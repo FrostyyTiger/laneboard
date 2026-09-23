@@ -39,7 +39,7 @@ A minimal file:
 | `human` | `the human` | `LANEBOARD_HUMAN` | What a kickoff prompt calls the person it reports to. |
 | `timezone` | the system's | `LANEBOARD_TIMEZONE` | Used by the Morning and Credit windows. |
 | — | — | `LANEBOARD_DB` | The SQLite file. `:memory:` for a scratch instance; the test suite sets it. |
-| — | — | `LANEBOARD_CONFIG` | The config file itself. |
+| — | — | `LANEBOARD_CONFIG` | The config file itself. `npm test` points this at `test/fixtures/empty-config.json` so the suite never reads the machine's own. |
 
 ### Where things live
 

@@ -181,3 +181,16 @@ test('the provider names config validates against are the ones that exist', asyn
   const { providerNames } = await import('../server/providers/index.mjs');
   assert.deepEqual(PROVIDERS, providerNames);
 });
+
+test('the suite runs against an empty config, never the machine\'s own', async () => {
+  // A test that reads ~/.config/laneboard/config.json passes or fails
+  // depending on whose machine it runs on. `npm test` points
+  // LANEBOARD_CONFIG at test/fixtures/empty-config.json; this is the
+  // assertion that says so, and it fails the day someone drops it.
+  const set = process.env.LANEBOARD_CONFIG;
+  assert.ok(set, 'npm test must set LANEBOARD_CONFIG');
+  assert.notEqual(path.resolve(set), path.join(os.homedir(), '.config', 'laneboard', 'config.json'));
+  const { config } = await import('../server/config.mjs');
+  assert.equal(config.slots.provider, 'none', 'the suite must see the defaults, not a host');
+  assert.deepEqual(config.repos, []);
+});
