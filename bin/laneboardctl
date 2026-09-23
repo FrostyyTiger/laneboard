@@ -12,7 +12,12 @@ USER_UNIT_DIR="$HOME/.config/systemd/user"
 # Without the "=", killing "_laneboard" also kills "_laneboard-test".
 TMUX_SESSION="_laneboard"
 TMUX_TARGET="=_laneboard"
-PORT=7777
+# The config file the unit points the server at; the same one `status` and
+# `start` read the port from, so they cannot look at a different port than the
+# service is listening on.
+export LANEBOARD_CONFIG="${LANEBOARD_CONFIG:-$HOME/.config/laneboard/config.json}"
+PORT=$(cd "$REPO" && "$NODE" -e 'import("./server/config.mjs").then((m) => console.log(m.config.port), () => console.log(7777))' 2>/dev/null </dev/null)
+PORT=${PORT:-7777}
 
 have_systemd() {
   [ -n "${LANEBOARD_FORCE_TMUX:-}" ] && return 1
@@ -75,7 +80,9 @@ cmd_status() {
   else
     echo "supervisor: none"
   fi
-  echo "linger: $(loginctl show-user "$USER" -p Linger --value 2>/dev/null)"
+  # Read rather than asked: `loginctl show-user` says exactly this, and a
+  # status command has no business talking to logind.
+  if [ -e "/var/lib/systemd/linger/$USER" ]; then echo "linger: yes"; else echo "linger: no (the service stops when you log out)"; fi
   if [ -n "$health" ]; then echo "health: $health"; else echo "health: DOWN"; return 1; fi
   ss -ltn 2>/dev/null | awk -v p=":$PORT" '$4 ~ p {print "listen: " $4}'
 }

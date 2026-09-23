@@ -27,16 +27,27 @@ node server/index.mjs     # http://127.0.0.1:7777
 ```
 
 Install it as a `systemd --user` service, put HTTPS in front of it and add it
-to a phone's home screen: see `docs/install.md`.
+to a phone's home screen: see **[docs/install.md](docs/install.md)**.
 
 ## Configure it
 
-Every host value has a generic default and can be overridden by the
-environment (`LANEBOARD_PORT`, `LANEBOARD_BIND`, `LANEBOARD_DB`, …) — see
-`server/config.mjs`. A second copy for testing:
+`~/.config/laneboard/config.json`, every key optional, every key also an
+environment variable — **`docs/config.md`** documents all of them. With no
+config file at all laneboard is a board of every session and every worktree on
+the machine, with lane slots, the guard and CI all off.
+
+```json
+{
+  "publicUrl": "https://board.example.invalid:8443",
+  "repos": [{ "name": "acme" }]
+}
+```
+
+A second copy for testing, which touches neither the file nor the database:
 
 ```bash
-LANEBOARD_PORT=7788 LANEBOARD_DB=:memory: node server/index.mjs
+LANEBOARD_PORT=7788 LANEBOARD_DB=:memory: LANEBOARD_CONFIG=/dev/null \
+  node server/index.mjs
 ```
 
 ## CLI
@@ -60,6 +71,16 @@ laneboard retire <lane> [--force]
 and `git worktree add/remove` run only inside `launch` and `retire`, which a
 human starts. The guard flags and pushes; it never acts.
 
+## Docs
+
+| | |
+| --- | --- |
+| [docs/install.md](docs/install.md) | prerequisites, the service, HTTPS in front of it, the phone |
+| [docs/config.md](docs/config.md) | every config key, its default and its environment variable |
+| [docs/providers.md](docs/providers.md) | the three interfaces everything site-specific sits behind, and how to add one |
+| [SECURITY.md](SECURITY.md) | why there is no login, and what that means for where you put it |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | `npm test`, the hygiene gate, what is deliberate |
+
 ## Licence
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).

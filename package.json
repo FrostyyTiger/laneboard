@@ -1,6 +1,6 @@
 {
   "name": "laneboard",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "private": false,
   "license": "MIT",
   "type": "module",
@@ -11,7 +11,7 @@
   "main": "server/index.mjs",
   "scripts": {
     "start": "node server/index.mjs",
-    "test": "LANEBOARD_DB=:memory: NODE_OPTIONS=--max-old-space-size=1536 node --test"
+    "test": "LANEBOARD_DB=:memory: LANEBOARD_CONFIG=test/fixtures/empty-config.json NODE_OPTIONS=--max-old-space-size=1536 node --test"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",

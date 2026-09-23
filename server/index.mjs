@@ -1,6 +1,7 @@
 // Laneboard — single-process server: http + ws + static.
 import http from 'node:http';
 import fs from 'node:fs';
+import path from 'node:path';
 import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { handleRequest, route, json, readBody, readJson } from './http.mjs';
@@ -22,7 +23,7 @@ import * as laneStore from './lanes/store.mjs';
 import * as launcher from './lanes/launch.mjs';
 import * as retirer from './lanes/retire.mjs';
 import * as prs from './collector/pr.mjs';
-import * as devstack from './collector/devstack.mjs';
+import * as guard from './collector/guard.mjs';
 import * as slots from './collector/slots.mjs';
 import { capturePane } from './collector/tmux.mjs';
 
@@ -33,13 +34,18 @@ fs.mkdirSync(config.dataDir, { recursive: true });
 
 const startedAt = Date.now();
 
+/** From package.json, so /healthz and the tag can never disagree. */
+const VERSION = JSON.parse(
+  fs.readFileSync(path.join(config.repoRoot, 'package.json'), 'utf8')
+).version;
+
 route('GET', '/healthz', (req, res) => {
   const m = process.memoryUsage();
   json(res, {
     ok: true,
     pid: process.pid,
     uptimeMs: Date.now() - startedAt,
-    version: '1.0.0',
+    version: VERSION,
     // Exposed so a slow leak can be watched over days without a profiler:
     // if rssMb climbs while heapUsedMb stays flat, it is native (node-pty), and
     // if both climb together it is JS.
@@ -152,7 +158,7 @@ route('DELETE', '/api/lanes/:id', laneAction(async (req) => {
 }));
 
 route('GET', '/api/ci', (req, res) => json(res, prs.snapshot()));
-route('GET', '/api/devstack', (req, res) => json(res, devstack.snapshot()));
+route('GET', '/api/guard', (req, res) => json(res, guard.snapshot()));
 route('GET', '/api/slots', (req, res) => json(res, slots.snapshot()));
 
 route('GET', '/api/jobs/:job', (req, res) => {
@@ -378,7 +384,7 @@ function boxPayload() {
   const ci = prs.snapshot();
   const records = laneStore.readAll();
   const activeIds = new Set(records.filter((r) => !r.retiredAt).map((r) => r.id));
-  const dev = devstack.snapshot();
+  const dev = guard.snapshot();
   boxMemo = {
     at: now,
     value: {
@@ -388,17 +394,18 @@ function boxPayload() {
       jobs: launcher.jobs().filter((j) => activeIds.has(j.lane) || now - (j.steps.at(-1)?.ts ?? 0) < 3600e3)
         .map((j) => ({ job: j.job, lane: j.lane, kind: j.kind, last: j.steps.at(-1) })),
       prs: ci.prs,
-      ci: { queue: ci.queue, auth: ci.auth },
+      ci: { provider: ci.provider, queue: ci.queue, auth: ci.auth },
       burn5h: burnMemo.value,
       // Without the per-probe timings, which would change the JSON every 15 s for nothing.
-      devstack: {
-        health: dev.health && {
-          api: { ok: dev.health.api.ok, status: dev.health.api.status },
-          web: { ok: dev.health.web.ok, status: dev.health.web.status },
-        },
+      guard: {
+        provider: dev.provider,
+        health: dev.health.map((h) => ({ name: h.name, ok: h.ok, status: h.status })),
         containers: dev.containers,
-        lastDeploy: dev.lastDeploy,
-        guard: { ok: dev.guard.ok, preventive: dev.guard.preventive, detective: dev.guard.detective, ssOk: dev.guard.ssOk },
+        ok: dev.guard.ok,
+        preventive: dev.guard.preventive,
+        detective: dev.guard.detective,
+        ssOk: dev.guard.ssOk,
+        ports: dev.guard.ports,
       },
       slots: slots.snapshot().slots,
     },
@@ -467,14 +474,14 @@ launcher.markInterrupted();
 prs.init({ noteMarker: state.noteMarkerFromHook });
 // A danger marker goes on the card like any marker, and is pushed at once,
 // outside the coalescing window (push.onDanger).
-devstack.init({
+guard.init({
   state,
   onDanger: (row) => {
     state.noteMarkerFromHook(row);
     push.onDanger(row).catch((err) => log.error('danger push failed', String(err)));
   },
 });
-devstack.start();
+guard.start();
 slots.start();
 prs.start();
 retirer.init({ state, broadcast: ws.broadcastEvent, prFor: (id) => prs.get(id) });

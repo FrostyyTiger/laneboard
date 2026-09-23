@@ -10,6 +10,9 @@ Type=simple
 WorkingDirectory=@REPO@
 Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 Environment=NODE_ENV=production
+# Every host value lives here, outside the checkout. A missing file is fine:
+# laneboard then runs on its generic defaults. See docs/config.md.
+Environment=LANEBOARD_CONFIG=%h/.config/laneboard/config.json
 ExecStart=@NODE@ server/index.mjs
 Restart=always
 RestartSec=2

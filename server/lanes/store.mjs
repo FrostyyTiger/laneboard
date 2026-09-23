@@ -94,7 +94,7 @@ export function slotOwners(records, stackSlots = []) {
 }
 
 /** The first free lane slot, or null. */
-export function freeSlot(owners, slots = config.laneSlots) {
+export function freeSlot(owners, slots = config.slots.laneSlots) {
   return slots.find((n) => !owners.has(n)) ?? null;
 }
 

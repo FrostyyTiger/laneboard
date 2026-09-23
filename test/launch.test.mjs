@@ -1,5 +1,9 @@
-// Launch (v3 Stage 3): the refusals, the environment check, the pure parsers.
-// Hermetic: claude, agent-stack, ~/lanes and ~/code are all scratch stand-ins.
+// Launch: the refusals, the environment check, the job.
+//
+// Hermetic. `claude`, ~/lanes and ~/code are scratch stand-ins, and the slot
+// provider is a fake that records what it was asked for and starts nothing —
+// which is also the proof that launch goes through the interface and not
+// through one particular stack.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,14 +24,37 @@ process.env.LANEBOARD_CLAUDE_BIN = fake('claude', `cat <<'EOF'
                                         "bypassPermissions", "manual",
                                         "dontAsk", "plan")
 EOF`);
-// Slot 1 is up: the human's own manual work.
-process.env.LANEBOARD_AGENT_STACK = fake('agent-stack', `printf 'agent1\\tagent1-postgres-1\\tUp 2 hours\\t127.0.0.1:15432->5432/tcp\\n'`);
 process.env.LANEBOARD_LANES_DIR = path.join(tmp, 'lanes');
-process.env.LANEBOARD_DEFAULT_REPO = 'example-repo';
-process.env.LANEBOARD_REPO_PREFIXES = 'example-repo-';
+process.env.LANEBOARD_REPOS = 'example-repo';
 process.env.LANEBOARD_HUMAN = 'the owner';
 process.env.LANEBOARD_CODE_DIR = path.join(tmp, 'code');
 fs.mkdirSync(path.join(tmp, 'code', 'example-repo', '.git'), { recursive: true });
+
+const providers = await import('../server/providers/index.mjs');
+
+/**
+ * A slot provider that starts nothing. Slot 1 is up, as if someone had
+ * brought it up by hand for their own work. `calls` is what a test asserts on.
+ */
+const fakeSlots = {
+  name: 'fake',
+  available: true,
+  slotCount: 5,
+  calls: [],
+  existingSlots: [1],
+  ports: (n) => ({ pg: 15432 + (n - 1) * 100, redis: 16379 + (n - 1) * 100, s3: 19000 + (n - 1) * 100 }),
+  envCommand: (n) => `FAKE_SLOT=${n}; `,
+  list: async () => ({ ok: true, bySlot: new Map([[1, { containers: [], up: true, createdAt: Date.now() }]]) }),
+  existing: async () => fakeSlots.existingSlots,
+  up: async (n, o) => { fakeSlots.calls.push(['up', n, o?.cwd]); return { ok: true, stdout: '', stderr: '' }; },
+  env: async (n) => {
+    fakeSlots.calls.push(['env', n]);
+    return { ok: true, ports: { pgPort: 15432 + (n - 1) * 100, redisPort: 16379 + (n - 1) * 100, s3Port: 19000 + (n - 1) * 100 } };
+  },
+  down: async (n) => { fakeSlots.calls.push(['down', n]); return { ok: true }; },
+  dropVolumes: async (n) => { fakeSlots.calls.push(['dropVolumes', n]); return { ok: true, removed: [], skipped: [] }; },
+};
+providers._set('slots', fakeSlots);
 
 const L = await import('../server/lanes/launch.mjs');
 const store = await import('../server/lanes/store.mjs');
@@ -102,7 +129,7 @@ test('with slots 2-4 held, the fourth launch is refused with the owners listed',
 });
 
 test('a slot running with no lane counts as taken', async () => {
-  // Someone started agent2 by hand; sharing its database with a suite that
+  // Someone started slot 2 by hand; sharing its database with a suite that
   // drops tenants is exactly what slots exist to prevent.
   clearLanes();
   const v = await L.validate({ lane: 'e', plan: 'docs/plans/e.md', fakeTakenSlots: [2] });
@@ -111,13 +138,36 @@ test('a slot running with no lane counts as taken', async () => {
     /slot 2: agent2 \(running, no lane\)/, 409);
 });
 
-test('faked slots can only add to what the agent stack reports', async () => {
-  // Slot 1 is up in the fake status; passing [] must not make anything freer.
+test('faked slots can only add to what the provider reports', async () => {
+  // Slot 1 is up in the fake provider; passing [] must not make anything freer.
   clearLanes();
   const owners = store.slotOwners([], [1]);
   assert.equal(owners.get(1), 'agent1 (running, no lane)');
   const v = await L.validate({ lane: 'f', plan: 'docs/plans/f.md', fakeTakenSlots: [] });
   assert.equal(v.slot, 2);
+});
+
+test('with no slot provider, launch refuses before it touches anything', async () => {
+  clearLanes();
+  const before = providers._set('slots', await import('../server/providers/slots/none.mjs'));
+  try {
+    await refused({ lane: 'nope', plan: 'docs/plans/nope.md' }, /no slot provider configured/, 501);
+    assert.equal(fs.existsSync(path.join(tmp, 'lanes', 'nope')), false, 'nothing was written');
+    assert.equal(fs.existsSync(path.join(tmp, 'code', 'example-repo-nope')), false, 'no worktree was made');
+  } finally {
+    providers._set('slots', before);
+  }
+});
+
+test('the provider decides which slots exist, and an unanswerable question is refused', async () => {
+  clearLanes();
+  const was = fakeSlots.existingSlots;
+  try {
+    fakeSlots.existingSlots = null; // "cannot tell"
+    await refused({ lane: 'unknown', plan: 'docs/plans/unknown.md' }, /could not say which slots are free/, 503);
+  } finally {
+    fakeSlots.existingSlots = was;
+  }
 });
 
 test('an existing worktree path is refused rather than reused', async () => {
@@ -137,21 +187,24 @@ test('urlPort reads postgres, asyncpg, redis and http urls', () => {
   assert.equal(L.urlPort(undefined), null);
 });
 
-test('the environment check: set, on the slot, never the dev stack', () => {
+test('the environment check: set, on the slot, never on a forbidden port', () => {
   const good = {
     DATABASE_URL: 'postgresql+asyncpg://a:b@localhost:15532/example',
     DATABASE_ADMIN_URL: 'postgresql://a:b@localhost:15532/example',
   };
-  assert.equal(L.checkLaneEnv(good, 15532).ok, true);
-  assert.match(L.checkLaneEnv({}, 15532).reason, /DATABASE_ADMIN_URL is unset/);
-  assert.match(L.checkLaneEnv({ DATABASE_ADMIN_URL: 'postgresql://x@localhost:5432/x' }, 15532).reason, /:5432, the dev stack/);
-  // A dev-stack port on ANY of the four is a failure, not only the admin URL.
-  assert.match(L.checkLaneEnv({ ...good, DATABASE_READONLY_URL: 'postgresql://x@localhost:5432/x' }, 15532).reason,
+  const FORBIDDEN = [5432, 6379, 9000];
+  assert.equal(L.checkLaneEnv(good, 15532, FORBIDDEN).ok, true);
+  assert.match(L.checkLaneEnv({}, 15532, FORBIDDEN).reason, /DATABASE_ADMIN_URL is unset/);
+  assert.match(L.checkLaneEnv({ DATABASE_ADMIN_URL: 'postgresql://x@localhost:5432/x' }, 15532, FORBIDDEN).reason, /:5432, which is forbidden/);
+  // A forbidden port on ANY of the four is a failure, not only the admin URL.
+  assert.match(L.checkLaneEnv({ ...good, DATABASE_READONLY_URL: 'postgresql://x@localhost:5432/x' }, 15532, FORBIDDEN).reason,
     /DATABASE_READONLY_URL points at :5432/);
-  // Slot 1's port is not the dev stack, but it is not this lane's either.
-  assert.match(L.checkLaneEnv({ DATABASE_ADMIN_URL: 'postgresql://x@localhost:15432/x' }, 15532).reason, /expected :15532/);
+  // Slot 1's port is forbidden by nobody, but it is not this lane's either.
+  assert.match(L.checkLaneEnv({ DATABASE_ADMIN_URL: 'postgresql://x@localhost:15432/x' }, 15532, FORBIDDEN).reason, /expected :15532/);
   // ":15432" contains "5432"; the check is on the port, not a substring.
-  assert.equal(L.checkLaneEnv({ DATABASE_ADMIN_URL: 'postgresql://x@localhost:15432/x' }, 15432).ok, true);
+  assert.equal(L.checkLaneEnv({ DATABASE_ADMIN_URL: 'postgresql://x@localhost:15432/x' }, 15432, FORBIDDEN).ok, true);
+  // With no guard configured, "on the slot I just made" is the whole check.
+  assert.equal(L.checkLaneEnv({ DATABASE_ADMIN_URL: 'postgresql://x@localhost:5432/x' }, 5432, []).ok, true);
 });
 
 test('parseEnviron splits /proc/<pid>/environ', () => {
@@ -168,24 +221,6 @@ test('parseEnviron reads this very process', () => {
 });
 
 // --- parsers ---------------------------------------------------------------------------
-
-test('agent-stack env output yields ports, never passwords', () => {
-  const out = `export AGENT_SLOT=2
-export PGPORT=15532
-export DATABASE_URL=postgresql+asyncpg://example_app:secret@localhost:15532/example
-export DATABASE_ADMIN_URL=postgresql://example:secret@localhost:15532/example
-export REDIS_URL=redis://localhost:16479/0
-export S3_ENDPOINT_URL=http://localhost:19100`;
-  const p = L.portsFromEnv(out);
-  assert.deepEqual(p, { pgPort: 15532, redisPort: 16479, s3Port: 19100 });
-  assert.ok(!JSON.stringify(p).includes('secret'));
-});
-
-test('agent-stack status yields the slots that exist', () => {
-  const out = 'agent1\tagent1-redis-1\tUp\t...\nagent1\tagent1-postgres-1\tUp\t...\nagent3\tagent3-minio-init-1\tExited (0)\t\n';
-  assert.deepEqual(L.slotsFromStatus(out), [1, 3]);
-  assert.deepEqual(L.slotsFromStatus(''), []);
-});
 
 test('the permission-mode choices are read from claude --help', () => {
   const help = fs.readFileSync(process.env.LANEBOARD_CLAUDE_BIN, 'utf8');
@@ -206,7 +241,7 @@ test('a plan needs at least one "## Stage N" heading', () => {
 });
 
 test('the kickoff template fills every placeholder it knows and leaves the rest visible', () => {
-  const tpl = fs.readFileSync(path.resolve(import.meta.dirname, '../deploy/kickoff.md'), 'utf8');
+  const tpl = fs.readFileSync(path.resolve(import.meta.dirname, '../templates/kickoff.md'), 'utf8');
   const out = L.renderKickoff(tpl, {
     lane: 'bauplan', plan: 'docs/plans/bauplan.md', root: '/r', branch: 'feat/bauplan',
     slot: 2, pgPort: 15532, redisPort: 16479, s3Port: 19100, human: 'the owner',
@@ -221,7 +256,7 @@ test('the kickoff template fills every placeholder it knows and leaves the rest 
 
 test('the kickoff quotes the markers without triggering them', async () => {
   const markers = await import('../server/collector/markers.mjs');
-  const tpl = fs.readFileSync(path.resolve(import.meta.dirname, '../deploy/kickoff.md'), 'utf8');
+  const tpl = fs.readFileSync(path.resolve(import.meta.dirname, '../templates/kickoff.md'), 'utf8');
   assert.deepEqual(markers.scanText(tpl), []);
   assert.equal(markers.classifyLine('LANE-DONE: all stages green')?.kind, 'done');
 });

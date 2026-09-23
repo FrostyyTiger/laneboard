@@ -2,41 +2,78 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-// Lane ids are derived against the repo prefixes in config, which default to
-// none: a fresh install has no repos yet. This suite configures one.
-process.env.LANEBOARD_REPO_PREFIXES = 'example-repo-';
+// Lane ids are derived against the main checkouts: the repos config names,
+// plus whatever `codeDir` actually holds. This suite sets them by hand — the
+// scan itself is tested against a scratch codeDir further down.
+process.env.LANEBOARD_REPOS = 'example-repo';
 const lanes = await import('../server/collector/lanes.mjs');
+lanes.setRepos(['example-repo', 'laneboard']);
 
-test('a lane id strips the repo prefix, and a main checkout keeps its name', () => {
-  // The worktrees on this box are named after their plan, which is why the
-  // basename is meaningful in the first place.
+test('a lane id strips its main checkout, and a main checkout keeps its name', () => {
+  // A lane's worktree is named <repo>-<lane>, which is why the basename is
+  // meaningful in the first place.
   assert.equal(lanes.laneIdFor('/home/user/code/example-repo-bauplan'), 'bauplan');
   assert.equal(lanes.laneIdFor('/home/user/code/example-repo-world-truth-plan'), 'world-truth-plan');
   // A main checkout is not a lane OF anything, so it keeps its own name.
   assert.equal(lanes.laneIdFor('/home/user/code/example-repo'), 'example-repo');
   assert.equal(lanes.laneIdFor('/home/user/code/laneboard'), 'laneboard');
-  // A repo whose prefix is not configured keeps its full name.
+  // A directory that belongs to no known checkout keeps its full name.
   assert.equal(lanes.laneIdFor('/home/user/Other-horizon-v1'), 'Other-horizon-v1');
   assert.equal(lanes.laneIdFor(null), null);
 });
 
-test('the repo prefixes come from config', async () => {
+test('the repos config seeds the checkouts before anything is scanned', async () => {
   const { config } = await import('../server/config.mjs');
-  assert.equal(lanes.REPO_PREFIXES, config.repoPrefixes);
-  assert.deepEqual(config.repoPrefixes, ['example-repo-']);
+  assert.deepEqual(config.repoNames, ['example-repo']);
+  assert.equal(config.defaultRepo, 'example-repo');
 });
 
-test('a prefix that is the whole name is not stripped to nothing', () => {
+test('a checkout name that is the whole basename is not stripped to nothing', () => {
   assert.equal(lanes.laneIdFor('/x/example-repo-'), 'example-repo-');
 });
 
-test('the longer repo prefix wins', () => {
-  // "example-repo-" must be tried before anything shorter could match, or
-  // every lane of it would come out named "repo-<lane>".
+test('the longer checkout name wins, with two repos that share a prefix', () => {
+  // "example-repo-" must be tried before "example-", or every lane of it
+  // would come out named "repo-<lane>".
+  lanes.setRepos(['example', 'example-repo']);
   assert.equal(lanes.laneIdFor('/x/example-repo-hygiene'), 'hygiene');
-  // A repo that merely starts with "example-" is not a lane clone.
+  assert.equal(lanes.laneIdFor('/x/example-hygiene'), 'hygiene');
+  assert.equal(lanes.laneIdFor('/x/example-repo'), 'example-repo');
+  assert.equal(lanes.laneIdFor('/x/example'), 'example');
+  // And a directory that merely starts with the same letters is not a lane.
+  lanes.setRepos(['example-repo']);
   assert.equal(lanes.laneIdFor('/x/example-test-server'), 'example-test-server');
-  assert.equal(lanes.laneIdFor('/x/example-website'), 'example-website');
+  assert.equal(lanes.laneIdFor('/x/examplewebsite'), 'examplewebsite');
+  lanes.setRepos(['example-repo', 'laneboard']);
+});
+
+test('the checkouts are scanned from codeDir: a repo, a worktree, a plain directory', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'laneboard-repos-'));
+  const { config } = await import('../server/config.mjs');
+  const codeDir = config.codeDir;
+  try {
+    fs.mkdirSync(path.join(dir, 'alpha', '.git'), { recursive: true });
+    fs.mkdirSync(path.join(dir, 'beta', '.git'), { recursive: true });
+    // A worktree: `.git` is a FILE pointing back at the repo, not a directory.
+    fs.mkdirSync(path.join(dir, 'alpha-lane'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'alpha-lane', '.git'), 'gitdir: /x\n');
+    fs.mkdirSync(path.join(dir, 'notes'), { recursive: true });
+
+    config.codeDir = dir;
+    const found = await lanes.scanRepos();
+    assert.deepEqual([...found].sort(), ['alpha', 'beta', 'example-repo'].sort());
+    // And the derivation follows from the scan alone.
+    assert.equal(lanes.laneIdFor(path.join(dir, 'alpha-lane')), 'lane');
+    assert.equal(lanes.laneIdFor(path.join(dir, 'alpha')), 'alpha');
+    assert.equal(lanes.laneIdFor(path.join(dir, 'notes')), 'notes');
+  } finally {
+    config.codeDir = codeDir;
+    lanes.setRepos(['example-repo', 'laneboard']);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('the lane hue is stable, in range, and derived from the id alone', () => {
