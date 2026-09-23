@@ -12,7 +12,7 @@ import * as progress from './collector/progress.mjs';
 import * as markers from './collector/markers.mjs';
 import * as ratelimits from './collector/ratelimits.mjs';
 import * as vitals from './collector/vitals.mjs';
-import * as devstack from './collector/devstack.mjs';
+import * as guard from './collector/guard.mjs';
 import * as transcripts from './collector/transcripts.mjs';
 import * as push from './push.mjs';
 import * as db from './db.mjs';
@@ -425,11 +425,11 @@ export async function tick() {
         .slice(-8)
         .map((l) => previewLineToHtml(l)),
       pinned: getFlags(name).pinned,
-      // The guard's finding for this session, or null (collector/devstack.mjs).
+      // The guard's finding for this session, or null (collector/guard.mjs).
       danger: null,
       attentionScore: 0,
     };
-    session.danger = devstack.dangerFor(name);
+    session.danger = guard.dangerFor(name);
     session.attentionScore = attentionScore(session, now);
     // The pane preview is already in hand, so scanning it for markers costs no
     // new tmux call — but it is NOT free. Joining and regex-scanning 40 lines

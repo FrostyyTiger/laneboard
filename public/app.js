@@ -1410,23 +1410,27 @@ function renderBox() {
   for (const b of boxBlocks()) box.append(b);
 }
 
-/** The dev stack, the CI queue and the slots: Box sections, and rail blocks on the 49". */
+/** The guard, the CI queue and the slots: Box sections, and rail blocks on the 49". */
 function boxBlocks() {
   const b = store.box;
   if (!b) return [el('p', 'empty', 'Waiting for the collectors…')];
-  return [devstackBlock(b.devstack), ciBlock(b.ci), slotsBlock(b.slots)];
+  const blocks = [guardBlock(b.guard), ciBlock(b.ci), slotsBlock(b.slots)].filter(Boolean);
+  // With every provider off there is nothing to say here, and saying nothing
+  // is better than three empty headings.
+  return blocks.length ? blocks : [el('p', 'empty', 'No guard, no agent slots and no CI configured — see docs/config.md.')];
 }
 
-function devstackBlock(d) {
+function guardBlock(g) {
+  // No guard provider: no block at all, rather than an empty one that implies
+  // something is being watched.
+  if (!g || g.provider === 'none') return null;
   const sec = el('section', 'mblock');
-  const g = d?.guard;
-  const h = el('h3', 'rail-h', 'Dev stack');
-  if (g) h.append(el('span', `guard ${g.ok ? 'guard-ok' : 'guard-danger'}`, g.ok ? 'guard ok' : 'DANGER'));
+  const h = el('h3', 'rail-h', 'Guard');
+  h.append(el('span', `guard ${g.ok ? 'guard-ok' : 'guard-danger'}`, g.ok ? 'guard ok' : 'DANGER'));
   sec.append(h);
-  const probes = d?.health ?? [];
-  if (!g) { sec.append(el('p', 'empty', 'Not checked yet.')); return sec; }
+  const probes = g.health ?? [];
   // The guard's findings first: this block exists for them.
-  for (const f of [...(g?.preventive ?? []), ...(g?.detective ?? [])]) {
+  for (const f of [...(g.preventive ?? []), ...(g.detective ?? [])]) {
     const line = el('div', 'marker-line mk-danger');
     line.append(el('span', 'mk-kind', 'danger'));
     line.append(el('span', 'mk-text', `${f.session || `pid ${f.pid}`}: ${f.reason}`));
@@ -1440,7 +1444,7 @@ function devstackBlock(d) {
     rows.append(r);
   };
   for (const p of probes) health(p.name, p);
-  for (const c of d.containers ?? []) {
+  for (const c of g.containers ?? []) {
     const r = el('div', 'kv-row');
     r.append(el('span', 'kv-k', c.name.replace(/-1$/, '')));
     r.append(el('span', `kv-v ${c.state === 'running' ? '' : 'dim'}`, c.status));
@@ -1451,6 +1455,7 @@ function devstackBlock(d) {
 }
 
 function ciBlock(ci) {
+  if (!ci || ci.provider === 'none') return null;
   const sec = el('section', 'mblock');
   const q = ci?.queue;
   const h = el('h3', 'rail-h', 'CI queue');
@@ -1472,6 +1477,8 @@ function ciBlock(ci) {
 }
 
 function slotsBlock(slots) {
+  // No slot provider: no slots, and no empty block implying there are some.
+  if (!slots?.length) return null;
   const sec = el('section', 'mblock');
   sec.append(el('h3', 'rail-h', 'Agent slots'));
   const rows = el('div', 'kv');

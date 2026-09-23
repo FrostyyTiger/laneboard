@@ -12,6 +12,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config } from '../config.mjs';
+import { slots as slotProvider } from '../providers/index.mjs';
 import { log } from '../log.mjs';
 import { run } from '../util.mjs';
 import * as db from '../db.mjs';
@@ -116,13 +117,18 @@ export function start() {
 
 // --- the act -----------------------------------------------------------------
 
-/** Compose project name for a lane slot, refused for anything but 2..5. */
-export function slotProject(slot) {
+/**
+ * The rail in front of the one destructive call in the program. A slot is
+ * taken down and its volumes dropped only if it is a slot lanes are allowed
+ * to take in the first place — never a reserved one, never a number that came
+ * from somewhere unexpected.
+ */
+export function assertLaneSlot(slot) {
   const n = Number(slot);
-  if (!Number.isInteger(n) || !config.slots.laneSlots.includes(n) || n === 1) {
+  if (!Number.isInteger(n) || !config.slots.laneSlots.includes(n) || config.slots.reservedSlots.includes(n)) {
     throw new LaneError(`slot ${slot} is not a lane slot`, 400);
   }
-  return `agent${n}`;
+  return n;
 }
 
 function stepper(job, lane) {
@@ -162,28 +168,22 @@ export async function retire(id, { force = false, confirm = null } = {}, who = '
   const step = stepper(job, id);
   step('validate', true, { force, by: who, blockers: verdict.blockers });
 
-  // agent-stack down, then that slot's volumes by compose label.
+  // The slot down, then its volumes: `down` leaves about 200 MB behind.
   if (rec.slot != null) {
-    const project = slotProject(rec.slot);
-    const down = await run(config.slots.bin, ['down', String(rec.slot)], { timeout: 120000 });
+    assertLaneSlot(rec.slot);
+    const down = await slotProvider.down(rec.slot);
     if (!down.ok) {
-      step('slot', false, { error: down.stderr.trim().slice(-300) });
+      step('slot', false, { error: down.error });
       step('failed', false, { step: 'slot' });
       return { ok: false, job };
     }
-    const vols = await run('docker', ['volume', 'ls', '-q', '--filter', `label=com.docker.compose.project=${project}`], { timeout: 20000 });
-    const names = vols.ok ? vols.stdout.split('\n').map((v) => v.trim()).filter(Boolean) : [];
-    // Belt and braces: every name must belong to this project.
-    const own = names.filter((v) => v.startsWith(`${project}_`));
-    if (own.length) {
-      const rm = await run('docker', ['volume', 'rm', ...own], { timeout: 60000 });
-      if (!rm.ok) {
-        step('slot', false, { error: rm.stderr.trim().slice(-300), volumes: own });
-        step('failed', false, { step: 'slot' });
-        return { ok: false, job };
-      }
+    const vols = await slotProvider.dropVolumes(rec.slot);
+    if (!vols.ok) {
+      step('slot', false, { error: vols.error, volumes: vols.volumes });
+      step('failed', false, { step: 'slot' });
+      return { ok: false, job };
     }
-    step('slot', true, { slot: rec.slot, down: true, volumesRemoved: own, skipped: names.filter((v) => !own.includes(v)) });
+    step('slot', true, { slot: rec.slot, down: true, volumesRemoved: vols.removed, skipped: vols.skipped });
   }
 
   if (f.worktreeExists) {

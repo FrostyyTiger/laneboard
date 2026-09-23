@@ -6,6 +6,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.mjs';
+import { slots as slotProvider } from './providers/index.mjs';
 import { log } from './log.mjs';
 import { run, isSafeSessionName } from './util.mjs';
 import { exactTarget, capturePane, runTmux } from './collector/tmux.mjs';
@@ -133,7 +134,7 @@ export async function spawn({ name, dir, prompt, model, resume, permissionMode, 
   claudeArgs.push('--permission-mode', permissionMode || 'default');
   const agentCmd = `${JSON.stringify(config.claudeBin)} ${claudeArgs.map((a) => JSON.stringify(a)).join(' ')}`;
 
-  const envCmd = slot != null ? `eval "$(${shellQuote(config.slots.bin)} env ${slot})"; ` : '';
+  const envCmd = slot != null ? slotProvider.envCommand(slot, shellQuote) : '';
   const shellCmd =
     `PATH=${pathPrefix}:$PATH; ` +
     envCmd +

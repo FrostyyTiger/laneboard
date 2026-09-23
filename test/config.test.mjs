@@ -172,3 +172,12 @@ test('an empty config file is a config with no keys set', () => {
     assert.equal(build({ env: {}, file }).port, 7777);
   }
 });
+
+test('the provider names config validates against are the ones that exist', async () => {
+  // The two lists are separate on purpose (config.mjs must not import the
+  // provider table, which reads config). This is the assertion that keeps
+  // them honest, and the same one the table makes at import time.
+  const { PROVIDERS } = await import('../server/config.mjs');
+  const { providerNames } = await import('../server/providers/index.mjs');
+  assert.deepEqual(PROVIDERS, providerNames);
+});

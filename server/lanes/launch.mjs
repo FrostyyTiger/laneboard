@@ -16,6 +16,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { config } from '../config.mjs';
+import { slots as slotProvider } from '../providers/index.mjs';
 import { log } from '../log.mjs';
 import { run, stripAnsi } from '../util.mjs';
 import * as db from '../db.mjs';
@@ -30,7 +31,13 @@ export class LaneError extends Error {
   }
 }
 
-export const DEV_STACK_PORTS = [5432, 6379, 9000, 9001, 8000, 3000];
+/**
+ * Ports a lane's own database URLs must never be on. The guard's forbidden
+ * list is the site's answer; with no guard configured there is nothing a
+ * lane's environment could collide with, and the check falls through to
+ * "is it on the slot the launch just made", which is the real requirement.
+ */
+export function forbiddenPorts() { return config.guard.forbiddenPorts ?? []; }
 export const DB_VARS = ['DATABASE_URL', 'DATABASE_ADMIN_URL', 'DATABASE_APP_URL', 'DATABASE_READONLY_URL'];
 
 // --- pure pieces, tested directly ---------------------------------------------
@@ -59,46 +66,24 @@ export function parseEnviron(buf) {
 }
 
 /**
- * Rule 8. Returns { ok, reason, ports } for a lane session's environment.
- * DATABASE_ADMIN_URL must be set and on the slot's Postgres port; no DB URL
- * may point at a dev-stack port.
+ * The check that runs on a launched session's /proc/<pid>/environ before a
+ * single character of the prompt is typed. Returns { ok, reason, ports }:
+ * DATABASE_ADMIN_URL must be set and on the slot's own Postgres port, and no
+ * DB URL may be on a port the guard forbids. A session that fails this is
+ * killed and the launch fails — it is the whole point of giving a lane a slot.
  */
-export function checkLaneEnv(env, expectPgPort) {
+export function checkLaneEnv(env, expectPgPort, forbidden = forbiddenPorts()) {
   const ports = Object.fromEntries(DB_VARS.map((k) => [k, urlPort(env[k])]));
   if (!env.DATABASE_ADMIN_URL) return { ok: false, reason: 'DATABASE_ADMIN_URL is unset', ports };
   for (const k of DB_VARS) {
-    if (ports[k] != null && DEV_STACK_PORTS.includes(ports[k])) {
-      return { ok: false, reason: `${k} points at :${ports[k]}, the dev stack`, ports };
+    if (ports[k] != null && forbidden.includes(ports[k])) {
+      return { ok: false, reason: `${k} points at :${ports[k]}, which is forbidden`, ports };
     }
   }
   if (expectPgPort && ports.DATABASE_ADMIN_URL !== expectPgPort) {
     return { ok: false, reason: `DATABASE_ADMIN_URL is on :${ports.DATABASE_ADMIN_URL}, expected :${expectPgPort}`, ports };
   }
   return { ok: true, reason: null, ports };
-}
-
-/** `agent-stack env N` output -> the ports, never the passwords. */
-export function portsFromEnv(text) {
-  const env = {};
-  for (const line of String(text).split('\n')) {
-    const m = /^\s*export\s+([A-Z_][A-Z0-9_]*)=(.*)$/.exec(line);
-    if (m) env[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
-  }
-  return {
-    pgPort: Number(env.PGPORT) || urlPort(env.DATABASE_ADMIN_URL),
-    redisPort: urlPort(env.REDIS_URL),
-    s3Port: urlPort(env.S3_ENDPOINT_URL),
-  };
-}
-
-/** `agent-stack status` -> the slot numbers that have any container. */
-export function slotsFromStatus(text) {
-  const out = new Set();
-  for (const line of String(text).split('\n')) {
-    const m = /^agent(\d+)\b/.exec(line.trim());
-    if (m) out.add(Number(m[1]));
-  }
-  return [...out].sort((a, b) => a - b);
 }
 
 /** The `--permission-mode` choices `claude --help` lists. */
@@ -147,11 +132,6 @@ function stepper(job, lane, kind) {
     const msg = `${kind} ${lane}: ${step}${ok === false ? ' FAILED' : ''}${detail ? ` ${JSON.stringify(detail).slice(0, 300)}` : ''}`;
     if (ok === false) log.warn(msg); else log.info(msg);
   };
-}
-
-async function agentStackSlots() {
-  const r = await run(config.slots.bin, ['status'], { timeout: 20000 });
-  return r.ok ? slotsFromStatus(r.stdout) : null;
 }
 
 async function tmuxHas(name) {
@@ -207,8 +187,11 @@ export async function validate(req) {
     if (err instanceof LaneError) throw err;
   }
 
-  const realSlots = await agentStackSlots();
-  if (realSlots == null) throw new LaneError('agent-stack status failed; cannot tell which slots are free', 503);
+  if (!slotProvider.available) {
+    throw new LaneError(`cannot launch: ${(await slotProvider.up()).error}`, 501);
+  }
+  const realSlots = await slotProvider.existing();
+  if (realSlots == null) throw new LaneError(`the ${slotProvider.name} provider could not say which slots are free`, 503);
   // Test only: pretend more slots are taken. It can only ever add to what the
   // agent stack reports, never make a slot in use look free.
   const faked = Array.isArray(req.fakeTakenSlots) ? req.fakeTakenSlots.map(Number).filter(Number.isInteger) : [];
@@ -327,14 +310,14 @@ async function runLaunch(v, step) {
   }
 
   // 5. The slot.
-  const up = await run(config.slots.bin, ['up', String(v.slot)], {
-    timeout: 10 * 60000, env: { ...process.env, AGENT_REPO: v.root }, cwd: v.root, maxBuffer: 16 * 1024 * 1024,
-  });
-  await fsp.writeFile(path.join(laneDir, 'agent-stack.log'), `${up.stdout}\n${up.stderr}`);
-  if (!up.ok) return fail('slot', { error: `agent-stack up ${v.slot} exited ${up.code}, see ${path.join(laneDir, 'agent-stack.log')}`, tail: up.stderr.trim().slice(-300), signal: up.signal });
-  const envOut = await run(config.slots.bin, ['env', String(v.slot)], { timeout: 20000 });
-  const ports = portsFromEnv(envOut.stdout);
-  if (!ports.pgPort) return fail('slot', { error: `agent-stack env ${v.slot} gave no Postgres port` });
+  const slotLog = path.join(laneDir, 'slot.log');
+  const up = await slotProvider.up(v.slot, { cwd: v.root, env: { ...process.env, AGENT_REPO: v.root } });
+  await fsp.writeFile(slotLog, `${up.stdout ?? ''}\n${up.stderr ?? ''}`);
+  const upError = up.error ?? `${slotProvider.name} up ${v.slot} exited ${up.code}, see ${slotLog}`;
+  if (!up.ok) return fail('slot', { error: upError, tail: (up.stderr ?? '').trim().slice(-300), signal: up.signal });
+  const got = await slotProvider.env(v.slot);
+  if (!got.ok) return fail('slot', { error: got.error });
+  const ports = got.ports;
   step('slot', true, { slot: v.slot, ...ports });
 
   // 6. The kickoff prompt, next to the record in ~/lanes, never in the worktree.

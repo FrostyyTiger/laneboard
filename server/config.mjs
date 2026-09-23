@@ -18,6 +18,18 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 
+/**
+ * The provider names each kind accepts. Not imported from
+ * server/providers/index.mjs: that module reads `config` to choose, and a
+ * cycle between the two would be a trap for whoever next moves an import.
+ * server/providers/index.mjs asserts the two lists agree.
+ */
+export const PROVIDERS = {
+  slots: ['none', 'agent-stack'],
+  guard: ['none', 'ports'],
+  ci: ['none', 'gh'],
+};
+
 const HOME = os.homedir();
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -256,7 +268,9 @@ function validate(c, file) {
   for (const r of c.repos) {
     if (!r || typeof r !== 'object' || !r.name) bad('every entry of repos needs a name');
   }
-  for (const [key, allowed] of [['slots', ['none', 'agent-stack']], ['guard', ['none', 'ports']], ['ci', ['none', 'gh']]]) {
+  // The names come from the provider table itself, so adding a provider is
+  // one line there and nothing here.
+  for (const [key, allowed] of Object.entries(PROVIDERS)) {
     const p = c[key]?.provider;
     if (!allowed.includes(p)) bad(`${key}.provider must be one of ${allowed.join(', ')}, got ${JSON.stringify(p)}`);
   }

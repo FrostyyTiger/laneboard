@@ -1,25 +1,30 @@
-// A live stack next to us, watched from outside, and the guard that keeps
-// agents off it.
+// The `ports` guard provider: a live stack next to us, watched from outside.
 //
 // Read-only by construction. What this file does, all of it: an HTTP GET
 // against each configured health probe, `docker ps` filtered by name,
 // `ss -Htnp state established`, and /proc reads. It never connects to a
-// guarded port, never touches a container, never acts.
+// guarded port, never touches a container, never acts. collector/guard.mjs
+// owns the timer and turns what comes back into markers.
 //
-// The guard, two checks, both producing `danger` markers:
-//   preventive  every Claude session's /proc/<pid>/environ: a DATABASE_* URL on
-//               a guarded port, or none at all in a session working in a
+// Two checks, both producing `danger`:
+//   preventive  every Claude session's /proc/<pid>/environ: a DATABASE_* URL
+//               on a forbidden port, or none at all in a session working in a
 //               checkout of the repo whose tests would fall back to one
 //   detective   an established connection from one of OUR processes to a
-//               guarded port. A live stack's own traffic stays inside its
+//               forbidden port. A live stack's own traffic stays inside its
 //               Docker network, so the expected count is zero.
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { config } from '../config.mjs';
-import { log } from '../log.mjs';
-import { run } from '../util.mjs';
-import * as markers from './markers.mjs';
-import { parseEnviron, urlPort, DB_VARS } from '../lanes/launch.mjs';
+import { config } from '../../config.mjs';
+import { run } from '../../util.mjs';
+import { parseEnviron, DB_VARS } from '../../lanes/launch.mjs';
+
+export const name = 'ports';
+export const active = true;
+
+export function forbiddenPorts() { return config.guard.forbiddenPorts ?? []; }
+export function healthProbes() { return config.guard.healthProbes ?? []; }
+export function containerFilter() { return config.guard.containerFilter || ''; }
 
 // --- pure --------------------------------------------------------------------
 
@@ -28,14 +33,22 @@ import { parseEnviron, urlPort, DB_VARS } from '../lanes/launch.mjs';
  * `platform`: the session works in a checkout of `config.guard.platformRepo`, whose
  * test suites fall back to a shared database when no DATABASE_* is set.
  */
-export function envDanger(env, { platform }) {
+export function envDanger(env, { platform, ports = forbiddenPorts() } = {}) {
   for (const k of DB_VARS) {
-    if (urlPort(env[k]) === 5432) return `${k} points at :5432, the dev stack`;
+    const p = portOf(env[k]);
+    if (p != null && ports.includes(p)) return `${k} points at :${p}, which is forbidden`;
   }
   if (platform && !env.DATABASE_ADMIN_URL && !env.DATABASE_URL) {
-    return 'no DATABASE_* in a platform checkout: its tests would fall back to :5432';
+    return `no DATABASE_* in a ${config.guard.platformRepo} checkout: its tests would fall back to a shared database`;
   }
   return null;
+}
+
+/** The port of a URL, or null. */
+export function portOf(u) {
+  if (!u) return null;
+  const m = /:(\d{2,5})(?:\/|$|\?)/.exec(String(u));
+  return m ? Number(m[1]) : null;
 }
 
 /** "127.0.0.1:5432" / "[::1]:5432" / "[::ffff:127.0.0.1]:5432" -> { host, port } */
@@ -91,23 +104,6 @@ export function isPlatformDir(dir, repo = config.guard.platformRepo) {
 
 // --- live --------------------------------------------------------------------
 
-let deps = { state: null, onDanger: () => {} };
-export function init(d) { deps = { ...deps, ...d }; }
-
-let snap = {
-  health: [], containers: [],
-  guard: { ok: true, preventive: [], detective: [], checkedAt: 0 },
-  at: 0,
-};
-
-export function snapshot() { return snap; }
-
-/** Danger per session name, for the attention score. */
-export function dangerFor(name) {
-  const g = snap.guard;
-  return g.preventive.find((d) => d.session === name) || g.detective.find((d) => d.session === name) || null;
-}
-
 async function probe(url) {
   const t0 = Date.now();
   try {
@@ -118,6 +114,19 @@ async function probe(url) {
   } catch (err) {
     return { ok: false, status: null, ms: Date.now() - t0, error: err?.name === 'TimeoutError' ? 'timeout' : (err?.cause?.code || err?.message) };
   }
+}
+
+/** Every configured probe, as the Box shows them. */
+export async function health() {
+  return Promise.all(healthProbes().map(async (p) => ({ name: p.name || p.url, url: p.url, ...(await probe(p.url)) })));
+}
+
+/** The containers matching the configured name filter. Empty filter, no call. */
+export async function containers() {
+  const filter = containerFilter();
+  if (!filter) return { ok: true, list: [] };
+  const r = await run('docker', ['ps', '-a', '--filter', `name=${filter}`, '--format', '{{.Names}}\t{{.State}}\t{{.Status}}'], { timeout: 8000 });
+  return { ok: r.ok, list: r.ok ? parseDockerPs(r.stdout) : null };
 }
 
 async function ppid(pid) {
@@ -151,9 +160,10 @@ async function paneMap() {
   return map;
 }
 
-async function preventive() {
+/** The environment of every live Claude session, checked against the rules. */
+export async function preventive(sessions) {
   const found = [];
-  for (const s of deps.state?.all?.() ?? []) {
+  for (const s of sessions ?? []) {
     const pid = s.claude?.pid;
     if (!pid) continue;
     let env;
@@ -164,69 +174,23 @@ async function preventive() {
   return found;
 }
 
-async function detective() {
+/**
+ * Established connections to a forbidden port. `null` means ss could not be
+ * run, which is a state and not a finding. `laneOf` maps a session name to
+ * its lane, so a hit lands on the right card.
+ */
+export async function detective(laneOf = () => null) {
+  const ports = forbiddenPorts();
+  if (!ports.length) return [];
   const r = await run('ss', ['-Htnp', 'state', 'established'], { timeout: 5000 });
   if (!r.ok) return null;
-  const hits = parseSs(r.stdout, config.guard.forbiddenPorts);
+  const hits = parseSs(r.stdout, ports);
   if (!hits.length) return [];
   const panes = await paneMap();
   const out = [];
   for (const h of hits) {
     const session = await sessionOfPid(h.pid, panes);
-    const lane = session ? deps.state?.get?.(session)?.lane ?? null : null;
-    out.push({ ...h, session, lane, reason: `${h.comm} (pid ${h.pid}) is connected to :${h.port}` });
+    out.push({ ...h, session, lane: session ? laneOf(session) : null, reason: `${h.comm} (pid ${h.pid}) is connected to :${h.port}` });
   }
   return out;
-}
-
-function raise(d, check) {
-  const who = d.session ? d.session : `pid ${d.pid}`;
-  const text = `DANGER: ${check} guard: ${d.reason}${d.session ? '' : ` (${who}, no tmux session)`}`;
-  const ts = Date.now();
-  // The marker key includes the text, and the text includes the pid, so a new
-  // offender is a new marker and the same one is not re-pushed every 15 s.
-  const id = markers.record({ lane: d.lane ?? null, sessionName: d.session ?? null, kind: 'danger', text: `${text} [pid ${d.pid}]`, source: 'guard', ts });
-  if (id) {
-    const row = { id, ts, lane: d.lane ?? null, sessionName: d.session ?? null, kind: 'danger', text: `${text} [pid ${d.pid}]`, source: 'guard' };
-    log.warn(row.text);
-    deps.onDanger(row);
-  }
-}
-
-export async function refresh() {
-  const probes = config.guard.healthProbes ?? [];
-  const filter = config.guard.containerFilter;
-  const [health, ps] = await Promise.all([
-    Promise.all(probes.map(async (p) => ({ name: p.name || p.url, url: p.url, ...(await probe(p.url)) }))),
-    filter
-      ? run('docker', ['ps', '-a', '--filter', `name=${filter}`, '--format', '{{.Names}}\t{{.State}}\t{{.Status}}'], { timeout: 8000 })
-      : Promise.resolve({ ok: true, stdout: '' }),
-  ]);
-  const prev = await preventive();
-  const det = await detective();
-  for (const d of prev) raise(d, 'preventive');
-  for (const d of det ?? []) raise(d, 'detective');
-  snap = {
-    health,
-    containers: ps.ok ? parseDockerPs(ps.stdout) : snap.containers,
-    dockerOk: ps.ok,
-    guard: {
-      ok: prev.length === 0 && (det?.length ?? 0) === 0,
-      preventive: prev,
-      detective: det ?? [],
-      ssOk: det != null,
-      ports: config.guard.forbiddenPorts,
-      checkedAt: Date.now(),
-    },
-    at: Date.now(),
-  };
-  return snap;
-}
-
-export function start() {
-  const tick = () => refresh().catch((err) => log.error('devstack refresh failed', String(err)));
-  const first = setTimeout(tick, 3000);
-  first.unref();
-  const timer = setInterval(tick, config.guardPollMs);
-  timer.unref();
 }

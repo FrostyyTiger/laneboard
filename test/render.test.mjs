@@ -898,11 +898,12 @@ function v3Snapshot(lanes, { extraSessions = 0 } = {}) {
       launched, prs, slots,
       readiness: Object.fromEntries(lanes.filter((l) => l.readiness).map((l) => [l.id, l.readiness])),
       jobs: [], burn5h: { [lanes[0]?.id]: 3.21 },
-      ci: { queue: { runs: [{ name: 'lint-and-test', branch: 'feat/a', status: 'in_progress', conclusion: null }], queued: 0, running: 1 }, auth: { ok: true } },
-      devstack: {
+      ci: { provider: 'gh', queue: { runs: [{ name: 'lint-and-test', branch: 'feat/a', status: 'in_progress', conclusion: null }], queued: 0, running: 1 }, auth: { ok: true } },
+      guard: {
+        provider: 'ports',
         health: [{ name: 'api', ok: true, status: 200 }, { name: 'web', ok: false, status: 503 }],
         containers: [{ name: 'example-stack-api-1', state: 'running', status: 'Up 5 hours' }],
-        guard: { ok: true, preventive: [], detective: [], ssOk: true },
+        ok: true, preventive: [], detective: [], ssOk: true, ports: [5432],
       },
     },
   };
@@ -1000,13 +1001,13 @@ test('the empty board says what to do', () => {
   assert.match(byId.get('grid-empty').textContent, /Launch/);
 });
 
-test('the Box shows the dev stack, the CI queue and the slots', () => {
+test('the Box shows the guard, the CI queue and the slots', () => {
   const { byId, socket, go } = mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...v3Snapshot([{ id: 'a' }]) });
   go('#box');
   const text = byId.get('box-body').textContent;
-  assert.match(text, /Dev stack.*guard ok/s);
+  assert.match(text, /Guard.*guard ok/s);
   assert.match(text, /api.*200/s);
   assert.match(text, /web.*503/s);
   assert.match(text, /CI queue.*1 running/s);
@@ -1025,7 +1026,7 @@ test('on the 49" the Box is rail blocks; elsewhere the rail box stays hidden', (
   wide.socket.emit('open', {});
   send(wide.socket, { type: 'snapshot', ...v3Snapshot([{ id: 'a' }]) });
   assert.equal(wide.byId.get('rail-box').hidden, false);
-  assert.match(wide.byId.get('rail-box').textContent, /Dev stack.*CI queue.*Agent slots/s);
+  assert.match(wide.byId.get('rail-box').textContent, /Guard.*CI queue.*Agent slots/s);
   const css = read2('styles.css');
   assert.match(css, /@media \(min-width: 2000px\)\s*\{\s*\.view-tab\[data-view="box"\] \{ display: none; \}/, 'the tab hides on the 49"');
 });
@@ -1120,4 +1121,19 @@ test('the terminal stays opaque and legible', () => {
   const term = read2('terminal.js');
   assert.match(term, /minimumContrastRatio: 4\.5/);
   assert.ok(!/allowTransparency:\s*true/.test(term), 'a transparent xterm costs performance');
+});
+
+test('with every provider off the Box says so instead of showing empty blocks', () => {
+  const { byId, socket, go } = mount();
+  socket.emit('open', {});
+  const s = v3Snapshot([{ id: 'a' }]);
+  s.box.guard = { provider: 'none', health: [], containers: [], ok: true, preventive: [], detective: [], ssOk: true, ports: [] };
+  s.box.ci = { provider: 'none', queue: null, auth: { ok: true } };
+  s.box.slots = [];
+  send(socket, { type: 'snapshot', ...s });
+  go('#box');
+  const text = byId.get('box-body').textContent;
+  assert.match(text, /No guard, no agent slots and no CI configured/);
+  assert.doesNotMatch(text, /Agent slots|CI queue|guard ok/);
+  assert.equal(errorText(byId), '');
 });
