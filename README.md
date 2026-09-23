@@ -27,7 +27,7 @@ node server/index.mjs     # http://127.0.0.1:7777
 ```
 
 Install it as a `systemd --user` service, put HTTPS in front of it and add it
-to a phone's home screen: see `docs/install.md`.
+to a phone's home screen: see **[docs/install.md](docs/install.md)**.
 
 ## Configure it
 
@@ -71,6 +71,16 @@ laneboard retire <lane> [--force]
 and `git worktree add/remove` run only inside `launch` and `retire`, which a
 human starts. The guard flags and pushes; it never acts.
 
+## Docs
+
+| | |
+| --- | --- |
+| [docs/install.md](docs/install.md) | prerequisites, the service, HTTPS in front of it, the phone |
+| [docs/config.md](docs/config.md) | every config key, its default and its environment variable |
+| [docs/providers.md](docs/providers.md) | the three interfaces everything site-specific sits behind, and how to add one |
+| [SECURITY.md](SECURITY.md) | why there is no login, and what that means for where you put it |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | `npm test`, the hygiene gate, what is deliberate |
+
 ## Licence
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).

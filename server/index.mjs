@@ -1,6 +1,7 @@
 // Laneboard — single-process server: http + ws + static.
 import http from 'node:http';
 import fs from 'node:fs';
+import path from 'node:path';
 import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { handleRequest, route, json, readBody, readJson } from './http.mjs';
@@ -33,13 +34,18 @@ fs.mkdirSync(config.dataDir, { recursive: true });
 
 const startedAt = Date.now();
 
+/** From package.json, so /healthz and the tag can never disagree. */
+const VERSION = JSON.parse(
+  fs.readFileSync(path.join(config.repoRoot, 'package.json'), 'utf8')
+).version;
+
 route('GET', '/healthz', (req, res) => {
   const m = process.memoryUsage();
   json(res, {
     ok: true,
     pid: process.pid,
     uptimeMs: Date.now() - startedAt,
-    version: '1.0.0',
+    version: VERSION,
     // Exposed so a slow leak can be watched over days without a profiler:
     // if rssMb climbs while heapUsedMb stays flat, it is native (node-pty), and
     // if both climb together it is JS.
