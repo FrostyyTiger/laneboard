@@ -34,3 +34,6 @@ and terminals on any machine. Everything site-specific sits behind three small
 provider interfaces — slots, guard, CI — each with a `none` implementation.
 
 Node 24, one process, six dependencies, no build step. 394 tests.
+
+Measured with ten sessions on the board: 105 MB RSS, 0.5 % CPU, hook latency
+under a millisecond.

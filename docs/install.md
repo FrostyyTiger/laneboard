@@ -141,6 +141,29 @@ finishes after at least five minutes of work, when a new `need`, `blocked` or
 for anything the guard calls `danger`. Tapping one opens that session's
 terminal.
 
+## What it costs to run
+
+Measured on a 6-vCPU, 16 GB VM with **10 tmux sessions** on the board, over
+20 minutes (40 samples, `deploy/soak.sh 20`):
+
+| | avg | max |
+| --- | --- | --- |
+| RSS | 105 MB | 112 MB |
+| CPU | 0.47 % | 0.57 % |
+| hook latency | 0.62 ms | 1.48 ms |
+
+Hook latency is the one that matters for anything but the machine's own
+comfort: every Claude Code hook waits on it, so it has to stay in the low
+milliseconds.
+
+RSS climbs by about 20 MB over the first ten minutes and then flattens, with
+the JS heap steady at 11–19 MB; the rest is the allocator and `node-pty`. If
+you want the numbers on your own machine:
+
+```bash
+deploy/soak.sh 20                  # writes data/soak-<stamp>.tsv and a summary
+```
+
 ## Upgrading
 
 ```bash
