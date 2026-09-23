@@ -23,8 +23,7 @@ EOF`);
 // Slot 1 is up: the human's own manual work.
 process.env.LANEBOARD_AGENT_STACK = fake('agent-stack', `printf 'agent1\\tagent1-postgres-1\\tUp 2 hours\\t127.0.0.1:15432->5432/tcp\\n'`);
 process.env.LANEBOARD_LANES_DIR = path.join(tmp, 'lanes');
-process.env.LANEBOARD_DEFAULT_REPO = 'example-repo';
-process.env.LANEBOARD_REPO_PREFIXES = 'example-repo-';
+process.env.LANEBOARD_REPOS = 'example-repo';
 process.env.LANEBOARD_HUMAN = 'the owner';
 process.env.LANEBOARD_CODE_DIR = path.join(tmp, 'code');
 fs.mkdirSync(path.join(tmp, 'code', 'example-repo', '.git'), { recursive: true });
@@ -206,7 +205,7 @@ test('a plan needs at least one "## Stage N" heading', () => {
 });
 
 test('the kickoff template fills every placeholder it knows and leaves the rest visible', () => {
-  const tpl = fs.readFileSync(path.resolve(import.meta.dirname, '../deploy/kickoff.md'), 'utf8');
+  const tpl = fs.readFileSync(path.resolve(import.meta.dirname, '../templates/kickoff.md'), 'utf8');
   const out = L.renderKickoff(tpl, {
     lane: 'bauplan', plan: 'docs/plans/bauplan.md', root: '/r', branch: 'feat/bauplan',
     slot: 2, pgPort: 15532, redisPort: 16479, s3Port: 19100, human: 'the owner',
@@ -221,7 +220,7 @@ test('the kickoff template fills every placeholder it knows and leaves the rest 
 
 test('the kickoff quotes the markers without triggering them', async () => {
   const markers = await import('../server/collector/markers.mjs');
-  const tpl = fs.readFileSync(path.resolve(import.meta.dirname, '../deploy/kickoff.md'), 'utf8');
+  const tpl = fs.readFileSync(path.resolve(import.meta.dirname, '../templates/kickoff.md'), 'utf8');
   assert.deepEqual(markers.scanText(tpl), []);
   assert.equal(markers.classifyLine('LANE-DONE: all stages green')?.kind, 'done');
 });

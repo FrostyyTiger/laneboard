@@ -119,7 +119,7 @@ export function start() {
 /** Compose project name for a lane slot, refused for anything but 2..5. */
 export function slotProject(slot) {
   const n = Number(slot);
-  if (!Number.isInteger(n) || !config.laneSlots.includes(n) || n === 1) {
+  if (!Number.isInteger(n) || !config.slots.laneSlots.includes(n) || n === 1) {
     throw new LaneError(`slot ${slot} is not a lane slot`, 400);
   }
   return `agent${n}`;
@@ -165,7 +165,7 @@ export async function retire(id, { force = false, confirm = null } = {}, who = '
   // agent-stack down, then that slot's volumes by compose label.
   if (rec.slot != null) {
     const project = slotProject(rec.slot);
-    const down = await run(config.agentStackBin, ['down', String(rec.slot)], { timeout: 120000 });
+    const down = await run(config.slots.bin, ['down', String(rec.slot)], { timeout: 120000 });
     if (!down.ok) {
       step('slot', false, { error: down.stderr.trim().slice(-300) });
       step('failed', false, { step: 'slot' });

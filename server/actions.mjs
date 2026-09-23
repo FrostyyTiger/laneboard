@@ -133,7 +133,7 @@ export async function spawn({ name, dir, prompt, model, resume, permissionMode, 
   claudeArgs.push('--permission-mode', permissionMode || 'default');
   const agentCmd = `${JSON.stringify(config.claudeBin)} ${claudeArgs.map((a) => JSON.stringify(a)).join(' ')}`;
 
-  const envCmd = slot != null ? `eval "$(${shellQuote(config.agentStackBin)} env ${slot})"; ` : '';
+  const envCmd = slot != null ? `eval "$(${shellQuote(config.slots.bin)} env ${slot})"; ` : '';
   const shellCmd =
     `PATH=${pathPrefix}:$PATH; ` +
     envCmd +

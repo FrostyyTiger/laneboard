@@ -900,9 +900,8 @@ function v3Snapshot(lanes, { extraSessions = 0 } = {}) {
       jobs: [], burn5h: { [lanes[0]?.id]: 3.21 },
       ci: { queue: { runs: [{ name: 'lint-and-test', branch: 'feat/a', status: 'in_progress', conclusion: null }], queued: 0, running: 1 }, auth: { ok: true } },
       devstack: {
-        health: { api: { ok: true, status: 200 }, web: { ok: true, status: 200 } },
+        health: [{ name: 'api', ok: true, status: 200 }, { name: 'web', ok: false, status: 503 }],
         containers: [{ name: 'example-stack-api-1', state: 'running', status: 'Up 5 hours' }],
-        lastDeploy: { at: Date.now() - 60e3, message: 'Finished' },
         guard: { ok: true, preventive: [], detective: [], ssOk: true },
       },
     },
@@ -1008,7 +1007,8 @@ test('the Box shows the dev stack, the CI queue and the slots', () => {
   go('#box');
   const text = byId.get('box-body').textContent;
   assert.match(text, /Dev stack.*guard ok/s);
-  assert.match(text, /api \/api\/health.*200/s);
+  assert.match(text, /api.*200/s);
+  assert.match(text, /web.*503/s);
   assert.match(text, /CI queue.*1 running/s);
   assert.match(text, /lint-and-test/);
   assert.match(text, /slot 2 :15532.*lane a/s);

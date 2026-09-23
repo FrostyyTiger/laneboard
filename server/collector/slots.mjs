@@ -58,7 +58,7 @@ export function buildSlots(bySlot, records, now = Date.now()) {
     let owner;
     let orphan = false;
     if (lane) owner = `lane ${lane.id}`;
-    else if (config.reservedSlots.includes(n)) owner = 'reserved (manual work)';
+    else if (config.slots.reservedSlots.includes(n)) owner = 'reserved (manual work)';
     else if (!exists) owner = null;
     else {
       const recent = d.createdAt != null && now - d.createdAt < ORPHAN_AFTER_MS;
@@ -73,7 +73,7 @@ export function buildSlots(bySlot, records, now = Date.now()) {
       lastLane: !lane ? (retiredBySlot.get(n)?.id ?? null) : null,
       owner,
       orphan,
-      laneSlot: config.laneSlots.includes(n),
+      laneSlot: config.slots.laneSlots.includes(n),
       ports: slotPorts(n),
       containers: d?.containers ?? [],
     });

@@ -177,11 +177,11 @@ export async function refresh({ force = false } = {}) {
     }
   }
   const r = await ghRun(['run', 'list', '--limit', '15', '--json', RUN_FIELDS], {
-    cwd: path.join(config.codeDir, config.ciRepo), timeout: 20000,
+    cwd: path.join(config.codeDir, config.ci.repo), timeout: 20000,
   });
   if (!r.ok && isAuthFailure(r)) { markAuthFailed(); return snapshot(); }
   if (r.ok) {
-    try { queue = { ...summariseRuns(JSON.parse(r.stdout)), repo: config.ciRepo, at: Date.now() }; } catch { /* keep the last */ }
+    try { queue = { ...summariseRuns(JSON.parse(r.stdout)), repo: config.ci.repo, at: Date.now() }; } catch { /* keep the last */ }
   }
   auth = { ok: true, checkedAt: Date.now() };
   prs = next;

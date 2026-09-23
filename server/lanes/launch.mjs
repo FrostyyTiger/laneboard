@@ -150,7 +150,7 @@ function stepper(job, lane, kind) {
 }
 
 async function agentStackSlots() {
-  const r = await run(config.agentStackBin, ['status'], { timeout: 20000 });
+  const r = await run(config.slots.bin, ['status'], { timeout: 20000 });
   return r.ok ? slotsFromStatus(r.stdout) : null;
 }
 
@@ -217,7 +217,7 @@ export async function validate(req) {
   const activeCount = store.active(records).length;
   const slot = store.freeSlot(owners);
   if (activeCount >= config.maxActiveLanes || slot == null) {
-    const held = config.laneSlots.map((n) => `slot ${n}: ${owners.get(n) ?? 'free'}`);
+    const held = config.slots.laneSlots.map((n) => `slot ${n}: ${owners.get(n) ?? 'free'}`);
     throw new LaneError(`no free lane slot (${held.join('; ')})`, 409, { owners: Object.fromEntries(owners) });
   }
 
@@ -327,18 +327,20 @@ async function runLaunch(v, step) {
   }
 
   // 5. The slot.
-  const up = await run(config.agentStackBin, ['up', String(v.slot)], {
+  const up = await run(config.slots.bin, ['up', String(v.slot)], {
     timeout: 10 * 60000, env: { ...process.env, AGENT_REPO: v.root }, cwd: v.root, maxBuffer: 16 * 1024 * 1024,
   });
   await fsp.writeFile(path.join(laneDir, 'agent-stack.log'), `${up.stdout}\n${up.stderr}`);
   if (!up.ok) return fail('slot', { error: `agent-stack up ${v.slot} exited ${up.code}, see ${path.join(laneDir, 'agent-stack.log')}`, tail: up.stderr.trim().slice(-300), signal: up.signal });
-  const envOut = await run(config.agentStackBin, ['env', String(v.slot)], { timeout: 20000 });
+  const envOut = await run(config.slots.bin, ['env', String(v.slot)], { timeout: 20000 });
   const ports = portsFromEnv(envOut.stdout);
   if (!ports.pgPort) return fail('slot', { error: `agent-stack env ${v.slot} gave no Postgres port` });
   step('slot', true, { slot: v.slot, ...ports });
 
   // 6. The kickoff prompt, next to the record in ~/lanes, never in the worktree.
-  const template = await fsp.readFile(path.join(config.repoRoot, 'deploy', 'kickoff.md'), 'utf8');
+  // A repo may name its own template; otherwise the one in config.
+  const repoEntry = config.repos.find((r) => r.name === v.repo);
+  const template = await fsp.readFile(repoEntry?.kickoff || config.kickoff, 'utf8');
   const prompt = v.promptOverride ?? renderKickoff(template, {
     lane: v.lane, plan: v.plan, root: v.root, branch: v.branch, slot: v.slot,
     human: config.human, ...ports,

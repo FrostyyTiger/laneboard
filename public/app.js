@@ -1423,7 +1423,8 @@ function devstackBlock(d) {
   const h = el('h3', 'rail-h', 'Dev stack');
   if (g) h.append(el('span', `guard ${g.ok ? 'guard-ok' : 'guard-danger'}`, g.ok ? 'guard ok' : 'DANGER'));
   sec.append(h);
-  if (!d?.health) { sec.append(el('p', 'empty', 'Not checked yet.')); return sec; }
+  const probes = d?.health ?? [];
+  if (!g) { sec.append(el('p', 'empty', 'Not checked yet.')); return sec; }
   // The guard's findings first: this block exists for them.
   for (const f of [...(g?.preventive ?? []), ...(g?.detective ?? [])]) {
     const line = el('div', 'marker-line mk-danger');
@@ -1438,16 +1439,7 @@ function devstackBlock(d) {
     r.append(el('span', `kv-v ${x?.ok ? 'ok' : 'bad'}`, x?.ok ? `${x.status}` : (x?.status ? `${x.status}` : 'down')));
     rows.append(r);
   };
-  health('api /api/health', d.health.api);
-  health('web /login', d.health.web);
-  if (d.lastDeploy?.at) {
-    const r = el('div', 'kv-row');
-    r.append(el('span', 'kv-k', 'deploy timer'));
-    const v = el('span', 'kv-v', `${ago(d.lastDeploy.at)} ago`);
-    v.title = d.lastDeploy.message || '';
-    r.append(v);
-    rows.append(r);
-  }
+  for (const p of probes) health(p.name, p);
   for (const c of d.containers ?? []) {
     const r = el('div', 'kv-row');
     r.append(el('span', 'kv-k', c.name.replace(/-1$/, '')));

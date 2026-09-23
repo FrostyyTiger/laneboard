@@ -25,7 +25,7 @@ import { parseEnviron, urlPort, DB_VARS } from '../lanes/launch.mjs';
 
 /**
  * Preventive verdict for one session's environment, or null when it is fine.
- * `platform`: the session works in a checkout of `config.platformRepo`, whose
+ * `platform`: the session works in a checkout of `config.guard.platformRepo`, whose
  * test suites fall back to a shared database when no DATABASE_* is set.
  */
 export function envDanger(env, { platform }) {
@@ -83,7 +83,7 @@ export function parseDockerPs(text) {
 }
 
 /** Is this directory a platform checkout (main or a lane worktree)? */
-export function isPlatformDir(dir, repo = config.platformRepo) {
+export function isPlatformDir(dir, repo = config.guard.platformRepo) {
   if (!dir || !repo) return false;
   const parts = path.resolve(dir).split(path.sep);
   return parts.some((p) => p === repo || p.startsWith(`${repo}-`));
@@ -95,7 +95,7 @@ let deps = { state: null, onDanger: () => {} };
 export function init(d) { deps = { ...deps, ...d }; }
 
 let snap = {
-  health: null, containers: [],
+  health: [], containers: [],
   guard: { ok: true, preventive: [], detective: [], checkedAt: 0 },
   at: 0,
 };
@@ -167,7 +167,7 @@ async function preventive() {
 async function detective() {
   const r = await run('ss', ['-Htnp', 'state', 'established'], { timeout: 5000 });
   if (!r.ok) return null;
-  const hits = parseSs(r.stdout, config.guardPorts);
+  const hits = parseSs(r.stdout, config.guard.forbiddenPorts);
   if (!hits.length) return [];
   const panes = await paneMap();
   const out = [];
@@ -194,11 +194,12 @@ function raise(d, check) {
 }
 
 export async function refresh() {
-  const [api, web, ps] = await Promise.all([
-    probe(`http://127.0.0.1:${config.devStack.apiPort}${config.devStack.apiPath}`),
-    probe(`http://127.0.0.1:${config.devStack.webPort}${config.devStack.webPath}`),
-    config.devStack.containerFilter
-      ? run('docker', ['ps', '-a', '--filter', `name=${config.devStack.containerFilter}`, '--format', '{{.Names}}\t{{.State}}\t{{.Status}}'], { timeout: 8000 })
+  const probes = config.guard.healthProbes ?? [];
+  const filter = config.guard.containerFilter;
+  const [health, ps] = await Promise.all([
+    Promise.all(probes.map(async (p) => ({ name: p.name || p.url, url: p.url, ...(await probe(p.url)) }))),
+    filter
+      ? run('docker', ['ps', '-a', '--filter', `name=${filter}`, '--format', '{{.Names}}\t{{.State}}\t{{.Status}}'], { timeout: 8000 })
       : Promise.resolve({ ok: true, stdout: '' }),
   ]);
   const prev = await preventive();
@@ -206,7 +207,7 @@ export async function refresh() {
   for (const d of prev) raise(d, 'preventive');
   for (const d of det ?? []) raise(d, 'detective');
   snap = {
-    health: { api, web },
+    health,
     containers: ps.ok ? parseDockerPs(ps.stdout) : snap.containers,
     dockerOk: ps.ok,
     guard: {
@@ -214,7 +215,7 @@ export async function refresh() {
       preventive: prev,
       detective: det ?? [],
       ssOk: det != null,
-      ports: config.guardPorts,
+      ports: config.guard.forbiddenPorts,
       checkedAt: Date.now(),
     },
     at: Date.now(),
@@ -226,6 +227,6 @@ export function start() {
   const tick = () => refresh().catch((err) => log.error('devstack refresh failed', String(err)));
   const first = setTimeout(tick, 3000);
   first.unref();
-  const timer = setInterval(tick, config.devStackPollMs);
+  const timer = setInterval(tick, config.guardPollMs);
   timer.unref();
 }

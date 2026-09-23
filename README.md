@@ -31,12 +31,23 @@ to a phone's home screen: see `docs/install.md`.
 
 ## Configure it
 
-Every host value has a generic default and can be overridden by the
-environment (`LANEBOARD_PORT`, `LANEBOARD_BIND`, `LANEBOARD_DB`, …) — see
-`server/config.mjs`. A second copy for testing:
+`~/.config/laneboard/config.json`, every key optional, every key also an
+environment variable — **`docs/config.md`** documents all of them. With no
+config file at all laneboard is a board of every session and every worktree on
+the machine, with lane slots, the guard and CI all off.
+
+```json
+{
+  "publicUrl": "https://board.example.invalid:8443",
+  "repos": [{ "name": "acme" }]
+}
+```
+
+A second copy for testing, which touches neither the file nor the database:
 
 ```bash
-LANEBOARD_PORT=7788 LANEBOARD_DB=:memory: node server/index.mjs
+LANEBOARD_PORT=7788 LANEBOARD_DB=:memory: LANEBOARD_CONFIG=/dev/null \
+  node server/index.mjs
 ```
 
 ## CLI

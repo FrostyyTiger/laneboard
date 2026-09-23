@@ -392,12 +392,8 @@ function boxPayload() {
       burn5h: burnMemo.value,
       // Without the per-probe timings, which would change the JSON every 15 s for nothing.
       devstack: {
-        health: dev.health && {
-          api: { ok: dev.health.api.ok, status: dev.health.api.status },
-          web: { ok: dev.health.web.ok, status: dev.health.web.status },
-        },
+        health: dev.health.map((h) => ({ name: h.name, ok: h.ok, status: h.status })),
         containers: dev.containers,
-        lastDeploy: dev.lastDeploy,
         guard: { ok: dev.guard.ok, preventive: dev.guard.preventive, detective: dev.guard.detective, ssOk: dev.guard.ssOk },
       },
       slots: slots.snapshot().slots,
