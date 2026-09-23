@@ -1,0 +1,9 @@
+1788559720	feat(horizon): stage 3 - rings to 38 km, one mesh per ring and sector, only what moved is rebuilt
+1788549692	feat(horizon): stage 2 - the voxel world follows the player, the region is bookkeeping
+1788548836	docs(horizon): the tour is deterministic with the lens off and the wind stilled
+1788548791	feat(horizon): stage 1 - origin-anchored height tiles at every level, the region kept inside them
+1788543791	feat(horizon): stage 0 - the sprint probe that exits, teleport, fly speed, the far probe past ring 5
+1788211485	feat(creatures): stage 8 - the tuner, the shots, and the night written down
+1788210022	feat(creatures): stages 6-7 - the pack, the flank as a mechanism, and the wire
+1788199861	feat(creatures): stage 5 - dens placed by the danger dials, not by a spawner
+1788199038	feat(creatures): stage 4 - one A* grid per territory, and two numbers that were wrong

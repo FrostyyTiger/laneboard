@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# laneboardctl — start | stop | restart | status | logs
+# Uses systemd --user when available, else a tmux session named _laneboard.
+set -uo pipefail
+
+# The repo is wherever this script lives (bin/ -> ..), following a symlink.
+REPO="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+NODE="${LANEBOARD_NODE:-$(command -v node || echo /usr/bin/node)}"
+UNIT="laneboard.service"
+USER_UNIT_DIR="$HOME/.config/systemd/user"
+# tmux matches -t targets by PREFIX unless the name is given as "=name".
+# Without the "=", killing "_laneboard" also kills "_laneboard-test".
+TMUX_SESSION="_laneboard"
+TMUX_TARGET="=_laneboard"
+PORT=7777
+
+have_systemd() {
+  [ -n "${LANEBOARD_FORCE_TMUX:-}" ] && return 1
+  systemctl --user is-system-running >/dev/null 2>&1 || return 1
+  [ -f "$USER_UNIT_DIR/$UNIT" ] || return 1
+  return 0
+}
+
+# Render the template: a repo under $HOME becomes %h/<rest>, so the unit
+# carries no absolute home path.
+render_unit() {
+  local repo="$REPO"
+  case "$repo" in "$HOME"/*) repo="%h/${repo#"$HOME"/}" ;; esac
+  sed -e "s|@REPO@|$repo|g" -e "s|@NODE@|$NODE|g" "$REPO/deploy/laneboard.service"
+}
+
+install_unit() {
+  mkdir -p "$USER_UNIT_DIR"
+  render_unit > "$USER_UNIT_DIR/$UNIT"
+  systemctl --user daemon-reload
+}
+
+wait_healthy() {
+  for _ in $(seq 1 40); do
+    if curl -sf -m 1 "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then return 0; fi
+    sleep 0.25
+  done
+  return 1
+}
+
+cmd_start() {
+  if systemctl --user is-system-running >/dev/null 2>&1; then
+    [ -f "$USER_UNIT_DIR/$UNIT" ] || install_unit
+    systemctl --user enable --now "$UNIT" >/dev/null 2>&1 || systemctl --user start "$UNIT"
+  else
+    tmux has-session -t "$TMUX_TARGET" 2>/dev/null && { echo "already running in tmux"; return 0; }
+    tmux new-session -d -s "$TMUX_SESSION" -c "$REPO" \
+      "exec $NODE server/index.mjs"
+  fi
+  wait_healthy && echo "laneboard up on http://127.0.0.1:$PORT" || { echo "laneboard did not become healthy"; return 1; }
+}
+
+cmd_stop() {
+  if have_systemd; then
+    systemctl --user stop "$UNIT"
+  fi
+  tmux has-session -t "$TMUX_TARGET" 2>/dev/null && tmux kill-session -t "$TMUX_TARGET"
+  echo "stopped"
+}
+
+cmd_restart() { cmd_stop >/dev/null 2>&1; sleep 0.5; cmd_start; }
+
+cmd_status() {
+  local health
+  health=$(curl -sf -m 2 "http://127.0.0.1:$PORT/healthz" 2>/dev/null)
+  if have_systemd; then
+    echo "supervisor: systemd --user ($UNIT: $(systemctl --user is-active "$UNIT" 2>/dev/null))"
+  elif tmux has-session -t "$TMUX_TARGET" 2>/dev/null; then
+    echo "supervisor: tmux ($TMUX_SESSION)"
+  else
+    echo "supervisor: none"
+  fi
+  echo "linger: $(loginctl show-user "$USER" -p Linger --value 2>/dev/null)"
+  if [ -n "$health" ]; then echo "health: $health"; else echo "health: DOWN"; return 1; fi
+  ss -ltn 2>/dev/null | awk -v p=":$PORT" '$4 ~ p {print "listen: " $4}'
+}
+
+cmd_logs() {
+  if have_systemd; then
+    systemctl --user status "$UNIT" --no-pager -n "${1:-40}" 2>/dev/null
+    journalctl --user -u "$UNIT" -n "${1:-40}" --no-pager 2>/dev/null
+  fi
+  [ -f "$REPO/data/laneboard.log" ] && tail -n "${1:-40}" "$REPO/data/laneboard.log"
+}
+
+case "${1:-status}" in
+  start) cmd_start ;;
+  stop) cmd_stop ;;
+  restart) cmd_restart ;;
+  status) cmd_status ;;
+  logs) shift; cmd_logs "${1:-40}" ;;
+  install) install_unit; echo "installed $USER_UNIT_DIR/$UNIT" ;;
+  render) render_unit ;;
+  *) echo "usage: laneboardctl {start|stop|restart|status|logs [n]|install|render}"; exit 2 ;;
+esac

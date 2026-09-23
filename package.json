@@ -1,0 +1,27 @@
+{
+  "name": "laneboard",
+  "version": "1.0.0",
+  "private": false,
+  "license": "MIT",
+  "type": "module",
+  "description": "Live overview of every Claude Code session and lane on a host",
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "server/index.mjs",
+  "scripts": {
+    "start": "node server/index.mjs",
+    "test": "LANEBOARD_DB=:memory: NODE_OPTIONS=--max-old-space-size=1536 node --test"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "node-pty": "^1.0.0",
+    "web-push": "^3.6.7",
+    "ws": "^8.18.0"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
+  }
+}

@@ -1,0 +1,22 @@
+# Template: bin/laneboardctl renders @REPO@ and @NODE@ into
+# ~/.config/systemd/user/laneboard.service. No absolute home path lives here;
+# a repo under $HOME is rendered as %h/<path>.
+[Unit]
+Description=Laneboard — live overview of Claude sessions and lanes
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO@
+Environment=PATH=%h/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=NODE_ENV=production
+ExecStart=@NODE@ server/index.mjs
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+# Read-only data sources stay read-only — laneboard only writes its own data/ dir.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

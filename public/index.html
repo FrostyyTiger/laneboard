@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1014">
+<title>laneboard</title>
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/vendor/xterm.css">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+
+<div id="ui-error" class="ui-error" hidden></div>
+
+<div id="offline" class="banner" hidden>
+  <span class="banner-dot"></span>
+  <span id="offline-text">Disconnected — reconnecting…</span>
+</div>
+
+<header class="topbar">
+  <div class="topbar-left">
+    <h1 class="brand">laneboard<span class="brand-host" id="brand-host"></span></h1>
+    <span id="conn" class="conn" title="live connection">live</span>
+  </div>
+  <nav class="views" id="views" aria-label="Views">
+    <button class="view-tab on" data-view="board" title="Board (g b)">Board</button>
+    <button class="view-tab" data-view="morning" title="Morning (g m)">Morning</button>
+    <button class="view-tab" data-view="credit" title="Credit (g c)">Credit</button>
+    <button class="view-tab" data-view="box" title="Box (g x)">Box</button>
+  </nav>
+  <div class="topbar-gauges" id="topbar-gauges"></div>
+  <div class="topbar-right">
+    <span class="stat" id="stat-cost" title="API-equivalent spend today">—</span>
+    <button class="icon-btn" id="btn-refresh" title="Force refresh">⟳</button>
+  </div>
+</header>
+
+<div class="layout" id="view-board">
+
+  <aside class="rail" id="rail">
+    <section class="rail-block">
+      <h2 class="rail-h">Needs you <span class="count" id="attention-count">0</span></h2>
+      <ol class="attention-list" id="attention-list"></ol>
+      <p class="empty" id="attention-empty">Nothing waiting.</p>
+    </section>
+
+    <section class="rail-block">
+      <h2 class="rail-h">Rate limits</h2>
+      <div id="rate-limits" class="gauges"></div>
+    </section>
+
+    <section class="rail-block">
+      <h2 class="rail-h">Machine</h2>
+      <div id="vitals" class="vitals"></div>
+    </section>
+
+    <section class="rail-block rail-box" id="rail-box" hidden></section>
+
+    <section class="rail-block">
+      <h2 class="rail-h">Notifications</h2>
+      <div id="push-box">
+        <button class="btn" id="btn-push">Enable notifications</button>
+        <p class="empty" id="push-note"></p>
+      </div>
+    </section>
+  </aside>
+
+  <main class="grid-wrap">
+    <div class="board-bar">
+      <button class="btn" id="btn-launch" title="Worktree, venv, agent-stack slot, session, kickoff prompt">Launch a lane…</button>
+    </div>
+    <div class="attention-strip" id="attention-strip"></div>
+    <div class="lane-rail" id="lane-rail" hidden></div>
+    <div class="grid" id="grid"></div>
+    <p class="empty grid-empty" id="grid-empty">Waiting for the first snapshot…</p>
+  </main>
+
+  <aside class="dock" id="dock">
+    <div class="dock-head">
+      <h2 class="rail-h">Pinned terminals <span class="count" id="dock-count">0</span></h2>
+      <button class="icon-btn" id="dock-layout" title="Toggle 2x2 / stacked">▦</button>
+    </div>
+    <div class="dock-body" id="dock-body">
+      <p class="empty">Pin a session with <kbd>p</kbd> to watch it live here.</p>
+    </div>
+  </aside>
+
+</div>
+
+<section class="view" id="view-morning" hidden>
+  <div class="view-head">
+    <h2 class="rail-h">Morning</h2>
+    <div class="window-picker" id="morning-window">
+      <button data-window="12h">12 h</button>
+      <button data-window="tonight" class="on">tonight</button>
+      <button data-window="24h">24 h</button>
+      <button data-window="7d">7 d</button>
+    </div>
+    <span class="view-since" id="morning-since"></span>
+  </div>
+  <div class="view-body morning" id="morning-body"><p class="empty">Loading…</p></div>
+</section>
+
+<section class="view" id="view-credit" hidden>
+  <div class="view-head">
+    <h2 class="rail-h">Credit</h2>
+    <span class="view-since" id="credit-sampler"></span>
+  </div>
+  <div class="view-body" id="credit-body"><p class="empty">Loading…</p></div>
+</section>
+
+<section class="view" id="view-box" hidden>
+  <div class="view-head">
+    <h2 class="rail-h">Box</h2>
+  </div>
+  <div class="view-body" id="box-body"><p class="empty">Loading…</p></div>
+</section>
+
+<nav class="tabs" id="tabs" aria-label="Views">
+  <button class="tab on" data-view="board">Board</button>
+  <button class="tab" data-view="morning">Morning</button>
+  <button class="tab" data-view="credit">Credit</button>
+  <button class="tab" data-view="box">Box</button>
+</nav>
+
+<div class="sheet launch-sheet" id="launch-sheet" hidden>
+  <div class="sheet-head">
+    <button class="icon-btn" id="lf-close" title="Close">✕</button>
+    <span class="sheet-title">Launch a lane</span>
+    <span class="sheet-hint">the plan must already be pushed on its branch</span>
+  </div>
+  <form class="launch-form" id="launch-form" autocomplete="off">
+    <label>repo <input id="lf-repo" placeholder="repo" spellcheck="false"></label>
+    <label>lane id <input id="lf-lane" placeholder="bauplan" spellcheck="false" required></label>
+    <label>branch <input id="lf-branch" placeholder="feat/&lt;lane&gt;" spellcheck="false"></label>
+    <label>plan <input id="lf-plan" placeholder="docs/plans/&lt;lane&gt;.md" spellcheck="false"></label>
+    <label>model
+      <select id="lf-model">
+        <option value="opus" selected>opus</option>
+        <option value="sonnet">sonnet</option>
+        <option value="haiku">haiku (no auto mode)</option>
+      </select>
+    </label>
+    <p class="empty">Permission mode: auto. Slot: the first free of 2–4.</p>
+    <button class="btn primary" id="lf-submit" type="submit">Launch</button>
+  </form>
+  <ol class="launch-steps" id="lf-steps"></ol>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-head">
+    <button class="icon-btn" id="sheet-close" title="Close">✕</button>
+    <span class="sheet-title" id="sheet-title"></span>
+    <span class="pill" id="sheet-state"></span>
+    <span class="sheet-hint">keys go to the session &mdash; close with &#10005;</span>
+  </div>
+  <div class="sheet-body" id="sheet-body"></div>
+  <div class="quickbar" id="quickbar">
+    <button data-key="yes" class="qb qb-yes">Yes</button>
+    <button data-key="no" class="qb qb-no">No</button>
+    <button data-key="esc" class="qb">Esc</button>
+    <button data-key="enter" class="qb">⏎</button>
+    <button data-key="ctrl-c" class="qb">⌃C</button>
+    <form class="qb-form" id="qb-form">
+      <input type="text" id="qb-input" placeholder="Send text…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <button type="submit" class="qb qb-send">Send</button>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

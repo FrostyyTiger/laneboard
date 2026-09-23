@@ -1,0 +1,7 @@
+2026-09-04 21:18:43 watchdog start (pid 3849817) session=laneboard-v2 dir=/home/user/code/laneboard model=opus
+2026-09-04 21:18:43 MARKER ● PROGRESS: Stage 0 done — plan committed, five-view shell + hash routing shipped, 211 tests green, restarted clean at 21 sessions
+2026-09-04 21:38:44 IDLE for ~10 min with no spinner — nudging
+2026-09-04 21:48:46 SESSION EXITED — restarting with --continue
+2026-09-04 21:54:47 watchdog start (pid 3926773) session=laneboard-v2 dir=/home/user/code/laneboard model=opus
+2026-09-04 21:54:47 SESSION MISSING: tmux session laneboard-v2 not found — recreating and continuing the last conversation (restart 1/3)
+2026-09-04 21:02:32 MARKER `PROGRESS: <stage> — <what is green>`. Blocked on a human? `NEED-HUMAN: <what>`, then
