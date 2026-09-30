@@ -17,6 +17,7 @@ const STATE_LABEL = {
 
 const store = {
   sessions: new Map(),
+  map: null,             // the Map's model, from `map` messages
   attention: [],
   lanes: [],
   // Which lanes the grid is filtered to. Empty = show everything.
@@ -46,8 +47,8 @@ const store = {
 // off-screen, so the capture-pane rate drops on its own while you are elsewhere.
 // v3: Machine and Files are gone. A stale #machine or #files is not in VIEWS,
 // so it lands on the Board.
-const VIEWS = ['board', 'morning', 'credit', 'box'];
-const VIEW_KEYS = { b: 'board', m: 'morning', c: 'credit', x: 'box' };
+const VIEWS = ['board', 'morning', 'credit', 'box', 'map'];
+const VIEW_KEYS = { b: 'board', m: 'morning', c: 'credit', x: 'box', p: 'map' };
 
 function setView(name, { pushHash = true } = {}) {
   const view = VIEWS.includes(name) ? name : 'board';
@@ -66,6 +67,7 @@ function setView(name, { pushHash = true } = {}) {
   if (view === 'morning') loadMorning();
   if (view === 'credit') loadCredit();
   if (view === 'box') renderBox();
+  if (view === 'map') showMap();
   scheduleVisible();
   fitAll();
 }
@@ -112,7 +114,11 @@ function connect() {
       applyCommon(msg);
       renderAll(msg.sessions?.map((s) => s.name));
     } else if (msg.type === 'event') {
-      // Events already move state via the next delta; nothing to draw yet.
+      // State moves via the next delta; the Map shows the event as a pulse.
+      pulseMapFor(msg.event);
+    } else if (msg.type === 'map') {
+      store.map = msg.map;
+      mapView?.update(msg.map);
     }
   });
 
@@ -1786,6 +1792,58 @@ function keyBelongsToTerminal(target) {
   if (!target || typeof target.closest !== 'function') return false;
   return Boolean(target.closest('.xterm, .term-host, .sheet-body, .xterm-helper-textarea'));
 }
+
+// ---------------------------------------------------------------- map
+//
+// The Map view (public/map.js) is loaded the first time it is opened: the
+// Board never pays for a canvas renderer it does not show. The model comes
+// over the socket as `map` messages; tool events from the hooks become pulses
+// on the lane they belong to.
+let mapView = null;
+let mapLoading = null;
+
+function sizeMap() {
+  const bar = document.querySelector('.topbar');
+  if (bar) document.documentElement.style.setProperty('--topbar-h', `${bar.offsetHeight}px`);
+}
+
+function showMap() {
+  sizeMap();
+  if (mapView) { mapView.resize(); return; }
+  if (mapLoading) return;
+  mapLoading = import('/map.js').then((mod) => {
+    mapView = mod.createMap($('map-root'), {
+      title: store.map?.title ?? 'Map',
+      actions: mapActions,
+    });
+    if (store.map) mapView.update(store.map);
+    else fetch('/api/map').then((r) => r.json()).then((m) => { store.map = m; mapView.update(m); }).catch(() => {});
+  }).catch((err) => {
+    mapLoading = null;
+    $('map-root').textContent = `The map could not load: ${err?.message || err}`;
+  });
+}
+
+/** What a node's panel offers: a lane's session can be opened in place. */
+function mapActions(node) {
+  if (node.kind !== 'lane' || !node.session || !store.sessions.has(node.session)) return [];
+  return [{ label: 'Open terminal', run: () => openSheet(node.session) }];
+}
+
+function pulseMapFor(ev) {
+  if (!mapView || !ev?.session_name) return;
+  const s = store.sessions.get(ev.session_name);
+  if (!s?.lane) return;
+  const waiting = ev.type === 'Notification' || ev.subtype === 'permission_prompt';
+  mapView.event({
+    node: `lane:${s.lane}`,
+    kind: waiting ? 'attention' : 'working',
+    text: `${s.lane} · ${ev.subtype || ev.type}`,
+    silent: !waiting,
+  });
+}
+
+addEventListener('resize', () => { if (store.view === 'map') sizeMap(); });
 
 /**
  * `g` starts a two-key view chord (g b / g m / g c / g k / g f). It expires

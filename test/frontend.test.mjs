@@ -105,9 +105,11 @@ const AMBIENT = new Set([
   'encodeURIComponent', 'decodeURIComponent', 'parseInt', 'parseFloat', 'isNaN',
   'queueMicrotask', 'structuredClone', 'reportError', 'open', 'close', 'focus', 'blur',
   'async', 'get', 'set', 'then', 'catch',
+  // Dynamic import() is a keyword, and map.js draws with these.
+  'import', 'requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle',
 ]);
 
-for (const file of ['app.js', 'terminal.js']) {
+for (const file of ['app.js', 'terminal.js', 'map.js']) {
   test(`${file}: every function it calls is defined`, () => {
     const src = read(file);
     const declared = declaredNames(stripNonCode(src));

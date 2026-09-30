@@ -7,6 +7,7 @@
 <meta name="theme-color" content="#0d1014">
 <title>laneboard</title>
 <link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/map.css">
 <link rel="stylesheet" href="/vendor/xterm.css">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -32,6 +33,7 @@
     <button class="view-tab" data-view="morning" title="Morning (g m)">Morning</button>
     <button class="view-tab" data-view="credit" title="Credit (g c)">Credit</button>
     <button class="view-tab" data-view="box" title="Box (g x)">Box</button>
+    <button class="view-tab" data-view="map" title="Map (g p)">Map</button>
   </nav>
   <div class="topbar-gauges" id="topbar-gauges"></div>
   <div class="topbar-right">
@@ -121,11 +123,16 @@
   <div class="view-body" id="box-body"><p class="empty">Loading…</p></div>
 </section>
 
+<section class="view map-view" id="view-map" hidden>
+  <div class="map-root" id="map-root"></div>
+</section>
+
 <nav class="tabs" id="tabs" aria-label="Views">
   <button class="tab on" data-view="board">Board</button>
   <button class="tab" data-view="morning">Morning</button>
   <button class="tab" data-view="credit">Credit</button>
   <button class="tab" data-view="box">Box</button>
+  <button class="tab" data-view="map">Map</button>
 </nav>
 
 <div class="sheet launch-sheet" id="launch-sheet" hidden>

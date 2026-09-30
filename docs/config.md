@@ -111,6 +111,17 @@ is killed, nothing is written.
 `gh` uses whatever login the person running laneboard has. Not logged in is a
 state with a back-off, not an error.
 
+### `map` — the Map view
+
+| Key | Default | Env | What |
+| --- | --- | --- | --- |
+| `map.file` | `~/.config/laneboard/map.json` | `LANEBOARD_MAP_FILE` | The topology: sites, rooms, services, links, probes. Missing is fine. |
+| `map.feedsDir` | `~/.cache/laneboard/feeds` | `LANEBOARD_MAP_FEEDS` | Where other machines drop their snapshots. Read only. |
+| `map.feedStaleMs` | `300000` | — | A feed older than this, or 3x its own interval, shows as no data. |
+| `map.probeEverySec` | `60` | — | The default interval of a node's HTTP probe; at least 15. |
+
+The file formats are in [map.md](map.md).
+
 ### `markers` — what a lane shouting for help looks like
 
 ```json
