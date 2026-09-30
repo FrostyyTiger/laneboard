@@ -95,6 +95,7 @@ export function attach(req, socket, head) {
     ws.visible = new Set();
     const snap = state.snapshot();
     ws.send(JSON.stringify({ type: 'snapshot', ...snap, sessions: snap.sessions.map(forWire) }));
+    for (const extra of greeting()) ws.send(JSON.stringify(extra));
     ws.on('pong', () => { ws.isAlive = true; });
     ws.on('message', (raw) => {
       let msg;
@@ -128,3 +129,7 @@ const heartbeat = setInterval(() => {
 heartbeat.unref();
 
 export function clientCount() { return clients.size; }
+
+/** Messages a new client gets right after its snapshot (the Map's model). */
+let greeting = () => [];
+export function onConnect(fn) { greeting = fn; }

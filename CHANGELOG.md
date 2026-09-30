@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+**The Map.** A fifth view (`g p`): everything laneboard knows about, drawn as
+one constellation. It has sites, rooms, services and lanes on rings, arcs for
+what depends on what, CPU and memory gauges on every room, and a list of what
+needs you. Every movement on it is an event. It is built from a private
+topology file, snapshots that other machines push into a directory, and HTTP
+probes; laneboard reaches out to nothing it watches. See docs/map.md.
+
 ## 0.1.0 — 2026-09-23
 
 First public release. Extracted from a private cockpit built for one host,

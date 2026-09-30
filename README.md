@@ -14,8 +14,9 @@ exposes it (a tailnet, a reverse proxy) has to do the authentication.
 | **Morning** `#morning` | Over a window (12 h / tonight / 24 h / 7 d): what needs a human (`danger` first), what finished (with its PR), what it cost. |
 | **Credit** `#credit` | Where the 5 h and 7 d rate-limit windows have been, and what each lane spent. |
 | **Box** `#box` | The machine, a live stack next to it and its guard, the CI queue, the agent slots. |
+| **Map** `#map` | What is all this running on, and where is the trouble? A live constellation of your sites, rooms, services and lanes, and what depends on what. Fed by a topology file, snapshots other machines push, and HTTP probes; laneboard reaches out to nothing else. |
 
-`g b` · `g m` · `g c` · `g x` switch views. `j` `k` `p` `Enter` `Esc` `1`–`9`
+`g b` · `g m` · `g c` · `g x` · `g p` switch views. `j` `k` `p` `Enter` `Esc` `1`–`9`
 work on the Board.
 
 ## Run it
@@ -78,6 +79,7 @@ human starts. The guard flags and pushes; it never acts.
 | [docs/install.md](docs/install.md) | prerequisites, the service, HTTPS in front of it, the phone |
 | [docs/config.md](docs/config.md) | every config key, its default and its environment variable |
 | [docs/providers.md](docs/providers.md) | the three interfaces everything site-specific sits behind, and how to add one |
+| [docs/map.md](docs/map.md) | the Map: the topology file, the feed format, pushing a feed from a hypervisor |
 | [SECURITY.md](SECURITY.md) | why there is no login, and what that means for where you put it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | `npm test`, the hygiene gate, what is deliberate |
 

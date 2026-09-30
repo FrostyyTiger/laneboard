@@ -25,6 +25,7 @@ import * as retirer from './lanes/retire.mjs';
 import * as prs from './collector/pr.mjs';
 import * as guard from './collector/guard.mjs';
 import * as slots from './collector/slots.mjs';
+import * as mapModel from './map.mjs';
 import { capturePane } from './collector/tmux.mjs';
 
 process.on('unhandledRejection', (err) => log.error('unhandledRejection', err?.stack || String(err)));
@@ -61,6 +62,9 @@ route('GET', '/healthz', (req, res) => {
 });
 
 route('GET', '/api/state', (req, res) => json(res, state.snapshot()));
+
+// The Map: topology + feeds + probes + this board's lanes (server/map.mjs).
+route('GET', '/api/map', (req, res) => json(res, mapModel.model()));
 
 // Lanes on their own, for the CLI and for anything that wants the worktree
 // picture without a whole snapshot.
@@ -467,7 +471,17 @@ await listenAll();
 // Any "<name>-web-<id>" session still around is from a crashed run of ours.
 await terminals.sweepStale();
 db.startRetention();
-state.start(ws.broadcastFrom);
+mapModel.start();
+ws.onConnect(() => [{ type: 'map', map: mapModel.model() }]);
+state.start((snap) => {
+  ws.broadcastFrom(snap);
+  try {
+    const msg = mapModel.tick(snap);
+    if (msg && ws.clientCount()) ws.send(msg);
+  } catch (err) {
+    log.error('map tick failed', err?.stack || String(err));
+  }
+});
 launcher.init({ state, actions, capturePane, broadcast: ws.broadcastEvent });
 // A launch cut off by a restart is shown as interrupted at its step, never resumed.
 launcher.markInterrupted();

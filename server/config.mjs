@@ -117,6 +117,21 @@ export function defaults() {
     ci: { provider: 'none', repo: '' },
 
     /**
+     * The Map view (docs/map.md). Everything here is optional: with no
+     * topology file the Map is this host and its lanes.
+     *   file          the topology: sites, rooms, services, links, probes
+     *   feedsDir      where other machines drop their snapshots; read only
+     *   feedStaleMs   a feed older than this (or 3x its own interval) is "no data"
+     *   probeEverySec the default interval for a node's HTTP probe
+     */
+    map: {
+      file: path.join(HOME, '.config', 'laneboard', 'map.json'),
+      feedsDir: path.join(HOME, '.cache', 'laneboard', 'feeds'),
+      feedStaleMs: 5 * 60 * 1000,
+      probeEverySec: 60,
+    },
+
+    /**
      * What a lane shouting for help looks like, as `kind -> pattern`.
      *
      * Anchored kinds must start the line, after an optional bullet or quote
@@ -239,9 +254,11 @@ export function fromEnv(env = process.env) {
     platformRepo: env.LANEBOARD_PLATFORM_REPO,
   });
   const ci = defined({ provider: env.LANEBOARD_CI_PROVIDER, repo: env.LANEBOARD_CI_REPO });
+  const map = defined({ file: env.LANEBOARD_MAP_FILE, feedsDir: env.LANEBOARD_MAP_FEEDS });
   if (Object.keys(slots).length) out.slots = slots;
   if (Object.keys(guard).length) out.guard = guard;
   if (Object.keys(ci).length) out.ci = ci;
+  if (Object.keys(map).length) out.map = map;
   return out;
 }
 
@@ -274,6 +291,8 @@ function validate(c, file) {
     const p = c[key]?.provider;
     if (!allowed.includes(p)) bad(`${key}.provider must be one of ${allowed.join(', ')}, got ${JSON.stringify(p)}`);
   }
+  if (typeof c.map?.file !== 'string' || typeof c.map?.feedsDir !== 'string') bad('map.file and map.feedsDir must be paths');
+  if (!(c.map.feedStaleMs > 0) || !(c.map.probeEverySec >= 15)) bad('map.feedStaleMs must be positive and map.probeEverySec at least 15');
   for (const [kind, source] of Object.entries(c.markers)) {
     try { new RegExp(source); } catch (err) { bad(`markers.${kind} is not a valid regular expression: ${err.message}`); }
   }
