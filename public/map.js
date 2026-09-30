@@ -496,19 +496,21 @@ export function createMap(root, opts = {}) {
     if (n.sub) panel.append(h('p', 'map-sub', n.sub));
 
     const m = n.metrics ?? {};
-    const bars = [['cpu', 'CPU'], ['mem', 'Memory'], ['disk', 'Disk'], ['gpu', 'GPU']].filter(([k]) => typeof m[k] === 'number');
+    const bars = [['cpu', 'CPU'], ['mem', n.memCache ? 'Memory*' : 'Memory'], ['disk', 'Disk'], ['gpu', 'GPU']].filter(([k]) => typeof m[k] === 'number');
     if (bars.length) {
       const g = h('div', 'map-bars');
       for (const [k, word] of bars) {
         const v = Math.max(0, Math.min(1, m[k]));
         const row = h('div', 'map-bar');
         const track = h('div', 'map-bar-track');
-        const fill = h('div', `map-bar-fill ${v > 0.9 ? 's-crit' : v > 0.75 ? 's-warn' : ''}`);
+        const calm = k === 'mem' && n.memCache;
+        const fill = h('div', `map-bar-fill ${calm ? '' : v > 0.9 ? 's-crit' : v > 0.75 ? 's-warn' : ''}`);
         fill.style.width = `${(v * 100).toFixed(1)}%`;
         track.append(fill);
         row.append(h('span', 'map-bar-k', word), track, h('span', 'map-bar-v', `${Math.round(v * 100)}%`));
         g.append(row);
       }
+      if (n.memCache && typeof m.mem === 'number') g.append(h('p', 'map-note', '* as the hypervisor sees it: includes page cache the guest can drop'));
       panel.append(g);
     }
 
@@ -1092,7 +1094,8 @@ export function createMap(root, opts = {}) {
           ctx.lineWidth = 2;
           ctx.strokeStyle = rgba(P.t3, 0.18 * alpha);
           ctx.beginPath(); ctx.arc(sp.x, sp.y, gr, 0, TAU); ctx.stroke();
-          ctx.strokeStyle = rgba(v > 0.9 ? P.crit : v > 0.75 ? P.warn : P.t2, 0.85 * alpha);
+          const cacheOnly = k === 'mem' && n.memCache;
+          ctx.strokeStyle = rgba(cacheOnly ? P.t2 : v > 0.9 ? P.crit : v > 0.75 ? P.warn : P.t2, 0.85 * alpha);
           ctx.beginPath(); ctx.arc(sp.x, sp.y, gr, -Math.PI / 2, -Math.PI / 2 + v * TAU); ctx.stroke();
         }
       }

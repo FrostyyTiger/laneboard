@@ -193,6 +193,9 @@ export function fromFeed(node, feeds, now) {
     why: g.why ?? why,
     sub: g.sub,
     metrics: status === 'ok' ? { cpu: clamp01(g.cpu), mem: clamp01(mem), disk: clamp01(g.disk), gpu: clamp01(g.gpu) } : undefined,
+    // A VM's memory as its hypervisor sees it counts the guest's page cache:
+    // shown, but never as a warning.
+    memCache: Boolean(g.memCache),
     detail,
   };
 }
@@ -352,13 +355,14 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
   for (const n of order) {
     const f = fromFeed(n, feeds, now);
     const p = fromProbe(n, probes);
-    let status, why, sub = n.sub, metrics, detail = { ...(n.detail ?? {}) };
+    let status, why, sub = n.sub, metrics, memCache = false, detail = { ...(n.detail ?? {}) };
     if (f || p) {
       status = f && p ? worse(f.status, p.status) : (f ?? p).status;
       why = [f, p].filter((x) => x && x.status === status && x.why).map((x) => x.why)[0] ?? f?.why ?? p?.why;
       // A probe's latency is worth showing next to the topology's own line.
       sub = f?.sub ?? ([sub, p?.sub].filter(Boolean).join(' · ') || undefined);
       metrics = f?.metrics;
+      memCache = Boolean(f?.memCache);
       Object.assign(detail, f?.detail ?? {}, p?.detail ?? {});
     } else if (n.kind === 'core' || n.kind === 'site') {
       // A place has no status of its own; the view rolls its children up.
@@ -395,6 +399,7 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
       why,
       sub,
       metrics: m && Object.keys(m).length ? m : undefined,
+      memCache: memCache || undefined,
       detail: Object.keys(detail).length ? detail : undefined,
       href: n.href,
     });

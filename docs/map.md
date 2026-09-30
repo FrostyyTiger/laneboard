@@ -152,6 +152,8 @@ half-written file.
 - `mem` / `maxmem` is in any unit, since only the ratio is used. A guest can
   instead give `memFrac` directly.
 - `status` is `running`, `stopped`, `paused` or `suspended`.
+- `memCache: true` says the memory figure counts page cache (a VM seen from
+  its hypervisor). The gauge is then drawn neutral and never as a warning.
 - `events` appear once each, in the ticker and as a pulse on the node.
   - Events already in the file when laneboard first reads it are not replayed.
   - `guest` targets one of the host's guests.

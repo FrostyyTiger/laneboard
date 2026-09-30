@@ -185,3 +185,13 @@ test('probes: status, latency, expectations and failures', async () => {
   const refused = await probeOnce(node({}), { fetchImpl: async () => { throw Object.assign(new Error('x'), { cause: { code: 'ECONNREFUSED' } }); } });
   assert.deepEqual([refused.ok, refused.error], [false, 'connection refused']);
 });
+
+test('a VM whose memory counts page cache says so, and only then', () => {
+  const f = feed({ guests: [{ vmid: 101, status: 'running', mem: 9, maxmem: 10, memCache: true }] });
+  const t = parseTopology({ nodes: [{ id: 'web', feed: 'hv/101', kind: 'room' }, { id: 'db', kind: 'room', probe: { url: 'https://x.example.invalid' } }] });
+  const m = build({ topology: t, feeds: f, probes: new Map([['db', { ok: true, code: 200, ms: 5 }]]), now: NOW });
+  const web = m.nodes.find((n) => n.id === 'web');
+  assert.equal(web.metrics.mem, 0.9);
+  assert.equal(web.memCache, true);
+  assert.equal(m.nodes.find((n) => n.id === 'db').memCache, undefined);
+});
