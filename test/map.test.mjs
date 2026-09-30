@@ -195,3 +195,13 @@ test('a VM whose memory counts page cache says so, and only then', () => {
   assert.equal(web.memCache, true);
   assert.equal(m.nodes.find((n) => n.id === 'db').memCache, undefined);
 });
+
+test('a dropped feed is one event, not one per guest and service', () => {
+  const t = topo();
+  const up = build({ topology: t, feeds: feed(), now: NOW });
+  const gone = build({ topology: t, feeds: feed({ at: NOW - 60 * 60_000 }), now: NOW });
+  const ev = diffEvents(up, gone, NOW);
+  assert.deepEqual(ev.map((e) => e.node), ['hv']);
+  assert.match(ev[0].text, /hv stopped reporting · no data from hv/);
+  assert.equal(gone.nodes.find((n) => n.id === 'app').derived, true);
+});

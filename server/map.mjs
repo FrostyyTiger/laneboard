@@ -355,7 +355,7 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
   for (const n of order) {
     const f = fromFeed(n, feeds, now);
     const p = fromProbe(n, probes);
-    let status, why, sub = n.sub, metrics, memCache = false, detail = { ...(n.detail ?? {}) };
+    let status, why, sub = n.sub, metrics, memCache = false, derived = false, detail = { ...(n.detail ?? {}) };
     if (f || p) {
       status = f && p ? worse(f.status, p.status) : (f ?? p).status;
       why = [f, p].filter((x) => x && x.status === status && x.why).map((x) => x.why)[0] ?? f?.why ?? p?.why;
@@ -369,6 +369,7 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
       status = 'ok';
     } else if (n.parent && live.has(n.parent) && live.get(n.parent).sourced) {
       // No check of its own: it is as up as the thing it runs inside.
+      derived = true;
       const ps = live.get(n.parent).status;
       status = ps === 'down' || ps === 'unknown' ? ps : 'ok';
       why = ps === 'down' ? `${byId.get(n.parent).label ?? n.parent} is down` : undefined;
@@ -400,6 +401,8 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
       sub,
       metrics: m && Object.keys(m).length ? m : undefined,
       memCache: memCache || undefined,
+      // Its status is its parent's: the parent's event already says it.
+      derived: derived || undefined,
       detail: Object.keys(detail).length ? detail : undefined,
       href: n.href,
     });
@@ -445,8 +448,16 @@ const STATUS_WORDS = {
 export function diffEvents(prev, next, now = Date.now()) {
   if (!prev) return [];
   const before = new Map(prev.nodes.map((n) => [n.id, n.status]));
+  const byId = new Map(next.nodes.map((n) => [n.id, n]));
+  // When a feed drops, its host and every guest change together: one line for
+  // the host says it, twenty for the guests bury everything else.
+  const sameAsParent = (n) => {
+    const p = n.parent && byId.get(n.parent);
+    return p && before.has(p.id) && before.get(p.id) !== p.status && p.status === n.status;
+  };
   const out = [];
   for (const n of next.nodes) {
+    if (n.derived || sameAsParent(n)) continue;
     const was = before.get(n.id);
     if (was === undefined) {
       if (n.kind === 'lane') out.push({ at: now, node: n.id, kind: n.status, text: `${n.label} started` });
