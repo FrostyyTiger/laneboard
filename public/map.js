@@ -900,9 +900,15 @@ export function createMap(root, opts = {}) {
 
   function drawLinks(s, now) {
     ctx.save();
+    const focusNow = hover ?? selected;
     for (const l of model.links) {
       const a = cur.get(l.from), b = cur.get(l.to);
       if (!a || !b) continue;
+      // A resting lane's links are drawn only when asked for: a dozen idle
+      // worktrees would otherwise web the middle for nothing.
+      const src = byId.get(l.from);
+      if (src?.kind === 'lane' && (src.status === 'idle' || src.status === 'unknown')
+        && focusNow !== l.from && focusNow !== l.to) continue;
       const ctrl = linkCtrl(a, b);
       const A = toScreen(a), C = toScreen(ctrl), B = toScreen(b);
       const alpha = Math.min(focusAlpha.get(l.from) ?? 1, focusAlpha.get(l.to) ?? 1);

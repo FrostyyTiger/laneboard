@@ -356,7 +356,8 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
     if (f || p) {
       status = f && p ? worse(f.status, p.status) : (f ?? p).status;
       why = [f, p].filter((x) => x && x.status === status && x.why).map((x) => x.why)[0] ?? f?.why ?? p?.why;
-      sub = f?.sub ?? sub ?? p?.sub;
+      // A probe's latency is worth showing next to the topology's own line.
+      sub = f?.sub ?? ([sub, p?.sub].filter(Boolean).join(' · ') || undefined);
       metrics = f?.metrics;
       Object.assign(detail, f?.detail ?? {}, p?.detail ?? {});
     } else if (n.kind === 'core' || n.kind === 'site') {
