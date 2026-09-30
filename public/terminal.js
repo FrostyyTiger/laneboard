@@ -28,11 +28,11 @@ function loadXterm() {
   if (xtermLoading) return xtermLoading;
   xtermLoading = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = '/vendor/xterm.js';
+    s.src = 'vendor/xterm.js';
     s.onload = () => {
       let pending = 2;
       const done = () => { if (--pending === 0) resolve(); };
-      for (const src of ['/vendor/addon-fit.js', '/vendor/addon-web-links.js']) {
+      for (const src of ['vendor/addon-fit.js', 'vendor/addon-web-links.js']) {
         const a = document.createElement('script');
         a.src = src;
         a.onload = done;

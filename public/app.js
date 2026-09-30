@@ -1,5 +1,5 @@
 // Laneboard dashboard. Vanilla ES modules, no framework (hard rule 7).
-import { openTerminal, closeTerminal, fitAll, writeTo, isLive } from '/terminal.js';
+import { openTerminal, closeTerminal, fitAll, writeTo, isLive } from './terminal.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -1811,7 +1811,7 @@ function showMap() {
   sizeMap();
   if (mapView) { mapView.resize(); return; }
   if (mapLoading) return;
-  mapLoading = import('/map.js').then((mod) => {
+  mapLoading = import('./map.js').then((mod) => {
     mapView = mod.createMap($('map-root'), {
       title: store.map?.title ?? 'Map',
       actions: mapActions,
@@ -1997,7 +1997,7 @@ async function refreshPushUi() {
 
 pushBtn.addEventListener('click', async () => {
   try {
-    const reg = await navigator.serviceWorker.register('/sw.js');
+    const reg = await navigator.serviceWorker.register('sw.js');
     const existing = await reg.pushManager.getSubscription();
     if (existing) {
       await post('/api/push/test');
@@ -2020,6 +2020,6 @@ pushBtn.addEventListener('click', async () => {
 });
 
 if ('serviceWorker' in navigator && isSecureContext) {
-  navigator.serviceWorker.register('/sw.js').catch(() => { /* reported by the button */ });
+  navigator.serviceWorker.register('sw.js').catch(() => { /* reported by the button */ });
 }
 refreshPushUi();

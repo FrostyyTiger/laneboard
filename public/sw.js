@@ -14,8 +14,8 @@ self.addEventListener('push', (event) => {
       body: data.body || '',
       tag: data.tag || 'laneboard',
       renotify: true,
-      icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
       data: { url: data.url || '/' },
       timestamp: Date.now(),
     })
