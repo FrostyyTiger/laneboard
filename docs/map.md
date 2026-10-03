@@ -160,6 +160,16 @@ half-written file.
 - `status` is `running`, `stopped`, `paused` or `suspended`.
 - `memCache: true` says the memory figure counts page cache (a VM seen from
   its hypervisor). The gauge is then drawn neutral and never as a warning.
+- `pressure: { "some": 0.002, "full": 0 }` is memory pressure (Linux PSI,
+  `/proc/pressure/memory` or a cgroup's `memory.pressure`), as a fraction of the
+  last minute (`avg60 / 100`). `some` means at least one task stalled waiting
+  for memory; `full` means all of them did. A host or a guest may send it.
+  - It answers "is RAM short?", which `mem` cannot: page cache fills `mem`
+    long before anything waits.
+  - The side panel shows it as a **Pressure** bar (full at 25 %) with a
+    one-line explanation.
+  - From 10 % (`some` or `full`) the node turns amber, and from 25 % red, with
+    the reason in its status line.
 - A guest's `alerts` work like the host's: while the guest runs, the worst one
   sets its status and its text says why (`{ "level": "crit", "text": "disk 99% full" }`).
 - A guest's `services` are what runs inside it, for a topology node whose

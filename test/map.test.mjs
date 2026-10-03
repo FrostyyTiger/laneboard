@@ -247,3 +247,23 @@ test('feed events land on the guest, not on a service inside it', () => {
   const ev = feedEvents(feed({ events: [{ at: NOW + 1, text: 'rebooted', guest: 104 }] }), t, seen);
   assert.deepEqual(ev.map((e) => e.node), ['ci']);
 });
+
+test('memory pressure passes through, and only a real stall raises the status', () => {
+  const t = parseTopology({ nodes: [{ id: 'hv', kind: 'site', feed: 'hv' }, { id: 'web', parent: 'hv', feed: 'hv/101', kind: 'room' }, { id: 'db', parent: 'hv', feed: 'hv/102', kind: 'room' }] });
+  const f = feed({
+    host: { mem: 0.8, pressure: { some: 0.0004, full: 0 } },
+    guests: [
+      { vmid: 101, status: 'running', mem: 9, maxmem: 10, pressure: { some: 0.14, full: 0.02 } },
+      { vmid: 102, status: 'running', mem: 1, maxmem: 10, pressure: { some: 0.4, full: 0.3 } },
+    ],
+  });
+  const m = build({ topology: t, feeds: f, now: NOW });
+  const by = (id) => m.nodes.find((n) => n.id === id);
+  assert.deepEqual(by('hv').pressure, { some: 0.0004, full: 0 });
+  assert.equal(by('hv').status, 'ok');
+  assert.equal(by('web').status, 'warn');
+  assert.match(by('web').why, /memory pressure: work stalled 14%/);
+  assert.equal(by('db').status, 'crit');
+  const none = build({ topology: t, feeds: feed({ host: { mem: 0.9 } }), now: NOW });
+  assert.equal(none.nodes.find((n) => n.id === 'hv').pressure, undefined);
+});
