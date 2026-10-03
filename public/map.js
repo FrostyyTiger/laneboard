@@ -514,6 +514,25 @@ export function createMap(root, opts = {}) {
       panel.append(g);
     }
 
+    // Memory pressure (PSI): the bar is full at 25 %, where work is badly slowed.
+    const p = n.pressure;
+    if (p && (typeof p.some === 'number' || typeof p.full === 'number')) {
+      const g = h('div', 'map-bars');
+      const v = Math.max(p.some ?? 0, p.full ?? 0);
+      const pct = (x) => `${x < 0.1 ? (x * 100).toFixed(1) : Math.round(x * 100)}%`;
+      const row = h('div', 'map-bar');
+      const track = h('div', 'map-bar-track');
+      const fill = h('div', `map-bar-fill ${v >= 0.25 ? 's-crit' : v >= 0.1 ? 's-warn' : ''}`);
+      fill.style.width = `${(Math.min(1, v / 0.25) * 100).toFixed(1)}%`;
+      track.append(fill);
+      row.title = `some ${pct(p.some ?? 0)} · full ${pct(p.full ?? 0)} of the last minute`;
+      row.append(h('span', 'map-bar-k', 'Pressure'), track, h('span', 'map-bar-v', pct(v)));
+      g.append(row, h('p', 'map-note',
+        'Memory pressure (PSI): how much of the last minute work stalled waiting for RAM. '
+        + '0% means no shortage, however full Memory looks; from 10% things slow down, from 25% it is short.'));
+      panel.append(g);
+    }
+
     const detail = Object.entries(n.detail ?? {});
     if (detail.length) {
       const dl = h('dl', 'map-dl');

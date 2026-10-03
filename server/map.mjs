@@ -26,6 +26,26 @@ export const LINK_KINDS = ['dep', 'flow', 'share'];
 const SEVERITY = ['idle', 'unknown', 'ok', 'working', 'warn', 'attention', 'crit', 'down'];
 const worse = (a, b) => (SEVERITY.indexOf(a) >= SEVERITY.indexOf(b) ? a : b);
 const round = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 100) / 100 : undefined);
+
+// Memory pressure (Linux PSI): the share of the last minute in which some
+// (`some`) or all (`full`) runnable tasks stalled waiting for memory. It is the
+// honest "is RAM short?" signal: page cache makes `mem` look full long before
+// anything waits. Above these lines work is visibly slowed.
+export const PRESSURE = { warn: 0.10, crit: 0.25 };
+
+export function memPressure(p) {
+  if (!p || typeof p !== 'object') return undefined;
+  const r = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(0, Math.min(1, v)) * 10000) / 10000 : undefined);
+  const out = { some: r(p.some), full: r(p.full) };
+  return out.some === undefined && out.full === undefined ? undefined : out;
+}
+
+function pressureAlert(p) {
+  const v = Math.max(p?.some ?? 0, p?.full ?? 0);
+  if (v < PRESSURE.warn) return null;
+  const pct = `${Math.round(v * 100)}%`;
+  return { level: v >= PRESSURE.crit ? 'crit' : 'warn', text: `memory pressure: work stalled ${pct} of the last minute waiting for RAM` };
+}
 const clamp01 = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : undefined);
 
 // ------------------------------------------------------------------ topology
@@ -185,7 +205,8 @@ export function fromFeed(node, feeds, now) {
   }
   if (!ref.guest) {
     const h = feed.host ?? {};
-    const alerts = Array.isArray(h.alerts) ? h.alerts : [];
+    const pressure = memPressure(h.pressure);
+    const alerts = [...(Array.isArray(h.alerts) ? h.alerts : []), pressureAlert(pressure)].filter(Boolean);
     let status = h.status ?? 'ok';
     for (const a of alerts) status = worse(status, a.level === 'crit' ? 'crit' : 'warn');
     return {
@@ -193,6 +214,7 @@ export function fromFeed(node, feeds, now) {
       why: alerts[0]?.text ?? h.why,
       sub: h.sub,
       metrics: { cpu: clamp01(h.cpu), mem: clamp01(h.mem), disk: clamp01(h.disk), gpu: clamp01(h.gpu) },
+      pressure,
       detail: h.detail,
     };
   }
@@ -211,7 +233,8 @@ export function fromFeed(node, feeds, now) {
     : status === 'warn' && !expectStopped ? `guest is ${g.status}`
       : status === 'warn' ? 'running but expected to be stopped' : undefined;
   // Alerts from inside a running guest (its disk is full, say), as for a host.
-  const alerts = g.status === 'running' && Array.isArray(g.alerts) ? g.alerts : [];
+  const pressure = g.status === 'running' && !expectStopped ? memPressure(g.pressure) : undefined;
+  const alerts = g.status === 'running' ? [...(Array.isArray(g.alerts) ? g.alerts : []), pressureAlert(pressure)].filter(Boolean) : [];
   for (const a of alerts) {
     const next = worse(status, a.level === 'crit' ? 'crit' : 'warn');
     if (next !== status) { status = next; why = a.text; }
@@ -228,6 +251,7 @@ export function fromFeed(node, feeds, now) {
     // A VM's memory as its hypervisor sees it counts the guest's page cache:
     // shown, but never as a warning.
     memCache: Boolean(g.memCache),
+    pressure,
     detail,
   };
 }
@@ -387,7 +411,7 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
   for (const n of order) {
     const f = fromFeed(n, feeds, now);
     const p = fromProbe(n, probes);
-    let status, why, sub = n.sub, metrics, memCache = false, derived = false, detail = { ...(n.detail ?? {}) };
+    let status, why, sub = n.sub, metrics, pressure, memCache = false, derived = false, detail = { ...(n.detail ?? {}) };
     if (f || p) {
       status = f && p ? worse(f.status, p.status) : (f ?? p).status;
       why = [f, p].filter((x) => x && x.status === status && x.why).map((x) => x.why)[0] ?? f?.why ?? p?.why;
@@ -395,6 +419,7 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
       sub = f?.sub ?? ([sub, p?.sub].filter(Boolean).join(' · ') || undefined);
       metrics = f?.metrics;
       memCache = Boolean(f?.memCache);
+      pressure = f?.pressure;
       Object.assign(detail, f?.detail ?? {}, p?.detail ?? {});
     } else if (n.kind === 'core' || n.kind === 'site') {
       // A place has no status of its own; the view rolls its children up.
@@ -433,6 +458,7 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
       sub,
       metrics: m && Object.keys(m).length ? m : undefined,
       memCache: memCache || undefined,
+      pressure,
       // Its status is its parent's: the parent's event already says it.
       derived: derived || undefined,
       detail: Object.keys(detail).length ? detail : undefined,
