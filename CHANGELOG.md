@@ -9,6 +9,13 @@ needs you. Every movement on it is an event. It is built from a private
 topology file, snapshots that other machines push into a directory, and HTTP
 probes; laneboard reaches out to nothing it watches. See docs/map.md.
 
+**Map motion.** Every movement on the Map is now a critically damped spring,
+so motion starts from its current speed and bends when you click again. Changes
+play in beats (exits, moves, then entries one by one), nodes travel along their
+rings, long jumps fly out and back in, drags glide, and the panel closes as
+smoothly as it opens, with a line to the node it describes. Nodes can be
+**folded** (`c`, or the `+N` badge) and folds are remembered.
+
 **Services inside a guest.** A feed can list what runs inside a guest (CI
 runners, say), each with its own status: `working` while busy, `idle` while
 waiting. A topology node points at one with `feed: "hv1/104/runner-1"`. A

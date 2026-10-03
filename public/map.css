@@ -101,9 +101,16 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-l);
   box-shadow: var(--highlight-inset), var(--shadow-float);
-  animation: map-in var(--dur) var(--ease);
+  animation: map-in 240ms var(--ease) both;
 }
-@keyframes map-in { from { opacity: 0; transform: translateX(8px); } }
+@keyframes map-in { from { opacity: 0; transform: translateX(14px) scale(0.985); } }
+/* Closing plays out before the panel hides; it leaves faster than it came. */
+.map-panel.map-panel-out { animation: map-out 150ms cubic-bezier(0.4, 0, 1, 1) both; pointer-events: none; }
+@keyframes map-out { to { opacity: 0; transform: translateX(10px) scale(0.985); } }
+/* Another node in an open panel: the frame stays, the contents cross-fade. */
+.map-panel.map-swap > * { animation: map-swap 200ms var(--ease) both; }
+.map-panel.map-swap > :nth-child(n+5) { animation-delay: 30ms; }
+@keyframes map-swap { from { opacity: 0; transform: translateY(3px); } }
 .map-panel-close {
   position: absolute; top: 8px; right: 8px; width: 26px; height: 26px;
   border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text-3);
@@ -141,6 +148,14 @@
 .map-rel { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 5px; }
 .map-rel .map-h { flex-basis: 100%; margin: 8px 0 2px; }
 .map-rel .map-h:first-child { margin-top: 0; }
+.map-h-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.map-fold {
+  padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius-s);
+  background: transparent; color: var(--text-2); font: 10.5px var(--font-mono); letter-spacing: 0.04em;
+  text-transform: none; cursor: pointer;
+}
+.map-fold:hover { color: var(--text-1); border-color: var(--border-strong); }
+.map-fold:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 .map-chip {
   display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
   padding: 3px 8px; border: 1px solid var(--border); border-radius: var(--radius-s);
@@ -208,12 +223,14 @@
     border-radius: 10px 10px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
     animation-name: map-up;
   }
-  @keyframes map-up { from { opacity: 0; transform: translateY(12px); } }
+  .map-panel.map-panel-out { animation-name: map-down; }
+  @keyframes map-up { from { opacity: 0; transform: translateY(16px); } }
+  @keyframes map-down { to { opacity: 0; transform: translateY(16px); } }
   .map-problem { margin: 8px 0 0; max-width: 420px; color: var(--warn); font: 11px var(--font-mono); pointer-events: auto; }
 .map-stat b { font-size: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .map-panel { animation: none; }
+  .map-panel, .map-panel.map-panel-out, .map-panel.map-swap > * { animation: none; }
   .map-bar-fill { transition: none; }
 }
