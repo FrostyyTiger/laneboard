@@ -135,12 +135,33 @@ export function readFeeds(dir = config.map.feedsDir) {
   return out;
 }
 
-/** "hv1" is a host; "hv1/103" or {source, guest} is a guest of it. */
+/**
+ * "hv1" is a host; "hv1/103" or {source, guest} is a guest of it;
+ * "hv1/103/worker-1" or {source, guest, service} is a service that guest lists.
+ */
 export function feedRef(ref) {
   if (!ref) return null;
-  if (typeof ref === 'object') return { source: String(ref.source), guest: ref.guest != null ? String(ref.guest) : null };
-  const [source, guest] = String(ref).split('/');
-  return { source, guest: guest ?? null };
+  const str = (v) => (v != null ? String(v) : null);
+  if (typeof ref === 'object') return { source: String(ref.source), guest: str(ref.guest), service: ref.guest != null ? str(ref.service) : null };
+  const [source, guest, ...service] = String(ref).split('/');
+  return { source, guest: guest ?? null, service: guest != null && service.length ? service.join('/') : null };
+}
+
+// What a feed may say about one of a guest's services. `working` is busy
+// (a runner on a job), `idle` is up with nothing to do.
+const SERVICE_STATUS = ['ok', 'working', 'idle', 'warn', 'crit', 'down'];
+
+/** One of a running guest's services, as the feed lists it. */
+function fromService(g, ref) {
+  const s = (Array.isArray(g.services) ? g.services : []).find((x) => x && String(x.name) === ref.service);
+  if (!s) return { status: 'unknown', why: `${ref.guest} does not list ${ref.service}` };
+  const status = SERVICE_STATUS.includes(s.status) ? s.status : 'unknown';
+  return {
+    status,
+    why: s.why ?? (status === 'down' ? 'not running' : undefined),
+    sub: s.sub,
+    detail: s.detail && typeof s.detail === 'object' ? { ...s.detail } : undefined,
+  };
 }
 
 const agoWords = (ms) => {
@@ -177,13 +198,24 @@ export function fromFeed(node, feeds, now) {
   }
   const g = (feed.guests ?? []).find((x) => String(x.vmid) === ref.guest || x.name === ref.guest);
   if (!g) return { status: 'unknown', why: `${ref.source} does not list ${ref.guest}` };
+  if (ref.service) {
+    // A service cannot be up inside a guest that is not.
+    if (g.status !== 'running') return { status: g.status === 'stopped' ? 'down' : 'unknown', why: `${ref.guest} is ${g.status ?? 'not reported'}` };
+    return fromService(g, ref);
+  }
   const expectStopped = node.expect === 'stopped';
-  const status = g.status === 'running' ? (expectStopped ? 'warn' : 'ok')
+  let status = g.status === 'running' ? (expectStopped ? 'warn' : 'ok')
     : g.status === 'stopped' ? (expectStopped ? 'idle' : 'down')
       : g.status === 'paused' || g.status === 'suspended' ? 'warn' : 'unknown';
-  const why = status === 'down' ? `${g.type === 'lxc' ? 'container' : 'VM'} is stopped`
+  let why = status === 'down' ? `${g.type === 'lxc' ? 'container' : 'VM'} is stopped`
     : status === 'warn' && !expectStopped ? `guest is ${g.status}`
       : status === 'warn' ? 'running but expected to be stopped' : undefined;
+  // Alerts from inside a running guest (its disk is full, say), as for a host.
+  const alerts = g.status === 'running' && Array.isArray(g.alerts) ? g.alerts : [];
+  for (const a of alerts) {
+    const next = worse(status, a.level === 'crit' ? 'crit' : 'warn');
+    if (next !== status) { status = next; why = a.text; }
+  }
   const mem = g.maxmem ? g.mem / g.maxmem : g.memFrac;
   const detail = { ...(g.detail ?? {}) };
   if (g.vmid != null) detail.ID ??= g.vmid;
@@ -192,7 +224,7 @@ export function fromFeed(node, feeds, now) {
     status,
     why: g.why ?? why,
     sub: g.sub,
-    metrics: status === 'ok' ? { cpu: clamp01(g.cpu), mem: clamp01(mem), disk: clamp01(g.disk), gpu: clamp01(g.gpu) } : undefined,
+    metrics: g.status === 'running' && !expectStopped ? { cpu: clamp01(g.cpu), mem: clamp01(mem), disk: clamp01(g.disk), gpu: clamp01(g.gpu) } : undefined,
     // A VM's memory as its hypervisor sees it counts the guest's page cache:
     // shown, but never as a warning.
     memCache: Boolean(g.memCache),
@@ -477,7 +509,8 @@ export function feedEvents(feeds, topology, seen) {
   const nodesByRef = new Map();
   for (const n of topology?.nodes ?? []) {
     const r = feedRef(n.feed);
-    if (r) nodesByRef.set(`${r.source}/${r.guest ?? ''}`, n.id);
+    // A feed's events name a guest, never one of its services.
+    if (r && !r.service) nodesByRef.set(`${r.source}/${r.guest ?? ''}`, n.id);
   }
   for (const [source, feed] of feeds) {
     const last = seen.get(source);
