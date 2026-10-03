@@ -50,9 +50,9 @@ test('a topology with a missing parent, a duplicate, a loop or a bad link is ref
 });
 
 test('feed refs name a host or one of its guests', () => {
-  assert.deepEqual(feedRef('hv'), { source: 'hv', guest: null });
-  assert.deepEqual(feedRef('hv/101'), { source: 'hv', guest: '101' });
-  assert.deepEqual(feedRef({ source: 'hv', guest: 7 }), { source: 'hv', guest: '7' });
+  assert.deepEqual(feedRef('hv'), { source: 'hv', guest: null, service: null });
+  assert.deepEqual(feedRef('hv/101'), { source: 'hv', guest: '101', service: null });
+  assert.deepEqual(feedRef({ source: 'hv', guest: 7 }), { source: 'hv', guest: '7', service: null });
   assert.equal(feedRef(undefined), null);
 });
 
@@ -204,4 +204,46 @@ test('a dropped feed is one event, not one per guest and service', () => {
   assert.deepEqual(ev.map((e) => e.node), ['hv']);
   assert.match(ev[0].text, /hv stopped reporting · no data from hv/);
   assert.equal(gone.nodes.find((n) => n.id === 'app').derived, true);
+});
+
+test('a service a guest lists takes its own status, and a stopped guest takes its services down', () => {
+  assert.deepEqual(feedRef('hv/104/runner-1'), { source: 'hv', guest: '104', service: 'runner-1' });
+  assert.deepEqual(feedRef('hv/104/a/b'), { source: 'hv', guest: '104', service: 'a/b' });
+  assert.deepEqual(feedRef('hv/104'), { source: 'hv', guest: '104', service: null });
+  assert.deepEqual(feedRef({ source: 'hv', guest: 104, service: 'r' }), { source: 'hv', guest: '104', service: 'r' });
+  const f = feed({ guests: [
+    { vmid: 104, status: 'running', services: [
+      { name: 'r1', status: 'working', sub: 'job 3m' },
+      { name: 'r2', status: 'idle' },
+      { name: 'r3', status: 'down', why: 'unit failed', detail: { Unit: 'r3.service' } },
+      { name: 'r4', status: 'exploded' },
+    ] },
+    { vmid: 102, status: 'stopped', services: [{ name: 'r9', status: 'ok' }] },
+  ] });
+  const at = (ref) => fromFeed({ id: 'x', feed: ref }, f, NOW);
+  assert.deepEqual([at('hv/104/r1').status, at('hv/104/r1').sub], ['working', 'job 3m']);
+  assert.equal(at('hv/104/r2').status, 'idle');
+  assert.deepEqual([at('hv/104/r3').status, at('hv/104/r3').why, at('hv/104/r3').detail.Unit], ['down', 'unit failed', 'r3.service']);
+  assert.equal(at('hv/104/r4').status, 'unknown');
+  assert.match(at('hv/104/gone').why, /104 does not list gone/);
+  assert.deepEqual([at('hv/102/r9').status, at('hv/102/r9').why], ['down', '102 is stopped']);
+});
+
+test('alerts from inside a running guest colour the room and keep its gauges', () => {
+  const f = feed({ guests: [
+    { vmid: 104, status: 'running', cpu: 0.2, mem: 1, maxmem: 8, disk: 0.99,
+      alerts: [{ level: 'warn', text: 'docker is noisy' }, { level: 'crit', text: 'disk 99% full' }] },
+    { vmid: 102, status: 'stopped', alerts: [{ level: 'crit', text: 'ignored' }] },
+  ] });
+  const room = fromFeed({ id: 'ci', feed: 'hv/104' }, f, NOW);
+  assert.deepEqual([room.status, room.why, room.metrics.disk], ['crit', 'disk 99% full', 0.99]);
+  assert.deepEqual([fromFeed({ id: 'db', feed: 'hv/102' }, f, NOW).status], ['down']);
+});
+
+test('feed events land on the guest, not on a service inside it', () => {
+  const t = parseTopology({ nodes: [{ id: 'ci', kind: 'room', feed: 'hv/104' }, { id: 'r1', parent: 'ci', kind: 'service', feed: 'hv/104/r1' }] });
+  const seen = new Map();
+  feedEvents(feed({ events: [] }), t, seen);
+  const ev = feedEvents(feed({ events: [{ at: NOW + 1, text: 'rebooted', guest: 104 }] }), t, seen);
+  assert.deepEqual(ev.map((e) => e.node), ['ci']);
 });

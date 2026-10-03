@@ -86,7 +86,7 @@ that infrastructure.
 | `kind` | `core`, `site`, `host`, `room`, `service`, `lane` or `pr`. Sets the ring and the shape. At most one `core`; without one, laneboard adds a core named after `title`. |
 | `label`, `sub` | The name, and the small line under it. A feed or probe can replace `sub`. |
 | `detail` | Key/value pairs shown in the side panel. |
-| `feed` | `"source"` for a host, `"source/<vmid or name>"` for one of its guests. |
+| `feed` | `"source"` for a host, `"source/<vmid or name>"` for one of its guests, `"source/<vmid or name>/<service>"` for a service that guest lists. |
 | `expect` | `"stopped"` for a guest that is meant to be off. It then shows idle, not down. |
 | `probe` | `{ url, expect?, every?, timeoutMs?, method?, level? }`. `expect` is a code, a list of codes, or `"2xx"`. The default is any 2xx or 3xx. `level: "warn"` makes a failure amber instead of red. |
 | `href` | An "Open" link in the side panel. |
@@ -136,7 +136,13 @@ half-written file.
   },
   "guests": [
     { "vmid": 101, "name": "web", "type": "qemu", "status": "running",
-      "cpu": 0.09, "mem": 2147483648, "maxmem": 8589934592, "uptime": 86400 }
+      "cpu": 0.09, "mem": 2147483648, "maxmem": 8589934592, "uptime": 86400 },
+    { "vmid": 104, "name": "ci", "type": "qemu", "status": "running", "disk": 0.35,
+      "alerts": [],
+      "services": [
+        { "name": "runner-1", "status": "working", "sub": "job · 4m" },
+        { "name": "runner-2", "status": "idle", "sub": "waiting for a job" }
+      ] }
   ],
   "events": [{ "at": 1790000000000, "kind": "ok", "text": "nightly backup finished", "guest": 101 }]
 }
@@ -154,6 +160,15 @@ half-written file.
 - `status` is `running`, `stopped`, `paused` or `suspended`.
 - `memCache: true` says the memory figure counts page cache (a VM seen from
   its hypervisor). The gauge is then drawn neutral and never as a warning.
+- A guest's `alerts` work like the host's: while the guest runs, the worst one
+  sets its status and its text says why (`{ "level": "crit", "text": "disk 99% full" }`).
+- A guest's `services` are what runs inside it, for a topology node whose
+  `feed` names one (`"hv1/104/runner-1"`).
+  - `status` is `ok`, `working` (busy, like a runner on a job), `idle` (up,
+    nothing to do), `warn`, `crit` or `down`. Anything else shows as unknown.
+  - `sub`, `why` and `detail` work as on a node.
+  - A service the guest does not list is unknown; every service of a stopped
+    guest is down.
 - `events` appear once each, in the ticker and as a pulse on the node.
   - Events already in the file when laneboard first reads it are not replayed.
   - `guest` targets one of the host's guests.

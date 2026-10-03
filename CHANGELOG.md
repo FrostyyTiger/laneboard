@@ -9,6 +9,11 @@ needs you. Every movement on it is an event. It is built from a private
 topology file, snapshots that other machines push into a directory, and HTTP
 probes; laneboard reaches out to nothing it watches. See docs/map.md.
 
+**Services inside a guest.** A feed can list what runs inside a guest (CI
+runners, say), each with its own status: `working` while busy, `idle` while
+waiting. A topology node points at one with `feed: "hv1/104/runner-1"`. A
+guest's own `alerts`, such as a full disk, now colour its room too.
+
 ## 0.1.0 — 2026-09-23
 
 First public release. Extracted from a private cockpit built for one host,
