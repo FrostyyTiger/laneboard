@@ -109,7 +109,7 @@ const AMBIENT = new Set([
   'import', 'requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle',
 ]);
 
-for (const file of ['app.js', 'terminal.js', 'map.js']) {
+for (const file of ['app.js', 'terminal.js', 'map.js', 'motion.js']) {
   test(`${file}: every function it calls is defined`, () => {
     const src = read(file);
     const declared = declaredNames(stripNonCode(src));
