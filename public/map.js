@@ -13,8 +13,19 @@
 //   * a repeating ping           the node is waiting for a human
 //   * a turning arc              a lane is working
 //
-// Nothing else animates, and `prefers-reduced-motion` turns all of it off:
-// the map then draws once per change, still complete.
+// Nothing else animates on its own, and `prefers-reduced-motion` turns all
+// of it off: the map then draws once per change, still complete.
+//
+// What you do moves too, and that motion is built to be followed rather than
+// noticed (public/motion.js has the maths):
+//
+//   * every position, fade and zoom is a critically damped spring: it starts
+//     from the speed it has, never overshoots, and bends when the goal moves
+//   * nodes move in angle and radius, so they swing along their rings
+//   * a change plays in beats: what leaves folds into its parent, what stays
+//     slides over, what arrives grows out of its parent one after another
+//   * a jump across the map is a flight: out, across, and in again
+//   * a drag glides on after you let go
 //
 // The module owns its DOM (canvas plus the overlay panels) inside the element
 // it is given, reads colours from the page's CSS tokens, and takes the model
@@ -24,7 +35,13 @@
 //   map.update({ nodes, links, events });
 //   map.event({ node: 'x', kind: 'ok', text: '…' });
 
+import { damp, settled, wrapAngle, flight, inertia, stage, easeInOut } from './motion.js';
+
 const TAU = Math.PI * 2;
+
+/** Spring half-lives in ms: how quickly each kind of motion closes half its distance. */
+const HL = { move: 80, fade: 55, zoom: 60, select: 70 };
+const FOLD_KEY = 'laneboard.map.folded';
 
 /** Distance from the centre for each depth, in world units. */
 const RINGS = [0, 150, 300, 440, 560, 660];
@@ -272,9 +289,17 @@ export function createMap(root, opts = {}) {
 
   // --- state
   let model = { nodes: [], links: [], events: [] };
-  let byId = new Map();
+  let byId = new Map();           // every node, drawn or folded away
   let lay = { pos: new Map(), center: null, kids: new Map() };
-  const cur = new Map();          // id -> {x, y, a (appear 0..1)}
+  let kidsAll = new Map();        // id -> child nodes, folded ones included
+  let hidden = new Set();         // ids inside a folded node
+  let vlinks = [];                // links between drawn nodes (folded ends moved up)
+  // id -> the drawn state of a node: polar position r/t with velocities, its
+  // appearance a (0..1), x/y derived, and when it may start moving. A node
+  // that left stays here as a ghost (`leaving`) until it has faded into `into`.
+  const cur = new Map();
+  const collapsed = new Set(loadFolded());
+  let foldBadges = [];            // [{id, x, y, w, h}] screen rects of "+N"
   let neighbours = new Map();     // id -> Set(id)
   let pulses = [];                // {id, t0, color}
   let comets = [];                // {link, t0, dur, color}
@@ -285,11 +310,15 @@ export function createMap(root, opts = {}) {
   let matches = new Set();
 
   const cam = { x: 0, y: 0, z: 1 };
-  const camTo = { x: 0, y: 0, z: 1 };
+  let fl = null;                  // a camera flight: {path, t0, ms}
+  let glide = null;               // a released drag: {vx, vy} in world units per ms
+  let zoomGoal = null;            // wheel zoom: {lz, v, sx, sy, wx, wy} (lz = log z)
+  const sel = { id: null, t: 0, v: 0 }; // the selection mark, drawing in
   let userMoved = false;
   let W = 0, H = 0, dpr = 1, fitScale = 1;
   let raf = 0, lastPing = 0, lastFrame = 0;
   const focusAlpha = new Map();   // id -> current emphasis 0..1
+  const focusVel = new Map();     // id -> its spring velocity
 
   // --- sizing
   const ro = new ResizeObserver(() => resize());
@@ -320,10 +349,29 @@ export function createMap(root, opts = {}) {
     userMoved = false;
     // Leave room for the left list on a wide screen by nudging the centre right.
     const nudge = W > 1000 ? 70 / (fitScale || 1) : 0;
-    camTo.x = -nudge; camTo.y = 0; camTo.z = 1;
-    if (instant) Object.assign(cam, camTo);
+    flyCam({ x: -nudge, y: 0, z: 1 }, instant);
+  }
+
+  /** Width of world in view at zoom z. */
+  const viewW = (z) => W / ((fitScale || 1) * z);
+
+  /** Move the camera to a view: a flight when there is room to show one. */
+  function flyCam(to, instant = false) {
+    glide = null;
+    zoomGoal = null;
+    if (instant || reducedMotion() || !W) {
+      fl = null;
+      Object.assign(cam, to);
+      kick();
+      return;
+    }
+    const path = flight([cam.x, cam.y, viewW(cam.z)], [to.x, to.y, viewW(to.z)]);
+    fl = { path, t0: performance.now(), ms: path.ms, to };
     kick();
   }
+
+  /** Where the camera is headed: the end of a flight, or where it is. */
+  const camGoal = () => fl?.to ?? cam;
 
   const scale = () => fitScale * cam.z;
   const toScreen = (p) => ({ x: W / 2 + (p.x - cam.x) * scale(), y: H / 2 + (p.y - cam.y) * scale() });
@@ -331,7 +379,6 @@ export function createMap(root, opts = {}) {
 
   // --- model
   function update(next) {
-    const prevIds = new Set(byId.keys());
     model = {
       nodes: next.nodes ?? [],
       links: (next.links ?? []).filter((l) => l.from !== l.to),
@@ -340,40 +387,164 @@ export function createMap(root, opts = {}) {
     if (next.title) title.textContent = next.title;
     problem.textContent = next.error ?? '';
     problem.hidden = !next.error;
+    const first = !cur.size;
     byId = new Map(model.nodes.map((n) => [n.id, n]));
-    lay = layout(model.nodes);
-    if (lay.center.virtual) byId.set(lay.center.id, lay.center);
+    relayout({ first });
 
-    // New nodes grow out of their parent instead of popping in.
+    // Events we have not seen become pulses and ticker lines.
+    const seen = new Set(recent.map((e) => e.key));
+    for (const e of model.events) {
+      const key = `${e.at}|${e.node ?? ''}|${e.link ?? ''}|${e.text ?? ''}`;
+      if (!seen.has(key)) event(e, { quiet: first });
+    }
+
+    if (selected && !byId.has(selected)) selected = null;
+    renderHud();
+    kick();
+  }
+
+  /** The drawn node standing in for `id`: itself, or the folded node it is inside. */
+  function shown(id) {
+    let x = id;
+    while (x != null && hidden.has(x)) x = byId.get(x)?.parent;
+    return x;
+  }
+
+  /**
+   * Lay out what is drawn (everything outside a folded node) and stage the
+   * change: leavers fold into their parent first, stayers slide next,
+   * arrivals grow out of their parent one by one around the circle.
+   */
+  function relayout({ first = false } = {}) {
+    const now = performance.now();
+    kidsAll = new Map();
+    for (const n of model.nodes) {
+      if (!n.parent || !byId.has(n.parent)) continue;
+      if (!kidsAll.has(n.parent)) kidsAll.set(n.parent, []);
+      kidsAll.get(n.parent).push(n);
+    }
+    hidden = new Set();
+    const hide = (id) => { for (const c of kidsAll.get(id) ?? []) if (!hidden.has(c.id)) { hidden.add(c.id); hide(c.id); } };
+    for (const id of collapsed) if (byId.has(id)) hide(id);
+
+    const prev = new Map([...cur].filter(([, c]) => !c.leaving).map(([id, c]) => [id, c.goal]));
+    lay = layout(model.nodes.filter((n) => !hidden.has(n.id)));
+    if (lay.center.virtual) byId.set(lay.center.id, lay.center);
+    const parentOf = (n) => (n.parent && byId.has(n.parent) ? n.parent : lay.center.virtual ? lay.center.id : null);
+
+    // Links whose end is folded away attach to the folded node instead.
+    vlinks = [];
+    const folded = new Map();
+    for (const l of model.links) {
+      const from = shown(l.from), to = shown(l.to);
+      if (from == null || to == null || from === to || !lay.pos.has(from) || !lay.pos.has(to)) continue;
+      if (from === l.from && to === l.to) { vlinks.push(l); continue; }
+      const id = `${from}>${to}~`;
+      const had = folded.get(id);
+      if (had) { had.live ||= l.live; continue; }
+      const f = { ...l, id, from, to, folded: true };
+      folded.set(id, f);
+      vlinks.push(f);
+    }
+
+    const still = reducedMotion() || document.visibilityState === 'hidden';
+    const entries = [];
+    let exits = 0, moves = 0;
     for (const [id, p] of lay.pos) {
-      if (!cur.has(id)) {
-        const n = byId.get(id);
-        const from = n?.parent && cur.get(n.parent);
-        cur.set(id, { x: from ? from.x : p.x, y: from ? from.y : p.y, a: prevIds.size ? 0 : 1 });
+      const n = byId.get(id);
+      const goal = { r: p.r, t: p.angle };
+      const c = cur.get(id);
+      if (c) {
+        if (c.leaving) { c.leaving = false; c.into = null; }
+        const was = prev.get(id);
+        if (was && (Math.abs(was.r - goal.r) > 0.5 || Math.abs(wrapAngle(was.t - goal.t)) > 0.002)) moves++;
+        Object.assign(c, { goal, node: n, pid: parentOf(n), depth: p.depth });
+        continue;
+      }
+      // A new node starts where its parent is drawn (the core, on first load).
+      const from = cur.get(n?.parent) ?? null;
+      const c0 = {
+        r: still ? goal.r : first ? 0 : from?.r ?? goal.r,
+        t: still || first ? goal.t : from?.t ?? goal.t,
+        vr: 0, vt: 0, a: still ? 1 : 0, va: 0,
+        goal, node: n, pid: parentOf(n), depth: p.depth,
+        holdUntil: 0, entering: !still,
+      };
+      Object.assign(c0, polar(c0.r, c0.t));
+      cur.set(id, c0);
+      if (!still) entries.push(id);
+    }
+    for (const [id, c] of cur) {
+      if (lay.pos.has(id) || c.leaving) continue;
+      if (still) { cur.delete(id); continue; }
+      // It folds back into the nearest ancestor still drawn.
+      let into = c.pid;
+      while (into != null && !lay.pos.has(into)) into = cur.get(into)?.pid ?? byId.get(into)?.parent ?? null;
+      Object.assign(c, { leaving: true, into, holdUntil: now, entering: false });
+      exits++;
+    }
+
+    if (!still) {
+      if (first) {
+        // The first look blooms outward ring by ring, sweeping round once.
+        for (const id of entries) {
+          const c = cur.get(id);
+          const sweep = ((wrapAngle(c.goal.t + Math.PI / 2) + Math.PI) / TAU) * 220;
+          c.holdUntil = now + (c.depth - 1) * 120 + sweep;
+        }
+      } else {
+        entries.sort((a, b) => {
+          const A = cur.get(a), B = cur.get(b);
+          return A.depth - B.depth || wrapAngle(A.goal.t + Math.PI / 2) - wrapAngle(B.goal.t + Math.PI / 2);
+        });
+        const s = stage({ exits, moves, entries });
+        if (s.moveAt) for (const [id, c] of cur) if (!c.leaving && !entries.includes(id)) c.holdUntil = now + s.moveAt;
+        for (const id of entries) cur.get(id).holdUntil = now + s.at.get(id);
       }
     }
-    for (const id of [...cur.keys()]) if (!lay.pos.has(id)) cur.delete(id);
 
     neighbours = new Map();
     const link = (a, b) => {
       if (!neighbours.has(a)) neighbours.set(a, new Set());
       neighbours.get(a).add(b);
     };
-    for (const n of model.nodes) if (n.parent && byId.has(n.parent)) { link(n.id, n.parent); link(n.parent, n.id); }
-    for (const l of model.links) { link(l.from, l.to); link(l.to, l.from); }
-
-    // Events we have not seen become pulses and ticker lines.
-    const seen = new Set(recent.map((e) => e.key));
-    for (const e of model.events) {
-      const key = `${e.at}|${e.node ?? ''}|${e.link ?? ''}|${e.text ?? ''}`;
-      if (!seen.has(key)) event(e, { quiet: !prevIds.size });
+    for (const id of lay.pos.keys()) {
+      const n = byId.get(id);
+      if (n?.parent && lay.pos.has(n.parent)) { link(id, n.parent); link(n.parent, id); }
     }
+    for (const l of vlinks) { link(l.from, l.to); link(l.to, l.from); }
 
-    if (selected && !byId.has(selected)) selected = null;
     const outer = maxRadius() + 64;
     fitScale = Math.min(W / (2 * outer), (H - 20) / (2 * outer)) || 1;
+  }
+
+  // --- folding
+  function loadFolded() {
+    try { return JSON.parse(localStorage.getItem(FOLD_KEY) || '[]').filter((x) => typeof x === 'string'); } catch { return []; }
+  }
+  function saveFolded() {
+    try { localStorage.setItem(FOLD_KEY, JSON.stringify([...collapsed])); } catch { /* private window: folds last this visit */ }
+  }
+
+  /** Fold a node's children into it, or unfold them. */
+  function toggleFold(id) {
+    if (!id || !(kidsAll.get(id)?.length)) return;
+    if (collapsed.has(id)) collapsed.delete(id); else collapsed.add(id);
+    saveFolded();
+    relayout();
+    if (selected && hidden.has(selected)) selected = shown(selected);
+    // The circle re-balances around the change; zoomed in, the camera follows the node.
+    if (userMoved) flyTo(id, camGoal().z);
     renderHud();
     kick();
+  }
+
+  /** Unfold whatever hides `id`, so it can be shown. */
+  function reveal(id) {
+    if (!id || !hidden.has(id)) return;
+    for (let p = byId.get(id)?.parent; p != null; p = byId.get(p)?.parent) collapsed.delete(p);
+    saveFolded();
+    relayout();
   }
 
   /** One thing happened. A node gets a ring, a link gets a comet. */
@@ -389,9 +560,10 @@ export function createMap(root, opts = {}) {
     const color = statusColor(P, e.kind ?? 'working');
     const fresh = Date.now() - at < 15000;
     if (!quiet && fresh && !reducedMotion()) {
-      if (e.node && lay.pos.has(e.node)) pulses.push({ id: e.node, t0: performance.now(), color });
+      const spot = shown(e.node);
+      if (spot != null && lay.pos.has(spot)) pulses.push({ id: spot, t0: performance.now(), color });
       if (e.link) {
-        const l = model.links.find((x) => x.id === e.link || `${x.from}>${x.to}` === e.link);
+        const l = vlinks.find((x) => x.id === e.link || `${x.from}>${x.to}` === e.link);
         if (l) comets.push({ link: l, t0: performance.now(), dur: 1600, color });
       }
     }
@@ -405,7 +577,8 @@ export function createMap(root, opts = {}) {
     const n = byId.get(id);
     let s = n?.status ?? 'unknown';
     if (s === 'working' || s === 'idle' || s === 'unknown') s = s === 'unknown' ? 'unknown' : 'ok';
-    for (const c of lay.kids.get(id) ?? []) {
+    // Folded children count: trouble inside a folded node still shows on it.
+    for (const c of (lay.center?.id === id ? lay.kids.get(id) : kidsAll.get(id)) ?? []) {
       const cs = rollup(c.id, memo);
       if (['warn', 'attention', 'crit', 'down'].includes(cs)) s = worse(s, cs === 'down' ? 'crit' : cs);
     }
@@ -479,10 +652,35 @@ export function createMap(root, opts = {}) {
     }
   }
 
+  let panelFor = null;
+  let panelOutTimer = 0;
   function renderPanel() {
     const n = selected && byId.get(selected);
-    panel.hidden = !n;
-    if (!n) return;
+    if (!n) {
+      panelFor = null;
+      // Closing plays out, then hides; a new selection meanwhile cancels it.
+      if (panel.hidden || panel.classList.contains('map-panel-out')) return;
+      if (reducedMotion()) { panel.hidden = true; return; }
+      panel.classList.add('map-panel-out');
+      // A background tab pauses CSS animations, so the end is also on a timer.
+      const done = () => {
+        clearTimeout(panelOutTimer);
+        if (panel.classList.contains('map-panel-out')) { panel.hidden = true; panel.classList.remove('map-panel-out'); }
+      };
+      panel.addEventListener('animationend', done, { once: true });
+      panelOutTimer = setTimeout(done, 220);
+      return;
+    }
+    const opening = panel.hidden || panel.classList.contains('map-panel-out');
+    panel.classList.remove('map-panel-out');
+    panel.hidden = false;
+    if (!opening && panelFor !== n.id && !reducedMotion()) {
+      // Another node in an open panel: the contents cross-fade, the frame stays.
+      panel.classList.remove('map-swap');
+      void panel.offsetWidth;
+      panel.classList.add('map-swap');
+    }
+    panelFor = n.id;
     panel.replaceChildren();
     const close = h('button', 'map-panel-close', '×');
     close.title = 'Close (Esc)';
@@ -526,7 +724,7 @@ export function createMap(root, opts = {}) {
       if (l.from === n.id && byId.has(l.to)) rel.push([l.label ?? l.kind ?? 'to', l.to, '→']);
       if (l.to === n.id && byId.has(l.from)) rel.push([l.label ?? l.kind ?? 'from', l.from, '←']);
     }
-    const children = lay.kids.get(n.id) ?? [];
+    const children = (n.id === lay.center?.id ? lay.kids.get(n.id) : kidsAll.get(n.id)) ?? [];
     if (rel.length || children.length) {
       const sec = h('div', 'map-rel');
       if (rel.length) {
@@ -534,7 +732,16 @@ export function createMap(root, opts = {}) {
         for (const [word, id, arrow] of rel) sec.append(chip(id, `${arrow} ${word}`));
       }
       if (children.length) {
-        sec.append(h('h4', 'map-h', `Inside · ${children.length}`));
+        const head = h('h4', 'map-h map-h-row', `Inside · ${children.length}`);
+        if (n.id !== lay.center?.id) {
+          const isFolded = collapsed.has(n.id);
+          const fold = h('button', 'map-fold', isFolded ? 'Unfold' : 'Fold');
+          fold.title = `${isFolded ? 'Show' : 'Hide'} what is inside (c)`;
+          fold.setAttribute('aria-expanded', String(!isFolded));
+          fold.addEventListener('click', () => toggleFold(n.id));
+          head.append(fold);
+        }
+        sec.append(head);
         for (const c of children.slice(0, 24)) sec.append(chip(c.id));
       }
       panel.append(sec);
@@ -570,6 +777,8 @@ export function createMap(root, opts = {}) {
   }
 
   function select(id) {
+    reveal(id);
+    if (id !== selected) { sel.id = id; sel.t = 0; sel.v = 0; }
     selected = id;
     renderPanel();
     opts.onSelect?.(id ? byId.get(id) : null);
@@ -577,15 +786,14 @@ export function createMap(root, opts = {}) {
   }
 
   function flyTo(id, z = 1.9) {
+    reveal(id);
     const p = lay.pos.get(id);
     if (!p) return;
     userMoved = true;
     const wide = W > 1000;
+    const tz = Math.max(camGoal().z, z);
     // Keep the node clear of the panel that opens on the right.
-    camTo.x = p.x + (wide ? 150 / (fitScale * z) : 0);
-    camTo.y = p.y + (wide ? 0 : 60 / (fitScale * z));
-    camTo.z = Math.max(camTo.z, z);
-    kick();
+    flyCam({ x: p.x + (wide ? 150 / (fitScale * tz) : 0), y: p.y + (wide ? 0 : 60 / (fitScale * tz)), z: tz });
   }
 
   // --- find
@@ -611,8 +819,8 @@ export function createMap(root, opts = {}) {
     let best = null, bd = Infinity;
     const s = scale();
     for (const [id, c] of cur) {
-      const n = byId.get(id);
-      if (!n || n.virtual) continue;
+      const n = c.node;
+      if (!n || n.virtual || c.leaving || c.a < 0.3) continue;
       const sp = toScreen(c);
       const r = Math.max(9, (SIZE[n.kind] ?? 5) * Math.max(0.8, s) + 6);
       const d = Math.hypot(sp.x - x, sp.y - y);
@@ -620,9 +828,12 @@ export function createMap(root, opts = {}) {
     }
     return best;
   }
+  const badgeAt = (x, y) => foldBadges.find((b) => x >= b.x - 3 && x <= b.x + b.w + 3 && y >= b.y - 3 && y <= b.y + b.h + 3)?.id;
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture(e.pointerId);
-    drag = { x: e.clientX, y: e.clientY, cx: camTo.x, cy: camTo.y, moved: false };
+    // Grabbing the map stops whatever it was doing.
+    fl = null; glide = null; zoomGoal = null;
+    drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false, trail: [] };
   });
   canvas.addEventListener('pointermove', (e) => {
     const r = canvas.getBoundingClientRect();
@@ -632,25 +843,39 @@ export function createMap(root, opts = {}) {
       if (Math.hypot(dx, dy) > 3) drag.moved = true;
       if (drag.moved) {
         userMoved = true;
-        camTo.x = drag.cx - dx / scale();
-        camTo.y = drag.cy - dy / scale();
-        cam.x = camTo.x; cam.y = camTo.y;
+        cam.x = drag.cx - dx / scale();
+        cam.y = drag.cy - dy / scale();
+        // The last few samples give the speed to glide on with.
+        const t = performance.now();
+        drag.trail.push({ t, x: cam.x, y: cam.y });
+        while (drag.trail.length > 2 && t - drag.trail[0].t > 90) drag.trail.shift();
         kick();
       }
       return;
     }
     const id = hit(x, y);
     if (id !== hover) { hover = id; kick(); }
-    canvas.style.cursor = id ? 'pointer' : 'grab';
+    canvas.style.cursor = id || badgeAt(x, y) ? 'pointer' : 'grab';
     showTip(id, x, y);
   });
   canvas.addEventListener('pointerleave', () => { hover = null; tip.hidden = true; kick(); });
   canvas.addEventListener('pointerup', (e) => {
     const r = canvas.getBoundingClientRect();
     if (drag && !drag.moved) {
-      const id = hit(e.clientX - r.left, e.clientY - r.top);
+      const x = e.clientX - r.left, y = e.clientY - r.top;
+      const badge = badgeAt(x, y);
+      if (badge) { toggleFold(badge); drag = null; return; }
+      const id = hit(x, y);
       select(id);
       if (id && e.pointerType !== 'mouse') flyTo(id);
+    } else if (drag?.moved && !reducedMotion()) {
+      const tr = drag.trail, t = performance.now();
+      const a = tr[0], b = tr[tr.length - 1];
+      // A drag that came to rest before release does not glide.
+      if (a && b && b.t > a.t && t - b.t < 60) {
+        const vx = (b.x - a.x) / (b.t - a.t), vy = (b.y - a.y) / (b.t - a.t);
+        if (Math.hypot(vx, vy) * scale() > 0.12) { glide = { vx, vy }; kick(); }
+      }
     }
     drag = null;
   });
@@ -663,12 +888,16 @@ export function createMap(root, opts = {}) {
     e.preventDefault();
     const r = canvas.getBoundingClientRect();
     const x = e.clientX - r.left, y = e.clientY - r.top;
-    const before = toWorld(x, y);
-    const k = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0022));
-    cam.z = camTo.z = Math.max(0.55, Math.min(6, camTo.z * k));
-    const after = toWorld(x, y);
-    cam.x = camTo.x = camTo.x + before.x - after.x;
-    cam.y = camTo.y = camTo.y + before.y - after.y;
+    // Line-mode wheels (Firefox) report lines, not pixels.
+    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    const k = -dy * (e.ctrlKey ? 0.01 : 0.0022);
+    fl = null; glide = null;
+    const w = toWorld(x, y);
+    const lz = Math.log(cam.z);
+    const goal = Math.max(Math.log(0.55), Math.min(Math.log(6), (zoomGoal?.goal ?? lz) + k));
+    // The point under the pointer stays under it while the zoom eases in.
+    zoomGoal = { goal, v: zoomGoal?.v ?? 0, sx: x, sy: y, wx: w.x, wy: w.y };
+    if (reducedMotion()) { cam.z = Math.exp(goal); holdAnchor(); zoomGoal = null; }
     userMoved = true;
     kick();
   }, { passive: false });
@@ -679,6 +908,7 @@ export function createMap(root, opts = {}) {
     if (e.key === '/') { input.focus(); e.preventDefault(); }
     else if (e.key === 'Escape') { select(null); }
     else if (e.key === 'f' && !e.metaKey && !e.ctrlKey) fit(false);
+    else if (e.key === 'c' && !e.metaKey && !e.ctrlKey && selected) toggleFold(selected);
   }
   window.addEventListener('keydown', onKey);
 
@@ -729,35 +959,91 @@ export function createMap(root, opts = {}) {
     if (busy) kick();
   }
 
+  /** Keep the wheel's anchor point under the pointer at the current zoom. */
+  function holdAnchor() {
+    if (!zoomGoal) return;
+    cam.x = zoomGoal.wx - (zoomGoal.sx - W / 2) / scale();
+    cam.y = zoomGoal.wy - (zoomGoal.sy - H / 2) / scale();
+  }
+
   /** Advance everything that eases. Returns true while anything is moving. */
   function step(now, dt) {
     let moving = false;
     const still = reducedMotion();
-    const k = still ? 1 : 1 - Math.exp(-dt / 90);
-    const kCam = still ? 1 : 1 - Math.exp(-dt / 110);
-    const kFade = still ? 1 : 1 - Math.exp(-dt / 70);
+    // A long gap (a hidden tab settling, a stalled frame) lands everything.
+    const jump = still || dt >= 1000;
+    const hl = (k) => (jump ? 0 : HL[k]);
+
     for (const [id, c] of cur) {
-      const p = lay.pos.get(id);
-      if (!p) continue;
-      const dx = p.x - c.x, dy = p.y - c.y;
-      if (Math.abs(dx) + Math.abs(dy) > 0.05) { c.x += dx * k; c.y += dy * k; moving = true; }
-      else { c.x = p.x; c.y = p.y; }
-      if (c.a < 1) { c.a = Math.min(1, c.a + (still ? 1 : dt / 500)); moving = true; }
+      let goalR, goalT, goalA;
+      if (c.leaving) {
+        const into = c.into != null ? cur.get(c.into) : null;
+        goalR = into ? into.r : c.r;
+        goalT = into ? into.t : c.t;
+        goalA = 0;
+      } else {
+        goalR = c.goal.r; goalT = c.goal.t; goalA = 1;
+      }
+      if (!jump && now < c.holdUntil) {
+        // Waiting for its beat: an arrival rides along with its parent, unseen.
+        if (c.entering) {
+          const p = c.pid != null ? cur.get(c.pid) : null;
+          if (p && p !== c) { c.r = p.r; c.t = p.t; }
+          else if (c.depth <= 1) c.r = 0;
+          Object.assign(c, polar(c.r, c.t));
+        }
+        moving = true;
+        continue;
+      }
+      c.entering = false;
+      const gt = c.t + wrapAngle(goalT - c.t);
+      [c.r, c.vr] = damp(c.r, c.vr, goalR, hl('move'), dt);
+      [c.t, c.vt] = damp(c.t, c.vt, gt, hl('move'), dt);
+      [c.a, c.va] = damp(c.a, c.va, goalA, hl('fade'), dt);
+      c.a = Math.max(0, Math.min(1, c.a));
+      Object.assign(c, polar(c.r, c.t));
+      if (c.leaving && (jump || c.a < 0.02)) { cur.delete(id); continue; }
+      if (!settled(c.r, c.vr, goalR, 0.05) || !settled(c.t, c.vt, gt, 0.0004) || !settled(c.a, c.va, goalA, 0.004)) moving = true;
+      else { c.r = goalR; c.t = goalT; c.a = goalA; c.vr = c.vt = c.va = 0; Object.assign(c, polar(c.r, c.t)); }
     }
-    for (const key of ['x', 'y', 'z']) {
-      const d = camTo[key] - cam[key];
-      if (Math.abs(d) > (key === 'z' ? 0.0005 : 0.05)) { cam[key] += d * kCam; moving = true; }
-      else cam[key] = camTo[key];
+
+    // The camera: a flight, a wheel zoom easing in, or a drag gliding out.
+    if (fl) {
+      const t = jump ? 1 : Math.min(1, (now - fl.t0) / fl.ms);
+      const [x, y, w] = fl.path.at(easeInOut(t));
+      cam.x = x; cam.y = y; cam.z = W / ((fitScale || 1) * w);
+      if (t >= 1) { Object.assign(cam, fl.to); fl = null; } else moving = true;
     }
+    if (zoomGoal) {
+      let lz = Math.log(cam.z);
+      [lz, zoomGoal.v] = damp(lz, zoomGoal.v, zoomGoal.goal, hl('zoom'), dt);
+      cam.z = Math.exp(lz);
+      holdAnchor();
+      if (settled(lz, zoomGoal.v, zoomGoal.goal, 0.0008)) { cam.z = Math.exp(zoomGoal.goal); holdAnchor(); zoomGoal = null; }
+      else moving = true;
+    }
+    if (glide) {
+      cam.x += glide.vx * dt; cam.y += glide.vy * dt;
+      glide.vx = inertia(glide.vx, dt); glide.vy = inertia(glide.vy, dt);
+      if (jump || Math.hypot(glide.vx, glide.vy) * scale() < 0.01) glide = null; else moving = true;
+    }
+
+    // The selection mark draws in.
+    if (sel.id) {
+      [sel.t, sel.v] = damp(sel.t, sel.v, 1, hl('select'), dt);
+      if (settled(sel.t, sel.v, 1, 0.002)) { sel.t = 1; sel.v = 0; } else moving = true;
+    }
+
     // Emphasis: the hovered or selected node and its neighbours stay lit.
     const focus = hover ?? selected;
     const lit = focus ? new Set([focus, ...(neighbours.get(focus) ?? [])]) : null;
+    // A match folded away lights the node it is folded into.
+    const found = new Set([...matches].map(shown));
     for (const id of cur.keys()) {
-      const want = !lit && !query ? 1 : (lit?.has(id) || matches.has(id) ? 1 : 0.16);
-      const have = focusAlpha.get(id) ?? 1;
-      const next = have + (want - have) * kFade;
-      focusAlpha.set(id, Math.abs(next - want) < 0.01 ? want : next);
-      if (Math.abs(next - want) >= 0.01) moving = true;
+      const want = !lit && !query ? 1 : (lit?.has(id) || found.has(id) ? 1 : 0.16);
+      const [next, v] = damp(focusAlpha.get(id) ?? 1, focusVel.get(id) ?? 0, want, hl('fade'), dt);
+      if (settled(next, v, want, 0.005)) { focusAlpha.set(id, want); focusVel.delete(id); }
+      else { focusAlpha.set(id, next); focusVel.set(id, v); moving = true; }
     }
     pulses = pulses.filter((p) => now - p.t0 < 1500);
     comets = comets.filter((c) => now - c.t0 < c.dur);
@@ -766,14 +1052,14 @@ export function createMap(root, opts = {}) {
       // The ambient layer: pings on nodes that wait for someone, spinners on
       // working lanes, and a slow drift of comets along live flows.
       const hasLife = model.nodes.some((n) => n.status === 'attention' || n.status === 'working')
-        || model.links.some((l) => l.live);
+        || vlinks.some((l) => l.live);
       if (hasLife && document.visibilityState === 'visible') moving = true;
       if (now - lastPing > 2400) {
         lastPing = now;
         for (const n of model.nodes) if (n.status === 'attention' || n.status === 'crit' || n.status === 'down') {
           pulses.push({ id: n.id, t0: now, color: statusColor(P, n.status), soft: true });
         }
-        for (const l of model.links) if (l.live && Math.random() < 0.7) {
+        for (const l of vlinks) if (l.live && Math.random() < 0.7) {
           comets.push({ link: l, t0: now + Math.random() * 900, dur: 2200, color: P.info, soft: true });
         }
       }
@@ -802,6 +1088,39 @@ export function createMap(root, opts = {}) {
     drawComets(s, now);
     drawNodes(s, now);
     drawLabels(s);
+    drawTether(s);
+  }
+
+  /** A hairline from the selected node to its panel, drawn out as the mark closes. */
+  function drawTether(s) {
+    if (!selected || panel.hidden || panel.classList.contains('map-panel-out') || W <= 760) return;
+    const c = cur.get(selected);
+    const n = c?.node;
+    if (!c || !n || c.a < 0.5) return;
+    const rr = root.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+    const sp = toScreen(c);
+    const off = (SIZE[n.kind] ?? 5) * Math.max(0.8, Math.min(1.6, s)) + 11;
+    const S = { x: sp.x + off, y: sp.y };
+    const E = { x: pr.left - rr.left, y: Math.max(pr.top - rr.top + 24, Math.min(pr.bottom - rr.top - 24, sp.y)) };
+    // Under or behind the panel there is nothing to point at.
+    if (E.x - S.x < 48 || sp.y < 0 || sp.y > H) return;
+    const t = sel.id === selected ? sel.t : 1;
+    const k = (E.x - S.x) * 0.5;
+    const c1 = { x: S.x + k, y: S.y }, c2 = { x: E.x - k, y: E.y };
+    ctx.save();
+    ctx.strokeStyle = rgba(P.accent, 0.38 * t);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(S.x, S.y);
+    const steps = 28;
+    let q = S;
+    for (let i = 1; i <= steps; i++) { q = cubic(S, c1, c2, E, (i / steps) * t); ctx.lineTo(q.x, q.y); }
+    ctx.stroke();
+    if (t > 0.9) {
+      ctx.fillStyle = rgba(P.accent, 0.8 * (t - 0.9) * 10);
+      ctx.beginPath(); ctx.arc(E.x, E.y, 2.2, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
   }
 
   /** Tracked caps where the canvas supports it; plain text where it does not. */
@@ -851,25 +1170,24 @@ export function createMap(root, opts = {}) {
     ctx.restore();
   }
 
-  function treeCurve(pid, cid) {
-    const p = cur.get(pid), c = cur.get(cid);
-    const pp = lay.pos.get(pid), cp = lay.pos.get(cid);
-    if (!p || !c || !pp || !cp) return null;
-    const midR = (pp.r + cp.r) / 2;
-    const a0 = pp.depth === 0 ? cp.angle : pp.angle;
-    return [p, polar(midR, a0), polar(midR, cp.angle), c];
+  /** The branch from a parent to a child, bent along the rings, from where both are drawn now. */
+  function treeCurve(p, c) {
+    const midR = (p.r + c.r) / 2;
+    const a0 = p.depth === 0 ? c.t : p.t;
+    return [p, polar(midR, a0), polar(midR, c.t), c];
   }
 
   function drawTree(s, now) {
     ctx.save();
-    for (const n of model.nodes) {
-      if (!n.parent && !lay.center.virtual) continue;
-      const pid = n.parent && byId.has(n.parent) ? n.parent : lay.center.id;
-      if (n.id === pid || n === lay.center) continue;
-      const pts = treeCurve(pid, n.id);
-      if (!pts) continue;
+    for (const [id, cc] of cur) {
+      const n = cc.node;
+      const pid = cc.leaving ? cc.into : cc.pid;
+      if (!n || pid == null || id === pid || n === lay.center) continue;
+      const pc = cur.get(pid);
+      if (!pc || (!cc.leaving && cc.entering)) continue;
+      const pts = treeCurve(pc, cc);
       const [a, b, c, d] = pts.map(toScreenP);
-      const alpha = Math.min(focusAlpha.get(n.id) ?? 1, focusAlpha.get(pid) ?? 1) * (cur.get(n.id)?.a ?? 1);
+      const alpha = Math.min(focusAlpha.get(id) ?? 1, focusAlpha.get(pid) ?? 1) * cc.a;
       const st = rollup(n.id);
       const col = ['crit', 'down', 'attention', 'warn'].includes(st) ? statusColor(P, st) : P.t3;
       const grad = ctx.createLinearGradient(a.x, a.y, d.x, d.y);
@@ -903,9 +1221,9 @@ export function createMap(root, opts = {}) {
   function drawLinks(s, now) {
     ctx.save();
     const focusNow = hover ?? selected;
-    for (const l of model.links) {
+    for (const l of vlinks) {
       const a = cur.get(l.from), b = cur.get(l.to);
-      if (!a || !b) continue;
+      if (!a || !b || a.leaving || b.leaving) continue;
       // A resting lane's links are drawn only when asked for: a dozen idle
       // worktrees would otherwise web the middle for nothing.
       const src = byId.get(l.from);
@@ -913,7 +1231,8 @@ export function createMap(root, opts = {}) {
         && focusNow !== l.from && focusNow !== l.to) continue;
       const ctrl = linkCtrl(a, b);
       const A = toScreen(a), C = toScreen(ctrl), B = toScreen(b);
-      const alpha = Math.min(focusAlpha.get(l.from) ?? 1, focusAlpha.get(l.to) ?? 1);
+      // A link fades in with whichever end arrived last.
+      const alpha = Math.min(focusAlpha.get(l.from) ?? 1, focusAlpha.get(l.to) ?? 1) * Math.min(a.a, b.a);
       const focus = hover ?? selected;
       const hot = focus && (l.from === focus || l.to === focus);
       const col = linkColor(l);
@@ -995,14 +1314,16 @@ export function createMap(root, opts = {}) {
       ctx.arc(sp.x, sp.y, r0 + ease(t) * (p.soft ? 18 : 30), 0, TAU);
       ctx.stroke();
     }
+    foldBadges = [];
     for (const [id, c] of cur) {
-      const n = byId.get(id);
-      if (!n) continue;
+      const n = c.node;
+      if (!n || c.a <= 0.001) continue;
       const sp = toScreen(c);
       if (sp.x < -40 || sp.y < -40 || sp.x > W + 40 || sp.y > H + 40) continue;
       const alpha = (focusAlpha.get(id) ?? 1) * c.a;
       const r = (SIZE[n.kind] ?? 5) * ns * (0.4 + 0.6 * c.a);
-      const status = n.kind === 'site' || n.kind === 'core' ? rollup(id) : (n.status ?? 'unknown');
+      const isFolded = collapsed.has(id) && !c.leaving;
+      const status = n.kind === 'site' || n.kind === 'core' || isFolded ? rollup(id) : (n.status ?? 'unknown');
       const col = n.virtual ? P.t3 : statusColor(P, status);
 
       if (n.kind === 'core') {
@@ -1100,12 +1421,41 @@ export function createMap(root, opts = {}) {
         }
       }
 
+      if (isFolded) {
+        // Folded: a dotted ring for what is inside, and how much.
+        const inside = kidsAll.get(id)?.length ?? 0;
+        ctx.strokeStyle = rgba(P.t2, 0.55 * alpha);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([1.5, 3]);
+        ctx.beginPath(); ctx.arc(sp.x, sp.y, r + (n.metrics ? 10 : 6), 0, TAU); ctx.stroke();
+        ctx.setLineDash([]);
+        const text = `+${inside}`;
+        ctx.font = `600 9.5px ${P.mono}`;
+        const tw = ctx.measureText(text).width;
+        const p = lay.pos.get(id);
+        // On the inner side, so it never sits on the node's label.
+        const ang = (p?.angle ?? c.t) + Math.PI;
+        const off = r + (n.metrics ? 16 : 12);
+        const bx = sp.x + Math.cos(ang) * off - (tw + 8) / 2, by = sp.y + Math.sin(ang) * off - 7;
+        ctx.fillStyle = rgba(P.sunken, 0.92 * alpha);
+        ctx.strokeStyle = rgba(P.t3, 0.6 * alpha);
+        ctx.beginPath(); ctx.roundRect?.(bx, by, tw + 8, 14, 7); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = rgba(P.t1, 0.9 * alpha);
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(text, bx + (tw + 8) / 2, by + 7.5);
+        if (c.a > 0.5) foldBadges.push({ id, x: bx, y: by, w: tw + 8, h: 14 });
+      }
+
       if (id === selected) {
-        ctx.strokeStyle = rgba(P.accent, 0.95);
+        // The mark draws in: it closes from wide and faint to tight and solid.
+        const t = sel.id === id ? sel.t : 1;
+        ctx.strokeStyle = rgba(P.accent, 0.95 * t);
         ctx.lineWidth = 1.4;
         ctx.setLineDash([3, 3]);
-        ctx.beginPath(); ctx.arc(sp.x, sp.y, r + 11, 0, TAU); ctx.stroke();
+        ctx.lineDashOffset = (1 - t) * 12;
+        ctx.beginPath(); ctx.arc(sp.x, sp.y, r + 11 + (1 - t) * 14, 0, TAU); ctx.stroke();
         ctx.setLineDash([]);
+        ctx.lineDashOffset = 0;
       } else if (id === focus) {
         ctx.strokeStyle = rgba(P.t1, 0.5);
         ctx.lineWidth = 1;
@@ -1121,9 +1471,9 @@ export function createMap(root, opts = {}) {
     ctx.save();
     ctx.textBaseline = 'middle';
     for (const [id, c] of cur) {
-      const n = byId.get(id);
-      const p = lay.pos.get(id);
-      if (!n || !p || n.virtual) continue;
+      const n = c.node;
+      if (!n || n.virtual) continue;
+      const p = { depth: c.depth, angle: c.t };
       const alpha = (focusAlpha.get(id) ?? 1) * c.a;
       const status = n.status ?? 'unknown';
       const loud = ['attention', 'crit', 'down'].includes(status);
@@ -1190,6 +1540,7 @@ export function createMap(root, opts = {}) {
       window.removeEventListener('keydown', onKey);
       document.removeEventListener('visibilitychange', onVisible);
       clearTimeout(settleTimer);
+      clearTimeout(panelOutTimer);
       root.innerHTML = '';
     },
   };

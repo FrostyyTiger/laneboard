@@ -25,6 +25,33 @@ Movement on the Map is always data:
 
 `prefers-reduced-motion` turns every animation off. The map then redraws only when something changes.
 
+What you do moves it too, built to be followed rather than noticed:
+
+- **Changes play in beats.** What leaves folds back into its parent, what stays
+  swings along its ring to its new place, and what arrives grows out of its
+  parent, one node after another around the circle.
+- **Jumps are flights.** Picking a node far away pulls back, crosses and comes in
+  again (van Wijk & Nuij's smooth zoom), so you never lose where you are.
+- **Everything is a spring.** Positions, fades and zoom start from the speed they
+  already have and settle without bouncing, so a new click mid-move bends the
+  motion instead of restarting it. A drag glides on after you let go.
+- **The selection draws in.** Its ring closes onto the node and a hairline runs
+  from the node to its panel.
+
+**Folding.** A node with something inside can be folded: its children tuck into
+it and it shows `+N` with a dotted ring. Select it and press `c`, or use **Fold**
+in its panel; click the `+N` to unfold. Trouble inside a folded node still
+colours it, links to what is folded away attach to it, and finding or picking a
+folded node unfolds what hides it. Folds are remembered in this browser.
+
+| Key | |
+| --- | --- |
+| `/` | find a node |
+| `f` | fit everything |
+| `c` | fold or unfold the selected node |
+| `Esc` | close the panel |
+| double-click | fly to a node (or fit, on empty space) |
+
 ## Three inputs, all optional
 
 | Input | What | Who writes it |
