@@ -9,6 +9,7 @@ import webpush from 'web-push';
 import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { kvRead, kvWrite, listSubscriptions, removeSubscription, markSubscriptionOk } from './db.mjs';
+import { fkey } from './fleet/keys.mjs';
 
 const COALESCE_MS = 60_000;
 const MIN_WORKING_MS = 5 * 60_000;
@@ -81,6 +82,22 @@ export function shouldNotify({ name, from, to, workingForMs = 0, lastAt = null, 
   return { notify: true, title, reason: 'ok' };
 }
 
+// --- deep links (fleet F7) ---------------------------------------------------
+
+/**
+ * Where a notification opens: the board with that session selected, by fleet
+ * key (`/#/board?sel=<encodeURIComponent(fkey)>`), or the Box. The name is
+ * encoded as a whole fkey, so a hostile session name cannot add parameters.
+ */
+export function sessionUrl(name, builderId = config.fleet?.id) {
+  try {
+    return `/#/board?sel=${encodeURIComponent(fkey(builderId, String(name)))}`;
+  } catch {
+    return boxUrl();
+  }
+}
+export function boxUrl() { return '/#/box'; }
+
 // --- sending ----------------------------------------------------------------
 
 export async function sendTo(sub, payload) {
@@ -131,7 +148,7 @@ export async function onTransition({ name, from, to, stateSince, activity }) {
     title: `${verdict.title}: ${name}`,
     body,
     tag: `laneboard-${name}`,
-    url: `/#session=${encodeURIComponent(name)}`,
+    url: sessionUrl(name),
     session: name,
     state: to,
   });
@@ -157,7 +174,7 @@ export async function onMarker({ session_name: name, kind, text }) {
     title: `${title}: ${name}`,
     body: String(text).slice(0, 140),
     tag: `laneboard-${name}`,
-    url: `/#session=${encodeURIComponent(name)}`,
+    url: sessionUrl(name),
     session: name,
     state: kind,
   });
@@ -176,7 +193,7 @@ export async function onDanger({ session_name: name, sessionName, text }) {
     title: `DANGER: ${who || 'dev stack guard'}`,
     body: String(text).slice(0, 160),
     tag: `laneboard-danger-${who || 'guard'}-${Date.now()}`,
-    url: who ? `/#session=${encodeURIComponent(who)}` : '/#box',
+    url: who ? sessionUrl(who) : boxUrl(),
     session: who,
     state: 'danger',
   });

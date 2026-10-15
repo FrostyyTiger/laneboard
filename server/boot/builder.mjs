@@ -37,7 +37,12 @@ registerHealthz(() => ({
   wsClients: ws.clientCount(),
 }));
 
-route('GET', '/api/state', (req, res) => json(res, state.snapshot()));
+// The snapshot as it always was, plus (fleet F7) which builder it is from.
+// Sessions, attention and lanes carry `key`/`laneKey` from state.snapshot().
+route('GET', '/api/state', (req, res) => json(res, {
+  ...state.snapshot(),
+  builder: { id: config.fleet?.id ?? null, code: config.fleet?.code ?? null },
+}));
 
 // The Map: topology + feeds + probes + this board's lanes (server/map.mjs).
 route('GET', '/api/map', (req, res) => json(res, mapModel.model()));
@@ -157,6 +162,7 @@ route('POST', '/api/hook', (req, res) => {
       try { body = JSON.parse(buf.toString('utf8')); } catch { return; }
       try {
         const r = hooks.ingest(body);
+        // ws.broadcastEvent adds the event's `key` and the frame's `builder`/`seq` (fleet F7).
         ws.broadcastEvent({
           ts: Date.now(),
           session_name: r?.name ?? null,
@@ -322,6 +328,8 @@ route('GET', '/api/events', (req, res) => {
   // SessionStart hooks arrive before the registry knows the name; resolve now.
   for (const e of events) {
     if (!e.session_name && e.session_id) e.session_name = state.sessionNameBySessionId(e.session_id);
+    // Fleet key of the event's session (F7), as on the wire.
+    e.key = e.session_name ? state.keyFor(e.session_name) : null;
   }
   json(res, { events });
 });
