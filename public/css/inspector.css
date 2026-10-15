@@ -1,0 +1,215 @@
+/* ===========================================================================
+   The inspector (L3, fleet plan §4 D6): the 360px panel in #shell-insp.
+   shell.css places it (an overlay inside main, translateX(100%) -> 0 on
+   [data-insp="open"]); this sheet fills it: header plate with brackets,
+   the tab strip, the overview data block, the preview, the action bar
+   (ui/actionbar.js) and the hairline tether to the selected Map node.
+   Grey baseline, colour only for abnormal, tokens only.
+   =========================================================================== */
+
+.shell-insp {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+.shell[data-insp="closed"] .shell-insp { pointer-events: none; }
+
+/* Slide in on open: the panel comes out of `hidden`, so its first frame
+   starts off-screen and the shell's transform transition carries it in. */
+@starting-style {
+  .shell[data-insp="open"] .shell-insp { transform: translateX(100%); }
+}
+
+/* --- header --------------------------------------------------------------------- */
+.insp-head {
+  flex: none;
+  margin: var(--sp-2);
+  padding: var(--sp-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+.insp-head-l {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.insp-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-label);
+  font-size: var(--fs-16);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+}
+.insp-tools { display: flex; gap: var(--sp-1); flex: none; }
+.insp-state {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-1);
+  font-size: var(--fs-11);
+  color: var(--text-3);
+}
+.insp-word { font-weight: 600; color: var(--text-2); letter-spacing: 0.04em; }
+.shell-insp[data-p="1"] .insp-word { color: var(--p1); }
+.shell-insp[data-p="2"] .insp-word { color: var(--p2); }
+.insp-sess { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.insp-age { margin-left: auto; }
+
+/* --- tabs ----------------------------------------------------------------------- */
+.insp-tabs {
+  flex: none;
+  display: flex;
+  gap: 0;
+  margin: 0 var(--sp-2);
+  border-bottom: var(--bw) solid var(--line);
+}
+.insp-tab {
+  padding: var(--sp-1) var(--sp-3);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--text-3);
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.insp-tab:hover { color: var(--text-1); }
+.insp-tab[aria-selected="true"] { color: var(--text-1); border-bottom-color: var(--accent); }
+
+/* --- body ----------------------------------------------------------------------- */
+.insp-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--sp-2);
+}
+.insp-tabhost, .insp-tabbody { min-height: 100%; }
+.insp-ovw { display: flex; flex-direction: column; gap: var(--sp-2); }
+.insp-empty { margin: var(--sp-4) 0; color: var(--text-3); }
+
+.insp-flags { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.insp-flag {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text-1);
+}
+.insp-flag[data-p="1"] { border-color: var(--p1-line); background: var(--p1-weak); }
+.insp-flag[data-p="2"] { border-color: var(--p2-line); background: var(--p2-weak); }
+.insp-flag[data-p="3"] { border-color: var(--p3-line); }
+
+.insp-data { display: flex; flex-direction: column; border-top: var(--bw) solid var(--line-weak); }
+.insp-row {
+  display: grid;
+  grid-template-columns: 5ch minmax(0, 1fr);
+  gap: var(--sp-2);
+  align-items: center;
+  min-height: var(--row-h);
+  border-bottom: var(--bw) solid var(--line-weak);
+}
+.insp-k {
+  font-family: var(--font-label);
+  font-size: var(--fs-10);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+.insp-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); }
+.insp-spark { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.insp-n.is-p2 { color: var(--p2); }
+.insp-n.is-p1 { color: var(--p1); }
+.insp-pr { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-1); text-decoration: none; }
+.insp-pr:hover { text-decoration: underline; }
+.insp-pr[data-verdict="red"] { color: var(--p2); }
+
+.insp-line { display: flex; gap: var(--sp-2); min-width: 0; color: var(--text-2); }
+.insp-tname { flex: none; font-weight: 600; color: var(--text-1); }
+.insp-targ { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.insp-say {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  max-height: 12em;
+  overflow: auto;
+  color: var(--text-2);
+}
+.insp-say-user {
+  padding-left: var(--sp-2);
+  border-left: 2px solid var(--line-strong);
+  color: var(--text-1);
+}
+.insp-preview {
+  padding: var(--sp-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: var(--fs-11);
+  line-height: var(--lh-tight);
+  white-space: pre;
+  overflow: auto;
+  max-height: 24em;
+}
+
+/* --- action bar (ui/actionbar.js) ------------------------------------------------ */
+.insp-actions {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border-top: var(--bw) solid var(--line);
+  background: var(--bg-sunken);
+}
+.insp-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.insp-act:hover:not(:disabled) { color: var(--text-1); border-color: var(--line-strong); background: var(--bg-hover); }
+.insp-act[data-tier="confirm"]:hover:not(:disabled) { color: var(--p1); border-color: var(--p1-line); }
+.insp-act:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* --- hairline: the selected Map node to the panel ---------------------------------- */
+.insp-tether {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 0;
+  border-top: var(--bw) solid var(--accent-weak);
+  transform-origin: 0 0;
+  pointer-events: none;
+  z-index: var(--z-insp);
+}
+
+/* --- phone: the panel takes the whole centre, above the bottom sheet's peek ---- */
+@media (max-width: 699px) {
+  .shell-insp { width: 100%; padding-bottom: 96px; }
+  .insp-act { width: 44px; height: 44px; }
+  .insp-tab { min-height: 44px; }
+}
