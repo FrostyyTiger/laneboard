@@ -331,8 +331,11 @@ async function realishBuilder(id, hubSessions, localSessions) {
     id,
     hubKeys: HUB_KEYS,
     sessions: Object.entries(hubSessions).map(([name, s]) => ({ name, ...s })),
-    onAction: async (envelope) => {
-      const out = await dispatch(envelope, { auth: { kind: 'hub', scopes: new Set(['read', 'control']), keyLabel: 'hub' }, deps, audit });
+    // The fake verifies the envelope signature before onAction runs (it throws otherwise), so reaching here as
+    // `hub` means verified, as auth.verifyEnvelope would report to the real dispatcher.
+    onAction: async (envelope, info) => {
+      const auth = { kind: info.kind, scopes: new Set(['read', 'control']), keyLabel: 'hub', verified: info.kind === 'hub' };
+      const out = await dispatch(envelope, { auth, deps, audit });
       return { status: out.status ?? (out.ok ? 200 : 500), body: out };
     },
   });
