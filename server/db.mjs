@@ -145,6 +145,18 @@ const MIGRATIONS = [
      at INTEGER NOT NULL DEFAULT 0,
      PRIMARY KEY(run_id, attempt)
    )`,
+  // fleet R9 (§10 2.9). One row per retired lane, written by retire (captured
+  // before the worktree goes) or by the startup backfill. Never pruned: it
+  // keeps its own copy of the markers so it outlives marker retention.
+  // Builder-local like ci_jobs: no `builder` column, no user_version bump.
+  `CREATE TABLE IF NOT EXISTS lane_archive (
+     lane TEXT PRIMARY KEY, repo TEXT, branch TEXT, plan_path TEXT, plan_title TEXT, plan_head TEXT,
+     created_at INTEGER, retired_at INTEGER NOT NULL, duration_ms INTEGER,
+     cost_usd REAL, tokens INTEGER, stage_n INTEGER, stage_m INTEGER,
+     pr_number INTEGER, pr_url TEXT, pr_state TEXT, merged INTEGER,
+     markers TEXT, summary TEXT, record TEXT, restored_as TEXT
+   )`,
+  `CREATE INDEX IF NOT EXISTS lane_archive_retired ON lane_archive(retired_at DESC)`,
 ];
 
 /** The schema version this file migrates to (`PRAGMA user_version`). */
@@ -579,4 +591,121 @@ export function ciJobsPut({ runId, attempt = 1, slug, jobs, at = Date.now() }) {
     log.error('ciJobsPut failed', String(err));
     return false;
   }
+}
+
+// --- lane archive (fleet R9) ---------------------------------------------------
+
+export const ARCHIVE_COLUMNS = Object.freeze([
+  'lane', 'repo', 'branch', 'plan_path', 'plan_title', 'plan_head', 'created_at', 'retired_at', 'duration_ms',
+  'cost_usd', 'tokens', 'stage_n', 'stage_m', 'pr_number', 'pr_url', 'pr_state', 'merged',
+  'markers', 'summary', 'record', 'restored_as',
+]);
+/** What a listing returns: everything but the bulky plan head, markers and record. */
+export const ARCHIVE_LIST_COLUMNS = Object.freeze(
+  ARCHIVE_COLUMNS.filter((c) => !['plan_head', 'markers', 'record'].includes(c)),
+);
+export const ARCHIVE_LIST_MAX = 200;
+
+const archiveUpsert = db.prepare(
+  `INSERT INTO lane_archive(${ARCHIVE_COLUMNS.join(', ')}) VALUES(${ARCHIVE_COLUMNS.map(() => '?').join(', ')}) ` +
+    `ON CONFLICT(lane) DO UPDATE SET ${ARCHIVE_COLUMNS.filter((c) => c !== 'lane' && c !== 'restored_as')
+      .map((c) => `${c} = excluded.${c}`).join(', ')}, restored_as = IFNULL(excluded.restored_as, lane_archive.restored_as)`
+);
+
+const intOrNull = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Math.trunc(Number(v)));
+const numOrNull = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+const strOrNull = (v) => (v == null ? null : String(v));
+const jsonOrNull = (v) => (v == null ? null : typeof v === 'string' ? v : JSON.stringify(v));
+
+/**
+ * Upsert one archive row. `markers` and `record` may be objects (stored as
+ * JSON). A re-archive never clears `restored_as`. Returns true when written.
+ */
+export function addArchive(row) {
+  if (!row || typeof row.lane !== 'string' || !row.lane || !Number.isFinite(Number(row.retired_at))) {
+    throw new Error('addArchive needs lane and retired_at');
+  }
+  const merged = row.merged == null ? null : row.merged ? 1 : 0;
+  archiveUpsert.run(
+    row.lane, strOrNull(row.repo), strOrNull(row.branch), strOrNull(row.plan_path), strOrNull(row.plan_title),
+    strOrNull(row.plan_head), intOrNull(row.created_at), Math.trunc(Number(row.retired_at)), intOrNull(row.duration_ms),
+    numOrNull(row.cost_usd), intOrNull(row.tokens), intOrNull(row.stage_n), intOrNull(row.stage_m),
+    intOrNull(row.pr_number), strOrNull(row.pr_url), strOrNull(row.pr_state), merged,
+    jsonOrNull(row.markers), strOrNull(row.summary), jsonOrNull(row.record), strOrNull(row.restored_as),
+  );
+  return true;
+}
+
+/** `%` and `_` (and the escape itself) match literally. */
+export function likeEscape(q) {
+  return String(q).replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/** Newest first. `q` searches lane, branch, repo, plan_title and summary; `before` is a retired_at bound. */
+export function listArchive({ q = null, limit = 50, before = null } = {}) {
+  const where = [];
+  const args = [];
+  if (q != null && String(q) !== '') {
+    const pat = `%${likeEscape(q)}%`;
+    where.push(`(${['lane', 'branch', 'repo', 'plan_title', 'summary'].map((c) => `${c} LIKE ? ESCAPE '\\'`).join(' OR ')})`);
+    args.push(pat, pat, pat, pat, pat);
+  }
+  if (before != null && Number.isFinite(Number(before))) { where.push('retired_at < ?'); args.push(Number(before)); }
+  const n = Math.max(1, Math.min(Math.trunc(Number(limit)) || 50, ARCHIVE_LIST_MAX));
+  const sql = `SELECT ${ARCHIVE_LIST_COLUMNS.join(', ')} FROM lane_archive` +
+    (where.length ? ` WHERE ${where.join(' AND ')}` : '') + ' ORDER BY retired_at DESC, lane ASC LIMIT ?';
+  return db.prepare(sql).all(...args, n).map((r) => ({ ...r, merged: r.merged == null ? null : Boolean(r.merged) }));
+}
+
+/** One full row, `markers` and `record` parsed, or null. */
+export function getArchive(lane) {
+  const r = db.prepare(`SELECT ${ARCHIVE_COLUMNS.join(', ')} FROM lane_archive WHERE lane = ?`).get(String(lane));
+  if (!r) return null;
+  const markers = r.markers ? safeParse(r.markers) : null;
+  return {
+    ...r,
+    merged: r.merged == null ? null : Boolean(r.merged),
+    markers: Array.isArray(markers) ? markers : [],
+    record: r.record ? safeParse(r.record) : null,
+  };
+}
+
+/** Every archived lane id (the backfill's "already has a row" test). */
+export function archivedLanes() {
+  return new Set(db.prepare('SELECT lane FROM lane_archive').all().map((r) => r.lane));
+}
+
+/** Record which lane restored this one. False when there is no row. */
+export function setRestoredAs(lane, newId) {
+  return db.prepare('UPDATE lane_archive SET restored_as = ? WHERE lane = ?').run(String(newId), String(lane)).changes > 0;
+}
+
+/**
+ * A lane's whole-life spend: snapshots are cumulative per transcript, so the
+ * cost is the sum over sessions (name + id) of each one's MAX(usd), over rows
+ * attributed to the lane or written by one of its session names. Tokens are
+ * summed from each session's newest row. -> { usd, tokens, sessions }
+ */
+export function laneCostAllTime(lane, sessionNames = []) {
+  const names = [...new Set((Array.isArray(sessionNames) ? sessionNames : []).filter((s) => typeof s === 'string' && s))].slice(0, 50);
+  const cond = ['lane = ?', ...(names.length ? [`session_name IN (${names.map(() => '?').join(',')})`] : [])].join(' OR ');
+  const rows = db.prepare(
+    `SELECT IFNULL(session_name, '') || char(0) || IFNULL(session_id, '') AS k, usd, tokens, ts
+       FROM cost_snapshots WHERE ${cond} ORDER BY ts ASC, id ASC`
+  ).all(String(lane), ...names);
+  const per = new Map();
+  for (const r of rows) {
+    const e = per.get(r.k) ?? { usd: 0, tokens: null };
+    e.usd = Math.max(e.usd, Number(r.usd) || 0);
+    e.tokens = r.tokens;
+    per.set(r.k, e);
+  }
+  let usd = 0;
+  let tokens = 0;
+  for (const e of per.values()) {
+    usd += e.usd;
+    const t = e.tokens ? safeParse(e.tokens) : null;
+    if (t && typeof t === 'object') for (const v of Object.values(t)) tokens += Number(v) || 0;
+  }
+  return { usd, tokens, sessions: per.size };
 }

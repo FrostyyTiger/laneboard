@@ -244,6 +244,18 @@ export async function validate(req, { callerKind = 'local' } = {}) {
     throw new LaneError(`invalid budgetUsd: a number of dollars above 0 and at most ${MAX_BUDGET_USD}`);
   }
   const budgetSource = budgetSourceFor(budgetUsd, callerKind);
+  // fleet R9: a restore is a new lane (`<id>-r<N>`) launched from an archived
+  // one's branch; the source must be a retired lane this builder knows.
+  let restoredFrom = null;
+  if (req.restoredFrom != null) {
+    restoredFrom = String(req.restoredFrom);
+    if (!store.isLaneId(restoredFrom)) throw new LaneError(`invalid restoredFrom "${restoredFrom.slice(0, 40)}"`);
+    if (restoredFrom === lane) throw new LaneError('a restore needs a new lane id: retired ids are never reused', 409);
+    const src = store.read(restoredFrom);
+    if (!(src?.retiredAt) && !db.getArchive(restoredFrom)) {
+      throw new LaneError(`restoredFrom ${restoredFrom} is not a retired lane on this builder`, src ? 409 : 404);
+    }
+  }
 
   const help = await run(config.claudeBin, ['--help'], { timeout: 15000 });
   const modes = permissionModesFromHelp(help.stdout);
@@ -264,6 +276,14 @@ export async function validate(req, { callerKind = 'local' } = {}) {
     await fsp.access(path.join(mainRepo, '.git'));
   } catch {
     throw new LaneError(`no checkout at ${mainRepo}`, 400);
+  }
+  // A restore's branch may have been deleted since (merged and cleaned up):
+  // refuse now, not at the worktree step. Read-only; no fetch here.
+  if (restoredFrom) {
+    const refOk = async (ref) => (await run('git', ['-C', mainRepo, 'rev-parse', '--verify', '--quiet', ref], { timeout: 10000 })).ok;
+    if (!(await refOk(`refs/heads/${branch}`)) && !(await refOk(`refs/remotes/origin/${branch}`))) {
+      throw new LaneError(`cannot restore ${restoredFrom}: branch ${branch} exists neither locally nor as origin/${branch} in ${repo}`, 409);
+    }
   }
   const root = path.join(path.dirname(mainRepo), `${repo}-${lane}`);
   try {
@@ -292,6 +312,7 @@ export async function validate(req, { callerKind = 'local' } = {}) {
 
   return {
     lane, repo, branch, plan, model, permissionMode, priority, budgetUsd, budgetSource, slot, mainRepo, root,
+    restoredFrom,
     localBranch: Boolean(req.localBranch),
     promptOverride: typeof req.promptOverride === 'string' && req.promptOverride ? req.promptOverride.slice(0, 8000) : null,
   };
@@ -332,6 +353,7 @@ export async function launch(req, who = 'local', { callerKind = 'local' } = {}) 
       plan: {
         lane: p.lane, repo: p.repo, branch: p.branch, plan: p.plan, model: p.model, permissionMode: p.permissionMode,
         priority: p.priority, budgetUsd: p.budgetUsd, slot: p.slot, root: p.root,
+        ...(p.restoredFrom ? { restoredFrom: p.restoredFrom } : {}),
       },
     };
   }
@@ -342,12 +364,13 @@ export async function launch(req, who = 'local', { callerKind = 'local' } = {}) 
       model: valid.model, permissionMode: valid.permissionMode, session: valid.lane,
       priority: valid.priority, budgetUsd: valid.budgetUsd, budgetSource: valid.budgetSource,
       createdAt: Date.now(), retiredAt: null,
+      ...(valid.restoredFrom ? { restoredFrom: valid.restoredFrom } : {}),
     });
     return valid;
   });
   const job = `launch-${v.lane}-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
   const step = stepper(job, v.lane, 'launch');
-  step('validate', true, { repo: v.repo, branch: v.branch, plan: v.plan, slot: v.slot, model: v.model, permissionMode: v.permissionMode, priority: v.priority, budgetUsd: v.budgetUsd, budgetSource: v.budgetSource, by: who });
+  step('validate', true, { repo: v.repo, branch: v.branch, plan: v.plan, slot: v.slot, model: v.model, permissionMode: v.permissionMode, priority: v.priority, budgetUsd: v.budgetUsd, budgetSource: v.budgetSource, ...(v.restoredFrom ? { restoredFrom: v.restoredFrom } : {}), by: who });
   step('record', true, { file: store.laneFile(v.lane) });
   runLaunch(v, step).catch((err) => {
     step('failed', false, { step: 'internal', error: String(err?.message || err) });
@@ -381,7 +404,13 @@ async function runLaunch(v, step) {
     startRef = `refs/remotes/origin/${v.branch}`;
     step('fetch', true, null);
   }
-  const where = v.localBranch ? v.branch : `origin/${v.branch}`;
+  let where = v.localBranch ? v.branch : `origin/${v.branch}`;
+  // A restore starts from the kept local branch when origin's is gone.
+  if (v.restoredFrom && !v.localBranch && !(await git(['rev-parse', '--verify', '--quiet', startRef])).ok
+    && (await git(['rev-parse', '--verify', '--quiet', `refs/heads/${v.branch}`])).ok) {
+    startRef = `refs/heads/${v.branch}`;
+    where = v.branch;
+  }
   if (!(await git(['rev-parse', '--verify', '--quiet', startRef])).ok) {
     return fail('plan', { error: `branch ${where} does not exist. The plan is pushed from where it was written: commit docs/plans/<lane>.md on the branch and push it, then launch.` });
   }
@@ -434,7 +463,7 @@ async function runLaunch(v, step) {
   const template = await fsp.readFile(repoEntry?.kickoff || config.kickoff, 'utf8');
   const prompt = v.promptOverride ?? renderKickoff(template, {
     lane: v.lane, plan: v.plan, root: v.root, branch: v.branch, slot: v.slot,
-    human: config.human, ...ports,
+    human: config.human, ...ports, restoredFrom: v.restoredFrom ?? '',
   });
   await store.writePrompt(v.lane, prompt);
   step('kickoff', true, { file: path.join(store.laneDir(v.lane), 'prompt.txt') });
@@ -486,6 +515,9 @@ async function runLaunch(v, step) {
   if (!delivered.ok) return fail('prompt', { error: delivered.reason });
   step('prompt', true, { chars: prompt.length });
   step('done', true, { lane: v.lane, slot: v.slot, root: v.root });
+  if (v.restoredFrom) {
+    try { db.setRestoredAs(v.restoredFrom, v.lane); } catch (err) { log.warn(`setRestoredAs ${v.restoredFrom}: ${String(err)}`); }
+  }
   return true;
 }
 
