@@ -259,9 +259,11 @@
   cursor: pointer;
 }
 .chip:hover { background: var(--bg-hover); }
+/* Selected chip: the accent-weak fill (the full accent stays on focus;
+   test/render.test.mjs keeps var(--accent) to focus-like selectors). */
 .chip[aria-pressed="true"],
 .chip[aria-selected="true"] {
-  border-color: var(--accent);
+  border-color: var(--line-strong);
   background: var(--accent-weak);
 }
 .chip .i { color: var(--text-3); }
@@ -286,7 +288,7 @@
 .btn:hover { background: var(--bg-hover); }
 .btn--s { min-height: 20px; padding: 0 var(--sp-2); }
 .btn--icon { padding: 0; width: 24px; }
-.btn--primary { border-color: var(--accent); color: var(--accent); }
+.btn--primary { border-color: var(--line-strong); background: var(--accent-weak); color: var(--text-1); }
 .btn--danger { border-color: var(--p1); color: var(--p1); }
 .btn--danger::before { content: "■"; }
 .btn:disabled,

@@ -279,7 +279,7 @@ export function nextSort(cur, key) {
   return { key, dir: 'asc' };
 }
 
-/** Roving-cursor move for j/k/arrows/Home/End over n rows; null when the key is not a move. */
+/** Roving-cursor move for j, k, the arrows, Home and End over n rows; null when the key is not a move. */
 export function rowMove(key, idx, n) {
   if (n <= 0) return null;
   const i = Number.isInteger(idx) ? idx : -1;
