@@ -1,0 +1,64 @@
+/* The annunciator tiles (fleet plan §4 2.5, task D7). The 2x4 grid itself
+   (#ann, 64x18 tiles, 48x18 on a tablet) is in shell.css; this sheet draws
+   the tiles. normal: dark, grey label, empty count. unack: filled --pN,
+   --text-inv text, 1 Hz flash (lb-flash, phase-synced in JS). ack: filled,
+   steady. Reduced motion: no flash, the fill stays solid and an UNACK tag
+   shows. */
+.ann-tile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  min-width: 0;
+  height: 18px;
+  padding: 0 var(--sp-1);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text-3);
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: pointer;
+}
+.ann-tile:hover { border-color: var(--line-strong); }
+.ann-tile:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
+.ann-tile[aria-pressed="true"] { border-color: var(--accent); }
+
+.ann-label { overflow: hidden; text-overflow: ellipsis; }
+.ann-n {
+  font-family: var(--font-mono);
+  font-size: var(--fs-10);
+  font-variant-numeric: tabular-nums;
+}
+.ann-i { display: none; flex: none; }
+.ann-tag { display: none; font-size: var(--fs-10); font-weight: 600; letter-spacing: 0; }
+
+/* Filled when active (unack or ack), in the tile's worst priority. */
+.ann-tile[data-state="unack"],
+.ann-tile[data-state="ack"] { color: var(--text-inv); border-color: transparent; }
+.ann-tile[data-state="unack"][data-p="1"],
+.ann-tile[data-state="ack"][data-p="1"] { background: var(--p1); }
+.ann-tile[data-state="unack"][data-p="2"],
+.ann-tile[data-state="ack"][data-p="2"] { background: var(--p2); }
+.ann-tile[data-state="unack"][data-p="3"],
+.ann-tile[data-state="ack"][data-p="3"] { background: var(--p3); }
+
+/* Unacknowledged: the shared 1 Hz blink. */
+.ann-tile[data-unack] { animation: lb-flash 1s linear infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ann-tile[data-unack] { animation: none; outline: none; }
+  .ann-tile[data-state="unack"] .ann-tag { display: inline; }
+}
+
+/* Tablet: 48x18, icon plus count, no label. */
+@media (min-width: 700px) and (max-width: 1199px) {
+  .ann-i { display: inline-block; width: 12px; height: 12px; }
+  .ann-label { display: none; }
+}
