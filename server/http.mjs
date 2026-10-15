@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.mjs';
+import { log } from './log.mjs';
+import { checkRequest, securityHeaders, warnRateLimited } from './security.mjs';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -42,6 +44,7 @@ export function json(res, body, status = 200, headers = {}) {
     'content-type': 'application/json; charset=utf-8',
     'content-length': buf.length,
     'cache-control': 'no-store',
+    ...securityHeaders(null),
     ...headers,
   });
   res.end(buf);
@@ -49,7 +52,7 @@ export function json(res, body, status = 200, headers = {}) {
 
 export function text(res, body, status = 200, headers = {}) {
   const buf = Buffer.from(String(body));
-  res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8', 'content-length': buf.length, ...headers });
+  res.writeHead(status, { 'content-type': 'text/plain; charset=utf-8', 'content-length': buf.length, ...securityHeaders(null), ...headers });
   res.end(buf);
 }
 
@@ -70,8 +73,12 @@ export async function readJson(req) {
   return JSON.parse(buf.toString('utf8'));
 }
 
-/** Serve a file from a root dir, refusing traversal. Returns true if handled. */
-export async function serveStatic(res, root, relPath, { immutable = false } = {}) {
+/**
+ * Serve a file from a root dir, refusing traversal. Returns true if handled.
+ * Every file gets nosniff/no-referrer; an `.html` file also gets the CSP,
+ * built from `req` (default `res.req`, set by node) for the ws:// Host.
+ */
+export async function serveStatic(res, root, relPath, { immutable = false, req = res.req } = {}) {
   const abs = path.join(root, relPath);
   if (!abs.startsWith(path.resolve(root) + path.sep) && abs !== path.resolve(root)) return false;
   let st;
@@ -86,6 +93,7 @@ export async function serveStatic(res, root, relPath, { immutable = false } = {}
     'content-type': MIME[ext] || 'application/octet-stream',
     'content-length': st.size,
     'cache-control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache',
+    ...securityHeaders(req, { html: ext === '.html' }),
   });
   fs.createReadStream(abs).pipe(res);
   return true;
@@ -98,6 +106,19 @@ export async function handleRequest(req, res) {
   req.query = url.searchParams;
   // Tailscale identity header, when the request came through `tailscale serve`.
   req.tsUser = req.headers['tailscale-user-login'] || null;
+
+  // Security baseline (server/security.mjs): Host on every request, then
+  // Origin and `X-Laneboard: 1` on mutating ones. OPTIONS is never answered:
+  // with no CORS preflight a cross-site page cannot send the custom header.
+  const refused = checkRequest(req, pathname, config);
+  if (refused) {
+    warnRateLimited((reason, detail) => log.warn(`refused request (${reason})`, detail), refused,
+      `${String(req.method).slice(0, 10)} host=${JSON.stringify(String(req.headers.host ?? '').slice(0, 80))} origin=${JSON.stringify(String(req.headers.origin ?? '').slice(0, 80))}`);
+    return json(res, { error: 'forbidden', reason: refused }, 403);
+  }
+  if (req.method === 'OPTIONS') {
+    return json(res, { error: 'method not allowed' }, 405, { allow: 'GET, HEAD, POST, PUT, PATCH, DELETE' });
+  }
 
   for (const r of routes) {
     // A HEAD request must hit the same handler as GET, or `curl -sI /healthz`
@@ -131,14 +152,14 @@ export async function handleRequest(req, res) {
     }
     const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\//, '');
     const publicDir = path.join(config.repoRoot, 'public');
-    if (await serveStatic(res, publicDir, rel)) return;
+    if (await serveStatic(res, publicDir, rel, { req })) return;
     // A missing file (a path with an extension, e.g. a mistyped module import)
     // is a 404, not the SPA page: index.html served as a .js module only shows
     // up as a confusing MIME error.
     if (/\.[a-z0-9]+$/i.test(pathname)) return json(res, { error: 'not found', path: pathname }, 404);
     // SPA-ish fallback: unknown non-API paths get index.html.
     if (!pathname.startsWith('/api') && !pathname.startsWith('/ws')) {
-      if (await serveStatic(res, publicDir, 'index.html')) return;
+      if (await serveStatic(res, publicDir, 'index.html', { req })) return;
     }
   }
   json(res, { error: 'not found', path: pathname }, 404);

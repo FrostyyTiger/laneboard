@@ -82,7 +82,7 @@ export function reportRenderStats() {
   };
   fetch('/api/client-metrics', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-laneboard': '1' },
     body: JSON.stringify(body),
     keepalive: true,
   }).catch(() => { /* metrics must never disturb the page */ });

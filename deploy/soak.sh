@@ -44,7 +44,7 @@ while [ "$(date +%s)" -lt "$END" ]; do
 
   # Hook latency: the number that must stay tiny, because every session waits on it.
   HOOK=$(curl -s -o /dev/null -w '%{time_total}' -m 2 -X POST \
-    -H 'content-type: application/json' \
+    -H 'content-type: application/json' -H 'X-Laneboard: 1' \
     -d '{"session_id":"soak","hook_event_name":"PostToolUse","tool_name":"Soak"}' \
     "$BASE/api/hook" 2>/dev/null | awk '{printf "%.2f", $1*1000}')
 

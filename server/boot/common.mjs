@@ -5,6 +5,7 @@ import http from 'node:http';
 import { config } from '../config.mjs';
 import { log } from '../log.mjs';
 import { handleRequest, route, json } from '../http.mjs';
+import { checkUpgrade, warnRateLimited } from '../security.mjs';
 import { VERSION } from '../version.mjs';
 
 export { VERSION };
@@ -43,6 +44,9 @@ export async function listenAll({ onUpgrade = null } = {}) {
       });
     });
     server.on('upgrade', (req, socket, head) => {
+      // Host and Origin before any upgrade handler (server/security.mjs).
+      // §2 A8 replaces this call with auth.guardUpgrade.
+      if (!upgradeAllowed(req, socket)) return;
       const url = new URL(req.url, 'http://localhost');
       if (onUpgrade && onUpgrade(req, socket, head, url)) return;
       for (const h of upgradeHandlers) {
@@ -60,6 +64,25 @@ export async function listenAll({ onUpgrade = null } = {}) {
     servers.push(server);
   }
   return servers;
+}
+
+/**
+ * Refuse a WebSocket upgrade whose Host or Origin is not allowed: write a 403
+ * status line and destroy the socket. True when the upgrade may proceed.
+ */
+export function upgradeAllowed(req, socket, cfg = config) {
+  const refused = checkUpgrade(req, cfg);
+  if (!refused) return true;
+  warnRateLimited((reason, detail) => log.warn(`refused upgrade (${reason})`, detail), `upgrade-${refused}`,
+    `host=${JSON.stringify(String(req.headers?.host ?? '').slice(0, 80))} origin=${JSON.stringify(String(req.headers?.origin ?? '').slice(0, 80))}`);
+  try {
+    socket.once('finish', () => socket.destroy());
+    setTimeout(() => socket.destroy(), 1000).unref();
+    socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+  } catch {
+    socket.destroy();
+  }
+  return false;
 }
 
 /**

@@ -124,7 +124,7 @@ export async function post(url, body) {
   try {
     const r = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-laneboard': '1' },
       body: JSON.stringify(body ?? {}),
     });
     if (r.status === 404) throw new Error('endpoint not wired yet');
@@ -138,7 +138,7 @@ export async function post(url, body) {
 
 export async function del(url) {
   try {
-    const r = await fetch(url, { method: 'DELETE' });
+    const r = await fetch(url, { method: 'DELETE', headers: { 'x-laneboard': '1' } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return await r.json();
   } catch (err) {
