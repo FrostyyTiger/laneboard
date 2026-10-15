@@ -3,7 +3,7 @@
 //
 //   const up = new Upstream({ builder, key, keyId, store, cfg });
 //   up.start(); ... up.stop();
-//   up.send({type:'visible', keys:[fkey...]})   // the only thing the hub sends on the stream
+//   up.send({type:'visible', keys:[fkey...]})   // visible, resync {fromSeq} and ping only (SR10 L4)
 //   up.setVisible(keys)                         // same, direct
 //   up.status() -> {state, lastSeen, latencyMs, attempts, error, connectedAt, seq, epoch, resyncs, dropped}
 //   backoffMs(attempt, rand)                    // pure
@@ -19,16 +19,24 @@
 //   3. frames {builder, seq, epoch, ...}: a frame naming another builder is dropped (logged once a
 //      minute). `snapshot` resets seq/epoch. Any other frame must be seq === last + 1 in the same
 //      epoch; otherwise ONE resync: signed GET /api/v1/snapshot (10 s, 8 MiB cap) while later frames
-//      are buffered (200 frames / 16 MiB cap, else the socket is closed), then the buffer is replayed
-//      dropping seq <= snap.seq. A second gap within 10 s closes the socket instead.
+//      are buffered RAW (Buffers, parsed only at replay; 200 frames / 4 MiB cap), then the buffer is
+//      replayed dropping seq <= snap.seq. On buffer overflow the buffer is dropped and ONE fresh
+//      snapshot is fetched instead; a second overflow closes 1008. A second gap within 10 s closes
+//      the socket instead. Resyncs are budgeted across reconnects: at most 3 per 60 s and 16 MiB of
+//      snapshot bodies per 60 s, else close 1008 with hostile backoff (SR10 M2, L1).
 //      delta -> store.applyDelta; event/health/approval/stuck/repos -> store.applyEvent;
 //      map/alarms/pong and unknown types are ignored (seq still advances).
 //   4. liveness: protocol ping every pingMs (EWMA latency, α 0.3); a 1 s tick classifies
 //      up (< staleMs since last frame) / stale (< downMs) / down. A closed socket is stale, not down,
 //      until downMs has passed. A connected socket silent for staleMs is terminated.
 //   5. reconnect: backoffMs(n) = min(30 s, 500 ms * 1.8^n) * (0.8 + 0.4 * rand); n resets after 30 s up.
-//   6. bounds: received bytes in a 1 s sliding window above 2 MiB → close 1008 `rate`; every HTTP read
-//      has a timeout and a byte cap before parsing (over → `response too large`).
+//   6. bounds: every received frame (text, binary, ws ping, ws pong) is charged its size + 256 bytes
+//      in a 1 s window of 10 fixed 100 ms buckets; above 2 MiB/s or 200 frames/s → close 1008 `rate`
+//      and back off as hostile (attempts jump to >= hostileAttempts). The first frame of a connection,
+//      when it is the snapshot and <= snapshotMaxBytes, is exempt from the byte budget (it still counts
+//      as a frame), so a large legitimate builder does not loop (SR10 M1, L2). Every HTTP read has a
+//      timeout and a byte cap before parsing (over → `response too large`).
+//   7. urls: https, or http only on a loopback host (localhost, 127.x, [::1]); else misconfigured (L3).
 //
 // Everything a builder sends is untrusted: only plain objects are accepted, the store sanitizes, and
 // routing identity is the configured builder id (the store recomputes fkeys from it). Errors recorded
@@ -54,9 +62,15 @@ export const DEFAULTS = Object.freeze({
   helloMaxBytes: 64 * KiB,
   snapshotMaxBytes: 8 * MiB,
   maxBytesPerSec: 2 * MiB,
+  maxFramesPerSec: 200,
+  frameOverheadBytes: 256,
+  hostileAttempts: 6, // backoff attempt floor after a hostile close (about 17 s)
   retryMisconfiguredMs: 60_000,
   resyncBufferFrames: 200,
-  resyncBufferBytes: 16 * MiB,
+  resyncBufferBytes: 4 * MiB,
+  resyncWindowMs: 60_000,
+  resyncMaxPerWindow: 3,
+  resyncBytesPerWindow: 16 * MiB,
   gapWindowMs: 10_000,
   stableMs: 30_000,
   closeGraceMs: 2_000,
@@ -100,10 +114,14 @@ const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArr
 const STORE_EVENT_TYPES = new Set(['event', 'health', 'approval', 'stuck', 'repos']);
 const IGNORED_TYPES = new Set(['map', 'alarms']);
 const EPOCH_RX = /^[A-Za-z0-9_-]{1,64}$/;
+const RATE_BUCKETS = 10;
+const RATE_BUCKET_MS = 100;
+const LOOPBACK_HOSTS = new Set(['localhost', '[::1]']);
+const isLoopbackHost = (h) => LOOPBACK_HOSTS.has(h) || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
 
 class HttpError extends Error {}
 
-/** Read at most `cap` bytes of a fetch Response body; parse JSON. Throws HttpError with a fixed message. */
+/** Read at most `cap` bytes of a fetch Response body; parse JSON -> {json, bytes}. Throws HttpError with a fixed message. */
 async function readJsonCapped(res, cap, what) {
   const len = Number(res.headers?.get?.('content-length'));
   if (Number.isFinite(len) && len > cap) {
@@ -130,12 +148,13 @@ async function readJsonCapped(res, cap, what) {
     chunks.push(buf);
   }
   let text;
+  const bytes = total || chunks.reduce((n, c) => n + c.byteLength, 0);
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks.map((c) => Buffer.from(c.buffer, c.byteOffset, c.byteLength))));
   } catch {
     throw new HttpError(`${what}: bad encoding`);
   }
-  try { return JSON.parse(text); } catch { throw new HttpError(`${what}: not JSON`); }
+  try { return { json: JSON.parse(text), bytes }; } catch { throw new HttpError(`${what}: not JSON`); }
 }
 
 /** Map a thrown fetch/abort error to a fixed string. */
@@ -189,7 +208,8 @@ export class Upstream extends EventEmitter {
     this._base = null;
     try {
       const u = new URL(String(builder.url));
-      if ((u.protocol === 'http:' || u.protocol === 'https:') && !u.username && !u.password && (u.pathname === '/' || u.pathname === '')
+      // https, or http only on a loopback host (S21, the same rule as H1's builderUrlProblem).
+      if ((u.protocol === 'https:' || (u.protocol === 'http:' && isLoopbackHost(u.hostname))) && !u.username && !u.password && (u.pathname === '/' || u.pathname === '')
         && !u.search && !u.hash) this._base = u.origin;
     } catch { /* stays null */ }
 
@@ -214,14 +234,17 @@ export class Upstream extends EventEmitter {
     this._bufferBytes = 0;
     this._lastGapAt = -Infinity;
     this._resyncs = 0;
-    this._rate = []; // [{t, n}] for the 1 s byte window
-    this._rateBytes = 0;
+    this._overflowed = false; // the resync buffer overflowed: frames are dropped until the fresh snapshot
+    this._refetched = false; // the one fresh snapshot after an overflow was already used
+    this._resyncLog = []; // [{t, bytes}] resync fetches in the last resyncWindowMs (survives reconnects)
+    this._firstFrame = true;
+    this._resetRate();
     this._pingAt = null;
     this._visible = [];
     this._timers = { tick: null, ping: null, retry: null, closeGrace: null };
     this._aborts = new Set();
     this._lastWrongBuilderLog = -Infinity;
-    this.dropped = { wrongBuilder: 0, binary: 0, badJson: 0, notObject: 0, noSeq: 0, duplicate: 0, ignored: 0 };
+    this.dropped = { wrongBuilder: 0, binary: 0, badJson: 0, notObject: 0, noSeq: 0, duplicate: 0, ignored: 0, overflow: 0 };
   }
 
   start() {
@@ -272,13 +295,20 @@ export class Upstream extends EventEmitter {
   }
 
   /**
-   * Send a JSON frame upstream. `visible` goes through setVisible (validated, ≤64 fkeys of this
-   * builder); any other frame must be a plain object under 64 KiB. Returns true if it was sent.
+   * Send a JSON frame upstream. Only the hub -> builder stream messages exist (SR10 L4):
+   * `visible` goes through setVisible (validated, ≤64 fkeys of this builder); `resync` is sent as
+   * {type, fromSeq} (a safe non-negative integer); `ping` as {type}. Other fields are not forwarded;
+   * every other type is refused. Returns true if it was sent.
    */
   send(msg) {
     if (!isPlainObject(msg) || typeof msg.type !== 'string') return false;
     if (msg.type === 'visible') return this.setVisible(msg.keys ?? []);
-    return this._sendRaw(msg);
+    if (msg.type === 'resync') {
+      if (!Number.isSafeInteger(msg.fromSeq) || msg.fromSeq < 0) return false;
+      return this._sendRaw({ type: 'resync', fromSeq: msg.fromSeq });
+    }
+    if (msg.type === 'ping') return this._sendRaw({ type: 'ping' });
+    return false;
   }
 
   /** The hub clients' visible sessions on this builder (fkeys). Remembered and re-sent on reconnect. */
@@ -357,8 +387,8 @@ export class Upstream extends EventEmitter {
         try { await res.body?.cancel(); } catch { /* gone */ }
         throw new HttpError(`${what}: http ${Number(res.status) | 0}`);
       }
-      const body = await readJsonCapped(res, cap, what);
-      return { body, t0, t1: this._now() };
+      const { json: body, bytes } = await readJsonCapped(res, cap, what);
+      return { body, bytes, t0, t1: this._now() };
     } finally {
       this._aborts.delete(ac);
     }
@@ -432,8 +462,10 @@ export class Upstream extends EventEmitter {
     this._resyncing = false;
     this._buffer = [];
     this._bufferBytes = 0;
-    this._rate = [];
-    this._rateBytes = 0;
+    this._overflowed = false;
+    this._refetched = false;
+    this._firstFrame = true;
+    this._resetRate();
     this._pingAt = null;
     let pendingError = null;
 
@@ -451,8 +483,14 @@ export class Upstream extends EventEmitter {
       if (gen !== this._gen) return;
       this._onMessage(gen, data, isBinary);
     });
-    ws.on('pong', () => {
+    // ws ping/pong control frames cost the hub too: charge them like any frame (SR10 M1).
+    ws.on('ping', (data) => {
       if (gen !== this._gen || this._closing) return;
+      if (!this._charge(this.cfg.frameOverheadBytes + (data?.length ?? 0), 1)) this._closeHostile(1008, 'rate');
+    });
+    ws.on('pong', (data) => {
+      if (gen !== this._gen || this._closing) return;
+      if (!this._charge(this.cfg.frameOverheadBytes + (data?.length ?? 0), 1)) { this._closeHostile(1008, 'rate'); return; }
       const t = this._now();
       if (this._pingAt !== null) {
         const rtt = Math.max(0, t - this._pingAt);
@@ -475,6 +513,7 @@ export class Upstream extends EventEmitter {
       this._resyncing = false;
       this._buffer = [];
       this._bufferBytes = 0;
+      this._overflowed = false;
       for (const ac of this._aborts) ac.abort();
       this._aborts.clear();
       if (pendingError) this._error = pendingError;
@@ -496,29 +535,89 @@ export class Upstream extends EventEmitter {
     this._resyncing = false;
     this._buffer = [];
     this._bufferBytes = 0;
+    this._overflowed = false;
     try { ws.close(code, error.slice(0, 100)); } catch { /* gone */ }
     // A peer that never answers the close frame does not get to keep the socket.
     this._timers.closeGrace = setTimeout(() => { try { ws.terminate(); } catch { /* gone */ } }, this.cfg.closeGraceMs);
     this._timers.closeGrace.unref?.();
   }
 
-  _countBytes(n) {
-    const t = this._now();
-    this._rate.push({ t, n });
-    this._rateBytes += n;
-    while (this._rate.length && t - this._rate[0].t >= 1000) this._rateBytes -= this._rate.shift().n;
-    return this._rateBytes <= this.cfg.maxBytesPerSec;
+  /** Close as hostile (rate, resync budget, overflow): the reconnect waits at least backoff(hostileAttempts). */
+  _closeHostile(code, error) {
+    if (!this._ws || this._closing) return;
+    this._attempts = Math.max(this._attempts, this.cfg.hostileAttempts);
+    this._closeWith(code, error);
+  }
+
+  _resetRate() {
+    this._rateB = new Float64Array(RATE_BUCKETS);
+    this._rateF = new Uint32Array(RATE_BUCKETS);
+    this._rateSlot = null;
+    this._rateBytes = 0;
+    this._rateFrames = 0;
+  }
+
+  /**
+   * Charge `bytes` and `frames` to the 1 s window (10 fixed 100 ms buckets). O(1) memory and time.
+   * Returns false when the window is over maxBytesPerSec or maxFramesPerSec.
+   */
+  _charge(bytes, frames) {
+    const now = Math.floor(this._now() / RATE_BUCKET_MS);
+    const cur = this._rateSlot;
+    if (cur === null || now - cur >= RATE_BUCKETS) {
+      this._rateB.fill(0);
+      this._rateF.fill(0);
+      this._rateBytes = 0;
+      this._rateFrames = 0;
+      this._rateSlot = now;
+    } else if (now > cur) {
+      for (let s = cur + 1; s <= now; s++) {
+        const i = ((s % RATE_BUCKETS) + RATE_BUCKETS) % RATE_BUCKETS;
+        this._rateBytes -= this._rateB[i];
+        this._rateFrames -= this._rateF[i];
+        this._rateB[i] = 0;
+        this._rateF[i] = 0;
+      }
+      this._rateSlot = now;
+    } // a clock that went back charges the current bucket
+    const i = ((this._rateSlot % RATE_BUCKETS) + RATE_BUCKETS) % RATE_BUCKETS;
+    this._rateB[i] += bytes;
+    this._rateF[i] += frames;
+    this._rateBytes += bytes;
+    this._rateFrames += frames;
+    return this._rateBytes <= this.cfg.maxBytesPerSec && this._rateFrames <= this.cfg.maxFramesPerSec;
   }
 
   _onMessage(gen, data, isBinary) {
     if (this._closing) return;
     const buf = Buffer.isBuffer(data) ? data : Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data);
     const size = buf.length;
-    if (!this._countBytes(size)) { this._closeWith(1008, 'rate'); return; }
+    const overhead = this.cfg.frameOverheadBytes;
+    // The connection's first frame, when it is the snapshot, is exempt from the byte budget up to the
+    // snapshot cap (SR10 L2). It still counts as a frame; anything else is charged after the parse.
+    const first = this._firstFrame;
+    this._firstFrame = false;
+    const exempt = first && !isBinary && !this._resyncing && size <= this.cfg.snapshotMaxBytes;
+    if (!this._charge(exempt ? overhead : size + overhead, 1)) { this._closeHostile(1008, 'rate'); return; }
     if (isBinary) { this.dropped.binary++; return; }
+    if (this._resyncing) {
+      // Raw Buffers only while the snapshot is in flight: parsed objects would cost ~20x the raw bytes (M2).
+      this._lastSeen = this._now();
+      this._bufferFrame(buf);
+      return;
+    }
+    const msg = this._decode(buf);
+    if (exempt && msg?.type !== 'snapshot' && !this._charge(size, 0)) { this._closeHostile(1008, 'rate'); return; }
+    if (!msg) return;
+    this._lastSeen = this._now();
+    this._process(gen, msg, buf);
+  }
+
+  /** Parse one text frame; null (counted in dropped) unless it is a plain object naming this builder. */
+  _decode(buf) {
     let msg;
-    try { msg = JSON.parse(buf.toString('utf8')); } catch { this.dropped.badJson++; return; }
-    if (!isPlainObject(msg)) { this.dropped.notObject++; return; }
+    try { msg = JSON.parse(buf.toString('utf8')); } catch { this.dropped.badJson++; return null; }
+    if (!isPlainObject(msg)) { this.dropped.notObject++; return null; }
     if (msg.builder !== this.id) {
       this.dropped.wrongBuilder++;
       const t = this._now();
@@ -526,23 +625,27 @@ export class Upstream extends EventEmitter {
         this._lastWrongBuilderLog = t;
         this._log?.warn?.(`upstream ${this.id}: dropped frame(s) naming another builder (${this.dropped.wrongBuilder} so far)`);
       }
-      return;
+      return null;
     }
-    this._lastSeen = this._now();
-    if (this._resyncing) { this._bufferFrame(msg, size); return; }
-    this._process(gen, msg, size);
+    return msg;
   }
 
-  _bufferFrame(msg, size) {
-    if (this._buffer.length >= this.cfg.resyncBufferFrames || this._bufferBytes + size > this.cfg.resyncBufferBytes) {
-      this._closeWith(1008, 'resync buffer overflow');
+  _bufferFrame(buf) {
+    if (this._overflowed) { this.dropped.overflow++; return; }
+    if (this._buffer.length >= this.cfg.resyncBufferFrames || this._bufferBytes + buf.length > this.cfg.resyncBufferBytes) {
+      if (this._refetched) { this._closeHostile(1008, 'resync buffer overflow'); return; }
+      // Drop the buffer; the fresh snapshot fetched after the current one covers these frames.
+      this.dropped.overflow += this._buffer.length + 1;
+      this._overflowed = true;
+      this._buffer = [];
+      this._bufferBytes = 0;
       return;
     }
-    this._buffer.push(msg);
-    this._bufferBytes += size;
+    this._buffer.push(buf);
+    this._bufferBytes += buf.length;
   }
 
-  _process(gen, msg, size = 0) {
+  _process(gen, msg, buf = null) {
     const type = msg.type;
     if (type === 'pong' || type === 'ping') return; // JSON heartbeats carry the current seq; not sequenced
     const epoch = typeof msg.epoch === 'string' && EPOCH_RX.test(msg.epoch) ? msg.epoch : null;
@@ -556,7 +659,7 @@ export class Upstream extends EventEmitter {
     const epochChanged = this._epoch !== null && epoch !== this._epoch;
     if (!epochChanged && this._seq !== null && msg.seq <= this._seq) { this.dropped.duplicate++; return; }
     if (this._seq === null || epochChanged || msg.seq !== this._seq + 1) {
-      this._gap(gen, msg, size);
+      this._gap(gen, buf);
       return;
     }
     this._seq = msg.seq;
@@ -570,7 +673,7 @@ export class Upstream extends EventEmitter {
     else if (IGNORED_TYPES.has(msg.type)) { /* the hub builds its own Map and alarms */ } else this.dropped.ignored++;
   }
 
-  _gap(gen, msg, size = 0) {
+  _gap(gen, buf) {
     const t = this._now();
     if (t - this._lastGapAt < this.cfg.gapWindowMs) {
       this._closeWith(4000, 'repeated seq gap');
@@ -579,42 +682,91 @@ export class Upstream extends EventEmitter {
     this._lastGapAt = t;
     this._resyncs++;
     this._resyncing = true;
-    this._buffer = [msg];
-    this._bufferBytes = size;
+    this._overflowed = false;
+    this._refetched = false;
+    this._buffer = buf ? [buf] : [];
+    this._bufferBytes = buf ? buf.length : 0;
     void this._resync(gen);
   }
 
+  /**
+   * The resync budget across reconnects (SR10 L1): null and the byte cap for the next fetch, or the
+   * fixed error to close with.
+   */
+  _resyncBudget() {
+    const t = this._now();
+    this._resyncLog = this._resyncLog.filter((e) => t - e.t < this.cfg.resyncWindowMs);
+    if (this._resyncLog.length >= this.cfg.resyncMaxPerWindow) return { error: 'resync rate' };
+    const used = this._resyncLog.reduce((n, e) => n + e.bytes, 0);
+    const left = this.cfg.resyncBytesPerWindow - used;
+    if (left <= 0) return { error: 'resync budget' };
+    return { error: null, cap: Math.min(this.cfg.snapshotMaxBytes, left) };
+  }
+
   async _resync(gen) {
-    let snap;
-    try {
-      ({ body: snap } = await this._get('/api/v1/snapshot', this.cfg.snapshotTimeoutMs, this.cfg.snapshotMaxBytes, 'snapshot'));
-    } catch (err) {
-      if (gen !== this._gen || this._stopped) return;
-      this._closeWith(1011, fetchError(err, 'snapshot'));
-      return;
+    for (;;) {
+      const budget = this._resyncBudget();
+      if (budget.error) { this._closeHostile(1008, budget.error); return; }
+      const entry = { t: this._now(), bytes: 0 };
+      this._resyncLog.push(entry);
+      let snap;
+      try {
+        let bytes;
+        ({ body: snap, bytes } = await this._get('/api/v1/snapshot', this.cfg.snapshotTimeoutMs, budget.cap, 'snapshot'));
+        entry.bytes = bytes;
+      } catch (err) {
+        if (gen !== this._gen || this._stopped) return;
+        const error = fetchError(err, 'snapshot');
+        if (error === 'snapshot: response too large') {
+          entry.bytes = budget.cap;
+          if (budget.cap < this.cfg.snapshotMaxBytes) { this._closeHostile(1008, 'resync budget'); return; }
+        }
+        this._closeWith(1011, error);
+        return;
+      }
+      if (gen !== this._gen || this._stopped || this._closing) return;
+      const claimed = isPlainObject(snap?.builder) ? snap.builder.id : snap?.builder;
+      if (!isPlainObject(snap) || !Array.isArray(snap.sessions) || !Number.isSafeInteger(snap.seq) || snap.seq < 0
+        || (claimed !== undefined && claimed !== this.id)) {
+        this._closeWith(1011, 'snapshot: bad body');
+        return;
+      }
+      this.store.applySnapshot(this.id, snap, this._now());
+      this._seq = snap.seq;
+      this._epoch = typeof snap.epoch === 'string' && EPOCH_RX.test(snap.epoch) ? snap.epoch : null;
+      snap = null;
+      if (this._overflowed) {
+        // Frames were dropped while this snapshot was in flight: ONE fresh snapshot covers them.
+        this._overflowed = false;
+        this._refetched = true;
+        this._buffer = [];
+        this._bufferBytes = 0;
+        continue;
+      }
+      break;
     }
-    if (gen !== this._gen || this._stopped || this._closing) return;
-    const claimed = isPlainObject(snap?.builder) ? snap.builder.id : snap?.builder;
-    if (!isPlainObject(snap) || !Array.isArray(snap.sessions) || !Number.isSafeInteger(snap.seq) || snap.seq < 0
-      || (claimed !== undefined && claimed !== this.id)) {
-      this._closeWith(1011, 'snapshot: bad body');
-      return;
-    }
-    this.store.applySnapshot(this.id, snap, this._now());
-    this._seq = snap.seq;
-    this._epoch = typeof snap.epoch === 'string' && EPOCH_RX.test(snap.epoch) ? snap.epoch : null;
     const buffered = this._buffer;
     this._buffer = [];
     this._bufferBytes = 0;
     this._resyncing = false;
-    for (const f of buffered) {
+    this._refetched = false;
+    for (let k = 0; k < buffered.length; k++) {
       if (gen !== this._gen || this._closing) return;
+      const raw = buffered[k];
+      const f = this._decode(raw);
+      if (!f) continue;
       const fe = typeof f.epoch === 'string' && EPOCH_RX.test(f.epoch) ? f.epoch : null;
       if (f.type !== 'snapshot' && fe === this._epoch && Number.isSafeInteger(f.seq) && f.seq <= this._seq) {
         this.dropped.duplicate++;
         continue;
       }
-      this._process(gen, f);
+      // A gap here starts a new resync (or closes on a repeated gap); stop replaying this buffer then.
+      this._process(gen, f, raw);
+      if (this._resyncing) {
+        // Frames after the gap frame belong to the new resync's buffer, in order.
+        for (let j = k + 1; j < buffered.length && !this._closing; j++) this._bufferFrame(buffered[j]);
+        return;
+      }
     }
   }
 
@@ -628,7 +780,8 @@ export class Upstream extends EventEmitter {
   _tick() {
     if (this._stopped) return;
     const t = this._now();
-    if (this._connected && this._connectedAt !== null && t - this._connectedAt >= this.cfg.stableMs && this._attempts !== 0) {
+    // Not while closing: a hostile close has just raised attempts for the coming reconnect.
+    if (this._connected && !this._closing && this._connectedAt !== null && t - this._connectedAt >= this.cfg.stableMs && this._attempts !== 0) {
       this._attempts = 0;
     }
     // A connected socket that has been silent (no frame, no pong) for staleMs is dead: drop it.
