@@ -68,7 +68,7 @@ async function teardown() {
 }
 
 function directHeaders(extra = {}) {
-  return { host: HOST, origin: ORIGIN, 'x-forwarded-for': '100.64.0.9', 'x-forwarded-proto': 'https', 'tailscale-user-login': USER, ...extra };
+  return { host: HOST, origin: ORIGIN, 'x-forwarded-for': '192.0.2.9', 'x-forwarded-proto': 'https', 'tailscale-user-login': USER, ...extra };
 }
 
 /** Open a browser socket; resolves {ws} on open or {status} on an HTTP refusal. */
