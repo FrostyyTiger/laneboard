@@ -83,7 +83,8 @@ function lookup(sessionsByKey, key) {
  * object); `builderUp(builderId)` (optional) says whether the hub can reach that builder now.
  * Order is kept; duplicates after the first are skipped.
  */
-export function planBroadcast(targets, sessionsByKey, { builderUp } = {}) {
+export function planBroadcast(targets, sessionsByKey, opts = {}) {
+  const isUp = typeof opts?.builderUp === 'function' ? opts.builderUp : null;
   const send = [];
   const skip = [];
   const seen = new Set();
@@ -93,7 +94,7 @@ export function planBroadcast(targets, sessionsByKey, { builderUp } = {}) {
     if (seen.has(key)) { skip.push({ key, reason: 'duplicate' }); continue; }
     seen.add(key);
     const builder = key.slice(0, key.indexOf('/'));
-    if (typeof builderUp === 'function' && builderUp(builder) !== true) { skip.push({ key, reason: 'builder-down' }); continue; }
+    if (isUp && isUp(builder) !== true) { skip.push({ key, reason: 'builder-down' }); continue; }
     const reason = skipReason(lookup(sessionsByKey, key));
     if (reason) skip.push({ key, reason });
     else send.push(key);
