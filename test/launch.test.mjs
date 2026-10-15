@@ -70,7 +70,7 @@ const writeLane = (id, slot, extra = {}) => {
 const clearLanes = () => fs.rmSync(path.join(tmp, 'lanes'), { recursive: true, force: true });
 
 async function refused(req, re, status) {
-  await assert.rejects(L.validate(req), (err) => {
+  await assert.rejects(L.validate({ permissionMode: 'auto', ...req }), (err) => {
     assert.ok(err instanceof L.LaneError, `expected a LaneError, got ${err}`);
     assert.match(err.message, re);
     if (status) assert.equal(err.status, status);
@@ -82,7 +82,7 @@ async function refused(req, re, status) {
 
 test('a good request resolves to slot 2, with the defaults the plan names', async () => {
   clearLanes();
-  const v = await L.validate({ lane: 'bauplan', plan: 'docs/plans/bauplan.md' });
+  const v = await L.validate({ lane: 'bauplan', plan: 'docs/plans/bauplan.md', permissionMode: 'auto' });
   assert.equal(v.slot, 2, 'slot 1 is reserved; lanes start at 2');
   assert.equal(v.branch, 'feat/bauplan');
   assert.equal(v.model, 'opus');
@@ -132,7 +132,7 @@ test('a slot running with no lane counts as taken', async () => {
   // Someone started slot 2 by hand; sharing its database with a suite that
   // drops tenants is exactly what slots exist to prevent.
   clearLanes();
-  const v = await L.validate({ lane: 'e', plan: 'docs/plans/e.md', fakeTakenSlots: [2] });
+  const v = await L.validate({ lane: 'e', plan: 'docs/plans/e.md', permissionMode: 'auto', fakeTakenSlots: [2] });
   assert.equal(v.slot, 3);
   await refused({ lane: 'e', plan: 'docs/plans/e.md', fakeTakenSlots: [2, 3, 4] },
     /slot 2: agent2 \(running, no lane\)/, 409);
@@ -143,7 +143,7 @@ test('faked slots can only add to what the provider reports', async () => {
   clearLanes();
   const owners = store.slotOwners([], [1]);
   assert.equal(owners.get(1), 'agent1 (running, no lane)');
-  const v = await L.validate({ lane: 'f', plan: 'docs/plans/f.md', fakeTakenSlots: [] });
+  const v = await L.validate({ lane: 'f', plan: 'docs/plans/f.md', permissionMode: 'auto', fakeTakenSlots: [] });
   assert.equal(v.slot, 2);
 });
 
@@ -293,8 +293,8 @@ test('the record is written at validation, so two launches at once cannot share 
   // after the record exists. What matters is the slot each one was given.
   L.init({ state: { get: () => null, tick: async () => {} } });
   const [a, b] = await Promise.all([
-    L.launch({ lane: 'twin-a', plan: 'docs/plans/twin-a.md', localBranch: true }),
-    L.launch({ lane: 'twin-b', plan: 'docs/plans/twin-b.md', localBranch: true }),
+    L.launch({ lane: 'twin-a', plan: 'docs/plans/twin-a.md', permissionMode: 'auto', localBranch: true }),
+    L.launch({ lane: 'twin-b', plan: 'docs/plans/twin-b.md', permissionMode: 'auto', localBranch: true }),
   ]);
   assert.notEqual(a.slot, b.slot, `both launches got slot ${a.slot}`);
   assert.deepEqual([a.slot, b.slot].sort(), [2, 3]);
