@@ -1,0 +1,5 @@
+[
+  {"conclusion":"failure","databaseId":18001000004,"workflowName":"CI"},
+  {"conclusion":"success","databaseId":18001000003,"workflowName":"Web"},
+  {"conclusion":"startup_failure","databaseId":18001000006,"workflowName":"Release check"}
+]

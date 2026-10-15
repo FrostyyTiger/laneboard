@@ -1,0 +1,26 @@
+{"jobs":[
+  {"completedAt":"2026-10-14T08:52:10Z","conclusion":"success","databaseId":51000000001,"name":"changes","startedAt":"2026-10-14T08:50:02Z","status":"completed","url":"https://github.com/acme/widgets/actions/runs/18001000004/job/51000000001","steps":[
+    {"conclusion":"success","name":"Set up job","number":1,"status":"completed"},
+    {"conclusion":"success","name":"Run actions/checkout@v4","number":2,"status":"completed"},
+    {"conclusion":"success","name":"Run dorny/paths-filter@v3","number":3,"status":"completed"},
+    {"conclusion":"success","name":"Post Run actions/checkout@v4","number":4,"status":"completed"},
+    {"conclusion":"success","name":"Complete job","number":5,"status":"completed"}]},
+  {"completedAt":"2026-10-14T08:57:55Z","conclusion":"failure","databaseId":51000000002,"name":"api (ruff, pytest)","startedAt":"2026-10-14T08:52:20Z","status":"completed","url":"https://github.com/acme/widgets/actions/runs/18001000004/job/51000000002","steps":[
+    {"conclusion":"success","name":"Set up job","number":1,"status":"completed"},
+    {"conclusion":"success","name":"Checkout","number":2,"status":"completed"},
+    {"conclusion":"success","name":"Run actions/setup-python@v5","number":3,"status":"completed"},
+    {"conclusion":"success","name":"ruff","number":4,"status":"completed"},
+    {"conclusion":"failure","name":"pytest","number":5,"status":"completed"},
+    {"conclusion":"skipped","name":"Upload coverage","number":6,"status":"completed"},
+    {"conclusion":"success","name":"Complete job","number":7,"status":"completed"}]},
+  {"completedAt":"2026-10-14T08:56:01Z","conclusion":"success","databaseId":51000000003,"name":"web (tsc, eslint)","startedAt":"2026-10-14T08:52:20Z","status":"completed","url":"https://github.com/acme/widgets/actions/runs/18001000004/job/51000000003","steps":[
+    {"conclusion":"success","name":"Set up job","number":1,"status":"completed"},
+    {"conclusion":"success","name":"Checkout","number":2,"status":"completed"},
+    {"conclusion":"success","name":"Run actions/setup-node@v4","number":3,"status":"completed"},
+    {"conclusion":"success","name":"tsc","number":4,"status":"completed"},
+    {"conclusion":"success","name":"eslint","number":5,"status":"completed"},
+    {"conclusion":"success","name":"Complete job","number":6,"status":"completed"}]},
+  {"completedAt":"0001-01-01T00:00:00Z","conclusion":"","databaseId":51000000004,"name":"e2e","startedAt":"2026-10-14T08:52:21Z","status":"in_progress","url":"https://github.com/acme/widgets/actions/runs/18001000004/job/51000000004","steps":[
+    {"conclusion":"success","name":"Set up job","number":1,"status":"completed"},
+    {"conclusion":"","name":"Run playwright","number":2,"status":"in_progress"}]}
+]}
