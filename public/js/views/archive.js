@@ -24,7 +24,7 @@
 // sends the launch.
 //
 // Pure at import time.
-import { $ } from '../core/dom.js';
+import { $ as byId } from '../core/dom.js';
 import { ago, money } from '../core/format.js';
 import { BUILDER_ID_RX, fkey } from '../core/keys.js';
 import { localBuilderId, store } from '../core/store.js';
@@ -184,7 +184,8 @@ export function restoreKey(kind, builder, lane) {
 }
 
 /** The builders a restore can go to: every hub builder, or the local one. */
-export function restoreBuilders(s = store) {
+export function restoreBuilders(given) {
+  const s = given ?? store;
   if (s?.source?.kind === 'hub') return [...(s.builders?.keys?.() ?? [])].filter((b) => BUILDER_ID_RX.test(b)).sort();
   const id = localBuilderId(s);
   return id ? [id] : [];
@@ -470,8 +471,8 @@ function sourceKind() {
 }
 
 function hostFor() {
-  const view = $('view-board');
-  const grid = $('grid');
+  const view = byId('view-board');
+  const grid = byId('grid');
   if (!view || !grid) return null;
   if (page.host && page.host.isConnected !== false) return page.host;
   const doc = globalThis.document;
@@ -553,7 +554,7 @@ export function openRestore(detail, source) {
   return sheet;
 }
 
-async function refresh(q) {
+async function refreshArchive(q) {
   const n = ++page.seq;
   try {
     const out = await loadArchive({ q, kind: sourceKind(), localId: localBuilderId(store) });
@@ -582,7 +583,7 @@ function show(route) {
     page.q = q;
     page.loaded = true;
     page.expanded.clear();
-    refresh(q);
+    refreshArchive(q);
   }
 }
 
