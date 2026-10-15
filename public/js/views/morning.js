@@ -52,16 +52,15 @@ const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const arr = (v) => (Array.isArray(v) ? v : []);
 const fin = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const txt = (v) => (typeof v === 'string' ? v : v == null ? '' : String(v));
-const WINDOW_RX = /^[a-z0-9]{1,16}$/;
 
 /** True when the page is fed by a hub. */
-export function isHub(s = store) {
-  return s?.source?.kind === 'hub';
+export function morningIsHub(s) {
+  return (s ?? store)?.source?.kind === 'hub';
 }
 
 /** The fetch URL for a window: the hub's fleet merge (optionally one builder), or the builder's own. */
 export function morningUrl(window, { hub = false, b = 'all' } = {}) {
-  const w = WINDOW_RX.test(String(window)) ? String(window) : 'tonight';
+  const w = /^[a-z0-9]{1,16}$/.test(String(window)) ? String(window) : 'tonight';
   if (!hub) return `/api/morning?window=${encodeURIComponent(w)}`;
   const one = typeof b === 'string' && b !== 'all' && BUILDER_ID_RX.test(b) ? `&b=${encodeURIComponent(b)}` : '';
   return `/api/fleet/morning?window=${encodeURIComponent(w)}${one}`;
@@ -103,7 +102,7 @@ function costOf(c) {
   };
 }
 
-function builderOf(x, s) {
+function morningBuilderOf(x, s) {
   const id = typeof x?.id === 'string' && BUILDER_ID_RX.test(x.id) ? x.id : localBuilderId(s);
   return {
     id,
@@ -128,16 +127,17 @@ const EMPTY_APPROVALS = Object.freeze({ answered: 0, approved: 0, denied: 0, rel
  * `hub` is whether the page is fed by a hub. A hub merge has `builders[]`; a hub
  * `?b=` answer is one builder row; a builder's own answer is wrapped as one builder.
  */
-export function morningModel(data, { hub = false, s = store } = {}) {
+export function morningModel(data, { hub = false, s = null } = {}) {
+  s = s ?? store;
   if (!isObj(data)) return { hub, error: 'bad response' };
   if (typeof data.error === 'string' && !Array.isArray(data.builders) && !(hub && typeof data.id === 'string')) {
     return { hub, error: data.error };
   }
   const fleet = Array.isArray(data.builders);
   let rows;
-  if (fleet) rows = data.builders.filter(isObj).map((x) => builderOf(x, s));
-  else if (hub && typeof data.id === 'string') rows = [builderOf(data, s)];
-  else rows = [builderOf({ ...data, id: typeof data.builder === 'string' ? data.builder : undefined, error: undefined }, s)];
+  if (fleet) rows = data.builders.filter(isObj).map((x) => morningBuilderOf(x, s));
+  else if (hub && typeof data.id === 'string') rows = [morningBuilderOf(data, s)];
+  else rows = [morningBuilderOf({ ...data, id: typeof data.builder === 'string' ? data.builder : undefined, error: undefined }, s)];
 
   const byId = new Map(rows.map((r) => [r.id, r]));
   const stuckFleet = [];
@@ -187,7 +187,7 @@ export function morningModel(data, { hub = false, s = store } = {}) {
 
 export async function loadMorning(force = false) {
   if (morning.loading) return;
-  const hub = isHub(store);
+  const hub = morningIsHub(store);
   const url = morningUrl(morning.window, { hub, b: morning.b });
   if (!force && morning.data && morning.url === url && Date.now() - morning.at < 20000) return;
   morning.loading = true;
@@ -230,7 +230,7 @@ export function renderModel(box, m) {
     if (b) for (const n of builderBlocks(b, m)) box.append(n);
     return box;
   }
-  box.append(summary(m));
+  box.append(morningSummary(m));
   for (const b of m.builders) box.append(builderGroup(b, m));
   if (!m.builders.length) box.append(el('p', 'empty', 'No builder is configured.'));
   box.append(reviewBlock(m.review, m));
@@ -248,7 +248,7 @@ function kv(k, v, cls = '') {
   return n;
 }
 
-function summary(m) {
+function morningSummary(m) {
   const sec = el('section', 'mblock morning-summary');
   const row = el('div', 'mrow-top');
   row.append(kv('builders', String(m.builders.length)));
@@ -367,7 +367,7 @@ function finishedBlock(b) {
 
 // --- what it cost ----------------------------------------------------------
 
-function table(head) {
+function morningTable(head) {
   const t = el('table', 'dtable');
   const thead = el('thead');
   const hr = el('tr');
@@ -381,7 +381,7 @@ function table(head) {
 
 function costBlock(c, rateLimits) {
   const cost = block('What it cost', null);
-  const { t, tbody } = table([['lane', ''], ['spend', 'num'], ['tokens', 'num'], ['sessions', '']]);
+  const { t, tbody } = morningTable([['lane', ''], ['spend', 'num'], ['tokens', 'num'], ['sessions', '']]);
   for (const l of c.lanes) {
     if (!(fin(l.usd) > 0.0005)) continue;
     const tr = el('tr');
@@ -452,7 +452,7 @@ function reviewBlock(r, m) {
   sec.append(top);
   if (!r.longest.length) sec.append(el('p', 'empty', 'Nothing is waiting for review.'));
   else {
-    const { t, tbody } = table([['lane', ''], ['builder', ''], ['waiting', 'num']]);
+    const { t, tbody } = morningTable([['lane', ''], ['builder', ''], ['waiting', 'num']]);
     for (const w of r.longest) {
       const tr = el('tr');
       tr.append(el('td', null, localPart(w.fkey)));
@@ -480,7 +480,7 @@ function approvalsBlock(a) {
 function packageBlock(rows, totalUsd) {
   const sec = block('Cost by package', rows.length);
   if (!rows.length) { sec.append(el('p', 'empty', 'No package spend in this window.')); return sec; }
-  const { t, tbody } = table([['package', ''], ['≈ spend', 'num'], ['lanes', 'num']]);
+  const { t, tbody } = morningTable([['package', ''], ['≈ spend', 'num'], ['lanes', 'num']]);
   for (const p of rows) {
     const tr = el('tr');
     tr.append(el('td', null, txt(p.package)));
@@ -546,7 +546,7 @@ export default {
   /** Its own fetch: refetch only when the builder filter or the source kind changed. */
   update: (_store, ctx = {}) => {
     if (ctx.route) morning.b = scopeOf(ctx);
-    const url = morningUrl(morning.window, { hub: isHub(store), b: morning.b });
+    const url = morningUrl(morning.window, { hub: morningIsHub(store), b: morning.b });
     if (morning.url !== null && url !== morning.url) loadMorning(true);
   },
 };
