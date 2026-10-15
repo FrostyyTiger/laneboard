@@ -1,0 +1,192 @@
+/* The phone shell (fleet D6b, plan §4 2.4 "Phone <700"): the builder chip
+   strip in #shell-strip, the three-snap bottom sheet in #shell-sheet (peek /
+   half / full, MAP|LIST|INBOX), 44px touch targets. Plus the L4 host: the
+   terminal #sheet is full screen on the phone and, with data-mode="centre",
+   a takeover of the centre column on desktop (D6 opens it so).
+   shell.css owns the grid and the hook rules this sheet fills in. */
+
+/* --- L4: the terminal sheet ------------------------------------------------- */
+@media (min-width: 700px) {
+  .sheet[data-mode="centre"] {
+    inset: var(--header-h) 0 var(--tape-h) var(--rail-cur, 0px);
+    z-index: var(--z-sheet);
+    border-top: var(--bw) solid var(--line-strong);
+  }
+  .shell-sheet { display: none; }
+}
+
+/* --- phone ---------------------------------------------------------------------- */
+@media (max-width: 699px) {
+  /* The chip strip: 36px chips with a 44px hit area, horizontal scroll. */
+  .shell-strip {
+    position: sticky;
+    top: env(safe-area-inset-top);
+    z-index: var(--z-rail);
+    align-items: center;
+    min-height: 44px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+  .shell-strip::-webkit-scrollbar { display: none; }
+  .strip-chip {
+    position: relative;
+    flex: none;
+    height: 36px;
+    padding: 0 var(--sp-3) 0 var(--sp-2);
+    font-size: var(--fs-12);
+  }
+  .strip-chip::after {
+    content: "";
+    position: absolute;
+    inset: -4px 0;
+  }
+
+  /* The bottom sheet: fixed at full height, moved by transform only. */
+  .shell-sheet {
+    --sheet-gap: 80px;
+    --sheet-peek: 96px;
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - var(--sheet-gap) - env(safe-area-inset-top));
+    padding-bottom: env(safe-area-inset-bottom);
+    transform: translateY(calc(100% - var(--sheet-peek) - env(safe-area-inset-bottom)));
+    transition: transform var(--dur) var(--ease);
+    touch-action: none;
+  }
+  .shell-sheet[data-snap="half"] { transform: translateY(calc(100% - 50dvh)); }
+  .shell-sheet[data-snap="full"] { transform: none; }
+  .shell-sheet.is-drag { transition: none; }
+
+  .ps-head {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    gap: var(--sp-1);
+    padding: var(--sp-1) var(--sp-1) 0;
+    flex: none;
+  }
+  .ps-handle {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    cursor: grab;
+    touch-action: none;
+  }
+  .ps-handle:active { cursor: grabbing; }
+  .ps-grip {
+    width: 28px;
+    height: 4px;
+    border-radius: var(--radius);
+    background: var(--line-strong);
+  }
+  .ps-seg {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    border: var(--bw) solid var(--line);
+    border-radius: var(--radius);
+  }
+  .ps-tab {
+    flex: 1 1 0;
+    min-height: 42px;
+    border: 0;
+    border-left: var(--bw) solid var(--line);
+    background: transparent;
+    color: var(--text-2);
+    font-family: var(--font-label);
+    font-size: var(--fs-13);
+    font-weight: 600;
+    letter-spacing: var(--ls-label);
+    cursor: pointer;
+  }
+  .ps-tab:first-child { border-left: 0; }
+  .ps-tab[aria-selected="true"] { background: var(--accent-weak); color: var(--text-1); }
+  .ps-more {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+  .ps-menu {
+    position: absolute;
+    right: var(--sp-1);
+    bottom: 100%;
+    z-index: var(--z-palette);
+    display: flex;
+    flex-direction: column;
+    min-width: 160px;
+    background: var(--bg-elevated);
+    border: var(--bw) solid var(--line-strong);
+    border-radius: var(--radius);
+  }
+  .ps-menu-i {
+    min-height: var(--row-touch);
+    padding: 0 var(--sp-3);
+    border: 0;
+    border-bottom: var(--bw) solid var(--line-weak);
+    background: transparent;
+    color: var(--text-1);
+    font-family: var(--font-label);
+    font-size: var(--fs-13);
+    text-align: left;
+    cursor: pointer;
+  }
+  .ps-menu-i:last-child { border-bottom: 0; }
+
+  /* Peek line: counts, then the latest event. */
+  .ps-peek, .ps-row {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    width: 100%;
+    min-height: var(--row-touch);
+    padding: 0 var(--sp-3);
+    border: 0;
+    background: transparent;
+    color: var(--text-1);
+    font-family: var(--font-mono);
+    font-size: var(--fs-12);
+    text-align: left;
+  }
+  .ps-peek { flex: none; cursor: pointer; }
+  button.ps-row { cursor: pointer; }
+  .ps-row { border-top: var(--bw) solid var(--line-weak); }
+  .ps-row:active, .ps-peek:active { background: var(--bg-hover); }
+  .ps-counts { display: inline-flex; align-items: center; gap: var(--sp-1); flex: none; }
+  .ps-n { margin-right: var(--sp-2); font-size: var(--fs-13); font-weight: 600; }
+  .ps-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ps-sub { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+  .ps-ago { flex: none; color: var(--text-3); font-size: var(--fs-11); }
+  .ps-empty { color: var(--text-3); }
+
+  .ps-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    border-top: var(--bw) solid var(--line);
+  }
+  .ps-sum, .ps-body > .ps-empty {
+    margin: 0;
+    padding: var(--sp-2) var(--sp-3);
+    font-family: var(--font-label);
+    font-size: var(--fs-11);
+    letter-spacing: var(--ls-label);
+    color: var(--text-3);
+  }
+  .ps-open { margin: var(--sp-2) var(--sp-3); min-height: var(--row-touch); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-sheet { transition: none; }
+}
