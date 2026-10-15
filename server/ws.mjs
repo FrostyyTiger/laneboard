@@ -45,7 +45,7 @@ let lastLanes = '';
 let lastBox = '';
 
 export function broadcastFrom(snapshot) {
-  if (!clients.size) {
+  if (!clientCount()) {
     // Keep the diff baseline current so the next client's first delta is small.
     lastSerialised = serialiseAll(snapshot.sessions);
     lastLanes = JSON.stringify(snapshot.lanes ?? []);
@@ -128,6 +128,37 @@ export function visibleNames(msg, builderId = config.fleet?.id) {
   return null;
 }
 
+// --- taps (fleet A7) ---------------------------------------------------------
+//
+// A tap sees every broadcast frame, with the seq send() gave it, so the v1
+// stream (server/fleet/stream.mjs) carries exactly what /ws carries, in the
+// same seq space. A tap may also own clients of its own: `count()` makes
+// broadcastFrom/broadcastEvent treat "has v1 clients" as "has clients" (the
+// diff baseline is global, so a delta must be built while anyone listens),
+// and `visible()` adds their visible names to state.visibleSessions.
+
+const taps = new Set(); // {fn, count, visible}
+
+/**
+ * addTap(fn, {count?, visible?}) -> remove()
+ * `fn(msg, seq)` runs synchronously inside send() for every broadcast frame;
+ * `msg` is the unstamped original. A throwing tap is logged, never fatal.
+ */
+export function addTap(fn, { count = () => 0, visible = () => [] } = {}) {
+  if (typeof fn !== 'function') throw new TypeError('addTap: fn must be a function');
+  const tap = { fn, count, visible };
+  taps.add(tap);
+  return () => { taps.delete(tap); recomputeVisible(); };
+}
+
+function tapClients() {
+  let n = 0;
+  for (const t of taps) {
+    try { n += Number(t.count()) || 0; } catch { /* broken tap counts as none */ }
+  }
+  return n;
+}
+
 export function send(msg) {
   seq += 1;
   const data = JSON.stringify(stamp(msg));
@@ -135,6 +166,9 @@ export function send(msg) {
     if (ws.readyState === ws.OPEN) {
       try { ws.send(data); } catch { /* client is going away */ }
     }
+  }
+  for (const t of taps) {
+    try { t.fn(msg, seq); } catch (err) { log.warn(`ws tap failed: ${err?.message || err}`); }
   }
 }
 
@@ -146,7 +180,7 @@ export function eventForWire(event) {
 
 /** Push a hook event straight through, so the log ticks live. */
 export function broadcastEvent(event) {
-  if (clients.size) send({ type: 'event', event: eventForWire(event) });
+  if (clientCount()) send({ type: 'event', event: eventForWire(event) });
 }
 
 export function attach(req, socket, head) {
@@ -176,10 +210,18 @@ export function attach(req, socket, head) {
   });
 }
 
-/** Union of what every open browser can see — drives the capture-pane rate. */
-function recomputeVisible() {
+/**
+ * Union of what every open browser (and every tap's clients, e.g. the hub on
+ * the v1 stream) can see — drives the capture-pane rate.
+ */
+export function recomputeVisible() {
   state.visibleSessions.clear();
   for (const ws of clients) for (const n of ws.visible ?? []) state.visibleSessions.add(n);
+  for (const t of taps) {
+    let names;
+    try { names = t.visible(); } catch { continue; }
+    for (const n of names ?? []) state.visibleSessions.add(n);
+  }
 }
 
 const heartbeat = setInterval(() => {
@@ -191,7 +233,8 @@ const heartbeat = setInterval(() => {
 }, 30000);
 heartbeat.unref();
 
-export function clientCount() { return clients.size; }
+/** Browsers on /ws plus every tap's clients (the v1 stream). */
+export function clientCount() { return clients.size + tapClients(); }
 
 /** Messages a new client gets right after its snapshot (the Map's model). */
 let greeting = () => [];
