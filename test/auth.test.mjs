@@ -65,7 +65,7 @@ function req({ method = 'GET', url = '/api/v1/hello', headers = {}, port = INGRE
   const h = {};
   if (serve) {
     h.host = PUBLIC_HOST;
-    h['x-forwarded-for'] = '100.64.0.10';
+    h['x-forwarded-for'] = '192.0.2.10';
     h['x-forwarded-host'] = PUBLIC_HOST;
     h['x-forwarded-proto'] = 'https';
   } else {
@@ -155,7 +155,7 @@ test('local listener: local; Tailscale-* headers are deleted from headers and ra
 });
 
 test('local listener: X-Forwarded-* and a signature do not make a request ingress (heuristic deleted)', () => {
-  const h = { 'x-forwarded-for': '100.64.0.10', 'x-forwarded-proto': 'https', ...readHeaders('GET', '/api/v1/hello') };
+  const h = { 'x-forwarded-for': '192.0.2.10', 'x-forwarded-proto': 'https', ...readHeaders('GET', '/api/v1/hello') };
   const a = classify(req({ port: PORT, headers: h }), makeCfg(), ctx());
   assert.equal(a.kind, 'local');
 });
@@ -350,13 +350,13 @@ test('nonce cache full → 503 nonce-cache-full and live nonces are not evicted'
 });
 
 test('hubAddrs: signed request from an unlisted X-Forwarded-For → 403 hub-addr; listed (also v4-mapped) ok', () => {
-  const cfg = makeCfg({ hubAddrs: ['100.64.0.10'] });
+  const cfg = makeCfg({ hubAddrs: ['192.0.2.10'] });
   assert.equal(classify(req({ headers: readHeaders('GET', '/api/v1/hello') }), cfg, ctx()).kind, 'hub');
-  assert.equal(classify(req({ headers: { ...readHeaders('GET', '/api/v1/hello'), 'x-forwarded-for': '::ffff:100.64.0.10' } }), cfg, ctx()).kind, 'hub');
-  expectAuth(() => classify(req({ headers: { ...readHeaders('GET', '/api/v1/hello'), 'x-forwarded-for': '100.64.0.11' } }), cfg, ctx()), 403, 'hub-addr');
-  expectAuth(() => classify(req({ headers: { ...readHeaders('GET', '/api/v1/hello'), 'x-forwarded-for': '100.64.0.10, 100.64.0.11' } }), cfg, ctx()), 403, 'hub-addr');
+  assert.equal(classify(req({ headers: { ...readHeaders('GET', '/api/v1/hello'), 'x-forwarded-for': '::ffff:192.0.2.10' } }), cfg, ctx()).kind, 'hub');
+  expectAuth(() => classify(req({ headers: { ...readHeaders('GET', '/api/v1/hello'), 'x-forwarded-for': '192.0.2.11' } }), cfg, ctx()), 403, 'hub-addr');
+  expectAuth(() => classify(req({ headers: { ...readHeaders('GET', '/api/v1/hello'), 'x-forwarded-for': '192.0.2.10, 192.0.2.11' } }), cfg, ctx()), 403, 'hub-addr');
   // direct users are not subject to hubAddrs
-  assert.equal(classify(req({ headers: { 'tailscale-user-login': 'alice@example.invalid', 'x-forwarded-for': '100.64.0.99' } }), cfg, ctx()).kind, 'direct');
+  assert.equal(classify(req({ headers: { 'tailscale-user-login': 'alice@example.invalid', 'x-forwarded-for': '192.0.2.99' } }), cfg, ctx()).kind, 'direct');
 });
 
 test('hub mode: a signed request is refused 403 (a hub never takes signed requests)', () => {
