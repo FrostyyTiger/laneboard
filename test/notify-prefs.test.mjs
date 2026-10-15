@@ -168,3 +168,20 @@ test('source rules: POSTs via net.js, no HTML sinks, palette command exported', 
   assert.equal(COMMAND.id, 'notifications');
   assert.equal(typeof COMMAND.run, 'function');
 });
+
+test('COMMAND registers as the palette ACT row, shown only on a hub', async () => {
+  const { createRegistry } = await import('../public/js/core/commands.js');
+  const reg = createRegistry();
+  reg.register({ ...COMMAND });
+  assert.ok(reg.has('notifications'));
+  const { store } = await import('../public/js/core/store.js');
+  const prev = store.source.kind;
+  try {
+    store.source.kind = 'local';
+    assert.equal(reg.list({}).some((c) => c.id === 'notifications'), false);
+    store.source.kind = 'hub';
+    assert.equal(reg.list({}).some((c) => c.id === 'notifications'), true);
+  } finally {
+    store.source.kind = prev;
+  }
+});

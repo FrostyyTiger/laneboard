@@ -9,15 +9,16 @@
 // push UI and quiet toggle.
 //
 // Entry points: the "Notification settings" button this module adds to the
-// Notifications block (#push-box) once the source is a hub, and COMMAND
-// ({id:'notifications', title, run}) for the palette's `ACT notifications`
-// once core/commands.js exists (D8).
+// Notifications block (#push-box) once the source is a hub, and the palette's
+// `ACT notifications` (COMMAND, registered with core/commands.js by init(),
+// shown only while the source is a hub).
 //
 // Pure at import time: the model functions below are tested in
 // test/notify-prefs.test.mjs; DOM code runs only from init()/openPrefs().
 // Builder-provided text (session names, fkeys) reaches the DOM only via
 // textContent / setAttribute. Every POST goes through net.js post()
 // (X-Laneboard: 1); the server re-validates every body (O9 checkPrefs).
+import { register as registerCommand } from '../core/commands.js';
 import { el } from '../core/dom.js';
 import { isFkey, parseFkey } from '../core/keys.js';
 import { post } from '../core/net.js';
@@ -159,13 +160,13 @@ export function pushModel(env = {}) {
 }
 
 /** Whether the sheet applies: hub sources only. */
-export function isHub(s = store) {
-  return s?.source?.kind === 'hub';
+export function isHub(s = null) {
+  return (s ?? store)?.source?.kind === 'hub';
 }
 
 /** POST a body to the prefs route through net.js; -> wire prefs or null. */
-export async function savePrefs(body, postFn = post) {
-  const r = await postFn(PREFS_PATH, body);
+export async function savePrefs(body, postFn = null) {
+  const r = await (postFn ?? post)(PREFS_PATH, body);
   return isObj(r) && isObj(r.kinds) ? r : null;
 }
 
@@ -366,8 +367,11 @@ export async function openPrefs() {
   render();
 }
 
-/** The palette entry (registered by core/commands.js once D8 lands). */
-export const COMMAND = Object.freeze({ id: 'notifications', title: 'Notifications', icon: 'bell', run: () => openPrefs() });
+/** The palette entry `ACT notifications` (hub only). */
+export const COMMAND = Object.freeze({
+  id: 'notifications', title: 'Notifications', icon: 'bell', sub: 'kinds, quiet hours, muted sessions',
+  when: () => isHub(), run: () => { openPrefs(); return true; },
+});
 
 let entry = null;
 
@@ -389,6 +393,7 @@ function mountEntry() {
 
 /** Runtime wiring, called once by app.js boot(). */
 export function init() {
+  registerCommand({ ...COMMAND });
   mountEntry();
   subscribe(() => mountEntry());
 }
