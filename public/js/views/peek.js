@@ -138,7 +138,7 @@ export function previewLinesOf(body) {
 
 // ---------------------------------------------------------------- DOM
 
-function button(text, cls, onClick, title = null) {
+function peekButton(text, cls, onClick, title = null) {
   const b = el('button', cls ? `btn btn--s ${cls}` : 'btn btn--s', text);
   b.type = 'button';
   if (title) b.title = title;
@@ -146,7 +146,7 @@ function button(text, cls, onClick, title = null) {
   return b;
 }
 
-async function getJson(fetchImpl, url) {
+async function peekJson(fetchImpl, url) {
   let r;
   try {
     r = await fetchImpl(url, { headers: { 'x-laneboard': '1', accept: 'application/json' } });
@@ -187,7 +187,7 @@ export function mountPeek(host, sel, ctx = {}) {
   host.append(root);
   if (!target) {
     root.append(el('p', 'insp-empty', 'No session to peek at for this selection.'));
-    return { stop() {}, state: null };
+    return { stop: () => {}, state: null };
   }
 
   const st = {
@@ -209,7 +209,7 @@ export function mountPeek(host, sel, ctx = {}) {
   prevNote.hidden = true;
 
   const txHead = el('div', 'insp-row peek-txhead');
-  const olderBtn = button('Older', 'peek-older', () => { older(); }, 'Load older transcript entries');
+  const olderBtn = peekButton('Older', 'peek-older', () => { older(); }, 'Load older transcript entries');
   olderBtn.hidden = true;
   txHead.append(el('span', 'insp-k', 'TRANSCRIPT'), olderBtn);
   const txBox = el('div', 'peek-tx');
@@ -224,11 +224,11 @@ export function mountPeek(host, sel, ctx = {}) {
   box.setAttribute('rows', '2');
   box.setAttribute('maxlength', String(REPLY_MAX));
   box.placeholder = 'Reply…';
-  const sendBtn = button('Send', 'btn--primary peek-send', () => { sendReply(); }, 'Type this into the session');
+  const sendBtn = peekButton('Send', 'btn--primary peek-send', () => { sendReply(); }, 'Type this into the session');
   const quickRow = el('div', 'peek-quick');
-  for (const q of QUICK) quickRow.append(button(q.label, 'peek-q', () => { quick(q.id); }, `${q.action} ${q.label}`));
+  for (const q of QUICK) quickRow.append(peekButton(q.label, 'peek-q', () => { quick(q.id); }, `${q.action} ${q.label}`));
   if (typeof ctx.openTerminal === 'function' && target.key) {
-    quickRow.append(button('Terminal', 'peek-term', () => { ctx.openTerminal(target.key); }, 'Open the terminal'));
+    quickRow.append(peekButton('Terminal', 'peek-term', () => { ctx.openTerminal(target.key); }, 'Open the terminal'));
   }
   const status = el('p', 'peek-status');
   status.setAttribute('role', 'status');
@@ -278,7 +278,7 @@ export function mountPeek(host, sel, ctx = {}) {
     if (!url) { st.previewErr = 'cannot be addressed'; renderPreview(); return; }
     st.busy.preview = true;
     try {
-      const res = await getJson(fetchImpl, url);
+      const res = await peekJson(fetchImpl, url);
       if (st.stopped) return;
       const lines = res.data ? previewLinesOf(res.data) : null;
       st.previewLines = lines;
@@ -295,7 +295,7 @@ export function mountPeek(host, sel, ctx = {}) {
     if (dir === 'before') q.before = st.tail.startOffset;
     const url = sessionUrl({ hub: target.hub, builder: target.builder, name: target.name, kind: 'transcript', query: q });
     if (!url) return { error: 'cannot be addressed', status: 400 };
-    return getJson(fetchImpl, url);
+    return peekJson(fetchImpl, url);
   }
 
   async function refreshTranscript() {
@@ -442,25 +442,24 @@ export const peekTab = Object.freeze({
   id: 'peek',
   title: 'Peek',
   long: 'Peek & reply',
-  mount(host, sel, ctx) {
+  mount: (host, sel, ctx) => {
     live?.stop();
     live = mountPeek(host, sel, ctx);
   },
-  unmount() {
+  unmount: () => {
     live?.stop();
     live = null;
   },
-  update() {
-    // The polls keep it current; store ticks only refresh the fallback preview.
-  },
+  // The polls keep it current; nothing to do on a store tick.
+  update: () => {},
 });
 
 export const diffTab = Object.freeze({
   id: 'diff',
   title: 'Diff',
   long: 'Diff review',
-  mount(host, sel, ctx) { mountDiffLink(host, sel, ctx); },
-  unmount() {},
+  mount: (host, sel, ctx) => { mountDiffLink(host, sel, ctx); },
+  unmount: () => {},
 });
 
 /** Register PEEK and DIFF with the inspector. Idempotent; returns an unregister function. */
