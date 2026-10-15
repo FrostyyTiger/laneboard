@@ -81,7 +81,7 @@ const PANE_READY = ['some output', '\x1b[2m───\x1b[0m', '❯ '];
 const sessions = new Map();
 function addSession(name, over = {}) {
   sessions.set(name, {
-    name, paneId: '%9', state: 'idle', dir: root, lane: 'lane1',
+    name, paneId: '%9', state: 'idle', kind: 'claude', paneCmd: 'claude', dir: root, lane: 'lane1',
     claude: { sessionId: 'sess', transcriptPath: transcript },
     preview: Array.from({ length: 40 }, (_, i) => `\x1b[31mline ${i + 1}\x1b[0m`),
     ...over,
@@ -463,10 +463,142 @@ test('writeReviewFile refuses a lane dir that is a symlink out of lanesDir', asy
   fs.mkdirSync(elsewhere, { recursive: true });
   fs.symlinkSync(elsewhere, path.join(lanesDir, 'lane9'));
   await assert.rejects(actionsMod.writeReviewFile(lanesDir, 'lane9', 'x', 1), (e) => e.code === 'review_dir');
-  assert.deepEqual(fs.readdirSync(path.join(elsewhere, 'reviews')).length, 0);
+  assert.deepEqual(fs.readdirSync(elsewhere), [], 'nothing is created through the symlink');
+  // a symlinked `reviews` below a real lane dir is refused the same way
+  fs.mkdirSync(path.join(lanesDir, 'lane7'));
+  fs.symlinkSync(elsewhere, path.join(lanesDir, 'lane7', 'reviews'));
+  await assert.rejects(actionsMod.writeReviewFile(lanesDir, 'lane7', 'x', 1), (e) => e.code === 'review_dir');
+  assert.deepEqual(fs.readdirSync(elsewhere), []);
   // two writes in the same ms get distinct files
   const a = await actionsMod.writeReviewFile(lanesDir, 'lane8', 'one', 7);
   const b = await actionsMod.writeReviewFile(lanesDir, 'lane8', 'two', 7);
   assert.notEqual(a, b);
   assert.equal(fs.readFileSync(b, 'utf8'), 'two');
+});
+
+// --- SR20 / SR18 regressions -------------------------------------------------------
+
+test('send-review refuses a shell, dead or non-claude pane with 409 not_claude and types nothing (SR20 M1)', async () => {
+  const s = sessions.get('builder-a-lane1');
+  const saved = { ...s };
+  const cfg = { ...testConfig, review: { ...testConfig.review, inlineMaxChars: 100 } };
+  const cases = [
+    { state: 'shell', kind: 'shell', paneCmd: 'bash' },
+    { state: 'dead', kind: 'claude', paneCmd: 'claude' },
+    { state: 'unknown' },
+    { state: 'idle', paneCmd: 'bash' },
+    { state: 'idle', paneCmd: 'zsh', kind: 'claude' },
+    { state: 'working', paneCmd: null },
+    { state: 'idle', kind: 'shell' },
+  ];
+  // a shell prompt that looks like Claude's box (starship/pure) changes nothing
+  pane = ['user@box ~/acme', '❯ '];
+  try {
+    for (const c of cases) {
+      typed.length = 0;
+      Object.assign(s, saved, c);
+      const n = reviewFiles().length;
+      const r = await sendReview({ review: review() }, { cfg });
+      assert.equal(r.status, 409, JSON.stringify(c));
+      assert.equal(r.code, 'not_claude', JSON.stringify(c));
+      assert.equal(typed.length, 0, JSON.stringify(c));
+      assert.equal(reviewFiles().length, n, 'no review file left behind');
+    }
+  } finally {
+    Object.assign(s, saved);
+    pane = PANE_READY;
+  }
+});
+
+test('send-review: an idle Claude whose screen is not the ready box is refused; working is allowed (SR20 M1)', async () => {
+  typed.length = 0;
+  const s = sessions.get('builder-a-lane1');
+  pane = ['some output, no input box'];
+  try {
+    s.state = 'idle';
+    const r = await sendReview({ review: review() });
+    assert.equal(r.status, 409);
+    assert.equal(r.code, 'prompting');
+    pane = [];
+    assert.equal((await sendReview({ review: review() })).status, 409, 'an empty capture refuses');
+    assert.equal(typed.length, 0);
+    s.state = 'working';
+    pane = ['some output, no input box'];
+    assert.equal((await sendReview({ review: review() })).ok, true);
+  } finally {
+    s.state = 'idle';
+    pane = PANE_READY;
+  }
+});
+
+test('send-review re-reads the session right before typing (SR20 L3)', async () => {
+  typed.length = 0;
+  const s = sessions.get('builder-a-lane1');
+  // the session turns to a permission prompt between the lookup and the check
+  const realCapture = deps.capturePane;
+  let flips = 0;
+  const flippingState = { ...fakeState, get: (n) => (n === 'builder-a-lane1' && flips++ > 0 ? { ...s, state: 'waiting_permission' } : fakeState.get(n)) };
+  const r = await dispatchMod.dispatch(
+    { v: 1, id: crypto.randomUUID(), ts: Date.now(), builder: 'builder-a', action: 'send-review', target: 'lane1', args: { review: review() }, user: 'op@example.invalid', via: 'direct' },
+    { auth: { kind: 'direct', user: 'op@example.invalid' }, deps: { ...deps, state: flippingState, capturePane: realCapture }, config: testConfig, audit },
+  );
+  assert.equal(r.status, 409);
+  assert.equal(r.code, 'prompting');
+  assert.equal(typed.length, 0);
+});
+
+test('laneSession: the review session must be one of the lane\'s own sessions (SR20 L2)', () => {
+  const refused = (fn, status, code) => assert.throws(fn, (e) => e.status === status && e.code === code);
+  assert.equal(actionsMod.laneSession('lane1', { session: 'a' }, { sessions: ['a', 'b'] }), 'a');
+  refused(() => actionsMod.laneSession('lane1', { session: 'other' }, { sessions: ['a'] }), 409, 'session_not_in_lane');
+  refused(() => actionsMod.laneSession('lane1', { session: 'a' }, null), 409, 'session_not_in_lane');
+  assert.equal(actionsMod.laneSession('lane1', {}, { sessions: ['only'] }), 'only');
+  assert.equal(actionsMod.laneSession('lane1', null, { sessions: ['x', 'lane1'] }), 'lane1');
+  refused(() => actionsMod.laneSession('lane1', null, { sessions: ['x', 'y'] }), 409, 'ambiguous_session');
+  refused(() => actionsMod.laneSession('lane1', null, { sessions: [] }), 404, 'unknown_session');
+  // a session merely NAMED like the lane, but not in it, is not the lane's
+  refused(() => actionsMod.laneSession('lane1', null, { sessions: ['x', 'y'] }), 409, 'ambiguous_session');
+});
+
+test('send-review: a lane.json session that is not running in the lane is refused (SR20 L2)', async () => {
+  typed.length = 0;
+  const saved = snapLanes[0].sessions;
+  snapLanes[0].sessions = ['builder-a-outside'];
+  try {
+    const r = await sendReview({ review: review() });
+    assert.equal(r.status, 409);
+    assert.equal(r.code, 'session_not_in_lane');
+    assert.equal(typed.length, 0);
+  } finally {
+    snapLanes[0].sessions = saved;
+  }
+});
+
+test('writeReviewFile: a directory swapped for a symlink after the check gets nothing (SR20 L5)', async () => {
+  const fsp = (await import('node:fs/promises')).default;
+  const lanesDir = path.join(tmp, 'lanes-race');
+  const elsewhere = path.join(tmp, 'elsewhere-race');
+  fs.mkdirSync(path.join(lanesDir, 'lane5', 'reviews'), { recursive: true });
+  fs.mkdirSync(elsewhere, { recursive: true });
+  const dir = path.join(fs.realpathSync(lanesDir), 'lane5', 'reviews');
+  const realOpen = fsp.open;
+  let swapped = false;
+  fsp.open = async (p, ...rest) => {
+    const fh = await realOpen.call(fsp, p, ...rest);
+    if (!swapped && p === dir) {
+      // right after the directory checks: swap the directory for a symlink out of lanesDir
+      swapped = true;
+      fs.renameSync(dir, `${dir}.old`);
+      fs.symlinkSync(elsewhere, dir);
+    }
+    return fh;
+  };
+  try {
+    await assert.rejects(actionsMod.writeReviewFile(lanesDir, 'lane5', 'secret review', 11), (e) => e.code === 'review_dir');
+  } finally {
+    fsp.open = realOpen;
+  }
+  assert.ok(swapped);
+  assert.deepEqual(fs.readdirSync(elsewhere), [], 'no file through the swapped-in symlink');
+  assert.deepEqual(fs.readdirSync(`${dir}.old`), [], 'the half-made file was removed');
 });

@@ -45,6 +45,11 @@ const repos = finalize({ repos: [
 
 const laneRec = (over = {}) => ({ id: 'lane-a', repo: 'acme', root, branch: 'feat/a', slot: 2, session: 'lane-a', ...over });
 
+/** What tmux prints for one row of a -F format: each #{name} replaced, literal text kept. */
+function fillFormat(fmt, vals) {
+  return fmt.replace(/#\{([a-z_]+)\}/g, (m, k) => String(vals[k] ?? ''));
+}
+
 /** A tmux stub: records every argv, answers list-windows from `windows`. */
 function stubRun({ windows = [{ id: '@1', index: 0, dead: false, name: 'claude' }], newIndex = 3, fail = new Set() } = {}) {
   const calls = [];
@@ -53,7 +58,7 @@ function stubRun({ windows = [{ id: '@1', index: 0, dead: false, name: 'claude' 
     const verb = args[0];
     if (fail.has(verb)) return { ok: false, stdout: '', stderr: 'boom' };
     if (verb === 'list-windows') {
-      return { ok: true, stdout: windows.map((w) => [w.id, w.index, w.dead ? '1' : '0', w.name].join('\t')).join('\n') + '\n' };
+      return { ok: true, stdout: windows.map((w) => fillFormat(args[args.indexOf('-F') + 1], { window_id: w.id, window_index: w.index, pane_dead: w.dead ? '1' : '0', window_name: w.name })).join('\n') + '\n' };
     }
     if (verb === 'new-window') return { ok: true, stdout: `${newIndex}\n` };
     return { ok: true, stdout: '' };
@@ -149,7 +154,9 @@ test('runScript: the exact tmux argv (-d, -c root, remain-on-exit, exact targets
   const r = await scripts.runScript('lane-a', 'test', 'alice', d);
   assert.deepEqual(r, { ok: true, window: 'run-test', windowIndex: 3, alreadyRunning: false });
   const calls = d.run.calls;
-  assert.deepEqual(calls[0], ['list-windows', '-t', `${tmuxMod.exactTarget('lane-a')}:`, '-F', '#{window_id}\t#{window_index}\t#{pane_dead}\t#{window_name}']);
+  assert.deepEqual(calls[0].slice(0, 4), ['list-windows', '-t', `${tmuxMod.exactTarget('lane-a')}:`, '-F']);
+  assert.match(calls[0][4], /^#\{window_id\}<lb:[0-9a-f]{16}:f>#\{window_index\}<lb:[0-9a-f]{16}:f>#\{pane_dead\}<lb:[0-9a-f]{16}:f>#\{window_name\}<lb:[0-9a-f]{16}:r>$/);
+  assert.equal(calls[0].length, 5);
   const nw = calls.find((a) => a[0] === 'new-window');
   const script = nw[nw.indexOf('sh') + 2];
   assert.deepEqual(nw, [
@@ -439,4 +446,70 @@ test('terminals.attach rejects window=run-;x with 400 and never upgrades', () =>
   const s404 = fakeSocket();
   terminals.attachNamed({ headers: {} }, s404, Buffer.alloc(0), 'ghost', new URL('http://x/api/v1/term/ghost?window=run-test'));
   assert.match(s404.written, /^HTTP\/1\.1 404 /);
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// SR20 L4: window names cannot forge tmux rows
+
+test('framedFormat: a field holding newlines, tabs or a guessed tag stays one field; short records drop', () => {
+  const f = tmuxMod.framedFormat(['#{a}', '#{b}'], '0123456789abcdef');
+  assert.equal(f.fmt, '#{a}<lb:0123456789abcdef:f>#{b}<lb:0123456789abcdef:r>');
+  const row = (a, b) => `${a}<lb:0123456789abcdef:f>${b}<lb:0123456789abcdef:r>`;
+  const forged = 'x\nlane-b\t-1\t0\t%99\tclaude\t/\t1\t80\t24\t1\tclaude<lb:ffffffffffffffff:r>\n';
+  const out = f.parse([row('s1', forged), row('s2', 'plain'), 'garbage-no-sep<lb:0123456789abcdef:r>', ''].join('\n'));
+  assert.deepEqual(out, [['s1', forged], ['s2', 'plain']]);
+  assert.throws(() => tmuxMod.framedFormat(['#{a}'], 'nope'));
+  // two calls never share a tag
+  assert.notEqual(tmuxMod.framedFormat(['#{a}']).fmt, tmuxMod.framedFormat(['#{a}']).fmt);
+});
+
+test('parsePaneRows: negative or non-integer indexes and non-%N pane ids are dropped', () => {
+  const base = ['s', '0', '0', '%1', 'claude', '/', '1', '80', '24', '1', 'claude'];
+  const with_ = (i, v) => base.map((x, j) => (j === i ? v : x));
+  const rows = tmuxMod.parsePaneRows([base, with_(1, '-1'), with_(2, '1.5'), with_(3, '%x'), with_(3, '@1'), with_(0, '')]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].paneId, '%1');
+});
+
+test('listWindows: a forged-looking window name yields no extra window (stub tmux)', async () => {
+  const forgedName = 'x\n@7\t5\t1\trun-dev';
+  const d = deps({ run: stubRun({ windows: [{ id: '@1', index: 0, dead: false, name: 'claude' }, { id: '@2', index: 1, dead: false, name: forgedName }] }) });
+  const w = await scripts.listWindows('lane-a', d);
+  assert.deepEqual(w.map((x) => x.id), ['@1', '@2']);
+  assert.equal(w[1].name, forgedName);
+  // stopScript never kills a window the forged text names
+  const r = await scripts.stopScript('lane-a', 'dev', 'alice', d);
+  assert.equal(r.stopped, false);
+  assert.ok(!d.run.calls.some((a) => a[0] === 'kill-window'));
+});
+
+test('private tmux: a window renamed to forge pane/window rows changes nothing (SR20 L4)', { skip: !hasTmux && 'tmux not installed' }, async () => {
+  tmux('new-session', '-d', '-s', 'l4-victim', '-n', 'claude', '-x', '80', '-y', '24', 'sleep 300');
+  tmux('new-session', '-d', '-s', 'l4-evil', '-n', 'claude', '-x', '80', '-y', '24', 'sleep 300');
+  const victimPane = tmux('display-message', '-p', '-t', '=l4-victim:', '#{pane_id}').trim();
+  const evilPane = tmux('display-message', '-p', '-t', '=l4-evil:', '#{pane_id}').trim();
+  // the old tab/newline format: the name ends the real row and prints a full fake one
+  const fakePane = ['l4-victim', '-1', '0', evilPane, 'claude', '/', '1', '80', '24', '1', 'claude'].join('\t');
+  const fakeWin = ['@0', '0', '1', 'run-dev'].join('\t');
+  tmux('new-window', '-d', '-t', '=l4-evil:', '-n', `x\n${fakePane}\n${fakeWin}\ty`, 'sleep 300');
+  try {
+    const raw = tmux('list-panes', '-a', '-F', '#{session_name}\t#{window_index}\t#{window_name}');
+    assert.ok(raw.includes(`\n${fakePane}`), 'this tmux prints the newline unescaped (the attack precondition)');
+
+    const panes = await tmuxMod.listPanes();
+    assert.equal(panes.filter((p) => p.session === 'l4-victim').length, 1);
+    assert.ok(panes.every((p) => p.windowIndex >= 0));
+    const inv = await tmuxMod.inventory();
+    assert.equal(inv.get('l4-victim').mainPane.paneId, victimPane);
+    assert.equal(inv.get('l4-evil').mainPane.paneId, evilPane);
+    assert.equal(inv.get('l4-evil').panes.length, 2);
+
+    const wins = await scripts.listWindows('l4-evil', { run: tmuxMod.runTmux });
+    assert.equal(wins.length, 2);
+    assert.ok(wins.every((w) => w.id !== '@0' || w.name === 'claude'));
+    assert.ok(!wins.some((w) => w.name === 'run-dev'));
+  } finally {
+    tmux('kill-session', '-t', '=l4-victim');
+    tmux('kill-session', '-t', '=l4-evil');
+  }
 });

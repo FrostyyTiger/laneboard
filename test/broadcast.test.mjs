@@ -318,7 +318,7 @@ async function realishBuilder(id, hubSessions, localSessions) {
   _reset();
   _resetBuiltins();
   const typed = [];
-  const local = new Map(Object.entries(localSessions).map(([n, s]) => [n, { name: n, paneId: '%1', ...s }]));
+  const local = new Map(Object.entries(localSessions).map(([n, s]) => [n, { name: n, paneId: '%1', kind: 'claude', paneCmd: 'claude', ...s }]));
   const deps = {
     config: { mode: 'builder', fleet: { id, hubControl: true }, repoNames: [], dirRoots: [] },
     actions: { sendText: async (name, text, enter) => { typed.push({ name, text, enter }); return { ok: true }; } },

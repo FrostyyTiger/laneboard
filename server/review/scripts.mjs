@@ -34,7 +34,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../config.mjs';
 import { isSafeSessionName } from '../util.mjs';
-import { runTmux, exactTarget, RUN_WINDOW_RE } from '../collector/tmux.mjs';
+import { runTmux, exactTarget, RUN_WINDOW_RE, framedFormat } from '../collector/tmux.mjs';
 import { slots as slotProvider } from '../providers/index.mjs';
 import { shellQuote } from '../actions.mjs';
 import * as store from '../lanes/store.mjs';
@@ -45,8 +45,7 @@ import { ActionRefused } from '../fleet/dispatch.mjs';
 
 export { SCRIPT_NAME_RE, RUN_WINDOW_RE };
 export const WINDOW_PREFIX = 'run-';
-const SEP = '\t';
-const LIST_FMT = ['#{window_id}', '#{window_index}', '#{pane_dead}', '#{window_name}'].join(SEP);
+const LIST_FIELDS = ['#{window_id}', '#{window_index}', '#{pane_dead}', '#{window_name}'];
 
 /** The window a script runs in. */
 export function windowFor(name) {
@@ -136,12 +135,12 @@ function laneOf(laneId, d) {
 
 /** [{id, index, dead, name}] of the session's windows; refuses when the session is gone. */
 export async function listWindows(session, d) {
-  const r = await d.run(['list-windows', '-t', `${exactTarget(session)}:`, '-F', LIST_FMT], { timeout: 5000 });
+  // SR20 L4: framed rows (a window name cannot forge one); only `@N` ids and integer indexes.
+  const { fmt, parse } = framedFormat(LIST_FIELDS);
+  const r = await d.run(['list-windows', '-t', `${exactTarget(session)}:`, '-F', fmt], { timeout: 5000 });
   if (!r?.ok) throw new ActionRefused(409, 'no_session', 'the lane session is not running');
-  return String(r.stdout ?? '').split('\n').filter(Boolean).map((line) => {
-    const [id, index, dead, ...name] = line.split(SEP);
-    return { id, index: Number(index), dead: dead === '1', name: name.join(SEP) };
-  });
+  return parse(r.stdout).filter(([id, index]) => /^@\d+$/.test(id) && /^\d{1,6}$/.test(index))
+    .map(([id, index, dead, name]) => ({ id, index: Number(index), dead: dead === '1', name }));
 }
 
 /** The environment the window's shell will see: `<prefix> env -0` in a probe shell. */

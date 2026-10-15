@@ -71,19 +71,38 @@ export async function sendKeys(name, keys, who) {
 }
 
 /**
+ * The tmux argv that types `text` literally into `paneId`, then (with
+ * `enter`) presses Enter, as ONE tmux invocation (SR20 L3, SR18 L2): the
+ * commands run back to back inside the tmux server, so no dialog can open
+ * between the text and its Enter the way it could between two tmux calls.
+ *
+ * tmux's argv parser ends a command at any argument that ENDS in ";" (and
+ * drops that ";"), so a text with a trailing ";" lost it, or with this
+ * chaining would have started a new tmux command. The trailing ";" run is sent
+ * as hex keys (`-H 3b`) instead. `--` ends the options, so a text starting with
+ * "-" ("-t%3") is never read as a flag.
+ */
+export function literalKeysArgs(paneId, text, enter) {
+  const body = String(text).replace(/;+$/, '');
+  const semis = String(text).length - body.length;
+  const cmds = [];
+  if (body.length) cmds.push(['send-keys', '-t', paneId, '-l', '--', body]);
+  if (semis) cmds.push(['send-keys', '-t', paneId, '-H', ...Array(semis).fill('3b')]);
+  if (enter) cmds.push(['send-keys', '-t', paneId, 'Enter']);
+  return cmds.flatMap((c, i) => (i ? [';', ...c] : c));
+}
+
+/**
  * Literal text. `-l` stops tmux interpreting it as key names, so a prompt
- * containing "Enter" or ";" is typed verbatim.
+ * containing "Enter" or ";" is typed verbatim. Text and Enter go out in one
+ * tmux invocation (literalKeysArgs).
  */
 export async function sendText(name, text, enter, who) {
   const s = requireSession(name);
   if (typeof text !== 'string' || !text.length) throw new ActionError('text must be a non-empty string');
   if (text.length > 8000) throw new ActionError('text too long');
-  const r = await runTmux(['send-keys', '-t', s.paneId, '-l', text]);
+  const r = await runTmux(literalKeysArgs(s.paneId, text, Boolean(enter)));
   if (!r.ok) throw new ActionError(`send-keys failed: ${r.stderr.trim()}`, 500);
-  if (enter) {
-    const e = await runTmux(['send-keys', '-t', s.paneId, 'Enter']);
-    if (!e.ok) throw new ActionError(`send-keys Enter failed: ${e.stderr.trim()}`, 500);
-  }
   record('text', name, { text: text.slice(0, 300), enter: Boolean(enter) }, who);
   return { ok: true };
 }
@@ -188,10 +207,8 @@ export async function deliverPrompt(name, prompt, who, { timeoutMs = 60000 } = {
     if (!s.claude?.sessionId) { lastReason = 'has not registered yet'; continue; }
     if (readiness !== 'ready') { lastReason = `pane not ready (${readiness})`; continue; }
 
-    const t = await runTmux(['send-keys', '-t', s.paneId, '-l', prompt.slice(0, 8000)]);
+    const t = await runTmux(literalKeysArgs(s.paneId, prompt.slice(0, 8000), true));
     if (!t.ok) { lastReason = `send-keys failed: ${t.stderr.trim()}`; break; }
-    const e = await runTmux(['send-keys', '-t', s.paneId, 'Enter']);
-    if (!e.ok) { lastReason = `send-keys Enter failed: ${e.stderr.trim()}`; break; }
 
     record('spawn-prompt-delivered', name, { prompt: prompt.slice(0, 300) }, who);
     return { ok: true };
