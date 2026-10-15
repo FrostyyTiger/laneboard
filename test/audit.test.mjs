@@ -331,7 +331,7 @@ test('reopen continues the chain; a torn tail is not glued onto and stays visibl
   assert.equal(d.prevHash, b.hash);
   assert.equal(re.verifyAll().ok, true);
   // simulate a torn write, then append again
-  fs.appendFileSync(file, '{"ts":12,"id":"tor');
+  fs.appendFileSync(file, '{"action":"send-text","argsHash":"ab');
   const e = re.append(act(4));
   assert.equal(e.prevHash, d.hash, 'chains onto the last parsable entry');
   const ls = fs.readFileSync(file, 'utf8').split('\n');
@@ -422,7 +422,9 @@ test('SR2 M1a: a second writer is refused, in this process and in another; a dea
   const { file, audit } = setup(t);
   audit.append(act(1));
   assert.throws(() => openAudit({ file }), (err) => err.code === 'AUDIT_LOCKED' && /only one writer/.test(err.message));
-  assert.equal(fs.readFileSync(`${file}.lock`, 'utf8'), `${process.pid} ${os.hostname().replace(/\s/g, '_') || 'localhost'}\n`);
+  const lockText = fs.readFileSync(`${file}.lock`, 'utf8');
+  assert.ok(lockText.startsWith(`${process.pid} ${os.hostname().replace(/\s/g, '_') || 'localhost'} `), lockText);
+  if (fs.existsSync('/proc/sys/kernel/random/boot_id')) assert.match(lockText, /^\d+ \S+ [0-9a-f-]{8,64} \d+\n$/);
   assert.equal(fs.statSync(`${file}.lock`).mode & 0o777, 0o600);
   audit.close();
   assert.equal(fs.existsSync(`${file}.lock`), false, 'close releases the lock');
@@ -441,7 +443,7 @@ test('SR2 M1a: a second writer is refused, in this process and in another; a dea
   assert.equal(b.head().count, 2);
   b.append(act(3));
   assert.equal(b.verifyAll().ok, true);
-  // a lock from another host, or an unreadable one, is never taken over
+  // a lock from another host, or an unreadable one, is not taken over (same boot: its pids are not ours to see)
   b.close();
   fs.writeFileSync(`${file}.lock`, '1 other-host\n');
   assert.throws(() => openAudit({ file }), (err) => err.code === 'AUDIT_LOCKED' && /other-host/.test(err.message));
@@ -500,7 +502,7 @@ test('SR2 M1c: rotation never overwrites an existing rotated file', (t) => {
 test('SR2 L1: a torn tail left in a rotated file does not break verification', (t) => {
   const { file, c, audit } = setup(t, { maxBytes: 700 });
   audit.append(act(1));
-  fs.appendFileSync(file, '{"ts":1,"id":"to'); // crash mid-write
+  fs.appendFileSync(file, '{"action":"send-te'); // crash mid-write
   for (let i = 2; i <= 8; i++) { audit.append(act(i)); c.t += 1000; }
   const v = audit.verifyAll();
   assert.equal(v.ok, true, JSON.stringify(v.firstBad));
@@ -516,9 +518,9 @@ test('SR2 L1: a torn tail left in a rotated file does not break verification', (
   assert.equal(verifyChain(file).firstBad.reason, 'hash_mismatch');
   // a torn line at the very end of the current file is still bad_json for a verifier
   const f0 = lines(file)[0];
-  assert.deepEqual(verifyFile([f0, '{"ts":1'], JSON.parse(f0).prevHash).firstBad, { file: null, line: 2, reason: 'bad_json' });
-  // two garbage lines inserted mid-file, followed by a chaining entry: warnings, not a failure
-  assert.equal(verifyFile([ls[0], 'x', 'y', ls[1]], JSON.parse(ls[0]).prevHash).warnings.length, 2);
+  assert.deepEqual(verifyFile([f0, '{"action":"x'], JSON.parse(f0).prevHash).firstBad, { file: null, line: 2, reason: 'bad_json' });
+  // one torn line mid-file, followed by a chaining entry: a warning, not a failure
+  assert.equal(verifyFile([ls[0], '{"action":"se', ls[1]], JSON.parse(ls[0]).prevHash).warnings.length, 1);
 });
 
 test('SR2 L2: the writer refuses to extend a chain that does not verify; head counts verified entries', (t) => {
@@ -595,7 +597,7 @@ test('SR2 L6: rotation survives short writes and is undone when the final rename
 
 test('SR2 L7: an existing wide directory is tightened; a symlinked directory or rotated file is refused', (t) => {
   const dir = tmpDir(t);
-  const wide = path.join(dir, 'wide');
+  const wide = path.join(dir, 'laneboard');
   fs.mkdirSync(wide, { mode: 0o777 });
   fs.chmodSync(wide, 0o777);
   openAudit({ file: path.join(wide, 'audit.jsonl') }).close();
@@ -644,4 +646,205 @@ test('SR2 L9: control characters are not stored', (t) => {
   assert.ok(!/[\x00-\x1f]/.test(JSON.stringify(audit.read().entries)));
   assert.equal(lines(file).length, 1);
   assert.equal(audit.verifyAll().ok, true);
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// SR2 re-review regressions (fleet A3-fix2)
+
+const HOST = os.hostname().replace(/\s/g, '_') || 'localhost';
+const BOOT_A = '11111111-2222-4333-8444-555555555555';
+const BOOT_B = '99999999-8888-4777-8666-555555555555';
+
+// A fake /proc: `pids` maps pid -> {start, signal}; pids not listed are dead. `btime` is /proc/stat's (s).
+function fakeProc({ boot = BOOT_A, pids = {}, btime = null, uptime = null, onSignal = null } = {}) {
+  const all = { [process.pid]: { start: '4242', signal: 'alive' }, ...pids };
+  return {
+    read(p) {
+      if (p === '/proc/sys/kernel/random/boot_id') return boot === null ? null : `${boot}\n`;
+      if (p === '/proc/stat') return btime === null ? null : `cpu 1 2 3\nbtime ${btime}\nprocesses 9\n`;
+      const m = /^\/proc\/(\d+)\/stat$/.exec(p);
+      if (m && boot !== null && all[m[1]] && all[m[1]].start !== null) {
+        // comm with spaces and a ')' inside, as the kernel allows
+        const rest = Array.from({ length: 50 }, (_, i) => String(i + 3));
+        rest[22 - 3] = all[m[1]].start;
+        return `${m[1]} (we ird) name) ${rest.join(' ')}\n`;
+      }
+      return null;
+    },
+    signal(pid) {
+      if (onSignal) onSignal(pid);
+      return all[pid] ? all[pid].signal : 'dead';
+    },
+    uptime: () => (uptime === null ? NaN : uptime),
+  };
+}
+
+function lockSetup(t) {
+  const dir = tmpDir(t);
+  const file = path.join(dir, 'laneboard', 'audit.jsonl');
+  fs.mkdirSync(path.dirname(file), { mode: 0o700 });
+  return { dir, file, lock: `${file}.lock` };
+}
+
+function opens(file, proc) {
+  const a = openAudit({ file, proc });
+  a.close();
+  return true;
+}
+
+const lockedErr = (err) => err.code === 'AUDIT_LOCKED';
+
+test('SR2 M2: the lock records pid, host, boot id and start time (from /proc, "-" without it)', (t) => {
+  const { file, lock } = lockSetup(t);
+  const a = openAudit({ file, proc: fakeProc() });
+  assert.equal(fs.readFileSync(lock, 'utf8'), `${process.pid} ${HOST} ${BOOT_A} 4242\n`, 'field 22 parsed after the last ")"');
+  a.close();
+  const b = openAudit({ file, proc: fakeProc({ boot: null }) });
+  assert.equal(fs.readFileSync(lock, 'utf8'), `${process.pid} ${HOST} - -\n`);
+  b.close();
+});
+
+test('SR2 M2: a lock from an earlier boot is stale, even when its pid is alive now or the hostname changed', (t) => {
+  const { file, lock } = lockSetup(t);
+  // after a reboot pid 1 is init and answers EPERM; the old hostname may differ
+  for (const line of [`1 ${HOST} ${BOOT_B} 77\n`, `1 old-name ${BOOT_B} 77\n`, `${process.pid} ${HOST} ${BOOT_B} 4242\n`]) {
+    fs.writeFileSync(lock, line);
+    assert.ok(opens(file, fakeProc({ pids: { 1: { start: '1', signal: 'eperm' } } })), line);
+    assert.equal(fs.existsSync(lock), false);
+  }
+  const leftovers = fs.readdirSync(path.dirname(file)).filter((f) => f.includes('.lock.'));
+  assert.deepEqual(leftovers, [], 'no temp or aside files left behind');
+});
+
+test('SR2 M2: same boot: a dead pid or a reused pid (other start time) is stale; a live owner is not', (t) => {
+  const { file, lock } = lockSetup(t);
+  const owner = 4000001;
+  const line = `${owner} ${HOST} ${BOOT_A} 500\n`;
+  // dead
+  fs.writeFileSync(lock, line);
+  assert.ok(opens(file, fakeProc()));
+  // alive with the recorded start time: live, fail closed
+  fs.writeFileSync(lock, line);
+  assert.throws(() => openAudit({ file, proc: fakeProc({ pids: { [owner]: { start: '500', signal: 'alive' } } }) }),
+    (err) => lockedErr(err) && err.message.includes(`pid ${owner}`));
+  assert.throws(() => openAudit({ file, proc: fakeProc({ pids: { [owner]: { start: '500', signal: 'eperm' } } }) }), lockedErr);
+  // the pid now belongs to another process (alive or EPERM, different start time): stale
+  assert.ok(opens(file, fakeProc({ pids: { [owner]: { start: '900', signal: 'alive' } } })));
+  fs.writeFileSync(lock, line);
+  assert.ok(opens(file, fakeProc({ pids: { [owner]: { start: '900', signal: 'eperm' } } })));
+  // EPERM without a readable start time does not prove the owner is alive
+  fs.writeFileSync(lock, line);
+  assert.ok(opens(file, fakeProc({ pids: { [owner]: { start: null, signal: 'eperm' } } })));
+  // alive, start time unreadable (e.g. hidepid): live
+  fs.writeFileSync(lock, line);
+  assert.throws(() => openAudit({ file, proc: fakeProc({ pids: { [owner]: { start: null, signal: 'alive' } } }) }), lockedErr);
+  // same boot, another host (another container on this kernel): live
+  fs.writeFileSync(lock, `${owner} other-host ${BOOT_A} 500\n`);
+  assert.throws(() => openAudit({ file, proc: fakeProc() }), (err) => lockedErr(err) && /other-host/.test(err.message));
+  fs.unlinkSync(lock);
+});
+
+test('SR2 M2: without /proc (or for an old-format lock) pid liveness and the boot time decide', (t) => {
+  const { file, lock } = lockSetup(t);
+  const owner = 4000002;
+  const nowS = Math.floor(Date.now() / 1000);
+  const noProc = (extra = {}) => fakeProc({ boot: null, ...extra });
+  // old format, alive: live; EPERM counts as alive when no start time was recorded
+  fs.writeFileSync(lock, `${owner} ${HOST}\n`);
+  assert.throws(() => openAudit({ file, proc: noProc({ pids: { [owner]: { start: null, signal: 'eperm' } } }) }), lockedErr);
+  assert.throws(() => openAudit({ file, proc: fakeProc({ pids: { [owner]: { start: null, signal: 'eperm' } } }) }), lockedErr,
+    'an old-format lock on a /proc system: no start time to compare');
+  // old format, dead: stale
+  assert.ok(opens(file, noProc()));
+  // a lock written before the current boot (btime from /proc/stat, else now - uptime): stale even if "alive"
+  for (const proc of [noProc({ btime: nowS, pids: { [owner]: { start: null, signal: 'eperm' } } }),
+    noProc({ uptime: 60, pids: { [owner]: { start: null, signal: 'eperm' } } })]) {
+    fs.writeFileSync(lock, `${owner} other-host - -\n`);
+    fs.utimesSync(lock, nowS - 3600, nowS - 3600);
+    assert.ok(opens(file, proc));
+  }
+  // written after the current boot, other host: live
+  fs.writeFileSync(lock, `${owner} other-host - -\n`);
+  assert.throws(() => openAudit({ file, proc: noProc({ btime: nowS - 3600 }) }), lockedErr);
+  fs.unlinkSync(lock);
+});
+
+test('SR2 M2: an unreadable lock is stale only when it is older than the current boot', (t) => {
+  const { file, lock } = lockSetup(t);
+  const nowS = Math.floor(Date.now() / 1000);
+  for (const junk of ['', 'garbage', '0 host\n']) {
+    fs.writeFileSync(lock, junk);
+    assert.throws(() => openAudit({ file, proc: fakeProc({ btime: nowS - 3600 }) }), (err) => lockedErr(err) && /unreadable/.test(err.message));
+    fs.utimesSync(lock, nowS - 7200, nowS - 7200);
+    assert.ok(opens(file, fakeProc({ btime: nowS - 3600 })), JSON.stringify(junk));
+  }
+});
+
+test('SR2 L10: two openers taking over the same stale lock: one wins, the winner keeps its lock', (t) => {
+  const { file, lock } = lockSetup(t);
+  const dead = 4000003;
+  fs.writeFileSync(lock, `${dead} ${HOST} ${BOOT_A} 500\n`);
+  let winner = null;
+  // B judges the lock stale; while it does, A (another boot id view: sees it stale too) takes over first
+  const procB = fakeProc({
+    onSignal(pid) {
+      if (pid === dead && winner === null) winner = openAudit({ file, proc: fakeProc({ boot: BOOT_B }) });
+    },
+  });
+  t.after(() => winner?.close());
+  assert.throws(() => openAudit({ file, proc: procB }), (err) => lockedErr(err) && /took over the stale lock first/.test(err.message));
+  assert.ok(winner, 'A opened');
+  const e = winner.append(act(1));
+  assert.equal(e.prevHash, GENESIS, 'the winner still holds its lock and writes');
+  assert.equal(fs.readFileSync(lock, 'utf8'), `${process.pid} ${HOST} ${BOOT_B} 4242\n`);
+  const leftovers = fs.readdirSync(path.dirname(file)).filter((f) => f.includes('.lock.'));
+  assert.deepEqual(leftovers, []);
+});
+
+test('SR2 L11: only a single torn prefix per gap is tolerated; inserted lines are bad_json', (t) => {
+  const { file, audit } = setup(t);
+  const a = audit.append(act(1));
+  const b = audit.append(act(2));
+  audit.close();
+  const [l1, l2] = lines(file);
+  const v = (mid) => verifyFile([l1, ...mid, l2], a.prevHash);
+  assert.equal(v(['{"action":"send-text","argsHash":"0']).ok, true);
+  assert.equal(v(['{"act']).ok, true, 'a prefix shorter than the key');
+  const fake = '{"action":"kill","target":"prod","user":"alice","ts":1}';
+  for (const mid of [[fake], ['not even json'], ['{"ts":1,"id":"to'], ['{"action":"a', '{"action":"b'], [fake, '{"action":"x']]) {
+    const r = v(mid);
+    assert.equal(r.ok, false, JSON.stringify(mid));
+    assert.equal(r.firstBad.reason, 'bad_json');
+  }
+  // the writer refuses to extend a log with an inserted line
+  fs.writeFileSync(file, `${l1}\n${fake}\n${l2}\n`);
+  const re = openAudit({ file });
+  t.after(() => re.close());
+  assert.throws(() => re.append(act(3)), (err) => err.code === 'AUDIT_CHAIN_INVALID' && /bad_json/.test(err.message));
+  assert.equal(b.prevHash, a.hash);
+});
+
+test('SR2 L12: control characters are removed from result keys; colliding keys are refused', (t) => {
+  const { audit } = setup(t);
+  const e = audit.append(act(1, { result: { 'k\x1b[2J': 1, nested: { 'a\nb': 'x' } } }));
+  assert.deepEqual(Object.keys(e.result).sort(), ['k�[2J', 'nested']);
+  assert.deepEqual(Object.keys(e.result.nested), ['a b']);
+  assert.ok(!/[\x00-\x1f]/.test(JSON.stringify(audit.read().entries)));
+  assert.throws(() => audit.append(act(2, { result: { 'a\nb': 1, 'a b': 2 } })), /collide/);
+  assert.equal(audit.verifyAll().ok, true);
+});
+
+test('SR2 L13: a wide directory is tightened only when created here or named laneboard; others are refused', (t) => {
+  const dir = tmpDir(t);
+  const home = path.join(dir, 'home');
+  fs.mkdirSync(home);
+  fs.chmodSync(home, 0o755);
+  assert.throws(() => openAudit({ file: path.join(home, 'audit.jsonl') }), (err) => err.code === 'AUDIT_UNSAFE_DIR' && /other users/.test(err.message));
+  assert.equal(fs.statSync(home).mode & 0o777, 0o755, 'left alone');
+  assert.equal(fs.existsSync(path.join(home, 'audit.jsonl')), false);
+  const lb = path.join(dir, 'laneboard');
+  fs.mkdirSync(lb);
+  fs.chmodSync(lb, 0o755);
+  openAudit({ file: path.join(lb, 'audit.jsonl') }).close();
+  assert.equal(fs.statSync(lb).mode & 0o777, 0o700);
 });
