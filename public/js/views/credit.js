@@ -17,6 +17,7 @@
 // only (el()/lamp()/panel()), numbers are checked before they are formatted,
 // and a lane hue reaches CSS only as a finite number.
 import { $, el, svg } from '../core/dom.js';
+import { BUILDER_ID_RX } from '../core/keys.js';
 import { ago, compactCount, money, resetsIn } from '../core/format.js';
 import { laneStripe } from '../ui/widgets.js';
 import { lamp, panel, scopeChip } from '../ui/components.js';
@@ -24,7 +25,6 @@ import { lamp, panel, scopeChip } from '../ui/components.js';
 export const BUILDER_PATH = '/api/credit';
 export const HUB_PATH = '/api/fleet/credit';
 export const CACHE_MS = 20000;
-const ID_RX = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const COST_COLS = ['tonight', 'day', 'week', 'allTime'];
 const TOKEN_COLS = ['input', 'output', 'cacheRead', 'cacheWrite'];
 const MAX_ROWS = 2000;
@@ -46,7 +46,7 @@ export function isHubSource(s) {
 /** A builder filter from the route: a builder id, or null for all. */
 export function builderFilter(route) {
   const b = route?.b;
-  return typeof b === 'string' && b !== 'all' && ID_RX.test(b) ? b : null;
+  return typeof b === 'string' && b !== 'all' && BUILDER_ID_RX.test(b) ? b : null;
 }
 
 /** The URL to read: the builder's own route, or the hub's (with `?b=` when filtered). */
@@ -651,16 +651,16 @@ export default {
   icon: 'credit',
   title: 'Credit',
   short: 'CRED',
-  mount(node, ctx = {}) {
+  mount: (node, ctx = {}) => {
     root = node ?? null;
     sync(ctx);
     loadCredit();
   },
-  unmount() {
+  unmount: () => {
     // The painted view stays, so switching back is instant (as before D13).
     root = null;
   },
-  update(store, ctx = {}) {
+  update: (store, ctx = {}) => {
     if (sync({ ...ctx, store: store ?? ctx.store })) loadCredit(true);
   },
 };
