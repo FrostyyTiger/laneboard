@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/*",
+    "cli",
+]
+exclude = ["crates/legacy"]
+
+[workspace.package]
+edition = "2021"
