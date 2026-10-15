@@ -11,7 +11,9 @@ export const name = 'gh';
 export const active = true;
 
 const PR_FIELDS = 'number,url,state,isDraft,mergeable,headRefOid,statusCheckRollup';
+const PR_FIELDS_NO_CHECKS = 'number,url,state,isDraft,mergeable,headRefOid';
 const RUN_FIELDS = 'status,conclusion,name,headBranch,createdAt';
+const COMMIT_RUN_FIELDS = 'status,conclusion,name';
 
 const PASSED = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 const FAILED = new Set(['FAILURE', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'STALE', 'ERROR']);
@@ -65,6 +67,21 @@ export function isNoPr(r) {
   return /no pull requests found/i.test(r.stderr || '');
 }
 
+/** Refused the check runs? Fine-grained tokens have no "Checks" permission, so statusCheckRollup is denied. */
+export function isChecksDenied(r) {
+  return /Resource not accessible by (personal access token|integration)/i.test(r.stderr || '');
+}
+
+/** `gh run list --commit` JSON -> statusCheckRollup-shaped entries, one per workflow run (coarser than per job). */
+export function runsAsChecks(runs) {
+  return (Array.isArray(runs) ? runs : []).map((r) => ({
+    __typename: 'CheckRun',
+    name: r.name,
+    status: String(r.status || '').toUpperCase(),
+    conclusion: String(r.conclusion || '').toUpperCase(),
+  }));
+}
+
 /** `gh run list` JSON -> the queue, newest first, as the Box shows it. */
 export function summariseRuns(runs) {
   const list = (Array.isArray(runs) ? runs : []).map((r) => ({
@@ -89,19 +106,34 @@ export function _setRunner(fn) { ghRun = fn; }
 
 /** The PR for one branch: a summary, `{none}`, `{auth:false}` or `{error}`. */
 export async function prForBranch({ repo, branch }) {
-  const r = await ghRun(['pr', 'view', branch, '--json', PR_FIELDS], {
-    cwd: path.join(config.codeDir, repo), timeout: 20000,
-  });
+  const cwd = path.join(config.codeDir, repo);
+  let r = await ghRun(['pr', 'view', branch, '--json', PR_FIELDS], { cwd, timeout: 20000 });
+  let viaRuns = false;
+  if (!r.ok && isChecksDenied(r)) {
+    // A fine-grained token cannot read check runs: take the PR without them, then the Actions runs of its head commit.
+    r = await ghRun(['pr', 'view', branch, '--json', PR_FIELDS_NO_CHECKS], { cwd, timeout: 20000 });
+    viaRuns = true;
+  }
   if (!r.ok) {
     if (isAuthFailure(r)) return { auth: false };
     if (isNoPr(r)) return { none: true };
     return { error: (r.stderr || '').trim().slice(-200) || `gh exited ${r.code}` };
   }
+  let pr;
   try {
-    return summarisePr(JSON.parse(r.stdout));
+    pr = JSON.parse(r.stdout);
   } catch {
     return { error: 'unparseable gh output' };
   }
+  if (viaRuns && pr.headRefOid) {
+    const runsR = await ghRun(['run', 'list', '--commit', pr.headRefOid, '--json', COMMIT_RUN_FIELDS], { cwd, timeout: 20000 });
+    try {
+      pr.statusCheckRollup = runsR.ok ? runsAsChecks(JSON.parse(runsR.stdout)) : [];
+    } catch {
+      pr.statusCheckRollup = [];
+    }
+  }
+  return summarisePr(pr);
 }
 
 /** The CI queue for the configured repo. */
