@@ -22,13 +22,32 @@
 //   fleet.allowedUsers     optional Tailscale logins allowed as `direct`.
 //   fleet.publicHosts      allowed Host values on ingress; default the host
 //                          of publicUrl when that is not loopback.
-//   fleet.enforce          refuse unidentified ingress; true with a fleet block.
+//   fleet.enforce          refuse unidentified ingress. Fail closed (SR4 M1):
+//                          true whenever an ingress listener will open, i.e.
+//                          ingressPort is non-null, whether the file or
+//                          LANEBOARD_INGRESS_PORT set it (env alone counts as
+//                          an enforcing fleet block). An explicit false with
+//                          a non-null ingressPort is a ConfigError unless
+//                          fleet.insecureNoEnforce is true, and then a loud
+//                          warning is logged at every load.
+//   fleet.insecureNoEnforce  escape hatch for the above, default false. With
+//                          it, unidentified ingress (tagged tailnet nodes,
+//                          forged X-Forwarded-* from local processes) acts as
+//                          `direct`. Never set it outside a test rig.
 //   fleet.clockSkewMs      signature ts window (≤ 120 s: nonces live 5 min).
 //   fleet.allowedPermissionModes  modes v1 launch/spawn accept; the default
 //                          leaves out bypassPermissions and dontAsk.
 //   fleet.rateLimits       per-action overrides, checked by resolveRules().
 //   fleet.audit.maxBytes   audit log rotate size.
 //   fleet.legacyBrowserRoutes  keep the pre-v1 browser routes.
+//
+// Unknown keys under `fleet` in the config file are refused (SR4 L2): the
+// allowed set is this fragment's keys plus those of server/config/fleet.mjs
+// (identity) and server/config/hub.mjs (the README section 3 contract lists
+// no other owner of fleet.*). `__proto__`, `constructor` and `prototype` are
+// refused at any depth under `fleet`. After validation every key this
+// fragment owns is read-only and deep-frozen (SR4 L3); hub keyring scopes are
+// a frozen array with has() (SR4 L1).
 //
 // "A fleet block" means a `fleet` key in the config file. Env:
 // LANEBOARD_INGRESS_PORT sets fleet.ingressPort; LANEBOARD_AUDIT_FILE is read
@@ -39,6 +58,8 @@ import net from 'node:net';
 
 import { parsePublicKey, keyId } from '../fleet/keys-ed25519.mjs';
 import { resolveRules } from '../fleet/ratelimit.mjs';
+import * as identity from './fleet.mjs';
+import * as hub from './hub.mjs';
 
 export const SCOPES = Object.freeze(['read', 'control', 'term']);
 export const KEY_LABEL_RX = /^[a-z0-9-]{1,32}$/;
@@ -62,6 +83,7 @@ export function defaults() {
       legacyBrowserRoutes: true,
       publicHosts: [],
       enforce: false,
+      insecureNoEnforce: false,
       clockSkewMs: 60000,
       allowedPermissionModes: [...DEFAULT_PERMISSION_MODES],
       rateLimits: {},
@@ -102,7 +124,9 @@ export function finalize(c, layers) {
   const block = hasFleetBlock(layers);
   // A hub gets no default: it must name the port serve targets (H1 relies on it).
   if (!setByUser(layers, 'ingressPort') && block && c.mode !== 'hub') f.ingressPort = DEFAULT_INGRESS_PORT;
-  if (!setByUser(layers, 'enforce') && block) f.enforce = true;
+  // Fail closed (SR4 M1): any ingress listener enforces unless told otherwise,
+  // whichever layer opened it.
+  if (!setByUser(layers, 'enforce') && (block || f.ingressPort !== null)) f.enforce = true;
   if (!setByUser(layers, 'publicHosts') && typeof c.publicUrl === 'string') {
     try {
       const u = new URL(c.publicUrl);
@@ -114,15 +138,23 @@ export function finalize(c, layers) {
 
 // --- hubKeys -----------------------------------------------------------------
 
-function frozenSet(values) {
-  const s = new Set(values);
-  const refuse = () => { throw new TypeError('hub key scopes are read-only'); };
-  Object.defineProperties(s, { add: { value: refuse }, delete: { value: refuse }, clear: { value: refuse } });
-  return Object.freeze(s);
+/**
+ * Scopes as a frozen array with Set-like `has(scope)` and `size` (SR4 L1). A
+ * frozen array has no Set brand, so `Set.prototype.add.call` cannot widen it,
+ * and `Array.prototype.push.call` throws.
+ */
+function frozenScopes(values) {
+  const arr = [...values];
+  Object.defineProperties(arr, {
+    has: { value: (s) => arr.includes(s) },
+    size: { get: () => arr.length },
+  });
+  return Object.freeze(arr);
 }
 
 /**
- * Parse `fleet.hubKeys` into frozen `{keyId, label, scopes: Set, pub}` entries.
+ * Parse `fleet.hubKeys` into frozen `{keyId, label, scopes, pub}` entries;
+ * `scopes` is a frozen array of scope names with `has(scope)`.
  * Throws TypeError with a message that names the entry by index (never its
  * key text). A bare string gets scopes {read} and its keyId as label.
  */
@@ -172,7 +204,7 @@ export function parseHubKeys(entries) {
     label ??= id;
     if (labels.has(label)) throw new TypeError(`${at}: duplicate id ${JSON.stringify(label)}`);
     labels.add(label);
-    out.push(Object.freeze({ keyId: id, label, scopes: frozenSet(scopes), pub }));
+    out.push(Object.freeze({ keyId: id, label, scopes: frozenScopes(scopes), pub }));
   });
   return Object.freeze(out);
 }
@@ -213,15 +245,73 @@ export function hostProblem(h) {
   return null;
 }
 
+// --- key hygiene (SR4 L2) and freezing (SR4 L3) -----------------------------
+
+const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const OWN_KEYS = Object.freeze(Object.keys(defaults().fleet));
+
+/** Every key a config file may put under `fleet`, sorted. */
+export function allowedFleetKeys() {
+  const keys = new Set(OWN_KEYS);
+  for (const fr of [identity, hub]) for (const k of Object.keys(fr.defaults().fleet ?? {})) keys.add(k);
+  return [...keys].sort();
+}
+
+/** Throws via `bad` on an own __proto__/constructor/prototype key at any depth. */
+function refuseForbidden(v, at, bad, depth = 0) {
+  if (v === null || typeof v !== 'object' || depth > 32) return;
+  for (const k of Object.keys(v)) {
+    if (FORBIDDEN_KEYS.has(k)) bad(`${at} has an unknown key ${JSON.stringify(k)} (__proto__, constructor and prototype are never allowed)`);
+    refuseForbidden(v[k], Array.isArray(v) ? `${at}[${k}]` : `${at}.${k}`, bad, depth + 1);
+  }
+}
+
+function deepFreeze(v, depth = 0) {
+  if (v === null || typeof v !== 'object' || Object.isFrozen(v) || depth > 32) return v;
+  if (Buffer.isBuffer(v) || ArrayBuffer.isView(v)) return v;
+  for (const k of Object.keys(v)) deepFreeze(v[k], depth + 1);
+  return Object.freeze(v);
+}
+
+/**
+ * Make this fragment's keys on `f` read-only and deep-frozen. The `fleet`
+ * object itself stays extensible: other fragments own keys on it too.
+ */
+function freezeOwnKeys(f) {
+  for (const k of OWN_KEYS) {
+    if (!Object.hasOwn(f, k)) continue;
+    Object.defineProperty(f, k, { value: deepFreeze(f[k]), writable: false, configurable: false, enumerable: true });
+  }
+}
+
 function list(v, name, bad) {
   if (!Array.isArray(v)) bad(`${name} must be a list`);
   if (v.length > MAX_LIST) bad(`${name} may hold at most ${MAX_LIST} entries`);
   return v;
 }
 
-export function validate(c, bad, layers, { platform = process.platform } = {}) {
+export function validate(c, bad, layers, { platform = process.platform, warn = console.warn } = {}) {
   const f = c.fleet;
   if (!isObj(f)) bad('fleet must be an object');
+  if (Object.getPrototypeOf(f) !== Object.prototype) bad('fleet has an unknown key "__proto__" (__proto__, constructor and prototype are never allowed)');
+
+  for (const layer of ['file', 'env']) {
+    const lf = layers?.[layer]?.fleet;
+    if (lf === undefined) continue;
+    refuseForbidden(lf, 'fleet', bad);
+  }
+  const ff = layers?.file?.fleet;
+  if (isObj(ff)) {
+    const allowed = allowedFleetKeys();
+    for (const k of Object.keys(ff)) {
+      if (!allowed.includes(k)) bad(`fleet has an unknown key ${JSON.stringify(k)} (allowed: ${allowed.join(', ')})`);
+    }
+    if (isObj(ff.audit)) {
+      for (const k of Object.keys(ff.audit)) {
+        if (k !== 'maxBytes') bad(`fleet.audit has an unknown key ${JSON.stringify(k)} (allowed: maxBytes)`);
+      }
+    }
+  }
 
   try {
     keyrings.set(f.hubKeys, parseHubKeys(f.hubKeys));
@@ -241,8 +331,17 @@ export function validate(c, bad, layers, { platform = process.platform } = {}) {
     bad(`fleet.ingressPort must differ from port (both are ${c.port})`);
   }
 
-  for (const k of ['hubControl', 'enforce', 'legacyBrowserRoutes']) {
+  for (const k of ['hubControl', 'enforce', 'insecureNoEnforce', 'legacyBrowserRoutes']) {
     if (typeof f[k] !== 'boolean') bad(`fleet.${k} must be true or false, got ${JSON.stringify(f[k])}`);
+  }
+
+  // SR4 M1/L4: an open ingress listener without enforce lets tagged tailnet
+  // nodes and forged serve headers act as `direct`.
+  if (f.ingressPort !== null && !f.enforce) {
+    if (!f.insecureNoEnforce) {
+      bad(`fleet.enforce is false while fleet.ingressPort ${f.ingressPort} opens an ingress listener: unidentified ingress would act as local. Remove enforce:false, or set fleet.insecureNoEnforce: true to accept that`);
+    }
+    warn(`laneboard: WARNING fleet.insecureNoEnforce is set: ingress port ${f.ingressPort} accepts unidentified requests as local (tagged tailnet nodes and forged X-Forwarded-* headers get full control)`);
   }
 
   for (const a of list(f.hubAddrs, 'fleet.hubAddrs', bad)) {
@@ -290,4 +389,6 @@ export function validate(c, bad, layers, { platform = process.platform } = {}) {
   if (!Number.isSafeInteger(mb) || mb < 65536 || mb > 2 ** 30) {
     bad(`fleet.audit.maxBytes must be an integer from 65536 to ${2 ** 30}, got ${JSON.stringify(mb)}`);
   }
+
+  freezeOwnKeys(f);
 }

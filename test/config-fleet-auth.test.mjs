@@ -164,7 +164,7 @@ test('hubKeys: bad entries are refused', () => {
   // __proto__ in a JSON file becomes an own key, refused as unknown
   const f = path.join(tmp, `proto${++n}.json`);
   fs.writeFileSync(f, `{"fleet":{"hubKeys":[{"key":${JSON.stringify(S1)},"id":"hub","scopes":["read"],"__proto__":{"x":1}}]}}`);
-  fails(() => cfg({}, f), /unknown field "__proto__"/);
+  fails(() => cfg({}, f), /fleet\.hubKeys\[0\] has an unknown key "__proto__"|unknown field "__proto__"/);
 });
 
 test('hubKeys errors never echo the key text', () => {
@@ -177,9 +177,8 @@ test('hubKeys errors never echo the key text', () => {
 
 test('hubControl, enforce and legacyBrowserRoutes are booleans', () => {
   assert.equal(withFleet({ hubControl: true }).fleet.hubControl, true);
-  assert.equal(withFleet({ enforce: false }).fleet.enforce, false);
   assert.equal(withFleet({ legacyBrowserRoutes: false }).fleet.legacyBrowserRoutes, false);
-  for (const k of ['hubControl', 'enforce', 'legacyBrowserRoutes']) {
+  for (const k of ['hubControl', 'enforce', 'insecureNoEnforce', 'legacyBrowserRoutes']) {
     for (const v of ['true', 1, null]) fails(() => withFleet({ [k]: v }), new RegExp(`fleet\\.${k} must be true or false`));
   }
 });
@@ -195,7 +194,7 @@ test('hubAddrs entries are IP literals', () => {
 test('ingressPeerUid: integer ≥ 0 or null, Linux only', () => {
   const bad = (m) => { throw new ConfigError(m); };
   const mk = (uid) => {
-    const c = { port: 7777, fleet: { ...auth.defaults().fleet, ingressPort: 7778, ingressPeerUid: uid } };
+    const c = { port: 7777, fleet: { ...auth.defaults().fleet, ingressPort: 7778, enforce: true, ingressPeerUid: uid } };
     return c;
   };
   auth.validate(mk(0), bad, {}, { platform: 'linux' });
@@ -263,4 +262,105 @@ test('F4 keys still come from fleet.mjs alongside these', () => {
   assert.equal(c.fleet.id, 'builder-a');
   assert.equal(c.fleet.code, 'BA');
   assert.deepEqual(c.fleet.allowedOrigins, []);
+});
+
+// --- SR4 fixes ----------------------------------------------------------------
+
+test('SR4 M1: LANEBOARD_INGRESS_PORT without a fleet block still enforces', () => {
+  const c = cfg({ LANEBOARD_INGRESS_PORT: '7790' });
+  assert.equal(c.fleet.ingressPort, 7790);
+  assert.equal(c.fleet.enforce, true, 'an env-opened ingress listener fails closed');
+  const d = cfg({ LANEBOARD_INGRESS_PORT: '7790' }, write({ human: 'acme' }));
+  assert.equal(d.fleet.enforce, true, 'a file without a fleet block too');
+  assert.equal(cfg().fleet.enforce, false, 'no ingress listener: nothing to enforce');
+});
+
+test('SR4 M1/L4: enforce:false with an ingress listener needs fleet.insecureNoEnforce, which warns', (t) => {
+  const rx = /fleet\.enforce is false while fleet\.ingressPort 7778 opens an ingress listener.*insecureNoEnforce/;
+  fails(() => withFleet({ enforce: false }), rx);
+  fails(() => withFleet({ enforce: false, insecureNoEnforce: false }), rx);
+  fails(() => cfg({ LANEBOARD_INGRESS_PORT: '7790' }, write({ fleet: { enforce: false } })), /fleet\.ingressPort 7790 opens/);
+  fails(() => cfg({ LANEBOARD_INGRESS_PORT: '7790' }, write({ fleet: { enforce: false, ingressPort: null } })), /fleet\.ingressPort 7790 opens/);
+
+  const warn = t.mock.method(console, 'warn', () => {});
+  const c = withFleet({ enforce: false, insecureNoEnforce: true });
+  assert.equal(c.fleet.enforce, false);
+  assert.equal(c.fleet.insecureNoEnforce, true);
+  assert.equal(warn.mock.callCount(), 1, 'one warning at load');
+  assert.match(warn.mock.calls[0].arguments[0], /WARNING fleet\.insecureNoEnforce .*7778.*unidentified/);
+  // enforcing configs do not warn
+  withFleet({});
+  withFleet({ insecureNoEnforce: true });
+  assert.equal(warn.mock.callCount(), 1);
+
+  // the validate() hook takes an injected warn
+  const seen = [];
+  const bad = (m) => { throw new ConfigError(m); };
+  const v = { port: 7777, fleet: { ...auth.defaults().fleet, ingressPort: 7778, enforce: false, insecureNoEnforce: true } };
+  auth.validate(v, bad, {}, { warn: (m) => seen.push(m) });
+  assert.equal(seen.length, 1);
+  // enforce:false without a listener is harmless and silent
+  const off = { port: 7777, fleet: { ...auth.defaults().fleet } };
+  auth.validate(off, bad, {}, { warn: (m) => seen.push(m) });
+  assert.equal(seen.length, 1);
+});
+
+test('SR4 L1: scopes are a frozen array with has(); Set/Array methods cannot widen them', () => {
+  const ring = auth.hubKeyring(withFleet({ hubKeys: [S1, { key: S2, id: 'hub', scopes: ['read', 'control'] }] }).fleet);
+  const s = ring[0].scopes;
+  assert.ok(s.has('read'));
+  assert.ok(!s.has('control'));
+  assert.equal(s.size, 1);
+  assert.ok(ring[1].scopes.has('control') && !ring[1].scopes.has('term'));
+  assert.ok(!(s instanceof Set));
+  assert.ok(Object.isFrozen(s));
+  assert.throws(() => Set.prototype.add.call(s, 'control'), TypeError);
+  assert.throws(() => Array.prototype.push.call(s, 'control'), TypeError);
+  assert.throws(() => { s[1] = 'control'; }, TypeError);
+  assert.throws(() => { s.has = () => true; }, TypeError);
+  assert.ok(!s.has('control'));
+  assert.deepEqual([...s], ['read']);
+});
+
+test('SR4 L2: unknown keys and __proto__/constructor/prototype under fleet are refused', () => {
+  for (const k of ['allowedusers', 'hubaddrs', 'hubcontrol', 'bogus']) {
+    fails(() => withFleet({ [k]: true }), new RegExp(`fleet has an unknown key "${k}" \\(allowed: .*hubKeys.*\\)`));
+  }
+  fails(() => withFleet({ audit: { maxBytes: 1048576, maxbytes: 5 } }), /fleet\.audit has an unknown key "maxbytes" \(allowed: maxBytes\)/);
+  const raw = (body) => {
+    const f = path.join(tmp, `raw${++n}.json`);
+    fs.writeFileSync(f, body);
+    return cfg({}, f);
+  };
+  fails(() => raw('{"fleet":{"__proto__":{"hubControl":true,"x":1}}}'), /fleet has an unknown key "__proto__" \(__proto__, constructor and prototype are never allowed\)/);
+  fails(() => raw('{"fleet":{"constructor":{"x":1}}}'), /fleet has an unknown key "constructor" \(__proto__, constructor and prototype are never allowed\)/);
+  fails(() => raw('{"fleet":{"rateLimits":{"prototype":{"limit":1}}}}'), /fleet\.rateLimits has an unknown key "prototype" \(__proto__, constructor and prototype are never allowed\)/);
+  fails(() => raw('{"fleet":{"placement":{"__proto__":{"x":1}}}}'), /fleet\.placement has an unknown key "__proto__" \(__proto__, constructor and prototype are never allowed\)/);
+  // every fleet.mjs (identity) and hub.mjs key stays allowed
+  const keys = auth.allowedFleetKeys();
+  for (const k of ['id', 'code', 'allowedOrigins', 'builders', 'hubKeyFile', 'staleMs', 'downMs', 'batchMs', 'pingMs',
+    'actionTimeoutMs', 'maxTermsPerBuilder', 'placement', 'hubKeys', 'ingressPort', 'enforce', 'insecureNoEnforce']) {
+    assert.ok(keys.includes(k), k);
+  }
+  const c = withFleet({ code: 'AB', allowedOrigins: [], staleMs: 15000, placement: { minFreeMemMb: 1024, maxSwapFrac: 0.5 } });
+  assert.equal(c.fleet.code, 'AB');
+});
+
+test('SR4 L3: fleet-auth keys are read-only and deep-frozen after load', () => {
+  const c = withFleet({ hubKeys: [S1], hubAddrs: ['192.0.2.7'], rateLimits: { kill: { limit: 2 } } });
+  const f = c.fleet;
+  assert.throws(() => { f.hubControl = true; }, TypeError);
+  assert.throws(() => { f.enforce = false; }, TypeError);
+  assert.throws(() => { delete f.enforce; }, TypeError);
+  assert.throws(() => { f.hubKeys = []; }, TypeError);
+  assert.throws(() => f.hubKeys.push(S2), TypeError);
+  assert.throws(() => f.allowedPermissionModes.push('bypassPermissions'), TypeError);
+  assert.throws(() => f.hubAddrs.push('192.0.2.8'), TypeError);
+  assert.throws(() => { f.rateLimits.kill.limit = 99; }, TypeError);
+  assert.throws(() => { f.audit.maxBytes = 1; }, TypeError);
+  assert.equal(f.hubControl, false);
+  assert.equal(auth.hubKeyring(f).length, 1);
+  // other fragments' keys on the same object are theirs to manage
+  assert.ok(!Object.isFrozen(f));
+  assert.ok(Object.getOwnPropertyDescriptor(f, 'id').writable);
 });
