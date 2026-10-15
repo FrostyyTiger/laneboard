@@ -728,3 +728,11 @@ test('a builder-mode map (GET /api/map with no config) renders: core, fleet, one
   assert.ok(canvas.ctx.calls.text.includes('BA'), 'the builder code is drawn');
   assert.match(byClass(root, 'map-readout').textContent, /N 3\/3/, 'all three nodes are drawn');
 });
+
+test('perf mode (?mapperf=1) appends the p95 draw time to the readout', async (t) => {
+  const { dom, root, map } = await mount({ perf: true });
+  t.after(() => { map.destroy(); dom.restore(); });
+  map.update(fleetModel());
+  dom.flush();
+  assert.match(byClass(root, 'map-readout').textContent, /P95 \d+\.\dMS$/);
+});
