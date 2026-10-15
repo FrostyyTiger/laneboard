@@ -8,7 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import mapView, {
-  laneActions, actionArgs, actionPulse, mapEventFor, routePlan, splitState, pipOffsets, getMapView, mapActions,
+  laneActions, actionArgs, actionPulse, mapEventFor, routePlan, splitState, pipOffsets, getMapView, mapActions, nodeActions,
 } from '../public/js/views/map.js';
 import {
   SPLIT_KEY, SPLIT_MIN_W, ROW_H, VIRTUAL_FROM, COLUMNS, splitOn, canSplit, stateGlyph, stateWord,
@@ -61,6 +61,8 @@ test('views/map.js default export is a registry view with the nav metadata', () 
   assert.equal(mapView.short, 'MAP');
   assert.equal(getMapView(), null, 'no map until it is mounted');
   assert.deepEqual(mapActions(null), []);
+  assert.deepEqual(nodeActions(null), []);
+  assert.deepEqual(nodeActions({ id: 'hv', kind: 'host' }), [], 'a leaf machine offers nothing');
 });
 
 test('routePlan: b= becomes the scope; sel= selects only when it changed', () => {

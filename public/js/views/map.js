@@ -12,7 +12,7 @@
 //                selection synced through the router, hover lit both ways
 //   PiP          map/minimap.js: 240x240 bottom right in every other view, 2 fps,
 //                click returns to the Map keeping b= and sel=
-//   actions      laneActions(node): the 2.8 list; the inspector runs them (its bar,
+//   actions      nodeActions(node) (laneActions + run): the 2.8 list; the inspector runs them (its bar,
 //                plus the map's own fold/peek buttons registered on it); results
 //                pulse the node, status never changes optimistically
 //   events       hook events from the store pulse `lane:<builder>/<lane>`
@@ -169,7 +169,7 @@ function ensureMap() {
   page.loading = import('./map-canvas.js').then((mod) => {
     const api = mod.createMap(root, {
       title: store.map?.title ?? 'Map',
-      actions: mapActions,
+      actions: nodeActions,
       // The inspector is the tether target (§5 2.3); the map draws the line.
       anchorEl: () => anchorEl(),
       // Old fold sets name lanes `lane:<x>`; they migrate to this builder's
@@ -406,9 +406,20 @@ export async function runMapAction(item, node, extra = {}) {
 }
 
 /** What a node offers (createMap opts.actions): the 2.8 list with run(). */
-export function mapActions(node) {
+export function nodeActions(node) {
   if (!node) return [];
   return laneActions(node, infoFor(node)).map((it) => ({ ...it, run: () => runMapAction(it, node) }));
+}
+
+/**
+ * The pre-M5 contract (F8b, test/render-fleet.test.mjs): a lane whose
+ * session (`node.session`, a fleet key) is in the store can open it in place.
+ */
+export function mapActions(node) {
+  if (node?.kind !== 'lane' || typeof node.session !== 'string') return [];
+  const k = toIndexKey(store, node.session);
+  if (!k || !store.sessions.has(k)) return [];
+  return [{ id: 'term', icon: 'terminal', label: 'Open terminal', run: () => openTerminal(k) }];
 }
 
 /**
