@@ -11,7 +11,7 @@ test('errorHash ignores digits, so "line 42" and "line 43" hash the same', () =>
 });
 
 test('errorHash ignores absolute paths and hex', () => {
-  assert.equal(errorHash('ENOENT: open "/home/builder-a/code/acme/a.txt"'), errorHash('ENOENT: open "/tmp/other/b.txt"'));
+  assert.equal(errorHash('ENOENT: open "/home/user/code/acme/a.txt"'), errorHash('ENOENT: open "/tmp/other/b.txt"'));
   assert.equal(errorHash('segfault at 0x7ffd1234abcd'), errorHash('segfault at 0xdeadbeef'));
   assert.equal(errorHash('commit 3f2a9c1b8e7d6f50 not found'), errorHash('commit a1b2c3d4e5f60718 not found'));
   assert.equal(normaliseError('Fail in /a/b/c.js:12 and ./rel/x.js'), 'fail in P:N and P');

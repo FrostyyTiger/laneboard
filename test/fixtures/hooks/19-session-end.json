@@ -1,7 +1,7 @@
 {
   "session_id": "0b6c1e2a-fixture-session-0001",
-  "transcript_path": "/home/builder-a/.claude/projects/-home-builder-a-code-acme/0b6c1e2a-fixture-session-0001.jsonl",
-  "cwd": "/home/builder-a/code/acme",
+  "transcript_path": "/home/user/.claude/projects/-home-user-code-acme/0b6c1e2a-fixture-session-0001.jsonl",
+  "cwd": "/home/user/code/acme",
   "hook_event_name": "SessionEnd",
   "reason": "other"
 }
