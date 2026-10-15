@@ -4,10 +4,16 @@
 // REST adapter, the CLI), is one envelope handed to dispatch(). The order of checks is fixed:
 //
 //   shape -> registry -> hub control -> remote-only (flag) -> target -> args -> remote-only (predicate)
-//         -> tier -> rate limit -> run -> audit (finally, for every outcome once we were called)
+//         -> tier -> rate limit -> audit (start) -> run -> audit (outcome)
 //
 // dispatch() is only ever called with an already authenticated `auth` (A4 classify / verifyEnvelope), so
-// every outcome, refusals included, lands exactly one audit entry. The envelope is the value A4 verified
+// every outcome, refusals included, lands an audit entry. A refusal lands exactly one entry (its outcome). An
+// action that gets as far as running lands two: a `{phase:'start'}` entry appended BEFORE run (fail closed: if
+// that append throws, the action does not run and the caller gets 503 `audit-unavailable`, SR5 M2) and the
+// outcome entry (`phase:'done'`) after it. A failed outcome append is logged and surfaced as `auditFailed:true`.
+//
+// `via` is derived from auth.kind only (hub -> 'hub', direct -> 'direct', local -> 'legacy'); whatever the
+// envelope says is ignored (SR5 L1). The envelope is the value A4 verified
 // (`canonicalJson(JSON.parse(body))`, SR1 I1): dispatch never sees, re-reads or re-parses a raw body. It
 // validates the parsed value once and hands run() a private deep copy of the validated args, so nothing that
 // mutates the caller's object after validation can change what runs.
@@ -34,10 +40,28 @@ const ALARM_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 // test/dispatch.test.mjs checks they agree.
 export const LANE_ID_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/;
 const ERROR_MAX = 300;
+const VIA_OF_KIND = Object.freeze({ hub: 'hub', direct: 'direct', local: 'legacy' });
+/** Audit `user` of a direct auth that carries no user (refused 403 no-identity, never recorded as `local`). */
+export const UNKNOWN_DIRECT_USER = 'unknown-direct';
+/** The only actions allowed to register `allConfirm:false` (SR5 L5). */
+export const ALL_CONFIRM_EXEMPT = Object.freeze(['ack-alarm', 'broadcast']);
+// C0 controls except \t \n, DEL, C1 controls.
+const CONTROL_RE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
+
+/**
+ * Clean text that is typed into a pane (send-text, SR5 L3): CRLF and CR become LF; every control character
+ * other than TAB and LF is removed (ESC, Ctrl-C, bracketed-paste markers, DEL, C1); with `enter === false` an
+ * LF would submit the input, so each line break becomes a space.
+ */
+export function cleanTypedText(text, enter) {
+  let t = String(text).replace(/\r\n?/g, '\n').replace(CONTROL_RE, '');
+  if (enter === false) t = t.replace(/\n/g, ' ');
+  return t;
+}
 const ARG_TYPES = new Set(['string', 'boolean', 'number', 'integer', 'array', 'object', 'null']);
 const SPEC_KEYS = new Set(['type', 'required', 'default', 'min', 'max', 're', 'enum', 'items', 'fields', 'check']);
 const DEF_KEYS = new Set(['tier', 'target', 'args', 'allArgs', 'hubOnly', 'localOnly', 'remoteOnly', 'allConfirm',
-  'prepare', 'status', 'runsAll', 'run']);
+  'confirmCheck', 'prepare', 'status', 'runsAll', 'run']);
 
 /** A refusal with an HTTP status and a stable machine code. `result` (optional) is returned to the caller. */
 export class ActionRefused extends Error {
@@ -98,14 +122,18 @@ function checkSchema(where, schema) {
  *     items? (array element spec), fields? (object, strict), check? ((value, ctx) => error string | null)}.
  *   allArgs: extra fields accepted only when target is '*'.
  *   hubOnly: refused on a builder (400 hub_only). localOnly: refused for hub kind (403 local-only).
- *   remoteOnly: true, or a predicate ({action, target, args, user, via}, deps) => bool evaluated after the args;
- *     refused for kind 'local' (403 remote-only).
+ *   remoteOnly: true, or a predicate ({action, target, args, user, via, kind}, deps) => bool evaluated after the
+ *     args; refused for kind 'local' (403 remote-only). A predicate must decide on `kind` (the auth kind), never
+ *     on `via` or `user`; anything other than `false` (a throw included) refuses.
  *   runsAll: run() itself handles target '*' (otherwise '*' needs registerAllHandler(name, fn), else 501).
- *   allConfirm: false exempts target '*' from the `args.confirm === fleet.id` rule (ack-alarm only).
+ *   allConfirm: false exempts target '*' from the `args.confirm === fleet.id` rule; only the actions in
+ *     ALL_CONFIRM_EXEMPT (ack-alarm, broadcast) may set it, and a confirm-tier one must then give confirmCheck.
+ *   confirmCheck: async? ({target, args, deps, config}) => error string | null (only null/undefined pass), the action's own confirm rule (e.g.
+ *     broadcast's confirmCount), run at the tier step; a throw or a non-null value refuses (fail closed).
  *   prepare: async ({target, args, deps, config}) => args, after the schema (normalise, e.g. realpath); a throw is
  *     400 bad_args unless it is an ActionRefused.
  *   status: (result, args) => HTTP status of a success (default 200).
- *   run: async ({action, target, args, user, via, auth, deps, config}) => result (plain object).
+ *   run: async ({action, target, args, user, via, kind, auth, deps, config}) => result (plain object).
  */
 export function registerAction(name, def) {
   if (typeof name !== 'string' || !NAME_RE.test(name)) throw new TypeError(`registerAction: invalid name ${JSON.stringify(name)}`);
@@ -130,10 +158,13 @@ export function registerAction(name, def) {
   if (def.runsAll !== undefined && typeof def.runsAll !== 'boolean') throw new TypeError(`registerAction(${name}): runsAll must be a boolean`);
   if (def.runsAll && !target.allowAll) throw new TypeError(`registerAction(${name}): runsAll needs a target that accepts '*'`);
   if (def.allConfirm !== undefined && def.allConfirm !== false) throw new TypeError(`registerAction(${name}): allConfirm may only be false`);
+  if (def.allConfirm === false && !ALL_CONFIRM_EXEMPT.includes(name)) throw new TypeError(`registerAction(${name}): allConfirm:false is reserved for ${ALL_CONFIRM_EXEMPT.join(', ')}`);
+  if (def.confirmCheck !== undefined && typeof def.confirmCheck !== 'function') throw new TypeError(`registerAction(${name}): confirmCheck must be a function`);
+  if (def.allConfirm === false && def.tier === 'confirm' && typeof def.confirmCheck !== 'function') throw new TypeError(`registerAction(${name}): a confirm tier with allConfirm:false needs confirmCheck`);
   ACTIONS.set(name, Object.freeze({
     name, tier: def.tier, target, args, allArgs,
     hubOnly: def.hubOnly === true, localOnly: def.localOnly === true, remoteOnly: ro,
-    allConfirm: def.allConfirm !== false,
+    allConfirm: def.allConfirm !== false, confirmCheck: def.confirmCheck ?? null,
     prepare: def.prepare ?? null, status: def.status ?? null, runsAll: def.runsAll === true, run: def.run,
   }));
 }
@@ -279,13 +310,15 @@ function errorText(err) {
 
 /**
  * dispatch(envelope, {auth, deps, config?, audit, limiter, now?, log?})
- *   -> {ok:true, status, result, auditId} | {ok:false, status, error, code, result?, retryAfterMs?, auditId}
+ *   -> {ok:true, status, result, auditId, auditFailed?}
+ *    | {ok:false, status, error, code, result?, retryAfterMs?, auditId, auditFailed?}
  *
  * envelope: {v:1, id:uuid, ts, builder, action, target, args, user?, via} (already parsed and, for hub kind,
- *   signature-verified by A4; this function re-checks the shape it relies on).
- * auth: {kind:'local'|'direct'|'hub', user?, scopes? (Set|array, hub), keyLabel?, readOnly?}.
+ *   signature-verified by A4; this function re-checks the shape it relies on). `via` is ignored: it is derived
+ *   from auth.kind.
+ * auth: {kind:'local'|'direct'|'hub', user? (required for direct), scopes? (Set|array, hub), keyLabel?, readOnly?}.
  * deps: handed to run() (actions, launcher, retirer, state, config, ...). config defaults to deps.config.
- * audit: openAudit() result (append); limiter: createLimiter() result (take); auditId = the entry's hash.
+ * audit: openAudit() result (append); limiter: createLimiter() result (take); auditId = the outcome entry's hash.
  * Never throws for a bad envelope or a failing action; throws TypeError only for a missing auth/audit (a
  * wiring bug, nothing to audit against).
  */
@@ -297,20 +330,44 @@ export async function dispatch(envelope, ctx = {}) {
 
   const env = isPlainObject(envelope) ? envelope : {};
   const str = (v) => (typeof v === 'string' ? v : null);
+  let user;
+  if (auth.kind === 'hub') user = str(env.user) && HUB_USER_RE.test(env.user) ? env.user : null;
+  else if (auth.kind === 'direct') user = str(auth.user) || UNKNOWN_DIRECT_USER;
+  else user = str(auth.user) || 'local';
   // What we know for the audit entry, filled in as checks pass.
   const rec = {
     id: str(env.id) && UUID_RE.test(env.id) ? env.id : undefined,
-    user: auth.kind === 'hub' ? (str(env.user) && HUB_USER_RE.test(env.user) ? env.user : null) : (str(auth.user) || 'local'),
-    via: VIAS.includes(env.via) ? env.via : null,
+    user,
+    via: VIA_OF_KIND[auth.kind],
     builder: str(env.builder),
     action: str(env.action) && NAME_RE.test(env.action) ? env.action : 'invalid',
     target: str(env.target),
     rawArgs: env.args,
   };
+  let argsHash;
+  try { argsHash = argsHashOf(rec.rawArgs); } catch { argsHash = argsHashOf({ unhashable: true }); }
+  const append = (result) => {
+    if (auth.kind === 'hub' && typeof auth.keyLabel === 'string') result.key = auth.keyLabel;
+    return audit.append({
+      ts: now(), id: rec.id, user: rec.user, via: rec.via, builder: rec.builder,
+      action: rec.action, target: rec.target, argsHash, result,
+    });
+  };
+
   let out;
   let job;
+  let started = false;
   try {
-    const r = await runChecked(env, rec, { auth, deps, config, limiter });
+    const p = await runChecked(env, rec, { auth, deps, config, limiter });
+    // pre-action audit: fail closed, the action must not run unaudited (SR5 M2)
+    try {
+      append({ phase: 'start' });
+    } catch (err) {
+      log?.error?.(`dispatch ${rec.action}: audit append failed, action refused: ${errorText(err)}`);
+      throw new ActionRefused(503, 'audit-unavailable', 'the audit log is unavailable; the action did not run');
+    }
+    started = true;
+    const r = await execute(p);
     job = typeof r.result?.job === 'string' ? r.result.job : undefined;
     out = { ok: true, status: r.status, result: r.result };
   } catch (err) {
@@ -326,35 +383,55 @@ export async function dispatch(envelope, ctx = {}) {
       out = { ok: false, status: 500, error: 'internal error', code: 'internal' };
     }
   }
-  // Audit every outcome. Not in a `finally`: an audit failure must not mask the outcome already reached.
-
+  // Audit the outcome. Not in a `finally`: an audit failure must not mask the outcome already reached.
   let auditId = null;
+  let auditFailed = false;
   try {
     const result = { ok: out.ok, status: out.status };
     if (!out.ok) { result.code = out.code; result.error = out.error; }
     if (job) result.job = job;
-    if (auth.kind === 'hub' && typeof auth.keyLabel === 'string') result.key = auth.keyLabel;
-    let argsHash;
-    try { argsHash = argsHashOf(rec.rawArgs); } catch { argsHash = argsHashOf({ unhashable: true }); }
-    const entry = audit.append({
-      ts: now(), id: rec.id, user: rec.user, via: rec.via, builder: rec.builder,
-      action: rec.action, target: rec.target, argsHash, result,
-    });
+    if (started) result.phase = 'done';
+    const entry = append(result);
     auditId = entry?.hash ?? null;
   } catch (err) {
-    log?.error?.(`dispatch ${rec.action}: audit append failed: ${errorText(err)}`);
+    auditFailed = true;
+    log?.error?.(`dispatch ${rec.action}: audit append failed${started ? ' after the action ran' : ''}: ${errorText(err)}`);
   }
-  return { ...out, auditId };
+  const res = { ...out, auditId };
+  if (auditFailed) res.auditFailed = true;
+  return res;
+}
+
+// The rate-limit identity of a request (SR5 L4): a hub request is charged under its signing key as well as
+// under (key, user), so a key that rotates `user` still hits the per-key buckets.
+function takeLimits(limiter, rec, def, target, args, auth) {
+  const fanoutParent = def.name === 'send-text' ? args.fanout?.parent : undefined;
+  if (auth.kind !== 'hub') return limiter.take(rec.user, def.name, target, { kind: auth.kind, fanoutParent });
+  const key = typeof auth.keyLabel === 'string' && auth.keyLabel ? auth.keyLabel : 'unknown-key';
+  // per key first (it also carries the shared `hub` bucket); a refusal there consumes nothing
+  const perKey = limiter.take(JSON.stringify(['hub-key', key]), def.name, target, { kind: 'hub', fanoutParent });
+  if (!perKey.ok) return perKey;
+  return limiter.take(JSON.stringify(['hub-key', key, rec.user]), def.name, target, { kind: 'direct', fanoutParent });
+}
+
+async function execute({ def, runFn, target, args, rec, auth, deps, config }) {
+  const result = await runFn({ action: def.name, target, args: structuredClone(args), user: rec.user, via: rec.via, kind: auth.kind, auth, deps, config });
+  const plain = result === undefined || result === null ? {} : result;
+  let status = 200;
+  if (def.status) {
+    // the side effect already happened: a throwing status() must not turn it into a reported failure (SR5 L2)
+    try { status = def.status(plain, args); } catch { status = 200; }
+  }
+  return { status: Number.isInteger(status) ? status : 200, result: plain };
 }
 
 async function runChecked(env, rec, { auth, deps, config, limiter }) {
-  // 1. shape
+  // 1. shape (env.via is not checked: it is derived from auth.kind)
   if (env.v !== 1) throw new ActionRefused(400, 'bad_envelope', 'envelope v must be 1');
   if (!rec.id) throw new ActionRefused(400, 'bad_envelope', 'envelope id must be a UUID');
   if (typeof env.ts !== 'number' || !Number.isFinite(env.ts)) throw new ActionRefused(400, 'bad_envelope', 'envelope ts must be a number');
   if (rec.action === 'invalid') throw new ActionRefused(400, 'bad_envelope', 'envelope action is invalid');
-  if (!rec.via) throw new ActionRefused(400, 'bad_envelope', 'envelope via is invalid');
-  if ((auth.kind === 'hub') !== (rec.via === 'hub')) throw new ActionRefused(400, 'bad_envelope', 'envelope via does not match the request');
+  if (auth.kind === 'direct' && rec.user === UNKNOWN_DIRECT_USER) throw new ActionRefused(403, 'no-identity', 'a direct request needs an authenticated user');
   if (!rec.user) throw new ActionRefused(400, 'bad_envelope', 'envelope user is invalid');
   if (typeof env.target !== 'string') throw new ActionRefused(400, 'bad_envelope', 'envelope target must be a string');
   if (env.args !== undefined && !isPlainObject(env.args)) throw new ActionRefused(400, 'bad_envelope', 'envelope args must be an object');
@@ -398,7 +475,7 @@ async function runChecked(env, rec, { auth, deps, config, limiter }) {
   }
 
   // 7. remote-only (predicate)
-  const view = { action: def.name, target, args, user: rec.user, via: rec.via };
+  const view = { action: def.name, target, args, user: rec.user, via: rec.via, kind: auth.kind };
   if (typeof def.remoteOnly === 'function' && auth.kind === 'local') {
     let ro;
     try { ro = def.remoteOnly(view, deps); } catch { ro = true; } // fail closed
@@ -414,13 +491,20 @@ async function runChecked(env, rec, { auth, deps, config, limiter }) {
   } else if (def.tier === 'confirm' && !all) {
     if (typeof args.confirm !== 'string' || args.confirm !== target) throw new ActionRefused(400, 'confirm_required', `confirm must equal ${target}`);
   }
+  if (def.confirmCheck) {
+    let err;
+    try { err = await def.confirmCheck({ target, args, deps, config }); } catch (e) {
+      if (e instanceof ActionRefused) throw e;
+      err = errorText(e) || 'confirm check failed';
+    }
+    if (err !== null && err !== undefined) throw new ActionRefused(400, 'confirm_required', String(err === false ? 'confirm check failed' : err).slice(0, ERROR_MAX));
+  }
   const runFn = all ? (ALL_HANDLERS.get(def.name) ?? (def.runsAll || def.target.kind === 'all' ? def.run : null)) : def.run;
   if (!runFn) throw new ActionRefused(501, 'not_implemented', `${def.name} * is not available on this builder`);
 
   // 9. rate limit
   if (limiter) {
-    const fanoutParent = def.name === 'send-text' ? args.fanout?.parent : undefined;
-    const lim = limiter.take(rec.user, def.name, target, { kind: auth.kind, fanoutParent });
+    const lim = takeLimits(limiter, rec, def, target, args, auth);
     if (!lim.ok) {
       const e = new ActionRefused(429, 'rate_limited', 'rate_limited');
       e.retryAfterMs = lim.retryAfterMs;
@@ -428,9 +512,6 @@ async function runChecked(env, rec, { auth, deps, config, limiter }) {
     }
   }
 
-  // 10. run
-  const result = await runFn({ action: def.name, target, args: structuredClone(args), user: rec.user, via: rec.via, auth, deps, config });
-  const plain = result === undefined || result === null ? {} : result;
-  const status = def.status ? def.status(plain, args) : 200;
-  return { status: Number.isInteger(status) ? status : 200, result: plain };
+  // 10. run (dispatch appends the start entry first)
+  return { def, runFn, target, args, rec, auth, deps, config };
 }

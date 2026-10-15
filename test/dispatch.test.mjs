@@ -6,9 +6,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 import {
-  dispatch, registerAction, registerAllHandler, tiers, TIERS, ActionRefused, LANE_ID_RE, _reset,
+  dispatch, registerAction, registerAllHandler, tiers, TIERS, ActionRefused, LANE_ID_RE, _reset, cleanTypedText,
 } from '../server/fleet/dispatch.mjs';
-import { registerBuiltins, resolveSpawnDir, BUILTIN_ACTIONS, _resetBuiltins } from '../server/fleet/builtin-actions.mjs';
+import {
+  registerBuiltins, resolveSpawnDir, BUILTIN_ACTIONS, _resetBuiltins, effectivePermissionMode,
+} from '../server/fleet/builtin-actions.mjs';
 import { openAudit } from '../server/fleet/audit.mjs';
 import { createLimiter } from '../server/fleet/ratelimit.mjs';
 
@@ -118,7 +120,7 @@ test('handlers receive validated args with defaults', async () => {
   assert.deepEqual(s.calls[0], ['sendText', 'agent-1', 'hello', true, 'alice@example.invalid']);
   const r = await s.go(env('launch', 'lane-2', { repo: 'acme', plan: 'docs/plans/x.md', priority: 'low' }));
   assert.equal(r.status, 202);
-  assert.deepEqual(s.calls[1], ['launch', { lane: 'lane-2', repo: 'acme', plan: 'docs/plans/x.md', priority: 'low' }, 'alice@example.invalid']);
+  assert.deepEqual(s.calls[1], ['launch', { lane: 'lane-2', repo: 'acme', plan: 'docs/plans/x.md', priority: 'low', permissionMode: 'auto' }, 'alice@example.invalid']);
   const d = await s.go(env('launch', 'lane-3', { repo: 'acme', plan: 'p.md', dryRun: true }));
   assert.equal(d.status, 200);
   await s.go(env('retire', 'lane-1', { confirm: 'lane-1' }));
@@ -224,11 +226,6 @@ test('hub kind: hubControl false -> 403 control-disabled (audited); scopes {read
   r = await s.go(hubEnv('send-keys', 'agent-1', { keys: ['a'] }), { kind: 'hub', scopes: ['read', 'control'] });
   assert.equal(r.ok, true, r.error);
   assert.equal(s.calls[0][3], 'alice@example.invalid', 'hub user is the envelope user');
-  // a hub envelope must say via:'hub', and a non-hub one must not
-  r = await s.go(env('send-keys', 'agent-1', { keys: ['a'] }), hub(['read', 'control']));
-  assert.equal(r.code, 'bad_envelope');
-  r = await s.go(hubEnv('send-keys', 'agent-1', { keys: ['a'] }));
-  assert.equal(r.code, 'bad_envelope');
   r = await s.go(hubEnv('send-keys', 'agent-1', { keys: ['a'] }, { user: 'has space' }), hub(['read', 'control']));
   assert.equal(r.code, 'bad_envelope');
 });
@@ -395,7 +392,7 @@ test('unknown session -> 404, bad session name -> 400, unknown action -> 400', a
 test('envelope shape: v, id, builder, args, ts', async () => {
   const s = setup();
   const cases = [
-    { v: 2 }, { id: 'not-a-uuid' }, { builder: 'builder-b' }, { args: [1] }, { ts: 'now' }, { via: 'carrier' }, { target: 5 },
+    { v: 2 }, { id: 'not-a-uuid' }, { builder: 'builder-b' }, { args: [1] }, { ts: 'now' }, { target: 5 },
   ];
   for (const c of cases) {
     const r = await s.go(env('send-keys', 'agent-1', { keys: ['a'] }, c));
@@ -436,7 +433,7 @@ test('run gets a private copy: mutating the envelope after dispatch starts chang
   assert.deepEqual(seen, ['a']);
 });
 
-test('every authenticated outcome lands exactly one audit entry (ok, refused, thrown)', async () => {
+test('every authenticated outcome is audited: refusals once, executed actions start + done', async () => {
   const s = setup();
   registerAction('boom', { tier: 'click', target: 'session', run: async () => { throw new Error('secret internals'); } });
   registerAction('lane-err', { tier: 'click', target: 'session', run: async () => { const e = new Error('lane busy'); e.status = 409; throw e; } });
@@ -449,9 +446,11 @@ test('every authenticated outcome lands exactly one audit entry (ok, refused, th
   assert.equal(outs[2].error, 'internal error', 'unknown errors do not leak');
   assert.equal(outs[3].error, 'lane busy');
   const e = entries(s.audit);
-  assert.equal(e.length, 4);
-  assert.deepEqual(e.map((x) => x.hash), outs.map((o) => o.auditId));
-  assert.deepEqual(e.map((x) => x.action), ['send-keys', 'kill', 'boom', 'lane-err']);
+  assert.equal(e.length, 7);
+  const done = e.filter((x) => x.result.phase !== 'start');
+  assert.deepEqual(done.map((x) => x.hash), outs.map((o) => o.auditId));
+  assert.deepEqual(done.map((x) => x.action), ['send-keys', 'kill', 'boom', 'lane-err']);
+  assert.deepEqual(e.map((x) => x.result.phase ?? null), ['start', 'done', null, 'start', 'done', 'start', 'done']);
   assert.equal(e[0].user, 'alice@example.invalid');
   assert.equal(e[0].via, 'direct');
   assert.equal(e[0].builder, BID);
@@ -460,15 +459,156 @@ test('every authenticated outcome lands exactly one audit entry (ok, refused, th
   assert.equal(s.audit.verifyAll().ok, true);
 });
 
-test('an audit failure does not mask the outcome', async () => {
+test('M2: a failing pre-action audit append refuses with 503 audit-unavailable and the action never runs', async () => {
   const s = setup();
   const r = await dispatch(env('send-keys', 'agent-1', { keys: ['a'] }), {
     auth: { kind: 'direct', user: 'u' }, deps: s.deps, limiter: s.limiter,
     audit: { append() { throw new Error('disk full'); } },
   });
-  assert.equal(r.ok, true);
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 503);
+  assert.equal(r.code, 'audit-unavailable');
   assert.equal(r.auditId, null);
+  assert.equal(r.auditFailed, true);
+  assert.equal(s.calls.length, 0, 'the action did not run');
+  // a refusal (no run) with a broken audit still answers with the refusal
+  const k = await dispatch(env('kill', 'agent-1', {}), {
+    auth: { kind: 'direct', user: 'u' }, deps: s.deps, limiter: s.limiter,
+    audit: { append() { throw new Error('disk full'); } },
+  });
+  assert.equal(k.code, 'bad_args');
+  assert.equal(k.auditFailed, true);
   await assert.rejects(dispatch(env('send-keys', 'agent-1', {}), { deps: s.deps, audit: s.audit }), TypeError);
+});
+
+test('M2: an outcome append that fails after the run is logged and surfaced as auditFailed', async () => {
+  const s = setup();
+  let n = 0;
+  const logged = [];
+  const r = await dispatch(env('send-keys', 'agent-1', { keys: ['a'] }), {
+    auth: { kind: 'direct', user: 'u' }, deps: s.deps, limiter: s.limiter,
+    audit: { append(e) { if (++n === 2) throw new Error('disk full'); return { hash: 'h-start', e }; } },
+    log: { error: (m) => logged.push(m) },
+  });
+  assert.equal(s.calls.length, 1, 'the start entry was written, so it ran');
+  assert.equal(r.ok, true);
+  assert.equal(r.auditFailed, true);
+  assert.equal(r.auditId, null);
+  assert.ok(logged.some((m) => m.includes('after the action ran')));
+});
+
+test('M1: launch/spawn without permissionMode get an allowed mode, passed explicitly; none allowed -> 400', async () => {
+  const s = setup();
+  s.config.fleet.allowedPermissionModes = ['default', 'plan'];
+  let r = await s.go(env('launch', 'lane-1', { repo: 'acme', plan: 'p.md' }));
+  assert.equal(r.ok, true, r.error);
+  assert.equal(s.calls.at(-1)[1].permissionMode, 'default', 'auto is not allowed: the first allowed mode');
+  s.config.fleet.allowedPermissionModes = ['plan'];
+  r = await s.go(env('spawn', 'new-one', { dir: repoDir }));
+  assert.equal(r.ok, true, r.error);
+  assert.equal(s.calls.at(-1)[1].permissionMode, 'plan');
+  s.config.fleet.allowedPermissionModes = ['plan', 'auto'];
+  r = await s.go(env('launch', 'lane-2', { repo: 'acme', plan: 'p.md' }));
+  assert.equal(s.calls.at(-1)[1].permissionMode, 'auto', 'the downstream default when it is allowed');
+  s.config.fleet.allowedPermissionModes = [];
+  const n = s.calls.length;
+  r = await s.go(env('launch', 'lane-3', { repo: 'acme', plan: 'p.md' }));
+  assert.equal(r.code, 'bad_args');
+  r = await s.go(env('spawn', 'new-two', { dir: repoDir }));
+  assert.equal(r.code, 'bad_args');
+  assert.equal(s.calls.length, n);
+  assert.throws(() => effectivePermissionMode('auto', 'launch', { fleet: { allowedPermissionModes: ['plan'] } }), ActionRefused);
+  assert.equal(effectivePermissionMode(undefined, 'spawn', {}), 'default');
+});
+
+test('L1: via is derived from auth.kind, the envelope via is ignored; predicates see kind', async () => {
+  const s = setup({ hubControl: true });
+  const views = [];
+  registerAction('probe-via', {
+    tier: 'click', target: 'session', remoteOnly: (v) => { views.push(v); return v.via !== 'direct'; },
+    run: async ({ via, kind }) => ({ ok: true, via, kind }),
+  });
+  let r = await s.go(env('probe-via', 'agent-1', {}, { via: 'direct' }), LOCAL);
+  assert.equal(r.code, 'remote-only', 'a local caller claiming via:direct is still local');
+  assert.equal(views[0].via, 'legacy');
+  assert.equal(views[0].kind, 'local');
+  r = await s.go(env('probe-via', 'agent-1', {}, { via: 'hub' }));
+  assert.deepEqual(r.result, { ok: true, via: 'direct', kind: 'direct' });
+  r = await s.go(env('probe-via', 'agent-1', {}, { via: 'legacy' }), hub(['control']));
+  assert.deepEqual(r.result, { ok: true, via: 'hub', kind: 'hub' });
+  r = await s.go(env('send-keys', 'agent-1', { keys: ['a'] }, { via: 'carrier' }));
+  assert.equal(r.ok, true);
+  const vias = entries(s.audit).map((e) => e.via);
+  assert.deepEqual([...new Set(vias)].sort(), ['direct', 'hub', 'legacy']);
+});
+
+test('L2: a status() that throws after a successful run reports success', async () => {
+  const s = setup();
+  registerAction('odd-status', { tier: 'click', target: 'session', status: () => { throw new Error('x'); }, run: async () => ({ ok: true }) });
+  const r = await s.go(env('odd-status', 'agent-1', {}));
+  assert.equal(r.ok, true);
+  assert.equal(r.status, 200);
+  assert.equal(entries(s.audit).at(-1).result.ok, true);
+});
+
+test('L3: send-text strips control characters; line breaks follow enter', async () => {
+  const s = setup();
+  await s.go(env('send-text', 'agent-1', { text: 'rm -rf x\r\x1b[201~\x03\x7f\u0085ok\tz', enter: false }));
+  assert.equal(s.calls[0][2], 'rm -rf x [201~ok\tz');
+  await s.go(env('send-text', 'agent-1', { text: 'a\r\nb\rc\nd' }));
+  assert.equal(s.calls[1][2], 'a\nb\nc\nd');
+  await s.go(env('send-text', 'agent-1', { text: 'a\nb', enter: false }));
+  assert.equal(s.calls[2][2], 'a b');
+  const r = await s.go(env('send-text', 'agent-1', { text: '\x1b\x03' }));
+  assert.equal(r.code, 'bad_args');
+  assert.equal(s.calls.length, 3);
+  assert.equal(cleanTypedText('x\u009by', true), 'xy');
+});
+
+test('L4: a hub key rotating user still hits the per-key limit', async () => {
+  const s = setup({ hubControl: true, rules: { kill: { limit: 5, windowMs: 60000 } } });
+  const results = [];
+  for (let i = 0; i < 8; i++) {
+    results.push(await s.go(hubEnv('kill', 'agent-1', { confirm: 'agent-1' }, { user: `user-${i}` }), hub(['control'])));
+  }
+  assert.equal(results.filter((r) => r.ok).length, 5);
+  assert.equal(results.at(-1).code, 'rate_limited');
+  // another key has its own bucket
+  const other = await s.go(hubEnv('kill', 'agent-1', { confirm: 'agent-1' }, { user: 'user-0' }), { ...hub(['control']), keyLabel: 'hub-b' });
+  assert.equal(other.ok, true);
+  // per user within one key
+  const t = setup({ hubControl: true, rules: { kill: { limit: 5, windowMs: 60000 } } });
+  for (let i = 0; i < 5; i++) assert.equal((await t.go(hubEnv('kill', 'agent-1', { confirm: 'agent-1' }), hub(['control']))).ok, true);
+  assert.equal((await t.go(hubEnv('kill', 'agent-1', { confirm: 'agent-1' }), hub(['control']))).code, 'rate_limited');
+});
+
+test('L5: allConfirm:false is reserved for ack-alarm and broadcast', () => {
+  setup();
+  const run = async () => ({});
+  assert.throws(() => registerAction('nuke', { tier: 'confirm', target: 'session-or-all', allConfirm: false, args: { confirm: { type: 'string' } }, run }), /reserved/);
+  assert.throws(() => registerAction('poke', { tier: 'click', target: 'session-or-all', allConfirm: false, run }), /reserved/);
+  registerAction('ack-alarm', { tier: 'click', target: 'alarm-or-all', allConfirm: false, runsAll: true, run });
+});
+
+test('L6: broadcast confirm is checked by the dispatcher on the hub', async () => {
+  const s = setup({ mode: 'hub' });
+  let r = await s.go(env('broadcast', '*', { targets: [`${BID}/agent-1`], text: 'x', confirmCount: 2 }));
+  assert.equal(r.status, 400);
+  assert.equal(r.code, 'confirm_required');
+  r = await s.go(env('broadcast', '*', { targets: [`${BID}/agent-1`], text: 'x', confirmCount: 1 }));
+  assert.equal(r.code, 'hub_only', 'reaches the built-in run, which C8 replaces');
+  assert.throws(() => registerAction('x-bc', { tier: 'confirm', target: 'all', hubOnly: true, allConfirm: false, run: async () => ({}) }), /reserved|confirmCheck/);
+});
+
+test('L7: a direct auth without a user is refused 403 no-identity and audited as unknown-direct', async () => {
+  const s = setup();
+  const r = await s.go(env('send-keys', 'agent-1', { keys: ['a'] }), { kind: 'direct' });
+  assert.equal(r.status, 403);
+  assert.equal(r.code, 'no-identity');
+  assert.equal(s.calls.length, 0);
+  const e = entries(s.audit).at(-1);
+  assert.equal(e.user, 'unknown-direct');
+  assert.notEqual(e.user, 'local');
 });
 
 test('hub mode: every action needs a direct user', async () => {
