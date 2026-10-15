@@ -5,14 +5,15 @@
 //        registerHubAction(name, def), validateArgs }
 //
 // relay(body, user): body is the parsed `POST /api/fleet/actions` JSON `{builder|'*'|null, action, target, args}`
-// (or `{fkey, action, args}`); `user` is the hub request's `req.auth.user` (Tailscale-User-Login of a `direct`
-// caller) or the `req.auth` object itself. It is never read from the body. Always resolves (never rejects on a
-// refusal) to `{ok, status, result|error, auditId, builder, ...}`; `status` is the HTTP status the route
-// should answer with.
+// (or `{fkey, action, args}`); `user` is the hub request's `req.auth` object, which must be
+// `{kind:'direct', user:<login>}` and not `readOnly` (SR11 L2: bare strings are refused). The user is never
+// read from the body. Always resolves (never rejects on a refusal) to `{ok, status, result|error, auditId,
+// builder, ...}`; `status` is the HTTP status the route should answer with, always one of HTTP_STATUSES
+// (SR11 L3: a builder never chooses the hub's status; its raw status is in `builderStatus`).
 //
 // Security rules (SECURITY-FIXES S2, S7, S12, S13; README 3.2/3.5):
-// - Every hub action needs a `direct` user: `local`, a missing user or a `hub`/`local` auth object -> 403
-//   `remote-only`.
+// - Every hub action needs a `direct` auth object: `local`, a bare string, a missing user or a `hub`/`local`
+//   auth object -> 403 `remote-only`; a `readOnly` one -> 403 `read-only`.
 // - Routing comes only from the hub's own config: the builder id is the body's `builder` (or the prefix of the
 //   UI's `fkey`), looked up in the fleet store, and the URL posted to is that store entry's configured `url`.
 //   Nothing a builder sent (snapshot fields, hello) ever chooses where an envelope goes.
@@ -22,12 +23,22 @@
 //   (an audit failure means nothing is sent) and `{phase:'done', ok: true|false|'unknown', ...}` after.
 // - Redirects are not followed; the response body is capped at 64 KB.
 // - Keys and signatures are never logged or returned.
+// - `launch` always needs a string `args.repo` that is a repo name and is in the hub-config `repos` allowlist
+//   of the builder it goes to (or that builder has no list and `fleet.placement.any: true`): 400 otherwise,
+//   for explicit and auto-placed launches alike (SR11 M1).
+// - Auto-placement (`builder: null`) is advisory and uses the same repo gate for spawn and launch: only a
+//   builder the hub config lists for the repo can be picked (placement.mjs). A spawn carries no repo, so it
+//   is never auto-placed: 400 `builder-required` (SR11 M2).
+// - Hub-local actions are audited `{phase:'pending'}` before they run (fail closed) and `{phase:'done'}`
+//   after; their sub-envelopes carry `parent` in their audit lines (SR11 L4).
+// - Refusals never echo unchecked body fields (SR11 L5).
 import crypto from 'node:crypto';
 
 import { signEnvelope, ENVELOPE_USER_RE } from '../fleet/auth.mjs';
 import { canonicalJson, sha256Hex } from '../fleet/canonical.mjs';
 import { keyId as keyIdOf } from '../fleet/keys-ed25519.mjs';
 import { parseFkey, BUILDER_ID_RX } from '../fleet/keys.mjs';
+import { isRepoName } from './fleet-store.mjs';
 import * as placementLib from './placement.mjs';
 
 /** Allowlist: the README 3.5 action table (`term` goes through the term-proxy only). */
@@ -42,6 +53,12 @@ export const HUB_ONLY = Object.freeze(['broadcast', 'ack-alarm']);
 export const FANOUT_BUILTIN = Object.freeze(['pause', 'resume']);
 export const FLEET_CONFIRM = 'fleet';
 export const PLACED_ACTIONS = Object.freeze(['spawn', 'launch']);
+/** Names a hub module may register without `override` (SR11 L1): scope 'any' for hub-only, 'fanout' for these. */
+export const HUB_REGISTRABLE = Object.freeze({ any: HUB_ONLY, fanout: Object.freeze(['kill', 'pause', 'resume']) });
+/** Every status `relay()` / `send()` resolves with (SR11 L3). */
+export const HTTP_STATUSES = Object.freeze([200, 202, 400, 403, 404, 409, 429, 500, 502, 503, 504]);
+/** Builder 4xx statuses passed through as themselves; any other non-2xx becomes 502. */
+const PASS_4XX = new Set([400, 403, 404, 409, 429]);
 
 export const LIMITS = Object.freeze({
   text: 8000,
@@ -91,6 +108,9 @@ export function validateArgs(action, args) {
       || !out.keys.every((k) => typeof k === 'string' && KEY_RE.test(k))) {
       throw new RelayError(400, 'bad-args', `keys must be 1..${LIMITS.keys} key names`);
     }
+  } else if (action === 'launch') {
+    // SR11 M1: no repo means no allowlist check, so a launch without a valid repo name never goes anywhere.
+    if (typeof out.repo !== 'string' || !isRepoName(out.repo)) throw new RelayError(400, 'bad-args', 'launch needs a repo name');
   }
   return out;
 }
@@ -104,16 +124,22 @@ function checkTarget(target) {
   return target;
 }
 
-/** The acting user: a `direct` login only (README 3.5: on the hub every action needs `direct`). */
-function actingUser(user) {
-  let login = user;
-  if (user !== null && typeof user === 'object') {
-    if (user.kind !== 'direct') throw new RelayError(403, 'remote-only');
-    login = user.user;
-  }
+/**
+ * The acting user: a `direct` auth object only (README 3.5: on the hub every action needs `direct`). A bare
+ * string is refused (SR11 L2): only the request's auth object says what kind of caller this is.
+ */
+function actingUser(auth) {
+  if (auth === null || typeof auth !== 'object' || Array.isArray(auth) || auth.kind !== 'direct') throw new RelayError(403, 'remote-only');
+  const login = auth.user;
   if (typeof login !== 'string' || login === '' || login === 'local') throw new RelayError(403, 'remote-only');
+  if (auth.readOnly === true) throw new RelayError(403, 'read-only');
   if (!ENVELOPE_USER_RE.test(login)) throw new RelayError(403, 'bad-user');
   return login;
+}
+
+/** A body value safe to reflect in a refusal: a valid builder id or '*', else null (SR11 L5). */
+function safeBuilder(b) {
+  return b === '*' || (typeof b === 'string' && BUILDER_ID_RX.test(b)) ? b : null;
 }
 
 // --- module-level hub-local registry (shared by every relay; instances may add their own) -----------------
@@ -126,23 +152,33 @@ function normDef(name, def) {
   if (typeof run !== 'function') throw new TypeError('registerHubAction: run must be a function');
   const scope = def?.scope ?? 'any';
   if (scope !== 'any' && scope !== 'fanout') throw new TypeError("registerHubAction: scope must be 'any' or 'fanout'");
-  return { name, run, scope };
+  const override = typeof def === 'object' && def !== null && def.override === true;
+  // SR11 L1: a hub module may not shadow a relayed builder action (approve, send-text, kill on one builder...).
+  if (!override && !HUB_REGISTRABLE[scope].includes(name)) {
+    throw new TypeError(`registerHubAction: ${name} (${scope}) collides with a relayed builder action`);
+  }
+  return { name, run, scope, override };
 }
 
-function addTo(map, name, def) {
+function addTo(map, name, def, others = []) {
   const d = normDef(name, def);
   const k = `${d.scope}:${name}`;
-  if (map.has(k)) throw new TypeError(`registerHubAction: ${name} (${d.scope}) is already registered`);
+  if (!d.override && (map.has(k) || others.some((m) => m.has(k)))) {
+    throw new TypeError(`registerHubAction: ${name} (${d.scope}) is already registered`);
+  }
   map.set(k, d);
   return () => { if (map.get(k) === d) map.delete(k); };
 }
 
 /**
- * Register hub-local handling for `name`: `{run(req, ctx), scope?}`. scope 'any' (default) takes every request
- * for the action (broadcast, ack-alarm); scope 'fanout' only `builder:'*'` (fleet kill, C9). `run` gets
+ * Register hub-local handling for `name`: `{run(req, ctx), scope?, override?}`. scope 'any' (default) takes
+ * every request for the action and is allowed for broadcast and ack-alarm; scope 'fanout' only `builder:'*'`
+ * and is allowed for kill/pause/resume (fleet kill, C9). Any other name, or a name already registered (in the
+ * module registry or on the relay instance), throws unless `override: true` (core code only). `run` gets
  * `req = {builder, action, target, args}` and `ctx = {user, id, send, fanout, store, view, now, audit, place}`;
  * its return value (or `{ok, result|error, status?}`) is the response. Sub-sends through `ctx.send` /
- * `ctx.fanout` are signed and audited per envelope; the relay audits the hub-local request itself once.
+ * `ctx.fanout` are signed and audited per envelope, with `parent` = ctx.id; the relay audits the hub-local request
+ * itself as `pending` before `run` (fail closed) and `done` after.
  * Returns an unregister function.
  */
 export function registerHubAction(name, def) {
@@ -198,8 +234,14 @@ export function createRelay({
     const order = fanout ? ['fanout', 'any'] : ['any'];
     for (const scope of order) {
       const k = `${scope}:${action}`;
-      const d = localActions.get(k) ?? globalHubActions.get(k);
-      if (d) return d;
+      const l = localActions.get(k);
+      const g = globalHubActions.get(k);
+      if (l && g && l !== g) {
+        // Registered twice (module registry after the instance): only an explicit override may win.
+        if (l.override !== g.override) return l.override ? l : g;
+        throw new RelayError(500, 'hub-action-conflict');
+      }
+      if (l ?? g) return l ?? g;
     }
     return null;
   }
@@ -216,19 +258,35 @@ export function createRelay({
    * Relay one envelope to one builder: steps 2-6 of 2.10. `view` is an optional fleet-store view to reuse
    * within one request. Resolves to `{ok, status, builder, auditId, result|error, ...}`.
    */
-  async function send(builder, action, target, args, user, { view } = {}) {
+  async function send(builder, action, target, args, user, opts = {}) {
     let login;
+    try { login = actingUser(user); } catch (err) { return refusal(err, builder); }
+    return sendAs(login, builder, action, target, args, opts);
+  }
+
+  /** Is `repo` allowed by the hub config for builder `entry` (SR11 M1)? */
+  function repoAllowed(entry, repo) {
+    if (!isRepoName(repo)) return false;
+    if (Array.isArray(entry?.repos)) return entry.repos.includes(repo);
+    return placementCfg?.any === true;
+  }
+
+  async function sendAs(login, builder, action, target, args, { view, parent, auditExtra } = {}) {
+    let entry;
     try {
-      login = actingUser(user);
       if (!ACTION_SET.has(action) || HUB_ONLY.includes(action)) throw new RelayError(400, 'not-relayable');
       args = validateArgs(action, args);
       checkTarget(target);
       if (typeof builder !== 'string' || !BUILDER_ID_RX.test(builder)) throw new RelayError(400, 'bad-builder');
+      entry = store.builder(builder);
+      if (!entry) return { ok: false, status: 404, error: 'unknown-builder', builder };
+      // Every launch path (explicit, auto-placed, hub-local sub-send) passes this gate (SR11 M1).
+      if (action === 'launch' && !repoAllowed(entry, args.repo)) {
+        throw new RelayError(400, 'repo-not-allowed', 'the hub config does not list this repo for this builder');
+      }
     } catch (err) {
       return refusal(err, builder);
     }
-    const entry = store.builder(builder);
-    if (!entry) return { ok: false, status: 404, error: 'unknown-builder', builder };
     const v = view ?? store.view(nowMs());
     const row = rowOf(v, builder);
     if (!row || !row.controls) {
@@ -258,8 +316,9 @@ export function createRelay({
     }
     const argsHash = sha256Hex(canonicalJson(args));
     const base0 = { id: envelope.id, user: login, via: 'hub', builder, action, target, argsHash };
+    const extra = { ...(typeof parent === 'string' ? { parent } : {}), ...(isPlain(auditExtra) ? auditExtra : {}) };
     try {
-      appendAudit({ ...base0, ts: envelope.ts, result: { phase: 'sent' } });
+      appendAudit({ ...base0, ts: envelope.ts, result: { phase: 'sent', ...extra } });
     } catch {
       // Fail closed: an action the hub cannot record is not sent.
       return { ok: false, status: 500, error: 'audit-failed', builder };
@@ -293,7 +352,7 @@ export function createRelay({
       outcome = { ok: e.sent === false ? false : 'unknown', error: e.error };
     }
     const builderAuditId = isPlain(parsed) ? clampStr(parsed.auditId, 128) : null;
-    const done = { phase: 'done', ok: outcome.ok, status };
+    const done = { phase: 'done', ok: outcome.ok, status, ...(typeof parent === 'string' ? { parent } : {}) };
     if (outcome.error) done.error = outcome.error;
     if (builderAuditId) done.builderAuditId = builderAuditId;
     let auditError = null;
@@ -304,16 +363,17 @@ export function createRelay({
     }
 
     const out = { ok: outcome.ok === true, builder, auditId: envelope.id };
+    // SR11 L3: the hub's status comes from a fixed set; the builder's raw one is only reported.
+    if (status !== null) out.builderStatus = status;
     if (outcome.ok === 'unknown') {
       out.outcome = 'unknown';
       out.error = outcome.error;
       out.status = 504;
-      if (status !== null) out.builderStatus = status;
     } else if (outcome.ok) {
-      out.status = status;
+      out.status = status === 202 ? 202 : 200;
       out.result = isPlain(parsed) && 'result' in parsed ? parsed.result : null;
     } else {
-      out.status = status === null ? 502 : (status >= 300 && status < 400 ? 502 : status);
+      out.status = PASS_4XX.has(status) ? status : 502;
       out.error = outcome.error;
       if (isPlain(parsed) && typeof parsed.code === 'string') out.code = clampStr(parsed.code, 64);
     }
@@ -326,7 +386,7 @@ export function createRelay({
    * One envelope per `up` builder (config order) with the typed `fleet` confirm rewritten to each builder's id
    * (builders never accept `fleet`, S13). Non-`up` builders are listed in `skipped` by name.
    */
-  async function fanout(action, target, args, user, { view } = {}) {
+  async function fanoutAs(login, action, target, args, { view, parent } = {}) {
     const a = validateArgs(action, args);
     if (target !== '*') throw new RelayError(400, 'bad-target', "a fleet fan-out targets '*'");
     if (a.confirm !== FLEET_CONFIRM) throw new RelayError(400, 'confirm-mismatch', `type ${FLEET_CONFIRM} to confirm`);
@@ -335,7 +395,7 @@ export function createRelay({
     const jobs = [];
     for (const row of v.builders) {
       if (!row.controls) { skipped.push({ builder: row.id, reason: row.state === 'up' ? 'version-skew' : row.state }); continue; }
-      jobs.push(send(row.id, action, '*', { ...a, confirm: row.id }, user, { view: v }));
+      jobs.push(sendAs(login, row.id, action, '*', { ...a, confirm: row.id }, { view: v, parent }));
     }
     const sent = await Promise.all(jobs);
     const failed = sent.filter((r) => !r.ok);
@@ -365,10 +425,23 @@ export function createRelay({
       view: v,
       now: nowMs,
       audit,
-      send: (b, act, tgt, args) => send(b, act, tgt, args, login),
-      fanout: (act, tgt, args) => fanout(act, tgt, args, login),
+      // Sub-envelopes are audited with `parent: id` (SR11 L4).
+      send: (b, act, tgt, args) => sendAs(login, b, act, tgt, args, { parent: id }),
+      fanout: async (act, tgt, args) => {
+        try { return await fanoutAs(login, act, tgt, args, { parent: id }); } catch (err) { return refusal(err, '*'); }
+      },
       place,
     };
+    const base = {
+      id, user: login, via: 'hub', builder: req.builder ?? null, action: req.action, target: req.target,
+      argsHash: sha256Hex(canonicalJson(req.args)),
+    };
+    try {
+      // SR11 L4: recorded before it runs; an action the hub cannot record does not run.
+      appendAudit({ ...base, result: { phase: 'pending', local: true } });
+    } catch {
+      return { ok: false, status: 500, error: 'audit-failed', builder: req.builder ?? null };
+    }
     let out;
     try {
       const ret = await def.run({ ...req }, ctx);
@@ -380,11 +453,11 @@ export function createRelay({
         ? { ok: false, status: err.status, error: err.code, ...(err.detail ? { detail: err.detail } : {}) }
         : { ok: false, status: 500, error: 'hub-action-failed' };
     }
+    if (!HTTP_STATUSES.includes(out.status)) out.status = out.ok === true ? 200 : 500;
     try {
       appendAudit({
-        id, user: login, via: 'hub', builder: req.builder ?? null, action: req.action, target: req.target,
-        argsHash: sha256Hex(canonicalJson(req.args)),
-        result: { phase: 'local', ok: out.ok === true, status: out.status, ...(out.error ? { error: clampStr(String(out.error), LIMITS.error) } : {}) },
+        ...base,
+        result: { phase: 'done', local: true, ok: out.ok === true, status: out.status, ...(out.error ? { error: clampStr(String(out.error), LIMITS.error) } : {}) },
       });
     } catch {
       out.auditError = 'audit-failed';
@@ -423,26 +496,30 @@ export function createRelay({
       if (HUB_ONLY.includes(action)) throw new RelayError(503, 'hub-action-unavailable', `${action} is handled on the hub and is not set up`);
       if (isFan) {
         if (!FANOUT_BUILTIN.includes(action)) throw new RelayError(400, 'fanout-not-supported', `${action} cannot fan out`);
-        return await fanout(action, target, args, login);
+        return await fanoutAs(login, action, target, args);
       }
 
       const v = store.view(nowMs());
       if (builder === undefined || builder === null) {
         if (!PLACED_ACTIONS.includes(action)) throw new RelayError(400, 'bad-builder', 'builder is required');
-        const opts = { repo: typeof args.repo === 'string' ? args.repo : undefined, need: action === 'launch' ? 'launch' : null, cfg: placementCfg };
+        // SR11 M2: auto-placement needs a repo the hub config can check. A spawn has none: choose a builder.
+        if (action === 'spawn') throw new RelayError(400, 'builder-required', 'a spawn has no repo to place by; choose a builder');
+        const opts = { repo: args.repo, need: 'launch', cfg: placementCfg };
         const ranking = placement.rank(v, opts);
         const top = ranking[0];
         if (!top || !top.eligible) return { ok: false, status: 503, error: 'no-eligible-builder', builder: null, placement: ranking };
-        const out = await send(top.builder, action, target, args, login, { view: v });
+        const out = await sendAs(login, top.builder, action, target, args, { view: v, auditExtra: { placedBy: 'hub', score: top.score } });
         return { ...out, placedBy: 'hub', score: top.score };
       }
       if (!store.builder(builder)) return { ok: false, status: 404, error: 'unknown-builder', builder };
       let warning;
       if (PLACED_ACTIONS.includes(action)) {
-        const opts = { repo: typeof args.repo === 'string' ? args.repo : undefined, need: action === 'launch' ? 'launch' : null, cfg: placementCfg };
+        const opts = action === 'launch'
+          ? { repo: args.repo, need: 'launch', cfg: placementCfg }
+          : { need: null, cfg: placementCfg, repoGate: false };
         warning = placement.check(v, builder, opts)?.warning;
       }
-      const out = await send(builder, action, target, args, login, { view: v });
+      const out = await sendAs(login, builder, action, target, args, { view: v });
       return warning ? { ...out, warning } : out;
     } catch (err) {
       return refusal(err, body?.builder);
@@ -450,18 +527,22 @@ export function createRelay({
   }
 
   function refusal(err, builder) {
+    const b = safeBuilder(builder);
     if (err instanceof RelayError) {
-      return { ok: false, status: err.status, error: err.code, ...(err.detail ? { detail: err.detail } : {}), builder: typeof builder === 'string' ? builder : null };
+      const status = HTTP_STATUSES.includes(err.status) ? err.status : 500;
+      return { ok: false, status, error: err.code, ...(err.detail ? { detail: err.detail } : {}), builder: b };
     }
-    return { ok: false, status: 500, error: 'relay-failed', builder: typeof builder === 'string' ? builder : null };
+    return { ok: false, status: 500, error: 'relay-failed', builder: b };
   }
 
   return {
     relay,
     send,
-    fanout: async (...a) => { try { return await fanout(...a); } catch (err) { return refusal(err, '*'); } },
+    fanout: async (action, target, args, user, opts) => {
+      try { return await fanoutAs(actingUser(user), action, target, args, opts); } catch (err) { return refusal(err, '*'); }
+    },
     place,
     validateArgs,
-    registerHubAction: (name, def) => addTo(localActions, name, def),
+    registerHubAction: (name, def) => addTo(localActions, name, def, [globalHubActions]),
   };
 }
