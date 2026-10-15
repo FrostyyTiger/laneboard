@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeDocument, texts } from './helpers/fakedom.mjs';
 import {
-  renderReviewQueue, mountReviewQueue, rowActions, pullFor, prChip, checksParts, checksTitle,
+  renderReviewQueue, mountReviewQueue, rowActions, pullFor, reviewPrChip, checksParts, checksTitle,
   diffStatText, ciRepoOf, waitAt, builderCodeOf, queueFor, OVERDUE_MS, PKG_MAX,
 } from '../public/js/views/review-queue.js';
 import { buildReviewQueue, formatWait } from '../public/js/core/review-queue.js';
@@ -141,7 +141,7 @@ test('tick: an open wait keeps counting from since; a closed one (review sent) s
   view.tick(NOW + 2 * MIN);
   const waits = byClass(host, 'rq-wait-t').map((n) => n.textContent);
   assert.deepEqual(waits, ['5h02m', '32m', '6m']);
-  assert.equal(view.rows[1].waitText, '32m');
+  assert.equal(view.rows[1].waitText(), '32m');
   assert.equal(waitAt(FIXTURE[2], NOW, NOW + HOUR), 6 * MIN);
   assert.equal(waitAt(FIXTURE[1], NOW, NOW + HOUR), 90 * MIN);
 }));
@@ -169,7 +169,7 @@ test('mountReviewQueue builds from the store (PRs from box.prs, codes from build
   assert.equal(queueFor(store, NOW).length, 2);
   const host = document.createElement('div');
   const m = mountReviewQueue(host, { store, now: NOW, navigate: () => {} });
-  assert.equal(m.count, 2);
+  assert.equal(m.count(), 2);
   assert.equal(byClass(host, 'rq-row').length, 2);
   const auth = byClass(host, 'rq-row').find((r) => r.dataset.fkey === 'builder-a/auth');
   assert.ok(texts(auth).includes('B1'));
@@ -177,7 +177,7 @@ test('mountReviewQueue builds from the store (PRs from box.prs, codes from build
   assert.deepEqual(byClass(auth, 'ck').map((n) => n.textContent), ['✓2']);
   store.lanes.push(lane('cache', 'builder-a', 3 * HOUR));
   m.update();
-  assert.equal(m.count, 3);
+  assert.equal(m.count(), 3);
   assert.equal(byClass(host, 'rq-row')[0].dataset.fkey, 'builder-a/cache');
   m.tick(NOW + MIN);
   m.unmount();
@@ -185,9 +185,9 @@ test('mountReviewQueue builds from the store (PRs from box.prs, codes from build
 }));
 
 test('pure helpers', () => {
-  assert.equal(prChip(null), null);
-  assert.equal(prChip({ number: 3, state: 'OPEN', isDraft: true }).icon, 'pr-draft');
-  assert.equal(prChip({ number: 3, state: 'MERGED' }).state, 'merged');
+  assert.equal(reviewPrChip(null), null);
+  assert.equal(reviewPrChip({ number: 3, state: 'OPEN', isDraft: true }).icon, 'pr-draft');
+  assert.equal(reviewPrChip({ number: 3, state: 'MERGED' }).state, 'merged');
   assert.deepEqual(checksParts({ passed: 0, failed: 2 }), [{ s: 'fail', g: '✗2' }]);
   assert.equal(checksTitle({ passed: 1, pending: 1 }), 'checks: 1 passed, 1 pending');
   assert.equal(checksTitle(null), 'no checks');

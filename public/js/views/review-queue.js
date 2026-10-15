@@ -43,7 +43,7 @@ const str = (v) => (typeof v === 'string' ? v : '');
 // ---------------------------------------------------------------- pure models
 
 /** PR record -> {state, icon, text, title} or null. */
-export function prChip(pr) {
+export function reviewPrChip(pr) {
   if (!pr || typeof pr !== 'object') return null;
   const st = str(pr.state).toUpperCase();
   const state = st === 'MERGED' ? 'merged' : st === 'CLOSED' ? 'closed' : pr.isDraft ? 'draft' : 'open';
@@ -140,7 +140,7 @@ export function rowActions(item, ctx = {}) {
 
 // ---------------------------------------------------------------- DOM
 
-function field(cls, text, title) {
+function rqField(cls, text, title) {
   const n = el('span', `rq-f ${cls}`, text);
   if (title) n.title = title;
   return n;
@@ -157,7 +157,7 @@ function waitNode(ms, overdueMs) {
 
 function prNode(item) {
   const n = el('span', 'rq-f rq-pr');
-  const chip = prChip(item.pr);
+  const chip = reviewPrChip(item.pr);
   if (chip) {
     n.dataset.state = chip.state;
     n.append(icon(chip.icon, { size: 's' }), el('span', 'rq-pr-n', chip.text));
@@ -179,8 +179,8 @@ function prNode(item) {
 function packagesNode(list) {
   const n = el('span', 'rq-f rq-pkgs');
   const pk = Array.isArray(list) ? list : [];
-  for (const p of pk.slice(0, PKG_MAX)) n.append(field('rq-pkg', p, `package ${p}`));
-  if (pk.length > PKG_MAX) n.append(field('rq-pkg rq-more', `+${pk.length - PKG_MAX}`, pk.slice(PKG_MAX).join(', ')));
+  for (const p of pk.slice(0, PKG_MAX)) n.append(rqField('rq-pkg', p, `package ${p}`));
+  if (pk.length > PKG_MAX) n.append(rqField('rq-pkg rq-more', `+${pk.length - PKG_MAX}`, pk.slice(PKG_MAX).join(', ')));
   if (!pk.length) n.textContent = DASH;
   n.title = pk.length ? `packages: ${pk.join(', ')}` : 'no packages';
   return n;
@@ -220,7 +220,7 @@ function pullNode(item) {
   return box;
 }
 
-/** One `.rq-row` <li> for an item. Returns {item, row, waitText, setWait(ms)}. */
+/** One `.rq-row` <li> for an item. Returns {item, row, waitText(), setWait(ms)}. */
 export function reviewRow(item, ctx = {}) {
   const overdueMs = isNum(ctx.overdueMs) ? ctx.overdueMs : OVERDUE_MS;
   const row = el('li', 'rq-row');
@@ -233,15 +233,15 @@ export function reviewRow(item, ctx = {}) {
   const codeEl = el('span', 'rq-f rq-code');
   codeEl.append(plate(code, { title: item.builder }));
   const where = [item.repo, item.branch].filter((v) => typeof v === 'string' && v).join(' / ');
-  const lane = field('rq-lane', item.lane, where ? `${item.fkey} · ${where}` : item.fkey);
-  main.append(wait, codeEl, lane, field('rq-branch', item.branch ?? DASH, item.branch ?? 'no branch'), reasonsNode(item.reasons));
+  const lane = rqField('rq-lane', item.lane, where ? `${item.fkey} · ${where}` : item.fkey);
+  main.append(wait, codeEl, lane, rqField('rq-branch', item.branch ?? DASH, item.branch ?? 'no branch'), reasonsNode(item.reasons));
 
   const facts = el('div', 'rq-line rq-facts');
   facts.append(
     prNode(item),
-    field('rq-diff', diffStatText(item.diffStat), 'diff against the base'),
+    rqField('rq-diff', diffStatText(item.diffStat), 'diff against the base'),
     packagesNode(item.packages),
-    field('rq-cost', isNum(item.costUsd) ? money(item.costUsd) : DASH, 'API-equivalent cost of the lane'),
+    rqField('rq-cost', isNum(item.costUsd) ? money(item.costUsd) : DASH, 'API-equivalent cost of the lane'),
   );
 
   const acts = el('div', 'rq-acts');
@@ -271,12 +271,12 @@ export function reviewRow(item, ctx = {}) {
   return {
     item,
     row,
-    setWait(ms) {
+    setWait: (ms) => {
       const next = waitNode(ms, overdueMs);
       wait.replaceWith(next);
       wait = next;
     },
-    get waitText() { return wait.textContent; },
+    waitText: () => wait.textContent,
   };
 }
 
@@ -300,7 +300,7 @@ export function renderReviewQueue(container, items, ctx = {}) {
   return {
     list: out,
     rows,
-    tick(now = Date.now()) {
+    tick: (now = Date.now()) => {
       for (const r of rows) r.setWait(waitAt(r.item, builtAt, now));
     },
   };
@@ -316,7 +316,7 @@ export function queueFor(store, now = Date.now()) {
 /**
  * Mount the live group: render from ctx.store now, and again on update().
  * tick(now) refreshes the wait timers without a rebuild (the Inbox calls it
- * from its 1 Hz clock). Returns {update(nextCtx?), tick(now), unmount(), count}.
+ * from its 1 Hz clock). Returns {update(nextCtx?), tick(now), unmount(), count()}.
  */
 export function mountReviewQueue(container, ctx = {}) {
   let cur = { ...ctx };
@@ -330,15 +330,15 @@ export function mountReviewQueue(container, ctx = {}) {
   };
   paint();
   return {
-    update(next) {
+    update: (next) => {
       if (next && typeof next === 'object') cur = { ...cur, ...next };
       paint();
     },
-    tick(now = Date.now()) { view?.tick(now); },
-    unmount() {
+    tick: (now = Date.now()) => { view?.tick(now); },
+    unmount: () => {
       if (container) container.textContent = '';
       view = null;
     },
-    get count() { return n; },
+    count: () => n,
   };
 }
