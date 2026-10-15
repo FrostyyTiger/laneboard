@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { config } from './config.mjs';
+import { VENDOR } from './vendor.mjs';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -114,14 +115,8 @@ export async function handleRequest(req, res) {
     // Vendored browser deps served straight out of node_modules (hard rule 7: no bundler).
     if (pathname.startsWith('/vendor/')) {
       const rel = pathname.slice('/vendor/'.length);
-      const map = {
-        'xterm.js': '@xterm/xterm/lib/xterm.js',
-        'xterm.css': '@xterm/xterm/css/xterm.css',
-        'addon-fit.js': '@xterm/addon-fit/lib/addon-fit.js',
-        'addon-web-links.js': '@xterm/addon-web-links/lib/addon-web-links.js',
-      };
-      if (map[rel]) {
-        const ok = await serveStatic(res, path.join(config.repoRoot, 'node_modules'), map[rel], { immutable: true });
+      if (Object.hasOwn(VENDOR, rel)) {
+        const ok = await serveStatic(res, path.join(config.repoRoot, 'node_modules'), VENDOR[rel], { immutable: true });
         if (ok) return;
       }
       return json(res, { error: 'not found' }, 404);

@@ -19,6 +19,19 @@ exposes it (a tailnet, a reverse proxy) has to do the authentication.
 `g b` · `g m` · `g c` · `g x` · `g p` switch views. `j` `k` `p` `Enter` `Esc` `1`–`9`
 work on the Board.
 
+## Try it without installing anything
+
+```bash
+npm ci --ignore-scripts   # no native build needed for the demo
+npm run demo              # http://127.0.0.1:7780
+```
+
+The demo is the real page fed by a simulated lab: eight lanes on one agent
+box, one waiting on a permission prompt, one asking a question, one blocked
+on CI, one done with a green PR, and the Map around them. Nothing runs; every
+action says so. `node bin/demo.mjs --build` writes the same thing to `site/`
+as a static site.
+
 ## Run it
 
 ```bash

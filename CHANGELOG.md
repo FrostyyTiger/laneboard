@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+**Demo.** `npm run demo` serves the real frontend fed by a simulated lab
+(demo/world.js, demo/engine.js): sessions that work, wait and finish, PRs and
+CI, markers, rate limits and cost, the Map, a recorded terminal. No tmux, no
+Claude Code, nothing runs. `--build` writes a static site for hosting. Asset
+paths in the page are relative now, so it also works under a subpath.
+
 **The Map.** A fifth view (`g p`): everything laneboard knows about, drawn as
 one constellation. It has sites, rooms, services and lanes on rings, arcs for
 what depends on what, CPU and memory gauges on every room, and a list of what

@@ -204,7 +204,7 @@ function mount({ responses: primed = [], wide = false } = {}) {
   // Strip the terminal.js import so the file runs as a classic script and no
   // socket is opened for a terminal.
   const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8').replace(
-    /^import .*from '\/terminal\.js';$/m,
+    /^import .*from '\.?\/terminal\.js';$/m,
     'const openTerminal=()=>{},closeTerminal=()=>{},fitAll=()=>{},writeTo=()=>false,isLive=()=>false;'
   );
   vm.runInContext(src, sandbox, { filename: 'app.js' });
