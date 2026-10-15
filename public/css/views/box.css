@@ -1,4 +1,31 @@
-/* ===================== box =============================================== */
+/* ===================== box (fleet D11) ===================================
+   The Box view: builders table, health table, then the local box blocks.
+   Grey is normal; p2/p3 appear only with their ▲ mark or a lamp. The tables
+   are the kit's .dt; this sheet only sets the cell layout. */
+
+#box-body { display: grid; gap: var(--sp-4); align-content: start; }
+.box-dt td { max-width: none; }
+.box-b { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.box-state { font-family: var(--font-label); font-weight: 600; letter-spacing: var(--ls-label); color: var(--text-2); }
+.dt tr[data-state="down"] .box-state,
+.dt tr[data-state="misconfigured"] .box-state { color: var(--p1); }
+.dt tr[data-state="incompatible"] .box-state { color: var(--p2); }
+.dt tr[data-state="stale"] .box-state { color: var(--p3); }
+.box-ver { color: var(--text-1); }
+.box-warn { margin-left: var(--sp-1); color: var(--p2); }
+.box-dim { color: var(--text-3); }
+.box-link { display: inline-flex; align-items: center; color: var(--text-2); text-decoration: none; }
+.box-link:hover { color: var(--text-1); }
+.box-link:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
+.box-metric, .box-meter { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.box-metric + .box-metric, .box-meter + .box-metric { margin-left: var(--sp-2); }
+.box-metric .spark { margin-left: var(--sp-1); }
+.box-v { color: var(--text-1); }
+.box-k { color: var(--text-3); font-size: var(--fs-10); margin-right: var(--sp-1); }
+.box-disks { display: inline-flex; gap: var(--sp-3); }
+.box-disk { display: inline-flex; align-items: center; }
+.box-alarms { display: inline-flex; gap: var(--sp-1); align-items: center; }
+.dt tr.is-stale .box-v, .dt tr.is-stale .box-ver { color: var(--text-3); }
 
 .vitals-wide { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); margin-bottom: 6px; }
 .dtable .dirty { color: var(--warn); }
@@ -16,7 +43,7 @@
 .lane-card { display: flex; flex-direction: column; gap: 7px; }
 .lane-head { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .lane-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.lane-title { font-weight: 600; color: oklch(86% 0.08 var(--lane-hue, 0)); white-space: nowrap; }
+.lane-title { font-weight: 600; color: var(--text-1); white-space: nowrap; }
 .lane-top .lane-stage { font-family: var(--font-mono); font-size: 12px; color: var(--text-1); }
 .lane-current {
   font-size: 12px; color: var(--text-2); min-width: 0;
@@ -26,15 +53,15 @@
 
 .chip-pr, .chip-slot {
   font-family: var(--font-mono); font-size: 11px; padding: 0 5px;
-  border: 1px solid var(--border); border-radius: 3px; white-space: nowrap;
+  border: 1px solid var(--border); border-radius: var(--radius); white-space: nowrap;
   color: var(--text-2); text-decoration: none;
 }
 .chip-pr.pr-none { color: var(--text-3); border-style: dashed; }
 .chip-pr.pr-draft { color: var(--text-2); }
 .chip-pr.pr-merged { color: var(--ok); }
-.chip-pr.ck-green { color: var(--ok); border-color: oklch(78% 0.16 158 / 0.3); }
-.chip-pr.ck-pending { color: var(--info); border-color: oklch(75% 0.13 242 / 0.3); }
-.chip-pr.ck-red { color: var(--crit); border-color: oklch(70% 0.2 12 / 0.45); background: oklch(70% 0.2 12 / 0.1); }
+.chip-pr.ck-green { color: var(--ok); border-color: var(--line); }
+.chip-pr.ck-pending { color: var(--info); border-color: var(--p3-line); }
+.chip-pr.ck-red { color: var(--crit); border-color: var(--p1-line); background: var(--p1-weak); }
 .chip-slot.slot-up { color: var(--ok); }
 .chip-slot.slot-down { color: var(--text-3); border-style: dashed; }
 
@@ -52,17 +79,17 @@
 .card-meta .ctxn.hot { color: var(--crit); }
 
 .lane-ready { display: flex; gap: 7px; align-items: baseline; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-2); }
-.lane-ready.ready .mk-kind { color: var(--ok); background: oklch(78% 0.16 158 / 0.14); }
+.lane-ready.ready .mk-kind { color: var(--ok); background: var(--bg-hover); }
 .lane-ready.not-ready .mk-kind { color: var(--text-3); }
 
 /* danger: the dev-stack guard. Always first in attention, and loud. */
-.card.danger { border-color: var(--crit); box-shadow: 0 0 0 1px oklch(70% 0.2 12 / 0.45); }
+.card.danger { border-color: var(--crit); outline: var(--bw) solid var(--p1-line); }
 .mk-danger .mk-kind { color: var(--bg-canvas); background: var(--crit); }
 .mk-danger .mk-text { color: var(--crit); }
-.attention-item.s-danger, .chip.s-danger { border-color: var(--crit); background: oklch(70% 0.2 12 / 0.16); color: var(--text-1); }
+.attention-item.s-danger, .chip.s-danger { border-color: var(--crit); background: var(--p1-weak); color: var(--text-1); }
 .mrow.need-danger .mrow-kind { color: var(--bg-canvas); background: var(--crit); }
-.guard { font-family: var(--font-mono); font-size: 10px; padding: 0 5px; border-radius: 3px; }
-.guard-ok { color: var(--ok); background: oklch(78% 0.16 158 / 0.12); }
+.guard { font-family: var(--font-mono); font-size: 10px; padding: 0 5px; border-radius: var(--radius); }
+.guard-ok { color: var(--ok); background: var(--bg-hover); }
 .guard-danger { color: var(--bg-canvas); background: var(--crit); }
 
 /* key/value rows for the Box blocks */
@@ -89,7 +116,7 @@
 .launch-form label { display: grid; gap: 3px; font-size: 12px; color: var(--text-2); }
 .launch-form input, .launch-form select {
   font-family: var(--font-mono); font-size: 13px; color: var(--text-1);
-  background: var(--bg-sunken); border: 1px solid var(--border); border-radius: var(--radius-s);
+  background: var(--bg-sunken); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 6px 8px;
 }
 .launch-form input:focus, .launch-form select:focus { outline: none; border-color: var(--accent); }

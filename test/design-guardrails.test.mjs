@@ -20,7 +20,6 @@ const LEGACY = new Map([
   ['misc.css', 'view owner'],
   ['lanes.css', 'view owner'],
   ['views/data.css', 'view owner'],
-  ['views/box.css', 'D11'],
 ]);
 
 const sheets = () => fs.readdirSync(CSS_DIR, { recursive: true })
