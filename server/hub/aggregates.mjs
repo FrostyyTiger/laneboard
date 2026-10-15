@@ -9,7 +9,18 @@
 // so they are NEVER summed. Per `account` group the current window is the one
 // with the latest `resetsAt`, and within it the highest `usedPct` wins.
 import { fkey } from '../fleet/keys.mjs';
-import { freshest } from '../collector/ratelimits.mjs';
+
+// The same rule as server/collector/ratelimits.mjs freshest() (whichever
+// statusline is freshest), copied here because that module imports db.mjs and
+// is a collector: the hub must not load server/collector/* (fleet H11).
+function freshest(sessions) {
+  let best = null;
+  for (const s of sessions) {
+    if (!s.rateLimits?.fiveHour) continue;
+    if (!best || (s.claude?.startedAt ?? 0) > (best.claude?.startedAt ?? 0)) best = s;
+  }
+  return best ? { rateLimits: best.rateLimits, session: best.name } : null;
+}
 
 export const ATTENTION_CAP = 100;
 
