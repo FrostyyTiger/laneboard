@@ -86,6 +86,8 @@ export async function sample({ claudeRssKb = 0, sessionCount = 0 } = {}) {
     cpuPct: cpu,
     mem,
     load,
+    // vCPUs for load-per-core (hub placement, fleet plan §3 2.11).
+    cpus: os.availableParallelism(),
     disk: dsk,
     gpu: g,
     claudeRssMb: Math.round(claudeRssKb / 1024),
