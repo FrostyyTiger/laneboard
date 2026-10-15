@@ -4,7 +4,7 @@
 //   agent on this builder cannot raise its own cap through the local API; '*' needs confirm = fleet.id);
 // - publishes snapshot key `budget` ([{scope, key, usd, limit, pct, level}], from which §7 O8 derives the
 //   budget-warn / budget-exceeded alarms);
-// - runs budget.tick every 30 s (caps, ceilings, quota guard);
+// - runs budget.tick every 30 s (caps, ceilings, quota guard; automatic pauses/lifts go to ctx.audit);
 // - adds `budget` to hello.capabilities.
 // No HTTP route of its own: set-budget is reached through POST /api/v1/actions.
 import { registerAction, has } from '../fleet/dispatch.mjs';
@@ -52,6 +52,8 @@ export default {
       state: ctx.state,
       laneRecords: () => store.readAll(),
       log: ctx.log,
+      // the fleet audit, once the v1 wiring provides one (SR17 L6); automatic pauses/lifts are appended to it
+      audit: () => ctx.audit ?? null,
     });
     registerBudgetAction();
     ctx.state.addSnapshotKey('budget', budget.snapshotValue);

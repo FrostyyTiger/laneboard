@@ -196,7 +196,27 @@ async function tmuxHas(name) {
  * Step 1. Everything that can be refused without touching anything.
  * Throws LaneError; returns the resolved request.
  */
-export async function validate(req) {
+/** Caller kinds that count as remote (the dispatcher's auth.kind): only these may raise a lane's cap. */
+export const REMOTE_CALLERS = Object.freeze(['direct', 'hub']);
+
+/**
+ * SR17 M2: who may set what cap. Returns budgetSource for the record: 'remote' when a remote caller set it,
+ * 'local' otherwise (null without a budgetUsd). A non-remote caller (local v1, the legacy route, or any caller
+ * that does not say: the default is 'local', fail closed) may only LOWER the cap below config.budget.perLaneUsd;
+ * raising it is set-budget's job, which is remote-only. The budget module enforces the same rule on read
+ * (min(config, record) unless budgetSource === 'remote').
+ */
+export function budgetSourceFor(budgetUsd, callerKind = 'local', cfg = config) {
+  if (budgetUsd === null) return null;
+  const remote = REMOTE_CALLERS.includes(callerKind);
+  const dflt = cfg?.budget?.perLaneUsd;
+  if (!remote && typeof dflt === 'number' && Number.isFinite(dflt) && dflt > 0 && budgetUsd > dflt) {
+    throw new LaneError(`budgetUsd ${budgetUsd} is above the operator's default of ${dflt} (budget.perLaneUsd): only a remote caller may raise a cap (use set-budget)`, 403);
+  }
+  return remote ? 'remote' : 'local';
+}
+
+export async function validate(req, { callerKind = 'local' } = {}) {
   const lane = String(req.lane ?? '');
   if (!store.isLaneId(lane)) {
     throw new LaneError(`invalid lane id "${lane}": lowercase letters, digits, . _ -, at most 40, not starting with . or -`);
@@ -223,6 +243,7 @@ export async function validate(req) {
   if (budgetUsd !== null && !(typeof budgetUsd === 'number' && Number.isFinite(budgetUsd) && budgetUsd > 0 && budgetUsd <= MAX_BUDGET_USD)) {
     throw new LaneError(`invalid budgetUsd: a number of dollars above 0 and at most ${MAX_BUDGET_USD}`);
   }
+  const budgetSource = budgetSourceFor(budgetUsd, callerKind);
 
   const help = await run(config.claudeBin, ['--help'], { timeout: 15000 });
   const modes = permissionModesFromHelp(help.stdout);
@@ -270,7 +291,7 @@ export async function validate(req) {
   }
 
   return {
-    lane, repo, branch, plan, model, permissionMode, priority, budgetUsd, slot, mainRepo, root,
+    lane, repo, branch, plan, model, permissionMode, priority, budgetUsd, budgetSource, slot, mainRepo, root,
     localBranch: Boolean(req.localBranch),
     promptOverride: typeof req.promptOverride === 'string' && req.promptOverride ? req.promptOverride.slice(0, 8000) : null,
   };
@@ -289,7 +310,11 @@ function serialised(fn) {
   return run;
 }
 
-export async function launch(req, who = 'local') {
+/**
+ * `opts.callerKind` is the dispatcher's auth.kind ('local' | 'direct' | 'hub'); anything else, or nothing (the
+ * legacy route), counts as local (SR17 M2).
+ */
+export async function launch(req, who = 'local', { callerKind = 'local' } = {}) {
   // The record is written as soon as validation passes, not at the end: it is
   // what holds the slot, and it is what lets `retire --force` find and clean a
   // launch that failed or was cut off before its session existed.
@@ -301,7 +326,7 @@ export async function launch(req, who = 'local') {
     throw new LaneError('invalid dryRun: true or false');
   }
   if (req?.dryRun === true) {
-    const p = await validate(req);
+    const p = await validate(req, { callerKind });
     return {
       ok: true, dryRun: true, lane: p.lane, slotAdvisory: true,
       plan: {
@@ -311,18 +336,18 @@ export async function launch(req, who = 'local') {
     };
   }
   const v = await serialised(async () => {
-    const valid = await validate(req);
+    const valid = await validate(req, { callerKind });
     await store.write({
       id: valid.lane, repo: valid.repo, root: valid.root, branch: valid.branch, plan: valid.plan, slot: valid.slot,
       model: valid.model, permissionMode: valid.permissionMode, session: valid.lane,
-      priority: valid.priority, budgetUsd: valid.budgetUsd,
+      priority: valid.priority, budgetUsd: valid.budgetUsd, budgetSource: valid.budgetSource,
       createdAt: Date.now(), retiredAt: null,
     });
     return valid;
   });
   const job = `launch-${v.lane}-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
   const step = stepper(job, v.lane, 'launch');
-  step('validate', true, { repo: v.repo, branch: v.branch, plan: v.plan, slot: v.slot, model: v.model, permissionMode: v.permissionMode, priority: v.priority, budgetUsd: v.budgetUsd, by: who });
+  step('validate', true, { repo: v.repo, branch: v.branch, plan: v.plan, slot: v.slot, model: v.model, permissionMode: v.permissionMode, priority: v.priority, budgetUsd: v.budgetUsd, budgetSource: v.budgetSource, by: who });
   step('record', true, { file: store.laneFile(v.lane) });
   runLaunch(v, step).catch((err) => {
     step('failed', false, { step: 'internal', error: String(err?.message || err) });

@@ -236,7 +236,7 @@ export function registerBuiltins(deps = {}) {
       model: { type: 'string', re: MODEL_RE },
       permissionMode: { type: 'string', enum: (c) => permissionModes(cfgOf(c)) },
       priority: { type: 'string', enum: ['low', 'normal', 'high'] },
-      budgetUsd: { type: 'number', min: 0, max: 100000 },
+      budgetUsd: { type: 'number', min: 0, max: 100000, check: (v) => (v > 0 ? null : 'must be above 0') },
       dryRun: { type: 'boolean' },
       restoredFrom: { type: 'string', re: LANE_RE, check: noDotDot },
     },
@@ -244,10 +244,10 @@ export function registerBuiltins(deps = {}) {
       return { ...args, permissionMode: effectivePermissionMode(args.permissionMode, 'launch', cfgOf(config)) };
     },
     status: (result, args) => (args.dryRun === true ? 200 : 202),
-    async run({ target, args, user, deps: rd }) {
+    async run({ target, args, user, kind, deps: rd }) {
       const req = { lane: target };
       for (const [k, v] of Object.entries(args)) if (v !== undefined) req[k] = v;
-      return D(rd).launcher.launch(req, user);
+      return D(rd).launcher.launch(req, user, { callerKind: kind });
     },
   });
 
