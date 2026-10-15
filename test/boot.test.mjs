@@ -360,7 +360,7 @@ test('fake builder: the stream upgrade takes a read signature; requireServe refu
   await withFake({ hubKeys: [publicKeyString(hubKey)], requireServe: true }, async (fb) => {
     const plain = await getJson(`${fb.url}/api/v1/hello`, hub.readHeaders('GET', 'builder-a', '/api/v1/hello'));
     assert.deepEqual(plain, { status: 403, body: { ok: false, error: 'not-from-serve' } });
-    const serve = { 'x-forwarded-for': '100.64.0.1', 'x-forwarded-proto': 'https' };
+    const serve = { 'x-forwarded-for': '127.0.0.1', 'x-forwarded-proto': 'https' };
     const s = await openStream(fb, { ...serve, ...hub.readHeaders('GET', 'builder-a', '/api/v1/stream') });
     const [snap] = await s.next(1);
     assert.equal(snap.type, 'snapshot');
