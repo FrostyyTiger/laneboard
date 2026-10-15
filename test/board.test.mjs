@@ -209,7 +209,7 @@ function withDom(fn) {
 
 const FULL = {
   key: 'builder-a/auth', name: 'auth', builder: 'builder-a', state: 'waiting_permission', stateSince: Date.now() - 60_000,
-  dir: '/home/someone/code/acme', branch: 'feat/auth', dirty: 2, ahead: 1, behind: 4,
+  dir: '/home/user/code/acme', branch: 'feat/auth', dirty: 2, ahead: 1, behind: 4,
   context: { usedPct: 71, size: 200000 },
   cost: { usd: 12.5, usdToday: 3.25 }, statuslineCostUsd: 12.4,
   claude: { model: 'opus', rssMb: 512, swapMb: 64 },
