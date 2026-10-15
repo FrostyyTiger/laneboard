@@ -1,0 +1,206 @@
+/* ===========================================================================
+   The Packages view (fleet §6 2.12, P12). A dense .dt table grouped by repo
+   with a sticky repo header row, glyph columns, filter chips and a side
+   inspector. Grey baseline; a status hue only on something abnormal and
+   always with its shape (■ ▲ ◆ ∅). Tokens only (test/design-guardrails).
+   =========================================================================== */
+
+#view-packages .panel { height: 100%; }
+
+.pk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  padding: var(--sp-2);
+  border-bottom: var(--bw) solid var(--line-weak);
+}
+.pk-chip-n {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  color: var(--text-3);
+  letter-spacing: 0;
+  padding-right: var(--sp-1);
+}
+.pk-chip--repo { text-transform: none; }
+
+.pk {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+.pk.pk--insp { grid-template-columns: minmax(0, 1fr) var(--insp-w); }
+.pk-wrap { min-height: 0; }
+
+/* --- the table ---------------------------------------------------------- */
+.pk-table td { max-width: 24ch; }
+.pk-table thead th {
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-10);
+}
+.pk-row { cursor: pointer; }
+.pk-lamp { width: 20px; text-align: center; }
+.pk-name { color: var(--text-1); }
+.pk-g { white-space: nowrap; }
+.pk-dim { color: var(--text-3); }
+.pk-red { color: var(--p1); }
+
+.pk-repo-h {
+  position: sticky;
+  top: var(--row-h);
+  z-index: 1;
+  height: var(--row-h);
+  padding: 0 var(--sp-2);
+  background: var(--bg-elevated);
+  border-top: var(--bw) solid var(--line);
+  border-bottom: var(--bw) solid var(--line);
+  text-align: left;
+}
+.pk-repo-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  white-space: nowrap;
+}
+.pk-repo-name {
+  font-family: var(--font-label);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  color: var(--text-1);
+}
+.pk-repo-slug,
+.pk-repo-via,
+.pk-repo-plans,
+.pk-repo-n {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-weight: 400;
+  color: var(--text-3);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.pk-repo-stale { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--p3); }
+.pk-repo-warn { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--p2); }
+.pk-order { margin-left: auto; }
+
+/* main CI status: grey unless abnormal */
+.pk-main { color: var(--text-2); }
+.pk-main--fail { color: var(--p1); }
+.pk-main--not-run { color: var(--p3); }
+.pk-main--running { color: var(--run); }
+.pk-main--none,
+.pk-main--unknown { color: var(--text-3); }
+
+/* the jobs strip: one 8px cell per mapped job */
+.pk-strip {
+  display: inline-flex;
+  gap: 1px;
+  vertical-align: middle;
+}
+.pk-job {
+  display: inline-block;
+  width: 8px;
+  height: 12px;
+  border: var(--bw) solid var(--line-strong);
+  border-radius: 0;
+  background: var(--line);
+  font-size: 8px;
+  line-height: 10px;
+  text-align: center;
+  color: var(--p3);
+}
+.pk-job--ok { background: var(--line-strong); }
+.pk-job--fail { background: var(--p1); border-color: var(--p1); }
+.pk-job--run { background: var(--run); }
+.pk-job--queued { background: transparent; border-style: dashed; }
+.pk-job--notrun { background: transparent; border-color: var(--p3-line); }
+.pk-job--partial { background: var(--tex-hatch); }
+
+.pk-lanes-g {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.pk-n { margin-right: 2px; }
+.pk-dot.row-stripe { width: 3px; height: 10px; align-self: center; }
+.pk-conf--p2 { color: var(--p2); }
+.pk-conf--p3 { color: var(--p3); }
+
+/* --- the inspector -------------------------------------------------------- */
+.pk-insp {
+  min-width: 0;
+  overflow: auto;
+  border-left: var(--bw) solid var(--line);
+  background: var(--bg-surface);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+}
+.pk-insp-h {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: var(--bw) solid var(--line);
+}
+.pk-insp-t { flex: 1; min-width: 0; }
+.pk-insp-name {
+  font-size: var(--fs-16);
+  color: var(--text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pk-insp-sub { font-size: var(--fs-11); color: var(--text-3); }
+.pk-sec { padding: var(--sp-2) var(--sp-3); border-bottom: var(--bw) solid var(--line-weak); }
+.pk-sec-t {
+  margin: 0 0 var(--sp-1);
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  color: var(--text-2);
+}
+.pk-sec-n { font-family: var(--font-mono); color: var(--text-3); letter-spacing: 0; }
+.pk-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+  min-height: 20px;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.pk-sub { padding-left: var(--sp-4); font-size: var(--fs-11); }
+.pk-file { color: var(--text-2); }
+.pk-v {
+  min-width: 7ch;
+  font-size: var(--fs-11);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.pk-v--fail .pk-v { color: var(--p1); }
+.pk-v--fail .pk-v::before { content: "■ "; }
+.pk-v--not-run .pk-v { color: var(--p3); }
+.pk-v--not-run .pk-v::before { content: "∅ "; }
+.pk-v--partial .pk-v { color: var(--p3); }
+.pk-v--partial .pk-v::before { content: "◆ "; }
+.pk-tag {
+  padding: 0 var(--sp-1);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  font-size: var(--fs-10);
+  color: var(--text-3);
+}
+.pk-rank { min-width: 3ch; color: var(--text-2); }
+.pk-cmd {
+  padding: 1px var(--sp-1);
+  border: var(--bw) solid var(--line-weak);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  user-select: all;
+}
+
+@media (max-width: 900px) {
+  .pk.pk--insp { grid-template-columns: minmax(0, 1fr); }
+  .pk-insp { border-left: 0; border-top: var(--bw) solid var(--line); }
+}
