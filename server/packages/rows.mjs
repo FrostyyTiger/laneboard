@@ -19,47 +19,26 @@
 // `prsByFkey` maps a fleet key to the lane's PR summary (pr.mjs: {number,
 // state, verdict, checks:{failedNames}, failedJobs?:[{workflow, job}]}).
 
+import { isValidGlob, matchAny } from './glob.mjs';
+
 export const STATUS_ORDER = Object.freeze(['fail', 'running', 'not-run', 'ok', 'none', 'unknown']);
 export const LAMP_ORDER = Object.freeze(['crit', 'warn', 'low', 'ok', 'none']);
 export const OTHER = '_other';
 
 // ---------------------------------------------------------------- globs
-// A small matcher for package path globs (`web/**`, `*.md`, `!web/docs/**`).
-// It mirrors the subset §2.3 needs; kept local so rows stay dependency-free.
 
-const reCache = new Map();
-
-function globRe(glob) {
-  let re = reCache.get(glob);
-  if (re) return re;
-  let src = '';
-  for (let i = 0; i < glob.length; i++) {
-    const c = glob[i];
-    if (c === '*') {
-      if (glob[i + 1] === '*') {
-        // `**/` matches zero or more whole segments; a trailing `**` anything.
-        if (glob[i + 2] === '/') { src += '(?:.*/)?'; i += 2; }
-        else { src += '.*'; i += 1; }
-      } else src += '[^/]*';
-    } else if (c === '?') src += '[^/]';
-    else src += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-  }
-  re = new RegExp(`^${src}$`);
-  if (reCache.size > 2000) reCache.clear();
-  reCache.set(glob, re);
-  return re;
-}
-
-/** True when `file` is matched by `globs` (later `!` globs exclude). */
+/**
+ * True when `file` is matched by the package `globs` (P1 semantics: the last
+ * matching glob decides, `!` excludes). Globs come from builders, so an
+ * invalid one is skipped, never a throw.
+ */
 export function matchesPaths(file, globs) {
   if (!Array.isArray(globs) || typeof file !== 'string') return false;
-  let hit = false;
-  for (const g of globs) {
-    if (typeof g !== 'string' || !g) continue;
-    if (g[0] === '!') { if (hit && globRe(g.slice(1)).test(file)) hit = false; }
-    else if (!hit && globRe(g).test(file)) hit = true;
+  try {
+    return matchAny(globs.filter((g) => isValidGlob(g)), file);
+  } catch {
+    return false;
   }
-  return hit;
 }
 
 // ---------------------------------------------------------------- helpers

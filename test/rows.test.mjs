@@ -338,3 +338,10 @@ test('several repos, junk input, and purity', () => {
   assert.equal(bare[0].lamp, 'none');
   assert.deepEqual(bare[0].conflicts, { textual: 0, overlap: 0, pairs: [] });
 });
+
+test('a malformed glob from a builder is skipped, not a throw', () => {
+  assert.equal(matchesPaths('web/a', ['', 'web/**']), true);
+  assert.equal(matchesPaths('web/a', [null, '!']), false);
+  const rows = buildRows([repo({ packages: [{ name: 'web', paths: [42, '!'] }], branches: [{ branch: 'x', files: ['web/a'] }] })]);
+  assert.equal(rows[0].package, 'web');
+});
