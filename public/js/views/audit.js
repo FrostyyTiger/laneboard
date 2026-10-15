@@ -84,7 +84,7 @@ export function auditUrl(mode, { since = null, builder = null, limit = LIMIT } =
   return q.length ? `${base}?${q.join('&')}` : base;
 }
 
-function phaseOf(e, relayed) {
+function auPhaseOf(e, relayed) {
   const p = clean(e.phase, 16) ?? clean(isObj(e.result) ? e.result.phase : null, 16);
   if (p) return p;
   // a hub list row is the outcome entry when there is one: a boolean `ok` means the relay saw `done`
@@ -92,14 +92,14 @@ function phaseOf(e, relayed) {
   return null;
 }
 
-function okOf(e) {
+function auOkOf(e) {
   if (e.ok === true || e.ok === false || e.ok === 'unknown') return e.ok;
   const r = isObj(e.result) ? e.result : null;
   if (r && (r.ok === true || r.ok === false || r.ok === 'unknown')) return r.ok;
   return null;
 }
 
-function rowOf(e, i, { state = undefined } = {}) {
+function auRowOf(e, i, { state = undefined } = {}) {
   const st = state !== undefined ? state : (AUDIT_STATES.includes(e.state) ? e.state : null);
   const relayed = st !== null;
   const ts = Number.isSafeInteger(e.ts) ? e.ts : null;
@@ -114,8 +114,8 @@ function rowOf(e, i, { state = undefined } = {}) {
     builder: clean(e.builder, 64),
     action: clean(e.action, 64),
     target: clean(e.target),
-    ok: okOf(e),
-    phase: phaseOf(e, relayed),
+    ok: auOkOf(e),
+    phase: auPhaseOf(e, relayed),
     state: st,
   };
 }
@@ -128,11 +128,15 @@ export function auditModel(mode, body) {
   const b = isObj(body) ? body : {};
   const list = Array.isArray(b.entries) ? b.entries : [];
   const rows = [];
-  list.forEach((e, i) => { if (isObj(e)) rows.push(rowOf(e, i, mode === 'hub' ? {} : { state: null })); });
+  list.forEach((e, i) => { if (isObj(e)) rows.push(auRowOf(e, i, mode === 'hub' ? {} : { state: null })); });
   if (mode === 'hub' && Array.isArray(b.mismatches)) {
     // H13 signals: only unknown-on-hub has no hub row of its own
     b.mismatches.forEach((m, i) => {
-      if (isObj(m) && m.state === 'unknown-on-hub') rows.push(rowOf({ ...m, via: m.via ?? 'hub' }, `u${i}`, { state: 'unknown-on-hub' }));
+      if (!isObj(m) || m.state !== 'unknown-on-hub') return;
+      const row = auRowOf({ ...m, via: m.via ?? 'hub' }, `u${i}`, { state: 'unknown-on-hub' });
+      // H13 aggregates unknown-on-hub per builder ({count, first, last}): one row, the count beside the target
+      if (Number.isSafeInteger(m.count) && m.count > 1) row.target = `${row.target ?? '—'} (+${m.count - 1} more)`;
+      rows.push(row);
     });
   }
   const forks = [];
@@ -171,7 +175,7 @@ export function forkAlarms(model, storeAlarms) {
   return out;
 }
 
-function hay(r) {
+function auHay(r) {
   return [r.user, r.via, r.builder, r.action, r.target, r.id, r.state, r.phase, okText(r.ok)]
     .filter(Boolean).join(' ').toLowerCase();
 }
@@ -186,14 +190,14 @@ export function filterRows(rows, { b = null, q = null, actions = null, states = 
     if (acts && !acts.has(r.action ?? '')) return false;
     if (sts && !sts.has(r.state ?? 'none')) return false;
     if (words.length) {
-      const h = hay(r);
+      const h = auHay(r);
       if (!words.every((w) => h.includes(w))) return false;
     }
     return true;
   });
 }
 
-function countBy(rows, f) {
+function auCountBy(rows, f) {
   const m = new Map();
   for (const r of rows) {
     const k = f(r);
@@ -209,10 +213,10 @@ function countBy(rows, f) {
  */
 export function chipModel(rows, builderIds = []) {
   const list = Array.isArray(rows) ? rows : [];
-  const bs = countBy(list, (r) => r.builder);
+  const bs = auCountBy(list, (r) => r.builder);
   for (const id of builderIds) if (typeof id === 'string' && id && !bs.has(id)) bs.set(id, 0);
-  const as = countBy(list, (r) => r.action);
-  const ss = countBy(list, (r) => r.state);
+  const as = auCountBy(list, (r) => r.action);
+  const ss = auCountBy(list, (r) => r.state);
   const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   return {
     builders: [...bs].map(([id, n]) => ({ id, n })).sort(byId),
@@ -263,7 +267,7 @@ function auNode(tag, cls, text) {
   return n;
 }
 
-function clear(n) {
+function auClear(n) {
   if (typeof n.replaceChildren === 'function') n.replaceChildren();
   else n.textContent = '';
 }
@@ -283,7 +287,7 @@ export function stateCell(state) {
   return n;
 }
 
-function okCell(ok) {
+function auOkCell(ok) {
   const t = okText(ok);
   const n = auNode('span', 'au-ok', t ?? '—');
   if (ok === false) n.dataset.p = '2';
@@ -297,12 +301,12 @@ const COLUMNS = Object.freeze([
   { key: 'builder', label: 'B', title: 'Builder' },
   { key: 'action', label: 'ACTION', title: 'Action' },
   { key: 'target', label: 'TARGET', title: 'Target' },
-  { key: 'ok', label: 'OK', title: 'Outcome', cell: (r) => okCell(r.ok) },
+  { key: 'ok', label: 'OK', title: 'Outcome', cell: (r) => auOkCell(r.ok) },
   { key: 'phase', label: 'PHASE', title: 'Phase (sent, start, done)' },
   { key: 'state', label: 'STATE', title: 'Reconciliation with the builder log', cell: (r) => stateCell(r.state) },
 ]);
 
-function chip(text, { pressed, title, onClick, mark = null, n = null }) {
+function auChip(text, { pressed, title, onClick, mark = null, n = null }) {
   const b = auNode('button', 'chip au-chip');
   b.type = 'button';
   b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
@@ -319,7 +323,7 @@ function chip(text, { pressed, title, onClick, mark = null, n = null }) {
   return b;
 }
 
-function chipGroup(label) {
+function auChipGroup(label) {
   const g = auNode('div', 'au-chips');
   g.setAttribute('role', 'group');
   g.setAttribute('aria-label', label);
@@ -329,23 +333,23 @@ function chipGroup(label) {
 
 const STATE_OF = { view: null };
 
-function freshState(el, ctx) {
+function auFreshState(el, ctx) {
   return {
     el, ctx, route: ctx.route ?? {}, mode: modeOf(ctx.store), model: null, status: 'loading', message: null,
     actions: new Set(), states: new Set(), timer: null, seq: 0, panel: null, parts: null,
   };
 }
 
-function navigateTo(st, patch) {
+function auNavigate(st, patch) {
   const nav = st.ctx?.navigate;
   if (typeof nav === 'function') nav(patch, { replace: true });
 }
 
-function toggle(set, k) {
+function auToggle(set, k) {
   if (set.has(k)) set.delete(k); else set.add(k);
 }
 
-function build(st) {
+function buildAudit(st) {
   const p = panel({ name: 'AUDIT', scope: st.route.b || 'all' });
   const forks = auNode('div', 'au-forks');
   forks.setAttribute('role', 'alert');
@@ -377,7 +381,7 @@ function build(st) {
 
 function paintForks(st) {
   const { forks } = st.parts;
-  clear(forks);
+  auClear(forks);
   const list = forkAlarms(st.model, st.ctx.store?.alarms);
   forks.hidden = list.length === 0;
   for (const f of list) {
@@ -395,7 +399,7 @@ function paintForks(st) {
 
 function paintHead(st) {
   const { head } = st.parts;
-  clear(head);
+  auClear(head);
   const m = st.model;
   head.hidden = !(m && m.mode === 'builder' && st.status === 'ok');
   if (head.hidden) return;
@@ -413,42 +417,42 @@ function paintHead(st) {
 
 function paintFilters(st, rows) {
   const { filters } = st.parts;
-  clear(filters);
+  auClear(filters);
   const r = st.route;
   const ids = (st.ctx.store?.builders instanceof Map) ? [...st.ctx.store.builders.keys()] : [];
   const chips = chipModel(rows, st.mode === 'hub' ? ids : []);
   if (st.mode === 'hub' && chips.builders.length) {
-    const g = chipGroup('Builder');
-    g.append(chip('ALL', { pressed: !r.b || r.b === 'all', title: 'All builders', onClick: () => navigateTo(st, { b: null }) }));
+    const g = auChipGroup('Builder');
+    g.append(auChip('ALL', { pressed: !r.b || r.b === 'all', title: 'All builders', onClick: () => auNavigate(st, { b: null }) }));
     for (const b of chips.builders) {
       const on = r.b === b.id;
-      g.append(chip(b.id, { pressed: on, n: b.n, title: on ? `Show all builders` : `Only builder ${b.id}`, onClick: () => navigateTo(st, { b: on ? null : b.id }) }));
+      g.append(auChip(b.id, { pressed: on, n: b.n, title: on ? `Show all builders` : `Only builder ${b.id}`, onClick: () => auNavigate(st, { b: on ? null : b.id }) }));
     }
     filters.append(g);
   }
   if (chips.actions.length) {
-    const g = chipGroup('Action');
+    const g = auChipGroup('Action');
     for (const a of chips.actions) {
-      g.append(chip(a.id, { pressed: st.actions.has(a.id), n: a.n, title: `Filter action ${a.id}`, onClick: () => { toggle(st.actions, a.id); paintAudit(st); } }));
+      g.append(auChip(a.id, { pressed: st.actions.has(a.id), n: a.n, title: `Filter action ${a.id}`, onClick: () => { auToggle(st.actions, a.id); paintAudit(st); } }));
     }
     filters.append(g);
   }
   if (chips.states.length) {
-    const g = chipGroup('State');
+    const g = auChipGroup('State');
     for (const s of chips.states) {
-      g.append(chip(s.id, { pressed: st.states.has(s.id), n: s.n, mark: s.mark, title: `Filter state ${s.mark?.label ?? s.id}`, onClick: () => { toggle(st.states, s.id); paintAudit(st); } }));
+      g.append(auChip(s.id, { pressed: st.states.has(s.id), n: s.n, mark: s.mark, title: `Filter state ${s.mark?.label ?? s.id}`, onClick: () => { auToggle(st.states, s.id); paintAudit(st); } }));
     }
     filters.append(g);
   }
   if (r.q) {
-    const g = chipGroup('Text');
-    g.append(scopeChip(r.q, { param: 'q', onRemove: () => navigateTo(st, { q: null }) }));
+    const g = auChipGroup('Text');
+    g.append(scopeChip(r.q, { param: 'q', onRemove: () => auNavigate(st, { q: null }) }));
     filters.append(g);
   }
   filters.hidden = filters.children?.length === 0;
 }
 
-function emptyText(st, all, shown) {
+function auEmptyText(st, all, shown) {
   if (st.status === 'loading') return 'Loading the audit log…';
   if (st.status === 'unavailable') {
     return st.mode === 'hub'
@@ -481,14 +485,14 @@ function paintAudit(st) {
     table.update(shown);
     table.root.hidden = !shown.length;
   }
-  const msg = emptyText(st, all, shown);
+  const msg = auEmptyText(st, all, shown);
   empty.textContent = msg;
   empty.hidden = !msg;
-  if (table) markRows(table, shown);
+  if (table) auMarkRows(table, shown);
 }
 
 /** Mark mismatch rows on the <tr> (▲ in the STATE cell already carries the shape). */
-function markRows(table, rows) {
+function auMarkRows(table, rows) {
   const byKey = new Map(rows.map((r) => [r.key, r]));
   const trs = table.table?.tBodies?.[0]?.rows ?? table.table?.children?.[1]?.children ?? [];
   for (const tr of trs) {
@@ -499,7 +503,7 @@ function markRows(table, rows) {
   }
 }
 
-async function refresh(st, fetchFn) {
+async function refreshAudit(st, fetchFn) {
   const seq = ++st.seq;
   const url = auditUrl(st.mode, { since: Date.now() - SINCE_MS, builder: st.mode === 'hub' ? st.route.b : null });
   const res = await loadAudit(url, fetchFn);
@@ -522,24 +526,24 @@ async function refresh(st, fetchFn) {
 export function mountAudit(el, ctx = {}, { fetchFn = globalThis.fetch, poll = true } = {}) {
   if (!el) return Promise.resolve();
   unmountAudit();
-  clear(el);
-  const st = freshState(el, ctx);
+  auClear(el);
+  const st = auFreshState(el, ctx);
   STATE_OF.view = st;
-  build(st);
+  buildAudit(st);
   paintAudit(st);
   if (poll && typeof setInterval === 'function') {
-    st.timer = setInterval(() => { refresh(st, fetchFn); }, POLL_MS);
+    st.timer = setInterval(() => { refreshAudit(st, fetchFn); }, POLL_MS);
     st.timer?.unref?.();
   }
   st.fetchFn = fetchFn;
-  return refresh(st, fetchFn);
+  return refreshAudit(st, fetchFn);
 }
 
 export function unmountAudit() {
   const st = STATE_OF.view;
   if (!st) return;
   if (st.timer) clearInterval(st.timer);
-  clear(st.el);
+  auClear(st.el);
   STATE_OF.view = null;
 }
 
@@ -557,7 +561,7 @@ export function updateAudit(_store, ctx = {}) {
     st.route = ctx.route;
     if (st.mode === 'hub' && (ctx.route.b ?? null) !== prevB) reload = true;
   }
-  if (reload) return refresh(st, st.fetchFn);
+  if (reload) return refreshAudit(st, st.fetchFn);
   paintAudit(st);
   return null;
 }

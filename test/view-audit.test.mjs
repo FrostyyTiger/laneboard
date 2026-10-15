@@ -121,13 +121,14 @@ test('auditModel (hub): the H13 list rows, states, hub-only rows, phase, forks',
 test('auditModel (hub): unknown-on-hub mismatches become rows when the body carries them', () => {
   const body = hubBody();
   body.mismatches = [
-    { kind: 'audit-mismatch', builder: 'builder-b', id: 'u1', state: 'unknown-on-hub', action: 'kill', target: 'web' },
+    { kind: 'audit-mismatch', builder: 'builder-b', id: 'u1', state: 'unknown-on-hub', action: 'kill', target: 'web', count: 4, first: [], last: [] },
     { kind: 'audit-mismatch', builder: 'builder-a', id: 'e2', state: 'missing-on-builder', action: 'kill', target: 'x' },
   ];
   const m = A.auditModel('hub', body);
   const u = m.rows.filter((r) => r.state === 'unknown-on-hub');
   assert.equal(u.length, 1, 'only unknown-on-hub (the others already have a hub row)');
   assert.equal(u[0].builder, 'builder-b');
+  assert.equal(u[0].target, 'web (+3 more)', 'the H13 per-builder aggregate keeps its count');
   assert.equal(new Set(m.rows.map((r) => r.key)).size, m.rows.length, 'row keys are unique');
 });
 
