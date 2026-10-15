@@ -1,0 +1,16 @@
+{
+  "Version": "1.80.0",
+  "BackendState": "Running",
+  "TailscaleIPs": ["192.0.2.10", "2001:db8::10"],
+  "Self": {
+    "ID": "nExample1",
+    "HostName": "builder-a",
+    "DNSName": "builder-a.example.invalid.",
+    "OS": "linux",
+    "TailscaleIPs": ["192.0.2.10", "2001:db8::10"],
+    "Online": true,
+    "Active": true
+  },
+  "MagicDNSSuffix": "example.invalid",
+  "CurrentTailnet": { "Name": "acme.example.invalid", "MagicDNSSuffix": "example.invalid" }
+}
