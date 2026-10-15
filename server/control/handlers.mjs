@@ -16,6 +16,9 @@
 //     config.stateDir and fails closed (any error refuses). The run step repeats the rule: without an
 //     override (and always for `local`) it lifts only `kind:'operator'` sentinels, so a budget pause written
 //     between the predicate and the run is kept (409).
+//   - A remote resume with `override` that lifts a `budget` sentinel records an explicit override mark
+//     (budget.mjs noteOverride, scope + window). This is the only writer: the budget tick re-applies a budget
+//     pause whose sentinel vanished without one (SR17 re-review R1).
 //   - pause * / resume * need `args.confirm === fleet.id` (the dispatcher's '*' rule; `fleet` is refused).
 //   These controls are cooperative on the builder itself: anything running as this uid can delete the
 //   sentinel files (docs/fleet/control.md, SECURITY.md).
@@ -39,6 +42,7 @@ import fs from 'node:fs';
 import { registerAction, has, ActionRefused } from '../fleet/dispatch.mjs';
 import * as pause from './pause.mjs';
 import * as approvalsCore from './approvals.mjs';
+import { noteOverride as noteBudgetOverride } from './budget.mjs';
 import { invalidate as invalidatePaused } from '../flags/paused.mjs';
 import { capturePane as tmuxCapturePane } from '../collector/tmux.mjs';
 
@@ -236,13 +240,23 @@ export async function runResume({ target, args, user, kind, deps }) {
   // never lift a budget/quota pause for `local`, whatever the predicate said (defence in depth)
   const override = args.override === true && kind !== 'local';
   let r;
+  let wasBudget = false;
   try {
+    if (override) {
+      try { wasBudget = pause.kindOf(scope, { stateDir }) === 'budget'; } catch { wasBudget = false; }
+    }
     r = pause.resume(scope, override ? {} : { kinds: ['operator'] }, { stateDir });
   } finally {
     invalidatePaused();
   }
   if (r.kept.length) throw keptRefusal(r.kept);
   const out = { ok: true, scope, removed: r.removed };
+  if (override && wasBudget && r.removed.includes(scope)) {
+    // SR17 re-review R1: only this remote-only path marks a budget pause as overridden for the window.
+    let noted = false;
+    try { noted = noteBudgetOverride(scope, typeof user === 'string' ? user : null); } catch { noted = false; }
+    if (noted) out.overrideNoted = true;
+  }
   if (args.nudge !== false) {
     let entries = [];
     try { entries = pause.list({ stateDir, mirrors: true }); } catch { entries = [{ scope: 'ALL', kind: 'operator' }]; }

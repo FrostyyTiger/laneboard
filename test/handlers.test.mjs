@@ -449,3 +449,25 @@ test('SR16 L3: the dispatcher ctx.config cannot move the run step to another sta
   assert.equal(pause.kindOf('lane-b', { stateDir }), 'budget');
   assert.equal(handlers.stateDirFor(deps), stateDir);
 });
+
+test('SR17 R1: a remote override of a budget pause writes the override mark; local and operator ones do not', async () => {
+  const budget = await import('../server/control/budget.mjs');
+  const { go, stateDir, config } = setup();
+  const kv = new Map();
+  const db = { kvRead: (k, fb = null) => (kv.has(k) ? structuredClone(kv.get(k)) : fb), kvWrite: (k, v) => kv.set(k, structuredClone(v)), costRowsForWindow: () => [], lastRateLimitSample: () => null, addEvent: () => {} };
+  budget.init({ config: { ...config, timezone: 'UTC', budget: {} }, db, state: { all: () => [] }, laneRecords: () => [] });
+  try {
+    pause.pause('lane-a', { kind: 'budget' }, { stateDir });
+    assert.equal((await go('resume', 'lane-a', { override: true, nudge: false }, LOCAL)).code, 'remote-only');
+    assert.equal(kv.has(budget.OVERRIDE_BY_KEY), false, 'local writes no mark');
+    pause.pause('lane-b', { kind: 'operator' }, { stateDir });
+    assert.equal((await go('resume', 'lane-b', { override: true, nudge: false })).ok, true);
+    assert.equal(kv.has(budget.OVERRIDE_BY_KEY), false, 'an operator pause override is no budget override');
+    const ok = await go('resume', 'lane-a', { override: true, nudge: false });
+    assert.equal(ok.ok, true, JSON.stringify(ok));
+    assert.deepEqual(Object.keys(kv.get(budget.OVERRIDE_BY_KEY).scopes), ['lane-a']);
+    assert.equal(kv.get(budget.OVERRIDE_BY_KEY).scopes['lane-a'].by, 'alice@example.invalid');
+  } finally {
+    budget._reset();
+  }
+});
