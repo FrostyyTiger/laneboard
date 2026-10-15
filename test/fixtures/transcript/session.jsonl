@@ -1,0 +1,10 @@
+{"sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/home/user/acme","type":"summary","summary":"Fixing the acme build"}
+{"sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/home/user/acme","type":"user","timestamp":"2026-01-01T00:00:01.000Z","message":{"role":"user","content":"Please fix the failing test — naïve café ✓ 🙂"}}
+{"sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/home/user/acme","type":"assistant","timestamp":"2026-01-01T00:00:02.000Z","message":{"role":"assistant","content":[{"type":"thinking","thinking":"secret reasoning","signature":"x"}]}}
+{"sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/home/user/acme","type":"assistant","timestamp":"2026-01-01T00:00:03.000Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"npm test","description":"run tests"}}]}}
+{"sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/home/user/acme","type":"user","timestamp":"2026-01-01T00:00:04.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","is_error":true,"content":[{"type":"text","text":"Exit code 1\nTest failed"}]}]}}
+{this is not json
+{"sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/home/user/acme","type":"assistant","timestamp":"2026-01-01T00:00:05.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Found it: <img src=x onerror=alert(1)> and \u001b[31mred\u001b[0m text"}]}}
+{"sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/home/user/acme","type":"file-history-snapshot","snapshot":{}}
+{"sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/home/user/acme","type":"user","timestamp":"2026-01-01T00:00:06.000Z","message":{"role":"user","content":[{"type":"text","text":"Thanks,"},{"type":"text","text":"now commit it"}]}}
+{"sessionId":"00000000-0000-4000-8000-00
