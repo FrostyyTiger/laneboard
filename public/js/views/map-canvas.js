@@ -17,7 +17,7 @@
 // of it off: the map then draws once per change, still complete.
 //
 // What you do moves too, and that motion is built to be followed rather than
-// noticed (public/motion.js has the maths):
+// noticed (core/motion.js has the maths):
 //
 //   * every position, fade and zoom is a critically damped spring: it starts
 //     from the speed it has, never overshoots, and bends when the goal moves
@@ -35,7 +35,7 @@
 //   map.update({ nodes, links, events });
 //   map.event({ node: 'x', kind: 'ok', text: '…' });
 
-import { damp, settled, wrapAngle, flight, inertia, stage, easeInOut } from './motion.js';
+import { damp, settled, wrapAngle, flight, inertia, stage, easeInOut } from '../core/motion.js';
 
 const TAU = Math.PI * 2;
 
