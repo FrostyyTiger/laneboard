@@ -110,6 +110,7 @@ test('parsers: refs, shortstat', () => {
 test('gitenv: names and refs', () => {
   assert.equal(safeRepoName('acme/web'), 'acme_web');
   assert.equal(safeRepoName('..'), '_');
+  assert.equal(path.dirname(scratchDir('../../etc', '/c')), '/c/scratch-objects');
   assert.ok(!scratchDir('../../etc', '/c').includes('..'));
   assert.equal(mirrorRef('origin/main'), 'refs/heads/main');
   assert.equal(mirrorRef('refs/remotes/origin/dev'), 'refs/heads/dev');

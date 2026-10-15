@@ -44,7 +44,7 @@ export function defaultCacheDir(env = process.env) {
 
 /** A repo name safe as one path segment: `acme/web` -> `acme_web`, never `..`. */
 export function safeRepoName(name) {
-  let s = String(name ?? '').replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '_').slice(0, 100);
+  let s = String(name ?? '').replace(/[^A-Za-z0-9._-]/g, '_').replace(/\.{2,}/g, '_').replace(/^\./, '_').slice(0, 100);
   if (!s) s = '_';
   return s;
 }
