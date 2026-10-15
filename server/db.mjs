@@ -133,6 +133,18 @@ const MIGRATIONS = [
      checks_pending INTEGER
    )`,
   `CREATE INDEX IF NOT EXISTS pr_samples_lane ON pr_samples(lane, ts DESC)`,
+  // fleet P9 (§6 2.4). The jobs of a completed CI run never change, so they are
+  // read from the forge once per (run, attempt) and kept here. A cache, not
+  // history: builder-local, no `builder` column, no user_version bump (the
+  // CREATE is re-runnable like every entry above).
+  `CREATE TABLE IF NOT EXISTS ci_jobs (
+     run_id INTEGER NOT NULL,
+     attempt INTEGER NOT NULL,
+     slug TEXT NOT NULL,
+     json TEXT NOT NULL,
+     at INTEGER NOT NULL DEFAULT 0,
+     PRIMARY KEY(run_id, attempt)
+   )`,
 ];
 
 /** The schema version this file migrates to (`PRAGMA user_version`). */
@@ -530,4 +542,41 @@ export function listPrSamples({ lane = null, limit = 100 } = {}) {
   const sql = 'SELECT * FROM pr_samples' + (lane ? ' WHERE lane = ?' : '') + ' ORDER BY ts DESC LIMIT ?';
   const args = lane ? [lane, Math.min(Number(limit) || 100, 1000)] : [Math.min(Number(limit) || 100, 1000)];
   return db.prepare(sql).all(...args);
+}
+
+// --- ci jobs (fleet P9) ---------------------------------------------------------
+
+const getCiJobs = db.prepare('SELECT slug, json FROM ci_jobs WHERE run_id = ? AND attempt = ?');
+const putCiJobs = db.prepare(
+  'INSERT INTO ci_jobs(run_id, attempt, slug, json, at) VALUES(?, ?, ?, ?, ?) ' +
+    'ON CONFLICT(run_id, attempt) DO UPDATE SET slug = excluded.slug, json = excluded.json, at = excluded.at'
+);
+
+/**
+ * The cached jobs of a completed run, or null. A row stored under another
+ * slug is not this run (run ids are global on GitHub, but a cache must never
+ * hand one repo another repo's data).
+ */
+export function ciJobsGet({ runId, attempt = 1, slug }) {
+  try {
+    const r = getCiJobs.get(Number(runId), Number(attempt) || 1);
+    if (!r || r.slug !== String(slug)) return null;
+    const jobs = JSON.parse(r.json);
+    return Array.isArray(jobs) ? jobs : null;
+  } catch (err) {
+    log.error('ciJobsGet failed', String(err));
+    return null;
+  }
+}
+
+/** Keep the jobs of a completed run (the collector calls this only once it completed). */
+export function ciJobsPut({ runId, attempt = 1, slug, jobs, at = Date.now() }) {
+  if (!Number.isSafeInteger(Number(runId)) || !Array.isArray(jobs) || typeof slug !== 'string' || !slug) return false;
+  try {
+    putCiJobs.run(Number(runId), Number(attempt) || 1, slug, JSON.stringify(jobs), at);
+    return true;
+  } catch (err) {
+    log.error('ciJobsPut failed', String(err));
+    return false;
+  }
 }
