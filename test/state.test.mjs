@@ -359,10 +359,10 @@ test('onTick hooks run in order with (ctx, now); one that throws does not stop t
 const SIDECAR_FIXTURE = {
   session_id: '00000000-0000-4000-8000-000000000001',
   session_name: 'builder-a demo',
-  transcript_path: '/home/builder-a/.claude/projects/x/y.jsonl',
+  transcript_path: '/tmp/example/y.jsonl',
   version: '2.1.301',
   model: { id: 'claude-opus-5-5', display_name: 'Opus' },
-  workspace: { current_dir: '/home/builder-a/code/acme' },
+  workspace: { current_dir: '/tmp/example/acme' },
   effort: { level: 'high' },
   thinking: { enabled: true },
   prompt_cache: { hit_ratio: 0.82, warm: true, expires_at: 1760000000, misses: 3 },
