@@ -484,7 +484,7 @@ function accountsPanel(d) {
   return p.root;
 }
 
-function buildersPanel(d) {
+function builderBreakdown(d) {
   const rows = builderRows(d);
   const p = panel({ name: 'Builders', scope: 'cost per builder', n: rows.length });
   if (!rows.length) { p.body.append(el('p', 'empty', 'No builder has answered yet.')); return p.root; }
@@ -631,7 +631,7 @@ export function renderCredit() {
 
   if (d.hub && !credit.b) {
     box.append(accountsPanel(d));
-    box.append(buildersPanel(d));
+    box.append(builderBreakdown(d));
   }
   box.append(lanesSection(d));
 }
