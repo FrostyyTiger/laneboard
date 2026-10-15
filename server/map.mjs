@@ -560,12 +560,13 @@ function stuckOf(x) {
   return compact({ rule: clip(String(x.rule ?? ''), 40), reason: clip(String(x.reason ?? ''), 120), since: num(x.since) }) ?? null;
 }
 
+// Flags carry only what is set (most sessions have none), to keep the model small.
 function sessionFlags(s) {
-  return {
-    stuck: stuckOf(s.stuck),
-    paused: Boolean(s.paused),
-    awaitingApproval: typeof s.awaitingApproval === 'string' ? s.awaitingApproval.slice(0, 64) : null,
-  };
+  return compact({
+    stuck: stuckOf(s.stuck) ?? undefined,
+    paused: s.paused ? true : undefined,
+    awaitingApproval: typeof s.awaitingApproval === 'string' ? s.awaitingApproval.slice(0, 64) : undefined,
+  });
 }
 
 /** `repo/pkg` names a lane touches: §6 facts first, else the lane's own list. */
@@ -608,7 +609,8 @@ export function fleetLaneNodes(snapshot, { builder = config.fleet?.id, parent, s
     const branch = typeof lane.branch === 'string' ? lane.branch : undefined;
     const detail = {};
     if (branch) detail.Branch = clip(branch, 120);
-    if (own.length) detail.Sessions = clip(own.map((s) => `${s.name} (${s.state})`).join(', '));
+    // With two or more live sessions they are child nodes and say it themselves.
+    if (own.length && live.length < 2) detail.Sessions = clip(own.map((s) => `${s.name} (${s.state})`).join(', '));
     if (lane.progress) detail.Plan = clip(typeof lane.progress === 'string' ? lane.progress : String(lane.progress.label ?? `${lane.progress.done ?? '?'}/${lane.progress.total ?? '?'}`), 80);
     if (lane.merged) detail.Merged = 'into main';
     const facts = laneFacts?.get?.(key) ?? null;
@@ -629,12 +631,12 @@ export function fleetLaneNodes(snapshot, { builder = config.fleet?.id, parent, s
       detail,
       // The fleet key of its first session (the client store is keyed by it).
       session: own[0] ? fkey(builder, own[0].name) : undefined,
-      flags: {
-        stuck: stuckOf(lead?.stuck),
-        paused: live.some((s) => s.paused),
-        awaitingApproval: live.map((s) => s.awaitingApproval).find((v) => typeof v === 'string')?.slice(0, 64) ?? null,
-        reviewReady: Boolean(lane.reviewReady?.ready),
-      },
+      flags: compact({
+        stuck: stuckOf(lead?.stuck) ?? undefined,
+        paused: live.some((s) => s.paused) || undefined,
+        awaitingApproval: live.map((s) => s.awaitingApproval).find((v) => typeof v === 'string')?.slice(0, 64),
+        reviewReady: lane.reviewReady?.ready ? true : undefined,
+      }),
       m: compact({
         costUsd: round(num(facts?.costUsd) ?? num(lane.costUsd) ?? (costs.length ? costs.reduce((a, b) => a + b, 0) : undefined)),
         ctxPct: ctx.length ? Math.round(Math.max(...ctx)) : undefined,
