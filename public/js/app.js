@@ -11,6 +11,7 @@ import { init as initTape } from './ui/tape.js';
 import { init as initAnnunciator } from './ui/annunciator.js';
 import { renderAttention } from './ui/rail.js';
 import { init as initSheet } from './ui/sheet.js';
+import { init as initInspector } from './ui/inspector.js';
 import { init as initHotkeys } from './ui/hotkeys.js';
 import { init as initPush } from './ui/push.js';
 import { init as initNotifyPrefs } from './ui/notify-prefs.js';
@@ -29,6 +30,7 @@ export function boot() {
   initHotkeys(); // app.js:1856-1891 (keydown, outside click)
   initRouter(); // app.js:1909 (hashchange)
   initArchive(); // fleet R14: the Board's archive filter (#/board?s=archive)
+  initInspector(); // fleet D6: the L3 inspector follows sel= (before the first applyHash)
   // The view registry (fleet D4): every route mounts its view through
   // views/index.js (router.js setView -> activateView). Built here, after the
   // modules have evaluated, so each view's default export is initialised.
