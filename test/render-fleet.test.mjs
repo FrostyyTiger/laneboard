@@ -183,6 +183,7 @@ test('opening the sheet writes #/board?sel=<fkey>; closing removes sel', async (
   socket.emit('open', {});
   send(hello());
   send({ type: 'snapshot', builder: 'builder-a', sessions: [sess('web')], attention: [] });
+  go('#board'); // the Map is home (fleet D4); this sheet is opened from the Board
 
   ns('ui/sheet.js').openSheet('builder-a/web');
   assert.equal(byId.get('sheet').hidden, false);

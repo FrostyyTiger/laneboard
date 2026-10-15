@@ -312,48 +312,39 @@ test('the stylesheets keep the [hidden] override that the sheet and banner depen
   assert.match(css, /\[hidden\]\s*\{\s*display:\s*none\s*!important/);
 });
 
-// --- Stage 10 constraints ----------------------------------------------------
+// --- Stage 10 constraints, as the industrial shell has them (fleet D4) -------
 
-test('backdrop-filter is spent on at most three fixed surfaces', () => {
-  // Each one costs a GPU readback + blur of the backdrop root every frame the
-  // backdrop changes. The plan caps it at three; anything that scrolls or sits
-  // above a live terminal must not be on the list.
-  const css = readStyles();
-  const selectors = new Set();
-  for (const m of css.matchAll(/([^{}]+)\{[^{}]*backdrop-filter\s*:/g)) {
-    for (const sel of m[1].split(',')) {
-      const s = sel.trim().split(/\s+/).pop();
-      if (s && s.startsWith('.')) selectors.add(s);
-    }
-  }
-  assert.ok(selectors.size <= 3, `backdrop-filter on ${selectors.size} surfaces: ${[...selectors].join(', ')}`);
-  for (const banned of ['.card', '.rail', '.quickbar', '.preview', '.term-host', '.term-pane', '.grid']) {
-    assert.ok(!selectors.has(banned), `${banned} must never blur`);
-  }
+test('no backdrop-filter anywhere: no glass in the shell', () => {
+  // Plan §4 2.8 guardrail 2. The old cap of three blurred surfaces is now zero.
+  const css = readCss().replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(css, /backdrop-filter\s*:/, 'a stylesheet still blurs its backdrop');
 });
 
-test('the blur declarations avoid the var() form WebKit drops', () => {
-  // If a var() chain inside -webkit-backdrop-filter resolves invalid, WebKit
-  // throws the whole declaration away and the surface loses its backing.
-  const css = readStyles();
-  // Only real declarations, not the @supports test line.
-  for (const m of css.matchAll(/^\s*(?:-webkit-)?backdrop-filter\s*:([^;]+);/gm)) {
-    assert.ok(!m[1].includes('var('), `backdrop-filter must use literals: ${m[1].trim()}`);
-  }
-});
-
-test('reduced motion and reduced transparency both have fallbacks', () => {
+test('reduced motion has a fallback', () => {
   const css = readStyles();
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
-  assert.match(css, /@media \(prefers-reduced-transparency: reduce\)/);
-  assert.match(css, /prefers-reduced-transparency: no-preference/);
 });
 
-test('the three breakpoints survive', () => {
-  const css = readStyles();
-  assert.match(css, /@media \(min-width: 700px\)/, 'desktop');
-  assert.match(css, /@media \(min-width: 2000px\)/, 'ultrawide');
-  assert.match(css, /@media \(max-width: 699px\)/, 'phone top bar');
+test('the shell breakpoints: phone <700, tablet 700-1199, desktop >=1200, ultrawide 2000', () => {
+  const shell = read('css/shell.css');
+  assert.match(shell, /@media \(max-width: 699px\)/, 'phone');
+  assert.match(shell, /@media \(min-width: 700px\) and \(max-width: 1199px\)/, 'tablet');
+  assert.match(shell, /@media \(min-width: 1200px\)/, 'desktop');
+  assert.match(shell, /@media \(min-width: 1440px\)/, 'nav labels and the legend');
+  assert.match(shell, /@media \(min-width: 2000px\)/, 'ultrawide');
+  // The board's own columns keep the 700px step.
+  assert.match(readStyles(), /@media \(min-width: 700px\)/);
+});
+
+test('the shell grid: header, rail, main, tape; the inspector overlays main', () => {
+  const shell = read('css/shell.css');
+  assert.match(shell, /grid-template-areas:\s*"head head head"\s*"rail main insp"\s*"tape tape tape"/);
+  assert.match(shell, /var\(--header-h\)/, 'the header is the 40px token');
+  assert.match(shell, /var\(--tape-h\)/, 'the bottom bar is the tape token');
+  const insp = /\.shell-insp\s*\{([^}]*)\}/.exec(shell);
+  assert.ok(insp, '.shell-insp rule');
+  assert.match(insp[1], /position:\s*absolute/, 'the inspector is an overlay, so the map never reflows');
+  assert.match(shell, /\[data-insp="open"\][^{]*\.shell-insp/);
 });
 
 test('the render path does no per-card layout reads', () => {
@@ -446,26 +437,52 @@ test('the client reports its own render timings', () => {
   assert.match(app, /keepalive: true/, 'the last sample must survive a tab close');
 });
 
-// --- Stage 0: the view shell -------------------------------------------------
+// --- the view shell (fleet D4) ---------------------------------------------
 
-test('all four views exist in the markup, in both navigations', () => {
+const SHELL_VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit'];
+
+test('every view has a section and exactly one nav button; diff is routable but not in the nav', () => {
   const html = read('index.html');
-  for (const v of ['board', 'morning', 'credit', 'box']) {
+  for (const v of SHELL_VIEWS) {
     assert.match(html, new RegExp(`id="view-${v}"`), `view-${v} section is missing`);
-    // The top strip (desktop) and the bottom tabs (phone) both list every view.
     const buttons = [...html.matchAll(new RegExp(`data-view="${v}"`, 'g'))];
-    assert.equal(buttons.length, 2, `${v} needs a top-strip button and a phone tab`);
+    assert.equal(buttons.length, 1, `${v} needs one nav button`);
+  }
+  assert.match(html, /id="view-diff"/);
+  assert.doesNotMatch(html, /data-view="diff"/, 'diff is a drill-down, never in the nav');
+  assert.doesNotMatch(html, /class="tabs"/, 'the old phone tab bar is gone');
+  const nav = /<nav class="shell-nav" id="views"[^>]*>([\s\S]*?)<\/nav>/.exec(html);
+  assert.ok(nav, 'the view nav');
+  const order = [...nav[1].matchAll(/data-view="([a-z]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(order, SHELL_VIEWS, 'nav order MAP BRD INBX PKG MORN CRED BOX AUD');
+  for (const m of nav[1].matchAll(/<button([^>]*)>/g)) {
+    assert.match(m[1], /aria-label="[A-Z][a-z]+"/, 'icon buttons carry the long name');
+    assert.match(m[1], /title="[A-Z][a-z]+ \(g [a-z]\)"/, 'and the chord in the title');
   }
 });
 
-test('the view chord covers g b / g m / g c / g x, and g k / g f are gone', () => {
-  const app = readApp();
-  const m = /const VIEW_KEYS\s*=\s*\{([^}]*)\}/.exec(app);
-  assert.ok(m, 'VIEW_KEYS must exist');
-  for (const [key, view] of [['b', 'board'], ['m', 'morning'], ['c', 'credit'], ['x', 'box']]) {
-    assert.match(m[1], new RegExp(`${key}:\\s*'${view}'`), `g ${key} should go to ${view}`);
+test('the shell keeps every id the page depends on, and has a slot for every later task', () => {
+  const html = read('index.html');
+  for (const id of ['offline', 'conn', 'toast', 'sheet', 'quickbar', 'ui-error', 'builders', 'brand-host',
+    'shell', 'shell-head', 'views', 'scope', 'ann', 'clock-utc', 'clock-local', 'shell-rail', 'shell-main',
+    'shell-insp', 'shell-bar', 'tape', 'legend', 'shell-strip', 'shell-sheet', 'map-root']) {
+    assert.match(html, new RegExp(`\\sid="${id}"`), `#${id} is missing`);
   }
-  assert.doesNotMatch(m[1], /\bk:|\bf:/, 'g k and g f went with Machine and Files');
+  assert.ok(html.indexOf('id="view-map"') < html.indexOf('id="view-board"'), 'the map is the first view in the centre');
+  assert.match(html, /<div class="toasts" id="toast" aria-live="polite"/, 'the toast region is the kit stack');
+  assert.doesNotMatch(html, /\sstyle="/, 'no inline style attributes');
+  for (const f of ['jetbrains-mono/JetBrainsMono-Regular.woff2', 'barlow-condensed/BarlowCondensed-SemiBold.woff2']) {
+    assert.match(html, new RegExp(`<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/${f}">`));
+  }
+});
+
+test('the view chord follows the plan: g m map, g o morning, g p packages', async () => {
+  const { VIEW_KEYS } = await import('../public/js/core/router.js');
+  assert.deepEqual({ ...VIEW_KEYS }, { m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning' });
+  assert.ok(Object.isFrozen(VIEW_KEYS));
+  for (const [k, v] of Object.entries(VIEW_KEYS)) {
+    assert.match(read('index.html'), new RegExp(`data-view="${v}" title="[A-Za-z]+ \\(g ${k}\\)"`), `the ${v} button names g ${k}`);
+  }
 });
 
 test('the board-only shortcuts are gated on the board', () => {
@@ -485,10 +502,80 @@ test('closing the sheet returns to a view, never to a bare path', () => {
   assert.match(app, /replaceState\(null, '', `#\$\{store\.view\}`\)/);
 });
 
-test('the phone tab bar and the desktop strip swap at the breakpoint', () => {
-  const css = readStyles();
-  assert.match(css, /@media \(min-width: 700px\) \{ \.tabs \{ display: none; \} \}/);
-  assert.match(css, /\.views \{ display: none; \}/);
+test('the nav labels and the legend appear only from 1440px; the nav stays reachable on a phone', () => {
+  const shell = read('css/shell.css');
+  assert.match(shell, /\.nav-l\s*\{\s*display:\s*none;?\s*\}/, 'icons only by default');
+  assert.match(shell, /\.shell-legend\s*\{[^}]*display:\s*none/, 'no legend below 1440');
+  const wide = /@media \(min-width: 1440px\)\s*\{([\s\S]*?)\n\}/.exec(shell);
+  assert.ok(wide, 'the 1440 block');
+  assert.match(wide[1], /\.nav-l/);
+  assert.match(wide[1], /\.shell-legend/);
+});
+
+test('the view registry: a default export per view, a legacy adapter otherwise', () => {
+  const reg = readJs('views/index.js');
+  for (const v of [...SHELL_VIEWS, 'diff']) {
+    assert.match(reg, new RegExp(`import \\* as ${v}Module from '\\./${v}\\.js';`), `${v} is imported as a namespace`);
+    assert.match(reg, new RegExp(`add\\('${v}', pick\\(${v}Module,`), `${v} is registered through pick()`);
+  }
+  for (const v of ['inbox', 'packages', 'audit', 'diff']) {
+    const src = readJs(`views/${v}.js`);
+    assert.match(src, /^export default \{/m, `views/${v}.js has a default export`);
+    assert.match(src, new RegExp(`id: '${v}'`));
+    assert.match(src, /panel\(/, 'the stub renders an empty .panel');
+  }
+  assert.match(readJs('core/router.js'), /activateView\(/, 'the router mounts views through the registry');
+});
+
+test('ui/shell.js re-exports the kit toast instead of its own', () => {
+  const src = readJs('ui/shell.js');
+  assert.match(src, /^export \{ toast \} from '\.\/toast\.js';$/m);
+  assert.doesNotMatch(src, /function toast\b/, 'the old one-line toast is gone');
+  for (const fn of ['builderChips', 'renderBuilders', 'adoptFleetKeys']) {
+    assert.match(src, new RegExp(`export function ${fn}\\(`), `${fn} (F8b) stays`);
+  }
+});
+
+test('shell: the clock shows UTC HH:MM:SSZ and local HH:MM with the zone', async () => {
+  const { clockParts } = await import('../public/js/ui/shell.js');
+  const t = new Date(Date.UTC(2026, 6, 1, 14, 2, 7));
+  assert.deepEqual(clockParts(t, { timeZone: 'UTC' }), { utc: '14:02:07Z', local: '14:02', tz: 'UTC' });
+  const berlin = clockParts(t, { timeZone: 'Europe/Berlin' });
+  assert.equal(berlin.utc, '14:02:07Z');
+  assert.equal(berlin.local, '16:02');
+  assert.match(berlin.tz, /^(CEST|GMT\+2)$/);
+  assert.equal(clockParts(Date.UTC(2026, 0, 1, 0, 0, 0), { timeZone: 'UTC' }).utc, '00:00:00Z', 'a number is a date too');
+});
+
+test('shell: scope chips per active filter, builder code from the store', async () => {
+  const { scopeModel } = await import('../public/js/ui/shell.js');
+  const s = { builders: new Map([['builder-a', { id: 'builder-a', code: 'B1' }]]) };
+  assert.deepEqual(scopeModel({ b: null, s: null, q: null }, s), []);
+  assert.deepEqual(scopeModel({ b: 'all' }, s), [], 'all is no scope');
+  const chips = scopeModel({ b: 'builder-a', s: 'stuck', q: 'auth' }, s);
+  assert.deepEqual(chips.map((c) => [c.param, c.text]), [['b', 'B1'], ['s', 'STUCK'], ['q', '“auth”']]);
+  assert.equal(scopeModel({ b: 'builder-zz' }, s)[0].param, 'b', 'an unknown builder still gets a chip');
+});
+
+test('shell: the legend leads with the view keys and names every other view chord', async () => {
+  const { legendItems } = await import('../public/js/ui/shell.js');
+  const board = legendItems('board');
+  assert.equal(board[0].label, 'MOVE');
+  assert.ok(!board.some((i) => i.keys === 'g b'), 'no chord for the view you are on');
+  assert.ok(board.some((i) => i.keys === 'g m' && i.label === 'MAP'));
+  assert.ok(board.some((i) => i.keys === 'g o' && i.label === 'MORN'));
+  assert.deepEqual(board.slice(-2).map((i) => i.label), ['CMD', 'HELP']);
+  assert.ok(legendItems('inbox').every((i) => i.label.length <= 5), 'labels stay short');
+});
+
+test('shell: layout, density and theme hooks', async () => {
+  const { layoutFor, densityFor, themeFor } = await import('../public/js/ui/shell.js');
+  assert.deepEqual([0, 699, 700, 1199, 1200, 3800].map(layoutFor), ['phone', 'phone', 'tablet', 'tablet', 'desktop', 'desktop']);
+  assert.equal(densityFor(1600), 'dense');
+  assert.equal(densityFor(900), 'comfy');
+  assert.equal(densityFor(1600, { coarse: true }), 'touch');
+  assert.equal(themeFor('light'), 'light');
+  for (const x of ['dark', null, 'nonsense', undefined]) assert.equal(themeFor(x), 'dark');
 });
 
 // --- Stage 1: lanes ----------------------------------------------------------

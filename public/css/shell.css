@@ -1,141 +1,307 @@
-/* ===================== top bar — real glass ============================== */
+/* ===========================================================================
+   shell: the app frame (fleet plan §4 2.4, task D4)
+   ---------------------------------------------------------------------------
+   One CSS grid on .shell:
+     head head head   40px   brand, conn lamp, view nav, scope, annunciator, clock
+     rail main insp   1fr    rail slot (D5) | view host | inspector (overlay, D6)
+     tape tape tape   28px   event tape (D7) + hotkey legend
+   The inspector is an overlay inside main, so the map never reflows. Phone
+   (<700): header, the builder chip strip (D6b), main; no rail, no tape.
+   Tablet 700-1199: the rail is fixed collapsed. Labels and the legend show
+   from 1440px. Every value is a token; no glass, no shadow, no gradient.
+   =========================================================================== */
 
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
+/* --- icons (sprite <use>, plan §4 2.3) ---------------------------------------- */
+.i {
+  width: var(--icon-m);
+  height: var(--icon-m);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+  vertical-align: middle;
+}
+.i-s { width: var(--icon-s); height: var(--icon-s); }
+.i-l { width: var(--icon-l); height: var(--icon-l); }
+
+/* --- the grid ----------------------------------------------------------------- */
+.shell {
+  --rail-cur: 0px;
+  display: grid;
+  grid-template-areas: "head head head" "rail main insp" "tape tape tape";
+  grid-template-rows: var(--header-h) minmax(0, 1fr) var(--tape-h);
+  grid-template-columns: var(--rail-cur) minmax(0, 1fr) 0;
+  height: 100vh;
+  height: 100dvh;
+  background: var(--bg-canvas);
+}
+.shell[data-rail="open"] { --rail-cur: var(--rail-w); }
+.shell[data-rail="min"] { --rail-cur: var(--rail-w-min); }
+
+/* --- header ------------------------------------------------------------------- */
+.shell-head {
+  grid-area: head;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 7px 14px;
-  padding-top: max(7px, env(safe-area-inset-top));
-  background: oklch(13% 0.014 258 / 0.82);
-  border-bottom: 1px solid var(--border-weak);
-  box-shadow: var(--highlight-inset);
-}
-@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  @media (prefers-reduced-transparency: no-preference) {
-    /* Literal values, never var() — WebKit drops the whole declaration if a
-       var() chain resolves invalid, and the bar would lose its backing. */
-    .topbar {
-      -webkit-backdrop-filter: blur(14px) saturate(155%);
-      backdrop-filter: blur(14px) saturate(155%);
-    }
-  }
-}
-
-.topbar-left { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.brand { font-size: 12.5px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 650; }
-.brand-host {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-3);
-  margin-left: 9px;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  font-weight: 400;
-}
-.brand-host::before { content: "· "; color: var(--border-strong); }
-
-.conn {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-weight: 600;
-  color: var(--ok);
-  border: 1px solid oklch(78% 0.16 158 / 0.32);
-  background: oklch(78% 0.16 158 / 0.1);
-  border-radius: var(--radius-pill);
-  padding: 2px 9px 2px 8px;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: 0 var(--sp-3);
+  background: var(--bg-surface);
+  border-bottom: var(--bw) solid var(--line);
+  overflow: hidden;
   white-space: nowrap;
+}
+
+.head-brand { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex: none; }
+.brand {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  height: 18px;
+  padding: 0 var(--sp-1);
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--radius);
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-1);
 }
-.conn::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.conn.down { color: var(--crit); border-color: oklch(70% 0.2 12 / 0.4); background: oklch(70% 0.2 12 / 0.12); }
+.brand-host {
+  font-family: var(--font-mono);
+  font-size: var(--fs-10);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-3);
+  margin-left: var(--sp-2);
+}
+.brand-host:empty { display: none; }
 
-.topbar-gauges { display: flex; gap: 16px; margin-left: auto; align-items: center; }
-.topbar-right { display: flex; align-items: center; gap: 12px; }
-.stat { font-family: var(--font-mono); font-size: 12px; color: var(--text-2); white-space: nowrap; }
+/* The connection lamp beside the brand (#conn keeps its id and its text). */
+.conn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-family: var(--font-label);
+  font-size: var(--fs-10);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.conn::before {
+  content: "";
+  width: var(--lamp);
+  height: var(--lamp);
+  border-radius: 50%;
+  background: var(--ok);
+}
+/* p1 is never shown without its square. */
+.conn.down { color: var(--p1); }
+.conn.down::before { border-radius: 0; background: var(--p1); }
+
+.builders { display: inline-flex; gap: var(--sp-1); }
+.builder-chip {
+  height: 18px;
+  padding: 0 var(--sp-1);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text-2);
+}
+.builder-chip.status-stale::before { background: var(--p3); border-radius: 0; transform: rotate(45deg) scale(0.8); }
+.builder-chip.status-connecting::before { background: var(--off); }
+
+/* View nav: icon buttons, 3-4 character labels from 1440px. */
+.shell-nav { display: flex; gap: 2px; flex: none; }
+.nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 28px;
+  min-width: 28px;
+  padding: 0 var(--sp-1);
+  justify-content: center;
+  background: transparent;
+  border: var(--bw) solid transparent;
+  border-radius: var(--radius);
+  color: var(--text-3);
+  cursor: pointer;
+}
+.nav-tab:hover { color: var(--text-1); background: var(--bg-hover); }
+.nav-tab.on, .nav-tab[aria-current="page"] {
+  color: var(--text-1);
+  background: var(--bg-selected);
+  border-color: var(--line);
+  border-bottom-color: var(--accent);
+}
+.nav-l {
+  display: none;
+}
+.nav-tab .nav-l {
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+}
+
+/* Scope chips (plan §4 2.5); the ALL plate when nothing is filtered. */
+.scope { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; overflow: hidden; }
+
+.topbar-gauges { display: flex; gap: var(--sp-4); margin-left: auto; align-items: center; min-width: 0; }
+.head-right { display: flex; align-items: center; gap: var(--sp-3); flex: none; }
+.stat { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); white-space: nowrap; }
 .stat b { color: var(--text-1); font-weight: 600; }
 
-.icon-btn {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  border-radius: var(--radius-s);
-  width: 30px;
-  height: 30px;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
+/* The annunciator slot: 2 x 4 tiles of 64 x 18 (D7 draws the tiles). */
+.ann {
   display: grid;
-  place-items: center;
-  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+  grid-template-columns: repeat(4, 64px);
+  grid-auto-rows: 18px;
+  gap: 2px;
 }
-.icon-btn:hover { color: var(--text-1); border-color: var(--border-strong); }
+.ann:empty { display: none; }
 
-/* ===================== overlays ========================================== */
+/* UTC on top, local time and zone below; ticks with textContent only. */
+.clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--font-mono);
+  font-size: var(--fs-10);
+  line-height: var(--lh-tight);
+}
+.clock-utc { color: var(--text-1); }
+.clock-local { color: var(--text-3); }
 
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: var(--fs-13);
+  line-height: 1;
+  cursor: pointer;
+}
+.icon-btn:hover { color: var(--text-1); background: var(--bg-hover); border-color: var(--line-strong); }
+
+/* --- rail slot, view host, inspector ------------------------------------------ */
+.shell-rail {
+  grid-area: rail;
+  min-width: 0;
+  overflow: hidden auto;
+  background: var(--bg-surface);
+  border-right: var(--bw) solid var(--line);
+  z-index: var(--z-rail);
+}
+.shell[data-rail="none"] .shell-rail { border-right: 0; }
+
+.shell-main {
+  grid-area: main;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+/* Each view scrolls on its own; the map fills the host. */
+.shell-main > .view, .shell-main > .layout { height: 100%; overflow: auto; }
+.shell-main > .view.map-view { height: 100%; padding: 0; overflow: hidden; }
+
+.shell-insp {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  width: min(var(--insp-w), calc(100% - var(--rail-w-min)));
+  overflow: auto;
+  background: var(--bg-surface);
+  border-left: var(--bw) solid var(--line);
+  z-index: var(--z-insp);
+  transform: translateX(100%);
+  transition: transform var(--dur) var(--ease);
+}
+.shell[data-insp="open"] .shell-insp { transform: translateX(0); }
+
+/* --- bottom bar: tape on the left, legend on the right ---------------------- */
+.shell-bar {
+  grid-area: tape;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: 0 var(--sp-3);
+  background: var(--bg-sunken);
+  border-top: var(--bw) solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-10);
+  color: var(--text-2);
+  overflow: hidden;
+  white-space: nowrap;
+  z-index: var(--z-tape);
+}
+.shell-tape { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.shell-legend { display: none; gap: var(--sp-3); margin-left: auto; color: var(--text-3); }
+.legend-i { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.legend-i kbd { font-size: var(--fs-10); padding: 0 var(--sp-1); }
+.legend-l { font-family: var(--font-label); letter-spacing: var(--ls-label); }
+
+/* --- phone hooks (D6b fills them) ------------------------------------------- */
+.shell-strip { display: none; }
+.shell-sheet {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: var(--z-sheet);
+  background: var(--bg-surface);
+  border-top: var(--bw) solid var(--line-strong);
+}
+
+/* --- overlays ------------------------------------------------------------------ */
 .ui-error {
   position: fixed;
   inset: 0 0 auto 0;
-  z-index: 70;
-  padding: 8px 16px;
-  padding-top: max(8px, env(safe-area-inset-top));
-  background: oklch(30% 0.12 12 / 0.95);
-  border-bottom: 1px solid oklch(70% 0.2 12 / 0.5);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: oklch(94% 0.05 12);
+  z-index: var(--z-dialog);
   max-height: 30vh;
   overflow-y: auto;
+  padding: var(--sp-2) var(--sp-4);
+  padding-top: max(var(--sp-2), env(safe-area-inset-top));
+  background: var(--bg-elevated);
+  border-bottom: var(--bw) solid var(--p1-line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-1);
 }
+.ui-error::before { content: "■ UI ERROR"; color: var(--p1); font-family: var(--font-label); letter-spacing: var(--ls-label); }
 
 .banner {
   position: fixed;
   inset: auto 0 0 0;
-  z-index: 60;
+  z-index: var(--z-toast);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 10px 14px;
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
-  background: oklch(26% 0.09 12 / 0.94);
-  border-top: 1px solid oklch(70% 0.2 12 / 0.42);
-  font-size: 12.5px;
-  color: oklch(92% 0.05 12);
-}
-.banner-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--crit); animation: pulse 1.4s ease-in-out infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
-
-.toast {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: max(20px, env(safe-area-inset-bottom));
-  z-index: 70;
-  background: var(--glass-fill-strong);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  padding: 9px 18px;
-  font-size: 12.5px;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  padding-bottom: max(var(--sp-2), env(safe-area-inset-bottom));
+  background: var(--bg-elevated);
+  border-top: var(--bw) solid var(--p1-line);
+  font-size: var(--fs-12);
   color: var(--text-1);
-  box-shadow: var(--shadow-float), var(--highlight-inset);
 }
-@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-  @media (prefers-reduced-transparency: no-preference) {
-    .toast {
-      -webkit-backdrop-filter: blur(16px) saturate(150%);
-      backdrop-filter: blur(16px) saturate(150%);
-    }
-  }
+.banner-dot {
+  width: var(--lamp);
+  height: var(--lamp);
+  background: var(--p1);
+  animation: lb-flash 1s linear infinite;
 }
 
-/* ===================== layout ============================================ */
-
+/* --- the board's own layout (inside #view-board) ---------------------------- */
 .layout {
   display: grid;
   grid-template-columns: 1fr;
@@ -153,8 +319,8 @@
   .rail {
     display: block;
     position: sticky;
-    top: 62px;
-    max-height: calc(100vh - 78px);
+    top: 0;
+    max-height: calc(100dvh - var(--header-h) - var(--tape-h) - 2 * var(--gap));
     overflow-y: auto;
     scrollbar-width: thin;
   }
@@ -162,9 +328,62 @@
   .grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 }
 
+/* --- breakpoints ----------------------------------------------------------------- */
+
+/* Phone: header, chip strip, main. No rail column, no tape (events live in INBOX). */
+@media (max-width: 699px) {
+  .shell {
+    grid-template-areas: "head" "strip" "main";
+    grid-template-rows: calc(var(--header-h) + 4px + env(safe-area-inset-top)) auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .shell-head { padding-top: env(safe-area-inset-top); gap: var(--sp-2); }
+  .shell-rail, .shell-bar { display: none; }
+  .shell-strip {
+    grid-area: strip;
+    display: flex;
+    gap: var(--sp-1);
+    padding: var(--sp-1) var(--sp-2);
+    overflow-x: auto;
+    background: var(--bg-surface);
+    border-bottom: var(--bw) solid var(--line);
+  }
+  .shell-strip:empty { display: none; }
+  .shell-nav { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .scope, .topbar-gauges, .stat, .builders, .clock-local, .brand-host { display: none; }
+  .shell-insp { width: 100%; }
+}
+
+/* Tablet: the rail is fixed collapsed; no labels, no legend. */
+@media (min-width: 700px) and (max-width: 1199px) {
+  .shell[data-rail="open"] { --rail-cur: var(--rail-w-min); }
+  .ann { grid-template-columns: repeat(4, 48px); }
+}
+
+/* Desktop. */
+@media (min-width: 1200px) {
+  .shell-head { gap: var(--sp-4); }
+}
+
+/* Wide desktop: the nav's short labels and the hotkey legend. */
+@media (min-width: 1440px) {
+  .nav-l { display: inline; }
+  .shell-legend { display: flex; }
+}
+
+/* Ultrawide (the 49"): the dock joins the board, the columns get denser. */
 @media (min-width: 2000px) {
   .layout { grid-template-columns: var(--rail-w) minmax(0, 1fr) minmax(0, 45%); }
-  .dock { display: flex; flex-direction: column; position: sticky; top: 62px; height: calc(100vh - 78px); }
+  .dock {
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: 0;
+    height: calc(100dvh - var(--header-h) - var(--tape-h) - 2 * var(--gap));
+  }
   .grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .shell-insp { transition: none; }
+}
