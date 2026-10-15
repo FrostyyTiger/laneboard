@@ -33,6 +33,7 @@ import { randomBytes } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { config } from '../config.mjs';
 import { log } from '../log.mjs';
+import { warnRateLimited } from '../security.mjs';
 import * as state from '../state.mjs';
 import * as ws from '../ws.mjs';
 
@@ -44,6 +45,14 @@ export const MAX_BUFFERED = 16 * 1024 * 1024;
 /** Fresh-snapshot resyncs allowed per client per RESYNC_WINDOW_MS. */
 export const RESYNC_LIMIT = 10;
 export const RESYNC_WINDOW_MS = 10_000;
+/** Ring replays allowed per client per RESYNC_WINDOW_MS (SR6 L2). */
+export const REPLAY_LIMIT = 20;
+/** Replayed bytes allowed per client per RESYNC_WINDOW_MS (SR6 L2). */
+export const REPLAY_BYTES_LIMIT = 4 * 1024 * 1024;
+/** A replay is refused (the client closed) while this much is still unsent to it (SR6 L2). */
+export const MAX_REPLAY_BUFFERED = 1024 * 1024;
+/** Concurrent v1 stream clients (SR6 L2); the hub needs one per builder. */
+export const MAX_STREAM_CLIENTS = 32;
 
 let EPOCH = randomBytes(9).toString('base64url');
 export function epoch() { return EPOCH; }
@@ -79,12 +88,34 @@ export function snapshotFrame() {
   return stampV1({ type: 'snapshot', ...body });
 }
 
+function warnClient(reason, text) {
+  // SR6 L3: one line per reason per minute, whatever a client sends
+  warnRateLimited(() => log.warn(text), `v1-stream-${reason}`, '');
+}
+
+/**
+ * Drop a client and ignore anything it still sends (SR6 L3). With a close
+ * `code` a close frame is sent first (the client learns why) and the socket is
+ * terminated after a second if the handshake does not finish; without one it
+ * is terminated at once.
+ */
+function dropClient(client, reason, text, code = null, why = '') {
+  if (client.lbClosing) return;
+  client.lbClosing = true;
+  warnClient(reason, text);
+  if (clients.delete(client)) ws.recomputeVisible();
+  if (code === null) {
+    try { client.terminate(); } catch { /* gone */ }
+    return;
+  }
+  try { client.close(code, why); } catch { /* gone */ }
+  setTimeout(() => { try { client.terminate(); } catch { /* gone */ } }, 1000).unref?.();
+}
+
 function sendRaw(client, data) {
-  if (client.readyState !== client.OPEN) return;
+  if (client.lbClosing || client.readyState !== client.OPEN) return;
   if (client.bufferedAmount > MAX_BUFFERED) {
-    log.warn('v1 stream client too far behind; dropping it');
-    client.terminate();
-    clients.delete(client);
+    dropClient(client, 'behind', 'v1 stream client too far behind; dropping it');
     return;
   }
   try { client.send(data); } catch { /* going away */ }
@@ -122,21 +153,48 @@ export function resyncPlan(fromSeq, clientEpoch) {
   return { replay: out.map((f) => f.data) };
 }
 
+/**
+ * SR6 L2: a replay is allowed while the client has drained what it was sent
+ * (at most one outstanding replay) and stays within REPLAY_LIMIT replays and
+ * REPLAY_BYTES_LIMIT replayed bytes per RESYNC_WINDOW_MS. 'close' → the client
+ * is dropped; 'snapshot' (the bytes budget) → a fresh snapshot instead.
+ */
+function replayVerdict(client, frames, now) {
+  if (client.bufferedAmount > MAX_REPLAY_BUFFERED) return 'close';
+  client.replays = (client.replays ?? []).filter((r) => now - r.at < RESYNC_WINDOW_MS);
+  if (client.replays.length >= REPLAY_LIMIT) return 'close';
+  let bytes = 0;
+  for (const d of frames) bytes += Buffer.byteLength(d);
+  const used = client.replays.reduce((n, r) => n + r.bytes, 0);
+  // too many bytes: a fresh snapshot instead (bounded by RESYNC_LIMIT)
+  if (used + bytes > REPLAY_BYTES_LIMIT) return 'snapshot';
+  client.replays.push({ at: now, bytes });
+  return 'replay';
+}
+
 function handleClientMessage(client, raw) {
+  if (client.lbClosing) return;
   let msg;
   try { msg = JSON.parse(raw.toString()); } catch { return; }
   if (!msg || typeof msg !== 'object') return;
   if (msg.type === 'resync') {
+    const now = Date.now();
     const plan = resyncPlan(msg.fromSeq, msg.epoch);
     if (plan.replay) {
-      for (const data of plan.replay) sendRaw(client, data);
-      return;
+      if (plan.replay.length === 0) return;
+      const verdict = replayVerdict(client, plan.replay, now);
+      if (verdict === 'close') {
+        dropClient(client, 'replay-rate', 'v1 stream client replaying too often or not reading its replays; closing it', 1008, 'replay rate');
+        return;
+      }
+      if (verdict === 'replay') {
+        for (const data of plan.replay) sendRaw(client, data);
+        return;
+      }
     }
-    const now = Date.now();
     client.resyncs = (client.resyncs ?? []).filter((t) => now - t < RESYNC_WINDOW_MS);
     if (client.resyncs.length >= RESYNC_LIMIT) {
-      log.warn('v1 stream client resyncing too often; closing it');
-      client.close(1008, 'resync rate');
+      dropClient(client, 'resync-rate', 'v1 stream client resyncing too often; closing it', 1008, 'resync rate');
       return;
     }
     client.resyncs.push(now);
@@ -154,6 +212,13 @@ function handleClientMessage(client, raw) {
  * classification result from §2 A8 (kept for logs, e.g. `{kind:'hub'}`).
  */
 export function attachStream(req, socket, head, auth = null) {
+  if (clients.size >= MAX_STREAM_CLIENTS) {
+    // SR6 L2: bounded fan-out (and so bounded buffered bytes in total)
+    warnClient('full', `v1 stream: ${MAX_STREAM_CLIENTS} clients already connected; refusing another`);
+    try { socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); } catch { /* gone */ }
+    setTimeout(() => { try { socket.destroy(); } catch { /* gone */ } }, 1000).unref?.();
+    return true;
+  }
   wss.handleUpgrade(req, socket, head, (client) => {
     client.isAlive = true;
     client.visible = new Set();
@@ -163,7 +228,7 @@ export function attachStream(req, socket, head, auth = null) {
     sendRaw(client, JSON.stringify(snapshotFrame()));
     client.on('pong', () => { client.isAlive = true; });
     client.on('message', (raw) => handleClientMessage(client, raw));
-    const gone = () => { if (clients.delete(client)) ws.recomputeVisible(); };
+    const gone = () => { client.lbClosing = true; if (clients.delete(client)) ws.recomputeVisible(); };
     client.on('close', gone);
     client.on('error', gone);
     log.info(`v1 stream client connected${auth?.kind ? ` (${auth.kind})` : ''} (${clients.size} total)`);

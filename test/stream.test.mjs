@@ -11,6 +11,7 @@ import * as state from '../server/state.mjs';
 import * as terminals from '../server/terminals.mjs';
 import { config } from '../server/config.mjs';
 import { fkey } from '../server/fleet/keys.mjs';
+import { log } from '../server/log.mjs';
 
 // --- a loopback server whose every upgrade becomes a v1 stream client -------
 
@@ -223,6 +224,105 @@ test('fresh-snapshot resyncs are rate limited', async () => {
   const closed = new Promise((r) => c.sock.once('close', (code) => r(code)));
   c.send({ type: 'resync', fromSeq: -1 });
   assert.equal(await closed, 1008);
+});
+
+// --- SR6 L2/L3: replay throttles, the client cap, no log flood ------------
+
+/** Capture log.warn lines while fn runs. */
+async function captureWarn(fn) {
+  const lines = [];
+  const orig = log.warn;
+  log.warn = (...a) => { lines.push(a.join(' ')); };
+  try { await fn(); } finally { log.warn = orig; }
+  return lines;
+}
+
+test('SR6 L2: ring replays are limited per client per window (count), then the client is closed 1008', async () => {
+  stream._reset();
+  const c = await connect();
+  await c.next();
+  ws.send({ type: 'health', health: {} });
+  await c.next();
+  const from = ws.currentSeq() - 1;
+  for (let i = 0; i < stream.REPLAY_LIMIT; i++) {
+    c.send({ type: 'resync', fromSeq: from });
+    const f = await c.next();
+    assert.equal(f.type, 'health', `replay ${i}`);
+    assert.equal(f.seq, from + 1);
+  }
+  const closed = new Promise((r) => c.sock.once('close', (code) => r(code)));
+  c.send({ type: 'resync', fromSeq: from });
+  assert.equal(await closed, 1008);
+  assert.equal(stream.streamClientCount(), 0);
+});
+
+test('SR6 L2: a replay over the per-window bytes budget becomes a snapshot', async () => {
+  stream._reset();
+  const c = await connect();
+  await c.next();
+  const before = ws.currentSeq();
+  const big = 'x'.repeat(256 * 1024);
+  const n = Math.ceil(stream.REPLAY_BYTES_LIMIT / big.length) + 1;
+  for (let i = 0; i < n; i++) ws.send({ type: 'health', health: { big } });
+  for (let i = 0; i < n; i++) await c.next(5000);
+  // half the frames fit the budget: replayed
+  const half = Math.floor(n / 2);
+  c.send({ type: 'resync', fromSeq: ws.currentSeq() - half });
+  for (let i = 0; i < half; i++) assert.equal((await c.next(5000)).type, 'health');
+  // all of them would exceed it (with what was already replayed): a fresh snapshot instead
+  c.send({ type: 'resync', fromSeq: before });
+  const f = await c.next(5000);
+  assert.equal(f.type, 'snapshot');
+  assert.equal(f.seq, ws.currentSeq());
+  await c.none();
+  await c.close();
+});
+
+test('SR6 L3: a client closed for its resync rate is ignored afterwards: one warning, not one per frame', async () => {
+  stream._reset();
+  const c = await connect();
+  await c.next();
+  const lines = await captureWarn(async () => {
+    const closed = new Promise((r) => c.sock.once('close', (code) => r(code)));
+    // the limit plus a burst that is already on the wire when the close starts
+    for (let i = 0; i < stream.RESYNC_LIMIT + 200; i++) c.send({ type: 'resync', fromSeq: -1 });
+    assert.equal(await closed, 1008);
+    // a second offender within the minute is not logged again either
+    const d = await connect();
+    await d.next();
+    const closed2 = new Promise((r) => d.sock.once('close', (code) => r(code)));
+    for (let i = 0; i < stream.RESYNC_LIMIT + 50; i++) d.send({ type: 'resync', fromSeq: -1 });
+    assert.equal(await closed2, 1008);
+  });
+  const resyncLines = lines.filter((l) => /resyncing too often/.test(l));
+  assert.ok(resyncLines.length <= 1, `rate-limited warning, got ${resyncLines.length}`);
+  assert.equal(stream.streamClientCount(), 0);
+});
+
+test('SR6 L2: the number of stream clients is capped (503 past MAX_STREAM_CLIENTS)', async () => {
+  stream._reset();
+  const open = [];
+  for (let i = 0; i < stream.MAX_STREAM_CLIENTS; i++) {
+    const c = await connect();
+    await c.next();
+    open.push(c);
+  }
+  assert.equal(stream.streamClientCount(), stream.MAX_STREAM_CLIENTS);
+  const extra = new WebSocket(base);
+  extra.on('error', () => {});
+  const [, res] = await new Promise((resolve, reject) => {
+    extra.once('unexpected-response', (...a) => resolve(a));
+    extra.once('open', () => reject(new Error('opened past the cap')));
+  });
+  assert.equal(res.statusCode, 503);
+  extra.terminate();
+  await open[0].close();
+  await until(() => stream.streamClientCount() === stream.MAX_STREAM_CLIENTS - 1);
+  const again = await connect();
+  assert.equal((await again.next()).type, 'snapshot', 'a freed slot is usable again');
+  open.push(again);
+  for (const c of open.slice(1)) c.sock.terminate();
+  stream._reset();
 });
 
 test('visible from a stream client drives state.visibleSessions; ping answers pong', async () => {

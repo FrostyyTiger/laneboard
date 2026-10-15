@@ -45,6 +45,8 @@ import { run, isSafeSessionName } from './util.mjs';
 import { exactTarget, RUN_WINDOW_RE } from './collector/tmux.mjs';
 import { kvRead, kvWrite } from './db.mjs';
 import * as state from './state.mjs';
+import { auditTerm } from './fleet/api-v1.mjs';
+import { termArgsFromQuery } from './fleet/auth.mjs';
 
 const wss = new WebSocketServer({ noServer: true });
 
@@ -307,13 +309,36 @@ export function windowParam(url) {
   return typeof w === 'string' && RUN_WINDOW_RE.test(w) ? w : null;
 }
 
-/** Upgrade handler for /ws/term/<name>. Returns true if it handled the request. */
+let termAuditor = auditTerm;
+/** Tests only: replace the audit hook of the legacy path (null restores api-v1's auditTerm). */
+export function _setTermAuditor(fn) { termAuditor = typeof fn === 'function' ? fn : auditTerm; }
+
+const STATUS_TEXT = { 400: '400 Bad Request', 401: '401 Unauthorized', 403: '403 Forbidden', 429: '429 Too Many Requests', 503: '503 Service Unavailable' };
+
+/**
+ * Upgrade handler for /ws/term/<name>. Returns true if it handled the request.
+ * SR6 L5: the legacy path is audited and rate-limited exactly like WS
+ * /api/v1/term/:name (api-v1 auditTerm: one `term` audit row per open, the
+ * `term` limiter, refused when the audit cannot be written). `req.auth` is
+ * the classification the upgrade guard set (local or direct here); without
+ * one the upgrade is refused 401.
+ */
 export function attach(req, socket, head, url) {
   const m = /^\/ws\/term\/(.+)$/.exec(url.pathname);
   if (!m) return false;
   let name;
   try { name = decodeURIComponent(m[1]); } catch { name = ''; }
-  return attachNamed(req, socket, head, name, url);
+  const gate = (n) => {
+    const a = req?.auth;
+    if (!a || (a.kind !== 'local' && a.kind !== 'direct')) return 401;
+    let args;
+    try { args = termArgsFromQuery(url.searchParams); } catch { return 400; }
+    if (args.cols === null || args.rows === null) return 400;
+    let r;
+    try { r = termAuditor(a, n, args); } catch { r = { ok: false, status: 503 }; }
+    return r?.ok ? 0 : (r?.status ?? 503);
+  };
+  return attachNamed(req, socket, head, name, url, { gate });
 }
 
 /**
@@ -322,9 +347,11 @@ export function attach(req, socket, head, url) {
  * v1 route `/api/v1/term/:name`, fleet A7/A8). `url` supplies `cols`/`rows`
  * (clamped as everywhere else) and an optional `window=run-<script>` (fleet
  * R8, RUN_WINDOW_RE). Always handles the request: a bad `window` is answered
- * 400, a refused name 404, and the socket destroyed. Returns true.
+ * 400, a refused name 404, and the socket destroyed. `gate(name)`, when
+ * given, runs after those checks and before the upgrade: 0 proceeds, any other
+ * value is the status the upgrade is refused with. Returns true.
  */
-export function attachNamed(req, socket, head, name, url) {
+export function attachNamed(req, socket, head, name, url, { gate = null } = {}) {
   const reject = (why, status = '404 Not Found') => {
     log.warn(`term refused for ${JSON.stringify(String(name).slice(0, 80))}: ${why}`);
     try { socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`); } catch { /* gone */ }
@@ -338,6 +365,11 @@ export function attachNamed(req, socket, head, name, url) {
   if (WEB_SUFFIX.test(name)) return reject('refusing to attach to a web session');
   if (!state.get(name)) return reject('not in inventory');
   if (!ownerSize(name)) return reject('owner pane size unknown');
+  if (gate) {
+    // `gate(name)` -> 0 to proceed, else the HTTP status to refuse with (audit, rate limit)
+    const status = gate(name);
+    if (status) return reject(`refused (${status})`, STATUS_TEXT[status] ?? '403 Forbidden');
+  }
 
   const want = { cols: Number(url?.searchParams?.get('cols')), rows: Number(url?.searchParams?.get('rows')) };
   if (window !== undefined) want.window = window;

@@ -553,3 +553,117 @@ test('initV1/preloadNonces: audit ids of the last 5 minutes are replay-protected
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------- SR6 L1, L4, L8 (units)
+
+import { EventEmitter } from 'node:events';
+import { misroutedServe, serveHeaderNames, authOptions, _setAuthOptionsForTests, _resetMisroutedWarning } from '../server/http.mjs';
+import { recordPeerUid, _setPeerUidLookup, _peerUidCacheSize } from '../server/boot/common.mjs';
+
+const fleetCfg = { port: 7801, fleet: { id: 'builder-a', ingressPort: 7802 } };
+const reqOn = (localPort, headers = {}) => ({ headers, socket: { localPort, remoteAddress: '127.0.0.1' } });
+
+test('SR6 L1: misroutedServe refuses serve headers on the local listener only with a fleet block, and warns once', () => {
+  _resetMisroutedWarning();
+  const warned = [];
+  const warn = (t) => warned.push(t);
+  for (const h of [{ 'x-forwarded-for': '192.0.2.1' }, { 'x-forwarded-proto': 'https' }, { 'x-forwarded-host': 'b.example.invalid' }, { 'tailscale-user-login': 'u@example.invalid' }, { 'tailscale-app-capabilities': '{}' }]) {
+    const err = misroutedServe(reqOn(7801, h), fleetCfg, warn);
+    assert.equal(err?.status, 403, JSON.stringify(h));
+    assert.equal(err.code, 'misrouted-serve');
+  }
+  assert.equal(warned.length, 1, 'one loud line per process');
+  assert.match(warned[0], /tailscale serve still targets the local port/);
+  assert.match(warned[0], /http:\/\/127\.0\.0\.1:7802/);
+  // plain local, the ingress listener, and no fleet block: nothing changes
+  assert.equal(misroutedServe(reqOn(7801, { 'user-agent': 'curl', 'x-laneboard': '1' }), fleetCfg, warn), null);
+  assert.equal(misroutedServe(reqOn(7802, { 'x-forwarded-for': '192.0.2.1', 'tailscale-user-login': 'u@example.invalid' }), fleetCfg, warn), null);
+  assert.equal(misroutedServe(reqOn(7801, { 'x-forwarded-for': '192.0.2.1' }), { port: 7801 }, warn), null);
+  assert.equal(misroutedServe(reqOn(7801, { 'x-forwarded-for': '192.0.2.1' }), { port: 7801, fleet: { id: 'x' } }, warn), null);
+  assert.deepEqual(serveHeaderNames({ headers: { 'X-Forwarded-For': '1', Host: 'h', 'Tailscale-User-Name': 'n' } }), ['x-forwarded-for', 'tailscale-user-name']);
+  _resetMisroutedWarning();
+});
+
+test('SR6 L8: authOptions() is frozen; only the test setter can extend it', () => {
+  const o = authOptions();
+  assert.equal(Object.isFrozen(o), true);
+  assert.throws(() => { 'use strict'; o.now = () => 0; }, TypeError);
+  assert.equal(authOptions().now, undefined);
+  _setAuthOptionsForTests({ now: () => 5 });
+  assert.equal(authOptions().now(), 5);
+  assert.equal(Object.isFrozen(authOptions()), true);
+  assert.equal(typeof authOptions().warn, 'function');
+  _setAuthOptionsForTests(null);
+  assert.equal(authOptions(), o);
+});
+
+function fakeSock(remotePort, family = 'IPv4') {
+  const s = new EventEmitter();
+  Object.assign(s, { remotePort, localPort: 7802, remoteAddress: '127.0.0.1', localAddress: '127.0.0.1', remoteFamily: family, destroyed: false });
+  return s;
+}
+
+test('SR6 L4: the peer uid is looked up lazily, once per connection, cached until close', () => {
+  const cfg = { fleet: { ingressPeerUid: 1000 } };
+  let calls = 0;
+  _setPeerUidLookup(() => { calls++; return 1000; });
+  try {
+    const idle = fakeSock(40001);
+    recordPeerUid(idle, cfg);
+    assert.equal(calls, 0, 'a connection that sends no request costs no /proc scan');
+    assert.equal(Object.hasOwn(idle, 'lbPeerUid'), true, 'auth.classify sees the own property');
+    const s = fakeSock(40002);
+    recordPeerUid(s, cfg);
+    assert.equal(s.lbPeerUid, 1000);
+    assert.equal(s.lbPeerUid, 1000);
+    assert.equal(calls, 1, 'keep-alive requests reuse the first lookup');
+    assert.equal(_peerUidCacheSize(), 1);
+    s.emit('close');
+    assert.equal(_peerUidCacheSize(), 0, 'the entry dies with the connection');
+    // a later connection on the same ports is looked up afresh (never inherits a uid)
+    _setPeerUidLookup(() => { calls++; return 0; });
+    const reused = fakeSock(40002);
+    recordPeerUid(reused, cfg);
+    assert.equal(reused.lbPeerUid, 0);
+    assert.equal(calls, 2);
+    reused.emit('close');
+    idle.emit('close');
+    // a throwing or non-integer lookup is null (fail closed)
+    _setPeerUidLookup(() => { throw new Error('boom'); });
+    const bad = fakeSock(40003);
+    recordPeerUid(bad, cfg);
+    assert.equal(bad.lbPeerUid, null);
+    bad.emit('close');
+    // no ingressPeerUid: nothing recorded
+    const none = fakeSock(40004);
+    recordPeerUid(none, { fleet: {} });
+    assert.equal(Object.hasOwn(none, 'lbPeerUid'), false);
+  } finally {
+    _setPeerUidLookup(null);
+  }
+  assert.equal(_peerUidCacheSize(), 0);
+});
+
+test('SR6 L4: the default lookup skips /proc/net/tcp6 for an IPv4 peer (real lookup, fail closed on no row)', { skip: process.platform !== 'linux' }, async () => {
+  const net = await import('node:net');
+  const fs = await import('node:fs');
+  const server = net.createServer();
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const accepted = new Promise((r) => server.once('connection', r));
+  const client = net.connect(port, '127.0.0.1');
+  const sock = await accepted;
+  const orig = fs.default.readFileSync;
+  const read = [];
+  fs.default.readFileSync = function (p, ...rest) { read.push(String(p)); return orig.call(this, p, ...rest); };
+  try {
+    recordPeerUid(sock, { fleet: { ingressPeerUid: process.getuid() } });
+    assert.equal(sock.lbPeerUid, process.getuid(), 'this process owns the peer socket');
+  } finally {
+    fs.default.readFileSync = orig;
+    client.destroy();
+    server.close();
+  }
+  assert.ok(read.includes('/proc/net/tcp'));
+  assert.equal(read.includes('/proc/net/tcp6'), false);
+});
