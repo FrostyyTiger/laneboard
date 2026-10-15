@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createFleetStore, compareVersions, snapshotOf, sanitize, LIMITS } from '../server/hub/fleet-store.mjs';
+import v8 from 'node:v8';
+import vm from 'node:vm';
+import { createFleetStore, compareVersions, snapshotOf, sanitize, LIMITS, RECORD_BUDGETS, MESSAGE_BUDGET, RETAINED_BOUND } from '../server/hub/fleet-store.mjs';
 import { fkey } from '../server/fleet/keys.mjs';
 
 const T0 = 1_000_000;
@@ -410,4 +412,178 @@ test('applyEvent updates health, approvals by op, stuck, repos', () => {
   assert.equal(e.snap.repos.size, LIMITS.repos);
   assert.equal(snapshotOf(e).repos.r0 !== undefined, true);
   protoClean();
+});
+
+// --- SR9 regressions ---------------------------------------------------------
+
+v8.setFlagsFromString('--expose-gc');
+const gc = vm.runInNewContext('gc');
+function heapAfterGc() {
+  gc(); gc();
+  return process.memoryUsage().heapUsed;
+}
+
+/** Deterministic size of retained data: string chars (values and keys) and nodes. */
+function measure(v, acc = { chars: 0, nodes: 0 }) {
+  acc.nodes++;
+  if (typeof v === 'string') acc.chars += v.length;
+  else if (v instanceof Map) for (const [k, x] of v) { acc.chars += String(k).length; measure(x, acc); }
+  else if (Array.isArray(v)) for (const x of v) measure(x, acc);
+  else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { acc.chars += k.length; measure(x, acc); }
+  return acc;
+}
+
+test('SR9 M1: clamped strings do not keep the original large string alive', () => {
+  const st = mk();
+  st.applySnapshot('b1', snapMsg([]), T0);
+  const N = 100;
+  const h0 = heapAfterGc();
+  for (let i = 0; i < N; i++) {
+    // A fresh 1 MiB string per delta (unique, so nothing is shared).
+    const big = `${i}:` + 'x'.repeat(1 << 20);
+    st.applyDelta('b1', { type: 'delta', sessions: [sess(`s${i}`, { title: big, meta: { note: big } })] }, T0 + i);
+  }
+  const grown = heapAfterGc() - h0;
+  const s = st.builder('b1').snap.sessions.get('s7');
+  assert.equal(s.title.length, LIMITS.string);
+  assert.ok(s.title.startsWith('7:x'));
+  // Without the flat copy this retains about N x 1 MiB (> 100 MiB).
+  assert.ok(grown < N * 64 * 1024, `retained ${grown} bytes for ${N} sessions`);
+});
+
+test('SR9 M2: a 1 MiB session is stored within its record budget and counted', () => {
+  const st = mk();
+  const fields = {};
+  for (let i = 0; i < 256; i++) fields[`f${i}`] = 'z'.repeat(4096); // 1 MiB of chars
+  st.applySnapshot('b1', snapMsg([sess('fat', fields)]), T0);
+  const s = st.builder('b1').snap.sessions.get('fat');
+  const m = measure(s);
+  assert.ok(m.chars <= RECORD_BUDGETS.session.chars + 64, `session kept ${m.chars} chars`);
+  assert.equal(s.name, 'fat');
+  assert.equal(s.state, 'working', 'fields before the budget runs out are kept');
+  assert.ok(st.builder('b1').dropped.oversize > 0);
+  // Node budget: many tiny nodes are cut too.
+  st.applyDelta('b1', { type: 'delta', sessions: [sess('tiny', { a: Array.from({ length: 400 }, () => [[], [], [], [], []]) })] }, T0 + 1);
+  assert.ok(measure(st.builder('b1').snap.sessions.get('tiny')).nodes <= RECORD_BUDGETS.session.nodes + 2);
+});
+
+test('SR9 M2: one budget is shared across a whole message', () => {
+  const st = mk();
+  // 500 sessions x ~1000 nodes each would be 500 000 nodes from one frame.
+  const many = Array.from({ length: 500 }, (_, i) => sess(`s${i}`, { a: Array.from({ length: 490 }, () => 0), b: Array.from({ length: 490 }, () => 1) }));
+  st.applySnapshot('b1', snapMsg(many), T0);
+  const e = st.builder('b1');
+  let nodes = 0;
+  for (const s of e.snap.sessions.values()) nodes += measure(s).nodes;
+  // Each stored session adds at most a couple of re-set fields outside the budget.
+  assert.ok(nodes <= MESSAGE_BUDGET.nodes + 2 * e.snap.sessions.size, `stored ${nodes} nodes`);
+  assert.ok(e.snap.sessions.size < 500, 'sessions past the message budget are dropped');
+  assert.ok(e.dropped.oversize > 0);
+});
+
+test('SR9 M2: retained state per builder stays under RETAINED_BOUND with every cap filled by fat records', () => {
+  const st = mk();
+  const fat = (n) => { const o = {}; for (let i = 0; i < n; i++) o[`k${i}`] = 'w'.repeat(4096); return o; };
+  const h0 = heapAfterGc();
+  const f64 = fat(16); // 64 Ki chars: over every non-repo record budget (repos get fat(20))
+  st.applySnapshot('b1', snapMsg([], {
+    lanes: Array.from({ length: 200 }, (_, i) => ({ id: `l${i}`, ...f64 })),
+    attention: Array.from({ length: 200 }, (_, i) => ({ name: `s${i}`, ...f64 })),
+    approvals: Array.from({ length: 100 }, (_, i) => ({ id: `ap-${i}`, ...fat(10) })),
+    repos: Object.fromEntries(Array.from({ length: 64 }, (_, i) => [`r${i}`, fat(20)])),
+    box: fat(20), vitals: fat(20), health: fat(20), budget: [fat(20)],
+  }), T0);
+  // 500 fat deltas (one new session each), then a fat stuck on every one.
+  for (let i = 0; i < 500; i++) {
+    st.applyDelta('b1', { type: 'delta', sessions: [sess(`s${i}`, { ...f64, previewLines: Array.from({ length: 20 }, () => 'p'.repeat(4096)) })] }, T0 + 1 + i);
+  }
+  for (let i = 0; i < 500; i++) st.applyEvent('b1', { type: 'stuck', name: `s${i}`, stuck: fat(4) }, T0 + 10_000 + i * 20);
+  const e = st.builder('b1');
+  assert.equal(e.snap.sessions.size, 500);
+  const m = measure(e.snap);
+  assert.ok(m.chars <= RETAINED_BOUND.chars, `chars ${m.chars} > ${RETAINED_BOUND.chars}`);
+  assert.ok(m.nodes <= RETAINED_BOUND.nodes, `nodes ${m.nodes} > ${RETAINED_BOUND.nodes}`);
+  // Heap: the bound is ~22.6 M chars (one-byte here) plus node overhead; before
+  // SR9 this scenario retained > 150 MiB.
+  const grown = heapAfterGc() - h0;
+  assert.ok(grown < 64 * 1024 * 1024, `retained ${(grown / 1048576).toFixed(1)} MiB`);
+});
+
+test('SR9 L1: event.name, approval.target and approval.lane are re-validated', () => {
+  const st = mk();
+  st.applySnapshot('b1', snapMsg([sess('a')]), T0);
+  const before = st.builder('b1').dropped.names;
+  const ev = st.applyEvent('b1', { type: 'event', event: { name: 'builder-b/x', kind: 'done', target: '../x', lane: 'Bad Lane' } }, T0);
+  assert.equal(ev.event.name, null);
+  assert.equal(ev.event.target, null);
+  assert.equal(ev.event.lane, null);
+  assert.equal(ev.event.kind, 'done');
+  const ok = st.applyEvent('b1', { type: 'event', event: { name: 'a' } }, T0 + 1);
+  assert.equal(ok.event.name, 'a');
+  const ap = st.applyEvent('b1', { type: 'approval', op: 'open', approval: { id: 'ap-1', name: 'a', target: 'b2/x', lane: 'l1' } }, T0 + 2);
+  assert.equal(ap.approval.target, null);
+  assert.equal(ap.approval.lane, 'l1');
+  assert.equal(st.builder('b1').dropped.names, before + 4);
+  // The same rule on approvals in a snapshot.
+  st.applySnapshot('b1', snapMsg([], { approvals: [{ id: 'ap-2', target: 'builder-b/y' }] }), T0 + 3);
+  assert.equal(st.builder('b1').snap.approvals[0].target, null);
+});
+
+test('SR9 L2: preview is dropped at any depth inside sessions, kept elsewhere', () => {
+  const st = mk();
+  st.applySnapshot('b1', snapMsg([sess('a', { meta: { preview: 'x', ok: 1, deeper: [{ preview: 'y' }] } })], { box: { preview: 'box-ok' } }), T0);
+  const s = st.builder('b1').snap.sessions.get('a');
+  assert.deepEqual(s.meta, { ok: 1, deeper: [{}] });
+  assert.equal(st.builder('b1').snap.box.preview, 'box-ok');
+});
+
+test('SR9 L3: keys that shadow builtins are dropped; consumers can call and coerce stored objects', () => {
+  const st = mk();
+  const evil = { hasOwnProperty: 1, toString: 'x', valueOf: 'x', toJSON: 'x', isPrototypeOf: 1, propertyIsEnumerable: 1, toLocaleString: 1, __defineGetter__: 1 };
+  st.applySnapshot('b1', snapMsg([sess('a', { ...evil, box: { ...evil, n: 1 } })], {
+    box: { ...evil },
+    repos: { toString: { a: 1 }, hasOwnProperty: { a: 1 }, good: { ...evil, n: 2 } },
+  }), T0);
+  const e = st.builder('b1');
+  const s = e.snap.sessions.get('a');
+  for (const k of Object.keys(evil)) {
+    assert.equal(Object.hasOwn(s, k), false, k);
+    assert.equal(Object.hasOwn(s.box, k), false, `box.${k}`);
+    assert.equal(Object.hasOwn(e.snap.box, k), false, `snap.box.${k}`);
+  }
+  assert.equal(s.hasOwnProperty('name'), true);
+  assert.equal(String(s.box), '[object Object]');
+  assert.equal(`${e.snap.box}`, '[object Object]');
+  const wire = snapshotOf(e);
+  assert.deepEqual(Object.keys(wire.repos), ['good']);
+  assert.equal(wire.repos.hasOwnProperty('good'), true);
+  assert.deepEqual(wire.repos.good, { n: 2 });
+  assert.equal(st.applyEvent('b1', { type: 'repos', repo: 'valueOf', data: { a: 1 } }, T0), null);
+  assert.doesNotThrow(() => JSON.stringify(wire));
+  protoClean();
+});
+
+test('SR9 L4: view() returns copies, mutating them does not change the store', () => {
+  const st = mk({ builders: [{ id: 'b1', url: 'https://b1.example.invalid', repos: ['r1'] }] });
+  st.setConn('b1', { state: 'up', lastSeen: T0, hello: { version: '0.1.0', actions: { kill: 'confirm' } } });
+  st.applySnapshot('b1', snapMsg([sess('a')], { lanes: [{ id: 'l1' }], repos: { r1: { n: 1 } } }), T0);
+  const v = st.view(T0).builders[0];
+  v.snap.sessions.get('a').state = 'hacked';
+  v.snap.sessions.set('b', { name: 'b' });
+  v.snap.lanes.push({ id: 'l2' });
+  v.snap.repos.get('r1').n = 99;
+  v.hello.actions.set('kill', 'read');
+  v.repos.push('r2');
+  v.conn.lastSeen = 0;
+  const e = st.builder('b1');
+  assert.equal(e.snap.sessions.get('a').state, 'working');
+  assert.equal(e.snap.sessions.has('b'), false);
+  assert.equal(e.snap.lanes.length, 1);
+  assert.equal(e.snap.repos.get('r1').n, 1);
+  assert.equal(e.hello.actions.get('kill'), 'confirm');
+  assert.deepEqual(e.repos, ['r1']);
+  assert.equal(e.conn.lastSeen, T0);
+  const v2 = st.view(T0).builders[0];
+  assert.equal(v2.snap.sessions.get('a').state, 'working');
+  assert.ok(v2.snap.sessions instanceof Map);
 });
