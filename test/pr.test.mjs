@@ -12,6 +12,8 @@ const fx = (f) => fs.readFileSync(path.join(FX, f), 'utf8');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'laneboard-pr-'));
 process.env.LANEBOARD_LANES_DIR = path.join(tmp, 'lanes');
+// Never the worktree's own data/laneboard.db: old rows there change what is "new".
+process.env.LANEBOARD_DB = ':memory:';
 process.env.LANEBOARD_CI_PROVIDER = 'gh';
 process.env.LANEBOARD_CI_REPO = 'example-repo';
 const gh = await import('../server/providers/ci/gh.mjs');
@@ -366,6 +368,71 @@ test('gh not logged in backs off to 10 min instead of looping', async () => {
   await pr.refresh(); // not forced: inside the back-off
   await pr.refresh();
   assert.equal(calls, n, 'no gh call during the back-off');
+});
+
+// --- job blame on the fine-grained red path (fleet P9) ----------------------------
+
+test('fine-grained red: failedJobsForCommit once per head sha, failedJobs on the summary', async () => {
+  const sha = 'c0ffee4000000000000000000000000000000004';
+  const denied = { ok: false, code: 1, stdout: '', stderr: 'GraphQL: Resource not accessible by personal access token (repository.pullRequest.commits.nodes.0.commit.statusCheckRollup)' };
+  const prJson = JSON.stringify({ number: 77, url: 'https://example.invalid/pr/77', state: 'OPEN', isDraft: false, headRefOid: sha, reviews: [], latestReviews: [] });
+  const run = recorder((args) => {
+    if (args[0] === 'pr') return args.at(-1).includes('statusCheckRollup') ? denied : okOut(prJson);
+    if (args[0] === 'run' && args[1] === 'list' && args.includes('-R')) return okOut(fx('runs-commit.json'));
+    if (args[0] === 'run' && args[1] === 'list' && args.includes('--commit')) {
+      return okOut(JSON.stringify([{ name: 'CI', status: 'completed', conclusion: 'failure' }]));
+    }
+    if (args[0] === 'run' && args[1] === 'view') return okOut(args[2] === '18001000004' ? fx('run-jobs.json') : '{"jobs":[]}');
+    return okOut(fx('runs.json')); // the queue
+  });
+  gh._setRunner(run);
+  const slugAsked = [];
+  pr._setSlugResolver(async (repo) => { slugAsked.push(repo); return 'acme/widgets'; });
+  const blameLists = () => run.calls.filter((c) => c.args[1] === 'list' && c.args.includes('-R') && c.args.includes('--commit'));
+
+  await pr.refresh({ force: true });
+  const s = pr.get('lane-a');
+  assert.equal(s.verdict, 'red');
+  assert.equal(s.viaRuns, true);
+  assert.deepEqual(s.checks.failedNames, ['CI'], 'workflow names from the run fallback');
+  assert.deepEqual(s.failedJobs, [
+    { workflow: 'CI', job: 'api (ruff, pytest)' },
+    { workflow: 'Release check', job: null },
+  ]);
+  assert.deepEqual(blameLists()[0].args.slice(0, 6), ['run', 'list', '-R', 'acme/widgets', '--commit', sha]);
+  assert.deepEqual(slugAsked, ['example-repo'], 'the slug of the lane repo');
+  const lastBlocked = db.listMarkers({ lane: 'lane-a', kinds: ['blocked'] })[0];
+  assert.match(lastBlocked.text, /checks red on c0ffee4: api \(ruff, pytest\), Release check$/, 'the marker blames jobs');
+
+  // Same head sha next minute: no second blame.
+  await pr.refresh({ force: true });
+  await pr.refresh({ force: true });
+  assert.equal(blameLists().length, 1, 'failedJobsForCommit is called once per head sha');
+  assert.deepEqual(pr.get('lane-a').failedJobs, s.failedJobs, 'the cached blame is still on the summary');
+
+  // A new head sha is blamed again.
+  const sha2 = 'c0ffee4000000000000000000000000000000005';
+  const prJson2 = prJson.replace(sha, sha2);
+  gh._setRunner(async (args, opts) => {
+    const r = await run(args, opts);
+    return args[0] === 'pr' && r.ok ? okOut(prJson2) : r;
+  });
+  await pr.refresh({ force: true });
+  assert.equal(blameLists().length, 2);
+  assert.equal(blameLists()[1].args[5], sha2);
+});
+
+test('job blame is skipped for green, classic-token red, and an unknown slug', async () => {
+  const red = { verdict: 'red', viaRuns: false, headSha: 'abcdef1', checks: { failedNames: ['web-check'] } };
+  pr._setSlugResolver(async () => 'acme/widgets');
+  const run = recorder(() => okOut('[]'));
+  gh._setRunner(run);
+  assert.equal(await pr.blameJobs({ repo: 'example-repo' }, red), red, 'per-job names already');
+  assert.equal(await pr.blameJobs({ repo: 'example-repo' }, { ...red, verdict: 'green', viaRuns: true }).then((x) => x.failedJobs), undefined);
+  pr._setSlugResolver(async () => null);
+  const noSlug = { ...red, viaRuns: true };
+  assert.equal(await pr.blameJobs({ repo: 'example-repo' }, noSlug), noSlug);
+  assert.equal(run.calls.length, 0, 'nothing reaches gh');
 });
 
 // --- the `none` provider ------------------------------------------------------
