@@ -17,6 +17,7 @@ import { init as initNotifyPrefs } from './ui/notify-prefs.js';
 import { cardNodes } from './views/board.js';
 import { init as initMap } from './views/map.js';
 import { views } from './views/index.js';
+import { init as initArchive } from './views/archive.js';
 
 export function boot() {
   initNet(); // app.js:208 (resize: scheduleVisible + fitAll)
@@ -27,6 +28,7 @@ export function boot() {
   initAnnunciator(); // fleet D7: the alarm tiles in #ann
   initHotkeys(); // app.js:1856-1891 (keydown, outside click)
   initRouter(); // app.js:1909 (hashchange)
+  initArchive(); // fleet R14: the Board's archive filter (#/board?s=archive)
   // The view registry (fleet D4): every route mounts its view through
   // views/index.js (router.js setView -> activateView). Built here, after the
   // modules have evaluated, so each view's default export is initialised.
