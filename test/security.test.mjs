@@ -40,9 +40,9 @@ test('allowedHosts: loopback with port and ingressPort, publicUrl host:port, pub
 });
 
 test('allowedHosts: wildcard binds are not added, concrete ones are; tolerates junk config', () => {
-  const s = allowedHosts({ port: 7790, bindAddresses: ['0.0.0.0', '::', '100.64.0.9', 'fd7a::1'] });
-  assert.ok(s.has('100.64.0.9:7790'));
-  assert.ok(s.has('[fd7a::1]:7790'));
+  const s = allowedHosts({ port: 7790, bindAddresses: ['0.0.0.0', '::', '192.0.2.9', '2001:db8::1'] });
+  assert.ok(s.has('192.0.2.9:7790'));
+  assert.ok(s.has('[2001:db8::1]:7790'));
   assert.ok(!s.has('0.0.0.0:7790'));
   assert.ok(!s.has('[::]:7790'));
   assert.deepEqual([...allowedHosts({ publicUrl: 'not a url', fleet: { publicHosts: 'x', allowedOrigins: [3] } })], []);
