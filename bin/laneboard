@@ -19,6 +19,9 @@
 //   laneboard fleet pubkey [--key <file>] [--pem]     offline: its public key for fleet.hubKeys
 //   laneboard audit [-n 50] [--since 1h] [--file f] [--json]   offline: tail the audit log
 //   laneboard audit verify [--file f]                 offline: check the hash chain
+//   laneboard pause <name|--all> [--reason r]          offline: write a pause sentinel
+//   laneboard resume <name|--all>                      offline: lift an operator pause
+//   laneboard paused [--json]                          offline: list the pause sentinels
 //
 // Every string that came from a server (or an audit file) passes cleanTerm()
 // before it is printed, so a session name cannot carry terminal escapes
@@ -26,6 +29,7 @@
 //
 // Exit codes: 0 ok, 1 error, 2 usage.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import readline from 'node:readline';
@@ -622,6 +626,147 @@ async function auditVerify() {
   process.stdout.write(`ok ${r.count} entries, head ${String(r.head).slice(0, 8)}\n`);
 }
 
+// ---------------------------------------------------------------- offline: pause sentinels
+// `pause`/`resume`/`paused` write and read the sentinels under the state dir
+// directly (server/control/pause.mjs), so pausing works with the server down.
+// The state dir is resolved exactly as the server resolves config.stateDir:
+// $LANEBOARD_STATE_DIR (a relative value against the cwd), else `stateDir`
+// from the config file ($LANEBOARD_CONFIG, else ~/.config/laneboard/config.json;
+// must be absolute or start with ~/), else paths.stateDir() ($XDG_STATE_HOME/
+// laneboard, else ~/.local/state/laneboard). It is always passed explicitly:
+// pause.mjs defaultStateDir() ignores $XDG_STATE_HOME.
+//
+// `resume` lifts only operator pauses. Budget and quota pauses are remote-only
+// (S7): they are lifted from the UI. That is a convention, not a boundary; the
+// files are writable by this uid.
+
+const pauseMod = () => import('../server/control/pause.mjs');
+const REMOTE_ONLY_HINT = 'budget/quota pauses are lifted from the UI (remote-only)';
+
+/** The config file's own `stateDir` value, or undefined. Mirrors config.mjs loadFile(). */
+function configFileStateDir(env) {
+  const file = env.LANEBOARD_CONFIG || path.join(os.homedir(), '.config', 'laneboard', 'config.json');
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') return { file, layer: {} };
+    die(`cannot read the config file ${file}: ${err?.message || err}\n(set LANEBOARD_STATE_DIR to pause without it)`);
+  }
+  if (!text.trim()) return { file, layer: {} };
+  let parsed;
+  try { parsed = JSON.parse(text); } catch (err) {
+    die(`${file}: not valid JSON — ${err?.message || err}\n(set LANEBOARD_STATE_DIR to pause without it)`);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    die(`${file}: the config must be a JSON object\n(set LANEBOARD_STATE_DIR to pause without it)`);
+  }
+  return { file, layer: Object.hasOwn(parsed, 'stateDir') ? { stateDir: parsed.stateDir } : {} };
+}
+
+async function resolveStateDir(env = process.env) {
+  const control = await import('../server/config/control.mjs');
+  const paths = await fleetPaths();
+  const envLayer = control.fromEnv(env);
+  let fileLayer = {};
+  let file = 'LANEBOARD_STATE_DIR';
+  if (envLayer.stateDir === undefined) ({ file, layer: fileLayer } = configFileStateDir(env));
+  let stateDir;
+  try {
+    stateDir = envLayer.stateDir ?? fileLayer.stateDir ?? paths.stateDir({ env });
+  } catch (err) { return fail(err); }
+  const c = control.finalize({ stateDir }, { env: envLayer, file: fileLayer });
+  const v = c.stateDir;
+  if (typeof v !== 'string' || v === '' || !path.isAbsolute(v) || v.includes('\0')) {
+    die(`${file}: stateDir must be an absolute path (or start with ~/), got ${JSON.stringify(v) ?? String(v)}`);
+  }
+  return v;
+}
+
+/** `<name>`, `ALL` or `--all` → a pause scope; exits 2 on anything else. */
+async function takeScope(usage) {
+  const all = takeBool('--all');
+  const reason = takeFlag('--reason');
+  const name = argv.shift();
+  if (argv.length) die(`unexpected argument: ${cleanTerm(argv[0])}`, 2);
+  if (all && name) die(usage, 2);
+  const scope = all ? 'ALL' : name;
+  if (!scope) die(usage, 2);
+  const { isValidScope } = await pauseMod();
+  if (!isValidScope(scope)) die(`not a session name: ${JSON.stringify(cleanTerm(scope))}`, 2);
+  return { scope, reason };
+}
+
+const scopeLabel = (scope) => (scope === 'ALL' ? 'every session (ALL)' : cleanTerm(scope));
+
+async function cmdPause() {
+  const { scope, reason } = await takeScope('usage: laneboard pause <name|--all> [--reason "text"]');
+  const stateDir = await resolveStateDir();
+  const pm = await pauseMod();
+  let r;
+  try {
+    r = pm.pause(scope, { kind: 'operator', by: 'cli', reason }, { stateDir });
+  } catch (err) { return fail(err); }
+  if (r.kept) {
+    process.stdout.write(`${scopeLabel(scope)} is already paused (kind ${r.kind}); kept\n`);
+    return;
+  }
+  process.stdout.write(`paused ${scopeLabel(scope)}  ${C.dim}${cleanTerm(r.file)}${C.off}\n`);
+}
+
+async function cmdResume() {
+  const { scope } = await takeScope('usage: laneboard resume <name|--all>');
+  const stateDir = await resolveStateDir();
+  const pm = await pauseMod();
+  let r;
+  try {
+    r = pm.resume(scope, { kinds: ['operator'] }, { stateDir });
+  } catch (err) { return fail(err); }
+  for (const k of r.kept) {
+    process.stderr.write(`laneboard: ${scopeLabel(k.scope)} stays paused (kind ${k.kind}): ${REMOTE_ONLY_HINT}\n`);
+  }
+  if (r.kept.length) {
+    process.exitCode = 1;
+    return;
+  }
+  if (r.removed.length) process.stdout.write(`resumed ${scopeLabel(scope)}\n`);
+  else process.stdout.write(`${scopeLabel(scope)} was not paused\n`);
+  if (scope !== 'ALL') {
+    const all = pm.kindOf('ALL', { stateDir });
+    if (all) process.stdout.write(`note: the builder-wide pause (ALL, kind ${all}) still holds every session\n`);
+  }
+}
+
+async function cmdPaused() {
+  const json = takeBool('--json');
+  if (argv.length) die(`unexpected argument: ${cleanTerm(argv[0])}`, 2);
+  const stateDir = await resolveStateDir();
+  const pm = await pauseMod();
+  let entries;
+  try {
+    entries = pm.list({ stateDir });
+  } catch (err) { return fail(err); }
+  if (json) {
+    // JSON.stringify escapes C0 but not DEL or C1 (U+0080..U+009F, incl. the
+    // 8-bit CSI/OSC introducers): escape those too, so the output stays valid
+    // JSON and terminal-safe.
+    const out = JSON.stringify({ stateDir, paused: entries })
+      .replace(/[\u007f-\u009f]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+    process.stdout.write(`${out}\n`);
+    return;
+  }
+  const s = (v) => (v === undefined || v === null || v === '' ? '-' : cleanTerm(v));
+  const rows = entries.map((e) => [
+    s(e.scope),
+    e.kind === 'operator' ? e.kind : `${C.amber}${e.kind}${C.off}`,
+    s(e.by),
+    ago(e.at),
+    s(e.reason).replace(/\s+/g, ' ').slice(0, 60),
+  ]);
+  process.stdout.write(`${table(rows, ['SCOPE', 'KIND', 'BY', 'SINCE', 'REASON'])}\n`);
+  if (entries.some((e) => e.kind !== 'operator')) process.stdout.write(`${C.dim}${REMOTE_ONLY_HINT}${C.off}\n`);
+}
+
 function usage() {
   process.stdout.write(`laneboard — control the Claude sessions and lanes on this box
 
@@ -652,6 +797,10 @@ Offline (no server needed):
   laneboard audit [-n 50] [--since 1h] [--file f] [--json]
                                       tail the local audit log
   laneboard audit verify [--file f]     check the audit hash chain
+  laneboard pause <name|--all> [--reason "text"]
+                                      pause one session or all (writes the sentinel)
+  laneboard resume <name|--all>         lift an operator pause (budget/quota: from the UI)
+  laneboard paused [--json]             list the pauses
 
 Server: ${BASE}   (override with LANEBOARD_URL)
 `);
@@ -663,6 +812,7 @@ const COMMANDS = {
   restart: cmdRestart, dirs: cmdDirs, morning: cmdMorning, credit: cmdCredit,
   launch: cmdLaunch, job: cmdJob, retire: cmdRetire,
   fleet: cmdFleet, audit: cmdAudit,
+  pause: cmdPause, resume: cmdResume, paused: cmdPaused,
 };
 
 if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') {
