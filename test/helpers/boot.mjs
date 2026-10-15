@@ -131,6 +131,10 @@ async function waitHealthy(url, child, timeoutMs, logs) {
 }
 
 async function bootOnce({ mode, config, env, trace, timeoutMs }) {
+  // Refuse before anything is created.
+  if (Number(env.LANEBOARD_PORT) === LIVE_PORT) throw new Error('boot: refusing to start a test laneboard on the live port 7777');
+  if (env.TMUX !== undefined || env.TMUX_PANE !== undefined) throw new Error('boot: TMUX must not reach the child (it would point tmux at the live server)');
+  if (env.LANEBOARD_DB !== undefined && env.LANEBOARD_DB !== ':memory:') throw new Error('boot: LANEBOARD_DB must stay :memory:');
   // A short base: the tmux socket path under it must stay below 108 bytes.
   const base = os.tmpdir().length <= 40 ? os.tmpdir() : '/tmp';
   const tmp = fs.mkdtempSync(path.join(base, 'lb-boot-'));
@@ -177,9 +181,6 @@ async function bootOnce({ mode, config, env, trace, timeoutMs }) {
     ...(traceFile ? { LANEBOARD_TEST_TRACE: traceFile } : {}),
     ...env,
   });
-  if (Number(e.LANEBOARD_PORT) === LIVE_PORT) throw new Error('boot: refusing to start a test laneboard on the live port 7777');
-  if (e.TMUX !== undefined || e.TMUX_PANE !== undefined) throw new Error('boot: TMUX must not reach the child (it would point tmux at the live server)');
-  if (e.LANEBOARD_DB !== ':memory:') throw new Error('boot: LANEBOARD_DB must stay :memory:');
 
   const args = [...(traceFile ? ['--import', TRACE_HOOK] : []), ENTRY];
   const child = spawn(process.execPath, args, {
