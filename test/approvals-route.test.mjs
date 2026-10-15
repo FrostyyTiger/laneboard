@@ -182,6 +182,7 @@ async function serve(over = {}) {
     config: () => conf,
     token: () => token,
     holdMs: over.holdMs ? () => over.holdMs : undefined,
+    bodyReadMs: over.bodyReadMs,
     state: { sessionNameBySessionId: (sid) => (sid === SID ? 'lane-a' : null), get: (n) => (n === 'lane-a' ? { lane: 'a' } : null) },
     log: { warn() {}, error() {}, info() {} },
   });
@@ -195,7 +196,7 @@ async function serve(over = {}) {
   const port = srv.address().port;
   if (over.ingressIsThisPort) conf.fleet.ingressPort = port;
   return {
-    port, token, headerFile, conf,
+    port, token, headerFile, conf, handlers: h,
     async close() { srv.closeAllConnections?.(); await new Promise((r) => srv.close(r)); },
   };
 }
@@ -344,9 +345,107 @@ test('bad bodies and a disabled queue answer with an empty body and open nothing
   } finally { await s.close(); }
 });
 
+// ------------------------------------------------- SR15 H1: bounded intake --
+
+/** A request whose body is streamed by the caller: returns {req, response}. */
+function openStream(port, headers = {}) {
+  const req = http.request({ host: '127.0.0.1', port, method: 'POST', path: route.INTAKE_PATH, headers: { 'content-type': 'application/json', ...headers } });
+  const response = new Promise((resolve) => {
+    req.on('response', (res) => {
+      let b = '';
+      res.on('data', (c) => { b += c; });
+      res.on('end', () => resolve({ status: res.statusCode, body: b }));
+    });
+    req.on('error', (e) => resolve({ error: e.code || String(e) }));
+  });
+  req.flushHeaders();
+  return { req, response };
+}
+
+test('body limits: default 256 KiB, configurable, clamped to 1 MiB', () => {
+  assert.equal(route.BODY_LIMIT, 256 * 1024);
+  assert.equal(route.bodyLimitOf({}), 256 * 1024);
+  assert.equal(route.bodyLimitOf({ approvals: { maxBodyBytes: 64 * 1024 } }), 64 * 1024);
+  assert.equal(route.bodyLimitOf({ approvals: { maxBodyBytes: 50 * 1024 * 1024 } }), 1024 * 1024);
+  assert.equal(route.bodyLimitOf({ approvals: { maxBodyBytes: 'big' } }), 256 * 1024);
+  assert.equal(route.maxInFlightOf({}), 16);
+  assert.equal(route.maxInFlightOf({ approvals: { maxInFlight: 1000 } }), route.MAX_IN_FLIGHT_HARD);
+  assert.equal(route.maxInFlightOf({ approvals: { maxInFlight: 0 } }), 1);
+});
+
+test('a body over the limit gets 413 with an empty body (declared or streamed) and opens nothing', async () => {
+  approvals._reset();
+  const s = await serve();
+  try {
+    const hdr = { 'x-laneboard-hook': s.token };
+    const big = JSON.stringify(hookBody({ tool_input: { command: 'x'.repeat(300 * 1024) } }));
+    let r = await post(s.port, { headers: hdr, body: big });
+    assert.deepEqual([r.status, r.body], [413, '']);
+    // Chunked, no Content-Length: refused as soon as it crosses the limit.
+    const st = openStream(s.port, hdr);
+    st.req.write(big.slice(0, 200 * 1024));
+    st.req.end(big.slice(200 * 1024));
+    r = await st.response;
+    if (!r.error) assert.deepEqual([r.status, r.body], [413, '']);
+    // A configured lower limit applies; a body under it is accepted.
+    s.conf.approvals.maxBodyBytes = 2048;
+    r = await post(s.port, { headers: hdr, body: hookBody({ tool_input: { command: 'y'.repeat(4096) } }) });
+    assert.deepEqual([r.status, r.body], [413, '']);
+    assert.deepEqual(approvals.pending(), []);
+    assert.equal(s.handlers.inFlight(), 0);
+    delete s.conf.approvals.maxBodyBytes;
+    const ok = post(s.port, { headers: hdr, body: hookBody({ tool_input: { command: 'z'.repeat(200 * 1024) } }) });
+    const a = await until(() => approvals.pending()[0]);
+    approvals.decide(a.id, { behavior: 'release' }, 'op');
+    assert.equal((await ok).status, 200);
+  } finally { await s.close(); }
+});
+
+test('the in-flight semaphore answers 429 before reading the body; held requests do not count', async () => {
+  approvals._reset();
+  const s = await serve({ config: { approvals: { enabled: true, holdSec: 600, maxInFlight: 2 } } });
+  try {
+    const hdr = { 'x-laneboard-hook': s.token };
+    const json = JSON.stringify(hookBody());
+    const a = openStream(s.port, hdr);
+    const b = openStream(s.port, hdr);
+    a.req.write(json.slice(0, 10));
+    b.req.write(json.slice(0, 10));
+    await until(() => s.handlers.inFlight() === 2);
+    // The third one never sends its body, yet is answered: refused before readBody.
+    const c = openStream(s.port, hdr);
+    const rc = await c.response;
+    assert.deepEqual([rc.status, rc.body], [429, '']);
+    c.req.destroy();
+    assert.deepEqual(approvals.pending(), []);
+    // Finishing the two opens them; once opened (held) they free their slots.
+    a.req.end(json.slice(10));
+    b.req.end(json.slice(10));
+    await until(() => approvals.pending().length === 2);
+    assert.equal(s.handlers.inFlight(), 0);
+    const d = post(s.port, { headers: hdr });
+    await until(() => approvals.pending().length === 3);
+    for (const x of approvals.pending()) approvals.decide(x.id, { behavior: 'release' }, 'op');
+    assert.deepEqual((await Promise.all([a.response, b.response, d])).map((r) => r.status), [200, 200, 200]);
+  } finally { await s.close(); }
+});
+
+test('a body that never completes is dropped after the read deadline and frees its slot', async () => {
+  approvals._reset();
+  const s = await serve({ bodyReadMs: 100 });
+  try {
+    const st = openStream(s.port, { 'x-laneboard-hook': s.token });
+    st.req.write('{"session_id":');
+    await until(() => s.handlers.inFlight() === 1);
+    await until(() => s.handlers.inFlight() === 0, 3000);
+    st.req.destroy();
+    assert.deepEqual(approvals.pending(), []);
+  } finally { await s.close(); }
+});
+
 // ------------------------------------------------- the real curl hook ------
 
-function runHook(port, headerFile, maxSec) {
+function runHook(port, headerFile, maxSec, payload = JSON.stringify(hookBody())) {
   const cmd = `curl -sf --connect-timeout 1 -m ${maxSec} -H @${headerFile} ` +
     `-H 'content-type: application/json' --data-binary @- ` +
     `http://127.0.0.1:${port}/api/hook/permission || true`;
@@ -355,7 +454,7 @@ function runHook(port, headerFile, maxSec) {
     let out = '';
     child.stdout.on('data', (b) => { out += b; });
     child.on('close', (code) => resolve({ code, out }));
-    child.stdin.end(JSON.stringify(hookBody()));
+    child.stdin.end(payload);
   });
 }
 
@@ -379,6 +478,23 @@ test('curl hook: allow JSON after approve, empty on timeout, empty (exit 0) on a
     fs.writeFileSync(bad, `X-Laneboard-Hook: ${tokens.generateToken()}\n`, { mode: 0o600 });
     r = await runHook(s.port, bad, 5);
     assert.deepEqual(r, { code: 0, out: '' });
+  } finally { await s.close(); }
+});
+
+test('curl hook falls through (empty stdout, exit 0) on 413 and on 429', { skip: NEEDS_CURL }, async () => {
+  approvals._reset();
+  const s = await serve({ config: { approvals: { enabled: true, holdSec: 600, maxInFlight: 1 } } });
+  try {
+    const big = JSON.stringify(hookBody({ tool_input: { command: 'x'.repeat(300 * 1024) } }));
+    let r = await runHook(s.port, s.headerFile, 5, big);
+    assert.deepEqual(r, { code: 0, out: '' });
+    const hold = openStream(s.port, { 'x-laneboard-hook': s.token });
+    hold.req.write('{');
+    await until(() => s.handlers.inFlight() === 1);
+    r = await runHook(s.port, s.headerFile, 5);
+    assert.deepEqual(r, { code: 0, out: '' });
+    hold.req.destroy();
+    assert.deepEqual(approvals.pending(), []);
   } finally { await s.close(); }
 });
 
@@ -408,19 +524,25 @@ test('the module registers both routes and the capability, supersedes on hook ev
     assert.equal(mode(path.join(dir, 'hook.token')), 0o600);
     assert.equal(mode(path.join(dir, 'hook.header')), 0o600);
 
-    const { approval } = approvals.open(hookBody(), { timeoutMs: 60_000 });
+    const TP = '/nonexistent-lb/projects/x/session.jsonl';
+    const { approval } = approvals.open(hookBody({ transcript_path: TP }), { timeoutMs: 60_000 });
     assert.deepEqual(sent.map((m) => [m.type, m.op, m.approval.id]), [['approval', 'open', approval.id]]);
 
-    hooks.ingest({ hook_event_name: 'PreToolUse', session_id: SID, tool_name: 'Bash', tool_input: {} });
+    hooks.ingest({ hook_event_name: 'PreToolUse', session_id: SID, transcript_path: TP, tool_name: 'Bash', tool_input: {} });
     assert.equal(approvals.get(approval.id).status, 'pending', 'PreToolUse does not supersede');
+    // SR15 L1: a forged collector event that knows only the session id cannot cancel it.
     hooks.ingest({ hook_event_name: 'PostToolUse', session_id: SID, tool_name: 'Bash', tool_input: {} });
+    assert.equal(approvals.get(approval.id).status, 'pending', 'no transcript_path → no supersede');
+    hooks.ingest({ hook_event_name: 'Stop', session_id: SID, transcript_path: '/nonexistent-lb/other.jsonl' });
+    assert.equal(approvals.get(approval.id).status, 'pending', 'another transcript → no supersede');
+    hooks.ingest({ hook_event_name: 'PostToolUse', session_id: SID, transcript_path: TP, tool_name: 'Bash', tool_input: {} });
     assert.equal(approvals.get(approval.id).status, 'superseded');
     assert.deepEqual(sent.map((m) => m.op), ['open', 'close']);
   } finally {
     mod.stop();
   }
-  const { approval: b } = approvals.open(hookBody(), { timeoutMs: 60_000 });
-  hooks.ingest({ hook_event_name: 'Stop', session_id: SID });
+  const { approval: b } = approvals.open(hookBody({ transcript_path: '/nonexistent-lb/t.jsonl' }), { timeoutMs: 60_000 });
+  hooks.ingest({ hook_event_name: 'Stop', session_id: SID, transcript_path: '/nonexistent-lb/t.jsonl' });
   assert.equal(approvals.get(b.id).status, 'pending', 'after stop() nothing is subscribed');
   approvals._reset();
 });

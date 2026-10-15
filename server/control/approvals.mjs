@@ -22,8 +22,12 @@
  * In memory only: a restart drops the curl connections, which is "no
  * decision". Every open and close is logged with db.addEvent({type:'approval'}).
  *
- * Security: the tool input is untrusted agent text. `input` is
- * JSON.stringify(tool_input) cut to 4 KB and kept as plain text (escaping is
+ * Security: the tool input is untrusted agent text. It is first cut by
+ * preview.capValue() (a bounded walk, SR15 H1), and only that copy is ever
+ * stringified, so open() never builds a string longer than
+ * preview.stringifyBound() (~335 000 chars) from tool_input, however large
+ * or deeply nested the body. `input` is that JSON cut to 4 KB and kept as
+ * plain text (escaping is
  * the renderer's job: textContent only); `preview` comes from preview.mjs,
  * which neutralises control characters and caps size. decide() refuses an
  * approval that does not belong to the action's target session (409, S19).
@@ -35,7 +39,7 @@ import crypto from 'node:crypto';
 import { ActionError } from '../actions.mjs';
 import { addEvent } from '../db.mjs';
 import { summariseToolInput } from '../collector/hooks.mjs';
-import { previewFor, cleanLine } from './preview.mjs';
+import { previewFor, cleanLine, capValue } from './preview.mjs';
 
 export const APPROVAL_LIMITS = Object.freeze({
   inputBytes: 4096,
@@ -91,13 +95,20 @@ function cleanNote(note) {
   return s ? cleanLine(s, APPROVAL_LIMITS.maxNote) : null;
 }
 
+/** Budget for one suggestion's walk: anything the walk had to cut is too big and dropped. */
+const SUGGESTION_CAP = Object.freeze({ maxDepth: 8, maxNodes: 256, maxChars: APPROVAL_LIMITS.maxSuggestionBytes });
+
 function cleanSuggestions(list) {
   if (!Array.isArray(list)) return [];
   const out = [];
-  for (const s of list.slice(0, APPROVAL_LIMITS.maxSuggestions)) {
+  for (let i = 0; i < list.length && i < APPROVAL_LIMITS.maxSuggestions; i++) {
+    const s = list[i];
     if (!s || typeof s !== 'object') continue;
+    // Walk with a budget first: never stringify an unbounded suggestion.
+    const capped = capValue(s, SUGGESTION_CAP);
+    if (capped.truncated) continue;
     let json;
-    try { json = JSON.stringify(s); } catch { continue; }
+    try { json = JSON.stringify(capped.value); } catch { continue; }
     if (Buffer.byteLength(json, 'utf8') > APPROVAL_LIMITS.maxSuggestionBytes) continue;
     out.push(JSON.parse(json)); // a plain-data copy, no prototypes or getters
   }
@@ -197,10 +208,16 @@ export function open(body, opts = {}) {
   const session = sessionId ? safeCall(opts.nameOf, sessionId) : null;
   const lane = session ? safeCall(opts.laneOf, session) : null;
   const cwd = field(body.cwd, 4096);
-  const { text: input, truncated: inputTruncated } = truncateBytes(stringifyInput(body.tool_input), APPROVAL_LIMITS.inputBytes);
+  // The bounded copy is what gets stringified (here and in summariseToolInput).
+  // previewFor gets the original: its Edit/Write/Bash branches only split the
+  // named string fields (line-limited), and its JSON branch caps on its own.
+  const capped = capValue(body.tool_input);
+  const cut = truncateBytes(stringifyInput(capped.value), APPROVAL_LIMITS.inputBytes);
+  const input = cut.text;
+  const inputTruncated = cut.truncated || capped.truncated;
 
   let summary = null;
-  try { summary = summariseToolInput(body.tool_input); } catch { summary = null; }
+  try { summary = summariseToolInput(capped.value); } catch { summary = null; }
   summary = summary ? cleanLine(summary, 200) : null;
 
   let preview = null;
@@ -233,7 +250,10 @@ export function open(body, opts = {}) {
 
   let resolve;
   const wait = new Promise((r) => { resolve = r; });
-  const entry = { approval, resolve, timer: null };
+  // The transcript binding (L1) stays private: it is not part of the Approval.
+  const transcriptPath = typeof body.transcript_path === 'string' && body.transcript_path.length <= 4096 && body.transcript_path
+    ? body.transcript_path : null;
+  const entry = { approval, resolve, timer: null, transcriptPath };
   open_.set(approval.id, entry);
   entry.timer = setTimeout(() => {
     if (onTimeout === 'deny') {
@@ -293,12 +313,25 @@ export function abandon(id, reason = null) {
  * ended or a new prompt came in, so the request was answered elsewhere.
  * Called from hooks.ingest (via hooks.subscribe, C4) on PostToolUse, Stop,
  * SessionEnd and UserPromptSubmit. Returns the closed approvals.
+ *
+ * `binding` (SR15 L1): the collector's POST /api/hook carries no hook token,
+ * so its session_id is forgeable. A caller relaying such an event passes
+ * `{ transcriptPath: body.transcript_path }`, and then only approvals whose
+ * token-authenticated intake carried the very same non-empty transcript_path
+ * are closed; an approval opened without one is never superseded that way
+ * (the curl closing or the hold expiring still ends it). Knowing a session
+ * id alone is therefore not enough to cancel its approval. Omitting
+ * `binding` (trusted in-process callers) matches on the session id only.
  */
-export function supersede(sessionId, reason = null) {
+export function supersede(sessionId, reason = null, binding = undefined) {
   if (typeof sessionId !== 'string' || !sessionId) return [];
+  const bound = binding !== undefined;
+  const tp = bound && typeof binding?.transcriptPath === 'string' ? binding.transcriptPath : null;
+  if (bound && !tp) return [];
   const out = [];
   for (const [id, entry] of [...open_]) {
     if (entry.approval.sessionId !== sessionId) continue;
+    if (bound && entry.transcriptPath !== tp) continue;
     out.push(snapshot(close(id, 'superseded', { note: cleanNote(reason) })));
   }
   return out;

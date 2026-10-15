@@ -14,7 +14,9 @@
  *   otherwise (missing, too big, outside cwd, no cwd) the first 80 lines of
  *   the new content as '+'.
  * - Bash: the command (and the description, when given) as text.
- * - Anything else: the input as indented JSON, as text.
+ * - Anything else: the input as indented JSON, as text. The input is first
+ *   cut by capValue() (a bounded walk), so JSON.stringify only ever sees a
+ *   copy of bounded size (SR15 H1); see stringifyBound().
  *
  * The tool input is untrusted text from the agent. Every line has C0
  * controls (except tab), DEL, C1 controls and ESC replaced by U+FFFD, so an
@@ -36,6 +38,105 @@ export const PREVIEW_LIMITS = Object.freeze({
   lcsMaxLines: 400,
 });
 
+/**
+ * Budget for capValue(): how much of an untrusted tool_input may be copied
+ * before anything stringifies it (SR15 H1). A 0.4 MB deeply nested body used
+ * to cost ~40 MB transient heap in JSON.stringify(input, null, 2), because the
+ * indentation grows with depth.
+ */
+export const INPUT_CAP = Object.freeze({
+  maxDepth: 16,         // containers nested deeper become '…'
+  maxNodes: 2000,       // values (scalars and containers) copied
+  maxChars: 32 * 1024,  // UTF-16 code units of strings + keys copied
+});
+
+const MARK = '…';
+
+function cutString(s, room) {
+  if (room <= 1) return MARK;
+  let cut = s.slice(0, room - 1);
+  const last = cut.charCodeAt(cut.length - 1);
+  if (last >= 0xd800 && last <= 0xdbff) cut = cut.slice(0, -1); // no lone high surrogate
+  return cut + MARK;
+}
+
+/**
+ * A bounded plain-data copy of untrusted JSON-like `value`, built by one walk
+ * that stops when a budget runs out. Never throws, never stringifies.
+ * Returns { value, truncated }.
+ *
+ * Bound: the copy holds at most maxNodes + maxDepth + 2 values, nests at most
+ * maxDepth deep, and its strings and keys total at most maxChars + (that many
+ * values) code units (each cut adds one '…'). Hence stringifyBound(limits)
+ * bounds the length of JSON.stringify(copy, null, 2) (with the defaults about
+ * 335 000 chars, ≤ 0.7 MB), whatever the size or shape of `value`. The walk
+ * itself visits at most that many values, so it is O(budget), not O(input).
+ */
+export function capValue(value, limits = {}) {
+  const lim = { ...INPUT_CAP, ...limits };
+  let nodes = 0;
+  let chars = 0;
+  let truncated = false;
+  const full = () => nodes >= lim.maxNodes || chars >= lim.maxChars;
+  const take = (s) => {
+    const room = lim.maxChars - chars;
+    if (s.length <= room) { chars += s.length; return s; }
+    truncated = true;
+    const out = cutString(s, room);
+    chars += out.length;
+    return out;
+  };
+
+  function walk(v, depth) {
+    nodes++;
+    if (v === null || v === undefined) return null;
+    const t = typeof v;
+    if (t === 'boolean') return v;
+    if (t === 'number') return Number.isFinite(v) ? v : null;
+    if (t === 'string') return take(v);
+    if (t !== 'object') { truncated = true; return null; } // bigint, symbol, function
+    if (depth >= lim.maxDepth) { truncated = true; chars++; return MARK; }
+    if (Array.isArray(v)) {
+      const out = [];
+      const n = v.length;
+      for (let i = 0; i < n; i++) {
+        if (full()) { truncated = true; nodes++; chars++; out.push(MARK); break; }
+        let item;
+        try { item = v[i]; } catch { item = null; truncated = true; }
+        out.push(walk(item, depth + 1));
+      }
+      return out;
+    }
+    const out = {};
+    for (const k in v) {
+      if (!Object.hasOwn(v, k)) continue;
+      if (full()) { truncated = true; nodes++; chars += 2; out[MARK] = MARK; break; }
+      let item;
+      try { item = v[k]; } catch { truncated = true; continue; }
+      if (item === undefined || typeof item === 'function' || typeof item === 'symbol') continue; // JSON drops these
+      const key = take(k);
+      out[key] = walk(item, depth + 1);
+    }
+    return out;
+  }
+
+  let copy;
+  try { copy = walk(value, 0); } catch { copy = null; truncated = true; }
+  return { value: copy, truncated };
+}
+
+/**
+ * Upper bound on JSON.stringify(capValue(x, limits).value, null, 2).length:
+ * every code unit may escape to 6 ('\u001f'); every value adds at most
+ * 2·maxDepth of indentation plus 40 of quotes, colon, comma, newline, a
+ * number (≤ 24) or a literal.
+ */
+export function stringifyBound(limits = {}) {
+  const lim = { ...INPUT_CAP, ...limits };
+  const values = lim.maxNodes + lim.maxDepth + 2;
+  return 6 * (lim.maxChars + values) + values * (2 * lim.maxDepth + 40);
+}
+
 // C0 except tab, DEL, C1 (which includes the 8-bit CSI 0x9b). ESC is C0.
 // Newlines never reach here: callers split first. CR is replaced too.
 const CONTROL_RE = /[\u0000-\u0008\u000a-\u001f\u007f-\u009f]/g;
@@ -47,12 +148,18 @@ export function cleanLine(s, max = PREVIEW_LIMITS.maxLineChars) {
   return str.replace(CONTROL_RE, '�');
 }
 
-/** Split text into lines; a trailing newline does not make an empty last line. */
-export function splitLines(text) {
+/**
+ * Split text into lines; a trailing newline does not make an empty last line.
+ * With `limit`, at most `limit` lines are returned (split stops early, so a
+ * huge text never becomes a huge array).
+ */
+export function splitLines(text, limit = Infinity) {
   const str = typeof text === 'string' ? text : text == null ? '' : String(text);
   if (str === '') return [];
-  const lines = str.split(/\r?\n/);
+  const lim = Number.isFinite(limit) ? Math.max(0, Math.trunc(limit)) : undefined;
+  const lines = lim === undefined ? str.split(/\r?\n/) : str.split(/\r?\n/, lim + 1);
   if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+  if (lim !== undefined && lines.length > lim) lines.length = lim;
   return lines;
 }
 
@@ -153,21 +260,26 @@ function safeHome(io) {
   try { return io.realpath(os.homedir()); } catch { return os.homedir(); }
 }
 
+/** Text of a field: strings as they are, numbers/booleans printed, anything else '' (no Array#join over attacker data). */
 function str(v) {
-  return typeof v === 'string' ? v : v == null ? '' : String(v);
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return '';
 }
 
-function editLines(edit) {
+function editLines(edit, limit) {
   return [
-    ...splitLines(str(edit?.old_string)).map((s) => ({ t: '-', s })),
-    ...splitLines(str(edit?.new_string)).map((s) => ({ t: '+', s })),
+    ...splitLines(str(edit?.old_string), limit).map((s) => ({ t: '-', s })),
+    ...splitLines(str(edit?.new_string), limit).map((s) => ({ t: '+', s })),
   ];
 }
 
+/** Indented JSON of the capValue() copy only: length ≤ stringifyBound(). */
 function jsonText(input) {
+  const capped = capValue(input);
   let text;
-  try { text = JSON.stringify(input ?? null, null, 2); } catch { text = '[unserialisable input]'; }
-  return text ?? '';
+  try { text = JSON.stringify(capped.value, null, 2); } catch { text = '[unserialisable input]'; }
+  return { text: text ?? '', truncated: capped.truncated };
 }
 
 /**
@@ -186,29 +298,33 @@ export function previewFor(tool, input, opts = {}) {
   let raw;
   let note = null;
   let cut = false;
+  // One more than capLines keeps, so it still sees (and reports) the cut.
+  const lineLimit = maxLines + 1;
 
   switch (tool) {
     case 'Edit':
       kind = 'diff';
-      raw = editLines(obj);
+      raw = editLines(obj, lineLimit);
       break;
     case 'MultiEdit': {
       kind = 'diff';
       const edits = Array.isArray(obj.edits) ? obj.edits : [];
       raw = [];
-      edits.forEach((e, i) => {
+      for (let i = 0; i < edits.length && raw.length <= maxLines; i++) {
         if (edits.length > 1) raw.push({ t: ' ', s: `edit ${i + 1}/${edits.length}` });
-        raw.push(...editLines(e));
-      });
+        raw.push(...editLines(edits[i], lineLimit));
+      }
       break;
     }
     case 'Write': {
       kind = 'diff';
-      const next = splitLines(str(obj.content));
+      // The diff needs every line; its size is bounded by the request body
+      // and the 256 KB file cap. The head-only case splits just what it shows.
       const cur = readForDiff(obj.file_path, opts.cwd, io);
       if (cur.text != null) {
-        raw = diffLines(splitLines(cur.text), next);
+        raw = diffLines(splitLines(cur.text), splitLines(str(obj.content)));
       } else {
+        const next = splitLines(str(obj.content), PREVIEW_LIMITS.writeHeadLines + 1);
         note = cur.note;
         cut = next.length > PREVIEW_LIMITS.writeHeadLines;
         raw = next.slice(0, PREVIEW_LIMITS.writeHeadLines).map((s) => ({ t: '+', s }));
@@ -216,11 +332,14 @@ export function previewFor(tool, input, opts = {}) {
       break;
     }
     case 'Bash':
-      raw = splitLines(str(obj.command)).map((s) => ({ t: ' ', s }));
-      if (obj.description) raw.unshift({ t: ' ', s: `# ${oneLineOf(obj.description)}` });
+      raw = splitLines(str(obj.command), lineLimit).map((s) => ({ t: ' ', s }));
+      if (obj.description) raw.unshift({ t: ' ', s: `# ${oneLineOf(str(obj.description).slice(0, PREVIEW_LIMITS.maxLineChars))}` });
       break;
-    default:
-      raw = splitLines(jsonText(input)).map((s) => ({ t: ' ', s }));
+    default: {
+      const j = jsonText(input);
+      cut = j.truncated;
+      raw = splitLines(j.text, lineLimit).map((s) => ({ t: ' ', s }));
+    }
   }
 
   const { lines, truncated } = capLines(raw, caps);
