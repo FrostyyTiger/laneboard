@@ -328,7 +328,7 @@ test('no browser header reaches the builder; only signature headers, accept and 
   const r = await rawGet(base, '/api/fleet/builder-a/v1/health?history=1', {
     headers: {
       cookie: 'sid=secret', authorization: 'Bearer x', 'tailscale-user-login': 'tester@example.invalid', origin: 'https://hub.example.invalid',
-      'x-forwarded-for': '100.64.0.1', 'x-laneboard': '1', 'x-laneboard-sig': 'ed25519 AAAA', 'x-custom': 'y',
+      'x-forwarded-for': '192.0.2.1', 'x-laneboard': '1', 'x-laneboard-sig': 'ed25519 AAAA', 'x-custom': 'y',
     },
   });
   assert.equal(r.status, 200);
