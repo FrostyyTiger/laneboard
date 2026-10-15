@@ -1,12 +1,19 @@
-// The Board: lane cards, the grid, the lane rail. Moved from public/app.js (fleet F1).
+// The Board: lane cards, the grid, the lane rail. Moved from public/app.js
+// (fleet F1); redesigned as ATC data blocks in an inset-title panel (fleet D9,
+// plan §4 2.7). The view registry (views/index.js) picks up the default
+// export at the bottom of this file.
 import { $, el } from '../core/dom.js';
 import { STATE_RANK, ago, hueFromId, money } from '../core/format.js';
 import { laneById, laneVisible, store } from '../core/store.js';
 import { fkey } from '../core/keys.js';
 import { scheduleVisible, unwatchCard, watchCard } from '../core/net.js';
+import { icon } from '../core/icons.js';
+import { panel, setPanel } from '../ui/components.js';
 import { prChip } from '../ui/widgets.js';
 import { openSheet } from '../ui/sheet.js';
-import { builderStale, renderCard } from './board-card.js';
+import {
+  FIELDS, builderCode, builderStale, checksLabel, dataBlock, renderCard, showCodes,
+} from './board-card.js';
 
 /** True when a builder id names a hub builder that is not live. */
 function staleBuilder(id) {
@@ -151,6 +158,9 @@ export function renderGrid(changedKeys) {
   }
   placeInOrder(grid, top);
 
+  lastShown = shown;
+  syncPanel();
+
   const empty = $('grid-empty');
   empty.hidden = shown > 0;
   empty.textContent = units.length
@@ -171,6 +181,10 @@ function laneCardNode(u) {
     readiness: b.readiness?.[u.id] ?? null,
     job: (b.jobs ?? []).find((j) => j.lane === u.id) ?? null,
     live: u.sessions.map((s) => s.key),
+    // What the head's data block shows of its sessions: state, age, flags.
+    states: u.sessions.map((s) => [s.state, s.stateSince ?? null, s.context?.usedPct ?? null, Boolean(s.stuck),
+      Boolean(s.paused), Boolean(s.awaitingApproval), Boolean(s.danger)]),
+    code: showCodes() ? builderCode(store.builders.get(u.builder) ?? { id: u.builder ?? '' }) : null,
     stale: u.sessions.some(builderStale) || (!u.sessions.length && staleBuilder(u.builder)),
     marker: newestMarker(u.sessions),
     danger: u.sessions.some((s) => s.danger),
@@ -191,10 +205,10 @@ function laneCardNode(u) {
     ln.sig = sig;
     ln.node.style.setProperty('--lane-hue', String(lane?.hue ?? hueFromId(u.id)));
     ln.node.classList.toggle('danger', headData.danger);
+    // Dimmed and hatched by board.css (`.stale`), never an inline opacity.
     ln.node.classList.toggle('stale', headData.stale);
-    ln.node.style.opacity = headData.stale ? '0.55' : '';
     ln.head.textContent = '';
-    renderLaneHead(ln.head, u.id, headData);
+    renderLaneHead(ln.head, u.id, headData, u.sessions);
   }
   return ln;
 }
@@ -205,36 +219,66 @@ function newestMarker(sessions) {
   return best;
 }
 
-function renderLaneHead(head, id, d) {
-  const top = el('div', 'lane-top');
-  top.append(el('span', 'lane-title', id));
+/**
+ * The lane card's head: the lane's data block (plan §4 2.7) on two lines.
+ * Line 1: code, the most urgent session's state, lane, stage n/m and the
+ * current stage, flags, age. Line 2: PR, checks, ctx, $ 5h, model, branch,
+ * slot. Then the job line, the newest marker, and the retire readiness.
+ */
+function renderLaneHead(head, id, d, sessions = []) {
   const p = d.lane?.progress;
+  const db = dataBlock(d.lane ?? { id }, null, {
+    sessions, pr: d.pr, usd5h: d.burn, stale: d.stale, code: d.code ?? undefined, model: d.rec?.model,
+  });
+  const o = {
+    showCode: d.code != null,
+    builder: d.lane?.builder ?? null,
+    checksLabel: checksLabel(d.pr?.checks),
+    usdTitle: 'API-equivalent spend of this lane over the last 5 hours',
+    ageTitle: 'time the most urgent session has been in its state',
+  };
+
+  const top = el('div', 'db db-1 lane-top');
+  top.append(FIELDS.code(db, o), FIELDS.state(db, o));
+  const title = el('span', 'db-f db-lane lane-title', id);
+  title.title = [id, d.lane?.root ?? d.rec?.root ?? ''].filter(Boolean).join(' · ');
+  top.append(title);
   if (p?.m != null) {
-    const st = el('span', 'lane-stage', `${p.n ?? 0}/${p.m}`);
+    const st = el('span', 'db-f db-stage lane-stage', `${p.n ?? 0}/${p.m}`);
     st.title = p.n == null ? `no stage of ${p.m} finished yet` : `stage ${p.n} of ${p.m}`;
     top.append(st);
     if (p.current?.title) top.append(el('span', 'lane-current', p.current.n != null ? `S${p.current.n} ${p.current.title}` : p.current.title));
+  } else {
+    top.append(FIELDS.stage(db, o));
   }
-  if (d.burn != null && d.burn > 0.005) {
-    const burn = el('span', 'lane-burn', `${money(d.burn)}/5h`);
-    burn.title = 'API-equivalent spend of this lane over the last 5 hours';
-    top.append(burn);
-  }
+  top.append(FIELDS.flags(db, o), FIELDS.age(db, o));
   head.append(top);
 
-  const meta = el('div', 'card-meta lane-meta');
+  const meta = el('div', 'card-meta lane-meta db db-2');
+  if (d.rec) {
+    // A launched lane always says something about its PR, "no PR" included.
+    const pr = el('span', 'db-f db-pr');
+    pr.append(icon(db.pr?.icon ?? 'pr', { size: 's' }), prChip(d.pr));
+    meta.append(pr);
+  } else {
+    meta.append(FIELDS.pr(db, o));
+  }
+  meta.append(FIELDS.checks(db, o), FIELDS.ctx(db, o));
+  const burn = el('span', 'db-f db-usd lane-burn', d.burn != null && d.burn > 0.005 ? `${money(d.burn)}/5h` : '—');
+  burn.title = o.usdTitle;
+  meta.append(burn);
+  if (d.rec?.model) meta.append(el('span', 'db-f db-model model', d.rec.model));
+  else meta.append(FIELDS.model(db, o));
   const branch = d.rec?.branch ?? d.lane?.branch;
   if (branch) meta.append(el('span', 'branch', `⌥${branch}`));
-  if (d.rec) meta.append(prChip(d.pr));
   if (d.rec?.slot != null) {
     const up = d.slot?.up;
     const slot = el('span', `chip-slot ${up ? 'slot-up' : 'slot-down'}`, `slot ${d.rec.slot}${d.slot?.ports ? ` :${d.slot.ports.pg}` : ''}`);
     slot.title = up ? 'agent stack up' : 'agent stack down';
     meta.append(slot);
   }
-  if (d.rec?.model) meta.append(el('span', 'model', d.rec.model));
   if (!d.rec && d.lane && !d.lane.isMain && d.lane.merged === true) meta.append(el('span', 'lane-merged', 'merged'));
-  if (meta.childNodes.length) head.append(meta);
+  head.append(meta);
 
   if (d.job && !['done'].includes(d.job.last?.step)) {
     const j = d.job.last;
@@ -372,3 +416,86 @@ export function focusSession(k) {
     openSheet(k);
   }
 }
+
+// ---------------------------------------------------------------- the view (D4 registry)
+
+const MODE_KEY = 'lb.board.mode';
+export const BOARD_MODES = Object.freeze(['cards', 'rows']);
+
+/** A stored preference -> 'cards' (two-line data blocks) or 'rows' (one line each). Pure. */
+export function boardModeFor(pref) {
+  return pref === 'rows' ? 'rows' : 'cards';
+}
+
+/** The panel title's scope: the builder filter as its code plate, else ALL. Pure. */
+export function boardScope(route, builders = new Map()) {
+  const b = route?.b;
+  if (typeof b !== 'string' || !b || b === 'all') return 'all';
+  return builderCode(builders.get(b) ?? { id: b });
+}
+
+let boardPanel = null; // { root, grid, mode }
+let lastShown = null;
+let scope = 'all';
+
+function readMode() {
+  try { return boardModeFor(localStorage.getItem(MODE_KEY)); } catch { return 'cards'; }
+}
+
+function applyMode(mode) {
+  if (!boardPanel) return;
+  boardPanel.mode = boardModeFor(mode);
+  boardPanel.grid.dataset.mode = boardPanel.mode;
+  boardPanel.toggle.setAttribute('aria-pressed', String(boardPanel.mode === 'rows'));
+}
+
+/** Keep the panel title in step: LANES · <scope> [n]. */
+function syncPanel() {
+  if (!boardPanel) return;
+  setPanel(boardPanel.root, { scope, n: Number.isFinite(lastShown) ? lastShown : null });
+}
+
+/**
+ * Put the grid inside an inset-title panel (once): LANES · ALL [n], with a
+ * tool to switch between two-line cards and one-line rows.
+ */
+function ensurePanel(view) {
+  const grid = $('grid');
+  if (!grid) return null;
+  if (boardPanel && boardPanel.grid === grid) return boardPanel;
+  const toggle = el('button', 'btn btn--s btn--icon board-mode');
+  toggle.append(icon('board', { size: 's' }));
+  toggle.title = 'Cards or rows';
+  toggle.setAttribute('aria-label', 'Cards or rows');
+  toggle.onclick = () => {
+    const next = boardPanel?.mode === 'rows' ? 'cards' : 'rows';
+    try { localStorage.setItem(MODE_KEY, next); } catch { /* private mode */ }
+    applyMode(next);
+  };
+  const p = panel({ name: 'LANES', scope, id: 'board-panel-t', tools: [toggle] });
+  p.root.classList.add('board-panel');
+  const host = grid.parentNode ?? view ?? null;
+  if (host) host.insertBefore(p.root, grid.parentNode ? grid : host.firstChild ?? null);
+  p.body.append(grid);
+  boardPanel = { root: p.root, grid, toggle, mode: 'cards' };
+  applyMode(readMode());
+  return boardPanel;
+}
+
+export default {
+  id: 'board',
+  icon: 'board',
+  title: 'Board',
+  short: 'BRD',
+  /** The grid itself is painted by renderAll (ui/render.js) on every snapshot and delta. */
+  mount: (view, ctx = {}) => {
+    scope = boardScope(ctx.route, store.builders);
+    ensurePanel(view);
+    syncPanel();
+  },
+  unmount: () => {},
+  update: (_s, ctx = {}) => {
+    if (ctx.route) scope = boardScope(ctx.route, store.builders);
+    syncPanel();
+  },
+};

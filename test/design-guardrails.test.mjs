@@ -16,7 +16,6 @@ const JS_DIR = path.join(ROOT, 'public', 'js');
 const LEGACY = new Map([
   ['shell.css', 'D4'],
   ['rail.css', 'D5'],
-  ['board.css', 'D9'],
   ['terminal.css', 'view owner'],
   ['misc.css', 'view owner'],
   ['lanes.css', 'view owner'],
