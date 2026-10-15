@@ -159,6 +159,9 @@ test('fleet block, hubControl false: classification on both listeners', { timeou
     const legacyRow = (await auditEntries(b)).filter((e) => e.action === 'send-keys' && e.target === 'nobody').at(-1);
     assert.equal(legacyRow.user, 'local', 'the forged login is not the audit user');
     assert.equal(legacyRow.via, 'legacy');
+    // the hook intake never comes through serve
+    r = await ingressFetch(b, '/api/hook', { user: USER, method: 'POST', headers: { origin: `https://${PUB}` }, body: { hook_event_name: 'Stop' } });
+    assert.equal(r.status, 403);
     // a publicHost is not a valid Host on the local listener
     r = await local(b, '/api/v1/hello', { headers: { host: PUB } });
     assert.equal(r.status, 403);

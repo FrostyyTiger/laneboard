@@ -529,3 +529,27 @@ test('SR15 H1: readBody caps at 256 KiB unless the route asks for more', async (
   await assert.rejects(readBody(big()), /too large/);
   assert.equal((await readBody(big(), 1024 * 1024)).length, 300 * 1024);
 });
+
+test('initV1/preloadNonces: audit ids of the last 5 minutes are replay-protected after a restart', async () => {
+  await ensure();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-a8-nonce-'));
+  try {
+    const file = path.join(tmp, 'audit.jsonl');
+    const a1 = openAudit({ file, builder: config.fleet.id });
+    const recent = crypto.randomUUID();
+    a1.append({ id: recent, user: 'u', via: 'hub', action: 'send-keys', target: 'demo', args: {}, result: { ok: true, status: 200 } });
+    a1.close();
+    const seen = [];
+    const fakeCache = { add: (id, ts) => { seen.push([id, ts]); return { ok: true }; } };
+    const a2 = openAudit({ file, builder: config.fleet.id });
+    try {
+      assert.equal(v1.preloadNonces(a2, fakeCache), 1);
+      assert.equal(seen[0][0], recent);
+      assert.equal(v1.preloadNonces(a2, fakeCache, Date.now() + 10 * 60000), 0, 'older than the nonce TTL: not loaded');
+    } finally {
+      a2.close();
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
