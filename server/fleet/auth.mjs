@@ -3,11 +3,20 @@
 // REVIEW-REQUIRED (SR3).
 //
 // Verify side (every builder; the hub runs classify too and refuses `hub` kind):
-//   classify(req, cfg, opts)        -> auth  {kind:'local'|'direct'|'hub', ...} or throws AuthError
+//   classify(req, cfg, opts)        -> auth  {kind:'local'|'direct'|'hub'|'hub-pending', ...} or throws AuthError
 //   verifyRead(req, cfg, opts)      -> hub auth for a signed read (GET / stream upgrade)
 //   verifyEnvelope(env, headers, cfg, opts) -> hub auth with the verified, frozen envelope
+//   verifyPendingAction(req, body, cfg, opts) -> verifyEnvelope for a `hub-pending` req.auth; sets req.auth
 //   guardRequest(req, url, cfg, opts)  -> auth; Host + kind rules + Origin/CSRF for HTTP requests
 //   guardUpgrade(req, url, cfg, opts)  -> auth; Host + kind rules + Origin for WebSocket upgrades
+//   termBinding(auth)               -> {name, cols, rows, window} of a verified `term` envelope (SR3 L4)
+//   isAuthenticated(auth)           -> true only for an auth object this module issued that is not pending
+//
+// SR3 H1: a hub caller is NEVER authorized by an unverified signature. classify verifies signed reads and
+// `term` envelopes itself. A bare -Sig/-Key pair (an action envelope whose body is not parsed yet) is only
+// accepted on `POST /api/v1/actions` and yields `{kind:'hub-pending', scopes: <empty>, verified:false}`:
+// every consumer must treat that as unauthenticated (dispatch refuses it, 403 `unverified`, audited). Only
+// verifyEnvelope / verifyPendingAction turn it into a `hub` auth with the key's scopes.
 // Sign side (the hub; pure):
 //   signedReadString({method, builderId, pathWithQuery, ts, nonce})
 //   signRead({method, url, builderId, key, keyId?, now?, uuid?}) -> {X-Laneboard-Ts, -Nonce, -Key, -Sig}
@@ -28,9 +37,27 @@
 //     signature                      -> hub (fleet.hubAddrs on X-Forwarded-For -> 403 hub-addr), verified:
 //         X-Laneboard-Envelope       -> a signed `term` envelope, verified here (verifyEnvelope)
 //         X-Laneboard-Ts/-Nonce      -> a signed read, verified here (verifyRead)
-//         -Sig/-Key only             -> an action envelope: key looked up, `verified:false`; the
-//                                       /api/v1/actions route MUST call verifyEnvelope(parsedBody, ...)
+//         -Sig/-Key only             -> POST /api/v1/actions only (else 401 missing-signature): key looked
+//                                       up, `kind:'hub-pending'`, EMPTY scopes, `verified:false`; the route
+//                                       MUST call verifyPendingAction(req, parsedBody, cfg) before acting
 //     neither                        -> fleet.enforce ? 403 unidentified : direct 'local'
+//
+// The local listener (fleet block present) also requires a loopback peer address (SR3 L2): a non-loopback
+// peer on the main listener (a legacy tailnet `bind`) is 403 `not-local`, never `local`.
+//
+// Accepted risk (SR3 L1, SECURITY-FIXES accepted risk 3): while `fleet.ingressPeerUid` is null (the
+// default) a local process can connect to the ingress port, send serve-like headers and become any `direct`
+// user, which passes remoteOnly. classify warns once per process; setting fleet.ingressPeerUid closes it.
+//
+// Nonce budgets (SR3 L3): replay caches are split per purpose ('read' | 'action' | 'term') and per keyId,
+// each with its own 10 000 live-nonce cap and its own 503 `nonce-cache-full`, so a read-only key (or a
+// buggy poller) can never starve control or terminals. nonceCache() is the boot cache A8 pre-loads from
+// audit ids; every check consults it (seen) before inserting into the budget.
+//
+// Boot epoch (SR3 L5): signed reads and `term` envelopes whose ts is before this process started are refused
+// (401 stale) so a read captured before a restart cannot be replayed into the fresh, empty read budget.
+// Action envelopes are covered by the audit pre-load instead. Right after a restart, a hub whose clock lags
+// ours sees a few `stale` reads until its clock passes our boot time; its poller retries.
 //
 // Verification order (S16): parse headers -> key lookup -> signature -> ts window -> nonce check-and-insert.
 // Nothing unauthenticated ever enters the nonce cache. Signed reads cover the RAW req.url. Envelopes are
@@ -97,19 +124,45 @@ export class AuthError extends Error {
 
 const refuse = (status, code, detail) => { throw new AuthError(status, code, detail); };
 
-// --- nonce cache (module singleton; A8 pre-loads it from the audit log) -------------------------------------
+// --- nonce caches (module singletons; A8 pre-loads the boot cache from the audit log) ----------------------
+
+const NONCE_MAX = 10000;
+const NONCE_TTL_MS = 300000;
+export const NONCE_PURPOSES = Object.freeze(['read', 'action', 'term']);
 
 let sharedNonces = null;
+let budgetMax = NONCE_MAX;
+const budgets = new Map(); // `${purpose} ${keyId}` -> nonce cache
+/** When this module was loaded (the process boot, for the signed-read replay floor, SR3 L5). */
+const BOOT_EPOCH = Date.now();
 
-/** The process-wide nonce cache used when opts.nonces is not given (10 000 live nonces, 5 min). */
+/**
+ * The boot nonce cache (10 000 live nonces, 5 min): A8 pre-loads it with the audit ids of the last 5 min.
+ * Every signed request checks it (seen) before inserting its nonce into its own budget (nonceBudget).
+ */
 export function nonceCache() {
-  sharedNonces ??= createNonceCache({ max: 10000, ttlMs: 300000 });
+  sharedNonces ??= createNonceCache({ max: NONCE_MAX, ttlMs: NONCE_TTL_MS });
   return sharedNonces;
 }
 
-/** Tests only: drop the shared nonce cache and the one-time warnings. */
-export function _resetForTests() {
+/** The replay budget of one purpose ('read' | 'action' | 'term') and one keyId (created on first use). */
+export function nonceBudget(purpose, keyId) {
+  if (!NONCE_PURPOSES.includes(purpose)) throw new TypeError(`nonceBudget: bad purpose ${purpose}`);
+  if (typeof keyId !== 'string' || !KEY_ID_RE.test(keyId)) throw new TypeError('nonceBudget: bad keyId');
+  const k = `${purpose} ${keyId}`;
+  let c = budgets.get(k);
+  if (!c) {
+    c = createNonceCache({ max: budgetMax, ttlMs: NONCE_TTL_MS });
+    budgets.set(k, c);
+  }
+  return c;
+}
+
+/** Tests only: drop every nonce cache and the one-time warnings; `budgetMax` shrinks the per-budget cap. */
+export function _resetForTests({ budgetMax: max = NONCE_MAX } = {}) {
   sharedNonces = null;
+  budgets.clear();
+  budgetMax = max;
   warned.clear();
 }
 
@@ -131,7 +184,41 @@ const nowOf = (opts) => {
   if (!Number.isFinite(t)) throw new TypeError('auth: now() must return a finite number');
   return t;
 };
-const noncesOf = (opts) => opts?.nonces ?? nonceCache();
+
+/**
+ * The replay floor (SR3 L5): opts.bootEpoch when given; otherwise the module boot time, but only on the real
+ * clock (an injected opts.now is a test or tool clock that the real boot time means nothing to).
+ */
+function bootEpochOf(opts) {
+  if (Number.isFinite(opts?.bootEpoch)) return opts.bootEpoch;
+  if (typeof opts?.now === 'function' && opts.now !== Date.now) return -Infinity;
+  return BOOT_EPOCH;
+}
+
+// Issued auth objects (SR3 L6): authOf only reuses a req.auth this module produced.
+const issued = new WeakSet();
+function mark(a) {
+  issued.add(a);
+  return a;
+}
+
+/** A Set whose contents never change (the scopes of a pending auth). */
+class FrozenSet extends Set {
+  add() { throw new TypeError('frozen scope set'); }
+  delete() { return false; }
+  clear() { /* frozen */ }
+}
+const EMPTY_SCOPES = Object.freeze(new FrozenSet());
+
+/**
+ * True only for an auth object issued by this module that authenticates its caller: local, direct, or a hub
+ * auth whose signature verified. A `hub-pending` auth, a forged object or anything else is false.
+ */
+export function isAuthenticated(a) {
+  if (!isObj(a) || !issued.has(a)) return false;
+  if (a.kind === 'local' || a.kind === 'direct') return true;
+  return a.kind === 'hub' && a.verified === true;
+}
 
 /**
  * The single value of a header, or undefined when absent. A repeated header (counted in rawHeaders, or an
@@ -327,15 +414,27 @@ function checkTs(ts, cfg, opts) {
   if (!Number.isSafeInteger(ts) || Math.abs(nowOf(opts) - ts) > skew) refuse(401, 'stale');
 }
 
-function useNonce(nonce, ts, opts) {
-  const r = noncesOf(opts).add(nonce, ts);
+/**
+ * Check-and-insert a verified nonce into its budget (SR3 L3). opts.nonces: a cache object (one cache for
+ * every purpose; tests and tools) or a function (purpose, keyId) -> cache. Default: the boot cache is
+ * consulted, then the per-(purpose, keyId) budget takes the insert; a full budget is 503 for that budget only.
+ */
+function useNonce(nonce, ts, opts, purpose, keyId) {
+  let cache;
+  if (typeof opts?.nonces === 'function') cache = opts.nonces(purpose, keyId);
+  else if (opts?.nonces) cache = opts.nonces;
+  else {
+    if (nonceCache().seen(nonce)) refuse(401, 'replay');
+    cache = nonceBudget(purpose, keyId);
+  }
+  const r = cache.add(nonce, ts);
   if (r.ok) return;
   if (r.error === 'full') refuse(503, 'nonce-cache-full');
   refuse(401, 'replay');
 }
 
 function hubAuth(k, extra) {
-  return { kind: 'hub', user: null, keyId: k.keyId, keyLabel: k.label, scopes: k.scopes, ...extra };
+  return mark({ kind: 'hub', user: null, keyId: k.keyId, keyLabel: k.label, scopes: k.scopes, ...extra });
 }
 
 /**
@@ -361,8 +460,10 @@ export function verifyRead(req, cfg, opts = {}) {
   }
   if (!verify(data, sig, k.pub)) refuse(401, 'bad-signature');
   checkTs(ts, cfg, opts);
-  useNonce(nonce, ts, opts);
+  if (ts < bootEpochOf(opts)) refuse(401, 'stale', 'signed before boot');
+  // scope before the nonce insert (SR3 L6): a key that may not read never spends a nonce
   if (!k.scopes.has('read')) refuse(403, 'scope-missing', 'read');
+  useNonce(nonce, ts, opts, 'read', k.keyId);
   return hubAuth(k, { signature: 'read', verified: true });
 }
 
@@ -396,8 +497,26 @@ export function verifyEnvelope(env, headers, cfg, opts = {}) {
   if (!isObj(e.args)) refuse(400, 'bad-envelope', 'args');
   if (opts.action !== undefined && e.action !== opts.action) refuse(403, 'wrong-action');
   checkTs(e.ts, cfg, opts);
-  useNonce(e.id, e.ts, opts);
+  // the budget follows the signed action, so one envelope always lands in the same budget
+  const purpose = e.action === 'term' ? 'term' : 'action';
+  if (purpose === 'term' && e.ts < bootEpochOf(opts)) refuse(401, 'stale', 'signed before boot');
+  useNonce(e.id, e.ts, opts, purpose, k.keyId);
   return hubAuth(k, { signature: e.action === 'term' && opts.action === 'term' ? 'term' : 'envelope', verified: true, user: e.user, envelope: deepFreeze(e) });
+}
+
+/**
+ * The POST /api/v1/actions step for a hub caller (SR3 H1): req.auth must be the `hub-pending` auth classify
+ * issued for this request; verifies the parsed body against the request's -Sig/-Key (same keyId as the
+ * pending auth), replaces req.auth with the verified hub auth and returns it. Act on `auth.envelope`.
+ */
+export function verifyPendingAction(req, body, cfg, opts = {}) {
+  const pending = req?.auth;
+  if (!isObj(pending) || !issued.has(pending) || pending.kind !== 'hub-pending') refuse(401, 'missing-signature', 'no pending hub auth');
+  const headers = { 'x-laneboard-sig': single(req, 'x-laneboard-sig'), 'x-laneboard-key': single(req, 'x-laneboard-key') };
+  if (headers['x-laneboard-key'] !== pending.keyId) refuse(401, 'bad-signature', 'key changed');
+  const a = verifyEnvelope(body, headers, cfg, opts);
+  req.auth = a;
+  return a;
 }
 
 /** Decode and verify the X-Laneboard-Envelope of a hub terminal upgrade (must be canonical JSON). */
@@ -430,21 +549,28 @@ function peerUidOk(req, expected, opts) {
  * Classify a request (2.3). Returns
  *   {kind:'local', user}                              CLI, hooks, scripts (non-ingress listener)
  *   {kind:'direct', user, name, readOnly}             a user's device through tailscale serve
- *   {kind:'hub', user, keyId, keyLabel, scopes, signature:'read'|'term'|'envelope', verified, envelope?}
- * or throws AuthError. `signature:'envelope'` with `verified:false` means only the key was looked up: the
- * actions route must verifyEnvelope(parsedBody, req.headers, cfg) before acting.
- * opts: {nonces, now, peerUid(socket) -> uid|null, warn}.
+ *   {kind:'hub', user, keyId, keyLabel, scopes, signature:'read'|'term', verified:true, envelope?}
+ *   {kind:'hub-pending', user:null, keyId, keyLabel, scopes:<empty>, signature:'pending', verified:false}
+ * or throws AuthError. `hub-pending` (POST /api/v1/actions only) is NOT authenticated: the route must call
+ * verifyPendingAction(req, parsedBody, cfg) before acting (SR3 H1).
+ * opts: {nonces, now, bootEpoch, peerUid(socket) -> uid|null, warn}.
  */
 export function classify(req, cfg, opts = {}) {
   const f = fleetOf(cfg);
   if (!isPort(f.ingressPort)) {
     // No ingress listener (standalone, no fleet block): everything is local; the login is attribution only.
     const login = single(req, 'tailscale-user-login');
-    return { kind: 'local', user: typeof login === 'string' && LOGIN_RE.test(login) ? login : 'local' };
+    return mark({ kind: 'local', user: typeof login === 'string' && LOGIN_RE.test(login) ? login : 'local' });
   }
   if (!isIngress(req, cfg)) {
     stripTailscaleHeaders(req);
-    return { kind: 'local', user: 'local' };
+    // SR3 L2: `local` means a process on this machine; a non-loopback peer (legacy tailnet bind) is refused.
+    if (!isLoopbackPeer(req)) refuse(403, 'not-local');
+    return mark({ kind: 'local', user: 'local' });
+  }
+  if (f.ingressPeerUid === null || f.ingressPeerUid === undefined) {
+    // SR3 L1 (accepted risk 3): make the gap visible once per process.
+    warnOnce(opts, 'ingress-peer-uid', 'laneboard: fleet.ingressPeerUid is not set; remote-only actions are not protected against local processes that connect to the ingress port');
   }
 
   const url = toUrl(undefined, req);
@@ -466,12 +592,12 @@ export function classify(req, cfg, opts = {}) {
     if (!LOGIN_RE.test(login)) refuse(403, 'unidentified', 'bad login');
     const allowed = Array.isArray(f.allowedUsers) ? f.allowedUsers : [];
     if (allowed.length > 0 && !allowed.includes(login)) refuse(403, 'user-not-allowed');
-    return {
+    return mark({
       kind: 'direct',
       user: login,
       name: decodeDisplayName(single(req, 'tailscale-user-name')),
       readOnly: appCapsReadOnly(single(req, 'tailscale-app-capabilities')),
-    };
+    });
   }
 
   if (signed) {
@@ -480,13 +606,25 @@ export function classify(req, cfg, opts = {}) {
     if (hubAddrs.length > 0 && !hubAddrs.includes(normIp(xff))) refuse(403, 'hub-addr');
     if (single(req, 'x-laneboard-envelope') !== undefined) return verifyTermHeader(req, cfg, opts);
     if (single(req, 'x-laneboard-ts') !== undefined || single(req, 'x-laneboard-nonce') !== undefined) return verifyRead(req, cfg, opts);
+    // SR3 H1: a bare -Sig/-Key pair is only a promise to sign the body of POST /api/v1/actions. Anywhere else
+    // it is refused here, so a route that skips guardRequest still fails closed.
+    if (String(req?.method ?? '').toUpperCase() !== 'POST' || url.pathname !== '/api/v1/actions') {
+      refuse(401, 'missing-signature', 'X-Laneboard-Ts/-Nonce');
+    }
     sigText(single(req, 'x-laneboard-sig'));
     const k = lookupKey(single(req, 'x-laneboard-key'), cfg);
-    return hubAuth(k, { signature: 'envelope', verified: false });
+    return mark({ kind: 'hub-pending', user: null, keyId: k.keyId, keyLabel: k.label, scopes: EMPTY_SCOPES, signature: 'pending', verified: false });
   }
 
   if (f.enforce !== false) refuse(403, 'unidentified');
-  return { kind: 'direct', user: 'local', name: null, readOnly: false };
+  return mark({ kind: 'direct', user: 'local', name: null, readOnly: false });
+}
+
+/** Is the TCP peer a loopback address (127.0.0.0/8, ::1, ::ffff:127.*)? Unknown → false (fail closed). */
+function isLoopbackPeer(req) {
+  const a = normIp(req?.socket?.remoteAddress);
+  if (a === null) return false;
+  return a === '::1' || (net.isIPv4(a) && a.startsWith('127.'));
 }
 
 // --- guards ------------------------------------------------------------------------------------------------
@@ -514,7 +652,7 @@ function guardHost(req, cfg, { allowMissing, ingress }, opts) {
 
 function guardOrigin(req, cfg, auth, { ingress, requireOrigin }) {
   const origin = req?.headers?.origin;
-  if (auth.kind === 'hub') {
+  if (auth.kind === 'hub' || auth.kind === 'hub-pending') {
     // A browser cannot sign: a signed request carrying browser headers is a confused deputy.
     if (origin !== undefined) refuse(403, 'origin-on-hub');
     if (req?.headers?.['sec-fetch-site'] !== undefined) refuse(403, 'origin-on-hub');
@@ -533,6 +671,7 @@ function guardOrigin(req, cfg, auth, { ingress, requireOrigin }) {
 function hubPathOk(url) {
   const p = url.pathname;
   if (!p.startsWith('/api/v1/')) return false;
+  if (p.includes('//')) return false; // no empty segments (SR3 L6)
   if (/%2f|%5c|%2e/i.test(p)) return false;
   let d;
   try { d = decodeURIComponent(p); } catch { return false; }
@@ -540,7 +679,8 @@ function hubPathOk(url) {
 }
 
 function authOf(req, cfg, opts) {
-  if (isObj(req?.auth) && typeof req.auth.kind === 'string') return req.auth;
+  // only an auth this module issued is reused (SR3 L6); anything else on req.auth is replaced
+  if (isObj(req?.auth) && issued.has(req.auth)) return req.auth;
   const a = classify(req, cfg, opts);
   if (req && typeof req === 'object') req.auth = a;
   return a;
@@ -550,8 +690,8 @@ function authOf(req, cfg, opts) {
  * Guard an HTTP request (2.5). Call after classify (uses req.auth, else classifies and sets it). Returns the
  * auth; throws AuthError. `url` is the request URL (URL or string; default req.url).
  *   - Host on every request (missing Host only for non-mutating requests off ingress);
- *   - hub kind: only /api/v1/ paths; GET/HEAD need a verified read signature; POST only /api/v1/actions with
- *     an envelope signature (still to be verified by the route); refused on a hub process;
+ *   - hub kind: only /api/v1/ paths; GET/HEAD need a verified read signature; refused on a hub process;
+ *   - hub-pending (unverified -Sig/-Key): only POST /api/v1/actions; the route must verifyPendingAction;
  *   - mutating: read-only direct users refused; hook intake local-only when enforcing; Origin exact
  *     (none for hub) and Sec-Fetch-Site; X-Laneboard: 1; JSON content-type on /api/v1/actions from remote.
  */
@@ -572,10 +712,16 @@ export function guardRequest(req, url, cfg, opts = {}) {
       if (!auth.scopes?.has?.('read')) refuse(403, 'scope-missing', 'read');
     } else if (method === 'POST' && u.pathname === '/api/v1/actions') {
       if (auth.signature === 'read') refuse(403, 'read-signature-not-allowed');
-      if (auth.signature !== 'envelope') refuse(403, 'envelope-required');
+      if (auth.signature !== 'envelope' || auth.verified !== true) refuse(403, 'envelope-required');
     } else {
       refuse(403, auth.signature === 'read' ? 'read-signature-not-allowed' : 'hub-not-allowed');
     }
+  } else if (auth.kind === 'hub-pending') {
+    // SR3 H1: only the actions route, which must then call verifyPendingAction
+    if (cfg?.mode === 'hub') refuse(403, 'hub-kind-refused');
+    if (method !== 'POST' || u.pathname !== '/api/v1/actions') refuse(401, 'missing-signature', 'X-Laneboard-Ts/-Nonce');
+  } else if (auth.kind !== 'local' && auth.kind !== 'direct') {
+    refuse(403, 'unidentified');
   }
 
   if (!mutating) return auth;
@@ -600,6 +746,8 @@ function clampDim(v, [lo, hi]) {
 
 /** The `term` args a hub must have signed for this upgrade URL: {cols?, rows?, window?} from the query. */
 export function termArgsFromQuery(searchParams) {
+  // a repeated parameter is ambiguous (first? last?): refused (SR3 L4)
+  for (const k of ['cols', 'rows', 'window']) if (searchParams.getAll(k).length > 1) refuse(403, 'envelope-mismatch', `repeated ${k}`);
   const out = {};
   if (searchParams.has('cols')) out.cols = clampDim(searchParams.get('cols'), TERM_COLS);
   if (searchParams.has('rows')) out.rows = clampDim(searchParams.get('rows'), TERM_ROWS);
@@ -640,6 +788,8 @@ export function guardUpgrade(req, url, cfg, opts = {}) {
   const termMatch = TERM_PATH_RE.exec(u.pathname);
   const isTerm = termMatch !== null || u.pathname.startsWith('/ws/term/');
 
+  if (auth.kind === 'hub-pending') refuse(401, 'missing-signature', 'X-Laneboard-Ts/-Nonce or envelope');
+  if (auth.kind !== 'hub' && auth.kind !== 'local' && auth.kind !== 'direct') refuse(403, 'unidentified');
   if (auth.kind === 'hub') {
     if (cfg?.mode === 'hub') refuse(403, 'hub-kind-refused');
     if (u.pathname === '/api/v1/stream') {
@@ -659,6 +809,20 @@ export function guardUpgrade(req, url, cfg, opts = {}) {
   guardOrigin(req, cfg, auth, { ingress, requireOrigin: auth.kind === 'direct' });
   if (isTerm && auth.kind === 'direct' && auth.readOnly === true) refuse(403, 'read-only');
   return auth;
+}
+
+/**
+ * The terminal a verified hub `term` upgrade may attach to, from the SIGNED envelope (SR3 L4):
+ * frozen {name, cols, rows, window} (cols/rows/window undefined when not signed). The upgrade route (A8) and
+ * the attach (H9 on the hub side signs these) must use exactly these values, never re-parse the URL.
+ * Throws AuthError 401 for anything but a verified `term` auth.
+ */
+export function termBinding(auth) {
+  if (!isObj(auth) || !issued.has(auth) || auth.kind !== 'hub' || auth.verified !== true || auth.signature !== 'term' || !isObj(auth.envelope)) {
+    refuse(401, 'missing-signature', 'term envelope');
+  }
+  const { target, args } = auth.envelope;
+  return Object.freeze({ name: target, cols: args.cols, rows: args.rows, window: args.window });
 }
 
 /** Answer a refused upgrade on the raw socket (status line only, no body, no detail) and close it. */

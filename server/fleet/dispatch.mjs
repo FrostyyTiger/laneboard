@@ -40,7 +40,10 @@ const ALARM_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 // test/dispatch.test.mjs checks they agree.
 export const LANE_ID_RE = /^[a-z0-9][a-z0-9._-]{0,39}$/;
 const ERROR_MAX = 300;
-const VIA_OF_KIND = Object.freeze({ hub: 'hub', direct: 'direct', local: 'legacy' });
+const VIA_OF_KIND = Object.freeze({ hub: 'hub', 'hub-pending': 'hub', direct: 'direct', local: 'legacy' });
+// auth.mjs's `hub-pending` (a -Sig/-Key whose envelope was never verified, SR3 H1) is accepted here only so
+// that its refusal (403 unverified) is audited; it never runs anything.
+const HUB_KINDS = Object.freeze(['hub', 'hub-pending']);
 /** Audit `user` of a direct auth that carries no user (refused 403 no-identity, never recorded as `local`). */
 export const UNKNOWN_DIRECT_USER = 'unknown-direct';
 /** The only actions allowed to register `allConfirm:false` (SR5 L5). */
@@ -316,7 +319,8 @@ function errorText(err) {
  * envelope: {v:1, id:uuid, ts, builder, action, target, args, user?, via} (already parsed and, for hub kind,
  *   signature-verified by A4; this function re-checks the shape it relies on). `via` is ignored: it is derived
  *   from auth.kind.
- * auth: {kind:'local'|'direct'|'hub', user? (required for direct), scopes? (Set|array, hub), keyLabel?, readOnly?}.
+ * auth: {kind:'local'|'direct'|'hub', user? (required for direct), scopes? (Set|array, hub), keyLabel?, readOnly?,
+ *   verified (hub: must be true, else 403 unverified, audited; `hub-pending` is always refused that way)}.
  * deps: handed to run() (actions, launcher, retirer, state, config, ...). config defaults to deps.config.
  * audit: openAudit() result (append); limiter: createLimiter() result (take); auditId = the outcome entry's hash.
  * Never throws for a bad envelope or a failing action; throws TypeError only for a missing auth/audit (a
@@ -325,13 +329,13 @@ function errorText(err) {
 export async function dispatch(envelope, ctx = {}) {
   const { auth, deps = {}, audit, limiter, now = Date.now, log = null } = ctx;
   const config = ctx.config ?? deps.config ?? {};
-  if (!auth || !KINDS.includes(auth.kind)) throw new TypeError('dispatch: auth.kind is required');
+  if (!auth || !(KINDS.includes(auth.kind) || auth.kind === 'hub-pending')) throw new TypeError('dispatch: auth.kind is required');
   if (!audit || typeof audit.append !== 'function') throw new TypeError('dispatch: audit is required');
 
   const env = isPlainObject(envelope) ? envelope : {};
   const str = (v) => (typeof v === 'string' ? v : null);
   let user;
-  if (auth.kind === 'hub') user = str(env.user) && HUB_USER_RE.test(env.user) ? env.user : null;
+  if (HUB_KINDS.includes(auth.kind)) user = str(env.user) && HUB_USER_RE.test(env.user) ? env.user : null;
   else if (auth.kind === 'direct') user = str(auth.user) || UNKNOWN_DIRECT_USER;
   else user = str(auth.user) || 'local';
   // What we know for the audit entry, filled in as checks pass.
@@ -347,7 +351,7 @@ export async function dispatch(envelope, ctx = {}) {
   let argsHash;
   try { argsHash = argsHashOf(rec.rawArgs); } catch { argsHash = argsHashOf({ unhashable: true }); }
   const append = (result) => {
-    if (auth.kind === 'hub' && typeof auth.keyLabel === 'string') result.key = auth.keyLabel;
+    if (HUB_KINDS.includes(auth.kind) && typeof auth.keyLabel === 'string') result.key = auth.keyLabel;
     return audit.append({
       ts: now(), id: rec.id, user: rec.user, via: rec.via, builder: rec.builder,
       action: rec.action, target: rec.target, argsHash, result,
@@ -426,6 +430,11 @@ async function execute({ def, runFn, target, args, rec, auth, deps, config }) {
 }
 
 async function runChecked(env, rec, { auth, deps, config, limiter }) {
+  // 0. a hub caller must carry a VERIFIED signature (SR3 H1): A4's classify only yields `hub-pending` for an
+  //    action whose envelope is not verified yet; only auth.verifyPendingAction/verifyEnvelope make it `hub`.
+  if (auth.kind === 'hub-pending' || (auth.kind === 'hub' && auth.verified !== true)) {
+    throw new ActionRefused(403, 'unverified', 'the hub signature was not verified');
+  }
   // 1. shape (env.via is not checked: it is derived from auth.kind)
   if (env.v !== 1) throw new ActionRefused(400, 'bad_envelope', 'envelope v must be 1');
   if (!rec.id) throw new ActionRefused(400, 'bad_envelope', 'envelope id must be a UUID');

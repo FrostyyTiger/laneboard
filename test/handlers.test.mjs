@@ -32,7 +32,7 @@ test.after(() => {
 
 const LOCAL = { kind: 'local', user: 'local' };
 const DIRECT = { kind: 'direct', user: 'alice@example.invalid' };
-const hub = (scopes = ['control']) => ({ kind: 'hub', scopes: new Set(scopes), keyLabel: 'hub-main' });
+const hub = (scopes = ['control']) => ({ kind: 'hub', scopes: new Set(scopes), keyLabel: 'hub-main', verified: true });
 
 let n = 0;
 function setup({ hubControl = false, readiness = 'ready', stateDir: sd } = {}) {

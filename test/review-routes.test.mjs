@@ -444,7 +444,7 @@ test('send-review: strict args', async () => {
 test('send-review: unknown lane 404, bad lane id 400, hub without control 403', async () => {
   assert.equal((await sendReview({ review: review() }, { target: 'ghost' })).status, 404);
   assert.equal((await sendReview({ review: review() }, { target: '../x' })).status, 400);
-  const hub = await sendReview({ review: review() }, { auth: { kind: 'hub', scopes: ['read'], keyLabel: 'k' } });
+  const hub = await sendReview({ review: review() }, { auth: { kind: 'hub', scopes: ['read'], keyLabel: 'k', verified: true } });
   assert.equal(hub.status, 403);
   assert.equal(hub.code, 'control-disabled');
 });
