@@ -54,7 +54,11 @@ export function resetTicks(rows, key, since, now) {
   return [...ticks].sort((a, b) => a - b);
 }
 
-export function build({ now = Date.now(), snapshot = null } = {}) {
+/**
+ * The Credit view's data. `builder` (fleet O11) is only echoed back as
+ * `builder` on the result, for the v1 read; it changes nothing else.
+ */
+export function build({ now = Date.now(), snapshot = null, builder = undefined } = {}) {
   const snap = snapshot ?? state.snapshot();
   const sessions = snap.sessions ?? [];
   const lanes = snap.lanes ?? [];
@@ -153,6 +157,7 @@ export function build({ now = Date.now(), snapshot = null } = {}) {
   }).sort((a, b) => (b.allTime ?? -1) - (a.allTime ?? -1) || b.tonight - a.tonight);
 
   return {
+    ...(builder !== undefined ? { builder } : {}),
     now,
     charts,
     lanes: rows,
