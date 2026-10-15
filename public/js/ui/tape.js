@@ -194,6 +194,12 @@ function itemNode(it) {
   return n;
 }
 
+/** Replace a node's children (textContent + append: older DOMs lack replaceChildren). */
+function setKids(node, kids) {
+  node.textContent = '';
+  node.append(...kids);
+}
+
 function textCell(text, cls) {
   const s = document.createElement('span');
   s.className = cls;
@@ -235,9 +241,9 @@ function paint() {
     const empty = document.createElement('span');
     empty.className = 'tape-empty';
     empty.textContent = ring.size() ? 'no events in this scope' : 'no events yet';
-    line.replaceChildren(empty);
+    setKids(line, [empty]);
   } else {
-    line.replaceChildren(...items.slice(0, LINE_ITEMS).map(itemNode));
+    setKids(line, items.slice(0, LINE_ITEMS).map(itemNode));
   }
   if (open) ensureTable().update(items.slice(0, DRAWER_ROWS));
 }

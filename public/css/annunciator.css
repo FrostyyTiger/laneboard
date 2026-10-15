@@ -28,7 +28,7 @@
 }
 .ann-tile:hover { border-color: var(--line-strong); }
 .ann-tile:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
-.ann-tile[aria-pressed="true"] { border-color: var(--accent); }
+.ann-tile[aria-pressed="true"] { border-color: var(--text-1); }
 
 .ann-label { overflow: hidden; text-overflow: ellipsis; }
 .ann-n {
