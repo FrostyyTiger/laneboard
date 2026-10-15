@@ -23,6 +23,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import WebSocket from 'ws';
+import { generateHubKey, writePrivateKey } from '../../server/fleet/keys-ed25519.mjs';
 
 export const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const ENTRY = path.join(ROOT, 'server', 'index.mjs');
@@ -130,7 +131,7 @@ async function waitHealthy(url, child, timeoutMs, logs) {
   throw new Error(`laneboard did not answer /healthz within ${timeoutMs} ms (${lastErr?.message})\n${logs().slice(-4000)}`);
 }
 
-async function bootOnce({ mode, config, env, trace, timeoutMs }) {
+async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey }) {
   // Refuse before anything is created.
   if (Number(env.LANEBOARD_PORT) === LIVE_PORT) throw new Error('boot: refusing to start a test laneboard on the live port 7777');
   if (env.TMUX !== undefined || env.TMUX_PANE !== undefined) throw new Error('boot: TMUX must not reach the child (it would point tmux at the live server)');
@@ -166,6 +167,15 @@ async function bootOnce({ mode, config, env, trace, timeoutMs }) {
   if (cfg) {
     fs.mkdirSync(path.dirname(configFile), { recursive: true });
     fs.writeFileSync(configFile, JSON.stringify(cfg, null, 2));
+  }
+  // A hub refuses to boot without its signing key (fleet H11): unless the
+  // config names its own fleet.hubKeyFile, write `hubKey` (or a fresh key) at
+  // the default path, $XDG_CONFIG_HOME/laneboard/hub.key, mode 0600.
+  let hubPrivateKey = null;
+  if (cfg?.mode === 'hub' && cfg.fleet?.hubKeyFile === undefined) {
+    const file = path.join(dirs.config, 'laneboard', 'hub.key');
+    if (hubKey) writePrivateKey(file, hubKey);
+    hubPrivateKey = hubKey ?? generateHubKey({ file }).privateKey;
   }
   const traceFile = trace ? path.join(tmp, 'modules.txt') : null;
 
@@ -253,6 +263,8 @@ async function bootOnce({ mode, config, env, trace, timeoutMs }) {
     configFile: cfg ? configFile : null,
     config: cfg,
     env: e,
+    /** The hub's private key (hub mode with the default key file), else null. */
+    hubKey: hubPrivateKey,
     logs,
     /** Resolved module URLs (needs boot({trace: true})). */
     loadedUrls() {
@@ -267,13 +279,15 @@ async function bootOnce({ mode, config, env, trace, timeoutMs }) {
  * Start laneboard in `mode` ('builder' default, or 'hub') with `config` (an
  * object written as its config file; null/undefined = no file) and extra
  * `env`. Resolves once /healthz answers (10 s), else rejects with the log
- * tail. Retries twice when the child dies early (a lost port race).
+ * tail. Retries twice when the child dies early (a lost port race). In hub
+ * mode `hubKey` (an Ed25519 private KeyObject; default a fresh one) is
+ * written as the hub key unless the config sets fleet.hubKeyFile.
  */
-export async function boot({ mode = 'builder', config = null, env = {}, trace = false, timeoutMs = 10_000 } = {}) {
+export async function boot({ mode = 'builder', config = null, env = {}, trace = false, timeoutMs = 10_000, hubKey = null } = {}) {
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      return await bootOnce({ mode, config, env, trace, timeoutMs });
+      return await bootOnce({ mode, config, env, trace, timeoutMs, hubKey });
     } catch (err) {
       lastErr = err;
       if (!err.exited || !/EADDRINUSE/.test(err.message)) throw err;
