@@ -365,12 +365,15 @@ deploy/install-claude.sh --uninstall --statusline  # also drop our status line
 ```
 
 - **Your own hooks are preserved.** The merge is per event: only entries
-  marked as laneboard's (a command or url that posts to
-  `127.0.0.1:<port>/api/hook...` or runs something under
-  `.claude/laneboard/`) are replaced. Two guards run before anything is
-  written: nothing outside `.hooks` and `.statusLine` changed, and every other
-  hook entry and group is identical before and after. If either fails, nothing
-  is written and it exits 1.
+  carrying laneboard's ownership marker, `"_laneboard": "managed"`, are
+  replaced or removed. An entry written by an older installer (no marker) is
+  migrated only when its command is byte-identical to a command the current
+  template renders; anything else that merely resembles laneboard's (a url
+  posting to `/api/hook`, a script under `.claude/laneboard/`) is left alone.
+  Guards run before anything is written: nothing outside `.hooks` and
+  `.statusLine` changed, every other hook entry and group is identical before
+  and after, and every removed entry is checked again on its own. If any
+  fails, nothing is written and it exits 1.
 - `settings.json` is backed up first to `~/.claude/backups/` (a symlinked
   settings file is written through, not replaced). An existing `.statusLine`
   is never replaced; the sidecar is appended to an existing status-line script.
