@@ -1,0 +1,7 @@
+{
+  "session_id": "0b6c1e2a-fixture-session-0001",
+  "transcript_path": "/home/builder-a/.claude/projects/-home-builder-a-code-acme/0b6c1e2a-fixture-session-0001.jsonl",
+  "cwd": "/home/builder-a/code/acme",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "fix the failing test"
+}

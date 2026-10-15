@@ -1,0 +1,15 @@
+{
+  "session_id": "0b6c1e2a-fixture-session-0001",
+  "transcript_path": "/home/builder-a/.claude/projects/-home-builder-a-code-acme/0b6c1e2a-fixture-session-0001.jsonl",
+  "cwd": "/home/builder-a/code/acme",
+  "hook_event_name": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_02",
+  "tool_input": {
+    "command": "npm test",
+    "description": "run tests"
+  },
+  "tool_response": {
+    "error": "Error: exit code 1 at /home/builder-a/code/acme/test/a.test.mjs:43"
+  }
+}
