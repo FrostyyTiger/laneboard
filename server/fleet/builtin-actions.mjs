@@ -98,17 +98,33 @@ export const NOT_CLAUDE_STATES = Object.freeze(['shell', 'dead', 'unknown']);
 /** promptReadiness() values that mean a dialog is on screen. */
 export const DIALOG_READINESS = Object.freeze(['trust_dialog', 'dialog']);
 
+/** Foreground commands that are a shell: typed text there runs as a command line (SR20 M1). */
+export const SHELL_COMMANDS = Object.freeze(['bash', 'zsh', 'sh', 'fish', 'dash', 'ksh', 'tcsh', 'csh', 'nu', 'xonsh']);
+/** A native Claude Code binary is installed as `versions/<semver>`, so tmux reports e.g. `2.1.301`. */
+const VERSIONED_BINARY = /^\d+\.\d+\.\d+([.-][\w.]+)?$/;
+
+/** True when a pane's foreground command is a known shell, including a login shell (`-bash`). */
+export function isShellCommand(cmd) {
+  if (typeof cmd !== 'string') return false;
+  const base = cmd.replace(/^-/, '').split('/').pop();
+  return SHELL_COMMANDS.includes(base);
+}
+
 /**
  * True when `session` is a live Claude session (SR20 M1): kind `claude`, a
- * state that is not shell/dead/unknown, and the main pane's foreground command
- * is `claude`. Anything else, including a missing paneCmd, is false: typed
- * text there would reach a shell, and a shell runs each typed line.
+ * state that is not shell/dead/unknown, a main-pane foreground command that is
+ * not a shell, and that command is `claude`, a versioned native binary name
+ * (`2.1.301`: ~/.local/bin/claude links to versions/<semver>), or the session
+ * has a live registry pid. Anything else, including a missing paneCmd, is
+ * false: typed text there would reach a shell, and a shell runs each typed line.
  */
 export function isLiveClaude(session) {
   if (!session || typeof session !== 'object') return false;
   if (session.kind !== 'claude') return false;
   if (typeof session.state !== 'string' || !session.state || NOT_CLAUDE_STATES.includes(session.state)) return false;
-  return session.paneCmd === 'claude';
+  const cmd = session.paneCmd;
+  if (typeof cmd !== 'string' || !cmd || isShellCommand(cmd)) return false;
+  return cmd === 'claude' || VERSIONED_BINARY.test(cmd) || Boolean(session.claude?.pid);
 }
 
 /**
