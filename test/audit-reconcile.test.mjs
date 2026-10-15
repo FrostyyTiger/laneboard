@@ -9,6 +9,7 @@ import path from 'node:path';
 
 import {
   reconcile, unknownOnHub, checkSegment, createAuditReconciler, hubActions, builderActions, FORK_ACTION, VIA,
+  MATCH_ACTION, MISMATCH_CAP, UNKNOWN_SAMPLES, SKEW_MS, START_ONLY_MS, handleRebase,
 } from '../server/hub/audit-reconcile.mjs';
 import { createReadProxy } from '../server/hub/read-proxy.mjs';
 import { createFleetStore } from '../server/hub/fleet-store.mjs';
@@ -413,6 +414,208 @@ test('service: once on reconnect, and pages past a long chain', async () => {
   await new Promise((r) => setTimeout(r, 50));
   await svc.pull('builder-a');
   assert.ok(fa.state.requests.length > before, 'a reconnect triggers a pull');
+});
+
+// --- SR14 regressions -------------------------------------------------------------------------------------
+
+const noTimers = { setInterval: () => null, clearInterval: () => {} };
+
+test('SR14 M1: a 5,001-entry via:hub flood with a future ts neither hides a missing hub action nor grows hub state', async () => {
+  const f = await fleet(['builder-a', 'builder-b']);
+  const [fa] = f.fakes;
+  let t = Date.now();
+  const svc = f.mk({ now: () => t });
+  // control: a relayed kill the builder never recorded, and one it did record
+  const missing = f.relay(fa, { action: 'kill', target: 's2' });
+  missing.done();
+  const okOne = f.relay(fa);
+  fa.act(okOne.env);
+  okOne.done();
+  // an envelope the hub sent to builder-b, claimed by builder-a
+  const other = f.relay(f.fakes[1]);
+  other.done();
+  // the flood: correctly chained lines appended by an agent with a shell on builder-a
+  fa.state.audit.close();
+  fa.state.audit = openAudit({ file: fa.file, builder: 'builder-a', now: () => 8e15 });
+  fa.act(other.env);
+  for (let i = 0; i < 5001; i++) {
+    fa.state.audit.append({ id: uuid(), user: 'x', via: 'hub', builder: 'builder-a', action: 'kill', target: `j${i}`, argsHash: H('0'), result: { ok: true } });
+  }
+  const hubBefore = f.hubAudit.read({}).entries.length;
+  const heapBefore = process.memoryUsage().heapUsed;
+  t += 10_000;
+  for (const x of f.fakes) f.store.setConn(x.id, { state: 'up', lastSeen: t });
+  await svc.tick();
+  assert.ok(process.memoryUsage().heapUsed - heapBefore < 64 * 1024 * 1024, 'bounded memory');
+  const st = svc.status()['builder-a'];
+  assert.equal(st.error, null);
+  assert.equal(st.indexed, 1, 'only the envelope the hub sent to builder-a is indexed');
+  assert.equal(st.unknownOnHub, 5002);
+  const m = svc.mismatches();
+  const hubSide = m.filter((x) => x.state !== 'unknown-on-hub' && x.builder === 'builder-a');
+  assert.deepEqual(hubSide.map((x) => [x.id, x.state]), [[missing.env.id, 'missing-on-builder']]);
+  const unk = m.filter((x) => x.state === 'unknown-on-hub');
+  assert.equal(unk.length, 1, 'one aggregate row per builder');
+  assert.equal(unk[0].builder, 'builder-a');
+  assert.equal(unk[0].count, 5002);
+  assert.equal(unk[0].first.length, UNKNOWN_SAMPLES);
+  assert.equal(unk[0].last.length, UNKNOWN_SAMPLES);
+  assert.equal(unk[0].first[0].id, other.env.id);
+  for (const x of [...unk[0].first, ...unk[0].last]) assert.ok(x.ts <= t + SKEW_MS, 'builder ts clamped to the hub window');
+  // list() agrees with mismatches()
+  const states = Object.fromEntries(svc.list({}).entries.filter((e) => e.via === 'hub').map((e) => [e.id, e.state]));
+  assert.equal(states[missing.env.id], 'missing-on-builder');
+  assert.equal(states[okOne.env.id], 'match');
+  // hub chain growth is bounded by the hub's own records: one match record entry, one anchor
+  const added = f.hubAudit.read({}).entries.slice(hubBefore);
+  assert.deepEqual(added.map((e) => e.action).sort(), [ANCHOR_ACTION, MATCH_ACTION]);
+  assert.equal(added.find((e) => e.action === MATCH_ACTION).result.matched.length, 2, 'start + done of the one real envelope');
+  // a second flood pull: still one aggregate row, hub-side rows still first
+  for (let i = 0; i < 300; i++) fa.state.audit.append({ id: uuid(), via: 'hub', builder: 'builder-a', action: 'kill', target: 'k', argsHash: H('0'), result: { ok: true } });
+  await svc.tick();
+  const m2 = svc.mismatches();
+  assert.equal(m2[0].id, missing.env.id);
+  assert.equal(m2.filter((x) => x.state === 'unknown-on-hub').length, 1);
+  assert.ok(m2.length <= MISMATCH_CAP + 2);
+});
+
+test('SR14 M2: after a hub restart earlier matches stay matched; real mismatches stay reported', async () => {
+  const f = await fleet(['builder-a']);
+  const [fa] = f.fakes;
+  let t = Date.now();
+  const a = f.relay(fa);
+  fa.act(a.env);
+  a.done();
+  const differs = f.relay(fa, { ok: false, status: 409 });
+  fa.act(differs.env, { ok: true });
+  differs.done();
+  const missing = f.relay(fa);
+  missing.done();
+  const svc = f.mk({ now: () => t });
+  t += 10_000;
+  for (const x of f.fakes) f.store.setConn(x.id, { state: 'up', lastSeen: t });
+  await svc.tick();
+  const st1 = Object.fromEntries(svc.list({}).entries.filter((e) => e.via === 'hub').map((e) => [e.id, e.state]));
+  assert.deepEqual([st1[a.env.id], st1[differs.env.id], st1[missing.env.id]], ['match', 'outcome-differs', 'missing-on-builder']);
+
+  // restart: a new reconciler on the same hub log; the builder has moved on since
+  fa.note('after');
+  const svc2 = f.mk({ now: () => t });
+  assert.equal(svc2.status()['builder-a'].indexed, 2, 'the index is rebuilt from the hub chain');
+  t += 10_000;
+  for (const x of f.fakes) f.store.setConn(x.id, { state: 'up', lastSeen: t });
+  await svc2.tick();
+  const st2 = Object.fromEntries(svc2.list({}).entries.filter((e) => e.via === 'hub').map((e) => [e.id, e.state]));
+  assert.equal(st2[a.env.id], 'match', 'not falsely missing after a restart');
+  assert.equal(st2[differs.env.id], 'outcome-differs');
+  assert.equal(st2[missing.env.id], 'missing-on-builder');
+  assert.deepEqual(svc2.mismatches().map((x) => x.id).sort(), [differs.env.id, missing.env.id].sort());
+  const row = svc2.list({}).entries.find((e) => e.id === a.env.id);
+  assert.equal(row.builderEntry.ok, true);
+  assert.match(row.builderEntry.hash, /^[0-9a-f]{64}$/);
+  assert.equal(f.hubAudit.verifyAll().ok, true);
+  // many matched envelopes in one pull are chunked under the audit result cap
+  for (let i = 0; i < 80; i++) {
+    const r = f.relay(fa);
+    fa.act(r.env);
+    r.done();
+  }
+  t += 10_000;
+  for (const x of f.fakes) f.store.setConn(x.id, { state: 'up', lastSeen: t });
+  await svc2.tick();
+  const chunks = f.hubAudit.read({}).entries.filter((e) => e.action === MATCH_ACTION);
+  assert.ok(chunks.length > 2);
+  const svc3 = f.mk({ now: () => t });
+  assert.equal(svc3.status()['builder-a'].indexed, 82);
+  await svc3.tick();
+  assert.deepEqual(svc3.mismatches().map((x) => x.id).sort(), [differs.env.id, missing.env.id].sort());
+});
+
+test('SR14 L1: once anchored, an answer without a head is bad-response, not a pass', () => {
+  const a = chainOf(3);
+  closers.push(() => a.close());
+  const all = a.read({}).entries;
+  const anchor = { hash: all[0].hash, count: 1 };
+  const r = a.read({ after: anchor.hash });
+  assert.equal(checkSegment(anchor, { ...r }, 'builder-a').ok, true);
+  assert.deepEqual(checkSegment(anchor, { ...r, head: undefined }, 'builder-a'), { ok: false, fork: false, reason: 'bad-response' });
+  assert.deepEqual(checkSegment(anchor, { ...r, head: { hash: 5 } }, 'builder-a'), { ok: false, fork: false, reason: 'bad-response' });
+  assert.equal(checkSegment(anchor, { ...r, afterFound: 'yes' }, 'builder-a').reason, 'bad-response');
+  // from genesis a head is optional
+  assert.equal(checkSegment({ hash: GENESIS, count: 0 }, { entries: a.read({}).entries }, 'builder-a').ok, true);
+});
+
+test('SR14 L2: a start-only builder entry for a hub-unknown outcome is not pending forever', () => {
+  const id = uuid();
+  const hub = hubPair(id, { ok: 'unknown', status: null, ts: 1000 });
+  const bld = builderPair(id, { ok: null });
+  const at = (pulled) => reconcile(hub, bld, { pulledAt: { 'builder-a': pulled } })[0].state;
+  assert.equal(at(100_000), 'pending');
+  assert.equal(at(1010 + 5_000 + START_ONLY_MS + 1), 'outcome-differs');
+});
+
+test('SR14 L3: a failed pull does not stamp lastOkAt', async () => {
+  const f = await fleet(['builder-a']);
+  const svc = createAuditReconciler({
+    store: { view: () => ({ builders: [{ id: 'builder-a', state: 'up' }] }) },
+    readProxy: { get: async () => ({ status: 503, json: { ok: false } }) },
+    audit: f.hubAudit, timers: noTimers,
+  });
+  await svc.tick();
+  assert.equal(svc.status()['builder-a'].lastOkAt, null);
+  await f.svc.tick();
+  assert.ok(Number.isFinite(f.svc.status()['builder-a'].lastOkAt));
+});
+
+test('SR14 L4: rebase onto the builder head clears a fork; handleRebase is direct-only and typed-confirm', async () => {
+  const f = await fleet(['builder-a']);
+  const [fa] = f.fakes;
+  let t = Date.now();
+  const svc = f.mk({ now: () => t });
+  fa.note('one');
+  await svc.tick();
+  const before = f.relay(fa); // sent before the reset, its builder entry is gone with the old log
+  before.done();
+  fa.rewrite(3);
+  t += 10_000;
+  for (const x of f.fakes) f.store.setConn(x.id, { state: 'up', lastSeen: t });
+  await svc.tick();
+  assert.equal(svc.forks()[0]?.reason, 'after-not-found');
+
+  assert.deepEqual(await handleRebase(svc, { builder: 'builder-a', confirm: 'builder-a', onto: 'head', auth: { kind: 'local' } }), { status: 403, body: { ok: false, error: 'remote-only' } });
+  assert.equal((await handleRebase(svc, { builder: 'builder-a', confirm: 'builder-b', onto: 'head', auth: { kind: 'direct', user: 'u@example.invalid' } })).status, 400);
+  assert.equal((await handleRebase(svc, { builder: 'builder-a', confirm: 'builder-a', onto: 'x', auth: { kind: 'direct' } })).status, 400);
+  assert.equal((await handleRebase(svc, { builder: '../x', confirm: '../x', auth: { kind: 'direct' } })).status, 404);
+  assert.deepEqual(svc.forks().length, 1, 'refused requests change nothing');
+  const r = await handleRebase(svc, { builder: 'builder-a', confirm: 'builder-a', onto: 'head', auth: { kind: 'direct', user: 'u@example.invalid' } });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.head, fa.state.audit.head());
+  const rebaseEntry = f.hubAudit.read({}).entries.filter((e) => e.action === ANCHOR_ACTION && e.result.rebased === true).at(-1);
+  assert.equal(rebaseEntry.user, 'u@example.invalid', 'audited with the user');
+  assert.deepEqual(svc.forks(), []);
+  fa.note('two');
+  const afterR = f.relay(fa);
+  fa.act(afterR.env);
+  afterR.done();
+  t += 10_000;
+  for (const x of f.fakes) f.store.setConn(x.id, { state: 'up', lastSeen: t });
+  await svc.tick();
+  assert.deepEqual(svc.forks(), []);
+  assert.deepEqual(svc.anchors()['builder-a'], fa.state.audit.head());
+  const st = Object.fromEntries(svc.list({}).entries.filter((e) => e.via === 'hub').map((e) => [e.id, e.state]));
+  assert.equal(st[before.env.id], 'pending', 'sent before the head rebase: not judged');
+  assert.equal(st[afterR.env.id], 'match');
+  assert.deepEqual(svc.mismatches(), []);
+  // a restart keeps all of it
+  const svc2 = f.mk({ now: () => t });
+  await svc2.tick();
+  assert.deepEqual(svc2.forks(), []);
+  assert.deepEqual(svc2.mismatches(), []);
+  assert.equal(f.hubAudit.verifyAll().ok, true);
+  // genesis rebase still works and an invalid head is refused
+  assert.equal(svc2.rebase('builder-a', { head: { hash: 'zz', count: 1 } }), false);
+  assert.equal((await handleRebase(svc2, { builder: 'builder-a', confirm: 'builder-a', auth: { kind: 'direct' } })).status, 200);
+  assert.deepEqual(svc2.anchors()['builder-a'], { hash: GENESIS, count: 0 });
 });
 
 test('hub module imports no builder-only module', () => {
