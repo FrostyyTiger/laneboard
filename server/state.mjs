@@ -33,18 +33,25 @@ const ATTENTION_SCORE = {
  * which made the queue useless. waiting_* is unchanged.
  */
 const HOUR = 60 * 60 * 1000;
+/** Added to a stuck session that is not already waiting (fleet §7). */
+export const STUCK_BONUS = 40;
 export function attentionScore(session, now = Date.now()) {
   // v3: the dev-stack guard outranks everything, a permission prompt included.
   if (session.danger) return 1000;
-  const base = ATTENTION_SCORE[session.state];
+  // A held approval (decorated `awaitingApproval`, fleet §8) is a permission
+  // prompt for the queue's purposes; the state word itself is not changed.
+  const state = session.awaitingApproval ? 'waiting_permission' : session.state;
+  const base = ATTENTION_SCORE[state];
   if (base) return base;
-  if (session.state === 'done' && session.activity?.lastAssistant) {
+  let score = 0;
+  if (state === 'done' && session.activity?.lastAssistant) {
     const age = now - (session.stateSince ?? now);
-    if (age < 2 * HOUR) return 50;
-    if (age < 24 * HOUR) return 20;
-    return 0;
+    if (age < 2 * HOUR) score = 50;
+    else if (age < 24 * HOUR) score = 20;
   }
-  return 0;
+  // Decorated `stuck` (fleet §7): raised, but never above a waiting session.
+  if (session.stuck) score += STUCK_BONUS;
+  return score;
 }
 
 /**
@@ -140,7 +147,7 @@ export function all() { return [...sessions.values()]; }
 
 /**
  * v3: what the lane cards and the Box need beyond sessions and lanes — lane
- * records, PRs, slots, the dev stack, readiness, jobs. Provided by index.mjs,
+ * records, PRs, slots, the dev stack, readiness, jobs. Provided by boot/builder.mjs,
  * which owns those collectors, so this module does not import them.
  */
 let extras = () => null;
@@ -148,20 +155,139 @@ export function setExtras(fn) {
   extras = fn;
 }
 
+// --- hooks for feature modules (server/flags/*.mjs) ------------------------
+//
+// Flags such as `stuck`, `paused`, `awaitingApproval` (sessions) and
+// `reviewReady` (lanes) are not computed here: a module registers a decorator
+// and this file merges its patch in. With nothing registered, every path
+// below is exactly what it was before the hooks existed.
+
+/** name -> { session?(s, ctx) -> patch, lane?(lane, ctx) -> patch } */
+const decorators = new Map();
+/** name -> () -> value, a top-level snapshot key */
+const snapshotKeys = new Map();
+/** fn(ctx, now), at the end of every tick */
+const tickHooks = [];
+
+const CORE_SNAPSHOT_KEYS = new Set(['box', 'sessions', 'lanes', 'vitals', 'attention', 'generatedAt']);
+
+/**
+ * Decorate sessions and/or lanes. `session(s, {now})` and
+ * `lane(lane, {now, sessions})` return a patch object (or null) that is merged
+ * into the session/lane. Session decorators run before the attention score is
+ * computed, so the score sees the flag. A patch should name every field it
+ * owns on every call (`{stuck: null}` to clear), because a lane is rebuilt per
+ * snapshot but a session object lives until the next tick.
+ */
+export function addDecorator(name, { session, lane } = {}) {
+  if (!name || typeof name !== 'string') throw new TypeError('addDecorator needs a name');
+  if (decorators.has(name)) throw new Error(`decorator '${name}' is already registered`);
+  if (session !== undefined && typeof session !== 'function') throw new TypeError(`decorator '${name}': session must be a function`);
+  if (lane !== undefined && typeof lane !== 'function') throw new TypeError(`decorator '${name}': lane must be a function`);
+  if (!session && !lane) throw new TypeError(`decorator '${name}' needs a session or a lane function`);
+  decorators.set(name, { session, lane });
+}
+
+/** Add `snapshot()[name] = fn()`. A core key or a second registration is refused. */
+export function addSnapshotKey(name, fn) {
+  if (!name || typeof name !== 'string') throw new TypeError('addSnapshotKey needs a name');
+  if (typeof fn !== 'function') throw new TypeError(`snapshot key '${name}' needs a function`);
+  if (CORE_SNAPSHOT_KEYS.has(name) || snapshotKeys.has(name)) throw new Error(`snapshot key '${name}' is already defined`);
+  snapshotKeys.set(name, fn);
+}
+
+/** Run `fn(ctx, now)` at the end of every tick; ctx is `{ sessions, get }`. */
+export function onTick(fn) {
+  if (typeof fn !== 'function') throw new TypeError('onTick needs a function');
+  tickHooks.push(fn);
+}
+
+/** Tests only: forget every registered hook. */
+export function _resetHooks() {
+  decorators.clear();
+  snapshotKeys.clear();
+  tickHooks.length = 0;
+}
+
+/** A hook that throws is logged and skipped; it never breaks a tick or a snapshot. */
+function guarded(what, fn) {
+  try {
+    return fn();
+  } catch (err) {
+    log.error(`${what} failed`, err?.stack || String(err));
+    return null;
+  }
+}
+
+/**
+ * Apply every session decorator to `list` (in place), then recompute the
+ * attention score. Exported for tests; snapshot() calls it.
+ */
+export function decorateSessions(list, now = Date.now()) {
+  if (!decorators.size) return list;
+  for (const s of list) {
+    for (const [name, d] of decorators) {
+      if (!d.session) continue;
+      const patch = guarded(`decorator ${name} (session ${s.name})`, () => d.session(s, { now }));
+      if (patch && typeof patch === 'object') Object.assign(s, patch);
+    }
+    s.attentionScore = attentionScore(s, now);
+  }
+  return list;
+}
+
+/** Apply every lane decorator to `laneList` (in place). Exported for tests. */
+export function decorateLanes(laneList, now = Date.now(), sessionList = []) {
+  if (!decorators.size || !Array.isArray(laneList)) return laneList;
+  for (const l of laneList) {
+    for (const [name, d] of decorators) {
+      if (!d.lane) continue;
+      const patch = guarded(`decorator ${name} (lane ${l?.id ?? '?'})`, () => d.lane(l, { now, sessions: sessionList }));
+      if (patch && typeof patch === 'object') Object.assign(l, patch);
+    }
+  }
+  return laneList;
+}
+
+/** The registered snapshot keys, evaluated. Exported for tests. */
+export function snapshotExtras() {
+  const out = {};
+  for (const [name, fn] of snapshotKeys) out[name] = guarded(`snapshot key ${name}`, fn) ?? null;
+  return out;
+}
+
+/** Run the onTick hooks. Exported for tests; tick() calls it. */
+export async function runTickHooks(now = Date.now()) {
+  const ctx = { sessions: all(), get };
+  for (const fn of tickHooks) {
+    try {
+      await fn(ctx, now);
+    } catch (err) {
+      log.error('tick hook failed', err?.stack || String(err));
+    }
+  }
+}
+
 export function snapshot() {
   const list = all();
-  return {
+  const now = generatedAt || Date.now();
+  // A decorator's source (an approval, a pause) can change between ticks, so
+  // the flags and the score are refreshed on every snapshot, not only per tick.
+  decorateSessions(list, now);
+  const snap = {
     box: extras(),
     sessions: list,
     // Idle lanes are NOT sessions (lanes plan hard rule 6): separate array,
     // no state, no attention score, never a card.
-    lanes: lanes.build(list, { progressFor: progress.get }),
+    lanes: decorateLanes(lanes.build(list, { progressFor: progress.get }), now, list),
     vitals: latestVitals,
     attention: list.filter((s) => s.attentionScore > 0)
       .sort((a, b) => b.attentionScore - a.attentionScore || (a.stateSince ?? 0) - (b.stateSince ?? 0))
       .map((s) => ({ name: s.name, state: s.state, score: s.attentionScore, since: s.stateSince, danger: s.danger ? s.danger.reason : null })),
     generatedAt,
   };
+  if (snapshotKeys.size) Object.assign(snap, snapshotExtras());
+  return snap;
 }
 
 // Pane captures are rate-limited per hard rule 8, and batched into ONE tmux
@@ -430,6 +556,8 @@ export async function tick() {
       attentionScore: 0,
     };
     session.danger = guard.dangerFor(name);
+    // Flags from modules first: the score must see them.
+    if (decorators.size) decorateSessions([session], now);
     session.attentionScore = attentionScore(session, now);
     // The pane preview is already in hand, so scanning it for markers costs no
     // new tmux call — but it is NOT free. Joining and regex-scanning 40 lines
@@ -478,6 +606,7 @@ export async function tick() {
   ratelimits.maybeSample([...sessions.values()], now);
   latestVitals = await vitals.sample({ claudeRssKb, sessionCount: seen.size });
   generatedAt = now;
+  if (tickHooks.length) await runTickHooks(now);
   return snapshot();
 }
 
