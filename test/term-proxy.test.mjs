@@ -4,9 +4,10 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import WebSocket from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 
 import { fakeBuilder } from './helpers/fake-builder.mjs';
 import { createFleetStore } from '../server/hub/fleet-store.mjs';
@@ -34,7 +35,7 @@ function listen(server) {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server.address().port)));
 }
 
-async function setup({ hubControl = true, scopes = ['read', 'term'], maxTermsPerBuilder = 2 } = {}) {
+async function setup({ hubControl = true, scopes = ['read', 'term'], maxTermsPerBuilder = 2, limits = {}, wss = null, fleet = {} } = {}) {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-term-proxy-'));
   audit = openAudit({ file: path.join(tmp, 'audit.jsonl') });
   fb = await fakeBuilder({ id: 'builder-a', hubControl, hubKeys: [{ key: publicKeyString(privateKey), id: 'hub', scopes }] });
@@ -48,10 +49,10 @@ async function setup({ hubControl = true, scopes = ['read', 'term'], maxTermsPer
     mode: 'hub',
     port: lp,
     publicUrl: ORIGIN,
-    fleet: { ingressPort: ip, publicHosts: [HOST], allowedOrigins: [], maxTermsPerBuilder, enforce: true },
+    fleet: { ingressPort: ip, ingressPeerUid: process.getuid(), publicHosts: [HOST], allowedOrigins: [], maxTermsPerBuilder, enforce: true, ...fleet },
   };
   logs.length = 0;
-  tp = createTermProxy({ store, key: privateKey, cfg, audit, log: { warn: (m) => logs.push(m), info: (m) => logs.push(m) } });
+  tp = createTermProxy({ store, key: privateKey, cfg, audit, limits, wss, log: { warn: (m) => logs.push(m), info: (m) => logs.push(m) } });
   for (const srv of [ingress, local]) {
     srv.on('upgrade', (req, socket, head) => {
       if (!tp.attach(req, socket, head, req.url)) socket.destroy();
@@ -93,6 +94,31 @@ const waitFor = async (fn, ms = 2000) => {
   }
 };
 const auditEntries = () => audit.read().entries;
+
+const WS_KEY = 'dGhlIHNhbXBsZSBub25jZQ==';
+/** A raw upgrade request; resolves with the status code of the first response line (or null on close). */
+function rawUpgrade(pathAndQuery, { server = ingress, headers = directHeaders(), method = 'GET', key = WS_KEY, version = '13', extra = {}, halfClose = false } = {}) {
+  const h = { ...headers, connection: 'Upgrade', upgrade: 'websocket', 'sec-websocket-version': version, 'sec-websocket-key': key, ...extra };
+  for (const k of Object.keys(h)) if (h[k] === undefined) delete h[k];
+  return new Promise((resolve) => {
+    const sock = net.connect(server.address().port, '127.0.0.1', () => {
+      sock.write(`${method} ${pathAndQuery} HTTP/1.1\r\n${Object.entries(h).map(([k, v]) => `${k}: ${v}`).join('\r\n')}\r\n\r\n`);
+      if (halfClose) sock.end();
+    });
+    let buf = '';
+    sock.on('data', (d) => {
+      buf += d.toString('latin1');
+      const m = /^HTTP\/1\.1 (\d{3})/.exec(buf);
+      if (m) { resolve({ status: Number(m[1]), sock }); }
+    });
+    sock.on('error', () => {});
+    sock.on('close', () => resolve({ status: null, sock }));
+  });
+}
+const auditPairs = () => {
+  const es = auditEntries();
+  return { att: es.filter((e) => e.action === 'term-attach' && e.result.ok), det: es.filter((e) => e.action === 'term-detach') };
+};
 
 // --- pure helpers ----------------------------------------------------------------------------------------
 
@@ -302,6 +328,7 @@ test('audit lines: term-attach and term-detach with byte counts in result, no ke
   assert.equal(det.result.bytesIn, 'secret-keystrokes'.length);
   assert.equal(det.result.bytesOut, 'secret-keystrokes'.length);
   assert.equal(det.result.code, 1000);
+  assert.equal(det.id, att.id, 'SR12 L4: the detach line carries the attach envelope id');
   const text = fs.readFileSync(path.join(tmp, 'audit.jsonl'), 'utf8');
   assert.ok(!text.includes('secret-keystrokes'));
   assert.ok(!text.includes(fb.requests.at(-1).headers['x-laneboard-sig'].slice(8)), 'no signature in the audit log');
@@ -345,3 +372,188 @@ test('a broken audit log fails closed: no terminal', async () => {
   audit = openAudit({ file: path.join(tmp, 'audit.jsonl') });
 });
 
+
+// --- SR12 regressions -----------------------------------------------------------------------------------
+
+test('SR12 M1: a bad browser handshake is refused before the upstream opens; no slot leaks', async () => {
+  const cases = [{ key: 'bogus' }, { key: '' }, { key: 'dGhlIHNhbXBsZSBub25jZQ=' }, { version: '8' }, { version: '' }, { method: 'POST' },
+    { extra: { upgrade: 'h2c' } }, { extra: { 'sec-websocket-protocol': 'x' } }];
+  for (const c of cases) {
+    const r = await Promise.race([rawUpgrade(termPath(), c), new Promise((res) => setTimeout(() => res({ status: 'hang', sock: { destroy() {} } }), 1000))]);
+    assert.ok(r.status === 400 || r.status === 405, `${JSON.stringify(c)} -> ${r.status}`);
+    r.sock.destroy();
+  }
+  assert.equal(fb.requests.filter((x) => x.method === 'UPGRADE').length, 0, 'the builder was never contacted');
+  assert.equal(fb.terms.length, 0);
+  assert.equal(tp.live('builder-a'), 0);
+  const a = await open(termPath());
+  const b = await open(termPath('docs pass'));
+  assert.ok(a.ws && b.ws, 'no 503: the slots are free');
+  a.ws.close();
+  b.ws.close();
+});
+
+test('SR12 M1: an upgrade that never completes times out: upstream closed, slot freed, detach audited', async () => {
+  await teardown();
+  const stub = new WebSocketServer({ noServer: true });
+  stub.handleUpgrade = () => {}; // never calls back (an aborted or stuck handshake)
+  await setup({ wss: stub, limits: { upgradeMs: 100 } });
+  const r = rawUpgrade(termPath());
+  await waitFor(() => fb.terms.length === 1);
+  const upClosed = closed(fb.terms[0].ws);
+  await upClosed;
+  await (await r).sock.destroy();
+  await waitFor(() => tp.live('builder-a') === 0);
+  assert.equal(tp.stats().upgradeFailures, 1);
+  const { att, det } = auditPairs();
+  assert.equal(att.length, 1);
+  assert.equal(det.length, 1);
+  assert.equal(det[0].id, att[0].id);
+  assert.equal(det[0].result.code, null);
+  // the slots are usable again
+  await teardown();
+  await setup();
+  const ok = await open(termPath());
+  assert.ok(ok.ws);
+  ok.ws.close();
+});
+
+test('SR12 M1: an upgrade aborted by ws (socket destroyed) frees the slot at once and closes the upstream', async () => {
+  await teardown();
+  const stub = new WebSocketServer({ noServer: true });
+  stub.handleUpgrade = (_req, socket) => { socket.destroy(); };
+  await setup({ wss: stub, limits: { upgradeMs: 60_000 } });
+  const r = await rawUpgrade(termPath());
+  assert.equal(r.status, null);
+  await waitFor(() => fb.terms.length === 1);
+  await waitFor(() => fb.terms[0].ws.readyState === WebSocket.CLOSED);
+  await waitFor(() => tp.live('builder-a') === 0);
+  const { att, det } = auditPairs();
+  assert.equal(det.length, 1);
+  assert.equal(det[0].id, att[0].id);
+});
+
+test('SR12 M1: a client that half-closes right after its upgrade leaks nothing', async () => {
+  for (let i = 0; i < 3; i++) (await rawUpgrade(termPath(), { halfClose: true })).sock.destroy();
+  await waitFor(() => tp.live('builder-a') === 0);
+  await waitFor(() => fb.terms.every((x) => x.ws.readyState === WebSocket.CLOSED));
+  const { att, det } = auditPairs();
+  assert.equal(det.length, att.length, 'every audited attach has its detach');
+  const ok = await open(termPath());
+  assert.ok(ok.ws);
+  ok.ws.close();
+});
+
+test('SR12 M2: builder pings are rate-limited (no pong flood toward the builder)', async () => {
+  const { ws } = await open(termPath());
+  await waitFor(() => fb.terms.length === 1);
+  const up = fb.terms[0].ws;
+  let pongs = 0;
+  up.on('pong', () => { pongs++; });
+  for (let i = 0; i < 500; i++) up.ping(Buffer.alloc(125, 1));
+  await waitFor(() => tp.stats().droppedPongs >= 499, 3000);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.ok(pongs <= 1, `at most one pong, got ${pongs}`);
+  const m = nextMessage(ws);
+  ws.send('still alive');
+  assert.equal(String((await m).data), 'still alive');
+  ws.close();
+});
+
+test('SR12 M2: browser pings are rate-limited too', async () => {
+  const { ws } = await open(termPath());
+  let pongs = 0;
+  ws.on('pong', () => { pongs++; });
+  for (let i = 0; i < 500; i++) ws.ping();
+  await waitFor(() => tp.stats().droppedPongs >= 499, 3000);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.ok(pongs <= 1, `at most one pong, got ${pongs}`);
+  ws.close();
+});
+
+test('SR12 M2: a socket queuing over maxQueuedBytes is terminated and the other side gets 1008', async () => {
+  await teardown();
+  // backpressure out of the way: only the hard cap can stop this
+  await setup({ limits: { maxQueuedBytes: 256 * 1024, highWater: 64 * 1024 * 1024, lowWater: 32 * 1024 * 1024 } });
+  const { ws } = await open(termPath());
+  await waitFor(() => fb.terms.length === 1);
+  const up = fb.terms[0].ws;
+  ws._socket.pause(); // the browser stops reading
+  const upClosed = closed(up);
+  const chunk = Buffer.alloc(512 * 1024, 7);
+  for (let i = 0; i < 16 && up.readyState === WebSocket.OPEN; i++) {
+    up.send(chunk, { binary: true });
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  assert.equal((await upClosed).code, 1008);
+  await waitFor(() => tp.live('builder-a') === 0);
+  assert.equal(tp.stats().overflows, 1);
+  const { det } = auditPairs();
+  assert.equal(det.length, 1);
+  assert.equal(det[0].result.code, 1008);
+  ws.terminate();
+});
+
+test('SR12 M3: a hub without fleet.ingressPeerUid refuses terminals (403, logged once)', async () => {
+  await teardown();
+  await setup({ fleet: { ingressPeerUid: null } });
+  assert.equal((await open(termPath())).status, 403);
+  assert.equal((await open(termPath())).status, 403);
+  assert.equal(fb.requests.filter((x) => x.method === 'UPGRADE').length, 0);
+  assert.equal(logs.filter((l) => /ingressPeerUid/.test(l)).length, 1);
+});
+
+test('SR12 M3: a wrong peer uid is refused (forged serve headers from a local process)', async () => {
+  await teardown();
+  await setup({ fleet: { ingressPeerUid: process.getuid() + 1 } });
+  assert.equal((await open(termPath())).status, 403);
+  assert.equal(fb.requests.filter((x) => x.method === 'UPGRADE').length, 0);
+});
+
+test('SR12 L1: createTermProxy refuses to run without an audit log', () => {
+  assert.throws(() => createTermProxy({ store, key: privateKey, cfg }), /audit is required/);
+  assert.throws(() => createTermProxy({ store, key: privateKey, cfg, audit: {} }), /audit is required/);
+});
+
+test('SR12 L2: a peer that stops answering pings is dropped; a live one stays', async () => {
+  await teardown();
+  await setup({ limits: { pingMs: 40 } });
+  const live1 = await open(termPath('docs pass'));
+  const port = ingress.address().port;
+  const dead = await new Promise((resolve) => {
+    const w = new WebSocket(`ws://127.0.0.1:${port}${termPath()}`, { headers: directHeaders(), autoPong: false });
+    w.once('open', () => resolve(w));
+  });
+  await waitFor(() => fb.terms.length === 2);
+  const c = closed(dead);
+  assert.equal((await c).code, 1006);
+  await waitFor(() => tp.live('builder-a') === 1);
+  assert.ok(tp.stats().deadPeers >= 1);
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(live1.ws.readyState, WebSocket.OPEN, 'a peer that answers pings stays open');
+  assert.equal(tp.live('builder-a'), 1);
+  live1.ws.close();
+});
+
+test('SR12 L3: a client RST during a refusal raises no uncaught error', async () => {
+  const errs = [];
+  const onErr = (e) => errs.push(e);
+  process.on('uncaughtException', onErr);
+  try {
+    const lp = local.address().port;
+    for (let i = 0; i < 30; i++) {
+      await new Promise((resolve) => {
+        const sock = net.connect(lp, '127.0.0.1', () => {
+          sock.write(`GET ${termPath()} HTTP/1.1\r\nhost: 127.0.0.1:${lp}\r\nconnection: Upgrade\r\nupgrade: websocket\r\nsec-websocket-version: 13\r\nsec-websocket-key: ${WS_KEY}\r\n\r\n`);
+          sock.resetAndDestroy();
+          resolve();
+        });
+        sock.on('error', () => {});
+      });
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  } finally {
+    process.off('uncaughtException', onErr);
+  }
+  assert.deepEqual(errs, []);
+});

@@ -17,8 +17,12 @@
 //                          may only read; true lets the key scopes decide.
 //   fleet.hubAddrs         optional IP literals expected in X-Forwarded-For of
 //                          hub requests ([] = not checked).
-//   fleet.ingressPeerUid   optional uid of tailscaled (peer-uid check, Linux
-//                          only), null = off.
+//   fleet.ingressPeerUid   uid of tailscaled (peer-uid check, Linux only),
+//                          null = off. Optional on a builder; REQUIRED in hub
+//                          mode on Linux (SR12 M3): without it any local
+//                          process can forge serve headers on the hub's
+//                          ingress port and act as a direct user, which on a
+//                          hub means a terminal on every builder.
 //   fleet.allowedUsers     optional Tailscale logins allowed as `direct`.
 //   fleet.publicHosts      allowed Host values on ingress; default the host
 //                          of publicUrl when that is not loopback.
@@ -353,6 +357,9 @@ export function validate(c, bad, layers, { platform = process.platform, warn = c
       bad(`fleet.ingressPeerUid must be a uid (integer ≥ 0) or null, got ${JSON.stringify(f.ingressPeerUid)}`);
     }
     if (platform !== 'linux') bad(`fleet.ingressPeerUid needs Linux (/proc/net/tcp); this host is ${platform}`);
+  }
+  if (c.mode === 'hub' && platform === 'linux' && f.ingressPeerUid === null) {
+    bad('mode "hub" needs fleet.ingressPeerUid: set it to the uid tailscaled runs as (`ps -o uid= -C tailscaled`, usually 0) so only tailscale serve can reach the ingress port');
   }
 
   for (const u of list(f.allowedUsers, 'fleet.allowedUsers', bad)) {

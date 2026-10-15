@@ -28,7 +28,7 @@ const fails = (fn, rx) => assert.throws(fn, (err) => {
 const A = { id: 'builder-a', url: 'https://builder-a.example.invalid' };
 const B = { id: 'builder-b', url: 'https://builder-b.example.invalid:8443/' };
 /** A valid hub config with `fleet` overrides. */
-const hubCfg = (fleet = {}, extra = {}) => cfg({ mode: 'hub', fleet: { builders: [A], ingressPort: 7778, ...fleet }, ...extra });
+const hubCfg = (fleet = {}, extra = {}) => cfg({ mode: 'hub', fleet: { builders: [A], ingressPort: 7778, ingressPeerUid: 0, ...fleet }, ...extra });
 
 test('the fragment is loaded from server/config/', () => {
   assert.ok(FRAGMENTS.some((f) => f.defaults === hub.defaults), 'hub.mjs is among FRAGMENTS');
@@ -65,7 +65,7 @@ test('a hub accepts http only on a loopback host', () => {
 });
 
 test('env LANEBOARD_FLEET_BUILDERS=id=url,id=url', () => {
-  const c = cfg({ mode: 'hub', fleet: { ingressPort: 7778 } }, {
+  const c = cfg({ mode: 'hub', fleet: { ingressPort: 7778, ingressPeerUid: 0 } }, {
     LANEBOARD_FLEET_BUILDERS: ' builder-a=https://builder-a.example.invalid , builder-b=http://127.0.0.1:7802,,',
   });
   assert.deepEqual(c.fleet.builders.map((b) => [b.id, b.url]), [
@@ -73,7 +73,7 @@ test('env LANEBOARD_FLEET_BUILDERS=id=url,id=url', () => {
   ]);
   assert.deepEqual(hub.fromEnv({}), {});
   assert.deepEqual(hub.fromEnv({ LANEBOARD_FLEET_BUILDERS: '' }), {});
-  fails(() => cfg({ mode: 'hub', fleet: { ingressPort: 7778 } }, { LANEBOARD_FLEET_BUILDERS: 'builder-a' }), /builder-a.*url \(missing\)/);
+  fails(() => cfg({ mode: 'hub', fleet: { ingressPort: 7778, ingressPeerUid: 0 } }, { LANEBOARD_FLEET_BUILDERS: 'builder-a' }), /builder-a.*url \(missing\)/);
 });
 
 test('rejects duplicate builder ids', () => {
@@ -81,7 +81,7 @@ test('rejects duplicate builder ids', () => {
 });
 
 test('rejects a hub with no builders', () => {
-  fails(() => cfg({ mode: 'hub', fleet: { ingressPort: 7778 } }), /mode "hub" needs at least one entry in fleet.builders/);
+  fails(() => cfg({ mode: 'hub', fleet: { ingressPort: 7778, ingressPeerUid: 0 } }), /mode "hub" needs at least one entry in fleet.builders/);
   fails(() => hubCfg({ builders: [] }), /at least one entry/);
   // builder mode does not care
   assert.deepEqual(cfg({ fleet: { builders: [] } }).fleet.builders, []);
@@ -127,7 +127,7 @@ test('rejects bad ids, codes, directUrls, accounts and unknown keys', () => {
   fails(() => hubCfg({ builders: [{ ...A, account: '' }] }), /account must be a short name/);
   fails(() => hubCfg({ builders: [{ ...A, account: 'a\nb' }] }), /account must be a short name/);
   fails(() => hubCfg({ builders: [{ ...A, token: 'x' }] }), /unknown key "token"/);
-  fails(() => cfg({ mode: 'hub', fleet: { ingressPort: 7778, builders: [JSON.parse('{"id":"builder-a","url":"https://a.example.invalid","__proto__":{"x":1}}')] } }), /unknown key "__proto__"/);
+  fails(() => cfg({ mode: 'hub', fleet: { ingressPort: 7778, ingressPeerUid: 0, builders: [JSON.parse('{"id":"builder-a","url":"https://a.example.invalid","__proto__":{"x":1}}')] } }), /unknown key "__proto__"/);
   fails(() => hubCfg({ builders: ['builder-a'] }), /fleet.builders\[0\] must be an object/);
   fails(() => hubCfg({ builders: { 'builder-a': A } }), /fleet.builders must be a list/);
   fails(() => hubCfg({ builders: Array.from({ length: hub.MAX_BUILDERS + 1 }, (_, i) => ({ id: `b${i}`, url: `https://b${i}.example.invalid` })) }), /at most/);
