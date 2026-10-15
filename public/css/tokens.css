@@ -1,85 +1,272 @@
 /* ===========================================================================
-   laneboard — a ground station for a machine nobody can physically reach
+   laneboard tokens: an ISA-101 high-performance HMI (plan §4 2.2, fleet D1)
    ---------------------------------------------------------------------------
-   An instrument panel for a machine nobody can physically reach. Its one job
-   is to say which session needs a human, so attention is the loudest thing on
-   screen and everything else stays quiet and dense.
+   Grey is the baseline and colour means abnormal. One accent (safety orange)
+   is spent only on selection, focus and the primary call to action. Status
+   hues always travel with a shape: p1 ■, p2 ▲, p3 ◆, ok ●. Depth comes from
+   borders and the surface step only: no shadows, no glass, no blur.
 
-   MISSION-CONTROL DENSE. Chosen over refining the
-   glass: flatter, darker, mono-heavy, tighter grid, more numbers per pixel — a
-   trading terminal rather than a set of floating tiles. What that means in
-   practice, and why each part is here:
+   Every colour literal of the app lives in this file (guardrail 4,
+   test/design-guardrails.test.mjs); test/tokens.test.mjs checks that each
+   token exists in both themes and that text and status hues keep contrast.
 
-     * Panels, not tiles. The elevated surface is DARKER than the canvas, radii
-       drop to 2 px, and the ambient shadows are gone. Depth comes from
-       hairlines alone. A console is flat; the depth cue is the grid.
-     * Every number is mono and tabular. UI sans is for names and prose only.
-       A column of figures that do not line up is a column you cannot scan.
-     * One colour with meaning: state (border, dot, pill) and lane (stripe).
-       The accent is spent only on focus and pins, so it never competes.
-     * Nothing animates but the working dot. Motion in the corner of a
-       twenty-card board is a distraction, not information.
-
-   Glass policy (plan 5.1): backdrop-filter costs a GPU readback plus a blur of
-   the backdrop-root texture every frame the backdrop changes. It is spent ONLY
-   where content genuinely passes underneath: the sticky top bar and the toast.
-   The budget allows three surfaces; two is enough. The rail scrolls and the
-   quickbar sits beneath a live terminal, so both use faux glass — blurring
-   either would re-blur on every frame a terminal paints.
+   Layout of this file:
+     1. @font-face (vendored, OFL, font-display: swap)
+     2. :root            theme-invariant tokens (type, spacing, sizes, motion)
+     3. dark  (default)  :root, [data-theme="dark"]
+     4. light            [data-theme="light"]
+     5. derived tokens   textures and the old names, recomputed per theme
+     6. density, keyframes, reduced motion
    =========================================================================== */
 
+/* --- 1. Fonts --------------------------------------------------------------
+   Vendored in public/vendor/fonts/ (sources and checksums in SOURCES.txt).
+   Weights are only 400/600 mono and 500/600 label. */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/vendor/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+2000-206F, U+2190-21FF, U+2500-25FF, U+20AC;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/vendor/fonts/jetbrains-mono/JetBrainsMono-SemiBold.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+2000-206F, U+2190-21FF, U+2500-25FF, U+20AC;
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/vendor/fonts/barlow-condensed/BarlowCondensed-Medium.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+2000-206F, U+2190-21FF, U+2500-25FF, U+20AC;
+}
+@font-face {
+  font-family: "Barlow Condensed";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("/vendor/fonts/barlow-condensed/BarlowCondensed-SemiBold.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+2000-206F, U+2190-21FF, U+2500-25FF, U+20AC;
+}
+
+/* --- 2. Theme-invariant tokens --------------------------------------------- */
 :root {
-  /* Surfaces — a cold, blue-shifted near-black. Never #000.
-     The elevated step is deliberately BELOW the canvas: a console panel is a
-     recess in the desk, not a card floating over it. */
-  --bg-canvas: oklch(13% 0.014 258);
-  --bg-surface: oklch(16.5% 0.013 258);
-  --bg-elevated: oklch(18.5% 0.013 258);
-  --bg-sunken: oklch(10.5% 0.013 258);
+  /* Type. Mono for all data; the condensed label face for labels, plates and
+     titles, always uppercase with --ls-label. --font-ui is the label face,
+     because the map draws room labels with it. */
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-label: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  --font-ui: var(--font-label);
+  --ls-label: 0.06em;
 
-  --glass-fill: oklch(17% 0.013 258 / 0.82);
-  --glass-fill-strong: oklch(14% 0.013 258 / 0.96);
+  --fs-10: 10px;   /* legend keys, tape, micro labels */
+  --fs-11: 11px;   /* plates, panel titles, tile labels */
+  --fs-12: 12px;   /* dense data, default body */
+  --fs-13: 13px;   /* comfortable data */
+  --fs-16: 16px;   /* inspector title */
+  --fs-20: 20px;   /* annunciator count on phone, KPI */
+  --fs-28: 28px;   /* map hero count */
+  --lh-tight: 1.1;
+  --lh: 1.35;
 
-  /* Hairlines carry the depth; shadows stay nearly invisible. */
-  --border-weak: oklch(92% 0.01 258 / 0.07);
-  --border: oklch(92% 0.01 258 / 0.13);
-  --border-strong: oklch(92% 0.01 258 / 0.24);
-  /* The inset highlight is what a hairline panel has instead of a shadow. */
-  --highlight-inset: inset 0 1px 0 oklch(100% 0 0 / 0.045);
-  /* Kept only for things that genuinely float above the page: the menu and the
-     toast. Panels get none — an ops console has no drop shadows. */
-  --shadow-float: 0 0 0 1px oklch(0% 0 0 / 0.6), 0 8px 24px oklch(0% 0 0 / 0.55);
+  /* Spacing, 4px base. */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
 
-  --text-1: oklch(94% 0.008 258);
-  --text-2: oklch(73% 0.012 258);
-  --text-3: oklch(56% 0.014 258);
+  /* Rows. --row-h resolves from density (section 6). */
+  --row-dense: 28px;
+  --row-comfy: 36px;
+  --row-touch: 44px;
+  --row-h: var(--row-dense);
 
-  /* One rationed accent — pins, focus, selection. Distinct from every state. */
-  --accent: oklch(70% 0.15 292);
-  --accent-dim: oklch(70% 0.15 292 / 0.16);
+  /* Sizes. */
+  --header-h: 40px;
+  --rail-w-min: 56px;
+  --rail-w: 220px;
+  --insp-w: 360px;
+  --tape-h: 28px;
+  --tape-h-open: 200px;
+  --icon-s: 14px;
+  --icon-m: 16px;
+  --icon-l: 20px;
+  --lamp: 8px;
 
-  /* State semantics. Pure red dies on dark, so critical is a pink-red. */
-  --crit: oklch(70% 0.2 12);
-  --warn: oklch(80% 0.15 78);
-  --ok: oklch(78% 0.16 158);
-  --info: oklch(75% 0.13 242);
-  --idle: oklch(58% 0.012 258);
+  /* Stacking. */
+  --z-rail: 10;
+  --z-insp: 20;
+  --z-tape: 30;
+  --z-sheet: 40;
+  --z-palette: 50;
+  --z-toast: 60;
+  --z-dialog: 70;
 
-  /* An ops console has square corners. 4 px on things you type into, so they
-     still read as controls; 2 px on panels; the pill survives for chips. */
-  --radius-s: 4px;
-  --radius-m: 3px;
-  --radius-l: 2px;
-  --radius-pill: 999px;
+  /* Shape: 2px on everything, 1px borders. Shadows: none. */
+  --radius: 2px;
+  --bw: 1px;
 
+  /* Motion: only opacity, transform and width transition. */
+  --dur: 120ms;
+  --ease: cubic-bezier(.2, 0, 0, 1);
+
+  /* --- Old names, theme-invariant (kept so the legacy sheets resolve until
+     their owners restyle them; new code uses the names above). */
+  --radius-s: var(--radius);
+  --radius-m: var(--radius);
+  --radius-l: 2px;  /* = --radius; test/render.test.mjs pins the literal */
+  --radius-pill: var(--radius);
   --dur-fast: 120ms;
-  --dur: 180ms;
-  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
-
-  --rail-w: 324px;
   --gap: 8px;
+  /* Shadows are gone: these resolve to nothing. A comma list of two `none`s
+     is invalid at computed-value time, which also yields no shadow. */
+  --shadow-float: none;
+  --highlight-inset: none;
+}
 
-  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Geist Mono", Menlo, Consolas, monospace;
+/* --- 3. Dark (default) ------------------------------------------------------ */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
 
+  --bg-canvas: oklch(16% 0.004 250);
+  --bg-surface: oklch(19% 0.004 250);
+  --bg-elevated: oklch(22% 0.004 250);
+  --bg-sunken: oklch(13% 0.004 250);
+  --bg-hover: oklch(100% 0 0 / 0.04);
+  --bg-selected: oklch(100% 0 0 / 0.07);
+
+  --line-weak: oklch(100% 0 0 / 0.07);
+  --line: oklch(100% 0 0 / 0.13);
+  --line-strong: oklch(100% 0 0 / 0.26);
+
+  --text-1: oklch(92% 0.003 250);
+  --text-2: oklch(72% 0.004 250);
+  --text-3: oklch(55% 0.004 250);
+  --text-inv: oklch(14% 0 0);
+
+  --accent: oklch(70% 0.19 45);
+  --accent-weak: oklch(70% 0.19 45 / 0.16);
+
+  --p1: oklch(62% 0.23 25);
+  --p2: oklch(84% 0.16 95);
+  --p3: oklch(74% 0.11 220);
+  --ok: oklch(66% 0.07 150);
+
+  --p1-weak: oklch(62% 0.23 25 / 0.16);
+  --p2-weak: oklch(84% 0.16 95 / 0.16);
+  --p3-weak: oklch(74% 0.11 220 / 0.16);
+  --p1-line: oklch(62% 0.23 25 / 0.5);
+  --p2-line: oklch(84% 0.16 95 / 0.5);
+  --p3-line: oklch(74% 0.11 220 / 0.5);
+}
+
+/* --- 4. Light --------------------------------------------------------------- */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-canvas: oklch(93% 0.003 250);
+  --bg-surface: oklch(97% 0.002 250);
+  --bg-elevated: oklch(100% 0 0);
+  --bg-sunken: oklch(89% 0.003 250);
+  --bg-hover: oklch(0% 0 0 / 0.04);
+  --bg-selected: oklch(0% 0 0 / 0.06);
+
+  --line-weak: oklch(0% 0 0 / 0.08);
+  --line: oklch(0% 0 0 / 0.16);
+  --line-strong: oklch(0% 0 0 / 0.32);
+
+  --text-1: oklch(20% 0.004 250);
+  --text-2: oklch(38% 0.004 250);
+  --text-3: oklch(52% 0.004 250);
+  --text-inv: oklch(98% 0 0);
+
+  --accent: oklch(60% 0.19 45);
+  --accent-weak: oklch(60% 0.19 45 / 0.14);
+
+  --p1: oklch(52% 0.22 25);
+  /* The plan's 66% gives 2.6:1 on the light canvas; 60% clears 3:1. */
+  --p2: oklch(60% 0.15 85);
+  --p3: oklch(52% 0.12 230);
+  --ok: oklch(48% 0.08 150);
+
+  --p1-weak: oklch(52% 0.22 25 / 0.14);
+  --p2-weak: oklch(60% 0.15 85 / 0.14);
+  --p3-weak: oklch(52% 0.12 230 / 0.14);
+  --p1-line: oklch(52% 0.22 25 / 0.55);
+  --p2-line: oklch(60% 0.15 85 / 0.55);
+  --p3-line: oklch(52% 0.12 230 / 0.55);
+}
+
+/* --- 5. Derived tokens ------------------------------------------------------
+   Declared on every themed element, so a var() inside them picks up the theme
+   of the element that set data-theme rather than the root's. */
+:root,
+[data-theme] {
+  /* Working is grey plus an activity glyph; idle, shell and dead are quieter. */
+  --run: var(--text-2);
+  --off: var(--text-3);
+
+  /* Textures: the only gradient functions allowed, hard stops only. */
+  --tex-dots: radial-gradient(circle, var(--line) 0.75px, transparent 1px) 0 0 / 16px 16px;
+  --tex-hatch: repeating-linear-gradient(45deg, var(--line) 0 1px, transparent 1px 6px);
+  /* Four 8x2px L-corners in the accent, for `.sel::after { inset: -3px }`. */
+  --bracket-img:
+    linear-gradient(var(--accent) 0 0) left top / 8px 2px no-repeat,
+    linear-gradient(var(--accent) 0 0) left top / 2px 8px no-repeat,
+    linear-gradient(var(--accent) 0 0) right top / 8px 2px no-repeat,
+    linear-gradient(var(--accent) 0 0) right top / 2px 8px no-repeat,
+    linear-gradient(var(--accent) 0 0) left bottom / 8px 2px no-repeat,
+    linear-gradient(var(--accent) 0 0) left bottom / 2px 8px no-repeat,
+    linear-gradient(var(--accent) 0 0) right bottom / 8px 2px no-repeat,
+    linear-gradient(var(--accent) 0 0) right bottom / 2px 8px no-repeat;
+
+  /* --- Old names (legacy sheets and the map's readPalette). */
+  --crit: var(--p1);
+  --warn: var(--p2);
+  --info: var(--p3);
+  --idle: var(--off);
+  --border-weak: var(--line-weak);
+  --border: var(--line);
+  --border-strong: var(--line-strong);
+  --accent-dim: var(--accent-weak);
+  /* No glass: the old fills are the solid elevated surface. */
+  --glass-fill: var(--bg-elevated);
+  --glass-fill-strong: var(--bg-elevated);
+}
+
+/* --- 6. Density, keyframes, reduced motion ----------------------------------
+   Default: dense at >=1200px, comfy at 700-1199px, touch rows on a coarse
+   pointer. An explicit data-density on <html> wins. */
+@media (max-width: 1199px) {
+  :root { --row-h: var(--row-comfy); }
+}
+@media (pointer: coarse) {
+  :root { --row-h: var(--row-touch); }
+}
+:root[data-density="dense"] { --row-h: var(--row-dense); }
+:root[data-density="comfy"] { --row-h: var(--row-comfy); }
+
+/* The one keyframe in the system: a 1 Hz hard blink for unacknowledged
+   alarms (`animation: lb-flash 1s linear infinite`). */
+@keyframes lb-flash {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: .35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur: 0ms; --dur-fast: 0ms; }
+  [data-unack] {
+    animation: none;
+    outline: 1px dashed currentColor;
+    outline-offset: 1px;
+  }
 }
