@@ -13,6 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const PUBLIC = path.resolve(import.meta.dirname, '..', 'public');
@@ -551,3 +552,67 @@ test('the lane stripe and chip survive, and the branch stays in card-meta', () =
   assert.match(app, /meta\.append\(el\('span', 'branch'/, 'the branch stays in the meta row');
 });
 
+// --- fleet F1: how the server hands out the modules -----------------------------
+
+/** GET `url` through the real handleRequest; resolves { status, type, headers, body }. */
+async function serve(url, repoRoot) {
+  // Never read a real config from a bare `node --test`.
+  process.env.LANEBOARD_CONFIG ??= path.join(PUBLIC, '..', 'test', 'fixtures', 'empty-config.json');
+  const { handleRequest } = await import('../server/http.mjs');
+  const { config } = await import('../server/config.mjs');
+  const { PassThrough } = await import('node:stream');
+  const saved = config.repoRoot;
+  if (repoRoot) config.repoRoot = repoRoot;
+  try {
+    const res = new PassThrough();
+    const chunks = [];
+    res.on('data', (c) => chunks.push(c));
+    let status = 0;
+    let headers = {};
+    res.writeHead = (s, h = {}) => { status = s; headers = h; };
+    const done = new Promise((resolve) => res.on('end', resolve));
+    await handleRequest({ method: 'GET', url, headers: {} }, res);
+    await done;
+    return { status, type: headers['content-type'] ?? '', headers, body: Buffer.concat(chunks).toString('utf8') };
+  } finally {
+    config.repoRoot = saved;
+  }
+}
+
+test('the page modules are served as JavaScript', async () => {
+  const r = await serve('/js/app.js');
+  assert.equal(r.status, 200);
+  assert.match(r.type, /^text\/javascript/);
+  assert.match(r.body, /boot\(\)/);
+});
+
+test('a missing file with an extension is a 404, not the SPA page', async () => {
+  // A bad import used to come back as index.html and show up as a MIME error.
+  for (const url of ['/js/core/nope.js', '/app.js', '/nope.css', '/icons/nope.PNG']) {
+    const r = await serve(url);
+    assert.equal(r.status, 404, url);
+    assert.match(r.type, /application\/json/, url);
+  }
+  // A path without an extension still gets the page (deep links).
+  const page = await serve('/board');
+  assert.equal(page.status, 200);
+  assert.match(page.body, /src="\/js\/app\.js"/);
+});
+
+test('an unmapped /vendor/ path falls through to public/vendor/, immutable', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-vendor-'));
+  try {
+    fs.mkdirSync(path.join(root, 'public', 'vendor', 'icons'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'public', 'vendor', 'icons', 'sprite.svg'), '<svg/>');
+    const hit = await serve('/vendor/icons/sprite.svg', root);
+    assert.equal(hit.status, 200);
+    assert.equal(hit.type, 'image/svg+xml');
+    assert.equal(hit.body, '<svg/>');
+    assert.match(hit.headers['cache-control'], /immutable/);
+    assert.equal((await serve('/vendor/icons/missing.svg', root)).status, 404);
+    // The mapped node_modules files keep working.
+    assert.equal((await serve('/vendor/xterm.js')).status, 200);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
