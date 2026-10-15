@@ -348,7 +348,7 @@ export function openPalette({ preset = '', ctx = null } = {}) {
 export function closePalette() {
   if (!ui?.dlg) return false;
   if (ui.dlg.open && typeof ui.dlg.close === 'function') ui.dlg.close();
-  else ui.dlg.removeAttribute('open');
+  else ui.dlg.removeAttribute?.('open');
   return true;
 }
 

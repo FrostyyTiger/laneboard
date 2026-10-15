@@ -19,6 +19,7 @@
 // go through confirmAction() (ui/confirm.js) like every palette action.
 import { store, builders, toIndexKey } from '../core/store.js';
 import { isFkey } from '../core/keys.js';
+import { alarmKey } from '../core/alarm-tiles.js';
 import { VIEWS, currentRoute, navigate } from '../core/router.js';
 import { tierOf, act, hubAct } from '../core/actions.js';
 import * as commands from '../core/commands.js';
@@ -26,6 +27,8 @@ import { nextOverlay } from '../views/map/overlays.js';
 import { VIEW_META } from '../views/index.js';
 import * as mapModule from '../views/map.js';
 import * as railModule from './rail.js';
+import * as tapeModule from './tape.js';
+import * as annModule from './annunciator.js';
 import { togglePin } from './dock.js';
 import { closeSheet, openSheet } from './sheet.js';
 import { closeTop, toggleTheme } from './shell.js';
@@ -36,6 +39,9 @@ import { closeMenus } from '../views/board-card.js';
 import { openPalette, closePalette, isPaletteOpen, registerPaletteCommands } from './palette.js';
 
 /** A chord's second key must come within this many ms (as app.js:1872 did). */
+/** An alarm's lane/session fleet key, or null (core/alarm-tiles.js, §4 D7). */
+export { alarmKey };
+
 export const CHORD_MS = 1000;
 /** resolve() returns this for a key that starts a chord (`g`). */
 export const CHORD_PREFIX = 'chord:';
@@ -215,13 +221,6 @@ export function alarmOrder(list) {
       || (x.a.since ?? 0) - (y.a.since ?? 0)
       || x.i - y.i)
     .map((x) => x.a);
-}
-
-/** An alarm's lane/session fleet key, or null. Pure. */
-export function alarmKey(a) {
-  if (typeof a?.builder !== 'string' || typeof a?.target !== 'string' || !a.target) return null;
-  const k = `${a.builder}/${a.target}`;
-  return isFkey(k) ? k : null;
 }
 
 /**
@@ -430,6 +429,11 @@ function ackAll(ctx) {
   const b = ctx.route?.b && ctx.route.b !== 'all' ? ctx.route.b : null;
   const live = (store.alarms ?? []).filter((a) => a && !a.acked && (!b || a.builder === b));
   if (!live.length) return false;
+  // The annunciator (§4 D7) acks tile by tile, scoped to b=; same tier (click).
+  if (typeof annModule.ackAllVisible === 'function' && (annModule.annunciatorModel?.() ?? []).some((t) => t.state === 'unack')) {
+    annModule.ackAllVisible().catch?.(() => {});
+    return true;
+  }
   ackAlarm('*', b ? { builder: b } : {});
   return true;
 }
@@ -444,7 +448,9 @@ function toggleSplit() {
   return true;
 }
 
-function toggleTape() {
+function tapeToggle() {
+  // The tape (§4 D7) owns its drawer; the attribute + event is the fallback.
+  if (typeof tapeModule.toggleTape === 'function') { tapeModule.toggleTape(); return true; }
   const tape = globalThis.document?.getElementById?.('tape');
   const open = tape?.dataset ? tape.dataset.open !== '1' : true;
   if (tape?.dataset) tape.dataset.open = open ? '1' : '0';
@@ -545,7 +551,7 @@ export function registerCommands() {
   reg({ id: 'palette.open', title: 'Command palette', icon: 'command', palette: false, run: () => { if (isPaletteOpen()) closePalette(); else openPalette({ ctx: hotkeyContext() }); return true; } });
   reg({ id: 'palette.act', title: 'Palette: actions', icon: 'command', palette: false, run: () => { openPalette({ preset: '>', ctx: hotkeyContext() }); return true; } });
   reg({ id: 'split.toggle', title: 'Split view (map + list)', icon: 'split', run: toggleSplit });
-  reg({ id: 'tape.toggle', title: 'Event tape', icon: 'clock', run: toggleTape });
+  reg({ id: 'tape.toggle', title: 'Event tape', icon: 'clock', run: tapeToggle });
   reg({ id: 'help', title: 'Keys', icon: 'keyboard', run: openHelp });
   reg({ id: 'layer.close', title: 'Close the top layer', icon: 'close', palette: false, run: () => closeTop() !== null });
   reg({ id: 'theme', title: 'Theme: dark / light', icon: 'theme', run: () => { toggleTheme(); return true; } });

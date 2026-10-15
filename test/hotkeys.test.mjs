@@ -270,3 +270,66 @@ test('the command registry: when gates, errors are contained, ids are validated'
   assert.equal(r.get('x.run'), null);
   assert.deepEqual(seen, ['yes']);
 });
+
+test('the palette and the help overlay render in a fake DOM with text only', async () => {
+  const { makeDocument, makeEl } = await import('./helpers/fakedom.mjs');
+  const doc = makeDocument();
+  const mk = doc.createElement;
+  doc.createElement = (t) => {
+    const el = mk(t);
+    el.hasAttribute = (n) => Object.hasOwn(el.attrs, n);
+    el.removeAttribute = (n) => { delete el.attrs[n]; };
+    return el;
+  };
+  const saved = { document: globalThis.document, localStorage: globalThis.localStorage };
+  const mem = new Map();
+  globalThis.document = doc;
+  globalThis.localStorage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)) };
+  try {
+    const pal = await import('../public/js/ui/palette.js');
+    const { createStore } = await import('../public/js/core/store.js');
+    const s = createStore();
+    const evil = '<img src=x onerror=alert(1)>';
+    s.builders.set('builder-a', { id: 'builder-a', code: 'B1', status: 'live', sessions: new Map() });
+    s.lanes = [{ id: evil, builder: 'builder-a', key: `builder-a/${evil}` }];
+    s.alarms = [{ id: 'x1', priority: 'P1', builder: 'builder-a', target: evil, acked: false }];
+    hk.registerCommands();
+    assert.equal(pal.openPalette({ ctx: { store: s, view: 'board', route: { sel: null } } }), true);
+    assert.equal(pal.isPaletteOpen(), true);
+    const dlg = doc.body.children.find((c) => c.className === 'pal');
+    assert.ok(dlg, 'a <dialog class="pal"> in the body');
+    const [input, list] = dlg.children;
+    assert.equal(input.attrs.role, 'combobox');
+    assert.equal(input.attrs['aria-controls'], 'pal-list');
+    assert.equal(list.attrs.role, 'listbox');
+    const rows = list.children;
+    assert.ok(rows.length >= 2, 'alarm lane + views');
+    assert.equal(rows[0].attrs.role, 'option');
+    assert.equal(rows[0].attrs['aria-selected'], 'true', 'the first row is active');
+    assert.equal(input.attrs['aria-activedescendant'], rows[0].id);
+    // The alarm lane comes first on an empty query, and its hostile name is plain text.
+    const label = rows[0].children.find((c) => c.className === 'pal-l');
+    assert.equal(label._text, evil);
+    assert.equal(label.children.length, 0);
+    for (const r of rows) assert.equal(r.innerHTML, '', 'no markup is ever parsed');
+    // `:` presets `>`: only ACT/VIEW rows.
+    pal.openPalette({ preset: '>', ctx: { store: s, view: 'board', route: { sel: null } } });
+    assert.equal(input.value, '>');
+    const plates = list.children.map((r) => r.children.find((c) => c.classList.contains('pal-type'))?.textContent);
+    assert.ok(plates.length && plates.every((t) => t === 'ACT' || t === 'VIEW'), plates.join(','));
+    pal.closePalette();
+    assert.equal(pal.isPaletteOpen(), false);
+
+    assert.equal(hk.openHelp(), true);
+    const help = doc.body.children.find((c) => c.className === 'pal pal-help');
+    assert.ok(help, 'the ? overlay');
+    const kbds = [];
+    const walk = (n) => { for (const c of n.children) { if (c.tagName === 'KBD') kbds.push(c.textContent); walk(c); } };
+    walk(help);
+    assert.equal(kbds.length, KEYMAP.length, 'one entry per KEYMAP row');
+    void makeEl;
+  } finally {
+    globalThis.document = saved.document;
+    globalThis.localStorage = saved.localStorage;
+  }
+});
