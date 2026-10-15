@@ -293,18 +293,27 @@ Remote-only. Steps (each recorded as a job step, kind `killall`):
    the victim list again from the live inventory (a lane launched during the
    grace is included) and kill each one. The kills are audited as `kill.done`.
 
-**Victims** are the sessions bound to an active lane record (the lane id and
-`session` that launch wrote), plus sessions you name in `include` (at most
-50). A working directory inside a repo or worktree is **not** enough: a shell
-in the main checkout, the hub's own session, or any other session that no lane
-record names is killed only when you list it in `include`. Never killed,
-whatever `include` says: `_laneboard*` sessions (and the configured
-`ownSessionPrefixes`) and the session laneboard itself runs in. Names in
-`include` that will not be killed are returned as `notIncluded`.
+**Victims** are the live Claude agents (a pane running `claude`, a versioned
+native Claude binary, or a session the registry knows by pid) that **either**
+are bound to an active lane record (the lane id and `session` that launch
+wrote) **or** run in a linked git worktree (a `.git` file pointing at
+`<repo>/.git/worktrees/<name>`). So `spawn`ed agents, lanes without a
+`lane.json` and agents started by hand in a worktree are stopped too. Never a
+victim by that rule: shells and other non-Claude panes, and anything whose
+working directory is a main checkout (a `.git` directory: your own checkout,
+the hub, a dotfiles repo), whatever runs there. Sessions you name in
+`include` (at most 50; they must exist in the live inventory) are killed
+whatever they run. Never killed, whatever `include` says: `_laneboard*`
+sessions (and the configured `ownSessionPrefixes`) and the session laneboard
+itself runs in. Names in `include` that will not be killed are returned as
+`notIncluded`. `kill.done` audits the counts, a SHA-256 of the name lists and
+the first names that fit.
 
-**Cancel** with `{confirm, cancel: <job>}` inside the grace. Only the
-principal that started the job may cancel it (same kind and user; for the hub,
-the same key): otherwise 403 `not-owner`. An unknown job is 404
+**Cancel** with `{confirm, cancel: <job>}` inside the grace. The principal
+that started the job may cancel it (same kind and user; for the hub, the same
+key), and so may any other `direct` user; such an override is audited
+(`kill.cancel`) with both users. A hub key that did not start the job gets 403
+`not-owner`. An unknown job is 404
 `unknown-job`, one past its grace 409 `too-late`. The `ALL` pause stays after
 a cancel: you decide when to resume.
 
@@ -326,8 +335,18 @@ every builder gets its own id as `confirm`.
   10.5 s and stay paused until then. Undo while the pause is still going out
   answers 202 `cancelling`.
 - **t = 10 s:** `kill *` with `graceMs: 0` to every builder the pause reached.
-  Each builder applies its own victim rules above (the fleet kill sends no
-  `include`). A builder that answers 429 gets one fresh kill after 10.5 s.
+  Each builder applies its own victim rules above. A builder that answers 429
+  gets one fresh kill after 10.5 s.
+
+The start may carry `include`: up to 50 fleet keys (`<builder>/<session>`)
+the builders' own rule would miss. A malformed key refuses the request (400,
+nothing sent); a key for an unknown builder or session is not sent and comes
+back in `notIncluded`. Each builder's kill carries only its own names, and a
+builder the pause did not reach gets none (`not-paused`). Any `direct` user
+may undo; an undo by someone else than the starter is audited (`kill.undo`)
+with both users. A newer fleet kill suspends the older jobs' pending retries
+(and re-arms them if it fails), so a stale undo can never resume the fleet
+during a later kill.
 
 One fleet kill at a time: a second start while one is active is 409
 `active-job`. An undo after the kill went out is 409 `too-late`. If the hub
@@ -455,17 +474,22 @@ longer contains the anchored head, so at the next pull (every 60 s, and when
 the builder comes back up) the hub raises an `audit-fork` alarm for that
 builder. The alarm is sticky, across hub restarts too, and the anchor does not
 move until a human accepts the new chain. After checking that the reset was
-yours, rebase from the hub as a `direct` user:
+yours, rebase from the hub as a `direct` user. `POST
+/api/fleet/audit/rebase` takes `{builder, confirm, onto?}`: `confirm` must be
+the builder id typed out (anything else is 400 `confirm` and nothing moves), and
+`onto` is `genesis` (the default, for a fresh chain) or `head` (re-anchor on
+the builder's current verified head). A `local` caller on the hub box gets 403
+`remote-only`.
 
 ```sh
 curl -X POST https://hub.example.invalid/api/fleet/audit/rebase \
   -H 'content-type: application/json' -H 'X-Laneboard: 1' \
-  --data '{"builder":"builder-a"}'
+  --data '{"builder":"builder-a","confirm":"builder-a","onto":"genesis"}'
 ```
 
-(or the equivalent button in the hub's audit view). The hub writes a
-`rebased` `audit.anchor` at genesis, and from the next pull it anchors and
-matches the new chain. `GET /api/fleet/audit?builder=builder-a` shows the
+The UI has no rebase button yet: the hub's Audit view shows the fork alarm
+and the reconciliation state, the rebase is this request. The hub writes a `rebased` `audit.anchor`, logs who rebased, and
+from the next pull it anchors and matches the new chain. `GET /api/fleet/audit?builder=builder-a` shows the
 reconciliation state. Hub-relayed actions that were never pulled from the old
 file can now show as `missing-on-builder`; check them against the file you
 moved aside.
