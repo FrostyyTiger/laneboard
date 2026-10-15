@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeEl, makeDocument } from './helpers/fakedom.mjs';
 import {
-  isArchiveRoute, listUrl, detailUrl, normRows, fmtDuration, prLabel, stagesLabel, restoreArgs,
+  isArchiveRoute, listUrl, detailUrl, normRows, archiveDuration, prLabel, stagesLabel, restoreArgs,
   restoreModel, restoreKey, restoreBuilders, loadArchive, loadDetail, renderDetail, renderTable,
   restoreSheet, onArchiveRoute, COLUMNS, RESTORE_ARG_KEYS,
 } from '../public/js/views/archive.js';
@@ -107,10 +107,10 @@ test('rows are tagged with their builder; bad ids are dropped', () => {
 });
 
 test('cell formatting', () => {
-  assert.equal(fmtDuration(42_000), '42s');
-  assert.equal(fmtDuration(3720_000), '1h 2m');
-  assert.equal(fmtDuration(90061_000), '1d 1h');
-  assert.equal(fmtDuration(null), '—');
+  assert.equal(archiveDuration(42_000), '42s');
+  assert.equal(archiveDuration(3720_000), '1h 2m');
+  assert.equal(archiveDuration(90061_000), '1d 1h');
+  assert.equal(archiveDuration(null), '—');
   assert.equal(prLabel({ pr_number: 12, merged: true }), '#12 merged');
   assert.equal(prLabel({ pr_number: 7, pr_state: 'OPEN' }), '#7 open');
   assert.equal(prLabel({}), '—');

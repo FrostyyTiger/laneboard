@@ -89,7 +89,7 @@ export function normRows(body, { kind = 'local', localId = null } = {}) {
 }
 
 /** 90061000 -> "1d 1h"; 3720000 -> "1h 2m"; 42000 -> "42s". */
-export function fmtDuration(ms) {
+export function archiveDuration(ms) {
   const v = num(ms);
   if (v === null || v < 0) return '—';
   const s = Math.round(v / 1000);
@@ -123,7 +123,7 @@ export const COLUMNS = Object.freeze([
   ['repo', 'Repo', (r) => str(r.repo)],
   ['branch', 'Branch', (r) => str(r.branch)],
   ['retired', 'Retired', (r) => (num(r.retired_at) ? `${ago(r.retired_at)} ago` : '—')],
-  ['duration', 'Duration', (r) => fmtDuration(r.duration_ms)],
+  ['duration', 'Duration', (r) => archiveDuration(r.duration_ms)],
   ['cost', 'Cost', (r) => (num(r.cost_usd) === null ? '—' : money(r.cost_usd))],
   ['pr', 'PR', prLabel],
   ['stages', 'Stages', stagesLabel],
@@ -191,7 +191,7 @@ export function restoreBuilders(given) {
   return id ? [id] : [];
 }
 
-async function getJson(fetchImpl, url) {
+async function archiveJson(fetchImpl, url) {
   const r = await fetchImpl(url, { headers: { accept: 'application/json' } });
   let body = null;
   try { body = await r.json(); } catch { /* not JSON */ }
@@ -202,14 +202,14 @@ async function getJson(fetchImpl, url) {
 
 /** Fetch and normalise the list. */
 export async function loadArchive({ q = null, kind = 'local', localId = null, fetchImpl = (u, i) => fetch(u, i) } = {}) {
-  return normRows(await getJson(fetchImpl, listUrl(kind, q)), { kind, localId });
+  return normRows(await archiveJson(fetchImpl, listUrl(kind, q)), { kind, localId });
 }
 
 /** Fetch one row's detail. */
 export async function loadDetail({ kind = 'local', builder, lane, fetchImpl = (u, i) => fetch(u, i) } = {}) {
   const url = detailUrl(kind, builder, lane);
   if (!url) throw new Error('bad lane id');
-  return getJson(fetchImpl, url);
+  return archiveJson(fetchImpl, url);
 }
 
 // ---------------------------------------------------------------- DOM
