@@ -12,6 +12,8 @@ const fx = (f) => fs.readFileSync(path.join(FX, f), 'utf8');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'laneboard-pr-'));
 process.env.LANEBOARD_LANES_DIR = path.join(tmp, 'lanes');
+// Never the worktree's own data/laneboard.db: old rows there change what is "new".
+process.env.LANEBOARD_DB = ':memory:';
 process.env.LANEBOARD_CI_PROVIDER = 'gh';
 process.env.LANEBOARD_CI_REPO = 'example-repo';
 const gh = await import('../server/providers/ci/gh.mjs');
