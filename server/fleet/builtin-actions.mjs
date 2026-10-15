@@ -13,7 +13,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { capturePane as tmuxCapturePane } from '../collector/tmux.mjs';
-import { registerAction, has, ActionRefused } from './dispatch.mjs';
+import { registerAction, has, ActionRefused, cleanTypedText } from './dispatch.mjs';
 
 export const DEFAULT_PERMISSION_MODES = Object.freeze(['default', 'acceptEdits', 'plan', 'auto']);
 export const PROMPTING_STATES = Object.freeze(['waiting_permission', 'waiting_question']);
@@ -37,6 +37,26 @@ let captured = {};
 function permissionModes(config) {
   const m = config?.fleet?.allowedPermissionModes;
   return Array.isArray(m) ? m : DEFAULT_PERMISSION_MODES;
+}
+
+/** What the downstream code uses when no mode is given (server/lanes/launch.mjs, server/actions.mjs). */
+export const DOWNSTREAM_DEFAULT_MODE = Object.freeze({ launch: 'auto', spawn: 'default' });
+
+/**
+ * The permission mode a launch/spawn really runs with (SR5 M1): the requested one, else the downstream default
+ * when it is allowed, else the first allowed mode. Always one of `fleet.allowedPermissionModes`; with none
+ * allowed it refuses (400 bad_args). The result is always passed explicitly, so no downstream fallback is used.
+ */
+export function effectivePermissionMode(requested, action, config) {
+  const allowed = permissionModes(config).filter((m) => typeof m === 'string' && m);
+  if (requested !== undefined) {
+    if (!allowed.includes(requested)) throw new ActionRefused(400, 'bad_args', 'args.permissionMode is not an allowed value');
+    return requested;
+  }
+  const dflt = DOWNSTREAM_DEFAULT_MODE[action];
+  if (allowed.includes(dflt)) return dflt;
+  if (allowed.length) return allowed[0];
+  throw new ActionRefused(400, 'bad_args', 'no permission mode is allowed on this builder (fleet.allowedPermissionModes)');
 }
 
 // Config of this call: the dispatch-time config, else the one given to registerBuiltins.
@@ -109,6 +129,12 @@ export function registerBuiltins(deps = {}) {
       enter: { type: 'boolean', default: true },
       fanout: { type: 'object', fields: { parent: { type: 'string', required: true, re: UUID_RE } } },
       guardPrompt: { type: 'boolean' },
+    },
+    // control characters never reach tmux; line breaks follow `enter` (SR5 L3)
+    async prepare({ args }) {
+      const text = cleanTypedText(args.text, args.enter);
+      if (!text.length) throw new ActionRefused(400, 'bad_args', 'args.text is empty after removing control characters');
+      return { ...args, text };
     },
     async run({ target, args, user, deps: rd }) {
       const d = D(rd);
@@ -191,7 +217,8 @@ export function registerBuiltins(deps = {}) {
       slot: { type: 'integer', min: 1, max: 9 },
     },
     async prepare({ args, config }) {
-      return { ...args, dir: await resolveSpawnDir(args.dir, cfgOf(config).dirRoots) };
+      const permissionMode = effectivePermissionMode(args.permissionMode, 'spawn', cfgOf(config));
+      return { ...args, permissionMode, dir: await resolveSpawnDir(args.dir, cfgOf(config).dirRoots) };
     },
     async run({ target, args, user, deps: rd }) {
       const { dir, prompt, model, permissionMode, resume, slot } = args;
@@ -212,6 +239,9 @@ export function registerBuiltins(deps = {}) {
       budgetUsd: { type: 'number', min: 0, max: 100000 },
       dryRun: { type: 'boolean' },
       restoredFrom: { type: 'string', re: LANE_RE, check: noDotDot },
+    },
+    async prepare({ args, config }) {
+      return { ...args, permissionMode: effectivePermissionMode(args.permissionMode, 'launch', cfgOf(config)) };
     },
     status: (result, args) => (args.dryRun === true ? 200 : 202),
     async run({ target, args, user, deps: rd }) {
@@ -242,6 +272,10 @@ export function registerBuiltins(deps = {}) {
       enter: { type: 'boolean', default: true },
       confirmCount: { type: 'integer', required: true, min: 1, max: 30 },
     },
+    // the dispatcher enforces broadcast's confirm on the hub path too (SR5 L6): the count the user confirmed can
+    // never exceed the targets. The exact rule (confirmCount === planned sends, else 409 with the fresh plan) is
+    // the C8 handler's, which only it can plan.
+    confirmCheck: ({ args }) => (args.confirmCount > args.targets.length ? 'confirmCount exceeds the targets' : null),
     async run() {
       throw new ActionRefused(400, 'hub_only', 'broadcast runs on the hub only');
     },
