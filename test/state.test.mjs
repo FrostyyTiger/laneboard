@@ -250,3 +250,105 @@ test('promptReadiness says not_ready for a still-painting TUI', () => {
   assert.equal(promptReadiness(['\u273b Composing\u2026 (2s)']), 'not_ready');
   assert.equal(promptReadiness([]), 'unknown');
 });
+
+// --- fleet X1: state hooks for flag modules (server/flags/*.mjs) -------------
+
+const stateMod = await import('../server/state.mjs');
+
+test('attention: a held approval scores as waiting_permission, the state word unchanged', () => {
+  const now = Date.now();
+  const s = { state: 'working', awaitingApproval: 'ap-1' };
+  assert.equal(attentionScore(s, now), 100);
+  assert.equal(s.state, 'working');
+  assert.equal(attentionScore({ state: 'done', activity: { lastAssistant: 'hi' }, stateSince: now, awaitingApproval: 'ap-2' }, now), 100);
+  assert.equal(attentionScore({ state: 'working', awaitingApproval: null }, now), 0);
+  // The dev-stack guard still outranks it.
+  assert.equal(attentionScore({ state: 'working', awaitingApproval: 'ap-3', danger: { reason: 'x' } }, now), 1000);
+});
+
+test('attention: stuck adds 40 unless the session is already waiting', () => {
+  const now = Date.now();
+  const stuck = { rule: 'tool-loop', reason: 'same tool 5x', since: now };
+  assert.equal(attentionScore({ state: 'working', stuck }, now), 40);
+  assert.equal(attentionScore({ state: 'idle', stuck }, now), 40);
+  assert.equal(attentionScore({ state: 'done', activity: { lastAssistant: 'hi' }, stateSince: now, stuck }, now), 90);
+  assert.equal(attentionScore({ state: 'done', activity: { lastAssistant: 'hi' }, stateSince: now - 3 * 3600e3, stuck }, now), 60);
+  assert.equal(attentionScore({ state: 'waiting_permission', stuck }, now), 100);
+  assert.equal(attentionScore({ state: 'waiting_question', stuck }, now), 90);
+  assert.equal(attentionScore({ state: 'working', awaitingApproval: 'ap', stuck }, now), 100);
+  assert.equal(attentionScore({ state: 'working', stuck: null }, now), 0);
+});
+
+test('with no hooks registered, snapshot() has exactly the core keys', () => {
+  stateMod._resetHooks();
+  assert.deepEqual(Object.keys(stateMod.snapshot()), ['box', 'sessions', 'lanes', 'vitals', 'attention', 'generatedAt']);
+});
+
+test('a session decorator patches the session before the score is computed', () => {
+  stateMod._resetHooks();
+  const now = Date.now();
+  stateMod.addDecorator('approval', { session: (s, ctx) => ({ awaitingApproval: s.name === 'a' ? 'ap-1' : null, seenAt: ctx.now }) });
+  stateMod.addDecorator('stuck', { session: (s) => ({ stuck: s.name === 'b' ? { rule: 'stalled', reason: 'r', since: 1 } : null }) });
+  const list = [
+    { name: 'a', state: 'working', attentionScore: 0 },
+    { name: 'b', state: 'working', attentionScore: 0 },
+    { name: 'c', state: 'working', attentionScore: 0 },
+  ];
+  stateMod.decorateSessions(list, now);
+  assert.deepEqual(list.map((s) => s.attentionScore), [100, 40, 0]);
+  assert.equal(list[0].awaitingApproval, 'ap-1');
+  assert.equal(list[0].seenAt, now);
+  assert.equal(list[1].stuck.rule, 'stalled');
+  assert.equal(list[2].stuck, null);
+  stateMod._resetHooks();
+});
+
+test('a lane decorator patches lanes; a throwing decorator is skipped, not fatal', () => {
+  stateMod._resetHooks();
+  stateMod.addDecorator('review', { lane: (lane, ctx) => ({ reviewReady: lane.id === 'x1' ? { ready: true, reasons: [], since: ctx.now } : null }) });
+  stateMod.addDecorator('broken', { lane: () => { throw new Error('boom'); }, session: () => { throw new Error('boom'); } });
+  const lanes = [{ id: 'x1' }, { id: 'f3' }];
+  stateMod.decorateLanes(lanes, 5, []);
+  assert.deepEqual(lanes[0].reviewReady, { ready: true, reasons: [], since: 5 });
+  assert.equal(lanes[1].reviewReady, null);
+  const s = [{ name: 'a', state: 'waiting_question' }];
+  stateMod.decorateSessions(s, 5);
+  assert.equal(s[0].attentionScore, 90, 'the score is still computed');
+  stateMod._resetHooks();
+});
+
+test('addDecorator refuses a duplicate name or a decorator with nothing to do', () => {
+  stateMod._resetHooks();
+  stateMod.addDecorator('paused', { session: () => ({ paused: null }) });
+  assert.throws(() => stateMod.addDecorator('paused', { session: () => ({}) }), /already registered/);
+  assert.throws(() => stateMod.addDecorator('empty', {}), /needs a session or a lane/);
+  assert.throws(() => stateMod.addDecorator('wrong', { session: 'x' }), /must be a function/);
+  stateMod._resetHooks();
+});
+
+test('addSnapshotKey adds a top-level key; core keys and duplicates are refused', () => {
+  stateMod._resetHooks();
+  let calls = 0;
+  stateMod.addSnapshotKey('approvals', () => { calls++; return [{ id: 'ap-1' }]; });
+  stateMod.addSnapshotKey('repos', () => { throw new Error('collector down'); });
+  const snap = stateMod.snapshot();
+  assert.deepEqual(snap.approvals, [{ id: 'ap-1' }]);
+  assert.equal(snap.repos, null, 'a failing key is null, the snapshot still builds');
+  assert.equal(calls, 1);
+  assert.throws(() => stateMod.addSnapshotKey('sessions', () => []), /already defined/);
+  assert.throws(() => stateMod.addSnapshotKey('approvals', () => []), /already defined/);
+  stateMod._resetHooks();
+  assert.equal('approvals' in stateMod.snapshot(), false);
+});
+
+test('onTick hooks run in order with (ctx, now); one that throws does not stop the rest', async () => {
+  stateMod._resetHooks();
+  const seen = [];
+  stateMod.onTick((ctx, now) => { seen.push(['a', Array.isArray(ctx.sessions), typeof ctx.get, now]); });
+  stateMod.onTick(() => { throw new Error('boom'); });
+  stateMod.onTick(async (ctx, now) => { seen.push(['c', now]); });
+  await stateMod.runTickHooks(1234);
+  assert.deepEqual(seen, [['a', true, 'function', 1234], ['c', 1234]]);
+  assert.throws(() => stateMod.onTick('nope'), /needs a function/);
+  stateMod._resetHooks();
+});
