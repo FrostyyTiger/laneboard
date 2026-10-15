@@ -352,3 +352,102 @@ test('onTick hooks run in order with (ctx, now); one that throws does not stop t
   assert.throws(() => stateMod.onTick('nope'), /needs a function/);
   stateMod._resetHooks();
 });
+
+// --- fleet O3: sidecar fields, head, push.local -------------------------------
+
+// Shaped like a live statusline sidecar file (Claude Code 2.1.301, §7.2.1).
+const SIDECAR_FIXTURE = {
+  session_id: '00000000-0000-4000-8000-000000000001',
+  session_name: 'builder-a demo',
+  transcript_path: '/home/builder-a/.claude/projects/x/y.jsonl',
+  version: '2.1.301',
+  model: { id: 'claude-opus-5-5', display_name: 'Opus' },
+  workspace: { current_dir: '/home/builder-a/code/acme' },
+  effort: { level: 'high' },
+  thinking: { enabled: true },
+  prompt_cache: { hit_ratio: 0.82, warm: true, expires_at: 1760000000, misses: 3 },
+  cost: {
+    total_cost_usd: 1.25, total_duration_ms: 600000, total_api_duration_ms: 123456,
+    total_lines_added: 10, total_lines_removed: 2,
+  },
+  context_window: { used_percentage: 40, context_window_size: 200000 },
+};
+
+test('sidecarFields reads effort, thinking, promptCache and apiMs from a sidecar JSON', () => {
+  assert.deepEqual(stateMod.sidecarFields(SIDECAR_FIXTURE), {
+    effort: 'high',
+    thinking: true,
+    promptCache: { hitRatio: 0.82, warm: true, expiresAt: 1760000000 * 1000 },
+    apiMs: 123456,
+  });
+});
+
+test('sidecarFields is all-null for a missing or older sidecar, and ignores junk types', () => {
+  const none = { effort: null, thinking: null, promptCache: null, apiMs: null };
+  assert.deepEqual(stateMod.sidecarFields(null), none);
+  assert.deepEqual(stateMod.sidecarFields({ model: { id: 'x' }, cost: { total_cost_usd: 1 } }), none);
+  const junk = stateMod.sidecarFields({
+    effort: { level: 7 }, thinking: { enabled: 'yes' },
+    prompt_cache: { hit_ratio: 'NaN', warm: 1, expires_at: 'not a date' },
+    cost: { total_api_duration_ms: Infinity },
+  });
+  assert.deepEqual(junk, { effort: null, thinking: null, promptCache: { hitRatio: null, warm: null, expiresAt: null }, apiMs: null });
+  assert.equal(stateMod.sidecarFields({ thinking: { enabled: false } }).thinking, false);
+});
+
+test('epochMs accepts seconds, milliseconds and ISO strings', () => {
+  assert.equal(stateMod.epochMs(1760000000), 1760000000000);
+  assert.equal(stateMod.epochMs(1760000000123), 1760000000123);
+  assert.equal(stateMod.epochMs('2025-10-09T08:53:20.000Z'), Date.parse('2025-10-09T08:53:20.000Z'));
+  assert.equal(stateMod.epochMs(0), null);
+  assert.equal(stateMod.epochMs(null), null);
+});
+
+test('headOf takes the git collector oid, and null for (initial) or no repo', () => {
+  const g = parseStatus('# branch.oid 0123456789abcdef0123456789abcdef01234567\n# branch.head main\n');
+  assert.equal(stateMod.headOf(g), '01234567');
+  assert.equal(stateMod.headOf(parseStatus('# branch.oid (initial)\n# branch.head main\n')), null);
+  assert.equal(stateMod.headOf(null), null);
+  assert.equal(stateMod.headOf({ isRepo: false }), null);
+});
+
+test('push.local: with fleet.hubKeys set and push.local null, the builder sends nothing', async () => {
+  const push = await import('../server/push.mjs');
+  const { config } = await import('../server/config.mjs');
+  const saved = { fleet: config.fleet, push: config.push };
+  try {
+    config.fleet = { ...(config.fleet ?? {}), hubKeys: [{ keyId: 'hub-1', publicKey: 'x', scopes: ['read'] }] };
+    config.push = { ...(config.push ?? {}), local: null };
+    assert.equal(push.localPushEnabled(), false);
+    // A transition that would notify on a standalone builder.
+    const t = await push.onTransition({ name: 'acme', from: 'working', to: 'waiting_permission', stateSince: 0, activity: {} });
+    assert.deepEqual(t, { notify: false, reason: 'push.local off' });
+    assert.deepEqual(await push.onMarker({ session_name: 'acme', kind: 'need', text: 'x' }), { notify: false, reason: 'push.local off' });
+    assert.deepEqual(await push.onDanger({ session_name: 'acme', text: 'x' }), { notify: false, reason: 'push.local off' });
+
+    // Forced on with a hub configured: the guard lets it through to the rules.
+    config.push = { ...config.push, local: true };
+    assert.equal(push.localPushEnabled(), true);
+    const r = await push.onTransition({ name: 'acme', from: 'working', to: 'idle', activity: {} });
+    assert.equal(r.reason, 'state not notifiable');
+
+    // Standalone (no hub keys) with local null: on, as today.
+    config.fleet = { ...config.fleet, hubKeys: [] };
+    config.push = { ...config.push, local: null };
+    assert.equal(push.localPushEnabled(), true);
+    // Forced off standalone.
+    config.push = { ...config.push, local: false };
+    assert.equal(push.localPushEnabled(), false);
+  } finally {
+    config.fleet = saved.fleet;
+    config.push = saved.push;
+  }
+});
+
+test('localPushEnabled resolves against an explicit config', async () => {
+  const push = await import('../server/push.mjs');
+  assert.equal(push.localPushEnabled({ fleet: { hubKeys: [] }, push: { local: null } }), true);
+  assert.equal(push.localPushEnabled({ fleet: { hubKeys: [{}] }, push: { local: null } }), false);
+  assert.equal(push.localPushEnabled({ fleet: { hubKeys: [{}] }, push: { local: true } }), true);
+  assert.equal(push.localPushEnabled({}), true);
+});

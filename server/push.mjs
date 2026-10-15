@@ -10,6 +10,7 @@ import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { kvRead, kvWrite, listSubscriptions, removeSubscription, markSubscriptionOk } from './db.mjs';
 import { fkey } from './fleet/keys.mjs';
+import { resolvePushLocal } from './config/observability.mjs';
 
 const COALESCE_MS = 60_000;
 const MIN_WORKING_MS = 5 * 60_000;
@@ -55,6 +56,19 @@ export function isQuiet(name) {
   const q = getQuiet();
   return q.global || q.sessions.includes(name);
 }
+
+// --- push.local (fleet O3) ---------------------------------------------------
+
+/**
+ * Does this builder send its own web pushes? `push.local` true/false forces
+ * it; null means true iff `fleet.hubKeys` is empty (standalone). Once a hub is
+ * configured, the hub notifies (server/hub/notify.mjs) and the builder stays
+ * silent. Read on every call, so a config reload takes effect at once.
+ */
+export function localPushEnabled(c = config) {
+  return resolvePushLocal(c);
+}
+const LOCAL_OFF = Object.freeze({ notify: false, reason: 'push.local off' });
 
 // --- rules ------------------------------------------------------------------
 
@@ -128,6 +142,7 @@ export async function broadcast(payload) {
 
 /** Called by state on every transition. Applies the rules, then sends. */
 export async function onTransition({ name, from, to, stateSince, activity }) {
+  if (!localPushEnabled()) return { ...LOCAL_OFF };
   const now = Date.now();
   const verdict = shouldNotify({
     name,
@@ -163,6 +178,7 @@ export async function onTransition({ name, from, to, stateSince, activity }) {
  * breath should buzz the phone once, not twice.
  */
 export async function onMarker({ session_name: name, kind, text }) {
+  if (!localPushEnabled()) return { ...LOCAL_OFF };
   if (!name) return { notify: false, reason: 'no session' };
   if (isQuiet(name)) return { notify: false, reason: 'quiet' };
   const now = Date.now();
@@ -188,6 +204,7 @@ export async function onMarker({ session_name: name, kind, text }) {
  * other people are using, not about this session's own progress.
  */
 export async function onDanger({ session_name: name, sessionName, text }) {
+  if (!localPushEnabled()) return { ...LOCAL_OFF };
   const who = name ?? sessionName ?? null;
   const r = await broadcast({
     title: `DANGER: ${who || 'dev stack guard'}`,
