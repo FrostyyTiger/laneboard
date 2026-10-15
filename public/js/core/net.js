@@ -9,7 +9,7 @@
 import { $ } from './dom.js';
 import { isFkey, parseFkey, fkey } from './keys.js';
 import { ingest, localBuilderId, setHello, setSourceKind, setSourceStatus, store } from './store.js';
-import { act } from './actions.js';
+import { act, isDotSegment } from './actions.js';
 import { applyHash } from './router.js';
 import { fitAll } from '../ui/terminal.js';
 import { renderAll } from '../ui/render.js';
@@ -25,13 +25,27 @@ export function nextBackoff(ms) {
   return Math.min(ms * BACKOFF_FACTOR, BACKOFF_MAX_MS);
 }
 
-/** The terminal socket path for a fleet key on a source of `kind`. */
+/**
+ * The terminal socket path for a fleet key on a source of `kind`, or null
+ * when there is none (callers treat null as "terminal unavailable"). Names
+ * '.' and '..' are refused: they would collapse the path segment (SR8 L2).
+ */
 export function termPath(kind, k) {
   const p = parseFkey(k);
-  if (kind === 'hub') return p ? `/ws/term/${p.builder}/${encodeURIComponent(p.name)}` : null;
-  if (p) return `/ws/term/${encodeURIComponent(p.name)}`;
-  return typeof k === 'string' && k ? `/ws/term/${encodeURIComponent(k)}` : null;
+  const seg = (name) => (typeof name === 'string' && name !== '' && !isDotSegment(name) ? encodeURIComponent(name) : null);
+  if (kind === 'hub') {
+    const n = p ? seg(p.name) : null;
+    return n ? `/ws/term/${p.builder}/${n}` : null;
+  }
+  const n = seg(p ? p.name : k);
+  return n ? `/ws/term/${n}` : null;
 }
+
+/**
+ * Frames held while an 'auto' source has not yet seen `hello` or `fleet`
+ * (SR8 L4). Bounded; the overflow is dropped and counted.
+ */
+export const PREKIND_BUFFER_MAX = 64;
 
 /**
  * One WebSocket source. kind 'local' | 'hub' | 'auto' (decided by the first
@@ -47,7 +61,10 @@ export function createSource(opts = {}) {
   let ws = null;
   let backoff = BACKOFF_START_MS;
   let stopped = false;
-  const source = { kind, send: null, reconnect: null, close: null, termUrl: null, backoffMs: () => backoff };
+  const source = {
+    kind, send: null, reconnect: null, close: null, termUrl: null, backoffMs: () => backoff,
+    pending: [], droppedBeforeKind: 0,
+  };
 
   function open() {
     if (stopped) return;
@@ -67,12 +84,33 @@ export function createSource(opts = {}) {
       if (source.kind === 'auto') {
         if (msg.type === 'fleet') source.kind = 'hub';
         else if (msg.type === 'hello') source.kind = 'local';
+        else if (msg.builder !== undefined && msg.builder !== null) {
+          // A frame that claims a builder is not routed until the kind is
+          // known: it would otherwise be filed under that claim, or a hub's
+          // frame under the local fallback (SR8 L4). A frame that claims no
+          // builder (a pre-hello legacy server) goes on to the local fallback.
+          if (source.pending.length < PREKIND_BUFFER_MAX) source.pending.push(msg);
+          else source.droppedBeforeKind += 1;
+          return;
+        } else {
+          onMessage(msg, source);
+          return;
+        }
+        onMessage(msg, source);
+        const held = source.pending;
+        source.pending = [];
+        for (const m of held) {
+          if (ws !== sock) return;
+          onMessage(m, source);
+        }
+        return;
       }
       onMessage(msg, source);
     });
     const drop = () => {
       if (ws !== sock) return;
       ws = null;
+      source.pending = [];
       onStatus('closed', source);
       if (stopped) return;
       // Keep the last snapshot on screen and retry with backoff.

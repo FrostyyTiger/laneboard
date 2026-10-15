@@ -170,3 +170,34 @@ test('helpers: uuid shape, envelope, legacy map', () => {
   assert.equal(legacyRequest('pause', 'x'), null);
   assert.equal(legacyRequest('send-keys', 'a/b').url, '/api/sessions/a%2Fb/keys');
 });
+
+// ---------------------------------------------------------------- SR8 lows
+
+test('SR8 L1: tierOf ignores inherited names in both tier tables', () => {
+  const s = localStore({ v1: true });
+  for (const name of ['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__']) {
+    assert.equal(tierOf(name, s), 'confirm', name);
+  }
+  // A hello table that carries `constructor` as a real own key is still honoured only if it is a tier.
+  setHello(s, JSON.parse('{"capabilities":["actions"],"actions":{"constructor":"click","kill":"bogus"}}'));
+  assert.equal(tierOf('constructor', s), 'click');
+  assert.equal(tierOf('kill', s), 'confirm', 'an invalid live tier falls back to the table');
+  assert.equal(tierOf('interrupt', s), 'click');
+});
+
+test('SR8 L2: legacy REST URLs never carry a dot-segment target', async () => {
+  for (const t of ['.', '..']) {
+    for (const a of ['send-keys', 'send-text', 'restart', 'kill', 'retire', 'dismiss-marker']) {
+      assert.equal(legacyRequest(a, t, { keys: ['x'], text: 'x' }), null, `${a} ${t}`);
+    }
+  }
+  assert.equal(legacyRequest('kill', '...').url, '/api/sessions/...');
+  const s = localStore();
+  ingest(s, { type: 'snapshot', sessions: [{ name: '..' }] });
+  const rec = recorder();
+  const { act } = createActions({ store: s, fetchImpl: rec.fetchImpl, ...fixed });
+  const r = await act('..', 'kill');
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 'bad-target');
+  assert.equal(rec.calls.length, 0);
+});
