@@ -94,6 +94,44 @@ export function permissionModesFromHelp(text) {
   return m ? [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]) : [];
 }
 
+// The modes `claude --help` lists, read once at start (loadPermissionModes) for
+// hello.permissionModes (fleet §8 2.7). validate() still asks claude itself on
+// every launch; this cache only says what to offer.
+let helpModes = null;
+
+/** Run `claude --help` once and cache its `--permission-mode` choices. Never throws. */
+export async function loadPermissionModes() {
+  try {
+    const help = await run(config.claudeBin, ['--help'], { timeout: 15000 });
+    helpModes = help.ok ? permissionModesFromHelp(help.stdout) : [];
+  } catch {
+    helpModes = [];
+  }
+  return helpModes;
+}
+
+/** The cached `claude --help` modes, or null before loadPermissionModes() ran. */
+export function cachedPermissionModes() {
+  return helpModes == null ? null : [...helpModes];
+}
+
+/**
+ * hello.permissionModes: `fleet.allowedPermissionModes` (in its order), narrowed
+ * to what claude lists once that is known. Before the help is read, or when it
+ * listed nothing (claude missing), the allowlist alone: a launch is refused at
+ * validate() with the reason either way.
+ */
+export function offeredPermissionModes(cfg = config, modes = helpModes) {
+  const allowed = Array.isArray(cfg?.fleet?.allowedPermissionModes) ? cfg.fleet.allowedPermissionModes : [];
+  const out = allowed.filter((m) => typeof m === 'string' && m);
+  return Array.isArray(modes) && modes.length ? out.filter((m) => modes.includes(m)) : out;
+}
+
+/** Tests only. */
+export function _setPermissionModes(modes) {
+  helpModes = modes == null ? null : [...modes];
+}
+
 export function hasStages(planText) {
   return stageHeadings(planText).length > 0;
 }
@@ -257,10 +295,15 @@ export async function launch(req, who = 'local') {
   // launch that failed or was cut off before its session existed.
   // A dry run (fleet §8 2.7) is validate() alone: no record, no job. Its slot
   // is advisory, because `serialised` only holds during a real launch.
+  // Only a real boolean decides: a legacy body's `dryRun: "true"` must not
+  // become a real launch, nor `dryRun: 0` a silent one.
+  if (req?.dryRun !== undefined && req?.dryRun !== null && typeof req.dryRun !== 'boolean') {
+    throw new LaneError('invalid dryRun: true or false');
+  }
   if (req?.dryRun === true) {
     const p = await validate(req);
     return {
-      ok: true, dryRun: true, lane: p.lane,
+      ok: true, dryRun: true, lane: p.lane, slotAdvisory: true,
       plan: {
         lane: p.lane, repo: p.repo, branch: p.branch, plan: p.plan, model: p.model, permissionMode: p.permissionMode,
         priority: p.priority, budgetUsd: p.budgetUsd, slot: p.slot, root: p.root,
