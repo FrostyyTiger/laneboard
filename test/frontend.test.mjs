@@ -392,7 +392,9 @@ test('no information was lost in the overhaul', () => {
     'disconnected banner': /id="offline"/,
     'LIVE badge': /id="conn"/,
     'keyboard j/k': /'j'|'k'/,
-    'keyboard 1-9': /attention\[Number\(e\.key\)/,
+    // §4 2.6 (D8): 1-9 pick builder N; the attention jump moved to n/N.
+    'keyboard 1-9': /'builder\.9'/,
+    'attention jump': /'attention\.next'/,
   };
   const missing = Object.entries(required).filter(([, re]) => !re.test(both)).map(([k]) => k);
   assert.deepEqual(missing, [], `the overhaul dropped: ${missing.join(', ')}`);

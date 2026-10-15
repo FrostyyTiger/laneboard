@@ -13,6 +13,9 @@ import { openSheet } from '../ui/sheet.js';
 let mapView = null;
 let mapLoading = null;
 
+/** The loaded map's API (createMap), or null: the hotkeys (ui/hotkeys.js, §4 D8) call it. */
+export function getMapView() { return mapView; }
+
 export function sizeMap() {
   const bar = document.querySelector('.topbar');
   if (bar) document.documentElement.style.setProperty('--topbar-h', `${bar.offsetHeight}px`);
