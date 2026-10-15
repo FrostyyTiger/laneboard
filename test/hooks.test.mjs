@@ -104,17 +104,18 @@ test('subtypeOf records the notification kind or the tool name', () => {
 const NEW_EVENTS = ['PostToolUseFailure', 'PermissionRequest', 'PermissionDenied', 'StopFailure',
   'SubagentStart', 'SubagentStop', 'PreCompact', 'PostCompact'];
 
-test('deploy/hooks.json registers the 7 old and the 8 new events as async curl hooks', () => {
-  const h = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../deploy/hooks.json'), 'utf8'));
+test('deploy/hooks.json.tmpl registers the 7 old and the 8 new events as async curl hooks', () => {
+  // C10: deploy/hooks.json became a template; its first group per event is the async curl.
+  const h = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../deploy/hooks.json.tmpl'), 'utf8'));
   const old = ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Notification', 'Stop', 'SessionStart', 'SessionEnd'];
   assert.deepEqual(Object.keys(h).sort(), [...old, ...NEW_EVENTS].sort());
   assert.equal(Object.keys(h).length, 15);
   for (const [ev, groups] of Object.entries(h)) {
-    assert.equal(groups.length, 1, ev);
+    assert.ok(groups.length >= 1, ev);
     for (const hk of groups[0].hooks) {
       assert.equal(hk.type, 'command', ev);
       assert.equal(hk.async, true, ev);
-      assert.match(hk.command, /^curl -s -m 2 .*http:\/\/127\.0\.0\.1:7777\/api\/hook .*\|\| true$/, ev);
+      assert.match(hk.command, /^curl -s -m 2 .*http:\/\/127\.0\.0\.1:@PORT@\/api\/hook .*\|\| true$/, ev);
     }
   }
   for (const ev of ['PostToolUseFailure', 'PermissionRequest', 'PermissionDenied']) assert.equal(h[ev][0].matcher, '*', ev);

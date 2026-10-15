@@ -1,0 +1,217 @@
+{
+  "UserPromptSubmit": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "LANEBOARD_STATE_DIR=@STATE_DIR@ \"$HOME/.claude/laneboard/gate.sh\"",
+          "timeout": 5
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    },
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "LANEBOARD_STATE_DIR=@STATE_DIR@ \"$HOME/.claude/laneboard/gate.sh\"",
+          "timeout": 5
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "Notification": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "SessionEnd": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "PostToolUseFailure": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "PermissionRequest": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    },
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -sf --connect-timeout 1 -m @HOLD@ -H @@HEADER_FILE@ -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook/permission || true",
+          "timeout": "@HOLD_TIMEOUT@"
+        }
+      ]
+    }
+  ],
+  "PermissionDenied": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "StopFailure": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "SubagentStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "SubagentStop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "PreCompact": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ],
+  "PostCompact": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:@PORT@/api/hook >/dev/null 2>&1 || true",
+          "async": true,
+          "timeout": 3
+        }
+      ]
+    }
+  ]
+}
