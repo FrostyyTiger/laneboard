@@ -142,7 +142,7 @@ test('refuseReason accepts only local, loopback, header-free, token-carrying req
   assert.equal(reason(fakeReq({ auth: { kind: 'hub' } })), 'not-local');
   assert.equal(reason(fakeReq({ auth: 'local' })), 'not-local');
   assert.equal(reason(fakeReq({ localPort: 7801 })), 'ingress');
-  assert.equal(reason(fakeReq({ remote: '100.64.0.7' })), 'not-loopback');
+  assert.equal(reason(fakeReq({ remote: '192.0.2.7' })), 'not-loopback');
   assert.equal(reason(fakeReq({ remote: '::ffff:10.0.0.1' })), 'not-loopback');
   assert.equal(reason(fakeReq({ remote: null })), 'not-loopback');
   assert.equal(reason(fakeReq({ headers: { 'tailscale-user-login': 'u@example.invalid' } })), 'serve-header');
