@@ -89,7 +89,7 @@ export function ciRepoOf(url) {
 }
 
 /** The copyable pull commands for one item (none when any part fails validation). */
-export function pullFor(item) {
+export function reviewPullFor(item) {
   if (!item) return [];
   const prNum = Number.isInteger(item.pr?.number) && item.pr.number > 0 ? item.pr.number : null;
   const ciRepo = prNum != null ? ciRepoOf(item.pr?.url) : null;
@@ -131,7 +131,7 @@ export function rowActions(item, ctx = {}) {
     out.push({ id: 'diff', label: 'Diff', icon: 'split', title: 'Open the diff review', run: () => nav({ view: 'diff', sel: item.fkey }) });
     out.push({ id: 'inspect', label: 'Peek', icon: 'inspector', title: 'Open the lane in the inspector', run: () => nav({ sel: item.fkey }) });
   }
-  if (pullFor(item).length) out.push({ id: 'pull', label: 'Pull', icon: 'terminal', title: 'Commands to pull this branch locally', run: null });
+  if (reviewPullFor(item).length) out.push({ id: 'pull', label: 'Pull', icon: 'terminal', title: 'Commands to pull this branch locally', run: null });
   if (item.pr?.state === 'MERGED' && typeof ctx.archive === 'function') {
     out.push({ id: 'archive', label: 'Archive', icon: 'retire', title: 'Retire the merged lane', run: () => ctx.archive(item) });
   }
@@ -146,7 +146,7 @@ function rqField(cls, text, title) {
   return n;
 }
 
-function waitNode(ms, overdueMs) {
+function rqWaitNode(ms, overdueMs) {
   const n = el('span', 'rq-f rq-wait');
   n.append(icon('clock', { size: 's' }), el('span', 'rq-wait-t', formatWait(ms)));
   const over = ms >= overdueMs;
@@ -155,7 +155,7 @@ function waitNode(ms, overdueMs) {
   return n;
 }
 
-function prNode(item) {
+function rqPrNode(item) {
   const n = el('span', 'rq-f rq-pr');
   const chip = reviewPrChip(item.pr);
   if (chip) {
@@ -176,7 +176,7 @@ function prNode(item) {
   return n;
 }
 
-function packagesNode(list) {
+function rqPackagesNode(list) {
   const n = el('span', 'rq-f rq-pkgs');
   const pk = Array.isArray(list) ? list : [];
   for (const p of pk.slice(0, PKG_MAX)) n.append(rqField('rq-pkg', p, `package ${p}`));
@@ -186,7 +186,7 @@ function packagesNode(list) {
   return n;
 }
 
-function reasonsNode(reasons) {
+function rqReasonsNode(reasons) {
   const n = el('span', 'rq-f rq-reasons');
   for (const r of Array.isArray(reasons) ? reasons : []) {
     const meta = REASON_META[r];
@@ -199,10 +199,10 @@ function reasonsNode(reasons) {
   return n;
 }
 
-function pullNode(item) {
+function rqPullNode(item) {
   const box = el('div', 'rq-pull');
   box.hidden = true;
-  for (const c of pullFor(item)) {
+  for (const c of reviewPullFor(item)) {
     const line = el('div', 'rq-pull-l');
     line.append(el('span', 'rq-pull-label', c.label), el('code', 'rq-pull-cmd', c.cmd));
     const copy = el('button', 'btn btn-s rq-copy', 'Copy');
@@ -228,19 +228,19 @@ export function reviewRow(item, ctx = {}) {
   if (isNum(item.hue)) row.style.setProperty('--lane-hue', String(item.hue));
 
   const main = el('div', 'rq-line');
-  let wait = waitNode(item.waitMs, overdueMs);
+  let wait = rqWaitNode(item.waitMs, overdueMs);
   const code = builderCodeOf(ctx.store, item.builder);
   const codeEl = el('span', 'rq-f rq-code');
   codeEl.append(plate(code, { title: item.builder }));
   const where = [item.repo, item.branch].filter((v) => typeof v === 'string' && v).join(' / ');
   const lane = rqField('rq-lane', item.lane, where ? `${item.fkey} · ${where}` : item.fkey);
-  main.append(wait, codeEl, lane, rqField('rq-branch', item.branch ?? DASH, item.branch ?? 'no branch'), reasonsNode(item.reasons));
+  main.append(wait, codeEl, lane, rqField('rq-branch', item.branch ?? DASH, item.branch ?? 'no branch'), rqReasonsNode(item.reasons));
 
   const facts = el('div', 'rq-line rq-facts');
   facts.append(
-    prNode(item),
+    rqPrNode(item),
     rqField('rq-diff', diffStatText(item.diffStat), 'diff against the base'),
-    packagesNode(item.packages),
+    rqPackagesNode(item.packages),
     rqField('rq-cost', isNum(item.costUsd) ? money(item.costUsd) : DASH, 'API-equivalent cost of the lane'),
   );
 
@@ -254,7 +254,7 @@ export function reviewRow(item, ctx = {}) {
     b.title = a.title;
     b.setAttribute('aria-label', `${a.label} ${item.lane}`);
     if (a.id === 'pull') {
-      pull = pullNode(item);
+      pull = rqPullNode(item);
       b.setAttribute('aria-expanded', 'false');
       b.addEventListener('click', () => {
         pull.hidden = !pull.hidden;
@@ -272,7 +272,7 @@ export function reviewRow(item, ctx = {}) {
     item,
     row,
     setWait: (ms) => {
-      const next = waitNode(ms, overdueMs);
+      const next = rqWaitNode(ms, overdueMs);
       wait.replaceWith(next);
       wait = next;
     },

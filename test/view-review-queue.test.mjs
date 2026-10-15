@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeDocument, texts } from './helpers/fakedom.mjs';
 import {
-  renderReviewQueue, mountReviewQueue, rowActions, pullFor, reviewPrChip, checksParts, checksTitle,
+  renderReviewQueue, mountReviewQueue, rowActions, reviewPullFor, reviewPrChip, checksParts, checksTitle,
   diffStatText, ciRepoOf, waitAt, builderCodeOf, queueFor, OVERDUE_MS, PKG_MAX,
 } from '../public/js/views/review-queue.js';
 import { buildReviewQueue, formatWait } from '../public/js/core/review-queue.js';
@@ -110,13 +110,13 @@ test('row actions navigate to the diff view and the inspector; archive only for 
 
 test('pull commands: fetch + gh checkout from a GitHub PR URL; nothing for unsafe parts', () => {
   const auth = FIXTURE[1];
-  const cmds = pullFor(auth);
+  const cmds = reviewPullFor(auth);
   assert.equal(cmds.length, 2);
   assert.match(cmds[0].cmd, /^git fetch origin 'feat\/auth'/);
   assert.equal(cmds[1].cmd, "gh pr checkout 42 --repo 'acme/acme'");
-  assert.deepEqual(pullFor({ ...auth, branch: '--upload-pack=x' }), []);
-  assert.deepEqual(pullFor({ ...auth, repo: '$(id)' }), []);
-  assert.equal(pullFor({ ...auth, pr: { number: 42, url: 'https://evil.invalid/x' } }).length, 1, 'no ciRepo, no gh command');
+  assert.deepEqual(reviewPullFor({ ...auth, branch: '--upload-pack=x' }), []);
+  assert.deepEqual(reviewPullFor({ ...auth, repo: '$(id)' }), []);
+  assert.equal(reviewPullFor({ ...auth, pr: { number: 42, url: 'https://evil.invalid/x' } }).length, 1, 'no ciRepo, no gh command');
   assert.equal(ciRepoOf('https://github.com/acme/acme/pull/42'), 'acme/acme');
   assert.equal(ciRepoOf('https://github.com/acme/a b/pull/42'), null);
   assert.equal(ciRepoOf(null), null);
