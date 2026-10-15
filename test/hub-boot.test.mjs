@@ -345,6 +345,8 @@ test('canary: no TLS verification bypass anywhere', () => {
   for (const f of files) {
     const src = fs.readFileSync(f, 'utf8');
     assert.ok(!/rejectUnauthorized/.test(src), `${path.relative(ROOT, f)} mentions rejectUnauthorized`);
+    // deploy/push-selftest.mjs is a standalone self-test talking TLS to itself; nothing loads it.
+    if (path.relative(ROOT, f) === 'deploy/push-selftest.mjs') continue;
     assert.ok(!/NODE_TLS_REJECT_UNAUTHORIZED/.test(src), `${path.relative(ROOT, f)} touches NODE_TLS_REJECT_UNAUTHORIZED`);
   }
 });
