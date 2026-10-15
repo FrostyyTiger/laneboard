@@ -1,0 +1,11 @@
+{
+  "session_id": "0b6c1e2a-fixture-session-0001",
+  "transcript_path": "/home/user/.claude/projects/-home-user-code-acme/0b6c1e2a-fixture-session-0001.jsonl",
+  "cwd": "/home/user/code/acme",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Read",
+  "tool_use_id": "toolu_03",
+  "tool_input": {
+    "file_path": "/home/user/code/acme/README.md"
+  }
+}

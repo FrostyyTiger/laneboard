@@ -4,6 +4,7 @@ import { addEvent } from '../db.mjs';
 import { oneLine, truncate } from '../util.mjs';
 import * as state from '../state.mjs';
 import * as markers from './markers.mjs';
+import * as signals from './signals.mjs';
 
 /**
  * Map a hook payload to a state-machine transition (plan §2.2).
@@ -19,12 +20,33 @@ export function classify(body) {
       return { state: 'working', tool: body.tool_name ?? null, toolInput: summariseToolInput(body.tool_input) };
     case 'PostToolUse':
       return { state: 'working', tool: body.tool_name ?? null, toolInput: summariseToolInput(body.tool_input) };
+    case 'PostToolUseFailure':
+      // A failed tool call keeps the turn going; the error goes to the signals ring.
+      return { state: 'working', tool: body.tool_name ?? null, toolInput: summariseToolInput(body.tool_input) };
+    case 'PermissionRequest':
+      // Earlier and more reliable than Notification(permission_prompt).
+      return { state: 'waiting_permission', tool: body.tool_name ?? null, toolInput: summariseToolInput(body.tool_input) };
+    case 'StopFailure': {
+      const out = { state: 'done', failure: failureOf(body) };
+      const last = truncate(textOf(body.last_assistant_message), 300);
+      if (last) out.lastAssistant = last;
+      return out;
+    }
+    // Observed only (counted in the signals ring); they never move the state machine.
+    case 'PermissionDenied':
+    case 'SubagentStart':
+    case 'SubagentStop':
+    case 'PreCompact':
+    case 'PostCompact':
+      return null;
     case 'Notification': {
       const kind = body.matcher || body.notification_type || body.subtype || null;
       if (kind === 'permission_prompt') return { state: 'waiting_permission' };
       if (kind === 'elicitation_dialog' || kind === 'agent_needs_input') return { state: 'waiting_question' };
       if (kind === 'idle_prompt') return { state: 'idle' };
       if (kind === 'agent_completed') return { state: 'done' };
+      if (kind === 'elicitation_complete' || kind === 'elicitation_response') return { state: 'working' };
+      // auth_success and unknown kinds do not move the state machine.
       // Unknown notification kinds must not move the state machine.
       return null;
     }
@@ -35,6 +57,14 @@ export function classify(body) {
     default:
       return null;
   }
+}
+
+/** {type, text} of a StopFailure, read defensively (the payload is undocumented). */
+export function failureOf(body) {
+  const err = body?.error;
+  const type = [body?.error_type, err && typeof err === 'object' ? (err.type ?? err.code) : null, body?.stop_reason, body?.reason]
+    .find((v) => typeof v === 'string' && v) ?? 'error';
+  return { type: oneLine(type, 60), text: oneLine(signals.errorTextOf(body) ?? '', 160) };
 }
 
 function textOf(msg) {
@@ -67,14 +97,42 @@ export function subtypeOf(body) {
   return null;
 }
 
+const listeners = new Set();
+
+/**
+ * Listen to every ingested hook event. `fn(body, {name, sessionId, now})` runs
+ * synchronously after ingest has updated the state; a throwing listener is
+ * isolated and never affects ingest or the other listeners. Returns an
+ * unsubscribe function. (§8 C4 uses it to supersede pending approvals.)
+ */
+export function subscribe(fn) {
+  if (typeof fn !== 'function') throw new TypeError('hooks.subscribe needs a function');
+  listeners.add(fn);
+  return () => { listeners.delete(fn); };
+}
+
+function emit(body, info) {
+  for (const fn of [...listeners]) {
+    try { fn(body, info); } catch { /* a listener must never break ingest */ }
+  }
+}
+
 /** Ingest one hook payload. Synchronous and cheap — no awaits on the hot path. */
-export function ingest(body) {
+export function ingest(body, now = Date.now()) {
+  const result = ingestInner(body, now);
+  emit(body, { name: result.name, sessionId: result.sessionId, now });
+  return result;
+}
+
+function ingestInner(body, now) {
   const sessionId = body?.session_id ?? null;
   const event = body?.hook_event_name ?? 'unknown';
   // May be null on SessionStart — the registry file does not exist yet. The
   // state machine does not need it, because hook state is keyed by sessionId.
   const name = sessionId ? state.sessionNameBySessionId(sessionId) : null;
-  const now = Date.now();
+
+  // Hashes and counters for the stuck detector; never allowed to break ingest.
+  try { signals.note(body, now); } catch { /* best effort */ }
 
   addEvent({
     ts: now,
@@ -88,7 +146,7 @@ export function ingest(body) {
   // Hooks are the most reliable marker source: `Stop` carries the assistant's
   // actual last message, so a NEED-HUMAN reaches here before it has finished
   // being painted into the pane.
-  const shouted = [textOf(body.last_assistant_message), body.message, body.reason]
+  const shouted = [textOf(body?.last_assistant_message), body?.message, body?.reason]
     .filter((t) => typeof t === 'string' && t)
     .join('\n');
   if (shouted) {
@@ -119,12 +177,14 @@ export function ingest(body) {
     next.toolInput = null;
   }
   if (event === 'UserPromptSubmit') { next.tool = null; next.toolInput = null; }
+  // A StopFailure stays visible until the session moves on.
+  if (!('failure' in transition) && transition.state !== 'dead') delete next.failure;
   state.hookState.set(sessionId, next);
   return { name, sessionId, transition: next };
 }
 
 /** Keep the event row small — full tool inputs can be megabytes. */
-function compactPayload(body) {
+export function compactPayload(body) {
   if (!body || typeof body !== 'object') return null;
   const out = {
     cwd: body.cwd ?? null,
@@ -139,5 +199,13 @@ function compactPayload(body) {
   if (body.message) out.message = oneLine(body.message, 200);
   if (body.matcher || body.notification_type) out.matcher = body.matcher || body.notification_type;
   if (body.reason) out.reason = oneLine(body.reason, 120);
+  if (body.tool_name && body.tool_input !== undefined) out.in_hash = signals.inputHash(body.tool_name, body.tool_input);
+  if (signals.isFailureEvent(body.hook_event_name)) {
+    const err = signals.errorTextOf(body);
+    if (err) {
+      out.err_hash = signals.errorHash(err);
+      out.error = oneLine(err, 160);
+    }
+  }
   return out;
 }
