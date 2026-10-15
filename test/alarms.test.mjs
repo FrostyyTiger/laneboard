@@ -658,3 +658,46 @@ test('the hub module never imports builder-only modules', () => {
   assert.deepEqual(hubModuleDefault.modes, ['hub']);
   assert.deepEqual(builderMod.default.modes, ['builder']);
 });
+
+test('hub: ack-alarm works end to end through the real relay (SR20 L1)', async () => {
+  const { createRelay } = await import('../server/hub/relay.mjs');
+  const store = createFleetStore({ builders: [{ id: 'builder-a', url: 'https://a.example.invalid' }] });
+  store.applySnapshot('builder-a', { sessions: [session('s1', { stuck: { rule: 'stalled' } }), session('s2', { state: 'waiting_question' })] }, T0);
+  store.setConn('builder-a', { state: 'up', lastSeen: T0 });
+  const audit = newAudit(null);
+  const { privateKey } = crypto.generateKeyPairSync('ed25519');
+  let fetched = 0;
+  const relay = createRelay({ store, key: privateKey, audit, fetchImpl: async () => { fetched++; throw new Error('no network'); } });
+  const mod = createHubModule();
+  const ctx = createContext({
+    mode: 'hub', config: { alarms: { evalMs: 1000 } }, db: createMemoryKv(), store, relay, audit,
+    broadcast: () => {}, now: () => T0,
+  }, { route: () => {} });
+  await mod.register(ctx);
+  mod.start(ctx);
+  try {
+    await new Promise((r) => setTimeout(r, 20));
+    assert.ok(mod.api.live().length >= 2, 'alarms derived');
+    const user = 'alice@example.invalid';
+    // the relay itself refuses a non-direct caller before the handler runs
+    let r = await relay.relay({ action: 'ack-alarm', target: '*', args: { tile: 'STCK' } }, { kind: 'local', user });
+    assert.equal(r.status, 403);
+    assert.ok(mod.api.live().every((a) => !a.acked));
+
+    r = await relay.relay({ action: 'ack-alarm', target: '*', args: { tile: 'STCK' } }, { kind: 'direct', user });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(r.status, 200);
+    assert.equal(r.result.n, 1);
+    for (const a of mod.api.live()) assert.equal(a.acked, a.kind === 'stuck');
+
+    r = await relay.relay({ action: 'ack-alarm', target: alarmId('needs-input', 'builder-a', 's2'), args: {} }, { kind: 'direct', user });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.ok(mod.api.live().every((a) => a.acked));
+    assert.equal(fetched, 0, 'never relayed to a builder');
+
+    const lines = fs.readFileSync(audit.file, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    assert.ok(lines.some((e) => e.action === 'ack-alarm' && e.result?.phase === 'start' && e.user === user && e.via === 'direct'));
+  } finally {
+    mod.stop();
+  }
+});

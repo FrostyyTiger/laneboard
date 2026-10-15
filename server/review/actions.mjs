@@ -7,19 +7,24 @@
 //      100 comments, an optional note. No free path, no command, no file name
 //      ever comes from the wire;
 //   2. the lane and its session are resolved here (lane.json `session`, else
-//      the lane id), never taken from the request;
+//      the lane's only live session), never taken from the request, and the
+//      session must be one of the lane's own live sessions (SR20 L2);
 //   3. every comment path must be in the lane's own diff file list (laneDiff,
 //      names only), so a comment cannot point the agent at an arbitrary file;
 //   4. the text is built by the shared formatReview (control characters and
 //      bidi marks stripped, caps applied); a ReviewFormatError is a 400;
-//   5. readiness: a session on a permission or trust dialog is refused with 409
-//      (typing would answer the dialog); `working` is allowed, Claude Code
-//      queues typed input. Checked last, right before typing, so the window
-//      between capture and send stays small;
+//   5. readiness (SR20 M1): the session must be a live Claude (kind claude,
+//      not shell/dead/unknown, pane command `claude`), else 409 not_claude; a
+//      session on a permission or trust dialog is refused with 409 (typing
+//      would answer the dialog); the screen must be the ready input box, or
+//      the session `working` (Claude Code queues typed input). Checked last,
+//      on the freshest session state, right before typing; the text and its
+//      Enter then go out in one tmux invocation (SR20 L3);
 //   6. a text within review.inlineMaxChars is typed inline (send-text rules:
 //      control characters removed). A longer one is written to
 //      <lanesDir>/<id>/reviews/<ts>.md (0600, dir 0700, created exclusively,
-//      outside the worktree) and only the fixed reviewPointer line is typed;
+//      outside the worktree, no symlinked component, realpath re-checked after
+//      the create: SR20 L5) and only the fixed reviewPointer line is typed;
 //   7. review.sentAt[lane] is set (server/collector/review.mjs setReviewSent).
 //
 // The dispatcher audits the call (argsHash over the args the text is built
@@ -34,6 +39,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { registerAction, has, ActionRefused, cleanTypedText } from '../fleet/dispatch.mjs';
+import { assertTypable, DIALOG_READINESS as TYPABLE_DIALOGS } from '../fleet/builtin-actions.mjs';
 import { BASE_RE } from '../config/review.mjs';
 import {
   formatReview, fitsInline, reviewPointer, ReviewFormatError,
@@ -44,7 +50,7 @@ export const ACTION = 'send-review';
 /** States in which typing would answer a prompt instead of reaching Claude. */
 export const PROMPT_STATES = Object.freeze(['waiting_permission', 'waiting_question']);
 /** promptReadiness() values that mean a dialog is on screen. */
-export const DIALOG_READINESS = Object.freeze(['trust_dialog', 'dialog']);
+export const DIALOG_READINESS = TYPABLE_DIALOGS;
 /** send-text's own cap (server/actions.mjs sendText). */
 const SEND_TEXT_MAX = 8000;
 const SHA_RE = /^[0-9a-f]{7,64}$/;
@@ -102,8 +108,26 @@ export async function resolveLane(id, d) {
   }
   if (!rec && !live) throw new ActionRefused(404, 'unknown_lane', 'no such lane');
   if (rec?.retiredAt) throw new ActionRefused(409, 'retired', 'the lane is retired');
-  const session = typeof rec?.session === 'string' && rec.session ? rec.session : id;
-  return { rec, live, session, branch: rec?.branch ?? live?.branch ?? null };
+  return { rec, live, session: laneSession(id, rec, live), branch: rec?.branch ?? live?.branch ?? null };
+}
+
+/**
+ * The lane's session (SR20 L2): lane.json's `session` when it is one of the
+ * lane's own live sessions (the collector's `sessions`: sessions whose
+ * directory is in the lane); without one, the lane's only live session, or
+ * the one named like the lane among them. A name alone never binds: a session
+ * of that name in another directory is refused.
+ */
+export function laneSession(id, rec, live) {
+  const own = Array.isArray(live?.sessions) ? live.sessions.filter((n) => typeof n === 'string' && n) : [];
+  if (typeof rec?.session === 'string' && rec.session) {
+    if (own.includes(rec.session)) return rec.session;
+    throw new ActionRefused(409, 'session_not_in_lane', "the lane's session is not running in the lane");
+  }
+  if (own.length === 1) return own[0];
+  if (own.includes(id)) return id;
+  if (!own.length) throw new ActionRefused(404, 'unknown_session', 'the lane has no live session');
+  throw new ActionRefused(409, 'ambiguous_session', 'the lane has several sessions and none is named in lane.json');
 }
 
 /**
@@ -135,20 +159,20 @@ export async function diffPaths(laneId, base, d, config) {
   return paths;
 }
 
-/** Refuse (409) when the session is on a prompt; `working` passes. Fail safe: unknown means refuse. */
+/**
+ * Refuse (409) unless typing reaches a live Claude now (SR20 M1): not_claude
+ * for a shell/dead/unknown session or a pane not running claude, prompting for
+ * a prompt state, awaitingApproval, a dialog, or a screen that is neither the
+ * ready box nor `working`. Fail safe: unknown means refuse. The session is
+ * re-read from state first, so the hook state is the freshest one (SR20 L3).
+ * Returns the session it checked.
+ */
 export async function checkReadiness(session, d) {
-  const onPrompt = () => new ActionRefused(409, 'prompting', 'session is on a prompt; answer it first', { ok: false, skipped: 'prompting' });
-  if (!session?.paneId) throw new ActionRefused(409, 'no_pane', 'the session has no pane');
-  if (PROMPT_STATES.includes(session.state) || session.awaitingApproval) throw onPrompt();
-  if (typeof d.state?.promptReadiness !== 'function' || typeof d.capturePane !== 'function') throw onPrompt();
-  let lines;
-  try {
-    lines = await d.capturePane(session.paneId, { ansi: true });
-  } catch {
-    throw onPrompt();
-  }
-  const r = d.state.promptReadiness(Array.isArray(lines) ? lines : []);
-  if (DIALOG_READINESS.includes(r)) throw onPrompt();
+  const fresh = session?.name && typeof d.state?.get === 'function' ? d.state.get(session.name) : session;
+  if (!fresh) throw new ActionRefused(404, 'unknown_session', 'the lane has no live session');
+  if (typeof d.capturePane !== 'function') throw new ActionRefused(409, 'prompting', 'session is on a prompt; answer it first', { ok: false, skipped: 'prompting' });
+  await assertTypable(fresh, { state: d.state, capturePane: d.capturePane });
+  return fresh;
 }
 
 function inside(child, root) {
@@ -156,38 +180,92 @@ function inside(child, root) {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
 }
 
+const sameNode = (a, b) => a && b && a.dev === b.dev && a.ino === b.ino;
+
+/** mkdir one component (0700) and require a real directory, not a symlink, there. */
+async function ownDir(p) {
+  try {
+    await fsp.mkdir(p, { mode: 0o700 });
+  } catch (err) {
+    if (err?.code !== 'EEXIST') throw err;
+  }
+  const st = await fsp.lstat(p);
+  if (!st.isDirectory() || st.isSymbolicLink()) throw new ActionRefused(500, 'review_dir', 'the review directory is not inside lanesDir');
+  return st;
+}
+
 /**
  * Write `text` to <lanesDir>/<id>/reviews/<ts>.md: dir 0700, file 0600,
  * created exclusively (never through an existing file or symlink), and the
  * real directory must lie inside realpath(lanesDir). Returns the absolute path.
+ *
+ * SR20 L5: no component below realpath(lanesDir) may be a symlink; the
+ * directory is opened with O_DIRECTORY|O_NOFOLLOW and the file is created
+ * relative to that descriptor (/proc/self/fd/<fd>/<name>, Linux's openat),
+ * so swapping a component for a symlink after the check cannot move it. Before
+ * any byte is written, the path is re-verified (realpath, and the directory
+ * and file at the path are the very ones opened); a mismatch removes the new,
+ * still empty file and refuses.
  */
 export async function writeReviewFile(lanesDir, id, text, ts) {
   if (typeof lanesDir !== 'string' || !path.isAbsolute(lanesDir)) throw new ActionRefused(500, 'internal', 'lanesDir is not configured');
-  const dir = path.join(lanesDir, id, 'reviews');
-  await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
+  const bad = () => new ActionRefused(500, 'review_dir', 'the review directory is not inside lanesDir');
+  await fsp.mkdir(lanesDir, { recursive: true, mode: 0o700 });
   const realRoot = await fsp.realpath(lanesDir);
-  const realDir = await fsp.realpath(dir);
-  if (!inside(realDir, realRoot) || realDir !== path.join(realRoot, id, 'reviews')) {
-    throw new ActionRefused(500, 'review_dir', 'the review directory is not inside lanesDir');
+  const realDir = path.join(realRoot, id, 'reviews');
+  if (!inside(realDir, realRoot)) throw bad();
+  await ownDir(path.join(realRoot, id));
+  await ownDir(realDir);
+  const C = fs.constants;
+  let dh;
+  try {
+    dh = await fsp.open(realDir, C.O_RDONLY | (C.O_DIRECTORY ?? 0) | (C.O_NOFOLLOW ?? 0));
+  } catch (err) {
+    if (err?.code === 'ELOOP' || err?.code === 'ENOTDIR') throw bad();
+    throw err;
   }
-  const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0);
-  for (let i = 0; i < 20; i++) {
-    const file = path.join(realDir, `${ts}${i ? `-${i}` : ''}.md`);
-    let fh;
+  try {
+    const dirSt = await dh.stat();
+    if (!dirSt.isDirectory()) throw bad();
+    const viaFd = `/proc/self/fd/${dh.fd}`;
+    let base = realDir;
     try {
-      fh = await fsp.open(file, flags, 0o600);
-    } catch (err) {
-      if (err?.code === 'EEXIST') continue;
-      throw err;
+      if (sameNode(await fsp.stat(viaFd), dirSt)) base = viaFd;
+    } catch { /* no /proc: path plus the re-check below */ }
+    const flags = C.O_WRONLY | C.O_CREAT | C.O_EXCL | (C.O_NOFOLLOW ?? 0);
+    for (let i = 0; i < 20; i++) {
+      const name = `${ts}${i ? `-${i}` : ''}.md`;
+      const file = path.join(realDir, name);
+      let fh;
+      try {
+        fh = await fsp.open(path.join(base, name), flags, 0o600);
+      } catch (err) {
+        if (err?.code === 'EEXIST') continue;
+        throw err;
+      }
+      try {
+        const fileSt = await fh.stat();
+        let ok = false;
+        try {
+          ok = (await fsp.realpath(file)) === file
+            && sameNode(await fsp.lstat(realDir), dirSt)
+            && sameNode(await fsp.lstat(file), fileSt)
+            && (await fsp.realpath(lanesDir)) === realRoot;
+        } catch { ok = false; }
+        if (!ok) {
+          await fsp.unlink(path.join(base, name)).catch(() => {});
+          throw bad();
+        }
+        await fh.writeFile(text, 'utf8');
+      } finally {
+        await fh.close();
+      }
+      return file;
     }
-    try {
-      await fh.writeFile(text, 'utf8');
-    } finally {
-      await fh.close();
-    }
-    return file;
+    throw new ActionRefused(409, 'review_file', 'could not pick a review file name');
+  } finally {
+    await dh.close();
   }
-  throw new ActionRefused(409, 'review_file', 'could not pick a review file name');
 }
 
 /**

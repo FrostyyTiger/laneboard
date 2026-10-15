@@ -339,6 +339,21 @@ export function createModule() {
     return null;
   }
 
+  /**
+   * The relay calls hub-local handlers as run(req, ctx) (server/hub/relay.mjs runLocal), with ctx.user the
+   * login its actingUser() already checked to be a `direct`, non-read-only user (SR20 L1). Only the relay's
+   * own fields of req are kept, so nothing else in it can name the actor. A bare string second argument is
+   * the older direct-call form.
+   */
+  function relayAck(req, ctx) {
+    if (isObj(ctx)) {
+      const r = isObj(req) ? req : {};
+      const user = typeof ctx.user === 'string' ? ctx.user : null;
+      return api.ack({ builder: r.builder ?? null, action: r.action, target: r.target, args: r.args, auth: { kind: 'direct', user } }, user);
+    }
+    return api.ack(req, ctx);
+  }
+
   const api = {
     live: () => (alarmStore ? alarmStore.live() : []),
     get: (id) => (alarmStore ? alarmStore.get(id) : null),
@@ -360,7 +375,7 @@ export function createModule() {
       if (typeof ctx.provide === 'function') ctx.provide('alarms', api);
       ctx.route('GET', PATH, (req, res) => ctx.json(res, { alarms: api.live().slice(0, WIRE_MAX) }));
       const registerHubAction = await hubActionRegistrar(ctx);
-      if (registerHubAction) registerHubAction(ACTION, { run: (req, user) => api.ack(req, user) });
+      if (registerHubAction) registerHubAction(ACTION, { run: (req, ctx) => relayAck(req, ctx) });
       else ctx.log?.warn?.('alarms: no relay registerHubAction; ack-alarm is not served on this hub');
       const services = servicesOf(ctx);
       if (services) {

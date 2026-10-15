@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ActionError, requireSession, sendKeys, sendText, spawn, kill } from '../server/actions.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { ActionError, requireSession, sendKeys, sendText, spawn, kill, literalKeysArgs } from '../server/actions.mjs';
 import { isOwnWebSession } from '../server/collector/tmux.mjs';
 
 async function rejectsWith(fn, message, status) {
@@ -91,4 +95,42 @@ test('ActionError carries an HTTP status', () => {
   assert.equal(new ActionError('x').status, 400);
   assert.equal(new ActionError('x', 409).status, 409);
   assert.ok(new ActionError('x') instanceof Error);
+});
+
+test('literalKeysArgs: text and Enter in one tmux invocation (SR20 L3, SR18 L2)', () => {
+  assert.deepEqual(literalKeysArgs('%3', 'hello', true), ['send-keys', '-t', '%3', '-l', '--', 'hello', ';', 'send-keys', '-t', '%3', 'Enter']);
+  assert.deepEqual(literalKeysArgs('%3', 'hello', false), ['send-keys', '-t', '%3', '-l', '--', 'hello']);
+  // a trailing ";" never ends a tmux command: it goes out as hex keys
+  assert.deepEqual(literalKeysArgs('%3', 'a;;', true), ['send-keys', '-t', '%3', '-l', '--', 'a', ';', 'send-keys', '-t', '%3', '-H', '3b', '3b', ';', 'send-keys', '-t', '%3', 'Enter']);
+  assert.deepEqual(literalKeysArgs('%3', ';', false), ['send-keys', '-t', '%3', '-H', '3b']);
+  for (const t of ['x;', 'x\\;', '-t%9 x', 'kill-server ;', 'a ; b']) {
+    const argv = literalKeysArgs('%1', t, true);
+    // the only arguments that end in ";" are the separators themselves
+    assert.ok(argv.every((a) => a === ';' || !a.endsWith(';')), t);
+  }
+});
+
+test('literalKeysArgs types exactly the text, then Enter, on a private tmux server', (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-actions-'));
+  const env = { ...process.env, TMUX_TMPDIR: tmp, LC_ALL: 'C.UTF-8' };
+  delete env.TMUX;
+  delete env.TMUX_PANE;
+  const tmux = (...a) => execFileSync('tmux', a, { env, encoding: 'utf8' });
+  try { tmux('-V'); } catch { t.skip('tmux not installed'); fs.rmSync(tmp, { recursive: true, force: true }); return; }
+  const out = path.join(tmp, 'out');
+  try {
+    tmux('new-session', '-d', '-s', 'lb-l3', '-x', '80', '-y', '10', `stty -echo; cat > ${out}`);
+    const pane = tmux('display-message', '-p', '-t', '=lb-l3:', '#{pane_id}').trim();
+    const texts = ['plain', 'ends;', 'two;;', ';', '-t%0 x', 'b\\;', 'a ; kill-server ;', 'Enter'];
+    for (const x of texts) tmux(...literalKeysArgs(pane, x, true));
+    let got = '';
+    for (let i = 0; i < 40 && got.split('\n').length <= texts.length; i++) {
+      execFileSync('sleep', ['0.05']);
+      got = fs.existsSync(out) ? fs.readFileSync(out, 'utf8') : '';
+    }
+    assert.deepEqual(got.split('\n').slice(0, texts.length), texts);
+  } finally {
+    try { tmux('kill-server'); } catch { /* gone */ }
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });

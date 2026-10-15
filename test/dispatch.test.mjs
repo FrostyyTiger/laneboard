@@ -31,9 +31,9 @@ function setup({ hubControl = false, sessions = null, readiness = 'ready', rules
   _resetBuiltins();
   const calls = [];
   const sess = new Map(Object.entries(sessions ?? {
-    'agent-1': { name: 'agent-1', paneId: '%1', state: 'idle' },
-    'agent-2': { name: 'agent-2', paneId: '%2', state: 'working' },
-    '_laneboard-x': { name: '_laneboard-x', paneId: '%3', state: 'idle' },
+    'agent-1': { name: 'agent-1', paneId: '%1', state: 'idle', kind: 'claude', paneCmd: 'claude' },
+    'agent-2': { name: 'agent-2', paneId: '%2', state: 'working', kind: 'claude', paneCmd: 'claude' },
+    '_laneboard-x': { name: '_laneboard-x', paneId: '%3', state: 'idle', kind: 'claude', paneCmd: 'claude' },
   }));
   const stub = (name) => async (...a) => { calls.push([name, ...a]); return { ok: true, via: name }; };
   const config = {
@@ -291,7 +291,7 @@ test('remote-only predicate that throws fails closed', async () => {
 });
 
 test('guardPrompt: 409 prompting when waiting_permission, awaitingApproval, or pane not ready', async () => {
-  let s = setup({ sessions: { 'agent-1': { name: 'agent-1', paneId: '%1', state: 'waiting_permission' } } });
+  let s = setup({ sessions: { 'agent-1': { name: 'agent-1', paneId: '%1', state: 'waiting_permission', kind: 'claude', paneCmd: 'claude' } } });
   let r = await s.go(env('send-text', 'agent-1', { text: 'go', guardPrompt: true }));
   assert.equal(r.status, 409);
   assert.equal(r.code, 'prompting');
@@ -301,7 +301,7 @@ test('guardPrompt: 409 prompting when waiting_permission, awaitingApproval, or p
   r = await s.go(env('send-text', 'agent-1', { text: 'go' }));
   assert.equal(r.ok, true);
 
-  s = setup({ sessions: { 'agent-1': { name: 'agent-1', paneId: '%1', state: 'idle', awaitingApproval: { id: 'a' } } } });
+  s = setup({ sessions: { 'agent-1': { name: 'agent-1', paneId: '%1', state: 'idle', kind: 'claude', paneCmd: 'claude', awaitingApproval: { id: 'a' } } } });
   r = await s.go(env('send-text', 'agent-1', { text: 'go', guardPrompt: true }));
   assert.equal(r.code, 'prompting');
 
@@ -312,6 +312,43 @@ test('guardPrompt: 409 prompting when waiting_permission, awaitingApproval, or p
   s = setup({ readiness: 'ready' });
   r = await s.go(env('send-text', 'agent-1', { text: 'go', guardPrompt: true }));
   assert.equal(r.ok, true);
+});
+
+test('guardPrompt refuses shell-with-❯, dead-with-old-box and paused panes (SR18 M1, SR20 M1)', async () => {
+  const claude = { name: 'agent-1', paneId: '%1', kind: 'claude', paneCmd: 'claude' };
+  const cases = [
+    // a starship/pure/zsh prompt draws `❯`: the screen reads "ready", but it is a shell
+    [{ ...claude, state: 'shell', kind: 'shell', paneCmd: 'zsh' }, 'not_claude'],
+    [{ ...claude, state: 'idle', paneCmd: 'zsh' }, 'not_claude'],
+    [{ ...claude, state: 'idle', kind: 'shell', paneCmd: 'bash' }, 'not_claude'],
+    // Claude exited, its last input box is still on screen
+    [{ ...claude, state: 'dead' }, 'not_claude'],
+    [{ ...claude, state: 'unknown' }, 'not_claude'],
+    [{ ...claude, state: 'idle', paneCmd: undefined }, 'not_claude'],
+    [{ ...claude, state: 'idle', paused: { scope: 'session', kind: 'manual', by: 'x', at: 1 } }, 'paused'],
+    [{ ...claude, state: 'working', paused: { scope: 'all', kind: 'manual', by: 'x', at: 1 } }, 'paused'],
+  ];
+  for (const [sess, code] of cases) {
+    const s = setup({ sessions: { 'agent-1': sess }, readiness: 'ready' });
+    s.deps.capturePane = async () => ['user@box ~/acme', '❯ '];
+    const r = await s.go(env('send-text', 'agent-1', { text: 'rm -rf build', guardPrompt: true }));
+    assert.equal(r.status, 409, JSON.stringify(sess));
+    assert.equal(r.code, code, JSON.stringify(sess));
+    assert.deepEqual(r.result, { ok: false, skipped: code });
+    assert.equal(s.calls.length, 0, 'nothing typed');
+  }
+  // a live Claude: an idle one must show the ready box, a working one may queue
+  let s = setup({ sessions: { 'agent-1': { ...claude, state: 'idle' } }, readiness: 'not_ready' });
+  assert.equal((await s.go(env('send-text', 'agent-1', { text: 'go', guardPrompt: true }))).code, 'prompting');
+  s = setup({ sessions: { 'agent-1': { ...claude, state: 'working' } }, readiness: 'not_ready' });
+  assert.equal((await s.go(env('send-text', 'agent-1', { text: 'go', guardPrompt: true }))).ok, true);
+  s = setup({ sessions: { 'agent-1': { ...claude, state: 'working' } }, readiness: 'dialog' });
+  assert.equal((await s.go(env('send-text', 'agent-1', { text: 'go', guardPrompt: true }))).code, 'prompting');
+  const { isPrompting, isLiveClaude } = await import('../server/fleet/builtin-actions.mjs');
+  assert.equal(await isPrompting({ ...claude, state: 'dead' }, s.deps), true);
+  assert.equal(await isPrompting(null, s.deps), true);
+  assert.equal(isLiveClaude({ ...claude, state: 'idle' }), true);
+  assert.equal(isLiveClaude({ ...claude, state: 'idle', kind: 'shell' }), false);
 });
 
 test('broadcast is refused on a builder', async () => {

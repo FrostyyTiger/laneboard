@@ -1,4 +1,5 @@
 // tmux inventory: sessions + panes. Read-only; never touches a session (hard rule 1).
+import crypto from 'node:crypto';
 import { run, isBlankLine } from '../util.mjs';
 
 const TMUX_BIN = 'tmux';
@@ -22,22 +23,55 @@ export function runTmux(args, opts = {}) {
   return run(TMUX_BIN, args, { ...opts, env: TMUX_ENV });
 }
 
-// Session names contain spaces, parens and colons, so fields are joined by a
-// tab, which a session name cannot contain. TMUX_ENV above is what makes tmux
-// emit that tab at all.
-const SEP = '\t';
+// Field and record framing (SR20 L4). Session names, pane paths and window
+// names are free text, and tmux prints a newline or tab inside them unescaped,
+// so a window renamed to "x\nfake\t-1\t..." used to forge a whole extra row
+// (a fake mainPane for another session). Every listing is framed with a
+// random tag instead, fresh per invocation: a process in a session cannot
+// know it, so it cannot end a field or a record early. Literal printable text
+// in a -F format comes out verbatim whatever the locale.
+const FRAME_RE = /^[0-9a-f]{16}$/;
 
-const S_FMT = [
+/**
+ * framedFormat(fields) -> {fmt, parse(stdout)}: `fmt` is the -F format for
+ * `fields` (tmux format strings), and parse() turns that command's stdout into
+ * string[] rows of exactly fields.length values. A record that does not split
+ * into exactly that many fields is dropped, never shifted; field values keep
+ * any newlines or tabs they contain.
+ */
+export function framedFormat(fields, tag = crypto.randomBytes(8).toString('hex')) {
+  if (!Array.isArray(fields) || !fields.length) throw new TypeError('framedFormat: fields required');
+  if (!FRAME_RE.test(tag)) throw new TypeError('framedFormat: bad tag');
+  const sep = `<lb:${tag}:f>`;
+  const eor = `<lb:${tag}:r>`;
+  const fmt = fields.join(sep) + eor;
+  const parse = (stdout) => {
+    const rows = [];
+    const pieces = String(stdout ?? '').split(eor);
+    pieces.pop(); // whatever follows the last terminator (its newline) is not a record
+    for (let i = 0; i < pieces.length; i++) {
+      // tmux ends every record with a newline; the next record starts after it
+      const rec = i > 0 && pieces[i].startsWith('\n') ? pieces[i].slice(1) : pieces[i];
+      const vals = rec.split(sep);
+      if (vals.length === fields.length) rows.push(vals);
+    }
+    return rows;
+  };
+  return { fmt, parse };
+}
+
+const S_FIELDS = [
   '#{session_name}', '#{session_created}', '#{session_activity}',
   '#{session_attached}', '#{session_windows}', '#{session_group}',
-].join(SEP);
-const P_FMT = [
+];
+const P_FIELDS = [
   '#{session_name}', '#{window_index}', '#{pane_index}', '#{pane_id}',
   '#{pane_current_command}', '#{pane_current_path}', '#{pane_pid}',
-  '#{pane_width}', '#{pane_height}', '#{pane_active}',
-  // Last: a window name is free text, so whatever it holds stays in this field.
-  '#{window_name}',
-].join(SEP);
+  '#{pane_width}', '#{pane_height}', '#{pane_active}', '#{window_name}',
+];
+
+const PANE_ID_RE = /^%\d+$/;
+const INDEX_RE = /^\d{1,6}$/;
 
 /**
  * A run-script window (fleet R8, server/review/scripts.mjs): `run-<script>`.
@@ -51,27 +85,37 @@ export function isRunWindow(name) {
 }
 
 export async function listSessions() {
-  const r = await runTmux(['list-sessions', '-F', S_FMT]);
+  const { fmt, parse } = framedFormat(S_FIELDS);
+  const r = await runTmux(['list-sessions', '-F', fmt]);
   if (!r.ok) return []; // "no server running on ..." is normal
-  return r.stdout.split('\n').filter(Boolean).map((line) => {
-    const [name, created, activity, attached, windows, group] = line.split(SEP);
-    return {
-      name,
-      createdAt: Number(created) * 1000 || null,
-      activityAt: Number(activity) * 1000 || null,
-      attached: Number(attached) > 0,
-      windows: Number(windows) || 0,
-      group: group || null,
-    };
-  });
+  return parse(r.stdout).filter(([name]) => name).map(([name, created, activity, attached, windows, group]) => ({
+    name,
+    createdAt: Number(created) * 1000 || null,
+    activityAt: Number(activity) * 1000 || null,
+    attached: Number(attached) > 0,
+    windows: Number(windows) || 0,
+    group: group || null,
+  }));
 }
 
+/**
+ * Every pane of every session. Rows whose pane id is not `%N` or whose window
+ * or pane index is not a plain non-negative integer are dropped (SR20 L4).
+ */
 export async function listPanes() {
-  const r = await runTmux(['list-panes', '-a', '-F', P_FMT]);
+  const { fmt, parse } = framedFormat(P_FIELDS);
+  const r = await runTmux(['list-panes', '-a', '-F', fmt]);
   if (!r.ok) return [];
-  return r.stdout.split('\n').filter(Boolean).map((line) => {
-    const [session, windowIndex, paneIndex, paneId, cmd, cwdPath, pid, w, h, active, ...nameParts] = line.split(SEP);
-    return {
+  return parsePaneRows(parse(r.stdout));
+}
+
+/** Rows of P_FIELDS values -> pane objects; malformed rows dropped. Exported for tests. */
+export function parsePaneRows(rows) {
+  const out = [];
+  for (const row of rows) {
+    const [session, windowIndex, paneIndex, paneId, cmd, cwdPath, pid, w, h, active, windowName] = row;
+    if (!session || !PANE_ID_RE.test(paneId) || !INDEX_RE.test(windowIndex) || !INDEX_RE.test(paneIndex)) continue;
+    out.push({
       session,
       windowIndex: Number(windowIndex),
       paneIndex: Number(paneIndex),
@@ -82,10 +126,11 @@ export async function listPanes() {
       width: Number(w),
       height: Number(h),
       active: active === '1',
-      windowName: nameParts.join(SEP),
+      windowName,
       target: paneId, // pane ids ("%17") are unambiguous targets, unlike names with spaces
-    };
-  });
+    });
+  }
+  return out;
 }
 
 /**

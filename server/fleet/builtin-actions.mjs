@@ -93,19 +93,64 @@ export async function resolveSpawnDir(dir, dirRoots) {
   throw new ActionRefused(400, 'bad_args', 'dir is outside the configured dirRoots');
 }
 
-/** True when a send-text with guardPrompt must not type into this session now. */
-export async function isPrompting(session, deps) {
-  if (!session) return true;
-  if (PROMPTING_STATES.includes(session.state) || session.awaitingApproval) return true;
-  if (typeof deps.state?.promptReadiness !== 'function') return true; // cannot tell: fail safe
+/** States in which a session's main pane is not a live Claude (SR20 M1). */
+export const NOT_CLAUDE_STATES = Object.freeze(['shell', 'dead', 'unknown']);
+/** promptReadiness() values that mean a dialog is on screen. */
+export const DIALOG_READINESS = Object.freeze(['trust_dialog', 'dialog']);
+
+/**
+ * True when `session` is a live Claude session (SR20 M1): kind `claude`, a
+ * state that is not shell/dead/unknown, and the main pane's foreground command
+ * is `claude`. Anything else, including a missing paneCmd, is false: typed
+ * text there would reach a shell, and a shell runs each typed line.
+ */
+export function isLiveClaude(session) {
+  if (!session || typeof session !== 'object') return false;
+  if (session.kind !== 'claude') return false;
+  if (typeof session.state !== 'string' || !session.state || NOT_CLAUDE_STATES.includes(session.state)) return false;
+  return session.paneCmd === 'claude';
+}
+
+/**
+ * The guard before typing into a session (send-text with guardPrompt, send-review). Throws ActionRefused 409:
+ *   - `no_pane` when there is no session or pane;
+ *   - `not_claude` unless isLiveClaude(session);
+ *   - `prompting` on a permission/question state, awaitingApproval, a dialog on screen, a capture that fails,
+ *     or a screen that is neither the ready input box nor a `working` session (fail safe: unknown refuses).
+ *   - `paused` when `opts.refusePaused` and the session (or the builder) is paused (SR18 M1).
+ * `deps` = {state: {promptReadiness}, capturePane?}. Resolves when typing is allowed.
+ */
+export async function assertTypable(session, deps = {}, opts = {}) {
+  const prompting = () => new ActionRefused(409, 'prompting', 'the session is prompting', { ok: false, skipped: 'prompting' });
+  if (!session?.paneId) throw new ActionRefused(409, 'no_pane', 'the session has no pane', { ok: false, skipped: 'no_pane' });
+  if (!isLiveClaude(session)) {
+    throw new ActionRefused(409, 'not_claude', 'the session is not a live Claude session', { ok: false, skipped: 'not_claude' });
+  }
+  if (opts.refusePaused && session.paused) throw new ActionRefused(409, 'paused', 'the session is paused', { ok: false, skipped: 'paused' });
+  if (PROMPTING_STATES.includes(session.state) || session.awaitingApproval) throw prompting();
+  if (typeof deps.state?.promptReadiness !== 'function') throw prompting(); // cannot tell: fail safe
   const capture = deps.capturePane ?? tmuxCapturePane;
   let lines;
   try {
     lines = await capture(session.paneId, { ansi: true });
   } catch {
-    return true;
+    throw prompting();
   }
-  return deps.state.promptReadiness(Array.isArray(lines) ? lines : []) !== 'ready';
+  const r = deps.state.promptReadiness(Array.isArray(lines) ? lines : []);
+  if (DIALOG_READINESS.includes(r)) throw prompting();
+  // Claude Code queues input typed while it works; any other screen is refused.
+  if (r !== 'ready' && session.state !== 'working') throw prompting();
+}
+
+/** True when a send-text with guardPrompt must not type into this session now. */
+export async function isPrompting(session, deps) {
+  try {
+    await assertTypable(session, deps ?? {}, { refusePaused: true });
+    return false;
+  } catch (err) {
+    if (err instanceof ActionRefused) return true;
+    throw err;
+  }
 }
 
 function sessionNames(state) {
@@ -138,9 +183,8 @@ export function registerBuiltins(deps = {}) {
     },
     async run({ target, args, user, deps: rd }) {
       const d = D(rd);
-      if (args.guardPrompt === true && await isPrompting(d.state.get(target), d)) {
-        throw new ActionRefused(409, 'prompting', 'the session is prompting', { ok: false, skipped: 'prompting' });
-      }
+      // SR20 M1 / SR18 M1: only a live, unpaused Claude session on its input box (or working) is typed into
+      if (args.guardPrompt === true) await assertTypable(d.state.get(target), d, { refusePaused: true });
       return d.actions.sendText(target, args.text, args.enter, user);
     },
   });
