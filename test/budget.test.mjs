@@ -27,6 +27,7 @@ fs.mkdirSync(path.join(tmp, 'code', 'example-repo', '.git'), { recursive: true }
 const budget = await import('../server/control/budget.mjs');
 const pause = await import('../server/control/pause.mjs');
 const dispatchMod = await import('../server/fleet/dispatch.mjs');
+const handlers = await import('../server/control/handlers.mjs');
 const { windowStart } = await import('../server/util.mjs');
 
 const SID1 = '0b5e9d3a-1c2f-4e7a-9b8d-123456789abc';
@@ -90,7 +91,7 @@ test('limitsFor: override > lane record budgetUsd > config.perLaneUsd; retired l
   const laneRecords = [rec('a', { budgetUsd: 10 }), rec('b'), rec('c', { budgetUsd: 7 }), rec('gone', { budgetUsd: 3, retiredAt: 9 })];
   const overrides = { lanes: { c: 2, orphan: 4, 'Bad Id': 9, d: -1 }, builder: 80 };
   const l = budget.limitsFor({ config, overrides, laneRecords });
-  assert.equal(l.lanes.get('a'), 10, 'record beats config');
+  assert.equal(l.lanes.get('a'), 5, 'a local record cannot raise the config default (SR17 M2)');
   assert.equal(l.lanes.get('b'), 5, 'config default');
   assert.equal(l.lanes.get('c'), 2, 'override beats record');
   assert.equal(l.lanes.get('orphan'), 4, 'an override for a lane with no record still counts');
@@ -99,6 +100,10 @@ test('limitsFor: override > lane record budgetUsd > config.perLaneUsd; retired l
   assert.equal(l.lanes.has('d'), false, 'a non-positive override is ignored');
   assert.equal(l.builder, 80, 'builder override beats config');
   assert.equal(budget.limitsFor({ config, overrides: {}, laneRecords }).builder, 50);
+  const remote = budget.limitsFor({ config, overrides: {}, laneRecords: [rec('a', { budgetUsd: 10, budgetSource: 'remote' }), rec('l', { budgetUsd: 3 })] });
+  assert.equal(remote.lanes.get('a'), 10, 'a remote launch may raise it');
+  assert.equal(remote.lanes.get('l'), 3, 'a record may lower it');
+  assert.equal(budget.limitsFor({ config: makeConfig('/x'), overrides: {}, laneRecords: [rec('a', { budgetUsd: 10 })] }).lanes.get('a'), 10, 'no default: the record is the cap');
   const none = budget.limitsFor({ config: makeConfig('/x'), overrides: null, laneRecords: [rec('a')] });
   assert.equal(none.lanes.size, 0);
   assert.equal(none.builder, null);
@@ -214,9 +219,13 @@ test('an operator resume cannot lift a budget pause; the hold is remote-only', a
   // an operator pause written over it does not downgrade it
   pause.pause('a', { kind: 'operator', by: 'builder-a' }, { stateDir: env.dir });
   assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget');
-  assert.equal(budget.isRemoteOnlyHold('a', { stateDir: env.dir }), true);
-  assert.equal(budget.isRemoteOnlyHold('*', { stateDir: env.dir }), false);
-  assert.throws(() => budget.isRemoteOnlyHold('a', {}), /stateDir/);
+  // SR17 L5: C7's own predicate is gone; C6's resumeRemoteOnly is the one
+  assert.equal(budget.isRemoteOnlyHold, undefined);
+  assert.equal(budget.remoteOnlyPredicate, undefined);
+  assert.deepEqual(budget.REMOTE_ONLY_KINDS, handlers.REMOTE_ONLY_KINDS);
+  const cdeps = { config: env.config };
+  assert.equal(handlers.resumeRemoteOnly({ target: 'a', args: {} }, cdeps), true);
+  assert.equal(handlers.resumeRemoteOnly({ target: '*', args: {} }, cdeps), false);
 
   // the predicate as a dispatcher would run it, for a resume-like action
   dispatchMod._reset();
@@ -224,7 +233,7 @@ test('an operator resume cannot lift a budget pause; the hold is remote-only', a
   dispatchMod.registerAction('resume', {
     tier: 'click', target: 'session-or-all', runsAll: true,
     args: { override: { type: 'boolean' }, confirm: { type: 'string' } },
-    remoteOnly: budget.remoteOnlyPredicate(env.config),
+    remoteOnly: handlers.resumeRemoteOnly,
     run: ({ target }) => { ran.push(target); return { ok: true }; },
   });
   const state = { get: (n) => env.sessions.find((s) => s.name === n) ?? null };
@@ -241,9 +250,6 @@ test('an operator resume cannot lift a budget pause; the hold is remote-only', a
   pause.resume('a', {}, { stateDir: env.dir });
   pause.pause('a', { kind: 'operator', by: 'builder-a' }, { stateDir: env.dir });
   assert.equal((await go('local', {})).ok, true);
-  // no state dir: fail closed
-  const broken = budget.remoteOnlyPredicate({});
-  assert.throws(() => broken({ target: 'a', args: {} }, {}), /stateDir/);
   dispatchMod._reset();
 });
 
@@ -332,6 +338,153 @@ test('without config.stateDir the tick refuses instead of using a default direct
   assert.equal(fs.existsSync(process.env.LANEBOARD_STATE_DIR), false, 'the env/default state dir was never written');
 });
 
+// --- SR17 regressions -----------------------------------------------------------------------------------------
+
+test('SR17 M3: a recorded session is charged, paused and ceilinged under its lane whatever its cwd says', async () => {
+  // x's agent did `cd` into y's worktree (s.lane 'y'); z's agent left every lane (s.lane null)
+  const env = setup({
+    budgetPatch: { perLaneUsd: 10 },
+    sessions: [
+      { name: 'x', lane: 'y', sid: SID1, usd: 12, statusline: 12 },
+      { name: 'y', lane: 'y', sid: SID2, usd: 1, statusline: 1 },
+      { name: 'z', lane: null, sid: SID3, usd: 11, statusline: 11 },
+    ],
+    records: [rec('x'), rec('y'), rec('z')],
+  });
+  // a cost row written after the cd carries the cwd lane: the binding still wins
+  env.db.rows = [{ session_name: 'x', ts: NOW - 60_000, usd: 12, tokens: {}, lane: 'y' }];
+  const r = await budget.tick(NOW);
+  const row = (k) => r.evaluation.find((e) => e.key === k);
+  assert.equal(row('x').usd, 12, 'x keeps its spend');
+  assert.equal(row('y').usd, 1, 'y is not charged for x');
+  assert.equal(row('z').usd, 11);
+  assert.equal(pause.kindOf('x', { stateDir: env.dir }), 'budget');
+  assert.equal(pause.kindOf('z', { stateDir: env.dir }), 'budget');
+  assert.equal(pause.kindOf('y', { stateDir: env.dir }), null, 'the wrong lane is not paused');
+  assert.ok(fs.existsSync(pause.ceilingPath(env.dir, SID1)), 'x keeps its ceiling');
+  assert.ok(fs.existsSync(pause.ceilingPath(env.dir, SID3)), 'z keeps its ceiling');
+  assert.equal(fs.readFileSync(pause.ceilingPath(env.dir, SID2), 'utf8').trim(), '10');
+  // the resolver: recorded binding first, cwd only for unrecorded sessions
+  const laneOf = budget.laneOfFor([rec('x'), rec('old', { retiredAt: 1 })]);
+  assert.equal(laneOf({ name: 'x', lane: 'y' }), 'x');
+  assert.equal(laneOf({ name: 'adhoc', lane: 'y' }), 'y');
+  assert.equal(laneOf({ name: 'old', lane: null }), null, 'a retired record binds nothing');
+});
+
+test('SR17 M3: the quota guard pauses a low lane by its record, not by its cwd', async () => {
+  const env = setup({
+    budgetPatch: { quota: { enabled: true, fiveHourPct: 90, resumeBelowPct: 70, autoResume: false } },
+    sessions: [{ name: 'low-1', lane: 'norm', sid: SID1 }, { name: 'norm', lane: 'low-1', sid: SID2 }],
+    records: [rec('low-1', { priority: 'low' }), rec('norm', { priority: 'normal' })],
+  });
+  env.db.sample = { ts: NOW, five_hour_pct: 95 };
+  const r = await budget.tick(NOW);
+  assert.deepEqual(r.quota.paused, ['low-1']);
+  assert.equal(pause.kindOf('norm', { stateDir: env.dir }), null);
+});
+
+test('SR17 L1: a remote override resume of a budget pause is not re-applied by the next tick', async () => {
+  const env = setup({ sessions: [{ name: 'a', lane: 'a', sid: SID1, usd: 20, statusline: 20 }, { name: 'b', lane: 'b', sid: SID2, usd: 20, statusline: 20 }], records: [rec('a', { budgetUsd: 10 }), rec('b', { budgetUsd: 10 })] });
+  await budget.tick(NOW);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget');
+  // C6's runResume with override (remote): removes every kind
+  pause.resume('a', {}, { stateDir: env.dir });
+  const r = await budget.tick(NOW + 30_000);
+  assert.deepEqual(r.paused, []);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), null, 'not re-paused');
+  assert.equal(fs.existsSync(pause.ceilingPath(env.dir, SID1)), false, 'and its lane ceiling is not re-armed');
+  assert.equal(pause.kindOf('b', { stateDir: env.dir }), 'budget', 'other sessions keep theirs');
+  await budget.tick(NOW + 60_000);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), null);
+  // a new set-budget decision on that lane forgets the override: lowering it pauses again
+  const lowered = await budget.setBudget({ target: 'a', usd: 5 }, { now: NOW + 90_000 });
+  assert.deepEqual(lowered.paused, ['a']);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget');
+});
+
+test('SR17 L2: a budget pause keeps the operator pause it upgrades and restores it when lifted', async () => {
+  const env = setup({ sessions: [{ name: 'a', lane: 'a', sid: SID1, usd: 12, statusline: 12 }], records: [rec('a', { budgetUsd: 10 })] });
+  pause.pause('a', { kind: 'operator', by: 'user@example.invalid', reason: 'hold for review' }, { stateDir: env.dir, now: NOW - 5000 });
+  await budget.tick(NOW);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget', 'most restrictive while over');
+  assert.equal(env.db.kv.get(budget.UNDER_KEY).a.reason, 'hold for review');
+  const r = await budget.setBudget({ target: 'a', usd: 50 }, { now: NOW + 1000 });
+  assert.deepEqual(r.lifted, ['a']);
+  const e = pause.list({ stateDir: env.dir }).find((x) => x.scope === 'a');
+  assert.equal(e.kind, 'operator', 'the operator pause is back, not erased');
+  assert.equal(e.by, 'user@example.invalid');
+  assert.equal(e.reason, 'hold for review');
+  assert.equal(e.at, NOW - 5000);
+  assert.deepEqual(env.db.kv.get(budget.UNDER_KEY), {});
+});
+
+test('SR17 L3: set-budget with a window is refused for a lane target', async () => {
+  const env = setup({ sessions: [], records: [rec('a')] });
+  await assert.rejects(budget.setBudget({ target: 'a', usd: 5, window: '12h' }), /window applies to every cap/);
+  assert.equal(env.db.kv.has(budget.OVERRIDES_KEY), false);
+  const ok = await budget.setBudget({ target: '*', usd: 5, window: '12h' }, { now: NOW });
+  assert.equal(ok.window, '12h');
+});
+
+test('SR17 L4: two sessions claiming one Claude session id get the smaller ceiling', () => {
+  const limits = { lanes: new Map([['a', 10]]), builder: null };
+  const evaluation = budget.evaluate({ spendByLane: new Map([['a', 2]]), limits });
+  const sessions = [
+    { name: 'a', lane: 'a', claude: { sessionId: SID1 }, statuslineCostUsd: 2 },
+    { name: 'free', lane: null, claude: { sessionId: SID1 }, statuslineCostUsd: 1 },
+  ];
+  assert.deepEqual([...budget.ceilings({ sessions, evaluation, limits })], [[SID1, 10]], 'the uncapped twin does not drop it');
+  const both = [...sessions, { name: 'a2', lane: 'a', claude: { sessionId: SID1 }, statuslineCostUsd: 0 }];
+  assert.deepEqual([...budget.ceilings({ sessions: both, evaluation, limits })], [[SID1, 8]], 'the smaller wins, whatever the order');
+  assert.deepEqual([...budget.ceilings({ sessions: [...both].reverse(), evaluation, limits })], [[SID1, 8]]);
+});
+
+test('SR17 L6: automatic budget and quota pauses and lifts are appended to the fleet audit', async () => {
+  const a = auditStub();
+  const env = setup({
+    budgetPatch: { quota: { enabled: true, fiveHourPct: 90, resumeBelowPct: 70, autoResume: true } },
+    sessions: [{ name: 'a', lane: 'a', sid: SID1, usd: 12, statusline: 12 }, { name: 'low-1', lane: 'low-1', sid: SID2 }],
+    records: [rec('a', { budgetUsd: 10 }), rec('low-1', { priority: 'low' })],
+  });
+  budget.init({ config: env.config, db: env.db, state: { all: () => env.sessions }, laneRecords: () => env.records, audit: () => a });
+  env.db.sample = { ts: NOW, five_hour_pct: 95 };
+  await budget.tick(NOW);
+  env.db.sample = { ts: NOW + 1000, five_hour_pct: 10 };
+  await budget.setBudget({ target: 'a', usd: 50 }, { now: NOW + 1000 });
+  const seen = a.entries.map((e) => [e.action, e.target, e.user, e.result.by]);
+  assert.deepEqual(seen, [
+    ['budget-pause', 'a', 'budget', 'budget'],
+    ['quota-pause', 'low-1', 'budget', 'budget'],
+    ['budget-lift', 'a', 'budget', 'budget'],
+    ['quota-resume', 'low-1', 'budget', 'budget'],
+  ]);
+  // a broken audit never breaks the tick
+  budget.init({ config: env.config, db: env.db, state: { all: () => env.sessions }, laneRecords: () => env.records, audit: { append() { throw new Error('locked'); } }, log: { warn() {} } });
+  await budget.setBudget({ target: 'a', usd: 5 }, { now: NOW + 2000 });
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget');
+});
+
+test('SR17 M2 + L7: the v1 launch schema refuses budgetUsd <= 0 and hands the caller kind to the launcher', async () => {
+  const builtins = await import('../server/fleet/builtin-actions.mjs');
+  dispatchMod._reset();
+  builtins._resetBuiltins();
+  const calls = [];
+  const config = { mode: 'builder', fleet: { id: 'builder-a', hubControl: false, allowedPermissionModes: ['default', 'acceptEdits', 'plan', 'auto'] }, repoNames: ['acme'] };
+  const deps = { config, launcher: { launch: async (req, who, opts) => { calls.push(opts); return { ok: true, job: 'j', lane: req.lane }; } } };
+  builtins.registerBuiltins(deps);
+  const args = (budgetUsd) => ({ repo: 'acme', plan: 'docs/plans/l1.md', budgetUsd });
+  for (const usd of [0, -0, -1]) {
+    const r = await send('launch', 'l1', args(usd), { kind: 'local' }, deps);
+    assert.equal(r.status, 400, `budgetUsd ${usd}`);
+  }
+  assert.deepEqual(calls, []);
+  assert.equal((await send('launch', 'l1', args(5), { kind: 'local' }, deps)).ok, true);
+  assert.equal((await send('launch', 'l1', args(5), { kind: 'direct', user: 'user@example.invalid' }, deps)).ok, true);
+  assert.deepEqual(calls, [{ callerKind: 'local' }, { callerKind: 'direct' }]);
+  dispatchMod._reset();
+  builtins._resetBuiltins();
+});
+
 // --- quota guard ---------------------------------------------------------------------------------------------
 
 test('quotaPct: a stale sample is ignored, a reset window counts as 0', () => {
@@ -363,7 +516,7 @@ test('the quota guard pauses only priority:low lanes and auto-resumes only kind:
   assert.equal(pause.kindOf('low-2', { stateDir: env.dir }), 'operator');
   assert.equal(pause.kindOf('norm', { stateDir: env.dir }), null);
   assert.equal(pause.kindOf('adhoc', { stateDir: env.dir }), null);
-  assert.equal(budget.isRemoteOnlyHold('low-1', { stateDir: env.dir }), true);
+  assert.equal(handlers.resumeRemoteOnly({ target: 'low-1', args: {} }, { config: env.config }), true);
   // between the thresholds: nothing changes
   env.db.sample = { ts: NOW + 30_000, five_hour_pct: 80 };
   const mid = await budget.tick(NOW + 30_000);
@@ -476,7 +629,39 @@ test('launch: a dry run returns the plan and writes no record; a real one record
   const r = store.read('real');
   assert.equal(r.priority, 'low');
   assert.equal(r.budgetUsd, 3);
+  assert.equal(r.budgetSource, 'local', 'the record says who set the cap (SR17 M2)');
   // the budget module reads it straight from the record
   assert.equal(budget.limitsFor({ config: makeConfig('/x'), overrides: null, laneRecords: [r] }).lanes.get('real'), 3);
   await new Promise((res) => setTimeout(res, 200)); // let the background job fail at git and log
+});
+
+test('SR17 M2: a local launch cannot raise its cap above budget.perLaneUsd; a remote one can, and says so', async () => {
+  const { config } = await import('../server/config.mjs');
+  const saved = config.budget;
+  config.budget = { ...(saved ?? {}), perLaneUsd: 20 };
+  try {
+    const base = { lane: 'cap', plan: 'docs/plans/cap.md', permissionMode: 'auto' };
+    for (const callerKind of [undefined, 'local', 'legacy', 'bogus']) {
+      await assert.rejects(L.validate({ ...base, budgetUsd: 100000 }, callerKind ? { callerKind } : undefined), (err) => {
+        assert.match(err.message, /only a remote caller may raise a cap/);
+        assert.equal(err.status, 403);
+        return true;
+      });
+    }
+    await assert.rejects(L.launch({ ...base, budgetUsd: 21 }), /only a remote caller/, 'launch() defaults to local');
+    await assert.rejects(L.launch({ ...base, budgetUsd: 21, dryRun: true }, 'x', { callerKind: 'local' }), /only a remote caller/);
+    assert.equal((await L.validate({ ...base, budgetUsd: 20 })).budgetSource, 'local', 'equal is fine');
+    assert.equal((await L.validate({ ...base, budgetUsd: 5 })).budgetSource, 'local', 'lowering is fine');
+    assert.equal((await L.validate(base)).budgetSource, null);
+    for (const callerKind of ['direct', 'hub']) {
+      const v = await L.validate({ ...base, budgetUsd: 100 }, { callerKind });
+      assert.equal(v.budgetUsd, 100);
+      assert.equal(v.budgetSource, 'remote');
+    }
+    // and on read, a local record above the default is clamped to it
+    const lim = budget.limitsFor({ config: makeConfig('/x', { perLaneUsd: 20 }), overrides: null, laneRecords: [rec('cap', { budgetUsd: 100000, budgetSource: 'local' })] });
+    assert.equal(lim.lanes.get('cap'), 20);
+  } finally {
+    config.budget = saved;
+  }
 });
