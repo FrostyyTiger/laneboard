@@ -57,7 +57,8 @@ async function api(path, { method = 'GET', body } = {}) {
   try {
     res = await fetch(`${BASE}${path}`, {
       method,
-      headers: body ? { 'content-type': 'application/json' } : undefined,
+      // `X-Laneboard: 1` is the server's CSRF barrier on every mutating route.
+      headers: body ? { 'content-type': 'application/json', 'x-laneboard': '1' } : { 'x-laneboard': '1' },
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch (err) {

@@ -42,7 +42,7 @@ export async function submitLaunch(e) {
   $('lf-submit').disabled = true;
   let res;
   try {
-    const r = await fetch('/api/lanes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await fetch('/api/lanes', { method: 'POST', headers: { 'content-type': 'application/json', 'x-laneboard': '1' }, body: JSON.stringify(body) });
     res = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(res.error || `HTTP ${r.status}`);
   } catch (err) {
