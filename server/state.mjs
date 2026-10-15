@@ -207,14 +207,22 @@ export function _resetHooks() {
   decorators.clear();
   snapshotKeys.clear();
   tickHooks.length = 0;
+  hookFailures.clear();
 }
 
-/** A hook that throws is logged and skipped; it never breaks a tick or a snapshot. */
-function guarded(what, fn) {
+/**
+ * A hook that throws is logged and skipped; it never breaks a tick or a
+ * snapshot. A hook failing on every session every tick is logged on its 1st,
+ * 10th, 100th... failure, not 30 times every 2 s.
+ */
+const hookFailures = new Map();
+function guarded(key, what, fn) {
   try {
     return fn();
   } catch (err) {
-    log.error(`${what} failed`, err?.stack || String(err));
+    const n = (hookFailures.get(key) ?? 0) + 1;
+    hookFailures.set(key, n);
+    if (Number.isInteger(Math.log10(n))) log.error(`${what} failed${n > 1 ? ` (${n} times)` : ''}`, err?.stack || String(err));
     return null;
   }
 }
@@ -228,7 +236,7 @@ export function decorateSessions(list, now = Date.now()) {
   for (const s of list) {
     for (const [name, d] of decorators) {
       if (!d.session) continue;
-      const patch = guarded(`decorator ${name} (session ${s.name})`, () => d.session(s, { now }));
+      const patch = guarded(`decorator:${name}`, `decorator ${name} (session ${s.name})`, () => d.session(s, { now }));
       if (patch && typeof patch === 'object') Object.assign(s, patch);
     }
     s.attentionScore = attentionScore(s, now);
@@ -242,7 +250,7 @@ export function decorateLanes(laneList, now = Date.now(), sessionList = []) {
   for (const l of laneList) {
     for (const [name, d] of decorators) {
       if (!d.lane) continue;
-      const patch = guarded(`decorator ${name} (lane ${l?.id ?? '?'})`, () => d.lane(l, { now, sessions: sessionList }));
+      const patch = guarded(`decorator:${name}`, `decorator ${name} (lane ${l?.id ?? '?'})`, () => d.lane(l, { now, sessions: sessionList }));
       if (patch && typeof patch === 'object') Object.assign(l, patch);
     }
   }
@@ -252,7 +260,7 @@ export function decorateLanes(laneList, now = Date.now(), sessionList = []) {
 /** The registered snapshot keys, evaluated. Exported for tests. */
 export function snapshotExtras() {
   const out = {};
-  for (const [name, fn] of snapshotKeys) out[name] = guarded(`snapshot key ${name}`, fn) ?? null;
+  for (const [name, fn] of snapshotKeys) out[name] = guarded(`key:${name}`, `snapshot key ${name}`, fn) ?? null;
   return out;
 }
 
