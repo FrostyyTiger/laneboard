@@ -75,7 +75,7 @@ function req({ method = 'GET', url = '/api/v1/hello', headers = {}, port = INGRE
     if (v === undefined) delete h[k.toLowerCase()];
     else h[k.toLowerCase()] = v;
   }
-  const r = { method, url, headers: h, socket: { localPort: port, ...socket } };
+  const r = { method, url, headers: h, socket: { localPort: port, remoteAddress: '127.0.0.1', ...socket } };
   if (raw) r.rawHeaders = Object.entries(h).flatMap(([k, v]) => [k, v]);
   return r;
 }
@@ -376,7 +376,8 @@ test('actions: classify only looks up the key; verifyEnvelope verifies the parse
   const h = envHeaders(env);
   const r = req({ method: 'POST', url: '/api/v1/actions', headers: { ...h, 'x-laneboard': '1' } });
   const pre = classify(r, makeCfg(), ctx());
-  assert.deepEqual({ kind: pre.kind, signature: pre.signature, verified: pre.verified, keyId: pre.keyId }, { kind: 'hub', signature: 'envelope', verified: false, keyId: HUB_KID });
+  assert.deepEqual({ kind: pre.kind, signature: pre.signature, verified: pre.verified, keyId: pre.keyId }, { kind: 'hub-pending', signature: 'pending', verified: false, keyId: HUB_KID });
+  assert.equal(pre.scopes.size, 0, 'a pending auth carries no scopes');
   // the body arrives with other key order and whitespace: the parsed value is what is verified
   const body = JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(env).reverse()), null, 2));
   const a = verifyEnvelope(body, r.headers, makeCfg(), ctx());
@@ -463,8 +464,9 @@ test('guardRequest: hub GET with a verified read; POST /api/v1/actions with an e
   const env = envelope();
   const p = req({ method: 'POST', url: '/api/v1/actions', headers: envHeaders(env) });
   const a = guardRequest(p, '/api/v1/actions', cfg, ctx());
-  assert.equal(a.signature, 'envelope');
+  assert.equal(a.kind, 'hub-pending');
   assert.equal(a.verified, false);
+  assert.equal(auth.isAuthenticated(a), false);
 });
 
 test('guardRequest: a read signature never authorizes a POST; hub off /api/v1 or with odd paths → 403', () => {
@@ -476,9 +478,9 @@ test('guardRequest: a read signature never authorizes a POST; hub off /api/v1 or
     expectAuth(() => guardRequest(r, undefined, cfg, ctx()), 403, 'hub-not-allowed');
   }
   const del = req({ method: 'DELETE', url: '/api/v1/sessions/x', headers: { ...envHeaders(envelope()), 'x-laneboard': '1' } });
-  expectAuth(() => guardRequest(del, undefined, cfg, ctx()), 403, 'hub-not-allowed');
+  expectAuth(() => guardRequest(del, undefined, cfg, ctx()), 401, 'missing-signature');
   const getEnv = req({ url: '/api/v1/hello', headers: envHeaders(envelope()) });
-  expectAuth(() => guardRequest(getEnv, undefined, cfg, ctx()), 403, 'read-signature-required');
+  expectAuth(() => guardRequest(getEnv, undefined, cfg, ctx()), 401, 'missing-signature');
 });
 
 test('guardRequest: Origin on a hub request → 403; hub request needs X-Laneboard and JSON', () => {
@@ -535,7 +537,7 @@ test('guardRequest: empty publicHosts on ingress is allowed with one warning', (
   const login = { 'tailscale-user-login': 'alice@example.invalid' };
   guardRequest(req({ headers: login }), undefined, cfg, ctx({ warn: (m) => warns.push(m) }));
   guardRequest(req({ headers: login }), undefined, cfg, ctx({ warn: (m) => warns.push(m) }));
-  assert.equal(warns.length, 1);
+  assert.equal(warns.filter((m) => /publicHosts/.test(m)).length, 1);
 });
 
 test('guardRequest: hook intake is local-only when enforcing; local CLI keeps working', () => {
@@ -638,7 +640,7 @@ test('guardUpgrade: term envelope must be a term action, canonical, signed, fres
 test('guardUpgrade: a hub sig without ts/nonce/envelope cannot upgrade', () => {
   const h = envHeaders(envelope());
   expectAuth(() => guardUpgrade(req({ url: '/api/v1/term/web', headers: h }), undefined, makeCfg(), ctx()), 401, 'missing-signature');
-  expectAuth(() => guardUpgrade(req({ url: '/api/v1/stream', headers: h }), undefined, makeCfg(), ctx()), 403, 'read-signature-required');
+  expectAuth(() => guardUpgrade(req({ url: '/api/v1/stream', headers: h }), undefined, makeCfg(), ctx()), 401, 'missing-signature');
 });
 
 test('guardUpgrade: origin rules: cross-origin 403, missing Origin on direct 403, allowedOrigins, Sec-Fetch-Site, hub Origin 403', () => {
@@ -694,6 +696,182 @@ test('the shared nonce cache is used when none is injected', () => {
   const h = readHeaders('GET', '/api/v1/hello', { ts: now });
   classify(req({ headers: { ...h } }), makeCfg());
   expectAuth(() => classify(req({ headers: { ...h } }), makeCfg()), 401, 'replay');
-  assert.equal(auth.nonceCache().size(), 1);
+  assert.equal(auth.nonceBudget('read', HUB_KID).size(), 1, 'reads land in the per-key read budget');
+  assert.equal(auth.nonceCache().size(), 0, 'the boot cache only holds what A8 pre-loads');
+  // a pre-loaded (audit) id is a replay in every budget
+  const env = envelope({ ts: now });
+  auth.nonceCache().add(env.id, now);
+  const r = req({ method: 'POST', url: '/api/v1/actions', headers: envHeaders(env) });
+  r.auth = classify(r, makeCfg());
+  expectAuth(() => auth.verifyPendingAction(r, env, makeCfg()), 401, 'replay');
   auth._resetForTests();
+});
+
+// --- SR3 regressions ---------------------------------------------------------------------------------------
+
+const GARBAGE_SIG = `ed25519 ${'A'.repeat(86)}==`;
+
+test('SR3 H1: a known keyId with a garbage signature is never a hub caller (classify alone refuses reads)', () => {
+  const cfg = makeCfg();
+  const h = { 'x-laneboard-key': HUB_KID, 'x-laneboard-sig': GARBAGE_SIG };
+  for (const [method, url] of [['GET', '/api/v1/snapshot'], ['HEAD', '/api/v1/snapshot'], ['GET', '/api/v1/audit'], ['POST', '/api/v1/sessions'], ['GET', '/api/v1/stream'], ['POST', '/api/v1/actions/x']]) {
+    expectAuth(() => classify(req({ method, url, headers: h }), cfg, ctx()), 401, 'missing-signature');
+  }
+  // the one place a pending auth exists: POST /api/v1/actions, with no scopes and kind hub-pending
+  const p = classify(req({ method: 'POST', url: '/api/v1/actions', headers: h }), cfg, ctx());
+  assert.equal(p.kind, 'hub-pending');
+  assert.equal(p.verified, false);
+  assert.equal(p.scopes.size, 0);
+  assert.equal(p.scopes.has('control'), false);
+  assert.throws(() => p.scopes.add('control'), TypeError, 'pending scopes cannot be widened');
+  assert.equal(auth.isAuthenticated(p), false);
+  // a pending auth opens no upgrade, even if a route forgot classify ran
+  const u = req({ url: '/api/v1/stream', headers: h });
+  u.auth = p;
+  expectAuth(() => guardUpgrade(u, undefined, cfg, ctx()), 401, 'missing-signature');
+  // and no GET even with a pre-set req.auth (guardRequest)
+  const g = req({ url: '/api/v1/snapshot', headers: h });
+  g.auth = p;
+  expectAuth(() => guardRequest(g, undefined, cfg, ctx()), 401, 'missing-signature');
+});
+
+test('SR3 H1: verifyPendingAction is the only way from hub-pending to an authorized hub', () => {
+  const cfg = makeCfg();
+  const env = envelope();
+  const mk = (headers) => {
+    const r = req({ method: 'POST', url: '/api/v1/actions', headers: { ...headers, 'x-laneboard': '1', 'content-type': 'application/json' } });
+    guardRequest(r, undefined, cfg, ctx());
+    return r;
+  };
+  // garbage signature: refused, req.auth stays pending
+  const bad = mk({ 'x-laneboard-key': HUB_KID, 'x-laneboard-sig': GARBAGE_SIG });
+  expectAuth(() => auth.verifyPendingAction(bad, env, cfg, ctx()), 401, 'bad-signature');
+  assert.equal(bad.auth.kind, 'hub-pending');
+  // valid: req.auth replaced with the verified hub auth carrying the key's scopes
+  const c = ctx();
+  const good = mk(envHeaders(env));
+  const a = auth.verifyPendingAction(good, env, cfg, c);
+  assert.equal(good.auth, a);
+  assert.equal(a.kind, 'hub');
+  assert.equal(a.verified, true);
+  assert.equal(a.scopes.has('control'), true);
+  assert.equal(auth.isAuthenticated(a), true);
+  // no pending auth (never classified, or a forged object) → refused
+  const none = req({ method: 'POST', url: '/api/v1/actions', headers: envHeaders(envelope()) });
+  expectAuth(() => auth.verifyPendingAction(none, envelope(), cfg, ctx()), 401, 'missing-signature');
+  none.auth = { kind: 'hub-pending', keyId: HUB_KID };
+  expectAuth(() => auth.verifyPendingAction(none, envelope(), cfg, ctx()), 401, 'missing-signature');
+  // the key may not change between classify and verification
+  const env2 = envelope();
+  const sw = mk(envHeaders(env2));
+  sw.headers['x-laneboard-key'] = CTL_KID;
+  sw.rawHeaders = Object.entries(sw.headers).flat();
+  expectAuth(() => auth.verifyPendingAction(sw, env2, cfg, ctx()), 401, 'bad-signature');
+});
+
+test('SR3 L2: the local listener needs a loopback peer; a tailnet peer is 403 not-local', () => {
+  const cfg = makeCfg();
+  for (const a of ['127.0.0.1', '127.1.2.3', '::1', '::ffff:127.0.0.1']) {
+    assert.equal(classify(req({ port: PORT, socket: { remoteAddress: a } }), cfg, ctx()).kind, 'local', a);
+  }
+  for (const a of ['198.51.100.7', '192.0.2.10', '::ffff:192.0.2.10', '2001:db8::1', undefined]) {
+    expectAuth(() => classify(req({ port: PORT, socket: { remoteAddress: a } }), cfg, ctx()), 403, 'not-local');
+  }
+  expectAuth(() => guardRequest(req({ method: 'POST', url: '/api/sessions', port: PORT, headers: { 'x-laneboard': '1' }, socket: { remoteAddress: '198.51.100.7' } }), undefined, cfg, ctx()), 403, 'not-local');
+  // standalone (no fleet ingress): unchanged
+  assert.equal(classify(req({ port: PORT, socket: { remoteAddress: '198.51.100.7' } }), makeCfg({ ingressPort: null, enforce: false }), ctx()).kind, 'local');
+});
+
+test('SR3 L1: an ingress request without fleet.ingressPeerUid warns once (accepted risk); none when set', () => {
+  auth._resetForTests();
+  const warns = [];
+  const login = { 'tailscale-user-login': 'alice@example.invalid' };
+  classify(req({ headers: login }), makeCfg(), ctx({ warn: (m) => warns.push(m) }));
+  classify(req({ headers: login }), makeCfg(), ctx({ warn: (m) => warns.push(m) }));
+  assert.equal(warns.filter((m) => /ingressPeerUid/.test(m)).length, 1);
+  auth._resetForTests();
+  const w2 = [];
+  classify(req({ headers: login, socket: { lbPeerUid: 1000 } }), makeCfg({ ingressPeerUid: 1000 }), ctx({ warn: (m) => w2.push(m) }));
+  assert.equal(w2.length, 0);
+  auth._resetForTests();
+});
+
+test('SR3 L3: per-purpose, per-key nonce budgets: a read-only key filling its budget cannot starve control', () => {
+  auth._resetForTests({ budgetMax: 2 });
+  const cfg = makeCfg();
+  const now = Date.now();
+  const rd = () => req({ headers: readHeaders('GET', '/api/v1/hello', { key: readKey, ts: now }) });
+  classify(rd(), cfg);
+  classify(rd(), cfg);
+  expectAuth(() => classify(rd(), cfg), 503, 'nonce-cache-full');
+  // other keys' reads, and control envelopes (also from the full key's own action budget), still work
+  assert.equal(classify(req({ headers: readHeaders('GET', '/api/v1/hello', { key: hubKey, ts: now }) }), cfg).kind, 'hub');
+  for (const key of [ctlKey, hubKey, ctlKey]) {
+    const env = envelope({ ts: now });
+    const r = req({ method: 'POST', url: '/api/v1/actions', headers: envHeaders(env, key) });
+    r.auth = classify(r, cfg);
+    assert.equal(auth.verifyPendingAction(r, env, cfg).verified, true);
+  }
+  // a key's own read traffic does not starve its terminals either
+  const h = () => req({ headers: readHeaders('GET', '/api/v1/hello', { key: hubKey, ts: now }) });
+  classify(h(), cfg);
+  expectAuth(() => classify(h(), cfg), 503, 'nonce-cache-full');
+  const t = termEnv('web', { cols: 120, rows: 40 }, { ts: now });
+  assert.equal(guardUpgrade(req({ url: '/api/v1/term/web?cols=120&rows=40', headers: lower(termHeaders(t, hubKey)) }), undefined, cfg).signature, 'term');
+  assert.equal(auth.nonceBudget('read', READ_KID).size(), 2);
+  assert.equal(auth.nonceBudget('term', HUB_KID).size(), 1);
+  auth._resetForTests();
+  // an injected budget function sees (purpose, keyId)
+  const seen = [];
+  const fn = (purpose, kid) => { seen.push([purpose, kid]); return createNonceCache({ now: () => T0 }); };
+  classify(req({ headers: readHeaders('GET', '/api/v1/hello', { key: readKey }) }), cfg, ctx({ nonces: fn }));
+  const env = envelope();
+  verifyEnvelope(env, envHeaders(env, ctlKey), cfg, ctx({ nonces: fn }));
+  assert.deepEqual(seen, [['read', READ_KID], ['action', CTL_KID]]);
+});
+
+test('SR3 L4: termBinding returns the signed values; repeated query parameters are refused', () => {
+  const cfg = makeCfg();
+  const env = termEnv('web', { cols: 120, rows: 40, window: 'run-a1' });
+  const a = guardUpgrade(termReq('/api/v1/term/web?cols=120&rows=40&window=run-a1', env), undefined, cfg, ctx());
+  const b = auth.termBinding(a);
+  assert.deepEqual({ ...b }, { name: 'web', cols: 120, rows: 40, window: 'run-a1' });
+  assert.ok(Object.isFrozen(b));
+  for (const q of ['cols=120&rows=40&cols=500', 'cols=120&rows=40&rows=40', 'cols=120&rows=40&window=run-a1&window=run-b2']) {
+    expectAuth(() => guardUpgrade(termReq(`/api/v1/term/web?${q}`, termEnv('web', { cols: 120, rows: 40 })), undefined, cfg, ctx()), 403, 'envelope-mismatch');
+  }
+  // only a verified term auth has a binding
+  const read = classify(req({ url: '/api/v1/stream', headers: readHeaders('GET', '/api/v1/stream') }), cfg, ctx());
+  expectAuth(() => auth.termBinding(read), 401, 'missing-signature');
+  expectAuth(() => auth.termBinding({ kind: 'hub', verified: true, signature: 'term', envelope: { target: 'x', args: {} } }), 401, 'missing-signature');
+  expectAuth(() => auth.termBinding(classify(req({ port: PORT }), cfg, ctx())), 401, 'missing-signature');
+});
+
+test('SR3 L5: signed reads and term envelopes from before boot are refused; actions rely on the audit preload', () => {
+  const cfg = makeCfg();
+  const c = ctx({ bootEpoch: T0 - 1000 });
+  expectAuth(() => classify(req({ headers: readHeaders('GET', '/api/v1/hello', { ts: T0 - 1001 }) }), cfg, c), 401, 'stale');
+  assert.equal(classify(req({ headers: readHeaders('GET', '/api/v1/hello', { ts: T0 - 1000 }) }), cfg, c).kind, 'hub');
+  const t = termEnv('web', { cols: 120, rows: 40 }, { ts: T0 - 5000 });
+  expectAuth(() => guardUpgrade(termReq('/api/v1/term/web?cols=120&rows=40', t), undefined, cfg, c), 401, 'stale');
+  const env = envelope({ ts: T0 - 5000 });
+  assert.equal(verifyEnvelope(env, envHeaders(env), cfg, c).verified, true);
+  // on the real clock the floor is the module boot time: a read signed (within skew) before it is refused
+  auth._resetForTests();
+  expectAuth(() => classify(req({ headers: readHeaders('GET', '/api/v1/hello', { ts: Date.now() - 55000 }) }), cfg), 401, 'stale');
+  auth._resetForTests();
+});
+
+test('SR3 L6: empty path segments refused for hub; a foreign req.auth is never trusted', () => {
+  const cfg = makeCfg();
+  const r = req({ url: '/api/v1//snapshot', headers: readHeaders('GET', '/api/v1//snapshot') });
+  expectAuth(() => guardRequest(r, undefined, cfg, ctx()), 403, 'hub-not-allowed');
+  // a forged hub object on req.auth is replaced by a real classification (here: unsigned ingress → 403)
+  const f = req({ url: '/api/v1/snapshot' });
+  f.auth = { kind: 'hub', signature: 'read', verified: true, scopes: new Set(['read', 'control', 'term']) };
+  expectAuth(() => guardRequest(f, undefined, cfg, ctx()), 403, 'unidentified');
+  const fu = req({ url: '/api/v1/stream' });
+  fu.auth = { kind: 'local', user: 'local' };
+  expectAuth(() => guardUpgrade(fu, undefined, cfg, ctx()), 403, 'unidentified');
+  assert.equal(auth.isAuthenticated({ kind: 'local', user: 'local' }), false);
 });

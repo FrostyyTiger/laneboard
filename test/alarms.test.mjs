@@ -406,12 +406,12 @@ test('builder: ack-alarm from a signed hub request -> 403 local-only', async () 
   const s = builderSetup({ hubControl: true });
   s.mod.evaluate(richSnapshot(), T0);
   const id = alarmId('stuck', BID, 'stk-loop');
-  const r = await s.go(s.env(id), { kind: 'hub', scopes: new Set(['read', 'control']), keyLabel: 'hub-main' });
+  const r = await s.go(s.env(id), { kind: 'hub', scopes: new Set(['read', 'control']), keyLabel: 'hub-main', verified: true });
   assert.equal(r.ok, false);
   assert.equal(r.status, 403);
   assert.equal(r.code, 'local-only');
   assert.equal(s.mod.store().get(id).acked, false);
-  const r2 = await s.go(s.env('*', { tile: 'STCK' }), { kind: 'hub', scopes: new Set(['read', 'control']), keyLabel: 'hub-main' });
+  const r2 = await s.go(s.env('*', { tile: 'STCK' }), { kind: 'hub', scopes: new Set(['read', 'control']), keyLabel: 'hub-main', verified: true });
   assert.equal(r2.code, 'local-only');
 });
 

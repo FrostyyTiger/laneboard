@@ -66,7 +66,7 @@ function env(action, target, args = {}, extra = {}) {
 }
 const hubEnv = (...a) => ({ ...env(...a), via: 'hub' });
 const LOCAL = { kind: 'local', user: 'local' };
-const hub = (scopes) => ({ kind: 'hub', scopes: new Set(scopes), keyLabel: 'hub-main' });
+const hub = (scopes) => ({ kind: 'hub', scopes: new Set(scopes), keyLabel: 'hub-main', verified: true });
 
 function entries(audit) {
   return audit.read({ since: 0 }).entries;
@@ -223,7 +223,7 @@ test('hub kind: hubControl false -> 403 control-disabled (audited); scopes {read
   s = setup({ hubControl: true });
   r = await s.go(hubEnv('send-keys', 'agent-1', { keys: ['a'] }), hub(['read']));
   assert.equal(r.code, 'scope-missing');
-  r = await s.go(hubEnv('send-keys', 'agent-1', { keys: ['a'] }), { kind: 'hub', scopes: ['read', 'control'] });
+  r = await s.go(hubEnv('send-keys', 'agent-1', { keys: ['a'] }), { kind: 'hub', scopes: ['read', 'control'], verified: true });
   assert.equal(r.ok, true, r.error);
   assert.equal(s.calls[0][3], 'alice@example.invalid', 'hub user is the envelope user');
   r = await s.go(hubEnv('send-keys', 'agent-1', { keys: ['a'] }, { user: 'has space' }), hub(['read', 'control']));
@@ -642,4 +642,31 @@ test('registerBuiltins is idempotent and dispatch-time deps win', async () => {
   assert.equal(r.ok, true);
   assert.equal(other.length, 1);
   assert.equal(s.calls.length, 0);
+});
+
+test('SR3 H1: a hub auth without verified:true, or a hub-pending auth, is refused 403 unverified (audited)', async () => {
+  for (const a of [
+    { kind: 'hub', scopes: new Set(['read', 'control', 'term']), keyLabel: 'hub-main' },
+    { kind: 'hub', scopes: new Set(['read', 'control']), keyLabel: 'hub-main', verified: false },
+    { kind: 'hub', scopes: new Set(['read', 'control']), keyLabel: 'hub-main', verified: 'true' },
+    { kind: 'hub-pending', scopes: new Set(), keyLabel: 'hub-main', verified: false },
+    { kind: 'hub-pending', scopes: new Set(['control']), keyLabel: 'hub-main', verified: true },
+  ]) {
+    const s = setup({ hubControl: true });
+    const r = await s.go(hubEnv('send-keys', 'agent-1', { keys: ['a'] }), a);
+    assert.equal(r.ok, false);
+    assert.equal(r.status, 403);
+    assert.equal(r.code, 'unverified');
+    assert.equal(s.calls.length, 0, 'nothing ran');
+    const e = entries(s.audit);
+    assert.equal(e.length, 1, 'exactly one audited refusal');
+    assert.equal(e[0].result.code, 'unverified');
+    assert.equal(e[0].via, 'hub');
+    assert.equal(e[0].result.key, 'hub-main');
+    assert.equal(e[0].hash, r.auditId);
+  }
+  // the same request with a verified hub auth runs
+  const s = setup({ hubControl: true });
+  const ok = await s.go(hubEnv('send-keys', 'agent-1', { keys: ['a'] }), hub(['read', 'control']));
+  assert.equal(ok.ok, true, ok.error);
 });
