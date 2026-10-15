@@ -2,7 +2,6 @@
 import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { truncate, stripAnsi, isBlankLine } from './util.mjs';
-import { previewLineToHtml } from './ansi.mjs';
 import * as tmux from './collector/tmux.mjs';
 import * as registry from './collector/registry.mjs';
 import * as statusline from './collector/statusline.mjs';
@@ -52,6 +51,22 @@ export function attentionScore(session, now = Date.now()) {
   // Decorated `stuck` (fleet §7): raised, but never above a waiting session.
   if (session.stuck) score += STUCK_BONUS;
   return score;
+}
+
+/** Card preview on the wire: the last 8 non-blank lines, raw ANSI. */
+export const PREVIEW_LINES = 8;
+export const PREVIEW_LINE_CHARS = 400;
+
+/**
+ * Raw pane lines -> `previewLines` (fleet F6): blanks dropped, the last
+ * PREVIEW_LINES kept, each right-trimmed and sliced to PREVIEW_LINE_CHARS.
+ * The client renders them with public/js/core/ansi.js; no HTML is built here.
+ */
+export function previewLinesOf(lines) {
+  return (Array.isArray(lines) ? lines : [])
+    .filter((l) => typeof l === 'string' && !isBlankLine(l))
+    .slice(-PREVIEW_LINES)
+    .map((l) => l.replace(/\s+$/, '').slice(0, PREVIEW_LINE_CHARS));
 }
 
 /**
@@ -552,12 +567,11 @@ export async function tick() {
           }
         : null,
       preview: (paneCache.get(name)?.lines ?? []).slice(-40),
-      // 8 rendered lines for the card; the raw lines stay out of the WS delta.
-      // Blank lines are dropped first so the card shows 8 lines of content.
-      previewHtml: (paneCache.get(name)?.lines ?? [])
-        .filter((l) => !isBlankLine(l))
-        .slice(-8)
-        .map((l) => previewLineToHtml(l)),
+      // 8 raw ANSI lines for the card, rendered on the client by
+      // public/js/core/ansi.js (fleet F6): no HTML goes on the wire. Blank lines
+      // are dropped first so the card shows 8 lines of content; each line is
+      // right-trimmed and capped at PREVIEW_LINE_CHARS.
+      previewLines: previewLinesOf(paneCache.get(name)?.lines),
       pinned: getFlags(name).pinned,
       // The guard's finding for this session, or null (collector/guard.mjs).
       danger: null,

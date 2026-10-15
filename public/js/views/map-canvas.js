@@ -228,7 +228,7 @@ const STATUS_WORD = {
 
 export function createMap(root, opts = {}) {
   root.classList.add('map');
-  root.innerHTML = '';
+  root.replaceChildren();
 
   const canvas = h('canvas', 'map-canvas');
   canvas.setAttribute('role', 'img');
@@ -1541,7 +1541,7 @@ export function createMap(root, opts = {}) {
       document.removeEventListener('visibilitychange', onVisible);
       clearTimeout(settleTimer);
       clearTimeout(panelOutTimer);
-      root.innerHTML = '';
+      root.replaceChildren();
     },
   };
 }

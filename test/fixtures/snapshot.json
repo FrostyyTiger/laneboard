@@ -51,10 +51,15 @@
     "",
     "\u001b[37m✻\u001b[39m \u001b[37mWorked for 1m 15s\u001b[39m"
    ],
-   "previewHtml": [
+   "previewLines": [
+    "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user\u001b[0m",
+    "  \u001b[93m⏵⏵ auto mode on\u001b[37m (shift+tab to cycle)\u001b[39m",
+    "\u001b[37m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "\u001b[39m❯",
     "  Read the two files and wrote the summary into notes.md.",
     "  The second pass is waiting on a decision about the column order.",
-    "<span style=\"color:#abb2bf\">✻</span> <span style=\"color:#abb2bf\">Worked for 1m 15s</span>"
+    "  Want me to fold that into the same commit, or keep it separate?",
+    "\u001b[37m✻\u001b[39m \u001b[37mWorked for 1m 15s\u001b[39m"
    ],
    "pinned": false,
    "attentionScore": 100
@@ -177,10 +182,15 @@
     "\u001b[37m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "\u001b[39m❯ "
    ],
-   "previewHtml": [
+   "previewLines": [
     "  Read the two files and wrote the summary into notes.md.",
     "  The second pass is waiting on a decision about the column order.",
-    "<span style=\"color:#abb2bf\">✻</span> <span style=\"color:#abb2bf\">Worked for 1m 15s</span>"
+    "  Want me to fold that into the same commit, or keep it separate?",
+    "\u001b[37m✻\u001b[39m \u001b[37mWorked for 1m 15s\u001b[39m",
+    "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user/code/example-repo\u001b[0m",
+    "  \u001b[93m⏵⏵ auto mode on\u001b[37m (shift+tab to cycle)\u001b[39m",
+    "\u001b[37m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "\u001b[39m❯"
    ],
    "pinned": false,
    "attentionScore": 0
@@ -301,10 +311,15 @@
     "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user/code/example-site\u001b[0m",
     "  \u001b[93m⏵⏵ auto mode on\u001b[37m (shift+tab to cycle)\u001b[39m"
    ],
-   "previewHtml": [
+   "previewLines": [
+    "\u001b[37m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "\u001b[39m❯",
     "  Read the two files and wrote the summary into notes.md.",
     "  The second pass is waiting on a decision about the column order.",
-    "<span style=\"color:#abb2bf\">✻</span> <span style=\"color:#abb2bf\">Worked for 1m 15s</span>"
+    "  Want me to fold that into the same commit, or keep it separate?",
+    "\u001b[37m✻\u001b[39m \u001b[37mWorked for 1m 15s\u001b[39m",
+    "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user/code/example-site\u001b[0m",
+    "  \u001b[93m⏵⏵ auto mode on\u001b[37m (shift+tab to cycle)\u001b[39m"
    ],
    "pinned": false,
    "attentionScore": 0
@@ -423,10 +438,15 @@
     "\u001b[37m✻\u001b[39m \u001b[37mWorked for 1m 15s\u001b[39m",
     ""
    ],
-   "previewHtml": [
+   "previewLines": [
+    "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user/code/example-repo-bauplan\u001b[0m",
+    "  \u001b[93m⏵⏵ auto mode on\u001b[37m (shift+tab to cycle)\u001b[39m",
+    "\u001b[37m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "\u001b[39m❯",
     "  Read the two files and wrote the summary into notes.md.",
     "  The second pass is waiting on a decision about the column order.",
-    "<span style=\"color:#abb2bf\">✻</span> <span style=\"color:#abb2bf\">Worked for 1m 15s</span>"
+    "  Want me to fold that into the same commit, or keep it separate?",
+    "\u001b[37m✻\u001b[39m \u001b[37mWorked for 1m 15s\u001b[39m"
    ],
    "pinned": false,
    "attentionScore": 0
@@ -546,10 +566,15 @@
     "",
     "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user\u001b[0m"
    ],
-   "previewHtml": [
+   "previewLines": [
+    "  \u001b[93m⏵⏵ auto mode on\u001b[37m (shift+tab to cycle)\u001b[39m",
+    "\u001b[37m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "\u001b[39m❯",
     "  Read the two files and wrote the summary into notes.md.",
     "  The second pass is waiting on a decision about the column order.",
-    "<span style=\"color:#abb2bf\">✻</span> <span style=\"color:#abb2bf\">Worked for 1m 15s</span>"
+    "  Want me to fold that into the same commit, or keep it separate?",
+    "\u001b[37m✻\u001b[39m \u001b[37mWorked for 1m 15s\u001b[39m",
+    "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user\u001b[0m"
    ],
    "pinned": false,
    "attentionScore": 0
@@ -672,10 +697,15 @@
     "\u001b[37m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
     "\u001b[39m❯ "
    ],
-   "previewHtml": [
+   "previewLines": [
     "  Read the two files and wrote the summary into notes.md.",
     "  The second pass is waiting on a decision about the column order.",
-    "<span style=\"color:#abb2bf\">✻</span> <span style=\"color:#abb2bf\">Worked for 1m 15s</span>"
+    "  Want me to fold that into the same commit, or keep it separate?",
+    "\u001b[37m✻\u001b[39m \u001b[37mWorked for 1m 15s\u001b[39m",
+    "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user/code/example-site\u001b[0m",
+    "  \u001b[93m⏵⏵ auto mode on\u001b[37m (shift+tab to cycle)\u001b[39m",
+    "\u001b[37m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "\u001b[39m❯"
    ],
    "pinned": false,
    "attentionScore": 0
@@ -796,10 +826,15 @@
     "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user/code/example-site\u001b[0m",
     "  \u001b[93m⏵⏵ auto mode on\u001b[37m (shift+tab to cycle)\u001b[39m"
    ],
-   "previewHtml": [
+   "previewLines": [
+    "\u001b[37m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "\u001b[39m❯",
     "  Read the two files and wrote the summary into notes.md.",
     "  The second pass is waiting on a decision about the column order.",
-    "<span style=\"color:#abb2bf\">✻</span> <span style=\"color:#abb2bf\">Worked for 1m 15s</span>"
+    "  Want me to fold that into the same commit, or keep it separate?",
+    "\u001b[37m✻\u001b[39m \u001b[37mWorked for 1m 15s\u001b[39m",
+    "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user/code/example-site\u001b[0m",
+    "  \u001b[93m⏵⏵ auto mode on\u001b[37m (shift+tab to cycle)\u001b[39m"
    ],
    "pinned": false,
    "attentionScore": 0
@@ -905,10 +940,15 @@
     "  The second pass is waiting on a decision about the column order.",
     "  Want me to fold that into the same commit, or keep it separate?"
    ],
-   "previewHtml": [
+   "previewLines": [
+    "\u001b[37m✻\u001b[39m \u001b[37mWorked for 1m 15s\u001b[39m",
+    "  \u001b[2m\u001b[32muser@host\u001b[0m\u001b[37m:\u001b[2m\u001b[34m/home/user/code/example-site\u001b[0m",
+    "  \u001b[93m⏵⏵ auto mode on\u001b[37m (shift+tab to cycle)\u001b[39m",
+    "\u001b[37m────────────────────────────────────────────────────────────────────────────────────────────────────────────────────",
+    "\u001b[39m❯",
     "  Read the two files and wrote the summary into notes.md.",
     "  The second pass is waiting on a decision about the column order.",
-    "<span style=\"color:#abb2bf\">✻</span> <span style=\"color:#abb2bf\">Worked for 1m 15s</span>"
+    "  Want me to fold that into the same commit, or keep it separate?"
    ],
    "pinned": false,
    "attentionScore": 0

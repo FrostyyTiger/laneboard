@@ -284,6 +284,86 @@ test('a session card carries no agent chip', async () => {
   assert.equal(card.className.includes('agent'), false);
 });
 
+// --- previews (fleet F6): raw ANSI on the wire, built as DOM on the client --
+
+function cardByName(grid, name) {
+  const walk = (n) => {
+    if (n.dataset?.name === name && n.classList.contains('card')) return n;
+    for (const c of n.children) { const hit = walk(c); if (hit) return hit; }
+    return null;
+  };
+  return walk(grid);
+}
+
+function allNodes(root) {
+  const out = [];
+  const walk = (n) => { out.push(n); n.children.forEach(walk); };
+  walk(root);
+  return out;
+}
+
+test('a card shows its previewLines, coloured by spans, with no innerHTML', async () => {
+  const { byId, socket } = await mount();
+  socket.emit('open', {});
+  send(socket, { type: 'snapshot', ...snapshot });
+
+  assert.equal(errorText(byId), '');
+  const s = snapshot.sessions[0];
+  assert.ok(Array.isArray(s.previewLines) && s.previewLines.length, 'the fixture carries previewLines');
+  assert.equal('previewHtml' in s, false, 'the fixture no longer carries previewHtml');
+  const card = cardByName(byId.get('grid'), s.name);
+  assert.ok(card, 'the session has a card');
+  const [pre] = card.querySelectorAll('.preview');
+  assert.ok(pre, 'the card has a preview');
+  assert.match(pre.textContent, /Worked for 1m 15s/);
+  assert.match(pre.textContent, /Want me to fold that into the same commit/);
+  assert.equal(pre.textContent.includes('\u001b'), false, 'escapes are consumed, not shown');
+  assert.equal(pre.textContent.split('\n').length, s.previewLines.length, 'one line per previewLine');
+  const spans = pre.children.filter((c) => c.tagName === 'SPAN');
+  assert.ok(spans.some((sp) => sp.style.color === '#abb2bf'), 'SGR 37 becomes a coloured span');
+  assert.ok(allNodes(pre).every((n) => n.innerHTML === ''), 'nothing is written as HTML');
+});
+
+test('hostile previewLines stay literal text in the card', async () => {
+  const { byId, socket } = await mount();
+  socket.emit('open', {});
+  send(socket, { type: 'snapshot', ...snapshot });
+
+  const target = snapshot.sessions[0];
+  const evil = '<img src=x onerror=alert(1)>';
+  send(socket, {
+    type: 'delta',
+    sessions: [{ ...target, previewLines: [`\u001b[31m${evil}`, `\u001b[38;2;999;0;0m${evil}\u001b]8;;http://example.invalid\u0007x`] }],
+    attention: snapshot.attention,
+    generatedAt: Date.now(),
+  });
+
+  assert.equal(errorText(byId), '');
+  const card = cardByName(byId.get('grid'), target.name);
+  const [pre] = card.querySelectorAll('.preview');
+  assert.equal(pre.textContent, `${evil}\n${evil}x`);
+  const nodes = allNodes(pre);
+  assert.equal(nodes.some((n) => n.tagName === 'IMG'), false, 'no element is parsed out of pane text');
+  assert.ok(nodes.every((n) => n.innerHTML === ''));
+  const spans = pre.children.filter((c) => c.tagName === 'SPAN');
+  assert.equal(spans[0].textContent, evil);
+  assert.equal(spans[0].children.length, 0);
+  assert.equal(spans[1].style.color, 'rgb(255,0,0)', 'truecolour channels are clamped');
+});
+
+test('a session without previewLines gets no preview box', async () => {
+  const { byId, socket } = await mount();
+  socket.emit('open', {});
+  send(socket, { type: 'snapshot', ...snapshot });
+  const target = snapshot.sessions[0];
+  const { previewLines: _drop, ...rest } = target;
+  send(socket, { type: 'delta', sessions: [{ ...rest, previewHtml: ['<b>old wire</b>'] }], attention: snapshot.attention, generatedAt: Date.now() });
+
+  assert.equal(errorText(byId), '');
+  const card = cardByName(byId.get('grid'), target.name);
+  assert.equal(card.querySelectorAll('.preview').length, 0, 'an old previewHtml is ignored, never rendered');
+});
+
 // --- views (Stage 0) --------------------------------------------------------
 
 const VIEWS = ['board', 'morning', 'credit', 'box'];

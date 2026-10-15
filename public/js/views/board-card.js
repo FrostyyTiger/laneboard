@@ -1,5 +1,6 @@
 // One session card and its ⋯ menu. Moved from public/app.js (fleet F1).
 import { el } from '../core/dom.js';
+import { previewToNodes } from '../core/ansi.js';
 import { STATE_LABEL, ago, money, shortDir } from '../core/format.js';
 import { laneById, store } from '../core/store.js';
 import { del, post } from '../core/net.js';
@@ -121,10 +122,11 @@ export function renderCard(s, { row = false } = {}) {
     card.append(el('div', 'say', s.activity.lastAssistant));
   }
 
-  if (s.previewHtml?.length) {
+  // Raw ANSI lines on the wire (fleet F6; the old server-rendered previewHtml
+  // is gone): built here as text nodes and spans, never parsed as markup.
+  if (Array.isArray(s.previewLines) && s.previewLines.length) {
     const pre = el('div', 'preview');
-    // Server-side converter already escapes every text run.
-    pre.innerHTML = s.previewHtml.join('\n');
+    pre.append(...previewToNodes(s.previewLines, document));
     card.append(pre);
   }
 
