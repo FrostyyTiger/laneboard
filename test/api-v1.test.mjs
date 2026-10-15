@@ -295,6 +295,7 @@ const env = (action, target, args = {}, over = {}) => ({
 });
 
 import crypto from 'node:crypto';
+import * as authMod from '../server/fleet/auth.mjs';
 
 function auditEntries() {
   return world.audit.read({ since: 0 }).entries;
@@ -373,7 +374,8 @@ test('SR17 M1: a local launch may not ask for priority high or a budget above th
   world.calls.length = 0;
   const repo = 'acme';
   const cfg = { ...config, repoNames: [repo], budget: { ...(config.budget ?? {}), perLaneUsd: 5 } };
-  const a = { kind: 'local', user: 'local' };
+  const a = authMod.classify({ method: 'POST', url: '/', headers: {}, socket: {} }, config);
+  assert.equal(a.kind, 'local');
   assert.match(v1.localLaunchRefusal(env('launch', 'l1', { repo, plan: 'p.md', priority: 'high' }), a, cfg), /remote-only/);
   assert.match(v1.localLaunchRefusal(env('launch', 'l1', { repo, plan: 'p.md', budgetUsd: 6 }), a, cfg), /remote-only/);
   assert.equal(v1.localLaunchRefusal(env('launch', 'l1', { repo, plan: 'p.md', budgetUsd: 5 }), a, cfg), null);
@@ -389,6 +391,7 @@ test('SR17 M1: a local launch may not ask for priority high or a budget above th
   const ok = await v1.runAction(env('launch', 'l2', { repo, plan: 'p.md' }), a, { config: cfg });
   assert.equal(ok.status, 202, JSON.stringify(ok));
   assert.equal(world.calls[0][1].permissionMode, 'auto', 'the dispatcher resolves the mode');
+  await assert.rejects(v1.runAction(env('send-keys', 'demo', { keys: ['Enter'] }), { kind: 'local', user: 'local' }), TypeError, 'a forged auth object never runs');
   const bp = await v1.runAction(env('launch', 'l3', { repo, plan: 'p.md', permissionMode: 'bypassPermissions' }), a, { config: cfg });
   assert.equal(bp.status, 400);
 });

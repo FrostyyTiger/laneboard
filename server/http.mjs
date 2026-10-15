@@ -142,7 +142,8 @@ export function authOptions() {
  * classification. Throws auth.AuthError.
  */
 export function classifyRequest(req, cfg = config) {
-  if (req?.auth && typeof req.auth.kind === 'string') return req.auth;
+  // only a verified auth that auth.mjs issued is reused; anything else is classified afresh
+  if (auth.isAuthenticated(req?.auth)) return req.auth;
   const a = auth.classify(req, cfg, authOpts);
   req.auth = a;
   return a;
@@ -151,13 +152,11 @@ export function classifyRequest(req, cfg = config) {
 /**
  * True for a local or direct auth, and for a hub auth whose signature was
  * VERIFIED (SR3 H1). A hub auth with only its key looked up (an action
- * envelope still to be verified by POST /api/v1/actions), or any other kind
- * (A4-fix's 'hub-pending'), is not authenticated.
+ * envelope still to be verified by POST /api/v1/actions: 'hub-pending'),
+ * a forged object or any other kind, is not (auth.isAuthenticated).
  */
 export function isAuthenticated(a) {
-  if (!a || typeof a.kind !== 'string') return false;
-  if (a.kind === 'local' || a.kind === 'direct') return true;
-  return a.kind === 'hub' && a.verified === true;
+  return auth.isAuthenticated(a);
 }
 
 /** Only POST /api/v1/actions may run with a not-yet-verified hub auth: it verifies the body itself. */
@@ -227,9 +226,15 @@ export async function handleRequest(req, res) {
     warnRefused(req, 'request', err.code);
     return json(res, refusalBody(err), err.status);
   }
-  if (!isAuthenticated(req.auth) && !(method === 'POST' && rawPath === ENVELOPE_PATH && String(req.auth?.kind).startsWith('hub'))) {
+  if (!isAuthenticated(req.auth) && !(method === 'POST' && rawPath === ENVELOPE_PATH && req.auth?.kind === 'hub-pending')) {
     warnRefused(req, 'request', 'unauthenticated');
     return json(res, { error: 'unauthenticated', reason: 'unauthenticated' }, 401);
+  }
+  // §2 2.5: a signed hub request carries no browser headers, on reads too (a
+  // browser cannot sign; a signed request with an Origin is a confused deputy).
+  if (String(req.auth?.kind).startsWith('hub') && (req.headers.origin !== undefined || req.headers['sec-fetch-site'] !== undefined)) {
+    warnRefused(req, 'request', 'origin-on-hub');
+    return json(res, { error: 'forbidden', reason: 'origin-on-hub' }, 403);
   }
   // Attribution comes from the classification only (never the raw header).
   req.tsUser = userOf(req.auth);

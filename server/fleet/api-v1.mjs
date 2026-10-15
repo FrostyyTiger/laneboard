@@ -246,7 +246,7 @@ export function localLaunchRefusal(env, a, cfg = config) {
   if (env.args.priority === 'high') return "priority 'high' is remote-only";
   const per = cfg.budget?.perLaneUsd;
   const b = env.args.budgetUsd;
-  if (b !== undefined && b !== null && typeof per === 'number' && Number.isFinite(per) && !(typeof b === 'number' && b <= per)) {
+  if (b !== undefined && b !== null && typeof per === 'number' && Number.isFinite(per) && per > 0 && !(typeof b === 'number' && b <= per)) {
     return `budgetUsd above the per-lane default (${per}) is remote-only`;
   }
   return null;
@@ -258,8 +258,7 @@ export function localLaunchRefusal(env, a, cfg = config) {
  * override the default deps, `opts.config` the dispatch config.
  */
 export async function runAction(envelope, a, { deps, config: cfg = config } = {}) {
-  if (!a || !['local', 'direct', 'hub'].includes(a.kind)) throw new TypeError('runAction: an authenticated auth is required');
-  if (a.kind === 'hub' && a.verified !== true) throw new TypeError('runAction: a hub auth must be verified');
+  if (!auth.isAuthenticated(a)) throw new TypeError('runAction: an authenticated auth (issued by auth.mjs) is required');
   if (!services.audit) return unavailable();
   const env = isObj(envelope) ? envelope : {};
   const local = localLaunchRefusal(env, a, cfg);
@@ -324,17 +323,20 @@ export async function postAction(req, res) {
 
   let a = req.auth;
   let envelope = parsed;
-  if (!a || (a.kind !== 'local' && a.kind !== 'direct')) {
-    // A hub (or anything still claiming to be one): verify the body itself.
+  if (a?.kind === 'hub-pending') {
+    // A hub: verify the PARSED body against this request's -Sig/-Key (same key as the pending auth). The
+    // shared boot nonce cache and the per-key budgets are auth.mjs's own (no nonces/now injected here).
     try {
-      a = auth.verifyEnvelope(parsed, req.headers, config, authOptions());
+      a = auth.verifyPendingAction(req, parsed, config, authOptions());
     } catch (err) {
       if (!(err instanceof auth.AuthError)) throw err;
       if (err.status === 401 || err.status === 403) services.unauth.note(err.code);
       return refusal(res, err);
     }
-    if (a?.kind !== 'hub' || a.verified !== true || !isObj(a.envelope)) return json(res, { error: 'unauthenticated', reason: 'unauthenticated' }, 401);
+    if (!auth.isAuthenticated(a) || a.kind !== 'hub' || !isObj(a.envelope)) return json(res, { error: 'unauthenticated', reason: 'unauthenticated' }, 401);
     envelope = a.envelope;
+  } else if (!auth.isAuthenticated(a)) {
+    return json(res, { error: 'unauthenticated', reason: 'unauthenticated' }, 401);
   }
   const out = await runAction(envelope, a);
   return json(res, actionBody(out), out.status, retryHeaders(out));
@@ -439,28 +441,38 @@ export function auditTerm(a, name, args) {
 export function upgradeV1(req, socket, head, url, { terminals = services.deps.terminals, st = services.deps.state ?? state } = {}) {
   const a = req.auth;
   if (url.pathname === '/api/v1/stream') {
-    if (!a || (a.kind === 'hub' && (a.signature !== 'read' || a.verified !== true))) { writeStatus(socket, 401); return true; }
+    if (!auth.isAuthenticated(a) || (a.kind === 'hub' && a.signature !== 'read')) { writeStatus(socket, 401); return true; }
     stream.attachStream(req, socket, head, streamAuth(a));
     return true;
   }
   const m = TERM_PATH_RE.exec(url.pathname);
   if (!m) return false;
-  if (!a || !['local', 'direct', 'hub'].includes(a.kind)) { writeStatus(socket, 401); return true; }
-  if (a.kind === 'hub' && (a.signature !== 'term' || a.verified !== true)) { writeStatus(socket, 401); return true; }
+  if (!auth.isAuthenticated(a)) { writeStatus(socket, 401); return true; }
   let name;
-  try { name = decodeURIComponent(m[1]); } catch { writeStatus(socket, 400); return true; }
-  if (!isSafeSessionName(name)) { writeStatus(socket, 400); return true; }
   let args;
-  if (a.kind === 'hub') args = a.envelope.args;
-  else {
-    args = auth.termArgsFromQuery(url.searchParams);
-    if (args.cols === null || args.rows === null || (args.window !== undefined && !auth.WINDOW_RE.test(args.window))) { writeStatus(socket, 400); return true; }
+  if (a.kind === 'hub') {
+    // the SIGNED values only (auth.termBinding), never re-parsed from the URL (SR3 L4)
+    let b;
+    try { b = auth.termBinding(a); } catch { writeStatus(socket, 401); return true; }
+    name = b.name;
+    args = {};
+    for (const k of ['cols', 'rows', 'window']) if (b[k] !== undefined) args[k] = b[k];
+  } else {
+    try { name = decodeURIComponent(m[1]); } catch { writeStatus(socket, 400); return true; }
+    try { args = auth.termArgsFromQuery(url.searchParams); } catch { writeStatus(socket, 400); return true; }
+    if (args.cols === null || args.rows === null) { writeStatus(socket, 400); return true; }
   }
+  if (args.window !== undefined && !auth.WINDOW_RE.test(args.window)) { writeStatus(socket, 400); return true; }
+  if (!isSafeSessionName(name)) { writeStatus(socket, 400); return true; }
   if (!st?.get?.(name)) { writeStatus(socket, 404); return true; }
   if (typeof terminals?.attachNamed !== 'function') { writeStatus(socket, 503); return true; }
   const r = auditTerm(a, name, args);
   if (!r.ok) { writeStatus(socket, r.status); return true; }
-  terminals.attachNamed(req, socket, head, name, url);
+  // attachNamed reads cols/rows/window from a URL: hand it one built from exactly the audited values
+  const q = new URLSearchParams();
+  for (const k of ['cols', 'rows', 'window']) if (args[k] !== undefined) q.set(k, String(args[k]));
+  const bound = new URL(`/api/v1/term/${encodeURIComponent(name)}${q.size ? `?${q}` : ''}`, 'http://localhost');
+  terminals.attachNamed(req, socket, head, name, bound);
   return true;
 }
 

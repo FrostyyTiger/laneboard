@@ -7,7 +7,7 @@ import { log } from '../log.mjs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { route, json, readBody, readJson } from '../http.mjs';
-import { initV1, runAction, actionBody } from '../fleet/api-v1.mjs';
+import { initV1, runAction, actionBody, auditLog } from '../fleet/api-v1.mjs';
 import { ansiLineToHtml } from '../ansi.mjs';
 import * as state from '../state.mjs';
 import * as db from '../db.mjs';
@@ -214,7 +214,7 @@ route('POST', '/api/lanes', legacy(async (req, res) => {
   const extra = pick(body, LAUNCH_TEST_FIELDS);
   if (Object.keys(extra).length) {
     if (!isLocal(req)) return json(res, { error: `test-only fields (${Object.keys(extra).join(', ')}) are local-only`, code: 'bad_args' }, 400);
-    deps = { launcher: { ...launcher, launch: (r, u) => launcher.launch({ ...r, ...extra }, u) } };
+    deps = { launcher: { ...launcher, launch: (r, u, o) => launcher.launch({ ...r, ...extra }, u, o) } };
   }
   return legacyDispatch(req, res, 'launch', lane, args, { deps });
 }));
@@ -536,17 +536,19 @@ installSignalHandlers();
 // Feature modules (server/routes/*.mjs, server/flags/*.mjs): registered after
 // every core route, so a module can never shadow one; started once the core
 // collectors are up (end of this file).
+// Audit log, rate limiter and the nonce pre-load (fleet §2 2.4, 2.8) before
+// any module registers or a request can arrive; the v1 module sets the
+// dispatch deps. ctx.audit: the budget module appends its automatic
+// pauses/lifts to the same log (C7-fix, SR17 L6).
+initV1();
 const ctx = createContext({
+  audit: auditLog(),
   mode: config.mode,
   config, state, ws, db, log, actions, terminals, mapModel,
   push, prs, guard, slots, launcher, retirer,
   version: VERSION, startedAt,
 });
 const modules = await registerModules(['routes', 'flags'], ctx);
-
-// Audit log, rate limiter and the nonce pre-load (fleet §2 2.4, 2.8) before
-// the first request can arrive. The dispatch deps were set by the v1 module.
-initV1();
 
 await listenAll({ onUpgrade });
 // Any "<name>-web-<id>" session still around is from a crashed run of ours.
