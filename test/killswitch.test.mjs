@@ -29,7 +29,7 @@ test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const LOCAL = { kind: 'local', user: 'local' };
 const DIRECT = { kind: 'direct', user: 'alice@example.invalid' };
-const HUB = { kind: 'hub', scopes: new Set(['control']), keyLabel: 'hub-main' };
+const HUB = { kind: 'hub', scopes: new Set(['control']), keyLabel: 'hub-main', verified: true };
 
 /** A fake clock: setTimeout callbacks run only on advance(). */
 function fakeClock(start = 1_000_000) {
@@ -467,4 +467,14 @@ test('builder cancel by the same user inside the grace is not rate limited (the 
   assert.equal(c.ok, true, JSON.stringify(c));
   await clock.advance(ks.DEFAULT_GRACE_MS);
   assert.equal(calls.filter((x) => x[0] === 'kill').length, 0);
+});
+
+test('the merged relay accepts kill in the fan-out scope without override, and refuses it in scope any', async () => {
+  _resetHubActions();
+  const { registerHubAction } = await import('../server/hub/relay.mjs');
+  const un = registerFanoutKill(registerHubAction, () => null);
+  assert.equal(typeof un, 'function');
+  un();
+  assert.throws(() => registerHubAction('kill', { run: () => null }), /collides/);
+  _resetHubActions();
 });

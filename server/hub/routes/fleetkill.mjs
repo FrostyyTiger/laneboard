@@ -6,8 +6,9 @@
 //   usual. The relay has already required a `direct` user (403 remote-only otherwise) and hands `ctx.fanout`,
 //   which rewrites the typed `fleet` confirm to each builder's id. The handler (server/hub/fleetkill.mjs)
 //   checks the typed `fleet` itself before anything is sent.
-// - `kill` is also a builder action name; if the relay's registry asks for an explicit `override` to shadow a
-//   relayed action, the registration is retried with `override: true` (fan-out scope only).
+// - `kill` is also a builder action name. The relay's registry (SR11 L1, HUB_REGISTRABLE) allows `kill` in the
+//   fan-out scope without `override`, so none is passed; should a stricter registry ever ask for an explicit
+//   `override`, the registration is retried once with `override: true` (fan-out scope only).
 // - GET /api/fleet/kill: the recent fleet kill jobs (read-only, for the dialog's countdown) as
 //   {jobs:[{job, state, by, startedAt, killAt, pause, kill, undo}]}.
 // - stop(): a pending undo window is dropped, nothing is killed, the fleet stays paused (fails safe).
