@@ -409,6 +409,9 @@ export async function dispatch(envelope, ctx = {}) {
 // The rate-limit identity of a request (SR5 L4): a hub request is charged under its signing key as well as
 // under (key, user), so a key that rotates `user` still hits the per-key buckets.
 function takeLimits(limiter, rec, def, target, args, auth) {
+  // C9: cancelling a builder kill inside its grace only clears a timer; the `all` bucket (1 per 10 s) would
+  // otherwise refuse the cancel of a `kill *` just sent by the same user (default grace 10 s)
+  if (def.name === 'kill' && target === '*' && args.cancel !== undefined) return { ok: true, retryAfterMs: 0 };
   const fanoutParent = def.name === 'send-text' ? args.fanout?.parent : undefined;
   if (auth.kind !== 'hub') return limiter.take(rec.user, def.name, target, { kind: auth.kind, fanoutParent });
   const key = typeof auth.keyLabel === 'string' && auth.keyLabel ? auth.keyLabel : 'unknown-key';
