@@ -117,10 +117,25 @@ export function spendByLane(spend, laneOfSession) {
 }
 
 /**
- * Build the whole view. Pure apart from the database and the live snapshot,
- * both of which are passed in by the caller in tests.
+ * The review fields a lane carries in the snapshot (fleet §10 2.4, the R5
+ * lane decorator), copied onto Morning's finished[] and cost.lanes[] rows
+ * (fleet R7). A lane the decorator has not seen yet gets the empty values.
  */
-export function build({ window = 'tonight', now = Date.now(), snapshot = null, prFor = null } = {}) {
+export function reviewFieldsOf(lane) {
+  const packages = Array.isArray(lane?.packages) ? lane.packages.filter((p) => typeof p === 'string') : [];
+  return {
+    packages,
+    reviewReady: lane?.reviewReady && typeof lane.reviewReady === 'object' ? lane.reviewReady : null,
+    reviewSentAt: Number.isFinite(lane?.reviewSentAt) ? lane.reviewSentAt : null,
+  };
+}
+
+/**
+ * Build the whole view. Pure apart from the database and the live snapshot,
+ * both of which are passed in by the caller in tests. `builder` ({id, code})
+ * is echoed as `builder` when given (the v1 route, fleet R7).
+ */
+export function build({ window = 'tonight', now = Date.now(), snapshot = null, prFor = null, builder = null } = {}) {
   const prOf = (id) => {
     const p = (prFor ?? prs.get)(id);
     return p && !p.none && !p.error ? { number: p.number, url: p.url, state: p.state, isDraft: p.isDraft, verdict: p.verdict, checks: p.checks } : null;
@@ -205,6 +220,7 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
       // v3: the lane's PR and its checks, when it is a launched lane with one.
       pr: prOf(lane.id),
       sessions: laneSessions.map((s) => ({ name: s.name, state: s.state, since: s.stateSince })),
+      ...reviewFieldsOf(lane),
     });
   }
   // A lane that says it is done, or whose branch has landed on main, is the
@@ -228,9 +244,9 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
   const nameOf = (r) => r.session_name || idToName.get(r.session_id) || r.session_id || null;
   const spend = spendBySession({ rows: db.costRowsForWindow(since), since, live, nameOf });
   const cost = spendByLane(spend, laneResolver(sessionByName));
-  const costLanes = cost.lanes.map((l) => ({ ...l, hue: hueOf(l.lane) }));
+  const costLanes = cost.lanes.map((l) => ({ ...l, hue: hueOf(l.lane), ...reviewFieldsOf(laneById.get(l.lane)) }));
 
-  return {
+  const out = {
     window: win,
     label: windowLabel(win),
     since,
@@ -245,6 +261,8 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
     },
     rateLimits: freshestRateLimits(sessions),
   };
+  if (builder && typeof builder === 'object') out.builder = { id: builder.id ?? null, code: builder.code ?? null };
+  return out;
 }
 
 /** The same rule the board's rail uses: whichever statusline fired last. */
