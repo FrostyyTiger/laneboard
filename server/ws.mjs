@@ -6,7 +6,11 @@ import * as state from './state.mjs';
 const wss = new WebSocketServer({ noServer: true });
 const clients = new Set();
 
-/** The raw ANSI preview is big and only the expanded view needs it. */
+/**
+ * The 40-line raw `preview` is big and only the expanded view needs it; the
+ * card's 8 raw ANSI `previewLines` ride the wire and the client renders them
+ * (public/js/core/ansi.js, fleet F6). No HTML preview exists any more.
+ */
 export function forWire(session) {
   const { preview, ...rest } = session;
   return rest;
