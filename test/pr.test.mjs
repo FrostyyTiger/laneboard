@@ -86,6 +86,22 @@ test('the CI queue from gh run list', () => {
   assert.equal(live.runs[0].conclusion, null);
 });
 
+test('a fine-grained token: check runs refused, Actions runs stand in', () => {
+  assert.equal(gh.isChecksDenied({ code: 1, stderr: 'GraphQL: Resource not accessible by personal access token (repository.pullRequest.commits.nodes.0.commit.statusCheckRollup)' }), true);
+  assert.equal(gh.isChecksDenied({ code: 1, stderr: 'no pull requests found' }), false);
+  const s = gh.summarisePr({
+    number: 7, headRefOid: 'abc',
+    statusCheckRollup: gh.runsAsChecks([
+      { name: 'ci', status: 'completed', conclusion: 'success' },
+      { name: 'web', status: 'completed', conclusion: 'failure' },
+      { name: 'e2e', status: 'in_progress', conclusion: '' },
+    ]),
+  });
+  assert.deepEqual([s.checks.passed, s.checks.failed, s.checks.pending], [1, 1, 1]);
+  assert.deepEqual(s.checks.failedNames, ['web']);
+  assert.equal(s.verdict, 'red');
+});
+
 test('pr_samples key changes only when a recorded field does', () => {
   const a = gh.summarisePr(JSON.parse(fx('pr-green.json')));
   const b = { ...a, url: 'changed', mergeable: 'MERGEABLE' };
