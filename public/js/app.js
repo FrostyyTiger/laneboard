@@ -13,6 +13,7 @@ import { renderAttention } from './ui/rail.js';
 import { init as initSheet } from './ui/sheet.js';
 import { init as initHotkeys } from './ui/hotkeys.js';
 import { init as initPush } from './ui/push.js';
+import { init as initNotifyPrefs } from './ui/notify-prefs.js';
 import { cardNodes } from './views/board.js';
 import { init as initMap } from './views/map.js';
 import { views } from './views/index.js';
@@ -58,6 +59,7 @@ export function boot() {
   }
 
   initPush(); // app.js:1953-2025 (push / PWA)
+  initNotifyPrefs(); // fleet D14: hub-only notification prefs sheet, entry in #push-box
 }
 
 boot();
