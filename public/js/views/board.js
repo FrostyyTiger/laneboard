@@ -2,17 +2,24 @@
 import { $, el } from '../core/dom.js';
 import { STATE_RANK, ago, hueFromId, money } from '../core/format.js';
 import { laneById, laneVisible, store } from '../core/store.js';
+import { fkey } from '../core/keys.js';
 import { scheduleVisible, unwatchCard, watchCard } from '../core/net.js';
 import { prChip } from '../ui/widgets.js';
 import { openSheet } from '../ui/sheet.js';
-import { renderCard } from './board-card.js';
+import { builderStale, renderCard } from './board-card.js';
 
-export const cardNodes = new Map(); // name -> element
+/** True when a builder id names a hub builder that is not live. */
+function staleBuilder(id) {
+  const b = id ? store.builders.get(id) : null;
+  return Boolean(b) && store.source.kind === 'hub' && (b.status === 'stale' || b.status === 'down');
+}
+
+export const cardNodes = new Map(); // fleet key -> element
 
 export function orderedSessions() {
   const rank = { waiting_permission: 0, waiting_question: 1, working: 2, done: 3, idle: 4, shell: 5, dead: 6 };
   return [...store.sessions.values()].sort(
-    (a, b) => (rank[a.state] ?? 9) - (rank[b.state] ?? 9) || a.name.localeCompare(b.name)
+    (a, b) => (rank[a.state] ?? 9) - (rank[b.state] ?? 9) || a.name.localeCompare(b.name) || cmp(a.key, b.key)
   );
 }
 
@@ -24,7 +31,9 @@ export function orderedSessions() {
 // lane card are the same nodes as before (cursor, pin, menu, visibility all
 // keep working), rendered as compact rows.
 
-/** lane id -> { node, head, rows, sig } */
+const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** lane fleet key -> { node, head, rows, sig } */
 const laneNodes = new Map();
 
 /** One session's urgency: the guard's danger first, then v2's state order. */
@@ -32,8 +41,18 @@ function sessionRank(s) {
   return s.danger ? -1 : (STATE_RANK[s.state] ?? 9);
 }
 
-function laneRecord(id) {
-  return store.box?.launched?.find((r) => r.id === id) ?? null;
+/** The box (lane records, PRs, slots, jobs) of the builder that owns a lane. */
+function boxOf(builderId) {
+  return store.builders.get(builderId)?.box ?? (store.builders.size <= 1 ? store.box : null) ?? null;
+}
+
+function laneRecord(u) {
+  return boxOf(u.builder)?.launched?.find((r) => r.id === u.id) ?? null;
+}
+
+/** A lane's fleet key; a session or record without a builder falls back to the bare id. */
+function laneKeyOf(builderId, id) {
+  try { return fkey(builderId, id); } catch { return id; }
 }
 
 /**
@@ -45,36 +64,42 @@ export function orderedUnits() {
   const lanes = new Map();
   const units = [];
   for (const s of orderedSessions()) {
-    if (!s.lane) { units.push({ kind: 'session', key: `s:${s.name}`, rank: sessionRank(s), name: s.name, s }); continue; }
-    if (!lanes.has(s.lane)) lanes.set(s.lane, { kind: 'lane', key: `l:${s.lane}`, id: s.lane, sessions: [] });
-    lanes.get(s.lane).sessions.push(s);
+    if (!s.lane) { units.push({ kind: 'session', key: `s:${s.key}`, rank: sessionRank(s), name: s.name, s }); continue; }
+    const lk = s.laneKey ?? laneKeyOf(s.builder, s.lane);
+    if (!lanes.has(lk)) lanes.set(lk, { kind: 'lane', key: `l:${lk}`, laneKey: lk, id: s.lane, builder: s.builder, sessions: [] });
+    lanes.get(lk).sessions.push(s);
   }
-  for (const r of store.box?.launched ?? []) {
-    if (!lanes.has(r.id)) lanes.set(r.id, { kind: 'lane', key: `l:${r.id}`, id: r.id, sessions: [] });
+  for (const b of store.builders.values()) {
+    for (const r of boxOf(b.id)?.launched ?? []) {
+      if (!r || typeof r.id !== 'string' || !r.id) continue;
+      const lk = laneKeyOf(b.id, r.id);
+      if (!lanes.has(lk)) lanes.set(lk, { kind: 'lane', key: `l:${lk}`, laneKey: lk, id: r.id, builder: b.id, sessions: [] });
+    }
   }
   for (const u of lanes.values()) {
     u.rank = u.sessions.length ? Math.min(...u.sessions.map(sessionRank)) : 8;
     u.name = u.id;
     units.push(u);
   }
-  return units.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name));
+  return units.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name) || cmp(a.key, b.key));
 }
 
 /** The session's node, re-rendered only when it changed or moved in/out of a lane card. */
-function sessionNode(s, changedNames, asRow) {
-  let node = cardNodes.get(s.name);
+function sessionNode(s, changedKeys, asRow) {
+  const k = s.key;
+  let node = cardNodes.get(k);
   const wasRow = node?.dataset.row === '1';
   if (!node) {
     node = renderCard(s, { row: asRow });
-    cardNodes.set(s.name, node);
+    cardNodes.set(k, node);
     watchCard(node);
-  } else if ((wasRow !== asRow || !changedNames || changedNames.includes(s.name)) && !node.querySelector('.menu')) {
+  } else if ((wasRow !== asRow || !changedKeys || changedKeys.includes(k)) && !node.querySelector('.menu')) {
     // Never re-render a card whose ⋯ menu is open — a delta arriving mid-click
     // would replace the menu just as it is being aimed at.
     const fresh = renderCard(s, { row: asRow });
     unwatchCard(node);
     node.replaceWith(fresh);
-    cardNodes.set(s.name, fresh);
+    cardNodes.set(k, fresh);
     node = fresh;
     watchCard(node);
   }
@@ -91,15 +116,16 @@ function placeInOrder(parent, nodes) {
   }
 }
 
-export function renderGrid(changedNames) {
+/** `changedKeys`: the fleet keys a delta touched; undefined re-renders every card. */
+export function renderGrid(changedKeys) {
   const grid = $('grid');
   const units = orderedUnits();
 
-  const liveNames = new Set(store.sessions.keys());
-  for (const [name, node] of cardNodes) {
-    if (!liveNames.has(name)) { unwatchCard(node); node.remove(); cardNodes.delete(name); }
+  const liveKeys = new Set([...store.sessions.values()].map((s) => s.key));
+  for (const [k, node] of cardNodes) {
+    if (!liveKeys.has(k)) { unwatchCard(node); node.remove(); cardNodes.delete(k); }
   }
-  const liveLanes = new Set(units.filter((u) => u.kind === 'lane').map((u) => u.id));
+  const liveLanes = new Set(units.filter((u) => u.kind === 'lane').map((u) => u.laneKey));
   for (const [id, ln] of laneNodes) {
     if (!liveLanes.has(id)) { ln.node.remove(); laneNodes.delete(id); }
   }
@@ -108,18 +134,18 @@ export function renderGrid(changedNames) {
   const top = [];
   for (const u of units) {
     if (u.kind === 'session') {
-      const node = sessionNode(u.s, changedNames, false);
+      const node = sessionNode(u.s, changedKeys, false);
       node.hidden = !laneVisible(u.s);
       if (!node.hidden) shown++;
       top.push(node);
       continue;
     }
     const ln = laneCardNode(u);
-    placeInOrder(ln.rows, u.sessions.map((s) => sessionNode(s, changedNames, true)));
-    for (const n of u.sessions.map((s) => cardNodes.get(s.name))) n.hidden = false;
+    placeInOrder(ln.rows, u.sessions.map((s) => sessionNode(s, changedKeys, true)));
+    for (const n of u.sessions.map((s) => cardNodes.get(s.key))) n.hidden = false;
     // Filter by lane: the whole card hides, and clearing the filter restores
     // the same nodes rather than rebuilding them.
-    ln.node.hidden = store.laneFilter.size > 0 && !store.laneFilter.has(u.id);
+    ln.node.hidden = store.laneFilter.size > 0 && !store.laneFilter.has(u.laneKey);
     if (!ln.node.hidden) shown++;
     top.push(ln.node);
   }
@@ -134,9 +160,9 @@ export function renderGrid(changedNames) {
 
 /** The lane card: header rebuilt when its data changes, rows kept as nodes. */
 function laneCardNode(u) {
-  const lane = laneById(u.id);
-  const rec = laneRecord(u.id);
-  const b = store.box ?? {};
+  const lane = laneById(u.laneKey);
+  const rec = laneRecord(u);
+  const b = boxOf(u.builder) ?? {};
   const headData = {
     lane, rec,
     pr: b.prs?.[u.id] ?? null,
@@ -144,25 +170,29 @@ function laneCardNode(u) {
     burn: b.burn5h?.[u.id] ?? null,
     readiness: b.readiness?.[u.id] ?? null,
     job: (b.jobs ?? []).find((j) => j.lane === u.id) ?? null,
-    live: u.sessions.map((s) => s.name),
+    live: u.sessions.map((s) => s.key),
+    stale: u.sessions.some(builderStale) || (!u.sessions.length && staleBuilder(u.builder)),
     marker: newestMarker(u.sessions),
     danger: u.sessions.some((s) => s.danger),
   };
   const sig = JSON.stringify(headData);
-  let ln = laneNodes.get(u.id);
+  let ln = laneNodes.get(u.laneKey);
   if (!ln) {
     const node = el('div', 'card lane-card has-lane');
     node.dataset.lane = u.id;
+    node.dataset.laneKey = u.laneKey;
     const head = el('div', 'lane-head');
     const rows = el('div', 'lane-rows');
     node.append(head, rows);
     ln = { node, head, rows, sig: null };
-    laneNodes.set(u.id, ln);
+    laneNodes.set(u.laneKey, ln);
   }
   if (ln.sig !== sig) {
     ln.sig = sig;
     ln.node.style.setProperty('--lane-hue', String(lane?.hue ?? hueFromId(u.id)));
     ln.node.classList.toggle('danger', headData.danger);
+    ln.node.classList.toggle('stale', headData.stale);
+    ln.node.style.opacity = headData.stale ? '0.55' : '';
     ln.head.textContent = '';
     renderLaneHead(ln.head, u.id, headData);
   }
@@ -255,7 +285,8 @@ export function renderLanes() {
 
   const row = el('div', 'lane-row');
   for (const lane of active) {
-    const on = store.laneFilter.has(lane.id);
+    const lk = lane.key ?? lane.id;
+    const on = store.laneFilter.has(lk);
     const pill = el('button', `lane-pill${on ? ' on' : ''}`);
     pill.style.setProperty('--lane-hue', String(lane.hue));
     pill.append(el('span', 'lane-swatch'));
@@ -274,7 +305,7 @@ export function renderLanes() {
       pill.append(p);
     }
     pill.title = `${lane.root}${lane.branch ? ` · ${lane.branch}` : ''}\n${lane.sessions.join(', ')}`;
-    pill.onclick = () => toggleLane(lane.id);
+    pill.onclick = () => toggleLane(lk);
     row.append(pill);
   }
   if (store.laneFilter.size) {
@@ -306,6 +337,7 @@ export function renderLanes() {
   rail.append(idleRow);
 }
 
+/** `id`: a lane's fleet key (lane.key). */
 export function toggleLane(id) {
   if (store.laneFilter.has(id)) store.laneFilter.delete(id);
   else store.laneFilter.add(id);
@@ -328,14 +360,15 @@ export function applyLaneFilter() {
   scheduleVisible();
 }
 
-export function focusSession(name) {
-  store.cursor = name;
-  const node = cardNodes.get(name);
+/** `k`: a session's fleet key. */
+export function focusSession(k) {
+  store.cursor = k;
+  const node = cardNodes.get(k);
   if (node && innerWidth >= 700) {
     node.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     for (const n of cardNodes.values()) n.classList.remove('cursor');
     node.classList.add('cursor');
   } else {
-    openSheet(name);
+    openSheet(k);
   }
 }

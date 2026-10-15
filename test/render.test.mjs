@@ -19,17 +19,27 @@ const HAS_VM_MODULES = typeof vm.SourceTextModule === 'function';
 const test = HAS_VM_MODULES ? nodeTest : () => {};
 if (!HAS_VM_MODULES) {
   nodeTest('render tests, re-run with --experimental-vm-modules', () => {
-    const r = spawnSync(process.execPath, ['--experimental-vm-modules', '--test', import.meta.filename], { encoding: 'utf8' });
+    // The child must run its own test runner: with NODE_TEST_CONTEXT
+    // inherited from this one it reports to us over a pipe it does not have,
+    // and exits 0 whatever happened. Unset, its exit code is the verdict.
+    const env = { ...process.env };
+    delete env.NODE_TEST_CONTEXT;
+    const r = spawnSync(process.execPath, ['--experimental-vm-modules', '--test', '--test-reporter=tap', import.meta.filename], { encoding: 'utf8', env });
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout, /^# fail 0$/m, `${r.stdout}\n${r.stderr}`);
+    assert.doesNotMatch(r.stdout, /^# pass 0$/m, 'the re-run ran no tests');
   });
 }
 
 const ROOT = path.resolve(import.meta.dirname, '..');
+/** The builder the fixtures belong to (its hello names it). */
+const ID = 'builder-a';
+const key = (name) => `${ID}/${name}`;
 const PUB = path.join(ROOT, 'public');
 const snapshot = JSON.parse(fs.readFileSync(path.join(ROOT, 'test/fixtures/snapshot.json'), 'utf8'));
 
 /** Build the sandbox, evaluate public/js/app.js in it, and hand back the pieces. */
-async function mount({ responses: primed = [], wide = false } = {}) {
+async function mount({ responses: primed = [], wide = false, hello = true, storage = {} } = {}) {
   // One element per id in the real index.html, the buttons of id'd
   // containers and the real `hidden` attributes (test/helpers/fakedom.mjs).
   const byId = elementsFromHtml(fs.readFileSync(path.join(PUB, 'index.html'), 'utf8'));
@@ -45,7 +55,10 @@ async function mount({ responses: primed = [], wide = false } = {}) {
     document, console: { log() {}, warn() {}, error() {} },
     location: { protocol: 'http:', host: 'x', hash: '', pathname: '/' },
     history: { replaceState() {} },
-    localStorage: { getItem: () => null, setItem() {} },
+    localStorage: {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(storage, k) ? storage[k] : null),
+      setItem: (k, v) => { storage[k] = String(v); },
+    },
     innerWidth: 3800, innerHeight: 1100, isSecureContext: false,
     addEventListener(k, fn) { (winListeners[k] ||= []).push(fn); },
     removeEventListener() {},
@@ -91,10 +104,18 @@ async function mount({ responses: primed = [], wide = false } = {}) {
   const ns = await loadModules(sandbox);
 
   assert.equal(sockets.length, 1, 'app.js should open exactly one dashboard socket');
+  // The builder names itself in its first frame (fleet F7 hello), so the page
+  // keys everything by fleet key `${ID}/<name>` from then on (fleet F8b).
+  const socket = sockets[0];
+  const emit = socket.emit.bind(socket);
+  socket.emit = (k, ev) => {
+    emit(k, ev);
+    if (k === 'open' && hello) emit('message', { data: JSON.stringify({ type: 'hello', builder: { id: ID, code: 'BA' }, mode: 'builder', version: '1', apiVersion: 1 }) });
+  };
   const fire = (kind, ev = {}) => { for (const fn of winListeners[kind] || []) fn(ev); };
   responses.push(...primed);
   const go = (hash) => { sandbox.location.hash = hash; fire('hashchange'); };
-  return { byId, socket: sockets[0], sandbox, fire, go, ns };
+  return { byId, socket, sandbox, fire, go, ns, storage };
 }
 
 const JS = path.join(PUB, 'js');
@@ -140,8 +161,10 @@ function readAppJs() {
     .map((f) => read2(path.join('js', f))).join('\n');
 }
 
+/** Builder-scoped frames carry their builder, as every /ws message does since fleet F7. */
 function send(socket, msg) {
-  socket.emit('message', { data: JSON.stringify(msg) });
+  const scoped = ['snapshot', 'delta', 'event', 'stuck'].includes(msg.type);
+  socket.emit('message', { data: JSON.stringify(scoped && !msg.builder ? { builder: ID, ...msg } : msg) });
 }
 
 function errorText(byId) {
@@ -288,7 +311,7 @@ test('a session card carries no agent chip', async () => {
 
 function cardByName(grid, name) {
   const walk = (n) => {
-    if (n.dataset?.name === name && n.classList.contains('card')) return n;
+    if (n.dataset?.key === key(name) && n.classList.contains('card')) return n;
     for (const c of n.children) { const hit = walk(c); if (hit) return hit; }
     return null;
   };
@@ -470,7 +493,7 @@ test('the lane rail lists active lanes and idle worktrees separately', async () 
 /** Every session card on the board, inside lane cards or not. */
 function sessionCards(grid) {
   const out = [];
-  const walk = (n) => { for (const c of n.children) { if (c.dataset?.name) out.push(c); else walk(c); } };
+  const walk = (n) => { for (const c of n.children) { if (c.dataset?.key) out.push(c); else walk(c); } };
   walk(grid);
   return out;
 }
@@ -505,10 +528,10 @@ test('a lane is one card, striped, with its sessions inside as rows (v3)', async
   }
   const horizon = laneCards.find((c) => c.dataset.lane === 'horizon-v1');
   const rows = sessionCards(horizon);
-  assert.deepEqual(rows.map((r) => r.dataset.name).sort(), s.lanes[0].sessions.slice().sort());
+  assert.deepEqual(rows.map((r) => r.dataset.key).sort(), s.lanes[0].sessions.map(key).sort());
   assert.ok(rows.every((r) => r.classList.contains('card-row')), 'sessions inside a lane card are rows');
   // A session with no lane keeps its own v2 card, with no stripe.
-  const lone = grid.children.filter((c) => c.dataset.name);
+  const lone = grid.children.filter((c) => c.dataset.key);
   assert.equal(lone.length, s.sessions.filter((x) => !x.lane).length);
   assert.ok(lone.every((c) => !c.classList.contains('has-lane')));
   // Nothing is dropped: every session is on the board exactly once.
@@ -557,7 +580,7 @@ test('filtering to a lane hides the others and keeps the very same card nodes', 
 
   for (const card of grid.children) {
     const want = card.dataset.lane === 'horizon-v1';
-    assert.equal(card.hidden, !want, `${card.dataset.lane || card.dataset.name} visibility`);
+    assert.equal(card.hidden, !want, `${card.dataset.lane || card.dataset.key} visibility`);
   }
   assert.equal(grid.children.length, before.length, 'no card was removed');
 
@@ -958,8 +981,8 @@ test('lane cards sort by the most urgent session inside; lone sessions sort amon
   const snap = v3Snapshot([{ id: 'calm', state: 'done' }, { id: 'asking', state: 'waiting_permission' }], { extraSessions: 1 });
   snap.sessions.find((x) => x.name === 'lone-0').state = 'working';
   send(socket, { type: 'snapshot', ...snap });
-  const order = byId.get('grid').children.map((c) => c.dataset.lane || c.dataset.name);
-  assert.deepEqual(order, ['asking', 'lone-0', 'calm']);
+  const order = byId.get('grid').children.map((c) => c.dataset.lane || c.dataset.key);
+  assert.deepEqual(order, ['asking', key('lone-0'), 'calm']);
 });
 
 test('danger goes first, even ahead of a permission prompt', async () => {

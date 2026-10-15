@@ -34,7 +34,8 @@ export function renderAttention() {
     b.append(stateDot(a.state, a.since));
     b.append(el('span', 'nm', a.name));
     b.append(el('span', 'ago', ago(a.since)));
-    b.onclick = () => focusSession(a.name);
+    b.dataset.key = a.key;
+    b.onclick = () => focusSession(a.key);
     li.append(b);
     list.append(li);
 
@@ -42,7 +43,8 @@ export function renderAttention() {
     chip.append(stateDot(a.state, a.since));
     chip.append(el('span', 'nm', a.name));
     chip.append(el('span', 'ago', ago(a.since)));
-    chip.onclick = () => focusSession(a.name);
+    chip.dataset.key = a.key;
+    chip.onclick = () => focusSession(a.key);
     strip.append(chip);
   });
 }

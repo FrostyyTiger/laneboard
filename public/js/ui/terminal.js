@@ -6,6 +6,7 @@
 //   * if a human is attached to that session in their own terminal the server
 //     answers {pinned:true} with ITS geometry, and we CSS-scale to fit instead
 //     of resizing, so we never disturb someone who is looking at the session.
+import { termUrl } from '../core/net.js';
 
 const views = new Map(); // name -> view
 let xtermLoading = null;
@@ -142,7 +143,8 @@ function connect(view) {
   // already wide instead of re-flowing a moment later.
   const want = proposeDims(view);
   const qs = want ? `?cols=${want.cols}&rows=${want.rows}` : '';
-  const ws = new WebSocket(`${proto}//${location.host}/ws/term/${encodeURIComponent(view.name)}${qs}`);
+  // view.name is the session's fleet key; the source maps it to its path (fleet F8b).
+  const ws = new WebSocket(`${proto}//${location.host}${termUrl(view.name)}${qs}`);
   ws.binaryType = 'arraybuffer';
   view.ws = ws;
   statusLine(view.host, view.everConnected ? 'reconnecting…' : 'connecting…');

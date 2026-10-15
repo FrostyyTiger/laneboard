@@ -226,6 +226,25 @@ const STATUS_WORD = {
 
 // ------------------------------------------------------------------ the map
 
+/**
+ * The fold set on fleet keys (fleet F8b, plan §1 2.5): a lane folded before
+ * the upgrade is `lane:<x>`; it becomes `lane:<localId>/<x>`, the id
+ * server/map.mjs now gives it (laneNodeId). Entries that already carry a
+ * builder, and every other kind of node, are kept as they are. Without a
+ * valid local builder id nothing is rewritten. Pure; duplicates collapse.
+ */
+export function migrateFolds(list, localId) {
+  const ok = typeof localId === 'string' && /^[a-z0-9-]{1,24}$/.test(localId);
+  const out = [];
+  for (const id of Array.isArray(list) ? list : []) {
+    if (typeof id !== 'string' || !id) continue;
+    let v = id;
+    if (ok && id.startsWith('lane:') && id.length > 5 && !id.includes('/')) v = `lane:${localId}/${id.slice(5)}`;
+    if (!out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
 export function createMap(root, opts = {}) {
   root.classList.add('map');
   root.replaceChildren();
@@ -520,7 +539,14 @@ export function createMap(root, opts = {}) {
 
   // --- folding
   function loadFolded() {
-    try { return JSON.parse(localStorage.getItem(FOLD_KEY) || '[]').filter((x) => typeof x === 'string'); } catch { return []; }
+    let raw;
+    try { raw = JSON.parse(localStorage.getItem(FOLD_KEY) || '[]'); } catch { return []; }
+    const list = Array.isArray(raw) ? raw.filter((x) => typeof x === 'string') : [];
+    const out = migrateFolds(list, opts.localId);
+    if (out.length !== list.length || out.some((v, i) => v !== list[i])) {
+      try { localStorage.setItem(FOLD_KEY, JSON.stringify(out)); } catch { /* private window */ }
+    }
+    return out;
   }
   function saveFolded() {
     try { localStorage.setItem(FOLD_KEY, JSON.stringify([...collapsed])); } catch { /* private window: folds last this visit */ }
