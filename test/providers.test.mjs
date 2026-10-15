@@ -26,7 +26,7 @@ test('every provider of a kind exports the same names', async () => {
   const shapes = {
     slots: ['name', 'available', 'slotCount', 'ports', 'envCommand', 'list', 'existing', 'up', 'env', 'down', 'dropVolumes'],
     guard: ['name', 'active', 'forbiddenPorts', 'healthProbes', 'containerFilter', 'health', 'containers', 'preventive', 'detective'],
-    ci: ['name', 'active', 'prForBranch', 'runs'],
+    ci: ['name', 'active', 'prForBranch', 'runs', 'mainRuns', 'runJobs', 'rateLimit', 'failedJobsForCommit'],
   };
   const paths = {
     slots: ['none', 'agent-stack'],

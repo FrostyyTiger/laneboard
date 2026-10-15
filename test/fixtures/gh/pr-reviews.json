@@ -1,0 +1,14 @@
+{"headRefOid":"feedface00000000000000000000000000000001","isDraft":false,"mergeable":"MERGEABLE","number":42,"state":"OPEN","url":"https://github.com/acme/widgets/pull/42",
+ "statusCheckRollup":[{"__typename":"CheckRun","completedAt":"2026-10-14T10:02:00Z","conclusion":"SUCCESS","name":"lint-and-test","startedAt":"2026-10-14T09:58:00Z","status":"COMPLETED","workflowName":"CI"}],
+ "reviews":[
+  {"id":"PRR_bot1","author":{"login":"copilot-pull-request-reviewer"},"authorAssociation":"NONE","body":"Summary of changes","submittedAt":"2026-10-14T10:03:00Z","state":"COMMENTED","commit":{"oid":"feedface00000000000000000000000000000001"}},
+  {"id":"PRR_bot2","author":{"login":"review-helper[bot]"},"authorAssociation":"NONE","body":"Automated note","submittedAt":"2026-10-14T10:04:00Z","state":"COMMENTED","commit":{"oid":"feedface00000000000000000000000000000001"}},
+  {"id":"PRR_h1","author":{"login":"reviewer-b"},"authorAssociation":"MEMBER","body":"One question inline.","submittedAt":"2026-10-14T11:30:00Z","state":"CHANGES_REQUESTED","commit":{"oid":"feedface00000000000000000000000000000001"}},
+  {"id":"PRR_h2","author":{"login":"builder-a"},"authorAssociation":"OWNER","body":"","submittedAt":"2026-10-14T12:10:00Z","state":"APPROVED","commit":{"oid":"feedface00000000000000000000000000000001"}},
+  {"id":"PRR_pending","author":{"login":"reviewer-c"},"authorAssociation":"MEMBER","body":"","submittedAt":null,"state":"PENDING","commit":{"oid":"feedface00000000000000000000000000000001"}}
+ ],
+ "latestReviews":[
+  {"id":"PRR_bot2","author":{"login":"review-helper[bot]"},"authorAssociation":"NONE","body":"Automated note","submittedAt":"2026-10-14T10:04:00Z","state":"COMMENTED","commit":{"oid":"feedface00000000000000000000000000000001"}},
+  {"id":"PRR_h1","author":{"login":"reviewer-b"},"authorAssociation":"MEMBER","body":"One question inline.","submittedAt":"2026-10-14T11:30:00Z","state":"CHANGES_REQUESTED","commit":{"oid":"feedface00000000000000000000000000000001"}},
+  {"id":"PRR_h2","author":{"login":"builder-a"},"authorAssociation":"OWNER","body":"","submittedAt":"2026-10-14T12:10:00Z","state":"APPROVED","commit":{"oid":"feedface00000000000000000000000000000001"}}
+ ]}

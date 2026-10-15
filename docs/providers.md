@@ -94,6 +94,16 @@ at once, never coalesced, never silenced by quiet hours.
 | `active` | `boolean` | `false` means the collector never starts. |
 | `prForBranch({repo, branch})` | `-> summary \| {none:true} \| {auth:false} \| {error}` | Four outcomes, and they are not interchangeable: `none` is "no PR yet", `auth` makes the caller back off for ten minutes and say `NEED-HUMAN` once, `error` is shown on the card. |
 | `runs({repo})` | `-> {ok, queue} \| {auth:false}` | `queue` is `{runs[], queued, running, repo}`. |
+| `mainRuns({slug, branch, limit=30, workflow?})` | `-> {ok, runs[]} \| {auth:false} \| {ok:false, error}` | Recent workflow runs on one branch (main), newest first, optionally of one workflow file. A run is `{id, attempt, workflow, workflowId, headSha, event, status, conclusion, createdAt, updatedAt}`; `status`/`conclusion` are lower case, `conclusion` is `null` while running, times are ms. |
+| `runJobs({slug, runId})` | `-> {ok, jobs[]} \| {auth:false} \| {ok:false, error}` | The jobs of one run: `{id, name, status, conclusion, startedAt, completedAt, steps}`. `steps` is `{total, ran, skipped, failed, skippedNames[]}`, where `ran` counts the steps that are not setup (`SETUP_STEP`: `Set up job`, `Complete job`, `Post …`, checkout and `setup-*` actions) and `skipped`/`skippedNames` are the skipped ones among them. A green job with `ran > 0` and `skipped === ran` tested nothing. |
+| `rateLimit()` | `-> {ok, remaining, limit, resetAt, graphql} \| {auth:false} \| {ok:false, error}` | The REST core budget that the run reads spend; `resetAt` in ms. `graphql` is the same shape for the bucket `pr view` spends. Reading it costs nothing. |
+| `failedJobsForCommit({slug, sha})` | `-> [{workflow, job}]` | The failed jobs of a commit's failed runs. A failed run with no readable failed job is `{workflow, job:null}`. Any failure to list the runs gives `[]`. |
+
+`slug` is `owner/name`, passed as `-R`, not taken from a checkout. These four
+only need Actions read, so they work with a fine-grained token that has no
+Checks permission. Every argument is checked before it reaches the CLI
+(`{ok:false, error:'bad argument'}`, or `[]`); nothing is ever a flag.
+The `none` provider has the same exports, returning `{ok:false}` (and `[]`).
 
 A `summary` is:
 
@@ -103,8 +113,19 @@ A `summary` is:
   isDraft, mergeable, headSha,
   checks: { passed, failed, pending, total, failedNames[] },
   verdict,                     // red | pending | green | none
+  viaRuns,                     // true: checks are the head commit's Actions runs
+  firstReviewAt,               // ms of the first review by a person, or null
 }
 ```
+
+A fine-grained token is refused `statusCheckRollup`. `prForBranch` then reads
+the PR without it and counts the Actions runs of the head commit instead, one
+per workflow: `viaRuns` is `true` and `failedNames` holds **workflow** names,
+not job names. `failedJobsForCommit` turns those into jobs.
+
+`firstReviewAt` is the earliest `submittedAt` across `reviews` and
+`latestReviews`, skipping pending reviews and bot authors (`…[bot]`, `…-bot`
+and the known review apps).
 
 `verdict` drives the chip and the `blocked` marker: red raises one marker per
 head commit, and green after red dismisses it.
