@@ -7,11 +7,14 @@ what, and where the trouble is. It is drawn as a constellation:
 - a **core** in the middle
 - **sites** on the first ring
 - **rooms** on the second ring
-- **services** and **lanes** on the outer ring
+- **services**, **builders** and **lanes** on the outer rings
 
 Arcs across the rings show the relationships a tree cannot hold.
 
-Open it with the **Map** tab, or `g p`.
+The Map is the home view: `#/map`, or `g m` from anywhere. Every other view
+keeps a small minimap of it in the bottom-right corner; click it to come back.
+It looks the same on a standalone builder (a fleet of one) and on a hub (the
+whole fleet).
 
 Movement on the Map is always data:
 
@@ -35,22 +38,46 @@ What you do moves it too, built to be followed rather than noticed:
 - **Everything is a spring.** Positions, fades and zoom start from the speed they
   already have and settle without bouncing, so a new click mid-move bends the
   motion instead of restarting it. A drag glides on after you let go.
-- **The selection draws in.** Its ring closes onto the node and a hairline runs
-  from the node to its panel.
+- **The selection draws in.** Corner brackets close onto the node, and its
+  details, tabs and actions open in the inspector on the right.
 
 **Folding.** A node with something inside can be folded: its children tuck into
-it and it shows `+N` with a dotted ring. Select it and press `c`, or use **Fold**
-in its panel; click the `+N` to unfold. Trouble inside a folded node still
+it and it shows `+N` with a dotted ring. Select it and press `c`, or use **Fold / unfold**
+in the inspector; click the `+N` to unfold. Trouble inside a folded node still
 colours it, links to what is folded away attach to it, and finding or picking a
 folded node unfolds what hides it. Folds are remembered in this browser.
+
+**The look.** Healthy nodes are grey; hue and shape appear only on trouble
+(■ crit, ▲ warn, ◆ low), so what is coloured is what needs you. The rings carry
+labels and a bearing dial; the readout corner (top right) shows zoom, scope,
+node count, overlay and the clock.
+
+**Overlays.** `o` cycles what the colour means (`O` goes back), and the choice
+is remembered in this browser:
+
+| Overlay | Lanes and sessions are coloured by |
+| --- | --- |
+| `status` | their state (the default); in every overlay a lane in trouble keeps its own colour |
+| `ci` | their CI: fail red, running animated, pass calm, none a ring; CI links stay drawn |
+| `cost` | spend over 24 h, against the builder's budget cap when one is set |
+| `context` | context window use (50 / 70 / 85 %) |
+| `age` | time since the last change (10 m, 1 h, 4 h, 24 h) |
+
+**Scope and split.** Picking a builder in the rail (or `[` `]`, `1`-`9`)
+ghosts every other builder and flies to its subtree. `\` splits the Map with a
+dense lane table on the right (from 900 px wide), worst first; hovering a row
+lights its node and the other way round.
 
 | Key | |
 | --- | --- |
 | `/` | find a node |
 | `f` | fit everything |
 | `c` | fold or unfold the selected node |
-| `Esc` | close the panel |
+| `o` / `O` | next / previous overlay |
+| `\` | split with the lane table |
+| `Esc` | close the inspector |
 | double-click | fly to a node (or fit, on empty space) |
+| pinch, wheel | zoom (pinch on a phone) |
 
 ## Three inputs, all optional
 
@@ -60,8 +87,9 @@ folded node unfolds what hides it. Folds are remembered in this browser.
 | feeds | snapshots other machines push | them, into `~/.cache/laneboard/feeds/` |
 | probes | HTTP checks | laneboard itself, from the topology |
 
-Lanes and sessions come from the board. With none of the three inputs, the Map
-shows this host with its active lanes around it.
+Lanes and sessions come from the board, or on a hub from every builder. With
+none of the three inputs, the Map shows this builder with its active lanes
+around it (on a hub: `core → FLEET → builder:<id> → lanes`).
 
 **laneboard never connects out to what it watches, apart from the probes you
 list.** Everything else arrives as a file that the other machine pushed. This is
@@ -108,15 +136,17 @@ that infrastructure.
 
 | Field | What |
 | --- | --- |
-| `id` | Unique. `lane:` ids are reserved for laneboard's own lane nodes. |
+| `id` | Unique. `lane:`, `builder:`, `sess:`, `repo:` and `pkg:` ids, and `__core`, `__fleet`, `__repos`, are reserved for laneboard's own nodes. |
 | `parent` | The node this one sits inside. A node with no parent hangs off the core. |
-| `kind` | `core`, `site`, `host`, `room`, `service`, `lane` or `pr`. Sets the ring and the shape. At most one `core`; without one, laneboard adds a core named after `title`. |
+| `kind` | `core`, `site`, `host`, `room`, `service`, `lane` or `pr`. Sets the ring and the shape. At most one `core`; without one, laneboard adds a core named after `title`. `builder`, `session`, `repo` and `package` are made by laneboard and refused in the file. |
+| `builder` | The builder id this node hosts (`"builder": "builder-a"`): the builder and its lanes hang under it. One node per builder id. |
+| `ci` | `{ "runner": true, "for": ["builder-a"] }` (or `"for": "*"`): this node is a CI runner serving those builders; a `ci` link to each is live while a run for one of its lanes is in progress. |
 | `label`, `sub` | The name, and the small line under it. A feed or probe can replace `sub`. |
-| `detail` | Key/value pairs shown in the side panel. |
+| `detail` | Key/value pairs shown in the inspector. |
 | `feed` | `"source"` for a host, `"source/<vmid or name>"` for one of its guests, `"source/<vmid or name>/<service>"` for a service that guest lists. |
 | `expect` | `"stopped"` for a guest that is meant to be off. It then shows idle, not down. |
 | `probe` | `{ url, expect?, every?, timeoutMs?, method?, level? }`. `expect` is a code, a list of codes, or `"2xx"`. The default is any 2xx or 3xx. `level: "warn"` makes a failure amber instead of red. |
-| `href` | An "Open" link in the side panel. |
+| `href` | An "Open" link in the inspector. |
 | `order` | Sort order among siblings. |
 
 **How a node's status is decided**
@@ -132,6 +162,8 @@ that infrastructure.
 - `kind: "flow"` means something moves along it.
 - `kind: "share"` means both ends use the same resource, such as a GPU. It is drawn dotted.
 - `live: true` animates the link.
+- `touch`, `conflict`, `pkg` and `ci` are laneboard's own (below) and refused
+  in the file.
 
 **Lanes**
 
@@ -196,7 +228,7 @@ half-written file.
   - `sub`, `why` and `detail` work as on a node.
   - A service the guest does not list is unknown; every service of a stopped
     guest is down.
-- `events` appear once each, in the ticker and as a pulse on the node.
+- `events` appear once each, in the event tape and as a pulse on the node.
   - Events already in the file when laneboard first reads it are not replayed.
   - `guest` targets one of the host's guests.
 
@@ -219,10 +251,55 @@ pvesh get /nodes/$(hostname)/qemu --output-format json  # and /lxc, /status
 ssh -i /root/.ssh/feed laneboard@board < feed.json
 ```
 
+## Builders, lanes and the links between them
+
+Every builder is a node `builder:<id>`, labelled with its code. It hangs under
+the topology node whose `builder` field names it; on a standalone builder,
+under the node `self` names; on a hub, else under a room whose feed guest is
+named like the builder; otherwise under a synthetic **FLEET** site, where it
+says `not in topology` so you know to add the field. The builder node takes
+its link state from the hub (`up`, `stale`, `down`), and its room takes the
+worse of its feed and that link. When a builder goes down, the event list
+says so once, and its lanes keep their last status, greyed.
+
+Lane ids carry the builder (`lane:builder-a/payments`), so two builders may
+both have a lane `payments`. A lane with two or more live sessions shows each
+as a child `sess:<builder>/<name>`. Lanes carry flags (`stuck`, `paused`,
+`awaitingApproval`, `reviewReady`) and the measures the overlays read.
+
+With packages data, a **REPOS** island holds one `repo:<name>` per repo and one
+`pkg:<repo>/<pkg>` per package, coloured by its CI on main. New links:
+
+| Link | Between | Means |
+| --- | --- | --- |
+| `touch` | lane, lane | both change the same files |
+| `conflict` | lane, lane | a predicted merge risk (warn), or a real merge-tree conflict (crit) |
+| `pkg` | lane, package | the lane changes that package; live while it works |
+| `ci` | builder, runner | the runner serves that builder; live while it runs one of its lanes |
+
+One edge per lane pair: a conflict replaces a touch, a confirmed conflict a
+predicted one. The full model is in [fleet/map.md](fleet/map.md).
+
+## On a hub
+
+The hub draws the Map from three sources: its own topology file and probes,
+the **feeds** pushed to its own `map.feedsDir`, and the merged state of every
+builder (their lanes, sessions, packages and CI). It rebuilds 1 s after any
+change and every 5 s, and resends at most every 10 s while only metrics move.
+
+**Feeds move to the hub.** A builder with `fleet.hubKeys` set no longer reads
+its feeds directory, and its own `/api/map` says `"feeds": false`. So once the
+hub key is pinned, point every feed pusher at the hub box instead: the same
+forced-command `authorized_keys` line, on the hub's laneboard user, writing
+into the hub's `~/.cache/laneboard/feeds/`. Nothing else changes in the format.
+A builder without a hub key keeps reading feeds as before.
+
+Probes run on the hub too, from the hub's own topology file.
+
 ## API
 
-- `GET /api/map` returns the model the view draws: `{ title, nodes, links, events, error?, generatedAt }`.
+- `GET /api/map` returns the model the view draws: `{ title, fleet: {builders}, nodes, links, events, error?, feeds?, generatedAt }`. `feeds: false` means this board does not read feeds (a builder a hub watches).
 - Over the socket, a `{ type: "map", map }` message arrives:
   - on connect
-  - whenever a status, label or link changes
-  - otherwise at most every 5 seconds, while metrics move
+  - whenever a status, label, flag, structure or link severity changes
+  - otherwise at most every 5 seconds on a builder (10 on a hub), while metrics move

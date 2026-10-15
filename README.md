@@ -8,16 +8,27 @@ One Node 24 process, no build step, six dependencies. It binds `127.0.0.1`
 only: laneboard has no login and can type into terminals, so anything that
 exposes it (a tailnet, a reverse proxy) has to do the authentication.
 
+With a `fleet` block, several of these boards sit behind one **hub**: a
+separate laneboard in `mode: "hub"` that shows and drives every builder through
+signed, audited requests. Without one, nothing changes. See
+**[docs/fleet.md](docs/fleet.md)**.
+
 | View | Answers |
 | --- | --- |
-| **Board** `#board` | What is each lane doing, and which one wants me? One card per lane — progress and current stage, branch, PR and checks, agent slot, model, 5 h spend, last marker — with its sessions inside as rows. Sorted by the most urgent thing inside. |
-| **Morning** `#morning` | Over a window (12 h / tonight / 24 h / 7 d): what needs a human (`danger` first), what finished (with its PR), what it cost. |
-| **Credit** `#credit` | Where the 5 h and 7 d rate-limit windows have been, and what each lane spent. |
-| **Box** `#box` | The machine, a live stack next to it and its guard, the CI queue, the agent slots. |
-| **Map** `#map` | What is all this running on, and where is the trouble? A live constellation of your sites, rooms, services and lanes, and what depends on what. Fed by a topology file, snapshots other machines push, and HTTP probes; laneboard reaches out to nothing else. |
+| **Map** `#/map` | The home view. What is all this running on, and where is the trouble? A live constellation of your sites, rooms, services, builders and lanes, with what depends on what, which lanes touch the same files and which conflict. Overlays for status, CI, cost, context and age; `\` splits it with a dense lane table, and every other view keeps a minimap of it in the corner. Fed by a topology file, snapshots other machines push, and HTTP probes; laneboard reaches out to nothing else. |
+| **Board** `#/board` | What is each lane doing, and which one wants me? One data block per lane and session: builder, state, stage, PR and checks, context, 5 h spend, age. Sorted by the most urgent thing inside. |
+| **Inbox** `#/inbox` | What is waiting for me? Pending approvals, lanes that need you, lanes ready for review, paused and stuck lanes, with keys to approve, deny, release and pause. |
+| **Packages** `#/packages` | What state is each package in? Its CI on main, untested commits, the lanes and PRs touching it, predicted conflicts and plan status. |
+| **Morning** `#/morning` | Over a window (12 h / tonight / 24 h / 7 d): what needs a human (`danger` first), what finished (with its PR), review waits, stuck incidents, what it cost. |
+| **Credit** `#/credit` | Where the 5 h and 7 d rate-limit windows have been, per account, and what each builder and lane spent. |
+| **Box** `#/box` | The machine and its health, a live stack next to it and its guard, the CI queue, the agent slots; on a hub, every builder's link, version, latency and health. |
+| **Audit** `#/audit` | What was done, by whom? The hash-chained action log, and on a hub each relayed action's reconciliation with the builder's own log. |
+| **Diff** `#/diff` | A lane's changes, with line comments batched into one review sent to the lane. Opened from a lane. |
+| **Archive** `#/board?s=archive` | Retired lanes, searchable; restore one through a confirmed launch. |
 
-`g b` · `g m` · `g c` · `g x` · `g p` switch views. `j` `k` `p` `Enter` `Esc` `1`–`9`
-work on the Board.
+`g m` map · `g b` board · `g i` inbox · `g p` packages · `g o` morning ·
+`g c` credit · `g x` box · `g a` audit. `⌘K` opens the command palette, `[`
+`]` step through builders, `\` splits the Map, `?` shows every key.
 
 ## Run it
 
@@ -61,6 +72,11 @@ laneboard morning [--window tonight|12h|24h|7d]
 laneboard credit
 laneboard launch <lane> --plan docs/plans/<lane>.md
 laneboard retire <lane> [--force]
+laneboard pause <name|--all>     # works with the server down
+laneboard resume <name|--all>
+laneboard paused
+laneboard audit [verify]         # the fleet audit log, offline
+laneboard fleet keygen|pubkey    # the hub key (on the hub)
 ```
 
 `LANEBOARD_URL` overrides the server address.
@@ -77,9 +93,10 @@ human starts. The guard flags and pushes; it never acts.
 | | |
 | --- | --- |
 | [docs/install.md](docs/install.md) | prerequisites, the service, HTTPS in front of it, the phone |
+| [docs/fleet.md](docs/fleet.md) | fleet mode: builders and the hub, signed actions, scopes, the rollout order |
 | [docs/config.md](docs/config.md) | every config key, its default and its environment variable |
 | [docs/providers.md](docs/providers.md) | the three interfaces everything site-specific sits behind, and how to add one |
-| [docs/map.md](docs/map.md) | the Map: the topology file, the feed format, pushing a feed from a hypervisor |
+| [docs/map.md](docs/map.md) | the Map: the topology file, the feed format, pushing a feed from a hypervisor, builders on the Map |
 | [SECURITY.md](SECURITY.md) | why there is no login, and what that means for where you put it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | `npm test`, the hygiene gate, what is deliberate |
 
