@@ -4,11 +4,12 @@
 import http from 'node:http';
 import { config } from '../config.mjs';
 import { log } from '../log.mjs';
-import { handleRequest, route, json, badRequestTarget, classifyRequest, authOptions, userOf, isAuthenticated } from '../http.mjs';
+import { handleRequest, route, json, badRequestTarget, classifyRequest, authOptions, userOf, isAuthenticated, misroutedServe } from '../http.mjs';
 import { checkUpgrade, warnRateLimited } from '../security.mjs';
 import * as auth from '../fleet/auth.mjs';
 import { AuthError } from '../fleet/auth.mjs';
-import { socketPeerUid } from '../fleet/peercred.mjs';
+import { socketPeerUid, PROC_NET_TCP6 } from '../fleet/peercred.mjs';
+import fs from 'node:fs';
 import { VERSION } from '../version.mjs';
 
 export { VERSION };
@@ -84,24 +85,74 @@ export function listenPorts(cfg = config) {
   return out;
 }
 
-let peerUidLookup = socketPeerUid;
+/**
+ * The default lookup (SR6 L4): for an IPv4 peer only /proc/net/tcp is read
+ * (the IPv4 loopback rows never appear in tcp6), which halves the parse.
+ */
+function defaultPeerUidLookup(socket) {
+  if (socket?.remoteFamily === 'IPv4') {
+    const read = (p, enc) => {
+      if (p === PROC_NET_TCP6) throw Object.assign(new Error('skipped: IPv4 peer'), { code: 'ENOENT' });
+      return fs.readFileSync(p, enc);
+    };
+    return socketPeerUid(socket, { read });
+  }
+  return socketPeerUid(socket);
+}
+
+let peerUidLookup = defaultPeerUidLookup;
 /** Tests only: replace the peer-uid lookup used on accepted ingress sockets. */
 export function _setPeerUidLookup(fn) {
-  peerUidLookup = typeof fn === 'function' ? fn : socketPeerUid;
+  peerUidLookup = typeof fn === 'function' ? fn : defaultPeerUidLookup;
 }
 
 /**
- * On the ingress listener with `fleet.ingressPeerUid` set, record the peer
- * uid of each accepted socket (A11, /proc/net/tcp) as `socket.lbPeerUid` at
- * `connection` time; auth.classify compares it (null → 403 not-from-serve,
- * never downgraded to local).
+ * Peer uids by the (address, port) pair of each end of an OPEN ingress
+ * connection (SR6 L4).
+ * An entry lives for the connection's lifetime (deleted on `close`), so a
+ * reused port never inherits another connection's uid.
+ */
+const peerUidCache = new Map();
+export function _peerUidCacheSize() { return peerUidCache.size; }
+
+/**
+ * On the ingress listener with `fleet.ingressPeerUid` set, give each accepted
+ * socket a `socket.lbPeerUid` (A11, /proc/net/tcp) that auth.classify compares
+ * (null → 403 not-from-serve, never downgraded to local). SR6 L4: the lookup
+ * runs lazily, on the first request that reads it (a connection that never
+ * sends a request costs no /proc scan), once per connection, and is cached
+ * per (remotePort, localPort) until the socket closes.
  */
 export function recordPeerUid(socket, cfg = config) {
   const want = cfg.fleet?.ingressPeerUid;
   if (want === null || want === undefined) return;
-  let uid = null;
-  try { uid = peerUidLookup(socket); } catch { uid = null; }
-  socket.lbPeerUid = Number.isInteger(uid) ? uid : null;
+  const key = JSON.stringify([socket?.remoteAddress, socket?.remotePort, socket?.localAddress, socket?.localPort]);
+  let done = false;
+  let cachedHere = false;
+  let value = null;
+  const compute = () => {
+    if (done) return value;
+    done = true;
+    if (peerUidCache.has(key)) {
+      value = peerUidCache.get(key);
+      return value;
+    }
+    let uid = null;
+    try { uid = peerUidLookup(socket); } catch { uid = null; }
+    value = Number.isInteger(uid) ? uid : null;
+    // only a live connection's tuple is cached: its ports cannot be reused while it is open
+    if (socket?.destroyed !== true) { peerUidCache.set(key, value); cachedHere = true; }
+    return value;
+  };
+  Object.defineProperty(socket, 'lbPeerUid', {
+    configurable: true,
+    enumerable: true,
+    get: compute,
+    set: (v) => { done = true; value = Number.isInteger(v) ? v : null; },
+  });
+  if (typeof socket?.once === 'function') {
+    socket.once('close', () => { if (cachedHere) peerUidCache.delete(key); });
+  }
 }
 
 /** One-time boot warnings about how the fleet auth is set up (§2 2.3, SR4 L4). */
@@ -130,6 +181,12 @@ export function handleUpgrade(req, socket, head, { onUpgrade = null, cfg = confi
   }
   const url = new URL(req.url, 'http://localhost');
   let a;
+  // SR6 L1: serve's headers on the local listener (with a fleet block) → 403 misrouted-serve
+  const misrouted = misroutedServe(req, cfg);
+  if (misrouted) {
+    refuseUpgrade(req, socket, misrouted);
+    return;
+  }
   try {
     req.auth = undefined;
     a = classifyRequest(req, cfg);

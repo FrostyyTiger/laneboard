@@ -151,20 +151,67 @@ test('fleet block, hubControl false: classification on both listeners', { timeou
     r = await ingressFetch(b, '/api/v1/actions', { user: USER, method: 'POST', headers: { 'content-type': 'text/plain', 'x-laneboard': '1', origin: `https://${PUB}` }, body: '{}' });
     assert.equal(r.status, 415);
 
-    // the local listener: local, and a Tailscale-User-Login header there is deleted, never trusted
-    r = await local(b, '/api/v1/hello', { headers: { 'tailscale-user-login': USER } });
+    // the local listener: local; a Tailscale-User-Login header there is never trusted (SR6 L1: refused outright)
+    r = await local(b, '/api/v1/hello');
     assert.deepEqual(r.json.auth, { kind: 'local' });
+    r = await local(b, '/api/v1/hello', { headers: { 'tailscale-user-login': USER } });
+    assert.equal(r.status, 403);
+    assert.equal(r.json.reason, 'misrouted-serve');
     r = await local(b, '/api/sessions/nobody/keys', { method: 'POST', body: { keys: ['Enter'] }, headers: { 'tailscale-user-login': USER } });
+    assert.equal(r.status, 403, r.text);
+    r = await local(b, '/api/sessions/nobody/keys', { method: 'POST', body: { keys: ['Enter'] } });
     assert.equal(r.status, 404, r.text);
-    const legacyRow = (await auditEntries(b)).filter((e) => e.action === 'send-keys' && e.target === 'nobody').at(-1);
-    assert.equal(legacyRow.user, 'local', 'the forged login is not the audit user');
-    assert.equal(legacyRow.via, 'legacy');
+    const legacyRow = (await auditEntries(b)).filter((e) => e.action === 'send-keys' && e.target === 'nobody');
+    assert.equal(legacyRow.length, 1, 'the misrouted request never reached dispatch');
+    assert.equal(legacyRow[0].user, 'local');
+    assert.equal(legacyRow[0].via, 'legacy');
     // the hook intake never comes through serve
     r = await ingressFetch(b, '/api/hook', { user: USER, method: 'POST', headers: { origin: `https://${PUB}` }, body: { hook_event_name: 'Stop' } });
     assert.equal(r.status, 403);
     // a publicHost is not a valid Host on the local listener
     r = await local(b, '/api/v1/hello', { headers: { host: PUB } });
     assert.equal(r.status, 403);
+  } finally {
+    await b.stop();
+  }
+});
+
+// SR6 L1: tailscale serve still pointed at the local port once a fleet block exists
+test('fleet block: serve headers on the LOCAL listener are refused 403 misrouted-serve, logged once', { timeout: 60_000 }, async () => {
+  const b = await boot({ config: { fleet: fleetBlock({ hubControl: true }) } });
+  try {
+    const serveLike = [
+      { 'x-forwarded-for': '192.0.2.9' },
+      { 'x-forwarded-proto': 'https' },
+      { 'x-forwarded-host': PUB },
+      { 'tailscale-user-login': USER },
+      { 'Tailscale-User-Name': 'Op' },
+      { 'x-forwarded-for': '192.0.2.9', 'x-forwarded-proto': 'https', 'tailscale-user-login': USER },
+    ];
+    for (const headers of serveLike) {
+      const r = await local(b, '/api/v1/hello', { headers });
+      assert.equal(r.status, 403, JSON.stringify(headers));
+      assert.equal(r.json.reason, 'misrouted-serve', JSON.stringify(headers));
+    }
+    // a mutation (kill, which local auto-confirms) never runs and is not audited
+    let r = await local(b, '/api/sessions/nobody', { method: 'DELETE', headers: { 'x-forwarded-for': '192.0.2.9', 'x-forwarded-proto': 'https' } });
+    assert.equal(r.status, 403);
+    assert.equal((await auditEntries(b)).filter((e) => e.target === 'nobody').length, 0);
+    // upgrades too (/ws, /ws/term/, /api/v1/stream)
+    const { WebSocket } = await import('ws');
+    for (const p of ['/ws', '/ws/term/demo', '/api/v1/stream']) {
+      const w = await wsOutcome(new WebSocket(`ws://127.0.0.1:${b.port}${p}`, { headers: { host: `127.0.0.1:${b.port}`, 'x-forwarded-for': '192.0.2.9', 'tailscale-user-login': USER } }));
+      assert.equal(w, 403, p);
+    }
+    // plain local requests are untouched, and serve's headers on the ingress port still work
+    r = await local(b, '/api/v1/hello');
+    assert.equal(r.status, 200);
+    r = await ingressFetch(b, '/api/v1/hello', { user: USER });
+    assert.equal(r.status, 200);
+    // one loud line telling the operator what to do, not one per request
+    const lines = b.logs().split('\n').filter((l) => /tailscale serve still targets the local port/.test(l));
+    assert.equal(lines.length, 1, b.logs().slice(-2000));
+    assert.match(lines[0], new RegExp(`http://127\\.0\\.0\\.1:${b.ingressPort}`));
   } finally {
     await b.stop();
   }
@@ -319,6 +366,26 @@ test('fleet block, hubControl true: scopes, terminals, approvals through ingress
     assert.equal(w, 'open');
     w = await wsOutcome(ingressWs(b, '/api/v1/term/demo', { user: USER, origin: null }));
     assert.equal(w, 403, 'a direct upgrade without Origin');
+    // SR6 L5: the legacy /ws/term/ path is audited like the v1 route (direct and local)
+    const termRows = async () => (await auditEntries(b)).filter((e) => e.action === 'term' && e.target === 'demo');
+    let before = (await termRows()).length;
+    w = await wsOutcome(ingressWs(b, '/ws/term/demo?cols=90&rows=20', { user: USER }));
+    assert.equal(w, 'open');
+    let rows = await termRows();
+    assert.equal(rows.length, before + 1, 'a legacy direct terminal leaves an audit row');
+    assert.equal(rows.at(-1).via, 'direct');
+    assert.equal(rows.at(-1).user, USER);
+    assert.equal(rows.at(-1).result.status, 101);
+    before = rows.length;
+    const { WebSocket } = await import('ws');
+    w = await wsOutcome(new WebSocket(`ws://127.0.0.1:${b.port}/ws/term/demo`, { headers: { host: `127.0.0.1:${b.port}` } }));
+    assert.equal(w, 'open');
+    rows = await termRows();
+    assert.equal(rows.length, before + 1, 'a legacy local terminal leaves an audit row');
+    assert.equal(rows.at(-1).via, 'legacy');
+    assert.equal(rows.at(-1).user, 'local');
+    w = await wsOutcome(new WebSocket(`ws://127.0.0.1:${b.port}/ws/term/demo?cols=80&cols=90`, { headers: { host: `127.0.0.1:${b.port}` } }));
+    assert.equal(w, 400, 'a repeated cols is ambiguous on the legacy path too');
 
     // C4: an approval is decided through the ingress listener by a direct user, and is remote-only locally
     const stateDir = path.join(b.tmp, 'state', 'laneboard');
@@ -426,6 +493,10 @@ test('no fleet block: no ingress listener, everything local, legacy routes audit
     const row = (await auditEntries(b)).filter((e) => e.action === 'send-keys').at(-1);
     assert.equal(row.user, USER, 'without a fleet block the login is attribution, as always');
     assert.equal(row.via, 'legacy');
+    // SR6 L1 applies only with a fleet block: serve on today's port keeps working
+    const fwd = await local(b, '/api/v1/hello', { headers: { 'x-forwarded-for': '192.0.2.9', 'x-forwarded-proto': 'https', 'tailscale-user-login': USER } });
+    assert.equal(fwd.status, 200);
+    assert.doesNotMatch(b.logs(), /misrouted|still targets the local port/);
     assert.match(b.logs(), /remote-only protection .* needs a fleet block/);
     // signature machinery is not reachable without an ingress listener: a signed request is just local
     const s = await local(b, '/api/v1/hello', { headers: { 'x-laneboard-sig': `ed25519 ${'A'.repeat(86)}==` } });

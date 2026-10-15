@@ -129,11 +129,59 @@ export function safeDecode(s) {
 // Shared options for auth.classify / guardRequest / guardUpgrade: the
 // process-wide nonce cache (pre-loaded from the audit log at boot by the v1
 // module) and the logger for one-time warnings.
-const authOpts = { warn: (text) => log.warn(text) };
-/** The options every classification in this process uses (tests may add `now`/`peerUid`). */
+// Frozen (SR6 L8): nothing can slip `now` or `nonces` into it, which would
+// turn off the boot-epoch check and the per-key nonce budgets (SR3 R2).
+const BASE_AUTH_OPTS = Object.freeze({ warn: (text) => log.warn(text) });
+let authOpts = BASE_AUTH_OPTS;
+/** The options every classification in this process uses (frozen). */
 export function authOptions() {
   return authOpts;
 }
+
+/**
+ * Tests only: classify with extra options (`now`, `peerUid`, ...) on top of
+ * the process-wide ones; `null` restores them. The result is frozen too.
+ */
+export function _setAuthOptionsForTests(extra = null) {
+  authOpts = extra ? Object.freeze({ ...BASE_AUTH_OPTS, ...extra }) : BASE_AUTH_OPTS;
+}
+
+/** The headers `tailscale serve` adds to what it forwards (SR6 L1). */
+export function serveHeaderNames(req) {
+  const out = [];
+  for (const k of Object.keys(req?.headers ?? {})) {
+    const l = k.toLowerCase();
+    if (l === 'x-forwarded-for' || l === 'x-forwarded-proto' || l === 'x-forwarded-host' || l.startsWith('tailscale-')) out.push(l);
+  }
+  return out;
+}
+
+let misroutedWarned = false;
+/**
+ * SR6 L1: with a fleet block (an ingress port), a request on the LOCAL
+ * listener that carries tailscale serve's headers means serve still targets
+ * the local port, and would otherwise run as `local` (full local power). It is
+ * refused with AuthError 403 `misrouted-serve`, and the operator is told once,
+ * loudly, to point serve at the ingress port. Local CLI, hooks and scripts
+ * never send these headers. Without a fleet block nothing changes (null).
+ * Returns the AuthError or null.
+ */
+export function misroutedServe(req, cfg = config, warn = (t) => log.error(t)) {
+  const ip = cfg?.fleet?.ingressPort;
+  if (!Number.isInteger(ip) || ip < 1 || ip > 65535) return null;
+  if (auth.isIngress(req, cfg)) return null;
+  const names = serveHeaderNames(req);
+  if (names.length === 0) return null;
+  if (!misroutedWarned) {
+    misroutedWarned = true;
+    warn(`fleet auth: a request on the local port ${req?.socket?.localPort ?? '?'} carries tailscale serve headers (${[...new Set(names)].slice(0, 5).join(', ')}): ` +
+      `tailscale serve still targets the local port. Point tailscale serve at http://127.0.0.1:${ip} (fleet.ingressPort); until then every such request is refused 403 misrouted-serve`);
+  }
+  return new auth.AuthError(403, 'misrouted-serve');
+}
+
+/** Tests only: let the misrouted-serve warning fire again. */
+export function _resetMisroutedWarning() { misroutedWarned = false; }
 
 /**
  * The request's auth (fleet §2 2.3): `req.auth` when http.mjs or the upgrade
@@ -217,6 +265,11 @@ export async function handleRequest(req, res) {
   // Classification + kind-aware guards (§2 2.3-2.5): Host (listener-specific),
   // local/direct/hub, Origin, Sec-Fetch-Site, `X-Laneboard: 1`, JSON on v1
   // actions. On the local listener every Tailscale-* header is deleted first.
+  const misrouted = misroutedServe(req);
+  if (misrouted) {
+    warnRefused(req, 'request', misrouted.code);
+    return json(res, refusalBody(misrouted), misrouted.status);
+  }
   try {
     req.auth = undefined;
     classifyRequest(req);
