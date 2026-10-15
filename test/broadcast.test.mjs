@@ -394,10 +394,11 @@ test('e2e: hub plans, skips prompting lanes, builder guardPrompt refuses a lane 
     assert.equal(a.envelope.args.guardPrompt, true);
     assert.equal(a.envelope.args.fanout.parent, r.auditId);
   }
-  // Hub audit: one local entry for the broadcast plus a sent/done pair per envelope.
+  // Hub audit: the broadcast itself (pending before it runs, done after) plus a sent/done pair per envelope.
   const hubLines = lines();
-  const local = hubLines.filter((l) => l.action === 'broadcast');
-  assert.equal(local.filter((l) => l.result.phase === 'local' && l.result.ok).length, 1);
+  const local = hubLines.filter((l) => l.action === 'broadcast' && l.id === r.auditId);
+  assert.deepEqual(local.map((l) => [l.result.phase, l.result.local]), [['pending', true], ['done', true]]);
+  assert.equal(local[1].result.ok, true);
   for (const id of ids) {
     const pair = hubLines.filter((l) => l.id === id).map((l) => l.result.phase);
     assert.deepEqual(pair, ['sent', 'done']);
@@ -420,7 +421,8 @@ test('e2e: the hub-local broadcast from local -> 403 remote-only; never relayed;
   }
   assert.equal(fb.actions.length, 0);
   // Directly sending `broadcast` to a builder is never possible through the relay.
-  const s = await relay.send('builder-a', 'broadcast', '*', body.args, USER);
+  const s = await relay.send('builder-a', 'broadcast', '*', body.args, { kind: 'direct', user: USER });
+  assert.equal(s.status, 400);
   assert.equal(s.error, 'not-relayable');
   const r = await relay.relay(body, { kind: 'direct', user: USER });
   assert.equal(r.status, 200, JSON.stringify(r));
