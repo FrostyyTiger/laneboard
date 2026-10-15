@@ -5,6 +5,9 @@
 //   hubKeyFile() $XDG_CONFIG_HOME/laneboard/hub.key  (fallback ~/.config/laneboard/hub.key)
 //   auditFile()  $LANEBOARD_AUDIT_FILE, else <stateDir()>/audit.jsonl
 //
+// $LANEBOARD_AUDIT_FILE must be absolute: a relative value would depend on
+// the cwd (often / under systemd), so it is refused with an error.
+//
 // Per the XDG base directory spec a relative $XDG_* value is invalid and is
 // ignored. Every result is an absolute path. `env` and `home` are injectable
 // for tests; they default to process.env and os.homedir().
@@ -39,6 +42,9 @@ export function hubKeyFile(opts = {}) {
 
 export function auditFile({ env = process.env, home } = {}) {
   const v = env.LANEBOARD_AUDIT_FILE;
-  if (typeof v === 'string' && v !== '') return path.resolve(v);
+  if (typeof v === 'string' && v !== '') {
+    if (!path.isAbsolute(v)) throw new Error('laneboard: LANEBOARD_AUDIT_FILE must be an absolute path');
+    return path.normalize(v);
+  }
   return path.join(stateDir({ env, home }), 'audit.jsonl');
 }

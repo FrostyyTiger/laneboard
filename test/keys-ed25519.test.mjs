@@ -301,11 +301,96 @@ test('loadPrivateKey refuses non-key, foreign, encrypted, multi-block and oversi
     const f = put(name, content);
     assert.throws(() => loadPrivateKey(f), (e) => !/SECRETGARBAGE|MC4CAQAw/.test(e.message), name);
   }
-  assert.throws(() => loadPrivateKey(dir), /regular file|EISDIR/);
+  assert.throws(() => loadPrivateKey(dir), /not a regular file/);
   assert.throws(() => loadPrivateKey(path.join(dir, 'missing')), { code: 'ENOENT' });
   assert.throws(() => loadPrivateKey(''), TypeError);
   // a well-formed key with surrounding whitespace is fine
   assert.equal(keyId(loadPrivateKey(put('ws', `\n${edPem}\n\n`))), keyId(ed));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+const POSIX = process.platform !== 'win32' && typeof process.getuid === 'function';
+
+test('loadPrivateKey refuses a FIFO or device at the key path quickly instead of hanging (SR1 L1)', { skip: !POSIX, timeout: 5000 }, () => {
+  const dir = tmpdir();
+  const fifo = path.join(dir, 'hub.key');
+  execFileSync('mkfifo', ['-m', '600', fifo]);
+  // in a child with a hard timeout: a blocking open would hang this process for good
+  const mod = new URL('../server/fleet/keys-ed25519.mjs', import.meta.url).href;
+  const script = `import(${JSON.stringify(mod)}).then((m) => { try { m.loadPrivateKey(process.argv[1]); console.log('loaded'); } catch (e) { console.log(e.message); } });`;
+  const out = execFileSync(process.execPath, ['--input-type=module', '-e', script, fifo], { timeout: 4000, encoding: 'utf8' });
+  assert.match(out, /not a regular file/);
+  assert.throws(() => loadPrivateKey('/dev/null'), /not a regular file/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('loadPrivateKey refuses a key owned by another user (SR1 L4)', { skip: !POSIX }, () => {
+  const dir = tmpdir();
+  const f = path.join(dir, 'hub.key');
+  generateHubKey({ file: f });
+  const me = process.getuid();
+  assert.throws(() => loadPrivateKey(f, { uid: me + 1 }), /owned by another user/);
+  assert.equal(loadPrivateKey(f, { uid: me }).asymmetricKeyType, 'ed25519');
+  assert.equal(loadPrivateKey(f, { uid: 0 }).asymmetricKeyType, 'ed25519'); // root may read any key
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('loadPrivateKey refuses a key in a group/other-writable directory (SR1 L2)', { skip: !POSIX }, () => {
+  const dir = tmpdir();
+  const f = path.join(dir, 'hub.key');
+  generateHubKey({ file: f });
+  for (const mode of [0o777, 0o720, 0o702, 0o775]) {
+    fs.chmodSync(dir, mode);
+    assert.throws(() => loadPrivateKey(f), /directory .* writable by group\/other/, mode.toString(8));
+  }
+  for (const mode of [0o755, 0o1777]) { // sticky: others cannot rename or unlink our key
+    fs.chmodSync(dir, mode);
+    assert.equal(loadPrivateKey(f).asymmetricKeyType, 'ed25519', mode.toString(8));
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('writePrivateKey tightens an existing loose key dir we own to 0700 (SR1 L2)', { skip: !POSIX }, () => {
+  const dir = tmpdir();
+  const keyDir = path.join(dir, 'laneboard');
+  for (const mode of [0o777, 0o755, 0o750]) {
+    fs.mkdirSync(keyDir);
+    fs.chmodSync(keyDir, mode);
+    const f = path.join(keyDir, 'hub.key');
+    generateHubKey({ file: f });
+    assert.equal(fs.statSync(keyDir).mode & 0o777, 0o700, mode.toString(8));
+    assert.equal(fs.statSync(f).mode & 0o777, 0o600);
+    assert.equal(loadPrivateKey(f).asymmetricKeyType, 'ed25519');
+    fs.rmSync(keyDir, { recursive: true, force: true });
+  }
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('writePrivateKey refuses a key dir owned by another user and writes nothing (SR1 L2)', { skip: !POSIX }, () => {
+  const dir = tmpdir();
+  fs.chmodSync(dir, 0o777);
+  const f = path.join(dir, 'hub.key');
+  assert.throws(() => generateHubKey({ file: f, uid: process.getuid() + 1 }), /directory .* owned by another user/);
+  assert.equal(fs.existsSync(f), false);
+  assert.equal(fs.statSync(dir).mode & 0o777, 0o777); // not ours: left alone
+  assert.throws(() => writePrivateKey(f, generateHubKey().privateKey, { uid: process.getuid() + 1 }), /owned by another user/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('writePrivateKey forces mode 0600 even if the file was created wider (fchmod, SR1 L4)', { skip: !POSIX }, (t) => {
+  const dir = tmpdir();
+  const f = path.join(dir, 'hub.key');
+  const real = fs.openSync;
+  // simulate a create mode that the umask/filesystem did not narrow
+  t.mock.method(fs, 'openSync', (p, flags, mode) => (p === f ? real(p, flags, 0o644) : real(p, flags, mode)));
+  const old = process.umask(0);
+  try {
+    generateHubKey({ file: f });
+  } finally {
+    process.umask(old);
+    t.mock.restoreAll();
+  }
+  assert.equal(fs.statSync(f).mode & 0o777, 0o600);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -330,9 +415,12 @@ test('paths: XDG variables when absolute, home fallbacks otherwise', () => {
   assert.equal(stateDir({ env: { XDG_STATE_HOME: '/srv/a/../b' }, home }), '/srv/b/laneboard');
 });
 
-test('paths: LANEBOARD_AUDIT_FILE wins and is made absolute', () => {
+test('paths: LANEBOARD_AUDIT_FILE wins when absolute; a relative value is refused', () => {
   assert.equal(auditFile({ env: { LANEBOARD_AUDIT_FILE: '/var/tmp/a.jsonl', XDG_STATE_HOME: '/srv' }, home: '/home/user' }), '/var/tmp/a.jsonl');
-  assert.equal(auditFile({ env: { LANEBOARD_AUDIT_FILE: 'rel/a.jsonl' }, home: '/home/user' }), path.resolve('rel/a.jsonl'));
+  assert.equal(auditFile({ env: { LANEBOARD_AUDIT_FILE: '/var/tmp/x/../a.jsonl' }, home: '/home/user' }), '/var/tmp/a.jsonl');
+  for (const rel of ['rel/a.jsonl', '../x', './a.jsonl', 'a.jsonl']) {
+    assert.throws(() => auditFile({ env: { LANEBOARD_AUDIT_FILE: rel }, home: '/home/user' }), /LANEBOARD_AUDIT_FILE must be an absolute path/, rel);
+  }
 });
 
 test('paths: defaults read process.env and os.homedir; a non-absolute home throws', () => {

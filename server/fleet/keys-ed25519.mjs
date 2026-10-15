@@ -149,15 +149,45 @@ export function keyId(k) {
   return crypto.createHash('sha256').update(rawPublicKey(k)).digest('hex').slice(0, 16);
 }
 
+function currentUid(opts) {
+  if (opts && opts.uid !== undefined) return opts.uid;
+  return typeof process.getuid === 'function' ? process.getuid() : null;
+}
+
+/**
+ * Make sure the key directory `dir` is a directory private to us: owned by
+ * `uid` and mode 0700. A directory we own with looser bits is tightened to
+ * 0700 (through the open descriptor, so a swapped path cannot redirect the
+ * chmod); one owned by another user is refused. `uid === null` (no getuid,
+ * e.g. Windows) skips the owner check.
+ */
+function secureKeyDir(dir, uid) {
+  if (process.platform === 'win32') return; // no POSIX modes or owners
+  const fd = fs.openSync(dir, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY);
+  try {
+    const st = fs.fstatSync(fd);
+    if (!st.isDirectory()) throw new Error(`hub key directory ${dir} is not a directory`);
+    if (uid !== null && st.uid !== uid) {
+      throw new Error(`hub key directory ${dir} is owned by another user; use a directory you own (mode 0700)`);
+    }
+    if (st.mode & 0o077) fs.fchmodSync(fd, 0o700);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 /**
  * Write an Ed25519 private key as PEM PKCS8 to `file`, mode 0600, refusing to
- * overwrite (flag `wx`); missing parent dirs are created 0700.
+ * overwrite (flag `wx`); missing parent dirs are created 0700, and an existing
+ * parent dir is tightened to 0700 if we own it, else refused. `opts.uid`
+ * overrides process.getuid() (tests).
  */
-export function writePrivateKey(file, privateKey) {
+export function writePrivateKey(file, privateKey, opts = {}) {
   if (!isEd25519(privateKey, 'private')) throw new TypeError('writePrivateKey: expected an Ed25519 private KeyObject');
   if (typeof file !== 'string' || file === '') throw new TypeError('writePrivateKey: file must be a path');
   const abs = path.resolve(file);
   fs.mkdirSync(path.dirname(abs), { recursive: true, mode: 0o700 });
+  secureKeyDir(path.dirname(abs), currentUid(opts));
   const pem = privateKey.export({ type: 'pkcs8', format: 'pem' });
   const fd = fs.openSync(abs, 'wx', 0o600);
   let ok = false;
@@ -179,9 +209,9 @@ export function writePrivateKey(file, privateKey) {
  * New Ed25519 key pair. With `{file}`, the private key is also written there
  * (see writePrivateKey). Returns {privateKey, publicKey, file|null}.
  */
-export function generateHubKey({ file } = {}) {
+export function generateHubKey({ file, uid } = {}) {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
-  const written = file === undefined || file === null ? null : writePrivateKey(file, privateKey);
+  const written = file === undefined || file === null ? null : writePrivateKey(file, privateKey, { uid });
   return { privateKey, publicKey, file: written };
 }
 
@@ -189,11 +219,21 @@ export function generateHubKey({ file } = {}) {
  * Load the hub's PEM PKCS8 Ed25519 private key. Refuses a file that is not a
  * regular file, is readable/writable by group or other, is owned by another
  * user (unless we are root), is larger than 16 KiB, is encrypted, or holds
- * anything but one unencrypted PKCS8 Ed25519 key.
+ * anything but one unencrypted PKCS8 Ed25519 key. Also refuses a key whose
+ * directory is writable by group/other (someone else could swap the key),
+ * unless it is sticky (others cannot rename or unlink our entries there).
+ * The open is non-blocking, so a FIFO or device at the path fails fast
+ * instead of hanging boot. `opts.uid` overrides process.getuid() (tests).
  */
-export function loadPrivateKey(file) {
+export function loadPrivateKey(file, opts = {}) {
   if (typeof file !== 'string' || file === '') throw new TypeError('loadPrivateKey: file must be a path');
-  const fd = fs.openSync(file, 'r');
+  const uid = currentUid(opts);
+  const dir = path.dirname(path.resolve(file));
+  const dst = fs.statSync(dir);
+  if (process.platform !== 'win32' && (dst.mode & 0o022) && !(dst.mode & 0o1000)) {
+    throw new Error(`hub key directory ${dir} is writable by group/other (mode ${(dst.mode & 0o777).toString(8)}); run chmod 700 on it`);
+  }
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | fs.constants.O_NOCTTY);
   let text;
   try {
     const st = fs.fstatSync(fd);
@@ -201,7 +241,6 @@ export function loadPrivateKey(file) {
     if (st.mode & 0o077) {
       throw new Error(`hub key ${file} is accessible by group/other (mode ${(st.mode & 0o777).toString(8)}); run chmod 600 on it`);
     }
-    const uid = typeof process.getuid === 'function' ? process.getuid() : null;
     if (uid !== null && uid !== 0 && st.uid !== uid) throw new Error(`hub key ${file} is owned by another user`);
     if (st.size > MAX_KEY_FILE) throw new Error(`hub key ${file} is too large to be an Ed25519 key`);
     text = fs.readFileSync(fd, 'utf8');
