@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {
   parseTopology, TopologyError, fromFeed, feedRef, build, laneNodes, diffEvents, feedEvents, probeOnce,
 } from '../server/map.mjs';
+import { laneNodeId } from '../server/fleet/keys.mjs';
 
 const NOW = 1_800_000_000_000;
 
@@ -124,8 +125,8 @@ const snapshot = {
 };
 
 test('lanes: the worst session wins, idle worktrees stay off the active map', () => {
-  const lanes = laneNodes(snapshot, { parent: 'agents', now: NOW });
-  assert.deepEqual(lanes.map((l) => l.id), ['lane:payments', 'lane:docs']);
+  const lanes = laneNodes(snapshot, { parent: 'agents', now: NOW, builderId: 'builder-a' });
+  assert.deepEqual(lanes.map((l) => l.id), ['lane:builder-a/payments', 'lane:builder-a/docs']);
   const [pay, docs] = lanes;
   assert.equal(pay.status, 'working');
   assert.equal(pay.sub, 'Edit api/charge.ts');
@@ -136,22 +137,39 @@ test('lanes: the worst session wins, idle worktrees stay off the active map', ()
 });
 
 test('lanes hang under `self`, which carries this host\'s vitals, and link by rule', () => {
-  const m = build({ topology: topo(), feeds: feed(), snapshot, now: NOW });
+  const m = build({ topology: topo(), feeds: feed(), snapshot, now: NOW, builderId: 'builder-a' });
   const agents = m.nodes.find((n) => n.id === 'agents');
   assert.deepEqual(agents.metrics, { cpu: 0.25, mem: 0.5, disk: 0.4 });
-  const pay = m.nodes.find((n) => n.id === 'lane:payments');
+  const pay = m.nodes.find((n) => n.id === 'lane:builder-a/payments');
   assert.equal(pay.parent, 'agents');
-  const rule = m.links.find((l) => l.from === 'lane:payments');
+  const rule = m.links.find((l) => l.from === 'lane:builder-a/payments');
   assert.equal(rule.to, 'api');
   assert.equal(rule.live, true, 'a working lane\'s links are live');
-  assert.ok(!m.links.some((l) => l.from === 'lane:docs'));
+  assert.ok(!m.links.some((l) => l.from === 'lane:builder-a/docs'));
 });
 
 test('with no topology the map is this host and its lanes', () => {
-  const m = build({ topology: null, snapshot, hostname: 'box', now: NOW });
+  const m = build({ topology: null, snapshot, hostname: 'box', now: NOW, builderId: 'builder-a' });
   assert.equal(m.title, 'box');
-  assert.deepEqual(m.nodes.map((n) => n.id), ['__core', 'lane:payments', 'lane:docs']);
+  assert.deepEqual(m.nodes.map((n) => n.id), ['__core', 'lane:builder-a/payments', 'lane:builder-a/docs']);
   assert.ok(m.nodes.slice(1).every((n) => n.parent === '__core'));
+});
+
+test('lane nodes use laneNodeId, keep the bare lane id as label and carry the session fkey (fleet F7)', () => {
+  const [pay, docs] = laneNodes(snapshot, { parent: 'agents', now: NOW, builderId: 'builder-b' });
+  assert.equal(pay.id, laneNodeId('builder-b', 'payments'));
+  assert.equal(pay.label, 'payments');
+  assert.equal(pay.session, 'builder-b/s1');
+  assert.equal(docs.session, 'builder-b/s2');
+  // Two builders with the same lane name give two distinct nodes.
+  const [other] = laneNodes(snapshot, { parent: 'agents', now: NOW, builderId: 'builder-a' });
+  assert.notEqual(other.id, pay.id);
+});
+
+test('without a builderId the lane ids use config.fleet.id', async () => {
+  const { config } = await import('../server/config.mjs');
+  const [pay] = laneNodes(snapshot, { parent: 'agents', now: NOW });
+  assert.equal(pay.id, laneNodeId(config.fleet.id, 'payments'));
 });
 
 test('events: a status change is news, the first data in is not', () => {

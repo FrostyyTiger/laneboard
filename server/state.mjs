@@ -15,6 +15,7 @@ import * as guard from './collector/guard.mjs';
 import * as transcripts from './collector/transcripts.mjs';
 import * as push from './push.mjs';
 import * as db from './db.mjs';
+import { fkey } from './fleet/keys.mjs';
 
 export const STATES = [
   'waiting_permission', 'waiting_question', 'working', 'done', 'idle', 'shell', 'dead',
@@ -128,6 +129,18 @@ export function deriveState({ hook, registryStatus, paneCmd, claudeAlive, paneLi
     if (guess) return { state: guess, source: 'heuristic' };
   }
   return { state: claudeAlive ? 'idle' : 'dead', source: 'default' };
+}
+
+// --- fleet keys (fleet F7) ---------------------------------------------------
+
+/**
+ * `"<fleet.id>/<name>"` for anything that leaves this process (README §3.2).
+ * Inside the process sessions stay keyed by local name. Null for an empty
+ * name, so a malformed lane never breaks a tick.
+ */
+export function keyFor(name, builderId = config.fleet?.id) {
+  if (typeof name !== 'string' || name === '') return null;
+  try { return fkey(builderId, name); } catch { return null; }
 }
 
 // --- live state -------------------------------------------------------------
@@ -297,16 +310,23 @@ export function snapshot() {
   // A decorator's source (an approval, a pause) can change between ticks, so
   // the flags and the score are refreshed on every snapshot, not only per tick.
   decorateSessions(list, now);
+  // Fleet keys (F7): additive, `name` and `lane` stay.
+  for (const s of list) {
+    s.key = keyFor(s.name);
+    s.laneKey = s.lane ? keyFor(s.lane) : null;
+  }
+  const laneList = decorateLanes(lanes.build(list, { progressFor: progress.get }), now, list);
+  if (Array.isArray(laneList)) for (const l of laneList) if (l && typeof l === 'object') l.key = keyFor(l.id);
   const snap = {
     box: extras(),
     sessions: list,
     // Idle lanes are NOT sessions (lanes plan hard rule 6): separate array,
     // no state, no attention score, never a card.
-    lanes: decorateLanes(lanes.build(list, { progressFor: progress.get }), now, list),
+    lanes: laneList,
     vitals: latestVitals,
     attention: list.filter((s) => s.attentionScore > 0)
       .sort((a, b) => b.attentionScore - a.attentionScore || (a.stateSince ?? 0) - (b.stateSince ?? 0))
-      .map((s) => ({ name: s.name, state: s.state, score: s.attentionScore, since: s.stateSince, danger: s.danger ? s.danger.reason : null })),
+      .map((s) => ({ name: s.name, key: keyFor(s.name), state: s.state, score: s.attentionScore, since: s.stateSince, danger: s.danger ? s.danger.reason : null })),
     generatedAt,
   };
   if (snapshotKeys.size) Object.assign(snap, snapshotExtras());
@@ -498,8 +518,12 @@ export async function tick() {
       if (cost) costBySession.set(name, cost);
     }
 
+    const lane = lanes.laneOf(dir);
     const session = {
       name,
+      // Fleet keys (F7); refreshed by snapshot() too.
+      key: keyFor(name),
+      laneKey: lane ? keyFor(lane) : null,
       tmuxTarget: t.mainPane?.target ?? null,
       paneId: t.mainPane?.paneId ?? null,
       paneCmd,
@@ -510,7 +534,7 @@ export async function tick() {
       dir,
       // The worktree this session is working in. A colour and a filter, never
       // a sort key (lanes plan hard rule 1). Null for a session with no repo.
-      lane: lanes.laneOf(dir),
+      lane,
       branch: g?.branch ?? null,
       dirty: g?.dirty ?? 0,
       ahead: g?.ahead ?? 0,

@@ -20,6 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.mjs';
 import { log } from './log.mjs';
+import { fkey, laneNodeId } from './fleet/keys.mjs';
 
 export const KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr'];
 export const LINK_KINDS = ['dep', 'flow', 'share'];
@@ -326,7 +327,7 @@ function toolLine(activity) {
 }
 
 /** One node per lane, its status the worst of its sessions. */
-export function laneNodes(snapshot, { parent, show = 'active', now = Date.now() } = {}) {
+export function laneNodes(snapshot, { parent, show = 'active', now = Date.now(), builderId = config.fleet?.id } = {}) {
   if (show === 'none') return [];
   const sessions = new Map((snapshot?.sessions ?? []).map((s) => [s.name, s]));
   const out = [];
@@ -351,7 +352,8 @@ export function laneNodes(snapshot, { parent, show = 'active', now = Date.now() 
     if (lane.progress) detail.Plan = typeof lane.progress === 'string' ? lane.progress : lane.progress.label ?? `${lane.progress.done ?? '?'}/${lane.progress.total ?? '?'}`;
     if (lane.merged) detail.Merged = 'into main';
     out.push({
-      id: `lane:${lane.id}`,
+      // Fleet F7: `lane:<builder>/<lane>`, so two builders' lanes never collide.
+      id: laneNodeId(builderId, lane.id),
       parent,
       kind: 'lane',
       label: lane.id,
@@ -359,7 +361,8 @@ export function laneNodes(snapshot, { parent, show = 'active', now = Date.now() 
       why: ['attention', 'crit'].includes(status) ? why : undefined,
       sub: sub ?? (why && !['attention', 'crit'].includes(status) ? why : lane.branch ?? undefined),
       detail,
-      session: own[0]?.name,
+      // The fleet key of its first session (the client store is keyed by it).
+      session: own[0]?.name ? fkey(builderId, own[0].name) : undefined,
       branch: lane.branch,
     });
   }
@@ -372,7 +375,7 @@ export function laneNodes(snapshot, { parent, show = 'active', now = Date.now() 
  * The model. Pure: every input is passed in, so the whole merge is testable
  * without a feed on disk, a network, or a tmux server.
  */
-export function build({ topology, feeds = new Map(), probes = new Map(), snapshot = null, hostname = config.hostname, now = Date.now(), topologyError = null }) {
+export function build({ topology, feeds = new Map(), probes = new Map(), snapshot = null, hostname = config.hostname, now = Date.now(), topologyError = null, builderId = config.fleet?.id }) {
   const topo = topology ?? { title: null, self: null, nodes: [], links: [], lanes: { show: 'active', links: [] } };
   const nodes = [];
   const hasCore = topo.nodes.some((n) => n.kind === 'core');
@@ -441,7 +444,7 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
   }
 
   const coreId = hasCore ? topo.nodes.find((n) => n.kind === 'core').id : '__core';
-  const lanes = laneNodes(snapshot, { parent: topo.self ?? coreId, show: topo.lanes.show, now });
+  const lanes = laneNodes(snapshot, { parent: topo.self ?? coreId, show: topo.lanes.show, now, builderId });
   nodes.push(...lanes);
 
   const links = topo.links.map((l) => ({

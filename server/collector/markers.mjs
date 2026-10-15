@@ -109,7 +109,7 @@ export function scanText(text, patterns = compiled) {
 
 // --- storage ----------------------------------------------------------------
 
-/** lane\0session\0text for everything already stored. Bounded by retention. */
+/** builder\0lane\0session\0text for everything already stored. Bounded by retention. */
 let seen = new Set();
 let loaded = false;
 
@@ -119,22 +119,25 @@ function ensureLoaded() {
   loaded = true;
 }
 
-export function keyOf(lane, sessionName, text) {
+export function keyOf(lane, sessionName, text, builder = '') {
   // NUL-separated, matching db.markerKeys(): a space separator would let lane
-  // "a" + session "b c" collide with lane "a b" + session "c".
-  return `${lane ?? ''}\u0000${sessionName ?? ''}\u0000${text}`;
+  // "a" + session "b c" collide with lane "a b" + session "c". `builder` is
+  // the stored form (fleet F7): '' for this builder's own markers.
+  return `${builder ?? ''}\u0000${lane ?? ''}\u0000${sessionName ?? ''}\u0000${text}`;
 }
 
 /**
  * Store a marker if it is new. Returns the row id when it was, else null —
  * which is what the push path uses to notify exactly once.
  */
-export function record({ lane = null, sessionName = null, kind, text, source, ts = Date.now() }) {
+export function record({ lane = null, sessionName = null, kind, text, source, ts = Date.now(), builder = '' }) {
   ensureLoaded();
-  const key = keyOf(lane, sessionName, text);
+  // Stored form: this builder's own id is '' (db.mjs resolves it at read time).
+  if (builder === config.fleet?.id) builder = '';
+  const key = keyOf(lane, sessionName, text, builder);
   if (seen.has(key)) return null;
   seen.add(key);
-  const id = db.addMarker({ ts, lane, sessionName, kind, text, source });
+  const id = db.addMarker({ ts, lane, sessionName, kind, text, source, builder });
   // A null id means another path won the race and the row already existed;
   // the key is in `seen` either way, so it will not be tried again.
   return id;
