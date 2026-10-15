@@ -6,7 +6,9 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
-import { createReadProxy, isAllowed, ALLOWLIST, RESPONSE_CAP } from '../server/hub/read-proxy.mjs';
+import {
+  createReadProxy, isAllowed, ALLOWLIST, RESPONSE_CAP, READ_CAP, jsonShapeOk, JSON_MAX_DEPTH,
+} from '../server/hub/read-proxy.mjs';
 import { createFleetStore } from '../server/hub/fleet-store.mjs';
 import { publicKeyString } from '../server/fleet/keys-ed25519.mjs';
 import { fakeBuilder } from './helpers/fake-builder.mjs';
@@ -244,17 +246,24 @@ test('a builder that is up in the store but unreachable is 503', async () => {
   assert.equal(r.json.error, 'builder unreachable');
 });
 
-test('a 5 MiB response is 502 (with content-length and chunked); 3 MiB passes', async () => {
+test('a 5 MiB response is 502 (with content-length and chunked); a 3 MiB diff passes, a 3 MiB non-diff read is 502', async () => {
   const big = 'x'.repeat(5 * 1024 * 1024);
   const mid = 'y'.repeat(3 * 1024 * 1024);
-  const { base } = await setup({ reads: { '/api/v1/credit': () => ({ big }), '/api/v1/morning': () => ({ mid }) } });
+  const { base } = await setup({ reads: {
+    '/api/v1/credit': () => ({ big }), '/api/v1/morning': () => ({ mid }), '/api/v1/lanes/lane-1/diff': () => ({ mid }),
+  } });
   const r = await rawGet(base, '/api/fleet/builder-a/v1/credit');
   assert.equal(r.status, 502);
   assert.equal(r.json.error, 'response too large');
-  const ok = await rawGet(base, '/api/fleet/builder-a/v1/morning');
+  const ok = await rawGet(base, '/api/fleet/builder-a/v1/lanes/lane-1/diff');
   assert.equal(ok.status, 200);
   assert.equal(ok.json.mid.length, mid.length);
+  // SR14 M3: non-diff reads have the lower default cap
+  const small = await rawGet(base, '/api/fleet/builder-a/v1/morning');
+  assert.equal(small.status, 502);
+  assert.equal(small.json.error, 'response too large');
   assert.ok(RESPONSE_CAP === 4 * 1024 * 1024);
+  assert.ok(READ_CAP === 1024 * 1024);
 
   // Chunked, no content-length: the cap still applies while streaming.
   let wrote = 0;
@@ -402,6 +411,108 @@ test('per-builder in-flight cap answers 429', async () => {
   assert.equal((await a).status, 200);
   assert.equal((await b).status, 200);
   assert.equal((await proxy.get('builder-a', 'credit')).status, 200);
+});
+
+// --- SR14 M3 / L5 -------------------------------------------------------------------------------------------
+
+test('SR14 M3: jsonShapeOk counts depth and values outside strings only', () => {
+  const b = (t) => Buffer.from(t);
+  assert.equal(jsonShapeOk(b('{"a":[1,2,{"b":"[[[[[["}]}')), true);
+  assert.equal(jsonShapeOk(b('['.repeat(JSON_MAX_DEPTH) + ']'.repeat(JSON_MAX_DEPTH))), true);
+  assert.equal(jsonShapeOk(b('['.repeat(JSON_MAX_DEPTH + 1) + ']'.repeat(JSON_MAX_DEPTH + 1))), false);
+  assert.equal(jsonShapeOk(b(JSON.stringify({ s: '\\"['.repeat(1000) }))), true, 'escaped quotes stay inside the string');
+  assert.equal(jsonShapeOk(b('[' + '0,'.repeat(50) + '0]'), { maxNodes: 40 }), false);
+  assert.equal(jsonShapeOk(b('[' + '0,'.repeat(10) + '0]'), { maxNodes: 40 }), true);
+});
+
+test('SR14 M3: a 4 MiB nesting bomb and a 4 MiB tiny-object array are 502 without parsing, heap stays bounded', async () => {
+  const MiB = 1024 * 1024;
+  const half = 2 * MiB - 1;
+  const nest = '['.repeat(half) + ']'.repeat(half);
+  const objs = '[' + '{},'.repeat(Math.floor((4 * MiB - 8) / 3) - 1) + '{}]';
+  const raw = await rawBuilder((req, res) => {
+    const p = new URL(req.url, 'http://x').pathname;
+    const body = p.endsWith('/diff') ? (p.includes('nest') ? nest : objs) : '{}';
+    res.writeHead(200, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) });
+    res.end(body);
+  });
+  const store = storeFor([['builder-a', raw.url]]);
+  const proxy = createReadProxy({ store, key: hubKey });
+  global.gc?.();
+  const before = process.memoryUsage().heapUsed;
+  let peak = before;
+  for (let i = 0; i < 4; i++) {
+    for (const lane of ['nest', 'objs']) {
+      const out = await proxy.get('builder-a', `lanes/${lane}/diff`);
+      assert.equal(out.status, 502, lane);
+      assert.equal(out.json.error, 'upstream json too complex');
+      peak = Math.max(peak, process.memoryUsage().heapUsed);
+    }
+  }
+  // parsing either body would cost ~100 MB of heap (SR14 measured ~30x); the scan costs ~nothing
+  assert.ok(peak - before < 48 * MiB, `heap grew ${Math.round((peak - before) / MiB)} MiB`);
+  assert.deepEqual(proxy.stats(), { inflight: 0, bytes: 0 });
+});
+
+test('SR14 M3: a hub-wide byte budget and read cap across builders answer 429', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const bigA = JSON.stringify({ s: 'a'.repeat(900 * 1024) });
+  const held = 800 * 1024;
+  const ra = await rawBuilder(async (req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.write(bigA.slice(0, held)); // held in flight until released
+    await gate;
+    res.end(bigA.slice(held));
+  });
+  const rb = await rawBuilder((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ s: 'b'.repeat(400 * 1024) }));
+  });
+  const store = storeFor([['builder-a', ra.url], ['builder-b', rb.url]]);
+  const proxy = createReadProxy({ store, key: hubKey, cfg: { bytesBudget: 1024 * 1024 } });
+  const a = proxy.get('builder-a', 'credit');
+  for (let i = 0; i < 200 && proxy.stats().bytes < held; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(proxy.stats().bytes, held, 'the first read holds its bytes');
+  const ob = await proxy.get('builder-b', 'credit');
+  assert.equal(ob.status, 429, "another builder's read is refused while the hub-wide budget is spent");
+  assert.equal(ob.json.error, 'hub read budget exhausted');
+  release();
+  assert.equal((await a).status, 200);
+  assert.deepEqual(proxy.stats(), { inflight: 0, bytes: 0 });
+  assert.equal((await proxy.get('builder-b', 'credit')).status, 200, 'the budget is returned');
+
+  // concurrent read cap across builders
+  let rel2;
+  const gate2 = new Promise((r) => { rel2 = r; });
+  const slow = () => rawBuilder(async (req, res) => { await gate2; res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); });
+  const [sa, sb] = [await slow(), await slow()];
+  const store2 = storeFor([['builder-a', sa.url], ['builder-b', sb.url]]);
+  const p2 = createReadProxy({ store: store2, key: hubKey, cfg: { maxTotal: 2 } });
+  const x = p2.get('builder-a', 'credit');
+  const y = p2.get('builder-b', 'credit');
+  assert.equal((await p2.get('builder-b', 'credit')).status, 429);
+  rel2();
+  assert.equal((await x).status, 200);
+  assert.equal((await y).status, 200);
+});
+
+test('SR14 L5: browser route reads cannot take the slots reserved for hub services', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const raw = await rawBuilder(async (req, res) => { await gate; res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}'); });
+  const store = storeFor([['builder-a', raw.url]]);
+  const proxy = createReadProxy({ store, key: hubKey, cfg: { maxInflight: 4, reserved: 1 } });
+  const base = await hubServer(proxy);
+  const routeReads = [0, 1, 2].map(() => rawGet(base, '/api/fleet/builder-a/v1/credit'));
+  for (let i = 0; i < 100 && proxy.stats().inflight < 3; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal((await rawGet(base, '/api/fleet/builder-a/v1/credit')).status, 429, 'the route has 3 of 4 slots');
+  const svc = proxy.get('builder-a', 'credit'); // the reserved slot
+  for (let i = 0; i < 100 && proxy.stats().inflight < 4; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(proxy.stats().inflight, 4);
+  release();
+  assert.equal((await svc).status, 200);
+  for (const r of await Promise.all(routeReads)) assert.equal(r.status, 200);
 });
 
 test('hub module imports no builder-only module', () => {

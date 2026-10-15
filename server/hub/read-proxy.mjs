@@ -2,7 +2,7 @@
 //
 //   createReadProxy({store, key, keyId, fetchImpl, now, cfg, classify?})
 //     -> { get(builderId, pathWithQuery, {timeoutMs}?) -> Promise<{status, json}>,
-//          route(req, res) -> Promise<boolean> }
+//          route(req, res) -> Promise<boolean>, stats() -> {inflight, bytes} }
 //
 // `route` serves `GET /api/fleet/:builder/v1/<rest>` and forwards it to
 // `{builder.url}/api/v1/<rest>` with `auth.signRead` headers (README 3.2:
@@ -25,12 +25,23 @@
 //   cookies. The hub sends only the four signature headers plus `accept`
 //   and `accept-encoding: identity`. Redirects are not followed (a 3xx is a 502).
 // - The builder's answer is untrusted: content-type must be application/json
-//   (else 502), the body is read with a hard byte cap (4 MiB, else 502) and a
+//   (else 502), the body is read with a hard byte cap (see M3 below, else 502) and a
 //   timeout (route 10 s; callers of get() pass theirs, e.g. 3 s), it must
 //   parse as JSON (else 502) and is re-serialized by the hub. Builder headers
 //   are dropped except RESPONSE_HEADER_ALLOWLIST (validated). A builder 401,
 //   403 or 407 (the builder refusing the HUB's signature) and every 1xx/3xx/5xx
 //   become 502, so the browser never mistakes them for its own auth state.
+// - SR14 M3 (decoded-size amplification): a response cap per endpoint
+//   (RESPONSE_CAP 4 MiB for `lanes/*/diff` and paged `audit` reads, READ_CAP
+//   1 MiB for every other read), a hub-wide budget across all builders
+//   (MAX_INFLIGHT_TOTAL concurrent reads and INFLIGHT_BYTES_BUDGET bytes held
+//   by in-flight reads, both answered 429), and a one-pass pre-scan of the
+//   body before JSON.parse that refuses nesting deeper than JSON_MAX_DEPTH or
+//   more than JSON_MAX_NODES values (502), so a 4 MiB `[[[[...` or `[{},{},...`
+//   can neither balloon the heap nor hand a stack-blowing value to get() callers.
+// - SR14 L5: browser route reads may use at most `maxInflight - ROUTE_RESERVED`
+//   slots per builder, so a user holding route reads cannot starve the hub
+//   services that call get() (audit pulls, morning, credit, archive).
 // - Nothing is cached or persisted. Keys, signatures, nonces and query
 //   strings are never logged.
 // - The route itself requires kind `direct` or `local` (req.auth set by the
@@ -62,9 +73,21 @@ export const ALLOWLIST = Object.freeze([
   /^archive\/[a-z0-9][a-z0-9._-]{0,63}$/,
 ]);
 
+// Cap for the large reads (`lanes/<lane>/diff`, and `audit` pages of up to 1000 entries).
 export const RESPONSE_CAP = 4 * 1024 * 1024;
+/** Cap for every other read (SR14 M3). */
+export const READ_CAP = 1024 * 1024;
 export const ROUTE_TIMEOUT_MS = 10_000;
 export const MAX_INFLIGHT_PER_BUILDER = 32;
+/** Per-builder slots only get() callers (hub services) may use (SR14 L5). */
+export const ROUTE_RESERVED = 4;
+/** Hub-wide limits across all builders (SR14 M3). */
+export const MAX_INFLIGHT_TOTAL = 64;
+export const INFLIGHT_BYTES_BUDGET = 32 * 1024 * 1024;
+/** Structural limits checked by a pre-scan before JSON.parse (SR14 M3). */
+export const JSON_MAX_DEPTH = 64;
+export const JSON_MAX_NODES = 200_000;
+const LARGE_RX = [/^lanes\/[^/?#]+\/diff(\?.*)?$/, /^audit\?/];
 /** Builder response headers re-emitted (validated); everything else is dropped. */
 export const RESPONSE_HEADER_ALLOWLIST = Object.freeze({ 'retry-after': /^\d{1,6}$/ });
 
@@ -124,8 +147,47 @@ function effectiveState(entry, now, staleMs, downMs) {
   return s;
 }
 
-/** Read at most `cap` bytes of a fetch Response body; throws ReadProxyError(502) past it. */
-async function readCapped(res, cap) {
+/**
+ * One pass over a JSON text (bytes) without building anything: does its nesting stay within `maxDepth` and its
+ * value count (containers, strings, and separators as a stand-in for numbers/literals) within `maxNodes`?
+ * Malformed text is left to JSON.parse.
+ */
+export function jsonShapeOk(buf, { maxDepth = JSON_MAX_DEPTH, maxNodes = JSON_MAX_NODES } = {}) {
+  let depth = 0;
+  let nodes = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < buf.length; i++) {
+    const c = buf[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === 0x5c) esc = true;
+      else if (c === 0x22) inStr = false;
+      continue;
+    }
+    if (c === 0x22) {
+      inStr = true;
+      nodes++;
+    } else if (c === 0x5b || c === 0x7b) {
+      if (++depth > maxDepth) return false;
+      nodes++;
+    } else if (c === 0x5d || c === 0x7d) {
+      depth--;
+    } else if (c === 0x2c) {
+      nodes++;
+    } else {
+      continue;
+    }
+    if (nodes > maxNodes) return false;
+  }
+  return true;
+}
+
+/**
+ * Read at most `cap` bytes of a fetch Response body; throws ReadProxyError(502) past it. `budget.take(n)` is
+ * called per chunk and returns false when the hub-wide byte budget is exhausted (429).
+ */
+async function readCapped(res, cap, budget) {
   const len = res.headers.get('content-length');
   if (len !== null && /^\d+$/.test(len) && Number(len) > cap) {
     try { await res.body?.cancel(); } catch { /* ignore */ }
@@ -143,6 +205,10 @@ async function readCapped(res, cap) {
       try { await reader.cancel(); } catch { /* ignore */ }
       throw new ReadProxyError(502, { ok: false, error: 'response too large' });
     }
+    if (!budget.take(value.byteLength)) {
+      try { await reader.cancel(); } catch { /* ignore */ }
+      throw new ReadProxyError(429, { ok: false, error: 'hub read budget exhausted' });
+    }
     chunks.push(Buffer.from(value.buffer, value.byteOffset, value.byteLength));
   }
   return Buffer.concat(chunks, n);
@@ -156,9 +222,17 @@ export function createReadProxy({ store, key, keyId, fetchImpl = globalThis.fetc
   const staleMs = numOr(fleet.staleMs, 15_000);
   const downMs = numOr(fleet.downMs, 60_000);
   const cap = numOr(fleet.readProxyCap ?? cfg.responseCap, RESPONSE_CAP);
+  const smallCap = Math.min(cap, numOr(fleet.readProxySmallCap ?? cfg.smallCap, READ_CAP));
   const routeTimeoutMs = numOr(fleet.readProxyTimeoutMs ?? cfg.timeoutMs, ROUTE_TIMEOUT_MS);
   const maxInflight = numOr(fleet.readProxyMaxInflight ?? cfg.maxInflight, MAX_INFLIGHT_PER_BUILDER);
+  const routeReserved = Math.min(maxInflight - 1, numOr(fleet.readProxyReserved ?? cfg.reserved, Math.min(ROUTE_RESERVED, Math.floor(maxInflight / 4)), 0));
+  const maxTotal = numOr(fleet.readProxyMaxTotal ?? cfg.maxTotal, MAX_INFLIGHT_TOTAL);
+  const bytesBudget = numOr(fleet.readProxyBytesBudget ?? cfg.bytesBudget, INFLIGHT_BYTES_BUDGET);
+  const maxDepth = numOr(fleet.readProxyMaxDepth ?? cfg.maxDepth, JSON_MAX_DEPTH);
+  const maxNodes = numOr(fleet.readProxyMaxNodes ?? cfg.maxNodes, JSON_MAX_NODES);
   const inflight = new Map(); // builder id -> count
+  let totalInflight = 0;
+  let bytesInFlight = 0; // hub-wide: bytes read and held by reads that have not finished yet
 
   /** Resolve the builder or throw 503 / 404. */
   function upBuilder(builderId, t) {
@@ -186,14 +260,27 @@ export function createReadProxy({ store, key, keyId, fetchImpl = globalThis.fetc
   }
 
   /** Forward one allowlisted read. Resolves {status, json, headers}; throws ReadProxyError. */
-  async function forward(builderId, rest, timeoutMs) {
+  async function forward(builderId, rest, timeoutMs, { fromRoute = false } = {}) {
     if (!isAllowed(rest)) throw notFound();
     const t = now();
     const entry = upBuilder(builderId, t);
     const u = targetUrl(entry, rest);
     const n = inflight.get(builderId) ?? 0;
-    if (n >= maxInflight) throw new ReadProxyError(429, { ok: false, error: 'too many reads' });
+    if (n >= (fromRoute ? maxInflight - routeReserved : maxInflight)) throw new ReadProxyError(429, { ok: false, error: 'too many reads' });
+    if (totalInflight >= maxTotal) throw new ReadProxyError(429, { ok: false, error: 'too many reads' });
+    const target = u.pathname.slice('/api/v1/'.length) + u.search;
+    const capHere = LARGE_RX.some((rx) => rx.test(target)) ? cap : smallCap;
+    let held = 0;
+    const budget = {
+      take(k) {
+        if (bytesInFlight + k > bytesBudget) return false;
+        bytesInFlight += k;
+        held += k;
+        return true;
+      },
+    };
     inflight.set(builderId, n + 1);
+    totalInflight++;
     try {
       const headers = {
         ...signRead({ method: 'GET', url: u, builderId, key, keyId, now: () => now() }),
@@ -220,14 +307,16 @@ export function createReadProxy({ store, key, keyId, fetchImpl = globalThis.fetc
       }
       let buf;
       try {
-        buf = await readCapped(res, cap);
+        buf = await readCapped(res, capHere, budget);
       } catch (err) {
         if (err instanceof ReadProxyError) throw err;
         if (signal.aborted) throw new ReadProxyError(504, { ok: false, error: 'builder timeout' });
         throw new ReadProxyError(502, { ok: false, error: 'bad upstream response' });
       }
+      if (!jsonShapeOk(buf, { maxDepth, maxNodes })) throw new ReadProxyError(502, { ok: false, error: 'upstream json too complex' });
       let json;
       try { json = JSON.parse(buf.toString('utf8')); } catch { throw new ReadProxyError(502, { ok: false, error: 'bad upstream json' }); }
+      buf = null;
       const out = {};
       for (const [name, rx] of Object.entries(RESPONSE_HEADER_ALLOWLIST)) {
         const v = res.headers.get(name);
@@ -235,6 +324,8 @@ export function createReadProxy({ store, key, keyId, fetchImpl = globalThis.fetc
       }
       return { status, json, headers: out };
     } finally {
+      bytesInFlight -= held;
+      totalInflight--;
       const m = (inflight.get(builderId) ?? 1) - 1;
       if (m <= 0) inflight.delete(builderId); else inflight.set(builderId, m);
     }
@@ -290,7 +381,7 @@ export function createReadProxy({ store, key, keyId, fetchImpl = globalThis.fetc
         send(res, 405, { ok: false, error: 'method not allowed' }, { allow: 'GET' });
         return true;
       }
-      const { status, json, headers } = await forward(m[1], m[2], routeTimeoutMs);
+      const { status, json, headers } = await forward(m[1], m[2], routeTimeoutMs, { fromRoute: true });
       send(res, status, json, headers);
     } catch (err) {
       if (err instanceof ReadProxyError) send(res, err.status, err.body);
@@ -299,5 +390,10 @@ export function createReadProxy({ store, key, keyId, fetchImpl = globalThis.fetc
     return true;
   }
 
-  return { get, route };
+  /** Introspection for tests and status pages: hub-wide reads and bytes in flight. */
+  function stats() {
+    return { inflight: totalInflight, bytes: bytesInFlight };
+  }
+
+  return { get, route, stats };
 }
