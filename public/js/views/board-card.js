@@ -3,19 +3,42 @@ import { el } from '../core/dom.js';
 import { previewToNodes } from '../core/ansi.js';
 import { STATE_LABEL, ago, money, shortDir } from '../core/format.js';
 import { laneById, store } from '../core/store.js';
-import { del, post } from '../core/net.js';
+import { deriveCode } from '../core/keys.js';
+import { act } from '../core/actions.js';
 import { stateDot } from '../ui/widgets.js';
 import { toast } from '../ui/shell.js';
 import { togglePin } from '../ui/dock.js';
 import { QUICK_KEYS, openSheet, sendQuick } from '../ui/sheet.js';
 import { cardNodes, toggleLane } from './board.js';
 
+/** The builder behind a session, when the store knows it. */
+export function builderOf(s) {
+  return s?.builder ? store.builders.get(s.builder) ?? null : null;
+}
+
+/** A builder's short code plate: its own, else derived from its id. */
+export function builderCode(b) {
+  return (b && typeof b.code === 'string' && b.code) || deriveCode(b?.id ?? '');
+}
+
+/** True when the session's builder is not live (hub: stale, down). */
+export function builderStale(s) {
+  const b = builderOf(s);
+  return Boolean(b) && store.source.kind === 'hub' && (b.status === 'stale' || b.status === 'down');
+}
+
 export function renderCard(s, { row = false } = {}) {
+  const k = s.key;
   const card = el('div', `card s-${s.state}${row ? ' card-row' : ''}${s.danger ? ' danger' : ''}`);
-  card.dataset.name = s.name;
+  card.dataset.key = k;
   card.dataset.row = row ? '1' : '0';
-  if (store.cursor === s.name) card.classList.add('cursor');
-  if (store.pinned.has(s.name)) card.classList.add('pinned');
+  if (store.cursor === k) card.classList.add('cursor');
+  if (store.pinned.has(k)) card.classList.add('pinned');
+  // One builder down in hub mode dims its cards; the global banner stays hidden.
+  if (builderStale(s)) {
+    card.classList.add('stale');
+    card.style.opacity = '0.55';
+  }
 
   // The lane stripe: 3 px down the left edge, one stable colour per worktree.
   // Pre-attentive — you see the grouping from across the 49" without reading
@@ -23,7 +46,7 @@ export function renderCard(s, { row = false } = {}) {
   // changes no order. A session with no repo gets NO stripe rather than a grey
   // one: absence reads faster than a null colour.
   // Inside a lane card the card's own stripe and chip would repeat its header.
-  const lane = row ? null : laneById(s.lane);
+  const lane = row ? null : laneById(s.laneKey);
   if (lane) {
     card.classList.add('has-lane');
     card.style.setProperty('--lane-hue', String(lane.hue));
@@ -31,6 +54,13 @@ export function renderCard(s, { row = false } = {}) {
 
   const top = el('div', 'card-top');
   top.append(stateDot(s.state, s.stateSince));
+  // The builder's code plate, only when there is more than one builder.
+  if (store.builders.size > 1) {
+    const b = builderOf(s);
+    const plate = el('span', 'card-builder', builderCode(b));
+    plate.title = s.builder ?? '';
+    top.append(plate);
+  }
   top.append(el('span', 'card-name', s.name));
   // The chip makes the stripe legible: the stripe says "these three are the
   // same thing", the chip says which thing.
@@ -39,7 +69,7 @@ export function renderCard(s, { row = false } = {}) {
     chip.style.setProperty('--lane-hue', String(lane.hue));
     chip.title = `${lane.root}${lane.branch ? ` · ${lane.branch}` : ''}` +
       `${lane.sessions.length > 1 ? ` · ${lane.sessions.length} sessions` : ''}`;
-    chip.onclick = (e) => { e.stopPropagation(); toggleLane(lane.id); };
+    chip.onclick = (e) => { e.stopPropagation(); toggleLane(lane.key ?? lane.id); };
     top.append(chip);
   }
   top.append(el('span', `pill s-${s.state}`, STATE_LABEL[s.state] || s.state));
@@ -132,18 +162,18 @@ export function renderCard(s, { row = false } = {}) {
 
   const actions = el('div', 'card-actions');
   const open = el('button', 'btn', 'open');
-  open.onclick = () => openSheet(s.name);
+  open.onclick = () => openSheet(k);
   actions.append(open);
 
-  const pin = el('button', `btn${store.pinned.has(s.name) ? ' on' : ''}`, store.pinned.has(s.name) ? 'pinned' : 'pin');
-  pin.onclick = () => togglePin(s.name);
+  const pin = el('button', `btn${store.pinned.has(k) ? ' on' : ''}`, store.pinned.has(k) ? 'pinned' : 'pin');
+  pin.onclick = () => togglePin(k);
   actions.append(pin);
 
   if (s.state === 'waiting_permission' || s.state === 'waiting_question') {
     const yes = el('button', 'btn ok', 'Yes');
-    yes.onclick = () => sendQuick(s.name, QUICK_KEYS.yes, 'Yes');
+    yes.onclick = () => sendQuick(k, QUICK_KEYS.yes, 'Yes');
     const no = el('button', 'btn primary', 'No');
-    no.onclick = () => sendQuick(s.name, QUICK_KEYS.no, 'No');
+    no.onclick = () => sendQuick(k, QUICK_KEYS.no, 'No');
     actions.append(yes, no);
   }
 
@@ -157,7 +187,7 @@ export function renderCard(s, { row = false } = {}) {
 
   card.addEventListener('click', (e) => {
     if (e.target.closest('button')) return;
-    store.cursor = s.name;
+    store.cursor = k;
     for (const n of cardNodes.values()) n.classList.remove('cursor');
     card.classList.add('cursor');
   });
@@ -178,27 +208,36 @@ export function toggleMenu(card, s) {
     menu.append(b);
   };
 
+  const k = s.key;
   item('Send text…', null, async () => {
     const text = globalThis.prompt(`Send to ${s.name}:`);
     if (text?.trim()) {
-      const r = await post(`/api/sessions/${encodeURIComponent(s.name)}/text`, { text: text.trim(), enter: true });
-      if (r) toast(`Sent → ${s.name}`);
+      const r = await act(k, 'send-text', { text: text.trim(), enter: true });
+      if (actOk(r)) toast(`Sent → ${s.name}`);
     }
   });
-  item('Open terminal', null, () => openSheet(s.name));
-  item(store.pinned.has(s.name) ? 'Unpin' : 'Pin to dock', null, () => togglePin(s.name));
+  item('Open terminal', null, () => openSheet(k));
+  item(store.pinned.has(k) ? 'Unpin' : 'Pin to dock', null, () => togglePin(k));
   item('Restart (resume)', null, async () => {
     if (!globalThis.confirm(`Restart ${s.name}? It resumes the same conversation.`)) return;
-    const r = await post(`/api/sessions/${encodeURIComponent(s.name)}/restart`);
-    if (r) toast(`Restarting ${s.name}…`);
+    const r = await act(k, 'restart');
+    if (actOk(r)) toast(`Restarting ${s.name}…`);
   });
   item('Kill session', 'danger', async () => {
     if (!globalThis.confirm(`Kill ${s.name}? This cannot be undone.`)) return;
-    const r = await del(`/api/sessions/${encodeURIComponent(s.name)}`);
-    if (r) toast(`Killed ${s.name}`);
+    const r = await act(k, 'kill');
+    if (actOk(r)) toast(`Killed ${s.name}`);
   });
 
   card.append(menu);
+}
+
+/** An act() result: true on success; a failure or an unknown outcome is said in a toast. */
+export function actOk(r) {
+  if (r?.ok === true) return true;
+  if (r?.ok === 'unknown') toast('Sent, outcome unknown');
+  else toast(`Failed: ${r?.error ?? 'no answer'}`);
+  return false;
 }
 
 export function closeMenus() {

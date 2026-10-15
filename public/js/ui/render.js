@@ -1,7 +1,7 @@
 // renderAll and the UI error box. Moved from public/app.js (fleet F1).
 import { $ } from '../core/dom.js';
 import { store } from '../core/store.js';
-import { renderTopbar } from './shell.js';
+import { renderBuilders, renderTopbar } from './shell.js';
 import { renderAttention, renderRailBox, renderRateLimits, renderVitals } from './rail.js';
 import { renderDock } from './dock.js';
 import { renderGrid, renderLanes } from '../views/board.js';
@@ -21,12 +21,13 @@ globalThis.laneboardRenderStats = () => ({
   average: renderStats.count ? renderStats.total / renderStats.count : 0,
 });
 
-export function renderAll(changedNames) {
+/** `changedKeys`: the fleet keys a delta touched; undefined re-renders every card. */
+export function renderAll(changedKeys) {
   const t0 = performance.now();
   performance.mark('laneboard:render:start');
   const sections = [
     ['lanes', renderLanes],
-    ['grid', () => renderGrid(changedNames)],
+    ['grid', () => renderGrid(changedKeys)],
     ['attention', renderAttention],
     ['vitals', renderVitals],
     ['rate limits', renderRateLimits],
@@ -34,6 +35,7 @@ export function renderAll(changedNames) {
     ['box', renderBox],
     ['rail box', renderRailBox],
     ['topbar', renderTopbar],
+    ['builders', renderBuilders],
   ];
   for (const [name, fn] of sections) {
     try {

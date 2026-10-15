@@ -47,10 +47,10 @@ export function init() {
     if (store.view !== 'board') return;
     if (e.key >= '1' && e.key <= '9') {
       const a = store.attention[Number(e.key) - 1];
-      if (a) { focusSession(a.name); e.preventDefault(); }
+      if (a) { focusSession(a.key); e.preventDefault(); }
       return;
     }
-    const list = orderedSessions().map((s) => s.name);
+    const list = orderedSessions().map((s) => s.key);
     if (!list.length) return;
     const i = list.indexOf(store.cursor);
     if (e.key === 'j') { store.cursor = list[Math.min(list.length - 1, i + 1)] ?? list[0]; e.preventDefault(); }
@@ -59,7 +59,7 @@ export function init() {
     else if (e.key === 'p' && store.cursor) { togglePin(store.cursor); e.preventDefault(); return; }
     else return;
 
-    for (const [n, node] of cardNodes) node.classList.toggle('cursor', n === store.cursor);
+    for (const [k, node] of cardNodes) node.classList.toggle('cursor', k === store.cursor);
     cardNodes.get(store.cursor)?.scrollIntoView({ block: 'nearest' });
   });
 

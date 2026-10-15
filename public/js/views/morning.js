@@ -1,8 +1,9 @@
 // The Morning view. Moved from public/app.js (fleet F1).
 import { $, el } from '../core/dom.js';
 import { STATE_LABEL, ago, compactCount, money, resetsIn } from '../core/format.js';
-import { store } from '../core/store.js';
-import { del } from '../core/net.js';
+import { localBuilderId, store } from '../core/store.js';
+import { BUILDER_ID_RX, fkey } from '../core/keys.js';
+import { act } from '../core/actions.js';
 import { setView } from '../core/router.js';
 import { block, gauge, laneStripe, prChip } from '../ui/widgets.js';
 import { toast } from '../ui/shell.js';
@@ -13,6 +14,17 @@ import { openSheet } from '../ui/sheet.js';
 // The view is fetched rather than derived from the socket: it needs database
 // history (cost snapshots, markers over a window) that the live snapshot does
 // not carry, and it is read once in the morning rather than watched all day.
+
+/**
+ * The fleet key of something the Morning payload names by local id. The
+ * payload comes from this page's own builder (GET /api/morning) unless an
+ * entry carries its builder.
+ */
+export function morningKey(entry, local) {
+  if (local === undefined || local === null || local === '') return null;
+  const b = typeof entry?.builder === 'string' && BUILDER_ID_RX.test(entry.builder) ? entry.builder : localBuilderId(store);
+  try { return fkey(b, String(local)); } catch { return null; }
+}
 
 export const morning = { window: 'tonight', data: null, loading: false, at: 0 };
 
@@ -63,17 +75,21 @@ export function renderMorning() {
     if (n.text) main.append(el('div', 'mrow-text', n.text));
     row.append(main);
     const acts = el('div', 'mrow-acts');
-    if (n.name && store.sessions.has(n.name)) {
+    const k = n.name ? morningKey(n, n.name) : null;
+    if (k && store.sessions.has(k)) {
       const open = el('button', 'btn', 'Open');
-      open.onclick = () => { setView('board'); openSheet(n.name); };
+      open.onclick = () => { setView('board'); openSheet(k); };
       acts.append(open);
     }
     if (n.source === 'marker') {
       const dis = el('button', 'btn', 'Dismiss');
       dis.onclick = async () => {
         dis.disabled = true;
-        const r = await del(`/api/markers/${n.markerId}`);
-        if (r) { toast('Dismissed'); loadMorning(true); } else dis.disabled = false;
+        const r = await act(morningKey(n, n.markerId) ?? String(n.markerId), 'dismiss-marker');
+        if (r?.ok === true) { toast('Dismissed'); loadMorning(true); } else {
+          toast(r?.ok === 'unknown' ? 'Sent, outcome unknown' : `Failed: ${r?.error ?? 'no answer'}`);
+          dis.disabled = false;
+        }
       };
       acts.append(dis);
     }
