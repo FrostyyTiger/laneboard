@@ -1,0 +1,121 @@
+/* Command palette and the hotkey help overlay (fleet plan §4 2.5 / 2.6, task D8).
+   Built by public/js/ui/palette.js and public/js/ui/hotkeys.js (openHelp).
+   Tokens only: no colour literals, no shadows, radius var(--radius). */
+
+.pal {
+  position: fixed;
+  top: 12vh;
+  margin: 0 auto;
+  width: min(640px, calc(100vw - 2 * var(--sp-4)));
+  max-height: 70vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  z-index: var(--z-palette);
+}
+.pal:not([open]) { display: none; }
+.pal::backdrop {
+  background: var(--bg-canvas);
+  opacity: .6;
+}
+
+.pal-in {
+  height: var(--row-touch);
+  padding: 0 var(--sp-3);
+  border: 0;
+  border-bottom: var(--bw) solid var(--line);
+  border-radius: 0;
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  outline: none;
+}
+.pal-in::placeholder { color: var(--text-3); }
+
+.pal-list {
+  margin: 0;
+  padding: var(--sp-1) 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.pal-o {
+  display: grid;
+  grid-template-columns: var(--icon-s) 4.5em minmax(0, 1fr) minmax(0, auto) auto;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--row-dense);
+  padding: 0 var(--sp-3);
+  cursor: pointer;
+  color: var(--text-2);
+}
+.pal-o.is-cursor {
+  background: var(--bg-selected);
+  color: var(--text-1);
+  outline: var(--bw) solid var(--accent);
+  outline-offset: -1px;
+}
+.pal-type { justify-self: start; }
+.pal-l, .pal-s {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pal-l { color: var(--text-1); }
+.pal-s { color: var(--text-3); }
+.pal-k {
+  font-family: var(--font-mono);
+  font-size: var(--fs-10);
+  color: var(--text-3);
+}
+.pal-empty {
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--text-3);
+}
+
+/* --- Help overlay (`?`), generated from KEYMAP ------------------------------- */
+.pal-help {
+  width: min(880px, calc(100vw - 2 * var(--sp-4)));
+  padding: var(--sp-4);
+  overflow-y: auto;
+}
+.pal-help-t {
+  margin: 0 0 var(--sp-3);
+  font-family: var(--font-label);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+}
+.pal-help-g {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--sp-4);
+}
+.pal-help-g h3 {
+  margin: 0 0 var(--sp-1);
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
+  letter-spacing: var(--ls-label);
+  color: var(--text-3);
+}
+.pal-help-g dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px var(--sp-2);
+  margin: 0;
+}
+.pal-help-g dt { white-space: nowrap; }
+.pal-help-g dd { margin: 0; color: var(--text-2); }
+.pal-help-g kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-1);
+}
