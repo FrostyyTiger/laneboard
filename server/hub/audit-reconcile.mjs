@@ -378,7 +378,7 @@ export function createAuditReconciler({
     const b = rec(id);
     const startedAt = clock();
     b.lastPullAt = startedAt;
-    let anchor = b.anchor;
+    const anchor = b.anchor;
     let tip = anchor;
     let pages = 0;
     let complete = false;
@@ -413,7 +413,12 @@ export function createAuditReconciler({
         complete = false;
         break;
       }
-      for (const e of seg.entries) fresh.push(e);
+      // keep only what matching needs (bounded: via:'hub' entries of this builder, few fields)
+      for (const e of seg.entries) {
+        if (!isPlain(e) || e.via !== 'hub' || e.builder !== id) continue;
+        const r = resultOf(e);
+        fresh.push({ id: e.id, via: e.via, builder: e.builder, action: e.action, target: e.target, ts: e.ts, hash: e.hash, result: { phase: r.phase, ok: r.ok } });
+      }
       tip = seg.tip;
       if (!seg.more) {
         complete = true;
@@ -437,9 +442,7 @@ export function createAuditReconciler({
       b.anchor = tip;
       // the anchor entry moved the hub head; let the next scan pick it up without re-reading it
     }
-    for (const e of fresh) {
-      if (isPlain(e) && e.builder === id) addBuilder(b.index, e);
-    }
+    for (const e of fresh) addBuilder(b.index, e);
     const ev = capMap(b.index, indexCap);
     if (ev !== null) b.evictedTs = Math.max(b.evictedTs ?? -Infinity, ev);
     // b.fork is sticky (a restored chain does not clear it): only rebase() does
