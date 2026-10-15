@@ -1,0 +1,16 @@
+[project]
+name = "acme"
+dependencies = [
+  "requests>=2",  # a [bracket] in a comment
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+  "core*",   # the domain model
+  'api*',
+]
+exclude = ["tests*"]
+
+[tool.ruff]
+line-length = 100

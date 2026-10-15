@@ -1,0 +1,1 @@
+class Thing: pass
