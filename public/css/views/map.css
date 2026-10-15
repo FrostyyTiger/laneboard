@@ -1,16 +1,21 @@
 /* ===========================================================================
-   The Map view. The canvas fills the view; everything that is read as text
-   floats over it in a HUD of four corners, so the constellation always owns
-   the middle of the screen. Panels here are the one place laneboard uses
-   glass: the map moves underneath them, which is exactly the case the glass
-   policy reserves it for.
+   The Map view (plan §5 2.5, fleet M3). Industrial: a flat --bg-canvas ground
+   with the --tex-dots grid, hairline borders, solid surfaces, no glass, no
+   shadows, no gradients of its own. Grey is normal; a status hue appears
+   only on something abnormal and always with its shape (drawn on the
+   canvas by views/map/render.js).
+
+   The map's HUD panels (the "needs you" list, the ticker, the legend and the
+   summary numbers) are gone: the §4 annunciator, inbox and tape replace
+   them. map-canvas.js still creates them until §5 M4 removes them, so they
+   are hidden here. The selected-node panel stays, restyled, until the §4
+   inspector takes over (M4/M5).
    =========================================================================== */
 
 .map {
   position: relative;
   overflow: hidden;
-  background:
-    radial-gradient(ellipse at 50% 50%, oklch(16% 0.02 258) 0%, var(--bg-canvas) 58%, var(--bg-sunken) 100%);
+  background: var(--tex-dots), var(--bg-canvas);
   user-select: none;
   -webkit-user-select: none;
 }
@@ -20,217 +25,193 @@
 .map-hud { position: absolute; inset: 0; pointer-events: none; }
 .map-hud > * { pointer-events: auto; }
 
+/* ---- deleted HUD panels (still emitted by map-canvas.js until M4) */
+.map-needs,
+.map-ticker,
+.map-legend,
+.map-summary { display: none; }
 
-/* ---- top left: title and the three numbers that matter */
-.map-head { position: absolute; top: 16px; left: 16px; pointer-events: none; }
+/* ---- top left: title plate and a topology problem */
+.map-head { position: absolute; top: var(--sp-4); left: var(--sp-4); pointer-events: none; }
 .map-title {
   margin: 0;
-  font: 600 11px/1 var(--font-mono);
-  letter-spacing: 0.22em;
+  font: 600 var(--fs-11)/1 var(--font-label);
+  letter-spacing: var(--ls-label);
   text-transform: uppercase;
   color: var(--text-2);
 }
-.map-summary { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font: 12px var(--font-mono); color: var(--text-3); }
-.map-problem { margin: 8px 0 0; max-width: 420px; color: var(--warn); font: 11px var(--font-mono); pointer-events: auto; }
-.map-stat b { color: var(--text-1); font-weight: 600; font-size: 20px; letter-spacing: -0.02em; margin-right: 2px; }
-.map-stat.s-attention b { color: var(--warn); }
-.map-stat.s-ok b { color: var(--ok); }
+.map-problem {
+  margin: var(--sp-2) 0 0;
+  max-width: 420px;
+  padding: 2px var(--sp-2);
+  border: var(--bw) solid var(--p2-line);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font: var(--fs-11) var(--font-mono);
+  pointer-events: auto;
+}
+.map-problem::before { content: "▲ "; color: var(--p2); }
 
-/* ---- left: needs you */
-.map-needs {
-  position: absolute; top: 92px; left: 16px; width: 256px;
-  max-height: calc(100% - 200px); overflow: auto;
-  padding: 10px 6px 6px;
-  background: oklch(14% 0.013 258 / 0.72);
-  backdrop-filter: blur(10px) saturate(1.2);
-  -webkit-backdrop-filter: blur(10px) saturate(1.2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-l);
-  box-shadow: var(--highlight-inset);
+/* ---- top right: the readout corner. One line of instrument text:
+   `Z 1.80×  SCOPE B1  N 214/570  OVL CI  12:04:31Z` (index.js fills it). */
+.map-readout {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-4);
+  padding: 3px var(--sp-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-canvas);
+  color: var(--text-2);
+  font: var(--fs-11)/1.2 var(--font-mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum", "zero";
+  white-space: pre;
+  pointer-events: none;
 }
-.map-h {
-  margin: 0 0 6px 8px;
-  font: 600 10px/1 var(--font-mono);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
-.map-needs-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
-.map-need-btn {
-  width: 100%;
-  display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 2px 8px; align-items: start;
-  padding: 7px 8px; border: 0; border-radius: var(--radius-s);
-  background: transparent; color: inherit; text-align: left; cursor: pointer;
-  font: inherit;
-}
-.map-need-btn:hover, .map-need-btn:focus-visible { background: oklch(92% 0.01 258 / 0.06); outline: none; }
-.map-need-btn .map-dot { margin-top: 4px; }
-.map-need-text { display: grid; gap: 2px; min-width: 0; }
-.map-need-name { color: var(--text-1); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.map-need-why { color: var(--text-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.map-need-where { grid-column: 2; color: var(--text-3); font: 10.5px var(--font-mono); }
-.map-need-more { padding: 4px 26px; color: var(--text-3); font: 11px var(--font-mono); }
+.map-readout b { color: var(--text-1); font-weight: 600; }
 
-/* ---- top right: find + fit */
-.map-find { position: absolute; top: 14px; right: 16px; display: flex; gap: 6px; }
+/* ---- below the readout: find + fit */
+.map-find { position: absolute; top: 44px; right: var(--sp-4); display: flex; gap: var(--sp-1); }
 .map-find-input {
-  width: 200px; height: 30px; padding: 0 10px;
-  border: 1px solid var(--border); border-radius: var(--radius-s);
-  background: oklch(14% 0.013 258 / 0.8); color: var(--text-1);
-  font: 12px var(--font-mono);
+  width: 200px; height: 28px; padding: 0 var(--sp-2);
+  border: var(--bw) solid var(--line); border-radius: var(--radius);
+  background: var(--bg-surface); color: var(--text-1);
+  font: var(--fs-12) var(--font-mono);
 }
 .map-find-input::placeholder { color: var(--text-3); }
 .map-find-input:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 .map-btn {
-  height: 30px; padding: 0 12px;
-  border: 1px solid var(--border); border-radius: var(--radius-s);
-  background: oklch(14% 0.013 258 / 0.8); color: var(--text-2);
-  font: 12px var(--font-mono); cursor: pointer;
+  height: 28px; padding: 0 var(--sp-3);
+  border: var(--bw) solid var(--line); border-radius: var(--radius);
+  background: var(--bg-surface); color: var(--text-2);
+  font: 600 var(--fs-11) var(--font-label); letter-spacing: var(--ls-label); text-transform: uppercase;
+  cursor: pointer;
 }
-.map-btn:hover { color: var(--text-1); border-color: var(--border-strong); }
+.map-btn:hover { color: var(--text-1); border-color: var(--line-strong); }
 .map-btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 
-/* ---- right: the selected node */
+/* ---- right: the selected node (until the §4 inspector replaces it) */
 .map-panel {
-  position: absolute; top: 56px; right: 16px; width: 316px;
-  max-height: calc(100% - 128px); overflow: auto;
-  padding: 16px 16px 18px;
-  background: oklch(14% 0.013 258 / 0.78);
-  backdrop-filter: blur(12px) saturate(1.2);
-  -webkit-backdrop-filter: blur(12px) saturate(1.2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-l);
-  box-shadow: var(--highlight-inset), var(--shadow-float);
-  animation: map-in 240ms var(--ease) both;
+  position: absolute; top: 80px; right: var(--sp-4); width: 316px;
+  max-height: calc(100% - 152px); overflow: auto;
+  padding: var(--sp-4);
+  background: var(--bg-elevated);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
 }
-@keyframes map-in { from { opacity: 0; transform: translateX(14px) scale(0.985); } }
-/* Closing plays out before the panel hides; it leaves faster than it came. */
-.map-panel.map-panel-out { animation: map-out 150ms cubic-bezier(0.4, 0, 1, 1) both; pointer-events: none; }
-@keyframes map-out { to { opacity: 0; transform: translateX(10px) scale(0.985); } }
-/* Another node in an open panel: the frame stays, the contents cross-fade. */
-.map-panel.map-swap > * { animation: map-swap 200ms var(--ease) both; }
-.map-panel.map-swap > :nth-child(n+5) { animation-delay: 30ms; }
-@keyframes map-swap { from { opacity: 0; transform: translateY(3px); } }
+.map-panel.map-panel-out { opacity: 0; pointer-events: none; transition: opacity var(--dur) var(--ease); }
 .map-panel-close {
-  position: absolute; top: 8px; right: 8px; width: 26px; height: 26px;
-  border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text-3);
-  font-size: 18px; line-height: 1; cursor: pointer;
+  position: absolute; top: var(--sp-2); right: var(--sp-2); width: 24px; height: 24px;
+  border: 0; border-radius: var(--radius); background: transparent; color: var(--text-3);
+  font: var(--fs-16)/1 var(--font-mono); cursor: pointer;
 }
-.map-panel-close:hover { color: var(--text-1); background: oklch(92% 0.01 258 / 0.06); }
-.map-eyebrow { font: 10.5px var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); padding-right: 26px; }
-.map-panel-title { margin: 6px 0 8px; font: 600 18px/1.2 var(--font-ui); color: var(--text-1); text-wrap: balance; overflow-wrap: anywhere; }
-.map-why { margin: 10px 0 0; color: var(--text-1); }
-.map-sub { margin: 6px 0 0; color: var(--text-2); font: 12px var(--font-mono); overflow-wrap: anywhere; }
+.map-panel-close:hover { color: var(--text-1); background: var(--bg-hover); }
+.map-panel-close:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.map-eyebrow {
+  padding-right: 26px;
+  font: 600 var(--fs-10) var(--font-label); letter-spacing: var(--ls-label); text-transform: uppercase;
+  color: var(--text-3);
+}
+.map-panel-title {
+  margin: var(--sp-1) 0 var(--sp-2);
+  font: 600 var(--fs-16)/var(--lh-tight) var(--font-label); letter-spacing: var(--ls-label); text-transform: uppercase;
+  color: var(--text-1); overflow-wrap: anywhere;
+}
+.map-why { margin: var(--sp-2) 0 0; color: var(--text-1); font: var(--fs-12)/var(--lh) var(--font-mono); }
+.map-sub { margin: var(--sp-1) 0 0; color: var(--text-2); font: var(--fs-12) var(--font-mono); overflow-wrap: anywhere; }
 
+/* A status plate: grey, with the status hue only on its glyph. */
 .map-pill {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 2px 8px 2px 7px; border-radius: var(--radius-pill);
-  font: 500 11px/18px var(--font-mono);
-  color: var(--pill); background: color-mix(in oklch, var(--pill) 14%, transparent);
-  border: 1px solid color-mix(in oklch, var(--pill) 30%, transparent);
+  padding: 0 var(--sp-2) 0 6px; border-radius: var(--radius);
+  border: var(--bw) solid var(--line);
+  color: var(--text-1);
+  font: 600 var(--fs-11)/18px var(--font-label); letter-spacing: var(--ls-label); text-transform: uppercase;
 }
-.map-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--pill); }
+.map-pill::before { content: "●"; color: var(--pill); font: var(--fs-10)/1 var(--font-mono); }
+.map-pill.s-warn::before, .map-pill.s-attention::before { content: "▲"; }
+.map-pill.s-crit::before, .map-pill.s-down::before { content: "■"; }
+.map-pill.s-unknown::before, .map-pill.s-idle::before { content: "○"; }
 
-.map-bars { display: grid; gap: 7px; margin-top: 16px; }
-.map-bar { display: grid; grid-template-columns: 56px minmax(0, 1fr) 38px; align-items: center; gap: 8px; font: 11px var(--font-mono); }
+.map-bars { display: grid; gap: 6px; margin-top: var(--sp-4); }
+.map-bar { display: grid; grid-template-columns: 56px minmax(0, 1fr) 38px; align-items: center; gap: var(--sp-2); font: var(--fs-11) var(--font-mono); }
 .map-bar-k { color: var(--text-3); }
-.map-note { margin: 2px 0 0; color: var(--text-3); font: 10.5px var(--font-mono); }
-.map-bar-v { color: var(--text-1); text-align: right; }
-.map-bar-track { height: 4px; border-radius: 2px; background: oklch(92% 0.01 258 / 0.08); overflow: hidden; }
-.map-bar-fill { height: 100%; background: var(--text-2); border-radius: 2px; transition: width var(--dur) var(--ease); }
-.map-bar-fill.s-warn { background: var(--warn); }
-.map-bar-fill.s-crit { background: var(--crit); }
+.map-note { margin: 2px 0 0; color: var(--text-3); font: var(--fs-10) var(--font-mono); }
+.map-bar-v { color: var(--text-1); text-align: right; font-variant-numeric: tabular-nums; }
+.map-bar-track { height: 4px; border-radius: 0; background: var(--line-weak); overflow: hidden; }
+.map-bar-fill { height: 100%; background: var(--text-2); transition: width var(--dur) var(--ease); }
+.map-bar-fill.s-warn { background: var(--p2); }
+.map-bar-fill.s-crit { background: var(--p1); }
 
-.map-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 14px; margin: 16px 0 0; font: 12px var(--font-mono); }
+.map-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px var(--sp-3); margin: var(--sp-4) 0 0; font: var(--fs-12) var(--font-mono); }
 .map-dl dt { color: var(--text-3); }
 .map-dl dd { margin: 0; color: var(--text-1); overflow-wrap: anywhere; }
 
-.map-rel { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 5px; }
-.map-rel .map-h { flex-basis: 100%; margin: 8px 0 2px; }
-.map-rel .map-h:first-child { margin-top: 0; }
-.map-h-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.map-fold {
-  padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius-s);
-  background: transparent; color: var(--text-2); font: 10.5px var(--font-mono); letter-spacing: 0.04em;
-  text-transform: none; cursor: pointer;
+.map-h {
+  margin: 0 0 6px;
+  font: 600 var(--fs-10)/1 var(--font-label);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-3);
 }
-.map-fold:hover { color: var(--text-1); border-color: var(--border-strong); }
-.map-fold:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.map-rel { margin-top: var(--sp-4); display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.map-rel .map-h { flex-basis: 100%; margin: var(--sp-2) 0 2px; }
+.map-rel .map-h:first-child { margin-top: 0; }
+.map-h-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.map-fold,
 .map-chip {
   display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
-  padding: 3px 8px; border: 1px solid var(--border); border-radius: var(--radius-s);
-  background: transparent; color: var(--text-1); font: 11.5px var(--font-ui); cursor: pointer;
+  padding: 2px var(--sp-2); border: var(--bw) solid var(--line); border-radius: var(--radius);
+  background: transparent; color: var(--text-1); font: var(--fs-11) var(--font-mono); cursor: pointer;
 }
-.map-chip:hover { border-color: var(--border-strong); background: oklch(92% 0.01 258 / 0.05); }
-.map-chip-note { color: var(--text-3); font: 10.5px var(--font-mono); }
-.map-open { display: inline-block; margin-top: 16px; color: var(--info); font: 12px var(--font-mono); text-decoration: none; }
-.map-open:hover { text-decoration: underline; }
-.map-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.map-fold { color: var(--text-2); }
+.map-fold:hover, .map-chip:hover { color: var(--text-1); border-color: var(--line-strong); background: var(--bg-hover); }
+.map-fold:focus-visible, .map-chip:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.map-chip-note { color: var(--text-3); font: var(--fs-10) var(--font-mono); }
+.map-open { display: inline-block; margin-top: var(--sp-4); color: var(--text-1); font: var(--fs-12) var(--font-mono); text-decoration: underline; text-decoration-color: var(--line-strong); }
+.map-open:hover { text-decoration-color: var(--accent); }
+.map-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--sp-3); }
 
-/* ---- bottom: ticker and key */
-.map-ticker {
-  position: absolute; left: 16px; bottom: 44px; width: min(460px, calc(100% - 32px));
-  list-style: none; margin: 0; padding: 0; display: grid; gap: 0;
-}
-.map-tick-btn {
-  width: 100%; display: grid; grid-template-columns: 10px 34px minmax(0, 1fr); align-items: center; gap: 8px;
-  padding: 3px 6px; border: 0; background: transparent; color: var(--text-2); text-align: left; cursor: pointer;
-  font: 11.5px var(--font-mono); border-radius: var(--radius-s);
-}
-.map-tick:first-child .map-tick-btn { color: var(--text-1); }
-.map-tick:nth-child(n+4) .map-tick-btn { opacity: 0.55; }
-.map-tick-btn:hover { background: oklch(92% 0.01 258 / 0.06); color: var(--text-1); opacity: 1; }
-.map-tick-at { color: var(--text-3); text-align: right; }
-.map-tick-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.map-legend {
-  position: absolute; left: 16px; right: 16px; bottom: 14px;
-  display: flex; flex-wrap: wrap; gap: 4px 16px; pointer-events: none;
-  font: 10.5px var(--font-mono); color: var(--text-3); letter-spacing: 0.04em;
-}
-.map-key { display: inline-flex; align-items: center; gap: 6px; }
-.map-dash { width: 18px; height: 0; border-top: 1px dashed var(--info); }
-
+/* Status glyph swatches (hover card, panel). Hue + shape, never hue alone. */
 .map-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--pill); }
-.map-dot.s-idle, .map-dot.s-unknown { background: transparent; box-shadow: inset 0 0 0 1.2px var(--pill); }
+.map-dot.s-warn, .map-dot.s-attention { border-radius: 0; background: transparent; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 8px solid var(--pill); }
+.map-dot.s-crit, .map-dot.s-down { border-radius: 0; }
+.map-dot.s-idle, .map-dot.s-unknown { background: transparent; border: 1px dashed var(--pill); }
 
-.s-ok { --pill: var(--ok); }
-.s-working { --pill: var(--info); }
-.s-warn, .s-attention { --pill: var(--warn); }
-.s-crit, .s-down { --pill: var(--crit); }
-.s-idle { --pill: var(--idle); }
+.s-ok { --pill: var(--text-3); }
+.s-working { --pill: var(--run); }
+.s-warn, .s-attention { --pill: var(--p2); }
+.s-crit, .s-down { --pill: var(--p1); }
+.s-low { --pill: var(--p3); }
+.s-idle { --pill: var(--off); }
 .s-unknown { --pill: var(--text-3); }
 
 /* ---- hover card */
 .map-tip {
   position: absolute; pointer-events: none; max-width: 280px;
-  padding: 7px 10px; border-radius: var(--radius-s);
-  background: var(--glass-fill-strong); border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-float);
+  padding: 6px var(--sp-2); border-radius: var(--radius);
+  background: var(--bg-elevated); border: var(--bw) solid var(--line-strong);
 }
-.map-tip-top { display: flex; align-items: center; gap: 7px; color: var(--text-1); font-size: 12.5px; }
-.map-tip-kind { margin-left: auto; padding-left: 10px; color: var(--text-3); font: 10px var(--font-mono); text-transform: uppercase; letter-spacing: 0.1em; }
-.map-tip-sub { margin-top: 3px; color: var(--text-2); font: 11px var(--font-mono); }
+.map-tip-top { display: flex; align-items: center; gap: 6px; color: var(--text-1); font: var(--fs-12) var(--font-mono); }
+.map-tip-kind { margin-left: auto; padding-left: var(--sp-3); color: var(--text-3); font: 600 var(--fs-10) var(--font-label); text-transform: uppercase; letter-spacing: var(--ls-label); }
+.map-tip-sub { margin-top: 2px; color: var(--text-2); font: var(--fs-11) var(--font-mono); }
 
-/* ---- narrow screens: the list collapses above the key, the panel becomes a sheet */
+/* ---- phone (< 700px): the readout collapses to one short line; find drops to the bottom */
 @media (max-width: 760px) {
-  .map-find { top: auto; bottom: 40px; right: 16px; }
+  .map-find { top: auto; bottom: var(--sp-4); right: var(--sp-4); }
   .map-find-input { width: 120px; }
-  .map-needs { top: auto; bottom: 84px; width: calc(100% - 32px); max-height: 30%; }
-  .map-ticker { display: none; }
   .map-panel {
     top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 62%;
-    border-radius: 10px 10px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
-    animation-name: map-up;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
   }
-  .map-panel.map-panel-out { animation-name: map-down; }
-  @keyframes map-up { from { opacity: 0; transform: translateY(16px); } }
-  @keyframes map-down { to { opacity: 0; transform: translateY(16px); } }
-  .map-problem { margin: 8px 0 0; max-width: 420px; color: var(--warn); font: 11px var(--font-mono); pointer-events: auto; }
-.map-stat b { font-size: 16px; }
+}
+@media (max-width: 699px) {
+  .map-readout { top: var(--sp-2); right: var(--sp-2); font-size: var(--fs-10); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .map-panel, .map-panel.map-panel-out, .map-panel.map-swap > * { animation: none; }
-  .map-bar-fill { transition: none; }
+  .map-panel.map-panel-out, .map-bar-fill { transition: none; }
 }
