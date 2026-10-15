@@ -5,7 +5,8 @@
 //   {scope:'fanout', run}). Only a `builder:'*'` request reaches it; a `kill` for one builder is relayed as
 //   usual. The relay has already required a `direct` user (403 remote-only otherwise) and hands `ctx.fanout`,
 //   which rewrites the typed `fleet` confirm to each builder's id. The handler (server/hub/fleetkill.mjs)
-//   checks the typed `fleet` itself before anything is sent.
+//   checks the typed `fleet` itself before anything is sent, validates an optional `include` of fleet keys
+//   against the fleet store (ctx.store) and audits an undo with both users (ctx.audit).
 // - `kill` is also a builder action name. The relay's registry (SR11 L1, HUB_REGISTRABLE) allows `kill` in the
 //   fan-out scope without `override`, so none is passed. A registry error is never retried with `override`
 //   (SR11 R1: override is honoured only for boot/hub.mjs's core allowlist); it propagates.

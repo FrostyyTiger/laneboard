@@ -18,13 +18,26 @@
 //               `args.cancel:<fleetJob>`: the timer is cleared and `resume '*'` goes out. Nothing is killed.
 //               Builders that answer the resume 429 (their `all` rate limit, still held by the pause) get one
 //               fresh resume envelope after RESUME_RETRY_MS. They stay paused until then (fails safe).
+//               Undo is allowed for the user that started the job and for any other direct hub user (the
+//               relay has already refused non-direct and read-only callers: every caller here has control).
+//               It is audited (`kill.undo`) with both users and `override` when they differ (SR19 re-review R4).
 //   t=undoMs    `kill '*'` with graceMs:0 to the builders the pause reached (each builder pauses + Escapes
-//               again, then kills its lanes). A builder that answers 429 gets one fresh kill envelope after
+//               again, then kills its victims: live Claude agents in lanes or linked worktrees, see
+//               server/control/killswitch.mjs). A builder that answers 429 gets one fresh kill envelope after
 //               KILL_RETRY_MS (SR19 F3: the kill must win).
 //
-// Every delayed retry is bound to its job: a newer fleet kill start drops the older job's pending retries,
-// and a retry whose job is no longer the latest is dropped when it fires (SR19 F3), so a stale undo can never
-// resume the fleet during a later kill.
+// `include` (start only): up to MAX_INCLUDE fleet keys (`<builder>/<session>`) the builders' own victim rule
+// would miss. Each is validated against the hub's fleet store (ctx.store.session, else the view's snapshot):
+// a malformed key refuses the request (400, nothing sent); a key for an unknown builder or session is not
+// sent and is reported in `notIncluded` (an emergency stop is never refused for a session that just went
+// away). Each builder's kill envelope carries only its own local names as `args.include`; a builder the pause
+// did not reach gets none (`notIncluded` reason `not-paused`).
+//
+// Every delayed retry is bound to its job. A newer fleet kill start suspends the older jobs' pending retries
+// while its pause is in flight; once the new job is `pending` they are dropped (`superseded by <job>`, SR19
+// F3), so a stale undo can never resume the fleet during a later kill. A start that fails (pause reached
+// nobody) or is undone during its pause re-arms them at their original due time (SR19 re-review R3), and its
+// result names them in `keptRetries`.
 //
 // If the hub dies (or the module stops) inside the window, the kill never happens and the fleet stays paused:
 // fails safe. Builders that are not `up` are skipped and listed by name in the result of each phase.
@@ -49,7 +62,12 @@ export const RESUME_RETRY_MS = 10_500;
 /** One fresh kill envelope per builder that answered the kill 429, after its `all` window (SR19 F3). */
 export const KILL_RETRY_MS = 10_500;
 const JOB_RE = /^fleetkill-[0-9]{1,16}-[0-9a-f]{8}$/;
-const ALLOWED_ARGS = new Set(['confirm', 'cancel']);
+const ALLOWED_ARGS = new Set(['confirm', 'cancel', 'include']);
+/** Fleet keys per fleet kill `include` (a builder takes at most 50 local names itself). */
+export const MAX_INCLUDE = 50;
+/** A builder's local session name as its `kill *` accepts it in `include` (builtin-actions SESSION_RE). */
+const SESSION_NAME_RE = /^[A-Za-z0-9 _.()-]{1,64}$/;
+const BUILDER_RE = /^[a-z0-9-]{1,24}$/;
 const KEEP = 20;
 const ERR_MAX = 200;
 
@@ -82,13 +100,48 @@ function pub(j) {
   return {
     job: j.job, state: j.state, by: j.user, startedAt: j.startedAt, killAt: j.killAt,
     pause: j.pause, kill: j.kill, undo: j.undo,
+    ...(j.include?.size ? { include: Object.fromEntries([...j.include].map(([b, names]) => [b, [...names]])) } : {}),
+    ...(j.notIncluded?.length ? { notIncluded: j.notIncluded.map((x) => ({ ...x })) } : {}),
     ...(j.pauseIncomplete ? { pauseIncomplete: j.pauseIncomplete } : {}),
+    ...(j.keptRetries ? { keptRetries: j.keptRetries } : {}),
     ...(j.undoneBy !== undefined ? { undoneBy: j.undoneBy } : {}),
+    ...(j.undoOverride ? { undoOverride: true } : {}),
     ...(j.error ? { error: j.error } : {}),
   };
 }
 
 const ACTIVE = new Set(['pausing', 'cancelling', 'pending', 'killing']);
+
+/** Parse and check a fleet kill `include` (shape only; 400 on anything malformed). -> [{fkey, builder, name}] */
+export function parseInclude(raw) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_INCLUDE) throw new RelayError(400, 'bad-args', `include must be an array of at most ${MAX_INCLUDE} fleet keys`);
+  const out = [];
+  const seen = new Set();
+  for (const k of raw) {
+    if (typeof k !== 'string') throw new RelayError(400, 'bad-args', 'include entries must be fleet keys');
+    const i = k.indexOf('/');
+    const builder = i > 0 ? k.slice(0, i) : '';
+    const name = i > 0 ? k.slice(i + 1) : '';
+    if (!BUILDER_RE.test(builder) || !SESSION_NAME_RE.test(name)) throw new RelayError(400, 'bad-args', 'include entries must be <builder>/<session> fleet keys');
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ fkey: k, builder, name });
+  }
+  return out;
+}
+
+/** Does the hub's fleet store know this session? ctx.store.session(fkey), else the view's builder snapshot. */
+function storeHas(ctx, row, fkey, name) {
+  if (typeof ctx.store?.session === 'function') {
+    try { return Boolean(ctx.store.session(fkey)); } catch { return false; }
+  }
+  const ss = row?.snap?.sessions;
+  if (ss instanceof Map) return ss.has(name);
+  if (Array.isArray(ss)) return ss.some((x) => x?.name === name);
+  if (ss && typeof ss === 'object') return Object.hasOwn(ss, name);
+  return false;
+}
 
 /**
  * createFleetKill({undoMs?, resumeRetryMs?, killRetryMs?, timers?: {now, setTimeout, clearTimeout}, log?, rand?})
@@ -104,9 +157,8 @@ export function createFleetKill({
   const setT = typeof timers.setTimeout === 'function' ? timers.setTimeout : globalThis.setTimeout;
   const clearT = typeof timers.clearTimeout === 'function' ? timers.clearTimeout : globalThis.clearTimeout;
   const jobs = new Map();
-  /** retry timer -> {job, rec}: every delayed send, bound to its job */
+  /** retry timer -> entry {j, rec, fn, due}: every delayed send, bound to its job */
   const retries = new Map();
-  let latest = null; // the job id of the newest start
   let stopped = false;
 
   function prune() {
@@ -131,6 +183,8 @@ export function createFleetKill({
     if (args.cancel !== undefined && (typeof args.cancel !== 'string' || !JOB_RE.test(args.cancel))) {
       throw new RelayError(400, 'bad-args', 'cancel must be a fleet kill job id');
     }
+    if (args.cancel !== undefined && args.include !== undefined) throw new RelayError(400, 'bad-args', 'include is for a start, not a cancel');
+    parseInclude(args.include);
     if (!ctx || typeof ctx.fanout !== 'function') throw new RelayError(500, 'no-fanout');
     if (stopped) throw new RelayError(503, 'hub-stopping');
     return args;
@@ -146,38 +200,89 @@ export function createFleetKill({
     }
   }
 
-  /** A delayed send bound to job `j`: dropped when a newer job started, or on stop(). */
-  function later(j, rec, ms, fn) {
+  function arm(entry) {
     const t = setT(async () => {
       retries.delete(t);
-      if (stopped) { rec.dropped = 'hub-stopping'; return; }
-      if (latest !== j.job) { rec.dropped = `superseded by ${latest}`; return; }
-      try { await fn(); } catch (err) { log?.error?.(`fleet kill ${j.job}: retry: ${String(err?.message ?? err).slice(0, ERR_MAX)}`); }
-    }, ms);
+      if (stopped) { entry.rec.dropped = 'hub-stopping'; return; }
+      if (entry.j.supersededBy) { entry.rec.dropped = `superseded by ${entry.j.supersededBy}`; return; }
+      try { await entry.fn(); } catch (err) { log?.error?.(`fleet kill ${entry.j.job}: retry: ${String(err?.message ?? err).slice(0, ERR_MAX)}`); }
+    }, Math.max(0, entry.due - now()));
     t?.unref?.();
-    retries.set(t, { job: j.job, rec });
+    retries.set(t, entry);
   }
 
-  function dropRetriesOtherThan(jobId) {
+  /** A delayed send bound to job `j`: dropped once a newer job is pending, or on stop(). */
+  function later(j, rec, ms, fn) {
+    arm({ j, rec, fn, due: now() + ms });
+  }
+
+  /** A new start: hold the other jobs' retries until it is known whether its pause landed (SR19 R3). */
+  function suspendRetriesOtherThan(jobId) {
+    const held = [];
     for (const [t, x] of retries) {
-      if (x.job === jobId) continue;
+      if (x.j.job === jobId) continue;
       clearT(t);
       retries.delete(t);
-      x.rec.dropped = `superseded by ${jobId}`;
+      held.push(x);
+    }
+    return held;
+  }
+
+  /** The new job is pending: the held retries and their jobs are superseded for good (SR19 F3). */
+  function supersede(j, held) {
+    for (const x of jobs.values()) if (x !== j) x.supersededBy ??= j.job;
+    for (const x of held) {
+      x.j.supersededBy ??= j.job;
+      x.rec.dropped = `superseded by ${j.job}`;
     }
   }
 
-  /** Builders that answered 429 get one fresh envelope of `action` after `ms` (bound to the job). */
+  /** The new job never got pending (failed, undone during its pause): the held retries go out after all. */
+  function restore(j, held) {
+    if (!held.length) return;
+    if (stopped) { for (const x of held) x.rec.dropped = 'hub-stopping'; return; }
+    for (const x of held) arm(x);
+    j.keptRetries = held.map((x) => ({ job: x.j.job, builders: [...(x.rec.builders ?? [])], at: x.due }));
+  }
+
+  /**
+   * Builders that answered 429 get one fresh envelope of `action` after `ms` (bound to the job). `args` is an
+   * object, or a function builder -> args (the kill's per-builder include).
+   */
   function retryLimited(j, phase, send, action, args, ms) {
     const limited = phase.sent.filter((s) => s.status === 429).map((s) => s.builder);
     if (!limited.length || typeof send !== 'function') return;
     phase.retry = { builders: limited, at: now() + ms, sent: null };
     const rec = phase.retry;
+    const argsFor = typeof args === 'function' ? args : () => args;
     later(j, rec, ms, async () => {
       const out = [];
-      for (const b of limited) out.push(await sendOne(send, b, action, args));
+      for (const b of limited) out.push(await sendOne(send, b, action, argsFor(b)));
       rec.sent = out;
     });
+  }
+
+  /** The kill args for one builder: graceMs 0, plus its own local names from the fleet `include`. */
+  function killArgsFor(j, b) {
+    const names = j.include?.get(b);
+    return names?.length ? { ...KILL_ARGS, include: [...names] } : { ...KILL_ARGS };
+  }
+
+  /** Validate the parsed `include` against the hub's fleet store: -> {include: Map<builder, names>, notIncluded}. */
+  function resolveInclude(entries, ctx) {
+    const include = new Map();
+    const notIncluded = [];
+    const rows = new Map((Array.isArray(ctx.view?.builders) ? ctx.view.builders : []).filter((r) => r && typeof r.id === 'string').map((r) => [r.id, r]));
+    for (const e of entries) {
+      const row = rows.get(e.builder);
+      if (!row) { notIncluded.push({ fkey: e.fkey, reason: 'unknown-builder' }); continue; }
+      if (!perBuilder(ctx)) { notIncluded.push({ fkey: e.fkey, reason: 'no-per-builder-send' }); continue; }
+      if (!storeHas(ctx, row, e.fkey, e.name)) { notIncluded.push({ fkey: e.fkey, reason: 'unknown-session' }); continue; }
+      if (!row.controls) { notIncluded.push({ fkey: e.fkey, reason: row.state === 'up' ? 'version-skew' : String(row.state ?? 'down') }); continue; }
+      if (!include.has(e.builder)) include.set(e.builder, []);
+      include.get(e.builder).push(e.name);
+    }
+    return { include, notIncluded };
   }
 
   // --- t=0: pause -----------------------------------------------------------------------------------------
@@ -233,14 +338,36 @@ export function createFleetKill({
     prune();
   }
 
+  /**
+   * Record who undid `j` (SR19 re-review R4): the starter or any other direct hub user (the relay refused
+   * everyone else). Appended to the hub audit with both users; never throws (the undo already happened).
+   */
+  function noteUndo(j, ctx) {
+    j.undoneBy = typeof ctx.user === 'string' ? ctx.user : null;
+    j.undoOverride = j.undoneBy !== j.user;
+    try {
+      const a = typeof ctx.audit === 'function' ? ctx.audit() : ctx.audit;
+      if (a && typeof a.append === 'function') {
+        a.append({
+          user: j.undoneBy, via: 'hub', builder: '*', action: 'kill.undo', target: '*', args: { job: j.job },
+          result: { job: j.job, state: j.state, startedBy: j.user, undoneBy: j.undoneBy, override: j.undoOverride },
+        });
+      }
+    } catch (err) {
+      log?.error?.(`fleet kill ${j.job}: audit append for kill.undo failed: ${String(err?.message ?? err).slice(0, ERR_MAX)}`);
+    }
+    if (j.undoOverride) log?.warn?.(`fleet kill ${j.job} started by ${j.user} undone by ${j.undoneBy}`);
+  }
+
   async function undo(jobId, ctx) {
     const j = jobs.get(jobId);
     if (!j) return { ok: false, status: 404, error: 'unknown-job' };
+    if (typeof ctx.user !== 'string' || !ctx.user) return { ok: false, status: 403, error: 'remote-only' };
     if (j.state === 'pausing' || j.state === 'cancelling') {
       if (!j.cancelRequested) {
         j.cancelRequested = true;
         j.state = 'cancelling';
-        j.undoneBy = typeof ctx.user === 'string' ? ctx.user : null;
+        noteUndo(j, ctx);
         // builders whose pause already landed are resumed now; the rest when their pause lands
         if (j.pauseSettled && perBuilder(ctx)) for (const [b, s] of j.pauseSettled) if (reached(s)) resumeOne(j, ctx, b);
       }
@@ -250,7 +377,7 @@ export function createFleetKill({
     clearT(j.timer);
     j.timer = null;
     j.state = 'cancelled';
-    j.undoneBy = typeof ctx.user === 'string' ? ctx.user : null;
+    noteUndo(j, ctx);
     let r;
     try {
       r = await ctx.fanout('resume', '*', { confirm: FLEET_CONFIRM });
@@ -274,7 +401,10 @@ export function createFleetKill({
     if (typeof send === 'function' && Array.isArray(j.pause?.sent) && j.perBuilder) {
       // only the builders the pause reached (SR19 F6): one that came up later was never paused or warned
       const targets = j.pause.sent.filter(reached).map((s) => s.builder);
-      const sent = await Promise.all(targets.map((b) => sendOne(send, b, 'kill', KILL_ARGS)));
+      for (const [b, names] of j.include ?? []) {
+        if (!targets.includes(b)) for (const name of names) j.notIncluded.push({ fkey: `${b}/${name}`, reason: 'not-paused' });
+      }
+      const sent = await Promise.all(targets.map((b) => sendOne(send, b, 'kill', killArgsFor(j, b))));
       const skipped = [...j.pause.skipped, ...j.pause.sent.filter((s) => !reached(s)).map((s) => ({ builder: s.builder, reason: 'not-paused' }))];
       j.kill = { ok: sent.length > 0 && sent.every((s) => s.ok), sent, skipped, failed: sent.filter((s) => !s.ok).map((s) => s.builder) };
     } else {
@@ -286,7 +416,7 @@ export function createFleetKill({
       }
       j.kill = summary(r);
     }
-    retryLimited(j, j.kill, send, 'kill', KILL_ARGS, killRetryMs);
+    retryLimited(j, j.kill, send, 'kill', (b) => killArgsFor(j, b), killRetryMs);
     j.state = 'killed';
     log?.warn?.(`fleet kill ${j.job}: kill sent to ${j.kill.sent.length} builder(s), skipped ${j.kill.skipped.map((s) => s.builder).join(',') || 'none'}`);
     prune();
@@ -295,29 +425,36 @@ export function createFleetKill({
   // --- start ----------------------------------------------------------------------------------------------
 
   async function start(req, ctx) {
-    check(req, ctx);
+    const args = check(req, ctx);
     const open = active();
     if (open) return { ok: false, status: 409, error: 'active-job', result: pub(open) };
+    const { include, notIncluded } = resolveInclude(parseInclude(args.include), ctx);
     const t0 = now();
     const job = `fleetkill-${Math.floor(t0)}-${rand()}`;
     const j = {
       job, user: typeof ctx.user === 'string' ? ctx.user : null, state: 'pausing', startedAt: t0, killAt: null,
       pause: null, kill: null, undo: null, timer: null, cancelRequested: false, resumes: [], resumed: new Set(),
-      perBuilder: perBuilder(ctx),
+      perBuilder: perBuilder(ctx), include, notIncluded,
     };
     jobs.set(job, j);
-    // a newer fleet kill: older jobs never send anything again (SR19 F3)
-    latest = job;
-    dropRetriesOtherThan(job);
+    // older jobs' retries wait until this pause is known to have landed (SR19 F3, re-review R3)
+    const held = suspendRetriesOtherThan(job);
     j.pause = await pausePhase(j, ctx);
-    if (stopped) { j.state = 'aborted'; return { ok: false, status: 503, error: 'hub-stopping', result: pub(j) }; }
+    if (stopped) {
+      j.state = 'aborted';
+      restore(j, held);
+      return { ok: false, status: 503, error: 'hub-stopping', result: pub(j) };
+    }
     if (j.cancelRequested) {
+      restore(j, held);
       await finishCancel(j, ctx);
       return { ok: true, status: 200, result: pub(j) };
     }
     const reachedN = j.pause.sent.filter(reached).length;
     if (reachedN === 0) {
-      // the pause reached nobody: no window, no kill (SR19 F6); the operator starts again when builders are up
+      // the pause reached nobody: no window, no kill (SR19 F6); the operator starts again when builders are up.
+      // An older undo's pending resume retry still goes out (SR19 re-review R3).
+      restore(j, held);
       j.state = 'failed';
       j.error = j.pause.sent.length === 0 ? 'no-builder-up' : 'pause-not-delivered';
       log?.warn?.(`fleet kill ${job} by ${j.user}: pause reached no builder (${j.error}); no kill armed`);
@@ -327,6 +464,8 @@ export function createFleetKill({
     const missed = j.pause.sent.filter((s) => !reached(s)).map((s) => s.builder);
     if (missed.length) j.pauseIncomplete = missed;
     j.state = 'pending';
+    // a newer fleet kill is pending: older jobs never send anything again (SR19 F3)
+    supersede(j, held);
     j.killAt = now() + undoMs;
     const kctx = { send: ctx.send, fanout: ctx.fanout };
     j.timer = setT(() => {
