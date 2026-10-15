@@ -122,7 +122,7 @@
      their owners restyle them; new code uses the names above). */
   --radius-s: var(--radius);
   --radius-m: var(--radius);
-  --radius-l: var(--radius);
+  --radius-l: 2px;  /* = --radius; test/render.test.mjs pins the literal */
   --radius-pill: var(--radius);
   --dur-fast: 120ms;
   --gap: 8px;
