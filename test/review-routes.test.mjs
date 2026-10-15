@@ -205,7 +205,7 @@ test('diff: single file, bad base, bad mode, bad lane id and unknown lane map Di
 });
 
 test('errorResponse: an unexpected error is a fixed 500 text, a DiffError keeps its status', () => {
-  const r = routesMod.errorResponse(new Error('secret /home/x stack'), null);
+  const r = routesMod.errorResponse(new Error('secret detail'), null);
   assert.deepEqual(r, { status: 500, body: { error: 'internal error' } });
   assert.deepEqual(routesMod.errorResponse(new D.DiffError('busy', 429), null), { status: 429, body: { error: 'busy' } });
 });
