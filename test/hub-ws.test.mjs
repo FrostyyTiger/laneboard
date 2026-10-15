@@ -254,6 +254,54 @@ test('previewLines only for visible sessions; previewHtml never sent; visible fo
   assert.deepEqual(upstream.at(-1), ['builder-a', []]);
 });
 
+test('SR21 L2: visible is capped, deduped, refcounted across clients and rate-coalesced per client', async (t) => {
+  const store = mkStore();
+  store.applySnapshot('builder-a', snap([sess('a'), sess('b'), sess('c')]), Date.now());
+  store.applySnapshot('builder-b', snap([sess('x')]), Date.now());
+  const upstream = [];
+  const { port, cw } = await boot(t, { store, batchMs: 50, visibleDebounceMs: 20, visibleMinMs: 200, onVisible: (id, keys) => upstream.push([id, keys]) });
+  const c1 = connect(port);
+  const c2 = connect(port);
+  await Promise.all([c1.opened, c2.opened]);
+  await c1.until((m) => m.some((x) => x.type === 'map'));
+  await c2.until((m) => m.some((x) => x.type === 'map'));
+  // dedupe + junk + over-long keys
+  c1.send({ type: 'visible', keys: ['builder-a/a', 'builder-a/a', 'builder-a/a', `builder-a/${'z'.repeat(600)}`, null, 'builder-b/x'] });
+  await sleep(80);
+  assert.deepEqual(cw.visibleKeys('builder-a'), ['builder-a/a']);
+  assert.deepEqual(cw.visibleKeys('builder-b'), ['builder-b/x']);
+  // a burst inside the window: coalesced, the latest list wins once the window ends
+  for (let i = 0; i < 20; i++) c1.send({ type: 'visible', keys: [i % 2 ? 'builder-a/b' : 'builder-a/c'] });
+  c1.send({ type: 'visible', keys: ['builder-a/b'] });
+  await sleep(40);
+  assert.deepEqual(cw.visibleKeys('builder-a'), ['builder-a/a'], 'not applied inside the window');
+  assert.ok(cw.stats().visibleCoalesced >= 20);
+  await sleep(260);
+  assert.deepEqual(cw.visibleKeys('builder-a'), ['builder-a/b']);
+  assert.deepEqual(cw.visibleKeys('builder-b'), []);
+  // refcounts: two clients share a key; one leaving keeps it, both leaving clears it
+  c2.send({ type: 'visible', keys: ['builder-a/b', 'builder-a/c'] });
+  await sleep(60);
+  assert.deepEqual(cw.visibleKeys('builder-a'), ['builder-a/b', 'builder-a/c']);
+  c2.close();
+  await sleep(120);
+  assert.deepEqual(cw.visibleKeys('builder-a'), ['builder-a/b']);
+  c1.close();
+  await sleep(120);
+  assert.deepEqual(cw.visibleKeys('builder-a'), []);
+  assert.deepEqual(upstream.at(-1), ['builder-a', []]);
+  // the cap: at most LIMITS.visibleKeys entries of a list are looked at
+  const c3 = connect(port);
+  await c3.opened;
+  await c3.until((m) => m.some((x) => x.type === 'map'));
+  const many = [];
+  for (let i = 0; i < LIMITS.visibleKeys + 50; i++) many.push(`builder-a/s${String(i).padStart(4, '0')}`);
+  c3.send({ type: 'visible', keys: many });
+  await sleep(60);
+  assert.equal(cw.visibleKeys('builder-a').length, Math.min(LIMITS.visibleKeys, LIMITS.visibleUpstream));
+  c3.close();
+});
+
 test('touch reaches a registered onClientMessage handler with the connection user', async (t) => {
   const { port, cw, origin } = await boot(t, { ingress: true });
   const seen = [];

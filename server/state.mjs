@@ -571,6 +571,8 @@ export async function tick() {
       tmuxTarget: t.mainPane?.target ?? null,
       paneId: t.mainPane?.paneId ?? null,
       paneCmd,
+      // tmux #{pane_pid} of the main pane: isLiveClaude matches it against the registry pid (SR21 M1)
+      panePid: Number.isInteger(t.mainPane?.pid) && t.mainPane.pid > 0 ? t.mainPane.pid : null,
       paneSize: t.mainPane ? { cols: t.mainPane.width, rows: t.mainPane.height } : null,
       attached: t.attached,
       createdAt: t.createdAt,

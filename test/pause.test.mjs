@@ -304,6 +304,50 @@ test('gate: session name via tmux ($TMUX_PANE) matches paused/<name>', { skip: N
   assert.equal(gate(ev('PreToolUse', SID2), { stateDir: d, pathDirs: [bin], env: { TMUX_PANE: '%3' } }).out, '');
 });
 
+test('SR21 L1: tmux is only asked when a by-name pause exists; a tmux timeout denies, ALL/sid never wait', { skip: NEEDS_JQ }, () => {
+  const d = tmp();
+  const bin = tmp();
+  const marker = path.join(bin, 'called');
+  // A wedged tmux: records the call, then hangs.
+  fs.writeFileSync(path.join(bin, 'tmux'), `#!/bin/sh\necho x >> '${marker}'\nexec sleep 30\n`, { mode: 0o755 });
+  const run = () => {
+    const t0 = Date.now();
+    const r = gate(ev('PreToolUse', SID2), { stateDir: d, pathDirs: [bin], env: { TMUX_PANE: '%3' } });
+    return { ...r, ms: Date.now() - t0 };
+  };
+  // only a sid mirror of another session: no by-name pause -> tmux never runs, allowed
+  fs.mkdirSync(path.join(d, 'paused'), { recursive: true });
+  fs.writeFileSync(path.join(d, 'paused', `sid-${SID}`), '{"kind":"operator"}');
+  fs.writeFileSync(path.join(d, 'paused', '.x.1.ab.tmp'), '');
+  let r = run();
+  assert.deepEqual([r.code, r.out], [0, '']);
+  assert.equal(fs.existsSync(marker), false, 'tmux not called without a by-name pause');
+  // ALL: denied at once, tmux never asked
+  pause.pause('ALL', {}, { stateDir: d });
+  r = run();
+  assert.equal(JSON.parse(r.out).hookSpecificOutput.permissionDecision, 'deny');
+  assert.equal(fs.existsSync(marker), false);
+  assert.ok(r.ms < 1500, `ALL decided without waiting (${r.ms} ms)`);
+  pause.resume('ALL', {}, { stateDir: d });
+  // a by-name pause for some session + a wedged tmux: fail closed within the bound, with its own reason
+  pause.pause('other-lane', {}, { stateDir: d });
+  r = run();
+  assert.equal(fs.existsSync(marker), true);
+  const out = JSON.parse(r.out);
+  assert.equal(out.hookSpecificOutput.permissionDecision, 'deny');
+  assert.match(out.hookSpecificOutput.permissionDecisionReason, /tmux did not answer within 2 s/);
+  assert.ok(r.ms < 4500, `bounded by the timeout (${r.ms} ms)`);
+  // UserPromptSubmit blocks too
+  const u = gate(ev('UserPromptSubmit', SID2), { stateDir: d, pathDirs: [bin], env: { TMUX_PANE: '%3' } });
+  assert.equal(JSON.parse(u.out).decision, 'block');
+  // tmux answering with an error (no server) is "no name": allowed, as before
+  fs.writeFileSync(path.join(bin, 'tmux'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  assert.deepEqual([run().code, run().out], [0, '']);
+  // a tmux session named like another session's sid mirror never reads that mirror (I1)
+  fs.writeFileSync(path.join(bin, 'tmux'), `#!/bin/sh\necho 'sid-${SID}'\n`, { mode: 0o755 });
+  assert.equal(run().out, '');
+});
+
 test('gate: malformed stdin with no sentinel → exit 0, empty', { skip: NEEDS_JQ }, () => {
   const d = tmp();
   pause.pause('a', {}, { stateDir: d }); // paused/ exists, but nothing matches

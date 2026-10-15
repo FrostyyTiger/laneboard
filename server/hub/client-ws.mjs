@@ -50,6 +50,8 @@ export const LIMITS = Object.freeze({
   visibleKeys: 128, // per client, browser -> hub
   visibleUpstream: 64, // per builder, hub -> builder
   visibleDebounceMs: 500,
+  visibleMinMs: 250, // SR21 L2: one applied `visible` per client per 250 ms; later ones coalesce (latest wins)
+  visibleKeyChars: 512, // longer keys are dropped before parsing
   fleetMinMs: 1000,
   inboundBytes: 64 * 1024,
   inboundPerSec: 50,
@@ -150,7 +152,7 @@ function withSessions(baseJson, sessionStrs) {
  * opts: store (fleet-store), config (merged config: port, publicUrl, fleet.*),
  * version (hub version for `fleet.hub.version`), now, batchMs, getMap,
  * aggregates, classify(req) -> {kind, user}, onVisible(builderId, fkeys),
- * log, heartbeatMs, and the LIMITS overrides fleetMinMs, visibleDebounceMs,
+ * log, heartbeatMs, and the LIMITS overrides fleetMinMs, visibleDebounceMs, visibleMinMs,
  * maxFrameBytes, maxBufferedBytes, sessionsPerFrame.
  */
 export function createClientWs({
@@ -167,6 +169,7 @@ export function createClientWs({
   heartbeatMs = 30_000,
   fleetMinMs = LIMITS.fleetMinMs,
   visibleDebounceMs = LIMITS.visibleDebounceMs,
+  visibleMinMs = LIMITS.visibleMinMs,
   maxFrameBytes = LIMITS.frameBytes,
   maxBufferedBytes = LIMITS.bufferedBytes,
   sessionsPerFrame = LIMITS.sessionsPerFrame,
@@ -177,7 +180,7 @@ export function createClientWs({
   const clients = new Set();
   const handlers = new Map(); // type -> Set<fn>
   const controlTypes = new Set(CONTROL_MESSAGES);
-  const counters = { dropped: 0, oversize: 0, terminated: 0, handlerErrors: 0, refused: 0, inboundDropped: 0, controlRefused: 0 };
+  const counters = { visibleCoalesced: 0, dropped: 0, oversize: 0, terminated: 0, handlerErrors: 0, refused: 0, inboundDropped: 0, controlRefused: 0 };
   let lastMap = null;
   let closed = false;
 
@@ -200,49 +203,73 @@ export function createClientWs({
   }
 
   // --- visibility -------------------------------------------------------------
-  /** builderId -> Set<name>: the union of every client's visible set. */
-  let visibleUnion = new Map();
+  /**
+   * builderId -> Map<name, refcount>: the union of every client's visible set, kept incrementally (SR21 L2): a
+   * `visible` message costs O(its own keys), never O(clients x keys).
+   */
+  const visibleRefs = new Map();
   const upstreamSent = new Map(); // builderId -> JSON of last keys sent upstream
   let visibleTimer = null;
 
   function isVisible(id, name) {
-    return visibleUnion.get(id)?.has(name) === true;
+    return (visibleRefs.get(id)?.get(name) ?? 0) > 0;
   }
 
-  function recomputeVisible() {
-    const next = new Map();
-    for (const ws of clients) {
-      for (const k of ws.visible) {
-        const p = parseFkey(k);
-        if (!p) continue;
-        let set = next.get(p.builder);
-        if (!set) next.set(p.builder, (set = new Set()));
-        set.add(p.name);
-      }
-    }
-    // Sessions that just became visible need their previewLines: queue them.
-    for (const [id, set] of next) {
-      const before = visibleUnion.get(id);
-      for (const name of set) if (!before?.has(name)) markChanged(id, name);
-    }
-    visibleUnion = next;
+  function addVisibleRef(id, name) {
+    let m = visibleRefs.get(id);
+    if (!m) visibleRefs.set(id, (m = new Map()));
+    const c = m.get(name) ?? 0;
+    m.set(name, c + 1);
+    // A session that just became visible needs its previewLines: queue it.
+    if (c === 0) { markChanged(id, name); return true; }
+    return false;
+  }
+
+  function dropVisibleRef(id, name) {
+    const m = visibleRefs.get(id);
+    const c = m?.get(name) ?? 0;
+    if (c <= 0) return false;
+    if (c > 1) { m.set(name, c - 1); return false; }
+    m.delete(name);
+    if (!m.size) visibleRefs.delete(id);
+    return true;
+  }
+
+  function scheduleVisiblePush() {
     if (!visibleTimer && !closed) {
       visibleTimer = setTimeout(pushVisible, visibleDebounceMs);
       visibleTimer.unref?.();
     }
   }
 
+  /** Replace one client's visible set (Map fkey -> {builder, name}) and update the union by the difference. */
+  function applyVisible(ws, next) {
+    const prev = ws.visible instanceof Map ? ws.visible : new Map();
+    let changed = false;
+    for (const [k, p] of prev) if (!next.has(k) && dropVisibleRef(p.builder, p.name)) changed = true;
+    for (const [k, p] of next) if (!prev.has(k) && addVisibleRef(p.builder, p.name)) changed = true;
+    ws.visible = next;
+    if (changed) scheduleVisiblePush();
+  }
+
+  /** A client went away: release its visible set exactly once. */
+  function releaseVisible(ws) {
+    if (ws.visibleTimer) { clearTimeout(ws.visibleTimer); ws.visibleTimer = null; }
+    ws.visiblePending = null;
+    if (ws.visible instanceof Map && ws.visible.size) applyVisible(ws, new Map());
+  }
+
   /** The fkeys sent upstream for one builder (<= 64, sorted). */
   function visibleKeys(id) {
-    const set = visibleUnion.get(id);
-    if (!set) return [];
-    return [...set].sort().slice(0, LIMITS.visibleUpstream).map((n) => fkey(id, n));
+    const m = visibleRefs.get(id);
+    if (!m) return [];
+    return [...m.keys()].sort().slice(0, LIMITS.visibleUpstream).map((n) => fkey(id, n));
   }
 
   function pushVisible() {
     visibleTimer = null;
     if (typeof onVisible !== 'function') return;
-    const ids = new Set([...visibleUnion.keys(), ...upstreamSent.keys()]);
+    const ids = new Set([...visibleRefs.keys(), ...upstreamSent.keys()]);
     for (const id of ids) {
       const keys = visibleKeys(id);
       const j = JSON.stringify(keys);
@@ -541,16 +568,38 @@ export function createClientWs({
     }
   }
 
+  /**
+   * `visible` from a browser (SR21 L2): at most LIMITS.visibleKeys entries are looked at, duplicates collapse,
+   * over-long or invalid keys are dropped, and a client is applied at most once per `visibleMinMs`; messages in
+   * between coalesce into one deferred apply of the latest list.
+   */
   function setVisible(ws, list) {
     if (!Array.isArray(list)) return;
-    const keys = new Set();
+    const t = now();
+    const wait = (ws.visibleAt ?? -Infinity) + visibleMinMs - t;
+    if (wait > 0) {
+      ws.visiblePending = list.slice(0, LIMITS.visibleKeys);
+      counters.visibleCoalesced++;
+      if (!ws.visibleTimer && !closed) {
+        ws.visibleTimer = setTimeout(() => {
+          ws.visibleTimer = null;
+          const pending = ws.visiblePending;
+          ws.visiblePending = null;
+          if (pending && clients.has(ws)) setVisible(ws, pending);
+        }, wait);
+        ws.visibleTimer.unref?.();
+      }
+      return;
+    }
+    ws.visibleAt = t;
+    const keys = new Map();
     for (const k of list.slice(0, LIMITS.visibleKeys)) {
+      if (typeof k !== 'string' || k.length > LIMITS.visibleKeyChars || keys.has(k)) continue;
       const p = parseFkey(k);
       if (!p || !isSafeName(p.name) || !store.builder(p.builder)) continue;
-      keys.add(k);
+      keys.set(k, { builder: p.builder, name: p.name });
     }
-    ws.visible = keys;
-    recomputeVisible();
+    applyVisible(ws, keys);
   }
 
   /** Register a handler for a browser message type. Returns an unsubscribe. */
@@ -623,15 +672,19 @@ export function createClientWs({
       ws.kind = g.auth.kind;
       ws.readOnly = g.auth.readOnly === true;
       ws.scope = 'all';
-      ws.visible = new Set();
+      ws.visible = new Map();
+      ws.visibleAt = -Infinity;
+      ws.visibleTimer = null;
+      ws.visiblePending = null;
       ws.isAlive = true;
       ws.rate = { start: now(), n: 0 };
       clients.add(ws);
       ws.on('pong', () => { ws.isAlive = true; });
       ws.on('message', (raw, isBinary) => onMessage(ws, raw, isBinary));
+      // The heartbeat may already have removed the client; the visible set is released either way, once.
       const gone = () => {
-        if (!clients.delete(ws)) return;
-        if (ws.visible.size) recomputeVisible();
+        clients.delete(ws);
+        releaseVisible(ws);
       };
       ws.on('close', gone);
       ws.on('error', gone);
@@ -649,7 +702,7 @@ export function createClientWs({
   tick.unref?.();
   const heartbeat = setInterval(() => {
     for (const ws of [...clients]) {
-      if (!ws.isAlive) { ws.terminate(); clients.delete(ws); continue; }
+      if (!ws.isAlive) { ws.terminate(); clients.delete(ws); releaseVisible(ws); continue; }
       ws.isAlive = false;
       try { ws.ping(); } catch { /* closing */ }
     }
