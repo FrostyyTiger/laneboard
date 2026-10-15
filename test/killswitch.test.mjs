@@ -20,7 +20,7 @@ const ks = await import('../server/control/killswitch.mjs');
 const pause = await import('../server/control/pause.mjs');
 const ksRoute = (await import('../server/routes/killswitch.mjs')).default;
 const { createRelay, _resetHubActions } = await import('../server/hub/relay.mjs');
-const { createFleetKill, UNDO_MS, RESUME_RETRY_MS } = await import('../server/hub/fleetkill.mjs');
+const { createFleetKill, UNDO_MS, RESUME_RETRY_MS, KILL_RETRY_MS } = await import('../server/hub/fleetkill.mjs');
 const { createModule: createFleetKillModule, registerFanoutKill } = await import('../server/hub/routes/fleetkill.mjs');
 
 const BID = 'builder-a';
@@ -61,15 +61,27 @@ const SESSIONS = () => [
   { name: 'board', paneId: '%7', lane: 'own' },
 ];
 
+// The lane records launch wrote (SR19 F4): only these sessions are lane victims. `board` is bound too, so the
+// own-pane rule is what protects it.
+const LANES = () => [
+  { id: 'a', session: 'lane-a', root: '/w/acme-a' },
+  { id: 'b', root: '/w/acme-b', session: 'lane-b' },
+  { id: 'x', session: '_laneboard-term' },
+  { id: 'own', session: 'board' },
+  { id: 'gone', session: 'notes', retiredAt: 5 },
+];
+
 let n = 0;
-function setup({ sessions = SESSIONS(), hubControl = true, failKill = null } = {}) {
+function setup({ sessions = SESSIONS(), lanes = LANES(), hubControl = true, failKill = null, rules = null } = {}) {
   _reset();
   _resetBuiltins();
   ks._resetKillSwitch();
   const stateDir = fs.mkdtempSync(path.join(tmp, 'state-'));
   const calls = [];
   let inv = sessions;
+  let laneRecs = lanes;
   const clock = fakeClock();
+  const audit = openAudit({ file: path.join(tmp, `audit-${++n}.jsonl`), builder: BID });
   const config = { mode: 'builder', stateDir, fleet: { id: BID, hubControl }, ownSessionPrefixes: ['_laneboard-test', '_laneboard'] };
   const actions = {
     async sendKeys(name, keys, who) { calls.push(['sendKeys', name, keys, who]); return { ok: true }; },
@@ -87,29 +99,34 @@ function setup({ sessions = SESSIONS(), hubControl = true, failKill = null } = {
     db: { addJobStep: (s) => { steps.push(s); return steps.length; } },
     timers: clock,
     ownPane: '%7',
+    laneRecords: () => laneRecs,
+    audit: () => audit,
   };
   registerBuiltins(deps);
   ks.registerKillSwitch(deps);
-  const audit = openAudit({ file: path.join(tmp, `audit-${++n}.jsonl`), builder: BID });
-  const limiter = createLimiter();
+  const limiter = createLimiter(rules, clock.now);
   const go = (target, args = {}, auth = DIRECT) => dispatch(
     { v: 1, id: crypto.randomUUID(), ts: Date.now(), builder: BID, action: 'kill', target, args, user: 'ops@example.invalid', via: 'hub' },
     { auth, deps, audit, limiter },
   );
-  return { calls, steps, clock, go, stateDir, setInventory: (x) => { inv = x; }, audit };
+  const entries = () => audit.read({ limit: 1000 }).entries;
+  return { calls, steps, clock, go, stateDir, setInventory: (x) => { inv = x; }, setLanes: (x) => { laneRecs = x; }, audit, entries };
 }
 
 // --- selectVictims ----------------------------------------------------------------------------------------
 
-test('selectVictims: lane sessions plus explicit include only, never _laneboard*', () => {
+test('selectVictims: launched lane sessions plus explicit include only, never _laneboard*', () => {
   const s = SESSIONS();
-  assert.deepEqual(ks.selectVictims(s), ['board', 'lane-a', 'lane-b']);
-  assert.deepEqual(ks.selectVictims(s, ['scratch']), ['board', 'lane-a', 'lane-b', 'scratch']);
+  const lanes = LANES();
+  assert.deepEqual(ks.selectVictims(s, [], { lanes }), ['board', 'lane-a', 'lane-b']);
+  assert.deepEqual(ks.selectVictims(s, ['scratch'], { lanes }), ['board', 'lane-a', 'lane-b', 'scratch']);
   // include cannot reach a protected session or a session that does not exist
-  assert.deepEqual(ks.selectVictims(s, ['_laneboard', '_laneboard-term', 'ghost']), ['board', 'lane-a', 'lane-b']);
+  assert.deepEqual(ks.selectVictims(s, ['_laneboard', '_laneboard-term', 'ghost'], { lanes }), ['board', 'lane-a', 'lane-b']);
   // the session laneboard runs in, and extra protected names/prefixes
-  assert.deepEqual(ks.selectVictims(s, ['notes'], { ownPane: '%7' }), ['lane-a', 'lane-b', 'notes']);
-  assert.deepEqual(ks.selectVictims(s, [], { protect: ['lane-a'], prefixes: ['lane-b'] }), ['board']);
+  assert.deepEqual(ks.selectVictims(s, ['notes'], { ownPane: '%7', lanes }), ['lane-a', 'lane-b', 'notes']);
+  assert.deepEqual(ks.selectVictims(s, [], { protect: ['lane-a'], prefixes: ['lane-b'], lanes }), ['board']);
+  // without lane records only `include` is killed
+  assert.deepEqual(ks.selectVictims(s), []);
   // garbage in, nothing out
   assert.deepEqual(ks.selectVictims(null, null), []);
   assert.deepEqual(ks.selectVictims([null, { lane: 'a' }, { name: 5, lane: 'a' }], ['x']), []);
@@ -172,10 +189,11 @@ test('kill *: pause and Escape first, kill only after the grace (fake clock)', a
 });
 
 test('kill *: a lane started during the grace is killed too; a protected one never', async () => {
-  const { go, calls, clock, setInventory } = setup();
+  const { go, calls, clock, setInventory, setLanes } = setup();
   const r = await go('*', { confirm: BID, graceMs: 5000 });
   assert.equal(r.ok, true);
   setInventory([...SESSIONS(), { name: 'lane-c', paneId: '%9', lane: 'c' }, { name: '_laneboard-new', paneId: '%10', lane: 'z' }]);
+  setLanes([...LANES(), { id: 'c', session: 'lane-c' }, { id: 'z', session: '_laneboard-new' }]);
   await clock.advance(5000);
   assert.deepEqual(calls.filter((c) => c[0] === 'kill').map((c) => c[1]), ['lane-a', 'lane-b', 'lane-c']);
 });
@@ -193,9 +211,11 @@ test('kill * cancel within the grace: no kill, the pause stays', async () => {
   assert.equal(calls.filter((x) => x[0] === 'kill').length, 0);
   assert.equal(pause.kindOf('ALL', { stateDir }), 'operator');
   assert.ok(steps.some((s) => s.step === 'cancel'));
-  // a second cancel is too late; an unknown job is 404
+  // a second cancel is charged like a kill * (the `all` bucket has refilled by now) and is too late; an
+  // unknown job is 404
   const again = await go('*', { confirm: BID, cancel: job });
   assert.equal(again.status, 409);
+  await clock.advance(10000); // that refusal took the `all` token
   const unknown = await go('*', { confirm: BID, cancel: 'killall-1-deadbeef' });
   assert.equal(unknown.status, 404);
   // cancel also needs the builder id confirm and is remote-only
@@ -204,13 +224,16 @@ test('kill * cancel within the grace: no kill, the pause stays', async () => {
 });
 
 test('kill * with graceMs 0 kills at once; a cancel afterwards is too late', async () => {
-  const { go, calls } = setup();
+  const ctxOf = setup();
+  const { go, calls } = ctxOf;
   const r = await go('*', { confirm: BID, graceMs: 0 });
   assert.equal(r.ok, true);
   assert.equal(r.result.state, 'killed');
   assert.deepEqual(r.result.killed, ['lane-a', 'lane-b']);
   const firstKill = calls.findIndex((c) => c[0] === 'kill');
   assert.equal(calls.slice(0, firstKill).filter((c) => c[0] === 'sendKeys').length, 2, 'Escape before kill');
+  const { clock } = ctxOf;
+  await clock.advance(10000);
   assert.equal((await go('*', { confirm: BID, cancel: r.result.job })).status, 409);
 });
 
@@ -260,7 +283,7 @@ function hubSetup({ respond = null, builders = [
   const fetchImpl = async (url, init) => {
     const env = JSON.parse(init.body);
     sent.push({ host: new URL(url).hostname, action: env.action, target: env.target, builder: env.builder, args: env.args });
-    const custom = respond?.(env, sent);
+    const custom = await respond?.(env, sent);
     if (custom) return new Response(JSON.stringify(custom.body), { status: custom.status });
     return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200, headers: { 'content-type': 'application/json' } });
   };
@@ -348,7 +371,7 @@ test('fleet kill: one at a time; a second start inside the window is 409 with th
   const r = await go({ confirm: 'fleet' });
   const second = await go({ confirm: 'fleet' });
   assert.equal(second.status, 409);
-  assert.equal(second.error, 'fleet-kill-pending');
+  assert.equal(second.error, 'active-job');
   assert.equal(second.result.job, r.result.job);
   assert.equal(sent.filter((s) => s.action === 'pause').length, 2, 'the second start sent nothing');
 });
@@ -370,13 +393,16 @@ test('a kill for one builder is still relayed as-is (the hub action is fan-out s
   assert.deepEqual(sent.map((s) => [s.builder, s.action, s.args.confirm]), [['builder-a', 'kill', 'builder-a']]);
 });
 
-test('fleet kill with no builder up: nothing sent, the window still guards a later kill', async () => {
-  const { go, sent, clock } = hubSetup({ builders: [{ id: 'builder-a', state: 'down', controls: false }] });
+test('fleet kill with no builder up: nothing sent, the job fails, no kill is armed (SR19 F6)', async () => {
+  const { go, sent, clock, svc } = hubSetup({ builders: [{ id: 'builder-a', state: 'down', controls: false }] });
   const r = await go({ confirm: 'fleet' });
-  assert.equal(r.ok, true);
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 503);
   assert.deepEqual(r.result.pause.skipped, [{ builder: 'builder-a', reason: 'down' }]);
+  assert.equal(clock.pending(), 0);
   await clock.advance(UNDO_MS);
   assert.deepEqual(sent, []);
+  assert.equal(svc.list()[0].state, 'failed');
 });
 
 test('hub module registers kill (fanout) on the relay, serves GET /api/fleet/kill, unregisters on stop', async () => {
@@ -477,4 +503,204 @@ test('the merged relay accepts kill in the fan-out scope without override, and r
   un();
   assert.throws(() => registerHubAction('kill', { run: () => null }), /collides/);
   _resetHubActions();
+});
+
+// --- SR19 regressions ---------------------------------------------------------------------------------------
+
+const flush = async (k = 5) => { for (let i = 0; i < k; i++) await new Promise((r) => setImmediate(r)); };
+function deferred() {
+  let resolve;
+  const promise = new Promise((r) => { resolve = r; });
+  return { promise, resolve };
+}
+
+test('SR19 F1: 200 bogus cancels are rate limited and refused before any start audit entry; nothing runs', async () => {
+  const { go, calls, entries } = setup();
+  const statuses = [];
+  for (let i = 0; i < 200; i++) statuses.push((await go('*', { confirm: BID, cancel: `killall-${i}-deadbeef` })).status);
+  assert.equal(statuses[0], 404, 'within the limits: unknown job');
+  assert.ok(statuses.slice(1).every((x) => x === 429), JSON.stringify([...new Set(statuses)]));
+  const es = entries().filter((e) => e.action === 'kill');
+  assert.equal(es.length, 200, 'one outcome entry per refusal');
+  assert.equal(es.filter((e) => e.result.phase === 'start').length, 0, 'no start entry: refused before running');
+  assert.equal(es[0].result.code, 'unknown-job');
+  assert.deepEqual(calls, []);
+});
+
+test('SR19 F1: a cancel of an existing job skips only `all`; the kill bucket is still charged', async () => {
+  const { go, calls, clock } = setup({ rules: { kill: { limit: 1, windowMs: 60000 } } });
+  const r = await go('*', { confirm: BID }, HUB);
+  assert.equal(r.ok, true);
+  const c = await go('*', { confirm: BID, cancel: r.result.job }, HUB);
+  assert.equal(c.status, 429, 'the kill bucket (1/min here) is charged by a cancel');
+  await clock.advance(60000);
+  assert.deepEqual(calls.filter((x) => x[0] === 'kill').map((x) => x[1]), ['lane-a', 'lane-b'], 'the job ran: the cancel was refused');
+});
+
+test('SR19 F1: a cancel inside the `all` window of a finished job is 429, not a free pass', async () => {
+  const { go } = setup();
+  const r = await go('*', { confirm: BID, graceMs: 0 });
+  assert.equal(r.result.state, 'killed');
+  assert.equal((await go('*', { confirm: BID, cancel: r.result.job })).status, 429);
+});
+
+test('SR19 F1: cancelGate has its own small bucket per owner', () => {
+  setup();
+  // a job in grace, started through the handler directly
+  return ks.killAll({ args: { confirm: BID }, kind: 'direct', user: 'alice@example.invalid' }).then((r) => {
+    const who = { kind: 'direct', user: 'alice@example.invalid' };
+    for (let i = 0; i < ks.CANCEL_LIMIT; i++) assert.deepEqual(ks.cancelGate(r.job, who), { ok: true });
+    const g = ks.cancelGate(r.job, who);
+    assert.equal(g.limited, true);
+    assert.ok(g.retryAfterMs > 0 && g.retryAfterMs <= ks.CANCEL_WINDOW_MS);
+    assert.equal(ks.cancelGate('killall-1-deadbeef', who).refusal.status, 404);
+  });
+});
+
+test('SR19 F7: only the principal that started a builder kill may cancel it', async () => {
+  const { go, calls, clock } = setup();
+  const r = await go('*', { confirm: BID }, HUB);
+  const other = await go('*', { confirm: BID, cancel: r.result.job }, { kind: 'direct', user: 'mallory@example.invalid' });
+  assert.equal(other.status, 403);
+  assert.equal(other.code, 'not-owner');
+  const otherKey = await go('*', { confirm: BID, cancel: r.result.job }, { ...HUB, keyLabel: 'hub-other' });
+  assert.equal(otherKey.status, 403);
+  assert.equal(ks.jobState(r.result.job).state, 'grace');
+  const own = await go('*', { confirm: BID, cancel: r.result.job }, HUB);
+  assert.equal(own.ok, true, JSON.stringify(own));
+  await clock.advance(ks.DEFAULT_GRACE_MS);
+  assert.equal(calls.filter((x) => x[0] === 'kill').length, 0);
+});
+
+test('SR19 F4: victims are launched lane sessions only; main checkouts, the hub and plain repo shells are not', () => {
+  const sessions = [
+    { name: 'lane-a', paneId: '%1', lane: 'a' },
+    { name: 'lane-moved', paneId: '%2', lane: null }, // a launched lane whose agent cd'ed out of its worktree
+    { name: 'acme', paneId: '%3', lane: 'acme' }, // the operator's shell in the main checkout
+    { name: 'hub', paneId: '%4', lane: 'laneboard' }, // the hub, running from a git checkout
+    { name: 'dotfiles', paneId: '%5', lane: 'home' }, // ~ under a dotfiles repo
+    { name: 'old-lane', paneId: '%6', lane: 'old' }, // a retired lane's session
+    { name: 'mine', paneId: '%7', panes: [{ paneId: '%7' }, { paneId: '%8' }], lane: null },
+    { name: 'lane-own', paneId: '%9', panes: [{ paneId: '%9' }, { paneId: '%10' }], lane: 'own' },
+  ];
+  const lanes = [
+    { id: 'a', session: 'lane-a' }, { id: 'moved', session: 'lane-moved' }, { id: 'old', session: 'old-lane', retiredAt: 1 },
+    { id: 'own', session: 'lane-own' }, { id: '../bad', session: 'acme' }, null, 'junk',
+  ];
+  // laneboard runs in a second pane of lane-own: protected whatever pane is main
+  assert.deepEqual(ks.selectVictims(sessions, [], { lanes, ownPane: '%10' }), ['lane-a', 'lane-moved']);
+  assert.deepEqual(ks.selectVictims(sessions, ['acme', 'hub'], { lanes, ownPane: '%10' }), ['acme', 'hub', 'lane-a', 'lane-moved']);
+  assert.deepEqual([...ks.laneSessions(lanes)], [['lane-a', 'a'], ['lane-moved', 'moved'], ['lane-own', 'own']]);
+});
+
+test('SR19 F4: through dispatch, a session with a repo cwd but no lane record is not killed', async () => {
+  const { go, calls } = setup({ lanes: [{ id: 'a', session: 'lane-a' }] });
+  const r = await go('*', { confirm: BID, graceMs: 0 });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.result.killed, ['lane-a']);
+  assert.deepEqual(calls.filter((c) => c[0] === 'kill').map((c) => c[1]), ['lane-a']);
+});
+
+test('SR19 F5: the actual kills (and a grace dropped at shutdown) are in the audit log', async () => {
+  const { go, clock, entries } = setup({ failKill: 'lane-b' });
+  const r = await go('*', { confirm: BID }, HUB);
+  await clock.advance(ks.DEFAULT_GRACE_MS);
+  const done = entries().filter((e) => e.action === 'kill.done');
+  assert.equal(done.length, 1);
+  assert.deepEqual(done[0].result, { job: r.result.job, ok: false, killed: ['lane-a'], failed: ['lane-b'] });
+  assert.equal(done[0].target, '*');
+  assert.equal(done[0].via, 'hub');
+
+  await clock.advance(10000);
+  const r2 = await go('*', { confirm: BID }, HUB);
+  assert.equal(r2.ok, true, JSON.stringify(r2));
+  ksRoute.stop();
+  const dropped = entries().filter((e) => e.action === 'kill.dropped');
+  assert.equal(dropped.length, 1);
+  assert.equal(dropped[0].result.job, r2.result.job);
+});
+
+test('SR19 F2: undo during a slow pause fan-out: nothing is killed, every paused builder is resumed', async () => {
+  const slow = deferred();
+  const { go, sent, clock, svc } = hubSetup({
+    respond: (env) => (env.action === 'pause' && env.builder === 'builder-b' ? slow.promise : null),
+  });
+  const startP = go({ confirm: 'fleet' });
+  await flush();
+  const job = svc.list()[0].job;
+  assert.equal(svc.get(job).state, 'pausing');
+  // a second start while the first is pausing: 409 active-job, nothing sent
+  const second = await go({ confirm: 'fleet' });
+  assert.equal(second.status, 409);
+  assert.equal(second.error, 'active-job');
+  assert.equal(second.result.job, job);
+  // undo is accepted while pausing; builder-a (already paused) is resumed at once
+  const u = await go({ confirm: 'fleet', cancel: job });
+  assert.equal(u.status, 202, JSON.stringify(u));
+  assert.equal(u.result.state, 'cancelling');
+  await flush();
+  assert.deepEqual(sent.filter((s) => s.action === 'resume').map((s) => s.builder), ['builder-a']);
+  // the slow pause lands: builder-b is resumed too; no window, no kill
+  slow.resolve({ status: 200, body: { ok: true, result: {} } });
+  const r = await startP;
+  assert.equal(r.result.state, 'cancelled');
+  assert.deepEqual(sent.filter((s) => s.action === 'resume').map((s) => s.builder).sort(), ['builder-a', 'builder-b']);
+  assert.equal(clock.pending(), 0, 'no kill timer');
+  await clock.advance(UNDO_MS * 3);
+  assert.equal(sent.filter((s) => s.action === 'kill').length, 0);
+  assert.equal(svc.get(job).undoneBy, DIRECT.user);
+});
+
+test('SR19 F3: a stale undo retry is dropped once a newer fleet kill starts; its kill retries a 429 once', async () => {
+  let killLimited = true;
+  const { go, sent, clock, svc } = hubSetup({
+    respond: (env) => {
+      if (env.action === 'resume' && env.builder === 'builder-b') return { status: 429, body: { ok: false, error: 'rate_limited', code: 'rate_limited' } };
+      if (env.action === 'kill' && env.builder === 'builder-a' && killLimited) { killLimited = false; return { status: 429, body: { ok: false, error: 'rate_limited' } }; }
+      return null;
+    },
+  });
+  const a = await go({ confirm: 'fleet' });
+  await clock.advance(2000);
+  const ua = await go({ confirm: 'fleet', cancel: a.result.job });
+  assert.deepEqual(ua.result.undo.retry.builders, ['builder-b']);
+  await clock.advance(3000);
+  const b = await go({ confirm: 'fleet' });
+  assert.equal(b.status, 202, JSON.stringify(b));
+  const resumesBefore = sent.filter((s) => s.action === 'resume').length;
+  await clock.advance(RESUME_RETRY_MS);
+  assert.equal(sent.filter((s) => s.action === 'resume').length, resumesBefore, 'the old retry never fires');
+  assert.match(svc.get(a.result.job).undo.retry.dropped, /^superseded by fleetkill-/);
+  // B's kill at its deadline: builder-a answers 429 and gets one fresh kill envelope later
+  await clock.advance(UNDO_MS);
+  const kills = () => sent.filter((s) => s.action === 'kill').map((s) => s.builder);
+  assert.deepEqual(kills().sort(), ['builder-a', 'builder-b']);
+  assert.deepEqual(svc.get(b.result.job).kill.retry.builders, ['builder-a']);
+  await clock.advance(KILL_RETRY_MS);
+  assert.deepEqual(kills().sort(), ['builder-a', 'builder-a', 'builder-b']);
+  assert.deepEqual(svc.get(b.result.job).kill.retry.sent, [{ builder: 'builder-a', ok: true, status: 200 }]);
+  assert.equal(sent.filter((s) => s.action === 'kill').at(-1).args.confirm, 'builder-a');
+  assert.equal(sent.filter((s) => s.action === 'kill').at(-1).args.graceMs, 0);
+});
+
+test('SR19 F6: a pause refused by every builder arms no kill; a partial pause names the misses and spares them', async () => {
+  {
+    const { go, sent, clock, svc } = hubSetup({ respond: (env) => (env.action === 'pause' ? { status: 429, body: { ok: false, error: 'rate_limited' } } : null) });
+    const r = await go({ confirm: 'fleet' });
+    assert.equal(r.ok, false);
+    assert.equal(r.status, 502);
+    assert.equal(r.error, 'pause-not-delivered');
+    assert.equal(clock.pending(), 0);
+    await clock.advance(UNDO_MS * 2);
+    assert.equal(sent.filter((s) => s.action === 'kill').length, 0);
+    assert.equal(svc.list()[0].state, 'failed');
+  }
+  {
+    const { go, sent, clock } = hubSetup({ respond: (env) => (env.action === 'pause' && env.builder === 'builder-b' ? { status: 403, body: { ok: false, error: 'forbidden' } } : null) });
+    const r = await go({ confirm: 'fleet' });
+    assert.equal(r.status, 202);
+    assert.deepEqual(r.result.pauseIncomplete, ['builder-b']);
+    await clock.advance(UNDO_MS);
+    assert.deepEqual(sent.filter((s) => s.action === 'kill').map((s) => s.builder), ['builder-a']);
+  }
 });
