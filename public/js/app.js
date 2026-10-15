@@ -19,6 +19,7 @@ import { cardNodes } from './views/board.js';
 import { init as initMap } from './views/map.js';
 import { views } from './views/index.js';
 import { init as initArchive } from './views/archive.js';
+import { init as initPeek } from './views/peek.js';
 
 export function boot() {
   initNet(); // app.js:208 (resize: scheduleVisible + fitAll)
@@ -31,6 +32,7 @@ export function boot() {
   initRouter(); // app.js:1909 (hashchange)
   initArchive(); // fleet R14: the Board's archive filter (#/board?s=archive)
   initInspector(); // fleet D6: the L3 inspector follows sel= (before the first applyHash)
+  initPeek(); // fleet R12: the inspector's PEEK and DIFF tabs
   // The view registry (fleet D4): every route mounts its view through
   // views/index.js (router.js setView -> activateView). Built here, after the
   // modules have evaluated, so each view's default export is initialised.
