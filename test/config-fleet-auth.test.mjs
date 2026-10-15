@@ -207,11 +207,11 @@ test('SR12 M3: a hub on Linux must set ingressPeerUid (tailscaled uid); builders
   auth.validate(mk('builder', null), bad, layers, { platform: 'linux' });
   // The peer-uid lookup is Linux only, so elsewhere a hub cannot set it (and term-proxy refuses terminals).
   auth.validate(mk('hub', null), bad, layers, { platform: 'darwin' });
-  // SR4 strictness still holds for a hub with the uid set.
+  // SR4 strictness still holds for a hub with the uid set (SR13 M1: a hub now refuses enforce:false outright).
   const noEnf = mk('hub', 0);
   noEnf.fleet.enforce = false;
   const l2 = { file: { fleet: { ingressPort: 7778, enforce: false } }, env: {} };
-  fails(() => auth.validate(noEnf, bad, l2, { platform: 'linux' }), /fleet\.enforce is false/);
+  fails(() => auth.validate(noEnf, bad, l2, { platform: 'linux' }), /mode "hub" refuses fleet\.enforce:false/);
   fails(() => auth.validate(mk('hub', 0), bad, { file: { fleet: { ingressPort: 7778, bogus: 1 } }, env: {} }, { platform: 'linux' }), /unknown key "bogus"/);
   const c = mk('hub', 0);
   auth.validate(c, bad, layers, { platform: 'linux' });
@@ -391,4 +391,20 @@ test('SR4 L3: fleet-auth keys are read-only and deep-frozen after load', () => {
   // other fragments' keys on the same object are theirs to manage
   assert.ok(!Object.isFrozen(f));
   assert.ok(Object.getOwnPropertyDescriptor(f, 'id').writable);
+});
+
+// --- SR13 fixes ---------------------------------------------------------------
+
+test('SR13 M1: mode "hub" refuses fleet.insecureNoEnforce and enforce:false (ConfigError)', () => {
+  const base = { port: 7777, mode: 'hub', fleet: { ...auth.defaults().fleet, ingressPort: 7778, ingressPeerUid: 0 } };
+  const bad = (m) => { throw new ConfigError(m); };
+  const opts = { platform: 'linux', warn: () => {} };
+  const rx = /mode "hub" refuses fleet\.enforce:false and fleet\.insecureNoEnforce/;
+  assert.throws(() => auth.validate({ ...base, fleet: { ...base.fleet, enforce: false, insecureNoEnforce: true } }, bad, {}, opts),
+    (e) => e instanceof ConfigError && rx.test(e.message));
+  assert.throws(() => auth.validate({ ...base, fleet: { ...base.fleet, enforce: true, insecureNoEnforce: true } }, bad, {}, opts), rx);
+  assert.throws(() => auth.validate({ ...base, fleet: { ...base.fleet, enforce: false } }, bad, {}, opts), rx);
+  // an enforcing hub is fine; a builder may still opt in (single-box decision)
+  auth.validate({ ...base, fleet: { ...base.fleet, enforce: true } }, bad, {}, opts);
+  auth.validate({ ...base, mode: 'builder', fleet: { ...base.fleet, enforce: false, insecureNoEnforce: true } }, bad, {}, opts);
 });

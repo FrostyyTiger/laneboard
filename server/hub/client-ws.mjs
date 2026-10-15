@@ -12,8 +12,11 @@
 //   3. {type:'map', map}
 //
 // Browser -> hub: `scope`, `visible`, `ping`; any other type goes to the
-// handlers registered with onClientMessage(type, fn(msg, {user, kind})), and is
-// dropped when there is none.
+// handlers registered with onClientMessage(type, fn(msg, {user, kind, readOnly,
+// control}), opts?), and is dropped when there is none. A control message
+// (CONTROL_MESSAGES, e.g. `touch`, or a type registered with {control:true})
+// reaches its handlers only from a direct user with control (relay.mjs
+// remoteUser: not `local`, not read-only; SR13 L3); otherwise it is dropped.
 //
 // Hub -> browser fan-out:
 // - store `delta` events accumulate per builder (sessions by name, removals,
@@ -38,6 +41,7 @@ import { checkUpgrade, warnRateLimited } from '../security.mjs';
 import { aggregates as defaultAggregates } from './aggregates.mjs';
 import { isSafeName, snapshotOf } from './fleet-store.mjs';
 import { log as defaultLog } from '../log.mjs';
+import { remoteUser } from './relay.mjs';
 
 export const LIMITS = Object.freeze({
   frameBytes: 512 * 1024,
@@ -56,6 +60,8 @@ export const LIMITS = Object.freeze({
 
 /** Types the hub handles itself; onClientMessage cannot take them over. */
 const RESERVED = new Set(['scope', 'visible', 'ping', 'pong']);
+/** Browser messages that change hub state: only a direct user with control may send them (SR13 L3). */
+export const CONTROL_MESSAGES = Object.freeze(['touch']);
 const TYPE_RX = /^[a-z][a-z0-9-]{0,31}$/;
 const USER_RX = /^[^\s\x00-\x1f\x7f]{1,256}$/;
 const PASS_THROUGH = new Set(['event', 'approval', 'stuck', 'health', 'repos']);
@@ -115,7 +121,7 @@ export function guardUpgrade(req, config, classify) {
   }
   const user = auth.kind === 'local' ? (typeof auth.user === 'string' && auth.user ? auth.user : 'local') : auth.user;
   if (typeof user !== 'string' || !USER_RX.test(user)) return { reason: 'user' };
-  return { auth: { kind: auth.kind, user } };
+  return { auth: { kind: auth.kind, user, readOnly: auth.readOnly === true } };
 }
 
 function refuse(socket, status = '403 Forbidden') {
@@ -170,7 +176,8 @@ export function createClientWs({
   const wss = new WebSocketServer({ noServer: true, maxPayload: LIMITS.inboundBytes });
   const clients = new Set();
   const handlers = new Map(); // type -> Set<fn>
-  const counters = { dropped: 0, oversize: 0, terminated: 0, handlerErrors: 0, refused: 0, inboundDropped: 0 };
+  const controlTypes = new Set(CONTROL_MESSAGES);
+  const counters = { dropped: 0, oversize: 0, terminated: 0, handlerErrors: 0, refused: 0, inboundDropped: 0, controlRefused: 0 };
   let lastMap = null;
   let closed = false;
 
@@ -547,9 +554,10 @@ export function createClientWs({
   }
 
   /** Register a handler for a browser message type. Returns an unsubscribe. */
-  function onClientMessage(type, fn) {
+  function onClientMessage(type, fn, { control = false } = {}) {
     if (typeof type !== 'string' || !TYPE_RX.test(type) || RESERVED.has(type)) throw new TypeError(`client-ws: cannot handle type ${type}`);
     if (typeof fn !== 'function') throw new TypeError('client-ws: handler must be a function');
+    if (control === true) controlTypes.add(type);
     let set = handlers.get(type);
     if (!set) handlers.set(type, (set = new Set()));
     set.add(fn);
@@ -572,9 +580,12 @@ export function createClientWs({
     }
     const set = handlers.get(msg.type);
     if (!set) return;
+    const control = remoteUser({ kind: ws.kind, user: ws.user, readOnly: ws.readOnly }).ok;
+    // SR13 L3: a read-only or local user cannot send a control message.
+    if (controlTypes.has(msg.type) && !control) { counters.controlRefused++; return; }
     for (const fn of [...set]) {
       try {
-        const r = fn(msg, { user: ws.user, kind: ws.kind });
+        const r = fn(msg, { user: ws.user, kind: ws.kind, readOnly: ws.readOnly, control });
         if (r && typeof r.catch === 'function') r.catch(() => { counters.handlerErrors++; });
       } catch {
         counters.handlerErrors++;
@@ -610,6 +621,7 @@ export function createClientWs({
       if (closed) { ws.terminate(); return; }
       ws.user = g.auth.user;
       ws.kind = g.auth.kind;
+      ws.readOnly = g.auth.readOnly === true;
       ws.scope = 'all';
       ws.visible = new Set();
       ws.isAlive = true;

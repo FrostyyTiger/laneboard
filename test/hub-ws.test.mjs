@@ -270,7 +270,7 @@ test('touch reaches a registered onClientMessage handler with the connection use
   await sleep(20);
   assert.equal(seen.length, 1);
   assert.deepEqual(seen[0][0], { type: 'touch', fkey: 'builder-a/web', how: 'inspect' });
-  assert.deepEqual(seen[0][1], { user: 'alice@example.invalid', kind: 'direct' });
+  assert.deepEqual(seen[0][1], { user: 'alice@example.invalid', kind: 'direct', readOnly: false, control: true });
   off();
   c.send({ type: 'touch', fkey: 'builder-a/web', how: 'peek' });
   c.send({ type: 'ping' });
@@ -279,16 +279,40 @@ test('touch reaches a registered onClientMessage handler with the connection use
   c.close();
 });
 
-test('a local (non-ingress) connection is user local', async (t) => {
+test('a local (non-ingress) connection is user local and cannot send control messages (SR13 L3)', async (t) => {
   const { port, cw } = await boot(t);
   const seen = [];
-  cw.onClientMessage('touch', (msg, ctx) => seen.push(ctx));
+  cw.onClientMessage('touch', (msg, ctx) => seen.push(['touch', ctx]));
+  cw.onClientMessage('note', (msg, ctx) => seen.push(['note', ctx]));
   const c = connect(port, { 'tailscale-user-login': 'spoofed@example.invalid' });
   await c.opened;
   c.send({ type: 'touch', fkey: 'builder-a/web', how: 'term' });
+  c.send({ type: 'note' });
   c.send({ type: 'ping' });
   await c.until((m) => m.some((x) => x.type === 'pong'));
-  assert.deepEqual(seen, [{ user: 'local', kind: 'local' }]);
+  assert.deepEqual(seen, [['note', { user: 'local', kind: 'local', readOnly: false, control: false }]]);
+  assert.equal(cw.stats().controlRefused, 1);
+  c.close();
+});
+
+test('SR13 L3: a read-only direct user cannot send touch (or a type registered as control)', async (t) => {
+  const { port, cw, origin } = await boot(t, {
+    ingress: true,
+    classify: () => ({ kind: 'direct', user: 'reader@example.invalid', readOnly: true }),
+  });
+  const seen = [];
+  cw.onClientMessage('touch', (msg, ctx) => seen.push(['touch', ctx]));
+  cw.onClientMessage('steer', (msg, ctx) => seen.push(['steer', ctx]), { control: true });
+  cw.onClientMessage('note', (msg, ctx) => seen.push(['note', ctx]));
+  const c = connect(port, { origin, 'tailscale-user-login': 'reader@example.invalid' });
+  await c.opened;
+  c.send({ type: 'touch', fkey: 'builder-a/web', how: 'inspect' });
+  c.send({ type: 'steer' });
+  c.send({ type: 'note' });
+  c.send({ type: 'ping' });
+  await c.until((m) => m.some((x) => x.type === 'pong'));
+  await sleep(20);
+  assert.deepEqual(seen, [['note', { user: 'reader@example.invalid', kind: 'direct', readOnly: true, control: false }]]);
   c.close();
 });
 

@@ -557,3 +557,18 @@ test('SR12 L3: a client RST during a refusal raises no uncaught error', async ()
   }
   assert.deepEqual(errs, []);
 });
+
+test('SR13 M1: unidentified ingress under enforce:false (user `local`) cannot open a terminal; a real user still can', async () => {
+  await teardown();
+  await setup({ fleet: { enforce: false, insecureNoEnforce: true } });
+  const noUser = directHeaders();
+  delete noUser['tailscale-user-login'];
+  assert.equal((await open(termPath(), { headers: noUser })).status, 403);
+  // a forged `local` login is refused too
+  assert.equal((await open(termPath(), { headers: directHeaders({ 'tailscale-user-login': 'local' }) })).status, 403);
+  assert.equal(fb.terms.length, 0);
+  assert.equal(fb.requests.filter((x) => x.method === 'UPGRADE').length, 0, 'nothing signed for the builder');
+  const { ws } = await open(termPath());
+  assert.ok(ws, 'a direct user still opens');
+  ws.close();
+});

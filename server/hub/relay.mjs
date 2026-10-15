@@ -1,6 +1,6 @@
 // Hub action relay (fleet plan §3 2.10) and the hub-local action registry. REVIEW-REQUIRED (SR11).
 //
-// createRelay({store, key, keyId?, sign?, audit, fetchImpl?, now?, uuid?, cfg?, placement?})
+// createRelay({store, key, keyId?, sign?, audit, fetchImpl?, now?, uuid?, cfg?, placement?, coreOverrides?})
 //   -> { relay(body, user), send(builder, action, target, args, user, opts?), fanout(...), place(opts),
 //        registerHubAction(name, def), validateArgs }
 //
@@ -125,16 +125,28 @@ function checkTarget(target) {
 }
 
 /**
+ * The one remote-user predicate of the hub (SR13 M1): relay, core routes and the terminal proxy all call it.
+ * A `direct` auth object with a real serve login: not `local` (what auth.mjs makes of unidentified ingress
+ * under enforce:false), not empty, not malformed, not read-only. Never throws.
+ * -> {ok:true, user} | {ok:false, status:403, error:'remote-only'|'read-only'|'bad-user'}
+ */
+export function remoteUser(auth) {
+  if (auth === null || typeof auth !== 'object' || Array.isArray(auth) || auth.kind !== 'direct') return { ok: false, status: 403, error: 'remote-only' };
+  const login = auth.user;
+  if (typeof login !== 'string' || login === '' || login === 'local') return { ok: false, status: 403, error: 'remote-only' };
+  if (auth.readOnly === true) return { ok: false, status: 403, error: 'read-only' };
+  if (!ENVELOPE_USER_RE.test(login)) return { ok: false, status: 403, error: 'bad-user' };
+  return { ok: true, user: login };
+}
+
+/**
  * The acting user: a `direct` auth object only (README 3.5: on the hub every action needs `direct`). A bare
  * string is refused (SR11 L2): only the request's auth object says what kind of caller this is.
  */
 function actingUser(auth) {
-  if (auth === null || typeof auth !== 'object' || Array.isArray(auth) || auth.kind !== 'direct') throw new RelayError(403, 'remote-only');
-  const login = auth.user;
-  if (typeof login !== 'string' || login === '' || login === 'local') throw new RelayError(403, 'remote-only');
-  if (auth.readOnly === true) throw new RelayError(403, 'read-only');
-  if (!ENVELOPE_USER_RE.test(login)) throw new RelayError(403, 'bad-user');
-  return login;
+  const r = remoteUser(auth);
+  if (!r.ok) throw new RelayError(r.status, r.error);
+  return r.user;
 }
 
 /** A body value safe to reflect in a refusal: a valid builder id or '*', else null (SR11 L5). */
@@ -145,26 +157,49 @@ function safeBuilder(b) {
 // --- module-level hub-local registry (shared by every relay; instances may add their own) -----------------
 
 const globalHubActions = new Map();
+const EMPTY = new Set();
 
-function normDef(name, def) {
-  if (!ACTION_SET.has(name)) throw new TypeError(`registerHubAction: ${name} is not a relay action`);
+/** Thrown by registerHubAction; `code` says why (SR11 R1: callers may only branch on the code). */
+export class HubActionError extends TypeError {
+  constructor(code, message) {
+    super(message);
+    this.name = 'HubActionError';
+    this.code = code;
+  }
+}
+/** `code`s of HubActionError. */
+export const HUB_ACTION_ERRORS = Object.freeze({
+  invalid: 'hub-action-invalid',
+  collides: 'hub-action-collides',
+  duplicate: 'hub-action-duplicate',
+  overrideRefused: 'hub-action-override-refused',
+});
+
+/**
+ * SR11 R1: `override: true` is honoured only for a name in `overridable` (the core allowlist boot/hub.mjs
+ * passes to createRelay). The module-level registry has no allowlist, so it never honours override.
+ */
+function normDef(name, def, overridable = EMPTY) {
+  if (!ACTION_SET.has(name)) throw new HubActionError(HUB_ACTION_ERRORS.invalid, `registerHubAction: ${name} is not a relay action`);
   const run = typeof def === 'function' ? def : def?.run;
-  if (typeof run !== 'function') throw new TypeError('registerHubAction: run must be a function');
+  if (typeof run !== 'function') throw new HubActionError(HUB_ACTION_ERRORS.invalid, 'registerHubAction: run must be a function');
   const scope = def?.scope ?? 'any';
-  if (scope !== 'any' && scope !== 'fanout') throw new TypeError("registerHubAction: scope must be 'any' or 'fanout'");
+  if (scope !== 'any' && scope !== 'fanout') throw new HubActionError(HUB_ACTION_ERRORS.invalid, "registerHubAction: scope must be 'any' or 'fanout'");
   const override = typeof def === 'object' && def !== null && def.override === true;
+  if (override && !overridable.has(name)) {
+    throw new HubActionError(HUB_ACTION_ERRORS.overrideRefused, `registerHubAction: override is not allowed for ${name} (not in the hub's core allowlist)`);
+  }
   // SR11 L1: a hub module may not shadow a relayed builder action (approve, send-text, kill on one builder...).
   if (!override && !HUB_REGISTRABLE[scope].includes(name)) {
-    throw new TypeError(`registerHubAction: ${name} (${scope}) collides with a relayed builder action`);
+    throw new HubActionError(HUB_ACTION_ERRORS.collides, `registerHubAction: ${name} (${scope}) collides with a relayed builder action`);
   }
   return { name, run, scope, override };
 }
-
-function addTo(map, name, def, others = []) {
-  const d = normDef(name, def);
+function addTo(map, name, def, others = [], overridable = EMPTY) {
+  const d = normDef(name, def, overridable);
   const k = `${d.scope}:${name}`;
   if (!d.override && (map.has(k) || others.some((m) => m.has(k)))) {
-    throw new TypeError(`registerHubAction: ${name} (${d.scope}) is already registered`);
+    throw new HubActionError(HUB_ACTION_ERRORS.duplicate, `registerHubAction: ${name} (${d.scope}) is already registered`);
   }
   map.set(k, d);
   return () => { if (map.get(k) === d) map.delete(k); };
@@ -174,7 +209,9 @@ function addTo(map, name, def, others = []) {
  * Register hub-local handling for `name`: `{run(req, ctx), scope?, override?}`. scope 'any' (default) takes
  * every request for the action and is allowed for broadcast and ack-alarm; scope 'fanout' only `builder:'*'`
  * and is allowed for kill/pause/resume (fleet kill, C9). Any other name, or a name already registered (in the
- * module registry or on the relay instance), throws unless `override: true` (core code only). `run` gets
+ * module registry or on the relay instance), throws a HubActionError. `override: true` is honoured only by a
+ * relay instance, and only for a name in its `coreOverrides` allowlist (SR11 R1); this module-level registry
+ * refuses it. `run` gets
  * `req = {builder, action, target, args}` and `ctx = {user, id, send, fanout, store, view, now, audit, place}`;
  * its return value (or `{ok, result|error, status?}`) is the response. Sub-sends through `ctx.send` /
  * `ctx.fanout` are signed and audited per envelope, with `parent` = ctx.id; the relay audits the hub-local request
@@ -218,7 +255,7 @@ function errorName(err) {
 
 export function createRelay({
   store, key, keyId, sign = signEnvelope, audit, fetchImpl = fetch, now = Date.now,
-  uuid = crypto.randomUUID, cfg = {}, placement = placementLib,
+  uuid = crypto.randomUUID, cfg = {}, placement = placementLib, coreOverrides = [],
 } = {}) {
   if (!store || typeof store.view !== 'function' || typeof store.builder !== 'function') throw new TypeError('createRelay: store is required');
   if (!audit || typeof audit.append !== 'function') throw new TypeError('createRelay: audit is required');
@@ -228,6 +265,8 @@ export function createRelay({
   const timeoutMs = Number.isInteger(fleetCfg?.actionTimeoutMs) && fleetCfg.actionTimeoutMs > 0 ? fleetCfg.actionTimeoutMs : DEFAULT_TIMEOUT_MS;
   const placementCfg = fleetCfg?.placement ?? {};
   const localActions = new Map();
+  // SR11 R1: the names core code (boot/hub.mjs) allows `override: true` for; nothing else may claim it.
+  const overridable = new Set(Array.isArray(coreOverrides) ? coreOverrides.filter((n) => typeof n === 'string' && ACTION_SET.has(n)) : []);
   const nowMs = () => Math.floor(Number(now()));
 
   function hubAction(action, fanout) {
@@ -543,6 +582,6 @@ export function createRelay({
     },
     place,
     validateArgs,
-    registerHubAction: (name, def) => addTo(localActions, name, def, [globalHubActions]),
+    registerHubAction: (name, def) => addTo(localActions, name, def, [globalHubActions], overridable),
   };
 }

@@ -7,8 +7,8 @@
 //   which rewrites the typed `fleet` confirm to each builder's id. The handler (server/hub/fleetkill.mjs)
 //   checks the typed `fleet` itself before anything is sent.
 // - `kill` is also a builder action name. The relay's registry (SR11 L1, HUB_REGISTRABLE) allows `kill` in the
-//   fan-out scope without `override`, so none is passed; should a stricter registry ever ask for an explicit
-//   `override`, the registration is retried once with `override: true` (fan-out scope only).
+//   fan-out scope without `override`, so none is passed. A registry error is never retried with `override`
+//   (SR11 R1: override is honoured only for boot/hub.mjs's core allowlist); it propagates.
 // - GET /api/fleet/kill: the recent fleet kill jobs (read-only, for the dialog's countdown) as
 //   {jobs:[{job, state, by, startedAt, killAt, pause, kill, undo}]}.
 // - stop(): a pending undo window is dropped, nothing is killed, the fleet stays paused (fails safe).
@@ -39,15 +39,9 @@ async function hubActionRegistrar(ctx) {
   return null;
 }
 
-/** Register `def` for the fan-out scope; retry with `override: true` when the registry demands it. */
+/** Register `def` for the fan-out scope. Never asks for `override` and never retries (SR11 R1). */
 export function registerFanoutKill(register, run) {
-  const def = { scope: 'fanout', run };
-  try {
-    return register(ACTION, def);
-  } catch (err) {
-    if (!/override/i.test(String(err?.message ?? ''))) throw err;
-    return register(ACTION, { ...def, override: true });
-  }
+  return register(ACTION, { scope: 'fanout', run });
 }
 
 export function createModule(opts = {}) {

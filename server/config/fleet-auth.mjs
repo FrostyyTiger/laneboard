@@ -339,9 +339,16 @@ export function validate(c, bad, layers, { platform = process.platform, warn = c
     if (typeof f[k] !== 'boolean') bad(`fleet.${k} must be true or false, got ${JSON.stringify(f[k])}`);
   }
 
+  // SR13 M1: a hub never has a reason to accept unidentified ingress. On a
+  // hub `insecureNoEnforce` would hand the fleet key's `term` scope to every
+  // tagged tailnet node (every builder), so it is refused outright.
+  if (c.mode === 'hub' && (f.insecureNoEnforce === true || f.enforce === false)) {
+    bad('mode "hub" refuses fleet.enforce:false and fleet.insecureNoEnforce: a hub must only accept identified ingress (Tailscale-User-Login); remove both');
+  }
+
   // SR4 M1/L4: an open ingress listener without enforce lets tagged tailnet
   // nodes and forged serve headers act as `direct`.
-  if (f.ingressPort !== null && !f.enforce) {
+  if (f.ingressPort !== null && !f.enforce && c.mode !== 'hub') {
     if (!f.insecureNoEnforce) {
       bad(`fleet.enforce is false while fleet.ingressPort ${f.ingressPort} opens an ingress listener: unidentified ingress would act as local. Remove enforce:false, or set fleet.insecureNoEnforce: true to accept that`);
     }

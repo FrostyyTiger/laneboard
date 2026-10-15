@@ -72,9 +72,13 @@ Every request is classified like on a builder:
 
 `local` may read everything. **Control is remote-only on the hub**: actions
 (`POST /api/fleet/actions`, including broadcast, fleet kill, fan-out pause and
-resume, ack-alarm), audit rebase and terminals need a `direct` user; `local`
-gets 403 `remote-only`. So a process on the hub box cannot drive the fleet
-through the loopback listener.
+resume, ack-alarm), audit rebase, terminals, push subscribe/unsubscribe,
+`/api/push/quiet` and `/api/notify/prefs` writes need a `direct` user with a
+real Tailscale login (not read-only); `local` gets 403 `remote-only`. So a
+process on the hub box cannot drive the fleet, open a terminal or mute alarms
+through the loopback listener. A read-only user cannot send `touch` on `/ws`
+either. A hub refuses `fleet.enforce: false` and `fleet.insecureNoEnforce` at
+startup: it never accepts unidentified ingress.
 
 The web baseline is the builders' own: Host must match (with its port),
 Origin must be same-origin or in `fleet.allowedOrigins`, every mutating request
@@ -92,9 +96,9 @@ carries `X-Laneboard: 1`, `OPTIONS` is 405, and pages carry the full CSP.
 | `POST /api/fleet/actions` | `{builder | '*' | null, action, target, args}`: relayed, signed and audited (direct only) |
 | `POST /api/fleet/placement` | `{repo?, need?}`: a dry-run ranking of builders |
 | `GET /api/fleet/audit?since=&builder=&limit=` | the hub's audit entries with their reconciliation state |
-| `POST /api/fleet/audit/rebase` | `{builder}`: accept a builder's rewritten audit chain after an `audit-fork` (direct only) |
+| `POST /api/fleet/audit/rebase` | `{builder, confirm, onto?}`: accept a builder's rewritten audit chain after an `audit-fork` (direct only). `confirm` must be the builder id typed out; `onto` is `genesis` (default) or `head` (re-anchor on the builder's current verified head) |
 | `GET /api/fleet/:builder/v1/<path>` | signed read proxy, fixed allowlist |
-| `GET /api/push/key`, `POST`/`DELETE /api/push/subscribe`, `POST /api/push/test` | web push on the hub (VAPID keys and subscriptions in the hub's own database) |
+| `GET /api/push/key`, `POST`/`DELETE /api/push/subscribe`, `POST /api/push/test` | web push on the hub (VAPID keys and subscriptions in the hub's own database). An endpoint must be `https` on port 443 at a known push service: `push.allowedEndpointHosts` (host names, `*.domain` for subdomains), default `fcm.googleapis.com`, `android.googleapis.com`, `*.push.services.mozilla.com`, `*.notify.windows.com`, `*.push.apple.com`. At most 5 subscriptions per user (50 in all); only the owner removes one |
 | `POST /api/push/quiet` | `{session: <fleet key>, quiet}`: mute one session's notifications (per-kind and quiet hours: `/api/notify/prefs`) |
 | `WS /ws` | the fleet stream (`fleet`, `snapshot`, `delta`, `map`, `alarms`, `packages`, ...) |
 | `WS /ws/term/:builder/:name` | a proxied terminal (direct only) |
@@ -116,11 +120,16 @@ one with another API version `incompatible`; both are read-only.
 
 `server/boot/hub.mjs` wires the parts in this order: hub key, audit, fleet
 store, upstreams, relay, read proxy, terminal proxy, audit reconciler, client
-socket, map loop, push, services hook; then the module ctx (every part on ctx
-and provided: `store`, `relay`, `readProxy`, `services`, `broadcast`,
+socket, map loop, push, services hook; then the module ctx (on ctx and
+provided: `store`, `relay`, `readProxy`, `services`, `broadcast`,
 `onClientMessage`, `audit`, `db`, `push`, `pushSender`, `auditForks`,
-`upstreams`, `clientWs`, `termProxy`), `loadModules('hub/routes', ctx)`, the
-services, and the listeners. Shutdown runs module stops first, then map loop,
+`upstreams`, `clientWs`), `loadModules('hub/routes', ctx)`, the
+services, and the listeners. The hub key goes only to the upstreams, relay,
+read proxy and terminal proxy constructors: modules get `upstreams` as a
+facade (`status(id)`, `setVisible(id, keys)`), never the upstream objects or
+the terminal proxy. `registerHubAction(..., {override: true})` is honoured
+only for names in the core allowlist boot/hub.mjs passes to the relay (empty
+today). Shutdown runs module stops first, then map loop,
 services, reconciler, upstreams, terminals, client sockets, audit, database.
 
 `server/hub/services.mjs` is the hook for fleet-derived services: a hub module
