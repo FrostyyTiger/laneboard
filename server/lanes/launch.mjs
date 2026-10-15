@@ -108,6 +108,21 @@ const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/;
 const PLAN_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}\.md$/;
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$/;
 const MODEL_RE = /^[A-Za-z0-9._[\]-]{1,40}$/;
+/** Lane priority (fleet §8 2.5): the quota guard pauses only `low` lanes. */
+export const PRIORITIES = Object.freeze(['low', 'normal', 'high']);
+export const MAX_BUDGET_USD = 100000;
+/** The mode the legacy POST /api/lanes route has always launched with. */
+export const LEGACY_DEFAULT_MODE = 'auto';
+
+/**
+ * The legacy route's request: today's default mode filled in explicitly, so
+ * validate() itself never guesses one. The v1 dispatcher does not use this.
+ */
+export function legacyRequest(body) {
+  const req = body && typeof body === 'object' && !Array.isArray(body) ? { ...body } : {};
+  if (req.permissionMode === undefined) req.permissionMode = LEGACY_DEFAULT_MODE;
+  return req;
+}
 
 let deps = null;
 /**
@@ -157,7 +172,19 @@ export async function validate(req) {
   if (!PLAN_RE.test(plan) || plan.includes('..')) throw new LaneError(`invalid plan path "${plan}"`);
   const model = String(req.model || 'opus');
   if (!MODEL_RE.test(model)) throw new LaneError(`invalid model "${model}"`);
-  const permissionMode = String(req.permissionMode || 'auto');
+  // No fallback mode (SR5 M1): every caller names the mode it means. The v1
+  // dispatcher passes the effective, allowlisted one; the legacy route goes
+  // through legacyRequest() below.
+  if (typeof req.permissionMode !== 'string' || !req.permissionMode) {
+    throw new LaneError('permissionMode is required', 400);
+  }
+  const permissionMode = req.permissionMode;
+  const priority = req.priority == null ? 'normal' : req.priority;
+  if (!PRIORITIES.includes(priority)) throw new LaneError(`invalid priority "${String(priority).slice(0, 20)}": one of ${PRIORITIES.join(', ')}`);
+  const budgetUsd = req.budgetUsd == null ? null : req.budgetUsd;
+  if (budgetUsd !== null && !(typeof budgetUsd === 'number' && Number.isFinite(budgetUsd) && budgetUsd > 0 && budgetUsd <= MAX_BUDGET_USD)) {
+    throw new LaneError(`invalid budgetUsd: a number of dollars above 0 and at most ${MAX_BUDGET_USD}`);
+  }
 
   const help = await run(config.claudeBin, ['--help'], { timeout: 15000 });
   const modes = permissionModesFromHelp(help.stdout);
@@ -205,7 +232,7 @@ export async function validate(req) {
   }
 
   return {
-    lane, repo, branch, plan, model, permissionMode, slot, mainRepo, root,
+    lane, repo, branch, plan, model, permissionMode, priority, budgetUsd, slot, mainRepo, root,
     localBranch: Boolean(req.localBranch),
     promptOverride: typeof req.promptOverride === 'string' && req.promptOverride ? req.promptOverride.slice(0, 8000) : null,
   };
@@ -228,18 +255,31 @@ export async function launch(req, who = 'local') {
   // The record is written as soon as validation passes, not at the end: it is
   // what holds the slot, and it is what lets `retire --force` find and clean a
   // launch that failed or was cut off before its session existed.
+  // A dry run (fleet §8 2.7) is validate() alone: no record, no job. Its slot
+  // is advisory, because `serialised` only holds during a real launch.
+  if (req?.dryRun === true) {
+    const p = await validate(req);
+    return {
+      ok: true, dryRun: true, lane: p.lane,
+      plan: {
+        lane: p.lane, repo: p.repo, branch: p.branch, plan: p.plan, model: p.model, permissionMode: p.permissionMode,
+        priority: p.priority, budgetUsd: p.budgetUsd, slot: p.slot, root: p.root,
+      },
+    };
+  }
   const v = await serialised(async () => {
     const valid = await validate(req);
     await store.write({
       id: valid.lane, repo: valid.repo, root: valid.root, branch: valid.branch, plan: valid.plan, slot: valid.slot,
       model: valid.model, permissionMode: valid.permissionMode, session: valid.lane,
+      priority: valid.priority, budgetUsd: valid.budgetUsd,
       createdAt: Date.now(), retiredAt: null,
     });
     return valid;
   });
   const job = `launch-${v.lane}-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
   const step = stepper(job, v.lane, 'launch');
-  step('validate', true, { repo: v.repo, branch: v.branch, plan: v.plan, slot: v.slot, model: v.model, permissionMode: v.permissionMode, by: who });
+  step('validate', true, { repo: v.repo, branch: v.branch, plan: v.plan, slot: v.slot, model: v.model, permissionMode: v.permissionMode, priority: v.priority, budgetUsd: v.budgetUsd, by: who });
   step('record', true, { file: store.laneFile(v.lane) });
   runLaunch(v, step).catch((err) => {
     step('failed', false, { step: 'internal', error: String(err?.message || err) });

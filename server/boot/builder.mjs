@@ -134,7 +134,7 @@ function laneAction(handler, okStatus = 200) {
 
 // 202: validation has passed and the job is running. Its steps land in
 // lane_jobs and /api/events; poll /api/jobs/:job.
-route('POST', '/api/lanes', laneAction(async (req) => launcher.launch(await readJson(req), who(req)), 202));
+route('POST', '/api/lanes', laneAction(async (req) => launcher.launch(launcher.legacyRequest(await readJson(req)), who(req)), 202));
 
 // Only when a human asks. Body: { force?, confirm? } — force needs confirm = the lane id.
 route('DELETE', '/api/lanes/:id', laneAction(async (req) => {
