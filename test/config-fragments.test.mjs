@@ -167,7 +167,7 @@ test('mode defaults to builder', () => {
 
 test('mode comes from the file or LANEBOARD_MODE, env winning', () => {
   // A hub needs builders and an ingress port (server/config/hub.mjs, fleet H1).
-  const hubFleet = { builders: [{ id: 'builder-a', url: 'https://builder-a.example.invalid' }], ingressPort: 7778 };
+  const hubFleet = { builders: [{ id: 'builder-a', url: 'https://builder-a.example.invalid' }], ingressPort: 7778, ingressPeerUid: 0 };
   assert.equal(build({ env: {}, file: write({ mode: 'hub', fleet: hubFleet }) }).mode, 'hub');
   assert.equal(build({ env: { LANEBOARD_MODE: 'hub' }, file: write({ fleet: hubFleet }) }).mode, 'hub');
   assert.equal(build({ env: { LANEBOARD_MODE: 'builder' }, file: write({ mode: 'hub' }) }).mode, 'builder');

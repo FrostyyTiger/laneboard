@@ -158,6 +158,8 @@ async function bootOnce({ mode, config, env, trace, timeoutMs }) {
     cfg.fleet = isObj(cfg.fleet) ? cfg.fleet : {};
     if (cfg.fleet.ingressPort === undefined) cfg.fleet.ingressPort = await freePort({ exclude: [port] });
     ingressPort = cfg.fleet.ingressPort;
+    // A hub on Linux must pin tailscaled's uid (SR12 M3); in tests the "serve" client is this process.
+    if (cfg.mode === 'hub' && cfg.fleet.ingressPeerUid === undefined && process.platform === 'linux') cfg.fleet.ingressPeerUid = process.getuid();
   }
   // No config at all means no file: exactly a fresh install.
   const configFile = path.join(dirs.config, 'laneboard', 'config.json');

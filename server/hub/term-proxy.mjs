@@ -5,7 +5,13 @@
 //   upgradeHandler: if (tp.attach(req, socket, head, url)) return;   // true = this path is ours
 //   tp.live(builderId) -> number of proxied terms (pending included); tp.close() closes them all (1001).
 //
-// Order of an attach (any refusal answers `HTTP/1.1 <status>` on the raw socket and destroys it):
+// Order of an attach (any refusal answers `HTTP/1.1 <status>` on the raw socket and destroys it; an
+// 'error' listener is set on the socket first, so a client RST during a refusal is not an uncaught error):
+//   0. The browser handshake is validated BEFORE anything else (SR12 M1): GET, Upgrade: websocket,
+//      Sec-WebSocket-Key /^[+/0-9A-Za-z]{22}==$/, Sec-WebSocket-Version 13, no Sec-WebSocket-Protocol
+//      (the UI sends none) -> else 400/405, so ws.handleUpgrade cannot fail after the upstream opened.
+//      In hub mode a terminal also needs fleet.ingressPeerUid (SR12 M3; the config refuses a Linux hub
+//      without it, and elsewhere the check cannot run) -> else 403, logged once.
 //   1. Path: exactly /ws/term/<builder>/<name> parsed from the RAW req.url (no URL normalization, so
 //      dot segments cannot move the target). <builder> must be a fleet-store id (Map lookup); <name> is
 //      percent-decoded once and must be a safe session name; '.', '..' and anything with '/' or '\' are
@@ -20,11 +26,19 @@
 //      signature, never query-param signatures, never an Origin. `args` are exactly the clamped query the
 //      builder will re-derive (termArgsFromQuery), so the builder's binding check matches.
 //      Builder 404 -> browser 404; 401/403 -> 403; anything else (refused, timeout, 5xx) -> 502/503.
-//   5. term-attach is audited (fails closed: no audit line, no terminal), then the browser is upgraded.
+//   5. term-attach is audited (fails closed: no audit line, no terminal; `audit` is required), then the
+//      browser is upgraded. If that upgrade still fails (the socket went away, ws aborted) or has not
+//      completed within limits.upgradeMs, the upstream is terminated, the slot freed and term-detach
+//      written. Every attach audited ok gets exactly one term-detach carrying the same `id` (SR12 L4).
 // Piping: frames are not interpreted, `isBinary` is preserved, a browser frame is capped at 64 KiB (ws
 // maxPayload -> 1009). Upstream frames that arrive before the browser socket exists are buffered (64 KiB,
 // then 1013). Backpressure: a receiver's bufferedAmount > 1 MiB pauses the sender's TCP socket; a 50 ms
 // timer resumes it below 256 KiB. Close codes propagate when sendable, else 1000 (normal) / 1011.
+// Control frames (SR12 M2): both sockets run with autoPong off; a ping is answered at most once per
+// limits.pongMinMs and only while that socket's queue is below lowWater, else dropped. Whatever the cause,
+// a socket whose queued bytes (bufferedAmount) exceed limits.maxQueuedBytes (4 MiB) is terminated and the
+// other side is closed with 1008. Liveness (SR12 L2): every limits.pingMs both sides are pinged; a side
+// that sent nothing (no pong, no frame) for 2 intervals while we were reading it is terminated.
 // A builder going `down` (store conn event) closes its proxied terms with 4001 "builder down".
 // term-detach is audited with {bytesIn, bytesOut, code, durationMs} inside `result`. Keystrokes are never
 // logged; nothing here logs keys, signatures or envelopes.
@@ -41,15 +55,22 @@ export const LIMITS = Object.freeze({
   pendingBytes: 64 * 1024,
   highWater: 1024 * 1024,
   lowWater: 256 * 1024,
+  maxQueuedBytes: 4 * 1024 * 1024,
   drainCheckMs: 50,
   handshakeMs: 10_000,
+  upgradeMs: 1000,
+  pingMs: 30_000,
+  pongMinMs: 1000,
   maxTermsPerBuilder: 8,
 });
 
 export const BUILDER_DOWN_CODE = 4001;
+export const OVERFLOW_CODE = 1008;
 const PATH_PREFIX = '/ws/term/';
-const STATUS_TEXT = { 400: 'Bad Request', 403: 'Forbidden', 404: 'Not Found', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable' };
+const STATUS_TEXT = { 400: 'Bad Request', 403: 'Forbidden', 404: 'Not Found', 405: 'Method Not Allowed', 500: 'Internal Server Error', 502: 'Bad Gateway', 503: 'Service Unavailable' };
 const REASON_RX = /^[\x20-\x7e]{0,120}$/;
+const WS_KEY_RX = /^[+/0-9A-Za-z]{22}==$/;
+const noop = () => {};
 
 /** True when `code` may be sent in a close frame (RFC 6455 + ws). */
 export function sendableCode(code) {
@@ -65,6 +86,20 @@ export function forwardCode(code) {
 function cleanReason(reason) {
   const s = Buffer.isBuffer(reason) ? reason.toString('utf8') : String(reason ?? '');
   return REASON_RX.test(s) ? s : '';
+}
+
+/**
+ * null when `req` is a WebSocket handshake ws.handleUpgrade will accept (with perMessageDeflate off and no
+ * subprotocols), else the HTTP status to refuse it with (SR12 M1).
+ */
+export function handshakeProblem(req) {
+  const h = req?.headers ?? {};
+  if (req?.method !== 'GET') return 405;
+  if (typeof h.upgrade !== 'string' || h.upgrade.toLowerCase() !== 'websocket') return 400;
+  if (typeof h['sec-websocket-key'] !== 'string' || !WS_KEY_RX.test(h['sec-websocket-key'])) return 400;
+  if (h['sec-websocket-version'] !== '13') return 400;
+  if (h['sec-websocket-protocol'] !== undefined) return 400;
+  return null;
 }
 
 /**
@@ -114,6 +149,7 @@ export function upstreamUrl(base, name, args) {
 function refuseSocket(socket, status) {
   const s = STATUS_TEXT[status] ? status : 403;
   try {
+    socket.on?.('error', noop);
     socket.once?.('finish', () => socket.destroy());
     setTimeout(() => socket.destroy?.(), 1000).unref?.();
     socket.end(`HTTP/1.1 ${s} ${STATUS_TEXT[s]}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
@@ -124,26 +160,31 @@ function refuseSocket(socket, status) {
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const byteLen = (d) => (Buffer.isBuffer(d) ? d.length : Array.isArray(d) ? d.reduce((n, b) => n + b.length, 0) : d?.byteLength ?? 0);
+const mono = () => performance.now();
 
 /**
- * createTermProxy({store, key, keyId?, cfg, audit, now?, log?, limits?})
+ * createTermProxy({store, key, keyId?, cfg, audit, now?, log?, limits?, authOpts?})
  *   store  the hub fleet store (H3); `key` the hub's Ed25519 private KeyObject; cfg the merged hub config
- *   (mode 'hub', fleet.ingressPort, fleet.maxTermsPerBuilder...); audit an openAudit() instance.
+ *   (mode 'hub', fleet.ingressPort, fleet.ingressPeerUid, fleet.maxTermsPerBuilder...); audit an openAudit()
+ *   instance (required: a terminal is never opened unaudited). `wss` is a test seam (a WebSocketServer).
  */
-export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now = Date.now, log = defaultLog, limits = {}, authOpts = {} } = {}) {
+export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now = Date.now, log = defaultLog, limits = {}, authOpts = {}, wss: wssOpt = null } = {}) {
   if (!store || typeof store.builder !== 'function') throw new TypeError('term-proxy: store is required');
   if (!key) throw new TypeError('term-proxy: key is required');
+  if (!audit || typeof audit.append !== 'function') throw new TypeError('term-proxy: audit is required');
   const L = { ...LIMITS, ...limits };
   const f = isObj(cfg.fleet) ? cfg.fleet : {};
   const maxTerms = Number.isInteger(f.maxTermsPerBuilder) && f.maxTermsPerBuilder > 0 ? f.maxTermsPerBuilder : L.maxTermsPerBuilder;
   const downMs = Number.isInteger(f.downMs) && f.downMs > 0 ? f.downMs : null;
-  const wss = new WebSocketServer({ noServer: true, maxPayload: L.browserFrameBytes, perMessageDeflate: false });
+  const wss = wssOpt ?? new WebSocketServer({ noServer: true, maxPayload: L.browserFrameBytes, perMessageDeflate: false, autoPong: false });
   /** builderId -> Set<term> (pending and open). */
   const byBuilder = new Map();
   let closed = false;
-  const stats = { pauses: 0 };
+  const stats = { pauses: 0, droppedPongs: 0, overflows: 0, deadPeers: 0, upgradeFailures: 0 };
+  const warned = new Set();
 
   const warn = (msg) => { try { (log?.warn ?? log?.info ?? (() => {}))(msg); } catch { /* never fail on logging */ } };
+  const warnOnce = (k, msg) => { if (!warned.has(k)) { warned.add(k); warn(msg); } };
 
   function setOf(id) {
     let s = byBuilder.get(id);
@@ -153,7 +194,6 @@ export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now
   function live(id) { return byBuilder.get(id)?.size ?? 0; }
 
   function writeAudit(entry) {
-    if (!audit || typeof audit.append !== 'function') return true;
     try { audit.append(entry); return true; } catch (err) {
       warn(`term-proxy: audit append failed (${err?.code ?? 'error'})`);
       return false;
@@ -187,8 +227,18 @@ export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now
   function attach(req, socket, head, _url) {
     const parsed = parseTermPath(typeof req?.url === 'string' ? req.url : '');
     if (parsed === null) return false;
+    // SR12 L3: a client RST while we answer must not become an uncaught 'error'.
+    try { socket.on('error', noop); } catch { /* not an emitter */ }
     if (closed) { refuseSocket(socket, 503); return true; }
     if (parsed.error) { refuseSocket(socket, parsed.error); return true; }
+    const hs = handshakeProblem(req);
+    if (hs !== null) { refuseSocket(socket, hs); return true; }
+    // SR12 M3: without the peer-uid check any local process on the hub can forge serve headers.
+    if (cfg.mode === 'hub' && !Number.isInteger(f.ingressPeerUid)) {
+      warnOnce('peer-uid', 'term-proxy: refusing terminals: fleet.ingressPeerUid is not set on this hub (set it to the uid tailscaled runs as)');
+      refuseSocket(socket, 403);
+      return true;
+    }
 
     let auth;
     try {
@@ -215,52 +265,56 @@ export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now
     let headers;
     try { headers = termHeaders(env, key, keyId); } catch { refuseSocket(socket, 500); return true; }
 
+    // state: pending (upstream connecting) -> upgrading (browser handshake) -> open; any -> gone.
     const t = {
       id, name, user, env, up: null, browser: null, state: 'pending', bytesIn: 0, bytesOut: 0,
       startedAt: now(), pendingUp: [], pendingBytes: 0, timers: new Map(), shut: null, detached: false,
+      attached: false, upgradeTimer: null, liveTimer: null,
+      sides: { up: { lastPong: -Infinity, lastSeen: 0 }, browser: { lastPong: -Infinity, lastSeen: 0 } },
     };
     set.add(t);
 
     const release = () => {
       set.delete(t);
-      if (set.size === 0) byBuilder.delete(id);
+      if (set.size === 0 && byBuilder.get(id) === set) byBuilder.delete(id);
       // A paused socket must be resumed, or its close handshake would hang until ws's close timeout.
       for (const [tm, sock] of t.timers) {
         clearInterval(tm);
         try { sock.resume(); } catch { /* ignore */ }
       }
       t.timers.clear();
+      if (t.upgradeTimer) { clearTimeout(t.upgradeTimer); t.upgradeTimer = null; }
+      if (t.liveTimer) { clearInterval(t.liveTimer); t.liveTimer = null; }
     };
 
+    /** Free the slot; every attach that was audited ok gets exactly one term-detach (same id). */
     const detach = (code) => {
       if (t.detached) return;
       t.detached = true;
       release();
-      if (t.state !== 'open') return;
-      writeAudit({
-        user, via: 'direct', builder: id, action: 'term-detach', target: name, args,
+      if (!t.attached) return;
+      if (!writeAudit({
+        id: env.id, user, via: 'direct', builder: id, action: 'term-detach', target: name, args,
         result: { ok: true, bytesIn: t.bytesIn, bytesOut: t.bytesOut, code: Number.isInteger(code) ? code : null, durationMs: Math.max(0, now() - t.startedAt) },
-      });
+      })) warn('term-proxy: term-detach could not be audited');
     };
 
-    // Before the browser is upgraded, a "close" means: refuse the raw socket.
-    const onSocketGone = () => {
-      if (t.state !== 'pending') return;
+    /** Before the browser is open: drop everything (upstream, slot, raw socket). */
+    const abort = (status) => {
+      if (t.state !== 'pending' && t.state !== 'upgrading') return;
+      const wasUpgrading = t.state === 'upgrading';
       t.state = 'gone';
       try { t.up?.terminate(); } catch { /* ignore */ }
       detach(null);
+      if (wasUpgrading || status === null) { try { socket.destroy(); } catch { /* ignore */ } } else refuseSocket(socket, status);
     };
+
+    // Before the browser is upgraded, a "close" of the raw socket means: drop everything.
+    const onSocketGone = () => abort(null);
     socket.on('close', onSocketGone);
-    socket.on('error', onSocketGone);
 
     t.shut = (code, reason) => {
-      if (t.state === 'pending') {
-        t.state = 'gone';
-        try { t.up?.terminate(); } catch { /* ignore */ }
-        refuseSocket(socket, 503);
-        detach(null);
-        return;
-      }
+      if (t.state === 'pending' || t.state === 'upgrading') { abort(503); return; }
       if (t.state !== 'open') return;
       try { t.browser.close(code, reason); } catch { try { t.browser.terminate(); } catch { /* ignore */ } }
       try { t.up.close(code, reason); } catch { try { t.up.terminate(); } catch { /* ignore */ } }
@@ -274,23 +328,18 @@ export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now
         maxPayload: L.upstreamFrameBytes,
         perMessageDeflate: false,
         followRedirects: false,
+        autoPong: false,
       });
     } catch {
-      release();
+      t.state = 'gone';
+      socket.off('close', onSocketGone);
+      detach(null);
       refuseSocket(socket, 503);
       return true;
     }
     t.up = up;
 
-    const failPending = (status) => {
-      if (t.state !== 'pending') return;
-      t.state = 'gone';
-      socket.off('close', onSocketGone);
-      socket.off('error', onSocketGone);
-      try { up.terminate(); } catch { /* ignore */ }
-      detach(null);
-      refuseSocket(socket, status);
-    };
+    const failPending = (status) => { if (t.state === 'pending') abort(status); };
 
     up.on('unexpected-response', (_r, res) => {
       const s = res?.statusCode;
@@ -303,6 +352,7 @@ export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now
 
     // Upstream frames before the browser exists are buffered (bounded).
     up.on('message', (data, isBinary) => {
+      t.sides.up.lastSeen = mono();
       if (t.state === 'pending' || t.state === 'upgrading') {
         t.pendingBytes += byteLen(data);
         if (t.pendingBytes > L.pendingBytes) {
@@ -318,16 +368,19 @@ export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now
       const b = t.browser;
       if (b.readyState !== WebSocket.OPEN) return;
       b.send(data, { binary: isBinary });
+      if (overQueued()) return;
       backpressure(b, up);
     });
+    up.on('ping', (data) => { t.sides.up.lastSeen = mono(); if (t.state === 'open') pongMaybe(up, t.sides.up, data); });
+    up.on('pong', () => { t.sides.up.lastSeen = mono(); });
 
     up.on('error', () => {
-      if (t.state === 'pending') { failPending(503); return; }
+      if (t.state === 'pending' || t.state === 'upgrading') { abort(503); return; }
       if (t.state === 'open') { try { t.browser.terminate(); } catch { /* ignore */ } }
     });
 
     up.on('close', (code, reason) => {
-      if (t.state === 'pending') { failPending(503); return; }
+      if (t.state === 'pending' || t.state === 'upgrading') { abort(503); return; }
       if (t.state !== 'open') return;
       const b = t.browser;
       if (b.readyState === WebSocket.OPEN) {
@@ -343,24 +396,35 @@ export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now
         failPending(503);
         return;
       }
-      socket.off('close', onSocketGone);
-      socket.off('error', onSocketGone);
-      if (socket.destroyed) { t.state = 'gone'; try { up.terminate(); } catch { /* ignore */ } detach(null); return; }
+      t.attached = true;
+      if (socket.destroyed) { abort(null); return; }
       t.state = 'upgrading';
+      // SR12 M1: an upgrade that does not complete (ws aborted it, the socket went away) must not keep the slot.
+      t.upgradeTimer = setTimeout(() => {
+        t.upgradeTimer = null;
+        if (t.state === 'upgrading') { stats.upgradeFailures++; abort(null); }
+      }, L.upgradeMs);
+      t.upgradeTimer.unref?.();
       try {
         wss.handleUpgrade(req, socket, head, (ws) => onBrowser(ws));
       } catch {
-        t.state = 'gone';
-        try { up.terminate(); } catch { /* ignore */ }
-        detach(null);
-        refuseSocket(socket, 500);
+        stats.upgradeFailures++;
+        abort(null);
+        return;
       }
+      if (t.state === 'upgrading' && socket.destroyed) { stats.upgradeFailures++; abort(null); }
     });
 
     function onBrowser(b) {
+      if (t.state !== 'upgrading') { try { b.terminate(); } catch { /* ignore */ } return; }
+      if (t.upgradeTimer) { clearTimeout(t.upgradeTimer); t.upgradeTimer = null; }
       t.browser = b;
       t.state = 'open';
       t.startedAt = now();
+      b.on('error', () => {
+        try { up.terminate(); } catch { /* ignore */ }
+        try { b.terminate(); } catch { /* ignore */ }
+      });
       for (const [data, isBinary] of t.pendingUp) {
         t.bytesOut += byteLen(data);
         b.send(data, { binary: isBinary });
@@ -373,16 +437,19 @@ export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now
         detach(null);
         return;
       }
+      const m = mono();
+      t.sides.up.lastSeen = m;
+      t.sides.browser.lastSeen = m;
       b.on('message', (data, isBinary) => {
+        t.sides.browser.lastSeen = mono();
         t.bytesIn += byteLen(data);
         if (up.readyState !== WebSocket.OPEN) return;
         up.send(data, { binary: isBinary });
+        if (overQueued()) return;
         backpressure(up, b);
       });
-      b.on('error', () => {
-        try { up.terminate(); } catch { /* ignore */ }
-        try { b.terminate(); } catch { /* ignore */ }
-      });
+      b.on('ping', (data) => { t.sides.browser.lastSeen = mono(); pongMaybe(b, t.sides.browser, data); });
+      b.on('pong', () => { t.sides.browser.lastSeen = mono(); });
       b.on('close', (code, reason) => {
         if (up.readyState === WebSocket.OPEN) {
           try { up.close(forwardCode(code), cleanReason(reason)); } catch { up.terminate(); }
@@ -391,6 +458,56 @@ export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now
         }
         detach(code);
       });
+      t.liveTimer = setInterval(liveness, L.pingMs);
+      t.liveTimer.unref?.();
+    }
+
+    /** Answer a ping only rarely and only while that socket's queue is short (SR12 M2). */
+    function pongMaybe(ws, side, data) {
+      if (ws.readyState !== WebSocket.OPEN) return;
+      const m = mono();
+      if (ws.bufferedAmount >= L.lowWater || m - side.lastPong < L.pongMinMs) { stats.droppedPongs++; return; }
+      side.lastPong = m;
+      try { ws.pong(data); } catch { /* ignore */ }
+      overQueued();
+    }
+
+    /** Hard cap on what either socket has queued (SR12 M2): terminate it, close the other with 1008. */
+    function overQueued() {
+      if (t.state !== 'open') return false;
+      const b = t.browser;
+      const over = b.bufferedAmount > L.maxQueuedBytes ? 'browser' : up.bufferedAmount > L.maxQueuedBytes ? 'up' : null;
+      if (!over) return false;
+      stats.overflows++;
+      warn(`term-proxy: ${over === 'up' ? 'builder' : 'browser'} socket queued over ${L.maxQueuedBytes} bytes; closing the terminal`);
+      const [bad, other] = over === 'up' ? [up, b] : [b, up];
+      t.state = 'gone';
+      detach(OVERFLOW_CODE);
+      try { bad.terminate(); } catch { /* ignore */ }
+      try { other.close(OVERFLOW_CODE, 'queue overflow'); } catch { try { other.terminate(); } catch { /* ignore */ } }
+      return true;
+    }
+
+    /** Ping both sides; a side silent for 2 intervals while we were reading it is dead (SR12 L2). */
+    function liveness() {
+      if (t.state !== 'open') return;
+      if (overQueued()) return;
+      const m = mono();
+      for (const [ws, side] of [[up, t.sides.up], [t.browser, t.sides.browser]]) {
+        // A socket we paused (backpressure) cannot deliver its pong; it is not silent.
+        if (ws._socket?.isPaused?.()) { side.lastSeen = m; continue; }
+        if (m - side.lastSeen > 2 * L.pingMs) {
+          stats.deadPeers++;
+          t.state = 'gone';
+          detach(null);
+          try { up.terminate(); } catch { /* ignore */ }
+          try { t.browser.terminate(); } catch { /* ignore */ }
+          return;
+        }
+      }
+      for (const ws of [up, t.browser]) {
+        if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < L.lowWater) { try { ws.ping(); } catch { /* ignore */ } }
+      }
     }
 
     /** `receiver` is buffering too much: pause the TCP socket we read `sender`'s frames from. */

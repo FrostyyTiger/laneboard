@@ -95,6 +95,7 @@ test('hub mode: ingressPort has no default, must be set and cannot be null', () 
   const ok = { mode: 'hub', port: 7777, fleet: { ...auth.defaults().fleet } };
   const layers = { file: { fleet: { ingressPort: 7778 } }, env: {} };
   ok.fleet.ingressPort = 7778;
+  ok.fleet.ingressPeerUid = 0;
   auth.finalize(ok, layers);
   auth.validate(ok, bad, layers);
   assert.equal(ok.fleet.ingressPort, 7778);
@@ -189,6 +190,33 @@ test('hubAddrs entries are IP literals', () => {
     fails(() => withFleet({ hubAddrs: [a] }), /fleet\.hubAddrs entry .* must be an IP address literal/);
   }
   fails(() => withFleet({ hubAddrs: '192.0.2.7' }), /fleet\.hubAddrs must be a list/);
+});
+
+test('SR12 M3: a hub on Linux must set ingressPeerUid (tailscaled uid); builders and non-Linux hubs need not', () => {
+  const bad = (m) => { throw new ConfigError(m); };
+  const layers = { file: { fleet: { ingressPort: 7778 } }, env: {} };
+  const mk = (mode, uid) => {
+    const c = { mode, port: 7777, fleet: { ...auth.defaults().fleet, ingressPort: 7778, ingressPeerUid: uid } };
+    auth.finalize(c, layers);
+    return c;
+  };
+  fails(() => auth.validate(mk('hub', null), bad, layers, { platform: 'linux' }), /mode "hub" needs fleet\.ingressPeerUid.*tailscaled/);
+  assert.throws(() => auth.validate(mk('hub', null), bad, layers, { platform: 'linux' }), ConfigError);
+  auth.validate(mk('hub', 0), bad, layers, { platform: 'linux' });
+  auth.validate(mk('hub', 1234), bad, layers, { platform: 'linux' });
+  auth.validate(mk('builder', null), bad, layers, { platform: 'linux' });
+  // The peer-uid lookup is Linux only, so elsewhere a hub cannot set it (and term-proxy refuses terminals).
+  auth.validate(mk('hub', null), bad, layers, { platform: 'darwin' });
+  // SR4 strictness still holds for a hub with the uid set.
+  const noEnf = mk('hub', 0);
+  noEnf.fleet.enforce = false;
+  const l2 = { file: { fleet: { ingressPort: 7778, enforce: false } }, env: {} };
+  fails(() => auth.validate(noEnf, bad, l2, { platform: 'linux' }), /fleet\.enforce is false/);
+  fails(() => auth.validate(mk('hub', 0), bad, { file: { fleet: { ingressPort: 7778, bogus: 1 } }, env: {} }, { platform: 'linux' }), /unknown key "bogus"/);
+  const c = mk('hub', 0);
+  auth.validate(c, bad, layers, { platform: 'linux' });
+  assert.ok(Object.isFrozen(c.fleet.hubKeys));
+  assert.throws(() => { c.fleet.ingressPeerUid = null; }, TypeError);
 });
 
 test('ingressPeerUid: integer ≥ 0 or null, Linux only', () => {
