@@ -357,3 +357,95 @@ test('unknown args are refused for every control action', async () => {
   assert.equal((await go('resume', 'lane-a', { kinds: ['budget'] })).code, 'bad_args');
   assert.equal((await go('release', 'lane-a', { approvalId: crypto.randomUUID(), note: 'x' })).code, 'bad_args');
 });
+
+// SR16 L1: a tmux session literally named ALL (or a dot / sid- name) never reaches the builder-wide sentinel.
+test('SR16 L1: a session named ALL, .x or sid-x is refused 400 bad_target for pause and resume', async () => {
+  for (const auth of [LOCAL, DIRECT, hub()]) {
+    const { go, stateDir, sess } = setup({ hubControl: true });
+    for (const name of ['ALL', '.x', 'sid-x']) sess.set(name, { name, paneId: '%9', state: 'idle', lane: 'z' });
+    for (const name of ['ALL', '.x', 'sid-x']) {
+      const p = await go('pause', name, {}, auth);
+      assert.equal(p.status, 400, `${auth.kind} pause ${name}: ${JSON.stringify(p)}`);
+      assert.equal(p.code, 'bad_target');
+    }
+    assert.deepEqual(pause.list({ stateDir, mirrors: true }), [], 'nothing written');
+    // an operator pause * (with confirm) is not liftable through the ALL session
+    pause.pause('ALL', { kind: 'operator', by: 'ops' }, { stateDir });
+    const r = await go('resume', 'ALL', { nudge: false }, auth);
+    assert.equal(r.status, 400, `${auth.kind} resume ALL: ${JSON.stringify(r)}`);
+    assert.equal(r.code, 'bad_target');
+    assert.equal(pause.kindOf('ALL', { stateDir }), 'operator');
+    // only '*' with confirm reaches ALL
+    const ok = await go('resume', '*', { confirm: BID, nudge: false }, auth);
+    assert.equal(ok.ok, true, JSON.stringify(ok));
+    assert.equal(pause.kindOf('ALL', { stateDir }), null);
+  }
+});
+
+test('SR16 L1: runPause / runResume refuse a reserved target even when called directly', async () => {
+  const { deps, stateDir } = setup();
+  pause.pause('ALL', { kind: 'operator' }, { stateDir });
+  for (const run of [handlers.runPause, handlers.runResume]) {
+    await assert.rejects(run({ target: 'ALL', args: { nudge: false }, user: 'local', kind: 'direct', deps }), (e) => e.status === 400 && e.code === 'bad_target');
+  }
+  assert.equal(pause.kindOf('ALL', { stateDir }), 'operator');
+  assert.equal(handlers.resumeRemoteOnly({ target: 'ALL', args: {} }, deps), true);
+  assert.equal(handlers.isReservedTarget('*'), false);
+  assert.equal(handlers.isReservedTarget('lane-a'), false);
+});
+
+// SR16 L2: a corrupt sentinel counts as the most restrictive kind for resume.
+test('SR16 L2: local resume of a corrupt, oversize or non-file sentinel is 403 and it stays', async () => {
+  const variants = {
+    truncated: (f) => fs.writeFileSync(f, '{"kind":"budget",'),
+    oversize: (f) => fs.writeFileSync(f, JSON.stringify({ kind: 'budget', reason: 'x'.repeat(5000) })),
+    unknownKind: (f) => fs.writeFileSync(f, '{"kind":"mystery"}'),
+    notJsonObject: (f) => fs.writeFileSync(f, '[1]'),
+    directory: (f) => fs.mkdirSync(f),
+  };
+  for (const [label, make] of Object.entries(variants)) {
+    for (const scope of ['lane-a', 'ALL']) {
+      const { go, stateDir } = setup();
+      fs.mkdirSync(path.join(stateDir, 'paused'), { recursive: true });
+      const file = path.join(stateDir, 'paused', scope);
+      make(file);
+      const r = await go('resume', 'lane-a', { nudge: false }, LOCAL);
+      assert.equal(r.status, 403, `${label} ${scope}: ${JSON.stringify(r)}`);
+      assert.equal(r.code, 'remote-only');
+      if (scope === 'ALL') assert.equal((await go('resume', '*', { confirm: BID, nudge: false }, LOCAL)).code, 'remote-only');
+      assert.ok(fs.existsSync(file), `${label} ${scope} kept`);
+    }
+  }
+});
+
+test('SR16 L2: a valid operator sentinel is still liftable from local', async () => {
+  const { go, stateDir } = setup();
+  pause.pause('lane-a', { kind: 'operator' }, { stateDir });
+  assert.equal(handlers.heldKind('lane-a', stateDir), 'operator');
+  assert.equal(handlers.heldKind('lane-b', stateDir), null);
+  assert.equal((await go('resume', 'lane-a', { nudge: false }, LOCAL)).ok, true);
+});
+
+// SR16 L3: predicate and run read the state dir from the same source (the deps config).
+test('SR16 L3: the dispatcher ctx.config cannot move the run step to another state dir', async () => {
+  const { deps, stateDir, config } = setup();
+  const other = fs.mkdtempSync(path.join(tmp, 'other-'));
+  const audit = openAudit({ file: path.join(tmp, `audit-${++n}.jsonl`), builder: BID });
+  const go = (action, target, args, auth) => dispatch(
+    { v: 1, id: crypto.randomUUID(), ts: Date.now(), builder: BID, action, target, args, user: 'ops@example.invalid', via: 'hub' },
+    { auth, deps, audit, limiter: createLimiter(), config: { ...config, stateDir: other } },
+  );
+  assert.equal((await go('pause', 'lane-a', {}, LOCAL)).ok, true);
+  assert.equal(pause.kindOf('lane-a', { stateDir }), 'operator', 'written under deps.config.stateDir');
+  assert.deepEqual(pause.list({ stateDir: other }), [], 'nothing under ctx.config.stateDir');
+  // budget pause in the deps dir: predicate (deps dir) refuses local; the run would read the same dir
+  pause.pause('lane-b', { kind: 'budget' }, { stateDir });
+  assert.equal((await go('resume', 'lane-b', { nudge: false }, LOCAL)).code, 'remote-only');
+  // runResume ignores a `config` argument for the state dir
+  await assert.rejects(
+    handlers.runResume({ target: 'lane-b', args: { nudge: false }, user: 'x', kind: 'direct', deps, config: { stateDir: other } }),
+    (e) => e.status === 409,
+  );
+  assert.equal(pause.kindOf('lane-b', { stateDir }), 'budget');
+  assert.equal(handlers.stateDirFor(deps), stateDir);
+});

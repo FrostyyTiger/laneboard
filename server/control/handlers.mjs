@@ -20,12 +20,21 @@
 //   These controls are cooperative on the builder itself: anything running as this uid can delete the
 //   sentinel files (docs/fleet/control.md, SECURITY.md).
 //
-// The state dir always comes from config.stateDir and is passed explicitly to pause.mjs (its
-// defaultStateDir ignores XDG_STATE_HOME). After every sentinel write the paused flag's cache is dropped
+//   - Reserved names (SR16 L1): a session target named `ALL`, or starting with '.' or 'sid-', is refused 400
+//     bad_target (prepare step, repeated in the run step), so the builder-wide `ALL` sentinel is reachable only
+//     through target '*' with its confirm.
+//   - An unreadable sentinel (SR16 L2: truncated, oversize, not a regular file, not JSON, unknown kind) counts
+//     as the most restrictive kind for resume: the predicate refuses `local`.
+//
+// The state dir has one source (SR16 L3): config.stateDir of the deps config (the dispatch call's deps, else
+// the ones given to registerControlActions), read by the predicate and the run step alike and passed
+// explicitly to pause.mjs (its defaultStateDir ignores XDG_STATE_HOME). After every sentinel write the paused flag's cache is dropped
 // (flags/paused.mjs invalidate), so the next snapshot shows the change.
 //
 // Deps (injected, as in builtin-actions.mjs): {actions, state, config, capturePane?, approvals?}; the deps a
 // dispatch() call carries win over the ones given to registerControlActions.
+
+import fs from 'node:fs';
 
 import { registerAction, has, ActionRefused } from '../fleet/dispatch.mjs';
 import * as pause from './pause.mjs';
@@ -53,16 +62,58 @@ function D(deps) {
   return { ...captured, ...(deps ?? {}) };
 }
 
-function cfgOf(config, deps) {
-  if (config && typeof config === 'object' && Object.keys(config).length) return config;
-  return D(deps).config ?? {};
-}
-
 /** config.stateDir, or a refusal: pause.mjs must never fall back to its own default. */
 export function stateDirOf(config) {
   const dir = config?.stateDir;
   if (typeof dir !== 'string' || dir === '') throw new ActionRefused(500, 'no-state-dir', 'config.stateDir is not set');
   return dir;
+}
+
+/** The single source of the state dir for the predicate and the run step (SR16 L3). */
+export function stateDirFor(deps) {
+  return stateDirOf(D(deps).config);
+}
+
+/** Session names that collide with the sentinel layout: the builder scope, dot names, sid- mirrors. */
+export function isReservedTarget(target) {
+  return target !== '*' && (target === 'ALL' || (typeof target === 'string' && (target.startsWith('.') || target.startsWith('sid-'))));
+}
+
+function refuseReserved(target) {
+  if (isReservedTarget(target)) {
+    throw new ActionRefused(400, 'bad_target', 'session name collides with a reserved pause scope (use target * for the builder)');
+  }
+}
+
+/** prepare step for pause/resume: refuse reserved session names before anything else runs. */
+function checkScopeTarget({ target, args }) {
+  refuseReserved(target);
+  return args;
+}
+
+const MAX_SENTINEL = 4096;
+
+/**
+ * Kind of the sentinel for `scope` for resume purposes: null when absent, the stored kind when it parses to a
+ * known kind, else 'unknown' (corrupt, oversize, not a regular file, unreadable). A directory error throws.
+ */
+export function heldKind(scope, stateDir) {
+  const file = pause.pausePath(stateDir, scope);
+  let text;
+  try {
+    const st = fs.lstatSync(file);
+    if (!st.isFile() || st.size > MAX_SENTINEL) return 'unknown';
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') return null;
+    return 'unknown';
+  }
+  try {
+    const d = JSON.parse(text);
+    return d && typeof d === 'object' && !Array.isArray(d) && pause.KINDS.includes(d.kind) ? d.kind : 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
 function errText(err) {
@@ -81,14 +132,19 @@ export function heldScopes(target) {
 }
 
 /**
- * resume's remoteOnly predicate (dispatcher step 7): true (refuse for `local`) with `override`, or when a
- * sentinel holding the target is a budget/quota pause. Throws when the state dir is unknown: the dispatcher
- * treats a throw as a refusal (fail closed).
+ * resume's remoteOnly predicate (dispatcher step 7): true (refuse for `local`) with `override`, for a
+ * reserved target, or when a sentinel holding the target is a budget/quota pause or cannot be read as a
+ * known kind (SR16 L2: doubt counts as the most restrictive kind). Throws when the state dir is unknown: the
+ * dispatcher treats a throw as a refusal (fail closed).
  */
 export function resumeRemoteOnly(view, deps) {
   if (view?.args?.override === true) return true;
-  const stateDir = stateDirOf(D(deps).config);
-  return heldScopes(view?.target).some((scope) => REMOTE_ONLY_KINDS.includes(pause.kindOf(scope, { stateDir })));
+  if (isReservedTarget(view?.target)) return true;
+  const stateDir = stateDirFor(deps);
+  return heldScopes(view?.target).some((scope) => {
+    const kind = heldKind(scope, stateDir);
+    return kind === 'unknown' || REMOTE_ONLY_KINDS.includes(kind);
+  });
 }
 
 function laneSessions(state) {
@@ -150,9 +206,10 @@ function keptRefusal(kept) {
 // ---------------------------------------------------------------------------------------------------------
 // Handlers (exported for tests; they run only through dispatch() in the server)
 
-export async function runPause({ target, args, user, deps, config }) {
+export async function runPause({ target, args, user, deps }) {
+  refuseReserved(target);
   const d = D(deps);
-  const stateDir = stateDirOf(cfgOf(config, deps));
+  const stateDir = stateDirFor(deps);
   const scope = target === '*' ? 'ALL' : target;
   let r;
   try {
@@ -171,9 +228,10 @@ export async function runPause({ target, args, user, deps, config }) {
   return out;
 }
 
-export async function runResume({ target, args, user, kind, deps, config }) {
+export async function runResume({ target, args, user, kind, deps }) {
+  refuseReserved(target);
   const d = D(deps);
-  const stateDir = stateDirOf(cfgOf(config, deps));
+  const stateDir = stateDirFor(deps);
   const scope = target === '*' ? 'ALL' : target;
   // never lift a budget/quota pause for `local`, whatever the predicate said (defence in depth)
   const override = args.override === true && kind !== 'local';
@@ -226,6 +284,7 @@ export function registerControlActions(deps = {}) {
     tier: 'click',
     target: 'session-or-all',
     runsAll: true,
+    prepare: checkScopeTarget,
     args: {
       confirm: { type: 'string', max: 128 },
       interrupt: { type: 'boolean' },
@@ -239,6 +298,7 @@ export function registerControlActions(deps = {}) {
     target: 'session-or-all',
     runsAll: true,
     remoteOnly: resumeRemoteOnly,
+    prepare: checkScopeTarget,
     args: {
       confirm: { type: 'string', max: 128 },
       nudge: { type: 'boolean', default: true },
