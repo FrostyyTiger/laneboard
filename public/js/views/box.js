@@ -100,7 +100,7 @@ export function clockWarn(ms) {
 }
 
 /** A health alarm level -> lamp priority (§7: health-crit is P2, health-warn P3). */
-export function alarmP(level) {
+export function healthAlarmP(level) {
   return level === 'crit' ? '2' : level === 'warn' ? '3' : 'off';
 }
 
@@ -112,7 +112,7 @@ function cleanAlarms(list) {
     const level = a.level === 'crit' ? 'crit' : a.level === 'warn' ? 'warn' : null;
     if (!level) continue;
     const key = str(a.key, 80) ?? '';
-    out.push({ key, level, p: alarmP(level), text: str(a.text) ?? key });
+    out.push({ key, level, p: healthAlarmP(level), text: str(a.text) ?? key });
   }
   // Worst first: crit before warn, otherwise as sent.
   return out.sort((x, y) => (x.level === y.level ? 0 : x.level === 'crit' ? -1 : 1));
@@ -673,7 +673,7 @@ function scheduleRender() {
   }, 200);
 }
 
-function refresh() {
+function refreshBox() {
   refreshHistory(store, { onDone: () => { if (mounted) renderBox(); } }).catch(() => {});
 }
 
@@ -687,7 +687,7 @@ export default {
     mounted = true;
     scope = scopeOf(ctx.route);
     renderBox();
-    refresh();
+    refreshBox();
   },
   unmount: () => {
     mounted = false;
@@ -704,6 +704,6 @@ export default {
       }
     }
     scheduleRender();
-    refresh();
+    refreshBox();
   },
 };
