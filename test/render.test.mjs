@@ -1,14 +1,27 @@
-// Runs the real public/app.js against a minimal DOM and a captured snapshot,
-// and asserts it actually produces cards.
+// Runs the real public/js/app.js (and every module it imports) against a
+// minimal DOM and a captured snapshot, and asserts it actually produces cards.
 //
 // The static check in frontend.test.mjs proves the functions exist; this proves
 // they RUN. Between them they close the hole that let Stage 9 ship a dashboard
 // which threw "renderGrid is not defined" on every snapshot and drew nothing.
-import test from 'node:test';
+import nodeTest from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+
+// vm.SourceTextModule needs --experimental-vm-modules. `npm test` sets it in
+// NODE_OPTIONS; a bare `node --test test/render.test.mjs` does not, so then
+// this file runs itself once more with the flag and reports that as one test.
+const HAS_VM_MODULES = typeof vm.SourceTextModule === 'function';
+const test = HAS_VM_MODULES ? nodeTest : () => {};
+if (!HAS_VM_MODULES) {
+  nodeTest('render tests, re-run with --experimental-vm-modules', () => {
+    const r = spawnSync(process.execPath, ['--experimental-vm-modules', '--test', import.meta.filename], { encoding: 'utf8' });
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+  });
+}
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const PUB = path.join(ROOT, 'public');
@@ -113,8 +126,8 @@ function makeEl(tag = 'div') {
   return el;
 }
 
-/** Build the sandbox, evaluate app.js in it, and hand back the pieces. */
-function mount({ responses: primed = [], wide = false } = {}) {
+/** Build the sandbox, evaluate public/js/app.js in it, and hand back the pieces. */
+async function mount({ responses: primed = [], wide = false } = {}) {
   const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
   const byId = new Map();
   for (const m of html.matchAll(/\sid="([^"]+)"/g)) byId.set(m[1], makeEl());
@@ -143,7 +156,7 @@ function mount({ responses: primed = [], wide = false } = {}) {
   }
 
   const sockets = [];
-  /** URL fragment -> JSON body, primed by mount({ responses }). */
+  /** URL fragment -> JSON body, primed by await mount({ responses }). */
   const responses = [];
   // Window-level listeners are recorded rather than dropped, so a test can fire
   // a hashchange and exercise the view router the way a browser would.
@@ -201,23 +214,67 @@ function mount({ responses: primed = [], wide = false } = {}) {
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
 
-  // Strip the terminal.js import so the file runs as a classic script and no
-  // socket is opened for a terminal.
-  const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8').replace(
-    /^import .*from '\/terminal\.js';$/m,
-    'const openTerminal=()=>{},closeTerminal=()=>{},fitAll=()=>{},writeTo=()=>false,isLive=()=>false;'
-  );
-  vm.runInContext(src, sandbox, { filename: 'app.js' });
+  // The page is ES modules (public/js/**), so they run as vm.SourceTextModule
+  // (needs --experimental-vm-modules, set in package.json). Every mount reads
+  // the files fresh into its own context, so no state is shared across tests.
+  // ui/terminal.js is replaced by a stub, so no socket is opened for a terminal.
+  const ns = await loadModules(sandbox);
 
   assert.equal(sockets.length, 1, 'app.js should open exactly one dashboard socket');
   const fire = (kind, ev = {}) => { for (const fn of winListeners[kind] || []) fn(ev); };
   responses.push(...primed);
   const go = (hash) => { sandbox.location.hash = hash; fire('hashchange'); };
-  return { byId, socket: sockets[0], sandbox, fire, go };
+  return { byId, socket: sockets[0], sandbox, fire, go, ns };
+}
+
+const JS = path.join(PUB, 'js');
+const TERMINAL = path.join(JS, 'ui', 'terminal.js');
+
+/**
+ * Link and evaluate public/js/app.js inside `context`. Returns ns(rel), the
+ * namespace of public/js/<rel> in that same context.
+ */
+async function loadModules(context) {
+  const cache = new Map();
+  const load = (file) => {
+    if (cache.has(file)) return cache.get(file);
+    let mod;
+    if (file === TERMINAL) {
+      const stub = {
+        openTerminal: () => {}, closeTerminal: () => {}, fitAll: () => {},
+        writeTo: () => false, isLive: () => false,
+      };
+      mod = new vm.SyntheticModule(Object.keys(stub), function () {
+        for (const [k, v] of Object.entries(stub)) this.setExport(k, v);
+      }, { context, identifier: file });
+    } else {
+      mod = new vm.SourceTextModule(fs.readFileSync(file, 'utf8'), { context, identifier: file });
+    }
+    cache.set(file, mod);
+    return mod;
+  };
+  const entry = load(path.join(JS, 'app.js'));
+  await entry.link((specifier, referencing) => {
+    assert.ok(specifier.startsWith('.'), `${referencing.identifier}: imports must be relative, got ${specifier}`);
+    return load(path.resolve(path.dirname(referencing.identifier), specifier));
+  });
+  await entry.evaluate();
+  return (rel) => load(path.join(JS, rel)).namespace;
 }
 
 /** Read a public/ file — the static assertions need the source, not the DOM. */
 function read2(f) { return fs.readFileSync(path.join(PUB, f), 'utf8'); }
+
+/**
+ * The modules split out of the old public/app.js, concatenated. The files that
+ * moved in whole (terminal, motion, the map canvas, keys) were never part of it.
+ */
+const NOT_FROM_APP_JS = new Set(['ui/terminal.js', 'core/motion.js', 'views/map-canvas.js', 'core/keys.js']);
+function readAppJs() {
+  return fs.readdirSync(JS, { recursive: true }).map((f) => f.split(path.sep).join('/'))
+    .filter((f) => f.endsWith('.js') && !NOT_FROM_APP_JS.has(f)).sort()
+    .map((f) => read2(path.join('js', f))).join('\n');
+}
 
 function send(socket, msg) {
   socket.emit('message', { data: JSON.stringify(msg) });
@@ -228,8 +285,8 @@ function errorText(byId) {
   return box.hidden ? '' : box.children.map((c) => c.textContent).join(' | ');
 }
 
-test('a snapshot renders one card per session with no UI errors', () => {
-  const { byId, socket } = mount();
+test('a snapshot renders one card per session with no UI errors', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -242,8 +299,8 @@ test('a snapshot renders one card per session with no UI errors', () => {
   assert.equal(byId.get('grid-empty').hidden, true, 'the "waiting" placeholder should be hidden');
 });
 
-test('a card carries the information a human needs at a glance', () => {
-  const { byId, socket } = mount();
+test('a card carries the information a human needs at a glance', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -263,8 +320,8 @@ test('a card carries the information a human needs at a glance', () => {
   assert.ok(texts.some((t) => /pin/.test(t)), 'the card should have a pin button');
 });
 
-test('the rail renders attention, vitals and rate limits', () => {
-  const { byId, socket } = mount();
+test('the rail renders attention, vitals and rate limits', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -275,8 +332,8 @@ test('the rail renders attention, vitals and rate limits', () => {
   assert.match(byId.get('stat-cost').textContent, /today/);
 });
 
-test('a delta updates only the sessions it names', () => {
-  const { byId, socket } = mount();
+test('a delta updates only the sessions it names', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   const before = byId.get('grid').children.length;
@@ -293,8 +350,8 @@ test('a delta updates only the sessions it names', () => {
   assert.equal(byId.get('grid').children.length, before, 'a delta must not change the card count');
 });
 
-test('a removal takes the card away', () => {
-  const { byId, socket } = mount();
+test('a removal takes the card away', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   const before = byId.get('grid').children.length;
@@ -305,8 +362,8 @@ test('a removal takes the card away', () => {
   assert.equal(byId.get('grid').children.length, before - 1);
 });
 
-test('an empty snapshot shows the placeholder instead of a blank page', () => {
-  const { byId, socket } = mount();
+test('an empty snapshot shows the placeholder instead of a blank page', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', sessions: [], attention: [], vitals: null, generatedAt: Date.now() });
 
@@ -315,9 +372,9 @@ test('an empty snapshot shows the placeholder instead of a blank page', () => {
   assert.equal(byId.get('grid-empty').hidden, false);
 });
 
-test('one broken section does not blank the rest of the page', () => {
+test('one broken section does not blank the rest of the page', async () => {
   // The lesson from the Stage 9 regression: renderAll isolates its sections.
-  const { byId, socket } = mount();
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   // vitals: null makes renderVitals bail early, but a malformed one would throw.
   send(socket, {
@@ -335,8 +392,8 @@ test('one broken section does not blank the rest of the page', () => {
   );
 });
 
-test('the connection badge follows the socket', () => {
-  const { byId, socket } = mount();
+test('the connection badge follows the socket', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   assert.equal(byId.get('conn').textContent, 'live');
   assert.equal(byId.get('offline').hidden, true);
@@ -352,10 +409,10 @@ function cardText(card) {
   return texts.join(' | ');
 }
 
-test('a session card carries no agent chip', () => {
+test('a session card carries no agent chip', async () => {
   // Claude is the only agent; chipping every card would spend density
   // without adding signal.
-  const { byId, socket } = mount();
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -367,8 +424,8 @@ test('a session card carries no agent chip', () => {
 
 const VIEWS = ['board', 'morning', 'credit', 'box'];
 
-test('the board is the default view and the others start hidden', () => {
-  const { byId, socket } = mount();
+test('the board is the default view and the others start hidden', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -378,8 +435,8 @@ test('the board is the default view and the others start hidden', () => {
   }
 });
 
-test('a hash route shows exactly one view', () => {
-  const { byId, socket, go } = mount();
+test('a hash route shows exactly one view', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -394,17 +451,17 @@ test('a hash route shows exactly one view', () => {
   }
 });
 
-test('an unknown hash falls back to the board rather than a blank page', () => {
-  const { byId, socket, go } = mount();
+test('an unknown hash falls back to the board rather than a blank page', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#nonsense');
   assert.equal(byId.get('view-board').hidden, false);
 });
 
-test('the #session= deep link still opens the sheet, on the board', () => {
+test('the #session= deep link still opens the sheet, on the board', async () => {
   // This is the URL a push notification opens. It must survive the router.
-  const { byId, socket, go } = mount();
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#morning');
@@ -419,8 +476,8 @@ test('the #session= deep link still opens the sheet, on the board', () => {
   assert.equal(errorText(byId), '');
 });
 
-test('switching views never blanks the grid', () => {
-  const { byId, socket, go } = mount();
+test('switching views never blanks the grid', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   const before = byId.get('grid').children.length;
@@ -450,8 +507,8 @@ function withLanes() {
   return s;
 }
 
-test('the lane rail lists active lanes and idle worktrees separately', () => {
-  const { byId, socket } = mount();
+test('the lane rail lists active lanes and idle worktrees separately', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...withLanes() });
 
@@ -474,10 +531,10 @@ function sessionCards(grid) {
   return out;
 }
 
-test('an idle lane gets no card — it is not a session', () => {
+test('an idle lane gets no card — it is not a session', async () => {
   // lanes plan hard rule 6. A worktree with nothing running in it and no
   // launch record has no state, no attention score and no place in the grid.
-  const { byId, socket } = mount();
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = withLanes();
   send(socket, { type: 'snapshot', ...s });
@@ -488,8 +545,8 @@ test('an idle lane gets no card — it is not a session', () => {
   assert.equal(sessionCards(grid).length, s.sessions.length);
 });
 
-test('a lane is one card, striped, with its sessions inside as rows (v3)', () => {
-  const { byId, socket } = mount();
+test('a lane is one card, striped, with its sessions inside as rows (v3)', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = withLanes();
   send(socket, { type: 'snapshot', ...s });
@@ -514,9 +571,9 @@ test('a lane is one card, striped, with its sessions inside as rows (v3)', () =>
   assert.equal(sessionCards(grid).length, s.sessions.length);
 });
 
-test('a freshly launched lane shows 0/M, not nothing', () => {
+test('a freshly launched lane shows 0/M, not nothing', async () => {
   // v3: a lane whose plan has 3 stages and none finished yet.
-  const { byId, socket } = mount();
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = withLanes();
   s.lanes[1].progress = { n: null, m: 3, source: null, at: null };
@@ -525,8 +582,8 @@ test('a freshly launched lane shows 0/M, not nothing', () => {
   assert.match(byId.get('lane-rail').textContent, /bauplan.*0\/3/s);
 });
 
-test('a session with no repo gets no stripe rather than a grey one', () => {
-  const { byId, socket } = mount();
+test('a session with no repo gets no stripe rather than a grey one', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = structuredClone(snapshot);
   for (const x of s.sessions) x.lane = null;
@@ -539,10 +596,10 @@ test('a session with no repo gets no stripe rather than a grey one', () => {
   }
 });
 
-test('filtering to a lane hides the others and keeps the very same card nodes', () => {
+test('filtering to a lane hides the others and keeps the very same card nodes', async () => {
   // Clearing the filter must restore the board with the SAME cards, not
   // re-created ones: a rebuilt card loses its open menu and its observer.
-  const { byId, socket } = mount();
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = withLanes();
   send(socket, { type: 'snapshot', ...s });
@@ -577,8 +634,8 @@ test('filtering to a lane hides the others and keeps the very same card nodes', 
   for (let i = 0; i < afterRows.length; i++) assert.ok(afterRows[i] === beforeRows[i], `row ${i} was rebuilt`);
 });
 
-test('a lane filter that matches nothing says so instead of looking broken', () => {
-  const { byId, socket } = mount();
+test('a lane filter that matches nothing says so instead of looking broken', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = withLanes();
   send(socket, { type: 'snapshot', ...s });
@@ -633,7 +690,7 @@ const morningPayload = {
 const settle = () => new Promise((r) => setImmediate(r));
 
 test('the morning view renders its three blocks from the API', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/morning', morningPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/morning', morningPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -654,7 +711,7 @@ test('a marker in Needs-you keeps its full text, never truncated to one line', (
 });
 
 test('the morning view shows the whole marker sentence and both blocks of data', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/morning', morningPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/morning', morningPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#morning');
@@ -677,7 +734,7 @@ test('the morning view shows the whole marker sentence and both blocks of data',
 });
 
 test('the window picker marks exactly one window active', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/morning', morningPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/morning', morningPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#morning');
@@ -689,7 +746,7 @@ test('the window picker marks exactly one window active', async () => {
 });
 
 test('a failed morning fetch says so instead of rendering a blank view', async () => {
-  const { byId, socket, go } = mount(); // no route primed -> the fetch rejects
+  const { byId, socket, go } = await mount(); // no route primed -> the fetch rejects
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#morning');
@@ -731,7 +788,7 @@ const creditPayload = {
 };
 
 test('the credit view draws both charts and the lane table', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/credit', creditPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/credit', creditPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#credit');
@@ -751,7 +808,7 @@ test('the credit view draws both charts and the lane table', async () => {
 test('the chart is inline SVG with no library and no animation', () => {
   // Hard rule 3: charts are hand-written. Hard rule: nothing animates but the
   // working dot.
-  const app = read2('app.js');
+  const app = readAppJs();
   assert.match(app, /createElementNS/, 'the chart is built as real SVG nodes');
   assert.ok(!/import .*chart|d3|chart\.js/i.test(app), 'no chart library may appear');
   const css = read2('styles.css');
@@ -767,7 +824,7 @@ test('an ended-session row shows a dash, not a zero, for all time', () => {
 });
 
 test('the ended-session row really renders as a dash', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/credit', creditPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/credit', creditPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#credit');
@@ -778,7 +835,7 @@ test('the ended-session row really renders as a dash', async () => {
 });
 
 test('the sampler health is on screen, so a dead sampler is visible', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/credit', creditPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/credit', creditPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#credit');
@@ -788,8 +845,8 @@ test('the sampler health is on screen, so a dead sampler is visible', async () =
 
 // --- v3: the Box view, and where the old views land ---------------------------
 
-test('the box view shows the vitals from the snapshot, with no fetch of its own', () => {
-  const { byId, socket, go } = mount();
+test('the box view shows the vitals from the snapshot, with no fetch of its own', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#box');
@@ -800,8 +857,8 @@ test('the box view shows the vitals from the snapshot, with no fetch of its own'
   assert.equal(errorText(byId), '');
 });
 
-test('a stale #machine or #files lands on the board', () => {
-  const { byId, socket, go } = mount();
+test('a stale #machine or #files lands on the board', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   for (const old of ['#machine', '#files']) {
@@ -831,8 +888,8 @@ function bigSnapshot(n) {
   return { ...snapshot, sessions, lanes };
 }
 
-test('twenty cards render, with their lanes, and nothing is dropped', () => {
-  const { byId, socket } = mount();
+test('twenty cards render, with their lanes, and nothing is dropped', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...bigSnapshot(20) });
 
@@ -842,23 +899,23 @@ test('twenty cards render, with their lanes, and nothing is dropped', () => {
   assert.ok(byId.get('lane-rail').textContent.includes('lane-0'));
 });
 
-test('the render path does not degrade superlinearly with card count', () => {
+test('the render path does not degrade superlinearly with card count', async () => {
   // The real 16 ms budget can only be measured in a browser — this harness has
   // a far cheaper DOM and would flatter the number, which the v1 handoff says
   // too. What CAN be caught here is the thing the budget actually protects
   // against: an accidental O(n^2) in renderGrid, where every card touches every
   // other. Ten times the cards must not cost anywhere near a hundred times.
-  const time = (n) => {
-    const { socket } = mount();
+  const time = async (n) => {
+    const { socket } = await mount();
     socket.emit('open', {});
     const snap = bigSnapshot(n);
     const t0 = process.hrtime.bigint();
     send(socket, { type: 'snapshot', ...snap });
     return Number(process.hrtime.bigint() - t0) / 1e6;
   };
-  time(5); // warm the JIT so the first measured run is not the slow one
-  const small = Math.max(time(5), 0.05);
-  const large = time(50);
+  await time(5); // warm the JIT so the first measured run is not the slow one
+  const small = Math.max(await time(5), 0.05);
+  const large = await time(50);
   assert.ok(large / small < 40, `50 cards cost ${(large / small).toFixed(1)}x of 5 — looks superlinear`);
 });
 
@@ -920,8 +977,8 @@ function laneCard(byId, id) {
   return byId.get('grid').children.find((c) => c.dataset.lane === id);
 }
 
-test('a lane card in every PR state: none, draft+pending, red, green, merged', () => {
-  const { byId, socket } = mount();
+test('a lane card in every PR state: none, draft+pending, red, green, merged', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...v3Snapshot([
     { id: 'no-pr' }, { id: 'drafty', pr: PR.draft }, { id: 'reddy', pr: PR.red }, { id: 'greeny', pr: PR.green }, { id: 'mergy', pr: PR.merged },
@@ -951,8 +1008,8 @@ test('a lane card in every PR state: none, draft+pending, red, green, merged', (
   assert.match(laneCard(byId, 'no-pr').textContent, /\$3\.21\/5h/, 'the lane\'s 5 h burn');
 });
 
-test('lane cards sort by the most urgent session inside; lone sessions sort among them', () => {
-  const { byId, socket } = mount();
+test('lane cards sort by the most urgent session inside; lone sessions sort among them', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const snap = v3Snapshot([{ id: 'calm', state: 'done' }, { id: 'asking', state: 'waiting_permission' }], { extraSessions: 1 });
   snap.sessions.find((x) => x.name === 'lone-0').state = 'working';
@@ -961,8 +1018,8 @@ test('lane cards sort by the most urgent session inside; lone sessions sort amon
   assert.deepEqual(order, ['asking', 'lone-0', 'calm']);
 });
 
-test('danger goes first, even ahead of a permission prompt', () => {
-  const { byId, socket } = mount();
+test('danger goes first, even ahead of a permission prompt', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const snap = v3Snapshot([{ id: 'asking', state: 'waiting_permission' },
     { id: 'risky', state: 'done', danger: { reason: 'DATABASE_ADMIN_URL points at :5432, the dev stack' } }]);
@@ -978,8 +1035,8 @@ test('danger goes first, even ahead of a permission prompt', () => {
   assert.ok(first.classList.contains('s-danger'), 'the attention list marks it');
 });
 
-test('a lane with nothing live shows its retire readiness, and never a retire button', () => {
-  const { byId, socket } = mount();
+test('a lane with nothing live shows its retire readiness, and never a retire button', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...v3Snapshot([
     { id: 'finished', sessions: 0, pr: PR.merged, readiness: { ready: true, reasons: ['no live session', 'worktree clean', 'PR merged'], blockers: [] } },
@@ -991,8 +1048,8 @@ test('a lane with nothing live shows its retire readiness, and never a retire bu
   assert.ok(!buttons.some((b) => /retire/i.test(b.textContent)), 'retiring is a human act elsewhere');
 });
 
-test('the empty board says what to do', () => {
-  const { byId, socket } = mount();
+test('the empty board says what to do', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot, sessions: [], lanes: [], attention: [], box: null });
   assert.equal(errorText(byId), '');
@@ -1001,8 +1058,8 @@ test('the empty board says what to do', () => {
   assert.match(byId.get('grid-empty').textContent, /Launch/);
 });
 
-test('the Box shows the guard, the CI queue and the slots', () => {
-  const { byId, socket, go } = mount();
+test('the Box shows the guard, the CI queue and the slots', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...v3Snapshot([{ id: 'a' }]) });
   go('#box');
@@ -1016,13 +1073,13 @@ test('the Box shows the guard, the CI queue and the slots', () => {
   assert.equal(errorText(byId), '');
 });
 
-test('on the 49" the Box is rail blocks; elsewhere the rail box stays hidden', () => {
-  const narrow = mount();
+test('on the 49" the Box is rail blocks; elsewhere the rail box stays hidden', async () => {
+  const narrow = await mount();
   narrow.socket.emit('open', {});
   send(narrow.socket, { type: 'snapshot', ...v3Snapshot([{ id: 'a' }]) });
   assert.equal(narrow.byId.get('rail-box').hidden, true);
 
-  const wide = mount({ wide: true });
+  const wide = await mount({ wide: true });
   wide.socket.emit('open', {});
   send(wide.socket, { type: 'snapshot', ...v3Snapshot([{ id: 'a' }]) });
   assert.equal(wide.byId.get('rail-box').hidden, false);
@@ -1031,8 +1088,8 @@ test('on the 49" the Box is rail blocks; elsewhere the rail box stays hidden', (
   assert.match(css, /@media \(min-width: 2000px\)\s*\{\s*\.view-tab\[data-view="box"\] \{ display: none; \}/, 'the tab hides on the 49"');
 });
 
-test('phone: lane cards are one column, rows keep Yes/No, the launch form will not zoom', () => {
-  const { byId, socket } = mount();
+test('phone: lane cards are one column, rows keep Yes/No, the launch form will not zoom', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...v3Snapshot([{ id: 'asking', state: 'waiting_permission' }]) });
   const row = laneCard(byId, 'asking').querySelectorAll('card-row')[0];
@@ -1045,12 +1102,12 @@ test('phone: lane cards are one column, rows keep Yes/No, the launch form will n
   assert.match(phone, /\.launch-form input, \.launch-form select \{ font-size: 16px; \}/);
 });
 
-test('the render budget of v2 holds with 3 lanes and 6 sessions', () => {
+test('the render budget of v2 holds with 3 lanes and 6 sessions', async () => {
   // Same proxy as the 20-card test above: a real browser is the only honest
   // 16 ms measurement, but a lane card must not turn a render into something
   // that scales with anything but its own rows.
-  const time = (snap) => {
-    const { socket } = mount();
+  const time = async (snap) => {
+    const { socket } = await mount();
     socket.emit('open', {});
     const t0 = process.hrtime.bigint();
     send(socket, { type: 'snapshot', ...snap });
@@ -1058,13 +1115,13 @@ test('the render budget of v2 holds with 3 lanes and 6 sessions', () => {
     return Number(process.hrtime.bigint() - t0) / 1e6;
   };
   const three = v3Snapshot([{ id: 'a', sessions: 2 }, { id: 'b', sessions: 2 }, { id: 'c', sessions: 2 }]);
-  time(three);
-  const ms = time(three);
+  await time(three);
+  const ms = await time(three);
   assert.ok(ms < 50, `a snapshot and ten deltas took ${ms.toFixed(1)} ms in the harness`);
 });
 
 test('the launch sheet posts the form and shows the refusal in the server\'s words', async () => {
-  const { byId, sandbox } = mount();
+  const { byId, sandbox, ns } = await mount();
   let posted = null;
   sandbox.fetch = (url, opts) => {
     posted = { url, body: JSON.parse(opts.body) };
@@ -1072,7 +1129,7 @@ test('the launch sheet posts the form and shows the refusal in the server\'s wor
   };
   byId.get('lf-lane').value = 'bauplan';
   byId.get('lf-model').value = 'opus';
-  await sandbox.submitLaunch({ preventDefault() {} });
+  await ns('ui/launch.js').submitLaunch({ preventDefault() {} });
   assert.equal(posted.url, '/api/lanes');
   // Empty fields are left out, so the server's defaults (example-repo, feat/<lane>) apply.
   assert.deepEqual(posted.body, { lane: 'bauplan', plan: 'docs/plans/bauplan.md', model: 'opus' });
@@ -1118,13 +1175,13 @@ test('the phone keeps readable type and 16px inputs', () => {
 });
 
 test('the terminal stays opaque and legible', () => {
-  const term = read2('terminal.js');
+  const term = read2('js/ui/terminal.js');
   assert.match(term, /minimumContrastRatio: 4\.5/);
   assert.ok(!/allowTransparency:\s*true/.test(term), 'a transparent xterm costs performance');
 });
 
-test('with every provider off the Box says so instead of showing empty blocks', () => {
-  const { byId, socket, go } = mount();
+test('with every provider off the Box says so instead of showing empty blocks', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   const s = v3Snapshot([{ id: 'a' }]);
   s.box.guard = { provider: 'none', health: [], containers: [], ok: true, preventive: [], detective: [], ssOk: true, ports: [] };

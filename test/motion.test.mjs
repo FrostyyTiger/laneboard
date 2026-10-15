@@ -1,7 +1,7 @@
 // The Map's motion maths: springs, flights, glide and staging. Pure, no DOM.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { damp, settled, wrapAngle, flight, inertia, stage } from '../public/motion.js';
+import { damp, settled, wrapAngle, flight, inertia, stage } from '../public/js/core/motion.js';
 
 const run = (x, v, goal, hl, ms, dt = 16) => {
   const trace = [];

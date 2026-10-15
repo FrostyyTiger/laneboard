@@ -5,15 +5,36 @@
 // orderedSessions while leaving the calls to them in place. The file still
 // parsed, every server test still passed, and the dashboard threw
 // "ReferenceError: renderGrid is not defined" on every snapshot and rendered
-// nothing. Node cannot import these modules (they need `document`), so the
-// guard has to be static.
+// nothing. The page modules need `document`, so this guard is static; the
+// render harness (render.test.mjs) is the one that runs them.
+//
+// Since fleet F1 the page is ES modules under public/js/**. The scans iterate
+// over every one of them, and an imported binding counts as declared.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const PUBLIC = path.resolve(import.meta.dirname, '..', 'public');
 const read = (f) => fs.readFileSync(path.join(PUBLIC, f), 'utf8');
+
+/** Every module of the page, relative to public/js. */
+const JS_DIR = path.join(PUBLIC, 'js');
+const JS_FILES = fs.readdirSync(JS_DIR, { recursive: true })
+  .map((f) => f.split(path.sep).join('/'))
+  .filter((f) => f.endsWith('.js'))
+  .sort();
+const readJs = (f) => read(`js/${f}`);
+
+/**
+ * The modules split out of the old public/app.js, concatenated: what the
+ * content checks below used to read as one file. The files that moved in
+ * whole (terminal, motion, the map canvas) and keys.js were never part of it.
+ */
+const NOT_FROM_APP_JS = new Set(['ui/terminal.js', 'core/motion.js', 'views/map-canvas.js', 'core/keys.js']);
+const APP_FILES = JS_FILES.filter((f) => !NOT_FROM_APP_JS.has(f));
+const readApp = () => APP_FILES.map(readJs).join('\n');
 
 /**
  * Strip comments and string/template literals. Without this the scan trips over
@@ -109,9 +130,20 @@ const AMBIENT = new Set([
   'import', 'requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle',
 ]);
 
-for (const file of ['app.js', 'terminal.js', 'map.js', 'motion.js']) {
-  test(`${file}: every function it calls is defined`, () => {
-    const src = read(file);
+test('the page is split into public/js/{core,ui,views}', () => {
+  for (const f of ['app.js', 'core/store.js', 'core/net.js', 'core/router.js', 'ui/render.js', 'ui/terminal.js',
+    'core/motion.js', 'views/board.js', 'views/map.js', 'views/map-canvas.js']) {
+    assert.ok(JS_FILES.includes(f), `public/js/${f} is missing`);
+  }
+  for (const gone of ['app.js', 'map.js', 'terminal.js', 'motion.js']) {
+    assert.ok(!fs.existsSync(path.join(PUBLIC, gone)), `public/${gone} should have moved under public/js`);
+  }
+  assert.match(read('index.html'), /<script type="module" src="\/js\/app\.js"><\/script>/);
+});
+
+for (const file of JS_FILES) {
+  test(`js/${file}: every function it calls is defined`, () => {
+    const src = readJs(file);
     const declared = declaredNames(stripNonCode(src));
     const missing = [...calledNames(src)].filter(
       (n) => !declared.has(n) && !AMBIENT.has(n)
@@ -120,9 +152,96 @@ for (const file of ['app.js', 'terminal.js', 'map.js', 'motion.js']) {
   });
 }
 
+// --- fleet F1: the module graph ---------------------------------------------
+
+/** Static imports of a module: [{ names: [[imported, local]], spec }]. */
+function staticImports(src) {
+  const out = [];
+  for (const m of src.matchAll(/^import\s+(?:\{([^}]*)\}\s+from\s+)?'([^']+)';/gm)) {
+    const names = (m[1] || '').split(',').map((x) => x.trim()).filter(Boolean)
+      .map((x) => { const [a, b] = x.split(/\s+as\s+/); return [a.trim(), (b ?? a).trim()]; });
+    out.push({ names, spec: m[2] });
+  }
+  return out;
+}
+
+/** Names a module exports with `export function|const|let|class` or `export { … }`. */
+function exportedNames(src) {
+  const names = new Set();
+  for (const m of src.matchAll(/^export\s+(?:async\s+)?(?:function\s*\*?|const|let|var|class)\s+([A-Za-z0-9_$]+)/gm)) names.add(m[1]);
+  for (const m of src.matchAll(/^export\s*\{([^}]*)\}/gm)) {
+    for (const raw of m[1].split(',')) if (raw.trim()) names.add(raw.trim().split(/\s+as\s+/).pop().trim());
+  }
+  return names;
+}
+
+/**
+ * The code a module runs when it is evaluated: brace depth 0, minus the bodies
+ * of arrow functions written without braces. Not a parser; good enough to
+ * keep wiring statements inside init() and boot().
+ */
+function topLevelCode(src) {
+  const code = stripNonCode(src);
+  let out = '';
+  let braces = 0;
+  let parens = 0;
+  let arrowAt = -1; // paren depth of an expression-bodied arrow being skipped
+  for (let i = 0; i < code.length; i++) {
+    const c = code[i];
+    if (c === '{') braces++;
+    else if (c === '}') braces--;
+    else if (c === '(' || c === '[') parens++;
+    else if (c === ')' || c === ']') {
+      if (arrowAt >= 0 && parens === arrowAt) arrowAt = -1;
+      parens--;
+    }
+    if (braces === 0 && arrowAt >= 0 && parens === arrowAt && (c === ';' || c === '\n' || c === ',')) arrowAt = -1;
+    if (braces === 0 && arrowAt < 0 && c === '=' && code[i + 1] === '>') {
+      let j = i + 2;
+      while (/\s/.test(code[j] ?? '')) j++;
+      if (code[j] !== '{') { arrowAt = parens; out += '=>'; i++; continue; }
+    }
+    if (braces === 0 && arrowAt < 0 && c !== '}') out += c;
+  }
+  return out;
+}
+
+for (const file of JS_FILES) {
+  test(`js/${file}: every relative import resolves to a file that exports the name`, () => {
+    const src = readJs(file);
+    for (const { names, spec } of staticImports(src)) {
+      assert.ok(spec.startsWith('./') || spec.startsWith('../'), `${file}: import '${spec}' must be relative`);
+      const target = path.posix.join(path.posix.dirname(file), spec);
+      assert.ok(JS_FILES.includes(target), `${file}: '${spec}' does not resolve to a file under public/js`);
+      const exp = exportedNames(readJs(target));
+      for (const [name] of names) assert.ok(exp.has(name), `${file}: ${target} does not export ${name}`);
+    }
+    for (const m of src.matchAll(/\bimport\(\s*'([^']+)'\s*\)/g)) {
+      assert.ok(m[1].startsWith('.'), `${file}: import('${m[1]}') must be relative`);
+      const target = path.posix.join(path.posix.dirname(file), m[1]);
+      assert.ok(JS_FILES.includes(target), `${file}: import('${m[1]}') does not resolve`);
+    }
+  });
+
+  test(`js/${file}: touches no DOM and no imported binding at evaluation time`, () => {
+    // Circular imports (board <-> net <-> render) are safe only while every
+    // cross-module use happens inside a function. Wiring lives in init().
+    const src = readJs(file);
+    const top = topLevelCode(src).split('\n').filter((l) => !/^\s*import\b/.test(l)).join('\n');
+    assert.ok(!/(?<![\w$.])\$\(/.test(top), `${file}: a top-level $( lookup belongs in init()`);
+    assert.ok(!/(?<![\w$.])document\./.test(top), `${file}: a top-level document. access belongs in init()`);
+    // app.js runs boot(), and boot() is where the imported init()s are called.
+    const imported = staticImports(src).flatMap((i) => i.names.map(([, local]) => local));
+    for (const name of imported) {
+      const used = new RegExp(`(?<![\\w$.])${name.replace(/\$/g, '\\$')}(?![\\w$])`).test(top);
+      assert.ok(!used, `${file}: imported ${name} is used at evaluation time`);
+    }
+  });
+}
+
 test('renderAll only calls render functions that exist', () => {
   // The specific shape of the Stage 9 regression.
-  const src = read('app.js');
+  const src = readJs('ui/render.js');
   const body = /function renderAll\([^)]*\)\s*\{([\s\S]*?)\n\}/.exec(stripNonCode(src));
   assert.ok(body, 'renderAll must exist');
   const called = [...body[1].matchAll(/(?<![.\w$])([a-z][A-Za-z0-9_$]*)\s*\(/g)].map((m) => m[1]);
@@ -130,41 +249,44 @@ test('renderAll only calls render functions that exist', () => {
   const declared = declaredNames(stripNonCode(src));
   for (const name of called) {
     if (AMBIENT.has(name)) continue;
-    assert.ok(declared.has(name), `renderAll calls ${name}(), which is not defined in app.js`);
+    assert.ok(declared.has(name), `renderAll calls ${name}(), which is neither defined nor imported in ui/render.js`);
   }
 });
 
-test('no function is declared twice in app.js', () => {
-  // A restore that pastes a block back in the wrong place shows up here.
-  const src = read('app.js');
+test('no function is declared twice in the page', () => {
+  // A restore that pastes a block back in the wrong place shows up here. Each
+  // module has its own init(), so that one name may repeat across modules.
   const seen = new Map();
-  for (const m of src.matchAll(/^(?:async\s+)?function\s+([A-Za-z0-9_$]+)/gm)) {
-    seen.set(m[1], (seen.get(m[1]) ?? 0) + 1);
+  for (const file of APP_FILES) {
+    for (const m of readJs(file).matchAll(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_$]+)/gm)) {
+      const key = m[1] === 'init' ? `${file}:init` : m[1];
+      seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
   }
   const dupes = [...seen].filter(([, n]) => n > 1).map(([n]) => n);
   assert.deepEqual(dupes, [], `duplicated: ${dupes.join(', ')}`);
 });
 
 test('the render pipeline is all present', () => {
-  const declared = declaredNames(stripNonCode(read('app.js')));
+  const declared = declaredNames(stripNonCode(readApp()));
   for (const fn of [
     'renderAll', 'renderGrid', 'renderCard', 'renderAttention', 'renderVitals',
     'renderRateLimits', 'renderTopbar', 'renderDock', 'renderBox',
     'orderedSessions', 'freshestRateLimits',
   ]) {
-    assert.ok(declared.has(fn), `${fn} is missing from app.js`);
+    assert.ok(declared.has(fn), `${fn} is missing from public/js`);
   }
 });
 
 test('index.html references only ids the script actually uses, and vice versa', () => {
   const html = read('index.html');
-  const app = read('app.js');
+  const app = readApp();
   const htmlIds = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   // Some nodes are built in JS and given their id there.
   for (const m of app.matchAll(/\.id\s*=\s*'([^']+)'/g)) htmlIds.add(m[1]);
   const wanted = new Set([...app.matchAll(/\$\('([^']+)'\)/g)].map((m) => m[1]));
   const missing = [...wanted].filter((id) => !htmlIds.has(id));
-  assert.deepEqual(missing, [], `app.js looks up ids that index.html does not define: ${missing.join(', ')}`);
+  assert.deepEqual(missing, [], `public/js looks up ids that index.html does not define: ${missing.join(', ')}`);
 });
 
 test('the service worker never caches API responses', () => {
@@ -226,14 +348,17 @@ test('the three breakpoints survive', () => {
 test('the render path does no per-card layout reads', () => {
   // getBoundingClientRect inside the render forces a synchronous layout per
   // card; visibility is tracked with IntersectionObserver instead.
-  const app = stripNonCode(read('app.js'));
-  const render = app.slice(app.indexOf('function renderGrid'), app.indexOf('function renderAttention'));
+  // The old app.js slice from renderGrid to renderAttention: the rest of the
+  // board module and the card module.
+  const board = stripNonCode(readJs('views/board.js'));
+  const render = board.slice(board.indexOf('function renderGrid')) + stripNonCode(readJs('views/board-card.js'));
+  const app = stripNonCode(readApp());
   assert.ok(!render.includes('getBoundingClientRect'), 'renderGrid/renderCard must not measure');
   assert.match(app, /new IntersectionObserver/);
 });
 
 test('renders are measured against the 16 ms budget', () => {
-  const app = read('app.js');
+  const app = readApp();
   assert.match(app, /performance\.mark\('laneboard:render:start'\)/);
   assert.match(app, /performance\.mark\('laneboard:render:end'\)/);
   assert.match(app, /laneboardRenderStats/, 'the timings must be readable from the console');
@@ -242,7 +367,7 @@ test('renders are measured against the 16 ms budget', () => {
 test('no information was lost in the overhaul', () => {
   // Every one of these must still be
   // produced by the client.
-  const app = read('app.js');
+  const app = readApp();
   const html = read('index.html');
   const both = app + html;
   const required = {
@@ -305,7 +430,7 @@ test('figures are tabular, so live metrics do not jitter', () => {
 
 test('the client reports its own render timings', () => {
   // The 16 ms budget can only be measured in a real browser.
-  const app = read('app.js');
+  const app = readApp();
   assert.match(app, /\/api\/client-metrics/);
   assert.match(app, /keepalive: true/, 'the last sample must survive a tab close');
 });
@@ -323,7 +448,7 @@ test('all four views exist in the markup, in both navigations', () => {
 });
 
 test('the view chord covers g b / g m / g c / g x, and g k / g f are gone', () => {
-  const app = read('app.js');
+  const app = readApp();
   const m = /const VIEW_KEYS\s*=\s*\{([^}]*)\}/.exec(app);
   assert.ok(m, 'VIEW_KEYS must exist');
   for (const [key, view] of [['b', 'board'], ['m', 'morning'], ['c', 'credit'], ['x', 'box']]) {
@@ -335,7 +460,7 @@ test('the view chord covers g b / g m / g c / g x, and g k / g f are gone', () =
 test('the board-only shortcuts are gated on the board', () => {
   // j/k/p/Enter/1-9 move a cursor through cards; on the Files view they would
   // scroll something invisible. `g k` must still beat the Board's own `k`.
-  const app = read('app.js');
+  const app = readApp();
   assert.match(app, /store\.view !== 'board'/, 'the keydown handler must gate on the view');
   const handler = app.slice(app.indexOf("addEventListener('keydown'"));
   assert.ok(
@@ -345,7 +470,7 @@ test('the board-only shortcuts are gated on the board', () => {
 });
 
 test('closing the sheet returns to a view, never to a bare path', () => {
-  const app = read('app.js');
+  const app = readApp();
   assert.match(app, /replaceState\(null, '', `#\$\{store\.view\}`\)/);
 });
 
@@ -361,7 +486,7 @@ test('orderedSessions is untouched: lane is a colour and a filter, never a sort 
   // Lanes plan hard rule 1. The grid's sort belongs to attention, which is the
   // product; a lane that could reorder the board would sink a session waiting
   // on a permission prompt below three merrily working ones.
-  const app = read('app.js');
+  const app = readApp();
   const body = /function orderedSessions\(\)\s*\{([\s\S]*?)\n\}/.exec(stripNonCode(app));
   assert.ok(body, 'orderedSessions must exist');
   assert.ok(!/lane/i.test(body[1]), 'orderedSessions must not mention lanes');
@@ -371,7 +496,7 @@ test('orderedSessions is untouched: lane is a colour and a filter, never a sort 
 test('the lane filter never leaves the browser', () => {
   // Lanes plan hard rule 5: not on the server, not in SQLite, not in
   // localStorage. A filter you forgot you set is a board that lies to you.
-  const app = read('app.js');
+  const app = readApp();
   assert.ok(!/localStorage[^\n]*laneFilter|laneFilter[^\n]*localStorage/.test(app));
   // v3 POSTs to /api/lanes to LAUNCH a lane; what it must never send is the
   // filter. So: nothing that talks to the server mentions it.
@@ -385,7 +510,7 @@ test('the lane filter never leaves the browser', () => {
 test('clearing the lane filter does not rebuild the cards', () => {
   // renderGrid() with no argument means "everything changed" and replaces every
   // card; the filter must pass an empty list so only visibility is recomputed.
-  const app = stripNonCode(read('app.js'));
+  const app = stripNonCode(readApp());
   const fn = /function applyLaneFilter\(\)\s*\{([\s\S]*?)\n\}/.exec(app);
   assert.ok(fn, 'applyLaneFilter must exist');
   assert.match(fn[1], /renderGrid\(\[\]\)/, 'the filter must re-render no cards');
@@ -410,8 +535,10 @@ test('a lane colour is derived, never stored', () => {
 
 test('an idle lane can never become a card', () => {
   // Lanes plan hard rule 6: separate array, separate render path.
-  const app = stripNonCode(read('app.js'));
-  const grid = app.slice(app.indexOf('function renderGrid'), app.indexOf('function renderCard'));
+  const app = stripNonCode(readApp());
+  // The old slice from renderGrid to renderCard: the grid, the lane card and its head.
+  const board = stripNonCode(readJs('views/board.js'));
+  const grid = board.slice(board.indexOf('function renderGrid'), board.indexOf('function renderLanes'));
   assert.ok(!/store\.lanes/.test(grid), 'renderGrid must build cards from sessions only');
   assert.match(app, /function renderLanes/);
 });
@@ -419,8 +546,73 @@ test('an idle lane can never become a card', () => {
 test('the lane stripe and chip survive, and the branch stays in card-meta', () => {
   // Lane and branch are usually the same idea but not always, and the one time
   // they diverge is the one time you need to see both.
-  const app = read('app.js');
+  const app = readApp();
   assert.match(app, /has-lane/, 'the stripe class');
   assert.match(app, /lane-chip/, 'the chip');
   assert.match(app, /meta\.append\(el\('span', 'branch'/, 'the branch stays in the meta row');
+});
+
+// --- fleet F1: how the server hands out the modules -----------------------------
+
+/** GET `url` through the real handleRequest; resolves { status, type, headers, body }. */
+async function serve(url, repoRoot) {
+  // Never read a real config from a bare `node --test`.
+  process.env.LANEBOARD_CONFIG ??= path.join(PUBLIC, '..', 'test', 'fixtures', 'empty-config.json');
+  const { handleRequest } = await import('../server/http.mjs');
+  const { config } = await import('../server/config.mjs');
+  const { PassThrough } = await import('node:stream');
+  const saved = config.repoRoot;
+  if (repoRoot) config.repoRoot = repoRoot;
+  try {
+    const res = new PassThrough();
+    const chunks = [];
+    res.on('data', (c) => chunks.push(c));
+    let status = 0;
+    let headers = {};
+    res.writeHead = (s, h = {}) => { status = s; headers = h; };
+    const done = new Promise((resolve) => res.on('end', resolve));
+    await handleRequest({ method: 'GET', url, headers: {} }, res);
+    await done;
+    return { status, type: headers['content-type'] ?? '', headers, body: Buffer.concat(chunks).toString('utf8') };
+  } finally {
+    config.repoRoot = saved;
+  }
+}
+
+test('the page modules are served as JavaScript', async () => {
+  const r = await serve('/js/app.js');
+  assert.equal(r.status, 200);
+  assert.match(r.type, /^text\/javascript/);
+  assert.match(r.body, /boot\(\)/);
+});
+
+test('a missing file with an extension is a 404, not the SPA page', async () => {
+  // A bad import used to come back as index.html and show up as a MIME error.
+  for (const url of ['/js/core/nope.js', '/app.js', '/nope.css', '/icons/nope.PNG']) {
+    const r = await serve(url);
+    assert.equal(r.status, 404, url);
+    assert.match(r.type, /application\/json/, url);
+  }
+  // A path without an extension still gets the page (deep links).
+  const page = await serve('/board');
+  assert.equal(page.status, 200);
+  assert.match(page.body, /src="\/js\/app\.js"/);
+});
+
+test('an unmapped /vendor/ path falls through to public/vendor/, immutable', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-vendor-'));
+  try {
+    fs.mkdirSync(path.join(root, 'public', 'vendor', 'icons'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'public', 'vendor', 'icons', 'sprite.svg'), '<svg/>');
+    const hit = await serve('/vendor/icons/sprite.svg', root);
+    assert.equal(hit.status, 200);
+    assert.equal(hit.type, 'image/svg+xml');
+    assert.equal(hit.body, '<svg/>');
+    assert.match(hit.headers['cache-control'], /immutable/);
+    assert.equal((await serve('/vendor/icons/missing.svg', root)).status, 404);
+    // The mapped node_modules files keep working.
+    assert.equal((await serve('/vendor/xterm.js')).status, 200);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

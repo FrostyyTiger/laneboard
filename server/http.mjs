@@ -123,12 +123,19 @@ export async function handleRequest(req, res) {
       if (map[rel]) {
         const ok = await serveStatic(res, path.join(config.repoRoot, 'node_modules'), map[rel], { immutable: true });
         if (ok) return;
+      } else if (await serveStatic(res, path.join(config.repoRoot, 'public', 'vendor'), rel, { immutable: true })) {
+        // Anything else under /vendor/ is a file checked in at public/vendor/.
+        return;
       }
       return json(res, { error: 'not found' }, 404);
     }
     const rel = pathname === '/' ? 'index.html' : pathname.replace(/^\//, '');
     const publicDir = path.join(config.repoRoot, 'public');
     if (await serveStatic(res, publicDir, rel)) return;
+    // A missing file (a path with an extension, e.g. a mistyped module import)
+    // is a 404, not the SPA page: index.html served as a .js module only shows
+    // up as a confusing MIME error.
+    if (/\.[a-z0-9]+$/i.test(pathname)) return json(res, { error: 'not found', path: pathname }, 404);
     // SPA-ish fallback: unknown non-API paths get index.html.
     if (!pathname.startsWith('/api') && !pathname.startsWith('/ws')) {
       if (await serveStatic(res, publicDir, 'index.html')) return;
