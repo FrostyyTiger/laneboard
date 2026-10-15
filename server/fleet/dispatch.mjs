@@ -409,9 +409,30 @@ export async function dispatch(envelope, ctx = {}) {
 // The rate-limit identity of a request (SR5 L4): a hub request is charged under its signing key as well as
 // under (key, user), so a key that rotates `user` still hits the per-key buckets.
 function takeLimits(limiter, rec, def, target, args, auth) {
-  // C9: cancelling a builder kill inside its grace only clears a timer; the `all` bucket (1 per 10 s) would
-  // otherwise refuse the cancel of a `kill *` just sent by the same user (default grace 10 s)
-  if (def.name === 'kill' && target === '*' && args.cancel !== undefined) return { ok: true, retryAfterMs: 0 };
+  // C9 / SR19 F1: cancelling a builder kill inside its grace only clears a timer; the `all` bucket (1 per 10 s)
+  // would otherwise refuse the cancel of a `kill *` just sent by the same principal. The handler's cancelGate
+  // decides: only an existing job in its grace, owned by this principal, within its own small cancel bucket,
+  // skips `all` (still charged `kill`, `global`, `hub`). Any other cancel is charged like a `kill *` and then
+  // refused (404 / 403 / 409) here, before the start audit entry.
+  if (def.name === 'kill' && target === '*' && args.cancel !== undefined) {
+    const gate = ALL_HANDLERS.get('kill')?.cancelGate;
+    let g = null;
+    try {
+      g = typeof gate === 'function' ? gate(args.cancel, { user: rec.user, kind: auth.kind, keyLabel: auth.keyLabel }) : null;
+    } catch { g = null; } // fail closed: normal limits, the handler refuses later
+    if (g?.ok === true) return takeLimitsFor(limiter, rec, def, CANCEL_TARGET, args, auth);
+    if (g?.limited === true) return { ok: false, retryAfterMs: Number.isFinite(g.retryAfterMs) ? g.retryAfterMs : 1000 };
+    const lim = takeLimitsFor(limiter, rec, def, target, args, auth);
+    if (lim.ok && g?.refusal instanceof ActionRefused) throw g.refusal;
+    return lim;
+  }
+  return takeLimitsFor(limiter, rec, def, target, args, auth);
+}
+
+// The limiter target a gated kill-switch cancel is charged under: not '*', so the `all` bucket is skipped.
+const CANCEL_TARGET = '*cancel';
+
+function takeLimitsFor(limiter, rec, def, target, args, auth) {
   const fanoutParent = def.name === 'send-text' ? args.fanout?.parent : undefined;
   if (auth.kind !== 'hub') return limiter.take(rec.user, def.name, target, { kind: auth.kind, fanoutParent });
   const key = typeof auth.keyLabel === 'string' && auth.keyLabel ? auth.keyLabel : 'unknown-key';
