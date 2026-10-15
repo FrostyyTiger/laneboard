@@ -136,23 +136,32 @@ test('lanes: the worst session wins, idle worktrees stay off the active map', ()
   assert.equal(laneNodes(snapshot, { parent: 'x', show: 'none' }).length, 0);
 });
 
-test('lanes hang under `self`, which carries this host\'s vitals, and link by rule', () => {
+test('lanes hang under the builder node, which hangs under `self` and carries this host\'s vitals, and link by rule', () => {
   const m = build({ topology: topo(), feeds: feed(), snapshot, now: NOW, builderId: 'builder-a' });
-  const agents = m.nodes.find((n) => n.id === 'agents');
-  assert.deepEqual(agents.metrics, { cpu: 0.25, mem: 0.5, disk: 0.4 });
+  const b = m.nodes.find((n) => n.id === 'builder:builder-a');
+  assert.equal(b.parent, 'agents', 'legacy self aliases builder: <fleet.id>');
+  assert.equal(b.kind, 'builder');
+  assert.deepEqual(b.metrics, { cpu: 0.25, mem: 0.5, disk: 0.4 });
+  assert.deepEqual(b.counts, { lanes: 3, working: 1, waiting: 1 });
+  assert.equal(m.nodes.find((n) => n.id === 'agents').hosts, 'builder-a');
   const pay = m.nodes.find((n) => n.id === 'lane:builder-a/payments');
-  assert.equal(pay.parent, 'agents');
+  assert.equal(pay.parent, 'builder:builder-a');
   const rule = m.links.find((l) => l.from === 'lane:builder-a/payments');
   assert.equal(rule.to, 'api');
   assert.equal(rule.live, true, 'a working lane\'s links are live');
   assert.ok(!m.links.some((l) => l.from === 'lane:builder-a/docs'));
+  assert.ok(!m.nodes.some((n) => n.id === '__fleet'), '__fleet only when a builder is unclaimed');
+  assert.deepEqual(m.fleet, { builders: [{ id: 'builder-a', code: 'BA', link: 'up' }] });
 });
 
-test('with no topology the map is this host and its lanes', () => {
+test('with no topology the map is core, fleet, this builder and its lanes', () => {
   const m = build({ topology: null, snapshot, hostname: 'box', now: NOW, builderId: 'builder-a' });
   assert.equal(m.title, 'box');
-  assert.deepEqual(m.nodes.map((n) => n.id), ['__core', 'lane:builder-a/payments', 'lane:builder-a/docs']);
-  assert.ok(m.nodes.slice(1).every((n) => n.parent === '__core'));
+  assert.deepEqual(m.nodes.filter((n) => n.kind !== 'session').map((n) => [n.id, n.parent]), [
+    ['__core', undefined], ['__fleet', '__core'], ['builder:builder-a', '__fleet'],
+    ['lane:builder-a/payments', 'builder:builder-a'], ['lane:builder-a/docs', 'builder:builder-a'],
+  ]);
+  assert.doesNotMatch(m.nodes[2].sub, /not in topology/, 'no topology at all is not a missing field');
 });
 
 test('lane nodes use laneNodeId, keep the bare lane id as label and carry the session fkey (fleet F7)', () => {
