@@ -1,0 +1,89 @@
+/* The event tape (fleet plan §4 2.4, task D7): the left part of the 28px
+   bottom bar (#tape inside .shell-bar, shell.css). One line, newest on the
+   left, a severity bar on each item. The log drawer opens above the bar,
+   200px, as an overlay (the views never reflow). Hidden on the phone with
+   the bar. */
+.shell-tape {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 100%;
+}
+.tape-tog {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tape-tog-i { transform: rotate(180deg); transition: transform var(--dur) var(--ease); }
+.shell-tape[data-open="true"] .tape-tog-i { transform: none; }
+
+.tape-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.tape-empty { color: var(--text-3); }
+
+.tape-i {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  flex: none;
+  max-width: 40ch;
+  height: 18px;
+  padding: 0 var(--sp-1) 0 var(--sp-2);
+  border: 0;
+  border-left: 2px solid var(--off);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-10);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tape-i:hover { background: var(--bg-hover); color: var(--text-1); }
+.tape-i:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
+.tape-i:disabled { cursor: default; }
+.tape-t { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.tape-c { color: var(--text-1); font-weight: 600; }
+.tape-n { color: var(--text-1); overflow: hidden; text-overflow: ellipsis; max-width: 18ch; }
+.tape-w { overflow: hidden; text-overflow: ellipsis; }
+
+/* Severity: the left bar (and a shape-free colour, the bar is never the only cue:
+   the event word says what happened). */
+.tape-i[data-p="1"], .tape-bar[data-p="1"] { border-left-color: var(--p1); }
+.tape-i[data-p="2"], .tape-bar[data-p="2"] { border-left-color: var(--p2); }
+.tape-i[data-p="3"], .tape-bar[data-p="3"] { border-left-color: var(--p3); }
+.tape-i[data-p="ok"], .tape-bar[data-p="ok"] { border-left-color: var(--ok); }
+.tape-i[data-p="run"], .tape-bar[data-p="run"] { border-left-color: var(--run); }
+.tape-i[data-p="off"], .tape-bar[data-p="off"] { border-left-color: var(--off); }
+
+/* The drawer: 200px above the bar, the newest 200 rows; its scroll is the user's. */
+.tape-drawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--tape-h);
+  height: var(--tape-h-open);
+  z-index: var(--z-tape);
+  background: var(--bg-sunken);
+  border-top: var(--bw) solid var(--line-strong);
+  overflow: hidden;
+  white-space: normal;
+}
+.tape-dt { height: 100%; overflow-y: auto; }
+.tape-dt td { font-size: var(--fs-10); }
+.tape-dt tbody tr { cursor: pointer; }
+.tape-bar {
+  display: block;
+  width: 0;
+  height: 12px;
+  border-left: 2px solid var(--off);
+}
