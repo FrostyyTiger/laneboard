@@ -125,7 +125,8 @@ test('the route object has only the routing keys: there is nothing to dispatch',
 });
 
 test('S20: router.js, the registry and the stubs have no path to an action', () => {
-  for (const f of ['core/router.js', 'views/index.js', 'views/inbox.js', 'views/packages.js', 'views/audit.js', 'views/diff.js']) {
+  // views/diff.js is a real view now (R11): test/view-diff.test.mjs pins its one act() to the send sheet's button.
+  for (const f of ['core/router.js', 'views/index.js', 'views/inbox.js', 'views/packages.js', 'views/audit.js']) {
     const src = fs.readFileSync(path.join(ROOT, 'public/js', f), 'utf8');
     assert.doesNotMatch(src, /actions\.js'/, f);
     assert.doesNotMatch(src, /\b(?:act|hubAct|post|del|sendKeys|sendText|fetch)\s*\(/, f);
