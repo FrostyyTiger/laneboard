@@ -4,7 +4,10 @@
 // in ./common.mjs. New features are modules (server/routes, server/flags).
 import { config } from '../config.mjs';
 import { log } from '../log.mjs';
+import crypto from 'node:crypto';
+import path from 'node:path';
 import { route, json, readBody, readJson } from '../http.mjs';
+import { initV1, runAction, actionBody } from '../fleet/api-v1.mjs';
 import { ansiLineToHtml } from '../ansi.mjs';
 import * as state from '../state.mjs';
 import * as db from '../db.mjs';
@@ -117,29 +120,116 @@ route('GET', '/api/lanes', (req, res) => {
   });
 });
 
-/** A LaneError is a refusal with a reason, not a crash. */
-function laneAction(handler, okStatus = 200) {
+// --- legacy mutating routes: thin adapters into the dispatcher -------------
+//
+// fleet §2 2.6: every legacy mutation (the CLI, scripts, today's UI) becomes
+// an envelope `{via:'legacy'}` handed to dispatch, so audit, rate limits,
+// tiers and the remote-only rules cover it too. The legacy response shape is
+// kept: the action's result on success, `{error, code}` with its status on a
+// refusal. The legacy HTTP verb is itself the explicit request (the CLI asks
+// y/N), so `args.confirm = target` is filled in for kill/restart (and a plain,
+// non-force retire) for `local` callers ONLY; a browser (`direct`) must send
+// `{confirm}` in the body. With `fleet.legacyBrowserRoutes: false` and
+// enforcement on, a `direct` caller gets 410 `use /api/v1/actions`.
+
+const LEGACY_LAUNCH_FIELDS = ['repo', 'plan', 'branch', 'model', 'permissionMode', 'priority', 'budgetUsd', 'dryRun', 'restoredFrom'];
+// Test-only launch fields (docs/status/laneboard-v3.md, Stage 3): honoured for
+// `local` callers only, handed to the launcher outside the validated args.
+const LAUNCH_TEST_FIELDS = ['fakeTakenSlots', 'localBranch', 'promptOverride'];
+
+/** The legacy body as an object ({} for an empty or non-object body); 400 for bad JSON. */
+async function legacyBody(req) {
+  let body;
+  try {
+    body = await readJson(req);
+  } catch {
+    throw new actions.ActionError('body is not JSON', 400);
+  }
+  return body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+}
+
+function pick(body, fields) {
+  const out = {};
+  for (const k of fields) if (body[k] !== undefined && body[k] !== null) out[k] = body[k];
+  return out;
+}
+
+/**
+ * Run `action` on `target` through dispatch for a legacy route and answer in
+ * the legacy shape. `opts.deps`/`opts.config` override dispatch deps; a
+ * success answers `okStatus` (default: the action's own status).
+ */
+async function legacyDispatch(req, res, action, target, args, { okStatus, deps, config: cfg } = {}) {
+  const a = req.auth;
+  const f = config.fleet ?? {};
+  if (a?.kind === 'direct' && f.legacyBrowserRoutes === false && f.enforce === true) {
+    return json(res, { error: 'use /api/v1/actions', code: 'legacy-route-gone' }, 410);
+  }
+  const envelope = {
+    v: 1,
+    id: crypto.randomUUID(),
+    ts: Date.now(),
+    builder: f.id ?? null,
+    action,
+    target,
+    args,
+    user: who(req),
+    via: 'legacy',
+  };
+  const out = await runAction(envelope, a, { deps, config: cfg });
+  if (out.ok) return json(res, out.result, okStatus ?? out.status);
+  const body = actionBody(out);
+  return json(res, { error: body.error, ...(body.code ? { code: body.code } : {}), ...(body.retryAfterMs !== undefined ? { retryAfterMs: body.retryAfterMs } : {}) }, out.status);
+}
+
+/** Wrap a legacy adapter: a thrown ActionError (bad JSON) becomes its status. */
+function legacy(handler) {
   return async (req, res) => {
     try {
-      json(res, await handler(req), okStatus);
+      await handler(req, res);
     } catch (err) {
-      if (err instanceof launcher.LaneError) json(res, { error: err.message, ...(err.detail ? { detail: err.detail } : {}) }, err.status);
+      if (err instanceof actions.ActionError) json(res, { error: err.message }, err.status);
       else {
-        log.error('lane action failed', err?.stack || String(err));
+        log.error('legacy action failed', err?.stack || String(err));
         json(res, { error: 'internal error' }, 500);
       }
     }
   };
 }
 
+const isLocal = (req) => req.auth?.kind === 'local';
+
 // 202: validation has passed and the job is running. Its steps land in
-// lane_jobs and /api/events; poll /api/jobs/:job.
-route('POST', '/api/lanes', laneAction(async (req) => launcher.launch(launcher.legacyRequest(await readJson(req)), who(req)), 202));
+// lane_jobs and /api/events; poll /api/jobs/:job. Through dispatch's `launch`
+// (SR17 M1): permissionMode resolved against fleet.allowedPermissionModes,
+// repo must be configured, local callers may not set priority 'high' or a
+// budget above the per-lane default.
+route('POST', '/api/lanes', legacy(async (req, res) => {
+  const body = await legacyBody(req);
+  const lane = typeof body.lane === 'string' ? body.lane : '';
+  const args = pick(body, LEGACY_LAUNCH_FIELDS);
+  if (args.repo === undefined && config.defaultRepo) args.repo = config.defaultRepo;
+  if (args.plan === undefined && lane) args.plan = `docs/plans/${lane}.md`;
+  let deps;
+  const extra = pick(body, LAUNCH_TEST_FIELDS);
+  if (Object.keys(extra).length) {
+    if (!isLocal(req)) return json(res, { error: `test-only fields (${Object.keys(extra).join(', ')}) are local-only`, code: 'bad_args' }, 400);
+    deps = { launcher: { ...launcher, launch: (r, u) => launcher.launch({ ...r, ...extra }, u) } };
+  }
+  return legacyDispatch(req, res, 'launch', lane, args, { deps });
+}));
 
 // Only when a human asks. Body: { force?, confirm? } — force needs confirm = the lane id.
-route('DELETE', '/api/lanes/:id', laneAction(async (req) => {
-  const body = await readJson(req).catch(() => ({}));
-  return retirer.retire(req.params.id, { force: body?.force === true, confirm: body?.confirm ?? null }, who(req));
+route('DELETE', '/api/lanes/:id', legacy(async (req, res) => {
+  const body = await legacyBody(req).catch(() => ({}));
+  const id = req.params.id;
+  const force = body.force === true;
+  const args = { force };
+  if (typeof body.confirm === 'string') args.confirm = body.confirm;
+  // retire is confirm tier; a plain retire from the CLI is its own request.
+  // A force retire keeps its own `force && confirm` rule (retire.mjs): never filled in.
+  else if (!force && isLocal(req)) args.confirm = id;
+  return legacyDispatch(req, res, 'retire', id, args);
 }));
 
 route('GET', '/api/ci', (req, res) => json(res, prs.snapshot()));
@@ -199,29 +289,53 @@ function action(handler, okStatus = 200) {
   };
 }
 
-/** Tailscale puts the identity in a header when the request came via serve. */
+/**
+ * Attribution: http.mjs sets req.tsUser from the classification only (the
+ * login serve stamped, or the login header without a fleet block, as
+ * always); dispatch takes the user from req.auth, never from a body.
+ */
 const who = (req) => req.tsUser || 'local';
 
-route('POST', '/api/sessions/:name/keys', action(async (req) => {
-  const body = await readJson(req);
-  return actions.sendKeys(req.params.name, body.keys, who(req));
+route('POST', '/api/sessions/:name/keys', legacy(async (req, res) => {
+  const body = await legacyBody(req);
+  return legacyDispatch(req, res, 'send-keys', req.params.name, { keys: body.keys });
 }));
 
-route('POST', '/api/sessions/:name/text', action(async (req) => {
-  const body = await readJson(req);
-  return actions.sendText(req.params.name, body.text, body.enter !== false, who(req));
+route('POST', '/api/sessions/:name/text', legacy(async (req, res) => {
+  const body = await legacyBody(req);
+  return legacyDispatch(req, res, 'send-text', req.params.name, { text: body.text, enter: body.enter !== false });
 }));
 
 // 202: the tmux session exists when this returns, but the initial prompt is
 // still being delivered in the background. Clients poll /api/state.
-route('POST', '/api/sessions', action(async (req) => {
-  const body = await readJson(req);
-  return actions.spawn(body, who(req));
-}, 202));
+// A local caller (CLI, scripts: cooperative by definition, it has a shell)
+// keeps today's rules: any directory, a relative one resolved, none = $HOME.
+// A remote caller gets the v1 rule: dir inside config.dirRoots.
+route('POST', '/api/sessions', legacy(async (req, res) => {
+  const body = await legacyBody(req);
+  const name = typeof body.name === 'string' ? body.name : '';
+  const args = pick(body, ['dir', 'prompt', 'model', 'permissionMode', 'resume', 'slot']);
+  let cfg;
+  if (isLocal(req)) {
+    args.dir = path.resolve(typeof args.dir === 'string' && args.dir ? args.dir : config.home);
+    cfg = { ...config, dirRoots: [path.parse(args.dir).root] };
+  }
+  return legacyDispatch(req, res, 'spawn', name, args, { okStatus: 202, config: cfg });
+}));
 
-route('DELETE', '/api/sessions/:name', action(async (req) => actions.kill(req.params.name, who(req))));
+route('DELETE', '/api/sessions/:name', legacy(async (req, res) => {
+  const body = await legacyBody(req).catch(() => ({}));
+  const name = req.params.name;
+  const confirm = typeof body.confirm === 'string' ? body.confirm : (isLocal(req) ? name : undefined);
+  return legacyDispatch(req, res, 'kill', name, confirm === undefined ? {} : { confirm });
+}));
 
-route('POST', '/api/sessions/:name/restart', action(async (req) => actions.restart(req.params.name, who(req))));
+route('POST', '/api/sessions/:name/restart', legacy(async (req, res) => {
+  const body = await legacyBody(req).catch(() => ({}));
+  const name = req.params.name;
+  const confirm = typeof body.confirm === 'string' ? body.confirm : (isLocal(req) ? name : undefined);
+  return legacyDispatch(req, res, 'restart', name, confirm === undefined ? {} : { confirm });
+}));
 
 // --- push ------------------------------------------------------------------
 
@@ -429,6 +543,10 @@ const ctx = createContext({
   version: VERSION, startedAt,
 });
 const modules = await registerModules(['routes', 'flags'], ctx);
+
+// Audit log, rate limiter and the nonce pre-load (fleet §2 2.4, 2.8) before
+// the first request can arrive. The dispatch deps were set by the v1 module.
+initV1();
 
 await listenAll({ onUpgrade });
 // Any "<name>-web-<id>" session still around is from a crashed run of ours.
