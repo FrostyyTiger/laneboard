@@ -391,13 +391,14 @@ test('a session without previewLines gets no preview box', async () => {
 
 const VIEWS = ['board', 'morning', 'credit', 'box'];
 
-test('the board is the default view and the others start hidden', async () => {
+test('the map is the default view and the others start hidden', async () => {
+  // fleet D4: the Map is home (core/router.js DEFAULT_VIEW).
   const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
-  assert.equal(byId.get('view-board').hidden, false);
-  for (const v of VIEWS.slice(1)) {
+  assert.equal(byId.get('view-map').hidden, false);
+  for (const v of VIEWS) {
     assert.equal(byId.get(`view-${v}`).hidden, true, `${v} should start hidden`);
   }
 });
@@ -418,12 +419,14 @@ test('a hash route shows exactly one view', async () => {
   }
 });
 
-test('an unknown hash falls back to the board rather than a blank page', async () => {
+test('an unknown hash falls back to the map rather than a blank page', async () => {
   const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
+  go('#board');
   go('#nonsense');
-  assert.equal(byId.get('view-board').hidden, false);
+  assert.equal(byId.get('view-map').hidden, false);
+  assert.equal(byId.get('view-board').hidden, true);
 });
 
 test('the #session= deep link still opens the sheet, on the board', async () => {
@@ -824,14 +827,14 @@ test('the box view shows the vitals from the snapshot, with no fetch of its own'
   assert.equal(errorText(byId), '');
 });
 
-test('a stale #machine or #files lands on the board', async () => {
+test('a stale #machine or #files lands on the map (the home view)', async () => {
   const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   for (const old of ['#machine', '#files']) {
     go('#credit');
     go(old);
-    assert.equal(byId.get('view-board').hidden, false, `${old} should land on the board`);
+    assert.equal(byId.get('view-map').hidden, false, `${old} should land on the map`);
   }
   assert.equal(errorText(byId), '');
 });

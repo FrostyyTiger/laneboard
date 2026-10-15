@@ -6,6 +6,8 @@
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0d1014">
 <title>laneboard</title>
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2">
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/barlow-condensed/BarlowCondensed-SemiBold.woff2">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/base.css">
 <link rel="stylesheet" href="/css/components.css">
@@ -33,27 +35,47 @@
   <span id="offline-text">Disconnected — reconnecting…</span>
 </div>
 
-<header class="topbar">
-  <div class="topbar-left">
-    <h1 class="brand">laneboard<span class="brand-host" id="brand-host"></span></h1>
+<!-- The shell (fleet plan §4 2.4): header, rail slot, centre view host with the
+     inspector overlay, bottom bar (event tape + hotkey legend), phone hooks. -->
+<div class="shell" id="shell" data-rail="none" data-insp="closed">
+
+<header class="shell-head" id="shell-head">
+  <div class="head-brand">
+    <h1 class="brand">LANEBOARD<span class="brand-host" id="brand-host"></span></h1>
     <span id="conn" class="conn" title="live connection">live</span>
-    <span id="builders" class="builders" role="status" aria-label="Builders" style="display:inline-flex;gap:4px" hidden></span>
+    <span id="builders" class="builders" role="status" aria-label="Builders" hidden></span>
   </div>
-  <nav class="views" id="views" aria-label="Views">
-    <button class="view-tab on" data-view="board" title="Board (g b)">Board</button>
-    <button class="view-tab" data-view="morning" title="Morning (g m)">Morning</button>
-    <button class="view-tab" data-view="credit" title="Credit (g c)">Credit</button>
-    <button class="view-tab" data-view="box" title="Box (g x)">Box</button>
-    <button class="view-tab" data-view="map" title="Map (g p)">Map</button>
+  <nav class="shell-nav" id="views" aria-label="Views">
+    <button class="nav-tab" type="button" data-view="map" title="Map (g m)" aria-label="Map"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-map"/></svg><span class="nav-l">MAP</span></button>
+    <button class="nav-tab" type="button" data-view="board" title="Board (g b)" aria-label="Board"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-board"/></svg><span class="nav-l">BRD</span></button>
+    <button class="nav-tab" type="button" data-view="inbox" title="Inbox (g i)" aria-label="Inbox"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-inbox"/></svg><span class="nav-l">INBX</span></button>
+    <button class="nav-tab" type="button" data-view="packages" title="Packages (g p)" aria-label="Packages"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-packages"/></svg><span class="nav-l">PKG</span></button>
+    <button class="nav-tab" type="button" data-view="morning" title="Morning (g o)" aria-label="Morning"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-morning"/></svg><span class="nav-l">MORN</span></button>
+    <button class="nav-tab" type="button" data-view="credit" title="Credit (g c)" aria-label="Credit"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-credit"/></svg><span class="nav-l">CRED</span></button>
+    <button class="nav-tab" type="button" data-view="box" title="Box (g x)" aria-label="Box"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-box"/></svg><span class="nav-l">BOX</span></button>
+    <button class="nav-tab" type="button" data-view="audit" title="Audit (g a)" aria-label="Audit"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-audit"/></svg><span class="nav-l">AUD</span></button>
   </nav>
+  <div class="scope" id="scope" role="toolbar" aria-label="Scope"></div>
   <div class="topbar-gauges" id="topbar-gauges"></div>
-  <div class="topbar-right">
+  <div class="head-right">
     <span class="stat" id="stat-cost" title="API-equivalent spend today">—</span>
-    <button class="icon-btn" id="btn-refresh" title="Force refresh">⟳</button>
+    <div class="ann" id="ann" role="group" aria-label="Alarms"></div>
+    <time class="clock" id="clock" aria-label="Time, UTC and local"><span class="clock-utc" id="clock-utc">--:--:--Z</span><span class="clock-local" id="clock-local">--:--</span></time>
+    <button class="icon-btn" id="btn-refresh" type="button" title="Force refresh" aria-label="Force refresh"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-restart"/></svg></button>
   </div>
 </header>
 
-<div class="layout" id="view-board">
+<div class="shell-strip" id="shell-strip" aria-label="Builders"></div>
+
+<aside class="shell-rail" id="shell-rail" aria-label="Builder rail"></aside>
+
+<main class="shell-main" id="shell-main">
+
+<section class="view map-view" id="view-map" hidden>
+  <div class="map-root" id="map-root"></div>
+</section>
+
+<div class="layout view-board" id="view-board" hidden>
 
   <aside class="rail" id="rail">
     <section class="rail-block">
@@ -134,17 +156,27 @@
   <div class="view-body" id="box-body"><p class="empty">Loading…</p></div>
 </section>
 
-<section class="view map-view" id="view-map" hidden>
-  <div class="map-root" id="map-root"></div>
-</section>
 
-<nav class="tabs" id="tabs" aria-label="Views">
-  <button class="tab on" data-view="board">Board</button>
-  <button class="tab" data-view="morning">Morning</button>
-  <button class="tab" data-view="credit">Credit</button>
-  <button class="tab" data-view="box">Box</button>
-  <button class="tab" data-view="map">Map</button>
-</nav>
+<section class="view" id="view-inbox" aria-label="Inbox" hidden></section>
+
+<section class="view" id="view-packages" aria-label="Packages" hidden></section>
+
+<section class="view" id="view-audit" aria-label="Audit" hidden></section>
+
+<section class="view" id="view-diff" aria-label="Diff" hidden></section>
+
+<aside class="shell-insp" id="shell-insp" aria-label="Inspector" hidden></aside>
+
+</main>
+
+<footer class="shell-bar" id="shell-bar">
+  <div class="shell-tape" id="tape" aria-label="Event tape"></div>
+  <div class="shell-legend" id="legend" aria-label="Keys"></div>
+</footer>
+
+<div class="shell-sheet" id="shell-sheet" hidden></div>
+
+</div>
 
 <div class="sheet launch-sheet" id="launch-sheet" hidden>
   <div class="sheet-head">
@@ -191,7 +223,7 @@
   </div>
 </div>
 
-<div class="toast" id="toast" hidden></div>
+<div class="toasts" id="toast" aria-live="polite" hidden></div>
 
 <script type="module" src="/js/app.js"></script>
 </body>

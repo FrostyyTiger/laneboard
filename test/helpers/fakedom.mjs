@@ -73,6 +73,7 @@ export function makeEl(tag = 'div') {
         this.children.push(k);
       }
     },
+    appendChild(k) { this.append(k); return k; },
     insertBefore(node, ref) {
       if (node === ref) return node;
       const old = node.parent?.children;

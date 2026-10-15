@@ -13,6 +13,7 @@ import { init as initHotkeys } from './ui/hotkeys.js';
 import { init as initPush } from './ui/push.js';
 import { cardNodes } from './views/board.js';
 import { init as initMap } from './views/map.js';
+import { views } from './views/index.js';
 
 export function boot() {
   initNet(); // app.js:208 (resize: scheduleVisible + fitAll)
@@ -21,6 +22,10 @@ export function boot() {
   initMap(); // app.js:1846 (resize: sizeMap)
   initHotkeys(); // app.js:1856-1891 (keydown, outside click)
   initRouter(); // app.js:1909 (hashchange)
+  // The view registry (fleet D4): every route mounts its view through
+  // views/index.js (router.js setView -> activateView). Built here, after the
+  // modules have evaluated, so each view's default export is initialised.
+  views();
 
   // Refresh the relative "since" labels without waiting for a delta.
   setInterval(() => {
@@ -38,6 +43,8 @@ export function boot() {
   addEventListener('unhandledrejection', (e) => reportUiError(`unhandled: ${e.reason?.message || e.reason}`, e.reason));
 
   connect();
+  // `#/` (or no hash) is the Map, the home view; legacy `#board`, `#map`, ...
+  // and push links `#session=<name>` keep working (core/router.js parseHash).
   if (location.hash.startsWith('#session=')) {
     // The session may not be in the store yet on a cold load.
     addEventListener('load', applyHash);

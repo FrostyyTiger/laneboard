@@ -1,5 +1,6 @@
 // Router v1 (fleet F8a, plan §1 2.5; §4 D4 extends it): the hash grammar, the
-// legacy forms, and "a hash/URL parameter never dispatches an action" (S20).
+// legacy forms, defaults dropped, the Map as home, navigate/onRoute, the view
+// registry, and "a hash/URL parameter never dispatches an action" (S20).
 import nodeTest from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -8,17 +9,62 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { elementsFromHtml, makeDocument, loadEsModules } from './helpers/fakedom.mjs';
 import {
-  parseHash, formatHash, emptyRoute, VIEWS, HIDDEN_VIEWS, DEFAULT_VIEW,
+  parseHash, formatHash, emptyRoute, patchRoute, VIEWS, HIDDEN_VIEWS, DEFAULT_VIEW, VIEW_KEYS,
 } from '../public/js/core/router.js';
+import {
+  VIEW_META, activateView, activeView, getView, isView, legacyView, updateActive, viewErrors, views,
+} from '../public/js/views/index.js';
 
 const test = nodeTest;
 const ROOT = path.resolve(import.meta.dirname, '..');
 const LOCAL = { localId: 'builder-a' };
 
-test('the view list: eight views plus the hidden diff, board by default', () => {
+test('the view list: eight views plus the hidden diff, the map by default', () => {
   assert.deepEqual(VIEWS, ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit']);
   assert.deepEqual(HIDDEN_VIEWS, ['diff']);
-  assert.equal(DEFAULT_VIEW, 'board');
+  assert.equal(DEFAULT_VIEW, 'map');
+});
+
+test('the view chord registers a route for every nav view (plan §4 2.6)', () => {
+  assert.deepEqual({ ...VIEW_KEYS }, { m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning' });
+  assert.deepEqual(Object.values(VIEW_KEYS).sort(), [...VIEWS].sort(), 'one chord per nav view, none for diff');
+});
+
+test('#/ and an empty hash land on the map', () => {
+  for (const h of ['', '#', '#/', '#/?b=all', '#/map']) assert.equal(parseHash(h).view, 'map', h);
+  assert.deepEqual(parseHash('#/?b=builder-a&q=x'), { ...emptyRoute('map'), b: 'builder-a', q: 'x' });
+});
+
+test('formatHash drops the defaults: the map view and b=all', () => {
+  assert.equal(formatHash(emptyRoute('map')), '#/');
+  assert.equal(formatHash({ view: 'map', b: 'all' }), '#/');
+  assert.equal(formatHash({ view: 'map', b: 'builder-a' }), '#/?b=builder-a');
+  assert.equal(formatHash({ view: 'board', b: 'all', s: 'stuck' }), '#/board?s=stuck');
+  // Stable key order whatever order the object has.
+  assert.equal(
+    formatHash({ open: 'term', sel: 'builder-a/x', q: 'auth', s: 'stuck', b: 'builder-a', view: 'board' }),
+    '#/board?b=builder-a&s=stuck&q=auth&sel=builder-a%2Fx&open=term',
+  );
+  assert.deepEqual(parseHash('#/board?b=builder-a&s=stuck&q=auth&sel=builder-a%2Fauth&open=term'),
+    { view: 'board', b: 'builder-a', s: 'stuck', q: 'auth', sel: 'builder-a/auth', open: 'term' });
+});
+
+test('legacy bare #morning and #board keep working', () => {
+  assert.deepEqual(parseHash('#morning'), emptyRoute('morning'));
+  assert.deepEqual(parseHash('#board'), emptyRoute('board'));
+  assert.equal(formatHash(parseHash('#morning')), '#/morning');
+  assert.equal(formatHash(parseHash('#map')), '#/');
+});
+
+test('patchRoute: merges routing keys only; a view switch drops sel and open', () => {
+  const r = { view: 'board', b: 'builder-a', s: 'stuck', q: null, sel: 'builder-a/x', open: 'term' };
+  assert.deepEqual(patchRoute(r, { view: 'map' }), { view: 'map', b: 'builder-a', s: 'stuck', q: null, sel: null, open: null });
+  assert.deepEqual(patchRoute(r, { view: 'inbox', sel: 'builder-a/y' }).sel, 'builder-a/y');
+  assert.deepEqual(patchRoute(r, { s: null }), { ...r, s: null });
+  assert.deepEqual(patchRoute(r, { view: 'board' }), r, 'the same view keeps the selection');
+  const hostile = patchRoute(r, { action: 'kill', target: '*', args: {}, __proto__: { x: 1 } });
+  assert.deepEqual(Object.keys(hostile).sort(), ['b', 'open', 'q', 's', 'sel', 'view'], 'nothing but routing keys');
+  assert.deepEqual(patchRoute(null, {}), emptyRoute('map'));
 });
 
 test('legacy #session=<name> lands on the board with the terminal open', () => {
@@ -44,19 +90,21 @@ test('unknown or empty input gives DEFAULT_VIEW', () => {
   assert.equal(parseHash('#/nonsense?b=all').b, 'all', 'parameters survive an unknown view');
 });
 
-test('#/inbox?b=all&sel=builder-b%2Fx round-trips', () => {
+test('#/inbox?b=all&sel=builder-b%2Fx round-trips (b=all is the default and drops)', () => {
   const h = '#/inbox?b=all&sel=builder-b%2Fx';
   const r = parseHash(h);
   assert.deepEqual(r, { view: 'inbox', b: 'all', s: null, q: null, sel: 'builder-b/x', open: null });
-  assert.equal(formatHash(r), h);
+  assert.equal(formatHash(r), '#/inbox?sel=builder-b%2Fx');
+  assert.deepEqual(parseHash(formatHash(r)), { ...r, b: null });
 });
 
 test('every parameter round-trips', () => {
   const r = { view: 'board', b: 'builder-a', s: 'working,needs_input', q: 'fix the "auth" bug & more', sel: 'builder-a/a/b c', open: 'transcript' };
   assert.deepEqual(parseHash(formatHash(r)), r);
   assert.deepEqual(parseHash(formatHash(emptyRoute('diff'))), emptyRoute('diff'));
-  assert.equal(formatHash(emptyRoute()), '#/board', 'null parameters are left out');
-  assert.equal(formatHash({ view: 'nope', b: '' }), '#/board');
+  assert.equal(formatHash(emptyRoute()), '#/', 'null parameters are left out');
+  assert.equal(formatHash(emptyRoute('board')), '#/board');
+  assert.equal(formatHash({ view: 'nope', b: '' }), '#/');
   assert.equal(parseHash('#/board?q=a+b').q, 'a b');
 });
 
@@ -76,10 +124,86 @@ test('the route object has only the routing keys: there is nothing to dispatch',
   assert.deepEqual(Object.keys(r).sort(), ['b', 'open', 'q', 's', 'sel', 'view']);
 });
 
-test('S20: router.js has no path to an action', () => {
-  const src = fs.readFileSync(path.join(ROOT, 'public/js/core/router.js'), 'utf8');
-  assert.doesNotMatch(src, /from '\.\/actions\.js'/);
-  assert.doesNotMatch(src, /\b(?:act|hubAct|post|del|sendKeys|sendText|fetch)\s*\(/);
+test('S20: router.js, the registry and the stubs have no path to an action', () => {
+  for (const f of ['core/router.js', 'views/index.js', 'views/inbox.js', 'views/packages.js', 'views/audit.js', 'views/diff.js']) {
+    const src = fs.readFileSync(path.join(ROOT, 'public/js', f), 'utf8');
+    assert.doesNotMatch(src, /actions\.js'/, f);
+    assert.doesNotMatch(src, /\b(?:act|hubAct|post|del|sendKeys|sendText|fetch)\s*\(/, f);
+  }
+});
+
+// --- the view registry ---------------------------------------------------------
+
+test('every routable view is registered with the view shape', () => {
+  for (const id of [...VIEWS, ...HIDDEN_VIEWS]) {
+    const v = getView(id);
+    assert.ok(isView(v), `${id} has {id, mount, unmount, update}`);
+    assert.equal(v.id, id);
+    assert.ok(VIEW_META[id]?.icon && VIEW_META[id]?.title && VIEW_META[id]?.short, `${id} has nav metadata`);
+    assert.ok(VIEW_META[id].short.length <= 4, `${id}: labels are at most 4 characters`);
+  }
+  assert.equal(getView('nonsense'), null);
+  assert.equal(views().size, 9);
+  for (const id of ['inbox', 'packages', 'audit', 'diff']) assert.equal(getView(id).legacy, undefined, `${id} is a real default export`);
+  for (const id of ['board', 'map', 'morning', 'credit', 'box']) {
+    // Until their owners add a default export, the F1-moved views use the adapter.
+    const v = getView(id);
+    if (v.legacy) assert.equal(v.unmount(), undefined);
+  }
+});
+
+test('isView and legacyView', () => {
+  assert.equal(isView(null), false);
+  assert.equal(isView({ id: 'x', mount() {}, unmount() {} }), false, 'update is required');
+  let shown = 0;
+  const v = legacyView('morning', () => { shown++; });
+  assert.ok(isView(v));
+  assert.equal(v.title, 'Morning');
+  v.mount(); v.mount();
+  assert.equal(shown, 2, 'the old show function runs on every mount');
+});
+
+test('activateView: mount on switch, unmount the old one, update on the same view; a throw never escapes', async () => {
+  const { makeEl, document } = await import('./helpers/fakedom.mjs');
+  const saved = globalThis.document;
+  globalThis.document = document;
+  try {
+    const inbox = makeEl('section');
+    const audit = makeEl('section');
+    assert.equal(activateView('inbox', inbox, { route: emptyRoute('inbox') }), 'inbox');
+    assert.equal(activeView(), 'inbox');
+    const p = inbox.children[0];
+    assert.ok(p.classList.contains('panel'), 'the stub renders an empty .panel');
+    assert.match(p.textContent, /INBOX/);
+    assert.equal(activateView('inbox', inbox, {}), 'inbox', 'the same view only updates');
+    assert.equal(inbox.children[0], p, 'and is not re-rendered');
+    activateView('audit', audit, { route: { ...emptyRoute('audit'), b: 'builder-a' } });
+    assert.equal(inbox.children.length, 0, 'the inbox unmounted');
+    assert.match(audit.textContent, /AUDIT/);
+    const { auditScope } = await import('../public/js/views/audit.js');
+    assert.equal(auditScope({ b: 'builder-a' }), 'builder-a', 'the builder filter is the panel scope');
+    assert.equal(auditScope({ b: 'all' }), 'all');
+    assert.equal(auditScope(null), 'all');
+    assert.equal(activateView('nonsense', makeEl(), {}), null);
+    assert.equal(activeView(), 'audit', 'an unknown id changes nothing');
+
+    // A throwing view is contained and recorded.
+    const diff = getView('diff');
+    const real = diff.mount;
+    diff.mount = () => { throw new Error('boom'); };
+    const log = console.error;
+    console.error = () => {};
+    try {
+      assert.equal(activateView('diff', makeEl(), {}), 'diff');
+      updateActive({});
+    } finally {
+      diff.mount = real;
+      console.error = log;
+    }
+    assert.ok(viewErrors().some((e) => e.id === 'diff' && e.what === 'mount' && e.message === 'boom'));
+  } finally {
+    globalThis.document = saved;
+  }
 });
 
 // --- S20 in the running page: hashes select, they never send -----------------
@@ -105,7 +229,7 @@ async function mountPage() {
     document: makeDocument({ byId, root: byId.get('grid') }),
     console: { log() {}, warn() {}, error() {} },
     location: { protocol: 'http:', host: 'x', hash: '', pathname: '/' },
-    history: { replaceState() {} },
+    history: { replaceState(_s, _t, url) { sandbox.location.hash = url; } },
     localStorage: { getItem: () => null, setItem() {} },
     innerWidth: 1600, innerHeight: 900, isSecureContext: false,
     addEventListener(k, fn) { (winListeners[k] ||= []).push(fn); },
@@ -138,7 +262,7 @@ async function mountPage() {
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
   const JS = path.join(PUB, 'js');
-  await loadEsModules(sandbox, {
+  const ns = await loadEsModules(sandbox, {
     entry: path.join(JS, 'app.js'),
     stubs: {
       [path.join(JS, 'ui', 'terminal.js')]: {
@@ -149,7 +273,7 @@ async function mountPage() {
   const fire = (kind) => { for (const fn of winListeners[kind] || []) fn({}); };
   const go = (hash) => { sandbox.location.hash = hash; fire('hashchange'); };
   const send = (msg) => sockets[0].emit('message', { data: JSON.stringify(msg) });
-  return { byId, fetches, go, send, socket: sockets[0] };
+  return { byId, fetches, go, fire, send, ns, sandbox, socket: sockets[0] };
 }
 
 pageTest('S20: no hash or URL parameter ever triggers act() or any mutating request', async () => {
@@ -189,14 +313,58 @@ pageTest('a v1 deep link #/board?sel=<fkey> opens the sheet on the board', async
   assert.equal(byId.get('sheet-title').textContent, 'x');
 });
 
-pageTest('a view the page has no section for yet lands on the board', async () => {
+pageTest('#/ lands on the map; every view has a section and mounts through the registry', async () => {
   const { byId, go, send, socket } = await mountPage();
   socket.emit('open', {});
   send({ type: 'snapshot', sessions: [], attention: [] });
-  go('#/inbox');
-  assert.equal(byId.get('view-board').hidden, false);
+  assert.equal(byId.get('view-map').hidden, false, 'a cold load with no hash is the map');
+  go('#board');
+  go('#/');
+  assert.equal(byId.get('view-map').hidden, false);
+  assert.equal(byId.get('view-board').hidden, true);
+  for (const v of ['inbox', 'packages', 'audit', 'diff']) {
+    go(`#/${v}`);
+    assert.equal(byId.get(`view-${v}`).hidden, false, `${v} shows`);
+    assert.ok(byId.get(`view-${v}`).children[0]?.classList.contains('panel'), `${v} rendered its stub panel`);
+  }
   go('#/box');
   assert.equal(byId.get('view-box').hidden, false);
+  assert.equal(byId.get('view-diff').children.length, 0, 'leaving a view unmounts it');
+  go('#morning');
+  assert.equal(byId.get('view-morning').hidden, false, 'a legacy hash still routes');
+  // The nav marks the shown view.
+  const on = byId.get('views').children.filter((b) => b.classList.contains('on')).map((b) => b.dataset.view);
+  assert.deepEqual(on, ['morning']);
+});
+
+pageTest('the scope chips follow the route; removing one navigates it away', async () => {
+  const { byId, go, fire, send, socket, sandbox, ns } = await mountPage();
+  socket.emit('open', {});
+  send({ type: 'hello', builder: { id: 'builder-a', code: 'BA' } });
+  send({ type: 'snapshot', builder: 'builder-a', sessions: [], attention: [] });
+  go('#/');
+  const scope = byId.get('scope');
+  assert.equal(scope.children.length, 1);
+  assert.equal(scope.children[0].textContent, 'ALL', 'no filter: the ALL plate');
+  go('#/board?b=builder-a&s=stuck&q=auth');
+  const params = scope.children.map((c) => c.dataset.param);
+  assert.deepEqual(params, ['b', 's', 'q']);
+  assert.match(scope.children[0].textContent, /BA/, 'the builder chip shows its code');
+  assert.match(byId.get('legend').textContent, /MOVE/, 'the legend leads with the view keys');
+  assert.match(byId.get('clock-utc').textContent, /^\d\d:\d\d:\d\dZ$/);
+  // navigate() is what a chip's x runs: a push drops the parameter.
+  const { navigate, onRoute } = ns('core/router.js');
+  const seen = [];
+  onRoute((r) => seen.push(r.view));
+  assert.equal(navigate({ s: null }), '#/board?b=builder-a&q=auth');
+  assert.equal(sandbox.location.hash, '#/board?b=builder-a&q=auth');
+  fire('hashchange');
+  assert.deepEqual(scope.children.map((c) => c.dataset.param), ['b', 'q']);
+  // replace: rewrites the entry and applies it at once.
+  navigate({ view: 'inbox', q: null }, { replace: true });
+  assert.equal(sandbox.location.hash, '#/inbox?b=builder-a');
+  assert.equal(byId.get('view-inbox').hidden, false);
+  assert.deepEqual(seen, ['board', 'inbox']);
 });
 
 pageTest('the page source: hello first, then fleet keys in the visible message', async () => {

@@ -1,5 +1,7 @@
 // Views and the hash router. Moved from public/app.js (fleet F1); router v1
-// (fleet F8a, plan §1 2.5; §4 D4 extends it and flips DEFAULT_VIEW to map).
+// (fleet F8a, plan §1 2.5), extended by §4 D4: the Map is home (DEFAULT_VIEW),
+// views mount through the registry (views/index.js), and navigate/onRoute/
+// current give the shell and later views one way to move.
 //
 // Grammar: #/<view>?b=<builderId|all>&s=<state filter>&q=<query>&sel=<fkey>&open=<term|transcript>
 // Legacy forms keep working, because old push notifications already sit in
@@ -15,10 +17,7 @@ import { localBuilderId, store, toIndexKey } from './store.js';
 import { scheduleVisible } from './net.js';
 import { fitAll } from '../ui/terminal.js';
 import { openSheet } from '../ui/sheet.js';
-import { loadMorning } from '../views/morning.js';
-import { loadCredit } from '../views/credit.js';
-import { renderBox } from '../views/box.js';
-import { showMap } from '../views/map.js';
+import { activateView } from '../views/index.js';
 
 // ---------------------------------------------------------------- views
 //
@@ -27,13 +26,18 @@ import { showMap } from '../views/map.js';
 // hidden, so switching back is instant and the terminals in the dock survive —
 // but an IntersectionObserver reports a display:none subtree as off-screen, so
 // the capture-pane rate drops on its own while you are elsewhere.
-// A view the page has no section for yet (inbox, packages, audit, diff until
-// §4 D4 adds them) lands on the default view, as a stale #machine always did.
+// Every view has a section (index.html `#view-<id>`) and a registry entry; a
+// view the page has no section for still lands on the default view.
 export const VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit'];
 /** Drill-down views: routable, never in the nav. */
 export const HIDDEN_VIEWS = ['diff'];
-export const DEFAULT_VIEW = 'board';
-export const VIEW_KEYS = { b: 'board', m: 'morning', c: 'credit', x: 'box', p: 'map' };
+export const DEFAULT_VIEW = 'map';
+/**
+ * The `g <key>` view chord (plan §4 2.6, authoritative). `g m` is the map now
+ * and morning moved to `g o`; `g p` is packages (it was the map). ui/hotkeys.js
+ * (D8) reads this table; the router only registers the routes.
+ */
+export const VIEW_KEYS = Object.freeze({ m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning' });
 export const OPEN_KINDS = ['term', 'transcript'];
 
 const ROUTABLE = new Set([...VIEWS, ...HIDDEN_VIEWS]);
@@ -97,21 +101,80 @@ export function parseHash(h, { localId } = {}) {
   return r;
 }
 
-/** A route -> its hash. Null/empty parameters are left out. */
+/**
+ * A route -> its hash, in the stable key order view, b, s, q, sel, open.
+ * Defaults are left out: null/empty parameters, `b=all`, and the home view,
+ * so the plain map is `#/`.
+ */
 export function formatHash(r = {}) {
   const view = ROUTABLE.has(r.view) ? r.view : DEFAULT_VIEW;
   const parts = [];
   for (const k of ['b', 's', 'q', 'sel', 'open']) {
     const v = r[k];
     if (v === null || v === undefined || v === '') continue;
+    if (k === 'b' && v === 'all') continue;
     parts.push(`${k}=${encodeURIComponent(String(v))}`);
   }
-  return `#/${view}${parts.length ? `?${parts.join('&')}` : ''}`;
+  const path = view === DEFAULT_VIEW ? '' : view;
+  return `#/${path}${parts.length ? `?${parts.join('&')}` : ''}`;
 }
 
 /** The current route, parsed against the store's local builder. */
 export function currentRoute() {
   return parseHash(location.hash, { localId: localBuilderId(store) });
+}
+
+/** Alias of currentRoute (plan §4 2.6 names it `current()`). */
+export function current() {
+  return currentRoute();
+}
+
+/**
+ * The route after applying `patch` to `route`: only the routing keys, and a
+ * view switch drops the selection unless the patch sets one. Pure.
+ */
+export function patchRoute(route, patch = {}) {
+  const base = { ...emptyRoute(route?.view ?? DEFAULT_VIEW), ...pickRoute(route) };
+  const p = pickRoute(patch);
+  const next = { ...base, ...p };
+  if ('view' in p && p.view !== base.view) {
+    if (!('sel' in p)) next.sel = null;
+    if (!('open' in p)) next.open = null;
+  }
+  return next;
+}
+
+const ROUTE_KEYS = ['view', 'b', 's', 'q', 'sel', 'open'];
+function pickRoute(r) {
+  const out = {};
+  if (!r || typeof r !== 'object') return out;
+  for (const k of ROUTE_KEYS) if (Object.prototype.hasOwnProperty.call(r, k)) out[k] = r[k];
+  return out;
+}
+
+const routeListeners = new Set();
+
+/** Run fn(route) after every applied route. Returns an unsubscribe. */
+export function onRoute(fn) {
+  routeListeners.add(fn);
+  return () => { routeListeners.delete(fn); };
+}
+
+/**
+ * Move to `{...current, ...patch}` (patchRoute). A push sets location.hash and
+ * the hashchange applies it; `replace` rewrites the entry and applies it at
+ * once (replaceState fires no hashchange). Routes only select and filter.
+ */
+export function navigate(patch = {}, { replace = false } = {}) {
+  const want = formatHash(patchRoute(currentRoute(), patch));
+  if (replace) {
+    history.replaceState(null, '', want);
+    applyHash();
+    return want;
+  }
+  if (location.hash !== want) location.hash = want;
+  else applyHash();
+  return want;
 }
 
 /** The view this page can actually show for `name`. */
@@ -126,19 +189,22 @@ export function setView(name, { pushHash = true } = {}) {
     const node = $(`view-${v}`);
     if (node) node.hidden = v !== view;
   }
-  for (const btn of document.querySelectorAll('.view-tab, .tab')) {
-    btn.classList.toggle('on', btn.dataset.view === view);
+  for (const btn of $('views')?.children ?? []) {
+    if (!btn.dataset?.view) continue;
+    const on = btn.dataset.view === view;
+    btn.classList.toggle('on', on);
+    if (on) btn.setAttribute('aria-current', 'page');
+    else btn.removeAttribute?.('aria-current');
   }
+  const cur = currentRoute();
   if (pushHash && !store.openSession) {
     // Keep the filters (b, s, q); a view switch drops the selection.
-    const cur = currentRoute();
     const want = formatHash({ ...cur, view, sel: null, open: null });
     if (location.hash !== want) history.replaceState(null, '', want);
   }
-  if (view === 'morning') loadMorning();
-  if (view === 'credit') loadCredit();
-  if (view === 'box') renderBox();
-  if (view === 'map') showMap();
+  // The registry mounts the view (a legacy adapter for the F1-moved ones runs
+  // their old show/load function) and unmounts the one it replaces.
+  activateView(view, $(`view-${view}`), { store, route: { ...cur, view }, navigate });
   scheduleVisible();
   fitAll();
 }
@@ -155,9 +221,13 @@ export function applyHash() {
   if (key && (r.open === 'term' || r.view === 'board')) {
     setView('board', { pushHash: false });
     openSheet(key);
-    return;
+  } else {
+    setView(r.view, { pushHash: false });
   }
-  setView(r.view, { pushHash: false });
+  const shown = { ...r, view: store.view };
+  for (const fn of [...routeListeners]) {
+    try { fn(shown); } catch { /* a listener never breaks routing */ }
+  }
 }
 
 /** Top-level wiring from the old public/app.js, run once by boot(). */
