@@ -67,7 +67,7 @@ const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
  * Strip a Map node-id prefix (`lane:` / `sess:`) from a `sel` value, the same
  * mapping as the map's selForId (§5 2.3). Pure.
  */
-export function selKey(sel) {
+export function selTarget(sel) {
   if (typeof sel !== 'string' || sel === '') return null;
   for (const prefix of ['lane:', 'sess:']) {
     if (sel.startsWith(prefix) && parseFkey(sel.slice(prefix.length))) return sel.slice(prefix.length);
@@ -75,7 +75,7 @@ export function selKey(sel) {
   return sel;
 }
 
-function laneOf(s, key, builder, name) {
+function findLane(s, key, builder, name) {
   const list = Array.isArray(s.lanes) ? s.lanes : [];
   return list.find((l) => l && l.key === key)
     ?? list.find((l) => l && l.id === name && (!builder || !l.builder || l.builder === builder))
@@ -89,7 +89,7 @@ function laneOf(s, key, builder, name) {
  * `builder`/`name` so the panel can say what it looked for. Pure.
  */
 export function resolveSel(s, sel) {
-  const key = selKey(sel);
+  const key = selTarget(sel);
   const out = { sel: key, key, builder: null, name: null, session: null, sessionKey: null, lane: null };
   if (!key || !s) return out;
   const p = parseFkey(key);
@@ -101,10 +101,10 @@ export function resolveSel(s, sel) {
     out.session = sess;
     out.sessionKey = sk;
     out.builder = sess.builder ?? out.builder;
-    if (sess.lane) out.lane = laneOf(s, sess.laneKey, out.builder, sess.lane);
+    if (sess.lane) out.lane = findLane(s, sess.laneKey, out.builder, sess.lane);
     return out;
   }
-  const lane = laneOf(s, key, out.builder, out.name);
+  const lane = findLane(s, key, out.builder, out.name);
   if (!lane) return out;
   out.lane = lane;
   out.builder = lane.builder ?? out.builder;
@@ -126,7 +126,7 @@ export function resolveSel(s, sel) {
 
 // ---------------------------------------------------------------- model
 
-function prModel(pr) {
+function inspPr(pr) {
   if (!pr || typeof pr !== 'object' || pr.none || pr.error) return null;
   const n = num(pr.number);
   if (n == null) return null;
@@ -215,7 +215,7 @@ export function inspectorModel(lane, opts = {}) {
     usdToday: num(s?.cost?.usdToday),
     ctxHistory: Array.isArray(hist.ctx) ? hist.ctx.slice(-SPARK_SAMPLES) : (ctx != null ? [ctx] : []),
     usdHistory: Array.isArray(hist.usd) ? hist.usd.slice(-SPARK_SAMPLES) : (usd != null ? [usd] : []),
-    pr: prModel(opts.pr),
+    pr: inspPr(opts.pr),
     prompt: str(s?.activity?.lastUserPrompt),
     assistant: str(s?.activity?.lastAssistant),
     tool: str(s?.activity?.tool, 120) ? { name: str(s.activity.tool, 120), input: str(s.activity.toolInput) } : null,
@@ -279,17 +279,17 @@ export function registerTab(spec) {
   if (typeof spec.mount !== 'function') throw new TypeError('registerTab: mount(el, sel, ctx) is required');
   const tab = Object.freeze({ ...spec, title: String(spec.title ?? spec.id) });
   tabRegistry.set(spec.id, tab);
-  scheduleRender();
+  scheduleInspector();
   return () => {
     if (tabRegistry.get(spec.id) !== tab) return;
     tabRegistry.delete(spec.id);
-    scheduleRender();
+    scheduleInspector();
   };
 }
 
 export function unregisterTab(id) {
   const had = tabRegistry.delete(id);
-  if (had) scheduleRender();
+  if (had) scheduleInspector();
   return had;
 }
 
@@ -545,7 +545,7 @@ function renderTabs(m, strip, body) {
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-selected', t.active ? 'true' : 'false');
     b.title = t.long;
-    b.onclick = () => { if (page.tab !== t.id) { page.tab = t.id; render(); } };
+    b.onclick = () => { if (page.tab !== t.id) { page.tab = t.id; renderInspector(); } };
     strip.append(b);
   }
   if (active === 'overview') {
@@ -573,7 +573,7 @@ function renderTabs(m, strip, body) {
 }
 
 /** Rebuild the open panel from the store. */
-export function render() {
+export function renderInspector() {
   const root = page.root;
   if (!root || !page.sel) return;
   const r = resolveSel(store, page.sel);
@@ -599,16 +599,16 @@ export function render() {
   updateTether();
 }
 
-function scheduleRender() {
+function scheduleInspector() {
   if (!page.sel || page.timer) return;
-  page.timer = setTimeout(() => { page.timer = null; try { render(); } catch { /* reported by the next render */ } }, 60);
+  page.timer = setTimeout(() => { page.timer = null; try { renderInspector(); } catch { /* reported by the next render */ } }, 60);
 }
 
 /** Open, switch or close for a route. */
 export function applyRoute(route) {
-  const sel = selKey(route?.sel ?? null);
+  const sel = selTarget(route?.sel ?? null);
   page.root = $('shell-insp') ?? page.root;
-  if (sel === page.sel) { if (sel) scheduleRender(); return; }
+  if (sel === page.sel) { if (sel) scheduleInspector(); return; }
   unmountTab();
   page.sel = sel;
   if (!sel) {
@@ -624,7 +624,7 @@ export function applyRoute(route) {
     page.touched = sel;
     try { currentSource()?.send?.(touchMessage(sel)); } catch { /* best effort */ }
   }
-  render();
+  renderInspector();
   insetsChanged();
 }
 
@@ -705,6 +705,6 @@ export function init() {
   if (!page.root) return;
   page.root.setAttribute('aria-live', 'off');
   onRoute(applyRoute);
-  subscribe(() => scheduleRender());
+  subscribe(() => scheduleInspector());
   addEventListener('resize', () => { insetsChanged(); updateTether(); }, { passive: true });
 }

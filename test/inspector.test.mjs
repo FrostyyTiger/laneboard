@@ -9,14 +9,14 @@ import path from 'node:path';
 import { makeDocument, makeEl, texts } from './helpers/fakedom.mjs';
 import {
   STATE_WORD, TAB_SLOTS, TOUCH_HOW, SPARK_SAMPLES,
-  selKey, resolveSel, inspectorModel, modelFor, prFor, pushSample,
+  selTarget, resolveSel, inspectorModel, modelFor, prFor, pushSample,
   registerTab, unregisterTab, registeredTabs, tabsModel, _resetTabs,
   touchMessage, shouldTouch, l4Mode, hairline,
   renderHeader, renderOverview, applyRoute, anchorEl, selected, bindMap,
 } from '../public/js/ui/inspector.js';
 import {
   ACTIONBAR_BUTTONS, actionBarModel, actionList, actionTarget, registerAction, unregisterAction,
-  renderActionBar, runAction, _resetActions,
+  renderActionBar, runBarItem, _resetActions,
 } from '../public/js/ui/actionbar.js';
 import { createStore, store } from '../public/js/core/store.js';
 import { HOWS } from '../server/hub/reviewwait.mjs';
@@ -53,13 +53,13 @@ function fleetStore() {
 
 // --- selection --------------------------------------------------------------------------
 
-test('selKey strips the Map node-id prefixes and keeps fleet keys', () => {
-  assert.equal(selKey('builder-a/auth'), 'builder-a/auth');
-  assert.equal(selKey('lane:builder-a/auth'), 'builder-a/auth');
-  assert.equal(selKey('sess:builder-a/auth-2'), 'builder-a/auth-2');
-  assert.equal(selKey('builder:builder-a'), 'builder:builder-a');
-  assert.equal(selKey(''), null);
-  assert.equal(selKey(null), null);
+test('selTarget strips the Map node-id prefixes and keeps fleet keys', () => {
+  assert.equal(selTarget('builder-a/auth'), 'builder-a/auth');
+  assert.equal(selTarget('lane:builder-a/auth'), 'builder-a/auth');
+  assert.equal(selTarget('sess:builder-a/auth-2'), 'builder-a/auth-2');
+  assert.equal(selTarget('builder:builder-a'), 'builder:builder-a');
+  assert.equal(selTarget(''), null);
+  assert.equal(selTarget(null), null);
 });
 
 test('resolveSel: a session wins, a lane resolves to its worst session, unknown keeps the names', () => {
@@ -277,7 +277,7 @@ test('registerAction: C14 can add, replace and drop buttons', () => {
   _resetActions();
 });
 
-test('runAction: asks by tier, Cancel sends nothing, confirm and approvalId reach act()', async () => {
+test('runBarItem: asks by tier, Cancel sends nothing, confirm and approvalId reach act()', async () => {
   _resetActions();
   const s = fleetStore();
   const m = modelFor(s, 'builder-a/auth-2');
@@ -288,19 +288,19 @@ test('runAction: asks by tier, Cancel sends nothing, confirm and approvalId reac
     act: async (k, action, args) => { sent.push(['act', k, action, args]); return { ok: true }; },
     openTerminal: (k) => sent.push(['term', k]),
   });
-  const cancelled = await runAction(items.find((x) => x.id === 'kill'), m, ctx({ ok: false }));
+  const cancelled = await runBarItem(items.find((x) => x.id === 'kill'), m, ctx({ ok: false }));
   assert.equal(cancelled.cancelled, true);
   assert.ok(!sent.some((x) => x[0] === 'act'), 'Cancel sends nothing');
   sent.length = 0;
-  await runAction(items.find((x) => x.id === 'kill'), m, ctx({ ok: true, confirm: 'auth-2' }));
+  await runBarItem(items.find((x) => x.id === 'kill'), m, ctx({ ok: true, confirm: 'auth-2' }));
   assert.deepEqual(sent.at(-1), ['act', 'builder-a/auth-2', 'kill', { confirm: 'auth-2' }]);
-  await runAction(items.find((x) => x.id === 'approve'), m, ctx({ ok: true, confirm: 'auth-2' }));
+  await runBarItem(items.find((x) => x.id === 'approve'), m, ctx({ ok: true, confirm: 'auth-2' }));
   assert.deepEqual(sent.at(-1), ['act', 'builder-a/auth-2', 'approve', { approvalId: '6f1c1a8e-0000-4000-8000-000000000001' }]);
-  await runAction(items.find((x) => x.id === 'retire'), m, ctx({ ok: true, confirm: 'auth' }));
+  await runBarItem(items.find((x) => x.id === 'retire'), m, ctx({ ok: true, confirm: 'auth' }));
   assert.deepEqual(sent.at(-1), ['act', 'builder-a/auth', 'retire', { confirm: 'auth' }], 'retire addresses the lane');
-  await runAction(items.find((x) => x.id === 'terminal'), m, ctx({ ok: true }));
+  await runBarItem(items.find((x) => x.id === 'terminal'), m, ctx({ ok: true }));
   assert.deepEqual(sent.at(-1), ['term', 'builder-a/auth-2']);
-  const off = await runAction({ ...items[0], disabled: true, reason: 'nope' }, m, ctx({ ok: true }));
+  const off = await runBarItem({ ...items[0], disabled: true, reason: 'nope' }, m, ctx({ ok: true }));
   assert.equal(off.ok, false);
   assert.equal(actionTarget({ target: 'lane' }, m), 'builder-a/auth');
 });

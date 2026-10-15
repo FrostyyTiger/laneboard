@@ -10,7 +10,7 @@
 //   actionList()               the registry, in bar order
 //   actionBarModel(m, opts)    pure: [{id, icon, label, action, tier, disabled, reason}]
 //   renderActionBar(el, ctx)   the DOM bar inside `el`
-//   runAction(item, m, ctx)    confirmAction (§4 component kit) then act() (§1 F8a)
+//   runBarItem(item, m, ctx)   confirmAction (§4 component kit) then act() (§1 F8a)
 //
 // `m` is the inspector model (ui/inspector.js inspectorModel). Pure at import
 // time: no `document` until renderActionBar runs. Every builder-supplied text
@@ -156,7 +156,7 @@ export function actionTarget(spec, m) {
  * openTerminal}. Asks by tier first; Cancel sends nothing. Resolves the act()
  * result, or {ok:false, cancelled:true}.
  */
-export async function runAction(item, m, ctx = {}) {
+export async function runBarItem(item, m, ctx = {}) {
   const spec = registry.get(item?.id);
   if (!spec || item.disabled) return { ok: false, error: item?.reason ?? 'unavailable' };
   if (typeof spec.run === 'function') {
@@ -182,7 +182,7 @@ export async function runAction(item, m, ctx = {}) {
 
 /**
  * Render the bar into `el` (replacing what was there). `ctx.model` is the
- * inspector model; the rest is passed to runAction. Returns the items drawn.
+ * inspector model; the rest is passed to runBarItem. Returns the items drawn.
  */
 export function renderActionBar(el, ctx = {}) {
   const m = ctx.model;
@@ -203,7 +203,7 @@ export function renderActionBar(el, ctx = {}) {
     b.title = name;
     b.disabled = it.disabled;
     b.append(icon(it.icon, { size: 'm' }));
-    b.onclick = () => { runAction(it, m, ctx).catch(() => {}); };
+    b.onclick = () => { runBarItem(it, m, ctx).catch(() => {}); };
     el.append(b);
   }
   el.hidden = items.length === 0;
