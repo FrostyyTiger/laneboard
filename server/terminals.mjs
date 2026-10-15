@@ -293,21 +293,32 @@ function cleanup(entry) {
 export function attach(req, socket, head, url) {
   const m = /^\/ws\/term\/(.+)$/.exec(url.pathname);
   if (!m) return false;
-  const name = decodeURIComponent(m[1]);
+  let name;
+  try { name = decodeURIComponent(m[1]); } catch { name = ''; }
+  return attachNamed(req, socket, head, name, url);
+}
 
+/**
+ * Open a terminal on session `name` for an upgrade whose path the caller has
+ * already matched and authorized (`/ws/term/<name>` via attach above, or the
+ * v1 route `/api/v1/term/:name`, fleet A7/A8). `url` supplies `cols`/`rows`
+ * (clamped as everywhere else). Always handles the request: a refused name is
+ * answered 404 and the socket destroyed. Returns true.
+ */
+export function attachNamed(req, socket, head, name, url) {
   const reject = (why) => {
     log.warn(`term refused for ${JSON.stringify(name)}: ${why}`);
-    socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+    try { socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n'); } catch { /* gone */ }
     socket.destroy();
     return true;
   };
 
-  if (!isSafeSessionName(name)) return reject('unsafe name');
+  if (typeof name !== 'string' || !isSafeSessionName(name)) return reject('unsafe name');
   if (WEB_SUFFIX.test(name)) return reject('refusing to attach to a web session');
   if (!state.get(name)) return reject('not in inventory');
   if (!ownerSize(name)) return reject('owner pane size unknown');
 
-  const want = { cols: Number(url.searchParams.get('cols')), rows: Number(url.searchParams.get('rows')) };
+  const want = { cols: Number(url?.searchParams?.get('cols')), rows: Number(url?.searchParams?.get('rows')) };
   wss.handleUpgrade(req, socket, head, (ws) => {
     attachTerminal(ws, name, want).catch((err) => {
       log.error('term attach failed', err?.stack || String(err));
