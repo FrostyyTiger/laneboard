@@ -22,7 +22,7 @@ delete process.env.GIT_ALTERNATE_OBJECT_DIRECTORIES;
 const gitenv = await import('../server/packages/gitenv.mjs');
 const branches = await import('../server/packages/branches.mjs');
 const { scratchEnv, syncMirror, pruneScratch, scratchDir, mirrorDir, mirrorRef, safeRepoName, withEnv } = gitenv;
-const { collectBranches, touches, branchInfo, packagesFor, parseRefs, parseShortstat, cacheStats, _clearCache } = branches;
+const { collectBranches, touches, branchInfo, packagesFor, parseRefs, parseShortstat, cacheStats, _clearCache, isSha } = branches;
 
 function git(cwd, ...args) {
   return execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'init.defaultBranch=main', ...args],
@@ -299,4 +299,264 @@ test('mirror: refuses ext:: and option-looking origins', async () => {
   fs.mkdirSync(path.join(root, 'plain'));
   const r3 = await syncMirror({ name: 'none', dir: path.join(root, 'plain') }, { cacheDir: path.join(root, 'cache') });
   assert.equal(r3.ok, false);
+});
+
+// ---------------------------------------------------------------------------
+// P7: conflict prediction, merge order, stale branches.
+
+const conflicts = await import('../server/packages/conflicts.mjs');
+const order = await import('../server/packages/order.mjs');
+const stale = await import('../server/packages/stale.mjs');
+const { run: realRun } = await import('../server/util.mjs');
+const { mergeTree, predictConflicts, overlapPairs, hotspots, parseGitVersion, atLeast, parseMergeTree, gitVersion, textualAvailable } = conflicts;
+const { mergeOrder, dependencies, isCandidate } = order;
+const { staleBranches, deleteCommand, shellQuote } = stale;
+
+// Spy on every git call; `fake(args)` may return a result to short-circuit.
+function spyGit(fake) {
+  const calls = [];
+  gitenv._setRunner(async (cmd, args, opts) => {
+    calls.push(args);
+    const f = fake?.(args);
+    return f ?? realRun(cmd, args, opts);
+  });
+  return calls;
+}
+const mergeTreeCalls = (calls) => calls.filter((a) => a.includes('merge-tree'));
+const resetSpies = () => { gitenv._setRunner(null); conflicts._clearCache(); order._clearCache(); };
+
+const cx = buildFixture('cx');
+const cxRepo = { name: 'cx', dir: cx.work, packages: PACKAGES };
+// main moves on a file no branch touches
+cx.sha.main1 = (() => { git(cx.work, 'checkout', '-q', 'main'); return commit(cx.work, 'w.txt', 'w\n', 'main moves'); })();
+const cxEnv = await scratchEnv(cxRepo, { cacheDir: cx.cacheDir });
+async function cxBranches(mainSha = cx.sha.main1) {
+  _clearCache();
+  const res = await collectBranches(cxRepo, { cacheDir: cx.cacheDir, mainRef: mainSha, worktrees: [{ id: 'c', root: cx.wtc }] });
+  assert.deepEqual(res.errors, []);
+  return res;
+}
+
+test('git version parsing and the 2.38 gate', async () => {
+  assert.deepEqual(parseGitVersion('git version 2.43.0\n'), [2, 43, 0]);
+  assert.deepEqual(parseGitVersion('git version 2.39.3 (Apple Git-146)'), [2, 39, 3]);
+  assert.equal(parseGitVersion('nope'), null);
+  assert.equal(atLeast([2, 38, 0]), true);
+  assert.equal(atLeast([2, 37, 9]), false);
+  assert.equal(atLeast([3, 0, 0]), true);
+  assert.equal(atLeast(null), false);
+  resetSpies();
+  const calls = spyGit();
+  const v = await gitVersion();
+  await gitVersion();
+  assert.equal(calls.filter((a) => a[0] === 'version').length, 1, 'checked once');
+  assert.equal(v.textual, atLeast(v.version));
+  assert.equal(await textualAvailable(), v.textual);
+  resetSpies();
+  assert.deepEqual(parseMergeTree(`${'e'.repeat(40)}\0x.txt\0x.txt\0y.txt\0`), { tree: 'e'.repeat(40), files: ['x.txt', 'y.txt'] });
+});
+
+test('mergeTree: a/b conflict on x.txt, a/c clean, bad input refused', async () => {
+  resetSpies();
+  assert.deepEqual(await mergeTree(cx.work, cx.sha.a, cx.sha.b, { env: cxEnv }), { clean: false, files: ['x.txt'] });
+  assert.deepEqual(await mergeTree(cx.work, cx.sha.a, cx.sha.c, { env: cxEnv }), { clean: true, files: [] });
+  assert.deepEqual(await mergeTree(cx.work, cx.sha.b, cx.sha.a, { env: cxEnv }), { clean: false, files: ['x.txt'] }, 'symmetric');
+  assert.deepEqual(await mergeTree(cx.work, '--output=/tmp/x', cx.sha.a, { env: cxEnv }), { error: 'bad sha' });
+  assert.deepEqual(await mergeTree(cx.work, cx.sha.a, cx.sha.b, {}), { error: 'no scratch env' }, 'never runs without the scratch env');
+  const missing = 'f'.repeat(40);
+  assert.ok((await mergeTree(cx.work, cx.sha.a, missing, { env: cxEnv })).error, 'unknown commit -> error');
+});
+
+test('predictConflicts: pairs pre-filtered by touches, vsMain clean, cache hits, repo objects unchanged', async () => {
+  const { branches: brs, mainSha } = await cxBranches();
+  const objects = path.join(cx.work, '.git', 'objects');
+  const objBefore = countFiles(objects);
+  resetSpies();
+  const calls = spyGit();
+  const res = await predictConflicts(cxRepo, { branches: brs, mainSha }, { env: cxEnv, now: 1000 });
+  assert.equal(res.textual, true);
+  assert.deepEqual(res.errors, []);
+  // no branch conflicts with main (main moved on w.txt only)
+  assert.ok(!res.conflicts.some((c) => c.b.main), 'vsMain clean');
+  const pairs = res.conflicts.map((c) => [c.a.branch, c.b.branch].sort().join('|')).sort();
+  assert.deepEqual(pairs, ['a|b', 'b|d']);
+  for (const c of res.conflicts) {
+    assert.equal(c.kind, 'textual');
+    assert.deepEqual(c.files, ['x.txt']);
+    assert.equal(c.at, 1000);
+    assert.ok(isSha(c.a.sha) && isSha(c.b.sha));
+  }
+  // the pre-filter skipped (b,c): disjoint files, never merge-treed
+  const mt = mergeTreeCalls(calls);
+  const ran = (x, y) => mt.some((a) => a.includes(x) && a.includes(y));
+  assert.equal(ran(cx.sha.b, cx.sha.c), false, '(b,c) skipped');
+  assert.equal(ran(cx.sha.a, cx.sha.b), true);
+  assert.equal(ran(cx.sha.a, cx.sha.c), false);
+  assert.ok(res.skipped > 0);
+  // 5 branches vs main + the 3 pairs sharing x.txt (a-b, a-d, b-d)
+  assert.equal(res.checked, brs.length + 3);
+  assert.equal(mt.length, res.checked);
+  // second pass: every pair is a cache hit
+  const again = await predictConflicts(cxRepo, { branches: brs, mainSha }, { env: cxEnv, now: 1000 });
+  assert.equal(mergeTreeCalls(calls).length, mt.length, 'no merge-tree on the second pass');
+  assert.deepEqual(again.conflicts, res.conflicts);
+  assert.ok(conflicts.cacheStats().hits >= res.checked);
+  resetSpies();
+  assert.equal(countFiles(objects), objBefore, 'repo objects unchanged (scratch env)');
+});
+
+test('predictConflicts: a branch that conflicts with main', async () => {
+  git(cx.work, 'checkout', '-q', 'main');
+  const main2 = commit(cx.work, 'x.txt', 'ONE-main\ntwo\n', 'main edits x line 1');
+  const { branches: brs } = await cxBranches(main2);
+  resetSpies();
+  const res = await predictConflicts(cxRepo, { branches: brs, mainSha: main2 }, { env: cxEnv });
+  const vsMain = res.conflicts.filter((c) => c.b.main).map((c) => c.a.branch).sort();
+  assert.deepEqual(vsMain, ['a', 'b', 'd']);
+  assert.ok(res.conflicts.every((c) => c.files.includes('x.txt')));
+  git(cx.work, 'reset', '-q', '--hard', cx.sha.main1);
+});
+
+test('predictConflicts: with git < 2.38 faked, degrades to overlap without merge-tree', async () => {
+  const { branches: brs, mainSha } = await cxBranches();
+  resetSpies();
+  const calls = spyGit((args) => (args[0] === 'version' ? { ok: true, stdout: 'git version 2.30.2\n', stderr: '', code: 0, signal: null } : null));
+  assert.equal(await textualAvailable(), false);
+  const res = await predictConflicts(cxRepo, { branches: brs, mainSha }, { env: cxEnv, now: 5 });
+  assert.equal(res.textual, false);
+  assert.equal(mergeTreeCalls(calls).length, 0, 'no merge-tree below 2.38');
+  assert.ok(res.conflicts.every((c) => c.kind === 'overlap'));
+  const pairs = res.conflicts.map((c) => (c.b.main ? `${c.a.branch}|main` : [c.a.branch, c.b.branch].sort().join('|'))).sort();
+  assert.deepEqual(pairs, ['a|b', 'a|d', 'b|d'], 'file-set overlap; main moved on w.txt only');
+  resetSpies();
+  assert.equal(await textualAvailable(), true, 'real git on this host is >= 2.38');
+});
+
+test('overlapPairs (pure) and hotspots', () => {
+  const s = (c) => c.repeat(40);
+  const items = [
+    { branch: 'p', sha: s('1'), files: ['a.js', 'b.js'], fkey: 'h1:p' },
+    { branch: 'q', sha: s('2'), files: ['b.js', 'c.js'] },
+    { branch: 'r', sha: s('3'), files: ['d.js'] },
+  ];
+  const ov = overlapPairs(items, { now: 7 });
+  assert.deepEqual(ov, [{ a: { branch: 'p', sha: s('1'), fkey: 'h1:p' }, b: { branch: 'q', sha: s('2') }, kind: 'overlap', files: ['b.js'], at: 7 }]);
+  assert.deepEqual(overlapPairs(items, { skip: new Set([conflicts.pairKey(s('2'), s('1'))]) }), [], 'textual result overrides');
+  const hs = hotspots(
+    [...items, { branch: 'z', sha: s('4'), files: ['b.js', 'a.js'] }],
+    [{ files: ['a.js'] }, { files: ['a.js'] }, { files: ['e.js'] }],
+  );
+  assert.deepEqual(hs.map((h) => [h.file, h.conflicts, h.lanes.length]), [['a.js', 2, 2], ['e.js', 1, 0], ['b.js', 0, 3]]);
+  assert.deepEqual(hs[0].lanes, ['h1:p', 'z']);
+  assert.equal(hotspots(Array.from({ length: 30 }, (_, i) => ({ branch: `b${i}`, files: ['f' + (i % 25), 'f' + ((i + 1) % 25)] })), []).length, 20, 'top 20');
+});
+
+test('mergeOrder: dependency first, c first (no conflicts, smallest)', async () => {
+  const { branches: brs, mainSha } = await cxBranches();
+  resetSpies();
+  const res = await predictConflicts(cxRepo, { branches: brs, mainSha }, { env: cxEnv });
+  const pick = brs.filter((b) => ['a', 'b', 'c', 'd'].includes(b.branch));
+  const fk = (sha) => pick.find((b) => b.sha === sha)?.branch;
+  const edges = res.conflicts.map((c) => ({ a: fk(c.a.sha), b: c.b.main ? 'main:cx' : fk(c.b.sha), kind: c.kind, files: c.files.length }));
+  const deps = await dependencies(cx.work, pick, { env: cxEnv });
+  assert.deepEqual(deps, [[cx.sha.a, cx.sha.d]], 'd contains a');
+  const cands = pick.map((b) => ({ fkey: b.branch, sha: b.sha, size: b.size }));
+  const { order: o, warnings } = mergeOrder(cands, edges, deps);
+  const pos = (k) => o.findIndex((x) => x.fkey === k);
+  assert.equal(o[0].fkey, 'c');
+  assert.ok(o[0].reasons.includes('no conflicts'));
+  const sz = (b) => b.size.ins + b.size.del;
+  assert.ok(pick.every((b) => sz(b) >= sz(pick.find((x) => x.branch === 'c'))), 'c is the smallest');
+  assert.ok(pos('a') < pos('d'), 'a before d');
+  assert.deepEqual(o.find((x) => x.fkey === 'd').after, ['a']);
+  assert.deepEqual(o.map((x) => x.rank), [1, 2, 3, 4]);
+  assert.ok(warnings.some((w) => w.text === 'merging a first makes b conflict on 1 file'));
+  // the sha-pair cache answers the second ancestry pass without git
+  const calls = spyGit();
+  assert.deepEqual(await dependencies(cx.work, pick, { env: cxEnv }), deps);
+  assert.equal(calls.length, 0);
+  resetSpies();
+});
+
+test('mergeOrder (pure): main conflicts sink, ties by size then oldest PR, cycles survive', () => {
+  const { order: o } = mergeOrder([
+    { fkey: 'x', size: { ins: 1, del: 0 } },
+    { fkey: 'y', size: { ins: 50, del: 0 }, prCreatedAt: '2026-01-02T00:00:00Z' },
+    { fkey: 'z', size: { ins: 50, del: 0 }, pr: { createdAt: '2026-01-01T00:00:00Z' } },
+    { fkey: 'x', size: { ins: 0, del: 0 } }, // duplicate ignored
+    null,
+  ], [{ a: 'x', b: 'main', kind: 'textual', files: 2 }, { a: 'y', b: 'z', kind: 'overlap', files: 1 }]);
+  assert.deepEqual(o.map((r) => r.fkey), ['z', 'y', 'x']);
+  assert.ok(o[0].reasons.includes('oldest PR'));
+  assert.ok(o[2].reasons.includes('conflicts with main on 2 files'));
+  const cyc = mergeOrder([{ fkey: 'p' }, { fkey: 'q' }], [], [['p', 'q'], ['q', 'p']]);
+  assert.equal(cyc.order.length, 2);
+  assert.ok(cyc.order[0].reasons.includes('dependency cycle'));
+  assert.deepEqual(mergeOrder([], [], []), { order: [], warnings: [] });
+  assert.deepEqual(mergeOrder(undefined).order, []);
+});
+
+test('isCandidate: reviewReady, done marker, open non-draft green/pending PR', () => {
+  assert.equal(isCandidate({ reviewReady: true }), true);
+  assert.equal(isCandidate({ marker: { kind: 'done' } }), true);
+  assert.equal(isCandidate({ markers: [{ kind: 'stage' }, { kind: 'done' }] }), true);
+  assert.equal(isCandidate({}, { state: 'OPEN', isDraft: false, verdict: 'green' }), true);
+  assert.equal(isCandidate({ pr: { state: 'OPEN', verdict: 'pending' } }), true);
+  assert.equal(isCandidate({}, { state: 'OPEN', isDraft: true, verdict: 'green' }), false);
+  assert.equal(isCandidate({}, { state: 'OPEN', verdict: 'red' }), false);
+  assert.equal(isCandidate({}, { state: 'MERGED', verdict: 'green' }), false);
+  assert.equal(isCandidate({ marker: { kind: 'blocked' } }), false);
+  assert.equal(isCandidate(null), false);
+});
+
+test('staleBranches: an old-dated branch suggests delete-branch; never executed', async () => {
+  _clearCache();
+  const res = await collectBranches(cxRepo, { cacheDir: cx.cacheDir, branchWindowDays: 365 * 50, worktrees: [{ id: 'c', root: cx.wtc }] });
+  const before = git(cx.work, 'for-each-ref');
+  const originBefore = git(cx.origin, 'for-each-ref');
+  const list = staleBranches(res.branches, res.mainSha, { staleDays: 7, staleBehind: 50 });
+  assert.deepEqual(list.map((s) => s.branch), ['old']);
+  const [s] = list;
+  assert.equal(s.sha, cx.sha.old);
+  assert.equal(s.suggestion, 'delete-branch');
+  assert.equal(s.laneFkey, null);
+  assert.equal(s.command, 'git push origin --delete old');
+  assert.ok(s.lastCommitAt < Date.parse('2020-01-02'));
+  assert.match(s.reasons[0], /no commit for \d+ days/);
+  assert.equal(git(cx.work, 'for-each-ref'), before, 'nothing deleted locally');
+  assert.equal(git(cx.origin, 'for-each-ref'), originBefore, 'nothing deleted on origin');
+});
+
+test('staleBranches (pure): behind threshold, merged, live, retire, quoting', () => {
+  const now = Date.parse('2026-06-01T00:00:00Z');
+  const day = 24 * 3600 * 1000;
+  const main = 'm'.repeat(40);
+  const br = (o) => ({ sha: 'a'.repeat(40), ahead: 1, behind: 0, lastCommitAt: now - day, pushed: true, ...o });
+  const list = staleBranches([
+    br({ branch: 'fresh' }),
+    br({ branch: 'behind', behind: 51 }),
+    br({ branch: 'merged', ahead: 0, lastCommitAt: now - 30 * day }),
+    br({ branch: 'main-itself', sha: main, lastCommitAt: now - 30 * day }),
+    br({ branch: 'live', lastCommitAt: now - 30 * day, live: true }),
+    br({ branch: 'live2', lastCommitAt: now - 30 * day, laneFkey: 'b1:live2' }),
+    br({ branch: 'lane', lastCommitAt: now - 9 * day, laneFkey: 'b1:lane', record: true }),
+    br({ branch: 'lane-norec', lastCommitAt: now - 9 * day, laneFkey: 'b1:x' }),
+    br({ branch: 'evil$(touch x)', lastCommitAt: now - 9 * day }),
+    br({ branch: 'local-only', lastCommitAt: now - 9 * day, pushed: false, local: true }),
+  ], main, { now, isLive: (b) => b.laneFkey === 'b1:live2', hasRecord: () => { throw new Error('boom'); } });
+  const by = Object.fromEntries(list.map((s) => [s.branch, s]));
+  assert.deepEqual(Object.keys(by).sort(), ['behind', 'evil$(touch x)', 'lane', 'lane-norec', 'local-only']);
+  assert.deepEqual(by.behind.reasons, ['51 commits behind main']);
+  assert.equal(by.lane.suggestion, 'retire');
+  assert.equal(by.lane.command, null);
+  assert.equal(by.lane.laneFkey, 'b1:lane');
+  assert.equal(by['lane-norec'].suggestion, 'delete-branch');
+  assert.equal(by['evil$(touch x)'].command, "git push origin --delete 'evil$(touch x)'");
+  assert.equal(by['local-only'].command, 'git branch -D local-only');
+  assert.equal(list[list.length - 1].branch, 'behind', 'oldest first');
+  assert.equal(shellQuote("it's"), `'it'\\''s'`);
+  assert.equal(deleteCommand('-rf'), null);
+  assert.equal(deleteCommand('a\nb'), null);
+  assert.equal(staleBranches([br({ branch: 'x', lastCommitAt: now - 3 * day })], main, { now, staleDays: 2 }).length, 1);
+  assert.deepEqual(staleBranches(null, main), []);
 });
