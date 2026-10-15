@@ -8,10 +8,11 @@
 //                          and scopes ⊆ read|control|term, always with read.
 //                          Parsed once at load; see hubKeyring().
 //   fleet.ingressPort      the loopback listener `tailscale serve` targets.
-//                          7778 when the config file has a `fleet` block or
-//                          mode is hub, else null. With a fleet block or in
-//                          hub mode it is mandatory: an explicit null is an
-//                          error. Must differ from `port`.
+//                          7778 when the config file has a `fleet` block (on
+//                          a builder), else null. Mandatory with a fleet block
+//                          (an explicit null is an error) and in hub mode,
+//                          where it has no default and must be set. Must
+//                          differ from `port`.
 //   fleet.hubControl       master switch, default false: hub-signed requests
 //                          may only read; true lets the key scopes decide.
 //   fleet.hubAddrs         optional IP literals expected in X-Forwarded-For of
@@ -99,7 +100,8 @@ export function finalize(c, layers) {
   const f = c.fleet;
   if (!isObj(f)) return c;
   const block = hasFleetBlock(layers);
-  if (!setByUser(layers, 'ingressPort') && (block || c.mode === 'hub')) f.ingressPort = DEFAULT_INGRESS_PORT;
+  // A hub gets no default: it must name the port serve targets (H1 relies on it).
+  if (!setByUser(layers, 'ingressPort') && block && c.mode !== 'hub') f.ingressPort = DEFAULT_INGRESS_PORT;
   if (!setByUser(layers, 'enforce') && block) f.enforce = true;
   if (!setByUser(layers, 'publicHosts') && typeof c.publicUrl === 'string') {
     try {
@@ -230,7 +232,8 @@ export function validate(c, bad, layers, { platform = process.platform } = {}) {
   const needsIngress = hasFleetBlock(layers) || c.mode === 'hub';
   if (f.ingressPort === null) {
     if (needsIngress) {
-      bad(`fleet.ingressPort is mandatory ${hasFleetBlock(layers) ? 'when the config has a fleet block' : 'in hub mode'} (the loopback port tailscale serve targets, e.g. ${DEFAULT_INGRESS_PORT}); it cannot be null`);
+      const why = c.mode === 'hub' ? 'mode "hub" needs fleet.ingressPort' : 'fleet.ingressPort is mandatory when the config has a fleet block';
+      bad(`${why} (the loopback port tailscale serve targets, e.g. ${DEFAULT_INGRESS_PORT}); it cannot be null`);
     }
   } else if (!isPort(f.ingressPort)) {
     bad(`fleet.ingressPort must be a port number, got ${JSON.stringify(f.ingressPort)}`);

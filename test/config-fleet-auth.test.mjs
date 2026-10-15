@@ -83,17 +83,21 @@ test('ingressPort: explicit value, env, and the explicit-null refusal', () => {
   assert.deepEqual(auth.fromEnv({}), {});
 });
 
-test('hub mode: ingressPort defaults to 7778 and cannot be null', () => {
+test('hub mode: ingressPort has no default, must be set and cannot be null', () => {
   // Validate the fragment alone: a hub config also needs H1's keys.
-  const c = { mode: 'hub', port: 7777, fleet: auth.defaults().fleet };
-  auth.finalize(c, { file: {}, env: {} });
-  assert.equal(c.fleet.ingressPort, 7778);
   const bad = (m) => { throw new ConfigError(m); };
-  auth.validate(c, bad, { file: {}, env: {} });
-  const d = { mode: 'hub', port: 7777, fleet: auth.defaults().fleet };
-  const layers = { file: {}, env: { fleet: { ingressPort: null } } };
-  auth.finalize(d, layers);
-  fails(() => auth.validate(d, bad, layers), /fleet\.ingressPort is mandatory in hub mode/);
+  for (const layers of [{ file: {}, env: {} }, { file: { fleet: {} }, env: {} }, { file: {}, env: { fleet: { ingressPort: null } } }]) {
+    const c = { mode: 'hub', port: 7777, fleet: auth.defaults().fleet };
+    auth.finalize(c, layers);
+    assert.equal(c.fleet.ingressPort, null);
+    fails(() => auth.validate(c, bad, layers), /mode "hub" needs fleet\.ingressPort/);
+  }
+  const ok = { mode: 'hub', port: 7777, fleet: { ...auth.defaults().fleet } };
+  const layers = { file: { fleet: { ingressPort: 7778 } }, env: {} };
+  ok.fleet.ingressPort = 7778;
+  auth.finalize(ok, layers);
+  auth.validate(ok, bad, layers);
+  assert.equal(ok.fleet.ingressPort, 7778);
 });
 
 test('hubKeys: a bare string (ed25519: or PEM) parses to scopes {read}', () => {
@@ -181,11 +185,11 @@ test('hubControl, enforce and legacyBrowserRoutes are booleans', () => {
 });
 
 test('hubAddrs entries are IP literals', () => {
-  assert.deepEqual(withFleet({ hubAddrs: ['100.64.0.7', 'fd7a:115c:a1e0::7'] }).fleet.hubAddrs, ['100.64.0.7', 'fd7a:115c:a1e0::7']);
-  for (const a of ['hub.example.invalid', '100.64.0.0/10', '100.64.0.7:443', '', 7, ' 100.64.0.7']) {
+  assert.deepEqual(withFleet({ hubAddrs: ['192.0.2.7', '2001:db8::7'] }).fleet.hubAddrs, ['192.0.2.7', '2001:db8::7']);
+  for (const a of ['hub.example.invalid', '192.0.2.0/24', '192.0.2.7:443', '', 7, ' 192.0.2.7']) {
     fails(() => withFleet({ hubAddrs: [a] }), /fleet\.hubAddrs entry .* must be an IP address literal/);
   }
-  fails(() => withFleet({ hubAddrs: '100.64.0.7' }), /fleet\.hubAddrs must be a list/);
+  fails(() => withFleet({ hubAddrs: '192.0.2.7' }), /fleet\.hubAddrs must be a list/);
 });
 
 test('ingressPeerUid: integer ≥ 0 or null, Linux only', () => {
@@ -220,7 +224,7 @@ test('publicHosts: derived from a non-loopback publicUrl, else empty; validated'
   // explicit wins, even [] (no derived default)
   const e = cfg({}, write({ publicUrl: 'https://b.example.invalid', fleet: { publicHosts: [] } }));
   assert.deepEqual(e.fleet.publicHosts, []);
-  assert.deepEqual(withFleet({ publicHosts: ['b.example.invalid:8443', '[fd7a::1]:8443'] }).fleet.publicHosts, ['b.example.invalid:8443', '[fd7a::1]:8443']);
+  assert.deepEqual(withFleet({ publicHosts: ['b.example.invalid:8443', '[2001:db8::1]:8443'] }).fleet.publicHosts, ['b.example.invalid:8443', '[2001:db8::1]:8443']);
   for (const h of ['https://b.example.invalid', 'b.example.invalid/x', 'a b', '', 'user@b.example.invalid', 'b.example.invalid:99999', 5]) {
     fails(() => withFleet({ publicHosts: [h] }), /fleet\.publicHosts entry/);
   }
