@@ -240,11 +240,11 @@ function checkRow(label, checked, onChange, { hint = null, name = null } = {}) {
 async function apply(body) {
   const r = await savePrefs(body);
   if (r) state = r;
-  render();
+  renderPrefsSheet();
   return !!r;
 }
 
-async function render() {
+async function renderPrefsSheet() {
   if (!dlg) return;
   const body = dlg.querySelector('.cfm-d');
   const m = prefsModel(state);
@@ -263,10 +263,10 @@ async function render() {
       const b = document.getElementById('btn-push');
       if (b) b.click();
       else toast('Push button not found');
-      setTimeout(render, 1500);
+      setTimeout(renderPrefsSheet, 1500);
     } else if (pm.action === 'unsubscribe') {
       if (await unsubscribePush(env.sub)) toast('Push turned off on this device');
-      render();
+      renderPrefsSheet();
     }
   });
   pushSec.append(pbtn, el('p', 'empty', pm.note));
@@ -364,7 +364,7 @@ export async function openPrefs() {
     body.textContent = 'Could not load the notification settings.';
     return;
   }
-  render();
+  renderPrefsSheet();
 }
 
 /** The palette entry `ACT notifications` (hub only). */
