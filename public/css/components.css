@@ -1,0 +1,376 @@
+/* ===========================================================================
+   components: the kit (plan §4 2.5)
+   ---------------------------------------------------------------------------
+   lamp · plate · brackets · panel · segbar · spark · dt · chip · btn · toast
+   · confirm dialog. Builders in public/js/ui/{components,spark,toast,confirm}.js,
+   gallery in public/dev/kit.html. Every value is a token from tokens.css; this
+   sheet is checked by test/design-guardrails.test.mjs (no gradients, shadows,
+   colour literals or radii other than var(--radius)/0/50%).
+   =========================================================================== */
+
+/* --- Label face, shared by plates, panel titles, buttons, chips ----------- */
+.plate, .panel-t, .btn, .chip, .dt th, .cfm-t {
+  font-family: var(--font-label);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+}
+
+/* --- Status lamp ------------------------------------------------------------
+   8x8. Shape follows priority: p1 square, p2 triangle, p3 diamond, ok/run
+   circle, off hollow circle, stale hollow circle on hatch. */
+.lamp {
+  display: inline-block;
+  flex: none;
+  width: var(--lamp);
+  height: var(--lamp);
+  vertical-align: middle;
+  color: var(--off);
+  background: currentColor;
+  border-radius: 0;
+}
+.lamp[data-p="1"] { color: var(--p1); }
+.lamp[data-p="2"] {
+  color: var(--p2);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.lamp[data-p="3"] {
+  color: var(--p3);
+  width: 6px;
+  height: 6px;
+  margin: 1px;
+  transform: rotate(45deg);
+}
+.lamp[data-p="ok"] { color: var(--ok); border-radius: 50%; }
+.lamp[data-p="run"] { color: var(--run); border-radius: 50%; }
+.lamp[data-p="off"],
+.lamp[data-p="stale"] {
+  color: var(--off);
+  background: transparent;
+  border: var(--bw) solid currentColor;
+  border-radius: 50%;
+}
+.lamp[data-p="stale"] { background: var(--tex-hatch); }
+
+/* The single glow in the system: p1/p2 lamps, dark theme only. */
+.lamp[data-p="1"],
+.lamp[data-p="2"] { filter: drop-shadow(0 0 3px currentColor); }
+[data-theme="light"] .lamp { filter: none; }
+
+/* Unacknowledged: the 1 Hz blink (phase-synced by components.js syncFlash). */
+[data-unack] { animation: lb-flash 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  [data-unack] {
+    animation: none;
+    outline: 1px dashed currentColor;
+    outline-offset: 1px;
+  }
+}
+
+/* --- Stamped plate --------------------------------------------------------- */
+.plate {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 var(--sp-1);
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--radius);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.plate--solid {
+  background: var(--text-2);
+  border-color: var(--text-2);
+  color: var(--text-inv);
+}
+.plate--p1 { border-color: var(--p1-line); color: var(--p1); background: var(--p1-weak); }
+.plate--p2 { border-color: var(--p2-line); color: var(--p2); background: var(--p2-weak); }
+.plate--p1::before { content: "■"; margin-right: 3px; }
+.plate--p2::before { content: "▲"; margin-right: 3px; }
+
+/* --- Corner brackets (selection) --------------------------------------------
+   Selection only; keyboard focus is the separate :focus-visible outline. */
+.sel { position: relative; }
+.sel::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  background: var(--bracket-img);
+  pointer-events: none;
+}
+
+/* --- Inset-title panel: LANES · ALL [42] on the top border ------------------ */
+.panel {
+  position: relative;
+  margin-top: var(--sp-2);
+  padding: var(--sp-3) var(--sp-2) var(--sp-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-1);
+}
+.panel-t {
+  position: absolute;
+  top: -0.65em;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0;
+  pointer-events: none;
+  font-size: var(--fs-11);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.panel-t > span {
+  background: var(--bg-surface);
+  padding: 0 2px;
+}
+.panel-t > span:first-child { padding-left: var(--sp-1); }
+.panel-name { color: var(--text-1); }
+.panel-scope { color: var(--text-3); }
+.panel-n { color: var(--text-2); font-family: var(--font-mono); letter-spacing: 0; }
+.panel-tools {
+  margin-left: auto;
+  display: inline-flex;
+  gap: var(--sp-1);
+  pointer-events: auto;
+}
+.panel-tools:empty { display: none; }
+
+/* --- Segment bar: 48x6, 1px gaps, p1 p2 run ok off dead --------------------- */
+.segbar {
+  display: inline-flex;
+  gap: 1px;
+  width: 48px;
+  height: 6px;
+  vertical-align: middle;
+}
+.segbar > i {
+  flex: 0 1 0;
+  min-width: 1px;
+  background: var(--off);
+}
+.segbar > i[data-p="1"] { background: var(--p1); }
+.segbar > i[data-p="2"] { background: var(--p2); }
+.segbar > i[data-p="run"] { background: var(--run); }
+.segbar > i[data-p="ok"] { background: var(--ok); }
+.segbar > i[data-p="off"] { background: var(--line-strong); }
+.segbar > i[data-p="dead"] { background: var(--tex-hatch); outline: var(--bw) solid var(--line); outline-offset: -1px; }
+.segbar--empty { border: var(--bw) dashed var(--line); }
+
+/* --- Sparkline: 60x16 SVG ----------------------------------------------------- */
+.spark {
+  display: inline-block;
+  vertical-align: middle;
+  overflow: visible;
+}
+.spark-line {
+  fill: none;
+  stroke: var(--text-2);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.spark-last { fill: var(--text-1); }
+.spark-th {
+  stroke: var(--p2);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  vector-effect: non-scaling-stroke;
+}
+
+/* --- Data table --------------------------------------------------------------- */
+.dt-wrap {
+  overflow: auto;
+  max-width: 100%;
+}
+.dt {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-1);
+}
+.dt thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: var(--row-h);
+  padding: 0;
+  background: var(--bg-surface);
+  border-bottom: var(--bw) solid var(--line);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  color: var(--text-2);
+  text-align: left;
+  white-space: nowrap;
+}
+.dt thead th > button {
+  width: 100%;
+  height: 100%;
+  padding: 0 var(--sp-2);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.dt th[aria-sort="ascending"] > button::after { content: " ▴"; }
+.dt th[aria-sort="descending"] > button::after { content: " ▾"; }
+.dt th[aria-sort="ascending"],
+.dt th[aria-sort="descending"] { color: var(--text-1); }
+.dt td {
+  height: var(--row-h);
+  max-width: 32ch;
+  padding: 0 var(--sp-2);
+  border-bottom: var(--bw) solid var(--line-weak);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dt .num { text-align: right; }
+.dt .dt-sel { width: 28px; text-align: center; }
+.dt tbody tr:hover { background: var(--bg-hover); }
+.dt tbody tr[aria-selected="true"] { background: var(--bg-selected); }
+.dt tbody tr:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.dt tbody tr.is-stale { background: var(--tex-hatch); color: var(--text-3); }
+
+/* --- Scope chips ------------------------------------------------------------- */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 22px;
+  padding: 0 var(--sp-1) 0 var(--sp-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chip:hover { background: var(--bg-hover); }
+/* Selected chip: the accent-weak fill (the full accent stays on focus;
+   test/render.test.mjs keeps var(--accent) to focus-like selectors). */
+.chip[aria-pressed="true"],
+.chip[aria-selected="true"] {
+  border-color: var(--line-strong);
+  background: var(--accent-weak);
+}
+.chip .i { color: var(--text-3); }
+
+/* --- Buttons ----------------------------------------------------------------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  min-height: 24px;
+  padding: 0 var(--sp-3);
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+.btn:hover { background: var(--bg-hover); }
+.btn--s { min-height: 20px; padding: 0 var(--sp-2); }
+.btn--icon { padding: 0; width: 24px; }
+.btn--primary { border-color: var(--line-strong); background: var(--accent-weak); color: var(--text-1); }
+.btn--danger { border-color: var(--p1); color: var(--p1); }
+.btn--danger::before { content: "■"; }
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: .4;
+  cursor: not-allowed;
+}
+@media (pointer: coarse) {
+  .btn { min-height: var(--row-touch); }
+  .chip { height: 36px; }
+}
+
+/* --- Toast stack: bottom-right above the tape, at most 3 ---------------------- */
+.toasts {
+  position: fixed;
+  right: var(--sp-3);
+  bottom: calc(var(--tape-h) + var(--sp-2));
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--sp-1);
+  max-width: min(420px, calc(100vw - 2 * var(--sp-3)));
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--row-dense);
+  padding: var(--sp-1) var(--sp-3);
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity var(--dur) var(--ease);
+}
+.toast[data-kind="err"] { border-color: var(--p1-line); }
+.toast[data-kind="ok"] { border-color: var(--line-strong); }
+.toast.is-out { opacity: 0; }
+.toast-m { overflow-wrap: anywhere; }
+
+/* --- Confirm dialog ------------------------------------------------------------ */
+.cfm {
+  width: min(480px, calc(100vw - 2 * var(--sp-4)));
+  padding: var(--sp-4);
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-1);
+  z-index: var(--z-dialog);
+}
+.cfm::backdrop {
+  background: var(--bg-canvas);
+  opacity: .8;
+}
+.cfm-t {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-13);
+  font-weight: 600;
+}
+.cfm-d { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+.cfm-d p { margin: 0 0 var(--sp-3); }
+.cfm-list { margin: 0 0 var(--sp-3); padding-left: var(--sp-4); }
+.cfm-list li { margin: 2px 0; }
+.cfm-in { display: flex; flex-direction: column; gap: var(--sp-1); margin-bottom: var(--sp-3); }
+.cfm-hint code { color: var(--text-1); font-family: var(--font-mono); }
+.cfm-in input {
+  height: var(--row-comfy);
+  padding: 0 var(--sp-2);
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+}
+.cfm-b { display: flex; justify-content: flex-end; gap: var(--sp-2); }
