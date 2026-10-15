@@ -27,12 +27,19 @@ const MAX_PATH_CHARS = 4096;
 const MAX_REF_CHARS = 200;
 const ELLIPSIS = '…';
 
-export class ReviewFormatError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'ReviewFormatError';
-  }
+const ERROR_NAME = 'ReviewFormatError';
+
+/** The error thrown for a comment that cannot be placed. */
+export function ReviewFormatError(message) {
+  const e = new Error(message);
+  e.name = ERROR_NAME;
+  Object.setPrototypeOf(e, ReviewFormatError.prototype);
+  return e;
 }
+ReviewFormatError.prototype = Object.create(Error.prototype, {
+  constructor: { value: ReviewFormatError, writable: true, configurable: true },
+  name: { value: ERROR_NAME, writable: true, configurable: true },
+});
 
 // ---------------------------------------------------------------------------
 // Quoting and cleaning
@@ -92,14 +99,14 @@ function validPath(p) {
  */
 function normalizeComment(c, i, fileSet) {
   const where = `comment ${i + 1}`;
-  if (!c || typeof c !== 'object') throw new ReviewFormatError(`${where}: not an object`);
-  if (!validPath(c.path)) throw new ReviewFormatError(`${where}: invalid path`);
-  if (fileSet && !fileSet.has(c.path)) throw new ReviewFormatError(`${where}: path is not in the diff`);
+  if (!c || typeof c !== 'object') throw ReviewFormatError(`${where}: not an object`);
+  if (!validPath(c.path)) throw ReviewFormatError(`${where}: invalid path`);
+  if (fileSet && !fileSet.has(c.path)) throw ReviewFormatError(`${where}: path is not in the diff`);
   const side = c.side == null ? 'new' : c.side;
-  if (side !== 'new' && side !== 'old') throw new ReviewFormatError(`${where}: side must be 'new' or 'old'`);
-  if (!isPosInt(c.line)) throw new ReviewFormatError(`${where}: line must be a positive integer`);
+  if (side !== 'new' && side !== 'old') throw ReviewFormatError(`${where}: side must be 'new' or 'old'`);
+  if (!isPosInt(c.line)) throw ReviewFormatError(`${where}: line must be a positive integer`);
   let endLine = c.endLine == null ? c.line : c.endLine;
-  if (!isPosInt(endLine) || endLine < c.line) throw new ReviewFormatError(`${where}: invalid endLine`);
+  if (!isPosInt(endLine) || endLine < c.line) throw ReviewFormatError(`${where}: invalid endLine`);
 
   const rawQuote = Array.isArray(c.quote) ? c.quote : (c.quote == null ? [] : String(c.quote).split('\n'));
   const quote = rawQuote.slice(0, MAX_QUOTE_LINES).map((l) => cap(cleanLine(l), MAX_QUOTE_LINE_CHARS));
@@ -124,7 +131,7 @@ function indentLines(text, prefix) {
 /**
  * Build the review text typed into the lane's session.
  *
- *   REVIEW of feat/x (origin/main @ ab12cd3 .. ef45678), 3 comments.
+ *   REVIEW of feat/x (origin/main @ 1a2b3c4 .. 5e6f7a8), 3 comments.
  *   Address each comment, commit, then print DONE: or NEED-HUMAN:.
  *
  *   1. src/a.js:42-44
@@ -138,7 +145,7 @@ function indentLines(text, prefix) {
 export function formatReview({ lane, branch, base, mergeBase, headSha, comments, note, files } = {}) {
   void lane;
   const list = Array.isArray(comments) ? comments : [];
-  if (list.length > MAX_COMMENTS) throw new ReviewFormatError(`at most ${MAX_COMMENTS} comments`);
+  if (list.length > MAX_COMMENTS) throw ReviewFormatError(`at most ${MAX_COMMENTS} comments`);
   const fileSet = files == null ? null : new Set(files);
   const norm = list
     .map((c, i) => ({ ...normalizeComment(c, i, fileSet), idx: i }))
@@ -177,8 +184,8 @@ export function fitsInline(text, inlineMaxChars = DEFAULT_INLINE_MAX_CHARS) {
  * characters; it is server-generated, but checked anyway.
  */
 export function reviewPointer(count, file) {
-  if (!Number.isSafeInteger(count) || count < 0) throw new ReviewFormatError('invalid comment count');
-  if (!validPath(file) || !file.startsWith('/')) throw new ReviewFormatError('invalid review file path');
+  if (!Number.isSafeInteger(count) || count < 0) throw ReviewFormatError('invalid comment count');
+  if (!validPath(file) || !file.startsWith('/')) throw ReviewFormatError('invalid review file path');
   return `REVIEW with ${count} comment${count === 1 ? '' : 's'} is in ${file}. ` +
     'Read it fully, address each comment, commit, then print DONE:.';
 }

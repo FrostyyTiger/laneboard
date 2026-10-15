@@ -96,6 +96,11 @@ test('formatReview: quotes from the diff are untrusted: escapes and controls str
 test('formatReview: paths validated', () => {
   const c = (o) => ({ ...base, comments: [{ path: 'a.js', line: 1, body: 'b', ...o }], files: ['a.js'] });
   assert.doesNotThrow(() => formatReview(c({})));
+  try { formatReview(c({ path: 'other.js' })); assert.fail('should throw'); } catch (e) {
+    assert.ok(e instanceof Error && e instanceof ReviewFormatError);
+    assert.equal(e.name, 'ReviewFormatError');
+    assert.equal(e.message, 'comment 1: path is not in the diff');
+  }
   assert.throws(() => formatReview(c({ path: 'other.js' })), ReviewFormatError);
   assert.throws(() => formatReview({ ...c({}), files: new Set(['x']) }), /not in the diff/);
   assert.throws(() => formatReview(c({ path: 'a\x1b.js' })), ReviewFormatError);
@@ -120,8 +125,8 @@ test('fitsInline and reviewPointer', () => {
   assert.equal(fitsInline('x'.repeat(7001)), false);
   assert.equal(fitsInline('x'.repeat(11), 10), false);
   assert.equal(
-    reviewPointer(3, '/home/u/lanes/l1/reviews/1700000000000.md'),
-    'REVIEW with 3 comments is in /home/u/lanes/l1/reviews/1700000000000.md. Read it fully, address each comment, commit, then print DONE:.',
+    reviewPointer(3, '/var/lanes/l1/reviews/1700000000000.md'),
+    'REVIEW with 3 comments is in /var/lanes/l1/reviews/1700000000000.md. Read it fully, address each comment, commit, then print DONE:.',
   );
   assert.match(reviewPointer(1, '/x.md'), /^REVIEW with 1 comment is in/);
   assert.throws(() => reviewPointer(3, 'relative.md'), ReviewFormatError);
