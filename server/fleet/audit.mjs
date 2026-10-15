@@ -20,8 +20,9 @@
 // `read({after}).afterIndex` over HTTP.
 //
 // Single writer (SR2 M1): `openAudit` takes an exclusive lock `<file>.lock` (created atomically with link(2),
-// holding `<pid> <hostname>`). A second writer, in this process or another, gets an `AUDIT_LOCKED` error. A
-// lock whose pid is dead on this host is stale and is taken over. Before every append the writer checks that
+// holding `<pid> <hostname> <boot_id> <start time>`). A second writer, in this process or another, gets an
+// `AUDIT_LOCKED` error. A lock from an earlier boot, or whose pid is dead or now belongs to another process
+// (different start time), is stale and is taken over atomically (SR2 M2, L10; rules at acquireLock). Before every append the writer checks that
 // its lock file is still the one it created (else `AUDIT_LOCK_LOST`, the instance stops writing) and that its
 // open fd is still the file at `file` (dev/ino): a replaced file is reopened and re-verified, a removed or
 // renamed one fails with `AUDIT_DETACHED` (never write into a detached inode). The writer also refuses to
@@ -39,7 +40,8 @@
 //   deleted, and are read without following symlinks.
 // - Rotation is crash-safe: link the full file to its rotated name, write and fsync the new current file as
 //   `<file>.rotating`, then rename it over `file` (atomic: `file` always exists). A crash leaves at worst a
-//   stray duplicate rotated file and a `.rotating` file that `openAudit` discards (or, for a log written by an
+//   stray rotated name (a hard link to the live file, so it keeps growing with it; it is not in the chain and is
+//   ignored, and may be deleted by hand) and a `.rotating` file that `openAudit` discards (or, for a log written by an
 //   older version that renamed the old file away first, moves into place). A failed rotation is undone; when
 //   the instance cannot get back to a consistent state it refuses further appends (`AUDIT_FAILED`).
 // - `append` is synchronous: write + fsync (actions are rare; durability beats latency). The head is cached in
@@ -47,7 +49,9 @@
 // - A torn line (crash mid-write, or a truncation) is never repaired or hidden: the next append starts on a
 //   fresh line and chains from the last verified entry. `verify` reports such a line as a `torn` warning (and
 //   keeps verifying) when the next entry chains onto the entry before it; a torn line at the end of the current
-//   file, or one the chain does not continue past, is `bad_json`.
+//   file, or one the chain does not continue past, is `bad_json`. Only what a crash can leave counts as torn
+//   (SR2 L11): a single line per gap that does not parse and is a prefix of a canonical line (`{"action":"…`);
+//   any other unparsable line is `bad_json`, so inserted fake lines are never silently tolerated.
 // - Reads stream files in 64 KiB chunks; a line over 64 KiB is `bad_json`. Rotated files are immutable, so
 //   their summaries are cached by {dev, ino, size, mtime, ctime}; `read({after})` and `hasHead` scan newest
 //   first and touch only the files they need.
@@ -122,9 +126,12 @@ function cleanValue(v, depth) {
   const proto = Object.getPrototypeOf(v);
   if (proto !== Object.prototype && proto !== null) throw new TypeError('audit: result holds a non-plain object');
   const out = {};
-  for (const [k, x] of Object.entries(v)) {
+  for (const [rawKey, x] of Object.entries(v)) {
+    // SR2 L12: keys are stored text too (no control characters); two keys that clean to the same text are refused
+    const k = storeStr(rawKey, FIELD_MAX);
     if (FORBIDDEN_KEYS.has(k)) throw new TypeError(`audit: forbidden key ${JSON.stringify(k)} in result`);
     if (x === undefined) continue;
+    if (Object.hasOwn(out, k)) throw new TypeError(`audit: result keys collide after cleaning (${JSON.stringify(k)})`);
     out[k] = cleanValue(x, depth + 1);
   }
   return out;
@@ -205,10 +212,28 @@ function parseEntry(text) {
   return e;
 }
 
+// Every stored line is canonicalJson of an entry, whose first key is "action".
+const LINE_PREFIX = '{"action":"';
+
+// SR2 L11: what a crash mid-write can leave: a prefix of a canonical line, so it does not parse as JSON and starts
+// with (or is a prefix of) `{"action":"`. Anything else unparsable is never tolerated.
+function isTornLine(text) {
+  if (typeof text !== 'string' || text === '') return false;
+  if (!(text.startsWith(LINE_PREFIX) || LINE_PREFIX.startsWith(text))) return false;
+  try {
+    JSON.parse(text);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 // Incremental verifier: feed(line, text) for every line (text '' = empty line, skipped; null = over-long line),
-// then result({tailOk}). An unparsable line is held as "pending": when the next entry chains onto the last
-// verified head it becomes a `torn` warning, otherwise it is the `bad_json` failure. Trailing pending lines are
-// warnings with `tailOk` (a rotated file's torn tail; the writer's own current file) and `bad_json` otherwise.
+// then result({tailOk}). A torn line (see isTornLine) is held as "pending": when the next entry chains onto the
+// last verified head it becomes a `torn` warning, otherwise it is the `bad_json` failure. A well-behaved writer
+// leaves at most one torn line per gap, so a second pending line, or any other line that is not a well-formed
+// entry, is `bad_json` at once. A trailing pending line is a warning with `tailOk` (a rotated file's torn tail;
+// the writer's own current file) and `bad_json` otherwise.
 function createVerifier(prevHash, lastTs, file) {
   let head = prevHash;
   let ts = lastTs;
@@ -221,8 +246,12 @@ function createVerifier(prevHash, lastTs, file) {
     if (text === '') return true;
     const e = parseEntry(text);
     if (!e) {
-      pending.push(line);
-      return true;
+      if (pending.length === 0 && isTornLine(text)) {
+        pending.push(line);
+        return true;
+      }
+      failed = { file, line: pending.length ? pending[0] : line, reason: 'bad_json' };
+      return false;
     }
     let canon;
     try {
@@ -277,8 +306,9 @@ function createVerifier(prevHash, lastTs, file) {
  * Pure. `lines` is an array of line strings (empty strings are skipped but still count for line numbers) or the
  * whole file text. Reasons: `bad_json` (not a parsable entry, or not byte-identical to canonicalJson of the
  * parsed entry), `prev_mismatch` (does not chain onto the previous entry), `hash_mismatch` (content changed),
- * `ts_regressed` (ts older than the previous entry's). An unparsable line followed by an entry that chains onto
- * the entry before it is a `torn` warning, not a failure (`tailOk`: trailing ones too). `head` is the hash of
+ * `ts_regressed` (ts older than the previous entry's). One torn line (a prefix of a canonical line that does not
+ * parse) followed by an entry that chains onto the entry before it is a `torn` warning, not a failure (`tailOk`:
+ * a trailing one too); any other unparsable line, or a second one in a row, is `bad_json`. `head` is the hash of
  * the last entry that verified (or `prevHash` when none did); `count` the number of entries verified.
  */
 export function verifyFile(lines, prevHash = GENESIS, { file = null, lastTs = -Infinity, tailOk = false } = {}) {
@@ -530,29 +560,102 @@ function tryUnlink(p) {
   }
 }
 
-// The audit directory: created 0700; an existing one must be a real directory we own, and is tightened to 0700.
+// The audit directory (SR2 L7, L13): created 0700; an existing one must be a real directory we own. A group- or
+// world-accessible one is tightened to 0700 only when this code just created it or it is named `laneboard` (the
+// default state dir); any other wide directory is refused, so `LANEBOARD_AUDIT_FILE=~/audit.jsonl` never chmods
+// $HOME.
 function prepareDir(dir) {
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const created = fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const st = fs.lstatSync(dir);
   if (st.isSymbolicLink() || !st.isDirectory()) throw auditError('AUDIT_UNSAFE_DIR', `audit: ${dir} is not a plain directory (symlink?)`);
   if (typeof process.getuid === 'function' && st.uid !== process.getuid()) {
     throw auditError('AUDIT_UNSAFE_DIR', `audit: ${dir} is owned by another user; use a private directory`);
   }
-  if ((st.mode & 0o077) !== 0) fs.chmodSync(dir, 0o700);
+  if ((st.mode & 0o077) === 0) return;
+  if (created !== undefined || path.basename(dir) === 'laneboard') {
+    fs.chmodSync(dir, 0o700);
+    return;
+  }
+  throw auditError('AUDIT_UNSAFE_DIR', `audit: ${dir} is accessible to other users; put the audit log in a private `
+    + 'directory (chmod 700 it, or point LANEBOARD_AUDIT_FILE into a directory of its own)');
 }
 
 // ---------------------------------------------------------------------------------------------------------
 // Single-writer lock
+//
+// The lock file holds one line `<pid> <host> <bootId> <startTime>\n` (SR2 M2): bootId from
+// /proc/sys/kernel/random/boot_id, startTime = field 22 of /proc/<pid>/stat (clock ticks since boot); `-` when
+// unavailable (no /proc). A lock written by an older version holds only `<pid> <host>\n`. A lock is stale when:
+// - its bootId differs from ours (the machine rebooted: no process from that boot is alive; the state dir is
+//   local, so a different hostname in that case is just a renamed machine), or
+// - same boot (or bootId unknown) and same host, and its pid is dead, or the pid is alive with a different start
+//   time (pid reuse). EPERM from kill(pid, 0) counts as alive only when the start time matches; without /proc
+//   (no start time recorded) it counts as alive.
+// - without a bootId on either side: also when the lock file is older than the current boot (mtime < btime).
+// - an unreadable/garbage lock (storage damage; a crash cannot produce one, the lock is fsynced before it is
+//   linked) is stale only when it is older than the current boot.
+// Same boot but a different hostname (another container on this kernel, whose pids we cannot see) is live.
+// Everything else is live: fail closed (AUDIT_LOCKED).
+//
+// Takeover (SR2 L10) renames the stale lock aside (atomic: one opener wins) and checks that what it moved is the
+// very file (dev/ino) it judged stale. If another opener took over first, the moved lock is put back (same inode,
+// so its owner keeps it) and this opener gets AUDIT_LOCKED. Two openers never both succeed.
 
 const heldLocks = new Set(); // lock paths held by an open instance in this process
+const BOOT_ID = /^[0-9a-f][0-9a-f-]{7,63}$/;
 
-function pidAlive(pid) {
+function defaultProcRead(p) {
+  try {
+    return fs.readFileSync(p, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function defaultSignal(pid) {
   try {
     process.kill(pid, 0);
-    return true;
+    return 'alive';
   } catch (err) {
-    return err.code === 'EPERM';
+    return err.code === 'EPERM' ? 'eperm' : 'dead';
   }
+}
+
+/** Default /proc readers; `openAudit({proc})` may replace any of them (tests fake /proc this way). */
+export const defaultProc = Object.freeze({ read: defaultProcRead, signal: defaultSignal, uptime: () => os.uptime() });
+
+function procApi(proc) {
+  const p = { ...defaultProc, ...(proc ?? {}) };
+  const read = (f) => {
+    const t = p.read(f);
+    return typeof t === 'string' ? t : null;
+  };
+  return {
+    bootId() {
+      const t = read('/proc/sys/kernel/random/boot_id');
+      const id = t === null ? '' : t.trim().toLowerCase();
+      return BOOT_ID.test(id) ? id : null;
+    },
+    // field 22 of /proc/<pid>/stat; comm (field 2) may hold spaces and parentheses, so split after the last ')'
+    startTime(pid) {
+      const t = read(`/proc/${pid}/stat`);
+      if (t === null) return null;
+      const close = t.lastIndexOf(')');
+      if (close === -1) return null;
+      const f = t.slice(close + 1).trim().split(/\s+/);
+      const v = f[22 - 3];
+      return v !== undefined && /^\d{1,20}$/.test(v) ? v : null;
+    },
+    // wall-clock boot time in ms: /proc/stat btime, else now - uptime
+    bootTimeMs() {
+      const t = read('/proc/stat');
+      const m = t === null ? null : /^btime (\d{1,15})$/m.exec(t);
+      if (m) return Number(m[1]) * 1000;
+      const up = Number(p.uptime());
+      return Number.isFinite(up) && up >= 0 ? Date.now() - up * 1000 : null;
+    },
+    signal: (pid) => p.signal(pid),
+  };
 }
 
 function readLockOwner(lockFile) {
@@ -564,23 +667,57 @@ function readLockOwner(lockFile) {
     }
   })();
   if (h === null) return null; // gone
-  if (h === undefined) return { unreadable: true };
+  if (h === undefined) return { unreadable: true, st: null };
   try {
-    const buf = Buffer.alloc(256);
+    const buf = Buffer.alloc(512);
     const n = fs.readSync(h.fd, buf, 0, buf.length, 0);
-    const m = /^(\d{1,10}) (\S{1,200})\n$/.exec(buf.subarray(0, n).toString('utf8'));
-    if (!m) return { unreadable: true };
-    return { pid: Number(m[1]), host: m[2] };
+    const m = /^(\d{1,10}) (\S{1,200})(?: (\S{1,64}) (\d{1,20}|-))?\n$/.exec(buf.subarray(0, n).toString('utf8'));
+    if (!m || Number(m[1]) <= 0) return { unreadable: true, st: h.st };
+    const boot = m[3] !== undefined && BOOT_ID.test(m[3]) ? m[3] : null;
+    const start = m[4] !== undefined && m[4] !== '-' ? m[4] : null;
+    return { pid: Number(m[1]), host: m[2], boot, start, st: h.st };
   } finally {
     fs.closeSync(h.fd);
   }
 }
 
+function olderThanBoot(st, px) {
+  if (!st) return false;
+  const bt = px.bootTimeMs();
+  return bt !== null && st.mtimeMs < bt;
+}
+
+function lockIsStale(owner, me, lockFile, px) {
+  if (owner.unreadable) return olderThanBoot(owner.st, px);
+  if (owner.boot && me.boot) {
+    if (owner.boot !== me.boot) return true;
+    if (owner.host !== me.host) return false;
+  } else {
+    if (olderThanBoot(owner.st, px)) return true;
+    if (owner.host !== me.host) return false;
+  }
+  if (owner.pid === process.pid) return !heldLocks.has(lockFile);
+  const sig = px.signal(owner.pid);
+  if (sig === 'dead') return true;
+  const cur = px.startTime(owner.pid);
+  if (owner.start && cur) return owner.start !== cur;
+  return sig === 'eperm' && owner.start !== null;
+}
+
+function lockedError(lockFile, owner, why = null) {
+  const who = owner.unreadable ? 'an unreadable lock' : `pid ${owner.pid} on ${owner.host}`;
+  return auditError('AUDIT_LOCKED', `audit: ${lockFile} is held by ${who}${why ? ` (${why})` : ''}; only one writer may open `
+    + 'the audit log (set LANEBOARD_AUDIT_FILE to a private path for a second instance, or remove the lock if that writer is gone)');
+}
+
 // -> {fd, st} of our lock file. Throws AUDIT_LOCKED when another live writer holds it.
-function acquireLock(lockFile) {
+function acquireLock(lockFile, proc) {
+  const px = procApi(proc);
   const host = os.hostname().replace(/\s/g, '_') || 'localhost';
-  const content = `${process.pid} ${host}\n`;
-  const tmp = `${lockFile}.${process.pid}.${crypto.randomBytes(6).toString('hex')}`;
+  const me = { pid: process.pid, host, boot: px.bootId(), start: px.startTime(process.pid) };
+  const content = `${me.pid} ${host} ${me.boot ?? '-'} ${me.start ?? '-'}\n`;
+  const rand = () => crypto.randomBytes(6).toString('hex');
+  const tmp = `${lockFile}.${process.pid}.${rand()}`;
   const tfd = fs.openSync(tmp, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | O_NOFOLLOW, 0o600);
   try {
     writeAll(tfd, Buffer.from(content));
@@ -598,21 +735,40 @@ function acquireLock(lockFile) {
       }
       const owner = readLockOwner(lockFile);
       if (owner === null) continue; // released meanwhile
-      const stale = owner.pid > 0 && owner.host === host
-        && (owner.pid === process.pid ? !heldLocks.has(lockFile) : !pidAlive(owner.pid));
-      if (!stale) {
-        const who = owner.unreadable ? 'an unreadable lock' : `pid ${owner.pid} on ${owner.host}`;
-        throw auditError('AUDIT_LOCKED', `audit: ${lockFile} is held by ${who}; only one writer may open the audit log `
-          + '(set LANEBOARD_AUDIT_FILE to a private path for a second instance, or remove the lock if that writer is gone)');
+      if (!lockIsStale(owner, me, lockFile, px)) throw lockedError(lockFile, owner);
+      if (!owner.st) throw lockedError(lockFile, owner);
+      // SR2 L10: take the stale lock away atomically, then make sure it was the one we judged
+      const aside = `${lockFile}.stale.${process.pid}.${rand()}`;
+      try {
+        fs.renameSync(lockFile, aside);
+      } catch (err) {
+        if (err.code === 'ENOENT') continue; // someone else removed it
+        throw err;
       }
-      tryUnlink(lockFile);
+      let moved = null;
+      try {
+        moved = fs.lstatSync(aside);
+      } catch {
+        // vanished: nothing to put back
+      }
+      if (moved && !sameFile(moved, owner.st)) {
+        // another opener replaced the stale lock first: give its lock back and yield
+        try {
+          fs.linkSync(aside, lockFile);
+        } catch {
+          // a third opener got in meanwhile; the second one will see AUDIT_LOCK_LOST (fail closed)
+        }
+        tryUnlink(aside);
+        throw lockedError(lockFile, owner, 'another writer took over the stale lock first');
+      }
+      tryUnlink(aside);
     }
   } finally {
     tryUnlink(tmp);
   }
   const h = openRead(lockFile);
   const owner = h && readLockOwner(lockFile);
-  if (!h || !owner || owner.pid !== process.pid || owner.host !== host) {
+  if (!h || !owner || owner.pid !== process.pid || owner.host !== host || !sameFile(owner.st, h.st)) {
     if (h) fs.closeSync(h.fd);
     throw auditError('AUDIT_LOCKED', `audit: lost the race for ${lockFile} to another writer`);
   }
@@ -628,11 +784,13 @@ function sameFile(a, b) {
 // openAudit
 
 /**
- * openAudit({file = auditFile(), maxBytes = 10485760, now = Date.now, builder = null})
+ * openAudit({file = auditFile(), maxBytes = 10485760, now = Date.now, builder = null, proc = defaultProc})
  *   -> {file, append(entry), head(), read({since, after, limit}), verifyAll(), hasHead({hash, count}), close()}
  *
  * Takes the single-writer lock `<file>.lock` (throws an Error with code `AUDIT_LOCKED` when another live writer
- * holds it, in this process too: share one instance). close() releases it.
+ * holds it, in this process too: share one instance). close() releases it. `proc` ({read(path) -> text|null,
+ * signal(pid) -> 'alive'|'eperm'|'dead', uptime() -> s}, each optional) replaces the /proc readers used to judge
+ * a stale lock; for tests.
  * append(entry) -> the stored entry (with prevHash and hash). Input fields: ts? (ms; clamped to
  *   [last entry's ts, now()+60s] so the chain never regresses and cannot be pinned in the future), id? (default
  *   a random UUID), user, via, builder (default the `builder` option), action (required; `audit.rotate` is
@@ -648,7 +806,7 @@ function sameFile(a, b) {
  * hasHead({hash, count}) -> true when the chain entry at index count-1 has that hash (an anchored head is still
  *   in the chain). count 0 matches only the genesis hash.
  */
-export function openAudit({ file = auditFile(), maxBytes = DEFAULT_MAX_BYTES, now = Date.now, builder = null } = {}) {
+export function openAudit({ file = auditFile(), maxBytes = DEFAULT_MAX_BYTES, now = Date.now, builder = null, proc } = {}) {
   if (typeof file !== 'string' || file === '') throw new TypeError('audit: file must be a path');
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new TypeError('audit: maxBytes must be a positive integer');
   if (typeof now !== 'function') throw new TypeError('audit: now must be a function');
@@ -660,7 +818,7 @@ export function openAudit({ file = auditFile(), maxBytes = DEFAULT_MAX_BYTES, no
   const defaultBuilder = optStr('builder', builder);
 
   prepareDir(dir);
-  let lock = acquireLock(lockFile);
+  let lock = acquireLock(lockFile, proc);
 
   let fd = null;
   let state = null; // {hash, count, lastTs, size, fileLines, torn, invalid}
