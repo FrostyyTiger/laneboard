@@ -18,6 +18,18 @@
 //
 // Each check returns null when the request passes, else the reason string
 // ('bad-host', 'bad-origin', 'no-csrf-header') that goes into the 403 body.
+//
+// The checks take an optional context `ctx` (SR7 L2/L6):
+//   ctx.trustForwardedProto  true only on the ingress listener / for requests
+//                            classified as tailscale serve ingress (§2 A8):
+//                            then X-Forwarded-Proto is honoured. Default: it
+//                            is ignored unless publicUrl is https and the Host
+//                            is not a loopback name (see requestProto).
+//   ctx.listenPort           the port the request actually arrived on. A
+//                            loopback publicUrl (the default
+//                            http://127.0.0.1:7777) is trusted only when its
+//                            port is this one (default: config.port or
+//                            fleet.ingressPort).
 
 /** Hook intake: plain curl from Claude Code hooks (deploy/hooks.json), no custom header. */
 export const HOOK_PATHS = new Set(['/api/hook', '/api/hook/permission']);
@@ -54,15 +66,52 @@ function urlOrigin(u) {
   }
 }
 
+/** True for 127.0.0.0/8, localhost and [::1] (lowercase URL.hostname form). */
+function isLoopbackName(hostname) {
+  const h = String(hostname).toLowerCase();
+  return h === 'localhost' || h === '[::1]' || h === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
+}
+
+/** The hostname part of a lowercase `host[:port]` value. */
+function hostnameOf(host) {
+  const h = String(host).toLowerCase();
+  if (h.startsWith('[')) return h.slice(0, h.indexOf(']') + 1);
+  const i = h.lastIndexOf(':');
+  return i === -1 ? h : h.slice(0, i);
+}
+
+/** The ports this laneboard listens on, per ctx.listenPort or the config. */
+function listenPorts(c, f, ctx) {
+  if (isPort(ctx?.listenPort)) return [ctx.listenPort];
+  return [c.port, f.ingressPort].filter(isPort);
+}
+
+/**
+ * `publicUrl`, or null when it is a loopback URL on a port we do not listen on
+ * (SR7 L6: the default http://127.0.0.1:7777 on an instance that only changed
+ * its port must not trust whatever else serves 127.0.0.1:7777).
+ */
+function trustedPublicUrl(c, f, ctx) {
+  const u = c.publicUrl;
+  if (typeof u !== 'string' || u === '') return null;
+  let url;
+  try { url = new URL(u); } catch { return null; }
+  if (!isLoopbackName(url.hostname)) return u;
+  const port = url.port ? Number(url.port) : (url.protocol === 'https:' ? 443 : 80);
+  return listenPorts(c, f, ctx).includes(port) ? u : null;
+}
+
 const listOf = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x !== '') : []);
 
 /**
  * Every Host value this laneboard answers to, as lowercase `host[:port]`:
  * loopback names with `port` and with `fleet.ingressPort`, each concrete
  * (non-wildcard) bind address with `port`, the host of `publicUrl`,
- * `fleet.publicHosts`, and the hosts of `fleet.allowedOrigins`.
+ * `fleet.publicHosts`, and the hosts of `fleet.allowedOrigins`. A loopback
+ * `publicUrl` counts only on a port we listen on (`ctx.listenPort`, else
+ * `port`/`fleet.ingressPort`).
  */
-export function allowedHosts(config) {
+export function allowedHosts(config, ctx = {}) {
   const c = config || {};
   const f = (c.fleet && typeof c.fleet === 'object') ? c.fleet : {};
   const set = new Set();
@@ -73,7 +122,7 @@ export function allowedHosts(config) {
       if (!WILDCARD_BINDS.has(a)) set.add(hostPort(a, c.port));
     }
   }
-  const pub = urlHost(c.publicUrl);
+  const pub = urlHost(trustedPublicUrl(c, f, ctx));
   if (pub) set.add(pub);
   for (const h of listOf(f.publicHosts)) set.add(h.toLowerCase());
   for (const o of listOf(f.allowedOrigins)) {
@@ -91,23 +140,55 @@ function header(req, name) {
 }
 
 /**
- * DNS-rebinding defence: null when the Host header is allowed, else 'bad-host'.
- * A request with no Host header at all passes: every browser sends Host, and
- * node refuses HTTP/1.1 requests without one, so only HTTP/1.0 tools (and the
- * in-process fakes used by tests) arrive here without it.
+ * How many Host header lines the request carried. node keeps only the first
+ * of duplicates in `req.headers`, so count `req.rawHeaders` (SR7 L4). Fakes
+ * without rawHeaders count from `req.headers`.
  */
-export function checkHost(req, config) {
-  const raw = req?.headers?.host;
-  if (raw === undefined) return null;
-  if (typeof raw !== 'string' || raw === '') return 'bad-host';
-  return allowedHosts(config).has(raw.toLowerCase()) ? null : 'bad-host';
+function hostCount(req) {
+  const raw = req?.rawHeaders;
+  if (Array.isArray(raw)) {
+    let n = 0;
+    for (let i = 0; i < raw.length; i += 2) if (String(raw[i]).toLowerCase() === 'host') n++;
+    return n;
+  }
+  const h = req?.headers?.host;
+  if (h === undefined) return 0;
+  return Array.isArray(h) ? h.length : 1;
 }
 
-/** 'https' when the request reached us over TLS or through tailscale serve's https, else 'http'. */
-function requestProto(req) {
+/**
+ * DNS-rebinding defence: null when the Host header is allowed, else 'bad-host'.
+ * Exactly one Host line is required (SR7 L1, L4): a missing Host (HTTP/1.0
+ * only; node refuses HTTP/1.1 without one) and duplicate Host lines are
+ * refused. `ctx.allowMissingHost` lets checkRequest keep GET/HEAD of static
+ * assets working for Host-less HTTP/1.0 tools; duplicates are never allowed.
+ */
+export function checkHost(req, config, ctx = {}) {
+  const n = hostCount(req);
+  if (n === 0) return ctx.allowMissingHost === true ? null : 'bad-host';
+  if (n !== 1) return 'bad-host';
+  const raw = req?.headers?.host;
+  if (typeof raw !== 'string' || raw === '') return 'bad-host';
+  return allowedHosts(config, ctx).has(raw.toLowerCase()) ? null : 'bad-host';
+}
+
+/**
+ * 'https' when the request reached us over TLS or through tailscale serve's
+ * https, else 'http'. X-Forwarded-Proto is client-settable, so it is honoured
+ * only (SR7 L2) with `ctx.trustForwardedProto` (the ingress listener / serve
+ * ingress classification), or when publicUrl is https and the Host is not a
+ * loopback name (serve forwards `Host: <name>:8443`; a local client talking
+ * to 127.0.0.1 gains nothing from claiming https).
+ */
+function requestProto(req, config, ctx) {
   if (req?.socket?.encrypted) return 'https';
-  const xfp = header(req, 'x-forwarded-proto');
-  return xfp === 'https' ? 'https' : 'http';
+  if (header(req, 'x-forwarded-proto') !== 'https') return 'http';
+  if (ctx?.trustForwardedProto === true) return 'https';
+  if (ctx?.trustForwardedProto === false) return 'http';
+  let pubHttps = false;
+  try { pubHttps = new URL(config?.publicUrl).protocol === 'https:'; } catch { /* no publicUrl */ }
+  const host = header(req, 'host');
+  return pubHttps && host && !isLoopbackName(hostnameOf(host)) ? 'https' : 'http';
 }
 
 /**
@@ -116,16 +197,16 @@ function requestProto(req) {
  * `publicUrl`, and each `fleet.allowedOrigins` entry. Exact string
  * comparison; 'null' and anything malformed are refused.
  */
-export function checkOrigin(req, config) {
+export function checkOrigin(req, config, ctx = {}) {
   const raw = req?.headers?.origin;
   if (raw === undefined) return null;
   const origin = header(req, 'origin');
   if (!origin || origin === 'null') return 'bad-origin';
   const host = header(req, 'host');
-  if (host && origin === `${requestProto(req)}://${host.toLowerCase()}`) return null;
+  if (host && origin === `${requestProto(req, config, ctx)}://${host.toLowerCase()}`) return null;
   const c = config || {};
-  if (origin === urlOrigin(c.publicUrl)) return null;
   const f = (c.fleet && typeof c.fleet === 'object') ? c.fleet : {};
+  if (origin === urlOrigin(trustedPublicUrl(c, f, ctx))) return null;
   if (listOf(f.allowedOrigins).includes(origin)) return null;
   return 'bad-origin';
 }
@@ -169,12 +250,26 @@ export function contentSecurityPolicy(host) {
 }
 
 /**
- * Headers for a response: always `X-Content-Type-Options: nosniff` and
- * `Referrer-Policy: no-referrer`; with `html`, also the CSP.
+ * True when a static file needs the CSP (SR7 L7): HTML pages, the service
+ * worker (a worker is governed by its own response's CSP) and SVG (renders as
+ * a document when opened directly). Takes a file path or URL path.
  */
-export function securityHeaders(req, { html = false } = {}) {
+export function wantsCsp(file) {
+  if (typeof file !== 'string' || file === '') return false;
+  const p = file.split(/[?#]/, 1)[0].toLowerCase();
+  const base = p.slice(p.lastIndexOf('/') + 1);
+  return base === 'sw.js' || p.endsWith('.html') || p.endsWith('.htm') || p.endsWith('.svg');
+}
+
+/**
+ * Headers for a response: always `X-Content-Type-Options: nosniff` and
+ * `Referrer-Policy: no-referrer`; also the CSP with `html`, with a `file`
+ * that wantsCsp, or when the request URL itself wantsCsp (so sw.js and .svg
+ * get it even from a caller that only passes `html` for .html).
+ */
+export function securityHeaders(req, { html = false, file } = {}) {
   const h = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer' };
-  if (html) h['content-security-policy'] = contentSecurityPolicy(header(req, 'host'));
+  if (html || wantsCsp(file) || wantsCsp(req?.url)) h['content-security-policy'] = contentSecurityPolicy(header(req, 'host'));
   return h;
 }
 
@@ -182,19 +277,22 @@ export function securityHeaders(req, { html = false } = {}) {
  * Host + Origin for a WebSocket upgrade (boot/common.mjs listenAll; §2 A8
  * replaces the call with auth.guardUpgrade, which uses these same checks).
  */
-export function checkUpgrade(req, config) {
-  return checkHost(req, config) || checkOrigin(req, config);
+export function checkUpgrade(req, config, ctx = {}) {
+  const c = { ...ctx, allowMissingHost: false };
+  return checkHost(req, config, c) || checkOrigin(req, config, c);
 }
 
 /**
  * Host for every request, then Origin and the CSRF header for mutating ones.
+ * A missing Host is tolerated only on GET/HEAD/OPTIONS (SR7 L1).
  * null or the first failing reason.
  */
-export function checkRequest(req, pathname, config) {
-  const host = checkHost(req, config);
+export function checkRequest(req, pathname, config, ctx = {}) {
+  const mutating = isMutating(req?.method);
+  const host = checkHost(req, config, { ...ctx, allowMissingHost: !mutating });
   if (host) return host;
-  if (!isMutating(req?.method)) return null;
-  return checkOrigin(req, config) || checkCsrf(req, pathname);
+  if (!mutating) return null;
+  return checkOrigin(req, config, ctx) || checkCsrf(req, pathname);
 }
 
 const lastWarn = new Map();

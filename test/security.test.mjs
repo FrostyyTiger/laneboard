@@ -9,7 +9,7 @@ import { PassThrough } from 'node:stream';
 process.env.LANEBOARD_CONFIG ??= path.join(import.meta.dirname, 'fixtures', 'empty-config.json');
 
 const sec = await import('../server/security.mjs');
-const { allowedHosts, checkHost, checkOrigin, checkCsrf, isMutating, HOOK_PATHS, securityHeaders, checkRequest, checkUpgrade, warnRateLimited } = sec;
+const { allowedHosts, checkHost, checkOrigin, checkCsrf, isMutating, HOOK_PATHS, securityHeaders, wantsCsp, checkRequest, checkUpgrade, warnRateLimited } = sec;
 const { handleRequest, route } = await import('../server/http.mjs');
 const { config } = await import('../server/config.mjs');
 const { upgradeAllowed } = await import('../server/boot/common.mjs');
@@ -73,8 +73,65 @@ test('checkHost: a Host without its port does not match a publicHosts entry with
   assert.equal(checkHost(req({ host: `${PUB}:8444` }), cfg), 'bad-host');
 });
 
-test('checkHost: no Host header at all passes (only non-browser HTTP/1.0 clients)', () => {
-  assert.equal(checkHost(req({}), cfg), null);
+// SR7 L1: a request without Host is refused, except a GET/HEAD (static assets) through checkRequest.
+test('SR7 L1: no Host is refused on mutating requests and upgrades; GET may pass', () => {
+  assert.equal(checkHost(req({}), cfg), 'bad-host');
+  assert.equal(checkHost(req({}), cfg, { allowMissingHost: true }), null);
+  for (const m of ['POST', 'DELETE', 'PROPFIND']) {
+    assert.equal(checkRequest(req({ 'x-laneboard': '1' }, m), '/api/sessions/x/keys', cfg), 'bad-host', m);
+  }
+  assert.equal(checkRequest(req({}, 'POST'), '/api/hook', cfg), 'bad-host', 'the hook path too');
+  assert.equal(checkRequest(req({}, 'GET'), '/js/app.js', cfg), null);
+  assert.equal(checkRequest(req({}, 'HEAD'), '/', cfg), null);
+  assert.equal(checkUpgrade(req({}), cfg), 'bad-host');
+  assert.equal(checkUpgrade(req({}), cfg, { allowMissingHost: true }), 'bad-host', 'an upgrade can never opt out');
+});
+
+// SR7 L4: node keeps the first of duplicate Host lines; rawHeaders shows them all.
+test('SR7 L4: duplicate Host lines are refused, even when both are allowed', () => {
+  const two = (a, b, method = 'GET') => ({ method, headers: { host: a }, rawHeaders: ['Host', a, 'host', b] });
+  assert.equal(checkHost(two('127.0.0.1:7777', 'evil.example.invalid'), cfg), 'bad-host');
+  assert.equal(checkHost(two('127.0.0.1:7777', '127.0.0.1:7777'), cfg), 'bad-host');
+  assert.equal(checkRequest(two('127.0.0.1:7777', 'evil.example.invalid'), '/', cfg), 'bad-host', 'GET too');
+  assert.equal(checkUpgrade(two('127.0.0.1:7777', 'evil.example.invalid'), cfg), 'bad-host');
+  assert.equal(checkHost({ headers: { host: '127.0.0.1:7777' }, rawHeaders: ['Host', '127.0.0.1:7777'] }, cfg), null, 'one is fine');
+  assert.equal(checkHost({ headers: {}, rawHeaders: [] }, cfg), 'bad-host', 'rawHeaders without Host');
+});
+
+// SR7 L6: the default publicUrl must not trust another instance's port.
+test('SR7 L6: a loopback publicUrl is trusted only on a port we listen on', () => {
+  const other = { port: 7857, publicUrl: 'http://127.0.0.1:7777' };
+  assert.ok(!allowedHosts(other).has('127.0.0.1:7777'));
+  assert.equal(checkHost(req({ host: '127.0.0.1:7777' }), other), 'bad-host');
+  assert.equal(checkOrigin(req({ host: '127.0.0.1:7857', origin: 'http://127.0.0.1:7777' }), other), 'bad-origin');
+  assert.equal(checkRequest(req({ host: '127.0.0.1:7857', origin: 'http://127.0.0.1:7777' }, 'POST'), '/api/hook', other), 'bad-origin',
+    'a page on 127.0.0.1:7777 cannot post to the hook of a 7857 instance');
+  const same = { port: 7777, publicUrl: 'http://127.0.0.1:7777' };
+  assert.equal(checkHost(req({ host: '127.0.0.1:7777' }), same), null);
+  assert.equal(checkOrigin(req({ host: '127.0.0.1:7777', origin: 'http://127.0.0.1:7777' }), same), null);
+  assert.equal(checkRequest(req({ host: 'localhost:7777', origin: 'http://localhost:7777' }, 'POST'), '/api/hook', { port: 7857, publicUrl: 'http://localhost:7777' }),
+    'bad-host', 'a same-origin request on the foreign port fails on Host');
+  assert.equal(checkHost(req({ host: '127.0.0.1:7777' }), { port: 7857, fleet: { ingressPort: 7777 }, publicUrl: 'http://127.0.0.1:7777' }), null,
+    'the ingress port counts');
+  assert.equal(checkOrigin(req({ host: '127.0.0.1:7857', origin: 'http://127.0.0.1:7777' }), same, { listenPort: 7857 }), 'bad-origin',
+    'ctx.listenPort narrows to the listener the request arrived on');
+  assert.equal(checkOrigin(req({ host: '127.0.0.1:7778', origin: `https://${PUB}:8443` }), cfg), null, 'a non-loopback publicUrl is unaffected');
+});
+
+// SR7 L2: X-Forwarded-Proto is client-settable.
+test('SR7 L2: X-Forwarded-Proto is ignored by default on loopback, honoured with the ingress flag', () => {
+  const local = { port: 7857, publicUrl: 'http://127.0.0.1:7857' };
+  const spoof = req({ host: '127.0.0.1:7857', origin: 'https://127.0.0.1:7857', 'x-forwarded-proto': 'https' }, 'POST');
+  assert.equal(checkOrigin(spoof, local), 'bad-origin');
+  assert.equal(checkOrigin(spoof, { ...local, publicUrl: `https://${PUB}:8443` }), 'bad-origin', 'https publicUrl but a loopback Host');
+  assert.equal(checkUpgrade(spoof, local), 'bad-origin');
+  assert.equal(checkOrigin(spoof, local, { trustForwardedProto: true }), null, 'the ingress listener trusts serve');
+  const alt = req({ host: 'alt.example.invalid:8443', origin: 'https://alt.example.invalid:8443', 'x-forwarded-proto': 'https' });
+  assert.equal(checkOrigin(alt, cfg), null, 'https publicUrl + a public Host: serve forwarded it');
+  assert.equal(checkOrigin(alt, cfg, { trustForwardedProto: false }), 'bad-origin', 'an explicit false always ignores it');
+  assert.equal(checkOrigin(alt, { ...cfg, publicUrl: 'http://127.0.0.1:7777' }), 'bad-origin', 'http publicUrl: ignored');
+  assert.equal(checkOrigin(req({ host: '127.0.0.1:7857', origin: 'https://127.0.0.1:7857' }, 'GET', { socket: { encrypted: true } }), local), null,
+    'a real TLS socket is https');
 });
 
 // --- checkOrigin ----------------------------------------------------------------
@@ -164,6 +221,15 @@ test('securityHeaders: nosniff + no-referrer always, CSP for html with ws/wss Ho
   assert.match(odd, /connect-src 'self'; /, 'an odd Host never reaches the header');
 });
 
+// SR7 L7: the service worker and SVG get the CSP too.
+test('SR7 L7: wantsCsp covers html, sw.js and svg; securityHeaders applies it by file or URL', () => {
+  for (const f of ['/index.html', 'public/sw.js', '/sw.js?v=2', '/vendor/lucide/sprite.svg', 'X.SVG']) assert.equal(wantsCsp(f), true, f);
+  for (const f of ['/js/app.js', '/css/app.css', '/notsw.js', '/sw.json', '', undefined, 3]) assert.equal(wantsCsp(f), false, String(f));
+  assert.ok(securityHeaders(req({ host: LOCAL }), { file: '/x/sprite.svg' })['content-security-policy']);
+  assert.ok(securityHeaders({ url: '/sw.js', headers: { host: LOCAL } })['content-security-policy']);
+  assert.equal(securityHeaders({ url: '/js/app.js', headers: {} })['content-security-policy'], undefined);
+});
+
 // --- handleRequest with fake req/res ---------------------------------------------
 
 let hits = 0;
@@ -247,6 +313,25 @@ test('handleRequest: index.html carries the CSP; a module does not need one but 
   assert.equal(js.headers['content-security-policy'], undefined);
 });
 
+test('SR7 L7: sw.js and the svg sprite are served with the CSP; GET without Host still serves assets', async () => {
+  const sw = await call('GET', '/sw.js', { host: LOCAL });
+  assert.equal(sw.status, 200);
+  assert.match(sw.headers['content-security-policy'], /script-src 'self'/);
+  const url = '/vendor/lucide/sprite.svg';
+  const { res, done } = fakeRes();
+  const rq = { method: 'GET', url, headers: { host: LOCAL } };
+  res.req = rq; // node sets res.req; serveStatic falls back to it
+  await handleRequest(rq, res);
+  const svg = await done;
+  assert.equal(svg.status, 200);
+  assert.match(svg.headers['content-security-policy'], /default-src 'self'/);
+  const bare = await call('GET', '/js/app.js', {});
+  assert.equal(bare.status, 200, 'SR7 L1: Host-less GET of a static asset stays allowed');
+  const post = await call('POST', '/api/_sec-test/keys', { 'x-laneboard': '1' });
+  assert.equal(post.status, 403);
+  assert.equal(JSON.parse(post.body).reason, 'bad-host');
+});
+
 test('index.html has no inline script the CSP would block', async () => {
   const page = await call('GET', '/', { host: LOCAL });
   for (const m of page.body.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)) {
@@ -301,6 +386,33 @@ test('upgrade: a bad Host is refused, a good Host/Origin proceeds', async () => 
   assert.equal(good.proceeded, true);
   const cli = await rawUpgrade({ Host: '127.0.0.1:7777' });
   assert.equal(cli.proceeded, true, 'node ws / CLI with no Origin');
+});
+
+test('SR7 L4: two Host lines on a real upgrade are refused', async () => {
+  const server = http.createServer();
+  let proceeded = false;
+  server.on('upgrade', (rq, socket) => {
+    if (!upgradeAllowed(rq, socket, cfg)) return;
+    proceeded = true;
+    socket.end('HTTP/1.1 101 Switching Protocols\r\n\r\n');
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const reply = await new Promise((resolve, reject) => {
+      const s = net.connect(server.address().port, '127.0.0.1');
+      let buf = '';
+      s.on('data', (d) => { buf += d; });
+      s.on('close', () => resolve(buf));
+      s.on('error', reject);
+      s.write(['GET /ws HTTP/1.1', 'Host: 127.0.0.1:7777', 'Host: evil.example.invalid', 'Connection: Upgrade', 'Upgrade: websocket',
+        'Sec-WebSocket-Version: 13', 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ=='].join('\r\n') + '\r\n\r\n');
+    });
+    // node itself may already answer 400 for a duplicate Host; either way it never proceeds.
+    assert.match(reply, /^HTTP\/1\.1 (403 Forbidden|400 Bad Request)\r\n/);
+    assert.equal(proceeded, false);
+  } finally {
+    server.close();
+  }
 });
 
 // --- clients send the header ------------------------------------------------------
