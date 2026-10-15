@@ -349,6 +349,41 @@ test('guardPrompt refuses shell-with-❯, dead-with-old-box and paused panes (SR
   assert.equal(await isPrompting(null, s.deps), true);
   assert.equal(isLiveClaude({ ...claude, state: 'idle' }), true);
   assert.equal(isLiveClaude({ ...claude, state: 'idle', kind: 'shell' }), false);
+  // native binary: tmux reports the version file name (N1-fix)
+  assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: '2.1.301' }), true);
+  assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: '2.1.301-beta.1' }), true);
+  assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: 'node', claude: { pid: 4242 } }), true);
+  assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: 'node' }), false);
+  for (const sh of ['zsh', 'bash', '-bash', '-zsh', 'fish', 'nu', '/bin/sh']) {
+    assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: sh, claude: { pid: 4242 } }), false, sh);
+  }
+  assert.equal(isLiveClaude({ ...claude, state: 'dead', paneCmd: '2.1.301' }), false);
+  assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: undefined, claude: { pid: 4242 } }), false);
+});
+
+test('guardPrompt: versioned Claude binary and registry pid are live; shells are not (N1-fix)', async () => {
+  const claude = { name: 'agent-1', paneId: '%1', kind: 'claude', state: 'idle' };
+  const ready = async (sess) => {
+    const s = setup({ sessions: { 'agent-1': sess }, readiness: 'ready' });
+    s.deps.capturePane = async () => ['╭───╮', '│ > │', '╰───╯'];
+    const r = await s.go(env('send-text', 'agent-1', { text: 'go', guardPrompt: true }));
+    return { r, s };
+  };
+  let { r, s } = await ready({ ...claude, paneCmd: '2.1.301' });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(s.calls.length > 0, true);
+  ({ r } = await ready({ ...claude, paneCmd: 'node', claude: { pid: 4242 } }));
+  assert.equal(r.ok, true, JSON.stringify(r));
+  // stale registry entry: kind claude, but the pane is back at a shell
+  for (const paneCmd of ['zsh', '-bash']) {
+    ({ r, s } = await ready({ ...claude, paneCmd, claude: { pid: 4242 } }));
+    assert.equal(r.status, 409, paneCmd);
+    assert.equal(r.code, 'not_claude', paneCmd);
+    assert.equal(s.calls.length, 0, 'nothing typed');
+  }
+  // paused versioned lane is still refused
+  ({ r } = await ready({ ...claude, paneCmd: '2.1.301', paused: { scope: 'session', kind: 'manual', by: 'x', at: 1 } }));
+  assert.equal(r.code, 'paused');
 });
 
 test('broadcast is refused on a builder', async () => {
