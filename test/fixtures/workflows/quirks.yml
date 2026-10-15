@@ -1,0 +1,31 @@
+# Comments with key: value shapes and 'quotes' must not confuse the scanner.
+name: 'Quirks: #1'   # a trailing comment: with a colon
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "docs/**"   # docs only
+      - '**/*.md'
+defaults: &defaults
+  run:
+    shell: bash
+jobs:
+  core-test:
+    name: "core #test"
+    runs-on: ubuntu-latest
+    env: { CI: true }
+    steps:
+      - name: Echo a hash
+        run: echo "#not a comment" # but this is
+      - name: don't trip on apostrophes
+        run: echo it's fine
+      - name: multi
+        run: >
+          echo one
+          echo two
+  other:
+    <<: *defaults
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo x

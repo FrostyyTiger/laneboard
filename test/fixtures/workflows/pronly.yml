@@ -1,0 +1,22 @@
+name: PR checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  title-lint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "check the title"
+  web-e2e:
+    if: ${{ github.event_name == "pull_request" && !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm run e2e
+        working-directory: web
+  deploy-preview:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo deploy

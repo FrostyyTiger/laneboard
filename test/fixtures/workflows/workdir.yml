@@ -1,0 +1,35 @@
+name: Checks
+on: [push, pull_request]
+jobs:
+  api:
+    name: api (ruff, pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - run: ruff check .
+      - run: pytest
+  web:
+    name: "web (tsc, eslint)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx tsc --noEmit
+        working-directory: ./web
+      - run: npx eslint .
+        working-directory: web/
+  frontend-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [web, web-admin]
+    steps:
+      - run: npm run build
+        working-directory: ${{ matrix.app }}
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make smoke
+        working-directory: ./
