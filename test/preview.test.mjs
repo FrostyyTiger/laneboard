@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { previewFor, diffLines, cleanLine, splitLines, readForDiff, PREVIEW_LIMITS } from '../server/control/preview.mjs';
+import { previewFor, diffLines, cleanLine, splitLines, readForDiff, PREVIEW_LIMITS, capValue, stringifyBound, INPUT_CAP } from '../server/control/preview.mjs';
 
 const dirs = [];
 function tmp() {
@@ -195,4 +195,81 @@ test('splitLines drops one trailing newline and handles CRLF', () => {
   assert.deepEqual(splitLines('a\r\nb\n'), ['a', 'b']);
   assert.deepEqual(splitLines(''), []);
   assert.deepEqual(splitLines('\n'), ['']);
+});
+
+// ------------------------------------------------- SR15 H1 ------------------
+
+test('capValue keeps small inputs exactly and reports no truncation', () => {
+  const v = { a: 1, b: [true, null, 'x'], c: { d: 'é😀' } };
+  assert.deepEqual(capValue(v), { value: v, truncated: false });
+  assert.deepEqual(capValue('s'), { value: 's', truncated: false });
+  assert.deepEqual(capValue(undefined), { value: null, truncated: false });
+});
+
+test('capValue cuts depth, node count and characters, and never splits a surrogate pair', () => {
+  let deep = 1;
+  for (let i = 0; i < 50; i++) deep = [deep];
+  const d = capValue(deep, { maxDepth: 3 });
+  assert.equal(d.truncated, true);
+  assert.deepEqual(d.value, [[['…']]]);
+
+  const n = capValue(Array.from({ length: 100 }, (_, i) => i), { maxNodes: 10 });
+  assert.equal(n.truncated, true);
+  assert.ok(n.value.length <= 11);
+  assert.equal(n.value.at(-1), '…');
+
+  const c = capValue({ s: 'a😀cd' }, { maxChars: 4 });
+  assert.equal(c.truncated, true);
+  assert.equal(c.value.s, 'a…'); // 's' key costs 1, the pair is not split
+
+  const k = capValue({ ['k'.repeat(100)]: 1 }, { maxChars: 10 });
+  assert.equal(k.truncated, true);
+  assert.ok(Object.keys(k.value)[0].length <= 10);
+});
+
+test('capValue survives getters, bigint and functions without throwing', () => {
+  const evil = { get boom() { throw new Error('x'); }, big: 10n, fn() {}, ok: 1 };
+  const r = capValue(evil);
+  assert.equal(r.truncated, true);
+  assert.deepEqual(r.value, { big: null, ok: 1 });
+});
+
+test('stringifyBound holds for adversarial shapes (deep, wide, escapes)', () => {
+  const bound = stringifyBound();
+  let deep = [];
+  for (let i = 0; i < 10_000; i++) deep = [deep, '\u0001'.repeat(10)];
+  const wide = Object.fromEntries(Array.from({ length: 10_000 }, (_, i) => [`\u0002${i}`, -1.2345678901234567e-300]));
+  for (const v of [deep, wide, { s: '\u001f'.repeat(100_000) }, Array(100_000).fill({})]) {
+    const len = JSON.stringify(capValue(v).value, null, 2).length;
+    assert.ok(len <= bound, `${len} > ${bound}`);
+  }
+  assert.ok(INPUT_CAP.maxDepth <= 32);
+});
+
+test('the JSON preview of a huge or deeply nested input is capped and marked truncated', () => {
+  let deep = [];
+  for (let i = 0; i < 100_000; i++) deep = [deep];
+  for (const input of [deep, { blob: 'x\n'.repeat(500_000) }]) {
+    const p = previewFor('mcp__acme__do', input);
+    assert.equal(p.truncated, true);
+    assert.ok(p.lines.length <= PREVIEW_LIMITS.maxLines);
+  }
+});
+
+test('splitLines with a limit stops early; Edit/Bash/MultiEdit previews of huge text stay capped', () => {
+  assert.deepEqual(splitLines('a\nb\nc\nd', 2), ['a', 'b']);
+  assert.deepEqual(splitLines('a\nb\n', 5), ['a', 'b']);
+  const huge = 'l\n'.repeat(200_000);
+  for (const [tool, input] of [
+    ['Edit', { old_string: huge, new_string: huge }],
+    ['Bash', { command: huge, description: 'd'.repeat(100_000) }],
+    ['MultiEdit', { edits: Array.from({ length: 5000 }, () => ({ old_string: 'a', new_string: 'b' })) }],
+    ['Write', { file_path: 'nope.txt', content: huge }],
+  ]) {
+    const p = previewFor(tool, input, { maxLines: 50 });
+    assert.equal(p.truncated, true, tool);
+    assert.ok(p.lines.length <= 50, tool);
+  }
+  // A non-string field is not Array#join-ed into text.
+  assert.deepEqual(previewFor('Bash', { command: ['a', 'b'] }).lines, []);
 });

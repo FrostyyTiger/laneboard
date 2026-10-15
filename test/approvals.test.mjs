@@ -336,3 +336,88 @@ test('fail-open: a 403 with a body → exit 0, empty stdout; 200 passes the deci
     await new Promise((r) => srv.close(r));
   }
 });
+
+// ------------------------------------------------- SR15 regressions --------
+
+const { stringifyBound } = await import('../server/control/preview.mjs');
+
+/** Run fn with JSON.stringify spied; returns the longest string it produced. */
+function longestStringify(fn) {
+  const real = JSON.stringify;
+  let max = 0;
+  let calls = 0;
+  JSON.stringify = function (...args) {
+    const out = real.apply(this, args);
+    calls++;
+    if (typeof out === 'string' && out.length > max) max = out.length;
+    return out;
+  };
+  try { fn(); } finally { JSON.stringify = real; }
+  return { max, calls };
+}
+
+function deepArray(depth) {
+  const root = [];
+  let cur = root;
+  for (let i = 0; i < depth; i++) { const n = []; cur.push(n); cur = n; }
+  return root;
+}
+
+test('SR15 H1: open() never stringifies more than stringifyBound() of tool_input, whatever its shape', () => {
+  const bound = stringifyBound();
+  assert.ok(bound < 400_000, `bound ${bound}`);
+  const wide = {};
+  for (let i = 0; i < 50_000; i++) wide[`k${i}`] = 'v'.repeat(8);
+  const inputs = {
+    deep: deepArray(100_000),                         // was ~40 MB with JSON.stringify(x, null, 2)
+    wide,                                             // ~0.7 MB of JSON
+    longString: { blob: 'x'.repeat(2_000_000) },
+    escapes: { blob: '\u0001'.repeat(200_000) },     // 6× expansion when escaped
+    deepObjects: JSON.parse('{"a":'.repeat(20_000) + '1' + '}'.repeat(20_000)),
+  };
+  for (const [name, input] of Object.entries(inputs)) {
+    for (const tool of ['mcp__acme__do', 'Bash']) {
+      let approval;
+      const { max, calls } = longestStringify(() => {
+        approval = approvals.open(body({
+          tool_name: tool,
+          tool_input: input,
+          permission_suggestions: [input, input, { type: 'addRules', rules: [{ toolName: tool }] }],
+        }), opts()).approval;
+      });
+      assert.ok(calls > 0);
+      assert.ok(max <= bound, `${name}/${tool}: longest stringify ${max} > ${bound}`);
+      assert.equal(approval.inputTruncated, true, `${name}/${tool}`);
+      assert.ok(Buffer.byteLength(approval.input) <= approvals.APPROVAL_LIMITS.inputBytes);
+      assert.ok(approval.preview.lines.length <= 300);
+      assert.deepEqual(approval.suggestions, [{ type: 'addRules', rules: [{ toolName: tool }] }], 'oversized suggestions dropped');
+      approvals._reset();
+    }
+  }
+});
+
+test('SR15 H1: transient heap of one open() on a hostile 256 KiB-class body stays small (generous margin)', () => {
+  const input = deepArray(120_000); // the shape that used to cost ~40 MB
+  const before = process.memoryUsage().heapUsed;
+  let peak = before;
+  const real = JSON.stringify;
+  JSON.stringify = function (...a) { const o = real.apply(this, a); peak = Math.max(peak, process.memoryUsage().heapUsed); return o; };
+  try { approvals.open(body({ tool_name: 'mcp__acme__do', tool_input: input }), opts()); } finally { JSON.stringify = real; }
+  assert.ok(peak - before < 24 * 1024 * 1024, `heap grew ${(peak - before) / 1e6} MB`);
+});
+
+test('SR15 L1: a bound supersede needs the same transcript_path as the intake; the binding stays private', async () => {
+  const a = approvals.open(body({ transcript_path: '/nonexistent-lb/a.jsonl' }), opts());
+  const none = approvals.open(body({ transcript_path: undefined }), opts());
+  assert.equal('transcriptPath' in a.approval, false);
+  assert.equal(JSON.stringify(a.approval).includes('a.jsonl'), false);
+  assert.deepEqual(approvals.supersede(SID, 'Stop', { transcriptPath: null }), []);
+  assert.deepEqual(approvals.supersede(SID, 'Stop', {}), []);
+  assert.deepEqual(approvals.supersede(SID, 'Stop', { transcriptPath: '/nonexistent-lb/b.jsonl' }), []);
+  assert.deepEqual(approvals.supersede(SID, 'Stop', { transcriptPath: '' }), []);
+  const closed = approvals.supersede(SID, 'Stop', { transcriptPath: '/nonexistent-lb/a.jsonl' });
+  assert.deepEqual(closed.map((x) => x.id), [a.approval.id]);
+  assert.equal(await a.wait, null);
+  assert.equal(approvals.get(none.approval.id).status, 'pending', 'an approval without transcript_path is never bound-superseded');
+  assert.equal(approvals.supersede(SID, 'in-process').length, 1, 'unbound (trusted) callers still match on the session id');
+});
