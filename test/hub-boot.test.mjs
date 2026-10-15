@@ -19,6 +19,7 @@ import { createFleetStore } from '../server/hub/fleet-store.mjs';
 import { createClientWs } from '../server/hub/client-ws.mjs';
 import {
   builderRow, checkSubscription, createMapLoop, createViewCache, createHubPush, isRemoteUser, healthCounts,
+  DEFAULT_PUSH_HOSTS, pushHostAllowed, pushHostList,
 } from '../server/hub/routes/core.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -95,6 +96,7 @@ test('hub mode end to end: fleet, routes, relay, auth, web baseline, liveness, n
     trace: true,
     config: {
       publicUrl: `https://${PUBLIC}`,
+      push: { allowedEndpointHosts: ['push.example.invalid'] },
       fleet: {
         builders: [{ id: 'builder-a', url: fa.url }, { id: 'builder-b', url: fb.url }],
         staleMs: 300,
@@ -189,8 +191,49 @@ test('hub mode end to end: fleet, routes, relay, auth, web baseline, liveness, n
   assert.equal(local.status, 403);
   assert.equal(local.json().reason, 'remote-only');
   assert.equal(fa.actions.length, 1);
-  const rebaseLocal = await localFetch(hub, '/api/fleet/audit/rebase', { method: 'POST', headers: { 'x-laneboard': '1' }, body: { builder: 'builder-a' } });
+  const rebaseLocal = await localFetch(hub, '/api/fleet/audit/rebase', { method: 'POST', headers: { 'x-laneboard': '1' }, body: { builder: 'builder-a', confirm: 'builder-a' } });
   assert.equal(rebaseLocal.status, 403);
+  // One rebase route (H13-fix handleRebase): direct-only, typed confirm, onto genesis|head.
+  const rebase = (body) => ingressFetch(hub, '/api/fleet/audit/rebase', { user: USER, method: 'POST', headers: { 'x-laneboard': '1' }, body });
+  const noConfirm = await rebase({ builder: 'builder-a' });
+  assert.equal(noConfirm.status, 400, noConfirm.text);
+  assert.equal(noConfirm.json().error, 'confirm');
+  assert.equal((await rebase({ builder: 'builder-a', confirm: 'builder-b' })).status, 400);
+  assert.equal((await rebase({ builder: 'builder-a', confirm: 'builder-a', onto: 'sideways' })).status, 400);
+  assert.equal((await rebase({ builder: 'nope', confirm: 'nope' })).status, 400);
+  const rebased = await rebase({ builder: 'builder-a', confirm: 'builder-a' });
+  assert.equal(rebased.status, 200, rebased.text);
+  assert.equal(rebased.json().ok, true);
+
+  // SR13 L1: push subscribe/unsubscribe/quiet and notify prefs writes are direct-only; endpoints are allowlisted.
+  const pushSub = { endpoint: 'https://push.example.invalid/sub-1', keys: { p256dh: 'BPk-x_y', auth: 'aa_bb' } };
+  const xl = { 'x-laneboard': '1' };
+  // Node's client sends a DELETE body without framing unless told its length.
+  const del = (user, body) => ingressFetch(hub, '/api/push/subscribe', {
+    user, method: 'DELETE', headers: { ...xl, 'content-length': String(Buffer.byteLength(JSON.stringify(body))) }, body,
+  });
+  assert.equal((await localFetch(hub, '/api/push/subscribe', { method: 'POST', headers: xl, body: pushSub })).status, 403);
+  assert.equal((await localFetch(hub, '/api/push/quiet', { method: 'POST', headers: xl, body: { session: 'builder-a/web', quiet: true } })).status, 403);
+  assert.equal((await localFetch(hub, '/api/notify/prefs', { method: 'POST', headers: xl, body: { mutedTargets: ['builder-a/web'] } })).status, 403);
+  assert.equal((await localFetch(hub, '/api/push/key')).status, 200, 'local keeps reads');
+  const ssrf = await ingressFetch(hub, '/api/push/subscribe', { user: USER, method: 'POST', headers: xl, body: { ...pushSub, endpoint: 'https://127.0.0.1:1/x' } });
+  assert.equal(ssrf.status, 400, ssrf.text);
+  for (let i = 1; i <= 5; i++) {
+    const r = await ingressFetch(hub, '/api/push/subscribe', { user: USER, method: 'POST', headers: xl, body: { ...pushSub, endpoint: `https://push.example.invalid/sub-${i}` } });
+    assert.equal(r.status, 200, r.text);
+  }
+  const sixth = await ingressFetch(hub, '/api/push/subscribe', { user: USER, method: 'POST', headers: xl, body: { ...pushSub, endpoint: 'https://push.example.invalid/sub-6' } });
+  assert.equal(sixth.status, 409, 'per-user cap');
+  const other = await ingressFetch(hub, '/api/push/subscribe', { user: 'other@example.invalid', method: 'POST', headers: xl, body: pushSub });
+  assert.equal(other.status, 409, 'an endpoint stays with its user');
+  const theirs = await del('other@example.invalid', pushSub);
+  assert.equal(theirs.status, 403, theirs.text);
+  for (let i = 1; i <= 5; i++) {
+    const r = await del(USER, { endpoint: `https://push.example.invalid/sub-${i}` });
+    assert.equal(r.status, 200, r.text);
+  }
+  assert.equal((await ingressFetch(hub, '/api/push/subscribe', { user: USER, method: 'POST', headers: xl, body: { ...pushSub, endpoint: 'https://push.example.invalid/sub-6' } })).status, 200);
+  assert.equal((await del(USER, { endpoint: 'https://push.example.invalid/sub-6' })).status, 200);
 
   // Placement is a dry run: local may ask.
   const place = await localFetch(hub, '/api/fleet/placement', { method: 'POST', headers: { 'x-laneboard': '1' }, body: {} });
@@ -294,6 +337,11 @@ test('a hub refuses to boot without its key or with a loose key file', { timeout
     writePrivateKey(loose, generateHubKey().privateKey);
     fs.chmodSync(loose, 0o644);
     await assert.rejects(boot({ mode: 'hub', config: cfg(loose) }), /cannot load the hub key[^\n]*chmod 600/);
+    // SR13 M1: a hub never accepts unidentified ingress, so insecureNoEnforce is a config error there.
+    const ok = path.join(dir, 'ok.key');
+    writePrivateKey(ok, generateHubKey().privateKey);
+    const noEnf = { fleet: { builders: [{ id: 'builder-a', url: 'http://127.0.0.1:9' }], hubKeyFile: ok, enforce: false, insecureNoEnforce: true } };
+    await assert.rejects(boot({ mode: 'hub', config: noEnf }), /mode "hub" refuses fleet\.enforce:false and fleet\.insecureNoEnforce/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -336,6 +384,31 @@ test('canary: only the hub transport modules use the signers; the key is loaded 
     if (/\bloadPrivateKey\s*\(/.test(src) && rel(f).startsWith('server/')) {
       assert.ok(['server/boot/hub.mjs', 'server/fleet/keys-ed25519.mjs'].includes(rel(f)), `${rel(f)} loads the hub key`);
     }
+    // SR13 L2: other ways to sign with, or reach, the key.
+    if (/\bcrypto\.sign\s*\(|\bcreatePrivateKey\b|\bsubtle\.sign\b|import\s*\{[^}]*\bsign\b[^}]*\}\s*from\s*['"](node:)?crypto['"]/.test(src)) {
+      assert.equal(rel(f), 'server/fleet/keys-ed25519.mjs', `${rel(f)} uses a raw sign primitive`);
+    }
+    if (/\._key\b|\._sign\b/.test(src)) {
+      assert.equal(rel(f), 'server/hub/upstream.mjs', `${rel(f)} reaches an Upstream's key or signer`);
+    }
+  }
+});
+
+test('SR13 L2: the hub key reaches only the transport constructors; modules get an upstream facade, no termProxy', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'server/boot/hub.mjs'), 'utf8');
+  const keyed = [...src.matchAll(/\b(create[A-Za-z]+)\(\{[^}]*\bkey\b[^}]*\}/g)].map((m) => m[1]).sort();
+  assert.deepEqual(keyed, ['createReadProxy', 'createRelay', 'createTermProxy', 'createUpstreams']);
+  const ctxBlock = /const ctx = createContext\(\{([\s\S]*?)\}\);/.exec(src)?.[1];
+  assert.ok(ctxBlock, 'no createContext block');
+  assert.ok(!/\btermProxy\b/.test(ctxBlock), 'termProxy is on the module ctx');
+  assert.ok(!/\bkey\b/.test(ctxBlock.replace(/\/\/.*$/gm, '')), 'the key is on the module ctx');
+  assert.match(ctxBlock, /upstreams: upstreamFacade/);
+  const provides = /for \(const \[name, value\] of \[([\s\S]*?)\]\) ctx\.provide/.exec(src)?.[1];
+  assert.ok(provides && !/termProxy|\['upstreams', upstreams\]/.test(provides), 'raw upstreams or termProxy provided');
+  assert.match(src, /coreOverrides: HUB_CORE_OVERRIDES/);
+  // override: true appears in no hub module (SR11 R1)
+  for (const f of sourceFiles(path.join(ROOT, 'server/hub/routes'))) {
+    assert.ok(!/override:\s*true/.test(fs.readFileSync(f, 'utf8')), `${path.relative(ROOT, f)} asks for override`);
   }
 });
 
@@ -454,13 +527,36 @@ test('core: BuilderRow, health counts, remote-only predicate, push subscription 
   assert.equal(isRemoteUser({ kind: 'hub', user: null }), false);
   assert.equal(isRemoteUser(USER), false);
 
+  const H = ['push.example.invalid'];
   const sub = { endpoint: 'https://push.example.invalid/abc', keys: { p256dh: 'BPk-x_y', auth: 'aa_bb' }, expirationTime: null, extra: 1 };
-  assert.deepEqual(checkSubscription(sub), { endpoint: 'https://push.example.invalid/abc', keys: { p256dh: 'BPk-x_y', auth: 'aa_bb' }, expirationTime: null });
-  assert.equal(checkSubscription({ ...sub, endpoint: 'http://push.example.invalid/abc' }), null);
-  assert.equal(checkSubscription({ ...sub, endpoint: 'https://u:p@push.example.invalid/' }), null);
-  assert.equal(checkSubscription({ ...sub, keys: { p256dh: '<x>', auth: 'a' } }), null);
-  assert.equal(checkSubscription({ endpoint: 'https://push.example.invalid/' }), null);
-  assert.equal(checkSubscription('nope'), null);
+  assert.deepEqual(checkSubscription(sub, H), { endpoint: 'https://push.example.invalid/abc', keys: { p256dh: 'BPk-x_y', auth: 'aa_bb' }, expirationTime: null });
+  assert.equal(checkSubscription({ ...sub, endpoint: 'http://push.example.invalid/abc' }, H), null);
+  assert.equal(checkSubscription({ ...sub, endpoint: 'https://u:p@push.example.invalid/' }, H), null);
+  assert.equal(checkSubscription({ ...sub, keys: { p256dh: '<x>', auth: 'a' } }, H), null);
+  assert.equal(checkSubscription({ endpoint: 'https://push.example.invalid/' }, H), null);
+  assert.equal(checkSubscription('nope', H), null);
+});
+
+test('SR13 L1: push endpoints must be https:443 on a known push service, never an IP literal', () => {
+  const sub = (endpoint) => ({ endpoint, keys: { p256dh: 'BPk-x_y', auth: 'aa_bb' } });
+  for (const ok of ['https://fcm.googleapis.com/fcm/send/abc', 'https://updates.push.services.mozilla.com/wpush/v2/x',
+    'https://wns2-par02p.notify.windows.com/w/?token=x', 'https://web.push.apple.com/QAbc', 'https://fcm.googleapis.com:443/x']) {
+    assert.ok(checkSubscription(sub(ok)), ok);
+  }
+  for (const bad of ['https://127.0.0.1:1/x', 'https://127.0.0.1/x', 'https://[::1]/x', 'https://198.51.100.7/x', 'https://10.0.0.1/x',
+    'https://localhost/x', 'https://push.example.invalid/abc', 'https://fcm.googleapis.com:8443/x', 'https://evilpush.apple.com/x',
+    'https://push.apple.com.evil.example.invalid/x', 'https://fcm.googleapis.com.example.invalid/x', 'http://fcm.googleapis.com/x',
+    'https://push.services.mozilla.com/x']) {
+    assert.equal(checkSubscription(sub(bad)), null, bad);
+  }
+  assert.ok(DEFAULT_PUSH_HOSTS.includes('fcm.googleapis.com'));
+  assert.equal(pushHostAllowed('a.push.example.invalid', ['*.push.example.invalid']), true);
+  assert.equal(pushHostAllowed('push.example.invalid', ['*.push.example.invalid']), false);
+  const dropped = [];
+  assert.deepEqual(pushHostList(['Push.Example.invalid', '*.acme.example.invalid', '127.0.0.1', '*.10.0.0.1', 'bad host', 3], (h) => dropped.push(h)),
+    ['push.example.invalid', '*.acme.example.invalid']);
+  assert.equal(dropped.length, 4);
+  assert.equal(pushHostList(undefined), DEFAULT_PUSH_HOSTS);
 });
 
 test('core: hub push keeps VAPID keys in kv and sends only through the sender', async () => {

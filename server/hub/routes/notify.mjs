@@ -14,8 +14,11 @@
 // - Persistence: the hub db's kv (`ctx.db`, or a provided `db` service), else
 //   a JSON-file kv under `<stateDir>/hub/` (as review-waits does).
 //
-// Route auth (direct or local) is the hub boot path's, as for every hub route.
+// Route auth is the hub boot path's, as for every hub route; on top of that a
+// prefs write needs a `direct` user (SR13 L1: muting hides alarms from the
+// operator, so a local process may not do it). `local` keeps the read.
 import path from 'node:path';
+import { remoteUser } from '../relay.mjs';
 import { createNotifier, checkPrefs, wirePrefs } from '../notify.mjs';
 import { createJsonKv } from '../reviewwait.mjs';
 import { stateDir as defaultStateDir } from '../../fleet/paths.mjs';
@@ -104,6 +107,8 @@ export function createModule() {
       if (typeof ctx.provide === 'function') ctx.provide('notify', notifier);
       ctx.route('GET', PATH, (req, res) => sendJson(ctx, res, wirePrefs(notifier.prefs())));
       ctx.route('POST', PATH, async (req, res) => {
+        const who = remoteUser(req?.auth);
+        if (!who.ok) return sendJson(ctx, res, { error: 'forbidden', reason: who.error === 'read-only' ? 'read-only' : 'remote-only' }, 403);
         let body;
         try {
           const buf = await readLimited(req, BODY_LIMIT);

@@ -17,8 +17,10 @@
 //      percent-decoded once and must be a safe session name; '.', '..' and anything with '/' or '\' are
 //      refused (404).
 //   2. Auth (auth.mjs guardUpgrade: Host, classification by the hub's ingress listener, Origin required for
-//      `direct`, read-only users refused). Only kind `direct` may open a terminal: `local` (the loopback
-//      listener on the hub box) gets 403 remote-only; `hub` kind is refused by classify on a hub.
+//      `direct`, read-only users refused). Then relay.mjs remoteUser, the predicate the relay and the core
+//      routes use (SR13 M1): only a `direct` user with a real serve login may open a terminal; `local` (the
+//      loopback listener, or unidentified ingress under enforce:false), a missing or malformed user and a
+//      read-only one get 403 remote-only; `hub` kind is refused by classify on a hub.
 //   3. The builder must `controls` (up, no major version skew), else 503; and live + pending terms for that
 //      builder must be below fleet.maxTermsPerBuilder (default 8), else 503.
 //   4. The upstream socket is opened FIRST, to {builder url}/api/v1/term/<encoded name>?cols&rows[&window],
@@ -45,8 +47,9 @@
 import crypto from 'node:crypto';
 import WebSocket, { WebSocketServer } from 'ws';
 
-import { AuthError, guardUpgrade, termArgsFromQuery, termHeaders, WINDOW_RE, BUILDER_ID_RE, ENVELOPE_USER_RE } from '../fleet/auth.mjs';
+import { AuthError, guardUpgrade, termArgsFromQuery, termHeaders, WINDOW_RE, BUILDER_ID_RE } from '../fleet/auth.mjs';
 import { isSafeName } from './fleet-store.mjs';
+import { remoteUser } from './relay.mjs';
 import { log as defaultLog } from '../log.mjs';
 
 export const LIMITS = Object.freeze({
@@ -247,9 +250,11 @@ export function createTermProxy({ store, key, keyId, cfg = {}, audit = null, now
       refuseSocket(socket, err instanceof AuthError ? err.status : 403);
       return true;
     }
-    if (auth?.kind !== 'direct') { refuseSocket(socket, 403); return true; } // remote-only
-    const user = auth.user;
-    if (typeof user !== 'string' || !ENVELOPE_USER_RE.test(user)) { refuseSocket(socket, 403); return true; }
+    // SR13 M1: the relay's own predicate (remote-only): a real serve login, never `local` (unidentified
+    // ingress under enforce:false), missing, malformed or read-only.
+    const who = remoteUser(auth);
+    if (!who.ok) { refuseSocket(socket, 403); return true; }
+    const user = who.user;
 
     const { builder: id, name } = parsed;
     const entry = store.builder(id);

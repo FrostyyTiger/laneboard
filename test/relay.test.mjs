@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { createRelay, validateArgs, RelayError, ACTIONS, registerHubAction, _resetHubActions } from '../server/hub/relay.mjs';
+import { createRelay, validateArgs, RelayError, ACTIONS, registerHubAction, _resetHubActions, HubActionError, HUB_ACTION_ERRORS, remoteUser } from '../server/hub/relay.mjs';
 import { createFleetStore } from '../server/hub/fleet-store.mjs';
 import { openAudit } from '../server/fleet/audit.mjs';
 import { verifyEnvelope, _resetForTests } from '../server/fleet/auth.mjs';
@@ -422,11 +422,39 @@ test('SR11 L1: registerHubAction refuses builder-action names and duplicates unl
   assert.throws(() => relay.registerHubAction('broadcast', { run() {} }), /already registered/);
   assert.throws(() => registerHubAction('kill', { scope: 'fanout', run() {} }), /already registered/);
   assert.throws(() => relay.registerHubAction('ack-alarm', { run() {} }), /already registered/);
-  // Core code can opt in explicitly.
-  offs.push(registerHubAction('approve', { run() {}, override: true }));
-  offs.push(relay.registerHubAction('broadcast', { run() {}, override: true }));
   for (const off of offs) off();
   _resetHubActions();
+});
+
+test('SR11 R1: override is honoured only by a relay instance, only for its core allowlist', () => {
+  _resetHubActions();
+  const store = createFleetStore({ builders: [], hubVersion: '0.1.0' });
+  const code = (c) => (e) => e instanceof HubActionError && e.code === c;
+  // The module-level registry never honours override.
+  assert.throws(() => registerHubAction('approve', { run() {}, override: true }), code(HUB_ACTION_ERRORS.overrideRefused));
+  assert.throws(() => registerHubAction('broadcast', { run() {}, override: true }), code(HUB_ACTION_ERRORS.overrideRefused));
+  // An instance without an allowlist (boot/hub.mjs passes an empty one) refuses it too.
+  const plain = createRelay({ store, key: privateKey, audit: { append() {} } });
+  assert.throws(() => plain.registerHubAction('approve', { run() {}, override: true }), code(HUB_ACTION_ERRORS.overrideRefused));
+  // With an allowlist, only the listed names may override.
+  const core = createRelay({ store, key: privateKey, audit: { append() {} }, coreOverrides: ['broadcast'] });
+  const off1 = core.registerHubAction('broadcast', { run() {} });
+  assert.throws(() => core.registerHubAction('broadcast', { run() {} }), code(HUB_ACTION_ERRORS.duplicate));
+  const off2 = core.registerHubAction('broadcast', { run() {}, override: true });
+  assert.throws(() => core.registerHubAction('approve', { run() {}, override: true }), code(HUB_ACTION_ERRORS.overrideRefused));
+  assert.throws(() => core.registerHubAction('approve', { run() {} }), code(HUB_ACTION_ERRORS.collides));
+  off1(); off2();
+  _resetHubActions();
+});
+
+test('SR13 M1: remoteUser is the one predicate: local, missing, read-only and malformed users are refused', () => {
+  assert.deepEqual(remoteUser({ kind: 'direct', user: 'alice@example.invalid' }), { ok: true, user: 'alice@example.invalid' });
+  for (const a of [null, 'alice', [], { kind: 'local', user: 'local' }, { kind: 'hub', user: 'x' }, { kind: 'direct', user: 'local' },
+    { kind: 'direct' }, { kind: 'direct', user: '' }]) {
+    assert.deepEqual(remoteUser(a), { ok: false, status: 403, error: 'remote-only' }, JSON.stringify(a));
+  }
+  assert.equal(remoteUser({ kind: 'direct', user: 'a', readOnly: true }).error, 'read-only');
+  assert.equal(remoteUser({ kind: 'direct', user: 'a b' }).error, 'bad-user');
 });
 
 test('SR11 L1: a module registration that collides with an instance one is refused at run time', async () => {

@@ -299,9 +299,11 @@ test('prefs: stored overrides over config; setMuted', () => {
 
 // --- module ----------------------------------------------------------------------
 
-function req(body) {
+const DIRECT = Object.freeze({ kind: 'direct', user: 'alice@example.invalid', readOnly: false });
+function req(body, auth = DIRECT) {
   const r = Readable.from(body === undefined ? [] : [Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))]);
   r.url = '/api/notify/prefs';
+  r.auth = auth;
   return r;
 }
 
@@ -329,7 +331,7 @@ function moduleSetup({ withAlarms = true } = {}) {
   mod.register(ctx);
   mod.start(ctx);
   const emit = (change) => { for (const fn of listeners) fn(change); };
-  const call = async (method, body) => { const res = {}; await routes.get(`${method} /api/notify/prefs`)(req(body), res); return res; };
+  const call = async (method, body, auth) => { const res = {}; await routes.get(`${method} /api/notify/prefs`)(req(body, auth), res); return res; };
   return { mod, ctx, provided, sent, emit, call, listeners };
 }
 
@@ -407,4 +409,16 @@ test('hub notify modules do not import builder-only modules', async () => {
     assert.ok(specs.length > 0);
     for (const spec of specs) assert.ok(!/(^|\/)(push|config|db|state|log)\.mjs$/.test(spec), `${f} imports ${spec}`);
   }
+});
+
+test('SR13 L1: a prefs write (mute) needs a direct user; local keeps the read', async () => {
+  const m = moduleSetup();
+  const LOCAL = { kind: 'local', user: 'local' };
+  for (const auth of [LOCAL, { kind: 'direct', user: 'local' }, { kind: 'direct', user: 'a', readOnly: true }, null]) {
+    const res = await m.call('POST', { mutedTargets: ['builder-a/api'] }, auth);
+    assert.equal(res.status, 403, JSON.stringify(auth));
+  }
+  assert.deepEqual((await m.call('GET', undefined, LOCAL)).body.mutedTargets, [], 'nothing was muted');
+  assert.equal((await m.call('POST', { mutedTargets: ['builder-a/api'] })).status, 200);
+  m.mod.stop();
 });

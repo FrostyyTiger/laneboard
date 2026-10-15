@@ -17,6 +17,14 @@
 //      INTEGRATION order store, relay, readProxy, services, broadcast,
 //      onClientMessage, audit, then the rest) BEFORE loadModules('hub/routes'),
 //      so a module can use them in register; core routes are hub/routes/core.mjs.
+//      SR13 L2: the key reaches only the createUpstreams / createRelay /
+//      createReadProxy / createTermProxy calls below. Neither the Upstream
+//      objects (they hold the key and their signer) nor the terminal proxy are
+//      on ctx: modules get `upstreams` as a narrow facade {status(id),
+//      setVisible(id, keys)} only.
+//      SR11 R1: the relay honours registerHubAction `override: true` only for
+//      HUB_CORE_OVERRIDES (empty: no hub module may shadow or replace a
+//      registered hub action).
 //   5. services.startAll, upstreams, reconciler, map probes + loop, retention.
 //   6. listenAll: the local listener (`local`: reads only) and the ingress
 //      listener (`fleet.ingressPort`, `tailscale serve` -> `direct`), with the
@@ -84,7 +92,9 @@ const view = () => viewCache.get();
 const tickMs = Math.max(50, Math.min(1000, Math.floor((fleet.staleMs ?? 15_000) / 4)));
 const upstreams = createUpstreams({ builders, key, keyId, store, now, log, cfg: { ...fleet, tickMs } });
 
-const relay = createRelay({ store, key, keyId, audit, now, cfg: config });
+/** SR11 R1: action names core code may re-register with `override: true`. None today. */
+const HUB_CORE_OVERRIDES = Object.freeze([]);
+const relay = createRelay({ store, key, keyId, audit, now, cfg: config, coreOverrides: HUB_CORE_OVERRIDES });
 const readProxy = createReadProxy({ store, key, keyId, now, cfg: config, classify: (req) => classifyRequest(req) });
 const termProxy = createTermProxy({ store, key, keyId, cfg: config, audit, now, log, authOpts: authOptions() });
 const auditReconciler = createAuditReconciler({ store, readProxy, audit, now, log });
@@ -125,6 +135,18 @@ push.setSender(pushSender);
 
 const services = createServices({ log });
 
+/** SR13 L2: what modules may do with the upstreams. Never the Upstream objects (key + signer). */
+const upstreamFacade = Object.freeze({
+  status: (id) => {
+    const u = typeof id === 'string' ? upstreams.get(id) : null;
+    return u ? u.status() : null;
+  },
+  setVisible: (id, keys) => {
+    const u = typeof id === 'string' ? upstreams.get(id) : null;
+    return u ? u.setVisible(keys) : false;
+  },
+});
+
 // 4. The module ctx. Base fields for modules that read ctx.<name>; the same
 // objects provided for modules that use ctx.use(name).
 const ctx = createContext({
@@ -145,9 +167,8 @@ const ctx = createContext({
   view,
   aggregates,
   push,
-  upstreams,
+  upstreams: upstreamFacade,
   clientWs,
-  termProxy,
   auditReconciler,
   mapModel,
 });
@@ -155,7 +176,7 @@ for (const [name, value] of [
   ['store', store], ['relay', relay], ['readProxy', readProxy], ['services', services],
   ['broadcast', broadcast], ['onClientMessage', onClientMessage], ['audit', audit],
   ['db', db], ['push', push], ['pushSender', pushSender], ['auditForks', auditReconciler],
-  ['upstreams', upstreams], ['clientWs', clientWs], ['termProxy', termProxy],
+  ['upstreams', upstreamFacade], ['clientWs', clientWs],
 ]) ctx.provide(name, value);
 
 registerHealthz(() => ({ mode: 'hub', builders: healthCounts(view()) }));

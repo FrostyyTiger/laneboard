@@ -448,17 +448,19 @@ test('hub module registers kill (fanout) on the relay, serves GET /api/fleet/kil
   assert.equal(after.error, 'fanout-not-supported');
 });
 
-test('registerFanoutKill retries with override only when the registry asks for it', () => {
+test('SR11 R1: registerFanoutKill never retries with override, whatever the registry error', () => {
   const seen = [];
   const strict = (name, def) => {
     seen.push({ name, ...def });
-    if (!def.override) throw new TypeError(`registerHubAction: ${name} is a builder action; pass override: true`);
-    return () => {};
+    throw new TypeError(`registerHubAction: ${name} is a builder action; pass override: true`);
   };
-  assert.equal(typeof registerFanoutKill(strict, () => null), 'function');
-  assert.deepEqual(seen.map((d) => [d.name, d.scope, d.override ?? false]), [['kill', 'fanout', false], ['kill', 'fanout', true]]);
+  assert.throws(() => registerFanoutKill(strict, () => null), /pass override/);
+  assert.deepEqual(seen.map((d) => [d.name, d.scope, d.override ?? false]), [['kill', 'fanout', false]], 'one attempt, no override');
   const other = () => { throw new TypeError('kill (fanout) is already registered'); };
   assert.throws(() => registerFanoutKill(other, () => null), /already registered/);
+  const ok = [];
+  assert.equal(typeof registerFanoutKill((n, d) => { ok.push(d); return () => {}; }, () => null), 'function');
+  assert.equal(ok[0].override, undefined);
 });
 
 test('fleet undo: a builder that answers the resume 429 (its * rate limit) gets one fresh resume later', async () => {
