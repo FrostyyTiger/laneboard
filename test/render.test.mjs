@@ -120,6 +120,16 @@ function loadModules(context) {
 function read2(f) { return fs.readFileSync(path.join(PUB, f), 'utf8'); }
 
 /**
+ * What used to be public/styles.css: the public/css sheets in index.html link
+ * order (fleet F2), minus the map view's sheet, which was map.css.
+ */
+function readStyles() {
+  return [...read2('index.html').matchAll(/<link rel="stylesheet" href="\/css\/([^"]+)">/g)]
+    .map((m) => m[1]).filter((f) => f !== 'views/map.css')
+    .map((f) => read2(path.join('css', f))).join('');
+}
+
+/**
  * The modules split out of the old public/app.js, concatenated. The files that
  * moved in whole (terminal, motion, the map canvas, keys) were never part of it.
  */
@@ -665,7 +675,7 @@ test('the chart is inline SVG with no library and no animation', () => {
   const app = readAppJs();
   assert.match(app, /createElementNS/, 'the chart is built as real SVG nodes');
   assert.ok(!/import .*chart|d3|chart\.js/i.test(app), 'no chart library may appear');
-  const css = read2('styles.css');
+  const css = readStyles();
   const chartRules = css.slice(css.indexOf('.chart-head'), css.indexOf('.dtable th.sorted'));
   assert.ok(!/animation|@keyframes|transition/.test(chartRules), 'charts must not animate');
 });
@@ -938,7 +948,7 @@ test('on the 49" the Box is rail blocks; elsewhere the rail box stays hidden', a
   send(wide.socket, { type: 'snapshot', ...v3Snapshot([{ id: 'a' }]) });
   assert.equal(wide.byId.get('rail-box').hidden, false);
   assert.match(wide.byId.get('rail-box').textContent, /Guard.*CI queue.*Agent slots/s);
-  const css = read2('styles.css');
+  const css = readStyles();
   assert.match(css, /@media \(min-width: 2000px\)\s*\{\s*\.view-tab\[data-view="box"\] \{ display: none; \}/, 'the tab hides on the 49"');
 });
 
@@ -950,7 +960,7 @@ test('phone: lane cards are one column, rows keep Yes/No, the launch form will n
   assert.ok(row, 'the session is a row inside its lane card');
   const labels = row.querySelectorAll('btn').map((b) => b.textContent);
   assert.ok(labels.includes('Yes') && labels.includes('No'), `Yes/No survive inside a lane card (${labels})`);
-  const css = read2('styles.css');
+  const css = readStyles();
   assert.match(css, /\.grid \{ display: grid; grid-template-columns: 1fr;/, 'one column below 700px');
   const phone = css.slice(css.lastIndexOf('@media (max-width: 699px)'));
   assert.match(phone, /\.launch-form input, \.launch-form select \{ font-size: 16px; \}/);
@@ -991,7 +1001,7 @@ test('the launch sheet posts the form and shows the refusal in the server\'s wor
 });
 
 test('the mission-control skin kept every panel flat', () => {
-  const css = read2('styles.css');
+  const css = readStyles();
   // Panels get no drop shadow; only things that genuinely float keep one.
   const cardRule = /\.card \{([\s\S]*?)\}/.exec(css);
   assert.ok(cardRule, '.card rule must exist');
@@ -1004,10 +1014,10 @@ test('the mission-control skin kept every panel flat', () => {
 test('the accent is spent only on focus and pins', () => {
   // State colour is the only colour that carries meaning. The model name used
   // to take the accent, which left nothing to notice a pin with.
-  const css = read2('styles.css');
+  const css = readStyles();
   const accentUsers = [...css.matchAll(/([^{}]+)\{[^{}]*var\(--accent(?!-)\)/g)]
     .map((m) => m[1].trim().split(/\s+/).pop())
-    // :root DEFINES the token (and its aliases); it does not spend it.
+    // :root DEFINES the token; it does not spend it.
     .filter((sel) => (sel.startsWith('.') || sel.startsWith(':')) && sel !== ':root');
   for (const sel of accentUsers) {
     assert.ok(
@@ -1022,7 +1032,7 @@ test('the accent is spent only on focus and pins', () => {
 
 test('the phone keeps readable type and 16px inputs', () => {
   // Dense is a desktop idea; iOS zooms the page for any input under 16px.
-  const css = read2('styles.css');
+  const css = readStyles();
   const phone = css.slice(css.indexOf('@media (max-width: 699px)'));
   assert.match(phone, /html, body \{ font-size: 15px; \}/);
   assert.match(css, /font-size: 16px; \/\* 16px stops iOS zooming/);

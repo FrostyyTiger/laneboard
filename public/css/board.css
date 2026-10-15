@@ -1,0 +1,176 @@
+/* ===================== cards ============================================= */
+/*
+   Panels in a console, not tiles on a desk. Flat fill, hairline border, 2 px
+   radius, no shadow. Never backdrop-filter: there are up to twenty of these,
+   they re-render on every delta, and several sit above live terminal output.
+*/
+.card {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-weak);
+  border-radius: var(--radius-l);
+  padding: 10px;
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  scroll-margin-top: 74px;
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.card:hover { border-color: var(--border); }
+
+/* State reads on the border and a soft inner glow — never a background wash
+   strong enough to fight the text. Only the states that need a human glow. */
+.card.s-waiting_permission {
+  border-color: oklch(70% 0.2 12 / 0.55);
+  box-shadow: inset 0 0 0 1px oklch(70% 0.2 12 / 0.14);
+}
+.card.s-waiting_question {
+  border-color: oklch(80% 0.15 78 / 0.5);
+  box-shadow: inset 0 0 0 1px oklch(80% 0.15 78 / 0.12);
+}
+.card.s-working { border-color: oklch(75% 0.13 242 / 0.26); }
+.card.s-dead { opacity: 0.5; }
+.card.s-dead .card-name { text-decoration: line-through; }
+.card.cursor { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim); }
+.card-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.card-name {
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: -0.005em;
+}
+
+.pill {
+  font-size: 9.5px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  flex: none;
+  white-space: nowrap;
+  background: oklch(100% 0 0 / 0.06);
+  color: var(--text-2);
+  border: 1px solid transparent;
+}
+.pill.s-waiting_permission { color: var(--crit); background: oklch(70% 0.2 12 / 0.14); border-color: oklch(70% 0.2 12 / 0.3); }
+.pill.s-waiting_question { color: var(--warn); background: oklch(80% 0.15 78 / 0.13); border-color: oklch(80% 0.15 78 / 0.28); }
+.pill.s-working { color: var(--info); background: oklch(75% 0.13 242 / 0.13); border-color: oklch(75% 0.13 242 / 0.26); }
+.pill.s-done { color: var(--ok); background: oklch(78% 0.16 158 / 0.12); border-color: oklch(78% 0.16 158 / 0.24); }
+.card-since { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); flex: none; }
+
+.card-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; font-family: var(--font-mono); font-size: 12px; color: var(--text-3); }
+.card-meta .dir, .card-meta .branch { color: var(--text-2); }
+.card-meta .dirty { color: var(--warn); }
+.card-meta .ahead { color: var(--info); }
+/* The accent is reserved for focus and pins (stage 7): the model name was
+   spending it on every card, which left nothing to notice a pin with. */
+.card-meta .model { color: var(--text-2); }
+.card-meta .cost { color: var(--text-1); font-weight: 500; }
+
+.ctx { display: grid; gap: 4px; }
+.ctx-label { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-3); font-family: var(--font-mono); }
+
+.tool-line {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--info);
+  overflow: hidden;
+  white-space: nowrap;
+  display: flex;
+  gap: 7px;
+}
+.tool-line::before { content: "▸"; color: var(--text-3); flex: none; }
+.tool-line .tname { color: var(--text-1); flex: none; font-weight: 500; }
+.tool-line .targ { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.say {
+  font-size: 12px;
+  line-height: 1.42;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.say-user {
+  color: var(--text-3);
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  border-left: 2px solid var(--border);
+  padding-left: 9px;
+}
+
+/* Card previews never scroll sideways: lines wrap, and the server has already
+   collapsed Claude's full-width rules so they cannot wrap on their own. */
+.preview {
+  font-family: var(--font-mono);
+  /* 11 px is the floor: below it Claude's box-drawing rules stop resolving. */
+  font-size: 11px;
+  line-height: 1.38;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-weak);
+  border-radius: var(--radius-m);
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  color: var(--text-2);
+  max-height: 11.2em;
+}
+.preview span { white-space: inherit; overflow-wrap: inherit; }
+
+.card-actions { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.btn {
+  font: inherit;
+  font-size: 11.5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  background: oklch(100% 0 0 / 0.05);
+  color: var(--text-2);
+  border: 1px solid var(--border-weak);
+  border-radius: var(--radius-s);
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+.btn:hover { color: var(--text-1); border-color: var(--border-strong); }
+.btn.primary { background: oklch(70% 0.2 12 / 0.16); color: var(--crit); border-color: oklch(70% 0.2 12 / 0.34); }
+.btn.primary:hover { background: oklch(70% 0.2 12 / 0.24); color: oklch(88% 0.12 12); }
+.btn.ok { background: oklch(78% 0.16 158 / 0.14); color: var(--ok); border-color: oklch(78% 0.16 158 / 0.3); }
+.btn.ok:hover { background: oklch(78% 0.16 158 / 0.22); color: oklch(90% 0.11 158); }
+.btn.on { color: var(--accent); border-color: oklch(70% 0.15 292 / 0.45); background: var(--accent-dim); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-more { margin-left: auto; padding: 5px 10px; }
+
+.menu {
+  position: absolute;
+  right: 13px;
+  bottom: 46px;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  padding: 5px;
+  min-width: 172px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-s);
+  box-shadow: var(--shadow-float);
+}
+.menu button {
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: var(--radius-s);
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.menu button:hover { background: oklch(100% 0 0 / 0.07); color: var(--text-1); }
+.menu button.danger:hover { background: oklch(70% 0.2 12 / 0.18); color: oklch(90% 0.11 12); }
+

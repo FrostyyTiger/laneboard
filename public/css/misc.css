@@ -1,0 +1,84 @@
+/* ===================== misc ============================================== */
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: oklch(100% 0 0 / 0.11); border-radius: var(--radius-pill); }
+::-webkit-scrollbar-thumb:hover { background: oklch(100% 0 0 / 0.2); }
+::selection { background: var(--accent-dim); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* Opaque fallback wherever the viewer has asked for less transparency. */
+@media (prefers-reduced-transparency: reduce) {
+  .card, .attention-item, .chip, .toast, .menu, .topbar { background: var(--bg-surface); }
+}
+
+.card-meta .tokens { color: var(--text-2); }
+.card-meta .sandbox { color: var(--text-3); }
+
+/* ===================== views ============================================= */
+/*
+   Five views on one page: Board, Morning, Credit, Machine, Files. The strip
+   lives in the top bar from 700px up; below that it gives way to a bottom tab
+   bar, because a thumb reaches the bottom of a phone and not the top. Both are
+   always in the DOM — CSS picks one, the same trick the rate-limit gauges use.
+*/
+.views { display: flex; gap: 2px; margin-left: 6px; }
+.view-tab {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 11px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.view-tab:hover { color: var(--text-1); background: oklch(100% 0 0 / 0.05); }
+.view-tab.on { color: var(--text-1); background: oklch(100% 0 0 / 0.07); border-color: var(--border-weak); }
+
+.view { padding: var(--gap); min-width: 0; }
+/* The Map owns everything below the top bar; public/map.css styles its inside. */
+.view.map-view { padding: 0; height: calc(100dvh - var(--topbar-h, 49px)); }
+.map-root { position: relative; width: 100%; height: 100%; }
+.view > .rail-h { margin-bottom: 12px; }
+.view-body { min-width: 0; }
+
+/* Bottom tab bar — phone only. */
+.tabs {
+  display: flex;
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 40;
+  background: var(--glass-fill-strong);
+  border-top: 1px solid var(--border-weak);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tab {
+  flex: 1;
+  font: inherit;
+  font-size: 11px;
+  padding: 11px 2px;
+  background: transparent;
+  border: 0;
+  border-top: 2px solid transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.tab.on { color: var(--text-1); border-top-color: var(--accent); }
+
+@media (min-width: 700px) { .tabs { display: none; } }
+@media (max-width: 699px) {
+  .views { display: none; }
+  /* The tab bar sits over the page, so give the last card somewhere to go —
+     and lift the disconnected banner clear of it. */
+  .layout, .view { padding-bottom: 68px; }
+  .view.map-view { padding-bottom: 0; height: calc(100dvh - var(--topbar-h, 49px) - 52px - env(safe-area-inset-bottom)); }
+  .banner { bottom: calc(52px + env(safe-area-inset-bottom)); }
+}
+
