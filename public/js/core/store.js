@@ -22,11 +22,34 @@ import { BUILDER_ID_RX, fkey, isFkey, parseFkey } from './keys.js';
 /** Builder id used before the local source's hello names it. */
 export const LOCAL_FALLBACK_ID = 'local';
 
-/** BuilderRow.state (hub, §3 2.5) -> Builder.status. */
-const ROW_STATE = {
+/**
+ * BuilderRow.state (hub, §3 2.5) -> Builder.status. Null prototype, and read
+ * only through own(), so `constructor`/`__proto__` map to nothing (SR8 L1).
+ */
+const ROW_STATE = Object.freeze(Object.assign(Object.create(null), {
   up: 'live', stale: 'stale', down: 'down', connecting: 'connecting',
   misconfigured: 'down', incompatible: 'stale',
-};
+}));
+
+/** table[k] if k is an OWN key of table, else undefined (never an inherited member). */
+export function own(table, k) {
+  return table && typeof k === 'string' && Object.hasOwn(table, k) ? table[k] : undefined;
+}
+
+/**
+ * Per-builder caps on what the client retains (SR8 L3), matching the hub's
+ * fleet-store LIMITS (server/hub/fleet-store.mjs). Extras are dropped and
+ * counted in `builder.dropped`. Defence in depth: the hub enforces them first.
+ */
+export const CLIENT_LIMITS = Object.freeze({
+  sessions: 500,
+  lanes: 200,
+  attention: 200,
+  approvals: 100,
+  repos: 64,
+  eventsPerSec: 20,
+  nameChars: 200,
+});
 /** Nested routing fields a builder may not choose (S2). */
 const ROUTING_FIELDS = ['key', 'laneKey', 'builder', 'fkey'];
 
@@ -35,6 +58,10 @@ function validId(id) {
 }
 function validName(n) {
   return typeof n === 'string' && n !== '';
+}
+/** A builder-supplied record name/id: non-empty and at most nameChars long. */
+function validRecordName(n) {
+  return validName(n) && n.length <= CLIENT_LIMITS.nameChars;
 }
 
 /** A fresh, empty store. */
@@ -158,6 +185,8 @@ function newBuilder(id) {
     health: null, approvals: new Map(), repos: new Map(), budget: null,
     stale: false, ageMs: 0, controls: true, capabilities: [], directUrl: null,
     latencyMs: null, versionSkew: null, state: null,
+    dropped: { sessions: 0, lanes: 0, attention: 0, approvals: 0, repos: 0, events: 0 },
+    eventWindow: { start: 0, n: 0 },
   };
 }
 
@@ -179,8 +208,9 @@ function builderFor(s, id) {
  */
 function routeOf(s, msg) {
   if (s.source.kind === 'hub') return validId(msg.builder) ? msg.builder : null;
-  if (s.source.id) return s.source.id;
-  return validId(msg.builder) ? msg.builder : LOCAL_FALLBACK_ID;
+  // Local source: its hello id, or the fallback before hello. Never the
+  // frame's own claimed builder (SR8 L4).
+  return s.source.id ?? LOCAL_FALLBACK_ID;
 }
 
 function stripRouting(obj) {
@@ -190,7 +220,7 @@ function stripRouting(obj) {
 }
 
 function stampSession(id, raw) {
-  if (!raw || typeof raw !== 'object' || !validName(raw.name)) return null;
+  if (!raw || typeof raw !== 'object' || !validRecordName(raw.name)) return null;
   const s = stripRouting(raw);
   s.builder = id;
   s.key = fkey(id, raw.name);
@@ -199,7 +229,7 @@ function stampSession(id, raw) {
 }
 
 function stampLane(id, raw) {
-  if (!raw || typeof raw !== 'object' || !validName(raw.id)) return null;
+  if (!raw || typeof raw !== 'object' || !validRecordName(raw.id)) return null;
   const l = stripRouting(raw);
   l.builder = id;
   l.key = fkey(id, raw.id);
@@ -207,7 +237,7 @@ function stampLane(id, raw) {
 }
 
 function stampAttention(id, raw) {
-  if (!raw || typeof raw !== 'object' || !validName(raw.name)) return null;
+  if (!raw || typeof raw !== 'object' || !validRecordName(raw.name)) return null;
   const a = stripRouting(raw);
   a.builder = id;
   a.key = fkey(id, raw.name);
@@ -222,10 +252,16 @@ function stampApproval(id, raw) {
   return a;
 }
 
-function stampAll(list, id, fn) {
+/**
+ * Stamp a builder-supplied list. With a builder `b` and a `what` cap name,
+ * keeps at most CLIENT_LIMITS[what] entries and counts the rest in b.dropped.
+ */
+function stampAll(list, id, fn, b = null, what = null) {
   if (!Array.isArray(list)) return [];
+  const max = what ? CLIENT_LIMITS[what] : Infinity;
   const out = [];
   for (const raw of list) {
+    if (out.length >= max) { b.dropped[what] += 1; continue; }
     const v = fn(id, raw);
     if (v) out.push(v);
   }
@@ -284,8 +320,8 @@ function dropIndexOf(s, b) {
 
 /** The optional per-builder fields of a snapshot or delta. */
 function applyCommon(s, b, msg) {
-  if (msg.lanes) b.lanes = stampAll(msg.lanes, b.id, stampLane);
-  if (msg.attention) b.attention = stampAll(msg.attention, b.id, stampAttention);
+  if (msg.lanes) b.lanes = stampAll(msg.lanes, b.id, stampLane, b, 'lanes');
+  if (msg.attention) b.attention = stampAll(msg.attention, b.id, stampAttention, b, 'attention');
   if (msg.vitals) {
     b.vitals = msg.vitals;
     if (typeof msg.vitals.host === 'string') b.host = msg.vitals.host;
@@ -294,7 +330,11 @@ function applyCommon(s, b, msg) {
   if (typeof msg.generatedAt === 'number' && msg.generatedAt) b.generatedAt = msg.generatedAt;
   if (Array.isArray(msg.approvals)) {
     b.approvals = new Map();
-    for (const a of stampAll(msg.approvals, b.id, stampApproval)) if (validName(a.id)) b.approvals.set(a.id, a);
+    for (const a of stampAll(msg.approvals, b.id, stampApproval)) {
+      if (!validRecordName(a.id)) continue;
+      if (!b.approvals.has(a.id) && b.approvals.size >= CLIENT_LIMITS.approvals) { b.dropped.approvals += 1; continue; }
+      b.approvals.set(a.id, a);
+    }
   }
   if (msg.health !== undefined && msg.health !== null) b.health = msg.health;
   if (msg.budget !== undefined) b.budget = msg.budget;
@@ -308,7 +348,10 @@ export function applySnapshot(s, builderId, msg) {
   const b = builderFor(s, builderId);
   dropIndexOf(s, b);
   b.sessions = new Map();
-  for (const sess of stampAll(msg.sessions, builderId, stampSession)) b.sessions.set(sess.name, sess);
+  for (const sess of stampAll(msg.sessions, builderId, stampSession)) {
+    if (!b.sessions.has(sess.name) && b.sessions.size >= CLIENT_LIMITS.sessions) { b.dropped.sessions += 1; continue; }
+    b.sessions.set(sess.name, sess);
+  }
   for (const sess of b.sessions.values()) s.sessions.set(sessionKey(s, sess), sess);
   applyCommon(s, b, msg);
   derive(s);
@@ -320,15 +363,19 @@ export function applyDelta(s, builderId, msg) {
   if (!validId(builderId)) return null;
   const b = builderFor(s, builderId);
   const changed = [];
+  const removed = Array.isArray(msg.removed) ? msg.removed : [];
+  // Sessions this delta removes free room under the cap for its upserts.
+  const leaving = new Set(removed.filter((n) => validName(n) && b.sessions.has(n)));
   for (const sess of stampAll(msg.sessions, builderId, stampSession)) {
     const old = b.sessions.get(sess.name);
+    if (!old && b.sessions.size - leaving.size >= CLIENT_LIMITS.sessions) { b.dropped.sessions += 1; continue; }
     if (old) s.sessions.delete(sessionKey(s, old));
     b.sessions.set(sess.name, sess);
     const k = sessionKey(s, sess);
     s.sessions.set(k, sess);
     changed.push(k);
   }
-  for (const n of Array.isArray(msg.removed) ? msg.removed : []) {
+  for (const n of removed) {
     if (!validName(n)) continue;
     const old = b.sessions.get(n);
     b.sessions.delete(n);
@@ -350,7 +397,7 @@ export function applyBuilders(s, list) {
     const b = builderFor(s, row.id);
     if (typeof row.code === 'string') b.code = row.code;
     b.state = typeof row.state === 'string' ? row.state : null;
-    b.status = ROW_STATE[row.state] ?? 'down';
+    b.status = own(ROW_STATE, row.state) ?? 'down';
     b.stale = b.status !== 'live';
     if (typeof row.ageMs === 'number') b.ageMs = row.ageMs;
     b.latencyMs = typeof row.latencyMs === 'number' ? row.latencyMs : null;
@@ -391,12 +438,20 @@ function applyHello(s, msg) {
   return { type: 'hello', builder: id };
 }
 
+/** Own string-valued entries of obj, in a null-prototype object (SR8 L1). */
+function ownStrings(obj) {
+  const out = Object.create(null);
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return out;
+  for (const k of Object.keys(obj)) if (typeof obj[k] === 'string') out[k] = obj[k];
+  return out;
+}
+
 /** The richer GET /api/v1/hello (capabilities, live tier table). */
 export function setHello(s, hello) {
   if (!hello || typeof hello !== 'object') return;
   s.source.hello = {
     capabilities: Array.isArray(hello.capabilities) ? hello.capabilities.filter((c) => typeof c === 'string') : [],
-    actions: hello.actions && typeof hello.actions === 'object' ? { ...hello.actions } : {},
+    actions: ownStrings(hello.actions),
     mode: typeof hello.mode === 'string' ? hello.mode : null,
   };
   if (s.source.kind === 'local') {
@@ -431,19 +486,29 @@ export function ingest(s, msg, now = Date.now()) {
   } else {
     const id = routeOf(s, msg);
     if (!id) return null;
-    out = ingestScoped(s, id, msg);
+    out = ingestScoped(s, id, msg, now);
     if (out) builderFor(s, id).lastMsgAt = now;
   }
   if (out) notify(s, out);
   return out;
 }
 
-function ingestScoped(s, id, msg) {
+/** One more event for builder b in the current 1 s window, or false (SR8 L3). */
+function allowEvent(b, now) {
+  const w = b.eventWindow;
+  if (!(now - w.start < 1000 && now >= w.start)) { w.start = now; w.n = 0; }
+  if (w.n >= CLIENT_LIMITS.eventsPerSec) { b.dropped.events += 1; return false; }
+  w.n += 1;
+  return true;
+}
+
+function ingestScoped(s, id, msg, now) {
   switch (msg.type) {
     case 'snapshot': return applySnapshot(s, id, msg);
     case 'delta': return applyDelta(s, id, msg);
     case 'event': {
       if (!msg.event || typeof msg.event !== 'object') return null;
+      if (!allowEvent(builderFor(s, id), now)) return null;
       const event = stripRouting(msg.event);
       event.builder = id;
       event.key = validName(event.session_name) ? fkey(id, event.session_name) : null;
@@ -456,8 +521,9 @@ function ingestScoped(s, id, msg) {
     case 'approval': {
       const b = builderFor(s, id);
       const a = stampApproval(id, msg.approval);
-      if (!a || !validName(a.id)) return null;
+      if (!a || !validRecordName(a.id)) return null;
       if (msg.op === 'close') b.approvals.delete(a.id);
+      else if (!b.approvals.has(a.id) && b.approvals.size >= CLIENT_LIMITS.approvals) { b.dropped.approvals += 1; return null; }
       else b.approvals.set(a.id, a);
       return { type: 'approval', builder: id, approval: a };
     }
@@ -473,8 +539,10 @@ function ingestScoped(s, id, msg) {
       return { type: 'stuck', builder: id, changed: [k] };
     }
     case 'repos': {
-      if (!validName(msg.repo)) return null;
-      builderFor(s, id).repos.set(msg.repo, msg.data ?? null);
+      if (!validRecordName(msg.repo)) return null;
+      const b = builderFor(s, id);
+      if (!b.repos.has(msg.repo) && b.repos.size >= CLIENT_LIMITS.repos) { b.dropped.repos += 1; return null; }
+      b.repos.set(msg.repo, msg.data ?? null);
       return { type: 'repos', builder: id };
     }
     default: return null;

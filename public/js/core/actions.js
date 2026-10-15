@@ -46,9 +46,22 @@ export const ACTION_TIMEOUT_MS = 20000;
 /** The tier of an action: the live hello table first, then the fallback. */
 export function tierOf(action, s) {
   s ||= store;
-  const live = s.source.hello?.actions?.[action];
+  if (typeof action !== 'string') return 'confirm';
+  // Own keys only: `constructor`, `__proto__`, `toString` ... are not
+  // actions and must not resolve to an inherited member (SR8 L1).
+  const table = s.source.hello?.actions;
+  const live = table && typeof table === 'object' && Object.hasOwn(table, action) ? table[action] : undefined;
   if (TIERS.has(live)) return live;
-  return ACTION_TIERS[action] ?? 'confirm';
+  return Object.hasOwn(ACTION_TIERS, action) ? ACTION_TIERS[action] : 'confirm';
+}
+
+/**
+ * True for a name that would collapse a URL path segment once encoded:
+ * encodeURIComponent leaves '.' and '..' as they are, and URL parsing then
+ * drops or pops the segment (SR8 L2). Such names never go into a path.
+ */
+export function isDotSegment(name) {
+  return name === '.' || name === '..';
 }
 
 /**
@@ -102,6 +115,7 @@ const enc = encodeURIComponent;
 /** action -> the legacy REST request, or null when there is none. */
 export function legacyRequest(action, target, args = {}) {
   const t = enc(target);
+  if (isDotSegment(target) && !['spawn', 'launch'].includes(action)) return null;
   switch (action) {
     case 'send-keys': return { method: 'POST', url: `/api/sessions/${t}/keys`, body: { keys: args.keys } };
     case 'send-text': return { method: 'POST', url: `/api/sessions/${t}/text`, body: { text: args.text, enter: args.enter !== false } };
@@ -175,6 +189,7 @@ export function createActions(opts = {}) {
       const env = buildEnvelope({ builder: t.builder, action, target: t.target, args, id: newId(), ts: now() });
       return request('POST', '/api/v1/actions', env, false);
     }
+    if (isDotSegment(t.target) && !['spawn', 'launch'].includes(action)) return { ok: false, error: 'bad-target', code: 'bad-target' };
     const req = legacyRequest(action, t.target, args ?? {});
     if (!req) return { ok: false, error: `${action} needs a newer builder`, code: 'unsupported' };
     return request(req.method, req.url, req.body, true);

@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import {
   createStore, ingest, applySnapshot, applyDelta, applyBuilders, setSourceKind, setSourceStatus,
   setKeyMode, setHello, migratePins, toIndexKey, sessionFor, builders, lanes, alarms, subscribe,
-  attentionOrder, LOCAL_FALLBACK_ID,
+  attentionOrder, LOCAL_FALLBACK_ID, CLIENT_LIMITS,
 } from '../public/js/core/store.js';
+import { createSource, termPath, PREKIND_BUFFER_MAX } from '../public/js/core/net.js';
 
 function hubStore() {
   const s = createStore();
@@ -295,4 +296,167 @@ test('applySnapshot/applyDelta refuse a bad builder id', () => {
   assert.equal(applySnapshot(s, '../x', { sessions: [] }), null);
   assert.equal(applyDelta(s, '', { sessions: [] }), null);
   assert.equal(applyBuilders(s, 'nope'), null);
+});
+
+// ---------------------------------------------------------------- SR8 lows
+
+test('SR8 L1: prototype names in BuilderRow.state map to down, not to an inherited member', () => {
+  const s = hubStore();
+  applyBuilders(s, [
+    { id: 'b1', state: 'constructor' }, { id: 'b2', state: '__proto__' },
+    { id: 'b3', state: 'toString' }, { id: 'b4', state: 'up' },
+  ]);
+  for (const id of ['b1', 'b2', 'b3']) {
+    assert.equal(s.builders.get(id).status, 'down', id);
+    assert.equal(s.builders.get(id).stale, true, id);
+  }
+  assert.equal(s.builders.get('b4').status, 'live');
+});
+
+test('SR8 L1: hello.actions keeps only own string entries in a null-prototype table', () => {
+  const s = localStore();
+  setHello(s, JSON.parse('{"actions":{"kill":"click","__proto__":"read","x":{"y":1}}}'));
+  const t = s.source.hello.actions;
+  assert.equal(Object.getPrototypeOf(t), null);
+  assert.equal(t.kill, 'click');
+  assert.equal(t.x, undefined);
+  assert.equal(t.constructor, undefined);
+  assert.equal({}.polluted, undefined);
+});
+
+test('SR8 L2: termPath refuses dot-segment names (null = terminal unavailable)', () => {
+  assert.equal(termPath('hub', 'b1/..'), null);
+  assert.equal(termPath('hub', 'b1/.'), null);
+  assert.equal(termPath('local', 'b1/..'), null);
+  assert.equal(termPath('local', '..'), null);
+  assert.equal(termPath('local', '.'), null);
+  assert.equal(termPath('hub', '..'), null);
+  assert.equal(termPath('hub', 'b1/...'), '/ws/term/b1/...');
+  assert.equal(termPath('hub', 'b1/a/..'), '/ws/term/b1/a%2F..');
+  assert.equal(termPath('hub', 'b1/x'), '/ws/term/b1/x');
+  assert.equal(termPath('local', 'web'), '/ws/term/web');
+  const u = new URL(termPath('hub', 'b1/a/..'), 'http://example.invalid');
+  assert.equal(u.pathname, '/ws/term/b1/a%2F..');
+});
+
+test('SR8 L3: per-builder caps drop and count extra sessions, lanes, attention, approvals, repos and events', () => {
+  const s = hubStore();
+  const many = (n, f) => Array.from({ length: n }, (_, i) => f(i));
+  ingest(s, {
+    type: 'snapshot', builder: 'b1',
+    sessions: many(CLIENT_LIMITS.sessions + 5, (i) => ({ name: `s${i}` })),
+    lanes: many(CLIENT_LIMITS.lanes + 3, (i) => ({ id: `l${i}` })),
+    attention: many(CLIENT_LIMITS.attention + 2, (i) => ({ name: `s${i}` })),
+    approvals: many(CLIENT_LIMITS.approvals + 4, (i) => ({ id: `a${i}` })),
+  });
+  const b = s.builders.get('b1');
+  assert.equal(b.sessions.size, CLIENT_LIMITS.sessions);
+  assert.equal(b.lanes.length, CLIENT_LIMITS.lanes);
+  assert.equal(b.attention.length, CLIENT_LIMITS.attention);
+  assert.equal(b.approvals.size, CLIENT_LIMITS.approvals);
+  assert.deepEqual({ ...b.dropped }, { sessions: 5, lanes: 3, attention: 2, approvals: 4, repos: 0, events: 0 });
+  // Delta: a new name is dropped at the cap, an update of a known one is not,
+  // and a removal in the same delta makes room.
+  ingest(s, { type: 'delta', builder: 'b1', sessions: [{ name: 'new1' }, { name: 's0', state: 'done' }] });
+  assert.equal(b.sessions.has('new1'), false);
+  assert.equal(b.sessions.get('s0').state, 'done');
+  assert.equal(b.dropped.sessions, 6);
+  ingest(s, { type: 'delta', builder: 'b1', removed: ['s1'], sessions: [{ name: 'new2' }] });
+  assert.equal(b.sessions.has('new2'), true);
+  assert.equal(b.sessions.size, CLIENT_LIMITS.sessions);
+  // Approval frames.
+  assert.equal(ingest(s, { type: 'approval', builder: 'b1', op: 'open', approval: { id: 'extra' } }), null);
+  assert.equal(b.approvals.has('extra'), false);
+  assert.ok(ingest(s, { type: 'approval', builder: 'b1', op: 'open', approval: { id: 'a0', name: 's0' } }));
+  assert.equal(b.dropped.approvals, 5);
+  // Repos.
+  for (let i = 0; i < CLIENT_LIMITS.repos + 2; i++) ingest(s, { type: 'repos', builder: 'b1', repo: `r${i}`, data: {} });
+  assert.equal(b.repos.size, CLIENT_LIMITS.repos);
+  assert.equal(b.dropped.repos, 2);
+  assert.ok(ingest(s, { type: 'repos', builder: 'b1', repo: 'r0', data: { x: 1 } }), 'a known repo still updates');
+  // Events: at most eventsPerSec per builder per second; other builders unaffected.
+  let passed = 0;
+  for (let i = 0; i < CLIENT_LIMITS.eventsPerSec + 7; i++) {
+    if (ingest(s, { type: 'event', builder: 'b1', event: { session_name: 's0' } }, 10_000 + i)) passed += 1;
+  }
+  assert.equal(passed, CLIENT_LIMITS.eventsPerSec);
+  assert.equal(b.dropped.events, 7);
+  assert.ok(ingest(s, { type: 'event', builder: 'b2', event: { session_name: 'x' } }, 10_010));
+  assert.ok(ingest(s, { type: 'event', builder: 'b1', event: { session_name: 's0' } }, 11_001), 'the next second has room');
+  // Over-long names are not stored.
+  ingest(s, { type: 'snapshot', builder: 'b3', sessions: [{ name: 'x'.repeat(CLIENT_LIMITS.nameChars + 1) }, { name: 'ok' }] });
+  assert.deepEqual([...s.builders.get('b3').sessions.keys()], ['ok']);
+});
+
+test('SR8 L4: before hello a local store files frames under the fallback, never the claimed builder', () => {
+  const s = createStore();
+  ingest(s, { type: 'snapshot', builder: 'b2', sessions: [{ name: 'x' }] });
+  assert.deepEqual([...s.builders.keys()], [LOCAL_FALLBACK_ID]);
+  assert.deepEqual([...s.sessions.keys()], [`${LOCAL_FALLBACK_ID}/x`]);
+});
+
+function fakeSockets() {
+  const all = [];
+  function FakeWS(url) {
+    const ls = {};
+    const sock = {
+      url, readyState: 0, sent: [],
+      addEventListener: (t, fn) => { (ls[t] ||= []).push(fn); },
+      send: (d) => sock.sent.push(d),
+      close: () => { for (const fn of ls.close || []) fn({}); },
+      emit: (t, ev) => { for (const fn of ls[t] || []) fn(ev); },
+      frame: (obj) => sock.emit('message', { data: JSON.stringify(obj) }),
+    };
+    all.push(sock);
+    return sock;
+  }
+  return { all, FakeWS };
+}
+
+test('SR8 L4: an auto source holds scoped frames until hello/fleet decides the kind', () => {
+  const { all, FakeWS } = fakeSockets();
+  const got = [];
+  const src = createSource({ url: 'ws://example.invalid/ws', WebSocketImpl: FakeWS, schedule: () => {}, onMessage: (m, so) => got.push([m.type, so.kind]) });
+  const ws = all[0];
+  ws.frame({ type: 'snapshot', builder: 'b2', sessions: [{ name: 'x' }] });
+  ws.frame({ type: 'event', builder: 'b2', event: {} });
+  assert.deepEqual(got, [], 'nothing routed before the kind is known');
+  assert.equal(src.kind, 'auto');
+  ws.frame({ type: 'fleet', builders: [{ id: 'b2', state: 'up' }] });
+  assert.deepEqual(got, [['fleet', 'hub'], ['snapshot', 'hub'], ['event', 'hub']]);
+  ws.frame({ type: 'delta', builder: 'b2' });
+  assert.deepEqual(got.at(-1), ['delta', 'hub']);
+  src.close();
+});
+
+test('SR8 L4: the pre-kind buffer is bounded, counted, and cleared on close', () => {
+  const { all, FakeWS } = fakeSockets();
+  const got = [];
+  const src = createSource({ url: 'ws://example.invalid/ws', WebSocketImpl: FakeWS, schedule: () => {}, onMessage: (m) => got.push(m) });
+  for (let i = 0; i < PREKIND_BUFFER_MAX + 10; i++) all[0].frame({ type: 'delta', builder: 'b1', seq: i });
+  assert.equal(src.pending.length, PREKIND_BUFFER_MAX);
+  assert.equal(src.droppedBeforeKind, 10);
+  all[0].close();
+  assert.equal(src.pending.length, 0, 'a dead socket\'s frames are not replayed');
+  assert.equal(got.length, 0);
+  // A local source (hello first) is not buffered after hello.
+  const loc = createSource({ url: 'ws://example.invalid/ws', WebSocketImpl: FakeWS, schedule: () => {}, onMessage: (m, so) => got.push([m.type, so.kind]) });
+  const ws = all.at(-1);
+  ws.frame({ type: 'hello', builder: { id: 'builder-a' } });
+  ws.frame({ type: 'snapshot', sessions: [] });
+  assert.deepEqual(got, [['hello', 'local'], ['snapshot', 'local']]);
+  src.close();
+  loc.close();
+});
+
+test('SR8 L4: an auto source passes builder-less legacy frames straight through', () => {
+  const { all, FakeWS } = fakeSockets();
+  const got = [];
+  const src = createSource({ url: 'ws://example.invalid/ws', WebSocketImpl: FakeWS, schedule: () => {}, onMessage: (m, so) => got.push([m.type, so.kind]) });
+  all[0].frame({ type: 'snapshot', sessions: [] });
+  all[0].frame({ type: 'snapshot', builder: null, sessions: [] });
+  all[0].frame({ type: 'snapshot', builder: 'b9', sessions: [] });
+  assert.deepEqual(got, [['snapshot', 'auto'], ['snapshot', 'auto']]);
+  assert.equal(src.pending.length, 1);
+  src.close();
 });
