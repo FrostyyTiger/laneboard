@@ -201,7 +201,7 @@
   left: 0;
   top: 0;
   height: 0;
-  border-top: var(--bw) solid var(--accent);
+  border-top: var(--bw) solid var(--accent-weak);
   transform-origin: 0 0;
   pointer-events: none;
   z-index: var(--z-insp);

@@ -10,7 +10,7 @@
 //   actionList()               the registry, in bar order
 //   actionBarModel(m, opts)    pure: [{id, icon, label, action, tier, disabled, reason}]
 //   renderActionBar(el, ctx)   the DOM bar inside `el`
-//   runAction(item, m, ctx)    confirmAction (§4 D3) then act() (§1 F8a)
+//   runAction(item, m, ctx)    confirmAction (§4 component kit) then act() (§1 F8a)
 //
 // `m` is the inspector model (ui/inspector.js inspectorModel). Pure at import
 // time: no `document` until renderActionBar runs. Every builder-supplied text
