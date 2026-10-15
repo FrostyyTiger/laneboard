@@ -1,5 +1,11 @@
+/* ===========================================================================
+   base: reset, [hidden], html/body type, focus, scrollbars (plan §4 2.2, D1)
+   ---------------------------------------------------------------------------
+   Only element defaults and the few cross-view utility rules the legacy
+   sheets rely on. No colour literals here: every value is a token.
+   =========================================================================== */
 
-* { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
 
 /* The UA [hidden] rule has no specificity, so any class that sets `display`
    beats it. This once left the terminal sheet covering the whole page. */
@@ -10,87 +16,63 @@ html, body {
   min-height: 100%;
   background: var(--bg-canvas);
   color: var(--text-1);
-  font-family: var(--font-ui);
-  /* 13 px on the desktop and the 49" (109 ppi, so the same physical size as a
-     27" 1440p). The phone overrides this back up below. */
-  font-size: 13px;
-  line-height: 1.35;
+  /* Data is mono; prose (assistant line, prompts) is mono at 12px too. */
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
   /* Every digit on this page is a measurement that updates live, so figures
-     must not change width between ticks. Set at the root and inherited, rather
-     than per metric: a number can appear in a tool argument or an assistant
-     line too, and those would jitter as well. font-feature-settings is the
-     belt-and-braces for faces that only expose the raw OpenType feature. */
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
+     must not change width between ticks, and a zero must not read as an O. */
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum", "zero";
+  /* Thin, flat scrollbars in the line colour (Firefox, and Chromium 121+). */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
-/* The gradient wash is gone: mission-control dense is flat, and a large
-   coloured field behind twenty panels is exactly the "floating tiles" look
-   decided against. What stays is the grain, which keeps a flat near-black
-   from banding across 5120 px. Fixed and non-interactive, so it never repaints. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: var(--bg-canvas);
-}
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.022;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+h1, h2, h3 { margin: 0; font-weight: 600; }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* Focus is separate from selection (corner brackets): a 1px accent outline. */
+:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
-h1, h2 { margin: 0; font-weight: 600; }
-button { font: inherit; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-s); }
+::selection { background: var(--accent-weak); }
 
 kbd {
   font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 1px 5px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  font-size: var(--fs-11);
+  padding: 1px var(--sp-1);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
   background: var(--bg-sunken);
+  color: var(--text-2);
 }
 
-.empty { color: var(--text-3); font-size: 12.5px; margin: 6px 0 0; }
+.empty { color: var(--text-3); font-size: var(--fs-12); margin: 6px 0 0; }
 
-/* Stated again on the metrics themselves, so the intent survives a future
-   change to the root rule. Inherited above; harmless to repeat. */
-.card-meta, .vital .v, .gauge-label b, .ctx-label, .card-since, .stat,
-.gauge-compact, .attention-item .ago, .attention-item .idx, .chip .ago,
-.count, .tool-line, .preview, .term-status {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-}
-
-/* Micro label — the ground-station convention for naming a channel. */
+/* Micro label: the label face, uppercase, tracked. */
 .rail-h, .vital .k, .pill {
-  font-size: 10.5px;
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: var(--ls-label);
   font-weight: 600;
 }
 .rail-h { color: var(--text-3); }
 
-/* Mission-control dense, the one rule that does most of the work: every figure
-   on this page is mono and tabular, and the UI sans is left for names and
-   prose. A column of numbers that does not line up is a column you cannot
-   scan, and almost every number here updates on a 2 s tick. */
+/* Every figure is mono and tabular, so a column of numbers lines up. Stated
+   on the metrics themselves too, so the intent survives a change to the root
+   rule. */
 .card-meta, .card-since, .stat, .count, .gauge-label b, .ctx-label, .vital .v,
 .gauge-compact, .attention-item .ago, .attention-item .idx, .chip .ago,
 .lane-n, .lane-stage, .lane-age, .mrow-age, .mrow-stage, .fcount, .fbytes,
-.dtable .num, .chart-now, .chart-reset, .chart-range, .term-status {
+.dtable .num, .chart-now, .chart-reset, .chart-range, .term-status,
+.tool-line, .preview {
   font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum", "zero";
 }
-

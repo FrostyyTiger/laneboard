@@ -652,7 +652,8 @@ test('index.html links every public/css sheet once, in cascade order, before xte
 });
 
 test('no rule in public/ names a legacy token alias', () => {
-  const rx = /var\(--(bg|bg-raise|bg-card|bg-inset|line|line-soft|fg|fg-dim|fg-faint|red|amber|blue|green|grey|violet|radius|radius-sm|mono|sans)[,)]/;
+  // §4 D1 defines --line and --radius again as industrial tokens, so they left the list.
+  const rx = /var\(--(bg|bg-raise|bg-card|bg-inset|line-soft|fg|fg-dim|fg-faint|red|amber|blue|green|grey|violet|radius-sm|mono|sans)[,)]/;
   const files = fs.readdirSync(PUBLIC, { recursive: true }).map((f) => f.split(path.sep).join('/'))
     .filter((f) => !f.startsWith('vendor/') && /\.(css|js|html)$/.test(f));
   for (const f of files) {

@@ -1,0 +1,15 @@
+Vendored web fonts (plan §4 2.2, fleet D1). Both are SIL Open Font License 1.1;
+each OFL.txt is copied verbatim from its upstream repository.
+
+jetbrains-mono/  JetBrains Mono, tag v2.304, fonts/webfonts/
+  https://github.com/JetBrains/JetBrainsMono/tree/v2.304/fonts/webfonts
+barlow-condensed/  Barlow Condensed, jpt/barlow commit dc2940e2e04e (main, 2020-07-09), fonts/woff2/
+  https://github.com/jpt/barlow/tree/dc2940e2e04ef4ec96c07e23e0f02aefbddd343b/fonts/woff2
+
+sha256:
+  97a6103574c8f698847fd948d339efa927cc23dc847e173d7b37592c2770a68c  barlow-condensed/BarlowCondensed-Medium.woff2
+  16a2eff3f132e6f603f3036ed99f21f5a8ddbc70ac2ccd614044c36faf292bfb  barlow-condensed/BarlowCondensed-SemiBold.woff2
+  a9cb1cd82332b23a47e3a1239d25d13c86d16c4220695e34b243effa999f45f2  jetbrains-mono/JetBrainsMono-Regular.woff2
+  918edad542a1da608fd2ba8daebaff9ac802309103fe760eed465b8b4e47faf1  jetbrains-mono/JetBrainsMono-SemiBold.woff2
+  186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f  barlow-condensed/OFL.txt
+  30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad  jetbrains-mono/OFL.txt
