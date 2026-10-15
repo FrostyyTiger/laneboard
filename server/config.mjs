@@ -165,7 +165,7 @@ function coreDefaults() {
     markers: {
       need: 'NEED-HUMAN|NEED-OWNER',
       blocked: 'BLOCKED',
-      done: 'STAGE-DONE|LANE-DONE',
+      done: 'STAGE-DONE|LANE-DONE|PLAN-DONE',
       progress: 'PROGRESS',
       limit: 'hit your limit|usage limit|rate limit|approaching your .{0,20}limit',
     },
