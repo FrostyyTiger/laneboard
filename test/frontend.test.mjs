@@ -12,6 +12,7 @@
 // over every one of them, and an imported binding counts as declared.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -35,6 +36,16 @@ const readJs = (f) => read(`js/${f}`);
 const NOT_FROM_APP_JS = new Set(['ui/terminal.js', 'core/motion.js', 'views/map-canvas.js', 'core/keys.js']);
 const APP_FILES = JS_FILES.filter((f) => !NOT_FROM_APP_JS.has(f));
 const readApp = () => APP_FILES.map(readJs).join('\n');
+
+/**
+ * The stylesheets under public/css, in the order index.html links them (fleet
+ * F2 split the old styles.css and map.css into contiguous ranges, so the
+ * concatenation is the cascade the page gets).
+ */
+const CSS_LINKS = [...read('index.html').matchAll(/<link rel="stylesheet" href="\/css\/([^"]+)">/g)].map((m) => m[1]);
+const readCss = (files = CSS_LINKS) => files.map((f) => read(`css/${f}`)).join('');
+/** What used to be styles.css: everything but the map view's sheet. */
+const readStyles = () => readCss(CSS_LINKS.filter((f) => f !== 'views/map.css'));
 
 /**
  * Strip comments and string/template literals. Without this the scan trips over
@@ -295,9 +306,9 @@ test('the service worker never caches API responses', () => {
   assert.ok(!/caches\.(open|match|addAll)/.test(sw), 'sw.js must not use the Cache API');
 });
 
-test('styles.css keeps the [hidden] override that the sheet and banner depend on', () => {
+test('the stylesheets keep the [hidden] override that the sheet and banner depend on', () => {
   // Without it, .sheet{display:flex} beats the UA rule and covers the page.
-  const css = read('styles.css');
+  const css = readStyles();
   assert.match(css, /\[hidden\]\s*\{\s*display:\s*none\s*!important/);
 });
 
@@ -307,7 +318,7 @@ test('backdrop-filter is spent on at most three fixed surfaces', () => {
   // Each one costs a GPU readback + blur of the backdrop root every frame the
   // backdrop changes. The plan caps it at three; anything that scrolls or sits
   // above a live terminal must not be on the list.
-  const css = read('styles.css');
+  const css = readStyles();
   const selectors = new Set();
   for (const m of css.matchAll(/([^{}]+)\{[^{}]*backdrop-filter\s*:/g)) {
     for (const sel of m[1].split(',')) {
@@ -324,7 +335,7 @@ test('backdrop-filter is spent on at most three fixed surfaces', () => {
 test('the blur declarations avoid the var() form WebKit drops', () => {
   // If a var() chain inside -webkit-backdrop-filter resolves invalid, WebKit
   // throws the whole declaration away and the surface loses its backing.
-  const css = read('styles.css');
+  const css = readStyles();
   // Only real declarations, not the @supports test line.
   for (const m of css.matchAll(/^\s*(?:-webkit-)?backdrop-filter\s*:([^;]+);/gm)) {
     assert.ok(!m[1].includes('var('), `backdrop-filter must use literals: ${m[1].trim()}`);
@@ -332,14 +343,14 @@ test('the blur declarations avoid the var() form WebKit drops', () => {
 });
 
 test('reduced motion and reduced transparency both have fallbacks', () => {
-  const css = read('styles.css');
+  const css = readStyles();
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(css, /@media \(prefers-reduced-transparency: reduce\)/);
   assert.match(css, /prefers-reduced-transparency: no-preference/);
 });
 
 test('the three breakpoints survive', () => {
-  const css = read('styles.css');
+  const css = readStyles();
   assert.match(css, /@media \(min-width: 700px\)/, 'desktop');
   assert.match(css, /@media \(min-width: 2000px\)/, 'ultrawide');
   assert.match(css, /@media \(max-width: 699px\)/, 'phone top bar');
@@ -421,7 +432,7 @@ test('figures are tabular, so live metrics do not jitter', () => {
   // Every digit here is a measurement that updates on a 2 s tick; proportional
   // figures make the whole row shuffle sideways each time. Set at the root so
   // a number inside a tool argument or an assistant line is covered too.
-  const css = read('styles.css');
+  const css = readStyles();
   const root = /html,\s*body\s*\{([\s\S]*?)\}/.exec(css);
   assert.ok(root, 'html, body rule must exist');
   assert.match(root[1], /font-variant-numeric:\s*tabular-nums/);
@@ -475,7 +486,7 @@ test('closing the sheet returns to a view, never to a bare path', () => {
 });
 
 test('the phone tab bar and the desktop strip swap at the breakpoint', () => {
-  const css = read('styles.css');
+  const css = readStyles();
   assert.match(css, /@media \(min-width: 700px\) \{ \.tabs \{ display: none; \} \}/);
   assert.match(css, /\.views \{ display: none; \}/);
 });
@@ -528,7 +539,7 @@ test('a lane colour is derived, never stored', () => {
   assert.match(lanes, /export function hueFor/);
   assert.ok(!/INSERT|CREATE TABLE|kvWrite/.test(lanes), 'lanes must persist nothing');
   // The CSS derives every lane colour from the one hue the server computes.
-  const css = read('styles.css');
+  const css = readStyles();
   assert.match(css, /--lane-hue/);
   assert.match(css, /oklch\([^)]*var\(--lane-hue/);
 });
@@ -615,4 +626,63 @@ test('an unmapped /vendor/ path falls through to public/vendor/, immutable', asy
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+// --- fleet F2: the CSS split ---------------------------------------------------
+
+/** The plan's CSS map (01-foundations §2.3), in cascade order. */
+const CSS_ORDER = [
+  'tokens.css', 'base.css', 'shell.css', 'rail.css', 'board.css', 'terminal.css',
+  'misc.css', 'lanes.css', 'views/data.css', 'views/box.css', 'views/map.css',
+];
+
+test('index.html links every public/css sheet once, in cascade order, before xterm', () => {
+  const onDisk = fs.readdirSync(path.join(PUBLIC, 'css'), { recursive: true })
+    .map((f) => f.split(path.sep).join('/')).filter((f) => f.endsWith('.css')).sort();
+  assert.deepEqual([...CSS_LINKS].sort(), onDisk, 'every sheet under public/css is linked, and only those');
+  assert.equal(new Set(CSS_LINKS).size, CSS_LINKS.length, 'no sheet is linked twice');
+  // Later tasks may add sheets; the split's own sheets keep their relative order.
+  assert.deepEqual(CSS_LINKS.filter((f) => CSS_ORDER.includes(f)), CSS_ORDER);
+  const html = read('index.html');
+  assert.ok(!/href="\/(styles|map)\.css"/.test(html), 'the pre-split sheets are not linked');
+  assert.ok(html.indexOf('/css/views/map.css') < html.indexOf('/vendor/xterm.css'), 'xterm.css still comes last');
+  for (const gone of ['styles.css', 'map.css']) {
+    assert.ok(!fs.existsSync(path.join(PUBLIC, gone)), `public/${gone} is gone`);
+  }
+});
+
+test('no rule in public/ names a legacy token alias', () => {
+  const rx = /var\(--(bg|bg-raise|bg-card|bg-inset|line|line-soft|fg|fg-dim|fg-faint|red|amber|blue|green|grey|violet|radius|radius-sm|mono|sans)[,)]/;
+  const files = fs.readdirSync(PUBLIC, { recursive: true }).map((f) => f.split(path.sep).join('/'))
+    .filter((f) => !f.startsWith('vendor/') && /\.(css|js|html)$/.test(f));
+  for (const f of files) {
+    const hit = rx.exec(read(f));
+    assert.ok(!hit, `${f} uses the removed alias ${hit && hit[0]}`);
+  }
+  assert.ok(!/--(fg-faint|bg-inset|mono|sans)\s*:/.test(read('css/tokens.css')), 'tokens.css defines no aliases');
+});
+
+test('the split is byte-identical to styles.css (minus the aliases) followed by map.css', (t) => {
+  // A historical invariant, checked against the commit that created the split,
+  // so later restyles (§4) do not trip it. Needs the git history.
+  const git = (...args) => execFileSync('git', args, { cwd: PUBLIC, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  let commit;
+  try {
+    commit = git('log', '--diff-filter=A', '--format=%H', '--', 'css/tokens.css').trim().split('\n').pop();
+  } catch { /* no git */ }
+  if (!commit) {
+    // Not committed yet (or no history): compare the working tree against HEAD.
+    try { git('cat-file', '-e', 'HEAD:public/styles.css'); } catch { return t.skip('no git history of the split'); }
+    const before = git('show', 'HEAD:public/styles.css').split('\n');
+    before.splice(84, 20);
+    assert.equal(readCss(CSS_ORDER), before.join('\n') + git('show', 'HEAD:public/map.css'));
+    return;
+  }
+  const before = git('show', `${commit}^:public/styles.css`).split('\n');
+  assert.match(before[84], /Aliases kept/, 'line 85 opens the alias block');
+  assert.equal(before[104], '}', 'line 105 closes :root');
+  before.splice(84, 20); // lines 85-104
+  const expected = before.join('\n') + git('show', `${commit}^:public/map.css`);
+  const actual = CSS_ORDER.map((f) => git('show', `${commit}:public/css/${f}`)).join('');
+  assert.equal(actual, expected);
 });

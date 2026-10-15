@@ -1,0 +1,85 @@
+/* ===========================================================================
+   laneboard — a ground station for a machine nobody can physically reach
+   ---------------------------------------------------------------------------
+   An instrument panel for a machine nobody can physically reach. Its one job
+   is to say which session needs a human, so attention is the loudest thing on
+   screen and everything else stays quiet and dense.
+
+   MISSION-CONTROL DENSE. Chosen over refining the
+   glass: flatter, darker, mono-heavy, tighter grid, more numbers per pixel — a
+   trading terminal rather than a set of floating tiles. What that means in
+   practice, and why each part is here:
+
+     * Panels, not tiles. The elevated surface is DARKER than the canvas, radii
+       drop to 2 px, and the ambient shadows are gone. Depth comes from
+       hairlines alone. A console is flat; the depth cue is the grid.
+     * Every number is mono and tabular. UI sans is for names and prose only.
+       A column of figures that do not line up is a column you cannot scan.
+     * One colour with meaning: state (border, dot, pill) and lane (stripe).
+       The accent is spent only on focus and pins, so it never competes.
+     * Nothing animates but the working dot. Motion in the corner of a
+       twenty-card board is a distraction, not information.
+
+   Glass policy (plan 5.1): backdrop-filter costs a GPU readback plus a blur of
+   the backdrop-root texture every frame the backdrop changes. It is spent ONLY
+   where content genuinely passes underneath: the sticky top bar and the toast.
+   The budget allows three surfaces; two is enough. The rail scrolls and the
+   quickbar sits beneath a live terminal, so both use faux glass — blurring
+   either would re-blur on every frame a terminal paints.
+   =========================================================================== */
+
+:root {
+  /* Surfaces — a cold, blue-shifted near-black. Never #000.
+     The elevated step is deliberately BELOW the canvas: a console panel is a
+     recess in the desk, not a card floating over it. */
+  --bg-canvas: oklch(13% 0.014 258);
+  --bg-surface: oklch(16.5% 0.013 258);
+  --bg-elevated: oklch(18.5% 0.013 258);
+  --bg-sunken: oklch(10.5% 0.013 258);
+
+  --glass-fill: oklch(17% 0.013 258 / 0.82);
+  --glass-fill-strong: oklch(14% 0.013 258 / 0.96);
+
+  /* Hairlines carry the depth; shadows stay nearly invisible. */
+  --border-weak: oklch(92% 0.01 258 / 0.07);
+  --border: oklch(92% 0.01 258 / 0.13);
+  --border-strong: oklch(92% 0.01 258 / 0.24);
+  /* The inset highlight is what a hairline panel has instead of a shadow. */
+  --highlight-inset: inset 0 1px 0 oklch(100% 0 0 / 0.045);
+  /* Kept only for things that genuinely float above the page: the menu and the
+     toast. Panels get none — an ops console has no drop shadows. */
+  --shadow-float: 0 0 0 1px oklch(0% 0 0 / 0.6), 0 8px 24px oklch(0% 0 0 / 0.55);
+
+  --text-1: oklch(94% 0.008 258);
+  --text-2: oklch(73% 0.012 258);
+  --text-3: oklch(56% 0.014 258);
+
+  /* One rationed accent — pins, focus, selection. Distinct from every state. */
+  --accent: oklch(70% 0.15 292);
+  --accent-dim: oklch(70% 0.15 292 / 0.16);
+
+  /* State semantics. Pure red dies on dark, so critical is a pink-red. */
+  --crit: oklch(70% 0.2 12);
+  --warn: oklch(80% 0.15 78);
+  --ok: oklch(78% 0.16 158);
+  --info: oklch(75% 0.13 242);
+  --idle: oklch(58% 0.012 258);
+
+  /* An ops console has square corners. 4 px on things you type into, so they
+     still read as controls; 2 px on panels; the pill survives for chips. */
+  --radius-s: 4px;
+  --radius-m: 3px;
+  --radius-l: 2px;
+  --radius-pill: 999px;
+
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  --rail-w: 324px;
+  --gap: 8px;
+
+  --font-ui: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Geist Mono", Menlo, Consolas, monospace;
+
+}

@@ -52,8 +52,8 @@ function statusLine(host, text) {
     n = document.createElement('div');
     n.className = 'term-status';
     n.style.cssText =
-      'position:absolute;inset:auto 0 0 0;padding:4px 8px;font:11px var(--mono);' +
-      'color:var(--fg-faint);background:color-mix(in srgb,var(--bg-inset) 88%,transparent);';
+      'position:absolute;inset:auto 0 0 0;padding:4px 8px;font:11px var(--font-mono);' +
+      'color:var(--text-3);background:color-mix(in srgb,var(--bg-sunken) 88%,transparent);';
     host.append(n);
   }
   n.textContent = text;

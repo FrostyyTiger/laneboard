@@ -1,0 +1,143 @@
+/* ===================== rail ============================================== */
+
+.rail-block { margin-bottom: 16px; }
+.rail-h { color: var(--text-3); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--text-2);
+  background: oklch(100% 0 0 / 0.06);
+  border-radius: var(--radius-pill);
+  padding: 1px 7px;
+  font-weight: 500;
+}
+
+.attention-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.attention-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: var(--radius-m);
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-weak);
+  color: var(--text-1);
+  text-align: left;
+  font: inherit;
+  transition: border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.attention-item:hover { border-color: var(--border-strong); }
+.attention-item:active { transform: translateY(1px); }
+.attention-item .idx { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); width: 12px; flex: none; }
+.attention-item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.attention-item .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); flex: none; }
+.attention-item.s-waiting_permission { border-color: oklch(70% 0.2 12 / 0.4); }
+.attention-item.s-waiting_question { border-color: oklch(80% 0.15 78 / 0.36); }
+
+/* phone chip strip — the rail carries the same list from 700px up. This
+   override must come AFTER the base rule: same specificity, later wins. */
+.attention-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 4px; scrollbar-width: none; }
+.attention-strip::-webkit-scrollbar { display: none; }
+@media (min-width: 700px) { .attention-strip { display: none; } }
+
+.chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px 7px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  max-width: 68vw;
+  font: inherit;
+}
+.chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.chip.s-waiting_permission { border-color: oklch(70% 0.2 12 / 0.5); background: oklch(70% 0.2 12 / 0.12); }
+.chip.s-waiting_question { border-color: oklch(80% 0.15 78 / 0.45); background: oklch(80% 0.15 78 / 0.1); }
+
+/* ===================== the pressure ring ================================= */
+/*
+   The signature instrument. Urgency is not a state, it is state x time: a
+   session waiting two minutes and one waiting thirteen days are the same
+   colour but not the same problem. The ring fills on a log scale (24 h = full)
+   so a long wait becomes physically louder without another colour or a word.
+   Static — one conic-gradient and a mask, no animation, no repaint.
+*/
+.dot {
+  --pressure: 0;
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--idle);
+  display: inline-grid;
+  place-items: center;
+}
+.dot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from -90deg, currentColor calc(var(--pressure) * 360deg), oklch(100% 0 0 / 0.09) 0);
+  -webkit-mask: radial-gradient(closest-side, transparent 62%, #000 64%);
+  mask: radial-gradient(closest-side, transparent 62%, #000 64%);
+}
+.dot::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.dot.s-waiting_permission { color: var(--crit); }
+.dot.s-waiting_question { color: var(--warn); }
+.dot.s-working { color: var(--info); }
+.dot.s-done { color: var(--ok); }
+.dot.s-idle, .dot.s-shell { color: var(--idle); }
+.dot.s-dead { color: var(--text-3); }
+
+/* The only ambient motion in the product, and only where work is in flight. */
+.dot.s-working::after { animation: breathe 1.2s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ===================== gauges & vitals =================================== */
+
+.gauges { display: grid; gap: 10px; }
+.gauge-row { display: grid; gap: 5px; }
+.gauge-label { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--text-3); }
+.gauge-label b { font-weight: 600; color: var(--text-1); }
+.gauge-track { height: 4px; border-radius: var(--radius-pill); background: oklch(100% 0 0 / 0.09); overflow: hidden; }
+.gauge-fill { height: 100%; border-radius: var(--radius-pill); background: var(--info); transition: width var(--dur) var(--ease); }
+.gauge-fill.warn { background: var(--warn); }
+.gauge-fill.hot { background: var(--crit); }
+
+.topbar-gauges .gauge-row { width: 120px; }
+.gauge-compact { display: none; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
+.gauge-compact b { color: var(--text-1); font-weight: 600; }
+.gauge-compact.warn b { color: var(--warn); }
+.gauge-compact.hot b { color: var(--crit); }
+
+/* Below 700px the bars, the cost and the title collide, so the bars give way
+   to "5h 31%" text and the whole bar wraps onto two rows. */
+@media (max-width: 699px) {
+  /* Mission-control dense is a desktop idea. A phone held at arm's length
+     needs bigger type, and iOS zooms the page for any input under 16 px. */
+  html, body { font-size: 15px; }
+  .topbar { flex-wrap: wrap; gap: 7px 14px; padding-left: 14px; padding-right: 14px; }
+  .topbar-left { width: 100%; }
+  .topbar-gauges { margin-left: 0; gap: 14px; }
+  .topbar-gauges .gauge-row { display: none; }
+  .topbar-gauges .gauge-compact { display: inline; }
+  .topbar-right { margin-left: auto; }
+  .stat { font-size: 11.5px; }
+}
+
+.vitals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.vital { display: grid; gap: 3px; }
+.vital .k { color: var(--text-3); }
+.vital .v { font-family: var(--font-mono); font-size: 13px; color: var(--text-1); font-weight: 500; }
+.vital .v small { color: var(--text-3); font-size: 11px; font-weight: 400; }
+
