@@ -1,0 +1,223 @@
+/* ===========================================================================
+   The Diff view (plan §10 2.12, fleet R11). Industrial: grey baseline, the
+   file list on the left and the unified diff on the right. Additions and
+   deletions carry their sign (+ / −) and a muted wash of the ok / p1 hues;
+   syntax colour is muted greys plus one keyword tone.
+   =========================================================================== */
+
+.dv {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .dv { grid-template-columns: minmax(0, 1fr); }
+  .dv-files { position: static; max-height: 30vh; }
+  .dv-ta { font-size: var(--fs-16); } /* 16px: iOS does not zoom into the field */
+}
+
+.dv-banners { display: flex; flex-direction: column; gap: var(--sp-1); margin-bottom: var(--sp-2); }
+.dv-meta { margin: 0; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); overflow-wrap: anywhere; }
+.dv-banner {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  font-size: var(--fs-12);
+  color: var(--text-2);
+}
+.dv-warn { border-color: var(--p2-line); color: var(--text-1); }
+.dv-warn::before { content: "▲ "; color: var(--p2); }
+.dv-err { color: var(--p1); }
+.dv-msg { margin: var(--sp-1) 0; font-size: var(--fs-12); color: var(--text-3); }
+.dv-count { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); }
+.dv-sub { margin: 0 0 var(--sp-2); font: 600 var(--fs-11)/1 var(--font-label); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-2); }
+
+/* ---- file list */
+.dv-files {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - var(--header-h) - var(--sp-8));
+  overflow: auto;
+  border: var(--bw) solid var(--line-weak);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+}
+.dv-fi {
+  display: flex;
+  gap: var(--sp-1);
+  align-items: baseline;
+  min-height: var(--row-h);
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-bottom: var(--bw) solid var(--line-weak);
+  background: transparent;
+  color: var(--text-1);
+  font: var(--fs-12)/var(--lh) var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.dv-fi:hover { background: var(--bg-hover); }
+.dv-fi-p { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+.dv-fi-n { flex: none; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); }
+.dv-st { flex: none; width: 1.2em; text-align: center; font-family: var(--font-mono); color: var(--text-2); }
+.dv-st-A { color: var(--ok); }
+.dv-st-D { color: var(--p1); }
+.dv-mk {
+  flex: none;
+  padding: 0 var(--sp-1);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  font: var(--fs-10)/1.4 var(--font-label);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+/* ---- files */
+.dv-main { min-width: 0; display: flex; flex-direction: column; gap: var(--sp-3); }
+.dv-file { border: var(--bw) solid var(--line-weak); border-radius: var(--radius); background: var(--bg-surface); min-width: 0; }
+.dv-fh {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: baseline;
+  width: 100%;
+  min-height: var(--row-h);
+  padding: var(--sp-1) var(--sp-2);
+  border: 0;
+  border-bottom: var(--bw) solid var(--line-weak);
+  background: var(--bg-elevated);
+  color: var(--text-1);
+  font: var(--fs-12)/var(--lh) var(--font-mono);
+  text-align: left;
+  cursor: pointer;
+}
+.dv-path { font-family: var(--font-mono); overflow-wrap: anywhere; unicode-bidi: plaintext; }
+.dv-old { color: var(--text-3); text-decoration: line-through; }
+.dv-arrow { color: var(--text-3); }
+.dv-hunks { overflow-x: auto; font: var(--fs-12)/var(--lh) var(--font-mono); }
+.dv-hunks > .dv-msg { padding: 0 var(--sp-2); }
+
+.dv-row { display: flex; align-items: flex-start; min-width: max-content; white-space: pre; }
+.dv-hunk { color: var(--text-3); background: var(--bg-sunken); padding: 2px var(--sp-2); }
+.dv-add { background: color-mix(in oklab, var(--ok) 12%, transparent); }
+.dv-del { background: color-mix(in oklab, var(--p1) 10%, transparent); }
+.dv-eof { color: var(--text-3); }
+.dv-sel { background: var(--bg-selected); outline: var(--bw) solid var(--line-strong); outline-offset: -1px; }
+.dv-add.dv-sel { background: color-mix(in oklab, var(--ok) 22%, transparent); }
+.dv-del.dv-sel { background: color-mix(in oklab, var(--p1) 20%, transparent); }
+
+.dv-no {
+  position: sticky;
+  left: 0;
+  flex: none;
+  display: flex;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-1);
+  border: 0;
+  border-right: var(--bw) solid var(--line-weak);
+  background: var(--bg-surface);
+  color: var(--text-3);
+  font: inherit;
+  cursor: pointer;
+}
+.dv-no:hover { color: var(--text-1); }
+.dv-no:disabled { cursor: default; }
+.dv-o, .dv-n { display: inline-block; min-width: 4ch; text-align: right; }
+.dv-sign { flex: none; width: 2ch; text-align: center; color: var(--text-3); user-select: none; }
+.dv-add .dv-sign { color: var(--ok); }
+.dv-del .dv-sign { color: var(--p1); }
+.dv-code { padding-right: var(--sp-4); color: var(--text-1); }
+.dv-cbtn { position: sticky; right: 0; margin-left: var(--sp-2); }
+
+/* ---- syntax: muted greys and one keyword tone */
+.hl-comment { color: var(--text-3); font-style: italic; }
+.hl-string { color: var(--text-2); }
+.hl-number { color: var(--text-2); }
+.hl-keyword { color: var(--p3); }
+
+/* ---- comments, editor, send sheet, pull popover */
+.dv-cmt, .dv-edit {
+  margin: var(--sp-1) var(--sp-2);
+  padding: var(--sp-2);
+  border: var(--bw) solid var(--line);
+  border-left: 2px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  font-family: var(--font-label);
+  white-space: normal;
+}
+.dv-cmt-h { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: baseline; font-size: var(--fs-11); color: var(--text-3); }
+.dv-cmt-note { color: var(--p2); }
+.dv-cmt-b { margin-top: var(--sp-1); font-size: var(--fs-13); color: var(--text-1); white-space: pre-wrap; overflow-wrap: anywhere; }
+.dv-ta {
+  display: block;
+  width: 100%;
+  margin-top: var(--sp-1);
+  padding: var(--sp-1);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font: var(--fs-12)/var(--lh) var(--font-mono);
+  resize: vertical;
+}
+.dv-edit-b { display: flex; justify-content: flex-end; gap: var(--sp-2); margin-top: var(--sp-2); }
+.dv-note { display: block; }
+
+.dv-sheet {
+  position: fixed;
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: var(--z-sheet);
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 2 * var(--sp-4)));
+  max-height: calc(100vh - var(--header-h) - 2 * var(--sp-4));
+  padding: var(--sp-3);
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+.dv-pre {
+  flex: 1;
+  min-height: 6em;
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-2);
+  overflow: auto;
+  border: var(--bw) solid var(--line-weak);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font: var(--fs-12)/var(--lh) var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dv-pop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  padding: var(--sp-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+.dv-pop-row { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.dv-pop-l { flex-basis: 100%; font-size: var(--fs-11); color: var(--text-3); }
+.dv-pop-c {
+  flex: 1;
+  min-width: 0;
+  padding: var(--sp-1);
+  background: var(--bg-sunken);
+  font: var(--fs-12)/var(--lh) var(--font-mono);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.dv-untracked { padding: var(--sp-2); border: var(--bw) dashed var(--line); border-radius: var(--radius); }
+.dv-untracked .dv-path { font-size: var(--fs-12); color: var(--text-2); }
