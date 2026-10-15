@@ -14,8 +14,8 @@ const TMPL = path.join(REPO, 'deploy', 'hooks.json.tmpl');
 const HAVE_JQ = spawnSync('jq', ['--version'], { stdio: 'ignore' }).status === 0;
 const skip = HAVE_JQ ? false : 'jq is not installed';
 
-const OURS = /127\.0\.0\.1:[0-9]+\/api\/hook|\.claude\/laneboard\//;
-const isOurs = (h) => OURS.test(String(h?.command ?? h?.url ?? ''));
+// SR21 M2: the ownership marker is the explicit field, never a URL or path substring.
+const isOurs = (h) => h?._laneboard === 'managed';
 
 const FOREIGN_PRE = { matcher: 'Bash', hooks: [{ type: 'command', command: '~/bin/my-guard.sh', timeout: 7 }] };
 const FOREIGN_STOP = { hooks: [{ type: 'command', command: 'notify-send done' }] };
@@ -73,7 +73,7 @@ test('template: 15 events, every entry carries the marker, sync gate and Permiss
   const t = JSON.parse(fs.readFileSync(TMPL, 'utf8'));
   assert.equal(Object.keys(t).length, 15);
   for (const [ev, groups] of Object.entries(t)) {
-    for (const g of groups) for (const h of g.hooks) assert.ok(isOurs({ command: h.command.replaceAll('@PORT@', '7777') }), `${ev}: ${h.command}`);
+    for (const g of groups) for (const h of g.hooks) assert.ok(isOurs(h), `${ev}: ${h.command}`);
   }
   for (const ev of ['PreToolUse', 'UserPromptSubmit']) {
     const gate = t[ev].flatMap((g) => g.hooks).filter((h) => h.command.includes('.claude/laneboard/gate.sh'));
@@ -180,6 +180,89 @@ test('the old installer\'s entries are replaced, not duplicated; mixed groups ke
     assert.equal(JSON.stringify(u.hooks.PreToolUse), JSON.stringify([FOREIGN_PRE]));
     assert.equal(JSON.stringify(u.hooks.PostToolUse), JSON.stringify([{ matcher: '*', hooks: [{ type: 'command', command: 'echo mine' }] }]));
     assert.equal(u.statusLine.command, '~/.claude/statusline-command.sh', 'statusLine kept without --statusline');
+  } finally {
+    sb.cleanup();
+  }
+});
+
+test('SR21 M2: user hooks that look like laneboard\'s survive install, re-install and uninstall byte-identically', { skip }, () => {
+  const sb = sandbox();
+  try {
+    const legacy = "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:7777/api/hook >/dev/null 2>&1 || true";
+    const mine = [
+      { type: 'command', command: "curl -s -m 2 -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:9999/api/hook >/dev/null 2>&1 || true", async: true, timeout: 3 },
+      { type: 'command', command: 'curl -s http://127.0.0.1:3000/api/hooks/audit' },
+      { type: 'command', command: 'curl -s http://127.0.0.1:7777/api/hook' }, // laneboard's port, not the template command
+      { type: 'command', command: `${legacy} ` }, // near-miss: trailing space
+      { type: 'http', url: 'http://127.0.0.1:7777/api/hook' },
+      { type: 'command', command: legacy, _laneboard: 'other' }, // a marker value that is not ours
+    ];
+    const pathy = { matcher: 'Edit', hooks: [{ type: 'command', command: 'cat ~/.claude/laneboard/notes.txt >> /tmp/x' }] };
+    const gateLike = { hooks: [{ type: 'command', command: `LANEBOARD_STATE_DIR='/elsewhere' "$HOME/.claude/laneboard/gate.sh"`, timeout: 5 }] };
+    const fixture = {
+      hooks: {
+        PreToolUse: [{ matcher: 'Bash', hooks: [...mine, { type: 'command', command: 'echo mine' }] }, pathy],
+        UserPromptSubmit: [gateLike],
+        MyEvent: [{ hooks: [{ type: 'command', command: 'bash ~/.claude/laneboard/mine.sh' }] }],
+      },
+    };
+    const original = fmt(fixture);
+    fs.writeFileSync(sb.settings, original);
+    const foreign = (s) => ({
+      pre: s.hooks.PreToolUse.filter((g) => !g.hooks.some(isOurs)),
+      ups: s.hooks.UserPromptSubmit.filter((g) => !g.hooks.some(isOurs)),
+      my: s.hooks.MyEvent,
+    });
+    const want = { pre: fixture.hooks.PreToolUse, ups: fixture.hooks.UserPromptSubmit, my: fixture.hooks.MyEvent };
+
+    const r = sb.ok();
+    let s = JSON.parse(sb.read());
+    assert.equal(JSON.stringify(foreign(s)), JSON.stringify(want));
+    assert.match(r.out, /PreToolUse: 2 laneboard, 8 other/);
+    const first = sb.read();
+    sb.ok();
+    assert.equal(sb.read(), first);
+    s = JSON.parse(sb.read());
+    assert.equal(JSON.stringify(foreign(s)), JSON.stringify(want));
+
+    sb.ok('--uninstall');
+    const u = JSON.parse(sb.read());
+    delete u.statusLine; // the install added the default status line; uninstall keeps it without --statusline
+    assert.equal(fmt(u), original);
+    // uninstall straight from the user's file: nothing of theirs is removed
+    fs.writeFileSync(sb.settings, original);
+    sb.ok('--uninstall');
+    assert.equal(sb.read(), original);
+  } finally {
+    sb.cleanup();
+  }
+});
+
+test('SR21 M2: only exact pre-marker template commands are migrated; marked entries from another port are replaced', { skip }, () => {
+  const sb = sandbox();
+  try {
+    const legacyGate = (sd) => `LANEBOARD_STATE_DIR='${sd}' "$HOME/.claude/laneboard/gate.sh"`;
+    const oldPort = { _laneboard: 'managed', type: 'command', command: 'curl http://127.0.0.1:7000/api/hook || true', async: true, timeout: 3 };
+    const fixture = {
+      hooks: {
+        PreToolUse: [
+          { matcher: '*', hooks: [{ type: 'command', command: legacyGate(sb.state), timeout: 5 }] }, // previous installer
+          { matcher: '*', hooks: [{ type: 'command', command: legacyGate('/other/state'), timeout: 5 }] }, // not ours to judge
+          { matcher: '*', hooks: [oldPort] },
+        ],
+      },
+    };
+    fs.writeFileSync(sb.settings, fmt(fixture));
+    sb.ok();
+    const s = JSON.parse(sb.read());
+    const pre = s.hooks.PreToolUse.flatMap((g) => g.hooks);
+    assert.equal(pre.filter((h) => h.command === legacyGate(sb.state)).length, 1);
+    assert.ok(isOurs(pre.find((h) => h.command === legacyGate(sb.state))), 'the migrated gate is the marked one');
+    assert.equal(pre.filter((h) => h.command === legacyGate('/other/state')).length, 1);
+    assert.equal(pre.some((h) => h.command === oldPort.command), false);
+    sb.ok('--uninstall');
+    const u = JSON.parse(sb.read());
+    assert.equal(JSON.stringify(u.hooks), JSON.stringify({ PreToolUse: [fixture.hooks.PreToolUse[1]] }));
   } finally {
     sb.cleanup();
   }

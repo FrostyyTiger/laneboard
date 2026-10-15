@@ -352,7 +352,8 @@ test('guardPrompt refuses shell-with-❯, dead-with-old-box and paused panes (SR
   // native binary: tmux reports the version file name (N1-fix)
   assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: '2.1.301' }), true);
   assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: '2.1.301-beta.1' }), true);
-  assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: 'node', claude: { pid: 4242 } }), true);
+  assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: 'node', panePid: 4242, claude: { pid: 4242 } }), true);
+  assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: 'node', claude: { pid: 4242 } }), false); // no pane pid
   assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: 'node' }), false);
   for (const sh of ['zsh', 'bash', '-bash', '-zsh', 'fish', 'nu', '/bin/sh']) {
     assert.equal(isLiveClaude({ ...claude, state: 'idle', paneCmd: sh, claude: { pid: 4242 } }), false, sh);
@@ -372,7 +373,7 @@ test('guardPrompt: versioned Claude binary and registry pid are live; shells are
   let { r, s } = await ready({ ...claude, paneCmd: '2.1.301' });
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(s.calls.length > 0, true);
-  ({ r } = await ready({ ...claude, paneCmd: 'node', claude: { pid: 4242 } }));
+  ({ r } = await ready({ ...claude, paneCmd: 'node', panePid: 4242, claude: { pid: 4242 } }));
   assert.equal(r.ok, true, JSON.stringify(r));
   // stale registry entry: kind claude, but the pane is back at a shell
   for (const paneCmd of ['zsh', '-bash']) {
@@ -384,6 +385,45 @@ test('guardPrompt: versioned Claude binary and registry pid are live; shells are
   // paused versioned lane is still refused
   ({ r } = await ready({ ...claude, paneCmd: '2.1.301', paused: { scope: 'session', kind: 'manual', by: 'x', at: 1 } }));
   assert.equal(r.code, 'paused');
+});
+
+test('SR21 M1: a live registry pid never makes a REPL, remote shell or editor pane typable', async () => {
+  const { isLiveClaude, assertTypable, foregroundPgid } = await import('../server/fleet/builtin-actions.mjs');
+  const base = { name: 'agent-1', paneId: '%1', kind: 'claude', state: 'working', panePid: 100, claude: { pid: 4242 } };
+  const fgClaude = () => 4242;
+  const fgOther = () => 101;
+  for (const paneCmd of ['python3', 'python', 'ipython', 'ssh', 'mosh', 'psql', 'mysql', 'vim', 'nvim', 'sudo', 'su', 'bash-5.2', 'nix-shell', 'perl', 'irb']) {
+    // even when the foreground process group "matches", only claude / versioned / node are candidates
+    assert.equal(isLiveClaude({ ...base, paneCmd }, { fgPgid: fgClaude }), false, paneCmd);
+    assert.equal(isLiveClaude({ ...base, paneCmd, panePid: 4242 }), false, paneCmd);
+  }
+  // node: only with a pid match
+  assert.equal(isLiveClaude({ ...base, paneCmd: 'node' }, { fgPgid: fgOther }), false); // Claude in another pane
+  assert.equal(isLiveClaude({ ...base, paneCmd: 'node' }, { fgPgid: () => null }), false);
+  assert.equal(isLiveClaude({ ...base, paneCmd: 'node' }, { fgPgid: () => { throw new Error('x'); } }), false);
+  assert.equal(isLiveClaude({ ...base, paneCmd: 'node' }, { fgPgid: fgClaude }), true); // claude is the pane's foreground
+  assert.equal(isLiveClaude({ ...base, paneCmd: 'node', panePid: 4242 }, { fgPgid: fgOther }), true); // the pane's own process
+  assert.equal(isLiveClaude({ ...base, paneCmd: 'node', panePid: '4242' }, { fgPgid: fgClaude }), false);
+  assert.equal(isLiveClaude({ ...base, paneCmd: 'node', claude: { pid: '4242' }, panePid: 4242 }), false);
+  // claude / versioned binaries stay live without a pid (N1-fix)
+  assert.equal(isLiveClaude({ ...base, paneCmd: 'claude', claude: null, panePid: null }), true);
+  assert.equal(isLiveClaude({ ...base, paneCmd: '2.1.301', claude: null, panePid: null }), true);
+  // the reviewer's case: python3 main pane, working state, '>>> ' on screen -> refused, nothing captured
+  let captured = 0;
+  const deps = { state: { promptReadiness: () => 'not_ready' }, capturePane: async () => { captured++; return ['>>> ']; }, fgPgid: fgClaude };
+  await assert.rejects(assertTypable({ ...base, paneCmd: 'python3' }, deps), (e) => e.code === 'not_claude');
+  await assert.rejects(assertTypable({ ...base, paneCmd: 'ssh' }, deps), (e) => e.code === 'not_claude');
+  await assert.rejects(assertTypable({ ...base, paneCmd: 'node' }, { ...deps, fgPgid: fgOther }), (e) => e.code === 'not_claude');
+  assert.equal(captured, 0);
+  await assertTypable({ ...base, paneCmd: 'node' }, deps); // working Claude under node: may queue
+  // /proc/<pid>/stat parsing: comm with spaces and ')' ; tpgid is field 8
+  const stat = (t) => () => t;
+  assert.equal(foregroundPgid(100, stat('100 (a) b (c)) S 1 100 100 34816 4242 4194560 0 0')), 4242);
+  assert.equal(foregroundPgid(100, stat('100 (bash) S 1 100 100 34816 -1 4194560')), null);
+  assert.equal(foregroundPgid(100, stat('garbage')), null);
+  assert.equal(foregroundPgid(100, () => { throw new Error('ENOENT'); }), null);
+  assert.equal(foregroundPgid('100', stat('100 (a) S 1 1 1 1 4242')), null);
+  if (process.platform === 'linux') assert.equal(typeof (foregroundPgid(process.pid) ?? 0), 'number');
 });
 
 test('broadcast is refused on a builder', async () => {

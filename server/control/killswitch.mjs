@@ -59,7 +59,7 @@ import path from 'node:path';
 import { registerAllHandler, ActionRefused } from '../fleet/dispatch.mjs';
 import * as pause from './pause.mjs';
 import { invalidate as invalidatePaused } from '../flags/paused.mjs';
-import { isLiveClaude } from '../fleet/builtin-actions.mjs';
+import { isClaudeAgentSession as isLiveClaude } from '../fleet/builtin-actions.mjs'; // SR21 M1: the wider agent rule
 
 export const KIND = 'killall';
 export const JOB_LANE = '*';

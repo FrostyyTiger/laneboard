@@ -2,14 +2,18 @@
 //
 // When `fleet.ingressPeerUid` is set, every connection on the ingress listener must come from a socket owned by
 // that uid (the uid `tailscaled` runs as). Node exposes no SO_PEERCRED for TCP, so the owner is looked up in
-// /proc/net/tcp and /proc/net/tcp6: the peer's socket is the row whose LOCAL end is the connection's remote
-// (ephemeral) port on loopback and whose REMOTE end is the ingress port on loopback.
+// /proc/net/tcp and /proc/net/tcp6: the peer's socket is the row whose LOCAL end is exactly the accepted
+// connection's remote address+port and whose REMOTE end is exactly its local address+port.
 //
 // Rules, each one load-bearing:
 // - Pure parser, never throws: a malformed line is skipped. A lookup never throws either; every failure is `null`.
 // - The caller (A8, `listenAll`) treats `null` as a mismatch: fail closed, never downgraded to `local`.
 // - Only ESTABLISHED rows count (a TIME_WAIT row reports uid 0 for a socket nobody owns any more).
 // - Both ends must be loopback (127.0.0.1, ::1, ::ffff:127.0.0.1): the ingress listener binds 127.0.0.1 only.
+//   A peer address anywhere else in 127/8 (127.0.0.2, ...) is refused before any lookup.
+// - SR21 H1: a row matches only on the FULL 4-tuple (both addresses AND both ports, v4-mapped v6 normalised to
+//   plain v4). Ports alone are never enough: a local attacker can bind 127.0.0.2:<tailscaled's source port>,
+//   connect, and would otherwise inherit tailscaled's row and uid.
 // - Two matching rows with different uids are ambiguous → `null`.
 // - The server's own accepted socket (local end = ingress port) is not the peer row as long as the caller passes
 //   the accepted socket's own `remotePort`/`localPort` (socketPeerUid does): the peer row's local port must be
@@ -107,6 +111,19 @@ export function parseProcNetTcp(text, { littleEndian = os.endianness() === 'LE' 
   return rows;
 }
 
+/**
+ * normAddr(a) -> canonical address string | null: lower-cased, `::ffff:a.b.c.d` -> `a.b.c.d`. Not a string → null.
+ */
+export function normAddr(a) {
+  if (typeof a !== 'string' || a.length === 0 || a.length > 64) return null;
+  const s = a.toLowerCase();
+  const m = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(s);
+  return m ? m[1] : s;
+}
+
+/** Normalised loopback addresses a peer or the listener may have (127/8 beyond .1 is refused on purpose). */
+const LOOPBACK_NORM = new Set(['127.0.0.1', '::1']);
+
 function validPort(p) {
   return Number.isInteger(p) && p > 0 && p <= 65535;
 }
@@ -121,17 +138,21 @@ function readText(read, path) {
 }
 
 /**
- * peerUid({remotePort, localPort, read = fs.readFileSync, littleEndian}) -> uid | null
+ * peerUid({remoteAddress, remotePort, localAddress, localPort, read = fs.readFileSync, littleEndian}) -> uid | null
  *
- * remotePort: the accepted socket's `remotePort` (the peer's ephemeral port); localPort: its `localPort` (the
- * ingress port). Reads /proc/net/tcp and /proc/net/tcp6 (either may be missing, not both) and returns the uid of
- * the single ESTABLISHED row whose local end is loopback:<remotePort> and whose remote end is
- * loopback:<localPort>. Anything else (bad ports, both reads failing, no row, ambiguous uids) → null.
- * Never throws. Callers MUST treat null as "not from serve" (fail closed).
+ * remoteAddress/remotePort: the accepted socket's peer end (the peer's ephemeral port); localAddress/localPort:
+ * its own end (the ingress listener). All four are required. Both addresses must normalise to exactly
+ * 127.0.0.1 or ::1. Reads /proc/net/tcp and /proc/net/tcp6 (either may be missing, not both) and returns the uid
+ * of the single ESTABLISHED row whose local end is exactly remoteAddress:remotePort and whose remote end is
+ * exactly localAddress:localPort (SR21 H1). Anything else (bad ports or addresses, both reads failing, no row,
+ * ambiguous uids) → null. Never throws. Callers MUST treat null as "not from serve" (fail closed).
  */
-export function peerUid({ remotePort, localPort, read = fs.readFileSync, littleEndian } = {}) {
+export function peerUid({ remoteAddress, remotePort, localAddress, localPort, read = fs.readFileSync, littleEndian } = {}) {
   try {
     if (!validPort(remotePort) || !validPort(localPort)) return null;
+    const peerAddr = normAddr(remoteAddress);
+    const selfAddr = normAddr(localAddress);
+    if (!LOOPBACK_NORM.has(peerAddr) || !LOOPBACK_NORM.has(selfAddr)) return null;
     const texts = [PROC_NET_TCP, PROC_NET_TCP6].map((p) => readText(read, p)).filter((t) => t !== null);
     if (texts.length === 0) return null;
     const opts = littleEndian === undefined ? undefined : { littleEndian };
@@ -140,7 +161,7 @@ export function peerUid({ remotePort, localPort, read = fs.readFileSync, littleE
       for (const r of parseProcNetTcp(text, opts)) {
         if (r.state !== TCP_ESTABLISHED) continue;
         if (r.local.port !== remotePort || r.remote.port !== localPort) continue;
-        if (!LOOPBACK_ADDRS.includes(r.local.addr) || !LOOPBACK_ADDRS.includes(r.remote.addr)) continue;
+        if (normAddr(r.local.addr) !== peerAddr || normAddr(r.remote.addr) !== selfAddr) continue;
         uids.add(r.uid);
       }
     }
@@ -156,7 +177,10 @@ export function peerUid({ remotePort, localPort, read = fs.readFileSync, littleE
  */
 export function socketPeerUid(socket, { read, lookup = peerUid } = {}) {
   try {
-    const args = { remotePort: socket?.remotePort, localPort: socket?.localPort };
+    const args = {
+      remoteAddress: socket?.remoteAddress, remotePort: socket?.remotePort,
+      localAddress: socket?.localAddress, localPort: socket?.localPort,
+    };
     if (read) args.read = read;
     const uid = lookup(args);
     return Number.isInteger(uid) ? uid : null;

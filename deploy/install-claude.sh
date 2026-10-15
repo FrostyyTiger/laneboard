@@ -8,15 +8,17 @@
 #  - backs up ~/.claude/settings.json first (~/.claude/backups/settings.json.<stamp>);
 #  - renders deploy/hooks.json.tmpl from server/config.mjs (port, stateDir,
 #    approvals.holdSec) and merges it PER EVENT: in each event only the hook
-#    entries marked as laneboard's (`ours` below) are replaced; every other
+#    entries owned by laneboard (`owned` below) are replaced; every other
 #    hook a user has stays where it is, byte for byte;
 #  - sets .statusLine only if there is none;
 #  - copies deploy/hooks/gate.sh to ~/.claude/laneboard/gate.sh (0755) and
 #    creates the PermissionRequest hook token (node server/control/token.mjs);
 #  - installs the status line, or appends the sidecar to an existing one.
-# Two guards run before anything is written: everything outside .hooks and
-# .statusLine is unchanged, and the non-laneboard hook entries (and groups)
-# are identical before and after. If either fails nothing is written, exit 1.
+# Guards run before anything is written: everything outside .hooks and
+# .statusLine is unchanged; the non-laneboard hook entries (and groups) are
+# identical before and after; and every entry that disappeared carries the
+# exact marker or is byte-identical to a rendered template entry's command
+# (checked without `owned`). If any fails nothing is written, exit 1.
 # Re-running is a no-op apart from a fresh backup.
 #
 # --uninstall: back up, strip laneboard's entries, drop events that end up
@@ -28,9 +30,16 @@
 # --dry-run: print the settings diff and change nothing (no backup, no token,
 # no copies).
 #
-# Ownership marker: a hook entry is laneboard's when its command (or url)
-# posts to 127.0.0.1:<port>/api/hook... or runs something under
-# .claude/laneboard/.
+# Ownership marker (SR21 M2): a hook entry is laneboard's when it carries the
+# field "_laneboard": "managed" (every template entry does; Claude Code ignores
+# unknown hook fields). Nothing is ever matched by URL or path substrings, so
+# a user's own hook that posts to 127.0.0.1:<port>/api/hook... or runs
+# something under .claude/laneboard/ is never touched.
+# Migration: an entry without the field is also laneboard's when it is a
+# command hook whose command is byte-identical to one of the commands the
+# template renders to with the CURRENT config (what the previous installer
+# version wrote, without the field). An old entry rendered with a different
+# port or stateDir is not recognised and is left alone (remove it by hand).
 #
 # Template placeholders (deploy/hooks.json.tmpl, valid JSON):
 #   @PORT@          config.port
@@ -71,14 +80,23 @@ TMPL="$REPO/deploy/hooks.json.tmpl"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-# Shared jq definitions. `ours` is the ownership marker; `strip` removes our
-# entries, drops groups we emptied and events we emptied, and touches nothing
-# else (an event or group without our entries is returned as is).
-JQ_DEFS='
-def ours: type == "object" and (((.command // .url // "") | tostring)
-  | test("127\\.0\\.0\\.1:[0-9]+/api/hook|\\.claude/laneboard/"));
-def hasours: type == "object" and ((.hooks | type) == "array") and any(.hooks[]; ours);
-def stripev: map(if hasours then (.hooks |= map(select(ours | not))) | select(.hooks | length > 0) else . end);
+# Shared jq definitions, built once the template is rendered (LEGACY needs it).
+# `ours` is the ownership marker, `legacy` the exact pre-marker commands,
+# `owned` either. `strip` removes owned entries, drops groups and events it
+# emptied, and touches nothing else (a group without owned entries is
+# returned as is).
+jq_defs() {
+  local legacy
+  legacy=$(jq -c '[.[][] | .hooks[] | .command | strings] | unique' "$WORK/hooks.json")
+  JQ_DEFS='
+def MARK: "managed";
+def LEGACY: '"$legacy"';
+def ours: type == "object" and ._laneboard == MARK;
+def legacy: type == "object" and (has("_laneboard") | not) and .type == "command"
+  and ((.command | type) == "string") and (.command as $c | any(LEGACY[]; . == $c));
+def owned: ours or legacy;
+def hasours: type == "object" and ((.hooks | type) == "array") and any(.hooks[]; owned);
+def stripev: map(if hasours then (.hooks |= map(select(owned | not))) | select(.hooks | length > 0) else . end);
 def strip:
   if (.hooks | type) == "object" then
     .hooks |= (to_entries
@@ -88,11 +106,14 @@ def strip:
   else . end;
 # Independent of strip: the foreign hook entries and the foreign groups, with their event.
 def foreign_entries: [(.hooks // {}) | objects | to_entries[] | .key as $k | .value | arrays | .[]
-  | objects | (del(.hooks)) as $g | .hooks | arrays | .[] | select(ours | not) | {ev: $k, g: $g, h: .}] | sort;
+  | objects | (del(.hooks)) as $g | .hooks | arrays | .[] | select(owned | not) | {ev: $k, g: $g, h: .}] | sort;
 def foreign_groups: [(.hooks // {}) | objects | to_entries[] | .key as $k | .value | arrays | .[]
-  | (if hasours then (.hooks |= map(select(ours | not))) | select(.hooks | length > 0) else . end)
+  | (if hasours then (.hooks |= map(select(owned | not))) | select(.hooks | length > 0) else . end)
   | {ev: $k, g: .}] | sort;
+# Every hook entry, flat (for the removed-entries guard, which does not use `owned`).
+def all_entries: [(.hooks // {}) | objects | .[] | arrays | .[] | objects | .hooks | arrays | .[]];
 '
+}
 
 # ---- the current settings ---------------------------------------------------
 BEFORE="$WORK/before.json"
@@ -122,15 +143,20 @@ render() {
   local cfg port sd hold hdr
   cfg=$(cd "$REPO" && "$NODE" --input-type=module -e '
     const { config: c } = await import("./server/config.mjs");
-    console.log(JSON.stringify({ port: c.port, stateDir: c.stateDir, holdSec: c.approvals?.holdSec ?? 600 }));
+    const { headerPath } = await import("./server/control/token.mjs");
+    let hdr = null;
+    try { hdr = headerPath(c.stateDir); } catch {}
+    console.log(JSON.stringify({ port: c.port, stateDir: c.stateDir, holdSec: c.approvals?.holdSec ?? 600, hdr }));
   ' </dev/null) || { echo "install-claude: cannot read the laneboard config" >&2; return 1; }
   port=$(jq -r '.port' <<<"$cfg"); sd=$(jq -r '.stateDir' <<<"$cfg"); hold=$(jq -r '.holdSec' <<<"$cfg")
   [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ] \
     || { echo "install-claude: bad port in config: $port" >&2; return 1; }
   [[ "$hold" =~ ^[0-9]+$ ]] || { echo "install-claude: bad approvals.holdSec: $hold" >&2; return 1; }
   case "$sd" in /*) ;; *) echo "install-claude: stateDir must be absolute: $sd" >&2; return 1 ;; esac
-  if [ "$DRY" = 1 ]; then
-    hdr="$sd/hook.header"
+  if [ "$DRY" = 1 ] || [ "$MODE" = uninstall ]; then
+    # no token is created; the path is the one token.mjs would print
+    hdr=$(jq -r '.hdr // empty' <<<"$cfg")
+    [ -n "$hdr" ] || hdr="$sd/hook.header"
   else
     hdr=$(cd "$REPO" && "$NODE" server/control/token.mjs "$sd" </dev/null) \
       || { echo "install-claude: cannot create the hook token" >&2; return 1; }
@@ -147,15 +173,19 @@ render() {
   if grep -q '@[A-Z_]*@' "$WORK/hooks.json"; then
     echo "install-claude: unrendered placeholder in $TMPL" >&2; return 1
   fi
+  jq_defs
   # Every rendered entry must carry the marker, or a re-install would duplicate it.
   jq -e "$JQ_DEFS"' all(.[][]; .hooks | all(.[]; ours))' "$WORK/hooks.json" >/dev/null \
     || { echo "install-claude: a template entry lacks the laneboard marker" >&2; return 1; }
 }
 
+# Both modes render: install merges the result, uninstall needs its commands
+# to recognise entries the previous installer version wrote (LEGACY).
+render
+
 # ---- compute the new settings --------------------------------------------------
 AFTER="$WORK/after.json"
 if [ "$MODE" = install ]; then
-  render
   jq --slurpfile h "$WORK/hooks.json" "$JQ_DEFS"'
     strip
     | .hooks = (reduce ($h[0] | keys_unsorted[]) as $ev ((.hooks // {}); .[$ev] = ((.[$ev] // []) + $h[0][$ev])))
@@ -179,6 +209,17 @@ cmp -s <(jq -c "$JQ_DEFS"' foreign_entries' "$BEFORE") <(jq -c "$JQ_DEFS"' forei
   || fail_guard "the merge changed hook entries that are not laneboard's"
 cmp -s <(jq -c "$JQ_DEFS"' foreign_groups' "$BEFORE") <(jq -c "$JQ_DEFS"' foreign_groups' "$AFTER") \
   || fail_guard "the merge changed hook groups that are not laneboard's"
+# Independent of `owned`: each entry that disappeared (multiset difference)
+# carries the exact marker field or has a rendered template command and no
+# marker field at all. A user's look-alike can never be removed silently.
+removed_ok=$(jq -n --slurpfile b "$BEFORE" --slurpfile a "$AFTER" --slurpfile h "$WORK/hooks.json" "$JQ_DEFS"'
+  ($b[0] | all_entries) as $be | ($a[0] | all_entries) as $ae
+  | ([$h[0][][] | .hooks[] | .command | strings] | unique) as $tc
+  | (reduce $ae[] as $x ($be; (index([$x]) // null) as $i | if $i == null then . else del(.[$i]) end)) as $gone
+  | all($gone[]; type == "object" and (
+      (has("_laneboard") and ._laneboard == "managed")
+      or ((has("_laneboard") | not) and .type == "command" and (.command as $c | $tc | index([$c]) != null))))')
+[ "$removed_ok" = true ] || fail_guard "the merge would remove hook entries that are not laneboard's"
 sl_ok=$(jq -n --slurpfile b "$BEFORE" --slurpfile a "$AFTER" --arg m "$MODE" '
   ($b[0].statusLine) as $x | ($a[0].statusLine) as $y
   | $x == $y or ($m == "install" and $x == null) or ($m == "uninstall" and $y == null)')
@@ -192,7 +233,7 @@ summary() {
   jq -r "$JQ_DEFS"'
     (.hooks // {}) | to_entries[] | .key as $k
     | [.value[]? | .hooks[]?] as $e
-    | "  \($k): \([$e[] | select(ours)] | length) laneboard, \([$e[] | select(ours | not)] | length) other"
+    | "  \($k): \([$e[] | select(owned)] | length) laneboard, \([$e[] | select(owned | not)] | length) other"
   ' "$1"
 }
 

@@ -10,6 +10,7 @@
 // a dispatch() call carries win over the ones given here, so a later registerBuiltins (or a test server with
 // other stubs) never runs against stale modules.
 
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { capturePane as tmuxCapturePane } from '../collector/tmux.mjs';
@@ -111,14 +112,44 @@ export function isShellCommand(cmd) {
 }
 
 /**
- * True when `session` is a live Claude session (SR20 M1): kind `claude`, a
- * state that is not shell/dead/unknown, a main-pane foreground command that is
- * not a shell, and that command is `claude`, a versioned native binary name
- * (`2.1.301`: ~/.local/bin/claude links to versions/<semver>), or the session
- * has a live registry pid. Anything else, including a missing paneCmd, is
- * false: typed text there would reach a shell, and a shell runs each typed line.
+ * Foreground commands that may be Claude only when the pid proves it (SR21 M1): an npm-installed Claude Code runs
+ * as `node`. Anything else that is not `claude` or a versioned binary name (python3, ssh, psql, vim, sudo, ...)
+ * is never Claude, whatever the registry says: the registry matches by tmux session name, so a Claude in another
+ * pane of the session sets `claude.pid` while the main pane runs a REPL.
  */
-export function isLiveClaude(session) {
+export const PID_MATCH_COMMANDS = Object.freeze(['node']);
+
+function validPid(p) {
+  return Number.isInteger(p) && p > 0 && p <= 0x3fffffff;
+}
+
+/**
+ * foregroundPgid(pid, read) -> the foreground process group (tpgid) of the terminal `pid` is attached to, or
+ * null. Reads /proc/<pid>/stat; the comm field may contain spaces and ')' so fields are split after the LAST ')'.
+ * Never throws.
+ */
+export function foregroundPgid(pid, read = fs.readFileSync) {
+  try {
+    if (!validPid(pid)) return null;
+    const text = String(read(`/proc/${pid}/stat`, 'utf8'));
+    const close = text.lastIndexOf(')');
+    if (close < 0) return null;
+    // after comm: state ppid pgrp session tty_nr tpgid ...
+    const f = text.slice(close + 1).trim().split(/\s+/);
+    const tpgid = Number(f[5]);
+    return validPid(tpgid) ? tpgid : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when `session` looks like a Claude agent session for the kill switch's victim selection (the N1-fix rule):
+ * kind `claude`, a live state, a main-pane command that is not a shell, and that command is `claude`, a versioned
+ * binary name, or the session has a live registry pid. Deliberately WIDER than isLiveClaude: a kill must not
+ * spare an agent because a REPL is the main pane. Never use it to decide whether typed text is safe.
+ */
+export function isClaudeAgentSession(session) {
   if (!session || typeof session !== 'object') return false;
   if (session.kind !== 'claude') return false;
   if (typeof session.state !== 'string' || !session.state || NOT_CLAUDE_STATES.includes(session.state)) return false;
@@ -128,18 +159,46 @@ export function isLiveClaude(session) {
 }
 
 /**
+ * True when `session` is a live Claude session (SR20 M1, SR21 M1): kind `claude`, a state that is not
+ * shell/dead/unknown, and the main pane's foreground process IS Claude:
+ *   - its command is `claude` or a versioned native binary name (`2.1.301`: ~/.local/bin/claude links to
+ *     versions/<semver>, N1-fix); or
+ *   - its command is in PID_MATCH_COMMANDS (`node`) AND the registry pid is the main pane's own process
+ *     (`session.panePid`, tmux #{pane_pid}) or the foreground process group of the main pane's terminal.
+ * Anything else, including a missing paneCmd, a shell, an interpreter, a remote shell or an editor, is false:
+ * typed text there would run as a command. `deps.fgPgid(panePid)` is injectable for tests.
+ */
+export function isLiveClaude(session, deps = {}) {
+  if (!session || typeof session !== 'object') return false;
+  if (session.kind !== 'claude') return false;
+  if (typeof session.state !== 'string' || !session.state || NOT_CLAUDE_STATES.includes(session.state)) return false;
+  const cmd = session.paneCmd;
+  if (typeof cmd !== 'string' || !cmd || isShellCommand(cmd)) return false;
+  if (cmd === 'claude' || VERSIONED_BINARY.test(cmd)) return true;
+  if (!PID_MATCH_COMMANDS.includes(cmd)) return false;
+  const pid = session.claude?.pid;
+  const panePid = session.panePid;
+  if (!validPid(pid) || !validPid(panePid)) return false;
+  if (pid === panePid) return true;
+  const fg = typeof deps?.fgPgid === 'function' ? deps.fgPgid : foregroundPgid;
+  let pgid = null;
+  try { pgid = fg(panePid); } catch { pgid = null; }
+  return validPid(pgid) && pgid === pid;
+}
+
+/**
  * The guard before typing into a session (send-text with guardPrompt, send-review). Throws ActionRefused 409:
  *   - `no_pane` when there is no session or pane;
  *   - `not_claude` unless isLiveClaude(session);
  *   - `prompting` on a permission/question state, awaitingApproval, a dialog on screen, a capture that fails,
  *     or a screen that is neither the ready input box nor a `working` session (fail safe: unknown refuses).
  *   - `paused` when `opts.refusePaused` and the session (or the builder) is paused (SR18 M1).
- * `deps` = {state: {promptReadiness}, capturePane?}. Resolves when typing is allowed.
+ * `deps` = {state: {promptReadiness}, capturePane?, fgPgid?}. Resolves when typing is allowed.
  */
 export async function assertTypable(session, deps = {}, opts = {}) {
   const prompting = () => new ActionRefused(409, 'prompting', 'the session is prompting', { ok: false, skipped: 'prompting' });
   if (!session?.paneId) throw new ActionRefused(409, 'no_pane', 'the session has no pane', { ok: false, skipped: 'no_pane' });
-  if (!isLiveClaude(session)) {
+  if (!isLiveClaude(session, deps)) {
     throw new ActionRefused(409, 'not_claude', 'the session is not a live Claude session', { ok: false, skipped: 'not_claude' });
   }
   if (opts.refusePaused && session.paused) throw new ActionRefused(409, 'paused', 'the session is paused', { ok: false, skipped: 'paused' });
