@@ -18,6 +18,9 @@
 // - typedText(text, enter): exactly what a builder types (the same cleaning as the dispatcher's
 //   cleanTypedText), so the preview is the text that lands in each pane.
 // - checkConfirm(plan, confirmCount): the typed count must EQUAL the planned sends (not merely ≤ targets).
+// - planHashInput(plan, preview, textHash) -> string: the canonical text the hub hashes (sha256, hex) into the
+//   `planHash` it returns with every 409 plan (SR18 L1). The confirmed request echoes that planHash, which binds
+//   the exact sorted lane list, the typed text (via its sha256 `textHash`) and the Enter flag, not only the count.
 
 export const BROADCAST_LIMITS = Object.freeze({ maxTargets: 30, maxText: 2000, minIntervalMs: 10_000 });
 
@@ -130,6 +133,15 @@ export function validateBroadcast({ targets, text, enter, confirmCount } = {}, l
   if (!Number.isInteger(confirmCount) || confirmCount < 1 || confirmCount > BROADCAST_LIMITS.maxTargets) return 'bad-confirm';
   if (typeof lastAt === 'number' && Number.isFinite(lastAt) && now - lastAt < BROADCAST_LIMITS.minIntervalMs) return 'rate-limited';
   return null;
+}
+
+/** Lower-case hex sha256, the shape of a planHash. */
+export const PLAN_HASH_RE = /^[0-9a-f]{64}$/;
+
+/** Canonical planHash input: version, sorted planned sends, Enter flag and the sha256 hex of the typed text. */
+export function planHashInput(plan, preview, textHash) {
+  const send = Array.isArray(plan?.send) ? plan.send.filter((k) => typeof k === 'string').slice().sort() : [];
+  return JSON.stringify({ v: 1, send, enter: preview?.enter !== false, textHash: String(textHash) });
 }
 
 /** The typed confirmation must equal the number of planned sends. */
