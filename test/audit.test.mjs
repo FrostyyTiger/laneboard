@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 
 import {
   openAudit, verifyFile, verifyChain, entryHash, argsHashOf, createUnauthWarner, GENESIS,
@@ -335,19 +336,23 @@ test('reopen continues the chain; a torn tail is not glued onto and stays visibl
   assert.equal(e.prevHash, d.hash, 'chains onto the last parsable entry');
   const ls = fs.readFileSync(file, 'utf8').split('\n');
   assert.equal(JSON.parse(ls[4]).hash, e.hash, 'the new entry is on its own line');
+  // SR2 L1: the torn line is reported, but it does not stop verification of what follows
   const v = re.verifyAll();
-  assert.equal(v.ok, false);
-  assert.deepEqual(v.firstBad, { file, line: 4, reason: 'bad_json' });
+  assert.equal(v.ok, true, JSON.stringify(v.firstBad));
+  assert.deepEqual(v.warnings, [{ file, line: 4, reason: 'torn' }]);
+  assert.equal(v.count, re.head().count, 'head and verify count the same entries');
+  assert.equal(v.head, e.hash);
   assert.ok(re.read({ after: d.hash }).entries.some((x) => x.hash === e.hash), 'read skips the torn line');
 });
 
 test('an external write to the file is noticed before the next append', (t) => {
   const { file, audit } = setup(t);
-  audit.append(act(1));
-  // another writer (e.g. a second process) appended a valid entry
-  const other = openAudit({ file });
-  const x = other.append(act(2));
-  other.close();
+  const a = audit.append(act(1));
+  // a non-cooperating writer appended a valid entry behind our back
+  const raw = { ...a, id: 'x2', target: 'other', prevHash: a.hash };
+  delete raw.hash;
+  const x = { ...raw, hash: entryHash(raw) };
+  fs.appendFileSync(file, `${canonicalJson(x)}\n`);
   const y = audit.append(act(3));
   assert.equal(y.prevHash, x.hash);
   assert.equal(audit.head().count, 3);
@@ -391,4 +396,252 @@ test('createUnauthWarner: at most one line per 10 s, with a counter, no control 
   assert.match(out[1], /\+5 more/);
   assert.ok(!/[\x00-\x1f]/.test(out.join('')));
   assert.equal(w.pending(), 0);
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// SR2 regressions
+
+const MODULE_URL = new URL('../server/fleet/audit.mjs', import.meta.url).href;
+
+function startHolder(file) {
+  // A second process that opens the log and keeps it open until killed.
+  const code = `import { openAudit } from ${JSON.stringify(MODULE_URL)};
+    const a = openAudit({ file: ${JSON.stringify(file)} });
+    a.append({ action: 'held', target: 'x' });
+    process.stdout.write('ready\\n');
+    setInterval(() => {}, 1000);`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', code], { stdio: ['ignore', 'pipe', 'inherit'] });
+  const ready = new Promise((resolve, reject) => {
+    child.stdout.on('data', (d) => { if (String(d).includes('ready')) resolve(); });
+    child.on('exit', (c) => reject(new Error(`holder exited ${c}`)));
+  });
+  return { child, ready };
+}
+
+test('SR2 M1a: a second writer is refused, in this process and in another; a dead holder is taken over', async (t) => {
+  const { file, audit } = setup(t);
+  audit.append(act(1));
+  assert.throws(() => openAudit({ file }), (err) => err.code === 'AUDIT_LOCKED' && /only one writer/.test(err.message));
+  assert.equal(fs.readFileSync(`${file}.lock`, 'utf8'), `${process.pid} ${os.hostname().replace(/\s/g, '_') || 'localhost'}\n`);
+  assert.equal(fs.statSync(`${file}.lock`).mode & 0o777, 0o600);
+  audit.close();
+  assert.equal(fs.existsSync(`${file}.lock`), false, 'close releases the lock');
+  // another live process holds it
+  const { child, ready } = startHolder(file);
+  t.after(() => child.kill('SIGKILL'));
+  await ready;
+  assert.throws(() => openAudit({ file }), (err) => err.code === 'AUDIT_LOCKED' && err.message.includes(`pid ${child.pid}`));
+  // the holder dies without closing: its lock is stale and is taken over
+  const exited = new Promise((r) => child.once('exit', r));
+  child.kill('SIGKILL');
+  await exited;
+  assert.ok(fs.existsSync(`${file}.lock`), 'the dead holder left its lock behind');
+  const b = openAudit({ file });
+  t.after(() => b.close());
+  assert.equal(b.head().count, 2);
+  b.append(act(3));
+  assert.equal(b.verifyAll().ok, true);
+  // a lock from another host, or an unreadable one, is never taken over
+  b.close();
+  fs.writeFileSync(`${file}.lock`, '1 other-host\n');
+  assert.throws(() => openAudit({ file }), (err) => err.code === 'AUDIT_LOCKED' && /other-host/.test(err.message));
+  fs.writeFileSync(`${file}.lock`, 'garbage');
+  assert.throws(() => openAudit({ file }), (err) => err.code === 'AUDIT_LOCKED' && /unreadable/.test(err.message));
+  fs.unlinkSync(`${file}.lock`);
+  const leftovers = fs.readdirSync(path.dirname(file)).filter((f) => f.startsWith('audit.jsonl.lock.'));
+  assert.deepEqual(leftovers, [], 'no temp lock files left behind');
+});
+
+test('SR2 M1a: a writer whose lock was removed or replaced stops writing', (t) => {
+  const { file, audit } = setup(t);
+  audit.append(act(1));
+  fs.unlinkSync(`${file}.lock`);
+  assert.throws(() => audit.append(act(2)), (err) => err.code === 'AUDIT_LOCK_LOST');
+  assert.throws(() => audit.append(act(3)), (err) => err.code === 'AUDIT_LOCK_LOST', 'stays refused');
+  assert.equal(lines(file).length, 1);
+});
+
+test('SR2 M1b: a renamed or removed file is never written into; a replaced file is reopened', (t) => {
+  const { dir, file, audit } = setup(t);
+  const a = audit.append(act(1));
+  const moved = path.join(dir, 'moved.jsonl');
+  fs.renameSync(file, moved);
+  assert.throws(() => audit.append(act(2)), (err) => err.code === 'AUDIT_DETACHED');
+  assert.throws(() => audit.head(), (err) => err.code === 'AUDIT_DETACHED');
+  assert.equal(lines(moved).length, 1, 'nothing went into the detached inode');
+  assert.equal(fs.existsSync(file), false);
+  // put a copy back (a new inode): the writer reopens it and continues its chain
+  fs.copyFileSync(moved, file);
+  const b = audit.append(act(3));
+  assert.equal(b.prevHash, a.hash);
+  assert.deepEqual(lines(file).map((l) => JSON.parse(l).hash), [a.hash, b.hash]);
+  assert.equal(lines(moved).length, 1);
+  assert.equal(audit.verifyAll().ok, true);
+  fs.unlinkSync(file);
+  assert.throws(() => audit.append(act(4)), (err) => err.code === 'AUDIT_DETACHED');
+});
+
+test('SR2 M1c: rotation never overwrites an existing rotated file', (t) => {
+  const { dir, file, c, audit } = setup(t, { maxBytes: 600 });
+  // a file already holds the name the first rotation would pick
+  const d = new Date(c.t);
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  const stamp = `${p(d.getUTCFullYear(), 4)}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`;
+  const taken = path.join(dir, 'state', `audit-${stamp}.jsonl`);
+  fs.writeFileSync(taken, 'sentinel\n');
+  for (let i = 1; i <= 6; i++) audit.append(act(i));
+  assert.equal(fs.readFileSync(taken, 'utf8'), 'sentinel\n');
+  assert.notEqual(JSON.parse(lines(file)[0]).target, path.basename(taken));
+  const v = audit.verifyAll();
+  assert.equal(v.ok, true, JSON.stringify(v.firstBad));
+  assert.equal(v.count, audit.head().count);
+});
+
+test('SR2 L1: a torn tail left in a rotated file does not break verification', (t) => {
+  const { file, c, audit } = setup(t, { maxBytes: 700 });
+  audit.append(act(1));
+  fs.appendFileSync(file, '{"ts":1,"id":"to'); // crash mid-write
+  for (let i = 2; i <= 8; i++) { audit.append(act(i)); c.t += 1000; }
+  const v = audit.verifyAll();
+  assert.equal(v.ok, true, JSON.stringify(v.firstBad));
+  assert.equal(v.warnings.length, 1);
+  assert.equal(v.warnings[0].reason, 'torn');
+  assert.equal(v.count, audit.head().count);
+  // real tampering after the torn line is still found
+  audit.close();
+  const ls = lines(file);
+  const e = JSON.parse(ls.at(-1));
+  e.id = 'forged';
+  fs.writeFileSync(file, `${[...ls.slice(0, -1), canonicalJson(e)].join('\n')}\n`);
+  assert.equal(verifyChain(file).firstBad.reason, 'hash_mismatch');
+  // a torn line at the very end of the current file is still bad_json for a verifier
+  const f0 = lines(file)[0];
+  assert.deepEqual(verifyFile([f0, '{"ts":1'], JSON.parse(f0).prevHash).firstBad, { file: null, line: 2, reason: 'bad_json' });
+  // two garbage lines inserted mid-file, followed by a chaining entry: warnings, not a failure
+  assert.equal(verifyFile([ls[0], 'x', 'y', ls[1]], JSON.parse(ls[0]).prevHash).warnings.length, 2);
+});
+
+test('SR2 L2: the writer refuses to extend a chain that does not verify; head counts verified entries', (t) => {
+  const { file, audit } = setup(t);
+  const a = audit.append(act(1));
+  const forged = { ...a, id: 'g', prevHash: a.hash, hash: 'f'.repeat(64) };
+  fs.appendFileSync(file, `${canonicalJson(forged)}\n`);
+  assert.throws(() => audit.append(act(2)), (err) => err.code === 'AUDIT_CHAIN_INVALID' && /hash_mismatch/.test(err.message));
+  assert.deepEqual(audit.head(), { hash: a.hash, count: 1 }, 'head is the last verified entry');
+  assert.equal(audit.verifyAll().count, audit.head().count);
+  assert.equal(lines(file).length, 2, 'nothing chained onto the forged hash');
+  audit.close();
+  assert.throws(() => openAudit({ file }).append(act(3)), (err) => err.code === 'AUDIT_CHAIN_INVALID');
+});
+
+test('SR2 L3: a line must be exactly canonicalJson of its entry', (t) => {
+  const { file, audit } = setup(t);
+  audit.append(act(1));
+  audit.append(act(2));
+  audit.close();
+  const ls = lines(file);
+  const dup = ls[1].replace(/^\{/, '{"action":"noop","target":"other",');
+  assert.equal(JSON.parse(dup).hash, JSON.parse(ls[1]).hash, 'last-wins parse still yields the hashed entry');
+  fs.writeFileSync(file, `${ls[0]}\n${dup}\n`);
+  assert.deepEqual(verifyChain(file).firstBad, { file, line: 2, reason: 'bad_json' });
+  fs.writeFileSync(file, `${ls[0]}\n${ls[1].replace(':', ': ')}\n`);
+  assert.deepEqual(verifyChain(file).firstBad, { file, line: 2, reason: 'bad_json' });
+});
+
+test('SR2 L4: a caller ts is clamped to at most now + 60 s', (t) => {
+  const { c, audit } = setup(t);
+  const a = audit.append(act(1, { ts: Number.MAX_SAFE_INTEGER }));
+  assert.equal(a.ts, c.t + 60000);
+  c.t += 1000;
+  const b = audit.append(act(2));
+  assert.equal(b.ts, a.ts, 'never regresses');
+  c.t += 120000;
+  assert.equal(audit.append(act(3)).ts, c.t, 'the pin wears off once the clock passes it');
+  assert.equal(audit.append(act(4, { ts: c.t - 10 })).ts, c.t);
+});
+
+test('SR2 L6: rotation survives short writes and is undone when the final rename fails', (t) => {
+  const { dir, file, c, audit } = setup(t, { maxBytes: 600 });
+  const realWrite = fs.writeSync;
+  const realRename = fs.renameSync;
+  t.after(() => { fs.writeSync = realWrite; fs.renameSync = realRename; });
+  fs.writeSync = (fd, buf, off = 0, len = buf.length - off, pos) => realWrite(fd, buf, off, Math.min(len, 7), pos);
+  for (let i = 1; i <= 6; i++) { audit.append(act(i)); c.t += 1000; }
+  fs.writeSync = realWrite;
+  assert.equal(audit.verifyAll().ok, true, 'short writes are looped, also for the rotate entry');
+  const before = fs.readdirSync(path.join(dir, 'state')).sort();
+  const headBefore = audit.head();
+  fs.renameSync = (from, to) => {
+    if (from === `${file}.rotating`) throw Object.assign(new Error('EIO injected'), { code: 'EIO' });
+    return realRename(from, to);
+  };
+  let failed = false;
+  for (let i = 0; i < 10 && !failed; i++) {
+    try { audit.append(act(100 + i)); } catch (err) { failed = err.code === 'EIO'; }
+  }
+  assert.ok(failed, 'a rotation was attempted');
+  fs.renameSync = realRename;
+  const after = fs.readdirSync(path.join(dir, 'state')).sort();
+  assert.ok(!after.includes('audit.jsonl.rotating'));
+  assert.equal(after.filter((f) => f.endsWith('.jsonl')).length, before.filter((f) => f.endsWith('.jsonl')).length, 'the extra rotated name was removed');
+  assert.equal(audit.verifyAll().ok, true);
+  assert.ok(audit.head().count >= headBefore.count);
+  const e = audit.append(act(200));
+  assert.equal(e.prevHash, audit.read({ limit: 1000 }).entries.at(-2).hash);
+  const v = audit.verifyAll();
+  assert.equal(v.ok, true, JSON.stringify(v.firstBad));
+  assert.equal(v.count, audit.head().count);
+});
+
+test('SR2 L7: an existing wide directory is tightened; a symlinked directory or rotated file is refused', (t) => {
+  const dir = tmpDir(t);
+  const wide = path.join(dir, 'wide');
+  fs.mkdirSync(wide, { mode: 0o777 });
+  fs.chmodSync(wide, 0o777);
+  openAudit({ file: path.join(wide, 'audit.jsonl') }).close();
+  assert.equal(fs.statSync(wide).mode & 0o777, 0o700);
+  const link = path.join(dir, 'link');
+  fs.symlinkSync(wide, link);
+  assert.throws(() => openAudit({ file: path.join(link, 'audit.jsonl') }), (err) => err.code === 'AUDIT_UNSAFE_DIR');
+  // a rotated file replaced by a symlink is not followed: the chain is broken, the target is not read
+  const file = path.join(wide, 'audit.jsonl');
+  const a = openAudit({ file, maxBytes: 600 });
+  for (let i = 0; i < 4; i++) a.append(act(i));
+  a.close();
+  const target = JSON.parse(lines(file)[0]).target;
+  const real = path.join(wide, target);
+  fs.renameSync(real, path.join(dir, 'elsewhere.jsonl'));
+  fs.symlinkSync(path.join(dir, 'elsewhere.jsonl'), real);
+  const v = verifyChain(file);
+  assert.equal(v.ok, false);
+  assert.equal(v.firstBad.reason, 'prev_mismatch');
+});
+
+test('SR2 L8: an over-long line is bad_json, not a crash; reads stream across rotated files', (t) => {
+  const { file, c, audit } = setup(t, { maxBytes: 900 });
+  for (let i = 1; i <= 10; i++) { audit.append(act(i)); c.t += 1000; }
+  const h = audit.head();
+  const all = audit.read({ limit: 1000 }).entries;
+  assert.equal(all.length, h.count);
+  for (let i = 0; i < all.length; i++) assert.equal(audit.hasHead({ hash: all[i].hash, count: i + 1 }), true, `index ${i}`);
+  assert.equal(audit.hasHead({ hash: all[0].hash, count: 2 }), false);
+  assert.equal(audit.hasHead({ hash: all.at(-1).hash, count: h.count + 1 }), false);
+  assert.equal(audit.read({ after: all[1].hash }).afterIndex, 1);
+  assert.equal(audit.read({ since: all.at(-1).ts }).entries.at(-1).hash, all.at(-1).hash);
+  audit.close();
+  fs.appendFileSync(file, `${'x'.repeat(200 * 1024)}\n`);
+  const v = verifyChain(file);
+  assert.equal(v.ok, false);
+  assert.equal(v.firstBad.reason, 'bad_json');
+});
+
+test('SR2 L9: control characters are not stored', (t) => {
+  const { file, audit } = setup(t);
+  const e = audit.append(act(1, { target: 's1\x1b]52;c;x\x07', user: 'u\nv', result: { ok: false, error: 'a\r\nb c\x9b' } }));
+  assert.equal(e.target, 's1�]52;c;x�');
+  assert.equal(e.user, 'u v');
+  assert.equal(e.result.error, 'a  b�c�');
+  assert.ok(!/[\x00-\x1f]/.test(JSON.stringify(audit.read().entries)));
+  assert.equal(lines(file).length, 1);
+  assert.equal(audit.verifyAll().ok, true);
 });
