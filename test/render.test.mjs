@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import { elementsFromHtml, makeDocument, loadEsModules } from './helpers/fakedom.mjs';
 
 // vm.SourceTextModule needs --experimental-vm-modules. `npm test` sets it in
 // NODE_OPTIONS; a bare `node --test test/render.test.mjs` does not, so then
@@ -27,133 +28,11 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const PUB = path.join(ROOT, 'public');
 const snapshot = JSON.parse(fs.readFileSync(path.join(ROOT, 'test/fixtures/snapshot.json'), 'utf8'));
 
-function makeEl(tag = 'div') {
-  const el = {
-    tagName: String(tag).toUpperCase(),
-    children: [],
-    parent: null,
-    style: { cssText: '', setProperty() {} },
-    dataset: {},
-    hidden: false,
-    _text: '',
-    innerHTML: '',
-    title: '',
-    disabled: false,
-    value: '',
-    onclick: null,
-    classList: {
-      _s: new Set(),
-      add(...c) { c.forEach((x) => x && this._s.add(x)); },
-      remove(...c) { c.forEach((x) => this._s.delete(x)); },
-      toggle(c, on) {
-        if (on === undefined) { this._s.has(c) ? this._s.delete(c) : this._s.add(c); }
-        else if (on) this._s.add(c);
-        else this._s.delete(c);
-      },
-      contains(c) { return this._s.has(c); },
-    },
-    // Faithful to the DOM: textContent aggregates descendants, and setting it
-    // clears the children. Getting this wrong hid a real regression once.
-    get textContent() {
-      return this._text + this.children.map((c) => c.textContent).join('');
-    },
-    set textContent(v) {
-      this.children.length = 0;
-      this._text = String(v ?? '');
-    },
-    get className() { return [...this.classList._s].join(' '); },
-    set className(v) { this.classList._s = new Set(String(v).split(/\s+/).filter(Boolean)); },
-    get firstChild() { return this.children[0] ?? null; },
-    get childNodes() { return this.children; },
-    get nextSibling() {
-      const sibs = this.parent?.children ?? [];
-      return sibs[sibs.indexOf(this) + 1] ?? null;
-    },
-    // Faithful to the DOM: inserting a node that already has a parent MOVES
-    // it. v3 moves session cards in and out of lane cards; a harness that
-    // left the old copy behind would count every moved card twice.
-    append(...kids) {
-      for (const k of kids) {
-        if (typeof k === 'string') { this._text += k; continue; }
-        const old = k.parent?.children;
-        if (old && old.includes(k)) old.splice(old.indexOf(k), 1);
-        k.parent = this;
-        this.children.push(k);
-      }
-    },
-    insertBefore(node, ref) {
-      if (node === ref) return node;
-      const old = node.parent?.children;
-      if (old && old.includes(node)) old.splice(old.indexOf(node), 1);
-      node.parent = this;
-      const i = ref ? this.children.indexOf(ref) : this.children.length;
-      this.children.splice(i < 0 ? this.children.length : i, 0, node);
-      return node;
-    },
-    replaceWith(next) {
-      const sibs = this.parent?.children ?? [];
-      const i = sibs.indexOf(this);
-      if (i >= 0) { sibs[i] = next; next.parent = this.parent; }
-    },
-    remove() {
-      const sibs = this.parent?.children ?? [];
-      const i = sibs.indexOf(this);
-      if (i >= 0) sibs.splice(i, 1);
-    },
-    addEventListener() {}, removeEventListener() {},
-    getBoundingClientRect: () => ({ top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100 }),
-    scrollIntoView() {}, focus() {},
-    attrs: {},
-    // Not a no-op: the charts are built as SVG nodes whose class arrives via
-    // setAttribute, and a no-op here made "did it draw two charts?" silently
-    // answer no while the page was in fact fine.
-    setAttribute(name, value) {
-      this.attrs[name] = String(value);
-      if (name === 'class') this.className = String(value);
-    },
-    getAttribute(name) { return this.attrs[name] ?? null; },
-    querySelector() { return null; },
-    querySelectorAll(sel) {
-      const want = String(sel).replace(/^\./, '');
-      const out = [];
-      const walk = (n) => { for (const c of n.children) { if (c.classList.contains(want)) out.push(c); walk(c); } };
-      walk(this);
-      return out;
-    },
-    closest() { return null; },
-    matches() { return false; },
-  };
-  return el;
-}
-
 /** Build the sandbox, evaluate public/js/app.js in it, and hand back the pieces. */
 async function mount({ responses: primed = [], wide = false } = {}) {
-  const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
-  const byId = new Map();
-  for (const m of html.matchAll(/\sid="([^"]+)"/g)) byId.set(m[1], makeEl());
-
-  // Buttons declared in the markup inside an id'd container — the view strip,
-  // the phone tabs, the window pickers. The harness builds elements from ids
-  // alone, so without this a container the page only ever READS from (to mark
-  // one child active) looks empty and the check silently passes on nothing.
-  // Deliberately shallow: these containers hold buttons and nothing else.
-  for (const m of html.matchAll(/<(nav|div)[^>]*\sid="([^"]+)"[^>]*>([\s\S]*?)<\/\1>/g)) {
-    const parent = byId.get(m[2]);
-    if (!parent) continue;
-    for (const b of m[3].matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)) {
-      const child = makeEl('button');
-      for (const a of b[1].matchAll(/data-([a-z-]+)="([^"]*)"/g)) child.dataset[a[1]] = a[2];
-      const cls = /\sclass="([^"]*)"/.exec(b[1]);
-      if (cls) child.className = cls[1];
-      child.textContent = b[2].trim();
-      parent.append(child);
-    }
-  }
-  // Honour the real `hidden` attributes, so "did app.js reveal this?" is real.
-  for (const m of html.matchAll(/<[^>]*\sid="([^"]+)"[^>]*\shidden[^>]*>/g)) {
-    const el = byId.get(m[1]);
-    if (el) el.hidden = true;
-  }
+  // One element per id in the real index.html, the buttons of id'd
+  // containers and the real `hidden` attributes (test/helpers/fakedom.mjs).
+  const byId = elementsFromHtml(fs.readFileSync(path.join(PUB, 'index.html'), 'utf8'));
 
   const sockets = [];
   /** URL fragment -> JSON body, primed by await mount({ responses }). */
@@ -161,16 +40,7 @@ async function mount({ responses: primed = [], wide = false } = {}) {
   // Window-level listeners are recorded rather than dropped, so a test can fire
   // a hashchange and exercise the view router the way a browser would.
   const winListeners = {};
-  const document = {
-    getElementById: (id) => byId.get(id) ?? null,
-    createElement: (t) => makeEl(t),
-    // The charts are hand-written SVG (hard rule 3: no chart library), so the
-    // harness has to be able to make namespaced elements too.
-    createElementNS: (_ns, t) => makeEl(t),
-    createTextNode: (t) => { const n = makeEl('#text'); n.textContent = String(t); return n; },
-    querySelectorAll: (sel) => byId.get('grid').querySelectorAll(sel),
-    head: makeEl(), body: makeEl(), addEventListener() {},
-  };
+  const document = makeDocument({ byId, root: byId.get('grid') });
   const sandbox = {
     document, console: { log() {}, warn() {}, error() {} },
     location: { protocol: 'http:', host: 'x', hash: '', pathname: '/' },
@@ -234,32 +104,16 @@ const TERMINAL = path.join(JS, 'ui', 'terminal.js');
  * Link and evaluate public/js/app.js inside `context`. Returns ns(rel), the
  * namespace of public/js/<rel> in that same context.
  */
-async function loadModules(context) {
-  const cache = new Map();
-  const load = (file) => {
-    if (cache.has(file)) return cache.get(file);
-    let mod;
-    if (file === TERMINAL) {
-      const stub = {
+function loadModules(context) {
+  return loadEsModules(context, {
+    entry: path.join(JS, 'app.js'),
+    stubs: {
+      [TERMINAL]: {
         openTerminal: () => {}, closeTerminal: () => {}, fitAll: () => {},
         writeTo: () => false, isLive: () => false,
-      };
-      mod = new vm.SyntheticModule(Object.keys(stub), function () {
-        for (const [k, v] of Object.entries(stub)) this.setExport(k, v);
-      }, { context, identifier: file });
-    } else {
-      mod = new vm.SourceTextModule(fs.readFileSync(file, 'utf8'), { context, identifier: file });
-    }
-    cache.set(file, mod);
-    return mod;
-  };
-  const entry = load(path.join(JS, 'app.js'));
-  await entry.link((specifier, referencing) => {
-    assert.ok(specifier.startsWith('.'), `${referencing.identifier}: imports must be relative, got ${specifier}`);
-    return load(path.resolve(path.dirname(referencing.identifier), specifier));
+      },
+    },
   });
-  await entry.evaluate();
-  return (rel) => load(path.join(JS, rel)).namespace;
 }
 
 /** Read a public/ file — the static assertions need the source, not the DOM. */
