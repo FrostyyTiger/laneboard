@@ -210,7 +210,7 @@ export function confirmBroadcastPlan(hp, code, ask = null) {
 }
 
 /** A refusal in words. */
-export function refusalText(out) {
+export function broadcastRefusalText(out) {
   const why = Object.hasOwn(REFUSAL_WHY, out?.code) ? REFUSAL_WHY[out.code] : (out?.detail ?? out?.code ?? 'refused');
   const wait = Number.isFinite(out?.retryAfterMs) ? ` (retry in ${Math.ceil(out.retryAfterMs / 1000)} s)` : '';
   return `${why}${wait}`;
@@ -360,7 +360,7 @@ export function openBroadcast(opts = {}) {
         current = { ...t, ...broadcastPreview(s, t.targets, text.value, enter.checked) };
         count.textContent = `${t.targets.length} target${t.targets.length === 1 ? '' : 's'}${t.truncated ? ` (the first ${BROADCAST_LIMITS.maxTargets} of ${t.total})` : ''}`;
         renderBroadcastPlan(planBox, current);
-        status.textContent = current.error && text.value !== '' ? refusalText({ code: current.error }) : '';
+        status.textContent = current.error && text.value !== '' ? broadcastRefusalText({ code: current.error }) : '';
         send.disabled = Boolean(current.error);
       };
       bSel.onchange = redraw;
@@ -396,7 +396,7 @@ export function openBroadcast(opts = {}) {
           return;
         }
         if (out.kind === 'cancelled') status.textContent = 'Cancelled: nothing was sent';
-        else status.textContent = `Not sent: ${refusalText(out)}`;
+        else status.textContent = `Not sent: ${broadcastRefusalText(out)}`;
         send.disabled = false;
       };
       redraw();

@@ -10,7 +10,7 @@ import {
 } from '../public/js/ui/actionbar.js';
 import {
   broadcastBody, broadcastPreview, broadcastTargets, builderUpIn, confirmBroadcastPlan, hubPlanOf, outcomeLines,
-  postBroadcast, refusalText, renderBroadcastPlan, sendBroadcast, skipWhy,
+  postBroadcast, broadcastRefusalText, renderBroadcastPlan, sendBroadcast, skipWhy,
 } from '../public/js/ui/broadcast.js';
 import {
   BUILDER_GRACE_MS, FLEET_UNDO_MS, builderInventory, cancelKill, fleetJobFrom, killCountdown, killPlan, killResultOf,
@@ -331,7 +331,7 @@ test('sendBroadcast: Cancel, nothing-to-send, refusals and a garbled planHash ne
     post: async () => ({ ok: false, status: 429, error: 'too-many-refusals', retryAfterMs: 42000 }), confirm: async () => assert.fail('no confirm'),
   });
   assert.deepEqual([limited.kind, limited.code, limited.retryAfterMs], ['refused', 'too-many-refusals', 42000]);
-  assert.match(refusalText(limited), /too many refused broadcasts.*retry in 42 s/);
+  assert.match(broadcastRefusalText(limited), /too many refused broadcasts.*retry in 42 s/);
 
   const bodies = [];
   const garbled = await sendBroadcast({ targets: ['builder-a/auth'], text: 'hi' }, {
