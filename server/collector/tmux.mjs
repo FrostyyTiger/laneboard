@@ -35,7 +35,20 @@ const P_FMT = [
   '#{session_name}', '#{window_index}', '#{pane_index}', '#{pane_id}',
   '#{pane_current_command}', '#{pane_current_path}', '#{pane_pid}',
   '#{pane_width}', '#{pane_height}', '#{pane_active}',
+  // Last: a window name is free text, so whatever it holds stays in this field.
+  '#{window_name}',
 ].join(SEP);
+
+/**
+ * A run-script window (fleet R8, server/review/scripts.mjs): `run-<script>`.
+ * The one rule for every place that names, selects or kills one.
+ */
+export const RUN_WINDOW_RE = /^run-[a-z0-9-]{1,24}$/;
+
+/** True when `name` is a run-script window's name. */
+export function isRunWindow(name) {
+  return typeof name === 'string' && RUN_WINDOW_RE.test(name);
+}
 
 export async function listSessions() {
   const r = await runTmux(['list-sessions', '-F', S_FMT]);
@@ -57,7 +70,7 @@ export async function listPanes() {
   const r = await runTmux(['list-panes', '-a', '-F', P_FMT]);
   if (!r.ok) return [];
   return r.stdout.split('\n').filter(Boolean).map((line) => {
-    const [session, windowIndex, paneIndex, paneId, cmd, cwdPath, pid, w, h, active] = line.split(SEP);
+    const [session, windowIndex, paneIndex, paneId, cmd, cwdPath, pid, w, h, active, ...nameParts] = line.split(SEP);
     return {
       session,
       windowIndex: Number(windowIndex),
@@ -69,6 +82,7 @@ export async function listPanes() {
       width: Number(w),
       height: Number(h),
       active: active === '1',
+      windowName: nameParts.join(SEP),
       target: paneId, // pane ids ("%17") are unambiguous targets, unlike names with spaces
     };
   });
@@ -81,6 +95,23 @@ export async function listPanes() {
  */
 export function isOwnWebSession(session) {
   return Boolean(session?.group) && /-web-[0-9a-z]+$/.test(session?.name ?? '');
+}
+
+/**
+ * The pane a session's work happens in: the active pane of the lowest-indexed
+ * window that is not a run-script window. Every window has an active pane, so
+ * "the first active pane" would pick a `run-*` window whenever tmux lists it
+ * first (fleet R8). Falls back to the first pane when every window is a
+ * `run-*` one, and to null for no panes.
+ */
+export function pickMainPane(panes) {
+  if (!Array.isArray(panes) || !panes.length) return null;
+  const work = panes.filter((p) => !isRunWindow(p.windowName));
+  if (!work.length) return panes.find((p) => p.active) || panes[0];
+  const lowest = Math.min(...work.map((p) => (Number.isFinite(p.windowIndex) ? p.windowIndex : Infinity)));
+  const win = work.filter((p) => p.windowIndex === lowest);
+  if (!win.length) return work.find((p) => p.active) || work[0];
+  return win.find((p) => p.active) || win[0];
 }
 
 /** Sessions with their panes attached, keyed by session name. */
@@ -96,8 +127,7 @@ export async function inventory() {
     if (s) s.panes.push(p);
   }
   for (const s of byName.values()) {
-    // The pane a session's work happens in: the active pane of the first window.
-    s.mainPane = s.panes.find((p) => p.active) || s.panes[0] || null;
+    s.mainPane = pickMainPane(s.panes);
   }
   return byName;
 }

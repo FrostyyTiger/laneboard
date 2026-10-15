@@ -42,7 +42,7 @@ import pty from 'node-pty';
 import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { run, isSafeSessionName } from './util.mjs';
-import { exactTarget } from './collector/tmux.mjs';
+import { exactTarget, RUN_WINDOW_RE } from './collector/tmux.mjs';
 import { kvRead, kvWrite } from './db.mjs';
 import * as state from './state.mjs';
 
@@ -171,11 +171,16 @@ async function attachTerminal(ws, name, want) {
     ? owner
     : { cols: clampDim(want.cols, 20, 500, owner.cols), rows: clampDim(want.rows, 5, 200, owner.rows) };
 
-  const term = pty.spawn('tmux', [
+  const chain = [
     'new-session', '-t', exactTarget(name), '-s', groupName,
     ';', 'set-option', '-t', groupName, 'status', 'off',
     ';', 'set-option', '-t', groupName, 'destroy-unattached', 'on',
-  ], {
+  ];
+  // A run-script window (fleet R8): only OUR grouped session switches to it;
+  // grouped sessions keep independent current windows, so the owner's view
+  // stays on the agent. `=` makes the window name an exact match.
+  if (want.window !== undefined) chain.push(';', 'select-window', '-t', `${groupName}:=${want.window}`);
+  const term = pty.spawn('tmux', chain, {
     name: 'xterm-256color',
     cols: size.cols,
     rows: size.rows,
@@ -289,6 +294,19 @@ function cleanup(entry) {
   log.info(`term ${entry.groupName} detached (${live.size} live)`);
 }
 
+/**
+ * The `window` query of a terminal URL (fleet R8): undefined when absent, the
+ * name when it is a run-script window (`run-<script>`), null when it is
+ * present but invalid (the upgrade is then answered 400).
+ */
+export function windowParam(url) {
+  const sp = url?.searchParams;
+  if (!sp || typeof sp.has !== 'function' || !sp.has('window')) return undefined;
+  if (sp.getAll('window').length !== 1) return null;
+  const w = sp.get('window');
+  return typeof w === 'string' && RUN_WINDOW_RE.test(w) ? w : null;
+}
+
 /** Upgrade handler for /ws/term/<name>. Returns true if it handled the request. */
 export function attach(req, socket, head, url) {
   const m = /^\/ws\/term\/(.+)$/.exec(url.pathname);
@@ -302,23 +320,27 @@ export function attach(req, socket, head, url) {
  * Open a terminal on session `name` for an upgrade whose path the caller has
  * already matched and authorized (`/ws/term/<name>` via attach above, or the
  * v1 route `/api/v1/term/:name`, fleet A7/A8). `url` supplies `cols`/`rows`
- * (clamped as everywhere else). Always handles the request: a refused name is
- * answered 404 and the socket destroyed. Returns true.
+ * (clamped as everywhere else) and an optional `window=run-<script>` (fleet
+ * R8, RUN_WINDOW_RE). Always handles the request: a bad `window` is answered
+ * 400, a refused name 404, and the socket destroyed. Returns true.
  */
 export function attachNamed(req, socket, head, name, url) {
-  const reject = (why) => {
-    log.warn(`term refused for ${JSON.stringify(name)}: ${why}`);
-    try { socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n'); } catch { /* gone */ }
+  const reject = (why, status = '404 Not Found') => {
+    log.warn(`term refused for ${JSON.stringify(String(name).slice(0, 80))}: ${why}`);
+    try { socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`); } catch { /* gone */ }
     socket.destroy();
     return true;
   };
 
+  const window = windowParam(url);
+  if (window === null) return reject('bad window', '400 Bad Request');
   if (typeof name !== 'string' || !isSafeSessionName(name)) return reject('unsafe name');
   if (WEB_SUFFIX.test(name)) return reject('refusing to attach to a web session');
   if (!state.get(name)) return reject('not in inventory');
   if (!ownerSize(name)) return reject('owner pane size unknown');
 
   const want = { cols: Number(url?.searchParams?.get('cols')), rows: Number(url?.searchParams?.get('rows')) };
+  if (window !== undefined) want.window = window;
   wss.handleUpgrade(req, socket, head, (ws) => {
     attachTerminal(ws, name, want).catch((err) => {
       log.error('term attach failed', err?.stack || String(err));
