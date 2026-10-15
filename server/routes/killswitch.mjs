@@ -4,8 +4,9 @@
 // (dispatch.registerAllHandler). The action itself (tier confirm, remote-only for '*', strict args) is A6's
 // registration in server/fleet/builtin-actions.mjs; it is reached through POST /api/v1/actions (A8), never a
 // route of its own. Pending grace timers are dropped on shutdown: nothing is killed, the pause stays.
-// Victims come from the lane records launch wrote (store.readAll, SR19 F4); the kills and dropped graces are
-// appended to the fleet audit (ctx.audit, SR19 F5).
+// Victims are live Claude agents bound to a lane record launch wrote (store.readAll) or running in a linked git
+// worktree, never a main checkout or a shell (SR19 F4, re-review R1), plus the validated `include` names; the
+// kills, cancels and dropped graces are appended to the fleet audit (ctx.audit, SR19 F5 / R2 / R4).
 import { registerKillSwitch, stopAll } from '../control/killswitch.mjs';
 import * as store from '../lanes/store.mjs';
 

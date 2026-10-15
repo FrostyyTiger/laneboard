@@ -51,14 +51,18 @@ function fakeClock(start = 1_000_000) {
   };
 }
 
+/** A stubbed tmux pane running a live Claude agent (isLiveClaude), and a plain shell. */
+const claude = (o) => ({ kind: 'claude', state: 'working', paneCmd: 'claude', ...o });
+const shell = (o) => ({ kind: 'shell', state: 'shell', paneCmd: 'bash', ...o });
+
 const SESSIONS = () => [
-  { name: 'lane-a', paneId: '%1', lane: 'a' },
-  { name: 'lane-b', paneId: '%2', lane: 'b' },
-  { name: 'scratch', paneId: '%3', lane: null },
-  { name: 'notes', paneId: '%4', lane: null },
-  { name: '_laneboard-term', paneId: '%5', lane: 'x' },
-  { name: '_laneboard', paneId: '%6', lane: null },
-  { name: 'board', paneId: '%7', lane: 'own' },
+  claude({ name: 'lane-a', paneId: '%1', lane: 'a' }),
+  claude({ name: 'lane-b', paneId: '%2', lane: 'b' }),
+  shell({ name: 'scratch', paneId: '%3', lane: null }),
+  shell({ name: 'notes', paneId: '%4', lane: null }),
+  claude({ name: '_laneboard-term', paneId: '%5', lane: 'x' }),
+  shell({ name: '_laneboard', paneId: '%6', lane: null }),
+  claude({ name: 'board', paneId: '%7', lane: 'own' }),
 ];
 
 // The lane records launch wrote (SR19 F4): only these sessions are lane victims. `board` is bound too, so the
@@ -192,7 +196,7 @@ test('kill *: a lane started during the grace is killed too; a protected one nev
   const { go, calls, clock, setInventory, setLanes } = setup();
   const r = await go('*', { confirm: BID, graceMs: 5000 });
   assert.equal(r.ok, true);
-  setInventory([...SESSIONS(), { name: 'lane-c', paneId: '%9', lane: 'c' }, { name: '_laneboard-new', paneId: '%10', lane: 'z' }]);
+  setInventory([...SESSIONS(), claude({ name: 'lane-c', paneId: '%9', lane: 'c' }), claude({ name: '_laneboard-new', paneId: '%10', lane: 'z' })]);
   setLanes([...LANES(), { id: 'c', session: 'lane-c' }, { id: 'z', session: '_laneboard-new' }]);
   await clock.advance(5000);
   assert.deepEqual(calls.filter((c) => c[0] === 'kill').map((c) => c[1]), ['lane-a', 'lane-b', 'lane-c']);
@@ -205,7 +209,7 @@ test('kill * cancel within the grace: no kill, the pause stays', async () => {
   await clock.advance(4000);
   const c = await go('*', { confirm: BID, cancel: job });
   assert.equal(c.ok, true, JSON.stringify(c));
-  assert.deepEqual(c.result, { ok: true, job, cancelled: true, paused: true });
+  assert.deepEqual(c.result, { ok: true, job, cancelled: true, paused: true, by: DIRECT.user, startedBy: DIRECT.user });
   assert.equal(clock.pending(), 0);
   await clock.advance(60000);
   assert.equal(calls.filter((x) => x[0] === 'kill').length, 0);
@@ -269,7 +273,7 @@ test('module stop() drops a pending grace: nothing killed, still paused', async 
 
 // --- hub fleet kill ---------------------------------------------------------------------------------------
 
-function hubSetup({ respond = null, builders = [
+function hubSetup({ respond = null, sessions = [], builders = [
   { id: 'builder-a', state: 'up', controls: true },
   { id: 'builder-b', state: 'up', controls: true },
   { id: 'builder-c', state: 'down', controls: false },
@@ -279,6 +283,8 @@ function hubSetup({ respond = null, builders = [
   const store = {
     view: () => ({ builders: builders.map((b) => ({ ...b, ageMs: 0 })) }),
     builder: (id) => (builders.some((b) => b.id === id) ? { id, url: `https://${id}.example.invalid` } : null),
+    // the fleet store's session(fkey): only the fleet keys in `sessions` exist
+    session: (k) => (sessions.includes(k) ? { builder: k.split('/')[0], session: { name: k.slice(k.indexOf('/') + 1) } } : null),
   };
   const fetchImpl = async (url, init) => {
     const env = JSON.parse(init.body);
@@ -559,12 +565,9 @@ test('SR19 F1: cancelGate has its own small bucket per owner', () => {
   });
 });
 
-test('SR19 F7: only the principal that started a builder kill may cancel it', async () => {
+test('SR19 F7: another hub key may not cancel a builder kill; its starter may', async () => {
   const { go, calls, clock } = setup();
   const r = await go('*', { confirm: BID }, HUB);
-  const other = await go('*', { confirm: BID, cancel: r.result.job }, { kind: 'direct', user: 'mallory@example.invalid' });
-  assert.equal(other.status, 403);
-  assert.equal(other.code, 'not-owner');
   const otherKey = await go('*', { confirm: BID, cancel: r.result.job }, { ...HUB, keyLabel: 'hub-other' });
   assert.equal(otherKey.status, 403);
   assert.equal(ks.jobState(r.result.job).state, 'grace');
@@ -576,14 +579,14 @@ test('SR19 F7: only the principal that started a builder kill may cancel it', as
 
 test('SR19 F4: victims are launched lane sessions only; main checkouts, the hub and plain repo shells are not', () => {
   const sessions = [
-    { name: 'lane-a', paneId: '%1', lane: 'a' },
-    { name: 'lane-moved', paneId: '%2', lane: null }, // a launched lane whose agent cd'ed out of its worktree
-    { name: 'acme', paneId: '%3', lane: 'acme' }, // the operator's shell in the main checkout
-    { name: 'hub', paneId: '%4', lane: 'laneboard' }, // the hub, running from a git checkout
-    { name: 'dotfiles', paneId: '%5', lane: 'home' }, // ~ under a dotfiles repo
-    { name: 'old-lane', paneId: '%6', lane: 'old' }, // a retired lane's session
-    { name: 'mine', paneId: '%7', panes: [{ paneId: '%7' }, { paneId: '%8' }], lane: null },
-    { name: 'lane-own', paneId: '%9', panes: [{ paneId: '%9' }, { paneId: '%10' }], lane: 'own' },
+    claude({ name: 'lane-a', paneId: '%1', lane: 'a' }),
+    claude({ name: 'lane-moved', paneId: '%2', lane: null }), // a launched lane whose agent cd'ed out of its worktree
+    shell({ name: 'acme', paneId: '%3', lane: 'acme' }), // the operator's shell in the main checkout
+    shell({ name: 'hub', paneId: '%4', lane: 'laneboard', paneCmd: 'node' }), // the hub, running from a git checkout
+    shell({ name: 'dotfiles', paneId: '%5', lane: 'home' }), // ~ under a dotfiles repo
+    claude({ name: 'old-lane', paneId: '%6', lane: 'old' }), // a retired lane's session
+    claude({ name: 'mine', paneId: '%7', panes: [{ paneId: '%7' }, { paneId: '%8' }], lane: null }),
+    claude({ name: 'lane-own', paneId: '%9', panes: [{ paneId: '%9' }, { paneId: '%10' }], lane: 'own' }),
   ];
   const lanes = [
     { id: 'a', session: 'lane-a' }, { id: 'moved', session: 'lane-moved' }, { id: 'old', session: 'old-lane', retiredAt: 1 },
@@ -609,7 +612,9 @@ test('SR19 F5: the actual kills (and a grace dropped at shutdown) are in the aud
   await clock.advance(ks.DEFAULT_GRACE_MS);
   const done = entries().filter((e) => e.action === 'kill.done');
   assert.equal(done.length, 1);
-  assert.deepEqual(done[0].result, { job: r.result.job, ok: false, killed: ['lane-a'], failed: ['lane-b'] });
+  const names = (list) => ks.auditNames(list);
+  assert.deepEqual(done[0].result, { job: r.result.job, ok: false, killed: names(['lane-a']), failed: names(['lane-b']) });
+  assert.deepEqual(done[0].result.killed.first, ['lane-a']);
   assert.equal(done[0].target, '*');
   assert.equal(done[0].via, 'hub');
 
@@ -705,4 +710,223 @@ test('SR19 F6: a pause refused by every builder arms no kill; a partial pause na
     await clock.advance(UNDO_MS);
     assert.deepEqual(sent.filter((s) => s.action === 'kill').map((s) => s.builder), ['builder-a']);
   }
+});
+
+// --- SR19 re-review ---------------------------------------------------------------------------------------
+
+/** A tmp layout of checkouts: a main checkout, a linked worktree of it, a submodule, and a plain dir. */
+function checkouts() {
+  const base = fs.mkdtempSync(path.join(tmp, 'code-'));
+  const main = path.join(base, 'acme');
+  const wt = path.join(base, 'acme-x');
+  const sub = path.join(main, 'vendor', 'lib');
+  const plain = path.join(base, 'plain');
+  fs.mkdirSync(path.join(main, '.git', 'worktrees', 'acme-x'), { recursive: true });
+  fs.mkdirSync(path.join(wt, 'src', 'deep'), { recursive: true });
+  fs.writeFileSync(path.join(wt, '.git'), `gitdir: ${path.join(main, '.git', 'worktrees', 'acme-x')}\n`);
+  fs.mkdirSync(sub, { recursive: true });
+  fs.writeFileSync(path.join(sub, '.git'), 'gitdir: ../../.git/modules/lib\n');
+  fs.mkdirSync(plain, { recursive: true });
+  return { base, main, wt, sub, plain };
+}
+
+/** Stubbed tmux panes for every R1 case, in the checkouts above. */
+function r1Sessions(c) {
+  return [
+    claude({ name: 'spawned', paneId: '%1', dir: c.wt, lane: 'x' }), // `spawn`: no lane record
+    claude({ name: 'versioned', paneId: '%2', dir: path.join(c.wt, 'src', 'deep'), paneCmd: '2.1.301', lane: 'x' }), // hand-started, native binary
+    claude({ name: 'reg-pid', paneId: '%3', dir: c.wt, paneCmd: 'node', claude: { pid: 4242 }, lane: 'x' }), // registry pid
+    claude({ name: 'v2-lane', paneId: '%4', dir: null, lane: null }), // has a lane record, cwd unknown
+    shell({ name: 'wt-shell', paneId: '%5', dir: c.wt, lane: 'x' }), // a shell in a worktree
+    claude({ name: 'exited', paneId: '%6', dir: c.wt, paneCmd: 'bash', state: 'shell', lane: 'x' }), // agent gone, shell left
+    claude({ name: 'main-claude', paneId: '%14', dir: c.main, lane: 'acme' }), // the main checkout, even with a record
+    claude({ name: 'sub-claude', paneId: '%8', dir: c.sub, lane: 'lib' }), // a submodule of the main checkout
+    claude({ name: '_laneboard-agent', paneId: '%9', dir: c.wt, lane: 'x' }), // laneboard's own prefix
+    claude({ name: 'board', paneId: '%10', panes: [{ paneId: '%10' }, { paneId: '%7' }], dir: c.wt, lane: 'x' }), // own session (laneboard in its 2nd pane)
+    claude({ name: 'plain-claude', paneId: '%12', dir: c.plain, lane: null }), // not in any checkout, no record
+    shell({ name: 'main-shell', paneId: '%13', dir: c.main, lane: 'acme' }),
+  ];
+}
+const R1_LANES = () => [{ id: 'v2', session: 'v2-lane' }, { id: 'acme-main', session: 'main-claude' }];
+
+test('SR19 R1: worktreeOf tells a linked worktree from a main checkout and a submodule, by fs only', () => {
+  const c = checkouts();
+  assert.deepEqual(ks.worktreeOf(c.wt), { root: c.wt, linked: true });
+  assert.deepEqual(ks.worktreeOf(path.join(c.wt, 'src', 'deep')), { root: c.wt, linked: true });
+  assert.deepEqual(ks.worktreeOf(path.join(c.main, 'vendor')), { root: c.main, linked: false });
+  assert.deepEqual(ks.worktreeOf(c.sub), { root: c.sub, linked: false });
+  for (const bad of [null, '', 'relative/dir', `${c.wt}\0x`, 5]) assert.equal(ks.worktreeOf(bad), null);
+});
+
+test('SR19 R1: victims are live Claude agents in a lane or a linked worktree; shells, main checkouts, own and _laneboard never', () => {
+  const c = checkouts();
+  const sessions = r1Sessions(c);
+  const opts = { lanes: R1_LANES(), ownPane: '%7', prefixes: ['_laneboard'] };
+  assert.deepEqual(ks.selectVictims(sessions, [], opts), ['reg-pid', 'spawned', 'v2-lane', 'versioned']);
+  // include adds what the rule missed (a shell, a main-checkout agent), never a protected or unknown session
+  assert.deepEqual(
+    ks.selectVictims(sessions, ['wt-shell', 'main-claude', '_laneboard-agent', 'board', 'ghost'], opts),
+    ['main-claude', 'reg-pid', 'spawned', 'v2-lane', 'versioned', 'wt-shell'],
+  );
+  // a stubbed worktreeOf is honoured (and a throwing one counts as no checkout)
+  assert.deepEqual(ks.selectVictims([claude({ name: 'y', dir: '/w/y' })], [], { worktreeOf: () => ({ root: '/w/y', linked: true }) }), ['y']);
+  assert.deepEqual(ks.selectVictims([claude({ name: 'y', dir: '/w/y' })], [], { worktreeOf: () => { throw new Error('x'); } }), []);
+});
+
+test('SR19 R1: through dispatch, kill * stops a spawned agent in a worktree and spares a main-checkout shell', async () => {
+  const c = checkouts();
+  const { go, calls } = setup({ sessions: r1Sessions(c), lanes: R1_LANES() });
+  const r = await go('*', { confirm: BID, graceMs: 0, include: ['main-shell', 'ghost', '_laneboard-agent'] });
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.deepEqual(r.result.killed, ['main-shell', 'reg-pid', 'spawned', 'v2-lane', 'versioned']);
+  assert.deepEqual(r.result.notIncluded, ['ghost', '_laneboard-agent']);
+  const killed = calls.filter((x) => x[0] === 'kill').map((x) => x[1]);
+  for (const spared of ['wt-shell', 'exited', 'main-claude', 'sub-claude', '_laneboard-agent', 'plain-claude']) assert.ok(!killed.includes(spared), spared);
+  // without include the main-checkout shell is not touched at all (no Escape either)
+  const s2 = setup({ sessions: r1Sessions(c), lanes: R1_LANES() });
+  const r2 = await s2.go('*', { confirm: BID, graceMs: 0 });
+  assert.deepEqual(r2.result.killed, ['reg-pid', 'spawned', 'v2-lane', 'versioned']);
+  assert.ok(!s2.calls.some((x) => x[1] === 'main-shell'));
+});
+
+test('SR19 R2: a kill of 120 long-named sessions is audited as counts, a sha256 and the first names, within the cap', async () => {
+  const names = Array.from({ length: 120 }, (_, i) => `lane-${String(i).padStart(3, '0')}-${'x'.repeat(54)}`);
+  const sessions = names.map((name, i) => claude({ name, paneId: `%${1000 + i}` }));
+  const lanes = names.map((name, i) => ({ id: `l${i}`, session: name }));
+  const { go, entries } = setup({ sessions, lanes, failKill: names[7] });
+  const r = await go('*', { confirm: BID, graceMs: 0 });
+  assert.equal(r.result.killed.length, 119);
+  const done = entries().filter((e) => e.action === 'kill.done');
+  assert.equal(done.length, 1, 'kill.done was appended');
+  const res = done[0].result;
+  assert.ok(Buffer.byteLength(JSON.stringify(res)) < 4096);
+  assert.equal(res.killed.n, 119);
+  assert.equal(res.failed.n, 1);
+  assert.deepEqual(res.failed.first, [names[7]]);
+  assert.ok(res.killed.first.length > 0 && res.killed.first.length < 119);
+  assert.equal(res.killed.more, 119 - res.killed.first.length);
+  const killedSorted = names.filter((n) => n !== names[7]).sort();
+  assert.equal(res.killed.sha256, crypto.createHash('sha256').update(JSON.stringify(killedSorted)).digest('hex'));
+});
+
+test('SR19 R4: a direct operator other than the starter may cancel a builder kill; audited with both users', async () => {
+  const { go, calls, clock, entries } = setup();
+  const r = await go('*', { confirm: BID }, HUB);
+  // a read-only direct user is refused by the dispatcher
+  const ro = await go('*', { confirm: BID, cancel: r.result.job }, { kind: 'direct', user: 'eve@example.invalid', readOnly: true });
+  assert.equal(ro.status, 403);
+  assert.equal(ks.jobState(r.result.job).state, 'grace');
+  const bob = { kind: 'direct', user: 'bob@example.invalid' };
+  const c = await go('*', { confirm: BID, cancel: r.result.job }, bob);
+  assert.equal(c.ok, true, JSON.stringify(c));
+  assert.equal(c.result.override, true);
+  assert.equal(c.result.by, bob.user);
+  assert.equal(c.result.startedBy, 'ops@example.invalid');
+  const note = entries().find((e) => e.action === 'kill.cancel');
+  assert.equal(note.user, bob.user);
+  assert.deepEqual(note.result, { job: r.result.job, ok: true, by: bob.user, startedBy: 'ops@example.invalid', override: true });
+  await clock.advance(ks.DEFAULT_GRACE_MS);
+  assert.equal(calls.filter((x) => x[0] === 'kill').length, 0);
+  // the handler, called directly: a hub caller with another key still may not
+  const j = await ks.killAll({ args: { confirm: BID }, kind: 'hub', user: 'ops@example.invalid', auth: { keyLabel: 'hub-main' } });
+  await assert.rejects(ks.killAll({ args: { confirm: BID, cancel: j.job }, kind: 'hub', user: 'ops@example.invalid', auth: { keyLabel: 'k2' } }), (e) => e.code === 'not-owner');
+  await assert.rejects(ks.killAll({ args: { confirm: BID, cancel: j.job }, kind: 'direct', user: 'x@example.invalid', auth: { readOnly: true } }), (e) => e.code === 'not-owner');
+});
+
+test('SR19 R1: fleet kill include: validated fkeys go to their own builder only; misses are reported, not sent', async () => {
+  const { go, sent, clock, svc } = hubSetup({
+    sessions: ['builder-a/spawned', 'builder-a/hand', 'builder-b/other', 'builder-c/down-one'],
+    respond: (env) => (env.action === 'kill' && env.builder === 'builder-a' && !sent.some((s) => s.action === 'kill' && s.builder === 'builder-a' && s !== sent.at(-1))
+      ? { status: 429, body: { ok: false, error: 'rate_limited' } } : null),
+  });
+  const r = await go({ confirm: 'fleet', include: ['builder-a/spawned', 'builder-a/hand', 'builder-a/spawned', 'builder-b/ghost', 'builder-z/x', 'builder-c/down-one'] });
+  assert.equal(r.status, 202, JSON.stringify(r));
+  assert.deepEqual(r.result.include, { 'builder-a': ['spawned', 'hand'] });
+  assert.deepEqual(r.result.notIncluded, [
+    { fkey: 'builder-b/ghost', reason: 'unknown-session' },
+    { fkey: 'builder-z/x', reason: 'unknown-builder' },
+    { fkey: 'builder-c/down-one', reason: 'down' },
+  ]);
+  // the pause carries no include; the kill does, per builder
+  assert.ok(sent.filter((s) => s.action === 'pause').every((s) => s.args.include === undefined));
+  await clock.advance(UNDO_MS);
+  const kills = sent.filter((s) => s.action === 'kill');
+  assert.deepEqual(kills.map((s) => [s.builder, s.args.include ?? null]), [['builder-a', ['spawned', 'hand']], ['builder-b', null]]);
+  // builder-a answered 429: its one fresh kill keeps its include
+  await clock.advance(KILL_RETRY_MS);
+  const retry = sent.filter((s) => s.action === 'kill').at(-1);
+  assert.equal(retry.builder, 'builder-a');
+  assert.deepEqual(retry.args.include, ['spawned', 'hand']);
+  assert.equal(retry.args.confirm, 'builder-a');
+  assert.equal(svc.get(r.result.job).state, 'killed');
+});
+
+test('SR19 R1: fleet kill include: malformed or too many keys, or include on a cancel, refuse before anything is sent', async () => {
+  const { go, sent } = hubSetup({ sessions: ['builder-a/x'] });
+  for (const include of ['builder-a/x', [5], ['nobuilder'], ['/x'], ['BUILDER/x'], ['builder-a/a;b'], ['builder-a/'], Array.from({ length: 51 }, (_, i) => `builder-a/s${i}`)]) {
+    const r = await go({ confirm: 'fleet', include });
+    assert.equal(r.status, 400, JSON.stringify(include));
+  }
+  assert.equal((await go({ confirm: 'fleet', cancel: 'fleetkill-1-deadbeef', include: ['builder-a/x'] })).status, 400);
+  assert.deepEqual(sent, []);
+});
+
+test('SR19 R1: fleet kill include for a builder the pause missed is not sent (not-paused)', async () => {
+  const { go, sent, clock, svc } = hubSetup({
+    sessions: ['builder-a/x', 'builder-b/y'],
+    respond: (env) => (env.action === 'pause' && env.builder === 'builder-b' ? { status: 403, body: { ok: false, error: 'forbidden' } } : null),
+  });
+  const r = await go({ confirm: 'fleet', include: ['builder-a/x', 'builder-b/y'] });
+  assert.equal(r.status, 202);
+  await clock.advance(UNDO_MS);
+  assert.deepEqual(sent.filter((s) => s.action === 'kill').map((s) => [s.builder, s.args.include]), [['builder-a', ['x']]]);
+  assert.deepEqual(svc.get(r.result.job).notIncluded, [{ fkey: 'builder-b/y', reason: 'not-paused' }]);
+});
+
+test("SR19 R3: a failed start keeps an older undo's pending resume retry; it still goes out", async () => {
+  let pauseFails = false;
+  const { go, sent, clock, svc } = hubSetup({
+    respond: (env) => {
+      if (env.action === 'resume' && env.builder === 'builder-b') return { status: 429, body: { ok: false, error: 'rate_limited' } };
+      if (env.action === 'pause' && pauseFails) return { status: 429, body: { ok: false, error: 'rate_limited' } };
+      return null;
+    },
+  });
+  const a = await go({ confirm: 'fleet' });
+  await clock.advance(2000);
+  const ua = await go({ confirm: 'fleet', cancel: a.result.job });
+  assert.deepEqual(ua.result.undo.retry.builders, ['builder-b']);
+  await clock.advance(3000);
+  pauseFails = true;
+  const b = await go({ confirm: 'fleet' });
+  assert.equal(b.status, 502);
+  assert.equal(b.error, 'pause-not-delivered');
+  assert.deepEqual(b.result.keptRetries, [{ job: a.result.job, builders: ['builder-b'], at: ua.result.undo.retry.at }]);
+  const resumes = () => sent.filter((s) => s.action === 'resume' && s.builder === 'builder-b').length;
+  const before = resumes();
+  await clock.advance(RESUME_RETRY_MS);
+  assert.equal(resumes(), before + 1, "A's resume retry fired after B failed");
+  assert.equal(svc.get(a.result.job).undo.retry.dropped, undefined);
+  assert.equal(svc.get(a.result.job).undo.retry.sent.length, 1);
+  assert.equal(sent.filter((s) => s.action === 'kill').length, 0);
+});
+
+test('SR19 R4: a fleet undo by another direct user is allowed and audited with both users', async () => {
+  const { go, clock, sent, auditEntries } = hubSetup();
+  const r = await go({ confirm: 'fleet' });
+  await clock.advance(3000);
+  const bob = { kind: 'direct', user: 'bob@example.invalid' };
+  const u = await go({ confirm: 'fleet', cancel: r.result.job }, bob);
+  assert.equal(u.ok, true, JSON.stringify(u));
+  assert.equal(u.result.by, DIRECT.user);
+  assert.equal(u.result.undoneBy, bob.user);
+  assert.equal(u.result.undoOverride, true);
+  const note = auditEntries.find((e) => e.action === 'kill.undo');
+  assert.equal(note.user, bob.user);
+  assert.deepEqual(note.result, { job: r.result.job, state: 'cancelled', startedBy: DIRECT.user, undoneBy: bob.user, override: true });
+  // a read-only user is refused by the relay
+  const r2 = await go({ confirm: 'fleet', cancel: r.result.job }, { kind: 'direct', user: 'eve@example.invalid', readOnly: true });
+  assert.equal(r2.status, 403);
+  await clock.advance(UNDO_MS * 2);
+  assert.equal(sent.filter((s) => s.action === 'kill').length, 0);
 });
