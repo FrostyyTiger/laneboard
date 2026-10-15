@@ -77,8 +77,8 @@ function setup({ budgetPatch = {}, sessions = [], records = [] } = {}) {
     name: s.name, lane: s.lane ?? null, claude: s.sid ? { sessionId: s.sid } : null,
     cost: { usd: s.usd ?? 0, tokens: {} }, statuslineCostUsd: s.statusline ?? null,
   }));
-  const env = { dir, config, db, sessions: live, records };
-  budget.init({ config, db, state: { all: () => env.sessions }, laneRecords: () => env.records });
+  const env = { dir, config, db, sessions: live, records, clock: NOW };
+  budget.init({ config, db, state: { all: () => env.sessions }, laneRecords: () => env.records, now: () => env.clock });
   return env;
 }
 
@@ -383,23 +383,88 @@ test('SR17 M3: the quota guard pauses a low lane by its record, not by its cwd',
   assert.equal(pause.kindOf('norm', { stateDir: env.dir }), null);
 });
 
+/** C6's real remote-only resume path, as a `direct` user (budget.init's db receives the override mark). */
+function remoteResume(env, target, args = { override: true }, kind = 'direct') {
+  return handlers.runResume({ target, args: { nudge: false, ...args }, user: 'user@example.invalid', kind, deps: { config: env.config, state: { all: () => env.sessions, get: () => null } } });
+}
+
 test('SR17 L1: a remote override resume of a budget pause is not re-applied by the next tick', async () => {
   const env = setup({ sessions: [{ name: 'a', lane: 'a', sid: SID1, usd: 20, statusline: 20 }, { name: 'b', lane: 'b', sid: SID2, usd: 20, statusline: 20 }], records: [rec('a', { budgetUsd: 10 }), rec('b', { budgetUsd: 10 })] });
   await budget.tick(NOW);
   assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget');
-  // C6's runResume with override (remote): removes every kind
-  pause.resume('a', {}, { stateDir: env.dir });
+  const out = await remoteResume(env, 'a');
+  assert.equal(out.overrideNoted, true);
+  assert.equal(env.db.kv.get(budget.OVERRIDE_BY_KEY).scopes.a.by, 'user@example.invalid');
   const r = await budget.tick(NOW + 30_000);
   assert.deepEqual(r.paused, []);
   assert.equal(pause.kindOf('a', { stateDir: env.dir }), null, 'not re-paused');
   assert.equal(fs.existsSync(pause.ceilingPath(env.dir, SID1)), false, 'and its lane ceiling is not re-armed');
   assert.equal(pause.kindOf('b', { stateDir: env.dir }), 'budget', 'other sessions keep theirs');
   await budget.tick(NOW + 60_000);
-  assert.equal(pause.kindOf('a', { stateDir: env.dir }), null);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), null, 'stays lifted for the window');
   // a new set-budget decision on that lane forgets the override: lowering it pauses again
   const lowered = await budget.setBudget({ target: 'a', usd: 5 }, { now: NOW + 90_000 });
   assert.deepEqual(lowered.paused, ['a']);
   assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget');
+});
+
+test('SR17 R1: a hand-removed budget sentinel is re-paused at the next tick and its ceiling kept', async () => {
+  const env = setup({ sessions: [{ name: 'a', lane: 'a', sid: SID1, usd: 20, statusline: 20 }], records: [rec('a', { budgetUsd: 10 })] });
+  const audit = auditStub();
+  budget.init({ config: env.config, db: env.db, state: { all: () => env.sessions }, laneRecords: () => env.records, audit, now: () => env.clock });
+  await budget.tick(NOW);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget');
+  assert.equal(fs.existsSync(pause.ceilingPath(env.dir, SID1)), true);
+  // `rm paused/a`: no override mark
+  fs.rmSync(pause.pausePath(env.dir, 'a'));
+  const r = await budget.tick(NOW + 30_000);
+  assert.deepEqual(r.paused, ['a']);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget', 're-paused');
+  assert.equal(fs.existsSync(pause.ceilingPath(env.dir, SID1)), true, 'ceiling kept');
+  assert.ok(audit.entries.some((e) => e.action === 'budget-sentinel-missing' && e.target === 'a'));
+  // legacy `override:` keys in budget.marks grant nothing
+  const marks = env.db.kv.get(budget.MARKS_KEY);
+  env.db.kv.set(budget.MARKS_KEY, { ...marks, keys: [...marks.keys, 'override:a'] });
+  fs.rmSync(pause.pausePath(env.dir, 'a'));
+  await budget.tick(NOW + 60_000);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget');
+  assert.equal(fs.existsSync(pause.ceilingPath(env.dir, SID1)), true);
+  // local resume with override cannot write a mark (refused, sentinel kept)
+  await assert.rejects(remoteResume(env, 'a', { override: true }, 'local'), (e) => e.status === 409);
+  assert.equal(env.db.kv.get(budget.OVERRIDE_BY_KEY), undefined);
+});
+
+test('SR17 R1: rm of the builder ALL sentinel re-pauses ALL and keeps the builder ceiling for every session', async () => {
+  const env = setup({
+    budgetPatch: { perBuilderUsd: 30 },
+    sessions: [{ name: 'a', lane: 'a', sid: SID1, usd: 20, statusline: 20 }, { name: 'b', lane: 'b', sid: SID2, usd: 20, statusline: 20 }],
+    records: [rec('a'), rec('b')],
+  });
+  await budget.tick(NOW);
+  assert.equal(pause.kindOf('ALL', { stateDir: env.dir }), 'budget');
+  fs.rmSync(pause.pausePath(env.dir, 'ALL'));
+  const r = await budget.tick(NOW + 30_000);
+  assert.deepEqual(r.paused, ['ALL']);
+  assert.equal(pause.kindOf('ALL', { stateDir: env.dir }), 'budget');
+  for (const sid of [SID1, SID2]) assert.equal(fs.existsSync(pause.ceilingPath(env.dir, sid)), true, 'builder ceiling kept');
+  // the remote override of ALL lifts it (and the builder ceiling) for the window
+  await remoteResume(env, '*');
+  await budget.tick(NOW + 60_000);
+  assert.equal(pause.kindOf('ALL', { stateDir: env.dir }), null);
+  for (const sid of [SID1, SID2]) assert.equal(fs.existsSync(pause.ceilingPath(env.dir, sid)), false);
+});
+
+test('SR17 R1: an override mark expires at the end of its window', async () => {
+  const env = setup({ sessions: [{ name: 'a', lane: 'a', sid: SID1, usd: 20, statusline: 20 }], records: [rec('a', { budgetUsd: 10 })] });
+  await budget.tick(NOW);
+  await remoteResume(env, 'a');
+  await budget.tick(NOW + 30_000);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), null);
+  // the next window: spend rows are per window, the live cost still counts; the old mark is void
+  const later = NOW + 26 * 3600_000;
+  assert.notEqual(windowStart('tonight', 'Europe/Zurich', later), windowStart('tonight', 'Europe/Zurich', NOW));
+  await budget.tick(later);
+  assert.equal(pause.kindOf('a', { stateDir: env.dir }), 'budget', 're-paused in the new window');
 });
 
 test('SR17 L2: a budget pause keeps the operator pause it upgrades and restores it when lifted', async () => {

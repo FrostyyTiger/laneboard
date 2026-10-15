@@ -23,8 +23,11 @@
 //
 // A budget pause is lifted only by `set-budget` (which re-evaluates at once) or by a remote `resume`
 // (C6: remote-only for budget/quota holds). A budget pause this module wrote that disappears while the scope is
-// still over was lifted by such a resume with `override` (or by hand, S7): it is not re-applied, and that
-// session's (or, for ALL, the builder's) ceiling is dropped, for the rest of the window (SR17 L1). A budget
+// still over is re-applied at the next tick, with its ceiling, unless C6's remote `resume{override}` recorded an
+// explicit override mark for that scope and window (`noteOverride`, db kv `budget.overrideBy`, written only from
+// the remote-only handler path). With a valid mark the pause is not re-applied and that session's (or, for ALL,
+// the builder's) ceiling is dropped until the window ends (SR17 L1, re-review R1: a plain `rm` of the sentinel is
+// not an override; it is audited as `budget-sentinel-missing`). A budget
 // pause written over an operator or quota pause remembers it (db kv `budget.under`) and restores it when the
 // budget pause is lifted (SR17 L2). Automatic pauses and lifts are appended to the fleet audit (SR17 L6). The state dir always comes from config.stateDir, never a default.
 //
@@ -40,6 +43,8 @@ export const OVERRIDES_KEY = 'budget.overrides';
 export const MARKS_KEY = 'budget.marks';
 /** Holds a budget pause was written over: {scope: {kind, by, at, reason}} (SR17 L2). */
 export const UNDER_KEY = 'budget.under';
+/** Explicit remote overrides of a budget pause: {since, scopes: {scope: {by, at}}} (SR17 re-review R1). */
+export const OVERRIDE_BY_KEY = 'budget.overrideBy';
 export const TICK_MS = 30_000;
 export const MAX_USD = 100000;
 /** A rate-limit sample older than this is not acted on (unless its 5 h window has already reset). */
@@ -236,6 +241,7 @@ let running = null;
  *   audit: the fleet audit ({append}) or a function returning it (null: not wired yet)
  *   state: {all() -> sessions}
  *   laneRecords: () => lane records (server/lanes/store.mjs readAll)
+ *   now: optional clock () => ms for noteOverride (default Date.now; tests)
  */
 export function init(d) {
   deps = d;
@@ -321,6 +327,40 @@ function readMarks(since) {
   return { since, keys: new Set(raw.keys.filter((k) => typeof k === 'string').slice(0, 2000)) };
 }
 
+/** The explicit override marks valid for the window starting at `since` (marks expire with their window). */
+function readOverrideBy(since) {
+  const raw = need().db.kvRead(OVERRIDE_BY_KEY, null);
+  const out = new Map();
+  if (!raw || typeof raw !== 'object' || raw.since !== since || !raw.scopes || typeof raw.scopes !== 'object') return out;
+  for (const [scope, e] of Object.entries(raw.scopes)) {
+    if (!pause.isValidScope(scope) || !e || typeof e !== 'object' || !Number.isFinite(e.at) || e.at < since) continue;
+    out.set(scope, { by: typeof e.by === 'string' ? e.by.slice(0, 128) : null, at: e.at });
+  }
+  return out;
+}
+
+function writeOverrideBy(since, map) {
+  need().db.kvWrite(OVERRIDE_BY_KEY, { since, scopes: Object.fromEntries(map) });
+}
+
+/**
+ * noteOverride(scope, by, now?) -> boolean. Records that a remote user lifted the budget pause on `scope`
+ * ('ALL' for the builder) with `resume{override}`, for the current window. Call it ONLY from C6's remote-only
+ * resume path (handlers.mjs runResume, never for `local`). Returns false when the module is not initialised or
+ * the scope is invalid. tick() honours only these marks; a sentinel that vanished without one is re-applied.
+ */
+export function noteOverride(scope, by, now) {
+  if (!deps || !pause.isValidScope(scope)) return false;
+  if (!Number.isFinite(now)) now = typeof deps.now === 'function' ? deps.now() : Date.now();
+  const config = cfg();
+  const since = windowStart(windowOf(config, readOverrides()), config.timezone, now);
+  const map = readOverrideBy(since);
+  map.set(scope, { by: typeof by === 'string' ? by.slice(0, 128) : null, at: Math.max(now, since) });
+  writeOverrideBy(since, map);
+  audit('budget-override', scope, { overrideBy: typeof by === 'string' ? by.slice(0, 128) : null });
+  return true;
+}
+
 function event(subtype, sessionName, payload) {
   try {
     need().db.addEvent({ type: 'budget', subtype, sessionName, payload });
@@ -403,6 +443,7 @@ export async function tick(now = Date.now(), { lift = false } = {}) {
 
   const marks = readMarks(since);
   const before = JSON.stringify([...marks.keys]);
+  const overridden = readOverrideBy(since);
   const under = readUnder();
   const underBefore = JSON.stringify(under);
   const paused = [];
@@ -423,14 +464,18 @@ export async function tick(now = Date.now(), { lift = false } = {}) {
       for (const scope of scopes) {
         const kind = pause.kindOf(scope, { stateDir });
         if (kind === 'budget') continue;
-        if (marks.keys.has(`override:${scope}`)) continue;
-        if (marks.keys.has(`held:${scope}`)) {
-          // SR17 L1: our pause is gone while still over: a remote resume with override lifted it. Respect it
-          // for the rest of the window instead of re-pausing on the next tick.
-          marks.keys.add(`override:${scope}`);
-          delete under[scope];
-          audit('budget-override-noted', scope, { scope: row.scope, key: row.key, window });
+        if (overridden.has(scope)) {
+          // SR17 L1: a remote resume with override lifted it (explicit mark): respect it for the window.
+          if (marks.keys.has(`held:${scope}`)) {
+            marks.keys.delete(`held:${scope}`);
+            delete under[scope];
+            audit('budget-override-noted', scope, { scope: row.scope, key: row.key, window, overrideBy: overridden.get(scope).by });
+          }
           continue;
+        }
+        if (marks.keys.has(`held:${scope}`)) {
+          // SR17 re-review R1: our pause vanished without an override mark (a hand `rm`): re-apply it.
+          audit('budget-sentinel-missing', scope, { scope: row.scope, key: row.key, window, found: kind ?? null });
         }
         if (kind === 'operator' || kind === 'quota') {
           // SR17 L2: keep the hold we are about to upgrade, to restore it when the budget pause goes.
@@ -467,8 +512,9 @@ export async function tick(now = Date.now(), { lift = false } = {}) {
 
   const quota = quotaGuard({ config, sessions, records, stateDir, now, laneOf });
 
-  const skipLane = new Set([...marks.keys].filter((k) => k.startsWith('override:') && k !== 'override:ALL').map((k) => k.slice('override:'.length)));
-  const ceil = ceilings({ sessions, evaluation, limits, pausePct, laneOf, skipLane, skipBuilder: marks.keys.has('override:ALL') });
+  // Only explicit override marks drop a ceiling; legacy `override:` keys in budget.marks are ignored (R1).
+  const skipLane = new Set([...overridden.keys()].filter((k) => k !== 'ALL'));
+  const ceil = ceilings({ sessions, evaluation, limits, pausePct, laneOf, skipLane, skipBuilder: overridden.has('ALL') });
   const synced = pause.syncCeilings(ceil, { stateDir });
 
   last = { at: now, window, since, evaluation };
@@ -523,14 +569,18 @@ function quotaGuard({ config, sessions, records, stateDir, now, laneOf = laneOfF
 function forgetOverrides(target) {
   const d = need();
   const raw = d.db.kvRead(MARKS_KEY, null);
-  if (!raw || !Array.isArray(raw.keys)) return;
   let scopes;
   if (target === '*') scopes = new Set(['ALL']);
   else {
     const laneOf = laneOfFor(recordsNow());
     scopes = new Set(sessionsNow().filter((s) => laneOf(s) === target).map((s) => s.name));
   }
-  // `held:` goes too, or the next tick would read the missing sentinel as a fresh override.
+  const ob = d.db.kvRead(OVERRIDE_BY_KEY, null);
+  if (ob && typeof ob === 'object' && ob.scopes && typeof ob.scopes === 'object') {
+    const kept = Object.fromEntries(Object.entries(ob.scopes).filter(([k]) => !scopes.has(k)));
+    if (Object.keys(kept).length !== Object.keys(ob.scopes).length) d.db.kvWrite(OVERRIDE_BY_KEY, { ...ob, scopes: kept });
+  }
+  if (!raw || !Array.isArray(raw.keys)) return;
   const forget = (k) => typeof k === 'string' && ['override:', 'held:'].some((p) => k.startsWith(p) && scopes.has(k.slice(p.length)));
   const keys = raw.keys.filter((k) => !forget(k));
   if (keys.length !== raw.keys.length) d.db.kvWrite(MARKS_KEY, { ...raw, keys });
