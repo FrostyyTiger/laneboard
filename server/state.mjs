@@ -13,6 +13,7 @@ import * as ratelimits from './collector/ratelimits.mjs';
 import * as vitals from './collector/vitals.mjs';
 import * as guard from './collector/guard.mjs';
 import * as transcripts from './collector/transcripts.mjs';
+import * as signals from './collector/signals.mjs';
 import * as push from './push.mjs';
 import * as db from './db.mjs';
 import { fkey } from './fleet/keys.mjs';
@@ -129,6 +130,48 @@ export function deriveState({ hook, registryStatus, paneCmd, claudeAlive, paneLi
     if (guess) return { state: guess, source: 'heuristic' };
   }
   return { state: claudeAlive ? 'idle' : 'dead', source: 'default' };
+}
+
+// --- statusline sidecar fields (fleet O3) ----------------------------------
+
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/** An epoch-ms time from seconds, ms or an ISO string; null otherwise. */
+export function epochMs(v) {
+  if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v < 1e12 ? Math.round(v * 1000) : v;
+  if (typeof v === 'string' && v) {
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : null;
+  }
+  return null;
+}
+
+/**
+ * The newer statusline keys (fleet §7.2.1), read defensively from the raw
+ * sidecar JSON: `effort.level`, `thinking.enabled`, `prompt_cache.*` and
+ * `cost.total_api_duration_ms`. Every field is null when absent or malformed.
+ */
+export function sidecarFields(sl) {
+  const pc = sl?.prompt_cache && typeof sl.prompt_cache === 'object' ? sl.prompt_cache : null;
+  const effort = sl?.effort?.level;
+  return {
+    effort: typeof effort === 'string' && effort ? effort.slice(0, 32) : null,
+    thinking: typeof sl?.thinking?.enabled === 'boolean' ? sl.thinking.enabled : null,
+    promptCache: pc
+      ? {
+          hitRatio: num(pc.hit_ratio),
+          warm: typeof pc.warm === 'boolean' ? pc.warm : null,
+          expiresAt: epochMs(pc.expires_at),
+        }
+      : null,
+    apiMs: num(sl?.cost?.total_api_duration_ms),
+  };
+}
+
+/** The short commit id from the git collector (`# branch.oid`), or null. */
+export function headOf(g) {
+  const oid = g?.oid;
+  return typeof oid === 'string' && /^[0-9a-f]{4,40}$/i.test(oid) ? oid : null;
 }
 
 // --- fleet keys (fleet F7) ---------------------------------------------------
@@ -519,6 +562,7 @@ export async function tick() {
     }
 
     const lane = lanes.laneOf(dir);
+    const side = sidecarFields(sl);
     const session = {
       name,
       // Fleet keys (F7); refreshed by snapshot() too.
@@ -539,6 +583,8 @@ export async function tick() {
       dirty: g?.dirty ?? 0,
       ahead: g?.ahead ?? 0,
       behind: g?.behind ?? 0,
+      // Short commit id (fleet O3): the stuck detector's progress fingerprint.
+      head: headOf(g),
       // 'claude' | 'shell' — which agent this session runs.
       kind: entry || paneCmd === 'claude' ? 'claude' : 'shell',
       claude: entry
@@ -556,6 +602,9 @@ export async function tick() {
             registryName: entry.name,
             transcriptPath: sl?.transcript_path || null,
             title: sl?.session_name || null,
+            // fleet O3, from the statusline sidecar
+            effort: side.effort,
+            thinking: side.thinking,
           }
         : null,
       state: derived.state,
@@ -568,6 +617,8 @@ export async function tick() {
         lastUserPrompt: truncate(hook?.lastUserPrompt || cost?.lastUserPrompt || prev?.activity?.lastUserPrompt || '', 200),
         lastAssistant: truncate(hook?.lastAssistant || cost?.lastAssistant || prev?.activity?.lastAssistant || '', 300),
         lastAssistantAt: hook?.lastAssistantAt ?? cost?.lastAssistantAt ?? prev?.activity?.lastAssistantAt ?? null,
+        // {type, text} from a StopFailure hook (fleet O1/O3), else null.
+        failure: hook?.failure ?? null,
       },
       context: sl?.context_window
         ? {
@@ -580,6 +631,9 @@ export async function tick() {
       statuslineCostUsd: sl?.cost?.total_cost_usd ?? null,
       linesAdded: sl?.cost?.total_lines_added ?? null,
       linesRemoved: sl?.cost?.total_lines_removed ?? null,
+      // fleet O3: total API time and the prompt cache (inspector only).
+      apiMs: side.apiMs,
+      promptCache: side.promptCache,
       rateLimits: sl?.rate_limits
         ? {
             fiveHour: sl.rate_limits.five_hour
@@ -645,6 +699,8 @@ export async function tick() {
   // Drop hook state for sessions that are gone, so the map stays bounded.
   const liveIds = new Set(reg.entries.map((e) => e.sessionId).filter(Boolean));
   for (const id of [...hookState.keys()]) if (!liveIds.has(id)) hookState.delete(id);
+  // ...and the per-session signal ring (fleet O3).
+  try { signals.prune(liveIds); } catch (err) { log.error('signals prune failed', String(err)); }
 
   // One row a minute, from the tick rather than a timer of its own: the tick
   // already holds the sessions, and a sampler firing mid-rebuild would read a
