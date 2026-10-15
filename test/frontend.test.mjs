@@ -367,33 +367,12 @@ test('renders are measured against the 16 ms budget', () => {
 });
 
 test('no information was lost in the overhaul', () => {
-  // Every one of these must still be
-  // produced by the client.
+  // Every one of these must still be produced by the client. The page-wide
+  // items are searched in all of public/js plus index.html.
   const app = readApp();
   const html = read('index.html');
   const both = app + html;
   const required = {
-    'session name': /card-name/,
-    'state pill': /pill s-/,
-    'since time': /card-since/,
-    'directory': /shortDir/,
-    'branch': /branch/,
-    'dirty count': /dirty/,
-    'ahead/behind': /ahead/,
-    'model': /class.*model|'model'/,
-    'context bar': /ctx-label/,
-    'context size': /of \$\{Math\.round\(s\.context\.size/,
-    'API-equivalent cost': /API-equivalent/,
-    'session RSS': /rssMb/,
-    'current tool': /tool-line/,
-    'last user prompt': /say-user/,
-    'last assistant': /lastAssistant/,
-    'ANSI preview': /previewHtml/,
-    'open action': /'open'/,
-    'pin action': /togglePin/,
-    'Yes action': /QUICK_KEYS\.yes/,
-    'No action': /QUICK_KEYS\.no/,
-    'the ⋯ menu': /btn-more/,
     'attention numbers': /'idx'/,
     'attention wait time': /attention-item/,
     'vitals cpu/load': /load \$\{/,
@@ -417,6 +396,69 @@ test('no information was lost in the overhaul', () => {
   };
   const missing = Object.entries(required).filter(([, re]) => !re.test(both)).map(([k]) => k);
   assert.deepEqual(missing, [], `the overhaul dropped: ${missing.join(', ')}`);
+});
+
+test('no information was lost in the board redesign: every card field is in the data block or the L3 detail', () => {
+  // Fleet D9 (plan §4 2.7): the v2 card became an ATC data block, and the
+  // preview, the user prompt and the assistant line moved out of the card
+  // body into the L3 detail (views/board-card.js cardDetail, shown for the
+  // selected card until the inspector mounts the same nodes). Each field must
+  // still be produced by views/board.js, views/board-card.js or ui/inspector.js.
+  const board = ['views/board.js', 'views/board-card.js', 'ui/inspector.js']
+    .filter((f) => JS_FILES.includes(f)).map(readJs).join('\n');
+  const required = {
+    // line 1: code state lane stage flags age
+    'builder code plate': /builderCode\(/,
+    'state lamp': /lamp\(db\.p/,
+    'state 4-char word': /waiting_permission: 'PERM'/,
+    'session name / lane id': /db-lane/,
+    'stage n/m': /progress/,
+    'current stage title': /p\.current\.title/,
+    'flag stuck': /\.stuck\b/,
+    'flag paused': /\.paused\b/,
+    'flag approval': /awaitingApproval/,
+    'flag review': /reviewReady/,
+    'time in state': /stateSince/,
+    // line 2: PR checks ctx $5h model git
+    'PR': /prModel\(|prChip\(/,
+    'checks': /checkGlyphs\(/,
+    'context %': /usedPct/,
+    'context size': /of \$\{Math\.round\(s\.context\.size/,
+    'spend 5h': /usd5h/,
+    'lane 5h burn': /burn5h/,
+    'model': /claude\?\.model/,
+    'dirty count': /dirty/,
+    'ahead/behind': /ahead/,
+    // the activity line and the L3 detail
+    'danger finding': /mk-danger/,
+    'current tool': /tool-line/,
+    'last marker': /lastMarker/,
+    'directory': /shortDir/,
+    'branch': /branch/,
+    'API-equivalent cost': /API-equivalent/,
+    'session RSS': /rssMb/,
+    'session swap': /swapMb/,
+    'last user prompt': /say-user/,
+    'last assistant': /lastAssistant/,
+    'ANSI preview': /previewToNodes\(s\.previewLines/,
+    // lane cards
+    'slot chip': /chip-slot/,
+    'job line': /d\.job/,
+    'retire readiness': /ready to retire/,
+    // actions
+    'open action': /'open'/,
+    'pin action': /togglePin/,
+    'Yes action': /QUICK_KEYS\.yes/,
+    'No action': /QUICK_KEYS\.no/,
+    'the ⋯ menu': /btn-more/,
+  };
+  const missing = Object.entries(required).filter(([, re]) => !re.test(board)).map(([k]) => k);
+  assert.deepEqual(missing, [], `the board redesign dropped: ${missing.join(', ')}`);
+  // The card body keeps one activity line; the long text lives in the detail.
+  const card = stripNonCode(readJs('views/board-card.js'));
+  const render = card.slice(card.indexOf('function renderCard'), card.indexOf('function toggleMenu'));
+  assert.doesNotMatch(render, /previewToNodes|lastAssistant|lastUserPrompt/, 'renderCard itself no longer draws the long text');
+  assert.match(render, /cardDetail\(s\)/, 'it appends the L3 detail instead');
 });
 
 test('figures are tabular, so live metrics do not jitter', () => {
