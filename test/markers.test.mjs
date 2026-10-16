@@ -19,11 +19,21 @@ test('every marker the lanes are told to print is recognised', () => {
     'BLOCKED: waiting on a token': 'blocked',
     'STAGE-DONE: stage 4': 'done',
     'LANE-DONE: everything shipped': 'done',
+    'PLAN-DONE: X': 'done',
     'PROGRESS: Stage 3 done': 'progress',
   };
   for (const [line, kind] of Object.entries(kinds)) {
     assert.equal(classifyLine(line)?.kind, kind, line);
   }
+});
+
+test('PLAN-DONE is in the generic done default and behaves like any anchored marker', async () => {
+  const { defaults } = await import('../server/config.mjs');
+  assert.match(defaults().markers.done, /(^|\|)PLAN-DONE(\||$)/);
+  assert.equal(classifyLine('PLAN-DONE: X')?.kind, 'done');
+  assert.equal(classifyLine('● PLAN-DONE: P8 plans parsed')?.kind, 'done');
+  assert.equal(classifyLine('the prompt says `PLAN-DONE: <TOKEN>`'), null, 'quoted, not a marker');
+  assert.equal(classifyLine('PLAN-DONE without a colon'), null);
 });
 
 test('a marker survives the bullet a TUI puts in front of it', () => {

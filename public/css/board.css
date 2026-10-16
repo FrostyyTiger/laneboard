@@ -1,0 +1,278 @@
+/* ===================== board: ATC data blocks (fleet D9, plan §4 2.7) ====== */
+/*
+   Every card has the same anatomy in fixed mono columns, so the eye scans
+   columns, not cards:
+     line 1  code  state  lane (18ch)  stage  flags  age
+     line 2  PR  checks  ctx  $ 5h  model  git
+   A row (a session inside a lane card, or every card in rows mode) is one
+   line. Grey is the baseline; colour only for abnormal, always with a shape.
+   Flat panels: no shadow, no gradient, no glass; depth from borders only.
+*/
+.card {
+  position: relative;
+  background: var(--bg-surface);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--sp-2);
+  display: grid;
+  gap: var(--sp-1);
+  min-width: 0;
+  scroll-margin-top: 74px;
+  color: var(--text-1);
+}
+.card:hover { border-color: var(--line-strong); }
+
+/* State reads on the border, in the priority colour of its lamp. */
+.card.s-waiting_permission { border-color: var(--p1-line); }
+.card.s-waiting_question { border-color: var(--p2-line); }
+.card.s-dead { opacity: .5; }
+.card.s-dead .db-lane { text-decoration: line-through; }
+
+/* Selection: the corner brackets of the kit, and the keyboard cursor. */
+.card.cursor { border-color: var(--accent); }
+.card.cursor::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  background: var(--bracket-img);
+  pointer-events: none;
+}
+
+/* A builder that is not live (hub: stale, down): dimmed and hatched. */
+.card.stale {
+  opacity: .55;
+  background-image: var(--tex-hatch);
+}
+.card.stale .db-word,
+.card.stale .db-lane { color: var(--text-3); }
+
+/* --- the data block ------------------------------------------------------- */
+.db {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  color: var(--text-2);
+}
+.db-f {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  min-width: 0;
+}
+.db-code:empty { display: none; }
+.db-state { width: 7ch; }
+.db-word { color: var(--text-2); font-weight: 600; letter-spacing: 0; }
+.db-state[data-p="1"] .db-word { color: var(--p1); }
+.db-state[data-p="2"] .db-word { color: var(--p2); }
+.db-state[data-p="stale"] .db-word { color: var(--text-3); }
+.db-lane {
+  display: block;
+  width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+  font-weight: 600;
+}
+.db-stage { width: 5ch; color: var(--text-1); }
+.db-flags { margin-left: auto; gap: var(--sp-1); }
+.db-flags:empty { display: none; }
+.db-flag { display: inline-flex; color: var(--text-2); }
+.db-flag[data-p="1"] { color: var(--p1); }
+.db-flag[data-p="2"] { color: var(--p2); }
+.db-age { width: 4ch; justify-content: flex-end; color: var(--text-3); }
+.db-flags:empty + .db-age { margin-left: auto; }
+
+.db-pr { min-width: 6ch; color: var(--text-2); }
+.db-pr[data-state="merged"] { color: var(--ok); }
+.db-pr .i { color: var(--text-3); }
+.db-checks { min-width: 7ch; gap: 1px; letter-spacing: 0; }
+.ck { color: var(--text-3); }
+.ck-fail { color: var(--p2); }
+.ck-run { color: var(--text-2); }
+.ck-more { color: var(--text-3); margin-left: 2px; }
+.db-ctx { width: 8ch; }
+.db-ctx[data-p="2"] { color: var(--p2); }
+.db-ctx[data-p="1"] { color: var(--p1); }
+.db-ctx[data-p="2"]::before { content: "▲"; }
+.db-ctx[data-p="1"]::before { content: "■"; }
+.db-usd { width: 7ch; color: var(--text-1); }
+.db-model {
+  display: block;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-git { gap: var(--sp-1); }
+.db-git:empty { display: none; }
+.db .dirty { color: var(--text-2); }
+.db .ahead { color: var(--text-2); }
+
+/* The lane card's head is the same block; its chips keep the line. */
+.grid .lane-top { align-items: center; gap: var(--sp-2); }
+.grid .lane-meta { gap: var(--sp-2); flex-wrap: nowrap; }
+.grid .lane-meta .lane-burn { margin-left: 0; }
+.grid .lane-current {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+.grid .chip-pr, .grid .chip-slot { border-radius: var(--radius); }
+.card-meta .branch,
+.card-meta .model { color: var(--text-2); }
+.card-meta .dirty { color: var(--text-2); }
+.card-meta .ahead { color: var(--text-2); }
+.card-meta .cost { color: var(--text-1); font-weight: 600; }
+
+/* A session inside a lane card: one line, recessed. */
+.grid .card.card-row {
+  background: var(--bg-sunken);
+  border-color: var(--line-weak);
+  padding: var(--sp-1) var(--sp-2);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-2);
+}
+.card.card-row > :not(.db-row):not(.card-actions):not(.menu) { grid-column: 1 / -1; }
+.card.card-row .db-flags { margin-left: 0; }
+
+/* --- the one activity line ------------------------------------------------ */
+.tool-line {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-2);
+  overflow: hidden;
+  white-space: nowrap;
+  display: flex;
+  gap: var(--sp-2);
+}
+.tool-line::before { content: "▸"; color: var(--text-3); flex: none; }
+.tool-line .tname { color: var(--text-1); flex: none; font-weight: 600; }
+.tool-line .targ { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- L3 detail: shown for the selected card until the inspector takes it -- */
+.card-detail { display: none; gap: var(--sp-1); min-width: 0; }
+.card.cursor .card-detail { display: grid; }
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-3);
+}
+.detail-meta .dir { color: var(--text-2); }
+
+.say {
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh);
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.say-user {
+  color: var(--text-3);
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  border-left: 2px solid var(--line);
+  padding-left: var(--sp-2);
+}
+
+/* Previews never scroll sideways: lines wrap, and the server has already
+   collapsed Claude's full-width rules so they cannot wrap on their own. */
+.preview {
+  font-family: var(--font-mono);
+  /* 11 px is the floor: below it Claude's box-drawing rules stop resolving. */
+  font-size: var(--fs-11);
+  line-height: var(--lh);
+  background: var(--bg-sunken);
+  border: var(--bw) solid var(--line-weak);
+  border-radius: var(--radius);
+  padding: var(--sp-1) var(--sp-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: hidden;
+  color: var(--text-2);
+  max-height: 11.2em;
+}
+.preview span { white-space: inherit; overflow-wrap: inherit; }
+
+/* --- actions: icons first, words in title/aria-label ------------------------ */
+.card-actions { display: flex; gap: var(--sp-1); flex-wrap: wrap; align-items: center; }
+.card-actions .btn { min-height: 20px; padding: 0 var(--sp-2); }
+.btn-l--hide {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.btn.ok { border-color: var(--line-strong); color: var(--text-1); }
+.btn.no { color: var(--text-2); }
+.btn.on { border-color: var(--accent); color: var(--text-1); }
+/* The primary CTA (the launch form's submit). */
+.btn.primary { background: var(--accent-weak); color: var(--text-1); }
+.btn-more { margin-left: auto; }
+.card.card-row .card-actions { flex-wrap: nowrap; }
+.card.card-row .btn-more { margin-left: 0; }
+
+.menu {
+  position: absolute;
+  right: var(--sp-3);
+  bottom: 36px;
+  z-index: 20;
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-1);
+  min-width: 172px;
+  background: var(--bg-elevated);
+  border: var(--bw) solid var(--line-strong);
+  border-radius: var(--radius);
+}
+.menu button {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  text-align: left;
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--radius);
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.menu button:hover { background: var(--bg-hover); color: var(--text-1); }
+.menu button.danger { color: var(--p1); }
+.menu button.danger::before { content: "■ "; }
+
+/* --- the panel and the two modes ------------------------------------------- */
+.board-panel { margin-top: var(--sp-3); }
+.board-panel > .panel-b { min-width: 0; }
+
+/* Rows mode: every card collapses to its first line plus its actions. */
+.grid[data-mode="rows"] { grid-template-columns: 1fr; }
+.grid[data-mode="rows"] .card:not(.cursor) .db-2,
+.grid[data-mode="rows"] .card:not(.cursor) .tool-line,
+.grid[data-mode="rows"] .card:not(.cursor) .marker-line:not(.mk-danger) { display: none; }
+.grid[data-mode="rows"] .card:not(.card-row):not(.lane-card) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.grid[data-mode="rows"] .card:not(.card-row):not(.lane-card) > :not(.db-1):not(.card-actions):not(.menu) { grid-column: 1 / -1; }
+
+/* The inspector overlays the centre: keep the board clear of it (plan §4 2.4). */
+.shell[data-insp="open"] .view-board .grid-wrap { padding-inline-end: var(--insp-w); }

@@ -1,168 +1,64 @@
-// Runs the real public/app.js against a minimal DOM and a captured snapshot,
-// and asserts it actually produces cards.
+// Runs the real public/js/app.js (and every module it imports) against a
+// minimal DOM and a captured snapshot, and asserts it actually produces cards.
 //
 // The static check in frontend.test.mjs proves the functions exist; this proves
 // they RUN. Between them they close the hole that let Stage 9 ship a dashboard
 // which threw "renderGrid is not defined" on every snapshot and drew nothing.
-import test from 'node:test';
+import nodeTest from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import { elementsFromHtml, makeDocument, loadEsModules } from './helpers/fakedom.mjs';
+
+// vm.SourceTextModule needs --experimental-vm-modules. `npm test` sets it in
+// NODE_OPTIONS; a bare `node --test test/render.test.mjs` does not, so then
+// this file runs itself once more with the flag and reports that as one test.
+const HAS_VM_MODULES = typeof vm.SourceTextModule === 'function';
+const test = HAS_VM_MODULES ? nodeTest : () => {};
+if (!HAS_VM_MODULES) {
+  nodeTest('render tests, re-run with --experimental-vm-modules', () => {
+    // The child must run its own test runner: with NODE_TEST_CONTEXT
+    // inherited from this one it reports to us over a pipe it does not have,
+    // and exits 0 whatever happened. Unset, its exit code is the verdict.
+    const env = { ...process.env };
+    delete env.NODE_TEST_CONTEXT;
+    const r = spawnSync(process.execPath, ['--experimental-vm-modules', '--test', '--test-reporter=tap', import.meta.filename], { encoding: 'utf8', env });
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    assert.match(r.stdout, /^# fail 0$/m, `${r.stdout}\n${r.stderr}`);
+    assert.doesNotMatch(r.stdout, /^# pass 0$/m, 'the re-run ran no tests');
+  });
+}
 
 const ROOT = path.resolve(import.meta.dirname, '..');
+/** The builder the fixtures belong to (its hello names it). */
+const ID = 'builder-a';
+const key = (name) => `${ID}/${name}`;
 const PUB = path.join(ROOT, 'public');
 const snapshot = JSON.parse(fs.readFileSync(path.join(ROOT, 'test/fixtures/snapshot.json'), 'utf8'));
 
-function makeEl(tag = 'div') {
-  const el = {
-    tagName: String(tag).toUpperCase(),
-    children: [],
-    parent: null,
-    style: { cssText: '', setProperty() {} },
-    dataset: {},
-    hidden: false,
-    _text: '',
-    innerHTML: '',
-    title: '',
-    disabled: false,
-    value: '',
-    onclick: null,
-    classList: {
-      _s: new Set(),
-      add(...c) { c.forEach((x) => x && this._s.add(x)); },
-      remove(...c) { c.forEach((x) => this._s.delete(x)); },
-      toggle(c, on) {
-        if (on === undefined) { this._s.has(c) ? this._s.delete(c) : this._s.add(c); }
-        else if (on) this._s.add(c);
-        else this._s.delete(c);
-      },
-      contains(c) { return this._s.has(c); },
-    },
-    // Faithful to the DOM: textContent aggregates descendants, and setting it
-    // clears the children. Getting this wrong hid a real regression once.
-    get textContent() {
-      return this._text + this.children.map((c) => c.textContent).join('');
-    },
-    set textContent(v) {
-      this.children.length = 0;
-      this._text = String(v ?? '');
-    },
-    get className() { return [...this.classList._s].join(' '); },
-    set className(v) { this.classList._s = new Set(String(v).split(/\s+/).filter(Boolean)); },
-    get firstChild() { return this.children[0] ?? null; },
-    get childNodes() { return this.children; },
-    get nextSibling() {
-      const sibs = this.parent?.children ?? [];
-      return sibs[sibs.indexOf(this) + 1] ?? null;
-    },
-    // Faithful to the DOM: inserting a node that already has a parent MOVES
-    // it. v3 moves session cards in and out of lane cards; a harness that
-    // left the old copy behind would count every moved card twice.
-    append(...kids) {
-      for (const k of kids) {
-        if (typeof k === 'string') { this._text += k; continue; }
-        const old = k.parent?.children;
-        if (old && old.includes(k)) old.splice(old.indexOf(k), 1);
-        k.parent = this;
-        this.children.push(k);
-      }
-    },
-    insertBefore(node, ref) {
-      if (node === ref) return node;
-      const old = node.parent?.children;
-      if (old && old.includes(node)) old.splice(old.indexOf(node), 1);
-      node.parent = this;
-      const i = ref ? this.children.indexOf(ref) : this.children.length;
-      this.children.splice(i < 0 ? this.children.length : i, 0, node);
-      return node;
-    },
-    replaceWith(next) {
-      const sibs = this.parent?.children ?? [];
-      const i = sibs.indexOf(this);
-      if (i >= 0) { sibs[i] = next; next.parent = this.parent; }
-    },
-    remove() {
-      const sibs = this.parent?.children ?? [];
-      const i = sibs.indexOf(this);
-      if (i >= 0) sibs.splice(i, 1);
-    },
-    addEventListener() {}, removeEventListener() {},
-    getBoundingClientRect: () => ({ top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100 }),
-    scrollIntoView() {}, focus() {},
-    attrs: {},
-    // Not a no-op: the charts are built as SVG nodes whose class arrives via
-    // setAttribute, and a no-op here made "did it draw two charts?" silently
-    // answer no while the page was in fact fine.
-    setAttribute(name, value) {
-      this.attrs[name] = String(value);
-      if (name === 'class') this.className = String(value);
-    },
-    getAttribute(name) { return this.attrs[name] ?? null; },
-    querySelector() { return null; },
-    querySelectorAll(sel) {
-      const want = String(sel).replace(/^\./, '');
-      const out = [];
-      const walk = (n) => { for (const c of n.children) { if (c.classList.contains(want)) out.push(c); walk(c); } };
-      walk(this);
-      return out;
-    },
-    closest() { return null; },
-    matches() { return false; },
-  };
-  return el;
-}
-
-/** Build the sandbox, evaluate app.js in it, and hand back the pieces. */
-function mount({ responses: primed = [], wide = false } = {}) {
-  const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8');
-  const byId = new Map();
-  for (const m of html.matchAll(/\sid="([^"]+)"/g)) byId.set(m[1], makeEl());
-
-  // Buttons declared in the markup inside an id'd container — the view strip,
-  // the phone tabs, the window pickers. The harness builds elements from ids
-  // alone, so without this a container the page only ever READS from (to mark
-  // one child active) looks empty and the check silently passes on nothing.
-  // Deliberately shallow: these containers hold buttons and nothing else.
-  for (const m of html.matchAll(/<(nav|div)[^>]*\sid="([^"]+)"[^>]*>([\s\S]*?)<\/\1>/g)) {
-    const parent = byId.get(m[2]);
-    if (!parent) continue;
-    for (const b of m[3].matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)) {
-      const child = makeEl('button');
-      for (const a of b[1].matchAll(/data-([a-z-]+)="([^"]*)"/g)) child.dataset[a[1]] = a[2];
-      const cls = /\sclass="([^"]*)"/.exec(b[1]);
-      if (cls) child.className = cls[1];
-      child.textContent = b[2].trim();
-      parent.append(child);
-    }
-  }
-  // Honour the real `hidden` attributes, so "did app.js reveal this?" is real.
-  for (const m of html.matchAll(/<[^>]*\sid="([^"]+)"[^>]*\shidden[^>]*>/g)) {
-    const el = byId.get(m[1]);
-    if (el) el.hidden = true;
-  }
+/** Build the sandbox, evaluate public/js/app.js in it, and hand back the pieces. */
+async function mount({ responses: primed = [], wide = false, hello = true, storage = {} } = {}) {
+  // One element per id in the real index.html, the buttons of id'd
+  // containers and the real `hidden` attributes (test/helpers/fakedom.mjs).
+  const byId = elementsFromHtml(fs.readFileSync(path.join(PUB, 'index.html'), 'utf8'));
 
   const sockets = [];
-  /** URL fragment -> JSON body, primed by mount({ responses }). */
+  /** URL fragment -> JSON body, primed by await mount({ responses }). */
   const responses = [];
   // Window-level listeners are recorded rather than dropped, so a test can fire
   // a hashchange and exercise the view router the way a browser would.
   const winListeners = {};
-  const document = {
-    getElementById: (id) => byId.get(id) ?? null,
-    createElement: (t) => makeEl(t),
-    // The charts are hand-written SVG (hard rule 3: no chart library), so the
-    // harness has to be able to make namespaced elements too.
-    createElementNS: (_ns, t) => makeEl(t),
-    createTextNode: (t) => { const n = makeEl('#text'); n.textContent = String(t); return n; },
-    querySelectorAll: (sel) => byId.get('grid').querySelectorAll(sel),
-    head: makeEl(), body: makeEl(), addEventListener() {},
-  };
+  const document = makeDocument({ byId, root: byId.get('grid') });
   const sandbox = {
     document, console: { log() {}, warn() {}, error() {} },
     location: { protocol: 'http:', host: 'x', hash: '', pathname: '/' },
     history: { replaceState() {} },
-    localStorage: { getItem: () => null, setItem() {} },
+    localStorage: {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(storage, k) ? storage[k] : null),
+      setItem: (k, v) => { storage[k] = String(v); },
+    },
     innerWidth: 3800, innerHeight: 1100, isSecureContext: false,
     addEventListener(k, fn) { (winListeners[k] ||= []).push(fn); },
     removeEventListener() {},
@@ -201,26 +97,74 @@ function mount({ responses: primed = [], wide = false } = {}) {
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
 
-  // Strip the terminal.js import so the file runs as a classic script and no
-  // socket is opened for a terminal.
-  const src = fs.readFileSync(path.join(PUB, 'app.js'), 'utf8').replace(
-    /^import .*from '\/terminal\.js';$/m,
-    'const openTerminal=()=>{},closeTerminal=()=>{},fitAll=()=>{},writeTo=()=>false,isLive=()=>false;'
-  );
-  vm.runInContext(src, sandbox, { filename: 'app.js' });
+  // The page is ES modules (public/js/**), so they run as vm.SourceTextModule
+  // (needs --experimental-vm-modules, set in package.json). Every mount reads
+  // the files fresh into its own context, so no state is shared across tests.
+  // ui/terminal.js is replaced by a stub, so no socket is opened for a terminal.
+  const ns = await loadModules(sandbox);
 
   assert.equal(sockets.length, 1, 'app.js should open exactly one dashboard socket');
+  // The builder names itself in its first frame (fleet F7 hello), so the page
+  // keys everything by fleet key `${ID}/<name>` from then on (fleet F8b).
+  const socket = sockets[0];
+  const emit = socket.emit.bind(socket);
+  socket.emit = (k, ev) => {
+    emit(k, ev);
+    if (k === 'open' && hello) emit('message', { data: JSON.stringify({ type: 'hello', builder: { id: ID, code: 'BA' }, mode: 'builder', version: '1', apiVersion: 1 }) });
+  };
   const fire = (kind, ev = {}) => { for (const fn of winListeners[kind] || []) fn(ev); };
   responses.push(...primed);
   const go = (hash) => { sandbox.location.hash = hash; fire('hashchange'); };
-  return { byId, socket: sockets[0], sandbox, fire, go };
+  return { byId, socket, sandbox, fire, go, ns, storage };
+}
+
+const JS = path.join(PUB, 'js');
+const TERMINAL = path.join(JS, 'ui', 'terminal.js');
+
+/**
+ * Link and evaluate public/js/app.js inside `context`. Returns ns(rel), the
+ * namespace of public/js/<rel> in that same context.
+ */
+function loadModules(context) {
+  return loadEsModules(context, {
+    entry: path.join(JS, 'app.js'),
+    stubs: {
+      [TERMINAL]: {
+        openTerminal: () => {}, closeTerminal: () => {}, fitAll: () => {},
+        writeTo: () => false, isLive: () => false,
+      },
+    },
+  });
 }
 
 /** Read a public/ file — the static assertions need the source, not the DOM. */
 function read2(f) { return fs.readFileSync(path.join(PUB, f), 'utf8'); }
 
+/**
+ * What used to be public/styles.css: the public/css sheets in index.html link
+ * order (fleet F2), minus the map view's sheet, which was map.css.
+ */
+function readStyles() {
+  return [...read2('index.html').matchAll(/<link rel="stylesheet" href="\/css\/([^"]+)">/g)]
+    .map((m) => m[1]).filter((f) => f !== 'views/map.css')
+    .map((f) => read2(path.join('css', f))).join('');
+}
+
+/**
+ * The modules split out of the old public/app.js, concatenated. The files that
+ * moved in whole (terminal, motion, the map canvas, keys) were never part of it.
+ */
+const NOT_FROM_APP_JS = new Set(['ui/terminal.js', 'core/motion.js', 'views/map-canvas.js', 'core/keys.js']);
+function readAppJs() {
+  return fs.readdirSync(JS, { recursive: true }).map((f) => f.split(path.sep).join('/'))
+    .filter((f) => f.endsWith('.js') && !NOT_FROM_APP_JS.has(f)).sort()
+    .map((f) => read2(path.join('js', f))).join('\n');
+}
+
+/** Builder-scoped frames carry their builder, as every /ws message does since fleet F7. */
 function send(socket, msg) {
-  socket.emit('message', { data: JSON.stringify(msg) });
+  const scoped = ['snapshot', 'delta', 'event', 'stuck'].includes(msg.type);
+  socket.emit('message', { data: JSON.stringify(scoped && !msg.builder ? { builder: ID, ...msg } : msg) });
 }
 
 function errorText(byId) {
@@ -228,8 +172,8 @@ function errorText(byId) {
   return box.hidden ? '' : box.children.map((c) => c.textContent).join(' | ');
 }
 
-test('a snapshot renders one card per session with no UI errors', () => {
-  const { byId, socket } = mount();
+test('a snapshot renders one card per session with no UI errors', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -242,8 +186,8 @@ test('a snapshot renders one card per session with no UI errors', () => {
   assert.equal(byId.get('grid-empty').hidden, true, 'the "waiting" placeholder should be hidden');
 });
 
-test('a card carries the information a human needs at a glance', () => {
-  const { byId, socket } = mount();
+test('a card carries the information a human needs at a glance', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -263,8 +207,8 @@ test('a card carries the information a human needs at a glance', () => {
   assert.ok(texts.some((t) => /pin/.test(t)), 'the card should have a pin button');
 });
 
-test('the rail renders attention, vitals and rate limits', () => {
-  const { byId, socket } = mount();
+test('the rail renders attention, vitals and rate limits', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -275,8 +219,8 @@ test('the rail renders attention, vitals and rate limits', () => {
   assert.match(byId.get('stat-cost').textContent, /today/);
 });
 
-test('a delta updates only the sessions it names', () => {
-  const { byId, socket } = mount();
+test('a delta updates only the sessions it names', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   const before = byId.get('grid').children.length;
@@ -293,8 +237,8 @@ test('a delta updates only the sessions it names', () => {
   assert.equal(byId.get('grid').children.length, before, 'a delta must not change the card count');
 });
 
-test('a removal takes the card away', () => {
-  const { byId, socket } = mount();
+test('a removal takes the card away', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   const before = byId.get('grid').children.length;
@@ -305,8 +249,8 @@ test('a removal takes the card away', () => {
   assert.equal(byId.get('grid').children.length, before - 1);
 });
 
-test('an empty snapshot shows the placeholder instead of a blank page', () => {
-  const { byId, socket } = mount();
+test('an empty snapshot shows the placeholder instead of a blank page', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', sessions: [], attention: [], vitals: null, generatedAt: Date.now() });
 
@@ -315,9 +259,9 @@ test('an empty snapshot shows the placeholder instead of a blank page', () => {
   assert.equal(byId.get('grid-empty').hidden, false);
 });
 
-test('one broken section does not blank the rest of the page', () => {
+test('one broken section does not blank the rest of the page', async () => {
   // The lesson from the Stage 9 regression: renderAll isolates its sections.
-  const { byId, socket } = mount();
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   // vitals: null makes renderVitals bail early, but a malformed one would throw.
   send(socket, {
@@ -335,8 +279,8 @@ test('one broken section does not blank the rest of the page', () => {
   );
 });
 
-test('the connection badge follows the socket', () => {
-  const { byId, socket } = mount();
+test('the connection badge follows the socket', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   assert.equal(byId.get('conn').textContent, 'live');
   assert.equal(byId.get('offline').hidden, true);
@@ -352,10 +296,10 @@ function cardText(card) {
   return texts.join(' | ');
 }
 
-test('a session card carries no agent chip', () => {
+test('a session card carries no agent chip', async () => {
   // Claude is the only agent; chipping every card would spend density
   // without adding signal.
-  const { byId, socket } = mount();
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -363,23 +307,104 @@ test('a session card carries no agent chip', () => {
   assert.equal(card.className.includes('agent'), false);
 });
 
+// --- previews (fleet F6): raw ANSI on the wire, built as DOM on the client --
+
+function cardByName(grid, name) {
+  const walk = (n) => {
+    if (n.dataset?.key === key(name) && n.classList.contains('card')) return n;
+    for (const c of n.children) { const hit = walk(c); if (hit) return hit; }
+    return null;
+  };
+  return walk(grid);
+}
+
+function allNodes(root) {
+  const out = [];
+  const walk = (n) => { out.push(n); n.children.forEach(walk); };
+  walk(root);
+  return out;
+}
+
+test('a card shows its previewLines, coloured by spans, with no innerHTML', async () => {
+  const { byId, socket } = await mount();
+  socket.emit('open', {});
+  send(socket, { type: 'snapshot', ...snapshot });
+
+  assert.equal(errorText(byId), '');
+  const s = snapshot.sessions[0];
+  assert.ok(Array.isArray(s.previewLines) && s.previewLines.length, 'the fixture carries previewLines');
+  assert.equal('previewHtml' in s, false, 'the fixture no longer carries previewHtml');
+  const card = cardByName(byId.get('grid'), s.name);
+  assert.ok(card, 'the session has a card');
+  const [pre] = card.querySelectorAll('.preview');
+  assert.ok(pre, 'the card has a preview');
+  assert.match(pre.textContent, /Worked for 1m 15s/);
+  assert.match(pre.textContent, /Want me to fold that into the same commit/);
+  assert.equal(pre.textContent.includes('\u001b'), false, 'escapes are consumed, not shown');
+  assert.equal(pre.textContent.split('\n').length, s.previewLines.length, 'one line per previewLine');
+  const spans = pre.children.filter((c) => c.tagName === 'SPAN');
+  assert.ok(spans.some((sp) => sp.style.color === '#abb2bf'), 'SGR 37 becomes a coloured span');
+  assert.ok(allNodes(pre).every((n) => n.innerHTML === ''), 'nothing is written as HTML');
+});
+
+test('hostile previewLines stay literal text in the card', async () => {
+  const { byId, socket } = await mount();
+  socket.emit('open', {});
+  send(socket, { type: 'snapshot', ...snapshot });
+
+  const target = snapshot.sessions[0];
+  const evil = '<img src=x onerror=alert(1)>';
+  send(socket, {
+    type: 'delta',
+    sessions: [{ ...target, previewLines: [`\u001b[31m${evil}`, `\u001b[38;2;999;0;0m${evil}\u001b]8;;http://example.invalid\u0007x`] }],
+    attention: snapshot.attention,
+    generatedAt: Date.now(),
+  });
+
+  assert.equal(errorText(byId), '');
+  const card = cardByName(byId.get('grid'), target.name);
+  const [pre] = card.querySelectorAll('.preview');
+  assert.equal(pre.textContent, `${evil}\n${evil}x`);
+  const nodes = allNodes(pre);
+  assert.equal(nodes.some((n) => n.tagName === 'IMG'), false, 'no element is parsed out of pane text');
+  assert.ok(nodes.every((n) => n.innerHTML === ''));
+  const spans = pre.children.filter((c) => c.tagName === 'SPAN');
+  assert.equal(spans[0].textContent, evil);
+  assert.equal(spans[0].children.length, 0);
+  assert.equal(spans[1].style.color, 'rgb(255,0,0)', 'truecolour channels are clamped');
+});
+
+test('a session without previewLines gets no preview box', async () => {
+  const { byId, socket } = await mount();
+  socket.emit('open', {});
+  send(socket, { type: 'snapshot', ...snapshot });
+  const target = snapshot.sessions[0];
+  const { previewLines: _drop, ...rest } = target;
+  send(socket, { type: 'delta', sessions: [{ ...rest, previewHtml: ['<b>old wire</b>'] }], attention: snapshot.attention, generatedAt: Date.now() });
+
+  assert.equal(errorText(byId), '');
+  const card = cardByName(byId.get('grid'), target.name);
+  assert.equal(card.querySelectorAll('.preview').length, 0, 'an old previewHtml is ignored, never rendered');
+});
+
 // --- views (Stage 0) --------------------------------------------------------
 
 const VIEWS = ['board', 'morning', 'credit', 'box'];
 
-test('the board is the default view and the others start hidden', () => {
-  const { byId, socket } = mount();
+test('the map is the default view and the others start hidden', async () => {
+  // fleet D4: the Map is home (core/router.js DEFAULT_VIEW).
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
-  assert.equal(byId.get('view-board').hidden, false);
-  for (const v of VIEWS.slice(1)) {
+  assert.equal(byId.get('view-map').hidden, false);
+  for (const v of VIEWS) {
     assert.equal(byId.get(`view-${v}`).hidden, true, `${v} should start hidden`);
   }
 });
 
-test('a hash route shows exactly one view', () => {
-  const { byId, socket, go } = mount();
+test('a hash route shows exactly one view', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -394,17 +419,19 @@ test('a hash route shows exactly one view', () => {
   }
 });
 
-test('an unknown hash falls back to the board rather than a blank page', () => {
-  const { byId, socket, go } = mount();
+test('an unknown hash falls back to the map rather than a blank page', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
+  go('#board');
   go('#nonsense');
-  assert.equal(byId.get('view-board').hidden, false);
+  assert.equal(byId.get('view-map').hidden, false);
+  assert.equal(byId.get('view-board').hidden, true);
 });
 
-test('the #session= deep link still opens the sheet, on the board', () => {
+test('the #session= deep link still opens the sheet, on the board', async () => {
   // This is the URL a push notification opens. It must survive the router.
-  const { byId, socket, go } = mount();
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#morning');
@@ -419,8 +446,8 @@ test('the #session= deep link still opens the sheet, on the board', () => {
   assert.equal(errorText(byId), '');
 });
 
-test('switching views never blanks the grid', () => {
-  const { byId, socket, go } = mount();
+test('switching views never blanks the grid', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   const before = byId.get('grid').children.length;
@@ -450,8 +477,8 @@ function withLanes() {
   return s;
 }
 
-test('the lane rail lists active lanes and idle worktrees separately', () => {
-  const { byId, socket } = mount();
+test('the lane rail lists active lanes and idle worktrees separately', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...withLanes() });
 
@@ -469,15 +496,15 @@ test('the lane rail lists active lanes and idle worktrees separately', () => {
 /** Every session card on the board, inside lane cards or not. */
 function sessionCards(grid) {
   const out = [];
-  const walk = (n) => { for (const c of n.children) { if (c.dataset?.name) out.push(c); else walk(c); } };
+  const walk = (n) => { for (const c of n.children) { if (c.dataset?.key) out.push(c); else walk(c); } };
   walk(grid);
   return out;
 }
 
-test('an idle lane gets no card — it is not a session', () => {
+test('an idle lane gets no card — it is not a session', async () => {
   // lanes plan hard rule 6. A worktree with nothing running in it and no
   // launch record has no state, no attention score and no place in the grid.
-  const { byId, socket } = mount();
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = withLanes();
   send(socket, { type: 'snapshot', ...s });
@@ -488,8 +515,8 @@ test('an idle lane gets no card — it is not a session', () => {
   assert.equal(sessionCards(grid).length, s.sessions.length);
 });
 
-test('a lane is one card, striped, with its sessions inside as rows (v3)', () => {
-  const { byId, socket } = mount();
+test('a lane is one card, striped, with its sessions inside as rows (v3)', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = withLanes();
   send(socket, { type: 'snapshot', ...s });
@@ -504,19 +531,19 @@ test('a lane is one card, striped, with its sessions inside as rows (v3)', () =>
   }
   const horizon = laneCards.find((c) => c.dataset.lane === 'horizon-v1');
   const rows = sessionCards(horizon);
-  assert.deepEqual(rows.map((r) => r.dataset.name).sort(), s.lanes[0].sessions.slice().sort());
+  assert.deepEqual(rows.map((r) => r.dataset.key).sort(), s.lanes[0].sessions.map(key).sort());
   assert.ok(rows.every((r) => r.classList.contains('card-row')), 'sessions inside a lane card are rows');
   // A session with no lane keeps its own v2 card, with no stripe.
-  const lone = grid.children.filter((c) => c.dataset.name);
+  const lone = grid.children.filter((c) => c.dataset.key);
   assert.equal(lone.length, s.sessions.filter((x) => !x.lane).length);
   assert.ok(lone.every((c) => !c.classList.contains('has-lane')));
   // Nothing is dropped: every session is on the board exactly once.
   assert.equal(sessionCards(grid).length, s.sessions.length);
 });
 
-test('a freshly launched lane shows 0/M, not nothing', () => {
+test('a freshly launched lane shows 0/M, not nothing', async () => {
   // v3: a lane whose plan has 3 stages and none finished yet.
-  const { byId, socket } = mount();
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = withLanes();
   s.lanes[1].progress = { n: null, m: 3, source: null, at: null };
@@ -525,8 +552,8 @@ test('a freshly launched lane shows 0/M, not nothing', () => {
   assert.match(byId.get('lane-rail').textContent, /bauplan.*0\/3/s);
 });
 
-test('a session with no repo gets no stripe rather than a grey one', () => {
-  const { byId, socket } = mount();
+test('a session with no repo gets no stripe rather than a grey one', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = structuredClone(snapshot);
   for (const x of s.sessions) x.lane = null;
@@ -539,10 +566,10 @@ test('a session with no repo gets no stripe rather than a grey one', () => {
   }
 });
 
-test('filtering to a lane hides the others and keeps the very same card nodes', () => {
+test('filtering to a lane hides the others and keeps the very same card nodes', async () => {
   // Clearing the filter must restore the board with the SAME cards, not
   // re-created ones: a rebuilt card loses its open menu and its observer.
-  const { byId, socket } = mount();
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = withLanes();
   send(socket, { type: 'snapshot', ...s });
@@ -556,7 +583,7 @@ test('filtering to a lane hides the others and keeps the very same card nodes', 
 
   for (const card of grid.children) {
     const want = card.dataset.lane === 'horizon-v1';
-    assert.equal(card.hidden, !want, `${card.dataset.lane || card.dataset.name} visibility`);
+    assert.equal(card.hidden, !want, `${card.dataset.lane || card.dataset.key} visibility`);
   }
   assert.equal(grid.children.length, before.length, 'no card was removed');
 
@@ -577,8 +604,8 @@ test('filtering to a lane hides the others and keeps the very same card nodes', 
   for (let i = 0; i < afterRows.length; i++) assert.ok(afterRows[i] === beforeRows[i], `row ${i} was rebuilt`);
 });
 
-test('a lane filter that matches nothing says so instead of looking broken', () => {
-  const { byId, socket } = mount();
+test('a lane filter that matches nothing says so instead of looking broken', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const s = withLanes();
   send(socket, { type: 'snapshot', ...s });
@@ -633,7 +660,7 @@ const morningPayload = {
 const settle = () => new Promise((r) => setImmediate(r));
 
 test('the morning view renders its three blocks from the API', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/morning', morningPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/morning', morningPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
 
@@ -654,7 +681,7 @@ test('a marker in Needs-you keeps its full text, never truncated to one line', (
 });
 
 test('the morning view shows the whole marker sentence and both blocks of data', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/morning', morningPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/morning', morningPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#morning');
@@ -677,7 +704,7 @@ test('the morning view shows the whole marker sentence and both blocks of data',
 });
 
 test('the window picker marks exactly one window active', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/morning', morningPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/morning', morningPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#morning');
@@ -689,7 +716,7 @@ test('the window picker marks exactly one window active', async () => {
 });
 
 test('a failed morning fetch says so instead of rendering a blank view', async () => {
-  const { byId, socket, go } = mount(); // no route primed -> the fetch rejects
+  const { byId, socket, go } = await mount(); // no route primed -> the fetch rejects
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#morning');
@@ -731,7 +758,7 @@ const creditPayload = {
 };
 
 test('the credit view draws both charts and the lane table', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/credit', creditPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/credit', creditPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#credit');
@@ -751,10 +778,10 @@ test('the credit view draws both charts and the lane table', async () => {
 test('the chart is inline SVG with no library and no animation', () => {
   // Hard rule 3: charts are hand-written. Hard rule: nothing animates but the
   // working dot.
-  const app = read2('app.js');
+  const app = readAppJs();
   assert.match(app, /createElementNS/, 'the chart is built as real SVG nodes');
   assert.ok(!/import .*chart|d3|chart\.js/i.test(app), 'no chart library may appear');
-  const css = read2('styles.css');
+  const css = readStyles();
   const chartRules = css.slice(css.indexOf('.chart-head'), css.indexOf('.dtable th.sorted'));
   assert.ok(!/animation|@keyframes|transition/.test(chartRules), 'charts must not animate');
 });
@@ -767,7 +794,7 @@ test('an ended-session row shows a dash, not a zero, for all time', () => {
 });
 
 test('the ended-session row really renders as a dash', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/credit', creditPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/credit', creditPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#credit');
@@ -778,7 +805,7 @@ test('the ended-session row really renders as a dash', async () => {
 });
 
 test('the sampler health is on screen, so a dead sampler is visible', async () => {
-  const { byId, socket, go } = mount({ responses: [['/api/credit', creditPayload]] });
+  const { byId, socket, go } = await mount({ responses: [['/api/credit', creditPayload]] });
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#credit');
@@ -788,8 +815,8 @@ test('the sampler health is on screen, so a dead sampler is visible', async () =
 
 // --- v3: the Box view, and where the old views land ---------------------------
 
-test('the box view shows the vitals from the snapshot, with no fetch of its own', () => {
-  const { byId, socket, go } = mount();
+test('the box view shows the vitals from the snapshot, with no fetch of its own', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   go('#box');
@@ -800,14 +827,14 @@ test('the box view shows the vitals from the snapshot, with no fetch of its own'
   assert.equal(errorText(byId), '');
 });
 
-test('a stale #machine or #files lands on the board', () => {
-  const { byId, socket, go } = mount();
+test('a stale #machine or #files lands on the map (the home view)', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot });
   for (const old of ['#machine', '#files']) {
     go('#credit');
     go(old);
-    assert.equal(byId.get('view-board').hidden, false, `${old} should land on the board`);
+    assert.equal(byId.get('view-map').hidden, false, `${old} should land on the map`);
   }
   assert.equal(errorText(byId), '');
 });
@@ -831,8 +858,8 @@ function bigSnapshot(n) {
   return { ...snapshot, sessions, lanes };
 }
 
-test('twenty cards render, with their lanes, and nothing is dropped', () => {
-  const { byId, socket } = mount();
+test('twenty cards render, with their lanes, and nothing is dropped', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...bigSnapshot(20) });
 
@@ -842,23 +869,23 @@ test('twenty cards render, with their lanes, and nothing is dropped', () => {
   assert.ok(byId.get('lane-rail').textContent.includes('lane-0'));
 });
 
-test('the render path does not degrade superlinearly with card count', () => {
+test('the render path does not degrade superlinearly with card count', async () => {
   // The real 16 ms budget can only be measured in a browser — this harness has
   // a far cheaper DOM and would flatter the number, which the v1 handoff says
   // too. What CAN be caught here is the thing the budget actually protects
   // against: an accidental O(n^2) in renderGrid, where every card touches every
   // other. Ten times the cards must not cost anywhere near a hundred times.
-  const time = (n) => {
-    const { socket } = mount();
+  const time = async (n) => {
+    const { socket } = await mount();
     socket.emit('open', {});
     const snap = bigSnapshot(n);
     const t0 = process.hrtime.bigint();
     send(socket, { type: 'snapshot', ...snap });
     return Number(process.hrtime.bigint() - t0) / 1e6;
   };
-  time(5); // warm the JIT so the first measured run is not the slow one
-  const small = Math.max(time(5), 0.05);
-  const large = time(50);
+  await time(5); // warm the JIT so the first measured run is not the slow one
+  const small = Math.max(await time(5), 0.05);
+  const large = await time(50);
   assert.ok(large / small < 40, `50 cards cost ${(large / small).toFixed(1)}x of 5 — looks superlinear`);
 });
 
@@ -920,8 +947,8 @@ function laneCard(byId, id) {
   return byId.get('grid').children.find((c) => c.dataset.lane === id);
 }
 
-test('a lane card in every PR state: none, draft+pending, red, green, merged', () => {
-  const { byId, socket } = mount();
+test('a lane card in every PR state: none, draft+pending, red, green, merged', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...v3Snapshot([
     { id: 'no-pr' }, { id: 'drafty', pr: PR.draft }, { id: 'reddy', pr: PR.red }, { id: 'greeny', pr: PR.green }, { id: 'mergy', pr: PR.merged },
@@ -951,18 +978,18 @@ test('a lane card in every PR state: none, draft+pending, red, green, merged', (
   assert.match(laneCard(byId, 'no-pr').textContent, /\$3\.21\/5h/, 'the lane\'s 5 h burn');
 });
 
-test('lane cards sort by the most urgent session inside; lone sessions sort among them', () => {
-  const { byId, socket } = mount();
+test('lane cards sort by the most urgent session inside; lone sessions sort among them', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const snap = v3Snapshot([{ id: 'calm', state: 'done' }, { id: 'asking', state: 'waiting_permission' }], { extraSessions: 1 });
   snap.sessions.find((x) => x.name === 'lone-0').state = 'working';
   send(socket, { type: 'snapshot', ...snap });
-  const order = byId.get('grid').children.map((c) => c.dataset.lane || c.dataset.name);
-  assert.deepEqual(order, ['asking', 'lone-0', 'calm']);
+  const order = byId.get('grid').children.map((c) => c.dataset.lane || c.dataset.key);
+  assert.deepEqual(order, ['asking', key('lone-0'), 'calm']);
 });
 
-test('danger goes first, even ahead of a permission prompt', () => {
-  const { byId, socket } = mount();
+test('danger goes first, even ahead of a permission prompt', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   const snap = v3Snapshot([{ id: 'asking', state: 'waiting_permission' },
     { id: 'risky', state: 'done', danger: { reason: 'DATABASE_ADMIN_URL points at :5432, the dev stack' } }]);
@@ -978,8 +1005,8 @@ test('danger goes first, even ahead of a permission prompt', () => {
   assert.ok(first.classList.contains('s-danger'), 'the attention list marks it');
 });
 
-test('a lane with nothing live shows its retire readiness, and never a retire button', () => {
-  const { byId, socket } = mount();
+test('a lane with nothing live shows its retire readiness, and never a retire button', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...v3Snapshot([
     { id: 'finished', sessions: 0, pr: PR.merged, readiness: { ready: true, reasons: ['no live session', 'worktree clean', 'PR merged'], blockers: [] } },
@@ -991,8 +1018,8 @@ test('a lane with nothing live shows its retire readiness, and never a retire bu
   assert.ok(!buttons.some((b) => /retire/i.test(b.textContent)), 'retiring is a human act elsewhere');
 });
 
-test('the empty board says what to do', () => {
-  const { byId, socket } = mount();
+test('the empty board says what to do', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...snapshot, sessions: [], lanes: [], attention: [], box: null });
   assert.equal(errorText(byId), '');
@@ -1001,8 +1028,8 @@ test('the empty board says what to do', () => {
   assert.match(byId.get('grid-empty').textContent, /Launch/);
 });
 
-test('the Box shows the guard, the CI queue and the slots', () => {
-  const { byId, socket, go } = mount();
+test('the Box shows the guard, the CI queue and the slots', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...v3Snapshot([{ id: 'a' }]) });
   go('#box');
@@ -1016,41 +1043,41 @@ test('the Box shows the guard, the CI queue and the slots', () => {
   assert.equal(errorText(byId), '');
 });
 
-test('on the 49" the Box is rail blocks; elsewhere the rail box stays hidden', () => {
-  const narrow = mount();
+test('on the 49" the Box is rail blocks; elsewhere the rail box stays hidden', async () => {
+  const narrow = await mount();
   narrow.socket.emit('open', {});
   send(narrow.socket, { type: 'snapshot', ...v3Snapshot([{ id: 'a' }]) });
   assert.equal(narrow.byId.get('rail-box').hidden, true);
 
-  const wide = mount({ wide: true });
+  const wide = await mount({ wide: true });
   wide.socket.emit('open', {});
   send(wide.socket, { type: 'snapshot', ...v3Snapshot([{ id: 'a' }]) });
   assert.equal(wide.byId.get('rail-box').hidden, false);
   assert.match(wide.byId.get('rail-box').textContent, /Guard.*CI queue.*Agent slots/s);
-  const css = read2('styles.css');
+  const css = readStyles();
   assert.match(css, /@media \(min-width: 2000px\)\s*\{\s*\.view-tab\[data-view="box"\] \{ display: none; \}/, 'the tab hides on the 49"');
 });
 
-test('phone: lane cards are one column, rows keep Yes/No, the launch form will not zoom', () => {
-  const { byId, socket } = mount();
+test('phone: lane cards are one column, rows keep Yes/No, the launch form will not zoom', async () => {
+  const { byId, socket } = await mount();
   socket.emit('open', {});
   send(socket, { type: 'snapshot', ...v3Snapshot([{ id: 'asking', state: 'waiting_permission' }]) });
   const row = laneCard(byId, 'asking').querySelectorAll('card-row')[0];
   assert.ok(row, 'the session is a row inside its lane card');
   const labels = row.querySelectorAll('btn').map((b) => b.textContent);
   assert.ok(labels.includes('Yes') && labels.includes('No'), `Yes/No survive inside a lane card (${labels})`);
-  const css = read2('styles.css');
+  const css = readStyles();
   assert.match(css, /\.grid \{ display: grid; grid-template-columns: 1fr;/, 'one column below 700px');
   const phone = css.slice(css.lastIndexOf('@media (max-width: 699px)'));
   assert.match(phone, /\.launch-form input, \.launch-form select \{ font-size: 16px; \}/);
 });
 
-test('the render budget of v2 holds with 3 lanes and 6 sessions', () => {
+test('the render budget of v2 holds with 3 lanes and 6 sessions', async () => {
   // Same proxy as the 20-card test above: a real browser is the only honest
   // 16 ms measurement, but a lane card must not turn a render into something
   // that scales with anything but its own rows.
-  const time = (snap) => {
-    const { socket } = mount();
+  const time = async (snap) => {
+    const { socket } = await mount();
     socket.emit('open', {});
     const t0 = process.hrtime.bigint();
     send(socket, { type: 'snapshot', ...snap });
@@ -1058,13 +1085,13 @@ test('the render budget of v2 holds with 3 lanes and 6 sessions', () => {
     return Number(process.hrtime.bigint() - t0) / 1e6;
   };
   const three = v3Snapshot([{ id: 'a', sessions: 2 }, { id: 'b', sessions: 2 }, { id: 'c', sessions: 2 }]);
-  time(three);
-  const ms = time(three);
+  await time(three);
+  const ms = await time(three);
   assert.ok(ms < 50, `a snapshot and ten deltas took ${ms.toFixed(1)} ms in the harness`);
 });
 
 test('the launch sheet posts the form and shows the refusal in the server\'s words', async () => {
-  const { byId, sandbox } = mount();
+  const { byId, sandbox, ns } = await mount();
   let posted = null;
   sandbox.fetch = (url, opts) => {
     posted = { url, body: JSON.parse(opts.body) };
@@ -1072,7 +1099,7 @@ test('the launch sheet posts the form and shows the refusal in the server\'s wor
   };
   byId.get('lf-lane').value = 'bauplan';
   byId.get('lf-model').value = 'opus';
-  await sandbox.submitLaunch({ preventDefault() {} });
+  await ns('ui/launch.js').submitLaunch({ preventDefault() {} });
   assert.equal(posted.url, '/api/lanes');
   // Empty fields are left out, so the server's defaults (example-repo, feat/<lane>) apply.
   assert.deepEqual(posted.body, { lane: 'bauplan', plan: 'docs/plans/bauplan.md', model: 'opus' });
@@ -1080,7 +1107,7 @@ test('the launch sheet posts the form and shows the refusal in the server\'s wor
 });
 
 test('the mission-control skin kept every panel flat', () => {
-  const css = read2('styles.css');
+  const css = readStyles();
   // Panels get no drop shadow; only things that genuinely float keep one.
   const cardRule = /\.card \{([\s\S]*?)\}/.exec(css);
   assert.ok(cardRule, '.card rule must exist');
@@ -1093,10 +1120,10 @@ test('the mission-control skin kept every panel flat', () => {
 test('the accent is spent only on focus and pins', () => {
   // State colour is the only colour that carries meaning. The model name used
   // to take the accent, which left nothing to notice a pin with.
-  const css = read2('styles.css');
+  const css = readStyles();
   const accentUsers = [...css.matchAll(/([^{}]+)\{[^{}]*var\(--accent(?!-)\)/g)]
     .map((m) => m[1].trim().split(/\s+/).pop())
-    // :root DEFINES the token (and its aliases); it does not spend it.
+    // :root DEFINES the token; it does not spend it.
     .filter((sel) => (sel.startsWith('.') || sel.startsWith(':')) && sel !== ':root');
   for (const sel of accentUsers) {
     assert.ok(
@@ -1111,20 +1138,20 @@ test('the accent is spent only on focus and pins', () => {
 
 test('the phone keeps readable type and 16px inputs', () => {
   // Dense is a desktop idea; iOS zooms the page for any input under 16px.
-  const css = read2('styles.css');
+  const css = readStyles();
   const phone = css.slice(css.indexOf('@media (max-width: 699px)'));
   assert.match(phone, /html, body \{ font-size: 15px; \}/);
   assert.match(css, /font-size: 16px; \/\* 16px stops iOS zooming/);
 });
 
 test('the terminal stays opaque and legible', () => {
-  const term = read2('terminal.js');
+  const term = read2('js/ui/terminal.js');
   assert.match(term, /minimumContrastRatio: 4\.5/);
   assert.ok(!/allowTransparency:\s*true/.test(term), 'a transparent xterm costs performance');
 });
 
-test('with every provider off the Box says so instead of showing empty blocks', () => {
-  const { byId, socket, go } = mount();
+test('with every provider off the Box says so instead of showing empty blocks', async () => {
+  const { byId, socket, go } = await mount();
   socket.emit('open', {});
   const s = v3Snapshot([{ id: 'a' }]);
   s.box.guard = { provider: 'none', health: [], containers: [], ok: true, preventive: [], detective: [], ssOk: true, ports: [] };

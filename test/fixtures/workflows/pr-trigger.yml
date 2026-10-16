@@ -1,0 +1,7 @@
+name: Review helpers
+on: pull_request
+jobs:
+  size-label:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo label

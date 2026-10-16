@@ -1,0 +1,72 @@
+# A "changes" gate job decides which checks matter: note: colons in comments are fine.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      web: ${{ steps.filter.outputs.web }}
+      web_admin: ${{ steps.filter.outputs.web_admin }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**/*.py'
+              - 'pyproject.toml'
+            web:
+              - 'web/**'
+            web_admin:
+              - 'web-admin/**'
+
+  web-check:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        if: needs.changes.outputs.web == 'true'
+        run: npm ci
+      - name: Typecheck
+        if: needs.changes.outputs.web == 'true'
+        run: npm run typecheck
+
+  web-admin-check:
+    needs: [changes]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Typecheck
+        if: ${{ needs.changes.outputs.web_admin == 'true' }}
+        run: npm run typecheck   # runs in the admin app
+
+  lint-and-test:
+    name: lint-and-test
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 'Lint #1'
+        if: needs.changes.outputs.code == 'true'
+        run: echo "lint: ok"
+      - name: Test
+        if: >-
+          needs.changes.outputs.code == 'true' &&
+          github.event_name != 'schedule'
+        run: |
+          pytest -q   # not a yaml comment, part of the script
+          echo done
+
+  promote:
+    needs: [lint-and-test, web-check]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo promote

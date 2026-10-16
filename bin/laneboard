@@ -15,8 +15,22 @@
 //   laneboard launch <lane> --plan docs/plans/<lane>.md [--repo r] [--branch b]
 //                  [--model m] [--permission-mode p] [--no-wait]
 //   laneboard retire <lane> [--force [--confirm <lane>]]
+//   laneboard fleet keygen [--out <file>] [--force]   offline: write the hub key
+//   laneboard fleet pubkey [--key <file>] [--pem]     offline: its public key for fleet.hubKeys
+//   laneboard audit [-n 50] [--since 1h] [--file f] [--json]   offline: tail the audit log
+//   laneboard audit verify [--file f]                 offline: check the hash chain
+//   laneboard pause <name|--all> [--reason r]          offline: write a pause sentinel
+//   laneboard resume <name|--all>                      offline: lift an operator pause
+//   laneboard paused [--json]                          offline: list the pause sentinels
+//
+// Every string that came from a server (or an audit file) passes cleanTerm()
+// before it is printed, so a session name cannot carry terminal escapes
+// (OSC 52 clipboard writes, cursor moves) to the user's terminal.
 //
 // Exit codes: 0 ok, 1 error, 2 usage.
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import readline from 'node:readline';
 
@@ -50,6 +64,33 @@ function takeBool(name) {
   return true;
 }
 
+// ---------------------------------------------------------------- terminal safety
+
+// C0 except tab (so ESC, BEL, CR, LF, BS), DEL, and C1 (incl. the 8-bit CSI/OSC introducers).
+// eslint-disable-next-line no-control-regex
+const TERM_UNSAFE = /[\u0000-\u0008\u000a-\u001f\u007f-\u009f]/g;
+
+/** Strip characters a terminal would interpret from a string we did not write ourselves. */
+function cleanTerm(s) {
+  return String(s ?? '').replace(TERM_UNSAFE, '');
+}
+
+/** cleanTerm every string (keys included) of parsed JSON. */
+function cleanDeep(v) {
+  if (typeof v === 'string') return cleanTerm(v);
+  if (Array.isArray(v)) return v.map(cleanDeep);
+  if (v && typeof v === 'object') {
+    const out = {};
+    for (const [k, x] of Object.entries(v)) {
+      const ck = cleanTerm(k);
+      if (ck === '__proto__') continue;
+      out[ck] = cleanDeep(x);
+    }
+    return out;
+  }
+  return v;
+}
+
 // ---------------------------------------------------------------- http
 
 async function api(path, { method = 'GET', body } = {}) {
@@ -57,7 +98,8 @@ async function api(path, { method = 'GET', body } = {}) {
   try {
     res = await fetch(`${BASE}${path}`, {
       method,
-      headers: body ? { 'content-type': 'application/json' } : undefined,
+      // `X-Laneboard: 1` is the server's CSRF barrier on every mutating route.
+      headers: body ? { 'content-type': 'application/json', 'x-laneboard': '1' } : { 'x-laneboard': '1' },
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch (err) {
@@ -68,12 +110,15 @@ async function api(path, { method = 'GET', body } = {}) {
   const text = await res.text();
   let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  // Server text is untrusted for the terminal: clean every string once, here.
+  data = cleanDeep(data);
   if (!res.ok) die(data.error || `HTTP ${res.status}`);
   return data;
 }
 
 function die(msg, code = 1) {
-  process.stderr.write(`laneboard: ${msg}\n`);
+  // Keep our own line breaks, clean everything else (messages may quote server or file text).
+  process.stderr.write(`laneboard: ${String(msg).split('\n').map(cleanTerm).join('\n')}\n`);
   process.exit(code);
 }
 
@@ -422,6 +467,306 @@ async function cmdDirs() {
   process.stdout.write(`${table(dirs.map((d) => [d.name, d.branch || '-', d.dir]), ['NAME', 'BRANCH', 'PATH'])}\n`);
 }
 
+// ---------------------------------------------------------------- offline: fleet keys, audit log
+// These never talk to a server and never import server/config.mjs. Private key
+// material is never printed or logged; errors name files, not contents.
+
+const fleetKeys = () => import('../server/fleet/keys-ed25519.mjs');
+const fleetPaths = () => import('../server/fleet/paths.mjs');
+const fleetAudit = () => import('../server/fleet/audit.mjs');
+
+function fail(err) {
+  die(err?.message || String(err));
+}
+
+async function cmdFleet() {
+  const sub = argv.shift();
+  if (sub === 'keygen') return fleetKeygen();
+  if (sub === 'pubkey') return fleetPubkey();
+  die('usage: laneboard fleet keygen [--out <file>] [--force] | laneboard fleet pubkey [--key <file>] [--pem]', 2);
+}
+
+async function fleetKeygen() {
+  const out = takeFlag('--out');
+  const force = takeBool('--force');
+  if (argv.length) die(`unexpected argument: ${argv[0]}`, 2);
+  const keys = await fleetKeys();
+  let file;
+  try {
+    file = path.resolve(out ?? (await fleetPaths()).hubKeyFile());
+  } catch (err) { return fail(err); }
+  let exists = false;
+  try { fs.lstatSync(file); exists = true; } catch (err) { if (err.code !== 'ENOENT') return fail(err); }
+  if (exists && !force) die(`${file} already exists; refusing to overwrite it (use --force to replace it)`);
+  let gen;
+  try {
+    if (!exists) {
+      gen = keys.generateHubKey({ file });
+    } else {
+      // --force: write a fresh 0600 file next to it, then rename over the old one (atomic).
+      const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+      gen = keys.generateHubKey({ file: tmp });
+      try {
+        fs.renameSync(tmp, file);
+      } catch (err) {
+        try { fs.unlinkSync(tmp); } catch { /* best effort */ }
+        throw err;
+      }
+    }
+  } catch (err) {
+    if (err?.code === 'EEXIST') die(`${file} already exists; refusing to overwrite it (use --force to replace it)`);
+    return fail(err);
+  }
+  process.stdout.write(
+    `wrote ${cleanTerm(file)} (mode 0600)\n` +
+    `public key: ${keys.publicKeyString(gen.publicKey)}\n` +
+    `keyId: ${keys.keyId(gen.publicKey)}\n` +
+    'Pin the public key on each builder in fleet.hubKeys (laneboard fleet pubkey [--pem] prints it again).\n'
+  );
+}
+
+async function fleetPubkey() {
+  const keyFile = takeFlag('--key');
+  const pem = takeBool('--pem');
+  if (argv.length) die(`unexpected argument: ${argv[0]}`, 2);
+  const keys = await fleetKeys();
+  let priv;
+  let file;
+  try {
+    file = path.resolve(keyFile ?? (await fleetPaths()).hubKeyFile());
+    priv = keys.loadPrivateKey(file);
+  } catch (err) {
+    if (err?.code === 'ENOENT') die(`no hub key at ${file}; create one with: laneboard fleet keygen`);
+    return fail(err);
+  }
+  // stdout carries only the public key (pipe-friendly); the keyId goes to stderr.
+  process.stdout.write(pem ? keys.publicKeyPem(priv) : `${keys.publicKeyString(priv)}\n`);
+  process.stderr.write(`keyId: ${keys.keyId(priv)}\n`);
+}
+
+async function auditFilePath(file) {
+  try {
+    return path.resolve(file ?? (await fleetPaths()).auditFile());
+  } catch (err) { return fail(err); }
+}
+
+/** `30s`, `15m`, `1h`, `2d`, `1w` → milliseconds; null when malformed. */
+function parseDuration(s) {
+  const m = /^(\d{1,9})(s|m|h|d|w)$/.exec(String(s));
+  if (!m) return null;
+  return Number(m[1]) * { s: 1e3, m: 60e3, h: 3600e3, d: 86400e3, w: 7 * 86400e3 }[m[2]];
+}
+
+async function cmdAudit() {
+  if (argv[0] === 'verify') {
+    argv.shift();
+    return auditVerify();
+  }
+  const n = Number(takeFlag('-n', '50'));
+  const since = takeFlag('--since');
+  const json = takeBool('--json');
+  const file = await auditFilePath(takeFlag('--file'));
+  if (argv.length) die(`unexpected argument: ${argv[0]}`, 2);
+  if (!Number.isInteger(n) || n < 1) die('-n must be a positive integer', 2);
+  let sinceMs = -Infinity;
+  if (since !== null) {
+    const d = parseDuration(since);
+    if (d === null) die('--since takes a duration like 30m, 1h, 2d', 2);
+    sinceMs = Date.now() - d;
+  }
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') die(`no audit log at ${file}`);
+    return fail(err);
+  }
+  const entries = [];
+  for (const line of text.split('\n')) {
+    if (!line) continue;
+    let e;
+    try { e = JSON.parse(line); } catch { continue; } // torn line: `audit verify` reports it
+    if (!e || typeof e !== 'object' || Array.isArray(e)) continue;
+    if (typeof e.ts === 'number' && e.ts < sinceMs) continue;
+    entries.push(e);
+  }
+  const tail = entries.slice(-n);
+  if (json) {
+    // JSON.stringify escapes every control character, so this is terminal-safe as is.
+    for (const e of tail) process.stdout.write(`${JSON.stringify(e)}\n`);
+    return;
+  }
+  const s = (v) => (v === undefined || v === null || v === '' ? '-' : cleanTerm(v));
+  const rows = tail.map((e) => [
+    typeof e.ts === 'number' ? new Date(e.ts).toISOString().replace('T', ' ').slice(0, 19) : '-',
+    s(e.user),
+    s(e.via),
+    s(e.action),
+    s(e.target).slice(0, 60),
+    e.result?.ok === true ? `${C.green}ok${C.off}` : `${C.red}${s(e.result?.status ?? 'fail')}${C.off}`,
+  ]);
+  process.stdout.write(`${table(rows, ['TS', 'USER', 'VIA', 'ACTION', 'TARGET', 'OK'])}\n`);
+}
+
+async function auditVerify() {
+  const file = await auditFilePath(takeFlag('--file'));
+  if (argv.length) die(`unexpected argument: ${argv[0]}`, 2);
+  if (!fs.existsSync(file)) die(`no audit log at ${file}`);
+  let r;
+  try {
+    r = (await fleetAudit()).verifyChain(file);
+  } catch (err) { return fail(err); }
+  for (const w of r.warnings ?? []) {
+    process.stderr.write(`warning: ${cleanTerm(w.file)}:${w.line}: ${cleanTerm(w.reason)}\n`);
+  }
+  if (!r.ok) {
+    const b = r.firstBad ?? {};
+    die(`audit verify failed: ${b.file ?? file}:${b.line ?? '?'}: ${b.reason ?? 'unknown'} (${r.count} entries verified before it)`);
+  }
+  process.stdout.write(`ok ${r.count} entries, head ${String(r.head).slice(0, 8)}\n`);
+}
+
+// ---------------------------------------------------------------- offline: pause sentinels
+// `pause`/`resume`/`paused` write and read the sentinels under the state dir
+// directly (server/control/pause.mjs), so pausing works with the server down.
+// The state dir is resolved exactly as the server resolves config.stateDir:
+// $LANEBOARD_STATE_DIR (a relative value against the cwd), else `stateDir`
+// from the config file ($LANEBOARD_CONFIG, else ~/.config/laneboard/config.json;
+// must be absolute or start with ~/), else paths.stateDir() ($XDG_STATE_HOME/
+// laneboard, else ~/.local/state/laneboard). It is always passed explicitly:
+// pause.mjs defaultStateDir() ignores $XDG_STATE_HOME.
+//
+// `resume` lifts only operator pauses. Budget and quota pauses are remote-only
+// (S7): they are lifted from the UI. That is a convention, not a boundary; the
+// files are writable by this uid.
+
+const pauseMod = () => import('../server/control/pause.mjs');
+const REMOTE_ONLY_HINT = 'budget/quota pauses are lifted from the UI (remote-only)';
+
+/** The config file's own `stateDir` value, or undefined. Mirrors config.mjs loadFile(). */
+function configFileStateDir(env) {
+  const file = env.LANEBOARD_CONFIG || path.join(os.homedir(), '.config', 'laneboard', 'config.json');
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err?.code === 'ENOENT') return { file, layer: {} };
+    die(`cannot read the config file ${file}: ${err?.message || err}\n(set LANEBOARD_STATE_DIR to pause without it)`);
+  }
+  if (!text.trim()) return { file, layer: {} };
+  let parsed;
+  try { parsed = JSON.parse(text); } catch (err) {
+    die(`${file}: not valid JSON — ${err?.message || err}\n(set LANEBOARD_STATE_DIR to pause without it)`);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    die(`${file}: the config must be a JSON object\n(set LANEBOARD_STATE_DIR to pause without it)`);
+  }
+  return { file, layer: Object.hasOwn(parsed, 'stateDir') ? { stateDir: parsed.stateDir } : {} };
+}
+
+async function resolveStateDir(env = process.env) {
+  const control = await import('../server/config/control.mjs');
+  const paths = await fleetPaths();
+  const envLayer = control.fromEnv(env);
+  let fileLayer = {};
+  let file = 'LANEBOARD_STATE_DIR';
+  if (envLayer.stateDir === undefined) ({ file, layer: fileLayer } = configFileStateDir(env));
+  let stateDir;
+  try {
+    stateDir = envLayer.stateDir ?? fileLayer.stateDir ?? paths.stateDir({ env });
+  } catch (err) { return fail(err); }
+  const c = control.finalize({ stateDir }, { env: envLayer, file: fileLayer });
+  const v = c.stateDir;
+  if (typeof v !== 'string' || v === '' || !path.isAbsolute(v) || v.includes('\0')) {
+    die(`${file}: stateDir must be an absolute path (or start with ~/), got ${JSON.stringify(v) ?? String(v)}`);
+  }
+  return v;
+}
+
+/** `<name>`, `ALL` or `--all` → a pause scope; exits 2 on anything else. */
+async function takeScope(usage) {
+  const all = takeBool('--all');
+  const reason = takeFlag('--reason');
+  const name = argv.shift();
+  if (argv.length) die(`unexpected argument: ${cleanTerm(argv[0])}`, 2);
+  if (all && name) die(usage, 2);
+  const scope = all ? 'ALL' : name;
+  if (!scope) die(usage, 2);
+  const { isValidScope } = await pauseMod();
+  if (!isValidScope(scope)) die(`not a session name: ${JSON.stringify(cleanTerm(scope))}`, 2);
+  return { scope, reason };
+}
+
+const scopeLabel = (scope) => (scope === 'ALL' ? 'every session (ALL)' : cleanTerm(scope));
+
+async function cmdPause() {
+  const { scope, reason } = await takeScope('usage: laneboard pause <name|--all> [--reason "text"]');
+  const stateDir = await resolveStateDir();
+  const pm = await pauseMod();
+  let r;
+  try {
+    r = pm.pause(scope, { kind: 'operator', by: 'cli', reason }, { stateDir });
+  } catch (err) { return fail(err); }
+  if (r.kept) {
+    process.stdout.write(`${scopeLabel(scope)} is already paused (kind ${r.kind}); kept\n`);
+    return;
+  }
+  process.stdout.write(`paused ${scopeLabel(scope)}  ${C.dim}${cleanTerm(r.file)}${C.off}\n`);
+}
+
+async function cmdResume() {
+  const { scope } = await takeScope('usage: laneboard resume <name|--all>');
+  const stateDir = await resolveStateDir();
+  const pm = await pauseMod();
+  let r;
+  try {
+    r = pm.resume(scope, { kinds: ['operator'] }, { stateDir });
+  } catch (err) { return fail(err); }
+  for (const k of r.kept) {
+    process.stderr.write(`laneboard: ${scopeLabel(k.scope)} stays paused (kind ${k.kind}): ${REMOTE_ONLY_HINT}\n`);
+  }
+  if (r.kept.length) {
+    process.exitCode = 1;
+    return;
+  }
+  if (r.removed.length) process.stdout.write(`resumed ${scopeLabel(scope)}\n`);
+  else process.stdout.write(`${scopeLabel(scope)} was not paused\n`);
+  if (scope !== 'ALL') {
+    const all = pm.kindOf('ALL', { stateDir });
+    if (all) process.stdout.write(`note: the builder-wide pause (ALL, kind ${all}) still holds every session\n`);
+  }
+}
+
+async function cmdPaused() {
+  const json = takeBool('--json');
+  if (argv.length) die(`unexpected argument: ${cleanTerm(argv[0])}`, 2);
+  const stateDir = await resolveStateDir();
+  const pm = await pauseMod();
+  let entries;
+  try {
+    entries = pm.list({ stateDir });
+  } catch (err) { return fail(err); }
+  if (json) {
+    // JSON.stringify escapes C0 but not DEL or C1 (U+0080..U+009F, incl. the
+    // 8-bit CSI/OSC introducers): escape those too, so the output stays valid
+    // JSON and terminal-safe.
+    const out = JSON.stringify({ stateDir, paused: entries })
+      .replace(/[\u007f-\u009f]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+    process.stdout.write(`${out}\n`);
+    return;
+  }
+  const s = (v) => (v === undefined || v === null || v === '' ? '-' : cleanTerm(v));
+  const rows = entries.map((e) => [
+    s(e.scope),
+    e.kind === 'operator' ? e.kind : `${C.amber}${e.kind}${C.off}`,
+    s(e.by),
+    ago(e.at),
+    s(e.reason).replace(/\s+/g, ' ').slice(0, 60),
+  ]);
+  process.stdout.write(`${table(rows, ['SCOPE', 'KIND', 'BY', 'SINCE', 'REASON'])}\n`);
+  if (entries.some((e) => e.kind !== 'operator')) process.stdout.write(`${C.dim}${REMOTE_ONLY_HINT}${C.off}\n`);
+}
+
 function usage() {
   process.stdout.write(`laneboard — control the Claude sessions and lanes on this box
 
@@ -444,6 +789,19 @@ function usage() {
   laneboard restart <name>
   laneboard kill <name>
 
+Offline (no server needed):
+  laneboard fleet keygen [--out <file>] [--force]
+                                      new hub key (PEM PKCS8 Ed25519, 0600)
+  laneboard fleet pubkey [--key <file>] [--pem]
+                                      its public key, for builders' fleet.hubKeys
+  laneboard audit [-n 50] [--since 1h] [--file f] [--json]
+                                      tail the local audit log
+  laneboard audit verify [--file f]     check the audit hash chain
+  laneboard pause <name|--all> [--reason "text"]
+                                      pause one session or all (writes the sentinel)
+  laneboard resume <name|--all>         lift an operator pause (budget/quota: from the UI)
+  laneboard paused [--json]             list the pauses
+
 Server: ${BASE}   (override with LANEBOARD_URL)
 `);
 }
@@ -453,6 +811,8 @@ const COMMANDS = {
   events: cmdEvents, cost: cmdCost, spawn: cmdSpawn, kill: cmdKill,
   restart: cmdRestart, dirs: cmdDirs, morning: cmdMorning, credit: cmdCredit,
   launch: cmdLaunch, job: cmdJob, retire: cmdRetire,
+  fleet: cmdFleet, audit: cmdAudit,
+  pause: cmdPause, resume: cmdResume, paused: cmdPaused,
 };
 
 if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') {

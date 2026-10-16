@@ -1,0 +1,149 @@
+/* ===================== the data views ==================================== */
+/*
+   Morning, Credit, Machine and Files share these: a heading row with an
+   optional window picker, blocks of rows, and one table style. Nothing here is
+   view-specific — that is what lets Stage 7 restyle five views through tokens
+   rather than five stylesheets (hard rule 9).
+*/
+.view-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.view-head .rail-h { margin: 0; }
+.view-since { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); margin-left: auto; }
+
+.window-picker { display: flex; gap: 2px; }
+.window-picker button {
+  font: inherit;
+  font-size: 11.5px;
+  padding: 3px 10px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s);
+  color: var(--text-3);
+}
+.window-picker button:hover { color: var(--text-1); background: oklch(100% 0 0 / 0.05); }
+.window-picker button.on { color: var(--text-1); background: oklch(100% 0 0 / 0.07); border-color: var(--border-weak); }
+
+.mblock { margin-bottom: 20px; }
+.mblock > .rail-h { margin-bottom: 9px; }
+
+.mrow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 7px 10px 7px 0;
+  border-bottom: 1px solid var(--border-weak);
+}
+.mrow:last-child { border-bottom: 0; }
+.row-stripe {
+  width: 3px;
+  align-self: stretch;
+  flex: none;
+  border-radius: 2px;
+  background: oklch(70% 0.14 var(--lane-hue, 0));
+}
+.row-stripe.no-lane { background: transparent; }
+.mrow-main { flex: 1; min-width: 0; }
+.mrow-top { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.mrow-name { font-size: 13px; font-weight: 600; }
+.mrow-kind {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: oklch(100% 0 0 / 0.07);
+  color: var(--text-3);
+}
+.need-need .mrow-kind, .need-waiting_permission .mrow-kind { color: var(--crit); background: oklch(70% 0.2 12 / 0.15); }
+.need-blocked .mrow-kind, .need-limit .mrow-kind,
+.need-waiting_question .mrow-kind { color: var(--warn); background: oklch(80% 0.15 78 / 0.15); }
+.mrow-lane, .mrow-branch, .mrow-stage, .mrow-age {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.mrow-stage { color: var(--text-2); }
+/* Full text, wrapped: the Morning view is the one place a lane's whole
+   sentence is worth reading, so nothing here is clipped to a single line. */
+.mrow-text {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+.mrow-done { color: var(--ok); }
+.mrow-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); margin-top: 3px; }
+.mrow-acts { display: flex; gap: 6px; flex: none; align-items: center; }
+
+/* One table style for Morning, Credit, Machine and Filings. */
+.dtable { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dtable th {
+  text-align: left;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.085em;
+  font-weight: 600;
+  color: var(--text-3);
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg-canvas);
+  z-index: 1;
+}
+.dtable td { padding: 4px 10px 4px 0; border-bottom: 1px solid var(--border-weak); vertical-align: baseline; }
+.dtable tbody tr:hover td { background: oklch(100% 0 0 / 0.03); }
+.dtable .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.dtable .dim { color: var(--text-3); font-family: var(--font-mono); font-size: 11px; }
+.dtable td:first-child { display: flex; gap: 8px; align-items: center; }
+.dtable tfoot td { border-bottom: 0; border-top: 1px solid var(--border); font-weight: 600; padding-top: 8px; }
+.dtable .row-stripe { height: 12px; align-self: center; }
+
+.morning-gauges { margin-top: 16px; max-width: 420px; }
+
+/* The tables are the one thing that can outgrow a phone; they scroll inside
+   their own box rather than making the page scroll sideways. */
+.view-body { overflow-x: auto; }
+
+/* ===================== charts ============================================ */
+/*
+   Hand-written inline SVG — no chart library (hard rule 3). Percent is a fixed
+   0-100 scale, so two charts are comparable by eye with no domain to compute,
+   and the bands say "how close to the wall" without needing a legend.
+   Every colour is a token; nothing here animates.
+*/
+.chart-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.chart-head .rail-h { margin: 0; }
+.chart-now {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--info);
+}
+.chart-now.warn { color: var(--warn); }
+.chart-now.hot { color: var(--crit); }
+.chart-reset, .chart-range { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.chart-range { margin-left: auto; }
+
+/* On a phone the chart scrolls inside its box at a readable size rather than
+   shrinking until the line is meaningless. */
+.chart-scroll { overflow-x: auto; max-width: 100%; }
+.chart { display: block; min-width: 560px; }
+
+.chart .band-warn { fill: oklch(80% 0.15 78 / 0.07); }
+.chart .band-crit { fill: oklch(70% 0.2 12 / 0.09); }
+.chart .axis { stroke: var(--border-weak); stroke-width: 1; }
+.chart .axis-label { fill: var(--text-3); font-family: var(--font-mono); font-size: 9.5px; }
+.chart .reset-tick { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
+.chart .series { fill: none; stroke: var(--info); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+/* Invisible until hovered: the point exists to carry a <title>, not to be seen. */
+.chart .point { fill: transparent; }
+.chart g:hover .point { fill: var(--info); r: 3; }
+
+.dtable th.sorted { color: var(--text-1); }
+.dtable th { cursor: pointer; user-select: none; }
+.dtable th:hover { color: var(--text-2); }
+

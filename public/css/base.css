@@ -1,0 +1,78 @@
+/* ===========================================================================
+   base: reset, [hidden], html/body type, focus, scrollbars (plan §4 2.2, D1)
+   ---------------------------------------------------------------------------
+   Only element defaults and the few cross-view utility rules the legacy
+   sheets rely on. No colour literals here: every value is a token.
+   =========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* The UA [hidden] rule has no specificity, so any class that sets `display`
+   beats it. This once left the terminal sheet covering the whole page. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg-canvas);
+  color: var(--text-1);
+  /* Data is mono; prose (assistant line, prompts) is mono at 12px too. */
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  line-height: var(--lh);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+  /* Every digit on this page is a measurement that updates live, so figures
+     must not change width between ticks, and a zero must not read as an O. */
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum", "zero";
+  /* Thin, flat scrollbars in the line colour (Firefox, and Chromium 121+). */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+h1, h2, h3 { margin: 0; font-weight: 600; }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* Focus is separate from selection (corner brackets): a 1px accent outline. */
+:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+::selection { background: var(--accent-weak); }
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  padding: 1px var(--sp-1);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+}
+
+.empty { color: var(--text-3); font-size: var(--fs-12); margin: 6px 0 0; }
+
+/* Micro label: the label face, uppercase, tracked. */
+.rail-h, .vital .k, .pill {
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+  font-weight: 600;
+}
+.rail-h { color: var(--text-3); }
+
+/* Every figure is mono and tabular, so a column of numbers lines up. Stated
+   on the metrics themselves too, so the intent survives a change to the root
+   rule. */
+.card-meta, .card-since, .stat, .count, .gauge-label b, .ctx-label, .vital .v,
+.gauge-compact, .attention-item .ago, .attention-item .idx, .chip .ago,
+.lane-n, .lane-stage, .lane-age, .mrow-age, .mrow-stage, .fcount, .fbytes,
+.dtable .num, .chart-now, .chart-reset, .chart-range, .term-status,
+.tool-line, .preview {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum", "zero";
+}

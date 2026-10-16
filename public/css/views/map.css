@@ -1,0 +1,217 @@
+/* ===========================================================================
+   The Map view (plan §5 2.5, fleet M3). Industrial: a flat --bg-canvas ground
+   with the --tex-dots grid, hairline borders, solid surfaces, no glass, no
+   shadows, no gradients of its own. Grey is normal; a status hue appears
+   only on something abnormal and always with its shape (drawn on the
+   canvas by views/map/render.js).
+
+   The map's HUD panels (the "needs you" list, the ticker, the legend and the
+   summary numbers) are gone: the §4 annunciator, inbox and tape replace
+   them. map-canvas.js still creates them until §5 M4 removes them, so they
+   are hidden here. The selected-node panel stays, restyled, until the §4
+   inspector takes over (M4/M5).
+   =========================================================================== */
+
+.map {
+  position: relative;
+  overflow: hidden;
+  background: var(--tex-dots), var(--bg-canvas);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.map-canvas { position: absolute; inset: 0; display: block; cursor: grab; touch-action: none; }
+.map-canvas:active { cursor: grabbing; }
+
+.map-hud { position: absolute; inset: 0; pointer-events: none; }
+.map-hud > * { pointer-events: auto; }
+
+/* ---- deleted HUD panels (still emitted by map-canvas.js until M4) */
+.map-needs,
+.map-ticker,
+.map-legend,
+.map-summary { display: none; }
+
+/* ---- top left: title plate and a topology problem */
+.map-head { position: absolute; top: var(--sp-4); left: var(--sp-4); pointer-events: none; }
+.map-title {
+  margin: 0;
+  font: 600 var(--fs-11)/1 var(--font-label);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.map-problem {
+  margin: var(--sp-2) 0 0;
+  max-width: 420px;
+  padding: 2px var(--sp-2);
+  border: var(--bw) solid var(--p2-line);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--text-1);
+  font: var(--fs-11) var(--font-mono);
+  pointer-events: auto;
+}
+.map-problem::before { content: "▲ "; color: var(--p2); }
+
+/* ---- top right: the readout corner. One line of instrument text:
+   `Z 1.80×  SCOPE B1  N 214/570  OVL CI  12:04:31Z` (index.js fills it). */
+.map-readout {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-4);
+  padding: 3px var(--sp-2);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-canvas);
+  color: var(--text-2);
+  font: var(--fs-11)/1.2 var(--font-mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum", "zero";
+  white-space: pre;
+  pointer-events: none;
+}
+.map-readout b { color: var(--text-1); font-weight: 600; }
+
+/* ---- below the readout: find + fit */
+.map-find { position: absolute; top: 44px; right: var(--sp-4); display: flex; gap: var(--sp-1); }
+.map-find-input {
+  width: 200px; height: 28px; padding: 0 var(--sp-2);
+  border: var(--bw) solid var(--line); border-radius: var(--radius);
+  background: var(--bg-surface); color: var(--text-1);
+  font: var(--fs-12) var(--font-mono);
+}
+.map-find-input::placeholder { color: var(--text-3); }
+.map-find-input:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.map-btn {
+  height: 28px; padding: 0 var(--sp-3);
+  border: var(--bw) solid var(--line); border-radius: var(--radius);
+  background: var(--bg-surface); color: var(--text-2);
+  font: 600 var(--fs-11) var(--font-label); letter-spacing: var(--ls-label); text-transform: uppercase;
+  cursor: pointer;
+}
+.map-btn:hover { color: var(--text-1); border-color: var(--line-strong); }
+.map-btn:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+/* ---- right: the selected node (until the §4 inspector replaces it) */
+.map-panel {
+  position: absolute; top: 80px; right: var(--sp-4); width: 316px;
+  max-height: calc(100% - 152px); overflow: auto;
+  padding: var(--sp-4);
+  background: var(--bg-elevated);
+  border: var(--bw) solid var(--line);
+  border-radius: var(--radius);
+}
+.map-panel.map-panel-out { opacity: 0; pointer-events: none; transition: opacity var(--dur) var(--ease); }
+.map-panel-close {
+  position: absolute; top: var(--sp-2); right: var(--sp-2); width: 24px; height: 24px;
+  border: 0; border-radius: var(--radius); background: transparent; color: var(--text-3);
+  font: var(--fs-16)/1 var(--font-mono); cursor: pointer;
+}
+.map-panel-close:hover { color: var(--text-1); background: var(--bg-hover); }
+.map-panel-close:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.map-eyebrow {
+  padding-right: 26px;
+  font: 600 var(--fs-10) var(--font-label); letter-spacing: var(--ls-label); text-transform: uppercase;
+  color: var(--text-3);
+}
+.map-panel-title {
+  margin: var(--sp-1) 0 var(--sp-2);
+  font: 600 var(--fs-16)/var(--lh-tight) var(--font-label); letter-spacing: var(--ls-label); text-transform: uppercase;
+  color: var(--text-1); overflow-wrap: anywhere;
+}
+.map-why { margin: var(--sp-2) 0 0; color: var(--text-1); font: var(--fs-12)/var(--lh) var(--font-mono); }
+.map-sub { margin: var(--sp-1) 0 0; color: var(--text-2); font: var(--fs-12) var(--font-mono); overflow-wrap: anywhere; }
+
+/* A status plate: grey, with the status hue only on its glyph. */
+.map-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 var(--sp-2) 0 6px; border-radius: var(--radius);
+  border: var(--bw) solid var(--line);
+  color: var(--text-1);
+  font: 600 var(--fs-11)/18px var(--font-label); letter-spacing: var(--ls-label); text-transform: uppercase;
+}
+.map-pill::before { content: "●"; color: var(--pill); font: var(--fs-10)/1 var(--font-mono); }
+.map-pill.s-warn::before, .map-pill.s-attention::before { content: "▲"; }
+.map-pill.s-crit::before, .map-pill.s-down::before { content: "■"; }
+.map-pill.s-unknown::before, .map-pill.s-idle::before { content: "○"; }
+
+.map-bars { display: grid; gap: 6px; margin-top: var(--sp-4); }
+.map-bar { display: grid; grid-template-columns: 56px minmax(0, 1fr) 38px; align-items: center; gap: var(--sp-2); font: var(--fs-11) var(--font-mono); }
+.map-bar-k { color: var(--text-3); }
+.map-note { margin: 2px 0 0; color: var(--text-3); font: var(--fs-10) var(--font-mono); }
+.map-bar-v { color: var(--text-1); text-align: right; font-variant-numeric: tabular-nums; }
+.map-bar-track { height: 4px; border-radius: 0; background: var(--line-weak); overflow: hidden; }
+.map-bar-fill { height: 100%; background: var(--text-2); transition: width var(--dur) var(--ease); }
+.map-bar-fill.s-warn { background: var(--p2); }
+.map-bar-fill.s-crit { background: var(--p1); }
+
+.map-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px var(--sp-3); margin: var(--sp-4) 0 0; font: var(--fs-12) var(--font-mono); }
+.map-dl dt { color: var(--text-3); }
+.map-dl dd { margin: 0; color: var(--text-1); overflow-wrap: anywhere; }
+
+.map-h {
+  margin: 0 0 6px;
+  font: 600 var(--fs-10)/1 var(--font-label);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.map-rel { margin-top: var(--sp-4); display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.map-rel .map-h { flex-basis: 100%; margin: var(--sp-2) 0 2px; }
+.map-rel .map-h:first-child { margin-top: 0; }
+.map-h-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.map-fold,
+.map-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 2px var(--sp-2); border: var(--bw) solid var(--line); border-radius: var(--radius);
+  background: transparent; color: var(--text-1); font: var(--fs-11) var(--font-mono); cursor: pointer;
+}
+.map-fold { color: var(--text-2); }
+.map-fold:hover, .map-chip:hover { color: var(--text-1); border-color: var(--line-strong); background: var(--bg-hover); }
+.map-fold:focus-visible, .map-chip:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.map-chip-note { color: var(--text-3); font: var(--fs-10) var(--font-mono); }
+.map-open { display: inline-block; margin-top: var(--sp-4); color: var(--text-1); font: var(--fs-12) var(--font-mono); text-decoration: underline; text-decoration-color: var(--line-strong); }
+.map-open:hover { text-decoration-color: var(--accent); }
+.map-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--sp-3); }
+
+/* Status glyph swatches (hover card, panel). Hue + shape, never hue alone. */
+.map-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--pill); }
+.map-dot.s-warn, .map-dot.s-attention { border-radius: 0; background: transparent; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 8px solid var(--pill); }
+.map-dot.s-crit, .map-dot.s-down { border-radius: 0; }
+.map-dot.s-idle, .map-dot.s-unknown { background: transparent; border: 1px dashed var(--pill); }
+
+.s-ok { --pill: var(--text-3); }
+.s-working { --pill: var(--run); }
+.s-warn, .s-attention { --pill: var(--p2); }
+.s-crit, .s-down { --pill: var(--p1); }
+.s-low { --pill: var(--p3); }
+.s-idle { --pill: var(--off); }
+.s-unknown { --pill: var(--text-3); }
+
+/* ---- hover card */
+.map-tip {
+  position: absolute; pointer-events: none; max-width: 280px;
+  padding: 6px var(--sp-2); border-radius: var(--radius);
+  background: var(--bg-elevated); border: var(--bw) solid var(--line-strong);
+}
+.map-tip-top { display: flex; align-items: center; gap: 6px; color: var(--text-1); font: var(--fs-12) var(--font-mono); }
+.map-tip-kind { margin-left: auto; padding-left: var(--sp-3); color: var(--text-3); font: 600 var(--fs-10) var(--font-label); text-transform: uppercase; letter-spacing: var(--ls-label); }
+.map-tip-sub { margin-top: 2px; color: var(--text-2); font: var(--fs-11) var(--font-mono); }
+
+/* ---- phone (< 700px): the readout collapses to one short line; find drops to the bottom */
+@media (max-width: 760px) {
+  .map-find { top: auto; bottom: var(--sp-4); right: var(--sp-4); }
+  .map-find-input { width: 120px; }
+  .map-panel {
+    top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 62%;
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding-bottom: calc(var(--sp-4) + env(safe-area-inset-bottom, 0px));
+  }
+}
+@media (max-width: 699px) {
+  .map-readout { top: var(--sp-2); right: var(--sp-2); font-size: var(--fs-10); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-panel.map-panel-out, .map-bar-fill { transition: none; }
+}

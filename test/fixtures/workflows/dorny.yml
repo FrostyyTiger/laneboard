@@ -1,0 +1,40 @@
+name: Desktop
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'pkg/**'
+      - '.github/workflows/dorny.yml'
+  pull_request:
+    paths: ['pkg/**']
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    outputs:
+      macos: ${{ steps.f.outputs.macos }}
+      windows: ${{ steps.f.outputs.windows }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: f
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            macos:
+              - 'pkg/macos/**'
+              - 'pkg/shared/**'
+            windows:
+              - 'pkg/windows/**'
+              - 'pkg/shared/**'
+  build-macos:
+    needs: x
+    if: needs.x.outputs.macos == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo build
+  build-windows:
+    needs: x
+    if: needs.x.outputs.windows == 'true'
+    runs-on: windows-latest
+    steps:
+      - run: cargo build

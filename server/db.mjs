@@ -61,8 +61,16 @@ const MIGRATIONS = [
   // log every minute, so the key is what stops it multiplying. IFNULL is not
   // optional: SQLite treats two NULLs as distinct in a UNIQUE index, so a
   // session with no lane would insert a fresh row every two seconds.
-  `CREATE UNIQUE INDEX IF NOT EXISTS markers_key
+  //
+  // Fleet F7: the one sanctioned edit to this append-only list. From schema
+  // version 1 the key also holds `builder` (index markers_key_b, created by
+  // migrateToV1 below), so this legacy index must not be re-created on every
+  // start once the database is at version 1: it carries `untilVersion`.
+  {
+    sql: `CREATE UNIQUE INDEX IF NOT EXISTS markers_key
      ON markers(IFNULL(lane, ''), IFNULL(session_name, ''), text)`,
+    untilVersion: 1,
+  },
   `CREATE INDEX IF NOT EXISTS markers_ts ON markers(ts DESC)`,
   `CREATE TABLE IF NOT EXISTS rate_limit_samples (
      id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,23 +133,116 @@ const MIGRATIONS = [
      checks_pending INTEGER
    )`,
   `CREATE INDEX IF NOT EXISTS pr_samples_lane ON pr_samples(lane, ts DESC)`,
+  // fleet P9 (§6 2.4). The jobs of a completed CI run never change, so they are
+  // read from the forge once per (run, attempt) and kept here. A cache, not
+  // history: builder-local, no `builder` column, no user_version bump (the
+  // CREATE is re-runnable like every entry above).
+  `CREATE TABLE IF NOT EXISTS ci_jobs (
+     run_id INTEGER NOT NULL,
+     attempt INTEGER NOT NULL,
+     slug TEXT NOT NULL,
+     json TEXT NOT NULL,
+     at INTEGER NOT NULL DEFAULT 0,
+     PRIMARY KEY(run_id, attempt)
+   )`,
+  // fleet R9 (§10 2.9). One row per retired lane, written by retire (captured
+  // before the worktree goes) or by the startup backfill. Never pruned: it
+  // keeps its own copy of the markers so it outlives marker retention.
+  // Builder-local like ci_jobs: no `builder` column, no user_version bump.
+  `CREATE TABLE IF NOT EXISTS lane_archive (
+     lane TEXT PRIMARY KEY, repo TEXT, branch TEXT, plan_path TEXT, plan_title TEXT, plan_head TEXT,
+     created_at INTEGER, retired_at INTEGER NOT NULL, duration_ms INTEGER,
+     cost_usd REAL, tokens INTEGER, stage_n INTEGER, stage_m INTEGER,
+     pr_number INTEGER, pr_url TEXT, pr_state TEXT, merged INTEGER,
+     markers TEXT, summary TEXT, record TEXT, restored_as TEXT
+   )`,
+  `CREATE INDEX IF NOT EXISTS lane_archive_retired ON lane_archive(retired_at DESC)`,
 ];
 
-for (const sql of MIGRATIONS) db.exec(sql);
+/** The schema version this file migrates to (`PRAGMA user_version`). */
+export const SCHEMA_VERSION = 1;
+
+/** Tables that carry a `builder` column from schema version 1 (fleet F7). */
+export const BUILDER_TABLES = ['events', 'cost_snapshots', 'markers', 'lane_jobs', 'pr_samples', 'rate_limit_samples'];
+
+export function userVersion(database = db) {
+  return Number(database.prepare('PRAGMA user_version').get()?.user_version ?? 0);
+}
 
 /**
  * Add a column to an existing table, once. SQLite has no
  * `ADD COLUMN IF NOT EXISTS`, and the migration list is append-only and must
  * stay re-runnable, so the guard is a PRAGMA rather than a caught exception.
  */
-function addColumn(table, column, decl) {
-  const has = db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
-  if (!has) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+function addColumn(table, column, decl, database = db) {
+  const has = database.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column);
+  if (!has) database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
 }
 
-// Which lane a snapshot's spend belongs to. Rows written before this existed
-// keep NULL and are attributed by session name at query time instead.
-addColumn('cost_snapshots', 'lane', 'TEXT');
+/**
+ * Schema 0 -> 1 (fleet F7): a `builder` column on the six history tables.
+ * `''` means this process's own builder, resolved at read time to
+ * config.fleet.id, so renaming fleet.id never orphans a row. The marker key
+ * becomes builder-aware. One transaction: a crash half way leaves version 0,
+ * and every step is re-runnable.
+ */
+function migrateToV1(database) {
+  database.exec('BEGIN');
+  try {
+    for (const t of BUILDER_TABLES) addColumn(t, 'builder', "TEXT NOT NULL DEFAULT ''", database);
+    database.exec('DROP INDEX IF EXISTS markers_key');
+    // A v0 database that somehow lost its unique index may hold duplicates;
+    // keep the oldest row of each key, or the new unique index cannot be built.
+    database.exec(`DELETE FROM markers WHERE id NOT IN (
+      SELECT MIN(id) FROM markers GROUP BY builder, IFNULL(lane, ''), IFNULL(session_name, ''), text)`);
+    database.exec(`CREATE UNIQUE INDEX IF NOT EXISTS markers_key_b
+      ON markers(builder, IFNULL(lane, ''), IFNULL(session_name, ''), text)`);
+    database.exec('CREATE INDEX IF NOT EXISTS events_builder ON events(builder, session_name, ts DESC)');
+    database.exec('PRAGMA user_version = 1');
+    database.exec('COMMIT');
+  } catch (err) {
+    try { database.exec('ROLLBACK'); } catch { /* nothing open */ }
+    throw err;
+  }
+}
+
+/** Run every migration against `database`. Exported for the migration test. */
+export function migrate(database = db) {
+  const version = userVersion(database);
+  for (const m of MIGRATIONS) {
+    const sql = typeof m === 'string' ? m : m.sql;
+    if (typeof m === 'object' && m.untilVersion != null) {
+      if (version >= m.untilVersion) continue;
+      // About to be replaced by a later version: a failure here (a v0 database
+      // with duplicate rows) must not stop the migration that fixes it.
+      try { database.exec(sql); } catch (err) { log.warn(`legacy migration skipped: ${String(err)}`); }
+      continue;
+    }
+    database.exec(sql);
+  }
+  // Which lane a snapshot's spend belongs to. Rows written before this existed
+  // keep NULL and are attributed by session name at query time instead.
+  addColumn('cost_snapshots', 'lane', 'TEXT', database);
+  if (version < 1) migrateToV1(database);
+}
+
+migrate(db);
+
+/** `''` (and this builder's own id) are stored as `''`; another id as itself. */
+function storedBuilder(builder) {
+  if (builder == null || builder === '' || builder === config.fleet?.id) return '';
+  return String(builder);
+}
+/** A row's stored builder, resolved: `''` is this process's own builder. */
+function resolvedBuilder(stored) {
+  return stored ? stored : (config.fleet?.id ?? '');
+}
+/** WHERE fragment for an optional builder filter; `null` means every builder. */
+function builderWhere(builder, where, args) {
+  if (builder === null) return;
+  where.push('builder = ?');
+  args.push(storedBuilder(builder));
+}
 
 // --- kv ---------------------------------------------------------------------
 
@@ -163,30 +264,33 @@ export function kvWrite(key, value) {
 // --- events -----------------------------------------------------------------
 
 const insertEvent = db.prepare(
-  'INSERT INTO events(ts, session_id, session_name, type, subtype, payload) VALUES(?, ?, ?, ?, ?, ?)'
+  'INSERT INTO events(ts, session_id, session_name, type, subtype, payload, builder) VALUES(?, ?, ?, ?, ?, ?, ?)'
 );
 
-export function addEvent({ ts = Date.now(), sessionId = null, sessionName = null, type, subtype = null, payload = null }) {
+export function addEvent({ ts = Date.now(), sessionId = null, sessionName = null, type, subtype = null, payload = null, builder = '' }) {
   try {
-    insertEvent.run(ts, sessionId, sessionName, type, subtype, payload == null ? null : JSON.stringify(payload));
+    insertEvent.run(ts, sessionId, sessionName, type, subtype, payload == null ? null : JSON.stringify(payload), storedBuilder(builder));
   } catch (err) {
     log.error('addEvent failed', String(err));
   }
 }
 
-export function listEvents({ session = null, limit = 50, before = null, type = null } = {}) {
+/** `builder`: '' (default) = this builder's rows, an id = that builder's, null = all. */
+export function listEvents({ session = null, limit = 50, before = null, type = null, builder = '' } = {}) {
   const where = [];
   const args = [];
+  builderWhere(builder, where, args);
   if (session) { where.push('session_name = ?'); args.push(session); }
   if (type) { where.push('type = ?'); args.push(type); }
   if (before) { where.push('ts < ?'); args.push(Number(before)); }
   const sql =
-    'SELECT id, ts, session_id, session_name, type, subtype, payload FROM events' +
+    'SELECT id, ts, session_id, session_name, type, subtype, payload, builder FROM events' +
     (where.length ? ` WHERE ${where.join(' AND ')}` : '') +
     ' ORDER BY ts DESC, id DESC LIMIT ?';
   args.push(Math.min(Number(limit) || 50, 500));
   return db.prepare(sql).all(...args).map((r) => ({
     ...r,
+    builder: resolvedBuilder(r.builder),
     payload: r.payload ? safeParse(r.payload) : null,
   }));
 }
@@ -196,10 +300,10 @@ function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
 // --- cost snapshots ---------------------------------------------------------
 
 const insertSnapshot = db.prepare(
-  'INSERT INTO cost_snapshots(ts, session_name, session_id, usd, tokens, lane) VALUES(?, ?, ?, ?, ?, ?)'
+  'INSERT INTO cost_snapshots(ts, session_name, session_id, usd, tokens, lane, builder) VALUES(?, ?, ?, ?, ?, ?, ?)'
 );
-export function addCostSnapshot({ ts = Date.now(), sessionName, sessionId, usd, tokens, lane = null }) {
-  insertSnapshot.run(ts, sessionName ?? null, sessionId ?? null, usd ?? 0, JSON.stringify(tokens ?? {}), lane);
+export function addCostSnapshot({ ts = Date.now(), sessionName, sessionId, usd, tokens, lane = null, builder = '' }) {
+  insertSnapshot.run(ts, sessionName ?? null, sessionId ?? null, usd ?? 0, JSON.stringify(tokens ?? {}), lane, storedBuilder(builder));
 }
 
 /**
@@ -305,16 +409,16 @@ export function close() {
 // --- markers ----------------------------------------------------------------
 
 const insertMarker = db.prepare(
-  'INSERT OR IGNORE INTO markers(ts, lane, session_name, kind, text, source) VALUES(?, ?, ?, ?, ?, ?)'
+  'INSERT OR IGNORE INTO markers(ts, lane, session_name, kind, text, source, builder) VALUES(?, ?, ?, ?, ?, ?, ?)'
 );
 
 /**
  * Record a marker. Returns the new row id, or null when the key already
  * existed — which is how the caller knows whether to push a notification.
  */
-export function addMarker({ ts = Date.now(), lane = null, sessionName = null, kind, text, source }) {
+export function addMarker({ ts = Date.now(), lane = null, sessionName = null, kind, text, source, builder = '' }) {
   try {
-    const r = insertMarker.run(ts, lane, sessionName, kind, text, source);
+    const r = insertMarker.run(ts, lane, sessionName, kind, text, source, storedBuilder(builder));
     return r.changes ? Number(r.lastInsertRowid) : null;
   } catch (err) {
     log.error('addMarker failed', String(err));
@@ -322,15 +426,21 @@ export function addMarker({ ts = Date.now(), lane = null, sessionName = null, ki
   }
 }
 
-/** Every marker key already stored, so a re-scan need not ask SQLite per line. */
+/**
+ * Every marker key already stored, so a re-scan need not ask SQLite per line.
+ * `builder\0lane\0session\0text`, builder as stored ('' = this builder),
+ * matching collector/markers.mjs keyOf().
+ */
 export function markerKeys() {
-  const sql = "SELECT IFNULL(lane, '') AS lane, IFNULL(session_name, '') AS s, text FROM markers";
-  return db.prepare(sql).all().map((r) => `${r.lane}\u0000${r.s}\u0000${r.text}`);
+  const sql = "SELECT builder, IFNULL(lane, '') AS lane, IFNULL(session_name, '') AS s, text FROM markers";
+  return db.prepare(sql).all().map((r) => `${r.builder}\u0000${r.lane}\u0000${r.s}\u0000${r.text}`);
 }
 
-export function listMarkers({ lane = null, since = null, kinds = null, limit = 200, includeDismissed = false } = {}) {
+/** `builder`: '' (default) = this builder's rows, an id = that builder's, null = all. */
+export function listMarkers({ lane = null, since = null, kinds = null, limit = 200, includeDismissed = false, builder = '' } = {}) {
   const where = [];
   const args = [];
+  builderWhere(builder, where, args);
   if (lane) { where.push('lane = ?'); args.push(lane); }
   if (since) { where.push('ts >= ?'); args.push(Number(since)); }
   if (kinds?.length) {
@@ -339,11 +449,11 @@ export function listMarkers({ lane = null, since = null, kinds = null, limit = 2
   }
   if (!includeDismissed) where.push('dismissed_at IS NULL');
   const sql =
-    'SELECT id, ts, lane, session_name, kind, text, source, dismissed_at FROM markers' +
+    'SELECT id, ts, lane, session_name, kind, text, source, dismissed_at, builder FROM markers' +
     (where.length ? ` WHERE ${where.join(' AND ')}` : '') +
     ' ORDER BY ts DESC, id DESC LIMIT ?';
   args.push(Math.min(Number(limit) || 200, 1000));
-  return db.prepare(sql).all(...args);
+  return db.prepare(sql).all(...args).map((r) => ({ ...r, builder: resolvedBuilder(r.builder) }));
 }
 
 /** Dismiss is a tombstone, never a delete: the marker still happened. */
@@ -444,4 +554,158 @@ export function listPrSamples({ lane = null, limit = 100 } = {}) {
   const sql = 'SELECT * FROM pr_samples' + (lane ? ' WHERE lane = ?' : '') + ' ORDER BY ts DESC LIMIT ?';
   const args = lane ? [lane, Math.min(Number(limit) || 100, 1000)] : [Math.min(Number(limit) || 100, 1000)];
   return db.prepare(sql).all(...args);
+}
+
+// --- ci jobs (fleet P9) ---------------------------------------------------------
+
+const getCiJobs = db.prepare('SELECT slug, json FROM ci_jobs WHERE run_id = ? AND attempt = ?');
+const putCiJobs = db.prepare(
+  'INSERT INTO ci_jobs(run_id, attempt, slug, json, at) VALUES(?, ?, ?, ?, ?) ' +
+    'ON CONFLICT(run_id, attempt) DO UPDATE SET slug = excluded.slug, json = excluded.json, at = excluded.at'
+);
+
+/**
+ * The cached jobs of a completed run, or null. A row stored under another
+ * slug is not this run (run ids are global on GitHub, but a cache must never
+ * hand one repo another repo's data).
+ */
+export function ciJobsGet({ runId, attempt = 1, slug }) {
+  try {
+    const r = getCiJobs.get(Number(runId), Number(attempt) || 1);
+    if (!r || r.slug !== String(slug)) return null;
+    const jobs = JSON.parse(r.json);
+    return Array.isArray(jobs) ? jobs : null;
+  } catch (err) {
+    log.error('ciJobsGet failed', String(err));
+    return null;
+  }
+}
+
+/** Keep the jobs of a completed run (the collector calls this only once it completed). */
+export function ciJobsPut({ runId, attempt = 1, slug, jobs, at = Date.now() }) {
+  if (!Number.isSafeInteger(Number(runId)) || !Array.isArray(jobs) || typeof slug !== 'string' || !slug) return false;
+  try {
+    putCiJobs.run(Number(runId), Number(attempt) || 1, slug, JSON.stringify(jobs), at);
+    return true;
+  } catch (err) {
+    log.error('ciJobsPut failed', String(err));
+    return false;
+  }
+}
+
+// --- lane archive (fleet R9) ---------------------------------------------------
+
+export const ARCHIVE_COLUMNS = Object.freeze([
+  'lane', 'repo', 'branch', 'plan_path', 'plan_title', 'plan_head', 'created_at', 'retired_at', 'duration_ms',
+  'cost_usd', 'tokens', 'stage_n', 'stage_m', 'pr_number', 'pr_url', 'pr_state', 'merged',
+  'markers', 'summary', 'record', 'restored_as',
+]);
+/** What a listing returns: everything but the bulky plan head, markers and record. */
+export const ARCHIVE_LIST_COLUMNS = Object.freeze(
+  ARCHIVE_COLUMNS.filter((c) => !['plan_head', 'markers', 'record'].includes(c)),
+);
+export const ARCHIVE_LIST_MAX = 200;
+
+const archiveUpsert = db.prepare(
+  `INSERT INTO lane_archive(${ARCHIVE_COLUMNS.join(', ')}) VALUES(${ARCHIVE_COLUMNS.map(() => '?').join(', ')}) ` +
+    `ON CONFLICT(lane) DO UPDATE SET ${ARCHIVE_COLUMNS.filter((c) => c !== 'lane' && c !== 'restored_as')
+      .map((c) => `${c} = excluded.${c}`).join(', ')}, restored_as = IFNULL(excluded.restored_as, lane_archive.restored_as)`
+);
+
+const intOrNull = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Math.trunc(Number(v)));
+const numOrNull = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+const strOrNull = (v) => (v == null ? null : String(v));
+const jsonOrNull = (v) => (v == null ? null : typeof v === 'string' ? v : JSON.stringify(v));
+
+/**
+ * Upsert one archive row. `markers` and `record` may be objects (stored as
+ * JSON). A re-archive never clears `restored_as`. Returns true when written.
+ */
+export function addArchive(row) {
+  if (!row || typeof row.lane !== 'string' || !row.lane || !Number.isFinite(Number(row.retired_at))) {
+    throw new Error('addArchive needs lane and retired_at');
+  }
+  const merged = row.merged == null ? null : row.merged ? 1 : 0;
+  archiveUpsert.run(
+    row.lane, strOrNull(row.repo), strOrNull(row.branch), strOrNull(row.plan_path), strOrNull(row.plan_title),
+    strOrNull(row.plan_head), intOrNull(row.created_at), Math.trunc(Number(row.retired_at)), intOrNull(row.duration_ms),
+    numOrNull(row.cost_usd), intOrNull(row.tokens), intOrNull(row.stage_n), intOrNull(row.stage_m),
+    intOrNull(row.pr_number), strOrNull(row.pr_url), strOrNull(row.pr_state), merged,
+    jsonOrNull(row.markers), strOrNull(row.summary), jsonOrNull(row.record), strOrNull(row.restored_as),
+  );
+  return true;
+}
+
+/** `%` and `_` (and the escape itself) match literally. */
+export function likeEscape(q) {
+  return String(q).replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+/** Newest first. `q` searches lane, branch, repo, plan_title and summary; `before` is a retired_at bound. */
+export function listArchive({ q = null, limit = 50, before = null } = {}) {
+  const where = [];
+  const args = [];
+  if (q != null && String(q) !== '') {
+    const pat = `%${likeEscape(q)}%`;
+    where.push(`(${['lane', 'branch', 'repo', 'plan_title', 'summary'].map((c) => `${c} LIKE ? ESCAPE '\\'`).join(' OR ')})`);
+    args.push(pat, pat, pat, pat, pat);
+  }
+  if (before != null && Number.isFinite(Number(before))) { where.push('retired_at < ?'); args.push(Number(before)); }
+  const n = Math.max(1, Math.min(Math.trunc(Number(limit)) || 50, ARCHIVE_LIST_MAX));
+  const sql = `SELECT ${ARCHIVE_LIST_COLUMNS.join(', ')} FROM lane_archive` +
+    (where.length ? ` WHERE ${where.join(' AND ')}` : '') + ' ORDER BY retired_at DESC, lane ASC LIMIT ?';
+  return db.prepare(sql).all(...args, n).map((r) => ({ ...r, merged: r.merged == null ? null : Boolean(r.merged) }));
+}
+
+/** One full row, `markers` and `record` parsed, or null. */
+export function getArchive(lane) {
+  const r = db.prepare(`SELECT ${ARCHIVE_COLUMNS.join(', ')} FROM lane_archive WHERE lane = ?`).get(String(lane));
+  if (!r) return null;
+  const markers = r.markers ? safeParse(r.markers) : null;
+  return {
+    ...r,
+    merged: r.merged == null ? null : Boolean(r.merged),
+    markers: Array.isArray(markers) ? markers : [],
+    record: r.record ? safeParse(r.record) : null,
+  };
+}
+
+/** Every archived lane id (the backfill's "already has a row" test). */
+export function archivedLanes() {
+  return new Set(db.prepare('SELECT lane FROM lane_archive').all().map((r) => r.lane));
+}
+
+/** Record which lane restored this one. False when there is no row. */
+export function setRestoredAs(lane, newId) {
+  return db.prepare('UPDATE lane_archive SET restored_as = ? WHERE lane = ?').run(String(newId), String(lane)).changes > 0;
+}
+
+/**
+ * A lane's whole-life spend: snapshots are cumulative per transcript, so the
+ * cost is the sum over sessions (name + id) of each one's MAX(usd), over rows
+ * attributed to the lane or written by one of its session names. Tokens are
+ * summed from each session's newest row. -> { usd, tokens, sessions }
+ */
+export function laneCostAllTime(lane, sessionNames = []) {
+  const names = [...new Set((Array.isArray(sessionNames) ? sessionNames : []).filter((s) => typeof s === 'string' && s))].slice(0, 50);
+  const cond = ['lane = ?', ...(names.length ? [`session_name IN (${names.map(() => '?').join(',')})`] : [])].join(' OR ');
+  const rows = db.prepare(
+    `SELECT IFNULL(session_name, '') || char(0) || IFNULL(session_id, '') AS k, usd, tokens, ts
+       FROM cost_snapshots WHERE ${cond} ORDER BY ts ASC, id ASC`
+  ).all(String(lane), ...names);
+  const per = new Map();
+  for (const r of rows) {
+    const e = per.get(r.k) ?? { usd: 0, tokens: null };
+    e.usd = Math.max(e.usd, Number(r.usd) || 0);
+    e.tokens = r.tokens;
+    per.set(r.k, e);
+  }
+  let usd = 0;
+  let tokens = 0;
+  for (const e of per.values()) {
+    usd += e.usd;
+    const t = e.tokens ? safeParse(e.tokens) : null;
+    if (t && typeof t === 'object') for (const v of Object.values(t)) tokens += Number(v) || 0;
+  }
+  return { usd, tokens, sessions: per.size };
 }

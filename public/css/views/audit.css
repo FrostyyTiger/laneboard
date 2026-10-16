@@ -1,0 +1,77 @@
+/* ===========================================================================
+   The Audit view (plan §4 D12). A dense table over the hub's (or this
+   builder's) audit log. Grey is normal: only a mismatch (▲ p2), a settled
+   unknown (◆ p3), a failed outcome and a fork alarm (■ p1) get a hue, and
+   each always carries its shape and its word.
+   =========================================================================== */
+
+#view-audit { overflow: auto; padding: var(--sp-2); }
+
+/* ---- fork alarms: the text the hub wrote, one line per builder */
+.au-forks { display: grid; gap: var(--sp-1); margin-bottom: var(--sp-2); }
+.au-fork {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bw) solid var(--p1-line);
+  border-radius: var(--radius);
+  background: var(--p1-weak);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+}
+.au-fork > .au-shape { color: var(--p1); }
+.au-fork-k {
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  color: var(--p1);
+}
+.au-fork-t { overflow-wrap: anywhere; }
+.au-fork-at { color: var(--text-3); }
+
+/* ---- builder mode: the chain head and the verify hint */
+.au-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-2);
+}
+.au-hash { color: var(--text-1); }
+.au-hint { color: var(--text-3); }
+.au-hint code { font-family: var(--font-mono); color: var(--text-2); }
+
+/* ---- filter chips */
+.au-filters { display: grid; gap: var(--sp-1); margin-bottom: var(--sp-2); }
+.au-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); }
+.au-lbl {
+  min-width: 5ch;
+  font-family: var(--font-label);
+  font-size: var(--fs-10);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  color: var(--text-3);
+}
+.au-chip { padding-right: var(--sp-2); }
+.au-n { font-family: var(--font-mono); color: var(--text-3); letter-spacing: 0; }
+
+.au-sum { margin: 0 0 var(--sp-1); font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-2); }
+
+/* ---- the table */
+.au-table .dt td { max-width: 40ch; }
+.au-st { display: inline-flex; align-items: center; gap: var(--sp-1); color: var(--text-2); }
+.au-shape { font-family: var(--font-mono); }
+.au-shape[data-p="2"], .au-st[data-p="2"] { color: var(--p2); }
+.au-shape[data-p="3"], .au-st[data-p="3"] { color: var(--p3); }
+.au-ok { color: var(--text-2); }
+.au-ok[data-p="2"] { color: var(--p2); }
+.dt tbody tr.au-mis { background: var(--p2-weak); }
+.dt tbody tr.au-mis > td:first-child { border-left: 2px solid var(--p2); }
+.dt tbody tr.au-settled > td:first-child { border-left: 2px solid var(--p3); }

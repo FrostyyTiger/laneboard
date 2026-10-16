@@ -1,0 +1,7 @@
+[
+  {"Id": "a1", "Names": ["/slot1-app"], "State": "running", "Status": "Up 3 hours (healthy)"},
+  {"Id": "a2", "Names": ["/slot1-db"], "State": "running", "Status": "Up 3 hours (unhealthy)"},
+  {"Id": "a3", "Names": ["/slot2-app"], "State": "restarting", "Status": "Restarting (1) 5 seconds ago"},
+  {"Id": "a4", "Names": ["/slot3-app"], "State": "running", "Status": "Up 2 days"},
+  {"Id": "a5", "Names": ["/slot4-app"], "State": "exited", "Status": "Exited (0) 1 hour ago"}
+]

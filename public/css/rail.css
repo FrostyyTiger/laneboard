@@ -1,0 +1,222 @@
+/* ===================== rail ==============================================
+   The legacy rail blocks (attention, rate limits, vitals) and the state dot,
+   on tokens only (guardrails §4 2.8) until D7's tape and annunciator replace
+   them; the builder rail (D5) follows at the end. */
+
+.rail-block { margin-bottom: 16px; }
+.rail-h { color: var(--text-3); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--text-2);
+  background: var(--bg-hover);
+  border-radius: var(--radius);
+  padding: 1px 7px;
+  font-weight: 500;
+}
+
+.attention-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.attention-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 9px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-weak);
+  color: var(--text-1);
+  text-align: left;
+  font: inherit;
+  transition: transform var(--dur-fast) var(--ease);
+}
+.attention-item:hover { border-color: var(--border-strong); }
+.attention-item:active { transform: translateY(1px); }
+.attention-item .idx { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); width: 12px; flex: none; }
+.attention-item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.attention-item .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); flex: none; }
+.attention-item.s-waiting_permission { border-color: var(--p1-line); }
+.attention-item.s-waiting_question { border-color: var(--p2-line); }
+
+/* phone chip strip — the rail carries the same list from 700px up. This
+   override must come AFTER the base rule: same specificity, later wins.
+   Scoped to the strip, so the kit's .chip (scope chips) keeps its own look. */
+.attention-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 4px; scrollbar-width: none; }
+.attention-strip::-webkit-scrollbar { display: none; }
+@media (min-width: 700px) { .attention-strip { display: none; } }
+
+.attention-strip .chip {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px 7px 9px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  cursor: pointer;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-1);
+  max-width: 68vw;
+  font: inherit;
+}
+.attention-strip .chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attention-strip .chip .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.attention-strip .chip.s-waiting_permission { border-color: var(--p1-line); background: var(--p1-weak); }
+.attention-strip .chip.s-waiting_question { border-color: var(--p2-line); background: var(--p2-weak); }
+
+/* ===================== the pressure ring ================================= */
+/*
+   Urgency is not a state, it is state x time: a session waiting two minutes
+   and one waiting thirteen days are the same colour but not the same
+   problem. The ring grows louder on a log scale (24 h = full): its opacity
+   follows --pressure (set by ui/widgets.js stateDot). No gradient, no
+   animation (guardrails 1 and 6).
+*/
+.dot {
+  --pressure: 0;
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--idle);
+  display: inline-grid;
+  place-items: center;
+}
+.dot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: calc(0.15 + var(--pressure) * 0.85);
+}
+.dot::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.dot.s-waiting_permission { color: var(--crit); }
+.dot.s-waiting_question { color: var(--warn); }
+.dot.s-working { color: var(--info); }
+.dot.s-done { color: var(--ok); }
+.dot.s-idle, .dot.s-shell { color: var(--idle); }
+.dot.s-dead { color: var(--text-3); }
+
+/* ===================== gauges & vitals =================================== */
+
+.gauges { display: grid; gap: 10px; }
+.gauge-row { display: grid; gap: 5px; }
+.gauge-label { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; color: var(--text-3); }
+.gauge-label b { font-weight: 600; color: var(--text-1); }
+.gauge-track { height: 4px; border-radius: var(--radius); background: var(--line-weak); overflow: hidden; }
+.gauge-fill { height: 100%; border-radius: var(--radius); background: var(--info); transition: width var(--dur) var(--ease); }
+.gauge-fill.warn { background: var(--warn); }
+.gauge-fill.hot { background: var(--crit); }
+
+.topbar-gauges .gauge-row { width: 120px; }
+.gauge-compact { display: none; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-3); white-space: nowrap; }
+.gauge-compact b { color: var(--text-1); font-weight: 600; }
+.gauge-compact.warn b { color: var(--warn); }
+.gauge-compact.hot b { color: var(--crit); }
+
+/* Below 700px the bars, the cost and the title collide, so the bars give way
+   to "5h 31%" text and the whole bar wraps onto two rows. */
+@media (max-width: 699px) {
+  /* Mission-control dense is a desktop idea. A phone held at arm's length
+     needs bigger type, and iOS zooms the page for any input under 16 px. */
+  html, body { font-size: 15px; }
+  .topbar { flex-wrap: wrap; gap: 7px 14px; padding-left: 14px; padding-right: 14px; }
+  .topbar-left { width: 100%; }
+  .topbar-gauges { margin-left: 0; gap: 14px; }
+  .topbar-gauges .gauge-row { display: none; }
+  .topbar-gauges .gauge-compact { display: inline; }
+  .topbar-right { margin-left: auto; }
+  .stat { font-size: 11.5px; }
+}
+
+.vitals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.vital { display: grid; gap: 3px; }
+.vital .k { color: var(--text-3); }
+.vital .v { font-family: var(--font-mono); font-size: 13px; color: var(--text-1); font-weight: 500; }
+.vital .v small { color: var(--text-3); font-size: 11px; font-weight: 400; }
+
+/* ===================== builder rail (fleet D5) ===========================
+   The left rail in #shell-rail (plan §4 2.4): an ALL row, then per builder
+   lamp, code plate, lane count and segment bar. 220px open, 56px collapsed
+   (lamp and code only); stale/down builders are hatched. Built by
+   public/js/ui/rail.js (buildRail). Tokens only, no colour literals. */
+.brail {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding-block: var(--sp-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-2);
+}
+.brail-tog {
+  align-self: flex-end;
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 20px;
+  margin: 0 var(--sp-1) var(--sp-1);
+  padding: 0;
+  color: var(--text-3);
+  background: transparent;
+  border: var(--bw) solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.brail-tog:hover { color: var(--text-1); background: var(--bg-hover); border-color: var(--line); }
+.brail[data-mode="min"] .brail-tog { align-self: center; margin-inline: 0; }
+
+.brail-list { display: flex; flex-direction: column; gap: 1px; }
+.brail-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--lamp) minmax(0, 1fr) auto;
+  grid-template-areas: "lamp code n" ". seg seg";
+  align-items: center;
+  gap: 2px var(--sp-2);
+  margin-inline: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  min-height: var(--row-h);
+  border: var(--bw) solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  user-select: none;
+}
+.brail-row > .lamp { grid-area: lamp; }
+.brail-code { grid-area: code; justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brail-n { grid-area: n; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
+.brail-seg { grid-area: seg; width: 100%; }
+.brail-row:hover { background: var(--bg-hover); }
+.brail-row.sel { background: var(--bg-selected); color: var(--text-1); }
+.brail-row.sel .brail-n { color: var(--text-2); }
+.brail-row:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
+.brail-row--all { margin-bottom: var(--sp-1); }
+/* A builder whose link is stale or down: hatched, its numbers in text-3. */
+.brail-row--hatch { background: var(--tex-hatch); color: var(--text-3); }
+.brail-row--hatch.sel { background: var(--tex-hatch); }
+
+/* Collapsed (56px): lamp and code only, centred. */
+.brail[data-mode="min"] .brail-row {
+  grid-template-columns: var(--lamp) minmax(0, auto);
+  grid-template-areas: "lamp code";
+  justify-content: center;
+  gap: var(--sp-1);
+  margin-inline: 2px;
+  padding-inline: 2px;
+}
+.brail[data-mode="min"] .brail-n,
+.brail[data-mode="min"] .brail-seg { display: none; }
+.brail[data-mode="min"] .brail-code { padding-inline: 2px; }
+
+/* Tablet: the column stays 56px (shell.css); open, the rail overlays main. */
+@media (min-width: 700px) and (max-width: 1199px) {
+  .shell[data-rail="open"] .shell-rail {
+    width: var(--rail-w);
+    border-right: var(--bw) solid var(--line-strong);
+  }
+}

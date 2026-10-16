@@ -1,0 +1,140 @@
+/* ===================== lanes ============================================= */
+/*
+   A lane is a git worktree: one branch, one plan, one piece of work. Lane
+   identity is carried by colour and by an optional filter — never by
+   reordering, because the grid's sort belongs to attention and attention is
+   the product (lanes plan §2).
+
+   Every lane colour is derived from --lane-hue, a number the server computes
+   by hashing the lane id. Chroma and lightness are fixed here so a new
+   worktree can never produce an unreadable colour.
+*/
+.card.has-lane { padding-left: 13px; }
+.card.has-lane::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: var(--radius-l) 0 0 var(--radius-l);
+  background: oklch(70% 0.14 var(--lane-hue, 0));
+}
+
+.lane-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  border: 1px solid oklch(70% 0.14 var(--lane-hue, 0) / 0.3);
+  background: oklch(70% 0.14 var(--lane-hue, 0) / 0.12);
+  color: oklch(83% 0.09 var(--lane-hue, 0));
+}
+.lane-chip:hover { border-color: oklch(70% 0.14 var(--lane-hue, 0) / 0.6); }
+
+.lane-rail { display: grid; gap: 7px; margin-bottom: var(--gap); }
+.lane-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+.lane-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px 4px 8px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  background: oklch(100% 0 0 / 0.04);
+  border: 1px solid var(--border-weak);
+  color: var(--text-2);
+  white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.lane-pill:hover { color: var(--text-1); border-color: var(--border-strong); }
+.lane-pill.on {
+  color: var(--text-1);
+  border-color: oklch(70% 0.14 var(--lane-hue, 0) / 0.65);
+  background: oklch(70% 0.14 var(--lane-hue, 0) / 0.14);
+}
+.lane-swatch {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 2px;
+  background: oklch(70% 0.14 var(--lane-hue, 0));
+}
+.lane-id { font-family: var(--font-mono); font-size: 11.5px; }
+.lane-n { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-3); }
+.lane-clear { color: var(--accent); border-color: oklch(70% 0.15 292 / 0.4); }
+
+/* Idle lanes: a worktree with nothing running in it. Muted, never a card. */
+.lane-row-idle { gap: 4px 12px; font-size: 11px; }
+.lane-idle-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-3);
+  flex: none;
+}
+.lane-idle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.lane-idle .lane-swatch { opacity: 0.45; width: 6px; height: 6px; }
+.lane-idle .lane-branch { color: var(--text-3); opacity: 0.75; }
+.lane-merged { color: var(--ok); }
+.lane-unmerged { color: var(--warn); }
+.lane-age { color: var(--text-3); opacity: 0.7; }
+
+/* A lane's stage, "4/8", on its rail pill. */
+.lane-stage {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-2);
+  padding-left: 6px;
+  border-left: 1px solid var(--border-weak);
+}
+.lane-idle .lane-stage { border-left: 0; padding-left: 0; opacity: 0.8; }
+
+/* The last thing this session shouted. Occupies the tool line's slot, never
+   its own row, so a marker costs a card no height. */
+.marker-line {
+  display: flex;
+  gap: 7px;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  overflow: hidden;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.mk-kind {
+  flex: none;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: oklch(100% 0 0 / 0.07);
+  color: var(--text-3);
+}
+.mk-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-need .mk-kind { color: var(--crit); background: oklch(70% 0.2 12 / 0.15); }
+.mk-blocked .mk-kind { color: var(--warn); background: oklch(80% 0.15 78 / 0.15); }
+.mk-limit .mk-kind { color: var(--warn); background: oklch(80% 0.15 78 / 0.15); }
+.mk-done .mk-kind { color: var(--ok); background: oklch(78% 0.16 158 / 0.14); }
+.mk-progress .mk-kind { color: var(--info); background: oklch(75% 0.13 242 / 0.14); }
+.mk-need .mk-text, .mk-blocked .mk-text { color: var(--text-1); }
+

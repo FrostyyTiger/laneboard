@@ -66,3 +66,46 @@ test('a grouped session name stays a legal session name', () => {
   assert.equal(isSafeSessionName(generated), true);
   assert.equal(WEB_SUFFIX.test(generated), true);
 });
+
+// SR6 L5: the legacy /ws/term/ path is audited like WS /api/v1/term/:name.
+// The gate runs after the name/inventory checks (no audit row for a refused
+// name) and before any upgrade; a refusal answers its status. The end-to-end
+// path (real tmux, audit rows for direct and local) is in api-v1-auth.test.mjs.
+import { attach, attachNamed, _setTermAuditor } from '../server/terminals.mjs';
+
+function sockStub() {
+  const s = { written: '', destroyed: false };
+  s.write = (d) => { s.written += d; return true; };
+  s.destroy = () => { s.destroyed = true; };
+  return s;
+}
+
+test('SR6 L5: a refused legacy terminal name is never audited', () => {
+  const calls = [];
+  _setTermAuditor((...a) => { calls.push(a); return { ok: true, status: 101 }; });
+  try {
+    for (const p of ['/ws/term/a%3Bkill', '/ws/term/x-web-1a', '/ws/term/no-such-session-here']) {
+      const s = sockStub();
+      assert.equal(attach({ auth: { kind: 'local', user: 'local' } }, s, Buffer.alloc(0), new URL(`http://127.0.0.1${p}`)), true);
+      assert.match(s.written, /^HTTP\/1\.1 404 /, p);
+      assert.equal(s.destroyed, true);
+    }
+    assert.equal(calls.length, 0);
+  } finally {
+    _setTermAuditor(null);
+  }
+});
+
+test('SR6 L5: attachNamed runs its gate after the checks and refuses with the gate status', () => {
+  // no session in the inventory here: the gate is not reached
+  let reached = false;
+  const s = sockStub();
+  attachNamed({}, s, Buffer.alloc(0), 'no-such-session-here', new URL('http://127.0.0.1/x'), { gate: () => { reached = true; return 0; } });
+  assert.equal(reached, false);
+  assert.match(s.written, /404/);
+  // a bad window is answered before the gate too
+  const w = sockStub();
+  attachNamed({}, w, Buffer.alloc(0), 'demo', new URL('http://127.0.0.1/x?window=bad;x'), { gate: () => { reached = true; return 0; } });
+  assert.equal(reached, false);
+  assert.match(w.written, /^HTTP\/1\.1 400 /);
+});

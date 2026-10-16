@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>laneboard component kit</title>
+<!--
+  Static component gallery for HUMAN review (plan §4 2.5 and §5): every
+  component of public/css/components.css in the dark and the light theme,
+  side by side. No script, no data, no network: open it from the running
+  board at /dev/kit.html, or straight from disk. The markup mirrors what the
+  builders in public/js/ui/{components,spark,toast,confirm}.js produce.
+  Fixture names are generic (builder-a, B1, acme).
+-->
+<link rel="stylesheet" href="../css/tokens.css">
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="../css/components.css">
+<style>
+  /* Gallery layout only; every colour and size is a token. */
+  body { margin: 0; background: var(--bg-canvas); }
+  .kit-wrap { display: grid; grid-template-columns: repeat(auto-fit, minmax(560px, 1fr)); }
+  .kit { background: var(--bg-canvas); color: var(--text-1); padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-4); }
+  .kit-h { font-family: var(--font-label); font-size: var(--fs-16); letter-spacing: var(--ls-label); display: flex; gap: var(--sp-2); align-items: center; color: var(--text-2); }
+  .kit-row { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; }
+  .kit-top { align-items: flex-start; }
+  .kit-cell { display: inline-flex; gap: var(--sp-1); align-items: center; color: var(--text-2); }
+  .kit-card { display: inline-flex; gap: var(--sp-2); align-items: center; padding: var(--sp-1) var(--sp-2); border: var(--bw) solid var(--line); border-radius: var(--radius); background: var(--bg-surface); }
+  .kit-toasts { display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-1); }
+  .kit-dialog { position: static; display: block; width: 300px; margin: 0; }
+</style>
+</head>
+<body>
+<div class="kit-wrap">
+<main class="kit" data-theme="dark">
+<h1 class="kit-h"><span class="plate plate--solid">KIT</span> DARK</h1>
+
+<section class="panel" aria-labelledby="dark-lamps"><h2 class="panel-t" id="dark-lamps"><span class="panel-name">LAMPS</span><span class="panel-n">[7]</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row">
+  <span class="kit-cell"><span class="lamp" data-p="1" role="img" aria-label="critical" title="critical"></span> <span>p1 ■</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="2" role="img" aria-label="warning" title="warning"></span> <span>p2 ▲</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="3" role="img" aria-label="low" title="low"></span> <span>p3 ◆</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="ok" role="img" aria-label="ok" title="ok"></span> <span>ok ●</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="run" role="img" aria-label="working" title="working"></span> <span>run</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="off" role="img" aria-label="off" title="off"></span> <span>off ○</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="stale" role="img" aria-label="stale" title="stale"></span> <span>stale</span></span>
+</div>
+<div class="kit-row">
+  <span class="kit-cell"><span class="lamp" data-p="1" data-unack role="img" aria-label="permission, unacknowledged" title="permission"></span> <span>p1 unack (1 Hz)</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="2" data-unack role="img" aria-label="question, unacknowledged" title="question"></span> <span>p2 unack</span></span>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="dark-plates"><h2 class="panel-t" id="dark-plates"><span class="panel-name">PLATES</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row">
+  <span class="plate">B1</span> <span class="plate">builder-a</span> <span class="plate plate--solid">LANEBOARD</span>
+  <span class="plate plate--p1">DOWN</span> <span class="plate plate--p2">STALE</span> <span class="plate">ACT</span>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="dark-lanes"><h2 class="panel-t" id="dark-lanes"><span class="panel-name">LANES</span><span class="panel-scope">· ALL</span><span class="panel-n">[42]</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row">
+  <span class="kit-cell"><span class="plate">B1</span> <span class="segbar" role="img" aria-label="12 lanes: 1 permission, 2 question, 6 working, 3 idle" title="12 lanes: 1 permission, 2 question, 6 working, 3 idle"><i data-p="1" style="flex-grow:1"></i><i data-p="2" style="flex-grow:2"></i><i data-p="run" style="flex-grow:6"></i><i data-p="off" style="flex-grow:3"></i></span> <span>[12]</span></span>
+  <span class="kit-cell"><span class="plate">B2</span> <span class="segbar" role="img" aria-label="18 lanes: 14 working, 3 done, 1 idle" title="18 lanes: 14 working, 3 done, 1 idle"><i data-p="run" style="flex-grow:14"></i><i data-p="ok" style="flex-grow:3"></i><i data-p="off" style="flex-grow:1"></i></span> <span>[18]</span></span>
+  <span class="kit-cell"><span class="plate">B3</span> <span class="segbar" role="img" aria-label="12 lanes: 4 idle, 8 dead" title="12 lanes: 4 idle, 8 dead"><i data-p="off" style="flex-grow:4"></i><i data-p="dead" style="flex-grow:8"></i></span> <span>[12]</span></span>
+  <span class="kit-cell"><span class="plate">B4</span> <span class="segbar segbar--empty" role="img" aria-label="0 lanes" title="0 lanes"></span> <span>[0]</span></span>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="dark-sparks"><h2 class="panel-t" id="dark-sparks"><span class="panel-name">SPARKLINES</span><span class="panel-scope">· B1/auth</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row">
+  <span class="kit-cell">ctx <svg class="spark" viewBox="0 0 60 16" width="60" height="16" role="img" aria-label="ctx 64%, rising"><title>ctx 64%, rising</title><line class="spark-th" x1="0" x2="60" y1="5.9" y2="5.9"/><polyline class="spark-line" points="1,13.32 7.44,12.48 13.89,11.92 20.33,10.8 26.78,9.26 33.22,8.42 39.67,7.72 46.11,6.88 52.56,6.6 59,6.04"/><rect class="spark-last" x="58" y="5.04" width="2" height="2"/></svg> <span>64%</span></span>
+  <span class="kit-cell">cpu <svg class="spark" viewBox="0 0 60 16" width="60" height="16" role="img" aria-label="cpu 16%, falling"><title>cpu 16%, falling</title><polyline class="spark-line" points="1,9.7 6.27,2.91 11.55,10.76 16.82,13.94 22.09,4.61 27.36,1 32.64,11.82 37.91,12.88 43.18,13.52 48.45,14.36 53.73,15 59,14.79"/><rect class="spark-last" x="58" y="13.79" width="2" height="2"/></svg> <span>16%</span></span>
+  <span class="kit-cell">$ 5h <svg class="spark" viewBox="0 0 60 16" width="60" height="16" role="img" aria-label="$ 5h 1.82, rising"><title>$ 5h 1.82, rising</title><polyline class="spark-line" points="1,15 9.29,14.19 17.57,14.19 25.86,11.74 34.14,8.49 42.43,6.05 50.71,5.23 59,1"/><rect class="spark-last" x="58" y="0" width="2" height="2"/></svg> <span>$1.82</span></span>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="dark-brackets"><h2 class="panel-t" id="dark-brackets"><span class="panel-name">BRACKETS</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row">
+  <span class="kit-card sel"><span class="plate">B1</span> <span class="lamp" data-p="1" role="img" aria-label="permission" title="permission"></span> <span>auth-refactor</span> <span>3/7</span></span>
+  <span class="kit-card"><span class="plate">B2</span> <span class="lamp" data-p="run" role="img" aria-label="working" title="working"></span> <span>api-cache</span> <span>5/5</span></span>
+  <button type="button" class="btn">focus me (Tab)</button>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="dark-chips"><h2 class="panel-t" id="dark-chips"><span class="panel-name">SCOPE</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row" role="toolbar" aria-label="Scope">
+  <button type="button" class="chip" data-param="b" aria-label="Remove filter B1"><span class="lamp" data-p="1" role="img" aria-label="critical"></span><span class="chip-t">B1</span><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-close"/></svg></button>
+  <button type="button" class="chip" data-param="s" aria-label="Remove filter STCK"><span class="lamp" data-p="2" role="img" aria-label="warning"></span><span class="chip-t">STCK</span><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-close"/></svg></button>
+  <button type="button" class="chip" data-param="q" aria-pressed="true" aria-label="Remove filter auth"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-search"/></svg><span class="chip-t">auth</span><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-close"/></svg></button>
+  <button type="button" class="btn btn--primary"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-play"/></svg> Resume</button>
+  <button type="button" class="btn btn--danger"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-kill"/></svg> Kill</button>
+  <button type="button" class="btn" disabled>Disabled</button>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="dark-table"><h2 class="panel-t" id="dark-table"><span class="panel-name">AUDIT</span><span class="panel-scope">· acme</span><span class="panel-n">[4]</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="dt-wrap" tabindex="0"><table class="dt" aria-rowcount="5" aria-label="Audit sample">
+<thead><tr><th scope="col" aria-sort="descending"><button type="button">TS</button></th><th scope="col" aria-sort="none"><button type="button">B</button></th><th scope="col" aria-sort="none"><button type="button">Action</button></th><th scope="col" aria-sort="none"><button type="button">Target</button></th><th scope="col" class="num" aria-sort="none"><button type="button">Age</button></th></tr></thead>
+<tbody>
+<tr tabindex="0" aria-rowindex="2"><td>14:02:05</td><td><span class="plate">B1</span></td><td>pause</td><td title="auth-refactor">auth-refactor</td><td class="num">12m</td></tr>
+<tr tabindex="-1" aria-rowindex="3" aria-selected="true"><td>14:01:50</td><td><span class="plate">B2</span></td><td>approve</td><td title="api-cache">api-cache</td><td class="num">3m</td></tr>
+<tr tabindex="-1" aria-rowindex="4" class="is-stale"><td>13:58:11</td><td><span class="plate">B3</span></td><td>kill</td><td title="docs-sweep">docs-sweep</td><td class="num">—</td></tr>
+<tr tabindex="-1" aria-rowindex="5"><td>13:40:00</td><td><span class="plate">B1</span></td><td>send-text</td><td title="ci-fix">ci-fix</td><td class="num">1h</td></tr>
+</tbody></table></div>
+</div></section>
+
+<section class="panel" aria-labelledby="dark-toasts"><h2 class="panel-t" id="dark-toasts"><span class="panel-name">TOASTS</span><span class="panel-n">[3]</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-toasts">
+  <div class="toast" data-kind="info"><span class="toast-m">sent to builder-a/auth</span></div>
+  <div class="toast" data-kind="ok"><span class="lamp" data-p="ok" role="img" aria-label="ok"></span><span class="toast-m">paused B1</span><button type="button" class="btn btn--s">Undo</button></div>
+  <div class="toast" data-kind="err" role="alert"><span class="lamp" data-p="1" role="img" aria-label="error"></span><span class="toast-m">kill failed: builder-b unreachable</span></div>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="dark-confirm"><h2 class="panel-t" id="dark-confirm"><span class="panel-name">CONFIRM</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row kit-top">
+<div class="cfm kit-dialog" role="alertdialog" aria-labelledby="dark-cfm-ask" aria-describedby="dark-cfm-ask-d" data-mode="ask">
+  <h2 class="cfm-t" id="dark-cfm-ask"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-command"/></svg><span>SPAWN</span><span class="plate">B1/docs</span></h2>
+  <div class="cfm-d" id="dark-cfm-ask-d"><p>SPAWN B1/docs?</p></div>
+  <div class="cfm-b"><button type="button" class="btn">Cancel</button><button type="button" class="btn btn--primary">SPAWN</button></div>
+</div>
+<div class="cfm kit-dialog" role="alertdialog" aria-labelledby="dark-cfm-kill" aria-describedby="dark-cfm-kill-d" data-mode="typed">
+  <h2 class="cfm-t" id="dark-cfm-kill"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-alarm"/></svg><span>KILL</span><span class="plate">B1/auth</span></h2>
+  <div class="cfm-d" id="dark-cfm-kill-d"><ul class="cfm-list"><li>ends the tmux session and its agent</li><li>unsaved work in the terminal is lost</li></ul>
+  <label class="cfm-in"><span class="cfm-hint">Type <code>KILL B1/auth</code> to confirm</span><input type="text" autocomplete="off" spellcheck="false" aria-label="Type KILL B1/auth to confirm" value="KILL B1/au"></label></div>
+  <div class="cfm-b"><button type="button" class="btn">Cancel</button><button type="button" class="btn btn--danger" disabled>KILL</button></div>
+</div>
+<div class="cfm kit-dialog" role="alertdialog" aria-labelledby="dark-cfm-fan" aria-describedby="dark-cfm-fan-d" data-mode="typed">
+  <h2 class="cfm-t" id="dark-cfm-fan"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-command"/></svg><span>BROADCAST</span><span class="plate">B1/auth</span><span class="plate">B1/api</span><span class="plate">B2/web</span><span class="plate">+4</span></h2>
+  <div class="cfm-d" id="dark-cfm-fan-d"><ul class="cfm-list"><li>sends the text to 7 sessions on 2 builders</li></ul>
+  <label class="cfm-in"><span class="cfm-hint">Type <code>BROADCAST 7</code> to confirm</span><input type="text" autocomplete="off" spellcheck="false" aria-label="Type BROADCAST 7 to confirm" value="BROADCAST 7"></label></div>
+  <div class="cfm-b"><button type="button" class="btn">Cancel</button><button type="button" class="btn btn--primary">BROADCAST</button></div>
+</div>
+</div>
+</div></section>
+</main>
+<main class="kit" data-theme="light">
+<h1 class="kit-h"><span class="plate plate--solid">KIT</span> LIGHT</h1>
+
+<section class="panel" aria-labelledby="light-lamps"><h2 class="panel-t" id="light-lamps"><span class="panel-name">LAMPS</span><span class="panel-n">[7]</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row">
+  <span class="kit-cell"><span class="lamp" data-p="1" role="img" aria-label="critical" title="critical"></span> <span>p1 ■</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="2" role="img" aria-label="warning" title="warning"></span> <span>p2 ▲</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="3" role="img" aria-label="low" title="low"></span> <span>p3 ◆</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="ok" role="img" aria-label="ok" title="ok"></span> <span>ok ●</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="run" role="img" aria-label="working" title="working"></span> <span>run</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="off" role="img" aria-label="off" title="off"></span> <span>off ○</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="stale" role="img" aria-label="stale" title="stale"></span> <span>stale</span></span>
+</div>
+<div class="kit-row">
+  <span class="kit-cell"><span class="lamp" data-p="1" data-unack role="img" aria-label="permission, unacknowledged" title="permission"></span> <span>p1 unack (1 Hz)</span></span>
+  <span class="kit-cell"><span class="lamp" data-p="2" data-unack role="img" aria-label="question, unacknowledged" title="question"></span> <span>p2 unack</span></span>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="light-plates"><h2 class="panel-t" id="light-plates"><span class="panel-name">PLATES</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row">
+  <span class="plate">B1</span> <span class="plate">builder-a</span> <span class="plate plate--solid">LANEBOARD</span>
+  <span class="plate plate--p1">DOWN</span> <span class="plate plate--p2">STALE</span> <span class="plate">ACT</span>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="light-lanes"><h2 class="panel-t" id="light-lanes"><span class="panel-name">LANES</span><span class="panel-scope">· ALL</span><span class="panel-n">[42]</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row">
+  <span class="kit-cell"><span class="plate">B1</span> <span class="segbar" role="img" aria-label="12 lanes: 1 permission, 2 question, 6 working, 3 idle" title="12 lanes: 1 permission, 2 question, 6 working, 3 idle"><i data-p="1" style="flex-grow:1"></i><i data-p="2" style="flex-grow:2"></i><i data-p="run" style="flex-grow:6"></i><i data-p="off" style="flex-grow:3"></i></span> <span>[12]</span></span>
+  <span class="kit-cell"><span class="plate">B2</span> <span class="segbar" role="img" aria-label="18 lanes: 14 working, 3 done, 1 idle" title="18 lanes: 14 working, 3 done, 1 idle"><i data-p="run" style="flex-grow:14"></i><i data-p="ok" style="flex-grow:3"></i><i data-p="off" style="flex-grow:1"></i></span> <span>[18]</span></span>
+  <span class="kit-cell"><span class="plate">B3</span> <span class="segbar" role="img" aria-label="12 lanes: 4 idle, 8 dead" title="12 lanes: 4 idle, 8 dead"><i data-p="off" style="flex-grow:4"></i><i data-p="dead" style="flex-grow:8"></i></span> <span>[12]</span></span>
+  <span class="kit-cell"><span class="plate">B4</span> <span class="segbar segbar--empty" role="img" aria-label="0 lanes" title="0 lanes"></span> <span>[0]</span></span>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="light-sparks"><h2 class="panel-t" id="light-sparks"><span class="panel-name">SPARKLINES</span><span class="panel-scope">· B1/auth</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row">
+  <span class="kit-cell">ctx <svg class="spark" viewBox="0 0 60 16" width="60" height="16" role="img" aria-label="ctx 64%, rising"><title>ctx 64%, rising</title><line class="spark-th" x1="0" x2="60" y1="5.9" y2="5.9"/><polyline class="spark-line" points="1,13.32 7.44,12.48 13.89,11.92 20.33,10.8 26.78,9.26 33.22,8.42 39.67,7.72 46.11,6.88 52.56,6.6 59,6.04"/><rect class="spark-last" x="58" y="5.04" width="2" height="2"/></svg> <span>64%</span></span>
+  <span class="kit-cell">cpu <svg class="spark" viewBox="0 0 60 16" width="60" height="16" role="img" aria-label="cpu 16%, falling"><title>cpu 16%, falling</title><polyline class="spark-line" points="1,9.7 6.27,2.91 11.55,10.76 16.82,13.94 22.09,4.61 27.36,1 32.64,11.82 37.91,12.88 43.18,13.52 48.45,14.36 53.73,15 59,14.79"/><rect class="spark-last" x="58" y="13.79" width="2" height="2"/></svg> <span>16%</span></span>
+  <span class="kit-cell">$ 5h <svg class="spark" viewBox="0 0 60 16" width="60" height="16" role="img" aria-label="$ 5h 1.82, rising"><title>$ 5h 1.82, rising</title><polyline class="spark-line" points="1,15 9.29,14.19 17.57,14.19 25.86,11.74 34.14,8.49 42.43,6.05 50.71,5.23 59,1"/><rect class="spark-last" x="58" y="0" width="2" height="2"/></svg> <span>$1.82</span></span>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="light-brackets"><h2 class="panel-t" id="light-brackets"><span class="panel-name">BRACKETS</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row">
+  <span class="kit-card sel"><span class="plate">B1</span> <span class="lamp" data-p="1" role="img" aria-label="permission" title="permission"></span> <span>auth-refactor</span> <span>3/7</span></span>
+  <span class="kit-card"><span class="plate">B2</span> <span class="lamp" data-p="run" role="img" aria-label="working" title="working"></span> <span>api-cache</span> <span>5/5</span></span>
+  <button type="button" class="btn">focus me (Tab)</button>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="light-chips"><h2 class="panel-t" id="light-chips"><span class="panel-name">SCOPE</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row" role="toolbar" aria-label="Scope">
+  <button type="button" class="chip" data-param="b" aria-label="Remove filter B1"><span class="lamp" data-p="1" role="img" aria-label="critical"></span><span class="chip-t">B1</span><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-close"/></svg></button>
+  <button type="button" class="chip" data-param="s" aria-label="Remove filter STCK"><span class="lamp" data-p="2" role="img" aria-label="warning"></span><span class="chip-t">STCK</span><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-close"/></svg></button>
+  <button type="button" class="chip" data-param="q" aria-pressed="true" aria-label="Remove filter auth"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-search"/></svg><span class="chip-t">auth</span><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-close"/></svg></button>
+  <button type="button" class="btn btn--primary"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-play"/></svg> Resume</button>
+  <button type="button" class="btn btn--danger"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-kill"/></svg> Kill</button>
+  <button type="button" class="btn" disabled>Disabled</button>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="light-table"><h2 class="panel-t" id="light-table"><span class="panel-name">AUDIT</span><span class="panel-scope">· acme</span><span class="panel-n">[4]</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="dt-wrap" tabindex="0"><table class="dt" aria-rowcount="5" aria-label="Audit sample">
+<thead><tr><th scope="col" aria-sort="descending"><button type="button">TS</button></th><th scope="col" aria-sort="none"><button type="button">B</button></th><th scope="col" aria-sort="none"><button type="button">Action</button></th><th scope="col" aria-sort="none"><button type="button">Target</button></th><th scope="col" class="num" aria-sort="none"><button type="button">Age</button></th></tr></thead>
+<tbody>
+<tr tabindex="0" aria-rowindex="2"><td>14:02:05</td><td><span class="plate">B1</span></td><td>pause</td><td title="auth-refactor">auth-refactor</td><td class="num">12m</td></tr>
+<tr tabindex="-1" aria-rowindex="3" aria-selected="true"><td>14:01:50</td><td><span class="plate">B2</span></td><td>approve</td><td title="api-cache">api-cache</td><td class="num">3m</td></tr>
+<tr tabindex="-1" aria-rowindex="4" class="is-stale"><td>13:58:11</td><td><span class="plate">B3</span></td><td>kill</td><td title="docs-sweep">docs-sweep</td><td class="num">—</td></tr>
+<tr tabindex="-1" aria-rowindex="5"><td>13:40:00</td><td><span class="plate">B1</span></td><td>send-text</td><td title="ci-fix">ci-fix</td><td class="num">1h</td></tr>
+</tbody></table></div>
+</div></section>
+
+<section class="panel" aria-labelledby="light-toasts"><h2 class="panel-t" id="light-toasts"><span class="panel-name">TOASTS</span><span class="panel-n">[3]</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-toasts">
+  <div class="toast" data-kind="info"><span class="toast-m">sent to builder-a/auth</span></div>
+  <div class="toast" data-kind="ok"><span class="lamp" data-p="ok" role="img" aria-label="ok"></span><span class="toast-m">paused B1</span><button type="button" class="btn btn--s">Undo</button></div>
+  <div class="toast" data-kind="err" role="alert"><span class="lamp" data-p="1" role="img" aria-label="error"></span><span class="toast-m">kill failed: builder-b unreachable</span></div>
+</div>
+</div></section>
+
+<section class="panel" aria-labelledby="light-confirm"><h2 class="panel-t" id="light-confirm"><span class="panel-name">CONFIRM</span><span class="panel-tools"></span></h2><div class="panel-b">
+<div class="kit-row kit-top">
+<div class="cfm kit-dialog" role="alertdialog" aria-labelledby="light-cfm-ask" aria-describedby="light-cfm-ask-d" data-mode="ask">
+  <h2 class="cfm-t" id="light-cfm-ask"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-command"/></svg><span>SPAWN</span><span class="plate">B1/docs</span></h2>
+  <div class="cfm-d" id="light-cfm-ask-d"><p>SPAWN B1/docs?</p></div>
+  <div class="cfm-b"><button type="button" class="btn">Cancel</button><button type="button" class="btn btn--primary">SPAWN</button></div>
+</div>
+<div class="cfm kit-dialog" role="alertdialog" aria-labelledby="light-cfm-kill" aria-describedby="light-cfm-kill-d" data-mode="typed">
+  <h2 class="cfm-t" id="light-cfm-kill"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-alarm"/></svg><span>KILL</span><span class="plate">B1/auth</span></h2>
+  <div class="cfm-d" id="light-cfm-kill-d"><ul class="cfm-list"><li>ends the tmux session and its agent</li><li>unsaved work in the terminal is lost</li></ul>
+  <label class="cfm-in"><span class="cfm-hint">Type <code>KILL B1/auth</code> to confirm</span><input type="text" autocomplete="off" spellcheck="false" aria-label="Type KILL B1/auth to confirm" value="KILL B1/au"></label></div>
+  <div class="cfm-b"><button type="button" class="btn">Cancel</button><button type="button" class="btn btn--danger" disabled>KILL</button></div>
+</div>
+<div class="cfm kit-dialog" role="alertdialog" aria-labelledby="light-cfm-fan" aria-describedby="light-cfm-fan-d" data-mode="typed">
+  <h2 class="cfm-t" id="light-cfm-fan"><svg class="i i-s" aria-hidden="true" focusable="false"><use href="../vendor/lucide/sprite.svg#i-command"/></svg><span>BROADCAST</span><span class="plate">B1/auth</span><span class="plate">B1/api</span><span class="plate">B2/web</span><span class="plate">+4</span></h2>
+  <div class="cfm-d" id="light-cfm-fan-d"><ul class="cfm-list"><li>sends the text to 7 sessions on 2 builders</li></ul>
+  <label class="cfm-in"><span class="cfm-hint">Type <code>BROADCAST 7</code> to confirm</span><input type="text" autocomplete="off" spellcheck="false" aria-label="Type BROADCAST 7 to confirm" value="BROADCAST 7"></label></div>
+  <div class="cfm-b"><button type="button" class="btn">Cancel</button><button type="button" class="btn btn--primary">BROADCAST</button></div>
+</div>
+</div>
+</div></section>
+</main>
+</div>
+</body>
+</html>

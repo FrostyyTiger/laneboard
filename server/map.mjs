@@ -11,18 +11,28 @@
 //              drawing a map of what it cannot touch.
 //   probes     HTTP checks laneboard runs itself, for what it can reach.
 //
-// Lanes and sessions come from the board's own snapshot and are attached
-// under the node the topology calls `self`. With no topology at all the Map is
-// this host with its lanes around it, which is still a picture.
+// Builders (fleet §5): each builder is a `builder:<id>` node, hung under the
+// topology node that names it (`"builder": "<id>"`, or legacy `self` for this
+// board's own id), else under a synthetic `__fleet` site. Its lanes and
+// sessions hang under it, from its snapshot. Builder mode is a fleet of one
+// (`build`); the hub passes every builder of its fleet store (`tickFleet`).
+// With no topology at all the Map is this builder with its lanes around it.
 //
-// docs/map.md has the file formats.
+// docs/map.md has the file formats; docs/fleet/map.md the fleet model.
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.mjs';
 import { log } from './log.mjs';
+import { fkey, isFkey, BUILDER_ID_RX, deriveCode } from './fleet/keys.mjs';
 
-export const KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr'];
-export const LINK_KINDS = ['dep', 'flow', 'share'];
+export const KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr', 'builder', 'session', 'repo', 'package'];
+export const LINK_KINDS = ['dep', 'flow', 'share', 'touch', 'conflict', 'pkg', 'ci'];
+// What a topology file may use: the rest are nodes and links laneboard makes.
+export const TOPOLOGY_KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr'];
+export const TOPOLOGY_LINK_KINDS = ['dep', 'flow', 'share'];
+// Id prefixes and synthetic ids laneboard owns; a topology may not use them.
+const RESERVED_PREFIXES = ['lane:', 'builder:', 'sess:', 'repo:', 'pkg:'];
+const RESERVED_IDS = ['__core', '__fleet', '__repos'];
 const SEVERITY = ['idle', 'unknown', 'ok', 'working', 'warn', 'attention', 'crit', 'down'];
 const worse = (a, b) => (SEVERITY.indexOf(a) >= SEVERITY.indexOf(b) ? a : b);
 const round = (v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 100) / 100 : undefined);
@@ -45,10 +55,28 @@ export function parseTopology(doc, where = 'topology') {
   const ids = new Set();
   for (const [i, n] of nodes.entries()) {
     if (!n || typeof n.id !== 'string' || !n.id) bad(`nodes[${i}] needs an id`);
-    if (n.id.startsWith('lane:')) bad(`nodes[${i}]: ids starting "lane:" are laneboard's own`);
+    const pre = RESERVED_PREFIXES.find((x) => n.id.startsWith(x));
+    if (pre) bad(`nodes[${i}]: ids starting "${pre}" are laneboard's own`);
+    if (RESERVED_IDS.includes(n.id)) bad(`nodes[${i}]: the id ${n.id} is laneboard's own`);
     if (ids.has(n.id)) bad(`nodes[${i}]: duplicate id ${JSON.stringify(n.id)}`);
     ids.add(n.id);
-    if (n.kind && !KINDS.includes(n.kind)) bad(`nodes[${i}] (${n.id}): kind must be one of ${KINDS.join(', ')}`);
+    if (n.kind && !TOPOLOGY_KINDS.includes(n.kind)) bad(`nodes[${i}] (${n.id}): kind must be one of ${TOPOLOGY_KINDS.join(', ')}`);
+  }
+  // `builder`: this node hosts that builder (fleet §5 2.1), at most one each.
+  const claimed = new Map();
+  for (const n of nodes) {
+    if (n.builder == null) continue;
+    if (typeof n.builder !== 'string' || !BUILDER_ID_RX.test(n.builder)) bad(`node ${n.id}: builder must be a builder id (a-z, 0-9, '-', 1-24 chars)`);
+    if (claimed.has(n.builder)) bad(`node ${n.id}: builder ${n.builder} is already claimed by node ${claimed.get(n.builder)}`);
+    claimed.set(n.builder, n.id);
+  }
+  // `ci`: this node is a CI runner for some builders (or "*" for all).
+  for (const n of nodes) {
+    if (n.ci == null) continue;
+    const c = n.ci;
+    if (!c || typeof c !== 'object' || Array.isArray(c) || typeof c.runner !== 'boolean') bad(`node ${n.id}: ci must be {"runner": true, "for": [...] | "*"}`);
+    const f = c.for ?? '*';
+    if (f !== '*' && !(Array.isArray(f) && f.every((x) => typeof x === 'string' && BUILDER_ID_RX.test(x)))) bad(`node ${n.id}: ci.for must be "*" or a list of builder ids`);
   }
   const byId = new Map(nodes.map((n) => [n.id, n]));
   for (const n of nodes) {
@@ -64,7 +92,7 @@ export function parseTopology(doc, where = 'topology') {
   if (!Array.isArray(links)) bad('links must be a list');
   for (const [i, l] of links.entries()) {
     if (!l || !byId.has(l.from) || !byId.has(l.to)) bad(`links[${i}]: from and to must both name nodes`);
-    if (l.kind && !LINK_KINDS.includes(l.kind)) bad(`links[${i}]: kind must be one of ${LINK_KINDS.join(', ')}`);
+    if (l.kind && !TOPOLOGY_LINK_KINDS.includes(l.kind)) bad(`links[${i}]: kind must be one of ${TOPOLOGY_LINK_KINDS.join(', ')}`);
   }
   if (doc.self != null && !byId.has(doc.self)) bad(`self ${JSON.stringify(doc.self)} does not name a node`);
   const lanes = doc.lanes ?? {};
@@ -302,6 +330,195 @@ function fromProbe(node, results) {
   };
 }
 
+// ------------------------------------------------------------------ helpers
+
+// Builder-provided text (labels, tool lines, reasons) is clipped here and
+// rendered with textContent by the view; nothing here is ever HTML.
+const MAX_TEXT = 200;
+const clip = (v, n = MAX_TEXT) => (typeof v === 'string' && v !== '' ? (v.length > n ? `${v.slice(0, n - 1)}…` : v) : undefined);
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+const arr = (v) => (Array.isArray(v) ? v : []);
+/** The object without its undefined fields, or undefined when nothing is left. */
+const compact = (o) => {
+  const out = {};
+  for (const [k, v] of Object.entries(o)) if (v !== undefined) out[k] = v;
+  return Object.keys(out).length ? out : undefined;
+};
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const CODE_RX = /^[A-Z0-9]{2,3}$/;
+const NAME_RX = /^[A-Za-z0-9][A-Za-z0-9._@/-]{0,99}$/;
+const CI_WORDS = ['pass', 'fail', 'running', 'none'];
+const EMPTY_TOPOLOGY = Object.freeze({ title: null, self: null, nodes: [], links: [], lanes: { show: 'active', links: [] } });
+
+// ------------------------------------------------------------------ builders
+
+export const LINKS = ['up', 'stale', 'down'];
+
+/** A fleet-store connection state as a map link (fleet §5 2.1). */
+export function linkOf(state) {
+  if (state === 'up') return 'up';
+  if (state === 'stale' || state === 'connecting') return 'stale';
+  return 'down';
+}
+
+/** The status a builder link lends the node that hosts it. */
+export function linkStatus(link) {
+  return link === 'up' ? 'ok' : link === 'stale' ? 'unknown' : 'down';
+}
+
+// A health sample older than this is not used for gauges (§7: 10 s cadence).
+const HEALTH_FRESH_MS = 60_000;
+
+function freshHealth(h, now) {
+  if (!h || typeof h !== 'object') return null;
+  const at = num(h.at);
+  return at !== undefined && now - at <= HEALTH_FRESH_MS ? h : null;
+}
+
+/** Gauges from a §7 health sample, or null when there is none fresh. */
+export function healthMetrics(health, now) {
+  const h = freshHealth(health, now);
+  if (!h) return null;
+  const root = arr(h.fs).find((x) => x && x.mount === '/');
+  const mem = num(h.mem?.availPct) !== undefined ? 1 - h.mem.availPct / 100
+    : num(h.mem?.totalMb) ? 1 - (num(h.mem.availMb) ?? 0) / h.mem.totalMb : undefined;
+  const m = compact({
+    cpu: round(clamp01(num(h.cpu?.busyPct) !== undefined ? h.cpu.busyPct / 100 : undefined)),
+    mem: round(clamp01(mem)),
+    disk: round(clamp01(num(root?.usedPct) !== undefined ? root.usedPct / 100 : undefined)),
+    swap: round(clamp01(num(h.swap?.totalMb) ? (num(h.swap.usedMb) ?? 0) / h.swap.totalMb : undefined)),
+  });
+  return m ?? null;
+}
+
+function vitalsMetrics(v) {
+  if (!v || typeof v !== 'object') return null;
+  return compact({
+    cpu: round(clamp01((num(v.cpuPct) ?? 0) / 100)),
+    mem: round(v.mem?.totalMb ? clamp01(v.mem.usedMb / v.mem.totalMb) : undefined),
+    disk: round(num(v.disk?.usedPct) !== undefined ? clamp01(v.disk.usedPct / 100) : undefined),
+  }) ?? null;
+}
+
+/** The worst fresh health alarm as [status, why], or null. */
+function healthLevel(health, now) {
+  const h = freshHealth(health, now);
+  const alarms = arr(h?.alarms).filter((a) => a && typeof a === 'object');
+  const a = alarms.find((x) => x.level === 'crit') ?? alarms.find((x) => x.level === 'warn');
+  return a ? [a.level, clip(a.text, 120)] : null;
+}
+
+/** Valid, de-duplicated builder entries with a link, in input order. */
+function cleanBuilders(builders) {
+  const out = [];
+  const seen = new Set();
+  for (const b of arr(builders)) {
+    if (!b || typeof b.id !== 'string' || !BUILDER_ID_RX.test(b.id) || seen.has(b.id)) continue;
+    seen.add(b.id);
+    const link = LINKS.includes(b.link) ? b.link : linkOf(b.state);
+    const snapshot = b.snapshot && typeof b.snapshot === 'object' ? b.snapshot : null;
+    out.push({
+      id: b.id,
+      code: typeof b.code === 'string' && CODE_RX.test(b.code) ? b.code : deriveCode(b.id),
+      link,
+      state: typeof b.state === 'string' ? b.state : link,
+      ageMs: num(b.ageMs),
+      lastSeenMs: num(b.lastSeenMs),
+      latencyMs: num(b.latencyMs),
+      version: clip(b.version, 40),
+      snapshot,
+      health: b.health ?? snapshot?.health ?? null,
+    });
+  }
+  return out;
+}
+
+function downWhy(b) {
+  if (b.state === 'misconfigured') return 'misconfigured';
+  if (b.state === 'incompatible') return 'incompatible version';
+  const age = b.lastSeenMs ?? b.ageMs;
+  return age !== undefined ? `no contact for ${agoWords(age)}` : 'no contact yet';
+}
+
+function staleWhy(b) {
+  if (b.state === 'connecting') return 'connecting';
+  const age = b.lastSeenMs ?? b.ageMs;
+  return age !== undefined ? `no data for ${agoWords(age)}` : 'no data yet';
+}
+
+const guestOf = (feeds, ref) => {
+  const feed = feeds?.get?.(ref.source);
+  return arr(feed?.guests).find((x) => x && (String(x.vmid) === ref.guest || x.name === ref.guest)) ?? null;
+};
+
+/**
+ * Which node each builder hangs under (fleet §5 2.1, attachment rule): the
+ * topology node naming it in `builder`; else `self` for the local builder
+ * (legacy builder-mode files); else a feed guest whose name is the builder id
+ * (§7); else the synthetic `__fleet` site. Returns Map builderId -> parent id.
+ */
+export function attachBuilders(topology, builders, { localId = null, feeds = null } = {}) {
+  const nodes = arr(topology?.nodes);
+  const ids = new Set(arr(builders).map((b) => b?.id).filter(Boolean));
+  const out = new Map();
+  const used = new Set();
+  const claim = (b, nodeId) => { out.set(b, nodeId); used.add(nodeId); };
+  for (const n of nodes) {
+    if (typeof n.builder === 'string' && ids.has(n.builder) && !out.has(n.builder)) claim(n.builder, n.id);
+  }
+  const self = topology?.self;
+  if (localId && self && ids.has(localId) && !out.has(localId) && !used.has(self)
+    && nodes.some((n) => n.id === self && n.builder == null)) claim(localId, self);
+  if (feeds) {
+    for (const n of nodes) {
+      if (used.has(n.id) || n.builder != null || n.id === self) continue;
+      const ref = feedRef(n.feed);
+      if (!ref?.guest || ref.service) continue;
+      const g = guestOf(feeds, ref);
+      if (g && typeof g.name === 'string' && ids.has(g.name) && !out.has(g.name)) claim(g.name, n.id);
+    }
+  }
+  for (const id of ids) if (!out.has(id)) out.set(id, '__fleet');
+  return out;
+}
+
+function builderNode(b, parent, lanes, now, { unclaimed }) {
+  const metrics = healthMetrics(b.health, now) ?? vitalsMetrics(b.snapshot?.vitals) ?? undefined;
+  let status = 'ok';
+  let why;
+  if (b.link === 'down') { status = 'down'; why = downWhy(b); }
+  else if (b.link === 'stale') { status = 'unknown'; why = staleWhy(b); }
+  else {
+    const h = healthLevel(b.health, now);
+    if (h) [status, why] = h;
+  }
+  const total = arr(b.snapshot?.lanes).length;
+  const counts = {
+    lanes: total,
+    working: lanes.filter((l) => l.status === 'working').length,
+    waiting: lanes.filter((l) => l.status === 'attention').length,
+  };
+  return {
+    id: `builder:${b.id}`,
+    parent,
+    kind: 'builder',
+    builder: b.id,
+    label: b.code,
+    status,
+    why,
+    sub: [b.id, plural(total, 'lane'), unclaimed ? 'not in topology' : null].filter(Boolean).join(' · '),
+    metrics,
+    counts,
+    detail: compact({
+      Version: b.version,
+      Latency: b.latencyMs !== undefined ? `${Math.round(b.latencyMs)} ms` : undefined,
+      'Last seen': b.lastSeenMs !== undefined ? `${agoWords(b.lastSeenMs)} ago` : undefined,
+    }),
+    stale: b.link !== 'up' || undefined,
+    ageMs: b.link !== 'up' ? b.ageMs : undefined,
+  };
+}
+
 // ------------------------------------------------------------------ lanes
 
 const SESSION_STATUS = {
@@ -322,58 +539,335 @@ function toolLine(activity) {
   else if (i && typeof i === 'object') arg = i.file_path ?? i.command ?? i.pattern ?? i.path ?? i.description ?? '';
   arg = String(arg).split('\n')[0];
   if (arg.includes('/')) arg = arg.split('/').slice(-2).join('/');
-  return `${activity.tool}${arg ? ` ${arg.slice(0, 48)}` : ''}`;
+  return `${String(activity.tool).slice(0, 40)}${arg ? ` ${arg.slice(0, 48)}` : ''}`;
 }
 
-/** One node per lane, its status the worst of its sessions. */
-export function laneNodes(snapshot, { parent, show = 'active', now = Date.now() } = {}) {
+function sessionStatus(s) {
+  if (s.danger) return ['crit', `guard: ${String(s.danger.reason ?? s.danger).slice(0, 120)}`];
+  return SESSION_STATUS[s.state] ?? ['unknown', null];
+}
+
+function sessionList(snapshot) {
+  const s = snapshot?.sessions;
+  const list = s instanceof Map ? [...s.values()] : arr(s);
+  return list.filter((x) => x && typeof x.name === 'string' && x.name !== '');
+}
+
+const sessionCost = (s) => num(s.cost?.usd) ?? num(s.statuslineCostUsd);
+
+function stuckOf(x) {
+  if (!x || typeof x !== 'object') return null;
+  return compact({ rule: clip(String(x.rule ?? ''), 40), reason: clip(String(x.reason ?? ''), 120), since: num(x.since) }) ?? null;
+}
+
+// Flags carry only what is set (most sessions have none), to keep the model small.
+function sessionFlags(s) {
+  return compact({
+    stuck: stuckOf(s.stuck) ?? undefined,
+    paused: s.paused ? true : undefined,
+    awaitingApproval: typeof s.awaitingApproval === 'string' ? s.awaitingApproval.slice(0, 64) : undefined,
+  });
+}
+
+/** `repo/pkg` names a lane touches: §6 facts first, else the lane's own list. */
+function lanePackages(facts, lane) {
+  const list = Array.isArray(facts?.packages) ? facts.packages : arr(lane.packages);
+  return [...new Set(list.filter((p) => typeof p === 'string' && p.includes('/') && NAME_RX.test(p)))];
+}
+
+/**
+ * One node per lane of one builder, its status the worst of its sessions,
+ * plus one `session` child per live session when a lane has two or more.
+ * Generalizes the builder-mode `laneNodes`: ids are `lane:<builder>/<lane>`
+ * and `sess:<builder>/<name>`, every node carries `builder` and `fkey`.
+ * A lane under a builder that is not `up` keeps its last status and gets
+ * `stale: true` (and `ageMs`, the age of the snapshot it came from).
+ */
+export function fleetLaneNodes(snapshot, { builder = config.fleet?.id, parent, show = 'active', now = Date.now(), laneFacts = null, stale = false, ageMs } = {}) {
   if (show === 'none') return [];
-  const sessions = new Map((snapshot?.sessions ?? []).map((s) => [s.name, s]));
+  const sessions = new Map(sessionList(snapshot).map((s) => [s.name, s]));
   const out = [];
-  for (const lane of snapshot?.lanes ?? []) {
-    const own = lane.sessions.map((n) => sessions.get(n)).filter(Boolean);
+  for (const lane of arr(snapshot?.lanes)) {
+    if (!lane || typeof lane.id !== 'string' || !lane.id) continue;
+    let key;
+    try { key = fkey(builder, lane.id); } catch { continue; }
+    const id = `lane:${key}`;
+    const own = arr(lane.sessions).map((n) => sessions.get(n)).filter(Boolean);
     const live = own.filter((s) => s.state !== 'dead');
     if (show === 'active' && !live.length) continue;
-    let status = live.length ? 'idle' : 'idle';
+    let status = 'idle';
     let why = live.length ? null : 'no session';
     let sub = null;
     for (const s of live) {
-      const [st, w] = s.danger ? ['crit', `guard: ${s.danger.reason ?? s.danger}`] : SESSION_STATUS[s.state] ?? ['unknown', null];
+      const [st, w] = sessionStatus(s);
       if (SEVERITY.indexOf(st) > SEVERITY.indexOf(status)) { status = st; why = w; }
       if (s.state === 'working') sub ??= toolLine(s.activity);
     }
     if (status === 'idle' && live.some((s) => s.state === 'done')) sub ??= 'done';
-    const waitingSince = live.filter((s) => SESSION_STATUS[s.state]?.[0] === 'attention').map((s) => s.stateSince).filter(Boolean);
+    const waitingSince = live.filter((s) => SESSION_STATUS[s.state]?.[0] === 'attention').map((s) => num(s.stateSince)).filter((v) => v !== undefined);
     if (waitingSince.length) why = `${why} · ${agoWords(now - Math.min(...waitingSince))}`;
+    const branch = typeof lane.branch === 'string' ? lane.branch : undefined;
     const detail = {};
-    if (lane.branch) detail.Branch = lane.branch;
-    if (own.length) detail.Sessions = own.map((s) => `${s.name} (${s.state})`).join(', ');
-    if (lane.progress) detail.Plan = typeof lane.progress === 'string' ? lane.progress : lane.progress.label ?? `${lane.progress.done ?? '?'}/${lane.progress.total ?? '?'}`;
+    if (branch) detail.Branch = clip(branch, 120);
+    // With two or more live sessions they are child nodes and say it themselves.
+    if (own.length && live.length < 2) detail.Sessions = clip(own.map((s) => `${s.name} (${s.state})`).join(', '));
+    if (lane.progress) detail.Plan = clip(typeof lane.progress === 'string' ? lane.progress : String(lane.progress.label ?? `${lane.progress.done ?? '?'}/${lane.progress.total ?? '?'}`), 80);
     if (lane.merged) detail.Merged = 'into main';
+    const facts = laneFacts?.get?.(key) ?? null;
+    const costs = own.map(sessionCost).filter((v) => v !== undefined);
+    const ctx = live.map((s) => num(s.context?.usedPct)).filter((v) => v !== undefined);
+    const born = own.map((s) => num(s.createdAt)).filter((v) => v !== undefined);
+    const lead = live.find((s) => s.stuck) ?? null;
     out.push({
-      id: `lane:${lane.id}`,
+      id,
       parent,
       kind: 'lane',
+      builder,
+      fkey: key,
       label: lane.id,
       status,
       why: ['attention', 'crit'].includes(status) ? why : undefined,
-      sub: sub ?? (why && !['attention', 'crit'].includes(status) ? why : lane.branch ?? undefined),
+      sub: clip(sub ?? (why && !['attention', 'crit'].includes(status) ? why : branch ?? undefined)),
       detail,
-      session: own[0]?.name,
-      branch: lane.branch,
+      // The fleet key of its first session (the client store is keyed by it).
+      session: own[0] ? fkey(builder, own[0].name) : undefined,
+      flags: compact({
+        stuck: stuckOf(lead?.stuck) ?? undefined,
+        paused: live.some((s) => s.paused) || undefined,
+        awaitingApproval: live.map((s) => s.awaitingApproval).find((v) => typeof v === 'string')?.slice(0, 64),
+        reviewReady: lane.reviewReady?.ready ? true : undefined,
+      }),
+      m: compact({
+        costUsd: round(num(facts?.costUsd) ?? num(lane.costUsd) ?? (costs.length ? costs.reduce((a, b) => a + b, 0) : undefined)),
+        ctxPct: ctx.length ? Math.round(Math.max(...ctx)) : undefined,
+        ageMs: born.length ? Math.max(0, now - Math.min(...born)) : undefined,
+        ci: CI_WORDS.includes(facts?.ci) ? facts.ci : undefined,
+      }),
+      stale: stale || undefined,
+      ageMs: stale ? num(ageMs) : undefined,
+      // Internal, for links; removed before the model leaves buildFleet.
+      branch,
+      packages: lanePackages(facts, lane),
+    });
+    if (live.length < 2) continue;
+    for (const s of live) {
+      const k = fkey(builder, s.name);
+      const [st, w] = sessionStatus(s);
+      out.push({
+        id: `sess:${k}`,
+        parent: id,
+        kind: 'session',
+        builder,
+        fkey: k,
+        label: clip(s.name, 64),
+        status: st,
+        why: ['attention', 'crit'].includes(st) ? w : undefined,
+        sub: s.state === 'working' ? clip(toolLine(s.activity)) : undefined,
+        flags: sessionFlags(s),
+        m: compact({ costUsd: round(sessionCost(s)), ctxPct: num(s.context?.usedPct) !== undefined ? Math.round(s.context.usedPct) : undefined }),
+        stale: stale || undefined,
+      });
+    }
+  }
+  return out;
+}
+
+/** Builder-mode lane nodes only (fleet F7 signature), without session children. */
+export function laneNodes(snapshot, { parent, show, now, builderId = config.fleet?.id, laneFacts } = {}) {
+  return fleetLaneNodes(snapshot, { builder: builderId, parent, show, now, laneFacts }).filter((n) => n.kind === 'lane');
+}
+
+// ------------------------------------------------------------------ repos
+
+const PKG_STATUS = { fail: 'crit', running: 'working', pass: 'ok', none: 'idle' };
+
+/**
+ * The repos island: `__repos`, then `repo:<name>` and `pkg:<repo>/<pkg>`
+ * per §6 row. Empty when there are no repos.
+ */
+export function repoNodes(repos, { parent = '__core' } = {}) {
+  const out = [];
+  const seen = new Set();
+  for (const r of arr(repos)) {
+    if (!r || typeof r.name !== 'string' || !NAME_RX.test(r.name)) continue;
+    const rid = `repo:${r.name}`;
+    if (seen.has(rid)) continue;
+    seen.add(rid);
+    const pkgs = [];
+    for (const p of arr(r.packages)) {
+      if (!p || typeof p.name !== 'string' || !NAME_RX.test(p.name)) continue;
+      const pid = `pkg:${r.name}/${p.name}`;
+      if (seen.has(pid)) continue;
+      seen.add(pid);
+      const ci = CI_WORDS.includes(p.ci) ? p.ci : undefined;
+      const status = PKG_STATUS[ci] ?? 'unknown';
+      pkgs.push({
+        id: pid,
+        parent: rid,
+        kind: 'package',
+        label: p.name,
+        status,
+        why: status === 'crit' ? clip(p.why, 120) ?? 'CI failed' : undefined,
+        sub: status === 'crit' ? undefined : clip(p.why, 120),
+        m: ci ? { ci } : undefined,
+      });
+    }
+    out.push({ id: rid, parent: '__repos', kind: 'repo', label: r.name, status: 'ok' }, ...pkgs);
+  }
+  if (!out.length) return [];
+  return [{ id: '__repos', parent, kind: 'site', label: 'REPOS', status: 'ok' }, ...out];
+}
+
+// ------------------------------------------------------------------ links
+
+/**
+ * §6 P11 `edges` ([{a, b, kind: 'textual'|'overlap', files, repo}]) as the
+ * map's `overlaps`: textual -> conflict (confirmed), overlap -> touch. Edges
+ * to `main:<repo>` (no lane on the other end) are dropped. Already-normalized
+ * kinds (touch, predicted, conflict) pass through.
+ */
+export function normalizeOverlaps(edges) {
+  const KIND = { textual: 'conflict', conflict: 'conflict', predicted: 'predicted', overlap: 'touch', touch: 'touch' };
+  const out = [];
+  for (const e of arr(edges)) {
+    if (!e || !isFkey(e.a) || !isFkey(e.b) || e.a === e.b) continue;
+    const kind = KIND[e.kind];
+    if (!kind) continue;
+    out.push({
+      a: e.a,
+      b: e.b,
+      kind,
+      files: Math.max(0, Math.floor(num(e.files) ?? (Array.isArray(e.files) ? e.files.length : 0))),
+      packages: arr(e.packages).filter((p) => typeof p === 'string' && NAME_RX.test(p)),
+      label: clip(e.label, 80),
+      repo: typeof e.repo === 'string' && NAME_RX.test(e.repo) ? e.repo : undefined,
     });
   }
   return out;
 }
 
+const OVERLAP_RANK = { touch: 0, predicted: 1, conflict: 2 };
+const RUNNING = new Set(['running', 'in_progress', 'queued']);
+const shortPkgs = (list) => list.slice(0, 3).map((p) => p.split('/').pop()).join(', ') + (list.length > 3 ? ` +${list.length - 3}` : '');
+
+/**
+ * Every link of the model: the topology's own, lane rules, then lane-lane
+ * `touch`/`conflict` (one per pair, the worst wins), lane->package `pkg`, and
+ * builder->runner `ci`.
+ */
+export function fleetLinks({ lanes = [], overlaps = [], topology = null, builders = [], ciRuns = [], nodeIds = null } = {}) {
+  const topo = topology ?? EMPTY_TOPOLOGY;
+  const links = topo.links.map((l) => ({
+    id: l.id ?? `${l.from}>${l.to}`, from: l.from, to: l.to, kind: l.kind ?? 'dep', label: l.label, live: Boolean(l.live),
+  }));
+  for (const rule of topo.lanes?.links ?? []) {
+    const re = new RegExp(rule.match);
+    for (const ln of lanes) {
+      if (re.test(ln.label) || (ln.branch && re.test(ln.branch))) {
+        links.push({ id: `${ln.id}>${rule.to}`, from: ln.id, to: rule.to, kind: rule.kind ?? 'dep', label: rule.label, live: ln.status === 'working' });
+      }
+    }
+  }
+
+  const laneByKey = new Map(lanes.map((l) => [l.fkey, l]));
+  const pairs = new Map();
+  for (const o of arr(overlaps)) {
+    const A = laneByKey.get(o?.a);
+    const B = laneByKey.get(o?.b);
+    if (!A || !B || A === B || !(o.kind in OVERLAP_RANK)) continue;
+    const [from, to] = [A.id, B.id].sort();
+    const key = `${from}|${to}`;
+    const cur = pairs.get(key);
+    const files = num(o.files) ?? 0;
+    const packages = arr(o.packages);
+    if (cur && OVERLAP_RANK[cur.kind] > OVERLAP_RANK[o.kind]) continue;
+    if (cur && cur.kind === o.kind) {
+      cur.files = Math.max(cur.files, files);
+      cur.packages = [...new Set([...cur.packages, ...packages])];
+      cur.label ??= o.label;
+      continue;
+    }
+    pairs.set(key, { kind: o.kind, from, to, files, packages: [...new Set(packages)], label: o.label });
+  }
+  for (const [key, p] of [...pairs].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const fileWords = plural(p.files, 'file');
+    if (p.kind === 'touch') {
+      links.push({
+        id: `touch:${key}`, kind: 'touch', from: p.from, to: p.to, files: p.files,
+        packages: p.packages.length ? p.packages : undefined,
+        label: p.label ?? (p.packages.length ? `${fileWords} · ${shortPkgs(p.packages)}` : fileWords),
+        live: false,
+      });
+    } else {
+      const predicted = p.kind === 'predicted';
+      links.push({
+        id: `conflict:${key}`, kind: 'conflict', from: p.from, to: p.to, predicted, severity: predicted ? 'warn' : 'crit',
+        files: p.files, packages: p.packages.length ? p.packages : undefined,
+        label: p.label ?? `${predicted ? 'merge risk' : 'merge conflict'} · ${fileWords}`,
+        live: false,
+      });
+    }
+  }
+
+  const has = (id) => !nodeIds || nodeIds.has(id);
+  const seen = new Set();
+  for (const ln of lanes) {
+    for (const p of arr(ln.packages)) {
+      const to = `pkg:${p}`;
+      const id = `pkg:${ln.id}>${to}`;
+      if (!has(to) || seen.has(id)) continue;
+      seen.add(id);
+      links.push({ id, kind: 'pkg', from: ln.id, to, live: ln.status === 'working' });
+    }
+  }
+
+  const branchesOf = new Map();
+  for (const ln of lanes) {
+    if (!branchesOf.has(ln.builder)) branchesOf.set(ln.builder, new Set());
+    if (ln.branch) branchesOf.get(ln.builder).add(ln.branch);
+  }
+  for (const r of topo.nodes) {
+    if (r.ci?.runner !== true) continue;
+    const f = r.ci.for ?? '*';
+    for (const b of builders) {
+      if (f !== '*' && !f.includes(b.id)) continue;
+      const from = `builder:${b.id}`;
+      if (!has(from)) continue;
+      const live = arr(ciRuns).some((run) => run && run.runner === r.id && run.builder === b.id && RUNNING.has(run.status)
+        && (!run.branch || branchesOf.get(b.id)?.has(run.branch)));
+      links.push({ id: `ci:${from}>${r.id}`, kind: 'ci', from, to: r.id, live });
+    }
+  }
+  return links;
+}
+
 // ------------------------------------------------------------------ build
 
 /**
- * The model. Pure: every input is passed in, so the whole merge is testable
- * without a feed on disk, a network, or a tmux server.
+ * The fleet model. Pure: every input is passed in, so the whole merge is
+ * testable without a feed on disk, a network, a hub or a tmux server.
+ *
+ *   builders  [{id, code, link|state, ageMs, lastSeenMs?, latencyMs?, version?, snapshot, health?}]
+ *   repos     [{name, packages: [{name, ci, why?}]}]          (§6 rows)
+ *   laneFacts Map<fkey, {packages: ['repo/pkg'], costUsd, ci}> (§6)
+ *   overlaps  [{a, b, kind: touch|predicted|conflict, files, packages}] (normalizeOverlaps)
+ *   ciRuns    [{runner, builder, branch, status}]
+ *   localId   the builder `self` aliases (builder mode); on a hub, none
+ *   feedsOff  this board does not read feeds (a builder a hub watches)
  */
-export function build({ topology, feeds = new Map(), probes = new Map(), snapshot = null, hostname = config.hostname, now = Date.now(), topologyError = null }) {
-  const topo = topology ?? { title: null, self: null, nodes: [], links: [], lanes: { show: 'active', links: [] } };
+export function buildFleet({
+  topology, feeds = new Map(), probes = new Map(), now = Date.now(), topologyError = null, hostname = config.hostname,
+  builders = [], repos = [], laneFacts = null, overlaps = [], ciRuns = [], localId = null, feedsOff = false,
+} = {}) {
+  const topo = topology ?? EMPTY_TOPOLOGY;
+  const fleet = cleanBuilders(builders);
+  const byBuilder = new Map(fleet.map((b) => [b.id, b]));
+  const anchors = attachBuilders(topo, fleet, { localId, feeds });
+  const hostOf = new Map();
+  for (const [b, p] of anchors) if (p !== '__fleet') hostOf.set(p, b);
+  const facts = laneFacts instanceof Map ? laneFacts
+    : laneFacts && typeof laneFacts === 'object' ? new Map(Object.entries(laneFacts)) : null;
+
   const nodes = [];
   const hasCore = topo.nodes.some((n) => n.kind === 'core');
   if (!hasCore) nodes.push({ id: '__core', kind: 'core', label: topo.title ?? hostname, status: 'ok' });
@@ -387,6 +881,7 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
   for (const n of order) {
     const f = fromFeed(n, feeds, now);
     const p = fromProbe(n, probes);
+    const hosted = hostOf.has(n.id) ? byBuilder.get(hostOf.get(n.id)) : null;
     let status, why, sub = n.sub, metrics, memCache = false, derived = false, detail = { ...(n.detail ?? {}) };
     if (f || p) {
       status = f && p ? worse(f.status, p.status) : (f ?? p).status;
@@ -396,6 +891,16 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
       metrics = f?.metrics;
       memCache = Boolean(f?.memCache);
       Object.assign(detail, f?.detail ?? {}, p?.detail ?? {});
+      if (hosted) {
+        // §7: a room that hosts a builder is as bad as its feed or its link.
+        const ls = linkStatus(hosted.link);
+        const next = worse(status, ls);
+        if (next !== status) { status = next; why = `${hosted.id} ${ls === 'down' ? downWhy(hosted) : staleWhy(hosted)}`; }
+      }
+    } else if (hosted) {
+      // No feed of its own: the builder link is its source.
+      status = linkStatus(hosted.link);
+      why = status === 'down' ? `${hosted.id} ${downWhy(hosted)}` : undefined;
     } else if (n.kind === 'core' || n.kind === 'site') {
       // A place has no status of its own; the view rolls its children up.
       status = 'ok';
@@ -408,19 +913,12 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
     } else {
       status = n.status ?? 'unknown';
     }
-    if (n.id === topo.self && snapshot?.vitals) {
-      const v = snapshot.vitals;
-      metrics = {
-        ...(metrics ?? {}),
-        cpu: clamp01((v.cpuPct ?? 0) / 100),
-        mem: v.mem?.totalMb ? clamp01(v.mem.usedMb / v.mem.totalMb) : undefined,
-        disk: v.disk?.usedPct != null ? clamp01(v.disk.usedPct / 100) : undefined,
-      };
-      if (!f && !p) status = 'ok';
-      const sessions = snapshot.sessions?.length ?? 0;
-      sub ??= `${sessions} session${sessions === 1 ? '' : 's'} · this board`;
+    if (hosted) {
+      // The builder's own fresh health beats the hypervisor's view of it.
+      const hm = healthMetrics(hosted.health, now);
+      if (hm) metrics = { ...(metrics ?? {}), ...hm };
     }
-    live.set(n.id, { status, sourced: Boolean(f || p || n.id === topo.self) });
+    live.set(n.id, { status, sourced: Boolean(f || p || hosted) });
     const m = metrics ? Object.fromEntries(Object.entries(metrics).map(([k, v]) => [k, round(v)]).filter(([, v]) => v !== undefined)) : undefined;
     nodes.push({
       id: n.id,
@@ -437,33 +935,79 @@ export function build({ topology, feeds = new Map(), probes = new Map(), snapsho
       derived: derived || undefined,
       detail: Object.keys(detail).length ? detail : undefined,
       href: n.href,
+      // The builder this node hosts; its events are the builder node's.
+      hosts: hosted?.id,
     });
   }
 
   const coreId = hasCore ? topo.nodes.find((n) => n.kind === 'core').id : '__core';
-  const lanes = laneNodes(snapshot, { parent: topo.self ?? coreId, show: topo.lanes.show, now });
-  nodes.push(...lanes);
-
-  const links = topo.links.map((l) => ({
-    id: l.id ?? `${l.from}>${l.to}`, from: l.from, to: l.to, kind: l.kind ?? 'dep', label: l.label, live: Boolean(l.live),
-  }));
-  for (const rule of topo.lanes.links) {
-    const re = new RegExp(rule.match);
-    for (const ln of lanes) {
-      if (re.test(ln.label) || (ln.branch && re.test(ln.branch))) {
-        links.push({ id: `${ln.id}>${rule.to}`, from: ln.id, to: rule.to, kind: rule.kind ?? 'dep', label: rule.label, live: ln.status === 'working' });
-      }
-    }
+  if (fleet.some((b) => anchors.get(b.id) === '__fleet')) {
+    nodes.push({ id: '__fleet', kind: 'site', parent: coreId, label: 'FLEET', status: 'ok' });
   }
-  for (const n of lanes) { delete n.branch; }
+  const lanes = [];
+  for (const b of fleet) {
+    const parent = anchors.get(b.id);
+    const mine = fleetLaneNodes(b.snapshot, {
+      builder: b.id, parent: `builder:${b.id}`, show: topo.lanes?.show ?? 'active', now, laneFacts: facts, stale: b.link !== 'up', ageMs: b.ageMs,
+    });
+    const laneList = mine.filter((n) => n.kind === 'lane');
+    nodes.push(builderNode(b, parent, laneList, now, { unclaimed: parent === '__fleet' && topology != null }));
+    nodes.push(...mine);
+    lanes.push(...laneList);
+  }
+  nodes.push(...repoNodes(repos, { parent: coreId }));
+
+  const links = fleetLinks({ lanes, overlaps, topology: topo, builders: fleet, ciRuns, nodeIds: new Set(nodes.map((n) => n.id)) });
+  for (const n of lanes) { delete n.branch; delete n.packages; }
 
   return {
     title: topo.title ?? hostname,
+    fleet: { builders: fleet.map((b) => ({ id: b.id, code: b.code, link: b.link })) },
     nodes,
     links,
     error: topologyError ?? undefined,
+    feeds: feedsOff ? false : undefined,
     generatedAt: now,
   };
+}
+
+/**
+ * Builder mode: this board's snapshot as a fleet of one, id `config.fleet.id`,
+ * always `up`. Same code path as the hub (fleet conventions).
+ */
+export function build({ snapshot = null, builderId = config.fleet?.id, code, ...rest } = {}) {
+  code ??= builderId === config.fleet?.id ? config.fleet?.code : undefined;
+  const builders = typeof builderId === 'string' && BUILDER_ID_RX.test(builderId)
+    ? [{ id: builderId, code, link: 'up', state: 'up', ageMs: 0, snapshot }]
+    : [];
+  return buildFleet({ ...rest, builders, localId: builderId });
+}
+
+/**
+ * The map's fleet input from the hub fleet store's `view(now)` (H3): link
+ * from the connection state, the cached snapshot in the wire shape (sessions
+ * as a list), the latest health sample.
+ */
+export function toMapFleet(view, now = num(view?.now) ?? Date.now()) {
+  const builders = [];
+  for (const b of arr(view?.builders)) {
+    if (!b || typeof b.id !== 'string') continue;
+    const snap = b.snap && typeof b.snap === 'object' ? b.snap : null;
+    const lastSeen = num(b.conn?.lastSeen);
+    builders.push({
+      id: b.id,
+      code: b.code,
+      state: b.state,
+      link: linkOf(b.state),
+      ageMs: num(b.ageMs),
+      lastSeenMs: lastSeen !== undefined ? Math.max(0, now - lastSeen) : undefined,
+      latencyMs: num(b.conn?.latencyMs),
+      version: b.hello?.version ?? undefined,
+      snapshot: snap ? { ...snap, sessions: sessionList(snap), lanes: arr(snap.lanes) } : null,
+      health: snap?.health ?? null,
+    });
+  }
+  return { builders };
 }
 
 // ------------------------------------------------------------------ events
@@ -475,7 +1019,9 @@ const STATUS_WORDS = {
 
 /**
  * Status changes between two models, as events. A lane going from working to
- * working is not news; a room going down is.
+ * working is not news; a room going down is. A builder going down is one
+ * event: its lanes (which keep their last status) and the room hosting it say
+ * nothing in the same tick.
  */
 export function diffEvents(prev, next, now = Date.now()) {
   if (!prev) return [];
@@ -487,17 +1033,29 @@ export function diffEvents(prev, next, now = Date.now()) {
     const p = n.parent && byId.get(n.parent);
     return p && before.has(p.id) && before.get(p.id) !== p.status && p.status === n.status;
   };
+  // The builder node changed (or appeared) this tick: it speaks for its own.
+  const builderMoved = (b) => {
+    const bn = b != null && byId.get(`builder:${b}`);
+    return Boolean(bn) && before.get(bn.id) !== bn.status;
+  };
+  const multi = (next.fleet?.builders?.length ?? 0) > 1;
+  const nameOf = (n) => {
+    if (n.kind === 'builder') return `builder ${n.builder}`;
+    if (multi && n.builder) return `${byId.get(`builder:${n.builder}`)?.label ?? n.builder} ${n.label}`;
+    return n.label;
+  };
   const out = [];
   for (const n of next.nodes) {
-    if (n.derived || sameAsParent(n)) continue;
+    if (n.derived) continue;
+    if (n.kind !== 'builder' && (builderMoved(n.builder ?? n.hosts) || sameAsParent(n))) continue;
     const was = before.get(n.id);
     if (was === undefined) {
-      if (n.kind === 'lane') out.push({ at: now, node: n.id, kind: n.status, text: `${n.label} started` });
+      if (n.kind === 'lane') out.push({ at: now, node: n.id, kind: n.status, text: `${nameOf(n)} started` });
       continue;
     }
     if (was === n.status) continue;
     if (was === 'unknown' && n.status === 'ok') continue; // first data in, not a recovery
-    const text = `${n.label} ${STATUS_WORDS[n.status] ?? n.status}${n.why ? ` · ${n.why}` : ''}`;
+    const text = `${nameOf(n)} ${STATUS_WORDS[n.status] ?? n.status}${n.why ? ` · ${n.why}` : ''}`;
     out.push({ at: now, node: n.id, kind: n.status === 'idle' && was === 'working' ? 'ok' : n.status, text });
   }
   return out;
@@ -538,26 +1096,64 @@ const feedSeen = new Map();
 let lastSentAt = 0;
 let lastShape = '';
 
-/** Rebuild from the latest snapshot. Returns a message worth sending, or null. */
-export function tick(snapshot, now = Date.now()) {
-  const t = loadTopology();
-  const feeds = readFeeds();
-  const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error });
-  const fresh = [...diffEvents(current, next, now), ...feedEvents(feeds, t.value, feedSeen)];
+/** What, when it changes, is sent at once (metrics that only jitter are not). */
+export function shapeKey(m) {
+  return JSON.stringify(
+    m.nodes.map((n) => [n.id, n.status, n.why, n.sub, n.label, n.parent, n.flags ?? null, n.stale ?? null])
+      .concat(m.links.map((l) => [l.id, l.live, l.severity ?? null, l.predicted ?? null, l.label ?? null]))
+      .concat([(m.fleet?.builders ?? []).map((b) => [b.id, b.link])]),
+  );
+}
+
+function emit(next, feeds, topology, now, resendMs) {
+  const fresh = [...diffEvents(current, next, now), ...feedEvents(feeds, topology, feedSeen)];
   if (fresh.length) events = [...events, ...fresh].slice(-80);
   current = next;
   // Statuses, labels and structure go out at once; metrics that only jitter
-  // go out at most every 5 s.
-  const shape = JSON.stringify(next.nodes.map((n) => [n.id, n.status, n.why, n.sub, n.label, n.parent]).concat(next.links.map((l) => [l.id, l.live])));
+  // go out at most every `resendMs`.
+  const shape = shapeKey(next);
   const changed = shape !== lastShape;
-  if (!changed && !fresh.length && now - lastSentAt < 5000) return null;
+  if (!changed && !fresh.length && now - lastSentAt < resendMs) return null;
   lastShape = shape;
   lastSentAt = now;
   return { type: 'map', map: model() };
 }
 
+/** False on a builder a hub watches (`fleet.hubKeys` set): the hub reads the feeds (§7). */
+export function feedsEnabled(c = config) {
+  const keys = c?.fleet?.hubKeys;
+  return !(Array.isArray(keys) && keys.length > 0);
+}
+
+/** Builder mode: rebuild from the latest snapshot. Returns a message worth sending, or null. */
+export function tick(snapshot, now = Date.now()) {
+  const t = loadTopology();
+  const on = feedsEnabled();
+  const feeds = on ? readFeeds() : new Map();
+  const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error, feedsOff: !on });
+  return emit(next, feeds, t.value, now, 5000);
+}
+
+/**
+ * Hub mode (called by the hub map loop, H11): rebuild from the fleet.
+ * `fleet` is `toMapFleet(store.view(now))` (a raw `view` is accepted too)
+ * plus optional `repos`, `laneFacts`, `overlaps` (or P11 `edges`), `ciRuns`.
+ */
+export function tickFleet(fleet, now = Date.now()) {
+  const t = loadTopology();
+  const feeds = readFeeds();
+  const raw = fleet ?? {};
+  const f = arr(raw.builders).some((b) => b && 'snap' in b && !('snapshot' in b)) ? { ...raw, ...toMapFleet(raw, now) } : raw;
+  const next = buildFleet({
+    topology: t.value, feeds, probes: probeResults, now, topologyError: t.error,
+    builders: f.builders, repos: f.repos, laneFacts: f.laneFacts,
+    overlaps: f.overlaps ?? normalizeOverlaps(f.edges), ciRuns: f.ciRuns,
+  });
+  return emit(next, feeds, t.value, now, 10_000);
+}
+
 export function model() {
-  return current ? { ...current, events } : { title: config.hostname, nodes: [], links: [], events: [], generatedAt: Date.now() };
+  return current ? { ...current, events } : { title: config.hostname, fleet: { builders: [] }, nodes: [], links: [], events: [], generatedAt: Date.now() };
 }
 
 export function start() {

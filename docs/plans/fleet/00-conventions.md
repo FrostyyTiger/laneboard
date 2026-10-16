@@ -1,0 +1,71 @@
+# Fleet plan: shared conventions (every section author MUST follow these)
+
+**Integration notes (integrator):**
+- The resolved contracts in `README.md` ("Resolved contracts") are authoritative where this file is less specific; this file was updated to match them.
+- Hub room name `hub`, tag `tag:laneboard-hub`; `mode: "both"` is rejected (validation error), not "allowed if trivial".
+- Stuck detection runs on each builder (§7) and streams `stuck` messages; the hub derives alarms from them (it no longer "owns stuck detection").
+- Action list extended: `release`, `send-review`, `run-script`; `term` is an audit-only pseudo-action; `send-text` takes `guardPrompt`.
+- Envelope `via` also allows `"legacy"` (legacy REST routes adapted through the dispatcher); hello carries `actions`, `repos`, `permissionModes`, `scripts`.
+- Mutating requests from browsers and the CLI carry `X-Laneboard: 1` (except the local hook intake `/api/hook`, `/api/hook/permission`).
+- Previews on the wire are `previewLines` (raw ANSI, client renders); `previewHtml` is gone.
+- Builder ingress: `fleet.ingressPort` (default 7778 when a `fleet` block exists); `tailscale serve` targets it on builders and on the hub.
+- Builder switches: per-key scopes in `fleet.hubKeys` (`{key, id, scopes:["read"|"control"|"term"]}`, a bare string = `read` only) plus the master switch `fleet.hubControl` (default `false`: hub actions and terminals refused with 403 `control-disabled` whatever the scopes, signed reads allowed); `push.local` (builder web push, auto-off once `fleet.hubKeys` is set).
+- Security fixes pass (`SECURITY-FIXES.md`): `fleet.ingressPort` is mandatory with a `fleet` block and the header heuristic is gone; remote-only actions (`approve`, `deny`, `release`, `set-budget`, `kill *`, budget/quota `resume`) and every hub action need a remote caller; security-critical files are REVIEW-REQUIRED with independent review tasks and a human-pinned hub deploy (README 4.5).
+- Router adds `open=term|transcript` (L4) and a hidden `diff` view; visible message is `{type:'visible', keys:[fkey]}`.
+- Concurrency for the night is 8 agents by default, 9 at most (not 15).
+- Late security-review fixes adopted (routing identity only from the connection, `remoteOnly` approvals, signed `term` envelopes, no query-param signatures, builder-id-only `*` confirms, audit anchoring); see INTEGRATION-REPORT.md.
+- Private specifics live in `private/` (homelab repo); section 9 moved there wholly.
+
+## Goal
+Turn laneboard (one Node 24 process per machine, vanilla JS, no build step, `~/code/laneboard`) into a **fleet**:
+one hub UI that shows and controls every builder, with an industrial UI redesign where the Map is the home screen,
+packages/CI per package across several repos, stuck detection, an approval queue, pause/broadcast/kill, budget caps,
+builder health, review queue, conflict prediction, dispatch with placement. The user approved ALL ideas. Architecture: **A, a hub**.
+The plan will be implemented overnight by Opus agents (8 by default, 9 at most, see §11), unattended, so it must be concrete
+down to file paths, function names, data shapes, endpoints, tests and acceptance checks.
+
+## Hard constraints
+- **laneboard is a public repo with a hygiene test** (`test/hygiene.test.mjs`): no private names (the user's name, his company,
+  homelab node names, tailnet domains, private IPs, `/home/<realuser>`). Anything written for the laneboard repo uses generic names:
+  `builder-a`, `builder-b`, `hub`, `example.invalid`, `acme`. Private specifics (which VM, Tailscale tags, real repo names, package
+  lists for the real repos) go in a separate **"PRIVATE (homelab repo)"** subsection at the end of your section; that part ships in
+  the private homelab repo instead.
+- Node 24, ES modules, **no build step, no frontend framework**, keep the dependency count tiny (today 6). New deps need a line of
+  justification. Vendored static assets (fonts, icon SVGs) go in `public/vendor/` with their license file.
+- **Same codebase, two modes**: `mode: "builder"` (default, today's behaviour, unchanged when no fleet config) and `mode: "hub"`.
+  A builder keeps working standalone with its own UI. A hub has no local tmux/sessions of its own. `mode: "both"` is rejected by config validation (§3: `state.mjs`/`ws.mjs` are module singletons); a host that wants both runs two processes.
+- Binds `127.0.0.1` only, always; exposure is `tailscale serve`. Nothing destructive happens on its own (the guard flags, never acts; stuck detection badges, never kills).
+- Builders are the **least trusted** machines. The hub must treat everything a builder sends as untrusted text (escape, no innerHTML from builder data, strict CSP). Builders hold no credentials for the hub or each other and start no connections to them.
+- Tests: `node --test` (see package.json `test` script). Every new module gets tests; the existing suite must stay green. Frontend logic that can be pure goes in pure modules that `node --test` can import.
+
+## Names and contracts (do not invent alternatives)
+- **Code layout** (§11 X1): `server/index.mjs` is a ~15-line dispatcher that dynamically imports `server/boot/builder.mjs` or `server/boot/hub.mjs` (shared helpers in `server/boot/common.mjs`). New endpoints are new files `server/routes/*.mjs` (builder) / `server/hub/routes/*.mjs` (hub) loaded by `server/modules.mjs` `loadModules()`; new config keys are fragments `server/config/<area>.mjs`; new per-session/lane flags are `server/flags/*.mjs` using `state.addDecorator`, `state.addSnapshotKey`, `state.onTick`. `server/index.mjs`, `server/boot/builder.mjs`, `server/config.mjs`, `server/state.mjs` are frozen after wave 0 except where a task card names them.
+- **Builder id**: `config.fleet.id` (slug `[a-z0-9-]{1,24}`, default = sanitized `os.hostname()`); short code for the UI `config.fleet.code` (2-3 chars, default derived, e.g. `B1`).
+- **Fleet keys**: every session, lane, attention entry, pin, marker, event and deep link is keyed `"<builderId>/<localName>"` in fleet-aware code. Helpers in `server/fleet/keys.mjs` and `public/js/core/keys.js`: `fkey(builderId, name)`, `parseFkey(k) -> {builder, name}`. In builder mode the UI still uses fleet keys (with the local builder id) so there is ONE code path.
+- **Builder API v1** (served by every builder, under `/api/v1/`):
+  - `GET  /api/v1/hello` → `{id, code, version, apiVersion: 1, mode, capabilities: [...], actions: {<name>: <tier>}, time, auth: {kind}}` plus fields registered by modules (`repos`, `permissionModes`, `scripts`)
+  - `GET  /api/v1/snapshot` → the `state.snapshot()` shape plus `{builder: {id, code}, seq}`, pane previews `preview`/`previewHtml` stripped, `previewLines` kept
+  - `GET  /api/v1/stream` (WebSocket) → the same messages as today's `/ws` (`snapshot`, `delta`, `map`, `event`) each with `builder`, `seq`, `epoch` added at top level; plus new `health`, `approval`, `stuck`, `repos`, `alarms` messages; client may send `visible`, `resync`, `ping`
+  - `POST /api/v1/actions` → body is an **action envelope** (below); returns `{ok, result|error, auditId}`
+  - `GET  /api/v1/audit?since=` → this builder's audit log entries
+  - `WS   /api/v1/term/:name[?window=run-<script>]` → terminal, same protocol as `/ws/term/:name`
+  - more v1 reads, all signed-or-direct: `jobs/:id`, `approvals`, `health`, `morning`, `credit`, `lanes/:id/diff`, `sessions/:name/transcript`, `sessions/:name/preview`, `archive`, `archive/:lane` (see README endpoint table)
+- **Action envelope**: `{v:1, id:"<uuid nonce>", ts:<ms>, builder:"<id>", action:"<name>", target:"<localName|laneId|*>", args:{...}, user:"<login>", via:"hub"|"direct"|"legacy"}` plus header `X-Laneboard-Sig: ed25519 <base64>` over the canonical JSON of the envelope (keys sorted). Actions: `send-text`, `send-keys`, `interrupt`, `pause`, `resume`, `kill`, `restart`, `spawn`, `launch`, `retire`, `approve`, `deny`, `release`, `broadcast` (hub-side fan-out into per-builder `send-text`), `set-budget`, `ack-alarm` (handled where the alarms live: hub-local on a hub, local on a standalone builder), `send-review`, `run-script`; plus the audit-only `term`. Tiers: `read`, `click`, `ask` (UI verb+Cancel dialog), `confirm` (server requires `args.confirm === target`); target `*` requires `args.confirm` = `"fleet"` or the builder id (except `ack-alarm`). Table in README.
+- **Auth on a builder** (`server/fleet/auth.mjs`): a request is either (1) *direct*: carries `Tailscale-User-Login` (set by `tailscale serve` for the user's own devices) → allowed as today, or (2) *hub*: no user header, carries a valid hub signature (Ed25519, public key pinned in builder config `fleet.hubKeys`, PEM SPKI or `ed25519:<base64 raw 32 bytes>`, both accepted), `ts` within ±60 s, nonce unseen (LRU of 10k for 5 min). Reads by the hub are signed too (headers `X-Laneboard-Ts/-Nonce/-Key/-Sig`, signature over `` `v1 ${METHOD} ${builderId} ${pathWithQuery} ${ts} ${nonce}` ``, built only by `auth.signedReadString()`). Optional defense in depth: Tailscale app capability header `Tailscale-App-Capabilities` (grant `laneboard.dev/cap` role read|control) when present (inert in v1), `fleet.hubAddrs`, `fleet.ingressPeerUid`, `fleet.allowedUsers`. Origin check on every WebSocket upgrade and every mutating route (allow same origin + configured `fleet.allowedOrigins`; exact match, never same-site). Unknown → 403. Request classification uses the ingress listener (`fleet.ingressPort`, mandatory with a `fleet` block): non-ingress = `local` (CLI, hooks; identity headers stripped), ingress without serve's `X-Forwarded-*` = 403, ingress + `Tailscale-User-Login` = `direct`, ingress + signature = `hub` with the pinned key's scopes. A hub action needs scope `control`, a hub terminal scope `term` (a `term` envelope, never a read signature); with `fleet.hubControl: false` (default) a `hub` request may read but every action and terminal answers 403 `control-disabled` (audited).
+- **Hub** (`server/hub/`): config `fleet.builders: [{id, url, code?}]`, hub private key at `~/.config/laneboard/hub.key` (0600, PEM PKCS8 Ed25519, generated by `laneboard fleet keygen` or `openssl genpkey -algorithm ed25519`; public key PEM/SPKI, pinned on builders as `fleet.hubKeys: ["<PEM or ed25519:<base64 raw 32 bytes>>"]` (read only) or `[{key, id, scopes}]`, accept both spellings). The hub keeps one upstream WS per builder (reconnect with backoff, `stale` after 15 s silence, `down` after 60 s), merges into a fleet store, serves the fleet UI on its own `/ws`, relays actions (signs them, adds `user` from its own `Tailscale-User-Login`, writes the hub audit log), proxies terminals `/ws/term/:builder/:name`, proxies an allowlist of signed v1 reads. Hub also ingests map feeds (moves from builder to hub) and owns alarms (derived from the builders' `stuck`, `health`, `approval`, attention, CI, budget and conflict data), the review-wait metric, the fleet merge of conflict prediction (computed on builders, §6) and notifications (web push) fleet-wide. Stuck detection itself runs on each builder (§7).
+- **Audit log**: append-only JSONL, `~/.local/state/laneboard/audit.jsonl`, entry `{ts, id, user, via, builder, action, target, argsHash, result, prevHash, hash}` (hash chain sha256). Builder log is authoritative only up to the hub's last `audit.anchor` of its head; the hub log is authoritative for hub-relayed actions and shows mismatches; a rewritten builder chain raises `audit-fork` (§3 H13, Audit view §4 D12). On a builder, pause/budget/approvals/kill/audit are cooperative controls against an agent with a shell there; the boundary is cross-machine.
+- **Frontend layout** (`public/js/` ES modules, `public/index.html` shell): `core/` (keys, store, router, net, format, icons), `ui/` (shell, rail, inspector, tape, annunciator, palette, hotkeys, sheet), `views/` (map, board, packages, inbox, morning, credit, box, audit). Router: hash URL `#/<view>?b=<builderId|all>&s=<state filter>&q=<query>&sel=<fkey>&open=<term|transcript>`; hidden drill-down view `diff`. Views: **map (home)**, board, inbox (needs-you + approvals + review), packages, morning, credit, box (builders/health), audit.
+- **Design tokens**: CSS custom properties in `public/css/tokens.css`. Industrial: grey baseline, colour only for abnormal, one accent (safety orange `oklch(70% 0.19 45)`), status hue + shape (■ crit, ▲ attention/warn, ◆ low, ● ok muted), 1px borders, radius 2px, no shadows/gradients/blur, fonts JetBrains Mono (data) + Barlow Condensed (labels) vendored as woff2 (OFL), `tabular-nums slashed-zero`. Icons: vendored Lucide subset as one SVG sprite `public/vendor/lucide/sprite.svg` (ISC). Dark default + light theme via `data-theme`. Prefer icons + short codes over words; tooltips (`title` + aria-label) carry the long text.
+- **Repos and packages**: `config.repos: [{name, path?, ci?: {provider:"gh", repo:"owner/name"}, packages?: [{name, paths:[globs], jobs:[job names], workflow?}], global?: [job names]}]`. `config.ci.repo` (single) stays supported as legacy. Auto-detect packages when none configured.
+- **Lane state words** stay as today's 7 STATES in `server/state.mjs`; new derived flags: `stuck {rule, reason, since}` (session), `paused {scope, kind, by, at}` (session), `awaitingApproval: <approvalId>|null` (session), `reviewReady {ready, reasons, since}|null` (lane).
+
+## What each section must contain
+1. Goal and scope (what is in, what is explicitly out).
+2. Design: data shapes, modules (exact new/changed file paths), functions, endpoints, messages, config keys with defaults.
+3. Step-by-step implementation tasks, small enough for one agent each, in dependency order, each with **files owned** (so parallel agents don't collide) and **done when** (tests/commands).
+4. Tests to add (file names, what they assert).
+5. Risks, open questions, verification steps that need a human (mark `HUMAN:`).
+6. Dependencies on other sections (by section number).
+7. PRIVATE (homelab repo) subsection if anything is homelab-specific.
+
+Ground every claim in the actual code: read the files you change, cite `file:line`. Do not modify any repo. Write your section as Markdown to the path you are given. Target 1500-3500 words; dense and technical, no fluff.

@@ -18,11 +18,13 @@ import { run } from '../util.mjs';
 import * as db from '../db.mjs';
 import * as store from './store.mjs';
 import { LaneError } from './launch.mjs';
+import * as archive from './archive.mjs';
 
 let deps = null;
 /** { state, broadcast, prFor(laneId) -> { state } | null } */
 export function init(d) {
   deps = d;
+  archive.init({ prFor: d?.prFor });
 }
 
 // --- readiness ---------------------------------------------------------------
@@ -168,6 +170,16 @@ export async function retire(id, { force = false, confirm = null } = {}, who = '
   const step = stepper(job, id);
   step('validate', true, { force, by: who, blockers: verdict.blockers });
 
+  // fleet R9: what the archive row needs, read now, while the worktree (and
+  // its plan) still exists. Read-only; it never stops a retire.
+  let snap;
+  try {
+    snap = await archive.capture(rec, f);
+  } catch (err) {
+    log.warn(`archive capture failed for ${id}: ${String(err?.message || err)}`);
+    snap = archive.minimal(rec);
+  }
+
   // The slot down, then its volumes: `down` leaves about 200 MB behind.
   if (rec.slot != null) {
     assertLaneSlot(rec.slot);
@@ -200,8 +212,19 @@ export async function retire(id, { force = false, confirm = null } = {}, who = '
     step('worktree', true, { skipped: 'already gone' });
   }
 
-  await store.write({ ...rec, retiredAt: Date.now() });
-  step('record', true, { retiredAt: true, branchKept: rec.branch });
+  const retiredAt = Date.now();
+  await store.write({ ...rec, retiredAt });
+  // Only now, so a retire that failed above writes no archive row. The retire
+  // has happened either way; a db failure here is logged, and the startup
+  // backfill writes the row next time.
+  let archived = false;
+  try {
+    archive.commit(snap, retiredAt);
+    archived = true;
+  } catch (err) {
+    log.error(`archive commit failed for ${id}`, String(err?.message || err));
+  }
+  step('record', true, { retiredAt: true, branchKept: rec.branch, archived });
   step('done', true, { lane: id });
   delete cache[id];
   return { ok: true, job, lane: id, branchKept: rec.branch };

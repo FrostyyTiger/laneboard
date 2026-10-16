@@ -14,9 +14,28 @@
 // Anything derived (paths under $HOME, poll intervals, the compiled marker
 // patterns) is computed after the merge and is not a config key. Every config
 // key is documented in docs/config.md.
+//
+// Fragments. The keys of a feature area live in `server/config/<area>.mjs`,
+// not here (this file is frozen after wave 0). A fragment exports
+//
+//   defaults()            its keys and their defaults (deep-merged into ours)
+//   fromEnv(env)          its env layer: only the keys actually set
+//   validate(c, bad, layers)   after the core checks; `bad(msg)` throws a
+//                         ConfigError naming the file
+//   finalize(c, layers)   optional, after the merge and BEFORE validation, for
+//                         derived defaults (`fleet.code ||= deriveCode(id)`);
+//                         it may mutate `c` or return a new object, and must
+//                         tolerate wrong types, which validate then reports
+//
+// `layers` is `{ file, env, path, bad }`: the parsed file layer, the merged env
+// layer, the config path, and `bad`. Two fragments (or a fragment and the core
+// defaults) defining the same leaf key is a ConfigError at start. Fragments are
+// imported in filename order with top-level await, so a fragment must NEVER
+// import this file (the cycle would deadlock); take what it needs from `c`.
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 
 /**
  * The provider names each kind accepts. Not imported from
@@ -40,8 +59,8 @@ const defined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v 
 
 // --- the defaults ------------------------------------------------------------
 
-/** Every key a config file may set, with the value used when it does not. */
-export function defaults() {
+/** The core keys (this file's own), with the value used when they are not set. */
+function coreDefaults() {
   return {
     port: 7777,
     // Loopback only, by design: laneboard has no login and can type into
@@ -146,7 +165,7 @@ export function defaults() {
     markers: {
       need: 'NEED-HUMAN|NEED-OWNER',
       blocked: 'BLOCKED',
-      done: 'STAGE-DONE|LANE-DONE',
+      done: 'STAGE-DONE|LANE-DONE|PLAN-DONE',
       progress: 'PROGRESS',
       limit: 'hit your limit|usage limit|rate limit|approaching your .{0,20}limit',
     },
@@ -222,11 +241,8 @@ export function loadFile(file) {
 
 // --- the environment ---------------------------------------------------------
 
-/**
- * The env layer, in the shape of a config file. Only keys that are actually
- * set appear, so an unset variable never overrides the file with a default.
- */
-export function fromEnv(env = process.env) {
+/** The core keys' env layer (see fromEnv, which adds the fragments'). */
+function coreFromEnv(env = process.env) {
   const out = defined({
     port: num(env.LANEBOARD_PORT),
     bind: list(env.LANEBOARD_BIND),
@@ -262,6 +278,103 @@ export function fromEnv(env = process.env) {
   return out;
 }
 
+// --- fragments ---------------------------------------------------------------
+
+export const FRAGMENTS_DIR = path.join(import.meta.dirname, 'config');
+
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * Import every `*.mjs` in `dir`, sorted by filename, as `{ name, defaults,
+ * fromEnv, validate, finalize? }`. A missing dir is no fragments.
+ */
+export async function loadFragments(dir = FRAGMENTS_DIR) {
+  let files;
+  try {
+    files = fs.readdirSync(dir).filter((f) => f.endsWith('.mjs')).sort();
+  } catch (err) {
+    if (err?.code === 'ENOENT') return [];
+    throw err;
+  }
+  const out = [];
+  for (const f of files) {
+    const file = path.join(dir, f);
+    let mod;
+    try {
+      mod = await import(pathToFileURL(file).href);
+    } catch (err) {
+      throw new ConfigError(`config fragment ${file} failed to load: ${err?.message || err}`);
+    }
+    out.push(checkFragment({ name: path.basename(f, '.mjs'), ...pick(mod) }, file));
+  }
+  return out;
+}
+
+const pick = (m) => ({ defaults: m.defaults, fromEnv: m.fromEnv, validate: m.validate, finalize: m.finalize });
+
+function checkFragment(fr, where = fr.name) {
+  for (const k of ['defaults', 'fromEnv', 'validate']) {
+    if (typeof fr[k] !== 'function') throw new ConfigError(`config fragment ${where} must export ${k}()`);
+  }
+  if (fr.finalize !== undefined && typeof fr.finalize !== 'function') {
+    throw new ConfigError(`config fragment ${where}: finalize must be a function`);
+  }
+  return fr;
+}
+
+/**
+ * Record every leaf path of `obj` as owned by `owner`, refusing a leaf (or an
+ * object/leaf clash) that another owner already holds. Plain objects are
+ * branches; arrays, scalars and null are leaves.
+ */
+function claimLeaves(obj, owner, claims, prefix = '') {
+  for (const [k, v] of Object.entries(obj ?? {})) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    const prev = claims.get(key);
+    if (isPlainObject(v)) {
+      if (prev && prev.leaf) throw new ConfigError(`config key ${key} is defined by both ${prev.owner} and ${owner}`);
+      if (!prev) claims.set(key, { owner, leaf: false });
+      claimLeaves(v, owner, claims, key);
+    } else {
+      if (prev) throw new ConfigError(`config key ${key} is defined by both ${prev.owner} and ${owner}`);
+      claims.set(key, { owner, leaf: true });
+    }
+  }
+}
+
+/** Core defaults plus every fragment's, with duplicate leaf keys refused. */
+export function mergedDefaults(fragments = FRAGMENTS) {
+  const claims = new Map();
+  let out = coreDefaults();
+  claimLeaves(out, 'server/config.mjs', claims);
+  for (const fr of fragments) {
+    const d = fr.defaults() ?? {};
+    claimLeaves(d, `server/config/${fr.name}.mjs`, claims);
+    out = merge(out, d);
+  }
+  return out;
+}
+
+/** The core env layer plus every fragment's. */
+export function mergedFromEnv(env = process.env, fragments = FRAGMENTS) {
+  let out = coreFromEnv(env);
+  for (const fr of fragments) out = merge(out, fr.fromEnv(env) ?? {});
+  return out;
+}
+
+/** Every key a config file may set (core and fragments), with its default. */
+export function defaults() {
+  return mergedDefaults(FRAGMENTS);
+}
+
+/**
+ * The env layer, in the shape of a config file. Only keys that are actually
+ * set appear, so an unset variable never overrides the file with a default.
+ */
+export function fromEnv(env = process.env) {
+  return mergedFromEnv(env, FRAGMENTS);
+}
+
 // --- the merge ---------------------------------------------------------------
 
 /** One level of object merge; a list or a scalar replaces, it never merges. */
@@ -277,7 +390,7 @@ function merge(base, over) {
 }
 
 /** Enough of a check that a wrong value fails at start rather than at 03:00. */
-function validate(c, file) {
+function validate(c, file, fragments = [], layers = {}) {
   const bad = (msg) => { throw new ConfigError(`${file}: ${msg}`); };
   if (!Number.isInteger(c.port) || c.port < 1 || c.port > 65535) bad(`port must be a port number, got ${JSON.stringify(c.port)}`);
   if (!Array.isArray(c.bind) || !c.bind.length) bad('bind must be a non-empty list of addresses');
@@ -296,6 +409,7 @@ function validate(c, file) {
   for (const [kind, source] of Object.entries(c.markers)) {
     try { new RegExp(source); } catch (err) { bad(`markers.${kind} is not a valid regular expression: ${err.message}`); }
   }
+  for (const fr of fragments) fr.validate(c, bad, { ...layers, bad });
   return c;
 }
 
@@ -320,8 +434,17 @@ export function markerPatterns(markers, repos = []) {
 }
 
 /** Merge the three layers and add everything derived from them. */
-export function build({ env = process.env, file = configPath(env) } = {}) {
-  const merged = validate(merge(merge(defaults(), loadFile(file)), fromEnv(env)), file);
+export function build({ env = process.env, file = configPath(env), fragments = FRAGMENTS } = {}) {
+  fragments = fragments.map((fr, i) => checkFragment({ name: fr.name ?? `fragment-${i}`, ...pick(fr) }));
+  const fileLayer = loadFile(file);
+  const envLayer = mergedFromEnv(env, fragments);
+  const bad = (msg) => { throw new ConfigError(`${file}: ${msg}`); };
+  const layers = { file: fileLayer, env: envLayer, path: file, bad };
+  let assembled = merge(merge(mergedDefaults(fragments), fileLayer), envLayer);
+  for (const fr of fragments) {
+    if (fr.finalize) assembled = fr.finalize(assembled, layers) ?? assembled;
+  }
+  const merged = validate(assembled, file, fragments, layers);
   const home = HOME;
   return {
     ...merged,
@@ -374,6 +497,16 @@ export function build({ env = process.env, file = configPath(env) } = {}) {
     eventRetentionDays: 30,
   };
 }
+
+/** The fragments in server/config/, imported once at start. */
+export const FRAGMENTS = await (async () => {
+  try {
+    return await loadFragments();
+  } catch (err) {
+    if (err instanceof ConfigError) process.stderr.write(`laneboard: refusing to start — ${err.message}\n`);
+    throw err;
+  }
+})();
 
 export const config = (() => {
   try {

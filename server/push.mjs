@@ -9,6 +9,8 @@ import webpush from 'web-push';
 import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { kvRead, kvWrite, listSubscriptions, removeSubscription, markSubscriptionOk } from './db.mjs';
+import { fkey } from './fleet/keys.mjs';
+import { resolvePushLocal } from './config/observability.mjs';
 
 const COALESCE_MS = 60_000;
 const MIN_WORKING_MS = 5 * 60_000;
@@ -55,6 +57,19 @@ export function isQuiet(name) {
   return q.global || q.sessions.includes(name);
 }
 
+// --- push.local (fleet O3) ---------------------------------------------------
+
+/**
+ * Does this builder send its own web pushes? `push.local` true/false forces
+ * it; null means true iff `fleet.hubKeys` is empty (standalone). Once a hub is
+ * configured, the hub notifies (server/hub/notify.mjs) and the builder stays
+ * silent. Read on every call, so a config reload takes effect at once.
+ */
+export function localPushEnabled(c = config) {
+  return resolvePushLocal(c);
+}
+const LOCAL_OFF = Object.freeze({ notify: false, reason: 'push.local off' });
+
 // --- rules ------------------------------------------------------------------
 
 const lastSentAt = new Map(); // session name -> ms
@@ -80,6 +95,22 @@ export function shouldNotify({ name, from, to, workingForMs = 0, lastAt = null, 
   if (lastAt != null && now - lastAt < COALESCE_MS) return { notify: false, reason: 'coalesced' };
   return { notify: true, title, reason: 'ok' };
 }
+
+// --- deep links (fleet F7) ---------------------------------------------------
+
+/**
+ * Where a notification opens: the board with that session selected, by fleet
+ * key (`/#/board?sel=<encodeURIComponent(fkey)>`), or the Box. The name is
+ * encoded as a whole fkey, so a hostile session name cannot add parameters.
+ */
+export function sessionUrl(name, builderId = config.fleet?.id) {
+  try {
+    return `/#/board?sel=${encodeURIComponent(fkey(builderId, String(name)))}`;
+  } catch {
+    return boxUrl();
+  }
+}
+export function boxUrl() { return '/#/box'; }
 
 // --- sending ----------------------------------------------------------------
 
@@ -111,6 +142,7 @@ export async function broadcast(payload) {
 
 /** Called by state on every transition. Applies the rules, then sends. */
 export async function onTransition({ name, from, to, stateSince, activity }) {
+  if (!localPushEnabled()) return { ...LOCAL_OFF };
   const now = Date.now();
   const verdict = shouldNotify({
     name,
@@ -131,7 +163,7 @@ export async function onTransition({ name, from, to, stateSince, activity }) {
     title: `${verdict.title}: ${name}`,
     body,
     tag: `laneboard-${name}`,
-    url: `/#session=${encodeURIComponent(name)}`,
+    url: sessionUrl(name),
     session: name,
     state: to,
   });
@@ -146,6 +178,7 @@ export async function onTransition({ name, from, to, stateSince, activity }) {
  * breath should buzz the phone once, not twice.
  */
 export async function onMarker({ session_name: name, kind, text }) {
+  if (!localPushEnabled()) return { ...LOCAL_OFF };
   if (!name) return { notify: false, reason: 'no session' };
   if (isQuiet(name)) return { notify: false, reason: 'quiet' };
   const now = Date.now();
@@ -157,7 +190,7 @@ export async function onMarker({ session_name: name, kind, text }) {
     title: `${title}: ${name}`,
     body: String(text).slice(0, 140),
     tag: `laneboard-${name}`,
-    url: `/#session=${encodeURIComponent(name)}`,
+    url: sessionUrl(name),
     session: name,
     state: kind,
   });
@@ -171,12 +204,13 @@ export async function onMarker({ session_name: name, kind, text }) {
  * other people are using, not about this session's own progress.
  */
 export async function onDanger({ session_name: name, sessionName, text }) {
+  if (!localPushEnabled()) return { ...LOCAL_OFF };
   const who = name ?? sessionName ?? null;
   const r = await broadcast({
     title: `DANGER: ${who || 'dev stack guard'}`,
     body: String(text).slice(0, 160),
     tag: `laneboard-danger-${who || 'guard'}-${Date.now()}`,
-    url: who ? `/#session=${encodeURIComponent(who)}` : '/#box',
+    url: who ? sessionUrl(who) : boxUrl(),
     session: who,
     state: 'danger',
   });

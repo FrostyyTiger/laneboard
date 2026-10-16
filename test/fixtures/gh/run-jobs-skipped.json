@@ -1,0 +1,17 @@
+{"jobs":[
+  {"completedAt":"2026-10-13T17:08:30Z","conclusion":"success","databaseId":52000000001,"name":"web-admin-check","startedAt":"2026-10-13T17:06:01Z","status":"completed","url":"https://github.com/acme/widgets/actions/runs/18001000002/job/52000000001","steps":[
+    {"conclusion":"success","name":"Set up job","number":1,"status":"completed"},
+    {"conclusion":"success","name":"Run actions/checkout@v4","number":2,"status":"completed"},
+    {"conclusion":"skipped","name":"Install","number":3,"status":"completed"},
+    {"conclusion":"skipped","name":"Typecheck","number":4,"status":"completed"},
+    {"conclusion":"skipped","name":"Test","number":5,"status":"completed"},
+    {"conclusion":"success","name":"Post Run actions/checkout@v4","number":6,"status":"completed"},
+    {"conclusion":"success","name":"Complete job","number":7,"status":"completed"}]},
+  {"completedAt":"2026-10-13T17:09:12Z","conclusion":"success","databaseId":52000000002,"name":"lint-and-test","startedAt":"2026-10-13T17:06:01Z","status":"completed","url":"https://github.com/acme/widgets/actions/runs/18001000002/job/52000000002","steps":[
+    {"conclusion":"success","name":"Set up job","number":1,"status":"completed"},
+    {"conclusion":"success","name":"Checkout","number":2,"status":"completed"},
+    {"conclusion":"success","name":"Lint","number":3,"status":"completed"},
+    {"conclusion":"skipped","name":"Test desktop","number":4,"status":"completed"},
+    {"conclusion":"success","name":"Complete job","number":5,"status":"completed"}]},
+  {"completedAt":"2026-10-13T17:05:50Z","conclusion":"skipped","databaseId":52000000003,"name":"desktop (macos)","startedAt":"2026-10-13T17:05:50Z","status":"completed","url":"https://github.com/acme/widgets/actions/runs/18001000002/job/52000000003","steps":[]}
+]}

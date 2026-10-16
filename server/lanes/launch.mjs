@@ -94,6 +94,44 @@ export function permissionModesFromHelp(text) {
   return m ? [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]) : [];
 }
 
+// The modes `claude --help` lists, read once at start (loadPermissionModes) for
+// hello.permissionModes (fleet §8 2.7). validate() still asks claude itself on
+// every launch; this cache only says what to offer.
+let helpModes = null;
+
+/** Run `claude --help` once and cache its `--permission-mode` choices. Never throws. */
+export async function loadPermissionModes() {
+  try {
+    const help = await run(config.claudeBin, ['--help'], { timeout: 15000 });
+    helpModes = help.ok ? permissionModesFromHelp(help.stdout) : [];
+  } catch {
+    helpModes = [];
+  }
+  return helpModes;
+}
+
+/** The cached `claude --help` modes, or null before loadPermissionModes() ran. */
+export function cachedPermissionModes() {
+  return helpModes == null ? null : [...helpModes];
+}
+
+/**
+ * hello.permissionModes: `fleet.allowedPermissionModes` (in its order), narrowed
+ * to what claude lists once that is known. Before the help is read, or when it
+ * listed nothing (claude missing), the allowlist alone: a launch is refused at
+ * validate() with the reason either way.
+ */
+export function offeredPermissionModes(cfg = config, modes = helpModes) {
+  const allowed = Array.isArray(cfg?.fleet?.allowedPermissionModes) ? cfg.fleet.allowedPermissionModes : [];
+  const out = allowed.filter((m) => typeof m === 'string' && m);
+  return Array.isArray(modes) && modes.length ? out.filter((m) => modes.includes(m)) : out;
+}
+
+/** Tests only. */
+export function _setPermissionModes(modes) {
+  helpModes = modes == null ? null : [...modes];
+}
+
 export function hasStages(planText) {
   return stageHeadings(planText).length > 0;
 }
@@ -108,6 +146,21 @@ const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/;
 const PLAN_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,200}\.md$/;
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$/;
 const MODEL_RE = /^[A-Za-z0-9._[\]-]{1,40}$/;
+/** Lane priority (fleet §8 2.5): the quota guard pauses only `low` lanes. */
+export const PRIORITIES = Object.freeze(['low', 'normal', 'high']);
+export const MAX_BUDGET_USD = 100000;
+/** The mode the legacy POST /api/lanes route has always launched with. */
+export const LEGACY_DEFAULT_MODE = 'auto';
+
+/**
+ * The legacy route's request: today's default mode filled in explicitly, so
+ * validate() itself never guesses one. The v1 dispatcher does not use this.
+ */
+export function legacyRequest(body) {
+  const req = body && typeof body === 'object' && !Array.isArray(body) ? { ...body } : {};
+  if (req.permissionMode === undefined) req.permissionMode = LEGACY_DEFAULT_MODE;
+  return req;
+}
 
 let deps = null;
 /**
@@ -143,7 +196,27 @@ async function tmuxHas(name) {
  * Step 1. Everything that can be refused without touching anything.
  * Throws LaneError; returns the resolved request.
  */
-export async function validate(req) {
+/** Caller kinds that count as remote (the dispatcher's auth.kind): only these may raise a lane's cap. */
+export const REMOTE_CALLERS = Object.freeze(['direct', 'hub']);
+
+/**
+ * SR17 M2: who may set what cap. Returns budgetSource for the record: 'remote' when a remote caller set it,
+ * 'local' otherwise (null without a budgetUsd). A non-remote caller (local v1, the legacy route, or any caller
+ * that does not say: the default is 'local', fail closed) may only LOWER the cap below config.budget.perLaneUsd;
+ * raising it is set-budget's job, which is remote-only. The budget module enforces the same rule on read
+ * (min(config, record) unless budgetSource === 'remote').
+ */
+export function budgetSourceFor(budgetUsd, callerKind = 'local', cfg = config) {
+  if (budgetUsd === null) return null;
+  const remote = REMOTE_CALLERS.includes(callerKind);
+  const dflt = cfg?.budget?.perLaneUsd;
+  if (!remote && typeof dflt === 'number' && Number.isFinite(dflt) && dflt > 0 && budgetUsd > dflt) {
+    throw new LaneError(`budgetUsd ${budgetUsd} is above the operator's default of ${dflt} (budget.perLaneUsd): only a remote caller may raise a cap (use set-budget)`, 403);
+  }
+  return remote ? 'remote' : 'local';
+}
+
+export async function validate(req, { callerKind = 'local' } = {}) {
   const lane = String(req.lane ?? '');
   if (!store.isLaneId(lane)) {
     throw new LaneError(`invalid lane id "${lane}": lowercase letters, digits, . _ -, at most 40, not starting with . or -`);
@@ -157,7 +230,32 @@ export async function validate(req) {
   if (!PLAN_RE.test(plan) || plan.includes('..')) throw new LaneError(`invalid plan path "${plan}"`);
   const model = String(req.model || 'opus');
   if (!MODEL_RE.test(model)) throw new LaneError(`invalid model "${model}"`);
-  const permissionMode = String(req.permissionMode || 'auto');
+  // No fallback mode (SR5 M1): every caller names the mode it means. The v1
+  // dispatcher passes the effective, allowlisted one; the legacy route goes
+  // through legacyRequest() below.
+  if (typeof req.permissionMode !== 'string' || !req.permissionMode) {
+    throw new LaneError('permissionMode is required', 400);
+  }
+  const permissionMode = req.permissionMode;
+  const priority = req.priority == null ? 'normal' : req.priority;
+  if (!PRIORITIES.includes(priority)) throw new LaneError(`invalid priority "${String(priority).slice(0, 20)}": one of ${PRIORITIES.join(', ')}`);
+  const budgetUsd = req.budgetUsd == null ? null : req.budgetUsd;
+  if (budgetUsd !== null && !(typeof budgetUsd === 'number' && Number.isFinite(budgetUsd) && budgetUsd > 0 && budgetUsd <= MAX_BUDGET_USD)) {
+    throw new LaneError(`invalid budgetUsd: a number of dollars above 0 and at most ${MAX_BUDGET_USD}`);
+  }
+  const budgetSource = budgetSourceFor(budgetUsd, callerKind);
+  // fleet R9: a restore is a new lane (`<id>-r<N>`) launched from an archived
+  // one's branch; the source must be a retired lane this builder knows.
+  let restoredFrom = null;
+  if (req.restoredFrom != null) {
+    restoredFrom = String(req.restoredFrom);
+    if (!store.isLaneId(restoredFrom)) throw new LaneError(`invalid restoredFrom "${restoredFrom.slice(0, 40)}"`);
+    if (restoredFrom === lane) throw new LaneError('a restore needs a new lane id: retired ids are never reused', 409);
+    const src = store.read(restoredFrom);
+    if (!(src?.retiredAt) && !db.getArchive(restoredFrom)) {
+      throw new LaneError(`restoredFrom ${restoredFrom} is not a retired lane on this builder`, src ? 409 : 404);
+    }
+  }
 
   const help = await run(config.claudeBin, ['--help'], { timeout: 15000 });
   const modes = permissionModesFromHelp(help.stdout);
@@ -178,6 +276,14 @@ export async function validate(req) {
     await fsp.access(path.join(mainRepo, '.git'));
   } catch {
     throw new LaneError(`no checkout at ${mainRepo}`, 400);
+  }
+  // A restore's branch may have been deleted since (merged and cleaned up):
+  // refuse now, not at the worktree step. Read-only; no fetch here.
+  if (restoredFrom) {
+    const refOk = async (ref) => (await run('git', ['-C', mainRepo, 'rev-parse', '--verify', '--quiet', ref], { timeout: 10000 })).ok;
+    if (!(await refOk(`refs/heads/${branch}`)) && !(await refOk(`refs/remotes/origin/${branch}`))) {
+      throw new LaneError(`cannot restore ${restoredFrom}: branch ${branch} exists neither locally nor as origin/${branch} in ${repo}`, 409);
+    }
   }
   const root = path.join(path.dirname(mainRepo), `${repo}-${lane}`);
   try {
@@ -205,7 +311,8 @@ export async function validate(req) {
   }
 
   return {
-    lane, repo, branch, plan, model, permissionMode, slot, mainRepo, root,
+    lane, repo, branch, plan, model, permissionMode, priority, budgetUsd, budgetSource, slot, mainRepo, root,
+    restoredFrom,
     localBranch: Boolean(req.localBranch),
     promptOverride: typeof req.promptOverride === 'string' && req.promptOverride ? req.promptOverride.slice(0, 8000) : null,
   };
@@ -224,22 +331,46 @@ function serialised(fn) {
   return run;
 }
 
-export async function launch(req, who = 'local') {
+/**
+ * `opts.callerKind` is the dispatcher's auth.kind ('local' | 'direct' | 'hub'); anything else, or nothing (the
+ * legacy route), counts as local (SR17 M2).
+ */
+export async function launch(req, who = 'local', { callerKind = 'local' } = {}) {
   // The record is written as soon as validation passes, not at the end: it is
   // what holds the slot, and it is what lets `retire --force` find and clean a
   // launch that failed or was cut off before its session existed.
+  // A dry run (fleet §8 2.7) is validate() alone: no record, no job. Its slot
+  // is advisory, because `serialised` only holds during a real launch.
+  // Only a real boolean decides: a legacy body's `dryRun: "true"` must not
+  // become a real launch, nor `dryRun: 0` a silent one.
+  if (req?.dryRun !== undefined && req?.dryRun !== null && typeof req.dryRun !== 'boolean') {
+    throw new LaneError('invalid dryRun: true or false');
+  }
+  if (req?.dryRun === true) {
+    const p = await validate(req, { callerKind });
+    return {
+      ok: true, dryRun: true, lane: p.lane, slotAdvisory: true,
+      plan: {
+        lane: p.lane, repo: p.repo, branch: p.branch, plan: p.plan, model: p.model, permissionMode: p.permissionMode,
+        priority: p.priority, budgetUsd: p.budgetUsd, slot: p.slot, root: p.root,
+        ...(p.restoredFrom ? { restoredFrom: p.restoredFrom } : {}),
+      },
+    };
+  }
   const v = await serialised(async () => {
-    const valid = await validate(req);
+    const valid = await validate(req, { callerKind });
     await store.write({
       id: valid.lane, repo: valid.repo, root: valid.root, branch: valid.branch, plan: valid.plan, slot: valid.slot,
       model: valid.model, permissionMode: valid.permissionMode, session: valid.lane,
+      priority: valid.priority, budgetUsd: valid.budgetUsd, budgetSource: valid.budgetSource,
       createdAt: Date.now(), retiredAt: null,
+      ...(valid.restoredFrom ? { restoredFrom: valid.restoredFrom } : {}),
     });
     return valid;
   });
   const job = `launch-${v.lane}-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
   const step = stepper(job, v.lane, 'launch');
-  step('validate', true, { repo: v.repo, branch: v.branch, plan: v.plan, slot: v.slot, model: v.model, permissionMode: v.permissionMode, by: who });
+  step('validate', true, { repo: v.repo, branch: v.branch, plan: v.plan, slot: v.slot, model: v.model, permissionMode: v.permissionMode, priority: v.priority, budgetUsd: v.budgetUsd, budgetSource: v.budgetSource, ...(v.restoredFrom ? { restoredFrom: v.restoredFrom } : {}), by: who });
   step('record', true, { file: store.laneFile(v.lane) });
   runLaunch(v, step).catch((err) => {
     step('failed', false, { step: 'internal', error: String(err?.message || err) });
@@ -273,7 +404,13 @@ async function runLaunch(v, step) {
     startRef = `refs/remotes/origin/${v.branch}`;
     step('fetch', true, null);
   }
-  const where = v.localBranch ? v.branch : `origin/${v.branch}`;
+  let where = v.localBranch ? v.branch : `origin/${v.branch}`;
+  // A restore starts from the kept local branch when origin's is gone.
+  if (v.restoredFrom && !v.localBranch && !(await git(['rev-parse', '--verify', '--quiet', startRef])).ok
+    && (await git(['rev-parse', '--verify', '--quiet', `refs/heads/${v.branch}`])).ok) {
+    startRef = `refs/heads/${v.branch}`;
+    where = v.branch;
+  }
   if (!(await git(['rev-parse', '--verify', '--quiet', startRef])).ok) {
     return fail('plan', { error: `branch ${where} does not exist. The plan is pushed from where it was written: commit docs/plans/<lane>.md on the branch and push it, then launch.` });
   }
@@ -326,7 +463,7 @@ async function runLaunch(v, step) {
   const template = await fsp.readFile(repoEntry?.kickoff || config.kickoff, 'utf8');
   const prompt = v.promptOverride ?? renderKickoff(template, {
     lane: v.lane, plan: v.plan, root: v.root, branch: v.branch, slot: v.slot,
-    human: config.human, ...ports,
+    human: config.human, ...ports, restoredFrom: v.restoredFrom ?? '',
   });
   await store.writePrompt(v.lane, prompt);
   step('kickoff', true, { file: path.join(store.laneDir(v.lane), 'prompt.txt') });
@@ -378,6 +515,9 @@ async function runLaunch(v, step) {
   if (!delivered.ok) return fail('prompt', { error: delivered.reason });
   step('prompt', true, { chars: prompt.length });
   step('done', true, { lane: v.lane, slot: v.slot, root: v.root });
+  if (v.restoredFrom) {
+    try { db.setRestoredAs(v.restoredFrom, v.lane); } catch (err) { log.warn(`setRestoredAs ${v.restoredFrom}: ${String(err)}`); }
+  }
   return true;
 }
 

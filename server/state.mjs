@@ -2,7 +2,6 @@
 import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { truncate, stripAnsi, isBlankLine } from './util.mjs';
-import { previewLineToHtml } from './ansi.mjs';
 import * as tmux from './collector/tmux.mjs';
 import * as registry from './collector/registry.mjs';
 import * as statusline from './collector/statusline.mjs';
@@ -14,8 +13,10 @@ import * as ratelimits from './collector/ratelimits.mjs';
 import * as vitals from './collector/vitals.mjs';
 import * as guard from './collector/guard.mjs';
 import * as transcripts from './collector/transcripts.mjs';
+import * as signals from './collector/signals.mjs';
 import * as push from './push.mjs';
 import * as db from './db.mjs';
+import { fkey } from './fleet/keys.mjs';
 
 export const STATES = [
   'waiting_permission', 'waiting_question', 'working', 'done', 'idle', 'shell', 'dead',
@@ -33,18 +34,41 @@ const ATTENTION_SCORE = {
  * which made the queue useless. waiting_* is unchanged.
  */
 const HOUR = 60 * 60 * 1000;
+/** Added to a stuck session that is not already waiting (fleet §7). */
+export const STUCK_BONUS = 40;
 export function attentionScore(session, now = Date.now()) {
   // v3: the dev-stack guard outranks everything, a permission prompt included.
   if (session.danger) return 1000;
-  const base = ATTENTION_SCORE[session.state];
+  // A held approval (decorated `awaitingApproval`, fleet §8) is a permission
+  // prompt for the queue's purposes; the state word itself is not changed.
+  const state = session.awaitingApproval ? 'waiting_permission' : session.state;
+  const base = ATTENTION_SCORE[state];
   if (base) return base;
-  if (session.state === 'done' && session.activity?.lastAssistant) {
+  let score = 0;
+  if (state === 'done' && session.activity?.lastAssistant) {
     const age = now - (session.stateSince ?? now);
-    if (age < 2 * HOUR) return 50;
-    if (age < 24 * HOUR) return 20;
-    return 0;
+    if (age < 2 * HOUR) score = 50;
+    else if (age < 24 * HOUR) score = 20;
   }
-  return 0;
+  // Decorated `stuck` (fleet §7): raised, but never above a waiting session.
+  if (session.stuck) score += STUCK_BONUS;
+  return score;
+}
+
+/** Card preview on the wire: the last 8 non-blank lines, raw ANSI. */
+export const PREVIEW_LINES = 8;
+export const PREVIEW_LINE_CHARS = 400;
+
+/**
+ * Raw pane lines -> `previewLines` (fleet F6): blanks dropped, the last
+ * PREVIEW_LINES kept, each right-trimmed and sliced to PREVIEW_LINE_CHARS.
+ * The client renders them with public/js/core/ansi.js; no HTML is built here.
+ */
+export function previewLinesOf(lines) {
+  return (Array.isArray(lines) ? lines : [])
+    .filter((l) => typeof l === 'string' && !isBlankLine(l))
+    .slice(-PREVIEW_LINES)
+    .map((l) => l.replace(/\s+$/, '').slice(0, PREVIEW_LINE_CHARS));
 }
 
 /**
@@ -108,6 +132,60 @@ export function deriveState({ hook, registryStatus, paneCmd, claudeAlive, paneLi
   return { state: claudeAlive ? 'idle' : 'dead', source: 'default' };
 }
 
+// --- statusline sidecar fields (fleet O3) ----------------------------------
+
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/** An epoch-ms time from seconds, ms or an ISO string; null otherwise. */
+export function epochMs(v) {
+  if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v < 1e12 ? Math.round(v * 1000) : v;
+  if (typeof v === 'string' && v) {
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : null;
+  }
+  return null;
+}
+
+/**
+ * The newer statusline keys (fleet §7.2.1), read defensively from the raw
+ * sidecar JSON: `effort.level`, `thinking.enabled`, `prompt_cache.*` and
+ * `cost.total_api_duration_ms`. Every field is null when absent or malformed.
+ */
+export function sidecarFields(sl) {
+  const pc = sl?.prompt_cache && typeof sl.prompt_cache === 'object' ? sl.prompt_cache : null;
+  const effort = sl?.effort?.level;
+  return {
+    effort: typeof effort === 'string' && effort ? effort.slice(0, 32) : null,
+    thinking: typeof sl?.thinking?.enabled === 'boolean' ? sl.thinking.enabled : null,
+    promptCache: pc
+      ? {
+          hitRatio: num(pc.hit_ratio),
+          warm: typeof pc.warm === 'boolean' ? pc.warm : null,
+          expiresAt: epochMs(pc.expires_at),
+        }
+      : null,
+    apiMs: num(sl?.cost?.total_api_duration_ms),
+  };
+}
+
+/** The short commit id from the git collector (`# branch.oid`), or null. */
+export function headOf(g) {
+  const oid = g?.oid;
+  return typeof oid === 'string' && /^[0-9a-f]{4,40}$/i.test(oid) ? oid : null;
+}
+
+// --- fleet keys (fleet F7) ---------------------------------------------------
+
+/**
+ * `"<fleet.id>/<name>"` for anything that leaves this process (README §3.2).
+ * Inside the process sessions stay keyed by local name. Null for an empty
+ * name, so a malformed lane never breaks a tick.
+ */
+export function keyFor(name, builderId = config.fleet?.id) {
+  if (typeof name !== 'string' || name === '') return null;
+  try { return fkey(builderId, name); } catch { return null; }
+}
+
 // --- live state -------------------------------------------------------------
 
 /** name -> Session. Rebuilt every tick, but stateSince and extras are carried over. */
@@ -140,7 +218,7 @@ export function all() { return [...sessions.values()]; }
 
 /**
  * v3: what the lane cards and the Box need beyond sessions and lanes — lane
- * records, PRs, slots, the dev stack, readiness, jobs. Provided by index.mjs,
+ * records, PRs, slots, the dev stack, readiness, jobs. Provided by boot/builder.mjs,
  * which owns those collectors, so this module does not import them.
  */
 let extras = () => null;
@@ -148,20 +226,154 @@ export function setExtras(fn) {
   extras = fn;
 }
 
+// --- hooks for feature modules (server/flags/*.mjs) ------------------------
+//
+// Flags such as `stuck`, `paused`, `awaitingApproval` (sessions) and
+// `reviewReady` (lanes) are not computed here: a module registers a decorator
+// and this file merges its patch in. With nothing registered, every path
+// below is exactly what it was before the hooks existed.
+
+/** name -> { session?(s, ctx) -> patch, lane?(lane, ctx) -> patch } */
+const decorators = new Map();
+/** name -> () -> value, a top-level snapshot key */
+const snapshotKeys = new Map();
+/** fn(ctx, now), at the end of every tick */
+const tickHooks = [];
+
+const CORE_SNAPSHOT_KEYS = new Set(['box', 'sessions', 'lanes', 'vitals', 'attention', 'generatedAt']);
+
+/**
+ * Decorate sessions and/or lanes. `session(s, {now})` and
+ * `lane(lane, {now, sessions})` return a patch object (or null) that is merged
+ * into the session/lane. Session decorators run before the attention score is
+ * computed, so the score sees the flag. A patch should name every field it
+ * owns on every call (`{stuck: null}` to clear), because a lane is rebuilt per
+ * snapshot but a session object lives until the next tick.
+ */
+export function addDecorator(name, { session, lane } = {}) {
+  if (!name || typeof name !== 'string') throw new TypeError('addDecorator needs a name');
+  if (decorators.has(name)) throw new Error(`decorator '${name}' is already registered`);
+  if (session !== undefined && typeof session !== 'function') throw new TypeError(`decorator '${name}': session must be a function`);
+  if (lane !== undefined && typeof lane !== 'function') throw new TypeError(`decorator '${name}': lane must be a function`);
+  if (!session && !lane) throw new TypeError(`decorator '${name}' needs a session or a lane function`);
+  decorators.set(name, { session, lane });
+}
+
+/** Add `snapshot()[name] = fn()`. A core key or a second registration is refused. */
+export function addSnapshotKey(name, fn) {
+  if (!name || typeof name !== 'string') throw new TypeError('addSnapshotKey needs a name');
+  if (typeof fn !== 'function') throw new TypeError(`snapshot key '${name}' needs a function`);
+  if (CORE_SNAPSHOT_KEYS.has(name) || snapshotKeys.has(name)) throw new Error(`snapshot key '${name}' is already defined`);
+  snapshotKeys.set(name, fn);
+}
+
+/** Run `fn(ctx, now)` at the end of every tick; ctx is `{ sessions, get }`. */
+export function onTick(fn) {
+  if (typeof fn !== 'function') throw new TypeError('onTick needs a function');
+  tickHooks.push(fn);
+}
+
+/** Tests only: forget every registered hook. */
+export function _resetHooks() {
+  decorators.clear();
+  snapshotKeys.clear();
+  tickHooks.length = 0;
+  hookFailures.clear();
+}
+
+/**
+ * A hook that throws is logged and skipped; it never breaks a tick or a
+ * snapshot. A hook failing on every session every tick is logged on its 1st,
+ * 10th, 100th... failure, not 30 times every 2 s.
+ */
+const hookFailures = new Map();
+function guarded(key, what, fn) {
+  try {
+    return fn();
+  } catch (err) {
+    const n = (hookFailures.get(key) ?? 0) + 1;
+    hookFailures.set(key, n);
+    if (Number.isInteger(Math.log10(n))) log.error(`${what} failed${n > 1 ? ` (${n} times)` : ''}`, err?.stack || String(err));
+    return null;
+  }
+}
+
+/**
+ * Apply every session decorator to `list` (in place), then recompute the
+ * attention score. Exported for tests; snapshot() calls it.
+ */
+export function decorateSessions(list, now = Date.now()) {
+  if (!decorators.size) return list;
+  for (const s of list) {
+    for (const [name, d] of decorators) {
+      if (!d.session) continue;
+      const patch = guarded(`decorator:${name}`, `decorator ${name} (session ${s.name})`, () => d.session(s, { now }));
+      if (patch && typeof patch === 'object') Object.assign(s, patch);
+    }
+    s.attentionScore = attentionScore(s, now);
+  }
+  return list;
+}
+
+/** Apply every lane decorator to `laneList` (in place). Exported for tests. */
+export function decorateLanes(laneList, now = Date.now(), sessionList = []) {
+  if (!decorators.size || !Array.isArray(laneList)) return laneList;
+  for (const l of laneList) {
+    for (const [name, d] of decorators) {
+      if (!d.lane) continue;
+      const patch = guarded(`decorator:${name}`, `decorator ${name} (lane ${l?.id ?? '?'})`, () => d.lane(l, { now, sessions: sessionList }));
+      if (patch && typeof patch === 'object') Object.assign(l, patch);
+    }
+  }
+  return laneList;
+}
+
+/** The registered snapshot keys, evaluated. Exported for tests. */
+export function snapshotExtras() {
+  const out = {};
+  for (const [name, fn] of snapshotKeys) out[name] = guarded(`key:${name}`, `snapshot key ${name}`, fn) ?? null;
+  return out;
+}
+
+/** Run the onTick hooks. Exported for tests; tick() calls it. */
+export async function runTickHooks(now = Date.now()) {
+  const ctx = { sessions: all(), get };
+  for (const fn of tickHooks) {
+    try {
+      await fn(ctx, now);
+    } catch (err) {
+      log.error('tick hook failed', err?.stack || String(err));
+    }
+  }
+}
+
 export function snapshot() {
   const list = all();
-  return {
+  const now = generatedAt || Date.now();
+  // A decorator's source (an approval, a pause) can change between ticks, so
+  // the flags and the score are refreshed on every snapshot, not only per tick.
+  decorateSessions(list, now);
+  // Fleet keys (F7): additive, `name` and `lane` stay.
+  for (const s of list) {
+    s.key = keyFor(s.name);
+    s.laneKey = s.lane ? keyFor(s.lane) : null;
+  }
+  const laneList = decorateLanes(lanes.build(list, { progressFor: progress.get }), now, list);
+  if (Array.isArray(laneList)) for (const l of laneList) if (l && typeof l === 'object') l.key = keyFor(l.id);
+  const snap = {
     box: extras(),
     sessions: list,
     // Idle lanes are NOT sessions (lanes plan hard rule 6): separate array,
     // no state, no attention score, never a card.
-    lanes: lanes.build(list, { progressFor: progress.get }),
+    lanes: laneList,
     vitals: latestVitals,
     attention: list.filter((s) => s.attentionScore > 0)
       .sort((a, b) => b.attentionScore - a.attentionScore || (a.stateSince ?? 0) - (b.stateSince ?? 0))
-      .map((s) => ({ name: s.name, state: s.state, score: s.attentionScore, since: s.stateSince, danger: s.danger ? s.danger.reason : null })),
+      .map((s) => ({ name: s.name, key: keyFor(s.name), state: s.state, score: s.attentionScore, since: s.stateSince, danger: s.danger ? s.danger.reason : null })),
     generatedAt,
   };
+  if (snapshotKeys.size) Object.assign(snap, snapshotExtras());
+  return snap;
 }
 
 // Pane captures are rate-limited per hard rule 8, and batched into ONE tmux
@@ -349,11 +561,18 @@ export async function tick() {
       if (cost) costBySession.set(name, cost);
     }
 
+    const lane = lanes.laneOf(dir);
+    const side = sidecarFields(sl);
     const session = {
       name,
+      // Fleet keys (F7); refreshed by snapshot() too.
+      key: keyFor(name),
+      laneKey: lane ? keyFor(lane) : null,
       tmuxTarget: t.mainPane?.target ?? null,
       paneId: t.mainPane?.paneId ?? null,
       paneCmd,
+      // tmux #{pane_pid} of the main pane: isLiveClaude matches it against the registry pid (SR21 M1)
+      panePid: Number.isInteger(t.mainPane?.pid) && t.mainPane.pid > 0 ? t.mainPane.pid : null,
       paneSize: t.mainPane ? { cols: t.mainPane.width, rows: t.mainPane.height } : null,
       attached: t.attached,
       createdAt: t.createdAt,
@@ -361,11 +580,13 @@ export async function tick() {
       dir,
       // The worktree this session is working in. A colour and a filter, never
       // a sort key (lanes plan hard rule 1). Null for a session with no repo.
-      lane: lanes.laneOf(dir),
+      lane,
       branch: g?.branch ?? null,
       dirty: g?.dirty ?? 0,
       ahead: g?.ahead ?? 0,
       behind: g?.behind ?? 0,
+      // Short commit id (fleet O3): the stuck detector's progress fingerprint.
+      head: headOf(g),
       // 'claude' | 'shell' — which agent this session runs.
       kind: entry || paneCmd === 'claude' ? 'claude' : 'shell',
       claude: entry
@@ -383,6 +604,9 @@ export async function tick() {
             registryName: entry.name,
             transcriptPath: sl?.transcript_path || null,
             title: sl?.session_name || null,
+            // fleet O3, from the statusline sidecar
+            effort: side.effort,
+            thinking: side.thinking,
           }
         : null,
       state: derived.state,
@@ -395,6 +619,8 @@ export async function tick() {
         lastUserPrompt: truncate(hook?.lastUserPrompt || cost?.lastUserPrompt || prev?.activity?.lastUserPrompt || '', 200),
         lastAssistant: truncate(hook?.lastAssistant || cost?.lastAssistant || prev?.activity?.lastAssistant || '', 300),
         lastAssistantAt: hook?.lastAssistantAt ?? cost?.lastAssistantAt ?? prev?.activity?.lastAssistantAt ?? null,
+        // {type, text} from a StopFailure hook (fleet O1/O3), else null.
+        failure: hook?.failure ?? null,
       },
       context: sl?.context_window
         ? {
@@ -407,6 +633,9 @@ export async function tick() {
       statuslineCostUsd: sl?.cost?.total_cost_usd ?? null,
       linesAdded: sl?.cost?.total_lines_added ?? null,
       linesRemoved: sl?.cost?.total_lines_removed ?? null,
+      // fleet O3: total API time and the prompt cache (inspector only).
+      apiMs: side.apiMs,
+      promptCache: side.promptCache,
       rateLimits: sl?.rate_limits
         ? {
             fiveHour: sl.rate_limits.five_hour
@@ -418,18 +647,19 @@ export async function tick() {
           }
         : null,
       preview: (paneCache.get(name)?.lines ?? []).slice(-40),
-      // 8 rendered lines for the card; the raw lines stay out of the WS delta.
-      // Blank lines are dropped first so the card shows 8 lines of content.
-      previewHtml: (paneCache.get(name)?.lines ?? [])
-        .filter((l) => !isBlankLine(l))
-        .slice(-8)
-        .map((l) => previewLineToHtml(l)),
+      // 8 raw ANSI lines for the card, rendered on the client by
+      // public/js/core/ansi.js (fleet F6): no HTML goes on the wire. Blank lines
+      // are dropped first so the card shows 8 lines of content; each line is
+      // right-trimmed and capped at PREVIEW_LINE_CHARS.
+      previewLines: previewLinesOf(paneCache.get(name)?.lines),
       pinned: getFlags(name).pinned,
       // The guard's finding for this session, or null (collector/guard.mjs).
       danger: null,
       attentionScore: 0,
     };
     session.danger = guard.dangerFor(name);
+    // Flags from modules first: the score must see them.
+    if (decorators.size) decorateSessions([session], now);
     session.attentionScore = attentionScore(session, now);
     // The pane preview is already in hand, so scanning it for markers costs no
     // new tmux call — but it is NOT free. Joining and regex-scanning 40 lines
@@ -471,6 +701,8 @@ export async function tick() {
   // Drop hook state for sessions that are gone, so the map stays bounded.
   const liveIds = new Set(reg.entries.map((e) => e.sessionId).filter(Boolean));
   for (const id of [...hookState.keys()]) if (!liveIds.has(id)) hookState.delete(id);
+  // ...and the per-session signal ring (fleet O3).
+  try { signals.prune(liveIds); } catch (err) { log.error('signals prune failed', String(err)); }
 
   // One row a minute, from the tick rather than a timer of its own: the tick
   // already holds the sessions, and a sampler firing mid-rebuild would read a
@@ -478,6 +710,7 @@ export async function tick() {
   ratelimits.maybeSample([...sessions.values()], now);
   latestVitals = await vitals.sample({ claudeRssKb, sessionCount: seen.size });
   generatedAt = now;
+  if (tickHooks.length) await runTickHooks(now);
   return snapshot();
 }
 
