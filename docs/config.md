@@ -272,6 +272,63 @@ env layer for this or the next two blocks.
 | `stuck.costUsd` | `5` | …this much spent with the progress fingerprint unchanged. |
 | `stuck.idleMin` | `20` | `idle-in-working`: a launched lane with no `LANE-DONE` whose session is idle or done this long. |
 
+### Unattended runs — what to set when nobody is watching
+
+The defaults above assume a human is near the board: the stuck detector only
+badges, no spend cap is set, the quota guard is off, and a held permission
+request falls through to the terminal dialog. For lanes that run for hours with
+nobody watching, an operator usually changes these keys. None of them kills
+anything; every automatic stop is a pause, lifted by a human or, for quota
+pauses with `autoResume`, by the guard itself.
+
+- **`stuck.autoPause: true`** with **`stuck.autoPauseRules`**. With the
+  default (`false`) a stuck session gets a badge and nothing else, so a lane
+  that loops at 3 a.m. keeps looping until morning. With it on, a match on one
+  of the listed rules writes an `operator` pause for that session. The default
+  rules are `tool-loop` (the same tool with the same input,
+  `stuck.toolLoopCount` times in a row) and `error-loop` (the same error
+  `stuck.errorLoopCount` times within `stuck.errorLoopWindowMin`). Adding
+  `cost-no-progress` also pauses a session that spends `stuck.costUsd` within
+  `stuck.costWindowMin` while its progress fingerprint does not change.
+- **`budget.perLaneUsd`**. The default cap per lane (`null`: none). At
+  `budget.pausePct` of the cap every live session of the lane gets a `budget`
+  pause, and the ceiling sentinel stops a session at its next tool call even if
+  laneboard itself has died. A launch may only lower it, unless the launch was
+  remote. A budget pause is lifted by a remote `resume` or `set-budget`, not
+  by the agent through the local API.
+- **`budget.quota`**: `enabled`, `fiveHourPct`, `resumeBelowPct`,
+  `autoResume`. The quota guard keeps low-priority work from using up the
+  account's 5-hour limit. Above `fiveHourPct` of the 5-hour window it pauses
+  the sessions of lanes launched with `priority: "low"`. Below
+  `resumeBelowPct` (which must be lower than `fiveHourPct`) it lifts those
+  pauses by itself only when `autoResume` is `true`; otherwise it raises a
+  `quota-resumable` alarm once and waits for an operator. Unattended,
+  `autoResume: true` is what lets the night continue after the window resets.
+- **`approvals.onTimeout`**: `prompt` (default) or `deny`, applied when a
+  request has been held for `approvals.holdSec` with no decision. `prompt`
+  falls through to the normal dialog in the pane: the lane waits, and the
+  board can still answer it. `deny` refuses the tool call instead. The design
+  ([fleet plan §8](plans/fleet/08-control.md)) keeps `prompt` as the default
+  because an agent that is denied tends to route around the refusal, which is
+  worse than waiting. Choose `deny` only if an idle lane costs you more than
+  an agent improvising after a refusal.
+
+A config file for overnight lanes:
+
+```json
+{
+  "stuck": {
+    "autoPause": true,
+    "autoPauseRules": ["tool-loop", "error-loop", "cost-no-progress"]
+  },
+  "budget": {
+    "perLaneUsd": 20,
+    "quota": { "enabled": true, "fiveHourPct": 90, "resumeBelowPct": 70, "autoResume": true }
+  },
+  "approvals": { "onTimeout": "prompt" }
+}
+```
+
 ### `health` — box health
 
 The 10 s builder health sampler (`/api/v1/health`, the Box view). Read-only:
