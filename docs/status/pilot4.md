@@ -26,17 +26,29 @@ Plan: [docs/plans/pilot.md](../plans/pilot.md). Branch `feat/pilot`.
   `npm test` on the PR.
 - The plan's context mentions a run room on gemini; this run is on builder.
   Nothing in the task depends on it.
+- The plan asks for "PLAN-DONE: PILOT-DONE <PR url>". The repo's hygiene
+  gate (`test/hygiene.test.mjs`) refuses the repo owner's name in any tracked
+  file, so the full URL cannot be committed. The status file writes `#9`; the
+  URL is in the PR itself and in the lane's final output.
 - No DB is used by this repo (SQLite in memory for tests); slot 3 untouched.
 
 ## Stage 2: tests, PR — done
 
 - Tests: targeted runs only (see Stage 1 and Executor's calls), all passing.
   The full `npm test` runs in CI on the PR.
-- Branch `feat/pilot` pushed. Draft PR opened against `main`:
-  https://github.com/FrostyyTiger/laneboard/pull/9
+- Branch `feat/pilot` pushed. Draft PR #9 opened against `main`
   ("docs: unattended runs section (run-room pilot)"). Not merged.
 - History: the first attempt was blocked because the system `gh` was not
-  logged in. Marcel fixed this, and the PR was opened with `~/.local/bin/gh`
-  (the token wrapper).
+  logged in. The operator fixed this, and the PR was opened with the
+  token-wrapper `gh`.
+- CI (`test`, `npm test`) on PR #9, first run, 2 failures:
+  - `test/hygiene.test.mjs`: this status file named the repo owner and a
+    person (the PR URL, an earlier line). Fixed: the PR is referred to as
+    `#9` (see Executor's calls).
+  - `test/frontend.test.mjs` "the split is byte-identical to styles.css…":
+    this test runs `git show <commit>^:public/styles.css` and needs full
+    history, but the workflow's checkout is shallow. This branch does not
+    touch CSS, and main's last CI run is red as well. Not fixed here: it is
+    outside a docs-only plan.
 
-PLAN-DONE: PILOT-DONE https://github.com/FrostyyTiger/laneboard/pull/9
+PLAN-DONE: PILOT-DONE #9
