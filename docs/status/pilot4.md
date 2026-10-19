@@ -28,17 +28,15 @@ Plan: [docs/plans/pilot.md](../plans/pilot.md). Branch `feat/pilot`.
   Nothing in the task depends on it.
 - No DB is used by this repo (SQLite in memory for tests); slot 3 untouched.
 
-## Stage 2: tests, PR — partly done, BLOCKED on the PR
+## Stage 2: tests, PR — done
 
-- Tests: targeted runs only (see Stage 1 and Executor's calls); green.
-  The full `npm test` is left to CI, which only runs once a PR exists.
-- Branch `feat/pilot` committed and pushed to `origin`
-  (github.com/FrostyyTiger/laneboard).
-- **Blocked:** `gh` is not logged in on this VM (`gh auth status`: "You are
-  not logged into any GitHub hosts"), so the PR
-  "docs: unattended runs section (run-room pilot)" could not be opened and
-  `gh pr checks --watch` could not run. The executor did not try to get around
-  the missing GitHub auth. To finish: `gh auth login` (or give the lane a token),
-  then
-  `gh pr create --draft --base main --head feat/pilot --title "docs: unattended runs section (run-room pilot)"`.
-- PLAN-DONE is not written, because there is no PR URL yet.
+- Tests: targeted runs only (see Stage 1 and Executor's calls), all passing.
+  The full `npm test` runs in CI on the PR.
+- Branch `feat/pilot` pushed. Draft PR opened against `main`:
+  https://github.com/FrostyyTiger/laneboard/pull/9
+  ("docs: unattended runs section (run-room pilot)"). Not merged.
+- History: the first attempt was blocked because the system `gh` was not
+  logged in. Marcel fixed this, and the PR was opened with `~/.local/bin/gh`
+  (the token wrapper).
+
+PLAN-DONE: PILOT-DONE https://github.com/FrostyyTiger/laneboard/pull/9
