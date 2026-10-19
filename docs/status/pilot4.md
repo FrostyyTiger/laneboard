@@ -50,5 +50,7 @@ Plan: [docs/plans/pilot.md](../plans/pilot.md). Branch `feat/pilot`.
     history, but the workflow's checkout is shallow. This branch does not
     touch CSS, and main's last CI run is red as well. Not fixed here: it is
     outside a docs-only plan.
+- CI, second run (98a49a2): the hygiene gate passes; the only failure left
+  is the shallow-checkout CSS test above.
 
 PLAN-DONE: PILOT-DONE #9
