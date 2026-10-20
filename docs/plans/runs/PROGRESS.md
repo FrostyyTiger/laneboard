@@ -44,6 +44,11 @@ Notes for builders, from reading the code (planner, round 1):
   `collect(kind, {source, now, every, ...readOpts})` is what T6's CLI should call. For
   `proxmox` the read options are `{url, tokenId, secretFile, ca, node, timeoutMs}` (secret
   from the file or `LANEBOARD_PVE_SECRET`, never a flag); T6 needs flags for those.
+- T6 done: `laneboard feed` exists (`bin/laneboard` `cmdFeed`). `--push <url>` POSTs the feed
+  as the body to `<url>/api/map/feeds` with `content-type: application/json` and
+  `x-laneboard: 1`, and prints the server's `{error}` on a non-2xx: T7's route should answer
+  that way. Reuse `SOURCE_ID` from `server/feeders/index.mjs` for T7's source check (the CLI
+  already enforces it). `docs/map.md` "Pushing a feed" documents `--push` already.
 - After T12, if time is left (README §7 item 6, not planned as tasks yet): B2 **Find** reaching
   discovered nodes, services and ports in `⌘K` (`public/js/ui/palette.js`), and A3 a run as a
   Map node with a progress ring. A triage round may add them as tasks.
