@@ -99,6 +99,8 @@ Notes for builders, from reading the code (planner, round 1):
 - [x] T11 (B2) Reach, server side, opt-in: config key `map.policyFile` (default `null` = none, env `LANEBOARD_MAP_POLICY`; in `server/config.mjs`, `docs/config.md`, `docs/map.md`), a small HuJSON reader `server/map/hujson.mjs` (comments, trailing commas; no dependency), and `server/map/reach.mjs` turning the policy's `grants` (and legacy `acls`) into `reach` links between Map nodes (resolving `tag:`, `group:`, `autogroup:`, `hosts` aliases, IPs and `*` per Q7; ports as the link label; unresolvable selectors counted, not guessed); laneboard only reads the named file, never fetches a policy — done when: `test/map-reach.test.mjs` parses `test/fixtures/feeds/policy.hujson` (invented tailnet `acme`) into the expected links, and with no `map.policyFile` the model has no `reach` link (commit adaa5da)
 - [x] T12 (B2) [ui] Reach overlay: `reach` in `OVERLAYS`, `reach` links drawn as arcs only in that overlay (thin, direction shown, the selected node's reachable set highlighted: "if this is compromised, what can it touch?"), the overlay is skipped by `o` when the model has no reach links; `docs/map.md` overlay table gets the row — done when: `test/map-overlays.test.mjs` covers the arc style and the skip rule, `test/map-render.test.mjs` draws a model with reach links, design guardrails stay green (commit 98030dc)
 - [ ] T13 (docs) Two honesty gaps from `reviews/12-stranger.md` (findings 3, 5): the README's test-copy section must say that sessions and directories are still read from the machine (`laneboard ls` lists the real ones; nothing is written), and `docs/map.md` "Pushing a feed" / the feeder section must say in one sentence that a feed holds real host names and addresses, so keep it out of bug reports and screenshots — done when: both sentences exist and `npm test` stays green (hygiene included)
+- [ ] T14 (bug) `POST /api/map/feeds` accepts a body with no `host` and no `guests` (`reviews/20-stranger.md` finding 4): a typo'd push answers `201`. In `feedProblem` (`server/map.mjs`) refuse a feed that has neither a `host` object nor a `guests` list with the message saying so (an empty `guests: []` or `host: {}` stays valid, the `none` feeder's empty feed must still pass) — done when: `test/feeds-route.test.mjs` gets a `{"source":"hv1","kind":"x","nodes":[]}` case answering 400 with that message, `readFeeds` skips such a file, and the existing feed tests stay green
+- [ ] T15 (docs) Three README/config gaps from `reviews/20-stranger.md` (findings 1 tail, 2, 3): the README's "second copy" block must not say the short form (port, db, config only) touches nothing, because without `LANEBOARD_AUDIT_FILE` / `LANEBOARD_STATE_DIR` it shares the real audit log and fails with `AUDIT_LOCKED` while another board runs (say that and which two variables avoid it); move "Pick a port nothing listens on (`ss -ltn`)" next to the command that takes the port; `docs/config.md` says where the default builder id / Map title comes from when nothing is configured — done when: the three statements exist (read `server/config.mjs` for the third, state what the code does) and `npm test` stays green (config-docs and hygiene included)
 
 ## Research questions
 
@@ -130,10 +132,21 @@ Notes for builders, from reading the code (planner, round 1):
   builder id and shows a one-builder `fleet` entry although `fleet` is off. Is that intended, or
   should the title fall back to the hostname and the block be omitted? Taste call, not a task.
 
+- **Health endpoint and API-per-view docs (`reviews/20-stranger.md` findings 5, 6).** `/api/health`
+  is 404 and nothing names an "is it up" check; the README does not list the `/api/*` route behind
+  each view, so a shell-only user cannot see a view's data. Ideas, not tasks: add a health route
+  (a new route module is allowed, but it is an API addition) and/or a short route table in the docs?
+- **Boot messages (`reviews/20-stranger.md` finding 1).** Wanted: a one-line `port N is in use, is
+  another laneboard running?` instead of the `EADDRINUSE` stack, and an `AUDIT_LOCKED` line naming
+  the holder and the two variables that avoid it. Boot files are fenced; same item as above.
+
 ## Reviews
 
 - `reviews/12-stranger.md`: 6 findings, 1 became a task (T13, merging 3 and 5); 1 covered by T7
   (`--push` 404 is the missing route), 2 and 6 are one cause and moved to the owner (fenced boot),
   4 moved to the owner (taste).
+- `reviews/20-stranger.md`: 6 findings, 2 became tasks (T14 for 4; T15 merging the docs parts of
+  1, 2 and 3); the EADDRINUSE / AUDIT_LOCKED messages in 1 are the boot files (fenced), already an
+  owner line; 5 (health endpoint) and 6 (route per view in the README) are ideas, moved to the owner.
 
 ## Morning
