@@ -73,7 +73,7 @@ Every line has these fields:
 | --- | --- | --- |
 | `run.start` | `goal` (text), `plan`, `branch`, `cwd` (the absolute dir the run works in), `deadline` (ISO or epoch), `budget` `{rounds, windowPct, pause5h, stop7d}` (the four may also sit at top level) | starts the run, or restarts it: a second `run.start` updates the goal and budget and reopens a stopped run |
 | `round.start` | **`n`** (integer ≥ 0), `role`, `task`, `session` | round `n` begins; starting the same `n` again is a retry, counted in the round's `starts` |
-| `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd`, `session` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` adds to the round's cost; `session` (on either round event) names a Claude Code session of the round (see "Sessions of a round") |
+| `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd`, `session` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` adds to the round's cost only, not to the run's `cost` (that is the sum of `cost` events); `session` (on either round event) names a Claude Code session of the round (see "Sessions of a round") |
 | `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n` | one measurement of a metric; without `n` it belongs to the latest round started (0 before any) |
 | `needs` | `kind` (default `decision`), `text`, `link`, `n` | the run needs a human; kind `wait` means the loop itself is waiting (a usage limit) and closes when the next round starts or the run stops; other kinds stay open |
 | `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests), `title` | something the run produced; the same URL twice is kept once |
@@ -110,8 +110,12 @@ A run's events, in file order, are folded into one picture
 (`foldRun` in `server/runs/protocol.mjs`): goal, plan, branch, deadline,
 budget, the rounds sorted by `n` (role, task, starts, start and end time,
 outcome, commit, cost, usage), the scores per metric over rounds and which way
-is better, the needs, the artifacts, the stop, the summed cost, the last usage,
-the raw events, and how many lines were skipped.
+is better, the needs, the artifacts, the stop, the run's `cost`, the last usage,
+the raw events, and how many lines were skipped. The run's `cost` (`usd`,
+and `rounds`, how many `cost` events) is the sum of the `cost` events only:
+a `round.end` `usd` (the CLI's `round --end --usd`) fills that round's
+`usd` but leaves the run's `cost` at 0. A loop that wants a run total sends
+`cost` events.
 
 ### Sessions of a round
 
@@ -224,7 +228,8 @@ of the UI (the CLI sends the `x-laneboard` header):
 `GET /api/runs` answers `{"runs": [...]}`, one row per run: `run`, `goal`,
 `plan`, `branch`, `state`, `round` (the latest round's `n`), `rounds` (how
 many), `maxRounds` (`budget.rounds`), `scores` (per name: the latest `n` and
-`value`, the `prev` value and `better`), `usage`, `cost`, `deadline`,
+`value`, the `prev` value and `better`), `usage`, `cost` (the sum of
+`cost` events, see above), `deadline`,
 `deadlineAt`, the open `needs`, `artifacts` (a count), `stop` (the reason or
 null), `startedAt`, `updatedAt`. `GET /api/runs/<run>` answers `{"run": …}`
 with the whole fold (rounds, every score, needs, artifacts, raw events); each
