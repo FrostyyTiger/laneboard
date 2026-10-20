@@ -10,10 +10,10 @@
 # Everything it knows lives in ~/runs/<name>/: run.jsonl (the run protocol, §3 A1), log, rounds/.
 set -uo pipefail
 
-NAME="" REPO="" BASE="plan/runs" DEADLINE="" MAX_ROUNDS=15 PAUSE_5H=90 STOP_7D=85 TZ_RUN="Europe/Zurich"
+NAME="" REPO="" BASE="plan/runs" NIGHT="Night 1" DEADLINE="" MAX_ROUNDS=40 PAUSE_5H=90 STOP_7D=85 TZ_RUN="Europe/Zurich"
 while [ $# -gt 0 ]; do case $1 in
   --name) NAME=$2; shift 2;; --repo) REPO=$2; shift 2;; --base) BASE=$2; shift 2;;
-  --deadline) DEADLINE=$2; shift 2;; --max-rounds) MAX_ROUNDS=$2; shift 2;;
+  --deadline) DEADLINE=$2; shift 2;; --night) NIGHT=$2; shift 2;; --max-rounds) MAX_ROUNDS=$2; shift 2;;
   --pause-5h) PAUSE_5H=$2; shift 2;; --stop-7d) STOP_7D=$2; shift 2;; --tz) TZ_RUN=$2; shift 2;; *) echo "unknown $1"; exit 1;; esac; done
 [ -n "$NAME" ] && [ -n "$REPO" ] && [ -n "$DEADLINE" ] || { echo "--name, --repo and --deadline are required"; exit 1; }
 
@@ -23,7 +23,7 @@ RUN_DIR="$HOME/runs/$NAME"
 MODEL_BUILD=${MODEL_BUILD:-claude-opus-5-5}     # planner, builder, fix, designer, final
 MODEL_REVIEW=${MODEL_REVIEW:-claude-sonnet-5-5} # stranger, triage, operator
 ROUND_SECS=${ROUND_SECS:-2700}                  # 45 min per round, then it is stopped
-REVIEW_EVERY=${REVIEW_EVERY:-4}                  # builder rounds between stranger reviews
+REVIEW_EVERY=${REVIEW_EVERY:-6}                  # builder rounds between stranger reviews
 RESEARCH_MAX=${RESEARCH_MAX:-4}                  # research rounds per run
 
 mkdir -p "$RUN_DIR/rounds"
@@ -91,7 +91,7 @@ round() {
   local n=$1 role=$2 model=$3 out="$RUN_DIR/rounds/$(printf %02d "$1")-$2.jsonl"
   local prompt; prompt="$(cat "$L/prompts/common.md" "$L/prompts/$role.md")
 
-RUN: $NAME   ROUND: $n   ROLE: $role
+RUN: $NAME   NIGHT: $NIGHT (README §7)   ROUND: $n   ROLE: $role
 NOW ($TZ_RUN): $(TZ=$TZ_RUN date '+%F %H:%M')   DEADLINE: $DEADLINE
 TESTS AFTER THE LAST ROUND: pass $TESTS_PASS, fail $TESTS_FAIL
 $( [ "$TESTS_OK" = 0 ] && printf 'FAILING TESTS (tail):\n%s\n' "$TEST_TAIL" )
@@ -121,6 +121,10 @@ for line in open(sys.argv[1], errors="replace"):
         f, s7 = w.get("five_hour") or {}, w.get("seven_day") or {}
         if "utilization" in f: u5, r5 = round(f["utilization"] * 100), int(f.get("resetsAt") or 0)
         if "utilization" in s7: u7 = round(s7["utilization"] * 100)
+        # unifiedWindows is not in the docs (research/Q1): fall back to the documented single window
+        if not w and "utilization" in i:
+            if i.get("rateLimitType") == "five_hour": u5, r5 = round(i["utilization"] * 100), int(i.get("resetsAt") or 0)
+            if i.get("rateLimitType") == "seven_day": u7 = round(i["utilization"] * 100)
         if i.get("isUsingOverage"): over = 1
         if i.get("status") not in (None, "allowed", "allowed_warning"): limited = 1
     if m.get("type") == "result":

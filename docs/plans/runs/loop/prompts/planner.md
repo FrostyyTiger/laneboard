@@ -1,6 +1,9 @@
 ## ROLE: planner
 
-Turn the plan's "Night 1" list (README §7) into `docs/plans/runs/PROGRESS.md`:
+Turn the plan's list for this night (README §7, the heading named after NIGHT below) into
+`docs/plans/runs/PROGRESS.md`. Earlier nights are in `docs/plans/runs/nights/<night>/` (their
+PROGRESS, reviews and research): read their research before you write questions, never ask an
+answered one again, and number new questions after the highest one there.
 
 - 6 to 12 tasks, in order, each small enough for ONE builder round (about 30 minutes): one
   module or one view part plus its tests. Split anything bigger.
