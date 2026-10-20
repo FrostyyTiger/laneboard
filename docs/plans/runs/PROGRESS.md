@@ -1,0 +1,66 @@
+# Runs: progress
+
+Run `runs-n1` (night 1, 2026-10-20 → 2026-10-21 07:00). Scope: README §7 "Night 1": A1 protocol +
+helper CLI + `docs/runs.md`, A2 Runs view (list + run page), C design directions, the loop's own
+events wired in. Part A3 (Inbox, Morning, Map, Stuck) and Part B wait for later nights.
+
+Notes for builders, from reading the code (planner, round 1):
+- New server code goes in `server/runs/` (pure, testable) plus a route module
+  `server/routes/runs.mjs` (picked up by `server/modules.mjs`, see `server/routes/health.mjs` for
+  the shape). Config is a fragment `server/config/runs.mjs` (see `server/config/review.mjs`),
+  documented in `docs/config.md` (`test/config-docs.test.mjs` checks the keys).
+- The client store (`public/js/core/store.js`), `net.js`, `keys.js` and `actions.js` are fenced:
+  the Runs view fetches `/api/runs` itself, like `public/js/views/morning.js` does. View chords
+  live in `VIEW_KEYS` in `public/js/core/router.js` (not fenced); `r` is free there.
+- `/api/v1/*` is the fleet API (fenced registry). Night 1 serves runs under `/api/runs…` on the
+  builder only; see "For the owner".
+- The loop's real events (`docs/plans/runs/loop/run.sh`, `ev()`): every value that looks like a
+  number is written as a JSON float (`"n": 3.0`, and a short commit sha made of digits becomes a
+  number), `run.start` carries `rounds`, `pause5h`, `stop7d`, `branch` at top level (no `budget`
+  object), and it also writes `usage` (`fiveHourPct`, `sevenDayPct`, `fiveHourResetsAt`,
+  `overage`) and `cost` (`n`, `usd`, `total`) events. The parser must take all of that as is.
+
+## Tasks
+
+- [ ] T1 (A1) `server/runs/protocol.mjs`: `parseLine(text)` → a checked event or a reason it was skipped (v1; known types from README §3 A1 plus the loop's `usage` and `cost`; unknown types kept raw; strings clamped, numbers coerced: integral floats to ints, `commit` always a string; caps on line length) and `foldRun(events)` → `{run, goal, state, deadline, budget, rounds[], scores{name: [{n,value}]}, needs[], artifacts[], stop, cost, usage, raw[]}`; fixture `test/fixtures/runs/readiness.jsonl` — done when: `test/runs-protocol.test.mjs` passes for every event type, an unknown type, malformed/oversized lines (skipped and counted) and out-of-order rounds
+- [ ] T2 (A1) `docs/runs.md`: the protocol spec v1 (file location `<dir>/.laneboard/run.jsonl`, every event type and field, states and stop reasons, the CLI, the `none` default), linked from `README.md` — done when: a test (`test/runs-docs.test.mjs`) checks every type in `protocol.mjs`'s known list appears in the doc's table and the reverse
+- [ ] T3 (A1) config fragment `server/config/runs.mjs`: `runs.files` (globs of run.jsonl files to read, default `[]` = none), `runs.lanes` (also read `<lane cwd>/.laneboard/run.jsonl`, default true), `runs.maxEvents`, `runs.keepDays`; section in `docs/config.md` — done when: `test/config-runs.test.mjs` passes (defaults, env layer if any, bad values are a ConfigError) and `test/config-docs.test.mjs` stays green
+- [ ] T4 (A1) `server/runs/store.mjs` + `server/collector/runs.mjs`: find the files from config (globs with `~` expanded, lane cwds), tail each incrementally (byte offset, partial last line, a truncated or replaced file starts over), fold into an in-memory map of runs, cap events per run; started from a module so no boot file changes — done when: `test/runs-collector.test.mjs` passes on temp dirs (append, partial line, truncate, two runs in one file, no config = no runs)
+- [ ] T5 (A1) `server/routes/runs.mjs`: `GET /api/runs` (list summaries), `GET /api/runs/:run` (the folded run), `POST /api/runs/events` (validated by `parseLine`, appended to `<stateDir>/runs/<run>.jsonl`, which the collector reads too; normal local guards, so the CLI's `x-laneboard` header) — done when: `test/runs-routes.test.mjs` passes (list, one run, 404, a bad event is 400, a good one shows up in the list)
+- [ ] T6 (A1) CLI `laneboard run start|round|score|needs|artifact|stop` in `bin/laneboard`: writes one line to `--file` / `$LANEBOARD_RUN_FILE` / `./.laneboard/run.jsonl` (works with laneboard down), `--post` sends it to the API instead; `round` prints `LANEBOARD_RUN=<run>/<n>` for `eval`; usage text in the header comment — done when: `test/cli-run.test.mjs` (pattern of `test/cli-pause.test.mjs`) shows each subcommand writes a line `parseLine` accepts, and bad args exit 2
+- [ ] T7 (A2) [ui] Runs list `#/runs` (`g r`): `public/js/views/runs.js` (default export view), `<section id="view-runs">` in `public/index.html`, `runs` in `VIEWS`/`VIEW_KEYS` (`router.js`) and `VIEW_META` (`views/index.js`), an icon in `core/icons.js`, `public/css/views/runs.css`; each row: goal, state, round n / max, latest score + trend, budget burn (5 h / 7 d from `usage`), time left, open needs; empty state says how to start a run — done when: `test/view-runs.test.mjs` (fakedom, see `test/view-morning.test.mjs`) renders the fixture and the empty state, and `router.test`, `icons.test`, `design-guardrails.test` stay green
+- [ ] T8 (A2) [ui] Run page `#/runs?run=<id>` (add the `run` parameter to `parseHash`/`formatHash` with a strict pattern): the timeline of rounds (role, task, outcome, commit, cost, duration), stop reason, open needs, artifacts (PR links), raw unknown events folded away — done when: `test/view-runs.test.mjs` covers the page from the fixture and `test/router.test.mjs` covers the new parameter (bad values dropped)
+- [ ] T9 (A1/§7) The loop's own events: `test/fixtures/runs/loop-runs-n1.jsonl` written with exactly the shapes `run.sh` emits (floats, numeric commit, `usage`, `cost`, `needs kind=wait|fence`, `run.stop` with `rounds`/`usd`), folded into budget burn and per-round cost; `docs/runs.md` gets a "Watching the runs loop" section with `runs.files: ["~/runs/*/run.jsonl"]` — done when: a test folds the fixture into the expected run (rounds, costs, scores `tests` and `tasks`, stop reason) and the list row shows it
+- [ ] T10 (C) [ui] Two or three design directions inside the control-room style (README §5, §8 Q1): each a token override file `docs/plans/runs/design/<name>.css` (type scale, 4 px spacing, elevation for floating layers only, both themes) and `docs/plans/runs/design/README.md` saying what each changes, why, and how to view it on the demo (`node test/tools/demo-fleet.mjs`) — done when: a test checks each file only sets custom properties that exist in `public/css/tokens.css` and passes the design guardrails
+- [ ] T11 (A2) [ui] Score chart per metric on the run page: one small SVG line per metric over rounds (reuse `public/js/ui/spark.js` if it fits), `better` decides which way is good, no animation — done when: `test/view-runs.test.mjs` checks the chart's points for the fixture's `tests` and `tasks` scores and an empty chart for a run with none
+- [ ] T12 (A1) Sessions tied to rounds by cwd + time window (`server/runs/bind.mjs`, read from the session registry): a round row lists the sessions that ran in its dir during it, with their cost — done when: `test/runs-bind.test.mjs` passes (inside the window, outside, two runs in one dir)
+
+## Research questions
+
+- [ ] Q1 Claude Code `--output-format stream-json`: the exact fields of the `result` message (`total_cost_usd`, `duration_ms`, `num_turns`, `usage`, `session_id`) and of `rate_limit_event` (`rate_limit_info`, `unifiedWindows`, `resetsAt` units), with links to the docs or source — for T9
+- [ ] Q2 How can laneboard tie a Claude Code session to the loop round that started it: do hook payloads carry the session's cwd, env or a settable id (`--session-id`, `CLAUDE_CODE_*`), and is reading `/proc/<pid>/environ` of a same-user process a documented, reliable way to see `LANEBOARD_RUN`? — for T12
+- [ ] Q3 How do comparable tools present long multi-step runs and their history (GitHub Actions run graphs, Buildkite, Weights & Biases / MLflow run comparison, LangSmith or Langfuse traces, OpenHands / SWE-agent trajectory viewers): what makes "what happened tonight, is it getting better" readable at a glance, what to avoid — for T7, T8, T11
+- [ ] Q4 Primary-source token systems of product-grade dense dark/light UIs (GitHub Primer, IBM Carbon, Grafana, Linear): type scale steps, spacing grid, elevation and translucency for floating layers, focus rings — for T10
+
+## For the owner
+
+- **Hook-style intake for runs needs a fenced file.** Plain `curl` from a loop (no custom header)
+  is only accepted on `HOOK_PATHS` in `server/security.mjs` (fenced). Night 1 ships
+  `POST /api/runs/events` behind the normal local guards (the CLI sends `x-laneboard`), and loops
+  that do not use the CLI write the file. Adding the path to `HOOK_PATHS` is your call.
+- **`/api/v1/runs/events` (README §3 A1) is not used yet.** `/api/v1/*` is the fleet API with its
+  own registry (`server/fleet/api-v1.mjs`, `server/routes/v1.mjs`, fenced), and runs on a hub need
+  `server/hub/*` (fenced). Night 1 is builder-local under `/api/runs…`; moving it into v1 and the
+  hub needs a reviewed change.
+- **No browser on the run VM.** There is no Chromium or Playwright here, so night 1 cannot take
+  screenshots: the design directions (T10) come as token files plus how to view them, and the
+  designer review (it starts on `docs/plans/runs/design/*.png`) will not run. Screenshot tests
+  (README §5) need a decision: Playwright as a dev dependency plus a browser download in the VM.
+- **`run.sh` writes numbers as floats** (`"n": 3.0`) and would write an all-digit short sha as a
+  number. laneboard copes (T1), but the loop (fenced) could quote `commit` and write ints.
+- Tests were red before this run (1 fail, a path assertion in the scripts tests under
+  `/tmp/lb-scripts-*`); the loop's fix round takes it first.
+
+## Reviews
+
+## Morning
