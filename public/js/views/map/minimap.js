@@ -139,6 +139,21 @@ export function createMinimap(canvas, sceneSource, opts = {}) {
   let last = null;
   let timer = 0;
   let pal = null;
+  let palKey = null;
+
+  // The theme the cached palette was read under: <html>'s data-theme and the
+  // OS scheme. A draw under another key re-reads the tokens, so the PiP
+  // follows the theme even when no `lb:theme` event reached it.
+  const themeKey = () => {
+    const html = globalThis.document?.documentElement;
+    const dark = globalThis.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+    return `${html?.dataset?.theme ?? html?.getAttribute?.('data-theme') ?? ''}|${html?.className ?? ''}|${dark ? 'dark' : 'light'}`;
+  };
+  const palette = () => {
+    const key = themeKey();
+    if (!pal || key !== palKey) { pal = readPalette(canvas); palKey = key; }
+    return pal;
+  };
 
   function draw(force = false) {
     let scene = null;
@@ -148,7 +163,7 @@ export function createMinimap(canvas, sceneSource, opts = {}) {
     if (!force && !shouldRedraw(last, scene, t, { reduced: reduced() })) return false;
     const phase = blinkPhase(t);
     last = { version: scene.version, at: t, phase };
-    pal ||= readPalette(canvas);
+    const pal = palette();
     const dpr = Math.min(2, globalThis.devicePixelRatio || 1);
     const px = Math.round(size * dpr);
     if (canvas.width !== px) canvas.width = px;
@@ -183,11 +198,19 @@ export function createMinimap(canvas, sceneSource, opts = {}) {
 
   const onClick = () => opts.onClick?.();
   canvas.addEventListener?.('click', onClick);
+  // Theme changes repaint with the new tokens: the shell's `lb:theme`, any
+  // other change of <html>'s theme attributes, and the OS scheme.
   const onTheme = () => { pal = null; draw(true); };
   globalThis.addEventListener?.('lb:theme', onTheme);
+  const mo = typeof MutationObserver === 'function' ? new MutationObserver(onTheme) : null;
+  const html = globalThis.document?.documentElement;
+  if (html) mo?.observe(html, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+  const mq = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
+  mq?.addEventListener?.('change', onTheme);
 
   function start() {
     if (timer) return;
+    pal = null;
     draw(true);
     timer = setInterval(() => draw(false), PIP_FRAME_MS);
   }
@@ -199,6 +222,8 @@ export function createMinimap(canvas, sceneSource, opts = {}) {
     stop();
     canvas.removeEventListener?.('click', onClick);
     globalThis.removeEventListener?.('lb:theme', onTheme);
+    mo?.disconnect();
+    mq?.removeEventListener?.('change', onTheme);
   }
   return { start, stop, draw, running: () => Boolean(timer), destroy };
 }
