@@ -68,10 +68,21 @@ LANEBOARD_PORT=7788 LANEBOARD_DB=:memory: LANEBOARD_CONFIG=/dev/null \
 
 The CLI talks to `http://127.0.0.1:7777` unless told otherwise, so point it at
 the copy, or it writes into the real board: `LANEBOARD_URL=http://127.0.0.1:7788
-laneboard ls`. Pick a port nothing listens on (`ss -ltn`). Stop the copy with
+laneboard ls` (or `node bin/laneboard ls` from the checkout, see [CLI](#cli)). Pick a port nothing listens on (`ss -ltn`). Stop the copy with
 Ctrl-C in its terminal, then `rm -r "$tmp"`.
 
 ## CLI
+
+`laneboard` is `bin/laneboard` in the checkout. Run it as `node bin/laneboard ls`,
+or put it on the PATH once (the same step as in [docs/install.md](docs/install.md)):
+
+```bash
+ln -s "$PWD/bin/laneboard" ~/.local/bin/laneboard
+readlink -f "$(command -v laneboard)"   # which checkout the PATH runs
+```
+
+With several checkouts (worktrees, a test copy) the link points at one of them;
+the `readlink` line shows which.
 
 ```bash
 laneboard ls                     # every session, attention first

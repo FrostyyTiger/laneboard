@@ -52,3 +52,18 @@ test('every env var the section names is documented and read by the code', () =>
     assert.ok(code.includes(name), `${name} read by server/ or bin/laneboard`);
   }
 });
+
+// runs T20 (reviews 27 #2, 33 #1): the CLI section says how `laneboard` gets on
+// the PATH, before its first example, and how to see which checkout it runs.
+test('the CLI section says how to get laneboard on the PATH', () => {
+  const readme = read('README.md');
+  const at = readme.indexOf('\n## CLI\n');
+  assert.ok(at >= 0, 'README has a CLI section');
+  const section = readme.slice(at, readme.indexOf('\n## ', at + 1));
+  const link = section.indexOf('ln -s "$PWD/bin/laneboard" ~/.local/bin/laneboard');
+  assert.ok(link >= 0, 'the ln -s step');
+  assert.ok(link < section.indexOf('laneboard ls '), 'before the first example');
+  assert.match(section, /node bin\/laneboard/);
+  assert.match(section, /readlink -f "\$\(command -v laneboard\)"/);
+  assert.ok(read('docs/install.md').includes('ln -s "$PWD/bin/laneboard" ~/.local/bin/laneboard'), 'same step as install.md');
+});
