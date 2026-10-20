@@ -54,3 +54,12 @@ test('README links the doc', async () => {
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   assert.ok(readme.includes('(docs/runs.md)'));
 });
+
+test('the doc names the view URLs and says where a run file must be to be seen', () => {
+  assert.ok(!/is being built/.test(doc), 'stale status note');
+  for (const s of ['`#/runs`', '`#/runs?run=<id>`', 'score chart', '`g r`']) assert.ok(doc.includes(s), s);
+  const cli = doc.slice(doc.indexOf('## The helper CLI'), doc.indexOf('## The API'));
+  assert.match(cli, /`runs\.files`[\s\S]*`--post`/);
+  const loop = doc.slice(doc.indexOf('## Writing a loop'), doc.indexOf('## Watching the runs loop'));
+  assert.match(loop, /`runs\.files`/);
+});

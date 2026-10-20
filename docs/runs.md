@@ -14,9 +14,11 @@ agent. laneboard does not care what runs the loop.
 nothing changes. laneboard never starts, stops or steers a run; it only reads
 what the run writes.
 
-> Status: the parser and the fold (`server/runs/protocol.mjs`), the config
-> keys, the collector, the API and the CLI are in. The Runs view is being
-> built (`docs/plans/runs/PROGRESS.md`); this page is the contract it follows.
+**Where to look:** the Runs view, `#/runs` (keys `g r`), lists every run
+laneboard knows: goal, state, round n / max, the latest scores and their
+trend, the 5 h / 7 d burn, time left and open needs. A row opens the run page,
+`#/runs?run=<id>`: the timeline of rounds, one small score chart per metric
+over the rounds, the stop reason, the open needs and the artifacts.
 
 ## Where runs write
 
@@ -183,6 +185,13 @@ laneboard run stop   --run readiness --reason done
 
 Every subcommand also takes `--run <id>`, `--file <path>` and `--post`.
 
+**laneboard only sees the file if it reads that place.** The default file,
+`./.laneboard/run.jsonl`, is seen when the current directory is the root of
+a lane (a git worktree laneboard shows on the board). Anywhere else, a
+subdirectory included, name the file in
+`runs.files` or send the events with `--post`; otherwise `#/runs` stays empty
+and nothing warns.
+
 - It writes to `--file`, else `$LANEBOARD_RUN_FILE`, else
   `./.laneboard/run.jsonl` (a relative path against the current directory,
   the directory made if missing), and works with laneboard down.
@@ -243,6 +252,10 @@ for n in 1 2 3; do
 done
 ev '{"t":"run.stop","run":"nightly","reason":"rounds"}'
 ```
+
+Run it at the root of a lane (the worktree its agent sessions work in) and the
+run shows up in `#/runs`. Run elsewhere, it needs a `runs.files` glob that matches
+`<dir>/.laneboard/run.jsonl` (see "Where runs write").
 
 Tips that make the Runs view worth reading:
 
