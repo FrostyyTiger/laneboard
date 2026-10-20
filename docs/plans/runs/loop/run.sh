@@ -116,7 +116,7 @@ PY
 }
 
 push() {
-  git push -q origin "$BRANCH" 2>>"$RUN_DIR/log" || { log "push failed"; return; }
+  git push -q -u origin "$BRANCH" 2>>"$RUN_DIR/log" || { log "push failed"; return; }
   if [ ! -f "$RUN_DIR/pr" ]; then
     gh pr create --draft --base main --head "$BRANCH" --title "Runs: $NAME (agent loop)" \
       --body-file "$L/pr-body.md" > "$RUN_DIR/pr" 2>>"$RUN_DIR/log" \
