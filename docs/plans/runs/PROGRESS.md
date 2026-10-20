@@ -78,6 +78,14 @@ Notes for builders, from reading the code (planner, round 1):
   T11 can chart (`tests` 10 points from n 0, `tasks` 6 points from n 3). The burn warn levels
   stay the view's constants (90/85), not `budget.pause5h/stop7d`; a deadline with no zone is
   read in the server's local time (documented). No code change was needed for the loop's shapes.
+- T10 decisions (round 18): three directions, `refined`, `product`, `night`, in
+  `docs/plans/runs/design/`; they override only tokens (no sheet changes) with tokens.css's
+  selectors, dark block before light (the dark `:root` would otherwise beat light on `<html>`).
+  `demo-fleet.mjs --design <name>` appends one to `/css/tokens.css` in its forwarder. The CSS
+  reader/guardrail checker now lives in `test/helpers/css-guardrails.mjs` (`violations(file,
+  css, {tokens})`) and the OKLCH contrast code in `test/helpers/oklch.mjs`. Focus ring width,
+  `--shadow-float` use, translucency and motion over 120 ms need sheet or guardrail changes
+  after the pick (listed in the design README).
 
 ## Tasks
 
@@ -90,7 +98,7 @@ Notes for builders, from reading the code (planner, round 1):
 - [x] T7 (A2) [ui] Runs list `#/runs` (`g r`): `public/js/views/runs.js` (default export view), `<section id="view-runs">` in `public/index.html`, `runs` in `VIEWS`/`VIEW_KEYS` (`router.js`) and `VIEW_META` (`views/index.js`), an icon in `core/icons.js`, `public/css/views/runs.css`; each row: goal, state, round n / max, latest score + trend, budget burn (5 h / 7 d from `usage`), time left, open needs; empty state says how to start a run — done when: `test/view-runs.test.mjs` (fakedom, see `test/view-morning.test.mjs`) renders the fixture and the empty state, and `router.test`, `icons.test`, `design-guardrails.test` stay green (commit 4cae33d)
 - [x] T8 (A2) [ui] Run page `#/runs?run=<id>` (add the `run` parameter to `parseHash`/`formatHash` with a strict pattern): the timeline of rounds (role, task, outcome, commit, cost, duration), stop reason, open needs, artifacts (PR links), raw unknown events folded away — done when: `test/view-runs.test.mjs` covers the page from the fixture and `test/router.test.mjs` covers the new parameter (bad values dropped) (commit 2f3e208)
 - [x] T9 (A1/§7) The loop's own events: `test/fixtures/runs/loop-runs-n1.jsonl` written with exactly the shapes `run.sh` emits (floats, numeric commit, `usage`, `cost`, `needs kind=wait|fence`, `run.stop` with `rounds`/`usd`), folded into budget burn and per-round cost; `docs/runs.md` gets a "Watching the runs loop" section with `runs.files: ["~/runs/*/run.jsonl"]` — done when: a test folds the fixture into the expected run (rounds, costs, scores `tests` and `tasks`, stop reason) and the list row shows it (commit 76fd855)
-- [ ] T10 (C) [ui] Two or three design directions inside the control-room style (README §5, §8 Q1): each a token override file `docs/plans/runs/design/<name>.css` (type scale, 4 px spacing, elevation for floating layers only, both themes) and `docs/plans/runs/design/README.md` saying what each changes, why, and how to view it on the demo (`node test/tools/demo-fleet.mjs`) — done when: a test checks each file only sets custom properties that exist in `public/css/tokens.css` and passes the design guardrails
+- [x] T10 (C) [ui] Two or three design directions inside the control-room style (README §5, §8 Q1): each a token override file `docs/plans/runs/design/<name>.css` (type scale, 4 px spacing, elevation for floating layers only, both themes) and `docs/plans/runs/design/README.md` saying what each changes, why, and how to view it on the demo (`node test/tools/demo-fleet.mjs`) — done when: a test checks each file only sets custom properties that exist in `public/css/tokens.css` and passes the design guardrails (commit 1efb5b8)
 - [ ] T11 (A2) [ui] Score chart per metric on the run page: one small SVG line per metric over rounds (reuse `public/js/ui/spark.js` if it fits), `better` decides which way is good, no animation — done when: `test/view-runs.test.mjs` checks the chart's points for the fixture's `tests` and `tasks` scores and an empty chart for a run with none
 - [ ] T12 (A1) Sessions tied to rounds by cwd + time window (`server/runs/bind.mjs`, read from the session registry): a round row lists the sessions that ran in its dir during it, with their cost — done when: `test/runs-bind.test.mjs` passes (inside the window, outside, two runs in one dir)
 - [ ] T13 (docs) README "second copy for testing" command is not isolated (it opens the default audit file and can fail with AUDIT_LOCKED): add `LANEBOARD_AUDIT_FILE` and `LANEBOARD_STATE_DIR` (temp paths) to the documented command, plus a line on how to stop the copy; check the env names in `docs/config.md` first — from reviews/14-stranger.md #1, #7 — done when: the README command sets both and a test or manual check of the doc names real env vars
@@ -108,6 +116,10 @@ Notes for builders, from reading the code (planner, round 1):
 
 ## For the owner
 
+- **Pick a design direction (T10).** `docs/plans/runs/design/README.md` compares `refined`,
+  `product` and `night`; view one with `node test/tools/demo-fleet.mjs --design <name>`. The pick
+  becomes tokens.css v2; taking `product`'s shadow or a 2 px focus ring also needs a guardrail
+  change (box-shadow on floating layers), which is yours to allow.
 - **Hook-style intake for runs needs a fenced file.** Plain `curl` from a loop (no custom header)
   is only accepted on `HOOK_PATHS` in `server/security.mjs` (fenced). Night 1 ships
   `POST /api/runs/events` behind the normal local guards (the CLI sends `x-laneboard`), and loops
