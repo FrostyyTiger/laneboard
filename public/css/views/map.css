@@ -120,6 +120,7 @@
   color: var(--text-1); overflow-wrap: anywhere;
 }
 .map-why { margin: var(--sp-2) 0 0; color: var(--text-1); font: var(--fs-12)/var(--lh) var(--font-mono); }
+.map-drift { margin: var(--sp-2) 0 0; color: var(--text-2); font: var(--fs-12)/var(--lh) var(--font-mono); }
 .map-sub { margin: var(--sp-1) 0 0; color: var(--text-2); font: var(--fs-12) var(--font-mono); overflow-wrap: anywhere; }
 
 /* A status plate: grey, with the status hue only on its glyph. */

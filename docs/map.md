@@ -62,6 +62,7 @@ is remembered in this browser:
 | `cost` | spend over 24 h, against the builder's budget cap when one is set |
 | `context` | context window use (50 / 70 / 85 %) |
 | `age` | time since the last change (10 m, 1 h, 4 h, 24 h) |
+| `drift` | declared against discovered: a dashed warn ring on a declared node no fresh feed lists ("declared, not seen"), an accent ring on a discovered one ("seen, not declared"), everything else dimmed; the readout counts both (see "Drift") |
 
 **Scope and split.** Picking a builder in the rail (or `[` `]`, `1`-`9`)
 ghosts every other builder and flies to its subtree. `\` splits the Map with a

@@ -45,7 +45,7 @@ import {
   idForSel, selForId, SEVERITY, FOLD_KEY, AUTO_UNFOLD_ZOOM,
 } from './model.js';
 import { layout, RINGS, SIZE, polar } from './layout.js';
-import { OVERLAY_KEY, validOverlay, nodeStyle, SHAPE_CODE, TONE_CODE } from './overlays.js';
+import { OVERLAY_KEY, validOverlay, nodeStyle, SHAPE_CODE, TONE_CODE, driftText, driftCounts } from './overlays.js';
 import { createRenderer, readPalette } from './render.js';
 import {
   createHitGrid, bindPointer, hitRadius, boundingCircle, fitCircle, anchored, clampZoom, fitScaleOf,
@@ -682,6 +682,7 @@ export function createMap(root, opts = {}) {
     const status = n.status ?? 'unknown';
     const pill = h('span', `map-pill s-${STATUS_WORD[status] ? status : 'unknown'}`, STATUS_WORD[status] ?? String(status));
     panel.append(close, eyebrow, name, pill);
+    if (driftText(n)) panel.append(h('p', 'map-drift', driftText(n)));
     if (n.why) panel.append(h('p', 'map-why', String(n.why)));
     if (n.sub) panel.append(h('p', 'map-sub', String(n.sub)));
 
@@ -855,7 +856,7 @@ export function createMap(root, opts = {}) {
     const top = h('div', 'map-tip-top');
     top.append(h('i', `map-dot s-${STATUS_WORD[n.status] ? n.status : 'unknown'}`), h('b', null, n.label ?? n.id), h('span', 'map-tip-kind', n.kind));
     tip.append(top);
-    const line = n.why ?? n.sub;
+    const line = (overlay === 'drift' && driftText(n)) || (n.why ?? n.sub);
     if (line) tip.append(h('div', 'map-tip-sub', String(line)));
     tip.hidden = false;
     const tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -1078,6 +1079,7 @@ export function createMap(root, opts = {}) {
     const text = renderer.readout({
       zoom: cam.z, scope: b, drawn: drawnCount, total: model.nodes.length, overlay,
       now: Date.now(), compact: W < 700, p95: perfOn ? p95() : null,
+      drift: overlay === 'drift' ? driftCounts(model.nodes) : null,
     });
     if (text !== readoutText) { readoutText = text; readoutEl.textContent = text; }
   }

@@ -4,18 +4,20 @@ import assert from 'node:assert/strict';
 import {
   OVERLAYS, nextOverlay, validOverlay, costLevel, ageLevel, contextBin, statusStyle,
   nodeStyle, linkStyle, confirmedConflict, DIM, SHAPE_CODE, TONE_CODE, ACCENT_L,
+  DRIFT_TEXT, driftText, driftCounts,
 } from '../public/js/views/map/overlays.js';
 
 const lane = (status = 'working', m = {}, extra = {}) => ({ id: 'lane:builder-a/x', kind: 'lane', status, m, ...extra });
 const MIN = 60e3, HOUR = 60 * MIN;
 
 test('nextOverlay cycles both ways and wraps', () => {
-  assert.deepEqual(OVERLAYS, ['status', 'ci', 'cost', 'context', 'age']);
+  assert.deepEqual(OVERLAYS, ['status', 'ci', 'cost', 'context', 'age', 'drift']);
   let o = 'status';
   const seen = [];
   for (let i = 0; i < OVERLAYS.length; i++) { o = nextOverlay(o); seen.push(o); }
-  assert.deepEqual(seen, ['ci', 'cost', 'context', 'age', 'status']);
-  assert.equal(nextOverlay('status', -1), 'age');
+  assert.deepEqual(seen, ['ci', 'cost', 'context', 'age', 'drift', 'status']);
+  assert.equal(nextOverlay('status', -1), 'drift');
+  assert.equal(nextOverlay('age'), 'drift');
   assert.equal(nextOverlay('ci', -1), 'status');
   for (const x of OVERLAYS) assert.equal(nextOverlay(nextOverlay(x, 1), -1), x);
   assert.equal(nextOverlay('bogus'), 'status');
@@ -134,4 +136,38 @@ test('codes for the packed minimap scene are distinct', () => {
   assert.equal(new Set(Object.values(SHAPE_CODE)).size, Object.keys(SHAPE_CODE).length);
   assert.equal(new Set(Object.values(TONE_CODE)).size, Object.keys(TONE_CODE).length);
   assert.equal(ACCENT_L.length, 5);
+});
+
+test('drift overlay: missing is a dashed warn ring, undeclared an accent ring, the rest dimmed', () => {
+  const missing = { kind: 'room', status: 'unknown', drift: 'missing' };
+  const undeclared = { kind: 'room', status: 'ok', drift: 'undeclared', discovered: true };
+  const calm = { kind: 'room', status: 'ok' };
+  const m = nodeStyle(missing, 'drift');
+  assert.equal(m.mark.tone, 'warn');
+  assert.ok(m.mark.dash.length === 2, 'dashed');
+  assert.equal(m.alpha, 1);
+  assert.equal(m.shape, 'ring', 'its unknown status still shows');
+  const u = nodeStyle(undeclared, 'drift');
+  assert.equal(u.mark.tone, 'accent');
+  assert.deepEqual(u.mark.dash, [], 'solid');
+  assert.equal(u.alpha, 1);
+  assert.equal(nodeStyle(calm, 'drift').alpha, DIM);
+  assert.equal(nodeStyle(calm, 'drift').mark, undefined);
+  assert.equal(nodeStyle(lane('working'), 'drift').alpha, DIM, 'lanes dim too');
+  // A crit node without drift keeps its hue, dimmed; no other overlay draws a mark.
+  assert.equal(nodeStyle({ kind: 'room', status: 'crit' }, 'drift').tone, 'crit');
+  for (const o of OVERLAYS.filter((x) => x !== 'drift')) assert.equal(nodeStyle(missing, o).mark, undefined, o);
+  // The style is a copy: changing it does not change the next one.
+  m.mark.dash.push(9);
+  assert.equal(nodeStyle(missing, 'drift').mark.dash.length, 2);
+});
+
+test('drift words and counts', () => {
+  assert.equal(driftText({ drift: 'missing' }), 'declared, not seen');
+  assert.equal(driftText({ drift: 'undeclared' }), 'seen, not declared');
+  assert.equal(driftText({}), null);
+  assert.equal(driftText({ drift: 'toString' }), null);
+  assert.deepEqual(Object.keys(DRIFT_TEXT), ['missing', 'undeclared']);
+  assert.deepEqual(driftCounts([{ drift: 'missing' }, { drift: 'undeclared' }, { drift: 'undeclared' }, {}, null]), { missing: 1, undeclared: 2 });
+  assert.deepEqual(driftCounts(undefined), { missing: 0, undeclared: 0 });
 });

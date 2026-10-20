@@ -1,5 +1,5 @@
 // The Map's overlays (plan §5 2.5, 2.6): how a node and a link look under the
-// status, ci, cost, context and age overlays.
+// status, ci, cost, context, age and drift overlays.
 //
 // Pure: no DOM, no globals. Styles are abstract (a tone, a lightness level, a
 // shape, dash pattern); the renderer maps tones to the §4 tokens: grey ->
@@ -7,7 +7,7 @@
 // lightness ACCENT_L[level], line -> --line.
 
 /** The overlays, in the order `o` cycles them (`O` goes back). */
-export const OVERLAYS = ['status', 'ci', 'cost', 'context', 'age'];
+export const OVERLAYS = ['status', 'ci', 'cost', 'context', 'age', 'drift'];
 
 /** localStorage key of the chosen overlay. */
 export const OVERLAY_KEY = 'laneboard.map.overlay';
@@ -27,6 +27,31 @@ export const TONE_CODE = { grey: 0, crit: 1, warn: 2, low: 3, accent: 4, line: 5
 
 /** Non-lane nodes in a non-status overlay are drawn at this alpha. */
 export const DIM = 0.5;
+
+/**
+ * Drift (server/map.mjs driftOf): the words the readout, the tip and the
+ * panel use, and the ring the drift overlay draws around the node. A missing
+ * node stays at its declared place in a dashed warn ring, an undeclared one
+ * gets a solid accent ring.
+ */
+export const DRIFT_TEXT = { missing: 'declared, not seen', undeclared: 'seen, not declared' };
+export const DRIFT_MARK = {
+  missing: { tone: 'warn', level: 0, dash: [3, 3] },
+  undeclared: { tone: 'accent', level: 2, dash: [] },
+};
+
+/** The node's drift kind when it is one of DRIFT_TEXT's, else null. */
+const driftOf = (node) => (typeof node?.drift === 'string' && Object.hasOwn(DRIFT_TEXT, node.drift) ? node.drift : null);
+
+/** "declared, not seen" / "seen, not declared" for a drifting node, else null. */
+export const driftText = (node) => (driftOf(node) ? DRIFT_TEXT[driftOf(node)] : null);
+
+/** `{missing, undeclared}` counts over a node list. */
+export function driftCounts(nodes) {
+  const out = { missing: 0, undeclared: 0 };
+  for (const n of nodes ?? []) if (n && Object.hasOwn(out, n.drift)) out[n.drift]++;
+  return out;
+}
 
 /** The overlay after `cur` (dir 1) or before it (dir -1), wrapping. Unknown -> status. */
 export function nextOverlay(cur, dir = 1) {
@@ -99,13 +124,19 @@ const MEASURED = {
  * its own status is used. `opts.budgetUsd` is the builder's budget cap for the
  * cost overlay (`opts.warnPct`, default 80, of it turns ◆ low; at the cap ■ crit).
  *
- * Returns `{tone, level, shape, alpha, arc?, abnormal}`. An abnormal status
- * keeps its own tone and shape in every overlay: a crit lane never looks calm
- * because the overlay is cost.
+ * Returns `{tone, level, shape, alpha, arc?, mark?, abnormal}`. An abnormal
+ * status keeps its own tone and shape in every overlay: a crit lane never
+ * looks calm because the overlay is cost. The drift overlay keeps the status
+ * style, adds `mark` (DRIFT_MARK, a ring around the node) on a drifting node
+ * and dims every other node.
  */
 export function nodeStyle(node, overlay = 'status', rolled = null, opts = {}) {
   const base = statusStyle(node, rolled ?? node?.status);
   const ov = validOverlay(overlay);
+  if (ov === 'drift') {
+    const mark = driftOf(node) && DRIFT_MARK[driftOf(node)];
+    return mark ? { ...base, alpha: 1, mark: { ...mark, dash: [...mark.dash] } } : { ...base, alpha: DIM };
+  }
   const measured = ov !== 'status' && MEASURED[ov].has(node?.kind);
   const alpha = ov === 'status' || measured ? 1 : DIM;
   if (base.abnormal || !measured) return { ...base, alpha };

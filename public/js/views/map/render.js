@@ -535,6 +535,16 @@ export function createRenderer(ctx, palette) {
         ctx.stroke();
       }
 
+      if (st.mark) {
+        // Drift overlay: a ring outside the glyph, dashed warn for "declared,
+        // not seen", solid accent for "seen, not declared".
+        strokeStyle(tone(st.mark.tone, st.mark.level), alpha, 1.5, st.mark.dash);
+        ctx.beginPath();
+        arc(sp.x, sp.y, (n.kind === 'builder' ? r * 1.25 * Math.SQRT2 : r) + 6, 0, TAU);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
       if (n.kind === 'room' || n.kind === 'site' || n.kind === 'host' || n.kind === 'builder') gauges(n, sp.x, sp.y, n.kind === 'builder' ? r * 1.25 + 1 : r, alpha);
       if (isFolded) {
         const b = foldMark(scene, id, n, c, sp, r, alpha);
@@ -737,13 +747,17 @@ export function createRenderer(ctx, palette) {
    * The readout corner's text: `Z 1.80×  SCOPE B1  N 214/570  OVL CI  12:04:31Z`
    * (compact on a phone: `Z 1.80× · N 214/570 · 12:04:31Z`). `scope` is a
    * builder code or id, or 'all'; `p95` (ms, from ?mapperf=1) is appended.
+   * In the drift overlay, `drift` ({missing, undeclared} counts) adds
+   * `NOT SEEN 2  NOT DECLARED 3` after the overlay.
    */
-  function readout({ zoom = 1, scope = 'all', drawn = 0, total = 0, overlay = 'status', now = Date.now(), compact = false, p95 = null } = {}) {
+  function readout({ zoom = 1, scope = 'all', drawn = 0, total = 0, overlay = 'status', now = Date.now(), compact = false, p95 = null, drift = null } = {}) {
     const z = `Z ${Number(zoom).toFixed(2)}×`;
     const n = `N ${drawn}/${total}`;
     const utc = `${new Date(now).toISOString().slice(11, 19)}Z`;
     if (compact) return [z, n, utc].join(' · ');
-    const parts = [z, `SCOPE ${!scope || scope === 'all' ? 'ALL' : String(scope).toUpperCase()}`, n, `OVL ${String(overlay).toUpperCase()}`, utc];
+    const parts = [z, `SCOPE ${!scope || scope === 'all' ? 'ALL' : String(scope).toUpperCase()}`, n, `OVL ${String(overlay).toUpperCase()}`];
+    if (overlay === 'drift' && drift) parts.push(`NOT SEEN ${drift.missing ?? 0}`, `NOT DECLARED ${drift.undeclared ?? 0}`);
+    parts.push(utc);
     if (Number.isFinite(p95)) parts.push(`P95 ${p95.toFixed(1)}MS`);
     return parts.join('  ');
   }

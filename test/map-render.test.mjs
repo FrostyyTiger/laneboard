@@ -281,6 +281,32 @@ test('overlay: a cost-heavy calm lane takes an accent level, a crit lane keeps i
   assert.ok(opsAt(ctx.ops, scene, 'b').some((o) => o.op === 'fill' && shapeOf(o) === 'square' && o.fillStyle === 'P1'));
 });
 
+test('drift overlay: a dashed warn ring on a missing node, an accent ring on an undeclared one', () => {
+  const nodes = [
+    { id: '__core', kind: 'core', label: 'hub' },
+    { id: 'hq', kind: 'site', parent: '__core', label: 'hq', status: 'ok' },
+    { id: 'gone', kind: 'room', parent: 'hq', label: 'gone', status: 'unknown', drift: 'missing', why: 'hv1 does not list gone' },
+    { id: 'feed:hv1', kind: 'site', parent: '__core', label: 'hv1', status: 'ok', discovered: true, drift: 'undeclared' },
+    { id: 'feed:hv1/new', kind: 'room', parent: 'feed:hv1', label: 'new', status: 'ok', discovered: true, drift: 'undeclared' },
+    { id: 'b', kind: 'builder', parent: 'hq', label: 'B1', code: 'B1', status: 'ok', drift: 'undeclared' },
+    { id: 'calm', kind: 'room', parent: 'hq', label: 'calm', status: 'ok' },
+  ];
+  const ctx = fakeCtx();
+  const scene = sceneOf(nodes, { overlay: 'drift' });
+  const r = createRenderer(ctx, PAL);
+  assert.doesNotThrow(() => r.draw(scene));
+  const ring = (id) => opsAt(ctx.ops, scene, id).filter((o) => o.op === 'stroke' && o.lineWidth === 1.5 && ['P2', 'A60'].includes(o.strokeStyle));
+  assert.ok(ring('gone').some((o) => o.strokeStyle === 'P2' && o.dash.length === 2), 'missing: dashed warn');
+  for (const id of ['feed:hv1', 'feed:hv1/new', 'b']) assert.ok(ring(id).some((o) => o.strokeStyle === 'A60' && o.dash.length === 0), `${id}: solid accent`);
+  assert.equal(ring('calm').length, 0);
+  assert.ok(opsAt(ctx.ops, scene, 'calm').every((o) => o.alpha <= 0.5 + 1e-9), 'the rest is dimmed');
+  // Outside the drift overlay, no drift ring.
+  const ctx2 = fakeCtx();
+  const s2 = sceneOf(nodes);
+  createRenderer(ctx2, PAL).drawNodes(s2);
+  assert.ok(!ctx2.ops.some((o) => o.op === 'stroke' && ['P2', 'A60'].includes(o.strokeStyle)));
+});
+
 test('a folded node draws a dotted ring and a +N plate, and returns the plate rect', () => {
   const ctx = fakeCtx();
   const nodes = FLEET.slice(0, 4);
@@ -492,6 +518,9 @@ test('readout text: zoom, scope, node count, overlay, UTC', () => {
   assert.equal(r.readout({ zoom: 1, scope: 'all', drawn: 3, total: 3, now }), 'Z 1.00×  SCOPE ALL  N 3/3  OVL STATUS  12:04:31Z');
   assert.equal(r.readout({ zoom: 2, drawn: 1, total: 2, now, compact: true }), 'Z 2.00× · N 1/2 · 12:04:31Z');
   assert.match(r.readout({ now, p95: 3.24 }), /P95 3\.2MS$/);
+  assert.equal(r.readout({ zoom: 1, drawn: 3, total: 3, overlay: 'drift', drift: { missing: 1, undeclared: 2 }, now }),
+    'Z 1.00×  SCOPE ALL  N 3/3  OVL DRIFT  NOT SEEN 1  NOT DECLARED 2  12:04:31Z');
+  assert.doesNotMatch(r.readout({ overlay: 'status', drift: { missing: 1, undeclared: 2 }, now }), /NOT SEEN/);
 });
 
 test('setPalette swaps colours for the next frame (lb:theme)', () => {
