@@ -7,6 +7,6 @@ The loop has stopped (STOP REASON below). Write the
 - the tests now (pass/fail);
 - what needs the owner, worst first: decisions, fenced-file requests, the design pick if
   screenshots exist, anything risky to look at before merging;
-- the reviews in one line each.
+- the reviews and the research in one line each (open questions too).
 Also add the owner notes the script left (OWNER NOTES below), if that file exists.
 Commit with `final: morning report`. No code changes.

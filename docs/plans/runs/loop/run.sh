@@ -24,6 +24,7 @@ MODEL_BUILD=${MODEL_BUILD:-claude-opus-5-5}     # planner, builder, fix, designe
 MODEL_REVIEW=${MODEL_REVIEW:-claude-sonnet-5-5} # stranger, triage, operator
 ROUND_SECS=${ROUND_SECS:-2700}                  # 45 min per round, then it is stopped
 REVIEW_EVERY=${REVIEW_EVERY:-4}                  # builder rounds between stranger reviews
+RESEARCH_MAX=${RESEARCH_MAX:-4}                  # research rounds per run
 
 mkdir -p "$RUN_DIR/rounds"
 # The loop runs from a frozen copy: a round cannot change the rules of the rounds after it.
@@ -75,6 +76,7 @@ check() {  # the checker is not an agent: npm test, hygiene included
   [ $total -gt 0 ] && ev score name=tests value="$(python3 -c "print(round($TESTS_PASS/$total,4))")" better=higher
 }
 tasks_done() { grep -cE '^- \[x\]' "$PLAN_DIR/PROGRESS.md" 2>/dev/null || echo 0; }
+questions_open() { grep -cE '^- \[ \] Q[0-9]' "$PLAN_DIR/PROGRESS.md" 2>/dev/null || echo 0; }
 tasks_open() { grep -cE '^- \[ \]' "$PLAN_DIR/PROGRESS.md" 2>/dev/null || echo 0; }
 
 SPENT=0 U5=0 R5=0 U7=0 OVERAGE=0
@@ -89,9 +91,16 @@ TESTS AFTER THE LAST ROUND: pass $TESTS_PASS, fail $TESTS_FAIL
 $( [ "$TESTS_OK" = 0 ] && printf 'FAILING TESTS (tail):\n%s\n' "$TEST_TAIL" )
 REVIEWS SO FAR: $(ls "$PLAN_DIR"/reviews/ 2>/dev/null | tr '\n' ' ')
 $( [ -n "${STOP_REASON:-}" ] && echo "STOP REASON: $STOP_REASON   OWNER NOTES: $RUN_DIR/owner-notes" )"
+  # The researcher reads the open web, so it gets no shell, no git, no MCP: only files in the repo
+  # and web tools. What it finds lands in a markdown file that later rounds read as data.
+  local tools=()
+  case $role in
+    research) tools=(--restricted --strict-mcp-config --tools "Read,Write,Edit,Glob,Grep,WebSearch,WebFetch") ;;
+    triage) tools=(--restricted --strict-mcp-config --tools "Read,Write,Edit,Glob,Grep") ;;
+  esac
   ev round.start n="$n" role="$role"
   LANEBOARD_RUN="$NAME/$n" timeout "$ROUND_SECS" claude -p "$prompt" --model "$model" \
-    --permission-mode auto \
+    --permission-mode auto "${tools[@]}" \
     --output-format stream-json --verbose > "$out" 2>&1
   local rc=$?
   read -r cost err u5 r5 u7 over text < <(python3 - "$out" <<'PY'
@@ -149,7 +158,7 @@ run_role() {  # with rate-limit waits; a waited round does not count
       ev needs kind=fence text="round $n wanted to change fenced files: $(echo $hits | tr '\n' ' ')"
       printf '\n- (round %s) wanted to change fenced files, reverted: %s\n' "$n" "$(echo $hits)" >> "$RUN_DIR/owner-notes"
     fi
-    git status --porcelain | grep -q . && { git add -A; git commit -q -m "$role: round $n leftovers" ; }
+    git status --porcelain | grep -q . && { git add -A; git commit -q -m "$role: round $n" ; }
     return $rc
   done
 }
@@ -164,7 +173,7 @@ if [ ! -f "$PLAN_DIR/PROGRESS.md" ]; then
   n=$((n + 1)); run_role $n planner "$MODEL_BUILD"; push
 fi
 
-STOP="" since_review=0 stale=0 fixes=0
+STOP="" since_review=0 stale=0 fixes=0 researched=0 since_research=9
 while :; do
   [ -f "$RUN_DIR/STOP" ] && { STOP=human; break; }
   [ "$(now)" -ge "$FINAL_S" ] && { STOP=deadline; break; }
@@ -182,11 +191,13 @@ while :; do
 
   if [ "$TESTS_OK" = 0 ]; then role=fix; fixes=$((fixes + 1))
     [ $fixes -gt 2 ] && { STOP=no-progress; log "tests red after 2 fix rounds"; break; }
+  elif [ "$(questions_open)" -gt 0 ] && [ $researched -lt "$RESEARCH_MAX" ] && [ $since_research -ge 2 ]; then role=research
   elif [ $since_review -ge "$REVIEW_EVERY" ]; then role=review-stranger
   elif ls "$PLAN_DIR"/design/*.png >/dev/null 2>&1 && [ ! -f "$RUN_DIR/designer-done" ]; then role=review-designer
   else role=builder; fi
 
-  model=$MODEL_BUILD; case $role in review-stranger|triage|review-operator) model=$MODEL_REVIEW;; esac
+  model=$MODEL_BUILD; case $role in review-stranger|triage|review-operator|research) model=$MODEL_REVIEW;; esac
+  since_research=$((since_research + 1))
   done_before=$(tasks_done); head_before=$(git rev-parse HEAD)
   n=$((n + 1)); run_role $n $role "$model"
   check
@@ -196,6 +207,8 @@ while :; do
       if [ "$(tasks_done)" -gt "$done_before" ]; then stale=0; ev round.end n=$n outcome=kept commit="$(git rev-parse --short HEAD)"
       else stale=$((stale + 1)); ev round.end n=$n outcome=no-task-done; fi
       [ $stale -ge 2 ] && { STOP=no-progress; push; break; } ;;
+    research) researched=$((researched + 1)); since_research=0
+      ev round.end n=$n outcome=researched open="$(questions_open)" ;;
     review-*) [ $role = review-designer ] && touch "$RUN_DIR/designer-done"
       [ $role = review-stranger ] && since_review=0
       ev round.end n=$n outcome=reviewed
