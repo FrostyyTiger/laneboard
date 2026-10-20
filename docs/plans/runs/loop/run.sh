@@ -79,7 +79,7 @@ tasks_done() { grep -cE '^- \[x\]' "$PLAN_DIR/PROGRESS.md" 2>/dev/null || echo 0
 questions_open() { grep -cE '^- \[ \] Q[0-9]' "$PLAN_DIR/PROGRESS.md" 2>/dev/null || echo 0; }
 tasks_open() { grep -cE '^- \[ \]' "$PLAN_DIR/PROGRESS.md" 2>/dev/null || echo 0; }
 
-SPENT=0 U5=0 R5=0 U7=0 OVERAGE=0
+SPENT=0 U5=0 R5=0 U7=0 OVERAGE=0 HARD=0
 # round <n> <role> <model>: one fresh session; returns 0 done, 2 rate-limited, 1 failed
 round() {
   local n=$1 role=$2 model=$3 out="$RUN_DIR/rounds/$(printf %02d "$1")-$2.jsonl"
@@ -105,7 +105,7 @@ $( [ -n "${STOP_REASON:-}" ] && echo "STOP REASON: $STOP_REASON   OWNER NOTES: $
   local rc=$?
   read -r cost err u5 r5 u7 over text < <(python3 - "$out" <<'PY'
 import json, sys
-cost, err, text = 0.0, 0, ""
+cost, err, text = 0.0, 1, ""
 u5 = r5 = u7 = -1; over = 0
 for line in open(sys.argv[1], errors="replace"):
     try: m = json.loads(line)
@@ -129,6 +129,8 @@ PY
   ev cost n="$n" usd="${cost:-0}" total="$SPENT"
   if grep -qiE 'usage limit|rate.?limit|limit reached|429' <<<"$text$(tail -3 "$out")"; then return 2; fi
   [ $rc -eq 124 ] && log "round $n timed out"
+  # No result message at all = Claude did not run (PATH, login, crash): a hard error, not a bad round.
+  grep -q '"type":"result"' "$out" || { log "round $n: no session ($(head -c 200 "$out" | tr '\n' ' '))"; return 3; }
   [ "${err:-1}" = 0 ] && [ $rc -eq 0 ] && return 0 || return 1
 }
 
@@ -159,7 +161,8 @@ run_role() {  # with rate-limit waits; a waited round does not count
       printf '\n- (round %s) wanted to change fenced files, reverted: %s\n' "$n" "$(echo $hits)" >> "$RUN_DIR/owner-notes"
     fi
     git status --porcelain | grep -q . && { git add -A; git commit -q -m "$role: round $n" ; }
-    return $rc
+    [ $rc -eq 3 ] && { HARD=$((HARD + 1)); return 3; }
+    HARD=0; return $rc
   done
 }
 
@@ -170,7 +173,9 @@ check
 
 n=$(ls "$RUN_DIR/rounds" | wc -l)
 if [ ! -f "$PLAN_DIR/PROGRESS.md" ]; then
-  n=$((n + 1)); run_role $n planner "$MODEL_BUILD"; push
+  n=$((n + 1)); run_role $n planner "$MODEL_BUILD"
+  [ "$HARD" -gt 0 ] && { ev run.stop reason=error rounds="$n"; log "end: the planner session did not run"; exit 1; }
+  push
 fi
 
 STOP="" since_review=0 stale=0 fixes=0 researched=0 since_research=9
@@ -200,6 +205,7 @@ while :; do
   since_research=$((since_research + 1))
   done_before=$(tasks_done); head_before=$(git rev-parse HEAD)
   n=$((n + 1)); run_role $n $role "$model"
+  [ "$HARD" -ge 2 ] && { STOP=error; log "two rounds without a session"; break; }
   check
   [ "$TESTS_OK" = 1 ] && fixes=0
   case $role in
@@ -221,7 +227,7 @@ done
 
 log "stopping: $STOP"
 # The operator review and the morning report run whatever stopped the loop (unless time is gone).
-if [ "$(now)" -lt "$DEADLINE_S" ]; then
+if [ "$(now)" -lt "$DEADLINE_S" ] && [ "$STOP" != error ]; then
   n=$((n + 1)); run_role $n review-operator "$MODEL_REVIEW"
   STOP_REASON=$STOP; n=$((n + 1)); run_role $n final "$MODEL_BUILD"
   check; push
