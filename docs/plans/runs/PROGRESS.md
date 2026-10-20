@@ -126,8 +126,10 @@ Notes for builders, from reading the code (planner, round 1):
 - [x] T17 (A2) Runs list copes with a run that has no `run.start` (only a posted `run.stop`: `goal` null, `rounds` 0): no `null`/`undefined` text, shows the run id as title — from reviews/14-stranger.md #4 — done when: `test/view-runs.test.mjs` renders such a row (commit 617eade)
 - [x] T18 (docs) `docs/runs.md` `round.end` row (and the run `cost` field) says the run's cost is the sum of `cost` events only; `round.end --usd` fills the round's `usd` but not the run's `cost` — done when: the doc says so in both places and `test/runs-docs.test.mjs` stays green — from reviews/20-stranger.md #2 (commit 42c9c1a)
 - [x] T19 (A1) `laneboard run --help` shows `--run <id>` as optional (it defaults to the run part of `$LANEBOARD_RUN`) and lists `--file` and `--post` — done when: `test/cli-run.test.mjs` checks the help text mentions both — from reviews/20-stranger.md #6 (commit c32dc20)
-- [ ] T20 (docs) README's CLI block says how to get `laneboard` on the PATH (the `ln -s` step from `docs/install.md`, or `node bin/laneboard`) — from reviews/27-stranger.md #2 — done when: README shows one of the two next to the first `laneboard run`/`laneboard ls` example and the docs tests stay green
-- [ ] T21 (docs) `docs/runs.md` has one `curl` example for `POST /api/runs/events` with the `x-laneboard` header, and says the answer without it is 403 `no-csrf-header` — from reviews/27-stranger.md #6 — done when: the example is in the doc and `test/runs-docs.test.mjs` stays green
+- [ ] T20 (docs) README's CLI block says how to get `laneboard` on the PATH (the `ln -s` step from `docs/install.md`, or `node bin/laneboard`; for a checkout also how to check which copy is on the PATH, `readlink -f "$(command -v laneboard)"`; reviews/33-stranger.md #1 too) — from reviews/27-stranger.md #2 — done when: README shows one of the two next to the first `laneboard run`/`laneboard ls` example and the docs tests stay green
+- [ ] T21 (docs) `docs/runs.md` has one `curl` example for `POST /api/runs/events` with the `x-laneboard` header (name the header and its value as the server checks it), and says the answer without it is 403 `no-csrf-header` — from reviews/27-stranger.md #6 — done when: the example is in the doc and `test/runs-docs.test.mjs` stays green
+- [ ] T22 (docs/A1) README's CLI block lists `laneboard run` (one line, link to `docs/runs.md`) and `laneboard --help` lists `run` too — from reviews/33-stranger.md #2 — done when: README and `laneboard --help` output both mention `run`, checked by a test (`test/cli-run.test.mjs` for the help), docs tests stay green
+- [ ] T23 (docs) `docs/runs.md` says `needs` (like `score`) attaches to the latest round started when `--n` is missing, even if that round has ended — from reviews/33-stranger.md #5 — done when: the doc says so and `test/runs-docs.test.mjs` stays green
 
 ## Research questions
 
@@ -189,5 +191,6 @@ Notes for builders, from reading the code (planner, round 1):
 - reviews/14-stranger.md: 7 findings, 5 became tasks (T13 #1+#7, T14 #2, T15 #6, T16 #3+#5, T17 #4); #6 is split between T14 (stale note) and T15 (README).
 - reviews/20-stranger.md: 6 findings, 2 became tasks (T18 #2, T19 #6); #1 extends T13 (plus two owner lines: EADDRINUSE in fenced boot, stray state file), #3 duplicate of T15, #4 duplicate of T14 (URLs added), #5 is a taste call (owner), #2 also has an owner line for summing round `usd`.
 - reviews/27-stranger.md: 6 findings, 2 became tasks (T20 #2, T21 #6); #1 duplicate of T18 (owner line exists), #3 duplicate of the silent-CLI owner line, #4 covered by T16 (bad-value error) and T19 (help), #5 is a taste call (owner).
+- reviews/33-stranger.md: 6 findings, 2 became tasks (T22 #2, T23 #5); #1 folded into T20 (PATH check added), #6 folded into T21 (header value), #3 duplicate (EADDRINUSE owner line), #4 duplicate (silent-CLI owner line; the outside-a-lane caveat is in runs.md since T14).
 
 ## Morning
