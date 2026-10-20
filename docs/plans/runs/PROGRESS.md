@@ -93,6 +93,17 @@ Notes for builders, from reading the code (planner, round 1):
   the metric's own range, two scores in one round keep the last. Pure helpers `chartDomain`,
   `chartPoints`, `scoreCharts`, `chartNum` (4 significant digits, so 0.9997 is not shown as 1).
   The latest value's mark compares with the point before (like the header), p2 only when worse.
+- T12 decisions (round 22): the source is not the live registry (a loop's short sessions are gone
+  by the time you look) but the hook events (`db.sessionsSeen`: id, first cwd, first/last seen
+  over the session's whole life) plus the highest cost snapshot per session id. A session belongs
+  to the round it was *first seen* in (README §3 A1 "started during a round"), not every round it
+  overlaps, so a cost is never counted twice. Exact binding: new optional `session` on
+  `round.start`/`round.end` (research/Q2 #2, #3). A run's dirs: new optional `run.start` `cwd`
+  plus `<dir>` of `<dir>/.laneboard/run.jsonl`; a glob file elsewhere (the loop's `~/runs/…`)
+  names no dir, so the loop's rounds list no sessions until it writes `cwd` or `session` (owner
+  line). Ties: every run of the store is bound together; a guess fitting two runs is `maybe` in
+  both. Only `GET /api/runs/:run` binds (the list does not). The CLI has no `--cwd`/`--session`
+  flags yet.
 
 ## Tasks
 
@@ -107,7 +118,7 @@ Notes for builders, from reading the code (planner, round 1):
 - [x] T9 (A1/§7) The loop's own events: `test/fixtures/runs/loop-runs-n1.jsonl` written with exactly the shapes `run.sh` emits (floats, numeric commit, `usage`, `cost`, `needs kind=wait|fence`, `run.stop` with `rounds`/`usd`), folded into budget burn and per-round cost; `docs/runs.md` gets a "Watching the runs loop" section with `runs.files: ["~/runs/*/run.jsonl"]` — done when: a test folds the fixture into the expected run (rounds, costs, scores `tests` and `tasks`, stop reason) and the list row shows it (commit 76fd855)
 - [x] T10 (C) [ui] Two or three design directions inside the control-room style (README §5, §8 Q1): each a token override file `docs/plans/runs/design/<name>.css` (type scale, 4 px spacing, elevation for floating layers only, both themes) and `docs/plans/runs/design/README.md` saying what each changes, why, and how to view it on the demo (`node test/tools/demo-fleet.mjs`) — done when: a test checks each file only sets custom properties that exist in `public/css/tokens.css` and passes the design guardrails (commit 1efb5b8)
 - [x] T11 (A2) [ui] Score chart per metric on the run page: one small SVG line per metric over rounds (reuse `public/js/ui/spark.js` if it fits), `better` decides which way is good, no animation — done when: `test/view-runs.test.mjs` checks the chart's points for the fixture's `tests` and `tasks` scores and an empty chart for a run with none (commit 04f1a7d)
-- [ ] T12 (A1) Sessions tied to rounds by cwd + time window (`server/runs/bind.mjs`, read from the session registry): a round row lists the sessions that ran in its dir during it, with their cost — done when: `test/runs-bind.test.mjs` passes (inside the window, outside, two runs in one dir)
+- [x] T12 (A1) Sessions tied to rounds by cwd + time window (`server/runs/bind.mjs`, read from the session registry): a round row lists the sessions that ran in its dir during it, with their cost — done when: `test/runs-bind.test.mjs` passes (inside the window, outside, two runs in one dir) (commit 5d3108f)
 - [ ] T13 (docs) README "second copy for testing" command is not isolated (it opens the default audit file and can fail with AUDIT_LOCKED): add `LANEBOARD_AUDIT_FILE` and `LANEBOARD_STATE_DIR` (temp paths) to the documented command, plus a line on how to stop the copy and one saying `LANEBOARD_URL` must point the CLI at the copy (also reviews/20-stranger.md #1); check the env names in `docs/config.md` first — from reviews/14-stranger.md #1, #7 — done when: the README command sets both and a test or manual check of the doc names real env vars
 - [ ] T14 (docs) `docs/runs.md` CLI section and "smallest useful loop" say that a run file outside a lane cwd is only seen with `runs.files` or `--post`; drop the "is being built" status note now that the CLI and view exist, and name the URLs (`#/runs`, `#/runs?run=<id>`, the score chart) — from reviews/14-stranger.md #2, #6 and reviews/20-stranger.md #4 — done when: `test/runs-docs.test.mjs` stays green and the note is gone
 - [ ] T15 (docs) README lists the Runs view and `g r` in the view table and key list, with a link to `docs/runs.md` — from reviews/14-stranger.md #6 — done when: README mentions `#/runs` and `g r` (a docs test greps for it if one already checks the view list)
@@ -144,8 +155,10 @@ Notes for builders, from reading the code (planner, round 1):
 - **`run.sh` writes numbers as floats** (`"n": 3.0`) and would write an all-digit short sha as a
   number. laneboard copes (T1), but the loop (fenced) could quote `commit` and write ints.
 - **Exact session-to-round binding needs a `run.sh` change (fenced).** Claude Code accepts
-  `--session-id <uuid>`; if the loop generated one per round and wrote it on the round's start
-  event, T12 could bind exactly instead of by cwd + time window (research/Q2). Your call.
+  `--session-id <uuid>`; T12 now reads `session` on `round.start`/`round.end` and binds it
+  exactly. The loop's rounds list no sessions today: its file is outside the work dir and it
+  writes neither `session` nor `cwd`. Either one in `ev()` (a `--session-id "$(uuidgen)"` written
+  as `session` on each `round.start`, or `cwd` on `run.start`) turns it on. Your call.
 - **Port already taken prints a stack, not a line** (reviews/20 #1). The `EADDRINUSE` handling is
   in the boot path (`server/boot/*`, fenced); one line like "port 7790 is taken, is laneboard
   already running?" would help. Your call.
