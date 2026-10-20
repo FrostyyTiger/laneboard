@@ -74,8 +74,8 @@ Every line has these fields:
 | `run.start` | `goal` (text), `plan`, `branch`, `cwd` (the absolute dir the run works in), `deadline` (ISO or epoch), `budget` `{rounds, windowPct, pause5h, stop7d}` (the four may also sit at top level) | starts the run, or restarts it: a second `run.start` updates the goal and budget and reopens a stopped run |
 | `round.start` | **`n`** (integer ≥ 0), `role`, `task`, `session` | round `n` begins; starting the same `n` again is a retry, counted in the round's `starts` |
 | `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd`, `session` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` adds to the round's cost only, not to the run's `cost` (that is the sum of `cost` events); `session` (on either round event) names a Claude Code session of the round (see "Sessions of a round") |
-| `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n` | one measurement of a metric; without `n` it belongs to the latest round started (0 before any) |
-| `needs` | `kind` (default `decision`), `text`, `link`, `n` | the run needs a human; kind `wait` means the loop itself is waiting (a usage limit) and closes when the next round starts or the run stops; other kinds stay open |
+| `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n` | one measurement of a metric; without `n` it belongs to the latest round (the highest `n` of a `round.start` or `round.end` so far in the file, even if that round has ended; 0 before any) |
+| `needs` | `kind` (default `decision`), `text`, `link`, `n` | the run needs a human; kind `wait` means the loop itself is waiting (a usage limit) and closes when the next round starts or the run stops; other kinds stay open; without `n` it belongs to the latest round, like `score` (even if that round has ended) |
 | `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests), `title` | something the run produced; the same URL twice is kept once |
 | `run.stop` | `reason` (default `unknown`), `rounds`, `usd` | the run stopped (reasons below) |
 | `usage` | `n`, `fiveHourPct`, `sevenDayPct`, `fiveHourResetsAt` (epoch s or ms), `overage` (boolean) | the account's usage windows after a round; a negative percentage means "not known" |
@@ -190,6 +190,10 @@ laneboard run stop   --run readiness --reason done
 Every subcommand also takes `--run <id>`, `--file <path>` and `--post`, after
 the subcommand or before it (`laneboard run --post score …`); every other
 flag goes after the subcommand.
+
+`score` and `needs` without `--n` attach to the latest round in the file, even
+if it has ended: a question asked between rounds 3 and 4 shows under round 3.
+Pass `--n` to put it elsewhere.
 
 **laneboard only sees the file if it reads that place.** The default file,
 `./.laneboard/run.jsonl`, is seen when the current directory is the root of

@@ -93,3 +93,22 @@ test('the API section has a curl example the server accepts, and names the 403 w
   assert.equal(parseLine(body[1]).ok, true, body[1]);
   assert.ok(doc.includes('"no-csrf-header"') && /403/.test(doc));
 });
+
+test('the doc says `score` and `needs` without `n` attach to the latest round, even an ended one, as the fold does', async () => {
+  const { parseLine, foldRun } = await import('../server/runs/protocol.mjs');
+  for (const t of ['score', 'needs']) {
+    const row = doc.split('\n').find((l) => l.startsWith(`| \`${t}\` |`) && l.includes('latest round'));
+    assert.ok(row && /even if that round has ended/.test(row), `the ${t} row does not say it`);
+  }
+  assert.match(doc, /`score` and `needs` without `--n` attach to the latest round/);
+  const lines = [
+    { t: 'round.start', n: 3 },
+    { t: 'round.end', n: 3, outcome: 'kept' },
+    { t: 'needs', kind: 'decision', text: 'Drop the v1 export?' },
+    { t: 'score', name: 'tests', value: 10 },
+  ].map((e) => parseLine(JSON.stringify({ v: 1, run: 'readiness', ...e })));
+  for (const l of lines) assert.equal(l.ok, true);
+  const run = foldRun(lines.map((l) => l.event));
+  assert.equal(run.needs[0].n, 3);
+  assert.equal(run.scores.tests[0].n, 3);
+});
