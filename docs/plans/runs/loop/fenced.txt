@@ -1,0 +1,37 @@
+# Paths no unattended round may change (README §2 principle 5; the REVIEW-REQUIRED list of
+# docs/plans/fleet/README.md §4.5). A round that touches one is reverted and the owner is told.
+# Bash globs, one per line, matched against repo-relative paths.
+server/fleet/auth.mjs
+server/fleet/dispatch.mjs
+server/fleet/builtin-actions.mjs
+server/fleet/audit.mjs
+server/fleet/canonical.mjs
+server/fleet/keys-ed25519.mjs
+server/fleet/nonces.mjs
+server/fleet/peercred.mjs
+server/fleet/api-v1.mjs
+server/config/fleet-auth.mjs
+server/security.mjs
+server/http.mjs
+server/boot/common.mjs
+server/boot/hub.mjs
+server/routes/v1.mjs
+server/routes/approvals.mjs
+server/routes/control.mjs
+server/routes/budget.mjs
+server/routes/killswitch.mjs
+server/routes/scripts.mjs
+server/routes/review.mjs
+server/routes/alarms.mjs
+server/control/*
+server/review/actions.mjs
+server/review/scripts.mjs
+server/hub/*
+public/js/core/store.js
+public/js/core/net.js
+public/js/core/actions.js
+public/js/core/keys.js
+deploy/*
+test/hygiene.test.mjs
+docs/plans/runs/loop/*
+.github/*
