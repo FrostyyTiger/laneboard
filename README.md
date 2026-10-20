@@ -55,12 +55,20 @@ the machine, with lane slots, the guard and CI all off.
 }
 ```
 
-A second copy for testing, which touches neither the file nor the database:
+A second copy for testing, which touches neither the config file, the database
+nor the state dir (audit log, hook token, run files go to a temp dir):
 
 ```bash
+tmp=$(mktemp -d)
 LANEBOARD_PORT=7788 LANEBOARD_DB=:memory: LANEBOARD_CONFIG=/dev/null \
+  LANEBOARD_STATE_DIR="$tmp" LANEBOARD_AUDIT_FILE="$tmp/audit.jsonl" \
   node server/index.mjs
 ```
+
+The CLI talks to `http://127.0.0.1:7777` unless told otherwise, so point it at
+the copy, or it writes into the real board: `LANEBOARD_URL=http://127.0.0.1:7788
+laneboard ls`. Pick a port nothing listens on (`ss -ltn`). Stop the copy with
+Ctrl-C in its terminal, then `rm -r "$tmp"`.
 
 ## CLI
 
