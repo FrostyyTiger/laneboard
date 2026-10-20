@@ -97,7 +97,10 @@ laneboard resume <name|--all>
 laneboard paused
 laneboard audit [verify]         # the fleet audit log, offline
 laneboard fleet keygen|pubkey    # the hub key (on the hub)
+laneboard run start|round|score|needs|artifact|stop   # report a loop's run, works offline
 ```
+
+`laneboard run` writes the run protocol of [docs/runs.md](docs/runs.md) (`laneboard run --help`).
 
 `LANEBOARD_URL` overrides the server address.
 

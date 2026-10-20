@@ -64,6 +64,13 @@ test('the doc names the view URLs and says where a run file must be to be seen',
   assert.match(loop, /`runs\.files`/);
 });
 
+test('README\'s CLI block lists `laneboard run` and points at the doc', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  const cli = readme.slice(readme.indexOf('## CLI'), readme.indexOf('## Nothing destructive'));
+  assert.match(cli, /^laneboard run start\|round\|score\|needs\|artifact\|stop/m);
+  assert.match(cli, /`laneboard run`[^\n]*\(docs\/runs\.md\)/);
+});
+
 test('README lists every view and its `g` chord', async () => {
   const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
   const { VIEWS, VIEW_KEYS } = await import('../public/js/core/router.js');

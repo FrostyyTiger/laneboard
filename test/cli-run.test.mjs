@@ -162,6 +162,14 @@ test('bad arguments exit 2 and write nothing', async (t) => {
   assert.match(help.stdout, /^  --post .*POST \/api\/runs\/events/m);
 });
 
+test('laneboard --help lists the run subcommand', async (t) => {
+  const dir = tmpDir(t);
+  const help = await run(['--help'], envFor(dir), dir);
+  assert.equal(help.code, 0, help.stderr);
+  assert.match(help.stdout, /^  laneboard run start\|round\|score\|needs\|artifact\|stop /m);
+  assert.match(help.stdout, /laneboard run --help/);
+});
+
 test('--run, --file and --post may come before the subcommand; other flags there are a short error', async (t) => {
   const dir = tmpDir(t);
   const env = envFor(dir);
