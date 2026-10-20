@@ -141,8 +141,8 @@ Runs in a throwaway VM (one repo token, no LAN, PRs only, the owner merges).
 | Reviewer: operator | uses the Runs view to answer "what happened tonight?" | end of night |
 | Triage | bugs → new tasks; ideas → "for the owner" list, never built automatically | after each review |
 
-Stops: all tasks done · deadline · round cap · two rounds without progress · 5 h window over 90 %
-(pause, resume under 70 %) · 7 d window over 60 % · a fenced file needed. The loop reports itself
+Stops: all tasks done · deadline · round cap · two rounds without progress · 5 h window at 90 %
+(sleep until it resets) · 7 d window at 85 % · the account going into paid extra usage · a fenced file needed. The loop reports itself
 through the run protocol (A1), so from the night A1 lands, **the run shows up in its own Runs view.**
 
 ### Night 1
