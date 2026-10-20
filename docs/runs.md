@@ -41,6 +41,9 @@ laneboard reads, as configured in `docs/config.md`:
 Files are tailed: a new line shows up within a collector tick, a half-written
 last line waits for its newline, and a file that shrinks or is replaced is read
 again from the start.
+A file that disappears keeps its runs until `runs.keepDays` forgets them, a
+run over `runs.maxEvents` drops its oldest events first (its `run.start` lines
+stay), and one run written to several files is merged by `ts`.
 
 ## A line
 
