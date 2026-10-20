@@ -45,7 +45,7 @@ import {
   idForSel, selForId, SEVERITY, FOLD_KEY, AUTO_UNFOLD_ZOOM,
 } from './model.js';
 import { layout, RINGS, SIZE, polar } from './layout.js';
-import { OVERLAY_KEY, validOverlay, nodeStyle, SHAPE_CODE, TONE_CODE, driftText, driftCounts } from './overlays.js';
+import { OVERLAY_KEY, validOverlay, availableOverlays, reachScope, nodeStyle, SHAPE_CODE, TONE_CODE, driftText, driftCounts } from './overlays.js';
 import { createRenderer, readPalette } from './render.js';
 import {
   createHitGrid, bindPointer, hitRadius, boundingCircle, fitCircle, anchored, clampZoom, fitScaleOf,
@@ -187,6 +187,7 @@ export function createMap(root, opts = {}) {
   let folded = new Set();         // ids drawn folded (the user's and the automatic folds)
   let shownOf = (id) => id;       // the drawn node standing in for an id
   let vlinks = [];                // links to draw (model.visibleLinks)
+  let vreach = [];                // reach links, ends mapped to drawn nodes (reach overlay)
   // id -> the drawn state of a node: polar position r/t with velocities, its
   // appearance a (0..1), x/y derived, and when it may start moving. A node
   // that left stays here as a ghost (`leaving`) until it has faded into `into`.
@@ -440,8 +441,23 @@ export function createMap(root, opts = {}) {
   /** The links to draw: they depend on the focus, the overlay and the scope. */
   function relink() {
     vlinks = visibleLinks(model.links, shownOf, {
-      focus: hover ?? highlighted ?? selected, overlay, scope, byId, drawn: lay.pos,
+      focus: hover ?? highlighted ?? selected, overlay: shownOverlay(), scope, byId, drawn: lay.pos,
     });
+    // Reach links whose ends are folded attach to the node standing in for them.
+    const seenReach = new Set();
+    vreach = [];
+    for (const l of model.reach?.links ?? []) {
+      const from = shownOf(l.from), to = shownOf(l.to);
+      const key = `${from}\u0000${to}`;
+      if (from === to || seenReach.has(key) || !lay.pos.has(from) || !lay.pos.has(to)) continue;
+      seenReach.add(key);
+      vreach.push({ ...l, from, to });
+    }
+  }
+
+  /** The overlay drawn: a stored `reach` shows as status while the model has no reach links. */
+  function shownOverlay() {
+    return availableOverlays(model).includes(overlay) ? overlay : 'status';
   }
 
   function rescope() {
@@ -600,9 +616,14 @@ export function createMap(root, opts = {}) {
     flyCam(fitCircle(circle, view(), { right: rightInset() }), reducedMotion());
   }
 
-  /** The overlay (2.6): persisted, instant, and shown in the readout. */
+  /**
+   * The overlay (2.6): persisted, instant, and shown in the readout. One the
+   * model cannot show (reach without reach links) is refused: the current
+   * overlay stays and is returned.
+   */
   function setOverlay(name) {
     const next = validOverlay(name);
+    if (!availableOverlays(model).includes(next)) return shownOverlay();
     if (next === overlay) return overlay;
     overlay = next;
     try { globalThis.localStorage?.setItem(OVERLAY_KEY, overlay); } catch { /* private window */ }
@@ -856,7 +877,7 @@ export function createMap(root, opts = {}) {
     const top = h('div', 'map-tip-top');
     top.append(h('i', `map-dot s-${STATUS_WORD[n.status] ? n.status : 'unknown'}`), h('b', null, n.label ?? n.id), h('span', 'map-tip-kind', n.kind));
     tip.append(top);
-    const line = (overlay === 'drift' && driftText(n)) || (n.why ?? n.sub);
+    const line = (shownOverlay() === 'drift' && driftText(n)) || (n.why ?? n.sub);
     if (line) tip.append(h('div', 'map-tip-sub', String(line)));
     tip.hidden = false;
     const tw = tip.offsetWidth, th = tip.offsetHeight;
@@ -1034,7 +1055,7 @@ export function createMap(root, opts = {}) {
     const near = (hover ?? highlighted ?? selected) ? neighbours.get(hover ?? highlighted ?? selected) ?? new Set() : new Set();
     return {
       W, H, now, s: scale(), zoom: cam.z, toScreen,
-      pos: lay.pos, nodes: cur, byId, links: vlinks, overlay,
+      pos: lay.pos, nodes: cur, byId, links: vlinks, overlay: shownOverlay(), reach: vreach,
       rolled: (id) => rollup(id, byId, kidsRoll, memo),
       folded, kids: kidsAll,
       alpha: (id) => focusAlpha.get(id) ?? 1,
@@ -1076,10 +1097,13 @@ export function createMap(root, opts = {}) {
 
   function renderReadout() {
     const b = scope === 'all' ? 'all' : byId.get(`builder:${scope}`)?.code ?? scope;
+    const ov = shownOverlay();
+    const rs = ov === 'reach' ? reachScope(vreach, selected) : null;
     const text = renderer.readout({
-      zoom: cam.z, scope: b, drawn: drawnCount, total: model.nodes.length, overlay,
+      zoom: cam.z, scope: b, drawn: drawnCount, total: model.nodes.length, overlay: ov,
       now: Date.now(), compact: W < 700, p95: perfOn ? p95() : null,
-      drift: overlay === 'drift' ? driftCounts(model.nodes) : null,
+      drift: ov === 'drift' ? driftCounts(model.nodes) : null,
+      reach: rs ? { links: rs.links, touches: selected ? rs.touched.size : null } : null,
     });
     if (text !== readoutText) { readoutText = text; readoutEl.textContent = text; }
   }
@@ -1117,18 +1141,19 @@ export function createMap(root, opts = {}) {
       list.push(c);
     }
     const pts = new Float32Array(list.length * 4);
+    const ov = shownOverlay();
     list.forEach((c, i) => {
       const n = c.node;
       const p = polar(c.goal.r, c.goal.t);
       const rolled = n.kind === 'site' || n.kind === 'core' || n.kind === 'host' || folded.has(n.id)
         ? rollup(n.id, byId, kidsRoll, memo) : null;
-      const st = n.virtual ? { shape: 'disc', tone: 'grey' } : nodeStyle(n, overlay, rolled);
+      const st = n.virtual ? { shape: 'disc', tone: 'grey' } : nodeStyle(n, ov, rolled);
       pts[i * 4] = p.x;
       pts[i * 4 + 1] = p.y;
       pts[i * 4 + 2] = SHAPE_CODE[st.shape] ?? 0;
       pts[i * 4 + 3] = TONE_CODE[st.tone] ?? 0;
     });
-    return { version, pts, count: list.length, overlay, scope, selected, outer: maxRadius() };
+    return { version, pts, count: list.length, overlay: ov, scope, selected, outer: maxRadius() };
   }
 
   function on(set, cb) {
@@ -1159,7 +1184,9 @@ export function createMap(root, opts = {}) {
     onSelect: (cb) => on(selectCbs, cb),
     onHover: (cb) => on(hoverCbs, cb),
     snapshotScene,
-    overlay: () => overlay,
+    overlay: shownOverlay,
+    // The overlays this model can show, in `o` order (reach only with reach links).
+    overlays: () => availableOverlays(model),
     scope: () => scope,
     // Where a node is drawn now (canvas px), e.g. to anchor an action list; null when not drawn.
     screenOf: (x) => {

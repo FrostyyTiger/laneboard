@@ -307,6 +307,58 @@ test('drift overlay: a dashed warn ring on a missing node, an accent ring on an 
   assert.ok(!ctx2.ops.some((o) => o.op === 'stroke' && ['P2', 'A60'].includes(o.strokeStyle)));
 });
 
+test('reach overlay: arcs with arrowheads only there, the selected node\'s reach in the accent', () => {
+  const nodes = [
+    { id: '__core', kind: 'core', label: 'hub' },
+    { id: 'hq', kind: 'site', parent: '__core', label: 'hq', status: 'ok' },
+    { id: 'a', kind: 'room', parent: 'hq', label: 'a', status: 'ok' },
+    { id: 'b', kind: 'room', parent: 'hq', label: 'b', status: 'ok' },
+    { id: 'c', kind: 'room', parent: 'hq', label: 'c', status: 'ok' },
+    { id: 'calm', kind: 'room', parent: 'hq', label: 'calm', status: 'ok' },
+  ];
+  const reach = [
+    { id: 'reach:a>b', kind: 'reach', from: 'a', to: 'b', label: 'tcp:22' },
+    { id: 'reach:b>c', kind: 'reach', from: 'b', to: 'c', label: 'tcp:443' },
+    { id: 'reach:a>gone', kind: 'reach', from: 'a', to: 'gone', label: '*' },
+  ];
+  const arcs = (ops) => ops.filter((o) => o.op === 'stroke' && o.path.some((p) => p[0] === 'quad'));
+  const heads = (ops) => ops.filter((o) => o.op === 'fill' && o.path.filter((p) => p[0] === 'lineTo').length === 2 && o.path.at(-1)[0] === 'closePath');
+
+  // Not in the reach overlay: nothing drawn, even with reach links in the scene.
+  const ctx0 = fakeCtx();
+  createRenderer(ctx0, PAL).draw(sceneOf(nodes, { reach, overlay: 'status' }));
+  assert.equal(arcs(ctx0.ops).length, 0);
+
+  // Reach, nothing selected: thin grey arcs, an arrowhead each; a link to a node not drawn is skipped.
+  const ctx = fakeCtx();
+  const scene = sceneOf(nodes, { reach, overlay: 'reach' });
+  const r = createRenderer(ctx, PAL);
+  r.drawReach(scene);
+  assert.equal(arcs(ctx.ops).length, 2);
+  assert.ok(arcs(ctx.ops).every((o) => o.strokeStyle === 'T3' && o.lineWidth === 1 && o.dash.length === 0));
+  assert.equal(heads(ctx.ops).length, 2, 'direction is shown');
+  assert.ok(!ctx.ops.some((o) => o.op === 'fillText'), 'no port labels without a selection');
+
+  // Selected a: its arc in the accent with its ports, b marked, calm dimmed, b>c faded.
+  const ctx2 = fakeCtx();
+  const s2 = sceneOf(nodes, { reach, overlay: 'reach', selected: 'a' });
+  const r2 = createRenderer(ctx2, PAL);
+  assert.doesNotThrow(() => r2.draw(s2));
+  const [ab, bc] = arcs(ctx2.ops);
+  assert.equal(ab.strokeStyle, 'A60');
+  assert.equal(ab.lineWidth, 1.5);
+  assert.equal(bc.strokeStyle, 'T3');
+  assert.ok(bc.alpha < 0.35);
+  assert.ok(ctx2.ops.some((o) => o.op === 'fillText' && o.text === 'tcp:22'));
+  assert.ok(!ctx2.ops.some((o) => o.op === 'fillText' && o.text === 'tcp:443'));
+  const ring = (id) => opsAt(ctx2.ops, s2, id).filter((o) => o.op === 'stroke' && o.lineWidth === 1.5 && o.strokeStyle === 'A70');
+  assert.equal(ring('b').length, 1, 'what a can touch is ringed');
+  assert.equal(ring('a').length + ring('c').length + ring('calm').length, 0);
+  assert.ok(opsAt(ctx2.ops, s2, 'calm').every((o) => o.alpha <= 0.5 + 1e-9), 'the rest is dimmed');
+  assert.ok(opsAt(ctx2.ops, s2, 'c').every((o) => o.alpha <= 0.5 + 1e-9), 'two hops away is not lit');
+  assert.ok(ctx2.ops.every((o) => o.op !== 'gradient'));
+});
+
 test('a folded node draws a dotted ring and a +N plate, and returns the plate rect', () => {
   const ctx = fakeCtx();
   const nodes = FLEET.slice(0, 4);
@@ -521,6 +573,9 @@ test('readout text: zoom, scope, node count, overlay, UTC', () => {
   assert.equal(r.readout({ zoom: 1, drawn: 3, total: 3, overlay: 'drift', drift: { missing: 1, undeclared: 2 }, now }),
     'Z 1.00×  SCOPE ALL  N 3/3  OVL DRIFT  NOT SEEN 1  NOT DECLARED 2  12:04:31Z');
   assert.doesNotMatch(r.readout({ overlay: 'status', drift: { missing: 1, undeclared: 2 }, now }), /NOT SEEN/);
+  assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: null }, now }), /OVL REACH {2}LINKS 12 {2}\d/);
+  assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: 3 }, now }), /LINKS 12 {2}TOUCHES 3/);
+  assert.doesNotMatch(r.readout({ overlay: 'status', reach: { links: 12, touches: 3 }, now }), /LINKS/);
 });
 
 test('setPalette swaps colours for the next frame (lb:theme)', () => {

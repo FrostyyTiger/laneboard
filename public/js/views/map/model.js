@@ -43,6 +43,10 @@ export function normalize(model) {
     nodes: arr(m.nodes).filter((n) => n && typeof n.id === 'string'),
     links: arr(m.links).filter((l) => l && l.from != null && l.to != null && l.from !== l.to),
     events: arr(m.events),
+    // Reach (T11) is drawn only by the reach overlay; links are kept as given.
+    reach: m.reach && Array.isArray(m.reach.links)
+      ? { links: m.reach.links.filter((l) => l && typeof l.from === 'string' && typeof l.to === 'string' && l.from !== l.to) }
+      : null,
   };
 }
 

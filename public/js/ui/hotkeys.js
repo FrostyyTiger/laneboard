@@ -540,8 +540,8 @@ export function registerCommands() {
   const onMap = (ctx) => ctx.view === 'map';
   reg({ id: 'map.fit', title: 'Fit the map', icon: 'map', when: onMap, run: mapCmd((mv) => mv.fit?.()) });
   reg({ id: 'map.fold', title: 'Fold / unfold the selection', icon: 'chev-d', when: onMap, run: mapCmd((mv) => mv.toggleFold?.()) });
-  reg({ id: 'map.overlay.next', title: 'Next map overlay', icon: 'filter', when: onMap, run: mapCmd((mv) => mv.setOverlay?.(nextOverlay(mv.overlay?.(), 1))) });
-  reg({ id: 'map.overlay.prev', title: 'Previous map overlay', icon: 'filter', when: onMap, run: mapCmd((mv) => mv.setOverlay?.(nextOverlay(mv.overlay?.(), -1))) });
+  reg({ id: 'map.overlay.next', title: 'Next map overlay', icon: 'filter', when: onMap, run: mapCmd((mv) => mv.setOverlay?.(nextOverlay(mv.overlay?.(), 1, mv.overlays?.()))) });
+  reg({ id: 'map.overlay.prev', title: 'Previous map overlay', icon: 'filter', when: onMap, run: mapCmd((mv) => mv.setOverlay?.(nextOverlay(mv.overlay?.(), -1, mv.overlays?.()))) });
   const pinKey = (ctx) => {
     const k = store.cursor ?? (ctx.route?.sel ? toIndexKey(store, ctx.route.sel) : null);
     return k && store.sessions.has(k) ? k : null;

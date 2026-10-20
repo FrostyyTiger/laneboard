@@ -16,7 +16,8 @@
 //     nodes,                   // id -> drawn state {x, y, r, t, a, node, pid, depth, leaving, entering, into}
 //     byId,                    // id -> model node (folded ones included)
 //     links,                   // visible links (model.visibleLinks)
-//     overlay,                 // 'status' | 'ci' | 'cost' | 'context' | 'age'
+//     overlay,                 // 'status' | 'ci' | 'cost' | 'context' | 'age' | 'drift' | 'reach'
+//     reach,                   // reach links ({from, to, label}) for the reach overlay, ends already shown ids
 //     rolled(id) -> status,    // rolled-up status for sites, the core and folded nodes (model.rollup)
 //     folded, kids,            // Set of folded ids; id -> child nodes (all, folded included)
 //     alpha(id) -> 0..1,       // focus/scope emphasis (springs)
@@ -33,7 +34,7 @@
 // fillText never interprets it.
 
 import { RINGS, SIZE, polar, ringLabels, ticks } from './layout.js';
-import { nodeStyle, linkStyle, ACCENT_L } from './overlays.js';
+import { nodeStyle, linkStyle, reachScope, reachLinkStyle, ACCENT_L } from './overlays.js';
 
 const TAU = Math.PI * 2;
 
@@ -274,6 +275,22 @@ export function createRenderer(ctx, palette) {
     ctx.restore();
   }
 
+  /** An arrowhead on the curve A-C-B, just outside the target node (kind `toKind`). */
+  function arrowHead(A, C, B, toKind, s, col, alpha) {
+    const p1 = quad(A, C, B, 0.92), p2 = quad(A, C, B, 0.985);
+    const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+    const rb = (SIZE[toKind] ?? 5) * Math.max(0.8, s) + 3;
+    const tip = { x: B.x - Math.cos(ang) * rb, y: B.y - Math.sin(ang) * rb };
+    ctx.setLineDash([]);
+    fillStyle(col, alpha);
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(tip.x - Math.cos(ang - 0.45) * 6, tip.y - Math.sin(ang - 0.45) * 6);
+    ctx.lineTo(tip.x - Math.cos(ang + 0.45) * 6, tip.y - Math.sin(ang + 0.45) * 6);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   /** Cross-links in their linkStyle, an arrowhead at the target, a label when hot. */
   function drawLinks(scene) {
     const nodes = scene.nodes ?? new Map();
@@ -297,18 +314,7 @@ export function createRenderer(ctx, palette) {
       ctx.lineDashOffset = 0;
       // Undirected kinds (touch, conflict) carry no arrowhead.
       if (l.kind !== 'touch' && l.kind !== 'conflict') {
-        const p1 = quad(A, C, B, 0.92), p2 = quad(A, C, B, 0.985);
-        const ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-        const rb = (SIZE[scene.byId?.get(l.to)?.kind] ?? 5) * Math.max(0.8, s) + 3;
-        const tip = { x: B.x - Math.cos(ang) * rb, y: B.y - Math.sin(ang) * rb };
-        ctx.setLineDash([]);
-        fillStyle(col, (hot ? 0.9 : Math.min(1, st.alpha + 0.15)) * fade);
-        ctx.beginPath();
-        ctx.moveTo(tip.x, tip.y);
-        ctx.lineTo(tip.x - Math.cos(ang - 0.45) * 6, tip.y - Math.sin(ang - 0.45) * 6);
-        ctx.lineTo(tip.x - Math.cos(ang + 0.45) * 6, tip.y - Math.sin(ang + 0.45) * 6);
-        ctx.closePath();
-        ctx.fill();
+        arrowHead(A, C, B, scene.byId?.get(l.to)?.kind, s, col, (hot ? 0.9 : Math.min(1, st.alpha + 0.15)) * fade);
       }
       if (l.label && (hot || s > 1.35)) {
         const m = quad(A, C, B, 0.5);
@@ -320,6 +326,44 @@ export function createRenderer(ctx, palette) {
         fillStyle(P.bg, 0.9 * fade);
         ctx.fillRect(m.x - w / 2, m.y - 7, w, 14);
         fillStyle(st.tone === 'grey' || st.tone === 'line' ? P.t2 : col, fade);
+        ctx.fillText(l.label, m.x, m.y);
+      }
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The reach overlay's arcs (only there): thin, an arrowhead at the target,
+   * the selected node's outgoing ones in the accent with their ports.
+   */
+  function drawReach(scene) {
+    if (scene.overlay !== 'reach') return;
+    const nodes = scene.nodes ?? new Map();
+    const s = scene.s ?? 1;
+    const focus = scene.selected ?? null;
+    ctx.save();
+    for (const l of scene.reach ?? []) {
+      const a = nodes.get(l?.from), b = nodes.get(l?.to);
+      if (!a || !b || a === b || a.leaving || b.leaving) continue;
+      const st = reachLinkStyle(l, focus);
+      const A = scene.toScreen(a), C = scene.toScreen(linkCtrl(a, b)), B = scene.toScreen(b);
+      const fade = Math.min(alphaOf(scene, l.from), alphaOf(scene, l.to)) * Math.min(a.a ?? 1, b.a ?? 1);
+      const col = tone(st.tone, st.level);
+      strokeStyle(col, st.alpha * fade, st.width, st.dash);
+      ctx.beginPath();
+      ctx.moveTo(A.x, A.y);
+      ctx.quadraticCurveTo(C.x, C.y, B.x, B.y);
+      ctx.stroke();
+      arrowHead(A, C, B, scene.byId?.get(l.to)?.kind, s, col, Math.min(1, st.alpha + 0.15) * fade);
+      if (l.label && focus != null && l.from === focus) {
+        const m = quad(A, C, B, 0.5);
+        ctx.font = `10px ${P.mono}`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const w = measure(l.label) + 8;
+        fillStyle(P.bg, 0.9 * fade);
+        ctx.fillRect(m.x - w / 2, m.y - 7, w, 14);
+        fillStyle(col, fade);
         ctx.fillText(l.label, m.x, m.y);
       }
     }
@@ -453,6 +497,7 @@ export function createRenderer(ctx, palette) {
     const ns = nodeScale(scene);
     const W = scene.W ?? Infinity, H = scene.H ?? Infinity;
     const badges = [];
+    const reach = scene.overlay === 'reach' ? reachScope(scene.reach, scene.selected ?? null) : null;
     ctx.save();
     if (!scene.reduced) {
       for (const p of scene.pulses ?? []) {
@@ -479,7 +524,7 @@ export function createRenderer(ctx, palette) {
       const rolled = n.kind === 'site' || n.kind === 'core' || n.kind === 'host' || isFolded
         ? scene.rolled?.(id) ?? null : null;
       const st = n.virtual ? { tone: 'grey', level: 0, shape: 'disc', alpha: 1, abnormal: false }
-        : nodeStyle(n, scene.overlay, rolled, { budgetUsd: scene.budgetUsd?.(n) });
+        : nodeStyle(n, scene.overlay, rolled, { budgetUsd: scene.budgetUsd?.(n), reach });
       const alpha = fade * (st.alpha ?? 1);
       const col = tone(st.tone, st.level);
 
@@ -537,7 +582,8 @@ export function createRenderer(ctx, palette) {
 
       if (st.mark) {
         // Drift overlay: a ring outside the glyph, dashed warn for "declared,
-        // not seen", solid accent for "seen, not declared".
+        // not seen", solid accent for "seen, not declared". Reach overlay: a
+        // solid accent ring on what the selected node can reach.
         strokeStyle(tone(st.mark.tone, st.mark.level), alpha, 1.5, st.mark.dash);
         ctx.beginPath();
         arc(sp.x, sp.y, (n.kind === 'builder' ? r * 1.25 * Math.SQRT2 : r) + 6, 0, TAU);
@@ -734,6 +780,7 @@ export function createRenderer(ctx, palette) {
     drawRings(scene);
     drawTree(scene);
     drawLinks(scene);
+    drawReach(scene);
     drawComets(scene);
     const badges = drawNodes(scene);
     drawLabels(scene);
@@ -748,15 +795,21 @@ export function createRenderer(ctx, palette) {
    * (compact on a phone: `Z 1.80× · N 214/570 · 12:04:31Z`). `scope` is a
    * builder code or id, or 'all'; `p95` (ms, from ?mapperf=1) is appended.
    * In the drift overlay, `drift` ({missing, undeclared} counts) adds
-   * `NOT SEEN 2  NOT DECLARED 3` after the overlay.
+   * `NOT SEEN 2  NOT DECLARED 3` after the overlay. In the reach overlay,
+   * `reach` ({links, touches}) adds `LINKS 12`, and `TOUCHES 3` while a node
+   * is selected (touches is then a number).
    */
-  function readout({ zoom = 1, scope = 'all', drawn = 0, total = 0, overlay = 'status', now = Date.now(), compact = false, p95 = null, drift = null } = {}) {
+  function readout({ zoom = 1, scope = 'all', drawn = 0, total = 0, overlay = 'status', now = Date.now(), compact = false, p95 = null, drift = null, reach = null } = {}) {
     const z = `Z ${Number(zoom).toFixed(2)}×`;
     const n = `N ${drawn}/${total}`;
     const utc = `${new Date(now).toISOString().slice(11, 19)}Z`;
     if (compact) return [z, n, utc].join(' · ');
     const parts = [z, `SCOPE ${!scope || scope === 'all' ? 'ALL' : String(scope).toUpperCase()}`, n, `OVL ${String(overlay).toUpperCase()}`];
     if (overlay === 'drift' && drift) parts.push(`NOT SEEN ${drift.missing ?? 0}`, `NOT DECLARED ${drift.undeclared ?? 0}`);
+    if (overlay === 'reach' && reach) {
+      parts.push(`LINKS ${reach.links ?? 0}`);
+      if (Number.isFinite(reach.touches)) parts.push(`TOUCHES ${reach.touches}`);
+    }
     parts.push(utc);
     if (Number.isFinite(p95)) parts.push(`P95 ${p95.toFixed(1)}MS`);
     return parts.join('  ');
@@ -770,6 +823,7 @@ export function createRenderer(ctx, palette) {
     drawRings,
     drawTree,
     drawLinks,
+    drawReach,
     drawComets,
     drawNodes,
     drawLabels,

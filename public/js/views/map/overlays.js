@@ -1,5 +1,5 @@
 // The Map's overlays (plan §5 2.5, 2.6): how a node and a link look under the
-// status, ci, cost, context, age and drift overlays.
+// status, ci, cost, context, age, drift and reach overlays.
 //
 // Pure: no DOM, no globals. Styles are abstract (a tone, a lightness level, a
 // shape, dash pattern); the renderer maps tones to the §4 tokens: grey ->
@@ -7,7 +7,7 @@
 // lightness ACCENT_L[level], line -> --line.
 
 /** The overlays, in the order `o` cycles them (`O` goes back). */
-export const OVERLAYS = ['status', 'ci', 'cost', 'context', 'age', 'drift'];
+export const OVERLAYS = ['status', 'ci', 'cost', 'context', 'age', 'drift', 'reach'];
 
 /** localStorage key of the chosen overlay. */
 export const OVERLAY_KEY = 'laneboard.map.overlay';
@@ -53,16 +53,66 @@ export function driftCounts(nodes) {
   return out;
 }
 
-/** The overlay after `cur` (dir 1) or before it (dir -1), wrapping. Unknown -> status. */
-export function nextOverlay(cur, dir = 1) {
+/**
+ * The overlays a model can show: `reach` only when the model carries reach
+ * links (server/map.mjs, opt-in by `map.policyFile`), every other one always.
+ */
+export function availableOverlays(model) {
+  const reach = Array.isArray(model?.reach?.links) && model.reach.links.length > 0;
+  return OVERLAYS.filter((o) => o !== 'reach' || reach);
+}
+
+/**
+ * The overlay after `cur` (dir 1) or before it (dir -1), wrapping, skipping
+ * the ones not in `available` (availableOverlays). Unknown -> status.
+ */
+export function nextOverlay(cur, dir = 1, available = OVERLAYS) {
   const i = OVERLAYS.indexOf(cur);
   if (i < 0) return OVERLAYS[0];
   const n = OVERLAYS.length;
-  return OVERLAYS[(((i + (dir < 0 ? -1 : 1)) % n) + n) % n];
+  const step = dir < 0 ? -1 : 1;
+  for (let k = 1; k <= n; k++) {
+    const o = OVERLAYS[(((i + step * k) % n) + n) % n];
+    if (o === 'status' || available.includes(o)) return o;
+  }
+  return OVERLAYS[0];
 }
 
 /** A stored overlay name, or `status`. */
 export const validOverlay = (name) => (OVERLAYS.includes(name) ? name : 'status');
+
+/**
+ * Reach (server/map.mjs, T11): who can reach what, from the policy file.
+ * `reachScope(links, focus)` is what the overlay lights: with a focus (the
+ * selected node), the focus and the nodes it reaches directly ("if this is
+ * compromised, what can it touch?"); with none, every node a reach link names.
+ */
+export const REACH_MARK = { tone: 'accent', level: 3, dash: [] };
+
+/** `{focus, touched: Set, lit: Set, links}` for the reach overlay. */
+export function reachScope(links, focus = null) {
+  const list = Array.isArray(links) ? links.filter((l) => l && l.from != null && l.to != null && l.from !== l.to) : [];
+  const touched = new Set();
+  const lit = new Set();
+  if (focus != null) {
+    for (const l of list) if (l.from === focus) touched.add(l.to);
+    if (touched.size || list.some((l) => l.to === focus)) lit.add(focus);
+    for (const id of touched) lit.add(id);
+  } else {
+    for (const l of list) { lit.add(l.from); lit.add(l.to); }
+  }
+  return { focus: focus ?? null, touched, lit, links: list.length };
+}
+
+/**
+ * How a reach link is drawn: a thin grey arc with an arrowhead at the target
+ * (direction is the point); the focus's outgoing links in the accent, the rest
+ * faded while something is selected.
+ */
+export function reachLinkStyle(link, focus = null) {
+  if (focus != null && link?.from === focus) return { tone: 'accent', level: 2, width: 1.5, dash: [], alpha: 0.9 };
+  return { tone: 'grey', level: 0, width: 1, dash: [], alpha: focus != null ? 0.12 : 0.35 };
+}
 
 /** Cost in USD -> accent level 0..4 (bins [0,1,5,20,50]). */
 export function costLevel(usd) {
@@ -128,7 +178,9 @@ const MEASURED = {
  * status keeps its own tone and shape in every overlay: a crit lane never
  * looks calm because the overlay is cost. The drift overlay keeps the status
  * style, adds `mark` (DRIFT_MARK, a ring around the node) on a drifting node
- * and dims every other node.
+ * and dims every other node. The reach overlay does the same with
+ * `opts.reach` (reachScope): lit nodes full, the focus's reachable set marked
+ * with REACH_MARK, the rest dimmed.
  */
 export function nodeStyle(node, overlay = 'status', rolled = null, opts = {}) {
   const base = statusStyle(node, rolled ?? node?.status);
@@ -136,6 +188,11 @@ export function nodeStyle(node, overlay = 'status', rolled = null, opts = {}) {
   if (ov === 'drift') {
     const mark = driftOf(node) && DRIFT_MARK[driftOf(node)];
     return mark ? { ...base, alpha: 1, mark: { ...mark, dash: [...mark.dash] } } : { ...base, alpha: DIM };
+  }
+  if (ov === 'reach') {
+    const r = opts.reach;
+    if (!r?.lit?.has(node?.id)) return { ...base, alpha: DIM };
+    return r.touched?.has(node.id) ? { ...base, alpha: 1, mark: { ...REACH_MARK, dash: [] } } : { ...base, alpha: 1 };
   }
   const measured = ov !== 'status' && MEASURED[ov].has(node?.kind);
   const alpha = ov === 'status' || measured ? 1 : DIM;

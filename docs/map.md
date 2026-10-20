@@ -63,6 +63,7 @@ is remembered in this browser:
 | `context` | context window use (50 / 70 / 85 %) |
 | `age` | time since the last change (10 m, 1 h, 4 h, 24 h) |
 | `drift` | declared against discovered: a dashed warn ring on a declared node no fresh feed lists ("declared, not seen"), an accent ring on a discovered one ("seen, not declared"), everything else dimmed; the readout counts both (see "Drift") |
+| `reach` | who can reach what, from the policy file (see "Reach"): thin grey arcs with an arrowhead at the target; select a node to answer "if this is compromised, what can it touch?": its outgoing arcs turn accent with their ports, the nodes it reaches directly get an accent ring, the rest dims; the readout shows `LINKS n` and `TOUCHES n`. Only in the cycle when the model has reach links (`o` skips it otherwise) |
 
 **Scope and split.** Picking a builder in the rail (or `[` `]`, `1`-`9`)
 ghosts every other builder and flies to its subtree. `\` splits the Map with a
@@ -307,8 +308,11 @@ would need an API key). Export it from the admin console when it changes.
   `group:`, users, roles, `autogroup:self` need who owns each node, so they
   are listed in `unresolved` with the reason instead of guessed, as is a
   selector that names no node on this Map.
-- Reach links are not in `links`: only the Reach overlay draws them. With no
-  `map.policyFile` there is no `reach` block.
+- Reach links are not in `links`: only the `reach` overlay draws them. With no
+  `map.policyFile` there is no `reach` block, and `o` skips the overlay.
+- The overlay shows one hop: what the selected node reaches directly, not
+  what those nodes reach in turn. A link to a folded node lands on the node
+  it is folded into.
 
 ### Pushing a feed
 
