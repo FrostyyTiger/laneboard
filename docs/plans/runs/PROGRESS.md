@@ -19,6 +19,13 @@ Notes for builders, from reading the code (planner, round 1):
   number), `run.start` carries `rounds`, `pause5h`, `stop7d`, `branch` at top level (no `budget`
   object), and it also writes `usage` (`fiveHourPct`, `sevenDayPct`, `fiveHourResetsAt`,
   `overage`) and `cost` (`n`, `usd`, `total`) events. The parser must take all of that as is.
+- T1 decisions (round 4), for T2's doc and the views: `foldRun` also returns `better{name}`,
+  `plan`, `branch`, `deadlineAt` (ms; `deadline` stays as written), `startedAt`/`updatedAt`,
+  `events`, `skipped`; each round has `starts` (retries), `usd`, `usage`. States are `running`,
+  `waiting` (last event is a `wait` need), `stopped`. Cost is the sum of `cost.usd` (the loop's
+  `total` restarts with it). A `wait` need closes at the next round or stop; others stay open.
+  Timestamps in seconds are turned into ms. The loop's real run.jsonl folds cleanly (one
+  skipped line: a `tasks` score of `"0\n0"`, a bug in the loop's `tasks_done`).
 
 ## Tasks
 
