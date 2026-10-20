@@ -15,9 +15,8 @@ nothing changes. laneboard never starts, stops or steers a run; it only reads
 what the run writes.
 
 > Status: the parser and the fold (`server/runs/protocol.mjs`), the config
-> keys, the collector and the API are in. The CLI and the Runs view below are
-> being built in this order (`docs/plans/runs/PROGRESS.md`); this page is the
-> contract they follow.
+> keys, the collector, the API and the CLI are in. The Runs view is being
+> built (`docs/plans/runs/PROGRESS.md`); this page is the contract it follows.
 
 ## Where runs write
 
@@ -147,12 +146,30 @@ laneboard run artifact --run readiness --kind pr --url https://example.invalid/a
 laneboard run stop   --run readiness --reason done
 ```
 
+| Subcommand | Flags |
+| --- | --- |
+| `start` | `--goal`, `--plan`, `--branch`, `--deadline`, `--rounds N`, `--window-pct P` (the last two go into `budget`) |
+| `round` | **`--n N`**, `--role`, `--task`; with `--end`: `--outcome`, `--commit`, `--open N`, `--usd x` |
+| `score` | **`--name`**, **`--value x`**, `--better higher\|lower`, `--n N` |
+| `needs` | `--kind`, `--text`, `--link`, `--n N` |
+| `artifact` | **`--url`**, `--kind`, `--title` |
+| `stop` | `--reason`, `--rounds N`, `--usd x` |
+
+Every subcommand also takes `--run <id>`, `--file <path>` and `--post`.
+
 - It writes to `--file`, else `$LANEBOARD_RUN_FILE`, else
-  `./.laneboard/run.jsonl`, and works with laneboard down.
-- `--post` sends the event to the API instead of the file.
-- `round` prints `LANEBOARD_RUN=<run>/<n>`, so after `eval` the sessions the
-  round starts carry the run and round in their environment.
-- Bad arguments exit 2 and write nothing.
+  `./.laneboard/run.jsonl` (a relative path against the current directory,
+  the directory made if missing), and works with laneboard down.
+- `--post` sends the event to `POST /api/runs/events` instead of the file;
+  a refused event prints the server's reason and exits 1.
+- Each line gets `"v":1` and `ts` (now, epoch ms).
+- `round` (without `--end`) prints `export LANEBOARD_RUN=<run>/<n>`, so after
+  `eval` the sessions the round starts carry the run and round in their
+  environment. `--run` defaults to the run part of `$LANEBOARD_RUN`, so a
+  session inside a round can send `laneboard run score --name … --value …`.
+- Bad arguments (an unknown flag, a missing value, a number that is not one,
+  a line `parseLine` would skip) exit 2 and write nothing. `laneboard run
+  --help` prints the flags.
 
 The exact flags are in the header of `bin/laneboard`.
 

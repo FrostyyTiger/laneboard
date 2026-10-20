@@ -22,6 +22,18 @@
 //   laneboard pause <name|--all> [--reason r]          offline: write a pause sentinel
 //   laneboard resume <name|--all>                      offline: lift an operator pause
 //   laneboard paused [--json]                          offline: list the pause sentinels
+//   laneboard run start|round|score|needs|artifact|stop --run <id> [flags] [--file f | --post]
+//                                                      offline: append one run-protocol line
+//     start    [--goal g] [--plan p] [--branch b] [--deadline iso] [--rounds N] [--window-pct P]
+//     round    --n N [--role r] [--task t]             prints `export LANEBOARD_RUN=<run>/<n>` for eval
+//     round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
+//     score    --name m --value x [--better higher|lower] [--n N]
+//     needs    [--kind decision|wait] [--text t] [--link url] [--n N]
+//     artifact --url u [--kind pr|link] [--title t]
+//     stop     [--reason done|deadline|rounds|…] [--rounds N] [--usd x]
+//     The line goes to --file, else $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl;
+//     --post sends it to POST /api/runs/events instead. --run defaults to the run
+//     part of $LANEBOARD_RUN. See docs/runs.md.
 //
 // Every string that came from a server (or an audit file) passes cleanTerm()
 // before it is printed, so a session name cannot carry terminal escapes
@@ -767,6 +779,129 @@ async function cmdPaused() {
   if (entries.some((e) => e.kind !== 'operator')) process.stdout.write(`${C.dim}${REMOTE_ONLY_HINT}${C.off}\n`);
 }
 
+// ---------------------------------------------------------------- offline: run protocol events
+// `laneboard run <sub>` writes one run-protocol line (docs/runs.md) so loops do
+// not hand-write JSON. The line is built from flags, stamped with `v` and `ts`,
+// and checked by parseLine before anything is written; a flag it does not know,
+// a missing value or a line parseLine would skip exits 2 and writes nothing.
+// It goes to --file, else $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl
+// (works with the server down), or with --post to POST /api/runs/events.
+// --run falls back to the run part of $LANEBOARD_RUN, which `round` exports.
+
+const runProtocol = () => import('../server/runs/protocol.mjs');
+
+// Per subcommand: flag → [event field, kind]. Kinds: str, int, num, bool.
+const RUN_COMMON = { '--run': ['run', 'str'], '--file': ['file', 'str'], '--post': ['post', 'bool'] };
+const RUN_SUBS = {
+  start: {
+    '--goal': ['goal', 'str'], '--plan': ['plan', 'str'], '--branch': ['branch', 'str'],
+    '--deadline': ['deadline', 'str'], '--rounds': ['rounds', 'int'], '--window-pct': ['windowPct', 'num'],
+  },
+  round: {
+    '--n': ['n', 'int'], '--role': ['role', 'str'], '--task': ['task', 'str'], '--end': ['end', 'bool'],
+    '--outcome': ['outcome', 'str'], '--commit': ['commit', 'str'], '--open': ['open', 'int'], '--usd': ['usd', 'num'],
+  },
+  score: { '--name': ['name', 'str'], '--value': ['value', 'num'], '--better': ['better', 'str'], '--n': ['n', 'int'] },
+  needs: { '--kind': ['kind', 'str'], '--text': ['text', 'str'], '--link': ['link', 'str'], '--n': ['n', 'int'] },
+  artifact: { '--url': ['url', 'str'], '--kind': ['kind', 'str'], '--title': ['title', 'str'] },
+  stop: { '--reason': ['reason', 'str'], '--rounds': ['rounds', 'int'], '--usd': ['usd', 'num'] },
+};
+const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', artifact: 'artifact', stop: 'run.stop' };
+const ROUND_START_ONLY = ['role', 'task'];
+const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
+
+const RUN_USAGE = `usage: laneboard run <sub> --run <id> [flags] [--file f | --post]
+  start    [--goal g] [--plan p] [--branch b] [--deadline iso] [--rounds N] [--window-pct P]
+  round    --n N [--role r] [--task t]            prints: export LANEBOARD_RUN=<run>/<n>
+  round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
+  score    --name m --value x [--better higher|lower] [--n N]
+  needs    [--kind decision|wait|…] [--text t] [--link url] [--n N]
+  artifact --url u [--kind pr|link|…] [--title t]
+  stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
+--run defaults to the run in $LANEBOARD_RUN; the file to $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl`;
+
+const runUsage = (msg) => die(msg ? `${msg}\n${RUN_USAGE}` : RUN_USAGE, 2);
+
+/** argv → {field: value} for the allowed flags; every other word is a usage error. */
+function parseRunFlags(allowed) {
+  const out = {};
+  while (argv.length) {
+    const flag = argv.shift();
+    const spec = allowed[flag];
+    if (!spec) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(flag))}`);
+    const [field, kind] = spec;
+    if (Object.hasOwn(out, field)) runUsage(`${flag} given twice`);
+    if (kind === 'bool') { out[field] = true; continue; }
+    const raw = argv.shift();
+    if (raw === undefined || (raw.startsWith('--') && allowed[raw])) runUsage(`${flag} needs a value`);
+    if (kind === 'str') out[field] = raw;
+    else {
+      const n = /^\s*-?\d+(\.\d+)?\s*$/.test(raw) ? Number(raw) : NaN;
+      if (!Number.isFinite(n) || (kind === 'int' && !Number.isInteger(n))) {
+        runUsage(`${flag} needs ${kind === 'int' ? 'an integer' : 'a number'}, got ${JSON.stringify(cleanTerm(raw))}`);
+      }
+      out[field] = n;
+    }
+  }
+  return out;
+}
+
+/** The subcommand's flags → one event object (without v/ts), or a usage exit. */
+function runEvent(sub, f) {
+  if (sub === 'round') {
+    if (f.n === undefined) runUsage('round needs --n');
+    const wrong = (f.end ? ROUND_START_ONLY : ROUND_END_ONLY).find((k) => f[k] !== undefined);
+    if (wrong) runUsage(`--${wrong} belongs to ${f.end ? 'a round start (no --end)' : 'a round end (--end)'}`);
+    const { end, ...fields } = f;
+    return { t: end ? 'round.end' : 'round.start', ...fields };
+  }
+  if (sub === 'start') {
+    const { rounds, windowPct, ...fields } = f;
+    const budget = {};
+    if (rounds !== undefined) budget.rounds = rounds;
+    if (windowPct !== undefined) budget.windowPct = windowPct;
+    return { t: 'run.start', ...fields, ...(Object.keys(budget).length ? { budget } : {}) };
+  }
+  if (sub === 'score') {
+    if (f.name === undefined || f.value === undefined) runUsage('score needs --name and --value');
+    if (f.better !== undefined && f.better !== 'higher' && f.better !== 'lower') runUsage('--better is higher or lower');
+  }
+  if (sub === 'artifact' && f.url === undefined) runUsage('artifact needs --url');
+  return { t: RUN_TYPE[sub], ...f };
+}
+
+async function cmdRun() {
+  const sub = argv.shift();
+  if (sub === '-h' || sub === '--help' || sub === 'help') {
+    process.stdout.write(`${RUN_USAGE}\n`);
+    return;
+  }
+  if (!Object.hasOwn(RUN_SUBS, sub ?? '')) runUsage(sub ? `unknown run subcommand: ${JSON.stringify(cleanTerm(sub))}` : '');
+  const f = parseRunFlags({ ...RUN_COMMON, ...RUN_SUBS[sub] });
+  const { run: runFlag, file: fileFlag, post, ...fields } = f;
+  if (post && fileFlag !== undefined) runUsage('--file and --post do not go together');
+  const run = runFlag ?? (process.env.LANEBOARD_RUN || '').split('/')[0];
+  if (!run) runUsage('--run is required (or set LANEBOARD_RUN)');
+  const { parseLine, RUN_ID } = await runProtocol();
+  if (!RUN_ID.test(run)) runUsage(`not a run id: ${JSON.stringify(cleanTerm(run))} (letters, digits, . _ -; 64 at most)`);
+  const ev = runEvent(sub, fields);
+  const event = { v: 1, t: ev.t, run, ts: Date.now(), ...ev };
+  const line = JSON.stringify(event);
+  const checked = parseLine(line);
+  if (!checked.ok) runUsage(`the event would be skipped: ${checked.reason}`);
+
+  if (post) {
+    await api('/api/runs/events', { method: 'POST', body: event });
+  } else {
+    const file = path.resolve(fileFlag || process.env.LANEBOARD_RUN_FILE || path.join('.laneboard', 'run.jsonl'));
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.appendFileSync(file, `${line}\n`);
+    } catch (err) { return fail(`cannot write ${file}: ${err?.message || err}`); }
+  }
+  if (event.t === 'round.start') process.stdout.write(`export LANEBOARD_RUN=${run}/${event.n}\n`);
+}
+
 function usage() {
   process.stdout.write(`laneboard — control the Claude sessions and lanes on this box
 
@@ -801,6 +936,8 @@ Offline (no server needed):
                                       pause one session or all (writes the sentinel)
   laneboard resume <name|--all>         lift an operator pause (budget/quota: from the UI)
   laneboard paused [--json]             list the pauses
+  laneboard run start|round|score|needs|artifact|stop --run <id> [flags]
+                                      append one run-protocol line (laneboard run --help)
 
 Server: ${BASE}   (override with LANEBOARD_URL)
 `);
@@ -813,6 +950,7 @@ const COMMANDS = {
   launch: cmdLaunch, job: cmdJob, retire: cmdRetire,
   fleet: cmdFleet, audit: cmdAudit,
   pause: cmdPause, resume: cmdResume, paused: cmdPaused,
+  run: cmdRun,
 };
 
 if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') {
