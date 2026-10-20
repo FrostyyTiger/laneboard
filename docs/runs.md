@@ -14,8 +14,8 @@ agent. laneboard does not care what runs the loop.
 nothing changes. laneboard never starts, stops or steers a run; it only reads
 what the run writes.
 
-> Status: the parser and the fold (`server/runs/protocol.mjs`) are in. The
-> config keys, the collector, the API, the CLI and the Runs view below are
+> Status: the parser and the fold (`server/runs/protocol.mjs`), the config
+> keys, the collector and the API are in. The CLI and the Runs view below are
 > being built in this order (`docs/plans/runs/PROGRESS.md`); this page is the
 > contract they follow.
 
@@ -166,6 +166,18 @@ of the UI (the CLI sends the `x-laneboard` header):
 | `GET /api/runs` | a summary of every run laneboard knows |
 | `GET /api/runs/<run>` | one run, folded; 404 if unknown |
 | `POST /api/runs/events` | one event as JSON; checked like a file line (400 with the reason if skipped) and appended to `<stateDir>/runs/<run>.jsonl` |
+
+`GET /api/runs` answers `{"runs": [...]}`, one row per run: `run`, `goal`,
+`plan`, `branch`, `state`, `round` (the latest round's `n`), `rounds` (how
+many), `maxRounds` (`budget.rounds`), `scores` (per name: the latest `n` and
+`value`, the `prev` value and `better`), `usage`, `cost`, `deadline`,
+`deadlineAt`, the open `needs`, `artifacts` (a count), `stop` (the reason or
+null), `startedAt`, `updatedAt`. `GET /api/runs/<run>` answers `{"run": …}`
+with the whole fold (rounds, every score, needs, artifacts, raw events).
+
+A posted event is written as sent, on one line, with `ts` set to the server's
+time if it had none; the answer is `201 {"ok": true, "run", "t"}`, and the run
+is in the list at once. A body over 64 KiB is 413.
 
 A loop that cannot send the header writes the file instead; that is always the
 simplest way.

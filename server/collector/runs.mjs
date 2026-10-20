@@ -182,17 +182,40 @@ export function createCollector(opts = {}) {
     }
   }
 
+  let running = null; // the tick in progress, so track() can wait for it
+
   async function tick({ discover: force = false } = {}) {
     if (busy) return;
     busy = true;
-    try {
+    running = (async () => {
       if (force || now() - discoveredAt >= discoverMs) await discover();
       for (const f of files) await readOne(f);
       for (const f of [...tails.keys()]) if (!files.includes(f)) tails.delete(f);
       store.prune();
+    })();
+    try {
+      await running;
     } finally {
       busy = false;
+      running = null;
     }
+  }
+
+  /**
+   * Read `file` now (the API just appended to it) instead of waiting up to
+   * `discoverMs` for discovery to find it. A file over FILES_MAX is not added.
+   */
+  async function track(file) {
+    if (!files.includes(file)) {
+      if (files.length >= FILES_MAX) return false;
+      files = [...files, file].sort();
+    }
+    // One reader at a time: wait for a tick in progress, then read the file.
+    while (busy) await running.catch(() => {});
+    busy = true;
+    running = readOne(file);
+    try { await running; } finally { busy = false; running = null; }
+    return true;
   }
 
   function start(intervalMs = TICK_MS) {
@@ -208,7 +231,7 @@ export function createCollector(opts = {}) {
     timer = null;
   }
 
-  return { store, tick, start, stop, files: () => [...files] };
+  return { store, tick, track, start, stop, files: () => [...files] };
 }
 
 // The one collector the builder runs, started by a module (server/routes/runs.mjs).
@@ -224,6 +247,11 @@ export function start(opts = {}) {
 export function stop() {
   current?.stop();
   current = null;
+}
+
+/** Read a file the API just wrote, on the running collector (no-op before start). */
+export async function track(file) {
+  return current ? current.track(file) : false;
 }
 
 /** The running collector's store, or null before start. */

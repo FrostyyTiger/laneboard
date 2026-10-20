@@ -282,6 +282,6 @@ test('the runs module is builder-only and provides the store', () => {
   assert.equal(runsModule.name, 'runs');
   assert.deepEqual(runsModule.modes, ['builder']);
   const provided = new Map();
-  runsModule.register({ provide: (k, v) => provided.set(k, v) });
+  runsModule.register({ provide: (k, v) => provided.set(k, v), route: () => {} });
   assert.equal(typeof provided.get('runs').store, 'function');
 });
