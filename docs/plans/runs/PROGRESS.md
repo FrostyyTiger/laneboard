@@ -150,3 +150,54 @@ Notes for builders, from reading the code (planner, round 1):
   owner line; 5 (health endpoint) and 6 (route per view in the README) are ideas, moved to the owner.
 
 ## Morning
+
+Done: all 15 tasks of night 2: the three night-1 screenshot bugs, both feeders with `laneboard feed`,
+feed intake, discovered + declared merge, Drift and opt-in Reach (server and overlay), four docs/bug fixes from reviews.
+Not done: README §7 item 6 (Find in `⌘K`, a run as a Map node), never planned as tasks; no screenshot of the new overlays.
+Why it stopped: `done` at 23:21, every task ticked, about 7.5 h before the 07:00 deadline (26 rounds of 40, about $14.5).
+
+**Tasks.** Done: T1 minimap negative arc radius (6f96b91), T2 minimap dark theme (1e1ab51), T3 demo core
+named `demo-host` (a11d0c5), T4 feeder interface + `tailscale` (9520a40), T5 `proxmox` (33e85ab), T6 `laneboard
+feed` CLI (5c0f8d6), T7 `POST /api/map/feeds` (77af5f6), T8 discovered/declared merge, topology optional (c1710c3),
+T9 drift server side (6aec3f8), T10 Drift overlay (4eb7203), T11 Reach server side, `map.policyFile` (adaa5da),
+T12 Reach overlay (98030dc), T13 honesty docs (47cd00b), T14 refuse feed with neither host nor guests (0516776),
+T15 README/config gaps (7ea3867). Open: none. Blocked: none.
+
+**Tests.** `npm test` after the last round: 3088 pass, 0 fail (hygiene included). One dip at round 7 (a PROGRESS
+note spelled the shapes the hygiene gate rejects), fixed in round 8 (d86b05a).
+
+**Needs you, worst first.**
+1. **Look at the UI before merging: no round had a browser.** T1, T2, T10 and T12 are tested with fake canvas
+   contexts only; nobody has seen the Drift rings or the Reach arcs. Run `node test/tools/demo-fleet.mjs`, open the
+   Map, press `o` through the overlays, switch views (T1) and themes (T2). There is no design pick tonight
+   (no screenshots exist; README §7 says the pick is not tonight).
+2. **Review 25 (operator) is untriaged** (it ran in the last round). Its top gap is serious for trust: the Runs
+   view says `needs: []` while "For the owner" above has about 8 items, because the loop never writes `needs`;
+   and the run showed `running` with no `run.stop` after the loop had decided to stop. Both are loop-side
+   (`docs/plans/runs/loop/*`, fenced), as are `task` on rounds (same as night 1's 39-operator). Decide whether they
+   come before night 3. Laneboard-side ideas in it: a stale/"stopping" signal, a max on the `tasks` score, the
+   tests count as a score, Morning/Inbox knowing about runs (A3).
+3. **Feed push from another machine** needs a signed intake on the hub (`server/hub/*`, `server/routes/v1.mjs`,
+   fenced). Today `--push` reaches the local board only; remote feeders use ssh + `--stdout`.
+4. **Busy port looks like success** (reviews 12, 20, 25: all three hit it, review 25 got a stale board's `demo`
+   run). Boot files are fenced: wanted a one-line `port N is in use` and an `AUDIT_LOCKED` line naming the
+   holder. Approve or reject the README warning sentence.
+5. **Risky to read before merging:** `server/feeders/proxmox.mjs` (token handling: secret from file/env only,
+   never a flag or a log; CA option), `server/routes/feeds.mjs` (writes files from a request body: source id
+   pattern, 1 MiB cap, atomic write, 409 on a watched builder), `server/map/hujson.mjs` (hand-written parser).
+6. Taste calls: Map title and the one-builder `fleet` block with no config (review 12 finding 4); a health
+   route and a route-per-view table (review 20 findings 5, 6).
+7. Still waiting from night 1: `nights/n1/PROGRESS.md` "Morning" (design pick, Playwright, `HOOK_PATHS`, runs in
+   `/api/v1`, `run.sh` fields, `sleep 1` in `windowScript`, stray `runs/demo.jsonl`) and its untriaged 39-operator.
+8. Next night, if you want it: item 6 (Find over discovered nodes/services/ports, A3 run node), `docker` feeder (§8 Q3).
+
+**Reviews.**
+- `reviews/12-stranger.md`: 6 findings; T13 from 3+5, 1 covered by T7, 2/6/4 to you (fenced boot, taste).
+- `reviews/20-stranger.md`: 6 findings; T14 from 4, T15 from 1/2/3 docs parts, boot messages and 5/6 to you.
+- `reviews/25-operator.md`: Runs view answers cost well, "why did it stop" and "what needs me" wrongly; untriaged (item 2 above).
+
+**Research.** Q5 `tailscale status --json` shape (used by T4); Q6 PVE `/cluster/resources`, token header,
+PVEAuditor, self-signed CA (T5); Q7 policy grants/acls/selectors and HuJSON (T11); Q8 how other tools draw
+drift and reachability (T8, T10, T12). No open questions.
+
+**Owner notes.** The script's owner-notes file does not exist for this run; nothing to add.
