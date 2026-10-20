@@ -129,3 +129,50 @@ and the known review apps).
 
 `verdict` drives the chip and the `blocked` marker: red raises one marker per
 head commit, and green after red dismisses it.
+
+---
+
+## FeedProvider
+
+A feeder reads one source and turns it into one feed in the format of
+`docs/map.md` "The feed format". It runs next to the source, usually from a
+timer, and the Map only ever reads what it wrote: infrastructure data is
+pushed in, never pulled by the board. Unlike the three above, a feeder is
+chosen per command (`laneboard feed <kind>`), not by a config key, and nothing
+in the server imports one.
+
+```
+server/feeders/
+  index.mjs              TABLE, feeder(kind), collect(kind, opts)
+  none.mjs               an empty feed that says so
+  tailscale.mjs          `tailscale status --json` on this machine
+```
+
+| Export | Signature | Contract |
+| --- | --- | --- |
+| `name` | `string` | The kind, as `laneboard feed` takes it. |
+| `toFeed(input, {source, now, every})` | `-> feed` | **Pure**: no clock, no I/O. `now` becomes `at`; `every` (seconds) defaults to 60. Tolerates missing and unknown fields (missing is unknown, never a throw). Never copies credentials or personal data into the feed. |
+| `read(opts)` | `-> {ok:true, input} \| {ok:false, error}` | Gets the input once, with a timeout. A missing tool, a refused connection or a source with nothing to report is `{ok:false}`: an empty feed would draw every node as gone. |
+
+`collect(kind, {source, now, every, ...readOpts})` in `index.mjs` is `read`
+then `toFeed`: `{ok:true, feed}` or `{ok:false, error}`; `source` defaults to
+the kind, and an unknown kind is a value, not an exception.
+
+**`none`** reads nothing and returns `{source, at, every, note, host:{sub:
+"no feeder"}, guests:[], events:[]}`.
+
+**`tailscale`** runs `tailscale status --json` (no API key, no network; it
+sees what this node may see). `read({bin, timeoutMs})` is `{ok:false}` when
+the binary is missing, the command fails or times out, or the daemon is not
+`Running` and logged in. `toFeed` makes this node the host and every peer a
+guest of `type: "tailnet"`:
+
+- the name is the MagicDNS label (the first label of `DNSName`, what `ssh
+  <name>` reaches), else `HostName`, lower case;
+- `status` is `running` while the peer is connected to the control plane
+  (`Online`), `stopped` otherwise; an offline peer carries `lastSeen` (ms);
+- `os`, `tags` and `ips` as fields, and in `detail` with subnet routes and
+  the exit-node role; an expired node key is a `warn` alert; tailscale's own
+  health messages are host alerts;
+- nodes shared in from another tailnet are left out, as the CLI's listing
+  does; login names, node keys and SSH host keys never reach the feed.

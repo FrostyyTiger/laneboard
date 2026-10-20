@@ -228,6 +228,12 @@ half-written file.
   - `sub`, `why` and `detail` work as on a node.
   - A service the guest does not list is unknown; every service of a stopped
     guest is down.
+- `type` is `qemu`, `lxc`, or `tailnet` for a peer the `tailscale` feeder
+  saw (`docs/providers.md` "FeedProvider").
+- Optional, for nodes a feeder discovers: `name` on the host, and `os`,
+  `tags` (`["tag:ci"]`), `ips` (strings) on the host and on a guest;
+  `lastSeen` (ms) on a guest that is offline. `note` on the feed says why it
+  is empty (the `none` feeder).
 - `events` appear once each, in the event tape and as a pulse on the node.
   - Events already in the file when laneboard first reads it are not replayed.
   - `guest` targets one of the host's guests.
