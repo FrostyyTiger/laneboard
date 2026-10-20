@@ -81,6 +81,7 @@ export const KEYMAP = Object.freeze([
   row('g a', 'view.audit', 'Audit', 'views'),
   row('g c', 'view.credit', 'Credit', 'views'),
   row('g o', 'view.morning', 'Morning', 'views'),
+  row('g r', 'view.runs', 'Runs', 'views'),
   row('[', 'builder.prev', 'Previous builder', 'scope'),
   row(']', 'builder.next', 'Next builder', 'scope'),
   row('0', 'builder.all', 'All builders', 'scope'),

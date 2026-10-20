@@ -105,9 +105,9 @@ export const FLICK_PX_MS = 0.5;
 /** The segmented control's tabs. */
 export const SHEET_TABS = Object.freeze(['map', 'list', 'inbox']);
 /** The views behind the `⋯` menu (every routable nav view the tabs do not cover). */
-export const MORE_VIEWS = Object.freeze(['board', 'packages', 'morning', 'credit', 'box', 'audit']);
+export const MORE_VIEWS = Object.freeze(['board', 'packages', 'morning', 'credit', 'box', 'audit', 'runs']);
 const TAB_LABEL = Object.freeze({ map: 'MAP', list: 'LIST', inbox: 'INBOX' });
-const VIEW_LABEL = Object.freeze({ board: 'Board', packages: 'Packages', morning: 'Morning', credit: 'Credit', box: 'Box', audit: 'Audit' });
+const VIEW_LABEL = Object.freeze({ board: 'Board', packages: 'Packages', morning: 'Morning', credit: 'Credit', box: 'Box', audit: 'Audit', runs: 'Runs' });
 const MAX_ROWS = 200;
 
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);

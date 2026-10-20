@@ -483,7 +483,7 @@ test('the client reports its own render timings', () => {
 
 // --- the view shell (fleet D4) ---------------------------------------------
 
-const SHELL_VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit'];
+const SHELL_VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs'];
 
 test('every view has a section and exactly one nav button; diff is routable but not in the nav', () => {
   const html = read('index.html');
@@ -498,7 +498,7 @@ test('every view has a section and exactly one nav button; diff is routable but 
   const nav = /<nav class="shell-nav" id="views"[^>]*>([\s\S]*?)<\/nav>/.exec(html);
   assert.ok(nav, 'the view nav');
   const order = [...nav[1].matchAll(/data-view="([a-z]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(order, SHELL_VIEWS, 'nav order MAP BRD INBX PKG MORN CRED BOX AUD');
+  assert.deepEqual(order, SHELL_VIEWS, 'nav order MAP BRD INBX PKG MORN CRED BOX AUD RUNS');
   for (const m of nav[1].matchAll(/<button([^>]*)>/g)) {
     assert.match(m[1], /aria-label="[A-Z][a-z]+"/, 'icon buttons carry the long name');
     assert.match(m[1], /title="[A-Z][a-z]+ \(g [a-z]\)"/, 'and the chord in the title');
@@ -522,7 +522,7 @@ test('the shell keeps every id the page depends on, and has a slot for every lat
 
 test('the view chord follows the plan: g m map, g o morning, g p packages', async () => {
   const { VIEW_KEYS } = await import('../public/js/core/router.js');
-  assert.deepEqual({ ...VIEW_KEYS }, { m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning' });
+  assert.deepEqual({ ...VIEW_KEYS }, { m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning', r: 'runs' });
   assert.ok(Object.isFrozen(VIEW_KEYS));
   for (const [k, v] of Object.entries(VIEW_KEYS)) {
     assert.match(read('index.html'), new RegExp(`data-view="${v}" title="[A-Za-z]+ \\(g ${k}\\)"`), `the ${v} button names g ${k}`);
