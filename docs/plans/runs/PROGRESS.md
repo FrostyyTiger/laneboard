@@ -126,6 +126,8 @@ Notes for builders, from reading the code (planner, round 1):
 - [ ] T17 (A2) Runs list copes with a run that has no `run.start` (only a posted `run.stop`: `goal` null, `rounds` 0): no `null`/`undefined` text, shows the run id as title — from reviews/14-stranger.md #4 — done when: `test/view-runs.test.mjs` renders such a row
 - [ ] T18 (docs) `docs/runs.md` `round.end` row (and the run `cost` field) says the run's cost is the sum of `cost` events only; `round.end --usd` fills the round's `usd` but not the run's `cost` — done when: the doc says so in both places and `test/runs-docs.test.mjs` stays green — from reviews/20-stranger.md #2
 - [ ] T19 (A1) `laneboard run --help` shows `--run <id>` as optional (it defaults to the run part of `$LANEBOARD_RUN`) and lists `--file` and `--post` — done when: `test/cli-run.test.mjs` checks the help text mentions both — from reviews/20-stranger.md #6
+- [ ] T20 (docs) README's CLI block says how to get `laneboard` on the PATH (the `ln -s` step from `docs/install.md`, or `node bin/laneboard`) — from reviews/27-stranger.md #2 — done when: README shows one of the two next to the first `laneboard run`/`laneboard ls` example and the docs tests stay green
+- [ ] T21 (docs) `docs/runs.md` has one `curl` example for `POST /api/runs/events` with the `x-laneboard` header, and says the answer without it is 403 `no-csrf-header` — from reviews/27-stranger.md #6 — done when: the example is in the doc and `test/runs-docs.test.mjs` stays green
 
 ## Research questions
 
@@ -180,9 +182,12 @@ Notes for builders, from reading the code (planner, round 1):
   with `sleep 1` so the pty drains before the shell exits (the exact-script unit test changes with
   it). Your call.
 
+- **`laneboard morning` header** (reviews/27 #5) reads "tonight (since 20/10/2026, 08:09:08)" at 22:09 and uses dd/mm/yyyy where the docs use ISO dates. Wording and date format are a taste call about existing, non-runs behaviour.
+
 ## Reviews
 
 - reviews/14-stranger.md: 7 findings, 5 became tasks (T13 #1+#7, T14 #2, T15 #6, T16 #3+#5, T17 #4); #6 is split between T14 (stale note) and T15 (README).
 - reviews/20-stranger.md: 6 findings, 2 became tasks (T18 #2, T19 #6); #1 extends T13 (plus two owner lines: EADDRINUSE in fenced boot, stray state file), #3 duplicate of T15, #4 duplicate of T14 (URLs added), #5 is a taste call (owner), #2 also has an owner line for summing round `usd`.
+- reviews/27-stranger.md: 6 findings, 2 became tasks (T20 #2, T21 #6); #1 duplicate of T18 (owner line exists), #3 duplicate of the silent-CLI owner line, #4 covered by T16 (bad-value error) and T19 (help), #5 is a taste call (owner).
 
 ## Morning
