@@ -194,3 +194,54 @@ Notes for builders, from reading the code (planner, round 1):
 - reviews/33-stranger.md: 6 findings, 2 became tasks (T22 #2, T23 #5); #1 folded into T20 (PATH check added), #6 folded into T21 (header value), #3 duplicate (EADDRINUSE owner line), #4 duplicate (silent-CLI owner line; the outside-a-lane caveat is in runs.md since T14).
 
 ## Morning
+
+Done: night 1's scope (A1 protocol + store + API + CLI + `docs/runs.md`, A2 Runs list + run page + score charts,
+the loop's own events, C three design directions) plus 11 doc/CLI fixes from four stranger reviews: 23 of 23 tasks.
+Not done: no screenshots (no browser on the VM), so the designer review never ran; the round-39 operator review
+was written but not triaged into tasks. Stopped: `done` (all tasks closed) at round 40 of 40, about 8.5 h before the deadline.
+
+**Tasks.** All done, none open or blocked:
+T1 4401484 · T2 056ac63 · T3 29bd4f2 · T4 2bdd595 · T5 b443f2f · T6 332ad36 · T7 4cae33d · T8 2f3e208 ·
+T9 76fd855 · T10 1efb5b8 · T11 04f1a7d · T12 5d3108f · T13 a5f7cb6 · T14 fa06f43 · T15 3cd012d ·
+T16 8e71c11 · T17 617eade · T18 42c9c1a · T19 c32dc20 · T20 f7dbc5d · T21 b7a03ed · T22 68b0a17 · T23 f826a1d.
+
+**Tests.** `npm test`: 3002 pass, 0 fail (the run started with 1 red scripts test; round 24 made it rerun a
+run whose last lines were lost, see the owner line on `sleep 1`).
+
+**Needs you, worst first.**
+1. *Read reviews/39-operator.md before merging the idea of "done".* Its top finding: the run page says
+   "all clear" while the 10 "For the owner" items wait, because none is a `needs` event. Fix is loop side
+   (fenced `run.sh`: emit `needs kind=decision` with a link, and say "N items for you" on `run.stop`).
+   Its other findings (rounds have no `task`, no "stopping" state, no silence/stuck rule, `tasks` score has
+   no total, round 1 looks never-ended, three `run.start` restarts merged silently, Morning's "Needs you"
+   shows an unrelated `limit` row for the loop's session) are untriaged: a next night's triage round should
+   turn them into tasks.
+2. *Design pick (T10).* `refined`, `product` or `night`, via `node test/tools/demo-fleet.mjs --design <name>`;
+   no screenshots exist. `product`'s shadow or a 2 px focus ring also needs a guardrail change.
+3. *Screenshot tests:* Playwright as a dev dependency plus a browser in the VM, or not.
+4. *Fenced-file calls:* `HOOK_PATHS` for plain-curl run intake (`server/security.mjs`); moving runs into
+   `/api/v1` and the hub; `run.sh` writing ints, a quoted `commit`, and `session`/`cwd` (turns on T12's
+   session binding, today every round shows `sessions: []`); EADDRINUSE as one line (`server/boot/*`);
+   `sleep 1` at the end of `windowScript` (`server/review/scripts.mjs`).
+5. *Taste calls:* sum rounds' `usd` when no `cost` events exist; `ok <run> <type>` on stderr from
+   `laneboard run`; the `laneboard morning` header wording and dd/mm/yyyy date.
+6. *Housekeeping:* the stray `demo` run in the real state dir (`runs/demo.jsonl`, from reviews/20) was still
+   showing in round 39; delete it.
+
+Risky to look at before merging: the router's new `run` parameter (`RUN_RX`, T8), the POST route and its body
+cap (T5), and the collector's tailing of files from `runs.files` globs (T4); the sprite was rebuilt (T7, only the
+`repeat` symbol should differ).
+
+**Reviews.**
+- 14-stranger: 7 findings → T13-T17.
+- 20-stranger: 6 findings → T18, T19 plus owner lines (EADDRINUSE, stray file, round `usd`, silent CLI).
+- 27-stranger: 6 findings → T20, T21; rest duplicates or the morning-header taste call.
+- 33-stranger: 6 findings → T22, T23; rest folded into T20/T21 or duplicates.
+- 39-operator: API/CLI morning walk (no browser); 6 ranked gaps, **not triaged** (see item 1 above).
+
+**Research.** Q1 stream-json `result` confirmed, `rate_limit_event` fields undocumented (accept s and ms) ·
+Q2 hooks carry `session_id` + `cwd`, `--session-id` settable, `/proc` environ unreliable · Q3 state-first
+summary + metric-over-round chart + round timeline (OpenHands not covered) · Q4 14/12 px type, 4 px grid,
+2 px focus ring, dark elevation = lighter surface + 1 px ring. No open research questions.
+
+**Owner notes from the script:** none (the script's owner-notes file did not exist at the end of the run).
