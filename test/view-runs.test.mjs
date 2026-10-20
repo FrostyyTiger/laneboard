@@ -325,6 +325,34 @@ test('a run with nothing yet: empty sections say so, no null or undefined text',
   assert.equal(runSummaryOf(null), null);
 }));
 
+test('a run made only of a posted run.stop: the id is the title, no null or undefined text', () => withDom(() => {
+  for (const [line, reason] of [
+    ['{"v":1,"t":"run.stop","run":"demo","reason":"human","ts":1760990000000}', 'human'],
+    ['{"v":1,"t":"run.stop","run":"demo","ts":1760990000000}', 'unknown'],
+  ]) {
+    const parsed = parseLine(line);
+    assert.ok(parsed.ok);
+    const run = JSON.parse(JSON.stringify(foldRun([parsed.event])));
+    const row = JSON.parse(JSON.stringify(summarize(run)));
+    assert.equal(row.goal, null);
+    assert.equal(row.rounds, 0);
+    const host = document.createElement('div');
+    renderRuns(host, [row], { status: 'ok' }, row.updatedAt + HOUR);
+    const li = byClass(host, 'rn-row')[0];
+    assert.doesNotMatch(li.textContent, /null|undefined|NaN/);
+    assert.equal(byClass(li, 'rn-goal-t')[0].textContent, 'demo', 'the id stands in for the goal');
+    assert.equal(byClass(li, 'rn-goal-sub')[0].textContent, '', 'no id repeated under itself');
+    assert.equal(byClass(li, 'rn-round')[0].textContent, '—');
+    assert.equal(byClass(li, 'rn-left')[0].textContent, reason);
+    assert.equal(li.dataset.state, 'stopped');
+    const page = renderRunPage(null, run, { status: 'ok' }, row.updatedAt + HOUR);
+    assert.doesNotMatch(page.textContent, /null|undefined|NaN/);
+    assert.equal(byClass(page, 'rn-goal-t')[0].textContent, 'demo');
+    assert.equal(byClass(page, 'rn-events')[0].textContent, '1 event');
+    assert.match(page.textContent, /No round has started yet/);
+  }
+}));
+
 test('loading, missing and error pages; an error keeps the last good run', () => withDom(() => {
   let page = renderRunPage(null, null, { status: 'loading', id: 'readiness' });
   assert.match(page.textContent, /Loading run readiness/);

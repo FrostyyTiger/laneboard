@@ -598,8 +598,8 @@ function pageHead(run, row, now) {
   const ev = Number.isInteger(run.events) ? run.events : null;
   if (ev !== null) {
     const skipped = Number.isInteger(run.skipped) && run.skipped > 0 ? run.skipped : 0;
-    const n = rnField('rn-events', `${ev} events${skipped ? ` · ${skipped} skipped` : ''}`,
-      skipped ? `${skipped} lines could not be read (docs/runs.md "Values")` : 'lines read');
+    const n = rnField('rn-events', `${ev} ${ev === 1 ? 'event' : 'events'}${skipped ? ` · ${skipped} skipped` : ''}`,
+      skipped ? `${skipped} ${skipped === 1 ? 'line' : 'lines'} could not be read (docs/runs.md "Values")` : 'lines read');
     if (skipped) n.dataset.p = '3';
     facts.append(n);
   }
