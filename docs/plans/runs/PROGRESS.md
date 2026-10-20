@@ -78,6 +78,11 @@ Notes for builders, from reading the code (planner, round 1):
 - [ ] T10 (C) [ui] Two or three design directions inside the control-room style (README §5, §8 Q1): each a token override file `docs/plans/runs/design/<name>.css` (type scale, 4 px spacing, elevation for floating layers only, both themes) and `docs/plans/runs/design/README.md` saying what each changes, why, and how to view it on the demo (`node test/tools/demo-fleet.mjs`) — done when: a test checks each file only sets custom properties that exist in `public/css/tokens.css` and passes the design guardrails
 - [ ] T11 (A2) [ui] Score chart per metric on the run page: one small SVG line per metric over rounds (reuse `public/js/ui/spark.js` if it fits), `better` decides which way is good, no animation — done when: `test/view-runs.test.mjs` checks the chart's points for the fixture's `tests` and `tasks` scores and an empty chart for a run with none
 - [ ] T12 (A1) Sessions tied to rounds by cwd + time window (`server/runs/bind.mjs`, read from the session registry): a round row lists the sessions that ran in its dir during it, with their cost — done when: `test/runs-bind.test.mjs` passes (inside the window, outside, two runs in one dir)
+- [ ] T13 (docs) README "second copy for testing" command is not isolated (it opens the default audit file and can fail with AUDIT_LOCKED): add `LANEBOARD_AUDIT_FILE` and `LANEBOARD_STATE_DIR` (temp paths) to the documented command, plus a line on how to stop the copy; check the env names in `docs/config.md` first — from reviews/14-stranger.md #1, #7 — done when: the README command sets both and a test or manual check of the doc names real env vars
+- [ ] T14 (docs) `docs/runs.md` CLI section and "smallest useful loop" say that a run file outside a lane cwd is only seen with `runs.files` or `--post`; drop the "is being built" status note now that the CLI and view exist — from reviews/14-stranger.md #2, #6 — done when: `test/runs-docs.test.mjs` stays green and the note is gone
+- [ ] T15 (docs) README lists the Runs view and `g r` in the view table and key list, with a link to `docs/runs.md` — from reviews/14-stranger.md #6 — done when: README mentions `#/runs` and `g r` (a docs test greps for it if one already checks the view list)
+- [ ] T16 (A1) CLI `laneboard run`: accept `--post`/`--run`/`--file` before the subcommand too (or fail with a message that says flags go after `<sub>`), and make a usage error print one line plus "see `laneboard run --help`" instead of the whole usage block — from reviews/14-stranger.md #3, #5 — done when: `test/cli-run.test.mjs` covers flags-first and a short bad-value error, exit code stays 2
+- [ ] T17 (A2) Runs list copes with a run that has no `run.start` (only a posted `run.stop`: `goal` null, `rounds` 0): no `null`/`undefined` text, shows the run id as title — from reviews/14-stranger.md #4 — done when: `test/view-runs.test.mjs` renders such a row
 
 ## Research questions
 
@@ -109,5 +114,7 @@ Notes for builders, from reading the code (planner, round 1):
   `/tmp/lb-scripts-*`); the loop's fix round takes it first.
 
 ## Reviews
+
+- reviews/14-stranger.md: 7 findings, 5 became tasks (T13 #1+#7, T14 #2, T15 #6, T16 #3+#5, T17 #4); #6 is split between T14 (stale note) and T15 (README).
 
 ## Morning
