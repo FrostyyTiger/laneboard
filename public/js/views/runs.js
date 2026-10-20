@@ -16,14 +16,30 @@
 // near its stop level, an overage, an error or no-progress stop, an open need;
 // each also carries a shape or a word.
 //
+// A run's page `#/runs?run=<id>` (task T8; the router checks the id against
+// the protocol's pattern): GET /api/runs/<id> -> {run} (the whole fold),
+// polled the same way. Under a header with the row's facts: the stop reason,
+// the open needs, the timeline of rounds (role, task, outcome, commit, cost,
+// duration), the artifacts (PR links), and the unknown events folded away in
+// a <details>. A row of the list opens its page through a plain link.
+//
 // Everything in a summary was written by a loop: it goes in through
-// textContent, title and setAttribute only. Pure at import time.
+// textContent, title and setAttribute only, and a link only when it is
+// http(s) (safeHref). Pure at import time.
 // Styles: public/css/views/runs.css (linked from index.html).
 import { el } from '../core/dom.js';
 import { money } from '../core/format.js';
 import { lamp, panel, setPanel } from '../ui/components.js';
 
 export const LIST_URL = '/api/runs';
+/** The list's own hash, and a run page's (router.js parses `run` with the protocol's RUN_ID). */
+export const LIST_HREF = '#/runs';
+export const runHref = (id) => `${LIST_HREF}?run=${encodeURIComponent(id)}`;
+export const runUrl = (id) => `${LIST_URL}/${encodeURIComponent(id)}`;
+/** At most this many unknown events are shown, newest last; each clamped to RAW_MAX characters. */
+export const RAW_SHOW = 50;
+const RAW_MAX = 2000;
+const URL_MAX = 2000;
 export const POLL_MS = 15_000;
 /** The loop's own stop levels (README §7): a window at or past one is drawn as trouble. */
 export const WARN_5H = 90;
@@ -34,6 +50,8 @@ const TEXT_MAX = 200;
 const DASH = '—';
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+/** The protocol's run id (server/runs/protocol.mjs RUN_ID): only such ids get a page link. */
+const RUN_ID_RX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 // eslint-disable-next-line no-control-regex
@@ -45,6 +63,18 @@ export function rnClean(v, max = TEXT_MAX) {
   if (typeof v !== 'string' || v === '') return null;
   const s = (typeof v.toWellFormed === 'function' ? v.toWellFormed() : v).replace(CONTROL, '\ufffd');
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+/** A link from a loop -> an absolute http(s) URL, or null (never `javascript:` and friends). */
+export function safeHref(v) {
+  // eslint-disable-next-line no-control-regex
+  if (typeof v !== 'string' || v === '' || v.length > URL_MAX || /[\u0000-\u0020\u007f-\u009f]/.test(v)) return null;
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------- pure models
@@ -219,11 +249,17 @@ function stateNode(row) {
   return n;
 }
 
-function goalNode(row) {
+function goalNode(row, asLink = false) {
   const n = el('span', 'rn-f rn-goal');
   const id = rnClean(row.run, 64) ?? '?';
   const goal = rnClean(row.goal);
-  n.append(el('span', 'rn-goal-t', goal ?? id));
+  if (asLink && RUN_ID_RX.test(row.run ?? '')) {
+    const a = el('a', 'rn-goal-t rn-open', goal ?? id);
+    a.href = runHref(row.run);
+    n.append(a);
+  } else {
+    n.append(el('span', 'rn-goal-t', goal ?? id));
+  }
   const sub = [id, rnClean(row.branch, 80)].filter(Boolean).join(' · ');
   n.append(el('span', 'rn-goal-sub', goal ? sub : rnClean(row.branch, 80) ?? ''));
   n.title = [goal, sub, rnClean(row.plan)].filter(Boolean).join('\n');
@@ -310,7 +346,7 @@ export function runRow(row, now = Date.now()) {
   const cost = isNum(row.cost?.usd) ? money(row.cost.usd) : DASH;
   li.append(
     stateNode(row),
-    goalNode(row),
+    goalNode(row, true),
     rnField('rn-round', roundText(row), `round ${roundText(row)}${isNum(row.rounds) ? `, ${row.rounds} recorded` : ''}`),
     scoresNode(row),
     burnNode(row),
@@ -368,31 +404,343 @@ export function renderRuns(container, runs, st = { status: 'ok' }, now = Date.no
   return { list: out, rows };
 }
 
+// ---------------------------------------------------------------- one run's page
+
+/** The fold's latest value per score series, as the list's summary has it. */
+function rnLastScores(run) {
+  const out = {};
+  const scores = isObj(run?.scores) ? run.scores : {};
+  const better = isObj(run?.better) ? run.better : {};
+  for (const [name, list] of Object.entries(scores)) {
+    if (!Array.isArray(list) || !list.length) continue;
+    const last = list[list.length - 1];
+    const prev = list.length > 1 ? list[list.length - 2] : null;
+    out[name] = { n: last?.n ?? null, value: last?.value ?? null, prev: prev ? prev.value : null, better: better[name] ?? null };
+  }
+  return out;
+}
+
+/** A folded run (GET /api/runs/<id>) -> the summary shape the list helpers take. */
+export function runSummaryOf(run) {
+  if (!isObj(run)) return null;
+  const rounds = Array.isArray(run.rounds) ? run.rounds.filter(isObj) : [];
+  const last = rounds[rounds.length - 1] ?? null;
+  return {
+    run: run.run, goal: run.goal, plan: run.plan, branch: run.branch, state: run.state,
+    round: Number.isInteger(last?.n) ? last.n : null,
+    rounds: rounds.length,
+    maxRounds: isObj(run.budget) ? run.budget.rounds ?? null : null,
+    scores: rnLastScores(run),
+    usage: run.usage, cost: run.cost, deadline: run.deadline, deadlineAt: run.deadlineAt,
+    needs: (Array.isArray(run.needs) ? run.needs : []).filter((x) => isObj(x) && x.open !== false),
+    artifacts: Array.isArray(run.artifacts) ? run.artifacts.length : 0,
+    stop: isObj(run.stop) ? run.stop.reason : null,
+    startedAt: run.startedAt, updatedAt: run.updatedAt,
+  };
+}
+
+/**
+ * The timeline: one entry per round, by `n`, at `now`:
+ * {n, role, task, outcome, commit, usd, cost, ms, span, live, starts}.
+ * A round with no end is `live` while the run is not stopped (its duration
+ * runs to `now`); in a stopped run it just has no outcome.
+ */
+export function roundRows(run, now = Date.now()) {
+  const stopped = run?.state === 'stopped';
+  const rounds = (Array.isArray(run?.rounds) ? run.rounds : []).filter((r) => isObj(r) && Number.isInteger(r.n));
+  return rounds.slice().sort((a, b) => a.n - b.n).map((r) => {
+    const live = !isNum(r.endedAt) && !stopped;
+    const end = isNum(r.endedAt) ? r.endedAt : live ? now : null;
+    const ms = isNum(r.startedAt) && isNum(end) && end >= r.startedAt ? end - r.startedAt : null;
+    const commit = rnClean(r.commit, 64);
+    return {
+      n: r.n,
+      role: rnClean(r.role, 40),
+      task: rnClean(r.task, 120),
+      outcome: rnClean(r.outcome, 40) ?? (live ? 'running' : null),
+      commit,
+      short: commit ? commit.slice(0, 7) : null,
+      usd: isNum(r.usd) ? r.usd : null,
+      cost: isNum(r.usd) ? money(r.usd) : DASH,
+      ms,
+      span: ms === null ? DASH : spanText(ms),
+      live,
+      starts: Number.isInteger(r.starts) && r.starts > 1 ? r.starts : 1,
+    };
+  });
+}
+
+/** The stop of a folded run -> {reason, p, text, title}, or null while it runs. */
+export function stopOf(run) {
+  if (run?.state !== 'stopped') return null;
+  const s = isObj(run.stop) ? run.stop : {};
+  const reason = rnClean(s.reason, 32) ?? 'unknown';
+  const bits = [`stopped: ${reason}`];
+  if (Number.isInteger(s.rounds)) bits.push(`after ${s.rounds} ${s.rounds === 1 ? 'round' : 'rounds'}`);
+  if (isNum(s.usd)) bits.push(money(s.usd));
+  return {
+    reason,
+    p: STOP_P[reason] ?? 'off',
+    text: bits.join(' · '),
+    title: isNum(s.ts) ? `stopped at ${new Date(s.ts).toISOString()}` : bits[0],
+  };
+}
+
+/** Artifacts -> [{kind, title, href, n}]: `href` only for an http(s) URL. */
+export function artifactsOf(run) {
+  return (Array.isArray(run?.artifacts) ? run.artifacts : []).filter(isObj).map((a) => ({
+    kind: rnClean(a.kind, 32) ?? 'link',
+    title: rnClean(a.title) ?? rnClean(a.url, 400) ?? '?',
+    url: rnClean(a.url, 400),
+    href: safeHref(a.url),
+    n: Number.isInteger(a.n) ? a.n : null,
+  }));
+}
+
+/** The unknown events, newest last, at most RAW_SHOW: [{t, n, text}] (JSON text, clamped). */
+export function rawOf(run) {
+  const list = (Array.isArray(run?.raw) ? run.raw : []).filter(isObj);
+  return {
+    total: list.length,
+    shown: list.slice(-RAW_SHOW).map((e) => {
+      let text;
+      try { text = JSON.stringify(isObj(e.raw) ? e.raw : e); } catch { text = '?'; }
+      return { t: rnClean(e.t, 64) ?? '?', text: rnClean(text, RAW_MAX) ?? '' };
+    }),
+  };
+}
+
+/**
+ * GET /api/runs/<id>. -> {kind:'ok', run} | {kind:'missing', status} (404:
+ * no such run here, or no runs route) | {kind:'error', message}. Never throws.
+ */
+export async function loadRun(id, fetchFn = globalThis.fetch) {
+  try {
+    const r = await fetchFn(runUrl(id), { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+    if (r.status === 404 || r.status === 503) return { kind: 'missing', status: r.status };
+    if (!r.ok) return { kind: 'error', message: `HTTP ${r.status}` };
+    const body = await r.json();
+    if (!isObj(body?.run)) return { kind: 'missing', status: r.status };
+    return { kind: 'ok', run: body.run };
+  } catch (err) {
+    return { kind: 'error', message: rnClean(String(err?.message ?? err), 120) ?? 'request failed' };
+  }
+}
+
+function rnLink(cls, text, href) {
+  if (!href) return el('span', cls, text);
+  const a = el('a', cls, text);
+  a.href = href;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.title = href;
+  return a;
+}
+
+function rnSection(cls, name, count) {
+  const sec = el('section', `rn-sec ${cls}`);
+  sec.append(el('h3', 'rn-sec-t', count === null ? name : `${name} (${count})`));
+  return sec;
+}
+
+function pageHead(run, row, now) {
+  const head = el('header', 'rn-head');
+  const back = el('a', 'rn-back', '← Runs');
+  back.href = LIST_HREF;
+  const left = timeLeft(row, now);
+  const leftEl = rnField('rn-left', left.text, left.title);
+  if (left.over) leftEl.dataset.p = '2';
+  const cost = isNum(row.cost?.usd) ? money(row.cost.usd) : DASH;
+  const facts = el('div', 'rn-facts');
+  facts.append(
+    rnField('rn-round', `round ${roundText(row)}`, isNum(row.rounds) ? `${row.rounds} rounds recorded` : null),
+    scoresNode(row),
+    burnNode(row),
+    leftEl,
+    rnField('rn-cost', cost, 'cost of the run (sum of its cost events)'),
+  );
+  const ev = Number.isInteger(run.events) ? run.events : null;
+  if (ev !== null) {
+    const skipped = Number.isInteger(run.skipped) && run.skipped > 0 ? run.skipped : 0;
+    const n = rnField('rn-events', `${ev} events${skipped ? ` · ${skipped} skipped` : ''}`,
+      skipped ? `${skipped} lines could not be read (docs/runs.md "Values")` : 'lines read');
+    if (skipped) n.dataset.p = '3';
+    facts.append(n);
+  }
+  const top = el('div', 'rn-head-top');
+  top.append(stateNode(row), goalNode(row));
+  head.append(back, top, facts);
+  return head;
+}
+
+function needsSection(row) {
+  const list = needsOf(row);
+  const sec = rnSection('rn-needs-sec', 'Open needs', list.length);
+  if (!list.length) { sec.append(el('p', 'rn-none', 'Nothing open.')); return sec; }
+  const ul = el('ul', 'rn-items');
+  for (const x of list) {
+    const li = el('li', 'rn-item rn-need');
+    const you = x.kind !== 'wait';
+    li.dataset.p = you ? '2' : '3';
+    li.append(el('span', 'rn-need-m', you ? '▲' : '○'), el('span', 'rn-item-k', x.kind), el('span', 'rn-item-t', x.text));
+    const href = safeHref(x.link);
+    if (x.link) li.append(rnLink('rn-item-l', href ? 'open' : x.link, href));
+    li.title = you ? 'needs a person' : 'the loop is waiting (a usage limit)';
+    ul.append(li);
+  }
+  sec.append(ul);
+  return sec;
+}
+
+const TL_COLS = [
+  ['n', 'round'], ['role', 'role'], ['task', 'task'], ['outcome', 'outcome'],
+  ['commit', 'commit'], ['cost', 'cost'], ['span', 'duration'],
+];
+
+function timelineSection(run, now) {
+  const rows = roundRows(run, now);
+  const sec = rnSection('rn-tl-sec', 'Rounds', rows.length);
+  if (!rows.length) { sec.append(el('p', 'rn-none', 'No round has started yet.')); return sec; }
+  const table = el('table', 'rn-tl');
+  const head = el('tr');
+  for (const [, label] of TL_COLS) {
+    const th = el('th', null, label);
+    th.setAttribute('scope', 'col');
+    head.append(th);
+  }
+  const thead = el('thead');
+  thead.append(head);
+  const body = el('tbody');
+  for (const r of rows) {
+    const tr = el('tr', 'rn-tl-row');
+    tr.dataset.n = String(r.n);
+    if (r.live) tr.dataset.live = '';
+    const nCell = el('td', 'rn-tl-n', String(r.n));
+    if (r.starts > 1) {
+      const re = el('span', 'rn-tl-re', ` ×${r.starts}`);
+      re.title = `started ${r.starts} times (retries)`;
+      nCell.append(re);
+    }
+    const commit = el('td', 'rn-tl-commit', r.short ?? DASH);
+    if (r.commit) commit.title = r.commit;
+    const outcome = el('td', 'rn-tl-outcome', r.outcome ?? DASH);
+    if (r.outcome) outcome.dataset.outcome = r.outcome;
+    tr.append(
+      nCell,
+      el('td', 'rn-tl-role', r.role ?? DASH),
+      el('td', 'rn-tl-task', r.task ?? DASH),
+      outcome,
+      commit,
+      el('td', 'rn-tl-cost', r.cost),
+      el('td', 'rn-tl-span', r.span),
+    );
+    body.append(tr);
+  }
+  table.append(thead, body);
+  sec.append(table);
+  return sec;
+}
+
+function artifactsSection(run) {
+  const list = artifactsOf(run);
+  const sec = rnSection('rn-art-sec', 'Artifacts', list.length);
+  if (!list.length) { sec.append(el('p', 'rn-none', 'Nothing produced yet.')); return sec; }
+  const ul = el('ul', 'rn-items');
+  for (const a of list) {
+    const li = el('li', 'rn-item rn-art');
+    li.append(el('span', 'rn-item-k', a.kind), rnLink('rn-item-t', a.title, a.href));
+    if (a.n !== null) li.append(el('span', 'rn-item-n', `round ${a.n}`));
+    if (!a.href && a.url) li.title = `${a.url} (not an http link)`;
+    ul.append(li);
+  }
+  sec.append(ul);
+  return sec;
+}
+
+function rawSection(run) {
+  const raw = rawOf(run);
+  if (!raw.total) return null;
+  const box = el('details', 'rn-raw');
+  const more = raw.total > raw.shown.length ? `, the last ${raw.shown.length} shown` : '';
+  box.append(el('summary', 'rn-raw-s', `${raw.total} other ${raw.total === 1 ? 'event' : 'events'} (types laneboard does not know${more})`));
+  for (const e of raw.shown) box.append(el('pre', 'rn-raw-e', e.text));
+  return box;
+}
+
+/**
+ * Paint one run's page into `container`. `run` is the fold (or null), `st`
+ * {status: 'loading'|'ok'|'missing'|'error', message?, id}. Returns the page node.
+ */
+export function renderRunPage(container, run, st = { status: 'ok' }, now = Date.now()) {
+  const page = el('div', 'rn-page');
+  const id = rnClean(st.id ?? run?.run, 64) ?? '?';
+  if (!isObj(run)) {
+    const back = el('a', 'rn-back', '← Runs');
+    back.href = LIST_HREF;
+    const box = el('div', 'empty rn-empty');
+    const msg = st.status === 'loading' ? `Loading run ${id}…`
+      : st.status === 'error' ? `The run could not be loaded: ${st.message ?? 'request failed'}.`
+        : `No run ${id} here: it may be older than runs.keepDays, or this server collects no runs.`;
+    box.append(el('p', null, msg));
+    page.append(back, box);
+  } else {
+    const row = runSummaryOf(run);
+    page.append(pageHead(run, row, now));
+    const stop = stopOf(run);
+    if (stop) {
+      const n = el('p', 'rn-stop', stop.text);
+      n.dataset.p = stop.p;
+      n.title = stop.title;
+      page.append(n);
+    }
+    if (st.status === 'error') page.append(el('p', 'rn-stale', `Not refreshed: ${st.message ?? 'request failed'}.`));
+    page.append(needsSection(row), timelineSection(run, now), artifactsSection(run));
+    const raw = rawSection(run);
+    if (raw) page.append(raw);
+  }
+  if (container) {
+    container.textContent = '';
+    container.append(page);
+  }
+  return page;
+}
+
 // ---------------------------------------------------------------- the view
 
 const STATE_OF = { view: null };
 
+/** The run id the route asks for (router.js already checked it), or null for the list. */
+const routeRun = (ctx) => (typeof ctx?.route?.run === 'string' && RUN_ID_RX.test(ctx.route.run) ? ctx.route.run : null);
+
 function rnPaint(st) {
   if (!st.panel) return;
+  if (st.runId) {
+    setPanel(st.panel.root, { scope: st.runId, n: null });
+    renderRunPage(st.panel.body, st.run, { status: st.status, message: st.message, id: st.runId }, Date.now());
+    return;
+  }
   const n = st.status === 'ok' ? st.runs.length : null;
-  setPanel(st.panel.root, { n });
+  setPanel(st.panel.root, { scope: null, n });
   renderRuns(st.panel.body, st.runs, { status: st.status, message: st.message }, Date.now());
 }
 
 async function rnRefresh(st) {
   const seq = ++st.seq;
-  const res = await loadRuns(st.fetchFn);
-  if (STATE_OF.view !== st || seq !== st.seq) return; // unmounted, or a newer load is running
+  const id = st.runId;
+  const res = id ? await loadRun(id, st.fetchFn) : await loadRuns(st.fetchFn);
+  if (STATE_OF.view !== st || seq !== st.seq || id !== st.runId) return; // unmounted, newer load, or moved
   if (res.kind === 'ok') {
     st.status = 'ok';
-    st.runs = res.runs;
-  } else if (res.kind === 'unavailable') {
-    st.status = 'unavailable';
+    if (id) st.run = res.run;
+    else st.runs = res.runs;
+  } else if (res.kind === 'unavailable' || res.kind === 'missing') {
+    st.status = id ? 'missing' : 'unavailable';
     st.runs = [];
+    st.run = null;
   } else {
     st.status = 'error';
     st.message = res.message;
-    // keep the last good rows on a transient error
+    // keep the last good rows (or run) on a transient error
   }
   rnPaint(st);
 }
@@ -402,7 +750,10 @@ export function mountRuns(host, ctx = {}, { fetchFn = globalThis.fetch, poll = t
   if (!host) return Promise.resolve();
   unmountRuns();
   host.textContent = '';
-  const st = { el: host, ctx, fetchFn, status: 'loading', message: null, runs: [], seq: 0, timer: null, panel: null };
+  const st = {
+    el: host, ctx, fetchFn, status: 'loading', message: null, runs: [], run: null,
+    runId: routeRun(ctx), seq: 0, timer: null, panel: null,
+  };
   st.panel = panel({ name: 'Runs' });
   host.append(st.panel.root);
   STATE_OF.view = st;
@@ -422,12 +773,26 @@ export function unmountRuns() {
   STATE_OF.view = null;
 }
 
-/** A route or store change: repaint (time left moves); the poll does the fetching. */
+/**
+ * A route or store change: a different `run` in the route switches between
+ * the list and a page and loads at once (the returned promise); otherwise a
+ * repaint (time left moves) and the poll does the fetching.
+ */
 export function updateRuns(_store, ctx = {}) {
   const st = STATE_OF.view;
-  if (!st) return;
+  if (!st) return Promise.resolve();
   st.ctx = { ...st.ctx, ...ctx };
+  const want = routeRun(st.ctx);
+  if (want !== st.runId) {
+    st.runId = want;
+    st.status = 'loading';
+    st.message = null;
+    st.run = null;
+    rnPaint(st);
+    return rnRefresh(st);
+  }
   rnPaint(st);
+  return Promise.resolve();
 }
 
 export default {

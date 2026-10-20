@@ -3,7 +3,8 @@
 // views mount through the registry (views/index.js), and navigate/onRoute/
 // current give the shell and later views one way to move.
 //
-// Grammar: #/<view>?b=<builderId|all>&s=<state filter>&q=<query>&sel=<fkey>&open=<term|transcript>
+// Grammar: #/<view>?b=<builderId|all>&s=<state filter>&q=<query>&sel=<fkey>&open=<term|transcript>&run=<run id>
+// (`run` is a run id as the protocol checks it: the Runs view opens that run's page).
 // Legacy forms keep working, because old push notifications already sit in
 // notification centres: `#board`, `#map`, ... map to the view, and
 // `#session=<name>` becomes {view:'board', sel: fkey(localId, name), open:'term'}.
@@ -46,6 +47,8 @@ const STATE_RX = new RegExp('^[a-z0-9_-]{1,24}(?:,[a-z0-9_-]{1,24}){0,15}$');
 const CONTROL_RX = /[\u0000-\u001f\u007f]/;
 const MAX_Q = 200;
 const MAX_SEL = 300;
+/** A run id, the protocol's own pattern (server/runs/protocol.mjs RUN_ID). */
+export const RUN_RX = new RegExp('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$');
 
 function safeDecode(v) {
   try { return decodeURIComponent(v.replace(/\+/g, ' ')); } catch { return null; }
@@ -53,7 +56,7 @@ function safeDecode(v) {
 
 /** An empty route on `view`: every parameter null. */
 export function emptyRoute(view = DEFAULT_VIEW) {
-  return { view, b: null, s: null, q: null, sel: null, open: null };
+  return { view, b: null, s: null, q: null, sel: null, open: null, run: null };
 }
 
 /** The query part (no `?`) -> {key: decoded value}; the first of a repeated key wins. */
@@ -71,7 +74,7 @@ function parseQuery(qs) {
 }
 
 /**
- * A hash (with or without the leading '#') -> {view, b, s, q, sel, open}.
+ * A hash (with or without the leading '#') -> {view, b, s, q, sel, open, run}.
  * Values that do not fit their parameter are dropped (null); an unknown view
  * becomes DEFAULT_VIEW. `localId` is the local builder, for `#session=`.
  */
@@ -98,18 +101,19 @@ export function parseHash(h, { localId } = {}) {
   if (typeof p.q === 'string' && p.q !== '' && !CONTROL_RX.test(p.q)) r.q = p.q.slice(0, MAX_Q);
   if (typeof p.sel === 'string' && p.sel.length <= MAX_SEL && !CONTROL_RX.test(p.sel) && isFkey(p.sel)) r.sel = p.sel;
   if (OPEN_KINDS.includes(p.open)) r.open = p.open;
+  if (RUN_RX.test(p.run ?? '')) r.run = p.run;
   return r;
 }
 
 /**
- * A route -> its hash, in the stable key order view, b, s, q, sel, open.
+ * A route -> its hash, in the stable key order view, b, s, q, sel, open, run.
  * Defaults are left out: null/empty parameters, `b=all`, and the home view,
  * so the plain map is `#/`.
  */
 export function formatHash(r = {}) {
   const view = ROUTABLE.has(r.view) ? r.view : DEFAULT_VIEW;
   const parts = [];
-  for (const k of ['b', 's', 'q', 'sel', 'open']) {
+  for (const k of ['b', 's', 'q', 'sel', 'open', 'run']) {
     const v = r[k];
     if (v === null || v === undefined || v === '') continue;
     if (k === 'b' && v === 'all') continue;
@@ -131,7 +135,7 @@ export function current() {
 
 /**
  * The route after applying `patch` to `route`: only the routing keys, and a
- * view switch drops the selection unless the patch sets one. Pure.
+ * view switch drops the selection (sel, open, run) unless the patch sets it. Pure.
  */
 export function patchRoute(route, patch = {}) {
   const base = { ...emptyRoute(route?.view ?? DEFAULT_VIEW), ...pickRoute(route) };
@@ -140,11 +144,12 @@ export function patchRoute(route, patch = {}) {
   if ('view' in p && p.view !== base.view) {
     if (!('sel' in p)) next.sel = null;
     if (!('open' in p)) next.open = null;
+    if (!('run' in p)) next.run = null;
   }
   return next;
 }
 
-const ROUTE_KEYS = ['view', 'b', 's', 'q', 'sel', 'open'];
+const ROUTE_KEYS = ['view', 'b', 's', 'q', 'sel', 'open', 'run'];
 function pickRoute(r) {
   const out = {};
   if (!r || typeof r !== 'object') return out;
@@ -199,7 +204,7 @@ export function setView(name, { pushHash = true } = {}) {
   const cur = currentRoute();
   if (pushHash && !store.openSession) {
     // Keep the filters (b, s, q); a view switch drops the selection.
-    const want = formatHash({ ...cur, view, sel: null, open: null });
+    const want = formatHash({ ...cur, view, sel: null, open: null, run: null });
     if (location.hash !== want) history.replaceState(null, '', want);
   }
   // The registry mounts the view (a legacy adapter for the F1-moved ones runs

@@ -46,7 +46,7 @@ test('formatHash drops the defaults: the map view and b=all', () => {
     '#/board?b=builder-a&s=stuck&q=auth&sel=builder-a%2Fx&open=term',
   );
   assert.deepEqual(parseHash('#/board?b=builder-a&s=stuck&q=auth&sel=builder-a%2Fauth&open=term'),
-    { view: 'board', b: 'builder-a', s: 'stuck', q: 'auth', sel: 'builder-a/auth', open: 'term' });
+    { view: 'board', b: 'builder-a', s: 'stuck', q: 'auth', sel: 'builder-a/auth', open: 'term', run: null });
 });
 
 test('legacy bare #morning and #board keep working', () => {
@@ -57,18 +57,18 @@ test('legacy bare #morning and #board keep working', () => {
 });
 
 test('patchRoute: merges routing keys only; a view switch drops sel and open', () => {
-  const r = { view: 'board', b: 'builder-a', s: 'stuck', q: null, sel: 'builder-a/x', open: 'term' };
-  assert.deepEqual(patchRoute(r, { view: 'map' }), { view: 'map', b: 'builder-a', s: 'stuck', q: null, sel: null, open: null });
+  const r = { view: 'board', b: 'builder-a', s: 'stuck', q: null, sel: 'builder-a/x', open: 'term', run: null };
+  assert.deepEqual(patchRoute(r, { view: 'map' }), { view: 'map', b: 'builder-a', s: 'stuck', q: null, sel: null, open: null, run: null });
   assert.deepEqual(patchRoute(r, { view: 'inbox', sel: 'builder-a/y' }).sel, 'builder-a/y');
   assert.deepEqual(patchRoute(r, { s: null }), { ...r, s: null });
   assert.deepEqual(patchRoute(r, { view: 'board' }), r, 'the same view keeps the selection');
   const hostile = patchRoute(r, { action: 'kill', target: '*', args: {}, __proto__: { x: 1 } });
-  assert.deepEqual(Object.keys(hostile).sort(), ['b', 'open', 'q', 's', 'sel', 'view'], 'nothing but routing keys');
+  assert.deepEqual(Object.keys(hostile).sort(), ['b', 'open', 'q', 'run', 's', 'sel', 'view'], 'nothing but routing keys');
   assert.deepEqual(patchRoute(null, {}), emptyRoute('map'));
 });
 
 test('legacy #session=<name> lands on the board with the terminal open', () => {
-  assert.deepEqual(parseHash('#session=foo', LOCAL), { view: 'board', b: null, s: null, q: null, sel: 'builder-a/foo', open: 'term' });
+  assert.deepEqual(parseHash('#session=foo', LOCAL), { view: 'board', b: null, s: null, q: null, sel: 'builder-a/foo', open: 'term', run: null });
   assert.equal(parseHash('#session=my%20sess', LOCAL).sel, 'builder-a/my sess');
   assert.equal(parseHash('#session=foo').sel, null, 'no local id, no selection');
   assert.equal(parseHash('#session=a%2Fb', LOCAL).sel, null, 'a legacy name never has a slash');
@@ -93,13 +93,13 @@ test('unknown or empty input gives DEFAULT_VIEW', () => {
 test('#/inbox?b=all&sel=builder-b%2Fx round-trips (b=all is the default and drops)', () => {
   const h = '#/inbox?b=all&sel=builder-b%2Fx';
   const r = parseHash(h);
-  assert.deepEqual(r, { view: 'inbox', b: 'all', s: null, q: null, sel: 'builder-b/x', open: null });
+  assert.deepEqual(r, { view: 'inbox', b: 'all', s: null, q: null, sel: 'builder-b/x', open: null, run: null });
   assert.equal(formatHash(r), '#/inbox?sel=builder-b%2Fx');
   assert.deepEqual(parseHash(formatHash(r)), { ...r, b: null });
 });
 
 test('every parameter round-trips', () => {
-  const r = { view: 'board', b: 'builder-a', s: 'working,needs_input', q: 'fix the "auth" bug & more', sel: 'builder-a/a/b c', open: 'transcript' };
+  const r = { view: 'board', b: 'builder-a', s: 'working,needs_input', q: 'fix the "auth" bug & more', sel: 'builder-a/a/b c', open: 'transcript', run: null };
   assert.deepEqual(parseHash(formatHash(r)), r);
   assert.deepEqual(parseHash(formatHash(emptyRoute('diff'))), emptyRoute('diff'));
   assert.equal(formatHash(emptyRoute()), '#/', 'null parameters are left out');
@@ -121,7 +121,23 @@ test('values that do not fit their parameter are dropped', () => {
 
 test('the route object has only the routing keys: there is nothing to dispatch', () => {
   const r = parseHash('#/board?sel=builder-a%2Fx&action=kill&target=x&args=%7B%7D&confirm=x');
-  assert.deepEqual(Object.keys(r).sort(), ['b', 'open', 'q', 's', 'sel', 'view']);
+  assert.deepEqual(Object.keys(r).sort(), ['b', 'open', 'q', 'run', 's', 'sel', 'view']);
+});
+
+test('#/runs?run=<id> opens a run page: the protocol run id pattern, bad values dropped', () => {
+  assert.deepEqual(parseHash('#/runs?run=readiness'), { ...emptyRoute('runs'), run: 'readiness' });
+  assert.equal(formatHash({ view: 'runs', run: 'runs-n1.v2_a' }), '#/runs?run=runs-n1.v2_a');
+  assert.deepEqual(parseHash(formatHash({ ...emptyRoute('runs'), run: 'A.b-c_9' })), { ...emptyRoute('runs'), run: 'A.b-c_9' });
+  assert.equal(formatHash({ view: 'runs', q: 'x', run: 'r1' }), '#/runs?q=x&run=r1', 'run comes last in the key order');
+  for (const bad of ['', '.hidden', '-x', '_x', 'a%2Fb', 'a%20b', '..', 'a%0A', '%3Cimg%3E', 'x'.repeat(65), 'r%E0%A4%A']) {
+    assert.equal(parseHash(`#/runs?run=${bad}`).run, null, bad);
+  }
+  assert.equal(parseHash(`#/runs?run=${'x'.repeat(64)}`).run, 'x'.repeat(64), '64 characters is the cap');
+  assert.equal(parseHash('#/runs?run=one&run=two').run, 'one', 'the first of a repeated key wins');
+  const r = { ...emptyRoute('runs'), run: 'readiness' };
+  assert.equal(patchRoute(r, { view: 'board' }).run, null, 'a view switch drops the run');
+  assert.equal(patchRoute(r, { q: 'x' }).run, 'readiness', 'the same view keeps it');
+  assert.equal(patchRoute(r, { run: null }).run, null, 'back to the list');
 });
 
 test('S20: router.js, the registry and the stubs have no path to an action', () => {
