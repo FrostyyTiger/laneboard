@@ -108,11 +108,13 @@ Notes for builders, from reading the code (planner, round 1):
 - [x] T10 (C) [ui] Two or three design directions inside the control-room style (README §5, §8 Q1): each a token override file `docs/plans/runs/design/<name>.css` (type scale, 4 px spacing, elevation for floating layers only, both themes) and `docs/plans/runs/design/README.md` saying what each changes, why, and how to view it on the demo (`node test/tools/demo-fleet.mjs`) — done when: a test checks each file only sets custom properties that exist in `public/css/tokens.css` and passes the design guardrails (commit 1efb5b8)
 - [x] T11 (A2) [ui] Score chart per metric on the run page: one small SVG line per metric over rounds (reuse `public/js/ui/spark.js` if it fits), `better` decides which way is good, no animation — done when: `test/view-runs.test.mjs` checks the chart's points for the fixture's `tests` and `tasks` scores and an empty chart for a run with none (commit 04f1a7d)
 - [ ] T12 (A1) Sessions tied to rounds by cwd + time window (`server/runs/bind.mjs`, read from the session registry): a round row lists the sessions that ran in its dir during it, with their cost — done when: `test/runs-bind.test.mjs` passes (inside the window, outside, two runs in one dir)
-- [ ] T13 (docs) README "second copy for testing" command is not isolated (it opens the default audit file and can fail with AUDIT_LOCKED): add `LANEBOARD_AUDIT_FILE` and `LANEBOARD_STATE_DIR` (temp paths) to the documented command, plus a line on how to stop the copy; check the env names in `docs/config.md` first — from reviews/14-stranger.md #1, #7 — done when: the README command sets both and a test or manual check of the doc names real env vars
-- [ ] T14 (docs) `docs/runs.md` CLI section and "smallest useful loop" say that a run file outside a lane cwd is only seen with `runs.files` or `--post`; drop the "is being built" status note now that the CLI and view exist — from reviews/14-stranger.md #2, #6 — done when: `test/runs-docs.test.mjs` stays green and the note is gone
+- [ ] T13 (docs) README "second copy for testing" command is not isolated (it opens the default audit file and can fail with AUDIT_LOCKED): add `LANEBOARD_AUDIT_FILE` and `LANEBOARD_STATE_DIR` (temp paths) to the documented command, plus a line on how to stop the copy and one saying `LANEBOARD_URL` must point the CLI at the copy (also reviews/20-stranger.md #1); check the env names in `docs/config.md` first — from reviews/14-stranger.md #1, #7 — done when: the README command sets both and a test or manual check of the doc names real env vars
+- [ ] T14 (docs) `docs/runs.md` CLI section and "smallest useful loop" say that a run file outside a lane cwd is only seen with `runs.files` or `--post`; drop the "is being built" status note now that the CLI and view exist, and name the URLs (`#/runs`, `#/runs?run=<id>`, the score chart) — from reviews/14-stranger.md #2, #6 and reviews/20-stranger.md #4 — done when: `test/runs-docs.test.mjs` stays green and the note is gone
 - [ ] T15 (docs) README lists the Runs view and `g r` in the view table and key list, with a link to `docs/runs.md` — from reviews/14-stranger.md #6 — done when: README mentions `#/runs` and `g r` (a docs test greps for it if one already checks the view list)
 - [ ] T16 (A1) CLI `laneboard run`: accept `--post`/`--run`/`--file` before the subcommand too (or fail with a message that says flags go after `<sub>`), and make a usage error print one line plus "see `laneboard run --help`" instead of the whole usage block — from reviews/14-stranger.md #3, #5 — done when: `test/cli-run.test.mjs` covers flags-first and a short bad-value error, exit code stays 2
 - [ ] T17 (A2) Runs list copes with a run that has no `run.start` (only a posted `run.stop`: `goal` null, `rounds` 0): no `null`/`undefined` text, shows the run id as title — from reviews/14-stranger.md #4 — done when: `test/view-runs.test.mjs` renders such a row
+- [ ] T18 (docs) `docs/runs.md` `round.end` row (and the run `cost` field) says the run's cost is the sum of `cost` events only; `round.end --usd` fills the round's `usd` but not the run's `cost` — done when: the doc says so in both places and `test/runs-docs.test.mjs` stays green — from reviews/20-stranger.md #2
+- [ ] T19 (A1) `laneboard run --help` shows `--run <id>` as optional (it defaults to the run part of `$LANEBOARD_RUN`) and lists `--file` and `--post` — done when: `test/cli-run.test.mjs` checks the help text mentions both — from reviews/20-stranger.md #6
 
 ## Research questions
 
@@ -144,11 +146,23 @@ Notes for builders, from reading the code (planner, round 1):
 - **Exact session-to-round binding needs a `run.sh` change (fenced).** Claude Code accepts
   `--session-id <uuid>`; if the loop generated one per round and wrote it on the round's start
   event, T12 could bind exactly instead of by cwd + time window (research/Q2). Your call.
+- **Port already taken prints a stack, not a line** (reviews/20 #1). The `EADDRINUSE` handling is
+  in the boot path (`server/boot/*`, fenced); one line like "port 7790 is taken, is laneboard
+  already running?" would help. Your call.
+- **Run cost when a loop sends only `round.end --usd`** (reviews/20 #2): the run's `cost` stays 0
+  because T1 sums `cost` events only. Summing the rounds' `usd` when there are no `cost` events
+  would change that decision; T18 only documents it.
+- **Should `laneboard run` print `ok <run> <type>` on stderr?** (reviews/20 #5) A typo in `--run`
+  quietly makes a second run and a repeated `start` reopens a stopped one. T6 chose silence so
+  `eval` stays clean; stderr would keep that. A taste call.
+- A stray `runs/demo.jsonl` in the real state dir came from the round-20 review walk (reviews/20);
+  delete it if it is there.
 - Tests were red before this run (1 fail, a path assertion in the scripts tests under
   `/tmp/lb-scripts-*`); the loop's fix round takes it first.
 
 ## Reviews
 
 - reviews/14-stranger.md: 7 findings, 5 became tasks (T13 #1+#7, T14 #2, T15 #6, T16 #3+#5, T17 #4); #6 is split between T14 (stale note) and T15 (README).
+- reviews/20-stranger.md: 6 findings, 2 became tasks (T18 #2, T19 #6); #1 extends T13 (plus two owner lines: EADDRINUSE in fenced boot, stray state file), #3 duplicate of T15, #4 duplicate of T14 (URLs added), #5 is a taste call (owner), #2 also has an owner line for summing round `usd`.
 
 ## Morning
