@@ -45,9 +45,14 @@ ev() {
 import json, sys, time, re
 path, run, t, *kv = sys.argv[1:]
 d = {"v": 1, "t": t, "run": run, "ts": int(time.time() * 1000)}
+NUM = {"n", "value", "rounds", "pause5h", "stop7d", "usd", "total", "fiveHourPct", "sevenDayPct",
+       "fiveHourResetsAt", "overage", "open"}
 for item in kv:
     k, _, v = item.partition("=")
-    d[k] = float(v) if re.fullmatch(r"-?\d+(\.\d+)?", v) else v
+    if k in NUM and re.fullmatch(r"-?\d+(\.\d+)?", v):
+        f = float(v); d[k] = int(f) if f.is_integer() else f
+    else:
+        d[k] = v
 open(path, "a").write(json.dumps(d) + "\n")
 PY
 }
@@ -75,9 +80,10 @@ check() {  # the checker is not an agent: npm test, hygiene included
   local total=$(( TESTS_PASS + TESTS_FAIL ))
   [ $total -gt 0 ] && ev score name=tests value="$(python3 -c "print(round($TESTS_PASS/$total,4))")" better=higher
 }
-tasks_done() { grep -cE '^- \[x\]' "$PLAN_DIR/PROGRESS.md" 2>/dev/null || echo 0; }
-questions_open() { grep -cE '^- \[ \] Q[0-9]' "$PLAN_DIR/PROGRESS.md" 2>/dev/null || echo 0; }
-tasks_open() { grep -cE '^- \[ \]' "$PLAN_DIR/PROGRESS.md" 2>/dev/null || echo 0; }
+count() { local c; c=$(grep -cE "$1" "$PLAN_DIR/PROGRESS.md" 2>/dev/null); echo "${c:-0}"; }
+tasks_done() { count '^- \[x\]'; }
+questions_open() { count '^- \[ \] Q[0-9]'; }
+tasks_open() { count '^- \[ \] T[0-9]'; }
 
 SPENT=0 U5=0 R5=0 U7=0 OVERAGE=0 HARD=0
 # round <n> <role> <model>: one fresh session; returns 0 done, 2 rate-limited, 1 failed
@@ -103,10 +109,10 @@ $( [ -n "${STOP_REASON:-}" ] && echo "STOP REASON: $STOP_REASON   OWNER NOTES: $
     --permission-mode auto "${tools[@]}" \
     --output-format stream-json --verbose > "$out" 2>&1
   local rc=$?
-  read -r cost err u5 r5 u7 over text < <(python3 - "$out" <<'PY'
-import json, sys
+  read -r cost err u5 r5 u7 over limited text < <(python3 - "$out" <<'PY'
+import json, sys, re
 cost, err, text = 0.0, 1, ""
-u5 = r5 = u7 = -1; over = 0
+u5 = r5 = u7 = -1; over = 0; limited = 0
 for line in open(sys.argv[1], errors="replace"):
     try: m = json.loads(line)
     except Exception: continue
@@ -116,18 +122,20 @@ for line in open(sys.argv[1], errors="replace"):
         if "utilization" in f: u5, r5 = round(f["utilization"] * 100), int(f.get("resetsAt") or 0)
         if "utilization" in s7: u7 = round(s7["utilization"] * 100)
         if i.get("isUsingOverage"): over = 1
+        if i.get("status") not in (None, "allowed", "allowed_warning"): limited = 1
     if m.get("type") == "result":
         cost = m.get("total_cost_usd") or 0.0
         err = 1 if m.get("is_error") else 0
         text = (m.get("result") or "").replace("\n", " ")[:200]
-print(f"{cost:.2f}", err, u5, r5, u7, over, text or "-")
+if err and re.search(r"usage limit|limit reached|rate limit", text, re.I): limited = 1
+print(f"{cost:.2f}", err, u5, r5, u7, over, limited, text or "-")
 PY
 )
   [ "$u5" -ge 0 ] && { U5=$u5; R5=$r5; }; [ "$u7" -ge 0 ] && U7=$u7; [ "$over" = 1 ] && OVERAGE=1
   ev usage n="$n" fiveHourPct="$U5" sevenDayPct="$U7" fiveHourResetsAt="$R5" overage="$OVERAGE"
   SPENT=$(python3 -c "print(round($SPENT+${cost:-0},2))")
   ev cost n="$n" usd="${cost:-0}" total="$SPENT"
-  if grep -qiE 'usage limit|rate.?limit|limit reached|429' <<<"$text$(tail -3 "$out")"; then return 2; fi
+  [ "$limited" = 1 ] && return 2
   [ $rc -eq 124 ] && log "round $n timed out"
   # No result message at all = Claude did not run (PATH, login, crash): a hard error, not a bad round.
   grep -q '"type":"result"' "$out" || { log "round $n: no session ($(head -c 200 "$out" | tr '\n' ' '))"; return 3; }
