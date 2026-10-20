@@ -20,6 +20,10 @@ export const TABLE = { none, tailscale, proxmox };
 
 export const feederNames = Object.keys(TABLE);
 
+/** A feed's `source`: it names the file `<feedsDir>/<source>.json`, so no
+ *  slash, no leading dot, 64 characters at most. */
+export const SOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
 /** The feeder called `kind`, or null. */
 export function feeder(kind) {
   return Object.hasOwn(TABLE, kind) ? TABLE[kind] : null;

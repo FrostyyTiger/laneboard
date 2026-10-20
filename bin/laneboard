@@ -35,6 +35,15 @@
 //     --post sends it to POST /api/runs/events instead. --run defaults to the run
 //     part of $LANEBOARD_RUN. --run/--file/--post may also come before <sub>.
 //     A bad argument prints one line and exits 2. See docs/runs.md.
+//   laneboard feed tailscale|proxmox [--source s] [--every N] [--stdout | --out <file> | --push <url>]
+//                                                      offline: read one source once, write one feed
+//     proxmox  --url https://<host>:8006 --token-id user@realm!name [--secret-file f] [--ca pem] [--node n]
+//     every kind: [--timeout <s>]
+//     --stdout (the default) prints the feed, for an ssh forced command on the board;
+//     --out writes it atomically (temp + rename); --push POSTs it to <url>/api/map/feeds.
+//     The secret comes from --secret-file or $LANEBOARD_PVE_SECRET, never a flag.
+//     `none`, an unknown kind or a bad argument prints one line and exits 2;
+//     a source that cannot be read exits 1. See docs/map.md "Pushing a feed".
 //
 // Every string that came from a server (or an audit file) passes cleanTerm()
 // before it is printed, so a session name cannot carry terminal escapes
@@ -916,6 +925,119 @@ async function cmdRun() {
   if (event.t === 'round.start') process.stdout.write(`export LANEBOARD_RUN=${run}/${event.n}\n`);
 }
 
+// ---------------------------------------------------------------- feed (offline)
+//
+// `laneboard feed <kind>` runs one feeder (server/feeders/) once, next to the
+// source, and puts the feed where the board reads it. Only `--push` talks to a
+// server, and to the URL it is given, not to LANEBOARD_URL.
+
+const feedersMod = () => import('../server/feeders/index.mjs');
+
+const FEED_USAGE = `usage: laneboard feed <kind> [--source s] [--every N] [--timeout s] [--stdout | --out <file> | --push <url>]
+  tailscale  reads \`tailscale status --json\` on this machine
+  proxmox    --url https://<host>:8006 --token-id user@realm!name [--secret-file f] [--ca pem] [--node n]
+             the secret comes from --secret-file or $LANEBOARD_PVE_SECRET
+  --source s   the feed's name, and its file <feedsDir>/<s>.json on the board; defaults to the kind
+  --every N    seconds between runs (the board calls the feed stale after 3 × N)
+  --stdout     print the feed (the default; for an ssh forced command on the board)
+  --out f      write the feed to f atomically (temp + rename)
+  --push url   POST the feed to <url>/api/map/feeds (a board on this machine)`;
+
+const feedUsage = (msg) => die(msg ? `feed: ${msg}\nsee: laneboard feed --help` : FEED_USAGE, 2);
+
+// flag -> [option, kind, the feeder it belongs to (null = every kind)]
+const FEED_FLAGS = {
+  '--source': ['source', 'str', null], '--every': ['every', 'int', null], '--timeout': ['timeout', 'int', null],
+  '--stdout': ['stdout', 'bool', null], '--out': ['out', 'str', null], '--push': ['push', 'str', null],
+  '--url': ['url', 'str', 'proxmox'], '--token-id': ['tokenId', 'str', 'proxmox'],
+  '--secret-file': ['secretFile', 'str', 'proxmox'], '--ca': ['ca', 'str', 'proxmox'], '--node': ['node', 'str', 'proxmox'],
+};
+
+function parseFeedFlags(kind) {
+  const out = {};
+  while (argv.length) {
+    const flag = argv.shift();
+    if (!Object.hasOwn(FEED_FLAGS, flag)) feedUsage(`unexpected argument: ${JSON.stringify(cleanTerm(flag))}`);
+    const [field, type, only] = FEED_FLAGS[flag];
+    if (only && only !== kind) feedUsage(`${flag} is for ${only} only`);
+    if (Object.hasOwn(out, field)) feedUsage(`${flag} given twice`);
+    if (type === 'bool') { out[field] = true; continue; }
+    const raw = argv.shift();
+    if (raw === undefined || raw === '' || Object.hasOwn(FEED_FLAGS, raw)) feedUsage(`${flag} needs a value`);
+    if (type === 'int') {
+      if (!/^\d{1,6}$/.test(raw) || Number(raw) < 1) feedUsage(`${flag} needs a whole number of seconds, got ${JSON.stringify(cleanTerm(raw))}`);
+      out[field] = Number(raw);
+    } else out[field] = raw;
+  }
+  return out;
+}
+
+/** Write `text` to `file` so that a reader sees the old file or the new one, never half. */
+function writeAtomic(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+  try {
+    fs.writeFileSync(tmp, text, { mode: 0o644 });
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to clean */ }
+    throw err;
+  }
+}
+
+async function cmdFeed() {
+  const kind = argv.shift();
+  if (kind === undefined || kind === '-h' || kind === '--help' || kind === 'help') {
+    if (kind === undefined) feedUsage('');
+    process.stdout.write(`${FEED_USAGE}\n`);
+    return;
+  }
+  const { feeder, feederNames, collect, SOURCE_ID } = await feedersMod();
+  const real = feederNames.filter((k) => k !== 'none');
+  if (kind === 'none') feedUsage(`none has nothing to read; pick ${real.join(' or ')}`);
+  if (!feeder(kind)) feedUsage(`unknown feeder: ${JSON.stringify(cleanTerm(kind))} (one of ${real.join(', ')})`);
+  const f = parseFeedFlags(kind);
+  const targets = ['stdout', 'out', 'push'].filter((k) => f[k] !== undefined);
+  if (targets.length > 1) feedUsage('--stdout, --out and --push do not go together');
+  const source = f.source ?? kind;
+  if (!SOURCE_ID.test(source)) feedUsage(`not a source name: ${JSON.stringify(cleanTerm(source))} (letters, digits, . _ -; 64 at most)`);
+  let pushUrl = null;
+  if (f.push !== undefined) {
+    try { pushUrl = new URL('/api/map/feeds', f.push); } catch { feedUsage(`--push needs an http(s) URL, got ${JSON.stringify(cleanTerm(f.push))}`); }
+    if (!/^https?:$/.test(pushUrl.protocol)) feedUsage(`--push needs an http(s) URL, got ${JSON.stringify(cleanTerm(f.push))}`);
+  }
+  if (kind === 'proxmox' && (f.url === undefined || f.tokenId === undefined)) feedUsage('proxmox needs --url and --token-id');
+
+  const readOpts = {};
+  for (const k of ['url', 'tokenId', 'secretFile', 'ca', 'node']) if (f[k] !== undefined) readOpts[k] = f[k];
+  if (f.timeout !== undefined) readOpts.timeoutMs = f.timeout * 1000;
+  const r = await collect(kind, { source, every: f.every, ...readOpts });
+  if (!r.ok) return fail(r.error);
+  const text = `${JSON.stringify(r.feed)}\n`;
+
+  if (f.out !== undefined) {
+    const file = path.resolve(f.out);
+    try { writeAtomic(file, text); } catch (err) { return fail(`cannot write ${file}: ${err?.message || err}`); }
+  } else if (pushUrl) {
+    let res;
+    try {
+      res = await fetch(pushUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-laneboard': '1' },
+        body: text,
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (err) { return fail(`cannot reach ${pushUrl.origin} (${err?.message || err})`); }
+    if (!res.ok) {
+      let why = '';
+      try { why = (await res.json())?.error || ''; } catch { /* not JSON */ }
+      return fail(`${pushUrl.origin} refused the feed: HTTP ${res.status}${why ? ` ${why}` : ''}`);
+    }
+  } else {
+    process.stdout.write(text);
+  }
+}
+
 function usage() {
   process.stdout.write(`laneboard — control the Claude sessions and lanes on this box
 
@@ -952,6 +1074,8 @@ Offline (no server needed):
   laneboard paused [--json]             list the pauses
   laneboard run start|round|score|needs|artifact|stop [--run <id>] [flags]
                                       append one run-protocol line (laneboard run --help)
+  laneboard feed tailscale|proxmox [--source s] [--stdout | --out <file> | --push <url>]
+                                      read one source once into a Map feed (laneboard feed --help)
 
 Server: ${BASE}   (override with LANEBOARD_URL)
 `);
@@ -964,7 +1088,7 @@ const COMMANDS = {
   launch: cmdLaunch, job: cmdJob, retire: cmdRetire,
   fleet: cmdFleet, audit: cmdAudit,
   pause: cmdPause, resume: cmdResume, paused: cmdPaused,
-  run: cmdRun,
+  run: cmdRun, feed: cmdFeed,
 };
 
 if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') {

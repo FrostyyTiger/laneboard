@@ -241,24 +241,83 @@ half-written file.
   - Events already in the file when laneboard first reads it are not replayed.
   - `guest` targets one of the host's guests.
 
-### Pushing a feed from a Proxmox host
+### Pushing a feed
 
-The host needs nothing but `pvesh`, which it already has, and an SSH key that
-may do one thing on the laneboard machine. On the laneboard machine, add the
-key to `authorized_keys` pinned to a forced command:
+`laneboard feed <kind>` runs one feeder once, next to the source, and puts
+the feed where the board reads it. It needs no server and no config.
+
+```sh
+laneboard feed tailscale                               # print the feed
+laneboard feed tailscale --out ~/.cache/laneboard/feeds/tailscale.json
+laneboard feed proxmox --source hv1 --url https://hv1.example.invalid:8006 \
+  --token-id 'laneboard@pve!map' --secret-file /etc/laneboard/pve.secret \
+  --ca /etc/laneboard/pve-root-ca.pem --every 30
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--source s` | The feed's name and its file `<feedsDir>/<s>.json`; defaults to the kind. Letters, digits, `.` `_` `-`. |
+| `--every N` | Seconds between runs; the board calls the feed stale after `3 × N`. Defaults to 60. |
+| `--timeout s` | How long the read may take. Defaults to 10. |
+| `--stdout` | Print the feed. The default. |
+| `--out f` | Write the feed to `f`, to a temporary name first and renamed into place. |
+| `--push url` | POST the feed to `<url>/api/map/feeds`, with the `x-laneboard` header. |
+| `--url`, `--token-id`, `--secret-file`, `--ca`, `--node` | `proxmox` only: the API, the token, a file holding its secret (else `LANEBOARD_PVE_SECRET`; never a flag), the CA certificate, one cluster node. |
+
+An unknown kind, `none` or a bad flag exits 2; a source that cannot be read
+exits 1 and writes nothing, so the board shows the old feed going stale
+instead of every node gone. `--push` reaches a board on the same machine
+only: the route takes the normal local guards, not fleet auth.
+
+**On the board's machine** (a tailnet seen from there), a `--out` into the
+feeds directory is enough.
+
+**From another machine**, such as a Proxmox host, send the printed feed over
+SSH with a key that may do one thing. On the board's machine, add the key to
+`authorized_keys` pinned to a forced command:
 
 ```
 command="umask 022; f=~/.cache/laneboard/feeds/hv1.json; cat > \"$f.tmp\" && mv \"$f.tmp\" \"$f\"",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA… feed@hv1
 ```
 
-The key can only replace that one file. On the host, a timer runs something
-like:
+The key can only replace that one file. On the source, a systemd timer runs
+the feeder every 30 seconds:
+
+```ini
+# /etc/systemd/system/laneboard-feed.service
+[Unit]
+Description=laneboard feed for the Map
+
+[Service]
+Type=oneshot
+User=laneboard
+RuntimeDirectory=laneboard-feed
+ExecStart=/bin/sh -c 'f=/run/laneboard-feed/hv1.json; \
+  laneboard feed proxmox --source hv1 --every 30 --out "$f" \
+    --url https://127.0.0.1:8006 --token-id "laneboard@pve!map" \
+    --secret-file /etc/laneboard/pve.secret --ca /etc/laneboard/pve-root-ca.pem \
+  && ssh -i ~/.ssh/feed laneboard@board < "$f"'
+
+# /etc/systemd/system/laneboard-feed.timer
+[Unit]
+Description=Run the laneboard feed every 30 seconds
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
+```
 
 ```sh
-pvesh get /nodes/$(hostname)/qemu --output-format json  # and /lxc, /status
-# …shape it into the format above, then:
-ssh -i /root/.ssh/feed laneboard@board < feed.json
+systemctl enable --now laneboard-feed.timer
 ```
+
+Keep `--every` equal to the timer's interval. The feed goes to a file first
+and `ssh` runs only when the feeder exits 0: piping a failed read straight
+into `ssh` would send nothing and empty the file on the board.
 
 ### A read-only Proxmox token
 
