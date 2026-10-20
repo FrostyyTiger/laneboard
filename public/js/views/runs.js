@@ -52,6 +52,7 @@ export const WARN_7D = 85;
 export const SCORE_MAX = 3;
 const TEXT_MAX = 200;
 const DASH = '—';
+const SESSIONS_SHOW = 20; // sessions listed per round
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 /** The protocol's run id (server/runs/protocol.mjs RUN_ID): only such ids get a page link. */
@@ -445,7 +446,7 @@ export function runSummaryOf(run) {
 
 /**
  * The timeline: one entry per round, by `n`, at `now`:
- * {n, role, task, outcome, commit, usd, cost, ms, span, live, starts}.
+ * {n, role, task, outcome, commit, usd, cost, ms, span, live, starts, sessions}.
  * A round with no end is `live` while the run is not stopped (its duration
  * runs to `now`); in a stopped run it just has no outcome.
  */
@@ -470,8 +471,39 @@ export function roundRows(run, now = Date.now()) {
       span: ms === null ? DASH : spanText(ms),
       live,
       starts: Number.isInteger(r.starts) && r.starts > 1 ? r.starts : 1,
+      sessions: roundSessions(r),
     };
   });
+}
+
+/**
+ * The sessions tied to a round (T12, server/runs/bind.mjs), first seen first:
+ * [{id, label, cost, usd, maybe, title}]. The label is the session's name, or
+ * the first 8 characters of its id; `maybe` when another run worked in the
+ * same dir at the same time. Bare ids (a fold without the bind) are taken too.
+ */
+export function roundSessions(r) {
+  const list = Array.isArray(r?.sessions) ? r.sessions : [];
+  const out = [];
+  for (const x of list.slice(0, SESSIONS_SHOW)) {
+    const s = typeof x === 'string' ? { sessionId: x, how: 'id' } : x;
+    const id = isObj(s) && typeof s.sessionId === 'string' ? rnClean(s.sessionId, 128) : null;
+    if (!id) continue;
+    const usd = isNum(s.usd) ? s.usd : null;
+    const how = s.how === 'cwd' ? 'by its dir and time' : 'named by the round';
+    const bits = [id, how];
+    if (rnClean(s.cwd, 300)) bits.push(rnClean(s.cwd, 300));
+    if (s.maybe) bits.push('possibly: another run worked in this dir at the same time');
+    out.push({
+      id,
+      label: rnClean(s.name, 40) ?? id.slice(0, 8),
+      usd,
+      cost: usd === null ? DASH : money(usd),
+      maybe: s.maybe === true,
+      title: bits.join(' · '),
+    });
+  }
+  return out;
 }
 
 /** The stop of a folded run -> {reason, p, text, title}, or null while it runs. */
@@ -598,8 +630,21 @@ function needsSection(row) {
 
 const TL_COLS = [
   ['n', 'round'], ['role', 'role'], ['task', 'task'], ['outcome', 'outcome'],
-  ['commit', 'commit'], ['cost', 'cost'], ['span', 'duration'],
+  ['commit', 'commit'], ['cost', 'cost'], ['span', 'duration'], ['sessions', 'sessions'],
 ];
+
+function sessionsCell(list) {
+  const td = el('td', 'rn-tl-ses');
+  if (!list.length) { td.textContent = DASH; return td; }
+  for (const s of list) {
+    const span = el('span', 'rn-tl-s', `${s.maybe ? '? ' : ''}${s.label} ${s.cost}`);
+    span.dataset.session = s.id;
+    if (s.maybe) span.dataset.maybe = '';
+    span.title = s.title;
+    td.append(span);
+  }
+  return td;
+}
 
 function timelineSection(run, now) {
   const rows = roundRows(run, now);
@@ -637,6 +682,7 @@ function timelineSection(run, now) {
       commit,
       el('td', 'rn-tl-cost', r.cost),
       el('td', 'rn-tl-span', r.span),
+      sessionsCell(r.sessions),
     );
     body.append(tr);
   }

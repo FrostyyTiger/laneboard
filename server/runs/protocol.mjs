@@ -27,6 +27,7 @@ export const STATES = ['running', 'waiting', 'stopped'];
 export const MAX_LINE = 16 * 1024;   // characters; a longer line is skipped, not cut
 export const MAX_TEXT = 2000;        // goal, needs text
 export const MAX_STR = 300;          // every other string
+export const MAX_PATH = 1024;        // `cwd`; a longer one is dropped, not cut
 const MAX_RAW_KEYS = 40;
 
 // Run ids end up in file names (`<stateDir>/runs/<run>.jsonl`), so they are strict.
@@ -93,6 +94,17 @@ function pct(v) {
   return n !== null && n >= 0 ? n : null;
 }
 
+/** The directory a run works in: an absolute path, never cut (a cut path names another dir). */
+function dir(v) {
+  if (typeof v !== 'string' || !v.startsWith('/') || v.length > MAX_PATH || /[\0\n\r]/.test(v)) return null;
+  return v.replace(/(.)\/+$/, '$1');
+}
+
+/** A Claude Code session id (a UUID, `claude --session-id`), or any short id a loop knows. */
+function sessionId(v) {
+  return typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v) ? v : null;
+}
+
 function rawCopy(obj) {
   const out = {};
   for (const [k, v] of Object.entries(obj).slice(0, MAX_RAW_KEYS)) {
@@ -119,6 +131,7 @@ const SHAPES = {
       goal: str(o.goal, MAX_TEXT),
       plan: str(o.plan),
       branch: str(o.branch),
+      cwd: dir(o.cwd),
       deadline: str(o.deadline, 64),
       deadlineAt: epochMs(o.deadline),
       budget,
@@ -127,12 +140,13 @@ const SHAPES = {
   'round.start'(o) {
     const n = int(o.n);
     if (n === null || n < 0) return 'bad n';
-    return { n, role: str(o.role), task: str(o.task) };
+    return { n, role: str(o.role), task: str(o.task), session: sessionId(o.session) };
   },
   'round.end'(o) {
     const n = int(o.n);
     if (n === null || n < 0) return 'bad n';
-    return { n, outcome: str(o.outcome), commit: commit(o.commit), open: int(o.open), usd: num(o.usd) };
+    return { n, outcome: str(o.outcome), commit: commit(o.commit), open: int(o.open), usd: num(o.usd),
+      session: sessionId(o.session) };
   },
   score(o) {
     const name = str(o.name, 64);
@@ -208,7 +222,7 @@ function round(rounds, n) {
   let r = rounds.get(n);
   if (!r) {
     r = { n, role: null, task: null, starts: 0, startedAt: null, endedAt: null, outcome: null,
-      commit: null, usd: null, open: null, usage: null };
+      commit: null, usd: null, open: null, usage: null, sessions: [] };
     rounds.set(n, r);
   }
   return r;
@@ -228,7 +242,7 @@ function round(rounds, n) {
  */
 export function foldRun(events, { skipped = 0 } = {}) {
   const run = {
-    run: null, goal: null, plan: null, branch: null, state: 'running', deadline: null, deadlineAt: null,
+    run: null, goal: null, plan: null, branch: null, cwd: null, state: 'running', deadline: null, deadlineAt: null,
     budget: null, rounds: [], scores: {}, better: {}, needs: [], artifacts: [], stop: null,
     cost: { usd: 0, rounds: 0 }, usage: null, raw: [], startedAt: null, updatedAt: null,
     events: 0, skipped: typeof skipped === 'number' ? skipped : Object.values(skipped).reduce((a, b) => a + b, 0),
@@ -252,7 +266,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
 
     switch (e.t) {
       case 'run.start':
-        for (const k of ['goal', 'plan', 'branch', 'deadline', 'deadlineAt']) if (e[k] !== null) run[k] = e[k];
+        for (const k of ['goal', 'plan', 'branch', 'cwd', 'deadline', 'deadlineAt']) if (e[k] !== null) run[k] = e[k];
         run.budget = { ...e.budget };
         run.stop = null;
         break;
@@ -261,6 +275,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
         r.starts++;
         if (e.role) r.role = e.role;
         if (e.task) r.task = e.task;
+        if (e.session && !r.sessions.includes(e.session)) r.sessions.push(e.session);
         if (e.ts && (r.startedAt === null || e.ts < r.startedAt)) r.startedAt = e.ts;
         current = Math.max(current, e.n);
         for (const need of run.needs) if (need.kind === 'wait') need.open = false;
@@ -270,6 +285,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
         const r = round(rounds, e.n);
         for (const k of ['outcome', 'commit', 'open']) if (e[k] !== null) r[k] = e[k];
         if (e.usd !== null) r.usd = (r.usd ?? 0) + e.usd;
+        if (e.session && !r.sessions.includes(e.session)) r.sessions.push(e.session);
         if (e.ts) r.endedAt = e.ts;
         current = Math.max(current, e.n);
         break;

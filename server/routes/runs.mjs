@@ -1,7 +1,8 @@
 // Route module: runs (docs/plans/runs/README.md §3 A1; protocol in docs/runs.md).
 //
 //   GET  /api/runs          -> {runs: [summary]}   latest activity first
-//   GET  /api/runs/:run     -> {run}               the folded run; 404 if unknown
+//   GET  /api/runs/:run     -> {run}               the folded run, each round with the
+//                           sessions tied to it (server/runs/bind.mjs); 404 if unknown
 //   POST /api/runs/events   one event as JSON -> 201 {ok, run, t}; 400 {error} if
 //                           parseLine skips it; appended to <stateDir>/runs/<run>.jsonl
 //
@@ -21,6 +22,8 @@ import * as collector from '../collector/runs.mjs';
 import { knownWorktrees } from '../collector/lanes.mjs';
 import { config as globalConfig } from '../config.mjs';
 import { parseLine, MAX_LINE, RUN_ID } from '../runs/protocol.mjs';
+import { bindRuns, runDirs, withSessions } from '../runs/bind.mjs';
+import { sessionsSeen } from '../db.mjs';
 
 export const LIST_PATH = '/api/runs';
 export const RUN_PATH = '/api/runs/:run';
@@ -62,6 +65,24 @@ export function summarize(run) {
     startedAt: run.startedAt,
     updatedAt: run.updatedAt,
   };
+}
+
+/**
+ * One run with its rounds' sessions. Every run of the store takes part in the
+ * bind (two runs in one dir make a guess a `maybe`); the sessions are the ones
+ * heard from while this run was active. `seen(since, until)` is the source
+ * (db.sessionsSeen); when it fails the run is given with no sessions.
+ */
+export function runWithSessions(store, run, { seen = sessionsSeen, now = Date.now() } = {}) {
+  const since = run.startedAt;
+  if (since === null) return withSessions(run, null);
+  const until = run.state === 'stopped' ? (run.stop?.ts ?? run.updatedAt ?? now) : now;
+  let sessions;
+  try { sessions = seen(since, Math.max(since, until)); } catch { sessions = []; }
+  const files = (id) => (typeof store?.filesOf === 'function' ? store.filesOf(id) : []);
+  const others = (store?.list?.() ?? []).filter((r) => r.run !== run.run);
+  const runs = [run, ...others].map((r) => ({ run: r, dirs: runDirs(r, files(r.run)) }));
+  return withSessions(run, bindRuns(runs, sessions, now));
 }
 
 /** The body of GET /api/runs from a store (null before the collector started). */
@@ -115,7 +136,7 @@ export default {
       const id = req.params?.run;
       const run = typeof id === 'string' && RUN_ID.test(id) ? collector.store()?.get(id) : null;
       if (!run) return ctx.json(res, { error: 'unknown run' }, 404);
-      return ctx.json(res, { run });
+      return ctx.json(res, { run: runWithSessions(collector.store(), run) });
     });
 
     ctx.route('POST', EVENTS_PATH, async (req, res) => {

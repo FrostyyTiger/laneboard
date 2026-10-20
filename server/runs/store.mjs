@@ -158,7 +158,14 @@ export function createStore({ maxEvents = 5000, keepDays = 30, now = () => Date.
     return [...sources.keys()];
   }
 
-  return { ingest, reset, get, list, prune, sources: sourceNames };
+  /** The sources (files) that hold events of run `id`, sorted. */
+  function filesOf(id) {
+    const out = [];
+    for (const [name, s] of sources) if (s.runs.get(id)?.events.length) out.push(name);
+    return out.sort();
+  }
+
+  return { ingest, reset, get, list, prune, sources: sourceNames, filesOf };
 }
 
 function byTime(a, b) {

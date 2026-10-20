@@ -209,6 +209,10 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
 .rn-tl-re { color: var(--text-3); }
 .rn-tl-task { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
 .rn-tl-row[data-live] .rn-tl-outcome { color: var(--run); }
+/* the sessions tied to a round (T12): one chip per session, a guess shared with another run is faint */
+.rn-tl-ses { color: var(--text-2); }
+.rn-tl-s + .rn-tl-s { margin-left: var(--sp-2); }
+.rn-tl-s[data-maybe] { color: var(--text-3); }
 
 /* unknown events, folded away */
 .rn-raw > summary { cursor: pointer; color: var(--text-3); }

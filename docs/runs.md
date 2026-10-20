@@ -69,9 +69,9 @@ Every line has these fields:
 
 | Type | Fields | What it does |
 | --- | --- | --- |
-| `run.start` | `goal` (text), `plan`, `branch`, `deadline` (ISO or epoch), `budget` `{rounds, windowPct, pause5h, stop7d}` (the four may also sit at top level) | starts the run, or restarts it: a second `run.start` updates the goal and budget and reopens a stopped run |
-| `round.start` | **`n`** (integer ≥ 0), `role`, `task` | round `n` begins; starting the same `n` again is a retry, counted in the round's `starts` |
-| `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` adds to the round's cost |
+| `run.start` | `goal` (text), `plan`, `branch`, `cwd` (the absolute dir the run works in), `deadline` (ISO or epoch), `budget` `{rounds, windowPct, pause5h, stop7d}` (the four may also sit at top level) | starts the run, or restarts it: a second `run.start` updates the goal and budget and reopens a stopped run |
+| `round.start` | **`n`** (integer ≥ 0), `role`, `task`, `session` | round `n` begins; starting the same `n` again is a retry, counted in the round's `starts` |
+| `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd`, `session` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` adds to the round's cost; `session` (on either round event) names a Claude Code session of the round (see "Sessions of a round") |
 | `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n` | one measurement of a metric; without `n` it belongs to the latest round started (0 before any) |
 | `needs` | `kind` (default `decision`), `text`, `link`, `n` | the run needs a human; kind `wait` means the loop itself is waiting (a usage limit) and closes when the next round starts or the run stops; other kinds stay open |
 | `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests), `title` | something the run produced; the same URL twice is kept once |
@@ -93,6 +93,10 @@ loop can send its own events (`review.note`, `deploy`, …) and still see them.
 - **`commit`** is a hex sha of 4 to 64 characters. A short sha made only of
   digits that a writer turned into a number gets its leading zeros back
   (padded to 7).
+- **`cwd`** is an absolute path of at most 1024 characters, a trailing `/`
+  dropped; anything else is ignored (never cut: a cut path names another dir).
+- **`session`** is a session id (a UUID, or letters, digits, `.`, `_`, `:`,
+  `-`, 128 at most); anything else is ignored.
 - **Booleans** may be `true`/`false`, `"true"`/`"false"` or `1`/`0`.
 - **Lines** longer than 16 KiB, empty lines, lines that are not a JSON object,
   and lines failing a check above are **skipped and counted** by reason; the
@@ -106,6 +110,28 @@ budget, the rounds sorted by `n` (role, task, starts, start and end time,
 outcome, commit, cost, usage), the scores per metric over rounds and which way
 is better, the needs, the artifacts, the stop, the summed cost, the last usage,
 the raw events, and how many lines were skipped.
+
+### Sessions of a round
+
+The run page lists, per round, the Claude Code sessions that ran in it, with
+what each cost. laneboard knows a session from its hook events (id, cwd, first
+and last time seen) and its cost snapshots, and ties it to a round
+(`server/runs/bind.mjs`):
+
+- **by name**: a round that carries `session` (for example a loop that
+  starts `claude --session-id <uuid>` and writes the same uuid on its
+  `round.start`) has that session, exactly, wherever it ran;
+- **by dir and time**: otherwise a session belongs to the round it was first
+  seen in, when its cwd is one of the run's dirs or below one. A round's window
+  runs from its start to its end, else to the next round's start, else to the
+  stop, else to now. The run's dirs are its `run.start` `cwd` and the `<dir>`
+  of every `<dir>/.laneboard/run.jsonl` it was read from.
+
+A run read from somewhere else (a `runs.files` glob outside the run dir, or
+posted to the API) and without `cwd` is tied only by name. Two runs working in
+the same dir at the same time cannot be told apart: a session that fits both is
+listed in both as a guess (`?` before it), never given to one by chance. A
+session open before the first round started belongs to no round.
 
 ### States
 
@@ -190,7 +216,10 @@ many), `maxRounds` (`budget.rounds`), `scores` (per name: the latest `n` and
 `value`, the `prev` value and `better`), `usage`, `cost`, `deadline`,
 `deadlineAt`, the open `needs`, `artifacts` (a count), `stop` (the reason or
 null), `startedAt`, `updatedAt`. `GET /api/runs/<run>` answers `{"run": …}`
-with the whole fold (rounds, every score, needs, artifacts, raw events).
+with the whole fold (rounds, every score, needs, artifacts, raw events); each
+round has `sessions`, the sessions tied to it (`sessionId`, `name`, `cwd`,
+`firstAt`, `lastAt`, `usd`, `how` = `id` or `cwd`, `maybe`), and `sessionsUsd`,
+their summed cost (null when none is known).
 
 A posted event is written as sent, on one line, with `ts` set to the server's
 time if it had none; the answer is `201 {"ok": true, "run", "t"}`, and the run
@@ -253,6 +282,11 @@ makes of it:
 | `needs` `fence` (a round touched a fenced file and was reverted) | an open need on the row: the owner decides |
 | `artifact` `pr` | the PR link on the run page |
 | `run.stop` with `reason`, `rounds`, `usd` | the stop reason: `done`, `deadline`, `rounds`, `no-progress`, `7d-window`, `overage`, `error`, `human` |
+
+Its file sits outside the dir the sessions work in and it writes neither
+`cwd` nor `session`, so its rounds list no sessions yet; a `cwd` on its
+`run.start` (or the uuid of `claude --session-id` on each `round.start`)
+would tie them.
 
 Two quirks of that writer are taken as they are: older copies wrote every
 number as a float (`"n": 3.0`, a commit made only of digits as a number,
