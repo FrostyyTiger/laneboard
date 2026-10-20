@@ -1,0 +1,72 @@
+{"v": 1, "t": "run.start", "run": "runs-n1", "ts": 1792520200000, "goal": "laneboard runs plan, runs-n1", "plan": "docs/plans/runs/README.md", "deadline": "2026-10-21 07:00", "rounds": 15.0, "pause5h": 90.0, "stop7d": 85.0, "branch": "run/runs-n1"}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792520215000, "name": "tests", "value": 0.9997, "better": "higher"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792520215020, "n": 1.0, "role": "planner"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792520372020, "n": 1.0, "fiveHourPct": -1.0, "sevenDayPct": -1.0, "fiveHourResetsAt": 0.0, "overage": 0.0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792520372045, "n": 1.0, "usd": 0.89, "total": 0.89}
+{"v": 1, "t": "artifact", "run": "runs-n1", "ts": 1792520378045, "kind": "pr", "url": "https://example.invalid/acme/laneboard/pull/10"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792520378065, "n": 2.0, "role": "fix"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792520472065, "n": 2.0, "fiveHourPct": 3.0, "sevenDayPct": 10.0, "fiveHourResetsAt": 1792534200.0, "overage": 0.0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792520472090, "n": 2.0, "usd": 0.39, "total": 1.28}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792520484090, "name": "tests", "value": 1.0, "better": "higher"}
+{"v": 1, "t": "round.end", "run": "runs-n1", "ts": 1792520484105, "n": 2.0, "outcome": "fixed"}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792520484120, "name": "tasks", "value": "0\n0", "better": "higher"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792520485120, "n": 3.0, "role": "research"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792520651120, "n": 3.0, "fiveHourPct": 3.0, "sevenDayPct": 10.0, "fiveHourResetsAt": 1792534200.0, "overage": 0.0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792520651145, "n": 3.0, "usd": 0.52, "total": 1.8}
+{"v": 1, "t": "needs", "run": "runs-n1", "ts": 1792520651160, "kind": "wait", "text": "usage limit, waiting 1200s"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792521851160, "n": 3.0, "role": "research"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792521966160, "n": 3.0, "fiveHourPct": 3.0, "sevenDayPct": 10.0, "fiveHourResetsAt": 1792534200.0, "overage": 0.0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792521966185, "n": 3.0, "usd": 0.24, "total": 2.04}
+{"v": 1, "t": "needs", "run": "runs-n1", "ts": 1792521966200, "kind": "wait", "text": "usage limit, waiting 1200s"}
+{"v": 1, "t": "run.start", "run": "runs-n1", "ts": 1792521993200, "goal": "laneboard runs plan, runs-n1", "plan": "docs/plans/runs/README.md", "deadline": "2026-10-21 07:00", "rounds": 15, "pause5h": 90, "stop7d": 85, "branch": "run/runs-n1"}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792522005200, "name": "tests", "value": 1, "better": "higher"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792522005220, "n": 3, "role": "research"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792522245220, "n": 3, "fiveHourPct": 4, "sevenDayPct": 10, "fiveHourResetsAt": 1792534200, "overage": 0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792522245245, "n": 3, "usd": 0.61, "total": 0.61}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792522257245, "name": "tests", "value": 1, "better": "higher"}
+{"v": 1, "t": "round.end", "run": "runs-n1", "ts": 1792522257260, "n": 3, "outcome": "researched", "open": 2}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792522257275, "name": "tasks", "value": 0, "better": "higher"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792522259275, "n": 4, "role": "builder"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792522799275, "n": 4, "fiveHourPct": 5, "sevenDayPct": 10, "fiveHourResetsAt": 1792534200, "overage": 0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792522799300, "n": 4, "usd": 2.1, "total": 2.71}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792522811300, "name": "tests", "value": 0.9993, "better": "higher"}
+{"v": 1, "t": "round.end", "run": "runs-n1", "ts": 1792522811315, "n": 4, "outcome": "kept", "commit": 4401484.0}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792522811330, "name": "tasks", "value": 1, "better": "higher"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792522813330, "n": 5, "role": "builder"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792523173330, "n": 5, "fiveHourPct": 7, "sevenDayPct": 11, "fiveHourResetsAt": 1792534200, "overage": 0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792523173355, "n": 5, "usd": 1.4, "total": 4.11}
+{"v": 1, "t": "needs", "run": "runs-n1", "ts": 1792523173370, "kind": "fence", "text": "round 5 wanted to change fenced files: server/security.mjs"}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792523185370, "name": "tests", "value": 1, "better": "higher"}
+{"v": 1, "t": "round.end", "run": "runs-n1", "ts": 1792523185385, "n": 5, "outcome": "no-task-done"}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792523185400, "name": "tasks", "value": 1, "better": "higher"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792523187400, "n": 6, "role": "review-stranger"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792523907400, "n": 6, "fiveHourPct": 8, "sevenDayPct": 11, "fiveHourResetsAt": 1792534200, "overage": 0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792523907425, "n": 6, "usd": 0.17, "total": 4.28}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792523919425, "name": "tests", "value": 1, "better": "higher"}
+{"v": 1, "t": "round.end", "run": "runs-n1", "ts": 1792523919440, "n": 6, "outcome": "reviewed"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792523919455, "n": 7, "role": "triage"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792523949455, "n": 7, "fiveHourPct": 8, "sevenDayPct": 11, "fiveHourResetsAt": 1792534200, "overage": 0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792523949480, "n": 7, "usd": 0.08, "total": 4.36}
+{"v": 1, "t": "round.end", "run": "runs-n1", "ts": 1792523949495, "n": 7, "outcome": "triaged"}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792523949510, "name": "tasks", "value": 1, "better": "higher"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792523951510, "n": 8, "role": "builder"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792524431510, "n": 8, "fiveHourPct": 91, "sevenDayPct": 12, "fiveHourResetsAt": 1792534200, "overage": 0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792524431535, "n": 8, "usd": 2.67, "total": 7.03}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792524443535, "name": "tests", "value": 1, "better": "higher"}
+{"v": 1, "t": "round.end", "run": "runs-n1", "ts": 1792524443550, "n": 8, "outcome": "kept", "commit": "0fd22f8"}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792524443565, "name": "tasks", "value": 2, "better": "higher"}
+{"v": 1, "t": "needs", "run": "runs-n1", "ts": 1792524445565, "kind": "wait", "text": "5 h window at 91 %, sleeping until 01:31"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792528045565, "n": 9, "role": "builder"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792528465565, "n": 9, "fiveHourPct": 2, "sevenDayPct": 13, "fiveHourResetsAt": 1792552200, "overage": 0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792528465590, "n": 9, "usd": 1.93, "total": 8.96}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792528477590, "name": "tests", "value": 1, "better": "higher"}
+{"v": 1, "t": "round.end", "run": "runs-n1", "ts": 1792528477605, "n": 9, "outcome": "kept", "commit": "2f3e208"}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792528477620, "name": "tasks", "value": 3, "better": "higher"}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792528479620, "n": 10, "role": "review-operator"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792528779620, "n": 10, "fiveHourPct": 4, "sevenDayPct": 13, "fiveHourResetsAt": 1792552200, "overage": 0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792528779645, "n": 10, "usd": 0.3, "total": 9.26}
+{"v": 1, "t": "round.start", "run": "runs-n1", "ts": 1792528781645, "n": 11, "role": "final"}
+{"v": 1, "t": "usage", "run": "runs-n1", "ts": 1792529021645, "n": 11, "fiveHourPct": 6, "sevenDayPct": 14, "fiveHourResetsAt": 1792552200, "overage": 0}
+{"v": 1, "t": "cost", "run": "runs-n1", "ts": 1792529021670, "n": 11, "usd": 0.85, "total": 10.11}
+{"v": 1, "t": "score", "run": "runs-n1", "ts": 1792529041670, "name": "tests", "value": 1, "better": "higher"}
+{"v": 1, "t": "run.stop", "run": "runs-n1", "ts": 1792529043670, "reason": "deadline", "rounds": 11, "usd": 10.11}

@@ -223,3 +223,41 @@ Tips that make the Runs view worth reading:
 - say why you stopped: a `run.stop` with a reason beats a run that just goes
   quiet;
 - put a question in `needs` instead of in a log nobody reads.
+
+## Watching the runs loop
+
+The loop that builds laneboard's own plans (`docs/plans/runs/loop/run.sh`)
+speaks this protocol with its own small `ev()` writer, not the CLI. It keeps
+everything for a run in `~/runs/<name>/`, outside any lane's cwd, so laneboard
+only sees it when the config names the files:
+
+```json
+{
+  "runs": { "files": ["~/runs/*/run.jsonl"] }
+}
+```
+
+Restart laneboard after changing the file; new runs under `~/runs/` are found
+on the next pass, without another restart. What it writes, and what laneboard
+makes of it:
+
+| The loop writes | Shown as |
+| --- | --- |
+| `run.start` with `rounds`, `pause5h`, `stop7d`, `branch` at the top level | the budget: round n / `rounds`; the burn bars warn at 90 % (5 h) and 85 % (7 d), the loop's default levels |
+| `round.start` per session, again for a retry after a usage limit | one timeline row, `×2` for a retry; the cost of every try adds up |
+| `usage` per round (`fiveHourPct`, `sevenDayPct` from the session's rate-limit events, `-1` when unknown, `fiveHourResetsAt` in seconds) | the 5 h / 7 d burn of the last round; `-1` is shown as unknown |
+| `cost` per round (`usd`, and `total` since the loop's last start) | the round's cost; the run's cost is the sum of every `usd`, so it does not drop when the loop restarts (`total` and `run.stop.usd` do) |
+| `score` `tests` (share of tests passing) after each check, `tasks` (tasks done) after each round | the two scores and their trend, higher is better |
+| `round.end` with `outcome` `kept`, `no-task-done`, `researched` (`open` questions), `reviewed`, `triaged`, `fixed`, `still-red` | the round's outcome and commit; the planner, operator and final rounds have no `round.end` |
+| `needs` `wait` (sleeping out a usage limit) | the run is `waiting`, not asking you anything |
+| `needs` `fence` (a round touched a fenced file and was reverted) | an open need on the row: the owner decides |
+| `artifact` `pr` | the PR link on the run page |
+| `run.stop` with `reason`, `rounds`, `usd` | the stop reason: `done`, `deadline`, `rounds`, `no-progress`, `7d-window`, `overage`, `error`, `human` |
+
+Two quirks of that writer are taken as they are: older copies wrote every
+number as a float (`"n": 3.0`, a commit made only of digits as a number,
+whose leading zeros are given back), and its deadline has no zone
+(`"2026-10-21 07:00"`), which laneboard reads in its own local time. A tasks
+score that is not a number is skipped and counted, not fatal.
+`test/fixtures/runs/loop-runs-n1.jsonl` is a night of that loop, folded by
+`test/runs-loop.test.mjs`.
