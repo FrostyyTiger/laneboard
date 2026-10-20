@@ -70,3 +70,19 @@ test('README lists every view and its `g` chord', async () => {
   for (const v of VIEWS) assert.ok(readme.includes(`\`#/${v}\``), `#/${v}`);
   for (const [k, v] of Object.entries(VIEW_KEYS)) assert.ok(readme.includes(`\`g ${k}\` ${v}`), `g ${k}`);
 });
+
+test('the API section has a curl example the server accepts, and names the 403 without the header', async () => {
+  const { parseLine } = await import('../server/runs/protocol.mjs');
+  const { checkCsrf } = await import('../server/security.mjs');
+  const block = /```sh\n(curl [^`]*?\/api\/runs\/events[\s\S]*?)```/.exec(doc);
+  assert.ok(block, 'no curl example for POST /api/runs/events');
+  const header = /-H '(x-laneboard): ([^']*)'/i.exec(block[1]);
+  assert.ok(header, 'the example sends no x-laneboard header');
+  const req = { method: 'POST', headers: { [header[1].toLowerCase()]: header[2] } };
+  assert.equal(checkCsrf(req, '/api/runs/events'), null, 'the server would refuse the header as written');
+  assert.equal(checkCsrf({ method: 'POST', headers: {} }, '/api/runs/events'), 'no-csrf-header');
+  const body = /-d '([^']*)'/.exec(block[1]);
+  assert.ok(body, 'the example sends no body');
+  assert.equal(parseLine(body[1]).ok, true, body[1]);
+  assert.ok(doc.includes('"no-csrf-header"') && /403/.test(doc));
+});

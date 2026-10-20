@@ -241,6 +241,18 @@ A posted event is written as sent, on one line, with `ts` set to the server's
 time if it had none; the answer is `201 {"ok": true, "run", "t"}`, and the run
 is in the list at once. A body over 64 KiB is 413.
 
+Without the CLI, `curl` does the same. The server wants the header
+`X-Laneboard` with the value `1` exactly (any other value counts as missing):
+
+```sh
+curl -sS -X POST http://127.0.0.1:7777/api/runs/events \
+  -H 'content-type: application/json' -H 'x-laneboard: 1' \
+  -d '{"v":1,"t":"score","run":"acme-night","n":3,"name":"tests","value":412}'
+```
+
+Without that header the answer is 403 `{"error": "forbidden", "reason":
+"no-csrf-header"}` and nothing is written.
+
 A loop that cannot send the header writes the file instead; that is always the
 simplest way.
 
