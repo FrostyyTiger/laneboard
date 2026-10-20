@@ -37,7 +37,8 @@ Notes for builders, from reading the code (planner, round 1):
   and the boot files are fenced, so anything a hub must accept from another machine is an owner
   line, not a task.
 - The demo is `node test/tools/demo-fleet.mjs` (a real hub, temp HOME, fake builders).
-- Fixtures: the hygiene gate rejects CGNAT `100.64.0.0/10` addresses and `*.ts.net` names, so use
+- Fixtures: the hygiene gate rejects CGNAT addresses and tailnet MagicDNS names (see
+  `test/hygiene.test.mjs` STRUCTURAL; do not spell them out in docs either), so use
   `192.0.2.x` / `2001:db8::` documentation addresses and `acme.example.invalid` (T4 does).
   `server/feeders/index.mjs` `TABLE` has `none` and `tailscale`; T5 adds `proxmox` there.
   `collect(kind, {source, now, every, ...readOpts})` is what T6's CLI should call.
