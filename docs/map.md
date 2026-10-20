@@ -264,6 +264,19 @@ guest's `name` (else its `vmid`). Names compare case-insensitively.
   hostname) hangs its guests on the core instead of drawing it twice.
 - A builder whose id is a discovered guest's name hangs under that room.
 
+### Drift
+
+With a topology file, the model marks where the file and the feeds disagree:
+
+- `drift: "missing"`: a declared node whose feed ref names a guest that
+  source no longer lists ("declared, not seen").
+- `drift: "undeclared"`: a discovered node ("seen, not declared").
+
+Only a fresh feed marks anything: a source that has not reported, or reported
+too long ago, is no data, not drift. Without a topology file nothing is
+declared, so nothing drifts. A service ref and `expect: "stopped"` are not
+drift; drift never changes a node's status.
+
 ### Pushing a feed
 
 `laneboard feed <kind>` runs one feeder once, next to the source, and puts

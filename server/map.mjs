@@ -219,17 +219,41 @@ const agoWords = (ms) => {
   return `${Math.round(s / 3600)}h`;
 };
 
+const feedAge = (feed, now) => now - (Number(feed.at) || feed.receivedAt);
+
+/** A feed is fresh until three of its intervals (or `map.feedStaleMs`) pass. */
+export function feedFresh(feed, now) {
+  if (!feed) return false;
+  const every = Math.max(10, Number(feed.every) || 60) * 1000;
+  return feedAge(feed, now) <= Math.max(3 * every, config.map.feedStaleMs);
+}
+
+/**
+ * Declared against live (docs/map.md "Drift"): `missing` for a declared node
+ * whose fresh feed does not list its guest, `undeclared` for a node only a
+ * fresh feed knows. Needs a topology file (without one nothing is declared)
+ * and a fresh feed (no data is not drift).
+ */
+export function driftOf(node, feeds, now, { declared = true } = {}) {
+  if (!declared) return undefined;
+  const ref = feedRef(node.feed);
+  if (!ref || ref.service) return undefined;
+  const feed = feeds.get(ref.source);
+  if (!feedFresh(feed, now)) return undefined;
+  if (node.discovered) return 'undeclared';
+  if (ref.guest == null) return undefined;
+  const listed = arr(feed.guests).some((x) => String(x.vmid) === ref.guest || x.name === ref.guest);
+  return listed ? undefined : 'missing';
+}
+
 /** What a feed says about one node, or null when the node has no feed. */
 export function fromFeed(node, feeds, now) {
   const ref = feedRef(node.feed);
   if (!ref) return null;
   const feed = feeds.get(ref.source);
   if (!feed) return { status: 'unknown', why: `no feed from ${ref.source} yet` };
-  const at = Number(feed.at) || feed.receivedAt;
-  const every = Math.max(10, Number(feed.every) || 60) * 1000;
-  const age = now - at;
-  if (age > Math.max(3 * every, config.map.feedStaleMs)) {
-    return { status: 'unknown', why: `no data from ${ref.source} for ${agoWords(age)}` };
+  if (!feedFresh(feed, now)) {
+    return { status: 'unknown', why: `no data from ${ref.source} for ${agoWords(feedAge(feed, now))}` };
   }
   if (!ref.guest) {
     const h = feed.host ?? {};
@@ -1073,6 +1097,7 @@ export function buildFleet({
       hosts: hosted?.id,
       // No topology node names it: a feed found it (docs/map.md "Discovered nodes").
       discovered: n.discovered || undefined,
+      drift: driftOf(n, feeds, now, { declared: topology != null }),
     });
   }
 
