@@ -48,7 +48,7 @@ import { layout, RINGS, SIZE, polar } from './layout.js';
 import { OVERLAY_KEY, validOverlay, nodeStyle, SHAPE_CODE, TONE_CODE } from './overlays.js';
 import { createRenderer, readPalette } from './render.js';
 import {
-  createHitGrid, bindPointer, hitRadius, boundingCircle, fitCircle, anchored, clampZoom,
+  createHitGrid, bindPointer, hitRadius, boundingCircle, fitCircle, anchored, clampZoom, fitScaleOf,
   laneOrder, nextInOrder, ZOOM_MIN, ZOOM_MAX,
 } from './interact.js';
 
@@ -243,12 +243,14 @@ export function createMap(root, opts = {}) {
   ro?.observe(root);
 
   function computeFit() {
-    const outer = maxRadius() + 64;
-    return Math.min(W / (2 * outer), (H - (W < 720 ? 40 : 20)) / (2 * outer)) || 1;
+    return fitScaleOf(W, H, maxRadius() + 64);
   }
 
   function resize() {
     const r = root.getBoundingClientRect();
+    // Hidden (another view is showing): keep the last size; the observer
+    // fires again when the Map comes back.
+    if (W && (!(r.width >= 1) || !(r.height >= 1))) return;
     W = Math.max(1, r.width);
     H = Math.max(1, r.height);
     dpr = Math.min(2.5, globalThis.devicePixelRatio || 1);

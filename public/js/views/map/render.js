@@ -97,6 +97,8 @@ export function readPalette(el) {
 }
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+/** A radius ctx.arc accepts: finite and >= 0. */
+const safeRadius = (r) => (Number.isFinite(r) && r > 0 ? r : 0);
 const ease = (t) => 1 - Math.pow(1 - t, 3);
 
 /** A point on the quadratic from p0 to p2 at t. */
@@ -192,6 +194,8 @@ export function createRenderer(ctx, palette) {
   const alphaOf = (scene, id) => (scene.alpha ? scene.alpha(id) ?? 1 : 1);
   const nodeScale = (scene) => clamp(scene.s ?? 1, 0.8, 1.6);
   const centre = (scene) => scene.toScreen({ x: 0, y: 0 });
+  /** ctx.arc with the radius clamped at 0: the browser throws on a negative one. */
+  const arc = (x, y, r, a0, a1) => ctx.arc(x, y, safeRadius(r), a0, a1);
 
   // ---------------------------------------------------------------- rings
 
@@ -211,7 +215,7 @@ export function createRenderer(ctx, palette) {
       outer = Math.max(outer, r);
       strokeStyle(P.line, 0.5, 1, []);
       ctx.beginPath();
-      ctx.arc(c0.x, c0.y, r, 0, TAU);
+      arc(c0.x, c0.y, r, 0, TAU);
       ctx.stroke();
       // The leader: a 6px tick up from the ring, the label above it.
       strokeStyle(P.t3, 0.6, 1, []);
@@ -341,7 +345,7 @@ export function createRenderer(ctx, palette) {
         const p = quad(A, C, B, Math.max(0, tt - i * 0.014));
         fillStyle(col === P.t3 ? P.t2 : col, peak * (1 - i / 6));
         ctx.beginPath();
-        ctx.arc(p.x, p.y, Math.max(0.6, 2 - i * 0.25), 0, TAU);
+        arc(p.x, p.y, Math.max(0.6, 2 - i * 0.25), 0, TAU);
         ctx.fill();
       }
     }
@@ -377,7 +381,7 @@ export function createRenderer(ctx, palette) {
         break;
       }
       default:
-        ctx.arc(x, y, r, 0, TAU);
+        arc(x, y, r, 0, TAU);
     }
     if (shape === 'ring') {
       // Unknown: hollow and dashed, the absence of a reading.
@@ -407,10 +411,10 @@ export function createRenderer(ctx, palette) {
       if (typeof m[k] !== 'number') continue;
       const v = clamp(m[k], 0, 1);
       strokeStyle(P.line, alpha, 2, []);
-      ctx.beginPath(); ctx.arc(x, y, gr, 0, TAU); ctx.stroke();
+      ctx.beginPath(); arc(x, y, gr, 0, TAU); ctx.stroke();
       const cacheOnly = k === 'mem' && n.memCache;
       strokeStyle(cacheOnly ? P.t3 : v > 0.9 ? P.crit : v > 0.75 ? P.warn : P.t2, 0.9 * alpha, 2, []);
-      ctx.beginPath(); ctx.arc(x, y, gr, -Math.PI / 2, -Math.PI / 2 + v * TAU); ctx.stroke();
+      ctx.beginPath(); arc(x, y, gr, -Math.PI / 2, -Math.PI / 2 + v * TAU); ctx.stroke();
     }
   }
 
@@ -419,7 +423,7 @@ export function createRenderer(ctx, palette) {
     const inside = scene.kids?.get(id)?.length ?? 0;
     const ring = r + (n.metrics ? 10 : 6);
     strokeStyle(P.t2, 0.55 * alpha, 1, [1.5, 3]);
-    ctx.beginPath(); ctx.arc(sp.x, sp.y, ring, 0, TAU); ctx.stroke();
+    ctx.beginPath(); arc(sp.x, sp.y, ring, 0, TAU); ctx.stroke();
     ctx.setLineDash([]);
     const text = `+${inside}`;
     ctx.font = `600 9.5px ${P.mono}`;
@@ -460,7 +464,7 @@ export function createRenderer(ctx, palette) {
         const r0 = (SIZE[c.node?.kind] ?? 5) * ns;
         strokeStyle(tone(p.tone ?? 'grey'), (p.soft ? 0.45 : 0.9) * (1 - t), p.soft ? 1 : 1.5, []);
         ctx.beginPath();
-        ctx.arc(sp.x, sp.y, r0 + ease(t) * (p.soft ? 18 : 30), 0, TAU);
+        arc(sp.x, sp.y, r0 + ease(t) * (p.soft ? 18 : 30), 0, TAU);
         ctx.stroke();
       }
     }
@@ -483,7 +487,7 @@ export function createRenderer(ctx, palette) {
         // The core: a solid point in two hairline rings. No glow, no breathing.
         for (const k of [1.6, 2.3]) {
           strokeStyle(P.line, alpha, 1, []);
-          ctx.beginPath(); ctx.arc(sp.x, sp.y, r * k, 0, TAU); ctx.stroke();
+          ctx.beginPath(); arc(sp.x, sp.y, r * k, 0, TAU); ctx.stroke();
         }
         glyph('disc', sp.x, sp.y, r * 0.45, st.abnormal ? col : P.t1, alpha);
         continue;
@@ -492,13 +496,13 @@ export function createRenderer(ctx, palette) {
       if (n.kind === 'site' || n.kind === 'host') {
         // A place, not a thing: a hollow ring with a ring inside, or the trouble glyph.
         fillStyle(P.bg, alpha);
-        ctx.beginPath(); ctx.arc(sp.x, sp.y, r, 0, TAU); ctx.fill();
+        ctx.beginPath(); arc(sp.x, sp.y, r, 0, TAU); ctx.fill();
         strokeStyle(st.abnormal ? col : P.t2, alpha, 1.5, []);
         ctx.stroke();
         if (st.abnormal && st.shape !== 'ring') glyph(st.shape, sp.x, sp.y, r * 0.45, col, alpha);
         else {
           strokeStyle(P.t3, 0.6 * alpha, 1, []);
-          ctx.beginPath(); ctx.arc(sp.x, sp.y, r * 0.55, 0, TAU); ctx.stroke();
+          ctx.beginPath(); arc(sp.x, sp.y, r * 0.55, 0, TAU); ctx.stroke();
         }
       } else if (n.kind === 'builder') {
         // A builder: a 2px square outline with its short code inside.
@@ -527,7 +531,7 @@ export function createRenderer(ctx, palette) {
         const a0 = scene.reduced ? -Math.PI / 2 : (now / 520) % TAU;
         strokeStyle(P.t2, 0.9 * alpha, 1.4, []);
         ctx.beginPath();
-        ctx.arc(sp.x, sp.y, r + 4, a0, a0 + 1.6);
+        arc(sp.x, sp.y, r + 4, a0, a0 + 1.6);
         ctx.stroke();
       }
 
@@ -713,6 +717,10 @@ export function createRenderer(ctx, palette) {
    */
   function draw(scene) {
     ctx.clearRect(0, 0, scene.W ?? 0, scene.H ?? 0);
+    // Nothing to draw into (the Map hidden behind another view, measured at
+    // 0 or 1 px) or no usable scale: skip the frame rather than throw.
+    const s = scene.s ?? 1;
+    if (!(s > 0) || (scene.W ?? 2) < 2 || (scene.H ?? 2) < 2) return { badges: [] };
     drawRings(scene);
     drawTree(scene);
     drawLinks(scene);

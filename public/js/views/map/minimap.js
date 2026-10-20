@@ -98,11 +98,15 @@ export function dotsOf(scene, tf) {
 /** The ring radii (PiP px) up to the scene's outermost radius. Pure. */
 export function ringsOf(outer, tf) {
   const out = [];
+  if (!(tf?.s > 0)) return out;
   for (const r of RINGS) if (r > 0 && r <= (outer ?? 0) + 1) out.push(r * tf.s);
   return out;
 }
 
 // ---------------------------------------------------------------- DOM
+
+/** A radius ctx.arc accepts: finite and >= 0 (the browser throws on a negative one). */
+const safeRadius = (r) => (Number.isFinite(r) && r > 0 ? r : 0);
 
 const toneColour = (pal, tone) => (tone === 'crit' ? pal.crit : tone === 'warn' ? pal.warn
   : tone === 'low' ? pal.low : tone === 'accent' ? pal.accent : pal.t3);
@@ -117,8 +121,8 @@ function dot(ctx, d, size) {
     case 'diamond':
       ctx.moveTo(d.x, d.y - size * 1.2); ctx.lineTo(d.x + size * 1.2, d.y); ctx.lineTo(d.x, d.y + size * 1.2); ctx.lineTo(d.x - size * 1.2, d.y);
       ctx.closePath(); ctx.fill(); return;
-    case 'ring': ctx.arc(d.x, d.y, size, 0, Math.PI * 2); ctx.stroke(); return;
-    default: ctx.arc(d.x, d.y, size * 0.8, 0, Math.PI * 2); ctx.fill();
+    case 'ring': ctx.arc(d.x, d.y, safeRadius(size), 0, Math.PI * 2); ctx.stroke(); return;
+    default: ctx.arc(d.x, d.y, safeRadius(size * 0.8), 0, Math.PI * 2); ctx.fill();
   }
 }
 
@@ -159,7 +163,7 @@ export function createMinimap(canvas, sceneSource, opts = {}) {
     ctx.lineWidth = 1;
     for (const r of ringsOf(scene.outer, tf)) {
       ctx.beginPath();
-      ctx.arc(tf.cx, tf.cy, r, 0, Math.PI * 2);
+      ctx.arc(tf.cx, tf.cy, safeRadius(r), 0, Math.PI * 2);
       ctx.stroke();
     }
     const blinkOff = !reduced() && phase === 1;

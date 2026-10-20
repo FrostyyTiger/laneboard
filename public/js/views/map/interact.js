@@ -27,6 +27,18 @@ export const clampZoom = (z) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Number.isF
 
 // ------------------------------------------------------------------ camera
 
+/**
+ * The scale that fits a world of radius `outer` into W x H (a strip at the
+ * bottom kept for the readout). Always > 0: a hidden map (measured at 0 or 1
+ * px) would otherwise get a negative scale, and every radius drawn with it
+ * would throw in ctx.arc (night-1 bug: leaving the Map). Not positive -> 1.
+ */
+export function fitScaleOf(W, H, outer) {
+  const o = Number.isFinite(outer) && outer > 0 ? outer : 1;
+  const s = Math.min(W / (2 * o), (H - (W < 720 ? 40 : 20)) / (2 * o));
+  return Number.isFinite(s) && s > 0 ? s : 1;
+}
+
 /** World -> screen scale for a view `{W, H, fitScale}` and a camera `{x, y, z}`. */
 export const viewScale = (view, cam) => (view.fitScale || 1) * cam.z;
 
