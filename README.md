@@ -57,7 +57,9 @@ the machine, with lane slots, the guard and CI all off.
 ```
 
 A second copy for testing, which touches neither the config file, the database
-nor the state dir (audit log, hook token, run files go to a temp dir):
+nor the state dir (audit log, hook token, run files go to a temp dir). Pick a
+port nothing listens on (`ss -ltn`) for `LANEBOARD_PORT`: on a taken port the
+copy exits, and the board already there answers instead:
 
 ```bash
 tmp=$(mktemp -d)
@@ -68,8 +70,14 @@ LANEBOARD_PORT=7788 LANEBOARD_DB=:memory: LANEBOARD_CONFIG=/dev/null \
 
 The CLI talks to `http://127.0.0.1:7777` unless told otherwise, so point it at
 the copy, or it writes into the real board: `LANEBOARD_URL=http://127.0.0.1:7788
-laneboard ls` (or `node bin/laneboard ls` from the checkout, see [CLI](#cli)). Pick a port nothing listens on (`ss -ltn`). Stop the copy with
+laneboard ls` (or `node bin/laneboard ls` from the checkout, see [CLI](#cli)). Stop the copy with
 Ctrl-C in its terminal, then `rm -r "$tmp"`.
+
+All five variables are needed. A shorter form with only the port, the database
+and the config still shares the real state dir: it opens the real audit log, and
+while another board runs it finds that log locked (`AUDIT_LOCKED` in its log)
+and refuses every action. `LANEBOARD_STATE_DIR` and `LANEBOARD_AUDIT_FILE`
+pointing at the temp dir avoid that.
 
 The copy is not a clean slate for reads: it still sees this machine's real
 sessions and directories (`laneboard ls` against it lists them). It only

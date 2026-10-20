@@ -35,7 +35,7 @@ A minimal file:
 | `port` | `7777` | `LANEBOARD_PORT` | The HTTP port. |
 | `bind` | `["127.0.0.1"]` | `LANEBOARD_BIND` | Addresses to listen on. **Loopback is the design**: laneboard has no login and can type into terminals. Anything that exposes it has to authenticate in front of it. |
 | `publicUrl` | `http://127.0.0.1:7777` | `LANEBOARD_PUBLIC_URL` | Where a browser reaches it. Used for the Web Push VAPID subject, and for the "needs HTTPS" hint on the notification button — Web Push needs an https origin. |
-| `hostname` | the system's | `LANEBOARD_HOSTNAME` | The label next to the brand in the header. |
+| `hostname` | the system's (`os.hostname()`) | `LANEBOARD_HOSTNAME` | The label next to the brand in the header, and the Map's title (its core node's name) when the topology file has no `title` or there is no topology file. |
 | `human` | `the human` | `LANEBOARD_HUMAN` | What a kickoff prompt calls the person it reports to. |
 | `timezone` | the system's | `LANEBOARD_TIMEZONE` | Used by the Morning and Credit windows. |
 | — | — | `LANEBOARD_DB` | The SQLite file. `:memory:` for a scratch instance; the test suite sets it. |
@@ -177,7 +177,7 @@ Details: [fleet/identity.md](fleet/identity.md).
 
 | Key | Default | Env | What |
 | --- | --- | --- | --- |
-| `fleet.id` | the hostname, sanitized | `LANEBOARD_FLEET_ID` | This builder's id, `^[a-z0-9-]{1,24}$`, e.g. `builder-a`. It prefixes every fleet key (`builder-a/web`). Refused, never rewritten, when it does not match. |
+| `fleet.id` | the hostname (`os.hostname()`, not `hostname`), sanitized: lowercased, every run of other characters turned into `-`, cut to 24; `builder` if nothing is left | `LANEBOARD_FLEET_ID` | This builder's id, `^[a-z0-9-]{1,24}$`, e.g. `builder-a`. It prefixes every fleet key (`builder-a/web`). Refused, never rewritten, when it does not match. |
 | `fleet.code` | `""` (derived from the id: `builder-a` → `BA`) | `LANEBOARD_FLEET_CODE` | The 2-3 character tag the UI shows, `^[A-Z0-9]{2,3}$` after uppercasing. |
 | `fleet.allowedOrigins` | `[]` | `LANEBOARD_ALLOWED_ORIGINS` (comma list) | Exact extra browser origins allowed on upgrades and mutating routes. `https`, or `http` on loopback only. Never same-site matching. A hub may not list a builder's origin. |
 
