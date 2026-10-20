@@ -363,18 +363,37 @@ test('inventory mainPane ignores a run-* window (private tmux server)', { skip: 
 });
 
 /**
- * The pane's text once it shows `needle`, or what it shows at the deadline.
- * The budget is generous: under the full parallel suite a loaded host can
- * take longer than the old 5 s poll for a script window to print its exit line.
+ * The pane's text once it shows `needle`, once the pane is dead (its last
+ * output read), or what it shows at the deadline. The budget is generous:
+ * under the full parallel suite a loaded host can take longer than the old
+ * 5 s poll for a script window to print its exit line.
  */
 async function waitPane(target, needle, ms = 20000) {
   const end = Date.now() + ms;
   let out = '';
   for (;;) {
+    const dead = tmux('display-message', '-p', '-t', target, '#{pane_dead}').trim() === '1';
     out = tmux('capture-pane', '-p', '-S', '-100', '-t', target);
-    if (out.includes(needle) || Date.now() > end) return out;
+    if (out.includes(needle) || dead || Date.now() > end) return out;
     await new Promise((res) => setTimeout(res, 100));
   }
+}
+
+/**
+ * The pane's text for script `name`, run again (at most twice) when its window
+ * died without `needle`. A shell that writes and exits within microseconds can
+ * hang up its pty before tmux has read the last lines (seen twice under the
+ * full suite: `pwd` shown, the rest never), which is the host, not runScript.
+ * A run that never prints `needle` still fails every try.
+ */
+async function paneAfterRun(name, needle, out, d) {
+  const target = `=lane-a:=run-${name}`;
+  for (let i = 0; i < 2 && !out.includes(needle); i++) {
+    const r = await scripts.runScript('lane-a', name, 'alice', d);
+    assert.equal(r.alreadyRunning, false, out);
+    out = await waitPane(target, needle);
+  }
+  return out;
 }
 
 test('runScript end to end on a private tmux server: window, remain-on-exit, agent window stays current', { skip: !hasTmux && 'tmux not installed' }, async () => {
@@ -393,7 +412,7 @@ test('runScript end to end on a private tmux server: window, remain-on-exit, age
   assert.equal(r.window, 'run-test');
   assert.equal(r.windowIndex, 1);
   assert.equal(tmux('display-message', '-p', '-t', '=lane-a:', '#{window_name}').trim(), 'claude', 'the agent window stays current');
-  let out = await waitPane('=lane-a:=run-test', '[test exited 0]');
+  let out = await paneAfterRun('test', '[test exited 0]', await waitPane('=lane-a:=run-test', '[test exited 0]'), d);
   assert.ok(out.includes(root), out);
   assert.ok(out.includes('out-42'), out);
   assert.ok(out.includes('[test exited 0]'), out);
@@ -406,7 +425,7 @@ test('runScript end to end on a private tmux server: window, remain-on-exit, age
   assert.deepEqual(names, ['claude', 'run-test']);
 
   await scripts.runScript('lane-a', 'fail', 'alice', d);
-  out = await waitPane('=lane-a:=run-fail', '[fail exited 3]');
+  out = await paneAfterRun('fail', '[fail exited 3]', await waitPane('=lane-a:=run-fail', '[fail exited 3]'), d);
   assert.ok(out.includes('[fail exited 3]'), out);
 
   const inv = await tmuxMod.inventory();

@@ -172,6 +172,13 @@ Notes for builders, from reading the code (planner, round 1):
   delete it if it is there.
 - Tests were red before this run (1 fail, a path assertion in the scripts tests under
   `/tmp/lb-scripts-*`); the loop's fix round takes it first.
+- **Run scripts can lose their last lines** (round 24, fix). The scripts e2e test failed again with
+  the pane showing only `pwd`, even with a 20 s wait: the window's shell writes its exit line and
+  exits at once, and tmux can see the pty hang up before it has read the rest. The test now reruns
+  a run that died without its exit line (at most twice). The same loss can hide `[<name> exited N]`
+  from a real user. The code fix is in `server/review/scripts.mjs` (fenced): end `windowScript`
+  with `sleep 1` so the pty drains before the shell exits (the exact-script unit test changes with
+  it). Your call.
 
 ## Reviews
 
