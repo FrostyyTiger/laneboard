@@ -67,11 +67,11 @@ test('the protocol keeps cwd on run.start and session on round events', () => {
 });
 
 test('runDirs: run.start cwd plus the dir of every <dir>/.laneboard/run.jsonl', () => {
-  assert.deepEqual(runDirs({ cwd: '/work/acme' }, ['/work/acme/.laneboard/run.jsonl', '/home/u/runs/x/run.jsonl', '/state/runs/x.jsonl']),
+  assert.deepEqual(runDirs({ cwd: '/work/acme' }, ['/work/acme/.laneboard/run.jsonl', '/srv/runs/x/run.jsonl', '/state/runs/x.jsonl']),
     ['/work/acme']);
   assert.deepEqual(runDirs({ cwd: null }, ['/work/b/.laneboard/run.jsonl', '/work/a/.laneboard/run.jsonl', 'rel/.laneboard/run.jsonl']),
     ['/work/a', '/work/b']);
-  assert.deepEqual(runDirs({ cwd: null }, ['/home/u/runs/x/run.jsonl']), [], 'a file outside the run dir names no dir');
+  assert.deepEqual(runDirs({ cwd: null }, ['/srv/runs/x/run.jsonl']), [], 'a file outside the run dir names no dir');
   assert.deepEqual(runDirs(null, null), []);
 });
 
