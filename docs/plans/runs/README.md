@@ -152,6 +152,26 @@ through the run protocol (A1), so from the night A1 lands, **the run shows up in
 3. C: two or three design directions as screenshots for the owner to pick.
 4. The loop's own events wired in, so night 2 is watched in the Runs view.
 
+### Night 2 (Map 2, plus what the owner saw on night 1)
+1. Bugs from the owner's screenshot pass of night 1 (demo fleet, headless Chrome), first:
+   the minimap throws `IndexSizeError: … arc … radius … is negative` when the Map is left for
+   another view, and every view then shows the red UI ERROR banner; the minimap stays light in
+   the dark theme; the demo fleet shows the machine's real hostname as the core node (use a demo
+   name, e.g. `demo-host`). Each with a test that fails before the fix.
+2. B1 feeders `tailscale` (`tailscale status --json`) and `proxmox` (PVE API, read-only token),
+   providers with a `none` default, `laneboard feed <kind> [--push <url> | --stdout]`, the existing
+   feed format. Tested on recorded fixtures with invented names only: never commit what the VM's
+   own `tailscale status` shows.
+3. Discovered and declared nodes merge by name; the topology file becomes optional (a Map from
+   feeds alone).
+4. B2 **Drift** overlay: declared but not seen, seen but not declared.
+5. B2 **Reach** overlay, opt-in (§8 Q4): a Tailscale policy file (HuJSON) named in config, grants
+   drawn as arcs; nothing without the config key.
+6. If time is left: B2 **Find** reaches discovered nodes, services and ports (`⌘K`), and A3 a
+   run as a node on the Map with a progress ring.
+Not tonight: the design pick (the owner chooses from night 1's directions), Playwright, the fenced
+files on the night-1 owner list.
+
 ## 8. Decisions (2026-10-20)
 - **Q1 Look:** polish the current control-room style (§5). No new direction.
 - **Q2 Order:** Runs (Part A) on night 1, Map 2 (Part B) on night 2.
