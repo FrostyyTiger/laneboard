@@ -154,6 +154,12 @@ test('bad arguments exit 2 and write nothing', async (t) => {
   const help = await run(['run', '--help'], env, dir);
   assert.equal(help.code, 0);
   assert.match(help.stdout, /usage: laneboard run/);
+  // --run is optional (it falls back to $LANEBOARD_RUN) and the common flags are explained.
+  assert.match(help.stdout, /\[--run <id>\]/);
+  assert.doesNotMatch(help.stdout, /<sub> --run <id>/);
+  assert.match(help.stdout, /^  --run <id> .*\$LANEBOARD_RUN/m);
+  assert.match(help.stdout, /^  --file f .*\$LANEBOARD_RUN_FILE/m);
+  assert.match(help.stdout, /^  --post .*POST \/api\/runs\/events/m);
 });
 
 test('--run, --file and --post may come before the subcommand; other flags there are a short error', async (t) => {

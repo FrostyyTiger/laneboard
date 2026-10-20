@@ -22,7 +22,7 @@
 //   laneboard pause <name|--all> [--reason r]          offline: write a pause sentinel
 //   laneboard resume <name|--all>                      offline: lift an operator pause
 //   laneboard paused [--json]                          offline: list the pause sentinels
-//   laneboard run start|round|score|needs|artifact|stop --run <id> [flags] [--file f | --post]
+//   laneboard run start|round|score|needs|artifact|stop [--run <id>] [flags] [--file f | --post]
 //                                                      offline: append one run-protocol line
 //     start    [--goal g] [--plan p] [--branch b] [--deadline iso] [--rounds N] [--window-pct P]
 //     round    --n N [--role r] [--task t]             prints `export LANEBOARD_RUN=<run>/<n>` for eval
@@ -811,7 +811,7 @@ const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', artifact:
 const ROUND_START_ONLY = ['role', 'task'];
 const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 
-const RUN_USAGE = `usage: laneboard run <sub> --run <id> [flags] [--file f | --post]
+const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
   start    [--goal g] [--plan p] [--branch b] [--deadline iso] [--rounds N] [--window-pct P]
   round    --n N [--role r] [--task t]            prints: export LANEBOARD_RUN=<run>/<n>
   round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
@@ -819,7 +819,11 @@ const RUN_USAGE = `usage: laneboard run <sub> --run <id> [flags] [--file f | --p
   needs    [--kind decision|wait|…] [--text t] [--link url] [--n N]
   artifact --url u [--kind pr|link|…] [--title t]
   stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
---run defaults to the run in $LANEBOARD_RUN; the file to $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl`;
+every subcommand:
+  --run <id>   the run; defaults to the run part of $LANEBOARD_RUN (which \`round\` exports)
+  --file f     append the line to f; defaults to $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl
+  --post       send the line to POST /api/runs/events on the server instead of a file
+  --run, --file and --post may also come before <sub>.`;
 
 // A usage error is one line plus a pointer to the help; no subcommand at all
 // prints the whole usage (that is what the user asked for).
@@ -946,7 +950,7 @@ Offline (no server needed):
                                       pause one session or all (writes the sentinel)
   laneboard resume <name|--all>         lift an operator pause (budget/quota: from the UI)
   laneboard paused [--json]             list the pauses
-  laneboard run start|round|score|needs|artifact|stop --run <id> [flags]
+  laneboard run start|round|score|needs|artifact|stop [--run <id>] [flags]
                                       append one run-protocol line (laneboard run --help)
 
 Server: ${BASE}   (override with LANEBOARD_URL)
