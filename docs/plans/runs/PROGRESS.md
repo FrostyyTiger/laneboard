@@ -129,7 +129,7 @@ Notes for builders, from reading the code (planner, round 1):
 - [x] T20 (docs) README's CLI block says how to get `laneboard` on the PATH (the `ln -s` step from `docs/install.md`, or `node bin/laneboard`; for a checkout also how to check which copy is on the PATH, `readlink -f "$(command -v laneboard)"`; reviews/33-stranger.md #1 too) — from reviews/27-stranger.md #2 — done when: README shows one of the two next to the first `laneboard run`/`laneboard ls` example and the docs tests stay green (commit f7dbc5d)
 - [x] T21 (docs) `docs/runs.md` has one `curl` example for `POST /api/runs/events` with the `x-laneboard` header (name the header and its value as the server checks it), and says the answer without it is 403 `no-csrf-header` — from reviews/27-stranger.md #6 — done when: the example is in the doc and `test/runs-docs.test.mjs` stays green (commit b7a03ed)
 - [x] T22 (docs/A1) README's CLI block lists `laneboard run` (one line, link to `docs/runs.md`) and `laneboard --help` lists `run` too — from reviews/33-stranger.md #2 — done when: README and `laneboard --help` output both mention `run`, checked by a test (`test/cli-run.test.mjs` for the help), docs tests stay green (commit 68b0a17)
-- [ ] T23 (docs) `docs/runs.md` says `needs` (like `score`) attaches to the latest round started when `--n` is missing, even if that round has ended — from reviews/33-stranger.md #5 — done when: the doc says so and `test/runs-docs.test.mjs` stays green
+- [x] T23 (docs) `docs/runs.md` says `needs` (like `score`) attaches to the latest round started when `--n` is missing, even if that round has ended — from reviews/33-stranger.md #5 — done when: the doc says so and `test/runs-docs.test.mjs` stays green (commit f826a1d)
 
 ## Research questions
 
