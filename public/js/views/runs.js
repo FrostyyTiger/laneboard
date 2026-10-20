@@ -22,6 +22,9 @@
 // the open needs, the timeline of rounds (role, task, outcome, commit, cost,
 // duration), the artifacts (PR links), and the unknown events folded away in
 // a <details>. A row of the list opens its page through a plain link.
+// Between the header and the timeline (task T11): one small SVG line per
+// score metric, x by round n on one scale shared by every metric and the
+// timeline, y the metric's own range; the spark.js classes, no animation.
 //
 // Everything in a summary was written by a loop: it goes in through
 // textContent, title and setAttribute only, and a link only when it is
@@ -30,6 +33,7 @@
 import { el } from '../core/dom.js';
 import { money } from '../core/format.js';
 import { lamp, panel, setPanel } from '../ui/components.js';
+import { sparkRange } from '../ui/spark.js';
 
 export const LIST_URL = '/api/runs';
 /** The list's own hash, and a run page's (router.js parses `run` with the protocol's RUN_ID). */
@@ -657,6 +661,118 @@ function artifactsSection(run) {
   return sec;
 }
 
+// ---------------------------------------------------------------- score charts
+
+export const CHART_W = 160;
+export const CHART_H = 32;
+const CHART_PAD = 1;
+const SVGNS = 'http://www.w3.org/2000/svg';
+const r2 = (v) => Math.round(v * 100) / 100;
+/** A chart value: integers as is, fractions to 4 significant digits (0.9997 stays apart from 1). */
+export const chartNum = (v) => (!isNum(v) ? DASH : Number.isInteger(v) ? String(v) : String(Number(v.toPrecision(4))));
+
+/** The rounds every chart spans: the run's round and score `n`s, {lo, hi}, or null. */
+export function chartDomain(run) {
+  const ns = [];
+  for (const r of Array.isArray(run?.rounds) ? run.rounds : []) if (Number.isInteger(r?.n)) ns.push(r.n);
+  const scores = isObj(run?.scores) ? run.scores : {};
+  for (const list of Object.values(scores)) {
+    for (const p of Array.isArray(list) ? list : []) if (Number.isInteger(p?.n) && isNum(p?.value)) ns.push(p.n);
+  }
+  if (!ns.length) return null;
+  return { lo: Math.min(...ns), hi: Math.max(...ns) };
+}
+
+/**
+ * One series [{n, value}] -> [{n, value, x, y}] in a w x h box: x by round n
+ * on `dom` (a one-round domain sits at the right edge, like a sparkline's
+ * single point), y in the series' own range (top is high, flat sits in the
+ * middle). Several scores in one round: the last one counts.
+ */
+export function chartPoints(list, dom, w = CHART_W, h = CHART_H) {
+  const byN = new Map();
+  for (const p of Array.isArray(list) ? list : []) if (Number.isInteger(p?.n) && isNum(p?.value)) byN.set(p.n, p.value);
+  if (!byN.size || !dom) return [];
+  const pts = [...byN].sort((a, b) => a[0] - b[0]);
+  const { lo, hi } = sparkRange(pts.map((p) => p[1]));
+  const span = dom.hi - dom.lo;
+  return pts.map(([n, value]) => {
+    const x = span === 0 ? w - CHART_PAD : r2(CHART_PAD + ((n - dom.lo) * (w - 2 * CHART_PAD)) / span);
+    const y = hi === lo ? r2(h / 2) : r2(CHART_PAD + (1 - (value - lo) / (hi - lo)) * (h - 2 * CHART_PAD));
+    return { n, value, x, y };
+  });
+}
+
+/**
+ * The run's charts, by metric name: [{name, better, points, lo, hi, first,
+ * last, trend, title}]. `trend` is the latest value against the one before
+ * (scoreTrend), so the chart reads like the header's score.
+ */
+export function scoreCharts(run) {
+  const scores = isObj(run?.scores) ? run.scores : {};
+  const betterOf = isObj(run?.better) ? run.better : {};
+  const dom = chartDomain(run);
+  const out = [];
+  for (const key of Object.keys(scores).sort()) {
+    const points = chartPoints(scores[key], dom);
+    if (!points.length) continue;
+    const name = rnClean(key, 32) ?? '?';
+    const better = betterOf[key] === 'lower' ? 'lower' : betterOf[key] === 'higher' ? 'higher' : null;
+    const first = points[0];
+    const last = points[points.length - 1];
+    const prev = points.length > 1 ? points[points.length - 2] : null;
+    const trend = scoreTrend({ value: last.value, prev: prev ? prev.value : null, better });
+    const { lo, hi } = sparkRange(points.map((p) => p.value));
+    const way = better ? `, ${better} is better` : '';
+    const title = points.length === 1
+      ? `${name}: ${chartNum(last.value)} at round ${last.n}${way}`
+      : `${name}: ${chartNum(first.value)} at round ${first.n} to ${chartNum(last.value)} at round ${last.n}, range ${chartNum(lo)} to ${chartNum(hi)}${way}`;
+    out.push({ name, better, points, lo, hi, first, last, trend, title });
+  }
+  return out;
+}
+
+function svgNode(tag, attrs) {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
+  return n;
+}
+
+function chartSvg(c) {
+  const svg = svgNode('svg', {
+    class: 'spark rn-chart-svg', viewBox: `0 0 ${CHART_W} ${CHART_H}`, width: CHART_W, height: CHART_H, role: 'img',
+  });
+  svg.setAttribute('aria-label', c.title);
+  const title = document.createElementNS(SVGNS, 'title');
+  title.textContent = c.title;
+  svg.appendChild(title);
+  if (c.points.length > 1) {
+    svg.appendChild(svgNode('polyline', { class: 'spark-line', points: c.points.map((p) => `${p.x},${p.y}`).join(' ') }));
+  }
+  const last = c.last;
+  svg.appendChild(svgNode('rect', { class: 'spark-last', x: r2(last.x - 1), y: r2(last.y - 1), width: 2, height: 2 }));
+  return svg;
+}
+
+function chartsSection(run) {
+  const charts = scoreCharts(run);
+  const sec = rnSection('rn-charts-sec', 'Scores', charts.length);
+  if (!charts.length) { sec.append(el('p', 'rn-none', 'No score yet: a loop sends them with laneboard run score.')); return sec; }
+  const ul = el('ul', 'rn-charts');
+  for (const c of charts) {
+    const li = el('li', 'rn-chart');
+    li.dataset.metric = c.name;
+    li.title = c.title;
+    const val = el('span', 'rn-chart-v', `${chartNum(c.last.value)}${c.trend.mark ? ` ${c.trend.mark}` : ''}`);
+    if (c.trend.good === false) val.dataset.p = '2';
+    const range = c.points.length > 1 ? `${chartNum(c.lo)}–${chartNum(c.hi)}` : `round ${c.last.n}`;
+    li.append(el('span', 'rn-chart-k', c.name), chartSvg(c), val, el('span', 'rn-chart-r', range));
+    ul.append(li);
+  }
+  sec.append(ul);
+  return sec;
+}
+
 function rawSection(run) {
   const raw = rawOf(run);
   if (!raw.total) return null;
@@ -694,7 +810,7 @@ export function renderRunPage(container, run, st = { status: 'ok' }, now = Date.
       page.append(n);
     }
     if (st.status === 'error') page.append(el('p', 'rn-stale', `Not refreshed: ${st.message ?? 'request failed'}.`));
-    page.append(needsSection(row), timelineSection(run, now), artifactsSection(run));
+    page.append(needsSection(row), chartsSection(run), timelineSection(run, now), artifactsSection(run));
     const raw = rawSection(run);
     if (raw) page.append(raw);
   }

@@ -1,19 +1,20 @@
 // The Runs list (runs plan §3 A2, task T7): the fixture run folded and
 // summarized by the server, then rendered in the fake DOM; the empty state;
 // the pure row models (trend, burn, time left, sort). The run page (T8): the
-// fixture's full fold rendered as timeline, stop, needs, artifacts, raw.
+// fixture's full fold rendered as timeline, stop, needs, artifacts, raw. The
+// score charts (T11): the loop fixture's `tests` and `tasks` lines, point by point.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeDocument, texts } from './helpers/fakedom.mjs';
-import { parseLine, foldRun } from '../server/runs/protocol.mjs';
+import { parseLine, parseLines, foldRun } from '../server/runs/protocol.mjs';
 import { summarize } from '../server/routes/runs.mjs';
 import runsView, {
   renderRuns, mountRuns, unmountRuns, loadRuns, sortRuns, scoreList, scoreTrend, scoreText, burnOf,
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, LIST_URL, SCORE_MAX,
   renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
-  runHref, runUrl, LIST_HREF, RAW_SHOW,
+  runHref, runUrl, LIST_HREF, RAW_SHOW, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
 
@@ -398,3 +399,102 @@ test('mount with route.run fetches GET /api/runs/<id>; a route change switches l
   assert.deepEqual(await loadRun('x', async () => ({ ok: false, status: 500 })), { kind: 'error', message: 'HTTP 500' });
   assert.deepEqual(await loadRun('x', async () => ({ ok: true, status: 200, json: async () => ({}) })), { kind: 'missing', status: 200 });
 }));
+
+// ---------------------------------------------------------------- score charts (T11)
+
+/** The loop's own night (test/fixtures/runs/loop-runs-n1.jsonl) as GET /api/runs/runs-n1 answers it. */
+function loopRun() {
+  const text = fs.readFileSync(path.join(ROOT, 'test/fixtures/runs/loop-runs-n1.jsonl'), 'utf8');
+  const { events, skipped } = parseLines(text);
+  return JSON.parse(JSON.stringify(foldRun(events, { skipped })));
+}
+const LOOP = loopRun();
+
+test('charts: the loop fixture\'s tests and tasks, x by round on one shared scale, y in each range', () => {
+  assert.deepEqual(chartDomain(LOOP), { lo: 0, hi: 11 }, 'the check before round 1 is round 0, the last round is 11');
+  const charts = scoreCharts(LOOP);
+  assert.deepEqual(charts.map((c) => c.name), ['tasks', 'tests']);
+  const [tasks, tests] = charts;
+  // x = 1 + n * 158 / 11, y = 1 + (1 - t) * 30 in a 160 x 32 box
+  assert.deepEqual(tasks.points.map((p) => [p.n, p.value, p.x, p.y]), [
+    [3, 0, 44.09, 31], [4, 1, 58.45, 21], [5, 1, 72.82, 21], [7, 1, 101.55, 21], [8, 2, 115.91, 11], [9, 3, 130.27, 1],
+  ]);
+  // two scores in round 3: the last one counts, so 9 points from 10 events
+  assert.deepEqual(tests.points.map((p) => [p.n, p.value, p.x, p.y]), [
+    [0, 0.9997, 1, 13.86], [2, 1, 29.73, 1], [3, 1, 44.09, 1], [4, 0.9993, 58.45, 31], [5, 1, 72.82, 1],
+    [6, 1, 87.18, 1], [8, 1, 115.91, 1], [9, 1, 130.27, 1], [11, 1, CHART_W - 1, 1],
+  ]);
+  assert.equal(tasks.better, 'higher');
+  assert.deepEqual([tasks.trend.mark, tasks.trend.good], ['▲', true]);
+  assert.deepEqual([tests.trend.mark, tests.trend.good], ['=', null]);
+  assert.equal(tests.title, 'tests: 0.9997 at round 0 to 1 at round 11, range 0.9993 to 1, higher is better');
+  for (const c of charts) for (const p of c.points) {
+    assert.ok(p.x >= 0 && p.x <= CHART_W && p.y >= 0 && p.y <= CHART_H, `${c.name} round ${p.n} inside the box`);
+  }
+});
+
+test('charts on the page: one SVG line per metric between the needs and the timeline, no animation', () => withDom(() => {
+  const page = renderRunPage(null, LOOP, { status: 'ok', id: 'runs-n1' }, LOOP.updatedAt);
+  const secs = page.children.filter((c) => c.tagName === 'SECTION').map((c) => c.className);
+  assert.deepEqual(secs, ['rn-sec rn-needs-sec', 'rn-sec rn-charts-sec', 'rn-sec rn-tl-sec', 'rn-sec rn-art-sec']);
+  assert.equal(byClass(page, 'rn-charts-sec')[0].children[0].textContent, 'Scores (2)');
+  const items = byClass(page, 'rn-chart');
+  assert.deepEqual(items.map((li) => li.dataset.metric), ['tasks', 'tests']);
+  const line = byClass(items[0], 'spark-line')[0];
+  assert.equal(line.attrs.points, '44.09,31 58.45,21 72.82,21 101.55,21 115.91,11 130.27,1');
+  const svg = byClass(items[0], 'rn-chart-svg')[0];
+  assert.equal(svg.attrs.viewBox, `0 0 ${CHART_W} ${CHART_H}`);
+  assert.equal(svg.attrs.role, 'img');
+  assert.match(svg.attrs['aria-label'], /^tasks: 0 at round 3 to 3 at round 9, range 0 to 3, higher is better$/);
+  const last = byClass(items[0], 'spark-last')[0];
+  assert.deepEqual([last.attrs.x, last.attrs.y], ['129.27', '0']);
+  assert.deepEqual(byClass(page, 'rn-chart-v').map((n) => n.textContent), ['3 ▲', '1 =']);
+  assert.deepEqual(byClass(page, 'rn-chart-r').map((n) => n.textContent), ['0–3', '0.9993–1']);
+  assert.equal(byClass(page, 'rn-chart-v').some((n) => n.dataset.p), false, 'nothing got worse: grey');
+  assert.doesNotMatch(SRC.slice(SRC.indexOf('score charts')), /animate|transition|requestAnimationFrame/);
+}));
+
+test('charts: `better` decides which way is good; a worse latest value is p2', () => withDom(() => {
+  // readiness: lint 14 -> 9 with lower better is good, tests 0.88 -> 0.93 higher is good
+  const page = renderRunPage(null, RUN, { status: 'ok', id: 'readiness' }, RUN.updatedAt);
+  assert.deepEqual(byClass(page, 'rn-chart-v').map((n) => [n.textContent, n.dataset.p ?? null]), [['9 ▼', null], ['0.93 ▲', null]]);
+  const worse = { ...RUN, scores: { lint: [{ n: 1, value: 9 }, { n: 2, value: 14 }] }, better: { lint: 'lower' } };
+  const p2 = renderRunPage(null, worse, { status: 'ok' }, RUN.updatedAt);
+  const v = byClass(p2, 'rn-chart-v')[0];
+  assert.deepEqual([v.textContent, v.dataset.p], ['14 ▲', '2']);
+}));
+
+test('charts: a run with no score has an empty chart section; one point is a mark, no line', () => withDom(() => {
+  const bare = { run: 'fresh', state: 'running', rounds: [], scores: {}, better: {}, needs: [], artifacts: [], raw: [], stop: null, cost: null, usage: null };
+  assert.deepEqual(scoreCharts(bare), []);
+  assert.equal(chartDomain(bare), null);
+  const page = renderRunPage(null, bare, { status: 'ok' }, 0);
+  const sec = byClass(page, 'rn-charts-sec')[0];
+  assert.equal(sec.children[0].textContent, 'Scores (0)');
+  assert.match(sec.textContent, /No score yet/);
+  assert.equal(byClass(page, 'rn-chart').length, 0);
+  assert.deepEqual(scoreCharts(null), []);
+  // one score, in a run of three rounds: x at its round, y in the middle, no polyline
+  const one = { ...bare, rounds: [{ n: 1 }, { n: 2 }, { n: 3 }], scores: { cov: [{ n: 2, value: 0.5 }] }, better: { cov: 'higher' } };
+  const [c] = scoreCharts(one);
+  assert.deepEqual(c.points.map((p) => [p.x, p.y]), [[80, CHART_H / 2]]);
+  assert.equal(c.title, 'cov: 0.5 at round 2, higher is better');
+  const p1 = renderRunPage(null, one, { status: 'ok' }, 0);
+  assert.equal(byClass(p1, 'spark-line').length, 0);
+  assert.equal(byClass(p1, 'spark-last').length, 1);
+  assert.equal(byClass(p1, 'rn-chart-r')[0].textContent, 'round 2');
+  assert.doesNotMatch(p1.textContent, /null|undefined|NaN/);
+}));
+
+test('charts: bad points are skipped, a huge round number does not blow up, names are clamped text', () => {
+  const dom = { lo: 0, hi: 1e9 };
+  const pts = chartPoints([{ n: 0, value: 1 }, { n: 1e9, value: 2 }, { n: 1.5, value: 3 }, { n: 2, value: 'x' }, null], dom);
+  assert.deepEqual(pts.map((p) => [p.n, p.x, p.y]), [[0, 1, 31], [1e9, CHART_W - 1, 1]]);
+  assert.deepEqual(chartPoints([{ n: 1, value: 1 }], null), []);
+  const [c] = scoreCharts({ scores: { 'a\u0000b<i>': [{ n: 1, value: 1 }] }, better: {} });
+  assert.doesNotMatch(c.name, /\u0000/);
+  assert.match(c.name, /^a.b<i>$/, 'kept as text, the control character replaced');
+  assert.equal(c.better, null);
+  assert.equal(c.title, `${c.name}: 1 at round 1`);
+  assert.deepEqual([chartNum(0.99974), chartNum(3), chartNum(null)], ['0.9997', '3', '—']);
+});

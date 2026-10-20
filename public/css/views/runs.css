@@ -163,6 +163,23 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
 .rn-need[data-p="2"] .rn-need-m { color: var(--p2); }
 .rn-need[data-p="3"] .rn-need-m { color: var(--p3); }
 
+/* score charts (T11): one line per metric, x by round, grey; a worse latest value is p2 */
+.rn-charts { list-style: none; margin: 0; padding: 0; }
+.rn-chart {
+  display: grid;
+  grid-template-columns: minmax(8ch, 16ch) auto 10ch minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--row-comfy);
+  padding: var(--sp-1) 0;
+  border-bottom: var(--bw) solid var(--line-weak);
+  font-variant-numeric: tabular-nums;
+}
+.rn-chart-k { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
+.rn-chart-v { color: var(--text-1); text-align: right; }
+.rn-chart-v[data-p="2"] { color: var(--p2); }
+.rn-chart-r { min-width: 0; color: var(--text-3); white-space: nowrap; }
+
 /* the timeline: one row per round, numbers right-aligned */
 .rn-tl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .rn-tl th {

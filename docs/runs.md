@@ -247,7 +247,7 @@ makes of it:
 | `round.start` per session, again for a retry after a usage limit | one timeline row, `×2` for a retry; the cost of every try adds up |
 | `usage` per round (`fiveHourPct`, `sevenDayPct` from the session's rate-limit events, `-1` when unknown, `fiveHourResetsAt` in seconds) | the 5 h / 7 d burn of the last round; `-1` is shown as unknown |
 | `cost` per round (`usd`, and `total` since the loop's last start) | the round's cost; the run's cost is the sum of every `usd`, so it does not drop when the loop restarts (`total` and `run.stop.usd` do) |
-| `score` `tests` (share of tests passing) after each check, `tasks` (tasks done) after each round | the two scores and their trend, higher is better |
+| `score` `tests` (share of tests passing) after each check, `tasks` (tasks done) after each round | the two scores and their trend, higher is better; on the run page one line each over the rounds (two scores in one round: the last counts) |
 | `round.end` with `outcome` `kept`, `no-task-done`, `researched` (`open` questions), `reviewed`, `triaged`, `fixed`, `still-red` | the round's outcome and commit; the planner, operator and final rounds have no `round.end` |
 | `needs` `wait` (sleeping out a usage limit) | the run is `waiting`, not asking you anything |
 | `needs` `fence` (a round touched a fenced file and was reverted) | an open need on the row: the owner decides |
