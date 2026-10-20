@@ -67,6 +67,7 @@ Notes for builders, from reading the code (planner, round 1):
 - [ ] T10 (B2) [ui] Drift overlay: `drift` added to `OVERLAYS` in `public/js/views/map/overlays.js` (missing = dashed ring at its declared place in warn, undeclared = accent ring, everything else dimmed), the readout and the inspector say "declared, not seen" / "seen, not declared"; `docs/map.md` overlay table gets the row — done when: `test/map-overlays.test.mjs` checks the styles for both kinds and `nextOverlay` order, `test/map-render.test.mjs` draws a fixture model with drift without throwing, design guardrails stay green
 - [ ] T11 (B2) Reach, server side, opt-in: config key `map.policyFile` (default `null` = none, env `LANEBOARD_MAP_POLICY`; in `server/config.mjs`, `docs/config.md`, `docs/map.md`), a small HuJSON reader `server/map/hujson.mjs` (comments, trailing commas; no dependency), and `server/map/reach.mjs` turning the policy's `grants` (and legacy `acls`) into `reach` links between Map nodes (resolving `tag:`, `group:`, `autogroup:`, `hosts` aliases, IPs and `*` per Q7; ports as the link label; unresolvable selectors counted, not guessed); laneboard only reads the named file, never fetches a policy — done when: `test/map-reach.test.mjs` parses `test/fixtures/feeds/policy.hujson` (invented tailnet `acme`) into the expected links, and with no `map.policyFile` the model has no `reach` link
 - [ ] T12 (B2) [ui] Reach overlay: `reach` in `OVERLAYS`, `reach` links drawn as arcs only in that overlay (thin, direction shown, the selected node's reachable set highlighted: "if this is compromised, what can it touch?"), the overlay is skipped by `o` when the model has no reach links; `docs/map.md` overlay table gets the row — done when: `test/map-overlays.test.mjs` covers the arc style and the skip rule, `test/map-render.test.mjs` draws a model with reach links, design guardrails stay green
+- [ ] T13 (docs) Two honesty gaps from `reviews/12-stranger.md` (findings 3, 5): the README's test-copy section must say that sessions and directories are still read from the machine (`laneboard ls` lists the real ones; nothing is written), and `docs/map.md` "Pushing a feed" / the feeder section must say in one sentence that a feed holds real host names and addresses, so keep it out of bug reports and screenshots — done when: both sentences exist and `npm test` stays green (hygiene included)
 
 ## Research questions
 
@@ -89,7 +90,19 @@ Notes for builders, from reading the code (planner, round 1):
 - Night 1's open owner items (design pick, Playwright, `HOOK_PATHS`, runs in `/api/v1`, `run.sh`
   ints/`session`/`cwd`, EADDRINUSE line, `sleep 1` in `windowScript`, taste calls, the stray
   `runs/demo.jsonl`) are in `nights/n1/PROGRESS.md` "Morning" and still wait for you.
+- **Busy port looks like success (`reviews/12-stranger.md` findings 2, 6).** A second board on a
+  taken port dies with `EADDRINUSE` / `AUDIT_LOCKED` in the log only, and `curl` then answers from
+  the other board. The fix is in the boot files (fenced); same item as the EADDRINUSE line in
+  night 1's Morning. A README sentence ("if the port is busy, the page you see is not yours")
+  is yours to approve.
+- **Map title and fleet block with no config (finding 4).** `/api/map` names the core after the
+  builder id and shows a one-builder `fleet` entry although `fleet` is off. Is that intended, or
+  should the title fall back to the hostname and the block be omitted? Taste call, not a task.
 
 ## Reviews
+
+- `reviews/12-stranger.md`: 6 findings, 1 became a task (T13, merging 3 and 5); 1 covered by T7
+  (`--push` 404 is the missing route), 2 and 6 are one cause and moved to the owner (fenced boot),
+  4 moved to the owner (taste).
 
 ## Morning
