@@ -183,7 +183,9 @@ laneboard run stop   --run readiness --reason done
 | `artifact` | **`--url`**, `--kind`, `--title` |
 | `stop` | `--reason`, `--rounds N`, `--usd x` |
 
-Every subcommand also takes `--run <id>`, `--file <path>` and `--post`.
+Every subcommand also takes `--run <id>`, `--file <path>` and `--post`, after
+the subcommand or before it (`laneboard run --post score …`); every other
+flag goes after the subcommand.
 
 **laneboard only sees the file if it reads that place.** The default file,
 `./.laneboard/run.jsonl`, is seen when the current directory is the root of
@@ -203,8 +205,8 @@ and nothing warns.
   environment. `--run` defaults to the run part of `$LANEBOARD_RUN`, so a
   session inside a round can send `laneboard run score --name … --value …`.
 - Bad arguments (an unknown flag, a missing value, a number that is not one,
-  a line `parseLine` would skip) exit 2 and write nothing. `laneboard run
-  --help` prints the flags.
+  a line `parseLine` would skip) exit 2, print one line saying what is wrong
+  and write nothing. `laneboard run --help` prints the flags.
 
 The exact flags are in the header of `bin/laneboard`.
 

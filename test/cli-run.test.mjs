@@ -145,12 +145,41 @@ test('bad arguments exit 2 and write nothing', async (t) => {
   for (const args of bad) {
     const r = await run(['run', ...args], env, dir);
     assert.equal(r.code, 2, `run ${args.join(' ').slice(0, 80)}: ${r.stderr.slice(0, 200)}`);
-    assert.match(r.stderr, /usage: laneboard run/);
+    if (args.length === 0) { assert.match(r.stderr, /usage: laneboard run/); continue; }
+    // One line saying what is wrong, then where the help is; not the whole usage block.
+    assert.doesNotMatch(r.stderr, /usage: laneboard run/, args.join(' ').slice(0, 80));
+    assert.match(r.stderr, /^laneboard: run: .+\nsee: laneboard run --help\n$/, args.join(' ').slice(0, 80));
   }
   assert.deepEqual(fs.readdirSync(dir), [], 'nothing was written');
   const help = await run(['run', '--help'], env, dir);
   assert.equal(help.code, 0);
   assert.match(help.stdout, /usage: laneboard run/);
+});
+
+test('--run, --file and --post may come before the subcommand; other flags there are a short error', async (t) => {
+  const dir = tmpDir(t);
+  const env = envFor(dir);
+  const file = path.join(dir, 'first.jsonl');
+  const r = await run(['run', '--file', file, '--run', 'r1', 'round', '--n', '2'], env, dir);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout, 'export LANEBOARD_RUN=r1/2\n');
+  const sc = await run(['run', '--run', 'r1', 'score', '--file', file, '--name', 'tests', '--value', '1'], env, dir);
+  assert.equal(sc.code, 0, sc.stderr);
+  const got = lines(file).map((l) => JSON.parse(l));
+  assert.deepEqual(got.map((e) => [e.t, e.run]), [['round.start', 'r1'], ['score', 'r1']]);
+  for (const l of lines(file)) assert.ok(parseLine(l).ok, l);
+
+  const twice = await run(['run', '--run', 'r1', 'stop', '--run', 'r2', '--file', file], env, dir);
+  assert.equal(twice.code, 2);
+  assert.match(twice.stderr, /--run given twice/);
+  const misplaced = await run(['run', '--goal', 'x', 'start', '--run', 'r1', '--file', file], env, dir);
+  assert.equal(misplaced.code, 2);
+  assert.match(misplaced.stderr, /"--goal" goes after the subcommand/);
+  assert.match(misplaced.stderr, /see: laneboard run --help/);
+  const both = await run(['run', '--post', 'stop', '--run', 'r1', '--file', file], env, dir);
+  assert.equal(both.code, 2);
+  assert.match(both.stderr, /--file and --post do not go together/);
+  assert.equal(lines(file).length, 2, 'the refused calls wrote nothing');
 });
 
 test('--post sends the event to POST /api/runs/events with the x-laneboard header, and writes no file', async (t) => {
