@@ -318,6 +318,8 @@ would need an API key). Export it from the admin console when it changes.
 
 `laneboard feed <kind>` runs one feeder once, next to the source, and puts
 the feed where the board reads it. It needs no server and no config.
+A feed holds the real host names and addresses of the machines it lists, so
+keep it (and screenshots of the Map) out of bug reports and public pastes.
 
 ```sh
 laneboard feed tailscale                               # print the feed

@@ -71,6 +71,10 @@ the copy, or it writes into the real board: `LANEBOARD_URL=http://127.0.0.1:7788
 laneboard ls` (or `node bin/laneboard ls` from the checkout, see [CLI](#cli)). Pick a port nothing listens on (`ss -ltn`). Stop the copy with
 Ctrl-C in its terminal, then `rm -r "$tmp"`.
 
+The copy is not a clean slate for reads: it still sees this machine's real
+sessions and directories (`laneboard ls` against it lists them). It only
+reads them, it writes nothing there.
+
 ## CLI
 
 `laneboard` is `bin/laneboard` in the checkout. Run it as `node bin/laneboard ls`,
