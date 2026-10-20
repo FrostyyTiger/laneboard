@@ -31,7 +31,7 @@ export const LINK_KINDS = ['dep', 'flow', 'share', 'touch', 'conflict', 'pkg', '
 export const TOPOLOGY_KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr'];
 export const TOPOLOGY_LINK_KINDS = ['dep', 'flow', 'share'];
 // Id prefixes and synthetic ids laneboard owns; a topology may not use them.
-const RESERVED_PREFIXES = ['lane:', 'builder:', 'sess:', 'repo:', 'pkg:'];
+const RESERVED_PREFIXES = ['lane:', 'builder:', 'sess:', 'repo:', 'pkg:', 'feed:'];
 const RESERVED_IDS = ['__core', '__fleet', '__repos'];
 const SEVERITY = ['idle', 'unknown', 'ok', 'working', 'warn', 'attention', 'crit', 'down'];
 const worse = (a, b) => (SEVERITY.indexOf(a) >= SEVERITY.indexOf(b) ? a : b);
@@ -503,6 +503,115 @@ export function attachBuilders(topology, builders, { localId = null, feeds = nul
   return out;
 }
 
+// ------------------------------------------------------------------ discovery
+
+const nameKey = (v) => (typeof v === 'string' && v.trim() ? v.trim().toLowerCase() : null);
+const hasNumbers = (g) => [g.cpu, g.mem, g.maxmem, g.memFrac].some((v) => typeof v === 'number' && Number.isFinite(v));
+
+/**
+ * The machines the feeds name: each source's host (named `host.name`, else
+ * the source) and each guest (named `name`, else its vmid). A machine named
+ * in two feeds (a tailnet peer that is also a PVE guest) is one machine.
+ */
+function feedMachines(feeds) {
+  const out = [];
+  const sources = [...(feeds?.keys?.() ?? [])].sort();
+  for (const source of sources) {
+    const feed = feeds.get(source);
+    out.push({ source, guest: null, name: nameKey(feed?.host?.name) ?? nameKey(source) ?? source, label: feed?.host?.name ?? source, rank: 0 });
+    for (const g of arr(feed?.guests)) {
+      const key = g.vmid ?? g.name;
+      if (key == null || key === '') continue;
+      const label = typeof g.name === 'string' && g.name ? g.name : String(g.vmid);
+      // The richer view of a machine leads: a hypervisor's numbers beat a
+      // tailnet's "it is online".
+      out.push({ source, guest: String(key), name: nameKey(label) ?? String(key), label, rank: hasNumbers(g) ? 1 : 2 });
+    }
+  }
+  return out;
+}
+
+const refKey = (r) => `${r.source}/${r.guest ?? ''}`;
+const refOf = (m) => (m.guest == null ? m.source : `${m.source}/${m.guest}`);
+
+/**
+ * The topology with what the feeds discovered merged in, by name
+ * (docs/map.md "Discovered nodes"). A declared node claims a feed's host or
+ * guest by its `feed` ref, or by its `label`/`id` equal to the machine's name
+ * (case-insensitive); a claimed machine without a `feed` ref of its own gives
+ * the node its live data. Every machine nobody claims becomes a node: a
+ * `site` per feed source, a `room` per guest under it, `discovered: true`.
+ * `coreLabel` is the synthetic core's name: a feed naming that machine hangs
+ * its guests on the core instead of drawing the core twice.
+ */
+export function withDiscovered(topology, feeds, { coreLabel = null } = {}) {
+  const topo = topology ?? EMPTY_TOPOLOGY;
+  const machines = feedMachines(feeds);
+  if (!machines.length) return topo;
+  const groups = new Map(); // name -> machines, the best first
+  for (const m of machines) {
+    if (!groups.has(m.name)) groups.set(m.name, []);
+    groups.get(m.name).push(m);
+  }
+  for (const g of groups.values()) g.sort((a, b) => a.rank - b.rank);
+  const byRef = new Map(machines.map((m) => [refKey(m), m]));
+  const owner = new Map(); // group name -> node id
+  const nodes = topo.nodes.map((n) => ({ ...n }));
+  const hasCore = nodes.some((n) => n.kind === 'core');
+  // A `feed` ref claims first, so a name never steals what a ref names.
+  for (const n of nodes) {
+    const r = feedRef(n.feed);
+    if (!r || r.service) continue;
+    const m = byRef.get(refKey(r)) ?? (r.guest != null ? machines.find((x) => x.source === r.source && x.guest != null && nameKey(x.label) === nameKey(r.guest)) : null);
+    if (m && !owner.has(m.name)) owner.set(m.name, n.id);
+  }
+  for (const n of nodes) {
+    if (feedRef(n.feed)?.service) continue;
+    for (const key of [nameKey(n.label), nameKey(n.id)]) {
+      if (!key || !groups.has(key) || owner.has(key)) continue;
+      owner.set(key, n.id);
+      if (!n.feed) n.feed = refOf(groups.get(key)[0]);
+      break;
+    }
+  }
+  // The other feeds naming the same machine add what they know (its IPs, say).
+  const claimed = new Map(nodes.map((n) => [n.id, n]));
+  for (const [name, id] of owner) {
+    const n = claimed.get(id);
+    const own = feedRef(n.feed);
+    const also = groups.get(name).filter((m) => !own || refKey(m) !== refKey(own)).map(refOf);
+    if (also.length) n.also = [...(n.also ?? []), ...also];
+  }
+  const core = hasCore ? nodes.find((n) => n.kind === 'core').id : '__core';
+  if (!hasCore && nameKey(coreLabel) && groups.has(nameKey(coreLabel)) && !owner.has(nameKey(coreLabel))) owner.set(nameKey(coreLabel), core);
+  // The rest: hosts first, so a guest knows the node its source became.
+  const ids = new Set(nodes.map((n) => n.id));
+  const found = [];
+  const place = (name) => {
+    if (owner.has(name)) return;
+    const [lead, ...rest] = groups.get(name);
+    const id = `feed:${refOf(lead)}`;
+    if (ids.has(id)) return;
+    ids.add(id);
+    owner.set(name, id);
+    const hostNode = owner.get(machines.find((x) => x.source === lead.source && x.guest == null).name);
+    const sources = [...new Set([lead, ...rest].map((x) => x.source))];
+    found.push({
+      id,
+      parent: lead.guest != null && hostNode && hostNode !== id && hostNode !== '__core' ? hostNode : (hasCore ? core : undefined),
+      kind: lead.guest == null ? 'site' : 'room',
+      label: lead.label,
+      feed: refOf(lead),
+      discovered: true,
+      also: rest.length ? rest.map(refOf) : undefined,
+      detail: sources.length > 1 ? { 'Seen by': sources.join(', ') } : undefined,
+    });
+  };
+  for (const m of machines) if (m.guest == null) place(m.name);
+  for (const m of machines) if (m.guest != null) place(m.name);
+  return { ...topo, nodes: [...nodes, ...found] };
+}
+
 function builderNode(b, parent, lanes, now, { unclaimed }) {
   const metrics = healthMetrics(b.health, now) ?? vitalsMetrics(b.snapshot?.vitals) ?? undefined;
   let status = 'ok';
@@ -880,7 +989,7 @@ export function buildFleet({
   topology, feeds = new Map(), probes = new Map(), now = Date.now(), topologyError = null, hostname = config.hostname,
   builders = [], repos = [], laneFacts = null, overlaps = [], ciRuns = [], localId = null, feedsOff = false,
 } = {}) {
-  const topo = topology ?? EMPTY_TOPOLOGY;
+  const topo = withDiscovered(topology, feeds, { coreLabel: topology?.title ?? hostname });
   const fleet = cleanBuilders(builders);
   const byBuilder = new Map(fleet.map((b) => [b.id, b]));
   const anchors = attachBuilders(topo, fleet, { localId, feeds });
@@ -912,6 +1021,10 @@ export function buildFleet({
       metrics = f?.metrics;
       memCache = Boolean(f?.memCache);
       Object.assign(detail, f?.detail ?? {}, p?.detail ?? {});
+      for (const ref of arr(n.also)) {
+        const o = fromFeed({ feed: ref }, feeds, now);
+        for (const [k, v] of Object.entries(o?.detail ?? {})) if (!(k in detail)) detail[k] = v;
+      }
       if (hosted) {
         // §7: a room that hosts a builder is as bad as its feed or its link.
         const ls = linkStatus(hosted.link);
@@ -958,6 +1071,8 @@ export function buildFleet({
       href: n.href,
       // The builder this node hosts; its events are the builder node's.
       hosts: hosted?.id,
+      // No topology node names it: a feed found it (docs/map.md "Discovered nodes").
+      discovered: n.discovered || undefined,
     });
   }
 
@@ -1152,7 +1267,7 @@ export function tick(snapshot, now = Date.now()) {
   const on = feedsEnabled();
   const feeds = on ? readFeeds() : new Map();
   const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error, feedsOff: !on });
-  return emit(next, feeds, t.value, now, 5000);
+  return emit(next, feeds, withDiscovered(t.value, feeds, { coreLabel: next.title }), now, 5000);
 }
 
 /**
@@ -1170,7 +1285,7 @@ export function tickFleet(fleet, now = Date.now()) {
     builders: f.builders, repos: f.repos, laneFacts: f.laneFacts,
     overlaps: f.overlaps ?? normalizeOverlaps(f.edges), ciRuns: f.ciRuns,
   });
-  return emit(next, feeds, t.value, now, 10_000);
+  return emit(next, feeds, withDiscovered(t.value, feeds, { coreLabel: next.title }), now, 10_000);
 }
 
 export function model() {

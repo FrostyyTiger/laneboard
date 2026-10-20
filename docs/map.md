@@ -87,7 +87,10 @@ lights its node and the other way round.
 | feeds | snapshots other machines push | them, into `~/.cache/laneboard/feeds/` |
 | probes | HTTP checks | laneboard itself, from the topology |
 
-Lanes and sessions come from the board, or on a hub from every builder. With
+Lanes and sessions come from the board, or on a hub from every builder. The
+topology file is optional: with feeds and no file, the Map is drawn from the
+feeds alone (see "Discovered nodes"), and the file only adds what no feed can
+know (sites, names, groups, links). With
 none of the three inputs, the Map shows this builder with its active lanes
 around it (on a hub: `core → FLEET → builder:<id> → lanes`).
 
@@ -136,7 +139,7 @@ that infrastructure.
 
 | Field | What |
 | --- | --- |
-| `id` | Unique. `lane:`, `builder:`, `sess:`, `repo:` and `pkg:` ids, and `__core`, `__fleet`, `__repos`, are reserved for laneboard's own nodes. |
+| `id` | Unique. `lane:`, `builder:`, `sess:`, `repo:`, `pkg:` and `feed:` ids, and `__core`, `__fleet`, `__repos`, are reserved for laneboard's own nodes. |
 | `parent` | The node this one sits inside. A node with no parent hangs off the core. |
 | `kind` | `core`, `site`, `host`, `room`, `service`, `lane` or `pr`. Sets the ring and the shape. At most one `core`; without one, laneboard adds a core named after `title`. `builder`, `session`, `repo` and `package` are made by laneboard and refused in the file. |
 | `builder` | The builder id this node hosts (`"builder": "builder-a"`): the builder and its lanes hang under it. One node per builder id. |
@@ -240,6 +243,26 @@ half-written file.
 - `events` appear once each, in the event tape and as a pulse on the node.
   - Events already in the file when laneboard first reads it are not replayed.
   - `guest` targets one of the host's guests.
+
+### Discovered nodes
+
+Every machine a feed names is drawn, declared or not. A feed's host and each
+of its guests is a machine, named by `host.name` (else the source) and the
+guest's `name` (else its `vmid`). Names compare case-insensitively.
+
+- A topology node claims a machine by its `feed` ref, or by its `label` or
+  `id` equal to the machine's name. A node claimed by name without a `feed` of
+  its own takes that machine's live data, as if the ref were written.
+- A machine nobody claims becomes a node with `discovered: true`: a `site`
+  per feed source (id `feed:<source>`) and a `room` per guest
+  (`feed:<source>/<vmid or name>`) under the node its source's host became.
+- One machine named by several feeds is one node: a tailnet peer that is also
+  a Proxmox guest or host is drawn once. The richest view leads (a host, then
+  a guest with CPU or memory numbers, then the rest); the others add their
+  `detail` (its tailnet addresses, say) and `Seen by` lists the sources.
+- A feed naming the machine the core is named after (the title, else the
+  hostname) hangs its guests on the core instead of drawing it twice.
+- A builder whose id is a discovered guest's name hangs under that room.
 
 ### Pushing a feed
 
