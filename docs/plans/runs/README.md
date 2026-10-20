@@ -1,7 +1,6 @@
 # Runs plan: laneboard as mission control for agents that work while you sleep
 
-**Status: DRAFT, being written in conversation with the owner. Nothing here is approved.** Open
-questions are in §8; each answer goes into the section it belongs to and the question is struck.
+**Status: DRAFT, being written in conversation with the owner; the §8 decisions are taken.** Decisions are in §8.
 
 ## 1. Goal
 
@@ -96,8 +95,8 @@ generalised and shipped in the repo). Discovered and declared nodes merge by nam
 becomes optional.
 
 ### B2. New overlays and tools
-- **Reach:** who can reach what, from the VPN's policy file when one is given (e.g. Tailscale ACL
-  grants as arcs). Answers "if this VM is compromised, what can it touch?"
+- **Reach:** who can reach what, from the VPN's policy file (e.g. Tailscale ACL grants as arcs).
+  **Opt-in only:** off unless the config names a policy file; never fetched by laneboard itself. Answers "if this VM is compromised, what can it touch?"
 - **Drift:** declared vs live. A node in the file but not seen, or seen but not declared, is marked.
 - **Time:** a scrubber over the last 24 h of feed snapshots and events: what did the fleet look like
   at 03:00 when the run stalled?
@@ -105,7 +104,7 @@ becomes optional.
 
 ## 5. Part C: Look
 
-**Direction (to confirm, §8 Q1):** keep the control-room logic (grey unless something needs you,
+**Direction (decided 2026-10-20):** keep the control-room logic (grey unless something needs you,
 hue and shape only for trouble, one accent, data first), raise the craft to product grade:
 
 - type: one family with a real range of weights and a mono for data; a strict type scale;
@@ -124,7 +123,8 @@ design reviewer (§7).
 ## 6. Part D: Try it in a minute
 - `npm run demo`: a recorded fleet + a recorded run replayed in the browser, no tmux, no agents,
   no network. The client-side engine already planned for the portfolio.
-- The same demo as a static page (GitHub Pages), and a 20-second GIF of a run in the README.
+- The same demo as a static page (GitHub Pages, published once it is ready), and a 20-second GIF
+  of a run in the README.
 - `npx laneboard` on a machine with Claude Code shows that machine's sessions with zero config.
 
 ## 7. The loop that builds this
@@ -151,10 +151,9 @@ through the run protocol (A1), so from the night A1 lands, **the run shows up in
 3. C: two or three design directions as screenshots for the owner to pick.
 4. The loop's own events wired in, so night 2 is watched in the Runs view.
 
-## 8. Open questions for the owner
-- **Q1 Look:** keep the control-room logic and polish it (proposed), or a new direction altogether?
-- **Q2 Map first or Runs first?** Proposed: Runs night 1 (it makes every later night visible),
-  Map 2 night 2.
-- **Q3 Feeders:** which first? Proposed: `tailscale` + `proxmox`, then `docker`.
-- **Q4 Reach overlay:** reading a VPN policy file is useful and sensitive; on by config only?
-- **Q5 Demo:** publish the static demo on GitHub Pages once it is ready (yes / show me first)?
+## 8. Decisions (2026-10-20)
+- **Q1 Look:** polish the current control-room style (§5). No new direction.
+- **Q2 Order:** Runs (Part A) on night 1, Map 2 (Part B) on night 2.
+- **Q3 Feeders:** `tailscale` + `proxmox` first, then `docker`.
+- **Q4 Reach overlay:** yes, opt-in by config only (§4 B2).
+- **Q5 Demo:** publish on GitHub Pages once it is ready.
