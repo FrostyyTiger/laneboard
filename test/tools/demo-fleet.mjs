@@ -4,10 +4,12 @@
 // fake builders (test/helpers/fake-builder.mjs) carrying generic demo data,
 // plus a small loopback forwarder that plays `tailscale serve`.
 //
-//   node test/tools/demo-fleet.mjs [--port 7795] [--builders 3] [--tick 4000]
+//   node test/tools/demo-fleet.mjs [--port 7795] [--builders 3] [--tick 4000] [--design <name>]
 //
 // Then open http://127.0.0.1:<port>/ (from another machine:
 // `ssh -L <port>:127.0.0.1:<port> <host>`). Ctrl-C stops everything.
+// `--design refined` lays docs/plans/runs/design/refined.css over the app's
+// tokens: the forwarder appends it to /css/tokens.css (runs plan T10).
 //
 // What it shows:
 //   builder-a  lanes in working / waiting (permission + question) / review-ready
@@ -34,7 +36,9 @@
 // relayed action with a throwaway key that the fakes pin with
 // read/control/term scopes; actions land in the fake builders' logs.
 import http from 'node:http';
+import fs from 'node:fs';
 import net from 'node:net';
+import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
@@ -54,11 +58,12 @@ const { values: args } = parseArgs({
     port: { type: 'string', default: process.env.DEMO_PORT ?? '7795' },
     builders: { type: 'string', default: '3' },
     tick: { type: 'string', default: '4000' },
+    design: { type: 'string' },
     help: { type: 'boolean', short: 'h', default: false },
   },
 });
 if (args.help) {
-  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms]\n');
+  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms] [--design <name>]\n');
   process.exit(0);
 }
 const PORT = Number(args.port);
@@ -68,6 +73,18 @@ if (!Number.isInteger(PORT) || PORT < MIN_PORT || PORT > 65535 || FORBIDDEN_PORT
 }
 const N_BUILDERS = Math.max(2, Math.min(3, Number(args.builders) || 3));
 const TICK_MS = Math.max(500, Number(args.tick) || 4000);
+
+// A design direction (docs/plans/runs/design/<name>.css), read once at start.
+const DESIGN_DIR = path.resolve(import.meta.dirname, '..', '..', 'docs', 'plans', 'runs', 'design');
+let DESIGN = null;
+if (args.design != null) {
+  const have = fs.readdirSync(DESIGN_DIR).filter((f) => f.endsWith('.css')).map((f) => f.slice(0, -4));
+  if (!have.includes(args.design)) {
+    process.stderr.write(`demo-fleet: --design must be one of ${have.join(', ')}\n`);
+    process.exit(2);
+  }
+  DESIGN = { name: args.design, css: fs.readFileSync(path.join(DESIGN_DIR, `${args.design}.css`), 'utf8') };
+}
 
 // --- demo data ---------------------------------------------------------------
 
@@ -311,8 +328,27 @@ function serveHeaders(inHeaders) {
   return h;
 }
 
+/** /css/tokens.css with the design direction appended, uncompressed and uncached. */
+function designTokens(ingressPort, req, res) {
+  const h = serveHeaders(req.headers);
+  for (const k of ['accept-encoding', 'if-none-match', 'if-modified-since']) delete h[k];
+  const up = http.request({ host: '127.0.0.1', port: ingressPort, method: 'GET', path: req.url, headers: h }, (r) => {
+    const chunks = [];
+    r.on('data', (c) => chunks.push(c));
+    r.on('end', () => {
+      if (r.statusCode !== 200) { res.writeHead(r.statusCode ?? 502, { 'content-type': 'text/plain' }); res.end(); return; }
+      const body = Buffer.concat([...chunks, Buffer.from(`\n/* demo-fleet --design ${DESIGN.name} */\n${DESIGN.css}`)]);
+      res.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store' });
+      res.end(body);
+    });
+  });
+  up.on('error', () => { if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' }); res.end('hub unreachable\n'); });
+  up.end();
+}
+
 function forwarder(ingressPort) {
   const server = http.createServer((req, res) => {
+    if (DESIGN && req.method === 'GET' && req.url.split('?')[0] === '/css/tokens.css') { designTokens(ingressPort, req, res); return; }
     const up = http.request({ host: '127.0.0.1', port: ingressPort, method: req.method, path: req.url, headers: serveHeaders(req.headers) }, (r) => {
       const out = {};
       for (const [k, v] of Object.entries(r.headers)) if (!HOP_BY_HOP.has(k)) out[k] = v;
@@ -427,6 +463,7 @@ async function main() {
 
   log(`hub (mode hub) + ${ids.join(', ')}`);
   log(`open  http://127.0.0.1:${PORT}/   (signed in as ${DEMO_USER} via the serve-like forwarder)`);
+  if (DESIGN) log(`design direction "${DESIGN.name}" laid over /css/tokens.css`);
   log(`hub local listener http://127.0.0.1:${hub.port}/ (read-only), ingress ${hub.ingressPort}`);
   log('Ctrl-C to stop');
 

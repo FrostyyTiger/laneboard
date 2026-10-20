@@ -1,0 +1,45 @@
+/* Design direction C: night (runs plan T10, README §5).
+   For the wall screen at 3 a.m.: more on one screen and more contrast to pay
+   for it. Rows 24/32/44, a 36px header, a deeper dark canvas, text and lines
+   one step firmer in both themes. Keeps the condensed label face.
+
+   A token override: loaded after public/css/tokens.css, it only sets custom
+   properties that file defines, with the same selectors. The dark block comes
+   before the light block, so the light values win on <html data-theme="light">.
+   test/design-directions.test.mjs checks all that. */
+
+:root {
+  --row-dense: 24px;
+  --row-comfy: 32px;
+  --row-touch: 44px;
+  --header-h: 36px;
+  --tape-h: 24px;
+  --lh: 1.3;
+}
+
+:root,
+[data-theme="dark"] {
+  --bg-canvas: oklch(12% 0.004 250);
+  --bg-surface: oklch(16% 0.004 250);
+  --bg-elevated: oklch(20% 0.004 250);
+  --bg-sunken: oklch(9% 0.004 250);
+  --line-weak: oklch(100% 0 0 / 0.09);
+  --line: oklch(100% 0 0 / 0.17);
+  --line-strong: oklch(100% 0 0 / 0.32);
+  --text-1: oklch(96% 0.002 250);
+  --text-2: oklch(78% 0.004 250);
+  --text-3: oklch(62% 0.004 250);
+}
+
+[data-theme="light"] {
+  --bg-canvas: oklch(95% 0.002 250);
+  --bg-surface: oklch(99% 0.001 250);
+  --bg-elevated: oklch(100% 0 0);
+  --bg-sunken: oklch(91% 0.003 250);
+  --line-weak: oklch(0% 0 0 / 0.1);
+  --line: oklch(0% 0 0 / 0.2);
+  --line-strong: oklch(0% 0 0 / 0.4);
+  --text-1: oklch(15% 0.004 250);
+  --text-2: oklch(32% 0.004 250);
+  --text-3: oklch(46% 0.004 250);
+}

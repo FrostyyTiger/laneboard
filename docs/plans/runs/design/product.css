@@ -1,0 +1,64 @@
+/* Design direction B: product (runs plan T10, README §5).
+   Product-grade calm: a system sans for labels instead of the condensed face,
+   a 13/14px body, Primer-sized rows (32/40/48) and a softer radius. The same
+   grey-first logic and the same one accent; the look moves towards GitHub or
+   Linear, away from the plant floor.
+
+   A token override: loaded after public/css/tokens.css, it only sets custom
+   properties that file defines, with the same selectors. The dark block comes
+   before the light block, so the light values win on <html data-theme="light">.
+   test/design-directions.test.mjs checks all that. */
+
+:root {
+  /* One sans with a real range of weights, from the system: no webfont. */
+  --font-label: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --ls-label: 0.03em;
+
+  /* Type: 12px labels, 13px data, 14px body (Primer and Carbon sit at 14). */
+  --fs-10: 11px;
+  --fs-11: 12px;
+  --fs-12: 13px;
+  --fs-13: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-28: 28px;
+  --lh: 1.45;
+
+  /* Rows at Primer's control heights; the 4px grid is unchanged. */
+  --row-dense: 32px;
+  --row-comfy: 40px;
+  --row-touch: 48px;
+  --header-h: 48px;
+
+  --radius: 4px;
+}
+
+/* Elevation the Carbon way: each layer a lighter surface in dark, white on
+   grey in light. --shadow-float is the floating layers' shadow for when the
+   sheets use it (the guardrails forbid box-shadow today, see README.md). */
+:root,
+[data-theme="dark"] {
+  --bg-canvas: oklch(17% 0.006 260);
+  --bg-surface: oklch(21% 0.006 260);
+  --bg-elevated: oklch(26% 0.007 260);
+  --bg-sunken: oklch(14% 0.006 260);
+  --line-weak: oklch(100% 0 0 / 0.06);
+  --line: oklch(100% 0 0 / 0.11);
+  --text-1: oklch(94% 0.003 260);
+  --text-2: oklch(75% 0.005 260);
+  --text-3: oklch(60% 0.005 260);
+  --shadow-float: 0 0 0 1px oklch(100% 0 0 / 0.1), 0 8px 24px oklch(5% 0.01 260 / 0.6);
+}
+
+[data-theme="light"] {
+  --bg-canvas: oklch(96% 0.003 260);
+  --bg-surface: oklch(99% 0.001 260);
+  --bg-elevated: oklch(100% 0 0);
+  --bg-sunken: oklch(93% 0.003 260);
+  --line-weak: oklch(0% 0 0 / 0.07);
+  --line: oklch(0% 0 0 / 0.13);
+  --text-1: oklch(22% 0.005 260);
+  --text-2: oklch(40% 0.005 260);
+  --text-3: oklch(52% 0.005 260);
+  --shadow-float: 0 1px 2px oklch(20% 0.01 260 / 0.08), 0 6px 18px oklch(20% 0.01 260 / 0.12);
+}

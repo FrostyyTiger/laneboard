@@ -1,0 +1,40 @@
+/* Design direction A: refined (runs plan T10, README §5).
+   The console as it is, with a type scale that reads at arm's length and
+   surfaces that step clearly. The smallest change of the three.
+
+   A token override: loaded after public/css/tokens.css, it only sets custom
+   properties that file defines, with the same selectors. The dark block comes
+   before the light block (as in tokens.css), so the light values win on
+   <html data-theme="light">. test/design-directions.test.mjs checks all that. */
+
+:root {
+  /* Type: 11px is the floor (was 10), each step is a real step. */
+  --fs-10: 11px;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-28: 28px;
+  --lh: 1.4;
+  --ls-label: 0.05em;
+}
+
+/* Elevation by surface only: canvas < surface < elevated in clear 4 % steps,
+   the strong line a little firmer so a floating layer has an edge. */
+:root,
+[data-theme="dark"] {
+  --bg-canvas: oklch(15% 0.004 250);
+  --bg-surface: oklch(19% 0.004 250);
+  --bg-elevated: oklch(23% 0.005 250);
+  --bg-sunken: oklch(12% 0.004 250);
+  --line-strong: oklch(100% 0 0 / 0.3);
+}
+
+[data-theme="light"] {
+  --bg-canvas: oklch(94% 0.003 250);
+  --bg-surface: oklch(98% 0.002 250);
+  --bg-elevated: oklch(100% 0 0);
+  --bg-sunken: oklch(90% 0.003 250);
+  --line-strong: oklch(0% 0 0 / 0.36);
+}
