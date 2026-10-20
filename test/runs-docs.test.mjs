@@ -63,3 +63,10 @@ test('the doc names the view URLs and says where a run file must be to be seen',
   const loop = doc.slice(doc.indexOf('## Writing a loop'), doc.indexOf('## Watching the runs loop'));
   assert.match(loop, /`runs\.files`/);
 });
+
+test('README lists every view and its `g` chord', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  const { VIEWS, VIEW_KEYS } = await import('../public/js/core/router.js');
+  for (const v of VIEWS) assert.ok(readme.includes(`\`#/${v}\``), `#/${v}`);
+  for (const [k, v] of Object.entries(VIEW_KEYS)) assert.ok(readme.includes(`\`g ${k}\` ${v}`), `g ${k}`);
+});

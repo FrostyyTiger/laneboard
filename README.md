@@ -20,6 +20,7 @@ signed, audited requests. Without one, nothing changes. See
 | **Inbox** `#/inbox` | What is waiting for me? Pending approvals, lanes that need you, lanes ready for review, paused and stuck lanes, with keys to approve, deny, release and pause. |
 | **Packages** `#/packages` | What state is each package in? Its CI on main, untested commits, the lanes and PRs touching it, predicted conflicts and plan status. |
 | **Morning** `#/morning` | Over a window (12 h / tonight / 24 h / 7 d): what needs a human (`danger` first), what finished (with its PR), review waits, stuck incidents, what it cost. |
+| **Runs** `#/runs` | Is tonight's unattended loop getting anywhere? Each run's state, round, latest score and its trend, budget burn, time left and open needs; a run's page (`#/runs?run=<id>`) has the timeline of rounds, a chart per score, the stop reason and the PRs. Fed by run files a loop writes, see [docs/runs.md](docs/runs.md). |
 | **Credit** `#/credit` | Where the 5 h and 7 d rate-limit windows have been, per account, and what each builder and lane spent. |
 | **Box** `#/box` | The machine and its health, a live stack next to it and its guard, the CI queue, the agent slots; on a hub, every builder's link, version, latency and health. |
 | **Audit** `#/audit` | What was done, by whom? The hash-chained action log, and on a hub each relayed action's reconciliation with the builder's own log. |
@@ -27,7 +28,7 @@ signed, audited requests. Without one, nothing changes. See
 | **Archive** `#/board?s=archive` | Retired lanes, searchable; restore one through a confirmed launch. |
 
 `g m` map · `g b` board · `g i` inbox · `g p` packages · `g o` morning ·
-`g c` credit · `g x` box · `g a` audit. `⌘K` opens the command palette, `[`
+`g r` runs · `g c` credit · `g x` box · `g a` audit. `⌘K` opens the command palette, `[`
 `]` step through builders, `\` splits the Map, `?` shows every key.
 
 ## Run it
