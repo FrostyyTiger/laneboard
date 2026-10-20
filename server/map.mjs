@@ -24,6 +24,7 @@ import path from 'node:path';
 import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { fkey, isFkey, BUILDER_ID_RX, deriveCode } from './fleet/keys.mjs';
+import { loadPolicy, reachLinks, parseAddr } from './map/reach.mjs';
 
 export const KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr', 'builder', 'session', 'repo', 'package'];
 export const LINK_KINDS = ['dep', 'flow', 'share', 'touch', 'conflict', 'pkg', 'ci'];
@@ -607,7 +608,11 @@ export function withDiscovered(topology, feeds, { coreLabel = null } = {}) {
     if (also.length) n.also = [...(n.also ?? []), ...also];
   }
   const core = hasCore ? nodes.find((n) => n.kind === 'core').id : '__core';
-  if (!hasCore && nameKey(coreLabel) && groups.has(nameKey(coreLabel)) && !owner.has(nameKey(coreLabel))) owner.set(nameKey(coreLabel), core);
+  let coreRefs;
+  if (!hasCore && nameKey(coreLabel) && groups.has(nameKey(coreLabel)) && !owner.has(nameKey(coreLabel))) {
+    owner.set(nameKey(coreLabel), core);
+    coreRefs = groups.get(nameKey(coreLabel)).map(refOf);
+  }
   // The rest: hosts first, so a guest knows the node its source became.
   const ids = new Set(nodes.map((n) => n.id));
   const found = [];
@@ -633,7 +638,34 @@ export function withDiscovered(topology, feeds, { coreLabel = null } = {}) {
   };
   for (const m of machines) if (m.guest == null) place(m.name);
   for (const m of machines) if (m.guest != null) place(m.name);
-  return { ...topo, nodes: [...nodes, ...found] };
+  return { ...topo, nodes: [...nodes, ...found], coreRefs };
+}
+
+/**
+ * What the feeds say about each node's tailnet identity, for Reach: a Map
+ * node id -> `{tags: Set, ips: [parsed address]}`, from its `feed` ref and
+ * the `also` refs of the same machine (the synthetic core from `coreRefs`).
+ * A stale feed still counts: a node's tags and addresses outlive a missed push.
+ */
+export function nodeIdentities(topo, feeds) {
+  const out = new Map();
+  const add = (id, refs) => {
+    const tags = new Set();
+    const ips = [];
+    for (const ref of refs) {
+      const r = feedRef(ref);
+      const feed = r && !r.service ? feeds?.get?.(r.source) : null;
+      if (!feed) continue;
+      const m = r.guest == null ? feed.host : arr(feed.guests).find((x) => String(x.vmid) === r.guest || x.name === r.guest);
+      // Only tailnet tags: a hypervisor's own tags (`web`, `prod`) are not.
+      for (const t of arr(m?.tags)) if (typeof t === 'string' && t.startsWith('tag:')) tags.add(t);
+      for (const ip of arr(m?.ips)) { const a = parseAddr(ip); if (a) ips.push(a); }
+    }
+    if (tags.size || ips.length) out.set(id, { tags, ips });
+  };
+  for (const n of topo?.nodes ?? []) add(n.id, [n.feed, ...arr(n.also)].filter(Boolean));
+  if (topo?.coreRefs) add('__core', topo.coreRefs);
+  return out;
 }
 
 function builderNode(b, parent, lanes, now, { unclaimed }) {
@@ -1008,10 +1040,12 @@ export function fleetLinks({ lanes = [], overlaps = [], topology = null, builder
  *   ciRuns    [{runner, builder, branch, status}]
  *   localId   the builder `self` aliases (builder mode); on a hub, none
  *   feedsOff  this board does not read feeds (a builder a hub watches)
+ *   policy    a parsed policy file (map/reach.mjs), or null: no Reach
  */
 export function buildFleet({
   topology, feeds = new Map(), probes = new Map(), now = Date.now(), topologyError = null, hostname = config.hostname,
   builders = [], repos = [], laneFacts = null, overlaps = [], ciRuns = [], localId = null, feedsOff = false,
+  policy = null, policyError = null,
 } = {}) {
   const topo = withDiscovered(topology, feeds, { coreLabel: topology?.title ?? hostname });
   const fleet = cleanBuilders(builders);
@@ -1120,6 +1154,14 @@ export function buildFleet({
 
   const links = fleetLinks({ lanes, overlaps, topology: topo, builders: fleet, ciRuns, nodeIds: new Set(nodes.map((n) => n.id)) });
   for (const n of lanes) { delete n.branch; delete n.packages; }
+  // Reach is opt-in and kept out of `links`: only its overlay draws it.
+  let reach;
+  if (policy || policyError) {
+    const ids = new Set(nodes.map((n) => n.id));
+    const r = policy ? reachLinks(policy, nodeIdentities(topo, feeds)) : { links: [], rules: 0, unresolved: [] };
+    r.links = r.links.filter((l) => ids.has(l.from) && ids.has(l.to));
+    reach = { ...r, error: policyError ?? undefined };
+  }
 
   return {
     title: topo.title ?? hostname,
@@ -1128,6 +1170,7 @@ export function buildFleet({
     links,
     error: topologyError ?? undefined,
     feeds: feedsOff ? false : undefined,
+    reach,
     generatedAt: now,
   };
 }
@@ -1262,7 +1305,8 @@ export function shapeKey(m) {
   return JSON.stringify(
     m.nodes.map((n) => [n.id, n.status, n.why, n.sub, n.label, n.parent, n.flags ?? null, n.stale ?? null])
       .concat(m.links.map((l) => [l.id, l.live, l.severity ?? null, l.predicted ?? null, l.label ?? null]))
-      .concat([(m.fleet?.builders ?? []).map((b) => [b.id, b.link])]),
+      .concat([(m.fleet?.builders ?? []).map((b) => [b.id, b.link])])
+      .concat([(m.reach?.links ?? []).map((l) => [l.id, l.label]), m.reach?.error ?? null]),
   );
 }
 
@@ -1291,7 +1335,8 @@ export function tick(snapshot, now = Date.now()) {
   const t = loadTopology();
   const on = feedsEnabled();
   const feeds = on ? readFeeds() : new Map();
-  const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error, feedsOff: !on });
+  const p = loadPolicy(config.map.policyFile);
+  const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error, feedsOff: !on, policy: p.value, policyError: p.error });
   return emit(next, feeds, withDiscovered(t.value, feeds, { coreLabel: next.title }), now, 5000);
 }
 
@@ -1305,8 +1350,9 @@ export function tickFleet(fleet, now = Date.now()) {
   const feeds = readFeeds();
   const raw = fleet ?? {};
   const f = arr(raw.builders).some((b) => b && 'snap' in b && !('snapshot' in b)) ? { ...raw, ...toMapFleet(raw, now) } : raw;
+  const p = loadPolicy(config.map.policyFile);
   const next = buildFleet({
-    topology: t.value, feeds, probes: probeResults, now, topologyError: t.error,
+    topology: t.value, feeds, probes: probeResults, now, topologyError: t.error, policy: p.value, policyError: p.error,
     builders: f.builders, repos: f.repos, laneFacts: f.laneFacts,
     overlaps: f.overlaps ?? normalizeOverlaps(f.edges), ciRuns: f.ciRuns,
   });

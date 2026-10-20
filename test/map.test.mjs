@@ -535,7 +535,10 @@ test('fleet: a builder a hub watches does not read feeds', () => {
 test('fleet: server/map.mjs imports no builder-only module (the hub loads it)', () => {
   const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'server', 'map.mjs'), 'utf8');
   const imports = [...src.matchAll(/^import .* from '([^']+)';$/gm)].map((x) => x[1]).sort();
-  assert.deepEqual(imports, ['./config.mjs', './fleet/keys.mjs', './log.mjs', 'node:fs', 'node:path']);
+  assert.deepEqual(imports, ['./config.mjs', './fleet/keys.mjs', './log.mjs', './map/reach.mjs', 'node:fs', 'node:path']);
+  // Reach (T11) is as hub-safe: the file system and its own HuJSON reader.
+  const reach = fs.readFileSync(path.join(import.meta.dirname, '..', 'server', 'map', 'reach.mjs'), 'utf8');
+  assert.deepEqual([...reach.matchAll(/^import .* from '([^']+)';$/gm)].map((x) => x[1]).sort(), ['./hujson.mjs', 'node:fs']);
 });
 
 // 6 builders x 20 lanes x 3 sessions, the HUMAN perf check's input (?mapperf=1).

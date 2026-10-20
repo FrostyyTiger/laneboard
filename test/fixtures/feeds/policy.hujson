@@ -1,0 +1,36 @@
+// An invented policy for the tailnet "acme" (docs/map.md "Reach").
+// HuJSON: comments and trailing commas, as the admin console exports it.
+{
+  "note": "https://example.invalid/a//b /* a string, not a comment */ \"quoted, \"",
+  "groups": {
+    "group:admins": ["alice@example.invalid"],
+  },
+  "tagOwners": {
+    "tag:hub":     ["group:admins"],
+    "tag:builder": ["group:admins"],
+    "tag:infra":   ["group:admins"],
+  },
+  "hosts": {
+    "hv1-mgmt": "192.0.2.13",
+    "lab-net":  "198.51.100.0/24",
+  },
+  "grants": [
+    // Builders push their feeds and health to the hub, nothing else.
+    {"src": ["tag:builder"], "dst": ["tag:hub"], "ip": ["tcp:443", "tcp:8787"]},
+    /* The owner's own devices reach everything. */
+    {"src": ["autogroup:member"], "dst": ["*"], "ip": ["*"]},
+    // The hub reads the hypervisor's API, by host alias.
+    {"src": ["tag:hub"], "dst": ["hv1-mgmt"], "ip": ["tcp:8006"]},
+    // Admins by group: needs user data, so unresolved.
+    {"src": ["group:admins"], "dst": ["tag:infra"], "ip": ["tcp:22"]},
+    // An app capability only: no network access.
+    {"src": ["tag:hub"], "dst": ["tag:builder"], "app": {"example.invalid/cap/x": [{}]}},
+  ],
+  "acls": [
+    // Legacy rule: the hub reaches the builders over ssh. A URL in a string
+    // keeps its slashes: "https://example.invalid/a//b".
+    {"action": "accept", "src": ["192.0.2.10/32"], "proto": "tcp", "dst": ["tag:builder:22,2222", "lab-net:*",],},
+  ],
+  "ssh": [{"action": "accept", "src": ["autogroup:member"], "dst": ["autogroup:self"], "users": ["autogroup:nonroot"]}],
+  "tests": [{"src": "tag:builder", "accept": ["tag:hub:443"]}],
+}

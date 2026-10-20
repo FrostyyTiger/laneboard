@@ -142,12 +142,15 @@ function coreDefaults() {
      *   feedsDir      where other machines drop their snapshots; read only
      *   feedStaleMs   a feed older than this (or 3x its own interval) is "no data"
      *   probeEverySec the default interval for a node's HTTP probe
+     *   policyFile    a Tailscale policy file (HuJSON) for the Reach overlay;
+     *                 null = none. Read only, never fetched.
      */
     map: {
       file: path.join(HOME, '.config', 'laneboard', 'map.json'),
       feedsDir: path.join(HOME, '.cache', 'laneboard', 'feeds'),
       feedStaleMs: 5 * 60 * 1000,
       probeEverySec: 60,
+      policyFile: null,
     },
 
     /**
@@ -270,7 +273,7 @@ function coreFromEnv(env = process.env) {
     platformRepo: env.LANEBOARD_PLATFORM_REPO,
   });
   const ci = defined({ provider: env.LANEBOARD_CI_PROVIDER, repo: env.LANEBOARD_CI_REPO });
-  const map = defined({ file: env.LANEBOARD_MAP_FILE, feedsDir: env.LANEBOARD_MAP_FEEDS });
+  const map = defined({ file: env.LANEBOARD_MAP_FILE, feedsDir: env.LANEBOARD_MAP_FEEDS, policyFile: env.LANEBOARD_MAP_POLICY });
   if (Object.keys(slots).length) out.slots = slots;
   if (Object.keys(guard).length) out.guard = guard;
   if (Object.keys(ci).length) out.ci = ci;
@@ -405,6 +408,7 @@ function validate(c, file, fragments = [], layers = {}) {
     if (!allowed.includes(p)) bad(`${key}.provider must be one of ${allowed.join(', ')}, got ${JSON.stringify(p)}`);
   }
   if (typeof c.map?.file !== 'string' || typeof c.map?.feedsDir !== 'string') bad('map.file and map.feedsDir must be paths');
+  if (c.map.policyFile != null && (typeof c.map.policyFile !== 'string' || !c.map.policyFile)) bad('map.policyFile must be a path or null');
   if (!(c.map.feedStaleMs > 0) || !(c.map.probeEverySec >= 15)) bad('map.feedStaleMs must be positive and map.probeEverySec at least 15');
   for (const [kind, source] of Object.entries(c.markers)) {
     try { new RegExp(source); } catch (err) { bad(`markers.${kind} is not a valid regular expression: ${err.message}`); }

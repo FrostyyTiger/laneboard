@@ -107,6 +107,7 @@ that infrastructure.
 | `map.feedsDir` | `~/.cache/laneboard/feeds` | `LANEBOARD_MAP_FEEDS` |
 | `map.feedStaleMs` | `300000` | — |
 | `map.probeEverySec` | `60` | — |
+| `map.policyFile` | `null` (none) | `LANEBOARD_MAP_POLICY` |
 
 ## The topology file
 
@@ -277,6 +278,37 @@ Only a fresh feed marks anything: a source that has not reported, or reported
 too long ago, is no data, not drift. Without a topology file nothing is
 declared, so nothing drifts. A service ref and `expect: "stopped"` are not
 drift; drift never changes a node's status.
+
+### Reach
+
+Opt-in: name a Tailscale policy file in `map.policyFile` (or
+`LANEBOARD_MAP_POLICY`) and the model gets a `reach` block saying who can
+reach what. laneboard reads that file only; it never fetches a policy (that
+would need an API key). Export it from the admin console when it changes.
+
+```json
+"reach": {
+  "links": [{ "id": "reach:<from>><to>", "kind": "reach", "from": "…", "to": "…", "ports": ["tcp:443"], "label": "tcp:443" }],
+  "rules": 5,
+  "unresolved": [{ "selector": "group:admins", "why": "needs who owns each node, which no feed says" }]
+}
+```
+
+- The file is HuJSON: JSON plus `//` and `/* */` comments and trailing
+  commas. A file that does not parse keeps the last good policy, and
+  `reach.error` says why.
+- `grants` (with `ip`) and legacy `acls` (`dst` as `host:ports`) are read;
+  rules only allow, so a link is the union of every rule. An `app`-only
+  grant, `ssh`, `tests` and `nodeAttrs` are not reachability and are skipped.
+- A selector is resolved against what the feeds say of each node: its `tag:`
+  tags and its addresses (`ips`). A node is on the tailnet when a feed gives
+  it either. `*`, `tag:`, `autogroup:tagged`, `autogroup:member` (the untagged
+  nodes), `hosts` aliases, addresses, CIDRs and `ipset:` (one level) resolve;
+  `group:`, users, roles, `autogroup:self` need who owns each node, so they
+  are listed in `unresolved` with the reason instead of guessed, as is a
+  selector that names no node on this Map.
+- Reach links are not in `links`: only the Reach overlay draws them. With no
+  `map.policyFile` there is no `reach` block.
 
 ### Pushing a feed
 
