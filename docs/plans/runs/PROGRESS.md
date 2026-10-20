@@ -37,7 +37,7 @@ Notes for builders, from reading the code (planner, round 1):
 
 ## Research questions
 
-- [ ] Q1 Claude Code `--output-format stream-json`: the exact fields of the `result` message (`total_cost_usd`, `duration_ms`, `num_turns`, `usage`, `session_id`) and of `rate_limit_event` (`rate_limit_info`, `unifiedWindows`, `resetsAt` units), with links to the docs or source — for T9
+- [x] Q1 Claude Code `--output-format stream-json`: the exact fields of the `result` message (`total_cost_usd`, `duration_ms`, `num_turns`, `usage`, `session_id`) and of `rate_limit_event` (`rate_limit_info`, `unifiedWindows`, `resetsAt` units), with links to the docs or source — for T9 → research/Q1-stream-json-result-and-rate-limit.md (`result` confirmed; `unifiedWindows` and the `resetsAt` unit are not in the official docs, parser should accept seconds and ms)
 - [ ] Q2 How can laneboard tie a Claude Code session to the loop round that started it: do hook payloads carry the session's cwd, env or a settable id (`--session-id`, `CLAUDE_CODE_*`), and is reading `/proc/<pid>/environ` of a same-user process a documented, reliable way to see `LANEBOARD_RUN`? — for T12
 - [ ] Q3 How do comparable tools present long multi-step runs and their history (GitHub Actions run graphs, Buildkite, Weights & Biases / MLflow run comparison, LangSmith or Langfuse traces, OpenHands / SWE-agent trajectory viewers): what makes "what happened tonight, is it getting better" readable at a glance, what to avoid — for T7, T8, T11
 - [ ] Q4 Primary-source token systems of product-grade dense dark/light UIs (GitHub Primer, IBM Carbon, Grafana, Linear): type scale steps, spacing grid, elevation and translucency for floating layers, focus rings — for T10
