@@ -231,7 +231,8 @@ export function fromFeed(node, feeds, now) {
     if (g.status !== 'running') return { status: g.status === 'stopped' ? 'down' : 'unknown', why: `${ref.guest} is ${g.status ?? 'not reported'}` };
     return fromService(g, ref);
   }
-  const expectStopped = node.expect === 'stopped';
+  // A template never runs: stopped is its normal state, like `expect: "stopped"`.
+  const expectStopped = node.expect === 'stopped' || g.template === true;
   let status = g.status === 'running' ? (expectStopped ? 'warn' : 'ok')
     : g.status === 'stopped' ? (expectStopped ? 'idle' : 'down')
       : g.status === 'paused' || g.status === 'suspended' ? 'warn' : 'unknown';

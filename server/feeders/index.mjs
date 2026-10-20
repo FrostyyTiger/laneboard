@@ -7,14 +7,16 @@
 // | --- | --- |
 // | none | nothing; an empty feed that says so |
 // | tailscale | `tailscale status --json` on this machine |
+// | proxmox | the PVE API's `/cluster/resources`, with a read-only token |
 //
 // A feeder is plain ESM with `name`, a pure `toFeed(input, {source, now,
 // every})` and an async `read(opts)` that returns `{ok:true, input}` or
 // `{ok:false, error}` and never throws. docs/providers.md has the interface.
 import * as none from './none.mjs';
 import * as tailscale from './tailscale.mjs';
+import * as proxmox from './proxmox.mjs';
 
-export const TABLE = { none, tailscale };
+export const TABLE = { none, tailscale, proxmox };
 
 export const feederNames = Object.keys(TABLE);
 

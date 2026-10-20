@@ -146,6 +146,7 @@ server/feeders/
   index.mjs              TABLE, feeder(kind), collect(kind, opts)
   none.mjs               an empty feed that says so
   tailscale.mjs          `tailscale status --json` on this machine
+  proxmox.mjs            the PVE API's `/cluster/resources`, read-only token
 ```
 
 | Export | Signature | Contract |
@@ -176,3 +177,34 @@ guest of `type: "tailnet"`:
   health messages are host alerts;
 - nodes shared in from another tailnet are left out, as the CLI's listing
   does; login names, node keys and SSH host keys never reach the feed.
+
+**`proxmox`** makes one `GET /api2/json/cluster/resources` call to a Proxmox
+VE host with a read-only API token (`PVEAuditor`; the recipe is in
+`docs/map.md`). `read({url, tokenId, secretFile, ca, node, timeoutMs})`:
+
+- `url` is the API's `https://` origin (`https://hv1.example.invalid:8006`);
+  plain `http` is refused, since the token would travel in clear;
+- `tokenId` is `user@realm!name`; the secret is read from `secretFile`, else
+  from `LANEBOARD_PVE_SECRET`, and is never a flag value, never logged, never
+  in an error; the header is `Authorization: PVEAPIToken=<tokenId>=<secret>`;
+- `ca` is a PEM file to trust (the PVE cluster CA, or the node's own
+  certificate): the default certificate is self-signed, and there is no
+  switch that skips verification;
+- `{ok:false}` for a bad option, a refused connection, a timeout, an
+  untrusted certificate, 401 (bad token or expired), 403 (no privilege), any
+  other non-2xx, or an answer that lists no nodes.
+
+`toFeed` maps the flat list by `type`:
+
+- one `node` row is the host (`name`, `cpu`, `mem`/`maxmem`, root `disk`;
+  `sub` like `PVE · 64 GB · 5/7 guests running`); a cluster's feed is the
+  whole cluster (metrics summed over the online nodes, an offline node is a
+  `warn`, every guest carries `node`), unless `node` picks one of them;
+- `qemu` and `lxc` rows are guests (`vmid`, `name`, `type`, `status`, `cpu`,
+  `mem`/`maxmem` with `memCache: true`, `disk` only when PVE knows it, which
+  for a qemu guest it usually does not, `uptime`, `tags` split from PVE's
+  `;` string, lock and HA state in `detail`);
+- a template is a guest with `template: true`: listed, never counted as
+  running or stopped, and drawn at rest on the Map, never down;
+- a storage at 90% is a `warn` host alert, at 97% `crit` (a shared storage
+  once, at its fullest); pools and SDN rows are ignored.

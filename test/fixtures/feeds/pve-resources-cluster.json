@@ -1,0 +1,17 @@
+{
+  "data": [
+    { "id": "node/hv1", "type": "node", "node": "hv1", "status": "online",
+      "cpu": 0.2, "maxcpu": 16, "mem": 32000000000, "maxmem": 64000000000,
+      "disk": 20000000000, "maxdisk": 100000000000, "uptime": 1209600 },
+    { "id": "node/hv2", "type": "node", "node": "hv2", "status": "offline",
+      "maxcpu": 8, "maxmem": 32000000000, "maxdisk": 100000000000 },
+    { "id": "qemu/101", "type": "qemu", "vmid": 101, "name": "web", "node": "hv1", "status": "running",
+      "cpu": 0.1, "maxcpu": 4, "mem": 2000000000, "maxmem": 8000000000, "uptime": 86400 },
+    { "id": "qemu/201", "type": "qemu", "vmid": 201, "name": "backup", "node": "hv2", "status": "unknown",
+      "maxcpu": 2, "maxmem": 4000000000 },
+    { "id": "storage/hv1/nas", "type": "storage", "storage": "nas", "node": "hv1", "status": "available",
+      "disk": 980000000000, "maxdisk": 1000000000000, "shared": 1 },
+    { "id": "storage/hv2/nas", "type": "storage", "storage": "nas", "node": "hv2", "status": "unknown",
+      "shared": 1 }
+  ]
+}

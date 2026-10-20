@@ -230,6 +230,9 @@ half-written file.
     guest is down.
 - `type` is `qemu`, `lxc`, or `tailnet` for a peer the `tailscale` feeder
   saw (`docs/providers.md` "FeedProvider").
+- `template: true` marks a guest that is a template (the `proxmox` feeder):
+  stopped is its normal state, so it is drawn at rest, never down. `node` on
+  a guest names the cluster node it runs on.
 - Optional, for nodes a feeder discovers: `name` on the host, and `os`,
   `tags` (`["tag:ci"]`), `ips` (strings) on the host and on a guest;
   `lastSeen` (ms) on a guest that is offline. `note` on the feed says why it
@@ -256,6 +259,25 @@ pvesh get /nodes/$(hostname)/qemu --output-format json  # and /lxc, /status
 # …shape it into the format above, then:
 ssh -i /root/.ssh/feed laneboard@board < feed.json
 ```
+
+### A read-only Proxmox token
+
+The `proxmox` feeder (`docs/providers.md` "FeedProvider") reads the PVE API
+with a token that can only look. On the PVE host, as root:
+
+```sh
+pveum user add laneboard@pve
+pveum user token add laneboard@pve map      # privilege separation stays on
+pveum acl modify / --roles PVEAuditor --users laneboard@pve
+pveum acl modify / --roles PVEAuditor --tokens 'laneboard@pve!map'
+```
+
+A separated token sees what both its user and itself may see, so both get
+the ACL. The secret is shown once: put it in a file only the feeder's user
+can read (`chmod 600`) and name that file, or set `LANEBOARD_PVE_SECRET`.
+Check the flag spelling with `pveum help acl modify` on your version. For the
+certificate, copy the cluster CA (`pve-root-ca.pem` under `/etc/pve/`) next
+to the feeder and pass it as the CA file.
 
 ## Builders, lanes and the links between them
 
