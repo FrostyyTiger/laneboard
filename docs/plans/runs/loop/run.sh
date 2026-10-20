@@ -81,7 +81,7 @@ check() {  # the checker is not an agent: npm test, hygiene included
   [ $total -gt 0 ] && ev score name=tests value="$(python3 -c "print(round($TESTS_PASS/$total,4))")" better=higher
 }
 count() { local c; c=$(grep -cE "$1" "$PLAN_DIR/PROGRESS.md" 2>/dev/null); echo "${c:-0}"; }
-tasks_done() { count '^- \[x\]'; }
+tasks_done() { count '^- \[x\] T[0-9]'; }
 questions_open() { count '^- \[ \] Q[0-9]'; }
 tasks_open() { count '^- \[ \] T[0-9]'; }
 
