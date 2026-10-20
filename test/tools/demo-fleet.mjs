@@ -25,7 +25,9 @@
 // Isolation (RULES 3): the hub runs with its own temp HOME, TMUX_TMPDIR,
 // XDG_*_HOME, LANEBOARD_STATE_DIR, LANEBOARD_AUDIT_FILE, LANEBOARD_CONFIG and
 // LANEBOARD_DB=:memory: (boot.mjs does that, and drops TMUX/TMUX_PANE and every
-// inherited LANEBOARD_* variable). The fakes and the forwarder live in this
+// inherited LANEBOARD_* variable). Its `hostname` is `demo-host`
+// (test/helpers/demo-hub.mjs), so neither the header nor the Map's core node
+// shows the name of the machine running the demo. The fakes and the forwarder live in this
 // process and touch no file. Nothing here talks to tmux.
 //
 // No auth bypass: the forwarder only adds what serve adds on the ingress
@@ -42,6 +44,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
+import { demoHubConfig, DEMO_HOSTNAME } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -412,16 +415,11 @@ async function main() {
     mode: 'hub',
     hubKey,
     timeoutMs: 20_000,
-    config: {
-      publicUrl: `https://${PUBLIC_HOST}`,
-      fleet: {
-        builders: ids.map((id) => ({ id, url: `http://127.0.0.1:${hops.get(id).port}` })),
-        allowedOrigins: origins,
-        staleMs: 6000,
-        downMs: 15_000,
-        pingMs: 2000,
-      },
-    },
+    config: demoHubConfig({
+      builders: ids.map((id) => ({ id, url: `http://127.0.0.1:${hops.get(id).port}` })),
+      origins,
+      publicHost: PUBLIC_HOST,
+    }),
   });
 
   const fwd = forwarder(hub.ingressPort);
@@ -461,7 +459,7 @@ async function main() {
   setTimeout(() => { for (const id of ids) pushExtras(id); }, 1500);
   const timer = setInterval(() => { tick().catch((e) => log(`tick failed: ${e.message}`)); }, TICK_MS);
 
-  log(`hub (mode hub) + ${ids.join(', ')}`);
+  log(`hub "${DEMO_HOSTNAME}" (mode hub) + ${ids.join(', ')}`);
   log(`open  http://127.0.0.1:${PORT}/   (signed in as ${DEMO_USER} via the serve-like forwarder)`);
   if (DESIGN) log(`design direction "${DESIGN.name}" laid over /css/tokens.css`);
   log(`hub local listener http://127.0.0.1:${hub.port}/ (read-only), ingress ${hub.ingressPort}`);
