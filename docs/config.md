@@ -357,3 +357,17 @@ file.
 | `transcript.tailMaxBytes` | `1048576` (1 MiB) | Bytes read from the end of a transcript (at least 4096). |
 | `transcript.maxEntries` | `200` | Entries per transcript page. |
 | `transcript.textCap` | `4000` | Characters kept per entry. |
+
+### `runs` — the Runs view
+
+Where laneboard finds run event files (the protocol is [runs.md](runs.md)).
+No env layer: `LANEBOARD_RUN_FILE` is where the `laneboard run` CLI writes, not
+what the server reads. With no config, the only run files read are the lanes'
+own `.laneboard/run.jsonl`, and a machine without any shows no runs.
+
+| Key | Default | What |
+| --- | --- | --- |
+| `runs.files` | `[]` | Globs of `run.jsonl` files to read, e.g. `["~/runs/*/run.jsonl"]`. Absolute or `~/`, no `..`, at most 64. |
+| `runs.lanes` | `true` | Also read `<lane cwd>/.laneboard/run.jsonl` for every lane. |
+| `runs.maxEvents` | `5000` | Events kept per run, newest kept (100..100000). |
+| `runs.keepDays` | `30` | A run whose last event is older is forgotten (1..3650). |
