@@ -1,7 +1,8 @@
 // Feeders: small readers that turn one source into one feed (docs/map.md "The
 // feed format"), run by `laneboard feed <kind>` next to the source. Unlike the
-// providers they are chosen per command, not by a config key, and nothing in
-// the server imports one: the board only reads the feeds they write.
+// providers they are chosen per command, not by a config key, and the server
+// never runs one: the board only reads the feeds they write (the feeds route
+// takes SOURCE_ID from here).
 //
 // | kind | reads |
 // | --- | --- |

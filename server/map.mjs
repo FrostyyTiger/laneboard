@@ -139,6 +139,25 @@ export function loadTopology(file = config.map.file) {
 
 const feedCache = new Map(); // file -> { mtimeMs, value }
 
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * Why a parsed feed cannot be drawn, or null. Checks only the shape the Map
+ * leans on (docs/map.md "The feed format"); every field is optional and
+ * unknown ones pass, so a newer feeder still loads. readFeeds skips a file
+ * that fails; POST /api/map/feeds refuses the body (server/routes/feeds.mjs).
+ */
+export function feedProblem(v) {
+  if (!isObj(v)) return 'a feed must be a JSON object';
+  if (v.source != null && typeof v.source !== 'string') return 'source must be a string';
+  if (v.at != null && !(typeof v.at === 'number' && Number.isFinite(v.at))) return 'at must be a time in ms';
+  if (v.every != null && !(typeof v.every === 'number' && v.every > 0)) return 'every must be a number of seconds';
+  if (v.host != null && !isObj(v.host)) return 'host must be an object';
+  if (v.guests != null && !(Array.isArray(v.guests) && v.guests.every(isObj))) return 'guests must be a list of objects';
+  if (v.events != null && !Array.isArray(v.events)) return 'events must be a list';
+  return null;
+}
+
 /** Every `*.json` in the feeds directory, keyed by its `source`. */
 export function readFeeds(dir = config.map.feedsDir) {
   const out = new Map();
@@ -153,6 +172,7 @@ export function readFeeds(dir = config.map.feedsDir) {
         hit = { mtimeMs: st.mtimeMs, value: JSON.parse(fs.readFileSync(file, 'utf8')) };
         feedCache.set(file, hit);
       }
+      if (feedProblem(hit.value)) continue;
       const source = String(hit.value?.source || name.replace(/\.json$/, ''));
       out.set(source, { ...hit.value, source, receivedAt: st.mtimeMs });
     } catch {
