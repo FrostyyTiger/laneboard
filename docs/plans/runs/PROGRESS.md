@@ -49,7 +49,7 @@ Notes for builders, from reading the code (planner, round 1):
 ## Research questions
 
 - [x] Q1 Claude Code `--output-format stream-json`: the exact fields of the `result` message (`total_cost_usd`, `duration_ms`, `num_turns`, `usage`, `session_id`) and of `rate_limit_event` (`rate_limit_info`, `unifiedWindows`, `resetsAt` units), with links to the docs or source — for T9 → research/Q1-stream-json-result-and-rate-limit.md (`result` confirmed; `unifiedWindows` and the `resetsAt` unit are not in the official docs, parser should accept seconds and ms)
-- [ ] Q2 How can laneboard tie a Claude Code session to the loop round that started it: do hook payloads carry the session's cwd, env or a settable id (`--session-id`, `CLAUDE_CODE_*`), and is reading `/proc/<pid>/environ` of a same-user process a documented, reliable way to see `LANEBOARD_RUN`? — for T12
+- [x] Q2 How can laneboard tie a Claude Code session to the loop round that started it: do hook payloads carry the session's cwd, env or a settable id (`--session-id`, `CLAUDE_CODE_*`), and is reading `/proc/<pid>/environ` of a same-user process a documented, reliable way to see `LANEBOARD_RUN`? — for T12 → research/Q2-session-to-round-binding.md (hooks carry `session_id` + `cwd`, `--session-id <uuid>` is settable, `/proc/<pid>/environ` is not reliable; cwd + window stays the default)
 - [ ] Q3 How do comparable tools present long multi-step runs and their history (GitHub Actions run graphs, Buildkite, Weights & Biases / MLflow run comparison, LangSmith or Langfuse traces, OpenHands / SWE-agent trajectory viewers): what makes "what happened tonight, is it getting better" readable at a glance, what to avoid — for T7, T8, T11
 - [ ] Q4 Primary-source token systems of product-grade dense dark/light UIs (GitHub Primer, IBM Carbon, Grafana, Linear): type scale steps, spacing grid, elevation and translucency for floating layers, focus rings — for T10
 
@@ -69,6 +69,9 @@ Notes for builders, from reading the code (planner, round 1):
   (README §5) need a decision: Playwright as a dev dependency plus a browser download in the VM.
 - **`run.sh` writes numbers as floats** (`"n": 3.0`) and would write an all-digit short sha as a
   number. laneboard copes (T1), but the loop (fenced) could quote `commit` and write ints.
+- **Exact session-to-round binding needs a `run.sh` change (fenced).** Claude Code accepts
+  `--session-id <uuid>`; if the loop generated one per round and wrote it on the round's start
+  event, T12 could bind exactly instead of by cwd + time window (research/Q2). Your call.
 - Tests were red before this run (1 fail, a path assertion in the scripts tests under
   `/tmp/lb-scripts-*`); the loop's fix round takes it first.
 
