@@ -97,6 +97,7 @@ human starts. The guard flags and pushes; it never acts.
 | [docs/config.md](docs/config.md) | every config key, its default and its environment variable |
 | [docs/providers.md](docs/providers.md) | the three interfaces everything site-specific sits behind, and how to add one |
 | [docs/map.md](docs/map.md) | the Map: the topology file, the feed format, pushing a feed from a hypervisor, builders on the Map |
+| [docs/runs.md](docs/runs.md) | the run protocol: how an unattended agent loop tells laneboard its goal, rounds, scores, cost and needs |
 | [SECURITY.md](SECURITY.md) | why there is no login, and what that means for where you put it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | `npm test`, the hygiene gate, what is deliberate |
 
