@@ -461,7 +461,7 @@ Probes run on the hub too, from the hub's own topology file.
 ## API
 
 - `GET /api/map` returns the model the view draws: `{ title, fleet: {builders}, nodes, links, events, error?, feeds?, generatedAt }`. `feeds: false` means this board does not read feeds (a builder a hub watches).
-- `POST /api/map/feeds` takes one feed as the body (what `laneboard feed --push` sends) and writes it to `<feedsDir>/<source>.json` (temporary name, then rename); the Map reads it on its next tick. `201 {ok, source, at}`; `400 {error}` for bad JSON, a bad shape or a `source` that is not letters, digits, `.` `_` `-`; `413` over 1 MiB; `409` on a builder a hub watches (push to the hub). The normal local guards apply, so a request without `x-laneboard: 1` is `403`. A feed without `at` gets the board's time.
+- `POST /api/map/feeds` takes one feed as the body (what `laneboard feed --push` sends) and writes it to `<feedsDir>/<source>.json` (temporary name, then rename); the Map reads it on its next tick. `201 {ok, source, at}`; `400 {error}` for bad JSON, a bad shape (a feed needs a `host` object or a `guests` list; `host: {}` or `guests: []` is a valid empty feed) or a `source` that is not letters, digits, `.` `_` `-`; `413` over 1 MiB; `409` on a builder a hub watches (push to the hub). The normal local guards apply, so a request without `x-laneboard: 1` is `403`. A feed without `at` gets the board's time.
 - Over the socket, a `{ type: "map", map }` message arrives:
   - on connect
   - whenever a status, label, flag, structure or link severity changes

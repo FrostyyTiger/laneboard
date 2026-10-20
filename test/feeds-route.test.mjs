@@ -91,6 +91,13 @@ test('a feed without `at` gets the server time; a second push replaces the file'
   assert.deepEqual(onDisk.guests, []);
 });
 
+test('the none feeder\'s empty feed passes the shape check', async () => {
+  const { toFeed } = await import('../server/feeders/none.mjs');
+  assert.equal(mapModel.feedProblem(toFeed(null, { source: 'none', now: 1 })), null);
+  assert.equal(mapModel.feedProblem({ source: 'x', guests: [] }), null);
+  assert.equal(mapModel.feedProblem({ source: 'x', host: {} }), null);
+});
+
 test('a bad source or shape is 400 with the reason, nothing written', async () => {
   for (const source of [undefined, '', '../etc', '.hidden', 'a/b', 'x'.repeat(65), 7]) {
     const r = await post(JSON.stringify(feed({ source })));
@@ -102,6 +109,7 @@ test('a bad source or shape is 400 with the reason, nothing written', async () =
     [JSON.stringify(feed({ source: 'bad1', guests: {} })), /guests/],
     [JSON.stringify(feed({ source: 'bad2', host: [] })), /host/],
     [JSON.stringify(feed({ source: 'bad3', at: 'now' })), /at/],
+    ['{"source":"hv1","kind":"x","nodes":[]}', /needs a host object or a guests list/],
   ]) {
     const r = await post(body);
     assert.equal(r.status, 400, body);
@@ -137,8 +145,8 @@ test('a builder a hub watches refuses with 409: the hub reads the feeds', async 
 });
 
 test('checkFeed, feedFile and writeFeed are strict about what reaches the disk', async () => {
-  assert.equal(checkFeed(JSON.stringify({ source: 'tailscale' }), 5).feed.at, 5);
-  assert.equal(checkFeed(JSON.stringify({ source: 'tailscale', future: { x: 1 } })).ok, true, 'unknown fields pass');
+  assert.equal(checkFeed(JSON.stringify({ source: 'tailscale', guests: [] }), 5).feed.at, 5);
+  assert.equal(checkFeed(JSON.stringify({ source: 'tailscale', host: {}, future: { x: 1 } })).ok, true, 'unknown fields pass');
   assert.equal(feedFile(feedsDir, '../x'), null);
   assert.equal(feedFile('', 'hv1'), null);
   assert.equal(feedFile(feedsDir, 'hv1'), path.join(feedsDir, 'hv1.json'));
@@ -151,5 +159,7 @@ test('readFeeds skips a file whose shape the route would refuse', () => {
   fs.writeFileSync(path.join(dir, 'good.json'), JSON.stringify({ source: 'good', guests: [] }));
   fs.writeFileSync(path.join(dir, 'list.json'), '[1, 2]');
   fs.writeFileSync(path.join(dir, 'guests.json'), JSON.stringify({ source: 'guests', guests: 'none' }));
-  assert.deepEqual([...mapModel.readFeeds(dir).keys()], ['good']);
+  fs.writeFileSync(path.join(dir, 'typo.json'), JSON.stringify({ source: 'typo', kind: 'x', nodes: [] }));
+  fs.writeFileSync(path.join(dir, 'empty.json'), JSON.stringify({ source: 'empty', host: {} }));
+  assert.deepEqual([...mapModel.readFeeds(dir).keys()].sort(), ['empty', 'good']);
 });

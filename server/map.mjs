@@ -156,6 +156,9 @@ export function feedProblem(v) {
   if (v.host != null && !isObj(v.host)) return 'host must be an object';
   if (v.guests != null && !(Array.isArray(v.guests) && v.guests.every(isObj))) return 'guests must be a list of objects';
   if (v.events != null && !Array.isArray(v.events)) return 'events must be a list';
+  // A feed that names no machine is a typo, not an empty feed: `host: {}` or
+  // `guests: []` is how a feeder says "nothing here" (the none feeder does).
+  if (v.host == null && v.guests == null) return 'a feed needs a host object or a guests list';
   return null;
 }
 
