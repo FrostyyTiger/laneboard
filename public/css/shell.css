@@ -362,6 +362,10 @@
   .shell-strip:empty { display: none; }
   .shell-nav { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   .scope, .topbar-gauges, .stat, .builders, .clock-local, .brand-host { display: none; }
+  /* 390 px holds no 4 x 64 px annunciator plus the clock: the tiles go 48 px, icon and
+     count (annunciator.css), and the clock goes (the phone shows its own). runs-n4 T37. */
+  .ann { grid-template-columns: repeat(4, 48px); }
+  .clock { display: none; }
   .shell-insp { width: 100%; }
 }
 

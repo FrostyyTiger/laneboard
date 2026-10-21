@@ -76,8 +76,8 @@
   .ann-tile[data-state="unack"] .ann-tag { display: inline; }
 }
 
-/* Tablet: 48x18, icon plus count, no label. */
-@media (min-width: 700px) and (max-width: 1199px) {
+/* Tablet and phone: 48x18, icon plus count, no label. */
+@media (max-width: 1199px) {
   .ann-i { display: inline-block; width: 12px; height: 12px; }
   .ann-label { display: none; }
 }
