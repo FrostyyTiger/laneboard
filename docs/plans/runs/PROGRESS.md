@@ -265,3 +265,63 @@ Planner notes (round 1), from reading the code:
   routes) went to For the owner as a taste call. No browser, pages not looked at.
 
 ## Morning
+
+Night 5 (`runs-n5`, 2026-10-21 21:32 to 2026-10-22 01:11), written by round 93.
+
+- Done: 60 of 61 tasks. The run had PR state in the Inbox and on the run page, round titles, cost and
+  `maxRounds` in the protocol, `/api/health`, a fixed CLI Morning, and about 30 CLI/docs/UI fixes from 12 reviews.
+- Not done: T29 (blocked, it needs your taste call) and research Q21/Q22 (open, not needed by any task that was done).
+- Why it stopped: `done`, "no open tasks left", at 01:11, 5 h 49 min before the deadline, after 92 rounds and $53.91.
+
+**Tasks.** Done (commit): T1 b9cf0b9, T2 0315aef, T3 1690527, T4 85ffc0b, T5 d204221, T6 b3692f3,
+T7 cdf9e71, T8 4cae1ee, T9 c8b16bc, T10 fd16453, T11 e714954, T12 52e8b18, T13 cf3fd7f, T14 826c50c,
+T15 fde41e4, T16 d2f363b, T17 3e65a89, T18 ad315c8, T19 d26cff6, T20 2735f6b, T21 6d42b20,
+T22 a991a18, T23 ec1fea6, T24 89f0266, T25 bf5f5a6, T25b 9687ef1, T26 ef42f21, T27 ede8261,
+T28 50df3d3, T30 bc59625, T31 e8b118f, T32 5436bc6, T33 8c4b3b7, T34 ea3caef, T35 1107fdc,
+T36 906ebaa, T37 d842f57, T38 62c8cc4, T39 43f0a3d, T40 afdbb41, T41 747bfd1, T42 7942251,
+T43 f62660d, T44 34aab7c, T45 30ccd99, T46 5d064ca, T47 69813ef, T48 2f3fdae, T49 a12ab3b,
+T50 b8be60a, T51 8dd7edd, T52 8c8d82c, T53 6e035c3, T54 5cb5371, T55 4ce92da, T56 d02fa3d,
+T57 f9fc63f, T58 9a3cd34, T59 da4f127, T60 f9a212f.
+Blocked: T29 (`align-items: start` on the lane grid reverses your §8 Q12 "equal heights").
+Open: none.
+
+**Tests now:** `npm test` passes 3446, fails 0 (after round 92). The full suite on `ci` runs on the PR.
+
+**Needs you, worst first.**
+1. **Stale `demo` need tops Morning**: the operator review (round 92) found that the only item in
+   `/api/morning` `needsYou` is a leftover run `demo` ("Make acme ready", decision "hi?", 2026-10-20),
+   probably read from the repo's own `.laneboard/run.jsonl` through the lane's cwd. Look at it before
+   merging. Delete the file, or decide whether runs found in a lane's cwd should count as needs.
+2. **Decide T29, card heights**: choose equal heights (keep it as it is), `align-items: start` on `.grid`
+   in `public/css/shell.css` (and drop the `doesNotMatch` in `test/board.test.mjs` "T15 Board 2"),
+   or start-aligned for red `s-danger` cards only. Round 49's shots looked right with the change.
+3. **`run stop --reason` free text**: reported by 4 reviews. Enforce the known reasons, or document it as
+   free text. In the same group: `run ack` exits 0 for a repeat ack, and should `run ack` post to the
+   board when `LANEBOARD_URL` is set (T40 only adds a notice)?
+4. **Operator review gaps (round 92)**: this round made no tasks from it. It suggests (a) Morning
+   explains why the lane cost ($0.09) differs from the run cost ($53.91), (b) one round count across
+   the list, run page and Morning, with the wrap-up round shown as such, (c) each run says where it was
+   read from, (d) the loop raises a `needs` for the For the owner list (none reached the Inbox tonight),
+   (e) a test-count score. Also PR #15 shows `title`/`state` null (the loop never updates the artifact).
+   Choose which of them become night 6 tasks.
+5. **Inbox stuck lane (from T13)**: move a stuck working lane from the grey ARCHIVE / STALE group to an
+   amber row in NEEDS YOU (the Board says `▲ STCK`), or keep it grey?
+6. **Fenced `shoot.mjs`**: reviews 13 and 27 ask it to freeze the demo fleet's clock, seed and
+   animations so dark and light shots show the same fleet. Only you can change it.
+7. **Taste calls from the reviews**: listed under For the owner. They cover counts in `[n]` style, nouns
+   before `x of y`, light amber toward ochre, the phone bottom bar and launch button, lane naming,
+   README test-copy port and `kill $!`, the README write-outside-state-dir list, a route list in the API
+   404 (fenced `server/http.mjs`), and `$LANEBOARD_RUN` said on stderr. Mark the ones you want.
+8. **UI shots to look at**: the `[ui]` tasks (T2, T4, T5, T13-T23, T25b, T27, T28, T30, T31, T51-T57)
+   left screenshots in the run's `shots/` folder. Look through them before merging, the Map labels at
+   390 (T51, T53) first.
+
+**Reviews:** 6- and 13-designer: about 80 findings, 11 tasks (T13-T23). 27-designer: 5 tasks (T27-T31,
+T29 blocked). 16-, 24-, 34-, 42-, 50-, 58-, 66-, 75- and 83-stranger: 20 tasks (T24-T26, T32-T45,
+T58-T60), the rest under For the owner. 92-operator: the run is readable on questions 1 and 4, not on 5
+(see item 4 above), and no tasks were made from it.
+**Research:** Q17 PR state mapping, Q18 growing totals, Q19 unknown command and target, Q20 health
+endpoint: all answered in `research/`. Q21 (map label collisions, for T51) and Q22 (mobile bottom
+sheets, for T53) are still open. T51 and T53 were done without them.
+**Owner notes:** the script pointed to `owner-notes` in the run dir, but that file does not exist, so
+there were none to add.
