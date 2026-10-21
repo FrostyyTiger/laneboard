@@ -209,9 +209,9 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
 .rn-tl-n,
 .rn-tl-cost,
 .rn-tl-span { text-align: right; }
-.rn-tl th:nth-child(1),
-.rn-tl th:nth-child(6),
-.rn-tl th:nth-child(7) { text-align: right; }
+.rn-tl th[data-col="n"],
+.rn-tl th[data-col="cost"],
+.rn-tl th[data-col="span"] { text-align: right; }
 .rn-tl-n { color: var(--text-1); }
 .rn-tl-re { color: var(--text-3); }
 .rn-tl-task { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
@@ -250,4 +250,12 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
   /* a chart's line gets its own row: name, value and range stay whole on a phone */
   .rn-chart { grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-1) var(--sp-3); }
   .rn-chart-svg { grid-column: 1 / -1; grid-row: 2; max-width: 100%; }
+}
+
+/* ---- phone: the rounds table drops its minor columns (TL_NARROW_HIDDEN in runs.js) so round,
+   role, outcome, commit and cost fit 390 px; task and duration stay in the row's title */
+@media (width < 700px) {
+  .rn-tl [data-col="task"],
+  .rn-tl [data-col="span"],
+  .rn-tl [data-col="sessions"] { display: none; }
 }

@@ -665,6 +665,8 @@ const TL_COLS = [
   ['n', 'round'], ['role', 'role'], ['task', 'task'], ['outcome', 'outcome'],
   ['commit', 'commit'], ['cost', 'cost'], ['span', 'duration'], ['sessions', 'sessions'],
 ];
+/** Columns a phone does not draw (runs.css, width < 700px, the phone breakpoint): the row carries task and duration as its title. */
+export const TL_NARROW_HIDDEN = ['task', 'span', 'sessions'];
 
 function sessionsCell(list) {
   const td = el('td', 'rn-tl-ses');
@@ -685,9 +687,10 @@ function timelineSection(run, now) {
   if (!rows.length) { sec.append(el('p', 'rn-none', 'No round has started yet.')); return sec; }
   const table = el('table', 'rn-tl');
   const head = el('tr');
-  for (const [, label] of TL_COLS) {
+  for (const [key, label] of TL_COLS) {
     const th = el('th', null, label);
     th.setAttribute('scope', 'col');
+    th.dataset.col = key;
     head.append(th);
   }
   const thead = el('thead');
@@ -697,6 +700,7 @@ function timelineSection(run, now) {
     const tr = el('tr', 'rn-tl-row');
     tr.dataset.n = String(r.n);
     if (r.live) tr.dataset.live = '';
+    tr.title = [r.task ? `task: ${r.task}` : null, r.span && r.span !== DASH ? `took ${r.span}` : null].filter(Boolean).join(' · ');
     const nCell = el('td', 'rn-tl-n', String(r.n));
     if (r.starts > 1) {
       const re = el('span', 'rn-tl-re', ` ×${r.starts}`);
@@ -717,6 +721,7 @@ function timelineSection(run, now) {
       el('td', 'rn-tl-span', r.span),
       sessionsCell(r.sessions),
     );
+    [...tr.children].forEach((td, i) => { td.dataset.col = TL_COLS[i][0]; });
     body.append(tr);
   }
   table.append(thead, body);

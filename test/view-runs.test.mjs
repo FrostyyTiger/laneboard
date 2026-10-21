@@ -14,7 +14,7 @@ import runsView, {
   renderRuns, mountRuns, unmountRuns, loadRuns, sortRuns, scoreList, scoreTrend, scoreText, burnOf,
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, EMPTY_HUB, LIST_URL, SCORE_MAX,
   renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
-  runHref, runUrl, LIST_HREF, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
+  runHref, runUrl, LIST_HREF, TL_NARROW_HIDDEN, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
 
@@ -286,6 +286,10 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
     ['3', 'builder', 'A2.5', 'no-task-done', '—', '$1.25', '29m', '—'],
   ]);
   assert.equal(rows.some((r) => 'live' in r.dataset), false, 'a stopped run has no live round');
+  // every cell names its column, so a phone can drop the minor ones (T22); task and duration stay as title
+  assert.deepEqual(rows[1].children.map((c) => c.dataset.col), ['n', 'role', 'task', 'outcome', 'commit', 'cost', 'span', 'sessions']);
+  assert.equal(rows[1].title, 'task: A2.4 · took 29m');
+  assert.equal(rows[0].title, 'took 9m', 'no task, the duration only');
   // the PR
   const art = byClass(page, 'rn-art');
   assert.equal(art.length, 1);
@@ -557,4 +561,19 @@ test('charts: bad points are skipped, a huge round number does not blow up, name
   assert.equal(c.better, null);
   assert.equal(c.title, `${c.name}: 1 at round 1`);
   assert.deepEqual([chartNum(0.99974), chartNum(3), chartNum(null)], ['0.9997', '3', '—']);
+});
+
+// Seen at 390 (shots r7-T2 page-after): COST, DURATION and SESSIONS were cut at the right edge.
+test('runs.css: a phone drops the rounds table\'s minor columns and keeps round, role, outcome, cost (T22)', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const at = css.indexOf('@media (width < 700px)');
+  assert.ok(at > 0, 'a phone block exists');
+  const phone = css.slice(at);
+  const hidden = [...phone.matchAll(/\.rn-tl \[data-col="([a-z]+)"\]/g)].map((m) => m[1]);
+  assert.deepEqual(hidden.sort(), TL_NARROW_HIDDEN.slice().sort());
+  assert.match(phone, /\.rn-tl \[data-col="sessions"\] \{ display: none; \}/);
+  for (const keep of ['n', 'role', 'outcome', 'cost']) {
+    assert.ok(!TL_NARROW_HIDDEN.includes(keep), `${keep} stays on a phone`);
+    assert.doesNotMatch(css, new RegExp(`\\[data-col="${keep}"\\][^{]*\\{[^}]*display: none`), `${keep} is never hidden`);
+  }
 });
