@@ -364,6 +364,9 @@ const MORNING_COLS = 100;
 
 async function cmdMorning() {
   const window = takeFlag('--window', 'tonight');
+  // An unknown window is a usage error (exit 2), not a silent `tonight`.
+  const { WINDOWS } = await import('../server/util.mjs');
+  if (!WINDOWS.includes(window)) die(`unknown window ${JSON.stringify(window)}; usage: laneboard morning [--window ${WINDOWS.join('|')}]`, 2);
   const m = await api(`/api/morning?window=${encodeURIComponent(window)}`);
   boardLine();
   process.stdout.write(`${C.bold}Morning — ${m.label}${C.off} ${C.dim}(since ${isoLocal(m.since)})${C.off}\n\n`);

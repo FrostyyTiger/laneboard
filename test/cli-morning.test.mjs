@@ -145,3 +145,25 @@ test('laneboard morning: an idle or merged lane is finished, whatever its sessio
   assert.match(out, /Finished \(2 lanes\)/);
   assert.doesNotMatch(out, /Still running/);
 });
+
+test('laneboard morning --window 3d: exit 2, the valid windows named, no request made (T37)', async (t) => {
+  let requests = 0;
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-cli-morning-'));
+  const server = http.createServer((req, res) => { requests++; res.writeHead(200); res.end('{}'); });
+  t.after(() => { server.close(); fs.rmSync(home, { recursive: true, force: true }); });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const env = {
+    PATH: process.env.PATH, HOME: home,
+    XDG_CONFIG_HOME: path.join(home, 'config'), XDG_STATE_HOME: path.join(home, 'state'),
+    LANEBOARD_CONFIG: path.join(home, 'no-config.json'),
+    LANEBOARD_URL: `http://127.0.0.1:${server.address().port}`,
+  };
+  const { code, stderr } = await new Promise((resolve) => {
+    execFile(process.execPath, [BIN, 'morning', '--window', '3d'], { env, cwd: home, timeout: 20000 },
+      (err, _stdout, stderr) => resolve({ code: err ? err.code : 0, stderr }));
+  });
+  assert.equal(code, 2);
+  assert.match(stderr, /unknown window "3d"/);
+  for (const w of ['tonight', '12h', '24h', '7d']) assert.ok(stderr.includes(w), `names ${w}: ${stderr}`);
+  assert.equal(requests, 0);
+});
