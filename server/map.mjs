@@ -280,6 +280,13 @@ export function fromFeed(node, feeds, now) {
     if (g.status !== 'running') return { status: g.status === 'stopped' ? 'down' : 'unknown', why: `${ref.guest} is ${g.status ?? 'not reported'}` };
     return fromService(g, ref);
   }
+  // A tailnet peer that is not connected is a laptop asleep, not a VM down:
+  // at rest, with when it was last seen (docs/map.md "Feeds").
+  if (g.type === 'tailnet' && g.status !== 'running') {
+    const seen = Number(g.lastSeen);
+    const why = Number.isFinite(seen) && seen > 0 ? `offline, last seen ${agoWords(Math.max(0, now - seen))} ago` : 'offline';
+    return { status: 'idle', why: g.why ?? why, sub: g.sub, detail: { ...(g.detail ?? {}) } };
+  }
   // A template never runs: stopped is its normal state, like `expect: "stopped"`.
   const expectStopped = node.expect === 'stopped' || g.template === true;
   let status = g.status === 'running' ? (expectStopped ? 'warn' : 'ok')

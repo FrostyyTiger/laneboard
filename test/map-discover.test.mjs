@@ -71,7 +71,10 @@ test('one machine named by both feeders is one node, with what each knows', () =
   const ts = m.nodes.find((n) => n.id === 'feed:tailscale');
   assert.equal(ts.label, 'hub');
   assert.equal(m.nodes.find((n) => n.label === 'builder-a').parent, 'feed:tailscale');
-  assert.equal(m.nodes.find((n) => n.label === 'laptop-1').status, 'down');
+  // An offline peer is at rest, not a stopped VM (T4).
+  const laptop = m.nodes.find((n) => n.label === 'laptop-1');
+  assert.equal(laptop.status, 'idle');
+  assert.match(laptop.why, /^offline, last seen /);
   // The shared-in node is not ours.
   assert.equal(byLabel(m, 'shared-box').length, 0);
   // Every id is unique.

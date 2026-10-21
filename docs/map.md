@@ -251,7 +251,10 @@ half-written file.
   a guest names the cluster node it runs on.
 - Optional, for nodes a feeder discovers: `name` on the host, and `os`,
   `tags` (`["tag:ci"]`), `ips` (strings) on the host and on a guest;
-  `lastSeen` (ms) on a guest that is offline. `note` on the feed says why it
+  `lastSeen` (ms) on a guest that is offline. A `tailnet` guest that is not
+  `running` is drawn idle, "offline, last seen 3h ago" (or "offline"), never
+  down: a peer that sleeps is not broken. A stopped `qemu`/`lxc` guest stays
+  down. `note` on the feed says why it
   is empty (the `none` feeder).
 - `events` appear once each, in the event tape and as a pulse on the node.
   - Events already in the file when laneboard first reads it are not replayed.

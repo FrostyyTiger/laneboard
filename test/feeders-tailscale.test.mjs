@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as tailscale from '../server/feeders/tailscale.mjs';
 import * as none from '../server/feeders/none.mjs';
+import { fromFeed } from '../server/map.mjs';
 import { TABLE, feeder, feederNames, collect } from '../server/feeders/index.mjs';
 
 const FIXTURE = fileURLToPath(new URL('./fixtures/feeds/tailscale-status.json', import.meta.url));
@@ -49,6 +50,27 @@ test('an offline peer is stopped and carries its last-seen time', () => {
   assert.equal(g.lastSeen, Date.UTC(2026, 9, 20, 18, 30, 0));
   assert.equal(g.detail['Last seen'], '2026-10-20T18:30:00Z');
   assert.equal(g.os, 'macOS');
+});
+
+test('the Map draws an offline peer at rest with its last-seen time, a stopped VM still down', () => {
+  const ts = tailscale.toFeed(status(), { source: 'tailnet', now: NOW });
+  const feeds = new Map([['tailnet', ts]]);
+  // laptop-1 was last seen at 18:30, the feed is from 21:00.
+  const laptop = fromFeed({ feed: 'tailnet/laptop-1' }, feeds, NOW);
+  assert.equal(laptop.status, 'idle');
+  assert.equal(laptop.why, 'offline, last seen 3h ago');
+  assert.equal(laptop.metrics, undefined);
+  assert.equal(laptop.detail['Last seen'], '2026-10-20T18:30:00Z');
+  // No LastSeen (Go's zero time): just "offline".
+  const bare = tailscale.toFeed({ Self: { HostName: 'hub' }, Peer: { k: { HostName: 'Gone', Online: false, LastSeen: '0001-01-01T00:00:00Z' } } }, { source: 'tailnet', now: NOW });
+  const gone = fromFeed({ feed: 'tailnet/gone' }, new Map([['tailnet', bare]]), NOW);
+  assert.deepEqual([gone.status, gone.why], ['idle', 'offline']);
+  // An online peer is up, as before.
+  assert.equal(fromFeed({ feed: 'tailnet/builder-a' }, feeds, NOW).status, 'ok');
+  // A stopped proxmox guest is unchanged: down, "VM is stopped".
+  const pve = { source: 'hv1', at: NOW, every: 60, host: {}, guests: [{ vmid: 105, name: 'db', type: 'qemu', status: 'stopped' }] };
+  const vm = fromFeed({ feed: 'hv1/105' }, new Map([['hv1', pve]]), NOW);
+  assert.deepEqual([vm.status, vm.why], ['down', 'VM is stopped']);
 });
 
 test('a peer with no tags has an empty tag list and no Tags line', () => {

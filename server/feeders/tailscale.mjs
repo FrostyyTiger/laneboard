@@ -48,7 +48,8 @@ function describe(p) {
 /**
  * `tailscale status --json` -> one feed. Pure: `now` is the feed's `at`.
  * Peers are `guests` of type `tailnet`, `running` while connected to the
- * control plane (`Online`), `stopped` otherwise. Nodes shared into this
+ * control plane (`Online`), `stopped` otherwise (the Map draws a stopped
+ * tailnet peer at rest, "offline, last seen …"). Nodes shared into this
  * tailnet (`ShareeNode`) are left out, as the CLI's own listing does.
  */
 export function toFeed(status, { source = 'tailscale', now = Date.now(), every = DEFAULT_EVERY } = {}) {
