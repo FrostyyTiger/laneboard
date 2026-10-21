@@ -466,6 +466,7 @@ test('ack warns (exit 0, still written) for a fence need without a person\'s --b
   const dir = tmpDir(t);
   const file = path.join(dir, 'r.jsonl');
   const go = (args) => run(['run', ...args, '--file', file], envFor(dir), dir);
+  assert.equal((await go(['start', '--run', 'r1'])).code, 0);
   assert.equal((await go(['needs', '--run', 'r1', '--kind', 'fence', '--text', 'touched server/http.mjs'])).code, 0);
   assert.equal((await go(['needs', '--run', 'r1', '--text', 'plain question'])).code, 0);
   assert.equal((await go(['needs', '--run', 'other', '--text', 'another run'])).code, 0);
@@ -492,7 +493,7 @@ test('ack warns (exit 0, still written) for a fence need without a person\'s --b
   const before = lines(file).length;
   const folded = foldRun(parseLines(fs.readFileSync(file, 'utf8')).events.filter((e) => e.run === 'r1'));
   assert.deepEqual(folded.needs.map((n) => [n.kind, n.open, n.by]), [['fence', false, 'owner'], ['decision', false, null]]);
-  assert.equal(before, 3 + 4);
+  assert.equal(before, 1 + 3 + 4);
 
   // r1 has two needs here (place 2 is the other run's); a ts that matches none; a
   // missing file. Offline the check sees this file only, and the server merges
@@ -732,7 +733,7 @@ test('T40: a file ack says it went to the file, not the board, when a board answ
   // No board answering (the closed port): nothing to compare with, no note.
   const off = await run(['run', 'ack', 'demo', '0'], envFor(dir), dir);
   assert.equal(off.code, 0, off.stderr);
-  assert.doesNotMatch(off.stderr, /note:/);
+  assert.doesNotMatch(off.stderr, /note: the ack went/);
 });
 
 test('stop with no --reason records stop "unknown", and the help says so (T42)', async (t) => {
@@ -746,4 +747,47 @@ test('stop with no --reason records stop "unknown", and the help says so (T42)',
     const help = await run(args, envFor(dir), dir);
     assert.match(help.stdout, /no --reason: the run records stop: "unknown"/, args.join(' '));
   }
+});
+
+test('T44: round, score, stop and ack on a run this file never started add a note on stderr, still append, exit 0', async (t) => {
+  const dir = tmpDir(t);
+  const file = path.join(dir, 'run.jsonl');
+  const go = (args, env = envFor(dir)) => run(['run', ...args, '--file', file], env, dir);
+  const note = (id) => `note: ${id} has no run.start in this file (${file}); appended anyway\n`;
+  const calls = (id) => [
+    ['round', '--run', id, '--n', '1'],
+    ['score', '--run', id, '--name', 'tests', '--value', '1'],
+    ['needs', '--run', id, '--text', 'q?'],
+    ['ack', id, '0', '--by', 'owner'],
+    ['stop', '--run', id, '--reason', 'done'],
+  ];
+  // The review's walk: the start went to another id (a typo), then the rest to r1.
+  assert.equal((await go(['start', '--run', 'rl'])).code, 0);
+  for (const args of calls('r1')) {
+    const r = await go(args);
+    assert.equal(r.code, 0, r.stderr);
+    if (args[0] === 'needs') assert.doesNotMatch(r.stderr, /note:/, 'needs is not one of the four');
+    else assert.ok(r.stderr.endsWith(note('r1')), `${args[0]}: ${r.stderr}`);
+  }
+  // A started run: no note at all.
+  assert.equal((await go(['start', '--run', 'r2'])).code, 0);
+  for (const args of calls('r2')) {
+    const r = await go(args);
+    assert.equal(r.code, 0, r.stderr);
+    assert.doesNotMatch(r.stderr, /note:/, args.join(' '));
+  }
+  assert.equal(lines(file).length, 2 + 5 + 5, 'every line is appended');
+  // --post writes no file, so it has no file to look in: no note.
+  const server = http.createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(201, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, run: 'r3', t: 'round.start' }));
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const posted = await run(['run', 'round', '--run', 'r3', '--n', '1', '--post'], envFor(dir, { LANEBOARD_URL: `http://127.0.0.1:${server.address().port}` }), dir);
+  assert.equal(posted.code, 0, posted.stderr);
+  assert.equal(posted.stderr, 'ok r3 round.start posted\n');
 });

@@ -1124,12 +1124,14 @@ async function cmdRun() {
   // Read before the append: the ack's own line must not count as a need.
   let warnings = [];
   let boardAnswered = false;
+  let boardKnows = false;
   if (event.t === 'needs.ack') {
     // The server folds every source of a run by time, so its needs decide when it
     // knows the run. Offline (or a run it does not know), a file ack can only see
     // this file's needs: a ref missing there may be another source's, so it warns.
     const known = await serverNeeds(run);
     boardAnswered = known.answered;
+    boardKnows = Boolean(known.needs);
     let needs = known.needs ?? (post && known.answered ? [] : null);
     let where = `on ${BASE}`;
     const offline = !post && !needs;
@@ -1143,6 +1145,11 @@ async function cmdRun() {
     if (r.acked) return void process.stderr.write(`need ${cleanTerm(String(event.ref))} already acked, nothing ${post ? 'posted' : 'written'}\n`);
     warnings = r.warnings;
   }
+  // A round, score, stop or ack for a run this file never started is usually a
+  // mistyped id or a start written elsewhere: say so once, append anyway (T44).
+  // An ack the board answered for a known run is not a typo: no note then.
+  const unstarted = !post && ['round', 'score', 'stop', 'ack'].includes(sub)
+    && !(sub === 'ack' && boardKnows) && !fileStarted(file, run, parseLines);
   let done;
   if (post) {
     // The receipt is what the server accepted: its run and type, and the fields
@@ -1160,10 +1167,18 @@ async function cmdRun() {
   // stdout stays for `eval "$(laneboard run round …)"`; the receipt and warnings go to stderr.
   process.stderr.write(`${cleanTerm(done)}\n`);
   for (const w of warnings) process.stderr.write(`warning: ${cleanTerm(w)}\n`);
+  if (unstarted) process.stderr.write(`note: ${cleanTerm(run)} has no run.start in this file (${cleanTerm(file)}); appended anyway\n`);
   // A board answered the check but the ack went to a file: it closes the need on
   // that board only if the board reads this file (a lane root, runs.files).
   if (!post && boardAnswered) process.stderr.write(`note: ${cleanTerm(`the ack went to ${file}, not to the board at ${BASE}: the board sees it only if it reads that file (a lane's root or runs.files); --post sends it to the board`)}\n`);
   if (event.t === 'round.start') process.stdout.write(`export LANEBOARD_RUN=${run}/${event.n}\n`);
+}
+
+/** Whether `file` already has a run.start line for `run` (false when there is no file yet). */
+function fileStarted(file, run, parseLines) {
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf8'); } catch { /* no file yet: no start either */ }
+  return parseLines(text).events.some((e) => e.run === run && e.t === 'run.start');
 }
 
 /** The needs of `run` in the file an ack appends to ([] when there is no file yet). */

@@ -266,6 +266,11 @@ and nothing warns.
 - On success it prints one line on stderr: `ok <run> <type> appended to
   <file>`, or `ok <run> <type> posted` with `--post` (stdout stays free for
   `eval`).
+- `round`, `score`, `stop` and `ack` written to a file whose lines have no
+  `run.start` for that run add `note: <run> has no run.start in this file
+  (<file>); appended anyway` on stderr: usually a mistyped id. The line is
+  still appended and the exit code stays 0. An ack the server answered for a
+  run it knows gets no such note; `--post` never does.
 - `ack` checks its ref first, in the server's copy of the run (`GET
   /api/runs/<run>`, which merges every source of the run by time) when the
   server is reachable and knows the run. A ref that names no need there is a
