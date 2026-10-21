@@ -88,10 +88,10 @@
   border-color: var(--text-2);
   color: var(--text-inv);
 }
-/* A quiet label plate (the Inbox tool name): sunken, never a dark slab next
-   to the outlined plates (runs night 4 T27). */
-.plate--sunken {
-  background: var(--bg-sunken);
+/* A quiet label plate (the Inbox tool name): outlined like the plates next
+   to it in both themes, never a fill (runs night 4 T27, night 5 T31). */
+.plate--quiet {
+  background: transparent;
   border-color: var(--line);
   color: var(--text-2);
 }

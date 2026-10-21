@@ -82,7 +82,7 @@ test('T16: the focused inbox row is a 2 px accent ring with no fill', () => {
   assert.match(of.find((d) => d.prop === 'outline')?.value ?? '', /^2px solid var\(--accent\)$/);
 });
 
-test('T27: the approval\'s tool chip (BASH) is a sunken plate, never a dark slab; the header builder chip is never filled', async () => {
+test('T27: the approval\'s tool chip (BASH) is an outlined quiet plate in both themes (night 5 T31), never a fill; the header builder chip is never filled', async () => {
   const { store } = await import('../public/js/core/store.js');
   const saved = store.builders;
   store.builders = new Map([['builder-a', {
@@ -98,16 +98,23 @@ test('T27: the approval\'s tool chip (BASH) is a sunken plate, never a dark slab
     const plates = all(row, (n) => n.classList?.contains('plate'));
     const tool = plates.find((p) => p.textContent === 'Bash');
     assert.ok(tool, 'the tool chip');
-    assert.ok(tool.classList.contains('plate--sunken'), `tool chip class: ${tool.className}`);
+    assert.ok(tool.classList.contains('plate--quiet'), `tool chip class: ${tool.className}`);
     assert.ok(!plates.some((p) => p.classList.contains('plate--solid')), 'no solid plate in an Inbox row');
   } finally {
     V.unmount();
     store.builders = saved;
   }
   const kit = fs.readFileSync(path.join(import.meta.dirname, '..', 'public/css/components.css'), 'utf8');
-  const sunken = declarations(kit).decls.filter((d) => d.prelude === '.plate--sunken');
-  assert.equal(sunken.find((d) => d.prop === 'background')?.value, 'var(--bg-sunken)');
-  assert.equal(sunken.find((d) => d.prop === 'color')?.value, 'var(--text-2)');
+  const quiet = declarations(kit).decls.filter((d) => d.prelude === '.plate--quiet');
+  assert.equal(quiet.find((d) => d.prop === 'background')?.value, 'transparent', 'no fill in either theme');
+  assert.equal(quiet.find((d) => d.prop === 'border-color')?.value, 'var(--line)');
+  assert.equal(quiet.find((d) => d.prop === 'color')?.value, 'var(--text-2)');
+  // No theme rule puts a fill back on it (light included).
+  const css = fs.readdirSync(path.join(import.meta.dirname, '..', 'public/css'), { recursive: true })
+    .filter((f) => f.endsWith('.css'))
+    .map((f) => fs.readFileSync(path.join(import.meta.dirname, '..', 'public/css', f), 'utf8')).join('\n');
+  const fills = declarations(css).decls.filter((d) => /plate--quiet/.test(d.prelude) && /^background/.test(d.prop) && d.value !== 'transparent');
+  assert.deepEqual(fills.map((d) => `${d.prelude} { ${d.prop}: ${d.value} }`), [], 'a fill on the quiet plate');
 
   // The header builder chip: outlined, its mark carries the state.
   const shell = fs.readFileSync(path.join(import.meta.dirname, '..', 'public/css/shell.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

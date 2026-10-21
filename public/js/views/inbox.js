@@ -167,7 +167,7 @@ function inboxRowNode(r) {
   }
   if (r.fkey || r.name) head.append(plate(r.fkey ?? r.name));
   if (r.kind === 'approval') {
-    head.append(plate(r.mcpServer ? `${r.mcpServer}:${r.tool}` : r.tool, { kind: 'sunken' }));
+    head.append(plate(r.mcpServer ? `${r.mcpServer}:${r.tool}` : r.tool, { kind: 'quiet' }));
     head.append(span('inbox-sum', r.summary));
     if (r.closed) head.append(span('inbox-status', 'closed'));
     else if (r.expiresAt !== null) {

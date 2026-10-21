@@ -81,9 +81,9 @@ export function lamp(p, { unack = false, label = null } = {}) {
   return n;
 }
 
-const PLATE_KINDS = new Set(['solid', 'sunken', 'p1', 'p2']);
+const PLATE_KINDS = new Set(['solid', 'quiet', 'p1', 'p2']);
 
-/** <span class="plate [plate--solid|plate--sunken|plate--p1|plate--p2]">B1</span>. */
+/** <span class="plate [plate--solid|plate--quiet|plate--p1|plate--p2]">B1</span>. */
 export function plate(text, { kind = null, title = null } = {}) {
   const n = document.createElement('span');
   n.className = PLATE_KINDS.has(kind) ? `plate plate--${kind}` : 'plate';
