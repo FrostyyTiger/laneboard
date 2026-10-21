@@ -216,12 +216,11 @@
 /* Each view scrolls on its own; the map fills the host. */
 .shell-main > .view, .shell-main > .layout { height: 100%; overflow: auto; }
 .shell-main > .view.map-view { height: 100%; padding: 0; overflow: hidden; }
-/* The minimap (views/map.js syncPip, 700 px and wider) sits over the bottom right of every
-   other view and sets --pip-clear while it shows: a view's last row scrolls out from under it.
+/* A view's last row keeps a gap above the tape (no minimap floats over it: runs-n4 T14).
    Phones keep misc.css's room for the tab bar. */
 @media (min-width: 700px) {
   .shell-main > .view:not(.map-view), .shell-main > .layout {
-    padding-bottom: max(var(--gap), env(safe-area-inset-bottom, 0px), var(--pip-clear, 0px));
+    padding-bottom: max(var(--gap), env(safe-area-inset-bottom, 0px));
   }
 }
 

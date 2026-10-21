@@ -102,7 +102,6 @@
   --insp-w: 360px;
   --tape-h: 24px;
   --tape-h-open: 200px;
-  --pip-clear: 0px;       /* room the minimap covers; views/map.js sets it while it shows */
   --sheet-peek: 96px;     /* the phone bottom sheet's peek (bar + status line); phone.css, misc.css */
   --icon-s: 14px;
   --icon-m: 16px;

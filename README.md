@@ -15,7 +15,7 @@ signed, audited requests. Without one, nothing changes. See
 
 | View | Answers |
 | --- | --- |
-| **Map** `#/map` | The home view. What is all this running on, and where is the trouble? A live constellation of your sites, rooms, services, builders and lanes, with what depends on what, which lanes touch the same files and which conflict. Overlays for status, CI, cost, context and age; `\` splits it with a dense lane table, and every other view keeps a minimap of it in the corner. Fed by a topology file, snapshots other machines push, and HTTP probes; laneboard reaches out to nothing else. |
+| **Map** `#/map` | The home view. What is all this running on, and where is the trouble? A live constellation of your sites, rooms, services, builders and lanes, with what depends on what, which lanes touch the same files and which conflict. Overlays for status, CI, cost, context and age; `\` splits it with a dense lane table. Fed by a topology file, snapshots other machines push, and HTTP probes; laneboard reaches out to nothing else. |
 | **Board** `#/board` | What is each lane doing, and which one wants me? One data block per lane and session: builder, state, stage, PR and checks, context, 5 h spend, age. Sorted by the most urgent thing inside. |
 | **Inbox** `#/inbox` | What is waiting for me? Pending approvals, lanes that need you, lanes ready for review, paused and stuck lanes, with keys to approve, deny, release and pause. |
 | **Packages** `#/packages` | What state is each package in? Its CI on main, untested commits, the lanes and PRs touching it, predicted conflicts and plan status. |

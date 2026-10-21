@@ -11,8 +11,8 @@ what, and where the trouble is. It is drawn as a constellation:
 
 Arcs across the rings show the relationships a tree cannot hold.
 
-The Map is the home view: `#/map`, or `g m` from anywhere. Every other view
-keeps a small minimap of it in the bottom-right corner; click it to come back.
+The Map is the home view: `#/map`, or `g m` from anywhere. It stays on the Map:
+no other view carries a minimap of it over its content.
 It looks the same on a standalone builder (a fleet of one) and on a hub (the
 whole fleet).
 

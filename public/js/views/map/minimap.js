@@ -1,6 +1,7 @@
-// The minimap PiP (fleet plan §5 2.7, task M5): a 240x240 canvas fixed at the
-// bottom right of every view that is not the Map, so the fleet stays in the
-// corner of your eye. Click it to go back to the Map (b= and sel= kept).
+// The minimap PiP renderer (fleet plan §5 2.7, task M5): a 240x240 canvas of the
+// Map's scene. No view mounts it since runs-n4 T14 (the owner's taste call
+// "the minimap on the Map only": it covered the end of other views, and the Map
+// is its own overview); the renderer stays for a Map-side overview later.
 //
 // It draws the rings and one dot per node (status shape, 2-3 px); no labels, no comets. The points come from the main map's
 // snapshotScene() (`{version, pts: Float32Array [x, y, shapeCode, toneCode]...,
@@ -8,11 +9,10 @@
 //
 // Redraw throttle: at most PIP_FPS frames a second, driven by a slow
 // interval, and only when the scene's version changed or a pulse is due (a
-// node in trouble blinks once a second). No animation-frame loop. Hidden on
-// viewports under PIP_MIN_VIEWPORT and while the document is hidden.
+// node in trouble blinks once a second). No animation-frame loop.
 // Reduced motion: no blink, draw on change only.
 //
-// Pure parts (transform, redraw decision, visibility, dot list) are tested in
+// Pure parts (transform, redraw decision, dot list) are tested in
 // test/map-view.test.mjs.
 import { RINGS } from './layout.js';
 import { SHAPE_CODE, TONE_CODE } from './overlays.js';
@@ -24,8 +24,6 @@ export const PIP_SIZE = 240;
 export const PIP_FPS = 2;
 /** Minimum time between two PiP frames, ms. */
 export const PIP_FRAME_MS = 1000 / PIP_FPS;
-/** Viewports narrower than this get no PiP. */
-export const PIP_MIN_VIEWPORT = 700;
 /** Padding inside the canvas around the outermost ring, px. */
 const PAD = 10;
 
@@ -35,11 +33,6 @@ let codes = null;
 function codeNames() {
   codes ||= { shape: invert(SHAPE_CODE), tone: invert(TONE_CODE), trouble: new Set([TONE_CODE.crit, TONE_CODE.warn]) };
   return codes;
-}
-
-/** True when the PiP should show. Pure. */
-export function pipVisible({ view = 'map', width = 0, hidden = false, hasMap = false } = {}) {
-  return view !== 'map' && Number(width) >= PIP_MIN_VIEWPORT && !hidden && Boolean(hasMap);
 }
 
 /** World -> PiP px: scale and centre for a scene whose outermost radius is `outer`. Pure. */
