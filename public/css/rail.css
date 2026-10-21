@@ -39,6 +39,11 @@
 .attention-item .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); flex: none; }
 .attention-item.s-waiting_permission { border-color: var(--p2-line); }
 .attention-item.s-waiting_question { border-color: var(--p2-line); }
+/* The 4-letter word beside the lamp, as on the card (`▲ STCK`, review 6-designer Across 1). */
+.attention-item .wd, .attention-strip .chip .wd { flex: none; font-family: var(--font-mono); font-size: var(--fs-11); font-weight: 600; color: var(--text-2); }
+:is(.attention-item, .attention-strip .chip)[data-p="1"] .wd { color: var(--p1); }
+:is(.attention-item, .attention-strip .chip)[data-p="2"] .wd { color: var(--p2); }
+.attention-item[data-p="2"] { border-color: var(--p2-line); }
 
 /* phone chip strip — the rail carries the same list from 700px up. This
    override must come AFTER the base rule: same specificity, later wins.
@@ -75,6 +80,7 @@
 /* A NEEDS YOU chip is its lamp and a 1 px status border, no fill (T28). */
 .attention-strip .chip.s-waiting_permission { border-color: var(--p2-line); }
 .attention-strip .chip.s-waiting_question { border-color: var(--p2-line); }
+.attention-strip .chip[data-p="2"] { border-color: var(--p2-line); }
 
 /* ===================== the pressure ring ================================= */
 /*

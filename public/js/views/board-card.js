@@ -44,6 +44,23 @@ export const STATE_P = Object.freeze(Object.fromEntries(
   ['waiting_permission', 'waiting_question', 'working', 'done', 'idle', 'shell', 'dead'].map((st) => [st, markP(st)]),
 ));
 
+/**
+ * The word beside a session's mark (review 6-designer Across 1): when a flag,
+ * not the state, raised the amber ▲ (an approval held, a stuck session), the
+ * word names the flag with the header tile's word (`APPR`, `STCK`), never
+ * `WORK` beside a ▲. Else the state's word. The Board card, the NEEDS YOU
+ * list and the phone chip all print this. Pure.
+ */
+export function markWord(s) {
+  const state = typeof s?.state === 'string' ? s.state : null;
+  const own = state ? markP(state) : 'off';
+  if (own !== '1' && own !== '2') {
+    if (s?.awaitingApproval) return 'APPR';
+    if (s?.stuck) return 'STCK';
+  }
+  return state ? (STATE_WORD[state] ?? state.slice(0, 4).toUpperCase()) : DASH;
+}
+
 const STATE_ORDER = Object.freeze({ waiting_permission: 0, waiting_question: 1, working: 2, done: 3, idle: 4, shell: 5, dead: 6 });
 
 /** At most this many check glyphs, then `+n`. */
@@ -190,10 +207,13 @@ export function dataBlock(lane, session, extras = {}) {
   const state = typeof lead?.state === 'string' ? lead.state : null;
   // One state, one mark (runs night 4 T23): danger anywhere on the lane is
   // the red ■, an approval or a stuck session the amber ▲, else the lead's state.
+  // The word follows the session that raised the ▲ (markWord).
   let p = state ? markP(state) : 'off';
+  let src = lead;
   for (const x of sessions) {
     const q = itemP(x);
-    if (q === '1' || (q === '2' && p !== '1')) p = q;
+    if (q === '1' && p !== '1') p = q;
+    else if (q === '2' && p !== '1' && p !== '2') { p = q; src = x; }
   }
   if (x.stale) p = 'stale';
   const prog = lane?.progress;
@@ -206,7 +226,7 @@ export function dataBlock(lane, session, extras = {}) {
     name: typeof lead?.name === 'string' ? lead.name : null,
     state,
     p,
-    word: state ? (STATE_WORD[state] ?? state.slice(0, 4).toUpperCase()) : DASH,
+    word: src ? markWord(src) : DASH,
     stage: prog && prog.m != null ? `${prog.n ?? 0}/${prog.m}` : DASH,
     pr: prModel(x.pr),
     checks: checkGlyphs(x.checks ?? x.pr?.checks ?? null),

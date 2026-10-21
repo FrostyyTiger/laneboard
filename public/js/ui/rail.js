@@ -2,7 +2,7 @@
 // Plus the builder rail in #shell-rail (fleet plan §4 2.4, task D5), at the end of this file.
 import { $, el } from '../core/dom.js';
 import { STATE_LABEL, ago, resetsIn } from '../core/format.js';
-import { alarms, builders, store, subscribe } from '../core/store.js';
+import { alarms, builders, indexKey, store, subscribe } from '../core/store.js';
 import { deriveCode } from '../core/keys.js';
 import { icon } from '../core/icons.js';
 import { currentRoute, navigate, onRoute } from '../core/router.js';
@@ -10,7 +10,7 @@ import { builderMark, lamp, lampLabel, laneMix, markSel, mixLabel, plate, scopeS
 import { setRail } from './shell.js';
 import { compactGauge, gauge } from './widgets.js';
 import { focusSession } from '../views/board.js';
-import { STATE_P } from '../views/board-card.js';
+import { STATE_P, markWord } from '../views/board-card.js';
 import { boxBlocks } from '../views/box.js';
 
 /** On the 49" the Box is rail blocks, not a tab (the CSS hides the tab there). */
@@ -26,16 +26,35 @@ export function renderRailBox() {
 
 /**
  * The mark of a NEEDS YOU item: the same lamp as its card (runs night 4 T15,
- * r10 Board 4-5): the guard's danger and a permission red ■, a question
- * amber ▲, working grey ●, the rest grey ○. Never a hue-only dot. Pure.
+ * r10 Board 4-5): the guard's danger red ■, a permission or a question
+ * amber ▲, then a held approval or a stuck session amber ▲ (review
+ * 6-designer Across 1: a stuck working lane is `▲ STCK`, never a grey ●),
+ * working grey ●, the rest grey ○. Never a hue-only dot. Pure.
  */
 export function attentionP(a) {
   if (a?.danger) return '1';
-  return STATE_P[a?.state] ?? 'off';
+  const own = STATE_P[a?.state] ?? 'off';
+  if (own === '1' || own === '2') return own;
+  if (a?.awaitingApproval || a?.stuck) return '2';
+  return own;
 }
 
-function attentionLamp(a) {
-  return lamp(attentionP(a), { label: a.danger ? `danger: ${a.danger}` : (STATE_LABEL[a.state] || a.state) });
+/**
+ * An attention entry with its session's flags: the wire entry has the state
+ * only, the store's session knows `stuck` and `awaitingApproval`. Pure.
+ */
+export function attentionItem(a, session) {
+  if (!session) return a;
+  return { ...a, stuck: a.stuck ?? session.stuck ?? null, awaitingApproval: a.awaitingApproval ?? session.awaitingApproval ?? null };
+}
+
+/** The lamp and the 4-letter word of a NEEDS YOU row or chip (`▲ STCK`, as the card). */
+const FLAG_LABEL = Object.freeze({ STCK: 'stuck', APPR: 'awaiting approval' });
+
+function attentionMark(a, p) {
+  const word = markWord(a);
+  const label = a.danger ? `danger: ${a.danger}` : FLAG_LABEL[word] ?? (STATE_LABEL[a.state] || a.state);
+  return [lamp(p, { label }), el('span', 'wd', word)];
 }
 
 export function renderAttention() {
@@ -47,12 +66,15 @@ export function renderAttention() {
   $('attention-count').textContent = String(store.attention.length);
   $('attention-empty').hidden = items.length > 0;
 
-  items.forEach((a, i) => {
+  items.forEach((raw, i) => {
+    const a = attentionItem(raw, store.sessions.get(indexKey(store, raw.builder, raw.name)));
+    const p = attentionP(a);
     const li = document.createElement('li');
     const b = el('button', `attention-item s-${a.danger ? 'danger' : a.state}`);
+    b.dataset.p = p;
     if (a.danger) b.title = a.danger;
     b.append(el('span', 'idx', String(i + 1)));
-    b.append(attentionLamp(a));
+    b.append(...attentionMark(a, p));
     b.append(el('span', 'nm', a.name));
     b.append(el('span', 'ago', ago(a.since)));
     b.dataset.key = a.key;
@@ -61,7 +83,8 @@ export function renderAttention() {
     list.append(li);
 
     const chip = el('button', `chip s-${a.danger ? 'danger' : a.state}`);
-    chip.append(attentionLamp(a));
+    chip.dataset.p = p;
+    chip.append(...attentionMark(a, p));
     chip.append(el('span', 'nm', a.name));
     chip.append(el('span', 'ago', ago(a.since)));
     chip.dataset.key = a.key;

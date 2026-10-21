@@ -158,3 +158,30 @@ test('T23: the sheets: no fill on the danger pill, grey card flags, a permission
   assert.doesNotMatch(rail, /s-waiting_permission[^{]*\{[^}]*(--p1|--crit)/, 'no red on a permission item');
   assert.match(css('public/css/components.css'), /\.lamp\[data-unack\] \{ animation: none; \}/, 'a red ■ never blinks to maroon');
 });
+
+// review 6-designer Across 1 (runs n5 T13): a stuck working lane reads
+// `▲ STCK` on the card, in the NEEDS YOU list and on the phone chip.
+test('T13: a stuck lane has one mark and one word on the card, the list and the chip', async () => {
+  const { markWord } = await import('../public/js/views/board-card.js');
+  const { attentionItem } = await import('../public/js/ui/rail.js');
+  const stuck = { name: 'ci retry', state: 'working', stuck: { rule: 'tool-loop', reason: 'same call 14x' } };
+  const card = dataBlock({ id: 'ci-retry' }, null, { sessions: [stuck, { name: 'other', state: 'idle' }] });
+  assert.equal(card.p, '2');
+  assert.equal(card.word, 'STCK', 'never ▲ WORK');
+  // The wire entry has the state only; the store's session adds the flag.
+  const entry = attentionItem({ name: 'ci retry', state: 'working', since: NOW }, stuck);
+  assert.equal(attentionP(entry), card.p, 'NEEDS YOU lamp = card lamp');
+  assert.equal(markWord(entry), card.word, 'NEEDS YOU word = card word');
+  assert.equal(attentionP({ name: 'ci retry', state: 'working' }), 'run', 'no session known: its state');
+  // The hourglass stays a grey flag beside the mark.
+  assert.deepEqual(card.flags.map((f) => [f.id, f.p]), [['stuck', null]]);
+  // A waiting state keeps its own word; an approval names itself.
+  assert.equal(markWord({ state: 'waiting_question', stuck: { reason: 'r' } }), 'QUES');
+  assert.equal(markWord({ state: 'working', awaitingApproval: 'a1' }), 'APPR');
+  assert.equal(markWord({ state: 'working' }), 'WORK');
+  // The list row and the chip print the word through one helper.
+  const rail = css('public/js/ui/rail.js');
+  assert.match(rail, /el\('span', 'wd', word\)/);
+  assert.equal(rail.match(/\.\.\.attentionMark\(a, p\)/g)?.length, 2, 'row and chip');
+  assert.match(css('public/css/rail.css'), /\.attention-strip \.chip\[data-p="2"\]/);
+});
