@@ -25,6 +25,7 @@ import { parseLine, MAX_LINE, RUN_ID } from '../runs/protocol.mjs';
 import { bindRuns, runDirs, withSessions } from '../runs/bind.mjs';
 import { summarize } from '../runs/summary.mjs';
 import { sessionsSeen } from '../db.mjs';
+import { setRunsSource } from '../map.mjs';
 
 export const LIST_PATH = '/api/runs';
 export const RUN_PATH = '/api/runs/:run';
@@ -141,8 +142,11 @@ export default {
       stateDir: cfg.stateDir,
       laneRoots: () => knownWorktrees().map((w) => w.root),
     });
+    // The Map draws each run as a node (server/map/runs.mjs).
+    setRunsSource(() => collector.store()?.list() ?? []);
   },
   stop() {
+    setRunsSource(null);
     collector.stop();
   },
 };

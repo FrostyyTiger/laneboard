@@ -29,7 +29,7 @@ const refused = (fileBody, re) => assert.throws(() => cfg(fileBody), (err) => {
 test('the fragment is loaded from server/config/ and defaults to no run files', () => {
   assert.ok(FRAGMENTS.some((f) => f.name === 'runs'), 'runs.mjs is a loaded fragment');
   const c = build({ env: {}, file: MISSING });
-  assert.deepEqual(c.runs, { files: [], lanes: true, maxEvents: 5000, keepDays: 30,
+  assert.deepEqual(c.runs, { files: [], lanes: true, maxEvents: 5000, keepDays: 30, mapKeepMin: 60,
     stuck: { patience: 3, minDelta: 0, sameTaskFails: 2, shorterRounds: 3, deadlineMin: 30 } });
   assert.equal(c.port, 7777, 'core keys untouched');
 });
@@ -47,7 +47,7 @@ test('no env layer', () => {
 
 test('the file sets every key; a half-set block keeps the other defaults', () => {
   const c = cfg({ runs: { files: ['/srv/runs/*/run.jsonl'], lanes: false } });
-  assert.deepEqual(c.runs, { files: ['/srv/runs/*/run.jsonl'], lanes: false, maxEvents: 5000, keepDays: 30,
+  assert.deepEqual(c.runs, { files: ['/srv/runs/*/run.jsonl'], lanes: false, maxEvents: 5000, keepDays: 30, mapKeepMin: 60,
     stuck: { patience: 3, minDelta: 0, sameTaskFails: 2, shorterRounds: 3, deadlineMin: 30 } });
   const d = cfg({ runs: { maxEvents: 100, keepDays: 3650 } });
   assert.equal(d.runs.maxEvents, 100);
@@ -78,6 +78,14 @@ test('bad runs.lanes, maxEvents and keepDays are a ConfigError', () => {
   refused({ runs: { keepDays: 0 } }, /runs\.keepDays must be an integer from 1 to 3650/);
   refused({ runs: { keepDays: '7' } }, /runs\.keepDays/);
   refused({ runs: 'all' }, /runs must be an object/);
+});
+
+test('runs.mapKeepMin: 0 is allowed (a run leaves the Map when it stops), a week at most', () => {
+  assert.equal(cfg({ runs: { mapKeepMin: 0 } }).runs.mapKeepMin, 0);
+  assert.equal(cfg({ runs: { mapKeepMin: 10080 } }).runs.mapKeepMin, 10080);
+  refused({ runs: { mapKeepMin: -1 } }, /runs\.mapKeepMin must be an integer from 0 to 10080/);
+  refused({ runs: { mapKeepMin: 10081 } }, /runs\.mapKeepMin/);
+  refused({ runs: { mapKeepMin: '60' } }, /runs\.mapKeepMin/);
 });
 
 test('fileGlobProblem accepts the documented loop pattern after expansion', () => {

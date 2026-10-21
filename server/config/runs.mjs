@@ -7,6 +7,8 @@
 //          maxEvents  events kept per run (older ones are dropped from the
 //                     fold's input, server/runs/store.mjs)
 //          keepDays   a run whose last event is older is forgotten
+//          mapKeepMin minutes a stopped run stays a node on the Map
+//                     (server/map/runs.mjs), 0 = it leaves when it stops
 //          stuck      the run stuck rules (server/runs/stuck.mjs):
 //                     {patience, minDelta, sameTaskFails, shorterRounds,
 //                     deadlineMin}, a count of 0 turns its rule off;
@@ -26,6 +28,7 @@ export const MAX_FILES = 64;
 export const LIMITS = Object.freeze({
   'runs.maxEvents': 100000,
   'runs.keepDays': 3650,
+  'runs.mapKeepMin': 7 * 24 * 60,
   'runs.stuck.patience': 100,
   'runs.stuck.minDelta': 1e9,
   'runs.stuck.sameTaskFails': 100,
@@ -37,7 +40,7 @@ const STUCK_INTS = ['patience', 'sameTaskFails', 'shorterRounds', 'deadlineMin']
 
 export function defaults() {
   return {
-    runs: { files: [], lanes: true, maxEvents: 5000, keepDays: 30, stuck: { ...STUCK_DEFAULTS } },
+    runs: { files: [], lanes: true, maxEvents: 5000, keepDays: 30, mapKeepMin: 60, stuck: { ...STUCK_DEFAULTS } },
   };
 }
 
@@ -90,6 +93,7 @@ export function validate(c, bad) {
   if (typeof r.lanes !== 'boolean') bad(`runs.lanes must be true or false, got ${J(r.lanes)}`);
   int(bad, 'runs.maxEvents', r.maxEvents, 100, LIMITS['runs.maxEvents']);
   int(bad, 'runs.keepDays', r.keepDays, 1, LIMITS['runs.keepDays']);
+  int(bad, 'runs.mapKeepMin', r.mapKeepMin, 0, LIMITS['runs.mapKeepMin']);
   const s = r.stuck;
   if (s === false) return;
   if (!isObj(s)) bad(`runs.stuck must be an object or false, got ${J(s)}`);

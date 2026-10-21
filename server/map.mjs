@@ -25,14 +25,15 @@ import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { fkey, isFkey, BUILDER_ID_RX, deriveCode } from './fleet/keys.mjs';
 import { loadPolicy, reachLinks, parseAddr } from './map/reach.mjs';
+import { runNodes } from './map/runs.mjs';
 
-export const KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr', 'builder', 'session', 'repo', 'package'];
+export const KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr', 'builder', 'session', 'repo', 'package', 'run'];
 export const LINK_KINDS = ['dep', 'flow', 'share', 'touch', 'conflict', 'pkg', 'ci'];
 // What a topology file may use: the rest are nodes and links laneboard makes.
 export const TOPOLOGY_KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr'];
 export const TOPOLOGY_LINK_KINDS = ['dep', 'flow', 'share'];
 // Id prefixes and synthetic ids laneboard owns; a topology may not use them.
-const RESERVED_PREFIXES = ['lane:', 'builder:', 'sess:', 'repo:', 'pkg:', 'feed:'];
+const RESERVED_PREFIXES = ['lane:', 'builder:', 'sess:', 'repo:', 'pkg:', 'feed:', 'run:'];
 const RESERVED_IDS = ['__core', '__fleet', '__repos'];
 const SEVERITY = ['idle', 'unknown', 'ok', 'working', 'warn', 'attention', 'crit', 'down'];
 const worse = (a, b) => (SEVERITY.indexOf(a) >= SEVERITY.indexOf(b) ? a : b);
@@ -1044,11 +1045,13 @@ export function fleetLinks({ lanes = [], overlaps = [], topology = null, builder
  *   localId   the builder `self` aliases (builder mode); on a hub, none
  *   feedsOff  this board does not read feeds (a builder a hub watches)
  *   policy    a parsed policy file (map/reach.mjs), or null: no Reach
+ *   runs      folded runs (the runs store's list), each a `run:<id>` node (map/runs.mjs)
+ *   runsCfg   `config.runs` (`mapKeepMin`, `stuck`)
  */
 export function buildFleet({
   topology, feeds = new Map(), probes = new Map(), now = Date.now(), topologyError = null, hostname = config.hostname,
   builders = [], repos = [], laneFacts = null, overlaps = [], ciRuns = [], localId = null, feedsOff = false,
-  policy = null, policyError = null,
+  policy = null, policyError = null, runs = [], runsCfg = config.runs,
 } = {}) {
   const topo = withDiscovered(topology, feeds, { coreLabel: topology?.title ?? hostname });
   const fleet = cleanBuilders(builders);
@@ -1154,6 +1157,7 @@ export function buildFleet({
     lanes.push(...laneList);
   }
   nodes.push(...repoNodes(repos, { parent: coreId }));
+  nodes.push(...runNodes(runs, { nodes, coreId, now, keepMin: runsCfg?.mapKeepMin, stuck: runsCfg?.stuck }));
 
   const links = fleetLinks({ lanes, overlaps, topology: topo, builders: fleet, ciRuns, nodeIds: new Set(nodes.map((n) => n.id)) });
   for (const n of lanes) { delete n.branch; delete n.packages; }
@@ -1333,13 +1337,25 @@ export function feedsEnabled(c = config) {
   return !(Array.isArray(keys) && keys.length > 0);
 }
 
+// Where builder mode takes its runs: set by the runs route module
+// (server/routes/runs.mjs, builder only), so this file, which the hub loads
+// too, imports no collector. Unset = no runs.
+let runsSource = null;
+
+/** `fn()` gives the folded runs to draw (the runs store's list), or null to stop. */
+export function setRunsSource(fn) {
+  runsSource = typeof fn === 'function' ? fn : null;
+}
+
 /** Builder mode: rebuild from the latest snapshot. Returns a message worth sending, or null. */
 export function tick(snapshot, now = Date.now()) {
   const t = loadTopology();
   const on = feedsEnabled();
   const feeds = on ? readFeeds() : new Map();
   const p = loadPolicy(config.map.policyFile);
-  const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error, feedsOff: !on, policy: p.value, policyError: p.error });
+  let runs = [];
+  try { runs = runsSource?.() ?? []; } catch { runs = []; }
+  const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error, feedsOff: !on, policy: p.value, policyError: p.error, runs });
   return emit(next, feeds, withDiscovered(t.value, feeds, { coreLabel: next.title }), now, 5000);
 }
 

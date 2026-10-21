@@ -144,6 +144,7 @@ const SHAPES = {
       plan: str(o.plan),
       branch: str(o.branch),
       cwd: dir(o.cwd),
+      host: str(o.host, 64),
       deadline: str(o.deadline, 64),
       deadlineAt: epochMs(o.deadline),
       budget,
@@ -165,7 +166,8 @@ const SHAPES = {
     if (!name) return 'no name';
     const value = num(o.value);
     if (value === null) return 'bad value';
-    return { name, value, better: o.better === 'lower' ? 'lower' : 'higher', n: int(o.n) };
+    const max = num(o.max);
+    return { name, value, better: o.better === 'lower' ? 'lower' : 'higher', n: int(o.n), max: max !== null && max > 0 ? max : null };
   },
   needs(o) {
     return { kind: str(o.kind, 32) || 'decision', text: str(o.text, MAX_TEXT), link: str(o.link), n: int(o.n) };
@@ -261,7 +263,7 @@ function round(rounds, n) {
  */
 export function foldRun(events, { skipped = 0 } = {}) {
   const run = {
-    run: null, goal: null, plan: null, branch: null, cwd: null, state: 'running', deadline: null, deadlineAt: null,
+    run: null, goal: null, plan: null, branch: null, cwd: null, host: null, state: 'running', deadline: null, deadlineAt: null,
     budget: null, rounds: [], scores: {}, better: {}, needs: [], artifacts: [], stop: null,
     cost: { usd: 0, rounds: 0 }, usage: null, raw: [], startedAt: null, updatedAt: null,
     events: 0, skipped: typeof skipped === 'number' ? skipped : Object.values(skipped).reduce((a, b) => a + b, 0),
@@ -285,7 +287,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
 
     switch (e.t) {
       case 'run.start':
-        for (const k of ['goal', 'plan', 'branch', 'cwd', 'deadline', 'deadlineAt']) if (e[k] !== null) run[k] = e[k];
+        for (const k of ['goal', 'plan', 'branch', 'cwd', 'host', 'deadline', 'deadlineAt']) if (e[k] !== null) run[k] = e[k];
         run.budget = { ...e.budget };
         run.stop = null;
         break;
@@ -311,7 +313,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
       }
       case 'score': {
         const n = e.n ?? current;
-        (run.scores[e.name] ||= []).push({ n, value: e.value, ts: e.ts });
+        (run.scores[e.name] ||= []).push({ n, value: e.value, ts: e.ts, max: e.max ?? null });
         run.better[e.name] = e.better;
         break;
       }

@@ -48,9 +48,9 @@ test('every subcommand writes one line parseLine accepts, to ./.laneboard/run.js
   const env = envFor(dir);
   const calls = [
     ['start', '--run', 'readiness', '--goal', 'Make acme-api ready for review', '--plan', 'docs/plans/x.md',
-      '--branch', 'run/x', '--deadline', '2026-10-21T05:00:00Z', '--rounds', '15', '--window-pct', '90'],
+      '--branch', 'run/x', '--host', 'builder-a', '--deadline', '2026-10-21T05:00:00Z', '--rounds', '15', '--window-pct', '90'],
     ['round', '--run', 'readiness', '--n', '3', '--role', 'builder', '--task', 'A2.4'],
-    ['score', '--run', 'readiness', '--name', 'tests', '--value', '0.93', '--better', 'higher'],
+    ['score', '--run', 'readiness', '--name', 'tests', '--value', '0.93', '--better', 'higher', '--max', '1'],
     ['round', '--run', 'readiness', '--n', '3', '--end', '--outcome', 'kept', '--commit', '0123456', '--open', '4', '--usd', '1.25'],
     ['needs', '--run', 'readiness', '--kind', 'decision', '--text', 'Drop the v1 export?', '--link', 'https://example.invalid/acme/acme-api/pull/7'],
     ['artifact', '--run', 'readiness', '--kind', 'pr', '--url', 'https://example.invalid/acme/acme-api/pull/7', '--title', 'v2 export'],
@@ -75,6 +75,8 @@ test('every subcommand writes one line parseLine accepts, to ./.laneboard/run.js
   assert.deepEqual(events.map((e) => e.t), ['run.start', 'round.start', 'score', 'round.end', 'needs', 'artifact', 'run.stop']);
   assert.deepEqual(events[0].budget, { rounds: 15, windowPct: 90, pause5h: null, stop7d: null });
   assert.equal(events[0].deadline, '2026-10-21T05:00:00Z');
+  assert.equal(events[0].host, 'builder-a');
+  assert.equal(events[2].max, 1);
   assert.equal(JSON.parse(got[3]).commit, '0123456', 'commit stays a string');
   assert.equal(events[3].usd, 1.25);
 

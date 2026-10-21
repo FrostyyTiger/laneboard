@@ -255,3 +255,16 @@ test('needs.ack by ts picks the first open need of that time; an acked wait stay
   assert.deepEqual(run.needs.map((n) => [n.text, n.open, n.acked, n.by]), [['a', false, true, null], ['b', false, true, null], ['limit', false, true, null]]);
   assert.deepEqual(run.raw, [], 'a third ack of a known ts is a second ack, not an unknown ref');
 });
+
+test('run.start may name its host and a score its max (T9, the Map); a bad max is dropped', () => {
+  assert.equal(ok({ t: 'run.start', host: 'builder-a' }).host, 'builder-a');
+  assert.equal(ok({ t: 'run.start' }).host, null);
+  assert.equal(ok({ t: 'score', name: 'tasks', value: 3, max: 12 }).max, 12);
+  for (const max of [0, -1, 'x', null]) assert.equal(ok({ t: 'score', name: 'tasks', value: 3, max }).max, null);
+  const run = foldRun([
+    ok({ t: 'run.start', host: 'scratch-1' }),
+    ok({ t: 'score', name: 'tasks', value: 3, max: 12 }),
+  ]);
+  assert.equal(run.host, 'scratch-1');
+  assert.equal(run.scores.tasks[0].max, 12);
+});

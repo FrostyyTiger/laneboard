@@ -142,9 +142,9 @@ that infrastructure.
 
 | Field | What |
 | --- | --- |
-| `id` | Unique. `lane:`, `builder:`, `sess:`, `repo:`, `pkg:` and `feed:` ids, and `__core`, `__fleet`, `__repos`, are reserved for laneboard's own nodes. |
+| `id` | Unique. `lane:`, `builder:`, `sess:`, `repo:`, `pkg:`, `feed:` and `run:` ids, and `__core`, `__fleet`, `__repos`, are reserved for laneboard's own nodes. |
 | `parent` | The node this one sits inside. A node with no parent hangs off the core. |
-| `kind` | `core`, `site`, `host`, `room`, `service`, `lane` or `pr`. Sets the ring and the shape. At most one `core`; without one, laneboard adds a core named after `title`. `builder`, `session`, `repo` and `package` are made by laneboard and refused in the file. |
+| `kind` | `core`, `site`, `host`, `room`, `service`, `lane` or `pr`. Sets the ring and the shape. At most one `core`; without one, laneboard adds a core named after `title`. `builder`, `session`, `repo`, `package` and `run` are made by laneboard and refused in the file. |
 | `builder` | The builder id this node hosts (`"builder": "builder-a"`): the builder and its lanes hang under it. One node per builder id. |
 | `ci` | `{ "runner": true, "for": ["builder-a"] }` (or `"for": "*"`): this node is a CI runner serving those builders; a `ci` link to each is live while a run for one of its lanes is in progress. |
 | `label`, `sub` | The name, and the small line under it. A feed or probe can replace `sub`. |
@@ -441,6 +441,25 @@ With packages data, a **REPOS** island holds one `repo:<name>` per repo and one
 
 One edge per lane pair: a conflict replaces a touch, a confirmed conflict a
 predicted one. The full model is in [fleet/map.md](fleet/map.md).
+
+## Runs
+
+Every run the board reads (the runs protocol, [runs.md](runs.md)) is a node,
+`kind: "run"`, id `run:<id>`, linking to its page `#/runs?run=<id>`:
+
+- **Where:** under the machine its `run.start` names in `host`, when a node
+  of the Map has that name (label or id, any case: a declared node, a
+  discovered VM, a builder); else under the core, the machine whose board
+  reads the run file. A throwaway VM a feed lists carries its run; when the
+  feed no longer lists the VM, the run falls back to the core and its detail
+  says the host is not on the Map.
+- **Progress** (0-1, the ring): the latest `tasks` score over its `max`, else
+  rounds over `budget.rounds`; none when neither is known.
+- **Status:** `working` while it runs, `warn` when a run stuck rule fires
+  (`stuck` carries `{rule, reason}`), `crit` when it stopped on `error`,
+  else `idle`. Also `state`, `round`, `maxRounds`, `goal`.
+- A stopped run stays `runs.mapKeepMin` minutes (default 60), then leaves.
+  No runs, no run nodes. A hub has no runs yet, so its Map has none.
 
 ## On a hub
 

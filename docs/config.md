@@ -372,6 +372,7 @@ own `.laneboard/run.jsonl`, and a machine without any shows no runs.
 | `runs.lanes` | `true` | Also read `<lane cwd>/.laneboard/run.jsonl` for every lane. |
 | `runs.maxEvents` | `5000` | Events kept per run, newest kept (100..100000). |
 | `runs.keepDays` | `30` | A run whose last event is older is forgotten (1..3650). |
+| `runs.mapKeepMin` | `60` | Minutes a stopped run stays a node on the Map, then it leaves (0..10080; `0` = it leaves when it stops). |
 | `runs.stuck` | see below | The run stuck rules (shown as a stuck badge on the Runs list). `false` turns every rule off; in an object, a count of `0` turns that rule off. A stopped run is never stuck, and a good round clears the badge. |
 | `runs.stuck.patience` | `3` | No score got better in this many ended rounds (0..100). |
 | `runs.stuck.minDelta` | `0` | How much a score must move in its `better` direction to count as better (0 = any change). |

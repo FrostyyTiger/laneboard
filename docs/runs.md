@@ -72,10 +72,10 @@ Every line has these fields:
 
 | Type | Fields | What it does |
 | --- | --- | --- |
-| `run.start` | `goal` (text), `plan`, `branch`, `cwd` (the absolute dir the run works in), `deadline` (ISO or epoch), `budget` `{rounds, windowPct, pause5h, stop7d}` (the four may also sit at top level) | starts the run, or restarts it: a second `run.start` updates the goal and budget and reopens a stopped run |
+| `run.start` | `goal` (text), `plan`, `branch`, `cwd` (the absolute dir the run works in), `host` (64 chars: the machine the run works on, when it is not the one reading the file; the Map hangs the run there), `deadline` (ISO or epoch), `budget` `{rounds, windowPct, pause5h, stop7d}` (the four may also sit at top level) | starts the run, or restarts it: a second `run.start` updates the goal and budget and reopens a stopped run |
 | `round.start` | **`n`** (integer ≥ 0), `role`, `task`, `session` | round `n` begins; starting the same `n` again is a retry, counted in the round's `starts` |
 | `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd`, `session` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` adds to the round's cost only, not to the run's `cost` (that is the sum of `cost` events); `session` (on either round event) names a Claude Code session of the round (see "Sessions of a round") |
-| `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n` | one measurement of a metric; without `n` it belongs to the latest round (the highest `n` of a `round.start` or `round.end` so far in the file, even if that round has ended; 0 before any) |
+| `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n`, `max` (a positive number: the value that means done, such as the task count; the Map's progress ring) | one measurement of a metric; without `n` it belongs to the latest round (the highest `n` of a `round.start` or `round.end` so far in the file, even if that round has ended; 0 before any) |
 | `needs` | `kind` (default `decision`), `text`, `link`, `n` | the run needs a human; kind `wait` means the loop itself is waiting (a usage limit) and closes when the next round starts or the run stops; other kinds stay open until a `needs.ack` closes them; without `n` it belongs to the latest round, like `score` (even if that round has ended) |
 | `needs.ack` | **`ref`**, `by` (64 chars) | someone saw a need and closed it: `ref` is the need's place in the run's needs (`0` = the first `needs` line of the run, an integer below 10⁹) or its `ts` (epoch s or ms, or ISO; the first open need with that `ts`, else the first one). The first ack of a need counts (it records `ackedAt` and `by`); a second one changes nothing. A `ref` that names no need is kept raw. |
 | `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests, `report` for the run's report), `title` | something the run produced; the same URL twice is kept once |
@@ -200,9 +200,9 @@ laneboard run stop   --run readiness --reason done
 
 | Subcommand | Flags |
 | --- | --- |
-| `start` | `--goal`, `--plan`, `--branch`, `--deadline`, `--rounds N`, `--window-pct P` (the last two go into `budget`) |
+| `start` | `--goal`, `--plan`, `--branch`, `--host`, `--deadline`, `--rounds N`, `--window-pct P` (the last two go into `budget`) |
 | `round` | **`--n N`**, `--role`, `--task`; with `--end`: `--outcome`, `--commit`, `--open N`, `--usd x` |
-| `score` | **`--name`**, **`--value x`**, `--better higher\|lower`, `--n N` |
+| `score` | **`--name`**, **`--value x`**, `--better higher\|lower`, `--n N`, `--max x` |
 | `needs` | `--kind`, `--text`, `--link`, `--n N` |
 | `ack` | **`<ref>`** (or `--ref`), `--by`; `ack <run> <ref>` names the run too |
 | `artifact` | **`--url`**, `--kind`, `--title` |

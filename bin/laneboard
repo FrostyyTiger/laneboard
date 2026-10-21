@@ -24,10 +24,10 @@
 //   laneboard paused [--json]                          offline: list the pause sentinels
 //   laneboard run start|round|score|needs|ack|artifact|stop [--run <id>] [flags] [--file f | --post]
 //                                                      offline: append one run-protocol line
-//     start    [--goal g] [--plan p] [--branch b] [--deadline iso] [--rounds N] [--window-pct P]
+//     start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
 //     round    --n N [--role r] [--task t]             prints `export LANEBOARD_RUN=<run>/<n>` for eval
 //     round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
-//     score    --name m --value x [--better higher|lower] [--n N]
+//     score    --name m --value x [--better higher|lower] [--n N] [--max x]
 //     needs    [--kind decision|wait] [--text t] [--link url] [--n N]
 //     ack      [<run>] <ref> [--by b]                  closes a need: ref = its place (0 = first) or its ts
 //     artifact --url u [--kind pr|link] [--title t]
@@ -833,14 +833,14 @@ const runProtocol = () => import('../server/runs/protocol.mjs');
 const RUN_COMMON = { '--run': ['run', 'str'], '--file': ['file', 'str'], '--post': ['post', 'bool'] };
 const RUN_SUBS = {
   start: {
-    '--goal': ['goal', 'str'], '--plan': ['plan', 'str'], '--branch': ['branch', 'str'],
+    '--goal': ['goal', 'str'], '--plan': ['plan', 'str'], '--branch': ['branch', 'str'], '--host': ['host', 'str'],
     '--deadline': ['deadline', 'str'], '--rounds': ['rounds', 'int'], '--window-pct': ['windowPct', 'num'],
   },
   round: {
     '--n': ['n', 'int'], '--role': ['role', 'str'], '--task': ['task', 'str'], '--end': ['end', 'bool'],
     '--outcome': ['outcome', 'str'], '--commit': ['commit', 'str'], '--open': ['open', 'int'], '--usd': ['usd', 'num'],
   },
-  score: { '--name': ['name', 'str'], '--value': ['value', 'num'], '--better': ['better', 'str'], '--n': ['n', 'int'] },
+  score: { '--name': ['name', 'str'], '--value': ['value', 'num'], '--better': ['better', 'str'], '--n': ['n', 'int'], '--max': ['max', 'num'] },
   needs: { '--kind': ['kind', 'str'], '--text': ['text', 'str'], '--link': ['link', 'str'], '--n': ['n', 'int'] },
   ack: { '--ref': ['ref', 'str'], '--by': ['by', 'str'] },
   artifact: { '--url': ['url', 'str'], '--kind': ['kind', 'str'], '--title': ['title', 'str'] },
@@ -851,10 +851,10 @@ const ROUND_START_ONLY = ['role', 'task'];
 const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 
 const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
-  start    [--goal g] [--plan p] [--branch b] [--deadline iso] [--rounds N] [--window-pct P]
+  start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
   round    --n N [--role r] [--task t]            prints: export LANEBOARD_RUN=<run>/<n>
   round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
-  score    --name m --value x [--better higher|lower] [--n N]
+  score    --name m --value x [--better higher|lower] [--n N] [--max x]
   needs    [--kind decision|wait|…] [--text t] [--link url] [--n N]
   ack      [<run>] <ref> [--by b]                 close a need: <ref> is its place (0 = the first) or its ts
   artifact --url u [--kind pr|link|…] [--title t]
