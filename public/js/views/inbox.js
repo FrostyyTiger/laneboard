@@ -32,10 +32,10 @@ import { register } from '../core/commands.js';
 import { buildReviewQueue, formatWait, storeLookups } from '../core/review-queue.js';
 import { mountReviewQueue } from './review-queue.js';
 import {
-  ackEvent, buildInbox, COOPERATIVE_NOTE, REMOTE_ONLY_NOTE, effectiveTier, formatCountdown, keyAction,
+  ackEvent, buildInbox, COOPERATIVE_NOTE, REMOTE_ONLY_NOTE, effectiveTier, emptyLine, formatCountdown, keyAction,
   lineClass, moveFocus, reconcileFocus, rowOf, withNote,
 } from '../core/inbox-model.js';
-import { lamp, panel, plate, markSel, setPanel } from '../ui/components.js';
+import { lamp, panel, plate, setPanel } from '../ui/components.js';
 import { confirmAction } from '../ui/confirm.js';
 import { toast } from '../ui/toast.js';
 
@@ -153,9 +153,8 @@ function inboxRowNode(r) {
   li.dataset.row = r.id;
   li.dataset.group = r.group;
   if (r.closed) li.dataset.closed = '';
-  const focused = r.id === state.focusId;
-  li.setAttribute('aria-selected', focused ? 'true' : 'false');
-  markSel(li, focused);
+  // T16: the focused row is a 2 px accent ring (fleet-views.css), no fill, no brackets.
+  li.setAttribute('aria-selected', r.id === state.focusId ? 'true' : 'false');
 
   const head = document.createElement('div');
   head.className = 'inbox-row-h';
@@ -172,7 +171,7 @@ function inboxRowNode(r) {
       head.append(t);
     }
     if (state.busy.has(r.id)) head.append(span('inbox-status', 'sending…'));
-  } else if (r.group === 'runs') {
+  } else if (r.group === 'runs' || r.group === 'runprs') {
     const sum = span('inbox-sum', r.reason);
     sum.title = r.reason;
     // a run need is the one row that wants a written answer: on a phone its text
@@ -245,6 +244,17 @@ function groupNode(g) {
   const sec = document.createElement('section');
   sec.className = 'inbox-group';
   sec.dataset.group = g.id;
+  if (g.empty) {
+    // T16 (r10-designer Inbox 1): an empty group is one muted line, the same
+    // wording everywhere, and the model has put it below the filled ones.
+    sec.dataset.empty = '';
+    const p = document.createElement('p');
+    p.className = 'inbox-empty';
+    p.textContent = emptyLine(g.title);
+    if (g.note) p.title = g.note;
+    sec.append(p);
+    return sec;
+  }
   const h = document.createElement('h3');
   h.className = 'inbox-group-t';
   const hid = `inbox-g-${g.id}`;
@@ -263,15 +273,8 @@ function groupNode(g) {
 
   if (g.id === 'review' && state.review) {
     const { slot } = state.review;
-    markSel(slot, g.rows.some((r) => r.id === state.focusId));
+    slot.toggleAttribute('data-focus', g.rows.some((r) => r.id === state.focusId));
     sec.append(slot);
-    return sec;
-  }
-  if (!g.rows.length) {
-    const p = document.createElement('p');
-    p.className = 'empty';
-    p.textContent = 'Nothing here.';
-    sec.append(p);
     return sec;
   }
   const ul = document.createElement('ul');

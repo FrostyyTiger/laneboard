@@ -71,7 +71,11 @@ Line height `--lh: 1.3`, `--lh-tight: 1.1` for one-line titles and counts.
 - **Header** 36 px, **tape** 24 px.
 - **Spacing** on a 4 px grid: `--sp-1` 4 … `--sp-8` 32.
 - **Radius** 2 px on everything (`--radius`), **borders** 1 px (`--bw`). No shadows.
-- **Focus** is an accent outline, separate from selection (the accent corner brackets).
+- **Focus** is an accent outline, separate from selection (the accent corner brackets). A list's
+  focused row (the Inbox, runs night 4 T16) is a 2 px accent ring inside the row, no fill and no
+  brackets.
+- **Empty sections** are one muted line, `<Section> · none`, below the filled sections (the Inbox,
+  T16), never a header plus a sentence.
 
 ## Surfaces
 

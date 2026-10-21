@@ -8,13 +8,15 @@
 //   effectiveTier(action, liveTier)                -> read|click|ask|confirm
 //
 // Groups, in order: approvals (pending PermissionRequests from every builder,
-// oldest first, countdown to expiresAt), runs (runs plan T5: the open needs of
-// agent loops and their recent PRs from GET /api/runs, newest first; absent
-// when there is no runs route, e.g. on a hub), needs (waiting_* sessions from the
-// attention list, the dev-stack guard, need/blocked markers), review (§10's
-// reviewReady lanes, rows from core/review-queue.js), paused (with kind), and
-// stale (stuck sessions with their reason, archive candidates, §6's stale
-// branches; read-only).
+// oldest first, countdown to expiresAt), needs (waiting_* sessions from the
+// attention list, the dev-stack guard, need/blocked markers), runs (runs plan
+// T5: the open needs of agent loops from GET /api/runs, newest first; absent
+// when there is no runs route, e.g. on a hub), review (§10's reviewReady lanes,
+// rows from core/review-queue.js), runprs (the runs' recent PRs: news, so after
+// review), paused (with kind), and stale (stuck sessions with their reason,
+// archive candidates, §6's stale branches; read-only, all grey). Runs night 4
+// T16: the groups with rows come first in that order, the empty ones after
+// them (`empty: true`, the view draws one muted line each).
 //
 // Everything a builder sent is untrusted text. This module only type-checks
 // it, copies it into fresh objects and clips its length; the view renders it
@@ -27,18 +29,22 @@
 
 import { fkey as makeFkey, BUILDER_ID_RX } from './keys.js';
 
-export const GROUPS = Object.freeze(['approvals', 'runs', 'needs', 'review', 'paused', 'stale']);
+export const GROUPS = Object.freeze(['approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
 
 export const GROUP_TITLES = Object.freeze({
   approvals: 'Approvals',
-  runs: 'Runs',
   needs: 'Needs you',
+  runs: 'Run needs',
   review: 'Review',
+  runprs: 'Run PRs',
   paused: 'Paused',
   stale: 'Archive / stale',
 });
 
 /** Security review S7: the note on the approvals group header (title + aria). */
+/** The one line an empty group shows: "Review · none". */
+export const emptyLine = (title) => `${title} · none`;
+
 export const COOPERATIVE_NOTE = 'Approvals, pause, budget and kill are cooperative on the builder: an agent with a shell there can bypass them';
 
 /** README §3.5: approve/deny/release are remoteOnly. */
@@ -275,7 +281,8 @@ function staleRows(s, scope, sessions) {
     const st = e.session.stuck;
     rows.push({
       id: `st:${e.fkey}`, group: 'stale', kind: 'stuck', builder: e.builder, fkey: e.fkey,
-      name: inboxClip(e.name, LIMITS.name), lane: inboxClip(str(e.session.lane), LIMITS.name), p: '2',
+      // Archive / stale is read-only news (T16): grey, never the amber ▲.
+      name: inboxClip(e.name, LIMITS.name), lane: inboxClip(str(e.session.lane), LIMITS.name), p: 'off',
       rule: inboxClip(str(st.rule), 64), reason: inboxClip(str(st.reason), LIMITS.reason) ?? inboxClip(str(st.rule), 64) ?? 'stuck',
       since: isNum(st.since) ? st.since : 0,
     });
@@ -297,7 +304,7 @@ function staleRows(s, scope, sessions) {
       if (!k) continue;
       rows.push({
         id: `ar:${k}`, group: 'stale', kind: 'archive', builder: b.id, fkey: k,
-        name: inboxClip(lane.id, LIMITS.name), lane: inboxClip(lane.id, LIMITS.name), p: 'ok',
+        name: inboxClip(lane.id, LIMITS.name), lane: inboxClip(lane.id, LIMITS.name), p: 'off',
         reason: 'merged, ready to retire', since: 0,
       });
     }
@@ -359,7 +366,7 @@ function runRows(runs, now) {
       if (!link) continue;
       rows.push({
         // News, not trouble (README §5): the grey hollow lamp, never a hue.
-        ...base, id: `rp:${r.run}:${link}`, kind: 'run-pr', p: 'off', lampLabel: 'pr to review',
+        ...base, group: 'runprs', id: `rp:${r.run}:${link}`, kind: 'run-pr', p: 'off', lampLabel: 'pr to review',
         reason: `pr: ${inboxClip(str(a.title), LIMITS.reason) ?? inboxClip(link, LIMITS.reason)}`,
         link, since: isNum(a.ts) ? a.ts : 0,
       });
@@ -392,11 +399,13 @@ export function ackEvent(plan) {
  */
 export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], ghost = null, runs = null } = {}) {
   const sessions = inboxSessionsOf(s, scope);
+  const runRowsAll = Array.isArray(runs) ? runRows(runs, now) : [];
   const by = {
     approvals: approvalRows(s, scope, now),
-    runs: Array.isArray(runs) ? runRows(runs, now) : [],
     needs: needsRows(s, scope, sessions),
+    runs: runRowsAll.filter((r) => r.group === 'runs'),
     review: reviewRows((Array.isArray(review) ? review : []).filter((it) => inboxInScope(it?.builder, scope))),
+    runprs: runRowsAll.filter((r) => r.group === 'runprs'),
     paused: pausedRows(sessions),
     stale: staleRows(s, scope, sessions),
   };
@@ -407,12 +416,14 @@ export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], gh
     by[g.group].push(g);
     rows.set(g.id, g);
   }
-  const groups = GROUPS.filter((id) => id !== 'runs' || Array.isArray(runs) || by.runs.length).map((id) => ({
+  const shown = GROUPS.filter((id) => (id !== 'runs' && id !== 'runprs') || Array.isArray(runs) || by[id].length).map((id) => ({
     id,
     title: GROUP_TITLES[id],
     note: id === 'approvals' ? COOPERATIVE_NOTE : null,
     rows: by[id],
+    empty: by[id].length === 0,
   }));
+  const groups = [...shown.filter((g) => !g.empty), ...shown.filter((g) => g.empty)];
   const order = groups.flatMap((g) => g.rows.map((r) => r.id));
   const count = groups.reduce((n, g) => n + g.rows.filter((r) => !r.closed).length, 0);
   return { groups, order, rows, count };
@@ -470,7 +481,7 @@ export function keyAction(key, focusId, model) {
   const r = rowOf(model, focusId);
   if (!r) return { none: 'no-focus' };
   if (key === 'Enter') {
-    if (r.group === 'runs') return { run: r.run, rowId: r.id };
+    if (r.group === 'runs' || r.group === 'runprs') return { run: r.run, rowId: r.id };
     return r.fkey ? { open: r.fkey, rowId: r.id } : { none: 'no-target' };
   }
   if (key === 'a' && r.kind === 'run-need') {

@@ -55,7 +55,17 @@
   color: var(--text-3);
   cursor: help;
 }
-.inbox-group > .empty { padding: 0 var(--sp-2); }
+/* T16: an empty group is one muted line ("Review · none"), below the filled ones. */
+.inbox-group:not([data-empty]) + .inbox-group[data-empty] { margin-top: var(--sp-2); }
+.inbox-empty {
+  display: flex;
+  align-items: center;
+  min-height: var(--row-h);
+  margin: 0;
+  padding: 0 var(--sp-2);
+  border-bottom: var(--bw) solid var(--line-weak);
+  color: var(--text-3);
+}
 
 .inbox-rows {
   margin: 0;
@@ -67,7 +77,9 @@
   cursor: pointer;
 }
 .inbox-row:hover { background: var(--bg-hover); }
-.inbox-row[aria-selected="true"] { background: var(--bg-selected); }
+/* T16: focus is a 2 px accent ring inside the row, never a fill. */
+.inbox-row[aria-selected="true"],
+.inbox-review-slot[data-focus] { outline: 2px solid var(--accent); outline-offset: -2px; }
 .inbox-row[data-closed] { color: var(--text-3); background: var(--tex-hatch); }
 .inbox-row[data-closed] .plate { color: var(--text-3); border-color: var(--line); }
 

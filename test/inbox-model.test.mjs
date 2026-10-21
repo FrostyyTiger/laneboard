@@ -45,7 +45,7 @@ test('groups come in the plan order and the approvals header carries the S7 note
   const m = buildInbox(storeOf([]), { now: NOW });
   // No runs list (no runs route): the runs group is left out.
   assert.deepEqual(m.groups.map((g) => g.id), ['approvals', 'needs', 'review', 'paused', 'stale']);
-  assert.deepEqual(GROUPS, ['approvals', 'runs', 'needs', 'review', 'paused', 'stale']);
+  assert.deepEqual(GROUPS, ['approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
   assert.deepEqual(buildInbox(storeOf([]), { now: NOW, runs: [] }).groups.map((g) => g.id), GROUPS);
   assert.equal(m.groups[0].note, COOPERATIVE_NOTE);
   assert.match(COOPERATIVE_NOTE, /^Approvals, pause, budget and kill are cooperative on the builder: an agent with a shell there can bypass them$/);
@@ -283,10 +283,10 @@ test('runs: open needs and recent PRs, newest first, each linking to the run pag
     runRow('acme-docs', { needs: [need(0, NOW - 30 * 60_000, { kind: 'fence', text: 'touched a fenced file' })] }),
   ];
   const m = buildInbox(storeOf([]), { now: NOW, runs });
-  assert.deepEqual(m.groups.map((g) => g.id).slice(0, 2), ['approvals', 'runs']);
-  assert.deepEqual(groupIds(m, 'runs'), [
-    'rn:acme-docs:0', 'rn:acme-search:2', 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42', 'rn:acme-search:0',
-  ]);
+  // T16: the run needs and the run PRs are the filled groups, needs before PRs.
+  assert.deepEqual(m.groups.map((g) => g.id).slice(0, 2), ['runs', 'runprs']);
+  assert.deepEqual(groupIds(m, 'runs'), ['rn:acme-docs:0', 'rn:acme-search:2', 'rn:acme-search:0']);
+  assert.deepEqual(groupIds(m, 'runprs'), ['rp:acme-search:https://example.invalid/acme/acme-api/pull/42']);
   const r = rowOf(m, 'rn:acme-search:2');
   assert.equal(r.href, '#/runs?run=acme-search');
   assert.equal(r.href, runPageHref('acme-search'));
@@ -323,11 +323,11 @@ test('runs: untrusted text is clipped, bad ids and links are dropped, acked need
 test('runs: a stopped run keeps its PR for RUN_PR_FRESH_MS after its last event, then drops it', () => {
   const pr = { url: 'https://example.invalid/acme/acme-api/pull/7', title: 'PR', ts: NOW - 30 * HOUR };
   const at = (ago) => buildInbox(storeOf([]), { now: NOW, runs: [runRow('acme-api', { state: 'stopped', updatedAt: NOW - ago, prs: [pr] })] });
-  assert.equal(groupIds(at(RUN_PR_FRESH_MS - 1000), 'runs').length, 1);
-  assert.equal(groupIds(at(RUN_PR_FRESH_MS + 1000), 'runs').length, 0);
+  assert.equal(groupIds(at(RUN_PR_FRESH_MS - 1000), 'runprs').length, 1);
+  assert.equal(groupIds(at(RUN_PR_FRESH_MS + 1000), 'runprs').length, 0);
   // A live run keeps its PR whatever its age.
   const live = buildInbox(storeOf([]), { now: NOW, runs: [runRow('acme-api', { updatedAt: NOW - 3 * RUN_PR_FRESH_MS, prs: [pr] })] });
-  assert.equal(groupIds(live, 'runs').length, 1);
+  assert.equal(groupIds(live, 'runprs').length, 1);
 });
 
 test('runs: `a` on a run need is the needs.ack of its ts; on a PR it does nothing', () => {
