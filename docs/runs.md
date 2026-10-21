@@ -237,6 +237,10 @@ laneboard run stop   --run readiness --reason done
 | `stop` | `--reason` (left out, the line carries no reason and the run records `stop: "unknown"`), `--rounds N` (the count of rounds done, not the cap), `--usd x` |
 | `cost` | **`--usd x`**, `--n N` (a `cost` event; the run's cost is the sum of these; a `round --end --usd` is the round's only, summed for the run when it sends no `cost`) |
 
+A goal is a sentence about what the run is for (`--goal "Night 5: PR state in the Inbox"`),
+not the run id: the board shows it as the run's title. `start` with a `--goal` equal to
+the run id still writes the line (exit 0) and prints a one-line hint on stderr.
+
 There is no `--budget` flag: a run's budget is `--max-rounds` and `--window-pct` on
 `start`, kept in `run.start`'s `budget`. The budget burn column (5 h / 7 d) shows
 `fiveHourPct` and `sevenDayPct` of the run's last `usage` event, and no `laneboard run`

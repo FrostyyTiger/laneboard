@@ -929,6 +929,7 @@ const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 
 const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
   start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--max-rounds N] [--window-pct P]
+           --goal is a sentence about what the run is for (--goal "Night 5: PR state in the Inbox"), not the run id
            --max-rounds N is the round cap; --rounds N on start is its old name (a note on stderr)
            there is no --budget flag: a run's budget is --max-rounds and --window-pct, kept in run.start's budget
            the budget burn column is the 5 h / 7 d usage % of the run's last usage event, which no subcommand writes:
@@ -1118,6 +1119,10 @@ async function cmdRun() {
   const { parseLine, parseLines, foldRun, ackTarget, droppedFields, RUN_ID, FENCE_ACK_BY } = await runProtocol();
   if (!RUN_ID.test(run)) runUsage(`not a run id: ${JSON.stringify(cleanTerm(run))} (letters, digits, . _ -; 64 at most)`);
   const ev = runEvent(sub, fields);
+  // The board shows the goal as the run's title: the id again tells nobody what the run is for.
+  if (sub === 'start' && ev.goal?.trim() === run) {
+    process.stderr.write(`hint: --goal is the run id; a goal says what the run is for (--goal "Night 5: PR state in the Inbox")\n`);
+  }
   const event = { v: 1, t: ev.t, run, ts: Date.now(), ...ev };
   const line = JSON.stringify(event);
   const checked = parseLine(line);

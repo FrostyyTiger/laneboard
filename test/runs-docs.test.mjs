@@ -243,3 +243,9 @@ test('docs/runs.md says there is no --budget flag and where the burn column gets
   assert.match(flat, /shows `fiveHourPct` and `sevenDayPct` of the run's last `usage` event, and no `laneboard run` subcommand writes one/);
   assert.match(flat, /warn at 90 % \(5 h\) and 85 % \(7 d\), fixed/);
 });
+
+test('docs/runs.md says a goal is a sentence about the run, not the run id (night 5 T47)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.match(flat, /A goal is a sentence about what the run is for \(`--goal "Night 5: PR state in the Inbox"`\), not the run id/);
+  assert.match(flat, /`start` with a `--goal` equal to the run id still writes the line \(exit 0\) and prints a one-line hint on stderr/);
+});
