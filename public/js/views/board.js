@@ -12,7 +12,7 @@ import { panel, setPanel } from '../ui/components.js';
 import { prChip } from '../ui/widgets.js';
 import { openSheet } from '../ui/sheet.js';
 import {
-  FIELDS, builderCode, builderStale, checksLabel, dataBlock, emptyField, markTrouble, renderCard, showCodes,
+  FIELDS, builderCode, builderStale, checksLabel, dataBlock, emptyField, markTrouble, offlinePlate, renderCard, showCodes,
 } from './board-card.js';
 
 /** True when a builder id names a hub builder that is not live. */
@@ -245,6 +245,7 @@ function renderLaneHead(head, id, d, sessions = []) {
   const title = el('span', 'db-f db-lane lane-title', id);
   title.title = [id, d.lane?.root ?? d.rec?.root ?? ''].filter(Boolean).join(' · ');
   top.append(title);
+  if (d.stale) top.append(offlinePlate());
   if (p?.m != null) {
     const st = el('span', 'db-f db-stage lane-stage', `${p.n ?? 0}/${p.m}`);
     st.title = p.n == null ? `no stage of ${p.m} finished yet` : `stage ${p.n} of ${p.m}`;

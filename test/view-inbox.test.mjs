@@ -81,3 +81,41 @@ test('T16: the focused inbox row is a 2 px accent ring with no fill', () => {
   assert.ok(!of.some((d) => /^background/.test(d.prop)), 'no fill on the focused row, in any theme');
   assert.match(of.find((d) => d.prop === 'outline')?.value ?? '', /^2px solid var\(--accent\)$/);
 });
+
+test('T27: the approval\'s tool chip (BASH) is a sunken plate, never a dark slab; the header builder chip is never filled', async () => {
+  const { store } = await import('../public/js/core/store.js');
+  const saved = store.builders;
+  store.builders = new Map([['builder-a', {
+    id: 'builder-a', status: 'live', sessions: new Map(), lanes: new Map(),
+    approvals: new Map([['a1', { id: 'a1', builder: 'builder-a', session: 'search-ui', tool: 'Bash', summary: 'npm run build', status: 'pending' }]]),
+  }]]);
+  const el = makeEl('div');
+  V.mount(el, { route: { view: 'inbox' } });
+  try {
+    await settle();
+    const row = all(el, (n) => n.classList?.contains('inbox-row') && n.dataset.group === 'approvals')[0];
+    assert.ok(row, 'the approval row is drawn');
+    const plates = all(row, (n) => n.classList?.contains('plate'));
+    const tool = plates.find((p) => p.textContent === 'Bash');
+    assert.ok(tool, 'the tool chip');
+    assert.ok(tool.classList.contains('plate--sunken'), `tool chip class: ${tool.className}`);
+    assert.ok(!plates.some((p) => p.classList.contains('plate--solid')), 'no solid plate in an Inbox row');
+  } finally {
+    V.unmount();
+    store.builders = saved;
+  }
+  const kit = fs.readFileSync(path.join(import.meta.dirname, '..', 'public/css/components.css'), 'utf8');
+  const sunken = declarations(kit).decls.filter((d) => d.prelude === '.plate--sunken');
+  assert.equal(sunken.find((d) => d.prop === 'background')?.value, 'var(--bg-sunken)');
+  assert.equal(sunken.find((d) => d.prop === 'color')?.value, 'var(--text-2)');
+
+  // The header builder chip: outlined, its mark carries the state.
+  const shell = fs.readFileSync(path.join(import.meta.dirname, '..', 'public/css/shell.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const chipRules = [...shell.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .filter(([, sel]) => sel.split(',').some((x) => /\.(builder-chip|conn)\b/.test(x) && !/::?before/.test(x)));
+  assert.ok(chipRules.length >= 2, 'shell.css styles the chip');
+  for (const [, sel, body] of chipRules) assert.doesNotMatch(body, /background/, `${sel.trim()} fills the chip`);
+  assert.match(shell, /\.builder-chip\.status-stale::before \{[^}]*background: transparent;[^}]*border: var\(--bw\) solid var\(--off\)/,
+    'offline is a hollow grey ○');
+  assert.match(shell, /\.conn\.down::before \{ border-radius: 0; background: var\(--p1\); \}/, 'red ■ only when down');
+});

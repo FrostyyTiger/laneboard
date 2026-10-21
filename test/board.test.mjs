@@ -433,3 +433,33 @@ test('T15 Board 6: the IDLE line prints a lane\'s name once, the branch only whe
     else globalThis.document = saved.doc;
   }
 });
+
+test('an offline builder\'s card is grey, marks included, with one `offline` plate (runs night 4 T27)', () => withDom(() => {
+  const saved = { builders: store.builders, kind: store.source.kind };
+  try {
+    store.builders = new Map([['builder-a', { id: 'builder-a', code: 'BA', status: 'stale' }], ['builder-b', { id: 'builder-b', code: 'BB' }]]);
+    store.source.kind = 'hub';
+    const card = renderCard(FULL);
+    const plates = find(card, 'db-offline');
+    assert.equal(plates.length, 1, 'one offline plate');
+    assert.equal(plates[0].textContent, 'offline');
+    const l1 = find(card, 'db-1')[0];
+    const names = l1.children.map((c) => c.className);
+    const at = names.findIndex((c) => c.includes('db-offline'));
+    assert.ok(names[at - 1].includes('db-lane'), `the plate follows the lane name: ${names.join(' | ')}`);
+    // A row inside a lane card carries none: the lane head has the one plate.
+    assert.equal(find(renderCard(FULL, { row: true }), 'db-offline').length, 0, 'a row adds no second plate');
+    store.builders = new Map([['builder-a', { id: 'builder-a', code: 'BA', status: 'live' }]]);
+    assert.equal(find(renderCard(FULL), 'db-offline').length, 0, 'a live builder has no plate');
+  } finally {
+    store.builders = saved.builders;
+    store.source.kind = saved.kind;
+  }
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/board.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rule = css.match(/\.card\.stale :is\(([^)]*)\) \{([^}]*)\}/);
+  assert.ok(rule, 'one :is() rule greys the marks of a stale card');
+  for (const c of ['.lamp', '.db-word', '.db-ctx', '.db-flag', '.mk-kind']) assert.ok(rule[1].includes(c), `${c} is grey on a stale card`);
+  assert.match(rule[2], /color: var\(--text-3\)/);
+  assert.match(css, /\.card\.stale \.mk-kind \{ background: none; \}/, 'no marker fill on a stale card');
+  assert.match(css, /\.card\.stale:not\(\.cursor\) \{ border-color: var\(--line\); \}/, 'no status border on a stale card');
+}));

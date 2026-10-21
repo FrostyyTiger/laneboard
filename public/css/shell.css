@@ -112,9 +112,11 @@
   border-radius: var(--radius);
   color: var(--text-2);
 }
-/* Stale is grey and hollow with the hatch, like the rail's stale lamp; down is
+/* The chip is outlined and never filled: its mark carries the state (runs
+   night 4 T27). Offline (stale) is a hollow grey ○ with grey text; down is
    the p1 square above. No blue: p3 is not a link state (runs T31). */
-.builder-chip.status-stale::before { background: var(--tex-hatch); border: var(--bw) solid var(--off); box-sizing: border-box; }
+.builder-chip.status-stale { color: var(--text-3); }
+.builder-chip.status-stale::before { background: transparent; border: var(--bw) solid var(--off); box-sizing: border-box; }
 .builder-chip.status-connecting::before { background: var(--off); }
 
 /* View nav: icon buttons, 3-4 character labels from 1440px. */

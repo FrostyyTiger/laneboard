@@ -232,6 +232,13 @@ export function builderCode(b) {
   return (b && typeof b.code === 'string' && b.code) || deriveCode(b?.id ?? '');
 }
 
+/** The one `offline` plate of a card whose builder is not live (runs night 4 T27). */
+export function offlinePlate() {
+  const n = plate('offline', { title: 'builder not live: no fresh data' });
+  n.classList.add('db-offline');
+  return n;
+}
+
 /** True when the session's builder is not live (hub: stale, down). */
 export function builderStale(s) {
   const b = builderOf(s);
@@ -486,6 +493,8 @@ export function renderCard(s, { row = false } = {}) {
       chip.onclick = (e) => { e.stopPropagation(); toggleLane(lane.key ?? lane.id); };
       l1.insertBefore(chip, l1.children?.[3] ?? null);
     }
+    // After the lane name, so the plate reads "<lane> offline".
+    if (stale) l1.insertBefore(offlinePlate(), [...l1.children].find((c) => c.classList.contains('db-lane'))?.nextSibling ?? null);
     const l2 = dbLine(db, LAYOUT.line2, 'db-2', o);
     // A line with nothing to say is left out, not a row of gaps.
     card.append(l1, ...(l2.children.length ? [l2] : []));

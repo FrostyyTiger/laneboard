@@ -127,5 +127,13 @@ The light block of `tokens.css` is held to the dark theme's finish by numbers, n
 - **Dim by colour, never by opacity.** A dead session or a builder that is not live is `--text-3`
   (plus the hatch for not live), not a faded card: opacity takes text under 3:1 on light.
 
-Not settled by tokens: the lane-bar working segment and the Map's dot grid. Those are rules of
-the view sheets (runs night 4 T27).
+- **Light does not invert the weights** (runs night 4 T27). The segment bar's working step
+  `--seg-run` is a mid grey lighter than the red and amber segments, idle `--seg-off` lighter
+  still: trouble is the darkest thing on a bar. The Map's dot grid `--grid-dot` is one step under
+  `--line-weak`, quieter than the edges.
+- **No dark slabs.** A label plate next to outlined plates is outlined or sunken
+  (`plate--sunken`: `--bg-sunken` + `--text-2`, the Inbox tool chip), never a black plate.
+- **A builder chip is never filled.** The header chip is outlined; its mark carries the state:
+  ● live, ○ grey offline, ■ red only when down.
+- **An offline builder's cards are grey through and through**, marks included, with one
+  `offline` plate after the lane name: a gone card never shows amber or red.

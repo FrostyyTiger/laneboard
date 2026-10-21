@@ -88,6 +88,13 @@
   border-color: var(--text-2);
   color: var(--text-inv);
 }
+/* A quiet label plate (the Inbox tool name): sunken, never a dark slab next
+   to the outlined plates (runs night 4 T27). */
+.plate--sunken {
+  background: var(--bg-sunken);
+  border-color: var(--line);
+  color: var(--text-2);
+}
 .plate--p1 { border-color: var(--p1-line); color: var(--p1); background: var(--p1-weak); }
 .plate--p2 { border-color: var(--p2-line); color: var(--p2); background: var(--p2-weak); }
 .plate--p1::before { content: "■"; margin-right: 3px; }
@@ -162,9 +169,9 @@
 }
 .segbar > i[data-p="1"] { background: var(--p1); }
 .segbar > i[data-p="2"] { background: var(--p2); }
-.segbar > i[data-p="run"] { background: var(--run); }
+.segbar > i[data-p="run"] { background: var(--seg-run); }
 .segbar > i[data-p="ok"] { background: var(--ok); }
-.segbar > i[data-p="off"] { background: var(--line-strong); }
+.segbar > i[data-p="off"] { background: var(--seg-off); }
 .segbar > i[data-p="dead"] { background: var(--tex-hatch); outline: var(--bw) solid var(--line); outline-offset: -1px; }
 .segbar--empty { border: var(--bw) dashed var(--line); }
 

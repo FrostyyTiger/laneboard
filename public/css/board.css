@@ -58,6 +58,17 @@
 .card.stale .db-usd,
 .card.stale .db-word,
 .card.stale .db-lane { color: var(--text-3); }
+/* Grey through and through, marks included (runs night 4 T27): a builder
+   that is gone never shows amber or red on its cards; the one `offline`
+   plate on the first line says why. :is() lifts these above the mark rules
+   (.db-state[data-p] .db-word, .db-ctx[data-p], .mk-need .mk-kind). */
+.card.stale :is(.lamp, .db-word, .db-ctx, .db-flag, .db-pr, .ck, .tname, .targ, .mk-kind, .mk-text) {
+  color: var(--text-3);
+  filter: none;
+}
+.card.stale .mk-kind { background: none; }
+.card.stale:not(.cursor) { border-color: var(--line); }
+.db-offline { flex: none; color: var(--text-3); border-color: var(--line); }
 
 /* --- the data block ------------------------------------------------------- */
 .db {

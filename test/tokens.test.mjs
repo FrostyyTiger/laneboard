@@ -68,7 +68,7 @@ const THEMED = [
   '--accent', '--accent-weak',
   '--p1', '--p2', '--p3', '--ok',
   '--p1-weak', '--p2-weak', '--p3-weak', '--p1-line', '--p2-line', '--p3-line',
-  '--map-edge-alpha',
+  '--map-edge-alpha', '--seg-run', '--seg-off', '--grid-dot',
 ];
 const INVARIANT = [
   '--font-mono', '--font-label', '--font-ui', '--ls-label',
@@ -130,7 +130,7 @@ test('old names map onto the new tokens', () => {
 });
 
 test('textures use hard stops only', () => {
-  assert.match(DERIVED.get('--tex-dots'), /^radial-gradient\(circle, var\(--line\) 0\.75px, transparent 1px\) 0 0 \/ 16px 16px$/);
+  assert.match(DERIVED.get('--tex-dots'), /^radial-gradient\(circle, var\(--grid-dot\) 0\.75px, transparent 1px\) 0 0 \/ 16px 16px$/);
   assert.match(DERIVED.get('--tex-hatch'), /^repeating-linear-gradient\(45deg, var\(--line\) 0 1px, transparent 1px 6px\)$/);
   const layers = DERIVED.get('--bracket-img').split(/,\s*(?=linear-gradient)/);
   assert.equal(layers.length, 8, 'four corners, two bars each');
@@ -367,4 +367,27 @@ test('the Map\'s topology edges are one step dimmer on light than on dark (runs 
   const dark = Number(DARK.get('--map-edge-alpha')), light = Number(LIGHT.get('--map-edge-alpha'));
   assert.equal(dark, 1);
   assert.ok(light > 0 && light < dark, `light ${light} < dark ${dark}`);
+});
+
+test('light: the bar\'s working segment is lighter than the trouble segments, idle lighter still (runs night 4 T27)', () => {
+  // r22-designer across 3: in light the working segment was near-black, the
+  // heaviest thing on the bar. Trouble (red ■, amber ▲) is the darkest step.
+  const lum = (t) => lumOver(oklch(resolve(t, 'light')), oklch(resolve('--bg-surface', 'light')));
+  for (const p of ['--p1', '--p2']) {
+    assert.ok(lum('--seg-run') > lum(p), `light --seg-run (${lum('--seg-run').toFixed(3)}) lighter than ${p} (${lum(p).toFixed(3)})`);
+  }
+  assert.ok(lum('--seg-off') > lum('--seg-run'), 'idle is lighter than working');
+  // Still a visible segment on the surface it sits on.
+  assert.ok(over('--seg-off', '--bg-surface') >= 1.3, `idle segment ${over('--seg-off', '--bg-surface').toFixed(2)}:1`);
+  const css = fs.readFileSync(path.join(PUBLIC, 'css', 'components.css'), 'utf8');
+  assert.match(css, /\.segbar > i\[data-p="run"\] \{ background: var\(--seg-run\); \}/);
+  assert.match(css, /\.segbar > i\[data-p="off"\] \{ background: var\(--seg-off\); \}/);
+});
+
+test('light: --p2 text (a Map lane label, a ctx %) keeps 4.5:1 on the canvas; the dot grid is one step under --line-weak (runs night 4 T27)', () => {
+  assert.ok(over('--p2', '--bg-canvas') >= 4.5, `light --p2 on the canvas ${over('--p2', '--bg-canvas').toFixed(2)}`);
+  const a = (t, theme) => oklch(resolve(t, theme)).alpha;
+  assert.ok(a('--grid-dot', 'light') < a('--line-weak', 'light'), 'light dots are fainter than --line-weak');
+  assert.equal(resolve('--grid-dot', 'dark'), resolve('--line', 'dark'), 'dark keeps its grid');
+  assert.match(DERIVED.get('--tex-dots'), /var\(--grid-dot\)/, 'the texture draws its dots in --grid-dot');
 });
