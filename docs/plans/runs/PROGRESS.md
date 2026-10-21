@@ -1,0 +1,85 @@
+# Runs: progress
+
+Run `runs-n3` (night 3, a day run on 2026-10-21, deadline 20:00). Scope: README §7 "Night 3": look
+first (the demo gets Drift, Reach and a run to show, then a screenshot pass), then A3 runs everywhere
+(Inbox, Morning, Stuck, Map), B2 Find, B1 `docker` feeder. Nights 1 and 2 are in `nights/n1/` and
+`nights/n2/` (research Q1-Q8 answered there; new questions start at Q9).
+
+Notes for builders, from reading the code (planner, round 1):
+- Every `[ui]` task is looked at before it is ticked: start `node test/tools/demo-fleet.mjs --port 7795`
+  and run `node docs/plans/runs/loop/shoot.mjs --url http://127.0.0.1:7795 --out <RUN_DIR>/shots/T<n>
+  --views <views> --themes dark,light --widths 1440,390`; read `console.txt` (a page error is a bug).
+  Shots go in the run dir, never in the repo. `shoot.mjs` is fenced: run it, do not edit it.
+- The demo (`test/tools/demo-fleet.mjs`) is a real hub (`test/helpers/demo-hub.mjs` `demoHubConfig`,
+  core named `demo-host`) behind a loopback forwarder that lives in the tool itself. A hub loads
+  `server/hub/routes` (fenced), and `server/routes/runs.mjs` is `modes: ['builder']`, so the hub has
+  no `/api/runs`. Hub-side runs are an owner line below; T2 serves a recorded run from the demo's own
+  forwarder with the real fold (`server/runs/protocol.mjs` `foldRun`, `server/routes/runs.mjs`
+  `summarize`), so the Runs view code is the real one.
+- Runs: protocol and fold `server/runs/protocol.mjs` (`KNOWN_TYPES`, `foldRun`; `needs` are
+  `{kind, text, link, n, ts, open}` and v1 has no "resolved" event, only `wait` needs close),
+  store `server/runs/store.mjs`, collector `server/collector/runs.mjs`, routes
+  `server/routes/runs.mjs` (`GET /api/runs`, `GET /api/runs/:run`, `POST /api/runs/events`), config
+  fragment `server/config/runs.mjs` (`runs.files`, `lanes`, `maxEvents`, `keepDays`; new keys also
+  in `docs/config.md`, `test/config-docs.test.mjs` checks), spec `docs/runs.md`
+  (`test/runs-docs.test.mjs`), CLI `laneboard run …` in `bin/laneboard` (`test/cli-run.test.mjs`),
+  view `public/js/views/runs.js` (`loadRuns`, `loadRun`).
+- Inbox: the pure model is `public/js/core/inbox-model.js` (`GROUPS`, `buildInbox`, `keyAction`;
+  tests `test/inbox-model.test.mjs`), the view `public/js/views/inbox.js`. Morning: server
+  `server/morning.mjs` (one builder for the view and `bin/laneboard morning`; tests
+  `test/morning.test.mjs`, `test/hub-morning.test.mjs`), client `public/js/views/morning.js`
+  (`morningModel`, `renderModel`). Session stuck rules: `server/fleet/stuck.mjs` (pure tracker,
+  not fenced) + `server/flags/stuck.mjs`; run rules are a separate pure module, not new session rules.
+- Map: `server/map.mjs` (`buildFleet`, `withDiscovered`, drift, reach), client
+  `public/js/views/map/` (`overlays.js`, `render.js`, `index.js` has `pick(id, {fly})` / `flyTo`).
+  Palette: `public/js/ui/palette.js` `paletteItems` / `paletteRows` (`test/` has `fuzzy` and palette
+  tests). Feeders: `server/feeders/index.mjs` `TABLE` + `collect(kind, …)`, each feeder a pure
+  `toFeed(input, {source, now})` and a `read(opts)` returning `{ok:false, error}` instead of throwing.
+- Fenced (never edit): `public/js/core/store.js`, `net.js`, `keys.js`, `actions.js`,
+  `server/hub/*`, `server/routes/v1.mjs`, the boot files, `test/hygiene.test.mjs`,
+  `docs/plans/runs/loop/*` (full list in `docs/plans/runs/loop/fenced.txt`).
+- Fixtures use invented names only (`builder-a`, `hub`, `hv1`, `acme`, `*.example.invalid`,
+  `192.0.2.x`); the hygiene gate rejects CGNAT addresses and tailnet DNS names, so do not spell
+  them anywhere, PROGRESS included.
+
+## Tasks
+
+- [ ] T1 (C, look) [ui] The demo gets something for Drift and Reach: `test/tools/demo-fleet.mjs` (and `test/helpers/demo-hub.mjs` if the config grows) writes into its temp dir a topology file declaring one node no feed lists (declared, not seen), a feed in `map.feedsDir` with one guest the topology does not name (seen, not declared), and a small Tailscale policy file with invented tags/hosts set as `map.policyFile`, so both overlays draw — done when: a test boots the demo hub config (pattern of `test/demo-fleet.test.mjs`) and `/api/map` has one `drift: "missing"` node, one `drift: "undeclared"` node and at least two `reach.links`; shots of the Map with `o` on Drift and on Reach (dark + light, 1440 + 390) have no page error in `console.txt`
+- [ ] T2 (C, look) [ui] The demo gets a recorded run: an invented run file `test/fixtures/runs/demo-run.jsonl` (run.start with goal/deadline/budget, 6-8 rounds with roles, tasks, outcomes, commits, `usd`, a `tests` and a `tasks` score that move, one open `needs`, one `artifact` PR, a `run.stop`), served by the demo's forwarder at `GET /api/runs` and `GET /api/runs/<id>` through the real `foldRun` + `summarize` (no hub file touched); the Runs view on the demo shows it instead of "a hub does not collect runs yet" — done when: a test folds the fixture and checks the list row (rounds, latest scores with trend, open needs 1, stop reason) and the forwarder helper answers both paths; shots of `#/runs` and the run page (dark + light, 1440 + 390) without page errors
+- [ ] T3 (C, look) [ui] Screenshot pass over Map (Drift, Reach), Runs list, run page, Board and Inbox on the demo, both themes, 1440 and 390: fix the worst visible defect (overlap, clipped text, unreadable contrast, a page error) in its module with a test, and add every other defect as a new task line `- [ ] T<n> (bug) [ui] …` at the end of this list — done when: the fix's test fails before and passes after, the shots after the fix are in `<RUN_DIR>/shots/T3`, and the remaining defects are task lines (or "none found" is written under T3's commit message)
+- [ ] T4 (A3) Protocol: a need can be acknowledged. A new event `{"t":"needs.ack","run":…,"ref":<index or ts of the need>,"by":…}` in `server/runs/protocol.mjs` (`KNOWN_TYPES`, `parseLine`, `foldRun` closes that need: `open: false`, `ackedAt`, `by`; an unknown ref is kept raw, never throws), `laneboard run ack <run> <ref>` in `bin/laneboard`, `docs/runs.md` updated (still `"v":1`, additive) — done when: `test/runs-protocol.test.mjs` covers ack by index, by ts, an unknown ref and a second ack, `test/cli-run.test.mjs` covers `run ack`, `test/runs-docs.test.mjs` stays green
+- [ ] T5 (A3) [ui] Inbox shows runs: a `runs` group in `public/js/core/inbox-model.js` built from `/api/runs` (open `needs` and PR artifacts not yet merged, newest first, clipped like other rows, each linking to `#/runs/<id>`), drawn by `public/js/views/inbox.js` next to approvals; the ack key on a need row posts T4's `needs.ack` through the existing `POST /api/runs/events` (no new route); with no runs route (a hub) the group is absent, not an error — done when: `test/inbox-model.test.mjs` covers the group order, the link, the ack mapping and the no-runs case; shots of `#/inbox` on the demo (dark + light, 1440 + 390) show the run need from T2
+- [ ] T6 (A3) Morning, server side: `server/morning.mjs` adds `runs: [{run, goal, rounds, scores: {name: {start, end, better}}, stop, prs: [url], usd, usage}]` for every run with events in the window (from the runs store, empty when there is none), and `bin/laneboard morning` prints one line per run — done when: `test/morning.test.mjs` covers a run inside the window, one outside, one that started before and ended in it (start score = first in the window), and no runs store; `/api/morning` on a hub without runs has `runs: []`
+- [ ] T7 (A3) [ui] Morning view draws T6's runs: one block per run in `public/js/views/morning.js` (`morningModel` / `renderModel`: goal, rounds, score start → end with its direction, stop reason, PR chips, cost), linking to the run page — done when: `test/view-morning.test.mjs` runs `morningModel` with a fixture `runs` list gives the block fields, `test/design-guardrails.test.mjs` stays green; shots of `#/morning` (dark + light, 1440 + 390) without page errors
+- [ ] T8 (A3) Stuck runs: a pure `server/runs/stuck.mjs` `runStuck(run, cfg, now)` with the rules no score change in N rounds, the same task failed twice, rounds getting shorter (last K each shorter, a rate-limit sign), deadline within M minutes with no `run.stop` and no report artifact; thresholds under `runs.stuck` in `server/config/runs.mjs` (defaults documented in `docs/config.md`, `none` = rules off with `runs.stuck: false`); `summarize` carries `stuck: {rule, reason} | null` and the Runs list shows it as the existing stuck badge style — done when: `test/runs-stuck.test.mjs` covers each rule firing and not firing, `test/config-runs.test.mjs` the new keys, `test/config-docs.test.mjs` stays green
+- [ ] T9 (A3) Map, server side: `server/map.mjs` adds a node per run (`kind: "run"`, `id: run:<id>`, `progress` 0-1 from the `tasks` score when it has a max, else rounds / `budget.rounds`, `state`, `stuck` from T8) attached to the machine its run file lives on (the core, or a discovered node whose name equals the run's `host` field when given), dropped when the run stopped more than `runs.mapKeepMin` ago — done when: `test/map.test.mjs` (or `test/map-runs.test.mjs`) covers a running run on the core, a run on a discovered VM that leaves when its feed no longer lists the VM, and no runs = no run nodes (counts unchanged)
+- [ ] T10 (A3) [ui] Map draws run nodes with a progress ring: `public/js/views/map/render.js` draws the ring (arc = progress, grey when running fine, trouble hue only when stuck or stopped on error), `overlays.js` / inspector say goal, round n / max, progress and link to `#/runs/<id>` — done when: `test/map-render.test.mjs` draws a model with run nodes at 0, 0.5 and 1 progress (fake context, no negative radius), `test/map-overlays.test.mjs` covers the stuck tone; shots of the Map on the demo with T2's run (dark + light, 1440 + 390)
+- [ ] T11 (B2) [ui] Find: `⌘K` reaches Map nodes, services and ports. `paletteItems` in `public/js/ui/palette.js` gets `NODE` items from the last Map model (label, site, kind, its services and ports as searchable sub text, e.g. "postgres :5432 on hv1/db"), choosing one navigates to the Map and flies to the node (`pick(id, {fly: true})` through the route's `sel`); nothing when no model has loaded — done when: a new `test/palette-find.test.mjs` (pattern of `test/fuzzy.test.mjs`) ranks "postgres" to the node that runs it and a port query ":5432" finds it, with no model it adds nothing; a shot of the palette open on the demo with a node query
+- [ ] T12 (B1) `docker` feeder `server/feeders/docker.mjs`: `toFeed(containers, {source, now})` mapping the Engine API container list (per Q9: name, image, state, health, published ports, compose project label) into the feed format (containers as `guests` with `type: "container"`, health into `alerts`, ports into `services`), `read({socket, timeoutMs})` GETs the list over the local unix socket with `node:http` `socketPath`, read-only (GET only, no other path), a missing socket = `{ok:false}`; added to `TABLE`, `laneboard feed docker`, `docs/providers.md` and `docs/map.md` — done when: `test/feeders-docker.test.mjs` maps `test/fixtures/feeds/docker-containers.json` (invented names), checks an unhealthy and an exited container, and a fake unix-socket server sees exactly one GET; hygiene stays green
+
+## Research questions
+
+- [ ] Q9 The Docker Engine API container list over the local socket: `GET /containers/json` (`all=1`) fields (`Id`, `Names` with the leading slash, `Image`, `State`, `Status`, `Ports` `{IP, PrivatePort, PublicPort, Type}`, `Labels` incl. `com.docker.compose.project` / `service`), where health shows (the `Status` text "(healthy)" vs `State.Health` only in inspect), API version negotiation (`/version`, `/v1.xx/` prefix), and what read-only access to the socket means in practice (socket proxies that allow GET only), with links to the API reference — for T12
+- [ ] Q10 How comparable tools put long-running automated work into an attention inbox and a morning digest (GitHub notifications for workflow runs and review requests, Buildkite / Argo Workflows / Temporal UI, agent products like OpenHands or Devin sessions): what an item carries, how it is acknowledged or snoozed, how a digest summarises a run (start → end, why it stopped, cost), what to avoid (noise, duplicate items) — for T5, T7
+- [ ] Q11 How tools detect a run that stopped making progress: early-stopping "patience" and min-delta in ML trainers (Keras, PyTorch Lightning), flaky/repeated-failure detection in CI (same job failing twice), backoff signs of rate limiting; typical default thresholds and how they are explained to a user — for T8
+- [ ] Q12 "Go to anything" palettes in infrastructure UIs (Grafana search, k9s, Datadog, Backstage, VS Code `⌘P`): how results of different types (host, service, port, container) are labelled and ranked, how a port or service query resolves to the machine running it, and how the UI moves to the result (fly/zoom vs page change) — for T11
+
+## For the owner
+
+- **Runs on a hub need a fenced file.** The hub loads `server/hub/routes` (fenced) and the runs route
+  is builder-only, so a hub has no `/api/runs` and no relay of its builders' runs. Tonight the demo
+  serves a recorded run from its own forwarder (T2) so the Runs view, Inbox (T5) and Morning (T7)
+  can be seen; a real hub relay (or `modes: ['builder','hub']` with the hub's own run files) is your
+  call. Same item as night 1's "runs in `/api/v1`".
+- **Acknowledging a run need is a protocol addition (T4, `needs.ack`).** It stays `"v":1` and is
+  written through the existing `POST /api/runs/events`; say if you would rather keep v1 frozen and
+  make acks a client-side "seen" instead.
+- Still waiting from earlier nights: `nights/n2/PROGRESS.md` "Morning" items 1-7 (look at the UI,
+  review 25 operator gaps, signed feed push, busy port / boot messages, risky files, taste calls)
+  and `nights/n1/PROGRESS.md` "Morning". Night 2's stranger findings that are not fenced (README
+  sentence on a busy port, a route-per-view table) and B2 **Time** are README §7 item 8: not planned
+  as tasks; a triage round may add them if time is left.
+
+## Reviews
+
+## Morning
