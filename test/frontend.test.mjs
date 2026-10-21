@@ -839,6 +839,9 @@ test('the split is byte-identical to styles.css (minus the aliases) followed by 
     assert.equal(readCss(CSS_ORDER), before.join('\n') + git('show', 'HEAD:public/map.css'));
     return;
   }
+  // A shallow checkout (CI's default depth 1) has the commit but not its
+  // parent; the invariant cannot be checked there.
+  try { git('cat-file', '-e', `${commit}^:public/styles.css`); } catch { return t.skip(`parent of ${commit.slice(0, 7)} not in the history (shallow checkout)`); }
   const before = git('show', `${commit}^:public/styles.css`).split('\n');
   assert.match(before[84], /Aliases kept/, 'line 85 opens the alias block');
   assert.equal(before[104], '}', 'line 105 closes :root');
