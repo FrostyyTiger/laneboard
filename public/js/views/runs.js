@@ -21,8 +21,8 @@
 //
 // A run's page `#/runs?run=<id>` (task T8; the router checks the id against
 // the protocol's pattern): GET /api/runs/<id> -> {run} (the whole fold),
-// polled the same way. Under a header with the row's facts: the stop reason,
-// the open needs, the timeline of rounds (role, task, outcome, commit, cost,
+// polled the same way. Under a header with the row's facts (a stopped run's
+// reason and rounds follow STOPPED in its state label, T17): the open needs, the timeline of rounds (role, task, outcome, commit, cost,
 // duration), the artifacts (PR links), and the unknown events folded away in
 // a <details>. A row of the list opens its page through a plain link.
 // An open need gets OPEN (its link) and ACK (task T28): ACK posts T4's
@@ -309,12 +309,17 @@ function rnField(cls, text, title) {
   return n;
 }
 
-function stateNode(row) {
+/** Lamp + word; on the run page a stopped run's `stop` (stopOf) follows the word (T17). */
+function stateNode(row, stop = null) {
   const s = stateOf(row);
   const n = el('span', 'rn-f rn-state');
   n.dataset.p = s.p;
   n.append(lamp(s.p, { label: s.title }), el('span', 'rn-state-t', s.word));
   n.title = s.title;
+  if (stop) {
+    n.append(el('span', 'rn-state-why', `· ${stop.why}`));
+    n.title = s.title = stop.title;
+  }
   const stuck = stuckOf(row);
   if (stuck) {
     const words = `stuck: ${stuck.reason}`;
@@ -627,19 +632,26 @@ export function roundSessions(r) {
   return out;
 }
 
-/** The stop of a folded run -> {reason, p, text, title}, or null while it runs. */
+/**
+ * The stop of a folded run -> {reason, p, why, text, title}, or null while it runs.
+ * `why` ("budget · after 7 rounds") follows STOPPED in the run page's state label
+ * (T17); the loop's own `usd` stays in the title, the head's cost cell has the sum.
+ */
 export function stopOf(run) {
   if (run?.state !== 'stopped') return null;
   const s = isObj(run.stop) ? run.stop : {};
   const reason = rnClean(s.reason, 32) ?? 'unknown';
-  const bits = [`stopped: ${reason}`];
+  const bits = [reason];
   if (Number.isInteger(s.rounds)) bits.push(`after ${s.rounds} ${s.rounds === 1 ? 'round' : 'rounds'}`);
-  if (isNum(s.usd)) bits.push(money(s.usd));
+  const why = bits.join(' · ');
+  const title = [isNum(s.ts) ? `stopped at ${new Date(s.ts).toISOString()}` : `stopped: ${reason}`];
+  if (isNum(s.usd)) title.push(`the loop reported ${money(s.usd)}`);
   return {
     reason,
     p: STOP_P[reason] ?? 'off',
-    text: bits.join(' · '),
-    title: isNum(s.ts) ? `stopped at ${new Date(s.ts).toISOString()}` : bits[0],
+    why,
+    text: `stopped · ${why}`,
+    title: title.join(' · '),
   };
 }
 
@@ -705,13 +717,15 @@ function pageHead(run, row, now) {
   const back = el('a', 'rn-back', '← Runs');
   back.href = LIST_HREF;
   const facts = el('div', 'rn-facts');
+  const stop = stopOf(run);
   facts.append(
     rnField('rn-round', `round ${roundText(row)}`, isNum(row.rounds) ? `${row.rounds} rounds recorded` : null),
     scoresNode(row),
     burnNode(row),
-    leftNode(row, now),
-    costNode(row),
   );
+  // once stopped, the reason is in the state label: no second "stop …" cell (T17)
+  if (!stop) facts.append(leftNode(row, now));
+  facts.append(costNode(row));
   const ev = Number.isInteger(run.events) ? run.events : null;
   if (ev !== null) {
     const skipped = Number.isInteger(run.skipped) && run.skipped > 0 ? run.skipped : 0;
@@ -721,7 +735,7 @@ function pageHead(run, row, now) {
     facts.append(n);
   }
   const top = el('div', 'rn-head-top');
-  top.append(stateNode(row), goalNode(row));
+  top.append(stateNode(row, stop), goalNode(row));
   head.append(back, top, facts);
   return head;
 }
@@ -1029,13 +1043,6 @@ export function renderRunPage(container, run, st = { status: 'ok' }, now = Date.
   } else {
     const row = runSummaryOf(run);
     page.append(pageHead(run, row, now));
-    const stop = stopOf(run);
-    if (stop) {
-      const n = el('p', 'rn-stop', stop.text);
-      n.dataset.p = stop.p;
-      n.title = stop.title;
-      page.append(n);
-    }
     if (st.status === 'error') page.append(el('p', 'rn-stale', `Not refreshed: ${st.message ?? 'request failed'}.`));
     page.append(needsSection(row, run, now, busy), chartsSection(run), timelineSection(run, now), artifactsSection(run));
     const raw = rawSection(run);

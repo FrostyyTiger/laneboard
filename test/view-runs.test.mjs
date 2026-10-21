@@ -269,11 +269,11 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
   assert.deepEqual(byClass(page, 'rn-score').map((n) => n.textContent), ['lint9▼', 'tests0.93▲']);
   assert.equal(byClass(page, 'rn-cost')[0].textContent, 'cost$3.75');
   assert.equal(byClass(page, 'rn-events')[0].textContent, '22 events');
-  // stop reason, coloured: no progress needs a look
-  const stop = byClass(page, 'rn-stop')[0];
-  assert.equal(stop.textContent, 'stopped: no-progress · after 3 rounds · $3.75');
-  assert.equal(stop.dataset.p, '2');
-  assert.match(stop.title, /^stopped at 2026-/);
+  // stop reason in the state label (T17), coloured: no progress needs a look
+  const state = byClass(byClass(page, 'rn-head')[0], 'rn-state')[0];
+  assert.match(state.textContent, /stopped· no-progress · after 3 rounds$/);
+  assert.equal(state.dataset.p, '2');
+  assert.match(state.title, /^stopped at 2026-/);
   // the open need, with its link
   const need = byClass(page, 'rn-need');
   assert.equal(need.length, 1);
@@ -346,12 +346,14 @@ test('the timeline: a live round runs to now, retries are counted, rounds sort b
     const live = byClass(page, 'rn-tl-row')[1];
     assert.equal(live.dataset.live, '');
     assert.equal(byClass(live, 'rn-tl-re')[0].textContent, ' ×2');
-    assert.equal(byClass(page, 'rn-stop').length, 0, 'no stop line while it runs');
+    assert.equal(byClass(page, 'rn-state-why').length, 0, 'no stop reason while it runs');
   });
   assert.equal(stopOf({ state: 'running' }), null);
   assert.deepEqual(stopOf({ state: 'stopped', stop: { reason: 'error', rounds: 1 } }),
-    { reason: 'error', p: '1', text: 'stopped: error · after 1 round', title: 'stopped: error' });
-  assert.equal(stopOf({ state: 'stopped' }).text, 'stopped: unknown');
+    { reason: 'error', p: '1', why: 'error · after 1 round', text: 'stopped · error · after 1 round', title: 'stopped: error' });
+  assert.equal(stopOf({ state: 'stopped' }).text, 'stopped · unknown');
+  assert.equal(stopOf({ state: 'stopped', stop: { reason: 'budget', ts: 0, usd: 9.98 } }).title,
+    'stopped at 1970-01-01T00:00:00.000Z · the loop reported $9.98');
 });
 
 test('a run with nothing yet: empty sections say so, no null or undefined text', () => withDom(() => {
@@ -652,6 +654,37 @@ test('T25: a label and its value share one cell: "stop budget", "cost $9.98"', (
   const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
   assert.match(css, /\.rn-k \{[^}]*color: var\(--text-3\)/);
   assert.doesNotMatch(css, /\.rn-k \{[^}]*grid-column/);
+}));
+
+test('T17: the run page folds the stop into the state label: one label, no stop line, no stop cell', () => withDom(() => {
+  const run = { ...RUN, stop: { reason: 'budget', rounds: 7, usd: 9.98, ts: RUN.updatedAt } };
+  const page = renderRunPage(null, run, { status: 'ok' }, FIX.updatedAt);
+  const head = byClass(page, 'rn-head')[0];
+  const labels = byClass(page, 'rn-state');
+  assert.equal(labels.length, 1, 'one state label on the page');
+  const label = labels[0];
+  assert.deepEqual(label.children.slice(1).map((c) => [c.className, c.textContent]),
+    [['rn-state-t', 'stopped'], ['rn-state-why', '· budget · after 7 rounds']]);
+  assert.equal(label.dataset.p, 'off', 'a budget stop is grey');
+  assert.match(label.title, /^stopped at .* · the loop reported \$9\.98$/);
+  // no second stop line, and the head's facts hold no "stop budget" cell
+  assert.equal(byClass(page, 'rn-stop').length, 0);
+  assert.equal(byClass(head, 'rn-left').length, 0);
+  const said = (page.textContent.match(/budget/g) ?? []).length;
+  assert.equal(said, 1, 'the reason is said once');
+  assert.equal(byClass(head, 'rn-cost')[0].textContent, 'cost$3.75', 'the cost stays a fact');
+  // a running run keeps its time-left cell and a bare label
+  const live = renderRunPage(null, { ...RUN, state: 'running', stop: null }, { status: 'ok' }, FIX.updatedAt);
+  assert.equal(byClass(live, 'rn-left').length, 1);
+  assert.equal(byClass(live, 'rn-state-why').length, 0);
+  // the list row is unchanged: its stop reason stays a cell of the grid
+  const host = document.createElement('div');
+  renderRuns(host, [{ ...FIX, stop: 'budget' }], { status: 'ok' }, FIX.updatedAt);
+  assert.equal(byClass(host, 'rn-state-why').length, 0);
+  assert.equal(byClass(byClass(host, 'rn-left')[0], 'rn-v')[0].textContent, 'budget');
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  assert.doesNotMatch(css, /\.rn-stop\b/, 'the stop line rules are gone');
+  assert.match(css, /\.rn-state\[data-p="2"\] \.rn-state-why \{ color: var\(--p2\); \}/);
 }));
 
 test('T44: the goal is the one flexible column of the list, every row a subgrid of it, the full goal its title', () => withDom(() => {

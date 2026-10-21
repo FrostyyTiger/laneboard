@@ -56,6 +56,10 @@
 }
 .rn-state[data-p="1"] .rn-state-t { color: var(--p1); }
 .rn-state[data-p="2"] .rn-state-t { color: var(--p2); }
+/* the run page's stop reason after STOPPED (T17): body text, the word's hue when it needs a look */
+.rn-state-why { color: var(--text-1); }
+.rn-state[data-p="1"] .rn-state-why { color: var(--p1); }
+.rn-state[data-p="2"] .rn-state-why { color: var(--p2); }
 /* the stuck badge (server/runs/stuck.mjs): Board's flag, the icon in p2 */
 .rn-stuck { display: inline-flex; color: var(--p2); }
 
@@ -136,24 +140,22 @@
   overflow-wrap: anywhere;
 }
 
-/* ---- one run's page (T8): head, stop, needs, timeline, artifacts, raw */
+/* ---- one run's page (T8): head, needs, timeline, artifacts, raw */
 /* a reading width: at 1440 the eye does not cross the screen per row (T27) */
 .rn-page { display: grid; gap: var(--sp-3); max-width: var(--read-max); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
 .rn-back { justify-self: start; color: var(--text-3); text-decoration: none; }
 .rn-back:hover { color: var(--text-1); }
 .rn-back:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
 .rn-head { display: grid; gap: var(--sp-2); }
-.rn-head-top { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
-/* the state word keeps its width; the goal shrinks and ellipsizes (it ran under STOPPED at 390) */
+.rn-head-top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); min-width: 0; }
+/* the state label keeps its width; the goal shrinks and ellipsizes (it ran under STOPPED at 390),
+   and below 24ch it takes its own line (the label carries the stop reason, T17) */
 .rn-head-top .rn-state { flex: none; }
-.rn-head-top .rn-goal { flex: 1 1 auto; min-width: 0; }
+.rn-head-top .rn-goal { flex: 1 1 24ch; min-width: 0; }
 .rn-head .rn-goal-t { font-size: var(--fs-13); }
 .rn-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); }
 .rn-events[data-p="3"] { color: var(--p3); }
 
-.rn-stop { margin: 0; color: var(--text-1); }
-.rn-stop[data-p="1"] { color: var(--p1); }
-.rn-stop[data-p="2"] { color: var(--p2); }
 .rn-stale { margin: 0; color: var(--text-3); }
 
 .rn-sec { display: grid; gap: var(--sp-1); }
