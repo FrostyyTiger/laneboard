@@ -716,6 +716,23 @@ test('readout text: zoom, scope, node count, overlay, UTC', () => {
   assert.doesNotMatch(r.readout({ overlay: 'status', reach: { links: 12, touches: 3 }, now }), /LINKS/);
 });
 
+test('readout at phone width keeps the overlay and its count, drops the clock (T19)', () => {
+  const r = createRenderer(fakeCtx(), PAL);
+  const now = Date.UTC(2026, 0, 2, 12, 4, 31);
+  const base = { zoom: 1, drawn: 22, total: 24, now, compact: true };
+  const drift = r.readout({ ...base, overlay: 'drift', drift: { missing: 1, undeclared: 1 } });
+  assert.equal(drift, 'Z 1.00× · N 22/24 · DRIFT ◌1 □1');
+  assert.equal(r.readout({ ...base, overlay: 'reach', reach: { links: 9, touches: null } }), 'Z 1.00× · N 22/24 · REACH 9');
+  assert.equal(r.readout({ ...base, overlay: 'reach', reach: { links: 9, touches: 3 } }), 'Z 1.00× · N 22/24 · REACH 3/9');
+  assert.equal(r.readout({ ...base, overlay: 'ci' }), 'Z 1.00× · N 22/24 · OVL CI');
+  assert.equal(r.readout({ ...base, overlay: 'status' }), 'Z 1.00× · N 22/24 · 12:04:31Z');
+  // Fits the 390 corner: one short line, no clock once an overlay is on.
+  for (const t of [drift, r.readout({ ...base, overlay: 'reach', reach: { links: 120, touches: 30 } })]) {
+    assert.doesNotMatch(t, /\d\d:\d\d:\d\dZ/);
+    assert.ok(t.length <= 34, t);
+  }
+});
+
 test('setPalette swaps colours for the next frame (lb:theme)', () => {
   const ctx = fakeCtx();
   const r = createRenderer(ctx, PAL);

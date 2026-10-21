@@ -906,7 +906,8 @@ export function createRenderer(ctx, palette) {
 
   /**
    * The readout corner's text: `Z 1.80×  SCOPE B1  N 214/570  OVL CI  12:04:31Z`
-   * (compact on a phone: `Z 1.80× · N 214/570 · 12:04:31Z`). `scope` is a
+   * (compact on a phone: `Z 1.80× · N 214/570 · 12:04:31Z`, the clock
+   * giving way to the overlay and its count when one is on). `scope` is a
    * builder code or id, or 'all'; `p95` (ms, from ?mapperf=1) is appended.
    * In the drift overlay, `drift` ({missing, undeclared} counts) adds
    * `◌ NOT SEEN 2  □ NOT DECLARED 3` after the overlay, each count keyed by
@@ -918,7 +919,16 @@ export function createRenderer(ctx, palette) {
     const z = `Z ${Number(zoom).toFixed(2)}×`;
     const n = `N ${drawn}/${total}`;
     const utc = `${new Date(now).toISOString().slice(11, 19)}Z`;
-    if (compact) return [z, n, utc].join(' · ');
+    if (compact) {
+      // A phone keeps the overlay and its count and drops the clock first:
+      // `Z 1.00× · N 22/24 · DRIFT ◌1 □1`, `… · REACH 9`, `… · OVL CI`.
+      const ov = String(overlay || 'status');
+      if (ov === 'status') return [z, n, utc].join(' · ');
+      let tag = `OVL ${ov.toUpperCase()}`;
+      if (ov === 'drift' && drift) tag = `DRIFT ${DRIFT_MARK.missing.glyph}${drift.missing ?? 0} ${DRIFT_MARK.undeclared.glyph}${drift.undeclared ?? 0}`;
+      if (ov === 'reach' && reach) tag = `REACH ${Number.isFinite(reach.touches) ? `${reach.touches}/` : ''}${reach.links ?? 0}`;
+      return [z, n, tag].join(' · ');
+    }
     const parts = [z, `SCOPE ${!scope || scope === 'all' ? 'ALL' : String(scope).toUpperCase()}`, n, `OVL ${String(overlay).toUpperCase()}`];
     if (overlay === 'drift' && drift) parts.push(`${DRIFT_MARK.missing.glyph} NOT SEEN ${drift.missing ?? 0}`, `${DRIFT_MARK.undeclared.glyph} NOT DECLARED ${drift.undeclared ?? 0}`);
     if (overlay === 'reach' && reach) {
