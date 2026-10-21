@@ -1197,9 +1197,18 @@ test('a filled left-column section keeps its header and no none line', async () 
   assert.match(cardText(byId.get('vitals')), /12%/);
 });
 
-test('an offline card hatch stops behind a solid title row (T17)', () => {
+test('an offline card hatch stops behind every text row at every width (T17, T28)', () => {
   const css = fs.readFileSync(path.join(PUB, 'css', 'board.css'), 'utf8');
-  const rule = css.match(/\.card\.stale :is\(\.db-1, \.db-row\) \{([^}]*)\}/);
-  assert.ok(rule, 'a rule for the stale card first line');
-  assert.match(rule[1], /background: var\(--bg-surface\)/);
+  const rule = css.match(/\.card\.stale :is\((\.db-1[^)]*)\) \{([^}]*)\}/);
+  assert.ok(rule, 'a rule for the stale card text rows');
+  const rows = rule[1].split(',').map((x) => x.trim());
+  for (const r of ['.db-1', '.db-2', '.db-row', '.tool-line', '.marker-line', '.card-detail']) {
+    assert.ok(rows.includes(r), `${r} sits on the solid strip`);
+  }
+  assert.match(rule[2], /background: var\(--bg-surface\)/);
+  // Not limited to the phone: the rule is at the top level, outside any @media.
+  const before = css.slice(0, rule.index);
+  let depth = 0;
+  for (const ch of before) { if (ch === '{') depth++; else if (ch === '}') depth--; }
+  assert.equal(depth, 0, 'the strip rule is not nested in an @media block');
 });

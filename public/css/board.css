@@ -69,10 +69,11 @@
 .card.stale .mk-kind { background: none; }
 .card.stale:not(.cursor) { border-color: var(--line); }
 .db-offline { flex: none; color: var(--text-3); border-color: var(--line); }
-/* The hatch stops behind the title row (runs n5 T17, review 6-designer
-   Board 8): a solid surface strip under the first line, so the text never
-   sits on the lines. */
-.card.stale :is(.db-1, .db-row) { background: var(--bg-surface); }
+/* The hatch stops behind every text row (runs n5 T17 + T28, reviews
+   6-designer Board 8, 27-designer Board 1): a solid surface strip under
+   each line, at every width, so grey text never sits on the grey lines;
+   the hatch shows only in the gaps and the card margin. */
+.card.stale :is(.db-1, .db-2, .db-row, .tool-line, .marker-line, .card-detail) { background: var(--bg-surface); }
 
 /* --- the data block ------------------------------------------------------- */
 .db {
