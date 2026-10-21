@@ -137,8 +137,8 @@ test('the list row shows the loop: goal, round n / max, scores, burn, stop, cost
   assert.equal(byClass(row, 'rn-round')[0].textContent, '11 / 15');
   assert.deepEqual(byClass(row, 'rn-score').map((s) => s.textContent), ['tasks3▲', 'tests1=']);
   assert.deepEqual(byClass(row, 'rn-win-v').map((n) => n.textContent), ['6%', '14%']);
-  assert.equal(byClass(row, 'rn-left')[0].textContent, 'deadline');
-  assert.equal(byClass(row, 'rn-cost')[0].textContent, '$12.15');
+  assert.equal(byClass(row, 'rn-left')[0].textContent, 'stopdeadline');
+  assert.equal(byClass(row, 'rn-cost')[0].textContent, 'cost$12.15');
   assert.match(byClass(row, 'rn-needs')[0].textContent, /fence: round 5 wanted to change fenced files/);
 }));
 

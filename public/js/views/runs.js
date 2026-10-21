@@ -318,6 +318,29 @@ function scoresNode(row) {
   return n;
 }
 
+/** A label and its value in one cell (".rn-k" muted, ".rn-v" the value), like "5h ▬ 92%". */
+function keyedField(cls, key, value, title) {
+  const n = rnField(cls, null, title);
+  n.append(el('span', 'rn-k', key), el('span', 'rn-v', value));
+  return n;
+}
+
+/** Time left ("3h 05m left") or, once stopped, "stop <reason>" in one cell. */
+function leftNode(row, now) {
+  const left = timeLeft(row, now);
+  const n = row?.state === 'stopped'
+    ? keyedField('rn-left', 'stop', left.text, left.title)
+    : rnField('rn-left', left.text, left.title);
+  if (left.over) n.dataset.p = '2';
+  return n;
+}
+
+/** "cost $9.98" in one cell. */
+function costNode(row) {
+  const cost = isNum(row.cost?.usd) ? money(row.cost.usd) : DASH;
+  return keyedField('rn-cost', 'cost', cost, 'cost of the run (sum of its cost events)');
+}
+
 function meterNode(label, w) {
   const n = el('span', 'rn-win');
   n.append(el('span', 'rn-win-k', label));
@@ -369,12 +392,9 @@ export function runRow(row, now = Date.now()) {
   li.dataset.state = STATE_META[row.state] ? row.state : 'running';
   if (needsYou(row)) li.dataset.needs = '';
   if (stuckOf(row)) li.dataset.stuck = '';
-  const left = timeLeft(row, now);
-  const leftEl = rnField('rn-left', left.text, left.title);
-  if (left.over) leftEl.dataset.p = '2';
+  const leftEl = leftNode(row, now);
   const stopP = row.state === 'stopped' ? STOP_P[rnClean(row.stop, 32)] : null;
   if (stopP && stopP !== 'ok') leftEl.dataset.p = stopP;
-  const cost = isNum(row.cost?.usd) ? money(row.cost.usd) : DASH;
   li.append(
     stateNode(row),
     goalNode(row, true),
@@ -382,7 +402,7 @@ export function runRow(row, now = Date.now()) {
     scoresNode(row),
     burnNode(row),
     leftEl,
-    rnField('rn-cost', cost, 'cost of the run (sum of its cost events)'),
+    costNode(row),
     needsNode(row),
   );
   return li;
@@ -616,17 +636,13 @@ function pageHead(run, row, now) {
   const head = el('header', 'rn-head');
   const back = el('a', 'rn-back', '← Runs');
   back.href = LIST_HREF;
-  const left = timeLeft(row, now);
-  const leftEl = rnField('rn-left', left.text, left.title);
-  if (left.over) leftEl.dataset.p = '2';
-  const cost = isNum(row.cost?.usd) ? money(row.cost.usd) : DASH;
   const facts = el('div', 'rn-facts');
   facts.append(
     rnField('rn-round', `round ${roundText(row)}`, isNum(row.rounds) ? `${row.rounds} rounds recorded` : null),
     scoresNode(row),
     burnNode(row),
-    leftEl,
-    rnField('rn-cost', cost, 'cost of the run (sum of its cost events)'),
+    leftNode(row, now),
+    costNode(row),
   );
   const ev = Number.isInteger(run.events) ? run.events : null;
   if (ev !== null) {

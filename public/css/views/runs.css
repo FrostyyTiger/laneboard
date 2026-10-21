@@ -13,7 +13,7 @@
 .rn-row {
   display: grid;
   grid-template-columns:
-    minmax(12ch, auto) minmax(0, 1fr) 7ch minmax(0, auto) auto 12ch 7ch minmax(0, 24ch);
+    minmax(12ch, auto) minmax(0, 1fr) 7ch minmax(0, auto) auto minmax(12ch, auto) minmax(10ch, auto) minmax(0, 24ch);
   align-items: center;
   gap: var(--sp-1) var(--sp-3);
   min-height: var(--row-comfy);
@@ -95,7 +95,12 @@
 .rn-win[data-p="2"] .rn-win-v { color: var(--p2); }
 .rn-over[data-p="1"] { color: var(--p1); }
 
-/* ---- time left or stop reason, cost, needs */
+/* ---- time left or stop reason, cost, needs; a label sits in the cell of its value
+   ("stop budget", "cost $9.98"), never in a column of its own (T25) */
+.rn-k { color: var(--text-3); font-size: var(--fs-11); }
+.rn-v { color: var(--text-1); }
+.rn-left[data-p="1"] .rn-v,
+.rn-left[data-p="2"] .rn-v { color: inherit; }
 .rn-left[data-p="1"] { color: var(--p1); }
 .rn-left[data-p="2"] { color: var(--p2); }
 .rn-cost { justify-content: flex-end; }

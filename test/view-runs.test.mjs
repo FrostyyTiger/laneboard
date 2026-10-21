@@ -82,9 +82,10 @@ test('the fixture renders one row with goal, state, round, scores and trend, bur
   assert.equal(byClass(row, 'rn-win').some((n) => n.dataset.p), false, 'far from the stop levels: grey');
   // stopped: the reason where the time left would be, coloured (no progress needs a look)
   const left = byClass(row, 'rn-left')[0];
-  assert.equal(left.textContent, 'no-progress');
+  assert.equal(left.textContent, 'stopno-progress');
+  assert.equal(byClass(left, 'rn-v')[0].textContent, 'no-progress');
   assert.equal(left.dataset.p, '2');
-  assert.equal(byClass(row, 'rn-cost')[0].textContent, '$3.75');
+  assert.equal(byClass(row, 'rn-cost')[0].textContent, 'cost$3.75');
   const needs = byClass(row, 'rn-needs')[0];
   assert.equal(needs.dataset.p, '2');
   assert.match(needs.textContent, /▲ 1decision: Drop the v1 export endpoint/);
@@ -263,7 +264,7 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
   assert.ok(t.includes('Make acme-api ready for review: tests green, docs current'));
   assert.equal(byClass(page, 'rn-round')[0].textContent, 'round 3 / 6');
   assert.deepEqual(byClass(page, 'rn-score').map((n) => n.textContent), ['lint9▼', 'tests0.93▲']);
-  assert.equal(byClass(page, 'rn-cost')[0].textContent, '$3.75');
+  assert.equal(byClass(page, 'rn-cost')[0].textContent, 'cost$3.75');
   assert.equal(byClass(page, 'rn-events')[0].textContent, '22 events');
   // stop reason, coloured: no progress needs a look
   const stop = byClass(page, 'rn-stop')[0];
@@ -379,7 +380,7 @@ test('a run made only of a posted run.stop: the id is the title, no null or unde
     assert.equal(byClass(li, 'rn-goal-t')[0].textContent, 'demo', 'the id stands in for the goal');
     assert.equal(byClass(li, 'rn-goal-sub')[0].textContent, '', 'no id repeated under itself');
     assert.equal(byClass(li, 'rn-round')[0].textContent, '—');
-    assert.equal(byClass(li, 'rn-left')[0].textContent, reason);
+    assert.equal(byClass(byClass(li, 'rn-left')[0], 'rn-v')[0].textContent, reason);
     assert.equal(li.dataset.state, 'stopped');
     const page = renderRunPage(null, run, { status: 'ok' }, row.updatedAt + HOUR);
     assert.doesNotMatch(page.textContent, /null|undefined|NaN/);
@@ -577,3 +578,28 @@ test('runs.css: a phone drops the rounds table\'s minor columns and keeps round,
     assert.doesNotMatch(css, new RegExp(`\\[data-col="${keep}"\\][^{]*\\{[^}]*display: none`), `${keep} is never hidden`);
   }
 });
+
+test('T25: a label and its value share one cell: "stop budget", "cost $9.98"', () => withDom(() => {
+  const host = document.createElement('div');
+  const budget = { ...FIX, stop: 'budget', cost: { usd: 9.98 } };
+  renderRuns(host, [budget, LIVE], { status: 'ok' }, FIX.updatedAt);
+  const [stopped, live] = byClass(host, 'rn-row');
+  // the row is a grid: each of its direct children is one column
+  const cells = stopped.children.map((c) => c.className);
+  const left = byClass(stopped, 'rn-left')[0];
+  const cost = byClass(stopped, 'rn-cost')[0];
+  assert.ok(cells.includes(left.className) && cells.includes(cost.className), 'stop and cost are row cells');
+  assert.deepEqual(left.children.map((c) => [c.className, c.textContent]), [['rn-k', 'stop'], ['rn-v', 'budget']]);
+  assert.deepEqual(cost.children.map((c) => [c.className, c.textContent]), [['rn-k', 'cost'], ['rn-v', '$9.98']]);
+  assert.equal(left.title, 'stopped: budget');
+  // a live run keeps its one-piece "3h 05m left"; its cost is labelled too
+  assert.equal(byClass(live, 'rn-left')[0].children.length, 0);
+  assert.equal(byClass(byClass(live, 'rn-cost')[0], 'rn-k')[0].textContent, 'cost');
+  // the run page head uses the same cells
+  const page = renderRunPage(null, RUN, { status: 'ok' }, FIX.updatedAt);
+  assert.equal(byClass(byClass(page, 'rn-cost')[0], 'rn-k')[0].textContent, 'cost');
+  // the label is muted text inside the cell, not a grid column of its own
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  assert.match(css, /\.rn-k \{[^}]*color: var\(--text-3\)/);
+  assert.doesNotMatch(css, /\.rn-k \{[^}]*grid-column/);
+}));
