@@ -72,6 +72,11 @@ Planner notes (round 1), from reading the code:
 - [ ] T24 (2, review 16-stranger, 2) `laneboard run start` takes `--max-rounds N` for the cap; `--rounds N` on `start` stays as an alias and prints a stderr note (`--rounds on start means --max-rounds`); `--rounds` on `stop` stays the count done; the usage and `laneboard run start --help` say which is which (`bin/laneboard` `RUN_FLAGS`, `docs/runs.md`) — done when: `test/cli-run.test.mjs` writes `start --max-rounds 3` and finds `maxRounds: 3` in the line, `start --rounds 3` gives the same line plus the stderr note, and the help text names both flags
 - [ ] T25 (4, review 24-stranger, 5) `laneboard morning` never lists a running lane under a "Finished" heading: the "(1 lane active)" count moves to its own line or heading (`Still running`), and Finished holds only what finished in the window (`bin/laneboard` morning text, and the web Morning if it does the same) — done when: a CLI test with a fake `/api/morning` body that has one active lane and one stopped run finds the active lane outside the Finished block, and no line over 100 columns
 - [ ] T26 (4, review 24-stranger, 7) `laneboard fleet pubkey` with no key reads the key path from the state dir like `keygen` does, or, if it must read the real home, the error says which path it looked in and README's isolation paragraph lists `fleet pubkey` beside `fleet keygen` — done when: a `test/cli-*.test.mjs` case with `LANEBOARD_STATE_DIR=<tmp>` and `HOME=<other tmp>` checks the error text (or the path used) and the README sentence is there
+- [ ] T27 (4, review 27-designer, Across 3) [ui] The Inbox rows carry the same mark word as the Board (`▲ QUES`, `▲ PERM`, from `STATE_MARK`) after the shape, then the session's own question text; generic `question` only as the fallback, in `--text-3` — done when: a view test finds `QUES` in an Inbox question row and the fallback word only when the session has no text; inbox shots (dark + light, 1440 + 390), console clean
+- [ ] T28 (4, review 27-designer, Board 1) [ui] An offline card's hatch stops behind a solid `--bg-surface` strip under the text rows at every width (extends T17's phone check to 1440) — done when: a CSS/view test checks the strip rule is not limited to the phone; board shots with an offline lane (dark + light, 1440 + 390), console clean
+- [ ] T29 (3, review 27-designer, Board 5) [ui] Lane cards are as tall as their content: a red-framed card does not stretch to the tallest card in its row (`align-items: start` on the lane grid) — done when: a CSS test finds the rule on the lane grid; board shots at 1440 (dark + light), console clean
+- [ ] T30 (2, review 27-designer, Board 3) [ui] Board filter chips have equal left and right padding (`--sp-3`), no blank slot on the left — done when: a CSS test finds equal padding on the chip; board shots (dark + light, 1440 + 390), console clean
+- [ ] T31 (2, review 27-designer, Inbox 2) [ui] The `BASH` tool badge is outlined in both themes, like the lane plates, never a grey fill in light — done when: a CSS test finds no background fill on the badge in the light theme; inbox shots (light, 1440 + 390), console clean
 
 ## Research questions
 
@@ -142,6 +147,16 @@ Planner notes (round 1), from reading the code:
     stderr for every subcommand, or keep it quiet?
   - The README test-copy snippet hard-codes port 7788 and does not check it is free; a stranger tested
     the wrong board for a pass (third review to hit it). Later has it (n3 T57); consider moving it up.
+- Ideas from review 27-designer (none made a task; say which you want):
+  - `shoot.mjs` (fenced): freeze the demo fleet's clock and seed so dark and light shots show the
+    same fleet (BC online vs offline, NEED counts differed between shots seconds apart).
+  - Name a lane one way everywhere: Board form (plate `BB` + session name in mono); the Inbox shows
+    `[BB] cleanup job`, the long name in a tooltip.
+  - Phone bottom bar: when the current view lives under `…`, show its name (`BOARD`) in the accent
+    frame, `…` beside it unframed.
+  - Phone: `LAUNCH A LANE…` as a `+` icon at the end of the plate row (saves ~100 px).
+  - Idle chip row could carry the state mark in the left slot (`▲ feat-search 2`, `○` for idle).
+  - Light amber still olive and nested panels heavy: same as review 6 ideas.
 
 ## Reviews
 
@@ -161,5 +176,9 @@ Planner notes (round 1), from reading the code:
 - reviews/24-stranger.md: 7 findings, 2 became tasks (T25, T26). Dropped as covered: taken test port
   (Later n3 T57, also For the owner), `?run=nope` empty list vs 404 (by design, T7), `--rounds` naming
   (T24). The `ls` BRANCH mismatch and the quiet `$LANEBOARD_RUN` on `needs` went to For the owner.
+- reviews/27-designer.md: about 20 findings, 5 became tasks (T27-T31). Dropped as covered: ALL plate
+  fill (T14), `$0.00` and bare MACHINE (T15, T17), phone RUN PRS cut (T16), stuck row in the Inbox
+  (already For the owner from T13), light olive amber and heavy panels (review 6 ideas). Lane naming,
+  shot freezing, phone nav/launch layout went to For the owner. Console clean.
 
 ## Morning
