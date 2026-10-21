@@ -86,6 +86,10 @@ Planner notes (round 1), from reading the code:
 - [ ] T37 (4, review 50-stranger, 1) `laneboard morning --window 3d` (an unknown window) exits 2 with a usage line naming the valid windows, as README says for usage errors — done when: a `test/cli-*.test.mjs` case runs it, finds exit 2 and the valid windows in the message
 - [ ] T38 (2, review 50-stranger, 3) README says where a builder's id, code and the map title come from with no fleet block (the host name) — done when: the README test finds the sentence
 - [ ] T39 (2, review 50-stranger, 6) README says the first startup log line on a no-config start, the `fleet auth: no fleet.ingressPort …` WARN, is expected — done when: the README test finds the sentence
+- [ ] T40 (4, review 58-stranger, 1) `laneboard run ack` without `--post` while a board is named (`LANEBOARD_URL`) says in its output that the ack went to the file and the board did not see it (`bin/laneboard` run ack) — done when: `test/cli-run.test.mjs` runs it with `LANEBOARD_URL` set and finds the sentence on stdout or stderr
+- [ ] T41 (2, review 58-stranger, 2) `laneboard run <cmd> --id x` fails with `did you mean: --run`, like the command suggestion (`bin/laneboard` run arg parsing) — done when: `test/cli-run.test.mjs` finds exit 2 and the `--run` hint
+- [ ] T42 (2, review 58-stranger, 4) `laneboard run --help` and `docs/runs.md` say that `run stop` with no `--reason` records `stop: "unknown"` — done when: `test/cli-run.test.mjs` and `test/runs-docs.test.mjs` find the sentence
+- [ ] T43 (2, review 58-stranger, 5) `docs/runs.md` says what `cost.rounds` counts (rounds that carried a `--usd`, not `counted`) and how it relates to `cost.from` — done when: `test/runs-docs.test.mjs` finds the sentence (check the code first and write what it does)
 
 ## Research questions
 
@@ -112,6 +116,10 @@ Planner notes (round 1), from reading the code:
 - (6, r10 idea 5) [ui] Run page sparkline ≤ 50 % wide, rounds table aligned and capped at ~900 px.
 
 ## For the owner
+
+- Review 58-stranger, items 1 and 3: should `run ack` default to the server when `LANEBOARD_URL` is
+  set (T40 only adds a notice that the ack went to a file)? And should a later `artifact --kind pr`
+  line for a URL first sent as `link` be allowed to change the kind (docs say state and title only)?
 
 - Review 50-stranger, item 7: the README paragraph on which CLI commands write outside the state dir
   (`run`, `fleet keygen`, `fleet pubkey`) is one long block; a list would read better. A rewrite of
@@ -222,5 +230,9 @@ Planner notes (round 1), from reading the code:
   missing `feed` (Later n3 T56), `run needs` with no text (T34), `ls` shows real sessions (README
   warns). Item 7 (README paragraph on CLI writes outside the state dir is hard to read; a list would
   do) went to For the owner as a taste call. No browser, pages not looked at.
+- reviews/58-stranger.md: 7 findings, 4 became tasks (T40-T43). Dropped as covered: map titled with
+  the host name (T38), silent `$LANEBOARD_RUN` (T10, earlier owner item). Item 3 (a later `artifact
+  --kind pr` stays `link`) and the choice to default `ack` to the server when `LANEBOARD_URL` is set
+  went to For the owner. No browser, pages not looked at.
 
 ## Morning
