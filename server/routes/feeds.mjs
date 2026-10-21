@@ -1,16 +1,19 @@
 // Route module: feeds pushed to this board (docs/map.md "Pushing a feed").
 //
 //   POST /api/map/feeds   one feed as JSON -> 201 {ok, source, at}
+//                         403 {error} unless the caller is this machine (`local`);
 //                         400 {error} bad JSON, shape or source; 413 over BODY_LIMIT;
 //                         409 when this board does not read feeds (a builder a hub
 //                         watches, feedsEnabled() false); written atomically to
 //                         <map.feedsDir>/<source>.json
 //
 // This is what `laneboard feed <kind> --push <url>` calls. The route sits
-// behind the normal local guards (Host/Origin and the `x-laneboard` header,
-// server/security.mjs), so it takes feeds from this machine only: a feed from
-// another machine still comes over the ssh forced command, and a signed intake
-// on a hub is the owner's call (PROGRESS "For the owner").
+// behind the normal guards (Host/Origin and the `x-laneboard` header,
+// server/security.mjs), and those let a tailnet (`direct`) caller through too,
+// so the route itself answers 403 unless `req.auth.kind` is `local`: it takes
+// feeds from this machine only. A feed from another machine still comes over
+// the ssh forced command, and a signed intake on a hub is the owner's call
+// (PROGRESS "For the owner").
 //
 // The body is checked with the same feedProblem readFeeds uses, so what is
 // accepted is what the Map draws; the source must be a SOURCE_ID (the CLI's
@@ -72,6 +75,7 @@ export default {
   modes: ['builder'],
   register(ctx) {
     ctx.route('POST', FEEDS_PATH, async (req, res) => {
+      if (req.auth?.kind !== 'local') return ctx.json(res, { error: 'feeds are pushed from this machine only' }, 403);
       const cfg = ctx.config ?? globalConfig;
       if (!feedsEnabled(cfg)) return ctx.json(res, { error: 'this board does not read feeds: a hub watches it, push to the hub' }, 409);
       let text;

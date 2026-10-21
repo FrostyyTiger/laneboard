@@ -163,3 +163,34 @@ test('readFeeds skips a file whose shape the route would refuse', () => {
   fs.writeFileSync(path.join(dir, 'empty.json'), JSON.stringify({ source: 'empty', host: {} }));
   assert.deepEqual([...mapModel.readFeeds(dir).keys()].sort(), ['empty', 'good']);
 });
+
+test('only a local caller may push: direct, hub, hub-pending and no auth are 403, nothing written', async () => {
+  // The handler itself, captured from a second context: the guards in front
+  // of it let a `direct` (tailnet) caller through, so the route checks the kind.
+  let handler;
+  feedsModule.register(createContext({ mode: 'builder' }, { route: (method, pattern, fn) => { handler = fn; } }));
+  async function call(auth, source) {
+    const req = Readable.from([Buffer.from(JSON.stringify(feed({ source })))]);
+    Object.assign(req, { method: 'POST', url: FEEDS_PATH, headers: HEADERS, auth });
+    const out = {};
+    const res = { headersSent: false, writeHead: (s) => { out.status = s; }, end: (b) => { out.body = b ? JSON.parse(String(b)) : null; }, setHeader() {} };
+    await handler(req, res);
+    return out;
+  }
+  for (const [auth, source] of [
+    [{ kind: 'direct', user: 'someone@example.invalid' }, 'fromdirect'],
+    [{ kind: 'hub', user: 'hub' }, 'fromhub'],
+    [{ kind: 'hub-pending', user: 'hub' }, 'frompending'],
+    [undefined, 'fromnone'],
+    [null, 'fromnull'],
+  ]) {
+    const r = await call(auth, source);
+    assert.equal(r.status, 403, `${auth?.kind}: ${JSON.stringify(r.body)}`);
+    assert.match(r.body.error, /this machine/);
+    assert.ok(!fs.existsSync(path.join(feedsDir, `${source}.json`)), source);
+  }
+  const ok = await call({ kind: 'local', user: 'local' }, 'fromlocal');
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+  assert.ok(fs.existsSync(path.join(feedsDir, 'fromlocal.json')));
+  fs.rmSync(path.join(feedsDir, 'fromlocal.json'));
+});

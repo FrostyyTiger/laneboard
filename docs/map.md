@@ -353,8 +353,9 @@ laneboard feed docker --source builder-a --out ~/.cache/laneboard/feeds/builder-
 
 An unknown kind, `none` or a bad flag exits 2; a source that cannot be read
 exits 1 and writes nothing, so the board shows the old feed going stale
-instead of every node gone. `--push` reaches a board on the same machine
-only: the route takes the normal local guards, not fleet auth.
+instead of every node gone. `--push` is loopback only: the board answers
+403 to any caller that is not this machine (a tailnet browser or a hub
+included), so push to a board on the same machine.
 
 **On the board's machine** (a tailnet seen from there), a `--out` into the
 feeds directory is enough.
