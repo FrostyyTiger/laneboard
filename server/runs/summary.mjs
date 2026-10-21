@@ -32,6 +32,7 @@ export function summarize(run) {
     deadlineAt: run.deadlineAt,
     needs: run.needs.filter((n) => n.open),
     artifacts: run.artifacts.length,
+    prs: run.artifacts.filter((a) => a.kind === 'pr').map((a) => ({ url: a.url, title: a.title, ts: a.ts })),
     stop: run.stop ? run.stop.reason : null,
     startedAt: run.startedAt,
     updatedAt: run.updatedAt,

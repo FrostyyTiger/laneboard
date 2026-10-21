@@ -3,11 +3,14 @@
 //
 //   buildInbox(store, {now, scope, review, ghost}) -> {groups, order, rows, count}
 //   keyAction(key, focusId, model)                 -> plan | {none: reason}
+//   ackEvent(plan)                                 -> the needs.ack event to post
 //   moveFocus(model, focusId, dir)                 -> row id | null
 //   effectiveTier(action, liveTier)                -> read|click|ask|confirm
 //
 // Groups, in order: approvals (pending PermissionRequests from every builder,
-// oldest first, countdown to expiresAt), needs (waiting_* sessions from the
+// oldest first, countdown to expiresAt), runs (runs plan T5: the open needs of
+// agent loops and their recent PRs from GET /api/runs, newest first; absent
+// when there is no runs route, e.g. on a hub), needs (waiting_* sessions from the
 // attention list, the dev-stack guard, need/blocked markers), review (§10's
 // reviewReady lanes, rows from core/review-queue.js), paused (with kind), and
 // stale (stuck sessions with their reason, archive candidates, §6's stale
@@ -24,10 +27,11 @@
 
 import { fkey as makeFkey, BUILDER_ID_RX } from './keys.js';
 
-export const GROUPS = Object.freeze(['approvals', 'needs', 'review', 'paused', 'stale']);
+export const GROUPS = Object.freeze(['approvals', 'runs', 'needs', 'review', 'paused', 'stale']);
 
 export const GROUP_TITLES = Object.freeze({
   approvals: 'Approvals',
+  runs: 'Runs',
   needs: 'Needs you',
   review: 'Review',
   paused: 'Paused',
@@ -51,6 +55,16 @@ export const LIMITS = Object.freeze({
   reason: 200,
   note: 500,
 });
+
+/** The run protocol's id (server/runs/protocol.mjs RUN_ID): other ids get no row. */
+const RUN_ID_RX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+/**
+ * The protocol has no "merged" event, so a PR artifact is listed while its run
+ * is live and for this long after the run's last event, then it drops.
+ */
+export const RUN_PR_FRESH_MS = 24 * 3600_000;
+/** Who an ack from the Inbox names (`needs.ack` `by`). */
+export const ACK_BY = 'inbox';
 
 const WAITING = new Set(['waiting_permission', 'waiting_question']);
 const MARKER_KINDS = new Set(['need', 'blocked']);
@@ -305,16 +319,71 @@ function staleRows(s, scope, sessions) {
   return rows;
 }
 
+/** The run page's route (views/runs.js runHref). */
+export const runPageHref = (id) => `#/runs?run=${encodeURIComponent(id)}`;
+
+/** An absolute http(s) URL, or null. */
+function httpHref(v) {
+  if (typeof v !== 'string' || v === '' || v.length > 2000) return null;
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
+  } catch { return null; }
+}
+
+/**
+ * Rows from GET /api/runs summaries: every open need a person must answer (a
+ * `wait` need is the loop sleeping and is left out) and every PR artifact of a
+ * run that is live or had an event in the last RUN_PR_FRESH_MS. Newest first.
+ */
+function runRows(runs, now) {
+  const rows = [];
+  for (const r of Array.isArray(runs) ? runs : []) {
+    if (!r || typeof r !== 'object' || typeof r.run !== 'string' || !RUN_ID_RX.test(r.run)) continue;
+    const base = { group: 'runs', builder: null, fkey: null, run: r.run, name: r.run, lane: null, href: runPageHref(r.run) };
+    for (const n of Array.isArray(r.needs) ? r.needs : []) {
+      if (!n || typeof n !== 'object' || n.open === false || !Number.isInteger(n.i) || n.i < 0) continue;
+      const kind = inboxClip(str(n.kind), 32) ?? 'decision';
+      if (kind === 'wait') continue;
+      rows.push({
+        ...base, id: `rn:${r.run}:${n.i}`, kind: 'run-need', needIndex: n.i, p: '2',
+        reason: `${kind}: ${inboxClip(str(n.text), LIMITS.reason) ?? ''}`.trim(),
+        link: httpHref(n.link), since: isNum(n.ts) ? n.ts : 0,
+      });
+    }
+    const at = isNum(r.updatedAt) ? r.updatedAt : isNum(r.startedAt) ? r.startedAt : 0;
+    const fresh = r.state !== 'stopped' || now - at <= RUN_PR_FRESH_MS;
+    if (!fresh) continue;
+    for (const a of Array.isArray(r.prs) ? r.prs : []) {
+      const link = a && typeof a === 'object' ? httpHref(a.url) : null;
+      if (!link) continue;
+      rows.push({
+        ...base, id: `rp:${r.run}:${link}`, kind: 'run-pr', p: '3',
+        reason: `pr: ${inboxClip(str(a.title), LIMITS.reason) ?? inboxClip(link, LIMITS.reason)}`,
+        link, since: isNum(a.ts) ? a.ts : 0,
+      });
+    }
+  }
+  rows.sort((x, y) => y.since - x.since || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+  return rows;
+}
+
+/** The `needs.ack` event an ack plan posts to POST /api/runs/events (docs/runs.md). */
+export function ackEvent(plan) {
+  return { v: 1, t: 'needs.ack', run: plan.run, ref: plan.ref, by: ACK_BY };
+}
+
 /**
  * The whole inbox from a store-like object ({builders, attention, lanes,
  * packages}). `review` is the review queue (core/review-queue.js
  * buildReviewQueue) the caller computed; `ghost` is the last row the view saw
  * for the focused id, kept as a closed row when its id is gone.
  */
-export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], ghost = null } = {}) {
+export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], ghost = null, runs = null } = {}) {
   const sessions = inboxSessionsOf(s, scope);
   const by = {
     approvals: approvalRows(s, scope, now),
+    runs: Array.isArray(runs) ? runRows(runs, now) : [],
     needs: needsRows(s, scope, sessions),
     review: reviewRows((Array.isArray(review) ? review : []).filter((it) => inboxInScope(it?.builder, scope))),
     paused: pausedRows(sessions),
@@ -327,7 +396,7 @@ export function buildInbox(s, { now = Date.now(), scope = 'all', review = [], gh
     by[g.group].push(g);
     rows.set(g.id, g);
   }
-  const groups = GROUPS.map((id) => ({
+  const groups = GROUPS.filter((id) => id !== 'runs' || Array.isArray(runs) || by.runs.length).map((id) => ({
     id,
     title: GROUP_TITLES[id],
     note: id === 'approvals' ? COOPERATIVE_NOTE : null,
@@ -382,12 +451,21 @@ export const KEY_COMMANDS = Object.freeze({
  *   {action, fkey, args, rowId}   send through confirmAction + act()
  *   {action:'deny', needsNote:true, ...}  open the note field first
  *   {open: fkey, rowId}           open in the inspector
+ *   {run, rowId}                  open the run page (a runs row, Enter)
+ *   {action:'ack', run, ref, rowId}  post ackEvent(plan) (a run need, `a`)
  *   {none: reason}                do nothing
  */
 export function keyAction(key, focusId, model) {
   const r = rowOf(model, focusId);
   if (!r) return { none: 'no-focus' };
-  if (key === 'Enter') return r.fkey ? { open: r.fkey, rowId: r.id } : { none: 'no-target' };
+  if (key === 'Enter') {
+    if (r.group === 'runs') return { run: r.run, rowId: r.id };
+    return r.fkey ? { open: r.fkey, rowId: r.id } : { none: 'no-target' };
+  }
+  if (key === 'a' && r.kind === 'run-need') {
+    if (r.closed) return { none: 'closed' };
+    return { action: 'ack', run: r.run, ref: r.needIndex, rowId: r.id };
+  }
   if (key === 'a' || key === 'd' || key === 'r') {
     if (r.kind !== 'approval') return { none: 'not-an-approval' };
     if (r.closed || r.status !== 'pending') return { none: 'closed' };

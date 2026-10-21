@@ -93,6 +93,13 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
 }
+.inbox-link {
+  flex: none;
+  font-size: var(--fs-11);
+  color: var(--text-2);
+}
+.inbox-link:hover { color: var(--text-1); }
+.inbox-ack { flex: none; }
 .inbox-status {
   font-family: var(--font-label);
   font-weight: 600;

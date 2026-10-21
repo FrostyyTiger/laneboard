@@ -239,7 +239,8 @@ of the UI (the CLI sends the `x-laneboard` header):
 many), `maxRounds` (`budget.rounds`), `scores` (per name: the latest `n` and
 `value`, the `prev` value and `better`), `usage`, `cost` (the sum of
 `cost` events, see above), `deadline`,
-`deadlineAt`, the open `needs`, `artifacts` (a count), `stop` (the reason or
+`deadlineAt`, the open `needs`, `artifacts` (a count), `prs` (the `pr`
+artifacts as `url`, `title`, `ts`; the Inbox lists them), `stop` (the reason or
 null), `startedAt`, `updatedAt`. `GET /api/runs/<run>` answers `{"run": …}`
 with the whole fold (rounds, every score, needs, artifacts, raw events); each
 round has `sessions`, the sessions tied to it (`sessionId`, `name`, `cwd`,
@@ -320,8 +321,8 @@ makes of it:
 | `score` `tests` (share of tests passing) after each check, `tasks` (tasks done) after each round | the two scores and their trend, higher is better; on the run page one line each over the rounds (two scores in one round: the last counts) |
 | `round.end` with `outcome` `kept`, `no-task-done`, `researched` (`open` questions), `reviewed`, `triaged`, `fixed`, `still-red` | the round's outcome and commit; the planner, operator and final rounds have no `round.end` |
 | `needs` `wait` (sleeping out a usage limit) | the run is `waiting`, not asking you anything |
-| `needs` `fence` (a round touched a fenced file and was reverted) | an open need on the row: the owner decides |
-| `artifact` `pr` | the PR link on the run page |
+| `needs` `fence` (a round touched a fenced file and was reverted) | an open need on the row: the owner decides; also a row in the Inbox's Runs group, where `a` acknowledges it (a `needs.ack` with `by: "inbox"`) |
+| `artifact` `pr` | the PR link on the run page; in the Inbox while the run is live and for 24 h after its last event (the protocol has no "merged") |
 | `run.stop` with `reason`, `rounds`, `usd` | the stop reason: `done`, `deadline`, `rounds`, `no-progress`, `7d-window`, `overage`, `error`, `human` |
 
 Its file sits outside the dir the sessions work in and it writes neither
