@@ -1111,12 +1111,36 @@ test('T5: the summary gives a score its latest and first max; "44 of 63" and the
   renderRuns(host, [row], { status: 'ok' }, row.updatedAt);
   const chip = byClass(host, 'rn-score')[0];
   assert.equal(byClass(chip, 'rn-score-v')[0].textContent, '44 of 63');
-  assert.equal(byClass(host, 'rn-score-scope')[0].textContent, 'scope 12 → 63', 'on its own line in the scores cell');
+  assert.equal(byClass(host, 'rn-score-scope')[0].textContent, 'scope 12 → 63', 'in the scores cell');
   const page = renderRunPage(document.createElement('div'), SCOPED, { status: 'ok', id: 'scoped' }, row.updatedAt);
   const pchip = byClass(page, 'rn-score')[0];
   assert.equal(byClass(pchip, 'rn-score-v')[0].textContent, '44 of 63');
   assert.equal(byClass(page, 'rn-score-scope')[0].textContent, 'scope 12 → 63');
-  assert.match(fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8'), /\.rn-score-scope \{ flex: 1 1 100%/, 'the scope wraps to its own line');
+}));
+
+// runs-n5 T20 (review 13-designer, Run page 2 + Runs list 1): the scope note stays inline in the
+// tasks chip, so the stat line is one line; a cell too narrow wraps in the chip, the row top-aligned.
+test('T20: the scope note sits inside the tasks chip, never on a line of its own', () => withDom(() => {
+  const row = runSummaryOf(SCOPED);
+  const host = document.createElement('div');
+  renderRuns(host, [row], { status: 'ok' }, row.updatedAt);
+  const page = renderRunPage(document.createElement('div'), SCOPED, { status: 'ok', id: 'scoped' }, row.updatedAt);
+  for (const root of [host, page]) {
+    const scope = byClass(root, 'rn-score-scope');
+    assert.equal(scope.length, 1);
+    const chip = scope[0].parent;
+    assert.ok(chip.classList.contains('rn-score'), 'the scope is a child of the chip');
+    assert.equal(byClass(chip, 'rn-score-k')[0].textContent, 'tasks');
+    assert.equal(byClass(chip, 'rn-score-v')[0].textContent, '44 of 63');
+    assert.equal(chip.children.at(-1), scope[0], 'after the value and the mark');
+  }
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const rule = css.match(/\.rn-score-scope \{([^}]*)\}/)[1];
+  assert.doesNotMatch(rule, /flex: 1 1 100%|display: block|flex-basis/, 'no block-level break');
+  assert.match(rule, /--text-3/, 'muted');
+  assert.match(css, /\.rn-score-scope::before \{ content: "· "; \}/);
+  assert.doesNotMatch(css, /\.rn-scores:has\(\.rn-score-scope\) \{ flex-wrap/, 'the cell does not wrap the scope to its own line');
+  assert.match(css, /\.rn-row:has\(\.rn-score-scope\) \{ align-items: start; \}/, 'a wrapped row is top-aligned');
 }));
 
 test('T5: a max that never moved prints no scope line', () => {

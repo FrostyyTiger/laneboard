@@ -378,11 +378,11 @@ function scoresNode(row) {
     else if (s.good === true) chip.dataset.trend = 'better';
     chip.append(el('span', 'rn-score-k', s.name), el('span', 'rn-score-v', s.text));
     if (s.mark) chip.append(el('span', 'rn-score-m', s.mark));
+    // a moved max stays in the chip, muted after a "·": `tasks 3 of 10 ↑ · scope 8 → 10` (T5, T20)
+    if (s.scope) chip.append(el('span', 'rn-score-scope', s.scope));
     chip.title = s.title;
     n.append(chip);
   }
-  // a moved max on a line of its own under the chips, muted, never clipped (T5)
-  for (const s of list.slice(0, SCORE_MAX)) if (s.scope) n.append(rnField('rn-score-scope', s.scope, s.title));
   if (list.length > SCORE_MAX) {
     n.append(rnField('rn-more', `+${list.length - SCORE_MAX}`, list.slice(SCORE_MAX).map((s) => s.title).join('\n')));
   }
