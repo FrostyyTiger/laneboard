@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeDocument } from './helpers/fakedom.mjs';
+import { declarations } from './helpers/css-guardrails.mjs';
 
 import {
   CHECKS_MAX, DASH, LAYOUT, STATE_P, STATE_WORD, ageText, cardDetail, checkGlyphs, checksLabel, ctxLevel,
@@ -157,6 +158,38 @@ test('ageText: the ago() steps, — for nothing', () => {
   assert.deepEqual([NOW - 5000, NOW - 12 * 60_000, NOW - 3 * 3600_000, NOW - 2 * 86400_000, NOW + 5000].map((t) => ageText(t, NOW)),
     ['5s', '12m', '3h', '2d', '0s']);
   for (const t of [null, undefined, 0, -1, 'x']) assert.equal(ageText(t, NOW), DASH);
+});
+
+test('ageText: plain ASCII units that fit the 4ch age column (runs T16: "3π" was "3m" cut at the edge)', () => {
+  assert.equal(ageText(NOW - 3 * 60_000, NOW), '3m');
+  for (const ms of [0, 59_000, 60_000, 59 * 60_000, 3600_000, 23 * 3600_000, 86400_000, 99 * 86400_000]) {
+    assert.match(ageText(NOW - ms, NOW), /^\d{1,2}[smhd]$/, `${ms} ms`);
+  }
+});
+
+test('board.css: the state word, code and age never shrink; the title and the branch give way (runs T16)', () => {
+  const { decls } = declarations(fs.readFileSync(path.join(ROOT, 'public/css/board.css'), 'utf8'));
+  const get = (sel, prop, at = 0) => decls.find((d) => d.prelude === sel && d.prop === prop && d.at.length === at)?.value;
+  for (const w of Object.values(STATE_WORD)) assert.equal(w.length, 4, `${w}: the state words are 4 characters`);
+  assert.equal(get('.db-state', 'flex'), 'none');
+  assert.equal(get('.db-state', 'min-width'), '7ch', 'lamp + 4-char word keep their 7ch');
+  assert.equal(get('.db-age', 'flex'), 'none');
+  assert.equal(get('.db-age', 'min-width'), '4ch');
+  assert.equal(get('.db-f', 'flex'), 'none', 'fields keep their width by default');
+  assert.match(get('.db-lane', 'flex'), /^0 1 18ch$/, 'the title is the one field that shrinks');
+  assert.equal(get('.db-lane', 'text-overflow'), 'ellipsis');
+  assert.equal(get('.db-lane', 'min-width'), '6ch');
+  assert.match(get('.db .branch', 'flex'), /^0 (\d+) auto$/);
+  assert.ok(Number(/^0 (\d+)/.exec(get('.db .branch', 'flex'))[1]) > 1, 'the branch shrinks before the title');
+  assert.equal(get('.db .branch', 'text-overflow'), 'ellipsis');
+  assert.equal(get('.db', 'container-type'), 'inline-size');
+  // A narrow line drops minor fields whole; code, state, title, flags and age always stay.
+  const hidden = decls.filter((d) => d.at.some((a) => a.startsWith('@container')) && d.prop === 'display' && d.value === 'none');
+  assert.ok(hidden.length >= 3, 'some fields drop on a narrow line');
+  for (const d of hidden) assert.doesNotMatch(d.prelude, /db-(state|code|lane|age|flags)\b/, d.prelude);
+  // A nested row wraps its buttons under the line rather than squeezing it.
+  assert.equal(get('.grid .card.card-row', 'flex-wrap'), 'wrap');
+  assert.match(get('.grid .card.card-row > .db-row', 'flex'), /^1 1 \d+ch$/);
 });
 
 test('the layouts: two lines for a card, one for a row, fixed field order', () => {

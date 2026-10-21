@@ -58,6 +58,9 @@
   white-space: nowrap;
   overflow: hidden;
   color: var(--text-2);
+  /* The fields below drop whole on a narrow line (the @container rules at
+     the end of this block), never half a field cut at the edge. */
+  container-type: inline-size;
 }
 .db-f {
   display: inline-flex;
@@ -67,14 +70,18 @@
   min-width: 0;
 }
 .db-code:empty { display: none; }
-.db-state { width: 7ch; }
+.db-state { width: 7ch; min-width: 7ch; flex: none; }
 .db-word { color: var(--text-2); font-weight: 600; letter-spacing: 0; }
 .db-state[data-p="1"] .db-word { color: var(--p1); }
 .db-state[data-p="2"] .db-word { color: var(--p2); }
 .db-state[data-p="stale"] .db-word { color: var(--text-3); }
 .db-lane {
   display: block;
+  /* The one column that gives way: 18ch when there is room, an ellipsis
+     down to 6ch when there is not. */
+  flex: 0 1 18ch;
   width: 18ch;
+  min-width: 6ch;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-1);
@@ -86,7 +93,7 @@
 .db-flag { display: inline-flex; color: var(--text-2); }
 .db-flag[data-p="1"] { color: var(--p1); }
 .db-flag[data-p="2"] { color: var(--p2); }
-.db-age { width: 4ch; justify-content: flex-end; color: var(--text-3); }
+.db-age { width: 4ch; min-width: 4ch; flex: none; justify-content: flex-end; color: var(--text-3); }
 .db-flags:empty + .db-age { margin-left: auto; }
 
 .db-pr { min-width: 6ch; color: var(--text-2); }
@@ -113,6 +120,26 @@
 .db-git:empty { display: none; }
 .db .dirty { color: var(--text-2); }
 .db .ahead { color: var(--text-2); }
+/* The branch is the first thing to give way on line 2: it shrinks before
+   anything else, with an ellipsis, down to nothing. */
+.db .branch {
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A narrow line drops its minor fields whole, the least needed first. Code,
+   state, lane title, flags and age always stay. */
+@container (max-width: 480px) {
+  .db-row .db-usd, .db-row .db-checks, .db-2 .db-model { display: none; }
+}
+@container (max-width: 380px) {
+  .db-row .db-pr, .db-row .db-ctx { display: none; }
+}
+@container (max-width: 300px) {
+  .db-row .db-stage { display: none; }
+}
 
 /* The lane card's head is the same block; its chips keep the line. */
 .grid .lane-top { align-items: center; gap: var(--sp-2); }
@@ -132,15 +159,21 @@
 .card-meta .ahead { color: var(--text-2); }
 .card-meta .cost { color: var(--text-1); font-weight: 600; }
 
-/* A session inside a lane card: one line, recessed. */
+/* A session inside a lane card: one line, recessed. When the line and its
+   buttons do not fit side by side (code, state word and 12ch of title), the
+   buttons wrap under it instead of squeezing the state word. */
 .grid .card.card-row {
   background: var(--bg-sunken);
   border-color: var(--line-weak);
   padding: var(--sp-1) var(--sp-2);
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-1) var(--sp-2);
 }
+.grid .card.card-row > .db-row { flex: 1 1 32ch; }
+.grid .card.card-row > .card-actions { flex: none; margin-left: auto; }
+.grid .card.card-row > :not(.db-row):not(.card-actions):not(.menu) { flex: 1 1 100%; }
 .card.card-row > :not(.db-row):not(.card-actions):not(.menu) { grid-column: 1 / -1; }
 .card.card-row .db-flags { margin-left: 0; }
 
