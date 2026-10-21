@@ -396,11 +396,18 @@ export const EMPTY_HOW = Object.freeze([
   'The protocol is in docs/runs.md.',
 ]);
 
+/** What a server without a runs route (a hub) says: where runs live, what to do. */
+export const EMPTY_HUB = Object.freeze([
+  'This server collects no runs: a hub does not read run files yet.',
+  'Open Runs on a builder, the machine the loop runs on, or see docs/runs.md for how a loop reports a run.',
+]);
+
 function emptyNode(st) {
   const box = el('div', 'empty rn-empty');
   if (st.status === 'loading') { box.append(el('p', null, 'Loading the runs…')); return box; }
   if (st.status === 'unavailable') {
-    box.append(el('p', null, 'Runs are read on a builder: this server has no runs route (a hub does not collect runs yet).'));
+    const [lead, next] = EMPTY_HUB;
+    box.append(el('p', 'rn-empty-lead', lead), el('p', null, next));
     return box;
   }
   if (st.status === 'error') {

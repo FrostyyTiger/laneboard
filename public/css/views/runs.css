@@ -107,6 +107,7 @@
 /* ---- empty state: what to run */
 .rn-empty { display: grid; gap: var(--sp-1); max-width: 72ch; }
 .rn-empty p { margin: 0; }
+.rn-empty-lead { color: var(--text-1); }
 .rn-empty-cmd {
   display: block;
   padding: var(--sp-1) var(--sp-2);

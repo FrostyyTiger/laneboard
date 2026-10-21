@@ -12,7 +12,7 @@ import { parseLine, parseLines, foldRun } from '../server/runs/protocol.mjs';
 import { summarize } from '../server/routes/runs.mjs';
 import runsView, {
   renderRuns, mountRuns, unmountRuns, loadRuns, sortRuns, scoreList, scoreTrend, scoreText, burnOf,
-  timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, LIST_URL, SCORE_MAX,
+  timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, EMPTY_HUB, LIST_URL, SCORE_MAX,
   renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
   runHref, runUrl, LIST_HREF, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
 } from '../public/js/views/runs.js';
@@ -133,6 +133,18 @@ test('a stuck run (T8) carries the stuck badge in p2 with its reason, sorts afte
   assert.equal(stuckOf({ stuck: {} }), null);
 }));
 
+test('a server without runs (a hub) names the next step: a builder or docs/runs.md (T21)', () => withDom(() => {
+  const host = document.createElement('div');
+  renderRuns(host, [], { status: 'unavailable' });
+  assert.equal(byClass(host, 'rn-row').length, 0);
+  assert.equal(byClass(host, 'rn-empty-lead').length, 1, 'a lead line, then the step');
+  const t = host.textContent;
+  assert.match(t, /hub/);
+  assert.match(t, /Open Runs on a builder/);
+  assert.match(t, /docs\/runs\.md/);
+  assert.equal(EMPTY_HUB.length, 2);
+}));
+
 test('the empty state says how to start a run; loading, unavailable and error say so', () => withDom(() => {
   const host = document.createElement('div');
   renderRuns(host, [], { status: 'ok' });
@@ -143,7 +155,7 @@ test('the empty state says how to start a run; loading, unavailable and error sa
   renderRuns(host, [], { status: 'loading' });
   assert.match(host.textContent, /Loading the runs/);
   renderRuns(host, [], { status: 'unavailable' });
-  assert.match(host.textContent, /no runs route/);
+  for (const line of EMPTY_HUB) assert.ok(texts(host).includes(line), line);
   renderRuns(host, [], { status: 'error', message: 'HTTP 500' });
   assert.match(host.textContent, /could not be loaded: HTTP 500/);
   assert.equal(host.children.length, 1, 'replaces what was there');
@@ -176,7 +188,7 @@ test('mount fetches GET /api/runs, paints, and unmount clears; a 404 is a note',
 
   const missing = async () => ({ ok: false, status: 404, json: async () => ({}) });
   await mountRuns(host, {}, { fetchFn: missing, poll: false });
-  assert.match(host.textContent, /no runs route/);
+  assert.match(host.textContent, /collects no runs: a hub/);
   unmountRuns();
 
   assert.deepEqual(await loadRuns(async () => { throw new Error('offline'); }), { kind: 'error', message: 'offline' });

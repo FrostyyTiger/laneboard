@@ -5,11 +5,14 @@
 // plus a small loopback forwarder that plays `tailscale serve`.
 //
 //   node test/tools/demo-fleet.mjs [--port 7795] [--builders 3] [--tick 4000] [--design <name>]
+//     [--no-runs-route]
 //
 // Then open http://127.0.0.1:<port>/ (from another machine:
 // `ssh -L <port>:127.0.0.1:<port> <host>`). Ctrl-C stops everything.
 // `--design refined` lays docs/plans/runs/design/refined.css over the app's
 // tokens: the forwarder appends it to /css/tokens.css (runs plan T10).
+// `--no-runs-route` leaves GET /api/runs to the hub (404), so the Runs view
+// shows what a real hub shows (runs plan T21).
 //
 // What it shows:
 //   builder-a  lanes in working / waiting (permission + question) / review-ready
@@ -78,11 +81,12 @@ const { values: args } = parseArgs({
     builders: { type: 'string', default: '3' },
     tick: { type: 'string', default: '4000' },
     design: { type: 'string' },
+    'no-runs-route': { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
   },
 });
 if (args.help) {
-  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms] [--design <name>]\n');
+  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms] [--design <name>] [--no-runs-route]\n');
   process.exit(0);
 }
 const PORT = Number(args.port);
@@ -425,7 +429,7 @@ function relayAppWs(ingressPort, req, socket, head) {
 function forwarder(ingressPort) {
   const server = http.createServer((req, res) => {
     if (DESIGN && req.method === 'GET' && req.url.split('?')[0] === '/css/tokens.css') { designTokens(ingressPort, req, res); return; }
-    const runs = demoRunsAnswer(req.method, req.url);
+    const runs = args['no-runs-route'] ? null : demoRunsAnswer(req.method, req.url);
     if (runs) {
       const body = Buffer.from(JSON.stringify(runs.body));
       res.writeHead(runs.status, { 'content-type': 'application/json; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store' });
