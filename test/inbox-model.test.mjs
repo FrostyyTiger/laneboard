@@ -114,7 +114,38 @@ test('needs you: waiting_* from attention, in attention order, then need/blocked
   });
   const m = buildInbox(s, { now: NOW });
   assert.deepEqual(groupIds(m, 'needs'), ['nd:builder-a/perm', 'nd:builder-a/q', 'nd:builder-a/mk']);
-  assert.match(rowOf(m, 'nd:builder-a/mk').reason, /^blocked: needs a key$/);
+  // T27: the word says the kind (`▲ BLKD`), so the text is the marker's own
+  assert.equal(rowOf(m, 'nd:builder-a/mk').reason, 'needs a key');
+  assert.equal(rowOf(m, 'nd:builder-a/mk').word, 'BLKD');
+});
+
+// review 27-designer Across 3 (runs n5 T27): the Inbox row reads `▲ QUES`
+// like the Board, then the session's own question; `question` only as a fallback.
+test('T27: needs rows carry the Board word and the session\'s own text; the generic word only as fallback', () => {
+  const s = storeOf([builder('builder-a', {
+    sessions: [
+      { name: 'q', state: 'waiting_question', activity: { lastAssistant: 'Keep the old export or drop it?' } },
+      { name: 'bare', state: 'waiting_question' },
+      { name: 'perm', state: 'waiting_permission', activity: { tool: 'Bash', toolInput: 'npm run bench', lastAssistant: 'x' } },
+      { name: 'stk', state: 'waiting_question', stuck: { reason: 'r' }, activity: { lastAssistant: '' } },
+      { name: 'nd', state: 'idle', lastMarker: { kind: 'need', text: '', ts: NOW - 10 } },
+    ],
+  })], {
+    attention: ['q', 'bare', 'perm', 'stk'].map((name, i) => ({
+      builder: 'builder-a', name, state: name === 'perm' ? 'waiting_permission' : 'waiting_question', score: 90 - i, since: 1,
+    })),
+  });
+  const m = buildInbox(s, { now: NOW });
+  const q = rowOf(m, 'nd:builder-a/q');
+  assert.deepEqual([q.word, q.reason, q.fallback], ['QUES', 'Keep the old export or drop it?', false]);
+  const bare = rowOf(m, 'nd:builder-a/bare');
+  assert.deepEqual([bare.word, bare.reason, bare.fallback], ['QUES', 'question', true]);
+  const perm = rowOf(m, 'nd:builder-a/perm');
+  assert.deepEqual([perm.word, perm.reason, perm.fallback], ['PERM', 'Bash npm run bench', false]);
+  assert.equal(rowOf(m, 'nd:builder-a/stk').word, 'QUES', 'a waiting state keeps its word, as the card');
+  assert.equal(rowOf(m, 'nd:builder-a/stk').fallback, true);
+  const nd = rowOf(m, 'nd:builder-a/nd');
+  assert.deepEqual([nd.word, nd.reason, nd.fallback], ['NEED', 'need', true]);
 });
 
 test('review rows come from the review queue (longest wait first); paused with kind; stale has stuck reasons and archive candidates', () => {

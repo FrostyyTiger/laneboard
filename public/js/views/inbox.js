@@ -159,6 +159,12 @@ function inboxRowNode(r) {
   const head = document.createElement('div');
   head.className = 'inbox-row-h';
   head.append(lamp(r.closed ? 'off' : r.p, { label: r.closed ? 'closed' : r.lampLabel ?? null }));
+  // T27: the Board's word after the shape (`▲ QUES`), coloured like the mark
+  if (r.word) {
+    const wd = span('inbox-wd', r.word);
+    if (!r.closed && (r.p === '1' || r.p === '2')) wd.dataset.p = r.p;
+    head.append(wd);
+  }
   if (r.fkey || r.name) head.append(plate(r.fkey ?? r.name));
   if (r.kind === 'approval') {
     head.append(plate(r.mcpServer ? `${r.mcpServer}:${r.tool}` : r.tool, { kind: 'sunken' }));
@@ -210,7 +216,11 @@ function inboxRowNode(r) {
     head.append(span('inbox-sum', r.reason));
     head.append(span('inbox-timer', formatWait(r.waitMs)));
   } else {
-    head.append(span('inbox-sum', r.reason ?? r.state ?? ''));
+    const sum = span('inbox-sum', r.reason ?? r.state ?? '');
+    // T27: the generic `question` (no words from the session) is muted
+    if (r.fallback) sum.classList.add('inbox-sum--fallback');
+    else if (r.reason) sum.title = r.reason;
+    head.append(sum);
     if (r.closed) head.append(span('inbox-status', 'closed'));
   }
   li.append(head);

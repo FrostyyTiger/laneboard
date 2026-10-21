@@ -23,7 +23,7 @@ import { laneById, store } from '../core/store.js';
 import { deriveCode } from '../core/keys.js';
 import { act } from '../core/actions.js';
 import { icon } from '../core/icons.js';
-import { itemP, markP } from '../core/marks.js';
+import { STATE_WORD, itemP, markP, markWord } from '../core/marks.js';
 import { lamp, plate } from '../ui/components.js';
 import { toast } from '../ui/shell.js';
 import { togglePin } from '../ui/dock.js';
@@ -33,33 +33,14 @@ import { cardNodes, toggleLane } from './board.js';
 /** What a missing field renders as. */
 export const DASH = '—';
 
-/** The 4-character state words (plan §4 2.7). */
-export const STATE_WORD = Object.freeze({
-  waiting_permission: 'PERM', waiting_question: 'QUES', working: 'WORK',
-  done: 'DONE', idle: 'IDLE', shell: 'SHEL', dead: 'DEAD',
-});
+// The state words and markWord live in core/marks.js (runs n5 T27: the Inbox
+// prints them too); re-exported for the callers that import them from here.
+export { STATE_WORD, markWord };
 
 /** Session state -> lamp `data-p` (ISA-101: colour only for abnormal). */
 export const STATE_P = Object.freeze(Object.fromEntries(
   ['waiting_permission', 'waiting_question', 'working', 'done', 'idle', 'shell', 'dead'].map((st) => [st, markP(st)]),
 ));
-
-/**
- * The word beside a session's mark (review 6-designer Across 1): when a flag,
- * not the state, raised the amber ▲ (an approval held, a stuck session), the
- * word names the flag with the header tile's word (`APPR`, `STCK`), never
- * `WORK` beside a ▲. Else the state's word. The Board card, the NEEDS YOU
- * list and the phone chip all print this. Pure.
- */
-export function markWord(s) {
-  const state = typeof s?.state === 'string' ? s.state : null;
-  const own = state ? markP(state) : 'off';
-  if (own !== '1' && own !== '2') {
-    if (s?.awaitingApproval) return 'APPR';
-    if (s?.stuck) return 'STCK';
-  }
-  return state ? (STATE_WORD[state] ?? state.slice(0, 4).toUpperCase()) : DASH;
-}
 
 const STATE_ORDER = Object.freeze({ waiting_permission: 0, waiting_question: 1, working: 2, done: 3, idle: 4, shell: 5, dead: 6 });
 

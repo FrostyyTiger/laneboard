@@ -28,7 +28,7 @@
 // last row it saw as `ghost`) and every action key on it does nothing.
 
 import { fkey as makeFkey, BUILDER_ID_RX } from './keys.js';
-import { markP } from './marks.js';
+import { markP, markWord } from './marks.js';
 
 export const GROUPS = Object.freeze(['approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
 
@@ -78,6 +78,23 @@ export const ACK_BY = 'inbox';
 export const PR_STATES = new Set(['open', 'merged', 'closed']);
 const WAITING = new Set(['waiting_permission', 'waiting_question']);
 const MARKER_KINDS = new Set(['need', 'blocked']);
+/** A marker's word beside its mark: the header tile's word (core/alarm-tiles.js). */
+const MARKER_WORD = Object.freeze({ need: 'NEED', blocked: 'BLKD' });
+
+/**
+ * What a waiting session asks, in its own words (as Morning and the push
+ * body read it): a question is the assistant's last line, a permission the
+ * tool and its input. Null when the session sent nothing.
+ */
+function waitingText(state, activity) {
+  if (!activity || typeof activity !== 'object') return null;
+  const said = str(activity.lastAssistant);
+  if (state === 'waiting_permission') {
+    const input = str(activity.toolInput);
+    if (input) return `${str(activity.tool) ?? ''} ${input}`.trim();
+  }
+  return said;
+}
 const PAUSE_KINDS = new Set(['operator', 'budget', 'quota', 'stuck']);
 const TIER_RANK = Object.freeze({ read: 0, click: 1, ask: 2, confirm: 3 });
 /**
@@ -218,9 +235,14 @@ function needsRows(s, scope, sessions) {
     if (!e) continue;
     const danger = str(a.danger);
     if (!WAITING.has(a.state) && !danger) continue;
+    // Runs n5 T27: the Board's word after the shape (`▲ QUES`), then the
+    // session's own words; the generic `question` only when it has none.
+    const text = danger ?? waitingText(a.state, e.session.activity);
     add(e, {
       p: danger ? markP('danger') : markP(a.state),
-      reason: danger ? inboxClip(danger, LIMITS.reason) : a.state === 'waiting_permission' ? 'permission' : 'question',
+      word: markWord({ state: a.state, stuck: e.session.stuck }),
+      reason: text ? inboxClip(text, LIMITS.reason) : a.state === 'waiting_permission' ? 'permission' : 'question',
+      fallback: !text,
       since: isNum(a.since) ? a.since : 0,
     });
   }
@@ -231,9 +253,12 @@ function needsRows(s, scope, sessions) {
   }).sort((x, y) => (x.session.lastMarker.ts ?? 0) - (y.session.lastMarker.ts ?? 0) || (x.fkey < y.fkey ? -1 : 1));
   for (const e of marked) {
     const m = e.session.lastMarker;
+    const text = inboxClip(str(m.text), LIMITS.reason);
     add(e, {
       p: markP(m.kind),
-      reason: `${m.kind}: ${inboxClip(str(m.text), LIMITS.reason) ?? ''}`.trim(),
+      word: MARKER_WORD[m.kind],
+      reason: text ?? m.kind,
+      fallback: !text,
       since: isNum(m.ts) ? m.ts : 0,
     });
   }

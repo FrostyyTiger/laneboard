@@ -145,3 +145,48 @@ test('T16 (night 5): a RUN PRS row is the title alone, its link `open ↗` keeps
   assert.equal(hide[0].value, 'none');
   assert.ok(hide[0].at.some((a) => /max-width: 700px/.test(a)), 'only on a phone');
 });
+
+// review 27-designer Across 3 (runs n5 T27)
+test('T27: an Inbox question row reads QUES after the shape, then the question; `question` only without text', async () => {
+  const { store } = await import('../public/js/core/store.js');
+  const saved = { builders: store.builders, attention: store.attention };
+  store.builders = new Map([['builder-a', {
+    id: 'builder-a', online: true, lanes: [], approvals: [],
+    sessions: new Map([
+      ['ask', { name: 'ask', state: 'waiting_question', activity: { lastAssistant: 'Keep the old export?' } }],
+      ['mute', { name: 'mute', state: 'waiting_question' }],
+    ]),
+  }]]);
+  store.attention = ['ask', 'mute'].map((name, i) => ({ builder: 'builder-a', name, state: 'waiting_question', score: 90 - i, since: 1 }));
+  const el = makeEl('div');
+  V.mount(el, { route: { view: 'inbox' } });
+  try {
+    await settle();
+    const rows = all(el, (n) => n.classList?.contains('inbox-row') && n.dataset.group === 'needs');
+    assert.equal(rows.length, 2);
+    const [ask, mute] = rows.map((r) => r.children[0].children);
+    assert.ok(ask[0].classList.contains('lamp'), 'the shape first');
+    assert.ok(ask[1].classList.contains('inbox-wd'), 'then the word');
+    assert.equal(ask[1].textContent, 'QUES');
+    assert.equal(ask[1].dataset.p, '2', 'amber like the mark');
+    const sum = (cells) => cells.find((c) => c.classList.contains('inbox-sum'));
+    assert.equal(sum(ask).textContent, 'Keep the old export?');
+    assert.ok(!sum(ask).classList.contains('inbox-sum--fallback'));
+    assert.doesNotMatch(rows[0].textContent, /question/);
+    assert.equal(mute[1].textContent, 'QUES');
+    assert.equal(sum(mute).textContent, 'question');
+    assert.ok(sum(mute).classList.contains('inbox-sum--fallback'), 'the fallback word is muted');
+  } finally {
+    V.unmount();
+    Object.assign(store, saved);
+  }
+});
+
+test('T27: the fallback text is --text-3 and the word is coloured by its mark', () => {
+  const css = fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'css', 'views', 'fleet-views.css'), 'utf8');
+  const decls = declarations(css).decls;
+  const of = (sel, prop) => decls.find((d) => d.prelude.trim() === sel && d.prop === prop)?.value;
+  assert.equal(of('.inbox-sum--fallback', 'color'), 'var(--text-3)');
+  assert.equal(of('.inbox-wd[data-p="2"]', 'color'), 'var(--p2)');
+  assert.equal(of('.inbox-wd', 'font-family'), 'var(--font-mono)');
+});

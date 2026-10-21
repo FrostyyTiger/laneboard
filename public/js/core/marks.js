@@ -28,3 +28,26 @@ export function itemP(s) {
   if (s.awaitingApproval || s.stuck) return '2';
   return own;
 }
+
+/** The 4-character state words (fleet plan §4 2.7). */
+export const STATE_WORD = Object.freeze({
+  waiting_permission: 'PERM', waiting_question: 'QUES', working: 'WORK',
+  done: 'DONE', idle: 'IDLE', shell: 'SHEL', dead: 'DEAD',
+});
+
+/**
+ * The word beside a session's mark (review 6-designer Across 1): when a flag,
+ * not the state, raised the amber ▲ (an approval held, a stuck session), the
+ * word names the flag with the header tile's word (`APPR`, `STCK`), never
+ * `WORK` beside a ▲. Else the state's word. The Board card, the NEEDS YOU
+ * list, the phone chip and the Inbox rows (runs n5 T27) all print this.
+ */
+export function markWord(s) {
+  const state = typeof s?.state === 'string' ? s.state : null;
+  const own = state ? markP(state) : 'off';
+  if (own !== '1' && own !== '2') {
+    if (s?.awaitingApproval) return 'APPR';
+    if (s?.stuck) return 'STCK';
+  }
+  return state ? (STATE_WORD[state] ?? state.slice(0, 4).toUpperCase()) : '—';
+}
