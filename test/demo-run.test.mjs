@@ -200,3 +200,16 @@ test('demoWsText: a map message gets the run nodes, anything else passes byte fo
     assert.equal(demoWsText(t, NOW), t);
   }
 });
+
+test('demoMorningWithRuns gives the first builder with no moved lane a done lane and a working one (T25b)', async () => {
+  const { demoMorningWithRuns } = await import('./helpers/demo-hub.mjs');
+  const now = Date.now();
+  const b = (id) => ({ id, error: 'not found', stale: true, needsYou: [], finished: [], cost: { lanes: [] } });
+  const out = demoMorningWithRuns({ since: now - 3600_000, builders: [b('builder-a'), b('builder-b')], missing: ['builder-a', 'builder-b'] }, now);
+  const [a, other] = out.builders;
+  assert.equal(a.error, undefined);
+  assert.deepEqual(a.finished.map((f) => f.sessions[0].state), ['idle', 'working']);
+  assert.equal(a.finished[0].doneMarkers.length, 1);
+  assert.equal(other.error, 'not found', 'only one builder is filled in');
+  assert.deepEqual(out.missing, ['builder-b']);
+});

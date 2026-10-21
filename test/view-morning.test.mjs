@@ -520,3 +520,43 @@ test('CSS T25: the selected builder chip is a 1 px accent border with no fill', 
   assert.doesNotMatch(rule, /background/, 'no fill on the selected chip');
   assert.doesNotMatch(rule, /accent-weak|--p\d/);
 });
+
+// --- T25b: a lane with a session still at work is not Finished ----------------
+
+const working = (lane, state = 'working') => fin(lane, { sessions: [{ name: `${lane}-1`, state, since: T0 - H }] });
+
+test('model T25b: a lane with a working or waiting session goes under running, not finished; the counts skip it', () => {
+  const m = V.morningModel(built({ finished: [working('busy'), working('asks', 'waiting_question'), fin('done-lane')] }), { hub: false, s: store });
+  const [b] = m.builders;
+  assert.deepEqual(b.finished.map((f) => f.lane), ['done-lane']);
+  assert.deepEqual(b.running.map((f) => f.lane), ['busy', 'asks']);
+  assert.equal(m.totals.sessions.finished, 1);
+  assert.equal(m.totals.finished, 1);
+  // A done marker or a merge is news: the lane finished even with a session still up.
+  assert.equal(V.laneStillRunning(fin('m', { merged: true, sessions: [{ name: 'm-1', state: 'working' }] })), false);
+  assert.equal(V.laneStillRunning(fin('d', { doneMarkers: [{ text: 'DONE' }], sessions: [{ name: 'd-1', state: 'working' }] })), false);
+  assert.equal(V.laneStillRunning(fin('x', { sessions: [] })), false);
+});
+
+test('render T25b: the working lane is under Still running, the done lane under Finished, the finished count is 1', () => {
+  const box = render(V.morningModel(built({ finished: [working('busy'), fin('done-lane')] }), { hub: false, s: store }));
+  const titles = byClass(box, 'mblock').map((b) => b.children[0]._text);
+  assert.deepEqual(titles, ['Needs you', 'Finished', 'Still running', 'What it cost']);
+  const names = (title) => byClass(blockTitled(box, title), 'mrow-name').map((n) => n._text);
+  assert.deepEqual(names('Finished'), ['done-lane']);
+  assert.deepEqual(names('Still running'), ['busy']);
+  // Hub mode: the summary strip's finished cell counts the done lane only.
+  const hub = render(V.morningModel({ builders: [{ id: 'builder-a', needsYou: [], finished: [working('busy'), fin('done-lane')], cost: { lanes: [] } }] }, { hub: true, s: store }));
+  const cell = byClass(hub, 'mkv').find((c) => c.children[0]._text === 'finished');
+  assert.equal(cell.children[1]._text, '1');
+  assert.equal(cell.title, '1 lanes + 0 runs stopped');
+  assert.deepEqual(byClass(blockTitled(hub, 'Still running'), 'mrow-name').map((n) => n._text), ['busy']);
+});
+
+test('render T25b: only running lanes moved: Finished says nothing finished; hub rows split the same', () => {
+  const box = render(V.morningModel(built({ finished: [working('busy')] }), { hub: false, s: store }));
+  assert.ok(texts(blockTitled(box, 'Finished')).includes('Nothing finished in this window.'));
+  const hub = V.morningModel({ builders: [{ id: 'builder-a', needsYou: [], finished: [working('busy'), fin('old')], cost: { lanes: [] } }] }, { hub: true, s: store });
+  assert.deepEqual(hub.builders[0].running.map((f) => f.lane), ['busy']);
+  assert.equal(hub.totals.finished, 1);
+});

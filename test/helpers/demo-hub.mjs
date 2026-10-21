@@ -219,7 +219,35 @@ export const FLEET_MORNING_PATH = '/api/fleet/morning';
 export function demoMorningWithRuns(body, now = Date.now()) {
   if (!body || typeof body !== 'object' || Array.isArray(body) || body.runs !== undefined) return body;
   const since = typeof body.since === 'number' && Number.isFinite(body.since) ? body.since : now - 12 * 3600_000;
-  return { ...body, runs: runsInWindow(demoRuns(now), { since, now }) };
+  if (!Array.isArray(body.builders)) return { ...body, runs: runsInWindow(demoRuns(now), { since, now }) };
+  const builders = demoMovedLanes(body.builders, now);
+  const answered = new Set(builders.filter((b) => b && !b.error).map((b) => b.id));
+  const missing = Array.isArray(body.missing) ? body.missing.filter((id) => !answered.has(id)) : body.missing;
+  return { ...body, builders, missing, runs: runsInWindow(demoRuns(now), { since, now }) };
+}
+
+/**
+ * The demo builders serve no /api/morning (the hub merges `not found` for
+ * each) and their sessions have no git lanes, so no builder block ever drew:
+ * the first builder with no moved lane answers here with two (runs n5 T25b),
+ * one with a done marker (Finished) and one with a session still working
+ * (Still running), so the Morning shots show both blocks.
+ */
+function demoMovedLanes(builders, now) {
+  const i = builders.findIndex((b) => b && typeof b === 'object' && Array.isArray(b.finished) && !b.finished.length);
+  if (i < 0) return builders;
+  const lane = (name, hue, extra) => ({
+    lane: name, hue, branch: `lane/${name}`, merged: false, isMain: false, idle: false, progress: { n: 2, m: 3 },
+    lastCommitAt: now - 40 * 60_000, newCommit: true, doneMarkers: [], pr: null, packages: ['web'], ...extra,
+  });
+  const finished = [
+    lane('search-index', 200, {
+      doneMarkers: [{ id: 1, ts: now - 50 * 60_000, text: 'PACKAGE-DONE: search index rebuilt', session: 'search-1' }],
+      sessions: [{ name: 'search-1', state: 'idle', since: now - 45 * 60_000 }],
+    }),
+    lane('billing-export', 30, { sessions: [{ name: 'billing-1', state: 'working', since: now - 5 * 60_000 }] }),
+  ];
+  return builders.map((b, j) => (j === i ? { ...b, error: undefined, stale: false, finished } : b));
 }
 
 /**

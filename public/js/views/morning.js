@@ -111,7 +111,19 @@ function costOf(c) {
   };
 }
 
+// A lane moved in the window but a session still works or waits on it (T25b):
+// not finished. Same rule as `laneStillRunning` in bin/laneboard: no done
+// marker, not merged, and a session working or waiting_*.
+const RUNNING_STATES = new Set(['working', 'waiting_permission', 'waiting_question']);
+
+/** Whether a moved lane is still at work (T25b), so it goes under Still running. */
+export function laneStillRunning(f) {
+  const news = arr(f?.doneMarkers).length > 0 || (f?.merged === true && !f?.isMain);
+  return !news && arr(f?.sessions).some((x) => RUNNING_STATES.has(x?.state));
+}
+
 function morningBuilderOf(x, s) {
+  const moved = arr(x?.finished).filter(isObj);
   const id = typeof x?.id === 'string' && BUILDER_ID_RX.test(x.id) ? x.id : localBuilderId(s);
   return {
     id,
@@ -119,7 +131,8 @@ function morningBuilderOf(x, s) {
     error: typeof x?.error === 'string' && x.error ? x.error : null,
     stale: x?.stale === true || (typeof x?.error === 'string' && x.error !== ''),
     needsYou: arr(x?.needsYou).filter(isObj),
-    finished: arr(x?.finished).filter(isObj),
+    finished: moved.filter((f) => !laneStillRunning(f)),
+    running: moved.filter(laneStillRunning),
     cost: costOf(x?.cost),
     stuck: [],
   };
@@ -216,8 +229,9 @@ export function sinceText(ms) {
 /**
  * Any Morning payload -> one shape:
  *   {hub, error?, window, label, since, sinceText, builders:[{id, code, error, stale, needsYou,
- *    finished, cost, stuck}], totals:{needsYou, finished, usd, tokens, sessions:{finished,
- *    usd}, runs:{finished, usd}} (finished/usd = sessions + runs stopped in the window), review,
+ *    finished, running (moved lanes still at work, T25b), cost, stuck}], totals:{needsYou,
+ *    finished, usd, tokens, sessions:{finished, usd}, runs:{finished, usd}} (finished/usd =
+ *    finished lanes + runs stopped in the window; running lanes count nowhere), review,
  *    approvals, costByPackage, stuck (no known builder), deferred, missing, rateLimits,
  *    runs:[morningRunOf()], empty:[emptyFleetBlocks()]}
  * `hub` is whether the page is fed by a hub. A hub merge has `builders[]`; a hub
@@ -447,6 +461,7 @@ function builderGroup(b, m) {
 
 function builderBlocks(b, m) {
   const out = [needsBlock(b), finishedBlock(b)];
+  if (b.running.length) out.push(runningBlock(b));
   if (m.hub) out.push(stuckBlock(b.stuck, 'Stuck incidents'));
   out.push(costBlock(b.cost, m.rateLimits));
   return out;
@@ -582,29 +597,40 @@ function needsBlock(b) {
 
 function finishedBlock(b) {
   const sec = block('Finished', b.finished.length);
-  if (!b.finished.length) sec.append(el('p', 'empty', 'No lane moved in this window.'));
-  for (const f of b.finished) {
-    const row = el('div', 'mrow');
-    row.append(laneStripe(fin(f.hue)));
-    const main = el('div', 'mrow-main');
-    const top = el('div', 'mrow-top');
-    top.append(el('span', 'mrow-name', localPart(f.lane)));
-    if (f.progress?.n != null) top.append(el('span', 'mrow-stage', `${txt(f.progress.n)} of ${txt(f.progress.m)}`));
-    if (f.branch) top.append(el('span', 'mrow-branch', `⌥${txt(f.branch)}`));
-    if (!f.isMain && f.merged === true) top.append(el('span', 'lane-merged', 'merged'));
-    if (!f.isMain && f.merged === false) top.append(el('span', 'lane-unmerged', 'unmerged'));
-    if (isObj(f.pr)) top.append(prChip(f.pr));
-    if (fin(f.lastCommitAt)) top.append(el('span', 'mrow-age', `commit ${ago(f.lastCommitAt)}`));
-    for (const p of arr(f.packages).slice(0, 6)) top.append(el('span', 'mrow-pkg', txt(p)));
-    main.append(top);
-    const states = arr(f.sessions).filter(isObj)
-      .map((s) => `${localPart(s.name)} · ${STATE_LABEL[s.state] || txt(s.state)}`).join('   ');
-    main.append(el('div', 'mrow-sub', states || 'no session running'));
-    for (const d of arr(f.doneMarkers).filter(isObj)) main.append(el('div', 'mrow-text mrow-done', txt(d.text)));
-    row.append(main);
-    sec.append(row);
+  if (!b.finished.length) {
+    sec.append(el('p', 'empty', b.running.length ? 'Nothing finished in this window.' : 'No lane moved in this window.'));
   }
+  for (const f of b.finished) sec.append(laneRow(f));
   return sec;
+}
+
+/** Lanes that moved but still have a session at work (T25b): not Finished. */
+function runningBlock(b) {
+  const sec = block('Still running', b.running.length);
+  for (const f of b.running) sec.append(laneRow(f));
+  return sec;
+}
+
+function laneRow(f) {
+  const row = el('div', 'mrow');
+  row.append(laneStripe(fin(f.hue)));
+  const main = el('div', 'mrow-main');
+  const top = el('div', 'mrow-top');
+  top.append(el('span', 'mrow-name', localPart(f.lane)));
+  if (f.progress?.n != null) top.append(el('span', 'mrow-stage', `${txt(f.progress.n)} of ${txt(f.progress.m)}`));
+  if (f.branch) top.append(el('span', 'mrow-branch', `⌥${txt(f.branch)}`));
+  if (!f.isMain && f.merged === true) top.append(el('span', 'lane-merged', 'merged'));
+  if (!f.isMain && f.merged === false) top.append(el('span', 'lane-unmerged', 'unmerged'));
+  if (isObj(f.pr)) top.append(prChip(f.pr));
+  if (fin(f.lastCommitAt)) top.append(el('span', 'mrow-age', `commit ${ago(f.lastCommitAt)}`));
+  for (const p of arr(f.packages).slice(0, 6)) top.append(el('span', 'mrow-pkg', txt(p)));
+  main.append(top);
+  const states = arr(f.sessions).filter(isObj)
+    .map((s) => `${localPart(s.name)} · ${STATE_LABEL[s.state] || txt(s.state)}`).join('   ');
+  main.append(el('div', 'mrow-sub', states || 'no session running'));
+  for (const d of arr(f.doneMarkers).filter(isObj)) main.append(el('div', 'mrow-text mrow-done', txt(d.text)));
+  row.append(main);
+  return row;
 }
 
 // --- what it cost ----------------------------------------------------------
