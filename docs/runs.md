@@ -73,13 +73,13 @@ Every line has these fields:
 | Type | Fields | What it does |
 | --- | --- | --- |
 | `run.start` | `goal` (text), `plan`, `branch`, `cwd` (the absolute dir the run works in), `host` (64 chars: the machine the run works on, when it is not the one reading the file; the Map hangs the run there), `deadline` (ISO or epoch), `budget` `{rounds, windowPct, pause5h, stop7d}` (the four may also sit at top level) | starts the run, or restarts it: a second `run.start` updates the goal and budget and reopens a stopped run |
-| `round.start` | **`n`** (integer ≥ 0), `role`, `task`, `session` | round `n` begins; starting the same `n` again is a retry, counted in the round's `starts` |
+| `round.start` | **`n`** (integer ≥ 0), `role`, `task`, `title` (the task's title, per round), `session`, `wrapup` (`true` for a round after `run.stop`, such as a final review or report) | round `n` begins; starting the same `n` again is a retry, counted in the round's `starts`; a `wrapup` round is flagged, leaves a stopped run stopped and does not count in the list's `rounds` against `maxRounds` (so a run never reads 64 of 63) |
 | `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd`, `session` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` adds to the round's cost only, not to the run's `cost` (that is the sum of `cost` events); `session` (on either round event) names a Claude Code session of the round (see "Sessions of a round") |
 | `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n`, `max` (a positive number: the value that means done, such as the task count; the Map's progress ring) | one measurement of a metric; without `n` it belongs to the latest round (the highest `n` of a `round.start` or `round.end` so far in the file, even if that round has ended; 0 before any) |
 | `needs` | `kind` (default `decision`), `text`, `link`, `n` | the run needs a human; kind `wait` means the loop itself is waiting (a usage limit) and closes when the next round starts or the run stops; other kinds stay open until a `needs.ack` closes them; without `n` it belongs to the latest round, like `score` (even if that round has ended) |
 | `needs.ack` | **`ref`**, `by` (64 chars) | someone saw a need and closed it: `ref` is the need's place in the run's needs (`0` = the first `needs` line of the run, an integer below 10⁹) or its `ts` (epoch s or ms, or ISO; the first open need with that `ts`, else the first one). The first ack of a need counts (it records `ackedAt` and `by`); a second one changes nothing. A `ref` that names no need is kept raw (`laneboard run ack` refuses one, see below). A `fence` need (the loop reverted a round that touched a fenced file) closes only on an ack by a person: `by` is `inbox` (the Inbox's `a`), `run page` (its Ack button) or `owner` (`laneboard run ack … --by owner`); an ack with any other `by` or none (the reference loop writes `by: "loop"`) leaves it open and is kept raw, and a new round or `run.stop` never closes it. |
 | `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests, `report` for the run's report), `title`, `state` (`open`, `merged` or `closed`, any case; anything else is read as none) | something the run produced; the same URL twice is kept once, in its first place, and a later line with that URL updates its `state` and (when not empty) its `title` |
-| `run.stop` | `reason` (default `unknown`), `rounds`, `usd` | the run stopped (reasons below) |
+| `run.stop` | `reason` (default `unknown`), `rounds`, `usd`, `detail` (one line on why, shown under the reason), `wrapup` (`true`: wrap-up rounds follow) | the run stopped (reasons below); `GET /api/runs/<id>` returns `detail` and `wrapup` in `stop` |
 | `usage` | `n`, `fiveHourPct`, `sevenDayPct`, `fiveHourResetsAt` (epoch s or ms), `overage` (boolean) | the account's usage windows after a round; a negative percentage means "not known" |
 | `cost` | **`usd`** (≥ 0), `n`, `total` | what a round cost; the run's cost is the sum of `usd` (the writer's own `total` restarts when the loop does) |
 
@@ -110,8 +110,10 @@ loop can send its own events (`review.note`, `deploy`, …) and still see them.
 
 A run's events, in file order, are folded into one picture
 (`foldRun` in `server/runs/protocol.mjs`): goal, plan, branch, deadline,
-budget, the rounds sorted by `n` (role, task, starts, start and end time,
-outcome, commit, cost, usage), the scores per metric over rounds and which way
+budget, the rounds sorted by `n` (role, task, title, `wrapup`, starts, start and
+end time, outcome, commit, cost, usage; a round's `usd` stays `null`, never 0,
+until a `round.end` `usd` or a `cost` event gives one), `counted` (the rounds
+that are not `wrapup`), the scores per metric over rounds and which way
 is better, the needs (each with `i`, its place, and `open`, `acked`, `ackedAt`,
 `by`), the artifacts, the stop, the run's `cost`, the last usage,
 the raw events, and how many lines were skipped. The run's `cost` (`usd`,

@@ -180,7 +180,8 @@ const SHAPES = {
   'round.start'(o) {
     const n = int(o.n);
     if (n === null || n < 0) return 'bad n';
-    return { n, role: str(o.role), task: str(o.task), session: sessionId(o.session) };
+    return { n, role: str(o.role), task: str(o.task), title: str(o.title), session: sessionId(o.session),
+      wrapup: bool(o.wrapup) === true };
   },
   'round.end'(o) {
     const n = int(o.n);
@@ -210,7 +211,8 @@ const SHAPES = {
     return { kind: str(o.kind, 32) || 'link', url, title: str(o.title), state: artifactState(o.state) };
   },
   'run.stop'(o) {
-    return { reason: str(o.reason, 32) || 'unknown', rounds: int(o.rounds), usd: num(o.usd) };
+    return { reason: str(o.reason, 32) || 'unknown', rounds: int(o.rounds), usd: num(o.usd), detail: str(o.detail),
+      wrapup: bool(o.wrapup) === true };
   },
   usage(o) {
     return {
@@ -267,7 +269,7 @@ export function parseLines(text) {
 function round(rounds, n) {
   let r = rounds.get(n);
   if (!r) {
-    r = { n, role: null, task: null, starts: 0, startedAt: null, endedAt: null, outcome: null,
+    r = { n, role: null, task: null, title: null, wrapup: false, starts: 0, startedAt: null, endedAt: null, outcome: null,
       commit: null, usd: null, open: null, usage: null, sessions: [] };
     rounds.set(n, r);
   }
@@ -284,6 +286,10 @@ function round(rounds, n) {
  * - An artifact is listed once per URL, where it first came; a later line with
  *   the same URL updates its `state` and (when not empty) its `title`.
  * - `cost.usd` is summed: `total` restarts when the loop does.
+ * - A `wrapup` round (the operator review and report after `run.stop`) is
+ *   flagged and leaves the run stopped; `counted` (rounds against the
+ *   `maxRounds` cap) leaves it out. A round's `usd` stays null until a
+ *   `round.end` or `cost` gives one.
  * - A `wait` need closes when the next round starts or the run stops; any need
  *   closes when a `needs.ack` names it (by its place in the list or its `ts`).
  *   The first ack counts; a second one changes nothing. An ack naming no need is
@@ -294,7 +300,7 @@ function round(rounds, n) {
 export function foldRun(events, { skipped = 0 } = {}) {
   const run = {
     run: null, goal: null, plan: null, branch: null, cwd: null, host: null, state: 'running', deadline: null, deadlineAt: null,
-    budget: null, rounds: [], scores: {}, better: {}, needs: [], artifacts: [], stop: null,
+    budget: null, rounds: [], counted: 0, scores: {}, better: {}, needs: [], artifacts: [], stop: null,
     cost: { usd: 0, rounds: 0 }, usage: null, raw: [], startedAt: null, updatedAt: null,
     events: 0, skipped: typeof skipped === 'number' ? skipped : Object.values(skipped).reduce((a, b) => a + b, 0),
   };
@@ -326,6 +332,8 @@ export function foldRun(events, { skipped = 0 } = {}) {
         r.starts++;
         if (e.role) r.role = e.role;
         if (e.task) r.task = e.task;
+        if (e.title) r.title = e.title;
+        if (e.wrapup) r.wrapup = true;
         if (e.session && !r.sessions.includes(e.session)) r.sessions.push(e.session);
         if (e.ts && (r.startedAt === null || e.ts < r.startedAt)) r.startedAt = e.ts;
         current = Math.max(current, e.n);
@@ -370,7 +378,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
         break;
       }
       case 'run.stop':
-        run.stop = { reason: e.reason, rounds: e.rounds, usd: e.usd, ts: e.ts };
+        run.stop = { reason: e.reason, rounds: e.rounds, usd: e.usd, detail: e.detail, wrapup: e.wrapup, ts: e.ts };
         for (const need of run.needs) if (need.kind === 'wait') need.open = false;
         break;
       case 'usage': {
@@ -392,6 +400,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
   const cents = (x) => Math.round(x * 1e6) / 1e6;
   run.cost.usd = cents(run.cost.usd);
   run.rounds = [...rounds.values()].sort((a, b) => a.n - b.n);
+  run.counted = run.rounds.filter((r) => !r.wrapup).length;
   for (const r of run.rounds) if (r.usd !== null) r.usd = cents(r.usd);
   for (const list of Object.values(run.scores)) list.sort((a, b) => a.n - b.n);
   if (run.stop) run.state = 'stopped';

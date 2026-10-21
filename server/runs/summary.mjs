@@ -17,7 +17,8 @@ function lastScore(list, better) {
  * the deadline rule measures from.
  */
 export function summarize(run, { stuck = STUCK_DEFAULTS, now = Date.now() } = {}) {
-  const last = run.rounds[run.rounds.length - 1] ?? null;
+  // A wrap-up round (after run.stop) is not one of the budget's rounds: "63 of 63", never "64 of 63".
+  const last = run.rounds.findLast((r) => !r.wrapup) ?? null;
   const scores = {};
   for (const [name, list] of Object.entries(run.scores)) {
     if (list.length) scores[name] = lastScore(list, run.better[name]);
@@ -29,7 +30,8 @@ export function summarize(run, { stuck = STUCK_DEFAULTS, now = Date.now() } = {}
     branch: run.branch,
     state: run.state,
     round: last ? last.n : null,
-    rounds: run.rounds.length,
+    rounds: run.counted ?? run.rounds.length,
+    wrapup: run.rounds[run.rounds.length - 1]?.wrapup === true,
     maxRounds: run.budget?.rounds ?? null,
     scores,
     usage: run.usage,

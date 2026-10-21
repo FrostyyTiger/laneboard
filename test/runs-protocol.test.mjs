@@ -118,7 +118,7 @@ test('the fixture folds into the run', () => {
   assert.equal(run.state, 'stopped');
   assert.deepEqual(run.budget, { rounds: 6, windowPct: 90, pause5h: null, stop7d: null });
   assert.equal(run.deadlineAt, Date.parse('2026-10-21T05:00:00Z'));
-  assert.deepEqual(run.stop, { reason: 'no-progress', rounds: 3, usd: 3.75, ts: 1792487410000 });
+  assert.deepEqual(run.stop, { reason: 'no-progress', rounds: 3, usd: 3.75, detail: null, wrapup: false, ts: 1792487410000 });
 
   assert.deepEqual(run.rounds.map((r) => [r.n, r.role, r.task, r.outcome, r.commit, r.usd]), [
     [1, 'planner', null, 'kept', 'a1b2c3d', 0.9],
@@ -177,6 +177,34 @@ test('a retried round counts its starts and adds its costs; a restart reopens th
   assert.equal(run.rounds[0].usd, 0.76);
   assert.equal(run.cost.usd, 0.76, 'summed, not the restarted total');
   assert.equal(run.needs[0].open, false, 'a wait closes when the next round starts');
+});
+
+test('a round keeps its title, a stop its detail; a wrap-up round after the stop is flagged and not counted (night 5 T3)', () => {
+  assert.equal(ok({ t: 'round.start', n: 1, wrapup: 'true' }).wrapup, true);
+  assert.equal(ok({ t: 'round.start', n: 1 }).wrapup, false);
+  assert.equal(ok({ t: 'round.start', n: 1, title: 7 }).title, '7');
+  assert.equal(ok({ t: 'run.stop', reason: 'done' }).detail, null);
+  const run = foldRun([
+    ok({ t: 'run.start', goal: 'g', budget: { rounds: 2 } }),
+    ok({ t: 'round.start', n: 1, role: 'builder', task: 'T3', title: 'The protocol keeps the loop\'s fields' }),
+    ok({ t: 'round.end', n: 1, outcome: 'done' }),
+    ok({ t: 'round.start', n: 2, role: 'builder' }),
+    ok({ t: 'round.end', n: 2, outcome: 'done', usd: 0.5 }),
+    ok({ t: 'run.stop', reason: 'rounds', rounds: 2, usd: 0.5, detail: 'used its 2-round budget', wrapup: true }),
+    ok({ t: 'round.start', n: 3, role: 'review-operator', wrapup: true }),
+    ok({ t: 'round.end', n: 3, outcome: 'reviewed' }),
+  ]);
+  assert.equal(run.rounds[0].title, 'The protocol keeps the loop\'s fields');
+  assert.equal(run.rounds[0].task, 'T3');
+  assert.equal(run.rounds[1].title, null);
+  assert.equal(run.stop.detail, 'used its 2-round budget');
+  assert.equal(run.stop.wrapup, true);
+  assert.equal(run.state, 'stopped', 'a wrap-up round does not restart the run');
+  assert.deepEqual(run.rounds.map((r) => r.wrapup), [false, false, true]);
+  assert.equal(run.counted, run.stop.rounds);
+  assert.equal(run.rounds[0].usd, null, 'no usd and no cost event: unknown, not 0');
+  assert.equal(run.rounds[2].usd, null);
+  assert.equal(run.rounds[1].usd, 0.5);
 });
 
 test('a run whose last word is a wait need is waiting', () => {

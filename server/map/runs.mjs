@@ -70,7 +70,8 @@ export function runNodes(runs, { nodes = [], coreId = '__core', now = Date.now()
     const s = runStuck(run, stuck, now);
     const host = clip(run.host);
     const parent = (host && hosts.get(nameKey(host))) || coreId;
-    const round = run.rounds?.length ? run.rounds[run.rounds.length - 1].n : null;
+    const counted = run.rounds?.findLast?.((r) => !r.wrapup);
+    const round = counted ? counted.n : null;
     const maxRounds = num(run.budget?.rounds);
     const progress = runProgress(run);
     const detail = {};

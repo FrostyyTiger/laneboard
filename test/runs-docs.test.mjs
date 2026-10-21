@@ -41,6 +41,14 @@ test('the artifact row documents `state` and the update rule (night 5 T1)', () =
   assert.match(row, /later line with that URL updates its `state`/);
 });
 
+test('round.start documents `title` and `wrapup`, run.stop `detail` (night 5 T3)', () => {
+  const rows = doc.split('\n');
+  const start = rows.find((l) => l.startsWith('| `round.start` |'));
+  const stop = rows.find((l) => l.startsWith('| `run.stop` |'));
+  for (const f of ['`title`', '`wrapup`']) assert.ok(start.includes(f), f);
+  assert.ok(stop.includes('`detail`'), 'detail');
+});
+
 test('the states table matches STATES', () => {
   assert.deepEqual([...tableNames('States')].sort(), [...STATES].sort());
 });

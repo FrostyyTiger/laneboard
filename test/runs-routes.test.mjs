@@ -172,6 +172,26 @@ test('POST /api/runs/events: a score before any round lands on n 0, the run on r
   assert.deepEqual(one.body.run.scores.tests.map((x) => x.n), [0]);
 });
 
+test('POST /api/runs/events: a stop keeps its detail, a wrap-up round leaves the count at the stop\'s (night 5 T3)', async () => {
+  await ready();
+  for (const e of [
+    { t: 'run.start', run: 'wrapped', goal: 'Two rounds', budget: { rounds: 2 } },
+    { t: 'round.start', run: 'wrapped', n: 1, role: 'builder', task: 'T1', title: 'Add the thing' },
+    { t: 'round.start', run: 'wrapped', n: 2, role: 'builder' },
+    { t: 'run.stop', run: 'wrapped', reason: 'rounds', rounds: 2, detail: 'used its 2-round budget', wrapup: true },
+    { t: 'round.start', run: 'wrapped', n: 3, role: 'final', wrapup: true },
+  ]) assert.equal((await call('POST', '/api/runs/events', { body: JSON.stringify(e) })).status, 201);
+  const row = (await call('GET', '/api/runs')).body.runs.find((x) => x.run === 'wrapped');
+  assert.equal(row.state, 'stopped');
+  assert.equal(row.rounds, 2, 'not 3 of 2');
+  assert.equal(row.round, 2);
+  assert.equal(row.wrapup, true);
+  const one = await call('GET', '/api/runs/:run', { params: { run: 'wrapped' } });
+  assert.equal(one.body.run.stop.detail, 'used its 2-round budget');
+  assert.equal(one.body.run.rounds[0].title, 'Add the thing');
+  assert.equal(one.body.run.rounds[2].wrapup, true);
+});
+
 test('eventLine and eventsFile are strict about what reaches the disk', () => {
   assert.equal(eventLine('{"t":"x.custom","run":"r1","ts":5000000000000,"a":1}').ok, true);
   assert.deepEqual(eventLine('   '), { ok: false, error: 'empty' });

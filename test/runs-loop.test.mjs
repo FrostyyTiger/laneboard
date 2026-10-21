@@ -121,7 +121,7 @@ test('a run whose last event is a wait need is waiting', () => {
 
 test('the stop: reason, rounds and the loop\'s total', () => {
   assert.equal(RUN.state, 'stopped');
-  assert.deepEqual({ ...RUN.stop, ts: undefined }, { reason: 'deadline', rounds: 11, usd: 10.11, ts: undefined });
+  assert.deepEqual({ ...RUN.stop, ts: undefined }, { reason: 'deadline', rounds: 11, usd: 10.11, detail: null, wrapup: false, ts: undefined });
   assert.equal(ROW.stop, 'deadline');
   assert.equal(ROW.round, 11);
   assert.equal(ROW.maxRounds, 15);
