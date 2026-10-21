@@ -204,7 +204,19 @@ Not tonight: the fenced items and taste calls on the night-1 and night-2 owner l
    designer reviewer judges against from then on. Night's dark theme as it is; its **light theme is
    the weak one** and is brought to the same finish (contrast, tile colors, Board cards). Every
    view shot in both themes at 1440 and 390 before and after; the designer compares.
-2. The open night-3 tasks T46-T63 (CLI and docs gaps, four UI fixes; T52 `pause --all` first).
+2. **T13 unblocked** (§8 Q7): the phone MAP/LIST/INBOX bar in `public/js/ui/sheet.js`.
+3. **Morning lists run needs** (§8 Q9): open run needs in `/api/morning` `needsYou` and in the CLI's
+   `morning`, and a need count on the Morning run row.
+4. **A PR leaves the Inbox when it is merged or closed** (§8 Q10): an optional `state` on `artifact`
+   (`open`, `merged`, `closed`; a later `artifact` line with the same URL updates it), shown and
+   honoured by the Inbox; the 24 h rule stays for artifacts without a state.
+5. **The loop's new fields, shown** (the loop writes them since 2026-10-21): `title` on
+   `round.start` (the task's headline, next to its id), `max` on the `tasks` score (the Map's ring and
+   "44 of 63"), `detail` on `run.stop` (kept by the protocol and shown under the stop reason), and
+   rounds with `wrapup: true` read as wrap-up after a stop, never as "81 of 80". A round with no
+   `cost` event shows its cost as unknown, not $0.
+6. The open night-3 tasks T46-T63 (CLI and docs gaps, four UI fixes; T52 `pause --all` first).
+Not on night 4: runs on the fleet hub (§8 Q11, done with the owner, not by the loop).
 
 ## 8. Decisions (2026-10-20)
 - **Q1 Look:** polish the current control-room style (§5). No new direction.
@@ -214,3 +226,10 @@ Not tonight: the fenced items and taste calls on the night-1 and night-2 owner l
 - **Q5 Demo:** publish on GitHub Pages once it is ready.
 - **Q6 Design direction (2026-10-21):** **Night**, picked from the four directions shot on night 3
   (current, refined, product, night). Its light theme needs lifting to match its dark one.
+- **Q7 `sheet.js` (2026-10-21):** not fenced; T13 goes ahead.
+- **Q8 `needs.ack` (2026-10-21):** stays in protocol v1 as night 3 built it (written through
+  `POST /api/runs/events`), so the board and the CLI share what was acknowledged.
+- **Q9 Morning (2026-10-21):** lists open run needs, web and CLI.
+- **Q10 PRs in the Inbox (2026-10-21):** an `artifact` gets a `state`; a merged or closed PR leaves at once.
+- **Q11 Runs on the hub (2026-10-21):** yes, but the fenced hub change (`/api/runs` relay and runs in
+  `mergeMorning`) is made with the owner in a session, not by an unattended loop.
