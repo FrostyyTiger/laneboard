@@ -382,27 +382,24 @@ async function cmdMorning() {
   }
 
   // A run that stopped in the window is news of the night, said with its
-  // reason under Finished; the runs still going stay under Runs.
+  // reason under Finished; the runs still going stay under Runs. A lane that
+  // moved but still has a session at work is not finished: it gets its own
+  // Still running block (T25).
   const runs = Array.isArray(m.runs) ? m.runs : [];
   const stopped = runs.filter((r) => r.state === 'stopped' && (r.stoppedAt == null || r.stoppedAt >= m.since));
   const going = runs.filter((r) => !stopped.includes(r));
-  const lanes = Array.isArray(m.finished) ? m.finished : [];
-  const counts = [stopped.length ? `${plural(stopped.length, 'run')} stopped` : '', `${plural(lanes.length, 'lane')} active`];
+  const moved = Array.isArray(m.finished) ? m.finished : [];
+  const running = moved.filter(laneStillRunning);
+  const lanes = moved.filter((f) => !running.includes(f));
+  const counts = [stopped.length ? `${plural(stopped.length, 'run')} stopped` : '', lanes.length || !stopped.length ? plural(lanes.length, 'lane') : ''];
   process.stdout.write(`\n${C.bold}Finished${C.off} (${counts.filter(Boolean).join(', ')})\n`);
   for (const r of stopped) process.stdout.write(`  ${morningRunLine(r)}\n`);
-  if (!lanes.length) {
-    if (!stopped.length) process.stdout.write('  (nothing moved)\n');
-  } else {
-    const rows = lanes.map((f) => [
-      clip(f.lane, 24),
-      f.progress?.n != null ? `${f.progress.n}/${f.progress.m}` : '-',
-      clip(f.branch || '-', 28),
-      f.isMain ? '-' : f.merged === true ? `${C.green}merged${C.off}` : f.merged === false ? `${C.amber}unmerged${C.off}` : '?',
-      f.lastCommitAt ? ago(f.lastCommitAt) : '-',
-      f.doneMarkers.length ? `${C.green}${f.doneMarkers.length} done${C.off}` : '',
-      f.sessions.length ? plural(f.sessions.length, 'session') : '(idle)',
-    ]);
-    process.stdout.write(`${table(rows, ['LANE', 'STAGE', 'BRANCH', 'MERGED', 'COMMIT', 'DONE', 'SESSIONS'])}\n`);
+  if (lanes.length) process.stdout.write(`${morningLaneTable(lanes)}\n`);
+  else if (!stopped.length) process.stdout.write(running.length ? '  (nothing finished)\n' : '  (nothing moved)\n');
+
+  if (running.length) {
+    process.stdout.write(`\n${C.bold}Still running${C.off} (${plural(running.length, 'lane')})\n`);
+    process.stdout.write(`${morningLaneTable(running)}\n`);
   }
 
   if (going.length) {
@@ -421,6 +418,33 @@ async function cmdMorning() {
     const g = (x, label) => (x ? `${label} ${Math.round(x.usedPct)}% (resets ${new Date(x.resetsAt).toLocaleTimeString('en-GB', { hour12: false }).slice(0, 5)})` : '');
     process.stdout.write(`${C.dim}${g(rl.fiveHour, '5h')}   ${g(rl.sevenDay, '7d')}${C.off}\n`);
   }
+}
+
+/** Session states that mean an agent is still at work (or waiting on you mid-task). */
+const RUNNING_STATES = new Set(['working', 'waiting_permission', 'waiting_question']);
+
+/**
+ * A Morning lane that moved but is not finished: no done marker, not merged,
+ * and a session still working or waiting. Idle, done and dead sessions do not
+ * keep a lane open.
+ */
+function laneStillRunning(f) {
+  const news = (Array.isArray(f.doneMarkers) && f.doneMarkers.length) || (f.merged === true && !f.isMain);
+  return !news && Array.isArray(f.sessions) && f.sessions.some((s) => RUNNING_STATES.has(s?.state));
+}
+
+/** Morning's lane rows: lane, stage, branch, merged, last commit, done markers, sessions. */
+function morningLaneTable(lanes) {
+  const rows = lanes.map((f) => [
+    clip(f.lane, 24),
+    f.progress?.n != null ? `${f.progress.n}/${f.progress.m}` : '-',
+    clip(f.branch || '-', 28),
+    f.isMain ? '-' : f.merged === true ? `${C.green}merged${C.off}` : f.merged === false ? `${C.amber}unmerged${C.off}` : '?',
+    f.lastCommitAt ? ago(f.lastCommitAt) : '-',
+    f.doneMarkers?.length ? `${C.green}${f.doneMarkers.length} done${C.off}` : '',
+    f.sessions?.length ? plural(f.sessions.length, 'session') : '(idle)',
+  ]);
+  return table(rows, ['LANE', 'STAGE', 'BRANCH', 'MERGED', 'COMMIT', 'DONE', 'SESSIONS']);
 }
 
 /** A table whose last column is cut to what is left of MORNING_COLS. */
