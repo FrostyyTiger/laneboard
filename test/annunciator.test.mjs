@@ -13,6 +13,7 @@ import {
 import { tileView } from '../public/js/ui/annunciator.js';
 import {
   TAPE_MAX, DRAWER_ROWS, createRing, eventP, tapeItem, filterItems, tapeScope, clip, tapeTime, itemLabel,
+  latestItem, emptyLine,
 } from '../public/js/ui/tape.js';
 import { ALARM_KINDS } from '../server/config/observability.mjs';
 import { KIND_TO_TILE as SERVER_KIND_TO_TILE, TILES as SERVER_TILES, KINDS } from '../server/fleet/alarms.mjs';
@@ -295,4 +296,28 @@ test('filterItems / tapeScope: b=, q= and s=<tile> scope the tape', () => {
   assert.deepEqual(filterItems(items, scope).map((i) => i.name), ['web']);
   assert.equal(tapeScope({ s: 'working' }, al).keys, null, 'a non-tile s= is not a tile filter');
   assert.deepEqual(filterItems(items, tapeScope({ s: 'conf' }, al)), []);
+});
+
+test('emptyLine (T20): before the first event the line shows the latest session, like the phone peek', () => {
+  const since = new Date(2026, 9, 21, 9, 5, 7).getTime();
+  const latest = { key: 'builder-a/search', text: 'BA/search working', p: 'run', since };
+  const e = emptyLine(0, latest);
+  assert.equal(e.kind, 'latest');
+  assert.equal(e.item.name, 'BA/search working');
+  assert.equal(e.item.time, '09:05:07');
+  assert.equal(e.item.key, 'builder-a/search');
+  assert.equal(e.item.p, 'run');
+  assert.notEqual(e.item.name, 'no events yet');
+  // No session either: the line stays empty, never "no events yet".
+  assert.deepEqual(emptyLine(0, null), { kind: 'none' });
+  // Events exist but the scope hides them.
+  assert.deepEqual(emptyLine(3, latest), { kind: 'scope', text: 'no events in this scope' });
+  // Junk: no key that is not a fleet key, unknown p falls back to run.
+  const j = latestItem({ key: 'nope', text: 'x', p: 'weird' });
+  assert.equal(j.key, null);
+  assert.equal(j.p, 'run');
+  assert.equal(latestItem({ text: '' }), null);
+  const src = fs.readFileSync(path.join(ROOT, 'public/js/ui/tape.js'), 'utf8');
+  assert.doesNotMatch(src, /no events yet/);
+  assert.match(src, /peekModel\(store/);
 });
