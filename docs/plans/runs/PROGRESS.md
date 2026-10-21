@@ -166,3 +166,26 @@ the owner types `--by owner` (the docs' example). A refused ack is kept in `raw`
 - reviews/r58-stranger.md: 5 findings, 2 became tasks (T39 from 3, T40 from 5); 1 and 2 → For the owner (server identity / CLI taste); 4 → dropped (minor, the error is clear). No browser views were tested by the reviewer.
 
 ## Morning
+
+Done: all 40 tasks, T1-T40: the review fixes of PRs #10-#12 (item 1), Night as `tokens.css` v2 with a light theme and `docs/design.md` (item 2), the agreed taste calls, the phone bar and Morning run needs (items 3-5), plus 21 tasks from the reviews.
+Not done: Night 4 items 6 (PR `state`), 7 (the loop's new fields), most of 8 (CLI and docs) and 9 (n3 T46-T63) never became tasks, because the planner stops at 12 tasks and triage only added tasks from reviews.
+Stopped: `done` after 63 rounds, $50.96, with no open task left (round 64 was the operator review, round 65 this report).
+
+Tasks done (commits): T1 c4fa057, aa09cea · T2 1b1fb97 · T3 106c2aa · T4 24f187f · T5 5eade81 · T6 99195d0 · T7 ace342a · T8 2649f45 · T9 7657ff3 · T10 75bd683, ad45d97, ac72671, cadda6c · T11 659dbf0 · T12 fc68978 · T13 4400705 · T14 990545e · T15 ce2edc0 · T16 d0caa9c · T17 e12bb34 · T18 37a28ee · T19 4ed5ce6 · T20 ac188c4 · T21 3539097 · T22 5dda018 · T23 1965504, c2ea0e2 · T24 ea891c1 · T25 ce37691 · T26 713ebf8 · T27 0ef0826 · T28 ab1ed29 · T29 350d90a · T30 a05e973 · T31 132f225 · T32 6564792 · T33 85b4905 · T34 0fbc7bf · T35 880cdc2 · T36 e4f0740 · T37 18441b9 · T38 0c5cfdf · T39 ab4b15a · T40 6c0c884.
+Open or blocked: none in the list. Left over from the scope: Night 4 items 6, 7, 8 (except the `ok <run> <type>` receipt, T21) and 9.
+
+Tests now: `npm test` 3326 pass, 0 fail, 0 skipped (here, round 65). The `ci` result is whatever the script's push of this branch reports. T1 made the shallow-clone split test skip instead of fail.
+
+**Needs you, worst first.**
+1. **Merge the stack: look at the night before you squash.** Nights 1-4 (PRs #10-#12 plus this branch, 366 commits on top of `main`) go to `main` in one squash (§8 Q13). This night changed the look in every view (T11-T31) and the runs protocol (fence acks by `ts`/`by`, T5-T6). Read the T5/T6/T7 diffs and one shot set before merging.
+2. **Design pick: judge the Night look from the shots.** Before and after shots are in the run dir under `shots/r21-T11/` (tokens v2) to `shots/r60-T37/` (one folder per `[ui]` task, dark + light, 1440 + 390, 0 console errors). The open taste call is r10's accent: the orange accent sits 20° from the amber warning, so either pick an accent outside amber/red or make the amber yellower.
+3. **Plan the rest of Night 4: items 6-9 are not tasks yet.** PR `state` (item 6), the loop's new fields `title`/`session`/`max`/`detail`/`wrapup` (item 7), the CLI and docs list (item 8) and n3 T46-T63 (T52 `pause --all` first). Either give a planner round a bigger cap, or start a night 5 with these items.
+4. **Runs lose what the operator needs (r64).** `run.stop` `detail` is dropped by the API, a wrap-up round after the stop reads as round 64 of 63, the PR artifact has no title or state, a growing `tasks` max is invisible, and owner items in PROGRESS.md are never posted as needs. Most of this is items 6-7. Item 4 of the review (the reference loop posting `For the owner` items as needs) is a change to the loop script, so it is yours.
+5. **Fenced boot fix: `/healthz` answers before ingress is bound.** In `server/boot/common.mjs` `listenAll`, bind the ingress port first or register `/healthz` after every listener is up. The same file also holds the one-line busy-port and `AUDIT_LOCKED` messages (§7). Strangers r33 (a) and r58 (a) also ask that a taken port say whose board answers.
+6. **Taste call: phone Map labels (T29).** At ≤ 480 px healthy machines are unlabelled until you tap them. If they should keep their names, add `plate` kinds to the phone `show` test in `public/js/views/map/render.js` `labelPlan`.
+7. **Environment-derived names (r41 b, r49 a).** `laneboard run start` takes an inherited `LANEBOARD_RUN`, and with no config the Map title and builder come from the loop's environment. Your call: ignore them unless configured, or warn.
+8. **Smaller CLI/API taste calls (not tasks).** r13 (a-c), r25 (a-b), r33 (b) (stopped runs in Morning?), r41 (a, c), r49 (b), r58 (b): listed under For the owner.
+
+Reviews: r10/r17/r22 designer (~93 findings, 17 tasks T13-T31, taste ideas under For the owner); r13/r25/r33/r41/r49/r58 stranger (38 findings, 11 tasks T20-T21, T32-T40, the rest under For the owner); r64 operator (7 ranked gaps, not triaged into tasks because the loop had stopped, see Needs 4).
+Research: Q13 light from dark (T12), Q14 status colour rules (T11), Q15 SQLite session/ts index (T7) answered; Q16 Tailscale offline/last seen partly answered (admin console and fleet tools unconfirmed). No open research questions.
+Owner notes: the script named `owner-notes` in the run dir, but no such file exists, so there were none to add.
