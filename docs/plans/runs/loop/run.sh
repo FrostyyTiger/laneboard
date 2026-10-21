@@ -111,10 +111,12 @@ $( [ -n "${STOP_REASON:-}" ] && echo "STOP REASON: $STOP_REASON   OWNER NOTES: $
   esac
   local task="" title=""; case $role in builder|fix) task=$(next_task); [ -n "$task" ] && title=$(task_title "$task");; esac
   # rounds after run.stop (operator review, report) say so, so a stopped run does not read "81 of 80"
-  ev round.start n="$n" role="$role" ${task:+task="$task"} ${title:+title="$title"} ${WRAPUP:+wrapup=true}
+  # its own session id, so laneboard binds the round to its session exactly (night 1 T12)
+  local sid; sid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen | tr A-Z a-z)
+  ev round.start n="$n" role="$role" session="$sid" ${task:+task="$task"} ${title:+title="$title"} ${WRAPUP:+wrapup=true}
   # The prompt goes in on stdin, not argv: a round that runs `pkill -f <something the prompt names>`
   # must not match (and kill) its own session (night 3, rounds 3/16/18/22).
-  LANEBOARD_RUN="$NAME/$n" timeout "$ROUND_SECS" claude -p --model "$model" \
+  LANEBOARD_RUN="$NAME/$n" timeout "$ROUND_SECS" claude -p --model "$model" --session-id "$sid" \
     --permission-mode auto "${tools[@]}" \
     --output-format stream-json --verbose <<<"$prompt" > "$out" 2>&1
   local rc=$?

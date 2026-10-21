@@ -198,25 +198,67 @@ screenshots (no Playwright dependency in the repo; that stays the owner's call).
    snapshots).
 Not tonight: the fenced items and taste calls on the night-1 and night-2 owner lists.
 
-### Night 4 (draft; the rest of the list after the PR #12 review)
-1. **Apply the Night direction** (§8 Q6): `public/css/tokens.css` v2 from the `night` direction of
+### Night 4 (agreed 2026-10-21: review fixes, the Night look, taste calls)
+Night 4 builds on all three unmerged nights (PRs #10-#12, reviewed 2026-10-21: "merge after
+fixes"). The owner squash-merges the stack after night 4.
+1. **Review fixes first**, each with a test that fails before it:
+   a. `POST /api/map/feeds` only from this machine: 403 unless `req.auth?.kind === 'local'`
+      (`server/routes/feeds.mjs`; a tailnet caller passes the other guards today).
+   b. Machines with the same name in one source stay apart: key by vmid inside a source, merge by
+      name only across sources (`server/map.mjs` `feedMachines`/`withDiscovered`).
+   c. An offline tailnet device is idle "offline, last seen …", not a red stopped VM (`fromFeed`).
+   d. The UI acks a need by its `ts`, not its place (`public/js/views/runs.js`,
+      `public/js/core/inbox-model.js`): places shift when a later-read source holds older needs.
+      A `fence` need is closed only by an ack from the UI or the owner's CLI, and the run page shows
+      who acked (`by`).
+   e. The run page does not block the server: an index on `events(session_id, ts)` in MIGRATIONS or
+      one grouped query (`server/db.mjs` `sessionsSeen`).
+   f. A file that leaves discovery and comes back is not counted twice (`server/collector/runs.mjs`:
+      reset the source in the store when there is no saved position).
+   g. The deadline stuck rule fires only when the deadline has passed with no `run.stop`
+      (`server/runs/stuck.mjs`).
+   h. Smaller: `reach.unresolved` sent as a count only; `laneboard feed --out` writes 0600; the
+      docker test asserts `Command`/mounts/networks never reach the feed; one test through `boot()`
+      that `POST /api/runs/events` without `x-laneboard` or with a foreign Origin is a 403; the red
+      CI test `frontend.test.mjs` "split is byte-identical to styles.css" made green.
+   i. `test/scripts.test.mjs` `paneAfterRun`: no rerun that hides the lost-lines bug; mark the case
+      known-flaky until the owner's `windowScript` fix (below).
+2. **Apply the Night direction** (§8 Q6): `public/css/tokens.css` v2 from the `night` direction of
    night 1 (shots in night 3's `shots/r11-designer/night/`), and a short `docs/design.md` that the
    designer reviewer judges against from then on. Night's dark theme as it is; its **light theme is
    the weak one** and is brought to the same finish (contrast, tile colors, Board cards). Every
    view shot in both themes at 1440 and 390 before and after; the designer compares.
-2. **T13 unblocked** (§8 Q7): the phone MAP/LIST/INBOX bar in `public/js/ui/sheet.js`.
-3. **Morning lists run needs** (§8 Q9): open run needs in `/api/morning` `needsYou` and in the CLI's
+3. **The agreed taste calls** (§8 Q12), as `[ui]` tasks after the look: grey status tiles with a
+   coloured count and the colour rule (grey = news, amber ▲ = wants you, red ■ = broken, no blue or
+   cyan in content), also written into `docs/design.md`; the minimap on the Map only; Board cards
+   (grey lane bars unless trouble, no empty "–" fields, equal heights); one muted line for every
+   empty section, Inbox empty state with a next step; Inbox order (run needs next to NEEDS YOU, run
+   PRs after REVIEW); run page stop line folded into the state label; Map polish (Reach arcs in the
+   accent with a key, topology edges dimmed, run ring ≥ 14 px, muted run label, ring legends by
+   the kinds on them); a 2 px focus ring (the guardrail test changes with it).
+4. **T13 unblocked** (§8 Q7): the phone MAP/LIST/INBOX bar in `public/js/ui/sheet.js`.
+5. **Morning lists run needs** (§8 Q9): open run needs in `/api/morning` `needsYou` and in the CLI's
    `morning`, and a need count on the Morning run row.
-4. **A PR leaves the Inbox when it is merged or closed** (§8 Q10): an optional `state` on `artifact`
+6. **A PR leaves the Inbox when it is merged or closed** (§8 Q10): an optional `state` on `artifact`
    (`open`, `merged`, `closed`; a later `artifact` line with the same URL updates it), shown and
    honoured by the Inbox; the 24 h rule stays for artifacts without a state.
-5. **The loop's new fields, shown** (the loop writes them since 2026-10-21): `title` on
-   `round.start` (the task's headline, next to its id), `max` on the `tasks` score (the Map's ring and
-   "44 of 63"), `detail` on `run.stop` (kept by the protocol and shown under the stop reason), and
-   rounds with `wrapup: true` read as wrap-up after a stop, never as "81 of 80". A round with no
-   `cost` event shows its cost as unknown, not $0.
-6. The open night-3 tasks T46-T63 (CLI and docs gaps, four UI fixes; T52 `pause --all` first).
-Not on night 4: runs on the fleet hub (§8 Q11, done with the owner, not by the loop).
+7. **The loop's new fields, shown** (the loop writes them since 2026-10-21): `title` on
+   `round.start`, `session` on `round.start` (link the round to its session), `max` on the `tasks`
+   score (the Map's ring and "44 of 63"), `detail` on `run.stop` (kept by the protocol and shown
+   under the stop reason), and rounds with `wrapup: true` read as wrap-up after a stop, never as
+   "81 of 80". A round with no `cost` event shows its cost as unknown, not $0.
+8. **CLI and docs** (§8 Q12): `laneboard run` prints `ok <run> <type>` on stderr; `laneboard
+   morning` with ISO dates and the right tonight/today word; run cost summed from `round.end` `usd`
+   when a run has no `cost` events; a README route table (view → `/api/*`) and `GET /api/health`;
+   the README's safe test-copy recipe first; one name `maxRounds` (`budget.rounds` stays as an alias
+   for one version); a 404 on `/api/runs/<id>` that names the right route; with no config the Map
+   title falls back to the hostname, no fleet block, and the branch still shows; `laneboard run
+   --post` prints what was accepted; the README names `shoot.mjs` for a headless look.
+9. The open night-3 tasks T46-T63 (T52 `pause --all` first).
+Not on night 4: runs on the fleet hub (§8 Q11), plain-curl intake (§8 Q12: no), signed feed push
+(later, with the hub), and the two fenced fixes the owner makes in a session: the one-line busy-port
+and `AUDIT_LOCKED` messages (`server/boot/common.mjs`) and `sleep 1` at the end of `windowScript`
+(`server/review/scripts.mjs`).
 
 ## 8. Decisions (2026-10-20)
 - **Q1 Look:** polish the current control-room style (§5). No new direction.
@@ -233,3 +275,7 @@ Not on night 4: runs on the fleet hub (§8 Q11, done with the owner, not by the 
 - **Q10 PRs in the Inbox (2026-10-21):** an `artifact` gets a `state`; a merged or closed PR leaves at once.
 - **Q11 Runs on the hub (2026-10-21):** yes, but the fenced hub change (`/api/runs` relay and runs in
   `mergeMorning`) is made with the owner in a session, not by an unattended loop.
+- **Q12 Taste calls (2026-10-21):** all agreed as listed in Night 4 items 3 and 8; plain-curl intake
+  on `HOOK_PATHS`: no (the header is the guard); signed feed push: later, with the hub.
+- **Q13 Merging (2026-10-21):** the reviewed stack #10-#12 gets its fixes on night 4, then one
+  squash-merge to `main` (keeps the run rooms' commit metadata out of main) and the branches deleted.
