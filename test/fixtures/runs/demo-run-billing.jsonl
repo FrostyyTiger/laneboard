@@ -1,0 +1,13 @@
+{"v":1,"run":"acme-billing","t":"run.start","ts":1792510000000,"goal":"Move acme-api billing to the new invoice table, tests green","plan":"docs/plans/billing.md","branch":"run/billing","host":"builder-b","deadline":"2026-10-21T01:26:40.000Z","budget":{"rounds":10,"windowPct":90}}
+{"v":1,"run":"acme-billing","t":"score","ts":1792510010000,"name":"tasks","value":0,"max":6,"better":"higher","n":0}
+{"v":1,"run":"acme-billing","t":"round.start","ts":1792510060000,"n":1,"role":"builder","task":"T1"}
+{"v":1,"run":"acme-billing","t":"score","ts":1792511554000,"name":"tasks","value":1,"max":6,"better":"higher","n":1}
+{"v":1,"run":"acme-billing","t":"cost","ts":1792511557000,"n":1,"usd":1.1}
+{"v":1,"run":"acme-billing","t":"round.end","ts":1792511560000,"n":1,"outcome":"kept","commit":"3d4e5f6","usd":1.1}
+{"v":1,"run":"acme-billing","t":"round.start","ts":1792511620000,"n":2,"role":"builder","task":"T2"}
+{"v":1,"run":"acme-billing","t":"cost","ts":1792513117000,"n":2,"usd":1.65}
+{"v":1,"run":"acme-billing","t":"round.end","ts":1792513120000,"n":2,"outcome":"still-red","usd":1.65}
+{"v":1,"run":"acme-billing","t":"round.start","ts":1792513180000,"n":3,"role":"builder","task":"T2"}
+{"v":1,"run":"acme-billing","t":"cost","ts":1792514977000,"n":3,"usd":1.9}
+{"v":1,"run":"acme-billing","t":"round.end","ts":1792514980000,"n":3,"outcome":"still-red","usd":1.9}
+{"v":1,"run":"acme-billing","t":"round.start","ts":1792515040000,"n":4,"role":"builder","task":"T2"}

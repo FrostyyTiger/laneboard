@@ -29,7 +29,11 @@
 //   a run      the recorded run test/fixtures/runs/demo-run.jsonl, answered by
 //              the forwarder at GET /api/runs and /api/runs/<id> (a hub has no
 //              runs route; test/helpers/demo-hub.mjs `demoRunsAnswer`), and added
-//              as `runs` to the hub's /api/fleet/morning (`demoMorningWithRuns`)
+//              as `runs` to the hub's /api/fleet/morning (`demoMorningWithRuns`);
+//              two more, one running on `vm-a` and one stuck on `builder-b`,
+//              and all three as run nodes on the Map: the forwarder relays /ws
+//              message by message and adds them to each `map` message
+//              (`demoWsText`; a hub has no runs source)
 //
 // Isolation (RULES 3): the hub runs with its own temp HOME, TMUX_TMPDIR,
 // XDG_*_HOME, LANEBOARD_STATE_DIR, LANEBOARD_AUDIT_FILE, LANEBOARD_CONFIG and
@@ -53,9 +57,10 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { WebSocket, WebSocketServer } from 'ws';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed, demoRunsAnswer, demoMorningWithRuns, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed, demoRunsAnswer, demoMorningWithRuns, demoWsText, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -381,6 +386,42 @@ function morningWithRuns(ingressPort, req, res) {
   up.end();
 }
 
+// The app's /ws, relayed message by message (the terminal sockets stay raw
+// pipes) so `map` messages get the demo's run nodes (night 3 T45).
+const APP_WS_PATH = '/ws';
+const relayWss = new WebSocketServer({ noServer: true });
+
+function relayAppWs(ingressPort, req, socket, head) {
+  const h = serveHeaders(req.headers);
+  for (const k of Object.keys(h)) if (k.startsWith('sec-websocket-')) delete h[k];
+  const protocols = String(req.headers['sec-websocket-protocol'] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  const up = new WebSocket(`ws://127.0.0.1:${ingressPort}${req.url}`, protocols, { headers: h, perMessageDeflate: false });
+  let client = null;
+  const early = [];
+  const toClient = (data, binary) => client.send(binary ? data : demoWsText(data.toString('utf8')), { binary });
+  // The hub may greet before the browser side is up: keep those until it is.
+  up.on('message', (data, binary) => {
+    if (!client) early.push([data, binary]);
+    else if (client.readyState === WebSocket.OPEN) toClient(data, binary);
+  });
+  up.on('error', () => { if (client) client.terminate(); else socket.destroy(); });
+  up.once('unexpected-response', (_q, r) => { socket.end(`HTTP/1.1 ${r.statusCode} ${r.statusMessage}\r\n\r\n`); });
+  up.once('open', () => {
+    relayWss.handleUpgrade(req, socket, head, (ws) => {
+      client = ws;
+      const close = (code, reason) => {
+        const c = code >= 1000 && code < 5000 && code !== 1005 && code !== 1006 ? code : 1000;
+        for (const w of [client, up]) if (w.readyState === WebSocket.OPEN) w.close(c, reason);
+      };
+      client.on('message', (data, binary) => { if (up.readyState === WebSocket.OPEN) up.send(data, { binary }); });
+      client.on('close', close);
+      client.on('error', () => up.terminate());
+      up.on('close', close);
+      for (const [data, binary] of early.splice(0)) toClient(data, binary);
+    });
+  });
+}
+
 function forwarder(ingressPort) {
   const server = http.createServer((req, res) => {
     if (DESIGN && req.method === 'GET' && req.url.split('?')[0] === '/css/tokens.css') { designTokens(ingressPort, req, res); return; }
@@ -402,6 +443,7 @@ function forwarder(ingressPort) {
     req.pipe(up);
   });
   server.on('upgrade', (req, socket, head) => {
+    if (req.url.split('?')[0] === APP_WS_PATH) { relayAppWs(ingressPort, req, socket, head); return; }
     const h = serveHeaders(req.headers);
     h.connection = 'Upgrade';
     h.upgrade = req.headers.upgrade ?? 'websocket';

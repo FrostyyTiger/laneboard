@@ -15,12 +15,21 @@
 // test/fixtures/runs/demo-run.jsonl, folded by the real `foldRun` and
 // summarized by the real `summarize`. Its times are moved so it stopped
 // `DEMO_RUN_AGO_MS` before now.
+//
+// Two more recorded runs keep it company (night 3 T45), so the Map's run
+// nodes have each state to draw: `acme-docs` running on `vm-a` (a room of
+// the topology), `acme-billing` running on `builder-b` and stuck (the same
+// task failed twice). `demoMapWithRuns(map)` adds their nodes, through the
+// real `runNodes` (server/map/runs.mjs), to the hub's Map; the forwarder
+// does it to every `map` message on /ws (`demoWsText`), since a hub has no
+// runs source and the Map reaches the browser over the WebSocket.
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseLines, foldRun } from '../../server/runs/protocol.mjs';
 import { summarize } from '../../server/runs/summary.mjs';
 import { withSessions } from '../../server/runs/bind.mjs';
 import { runsInWindow } from '../../server/runs/digest.mjs';
+import { runNodes } from '../../server/map/runs.mjs';
 
 export const DEMO_HOSTNAME = 'demo-host';
 
@@ -131,11 +140,11 @@ function shiftTime(v, d) {
   return v;
 }
 
-/** The recorded run's lines with every time moved so its last event is `now - DEMO_RUN_AGO_MS`. */
-export function demoRunText(now = Date.now(), text = fs.readFileSync(DEMO_RUN_FILE, 'utf8')) {
+/** The recorded run's lines with every time moved so its last event is `now - agoMs`. */
+export function demoRunText(now = Date.now(), text = fs.readFileSync(DEMO_RUN_FILE, 'utf8'), agoMs = DEMO_RUN_AGO_MS) {
   const objs = text.split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l));
   const last = Math.max(...objs.map((o) => (typeof o.ts === 'number' ? o.ts : 0)));
-  const d = now - DEMO_RUN_AGO_MS - last;
+  const d = now - agoMs - last;
   return objs.map((o) => {
     const x = { ...o };
     for (const k of ['ts', 'deadline', 'fiveHourResetsAt']) if (x[k] !== undefined) x[k] = shiftTime(x[k], d);
@@ -149,6 +158,23 @@ export function demoRun(now = Date.now()) {
   return foldRun(events, { skipped });
 }
 
+const fixture = (name) => path.resolve(import.meta.dirname, '..', 'fixtures', 'runs', name);
+
+/** Every recorded run of the demo: its file and how long before now its last event is. */
+export const DEMO_RUNS = Object.freeze([
+  { file: DEMO_RUN_FILE, agoMs: DEMO_RUN_AGO_MS },
+  { file: fixture('demo-run-docs.jsonl'), agoMs: 3 * 60_000 },
+  { file: fixture('demo-run-billing.jsonl'), agoMs: 6 * 60_000 },
+]);
+
+/** Every demo run folded, `acme-search` (the stopped one) first. */
+export function demoRuns(now = Date.now()) {
+  return DEMO_RUNS.map(({ file, agoMs }) => {
+    const { events, skipped } = parseLines(demoRunText(now, fs.readFileSync(file, 'utf8'), agoMs));
+    return foldRun(events, { skipped });
+  });
+}
+
 /**
  * What the runs routes would answer for the demo's one run, or null when the
  * request is not theirs (the forwarder then passes it to the hub). GET only:
@@ -157,12 +183,12 @@ export function demoRun(now = Date.now()) {
 export function demoRunsAnswer(method, url, now = Date.now()) {
   if (method !== 'GET' || typeof url !== 'string') return null;
   const p = url.split('?')[0];
-  if (p === RUNS_PATH) return { status: 200, body: { runs: [summarize(demoRun(now))] } };
+  if (p === RUNS_PATH) return { status: 200, body: { runs: demoRuns(now).map((r) => summarize(r, { now })) } };
   if (!p.startsWith(`${RUNS_PATH}/`)) return null;
   let id;
   try { id = decodeURIComponent(p.slice(RUNS_PATH.length + 1)); } catch { return { status: 404, body: { error: 'unknown run' } }; }
-  const run = demoRun(now);
-  if (id !== run.run) return { status: 404, body: { error: 'unknown run' } };
+  const run = demoRuns(now).find((r) => r.run === id);
+  if (!run) return { status: 404, body: { error: 'unknown run' } };
   return { status: 200, body: { run: withSessions(run, null) } };
 }
 
@@ -177,5 +203,30 @@ export const FLEET_MORNING_PATH = '/api/fleet/morning';
 export function demoMorningWithRuns(body, now = Date.now()) {
   if (!body || typeof body !== 'object' || Array.isArray(body) || body.runs !== undefined) return body;
   const since = typeof body.since === 'number' && Number.isFinite(body.since) ? body.since : now - 12 * 3600_000;
-  return { ...body, runs: runsInWindow([demoRun(now)], { since, now }) };
+  return { ...body, runs: runsInWindow(demoRuns(now), { since, now }) };
+}
+
+/**
+ * The hub's Map with a node per demo run added by the real `runNodes`, hung
+ * on the node its `host` names, else on the core. A map that is not an
+ * object with `nodes`, or already has run nodes, is kept.
+ */
+export function demoMapWithRuns(map, now = Date.now()) {
+  if (!map || typeof map !== 'object' || !Array.isArray(map.nodes)) return map;
+  if (map.nodes.some((n) => n?.kind === 'run')) return map;
+  const coreId = map.nodes.find((n) => n?.kind === 'core')?.id ?? '__core';
+  return { ...map, nodes: [...map.nodes, ...runNodes(demoRuns(now), { nodes: map.nodes, coreId, now })] };
+}
+
+/**
+ * One text frame the hub sends on /ws, as the forwarder passes it on: a
+ * `map` message gets the run nodes, anything else (or text that is not
+ * JSON) goes through unchanged.
+ */
+export function demoWsText(text, now = Date.now()) {
+  if (typeof text !== 'string' || !text.includes('"map"')) return text;
+  let msg;
+  try { msg = JSON.parse(text); } catch { return text; }
+  if (!msg || msg.type !== 'map' || !msg.map) return text;
+  return JSON.stringify({ ...msg, map: demoMapWithRuns(msg.map, now) });
 }
