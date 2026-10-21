@@ -752,6 +752,13 @@ const TL_COLS = [
 ];
 /** Columns a phone does not draw (runs.css, width < 700px, the phone breakpoint): the row carries task and duration as its title. */
 export const TL_NARROW_HIDDEN = ['task', 'span', 'sessions'];
+/** Columns drawn only when some row has a value (T40, reviews/25-designer.md: SESSIONS read `—` in every row). */
+const TL_OPTIONAL = { sessions: (r) => r.sessions.length > 0 };
+
+/** The rounds table's columns, [key, label] in order: an optional column no row fills is left out, header included. */
+export function tlColumns(rows) {
+  return TL_COLS.filter(([key]) => !TL_OPTIONAL[key] || rows.some(TL_OPTIONAL[key]));
+}
 
 function sessionsCell(list) {
   const td = el('td', 'rn-tl-ses');
@@ -771,8 +778,9 @@ function timelineSection(run, now) {
   const sec = rnSection('rn-tl-sec', 'Rounds', rows.length);
   if (!rows.length) { sec.append(el('p', 'rn-none', 'No round has started yet.')); return sec; }
   const table = el('table', 'rn-tl');
+  const cols = tlColumns(rows);
   const head = el('tr');
-  for (const [key, label] of TL_COLS) {
+  for (const [key, label] of cols) {
     const th = el('th', null, label);
     th.setAttribute('scope', 'col');
     th.dataset.col = key;
@@ -796,17 +804,20 @@ function timelineSection(run, now) {
     if (r.commit) commit.title = r.commit;
     const outcome = el('td', 'rn-tl-outcome', r.outcome ?? DASH);
     if (r.outcome) outcome.dataset.outcome = r.outcome;
-    tr.append(
-      nCell,
-      el('td', 'rn-tl-role', r.role ?? DASH),
-      el('td', 'rn-tl-task', r.task ?? DASH),
+    const cells = {
+      n: nCell,
+      role: el('td', 'rn-tl-role', r.role ?? DASH),
+      task: el('td', 'rn-tl-task', r.task ?? DASH),
       outcome,
       commit,
-      el('td', 'rn-tl-cost', r.cost),
-      el('td', 'rn-tl-span', r.span),
-      sessionsCell(r.sessions),
-    );
-    [...tr.children].forEach((td, i) => { td.dataset.col = TL_COLS[i][0]; });
+      cost: el('td', 'rn-tl-cost', r.cost),
+      span: el('td', 'rn-tl-span', r.span),
+      sessions: sessionsCell(r.sessions),
+    };
+    for (const [key] of cols) {
+      cells[key].dataset.col = key;
+      tr.append(cells[key]);
+    }
     body.append(tr);
   }
   table.append(thead, body);

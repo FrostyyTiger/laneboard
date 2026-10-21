@@ -15,7 +15,7 @@ import runsView, {
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, EMPTY_HUB, LIST_URL, SCORE_MAX,
   renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
   runHref, runUrl, LIST_HREF, needActions, ackNeed, ACK_BY, EVENTS_URL, TL_NARROW_HIDDEN, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
-  needsCell,
+  needsCell, tlColumns,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
 
@@ -289,16 +289,17 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
   assert.equal(ackB.tagName, 'BUTTON');
   assert.match(ackB.className, /\bbtn btn--s ok\b/);
   assert.equal(ackB.textContent, 'Ack');
-  // the timeline: round, role, task, outcome, commit, cost, duration, sessions
+  // the timeline: round, role, task, outcome, commit, cost, duration (no round has a session: no sessions column, T40)
   const rows = byClass(page, 'rn-tl-row');
   assert.deepEqual(rows.map((r) => r.children.map((c) => c.textContent)), [
-    ['1', 'planner', '—', 'kept', 'a1b2c3d', '$0.90', '9m', '—'],
-    ['2', 'builder', 'A2.4', 'kept', 'b2c3d4e', '$1.60', '29m', '—'],
-    ['3', 'builder', 'A2.5', 'no-task-done', '—', '$1.25', '29m', '—'],
+    ['1', 'planner', '—', 'kept', 'a1b2c3d', '$0.90', '9m'],
+    ['2', 'builder', 'A2.4', 'kept', 'b2c3d4e', '$1.60', '29m'],
+    ['3', 'builder', 'A2.5', 'no-task-done', '—', '$1.25', '29m'],
   ]);
+  assert.equal(byClass(page, 'rn-tl')[0].children[0].children[0].children.some((th) => th.dataset.col === 'sessions'), false, 'no sessions header either');
   assert.equal(rows.some((r) => 'live' in r.dataset), false, 'a stopped run has no live round');
   // every cell names its column, so a phone can drop the minor ones (T22); task and duration stay as title
-  assert.deepEqual(rows[1].children.map((c) => c.dataset.col), ['n', 'role', 'task', 'outcome', 'commit', 'cost', 'span', 'sessions']);
+  assert.deepEqual(rows[1].children.map((c) => c.dataset.col), ['n', 'role', 'task', 'outcome', 'commit', 'cost', 'span']);
   assert.equal(rows[1].title, 'task: A2.4 · took 29m');
   assert.equal(rows[0].title, 'took 9m', 'no task, the duration only');
   // the PR
@@ -735,3 +736,13 @@ test('T30: a stopped run\'s windows stay grey at 92 %; a running one near the li
   assert.equal(wins[0].dataset.p, undefined, 'no hue on a stopped run');
   assert.doesNotMatch(wins[0].attrs['aria-label'], /near the stop level/);
 }));
+
+// Seen in reviews/25-designer.md (new 3): SESSIONS read `—` in every row of the run page.
+test('T40: the rounds table draws the sessions column only when some round has a session', () => {
+  const keys = (rows) => tlColumns(rows).map(([k]) => k);
+  const bare = { sessions: [] };
+  assert.deepEqual(keys([bare, bare]), ['n', 'role', 'task', 'outcome', 'commit', 'cost', 'span']);
+  assert.deepEqual(keys([]), ['n', 'role', 'task', 'outcome', 'commit', 'cost', 'span']);
+  assert.deepEqual(keys([bare, { sessions: [{ id: 'x' }] }]), ['n', 'role', 'task', 'outcome', 'commit', 'cost', 'span', 'sessions']);
+  assert.deepEqual(tlColumns([bare, { sessions: [{ id: 'x' }] }]).at(-1), ['sessions', 'sessions']);
+});
