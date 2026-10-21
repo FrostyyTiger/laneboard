@@ -81,6 +81,8 @@ Planner notes (round 1), from reading the code:
 - [ ] T32 (r33-stranger.md, 2) A private state dir is documented and the startup line gives the reason: README's run recipe says `LANEBOARD_STATE_DIR` must be a private directory (mode 700, `mktemp -d`, not a plain `mkdir -p`), and the startup ERROR for an unusable audit log prints the reason next to the code (`audit.mjs` has it; do not edit fenced boot files, change the message where it is built if that file is not fenced) — done when: a test finds the private-dir sentence in README and a test on the message builder with a mode-775 dir finds the reason text next to `AUDIT_UNSAFE_DIR`
 - [ ] T33 (r33-stranger.md, 3) `laneboard run <sub> --help` prints that subcommand's usage and exits 0 instead of `unexpected argument: "--help"` (`bin/laneboard`, start/round/score/needs/ack/stop) — done when: `test/cli-run.test.mjs` (or the existing CLI run test) runs `run start --help` and one more subcommand and finds usage text, exit 0 and nothing appended to a run file
 - [ ] T34 (r33-stranger.md, 4) `docs/runs.md` says which numbers a stopped run shows: `cost` is what the rounds' `usd`/`score` events add up to, `stop.usd`/`stop.rounds` is what the loop reported at `run.stop`, and name the one the list row and run page print; if the page prints `$0` while `stop.usd` is set and no round carried a cost, show the stop's usd instead (marked as the loop's own figure) — done when: `test/runs-docs.test.mjs` finds the sentence, and `test/view-runs.test.mjs` has a run stopped with `usd: 2` and no round cost whose row and page show `$2`, not `$0`
+- [ ] T35 (r41-stranger.md, 4) `laneboard run ack <ref>` tells the truth about the ref: the `--by` warning shows only for a fence need and says it is advisory (the ack is still posted); a ref that matches no need of the run prints a warning naming the ref and exits non-zero (or says plainly `no need <ref>, kept raw`) instead of rc=0 — done when: a CLI test acks need 0 (not a fence need) and finds no `--by` warning, and acks a missing need and finds the warning text and the non-zero exit (or the plain sentence)
+- [ ] T36 (r41-stranger.md, 6) `docs/runs.md` says where a `score` without `--n` lands (round 0, shown as run `round: null` until a round starts) — done when: `test/runs-docs.test.mjs` finds the sentence and a protocol test posts a score before any round and finds `n: 0`
 
 Builder note (round 12, T6): a fence need closes only on `by` = `inbox`, `run page` or `owner`
 (`FENCE_ACK_BY` in `server/runs/protocol.mjs`), chosen as an allowlist because the reference loop
@@ -132,6 +134,13 @@ the owner types `--by owner` (the docs' example). A refused ack is kept in `raw`
   this is yours to change); (b) `laneboard morning` lists no stopped run ("what finished" in the
   README): should a finished run appear under Finished? It changes Morning's scope, so it is your call.
 
+- **Stranger r41, ideas (not tasks):** (a) `laneboard ls/morning/credit` could print one line naming
+  the URL that answered, since without `LANEBOARD_URL` in the same shell they act on the real board;
+  (b) `laneboard run start` takes the run id from an inherited `LANEBOARD_RUN`: a fresh id (or a
+  warning) when `--run` is absent would protect a stranger in a loop's shell, but the reference loop
+  may rely on the env id, so it is your call; (c) `/api/morning?window=bogus` answers 200 with the
+  default window and `/nope` answers the page with 200: 400/404 would be stricter.
+
 ## Reviews
 
 - reviews/r10-designer.md: 33 findings, 7 became tasks (T13-T19, the agreed taste calls of README §7 item 3 and n3 T13); lane-sidebar bars, accent vs amber, header density, run-list empty cells and widths, run page sparklines/table/width, Inbox phone layout, "cooperative control" badge, usage-bar tracks, RUNNING hourglass → For the owner (taste); hatched faded Board cards in light → dropped (T12 covers it); light pink/ochre fills → dropped (T12/T13 cover them); console clean.
@@ -140,5 +149,7 @@ the owner types `--by owner` (the docs' example). A refused ack is kept in `raw`
 - reviews/r22-designer.md: ~25 findings (all r10/r17 ones re-confirmed as standing), 5 became tasks (T27 light fills/weights from across 3, Map 3-4, Board 2, Inbox 1, Morning 2; T28 from across 4; T29 from Map 1-2; T30 from Board 1; T31 from Runs list 1 and Run page 2); across 1 → dropped (T13 covers it); across 2, 5, Map 5, Board 3, Inbox 2, Morning 1, Run page 1, 3, 5 → dropped (T23/T15/T14/T26/T22/T17/T24/T25 cover them); Run page 4 sparkline, Runs list 2 hourglass → dropped (already under For the owner, taste); v1 → v2 notes and light-test advice → dropped (praise; the T12 test advice is folded into T27); console clean.
 - reviews/r25-stranger.md: 6 findings, 0 became tasks; 2 and 3 → For the owner (API shape / naming); 1 → dropped (no browser, nothing found); 4 → dropped (same as r13 idea (a), already under For the owner); 5 → dropped (minor, untested by the reviewer); 6 → dropped (README already says so).
 - reviews/r33-stranger.md: 6 findings, 3 became tasks (T32 from 2, T33 from 3, T34 from 4); 1 and 5 → For the owner (fenced boot file / scope of Morning); 6 → dropped (same as r13 idea (a), already under For the owner). No browser views were tested by the reviewer.
+
+- reviews/r41-stranger.md: 7 findings, 2 became tasks (T35 from 4, T36 from 6); 2, 3, 5 → For the owner (CLI output / env-id behaviour / API strictness); 1 → dropped (same as r33 idea (a), already under For the owner); 7 → dropped (README says so). No browser views were tested by the reviewer.
 
 ## Morning
