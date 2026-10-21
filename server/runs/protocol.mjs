@@ -13,7 +13,7 @@ export const VERSION = 1;
 
 /** Event types v1 knows. Anything else is kept raw and shown as is. */
 export const KNOWN_TYPES = [
-  'run.start', 'round.start', 'round.end', 'score', 'needs', 'artifact', 'run.stop', 'usage', 'cost',
+  'run.start', 'round.start', 'round.end', 'score', 'needs', 'needs.ack', 'artifact', 'run.stop', 'usage', 'cost',
 ];
 
 /** Stop reasons from the plan plus the ones the reference loop writes. Others are kept as written. */
@@ -34,6 +34,10 @@ const MAX_RAW_KEYS = 40;
 export const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 const NUMERIC = /^\s*-?\d+(\.\d+)?\s*$/;
+
+// A `needs.ack` ref below this is a need's place in the run's needs list; at or
+// above it, a time (epoch seconds start at 1e9 in 2001, so the two never meet).
+export const MAX_NEED_INDEX = 1e9;
 
 function clamp(s, max = MAX_STR) {
   if (typeof s !== 'string') return null;
@@ -92,6 +96,14 @@ function commit(v) {
 function pct(v) {
   const n = num(v);
   return n !== null && n >= 0 ? n : null;
+}
+
+/** A need ref: `{ref, refBy: 'index'}` (0 = the run's first need), `{ref, refBy: 'ts'}` (epoch ms), or null. */
+function needRef(v) {
+  const i = int(v);
+  if (i !== null && i >= 0 && i < MAX_NEED_INDEX) return { ref: i, refBy: 'index' };
+  const ts = epochMs(v);
+  return ts === null || ts < MAX_NEED_INDEX * 1000 ? null : { ref: ts, refBy: 'ts' };
 }
 
 /** The directory a run works in: an absolute path, never cut (a cut path names another dir). */
@@ -157,6 +169,11 @@ const SHAPES = {
   },
   needs(o) {
     return { kind: str(o.kind, 32) || 'decision', text: str(o.text, MAX_TEXT), link: str(o.link), n: int(o.n) };
+  },
+  'needs.ack'(o) {
+    const ref = needRef(o.ref);
+    if (!ref) return 'bad ref';
+    return { ...ref, by: str(o.by, 64) };
   },
   artifact(o) {
     const url = str(o.url);
@@ -236,8 +253,10 @@ function round(rounds, n) {
  *   started twice (a retry) counts its `starts` and adds up its cost.
  * - A score without `n` belongs to the latest round started before it (0 = before any).
  * - `cost.usd` is summed: `total` restarts when the loop does.
- * - A `wait` need closes when the next round starts or the run stops; other needs
- *   stay open (v1 has no "resolved" event).
+ * - A `wait` need closes when the next round starts or the run stops; any need
+ *   closes when a `needs.ack` names it (by its place in the list or its `ts`).
+ *   The first ack counts; a second one changes nothing. An ack naming no need is
+ *   kept in `raw`.
  * Events of another run than the first one are ignored.
  */
 export function foldRun(events, { skipped = 0 } = {}) {
@@ -297,8 +316,16 @@ export function foldRun(events, { skipped = 0 } = {}) {
         break;
       }
       case 'needs':
-        run.needs.push({ kind: e.kind, text: e.text, link: e.link, n: e.n ?? current, ts: e.ts, open: true });
+        run.needs.push({ i: run.needs.length, kind: e.kind, text: e.text, link: e.link, n: e.n ?? current, ts: e.ts,
+          open: true, acked: false, ackedAt: null, by: null });
         break;
+      case 'needs.ack': {
+        const need = e.refBy === 'index' ? run.needs[e.ref]
+          : run.needs.find((x) => x.ts === e.ref && !x.acked) ?? run.needs.find((x) => x.ts === e.ref);
+        if (!need) { run.raw.push(e); break; }
+        if (!need.acked) Object.assign(need, { open: false, acked: true, ackedAt: e.ts, by: e.by });
+        break;
+      }
       case 'artifact':
         if (!urls.has(e.url)) {
           urls.add(e.url);

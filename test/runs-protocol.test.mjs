@@ -38,6 +38,7 @@ test('every known type parses, with its checked fields', () => {
   check({ t: 'score', name: 'tests', value: 0.93, better: 'higher' }, { name: 'tests', value: 0.93, better: 'higher', n: null });
   check({ t: 'needs', kind: 'decision', text: 'which?', link: 'https://example.invalid/x' },
     { kind: 'decision', text: 'which?', link: 'https://example.invalid/x' });
+  check({ t: 'needs.ack', ref: 2, by: 'owner' }, { ref: 2, refBy: 'index', by: 'owner' });
   check({ t: 'artifact', kind: 'pr', url: 'https://example.invalid/pull/1' }, { kind: 'pr', url: 'https://example.invalid/pull/1' });
   check({ t: 'run.stop', reason: 'deadline' }, { reason: 'deadline', rounds: null, usd: null });
   check({ t: 'usage', n: 1, fiveHourPct: 2, sevenDayPct: 10, fiveHourResetsAt: 1792534200, overage: 0 },
@@ -205,4 +206,52 @@ test('duplicate artifacts are kept once', () => {
     ok({ t: 'artifact', kind: 'pr', url: 'https://example.invalid/pull/1' }),
   ]);
   assert.equal(run.artifacts.length, 1);
+});
+
+test('needs.ack: a ref is a place (below 1e9) or a time; anything else is skipped', () => {
+  assert.deepEqual([ok({ t: 'needs.ack', ref: 0 })].map((e) => [e.ref, e.refBy, e.by]), [[0, 'index', null]]);
+  assert.equal(ok({ t: 'needs.ack', ref: '3' }).ref, 3);
+  assert.deepEqual([ok({ t: 'needs.ack', ref: 1792483200 })].map((e) => [e.ref, e.refBy]), [[1792483200000, 'ts']], 'seconds');
+  assert.equal(ok({ t: 'needs.ack', ref: 1792483200000 }).ref, 1792483200000);
+  assert.equal(ok({ t: 'needs.ack', ref: '2026-10-21T05:00:00Z' }).ref, Date.parse('2026-10-21T05:00:00Z'));
+  for (const ref of [undefined, -1, 1.5, 'soon', null, [0], { i: 0 }]) {
+    assert.equal(reason(line({ t: 'needs.ack', ref })), 'needs.ack: bad ref', String(ref));
+  }
+});
+
+test('needs.ack closes a need by its place or its ts; a second ack changes nothing; an unknown ref is kept raw', () => {
+  const run = foldRun([
+    ok({ t: 'run.start' }),
+    ok({ t: 'round.start', n: 1 }),
+    ok({ t: 'needs', text: 'first?', ts: 1792483201000 }),
+    ok({ t: 'needs', text: 'second?', ts: 1792483202000 }),
+    ok({ t: 'needs', text: 'third?', ts: 1792483203000 }),
+    ok({ t: 'needs.ack', ref: 0, by: 'owner', ts: 1792483300000 }),
+    ok({ t: 'needs.ack', ref: 1792483202, ts: 1792483400000 }),
+    ok({ t: 'needs.ack', ref: 0, by: 'someone else', ts: 1792483500000 }),
+    ok({ t: 'needs.ack', ref: 7, ts: 1792483600000 }),
+    ok({ t: 'needs.ack', ref: 1792483999000, ts: 1792483700000 }),
+  ]);
+  assert.deepEqual(run.needs.map((n) => [n.i, n.text, n.open, n.acked, n.ackedAt, n.by]), [
+    [0, 'first?', false, true, 1792483300000, 'owner'],
+    [1, 'second?', false, true, 1792483400000, null],
+    [2, 'third?', true, false, null, null],
+  ]);
+  assert.deepEqual(run.raw.map((e) => [e.t, e.ref]), [['needs.ack', 7], ['needs.ack', 1792483999000]]);
+  assert.equal(run.state, 'running');
+});
+
+test('needs.ack by ts picks the first open need of that time; an acked wait stays closed when the round moves on', () => {
+  const run = foldRun([
+    ok({ t: 'needs', text: 'a', ts: 1792483201000 }),
+    ok({ t: 'needs', text: 'b', ts: 1792483201000 }),
+    ok({ t: 'needs.ack', ref: 1792483201000 }),
+    ok({ t: 'needs.ack', ref: 1792483201000 }),
+    ok({ t: 'needs.ack', ref: 1792483201000, by: 'late' }),
+    ok({ t: 'needs', kind: 'wait', text: 'limit' }),
+    ok({ t: 'needs.ack', ref: 2 }),
+    ok({ t: 'round.start', n: 2 }),
+  ]);
+  assert.deepEqual(run.needs.map((n) => [n.text, n.open, n.acked, n.by]), [['a', false, true, null], ['b', false, true, null], ['limit', false, true, null]]);
+  assert.deepEqual(run.raw, [], 'a third ack of a known ts is a second ack, not an unknown ref');
 });

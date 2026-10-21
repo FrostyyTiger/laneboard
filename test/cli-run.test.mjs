@@ -1,5 +1,5 @@
 // Offline CLI run-protocol commands (runs plan §3 A1, task T6): `laneboard run
-// start|round|score|needs|artifact|stop` append one line that parseLine accepts,
+// start|round|score|needs|ack|artifact|stop` append one line that parseLine accepts,
 // to --file, $LANEBOARD_RUN_FILE or ./.laneboard/run.jsonl, or POST it with
 // --post. Bad arguments exit 2 and write nothing. Every run uses a temp HOME and
 // cwd; LANEBOARD_URL points at a closed port unless a test serves one.
@@ -141,6 +141,11 @@ test('bad arguments exit 2 and write nothing', async (t) => {
     ['artifact', '--run', 'r1', '--kind', 'pr'],
     ['stop', '--run', 'r1', '--file', path.join(dir, 'f.jsonl'), '--post'],
     ['needs', '--run', 'r1', '--text', 'x'.repeat(17 * 1024)], // over MAX_LINE: parseLine would skip it
+    ['ack', '--run', 'r1'], // no ref
+    ['ack', 'r1'], // one word is the ref, and there is no run
+    ['ack', '--run', 'r1', 'soon'], // not a place nor a time
+    ['ack', '--run', 'r1', 'r2', '0'], // the run twice
+    ['ack', 'r1', '0', 'extra'],
   ];
   for (const args of bad) {
     const r = await run(['run', ...args], env, dir);
@@ -166,7 +171,7 @@ test('laneboard --help lists the run subcommand', async (t) => {
   const dir = tmpDir(t);
   const help = await run(['--help'], envFor(dir), dir);
   assert.equal(help.code, 0, help.stderr);
-  assert.match(help.stdout, /^  laneboard run start\|round\|score\|needs\|artifact\|stop /m);
+  assert.match(help.stdout, /^  laneboard run start\|round\|score\|needs\|ack\|artifact\|stop /m);
   assert.match(help.stdout, /laneboard run --help/);
 });
 
@@ -245,4 +250,30 @@ test('the lines fold like any writer\'s: a whole file of CLI output parses with 
   const { events, skipped } = parseLines(fs.readFileSync(path.join(dir, '.laneboard', 'run.jsonl'), 'utf8'));
   assert.deepEqual(skipped, {});
   assert.deepEqual(foldRun(events).scores.tests.map((s) => [s.n, s.value]), [[1, 10], [2, 20]]);
+});
+
+test('ack closes a need by its place or its ts: `ack <run> <ref>`, `ack <ref>` with --run, --by', async (t) => {
+  const dir = tmpDir(t);
+  const env = envFor(dir);
+  const file = path.join(dir, 'r.jsonl');
+  const ok = async (args, e = env) => {
+    const r = await run(['run', ...args, '--file', file], e, dir);
+    assert.equal(r.code, 0, `${args.join(' ')}: ${r.stderr}`);
+    assert.equal(r.stdout, '');
+  };
+  await ok(['needs', '--run', 'r1', '--text', 'first?']);
+  await ok(['needs', '--run', 'r1', '--text', 'second?']);
+  await ok(['needs', '--run', 'r1', '--text', 'third?']);
+  const third = JSON.parse(lines(file)[2]).ts;
+  await ok(['ack', 'r1', '0', '--by', 'owner']);
+  await ok(['ack', '--run', 'r1', String(third)]);
+  await ok(['ack', '1'], envFor(dir, { LANEBOARD_RUN: 'r1/4' }));
+  const got = lines(file).slice(3).map((l) => JSON.parse(l));
+  assert.deepEqual(got.map((e) => [e.t, e.run, e.ref]), [['needs.ack', 'r1', 0], ['needs.ack', 'r1', third], ['needs.ack', 'r1', 1]]);
+  assert.equal(got[0].by, 'owner');
+  const { events, skipped } = parseLines(fs.readFileSync(file, 'utf8'));
+  assert.deepEqual(skipped, {});
+  const folded = foldRun(events);
+  assert.deepEqual(folded.needs.map((n) => [n.text, n.open, n.by]), [['first?', false, 'owner'], ['second?', false, null], ['third?', false, null]]);
+  assert.deepEqual(folded.raw, []);
 });

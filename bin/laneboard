@@ -22,13 +22,14 @@
 //   laneboard pause <name|--all> [--reason r]          offline: write a pause sentinel
 //   laneboard resume <name|--all>                      offline: lift an operator pause
 //   laneboard paused [--json]                          offline: list the pause sentinels
-//   laneboard run start|round|score|needs|artifact|stop [--run <id>] [flags] [--file f | --post]
+//   laneboard run start|round|score|needs|ack|artifact|stop [--run <id>] [flags] [--file f | --post]
 //                                                      offline: append one run-protocol line
 //     start    [--goal g] [--plan p] [--branch b] [--deadline iso] [--rounds N] [--window-pct P]
 //     round    --n N [--role r] [--task t]             prints `export LANEBOARD_RUN=<run>/<n>` for eval
 //     round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
 //     score    --name m --value x [--better higher|lower] [--n N]
 //     needs    [--kind decision|wait] [--text t] [--link url] [--n N]
+//     ack      [<run>] <ref> [--by b]                  closes a need: ref = its place (0 = first) or its ts
 //     artifact --url u [--kind pr|link] [--title t]
 //     stop     [--reason done|deadline|rounds|…] [--rounds N] [--usd x]
 //     The line goes to --file, else $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl;
@@ -813,10 +814,11 @@ const RUN_SUBS = {
   },
   score: { '--name': ['name', 'str'], '--value': ['value', 'num'], '--better': ['better', 'str'], '--n': ['n', 'int'] },
   needs: { '--kind': ['kind', 'str'], '--text': ['text', 'str'], '--link': ['link', 'str'], '--n': ['n', 'int'] },
+  ack: { '--ref': ['ref', 'str'], '--by': ['by', 'str'] },
   artifact: { '--url': ['url', 'str'], '--kind': ['kind', 'str'], '--title': ['title', 'str'] },
   stop: { '--reason': ['reason', 'str'], '--rounds': ['rounds', 'int'], '--usd': ['usd', 'num'] },
 };
-const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', artifact: 'artifact', stop: 'run.stop' };
+const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', ack: 'needs.ack', artifact: 'artifact', stop: 'run.stop' };
 const ROUND_START_ONLY = ['role', 'task'];
 const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 
@@ -826,6 +828,7 @@ const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | -
   round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
   score    --name m --value x [--better higher|lower] [--n N]
   needs    [--kind decision|wait|…] [--text t] [--link url] [--n N]
+  ack      [<run>] <ref> [--by b]                 close a need: <ref> is its place (0 = the first) or its ts
   artifact --url u [--kind pr|link|…] [--title t]
   stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
 every subcommand:
@@ -885,6 +888,11 @@ function runEvent(sub, f) {
     if (f.better !== undefined && f.better !== 'higher' && f.better !== 'lower') runUsage('--better is higher or lower');
   }
   if (sub === 'artifact' && f.url === undefined) runUsage('artifact needs --url');
+  if (sub === 'ack') {
+    if (f.ref === undefined) runUsage('ack needs a ref (the need\'s place, 0 = the first, or its ts)');
+    // A place is written as a number, a time as given (epoch or ISO); parseLine tells them apart.
+    return { t: 'needs.ack', ...f, ref: /^\d+$/.test(f.ref) ? Number(f.ref) : f.ref };
+  }
   return { t: RUN_TYPE[sub], ...f };
 }
 
@@ -900,6 +908,19 @@ async function cmdRun() {
     return;
   }
   if (!Object.hasOwn(RUN_SUBS, sub ?? '')) runUsage(sub ? `unknown run subcommand: ${JSON.stringify(cleanTerm(sub))}` : '');
+  // `ack [<run>] <ref>`: up to two words that are not flags or flag values, anywhere
+  // after `ack`; one is the ref, two are the run and the ref. A third is an error below.
+  const words = [];
+  for (let i = 0; sub === 'ack' && i < argv.length && words.length < 2; i += 1) {
+    const spec = RUN_COMMON[argv[i]] ?? RUN_SUBS.ack[argv[i]];
+    if (spec) { if (spec[1] !== 'bool') i += 1; continue; }
+    if (!argv[i].startsWith('--')) { words.push(argv[i]); argv.splice(i, 1); i -= 1; }
+  }
+  if (words.length === 2) {
+    if (Object.hasOwn(first, 'run')) runUsage('--run given twice');
+    first.run = words.shift();
+  }
+  if (words.length) first.ref = words[0];
   const f = parseRunFlags({ ...RUN_COMMON, ...RUN_SUBS[sub] }, first);
   const { run: runFlag, file: fileFlag, post, ...fields } = f;
   if (post && fileFlag !== undefined) runUsage('--file and --post do not go together');
@@ -1072,7 +1093,7 @@ Offline (no server needed):
                                       pause one session or all (writes the sentinel)
   laneboard resume <name|--all>         lift an operator pause (budget/quota: from the UI)
   laneboard paused [--json]             list the pauses
-  laneboard run start|round|score|needs|artifact|stop [--run <id>] [flags]
+  laneboard run start|round|score|needs|ack|artifact|stop [--run <id>] [flags]
                                       append one run-protocol line (laneboard run --help)
   laneboard feed tailscale|proxmox [--source s] [--stdout | --out <file> | --push <url>]
                                       read one source once into a Map feed (laneboard feed --help)
