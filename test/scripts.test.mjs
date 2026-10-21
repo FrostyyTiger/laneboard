@@ -380,6 +380,15 @@ async function waitPane(target, needle, ms = 20000) {
   }
 }
 
+/** Poll (5 s at most) until the pane of `target` is dead. */
+async function waitDead(target, ms = 5000) {
+  const end = Date.now() + ms;
+  while (tmux('display-message', '-p', '-t', target, '#{pane_dead}').trim() !== '1') {
+    if (Date.now() > end) assert.fail(`${target} still alive after ${ms} ms`);
+    await new Promise((res) => setTimeout(res, 100));
+  }
+}
+
 test('runScript end to end on a private tmux server: window, remain-on-exit, agent window stays current', { skip: !hasTmux && 'tmux not installed' }, async () => {
   tmux('new-session', '-d', '-s', 'lane-a', '-n', 'claude', '-x', '80', '-y', '24', 'sleep 300');
   const d = {
@@ -402,7 +411,9 @@ test('runScript end to end on a private tmux server: window, remain-on-exit, age
   assert.ok(out.includes('[test exited 0]'), out);
   assert.equal(tmux('show-options', '-w', '-v', '-t', '=lane-a:=run-test', 'remain-on-exit').trim(), 'on');
 
-  // The window is dead now: a second run replaces it.
+  // The exit line is followed by `sleep 1` (the pty drain): wait for the
+  // window to die, then a second run replaces it.
+  await waitDead('=lane-a:=run-test');
   const again = await scripts.runScript('lane-a', 'test', 'alice', d);
   assert.equal(again.alreadyRunning, false);
   const names = tmux('list-windows', '-t', '=lane-a:', '-F', '#{window_name}').trim().split('\n');
