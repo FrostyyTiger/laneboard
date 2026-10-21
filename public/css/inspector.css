@@ -207,9 +207,49 @@
   z-index: var(--z-insp);
 }
 
-/* --- phone: the panel takes the whole centre, above the bottom sheet's peek ---- */
+/* The phone's grip (below): hidden wider. */
+.insp-grip { display: none; }
+
+/* --- phone: a bottom sheet above the phone sheet's peek (T53) -------------------
+   It comes up from below. On the Map it opens at peek, the grip and the header,
+   so the node the map flew to stays in view; the grip (or a tap on the header)
+   takes it to full, the whole centre as before. Other views open it full. */
 @media (max-width: 699px) {
-  .shell-insp { width: 100%; padding-bottom: var(--sheet-peek); }
+  .shell-insp {
+    width: 100%;
+    padding-bottom: var(--sheet-peek);
+    border-left: 0;
+    border-top: var(--bw) solid var(--line-strong);
+    transform: translateY(100%);
+  }
+  .shell[data-insp="open"] .shell-insp { transform: none; }
+  @starting-style {
+    .shell[data-insp="open"] .shell-insp { transform: translateY(100%); }
+  }
+  .shell-insp[data-snap="peek"] { top: auto; overflow: hidden; }
+  .shell-insp[data-snap="peek"] > :not(.insp-grip, .insp-head) { display: none; }
+  .shell-insp[data-snap="peek"] .insp-head { cursor: pointer; margin-top: 0; }
+  .insp-grip {
+    position: relative;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+  /* A 44 px hit area: the 24 px row and 20 px above it, none over the header. */
+  .insp-grip::after { content: ""; position: absolute; inset: -20px 0 0; }
+  .insp-grip-bar {
+    width: 28px;
+    height: 4px;
+    border-radius: var(--radius);
+    background: var(--line-strong);
+  }
+  .insp-grip:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: -2px; }
   .insp-act { width: 44px; height: 44px; }
   .insp-tab { min-height: 44px; }
 }

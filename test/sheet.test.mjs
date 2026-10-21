@@ -408,5 +408,7 @@ test('a phone view reserves at least the sheet peek at its bottom, from the one 
   assert.match(rule[1], /^calc\(var\(--sheet-peek\) \+ var\(--gap\)/, 'the peek plus a gap');
   assert.doesNotMatch(misc, /padding-bottom: \d+px/, 'no hardcoded reserve left');
   const insp = fs.readFileSync(path.join(ROOT, 'public/css/inspector.css'), 'utf8');
-  assert.match(insp, /\.shell-insp \{ width: 100%; padding-bottom: var\(--sheet-peek\); \}/);
+  // T53 made the phone panel a bottom sheet (a block, not one line); it still keeps the peek clear.
+  const ip = insp.slice(insp.indexOf('@media (max-width: 699px)'));
+  assert.match(ip, /\.shell-insp \{[^}]*width: 100%;[^}]*padding-bottom: var\(--sheet-peek\);[^}]*\}/);
 });

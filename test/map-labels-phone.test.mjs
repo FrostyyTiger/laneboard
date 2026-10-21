@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { createRenderer, PHONE_ALL_LABELS } from '../public/js/views/map/render.js';
+import { createRenderer, PHONE_ALL_LABELS, reticleD, RETICLE_GAP } from '../public/js/views/map/render.js';
 import { layout } from '../public/js/views/map/layout.js';
 import { fitFrame } from '../public/js/views/map/interact.js';
 import { foldState, autoFold, rollup } from '../public/js/views/map/model.js';
@@ -229,4 +229,37 @@ test('T51: at 1440 every ▲/■ node is named and the labels keep clear of the 
   for (const id of markedIds(scene)) assert.ok(named.has(id), `${id} (▲/■) named at 1440`);
   for (const b of boxes) for (const t of rings) assert.ok(!hits(b, t), `${b.text} clear of ${t.text}`);
   assert.ok(r.ringTextBoxes(phoneScene()).every((t) => /^\d{3}$/.test(t.text)), 'a phone has bearings only');
+});
+
+// T53 (n3 T51): after Find and fly-to at 390 the selected node's name is
+// laid outside its selection brackets, 4 px clear, wherever the node sits.
+test('T53 390: a selected node, at the fit and after a fly-to, keeps its label box clear of the bracket box (+4 px)', () => {
+  const base = drawnScene(DEMO.nodes);
+  let checked = 0;
+  for (const [id, c] of base.nodes) {
+    const n = c.node;
+    if (!n || n.virtual || n.kind === 'core') continue;
+    // The fit as drawn, then the flight: zoom 1.9 with the node 60 px above the centre (map/index.js flyTo).
+    const s2 = base.s * 1.9;
+    const views = [
+      { s: base.s, toScreen: base.toScreen },
+      { s: s2, toScreen: (p) => ({ x: W / 2 + (p.x - c.x) * s2, y: H / 2 + (p.y - c.y) * s2 - 60 }) },
+    ];
+    for (const v of views) {
+      const scene = { ...base, ...v, selected: id };
+      const r = createRenderer(fakeCtx(), PAL);
+      const boxes = r.labelBoxes(scene, r.drawNodes(scene));
+      const mine = boxes.find((b) => b.id === id);
+      assert.ok(mine, `${id} (selected) is named at s=${v.s.toFixed(2)}`);
+      const sp = v.toScreen(c);
+      const d = reticleD(n.kind, Math.min(1.6, Math.max(0.8, v.s))) + RETICLE_GAP;
+      const ret = { x0: sp.x - d, y0: sp.y - d, x1: sp.x + d, y1: sp.y + d };
+      assert.ok(!hits(mine, ret), `${id} label ${JSON.stringify(mine)} clear of its brackets ${JSON.stringify(ret)}`);
+      // Its sub line too stays on the canvas (it ran off the right edge before).
+      assert.ok(mine.x0 >= 0 && mine.x1 <= W, `${id} label inside the canvas: ${JSON.stringify(mine)}`);
+      assert.deepEqual(overlaps(boxes), [], `${id} selected`);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 20, `nodes checked: ${checked}`);
 });

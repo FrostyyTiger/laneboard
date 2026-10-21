@@ -116,8 +116,8 @@ function opsAt(ops, scene, id) {
 
 // --- readPalette ---------------------------------------------------------------
 
-test('exports exactly createRenderer, platePlace, readPalette, codeFont and PHONE_ALL_LABELS', () => {
-  assert.deepEqual(Object.keys(render).sort(), ['PHONE_ALL_LABELS', 'codeFont', 'createRenderer', 'platePlace', 'readPalette']);
+test('exports exactly createRenderer, platePlace, readPalette, codeFont, PHONE_ALL_LABELS and the reticle geometry (T53)', () => {
+  assert.deepEqual(Object.keys(render).sort(), ['PHONE_ALL_LABELS', 'RETICLE_GAP', 'codeFont', 'createRenderer', 'platePlace', 'readPalette', 'reticleD']);
 });
 
 test('readPalette reads the §4 tokens through getComputedStyle', (t) => {

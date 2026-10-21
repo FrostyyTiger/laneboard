@@ -34,7 +34,7 @@ import { lamp, markSel, normP, plate } from './components.js';
 import { sparkline } from './spark.js';
 import { confirmAction } from './confirm.js';
 import { toast } from './toast.js';
-import { openSheet } from './sheet.js';
+import { openSheet, setSnap } from './sheet.js';
 import { layoutFor, setInspector } from './shell.js';
 import { renderActionBar } from './actionbar.js';
 import { runFacts } from '../views/map/overlays.js';
@@ -365,6 +365,40 @@ export function shouldTouch(prev, sel, sourceKind) {
   return sourceKind === 'hub' && typeof sel === 'string' && sel !== prev && Boolean(parseFkey(sel));
 }
 
+/**
+ * How the inspector opens for a new selection (T53): on a phone's Map it is a
+ * bottom sheet at peek, the header only, so the node the map flew to stays in
+ * view (as 1440 shows it beside the panel); anywhere else the whole panel. Pure.
+ */
+export function openSnap(width, view) {
+  return layoutFor(width) === 'phone' && view === 'map' ? 'peek' : 'full';
+}
+
+/** Move the panel to `snap` ('peek' | 'full'); the grip says which. */
+export function setInspSnap(snap) {
+  page.snap = snap === 'peek' ? 'peek' : 'full';
+  const root = page.root;
+  if (!root) return page.snap;
+  root.dataset.snap = page.snap;
+  const grip = page.grip;
+  if (grip) {
+    grip.setAttribute('aria-expanded', String(page.snap === 'full'));
+    grip.setAttribute('aria-label', page.snap === 'full' ? 'Show the map (collapse the inspector)' : 'Expand the inspector');
+  }
+  insetsChanged();
+  return page.snap;
+}
+
+/** The phone's grip on top of the panel: a tap moves it between peek and full. */
+function renderGrip() {
+  const grip = el('button', 'insp-grip');
+  grip.type = 'button';
+  grip.append(el('span', 'insp-grip-bar'));
+  grip.onclick = () => setInspSnap(page.snap === 'peek' ? 'full' : 'peek');
+  page.grip = grip;
+  return grip;
+}
+
 /** Where L4 opens for a viewport width: the centre takeover on desktop, else the full sheet. Pure. */
 export function l4Mode(width) {
   return layoutFor(width) === 'desktop' ? 'centre' : 'sheet';
@@ -396,6 +430,8 @@ const page = {
   sel: null,           // the open fkey
   touched: null,       // the last fkey a touch was sent for
   tab: 'overview',
+  snap: 'full',        // 'peek' (phone Map: the header over the map) | 'full' (T53)
+  grip: null,          // the phone's grip button (hidden wider)
   mounted: null,       // {id, tab, el} of a registered tab's mount
   history: new Map(),  // key -> {ctx:[], usd:[]}
   map: null,           // {api, root, hairline}
@@ -639,7 +675,12 @@ export function renderInspector() {
   if (keep) keep.remove();
   root.textContent = '';
   root.dataset.p = m.p;
-  root.append(renderHeader(m));
+  const head = renderHeader(m);
+  // At peek the header is the handle too: a tap off its buttons opens the panel.
+  head.addEventListener?.('click', (e) => {
+    if (page.snap === 'peek' && !e.target?.closest?.('button')) setInspSnap('full');
+  });
+  root.append(renderGrip(), head);
   const strip = el('nav', 'insp-tabs');
   strip.setAttribute('role', 'tablist');
   strip.setAttribute('aria-label', 'Inspector tabs');
@@ -650,6 +691,7 @@ export function renderInspector() {
   const bar = el('div', 'insp-actions');
   root.append(bar);
   renderActionBar(bar, { model: m, act, confirmAction, toast, openTerminal });
+  setInspSnap(page.snap);
   updateTether();
 }
 
@@ -674,6 +716,9 @@ export function applyRoute(route) {
     return;
   }
   setInspector(true);
+  page.snap = openSnap(globalThis.innerWidth ?? 1200, route?.view ?? store.view);
+  // The phone's own sheet goes down to its peek so it does not cover this one.
+  if (page.snap === 'peek') setSnap('peek');
   if (shouldTouch(page.touched, sel, store.source?.kind)) {
     page.touched = sel;
     try { currentSource()?.send?.(touchMessage(sel)); } catch { /* best effort */ }
@@ -687,7 +732,9 @@ export function applyRoute(route) {
 function insetsChanged() {
   const api = page.map?.api;
   if (!api || typeof api.setInsets !== 'function') return;
-  const w = page.sel && page.root ? page.root.getBoundingClientRect?.().width ?? 0 : 0;
+  // A phone's panel is a bottom sheet: it covers no side of the map.
+  const phone = layoutFor(globalThis.innerWidth ?? 1200) === 'phone';
+  const w = page.sel && page.root && !phone ? page.root.getBoundingClientRect?.().width ?? 0 : 0;
   try { api.setInsets({ right: w }); } catch { /* the map's own problem */ }
 }
 

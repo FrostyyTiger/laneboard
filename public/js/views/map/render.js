@@ -202,6 +202,13 @@ const PHONE = 480;
 /** On a phone, a map of this many nodes or fewer labels every one. */
 export const PHONE_ALL_LABELS = 8;
 const TEXT_CACHE_MAX = 4000;
+/** The selected node's label keeps this far (px) outside its closed reticle (T53). */
+export const RETICLE_GAP = 4;
+
+/** Half the side of the selection reticle's square when closed: the brackets' corner distance. Pure. */
+export function reticleD(kind, ns = 1) {
+  return (SIZE[kind] ?? 5) * ns * (kind === 'builder' ? 1.25 : 1) + 6;
+}
 
 /**
  * A renderer bound to one 2D context. `palette` is readPalette's shape; swap
@@ -918,7 +925,10 @@ export function createRenderer(ctx, palette) {
       const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
       // From the outermost ring the node draws, plus half a text line where
       // the label sits above or below it, so the backing never covers a ring.
-      const R = outerR.get(id) ?? ringOuter(n, r, { folded: Boolean(scene.folded?.has(id)) });
+      let R = outerR.get(id) ?? ringOuter(n, r, { folded: Boolean(scene.folded?.has(id)) });
+      // The selection's name sits outside its reticle, not on a bracket (T53).
+      const sel = id === scene.selected;
+      if (sel) R = Math.max(R, reticleD(n.kind, ns) + RETICLE_GAP);
       const out = R + 6 + 7 * Math.abs(Math.sin(ang));
       let x = sp.x + Math.cos(ang) * out;
       let y = sp.y + Math.sin(ang) * out;
@@ -938,31 +948,46 @@ export function createRenderer(ctx, palette) {
       const w = measure(text) + ('letterSpacing' in ctx ? text.length : 0);
       const round = n.kind === 'run' ? runRound(n) : null;
       const extra = round ? round.length * 7 + 8 : 0;
-      const off = (lft, px) => (lft ? px + w + extra > W - 4 : px - w - extra < 4);
+      const rawSub = n.why && loud ? n.why : n.sub;
+      const sub = rawSub && (s > 1.05 || id === focus || id === scene.selected) ? String(rawSub) : null;
+      const subText = sub && (sub.length > 38 ? `${sub.slice(0, 37)}…` : sub);
+      let sw = 0;
+      if (subText) { ctx.font = `10px ${P.mono}`; sw = measure(subText); ctx.font = font; }
+      // The widest line decides whether the label fits on this side (T53: a sub line ran off the edge).
+      const wide = Math.max(w + extra, sw);
+      const off = (lft, px) => (lft ? px + wide > W - 4 : px - wide < 4);
       if (off(left, x)) {
         // It would run off the edge: it flips to the node's other side; when
         // that does not fit either, it goes over the node, centred on it and
         // kept inside the canvas (labels under a node belong to its neighbours).
         const fx = 2 * sp.x - x;
         if (!off(!left, fx)) { x = fx; left = !left; } else {
-          x = clamp(sp.x - (w + extra) / 2, 4, W - 4 - w - extra);
+          x = clamp(sp.x - wide / 2, 4, W - 4 - wide);
           y = sp.y - out - 6;
           left = true;
         }
       }
-      const rawSub = n.why && loud ? n.why : n.sub;
-      const sub = rawSub && (s > 1.05 || id === focus || id === scene.selected) ? String(rawSub) : null;
-      const subText = sub && (sub.length > 38 ? `${sub.slice(0, 37)}…` : sub);
       const bx = left ? x - 2 : x - w - 2;
       const box = { x0: bx, y0: y - 7, x1: bx + w + 4, y1: y + 7 };
       if (round) { if (left) box.x1 += extra; else box.x0 -= extra; }
       let low = n.kind === 'builder' ? 22 : 13;
       if (n.kind === 'builder') box.y1 = y + 13;
       if (subText) {
-        ctx.font = `10px ${P.mono}`;
-        const sw = measure(subText);
         box.y1 = y + low + 6;
         if (left) box.x1 = Math.max(box.x1, x + sw); else box.x0 = Math.min(box.x0, x - sw);
+      }
+      if (sel) {
+        // On a diagonal the box corner can still reach the reticle's square:
+        // step it out along the bearing until it is clear.
+        const d = reticleD(n.kind, ns) + RETICLE_GAP;
+        const ret = { x0: sp.x - d, y0: sp.y - d, x1: sp.x + d, y1: sp.y + d };
+        const cx = (box.x0 + box.x1) / 2 - sp.x, cy = (box.y0 + box.y1) / 2 - sp.y;
+        // Sideways only while the canvas has room; else straight up or down.
+        const room = cx > 0 ? box.x1 + 40 <= W - 4 : box.x0 - 40 >= 4;
+        const dx = Math.abs(cx) > 2 && room ? Math.sign(cx) * 2 : 0, dy = (Math.sign(cy) || -1) * 2;
+        for (let k = 0; k < 40 && hits(box, ret); k++) {
+          x += dx; y += dy; box.x0 += dx; box.x1 += dx; box.y0 += dy; box.y1 += dy;
+        }
       }
       // Who keeps its place when two collide: the selection, then trouble,
       // then machines and places, then the rest.
@@ -999,7 +1024,8 @@ export function createRenderer(ctx, palette) {
       const n = c.node;
       if (!n || n.virtual || alphaOf(scene, id) * (c.a ?? 1) < 0.12) continue;
       const sp = scene.toScreen(c);
-      const R = outerR.get(id) ?? (SIZE[n.kind] ?? 5) * ns;
+      let R = outerR.get(id) ?? (SIZE[n.kind] ?? 5) * ns;
+      if (id === scene.selected) R = Math.max(R, reticleD(n.kind, ns) + RETICLE_GAP);
       discs.push({ id, x0: sp.x - R, y0: sp.y - R, x1: sp.x + R, y1: sp.y + R });
     }
     const order = plan.map((e, i) => [e, i]).sort((a, b) => a[0].rank - b[0].rank || a[1] - b[1]).map(([e]) => e);
@@ -1033,7 +1059,9 @@ export function createRenderer(ctx, palette) {
       // Off every node, its own included: a label moved a line up or down
       // must not land on the plate it names.
       const offNodes = (b) => !discs.some((n) => hits(n, b));
-      const any = () => true;
+      // The selection never moves onto its own reticle, even with no clear place.
+      const own = e0.id === scene.selected ? discs.find((n) => n.id === e0.id) : null;
+      const any = own ? (b) => !hits(own, b) : () => true;
       let e = e0;
       let dy = null;
       for (const [cand, clear] of [[e0, offNodes], [alt, offNodes], [up, offNodes], [down, offNodes], [e0, any], [alt, any], [up, any], [down, any]]) {
@@ -1152,8 +1180,7 @@ export function createRenderer(ctx, palette) {
       const c = nodes.get(id);
       if (!c?.node) continue;
       const sp = scene.toScreen(c);
-      const r = (SIZE[c.node.kind] ?? 5) * ns * (c.node.kind === 'builder' ? 1.25 : 1);
-      const d = r + 6 + (1 - t) * 12;
+      const d = reticleD(c.node.kind, ns) + (1 - t) * 12;
       strokeStyle(P.accent, a * (0.35 + 0.65 * t) * (c.a ?? 1), 1.5, []);
       brackets(sp.x, sp.y, d, 6);
     }
