@@ -121,11 +121,18 @@ the owner types `--by owner` (the docs' example). A refused ack is kept in `raw`
   help and exits 2, same text as `--help` (exit 0): a one-line `unknown command` first would stand
   out in logs; (c) README "All five variables are needed" reads as a correction of the block above.
 
+- **Stranger r25, ideas (not tasks):** (a) `GET /api/runs?run=<id>` ignores the query and returns the
+  whole list with 200, while the page route is `#/runs?run=<id>`: either filter on it, or answer 400/404
+  for an unknown query, or leave it and keep `/api/runs/<run>` as the only documented form; (b) in a
+  runs row `rounds` is rounds done and `maxRounds` is what `start --rounds` sets: a rename
+  (`roundsDone`) or a line in the docs would stop the misreading.
+
 ## Reviews
 
 - reviews/r10-designer.md: 33 findings, 7 became tasks (T13-T19, the agreed taste calls of README §7 item 3 and n3 T13); lane-sidebar bars, accent vs amber, header density, run-list empty cells and widths, run page sparklines/table/width, Inbox phone layout, "cooperative control" badge, usage-bar tracks, RUNNING hourglass → For the owner (taste); hatched faded Board cards in light → dropped (T12 covers it); light pink/ochre fills → dropped (T12/T13 cover them); console clean.
 - reviews/r13-stranger.md: 7 findings, 2 became tasks (T20 from 1; T21 from 2 and 3 together); 4, 5, 6 → For the owner (docs/taste); 7 → dropped (not a bug, README says so). No browser views were tested by the reviewer.
 - reviews/r17-designer.md: ~35 findings, 5 became tasks (T22 from across 1; T23 from across 2, 5, Board 1-2, Map; T24 from across 3; T25 from Morning 2-4, 6, 8; T26 from Run page 1-2); across 4, Board 3, Inbox, Night light notes, Run page 6 → dropped (covered by T12/T14/T16); Morning 5, Run page 3 → dropped (praise; the ✓ mark can be named by the T11 builder); Morning 7 → dropped (fine once T14 lands); Run page 4 → dropped (T17 covers it); Run page 5 → dropped (r10 taste, already under For the owner); console clean.
 - reviews/r22-designer.md: ~25 findings (all r10/r17 ones re-confirmed as standing), 5 became tasks (T27 light fills/weights from across 3, Map 3-4, Board 2, Inbox 1, Morning 2; T28 from across 4; T29 from Map 1-2; T30 from Board 1; T31 from Runs list 1 and Run page 2); across 1 → dropped (T13 covers it); across 2, 5, Map 5, Board 3, Inbox 2, Morning 1, Run page 1, 3, 5 → dropped (T23/T15/T14/T26/T22/T17/T24/T25 cover them); Run page 4 sparkline, Runs list 2 hourglass → dropped (already under For the owner, taste); v1 → v2 notes and light-test advice → dropped (praise; the T12 test advice is folded into T27); console clean.
+- reviews/r25-stranger.md: 6 findings, 0 became tasks; 2 and 3 → For the owner (API shape / naming); 1 → dropped (no browser, nothing found); 4 → dropped (same as r13 idea (a), already under For the owner); 5 → dropped (minor, untested by the reviewer); 6 → dropped (README already says so).
 
 ## Morning
