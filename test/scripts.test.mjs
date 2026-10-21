@@ -173,6 +173,7 @@ test('runScript: the exact tmux argv (-d, -c root, remain-on-exit, exact targets
     's=$?',
     'echo',
     'echo "[test exited $s]"',
+    'sleep 1',
   ].join('\n'));
   assert.equal(calls.length, 2, 'list-windows, new-window: nothing else');
   // The probe evaluated the same slot prefix in the worktree.
@@ -379,23 +380,6 @@ async function waitPane(target, needle, ms = 20000) {
   }
 }
 
-/**
- * The pane's text for script `name`, run again (at most twice) when its window
- * died without `needle`. A shell that writes and exits within microseconds can
- * hang up its pty before tmux has read the last lines (seen twice under the
- * full suite: `pwd` shown, the rest never), which is the host, not runScript.
- * A run that never prints `needle` still fails every try.
- */
-async function paneAfterRun(name, needle, out, d) {
-  const target = `=lane-a:=run-${name}`;
-  for (let i = 0; i < 2 && !out.includes(needle); i++) {
-    const r = await scripts.runScript('lane-a', name, 'alice', d);
-    assert.equal(r.alreadyRunning, false, out);
-    out = await waitPane(target, needle);
-  }
-  return out;
-}
-
 test('runScript end to end on a private tmux server: window, remain-on-exit, agent window stays current', { skip: !hasTmux && 'tmux not installed' }, async () => {
   tmux('new-session', '-d', '-s', 'lane-a', '-n', 'claude', '-x', '80', '-y', '24', 'sleep 300');
   const d = {
@@ -412,7 +396,7 @@ test('runScript end to end on a private tmux server: window, remain-on-exit, age
   assert.equal(r.window, 'run-test');
   assert.equal(r.windowIndex, 1);
   assert.equal(tmux('display-message', '-p', '-t', '=lane-a:', '#{window_name}').trim(), 'claude', 'the agent window stays current');
-  let out = await paneAfterRun('test', '[test exited 0]', await waitPane('=lane-a:=run-test', '[test exited 0]'), d);
+  let out = await waitPane('=lane-a:=run-test', '[test exited 0]');
   assert.ok(out.includes(root), out);
   assert.ok(out.includes('out-42'), out);
   assert.ok(out.includes('[test exited 0]'), out);
@@ -425,7 +409,7 @@ test('runScript end to end on a private tmux server: window, remain-on-exit, age
   assert.deepEqual(names, ['claude', 'run-test']);
 
   await scripts.runScript('lane-a', 'fail', 'alice', d);
-  out = await paneAfterRun('fail', '[fail exited 3]', await waitPane('=lane-a:=run-fail', '[fail exited 3]'), d);
+  out = await waitPane('=lane-a:=run-fail', '[fail exited 3]');
   assert.ok(out.includes('[fail exited 3]'), out);
 
   const inv = await tmuxMod.inventory();

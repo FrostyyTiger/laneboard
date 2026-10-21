@@ -165,13 +165,15 @@ export function checkScriptEnv(env, { slot, expectPgPort, forbidden }) {
   return { ok: true, reason: null };
 }
 
-/** The shell text the window runs: PATH, slot env, the command, an exit line. */
+/** The shell text the window runs: PATH, slot env, the command, an exit line, a short drain. */
 export function windowScript({ name, cmd, envCmd = '', nodeBin }) {
   const pathLine = nodeBin ? `PATH=${shellQuote(nodeBin)}:"$PATH"; export PATH` : '';
   // One line each: a `#` in the configured command can only comment out its
   // own line. The subshell keeps an `exit` in the command from skipping the
-  // exit line.
-  return [pathLine, envCmd, '(', cmd, ')', 's=$?', 'echo', `echo "[${name} exited $s]"`].filter(Boolean).join('\n');
+  // exit line. The closing `sleep 1` lets the pty drain: a shell that writes
+  // its exit line and exits at once can hang up before tmux has read the last
+  // lines, and the pane then lost them.
+  return [pathLine, envCmd, '(', cmd, ')', 's=$?', 'echo', `echo "[${name} exited $s]"`, 'sleep 1'].filter(Boolean).join('\n');
 }
 
 /**
