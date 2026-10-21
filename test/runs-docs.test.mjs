@@ -236,3 +236,10 @@ test('docs/runs.md says cost.rounds counts the cost events, not rounds, and is 0
   assert.match(flat, /`cost\.rounds` is the number of `cost` events, not a count of rounds: it is neither `counted` nor the rounds that carried a `round\.end` `usd`/);
   assert.match(flat, /shows `rounds: 0` next to `from: "rounds"`/);
 });
+
+test('docs/runs.md says there is no --budget flag and where the burn column gets its numbers (night 5 T45)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.match(flat, /There is no `--budget` flag: a run's budget is `--max-rounds` and `--window-pct` on `start`/);
+  assert.match(flat, /shows `fiveHourPct` and `sevenDayPct` of the run's last `usage` event, and no `laneboard run` subcommand writes one/);
+  assert.match(flat, /warn at 90 % \(5 h\) and 85 % \(7 d\), fixed/);
+});

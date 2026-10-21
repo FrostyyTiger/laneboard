@@ -237,6 +237,13 @@ laneboard run stop   --run readiness --reason done
 | `stop` | `--reason` (left out, the line carries no reason and the run records `stop: "unknown"`), `--rounds N` (the count of rounds done, not the cap), `--usd x` |
 | `cost` | **`--usd x`**, `--n N` (a `cost` event; the run's cost is the sum of these; a `round --end --usd` is the round's only, summed for the run when it sends no `cost`) |
 
+There is no `--budget` flag: a run's budget is `--max-rounds` and `--window-pct` on
+`start`, kept in `run.start`'s `budget`. The budget burn column (5 h / 7 d) shows
+`fiveHourPct` and `sevenDayPct` of the run's last `usage` event, and no `laneboard run`
+subcommand writes one: the loop appends the `usage` line itself (or posts it). The bars
+warn at 90 % (5 h) and 85 % (7 d), fixed; `windowPct`, `pause5h` and `stop7d` are kept
+but the board does not read them.
+
 Every subcommand also takes `--run <id>`, `--file <path>` and `--post`, after
 the subcommand or before it (`laneboard run --post score …`); every other
 flag goes after the subcommand.

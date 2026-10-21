@@ -749,6 +749,16 @@ test('stop with no --reason records stop "unknown", and the help says so (T42)',
   }
 });
 
+test('the help says there is no --budget flag and where the burn column gets its numbers (T45)', async (t) => {
+  const dir = tmpDir(t);
+  for (const args of [['run', '--help'], ['run', 'start', '--help']]) {
+    const help = await run(args, envFor(dir), dir);
+    assert.equal(help.code, 0, help.stderr);
+    assert.match(help.stdout, /there is no --budget flag: a run's budget is --max-rounds and --window-pct/, args.join(' '));
+    assert.match(help.stdout, /the budget burn column is the 5 h \/ 7 d usage % of the run's last usage event, which no subcommand writes/, args.join(' '));
+  }
+});
+
 test('T44: round, score, stop and ack on a run this file never started add a note on stderr, still append, exit 0', async (t) => {
   const dir = tmpDir(t);
   const file = path.join(dir, 'run.jsonl');

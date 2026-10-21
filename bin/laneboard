@@ -930,6 +930,9 @@ const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
   start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--max-rounds N] [--window-pct P]
            --max-rounds N is the round cap; --rounds N on start is its old name (a note on stderr)
+           there is no --budget flag: a run's budget is --max-rounds and --window-pct, kept in run.start's budget
+           the budget burn column is the 5 h / 7 d usage % of the run's last usage event, which no subcommand writes:
+           the loop appends a usage line itself (docs/runs.md); the bars warn at 90 % / 85 %, not at --window-pct
   round    --n N [--role r] [--task t]            prints export LANEBOARD_RUN=<run>/<n>, meant for: eval "$(laneboard run round --n N …)"
   round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]   --usd is this round only; the run sums them when it has no cost events
   score    --name m --value x [--better higher|lower] [--n N] [--max x]
