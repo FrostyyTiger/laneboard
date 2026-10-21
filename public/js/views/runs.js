@@ -334,7 +334,11 @@ function stateNode(row, stop = null) {
   return n;
 }
 
-function goalNode(row, asLink = false) {
+/**
+ * The goal and, on its second line, the run id and branch. A list row puts its
+ * open need on that line too (`extra`, T31): a last column clipped it at 1440.
+ */
+function goalNode(row, asLink = false, extra = null) {
   const n = el('span', 'rn-f rn-goal');
   const id = rnClean(row.run, 64) ?? '?';
   const goal = rnClean(row.goal);
@@ -346,7 +350,14 @@ function goalNode(row, asLink = false) {
     n.append(el('span', 'rn-goal-t', goal ?? id));
   }
   const sub = [id, rnClean(row.branch, 80)].filter(Boolean).join(' · ');
-  n.append(el('span', 'rn-goal-sub', goal ? sub : rnClean(row.branch, 80) ?? ''));
+  const subEl = el('span', 'rn-goal-sub', goal ? sub : rnClean(row.branch, 80) ?? '');
+  if (extra) {
+    const line = el('span', 'rn-goal-2');
+    line.append(subEl, extra);
+    n.append(line);
+  } else {
+    n.append(subEl);
+  }
   n.title = [goal, sub, rnClean(row.plan)].filter(Boolean).join('\n');
   return n;
 }
@@ -369,6 +380,8 @@ function scoresNode(row) {
   if (!list.length) {
     n.textContent = DASH;
     n.title = 'no scores yet';
+  } else {
+    n.title = list.map((s) => s.title).join('\n');
   }
   return n;
 }
@@ -444,14 +457,11 @@ export function needsCell(row) {
   };
 }
 
+/** The open need under a list row's goal, null when nothing is open (no "—" to read). */
 function needsNode(row) {
   const c = needsCell(row);
+  if (!c) return null;
   const n = el('span', 'rn-f rn-needs');
-  if (!c) {
-    n.textContent = DASH;
-    n.title = 'nothing open';
-    return n;
-  }
   n.dataset.p = c.p;
   n.append(el('span', 'rn-needs-n', c.count ? `${c.mark} ${c.count}` : c.mark), el('span', 'rn-needs-t', c.text));
   n.title = c.title;
@@ -470,13 +480,12 @@ export function runRow(row, now = Date.now()) {
   if (stopP && stopP !== 'ok') leftEl.dataset.p = stopP;
   li.append(
     stateNode(row),
-    goalNode(row, true),
+    goalNode(row, true, needsNode(row)),
     rnField('rn-round', roundText(row), `round ${roundText(row)}${isNum(row.rounds) ? `, ${row.rounds} recorded` : ''}`),
     scoresNode(row),
     burnNode(row),
     leftEl,
     costNode(row),
-    needsNode(row),
   );
   return li;
 }
@@ -1089,10 +1098,12 @@ function rnPaint(st) {
   if (!st.panel) return;
   if (st.runId) {
     setPanel(st.panel.root, { scope: st.runId, n: null });
+    st.panel.root.dataset.page = '';
     renderRunPage(st.panel.body, st.run, { status: st.status, message: st.message, id: st.runId }, Date.now(), st.busy);
     return;
   }
   const n = st.status === 'ok' ? st.runs.length : null;
+  delete st.panel.root.dataset.page;
   setPanel(st.panel.root, { scope: null, n });
   renderRuns(st.panel.body, st.runs, { status: st.status, message: st.message }, Date.now());
 }

@@ -9,16 +9,18 @@
 #view-runs { overflow: auto; padding-top: var(--sp-2); padding-inline: var(--sp-2); }
 
 /* The columns are the list's and every row is a subgrid of them, so a column has one width
-   down the list (T44). The goal is the one flexible column; the others take their content
-   width, the needs cell at most 24ch (an empty "—" no longer holds 24ch the goal could use). */
+   down the list (T44). The goal is the one flexible column; state, round, scores, burn, stop/left
+   and cost have fixed widths, so a "—" sits where a value would (T31). The list sets the row font,
+   so a `ch` here is the mono digit the cells print. An open need is the goal's second line. */
 .rn-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns:
-    minmax(12ch, auto) minmax(0, 1fr) 7ch minmax(0, auto) auto minmax(12ch, auto) minmax(10ch, auto) fit-content(24ch);
+  grid-template-columns: 14ch minmax(0, 1fr) 7ch 24ch 28ch 16ch 12ch;
   column-gap: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
 }
 
 .rn-row {
@@ -75,11 +77,16 @@
 .rn-open:focus-visible { outline: none; }
 .rn-row:has(.rn-open:focus-visible) { outline: var(--bw) solid var(--accent); outline-offset: -1px; }
 .rn-goal-sub { color: var(--text-3); font-size: var(--fs-11); }
+/* the second line: run id and branch (at most half the line), then the open need (T31) */
+.rn-goal-2 { display: flex; align-items: baseline; gap: var(--sp-3); max-width: 100%; min-width: 0; }
+.rn-goal-2 > .rn-goal-sub { flex: none; max-width: 50%; white-space: nowrap; }
+.rn-goal-2 > .rn-goal-sub:empty { display: none; }
+.rn-goal-2 > .rn-needs { flex: 0 1 auto; font-size: var(--fs-11); }
 
 .rn-round { justify-content: flex-end; color: var(--text-1); }
 
-/* ---- scores: name, value, trend mark; only a worse one gets a hue */
-.rn-scores { gap: var(--sp-2); }
+/* ---- scores: name, value, trend mark; only a worse one gets a hue (all in the cell's title) */
+.rn-scores { gap: var(--sp-2); overflow: hidden; }
 .rn-score { display: inline-flex; align-items: baseline; gap: var(--sp-1); }
 .rn-score-k { color: var(--text-3); }
 .rn-score-v { color: var(--text-1); }
@@ -89,8 +96,10 @@
 .rn-more { color: var(--text-3); }
 
 /* ---- budget burn: one thin meter per window */
-.rn-burn { gap: var(--sp-2); }
-.rn-win { display: inline-flex; align-items: center; gap: var(--sp-1); }
+/* each window a fixed grid (label, bar, value) so the meters and their "—" line up; an
+   overage takes the cell's next line */
+.rn-burn { gap: var(--sp-1) var(--sp-2); flex-wrap: wrap; }
+.rn-win { display: inline-grid; grid-template-columns: 2ch 40px 4ch; align-items: center; gap: var(--sp-1); }
 .rn-win-k { color: var(--text-3); font-size: var(--fs-11); }
 .rn-win-v { min-width: 4ch; text-align: right; }
 .rn-bar {
@@ -118,6 +127,7 @@
 .rn-left[data-p="2"] .rn-v { color: inherit; }
 .rn-left[data-p="1"] { color: var(--p1); }
 .rn-left[data-p="2"] { color: var(--p2); }
+.rn-left .rn-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .rn-cost { justify-content: flex-end; }
 .rn-needs { overflow: hidden; }
 .rn-needs-n { flex: none; }
@@ -142,6 +152,8 @@
 
 /* ---- one run's page (T8): head, needs, timeline, artifacts, raw */
 /* a reading width: at 1440 the eye does not cross the screen per row (T27) */
+/* the run page's frame stops at the same token as the page in it: no empty gutter (T31) */
+#view-runs > .panel[data-page] { max-width: var(--read-max); }
 .rn-page { display: grid; gap: var(--sp-3); max-width: var(--read-max); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
 .rn-back { justify-self: start; color: var(--text-3); text-decoration: none; }
 .rn-back:hover { color: var(--text-1); }
@@ -290,8 +302,11 @@ a.rn-need-open { text-decoration: none; }
   .rn-row { gap: var(--sp-1) var(--sp-2); }
   .rn-scores,
   .rn-burn { grid-column: 1 / -1; flex-wrap: wrap; white-space: normal; }
-  /* the needs cell stays one line, mark and text together, the text clipped (T29) */
-  .rn-needs { grid-column: 1 / -1; }
+  /* the open need takes its own line under the run id, one line, mark and text together, the
+     text clipped (T29, T31) */
+  .rn-goal-2 { flex-wrap: wrap; row-gap: 0; }
+  .rn-goal-2 > .rn-goal-sub { max-width: 100%; }
+  .rn-goal-2 > .rn-needs { flex: 1 1 100%; min-width: 0; }
   .rn-left,
   .rn-cost { justify-content: flex-start; }
   .rn-tl-sec { overflow-x: auto; }

@@ -102,7 +102,7 @@ test('a live run shows the time left, and a window at its stop level is marked',
   assert.equal(wins[0].dataset.p, '2', '5 h at 92 % is past 90');
   assert.match(wins[0].attrs['aria-label'], /near the stop level/);
   assert.equal(wins[1].dataset.p, undefined);
-  assert.equal(byClass(row, 'rn-needs')[0].textContent, '—');
+  assert.equal(byClass(row, 'rn-needs').length, 0, 'nothing open: no needs line, no "—" (T31)');
   assert.equal(byClass(row, 'rn-state')[0].dataset.p, 'run');
 }));
 
@@ -457,10 +457,13 @@ test('mount with route.run fetches GET /api/runs/<id>; a route change switches l
   await mountRuns(host, { route: { ...emptyRoute('runs'), run: 'readiness' } }, { fetchFn, poll: false });
   assert.deepEqual(calls, [['/api/runs/readiness', 'GET']]);
   assert.equal(byClass(host, 'rn-tl-row').length, 3);
+  const frame = byClass(host, 'panel')[0];
+  assert.equal(frame.dataset.page, '', 'a run page marks its frame for the reading width (T31)');
 
   await updateRuns(null, { route: { ...emptyRoute('runs'), run: null } });
   assert.deepEqual(calls.at(-1), [LIST_URL, 'GET']);
   assert.equal(byClass(host, 'rn-row').length, 1);
+  assert.equal(frame.dataset.page, undefined, 'the list takes the full width');
   assert.equal(byClass(host, 'rn-tl-row').length, 0);
 
   await updateRuns(null, { route: { ...emptyRoute('runs'), run: 'gone' } });
@@ -692,13 +695,11 @@ test('T44: the goal is the one flexible column of the list, every row a subgrid 
   const wide = css.slice(0, css.indexOf('@media (max-width: 1024px)'));
   const list = wide.match(/\.rn-list \{[^}]*grid-template-columns:\s*([^;]+);/);
   assert.ok(list, 'the list holds the columns');
-  // split on top-level spaces: one entry per column, in row order (state, goal, round, scores, burn, left, cost, needs)
+  // split on top-level spaces: one entry per column, in row order (state, goal, round, scores, burn, left, cost)
   const cols = list[1].trim().match(/[a-z-]+\([^)]*(?:\([^)]*\)[^)]*)*\)|\S+/g);
-  assert.equal(cols.length, 8);
+  assert.equal(cols.length, 7, 'no needs column: the need is the goal\'s second line (T31)');
   assert.deepEqual(cols.filter((c) => /fr\b/.test(c)), ['minmax(0, 1fr)'], 'one flexible column');
   assert.equal(cols[1], 'minmax(0, 1fr)', 'and it is the goal');
-  // the needs column takes its content, at most 24ch: a "—" no longer holds 24ch
-  assert.equal(cols[7], 'fit-content(24ch)');
   assert.match(wide, /\.rn-row \{[^}]*grid-column: 1 \/ -1;[^}]*grid-template-columns: subgrid;/);
   // the narrow layout moves its columns to the list too
   const narrow = css.slice(css.indexOf('@media (max-width: 1024px)'));
@@ -710,6 +711,38 @@ test('T44: the goal is the one flexible column of the list, every row a subgrid 
   const cell = byClass(host, 'rn-goal')[0];
   assert.equal(cell.title.split('\n')[0], goal);
   assert.equal(byClass(cell, 'rn-goal-t')[0].textContent, goal);
+}));
+
+// Seen at 1440 (reviews/r22-designer.md, Runs list 1, Run page 2): the meters and their "—" floated,
+// the need was a last column clipped where there was room, and the run page's frame ran 270 px past
+// its content.
+test('T31: the list columns have fixed widths, the need sits under the goal, the run page frame is one width', () => withDom(() => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const wide = css.slice(0, css.indexOf('@media (max-width: 1024px)'));
+  const list = wide.match(/\.rn-list \{[^}]*grid-template-columns:\s*([^;]+);/);
+  const cols = list[1].trim().match(/[a-z-]+\([^)]*(?:\([^)]*\)[^)]*)*\)|\S+/g);
+  // state, round, scores, burn, stop/left, cost: a fixed `ch` each, no auto, no fit-content
+  for (const i of [0, 2, 3, 4, 5, 6]) assert.match(cols[i], /^\d+ch$/, `column ${i} is fixed: ${cols[i]}`);
+  assert.match(wide, /\.rn-list \{[^}]*font-family: var\(--font-mono\);[^}]*font-size: var\(--fs-12\);/, 'a ch is the row\'s mono digit');
+  // each window a fixed label/bar/value grid, so a "—" sits where a value would
+  assert.match(wide, /\.rn-win \{[^}]*grid-template-columns: 2ch 40px 4ch;/);
+  // the need is in the goal cell, never a cell of the row
+  const host = document.createElement('div');
+  renderRuns(host, [FIX], { status: 'ok' }, FIX.updatedAt);
+  const row = byClass(host, 'rn-row')[0];
+  assert.equal(row.children.length, 7);
+  assert.equal(row.children.some((c) => /\brn-needs\b/.test(c.className)), false, 'no needs column');
+  assert.ok(!/\brn-needs\b/.test(row.children.at(-1).className));
+  const line = byClass(byClass(row, 'rn-goal')[0], 'rn-goal-2')[0];
+  assert.ok(line, 'the goal has a second line');
+  assert.deepEqual(line.children.map((c) => c.className.split(' ').at(-1)), ['rn-goal-sub', 'rn-needs']);
+  assert.match(byClass(line, 'rn-needs-t')[0].textContent, /^decision: Drop the v1 export endpoint/);
+  assert.equal(byClass(row, 'rn-cost')[0], row.children.at(-1), 'cost closes the row');
+  // the run page: its frame stops at the token the page does
+  assert.match(wide, /#view-runs > \.panel\[data-page\] \{ max-width: var\(--read-max\); \}/);
+  assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--read-max\);/);
+  const tokens = css.match(/max-width: var\(--[a-z-]+\)/g).filter((x) => !/100%/.test(x));
+  assert.deepEqual([...new Set(tokens)], ['max-width: var(--read-max)'], 'one width token on the page and its frame');
 }));
 
 test('T28: an open need gives the needs.ack payload and its link; a closed or waiting one no ack', () => {
