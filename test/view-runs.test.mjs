@@ -15,7 +15,7 @@ import runsView, {
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, EMPTY_HUB, LIST_URL, SCORE_MAX,
   renderRunPage, roundRows, roundSessions, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
   runHref, runUrl, LIST_HREF, needActions, ackNeed, ACK_BY, EVENTS_URL, TL_NARROW_HIDDEN, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
-  needsCell, tlColumns, ackedNeedsOf, runCostOf,
+  needsCell, tlColumns, ackedNeedsOf, runCostOf, outcomeText,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
 
@@ -318,8 +318,11 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
   assert.deepEqual(rows.map((r) => r.children.map((c) => c.textContent)), [
     ['1', 'planner', '—', 'kept', 'a1b2c3d', '$0.90', '9m'],
     ['2', 'builder', 'A2.4', 'kept', 'b2c3d4e', '$1.60', '29m'],
-    ['3', 'builder', 'A2.5', 'no-task-done', '—', '$1.25', '29m'],
+    ['3', 'builder', 'A2.5', 'no task done', '—', '$1.25', '29m'],
   ]);
+  // T21: the outcome prints words, the protocol slug stays on the cell
+  assert.equal(rows[2].children[3].dataset.outcome, 'no-task-done');
+  assert.equal(rows[2].children[3].title, 'outcome: no-task-done');
   assert.equal(byClass(page, 'rn-tl')[0].children[0].children[0].children.some((th) => th.dataset.col === 'sessions'), false, 'no sessions header either');
   assert.equal(rows.some((r) => 'live' in r.dataset), false, 'a stopped run has no live round');
   // every cell names its column, so a phone can drop the minor ones (T22); task and duration stay as title
@@ -1044,6 +1047,10 @@ test('T4: the run page shows round titles, session links, the stop detail and th
   assert.equal(rows[2].dataset.wrapup, '');
   assert.equal(byClass(rows[2], 'rn-tl-n')[0].textContent, 'wrap-up');
   assert.match(byClass(rows[2], 'rn-tl-n')[0].title, /not counted/);
+  // T21: `wrap-up` once in the row, in the ROUND cell; the task cell is empty, the tooltip has no task
+  assert.equal(rows[2].textContent.match(/wrap-up/g).length, 1);
+  assert.equal(byClass(rows[2], 'rn-tl-task')[0].textContent, '');
+  assert.doesNotMatch(rows[2].title, /task: wrap-up/);
 
   // a named session links to its sheet; an id-only one is plain text
   const linked = byClass(rows[0], 'rn-tl-s')[0];
@@ -1149,4 +1156,38 @@ test('T5: a max that never moved prints no scope line', () => {
   assert.equal(s.scope, null);
   const [old] = scoreList({ tasks: { n: 2, value: 7, prev: 5, better: 'higher' } });
   assert.equal(old.text, '7', 'a summary without max (an older board) reads as before');
+});
+
+// runs-n5 T21 (reviews/13-designer.md Run page 3 + 4): rounds table words.
+test('T21: outcome slugs print as words, plain words stay', () => {
+  assert.equal(outcomeText('no-task-done'), 'no task done');
+  assert.equal(outcomeText('still-red'), 'still red');
+  assert.equal(outcomeText('timed_out'), 'timed out');
+  assert.equal(outcomeText('kept'), 'kept');
+  assert.equal(outcomeText(''), null);
+  assert.equal(outcomeText(null), null);
+});
+
+test('T21: a titled wrap-up round says wrap-up only in the ROUND cell, the title stays', () => withDom(() => {
+  const events = [
+    { t: 'run.start', goal: 'Build it', budget: { rounds: 1 }, ts: 1000 },
+    { t: 'round.start', n: 1, role: 'builder', task: 'T3', ts: 2000 },
+    { t: 'round.end', n: 1, outcome: 'no-task-done', ts: 3000 },
+    { t: 'run.stop', reason: 'rounds', rounds: 1, ts: 4000 },
+    { t: 'round.start', n: 2, role: 'operator', task: 'wrap-up', title: 'Review the night and write the report', wrapup: true, ts: 5000 },
+    { t: 'round.end', n: 2, outcome: 'reported', ts: 6000 },
+  ].map((e) => parseLine(JSON.stringify({ v: 1, run: 'demo', ...e }))).map((r) => r.event);
+  const page = renderRunPage(null, JSON.parse(JSON.stringify(foldRun(events))), { status: 'ok', id: 'demo' }, 9000);
+  const rows = byClass(page, 'rn-tl-row');
+  assert.equal(rows[1].textContent.match(/wrap-up/g).length, 1);
+  assert.equal(byClass(rows[1], 'rn-tl-n')[0].textContent, 'wrap-up');
+  assert.equal(byClass(rows[1], 'rn-tl-title')[0].textContent, 'Review the night and write the report');
+  assert.equal(byClass(rows[1], 'rn-tl-tid').length, 0);
+  assert.match(page.textContent, /no task done/);
+  assert.doesNotMatch(page.textContent, /no-task-done/);
+}));
+
+test('T21: the wrap-up ROUND cell is left-aligned in --text-2', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  assert.match(css, /\.rn-tl-row\[data-wrapup\] \.rn-tl-n \{[^}]*color: var\(--text-2\);[^}]*text-align: left/);
 });

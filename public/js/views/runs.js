@@ -921,13 +921,26 @@ function sessionsCell(list) {
   return td;
 }
 
-/** The round's title with its task id muted beside it; the task alone, or DASH, without one (T4). */
+/**
+ * The round's title with its task id muted beside it; the task alone, or DASH, without one (T4).
+ * A wrap-up round's ROUND cell already says `wrap-up`: its task id is left out, the title stays (T21).
+ */
 function taskCell(r) {
-  if (!r.title) return el('td', 'rn-tl-task', r.task ?? DASH);
+  const task = r.wrapup ? null : r.task;
+  if (!r.title) return el('td', 'rn-tl-task', task ?? (r.wrapup ? '' : DASH));
   const td = el('td', 'rn-tl-task');
   td.append(el('span', 'rn-tl-title', r.title));
-  if (r.task) td.append(el('span', 'rn-tl-tid', r.task));
+  if (task) td.append(el('span', 'rn-tl-tid', task));
   return td;
+}
+
+/** Outcome slugs the loop writes, as words (T21, reviews/13-designer.md Run page 4); the protocol value stays in `data-outcome`. */
+const OUTCOME_WORDS = Object.freeze({ 'no-task-done': 'no task done', 'still-red': 'still red', 'timed-out': 'timed out' });
+
+/** The outcome as words: a known slug from OUTCOME_WORDS, any other `-`/`_` slug with spaces. Pure. */
+export function outcomeText(outcome) {
+  if (typeof outcome !== 'string' || !outcome) return null;
+  return OUTCOME_WORDS[outcome] ?? outcome.replace(/[-_]+/g, ' ').trim();
 }
 
 function timelineSection(run, now) {
@@ -951,7 +964,7 @@ function timelineSection(run, now) {
     tr.dataset.n = String(r.n);
     if (r.live) tr.dataset.live = '';
     if (r.wrapup) tr.dataset.wrapup = '';
-    tr.title = [r.title, r.task ? `task: ${r.task}` : null, r.span && r.span !== DASH ? `took ${r.span}` : null].filter(Boolean).join(' · ');
+    tr.title = [r.title, r.task && !r.wrapup ? `task: ${r.task}` : null, r.span && r.span !== DASH ? `took ${r.span}` : null].filter(Boolean).join(' · ');
     // the wrap-up after run.stop is not a counted round: it reads "wrap-up", never "64" of 63 (T4)
     const nCell = el('td', 'rn-tl-n', r.wrapup ? 'wrap-up' : String(r.n));
     if (r.wrapup) nCell.title = `round ${r.n}: the wrap-up after the stop, not counted against the cap`;
@@ -962,8 +975,9 @@ function timelineSection(run, now) {
     }
     const commit = el('td', 'rn-tl-commit', r.short ?? DASH);
     if (r.commit) commit.title = r.commit;
-    const outcome = el('td', 'rn-tl-outcome', r.outcome ?? DASH);
+    const outcome = el('td', 'rn-tl-outcome', outcomeText(r.outcome) ?? DASH);
     if (r.outcome) outcome.dataset.outcome = r.outcome;
+    if (r.outcome && outcomeText(r.outcome) !== r.outcome) outcome.title = `outcome: ${r.outcome}`;
     const cells = {
       n: nCell,
       role: el('td', 'rn-tl-role', r.role ?? DASH),

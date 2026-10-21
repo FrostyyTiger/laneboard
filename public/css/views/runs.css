@@ -294,7 +294,7 @@ a.rn-need-open { text-decoration: none; }
 /* a round's title with its task id muted beside it (T4); the wrap-up round's label is muted */
 .rn-tl-task:has(.rn-tl-title) { max-width: 48ch; }
 .rn-tl-tid { margin-left: var(--sp-2); color: var(--text-3); }
-.rn-tl-row[data-wrapup] .rn-tl-n { color: var(--text-3); }
+.rn-tl-row[data-wrapup] .rn-tl-n { color: var(--text-2); text-align: left; } /* T21: right-aligned it overhung the numbers */
 /* the sessions tied to a round (T12): one chip per session, a guess shared with another run is faint */
 .rn-tl td.rn-tl-ses { color: var(--text-2); white-space: normal; }
 .rn-tl-s { white-space: nowrap; }
