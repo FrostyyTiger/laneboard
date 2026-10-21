@@ -547,6 +547,19 @@
 .np-sec > .empty { margin: var(--sp-1) 0 0; }
 
 @media (max-width: 700px) {
+  /* T34: a run need wraps (up to three lines) under the run name, OPEN/ACK on the right edge */
+  .inbox-row-h--need { flex-wrap: wrap; row-gap: 0; padding-bottom: var(--sp-1); }
+  .inbox-row-h--need > .plate { margin-right: auto; }
+  .inbox-row-h--need > .inbox-sum {
+    order: 1;
+    flex: 1 0 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
   .rq-row { grid-template-columns: minmax(0, 1fr); }
   .rq-acts { grid-column: 1; grid-row: auto; flex-wrap: wrap; margin-top: var(--sp-1); }
   .rq-pull-l { grid-template-columns: minmax(0, 1fr) auto; }

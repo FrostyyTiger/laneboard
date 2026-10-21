@@ -174,7 +174,10 @@ function inboxRowNode(r) {
     if (state.busy.has(r.id)) head.append(span('inbox-status', 'sending…'));
   } else if (r.group === 'runs') {
     const sum = span('inbox-sum', r.reason);
-    sum.title = r.reason; // cut to one line on a phone
+    sum.title = r.reason;
+    // a run need is the one row that wants a written answer: on a phone its text
+    // takes a line of its own under the run name and OPEN/ACK (fleet-views.css)
+    if (r.kind === 'run-need') head.classList.add('inbox-row-h--need');
     head.append(sum);
     if (r.link) {
       const a = document.createElement('a');

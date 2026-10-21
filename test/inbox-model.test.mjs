@@ -353,3 +353,24 @@ test('runs: the posted ack is one the protocol folds into a closed need', async 
   assert.equal(run.needs[0].open, false);
   assert.equal(run.needs[0].by, ACK_BY);
 });
+
+// Seen at 390 (reviews/20-designer.md, Inbox 1): the run decision was cut to
+// "decision: Keep the o…", one line beside OPEN and ACK.
+test('T34: on a phone a run need wraps on its own line instead of a one-line clamp', () => {
+  const root = path.join(import.meta.dirname, '..');
+  const css = fs.readFileSync(path.join(root, 'public/css/views/fleet-views.css'), 'utf8');
+  const at = css.indexOf('@media (max-width: 700px)');
+  assert.ok(at > 0, 'a phone block exists');
+  const phone = css.slice(at);
+  const rule = phone.match(/\.inbox-row-h--need > \.inbox-sum \{([^}]*)\}/);
+  assert.ok(rule, 'the phone block styles the need text');
+  assert.match(rule[1], /white-space: normal;/);
+  assert.match(rule[1], /flex: 1 0 100%;/, 'a line of its own');
+  assert.match(rule[1], /line-clamp: [2-9];/, 'more than one line');
+  assert.match(phone, /\.inbox-row-h--need \{[^}]*flex-wrap: wrap;/);
+  assert.match(phone, /\.inbox-row-h--need > \.plate \{[^}]*margin-right: auto;/, 'OPEN/ACK on the right edge');
+  // the desktop row stays one line, its title carries the whole text
+  assert.match(css.slice(0, at), /\.inbox-sum \{[^}]*white-space: nowrap;/);
+  const view = fs.readFileSync(path.join(root, 'public/js/views/inbox.js'), 'utf8');
+  assert.match(view, /r\.kind === 'run-need'\) head\.classList\.add\('inbox-row-h--need'\)/);
+});
