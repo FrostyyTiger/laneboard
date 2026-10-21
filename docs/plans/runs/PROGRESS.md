@@ -82,4 +82,6 @@ Notes for builders, from reading the code (planner, round 1):
 
 ## Reviews
 
+- Round 4, designer: `reviews/4-designer.md` (Map Drift/Reach from round 3, Board, Inbox, Runs shot this round; no page errors). Worst: the phone tab bar marks MAP active on every view; light-theme alarm tiles fade to unreadable white-on-pastel; Drift draws the undeclared node in the accent orange; Reach arcs look like topology edges; coloured left bars on calm Board lanes.
+
 ## Morning
