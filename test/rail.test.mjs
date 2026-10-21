@@ -270,6 +270,21 @@ test('buildRail: a listbox of options with aria-selected, lamp, plate, count and
   assert.match(tog.getAttribute('aria-label'), /Collapse/);
 }));
 
+test('buildRail: the selected ALL plate is outlined like the builder plates, never a fill (T14)', () => withDom(() => {
+  const root = R.buildRail(R.railRows(fleet(), {}), { mode: 'open' });
+  const opts = root.find('brail-list')[0].children;
+  const all = opts[0];
+  assert.equal(all.getAttribute('aria-selected'), 'true');
+  assert.ok(all.classList.contains('sel'), 'the brackets say selected');
+  const code = all.find('brail-code')[0];
+  assert.equal(code.textContent, 'ALL');
+  const cls = (el) => String(el.className).split(/\s+/).filter(Boolean).sort();
+  assert.deepEqual(cls(code), cls(opts[1].find('brail-code')[0]), 'same plate classes as a builder');
+  assert.ok(!cls(code).some((c) => /^plate--(solid|sunken|p1|p2)$/.test(c)), 'no filled plate kind');
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/rail.css'), 'utf8');
+  assert.doesNotMatch(css, /\.brail-row(\.sel|--all)[^{]*\.brail-code[^{]*\{[^}]*background/, 'no fill on the rail plate');
+}));
+
 test('buildRail: collapsed mode is marked for the CSS and the toggle says expand', () => withDom(() => {
   let toggled = 0;
   const root = R.buildRail(R.railRows(fleet(), {}), { mode: 'min', onToggle: () => { toggled++; } });

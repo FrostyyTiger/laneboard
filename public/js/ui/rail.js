@@ -305,7 +305,9 @@ function railOption(r, onSelect) {
   // nothing the lamp does not, so rail.css hides it.
   if (!(r.n > 1)) o.dataset.single = '';
   markSel(o, r.selected);
-  const code = plate(r.code, { kind: r.id === 'all' ? 'solid' : null });
+  // ALL is outlined like every builder plate: selection is the row's corner
+  // brackets, never a filled slab (design.md, runs night 5 T14).
+  const code = plate(r.code);
   code.classList.add('brail-code');
   const n = document.createElement('span');
   n.className = 'brail-n';
