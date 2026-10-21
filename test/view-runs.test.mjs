@@ -1062,6 +1062,17 @@ test('T4: the run page shows round titles, session links, the stop detail and th
   assert.equal(plain.href, undefined);
   assert.equal(plain.textContent, 'bbbbbbbb —');
 
+  // T22: the link is marked: a ↗ inside the session anchor, and the role links to the same session
+  assert.equal(byClass(linked, 'rn-item-arrow')[0].textContent, ' ↗');
+  assert.equal(byClass(linked, 'rn-item-arrow')[0].getAttribute('aria-hidden'), 'true');
+  const role = byClass(rows[0], 'rn-tl-role')[0];
+  const roleLink = byClass(role, 'rn-tl-role-a')[0];
+  assert.equal(roleLink.tagName.toLowerCase(), 'a');
+  assert.equal(roleLink.href, '#session=builder-a-run');
+  assert.match(roleLink.textContent, / ↗$/);
+  assert.equal(byClass(rows[1], 'rn-tl-role-a').length, 0, 'a session known only by its id links nothing');
+  assert.equal(byClass(rows[1], 'rn-item-arrow').length, 0);
+
   // the stop's detail on its own line under the reason
   const state = byClass(page, 'rn-state')[0];
   assert.equal(state.dataset.detail, '');

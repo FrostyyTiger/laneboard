@@ -912,12 +912,38 @@ function sessionsCell(list) {
   if (!list.length) { td.textContent = DASH; return td; }
   for (const s of list) {
     const span = el(s.href ? 'a' : 'span', 'rn-tl-s', `${s.maybe ? '? ' : ''}${s.label} ${s.cost}`);
-    if (s.href) span.href = s.href;
+    if (s.href) {
+      span.href = s.href;
+      span.append(linkArrow());
+    }
     span.dataset.session = s.id;
     if (s.maybe) span.dataset.maybe = '';
     span.title = s.title;
     td.append(span);
   }
+  return td;
+}
+
+/** The ↗ that marks a link (T16 artifact titles, T22 sessions): inside the anchor, hidden from screen readers. */
+function linkArrow() {
+  const arrow = el('span', 'rn-item-arrow', ' ↗');
+  arrow.setAttribute('aria-hidden', 'true');
+  return arrow;
+}
+
+/**
+ * The round's role; a link with a ↗ to the round's first session the board knows by name (T22,
+ * reviews/13-designer.md Run page 5), so a phone, which drops the SESSIONS column, still has it.
+ */
+function roleCell(r) {
+  const td = el('td', 'rn-tl-role');
+  const s = r.sessions.find((x) => x.href);
+  if (!s) { td.textContent = r.role ?? DASH; return td; }
+  const a = el('a', 'rn-tl-role-a', r.role ?? 'session');
+  a.href = s.href;
+  a.title = `open session ${s.label}`;
+  a.append(linkArrow());
+  td.append(a);
   return td;
 }
 
@@ -980,7 +1006,7 @@ function timelineSection(run, now) {
     if (r.outcome && outcomeText(r.outcome) !== r.outcome) outcome.title = `outcome: ${r.outcome}`;
     const cells = {
       n: nCell,
-      role: el('td', 'rn-tl-role', r.role ?? DASH),
+      role: roleCell(r),
       task: taskCell(r),
       outcome,
       commit,
@@ -1009,11 +1035,7 @@ function artifactsSection(run) {
     // T16: `title ↗ · state · round n`, the ↗ inside a real link (it follows a wrapped title's
     // last word), every part after it behind a `·`
     const t = rnLink('rn-item-t', a.title, a.href);
-    if (a.href) {
-      const arrow = el('span', 'rn-item-arrow', ' ↗');
-      arrow.setAttribute('aria-hidden', 'true');
-      t.append(arrow);
-    }
+    if (a.href) t.append(linkArrow());
     li.append(el('span', 'rn-item-k', a.kind), t);
     if (a.state) {
       const s = el('span', 'rn-item-s', `· ${a.state}`);

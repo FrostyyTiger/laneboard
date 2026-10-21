@@ -32,7 +32,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseLines, foldRun } from '../../server/runs/protocol.mjs';
 import { summarize } from '../../server/runs/summary.mjs';
-import { withSessions } from '../../server/runs/bind.mjs';
+import { bindRuns, withSessions } from '../../server/runs/bind.mjs';
 import { runsInWindow } from '../../server/runs/digest.mjs';
 import { runNodes } from '../../server/map/runs.mjs';
 import { attentionList, attentionScore } from '../../server/state.mjs';
@@ -140,6 +140,15 @@ export const RUNS_PATH = '/api/runs';
 export const DEMO_RUN_FILE = path.resolve(import.meta.dirname, '..', 'fixtures', 'runs', 'demo-run.jsonl');
 export const DEMO_RUN_AGO_MS = 25 * 60_000;
 
+/**
+ * The sessions the demo's board knows by id (runs T22): round 3 of
+ * `acme-search` names the first in its `round.start`, so the run page shows
+ * one round linked to its session (`search api` on builder-a).
+ */
+export const DEMO_RUN_SESSIONS = Object.freeze([
+  Object.freeze({ sessionId: '5e1c0a7d-3b2f-4c19-9a6e-2d8f40b1c7e3', name: 'search api', cwd: null, firstAt: null, lastAt: null, usd: 1.84 }),
+]);
+
 /** Move a time by `d` ms, keeping its form (epoch ms, epoch s, ISO); anything else as is. */
 function shiftTime(v, d) {
   if (typeof v === 'number') return v < 1e11 ? Math.round(v + d / 1000) : v + d;
@@ -196,7 +205,7 @@ export function demoRunsAnswer(method, url, now = Date.now()) {
   try { id = decodeURIComponent(p.slice(RUNS_PATH.length + 1)); } catch { return { status: 404, body: { error: 'unknown run' } }; }
   const run = demoRuns(now).find((r) => r.run === id);
   if (!run) return { status: 404, body: { error: 'unknown run' } };
-  return { status: 200, body: { run: withSessions(run, null) } };
+  return { status: 200, body: { run: withSessions(run, bindRuns([{ run, dirs: [] }], DEMO_RUN_SESSIONS, now)) } };
 }
 
 /** The hub's fleet Morning path (server/hub/routes, fenced; its merge drops `runs`). */

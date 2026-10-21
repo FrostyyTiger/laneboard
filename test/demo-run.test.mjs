@@ -89,7 +89,11 @@ test('demoRunsAnswer: GET /api/runs and GET /api/runs/<id>; anything else is not
   const one = demoRunsAnswer('GET', runUrl('acme-search'), NOW);
   assert.equal(one.status, 200);
   assert.equal(one.body.run.run, 'acme-search');
-  assert.ok(one.body.run.rounds.every((r) => Array.isArray(r.sessions) && r.sessionsUsd === null), 'rounds carry (no) sessions like the route');
+  assert.ok(one.body.run.rounds.every((r) => Array.isArray(r.sessions)), 'rounds carry sessions like the route');
+  // T22: round 3 names a session the demo knows, so the run page shows one linked round
+  const named = one.body.run.rounds.filter((r) => r.sessions.length);
+  assert.deepEqual(named.map((r) => [r.n, r.sessions.map((s) => [s.name, s.how])]), [[3, [['search api', 'id']]]]);
+  assert.equal(named[0].sessionsUsd, 1.84);
   assert.equal(demoRunsAnswer('GET', runUrl('acme-billing'), NOW).body.run.run, 'acme-billing');
   assert.equal(demoRunsAnswer('GET', '/api/runs/other', NOW).status, 404);
   assert.equal(demoRunsAnswer('GET', '/api/runs/%E0%A4%A', NOW).status, 404);

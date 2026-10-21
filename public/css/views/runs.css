@@ -300,6 +300,11 @@ a.rn-need-open { text-decoration: none; }
 .rn-tl-s { white-space: nowrap; }
 a.rn-tl-s { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
 a.rn-tl-s:hover { color: var(--text-1); }
+/* T22: a round with a named session links its role, underlined with a ↗ like an artifact title */
+a.rn-tl-role-a { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
+a.rn-tl-role-a:hover { color: var(--text-1); }
+a.rn-tl-s:focus-visible,
+a.rn-tl-role-a:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
 .rn-tl-s + .rn-tl-s { margin-left: var(--sp-2); }
 .rn-tl-s[data-maybe] { color: var(--text-3); }
 

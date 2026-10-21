@@ -9,7 +9,7 @@
 {"v":1,"t":"usage","run":"acme-search","ts":1792488222000,"n":2,"fiveHourPct":22,"sevenDayPct":24,"fiveHourResetsAt":1792493640,"overage":false}
 {"v":1,"t":"cost","run":"acme-search","ts":1792488228000,"n":2,"usd":0.95}
 {"v":1,"t":"round.end","run":"acme-search","ts":1792488240000,"n":2,"outcome":"kept","commit":"b2d3f4a","usd":0.95}
-{"v":1,"t":"round.start","run":"acme-search","ts":1792488300000,"n":3,"role":"builder","task":"T1","title":"Paged search endpoint with a cursor"}
+{"v":1,"t":"round.start","run":"acme-search","ts":1792488300000,"n":3,"role":"builder","task":"T1","title":"Paged search endpoint with a cursor","session":"5e1c0a7d-3b2f-4c19-9a6e-2d8f40b1c7e3"}
 {"v":1,"t":"usage","run":"acme-search","ts":1792491402000,"n":3,"fiveHourPct":33,"sevenDayPct":26,"fiveHourResetsAt":1792496820,"overage":false}
 {"v":1,"t":"cost","run":"acme-search","ts":1792491408000,"n":3,"usd":1.84}
 {"v":1,"t":"score","run":"acme-search","ts":1792491414000,"name":"tests","value":0.88,"better":"higher","n":3}
