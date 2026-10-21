@@ -120,12 +120,12 @@ test('codes: the row code is upper case and short, derived from the id when abse
   assert.equal(R.codeText('   ', 'builder-a'), 'BA');
 });
 
-test('lamp: down -> p1, stale -> p3, both hatched; live with no alarm -> working/ok', () => {
+test('lamp: down -> p1, stale -> grey stale, both hatched; live with no alarm -> working/ok', () => {
   const [all, a, b, c] = R.railRows(fleet(), {});
   assert.equal(b.p, '1');
   assert.equal(b.hatched, true);
   assert.equal(b.status, 'down');
-  assert.equal(c.p, '3');
+  assert.equal(c.p, 'stale');
   assert.equal(c.hatched, true);
   assert.equal(c.status, 'stale');
   assert.equal(a.p, 'run', 'a live builder with a working lane and no alarm is grey "working"');
@@ -248,7 +248,7 @@ test('buildRail: a listbox of options with aria-selected, lamp, plate, count and
   assert.ok(opts[2].classList.contains('brail-row--hatch'), 'down is hatched');
   assert.ok(opts[3].classList.contains('brail-row--hatch'), 'stale is hatched');
   assert.equal(opts[2].find('lamp')[0].dataset.p, '1');
-  assert.equal(opts[3].find('lamp')[0].dataset.p, '3');
+  assert.equal(opts[3].find('lamp')[0].dataset.p, 'stale');
   const tog = root.find('brail-tog')[0];
   assert.equal(tog.getAttribute('aria-expanded'), 'true');
   assert.match(tog.getAttribute('aria-label'), /Collapse/);
@@ -329,4 +329,28 @@ test('rail.css: collapsed rows hide count and segbar, stale/down rows are hatche
   assert.match(css, /\.shell\[data-rail="open"\] \.shell-rail \{[^}]*width: var\(--rail-w\)/);
   assert.match(css, /\.brail-row:focus-visible \{[^}]*var\(--accent\)/);
   assert.doesNotMatch(css, /oklch\(|#[0-9a-f]{3,8}\b|rgb\(|gradient\(|box-shadow|backdrop-filter|@keyframes/i, 'rail.css keeps the guardrails');
+});
+
+// runs T31 (reviews/11-designer.md, new 8): a down or stale builder never takes
+// the blue p3 hue in the sidebar or the header chip, in either theme.
+test('T31: down is the p1 (red) token, stale is grey; neither uses p3', () => {
+  const lp = (status) => R.builderLamp({ id: 'x', status }, []);
+  assert.equal(lp('down').p, '1');
+  assert.equal(lp('stale').p, 'stale');
+  const comp = read('public/css/components.css');
+  assert.match(comp, /\.lamp\[data-p="1"\]\s*\{\s*color:\s*var\(--p1\)/);
+  assert.match(comp, /\.lamp\[data-p="stale"\]\s*\{[^}]*--tex-hatch/);
+  const shell = read('public/css/shell.css');
+  assert.match(shell, /\.conn\.down::before\s*\{[^}]*var\(--p1\)/);
+  const stale = shell.match(/\.builder-chip\.status-stale::before\s*\{([^}]*)\}/);
+  assert.ok(stale, 'a stale chip rule exists');
+  assert.doesNotMatch(stale[1], /--p3/);
+  // No theme-scoped rule gives the lamp or the chip another colour: one rule for both.
+  const tokens = read('public/css/tokens.css');
+  for (const m of (comp + shell).matchAll(/\[data-theme="(?:light|dark)"\][^{]*(?:\.lamp|builder-chip|\.conn)[^{]*\{([^}]*)\}/g)) {
+    assert.doesNotMatch(m[1], /color|background/, `theme rule ${m[0]}`);
+  }
+  // p1 is the red family (hue 25) in both themes.
+  const p1 = [...tokens.matchAll(/--p1:\s*oklch\(\d+% [\d.]+ (\d+)\)/g)].map((m) => Number(m[1]));
+  assert.ok(p1.length >= 2 && p1.every((h) => h === 25), `p1 hues ${p1}`);
 });

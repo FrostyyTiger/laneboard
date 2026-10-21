@@ -115,8 +115,9 @@ export function renderRateLimits() {
 // it) through the router; routes only select and filter.
 //
 // The lamp is the builder's worst alarm (§7 `alarms`, plus its `health`
-// sample's own alarms), or its link state: down -> p1, stale -> p3, and both
-// rows are hatched. Builder names and codes are untrusted: they reach the DOM
+// sample's own alarms), or its link state: down -> p1 (the trouble red), stale
+// -> the grey hollow `stale` lamp (as the phone sheet), and both rows are
+// hatched: the hatch is the shape cue, so no third hue (runs T31). Builder names and codes are untrusted: they reach the DOM
 // through textContent and setAttribute only.
 //
 // The collapse state lives in localStorage['lb.rail'] ('open' | 'min'). On a
@@ -173,13 +174,13 @@ export function worseP(a, b) {
 /**
  * One builder's lamp: {p, unack, label, n}. `list` is the store's alarms
  * ({builder, priority 'P1'..'P4', acked}); `mix` its laneMix. Down -> p1,
- * stale -> p3, else the worst alarm (unack when an alarm at that priority is
+ * stale -> 'stale' (grey, hatched), else the worst alarm (unack when an alarm at that priority is
  * not acked), else working (any lane running) or ok. Pure.
  */
 export function builderLamp(b, list = [], mix = null) {
   if (!b || typeof b !== 'object') return { p: 'off', unack: false, label: 'unknown', n: 0 };
   if (b.status === 'down') return { p: '1', unack: false, label: 'down', n: 0 };
-  if (b.status === 'stale') return { p: '3', unack: false, label: 'stale', n: 0 };
+  if (b.status === 'stale') return { p: 'stale', unack: false, label: 'stale', n: 0 };
   let p = null;
   let unack = false;
   let n = 0;

@@ -112,7 +112,9 @@
   border-radius: var(--radius);
   color: var(--text-2);
 }
-.builder-chip.status-stale::before { background: var(--p3); border-radius: 0; transform: rotate(45deg) scale(0.8); }
+/* Stale is grey and hollow with the hatch, like the rail's stale lamp; down is
+   the p1 square above. No blue: p3 is not a link state (runs T31). */
+.builder-chip.status-stale::before { background: var(--tex-hatch); border: var(--bw) solid var(--off); box-sizing: border-box; }
 .builder-chip.status-connecting::before { background: var(--off); }
 
 /* View nav: icon buttons, 3-4 character labels from 1440px. */
