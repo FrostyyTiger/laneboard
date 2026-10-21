@@ -358,7 +358,8 @@ function runRows(runs, now) {
       const link = a && typeof a === 'object' ? httpHref(a.url) : null;
       if (!link) continue;
       rows.push({
-        ...base, id: `rp:${r.run}:${link}`, kind: 'run-pr', p: '3',
+        // News, not trouble (README §5): the grey hollow lamp, never a hue.
+        ...base, id: `rp:${r.run}:${link}`, kind: 'run-pr', p: 'off', lampLabel: 'pr to review',
         reason: `pr: ${inboxClip(str(a.title), LIMITS.reason) ?? inboxClip(link, LIMITS.reason)}`,
         link, since: isNum(a.ts) ? a.ts : 0,
       });

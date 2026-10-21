@@ -294,6 +294,10 @@ test('runs: open needs and recent PRs, newest first, each linking to the run pag
   assert.equal(r.link, 'https://example.invalid/acme/acme-api/pull/42');
   assert.equal(rowOf(m, 'rn:acme-docs:0').reason, 'fence: touched a fenced file');
   assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').reason, 'pr: Paged search');
+  // T35: a PR is news, the grey hollow lamp; an open need keeps the amber triangle.
+  assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').p, 'off');
+  assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').lampLabel, 'pr to review');
+  assert.equal(r.p, '2');
   // A `wait` need is the loop sleeping: no row.
   assert.equal(rowOf(m, 'rn:acme-search:3'), null);
   assert.equal(m.count, 4);
