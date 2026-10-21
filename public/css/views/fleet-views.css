@@ -471,7 +471,7 @@
 }
 .mkv-k {
   font-family: var(--font-label);
-  font-size: var(--fs-10);
+  font-size: var(--fs-11);
   font-weight: 600;
   letter-spacing: var(--ls-label);
   text-transform: uppercase;
@@ -488,7 +488,7 @@
 /* A count that is not known while a builder sent no data (T24): `—`, then this. */
 .mkv.nodata .mkv-v { color: var(--text-3); }
 .mkv-nodata {
-  font-size: var(--fs-10);
+  font-size: var(--fs-11);
   color: var(--text-3);
 }
 .mblock > .mrow-top { margin-bottom: var(--sp-2); }
@@ -500,6 +500,27 @@
   background: var(--bg-surface);
 }
 .morning-summary > .mrow-top { gap: var(--sp-1) var(--sp-2); overflow: hidden; }
+/* One label size (11 caps) and one value size (13 mono) in the strip, spend
+   included (T25). On a phone it is a 3-column grid of label-over-value cells
+   instead of a row that wraps: no dividers, the grid's gap is the rule. */
+.morning-summary .mkv-v { font-size: var(--fs-13); }
+@media (max-width: 699px) {
+  .morning-summary > .mrow-top {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-2) var(--sp-3);
+  }
+  .morning-summary .mkv {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    gap: 0 var(--sp-1);
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .morning-summary .mkv-k { grid-column: 1 / -1; }
+}
 .morning-missing {
   display: flex;
   align-items: center;
@@ -511,6 +532,8 @@
 
 /* one reading width for the whole page, the run page's cap (T27, T37) */
 #morning-body { max-width: var(--read-max); }
+/* the head too, so the `since` date ends on the panel's right edge (T25) */
+#view-morning > .view-head { max-width: var(--read-max); }
 .morning-builder { margin: var(--sp-4) 0; }
 .morning-builder > .mblock:last-child { margin-bottom: 0; }
 .morning-quiet { margin: var(--sp-4) 0; }
@@ -518,8 +541,7 @@
 .morning-stuck,
 .morning-run,
 .morning-deferred { align-items: flex-start; }
-.morning-stuck > .lamp,
-.morning-run > .lamp { margin-top: 4px; }
+.morning-stuck > .lamp { margin-top: 4px; }
 /* Morning's links (run title, deferred item) read as text like every other
    link: no resting underline, an underline on hover/focus, and a muted `›`
    after the name saying it opens a page (T42). */
@@ -529,12 +551,21 @@
 .morning-run a.mrow-name:focus-visible,
 .morning-deferred a.mrow-name:hover,
 .morning-deferred a.mrow-name:focus-visible { text-decoration: underline; text-decoration-color: var(--text-1); }
-.morning-run a.mrow-name::after,
 .morning-deferred a.mrow-name::after { content: ' \203A'; color: var(--text-3); font-weight: 400; }
-/* The run's state word (`stopped: budget`) is bare muted text in both themes:
-   the shared .mrow-kind fill is a white wash that shows in dark only, and a
-   stop is not trouble, so a chip shape would say nothing (T36). */
-.morning-run .mrow-kind { background: none; padding: 0; color: var(--text-3); }
+/* A run row (T25): the title at the body step, not the biggest type on the
+   screen; the whole title is the link (no `›`). The state is the meta line's
+   leading mark + word, plain muted text in both themes, no chip (T36). */
+.morning-run .mrow-name { font-size: var(--fs-12); font-weight: 600; }
+.morning-run-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-3);
+}
+.morning-run-state { background: none; padding: 0; min-width: 0; overflow-wrap: anywhere; }
 .morning-run-sub { margin-top: var(--sp-1); font-family: var(--font-mono); font-size: var(--fs-11); }
 
 .mrow-pkg {

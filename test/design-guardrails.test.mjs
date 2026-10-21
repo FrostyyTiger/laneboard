@@ -101,7 +101,8 @@ test('no code sets the style attribute wholesale (only el.style.x) [9]', () => {
 // dark and read as bare text in light (the shared .mrow-kind wash is white).
 test('T36: the Morning run state word has one treatment in both themes, no fill', () => {
   const all = sheets().flatMap((f) => declarations(fs.readFileSync(path.join(CSS_DIR, f), 'utf8')).decls);
-  const run = all.filter((d) => d.prelude.split(',').map((s) => s.trim()).includes('.morning-run .mrow-kind'));
+  // T25: the word moved into the meta line (.morning-run-state)
+  const run = all.filter((d) => d.prelude.split(',').map((s) => s.trim()).includes('.morning-run-state'));
   const val = (prop) => run.filter((d) => d.prop === prop).at(-1)?.value;
   assert.match(val('background') ?? '', /^(none|transparent)$/, 'no fill behind the state word');
   assert.equal(val('padding'), '0', 'no chip padding');
@@ -136,11 +137,14 @@ test('T42: Morning title links have no resting underline, one on hover/focus, an
     && d.prop === prop).at(-1)?.value;
   for (const row of ['.morning-run', '.morning-deferred']) {
     const link = `${row} a.mrow-name`;
+    // T25: a run row's whole title is the link, so it has no `›` after it
+    const chevron = row === '.morning-deferred';
     assert.equal(of(link, 'text-decoration'), 'none', `${link}: no resting underline`);
     assert.equal(of(link, 'color'), 'var(--text-1)', `${link}: text colour`);
     assert.match(of(`${link}:hover`, 'text-decoration') ?? '', /^underline/, `${link}: underline on hover`);
     assert.match(of(`${link}:focus-visible`, 'text-decoration') ?? '', /^underline/, `${link}: underline on focus`);
-    assert.match(of(`${link}::after`, 'content') ?? '', /\\203A|›/, `${link}: a › after the name`);
+    if (chevron) assert.match(of(`${link}::after`, 'content') ?? '', /\\203A|›/, `${link}: a › after the name`);
+    else assert.equal(of(`${link}::after`, 'content'), undefined, `${link}: no › after the name`);
   }
   // nothing themes the link back to an underline
   const themed = all.filter((d) => /data-theme|prefers-color-scheme/.test(d.prelude + d.at.join(' '))

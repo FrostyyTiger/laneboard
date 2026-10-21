@@ -40,6 +40,9 @@
     position: absolute;
     inset: -4px 0;
   }
+  /* The selected builder chip is a 1 px accent border, no fill: the lamp
+     carries the state, a peach or brown plate would be one more tint (T25). */
+  .strip-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--bg-surface); }
 
   /* The bottom sheet: fixed at full height, moved by transform only. */
   .shell-sheet {

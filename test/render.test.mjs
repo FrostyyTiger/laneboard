@@ -1068,8 +1068,9 @@ test('phone: lane cards are one column, rows keep Yes/No, the launch form will n
   assert.ok(labels.includes('Yes') && labels.includes('No'), `Yes/No survive inside a lane card (${labels})`);
   const css = readStyles();
   assert.match(css, /\.grid \{ display: grid; grid-template-columns: 1fr;/, 'one column below 700px');
-  const phone = css.slice(css.lastIndexOf('@media (max-width: 699px)'));
-  assert.match(phone, /\.launch-form input, \.launch-form select \{ font-size: 16px; \}/);
+  // inside a phone block (several sheets have one; the launch form's is not the last)
+  const phone = css.split('@media (max-width: 699px)').slice(1);
+  assert.ok(phone.some((b) => /^ \{[^@]*\.launch-form input, \.launch-form select \{ font-size: 16px; \}/.test(b)));
 });
 
 test('the render budget of v2 holds with 3 lanes and 6 sessions', async () => {
@@ -1128,9 +1129,9 @@ test('the accent is spent only on focus and pins', () => {
   for (const sel of accentUsers) {
     assert.ok(
       // focus, the keyboard cursor, a pin, the active view, an active filter,
-      // a drop target, and a filing a human overrode — all of them transient
-      // "you did this" marks rather than a property of the data.
-      /focus|cursor|dropping|btn\.on|tab|lane-clear|qb-form|foverride/.test(sel),
+      // a drop target, a filing a human overrode and a picked filter chip — all
+      // of them transient "you did this" marks rather than a property of the data.
+      /focus|cursor|dropping|btn\.on|tab|lane-clear|qb-form|foverride|aria-pressed/.test(sel),
       `${sel} spends the accent on something that is not focus, a pin or an interaction`
     );
   }

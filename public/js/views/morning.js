@@ -13,7 +13,7 @@
 // back while you were away (quiet hours or rate limit). A builder that did not
 // answer draws no block: the summary strip names it with a stale lamp (runs
 // plan T33). A fleet block with nothing in the window is not drawn either; the
-// empty ones share one muted line at the end ("Nothing on review wait, …").
+// empty ones share one muted line at the end ("Nothing else waiting since …").
 //
 // Runs (runs plan A3, T7): one block per run with events in the window
 // (server/runs/digest.mjs runsInWindow, `runs` in GET /api/morning): goal
@@ -378,7 +378,12 @@ export function renderModel(box, m) {
   if (!empty.has('approvals')) box.append(approvalsBlock(m.approvals));
   if (!empty.has('package cost')) box.append(packageBlock(m.costByPackage, m.totals.sessions.usd));
   if (!empty.has('held back')) box.append(deferredBlock(m.deferred, m));
-  if (empty.size) box.append(el('p', 'empty morning-quiet', `Nothing on ${[...empty].join(', ')}.`));
+  if (empty.size) {
+    // A sentence, not a list of section names (T25); the names stay in its title.
+    const quiet = el('p', 'empty morning-quiet', m.sinceText ? `Nothing else waiting ${m.sinceText}.` : 'Nothing else waiting.');
+    quiet.title = `Nothing on ${[...empty].join(', ')}`;
+    box.append(quiet);
+  }
   return box;
 }
 
@@ -412,7 +417,8 @@ function morningSummary(m) {
   spend.title = `sessions ${money(sessions.usd)} + runs ${money(runs.usd)}`;
   row.append(spend);
   row.append(kvCount('tokens', m.counts.tokens));
-  row.append(kv('review', `${m.review.n} · ${m.review.waiting} waiting`));
+  row.append(kv('review', String(m.review.n)));
+  row.append(kv('waiting', String(m.review.waiting)));
   row.append(kv('approvals', String(m.approvals.answered)));
   sec.append(row);
   const why = new Map(m.builders.filter((b) => b.error).map((b) => [b.id, `${b.id}: ${b.error}`]));
@@ -448,24 +454,36 @@ function builderBlocks(b, m) {
 
 // --- runs ------------------------------------------------------------------
 
+/**
+ * The meta line of a Morning run row (T25): the state word, the stop reason,
+ * rounds, cost and usage, in that order; the row's lamp leads it.
+ */
+export function runMetaParts(r) {
+  const word = STATE_META[r.state].word;
+  const out = [r.stop && r.stop.reason !== 'unknown' ? `${word} · ${r.stop.reason}` : word];
+  out.push(`${r.rounds} ${r.rounds === 1 ? 'round' : 'rounds'}`);
+  if (r.usd !== null) out.push(money(r.usd));
+  if (r.usage.fiveHour) out.push(`usage 5h ${r.usage.fiveHour.text}`);
+  return out;
+}
+
 function runsBlock(list) {
   const sec = block('Runs', list.length);
   for (const r of list) {
+    // Title at body size on its own line, then the state as a leading mark +
+    // word in the meta line; the whole title is the link, no chevron (T25).
     const row = el('div', 'mrow morning-run');
     row.dataset.run = r.run;
-    const p = r.stop ? r.stop.p : STATE_META[r.state].p;
-    row.append(lamp(p, { label: r.stop ? `stopped: ${r.stop.reason}` : STATE_META[r.state].word }));
     const main = el('div', 'mrow-main');
-    const top = el('div', 'mrow-top');
     const goal = r.href ? el('a', 'mrow-name', r.goal) : el('span', 'mrow-name', r.goal);
     if (r.href) goal.setAttribute('href', r.href);
     goal.title = r.run;
-    top.append(goal);
-    top.append(el('span', 'mrow-stage', `${r.rounds} ${r.rounds === 1 ? 'round' : 'rounds'}`));
-    top.append(el('span', 'mrow-kind', r.stop ? `stopped: ${r.stop.reason}` : STATE_META[r.state].word));
-    if (r.usd !== null) top.append(el('span', 'mrow-age', money(r.usd)));
-    if (r.usage.fiveHour) top.append(el('span', 'mrow-age', `5h ${r.usage.fiveHour.text}`));
-    main.append(top);
+    main.append(goal);
+    const meta = el('div', 'morning-run-meta');
+    const p = r.stop ? r.stop.p : STATE_META[r.state].p;
+    meta.append(lamp(p, { label: r.stop ? `stopped: ${r.stop.reason}` : STATE_META[r.state].word }));
+    meta.append(el('span', 'morning-run-state', runMetaParts(r).join(' · ')));
+    main.append(meta);
     if (r.scores.length || r.prs.length) {
       const sub = el('div', 'mrow-top morning-run-sub');
       for (const s of r.scores) {
