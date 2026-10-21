@@ -90,7 +90,9 @@ kill $!; rm -r "$tmp"
 
 The CLI talks to `http://127.0.0.1:7777` unless told otherwise, so without
 `LANEBOARD_URL=http://127.0.0.1:7788` it writes into the real board (`laneboard ls`
-works the same once it is on the PATH, see [CLI](#cli)). Run in the foreground
+works the same once it is on the PATH, see [CLI](#cli)). `laneboard run …` is the exception:
+it writes to `./.laneboard/run.jsonl` unless `--post` is given, so the copy's `#/runs` stays
+empty; add `--post` (it takes no value, the board is `$LANEBOARD_URL`). Run in the foreground
 (no `&`), the copy stops with Ctrl-C in its terminal; remove `"$tmp"` after.
 The state dir and audit file point at the temp dir so the copy never opens the
 real audit log: with only the port, the database and the config set, it shares
@@ -159,6 +161,10 @@ in `.gitignore`, add it to your own repo's ignore file too.
 `laneboard feed` turns one source into a feed for the Map (`--stdout`, `--out f` or `--push <url>`):
 see [docs/map.md](docs/map.md#pushing-a-feed) for pushing it and
 [docs/providers.md](docs/providers.md#feedprovider) for the feeders and how to add one.
+
+`laneboard morning`'s `tonight` (the default window) reaches back to 18:00 local time of the
+evening that has begun (today's after 18:00, else yesterday's) or 12 hours, whichever is further
+back: at 07:00 that is 13 hours, at 02:00 it is 12. Local time is the config's `timezone`.
 
 `LANEBOARD_URL` overrides the server address. `ls`, `morning` and `credit` print
 `board: <url>` on stderr (the board that answered), so stdout stays the table. An unknown

@@ -261,3 +261,35 @@ test('README and docs/runs.md name `#/runs/<id>` beside `#/runs?run=<id>`; READM
   assert.ok(cli.includes('(docs/map.md#pushing-a-feed)'), 'link to docs/map.md');
   assert.ok(cli.includes('(docs/providers.md#feedprovider)'), 'link to docs/providers.md');
 });
+
+test('README: the test-copy recipe says `laneboard run` writes the file unless --post; README, docs/runs.md and `morning --help` say how far back tonight reaches (night 5 T60)', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { windowStart } = await import('../server/util.mjs');
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  const flat = (s) => s.replace(/\s+/g, ' ');
+
+  // The --post sentence sits right after the test-copy block (the one with LANEBOARD_URL).
+  const recipe = readme.indexOf('LANEBOARD_URL=http://127.0.0.1:7788 node bin/laneboard ls');
+  assert.ok(recipe > 0, 'no test-copy recipe');
+  const after = flat(readme.slice(recipe, recipe + 900));
+  assert.match(after, /`laneboard run …` is the exception: it writes to `\.\/\.laneboard\/run\.jsonl` unless `--post` is given, so the copy's `#\/runs` stays empty/);
+
+  // The window sentence, in the docs and in the help, and the rule it states is the server's.
+  const rule = /`?tonight`?,? (?:\(the default window\) |the default, )?reaches back to 18:00 local time of the evening that has begun \(today's after 18:00, else yesterday's\) or 12 hours, whichever is further back/;
+  assert.match(flat(readme), rule, 'README');
+  assert.match(flat(doc), rule, 'docs/runs.md');
+  const help = execFileSync(process.execPath, [new URL('../bin/laneboard', import.meta.url).pathname, 'morning', '--help'], {
+    env: { PATH: process.env.PATH, LANEBOARD_URL: 'http://127.0.0.1:9' }, encoding: 'utf8',
+  });
+  assert.match(flat(help), rule, 'morning --help');
+  assert.match(help, /^usage: laneboard morning \[--window tonight\|12h\|24h\|7d\]/);
+
+  const H = 3600000;
+  const at7 = Date.parse('2026-10-22T05:00:00Z'); // 07:00 in Zurich
+  const at2 = Date.parse('2026-10-22T00:00:00Z'); // 02:00 in Zurich
+  const at22 = Date.parse('2026-10-21T20:00:00Z'); // 22:00 in Zurich
+  assert.equal((at7 - windowStart('tonight', 'Europe/Zurich', at7)) / H, 13);
+  assert.equal((at2 - windowStart('tonight', 'Europe/Zurich', at2)) / H, 12);
+  assert.equal((at22 - windowStart('tonight', 'Europe/Zurich', at22)) / H, 12);
+  assert.match(flat(readme), /at 07:00 that is 13 hours, at 02:00 it is 12/);
+});

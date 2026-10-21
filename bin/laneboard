@@ -370,7 +370,15 @@ async function cmdRestart() {
 /** The widest line `laneboard morning` prints, so it reads in an 100-column terminal. */
 const MORNING_COLS = 100;
 
+const MORNING_USAGE = `usage: laneboard morning [--window tonight|12h|24h|7d]
+  what needs you, what finished, what it cost, over one window (default tonight).
+  tonight reaches back to 18:00 local time of the evening that has begun (today's
+  after 18:00, else yesterday's) or 12 hours, whichever is further back: at 07:00
+  that is 13 hours. Local time is the config's \`timezone\` (LANEBOARD_TIMEZONE).
+`;
+
 async function cmdMorning() {
+  if (argv.includes('-h') || argv.includes('--help')) return process.stdout.write(MORNING_USAGE);
   const window = takeFlag('--window', 'tonight');
   // An unknown window is a usage error (exit 2), not a silent `tonight`.
   const { WINDOWS } = await import('../server/util.mjs');

@@ -346,7 +346,9 @@ round has `sessions`, the sessions tied to it (`sessionId`, `name`, `cwd`,
 their summed cost (null when none is known).
 
 `GET /api/morning` (and `laneboard morning`, one line per run) carries `runs`:
-every run with an event in the window, as `run`, `goal`, `state`, `rounds`
+every run with an event in the window (`tonight`, the default, reaches back to 18:00 local time of the
+evening that has begun (today's after 18:00, else yesterday's) or 12 hours, whichever is further
+back), as `run`, `goal`, `state`, `rounds`
 (started or ended in the window), `scores` (per name: `start` = the first value
 in the window, `end` = the last, `better`), `stop` (the reason or null), `prs`
 (URLs of the `pr` artifacts given in the window), `usd` (the run's `cost.usd` when
