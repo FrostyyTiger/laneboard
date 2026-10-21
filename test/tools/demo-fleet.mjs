@@ -28,7 +28,8 @@
 //              `scratch` seen but not declared) and Reach have something to draw
 //   a run      the recorded run test/fixtures/runs/demo-run.jsonl, answered by
 //              the forwarder at GET /api/runs and /api/runs/<id> (a hub has no
-//              runs route; test/helpers/demo-hub.mjs `demoRunsAnswer`)
+//              runs route; test/helpers/demo-hub.mjs `demoRunsAnswer`), and added
+//              as `runs` to the hub's /api/fleet/morning (`demoMorningWithRuns`)
 //
 // Isolation (RULES 3): the hub runs with its own temp HOME, TMUX_TMPDIR,
 // XDG_*_HOME, LANEBOARD_STATE_DIR, LANEBOARD_AUDIT_FILE, LANEBOARD_CONFIG and
@@ -54,7 +55,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed, demoRunsAnswer } from '../helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed, demoRunsAnswer, demoMorningWithRuns, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -359,6 +360,27 @@ function designTokens(ingressPort, req, res) {
   up.end();
 }
 
+// The hub's Morning merge drops `runs` (fenced), so the forwarder adds the
+// demo run's digest to /api/fleet/morning itself (night 3 T7).
+function morningWithRuns(ingressPort, req, res) {
+  const h = serveHeaders(req.headers);
+  delete h['accept-encoding'];
+  const up = http.request({ host: '127.0.0.1', port: ingressPort, method: 'GET', path: req.url, headers: h }, (r) => {
+    const chunks = [];
+    r.on('data', (c) => chunks.push(c));
+    r.on('end', () => {
+      let body = Buffer.concat(chunks);
+      if (r.statusCode === 200) {
+        try { body = Buffer.from(JSON.stringify(demoMorningWithRuns(JSON.parse(body.toString('utf8'))))); } catch { /* keep the hub's bytes */ }
+      }
+      res.writeHead(r.statusCode ?? 502, { 'content-type': r.headers['content-type'] ?? 'application/json; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store' });
+      res.end(body);
+    });
+  });
+  up.on('error', () => { if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' }); res.end('hub unreachable\n'); });
+  up.end();
+}
+
 function forwarder(ingressPort) {
   const server = http.createServer((req, res) => {
     if (DESIGN && req.method === 'GET' && req.url.split('?')[0] === '/css/tokens.css') { designTokens(ingressPort, req, res); return; }
@@ -369,6 +391,7 @@ function forwarder(ingressPort) {
       res.end(body);
       return;
     }
+    if (req.method === 'GET' && req.url.split('?')[0] === FLEET_MORNING_PATH) { morningWithRuns(ingressPort, req, res); return; }
     const up = http.request({ host: '127.0.0.1', port: ingressPort, method: req.method, path: req.url, headers: serveHeaders(req.headers) }, (r) => {
       const out = {};
       for (const [k, v] of Object.entries(r.headers)) if (!HOP_BY_HOP.has(k)) out[k] = v;

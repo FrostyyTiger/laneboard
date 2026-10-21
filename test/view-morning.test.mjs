@@ -251,3 +251,95 @@ test('view: builder mode fetches GET /api/morning and renders ungrouped', async 
     delete globalThis.fetch;
   }
 });
+
+// --- runs (runs plan T7) ---------------------------------------------------------
+
+/** Digest rows as server/runs/digest.mjs runsInWindow gives them. */
+const RUNS = [
+  {
+    run: 'acme-search', goal: 'Add paged search to acme-api', state: 'stopped', rounds: 6,
+    scores: { tests: { start: 40, end: 52, better: 'higher' }, lint: { start: 3, end: 5, better: 'lower' }, size: { start: 7, end: 7, better: null } },
+    stop: 'done', prs: ['https://example.invalid/acme/api/pull/12', 'javascript:alert(1)'], usd: 9.98,
+    usage: { fiveHourPct: 92, sevenDayPct: 40, overage: false }, startedAt: T0 - 8 * H, updatedAt: T0 - H,
+  },
+  { run: 'acme docs!', goal: HOSTILE, state: 'running', rounds: 1, scores: {}, stop: null, prs: [], usd: null, usage: null },
+  { goal: 'no id' },
+];
+
+test('model T7: runs from /api/morning become blocks: goal link, rounds, score start → end with direction, stop, PRs, cost', () => {
+  const m = V.morningModel({ ...built(), runs: RUNS }, { hub: false, s: store });
+  assert.equal(m.runs.length, 2, 'a row without a run id is dropped');
+  const [a, b] = m.runs;
+  assert.equal(a.run, 'acme-search');
+  assert.equal(a.href, '#/runs?run=acme-search');
+  assert.equal(a.goal, 'Add paged search to acme-api');
+  assert.equal(a.rounds, 6);
+  assert.deepEqual(a.stop, { reason: 'done', p: 'ok' });
+  assert.equal(a.usd, 9.98);
+  assert.equal(a.usage.fiveHour.text, '92%');
+  assert.deepEqual(a.scores.map((s) => [s.name, s.text, s.dir, s.good, s.mark]), [
+    ['lint', '3 → 5', 'up', false, '▲'],
+    ['size', '7', 'same', null, '='],
+    ['tests', '40 → 52', 'up', true, '▲'],
+  ]);
+  assert.deepEqual(a.prs, [{ href: 'https://example.invalid/acme/api/pull/12', text: 'PR #12' }], 'only http(s) PR links');
+  assert.equal(b.href, null, 'an id outside the protocol pattern gets no page link');
+  assert.equal(b.stop, null);
+  assert.equal(b.usd, null);
+  assert.deepEqual(b.scores, []);
+});
+
+test('model T7: no runs (none sent, an older builder, the hub merge) is an empty list', () => {
+  assert.deepEqual(V.morningModel(built(), { hub: false, s: store }).runs, []);
+  assert.deepEqual(V.morningModel(merged(), { hub: true, s: store }).runs, []);
+  assert.deepEqual(V.morningModel({ ...built(), runs: 'nope' }, { hub: false, s: store }).runs, []);
+});
+
+test('model T7: a hub payload with runs on top or on a builder row keeps both', () => {
+  const data = merged();
+  data.runs = [RUNS[0]];
+  data.builders[0].runs = [{ ...RUNS[1], run: 'b-run' }];
+  const m = V.morningModel(data, { hub: true, s: store });
+  assert.deepEqual(m.runs.map((r) => [r.run, r.builder]), [['acme-search', null], ['b-run', 'builder-a']]);
+});
+
+test('model T7: the real digest of the demo run reads whole', async () => {
+  const { demoRun } = await import('./helpers/demo-hub.mjs');
+  const { runsInWindow } = await import('../server/runs/digest.mjs');
+  const now = Date.now();
+  const rows = runsInWindow([demoRun(now)], { since: now - 24 * H, now });
+  const [r] = V.morningModel({ ...built(), runs: rows }, { hub: false, s: store }).runs;
+  assert.ok(r.href.startsWith('#/runs?run='));
+  assert.ok(r.rounds > 0);
+  assert.ok(r.scores.length >= 2 && r.scores.every((s) => s.dir !== null));
+  assert.ok(r.stop && r.stop.reason);
+  assert.ok(r.prs.length >= 1);
+  assert.ok(r.usd > 0);
+});
+
+test('render T7: a Runs block first, one row per run, text as text, links only to the run page and http(s) PRs', () => {
+  const box = render(V.morningModel({ ...built({ needs: [need('x', 'need', T0)] }), runs: RUNS }, { hub: false, s: store }));
+  const titles = byClass(box, 'mblock').map((b) => b.children[0]._text);
+  assert.deepEqual(titles, ['Runs', 'Needs you', 'Finished', 'What it cost']);
+  const rows = byClass(box, 'morning-run');
+  assert.equal(rows.length, 2);
+  const nodes = walk(box);
+  assert.ok(!nodes.some((n) => n.tagName === 'IMG'));
+  assert.ok(texts(box).includes(HOSTILE), 'a hostile goal appears literally');
+  const all = texts(rows[0]);
+  for (const want of ['6 rounds', 'stopped: done', '$9.98', '40 → 52', 'PR #12']) assert.ok(all.some((t) => t.includes(want)), want);
+  const links = nodes.filter((n) => n.tagName === 'A').map((l) => l.attrs.href);
+  assert.deepEqual(links, ['#/runs?run=acme-search', 'https://example.invalid/acme/api/pull/12']);
+  const worse = byClass(rows[0], 'rn-score').filter((c) => c.dataset.trend === 'worse');
+  assert.equal(worse.length, 1, 'only the score that went the wrong way gets the trouble tone');
+});
+
+test('render T7: hub mode puts the Runs block after the summary; no runs draws no block', () => {
+  const data = merged();
+  data.runs = [RUNS[0]];
+  let titles = byClass(render(V.morningModel(data, { hub: true, s: store })), 'mblock').map((b) => b.children[0]._text);
+  assert.equal(titles[1], 'Runs', 'right after the summary (an mblock with no title)');
+  assert.ok(titles.indexOf('Runs') < titles.indexOf('Needs you'));
+  titles = byClass(render(V.morningModel(merged(), { hub: true, s: store })), 'mblock').map((b) => b.children[0]._text);
+  assert.ok(!titles.includes('Runs'));
+});

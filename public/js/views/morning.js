@@ -13,6 +13,12 @@
 // back while you were away (quiet hours or rate limit). A builder that did not
 // answer is a row with its error and a stale lamp, never dropped.
 //
+// Runs (runs plan A3, T7): one block per run with events in the window
+// (server/runs/digest.mjs runsInWindow, `runs` in GET /api/morning): goal
+// linking to the run page, rounds, each score start -> end with its direction,
+// the stop reason, PR chips and the cost. A payload without `runs` (an older
+// builder, or the hub merge, which does not carry them yet) draws no block.
+//
 // Everything in the payload was written by a builder or its agents: it goes in
 // through textContent, title or dataset only, never markup.
 import { $, el } from '../core/dom.js';
@@ -25,6 +31,7 @@ import { block, gauge, laneStripe, prChip } from '../ui/widgets.js';
 import { lamp, panel } from '../ui/components.js';
 import { toast } from '../ui/shell.js';
 import { openSheet } from '../ui/sheet.js';
+import { STOP_P, STATE_META, burnOf, rnClean, runHref, safeHref, scoreText } from './runs.js';
 
 // ---------------------------------------------------------------- morning
 //
@@ -116,6 +123,64 @@ function morningBuilderOf(x, s) {
   };
 }
 
+// --- runs (T7) ----------------------------------------------------------------
+
+const RUN_ID_RX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/** One digest score {start, end, better} -> {name, text, dir, good, mark, title}. */
+export function runScoreOf(name, s) {
+  const start = fin(s?.start);
+  const end = fin(s?.end);
+  const better = s?.better === 'higher' || s?.better === 'lower' ? s.better : null;
+  const dir = start === null || end === null ? null : end > start ? 'up' : end < start ? 'down' : 'same';
+  const good = dir === null || dir === 'same' || better === null ? null : (dir === 'up') === (better === 'higher');
+  const mark = dir === 'up' ? '▲' : dir === 'down' ? '▼' : dir === 'same' ? '=' : '';
+  const text = start === null || start === end ? scoreText(end ?? start) : `${scoreText(start)} → ${scoreText(end)}`;
+  const word = good === true ? ', better' : good === false ? ', worse' : '';
+  return { name, text, dir, good, mark, title: `${name}: ${scoreText(start)} → ${scoreText(end)}${word}` };
+}
+
+/** A PR URL -> {href, text} ("PR #12"), or null when it is not http(s). */
+export function runPrOf(url) {
+  const href = safeHref(url);
+  if (!href) return null;
+  const n = /\/pull\/(\d{1,9})(?:[/?#]|$)/.exec(href)?.[1];
+  return { href, text: n ? `PR #${n}` : 'PR' };
+}
+
+/** One digest row (server/runs/digest.mjs) -> what the block draws; null when it names no run. */
+export function morningRunOf(r, builder = null) {
+  if (!isObj(r)) return null;
+  const id = rnClean(r.run, 64);
+  if (!id) return null;
+  const state = Object.hasOwn(STATE_META, r.state) ? r.state : r.stop ? 'stopped' : 'running';
+  const reason = rnClean(r.stop, 32);
+  const scores = isObj(r.scores) ? r.scores : {};
+  const usage = burnOf(r.usage);
+  return {
+    run: id,
+    builder: typeof builder === 'string' && BUILDER_ID_RX.test(builder) ? builder : null,
+    href: RUN_ID_RX.test(id) ? runHref(id) : null,
+    goal: rnClean(r.goal) ?? id,
+    state,
+    rounds: Number.isInteger(r.rounds) && r.rounds >= 0 ? r.rounds : 0,
+    scores: Object.keys(scores).sort().map((k) => runScoreOf(rnClean(k, 32) ?? '?', scores[k])),
+    stop: state === 'stopped' ? { reason: reason ?? 'unknown', p: STOP_P[reason] ?? 'off' } : null,
+    prs: arr(r.prs).map(runPrOf).filter(Boolean),
+    usd: fin(r.usd),
+    usage,
+  };
+}
+
+/** The runs of a payload: its own `runs`, then any a builder row carries (a future hub merge). */
+export function morningRuns(data) {
+  const out = arr(data?.runs).map((r) => morningRunOf(r, typeof data?.builder === 'string' ? data.builder : null));
+  for (const b of arr(data?.builders).filter(isObj)) {
+    for (const r of arr(b.runs)) out.push(morningRunOf(r, b.id));
+  }
+  return out.filter(Boolean);
+}
+
 const EMPTY_REVIEW = Object.freeze({ n: 0, waiting: 0, medianWaitMs: null, p90WaitMs: null, longest: [] });
 const EMPTY_APPROVALS = Object.freeze({ answered: 0, approved: 0, denied: 0, released: 0, medianAnswerMs: null });
 
@@ -123,7 +188,8 @@ const EMPTY_APPROVALS = Object.freeze({ answered: 0, approved: 0, denied: 0, rel
  * Any Morning payload -> one shape:
  *   {hub, error?, window, label, since, builders:[{id, code, error, stale, needsYou,
  *    finished, cost, stuck}], totals:{needsYou, finished, usd, tokens}, review,
- *    approvals, costByPackage, stuck (no known builder), deferred, missing, rateLimits}
+ *    approvals, costByPackage, stuck (no known builder), deferred, missing, rateLimits,
+ *    runs:[morningRunOf()]}
  * `hub` is whether the page is fed by a hub. A hub merge has `builders[]`; a hub
  * `?b=` answer is one builder row; a builder's own answer is wrapped as one builder.
  */
@@ -182,6 +248,7 @@ export function morningModel(data, { hub = false, s = null } = {}) {
     deferred: arr(data.deferred).filter(isObj),
     missing: [...missing].sort(),
     rateLimits: isObj(data.rateLimits) ? data.rateLimits : null,
+    runs: morningRuns(data),
   };
 }
 
@@ -225,12 +292,15 @@ export function renderMorning() {
 
 /** Paint a morningModel() into `box` (cleared by the caller). Exported for tests. */
 export function renderModel(box, m) {
+  const runs = m.runs?.length ? runsBlock(m.runs) : null;
   if (!m.hub) {
     const b = m.builders[0];
+    if (runs) box.append(runs);
     if (b) for (const n of builderBlocks(b, m)) box.append(n);
     return box;
   }
   box.append(morningSummary(m));
+  if (runs) box.append(runs);
   for (const b of m.builders) box.append(builderGroup(b, m));
   if (!m.builders.length) box.append(el('p', 'empty', 'No builder is configured.'));
   box.append(reviewBlock(m.review, m));
@@ -287,6 +357,54 @@ function builderBlocks(b, m) {
   if (m.hub) out.push(stuckBlock(b.stuck, 'Stuck incidents'));
   out.push(costBlock(b.cost, m.rateLimits));
   return out;
+}
+
+// --- runs ------------------------------------------------------------------
+
+function runsBlock(list) {
+  const sec = block('Runs', list.length);
+  for (const r of list) {
+    const row = el('div', 'mrow morning-run');
+    row.dataset.run = r.run;
+    const p = r.stop ? r.stop.p : STATE_META[r.state].p;
+    row.append(lamp(p, { label: r.stop ? `stopped: ${r.stop.reason}` : STATE_META[r.state].word }));
+    const main = el('div', 'mrow-main');
+    const top = el('div', 'mrow-top');
+    const goal = r.href ? el('a', 'mrow-name', r.goal) : el('span', 'mrow-name', r.goal);
+    if (r.href) goal.setAttribute('href', r.href);
+    goal.title = r.run;
+    top.append(goal);
+    top.append(el('span', 'mrow-stage', `${r.rounds} ${r.rounds === 1 ? 'round' : 'rounds'}`));
+    top.append(el('span', 'mrow-kind', r.stop ? `stopped: ${r.stop.reason}` : STATE_META[r.state].word));
+    if (r.usd !== null) top.append(el('span', 'mrow-age', money(r.usd)));
+    if (r.usage.fiveHour) top.append(el('span', 'mrow-age', `5h ${r.usage.fiveHour.text}`));
+    main.append(top);
+    if (r.scores.length || r.prs.length) {
+      const sub = el('div', 'mrow-top morning-run-sub');
+      for (const s of r.scores) {
+        const chip = el('span', 'rn-score');
+        chip.title = s.title;
+        if (s.good === false) chip.dataset.trend = 'worse';
+        else if (s.good === true) chip.dataset.trend = 'better';
+        chip.append(el('span', 'rn-score-k', s.name));
+        chip.append(el('span', 'rn-score-v', s.text));
+        if (s.mark) chip.append(el('span', 'rn-score-m', s.mark));
+        sub.append(chip);
+      }
+      for (const pr of r.prs) {
+        const a = el('a', 'chip-pr pr-link', pr.text);
+        a.setAttribute('href', pr.href);
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.title = pr.href;
+        sub.append(a);
+      }
+      main.append(sub);
+    }
+    row.append(main);
+    sec.append(row);
+  }
+  return sec;
 }
 
 // --- needs you -------------------------------------------------------------

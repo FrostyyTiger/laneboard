@@ -101,3 +101,16 @@ test('runs.css: the page head keeps the state word whole; narrow charts put the 
   const narrow = css.slice(css.indexOf('@media (max-width: 1024px)'));
   assert.match(narrow, /\.rn-chart-svg \{[^}]*grid-column: 1 \/ -1;[^}]*grid-row: 2;/);
 });
+
+test('demoMorningWithRuns adds the run digest to a fleet Morning answer, keeps anything else (T7)', async () => {
+  const { demoMorningWithRuns } = await import('./helpers/demo-hub.mjs');
+  const now = Date.now();
+  const out = demoMorningWithRuns({ window: 'tonight', since: now - 12 * 3600_000, builders: [] }, now);
+  assert.equal(out.runs.length, 1);
+  assert.ok(out.runs[0].rounds > 0 && out.runs[0].prs.length >= 1);
+  assert.deepEqual(demoMorningWithRuns({ since: now + 1, builders: [] }, now).runs, [], 'nothing in a window that starts later');
+  const has = { runs: [] };
+  assert.equal(demoMorningWithRuns(has, now), has);
+  assert.equal(demoMorningWithRuns(null, now), null);
+  assert.deepEqual(demoMorningWithRuns([1], now), [1]);
+});

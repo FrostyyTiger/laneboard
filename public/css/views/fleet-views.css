@@ -494,8 +494,13 @@
 .morning-error::before { content: "◆ "; color: var(--p3); }
 
 .morning-stuck,
+.morning-run,
 .morning-deferred { align-items: flex-start; }
-.morning-stuck > .lamp { margin-top: 4px; }
+.morning-stuck > .lamp,
+.morning-run > .lamp { margin-top: 4px; }
+.morning-run a.mrow-name { color: var(--text-1); text-decoration: underline; text-decoration-color: var(--line-strong); overflow-wrap: anywhere; }
+.morning-run a.mrow-name:hover { text-decoration-color: var(--text-1); }
+.morning-run-sub { margin-top: var(--sp-1); font-family: var(--font-mono); font-size: var(--fs-11); }
 .morning-deferred a.mrow-name { color: var(--text-1); text-decoration: underline; text-decoration-color: var(--line-strong); }
 .morning-deferred a.mrow-name:hover { text-decoration-color: var(--text-1); }
 

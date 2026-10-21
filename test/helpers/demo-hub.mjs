@@ -20,6 +20,7 @@ import path from 'node:path';
 import { parseLines, foldRun } from '../../server/runs/protocol.mjs';
 import { summarize } from '../../server/runs/summary.mjs';
 import { withSessions } from '../../server/runs/bind.mjs';
+import { runsInWindow } from '../../server/runs/digest.mjs';
 
 export const DEMO_HOSTNAME = 'demo-host';
 
@@ -163,4 +164,18 @@ export function demoRunsAnswer(method, url, now = Date.now()) {
   const run = demoRun(now);
   if (id !== run.run) return { status: 404, body: { error: 'unknown run' } };
   return { status: 200, body: { run: withSessions(run, null) } };
+}
+
+/** The hub's fleet Morning path (server/hub/routes, fenced; its merge drops `runs`). */
+export const FLEET_MORNING_PATH = '/api/fleet/morning';
+
+/**
+ * The hub's /api/fleet/morning answer with the demo run's digest added as
+ * `runs` (night 3 T7): the real `runsInWindow` over the window the hub
+ * answered for. A body that is not an object, or already has `runs`, is kept.
+ */
+export function demoMorningWithRuns(body, now = Date.now()) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || body.runs !== undefined) return body;
+  const since = typeof body.since === 'number' && Number.isFinite(body.since) ? body.since : now - 12 * 3600_000;
+  return { ...body, runs: runsInWindow([demoRun(now)], { since, now }) };
 }
