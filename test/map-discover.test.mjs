@@ -111,3 +111,33 @@ test('no feeds: the topology is unchanged; feed: ids are laneboard\'s own', () =
   assert.equal(withDiscovered(t, new Map()), t);
   assert.throws(() => parseTopology({ nodes: [{ id: 'feed:x' }] }), /laneboard's own/);
 });
+
+test('two guests with one name in one source stay two nodes; another source merges with one', () => {
+  // A two-node cluster: `web` on hv1 (101) and another `web` on hv2 (201).
+  const raw = fixture('pve-resources.json');
+  raw.data.push(
+    { id: 'node/hv2', type: 'node', node: 'hv2', status: 'online', cpu: 0.05, maxcpu: 8, mem: 1, maxmem: 2 },
+    { id: 'qemu/201', type: 'qemu', vmid: 201, name: 'web', node: 'hv2', status: 'running', cpu: 0.02, maxcpu: 2, mem: 1, maxmem: 4 },
+  );
+  const pve = proxmox.toFeed(raw, { source: 'proxmox', now: NOW });
+  const alone = byLabel(buildFleet({ topology: null, feeds: feeds(pve), now: NOW, hostname: 'h' }), 'web');
+  assert.deepEqual(alone.map((n) => n.id).sort(), ['feed:proxmox/101', 'feed:proxmox/201']);
+
+  // A tailnet peer `web` is one of those machines, not a third node.
+  const ts = tsFeed();
+  ts.guests.push({ name: 'web', type: 'tailnet', status: 'running', detail: { IPs: '192.0.2.10' } });
+  const m = buildFleet({ topology: null, feeds: feeds(ts, pve), now: NOW, hostname: 'h' });
+  const web = byLabel(m, 'web');
+  assert.equal(web.length, 2);
+  const merged = web.filter((n) => n.detail?.['Seen by'] === 'proxmox, tailscale');
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].detail.IPs, '192.0.2.10');
+  assert.ok(web.every((n) => n.metrics), 'each keeps its hypervisor numbers');
+  assert.equal(new Set(m.nodes.map((n) => n.id)).size, m.nodes.length);
+
+  // Two declared nodes named `web` claim one machine each.
+  const topology = parseTopology({ nodes: [{ id: 'web' }, { id: 'web-b', label: 'WEB' }] });
+  const d = withDiscovered(topology, feeds(pve));
+  assert.deepEqual(d.nodes.filter((n) => n.id === 'web' || n.id === 'web-b').map((n) => n.feed).sort(), ['proxmox/101', 'proxmox/201']);
+  assert.equal(byLabel(d, 'web').filter((n) => n.discovered).length, 0);
+});

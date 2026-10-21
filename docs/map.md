@@ -273,6 +273,10 @@ guest's `name` (else its `vmid`). Names compare case-insensitively.
   a Proxmox guest or host is drawn once. The richest view leads (a host, then
   a guest with CPU or memory numbers, then the rest); the others add their
   `detail` (its tailnet addresses, say) and `Seen by` lists the sources.
+- Inside one source a machine is its `vmid` (else its name): two Proxmox
+  guests named `web` on two cluster nodes are two nodes. Names merge only
+  across sources, and a machine of another source named `web` joins one of
+  them; two declared nodes named `web` claim one each.
 - A feed naming the machine the core is named after (the title, else the
   hostname) hangs its guests on the core instead of drawing it twice.
 - A builder whose id is a discovered guest's name hangs under that room.

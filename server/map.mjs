@@ -539,8 +539,10 @@ const hasNumbers = (g) => [g.cpu, g.mem, g.maxmem, g.memFrac].some((v) => typeof
 
 /**
  * The machines the feeds name: each source's host (named `host.name`, else
- * the source) and each guest (named `name`, else its vmid). A machine named
- * in two feeds (a tailnet peer that is also a PVE guest) is one machine.
+ * the source) and each guest (named `name`, else its vmid), keyed inside its
+ * source by vmid (else name). A machine named in two feeds (a tailnet peer
+ * that is also a PVE guest) is one machine; two guests of one source with the
+ * same name (`web` on two cluster nodes) are two.
  */
 function feedMachines(feeds) {
   const out = [];
@@ -577,14 +579,26 @@ export function withDiscovered(topology, feeds, { coreLabel = null } = {}) {
   const topo = topology ?? EMPTY_TOPOLOGY;
   const machines = feedMachines(feeds);
   if (!machines.length) return topo;
-  const groups = new Map(); // name -> machines, the best first
+  // A group is one machine: at most one entry per source, merged by name
+  // across sources. A second `web` in the same source starts a group of its
+  // own (key `web\u00002`), so it is never folded into the first.
+  const groups = new Map(); // group key -> machines, the best first
+  const byName = new Map(); // name -> group keys, in feed order
   for (const m of machines) {
-    if (!groups.has(m.name)) groups.set(m.name, []);
-    groups.get(m.name).push(m);
+    const keys = byName.get(m.name) ?? [];
+    let key = keys.find((k) => !groups.get(k).some((x) => x.source === m.source));
+    if (!key) {
+      key = keys.length ? `${m.name}\u0000${keys.length + 1}` : m.name;
+      keys.push(key);
+      byName.set(m.name, keys);
+      groups.set(key, []);
+    }
+    groups.get(key).push(m);
+    m.group = key;
   }
   for (const g of groups.values()) g.sort((a, b) => a.rank - b.rank);
   const byRef = new Map(machines.map((m) => [refKey(m), m]));
-  const owner = new Map(); // group name -> node id
+  const owner = new Map(); // group key -> node id
   const nodes = topo.nodes.map((n) => ({ ...n }));
   const hasCore = nodes.some((n) => n.kind === 'core');
   // A `feed` ref claims first, so a name never steals what a ref names.
@@ -592,12 +606,13 @@ export function withDiscovered(topology, feeds, { coreLabel = null } = {}) {
     const r = feedRef(n.feed);
     if (!r || r.service) continue;
     const m = byRef.get(refKey(r)) ?? (r.guest != null ? machines.find((x) => x.source === r.source && x.guest != null && nameKey(x.label) === nameKey(r.guest)) : null);
-    if (m && !owner.has(m.name)) owner.set(m.name, n.id);
+    if (m && !owner.has(m.group)) owner.set(m.group, n.id);
   }
   for (const n of nodes) {
     if (feedRef(n.feed)?.service) continue;
-    for (const key of [nameKey(n.label), nameKey(n.id)]) {
-      if (!key || !groups.has(key) || owner.has(key)) continue;
+    for (const name of [nameKey(n.label), nameKey(n.id)]) {
+      const key = name && byName.get(name)?.find((k) => !owner.has(k));
+      if (!key) continue;
       owner.set(key, n.id);
       if (!n.feed) n.feed = refOf(groups.get(key)[0]);
       break;
@@ -605,10 +620,10 @@ export function withDiscovered(topology, feeds, { coreLabel = null } = {}) {
   }
   // The other feeds naming the same machine add what they know (its IPs, say).
   const claimed = new Map(nodes.map((n) => [n.id, n]));
-  for (const [name, id] of owner) {
+  for (const [key, id] of owner) {
     const n = claimed.get(id);
     const own = feedRef(n.feed);
-    const also = groups.get(name).filter((m) => !own || refKey(m) !== refKey(own)).map(refOf);
+    const also = groups.get(key).filter((m) => !own || refKey(m) !== refKey(own)).map(refOf);
     if (also.length) n.also = [...(n.also ?? []), ...also];
   }
   const core = hasCore ? nodes.find((n) => n.kind === 'core').id : '__core';
@@ -620,14 +635,14 @@ export function withDiscovered(topology, feeds, { coreLabel = null } = {}) {
   // The rest: hosts first, so a guest knows the node its source became.
   const ids = new Set(nodes.map((n) => n.id));
   const found = [];
-  const place = (name) => {
-    if (owner.has(name)) return;
-    const [lead, ...rest] = groups.get(name);
+  const place = (key) => {
+    if (owner.has(key)) return;
+    const [lead, ...rest] = groups.get(key);
     const id = `feed:${refOf(lead)}`;
     if (ids.has(id)) return;
     ids.add(id);
-    owner.set(name, id);
-    const hostNode = owner.get(machines.find((x) => x.source === lead.source && x.guest == null).name);
+    owner.set(key, id);
+    const hostNode = owner.get(machines.find((x) => x.source === lead.source && x.guest == null).group);
     const sources = [...new Set([lead, ...rest].map((x) => x.source))];
     found.push({
       id,
@@ -640,8 +655,8 @@ export function withDiscovered(topology, feeds, { coreLabel = null } = {}) {
       detail: sources.length > 1 ? { 'Seen by': sources.join(', ') } : undefined,
     });
   };
-  for (const m of machines) if (m.guest == null) place(m.name);
-  for (const m of machines) if (m.guest != null) place(m.name);
+  for (const m of machines) if (m.guest == null) place(m.group);
+  for (const m of machines) if (m.guest != null) place(m.group);
   return { ...topo, nodes: [...nodes, ...found], coreRefs };
 }
 
