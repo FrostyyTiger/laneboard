@@ -944,7 +944,17 @@ every subcommand:
 
 // A usage error is one line plus a pointer to the help; no subcommand at all
 // prints the whole usage (that is what the user asked for).
-const runUsage = (msg) => die(msg ? `run: ${msg}\nsee: laneboard run --help` : RUN_USAGE, 2);
+// `runHint` is a close match for an unexpected argument (set by cmdRun).
+let runHint = '';
+const runUsage = (msg) => die(msg
+  ? `run: ${msg}\n${msg.startsWith('unexpected argument') ? runHint : ''}see: laneboard run --help`
+  : RUN_USAGE, 2);
+
+/** `did you mean: laneboard run <sub> <its args>` for a subcommand name, from RUN_USAGE. */
+function subHint(sub) {
+  const line = RUN_USAGE.split('\n').find((l) => l.startsWith(`  ${sub} `));
+  return `did you mean: laneboard run ${sub} ${line.trim().slice(sub.length).trim().split(/\s{2,}/)[0]}\n`;
+}
 
 /** `laneboard run <sub> … -h|--help`: a -h/--help word that is not a flag's value. */
 function wantsHelp(allowed) {
@@ -1044,6 +1054,9 @@ async function cmdRun() {
     process.stdout.write(`${subUsage(sub)}\n`);
     return;
   }
+  // `run needs ack …`: a subcommand name as the first word after another is most
+  // likely a second subcommand; if the words end up refused, the error names it.
+  if (Object.hasOwn(RUN_SUBS, argv[0] ?? '') && argv[0] !== sub) runHint = subHint(argv[0]);
   // `ack [<run>] <ref>`: up to two words that are not flags or flag values, anywhere
   // after `ack`; one is the ref, two are the run and the ref. A third is an error below.
   const words = [];

@@ -599,3 +599,19 @@ test('T12: `run needs "text"` takes the bare word as --text; a second word or --
   const help = await run(['run', 'needs', '--help'], env, dir);
   assert.match(help.stdout, /needs \["text" \| --text t\]/);
 });
+
+test('T32: a subcommand name as the bare word after another (`run needs ack demo 0`) adds a did-you-mean line', async (t) => {
+  const dir = tmpDir(t);
+  const env = envFor(dir);
+  const file = path.join(dir, '.laneboard', 'run.jsonl');
+  const r = await run(['run', 'needs', 'ack', 'demo', '0'], env, dir);
+  assert.equal(r.code, 2);
+  assert.match(r.stderr, /unexpected argument: "demo"\ndid you mean: laneboard run ack \[<run>\] <ref>/);
+  const other = await run(['run', 'score', 'needs', '--run', 'r1'], env, dir);
+  assert.equal(other.code, 2);
+  assert.match(other.stderr, /did you mean: laneboard run needs \["text" \| --text t\]/);
+  // Only an unexpected argument gets the hint; a plain error stays one line plus the pointer.
+  const plain = await run(['run', 'score', '--run', 'r1', 'oops'], env, dir);
+  assert.doesNotMatch(plain.stderr, /did you mean/);
+  assert.equal(fs.existsSync(file), false, 'nothing written');
+});
