@@ -137,6 +137,13 @@ function sessionId(v) {
   return typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v) ? v : null;
 }
 
+/** Where a PR stands: `open`, `merged` or `closed` (any case, as `gh pr view` prints them); anything else is null. */
+export const ARTIFACT_STATES = ['open', 'merged', 'closed'];
+function artifactState(v) {
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : null;
+  return ARTIFACT_STATES.includes(s) ? s : null;
+}
+
 function rawCopy(obj) {
   const out = {};
   for (const [k, v] of Object.entries(obj).slice(0, MAX_RAW_KEYS)) {
@@ -200,7 +207,7 @@ const SHAPES = {
   artifact(o) {
     const url = str(o.url);
     if (!url) return 'no url';
-    return { kind: str(o.kind, 32) || 'link', url, title: str(o.title) };
+    return { kind: str(o.kind, 32) || 'link', url, title: str(o.title), state: artifactState(o.state) };
   },
   'run.stop'(o) {
     return { reason: str(o.reason, 32) || 'unknown', rounds: int(o.rounds), usd: num(o.usd) };
@@ -274,6 +281,8 @@ function round(rounds, n) {
  * - Rounds are keyed by `n` and sorted, whatever order they came in; a round
  *   started twice (a retry) counts its `starts` and adds up its cost.
  * - A score without `n` belongs to the latest round started before it (0 = before any).
+ * - An artifact is listed once per URL, where it first came; a later line with
+ *   the same URL updates its `state` and (when not empty) its `title`.
  * - `cost.usd` is summed: `total` restarts when the loop does.
  * - A `wait` need closes when the next round starts or the run stops; any need
  *   closes when a `needs.ack` names it (by its place in the list or its `ts`).
@@ -290,7 +299,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
     events: 0, skipped: typeof skipped === 'number' ? skipped : Object.values(skipped).reduce((a, b) => a + b, 0),
   };
   const rounds = new Map();
-  const urls = new Set();
+  const urls = new Map();
   let current = 0;
   let last = null;
 
@@ -348,12 +357,18 @@ export function foldRun(events, { skipped = 0 } = {}) {
         if (!need.acked) Object.assign(need, { open: false, acked: true, ackedAt: e.ts, by: e.by });
         break;
       }
-      case 'artifact':
-        if (!urls.has(e.url)) {
-          urls.add(e.url);
-          run.artifacts.push({ kind: e.kind, url: e.url, title: e.title, n: current, ts: e.ts });
+      case 'artifact': {
+        const a = urls.get(e.url);
+        if (!a) {
+          const next = { kind: e.kind, url: e.url, title: e.title, state: e.state, n: current, ts: e.ts };
+          urls.set(e.url, next);
+          run.artifacts.push(next);
+        } else {
+          if (e.state !== null) a.state = e.state;
+          if (e.title) a.title = e.title;
         }
         break;
+      }
       case 'run.stop':
         run.stop = { reason: e.reason, rounds: e.rounds, usd: e.usd, ts: e.ts };
         for (const need of run.needs) if (need.kind === 'wait') need.open = false;

@@ -38,7 +38,7 @@ export function summarize(run, { stuck = STUCK_DEFAULTS, now = Date.now() } = {}
     deadlineAt: run.deadlineAt,
     needs: run.needs.filter((n) => n.open),
     artifacts: run.artifacts.length,
-    prs: run.artifacts.filter((a) => a.kind === 'pr').map((a) => ({ url: a.url, title: a.title, ts: a.ts })),
+    prs: run.artifacts.filter((a) => a.kind === 'pr').map((a) => ({ url: a.url, title: a.title, state: a.state ?? null, ts: a.ts })),
     stop: run.stop ? run.stop.reason : null,
     stopUsd: typeof run.stop?.usd === 'number' ? run.stop.usd : null,
     stuck: runStuck(run, stuck, now),

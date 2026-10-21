@@ -30,7 +30,7 @@
 //     score    --name m --value x [--better higher|lower] [--n N] [--max x]
 //     needs    [--kind decision|wait] [--text t] [--link url] [--n N]
 //     ack      [<run>] <ref> [--by b]                  closes a need: ref = its place (0 = first) or its ts; a closed one: nothing sent
-//     artifact --url u [--kind pr|link] [--title t]
+//     artifact --url u [--kind pr|link] [--title t] [--state open|merged|closed]
 //     stop     [--reason done|deadline|rounds|…] [--rounds N] [--usd x]
 //     The line goes to --file, else $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl;
 //     --post sends it to POST /api/runs/events instead. --run defaults to the run
@@ -844,7 +844,7 @@ const RUN_SUBS = {
   score: { '--name': ['name', 'str'], '--value': ['value', 'num'], '--better': ['better', 'str'], '--n': ['n', 'int'], '--max': ['max', 'num'] },
   needs: { '--kind': ['kind', 'str'], '--text': ['text', 'str'], '--link': ['link', 'str'], '--n': ['n', 'int'] },
   ack: { '--ref': ['ref', 'str'], '--by': ['by', 'str'] },
-  artifact: { '--url': ['url', 'str'], '--kind': ['kind', 'str'], '--title': ['title', 'str'] },
+  artifact: { '--url': ['url', 'str'], '--kind': ['kind', 'str'], '--title': ['title', 'str'], '--state': ['state', 'str'] },
   stop: { '--reason': ['reason', 'str'], '--rounds': ['rounds', 'int'], '--usd': ['usd', 'num'] },
 };
 const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', ack: 'needs.ack', artifact: 'artifact', stop: 'run.stop' };
@@ -858,7 +858,7 @@ const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | -
   score    --name m --value x [--better higher|lower] [--n N] [--max x]
   needs    [--kind decision|wait|…] [--text t] [--link url] [--n N]
   ack      [<run>] <ref> [--by b]                 close a need: <ref> is its place (0 = the first) or its ts (no such need: exit 1; already acked: nothing sent, exit 0)
-  artifact --url u [--kind pr|link|…] [--title t]
+  artifact --url u [--kind pr|link|…] [--title t] [--state open|merged|closed]
   stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
 every subcommand:
   --run <id>   the run; defaults to the run part of $LANEBOARD_RUN (which \`round\` exports)

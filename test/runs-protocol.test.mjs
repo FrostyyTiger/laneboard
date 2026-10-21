@@ -208,6 +208,34 @@ test('duplicate artifacts are kept once', () => {
   assert.equal(run.artifacts.length, 1);
 });
 
+test('artifact state: open, merged or closed in any case; anything else is null (night 5 T1)', () => {
+  const url = 'https://example.invalid/acme/acme-api/pull/7';
+  assert.equal(ok({ t: 'artifact', kind: 'pr', url }).state, null);
+  assert.equal(ok({ t: 'artifact', kind: 'pr', url, state: 'open' }).state, 'open');
+  assert.equal(ok({ t: 'artifact', kind: 'pr', url, state: 'MERGED' }).state, 'merged', 'gh pr view prints upper case');
+  assert.equal(ok({ t: 'artifact', kind: 'pr', url, state: ' closed ' }).state, 'closed');
+  for (const bad of ['draft', 'gone', '', 3, true, ['open'], { s: 'open' }]) {
+    assert.equal(ok({ t: 'artifact', kind: 'pr', url, state: bad }).state, null, JSON.stringify(bad));
+  }
+});
+
+test('a later artifact line with the same URL updates state and title, in its first place (night 5 T1)', () => {
+  const pr = 'https://example.invalid/acme/acme-api/pull/7';
+  const run = foldRun([
+    ok({ t: 'artifact', kind: 'report', url: 'https://example.invalid/report' }),
+    ok({ t: 'artifact', kind: 'pr', url: pr, title: 'v2 export (draft)', state: 'open' }),
+    ok({ t: 'artifact', kind: 'link', url: 'https://example.invalid/other' }),
+    ok({ t: 'artifact', kind: 'pr', url: pr, title: 'v2 export', state: 'merged' }),
+    ok({ t: 'artifact', kind: 'pr', url: pr, title: '', state: 'bogus' }),
+  ]);
+  assert.equal(run.artifacts.length, 3);
+  assert.equal(run.artifacts[1].url, pr, 'keeps its place');
+  assert.equal(run.artifacts[1].state, 'merged', 'a bad state later does not clear it');
+  assert.equal(run.artifacts[1].title, 'v2 export', 'the later title; an empty one does not clear it');
+  assert.equal(run.artifacts[1].kind, 'pr');
+  assert.equal(run.artifacts[0].state, null);
+});
+
 test('needs.ack: a ref is a place (below 1e9) or a time; anything else is skipped', () => {
   assert.deepEqual([ok({ t: 'needs.ack', ref: 0 })].map((e) => [e.ref, e.refBy, e.by]), [[0, 'index', null]]);
   assert.equal(ok({ t: 'needs.ack', ref: '3' }).ref, 3);

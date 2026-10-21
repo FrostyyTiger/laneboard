@@ -34,6 +34,13 @@ test('the needs.ack row names every `by` that may close a fence need (night 4 T6
   for (const by of FENCE_ACK_BY) assert.ok(row.includes(`\`${by}\``), by);
 });
 
+test('the artifact row documents `state` and the update rule (night 5 T1)', () => {
+  const row = doc.split('\n').find((l) => l.startsWith('| `artifact` |'));
+  assert.ok(row, 'no artifact row');
+  for (const s of ['`state`', '`open`', '`merged`', '`closed`']) assert.ok(row.includes(s), s);
+  assert.match(row, /later line with that URL updates its `state`/);
+});
+
 test('the states table matches STATES', () => {
   assert.deepEqual([...tableNames('States')].sort(), [...STATES].sort());
 });

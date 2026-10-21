@@ -90,6 +90,20 @@ test('every subcommand writes one line parseLine accepts, to ./.laneboard/run.js
   assert.equal(run1.artifacts.length, 1);
 });
 
+test('artifact --state merged writes the state; the help names it (night 5 T1)', async (t) => {
+  const dir = tmpDir(t);
+  const url = 'https://example.invalid/acme/acme-api/pull/7';
+  const r = await run(['run', 'artifact', '--run', 'readiness', '--kind', 'pr', '--url', url, '--state', 'merged'], envFor(dir), dir);
+  assert.equal(r.code, 0, r.stderr);
+  const [l] = lines(path.join(dir, '.laneboard', 'run.jsonl'));
+  assert.equal(JSON.parse(l).state, 'merged');
+  const p = parseLine(l);
+  assert.ok(p.ok);
+  assert.equal(p.event.state, 'merged');
+  const help = await run(['run', 'artifact', '--help'], envFor(dir), dir);
+  assert.match(help.stdout + help.stderr, /artifact --url u .*--state open\|merged\|closed/);
+});
+
 test('round prints an export line for eval; --run then defaults from $LANEBOARD_RUN', async (t) => {
   const dir = tmpDir(t);
   const file = path.join(dir, 'out', 'r.jsonl');

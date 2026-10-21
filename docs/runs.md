@@ -78,7 +78,7 @@ Every line has these fields:
 | `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n`, `max` (a positive number: the value that means done, such as the task count; the Map's progress ring) | one measurement of a metric; without `n` it belongs to the latest round (the highest `n` of a `round.start` or `round.end` so far in the file, even if that round has ended; 0 before any) |
 | `needs` | `kind` (default `decision`), `text`, `link`, `n` | the run needs a human; kind `wait` means the loop itself is waiting (a usage limit) and closes when the next round starts or the run stops; other kinds stay open until a `needs.ack` closes them; without `n` it belongs to the latest round, like `score` (even if that round has ended) |
 | `needs.ack` | **`ref`**, `by` (64 chars) | someone saw a need and closed it: `ref` is the need's place in the run's needs (`0` = the first `needs` line of the run, an integer below 10⁹) or its `ts` (epoch s or ms, or ISO; the first open need with that `ts`, else the first one). The first ack of a need counts (it records `ackedAt` and `by`); a second one changes nothing. A `ref` that names no need is kept raw (`laneboard run ack` refuses one, see below). A `fence` need (the loop reverted a round that touched a fenced file) closes only on an ack by a person: `by` is `inbox` (the Inbox's `a`), `run page` (its Ack button) or `owner` (`laneboard run ack … --by owner`); an ack with any other `by` or none (the reference loop writes `by: "loop"`) leaves it open and is kept raw, and a new round or `run.stop` never closes it. |
-| `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests, `report` for the run's report), `title` | something the run produced; the same URL twice is kept once |
+| `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests, `report` for the run's report), `title`, `state` (`open`, `merged` or `closed`, any case; anything else is read as none) | something the run produced; the same URL twice is kept once, in its first place, and a later line with that URL updates its `state` and (when not empty) its `title` |
 | `run.stop` | `reason` (default `unknown`), `rounds`, `usd` | the run stopped (reasons below) |
 | `usage` | `n`, `fiveHourPct`, `sevenDayPct`, `fiveHourResetsAt` (epoch s or ms), `overage` (boolean) | the account's usage windows after a round; a negative percentage means "not known" |
 | `cost` | **`usd`** (≥ 0), `n`, `total` | what a round cost; the run's cost is the sum of `usd` (the writer's own `total` restarts when the loop does) |
@@ -202,6 +202,7 @@ laneboard run round  --run readiness --n 3 --end --outcome kept --commit abc1234
 laneboard run needs  --run readiness --kind decision --text "Drop the v1 export?"
 laneboard run ack    readiness 0 --by owner
 laneboard run artifact --run readiness --kind pr --url https://example.invalid/acme/acme-api/pull/7
+laneboard run artifact --run readiness --url https://example.invalid/acme/acme-api/pull/7 --state merged
 laneboard run stop   --run readiness --reason done
 ```
 
@@ -212,7 +213,7 @@ laneboard run stop   --run readiness --reason done
 | `score` | **`--name`**, **`--value x`**, `--better higher\|lower`, `--n N`, `--max x` |
 | `needs` | `--kind`, `--text`, `--link`, `--n N` |
 | `ack` | **`<ref>`** (or `--ref`), `--by`; `ack <run> <ref>` names the run too |
-| `artifact` | **`--url`**, `--kind`, `--title` |
+| `artifact` | **`--url`**, `--kind`, `--title`, `--state` |
 | `stop` | `--reason`, `--rounds N`, `--usd x` |
 
 Every subcommand also takes `--run <id>`, `--file <path>` and `--post`, after
@@ -289,7 +290,7 @@ many), `maxRounds` (`budget.rounds`), `scores` (per name: the latest `n` and
 `value`, the `prev` value and `better`), `usage`, `cost` (the sum of
 `cost` events, see above), `deadline`,
 `deadlineAt`, the open `needs`, `artifacts` (a count), `prs` (the `pr`
-artifacts as `url`, `title`, `ts`; the Inbox lists them), `stop` (the reason or
+artifacts as `url`, `title`, `state`, `ts`; the Inbox lists them), `stop` (the reason or
 null), `stopUsd` (`stop.usd`, the loop's own figure, or null), `stuck` (`{rule, reason}` from the rules above, or null), `startedAt`,
 `updatedAt`. `GET /api/runs/<run>` answers `{"run": …}`
 with the whole fold (rounds, every score, needs, artifacts, raw events); each
@@ -383,7 +384,7 @@ makes of it:
 | `round.end` with `outcome` `kept`, `no-task-done`, `researched` (`open` questions), `reviewed`, `triaged`, `fixed`, `still-red` | the round's outcome and commit; the planner, operator and final rounds have no `round.end` |
 | `needs` `wait` (sleeping out a usage limit) | the run is `waiting`, not asking you anything |
 | `needs` `fence` (a round touched a fenced file and was reverted) | an open need on the row: the owner decides; also a row in the Inbox's Runs group, where `a` acknowledges it (a `needs.ack` with `by: "inbox"` that names the need by its `ts`, since places shift when a later-read file holds older needs); only a person's ack closes it (`needs.ack` above), and the run page lists it under the open needs as `acked by <by> <time> ago` |
-| `artifact` `pr` | the PR link on the run page; in the Inbox while the run is live and for 24 h after its last event (the protocol has no "merged") |
+| `artifact` `pr` | the PR link on the run page; in the Inbox while the run is live and for 24 h after its last event (an artifact's `state` comes with night 5 T2) |
 | `run.stop` with `reason`, `rounds`, `usd` | the stop reason: `done`, `deadline`, `rounds`, `no-progress`, `7d-window`, `overage`, `error`, `human` |
 
 Its file sits outside the dir the sessions work in and it writes neither
