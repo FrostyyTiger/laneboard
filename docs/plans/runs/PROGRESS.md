@@ -104,6 +104,7 @@ Planner notes (round 1), from reading the code:
 - [ ] T55 (6, r10 idea 2) [ui] The header cost line is at nav size and dim (`--text-3`) unless the day is over its budget, then the warn hue (T15 made it `--text-2` and `—`; with no budget configured it stays dim) — done when: a view test finds the dim class with no budget and under budget and the warn class over budget; board shots (dark + light, 1440 + 390), console clean
 - [ ] T56 (6, r10 idea 3) [ui] Lane-sidebar bars are grey unless the lane is in trouble (amber/red then), with no hatch fill (`public/css/`, the sidebar plate code in `public/js/ui/shell.js` or the view that draws it) — done when: a test reads the bar class for an ok lane (neutral) and a trouble lane (trouble hue) and no hatch rule on the bar; board and inbox shots (dark + light, 1440 + 390), console clean
 - [ ] T57 (6, r10 idea 5) [ui] Run page: the sparkline is at most 50 % of the content width, and the rounds table has aligned, content-sized columns and a max width of about 900 px at 1440 (`public/js/views/runs.js`, its CSS) — done when: a test reads the sparkline width cap and the table max-width rule; run page shots (dark + light, 1440 + 390), console clean
+- [ ] T58 (3, review 75-stranger 1 + 5) T48 does not show in `launch`: `laneboard launch foo --plan docs/x.md` with no config and no `--repo` prints `laneboard: args.repo is required` (rc 1), not the `--repo` / config `repos` hint. Find where that message comes from (probably a check before the server call in `bin/laneboard` `cmdLaunch`) and give it the T48 text; and the top-level help line for `launch` says `--repo` is needed unless the config lists `repos` — done when: `test/cli-deadends.test.mjs` runs `launch foo --plan x.md` with no repo and no config and finds `--repo` and `repos` in stderr, no `args.repo`, rc 1; a help test finds the `--repo` wording
 
 ## Research questions
 
@@ -208,6 +209,9 @@ Planner notes (round 1), from reading the code:
   - `/api/map` title is the host's session name; a neutral title with an empty config?
   - A `scripts/` helper or `npm run try` for the README test-copy recipe; and suggest `kill <pid>`
     from the `laneboard up, pid …` log line (same as the review 34 `kill $!` note).
+- From review 75-stranger (no task): `run stop --reason` still takes any text and `run ack` still
+  exits 0 for a repeat ack (both already above, third time reported); the `ls`-shows-real-sessions
+  warning sits far below the test-copy recipe: move it next to the recipe?
 
 ## Reviews
 
@@ -247,5 +251,8 @@ Planner notes (round 1), from reading the code:
 - reviews/66-stranger.md: 5 findings, 2 became tasks (T44, T45). Items 3 (`run stop --reason` takes
   any text), 4 (`run ack` exit 0 for both fresh and repeat ack) and 5 (`credit` prints `sampler: 0
   samples` with no pointer to a doc) went to For the owner as taste calls. No browser, pages not looked at.
+- reviews/75-stranger.md: 5 findings, 1 became a task (T58, items 1 and 5 together). Dropped as
+  covered: `run stop --reason` and `run ack` exit codes (already For the owner, third report), `ls`
+  shows real sessions (README warns; moving the warning went to For the owner). No browser, pages not looked at.
 
 ## Morning
