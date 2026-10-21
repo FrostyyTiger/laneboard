@@ -84,6 +84,35 @@ test('a builder with no config boots isolated: /healthz ok, root page 200, colle
   }
 });
 
+test('POST /api/runs/events through the real guards: no x-laneboard or a foreign Origin is a 403 (runs T10)', async () => {
+  const b = await boot();
+  try {
+    const post = (headers, run) => fetch(`${b.url}/api/runs/events`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ t: 'run.start', run, goal: 'probe' }),
+    });
+    const refused = [
+      [{}, 'no x-laneboard'],
+      [{ 'x-laneboard': '1', origin: 'https://evil.example.invalid' }, 'a foreign Origin'],
+      [{ origin: 'https://evil.example.invalid' }, 'a foreign Origin and no x-laneboard'],
+    ];
+    for (const [headers, why] of refused) {
+      const r = await post(headers, 'refused');
+      assert.equal(r.status, 403, why);
+      await r.body?.cancel();
+    }
+    // Positive control: the same body with the header and no Origin is taken.
+    const ok = await post({ 'x-laneboard': '1' }, 'taken');
+    assert.equal(ok.status, 201, await ok.clone().text());
+    assert.equal((await ok.json()).run, 'taken');
+    assert.equal((await fetch(`${b.url}/api/runs/taken`)).status, 200);
+    assert.equal((await fetch(`${b.url}/api/runs/refused`)).status, 404, 'a refused event was written');
+  } finally {
+    await b.stop();
+  }
+});
+
 test('stop() kills the process group, frees the port and removes the temp dir', async () => {
   const b = await boot();
   await b.stop();
