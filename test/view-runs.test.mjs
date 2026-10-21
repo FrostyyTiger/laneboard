@@ -560,6 +560,37 @@ test('charts on the page: one SVG line per metric between the needs and the time
   assert.doesNotMatch(SRC.slice(SRC.indexOf('score charts')), /animate|transition|requestAnimationFrame/);
 }));
 
+test('charts: a score with a max reads "3 of 10" and is drawn against 0..max; no max keeps its range (T19)', () => withDom(() => {
+  const base = { run: 'docs', state: 'running', rounds: [{ n: 1 }, { n: 2 }, { n: 3 }], needs: [], artifacts: [], raw: [], stop: null, cost: null, usage: null };
+  const run = {
+    ...base,
+    scores: {
+      tasks: [{ n: 1, value: 1, max: 8 }, { n: 2, value: 2, max: 10 }, { n: 3, value: 3, max: 10 }],
+      tests: [{ n: 1, value: 0.84 }, { n: 3, value: 0.94 }],
+    },
+    better: { tasks: 'higher', tests: 'higher' },
+  };
+  const [tasks, tests] = scoreCharts(run);
+  assert.equal(tasks.max, 10);
+  // y = 1 + (1 - v / 10) * 30: 3 of 10 sits at 70% down, not at the top as its own 1..3 range would put it
+  assert.deepEqual(tasks.points.map((p) => p.y), [28, 25, 22]);
+  assert.equal(tasks.title, 'tasks: 1 at round 1 to 3 of 10 at round 3, scope 8 → 10, higher is better');
+  assert.equal(tests.max, null);
+  assert.deepEqual(tests.points.map((p) => p.y), [31, 1]);
+  const page = renderRunPage(null, run, { status: 'ok' }, 0);
+  const sec = byClass(page, 'rn-charts-sec')[0];
+  assert.deepEqual(byClass(sec, 'rn-chart-v').map((n) => n.textContent), ['3 of 10 ↑', '0.94 ↑']);
+  assert.deepEqual(byClass(sec, 'rn-chart-r').map((n) => n.textContent), ['scope 8 → 10', '0.84–0.94']);
+  assert.doesNotMatch(sec.textContent, /1–3|0–3/);
+  // a max that never moved: no scope note, an empty range cell
+  const still = { ...run, scores: { tasks: [{ n: 1, value: 1, max: 10 }, { n: 3, value: 3, max: 10 }] } };
+  const p2 = renderRunPage(null, still, { status: 'ok' }, 0);
+  assert.equal(byClass(p2, 'rn-chart-r')[0].textContent, '');
+  // a value past its max widens the scale, the line stays in the box
+  const over = scoreCharts({ ...run, scores: { tasks: [{ n: 1, value: 2, max: 10 }, { n: 3, value: 12, max: 10 }] } })[0];
+  for (const p of over.points) assert.ok(p.y >= 0 && p.y <= CHART_H);
+}));
+
 test('charts: `better` decides which way is good; a worse latest value is p2', () => withDom(() => {
   // readiness: lint 14 -> 9 with lower better is good, tests 0.88 -> 0.93 higher is good
   const page = renderRunPage(null, RUN, { status: 'ok', id: 'readiness' }, RUN.updatedAt);
@@ -649,7 +680,7 @@ test('T27: the run page stops at a reading width and its score line fills the ro
   const wide = css.slice(0, css.indexOf('@media (max-width: 1024px)'));
   assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--read-max\);/);
   // name, line, value, range: the line is the one flexible column, and the svg takes it
-  assert.match(wide, /\.rn-chart \{[^}]*grid-template-columns: minmax\(8ch, 16ch\) minmax\(0, 1fr\) 10ch minmax\(8ch, auto\);/);
+  assert.match(wide, /\.rn-chart \{[^}]*grid-template-columns: minmax\(8ch, 16ch\) minmax\(0, 1fr\) minmax\(10ch, max-content\) minmax\(8ch, auto\);/);
   assert.match(wide, /\.rn-chart-svg \{ width: 100%; \}/);
   // the minor columns stay narrow
   const task = Number(wide.match(/\.rn-tl-task \{ max-width: (\d+)ch;/)?.[1]);

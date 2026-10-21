@@ -590,11 +590,8 @@ function rnLastScores(run) {
     const last = list[list.length - 1];
     const prev = list.length > 1 ? list[list.length - 2] : null;
     // the latest max a line gave and the first one (server/runs/summary.mjs scoreMax)
-    const maxes = list.map((p) => p?.max).filter((m) => isNum(m) && m > 0);
-    out[name] = {
-      n: last?.n ?? null, value: last?.value ?? null, prev: prev ? prev.value : null, better: better[name] ?? null,
-      max: maxes.length ? maxes[maxes.length - 1] : null, firstMax: maxes.length ? maxes[0] : null,
-    };
+    const { max, firstMax } = seriesMax(list);
+    out[name] = { n: last?.n ?? null, value: last?.value ?? null, prev: prev ? prev.value : null, better: better[name] ?? null, max, firstMax };
   }
   return out;
 }
@@ -1039,18 +1036,31 @@ export function chartDomain(run) {
   return { lo: Math.min(...ns), hi: Math.max(...ns) };
 }
 
+/** A series' latest and first `max` (positive numbers only), as the stat line has them (rnLastScores). */
+export function seriesMax(list) {
+  const maxes = (Array.isArray(list) ? list : []).map((p) => p?.max).filter((m) => isNum(m) && m > 0);
+  return { max: maxes.length ? maxes[maxes.length - 1] : null, firstMax: maxes.length ? maxes[0] : null };
+}
+
+/** The y range: the values' own, or 0..max widened to any value past it (never off the box). */
+function chartRange(values, max) {
+  if (!isNum(max)) return sparkRange(values);
+  return { lo: Math.min(0, ...values), hi: Math.max(max, ...values) };
+}
+
 /**
  * One series [{n, value}] -> [{n, value, x, y}] in a w x h box: x by round n
  * on `dom` (a one-round domain sits at the right edge, like a sparkline's
  * single point), y in the series' own range (top is high, flat sits in the
- * middle). Several scores in one round: the last one counts.
+ * middle), or 0..max when the score has a `max` (the line ends where the
+ * ring ends, T19). Several scores in one round: the last one counts.
  */
-export function chartPoints(list, dom, w = CHART_W, h = CHART_H) {
+export function chartPoints(list, dom, w = CHART_W, h = CHART_H, max = null) {
   const byN = new Map();
   for (const p of Array.isArray(list) ? list : []) if (Number.isInteger(p?.n) && isNum(p?.value)) byN.set(p.n, p.value);
   if (!byN.size || !dom) return [];
   const pts = [...byN].sort((a, b) => a[0] - b[0]);
-  const { lo, hi } = sparkRange(pts.map((p) => p[1]));
+  const { lo, hi } = chartRange(pts.map((p) => p[1]), max);
   const span = dom.hi - dom.lo;
   return pts.map(([n, value]) => {
     const x = span === 0 ? w - CHART_PAD : r2(CHART_PAD + ((n - dom.lo) * (w - 2 * CHART_PAD)) / span);
@@ -1070,7 +1080,8 @@ export function scoreCharts(run) {
   const dom = chartDomain(run);
   const out = [];
   for (const key of Object.keys(scores).sort()) {
-    const points = chartPoints(scores[key], dom);
+    const { max, firstMax } = seriesMax(scores[key]);
+    const points = chartPoints(scores[key], dom, CHART_W, CHART_H, max);
     if (!points.length) continue;
     const name = rnClean(key, 32) ?? '?';
     const better = betterOf[key] === 'lower' ? 'lower' : betterOf[key] === 'higher' ? 'higher' : null;
@@ -1080,10 +1091,15 @@ export function scoreCharts(run) {
     const trend = scoreTrend({ value: last.value, prev: prev ? prev.value : null, better });
     const { lo, hi } = sparkRange(points.map((p) => p.value));
     const way = better ? `, ${better} is better` : '';
+    // a score with a max reads "3 of 10" like the stat line, and its moved max "scope 8 → 10" (T19, T5)
+    const of = max !== null ? ` of ${chartNum(max)}` : '';
+    const scope = max !== null && firstMax !== max ? `scope ${chartNum(firstMax)} → ${chartNum(max)}` : null;
     const title = points.length === 1
-      ? `${name}: ${chartNum(last.value)} at round ${last.n}${way}`
-      : `${name}: ${chartNum(first.value)} at round ${first.n} to ${chartNum(last.value)} at round ${last.n}, range ${chartNum(lo)} to ${chartNum(hi)}${way}`;
-    out.push({ name, better, points, lo, hi, first, last, trend, title });
+      ? `${name}: ${chartNum(last.value)}${of} at round ${last.n}${way}`
+      : max !== null
+        ? `${name}: ${chartNum(first.value)} at round ${first.n} to ${chartNum(last.value)}${of} at round ${last.n}${scope ? `, ${scope}` : ''}${way}`
+        : `${name}: ${chartNum(first.value)} at round ${first.n} to ${chartNum(last.value)} at round ${last.n}, range ${chartNum(lo)} to ${chartNum(hi)}${way}`;
+    out.push({ name, better, points, lo, hi, max, scope, first, last, trend, title });
   }
   return out;
 }
@@ -1122,9 +1138,11 @@ function chartsSection(run) {
     const li = el('li', 'rn-chart');
     li.dataset.metric = c.name;
     li.title = c.title;
-    const val = el('span', 'rn-chart-v', `${chartNum(c.last.value)}${c.trend.mark ? ` ${c.trend.mark}` : ''}`);
+    const of = c.max !== null ? ` of ${chartNum(c.max)}` : '';
+    const val = el('span', 'rn-chart-v', `${chartNum(c.last.value)}${of}${c.trend.mark ? ` ${c.trend.mark}` : ''}`);
     if (c.trend.good === false) val.dataset.p = '2';
-    const range = c.points.length > 1 ? `${chartNum(c.lo)}–${chartNum(c.hi)}` : `round ${c.last.n}`;
+    // the min–max range only for a score with no max: with one, "of 10" already says the scale
+    const range = c.max !== null ? (c.scope ?? '') : c.points.length > 1 ? `${chartNum(c.lo)}–${chartNum(c.hi)}` : `round ${c.last.n}`;
     li.append(el('span', 'rn-chart-k', c.name), chartSvg(c), val, el('span', 'rn-chart-r', range));
     ul.append(li);
   }

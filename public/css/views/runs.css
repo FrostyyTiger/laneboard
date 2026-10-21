@@ -241,7 +241,7 @@ a.rn-need-open { text-decoration: none; }
 .rn-chart {
   display: grid;
   /* the line takes the room between the name and its value (T27) */
-  grid-template-columns: minmax(8ch, 16ch) minmax(0, 1fr) 10ch minmax(8ch, auto);
+  grid-template-columns: minmax(8ch, 16ch) minmax(0, 1fr) minmax(10ch, max-content) minmax(8ch, auto);
   align-items: center;
   gap: var(--sp-3);
   min-height: var(--row-comfy);
@@ -250,7 +250,7 @@ a.rn-need-open { text-decoration: none; }
   font-variant-numeric: tabular-nums;
 }
 .rn-chart-k { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
-.rn-chart-v { color: var(--text-1); text-align: right; }
+.rn-chart-v { color: var(--text-1); text-align: right; white-space: nowrap; }
 .rn-chart-v[data-p="2"] { color: var(--p2); }
 .rn-chart-r { min-width: 0; color: var(--text-3); white-space: nowrap; }
 .rn-chart-svg { width: 100%; }
