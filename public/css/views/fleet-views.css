@@ -499,6 +499,10 @@
 .morning-run > .lamp { margin-top: 4px; }
 .morning-run a.mrow-name { color: var(--text-1); text-decoration: underline; text-decoration-color: var(--line-strong); overflow-wrap: anywhere; }
 .morning-run a.mrow-name:hover { text-decoration-color: var(--text-1); }
+/* The run's state word (`stopped: budget`) is bare muted text in both themes:
+   the shared .mrow-kind fill is a white wash that shows in dark only, and a
+   stop is not trouble, so a chip shape would say nothing (T36). */
+.morning-run .mrow-kind { background: none; padding: 0; color: var(--text-3); }
 .morning-run-sub { margin-top: var(--sp-1); font-family: var(--font-mono); font-size: var(--fs-11); }
 .morning-deferred a.mrow-name { color: var(--text-1); text-decoration: underline; text-decoration-color: var(--line-strong); }
 .morning-deferred a.mrow-name:hover { text-decoration-color: var(--text-1); }

@@ -96,3 +96,17 @@ test('no code sets the style attribute wholesale (only el.style.x) [9]', () => {
     assert.ok(!/setAttribute\(\s*['"`]style['"`]/.test(src), `public/js/${f} uses setAttribute('style')`);
   }
 });
+
+// reviews/20-designer.md, Morning 5: `STOPPED: BUDGET` sat in a filled chip in
+// dark and read as bare text in light (the shared .mrow-kind wash is white).
+test('T36: the Morning run state word has one treatment in both themes, no fill', () => {
+  const all = sheets().flatMap((f) => declarations(fs.readFileSync(path.join(CSS_DIR, f), 'utf8')).decls);
+  const run = all.filter((d) => d.prelude.split(',').map((s) => s.trim()).includes('.morning-run .mrow-kind'));
+  const val = (prop) => run.filter((d) => d.prop === prop).at(-1)?.value;
+  assert.match(val('background') ?? '', /^(none|transparent)$/, 'no fill behind the state word');
+  assert.equal(val('padding'), '0', 'no chip padding');
+  // nothing themes the run row's word, or any .mrow-kind fill, per theme
+  const themed = all.filter((d) => /data-theme|prefers-color-scheme/.test(d.prelude + d.at.join(' '))
+    && /mrow-kind/.test(d.prelude) && /^background/.test(d.prop));
+  assert.deepEqual(themed, []);
+});
