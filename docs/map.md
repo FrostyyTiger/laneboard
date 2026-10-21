@@ -354,7 +354,7 @@ laneboard feed docker --source builder-a --out ~/.cache/laneboard/feeds/builder-
 | `--every N` | Seconds between runs; the board calls the feed stale after `3 × N`. Defaults to 60. |
 | `--timeout s` | How long the read may take. Defaults to 10. |
 | `--stdout` | Print the feed. The default. |
-| `--out f` | Write the feed to `f`, to a temporary name first and renamed into place. |
+| `--out f` | Write the feed to `f`, to a temporary name first and renamed into place, mode 0600 (a feed names machines and addresses). |
 | `--push url` | POST the feed to `<url>/api/map/feeds`, with the `x-laneboard` header. |
 | `--url`, `--token-id`, `--secret-file`, `--ca`, `--node` | `proxmox` only: the API, the token, a file holding its secret (else `LANEBOARD_PVE_SECRET`; never a flag), the CA certificate, one cluster node. |
 | `--socket path` | `docker` only: the Engine's unix socket, or a GET-only proxy's. Defaults to `/var/run/docker.sock`. |

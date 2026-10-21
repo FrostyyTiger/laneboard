@@ -94,6 +94,21 @@ test('--out writes the feed atomically, creating the directory and replacing an 
   assert.equal(JSON.parse(fs.readFileSync(fresh, 'utf8')).source, 'tailscale');
 });
 
+test('--out writes the feed 0600, also over an old 0644 file', async (t) => {
+  const { home, env } = setup(t);
+  const file = path.join(home, 'feeds', 'acme.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '{"source":"old"}', { mode: 0o644 });
+  fs.chmodSync(file, 0o644);
+  const r = await run(['feed', 'tailscale', '--source', 'acme', '--out', file], env, home);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+  const fresh = path.join(home, 'other', 'tailscale.json');
+  const r2 = await run(['feed', 'tailscale', '--out', fresh], env, home);
+  assert.equal(r2.code, 0, r2.stderr);
+  assert.equal(fs.statSync(fresh).mode & 0o777, 0o600);
+});
+
 test('--push POSTs the feed to <url>/api/map/feeds with the x-laneboard header', async (t) => {
   const { home, env } = setup(t);
   const got = [];

@@ -42,7 +42,7 @@
 //     docker   [--socket path]  (GET /containers/json only; default /var/run/docker.sock)
 //     every kind: [--timeout <s>]
 //     --stdout (the default) prints the feed, for an ssh forced command on the board;
-//     --out writes it atomically (temp + rename); --push POSTs it to <url>/api/map/feeds.
+//     --out writes it atomically (temp + rename, mode 0600); --push POSTs it to <url>/api/map/feeds.
 //     The secret comes from --secret-file or $LANEBOARD_PVE_SECRET, never a flag.
 //     `none`, an unknown kind or a bad argument prints one line and exits 2;
 //     a source that cannot be read exits 1. See docs/map.md "Pushing a feed".
@@ -991,7 +991,7 @@ const FEED_USAGE = `usage: laneboard feed <kind> [--source s] [--every N] [--tim
   --source s   the feed's name, and its file <feedsDir>/<s>.json on the board; defaults to the kind
   --every N    seconds between runs (the board calls the feed stale after 3 × N)
   --stdout     print the feed (the default; for an ssh forced command on the board)
-  --out f      write the feed to f atomically (temp + rename)
+  --out f      write the feed to f atomically (temp + rename, mode 0600)
   --push url   POST the feed to <url>/api/map/feeds (a board on this machine)`;
 
 const feedUsage = (msg) => die(msg ? `feed: ${msg}\nsee: laneboard feed --help` : FEED_USAGE, 2);
@@ -1024,12 +1024,17 @@ function parseFeedFlags(kind) {
   return out;
 }
 
-/** Write `text` to `file` so that a reader sees the old file or the new one, never half. */
+/**
+ * Write `text` to `file` so that a reader sees the old file or the new one,
+ * never half. The file is 0600: a feed names machines, addresses and services
+ * (the board's own feeds dir is 0700 with 0600 files, server/routes/feeds.mjs).
+ */
 function writeAtomic(file, text) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
   try {
-    fs.writeFileSync(tmp, text, { mode: 0o644 });
+    fs.writeFileSync(tmp, text, { mode: 0o600 });
+    fs.chmodSync(tmp, 0o600); // a stale temp of the same name kept its old mode
     fs.renameSync(tmp, file);
   } catch (err) {
     try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to clean */ }
