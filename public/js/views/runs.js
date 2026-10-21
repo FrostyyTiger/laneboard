@@ -9,7 +9,7 @@
 // One row per run, worst first (open needs, then live runs, then latest
 // activity):
 //   state lamp + word · goal (run id, branch) · round n / max
-//   latest score per metric with its trend (▲ ▼ =, `better` says which is good)
+//   latest score per metric with its trend (↑ ↓ =, never the ▲ status shape; `better` says which is good)
 //   budget burn against the 5 h / 7 d windows (from the last `usage` event)
 //   time left to the deadline, or the stop reason · cost · open needs
 // A run the stuck rules flag (server/runs/stuck.mjs, `stuck: {rule, reason}`)
@@ -133,7 +133,7 @@ export function scoreTrend(s) {
   const dir = delta > 0 ? 'up' : delta < 0 ? 'down' : 'same';
   const good = dir === 'same' || (s.better !== 'higher' && s.better !== 'lower') ? null
     : (dir === 'up') === (s.better === 'higher');
-  return { dir, good, mark: dir === 'up' ? '▲' : dir === 'down' ? '▼' : '=', delta };
+  return { dir, good, mark: dir === 'up' ? '↑' : dir === 'down' ? '↓' : '=', delta };
 }
 
 /** The row's scores, by name, each with its trend: [{name, value, text, dir, good, mark, title}]. */

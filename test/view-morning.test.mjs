@@ -278,9 +278,9 @@ test('model T7: runs from /api/morning become blocks: goal link, rounds, score s
   assert.equal(a.usd, 9.98);
   assert.equal(a.usage.fiveHour.text, '92%');
   assert.deepEqual(a.scores.map((s) => [s.name, s.text, s.dir, s.good, s.mark]), [
-    ['lint', '3 → 5', 'up', false, '▲'],
+    ['lint', '3 → 5', 'up', false, '↑'],
     ['size', '7', 'same', null, '='],
-    ['tests', '40 → 52', 'up', true, '▲'],
+    ['tests', '40 → 52', 'up', true, '↑'],
   ]);
   assert.deepEqual(a.prs, [{ href: 'https://example.invalid/acme/api/pull/12', text: 'PR #12' }], 'only http(s) PR links');
   assert.equal(b.href, null, 'an id outside the protocol pattern gets no page link');
@@ -332,6 +332,14 @@ test('render T7: a Runs block first, one row per run, text as text, links only t
   assert.deepEqual(links, ['#/runs?run=acme-search', 'https://example.invalid/acme/api/pull/12']);
   const worse = byClass(rows[0], 'rn-score').filter((c) => c.dataset.trend === 'worse');
   assert.equal(worse.length, 1, 'only the score that went the wrong way gets the trouble tone');
+});
+
+test('render T22: a score trend is an arrow, never the ▲/■ status shapes', () => {
+  const box = render(V.morningModel({ ...built(), runs: RUNS }, { hub: false, s: store }));
+  const marks = byClass(box, 'rn-score').flatMap((c) => byClass(c, 'rn-score-m')).map((m) => m._text ?? m.textContent);
+  assert.ok(marks.includes('↑'), 'a rising score shows ↑');
+  for (const c of byClass(box, 'rn-score')) assert.doesNotMatch(texts(c).join(''), /[▲▼■]/);
+  assert.deepEqual(['up', 'down', 'same'].map((d) => V.runScoreOf('x', { start: 2, end: d === 'up' ? 3 : d === 'down' ? 1 : 2 }).mark), ['↑', '↓', '=']);
 });
 
 test('model T32: a run that stopped in the window counts in FINISHED and its cost in SPEND; the package total stays sessions', () => {

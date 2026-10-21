@@ -134,7 +134,7 @@ export function runScoreOf(name, s) {
   const better = s?.better === 'higher' || s?.better === 'lower' ? s.better : null;
   const dir = start === null || end === null ? null : end > start ? 'up' : end < start ? 'down' : 'same';
   const good = dir === null || dir === 'same' || better === null ? null : (dir === 'up') === (better === 'higher');
-  const mark = dir === 'up' ? '▲' : dir === 'down' ? '▼' : dir === 'same' ? '=' : '';
+  const mark = dir === 'up' ? '↑' : dir === 'down' ? '↓' : dir === 'same' ? '=' : '';
   const text = start === null || start === end ? scoreText(end ?? start) : `${scoreText(start)} → ${scoreText(end)}`;
   const word = good === true ? ', better' : good === false ? ', worse' : '';
   return { name, text, dir, good, mark, title: `${name}: ${scoreText(start)} → ${scoreText(end)}${word}` };

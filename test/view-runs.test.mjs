@@ -76,7 +76,7 @@ test('the fixture renders one row with goal, state, round, scores and trend, bur
   assert.equal(byClass(row, 'rn-round')[0].textContent, '3 / 6');
   // scores by name: lint 14 -> 9 (lower is better), tests 0.88 -> 0.93 (higher is better)
   const scores = byClass(row, 'rn-score').map((s) => s.textContent);
-  assert.deepEqual(scores, ['lint9▼', 'tests0.93▲']);
+  assert.deepEqual(scores, ['lint9↓', 'tests0.93↑']);
   assert.deepEqual(byClass(row, 'rn-score').map((s) => s.dataset.trend), ['better', 'better']);
   // burn from the last usage event
   assert.deepEqual(byClass(row, 'rn-win-v').map((n) => n.textContent), ['19%', '14%']);
@@ -199,7 +199,7 @@ test('mount fetches GET /api/runs, paints, and unmount clears; a 404 is a note',
 }));
 
 test('pure helpers: trend, burn, time left, round text, state', () => {
-  assert.deepEqual(scoreTrend({ value: 9, prev: 14, better: 'lower' }), { dir: 'down', good: true, mark: '▼', delta: -5 });
+  assert.deepEqual(scoreTrend({ value: 9, prev: 14, better: 'lower' }), { dir: 'down', good: true, mark: '↓', delta: -5 });
   assert.equal(scoreTrend({ value: 0.8, prev: 0.9, better: 'higher' }).good, false);
   assert.equal(scoreTrend({ value: 3, prev: 3, better: 'higher' }).mark, '=');
   assert.equal(scoreTrend({ value: 4, prev: 3 }).good, null, 'no better: no judgement');
@@ -266,7 +266,7 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
   const t = texts(page);
   assert.ok(t.includes('Make acme-api ready for review: tests green, docs current'));
   assert.equal(byClass(page, 'rn-round')[0].textContent, 'round 3 / 6');
-  assert.deepEqual(byClass(page, 'rn-score').map((n) => n.textContent), ['lint9▼', 'tests0.93▲']);
+  assert.deepEqual(byClass(page, 'rn-score').map((n) => n.textContent), ['lint9↓', 'tests0.93↑']);
   assert.equal(byClass(page, 'rn-cost')[0].textContent, 'cost$3.75');
   assert.equal(byClass(page, 'rn-events')[0].textContent, '22 events');
   // stop reason in the state label (T17), coloured: no progress needs a look
@@ -503,7 +503,7 @@ test('charts: the loop fixture\'s tests and tasks, x by round on one shared scal
     [6, 1, 87.18, 1], [8, 1, 115.91, 1], [9, 1, 130.27, 1], [11, 1, CHART_W - 1, 1],
   ]);
   assert.equal(tasks.better, 'higher');
-  assert.deepEqual([tasks.trend.mark, tasks.trend.good], ['▲', true]);
+  assert.deepEqual([tasks.trend.mark, tasks.trend.good], ['↑', true]);
   assert.deepEqual([tests.trend.mark, tests.trend.good], ['=', null]);
   assert.equal(tests.title, 'tests: 0.9997 at round 0 to 1 at round 11, range 0.9993 to 1, higher is better');
   for (const c of charts) for (const p of c.points) {
@@ -527,7 +527,7 @@ test('charts on the page: one SVG line per metric between the needs and the time
   const last = byClass(items[0], 'spark-last')[0];
   assert.equal(last.tagName.toLowerCase(), 'line');
   assert.deepEqual([last.attrs.x1, last.attrs.y1, last.attrs.x2, last.attrs.y2], ['130.27', '1', '130.27', '1']);
-  assert.deepEqual(byClass(page, 'rn-chart-v').map((n) => n.textContent), ['3 ▲', '1 =']);
+  assert.deepEqual(byClass(page, 'rn-chart-v').map((n) => n.textContent), ['3 ↑', '1 =']);
   assert.deepEqual(byClass(page, 'rn-chart-r').map((n) => n.textContent), ['0–3', '0.9993–1']);
   assert.equal(byClass(page, 'rn-chart-v').some((n) => n.dataset.p), false, 'nothing got worse: grey');
   assert.doesNotMatch(SRC.slice(SRC.indexOf('score charts')), /animate|transition|requestAnimationFrame/);
@@ -536,11 +536,11 @@ test('charts on the page: one SVG line per metric between the needs and the time
 test('charts: `better` decides which way is good; a worse latest value is p2', () => withDom(() => {
   // readiness: lint 14 -> 9 with lower better is good, tests 0.88 -> 0.93 higher is good
   const page = renderRunPage(null, RUN, { status: 'ok', id: 'readiness' }, RUN.updatedAt);
-  assert.deepEqual(byClass(page, 'rn-chart-v').map((n) => [n.textContent, n.dataset.p ?? null]), [['9 ▼', null], ['0.93 ▲', null]]);
+  assert.deepEqual(byClass(page, 'rn-chart-v').map((n) => [n.textContent, n.dataset.p ?? null]), [['9 ↓', null], ['0.93 ↑', null]]);
   const worse = { ...RUN, scores: { lint: [{ n: 1, value: 9 }, { n: 2, value: 14 }] }, better: { lint: 'lower' } };
   const p2 = renderRunPage(null, worse, { status: 'ok' }, RUN.updatedAt);
   const v = byClass(p2, 'rn-chart-v')[0];
-  assert.deepEqual([v.textContent, v.dataset.p], ['14 ▲', '2']);
+  assert.deepEqual([v.textContent, v.dataset.p], ['14 ↑', '2']);
 }));
 
 test('charts: a run with no score has an empty chart section; one point is a mark, no line', () => withDom(() => {
@@ -786,6 +786,16 @@ test('night 4 T6: the run page shows who acked a closed need, and a fence the lo
   // the decision and the fence the loop tried to ack are still open, each with its Ack
   assert.equal(byClass(host, 'rn-need-ack').length, 2);
   assert.equal(byClass(byClass(host, 'rn-needs-sec')[0], 'rn-sec-t')[0].textContent, 'Open needs (2)');
+}));
+
+test('T22: score trends on the Runs list and the run page are arrows, never the ▲/■ status shapes', () => withDom(() => {
+  const host = document.createElement('div');
+  renderRuns(host, [FIX], { status: 'ok' }, FIX.updatedAt);
+  const page = renderRunPage(null, RUN, { status: 'ok', id: 'readiness' }, RUN.updatedAt);
+  const cells = [...byClass(host, 'rn-score'), ...byClass(page, 'rn-score'), ...byClass(page, 'rn-chart-v')];
+  assert.ok(cells.length >= 6);
+  for (const c of cells) assert.doesNotMatch(c.textContent, /[▲▼■]/, c.textContent);
+  assert.deepEqual([3, 1, 2].map((value) => scoreTrend({ value, prev: 2 }).mark), ['↑', '↓', '=']);
 }));
 
 test('needs cell: one line, the count only when more than one need is open (T29)', () => {

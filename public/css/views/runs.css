@@ -1,6 +1,6 @@
 /* ===========================================================================
    The Runs view (runs plan §3 A2, task T7). One row per unattended run.
-   Grey is normal: only a worse score (▼/▲ p2), a window near its stop level
+   Grey is normal: only a worse score (↓/↑ p2), a window near its stop level
    (p2), an overage (■ p1), an error or no-progress stop and an open need
    get a hue, and each always carries its shape or its word.
    =========================================================================== */
