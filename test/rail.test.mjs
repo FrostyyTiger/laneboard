@@ -128,10 +128,10 @@ test('lamp: down -> p1, stale -> grey stale, both hatched; live with no alarm ->
   assert.equal(c.p, 'stale');
   assert.equal(c.hatched, true);
   assert.equal(c.status, 'stale');
-  assert.equal(a.p, '1', 'a live builder with a permission lane and no alarm is p1 (runs T43)');
+  assert.equal(a.p, '2', 'a live builder with a permission lane and no alarm is the amber ▲ (runs T43, T23)');
   assert.equal(a.hatched, false);
   assert.equal(R.builderLamp({ id: 'x', status: 'live' }, [], { run: 2 }).p, 'run', 'a working lane and no alarm is grey "working"');
-  assert.equal(all.p, '1', 'ALL takes the worst row');
+  assert.equal(all.p, '1', 'ALL takes the worst row (the down builder)');
   assert.equal(R.builderLamp({ id: 'x', status: 'live' }, [], { run: 0 }).p, 'ok');
   assert.equal(R.builderLamp({ id: 'x', status: 'connecting' }, []).p, 'off');
   assert.equal(R.builderLamp(null).p, 'off');
@@ -139,7 +139,7 @@ test('lamp: down -> p1, stale -> grey stale, both hatched; live with no alarm ->
 
 test('lamp: the worst alarm of that builder, unack while one at that priority is open', () => {
   const alarms = [
-    { id: '1', kind: 'stuck', priority: 'P3', builder: 'builder-a', acked: false },
+    { id: '1', kind: 'review', priority: 'P3', builder: 'builder-a', acked: false },
     { id: '2', kind: 'approval', priority: 'P2', builder: 'builder-a', acked: true },
     { id: '3', kind: 'needs-input', priority: 'P1', builder: 'builder-z', acked: false },
   ];
@@ -155,6 +155,9 @@ test('lamp: the worst alarm of that builder, unack while one at that priority is
   // The health sample's own alarms count too.
   assert.equal(R.builderLamp({ id: 'h', status: 'live', health: { alarms: [{ key: 'memAvailPct', level: 'crit' }] } }, []).p, '1');
   assert.equal(R.builderLamp({ id: 'h', status: 'live', health: { alarms: [{ key: 'x', level: 'warn' }] } }, []).p, '2');
+  // An alarm with a header tile draws at the tile's mark, as the header (T23).
+  assert.equal(R.builderLamp({ id: 'builder-a', status: 'live' }, [{ kind: 'stuck', priority: 'P3', builder: 'builder-a' }]).p, '2', 'STCK is amber ▲');
+  assert.equal(R.builderLamp({ id: 'builder-a', status: 'live' }, [{ kind: 'blocked', priority: 'P2', builder: 'builder-a' }]).p, '1', 'BLKD is red ■');
   // A down builder is p1 whatever its alarms say.
   assert.equal(R.builderLamp({ id: 'builder-a', status: 'down' }, alarms).p, '1');
 });
@@ -163,10 +166,10 @@ test('railRows: alarms from the store reach the rows and the ALL row', () => {
   const s = fleet({ alarms: [{ id: '1', kind: 'approval', priority: 'P1', builder: 'builder-a', acked: false }] });
   applyBuilders(s, [{ id: 'builder-a', code: 'b1', state: 'up' }]);
   const [all, a] = R.railRows(s, {});
-  assert.equal(a.p, '1');
+  assert.equal(a.p, '2', 'an approval is the amber ▲ of its APPR tile, whatever its priority (T23)');
   assert.equal(a.unack, true);
   assert.match(a.lampLabel, /1 alarm, 1 permission/);
-  assert.equal(all.p, '1');
+  assert.equal(all.p, '2');
   assert.equal(all.unack, true);
   assert.match(all.label, /All 1 builder/);
 });
@@ -241,7 +244,7 @@ test('buildRail: a listbox of options with aria-selected, lamp, plate, count and
   assert.ok(opts[1].classList.contains('sel'), 'the selected row carries the corner brackets');
   assert.deepEqual(opts.map((o) => o.dataset.b), ['all', 'builder-a', 'builder-b', 'builder-c']);
   const a = opts[1];
-  assert.equal(a.find('lamp')[0].dataset.p, '1', 'its permission lane');
+  assert.equal(a.find('lamp')[0].dataset.p, '2', 'its permission lane');
   assert.equal(a.find('brail-code')[0].textContent, 'B1');
   assert.ok(a.find('brail-code')[0].classList.contains('plate'));
   assert.equal(a.find('brail-n')[0].textContent, '[3]');

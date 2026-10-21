@@ -17,6 +17,7 @@ import { scheduleVisible, sendKeys, sendText } from '../core/net.js';
 import { icon } from '../core/icons.js';
 import { closeTerminal, isLive, openTerminal, writeTo } from './terminal.js';
 import { builderMark, lamp, laneMix, normP } from './components.js';
+import { itemP } from '../core/marks.js';
 import { layoutFor, toast } from './shell.js';
 
 /**
@@ -248,7 +249,9 @@ function laneName(s, item, name) {
 
 /**
  * The peek line for store `s` in builder scope `scope` (null = all):
- * {p1, p2, run, total, latest}. `latest` is the top needs-you entry, else the
+ * {p1, p2, run, total, latest}: p1 counts the broken lanes (red ■), p2 the
+ * ones that want you (amber ▲: a permission, an approval, a question, stuck;
+ * runs night 4 T23). `latest` is the top needs-you entry, else the
  * most recently changed session: {key, text, p, since}. Pure.
  */
 export function peekModel(s, scope = null) {
@@ -256,7 +259,7 @@ export function peekModel(s, scope = null) {
   const sess = scopedSessions(s, b);
   const out = { p1: 0, p2: 0, run: 0, total: sess.length, latest: null };
   for (const x of sess) {
-    const p = normP(x?.state);
+    const p = itemP(x);
     if (p === '1') out.p1++;
     else if (p === '2') out.p2++;
     else if (p === 'run') out.run++;
@@ -267,7 +270,7 @@ export function peekModel(s, scope = null) {
     out.latest = { key: a.key, text: `${laneName(s, a, a.name)} ${STATE_LABEL[a.state] || a.state || ''}`.trim(), p: a.danger ? '1' : normP(a.state), since: a.since ?? null };
   } else if (sess.length) {
     const x = sess.reduce((m, c) => (num(c.stateSince) > num(m.stateSince) ? c : m));
-    out.latest = { key: x.key, text: `${laneName(s, x, x.name)} ${STATE_LABEL[x.state] || x.state || ''}`.trim(), p: normP(x.state), since: x.stateSince ?? null };
+    out.latest = { key: x.key, text: `${laneName(s, x, x.name)} ${STATE_LABEL[x.state] || x.state || ''}`.trim(), p: itemP(x), since: x.stateSince ?? null };
   }
   return out;
 }
@@ -291,7 +294,7 @@ export function sheetRows(s, tab, scope = null) {
     rows = scopedSessions(s, b)
       .sort((x, y) => (STATE_RANK[x.state] ?? 9) - (STATE_RANK[y.state] ?? 9) || String(x.name).localeCompare(String(y.name)))
       .map((x) => ({
-        key: x.key, sel: x.key ?? null, p: normP(x.state), unack: false,
+        key: x.key, sel: x.key ?? null, p: itemP(x), unack: false,
         name: laneName(s, x, x.name), sub: STATE_LABEL[x.state] || String(x.state ?? ''), since: x.stateSince ?? null,
       }));
   } else {
@@ -541,8 +544,8 @@ export function renderPhone() {
   const pk = peekModel(store, scope);
   p.peek.textContent = '';
   const counts = el('span', 'ps-counts');
-  counts.append(lamp('1', { label: `${pk.p1} permission` }), el('span', 'ps-n', String(pk.p1)),
-    lamp('2', { label: `${pk.p2} question` }), el('span', 'ps-n', String(pk.p2)),
+  counts.append(lamp('1', { label: `${pk.p1} broken` }), el('span', 'ps-n', String(pk.p1)),
+    lamp('2', { label: `${pk.p2} want you` }), el('span', 'ps-n', String(pk.p2)),
     lamp('run', { label: `${pk.run} working` }), el('span', 'ps-n', `${pk.run}/${pk.total}`));
   p.peek.append(counts);
   if (pk.latest) {

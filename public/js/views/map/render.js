@@ -34,7 +34,7 @@
 // fillText never interprets it.
 
 import { RINGS, SIZE, LEGEND_ANGLE, polar, ringLabels, runRingR, ticks } from './layout.js';
-import { nodeStyle, linkStyle, reachScope, reachLinkStyle, runRing, runRound, ACCENT_L, DRIFT_MARK } from './overlays.js';
+import { nodeStyle, rollsUp, linkStyle, reachScope, reachLinkStyle, runRing, runRound, ACCENT_L, DRIFT_MARK } from './overlays.js';
 
 const TAU = Math.PI * 2;
 
@@ -646,8 +646,7 @@ export function createRenderer(ctx, palette) {
       const fade = alphaOf(scene, id) * (c.a ?? 1);
       const r = (SIZE[n.kind] ?? 5) * ns * (0.4 + 0.6 * (c.a ?? 1));
       const isFolded = Boolean(scene.folded?.has(id)) && !c.leaving;
-      const rolled = n.kind === 'site' || n.kind === 'core' || n.kind === 'host' || isFolded
-        ? scene.rolled?.(id) ?? null : null;
+      const rolled = rollsUp(n, isFolded) ? scene.rolled?.(id) ?? null : null;
       const st = n.virtual ? { tone: 'grey', level: 0, shape: 'disc', alpha: 1, abnormal: false }
         : nodeStyle(n, scene.overlay, rolled, { budgetUsd: scene.budgetUsd?.(n), reach });
       const alpha = fade * (st.alpha ?? 1);
@@ -660,7 +659,9 @@ export function createRenderer(ctx, palette) {
           strokeStyle(P.line, alpha, 1, []);
           ctx.beginPath(); arc(sp.x, sp.y, r * k, 0, TAU); ctx.stroke();
         }
-        glyph('disc', sp.x, sp.y, r * 0.45, st.abnormal ? col : P.t1, alpha);
+        // Grey unless the host itself is in trouble, then its ▲/■ (T23).
+        if (st.abnormal && st.shape !== 'ring') glyph(st.shape, sp.x, sp.y, r * 0.6, col, alpha);
+        else glyph('disc', sp.x, sp.y, r * 0.45, P.t1, alpha);
         continue;
       }
 

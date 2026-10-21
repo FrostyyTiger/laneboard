@@ -45,7 +45,7 @@ import {
   idForSel, selForId, SEVERITY, FOLD_KEY, AUTO_UNFOLD_ZOOM,
 } from './model.js';
 import { layout, RINGS, SIZE, polar, runRingR } from './layout.js';
-import { OVERLAY_KEY, validOverlay, availableOverlays, reachScope, nodeStyle, SHAPE_CODE, TONE_CODE, driftText, driftCounts, runFacts } from './overlays.js';
+import { OVERLAY_KEY, validOverlay, availableOverlays, reachScope, nodeStyle, rollsUp, SHAPE_CODE, TONE_CODE, driftText, driftCounts, runFacts } from './overlays.js';
 import { createRenderer, readPalette } from './render.js';
 import {
   createHitGrid, bindPointer, hitRadius, boundingCircle, fitCircle, anchored, clampZoom, fitScaleOf,
@@ -1141,8 +1141,7 @@ export function createMap(root, opts = {}) {
     list.forEach((c, i) => {
       const n = c.node;
       const p = polar(c.goal.r, c.goal.t);
-      const rolled = n.kind === 'site' || n.kind === 'core' || n.kind === 'host' || folded.has(n.id)
-        ? rollup(n.id, byId, kidsRoll, memo) : null;
+      const rolled = rollsUp(n, folded.has(n.id)) ? rollup(n.id, byId, kidsRoll, memo) : null;
       const st = n.virtual ? { shape: 'disc', tone: 'grey' } : nodeStyle(n, ov, rolled);
       pts[i * 4] = p.x;
       pts[i * 4 + 1] = p.y;

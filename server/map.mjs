@@ -756,6 +756,15 @@ function toolLine(activity) {
 
 function sessionStatus(s) {
   if (s.danger) return ['crit', `guard: ${String(s.danger.reason ?? s.danger).slice(0, 120)}`];
+  // A lane that said it is blocked is broken (red ■), as on the Board and in
+  // the Inbox (runs night 4 T23); an open need wants you, like a question.
+  const m = s.lastMarker;
+  if (m && typeof m === 'object' && !m.dismissed_at && (m.kind === 'blocked' || m.kind === 'need')) {
+    const text = typeof m.text === 'string' && m.text ? `: ${m.text.slice(0, 100)}` : '';
+    if (m.kind === 'blocked') return ['crit', `blocked${text}`];
+    const own = SESSION_STATUS[s.state];
+    return own?.[0] === 'attention' ? own : ['attention', `need${text}`];
+  }
   return SESSION_STATUS[s.state] ?? ['unknown', null];
 }
 

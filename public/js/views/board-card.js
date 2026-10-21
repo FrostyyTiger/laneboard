@@ -23,6 +23,7 @@ import { laneById, store } from '../core/store.js';
 import { deriveCode } from '../core/keys.js';
 import { act } from '../core/actions.js';
 import { icon } from '../core/icons.js';
+import { itemP, markP } from '../core/marks.js';
 import { lamp, plate } from '../ui/components.js';
 import { toast } from '../ui/shell.js';
 import { togglePin } from '../ui/dock.js';
@@ -39,10 +40,9 @@ export const STATE_WORD = Object.freeze({
 });
 
 /** Session state -> lamp `data-p` (ISA-101: colour only for abnormal). */
-export const STATE_P = Object.freeze({
-  waiting_permission: '1', waiting_question: '2', working: 'run',
-  done: 'ok', idle: 'off', shell: 'off', dead: 'off',
-});
+export const STATE_P = Object.freeze(Object.fromEntries(
+  ['waiting_permission', 'waiting_question', 'working', 'done', 'idle', 'shell', 'dead'].map((st) => [st, markP(st)]),
+));
 
 const STATE_ORDER = Object.freeze({ waiting_permission: 0, waiting_question: 1, working: 2, done: 3, idle: 4, shell: 5, dead: 6 });
 
@@ -151,20 +151,20 @@ function reasonOf(v) {
   return typeof v === 'string' ? v : '';
 }
 
-/** Flags, in plan order: stuck, paused, approval, review. */
+/** Flags, in plan order: stuck, paused, approval, review. Grey icons: the lamp is the one trouble mark (T23). */
 function flagsOf(sessions, lane, extras) {
   const flags = [];
   const stuck = sessions.find((s) => s.stuck);
   if (stuck) {
     const why = reasonOf(stuck.stuck);
-    flags.push({ id: 'stuck', icon: 'stuck', p: '2', title: why ? `stuck: ${why}` : 'stuck' });
+    flags.push({ id: 'stuck', icon: 'stuck', p: null, title: why ? `stuck: ${why}` : 'stuck' });
   }
   const paused = sessions.find((s) => s.paused);
   if (paused) {
     const scope = paused.paused && typeof paused.paused === 'object' && paused.paused.scope ? String(paused.paused.scope) : '';
     flags.push({ id: 'paused', icon: 'pause', p: null, title: scope ? `paused (${scope})` : 'paused' });
   }
-  if (sessions.some((s) => s.awaitingApproval)) flags.push({ id: 'approval', icon: 'approval', p: '1', title: 'awaiting approval' });
+  if (sessions.some((s) => s.awaitingApproval)) flags.push({ id: 'approval', icon: 'approval', p: null, title: 'awaiting approval' });
   const rr = lane?.reviewReady ?? extras.reviewReady ?? null;
   if (rr && rr.ready === true) {
     const reasons = Array.isArray(rr.reasons) ? rr.reasons.filter((r) => typeof r === 'string') : [];
@@ -188,8 +188,13 @@ export function dataBlock(lane, session, extras = {}) {
   const sessions = session ? [session] : (Array.isArray(x.sessions) ? x.sessions.filter((s) => s && typeof s === 'object') : []);
   const lead = session ?? mostUrgent(sessions);
   const state = typeof lead?.state === 'string' ? lead.state : null;
-  let p = state ? (STATE_P[state] ?? 'off') : 'off';
-  if (sessions.some((s) => s.awaitingApproval || s.danger)) p = '1';
+  // One state, one mark (runs night 4 T23): danger anywhere on the lane is
+  // the red ■, an approval or a stuck session the amber ▲, else the lead's state.
+  let p = state ? markP(state) : 'off';
+  for (const x of sessions) {
+    const q = itemP(x);
+    if (q === '1' || (q === '2' && p !== '1')) p = q;
+  }
   if (x.stale) p = 'stale';
   const prog = lane?.progress;
   const pct = lead?.context?.usedPct;

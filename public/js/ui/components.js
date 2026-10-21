@@ -7,6 +7,8 @@
 // are tested in test/components.test.mjs. Every text that may come from a
 // builder goes in through textContent or setAttribute, never as markup.
 import { icon } from '../core/icons.js';
+import { STATE_MARK } from '../core/marks.js';
+import { TILE_FIXED_P, tileOf } from '../core/alarm-tiles.js';
 
 // ---------------------------------------------------------------- priorities
 
@@ -21,12 +23,6 @@ export const P_WORDS = Object.freeze({
 /** The shape a priority is drawn with (guardrail 5: colour always has a shape). */
 export const P_SHAPE = Object.freeze({
   1: '■', 2: '▲', 3: '◆', ok: '●', run: '●', off: '○', stale: '○',
-});
-
-const SESSION_P = Object.freeze({
-  waiting_permission: '1', permission: '1',
-  waiting_question: '2', question: '2',
-  working: 'run', done: 'ok', idle: 'off', shell: 'off', dead: 'off',
 });
 
 /**
@@ -45,7 +41,7 @@ export function normP(p) {
   if (low === 'warn') return '2';
   if (low === 'info') return '3';
   if (low === 'dead' || low === 'down') return 'off';
-  return SESSION_P[low] ?? 'off';
+  return Object.hasOwn(STATE_MARK, low) ? STATE_MARK[low] : 'off';
 }
 
 /** The lamp's aria-label: the given label (or the priority word), plus ", unacknowledged". */
@@ -173,7 +169,9 @@ export function setPanel(root, { scope, n } = {}) {
 /** Segment order, worst first; `dead` is hatched. */
 export const MIX_ORDER = Object.freeze(['p1', 'p2', 'run', 'ok', 'off', 'dead']);
 const MIX_WORD = Object.freeze({ p1: 'permission', p2: 'question', run: 'working', ok: 'done', off: 'idle', dead: 'dead' });
-const MIX_P = Object.freeze({ p1: '1', p2: '2', run: 'run', ok: 'ok', off: 'off', dead: 'dead' });
+// The p1 (permission) and p2 (question) buckets both want you: one amber ▲
+// (runs night 4 T23, core/marks.js). The bucket names stay for the counts.
+const MIX_P = Object.freeze({ p1: '2', p2: '2', run: 'run', ok: 'ok', off: 'off', dead: 'dead' });
 
 /** One session or lane -> its mix bucket. */
 export function mixBucket(item) {
@@ -217,9 +215,9 @@ const ALARM_P = new Set(['1', '2', '3']);
  * One builder's mark, the single rule the 1440 rail row and the 390 scope
  * chip share (runs T43): {p, unack, label, n}. `list` is the store's alarms
  * ({builder, priority 'P1'..'P4', acked}), `mix` its laneMix. Down -> p1,
- * stale -> 'stale', else the worst of its alarms (and its health sample's)
- * and its lanes (a permission lane is p1, a question lane p2): unack when an
- * open alarm sits at that priority. Else working (a lane running) or ok. Pure.
+ * stale -> 'stale', else the worst of its alarms (at their header tile's mark,
+ * and its health sample's) and its lanes (a permission or a question lane is
+ * p2, T23): unack when an open alarm sits at that priority. Else working (a lane running) or ok. Pure.
  */
 export function builderMark(b, list = [], mix = null) {
   if (!b || typeof b !== 'object') return { p: 'off', unack: false, label: 'unknown', n: 0 };
@@ -230,7 +228,10 @@ export function builderMark(b, list = [], mix = null) {
   let n = 0;
   for (const a of Array.isArray(list) ? list : []) {
     if (!a || typeof a !== 'object' || a.builder !== b.id) continue;
-    const q = normP(a.priority);
+    // The alarm's tile mark wins over its priority, so the rail agrees with
+    // the header: an approval is the amber ▲ even when sent as P1 (T23).
+    const fixed = TILE_FIXED_P[tileOf(a.kind)];
+    const q = fixed != null ? String(fixed) : normP(a.priority);
     if (!ALARM_P.has(q)) continue;
     n++;
     const open = a.acked !== true;
@@ -242,7 +243,7 @@ export function builderMark(b, list = [], mix = null) {
     if (q && (p === null || MARK_RANK[q] < MARK_RANK[p])) { p = q; unack = false; }
   }
   // The worst lane: the same order the segment bar and the chips draw.
-  const lane = mix?.p1 > 0 ? '1' : mix?.p2 > 0 ? '2' : null;
+  const lane = mix?.p1 > 0 || mix?.p2 > 0 ? '2' : null;
   if (lane && (p === null || MARK_RANK[lane] < MARK_RANK[p])) { p = lane; unack = false; }
   if (p) {
     const parts = [];

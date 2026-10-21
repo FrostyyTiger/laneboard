@@ -125,7 +125,7 @@ test('tabs: MAP, LIST, INBOX; the ⋯ menu holds the other nav views', () => {
 
 test('builderP: the shared builder mark (worst lane or alarm), p1 when the link is down, stale when stale', () => {
   const f = fleet();
-  assert.equal(builderP(f.builders.get('builder-a')), '1');
+  assert.equal(builderP(f.builders.get('builder-a')), '2', 'a permission lane: amber ▲ (T23)');
   assert.equal(builderP(f.builders.get('builder-b')), '2');
   assert.equal(builderP(f.builders.get('builder-c')), '1', 'down is p1, as the rail row');
   assert.equal(builderP(builder('s', [{ name: 'x', state: 'working' }], { status: 'stale' })), 'stale');
@@ -144,7 +144,7 @@ test('T43: one builder with a PERM and a QUES lane gets the same mark on the rai
     const s = { builders: new Map([[b.id, b]]), attention: [], alarms: al };
     const chip = stripModel(s, {})[1];
     const row = railLamp(b, al, laneMix([...b.sessions.values()]));
-    assert.equal(chip.p, '1', 'worst lane state wins: the permission lane');
+    assert.equal(chip.p, '2', 'both lanes want you: the amber ▲ (T23)');
     assert.equal(row.p, chip.p);
     assert.equal(chip.label, row.label);
   }
@@ -166,12 +166,12 @@ test('stripModel: ALL first, then each builder by id, on follows b=', () => {
 test('peekModel: counts in scope and the latest event', () => {
   const f = fleet();
   const pk = peekModel(f);
-  assert.equal(pk.p1, 1);
-  assert.equal(pk.p2, 1);
+  assert.equal(pk.p1, 0, 'nothing is broken');
+  assert.equal(pk.p2, 2, 'the permission and the question both want you (T23)');
   assert.equal(pk.run, 2);
   assert.equal(pk.total, 6);
   assert.equal(pk.latest.key, 'builder-a/auth');
-  assert.equal(pk.latest.p, '1');
+  assert.equal(pk.latest.p, '2');
   assert.match(pk.latest.text, /^B1\/auth /);
   const b = peekModel(f, 'builder-b');
   assert.equal(b.total, 2);

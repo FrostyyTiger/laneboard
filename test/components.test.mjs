@@ -99,7 +99,8 @@ test('normP maps priorities, alarm levels and session states to lamp values', ()
   assert.equal(C.normP('P4'), '3', 'P4 -> 3 (§4 2.5)');
   assert.equal(C.normP('ok'), 'ok');
   assert.equal(C.normP('stale'), 'stale');
-  assert.equal(C.normP('waiting_permission'), '1');
+  assert.equal(C.normP('waiting_permission'), '2', 'a permission wants you: amber ▲ (T23)');
+  assert.equal(C.normP('blocked'), '1', 'blocked is broken: red ■ (T23)');
   assert.equal(C.normP('waiting_question'), '2');
   assert.equal(C.normP('working'), 'run');
   assert.equal(C.normP('done'), 'ok');
@@ -164,7 +165,7 @@ test('segbar() renders segments in order with flex-grow and an aria-label', () =
   assert.equal(bar.className, 'segbar');
   assert.equal(bar.getAttribute('role'), 'img');
   assert.equal(bar.getAttribute('aria-label'), '4 lanes: 1 permission, 2 working, 1 idle');
-  assert.deepEqual(bar.children.map((i) => [i.dataset.p, i.style.flexGrow]), [['1', '1'], ['run', '2'], ['off', '1']]);
+  assert.deepEqual(bar.children.map((i) => [i.dataset.p, i.style.flexGrow]), [['2', '1'], ['run', '2'], ['off', '1']]);
   const empty = C.segbar([]);
   assert.match(empty.className, /segbar--empty/);
   assert.equal(empty.children.length, 0);

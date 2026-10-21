@@ -28,6 +28,7 @@
 // last row it saw as `ghost`) and every action key on it does nothing.
 
 import { fkey as makeFkey, BUILDER_ID_RX } from './keys.js';
+import { markP } from './marks.js';
 
 export const GROUPS = Object.freeze(['approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
 
@@ -173,7 +174,7 @@ function approvalRows(s, scope, now) {
         fkey: k,
         name: inboxClip(session, LIMITS.name),
         lane: inboxClip(str(a.lane), LIMITS.name),
-        p: '1',
+        p: markP('approval'),
         status: 'pending',
         tool: inboxClip(str(a.tool), LIMITS.tool) ?? '?',
         mcpServer: inboxClip(str(a.mcpServer), LIMITS.tool),
@@ -215,7 +216,7 @@ function needsRows(s, scope, sessions) {
     const danger = str(a.danger);
     if (!WAITING.has(a.state) && !danger) continue;
     add(e, {
-      p: danger || a.state === 'waiting_permission' ? '1' : '2',
+      p: danger ? markP('danger') : markP(a.state),
       reason: danger ? inboxClip(danger, LIMITS.reason) : a.state === 'waiting_permission' ? 'permission' : 'question',
       since: isNum(a.since) ? a.since : 0,
     });
@@ -228,7 +229,7 @@ function needsRows(s, scope, sessions) {
   for (const e of marked) {
     const m = e.session.lastMarker;
     add(e, {
-      p: m.kind === 'blocked' ? '1' : '2',
+      p: markP(m.kind),
       reason: `${m.kind}: ${inboxClip(str(m.text), LIMITS.reason) ?? ''}`.trim(),
       since: isNum(m.ts) ? m.ts : 0,
     });

@@ -56,8 +56,11 @@
 .lamp[data-p="2"] { filter: drop-shadow(0 0 3px currentColor); }
 [data-theme="light"] .lamp { filter: none; }
 
-/* Unacknowledged: the 1 Hz blink (phase-synced by components.js syncFlash). */
+/* Unacknowledged: the 1 Hz blink (phase-synced by components.js syncFlash).
+   A lamp never fades (runs night 4 T23): at .35 a red ■ read as a dim
+   maroon, a different state; the header tile's ring is the blink. */
 [data-unack] { animation: lb-flash 1s linear infinite; }
+.lamp[data-unack] { animation: none; }
 @media (prefers-reduced-motion: reduce) {
   [data-unack] {
     animation: none;

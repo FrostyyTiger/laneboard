@@ -26,8 +26,21 @@ laneboard is read from across the room at 3 a.m. It follows the high-performance
 | What it means | Colour | Mark | Examples |
 | --- | --- | --- | --- |
 | **news**: working, idle, done, information | grey (`--text-2`, `--text-3`) | `●` working, `○` idle | a lane at work, a finished run, a new PR |
-| **wants you**: a decision, an approval, stuck | amber `--p2` | `▲` | NEED, APPR, STCK, CI-F, BUDG, a run's open need |
-| **broken**: blocked, down, danger | red `--p1` | `■` | BLKD, DOWN, a failed host |
+| **wants you**: a decision, an approval, stuck | amber `--p2` | `▲` | NEED, APPR, STCK, CI-F, BUDG, a run's open need, a PERM or QUES lane |
+| **broken**: blocked, down, danger | red `--p1` | `■` | BLKD, DOWN, a failed host, the guard's danger, a lane that said it is blocked |
+
+- **One state, one mark in every view** (runs night 4 T23). The table above lives in
+  `public/js/core/marks.js` (`STATE_MARK`); the Inbox rows, the Board's cards and NEEDS YOU list,
+  the phone bar, the rail and the Map read it, and `test/marks.test.mjs` enumerates each state per
+  view. A permission is not "broken": it waits for you like a question. Icons beside a mark (the
+  Board's stuck hourglass, the approval stamp) are grey; the lamp is the row's one trouble mark.
+  The rail and the phone chips take an alarm at its header tile's mark, whatever its priority.
+- **A lamp never fades.** An unacknowledged alarm blinks on its header tile's ring; a lamp stays at
+  full strength, because a red ■ at 35 % reads as a dim maroon, a different state.
+- **No filled status pills.** The guard's `■ danger` and a `▲ need` / `■ blocked` marker are the
+  mark and the word in the status hue, no plate behind them.
+- **The Map's centre** (the board's own host) shows its own state only: a grey point, or its ▲/■
+  when it itself is in trouble; what it holds is read on the rings.
 
 - **No blue or cyan in content.** Information is grey. `--p3` (hue 220) stays defined for the old
   sheets until the taste tasks retire it from every view; new work does not use it.

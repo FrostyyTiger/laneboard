@@ -26,7 +26,7 @@
 .card:hover { border-color: var(--line-strong); }
 
 /* State reads on the border, in the priority colour of its lamp. */
-.card.s-waiting_permission { border-color: var(--p1-line); }
+.card.s-waiting_permission { border-color: var(--p2-line); }
 .card.s-waiting_question { border-color: var(--p2-line); }
 /* Dimmed by colour, not opacity: a faded card dropped text under 3:1 in
    light (runs night 4 T12). */
@@ -103,9 +103,8 @@
 .db-stage { width: 5ch; color: var(--text-1); }
 .db-flags { margin-left: auto; gap: var(--sp-1); }
 .db-flags:empty { display: none; }
+/* Grey icons: the lamp carries the card's one trouble mark (runs night 4 T23). */
 .db-flag { display: inline-flex; color: var(--text-2); }
-.db-flag[data-p="1"] { color: var(--p1); }
-.db-flag[data-p="2"] { color: var(--p2); }
 .db-age { width: 4ch; min-width: 4ch; flex: none; justify-content: flex-end; color: var(--text-3); }
 .db-flags:empty + .db-age { margin-left: auto; }
 

@@ -179,7 +179,7 @@ export function inspectorModel(lane, opts = {}) {
   const prog = l?.progress && num(l.progress.m) != null ? { n: num(l.progress.n) ?? 0, m: l.progress.m } : null;
   const flags = [];
   if (s?.danger) flags.push({ id: 'danger', icon: 'alarm', p: '1', text: str(s.danger.reason) ?? 'danger' });
-  if (s?.awaitingApproval) flags.push({ id: 'approval', icon: 'approval', p: '1', text: 'approval pending' });
+  if (s?.awaitingApproval) flags.push({ id: 'approval', icon: 'approval', p: '2', text: 'approval pending' });
   if (s?.stuck) flags.push({ id: 'stuck', icon: 'stuck', p: '2', text: str(s.stuck.reason) ?? str(s.stuck.rule) ?? 'stuck' });
   if (s?.paused) flags.push({ id: 'paused', icon: 'pause', p: '3', text: `paused${str(s.paused.by, 80) ? ` by ${s.paused.by}` : ''}` });
   if (l?.reviewReady?.ready) flags.push({ id: 'review', icon: 'review', p: '3', text: 'ready for review' });

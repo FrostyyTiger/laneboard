@@ -42,7 +42,8 @@ test('the state words are the plan\'s 4-character words, one per state, each wit
     assert.equal(d.p, STATE_P[state]);
   }
   // Colour only for abnormal: working is grey (run), done is ok, the rest are off.
-  assert.equal(STATE_P.waiting_permission, '1');
+  // A permission wants you: the amber ▲, like a question (runs night 4 T23).
+  assert.equal(STATE_P.waiting_permission, '2');
   assert.equal(STATE_P.waiting_question, '2');
   assert.equal(STATE_P.working, 'run');
   assert.equal(dataBlock(null, { name: 'x', state: 'brand-new' }).word, 'BRAN', 'an unknown state still fits the column');
@@ -97,7 +98,7 @@ test('every field, when the data is there', () => {
   const d = dataBlock(lane, s, { code: 'B1', pr, now: NOW });
   assert.deepEqual(
     { code: d.code, lane: d.lane, name: d.name, word: d.word, p: d.p, stage: d.stage, ctx: d.ctx, usd5h: d.usd5h, age: d.age, model: d.model },
-    { code: 'B1', lane: 'auth-refactor', name: 'auth', word: 'PERM', p: '1', stage: '3/7', ctx: '64%', usd5h: '$1.82', age: '12m', model: 'opus' },
+    { code: 'B1', lane: 'auth-refactor', name: 'auth', word: 'PERM', p: '2', stage: '3/7', ctx: '64%', usd5h: '$1.82', age: '12m', model: 'opus' },
   );
   assert.deepEqual(d.pr, { number: 142, state: 'open', icon: 'pr', text: '#142', title: 'open PR #142', url: null });
   assert.deepEqual(d.checks.map((c) => c.g), ['✗', '◌', '●', '●']);
@@ -118,12 +119,15 @@ test('flags from stuck, paused, awaitingApproval and reviewReady, in that order'
   const lane = { id: 'l', reviewReady: { ready: true, reasons: ['PR green', 'plan done'], since: 1 } };
   const d = dataBlock(lane, s);
   assert.deepEqual(d.flags.map((f) => [f.id, f.icon, f.p]), [
-    ['stuck', 'stuck', '2'], ['paused', 'pause', null], ['approval', 'approval', '1'], ['review', 'review', null],
+    ['stuck', 'stuck', null], ['paused', 'pause', null], ['approval', 'approval', null], ['review', 'review', null],
   ]);
+  // The icons stay grey; the lamp is the one trouble mark, amber for a stuck lane with an approval (T23).
+  assert.equal(d.p, '2');
   assert.equal(d.flags[0].title, 'stuck: Edit x5 on one file');
   assert.equal(d.flags[1].title, 'paused (session)');
   assert.equal(d.flags[3].title, 'ready for review: PR green · plan done');
-  assert.equal(d.p, '1', 'an approval held for the session is p1 even while it works');
+  assert.equal(dataBlock(null, { name: 'x', state: 'working', awaitingApproval: 'a' }).p, '2', 'an approval held for the session is the amber ▲ even while it works');
+  assert.equal(dataBlock(null, { name: 'x', state: 'waiting_question', danger: { reason: 'rm' } }).p, '1', 'the guard\'s danger is the red ■');
   // Off when the decorators clear them (`{stuck: null}`), and reviewReady must be ready.
   assert.deepEqual(dataBlock({ id: 'l', reviewReady: { ready: false } }, { name: 'x', state: 'working', stuck: null, paused: null, awaitingApproval: null }).flags, []);
   assert.deepEqual(dataBlock(null, { name: 'x', state: 'idle', stuck: true }).flags.map((f) => f.title), ['stuck'], 'a bare flag still shows');
@@ -355,7 +359,7 @@ const css = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
 test('T15 Board 1: a lane bar is grey unless the card is in trouble', () => withDom(() => {
   const at = (s) => renderCard({ key: `builder-a/${s.name}`, name: s.name, ...s }).dataset.trouble;
-  assert.equal(at({ name: 'p', state: 'waiting_permission' }), '1', 'a permission: red');
+  assert.equal(at({ name: 'p', state: 'waiting_permission' }), '2', 'a permission: amber (T23)');
   assert.equal(at({ name: 'q', state: 'waiting_question' }), '2', 'a question: amber');
   assert.equal(at({ name: 's', state: 'working', stuck: { reason: 'no output' } }), '2', 'stuck: amber');
   assert.equal(at({ name: 'd', state: 'idle', danger: { reason: 'rm -rf' } }), '1', 'the guard: red');

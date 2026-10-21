@@ -162,6 +162,16 @@ export function statusStyle(node, status = node?.status) {
   return { tone: 'grey', level: 0, shape: calmShape(node), abnormal: false, ...(s === 'working' ? { arc: true } : {}) };
 }
 
+/**
+ * True when a node draws the rolled-up status of what it holds: a site, a host
+ * or a folded node. Never the core (runs night 4 T23): the centre is the
+ * board's own host, grey unless it itself wants you, so a waiting lane does
+ * not paint it an amber disc with no ▲.
+ */
+export function rollsUp(node, folded = false) {
+  return node?.kind === 'site' || node?.kind === 'host' || (Boolean(folded) && node?.kind !== 'core');
+}
+
 /** The kinds each non-status overlay measures. */
 const MEASURED = {
   ci: new Set(['lane', 'package']),
