@@ -49,7 +49,7 @@ stay), and one run written to several files is merged by `ts`.
 ## A line
 
 ```jsonl
-{"v":1,"t":"run.start","run":"readiness","ts":1792483200000,"goal":"Make acme-api ready for review","deadline":"2026-10-21T05:00:00Z","budget":{"rounds":15,"windowPct":90}}
+{"v":1,"t":"run.start","run":"readiness","ts":1792483200000,"goal":"Make acme-api ready for review","deadline":"2026-10-21T05:00:00Z","budget":{"maxRounds":15,"windowPct":90}}
 {"v":1,"t":"round.start","run":"readiness","n":3,"role":"builder","task":"A2.4"}
 {"v":1,"t":"score","run":"readiness","name":"tests","value":0.93,"better":"higher"}
 {"v":1,"t":"round.end","run":"readiness","n":3,"outcome":"kept","commit":"abc1234"}
@@ -72,7 +72,7 @@ Every line has these fields:
 
 | Type | Fields | What it does |
 | --- | --- | --- |
-| `run.start` | `goal` (text), `plan`, `branch`, `cwd` (the absolute dir the run works in), `host` (64 chars: the machine the run works on, when it is not the one reading the file; the Map hangs the run there), `deadline` (ISO or epoch), `budget` `{rounds, windowPct, pause5h, stop7d}` (the four may also sit at top level) | starts the run, or restarts it: a second `run.start` updates the goal and budget and reopens a stopped run |
+| `run.start` | `goal` (text), `plan`, `branch`, `cwd` (the absolute dir the run works in), `host` (64 chars: the machine the run works on, when it is not the one reading the file; the Map hangs the run there), `deadline` (ISO or epoch), `budget` `{maxRounds, windowPct, pause5h, stop7d}` (the four may also sit at top level; `rounds` is read as `maxRounds` until 0.2.0, see below) | starts the run, or restarts it: a second `run.start` updates the goal and budget and reopens a stopped run |
 | `round.start` | **`n`** (integer ≥ 0), `role`, `task`, `title` (the task's title, per round), `session`, `wrapup` (`true` for a round after `run.stop`, such as a final review or report) | round `n` begins; starting the same `n` again is a retry, counted in the round's `starts`; a `wrapup` round is flagged, leaves a stopped run stopped and does not count in the list's `rounds` against `maxRounds` (so a run never reads 64 of 63) |
 | `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd`, `session` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` is the round's cost; the run's `cost` sums the rounds' `usd` only when the run sent no `cost` event; `session` (on either round event) names a Claude Code session of the round (see "Sessions of a round") |
 | `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n`, `max` (a positive number: the value that means done, such as the task count; the Map's progress ring) | one measurement of a metric; without `n` it belongs to the latest round (the highest `n` of a `round.start` or `round.end` so far in the file, even if that round has ended; 0 before any) |
@@ -102,6 +102,11 @@ loop can send its own events (`review.note`, `deploy`, …) and still see them.
 - **`session`** is a session id (a UUID, or letters, digits, `.`, `_`, `:`,
   `-`, 128 at most); anything else is ignored.
 - **Booleans** may be `true`/`false`, `"true"`/`"false"` or `1`/`0`.
+- **`rounds` is rounds done, `maxRounds` the cap.** `run.start` takes the cap
+  as `maxRounds` (top level or in `budget`); `budget.rounds` (or a top-level
+  `rounds` on `run.start`) is its old name, still read as `maxRounds` in 0.1.x
+  and dropped in 0.2.0. `maxRounds` wins when a line has both. On `run.stop`
+  and in the API's list, `rounds` stays the count of rounds done.
 - **Lines** longer than 16 KiB, empty lines, lines that are not a JSON object,
   and lines failing a check above are **skipped and counted** by reason; the
   run shows how many. Nothing a writer sends makes laneboard throw.
@@ -287,13 +292,13 @@ of the UI (the CLI sends the `x-laneboard` header):
 
 | Route | Does |
 | --- | --- |
-| `GET /api/runs` | a summary of every run laneboard knows |
-| `GET /api/runs/<run>` | one run, folded; 404 if unknown |
+| `GET /api/runs` | a summary of every run laneboard knows; `?run=<id>` keeps only that run (an empty list for an unknown id) |
+| `GET /api/runs/<run>` | one run, folded; 404 if unknown, `{"error": "no run <run>; the list is GET /api/runs"}` |
 | `POST /api/runs/events` | one event as JSON; checked like a file line (400 with the reason if skipped) and appended to `<stateDir>/runs/<run>.jsonl`; 201 `{ok, run, t, dropped}`, `dropped` naming the fields the fold will not use |
 
 `GET /api/runs` answers `{"runs": [...]}`, one row per run: `run`, `goal`,
 `plan`, `branch`, `state`, `round` (the latest round's `n`), `rounds` (how
-many), `maxRounds` (`budget.rounds`), `scores` (per name: the latest `n` and
+many), `maxRounds` (`budget.maxRounds`), `scores` (per name: the latest `n` and
 `value`, the `prev` value and `better`), `usage`, `cost` (`{usd, rounds,
 from}`, see above), `deadline`,
 `deadlineAt`, the open `needs`, `artifacts` (a count), `prs` (the `pr`
@@ -383,7 +388,7 @@ makes of it:
 
 | The loop writes | Shown as |
 | --- | --- |
-| `run.start` with `rounds`, `pause5h`, `stop7d`, `branch` at the top level | the budget: round n / `rounds`; the burn bars warn at 90 % (5 h) and 85 % (7 d), the loop's default levels |
+| `run.start` with `rounds`, `pause5h`, `stop7d`, `branch` at the top level | the budget: round n of `rounds` (read as `maxRounds`); the burn bars warn at 90 % (5 h) and 85 % (7 d), the loop's default levels |
 | `round.start` per session, again for a retry after a usage limit | one timeline row, `×2` for a retry; the cost of every try adds up |
 | `usage` per round (`fiveHourPct`, `sevenDayPct` from the session's rate-limit events, `-1` when unknown, `fiveHourResetsAt` in seconds) | the 5 h / 7 d burn of the last round; `-1` is shown as unknown |
 | `cost` per round (`usd`, and `total` since the loop's last start) | the round's cost; the run's cost is the sum of every `usd`, so it does not drop when the loop restarts (`total` and `run.stop.usd` do) |

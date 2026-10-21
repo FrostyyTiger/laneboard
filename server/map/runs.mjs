@@ -10,7 +10,7 @@
 //   carries its run; when the feed no longer lists it, the run falls back
 //   to the core and says its host is not on the Map.
 // - Progress 0-1: the latest `tasks` score over its latest `max` when a line
-//   gave one, else rounds over `budget.rounds`; none when neither is known.
+//   gave one, else rounds over `budget.maxRounds`; none when neither is known.
 //   The label prints the same numbers the ring draws ("44 of 63").
 // - A stopped run stays `runs.mapKeepMin` minutes after its stop, then leaves.
 import { runStuck, DEFAULTS as STUCK_DEFAULTS } from '../runs/stuck.mjs';
@@ -36,11 +36,11 @@ export function runTasks(run) {
   return { value: last.value, max, firstMax };
 }
 
-/** 0-1 from the `tasks` score's max, else rounds / budget.rounds; null when unknown. */
+/** 0-1 from the `tasks` score's max, else rounds / budget.maxRounds; null when unknown. */
 export function runProgress(run) {
   const t = runTasks(run);
   if (t) return Math.round(clamp01(t.value / t.max) * 100) / 100;
-  const max = num(run?.budget?.rounds);
+  const max = num(run?.budget?.maxRounds ?? run?.budget?.rounds);
   // a wrap-up round (after run.stop) is not one of the budget's rounds (runs-n5 T3/T4)
   const done = Number.isInteger(run?.counted) ? run.counted : (run.rounds ?? []).filter((r) => !r?.wrapup).length;
   if (max > 0) return Math.round(clamp01(done / max) * 100) / 100;
@@ -84,7 +84,7 @@ export function runNodes(runs, { nodes = [], coreId = '__core', now = Date.now()
     const parent = (host && hosts.get(nameKey(host))) || coreId;
     const counted = run.rounds?.findLast?.((r) => !r.wrapup);
     const round = counted ? counted.n : null;
-    const maxRounds = num(run.budget?.rounds);
+    const maxRounds = num(run.budget?.maxRounds ?? run.budget?.rounds);
     const progress = runProgress(run);
     const tasks = runTasks(run);
     const detail = {};

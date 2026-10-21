@@ -160,8 +160,12 @@ const skip = (reason) => ({ ok: false, reason });
 const SHAPES = {
   'run.start'(o) {
     const b = o.budget && typeof o.budget === 'object' ? o.budget : {};
+    // `maxRounds` is the cap (top level or in budget); `rounds` is its old name,
+    // read until 0.2.0 and kept in the fold as a copy for readers of 0.1.x.
+    const maxRounds = int(b.maxRounds ?? o.maxRounds ?? b.rounds ?? o.rounds);
     const budget = {
-      rounds: int(b.rounds ?? o.rounds),
+      maxRounds,
+      rounds: maxRounds,
       windowPct: num(b.windowPct ?? o.windowPct),
       pause5h: num(b.pause5h ?? o.pause5h),
       stop7d: num(b.stop7d ?? o.stop7d),

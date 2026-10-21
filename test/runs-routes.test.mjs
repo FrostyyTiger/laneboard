@@ -36,12 +36,12 @@ test.after(() => {
 });
 
 /** Call a registered route with a fake request; resolves to {status, body}. */
-async function call(method, pattern, { params = {}, body = '' } = {}) {
+async function call(method, pattern, { params = {}, body = '', url = pattern } = {}) {
   const r = routes.find((x) => x.method === method && x.pattern === pattern);
   assert.ok(r, `${method} ${pattern} is registered`);
   const req = Readable.from(body ? [Buffer.from(body)] : []);
   req.method = method;
-  req.url = pattern;
+  req.url = url;
   req.headers = {};
   req.params = params;
   return new Promise((resolve, reject) => {
@@ -97,7 +97,7 @@ test('GET /api/runs/:run gives the folded run, 404 for an unknown or bad id', as
   for (const id of ['nope', '../etc', '', '.hidden']) {
     const r = await call('GET', '/api/runs/:run', { params: { run: id } });
     assert.equal(r.status, 404, id);
-    assert.equal(r.body.error, 'unknown run');
+    assert.match(r.body.error, /^no run .*; the list is GET \/api\/runs$/);
   }
 });
 
@@ -212,4 +212,18 @@ test('appendEvent refuses an unsafe id', async () => {
 
 test('listBody before the collector started is an empty list', () => {
   assert.deepEqual(listBody(null), { runs: [] });
+});
+
+test('T7: GET /api/runs?run=<id> keeps only that run, an unknown id gives an empty list; the 404 names the list', async () => {
+  await ready();
+  const all = await call('GET', '/api/runs');
+  assert.ok(all.body.runs.length > 1, 'the earlier tests posted more runs');
+  const one = await call('GET', '/api/runs', { url: '/api/runs?run=readiness' });
+  assert.equal(one.status, 200);
+  assert.deepEqual(one.body.runs.map((r) => r.run), ['readiness']);
+  const none = await call('GET', '/api/runs', { url: '/api/runs?run=nope' });
+  assert.deepEqual(none.body, { runs: [] });
+  const miss = await call('GET', '/api/runs/:run', { params: { run: 'nope' } });
+  assert.equal(miss.status, 404);
+  assert.equal(miss.body.error, 'no run nope; the list is GET /api/runs');
 });

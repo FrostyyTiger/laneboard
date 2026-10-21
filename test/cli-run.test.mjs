@@ -74,7 +74,7 @@ test('every subcommand writes one line parseLine accepts, to ./.laneboard/run.js
     return p.event;
   });
   assert.deepEqual(events.map((e) => e.t), ['run.start', 'round.start', 'score', 'round.end', 'needs', 'artifact', 'run.stop']);
-  assert.deepEqual(events[0].budget, { rounds: 15, windowPct: 90, pause5h: null, stop7d: null });
+  assert.deepEqual(events[0].budget, { maxRounds: 15, rounds: 15, windowPct: 90, pause5h: null, stop7d: null });
   assert.equal(events[0].deadline, '2026-10-21T05:00:00Z');
   assert.equal(events[0].host, 'builder-a');
   assert.equal(events[2].max, 1);

@@ -1,8 +1,10 @@
 // Route module: runs (docs/plans/runs/README.md §3 A1; protocol in docs/runs.md).
 //
-//   GET  /api/runs          -> {runs: [summary]}   latest activity first
+//   GET  /api/runs          -> {runs: [summary]}   latest activity first; `?run=<id>`
+//                           keeps only that run (an empty list for an unknown id)
 //   GET  /api/runs/:run     -> {run}               the folded run, each round with the
-//                           sessions tied to it (server/runs/bind.mjs); 404 if unknown
+//                           sessions tied to it (server/runs/bind.mjs); 404 if unknown,
+//                           its error naming the list route
 //   POST /api/runs/events   one event as JSON -> 201 {ok, run, t, dropped}; 400 {error}
 //                           if parseLine skips it; appended to <stateDir>/runs/<run>.jsonl;
 //                           `dropped` names the fields the fold will not use
@@ -60,11 +62,22 @@ export function runWithSessions(store, run, { seen = sessionsSeen, now = Date.no
 
 /**
  * The body of GET /api/runs from a store (null before the collector started).
- * `opts` go to summarize: `{stuck}` is `runs.stuck`, `{now}` the time.
+ * `opts.run` keeps only that run id; the rest go to summarize: `{stuck}` is
+ * `runs.stuck`, `{now}` the time.
  */
 export function listBody(store, opts = {}) {
-  return { runs: store ? store.list().map((run) => summarize(run, opts)) : [] };
+  const { run: only, ...rest } = opts;
+  const runs = store ? store.list() : [];
+  const kept = typeof only === 'string' ? runs.filter((r) => r.run === only) : runs;
+  return { runs: kept.map((run) => summarize(run, rest)) };
 }
+
+/** The 404 text for GET /api/runs/<id>: the id (clipped) and where the list is. */
+export function noRunError(id) {
+  return `no run ${String(id ?? '').slice(0, 64)}; the list is GET ${LIST_PATH}`;
+}
+
+const query = (req) => req.query ?? new URL(req.url ?? '/', 'http://localhost').searchParams;
 
 /**
  * Check one posted body and give the line to append, or why not:
@@ -109,13 +122,14 @@ export default {
 
     ctx.route('GET', LIST_PATH, (req, res) => {
       const cfg = ctx.config ?? globalConfig;
-      return ctx.json(res, listBody(collector.store(), { stuck: cfg.runs?.stuck }));
+      const only = query(req).get('run');
+      return ctx.json(res, listBody(collector.store(), { stuck: cfg.runs?.stuck, ...(only !== null ? { run: only } : {}) }));
     });
 
     ctx.route('GET', RUN_PATH, (req, res) => {
       const id = req.params?.run;
       const run = typeof id === 'string' && RUN_ID.test(id) ? collector.store()?.get(id) : null;
-      if (!run) return ctx.json(res, { error: 'unknown run' }, 404);
+      if (!run) return ctx.json(res, { error: noRunError(id) }, 404);
       return ctx.json(res, { run: runWithSessions(collector.store(), run) });
     });
 

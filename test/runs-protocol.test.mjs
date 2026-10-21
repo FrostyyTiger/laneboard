@@ -7,6 +7,7 @@ import path from 'node:path';
 import {
   parseLine, parseLines, foldRun, ackTarget, droppedFields, KNOWN_TYPES, MAX_LINE, MAX_TEXT, FENCE_ACK_BY,
 } from '../server/runs/protocol.mjs';
+import { summarize } from '../server/runs/summary.mjs';
 
 const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'runs', 'readiness.jsonl');
 const line = (o) => JSON.stringify({ v: 1, run: 'r1', ts: 1792483200000, ...o });
@@ -32,7 +33,7 @@ test('every known type parses, with its checked fields', () => {
   };
   check({ t: 'run.start', goal: 'g', plan: 'p.md', deadline: '2026-10-21T05:00:00Z', budget: { rounds: 15, windowPct: 90 } },
     { goal: 'g', plan: 'p.md', deadlineAt: Date.parse('2026-10-21T05:00:00Z'),
-      budget: { rounds: 15, windowPct: 90, pause5h: null, stop7d: null } });
+      budget: { maxRounds: 15, rounds: 15, windowPct: 90, pause5h: null, stop7d: null } });
   check({ t: 'round.start', n: 3, role: 'builder', task: 'A2.4' }, { n: 3, role: 'builder', task: 'A2.4' });
   check({ t: 'round.end', n: 3, outcome: 'kept', commit: 'abc1234' }, { n: 3, outcome: 'kept', commit: 'abc1234' });
   check({ t: 'score', name: 'tests', value: 0.93, better: 'higher' }, { name: 'tests', value: 0.93, better: 'higher', n: null });
@@ -49,7 +50,7 @@ test('every known type parses, with its checked fields', () => {
 
 test('the reference loop\'s shapes: floats, top-level budget, numeric commit', () => {
   const start = ok({ t: 'run.start', goal: 'g', deadline: '2026-10-21 07:00', rounds: 15.0, pause5h: 90.0, stop7d: 85.0, branch: 'run/x' });
-  assert.deepEqual(start.budget, { rounds: 15, windowPct: null, pause5h: 90, stop7d: 85 });
+  assert.deepEqual(start.budget, { maxRounds: 15, rounds: 15, windowPct: null, pause5h: 90, stop7d: 85 });
   assert.equal(start.deadline, '2026-10-21 07:00');
   assert.equal(start.branch, 'run/x');
   const r = ok({ t: 'round.start', n: 3.0, role: 'fix' });
@@ -116,7 +117,7 @@ test('the fixture folds into the run', () => {
   assert.equal(run.run, 'readiness');
   assert.match(run.goal, /acme-api/);
   assert.equal(run.state, 'stopped');
-  assert.deepEqual(run.budget, { rounds: 6, windowPct: 90, pause5h: null, stop7d: null });
+  assert.deepEqual(run.budget, { maxRounds: 6, rounds: 6, windowPct: 90, pause5h: null, stop7d: null });
   assert.equal(run.deadlineAt, Date.parse('2026-10-21T05:00:00Z'));
   assert.deepEqual(run.stop, { reason: 'no-progress', rounds: 3, usd: 3.75, detail: null, wrapup: false, ts: 1792487410000 });
 
@@ -403,4 +404,20 @@ test('T6: droppedFields names what the checked event leaves out', () => {
   assert.deepEqual(droppedFields(raw, parseLine(JSON.stringify(raw)).event), [], 'an unknown type is kept raw');
   const cost = { t: 'cost', run: 'r1', usd: 0.5, n: 2 };
   assert.deepEqual(droppedFields(cost, parseLine(JSON.stringify(cost)).event), []);
+});
+
+test('T7: `maxRounds` (top level or in budget) and the old `budget.rounds` fold to the same cap', () => {
+  const caps = [
+    { maxRounds: 7 },
+    { budget: { maxRounds: 7 } },
+    { budget: { rounds: 7 } },
+    { rounds: 7 },
+  ].map((extra) => {
+    const run = foldRun([ok({ t: 'run.start', goal: 'g', ...extra })]);
+    return [run.budget.maxRounds, summarize(run).maxRounds];
+  });
+  assert.deepEqual(caps, [[7, 7], [7, 7], [7, 7], [7, 7]]);
+  assert.equal(ok({ t: 'run.start', budget: { maxRounds: 4, rounds: 9 } }).budget.maxRounds, 4, 'the new name wins');
+  const start = { t: 'run.start', run: 'r1', maxRounds: 5, budget: { rounds: 5 } };
+  assert.deepEqual(droppedFields(start, parseLine(JSON.stringify(start)).event), [], 'neither spelling is reported dropped');
 });

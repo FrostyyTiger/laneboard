@@ -42,7 +42,7 @@ export function summarize(run, { stuck = STUCK_DEFAULTS, now = Date.now() } = {}
     round: last ? last.n : null,
     rounds: run.counted ?? run.rounds.length,
     wrapup: run.rounds[run.rounds.length - 1]?.wrapup === true,
-    maxRounds: run.budget?.rounds ?? null,
+    maxRounds: run.budget?.maxRounds ?? run.budget?.rounds ?? null,
     scores,
     usage: run.usage,
     cost: run.cost,

@@ -610,7 +610,7 @@ export function runSummaryOf(run) {
     run: run.run, goal: run.goal, plan: run.plan, branch: run.branch, state: run.state,
     round: Number.isInteger(last?.n) ? last.n : null,
     rounds: Number.isInteger(run.counted) ? run.counted : counted.length,
-    maxRounds: isObj(run.budget) ? run.budget.rounds ?? null : null,
+    maxRounds: isObj(run.budget) ? run.budget.maxRounds ?? run.budget.rounds ?? null : null,
     scores: rnLastScores(run),
     usage: run.usage, cost: run.cost, deadline: run.deadline, deadlineAt: run.deadlineAt,
     needs: (Array.isArray(run.needs) ? run.needs : []).filter((x) => isObj(x) && x.open !== false),

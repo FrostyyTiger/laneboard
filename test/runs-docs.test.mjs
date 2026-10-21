@@ -194,3 +194,10 @@ test('T6: docs/runs.md documents `run cost`, the run cost from rounds and what -
   assert.match(doc, /`, dropped: <fields>`/);
   assert.match(doc, /201 `\{ok, run, t, dropped\}`/);
 });
+
+test('T7: docs/runs.md says `rounds` is rounds done and `maxRounds` the cap, the alias with its version, and `?run=`', () => {
+  assert.ok(doc.includes('`rounds` is rounds done, `maxRounds` the cap'));
+  assert.match(doc, /`budget\.rounds`[^|]*old name, still read as `maxRounds` in 0\.1\.x\s+and dropped in 0\.2\.0/);
+  assert.ok(doc.includes('`?run=<id>`'));
+  assert.ok(doc.includes('no run <run>; the list is GET /api/runs'));
+});

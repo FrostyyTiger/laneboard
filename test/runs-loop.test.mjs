@@ -50,7 +50,7 @@ test('run.start: goal, plan, branch, deadline and the top-level budget', () => {
   assert.equal(RUN.branch, 'run/runs-n1');
   assert.equal(RUN.deadline, '2026-10-21 07:00');
   assert.equal(RUN.deadlineAt, Date.parse('2026-10-21 07:00'), 'no zone: read in laneboard\'s local time');
-  assert.deepEqual(RUN.budget, { rounds: 15, windowPct: null, pause5h: 90, stop7d: 85 });
+  assert.deepEqual(RUN.budget, { maxRounds: 15, rounds: 15, windowPct: null, pause5h: 90, stop7d: 85 });
 });
 
 test('rounds: roles, retries, outcomes, commits and the cost of each', () => {
