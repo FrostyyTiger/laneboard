@@ -117,6 +117,7 @@ Notes for builders, from reading the code (planner, round 1):
 
 ## For the owner
 
+- **Round 79: a demo from an earlier round (started 12:14) still holds `:7795`**, so round 79's own demo exited with EADDRINUSE and the shots came from that older process (it serves `public/` from disk, so the new code was on screen: BA red in the rail). Round 79 left it running because it did not start it.
 - **Round 79 (T43): `public/js/ui/sheet.js` is not in `fenced.txt`** (round 8 thought it was): T43 changed the chip model there and the round was not reverted; T13 may be buildable after all, your call or a triage round's.
 - **Round 8: two fenced files stand in front of planned UI tasks.** (1) T13: the phone's MAP/LIST/INBOX
   bar is the bottom sheet's own control (`public/js/ui/sheet.js`, fenced), not a route tab bar; it shows
