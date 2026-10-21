@@ -688,6 +688,8 @@ test('T28: an open need gives the needs.ack payload and its link; a closed or wa
   assert.deepEqual(needActions({ ...need, open: false }, 'acme-search'), { ack: null, open: null }, 'closed: no buttons');
   assert.equal(needActions({ ...need, kind: 'wait' }, 'acme-search').ack, null, 'a wait closes itself');
   assert.equal(needActions({ ...need, i: undefined }, 'acme-search').ack, null, 'no place, no ack');
+  // T5: a need with a time is acked by its ts (places shift across sources).
+  assert.equal(needActions({ ...need, ts: 1792483201000 }, 'acme-search').ack.ref, 1792483201000);
   assert.equal(needActions(need, '../x').ack, null, 'not a run id');
   assert.equal(needActions({ ...need, link: 'javascript:alert(1)' }, 'acme-search').open, null);
   assert.deepEqual(needActions(null, 'acme-search'), { ack: null, open: null });

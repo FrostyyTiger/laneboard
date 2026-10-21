@@ -8,7 +8,7 @@ import path from 'node:path';
 import {
   GROUPS, COOPERATIVE_NOTE, LIMITS, KEY_COMMANDS, buildInbox, keyAction, moveFocus, reconcileFocus,
   rowOf, withNote, effectiveTier, formatCountdown, lineClass, previewOf, inboxClip,
-  ackEvent, runPageHref, RUN_PR_FRESH_MS, ACK_BY,
+  ackEvent, needAckRef, runPageHref, RUN_PR_FRESH_MS, ACK_BY,
 } from '../public/js/core/inbox-model.js';
 import { buildReviewQueue } from '../public/js/core/review-queue.js';
 import { createRegistry } from '../public/js/core/commands.js';
@@ -330,12 +330,15 @@ test('runs: a stopped run keeps its PR for RUN_PR_FRESH_MS after its last event,
   assert.equal(groupIds(live, 'runs').length, 1);
 });
 
-test('runs: `a` on a run need is the needs.ack of its place in the list; on a PR it does nothing', () => {
+test('runs: `a` on a run need is the needs.ack of its ts; on a PR it does nothing', () => {
   const runs = [runRow('acme-search', { needs: [need(2, NOW)], prs: [{ url: 'https://example.invalid/p/1', title: 't', ts: NOW - 1 }] })];
   const m = buildInbox(storeOf([]), { now: NOW, runs });
   const plan = keyAction('a', 'rn:acme-search:2', m);
-  assert.deepEqual(plan, { action: 'ack', run: 'acme-search', ref: 2, rowId: 'rn:acme-search:2' });
-  assert.deepEqual(ackEvent(plan), { v: 1, t: 'needs.ack', run: 'acme-search', ref: 2, by: ACK_BY });
+  assert.deepEqual(plan, { action: 'ack', run: 'acme-search', ref: NOW, rowId: 'rn:acme-search:2' });
+  assert.deepEqual(ackEvent(plan), { v: 1, t: 'needs.ack', run: 'acme-search', ref: NOW, by: ACK_BY });
+  // A need without a time falls back to its place.
+  assert.equal(needAckRef({ i: 3, ts: null }), 3);
+  assert.equal(needAckRef({ i: 3, ts: 0 }), 3);
   assert.deepEqual(keyAction('a', 'rp:acme-search:https://example.invalid/p/1', m), { none: 'not-an-approval' });
   assert.deepEqual(keyAction('d', 'rn:acme-search:2', m), { none: 'not-an-approval' });
   assert.deepEqual(keyAction('p', 'rn:acme-search:2', m), { none: 'no-session' });
@@ -356,6 +359,36 @@ test('runs: the posted ack is one the protocol folds into a closed need', async 
   const run = foldRun(events);
   assert.equal(run.needs[0].open, false);
   assert.equal(run.needs[0].by, ACK_BY);
+});
+
+// T5 (review 1d): the store merges sources by time, so a source read later
+// that holds an older need shifts every place after it. The ack names the
+// need by its ts and still closes the one the person saw.
+test('runs: an ack by ts closes the need the row showed after a later-read source shifted the places', async () => {
+  const { parseLine } = await import('../server/runs/protocol.mjs');
+  const { createStore } = await import('../server/runs/store.mjs');
+  const { summarize } = await import('../server/runs/summary.mjs');
+  const ev = (o) => { const p = parseLine(JSON.stringify({ v: 1, run: 'acme-search', ...o })); assert.ok(p.ok, JSON.stringify(p)); return p.event; };
+  const store = createStore({ now: () => NOW });
+  store.ingest('loop.jsonl', [ev({ t: 'run.start', ts: NOW - HOUR }), ev({ t: 'needs', ts: NOW - 1000, text: 'keep the old export?' })]);
+  const before = buildInbox(storeOf([]), { now: NOW, runs: store.list().map((r) => summarize(r, { now: NOW })) });
+  assert.deepEqual(groupIds(before, 'runs'), ['rn:acme-search:0']);
+  const plan = keyAction('a', 'rn:acme-search:0', before);
+  assert.equal(plan.ref, NOW - 1000, 'the ack names the ts, not place 0');
+  // The API's own file is read later and holds an older need: it takes place 0.
+  store.ingest('api.jsonl', [ev({ t: 'needs', ts: NOW - 5000, text: 'fence: a round touched a fenced file', kind: 'fence' })]);
+  assert.equal(store.get('acme-search').needs[0].text, 'fence: a round touched a fenced file', 'the places shifted');
+  store.ingest('api.jsonl', [{ ...ev(ackEvent(plan)), ts: NOW }]);
+  const run = store.get('acme-search');
+  assert.deepEqual(run.needs.map((n) => [n.text, n.open, n.by]), [
+    ['fence: a round touched a fenced file', true, null],
+    ['keep the old export?', false, ACK_BY],
+  ]);
+  // The place the row had (0) would have closed the wrong need.
+  const byPlace = createStore({ now: () => NOW });
+  byPlace.ingest('loop.jsonl', [ev({ t: 'run.start', ts: NOW - HOUR }), ev({ t: 'needs', ts: NOW - 1000, text: 'keep the old export?' })]);
+  byPlace.ingest('api.jsonl', [ev({ t: 'needs', ts: NOW - 5000, text: 'fence', kind: 'fence' }), ev({ ...ackEvent({ run: 'acme-search', ref: 0 }), ts: NOW })]);
+  assert.equal(byPlace.get('acme-search').needs[0].open, false, 'by place, the fence need closes instead');
 });
 
 // Seen at 390 (reviews/20-designer.md, Inbox 1): the run decision was cut to

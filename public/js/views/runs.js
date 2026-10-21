@@ -40,6 +40,7 @@ import { money } from '../core/format.js';
 import { icon } from '../core/icons.js';
 import { lamp, panel, setPanel } from '../ui/components.js';
 import { confirmAction } from '../ui/confirm.js';
+import { needAckRef } from '../core/inbox-model.js';
 import { toast } from '../ui/toast.js';
 import { sparkRange } from '../ui/spark.js';
 
@@ -220,15 +221,16 @@ export const EVENTS_URL = `${LIST_URL}/events`;
 
 /**
  * One need of run `runId` -> its buttons: {ack, open}. `ack` is the
- * `needs.ack` event to post (an open need a person must answer, with its place
- * `i` from the fold), `open` the need's http(s) link; both null on a closed need.
+ * `needs.ack` event to post (an open need a person must answer, named by its
+ * `ts`, or its place `i` from the fold when it has no time: core/inbox-model.js
+ * needAckRef), `open` the need's http(s) link; both null on a closed need.
  */
 export function needActions(need, runId) {
   if (!isObj(need) || need.open === false) return { ack: null, open: null };
   const kind = rnClean(need.kind, 32) ?? 'decision';
   const ack = kind !== 'wait' && Number.isInteger(need.i) && need.i >= 0
     && typeof runId === 'string' && RUN_ID_RX.test(runId)
-    ? { v: 1, t: 'needs.ack', run: runId, ref: need.i, by: ACK_BY } : null;
+    ? { v: 1, t: 'needs.ack', run: runId, ref: needAckRef(need), by: ACK_BY } : null;
   return { ack, open: safeHref(rnClean(need.link, 400)) };
 }
 

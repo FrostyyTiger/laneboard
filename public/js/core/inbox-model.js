@@ -346,7 +346,7 @@ function runRows(runs, now) {
       const kind = inboxClip(str(n.kind), 32) ?? 'decision';
       if (kind === 'wait') continue;
       rows.push({
-        ...base, id: `rn:${r.run}:${n.i}`, kind: 'run-need', needIndex: n.i, p: '2',
+        ...base, id: `rn:${r.run}:${n.i}`, kind: 'run-need', needIndex: n.i, needRef: needAckRef(n), p: '2',
         reason: `${kind}: ${inboxClip(str(n.text), LIMITS.reason) ?? ''}`.trim(),
         link: httpHref(n.link), since: isNum(n.ts) ? n.ts : 0,
       });
@@ -367,6 +367,16 @@ function runRows(runs, now) {
   }
   rows.sort((x, y) => y.since - x.since || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
   return rows;
+}
+
+/**
+ * What a `needs.ack` names a need by: its `ts` (epoch ms), since its place `i`
+ * shifts when a later-read source holds older needs (the store merges sources
+ * by time); the place only for a need without a time. The fold reads a ref at
+ * or above 1e9 as a time (server/runs/protocol.mjs MAX_NEED_INDEX).
+ */
+export function needAckRef(n) {
+  return isNum(n?.ts) && n.ts >= 1e12 ? n.ts : n?.i;
 }
 
 /** The `needs.ack` event an ack plan posts to POST /api/runs/events (docs/runs.md). */
@@ -465,7 +475,7 @@ export function keyAction(key, focusId, model) {
   }
   if (key === 'a' && r.kind === 'run-need') {
     if (r.closed) return { none: 'closed' };
-    return { action: 'ack', run: r.run, ref: r.needIndex, rowId: r.id };
+    return { action: 'ack', run: r.run, ref: r.needRef ?? r.needIndex, rowId: r.id };
   }
   if (key === 'a' || key === 'd' || key === 'r') {
     if (r.kind !== 'approval') return { none: 'not-an-approval' };

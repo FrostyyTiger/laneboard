@@ -346,7 +346,7 @@ makes of it:
 | `score` `tests` (share of tests passing) after each check, `tasks` (tasks done) after each round | the two scores and their trend, higher is better; on the run page one line each over the rounds (two scores in one round: the last counts) |
 | `round.end` with `outcome` `kept`, `no-task-done`, `researched` (`open` questions), `reviewed`, `triaged`, `fixed`, `still-red` | the round's outcome and commit; the planner, operator and final rounds have no `round.end` |
 | `needs` `wait` (sleeping out a usage limit) | the run is `waiting`, not asking you anything |
-| `needs` `fence` (a round touched a fenced file and was reverted) | an open need on the row: the owner decides; also a row in the Inbox's Runs group, where `a` acknowledges it (a `needs.ack` with `by: "inbox"`) |
+| `needs` `fence` (a round touched a fenced file and was reverted) | an open need on the row: the owner decides; also a row in the Inbox's Runs group, where `a` acknowledges it (a `needs.ack` with `by: "inbox"` that names the need by its `ts`, since places shift when a later-read file holds older needs) |
 | `artifact` `pr` | the PR link on the run page; in the Inbox while the run is live and for 24 h after its last event (the protocol has no "merged") |
 | `run.stop` with `reason`, `rounds`, `usd` | the stop reason: `done`, `deadline`, `rounds`, `no-progress`, `7d-window`, `overage`, `error`, `human` |
 
