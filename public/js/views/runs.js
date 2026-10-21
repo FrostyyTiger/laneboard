@@ -13,8 +13,9 @@
 //   budget burn against the 5 h / 7 d windows (from the last `usage` event)
 //   time left to the deadline, or the stop reason · cost · open needs
 // A run the stuck rules flag (server/runs/stuck.mjs, `stuck: {rule, reason}`)
-// carries the Board's stuck badge (the `stuck` icon, p2) next to its state
-// word, and sorts after the runs that need you.
+// reads `▲ STUCK` in p2 in its list row, the reason on a muted second line
+// (T54); its page keeps the Board's stuck badge (the `stuck` icon) next to the
+// state word. It sorts after the runs that need you.
 // Grey unless something needs you: a hue only for a worse score, a window
 // near its stop level, an overage, an error or no-progress stop, an open need;
 // each also carries a shape or a word.
@@ -312,8 +313,11 @@ function rnField(cls, text, title) {
   return n;
 }
 
-/** Lamp + word; on the run page a stopped run's `stop` (stopOf) follows the word (T17). */
-function stateNode(row, stop = null) {
+/**
+ * Lamp + word; on the run page a stopped run's `stop` (stopOf) follows the word (T17).
+ * A list row (`list`) of a stuck run reads `▲ STUCK` with the reason under it (T54).
+ */
+function stateNode(row, stop = null, list = false) {
   const s = stateOf(row);
   const n = el('span', 'rn-f rn-state');
   n.dataset.p = s.p;
@@ -328,7 +332,20 @@ function stateNode(row, stop = null) {
     }
   }
   const stuck = stuckOf(row);
-  if (stuck) {
+  if (stuck && list) {
+    // a list row (T54): the state word itself says it, `▲ STUCK` in p2, the reason under it
+    const words = `stuck: ${stuck.reason}`;
+    n.textContent = '';
+    n.dataset.p = '2';
+    n.dataset.stuck = '';
+    const m = el('span', 'rn-stuck rn-state-m', '▲');
+    m.dataset.p = '2';
+    if (stuck.rule) m.dataset.rule = stuck.rule;
+    m.setAttribute('aria-hidden', 'true');
+    m.title = words;
+    n.append(m, el('span', 'rn-state-t', 'stuck'), el('span', 'rn-state-sub', stuck.reason));
+    n.title = `${s.title}\n${words}`;
+  } else if (stuck) {
     const words = `stuck: ${stuck.reason}`;
     const f = el('span', 'rn-stuck flag-stuck');
     f.dataset.p = '2';
@@ -362,8 +379,8 @@ function goalNode(row, asLink = false, extra = null) {
     const line = el('span', 'rn-goal-2');
     line.append(subEl, extra);
     n.append(line);
-  } else {
-    n.append(subEl);
+  } else if (subEl.textContent) {
+    n.append(subEl); // no empty second line under a goal-less, branch-less id (T54)
   }
   n.title = [goal, sub, rnClean(row.plan)].filter(Boolean).join('\n');
   return n;
@@ -462,6 +479,13 @@ function meterNode(label, w) {
 function burnNode(row) {
   const b = burnOf(row.usage, row.state);
   const n = el('span', 'rn-f rn-burn');
+  if (!b.fiveHour && !b.sevenDay && !b.overage) {
+    // no usage reported: one muted dash, not two empty bar tracks (T54)
+    n.dataset.none = '';
+    n.textContent = DASH;
+    n.title = 'no usage reported';
+    return n;
+  }
   n.append(meterNode('5h', b.fiveHour), meterNode('7d', b.sevenDay));
   if (b.overage) {
     const o = rnField('rn-over', '■ overage', 'the account is in paid extra usage');
@@ -513,7 +537,7 @@ export function runRow(row, now = Date.now()) {
   const stopP = row.state === 'stopped' ? STOP_P[rnClean(row.stop, 32)] : null;
   if (stopP && stopP !== 'ok') leftEl.dataset.p = stopP;
   li.append(
-    stateNode(row),
+    stateNode(row, null, true),
     goalNode(row, true, needsNode(row)),
     rnField('rn-round', roundText(row), `round ${roundText(row)}${isNum(row.rounds) ? `, ${row.rounds} recorded` : ''}`),
     scoresNode(row),

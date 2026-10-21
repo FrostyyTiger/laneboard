@@ -72,6 +72,18 @@
 }
 /* the stuck badge (server/runs/stuck.mjs): Board's flag, the icon in p2 */
 .rn-stuck { display: inline-flex; color: var(--p2); }
+/* a list row's stuck state (T54): `▲ STUCK`, the reason on a muted second line, clipped; it adds
+   nothing to the column's width (contain), so a long reason never widens the state column */
+.rn-state[data-stuck] { flex-wrap: wrap; row-gap: 0; max-width: 100%; }
+.rn-state-sub {
+  flex-basis: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  contain: inline-size;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+}
 
 /* ---- goal: the goal text, the run id and branch under it */
 .rn-goal { flex-direction: column; align-items: flex-start; gap: 0; }
@@ -113,6 +125,8 @@
 /* each window a fixed grid (label, bar, value) so the meters and their "—" line up; an
    overage takes the cell's next line */
 .rn-burn { gap: var(--sp-1) var(--sp-2); flex-wrap: wrap; }
+/* no usage reported: one muted dash (T54) */
+.rn-burn[data-none] { color: var(--text-3); }
 .rn-win { display: inline-grid; grid-template-columns: 2ch 40px 4ch; align-items: center; gap: var(--sp-1); }
 .rn-win-k { color: var(--text-3); font-size: var(--fs-11); }
 .rn-win-v { min-width: 4ch; text-align: right; }
@@ -331,6 +345,8 @@ a.rn-tl-role-a:focus-visible { outline: var(--bw) solid var(--accent); outline-o
   .rn-row { gap: var(--sp-1) var(--sp-2); }
   .rn-scores,
   .rn-burn { grid-column: 1 / -1; flex-wrap: wrap; white-space: normal; }
+  /* a lone unlabelled dash on its own line says nothing here (T54) */
+  .rn-burn[data-none] { display: none; }
   /* the open need takes its own line under the run id, one line, mark and text together, the
      text clipped (T29, T31) */
   .rn-goal-2 { flex-wrap: wrap; row-gap: 0; }

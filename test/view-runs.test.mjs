@@ -418,7 +418,7 @@ test('a run made only of a posted run.stop: the id is the title, no null or unde
     const li = byClass(host, 'rn-row')[0];
     assert.doesNotMatch(li.textContent, /null|undefined|NaN/);
     assert.equal(byClass(li, 'rn-goal-t')[0].textContent, 'demo', 'the id stands in for the goal');
-    assert.equal(byClass(li, 'rn-goal-sub')[0].textContent, '', 'no id repeated under itself');
+    assert.equal(byClass(li, 'rn-goal-sub').length, 0, 'no id repeated under itself, no empty line (T54)');
     assert.equal(byClass(li, 'rn-round')[0].textContent, '—');
     assert.equal(byClass(byClass(li, 'rn-left')[0], 'rn-v')[0].textContent, reason);
     assert.equal(li.dataset.state, 'stopped');
@@ -1234,3 +1234,39 @@ test('T21: the wrap-up ROUND cell is left-aligned in --text-2', () => {
   const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
   assert.match(css, /\.rn-tl-row\[data-wrapup\] \.rn-tl-n \{[^}]*color: var\(--text-2\);[^}]*text-align: left/);
 });
+
+// n3 T50 + review 10 idea 4: a stuck run says so in its state cell, a run with no usage shows one dash.
+test('T54: a stuck list row reads ▲ STUCK in p2 with the reason under it; no usage is one muted —; no empty cell', () => withDom(() => {
+  const stuck = { ...LIVE, run: 'loopy', needs: [], stuck: { rule: 'same-task', reason: 'task T7 failed in rounds 4, 5' } };
+  const bare = { run: 'fresh', state: 'running', usage: null, needs: [] };
+  const host = document.createElement('div');
+  renderRuns(host, [stuck, bare], { status: 'ok' }, FIX.updatedAt);
+  const [row, fresh] = byClass(host, 'rn-row');
+  const st = byClass(row, 'rn-state')[0];
+  assert.equal(st.dataset.p, '2');
+  assert.match(st.textContent, /^▲stuck/);
+  assert.equal(byClass(st, 'rn-state-t')[0].textContent.toUpperCase(), 'STUCK');
+  assert.equal(byClass(st, 'rn-state-t').length, 1, 'no RUNNING beside it');
+  assert.equal(byClass(st, 'rn-state-sub')[0].textContent, 'task T7 failed in rounds 4, 5');
+  assert.match(st.title, /stuck: task T7 failed in rounds 4, 5/);
+  // the run page keeps the lamp, the state word and the stuck icon
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  assert.match(css, /\.rn-state\[data-p="2"\] \.rn-state-t \{ color: var\(--p2\); \}/);
+  assert.match(css, /\.rn-state-sub \{[^}]*contain: inline-size;[^}]*color: var\(--text-3\)/);
+  // no usage: one dash, no bar tracks
+  const burn = byClass(fresh, 'rn-burn')[0];
+  assert.equal(burn.textContent, '—');
+  assert.equal(byClass(burn, 'rn-bar').length, 0);
+  assert.equal(burn.title, 'no usage reported');
+  assert.match(css, /\.rn-burn\[data-none\] \{ color: var\(--text-3\); \}/);
+  const narrow = css.slice(css.indexOf('@media (max-width: 1024px)'));
+  assert.match(narrow, /\.rn-burn\[data-none\] \{ display: none; \}/, 'no line of its own on a phone');
+  // a partial usage keeps both meters, the unknown one reading —
+  renderRuns(host, [{ ...bare, usage: { sevenDayPct: 30 } }], { status: 'ok' }, FIX.updatedAt);
+  assert.equal(byClass(host, 'rn-bar').length, 2);
+  // no empty cell in either row
+  for (const r of [row, fresh]) {
+    for (const cell of r.children) assert.notEqual(cell.textContent.trim(), '', `${cell.className} is empty`);
+    for (const sub of byClass(r, 'rn-goal-sub')) assert.notEqual(sub.textContent, '', 'no empty goal line');
+  }
+}));
