@@ -285,7 +285,7 @@ export function fromFeed(node, feeds, now) {
   let status = g.status === 'running' ? (expectStopped ? 'warn' : 'ok')
     : g.status === 'stopped' ? (expectStopped ? 'idle' : 'down')
       : g.status === 'paused' || g.status === 'suspended' ? 'warn' : 'unknown';
-  let why = status === 'down' ? `${g.type === 'lxc' ? 'container' : 'VM'} is stopped`
+  let why = status === 'down' ? `${g.type === 'lxc' || g.type === 'container' ? 'container' : 'VM'} is stopped`
     : status === 'warn' && !expectStopped ? `guest is ${g.status}`
       : status === 'warn' ? 'running but expected to be stopped' : undefined;
   // Alerts from inside a running guest (its disk is full, say), as for a host.

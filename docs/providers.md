@@ -147,6 +147,7 @@ server/feeders/
   none.mjs               an empty feed that says so
   tailscale.mjs          `tailscale status --json` on this machine
   proxmox.mjs            the PVE API's `/cluster/resources`, read-only token
+  docker.mjs             the local Docker socket's `/containers/json`, GET only
 ```
 
 | Export | Signature | Contract |
@@ -208,3 +209,44 @@ VE host with a read-only API token (`PVEAuditor`; the recipe is in
   running or stopped, and drawn at rest on the Map, never down;
 - a storage at 90% is a `warn` host alert, at 97% `crit` (a shared storage
   once, at its fullest); pools and SDN rows are ignored.
+
+**`docker`** sends one `GET /containers/json?all=1` (what `docker ps -a`
+lists) over the Docker Engine's local unix socket, and no other request.
+`read({socket, timeoutMs})`:
+
+- `socket` defaults to `/var/run/docker.sock`; no version prefix is sent, so
+  the daemon answers in its own version;
+- `{ok:false}` for a missing socket, no permission (the user is not in the
+  `docker` group), a refused connection, a timeout, a 403 (a socket proxy
+  without `CONTAINERS=1`), any other non-2xx, or a body that is not a JSON
+  list. An empty list is an answer: the Engine has no containers.
+
+The socket has no read-only mode: write access to it is root on the machine.
+A user in the `docker` group trusts the feeder to send only that GET; a
+GET-only socket proxy (such as `docker-socket-proxy` with `CONTAINERS=1` and
+`POST=0`) takes that trust away, and `socket` can point at the proxy's own
+unix socket. `CONTAINERS=1` lets a proxy pass more than the list (logs, for
+one), so keep the proxy's socket readable by the feeder's user only.
+
+`toFeed` makes the Engine the host (`sub` like `docker · 4/6 containers
+running`; named by the feed's `source`) and every container a guest of
+`type: "container"`:
+
+- the name is the first of `Names` without its leading `/`; `State` (in any
+  case) `running` and `restarting` are `running`, `paused` is `paused`,
+  `exited`, `dead`, `created` and `removing` are `stopped`, with `why` giving
+  the exit code (`exited with code 1`);
+- health comes from the trailing `(healthy)`, `(unhealthy)` or
+  `(health: starting)` of `Status`, the only place the list has it: unhealthy
+  is a `crit` alert, `restarting` is a `crit` alert with its exit code;
+  starting and healthy are only in `detail`; no healthcheck is no health;
+- each published port (one per port and protocol; Docker lists IPv4 and IPv6
+  twice) is a service named `<port>/<proto>` (`8080/tcp`, so the ref is
+  `builder-a/acme-web-1/8080/tcp`) with `port`, `ok` while the container runs
+  (`crit` when unhealthy, `warn` while starting or paused); exposed ports that
+  are not published are left out; the image and the port words (`:8080`) are
+  the guest's `sub`, so Find reaches a container by its port;
+- `detail` has the image, the compose project and service
+  (`com.docker.compose.project` / `service`), Docker's `Status` text, health,
+  the ports and a 12-character id. `Command`, every other label, mounts and
+  network addresses never reach the feed.

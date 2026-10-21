@@ -36,9 +36,10 @@
 //     --post sends it to POST /api/runs/events instead. --run defaults to the run
 //     part of $LANEBOARD_RUN. --run/--file/--post may also come before <sub>.
 //     A bad argument prints one line and exits 2. See docs/runs.md.
-//   laneboard feed tailscale|proxmox [--source s] [--every N] [--stdout | --out <file> | --push <url>]
+//   laneboard feed tailscale|proxmox|docker [--source s] [--every N] [--stdout | --out <file> | --push <url>]
 //                                                      offline: read one source once, write one feed
 //     proxmox  --url https://<host>:8006 --token-id user@realm!name [--secret-file f] [--ca pem] [--node n]
+//     docker   [--socket path]  (GET /containers/json only; default /var/run/docker.sock)
 //     every kind: [--timeout <s>]
 //     --stdout (the default) prints the feed, for an ssh forced command on the board;
 //     --out writes it atomically (temp + rename); --push POSTs it to <url>/api/map/feeds.
@@ -986,6 +987,7 @@ const FEED_USAGE = `usage: laneboard feed <kind> [--source s] [--every N] [--tim
   tailscale  reads \`tailscale status --json\` on this machine
   proxmox    --url https://<host>:8006 --token-id user@realm!name [--secret-file f] [--ca pem] [--node n]
              the secret comes from --secret-file or $LANEBOARD_PVE_SECRET
+  docker     [--socket path]  the Docker socket (default /var/run/docker.sock); one GET, nothing else
   --source s   the feed's name, and its file <feedsDir>/<s>.json on the board; defaults to the kind
   --every N    seconds between runs (the board calls the feed stale after 3 × N)
   --stdout     print the feed (the default; for an ssh forced command on the board)
@@ -1000,6 +1002,7 @@ const FEED_FLAGS = {
   '--stdout': ['stdout', 'bool', null], '--out': ['out', 'str', null], '--push': ['push', 'str', null],
   '--url': ['url', 'str', 'proxmox'], '--token-id': ['tokenId', 'str', 'proxmox'],
   '--secret-file': ['secretFile', 'str', 'proxmox'], '--ca': ['ca', 'str', 'proxmox'], '--node': ['node', 'str', 'proxmox'],
+  '--socket': ['socket', 'str', 'docker'],
 };
 
 function parseFeedFlags(kind) {
@@ -1058,7 +1061,7 @@ async function cmdFeed() {
   if (kind === 'proxmox' && (f.url === undefined || f.tokenId === undefined)) feedUsage('proxmox needs --url and --token-id');
 
   const readOpts = {};
-  for (const k of ['url', 'tokenId', 'secretFile', 'ca', 'node']) if (f[k] !== undefined) readOpts[k] = f[k];
+  for (const k of ['url', 'tokenId', 'secretFile', 'ca', 'node', 'socket']) if (f[k] !== undefined) readOpts[k] = f[k];
   if (f.timeout !== undefined) readOpts.timeoutMs = f.timeout * 1000;
   const r = await collect(kind, { source, every: f.every, ...readOpts });
   if (!r.ok) return fail(r.error);
@@ -1123,7 +1126,7 @@ Offline (no server needed):
   laneboard paused [--json]             list the pauses
   laneboard run start|round|score|needs|ack|artifact|stop [--run <id>] [flags]
                                       append one run-protocol line (laneboard run --help)
-  laneboard feed tailscale|proxmox [--source s] [--stdout | --out <file> | --push <url>]
+  laneboard feed tailscale|proxmox|docker [--source s] [--stdout | --out <file> | --push <url>]
                                       read one source once into a Map feed (laneboard feed --help)
 
 Server: ${BASE}   (override with LANEBOARD_URL)

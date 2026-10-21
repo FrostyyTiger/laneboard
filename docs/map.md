@@ -241,8 +241,9 @@ half-written file.
   - `sub`, `why` and `detail` work as on a node.
   - A service the guest does not list is unknown; every service of a stopped
     guest is down.
-- `type` is `qemu`, `lxc`, or `tailnet` for a peer the `tailscale` feeder
-  saw (`docs/providers.md` "FeedProvider").
+- `type` is `qemu`, `lxc`, `tailnet` for a peer the `tailscale` feeder
+  saw, or `container` for one the `docker` feeder listed (`docs/providers.md`
+  "FeedProvider").
 - `template: true` marks a guest that is a template (the `proxmox` feeder):
   stopped is its normal state, so it is drawn at rest, never down. `node` on
   a guest names the cluster node it runs on.
@@ -334,6 +335,7 @@ laneboard feed tailscale --out ~/.cache/laneboard/feeds/tailscale.json
 laneboard feed proxmox --source hv1 --url https://hv1.example.invalid:8006 \
   --token-id 'laneboard@pve!map' --secret-file /etc/laneboard/pve.secret \
   --ca /etc/laneboard/pve-root-ca.pem --every 30
+laneboard feed docker --source builder-a --out ~/.cache/laneboard/feeds/builder-a.json
 ```
 
 | Flag | Meaning |
@@ -345,6 +347,7 @@ laneboard feed proxmox --source hv1 --url https://hv1.example.invalid:8006 \
 | `--out f` | Write the feed to `f`, to a temporary name first and renamed into place. |
 | `--push url` | POST the feed to `<url>/api/map/feeds`, with the `x-laneboard` header. |
 | `--url`, `--token-id`, `--secret-file`, `--ca`, `--node` | `proxmox` only: the API, the token, a file holding its secret (else `LANEBOARD_PVE_SECRET`; never a flag), the CA certificate, one cluster node. |
+| `--socket path` | `docker` only: the Engine's unix socket, or a GET-only proxy's. Defaults to `/var/run/docker.sock`. |
 
 An unknown kind, `none` or a bad flag exits 2; a source that cannot be read
 exits 1 and writes nothing, so the board shows the old feed going stale
@@ -400,6 +403,19 @@ systemctl enable --now laneboard-feed.timer
 Keep `--every` equal to the timer's interval. The feed goes to a file first
 and `ssh` runs only when the feeder exits 0: piping a failed read straight
 into `ssh` would send nothing and empty the file on the board.
+
+### Docker without the whole socket
+
+The `docker` feeder sends one `GET /containers/json?all=1` and nothing else,
+but the Docker socket cannot tell a reader from a writer: a user who may open
+it may also start a privileged container. Either run the feeder as a user in
+the `docker` group and trust that, or put a GET-only proxy in front of the
+socket and give the feeder the proxy's socket with `--socket`. A proxy that
+allows the container list (`CONTAINERS=1`, `POST=0` on
+`docker-socket-proxy`) also allows other GETs under `/containers` (logs, for
+one), so its socket stays readable by the feeder's user only, never on the
+network. Name the feed after the machine (`--source builder-a`) so its
+containers hang under that node on the Map.
 
 ### A read-only Proxmox token
 

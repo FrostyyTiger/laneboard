@@ -1,0 +1,98 @@
+[
+  {
+    "Id": "a1000000000000000000000000000000000000000000000000000000000000a1",
+    "Names": ["/acme-web-1"],
+    "Image": "nginx:1.27",
+    "ImageID": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+    "Command": "/docker-entrypoint.sh nginx -g 'daemon off;'",
+    "Created": 1790000000,
+    "Ports": [
+      { "IP": "0.0.0.0", "PrivatePort": 80, "PublicPort": 8080, "Type": "tcp" },
+      { "IP": "::", "PrivatePort": 80, "PublicPort": 8080, "Type": "tcp" },
+      { "IP": "0.0.0.0", "PrivatePort": 443, "PublicPort": 8443, "Type": "tcp" }
+    ],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "web",
+      "com.docker.compose.container-number": "1"
+    },
+    "State": "running",
+    "Status": "Up 4 days (healthy)"
+  },
+  {
+    "Id": "a2000000000000000000000000000000000000000000000000000000000000a2",
+    "Names": ["/acme-api-1"],
+    "Image": "registry.example.invalid/acme/api:2.3",
+    "ImageID": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+    "Command": "node server.js",
+    "Created": 1790000000,
+    "Ports": [
+      { "IP": "127.0.0.1", "PrivatePort": 3000, "PublicPort": 3000, "Type": "tcp" }
+    ],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "api"
+    },
+    "State": "running",
+    "Status": "Up 2 hours (unhealthy)"
+  },
+  {
+    "Id": "a3000000000000000000000000000000000000000000000000000000000000a3",
+    "Names": ["/acme-db-1"],
+    "Image": "postgres:17",
+    "ImageID": "sha256:0000000000000000000000000000000000000000000000000000000000000003",
+    "Command": "docker-entrypoint.sh postgres",
+    "Created": 1790000000,
+    "Ports": [
+      { "PrivatePort": 5432, "Type": "tcp" }
+    ],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "db"
+    },
+    "State": "running",
+    "Status": "Up 4 days (health: starting)"
+  },
+  {
+    "Id": "a4000000000000000000000000000000000000000000000000000000000000a4",
+    "Names": ["/acme-migrate-1"],
+    "Image": "registry.example.invalid/acme/api:2.3",
+    "ImageID": "sha256:0000000000000000000000000000000000000000000000000000000000000002",
+    "Command": "node migrate.js",
+    "Created": 1790000000,
+    "Ports": [],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "migrate"
+    },
+    "State": "Exited",
+    "Status": "Exited (1) 3 minutes ago"
+  },
+  {
+    "Id": "a5000000000000000000000000000000000000000000000000000000000000a5",
+    "Names": ["/cache"],
+    "Image": "redis:7",
+    "ImageID": "sha256:0000000000000000000000000000000000000000000000000000000000000005",
+    "Command": "redis-server",
+    "Created": 1790000000,
+    "Ports": [
+      { "IP": "0.0.0.0", "PrivatePort": 6379, "PublicPort": 6379, "Type": "tcp" },
+      { "IP": "0.0.0.0", "PrivatePort": 6379, "PublicPort": 6379, "Type": "udp" }
+    ],
+    "Labels": {},
+    "State": "paused",
+    "Status": "Up 3 hours (Paused)"
+  },
+  {
+    "Id": "a6000000000000000000000000000000000000000000000000000000000000a6",
+    "Names": ["/worker"],
+    "Image": "registry.example.invalid/acme/worker:latest",
+    "ImageID": "sha256:0000000000000000000000000000000000000000000000000000000000000006",
+    "Command": "worker",
+    "Created": 1790000000,
+    "Ports": [],
+    "Labels": null,
+    "State": "restarting",
+    "Status": "Restarting (2) 10 seconds ago"
+  }
+]
