@@ -263,7 +263,7 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
 
   const out = {
     window: win,
-    label: windowLabel(win),
+    label: windowLabel(win, config.timezone, now),
     since,
     now,
     needsYou: needs,

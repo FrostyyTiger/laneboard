@@ -316,7 +316,9 @@ every run with an event in the window, as `run`, `goal`, `state`, `rounds`
 in the window, `end` = the last, `better`), `stop` (the reason or null), `prs`
 (URLs of the `pr` artifacts given in the window), `usd` (the run's `cost.usd` when
 the whole run is in the window and it is known, else the window's rounds' `usd`; null when
-nothing says), `usage`, `startedAt`, `updatedAt`. No runs means `runs: []`.
+nothing says), `usage`, `startedAt`, `updatedAt`, `stoppedAt` (the stop's time
+or null). No runs means `runs: []`. `laneboard morning` prints a run that stopped
+in the window under Finished with its reason, the others under Runs.
 Its `needsYou` also lists every open need of a run that a person answers (not
 a `wait`), whatever the window, as the Inbox's "Run needs" does: `source:
 "run"`, `id` `run:<run>:<ts>`, `run`, `name` (the run), `kind`, `text`, `at`.

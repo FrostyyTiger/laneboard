@@ -172,7 +172,18 @@ function ago(ts) {
   return `${Math.round(s / 86400)}d`;
 }
 
-const money = (v) => (v == null ? '-' : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toFixed(3)}`);
+const money = (v) => (v == null ? '-' : `$${v.toFixed(2)}`);
+
+/** `2026-10-21 18:00` in the terminal's local time: the ISO order, no seconds. */
+function isoLocal(ts) {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '-';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const clip = (v, n) => { const t = String(v ?? '').replace(/\s+/g, ' '); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
 /** Width ignoring ANSI, so coloured columns still line up. */
 const width = (s) => String(s).replace(/\u001b\[[0-9;]*m/g, '').length;
@@ -335,50 +346,60 @@ async function cmdRestart() {
   process.stdout.write(`restarted ${name}${r.resumed ? ` (resumed ${r.resumed})` : ''}\n`);
 }
 
+/** The widest line `laneboard morning` prints, so it reads in an 100-column terminal. */
+const MORNING_COLS = 100;
+
 async function cmdMorning() {
   const window = takeFlag('--window', 'tonight');
   const m = await api(`/api/morning?window=${encodeURIComponent(window)}`);
-  const since = new Date(m.since).toLocaleString('en-GB', { hour12: false });
-  process.stdout.write(`${C.bold}Morning — ${m.label}${C.off} ${C.dim}(since ${since})${C.off}\n\n`);
+  process.stdout.write(`${C.bold}Morning — ${m.label}${C.off} ${C.dim}(since ${isoLocal(m.since)})${C.off}\n\n`);
 
   process.stdout.write(`${C.bold}Needs you${C.off} (${m.needsYou.length})\n`);
   if (!m.needsYou.length) process.stdout.write('  (nothing)\n');
   else {
     const rows = m.needsYou.map((n) => [
       `${STATE_COLOUR[n.state] || C.amber}${n.kind}${C.off}`,
-      n.name || '-',
-      n.lane || '-',
+      clip(n.name || '-', 24),
+      clip(n.lane || '-', 20),
       ago(n.at),
-      (n.text || '').replace(/\s+/g, ' ').slice(0, 70),
+      n.text || '',
     ]);
-    process.stdout.write(`${table(rows, ['WHAT', 'SESSION', 'LANE', 'AGE', 'DETAIL'])}\n`);
+    process.stdout.write(`${fitLast(rows, ['WHAT', 'SESSION', 'LANE', 'AGE', 'DETAIL'])}\n`);
   }
 
-  process.stdout.write(`\n${C.bold}Finished${C.off} (${m.finished.length} lanes active)\n`);
-  if (!m.finished.length) process.stdout.write('  (nothing moved)\n');
-  else {
-    const rows = m.finished.map((f) => [
-      f.lane,
+  // A run that stopped in the window is news of the night, said with its
+  // reason under Finished; the runs still going stay under Runs.
+  const runs = Array.isArray(m.runs) ? m.runs : [];
+  const stopped = runs.filter((r) => r.state === 'stopped' && (r.stoppedAt == null || r.stoppedAt >= m.since));
+  const going = runs.filter((r) => !stopped.includes(r));
+  const lanes = Array.isArray(m.finished) ? m.finished : [];
+  const counts = [stopped.length ? `${plural(stopped.length, 'run')} stopped` : '', `${plural(lanes.length, 'lane')} active`];
+  process.stdout.write(`\n${C.bold}Finished${C.off} (${counts.filter(Boolean).join(', ')})\n`);
+  for (const r of stopped) process.stdout.write(`  ${morningRunLine(r)}\n`);
+  if (!lanes.length) {
+    if (!stopped.length) process.stdout.write('  (nothing moved)\n');
+  } else {
+    const rows = lanes.map((f) => [
+      clip(f.lane, 24),
       f.progress?.n != null ? `${f.progress.n}/${f.progress.m}` : '-',
-      f.branch || '-',
+      clip(f.branch || '-', 28),
       f.isMain ? '-' : f.merged === true ? `${C.green}merged${C.off}` : f.merged === false ? `${C.amber}unmerged${C.off}` : '?',
       f.lastCommitAt ? ago(f.lastCommitAt) : '-',
       f.doneMarkers.length ? `${C.green}${f.doneMarkers.length} done${C.off}` : '',
-      f.sessions.map((s) => `${s.name}:${s.state}`).join(' ').slice(0, 40) || '(idle)',
+      f.sessions.length ? plural(f.sessions.length, 'session') : '(idle)',
     ]);
     process.stdout.write(`${table(rows, ['LANE', 'STAGE', 'BRANCH', 'MERGED', 'COMMIT', 'DONE', 'SESSIONS'])}\n`);
   }
 
-  const runs = Array.isArray(m.runs) ? m.runs : [];
-  if (runs.length) {
-    process.stdout.write(`\n${C.bold}Runs${C.off} (${runs.length})\n`);
-    for (const r of runs) process.stdout.write(`  ${morningRunLine(r)}\n`);
+  if (going.length) {
+    process.stdout.write(`\n${C.bold}Runs${C.off} (${going.length})\n`);
+    for (const r of going) process.stdout.write(`  ${morningRunLine(r)}\n`);
   }
 
   process.stdout.write(`\n${C.bold}What it cost${C.off} ${C.dim}(API-equivalent)${C.off}\n`);
   const rows = m.cost.lanes
     .filter((l) => l.usd > 0.0005)
-    .map((l) => [l.lane || '(no lane)', money(l.usd), compact(l.tokens), l.sessions.slice(0, 3).join(' ')]);
+    .map((l) => [clip(l.lane || '(no lane)', 24), money(l.usd), compact(l.tokens), plural((l.sessions || []).length, 'session')]);
   process.stdout.write(`${table(rows, ['LANE', 'SPEND', 'TOKENS', 'SESSIONS'])}\n`);
   process.stdout.write(`total ${money(m.cost.totalUsd)}   ${compact(m.cost.totalTokens)} tokens\n`);
   const rl = m.rateLimits;
@@ -386,6 +407,14 @@ async function cmdMorning() {
     const g = (x, label) => (x ? `${label} ${Math.round(x.usedPct)}% (resets ${new Date(x.resetsAt).toLocaleTimeString('en-GB', { hour12: false }).slice(0, 5)})` : '');
     process.stdout.write(`${C.dim}${g(rl.fiveHour, '5h')}   ${g(rl.sevenDay, '7d')}${C.off}\n`);
   }
+}
+
+/** A table whose last column is cut to what is left of MORNING_COLS. */
+function fitLast(rows, headers) {
+  const last = headers.length - 1;
+  const rest = headers.slice(0, last).map((h, i) => Math.max(width(h), ...rows.map((r) => width(r[i] ?? ''))));
+  const room = Math.max(10, MORNING_COLS - rest.reduce((a, w) => a + w + 2, 0));
+  return table(rows.map((r) => [...r.slice(0, last), clip(r[last], room)]), headers);
 }
 
 /** One Morning run: id, rounds, each score start → end, stop reason, PRs, cost, goal. */
@@ -399,15 +428,17 @@ function morningRunLine(r) {
     return `${name} ${fmt(s.start)}→${fmt(s.end)} ${tint}${arrow}${tint ? C.off : ''}`;
   });
   const prs = Array.isArray(r.prs) ? r.prs : [];
-  return [
-    `${C.bold}${r.run}${C.off}`,
-    `${r.rounds} round${r.rounds === 1 ? '' : 's'}`,
+  const line = [
+    `${C.bold}${clip(r.run, 32)}${C.off}`,
+    plural(r.rounds, 'round'),
     ...scores,
-    r.stop ? `stopped: ${r.stop}` : r.state || '',
-    prs.length ? `${prs.length} PR${prs.length === 1 ? '' : 's'}` : '',
+    r.stop ? `stopped: ${clip(r.stop, 30)}` : r.state || '',
+    prs.length ? plural(prs.length, 'PR') : '',
     r.usd == null ? '' : money(r.usd),
-    r.goal ? `${C.dim}${String(r.goal).replace(/\s+/g, ' ').slice(0, 60)}${C.off}` : '',
   ].filter(Boolean).join('  ');
+  // The goal takes what is left of the line (2 for the indent, 2 for the gap).
+  const room = MORNING_COLS - 4 - width(line);
+  return r.goal && room >= 10 ? `${line}  ${C.dim}${clip(r.goal, room)}${C.off}` : line;
 }
 
 function compact(n) {

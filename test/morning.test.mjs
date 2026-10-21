@@ -309,6 +309,7 @@ test('T6: a run inside the window is one row with its rounds, scores, stop, PRs,
   assert.equal(inside.rounds, 2);
   assert.deepEqual(inside.scores, { tests: { start: 0.8, end: 0.95, better: 'higher' } });
   assert.equal(inside.stop, 'done');
+  assert.equal(inside.stoppedAt, since + 3 * H + M, 'the stop time, so the CLI can say it stopped in the window');
   assert.equal(inside.state, 'stopped');
   assert.deepEqual(inside.prs, ['https://example.invalid/acme/acme-api/pull/7']);
   assert.equal(inside.usd, 3.5, 'the whole run is in the window: its cost events');
@@ -328,6 +329,7 @@ test('T6: a run that started before the window counts only what happened in it',
   assert.deepEqual(across.prs, [], 'its PR was given before the window');
   assert.equal(across.usd, 1, 'the rounds of the window, not the $5 of round 1');
   assert.equal(across.stop, null);
+  assert.equal(across.stoppedAt, null);
   assert.equal(across.state, 'running');
 });
 
@@ -362,8 +364,19 @@ test('T6: laneboard morning prints one line per run', async (t) => {
     execFile(process.execPath, [bin, 'morning'], { env, cwd: home, timeout: 20000 }, (err, stdout, stderr) => resolve({ err, stdout, stderr }));
   });
   assert.equal(out.err, null, out.stderr);
-  assert.match(out.stdout, /Runs \(2\)/);
+  // T9: the run that stopped tonight is under Finished, the one still going under Runs.
+  assert.match(out.stdout, /Finished \(1 run stopped, /);
+  assert.match(out.stdout, /Runs \(1\)/);
   const line = (id) => out.stdout.split('\n').find((l) => l.trim().startsWith(id));
   assert.match(line('inside'), /2 rounds\s+tests 0\.8→0\.95 ↑\s+stopped: done\s+1 PR\s+\$3\.50/);
   assert.match(line('across'), /2 rounds\s+lint 12→3 ↓\s+running\s+\$1\.00/);
+});
+
+test('the tonight window says tonight while its night runs and last night once it is morning (T9)', () => {
+  assert.equal(windowLabel('tonight', TZ, at('2026-10-21T20:21:00Z')), 'tonight'); // 22:21 CEST
+  assert.equal(windowLabel('tonight', TZ, at('2026-10-22T00:30:00Z')), 'tonight'); // 02:30
+  assert.equal(windowLabel('tonight', TZ, at('2026-10-22T05:00:00Z')), 'last night'); // 07:00
+  assert.equal(windowLabel('tonight', TZ, at('2026-10-22T14:00:00Z')), 'last night'); // 16:00
+  assert.equal(windowLabel('tonight', TZ, at('2026-10-22T16:00:00Z')), 'tonight'); // 18:00
+  assert.equal(windowLabel('12h', TZ, at('2026-10-22T05:00:00Z')), 'last 12 h');
 });

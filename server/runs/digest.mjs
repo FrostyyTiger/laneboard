@@ -1,7 +1,7 @@
 // What the Morning digest says about runs (docs/plans/runs/README.md §3 A3, T6).
 //
 //   runsInWindow(runs, {since, now}) -> [{run, goal, state, rounds, scores, stop, prs, usd, usage,
-//                                         startedAt, updatedAt}]
+//                                         startedAt, updatedAt, stoppedAt}]
 //
 // `runs` are folded runs (server/runs/protocol.mjs foldRun, as the store's
 // list() gives them, latest activity first). Pure: no database, no config, so
@@ -18,7 +18,7 @@
 // - `usd`: the run's own `cost` total when the whole run is in the window and
 //   it has one (its `cost` events, else its rounds' `usd`); otherwise the sum of the window's rounds' `usd`
 //   (`cost` events keep no time once folded), null when no round says.
-// - `stop` is the stop reason or null; `usage` the latest usage the run sent.
+// - `stop` is the stop reason or null, `stoppedAt` the stop's ts (null when none); `usage` the latest usage the run sent.
 
 const inWindow = (ts, since, now) => ts >= since && ts <= now;
 
@@ -57,6 +57,7 @@ export function runsInWindow(runs, { since, now = Date.now() } = {}) {
       rounds: rounds.length,
       scores: windowScores(run, since, now),
       stop: run.stop ? run.stop.reason : null,
+      stoppedAt: run.stop ? run.stop.ts ?? null : null,
       prs: run.artifacts
         .filter((a) => a.kind === 'pr' && (a.ts === null || inWindow(a.ts, since, now)))
         .map((a) => a.url),
