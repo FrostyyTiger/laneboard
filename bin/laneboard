@@ -949,10 +949,24 @@ every subcommand:
 // A usage error is one line plus a pointer to the help; no subcommand at all
 // prints the whole usage (that is what the user asked for).
 // `runHint` is a close match for an unexpected argument (set by cmdRun).
+// `hint` is a close match for this one argument (a flag), it wins over runHint.
 let runHint = '';
-const runUsage = (msg) => die(msg
-  ? `run: ${msg}\n${msg.startsWith('unexpected argument') ? runHint : ''}see: laneboard run --help`
+const runUsage = (msg, hint = '') => die(msg
+  ? `run: ${msg}\n${hint || (msg.startsWith('unexpected argument') ? runHint : '')}see: laneboard run --help`
   : RUN_USAGE, 2);
+
+// Words people guess for a flag that edit distance does not reach (the README says "run id").
+const RUN_FLAG_GUESSES = { '--id': '--run', '--run-id': '--run', '--runid': '--run' };
+
+/** `did you mean: --flag` for an unknown flag: a known guess, or the one allowed flag within edit distance 2. */
+function flagHint(word, allowed) {
+  if (!String(word).startsWith('--')) return '';
+  const w = word.toLowerCase();
+  const guess = RUN_FLAG_GUESSES[w];
+  if (guess && Object.hasOwn(allowed, guess)) return `did you mean: ${guess}\n`;
+  const hits = Object.keys(allowed).filter((f) => editDistance(w, f) <= Math.min(2, f.length - 3));
+  return hits.length === 1 ? `did you mean: ${hits[0]}\n` : '';
+}
 
 /** `did you mean: laneboard run <sub> <its args>` for a subcommand name, from RUN_USAGE. */
 function subHint(sub) {
@@ -991,7 +1005,7 @@ function parseRunFlags(allowed, out = {}, until = false) {
     if (until && !allowed[argv[0]]) break;
     const flag = argv.shift();
     const spec = allowed[flag];
-    if (!spec) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(flag))}`);
+    if (!spec) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(flag))}`, flagHint(flag, allowed));
     const [field, kind] = spec;
     if (Object.hasOwn(out, field)) runUsage(`${flag} given twice`);
     if (kind === 'bool') { out[field] = true; continue; }
@@ -1047,6 +1061,9 @@ function runEvent(sub, f) {
 async function cmdRun() {
   // --run/--file/--post may come before the subcommand too (`laneboard run --post score …`).
   const first = parseRunFlags(RUN_COMMON, {}, true);
+  // `laneboard run --id x start`: a misspelt common flag, not one that belongs after <sub>.
+  const early = argv[0]?.startsWith('--') ? flagHint(argv[0], RUN_COMMON) : '';
+  if (early) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(argv[0]))}`, early);
   if (argv[0]?.startsWith('-') && !['-h', '--help'].includes(argv[0])) {
     runUsage(`${JSON.stringify(cleanTerm(argv[0]))} goes after the subcommand (laneboard run <sub> [flags])`);
   }
@@ -1347,17 +1364,19 @@ Server: ${BASE}   (override with LANEBOARD_URL)
 }
 
 /** The one command within edit distance 2 of `word`, or the one it is a prefix of; else null. */
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j += 1) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = row;
+  }
+  return prev[b.length];
+}
+
 function closeCommand(word) {
   const w = String(word).toLowerCase();
-  const dist = (a, b) => {
-    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
-    for (let i = 1; i <= a.length; i += 1) {
-      const row = [i];
-      for (let j = 1; j <= b.length; j += 1) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-      prev = row;
-    }
-    return prev[b.length];
-  };
+  const dist = editDistance;
   const names = Object.keys(COMMANDS);
   const hits = names.filter((n) => (w.length > 1 && n.startsWith(w)) || dist(w, n) <= Math.min(2, n.length - 1));
   // `ls` and its alias `list` are one command.

@@ -629,6 +629,30 @@ test('T32: a subcommand name as the bare word after another (`run needs ack demo
   assert.equal(fs.existsSync(file), false, 'nothing written');
 });
 
+test('T41: `--id` for the run (and a misspelt flag) says `did you mean: --run`, exit 2, nothing written', async (t) => {
+  const dir = tmpDir(t);
+  const env = envFor(dir);
+  const file = path.join(dir, '.laneboard', 'run.jsonl');
+  for (const args of [
+    ['run', 'start', '--id', 'x'],
+    ['run', 'score', '--id', 'x', '--name', 'tasks', '--value', '1'],
+    ['run', '--id', 'x', 'stop'],
+    ['run', 'stop', '--run-id', 'x'],
+  ]) {
+    const r = await run(args, env, dir);
+    assert.equal(r.code, 2, args.join(' '));
+    assert.match(r.stderr, /unexpected argument: "--(id|run-id)"\ndid you mean: --run\nsee: laneboard run --help/, args.join(' '));
+  }
+  const typo = await run(['run', 'start', '--run', 'x', '--max-round', '3'], env, dir);
+  assert.equal(typo.code, 2);
+  assert.match(typo.stderr, /did you mean: --max-rounds\n/);
+  // A flag of another subcommand far from every allowed one gets no guess.
+  const far = await run(['run', 'stop', '--run', 'x', '--goal', 'g'], env, dir);
+  assert.equal(far.code, 2);
+  assert.doesNotMatch(far.stderr, /did you mean/);
+  assert.equal(fs.existsSync(file), false, 'nothing written');
+});
+
 test('T34: `run needs` with no text, or empty text, exits 2 with `needs: give the text` and posts nothing', async (t) => {
   const dir = tmpDir(t);
   const posted = [];
