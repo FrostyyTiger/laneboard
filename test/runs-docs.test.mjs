@@ -152,3 +152,7 @@ test('docs/runs.md says which cost a stopped run prints: the cost events, else t
   assert.match(doc, /The list row and the run page print `cost\.usd`; only\s+when no `cost` event was sent \(`cost\.rounds` is 0\) and `stop\.usd` is set do\s+they print `stop\.usd` instead, marked `loop` as the loop's own figure\./);
   assert.match(doc, /`stopUsd` \(`stop\.usd`/);
 });
+
+test('docs/runs.md says where a score without --n lands before any round (night 4 T36)', () => {
+  assert.match(doc, /Before any round they land on round 0: the score gets `n: 0`, and the run\s+shows `round: null` in `GET \/api\/runs` until its first `round\.start`\./);
+});

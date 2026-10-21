@@ -221,6 +221,8 @@ flag goes after the subcommand.
 
 `score` and `needs` without `--n` attach to the latest round in the file, even
 if it has ended: a question asked between rounds 3 and 4 shows under round 3.
+Before any round they land on round 0: the score gets `n: 0`, and the run
+shows `round: null` in `GET /api/runs` until its first `round.start`.
 Pass `--n` to put it elsewhere.
 
 **laneboard only sees the file if it reads that place.** The default file,

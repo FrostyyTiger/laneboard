@@ -293,3 +293,8 @@ test('run.start may name its host and a score its max (T9, the Map); a bad max i
   assert.equal(run.host, 'scratch-1');
   assert.equal(run.scores.tasks[0].max, 12);
 });
+
+test('a score before any round lands on round 0 (night 4 T36)', () => {
+  const run = foldRun([ok({ t: 'run.start' }), ok({ t: 'score', name: 'tests', value: 0.5 }), ok({ t: 'round.start', n: 1 }), ok({ t: 'score', name: 'tests', value: 0.7 })]);
+  assert.deepEqual(run.scores.tests.map((x) => [x.n, x.value]), [[0, 0.5], [1, 0.7]]);
+});

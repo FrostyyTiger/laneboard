@@ -156,6 +156,22 @@ test('POST /api/runs/events: a good event is appended and shows up in the list',
   assert.equal(one.body.run.rounds[0].role, 'builder');
 });
 
+test('POST /api/runs/events: a score before any round lands on n 0, the run on round null (night 4 T36)', async () => {
+  await ready();
+  for (const e of [
+    { t: 'run.start', run: 'early', goal: 'Score first' },
+    { t: 'score', run: 'early', name: 'tests', value: 0.5 },
+  ]) assert.equal((await call('POST', '/api/runs/events', { body: JSON.stringify(e) })).status, 201);
+  const row = (await call('GET', '/api/runs')).body.runs.find((x) => x.run === 'early');
+  assert.ok(row, 'the posted run is listed');
+  assert.equal(row.round, null, 'no round has started');
+  assert.equal(row.rounds, 0);
+  assert.equal(row.scores.tests.n, 0);
+  assert.equal(row.scores.tests.value, 0.5);
+  const one = await call('GET', '/api/runs/:run', { params: { run: 'early' } });
+  assert.deepEqual(one.body.run.scores.tests.map((x) => x.n), [0]);
+});
+
 test('eventLine and eventsFile are strict about what reaches the disk', () => {
   assert.equal(eventLine('{"t":"x.custom","run":"r1","ts":5000000000000,"a":1}').ok, true);
   assert.deepEqual(eventLine('   '), { ok: false, error: 'empty' });
