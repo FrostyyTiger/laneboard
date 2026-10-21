@@ -185,7 +185,8 @@ const EMPTY_APPROVALS = Object.freeze({ answered: 0, approved: 0, denied: 0, rel
 /**
  * Any Morning payload -> one shape:
  *   {hub, error?, window, label, since, builders:[{id, code, error, stale, needsYou,
- *    finished, cost, stuck}], totals:{needsYou, finished, usd, tokens}, review,
+ *    finished, cost, stuck}], totals:{needsYou, finished, usd, tokens, sessions:{finished,
+ *    usd}, runs:{finished, usd}} (finished/usd = sessions + runs stopped in the window), review,
  *    approvals, costByPackage, stuck (no known builder), deferred, missing, rateLimits,
  *    runs:[morningRunOf()]}
  * `hub` is whether the page is fed by a hub. A hub merge has `builders[]`; a hub
@@ -214,6 +215,18 @@ export function morningModel(data, { hub = false, s = null } = {}) {
   const ap = isObj(data.approvals) ? data.approvals : EMPTY_APPROVALS;
   const missing = new Set(arr(data.missing).filter((m) => typeof m === 'string'));
   for (const r of rows) if (r.error) missing.add(r.id);
+  const runs = morningRuns(data);
+  // A run that stopped in the window finished there too, and what it cost is
+  // spend (runs plan T32): the strip counts sessions and runs, kept apart below
+  // so the package table still totals sessions only.
+  const sessions = {
+    finished: rows.reduce((a, r) => a + r.finished.length, 0),
+    usd: fin(data.totalUsd) ?? rows.reduce((a, r) => a + r.cost.totalUsd, 0),
+  };
+  const runTotals = {
+    finished: runs.filter((r) => r.state === 'stopped').length,
+    usd: runs.reduce((a, r) => a + (r.usd ?? 0), 0),
+  };
   return {
     hub,
     fleet: hub,
@@ -223,8 +236,10 @@ export function morningModel(data, { hub = false, s = null } = {}) {
     builders: rows,
     totals: {
       needsYou: rows.reduce((a, r) => a + r.needsYou.length, 0),
-      finished: rows.reduce((a, r) => a + r.finished.length, 0),
-      usd: fin(data.totalUsd) ?? rows.reduce((a, r) => a + r.cost.totalUsd, 0),
+      finished: sessions.finished + runTotals.finished,
+      usd: sessions.usd + runTotals.usd,
+      sessions,
+      runs: runTotals,
       tokens: fin(data.totalTokens) ?? rows.reduce((a, r) => a + r.cost.totalTokens, 0),
     },
     review: {
@@ -246,7 +261,7 @@ export function morningModel(data, { hub = false, s = null } = {}) {
     deferred: arr(data.deferred).filter(isObj),
     missing: [...missing].sort(),
     rateLimits: isObj(data.rateLimits) ? data.rateLimits : null,
-    runs: morningRuns(data),
+    runs,
   };
 }
 
@@ -304,7 +319,7 @@ export function renderModel(box, m) {
   box.append(reviewBlock(m.review, m));
   if (m.stuck.length) box.append(stuckBlock(m.stuck, 'Stuck incidents · fleet'));
   box.append(approvalsBlock(m.approvals));
-  box.append(packageBlock(m.costByPackage, m.totals.usd));
+  box.append(packageBlock(m.costByPackage, m.totals.sessions.usd));
   box.append(deferredBlock(m.deferred, m));
   return box;
 }
@@ -321,8 +336,13 @@ function morningSummary(m) {
   const row = el('div', 'mrow-top');
   row.append(kv('builders', String(m.builders.length)));
   row.append(kv('needs you', String(m.totals.needsYou), m.totals.needsYou ? 'warn' : ''));
-  row.append(kv('finished', String(m.totals.finished)));
-  row.append(kv('spend', money(m.totals.usd)));
+  const { sessions, runs } = m.totals;
+  const finCell = kv('finished', String(m.totals.finished));
+  finCell.title = `${sessions.finished} lanes + ${runs.finished} runs stopped`;
+  row.append(finCell);
+  const spend = kv('spend', money(m.totals.usd));
+  spend.title = `sessions ${money(sessions.usd)} + runs ${money(runs.usd)}`;
+  row.append(spend);
   row.append(kv('tokens', compactCount(m.totals.tokens)));
   row.append(kv('review', `${m.review.n} · ${m.review.waiting} waiting`));
   row.append(kv('approvals', String(m.approvals.answered)));

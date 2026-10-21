@@ -93,7 +93,7 @@ test('model: the merge groups into builder rows with their stuck incidents; flee
   assert.deepEqual(c.stuck.map((x) => x.reason), ['spinning']);
   assert.deepEqual(m.stuck.map((x) => x.reason), ['orphan incident'], 'an incident with no known builder stays fleet-level');
   assert.deepEqual(m.missing, ['builder-b']);
-  assert.deepEqual(m.totals, { needsYou: 3, finished: 2, usd: 6, tokens: 300 });
+  assert.deepEqual(m.totals, { needsYou: 3, finished: 2, usd: 6, tokens: 300, sessions: { finished: 2, usd: 6 }, runs: { finished: 0, usd: 0 } });
   assert.equal(m.review.n, 4);
   assert.equal(m.review.waiting, 1);
   assert.equal(m.review.medianWaitMs, 30 * MIN);
@@ -332,6 +332,29 @@ test('render T7: a Runs block first, one row per run, text as text, links only t
   assert.deepEqual(links, ['#/runs?run=acme-search', 'https://example.invalid/acme/api/pull/12']);
   const worse = byClass(rows[0], 'rn-score').filter((c) => c.dataset.trend === 'worse');
   assert.equal(worse.length, 1, 'only the score that went the wrong way gets the trouble tone');
+});
+
+test('model T32: a run that stopped in the window counts in FINISHED and its cost in SPEND; the package total stays sessions', () => {
+  const data = merged();
+  data.runs = [RUNS[0], RUNS[1]];
+  const m = V.morningModel(data, { hub: true, s: store });
+  assert.equal(m.totals.finished, 3, '2 lanes + the stopped run; the running one is not finished');
+  assert.equal(m.totals.usd, 6 + 9.98);
+  assert.deepEqual(m.totals.sessions, { finished: 2, usd: 6 });
+  assert.deepEqual(m.totals.runs, { finished: 1, usd: 9.98 });
+  const box = render(m);
+  const cells = byClass(box, 'mkv');
+  const cell = (k) => cells.find((c) => c.children[0]._text === k);
+  assert.equal(cell('finished').children[1]._text, '3');
+  assert.equal(cell('finished').title, '2 lanes + 1 runs stopped');
+  assert.match(cell('spend').children[1]._text, /^\$15\.98/);
+  assert.match(cell('spend').title, /sessions \$6\.0+ \+ runs \$9\.98/);
+});
+
+test('model T32: a builder answer with only a stopped run is not FINISHED 0 / SPEND $0', () => {
+  const m = V.morningModel({ ...built(), runs: [RUNS[0]] }, { hub: false, s: store });
+  assert.equal(m.totals.runs.finished, 1);
+  assert.equal(m.totals.runs.usd, 9.98);
 });
 
 test('render T7: hub mode puts the Runs block after the summary; no runs draws no block', () => {
