@@ -15,7 +15,7 @@ import runsView, {
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, EMPTY_HUB, LIST_URL, SCORE_MAX,
   renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
   runHref, runUrl, LIST_HREF, needActions, ackNeed, ACK_BY, EVENTS_URL, TL_NARROW_HIDDEN, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
-  needsCell, tlColumns,
+  needsCell, tlColumns, ackedNeedsOf,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
 
@@ -723,6 +723,36 @@ test('T28: ACK on the run page posts needs.ack to POST /api/runs/events and relo
   ]);
   assert.equal(byClass(host, 'rn-need-ack').length, 0, 'the need is gone after the reload');
   unmountRuns();
+}));
+
+test('night 4 T6: the run page shows who acked a closed need, and a fence the loop acked stays open', () => withDom((document) => {
+  const text = fs.readFileSync(path.join(ROOT, 'test/fixtures/runs/readiness.jsonl'), 'utf8');
+  const fence = { v: 1, t: 'needs', run: 'readiness', ts: 1792487401000, kind: 'fence', text: 'round 3 wanted to change fenced files: server/http.mjs' };
+  const extra = [
+    fence,
+    { ...fence, ts: 1792487402000, text: 'round 4 wanted to change fenced files: .github/ci.yml' },
+    { v: 1, t: 'needs.ack', run: 'readiness', ts: 1792487403000, ref: 1792487401000, by: 'loop' },
+    { v: 1, t: 'needs.ack', run: 'readiness', ts: 1792487404000, ref: 1792487401000, by: 'inbox' },
+    { v: 1, t: 'needs.ack', run: 'readiness', ts: 1792487405000, ref: 1792487402000, by: 'loop' },
+  ].map((o) => JSON.stringify(o)).join('\n');
+  const run = JSON.parse(JSON.stringify(foldRun(parseLines(`${text}\n${extra}`).events)));
+  const now = 1792487404000 + 5 * MIN;
+  assert.deepEqual(ackedNeedsOf(run, now).map((x) => [x.kind, x.by, x.line, x.title]), [
+    ['fence', 'inbox', 'acked by inbox 5m ago', `acked at ${new Date(1792487404000).toISOString()}`],
+  ]);
+  assert.deepEqual(ackedNeedsOf({ needs: [{ acked: true, ackedAt: null, by: null, text: 'x' }] }).map((x) => x.line), ['acked by ?']);
+  assert.deepEqual(ackedNeedsOf(null), []);
+
+  const host = document.createElement('div');
+  renderRunPage(host, run, { status: 'ok' }, now);
+  assert.deepEqual([...byClass(host, 'rn-need-by')].map((n) => n.textContent), ['acked by inbox 5m ago']);
+  const acked = byClass(host, 'rn-need--acked');
+  assert.equal(acked.length, 1);
+  assert.equal(acked[0].dataset.p, 'off', 'a closed need is grey');
+  assert.equal(byClass(acked[0], 'rn-need-ack').length, 0, 'no Ack on a closed need');
+  // the decision and the fence the loop tried to ack are still open, each with its Ack
+  assert.equal(byClass(host, 'rn-need-ack').length, 2);
+  assert.equal(byClass(byClass(host, 'rn-needs-sec')[0], 'rn-sec-t')[0].textContent, 'Open needs (2)');
 }));
 
 test('needs cell: one line, the count only when more than one need is open (T29)', () => {

@@ -16,6 +16,8 @@
 {"v":1,"t":"score","run":"acme-search","ts":1792491414000,"name":"tasks","value":1,"better":"higher","n":3}
 {"v":1,"t":"round.end","run":"acme-search","ts":1792491420000,"n":3,"outcome":"kept","commit":"c3e4a5b","usd":1.84}
 {"v":1,"t":"round.start","run":"acme-search","ts":1792491480000,"n":4,"role":"builder","task":"T2"}
+{"v":1,"t":"needs","run":"acme-search","ts":1792491600000,"n":4,"kind":"fence","text":"round 4 wanted to change fenced files: server/http.mjs"}
+{"v":1,"t":"needs.ack","run":"acme-search","ts":1792492200000,"ref":0,"by":"inbox"}
 {"v":1,"t":"artifact","run":"acme-search","ts":1792493280000,"kind":"pr","url":"https://example.invalid/acme/acme-api/pull/42","title":"Paged search (agent loop)"}
 {"v":1,"t":"usage","run":"acme-search","ts":1792495122000,"n":4,"fiveHourPct":44,"sevenDayPct":28,"fiveHourResetsAt":1792500540,"overage":false}
 {"v":1,"t":"cost","run":"acme-search","ts":1792495128000,"n":4,"usd":2.1}

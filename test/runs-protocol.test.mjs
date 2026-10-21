@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  parseLine, parseLines, foldRun, KNOWN_TYPES, MAX_LINE, MAX_TEXT,
+  parseLine, parseLines, foldRun, KNOWN_TYPES, MAX_LINE, MAX_TEXT, FENCE_ACK_BY,
 } from '../server/runs/protocol.mjs';
 
 const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'runs', 'readiness.jsonl');
@@ -254,6 +254,31 @@ test('needs.ack by ts picks the first open need of that time; an acked wait stay
   ]);
   assert.deepEqual(run.needs.map((n) => [n.text, n.open, n.acked, n.by]), [['a', false, true, null], ['b', false, true, null], ['limit', false, true, null]]);
   assert.deepEqual(run.raw, [], 'a third ack of a known ts is a second ack, not an unknown ref');
+});
+
+test('a fence need closes only on an ack by a person (inbox, run page, owner), never by the loop or a new round (night 4 T6)', () => {
+  assert.deepEqual(FENCE_ACK_BY, ['inbox', 'run page', 'owner']);
+  const fence = (ts) => ok({ t: 'needs', kind: 'fence', text: 'round 3 wanted to change fenced files', ts });
+  const run = foldRun([
+    ok({ t: 'round.start', n: 3 }),
+    fence(1792483201000),
+    ok({ t: 'needs.ack', ref: 1792483201000, by: 'loop', ts: 1792483300000 }),
+    ok({ t: 'needs.ack', ref: 0, ts: 1792483310000 }),
+    ok({ t: 'round.start', n: 4 }),
+    ok({ t: 'needs.ack', ref: 1792483201000, by: 'inbox', ts: 1792483400000 }),
+    ok({ t: 'needs.ack', ref: 1792483201000, by: 'loop', ts: 1792483500000 }),
+  ]);
+  assert.deepEqual(run.needs.map((n) => [n.kind, n.open, n.acked, n.ackedAt, n.by]), [['fence', false, true, 1792483400000, 'inbox']]);
+  assert.deepEqual(run.raw.map((e) => [e.t, e.by]), [['needs.ack', 'loop'], ['needs.ack', null]], 'refused acks are kept raw; one after the close changes nothing');
+
+  const open = foldRun([fence(1792483201000), ok({ t: 'needs.ack', ref: 0, by: 'loop' }), ok({ t: 'run.stop', reason: 'done' })]);
+  assert.deepEqual(open.needs.map((n) => [n.open, n.acked]), [[true, false]], 'run.stop closes wait needs, not a fence');
+  for (const by of FENCE_ACK_BY) {
+    const r = foldRun([fence(1792483201000), ok({ t: 'needs.ack', ref: 1792483201000, by })]);
+    assert.equal(r.needs[0].open, false, by);
+  }
+  const other = foldRun([ok({ t: 'needs', kind: 'decision', text: 'x' }), ok({ t: 'needs.ack', ref: 0, by: 'loop' })]);
+  assert.equal(other.needs[0].open, false, 'other kinds still close on any ack');
 });
 
 test('run.start may name its host and a score its max (T9, the Map); a bad max is dropped', () => {

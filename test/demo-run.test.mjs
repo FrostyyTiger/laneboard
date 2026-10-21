@@ -91,7 +91,9 @@ test('demoRunsAnswer: GET /api/runs and GET /api/runs/<id>; anything else is not
   assert.equal(demoRunsAnswer('GET', '/api/map', NOW), null);
   assert.equal(demoRunsAnswer('GET', '/api/runsx', NOW), null);
   // A JSON round trip is what the browser gets.
-  assert.deepEqual(JSON.parse(JSON.stringify(one.body)).run.needs.length, 1);
+  const needs = JSON.parse(JSON.stringify(one.body)).run.needs;
+  assert.deepEqual(needs.map((n) => [n.kind, n.open, n.by]), [['fence', false, 'inbox'], ['decision', true, null]],
+    'one open need, and a fence the Inbox acked (night 4 T6: the run page shows who)');
 });
 
 // Seen on the demo's run page at 390 (T2 shots): the state word ran under the

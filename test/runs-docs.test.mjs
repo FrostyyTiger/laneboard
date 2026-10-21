@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-import { KNOWN_TYPES, STATES, STOP_REASONS, VERSION } from '../server/runs/protocol.mjs';
+import { KNOWN_TYPES, STATES, STOP_REASONS, VERSION, FENCE_ACK_BY } from '../server/runs/protocol.mjs';
 import { RULES as STUCK_RULES, FAILED_OUTCOME } from '../server/runs/stuck.mjs';
 
 const doc = await readFile(new URL('../docs/runs.md', import.meta.url), 'utf8');
@@ -26,6 +26,12 @@ function tableNames(heading) {
 test('every known event type is in the events table, and the table names no other', () => {
   const names = tableNames('Events');
   assert.deepEqual([...names].sort(), [...KNOWN_TYPES].sort());
+});
+
+test('the needs.ack row names every `by` that may close a fence need (night 4 T6)', () => {
+  const row = doc.split('\n').find((l) => l.startsWith('| `needs.ack` |'));
+  assert.ok(row, 'no needs.ack row');
+  for (const by of FENCE_ACK_BY) assert.ok(row.includes(`\`${by}\``), by);
 });
 
 test('the states table matches STATES', () => {

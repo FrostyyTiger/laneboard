@@ -39,6 +39,14 @@ const NUMERIC = /^\s*-?\d+(\.\d+)?\s*$/;
 // above it, a time (epoch seconds start at 1e9 in 2001, so the two never meet).
 export const MAX_NEED_INDEX = 1e9;
 
+/**
+ * Who may close a `fence` need (a round touched a fenced file and was reverted):
+ * a person, never the loop. `inbox` and `run page` are what the UI writes,
+ * `owner` what `laneboard run ack --by owner` writes. An ack with another `by`
+ * (the loop's own `by: "loop"`) or none leaves a fence need open and is kept raw.
+ */
+export const FENCE_ACK_BY = ['inbox', 'run page', 'owner'];
+
 function clamp(s, max = MAX_STR) {
   if (typeof s !== 'string') return null;
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
@@ -258,7 +266,8 @@ function round(rounds, n) {
  * - A `wait` need closes when the next round starts or the run stops; any need
  *   closes when a `needs.ack` names it (by its place in the list or its `ts`).
  *   The first ack counts; a second one changes nothing. An ack naming no need is
- *   kept in `raw`.
+ *   kept in `raw`. A `fence` need closes only on an ack whose `by` is in
+ *   FENCE_ACK_BY (a person); any other ack of it is kept in `raw`.
  * Events of another run than the first one are ignored.
  */
 export function foldRun(events, { skipped = 0 } = {}) {
@@ -324,7 +333,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
       case 'needs.ack': {
         const need = e.refBy === 'index' ? run.needs[e.ref]
           : run.needs.find((x) => x.ts === e.ref && !x.acked) ?? run.needs.find((x) => x.ts === e.ref);
-        if (!need) { run.raw.push(e); break; }
+        if (!need || (need.kind === 'fence' && !need.acked && !FENCE_ACK_BY.includes(e.by))) { run.raw.push(e); break; }
         if (!need.acked) Object.assign(need, { open: false, acked: true, ackedAt: e.ts, by: e.by });
         break;
       }

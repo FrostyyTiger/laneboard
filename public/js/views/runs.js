@@ -234,6 +234,27 @@ export function needActions(need, runId) {
   return { ack, open: safeHref(rnClean(need.link, 400)) };
 }
 
+/**
+ * The acked needs of a folded run at `now`, oldest first: [{kind, text, by, at,
+ * line, title}]. `line` is "acked by <by> <span> ago" (who closed it, night 4 T6;
+ * `by` is "?" when the ack named no one), `title` the ack's ISO time.
+ */
+export function ackedNeedsOf(run, now = Date.now()) {
+  return (Array.isArray(run?.needs) ? run.needs : []).filter((n) => isObj(n) && n.acked === true).map((n) => {
+    const by = rnClean(n.by, 64) ?? '?';
+    const at = isNum(n.ackedAt) ? n.ackedAt : null;
+    const when = at !== null && now >= at ? ` ${spanText(now - at)} ago` : '';
+    return {
+      kind: rnClean(n.kind, 32) ?? 'decision',
+      text: rnClean(n.text) ?? '',
+      by,
+      at,
+      line: `acked by ${by}${when}`,
+      title: at !== null ? `acked at ${new Date(at).toISOString()}` : 'acked',
+    };
+  });
+}
+
 /** A `wait` need is the loop sleeping (rate limit); every other kind needs a person. */
 export function needsYou(row) {
   return needsOf(row).some((n) => n.kind !== 'wait');
@@ -728,11 +749,33 @@ function needButtons(acts, x, busy) {
   return box;
 }
 
-function needsSection(row, busy = new Set()) {
+function needsSection(row, run, now, busy = new Set()) {
   const list = needsOf(row);
   const raw = (Array.isArray(row?.needs) ? row.needs : []).filter(isObj); // needsOf's order, with `i` and `open`
   const sec = rnSection('rn-needs-sec', 'Open needs', list.length);
-  if (!list.length) { sec.append(el('p', 'rn-none', 'Nothing open.')); return sec; }
+  const acked = ackedNeedsOf(run, now);
+  if (!list.length) sec.append(el('p', 'rn-none', 'Nothing open.'));
+  else sec.append(openNeedsList(row, list, raw, busy));
+  if (acked.length) sec.append(ackedNeedsList(acked));
+  return sec;
+}
+
+/** Closed needs, muted, each with who acked it. */
+function ackedNeedsList(acked) {
+  const ul = el('ul', 'rn-items rn-acked');
+  for (const x of acked) {
+    const li = el('li', 'rn-item rn-need rn-need--acked');
+    li.dataset.p = 'off';
+    li.append(el('span', 'rn-need-m', '✓'), el('span', 'rn-item-k', x.kind), el('span', 'rn-item-t', x.text));
+    const by = el('span', 'rn-item-n rn-need-by', x.line);
+    by.title = x.title;
+    li.append(by);
+    ul.append(li);
+  }
+  return ul;
+}
+
+function openNeedsList(row, list, raw, busy) {
   const ul = el('ul', 'rn-items');
   list.forEach((x, k) => {
     const li = el('li', 'rn-item rn-need');
@@ -744,8 +787,7 @@ function needsSection(row, busy = new Set()) {
     li.title = you ? 'needs a person' : 'the loop is waiting (a usage limit)';
     ul.append(li);
   });
-  sec.append(ul);
-  return sec;
+  return ul;
 }
 
 const TL_COLS = [
@@ -995,7 +1037,7 @@ export function renderRunPage(container, run, st = { status: 'ok' }, now = Date.
       page.append(n);
     }
     if (st.status === 'error') page.append(el('p', 'rn-stale', `Not refreshed: ${st.message ?? 'request failed'}.`));
-    page.append(needsSection(row, busy), chartsSection(run), timelineSection(run, now), artifactsSection(run));
+    page.append(needsSection(row, run, now, busy), chartsSection(run), timelineSection(run, now), artifactsSection(run));
     const raw = rawSection(run);
     if (raw) page.append(raw);
   }
