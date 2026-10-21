@@ -79,6 +79,12 @@ while another board runs it finds that log locked (`AUDIT_LOCKED` in its log)
 and refuses every action. `LANEBOARD_STATE_DIR` and `LANEBOARD_AUDIT_FILE`
 pointing at the temp dir avoid that.
 
+The state dir must be a private directory (mode 700, only you can read it):
+`mktemp -d` makes one, a plain `mkdir -p /tmp/lb` usually does not (mode 775
+with the common umask). In a directory other users can read, the board still
+starts but logs `AUDIT_UNSAFE_DIR` with the reason and refuses every action
+until you `chmod 700` it.
+
 The copy is not a clean slate for reads: it still sees this machine's real
 sessions and directories (`laneboard ls` against it lists them). It only
 reads them, it writes nothing there.

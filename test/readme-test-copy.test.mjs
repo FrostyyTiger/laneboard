@@ -67,3 +67,10 @@ test('the CLI section says how to get laneboard on the PATH', () => {
   assert.match(section, /readlink -f "\$\(command -v laneboard\)"/);
   assert.ok(read('docs/install.md').includes('ln -s "$PWD/bin/laneboard" ~/.local/bin/laneboard'), 'same step as install.md');
 });
+
+test('the section says the state dir must be private and names the code a wide one logs (runs T32)', () => {
+  const section = testCopySection().replace(/\s+/g, ' ');
+  assert.match(section, /state dir must be a private directory \(mode 700/);
+  assert.match(section, /`mktemp -d` makes one, a plain `mkdir -p/);
+  assert.match(section, /AUDIT_UNSAFE_DIR/);
+});
