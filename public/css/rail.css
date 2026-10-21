@@ -146,7 +146,7 @@
   .topbar-gauges .gauge-row { display: none; }
   .topbar-gauges .gauge-compact { display: inline; }
   .topbar-right { margin-left: auto; }
-  .stat { font-size: 11.5px; }
+  .stat { font-size: var(--fs-11); }
 }
 
 .vitals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
