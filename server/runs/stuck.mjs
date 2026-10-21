@@ -7,8 +7,12 @@
 // These are not the session rules (server/fleet/stuck.mjs): a run is a loop of
 // rounds, so the rules count rounds.
 //
-//   deadline        the deadline is within `deadlineMin` minutes (or past) and
-//                   the run has no `run.stop` and no `report` artifact
+//   deadline        the deadline has passed and the run has no `run.stop`
+//                   (night 4 review, item 1g: before the deadline a run is
+//                   working to it, not stuck, and a report written before it
+//                   does not make an overrun run done). `deadlineMin` has no
+//                   threshold any more: it is accepted for one version, and
+//                   0 still turns the rule off; any other value is ignored
 //   same-task       the latest ended round failed, and its task failed in
 //                   `sameTaskFails` rounds since that task last went well
 //   no-progress     no score got better (by more than `minDelta`, in its
@@ -63,12 +67,10 @@ const failed = (r) => typeof r.outcome === 'string' && FAILED_OUTCOME.test(r.out
 
 function deadlineRule(run, cfg, now) {
   if (!cfg.deadlineMin || !isNum(run.deadlineAt)) return null;
-  if ((run.artifacts ?? []).some((a) => a?.kind === 'report')) return null;
-  const left = run.deadlineAt - now;
-  if (left > cfg.deadlineMin * MIN) return null;
-  return left >= 0
-    ? `deadline in ${spanText(left)}, no report yet`
-    : `deadline passed ${spanText(-left)} ago, not stopped, no report`;
+  if (run.stop) return null;
+  const over = now - run.deadlineAt;
+  if (!(over > 0)) return null;
+  return `deadline passed ${spanText(over)} ago, not stopped`;
 }
 
 function sameTaskRule(ended, cfg) {

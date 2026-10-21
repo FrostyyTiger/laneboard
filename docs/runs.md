@@ -177,7 +177,7 @@ times) stays silent. The numbers are `runs.stuck` in [config.md](config.md)
 
 | Rule | Fires when |
 | --- | --- |
-| `deadline` | the deadline is 30 min away or past, the run has not stopped and has no `artifact` of kind `report` |
+| `deadline` | the deadline has passed and the run has no `run.stop` (before the deadline a run is never stuck by this rule, and a `report` artifact does not change that) |
 | `same-task` | the latest round failed and its task failed in 2 rounds in a row of that task; a failed round has `outcome` `fail`, `failed`, `failure`, `error`, `errored`, `no-task-done`, `still-red`, `reverted`, `blocked`, `timeout` or `timed-out` |
 | `no-progress` | no score got better in its `better` direction over the last 3 ended rounds (a score without a value before those rounds is not judged) |
 | `shorter-rounds` | the last 3 ended rounds were each shorter than the one before: a hint at a usage limit, or the run finishing its backlog; not while the run is `waiting` |

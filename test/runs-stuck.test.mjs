@@ -130,28 +130,33 @@ test('shorter-rounds: a longer round in the tail, too few rounds, or a waiting r
   assert.equal(runStuck(waiting.run, only('shorter-rounds'), waiting.end), null, 'waiting is not stuck');
 });
 
-test('deadline: within 30 min or past, not stopped, no report fires', () => {
+test('deadline: 10 min before is quiet, 1 min after with no run.stop fires, a stop clears it (T9)', () => {
   const deadline = new Date(T0 + 5 * 60 * MIN).toISOString();
+  const at = T0 + 5 * 60 * MIN;
   const { run: r } = run([{}], { start: { deadline } });
-  assert.deepEqual(runStuck(r, only('deadline'), T0 + 5 * 60 * MIN - 25 * MIN),
-    { rule: 'deadline', reason: 'deadline in 25m, no report yet' });
-  assert.deepEqual(runStuck(r, only('deadline'), T0 + 5 * 60 * MIN + 90 * MIN),
-    { rule: 'deadline', reason: 'deadline passed 1h 30m ago, not stopped, no report' });
+  assert.equal(runStuck(r, only('deadline'), at - 10 * MIN), null, 'before the deadline a run is working to it');
+  assert.equal(runStuck(r, only('deadline'), at), null, 'at the deadline itself, not yet');
+  assert.deepEqual(runStuck(r, only('deadline'), at + 1 * MIN),
+    { rule: 'deadline', reason: 'deadline passed 1m ago, not stopped' });
+  assert.deepEqual(runStuck(r, only('deadline'), at + 90 * MIN),
+    { rule: 'deadline', reason: 'deadline passed 1h 30m ago, not stopped' });
+  const stopped = run([{}], { start: { deadline }, after: [{ t: 'run.stop', reason: 'deadline' }] });
+  assert.equal(runStuck(stopped.run, only('deadline'), at + 1 * MIN), null);
+  assert.equal(runStuck(stopped.run, only('deadline'), at + 90 * MIN), null);
 });
 
-test('deadline: far away, a report artifact, a stop, or no deadline does not fire', () => {
+test('deadline: a report does not excuse an overrun, no deadline is silent, deadlineMin only switches it off', () => {
   const deadline = new Date(T0 + 5 * 60 * MIN).toISOString();
-  const near = T0 + 5 * 60 * MIN - 10 * MIN;
-  const far = run([{}], { start: { deadline } });
-  assert.equal(runStuck(far.run, only('deadline'), T0 + 60 * MIN), null);
+  const after = T0 + 5 * 60 * MIN + 5 * MIN;
   const reported = run([{}], { start: { deadline }, after: [{ t: 'artifact', kind: 'report', url: 'https://example.invalid/r' }] });
-  assert.equal(runStuck(reported.run, only('deadline'), near), null);
-  const pr = run([{}], { start: { deadline }, after: [{ t: 'artifact', kind: 'pr', url: 'https://example.invalid/pr/1' }] });
-  assert.equal(runStuck(pr.run, only('deadline'), near).rule, 'deadline', 'a PR is not a report');
-  const stopped = run([{}], { start: { deadline }, after: [{ t: 'run.stop', reason: 'done' }] });
-  assert.equal(runStuck(stopped.run, only('deadline'), near), null);
+  assert.equal(runStuck(reported.run, only('deadline'), after - 10 * MIN), null);
+  assert.equal(runStuck(reported.run, only('deadline'), after).rule, 'deadline', 'past the deadline and still going');
   const open = run([{}]);
-  assert.equal(runStuck(open.run, only('deadline'), near), null);
+  assert.equal(runStuck(open.run, only('deadline'), after), null);
+  const far = run([{}], { start: { deadline } });
+  assert.equal(runStuck(far.run, { ...only('deadline'), deadlineMin: 1 }, after).rule, 'deadline', 'any count but 0 is ignored');
+  assert.equal(runStuck(far.run, { ...only('deadline'), deadlineMin: 10080 }, after - 10 * MIN), null, 'no early warning any more');
+  assert.equal(runStuck(far.run, { ...only('deadline'), deadlineMin: 0 }, after), null, '0 turns it off');
 });
 
 test('a stopped run is never stuck, whatever its rounds look like', () => {
@@ -166,7 +171,7 @@ test('first rule in RULES order wins; false and zero counts turn rules off', () 
   const { run: r } = run([{ task: 'T7', outcome: 'failed', score: 1, min: 40 }, { task: 'T7', outcome: 'failed', score: 1, min: 30 },
     { task: 'T7', outcome: 'failed', score: 1, min: 20 }, { task: 'T7', outcome: 'failed', score: 1, min: 10 }],
   { start: { deadline } });
-  const near = T0 + 5 * 60 * MIN - 5 * MIN;
+  const near = T0 + 5 * 60 * MIN + 5 * MIN;
   assert.equal(runStuck(r, DEFAULTS, near).rule, 'deadline');
   assert.equal(runStuck(r, { deadlineMin: 0 }, near).rule, 'same-task', 'missing keys take the defaults');
   assert.equal(runStuck(r, { deadlineMin: 0, sameTaskFails: 0 }, near).rule, 'no-progress');

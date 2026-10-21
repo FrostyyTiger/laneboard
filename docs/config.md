@@ -378,4 +378,4 @@ own `.laneboard/run.jsonl`, and a machine without any shows no runs.
 | `runs.stuck.minDelta` | `0` | How much a score must move in its `better` direction to count as better (0 = any change). |
 | `runs.stuck.sameTaskFails` | `2` | The same task failed in this many rounds in a row of that task (outcome `failed`, `error`, `no-task-done`, `still-red`, …) (0..100). |
 | `runs.stuck.shorterRounds` | `3` | The last this many rounds were each shorter than the one before: a hint at a usage limit (0..100). |
-| `runs.stuck.deadlineMin` | `30` | The deadline is this many minutes away (or past), the run has not stopped and has no `report` artifact (0..10080). |
+| `runs.stuck.deadlineMin` | `30` | Kept for one version, no longer a threshold: `0` turns the deadline rule off, any other value (0..10080) is accepted and ignored. The rule fires once the deadline has passed and the run has no `run.stop`. |

@@ -114,7 +114,7 @@ test('a stopped run stays mapKeepMin minutes, then leaves; error stops are crit'
 });
 
 test('a stuck run carries the rule and the warn status; runs.stuck false turns it off', () => {
-  const late = running({ deadline: new Date(NOW + 5 * MIN).toISOString() });
+  const late = running({ deadline: new Date(NOW - 5 * MIN).toISOString() });
   const [n] = runNodes([late], { now: NOW });
   assert.equal(n.status, 'warn');
   assert.equal(n.stuck.rule, 'deadline');

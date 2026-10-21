@@ -11,7 +11,9 @@
 //                     (server/map/runs.mjs), 0 = it leaves when it stops
 //          stuck      the run stuck rules (server/runs/stuck.mjs):
 //                     {patience, minDelta, sameTaskFails, shorterRounds,
-//                     deadlineMin}, a count of 0 turns its rule off;
+//                     deadlineMin}, a count of 0 turns its rule off
+//                     (deadlineMin is only that switch now, kept for one
+//                     version);
 //                     false = every rule off}
 //
 // No env layer: which files laneboard reads comes only from the config file
