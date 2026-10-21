@@ -92,9 +92,8 @@ the hooks with the `_laneboard` field; a read of `gate.sh`; `laneboard audit ver
 4. `term` only after HC4's terminal items, as its own decision.
 
 ## 6. Decisions
-- **D1 (2026-10-21, proposed):** a 15-minute control window opened by a passkey, ended by idle
-  or lock; kill `*`, broadcast and `run-script` ask every time. Alternative: a passkey for every
-  action.
+- **D1 (2026-10-21, decided):** a 15-minute control window opened by a passkey, ended by idle
+  (5 min) or lock; kill `*`, broadcast and `run-script` ask every time.
 - **D2 (2026-10-21):** agent reviews, no line-by-line human review (owner's choice); fresh
   reviewers for each item, and the rollout starts with one builder.
 - **D3 (2026-10-21):** `term` stays off until it is decided on its own.
