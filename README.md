@@ -99,6 +99,9 @@ dir, never the real one. Two commands write outside it by design: `laneboard run
 without `--post` appends to `./.laneboard/run.jsonl` in the current directory
 (or `--file`), and `laneboard fleet keygen` without `--out` writes the real hub key
 (`$XDG_CONFIG_HOME/laneboard/hub.key`, else `~/.config/laneboard/hub.key`).
+`laneboard fleet pubkey` without `--key` reads that same file, so with no key there
+its error names that real path, not the state dir. Pass `--out` and `--key` to keep
+both inside the temp dir.
 
 ## CLI
 

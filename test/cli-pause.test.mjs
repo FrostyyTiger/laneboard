@@ -227,4 +227,5 @@ test('README says which CLI commands stay in LANEBOARD_STATE_DIR and which write
   assert.match(readme, /with `LANEBOARD_STATE_DIR` set, `laneboard\s+pause`, `resume` and `paused`/);
   assert.match(readme, /`laneboard run`\s+without `--post` appends to `\.\/\.laneboard\/run\.jsonl`/);
   assert.match(readme, /`laneboard fleet keygen` without `--out`/);
+  assert.match(readme, /`laneboard fleet pubkey` without `--key` reads that same file/);
 });
