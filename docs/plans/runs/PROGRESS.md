@@ -79,6 +79,9 @@ Planner notes (round 1), from reading the code:
 - [ ] T31 (2, review 27-designer, Inbox 2) [ui] The `BASH` tool badge is outlined in both themes, like the lane plates, never a grey fill in light — done when: a CSS test finds no background fill on the badge in the light theme; inbox shots (light, 1440 + 390), console clean
 - [ ] T32 (2, review 34-stranger, 2) `laneboard run needs ack …` (a known subcommand as the bare word after another) says `did you mean: laneboard run ack [<run>] <ref>` instead of only `unexpected argument` (`bin/laneboard` run arg parsing; same close-match line the top-level unknown command prints) — done when: `test/cli-run.test.mjs` runs `run needs ack demo 0`, finds exit 2 and the `did you mean` line naming `run ack`
 - [ ] T33 (2, review 34-stranger, 5) `laneboard run artifact --help` and `docs/runs.md` say what the default `--kind` is and that only `kind: pr` artifacts appear in a run's `prs` — done when: `test/cli-run.test.mjs` finds the default kind named in the artifact help and `test/runs-docs.test.mjs` finds the `prs` sentence
+- [ ] T34 (4, review 42-stranger, 1) `laneboard run needs` with no text (and no `--text`, or empty text) exits 2 with `needs: give the text` and posts nothing, like the other missing values (`bin/laneboard` run needs) — done when: `test/cli-run.test.mjs` runs it with and without `--post`, finds exit 2, the message, and no `needs` event in the run file
+- [ ] T35 (2, review 42-stranger, 2) `run start` with both `--max-rounds` and `--rounds` says `both --max-rounds and --rounds given; use --max-rounds` (exit 2 stays) — done when: `test/cli-run.test.mjs` finds the new sentence
+- [ ] T36 (2, review 42-stranger, 4) `docs/runs.md` says that a round's `--end --usd` wins over `stop --usd` for the run cost and that `cost.from` shows which was used — done when: `test/runs-docs.test.mjs` finds the sentence
 
 ## Research questions
 
@@ -167,6 +170,13 @@ Planner notes (round 1), from reading the code:
   - Phone: `LAUNCH A LANE…` as a `+` icon at the end of the plate row (saves ~100 px).
   - Idle chip row could carry the state mark in the left slot (`▲ feat-search 2`, `○` for idle).
   - Light amber still olive and nested panels heavy: same as review 6 ideas.
+- From review 42-stranger (no task; say which you want):
+  - A run that reports rounds only in `stop --rounds N` (no `round` events) shows `rounds: 0` in
+    `/api/runs` but `stop.rounds` in `/api/runs/<id>`; which is the truth for the list? The loop
+    always sends `round`, so only hand-driven runs hit it.
+  - `/api/map` title is the host's session name; a neutral title with an empty config?
+  - A `scripts/` helper or `npm run try` for the README test-copy recipe; and suggest `kill <pid>`
+    from the `laneboard up, pid …` log line (same as the review 34 `kill $!` note).
 
 ## Reviews
 
@@ -193,5 +203,7 @@ Planner notes (round 1), from reading the code:
 
 - reviews/34-stranger.md: 6 findings, 2 became tasks (T32, T33). Dropped as covered: taken test port
   (Later n3 T57, third time reported). Items 3, 4 and 6 went to For the owner. No browser, pages not looked at.
+- reviews/42-stranger.md: 6 findings, 3 became tasks (T34-T36). Dropped as covered: `pkill` note
+  (review 34 owner item). Items 3, 5 and 6 went to For the owner. No browser, pages not looked at.
 
 ## Morning
