@@ -166,12 +166,9 @@ export function setPanel(root, { scope, n } = {}) {
 
 // ---------------------------------------------------------------- segment bar
 
-/** Segment order, worst first; `dead` is hatched. */
+/** Bucket order, worst first (the counts and the label; the bar draws barSegs). */
 export const MIX_ORDER = Object.freeze(['p1', 'p2', 'run', 'ok', 'off', 'dead']);
 const MIX_WORD = Object.freeze({ p1: 'permission', p2: 'question', run: 'working', ok: 'done', off: 'idle', dead: 'dead' });
-// The p1 (permission) and p2 (question) buckets both want you: one amber ▲
-// (runs night 4 T23, core/marks.js). The bucket names stay for the counts.
-const MIX_P = Object.freeze({ p1: '2', p2: '2', run: 'run', ok: 'ok', off: 'off', dead: 'dead' });
 
 /** One session or lane -> its mix bucket. */
 export function mixBucket(item) {
@@ -187,19 +184,24 @@ export function mixBucket(item) {
 }
 
 /**
- * lanes (sessions with a `state`) -> {p1, p2, run, ok, off, dead, total, p}.
- * `p` is the worst trouble mark of the live lanes by itemP ('1' ■, '2' ▲, else
- * null), so a stuck working lane marks its builder ▲ as the status line counts
- * it, not the ● of its bucket.
+ * lanes (sessions with a `state`) -> {p1, p2, run, ok, off, dead, total, p,
+ * t1, t2, calmRun}. `p` is the worst trouble mark of the live lanes by itemP
+ * ('1' ■, '2' ▲, else null), so a stuck working lane marks its builder ▲ as
+ * the status line counts it, not the ● of its bucket. `t1`/`t2` count the
+ * live lanes itemP marks ■/▲ and `calmRun` the working lanes in no trouble:
+ * the segment bar is drawn from these (runs n5 T56).
  */
 export function laneMix(lanes) {
-  const mix = { p1: 0, p2: 0, run: 0, ok: 0, off: 0, dead: 0, total: 0, p: null };
+  const mix = { p1: 0, p2: 0, run: 0, ok: 0, off: 0, dead: 0, total: 0, p: null, t1: 0, t2: 0, calmRun: 0 };
   for (const l of Array.isArray(lanes) ? lanes : []) {
     const k = mixBucket(l);
     mix[k]++;
     mix.total++;
     if (k === 'dead') continue;
     const q = itemP(l);
+    if (q === '1') mix.t1++;
+    else if (q === '2') mix.t2++;
+    else if (k === 'run') mix.calmRun++;
     if (q === '1' || (q === '2' && mix.p !== '1')) mix.p = q;
   }
   return mix;
@@ -281,6 +283,25 @@ export function mixLabel(mix) {
   return parts.length ? `${head}: ${parts.join(', ')}` : head;
 }
 
+/**
+ * A mix -> the bar's segments, worst first: [[data-p, n], ...]. Grey unless
+ * in trouble (review r10 Across 4, runs n5 T56): red '1' for a lane itemP
+ * marks ■, amber '2' for ▲ (a permission, a question, an approval, stuck),
+ * then one grey for working and one lighter grey for every other lane (done,
+ * idle, dead: no green, no hatch; the rail row carries the hatch for
+ * offline). A mix without the trouble counts (meterMix) maps p1+p2 to amber
+ * and run to working. Pure.
+ */
+export function barSegs(mix) {
+  const total = mix?.total || 0;
+  const has = Number.isFinite(mix?.t1);
+  const t1 = has ? mix.t1 : 0;
+  const t2 = has ? mix.t2 || 0 : (mix?.p1 || 0) + (mix?.p2 || 0);
+  const run = has ? mix.calmRun || 0 : mix?.run || 0;
+  const rest = Math.max(0, total - t1 - t2 - run);
+  return [['1', t1], ['2', t2], ['run', run], ['off', rest]].filter(([, n]) => n > 0);
+}
+
 /** <span class="segbar" role="img" aria-label=..><i data-p=.. style="flex-grow:n"></i>...</span>. */
 export function segbar(mixOrLanes, { label = null } = {}) {
   const mix = Array.isArray(mixOrLanes) ? laneMix(mixOrLanes) : (mixOrLanes ?? laneMix([]));
@@ -290,11 +311,10 @@ export function segbar(mixOrLanes, { label = null } = {}) {
   const name = label == null || label === '' ? mixLabel(mix) : String(label);
   n.setAttribute('aria-label', name);
   n.title = name;
-  for (const k of MIX_ORDER) {
-    if (!(mix[k] > 0)) continue;
+  for (const [p, count] of barSegs(mix)) {
     const seg = document.createElement('i');
-    seg.dataset.p = MIX_P[k];
-    seg.style.flexGrow = String(mix[k]);
+    seg.dataset.p = p;
+    seg.style.flexGrow = String(count);
     n.appendChild(seg);
   }
   return n;
