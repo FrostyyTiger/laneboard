@@ -45,6 +45,8 @@
 }
 .rn-state[data-p="1"] .rn-state-t { color: var(--p1); }
 .rn-state[data-p="2"] .rn-state-t { color: var(--p2); }
+/* the stuck badge (server/runs/stuck.mjs): Board's flag, the icon in p2 */
+.rn-stuck { display: inline-flex; color: var(--p2); }
 
 /* ---- goal: the goal text, the run id and branch under it */
 .rn-goal { flex-direction: column; align-items: flex-start; gap: 0; }

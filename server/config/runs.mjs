@@ -6,7 +6,11 @@
 //          lanes      also read <lane cwd>/.laneboard/run.jsonl, default true
 //          maxEvents  events kept per run (older ones are dropped from the
 //                     fold's input, server/runs/store.mjs)
-//          keepDays   a run whose last event is older is forgotten}
+//          keepDays   a run whose last event is older is forgotten
+//          stuck      the run stuck rules (server/runs/stuck.mjs):
+//                     {patience, minDelta, sameTaskFails, shorterRounds,
+//                     deadlineMin}, a count of 0 turns its rule off;
+//                     false = every rule off}
 //
 // No env layer: which files laneboard reads comes only from the config file
 // (the CLI's LANEBOARD_RUN_FILE is a writer's setting, not this). With no
@@ -16,16 +20,24 @@
 import os from 'node:os';
 import path from 'node:path';
 import { globError } from '../packages/glob.mjs';
+import { DEFAULTS as STUCK_DEFAULTS } from '../runs/stuck.mjs';
 
 export const MAX_FILES = 64;
 export const LIMITS = Object.freeze({
   'runs.maxEvents': 100000,
   'runs.keepDays': 3650,
+  'runs.stuck.patience': 100,
+  'runs.stuck.minDelta': 1e9,
+  'runs.stuck.sameTaskFails': 100,
+  'runs.stuck.shorterRounds': 100,
+  'runs.stuck.deadlineMin': 7 * 24 * 60,
 });
+
+const STUCK_INTS = ['patience', 'sameTaskFails', 'shorterRounds', 'deadlineMin'];
 
 export function defaults() {
   return {
-    runs: { files: [], lanes: true, maxEvents: 5000, keepDays: 30 },
+    runs: { files: [], lanes: true, maxEvents: 5000, keepDays: 30, stuck: { ...STUCK_DEFAULTS } },
   };
 }
 
@@ -78,4 +90,14 @@ export function validate(c, bad) {
   if (typeof r.lanes !== 'boolean') bad(`runs.lanes must be true or false, got ${J(r.lanes)}`);
   int(bad, 'runs.maxEvents', r.maxEvents, 100, LIMITS['runs.maxEvents']);
   int(bad, 'runs.keepDays', r.keepDays, 1, LIMITS['runs.keepDays']);
+  const s = r.stuck;
+  if (s === false) return;
+  if (!isObj(s)) bad(`runs.stuck must be an object or false, got ${J(s)}`);
+  for (const k of Object.keys(s)) {
+    if (!(k in STUCK_DEFAULTS)) bad(`runs.stuck.${k} is not a known key (${Object.keys(STUCK_DEFAULTS).join(', ')})`);
+  }
+  for (const k of STUCK_INTS) int(bad, `runs.stuck.${k}`, s[k], 0, LIMITS[`runs.stuck.${k}`]);
+  if (typeof s.minDelta !== 'number' || !Number.isFinite(s.minDelta) || s.minDelta < 0 || s.minDelta > LIMITS['runs.stuck.minDelta']) {
+    bad(`runs.stuck.minDelta must be a number from 0 to ${LIMITS['runs.stuck.minDelta']}, got ${J(s.minDelta)}`);
+  }
 }

@@ -54,9 +54,12 @@ export function runWithSessions(store, run, { seen = sessionsSeen, now = Date.no
   return withSessions(run, bindRuns(runs, sessions, now));
 }
 
-/** The body of GET /api/runs from a store (null before the collector started). */
-export function listBody(store) {
-  return { runs: store ? store.list().map(summarize) : [] };
+/**
+ * The body of GET /api/runs from a store (null before the collector started).
+ * `opts` go to summarize: `{stuck}` is `runs.stuck`, `{now}` the time.
+ */
+export function listBody(store, opts = {}) {
+  return { runs: store ? store.list().map((run) => summarize(run, opts)) : [] };
 }
 
 /**
@@ -99,7 +102,10 @@ export default {
     // The store exists once start() ran; handlers call ctx.use('runs').store().
     ctx.provide('runs', { store: () => collector.store() });
 
-    ctx.route('GET', LIST_PATH, (req, res) => ctx.json(res, listBody(collector.store())));
+    ctx.route('GET', LIST_PATH, (req, res) => {
+      const cfg = ctx.config ?? globalConfig;
+      return ctx.json(res, listBody(collector.store(), { stuck: cfg.runs?.stuck }));
+    });
 
     ctx.route('GET', RUN_PATH, (req, res) => {
       const id = req.params?.run;

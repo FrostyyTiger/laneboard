@@ -78,7 +78,7 @@ Every line has these fields:
 | `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n` | one measurement of a metric; without `n` it belongs to the latest round (the highest `n` of a `round.start` or `round.end` so far in the file, even if that round has ended; 0 before any) |
 | `needs` | `kind` (default `decision`), `text`, `link`, `n` | the run needs a human; kind `wait` means the loop itself is waiting (a usage limit) and closes when the next round starts or the run stops; other kinds stay open until a `needs.ack` closes them; without `n` it belongs to the latest round, like `score` (even if that round has ended) |
 | `needs.ack` | **`ref`**, `by` (64 chars) | someone saw a need and closed it: `ref` is the need's place in the run's needs (`0` = the first `needs` line of the run, an integer below 10⁹) or its `ts` (epoch s or ms, or ISO; the first open need with that `ts`, else the first one). The first ack of a need counts (it records `ackedAt` and `by`); a second one changes nothing. A `ref` that names no need is kept raw. |
-| `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests), `title` | something the run produced; the same URL twice is kept once |
+| `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests, `report` for the run's report), `title` | something the run produced; the same URL twice is kept once |
 | `run.stop` | `reason` (default `unknown`), `rounds`, `usd` | the run stopped (reasons below) |
 | `usage` | `n`, `fiveHourPct`, `sevenDayPct`, `fiveHourResetsAt` (epoch s or ms), `overage` (boolean) | the account's usage windows after a round; a negative percentage means "not known" |
 | `cost` | **`usd`** (≥ 0), `n`, `total` | what a round cost; the run's cost is the sum of `usd` (the writer's own `total` restarts when the loop does) |
@@ -166,6 +166,22 @@ Any reason is kept as written; these are the ones laneboard knows:
 | `error` | the loop could not go on (a session would not start, a tool failed) |
 | `human` | someone stopped it |
 
+### Stuck
+
+A run that has not stopped can look stuck. laneboard works it out again from
+the events every time it folds the run, so a later good round clears it and
+nothing has to be acknowledged. The first rule that matches wins; a rule with
+nothing to judge (no deadline, no task names, no score history, rounds without
+times) stays silent. The numbers are `runs.stuck` in [config.md](config.md)
+(`runs.stuck: false` turns every rule off).
+
+| Rule | Fires when |
+| --- | --- |
+| `deadline` | the deadline is 30 min away or past, the run has not stopped and has no `artifact` of kind `report` |
+| `same-task` | the latest round failed and its task failed in 2 rounds in a row of that task; a failed round has `outcome` `fail`, `failed`, `failure`, `error`, `errored`, `no-task-done`, `still-red`, `reverted`, `blocked`, `timeout` or `timed-out` |
+| `no-progress` | no score got better in its `better` direction over the last 3 ended rounds (a score without a value before those rounds is not judged) |
+| `shorter-rounds` | the last 3 ended rounds were each shorter than the one before: a hint at a usage limit, or the run finishing its backlog; not while the run is `waiting` |
+
 ## The helper CLI
 
 So loops do not hand-write JSON, `laneboard run` writes one line per call:
@@ -241,7 +257,8 @@ many), `maxRounds` (`budget.rounds`), `scores` (per name: the latest `n` and
 `cost` events, see above), `deadline`,
 `deadlineAt`, the open `needs`, `artifacts` (a count), `prs` (the `pr`
 artifacts as `url`, `title`, `ts`; the Inbox lists them), `stop` (the reason or
-null), `startedAt`, `updatedAt`. `GET /api/runs/<run>` answers `{"run": …}`
+null), `stuck` (`{rule, reason}` from the rules above, or null), `startedAt`,
+`updatedAt`. `GET /api/runs/<run>` answers `{"run": …}`
 with the whole fold (rounds, every score, needs, artifacts, raw events); each
 round has `sessions`, the sessions tied to it (`sessionId`, `name`, `cwd`,
 `firstAt`, `lastAt`, `usd`, `how` = `id` or `cwd`, `maybe`), and `sessionsUsd`,

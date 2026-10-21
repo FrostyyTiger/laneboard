@@ -372,3 +372,9 @@ own `.laneboard/run.jsonl`, and a machine without any shows no runs.
 | `runs.lanes` | `true` | Also read `<lane cwd>/.laneboard/run.jsonl` for every lane. |
 | `runs.maxEvents` | `5000` | Events kept per run, newest kept (100..100000). |
 | `runs.keepDays` | `30` | A run whose last event is older is forgotten (1..3650). |
+| `runs.stuck` | see below | The run stuck rules (shown as a stuck badge on the Runs list). `false` turns every rule off; in an object, a count of `0` turns that rule off. A stopped run is never stuck, and a good round clears the badge. |
+| `runs.stuck.patience` | `3` | No score got better in this many ended rounds (0..100). |
+| `runs.stuck.minDelta` | `0` | How much a score must move in its `better` direction to count as better (0 = any change). |
+| `runs.stuck.sameTaskFails` | `2` | The same task failed in this many rounds in a row of that task (outcome `failed`, `error`, `no-task-done`, `still-red`, …) (0..100). |
+| `runs.stuck.shorterRounds` | `3` | The last this many rounds were each shorter than the one before: a hint at a usage limit (0..100). |
+| `runs.stuck.deadlineMin` | `30` | The deadline is this many minutes away (or past), the run has not stopped and has no `report` artifact (0..10080). |

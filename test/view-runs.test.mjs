@@ -14,7 +14,7 @@ import runsView, {
   renderRuns, mountRuns, unmountRuns, loadRuns, sortRuns, scoreList, scoreTrend, scoreText, burnOf,
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, LIST_URL, SCORE_MAX,
   renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
-  runHref, runUrl, LIST_HREF, RAW_SHOW, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
+  runHref, runUrl, LIST_HREF, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
 
@@ -112,6 +112,26 @@ test('rows that need you come first, then live runs, then the latest activity', 
   assert.equal(needsYou(wait), false, 'a wait is the loop sleeping, not a question');
   assert.equal(needsYou(FIX), true);
 });
+
+test('a stuck run (T8) carries the stuck badge in p2 with its reason, sorts after the runs that need you', () => withDom(() => {
+  const stuck = { ...LIVE, run: 'loopy', stuck: { rule: 'same-task', reason: 'task T7 failed in rounds 4, 5' } };
+  const host = document.createElement('div');
+  renderRuns(host, [stuck, LIVE], { status: 'ok' }, FIX.updatedAt);
+  const [row, calm] = byClass(host, 'rn-row');
+  assert.equal(row.dataset.run, 'loopy');
+  assert.equal(row.dataset.stuck, '');
+  const badge = byClass(row, 'rn-stuck')[0];
+  assert.equal(badge.dataset.p, '2');
+  assert.equal(badge.dataset.rule, 'same-task');
+  assert.equal(badge.title, 'stuck: task T7 failed in rounds 4, 5');
+  assert.match(byClass(row, 'rn-state')[0].title, /stuck: task T7 failed/);
+  assert.equal(calm.dataset.stuck, undefined);
+  assert.equal(byClass(calm, 'rn-stuck').length, 0, 'stuck: null draws no badge');
+  assert.deepEqual(sortRuns([LIVE, stuck, FIX]).map((r) => r.run), ['readiness', 'loopy', 'nightly']);
+  assert.equal(stuckOf({ stuck: 'yes' }), null, 'only an object counts');
+  assert.deepEqual(stuckOf({ stuck: { rule: 'deadline' } }), { rule: 'deadline', reason: 'deadline' });
+  assert.equal(stuckOf({ stuck: {} }), null);
+}));
 
 test('the empty state says how to start a run; loading, unavailable and error say so', () => withDom(() => {
   const host = document.createElement('div');

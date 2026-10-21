@@ -12,6 +12,9 @@
 //   latest score per metric with its trend (▲ ▼ =, `better` says which is good)
 //   budget burn against the 5 h / 7 d windows (from the last `usage` event)
 //   time left to the deadline, or the stop reason · cost · open needs
+// A run the stuck rules flag (server/runs/stuck.mjs, `stuck: {rule, reason}`)
+// carries the Board's stuck badge (the `stuck` icon, p2) next to its state
+// word, and sorts after the runs that need you.
 // Grey unless something needs you: a hue only for a worse score, a window
 // near its stop level, an overage, an error or no-progress stop, an open need;
 // each also carries a shape or a word.
@@ -32,6 +35,7 @@
 // Styles: public/css/views/runs.css (linked from index.html).
 import { el } from '../core/dom.js';
 import { money } from '../core/format.js';
+import { icon } from '../core/icons.js';
 import { lamp, panel, setPanel } from '../ui/components.js';
 import { sparkRange } from '../ui/spark.js';
 
@@ -206,15 +210,25 @@ export function needsYou(row) {
   return needsOf(row).some((n) => n.kind !== 'wait');
 }
 
+/** The stuck verdict of a row as {rule, reason} (clamped), or null. */
+export function stuckOf(row) {
+  const s = row?.stuck;
+  if (!isObj(s)) return null;
+  const rule = rnClean(s.rule, 32);
+  const reason = rnClean(s.reason, 160) ?? rule;
+  return reason ? { rule, reason } : null;
+}
+
 const LIVE = { running: 0, waiting: 0, stopped: 1 };
 
-/** Sort order: runs that need you first, then live runs, then latest activity. Returns a new array. */
+/** Sort order: runs that need you first, then stuck ones, then live runs, then latest activity. Returns a new array. */
 export function sortRuns(rows) {
   const list = (Array.isArray(rows) ? rows : []).filter((r) => isObj(r) && typeof r.run === 'string');
   const at = (r) => (isNum(r.updatedAt) ? r.updatedAt : isNum(r.startedAt) ? r.startedAt : 0);
   return list
     .map((r, i) => ({ r, i }))
     .sort((a, b) => (needsYou(b.r) - needsYou(a.r))
+      || (Boolean(stuckOf(b.r)) - Boolean(stuckOf(a.r)))
       || ((LIVE[a.r.state] ?? 0) - (LIVE[b.r.state] ?? 0))
       || (at(b.r) - at(a.r))
       || (a.i - b.i))
@@ -251,6 +265,17 @@ function stateNode(row) {
   n.dataset.p = s.p;
   n.append(lamp(s.p, { label: s.title }), el('span', 'rn-state-t', s.word));
   n.title = s.title;
+  const stuck = stuckOf(row);
+  if (stuck) {
+    const words = `stuck: ${stuck.reason}`;
+    const f = el('span', 'rn-stuck flag-stuck');
+    f.dataset.p = '2';
+    if (stuck.rule) f.dataset.rule = stuck.rule;
+    f.title = words;
+    f.append(icon('stuck', { size: 's', label: words }));
+    n.append(f);
+    n.title = `${s.title}\n${words}`;
+  }
   return n;
 }
 
@@ -343,6 +368,7 @@ export function runRow(row, now = Date.now()) {
   li.dataset.run = rnClean(row.run, 64) ?? '';
   li.dataset.state = STATE_META[row.state] ? row.state : 'running';
   if (needsYou(row)) li.dataset.needs = '';
+  if (stuckOf(row)) li.dataset.stuck = '';
   const left = timeLeft(row, now);
   const leftEl = rnField('rn-left', left.text, left.title);
   if (left.over) leftEl.dataset.p = '2';

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 import { KNOWN_TYPES, STATES, STOP_REASONS, VERSION } from '../server/runs/protocol.mjs';
+import { RULES as STUCK_RULES, FAILED_OUTCOME } from '../server/runs/stuck.mjs';
 
 const doc = await readFile(new URL('../docs/runs.md', import.meta.url), 'utf8');
 
@@ -33,6 +34,14 @@ test('the states table matches STATES', () => {
 
 test('the stop reasons table matches STOP_REASONS', () => {
   assert.deepEqual([...tableNames('Stop reasons')].sort(), [...STOP_REASONS].sort());
+});
+
+test('the stuck table matches the run stuck rules, and every failed outcome it names counts as failed', () => {
+  assert.deepEqual([...tableNames('Stuck')].sort(), [...STUCK_RULES].sort());
+  const row = doc.split('\n').find((l) => l.startsWith('| `same-task` |'));
+  const words = [...row.split('|')[2].matchAll(/`([^`]+)`/g)].map((m) => m[1]).filter((w) => w !== 'outcome');
+  assert.ok(words.length >= 5);
+  for (const w of words) assert.match(w, FAILED_OUTCOME, w);
 });
 
 test('the doc names the version, the file location and the none default', () => {

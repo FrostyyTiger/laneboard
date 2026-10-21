@@ -29,7 +29,8 @@ const refused = (fileBody, re) => assert.throws(() => cfg(fileBody), (err) => {
 test('the fragment is loaded from server/config/ and defaults to no run files', () => {
   assert.ok(FRAGMENTS.some((f) => f.name === 'runs'), 'runs.mjs is a loaded fragment');
   const c = build({ env: {}, file: MISSING });
-  assert.deepEqual(c.runs, { files: [], lanes: true, maxEvents: 5000, keepDays: 30 });
+  assert.deepEqual(c.runs, { files: [], lanes: true, maxEvents: 5000, keepDays: 30,
+    stuck: { patience: 3, minDelta: 0, sameTaskFails: 2, shorterRounds: 3, deadlineMin: 30 } });
   assert.equal(c.port, 7777, 'core keys untouched');
 });
 
@@ -46,7 +47,8 @@ test('no env layer', () => {
 
 test('the file sets every key; a half-set block keeps the other defaults', () => {
   const c = cfg({ runs: { files: ['/srv/runs/*/run.jsonl'], lanes: false } });
-  assert.deepEqual(c.runs, { files: ['/srv/runs/*/run.jsonl'], lanes: false, maxEvents: 5000, keepDays: 30 });
+  assert.deepEqual(c.runs, { files: ['/srv/runs/*/run.jsonl'], lanes: false, maxEvents: 5000, keepDays: 30,
+    stuck: { patience: 3, minDelta: 0, sameTaskFails: 2, shorterRounds: 3, deadlineMin: 30 } });
   const d = cfg({ runs: { maxEvents: 100, keepDays: 3650 } });
   assert.equal(d.runs.maxEvents, 100);
   assert.equal(d.runs.keepDays, 3650);
@@ -82,4 +84,23 @@ test('fileGlobProblem accepts the documented loop pattern after expansion', () =
   assert.equal(runs.fileGlobProblem(path.join(os.homedir(), 'runs/*/run.jsonl')), null);
   assert.equal(runs.fileGlobProblem('/srv/{a,b}/.laneboard/run.jsonl'), null);
   assert.match(runs.fileGlobProblem('/a\0b'), /NUL/);
+});
+
+test('runs.stuck: defaults, a half-set block, false turns every rule off', () => {
+  assert.deepEqual(cfg(null).runs.stuck, { patience: 3, minDelta: 0, sameTaskFails: 2, shorterRounds: 3, deadlineMin: 30 });
+  assert.deepEqual(cfg({ runs: { stuck: { patience: 5, minDelta: 0.01 } } }).runs.stuck,
+    { patience: 5, minDelta: 0.01, sameTaskFails: 2, shorterRounds: 3, deadlineMin: 30 });
+  assert.equal(cfg({ runs: { stuck: false } }).runs.stuck, false);
+  assert.equal(cfg({ runs: { stuck: { shorterRounds: 0, deadlineMin: 0 } } }).runs.stuck.shorterRounds, 0, '0 turns one rule off');
+});
+
+test('bad runs.stuck values are a ConfigError naming the key', () => {
+  refused({ runs: { stuck: true } }, /runs\.stuck must be an object or false/);
+  refused({ runs: { stuck: 'off' } }, /runs\.stuck must be an object or false/);
+  refused({ runs: { stuck: { patience: -1 } } }, /runs\.stuck\.patience must be an integer from 0 to 100/);
+  refused({ runs: { stuck: { sameTaskFails: 1.5 } } }, /runs\.stuck\.sameTaskFails/);
+  refused({ runs: { stuck: { deadlineMin: 99999999 } } }, /runs\.stuck\.deadlineMin/);
+  refused({ runs: { stuck: { minDelta: -0.1 } } }, /runs\.stuck\.minDelta must be a number/);
+  refused({ runs: { stuck: { minDelta: '0' } } }, /runs\.stuck\.minDelta/);
+  refused({ runs: { stuck: { patiense: 3 } } }, /runs\.stuck\.patiense is not a known key/);
 });
