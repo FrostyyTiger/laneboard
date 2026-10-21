@@ -7,7 +7,7 @@
 //     directly and +1 when its case is exact; every skipped character between
 //     two matches costs -1. The best alignment wins (dynamic programming, not
 //     the first greedy one). No match is null; an empty query scores 0.
-//   parsePrefix(q)  -> {type: 'HOST'|'LANE'|'PKG'|'ACT'|null, text}
+//   parsePrefix(q)  -> {type: 'HOST'|'LANE'|'PKG'|'NODE'|'ACT'|null, text}
 //   rankItems(items, q, {recent, cap}) -> the matching items, best first
 
 export const SCORE = Object.freeze({ wordStart: 8, consecutive: 5, caseExact: 1, gap: -1 });
@@ -72,6 +72,7 @@ const PREFIXES = [
   ['host:', 'HOST'], ['h:', 'HOST'],
   ['lane:', 'LANE'], ['l:', 'LANE'],
   ['pkg:', 'PKG'], ['p:', 'PKG'],
+  ['node:', 'NODE'], ['n:', 'NODE'],
   ['act:', 'ACT'], ['>', 'ACT'],
 ];
 

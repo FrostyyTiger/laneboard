@@ -243,12 +243,14 @@ export function scopeAlpha(node, scope, byId) {
 
 /**
  * The node a router `sel=` value names (2.3). A fleet key resolves to its
- * lane, then its session node, then the lane whose only session it is; any
- * other value is a raw node id. Null when nothing matches.
+ * lane, then its session node, then the lane whose only session it is;
+ * `node:<id>` (the palette's NODE rows) names node `<id>`; any other value is
+ * a raw node id. Null when nothing matches.
  */
 export function idForSel(sel, byId) {
   if (typeof sel !== 'string' || sel === '') return null;
   if (byId.has(sel)) return sel;
+  if (sel.startsWith('node:') && byId.has(sel.slice(5))) return sel.slice(5);
   const p = parseFkey(sel);
   if (!p) return null;
   const lane = laneNodeId(p.builder, p.name);

@@ -66,10 +66,11 @@ const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /**
  * Strip a Map node-id prefix (`lane:` / `sess:`) from a `sel` value, the same
- * mapping as the map's selForId (§5 2.3). Pure.
+ * mapping as the map's selForId (§5 2.3). A `node:<id>` sel (a machine or a
+ * service the palette flew to, T11) has no lane panel: null. Pure.
  */
 export function selTarget(sel) {
-  if (typeof sel !== 'string' || sel === '') return null;
+  if (typeof sel !== 'string' || sel === '' || sel.startsWith('node:')) return null;
   for (const prefix of ['lane:', 'sess:']) {
     if (sel.startsWith(prefix) && parseFkey(sel.slice(prefix.length))) return sel.slice(prefix.length);
   }

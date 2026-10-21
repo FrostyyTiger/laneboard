@@ -70,6 +70,13 @@ ghosts every other builder and flies to its subtree. `\` splits the Map with a
 dense lane table on the right (from 900 px wide), worst first; hovering a row
 lights its node and the other way round.
 
+**Find from anywhere.** `⌘K` (Ctrl-K) lists the Map's machines and services
+next to builders and lanes, each with where it runs and its ports
+(`postgres` · `:5432 on hv1/db`), so a service name or a port (`:5432`) finds
+the node; `n:` keeps only nodes. Choosing one opens the Map and flies there
+(`#/map?sel=node:<id>`). Ports come from the port in a node's `href` and the
+Reach links into it. Until a Map model has loaded, there are no node rows.
+
 | Key | |
 | --- | --- |
 | `/` | find a node |
