@@ -490,8 +490,7 @@
 
 .morning-builder { margin: var(--sp-4) 0; }
 .morning-builder > .mblock:last-child { margin-bottom: 0; }
-.morning-error { padding: var(--sp-1) 0; }
-.morning-error::before { content: "◆ "; color: var(--p3); }
+.morning-quiet { margin: var(--sp-4) 0; }
 
 .morning-stuck,
 .morning-run,

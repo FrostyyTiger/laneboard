@@ -148,8 +148,8 @@ test('helpers: durations, local parts, fleet keys that are already fkeyed', () =
 test('render: the merge fixture renders grouped by builder, then the fleet blocks', () => {
   const box = render(V.morningModel(merged(), { hub: true, s: store }));
   const groups = byClass(box, 'morning-builder');
-  assert.deepEqual(groups.map((g) => g.dataset.builder), ['builder-a', 'builder-c', 'builder-b'], 'one panel per builder, merge order');
-  const [a, c, b] = groups;
+  assert.deepEqual(groups.map((g) => g.dataset.builder), ['builder-a', 'builder-c'], 'one panel per builder that answered, merge order');
+  const [a, c] = groups;
   assert.match(a.textContent, /^BA/);
   assert.match(a.textContent, /Needs you2/);
   assert.match(a.textContent, /Finished2/);
@@ -160,9 +160,9 @@ test('render: the merge fixture renders grouped by builder, then the fleet block
   assert.match(a.textContent, /PACKAGE-DONE: web/);
   assert.doesNotMatch(a.textContent, /builder-a\/feat-1/, 'local names are shown without the builder prefix');
   assert.match(c.textContent, /spinning/);
-  assert.match(b.textContent, /No answer: builder timeout/);
-  assert.ok(walk(b).some((n) => n.dataset?.p === 'stale'), 'the down builder carries a stale lamp');
-  assert.doesNotMatch(b.textContent, /Needs you/);
+  const miss = byClass(box, 'morning-missing')[0];
+  assert.match(miss.title, /builder-b: builder timeout/, 'the down builder is the strip line, its error in the title');
+  assert.ok(walk(miss).some((n) => n.dataset?.p === 'stale'), 'the strip line carries a stale lamp');
 
   const text = box.textContent;
   assert.match(text, /no answer from builder-b/);
@@ -216,7 +216,7 @@ test('view: default export fits the registry; hub mode fetches the fleet merge a
     await new Promise((r) => setImmediate(r));
     assert.deepEqual(calls, ['/api/fleet/morning?window=tonight']);
     const body = byId.get('morning-body');
-    assert.equal(byClass(body, 'morning-builder').length, 3);
+    assert.equal(byClass(body, 'morning-builder').length, 2, 'builder-b did not answer: no block');
     assert.match(byId.get('morning-since').textContent, /^since /);
 
     // Same route: no refetch. Builder filter: one refetch with b=.
@@ -365,4 +365,49 @@ test('render T7: hub mode puts the Runs block after the summary; no runs draws n
   assert.ok(titles.indexOf('Runs') < titles.indexOf('Needs you'));
   titles = byClass(render(V.morningModel(merged(), { hub: true, s: store })), 'mblock').map((b) => b.children[0]._text);
   assert.ok(!titles.includes('Runs'));
+});
+
+// --- T33: no block for a builder with no answer, empty fleet blocks in one line ------
+
+test('model T33: the empty fleet blocks are listed in drawing order; the merge fixture has none', () => {
+  assert.deepEqual(V.morningModel(merged(), { hub: true, s: store }).empty, []);
+  const quiet = V.morningModel({ builders: [{ id: 'builder-a', needsYou: [], finished: [], cost: { lanes: [] } }] }, { hub: true, s: store });
+  assert.deepEqual(quiet.empty, ['review wait', 'approvals', 'package cost', 'held back']);
+  const some = V.morningModel({ builders: [], review: { n: 2, waiting: 0, longest: [] }, deferred: [{ reason: 'quiet', title: 'x' }] }, { hub: true, s: store });
+  assert.deepEqual(some.empty, ['approvals', 'package cost'], 'reviews done with none waiting still draw the stats');
+});
+
+test('render T33: a builder with no answer draws no block, the strip names it; empty fleet blocks are one muted line', () => {
+  const data = {
+    builders: [
+      { id: 'builder-a', error: 'not found', stale: true },
+      { id: 'builder-b', error: 'builder down', stale: true },
+      { id: 'builder-c', needsYou: [], finished: [fin('feat')], cost: { lanes: [costLane('feat', 1)] } },
+    ],
+    missing: ['builder-a', 'builder-b'],
+  };
+  const box = render(V.morningModel(data, { hub: true, s: store }));
+  assert.deepEqual(byClass(box, 'morning-builder').map((g) => g.dataset.builder), ['builder-c']);
+  assert.doesNotMatch(box.textContent, /No answer:/);
+  const miss = byClass(box, 'morning-missing');
+  assert.equal(miss.length, 1);
+  assert.match(miss[0].textContent, /no answer from builder-a, builder-b$/);
+  assert.equal(miss[0].title, 'builder-a: not found\nbuilder-b: builder down');
+  const titles = byClass(box, 'mblock').map((b) => b.children[0]?._text);
+  for (const t of ['Review wait', 'Approvals answered', 'Cost by package', 'While you were away']) {
+    assert.ok(!titles.includes(t), `${t} is not drawn when empty`);
+  }
+  const quiet = byClass(box, 'morning-quiet');
+  assert.equal(quiet.length, 1, 'one line for every empty fleet block');
+  assert.ok(quiet[0].classList.contains('empty'), 'muted');
+  assert.equal(quiet[0].textContent, 'Nothing on review wait, approvals, package cost, held back.');
+  assert.equal(box.children.at(-1), quiet[0], 'at the end');
+});
+
+test('render T33: every builder down draws the strip only; the full merge draws no quiet line', () => {
+  const down = render(V.morningModel({ builders: [{ id: 'builder-a', error: 'not found' }] }, { hub: true, s: store }));
+  assert.equal(byClass(down, 'morning-builder').length, 0);
+  assert.doesNotMatch(down.textContent, /No builder is configured/);
+  assert.match(byClass(down, 'morning-missing')[0].textContent, /no answer from builder-a/);
+  assert.equal(byClass(render(V.morningModel(merged(), { hub: true, s: store })), 'morning-quiet').length, 0);
 });

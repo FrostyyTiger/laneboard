@@ -11,7 +11,9 @@
 // stuck incidents, what it cost), then the fleet blocks: review wait, approvals
 // answered, cost by package (equal split, so "≈"), and what the notifier held
 // back while you were away (quiet hours or rate limit). A builder that did not
-// answer is a row with its error and a stale lamp, never dropped.
+// answer draws no block: the summary strip names it with a stale lamp (runs
+// plan T33). A fleet block with nothing in the window is not drawn either; the
+// empty ones share one muted line at the end ("Nothing on review wait, …").
 //
 // Runs (runs plan A3, T7): one block per run with events in the window
 // (server/runs/digest.mjs runsInWindow, `runs` in GET /api/morning): goal
@@ -183,12 +185,27 @@ const EMPTY_REVIEW = Object.freeze({ n: 0, waiting: 0, medianWaitMs: null, p90Wa
 const EMPTY_APPROVALS = Object.freeze({ answered: 0, approved: 0, denied: 0, released: 0, medianAnswerMs: null });
 
 /**
+ * The fleet blocks with nothing in the window, in drawing order, by the words
+ * the one muted line uses (T33): ['review wait', 'approvals', 'package cost', 'held back'].
+ */
+export function emptyFleetBlocks(m) {
+  const out = [];
+  const r = m.review;
+  if (!r.n && !r.waiting && !r.longest.length) out.push('review wait');
+  const a = m.approvals;
+  if (!a.answered && !a.approved && !a.denied && !a.released) out.push('approvals');
+  if (!m.costByPackage.length) out.push('package cost');
+  if (!m.deferred.length) out.push('held back');
+  return out;
+}
+
+/**
  * Any Morning payload -> one shape:
  *   {hub, error?, window, label, since, builders:[{id, code, error, stale, needsYou,
  *    finished, cost, stuck}], totals:{needsYou, finished, usd, tokens, sessions:{finished,
  *    usd}, runs:{finished, usd}} (finished/usd = sessions + runs stopped in the window), review,
  *    approvals, costByPackage, stuck (no known builder), deferred, missing, rateLimits,
- *    runs:[morningRunOf()]}
+ *    runs:[morningRunOf()], empty:[emptyFleetBlocks()]}
  * `hub` is whether the page is fed by a hub. A hub merge has `builders[]`; a hub
  * `?b=` answer is one builder row; a builder's own answer is wrapped as one builder.
  */
@@ -227,7 +244,7 @@ export function morningModel(data, { hub = false, s = null } = {}) {
     finished: runs.filter((r) => r.state === 'stopped').length,
     usd: runs.reduce((a, r) => a + (r.usd ?? 0), 0),
   };
-  return {
+  const m = {
     hub,
     fleet: hub,
     window: typeof data.window === 'string' ? data.window : morning.window,
@@ -263,6 +280,8 @@ export function morningModel(data, { hub = false, s = null } = {}) {
     rateLimits: isObj(data.rateLimits) ? data.rateLimits : null,
     runs,
   };
+  m.empty = emptyFleetBlocks(m);
+  return m;
 }
 
 export async function loadMorning(force = false) {
@@ -314,13 +333,16 @@ export function renderModel(box, m) {
   }
   box.append(morningSummary(m));
   if (runs) box.append(runs);
-  for (const b of m.builders) box.append(builderGroup(b, m));
+  // A builder with no answer is the strip's "no answer from …" line, not a block.
+  for (const b of m.builders) if (!b.error) box.append(builderGroup(b, m));
   if (!m.builders.length) box.append(el('p', 'empty', 'No builder is configured.'));
-  box.append(reviewBlock(m.review, m));
+  const empty = new Set(m.empty ?? []);
+  if (!empty.has('review wait')) box.append(reviewBlock(m.review, m));
   if (m.stuck.length) box.append(stuckBlock(m.stuck, 'Stuck incidents · fleet'));
-  box.append(approvalsBlock(m.approvals));
-  box.append(packageBlock(m.costByPackage, m.totals.sessions.usd));
-  box.append(deferredBlock(m.deferred, m));
+  if (!empty.has('approvals')) box.append(approvalsBlock(m.approvals));
+  if (!empty.has('package cost')) box.append(packageBlock(m.costByPackage, m.totals.sessions.usd));
+  if (!empty.has('held back')) box.append(deferredBlock(m.deferred, m));
+  if (empty.size) box.append(el('p', 'empty morning-quiet', `Nothing on ${[...empty].join(', ')}.`));
   return box;
 }
 
@@ -350,7 +372,9 @@ function morningSummary(m) {
   if (m.missing.length) {
     const miss = el('div', 'mrow-sub morning-missing');
     miss.append(lamp('stale', { label: 'stale: did not answer' }));
-    miss.append(el('span', null, ` no answer from ${m.missing.join(', ')}; their blocks are empty`));
+    miss.append(el('span', null, ` no answer from ${m.missing.join(', ')}`));
+    const why = m.builders.filter((b) => b.error).map((b) => `${b.id}: ${b.error}`);
+    if (why.length) miss.title = why.join('\n');
     sec.append(miss);
   }
   return sec;
@@ -360,12 +384,7 @@ function builderGroup(b, m) {
   const p = panel({ name: b.code, scope: b.id, n: b.needsYou.length });
   p.root.classList.add('morning-builder');
   p.root.dataset.builder = b.id;
-  const state = b.error ? lamp('stale', { label: `stale: ${b.error}` }) : lamp(b.needsYou.length ? '2' : 'ok', { label: b.needsYou.length ? 'needs you' : 'nothing waiting' });
-  p.tools.append(state);
-  if (b.error) {
-    p.body.append(el('p', 'empty morning-error', `No answer: ${b.error}`));
-    return p.root;
-  }
+  p.tools.append(lamp(b.needsYou.length ? '2' : 'ok', { label: b.needsYou.length ? 'needs you' : 'nothing waiting' }));
   for (const n of builderBlocks(b, m)) p.body.append(n);
   return p.root;
 }
