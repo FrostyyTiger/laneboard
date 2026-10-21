@@ -32,12 +32,14 @@ export const DIM = 0.5;
  * Drift (server/map.mjs driftOf): the words the readout, the tip and the
  * panel use, and the ring the drift overlay draws around the node. A missing
  * node stays at its declared place in a dashed warn ring, an undeclared one
- * gets a solid accent ring.
+ * gets a solid warn square: both want a look (the amber of README §5), the
+ * shape tells which, and the accent stays for selection. `glyph` is the
+ * readout's key in front of each count.
  */
 export const DRIFT_TEXT = { missing: 'declared, not seen', undeclared: 'seen, not declared' };
 export const DRIFT_MARK = {
-  missing: { tone: 'warn', level: 0, dash: [3, 3] },
-  undeclared: { tone: 'accent', level: 2, dash: [] },
+  missing: { tone: 'warn', level: 0, dash: [3, 3], shape: 'ring', glyph: '◌' },
+  undeclared: { tone: 'warn', level: 0, dash: [], shape: 'square', glyph: '□' },
 };
 
 /** The node's drift kind when it is one of DRIFT_TEXT's, else null. */
@@ -177,7 +179,7 @@ const MEASURED = {
  * Returns `{tone, level, shape, alpha, arc?, mark?, abnormal}`. An abnormal
  * status keeps its own tone and shape in every overlay: a crit lane never
  * looks calm because the overlay is cost. The drift overlay keeps the status
- * style, adds `mark` (DRIFT_MARK, a ring around the node) on a drifting node
+ * style, adds `mark` (DRIFT_MARK, a ring or square around the node) on a drifting node
  * and dims every other node. The reach overlay does the same with
  * `opts.reach` (reachScope): lit nodes full, the focus's reachable set marked
  * with REACH_MARK, the rest dimmed.

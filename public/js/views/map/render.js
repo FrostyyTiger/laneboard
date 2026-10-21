@@ -34,7 +34,7 @@
 // fillText never interprets it.
 
 import { RINGS, RUN_RING, SIZE, polar, ringLabels, ticks } from './layout.js';
-import { nodeStyle, linkStyle, reachScope, reachLinkStyle, runRing, runRound, ACCENT_L } from './overlays.js';
+import { nodeStyle, linkStyle, reachScope, reachLinkStyle, runRing, runRound, ACCENT_L, DRIFT_MARK } from './overlays.js';
 
 const TAU = Math.PI * 2;
 
@@ -399,6 +399,19 @@ export function createRenderer(ctx, palette) {
   // ---------------------------------------------------------------- nodes
 
   /** The status glyph at (x, y), radius r: disc ●, square ■, triangle ▲, diamond ◆, ring ○. */
+  /**
+   * An overlay mark (nodeStyle `mark`) around a node at radius `ro`: a ring,
+   * or a square whose sides touch that circle when `mark.shape` is 'square'.
+   */
+  function markRing(mark, sp, ro, alpha) {
+    strokeStyle(tone(mark.tone, mark.level), alpha, 1.5, mark.dash);
+    ctx.beginPath();
+    if (mark.shape === 'square') ctx.rect(sp.x - ro, sp.y - ro, ro * 2, ro * 2);
+    else arc(sp.x, sp.y, ro, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   function glyph(shape, x, y, r, col, alpha, { hollow = false } = {}) {
     ctx.beginPath();
     switch (shape) {
@@ -564,9 +577,7 @@ export function createRenderer(ctx, palette) {
         // A run: its progress as an arc on a full track, from twelve o'clock.
         runNode(n, sp, r, alpha);
         if (st.mark) {
-          strokeStyle(tone(st.mark.tone, st.mark.level), alpha, 1.5, st.mark.dash);
-          ctx.beginPath(); arc(sp.x, sp.y, r + RUN_RING + 5, 0, TAU); ctx.stroke();
-          ctx.setLineDash([]);
+          markRing(st.mark, sp, r + RUN_RING + 5, alpha);
         }
         continue;
       }
@@ -614,14 +625,10 @@ export function createRenderer(ctx, palette) {
       }
 
       if (st.mark) {
-        // Drift overlay: a ring outside the glyph, dashed warn for "declared,
-        // not seen", solid accent for "seen, not declared". Reach overlay: a
-        // solid accent ring on what the selected node can reach.
-        strokeStyle(tone(st.mark.tone, st.mark.level), alpha, 1.5, st.mark.dash);
-        ctx.beginPath();
-        arc(sp.x, sp.y, (n.kind === 'builder' ? r * 1.25 * Math.SQRT2 : r) + 6, 0, TAU);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        // Drift overlay: a dashed warn ring for "declared, not seen", a solid
+        // warn square for "seen, not declared". Reach overlay: a solid accent
+        // ring on what the selected node can reach.
+        markRing(st.mark, sp, (n.kind === 'builder' ? r * 1.25 * Math.SQRT2 : r) + 6, alpha);
       }
 
       if (n.kind === 'room' || n.kind === 'site' || n.kind === 'host' || n.kind === 'builder') gauges(n, sp.x, sp.y, n.kind === 'builder' ? r * 1.25 + 1 : r, alpha);
@@ -848,7 +855,8 @@ export function createRenderer(ctx, palette) {
    * (compact on a phone: `Z 1.80× · N 214/570 · 12:04:31Z`). `scope` is a
    * builder code or id, or 'all'; `p95` (ms, from ?mapperf=1) is appended.
    * In the drift overlay, `drift` ({missing, undeclared} counts) adds
-   * `NOT SEEN 2  NOT DECLARED 3` after the overlay. In the reach overlay,
+   * `◌ NOT SEEN 2  □ NOT DECLARED 3` after the overlay, each count keyed by
+   * the mark the nodes carry. In the reach overlay,
    * `reach` ({links, touches}) adds `LINKS 12`, and `TOUCHES 3` while a node
    * is selected (touches is then a number).
    */
@@ -858,7 +866,7 @@ export function createRenderer(ctx, palette) {
     const utc = `${new Date(now).toISOString().slice(11, 19)}Z`;
     if (compact) return [z, n, utc].join(' · ');
     const parts = [z, `SCOPE ${!scope || scope === 'all' ? 'ALL' : String(scope).toUpperCase()}`, n, `OVL ${String(overlay).toUpperCase()}`];
-    if (overlay === 'drift' && drift) parts.push(`NOT SEEN ${drift.missing ?? 0}`, `NOT DECLARED ${drift.undeclared ?? 0}`);
+    if (overlay === 'drift' && drift) parts.push(`${DRIFT_MARK.missing.glyph} NOT SEEN ${drift.missing ?? 0}`, `${DRIFT_MARK.undeclared.glyph} NOT DECLARED ${drift.undeclared ?? 0}`);
     if (overlay === 'reach' && reach) {
       parts.push(`LINKS ${reach.links ?? 0}`);
       if (Number.isFinite(reach.touches)) parts.push(`TOUCHES ${reach.touches}`);

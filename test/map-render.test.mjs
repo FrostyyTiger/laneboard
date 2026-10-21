@@ -281,7 +281,7 @@ test('overlay: a cost-heavy calm lane takes an accent level, a crit lane keeps i
   assert.ok(opsAt(ctx.ops, scene, 'b').some((o) => o.op === 'fill' && shapeOf(o) === 'square' && o.fillStyle === 'P1'));
 });
 
-test('drift overlay: a dashed warn ring on a missing node, an accent ring on an undeclared one', () => {
+test('drift overlay: a dashed warn ring on a missing node, a solid warn square on an undeclared one, never the accent', () => {
   const nodes = [
     { id: '__core', kind: 'core', label: 'hub' },
     { id: 'hq', kind: 'site', parent: '__core', label: 'hq', status: 'ok' },
@@ -295,16 +295,23 @@ test('drift overlay: a dashed warn ring on a missing node, an accent ring on an 
   const scene = sceneOf(nodes, { overlay: 'drift' });
   const r = createRenderer(ctx, PAL);
   assert.doesNotThrow(() => r.draw(scene));
-  const ring = (id) => opsAt(ctx.ops, scene, id).filter((o) => o.op === 'stroke' && o.lineWidth === 1.5 && ['P2', 'A60'].includes(o.strokeStyle));
-  assert.ok(ring('gone').some((o) => o.strokeStyle === 'P2' && o.dash.length === 2), 'missing: dashed warn');
-  for (const id of ['feed:hv1', 'feed:hv1/new', 'b']) assert.ok(ring(id).some((o) => o.strokeStyle === 'A60' && o.dash.length === 0), `${id}: solid accent`);
-  assert.equal(ring('calm').length, 0);
+  const accent = [PAL.accent, ...PAL.accentL];
+  const mark = (id) => opsAt(ctx.ops, scene, id).filter((o) => o.op === 'stroke' && o.lineWidth === 1.5);
+  const gone = mark('gone');
+  assert.ok(gone.some((o) => o.strokeStyle === 'P2' && o.dash.length === 2 && shapeOf(o) === 'disc'), 'missing: dashed warn ring');
+  for (const id of ['feed:hv1', 'feed:hv1/new', 'b']) {
+    const m = mark(id).filter((o) => o.strokeStyle === 'P2');
+    assert.ok(m.some((o) => o.dash.length === 0 && shapeOf(o) === 'square'), `${id}: solid warn square`);
+    assert.ok(mark(id).every((o) => !accent.includes(o.strokeStyle)), `${id}: not the accent`);
+  }
+  assert.notEqual(shapeOf(gone.find((o) => o.strokeStyle === 'P2')), shapeOf(mark('b').find((o) => o.strokeStyle === 'P2')), 'the two differ in shape');
+  assert.equal(mark('calm').length, 0);
   assert.ok(opsAt(ctx.ops, scene, 'calm').every((o) => o.alpha <= 0.5 + 1e-9), 'the rest is dimmed');
-  // Outside the drift overlay, no drift ring.
+  // Outside the drift overlay, no drift mark.
   const ctx2 = fakeCtx();
   const s2 = sceneOf(nodes);
   createRenderer(ctx2, PAL).drawNodes(s2);
-  assert.ok(!ctx2.ops.some((o) => o.op === 'stroke' && ['P2', 'A60'].includes(o.strokeStyle)));
+  assert.ok(!ctx2.ops.some((o) => o.op === 'stroke' && o.lineWidth === 1.5 && o.strokeStyle === 'P2'));
 });
 
 test('reach overlay: arcs with arrowheads only there, the selected node\'s reach in the accent', () => {
@@ -571,7 +578,7 @@ test('readout text: zoom, scope, node count, overlay, UTC', () => {
   assert.equal(r.readout({ zoom: 2, drawn: 1, total: 2, now, compact: true }), 'Z 2.00× · N 1/2 · 12:04:31Z');
   assert.match(r.readout({ now, p95: 3.24 }), /P95 3\.2MS$/);
   assert.equal(r.readout({ zoom: 1, drawn: 3, total: 3, overlay: 'drift', drift: { missing: 1, undeclared: 2 }, now }),
-    'Z 1.00×  SCOPE ALL  N 3/3  OVL DRIFT  NOT SEEN 1  NOT DECLARED 2  12:04:31Z');
+    'Z 1.00×  SCOPE ALL  N 3/3  OVL DRIFT  ◌ NOT SEEN 1  □ NOT DECLARED 2  12:04:31Z');
   assert.doesNotMatch(r.readout({ overlay: 'status', drift: { missing: 1, undeclared: 2 }, now }), /NOT SEEN/);
   assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: null }, now }), /OVL REACH {2}LINKS 12 {2}\d/);
   assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: 3 }, now }), /LINKS 12 {2}TOUCHES 3/);

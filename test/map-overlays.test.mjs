@@ -139,7 +139,7 @@ test('codes for the packed minimap scene are distinct', () => {
   assert.equal(ACCENT_L.length, 5);
 });
 
-test('drift overlay: missing is a dashed warn ring, undeclared an accent ring, the rest dimmed', () => {
+test('drift overlay: missing is a dashed warn ring, undeclared a solid warn square (not the accent), the rest dimmed', () => {
   const missing = { kind: 'room', status: 'unknown', drift: 'missing' };
   const undeclared = { kind: 'room', status: 'ok', drift: 'undeclared', discovered: true };
   const calm = { kind: 'room', status: 'ok' };
@@ -149,8 +149,12 @@ test('drift overlay: missing is a dashed warn ring, undeclared an accent ring, t
   assert.equal(m.alpha, 1);
   assert.equal(m.shape, 'ring', 'its unknown status still shows');
   const u = nodeStyle(undeclared, 'drift');
-  assert.equal(u.mark.tone, 'accent');
+  assert.equal(u.mark.tone, 'warn', 'wants a look: amber, not the accent');
+  assert.notEqual(u.mark.tone, 'accent');
   assert.deepEqual(u.mark.dash, [], 'solid');
+  assert.equal(m.mark.shape, 'ring');
+  assert.equal(u.mark.shape, 'square', 'a shape of its own');
+  assert.notEqual(m.mark.glyph, u.mark.glyph, 'the readout keys each count by its mark');
   assert.equal(u.alpha, 1);
   assert.equal(nodeStyle(calm, 'drift').alpha, DIM);
   assert.equal(nodeStyle(calm, 'drift').mark, undefined);
