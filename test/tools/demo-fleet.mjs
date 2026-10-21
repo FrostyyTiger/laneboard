@@ -60,7 +60,7 @@ import { parseArgs } from 'node:util';
 import { WebSocket, WebSocketServer } from 'ws';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed, demoRunsAnswer, demoMorningWithRuns, demoWsText, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed, demoRunsAnswer, demoMorningWithRuns, demoWsText, demoAttention, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -517,7 +517,7 @@ async function main() {
   function pushExtras(id) {
     const fb = fakes.get(id);
     const d = DEMO[id];
-    fb.push({ type: 'delta', sessions: fb.sessions, lanes: d.lanes, budget: d.budget, generatedAt: Date.now() });
+    fb.push({ type: 'delta', sessions: fb.sessions, lanes: d.lanes, attention: demoAttention(id, fb.sessions), budget: d.budget, generatedAt: Date.now() });
     fb.push({ type: 'health', health: d.health });
     for (const a of d.approvals) fb.push({ type: 'approval', op: 'open', approval: a });
     for (const s of fb.sessions) if (s.stuck) fb.push({ type: 'stuck', name: s.name, stuck: s.stuck });

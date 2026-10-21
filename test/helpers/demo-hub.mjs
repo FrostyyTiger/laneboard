@@ -23,6 +23,11 @@
 // real `runNodes` (server/map/runs.mjs), to the hub's Map; the forwarder
 // does it to every `map` message on /ws (`demoWsText`), since a hub has no
 // runs source and the Map reaches the browser over the WebSocket.
+//
+// `demoAttention(id, sessions)` is the attention queue a real builder sends
+// with its snapshot (night 3 T17): the fake builders send none of their own,
+// so without it the Board's "Needs you" said 0 next to PERM and QUES cards.
+// Built by the real `attentionList` (server/state.mjs), keyed like the fake.
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseLines, foldRun } from '../../server/runs/protocol.mjs';
@@ -30,6 +35,8 @@ import { summarize } from '../../server/runs/summary.mjs';
 import { withSessions } from '../../server/runs/bind.mjs';
 import { runsInWindow } from '../../server/runs/digest.mjs';
 import { runNodes } from '../../server/map/runs.mjs';
+import { attentionList, attentionScore } from '../../server/state.mjs';
+import { fkey } from '../../server/fleet/keys.mjs';
 
 export const DEMO_HOSTNAME = 'demo-host';
 
@@ -229,4 +236,15 @@ export function demoWsText(text, now = Date.now()) {
   try { msg = JSON.parse(text); } catch { return text; }
   if (!msg || msg.type !== 'map' || !msg.map) return text;
   return JSON.stringify({ ...msg, map: demoMapWithRuns(msg.map, now) });
+}
+
+/**
+ * The attention queue builder `id` would send for `sessions` (danger, waiting,
+ * stuck first). Like a real builder's snapshot (`decorateSessions`) it first
+ * rescores every session in place: the fake's sessions inherit the fixture
+ * template's `attentionScore: 100`, which would put every lane in the queue.
+ */
+export function demoAttention(id, sessions, now = Date.now()) {
+  for (const s of sessions) s.attentionScore = attentionScore(s, now);
+  return attentionList(sessions, (name) => fkey(id, name), now).map((a) => ({ ...a, builder: id }));
 }

@@ -10,7 +10,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { boot } from './helpers/boot.mjs';
 import { fakeBuilder } from './helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap } from './helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, demoAttention } from './helpers/demo-hub.mjs';
+import { attentionList } from '../server/state.mjs';
+import { fkey } from '../server/fleet/keys.mjs';
 import { generateHubKey, publicKeyString } from '../server/fleet/keys-ed25519.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -106,4 +108,38 @@ test('the demo map: drift both ways and reach links on /api/map', { timeout: 60_
   assert.ok(m.reach.unresolved.some((u) => u.selector === 'group:admins'), 'a group rule is unresolved, not guessed');
   assert.equal(m.nodes.find((n) => n.id === 'builder:builder-a').parent, 'room-a', 'builder-a hangs under its room');
   assert.equal(m.title, DEMO_HOSTNAME);
+});
+
+// Night 3 T17: the Board said "Needs you 0 / Nothing waiting." next to PERM,
+// QUES and DANGER cards. Cause: the fake builders sent `fixture.attention ?? []`
+// and the demo's sessions carry no such list, so the hub relayed an empty
+// queue; a real builder builds it from its sessions (server/state.mjs).
+test('demoAttention: a permission-waiting lane counts, ordered like a real builder', () => {
+  const now = 1_000_000;
+  const sessions = [
+    { name: 'search api', lane: 'feat-search', state: 'working', attentionScore: 100 }, // the fixture template's stale score
+    { name: 'search ui', lane: 'feat-search', state: 'waiting_permission', stateSince: now - 5000 },
+    { name: 'login fix', lane: 'fix-login', state: 'waiting_question', stateSince: now - 9000 },
+    { name: 'cleanup job', state: 'waiting_permission', danger: { kind: 'guard', reason: 'delete outside the worktree' } },
+  ];
+  const a = demoAttention('builder-a', sessions, now);
+  assert.equal(a.length, 3);
+  assert.deepEqual(a.map((x) => x.name), ['cleanup job', 'search ui', 'login fix']);
+  assert.equal(a[0].danger, 'delete outside the worktree');
+  assert.equal(a[1].key, fkey('builder-a', 'search ui'));
+  assert.ok(a.every((x) => x.builder === 'builder-a'));
+  assert.equal(sessions[0].attentionScore, 0, 'rescored like a real snapshot');
+  assert.deepEqual(demoAttention('builder-a', [{ name: 'idle', state: 'idle' }], now), []);
+});
+
+test('attentionList: the snapshot rule, a score already on the session wins', () => {
+  const key = (n) => `k:${n}`;
+  const list = attentionList([
+    { name: 'a', state: 'waiting_question', stateSince: 2 },
+    { name: 'b', state: 'waiting_question', stateSince: 1 },
+    { name: 'c', state: 'working', attentionScore: 0 },
+    { name: 'd', state: 'working', attentionScore: 150 },
+  ], key, 10);
+  assert.deepEqual(list.map((x) => [x.name, x.score]), [['d', 150], ['b', 90], ['a', 90]]);
+  assert.equal(list[0].key, 'k:d');
 });

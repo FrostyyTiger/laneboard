@@ -55,6 +55,19 @@ export function attentionScore(session, now = Date.now()) {
   return score;
 }
 
+/**
+ * The attention queue of a snapshot: every session with a positive score,
+ * highest first, oldest first on a tie. Uses `attentionScore` when the
+ * session already carries one (snapshot() decorates first), else computes it.
+ * Exported so a fake builder (test/tools/demo-fleet.mjs) sends the same list.
+ */
+export function attentionList(list, keyFor, now = Date.now()) {
+  return list.map((s) => ({ s, score: s.attentionScore ?? attentionScore(s, now) }))
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || (a.s.stateSince ?? 0) - (b.s.stateSince ?? 0))
+    .map(({ s, score }) => ({ name: s.name, key: keyFor(s.name), state: s.state, score, since: s.stateSince, danger: s.danger ? s.danger.reason : null }));
+}
+
 /** Card preview on the wire: the last 8 non-blank lines, raw ANSI. */
 export const PREVIEW_LINES = 8;
 export const PREVIEW_LINE_CHARS = 400;
@@ -367,9 +380,7 @@ export function snapshot() {
     // no state, no attention score, never a card.
     lanes: laneList,
     vitals: latestVitals,
-    attention: list.filter((s) => s.attentionScore > 0)
-      .sort((a, b) => b.attentionScore - a.attentionScore || (a.stateSince ?? 0) - (b.stateSince ?? 0))
-      .map((s) => ({ name: s.name, key: keyFor(s.name), state: s.state, score: s.attentionScore, since: s.stateSince, danger: s.danger ? s.danger.reason : null })),
+    attention: attentionList(list, keyFor, now),
     generatedAt,
   };
   if (snapshotKeys.size) Object.assign(snap, snapshotExtras());
