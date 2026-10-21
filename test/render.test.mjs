@@ -1166,3 +1166,40 @@ test('with every provider off the Box says so instead of showing empty blocks', 
   assert.doesNotMatch(text, /Agent slots|CI queue|guard ok/);
   assert.equal(errorText(byId), '');
 });
+
+// --- left column empty states (runs n5 T17) ---------------------------------
+
+test('an empty left-column section is one muted line, no bare header', async () => {
+  const { byId, socket } = await mount();
+  socket.emit('open', {});
+  send(socket, { type: 'snapshot', sessions: [], attention: [], vitals: null, generatedAt: Date.now() });
+
+  assert.equal(errorText(byId), '');
+  const text = (id) => cardText(byId.get(id));
+  assert.equal(text('rate-limits'), 'Rate limits · none');
+  assert.equal(text('vitals'), 'Machine · none');
+  assert.equal(byId.get('rate-limits-h').hidden, true, 'no RATE LIMITS header over the line');
+  assert.equal(byId.get('vitals-h').hidden, true, 'no MACHINE header with nothing under it');
+  assert.doesNotMatch(text('rate-limits'), /No statusline data/);
+});
+
+test('a filled left-column section keeps its header and no none line', async () => {
+  const { byId, socket } = await mount();
+  socket.emit('open', {});
+  send(socket, {
+    type: 'snapshot', sessions: [], attention: [], generatedAt: Date.now(),
+    vitals: { cpuPct: 12, load: [0.5, 0.4, 0.3], claudeRssMb: 1024, sessionCount: 1, laneboardRssMb: 80 },
+  });
+
+  assert.equal(errorText(byId), '');
+  assert.equal(byId.get('vitals-h').hidden, false);
+  assert.doesNotMatch(cardText(byId.get('vitals')), /· none/);
+  assert.match(cardText(byId.get('vitals')), /12%/);
+});
+
+test('an offline card hatch stops behind a solid title row (T17)', () => {
+  const css = fs.readFileSync(path.join(PUB, 'css', 'board.css'), 'utf8');
+  const rule = css.match(/\.card\.stale :is\(\.db-1, \.db-row\) \{([^}]*)\}/);
+  assert.ok(rule, 'a rule for the stale card first line');
+  assert.match(rule[1], /background: var\(--bg-surface\)/);
+});

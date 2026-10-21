@@ -12,6 +12,7 @@ import { compactGauge, gauge } from './widgets.js';
 import { focusSession } from '../views/board.js';
 import { STATE_P, markWord } from '../views/board-card.js';
 import { boxBlocks } from '../views/box.js';
+import { emptyLine } from '../core/inbox-model.js';
 
 /** On the 49" the Box is rail blocks, not a tab (the CSS hides the tab there). */
 export function renderRailBox() {
@@ -93,11 +94,23 @@ export function renderAttention() {
   });
 }
 
+/**
+ * A left-column section with nothing to show is one muted line,
+ * `<Section> · none`, never a header plus a sentence or a bare header
+ * (design.md, runs n5 T17). Returns true when the section is empty.
+ */
+export function railSection(box, headId, title, empty) {
+  const h = $(headId);
+  if (h) h.hidden = empty;
+  if (empty) box.append(el('p', 'empty rail-none', emptyLine(title)));
+  return empty;
+}
+
 export function renderVitals() {
   const v = store.vitals;
   const box = $('vitals');
   box.textContent = '';
-  if (!v) return;
+  if (railSection(box, 'vitals-h', 'Machine', !v)) return;
   const add = (k, val, sub) => {
     const d = el('div', 'vital');
     d.append(el('div', 'k', k));
@@ -131,7 +144,7 @@ export function renderRateLimits() {
   box.textContent = '';
   top.textContent = '';
   const rl = freshestRateLimits();
-  if (!rl) { box.append(el('p', 'empty', 'No statusline data yet.')); return; }
+  if (railSection(box, 'rate-limits-h', 'Rate limits', !rl)) return;
   for (const [key, label] of [['fiveHour', '5 h window'], ['sevenDay', '7 d window']]) {
     const g = rl[key];
     if (!g) continue;
