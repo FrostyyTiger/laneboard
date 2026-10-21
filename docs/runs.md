@@ -229,6 +229,15 @@ and nothing warns.
 - `--post` sends the event to `POST /api/runs/events` instead of the file;
   a refused event prints the server's reason and exits 1.
 - Each line gets `"v":1` and `ts` (now, epoch ms).
+- On success it prints one line on stderr: `ok <run> <type> appended to
+  <file>`, or `ok <run> <type> posted` with `--post` (stdout stays free for
+  `eval`).
+- `ack` still writes and exits 0, but warns on stderr when the ack will not do
+  what it looks like: the ref names no need of the run in the file it appends
+  to (it will be kept raw), or the need is a `fence` need and `--by` is
+  missing or not `inbox`, `run page` or `owner` (it stays open). With `--post`
+  the file is not read, so an ack without one of those `--by` values warns
+  that it would not close a fence need.
 - `round` (without `--end`) prints `export LANEBOARD_RUN=<run>/<n>`, so after
   `eval` the sessions the round starts carry the run and round in their
   environment. `--run` defaults to the run part of `$LANEBOARD_RUN`, so a

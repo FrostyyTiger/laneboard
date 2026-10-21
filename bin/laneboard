@@ -955,7 +955,7 @@ async function cmdRun() {
   if (post && fileFlag !== undefined) runUsage('--file and --post do not go together');
   const run = runFlag ?? (process.env.LANEBOARD_RUN || '').split('/')[0];
   if (!run) runUsage('--run is required (or set LANEBOARD_RUN)');
-  const { parseLine, RUN_ID } = await runProtocol();
+  const { parseLine, parseLines, foldRun, RUN_ID, FENCE_ACK_BY } = await runProtocol();
   if (!RUN_ID.test(run)) runUsage(`not a run id: ${JSON.stringify(cleanTerm(run))} (letters, digits, . _ -; 64 at most)`);
   const ev = runEvent(sub, fields);
   const event = { v: 1, t: ev.t, run, ts: Date.now(), ...ev };
@@ -963,16 +963,40 @@ async function cmdRun() {
   const checked = parseLine(line);
   if (!checked.ok) runUsage(`the event would be skipped: ${checked.reason}`);
 
+  const file = post ? null : path.resolve(fileFlag || process.env.LANEBOARD_RUN_FILE || path.join('.laneboard', 'run.jsonl'));
+  // Read before the append: the ack's own line must not count as a need.
+  const warnings = event.t === 'needs.ack' ? ackWarnings({ ...checked.event, given: event.ref }, file, { parseLines, foldRun, FENCE_ACK_BY }) : [];
+  let done;
   if (post) {
-    await api('/api/runs/events', { method: 'POST', body: event });
+    const r = await api('/api/runs/events', { method: 'POST', body: event });
+    done = `ok ${r.run || run} ${r.t || event.t} posted`;
   } else {
-    const file = path.resolve(fileFlag || process.env.LANEBOARD_RUN_FILE || path.join('.laneboard', 'run.jsonl'));
     try {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.appendFileSync(file, `${line}\n`);
     } catch (err) { return fail(`cannot write ${file}: ${err?.message || err}`); }
+    done = `ok ${run} ${event.t} appended to ${file}`;
   }
+  // stdout stays for `eval "$(laneboard run round …)"`; the receipt and warnings go to stderr.
+  process.stderr.write(`${cleanTerm(done)}\n`);
+  for (const w of warnings) process.stderr.write(`warning: ${cleanTerm(w)}\n`);
   if (event.t === 'round.start') process.stdout.write(`export LANEBOARD_RUN=${run}/${event.n}\n`);
+}
+
+/** Warnings for an ack that will not do what it looks like (it is still written,
+ *  exit 0): a ref that names no need in the file, or a `by` that cannot close a
+ *  `fence` need (docs/runs.md) when the need is one or, with --post, may be one. */
+function ackWarnings(ack, file, { parseLines, foldRun, FENCE_ACK_BY }) {
+  const byOk = FENCE_ACK_BY.includes(ack.by);
+  const byHint = `${ack.by ? `--by ${JSON.stringify(ack.by)}` : 'no --by'}: a fence need closes only with --by ${FENCE_ACK_BY.map((b) => JSON.stringify(b)).join(', ')}`;
+  if (!file) return byOk ? [] : [`${byHint}, if this need is one`];
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf8'); } catch { /* no file yet: no need either */ }
+  const needs = foldRun(parseLines(text).events.filter((e) => e.run === ack.run)).needs;
+  const need = ack.refBy === 'index' ? needs[ack.ref] : needs.find((x) => x.ts === ack.ref);
+  if (!need) return [`ref ${ack.given} names no need of run ${ack.run} in ${file}; the ack will be kept raw`];
+  if (need.kind === 'fence' && !need.acked && !byOk) return [`${byHint}; this ack leaves need ${need.i} open`];
+  return [];
 }
 
 // ---------------------------------------------------------------- feed (offline)

@@ -279,3 +279,82 @@ test('ack closes a need by its place or its ts: `ack <run> <ref>`, `ack <ref>` w
   assert.deepEqual(folded.needs.map((n) => [n.text, n.open, n.by]), [['first?', false, 'owner'], ['second?', false, null], ['third?', false, null]]);
   assert.deepEqual(folded.raw, []);
 });
+
+test('every subcommand prints one receipt on stderr: `ok <run> <type> appended to <file>` or `posted` (night 4 T21)', async (t) => {
+  const dir = tmpDir(t);
+  const file = path.join(dir, 'r.jsonl');
+  const calls = [
+    [['start', '--run', 'r1', '--goal', 'g'], 'run.start'],
+    [['round', '--run', 'r1', '--n', '1'], 'round.start'],
+    [['score', '--run', 'r1', '--name', 'tests', '--value', '1'], 'score'],
+    [['needs', '--run', 'r1', '--text', 'q?'], 'needs'],
+    [['ack', 'r1', '0', '--by', 'owner'], 'needs.ack'],
+    [['round', '--run', 'r1', '--n', '1', '--end'], 'round.end'],
+    [['stop', '--run', 'r1', '--reason', 'done'], 'run.stop'],
+  ];
+  for (const [args, type] of calls) {
+    const r = await run(['run', ...args, '--file', file], envFor(dir), dir);
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(r.stderr, `ok r1 ${type} appended to ${file}\n`, args.join(' '));
+  }
+  assert.equal(lines(file).length, calls.length);
+
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      const ev = JSON.parse(body);
+      res.writeHead(201, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, run: ev.run, t: ev.t }));
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const env = envFor(dir, { LANEBOARD_URL: `http://127.0.0.1:${server.address().port}` });
+  const p = await run(['run', 'score', '--run', 'r1', '--name', 'tests', '--value', '1', '--post'], env, dir);
+  assert.equal(p.code, 0, p.stderr);
+  assert.equal(p.stderr, 'ok r1 score posted\n');
+  const pa = await run(['run', 'ack', 'r1', '0', '--post'], env, dir);
+  assert.equal(pa.code, 0, pa.stderr);
+  assert.match(pa.stderr, /^ok r1 needs\.ack posted\nwarning: no --by: a fence need closes only with --by "inbox", "run page", "owner", if this need is one\n$/);
+  const pb = await run(['run', 'ack', 'r1', '0', '--by', 'inbox', '--post'], env, dir);
+  assert.equal(pb.stderr, 'ok r1 needs.ack posted\n');
+});
+
+test('ack warns (exit 0, still written) for a fence need without a person\'s --by, and for a ref that names no need (night 4 T21)', async (t) => {
+  const dir = tmpDir(t);
+  const file = path.join(dir, 'r.jsonl');
+  const go = (args) => run(['run', ...args, '--file', file], envFor(dir), dir);
+  assert.equal((await go(['needs', '--run', 'r1', '--kind', 'fence', '--text', 'touched server/http.mjs'])).code, 0);
+  assert.equal((await go(['needs', '--run', 'r1', '--text', 'plain question'])).code, 0);
+  assert.equal((await go(['needs', '--run', 'other', '--text', 'another run'])).code, 0);
+
+  const bare = await go(['ack', 'r1', '0']);
+  assert.equal(bare.code, 0);
+  assert.equal(bare.stdout, '');
+  assert.match(bare.stderr, /^ok r1 needs\.ack appended to .+\nwarning: no --by: a fence need closes only with --by "inbox", "run page", "owner"; this ack leaves need 0 open\n$/);
+  const loop = await go(['ack', 'r1', '0', '--by', 'loop']);
+  assert.match(loop.stderr, /\nwarning: --by "loop": a fence need closes only with/);
+  // A plain need closes with any by; a person's by closes the fence need: no warning.
+  assert.doesNotMatch((await go(['ack', 'r1', '1'])).stderr, /warning/);
+  assert.doesNotMatch((await go(['ack', 'r1', '0', '--by', 'owner'])).stderr, /warning/);
+  // Once closed, a later ack changes nothing and needs no warning about by.
+  assert.doesNotMatch((await go(['ack', 'r1', '0'])).stderr, /warning/);
+
+  // r1 has two needs (place 2 is the other run's); a ts that matches none; a missing file.
+  for (const [args, ref, f] of [[['ack', 'r1', '2'], '2', file], [['ack', 'r1', '2026-01-01T00:00:00Z'], '2026-01-01T00:00:00Z', file]]) {
+    const r = await go(args);
+    assert.equal(r.code, 0);
+    assert.ok(r.stderr.endsWith(`\nwarning: ref ${ref} names no need of run r1 in ${f}; the ack will be kept raw\n`), r.stderr);
+  }
+  const fresh = path.join(dir, 'none.jsonl');
+  const none = await run(['run', 'ack', 'r1', '0', '--file', fresh], envFor(dir), dir);
+  assert.equal(none.code, 0);
+  assert.match(none.stderr, /warning: ref 0 names no need of run r1 in .+none\.jsonl/);
+  assert.equal(lines(fresh).length, 1, 'the ack is written anyway');
+
+  const before = lines(file).length;
+  const folded = foldRun(parseLines(fs.readFileSync(file, 'utf8')).events.filter((e) => e.run === 'r1'));
+  assert.deepEqual(folded.needs.map((n) => [n.kind, n.open, n.by]), [['fence', false, 'owner'], ['decision', false, null]]);
+  assert.equal(before, 3 + 7);
+});

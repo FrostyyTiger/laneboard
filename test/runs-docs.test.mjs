@@ -135,3 +135,10 @@ test('`laneboard run` leaves no untracked file: .laneboard/ is ignored and READM
   assert.match(readme, /`\.\/\.laneboard\/run\.jsonl` in the current directory/);
   assert.match(readme, /unless `--post`/);
 });
+
+test('docs/runs.md names the CLI receipt and the ack warnings (night 4 T21)', () => {
+  assert.match(doc, /`ok <run> <type> appended to\s+<file>`/);
+  assert.match(doc, /`ok <run> <type> posted`/);
+  assert.match(doc, /`ack` still writes and exits 0, but warns on stderr/);
+  for (const by of FENCE_ACK_BY) assert.ok(doc.includes(`\`${by}\``), by);
+});
