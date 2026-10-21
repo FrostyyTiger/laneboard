@@ -32,8 +32,8 @@ Notes for builders, from reading the code (planner, round 1):
   not fenced) + `server/flags/stuck.mjs`; run rules are a separate pure module, not new session rules.
 - Map: `server/map.mjs` (`buildFleet`, `withDiscovered`, drift, reach), client
   `public/js/views/map/` (`overlays.js`, `render.js`, `index.js` has `pick(id, {fly})` / `flyTo`).
-  Palette: `public/js/ui/palette.js` `paletteItems` / `paletteRows` (`test/` has `fuzzy` and palette
-  tests). Feeders: `server/feeders/index.mjs` `TABLE` + `collect(kind, …)`, each feeder a pure
+  Palette: `public/js/ui/palette.js` `paletteItems` / `paletteRows` (tested only through
+  `test/fuzzy.test.mjs` today). Feeders: `server/feeders/index.mjs` `TABLE` + `collect(kind, …)`, each feeder a pure
   `toFeed(input, {source, now})` and a `read(opts)` returning `{ok:false, error}` instead of throwing.
 - Fenced (never edit): `public/js/core/store.js`, `net.js`, `keys.js`, `actions.js`,
   `server/hub/*`, `server/routes/v1.mjs`, the boot files, `test/hygiene.test.mjs`,
