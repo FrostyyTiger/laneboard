@@ -841,6 +841,8 @@ function svgNode(tag, attrs) {
 function chartSvg(c) {
   const svg = svgNode('svg', {
     class: 'spark rn-chart-svg', viewBox: `0 0 ${CHART_W} ${CHART_H}`, width: CHART_W, height: CHART_H, role: 'img',
+    // a narrow row stretches the line to its width (runs.css); the strokes do not scale (T26)
+    preserveAspectRatio: 'none',
   });
   svg.setAttribute('aria-label', c.title);
   const title = document.createElementNS(SVGNS, 'title');
@@ -850,7 +852,8 @@ function chartSvg(c) {
     svg.appendChild(svgNode('polyline', { class: 'spark-line', points: c.points.map((p) => `${p.x},${p.y}`).join(' ') }));
   }
   const last = c.last;
-  svg.appendChild(svgNode('rect', { class: 'spark-last', x: r2(last.x - 1), y: r2(last.y - 1), width: 2, height: 2 }));
+  // the last value: a zero-length line with a square cap, so it stays a 2 px square when stretched
+  svg.appendChild(svgNode('line', { class: 'spark-last', x1: last.x, y1: last.y, x2: last.x, y2: last.y }));
   return svg;
 }
 

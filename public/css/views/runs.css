@@ -191,6 +191,8 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
 .rn-chart-v { color: var(--text-1); text-align: right; }
 .rn-chart-v[data-p="2"] { color: var(--p2); }
 .rn-chart-r { min-width: 0; color: var(--text-3); white-space: nowrap; }
+/* the last value is a line with no length: a 2 px square at any stretch */
+.rn-chart-svg .spark-last { fill: none; stroke: var(--text-1); stroke-width: 2; stroke-linecap: square; vector-effect: non-scaling-stroke; }
 
 /* the timeline: one row per round, numbers right-aligned */
 .rn-tl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -254,7 +256,7 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
   .rn-tl-sec { overflow-x: auto; }
   /* a chart's line gets its own row: name, value and range stay whole on a phone */
   .rn-chart { grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-1) var(--sp-3); }
-  .rn-chart-svg { grid-column: 1 / -1; grid-row: 2; max-width: 100%; }
+  .rn-chart-svg { grid-column: 1 / -1; grid-row: 2; width: 100%; max-width: 100%; }
 }
 
 /* ---- phone: the rounds table drops its minor columns (TL_NARROW_HIDDEN in runs.js) so round,
@@ -263,4 +265,8 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
   .rn-tl [data-col="task"],
   .rn-tl [data-col="span"],
   .rn-tl [data-col="sessions"] { display: none; }
+  /* the run page's goal wraps whole instead of ending in "…" (T26); the list row still clips */
+  .rn-head .rn-goal,
+  .rn-head .rn-goal-t { white-space: normal; overflow-wrap: anywhere; }
+  .rn-head .rn-goal-t { overflow: visible; }
 }

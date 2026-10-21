@@ -512,7 +512,8 @@ test('charts on the page: one SVG line per metric between the needs and the time
   assert.equal(svg.attrs.role, 'img');
   assert.match(svg.attrs['aria-label'], /^tasks: 0 at round 3 to 3 at round 9, range 0 to 3, higher is better$/);
   const last = byClass(items[0], 'spark-last')[0];
-  assert.deepEqual([last.attrs.x, last.attrs.y], ['129.27', '0']);
+  assert.equal(last.tagName.toLowerCase(), 'line');
+  assert.deepEqual([last.attrs.x1, last.attrs.y1, last.attrs.x2, last.attrs.y2], ['130.27', '1', '130.27', '1']);
   assert.deepEqual(byClass(page, 'rn-chart-v').map((n) => n.textContent), ['3 ▲', '1 =']);
   assert.deepEqual(byClass(page, 'rn-chart-r').map((n) => n.textContent), ['0–3', '0.9993–1']);
   assert.equal(byClass(page, 'rn-chart-v').some((n) => n.dataset.p), false, 'nothing got worse: grey');
@@ -578,6 +579,25 @@ test('runs.css: a phone drops the rounds table\'s minor columns and keeps round,
     assert.doesNotMatch(css, new RegExp(`\\[data-col="${keep}"\\][^{]*\\{[^}]*display: none`), `${keep} is never hidden`);
   }
 });
+
+// Seen at 390 (shots r8-T3/before page/custom-*-390.png): the sparklines took half the row
+// and the goal ended in "…" with no way to read it.
+test('T26: a narrow run page stretches the score line to the row and wraps the goal whole', () => withDom(() => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const narrow = css.slice(css.indexOf('@media (max-width: 1024px)'));
+  assert.match(narrow, /\.rn-chart-svg \{[^}]*grid-column: 1 \/ -1;[^}]*width: 100%;/);
+  assert.match(css, /\.rn-chart-svg \.spark-last \{[^}]*stroke-linecap: square;[^}]*vector-effect: non-scaling-stroke;/);
+  const phone = css.slice(css.indexOf('@media (width < 700px)'));
+  assert.match(phone, /\.rn-head \.rn-goal-t \{[^}]*white-space: normal;/);
+  assert.match(phone, /\.rn-head \.rn-goal-t \{ overflow: visible; \}/);
+  const goal = 'Add paged search to acme-api and the client, keep the old endpoint for one release';
+  const page = renderRunPage(null, { ...RUN, goal }, { status: 'ok' }, FIX.updatedAt);
+  const head = byClass(page, 'rn-head')[0];
+  assert.equal(byClass(head, 'rn-goal-t')[0].textContent, goal, 'the page draws the goal whole');
+  assert.ok(byClass(head, 'rn-goal')[0].title.startsWith(`${goal}\n`), 'and carries it as title');
+  const svg = byClass(page, 'rn-chart-svg')[0];
+  assert.equal(svg.attrs.preserveAspectRatio, 'none');
+}));
 
 test('T25: a label and its value share one cell: "stop budget", "cost $9.98"', () => withDom(() => {
   const host = document.createElement('div');
