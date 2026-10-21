@@ -171,13 +171,43 @@ test('text and status hues keep contrast against the canvas in both themes', () 
       const ratio = contrast(c, bg);
       assert.ok(ratio >= min, `${theme} ${t} on --bg-canvas: ${ratio.toFixed(2)} < ${min}`);
     }
-    // Text on the filled alarm tiles.
+    // Text on the filled alarm tiles: 11px labels, so 4.5:1 (runs T14).
     const inv = oklch(resolve('--text-inv', theme));
     for (const p of ['--p1', '--p2', '--p3']) {
       const r = contrast(inv, oklch(resolve(p, theme)));
-      assert.ok(r >= 3, `${theme} --text-inv on ${p}: ${r.toFixed(2)}`);
+      assert.ok(r >= 4.5, `${theme} --text-inv on ${p}: ${r.toFixed(2)} < 4.5`);
+    }
+    // Amber is text too (Board ctx %, Drift labels): 4.5:1 on the canvas and the surfaces.
+    for (const s of ['--bg-canvas', '--bg-surface', '--bg-elevated']) {
+      const r = contrast(oklch(resolve('--p2', theme)), oklch(resolve(s, theme)));
+      assert.ok(r >= 4.5, `${theme} --p2 text on ${s}: ${r.toFixed(2)} < 4.5`);
     }
   }
+});
+
+// Alpha over an opaque surface, blended in gamma sRGB like the browser does.
+const toGamma = (x) => (x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055);
+const toLinear = (x) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+function lumOver(fg, bg) {
+  const f = oklchToLinearSrgb(fg).map(toGamma), b = oklchToLinearSrgb(bg).map(toGamma);
+  const [r, g, bl] = f.map((x, i) => toLinear(x * fg.alpha + b[i] * (1 - fg.alpha)));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+}
+const ratio = (x, y) => (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+
+test('the selected row is one visible surface step in both themes (runs T14)', () => {
+  const step = {};
+  for (const theme of ['dark', 'light']) {
+    const sel = oklch(resolve('--bg-selected', theme));
+    const steps = ['--bg-canvas', '--bg-surface'].map((s) => {
+      const bg = oklch(resolve(s, theme));
+      return ratio(lumOver(sel, bg), luminance(bg));
+    });
+    step[theme] = Math.min(...steps);
+  }
+  // The light step was 1.10:1 (#e3e4e6 on #f3f4f6, reviews/4-designer.md Inbox 4): barely seen.
+  assert.ok(step.light >= 1.15, `light --bg-selected step ${step.light.toFixed(3)} < 1.15`);
+  assert.ok(step.light >= step.dark * 0.95, `light step ${step.light.toFixed(3)} vs dark ${step.dark.toFixed(3)}`);
 });
 
 test('one accent: a single hue, apart from p1 by lightness and chroma', () => {

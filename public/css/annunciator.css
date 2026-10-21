@@ -1,9 +1,10 @@
 /* The annunciator tiles (fleet plan §4 2.5, task D7). The 2x4 grid itself
    (#ann, 64x18 tiles, 48x18 on a tablet) is in shell.css; this sheet draws
    the tiles. normal: dark, grey label, empty count. unack: filled --pN,
-   --text-inv text, 1 Hz flash (lb-flash, phase-synced in JS). ack: filled,
-   steady. Reduced motion: no flash, the fill stays solid and an UNACK tag
-   shows. */
+   --text-inv text, a 1 Hz flashing ring (lb-flash on ::after, phase-synced
+   in JS; the fill and the text never fade, so they keep 4.5:1 in both
+   themes, runs T14). ack: filled, steady. Reduced motion: no flash, the
+   fill and the ring stay solid and an UNACK tag shows. */
 .ann-tile {
   display: flex;
   align-items: center;
@@ -25,6 +26,7 @@
   white-space: nowrap;
   overflow: hidden;
   cursor: pointer;
+  position: relative;
 }
 .ann-tile:hover { border-color: var(--line-strong); }
 .ann-tile:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
@@ -49,11 +51,23 @@
 .ann-tile[data-state="unack"][data-p="3"],
 .ann-tile[data-state="ack"][data-p="3"] { background: var(--p3); }
 
-/* Unacknowledged: the shared 1 Hz blink. */
-.ann-tile[data-unack] { animation: lb-flash 1s linear infinite; }
+/* Unacknowledged: the shared 1 Hz blink, on a ring inside the tile only.
+   The tile itself does not fade (components.css's [data-unack] would). */
+.ann-tile[data-unack] { animation: none; }
+.ann-tile[data-unack]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--text-1);
+  border-radius: var(--radius);
+  pointer-events: none;
+  animation: lb-flash 1s linear infinite;
+  animation-delay: inherit;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .ann-tile[data-unack] { animation: none; outline: none; }
+  .ann-tile[data-unack]::after { animation: none; }
   .ann-tile[data-state="unack"] .ann-tag { display: inline; }
 }
 

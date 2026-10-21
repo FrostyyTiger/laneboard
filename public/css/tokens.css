@@ -179,7 +179,8 @@
   --bg-elevated: oklch(100% 0 0);
   --bg-sunken: oklch(89% 0.003 250);
   --bg-hover: oklch(0% 0 0 / 0.04);
-  --bg-selected: oklch(0% 0 0 / 0.06);
+  /* One surface step, like the dark theme's 7 % white (runs T14). */
+  --bg-selected: oklch(0% 0 0 / 0.1);
 
   --line-weak: oklch(0% 0 0 / 0.08);
   --line: oklch(0% 0 0 / 0.16);
@@ -194,16 +195,17 @@
   --accent-weak: oklch(60% 0.19 45 / 0.14);
 
   --p1: oklch(52% 0.22 25);
-  /* The plan's 66% gives 2.6:1 on the light canvas; 60% clears 3:1. */
-  --p2: oklch(60% 0.15 85);
+  /* Amber is also text (ctx %, Drift labels) and carries --text-inv on the
+     alarm tiles: 50% keeps 4.5:1 both ways (runs T14; 60% gave 3.2:1). */
+  --p2: oklch(50% 0.12 80);
   --p3: oklch(52% 0.12 230);
   --ok: oklch(48% 0.08 150);
 
   --p1-weak: oklch(52% 0.22 25 / 0.14);
-  --p2-weak: oklch(60% 0.15 85 / 0.14);
+  --p2-weak: oklch(50% 0.12 80 / 0.14);
   --p3-weak: oklch(52% 0.12 230 / 0.14);
   --p1-line: oklch(52% 0.22 25 / 0.55);
-  --p2-line: oklch(60% 0.15 85 / 0.55);
+  --p2-line: oklch(50% 0.12 80 / 0.55);
   --p3-line: oklch(52% 0.12 230 / 0.55);
 }
 

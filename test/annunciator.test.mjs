@@ -200,7 +200,12 @@ test('annunciator.js acks through act() with ack-alarm and filters through the r
 
 test('annunciator.css: filled when active, flash only while unacked, reduced motion solid + UNACK', () => {
   const css = read('public/css/annunciator.css');
-  assert.match(css, /\.ann-tile\[data-unack\]\s*\{\s*animation:\s*lb-flash 1s linear infinite;/);
+  // The flash is a ring on ::after (runs T14): the tile, its fill and its text never fade.
+  assert.match(css, /\.ann-tile\[data-unack\]\s*\{\s*animation:\s*none;\s*\}/);
+  const ring = /\.ann-tile\[data-unack\]::after\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  assert.match(ring, /animation:\s*lb-flash 1s linear infinite;/);
+  assert.match(ring, /animation-delay:\s*inherit;/, 'the ring takes the phase syncFlash sets on the tile');
+  assert.match(ring, /border:\s*2px solid var\(--text-1\)/);
   assert.match(css, /--text-inv/);
   for (const p of [1, 2, 3]) assert.match(css, new RegExp(`\\[data-p="${p}"\\][^{]*\\{ background: var\\(--p${p}\\); \\}`));
   const rm = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
