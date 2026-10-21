@@ -258,8 +258,9 @@ a.rn-need-open { text-decoration: none; }
 .rn-charts { list-style: none; margin: 0; padding: 0; }
 .rn-chart {
   display: grid;
-  /* the line takes the room between the name and its value (T27) */
-  grid-template-columns: minmax(8ch, 16ch) minmax(0, 1fr) minmax(10ch, max-content) minmax(8ch, auto);
+  /* the line is at most half the page and its value sits right after it; the range takes the
+     rest (T27, T57: a 600 px line read as a chart without axes) */
+  grid-template-columns: minmax(8ch, 16ch) minmax(0, 50%) minmax(10ch, max-content) minmax(8ch, 1fr);
   align-items: center;
   gap: var(--sp-3);
   min-height: var(--row-comfy);
@@ -275,8 +276,9 @@ a.rn-need-open { text-decoration: none; }
 /* the last value is a line with no length: a 2 px square at any stretch */
 .rn-chart-svg .spark-last { fill: none; stroke: var(--text-1); stroke-width: 2; stroke-linecap: square; vector-effect: non-scaling-stroke; }
 
-/* the timeline: one row per round, numbers right-aligned */
-.rn-tl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+/* the timeline: one row per round, numbers right-aligned; its columns are as wide as their content
+   and the table stops at --table-max, so outcome and cost do not drift to the page edge (T57) */
+.rn-tl { width: auto; max-width: min(100%, var(--table-max)); border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .rn-tl th {
   padding: var(--sp-1) var(--sp-2);
   border-bottom: var(--bw) solid var(--line);

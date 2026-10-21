@@ -714,14 +714,37 @@ test('T27: the run page stops at a reading width and its score line fills the ro
   assert.ok(px >= 960 && px <= 1100, `a reading width near 1000 px, got ${px}`);
   const wide = css.slice(0, css.indexOf('@media (max-width: 1024px)'));
   assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--read-max\);/);
-  // name, line, value, range: the line is the one flexible column, and the svg takes it
-  assert.match(wide, /\.rn-chart \{[^}]*grid-template-columns: minmax\(8ch, 16ch\) minmax\(0, 1fr\) minmax\(10ch, max-content\) minmax\(8ch, auto\);/);
+  // name, line, value, range: the svg fills its column (T57 caps that column at half the row)
+  assert.match(wide, /\.rn-chart \{[^}]*grid-template-columns: minmax\(8ch, 16ch\) minmax\(0, 50%\) minmax\(10ch, max-content\) minmax\(8ch, 1fr\);/);
   assert.match(wide, /\.rn-chart-svg \{ width: 100%; \}/);
   // the minor columns stay narrow
   const task = Number(wide.match(/\.rn-tl-task \{ max-width: (\d+)ch;/)?.[1]);
   assert.ok(task > 0 && task <= 24, `task column at most 24ch, got ${task}`);
   assert.match(wide, /\.rn-tl td\.rn-tl-ses \{[^}]*white-space: normal;/);
   assert.match(wide, /\.rn-tl-s \{ white-space: nowrap; \}/);
+});
+
+// Designer r10 idea 5: at 1440 the score line ran 600 px with no axes and the rounds table spread
+// outcome and cost to the page edge, far from the round they belong to.
+test('T57: the score line is at most half the row and the rounds table is content-sized, at most 900 px', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const tokens = fs.readFileSync(path.join(ROOT, 'public/css/tokens.css'), 'utf8');
+  const wide = css.slice(0, css.indexOf('@media (max-width: 1024px)'));
+  const cols = wide.match(/\.rn-chart \{[^}]*grid-template-columns:\s*([^;]+);/)[1].trim().match(/[a-z-]+\([^)]*\)|\S+/g);
+  assert.equal(cols.length, 4, 'name, line, value, range');
+  const cap = Number(cols[1].match(/^minmax\(0, (\d+)%\)$/)?.[1]);
+  assert.ok(cap > 0 && cap <= 50, `the line's column is at most 50 % of the row, got ${cols[1]}`);
+  assert.match(cols[2], /max-content/, 'the value sits right after the line, not mid-row');
+  assert.equal(cols.filter((c) => /fr\b/.test(c)).length, 1, 'the range takes what is left');
+  assert.match(cols[3], /1fr/);
+  // the table: content-sized columns, capped by a token near 900 px, never wider than the page
+  const tl = wide.match(/\.rn-tl \{([^}]*)\}/)[1];
+  assert.match(tl, /width: auto;/);
+  assert.doesNotMatch(tl, /(^|[^-])width: 100%/);
+  assert.match(tl, /max-width: min\(100%, var\(--table-max\)\);/);
+  const px = Number(tokens.match(/--table-max: (\d+)px;/)?.[1]);
+  assert.ok(px >= 860 && px <= 940, `a table width near 900 px, got ${px}`);
+  assert.ok(px < Number(tokens.match(/--read-max: (\d+)px;/)?.[1]), 'inside the page\'s reading width');
 });
 
 test('T25: a label and its value share one cell: "stop budget", "cost $9.98"', () => withDom(() => {

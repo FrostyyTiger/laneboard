@@ -108,6 +108,7 @@
   --icon-l: 20px;
   --lamp: 8px;
   --read-max: 1000px;     /* a page of reading (run page; Morning, T37) stops here at 1440 */
+  --table-max: 900px;     /* a table of rounds (run page, T57) stops here, inside --read-max */
 
   /* Stacking. */
   --z-rail: 10;
