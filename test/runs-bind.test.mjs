@@ -222,7 +222,7 @@ test('the run page lists a round\'s sessions with their cost, a guess shared wit
     ],
   });
   assert.deepEqual(rows.map((r) => [r.label, r.cost, r.maybe]), [
-    ['6f1c2a3b', '$0.900', false], ['acme <b>', '—', true], ['bare-id-', '—', false],
+    ['6f1c2a3b', '$0.90', false], ['acme <b>', '—', true], ['bare-id-', '—', false],
   ]);
   assert.match(rows[0].title, /by its dir and time · \/work\/acme/);
   assert.match(rows[1].title, /possibly: another run worked in this dir/);

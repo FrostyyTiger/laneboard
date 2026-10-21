@@ -292,7 +292,7 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
   // the timeline: round, role, task, outcome, commit, cost, duration, sessions
   const rows = byClass(page, 'rn-tl-row');
   assert.deepEqual(rows.map((r) => r.children.map((c) => c.textContent)), [
-    ['1', 'planner', '—', 'kept', 'a1b2c3d', '$0.900', '9m', '—'],
+    ['1', 'planner', '—', 'kept', 'a1b2c3d', '$0.90', '9m', '—'],
     ['2', 'builder', 'A2.4', 'kept', 'b2c3d4e', '$1.60', '29m', '—'],
     ['3', 'builder', 'A2.5', 'no-task-done', '—', '$1.25', '29m', '—'],
   ]);

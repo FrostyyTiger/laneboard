@@ -591,6 +591,35 @@ test('shell: the clock shows UTC HH:MM:SSZ and local HH:MM with the zone', async
   assert.equal(clockParts(Date.UTC(2026, 0, 1, 0, 0, 0), { timeZone: 'UTC' }).utc, '00:00:00Z', 'a number is a date too');
 });
 
+test('shell: the header spend names what it counts, sessions only, beside a run that cost $9.98 (T39)', async () => {
+  const { topbarSpend } = await import('../public/js/ui/shell.js');
+  const sessions = [
+    { cost: { usdToday: 0.0004, usd: 1.2 } },
+    { cost: { usdToday: 0.02 } },
+    { cost: null },
+  ];
+  // A run's cost lives in /api/runs, which the header never reads: the run
+  // fixture must not change the figure, and the label must not claim it.
+  const run = { id: 'acme-billing', cost: { usd: 9.98 } };
+  const m = topbarSpend(sessions, [run]);
+  assert.equal(m.text, '$0.02');
+  assert.equal(m.label, ' sessions today');
+  assert.match(m.title, /runs show their own cost/);
+  assert.match(m.title, /\$1\.20/);
+  assert.equal(topbarSpend([]).text, '$0.00');
+  assert.equal(topbarSpend(undefined).text, '$0.00');
+});
+
+test('format: money uses 2 decimals everywhere ($9.98, $0.00), whole dollars from $100', async () => {
+  const { money } = await import('../public/js/core/format.js');
+  assert.equal(money(9.98), '$9.98');
+  assert.equal(money(0), '$0.00');
+  assert.equal(money(0.004), '$0.00');
+  assert.equal(money(0.081), '$0.08');
+  assert.equal(money(252.4), '$252');
+  assert.equal(money(null), '—');
+});
+
 test('shell: scope chips per active filter, builder code from the store', async () => {
   const { scopeModel } = await import('../public/js/ui/shell.js');
   const s = { builders: new Map([['builder-a', { id: 'builder-a', code: 'B1' }]]) };
