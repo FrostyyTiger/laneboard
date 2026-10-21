@@ -37,7 +37,7 @@ const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'shoot-'));
 const chrome = spawn(findChrome(), ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${prof}`,
   '--no-first-run', '--hide-scrollbars', '--no-sandbox', 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const done = (code) => { try { chrome.kill(); } catch {} fs.rmSync(prof, { recursive: true, force: true }); process.exit(code); };
+const done = (code) => { try { chrome.kill(); } catch {} try { fs.rmSync(prof, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch {} process.exit(code); };
 setTimeout(() => { console.error('shoot: timed out'); done(1); }, 10 * 60 * 1000).unref();
 
 let ok = false;
