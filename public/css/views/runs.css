@@ -8,12 +8,23 @@
 /* The bottom padding is shell.css's (it clears the minimap). */
 #view-runs { overflow: auto; padding-top: var(--sp-2); padding-inline: var(--sp-2); }
 
-.rn-list { list-style: none; margin: 0; padding: 0; }
+/* The columns are the list's and every row is a subgrid of them, so a column has one width
+   down the list (T44). The goal is the one flexible column; the others take their content
+   width, the needs cell at most 24ch (an empty "—" no longer holds 24ch the goal could use). */
+.rn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns:
+    minmax(12ch, auto) minmax(0, 1fr) 7ch minmax(0, auto) auto minmax(12ch, auto) minmax(10ch, auto) fit-content(24ch);
+  column-gap: var(--sp-3);
+}
 
 .rn-row {
   display: grid;
-  grid-template-columns:
-    minmax(12ch, auto) minmax(0, 1fr) 7ch minmax(0, auto) auto minmax(12ch, auto) minmax(10ch, auto) minmax(0, 24ch);
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
   gap: var(--sp-1) var(--sp-3);
   min-height: var(--row-comfy);
@@ -253,10 +264,11 @@ a.rn-need-open { text-decoration: none; }
 
 /* ---- narrow: the row wraps into two lines */
 @media (max-width: 1024px) {
-  .rn-row {
+  .rn-list {
     grid-template-columns: minmax(10ch, auto) minmax(0, 1fr) auto;
-    gap: var(--sp-1) var(--sp-2);
+    column-gap: var(--sp-2);
   }
+  .rn-row { gap: var(--sp-1) var(--sp-2); }
   .rn-scores,
   .rn-burn { grid-column: 1 / -1; flex-wrap: wrap; white-space: normal; }
   /* the needs cell stays one line, mark and text together, the text clipped (T29) */

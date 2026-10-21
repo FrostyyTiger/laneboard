@@ -654,6 +654,31 @@ test('T25: a label and its value share one cell: "stop budget", "cost $9.98"', (
   assert.doesNotMatch(css, /\.rn-k \{[^}]*grid-column/);
 }));
 
+test('T44: the goal is the one flexible column of the list, every row a subgrid of it, the full goal its title', () => withDom(() => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const wide = css.slice(0, css.indexOf('@media (max-width: 1024px)'));
+  const list = wide.match(/\.rn-list \{[^}]*grid-template-columns:\s*([^;]+);/);
+  assert.ok(list, 'the list holds the columns');
+  // split on top-level spaces: one entry per column, in row order (state, goal, round, scores, burn, left, cost, needs)
+  const cols = list[1].trim().match(/[a-z-]+\([^)]*(?:\([^)]*\)[^)]*)*\)|\S+/g);
+  assert.equal(cols.length, 8);
+  assert.deepEqual(cols.filter((c) => /fr\b/.test(c)), ['minmax(0, 1fr)'], 'one flexible column');
+  assert.equal(cols[1], 'minmax(0, 1fr)', 'and it is the goal');
+  // the needs column takes its content, at most 24ch: a "—" no longer holds 24ch
+  assert.equal(cols[7], 'fit-content(24ch)');
+  assert.match(wide, /\.rn-row \{[^}]*grid-column: 1 \/ -1;[^}]*grid-template-columns: subgrid;/);
+  // the narrow layout moves its columns to the list too
+  const narrow = css.slice(css.indexOf('@media (max-width: 1024px)'));
+  assert.match(narrow, /\.rn-list \{[^}]*grid-template-columns: minmax\(10ch, auto\) minmax\(0, 1fr\) auto;/);
+  // a goal that clips still reads whole in the cell's title
+  const goal = 'Move acme-api billing to the new invoice table, test every path and keep the old one readable';
+  const host = document.createElement('div');
+  renderRuns(host, [{ ...FIX, goal }], { status: 'ok' }, FIX.updatedAt);
+  const cell = byClass(host, 'rn-goal')[0];
+  assert.equal(cell.title.split('\n')[0], goal);
+  assert.equal(byClass(cell, 'rn-goal-t')[0].textContent, goal);
+}));
+
 test('T28: an open need gives the needs.ack payload and its link; a closed or waiting one no ack', () => {
   const need = { i: 2, kind: 'decision', text: 'Keep the old export?', link: 'https://example.invalid/acme/pull/7', open: true };
   assert.deepEqual(needActions(need, 'acme-search'), {
