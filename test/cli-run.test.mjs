@@ -178,7 +178,7 @@ test('`run <sub> --help` prints that subcommand\'s usage, exit 0, and writes not
     [['round', '-h'], /^usage: laneboard run round --n N --end /m],
     [['score', '--run', 'r1', '--help'], /^usage: laneboard run score --name m --value x/m],
     [['needs', '--kind', 'wait', '--help'], /^usage: laneboard run needs /m],
-    [['ack', '0', '--help'], /^usage: laneboard run ack \[<run>\] <ref>/m],
+    [['ack', '0', '--help'], /^usage: laneboard run ack \[<run>\] <ref>.*already acked: nothing sent, exit 0/m],
     [['--post', 'stop', '--help'], /^usage: laneboard run stop \[--reason /m],
   ];
   for (const [args, want] of cases) {
@@ -373,6 +373,12 @@ test('every subcommand prints one receipt on stderr: `ok <run> <type> appended t
     assert.equal(r.stderr, `laneboard: no need ${args[1]} in run ${args[0]} on ${env.LANEBOARD_URL}; nothing posted\n`);
   }
   assert.equal(posts(), n0, 'a missing ref is not posted');
+  // T39: need 0 acked twice; the server's copy says it is closed: nothing posted, exit 0.
+  needs[0].acked = true;
+  const twice = await run(['run', 'ack', 'r1', '0', '--post'], env, dir);
+  assert.equal(twice.code, 0, twice.stderr);
+  assert.equal(twice.stderr, 'need 0 already acked, nothing posted\n');
+  assert.equal(posts(), n0, 'a second ack is not posted');
 });
 
 test('ack warns (exit 0, still written) for a fence need without a person\'s --by; a ref that names no need writes nothing and exits 1 (night 4 T21, T35)', async (t) => {
@@ -392,8 +398,15 @@ test('ack warns (exit 0, still written) for a fence need without a person\'s --b
   // A plain need closes with any by; a person's by closes the fence need: no warning.
   assert.doesNotMatch((await go(['ack', 'r1', '1'])).stderr, /warning/);
   assert.doesNotMatch((await go(['ack', 'r1', '0', '--by', 'owner'])).stderr, /warning/);
-  // Once closed, a later ack changes nothing and needs no warning about by.
-  assert.doesNotMatch((await go(['ack', 'r1', '0'])).stderr, /warning/);
+  // T39: once closed, a later ack would change nothing: it says so, writes no line, exit 0.
+  const closed = lines(file).length;
+  for (const ref of ['0', '1']) {
+    const again = await go(['ack', 'r1', ref]);
+    assert.equal(again.code, 0, again.stderr);
+    assert.equal(again.stdout, '');
+    assert.equal(again.stderr, `need ${ref} already acked, nothing written\n`);
+  }
+  assert.equal(lines(file).length, closed, 'a second ack is not written');
 
   // T35: r1 has two needs (place 2 is the other run's); a ts that matches none; a
   // missing file. A ref that names no need is a typo: nothing written, exit 1.
@@ -413,5 +426,5 @@ test('ack warns (exit 0, still written) for a fence need without a person\'s --b
   const before = lines(file).length;
   const folded = foldRun(parseLines(fs.readFileSync(file, 'utf8')).events.filter((e) => e.run === 'r1'));
   assert.deepEqual(folded.needs.map((n) => [n.kind, n.open, n.by]), [['fence', false, 'owner'], ['decision', false, null]]);
-  assert.equal(before, 3 + 5);
+  assert.equal(before, 3 + 4);
 });

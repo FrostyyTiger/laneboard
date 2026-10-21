@@ -145,6 +145,8 @@ test('docs/runs.md names the CLI receipt and the ack warnings (night 4 T21)', ()
 test('docs/runs.md says an ack whose ref names no need writes nothing and exits 1 (night 4 T35)', () => {
   assert.match(doc, /`laneboard: no need\s+<ref> in run <run> …; nothing written` \(or `nothing posted`\) and exits 1/);
   assert.match(doc, /`laneboard run ack` refuses one/);
+  // T39: a second ack of a closed need sends nothing and exits 0.
+  assert.match(doc, /`need\s+<ref> already acked, nothing written` \(or `nothing posted`\), adds no line\s+and exits 0/);
   for (const by of FENCE_ACK_BY) assert.ok(doc.includes(`\`${by}\``), by);
 });
 

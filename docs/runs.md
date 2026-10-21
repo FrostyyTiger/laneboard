@@ -245,6 +245,9 @@ and nothing warns.
   in the server's copy of the run (`GET /api/runs/<run>`). A ref that names
   no need of the run is a typo, not an ack: it prints `laneboard: no need
   <ref> in run <run> …; nothing written` (or `nothing posted`) and exits 1.
+  A need that is already acked (closed) would not change: it prints `need
+  <ref> already acked, nothing written` (or `nothing posted`), adds no line
+  and exits 0, since the need is closed as asked.
   When the need is a `fence` need and `--by` is missing or not `inbox`,
   `run page` or `owner`, the ack is still written (exit 0) and a warning on
   stderr says it is advisory: the need stays open. A plain need closes with
