@@ -18,6 +18,7 @@ import * as lanes from '../collector/lanes.mjs';
 import * as progress from '../collector/progress.mjs';
 import * as markerCollector from '../collector/markers.mjs';
 import * as morning from '../morning.mjs';
+import { WINDOWS } from '../util.mjs';
 import * as credit from '../credit.mjs';
 import * as transcripts from '../collector/transcripts.mjs';
 import * as ws from '../ws.mjs';
@@ -77,8 +78,12 @@ function memo(key, build) {
 
 // Exactly what the Morning view renders, so `bin/laneboard morning` prints the
 // same numbers the browser shows and the two cannot drift.
+// An unknown window is a 400 naming the allowed ones, never a silent `tonight`.
 route('GET', '/api/morning', (req, res) => {
   const window = req.query.get('window') || 'tonight';
+  if (!WINDOWS.includes(window)) {
+    return json(res, { error: `unknown window ${JSON.stringify(window.slice(0, 40))}; one of ${WINDOWS.join(', ')}`, windows: WINDOWS }, 400);
+  }
   json(res, memo(`morning:${window}`, () => morning.build({ window })));
 });
 

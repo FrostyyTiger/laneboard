@@ -129,6 +129,27 @@ in `.gitignore`, add it to your own repo's ignore file too.
 
 `LANEBOARD_URL` overrides the server address.
 
+## API
+
+Every view reads JSON you can `curl` (builder mode; a hub serves the same views from
+`/api/fleet/*`). The live views also get pushes over `/ws`.
+
+| View | Reads |
+| --- | --- |
+| Map | `GET /api/map` |
+| Board, Inbox | `GET /api/state` (the `/ws` snapshot); the Inbox acks a need with `POST /api/runs/events` |
+| Packages | `GET /api/packages` |
+| Morning | `GET /api/morning?window=12h\|tonight\|24h\|7d` (another window is a 400) |
+| Runs | `GET /api/runs`, `GET /api/runs?run=<id>`, `GET /api/runs/<id>` |
+| Credit | `GET /api/credit` |
+| Box | `GET /api/v1/health?history=1` |
+| Audit | `GET /api/v1/audit` |
+| Archive | `GET /api/v1/archive` |
+| (none) | `GET /api/health`: `{ok, version, mode}`, nothing else |
+
+`/healthz` adds the process's pid, uptime and memory. An unknown `/api/*` path is a JSON 404;
+any other unknown path gets the page.
+
 ## Nothing destructive happens on its own
 
 `retire` refuses a live session always, and a dirty or unmerged lane without

@@ -201,3 +201,18 @@ test('T7: docs/runs.md says `rounds` is rounds done and `maxRounds` the cap, the
   assert.ok(doc.includes('`?run=<id>`'));
   assert.ok(doc.includes('no run <run>; the list is GET /api/runs'));
 });
+
+test('T8: README has the API route table with /api/health, and every route in it exists', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  assert.match(readme, /^## API$/m);
+  assert.match(readme, /^\| View \| Reads \|$/m);
+  assert.ok(readme.includes('`GET /api/health`: `{ok, version, mode}`'));
+  const table = readme.slice(readme.indexOf('| View | Reads |'), readme.indexOf('`/healthz` adds'));
+  const paths = [...table.matchAll(/`(?:GET|POST) (\/api\/[a-z0-9/_-]+)/g)].map((m) => m[1].replace(/\/<id>$/, ''));
+  assert.ok(paths.length >= 10, `only ${paths.length} routes in the table`);
+  const server = await Promise.all(['server/boot/builder.mjs', 'server/routes/runs.mjs', 'server/routes/api-health.mjs',
+    'server/routes/packages.mjs', 'server/routes/health.mjs', 'server/fleet/api-v1.mjs', 'server/routes/archive.mjs']
+    .map((f) => readFile(new URL(`../${f}`, import.meta.url), 'utf8').catch(() => '')));
+  const all = server.join('\n');
+  for (const p of paths) assert.ok(all.includes(`'${p}`), `${p} is in the README table but no server file names it`);
+});
