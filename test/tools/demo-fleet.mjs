@@ -26,6 +26,9 @@
 //              `hv1` feed (re-stamped every tick so it never goes stale) and
 //              a Tailscale policy, so Drift (`backup` declared but not seen,
 //              `scratch` seen but not declared) and Reach have something to draw
+//   a run      the recorded run test/fixtures/runs/demo-run.jsonl, answered by
+//              the forwarder at GET /api/runs and /api/runs/<id> (a hub has no
+//              runs route; test/helpers/demo-hub.mjs `demoRunsAnswer`)
 //
 // Isolation (RULES 3): the hub runs with its own temp HOME, TMUX_TMPDIR,
 // XDG_*_HOME, LANEBOARD_STATE_DIR, LANEBOARD_AUDIT_FILE, LANEBOARD_CONFIG and
@@ -51,7 +54,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed } from '../helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed, demoRunsAnswer } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -359,6 +362,13 @@ function designTokens(ingressPort, req, res) {
 function forwarder(ingressPort) {
   const server = http.createServer((req, res) => {
     if (DESIGN && req.method === 'GET' && req.url.split('?')[0] === '/css/tokens.css') { designTokens(ingressPort, req, res); return; }
+    const runs = demoRunsAnswer(req.method, req.url);
+    if (runs) {
+      const body = Buffer.from(JSON.stringify(runs.body));
+      res.writeHead(runs.status, { 'content-type': 'application/json; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store' });
+      res.end(body);
+      return;
+    }
     const up = http.request({ host: '127.0.0.1', port: ingressPort, method: req.method, path: req.url, headers: serveHeaders(req.headers) }, (r) => {
       const out = {};
       for (const [k, v] of Object.entries(r.headers)) if (!HOP_BY_HOP.has(k)) out[k] = v;

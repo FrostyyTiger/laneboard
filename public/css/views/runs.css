@@ -122,6 +122,9 @@
 .rn-back:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
 .rn-head { display: grid; gap: var(--sp-2); }
 .rn-head-top { display: flex; align-items: center; gap: var(--sp-3); min-width: 0; }
+/* the state word keeps its width; the goal shrinks and ellipsizes (it ran under STOPPED at 390) */
+.rn-head-top .rn-state { flex: none; }
+.rn-head-top .rn-goal { flex: 1 1 auto; min-width: 0; }
 .rn-head .rn-goal-t { font-size: var(--fs-13); }
 .rn-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); }
 .rn-events[data-p="3"] { color: var(--p3); }
@@ -240,4 +243,7 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
   .rn-left,
   .rn-cost { justify-content: flex-start; }
   .rn-tl-sec { overflow-x: auto; }
+  /* a chart's line gets its own row: name, value and range stay whole on a phone */
+  .rn-chart { grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-1) var(--sp-3); }
+  .rn-chart-svg { grid-column: 1 / -1; grid-row: 2; max-width: 100%; }
 }

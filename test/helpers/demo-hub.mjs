@@ -7,8 +7,19 @@
 // `writeDemoMap(dir)` gives the demo something for the Map's Drift and Reach
 // overlays (runs plan night 3 T1): an invented topology, one hypervisor feed
 // and a Tailscale policy, written into the demo's own temp dir.
+//
+// `demoRunsAnswer(method, url)` gives the demo a run to show (night 3 T2): a
+// hub has no `/api/runs` (server/routes/runs.mjs is builder only, the hub
+// routes are fenced), so the demo's forwarder answers `GET /api/runs` and
+// `GET /api/runs/<id>` itself from the recorded run
+// test/fixtures/runs/demo-run.jsonl, folded by the real `foldRun` and
+// summarized by the real `summarize`. Its times are moved so it stopped
+// `DEMO_RUN_AGO_MS` before now.
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseLines, foldRun } from '../../server/runs/protocol.mjs';
+import { summarize } from '../../server/runs/summary.mjs';
+import { withSessions } from '../../server/runs/bind.mjs';
 
 export const DEMO_HOSTNAME = 'demo-host';
 
@@ -105,4 +116,51 @@ export function writeDemoMap(dir, now = Date.now()) {
   fs.writeFileSync(policyFile, DEMO_POLICY);
   writeDemoFeed(feedsDir, now);
   return { file, feedsDir, policyFile };
+}
+
+/** server/routes/runs.mjs LIST_PATH (not imported: that module opens the database). */
+export const RUNS_PATH = '/api/runs';
+export const DEMO_RUN_FILE = path.resolve(import.meta.dirname, '..', 'fixtures', 'runs', 'demo-run.jsonl');
+export const DEMO_RUN_AGO_MS = 25 * 60_000;
+
+/** Move a time by `d` ms, keeping its form (epoch ms, epoch s, ISO); anything else as is. */
+function shiftTime(v, d) {
+  if (typeof v === 'number') return v < 1e11 ? Math.round(v + d / 1000) : v + d;
+  if (typeof v === 'string' && !Number.isNaN(Date.parse(v))) return new Date(Date.parse(v) + d).toISOString();
+  return v;
+}
+
+/** The recorded run's lines with every time moved so its last event is `now - DEMO_RUN_AGO_MS`. */
+export function demoRunText(now = Date.now(), text = fs.readFileSync(DEMO_RUN_FILE, 'utf8')) {
+  const objs = text.split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l));
+  const last = Math.max(...objs.map((o) => (typeof o.ts === 'number' ? o.ts : 0)));
+  const d = now - DEMO_RUN_AGO_MS - last;
+  return objs.map((o) => {
+    const x = { ...o };
+    for (const k of ['ts', 'deadline', 'fiveHourResetsAt']) if (x[k] !== undefined) x[k] = shiftTime(x[k], d);
+    return JSON.stringify(x);
+  }).join('\n') + '\n';
+}
+
+/** The recorded run, folded as the collector would (`foldRun`). */
+export function demoRun(now = Date.now()) {
+  const { events, skipped } = parseLines(demoRunText(now));
+  return foldRun(events, { skipped });
+}
+
+/**
+ * What the runs routes would answer for the demo's one run, or null when the
+ * request is not theirs (the forwarder then passes it to the hub). GET only:
+ * `/api/runs` -> {runs: [summary]}, `/api/runs/<id>` -> {run} or 404.
+ */
+export function demoRunsAnswer(method, url, now = Date.now()) {
+  if (method !== 'GET' || typeof url !== 'string') return null;
+  const p = url.split('?')[0];
+  if (p === RUNS_PATH) return { status: 200, body: { runs: [summarize(demoRun(now))] } };
+  if (!p.startsWith(`${RUNS_PATH}/`)) return null;
+  let id;
+  try { id = decodeURIComponent(p.slice(RUNS_PATH.length + 1)); } catch { return { status: 404, body: { error: 'unknown run' } }; }
+  const run = demoRun(now);
+  if (id !== run.run) return { status: 404, body: { error: 'unknown run' } };
+  return { status: 200, body: { run: withSessions(run, null) } };
 }

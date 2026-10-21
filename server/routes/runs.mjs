@@ -23,6 +23,7 @@ import { knownWorktrees } from '../collector/lanes.mjs';
 import { config as globalConfig } from '../config.mjs';
 import { parseLine, MAX_LINE, RUN_ID } from '../runs/protocol.mjs';
 import { bindRuns, runDirs, withSessions } from '../runs/bind.mjs';
+import { summarize } from '../runs/summary.mjs';
 import { sessionsSeen } from '../db.mjs';
 
 export const LIST_PATH = '/api/runs';
@@ -31,41 +32,9 @@ export const EVENTS_PATH = '/api/runs/events';
 /** A posted event is one protocol line: a body over 4 × MAX_LINE is not read to the end. */
 export const BODY_LIMIT = 4 * MAX_LINE;
 
-/** The latest value of a score series and the one before it (the list's trend). */
-function lastScore(list, better) {
-  const last = list[list.length - 1];
-  const prev = list.length > 1 ? list[list.length - 2] : null;
-  return { n: last.n, value: last.value, prev: prev ? prev.value : null, better: better ?? null };
-}
-
-/** One row of the runs list: what README §3 A2 shows per run, without the per-round detail. */
-export function summarize(run) {
-  const last = run.rounds[run.rounds.length - 1] ?? null;
-  const scores = {};
-  for (const [name, list] of Object.entries(run.scores)) {
-    if (list.length) scores[name] = lastScore(list, run.better[name]);
-  }
-  return {
-    run: run.run,
-    goal: run.goal,
-    plan: run.plan,
-    branch: run.branch,
-    state: run.state,
-    round: last ? last.n : null,
-    rounds: run.rounds.length,
-    maxRounds: run.budget?.rounds ?? null,
-    scores,
-    usage: run.usage,
-    cost: run.cost,
-    deadline: run.deadline,
-    deadlineAt: run.deadlineAt,
-    needs: run.needs.filter((n) => n.open),
-    artifacts: run.artifacts.length,
-    stop: run.stop ? run.stop.reason : null,
-    startedAt: run.startedAt,
-    updatedAt: run.updatedAt,
-  };
-}
+// `summarize` lives in server/runs/summary.mjs (pure: the demo's forwarder
+// uses it without opening the database); re-exported for the callers here.
+export { summarize };
 
 /**
  * One run with its rounds' sessions. Every run of the store takes part in the
