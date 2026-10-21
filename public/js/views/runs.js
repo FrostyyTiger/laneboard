@@ -25,6 +25,8 @@
 // the open needs, the timeline of rounds (role, task, outcome, commit, cost,
 // duration), the artifacts (PR links), and the unknown events folded away in
 // a <details>. A row of the list opens its page through a plain link.
+// An open need gets OPEN (its link) and ACK (task T28): ACK posts T4's
+// `needs.ack` to POST /api/runs/events, the one write of this view.
 // Between the header and the timeline (task T11): one small SVG line per
 // score metric, x by round n on one scale shared by every metric and the
 // timeline, y the metric's own range; the spark.js classes, no animation.
@@ -37,6 +39,8 @@ import { el } from '../core/dom.js';
 import { money } from '../core/format.js';
 import { icon } from '../core/icons.js';
 import { lamp, panel, setPanel } from '../ui/components.js';
+import { confirmAction } from '../ui/confirm.js';
+import { toast } from '../ui/toast.js';
 import { sparkRange } from '../ui/spark.js';
 
 export const LIST_URL = '/api/runs';
@@ -203,6 +207,25 @@ export function needsOf(row) {
     text: rnClean(n.text) ?? '',
     link: rnClean(n.link, 400),
   }));
+}
+
+/** Who an ack from the run page names (`needs.ack` `by`; the Inbox's is `inbox`). */
+export const ACK_BY = 'run page';
+/** Where an ack is posted (the runs route, docs/runs.md; no route of its own). */
+export const EVENTS_URL = `${LIST_URL}/events`;
+
+/**
+ * One need of run `runId` -> its buttons: {ack, open}. `ack` is the
+ * `needs.ack` event to post (an open need a person must answer, with its place
+ * `i` from the fold), `open` the need's http(s) link; both null on a closed need.
+ */
+export function needActions(need, runId) {
+  if (!isObj(need) || need.open === false) return { ack: null, open: null };
+  const kind = rnClean(need.kind, 32) ?? 'decision';
+  const ack = kind !== 'wait' && Number.isInteger(need.i) && need.i >= 0
+    && typeof runId === 'string' && RUN_ID_RX.test(runId)
+    ? { v: 1, t: 'needs.ack', run: runId, ref: need.i, by: ACK_BY } : null;
+  return { ack, open: safeHref(rnClean(need.link, 400)) };
 }
 
 /** A `wait` need is the loop sleeping (rate limit); every other kind needs a person. */
@@ -658,21 +681,45 @@ function pageHead(run, row, now) {
   return head;
 }
 
-function needsSection(row) {
+function needButtons(acts, x, busy) {
+  const box = el('span', 'rn-need-acts');
+  if (acts.open) {
+    const a = el('a', 'btn btn--s no rn-need-open');
+    a.append(icon('external', { size: 's' }), el('span', 'btn-l', 'Open'));
+    a.href = acts.open;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.title = acts.open;
+    box.append(a);
+  } else if (x.link) box.append(el('span', 'rn-item-l', x.link));
+  if (acts.ack) {
+    const b = el('button', 'btn btn--s ok rn-need-ack');
+    b.type = 'button';
+    b.append(icon('approve', { size: 's' }), el('span', 'btn-l', busy ? 'Sending…' : 'Ack'));
+    b.title = 'Acknowledge this need: the run page and the Inbox stop showing it';
+    if (busy) b.disabled = true;
+    else b.addEventListener('click', () => { ackNeed(acts.ack); });
+    box.append(b);
+  }
+  return box;
+}
+
+function needsSection(row, busy = new Set()) {
   const list = needsOf(row);
+  const raw = (Array.isArray(row?.needs) ? row.needs : []).filter(isObj); // needsOf's order, with `i` and `open`
   const sec = rnSection('rn-needs-sec', 'Open needs', list.length);
   if (!list.length) { sec.append(el('p', 'rn-none', 'Nothing open.')); return sec; }
   const ul = el('ul', 'rn-items');
-  for (const x of list) {
+  list.forEach((x, k) => {
     const li = el('li', 'rn-item rn-need');
     const you = x.kind !== 'wait';
     li.dataset.p = you ? '2' : '3';
     li.append(el('span', 'rn-need-m', you ? '▲' : '○'), el('span', 'rn-item-k', x.kind), el('span', 'rn-item-t', x.text));
-    const href = safeHref(x.link);
-    if (x.link) li.append(rnLink('rn-item-l', href ? 'open' : x.link, href));
+    const acts = needActions(raw[k], rnClean(row.run, 64));
+    if (acts.open || acts.ack || x.link) li.append(needButtons(acts, x, acts.ack ? busy.has(acts.ack.ref) : false));
     li.title = you ? 'needs a person' : 'the loop is waiting (a usage limit)';
     ul.append(li);
-  }
+  });
   sec.append(ul);
   return sec;
 }
@@ -890,7 +937,7 @@ function rawSection(run) {
  * Paint one run's page into `container`. `run` is the fold (or null), `st`
  * {status: 'loading'|'ok'|'missing'|'error', message?, id}. Returns the page node.
  */
-export function renderRunPage(container, run, st = { status: 'ok' }, now = Date.now()) {
+export function renderRunPage(container, run, st = { status: 'ok' }, now = Date.now(), busy = new Set()) {
   const page = el('div', 'rn-page');
   const id = rnClean(st.id ?? run?.run, 64) ?? '?';
   if (!isObj(run)) {
@@ -913,7 +960,7 @@ export function renderRunPage(container, run, st = { status: 'ok' }, now = Date.
       page.append(n);
     }
     if (st.status === 'error') page.append(el('p', 'rn-stale', `Not refreshed: ${st.message ?? 'request failed'}.`));
-    page.append(needsSection(row), chartsSection(run), timelineSection(run, now), artifactsSection(run));
+    page.append(needsSection(row, busy), chartsSection(run), timelineSection(run, now), artifactsSection(run));
     const raw = rawSection(run);
     if (raw) page.append(raw);
   }
@@ -935,7 +982,7 @@ function rnPaint(st) {
   if (!st.panel) return;
   if (st.runId) {
     setPanel(st.panel.root, { scope: st.runId, n: null });
-    renderRunPage(st.panel.body, st.run, { status: st.status, message: st.message, id: st.runId }, Date.now());
+    renderRunPage(st.panel.body, st.run, { status: st.status, message: st.message, id: st.runId }, Date.now(), st.busy);
     return;
   }
   const n = st.status === 'ok' ? st.runs.length : null;
@@ -964,13 +1011,56 @@ async function rnRefresh(st) {
   rnPaint(st);
 }
 
-/** Mount; `fetchFn` is injectable for tests (GET only). Returns the first load's promise. */
-export function mountRuns(host, ctx = {}, { fetchFn = globalThis.fetch, poll = true } = {}) {
+/** POST one event to EVENTS_URL -> true when the server took it. Never throws. */
+async function postEvent(ev, fetchFn) {
+  try {
+    const r = await fetchFn(EVENTS_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-laneboard': '1' },
+      body: JSON.stringify(ev),
+      credentials: 'same-origin',
+    });
+    if (!r.ok) { toast(`Ack failed: HTTP ${r.status}`, { kind: 'err' }); return false; }
+    return true;
+  } catch (err) {
+    toast(`Ack failed: ${rnClean(String(err?.message ?? err), 120) ?? 'request failed'}`, { kind: 'err' });
+    return false;
+  }
+}
+
+/**
+ * The ACK button on an open need: confirmAction (click tier, like the Inbox's
+ * `a`), post the `needs.ack` event, reload the page. `confirm` is injectable
+ * for tests. Resolves to true when the server took it.
+ */
+export async function ackNeed(ev, { confirm = confirmAction } = {}) {
+  const st = STATE_OF.view;
+  if (!st || !ev || st.busy.has(ev.ref)) return false;
+  const ok = await confirm({ action: 'ack', targets: [ev.run], tier: 'click' });
+  if (!ok?.ok || STATE_OF.view !== st) return false;
+  st.busy.add(ev.ref);
+  rnPaint(st);
+  let done;
+  try {
+    done = await postEvent(ev, st.postFn);
+  } finally {
+    st.busy.delete(ev.ref);
+  }
+  if (done) toast('Acknowledged', { kind: 'ok' });
+  if (STATE_OF.view === st) await rnRefresh(st);
+  return done;
+}
+
+/**
+ * Mount; `fetchFn` is injectable for tests (GET only), `postFn` likewise for
+ * the one POST (an ack). Returns the first load's promise.
+ */
+export function mountRuns(host, ctx = {}, { fetchFn = globalThis.fetch, postFn = fetchFn, poll = true } = {}) {
   if (!host) return Promise.resolve();
   unmountRuns();
   host.textContent = '';
   const st = {
-    el: host, ctx, fetchFn, status: 'loading', message: null, runs: [], run: null,
+    el: host, ctx, fetchFn, postFn, busy: new Set(), status: 'loading', message: null, runs: [], run: null,
     runId: routeRun(ctx), seq: 0, timer: null, panel: null,
   };
   st.panel = panel({ name: 'Runs' });

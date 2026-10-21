@@ -14,7 +14,7 @@ import runsView, {
   renderRuns, mountRuns, unmountRuns, loadRuns, sortRuns, scoreList, scoreTrend, scoreText, burnOf,
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, EMPTY_HUB, LIST_URL, SCORE_MAX,
   renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
-  runHref, runUrl, LIST_HREF, TL_NARROW_HIDDEN, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
+  runHref, runUrl, LIST_HREF, needActions, ackNeed, ACK_BY, EVENTS_URL, TL_NARROW_HIDDEN, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
 
@@ -237,7 +237,9 @@ test('the view has the registry shape and the Runs metadata', () => {
   assert.equal(runsView.icon, 'runs');
   for (const k of ['mount', 'unmount', 'update']) assert.equal(typeof runsView[k], 'function');
   assert.doesNotMatch(SRC, /\bclass\s+\w+|\bsuper\(/);
-  assert.doesNotMatch(SRC, /method:\s*'(POST|PUT|DELETE)'/, 'GET only: this view never sends an action');
+  // one write since T28: the ACK's POST of a needs.ack event to /api/runs/events, nothing else
+  assert.doesNotMatch(SRC, /method:\s*'(PUT|DELETE|PATCH)'/);
+  assert.equal(SRC.match(/method:\s*'POST'/g)?.length, 1, 'one POST only (an ack)');
 });
 
 // ---------------------------------------------------------------- the run page (T8)
@@ -276,9 +278,16 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
   assert.equal(need.length, 1);
   assert.equal(need[0].dataset.p, '2');
   assert.match(need[0].textContent, /▲decisionDrop the v1 export endpoint/);
-  const needLink = byClass(need[0], 'rn-item-l')[0];
+  // T28: OPEN and ACK as buttons on the right, not a grey word
+  const needLink = byClass(need[0], 'rn-need-open')[0];
+  assert.equal(needLink.tagName, 'A');
+  assert.match(needLink.className, /\bbtn btn--s\b/);
   assert.equal(needLink.href, 'https://example.invalid/acme/acme-api/pull/7');
   assert.equal(needLink.rel, 'noopener noreferrer');
+  const ackB = byClass(need[0], 'rn-need-ack')[0];
+  assert.equal(ackB.tagName, 'BUTTON');
+  assert.match(ackB.className, /\bbtn btn--s ok\b/);
+  assert.equal(ackB.textContent, 'Ack');
   // the timeline: round, role, task, outcome, commit, cost, duration, sessions
   const rows = byClass(page, 'rn-tl-row');
   assert.deepEqual(rows.map((r) => r.children.map((c) => c.textContent)), [
@@ -641,4 +650,48 @@ test('T25: a label and its value share one cell: "stop budget", "cost $9.98"', (
   const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
   assert.match(css, /\.rn-k \{[^}]*color: var\(--text-3\)/);
   assert.doesNotMatch(css, /\.rn-k \{[^}]*grid-column/);
+}));
+
+test('T28: an open need gives the needs.ack payload and its link; a closed or waiting one no ack', () => {
+  const need = { i: 2, kind: 'decision', text: 'Keep the old export?', link: 'https://example.invalid/acme/pull/7', open: true };
+  assert.deepEqual(needActions(need, 'acme-search'), {
+    ack: { v: 1, t: 'needs.ack', run: 'acme-search', ref: 2, by: ACK_BY },
+    open: 'https://example.invalid/acme/pull/7',
+  });
+  assert.deepEqual(needActions({ ...need, open: false }, 'acme-search'), { ack: null, open: null }, 'closed: no buttons');
+  assert.equal(needActions({ ...need, kind: 'wait' }, 'acme-search').ack, null, 'a wait closes itself');
+  assert.equal(needActions({ ...need, i: undefined }, 'acme-search').ack, null, 'no place, no ack');
+  assert.equal(needActions(need, '../x').ack, null, 'not a run id');
+  assert.equal(needActions({ ...need, link: 'javascript:alert(1)' }, 'acme-search').open, null);
+  assert.deepEqual(needActions(null, 'acme-search'), { ack: null, open: null });
+  assert.equal(EVENTS_URL, '/api/runs/events');
+});
+
+test('T28: ACK on the run page posts needs.ack to POST /api/runs/events and reloads the run', async () => withDomAsync(async () => {
+  const calls = [];
+  let open = true;
+  const get = async (url) => {
+    calls.push(['GET', url]);
+    const run = { ...RUN, needs: RUN.needs.map((n) => ({ ...n, open: open && n.open })) };
+    return { ok: true, status: 200, json: async () => ({ run }) };
+  };
+  const post = async (url, init) => {
+    calls.push([init.method, url, JSON.parse(init.body), init.headers['x-laneboard']]);
+    open = false;
+    return { ok: true, status: 200, json: async () => ({ ok: true }) };
+  };
+  const host = document.createElement('div');
+  await mountRuns(host, { route: { run: RUN.run } }, { fetchFn: get, postFn: post, poll: false });
+  assert.equal(byClass(host, 'rn-need-ack').length, 1);
+  const i = RUN.needs.find((n) => n.open).i;
+  assert.equal(await ackNeed(needActions(RUN.needs.find((n) => n.open), RUN.run).ack, { confirm: async () => ({ ok: false }) }), false, 'cancelled');
+  assert.equal(calls.length, 1, 'nothing posted on cancel');
+  const done = await ackNeed({ v: 1, t: 'needs.ack', run: RUN.run, ref: i, by: ACK_BY }, { confirm: async () => ({ ok: true }) });
+  assert.equal(done, true);
+  assert.deepEqual(calls.slice(1), [
+    ['POST', '/api/runs/events', { v: 1, t: 'needs.ack', run: RUN.run, ref: i, by: ACK_BY }, '1'],
+    ['GET', runUrl(RUN.run)],
+  ]);
+  assert.equal(byClass(host, 'rn-need-ack').length, 0, 'the need is gone after the reload');
+  unmountRuns();
 }));

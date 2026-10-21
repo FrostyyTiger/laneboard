@@ -175,6 +175,9 @@ a.rn-item-t:focus-visible,
 a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
 .rn-need[data-p="2"] .rn-need-m { color: var(--p2); }
 .rn-need[data-p="3"] .rn-need-m { color: var(--p3); }
+/* an open need's OPEN and ACK (T28): Board's YES/NO buttons, on the right edge */
+.rn-need-acts { flex: none; display: inline-flex; align-items: center; gap: var(--sp-2); margin-left: auto; align-self: center; }
+a.rn-need-open { text-decoration: none; }
 
 /* score charts (T11): one line per metric, x by round, grey; a worse latest value is p2 */
 .rn-charts { list-style: none; margin: 0; padding: 0; }
