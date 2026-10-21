@@ -219,7 +219,7 @@ laneboard run stop   --run readiness --reason done
 | `start` | `--goal`, `--plan`, `--branch`, `--host`, `--deadline`, `--rounds N`, `--window-pct P` (the last two go into `budget`) |
 | `round` | **`--n N`**, `--role`, `--task`; with `--end`: `--outcome`, `--commit`, `--open N`, `--usd x`. A round start prints `export LANEBOARD_RUN=<run>/<n>` on stdout, meant for `eval "$(laneboard run round --n 1 …)"` so later calls in that shell find the run |
 | `score` | **`--name`**, **`--value x`**, `--better higher\|lower`, `--n N`, `--max x` |
-| `needs` | `--kind`, `--text`, `--link`, `--n N` |
+| `needs` | `--text` (or the text as the one bare word: `needs "Drop the v1 export?"`), `--kind`, `--link`, `--n N` |
 | `ack` | **`<ref>`** (or `--ref`), `--by`; `ack <run> <ref>` names the run too |
 | `artifact` | **`--url`**, `--kind`, `--title`, `--state` |
 | `stop` | `--reason`, `--rounds N`, `--usd x` |

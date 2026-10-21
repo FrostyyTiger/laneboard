@@ -541,3 +541,29 @@ test('T6: --post prints what the server accepted: its run and type, and the fiel
   const echoed = await run(['run', 'cost', '--run', 'r1', '--usd', '0.5', '--post'], env, dir);
   assert.equal(echoed.stderr, 'ok r1 cost posted\n');
 });
+
+test('T12: `run needs "text"` takes the bare word as --text; a second word or --text as well is a usage error', async (t) => {
+  const dir = tmpDir(t);
+  const env = envFor(dir);
+  const file = path.join(dir, '.laneboard', 'run.jsonl');
+  const ok = await run(['run', 'needs', 'Drop the v1 export?', '--run', 'r1', '--kind', 'decision'], env, dir);
+  assert.equal(ok.code, 0, ok.stderr);
+  const flagFirst = await run(['run', 'needs', '--run', 'r1', '--link', 'https://example.invalid/acme/pull/7', 'Merge it?'], env, dir);
+  assert.equal(flagFirst.code, 0, flagFirst.stderr);
+  const got = lines(file).map((l) => JSON.parse(l));
+  assert.equal(got[0].text, 'Drop the v1 export?');
+  assert.equal(got[0].kind, 'decision');
+  assert.equal(got[1].text, 'Merge it?');
+  assert.equal(got[1].link, 'https://example.invalid/acme/pull/7');
+
+  const two = await run(['run', 'needs', 'one', 'two', '--run', 'r1'], env, dir);
+  assert.equal(two.code, 2);
+  assert.match(two.stderr, /unexpected argument: "two"/);
+  const both = await run(['run', 'needs', 'one', '--text', 'two', '--run', 'r1'], env, dir);
+  assert.equal(both.code, 2);
+  assert.match(both.stderr, /--text given twice/);
+  assert.equal(lines(file).length, 2, 'the refused calls wrote nothing');
+
+  const help = await run(['run', 'needs', '--help'], env, dir);
+  assert.match(help.stdout, /needs \["text" \| --text t\]/);
+});

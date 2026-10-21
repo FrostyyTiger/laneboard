@@ -119,6 +119,14 @@ function cleanDeep(v) {
 
 // ---------------------------------------------------------------- http
 
+let answered = null;
+
+/** `board: <url>` on stderr once the board answered, so stdout stays parseable
+ *  (`laneboard ls | …`) and a reader sees which board the numbers came from. */
+function boardLine() {
+  if (answered) process.stderr.write(`board: ${cleanTerm(answered)}\n`);
+}
+
 async function api(path, { method = 'GET', body } = {}) {
   let res;
   try {
@@ -133,6 +141,8 @@ async function api(path, { method = 'GET', body } = {}) {
     e.unreachable = true;
     throw e;
   }
+  // The board that answered (after any redirect), for `board: <url>` (boardLine).
+  answered = res.redirected ? new URL(res.url).origin : BASE;
   const text = await res.text();
   let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
@@ -202,6 +212,7 @@ function table(rows, headers) {
 
 async function cmdLs() {
   const { sessions, attention } = await api('/api/state');
+  boardLine();
   const order = { waiting_permission: 0, waiting_question: 1, working: 2, done: 3, idle: 4, shell: 5, dead: 6 };
   sessions.sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || a.name.localeCompare(b.name));
   const rows = sessions.map((s) => [
@@ -353,6 +364,7 @@ const MORNING_COLS = 100;
 async function cmdMorning() {
   const window = takeFlag('--window', 'tonight');
   const m = await api(`/api/morning?window=${encodeURIComponent(window)}`);
+  boardLine();
   process.stdout.write(`${C.bold}Morning — ${m.label}${C.off} ${C.dim}(since ${isoLocal(m.since)})${C.off}\n\n`);
 
   process.stdout.write(`${C.bold}Needs you${C.off} (${m.needsYou.length})\n`);
@@ -452,6 +464,7 @@ function compact(n) {
 
 async function cmdCredit() {
   const c = await api('/api/credit');
+  boardLine();
   const rl = c.rateLimits || {};
   const g = (x, label) => (x
     ? `${label} ${String(Math.round(x.usedPct)).padStart(3)}%  resets ${new Date(x.resetsAt).toLocaleString('en-GB', { hour12: false }).slice(-8, -3)}`
@@ -890,7 +903,7 @@ const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | -
   round    --n N [--role r] [--task t]            prints export LANEBOARD_RUN=<run>/<n>, meant for: eval "$(laneboard run round --n N …)"
   round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]   --usd is this round only; the run sums them when it has no cost events
   score    --name m --value x [--better higher|lower] [--n N] [--max x]
-  needs    [--kind decision|wait|…] [--text t] [--link url] [--n N]
+  needs    ["text" | --text t] [--kind decision|wait|…] [--link url] [--n N]
   ack      [<run>] <ref> [--by b]                 close a need: <ref> is its place (0 = the first) or its ts (no such need: exit 1; already acked: nothing sent, exit 0)
   artifact --url u [--kind pr|link|…] [--title t] [--state open|merged|closed]
   stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
@@ -1007,6 +1020,15 @@ async function cmdRun() {
     first.run = words.shift();
   }
   if (words.length) first.ref = words[0];
+  // `needs "text"`: the first word that is not a flag or a flag's value is the text;
+  // a second one, or --text as well, is left for parseRunFlags to refuse.
+  for (let i = 0; sub === 'needs' && i < argv.length; i += 1) {
+    const spec = RUN_COMMON[argv[i]] ?? RUN_SUBS.needs[argv[i]];
+    if (spec) { if (spec[1] !== 'bool') i += 1; continue; }
+    if (argv[i].startsWith('--')) continue;
+    first.text = argv.splice(i, 1)[0];
+    break;
+  }
   const f = parseRunFlags({ ...RUN_COMMON, ...RUN_SUBS[sub] }, first);
   const { run: runFlag, file: fileFlag, post, ...fields } = f;
   if (post && fileFlag !== undefined) runUsage('--file and --post do not go together');
@@ -1219,8 +1241,8 @@ async function cmdFeed() {
   }
 }
 
-function usage() {
-  process.stdout.write(`laneboard — control the Claude sessions and lanes on this box
+function usage(out = process.stdout) {
+  out.write(`laneboard — control the Claude sessions and lanes on this box
 
   laneboard ls                          every session, attention first
   laneboard peek <name> [-n 40]         the last N lines of a pane
@@ -1262,6 +1284,25 @@ Server: ${BASE}   (override with LANEBOARD_URL)
 `);
 }
 
+/** The one command within edit distance 2 of `word`, or the one it is a prefix of; else null. */
+function closeCommand(word) {
+  const w = String(word).toLowerCase();
+  const dist = (a, b) => {
+    let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i += 1) {
+      const row = [i];
+      for (let j = 1; j <= b.length; j += 1) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = row;
+    }
+    return prev[b.length];
+  };
+  const names = Object.keys(COMMANDS);
+  const hits = names.filter((n) => (w.length > 1 && n.startsWith(w)) || dist(w, n) <= Math.min(2, n.length - 1));
+  // `ls` and its alias `list` are one command.
+  const fns = new Set(hits.map((n) => COMMANDS[n]));
+  return fns.size === 1 ? hits[0] : null;
+}
+
 const COMMANDS = {
   ls: cmdLs, list: cmdLs, peek: cmdPeek, send: cmdSend, keys: cmdKeys,
   events: cmdEvents, cost: cmdCost, spawn: cmdSpawn, kill: cmdKill,
@@ -1277,7 +1318,16 @@ if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') {
   process.exit(cmd ? 0 : 2);
 }
 const fn = COMMANDS[cmd];
-if (!fn) { usage(); die(`unknown command: ${cmd}`, 2); }
+if (!fn) {
+  // The error first (what a script or a person greps), then a close match, then the
+  // help; all on stderr. Exit 2 = a usage error.
+  process.stderr.write(`laneboard: unknown command: ${cleanTerm(cmd)}\n`);
+  const near = closeCommand(cmd);
+  if (near) process.stderr.write(`did you mean: laneboard ${near}\n`);
+  process.stderr.write('\n');
+  usage(process.stderr);
+  process.exit(2);
+}
 try {
   await fn();
 } catch (err) {

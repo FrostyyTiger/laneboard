@@ -134,7 +134,10 @@ Each `run` subcommand appends one line to `./.laneboard/run.jsonl` in the curren
 (or `--file f`, or `$LANEBOARD_RUN_FILE`) unless `--post` sends it to the server; `.laneboard/` is
 in `.gitignore`, add it to your own repo's ignore file too.
 
-`LANEBOARD_URL` overrides the server address.
+`LANEBOARD_URL` overrides the server address. `ls`, `morning` and `credit` print
+`board: <url>` on stderr (the board that answered), so stdout stays the table. An unknown
+command prints `laneboard: unknown command: <x>` first, a close match if there is one, then
+the help, all on stderr; exit 2 is a usage error, exit 1 a failure.
 
 ## API
 
