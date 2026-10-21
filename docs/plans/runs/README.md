@@ -178,7 +178,10 @@ at in both themes and at phone width before it is marked done, and the designer 
 screenshots (no Playwright dependency in the repo; that stays the owner's call).
 1. **Look first:** screenshot the Map with the Drift and Reach overlays on the demo fleet (give the
    demo a declared-but-unseen node, an undeclared one and a small policy file with invented names,
-   so both overlays have something to draw) and the Runs view; fix what is broken.
+   so both overlays have something to draw) and the Runs view; fix what is broken. The demo is a
+   hub, and its Runs view says "a hub does not collect runs yet": give the demo a recorded run to
+   show (a builder-side run file, or the hub relaying runs if that needs no fenced file; if it
+   does, it goes to the owner list instead).
 2. A3 **Inbox:** a run's open `needs` and its PRs ready for review appear next to approvals, with a
    link to the run page; acknowledging one works like the other Inbox items (no new fenced route).
 3. A3 **Morning:** one block per run that ran in the window: rounds, score start → end, stop reason,
