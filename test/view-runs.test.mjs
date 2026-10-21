@@ -429,7 +429,7 @@ test('links from a loop: only http(s) becomes an <a>; everything else stays text
   assert.equal(byClass(art, 'rn-item-t')[0].tagName, 'SPAN');
   assert.equal(byClass(art, 'rn-item-t')[0].textContent, 'javascript:alert(1)');
   assert.equal(byClass(byClass(page, 'rn-need')[0], 'rn-item-l')[0].tagName, 'SPAN');
-  assert.ok(texts(page).includes('<b>hi</b>'));
+  assert.ok(texts(page).join('').includes('<b>hi</b>')); // as text (split at its `/` by T26's break chances)
   const walk = (n) => { assert.equal(n.innerHTML, '', 'no innerHTML'); n.children.forEach(walk); };
   walk(page);
   assert.deepEqual(artifactsOf(evil).map((a) => a.href), [null]);
@@ -846,3 +846,37 @@ test('T40: the rounds table draws the sessions column only when some round has a
   assert.deepEqual(keys([bare, { sessions: [{ id: 'x' }] }]), ['n', 'role', 'task', 'outcome', 'commit', 'cost', 'span', 'sessions']);
   assert.deepEqual(tlColumns([bare, { sessions: [{ id: 'x' }] }]).at(-1), ['sessions', 'sessions']);
 });
+
+test('night 4 T26: a need row has a fixed kind column, a path breaks at `/`, and on a phone its end drops to its own line', () => withDom((document) => {
+  const text = fs.readFileSync(path.join(ROOT, 'test/fixtures/runs/readiness.jsonl'), 'utf8');
+  const fence = { v: 1, t: 'needs', run: 'readiness', ts: 1792487401000, kind: 'fence', text: 'round 4 wanted to change fenced files: server/http.mjs' };
+  const extra = [fence, { v: 1, t: 'needs.ack', run: 'readiness', ts: 1792487404000, ref: 1792487401000, by: 'inbox' }]
+    .map((o) => JSON.stringify(o)).join('\n');
+  const run = JSON.parse(JSON.stringify(foldRun(parseLines(`${text}\n${extra}`).events)));
+  const host = document.createElement('div');
+  renderRunPage(host, run, { status: 'ok' }, 1792487404000 + 5 * MIN);
+  const rows = [...byClass(host, 'rn-need')];
+  assert.ok(rows.some((r) => r.classList.contains('rn-need--acked')) && rows.some((r) => !r.classList.contains('rn-need--acked')));
+  for (const r of rows) {
+    // mark, kind, text, end: the same four cells open or closed, so the grid lines them up
+    const cells = ['rn-need-m', 'rn-need-k', 'rn-need-t', 'rn-need-end'];
+    assert.equal(r.children.length, 4);
+    cells.forEach((cls, k) => assert.ok(r.children[k].classList.contains(cls), `${cls} at ${k}`));
+  }
+  const closed = byClass(host, 'rn-need--acked')[0];
+  const t = byClass(closed, 'rn-need-t')[0];
+  assert.equal(t.textContent, 'round 4 wanted to change fenced files: server/http.mjs');
+  assert.deepEqual(t.children.map((c) => c.tagName.toLowerCase()), ['#text', 'wbr', '#text'], 'one break chance, after the /');
+  assert.equal(t.children[0].textContent, 'round 4 wanted to change fenced files: server/');
+  assert.equal(byClass(closed, 'rn-need-k')[0].title, 'fence');
+
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const wide = css.slice(0, css.indexOf('@media'));
+  assert.match(wide, /\.rn-need\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*2ch 8ch minmax\(0, 1fr\) auto/, 'a fixed kind column');
+  assert.match(wide, /\.rn-need-t\s*\{[^}]*overflow-wrap:\s*break-word/, 'no break inside a word');
+  assert.doesNotMatch(wide.match(/\.rn-need-t\s*\{[^}]*\}/)[0], /anywhere/);
+  const phone = css.slice(css.indexOf('@media (width < 700px)'));
+  assert.match(phone, /\.rn-need\s*\{\s*grid-template-columns:\s*2ch 8ch minmax\(0, 1fr\);/, 'three columns on a phone');
+  assert.match(phone, /\.rn-need-end\s*\{\s*grid-column:\s*1 \/ -1;/, 'the end on its own line');
+  assert.match(wide, /\.rn-need-end\s*\{\s*justify-self:\s*end;/, 'right-aligned');
+}));

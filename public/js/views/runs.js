@@ -741,7 +741,7 @@ function pageHead(run, row, now) {
 }
 
 function needButtons(acts, x, busy) {
-  const box = el('span', 'rn-need-acts');
+  const box = el('span', 'rn-need-acts rn-need-end');
   if (acts.open) {
     const a = el('a', 'btn btn--s no rn-need-open');
     a.append(icon('external', { size: 's' }), el('span', 'btn-l', 'Open'));
@@ -763,6 +763,29 @@ function needButtons(acts, x, busy) {
   return box;
 }
 
+/**
+ * A need row (night 4 T26) is a grid: mark, a fixed kind column (`rn-need-k`,
+ * so open and closed texts start on one line), the text, and its end (`acked
+ * by …` or OPEN/ACK, `rn-need-end`), which drops to its own right-aligned line
+ * on a phone. A kind longer than the column is clipped, whole in its title.
+ */
+function needKind(kind) {
+  const k = el('span', 'rn-item-k rn-need-k', kind);
+  k.title = kind;
+  return k;
+}
+
+/** The need's text with a break chance after each `/` (`<wbr>`), so a path wraps there, never inside a word. */
+export function needText(text) {
+  const t = el('span', 'rn-item-t rn-need-t');
+  const parts = String(text ?? '').split(/(?<=\/)/);
+  parts.forEach((part, k) => {
+    t.append(document.createTextNode(part));
+    if (k < parts.length - 1) t.append(document.createElement('wbr'));
+  });
+  return t;
+}
+
 function needsSection(row, run, now, busy = new Set()) {
   const list = needsOf(row);
   const raw = (Array.isArray(row?.needs) ? row.needs : []).filter(isObj); // needsOf's order, with `i` and `open`
@@ -780,8 +803,8 @@ function ackedNeedsList(acked) {
   for (const x of acked) {
     const li = el('li', 'rn-item rn-need rn-need--acked');
     li.dataset.p = 'off';
-    li.append(el('span', 'rn-need-m', '✓'), el('span', 'rn-item-k', x.kind), el('span', 'rn-item-t', x.text));
-    const by = el('span', 'rn-item-n rn-need-by', x.line);
+    li.append(el('span', 'rn-need-m', '✓'), needKind(x.kind), needText(x.text));
+    const by = el('span', 'rn-item-n rn-need-by rn-need-end', x.line);
     by.title = x.title;
     li.append(by);
     ul.append(li);
@@ -795,7 +818,7 @@ function openNeedsList(row, list, raw, busy) {
     const li = el('li', 'rn-item rn-need');
     const you = x.kind !== 'wait';
     li.dataset.p = you ? '2' : '3';
-    li.append(el('span', 'rn-need-m', you ? '▲' : '○'), el('span', 'rn-item-k', x.kind), el('span', 'rn-item-t', x.text));
+    li.append(el('span', 'rn-need-m', you ? '▲' : '○'), needKind(x.kind), needText(x.text));
     const acts = needActions(raw[k], rnClean(row.run, 64));
     if (acts.open || acts.ack || x.link) li.append(needButtons(acts, x, acts.ack ? busy.has(acts.ack.ref) : false));
     li.title = you ? 'needs a person' : 'the loop is waiting (a usage limit)';

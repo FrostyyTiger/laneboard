@@ -187,6 +187,19 @@ a.rn-item-t,
 a.rn-item-l { text-decoration: underline; text-decoration-color: var(--line); }
 a.rn-item-t:focus-visible,
 a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
+/* a need row (night 4 T26): mark, a fixed kind column (the longest known kind, `decision`) so
+   open and closed texts start on one line, the text, and its end (acked by / OPEN, ACK) */
+.rn-need {
+  display: grid;
+  grid-template-columns: 2ch 8ch minmax(0, 1fr) auto;
+  column-gap: var(--sp-2);
+  row-gap: var(--sp-1);
+}
+.rn-need-m { text-align: center; }
+.rn-need-k { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a path breaks at its `/` (<wbr> in runs.js), never inside a word */
+.rn-need-t { overflow-wrap: break-word; }
+.rn-need-end { justify-self: end; }
 .rn-need[data-p="2"] .rn-need-m { color: var(--p2); }
 .rn-need[data-p="3"] .rn-need-m { color: var(--p3); }
 /* an open need's OPEN and ACK (T28): Board's YES/NO buttons, on the right edge */
@@ -297,4 +310,7 @@ a.rn-need-open { text-decoration: none; }
   .rn-head .rn-goal,
   .rn-head .rn-goal-t { white-space: normal; overflow-wrap: anywhere; }
   .rn-head .rn-goal-t { overflow: visible; }
+  /* a need stacks (T26): mark, kind and text on the full width, then its end on its own line */
+  .rn-need { grid-template-columns: 2ch 8ch minmax(0, 1fr); }
+  .rn-need-end { grid-column: 1 / -1; }
 }
