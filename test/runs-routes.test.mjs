@@ -131,7 +131,7 @@ test('POST /api/runs/events: a good event is appended and shows up in the list',
   const start = { t: 'run.start', run: 'nightly', goal: 'Make the tests green', budget: { rounds: 3 } };
   const r = await call('POST', '/api/runs/events', { body: JSON.stringify(start, null, 2) });
   assert.equal(r.status, 201);
-  assert.deepEqual(r.body, { ok: true, run: 'nightly', t: 'run.start' });
+  assert.deepEqual(r.body, { ok: true, run: 'nightly', t: 'run.start', dropped: [] });
   const file = path.join(stateDir, 'runs', 'nightly.jsonl');
   const lines = fs.readFileSync(file, 'utf8').split('\n');
   assert.equal(lines.length, 2, 'one compact line plus the final newline');
@@ -142,6 +142,10 @@ test('POST /api/runs/events: a good event is appended and shows up in the list',
 
   const round = await call('POST', '/api/runs/events', { body: '{"t":"round.start","run":"nightly","n":1,"role":"builder","ts":1792483300000}' });
   assert.equal(round.status, 201);
+  // T6: the 201 names the fields the fold will not use.
+  const art = await call('POST', '/api/runs/events', { body: '{"t":"artifact","run":"nightly","url":"https://example.invalid/acme/pull/1","state":"shipped","ts":1792483300000}' });
+  assert.equal(art.status, 201);
+  assert.deepEqual(art.body.dropped, ['state']);
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8').split('\n')[1]).ts, 1792483300000, 'a given ts is kept');
 
   // Read at once (track), not after the next discovery pass.

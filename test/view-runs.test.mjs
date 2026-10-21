@@ -940,7 +940,7 @@ test('a run stopped with usd 2 and no cost event shows $2 on its row and page, m
     { t: 'run.stop', reason: 'budget', rounds: 1, usd: 2 },
   ].map((e) => parseLine(JSON.stringify({ v: 1, run: 'demo', ...e }))).map((r) => r.event);
   const run = JSON.parse(JSON.stringify(foldRun(events)));
-  assert.deepEqual(run.cost, { usd: 0, rounds: 0 });
+  assert.deepEqual(run.cost, { usd: null, rounds: 0, from: null });
   const row = JSON.parse(JSON.stringify(summarize(run)));
   assert.equal(row.stopUsd, 2);
   const host = document.createElement('div');
@@ -958,6 +958,12 @@ test('a run stopped with usd 2 and no cost event shows $2 on its row and page, m
   assert.deepEqual(runCostOf({ cost: { usd: 3.75, rounds: 3 }, stopUsd: 9 }).text, '$3.75');
   assert.equal(runCostOf({ cost: { usd: 3.75, rounds: 3 }, stopUsd: 9 }).loop, false);
   assert.equal(runCostOf({ cost: { usd: 0, rounds: 0 }, stopUsd: null }).text, '$0.00');
+  // T6: no cost events, the rounds' usd summed: that sum, not the stop's figure
+  const fromRounds = runCostOf({ cost: { usd: 1.75, rounds: 0, from: 'rounds' }, stopUsd: 9 });
+  assert.equal(fromRounds.text, '$1.75');
+  assert.equal(fromRounds.loop, false);
+  assert.match(fromRounds.title, /rounds' usd/);
+  assert.equal(runCostOf({ cost: { usd: null, rounds: 0, from: null }, stopUsd: null }).text, '—');
 }));
 
 test('T4: the run page shows round titles, session links, the stop detail and the wrap-up round', () => withDom(() => {

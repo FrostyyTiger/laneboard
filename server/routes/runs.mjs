@@ -3,8 +3,9 @@
 //   GET  /api/runs          -> {runs: [summary]}   latest activity first
 //   GET  /api/runs/:run     -> {run}               the folded run, each round with the
 //                           sessions tied to it (server/runs/bind.mjs); 404 if unknown
-//   POST /api/runs/events   one event as JSON -> 201 {ok, run, t}; 400 {error} if
-//                           parseLine skips it; appended to <stateDir>/runs/<run>.jsonl
+//   POST /api/runs/events   one event as JSON -> 201 {ok, run, t, dropped}; 400 {error}
+//                           if parseLine skips it; appended to <stateDir>/runs/<run>.jsonl;
+//                           `dropped` names the fields the fold will not use
 //
 // Starts the run-file collector (server/collector/runs.mjs) and provides its
 // store as the `runs` service. The routes sit behind the normal request guards
@@ -23,7 +24,7 @@ import path from 'node:path';
 import * as collector from '../collector/runs.mjs';
 import { knownWorktrees } from '../collector/lanes.mjs';
 import { config as globalConfig } from '../config.mjs';
-import { parseLine, MAX_LINE, RUN_ID } from '../runs/protocol.mjs';
+import { parseLine, droppedFields, MAX_LINE, RUN_ID } from '../runs/protocol.mjs';
 import { bindRuns, runDirs, withSessions } from '../runs/bind.mjs';
 import { summarize } from '../runs/summary.mjs';
 import { sessionsSeen } from '../db.mjs';
@@ -67,7 +68,8 @@ export function listBody(store, opts = {}) {
 
 /**
  * Check one posted body and give the line to append, or why not:
- * `{ok: true, run, t, line}` or `{ok: false, error}`.
+ * `{ok: true, run, t, dropped, line}` or `{ok: false, error}`; `dropped` lists
+ * the fields the checked event leaves out (droppedFields).
  */
 export function eventLine(text, now = Date.now()) {
   if (typeof text !== 'string' || !text.trim()) return { ok: false, error: 'empty' };
@@ -80,7 +82,7 @@ export function eventLine(text, now = Date.now()) {
   if (line.length > MAX_LINE) return { ok: false, error: 'too long' };
   const again = parseLine(line);
   if (!again.ok) return { ok: false, error: again.reason };
-  return { ok: true, run: again.event.run, t: again.event.t, line: `${line}\n` };
+  return { ok: true, run: again.event.run, t: again.event.t, dropped: droppedFields(o, again.event), line: `${line}\n` };
 }
 
 /** `<stateDir>/runs/<run>.jsonl`, or null for an id that is not a safe file name. */
@@ -134,7 +136,7 @@ export default {
         return ctx.json(res, { error: 'could not write the event' }, 500);
       }
       await collector.track(file).catch(() => {});
-      return ctx.json(res, { ok: true, run: r.run, t: r.t }, 201);
+      return ctx.json(res, { ok: true, run: r.run, t: r.t, dropped: r.dropped }, 201);
     });
   },
   start(ctx) {

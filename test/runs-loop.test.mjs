@@ -72,7 +72,7 @@ test('rounds: roles, retries, outcomes, commits and the cost of each', () => {
 });
 
 test('cost is the sum of every cost event, across the restart; the loop\'s own total starts over', () => {
-  assert.deepEqual(RUN.cost, { usd: 12.15, rounds: 13 });
+  assert.deepEqual(RUN.cost, { usd: 12.15, rounds: 13, from: 'cost' });
   assert.equal(RUN.stop.usd, 10.11, 'run.stop carries the loop\'s total since its last start');
   const perRound = RUN.rounds.reduce((a, r) => a + (r.usd ?? 0), 0);
   assert.equal(Math.round(perRound * 100) / 100, 12.15);

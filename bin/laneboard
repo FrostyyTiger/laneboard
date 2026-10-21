@@ -22,7 +22,7 @@
 //   laneboard pause <name|--all> [--reason r]          offline: write a pause sentinel
 //   laneboard resume <name|--all>                      offline: lift an operator pause
 //   laneboard paused [--json]                          offline: list the pause sentinels
-//   laneboard run start|round|score|needs|ack|artifact|stop [--run <id>] [flags] [--file f | --post]
+//   laneboard run start|round|score|needs|ack|artifact|stop|cost [--run <id>] [flags] [--file f | --post]
 //                                                      offline: append one run-protocol line
 //     start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
 //     round    --n N [--role r] [--task t]             prints `export LANEBOARD_RUN=<run>/<n>` for eval
@@ -32,6 +32,7 @@
 //     ack      [<run>] <ref> [--by b]                  closes a need: ref = its place (0 = first) or its ts; a closed one: nothing sent
 //     artifact --url u [--kind pr|link] [--title t] [--state open|merged|closed]
 //     stop     [--reason done|deadline|rounds|…] [--rounds N] [--usd x]
+//     cost     --usd x [--n N]                         the run's cost is the sum of these (else of the rounds' --usd)
 //     The line goes to --file, else $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl;
 //     --post sends it to POST /api/runs/events instead. --run defaults to the run
 //     part of $LANEBOARD_RUN. --run/--file/--post may also come before <sub>.
@@ -846,20 +847,22 @@ const RUN_SUBS = {
   ack: { '--ref': ['ref', 'str'], '--by': ['by', 'str'] },
   artifact: { '--url': ['url', 'str'], '--kind': ['kind', 'str'], '--title': ['title', 'str'], '--state': ['state', 'str'] },
   stop: { '--reason': ['reason', 'str'], '--rounds': ['rounds', 'int'], '--usd': ['usd', 'num'] },
+  cost: { '--usd': ['usd', 'num'], '--n': ['n', 'int'] },
 };
-const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', ack: 'needs.ack', artifact: 'artifact', stop: 'run.stop' };
+const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', ack: 'needs.ack', artifact: 'artifact', stop: 'run.stop', cost: 'cost' };
 const ROUND_START_ONLY = ['role', 'task'];
 const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 
 const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
   start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
   round    --n N [--role r] [--task t]            prints export LANEBOARD_RUN=<run>/<n>, meant for: eval "$(laneboard run round --n N …)"
-  round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
+  round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]   --usd is this round only; the run sums them when it has no cost events
   score    --name m --value x [--better higher|lower] [--n N] [--max x]
   needs    [--kind decision|wait|…] [--text t] [--link url] [--n N]
   ack      [<run>] <ref> [--by b]                 close a need: <ref> is its place (0 = the first) or its ts (no such need: exit 1; already acked: nothing sent, exit 0)
   artifact --url u [--kind pr|link|…] [--title t] [--state open|merged|closed]
   stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
+  cost     --usd x [--n N]                        what was spent (in round N); the run's cost is the sum of these
 every subcommand:
   --run <id>   the run; defaults to the run part of $LANEBOARD_RUN (which \`round\` exports)
   --file f     append the line to f; defaults to $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl
@@ -934,6 +937,7 @@ function runEvent(sub, f) {
     if (f.better !== undefined && f.better !== 'higher' && f.better !== 'lower') runUsage('--better is higher or lower');
   }
   if (sub === 'artifact' && f.url === undefined) runUsage('artifact needs --url');
+  if (sub === 'cost' && f.usd === undefined) runUsage('cost needs --usd');
   if (sub === 'ack') {
     if (f.ref === undefined) runUsage('ack needs a ref (the need\'s place, 0 = the first, or its ts)');
     // A place is written as a number, a time as given (epoch or ISO); parseLine tells them apart.
@@ -976,7 +980,7 @@ async function cmdRun() {
   if (post && fileFlag !== undefined) runUsage('--file and --post do not go together');
   const run = runFlag ?? (process.env.LANEBOARD_RUN || '').split('/')[0];
   if (!run) runUsage('--run is required (or set LANEBOARD_RUN)');
-  const { parseLine, parseLines, foldRun, ackTarget, RUN_ID, FENCE_ACK_BY } = await runProtocol();
+  const { parseLine, parseLines, foldRun, ackTarget, droppedFields, RUN_ID, FENCE_ACK_BY } = await runProtocol();
   if (!RUN_ID.test(run)) runUsage(`not a run id: ${JSON.stringify(cleanTerm(run))} (letters, digits, . _ -; 64 at most)`);
   const ev = runEvent(sub, fields);
   const event = { v: 1, t: ev.t, run, ts: Date.now(), ...ev };
@@ -1006,8 +1010,11 @@ async function cmdRun() {
   }
   let done;
   if (post) {
+    // The receipt is what the server accepted: its run and type, and the fields
+    // it will not use (an older server sends no `dropped`: the local check says).
     const r = await api('/api/runs/events', { method: 'POST', body: event });
-    done = `ok ${r.run || run} ${r.t || event.t} posted`;
+    const dropped = Array.isArray(r.dropped) ? r.dropped : droppedFields(event, checked.event);
+    done = `ok ${r.run || run} ${r.t || event.t} posted${dropped.length ? `, dropped: ${dropped.join(', ')}` : ''}`;
   } else {
     try {
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -1210,7 +1217,7 @@ Offline (no server needed):
                                       pause one session or all (writes the sentinel)
   laneboard resume <name|--all>         lift an operator pause (budget/quota: from the UI)
   laneboard paused [--json]             list the pauses
-  laneboard run start|round|score|needs|ack|artifact|stop [--run <id>] [flags]
+  laneboard run start|round|score|needs|ack|artifact|stop|cost [--run <id>] [flags]
                                       append one run-protocol line (laneboard run --help)
   laneboard feed tailscale|proxmox|docker [--source s] [--stdout | --out <file> | --push <url>]
                                       read one source once into a Map feed (laneboard feed --help)

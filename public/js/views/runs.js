@@ -414,8 +414,9 @@ function leftNode(row, now) {
 
 /**
  * The cost a row shows -> {usd, text, title, loop}: the sum of the run's `cost`
- * events; when none was sent and the loop reported a `usd` at `run.stop`, that
- * figure instead, marked as the loop's own (`loop` true, T34).
+ * events, or with none of those the sum of its rounds' `usd` (`cost.from`
+ * `rounds`); when neither is known and the loop reported a `usd` at
+ * `run.stop`, that figure instead, marked as the loop's own (`loop` true, T34).
  */
 export function runCostOf(row) {
   const sum = isNum(row?.cost?.usd) ? row.cost.usd : null;
@@ -426,7 +427,9 @@ export function runCostOf(row) {
       title: 'what the loop reported at run.stop (no cost events were sent)',
     };
   }
-  return { usd: sum, text: sum === null ? DASH : money(sum), loop: false, title: 'cost of the run (sum of its cost events)' };
+  const title = row?.cost?.from === 'rounds' ? 'cost of the run (sum of its rounds\' usd; no cost events were sent)'
+    : 'cost of the run (sum of its cost events)';
+  return { usd: sum, text: sum === null ? DASH : money(sum), loop: false, title };
 }
 
 /** "cost $9.98" in one cell; "cost $2.00 loop" when the figure is the stop's (T34). */

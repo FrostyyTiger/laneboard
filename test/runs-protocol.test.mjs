@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  parseLine, parseLines, foldRun, ackTarget, KNOWN_TYPES, MAX_LINE, MAX_TEXT, FENCE_ACK_BY,
+  parseLine, parseLines, foldRun, ackTarget, droppedFields, KNOWN_TYPES, MAX_LINE, MAX_TEXT, FENCE_ACK_BY,
 } from '../server/runs/protocol.mjs';
 
 const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'runs', 'readiness.jsonl');
@@ -137,7 +137,7 @@ test('the fixture folds into the run', () => {
   assert.equal(run.needs[0].open, true);
   assert.equal(run.needs[0].kind, 'decision');
   assert.deepEqual(run.artifacts.map((a) => [a.kind, a.url]), [['pr', 'https://example.invalid/acme/acme-api/pull/7']]);
-  assert.deepEqual(run.cost, { usd: 3.75, rounds: 3 });
+  assert.deepEqual(run.cost, { usd: 3.75, rounds: 3, from: 'cost' });
   assert.equal(run.usage.fiveHourPct, 19);
   assert.equal(run.usage.fiveHourResetsAt, 1792497600000);
   assert.deepEqual(run.raw.map((e) => e.t), ['review.note']);
@@ -369,4 +369,38 @@ test('run.start may name its host and a score its max (T9, the Map); a bad max i
 test('a score before any round lands on round 0 (night 4 T36)', () => {
   const run = foldRun([ok({ t: 'run.start' }), ok({ t: 'score', name: 'tests', value: 0.5 }), ok({ t: 'round.start', n: 1 }), ok({ t: 'score', name: 'tests', value: 0.7 })]);
   assert.deepEqual(run.scores.tests.map((x) => [x.n, x.value]), [[0, 0.5], [1, 0.7]]);
+});
+
+test('T6: with no cost event the run\'s cost is the sum of its rounds\' round.end usd, null with none', () => {
+  const rounds = foldRun([
+    ok({ t: 'run.start' }),
+    ok({ t: 'round.start', n: 1 }),
+    ok({ t: 'round.end', n: 1, usd: 1.25 }),
+    ok({ t: 'round.start', n: 2 }),
+    ok({ t: 'round.end', n: 2, usd: 0.5 }),
+    ok({ t: 'round.start', n: 3 }),
+    ok({ t: 'round.end', n: 3 }),
+  ]);
+  assert.deepEqual(rounds.cost, { usd: 1.75, rounds: 0, from: 'rounds' });
+  const none = foldRun([ok({ t: 'run.start' }), ok({ t: 'round.start', n: 1 }), ok({ t: 'round.end', n: 1 })]);
+  assert.deepEqual(none.cost, { usd: null, rounds: 0, from: null }, 'unknown, never 0');
+  // Once a cost event is sent, only cost events add up.
+  const both = foldRun([
+    ok({ t: 'round.end', n: 1, usd: 1.25 }),
+    ok({ t: 'cost', n: 2, usd: 0.4 }),
+  ]);
+  assert.deepEqual(both.cost, { usd: 0.4, rounds: 1, from: 'cost' });
+  const zero = foldRun([ok({ t: 'round.end', n: 1, usd: 0 })]);
+  assert.deepEqual(zero.cost, { usd: 0, rounds: 0, from: 'rounds' }, 'a reported 0 is a real 0');
+});
+
+test('T6: droppedFields names what the checked event leaves out', () => {
+  const art = { v: 1, t: 'artifact', run: 'r1', ts: 1, url: 'https://example.invalid/acme/pull/1', state: 'shipped', title: 'x' };
+  assert.deepEqual(droppedFields(art, parseLine(JSON.stringify(art)).event), ['state']);
+  const start = { t: 'run.start', run: 'r1', rounds: 5, goal: 'g', budget: { windowPct: 'lots' }, colour: 'red' };
+  assert.deepEqual(droppedFields(start, parseLine(JSON.stringify(start)).event), ['budget.windowPct', 'colour']);
+  const raw = { t: 'review.note', run: 'r1', anything: 1 };
+  assert.deepEqual(droppedFields(raw, parseLine(JSON.stringify(raw)).event), [], 'an unknown type is kept raw');
+  const cost = { t: 'cost', run: 'r1', usd: 0.5, n: 2 };
+  assert.deepEqual(droppedFields(cost, parseLine(JSON.stringify(cost)).event), []);
 });

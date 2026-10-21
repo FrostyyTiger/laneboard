@@ -172,7 +172,7 @@ test('docs/runs.md says an ack whose ref names no need writes nothing and exits 
 });
 
 test('docs/runs.md says which cost a stopped run prints: the cost events, else the stop usd (night 4 T34)', () => {
-  assert.match(doc, /The list row and the run page print `cost\.usd`; only\s+when no `cost` event was sent \(`cost\.rounds` is 0\) and `stop\.usd` is set do\s+they print `stop\.usd` instead, marked `loop` as the loop's own figure\./);
+  assert.match(doc, /The list row and the run page print `cost\.usd`; only\s+when no `cost` event was sent and the rounds give none above 0 \(`cost\.rounds` is 0,\s+`cost\.usd` null or 0\) and `stop\.usd` is set do\s+they print `stop\.usd` instead, marked `loop` as the loop's own figure\./);
   assert.match(doc, /`stopUsd` \(`stop\.usd`/);
 });
 
@@ -185,4 +185,12 @@ test('the helper CLI table says a round start is meant for eval (night 4 T40)', 
   assert.ok(row, 'no `round` row');
   assert.match(row, /`eval "\$\(laneboard run round --n 1 [^`]*\)"`/);
   assert.match(row, /export LANEBOARD_RUN=<run>\/<n>/);
+});
+
+test('T6: docs/runs.md documents `run cost`, the run cost from rounds and what --post prints', () => {
+  assert.match(doc, /^\| `cost` \| \*\*`--usd x`\*\*, `--n N`/m);
+  assert.match(doc, /A run with no `cost` event sums its rounds' `round\.end`\s+`usd`/);
+  assert.match(doc, /neither, `usd` and `from` are null, never 0/);
+  assert.match(doc, /`, dropped: <fields>`/);
+  assert.match(doc, /201 `\{ok, run, t, dropped\}`/);
 });

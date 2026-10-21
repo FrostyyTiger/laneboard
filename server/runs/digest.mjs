@@ -16,7 +16,7 @@
 //   left out.
 // - `prs` are the URLs of `pr` artifacts given in the window.
 // - `usd`: the run's own `cost` total when the whole run is in the window and
-//   it sent `cost` events; otherwise the sum of the window's rounds' `usd`
+//   it has one (its `cost` events, else its rounds' `usd`); otherwise the sum of the window's rounds' `usd`
 //   (`cost` events keep no time once folded), null when no round says.
 // - `stop` is the stop reason or null; `usage` the latest usage the run sent.
 
@@ -47,7 +47,7 @@ export function runsInWindow(runs, { since, now = Date.now() } = {}) {
       return ts.some((t) => inWindow(t, since, now));
     });
     const roundUsd = rounds.filter((r) => r.usd !== null);
-    const whole = run.startedAt !== null && run.startedAt >= since && run.cost?.rounds > 0;
+    const whole = run.startedAt !== null && run.startedAt >= since && typeof run.cost?.usd === 'number';
     const usd = whole ? run.cost.usd
       : roundUsd.length ? Math.round(roundUsd.reduce((a, r) => a + r.usd, 0) * 1e6) / 1e6 : null;
     out.push({

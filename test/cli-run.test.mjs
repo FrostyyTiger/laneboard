@@ -1,5 +1,5 @@
 // Offline CLI run-protocol commands (runs plan §3 A1, task T6): `laneboard run
-// start|round|score|needs|ack|artifact|stop` append one line that parseLine accepts,
+// start|round|score|needs|ack|artifact|stop|cost` append one line that parseLine accepts,
 // to --file, $LANEBOARD_RUN_FILE or ./.laneboard/run.jsonl, or POST it with
 // --post. Bad arguments exit 2 and write nothing. Every run uses a temp HOME and
 // cwd; LANEBOARD_URL points at a closed port unless a test serves one.
@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseLine, parseLines, foldRun } from '../server/runs/protocol.mjs';
 
-const RUN_SUB_NAMES = ['start', 'round', 'score', 'needs', 'ack', 'artifact', 'stop'];
+const RUN_SUB_NAMES = ['start', 'round', 'score', 'needs', 'ack', 'artifact', 'stop', 'cost'];
 const BIN = fileURLToPath(new URL('../bin/laneboard', import.meta.url));
 
 function tmpDir(t) {
@@ -219,7 +219,7 @@ test('laneboard --help lists the run subcommand', async (t) => {
   const dir = tmpDir(t);
   const help = await run(['--help'], envFor(dir), dir);
   assert.equal(help.code, 0, help.stderr);
-  assert.match(help.stdout, /^  laneboard run start\|round\|score\|needs\|ack\|artifact\|stop /m);
+  assert.match(help.stdout, /^  laneboard run start\|round\|score\|needs\|ack\|artifact\|stop\|cost /m);
   assert.match(help.stdout, /laneboard run --help/);
 });
 
@@ -466,4 +466,57 @@ test('a file ack checks the server\'s merged needs when it knows the run; an unk
   const other = await run(['run', 'ack', 'r2', '0', '--file', file], env, dir);
   assert.equal(other.code, 0, other.stderr);
   assert.match(other.stderr, /\nwarning: no need 0 in run r2 in this file \(offline/);
+});
+
+test('T6: `run cost --usd x --n N` writes a cost event; the help has it and says a round\'s --usd is that round\'s only', async (t) => {
+  const dir = tmpDir(t);
+  const file = path.join(dir, 'c.jsonl');
+  const r = await run(['run', 'cost', '--run', 'r1', '--usd', '1.84', '--n', '3', '--file', file], envFor(dir), dir);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stderr, `ok r1 cost appended to ${file}\n`);
+  const p = parseLine(lines(file)[0]);
+  assert.equal(p.ok, true);
+  assert.equal(p.event.t, 'cost');
+  assert.equal(p.event.usd, 1.84);
+  assert.equal(p.event.n, 3);
+  const none = await run(['run', 'cost', '--run', 'r1', '--file', file], envFor(dir), dir);
+  assert.equal(none.code, 2);
+  assert.match(none.stderr, /cost needs --usd/);
+  assert.equal(lines(file).length, 1);
+
+  const help = await run(['run', '--help'], envFor(dir), dir);
+  assert.match(help.stdout, /^ {2}cost {5}--usd x \[--n N\] /m);
+  assert.match(help.stdout, /^ {2}round .*--end .*--usd x\] +--usd is this round only/m);
+  const sub = await run(['run', 'cost', '--help'], envFor(dir), dir);
+  assert.match(sub.stdout, /^usage: laneboard run cost --usd x \[--n N\]/m);
+});
+
+test('T6: --post prints what the server accepted: its run and type, and the fields it dropped', async (t) => {
+  const dir = tmpDir(t);
+  let answer = (ev) => ({ ok: true, run: ev.run, t: ev.t, dropped: ['state'] });
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      res.writeHead(201, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(answer(JSON.parse(body))));
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const env = envFor(dir, { LANEBOARD_URL: `http://127.0.0.1:${server.address().port}` });
+  const url = 'https://example.invalid/acme/pull/1';
+  const a = await run(['run', 'artifact', '--run', 'r1', '--url', url, '--state', 'shipped', '--post'], env, dir);
+  assert.equal(a.code, 0, a.stderr);
+  assert.equal(a.stderr, 'ok r1 artifact posted, dropped: state\n');
+  // An older server sends no `dropped`: the CLI's own check names the field.
+  answer = (ev) => ({ ok: true, run: ev.run, t: ev.t });
+  const old = await run(['run', 'artifact', '--run', 'r1', '--url', url, '--state', 'shipped', '--post'], env, dir);
+  assert.equal(old.stderr, 'ok r1 artifact posted, dropped: state\n');
+  const clean = await run(['run', 'cost', '--run', 'r1', '--usd', '0.5', '--post'], env, dir);
+  assert.equal(clean.stderr, 'ok r1 cost posted\n');
+  // The run and type printed are the server's.
+  answer = () => ({ ok: true, run: 'r1', t: 'cost', dropped: [] });
+  const echoed = await run(['run', 'cost', '--run', 'r1', '--usd', '0.5', '--post'], env, dir);
+  assert.equal(echoed.stderr, 'ok r1 cost posted\n');
 });

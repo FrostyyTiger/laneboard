@@ -74,14 +74,14 @@ Every line has these fields:
 | --- | --- | --- |
 | `run.start` | `goal` (text), `plan`, `branch`, `cwd` (the absolute dir the run works in), `host` (64 chars: the machine the run works on, when it is not the one reading the file; the Map hangs the run there), `deadline` (ISO or epoch), `budget` `{rounds, windowPct, pause5h, stop7d}` (the four may also sit at top level) | starts the run, or restarts it: a second `run.start` updates the goal and budget and reopens a stopped run |
 | `round.start` | **`n`** (integer ≥ 0), `role`, `task`, `title` (the task's title, per round), `session`, `wrapup` (`true` for a round after `run.stop`, such as a final review or report) | round `n` begins; starting the same `n` again is a retry, counted in the round's `starts`; a `wrapup` round is flagged, leaves a stopped run stopped and does not count in the list's `rounds` against `maxRounds` (so a run never reads 64 of 63) |
-| `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd`, `session` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` adds to the round's cost only, not to the run's `cost` (that is the sum of `cost` events); `session` (on either round event) names a Claude Code session of the round (see "Sessions of a round") |
+| `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd`, `session` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` is the round's cost; the run's `cost` sums the rounds' `usd` only when the run sent no `cost` event; `session` (on either round event) names a Claude Code session of the round (see "Sessions of a round") |
 | `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n`, `max` (a positive number: the value that means done, such as the task count; the Map's progress ring) | one measurement of a metric; without `n` it belongs to the latest round (the highest `n` of a `round.start` or `round.end` so far in the file, even if that round has ended; 0 before any) |
 | `needs` | `kind` (default `decision`), `text`, `link`, `n` | the run needs a human; kind `wait` means the loop itself is waiting (a usage limit) and closes when the next round starts or the run stops; other kinds stay open until a `needs.ack` closes them; without `n` it belongs to the latest round, like `score` (even if that round has ended) |
 | `needs.ack` | **`ref`**, `by` (64 chars) | someone saw a need and closed it: `ref` is the need's place in the run's needs (`0` = the first `needs` line of the run, an integer below 10⁹) or its `ts` (epoch s or ms, or ISO; the first open need with that `ts`, else the first one). The first ack of a need counts (it records `ackedAt` and `by`); a second one changes nothing. A `ref` that names no need is kept raw (`laneboard run ack` refuses one, see below). A `fence` need (the loop reverted a round that touched a fenced file) closes only on an ack by a person: `by` is `inbox` (the Inbox's `a`), `run page` (its Ack button) or `owner` (`laneboard run ack … --by owner`); an ack with any other `by` or none (the reference loop writes `by: "loop"`) leaves it open and is kept raw, and a new round or `run.stop` never closes it. |
 | `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests, `report` for the run's report), `title`, `state` (`open`, `merged` or `closed`, any case; anything else is read as none) | something the run produced; the same URL twice is kept once, in its first place, and a later line with that URL updates its `state` and (when not empty) its `title` |
 | `run.stop` | `reason` (default `unknown`), `rounds`, `usd`, `detail` (one line on why, shown under the reason), `wrapup` (`true`: wrap-up rounds follow) | the run stopped (reasons below); `GET /api/runs/<id>` returns `detail` and `wrapup` in `stop` |
 | `usage` | `n`, `fiveHourPct`, `sevenDayPct`, `fiveHourResetsAt` (epoch s or ms), `overage` (boolean) | the account's usage windows after a round; a negative percentage means "not known" |
-| `cost` | **`usd`** (≥ 0), `n`, `total` | what a round cost; the run's cost is the sum of `usd` (the writer's own `total` restarts when the loop does) |
+| `cost` | **`usd`** (≥ 0), `n`, `total` | what a round cost; the run's cost is the sum of `usd` (the writer's own `total` restarts when the loop does); once a run sends one, the rounds' `round.end` `usd` no longer add to the run's cost |
 
 Bold fields are required: a line without them is skipped. Any other type is
 **kept raw** (its first 40 keys, strings clamped) and shown as written, so a
@@ -116,18 +116,18 @@ until a `round.end` `usd` or a `cost` event gives one), `counted` (the rounds
 that are not `wrapup`), the scores per metric over rounds and which way
 is better, the needs (each with `i`, its place, and `open`, `acked`, `ackedAt`,
 `by`), the artifacts, the stop, the run's `cost`, the last usage,
-the raw events, and how many lines were skipped. The run's `cost` (`usd`,
-and `rounds`, how many `cost` events) is the sum of the `cost` events only:
-a `round.end` `usd` (the CLI's `round --end --usd`) fills that round's
-`usd` but leaves the run's `cost` at 0. A loop that wants a run total sends
-`cost` events.
+the raw events, and how many lines were skipped. The run's `cost` is
+`{usd, rounds, from}`: `rounds` counts the `cost` events, and `usd` is their
+sum (`from: "cost"`). A run with no `cost` event sums its rounds' `round.end`
+`usd` (the CLI's `round --end --usd`) instead (`from: "rounds"`); with
+neither, `usd` and `from` are null, never 0.
 
 A stopped run carries two sets of numbers. `cost` (`usd`, `rounds`) is what
-laneboard adds up from the run's `cost` events; `stop.usd` and `stop.rounds`
+laneboard adds up from the run's `cost` events (or its rounds' `usd`); `stop.usd` and `stop.rounds`
 are what the loop itself reported in `run.stop` (its own `total`, which
 restarts with the loop). The list row and the run page print `cost.usd`; only
-when no `cost` event was sent (`cost.rounds` is 0) and `stop.usd` is set do
-they print `stop.usd` instead, marked `loop` as the loop's own figure.
+when no `cost` event was sent and the rounds give none above 0 (`cost.rounds` is 0,
+`cost.usd` null or 0) and `stop.usd` is set do they print `stop.usd` instead, marked `loop` as the loop's own figure.
 
 ### Sessions of a round
 
@@ -201,6 +201,7 @@ laneboard run start  --run readiness --goal "Make acme-api ready for review" \
 eval "$(laneboard run round --run readiness --n 3 --role builder --task A2.4)"
 laneboard run score  --run readiness --name tests --value 0.93 --better higher
 laneboard run round  --run readiness --n 3 --end --outcome kept --commit abc1234
+laneboard run cost   --run readiness --n 3 --usd 1.84
 laneboard run needs  --run readiness --kind decision --text "Drop the v1 export?"
 laneboard run ack    readiness 0 --by owner
 laneboard run artifact --run readiness --kind pr --url https://example.invalid/acme/acme-api/pull/7
@@ -217,6 +218,7 @@ laneboard run stop   --run readiness --reason done
 | `ack` | **`<ref>`** (or `--ref`), `--by`; `ack <run> <ref>` names the run too |
 | `artifact` | **`--url`**, `--kind`, `--title`, `--state` |
 | `stop` | `--reason`, `--rounds N`, `--usd x` |
+| `cost` | **`--usd x`**, `--n N` (a `cost` event; the run's cost is the sum of these; a `round --end --usd` is the round's only, summed for the run when it sends no `cost`) |
 
 Every subcommand also takes `--run <id>`, `--file <path>` and `--post`, after
 the subcommand or before it (`laneboard run --post score …`); every other
@@ -239,7 +241,10 @@ and nothing warns.
   `./.laneboard/run.jsonl` (a relative path against the current directory,
   the directory made if missing), and works with laneboard down.
 - `--post` sends the event to `POST /api/runs/events` instead of the file;
-  a refused event prints the server's reason and exits 1.
+  a refused event prints the server's reason and exits 1. The receipt is
+  what the server accepted: its `run` and `t`, and `, dropped: <fields>`
+  when it will not use some (`dropped` in the 201 body, such as a `--state`
+  that is not `open`, `merged` or `closed`).
 - Each line gets `"v":1` and `ts` (now, epoch ms).
 - On success it prints one line on stderr: `ok <run> <type> appended to
   <file>`, or `ok <run> <type> posted` with `--post` (stdout stays free for
@@ -284,13 +289,13 @@ of the UI (the CLI sends the `x-laneboard` header):
 | --- | --- |
 | `GET /api/runs` | a summary of every run laneboard knows |
 | `GET /api/runs/<run>` | one run, folded; 404 if unknown |
-| `POST /api/runs/events` | one event as JSON; checked like a file line (400 with the reason if skipped) and appended to `<stateDir>/runs/<run>.jsonl` |
+| `POST /api/runs/events` | one event as JSON; checked like a file line (400 with the reason if skipped) and appended to `<stateDir>/runs/<run>.jsonl`; 201 `{ok, run, t, dropped}`, `dropped` naming the fields the fold will not use |
 
 `GET /api/runs` answers `{"runs": [...]}`, one row per run: `run`, `goal`,
 `plan`, `branch`, `state`, `round` (the latest round's `n`), `rounds` (how
 many), `maxRounds` (`budget.rounds`), `scores` (per name: the latest `n` and
-`value`, the `prev` value and `better`), `usage`, `cost` (the sum of
-`cost` events, see above), `deadline`,
+`value`, the `prev` value and `better`), `usage`, `cost` (`{usd, rounds,
+from}`, see above), `deadline`,
 `deadlineAt`, the open `needs`, `artifacts` (a count), `prs` (the `pr`
 artifacts as `url`, `title`, `state`, `ts`; the Inbox lists them), `stop` (the reason or
 null), `stopUsd` (`stop.usd`, the loop's own figure, or null), `stuck` (`{rule, reason}` from the rules above, or null), `startedAt`,
@@ -304,8 +309,8 @@ their summed cost (null when none is known).
 every run with an event in the window, as `run`, `goal`, `state`, `rounds`
 (started or ended in the window), `scores` (per name: `start` = the first value
 in the window, `end` = the last, `better`), `stop` (the reason or null), `prs`
-(URLs of the `pr` artifacts given in the window), `usd` (the run's `cost` when
-the whole run is in the window, else the window's rounds' `usd`; null when
+(URLs of the `pr` artifacts given in the window), `usd` (the run's `cost.usd` when
+the whole run is in the window and it is known, else the window's rounds' `usd`; null when
 nothing says), `usage`, `startedAt`, `updatedAt`. No runs means `runs: []`.
 Its `needsYou` also lists every open need of a run that a person answers (not
 a `wait`), whatever the window, as the Inbox's "Run needs" does: `source:

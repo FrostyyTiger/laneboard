@@ -266,6 +266,27 @@ export function parseLines(text) {
   return { events, skipped };
 }
 
+/**
+ * The fields of a written object `o` that its checked `event` (parseLine) left
+ * out or set to null: a bad value, an unknown field. A `budget` field is
+ * checked key by key (`budget.rounds`), and a top-level budget key that the
+ * event keeps in `budget` counts as kept. An unknown type keeps everything (raw).
+ */
+export function droppedFields(o, event) {
+  if (!o || typeof o !== 'object' || !event?.known) return [];
+  const gone = (v) => v === null || v === undefined;
+  const out = [];
+  for (const [k, v] of Object.entries(o)) {
+    if (['v', 't', 'run', 'ts'].includes(k) || v === null) continue;
+    if (k === 'budget' && v && typeof v === 'object' && !Array.isArray(v)) {
+      for (const [bk, bv] of Object.entries(v)) if (bv !== null && gone(event.budget?.[bk])) out.push(`budget.${bk}`);
+      continue;
+    }
+    if (gone(event[k]) && gone(event.budget?.[k])) out.push(k);
+  }
+  return out;
+}
+
 function round(rounds, n) {
   let r = rounds.get(n);
   if (!r) {
@@ -285,7 +306,10 @@ function round(rounds, n) {
  * - A score without `n` belongs to the latest round started before it (0 = before any).
  * - An artifact is listed once per URL, where it first came; a later line with
  *   the same URL updates its `state` and (when not empty) its `title`.
- * - `cost.usd` is summed: `total` restarts when the loop does.
+ * - `cost.usd` is the sum of the `cost` events (`total` restarts when the loop
+ *   does); a run with no `cost` event sums its rounds' `round.end` `usd`
+ *   instead, null when none has one. `cost.from` says which: `cost`, `rounds`
+ *   or null.
  * - A `wrapup` round (the operator review and report after `run.stop`) is
  *   flagged and leaves the run stopped; `counted` (rounds against the
  *   `maxRounds` cap) leaves it out. A round's `usd` stays null until a
@@ -301,13 +325,15 @@ export function foldRun(events, { skipped = 0 } = {}) {
   const run = {
     run: null, goal: null, plan: null, branch: null, cwd: null, host: null, state: 'running', deadline: null, deadlineAt: null,
     budget: null, rounds: [], counted: 0, scores: {}, better: {}, needs: [], artifacts: [], stop: null,
-    cost: { usd: 0, rounds: 0 }, usage: null, raw: [], startedAt: null, updatedAt: null,
+    cost: { usd: 0, rounds: 0, from: null }, usage: null, raw: [], startedAt: null, updatedAt: null,
     events: 0, skipped: typeof skipped === 'number' ? skipped : Object.values(skipped).reduce((a, b) => a + b, 0),
   };
   const rounds = new Map();
   const urls = new Map();
   let current = 0;
   let last = null;
+  let endUsd = 0;
+  let endSeen = false;
 
   for (const e of events) {
     if (!e || typeof e !== 'object') continue;
@@ -343,7 +369,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
       case 'round.end': {
         const r = round(rounds, e.n);
         for (const k of ['outcome', 'commit', 'open']) if (e[k] !== null) r[k] = e[k];
-        if (e.usd !== null) r.usd = (r.usd ?? 0) + e.usd;
+        if (e.usd !== null) { r.usd = (r.usd ?? 0) + e.usd; endUsd += e.usd; endSeen = true; }
         if (e.session && !r.sessions.includes(e.session)) r.sessions.push(e.session);
         if (e.ts) r.endedAt = e.ts;
         current = Math.max(current, e.n);
@@ -398,7 +424,8 @@ export function foldRun(events, { skipped = 0 } = {}) {
   }
 
   const cents = (x) => Math.round(x * 1e6) / 1e6;
-  run.cost.usd = cents(run.cost.usd);
+  if (run.cost.rounds > 0) Object.assign(run.cost, { usd: cents(run.cost.usd), from: 'cost' });
+  else Object.assign(run.cost, endSeen ? { usd: cents(endUsd), from: 'rounds' } : { usd: null, from: null });
   run.rounds = [...rounds.values()].sort((a, b) => a.n - b.n);
   run.counted = run.rounds.filter((r) => !r.wrapup).length;
   for (const r of run.rounds) if (r.usd !== null) r.usd = cents(r.usd);
