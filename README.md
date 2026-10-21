@@ -113,6 +113,9 @@ laneboard run start|round|score|needs|ack|artifact|stop   # report a loop's run,
 ```
 
 `laneboard run` writes the run protocol of [docs/runs.md](docs/runs.md) (`laneboard run --help`).
+Each `run` subcommand appends one line to `./.laneboard/run.jsonl` in the current directory
+(or `--file f`, or `$LANEBOARD_RUN_FILE`) unless `--post` sends it to the server; `.laneboard/` is
+in `.gitignore`, add it to your own repo's ignore file too.
 
 `LANEBOARD_URL` overrides the server address.
 

@@ -127,3 +127,11 @@ test('the doc says `score` and `needs` without `n` attach to the latest round, e
   assert.equal(run.needs[0].n, 3);
   assert.equal(run.scores.tests[0].n, 3);
 });
+
+test('`laneboard run` leaves no untracked file: .laneboard/ is ignored and README names the default path (night 4 T20)', async () => {
+  const ignore = await readFile(new URL('../.gitignore', import.meta.url), 'utf8');
+  assert.ok(ignore.split('\n').some((l) => l.trim() === '.laneboard/'), '.laneboard/ not in .gitignore');
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  assert.match(readme, /`\.\/\.laneboard\/run\.jsonl` in the current directory/);
+  assert.match(readme, /unless `--post`/);
+});
