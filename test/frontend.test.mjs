@@ -606,8 +606,25 @@ test('shell: the header spend names what it counts, sessions only, beside a run 
   assert.equal(m.label, ' sessions today');
   assert.match(m.title, /runs show their own cost/);
   assert.match(m.title, /\$1\.20/);
-  assert.equal(topbarSpend([]).text, '$0.00');
-  assert.equal(topbarSpend(undefined).text, '$0.00');
+});
+
+test('shell: the header spend is — when no session reported a cost, $0.00 for a reported zero (T15)', async () => {
+  const { topbarSpend } = await import('../public/js/ui/shell.js');
+  for (const none of [[], undefined, [{ cost: null }, {}, { cost: { usd: 3 } }]]) {
+    const m = topbarSpend(none);
+    assert.equal(m.text, '—');
+    assert.equal(m.usd, null);
+    assert.equal(m.label, ' sessions today');
+  }
+  const zero = topbarSpend([{ cost: { usdToday: 0 } }, { cost: null }]);
+  assert.equal(zero.text, '$0.00');
+  assert.equal(zero.usd, 0);
+  // At the size and colour of the header tiles, never a loud bold figure.
+  const shell = read('css/shell.css');
+  assert.match(shell, /\.stat \{[^}]*font-size: var\(--fs-12\);[^}]*color: var\(--text-2\)/);
+  const b = shell.match(/\.stat b \{([^}]*)\}/)[1];
+  assert.match(b, /color: var\(--text-2\)/);
+  assert.doesNotMatch(b, /font-size|--text-1/);
 });
 
 test('format: money uses 2 decimals everywhere ($9.98, $0.00), whole dollars from $100', async () => {

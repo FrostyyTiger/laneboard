@@ -158,7 +158,7 @@
 .topbar-gauges { display: flex; gap: var(--sp-4); margin-left: auto; align-items: center; min-width: 0; }
 .head-right { display: flex; align-items: center; gap: var(--sp-3); flex: none; }
 .stat { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); white-space: nowrap; }
-.stat b { color: var(--text-1); font-weight: 600; }
+.stat b { color: var(--text-2); font-weight: 400; }  /* the figure at tile weight, no louder than the tiles around it (T15) */
 
 /* The annunciator slot: 2 x 4 tiles of 64 x 16 (D7 draws the tiles): two rows and their
    2 px gap are 34 px, so they sit centred in the 36 px header, not flush with its top. */

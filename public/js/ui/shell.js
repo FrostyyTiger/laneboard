@@ -33,17 +33,23 @@ export { toast } from './toast.js';
  * sessions' `cost.usdToday` and says so in its label ("sessions today"): runs
  * are fetched by the Runs view only and a hub has no `/api/runs`, so a run's
  * cost is not in this number and the label must not claim it is (T39).
+ * When no session reported a cost today the figure is `—`, not `$0.00`: an
+ * unknown cost is never shown as a zero; a reported zero stays `$0.00` (T15).
  */
 export function topbarSpend(sessions) {
   let today = 0;
   let all = 0;
+  let reported = false;
   for (const s of sessions || []) {
-    today += Number.isFinite(s?.cost?.usdToday) ? s.cost.usdToday : 0;
+    if (Number.isFinite(s?.cost?.usdToday)) {
+      today += s.cost.usdToday;
+      reported = true;
+    }
     all += Number.isFinite(s?.cost?.usd) ? s.cost.usd : 0;
   }
   return {
-    usd: today,
-    text: money(today),
+    usd: reported ? today : null,
+    text: reported ? money(today) : '—',
     label: ' sessions today',
     title: `API-equivalent spend of live sessions today; runs show their own cost on the Runs view. All time across live sessions: ${money(all)}. On a subscription the rate-limit gauges are the real constraint.`,
   };
