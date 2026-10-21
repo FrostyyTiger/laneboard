@@ -107,9 +107,11 @@ $( [ -n "${STOP_REASON:-}" ] && echo "STOP REASON: $STOP_REASON   OWNER NOTES: $
   esac
   local task=""; case $role in builder|fix) task=$(next_task);; esac
   ev round.start n="$n" role="$role" ${task:+task="$task"}
-  LANEBOARD_RUN="$NAME/$n" timeout "$ROUND_SECS" claude -p "$prompt" --model "$model" \
+  # The prompt goes in on stdin, not argv: a round that runs `pkill -f <something the prompt names>`
+  # must not match (and kill) its own session (night 3, rounds 3/16/18/22).
+  LANEBOARD_RUN="$NAME/$n" timeout "$ROUND_SECS" claude -p --model "$model" \
     --permission-mode auto "${tools[@]}" \
-    --output-format stream-json --verbose > "$out" 2>&1
+    --output-format stream-json --verbose <<<"$prompt" > "$out" 2>&1
   local rc=$?
   read -r cost err u5 r5 u7 over limited text < <(python3 - "$out" <<'PY'
 import json, sys, re
