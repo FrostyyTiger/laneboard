@@ -104,6 +104,8 @@ Planner notes (round 1), from reading the code:
 - [x] T55 (6, r10 idea 2) [ui] The header cost line is at nav size and dim (`--text-3`) unless the day is over its budget, then the warn hue (T15 made it `--text-2` and `—`; with no budget configured it stays dim) — done when: a view test finds the dim class with no budget and under budget and the warn class over budget; board shots (dark + light, 1440 + 390), console clean (commit 4ce92da; "over its budget" is the builder-scope row of the `budget` snapshot key at level `over` (`budget.perBuilderUsd` or a `set-budget *` cap over `budget.window`); a lane over its own cap or a builder at `warn` stays dim; at 390 the line stays hidden as before; the demo fleet has no builder cap, so the shots show the dim state only)
 - [ ] T56 (6, r10 idea 3) [ui] Lane-sidebar bars are grey unless the lane is in trouble (amber/red then), with no hatch fill (`public/css/`, the sidebar plate code in `public/js/ui/shell.js` or the view that draws it) — done when: a test reads the bar class for an ok lane (neutral) and a trouble lane (trouble hue) and no hatch rule on the bar; board and inbox shots (dark + light, 1440 + 390), console clean
 - [ ] T57 (6, r10 idea 5) [ui] Run page: the sparkline is at most 50 % of the content width, and the rounds table has aligned, content-sized columns and a max width of about 900 px at 1440 (`public/js/views/runs.js`, its CSS) — done when: a test reads the sparkline width cap and the table max-width rule; run page shots (dark + light, 1440 + 390), console clean
+- [ ] T59 (3, review 83-stranger 1) `laneboard run <verb> --post <url>`: when `--post` is followed by a word that looks like a URL, the "unexpected argument" error adds that `--post` takes no value and the board is `$LANEBOARD_URL` (`bin/laneboard` run arg parsing) — done when: `test/cli-run.test.mjs` runs `run start --post http://example.invalid` and finds the hint in stderr and a non-zero exit; plain `--post` still works
+- [ ] T60 (4, review 83-stranger 2 + 6) Docs: the README test-copy block (the one using `LANEBOARD_URL`) says in one sentence that `laneboard run …` writes to `./.laneboard/run.jsonl` unless `--post` is given, so `#/runs` stays empty; README/`docs/runs.md` and `laneboard morning --help` say how far back `tonight` reaches (check `server/` for the real window first) — done when: a docs test (`test/runs-docs.test.mjs`) finds the `--post` sentence next to the test-copy recipe and the `tonight` window sentence
 - [x] T58 (3, review 75-stranger 1 + 5) T48 does not show in `launch`: `laneboard launch foo --plan docs/x.md` with no config and no `--repo` prints `laneboard: args.repo is required` (rc 1), not the `--repo` / config `repos` hint. Find where that message comes from (probably a check before the server call in `bin/laneboard` `cmdLaunch`) and give it the T48 text; and the top-level help line for `launch` says `--repo` is needed unless the config lists `repos` — done when: `test/cli-deadends.test.mjs` runs `launch foo --plan x.md` with no repo and no config and finds `--repo` and `repos` in stderr, no `args.repo`, rc 1; a help test finds the `--repo` wording (commit 9a3cd34; the message comes from fenced `server/fleet/dispatch.mjs`'s schema check (`repo` required in `builtin-actions.mjs`), so the CLI's `onError` matches it as well as the launcher's `no repo given`; taken before T56/T57 as priority 3 while T51/T53 wait on Q21/Q22)
 
 ## Research questions
@@ -212,6 +214,9 @@ Planner notes (round 1), from reading the code:
 - From review 75-stranger (no task): `run stop --reason` still takes any text and `run ack` still
   exits 0 for a repeat ack (both already above, third time reported); the `ls`-shows-real-sessions
   warning sits far below the test-copy recipe: move it next to the recipe?
+- From review 83-stranger (no task): an unknown API path such as `/api/board` answers 404; should the
+  body list the routes (or the README table's names)? Taste call. `run stop --reason` free text
+  reported a fourth time: decide once, document it as free text or enforce the list.
 
 ## Reviews
 
@@ -254,5 +259,9 @@ Planner notes (round 1), from reading the code:
 - reviews/75-stranger.md: 5 findings, 1 became a task (T58, items 1 and 5 together). Dropped as
   covered: `run stop --reason` and `run ack` exit codes (already For the owner, third report), `ls`
   shows real sessions (README warns; moving the warning went to For the owner). No browser, pages not looked at.
+- reviews/83-stranger.md: 7 findings, 2 became tasks (T59, T60). Dropped as covered: `run stop
+  --reason stuck` (already For the owner, fourth report), `run round` printing the export line
+  (documented), `fleet pubkey` home path (README warns). Item 5 (the `/api/board` 404 could list the
+  routes) went to For the owner as a taste call. No browser, pages not looked at.
 
 ## Morning
