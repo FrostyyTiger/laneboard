@@ -125,7 +125,8 @@
 }
 
 /* ---- one run's page (T8): head, stop, needs, timeline, artifacts, raw */
-.rn-page { display: grid; gap: var(--sp-3); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+/* a reading width: at 1440 the eye does not cross the screen per row (T27) */
+.rn-page { display: grid; gap: var(--sp-3); max-width: var(--read-max); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
 .rn-back { justify-self: start; color: var(--text-3); text-decoration: none; }
 .rn-back:hover { color: var(--text-1); }
 .rn-back:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
@@ -179,7 +180,8 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
 .rn-charts { list-style: none; margin: 0; padding: 0; }
 .rn-chart {
   display: grid;
-  grid-template-columns: minmax(8ch, 16ch) auto 10ch minmax(0, 1fr);
+  /* the line takes the room between the name and its value (T27) */
+  grid-template-columns: minmax(8ch, 16ch) minmax(0, 1fr) 10ch minmax(8ch, auto);
   align-items: center;
   gap: var(--sp-3);
   min-height: var(--row-comfy);
@@ -191,6 +193,7 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
 .rn-chart-v { color: var(--text-1); text-align: right; }
 .rn-chart-v[data-p="2"] { color: var(--p2); }
 .rn-chart-r { min-width: 0; color: var(--text-3); white-space: nowrap; }
+.rn-chart-svg { width: 100%; }
 /* the last value is a line with no length: a 2 px square at any stretch */
 .rn-chart-svg .spark-last { fill: none; stroke: var(--text-1); stroke-width: 2; stroke-linecap: square; vector-effect: non-scaling-stroke; }
 
@@ -221,10 +224,12 @@ a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offs
 .rn-tl th[data-col="span"] { text-align: right; }
 .rn-tl-n { color: var(--text-1); }
 .rn-tl-re { color: var(--text-3); }
-.rn-tl-task { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
+/* minor columns stay narrow (T27): the task clips (full text in the row's title), sessions wrap */
+.rn-tl-task { max-width: 24ch; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
 .rn-tl-row[data-live] .rn-tl-outcome { color: var(--run); }
 /* the sessions tied to a round (T12): one chip per session, a guess shared with another run is faint */
-.rn-tl-ses { color: var(--text-2); }
+.rn-tl td.rn-tl-ses { color: var(--text-2); white-space: normal; }
+.rn-tl-s { white-space: nowrap; }
 .rn-tl-s + .rn-tl-s { margin-left: var(--sp-2); }
 .rn-tl-s[data-maybe] { color: var(--text-3); }
 

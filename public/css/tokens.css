@@ -102,6 +102,7 @@
   --icon-m: 16px;
   --icon-l: 20px;
   --lamp: 8px;
+  --read-max: 1000px;     /* a page of reading (run page; Morning, T37) stops here at 1440 */
 
   /* Stacking. */
   --z-rail: 10;

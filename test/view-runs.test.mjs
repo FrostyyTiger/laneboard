@@ -599,6 +599,25 @@ test('T26: a narrow run page stretches the score line to the row and wraps the g
   assert.equal(svg.attrs.preserveAspectRatio, 'none');
 }));
 
+// Seen at 1440 (reviews/11-designer.md, new 2): the page spread over 1650 px, the line sat at
+// 220 px with its value floating mid-row, and task/sessions took the table's width.
+test('T27: the run page stops at a reading width and its score line fills the row', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const tokens = fs.readFileSync(path.join(ROOT, 'public/css/tokens.css'), 'utf8');
+  const px = Number(tokens.match(/--read-max: (\d+)px;/)?.[1]);
+  assert.ok(px >= 960 && px <= 1100, `a reading width near 1000 px, got ${px}`);
+  const wide = css.slice(0, css.indexOf('@media (max-width: 1024px)'));
+  assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--read-max\);/);
+  // name, line, value, range: the line is the one flexible column, and the svg takes it
+  assert.match(wide, /\.rn-chart \{[^}]*grid-template-columns: minmax\(8ch, 16ch\) minmax\(0, 1fr\) 10ch minmax\(8ch, auto\);/);
+  assert.match(wide, /\.rn-chart-svg \{ width: 100%; \}/);
+  // the minor columns stay narrow
+  const task = Number(wide.match(/\.rn-tl-task \{ max-width: (\d+)ch;/)?.[1]);
+  assert.ok(task > 0 && task <= 24, `task column at most 24ch, got ${task}`);
+  assert.match(wide, /\.rn-tl td\.rn-tl-ses \{[^}]*white-space: normal;/);
+  assert.match(wide, /\.rn-tl-s \{ white-space: nowrap; \}/);
+});
+
 test('T25: a label and its value share one cell: "stop budget", "cost $9.98"', () => withDom(() => {
   const host = document.createElement('div');
   const budget = { ...FIX, stop: 'budget', cost: { usd: 9.98 } };
