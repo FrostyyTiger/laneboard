@@ -995,6 +995,12 @@ function flagHint(word, allowed) {
   return hits.length === 1 ? `did you mean: ${hits[0]}\n` : '';
 }
 
+/** `--post http://…`: --post is a switch, the board comes from $LANEBOARD_URL (review 83-stranger 1). */
+function postHint(prev, word) {
+  if (prev !== '--post' || !/^([a-z][a-z0-9+.-]*:\/\/\S|[\w.-]+:\d+(\/|$))/i.test(String(word))) return '';
+  return `--post takes no value: it sends to the board at $LANEBOARD_URL (now ${cleanTerm(BASE)}), e.g. LANEBOARD_URL=${cleanTerm(word)} laneboard run … --post\n`;
+}
+
 /** `did you mean: laneboard run <sub> <its args>` for a subcommand name, from RUN_USAGE. */
 function subHint(sub) {
   const line = RUN_USAGE.split('\n').find((l) => l.startsWith(`  ${sub} `));
@@ -1028,11 +1034,17 @@ function subUsage(sub) {
  *  `out` may hold flags already read (the common ones before the subcommand);
  *  with `until`, it stops at the first word that is not a flag in `allowed`. */
 function parseRunFlags(allowed, out = {}, until = false) {
+  let prev = '';
   while (argv.length) {
-    if (until && !allowed[argv[0]]) break;
+    if (until && !allowed[argv[0]]) {
+      // `laneboard run --post http://… start`: the URL is not the subcommand.
+      if (postHint(prev, argv[0])) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(argv[0]))}`, postHint(prev, argv[0]));
+      break;
+    }
     const flag = argv.shift();
     const spec = allowed[flag];
-    if (!spec) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(flag))}`, flagHint(flag, allowed));
+    if (!spec) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(flag))}`, postHint(prev, flag) || flagHint(flag, allowed));
+    prev = flag;
     const [field, kind] = spec;
     if (Object.hasOwn(out, field)) runUsage(`${flag} given twice`);
     if (kind === 'bool') { out[field] = true; continue; }

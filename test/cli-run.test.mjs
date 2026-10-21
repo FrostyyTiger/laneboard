@@ -819,3 +819,28 @@ test('T44: round, score, stop and ack on a run this file never started add a not
   assert.equal(posted.code, 0, posted.stderr);
   assert.equal(posted.stderr, 'ok r3 round.start posted\n');
 });
+
+test('T59: `--post <url>` says --post takes no value and the board is $LANEBOARD_URL; exit 2, nothing written', async (t) => {
+  const dir = tmpDir(t);
+  const env = envFor(dir);
+  const file = path.join(dir, '.laneboard', 'run.jsonl');
+  for (const args of [
+    ['run', 'start', '--run', 'x', '--post', 'http://example.invalid'],
+    ['run', '--post', 'http://example.invalid', 'start', '--run', 'x'],
+    ['run', 'stop', '--run', 'x', '--post', 'example.invalid:7777'],
+  ]) {
+    const r = await run(args, env, dir);
+    assert.equal(r.code, 2, args.join(' '));
+    assert.match(r.stderr, /unexpected argument: "[^"]+"\n--post takes no value: it sends to the board at \$LANEBOARD_URL \(now http:\/\/127\.0\.0\.1:9\)/, args.join(' '));
+    assert.match(r.stderr, /see: laneboard run --help/);
+  }
+  // A word after --post that is not a URL keeps the plain error.
+  const plain = await run(['run', 'start', '--run', 'x', '--post', 'foo'], env, dir);
+  assert.equal(plain.code, 2);
+  assert.doesNotMatch(plain.stderr, /takes no value/);
+  // A URL after another flag is not about --post.
+  const other = await run(['run', 'start', '--run', 'x', '--goal', 'g', 'http://example.invalid'], env, dir);
+  assert.equal(other.code, 2);
+  assert.doesNotMatch(other.stderr, /takes no value/);
+  assert.equal(fs.existsSync(file), false, 'nothing written');
+});
