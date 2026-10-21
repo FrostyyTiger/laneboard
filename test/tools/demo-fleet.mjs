@@ -21,6 +21,11 @@
 //   repo `acme` with packages web/api/docs, a red `api-test` job on main and
 //   branches joined to the lanes above, so Packages, Map, Inbox and the
 //   annunciator all have something to show. Session states cycle every tick.
+//   the Map's infrastructure (test/helpers/demo-hub.mjs `writeDemoMap`): a
+//              topology with a room per builder on hypervisor `hv1`, the
+//              `hv1` feed (re-stamped every tick so it never goes stale) and
+//              a Tailscale policy, so Drift (`backup` declared but not seen,
+//              `scratch` seen but not declared) and Reach have something to draw
 //
 // Isolation (RULES 3): the hub runs with its own temp HOME, TMUX_TMPDIR,
 // XDG_*_HOME, LANEBOARD_STATE_DIR, LANEBOARD_AUDIT_FILE, LANEBOARD_CONFIG and
@@ -28,7 +33,8 @@
 // inherited LANEBOARD_* variable). Its `hostname` is `demo-host`
 // (test/helpers/demo-hub.mjs), so neither the header nor the Map's core node
 // shows the name of the machine running the demo. The fakes and the forwarder live in this
-// process and touch no file. Nothing here talks to tmux.
+// process; the only files it writes are the Map's, in its own temp dir, removed
+// on stop. Nothing here talks to tmux.
 //
 // No auth bypass: the forwarder only adds what serve adds on the ingress
 // listener (X-Forwarded-For/-Proto/-Host, Host = the public host,
@@ -40,11 +46,12 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME } from '../helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -410,6 +417,8 @@ async function main() {
     hops.set(id, await hop(fb.port));
   }
 
+  const mapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-demo-map-'));
+  const map = writeDemoMap(mapDir);
   const origins = [`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`];
   const hub = await boot({
     mode: 'hub',
@@ -419,6 +428,7 @@ async function main() {
       builders: ids.map((id) => ({ id, url: `http://127.0.0.1:${hops.get(id).port}` })),
       origins,
       publicHost: PUBLIC_HOST,
+      map,
     }),
   });
 
@@ -442,6 +452,7 @@ async function main() {
   let n = 0;
   const tick = async () => {
     n++;
+    try { writeDemoFeed(map.feedsDir); } catch (e) { log(`feed write failed: ${e.message}`); }
     for (const id of ids) {
       const fb = fakes.get(id);
       DEMO[id].cycle(n, fb.sessions);
@@ -476,6 +487,7 @@ async function main() {
     await hub.stop().catch(() => {});
     for (const h of hops.values()) await h.down().catch(() => {});
     await Promise.all([...fakes.values()].map((f) => f.close().catch(() => {})));
+    fs.rmSync(mapDir, { recursive: true, force: true });
     process.exit(0);
   };
   process.on('SIGINT', () => stop('SIGINT'));

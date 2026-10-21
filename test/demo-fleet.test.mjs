@@ -1,13 +1,16 @@
 // The morning preview's hub (test/tools/demo-fleet.mjs) names itself
 // `demo-host` (runs plan T3): booted with the same config helper, its Map's
 // core node and title are the demo name, never this machine's hostname.
+// With `writeDemoMap` (night 3 T1) its Map has drift both ways and Reach links.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
 import { boot } from './helpers/boot.mjs';
 import { fakeBuilder } from './helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME } from './helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap } from './helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../server/fleet/keys-ed25519.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -63,4 +66,44 @@ test('the demo hub labels the Map core demo-host, not os.hostname()', { timeout:
     assert.ok(!map.nodes.some((n) => n.label === os.hostname()), 'no node carries the real hostname');
     assert.ok(!JSON.stringify(map).includes(JSON.stringify(os.hostname())), 'the real hostname appears nowhere in /api/map');
   }
+});
+
+test('the demo map: drift both ways and reach links on /api/map', { timeout: 60_000 }, async (t) => {
+  const { privateKey: hubKey } = generateHubKey();
+  const fa = await fakeBuilder({ id: 'builder-a', hubKeys: [{ key: publicKeyString(hubKey), id: 'hub', scopes: ['read'] }] });
+  t.after(() => fa.close());
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-demo-map-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const map = writeDemoMap(dir);
+  const hub = await boot({
+    mode: 'hub',
+    hubKey,
+    timeoutMs: 20_000,
+    config: demoHubConfig({ builders: [{ id: 'builder-a', url: fa.url }], origins: [], publicHost: 'hub.example.invalid', map }),
+  });
+  t.after(() => hub.stop());
+
+  let m = null;
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const r = await localGet(hub, '/api/map');
+    if (r.status === 200) {
+      const x = JSON.parse(r.text);
+      if (x.nodes.some((n) => n.id === 'builder:builder-a') && x.reach?.links?.length) { m = x; break; }
+    }
+    await sleep(100);
+  }
+  assert.ok(m, 'the hub Map came up with builder-a and reach links');
+  assert.equal(m.error, undefined, 'the topology loads');
+  assert.equal(m.reach.error, undefined, 'the policy loads');
+  const missing = m.nodes.filter((n) => n.drift === 'missing');
+  const undeclared = m.nodes.filter((n) => n.drift === 'undeclared');
+  assert.deepEqual(missing.map((n) => n.id), ['backup']);
+  assert.deepEqual(undeclared.map((n) => n.label), ['scratch']);
+  assert.ok(m.reach.links.length >= 2, `reach links: ${m.reach.links.length}`);
+  assert.ok(m.reach.links.some((l) => l.from === 'room-a' && l.to === 'ci'), 'builder-a reaches ci');
+  assert.ok(m.reach.links.some((l) => l.from === 'ci' && l.to === 'lab' && l.ports.includes('tcp:8006')), 'ci reaches the hypervisor API');
+  assert.ok(m.reach.unresolved.some((u) => u.selector === 'group:admins'), 'a group rule is unresolved, not guessed');
+  assert.equal(m.nodes.find((n) => n.id === 'builder:builder-a').parent, 'room-a', 'builder-a hangs under its room');
+  assert.equal(m.title, DEMO_HOSTNAME);
 });
