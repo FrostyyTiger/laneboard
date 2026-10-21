@@ -502,15 +502,22 @@
 .morning-deferred { align-items: flex-start; }
 .morning-stuck > .lamp,
 .morning-run > .lamp { margin-top: 4px; }
-.morning-run a.mrow-name { color: var(--text-1); text-decoration: underline; text-decoration-color: var(--line-strong); overflow-wrap: anywhere; }
-.morning-run a.mrow-name:hover { text-decoration-color: var(--text-1); }
+/* Morning's links (run title, deferred item) read as text like every other
+   link: no resting underline, an underline on hover/focus, and a muted `›`
+   after the name saying it opens a page (T42). */
+.morning-run a.mrow-name,
+.morning-deferred a.mrow-name { color: var(--text-1); text-decoration: none; overflow-wrap: anywhere; }
+.morning-run a.mrow-name:hover,
+.morning-run a.mrow-name:focus-visible,
+.morning-deferred a.mrow-name:hover,
+.morning-deferred a.mrow-name:focus-visible { text-decoration: underline; text-decoration-color: var(--text-1); }
+.morning-run a.mrow-name::after,
+.morning-deferred a.mrow-name::after { content: ' \203A'; color: var(--text-3); font-weight: 400; }
 /* The run's state word (`stopped: budget`) is bare muted text in both themes:
    the shared .mrow-kind fill is a white wash that shows in dark only, and a
    stop is not trouble, so a chip shape would say nothing (T36). */
 .morning-run .mrow-kind { background: none; padding: 0; color: var(--text-3); }
 .morning-run-sub { margin-top: var(--sp-1); font-family: var(--font-mono); font-size: var(--fs-11); }
-.morning-deferred a.mrow-name { color: var(--text-1); text-decoration: underline; text-decoration-color: var(--line-strong); }
-.morning-deferred a.mrow-name:hover { text-decoration-color: var(--text-1); }
 
 .mrow-pkg {
   padding: 0 var(--sp-1);

@@ -127,3 +127,23 @@ test('T37: Morning has one reading width, its strip clips line-start dividers, p
   assert.equal(of('.panel-t', 'gap'), '0');
   assert.match(of('.panel-t > span', 'background') ?? '', /var\(--bg-surface\)/);
 });
+
+// reviews/25-designer.md, new 5: the Morning run title was a heavy full-width
+// underline in both themes while no other link is drawn that way.
+test('T42: Morning title links have no resting underline, one on hover/focus, and a › after', () => {
+  const all = sheets().flatMap((f) => declarations(fs.readFileSync(path.join(CSS_DIR, f), 'utf8')).decls);
+  const of = (sel, prop) => all.filter((d) => d.prelude.split(',').map((s) => s.trim()).includes(sel)
+    && d.prop === prop).at(-1)?.value;
+  for (const row of ['.morning-run', '.morning-deferred']) {
+    const link = `${row} a.mrow-name`;
+    assert.equal(of(link, 'text-decoration'), 'none', `${link}: no resting underline`);
+    assert.equal(of(link, 'color'), 'var(--text-1)', `${link}: text colour`);
+    assert.match(of(`${link}:hover`, 'text-decoration') ?? '', /^underline/, `${link}: underline on hover`);
+    assert.match(of(`${link}:focus-visible`, 'text-decoration') ?? '', /^underline/, `${link}: underline on focus`);
+    assert.match(of(`${link}::after`, 'content') ?? '', /\\203A|›/, `${link}: a › after the name`);
+  }
+  // nothing themes the link back to an underline
+  const themed = all.filter((d) => /data-theme|prefers-color-scheme/.test(d.prelude + d.at.join(' '))
+    && /morning-(run|deferred)/.test(d.prelude) && /^text-decoration/.test(d.prop));
+  assert.deepEqual(themed, []);
+});
