@@ -22,6 +22,11 @@
 }
 .window-picker button:hover { color: var(--text-1); background: oklch(100% 0 0 / 0.05); }
 .window-picker button.on { color: var(--text-1); background: oklch(100% 0 0 / 0.07); border-color: var(--border-weak); }
+/* On a phone the heading, the picker and the since line share one row (runs plan T41). */
+@media (max-width: 699px) {
+  .view-head { column-gap: 8px; }
+  .window-picker button { padding: 3px 6px; }
+}
 
 .mblock { margin-bottom: 20px; }
 .mblock > .rail-h { margin-bottom: 9px; }

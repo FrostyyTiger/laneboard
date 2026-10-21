@@ -426,3 +426,21 @@ test('render T37: a builder with nothing waiting has no lamp on its frame; one t
   assert.equal(bTools.children.length, 1);
   assert.equal(bTools.children[0].dataset.p, '2');
 });
+
+test('morningModel: the window start is short, local, without seconds or year (runs plan T41)', () => {
+  const since = new Date(2026, 9, 20, 18, 0, 37).getTime();
+  const m = V.morningModel({ window: 'tonight', since, now: since + 12 * 3600e3 }, { s: store });
+  assert.equal(m.sinceText, 'since 20 Oct 18:00');
+  assert.doesNotMatch(m.sinceText, /:\d\d:\d\d|2026/);
+  assert.equal(V.sinceText(new Date(2026, 0, 5, 7, 4).getTime()), 'since 5 Jan 07:04');
+  assert.equal(V.morningModel({ window: 'tonight' }, { s: store }).sinceText, null);
+});
+
+test('data.css: on a phone the view head keeps picker and since line on one row (runs plan T41)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const css = await readFile(new URL('../public/css/views/data.css', import.meta.url), 'utf8');
+  const phone = css.match(/@media \(max-width: 699px\) \{([\s\S]*?)\n\}/);
+  assert.ok(phone, 'a phone block in data.css');
+  assert.match(phone[1], /\.view-head \{ column-gap: 8px; \}/);
+  assert.match(phone[1], /\.window-picker button \{ padding: 3px 6px; \}/);
+});

@@ -199,9 +199,23 @@ export function emptyFleetBlocks(m) {
   return out;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * The window's start for the head row, short and in local time (`since 20 Oct
+ * 18:00`): no year, no seconds, so it stays on the picker's row at 390 (runs
+ * plan T41). null when there is no start.
+ */
+export function sinceText(ms) {
+  if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `since ${d.getDate()} ${MONTHS[d.getMonth()]} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+
 /**
  * Any Morning payload -> one shape:
- *   {hub, error?, window, label, since, builders:[{id, code, error, stale, needsYou,
+ *   {hub, error?, window, label, since, sinceText, builders:[{id, code, error, stale, needsYou,
  *    finished, cost, stuck}], totals:{needsYou, finished, usd, tokens, sessions:{finished,
  *    usd}, runs:{finished, usd}} (finished/usd = sessions + runs stopped in the window), review,
  *    approvals, costByPackage, stuck (no known builder), deferred, missing, rateLimits,
@@ -250,6 +264,7 @@ export function morningModel(data, { hub = false, s = null } = {}) {
     window: typeof data.window === 'string' ? data.window : morning.window,
     label: typeof data.label === 'string' ? data.label : null,
     since: fin(data.since),
+    sinceText: sinceText(fin(data.since)),
     builders: rows,
     totals: {
       needsYou: rows.reduce((a, r) => a + r.needsYou.length, 0),
@@ -316,7 +331,7 @@ export function renderMorning() {
   const m = morningModel(morning.data, { hub: morning.hub });
   if (m.error) { box.append(el('p', 'empty', `Could not load: ${m.error}`)); return; }
   const sinceEl = $('morning-since');
-  if (sinceEl && m.since !== null) sinceEl.textContent = `since ${new Date(m.since).toLocaleString('en-GB', { hour12: false })}`;
+  if (sinceEl && m.sinceText) sinceEl.textContent = m.sinceText;
   renderModel(box, m);
 }
 
