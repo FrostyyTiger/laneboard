@@ -933,6 +933,7 @@ const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | -
   needs    ["text" | --text t] [--kind decision|wait|…] [--link url] [--n N]
   ack      [<run>] <ref> [--by b]                 close a need: <ref> is its place (0 = the first) or its ts (no such need: exit 1; already acked: nothing sent, exit 0)
   artifact --url u [--kind pr|link|…] [--title t] [--state open|merged|closed]
+           --kind defaults to link; only kind pr artifacts are listed in the run's prs (the Inbox)
   stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
            --rounds N on stop is the count of rounds done, not the cap
   cost     --usd x [--n N]                        what was spent (in round N); the run's cost is the sum of these

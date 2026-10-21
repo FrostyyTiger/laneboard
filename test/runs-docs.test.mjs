@@ -39,6 +39,8 @@ test('the artifact row documents `state` and the update rule (night 5 T1)', () =
   assert.ok(row, 'no artifact row');
   for (const s of ['`state`', '`open`', '`merged`', '`closed`']) assert.ok(row.includes(s), s);
   assert.match(row, /later line with that URL updates its `state`/);
+  assert.match(row, /default `link`/);
+  assert.match(row, /only `kind: pr` artifacts appear in a run's `prs`/);
 });
 
 test('round.start documents `title` and `wrapup`, run.stop `detail` (night 5 T3)', () => {

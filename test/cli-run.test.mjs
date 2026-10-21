@@ -102,6 +102,7 @@ test('artifact --state merged writes the state; the help names it (night 5 T1)',
   assert.equal(p.event.state, 'merged');
   const help = await run(['run', 'artifact', '--help'], envFor(dir), dir);
   assert.match(help.stdout + help.stderr, /artifact --url u .*--state open\|merged\|closed/);
+  assert.match(help.stdout, /--kind defaults to link; only kind pr artifacts are listed in the run's prs/);
 });
 
 test('round prints an export line for eval; --run then defaults from $LANEBOARD_RUN', async (t) => {
