@@ -4,14 +4,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeDocument } from './helpers/fakedom.mjs';
+import { makeDocument, makeEl } from './helpers/fakedom.mjs';
 import { declarations } from './helpers/css-guardrails.mjs';
 
 import {
   CHECKS_MAX, DASH, LAYOUT, STATE_P, STATE_WORD, ageText, cardDetail, checkGlyphs, checksLabel, ctxLevel,
-  dataBlock, prModel, renderCard,
+  dataBlock, emptyField, prModel, renderCard, troubleOf,
 } from '../public/js/views/board-card.js';
-import boardView, { boardModeFor, boardScope } from '../public/js/views/board.js';
+import boardView, { boardModeFor, boardScope, renderLanes } from '../public/js/views/board.js';
+import { attentionP } from '../public/js/ui/rail.js';
 import { isView, views } from '../public/js/views/index.js';
 import { store } from '../public/js/core/store.js';
 
@@ -259,11 +260,12 @@ test('a card keeps every field: the data block, the activity line, the detail an
   const [l1] = find(card, 'db-1');
   const [l2] = find(card, 'db-2');
   assert.ok(l1 && l2, 'two lines');
-  assert.deepEqual(l1.children.map((c) => c.className.split(' ')[1]), ['db-code', 'db-state', 'db-lane', 'db-stage', 'db-flags', 'db-age']);
-  assert.deepEqual(l2.children.map((c) => c.className.split(' ')[1]), ['db-pr', 'db-checks', 'db-ctx', 'db-usd', 'db-model', 'db-git']);
+  assert.deepEqual(l1.children.map((c) => c.className.split(' ')[1]), ['db-code', 'db-state', 'db-lane', 'db-flags', 'db-age'], 'no plan: no stage field');
+  // A lone session has no PR, no checks and no 5 h spend: left out, not `—` (runs night 4 T15).
+  assert.deepEqual(l2.children.map((c) => c.className.split(' ')[1]), ['db-ctx', 'db-model', 'db-git']);
   assert.equal(find(card, 'db-word')[0].textContent, 'PERM');
   assert.equal(find(card, 'db-ctx')[0].dataset.p, '2', 'ctx 71 % is p2');
-  assert.equal(find(card, 'db-pr')[0].textContent, DASH, 'no PR on a lone session');
+  assert.equal(find(card, 'db-pr').length, 0, 'no PR on a lone session: no PR field');
   assert.equal(find(card, 'flag-stuck').length, 1);
   const text = reachable(card);
   for (const want of [
@@ -291,7 +293,9 @@ test('a row is one line of the same fields', () => withDom(() => {
   assert.ok(row.classList.contains('card-row'));
   assert.equal(find(row, 'db-1').length + find(row, 'db-2').length, 0);
   const [line] = find(row, 'db-row');
-  assert.deepEqual(line.children.map((c) => c.className.split(' ')[1]), LAYOUT.row.map((f) => `db-${f}`));
+  const names = line.children.map((c) => c.className.split(' ')[1]);
+  assert.deepEqual(names, ['db-code', 'db-state', 'db-lane', 'db-ctx', 'db-age', 'db-flags'], 'the fields with data, in row order');
+  assert.deepEqual(names, LAYOUT.row.map((f) => `db-${f}`).filter((f) => names.includes(f)));
 }));
 
 test('one builder: no code plate; several: the plate; a stale builder hatches the card by class, not inline style', () => withDom(() => {
@@ -343,4 +347,85 @@ test('board.css styles the data block, the stale class and both modes', () => {
   assert.match(css, /\.grid\[data-mode="rows"\]/);
   assert.match(css, /\.db-ctx\[data-p="2"\]::before \{ content: "▲"; \}/, 'colour always comes with a shape');
   assert.match(css, /padding-inline-end: var\(--insp-w\)/, 'the board keeps clear of the open inspector');
+});
+
+// ---------------------------------------------------------------- runs night 4 T15: the cards (r10 Board 1-6)
+
+const css = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+
+test('T15 Board 1: a lane bar is grey unless the card is in trouble', () => withDom(() => {
+  const at = (s) => renderCard({ key: `builder-a/${s.name}`, name: s.name, ...s }).dataset.trouble;
+  assert.equal(at({ name: 'p', state: 'waiting_permission' }), '1', 'a permission: red');
+  assert.equal(at({ name: 'q', state: 'waiting_question' }), '2', 'a question: amber');
+  assert.equal(at({ name: 's', state: 'working', stuck: { reason: 'no output' } }), '2', 'stuck: amber');
+  assert.equal(at({ name: 'd', state: 'idle', danger: { reason: 'rm -rf' } }), '1', 'the guard: red');
+  assert.equal(at({ name: 'w', state: 'working' }), undefined, 'working: no trouble, grey bar');
+  assert.equal(at({ name: 'i', state: 'idle' }), undefined, 'idle: grey bar');
+  assert.equal(troubleOf(dataBlock(null, { name: 'x', state: 'waiting_permission' }, { stale: true })), null, 'not live: grey');
+  const lanes = css('public/css/lanes.css');
+  const bar = lanes.match(/\.card\.has-lane::before \{[^}]*\}/)[0];
+  assert.match(bar, /background: var\(--line-strong\)/, 'the bar is grey by default');
+  assert.doesNotMatch(bar, /lane-hue/, 'no lane hue on the bar');
+  assert.match(lanes, /\.card\.has-lane\[data-trouble="1"\]::before \{ background: var\(--p1\); \}/);
+  assert.match(lanes, /\.card\.has-lane\[data-trouble="2"\]::before \{ background: var\(--p2\); \}/);
+}));
+
+test('T15 Board 2: no empty `—` field on a card or a row, and a line with nothing to say is left out', () => withDom(() => {
+  const bare = { key: 'builder-a/bare', name: 'bare', state: 'idle' };
+  for (const row of [false, true]) {
+    const n = renderCard(bare, { row });
+    for (const line of find(n, 'db')) {
+      for (const f of line.children) assert.ok(!f.textContent.includes(DASH), `${row ? 'row' : 'card'}: ${f.className} prints —`);
+    }
+  }
+  const card = renderCard(bare);
+  assert.equal(find(card, 'db-2').length, 0, 'no second line when it would be empty');
+  const db = dataBlock(null, bare);
+  for (const f of ['stage', 'pr', 'checks', 'ctx', 'usd', 'model', 'age', 'git']) assert.equal(emptyField(db, f), true, f);
+  for (const f of ['code', 'state', 'lane', 'flags']) assert.equal(emptyField(db, f), false, `${f} always stays`);
+}));
+
+test('T15 Board 2: equal card heights with the rows packed at the top', () => {
+  const card = css('public/css/board.css').match(/\n\.card \{[^}]*\}/)[0];
+  assert.match(card, /display: grid;/);
+  assert.match(card, /align-content: start;/, 'spare height goes below the rows, not between them');
+  assert.doesNotMatch(css('public/css/shell.css').match(/\.grid \{[^}]*\}/)[0], /align-items/, 'the grid still stretches cards to one height');
+});
+
+test('T15 Board 4-5: NEEDS YOU items carry the card\'s shape, the guard a red ■ with a 1 px border and no fill', () => {
+  assert.equal(attentionP({ state: 'idle', danger: 'delete outside the worktree' }), '1', 'danger: red ■');
+  assert.equal(attentionP({ state: 'waiting_permission' }), STATE_P.waiting_permission);
+  assert.equal(attentionP({ state: 'waiting_question' }), '2', 'a question: amber ▲');
+  assert.equal(attentionP({ state: 'working' }), 'run', 'a working lane: grey ●, never cyan');
+  assert.equal(attentionP({ state: 'brand-new' }), 'off');
+  const rail = css('public/js/ui/rail.js');
+  assert.doesNotMatch(rail, /stateDot/, 'no hue-only dot in the list');
+  const tokens = css('public/css/tokens.css');
+  assert.match(tokens, /--run: var\(--text-2\);/, 'the run lamp is grey');
+  const box = css('public/css/views/box.css');
+  const danger = box.match(/\.attention-item\.s-danger, \.chip\.s-danger \{[^}]*\}/)[0];
+  assert.doesNotMatch(danger, /background/, 'no fill');
+  assert.match(danger, /border-color: var\(--crit\)/);
+  assert.doesNotMatch(box.match(/\.card\.danger \{[^}]*\}/)[0], /outline/, 'one 1 px border, no second outline');
+});
+
+test('T15 Board 6: the IDLE line prints a lane\'s name once, the branch only when it differs', () => {
+  const rail = makeEl('div');
+  const saved = { doc: globalThis.document, lanes: store.lanes };
+  globalThis.document = makeDocument({ byId: new Map([['lane-rail', rail]]) });
+  try {
+    store.lanes = [
+      { id: 'docs-refresh', key: 'builder-a/docs-refresh', idle: true, hue: 10, root: '/r/a', branch: 'docs-refresh', sessions: [] },
+      { id: 'release', key: 'builder-a/release', idle: true, hue: 20, root: '/r/b', branch: 'release-notes', sessions: [] },
+    ];
+    renderLanes();
+    const text = rail.textContent;
+    assert.equal(text.split('docs-refresh').length - 1, 1, 'docs-refresh once');
+    assert.ok(!text.includes('⌥docs-refresh'));
+    assert.ok(text.includes('⌥release-notes'), 'a branch that differs still shows');
+  } finally {
+    store.lanes = saved.lanes;
+    if (saved.doc === undefined) delete globalThis.document;
+    else globalThis.document = saved.doc;
+  }
 });

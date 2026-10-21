@@ -12,7 +12,7 @@ import { panel, setPanel } from '../ui/components.js';
 import { prChip } from '../ui/widgets.js';
 import { openSheet } from '../ui/sheet.js';
 import {
-  FIELDS, builderCode, builderStale, checksLabel, dataBlock, renderCard, showCodes,
+  FIELDS, builderCode, builderStale, checksLabel, dataBlock, emptyField, markTrouble, renderCard, showCodes,
 } from './board-card.js';
 
 /** True when a builder id names a hub builder that is not live. */
@@ -208,7 +208,8 @@ function laneCardNode(u) {
     // Dimmed and hatched by board.css (`.stale`), never an inline opacity.
     ln.node.classList.toggle('stale', headData.stale);
     ln.head.textContent = '';
-    renderLaneHead(ln.head, u.id, headData, u.sessions);
+    // The lane bar is grey unless the card is in trouble (board.css).
+    markTrouble(ln.node, renderLaneHead(ln.head, u.id, headData, u.sessions));
   }
   return ln;
 }
@@ -223,7 +224,8 @@ function newestMarker(sessions) {
  * The lane card's head: the lane's data block (plan §4 2.7) on two lines.
  * Line 1: code, the most urgent session's state, lane, stage n/m and the
  * current stage, flags, age. Line 2: PR, checks, ctx, $ 5h, model, branch,
- * slot. Then the job line, the newest marker, and the retire readiness.
+ * slot, each left out when it has nothing to show. Then the job line, the
+ * newest marker, and the retire readiness. Returns the data block.
  */
 function renderLaneHead(head, id, d, sessions = []) {
   const p = d.lane?.progress;
@@ -248,10 +250,11 @@ function renderLaneHead(head, id, d, sessions = []) {
     st.title = p.n == null ? `no stage of ${p.m} finished yet` : `stage ${p.n} of ${p.m}`;
     top.append(st);
     if (p.current?.title) top.append(el('span', 'lane-current', p.current.n != null ? `S${p.current.n} ${p.current.title}` : p.current.title));
-  } else {
+  } else if (!emptyField(db, 'stage')) {
     top.append(FIELDS.stage(db, o));
   }
-  top.append(FIELDS.flags(db, o), FIELDS.age(db, o));
+  top.append(FIELDS.flags(db, o));
+  if (!emptyField(db, 'age')) top.append(FIELDS.age(db, o));
   head.append(top);
 
   const meta = el('div', 'card-meta lane-meta db db-2');
@@ -260,17 +263,21 @@ function renderLaneHead(head, id, d, sessions = []) {
     const pr = el('span', 'db-f db-pr');
     pr.append(icon(db.pr?.icon ?? 'pr', { size: 's' }), prChip(d.pr));
     meta.append(pr);
-  } else {
+  } else if (!emptyField(db, 'pr')) {
     meta.append(FIELDS.pr(db, o));
   }
-  meta.append(FIELDS.checks(db, o), FIELDS.ctx(db, o));
-  const burn = el('span', 'db-f db-usd lane-burn', d.burn != null && d.burn > 0.005 ? `${money(d.burn)}/5h` : '—');
-  burn.title = o.usdTitle;
-  meta.append(burn);
+  // An empty field is left out, never a `—` (runs night 4 T15).
+  for (const f of ['checks', 'ctx']) if (!emptyField(db, f)) meta.append(FIELDS[f](db, o));
+  if (d.burn != null && d.burn > 0.005) {
+    const burn = el('span', 'db-f db-usd lane-burn', `${money(d.burn)}/5h`);
+    burn.title = o.usdTitle;
+    meta.append(burn);
+  }
   if (d.rec?.model) meta.append(el('span', 'db-f db-model model', d.rec.model));
-  else meta.append(FIELDS.model(db, o));
+  else if (!emptyField(db, 'model')) meta.append(FIELDS.model(db, o));
+  // The branch only when it is not the lane's own name (r10 Board 6).
   const branch = d.rec?.branch ?? d.lane?.branch;
-  if (branch) meta.append(el('span', 'branch', `⌥${branch}`));
+  if (branch && branch !== id) meta.append(el('span', 'branch', `⌥${branch}`));
   if (d.rec?.slot != null) {
     const up = d.slot?.up;
     const slot = el('span', `chip-slot ${up ? 'slot-up' : 'slot-down'}`, `slot ${d.rec.slot}${d.slot?.ports ? ` :${d.slot.ports.pg}` : ''}`);
@@ -278,7 +285,7 @@ function renderLaneHead(head, id, d, sessions = []) {
     meta.append(slot);
   }
   if (!d.rec && d.lane && !d.lane.isMain && d.lane.merged === true) meta.append(el('span', 'lane-merged', 'merged'));
-  head.append(meta);
+  if (meta.children.length) head.append(meta);
 
   if (d.job && !['done'].includes(d.job.last?.step)) {
     const j = d.job.last;
@@ -303,6 +310,7 @@ function renderLaneHead(head, id, d, sessions = []) {
     if (r) box.append(el('span', 'mk-text', (r.ready ? r.reasons : r.blockers).join(' · ')));
     head.append(box);
   }
+  return db;
 }
 
 /**
@@ -367,7 +375,8 @@ export function renderLanes() {
     item.style.setProperty('--lane-hue', String(lane.hue));
     item.append(el('span', 'lane-swatch'));
     item.append(el('span', 'lane-id', lane.id));
-    if (lane.branch) item.append(el('span', 'lane-branch', `⌥${lane.branch}`));
+    // The name once: the branch only when it differs from the lane's id (r10 Board 6).
+    if (lane.branch && lane.branch !== lane.id) item.append(el('span', 'lane-branch', `⌥${lane.branch}`));
     if (lane.progress?.m != null) item.append(el('span', 'lane-stage', `${lane.progress.n ?? 0}/${lane.progress.m}`));
     // A main checkout is always an ancestor of origin/main; saying "merged"
     // there is noise, not news.

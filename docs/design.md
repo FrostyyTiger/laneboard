@@ -41,6 +41,10 @@ laneboard is read from across the room at 3 a.m. It follows the high-performance
   `public/js/core/alarm-tiles.js`). An unacknowledged tile adds a 1 px flashing ring in the same
   hue.
 - Amber on the light canvas needs its shape or a 1 px border next to it, never a pale fill alone.
+- **Board cards** (runs night 4 T15): the lane bar on a card's left edge is grey (`--line-strong`)
+  and takes `--p1` / `--p2` only while the card is in trouble; the lane's own hue stays on its
+  chip and rail swatch. A field with nothing to show is left out, never printed as `—`. A NEEDS
+  YOU item carries its card's lamp (■ / ▲ / ● / ○) and a 1 px border, no fill.
 
 ## Type
 

@@ -1,15 +1,16 @@
 // The rail: attention, vitals, rate limits, the 49" box blocks. Moved from public/app.js (fleet F1).
 // Plus the builder rail in #shell-rail (fleet plan §4 2.4, task D5), at the end of this file.
 import { $, el } from '../core/dom.js';
-import { ago, resetsIn } from '../core/format.js';
+import { STATE_LABEL, ago, resetsIn } from '../core/format.js';
 import { alarms, builders, store, subscribe } from '../core/store.js';
 import { deriveCode } from '../core/keys.js';
 import { icon } from '../core/icons.js';
 import { currentRoute, navigate, onRoute } from '../core/router.js';
 import { builderMark, lamp, lampLabel, laneMix, markSel, mixLabel, plate, scopeSessions, segbar } from './components.js';
 import { setRail } from './shell.js';
-import { compactGauge, gauge, stateDot } from './widgets.js';
+import { compactGauge, gauge } from './widgets.js';
 import { focusSession } from '../views/board.js';
+import { STATE_P } from '../views/board-card.js';
 import { boxBlocks } from '../views/box.js';
 
 /** On the 49" the Box is rail blocks, not a tab (the CSS hides the tab there). */
@@ -21,6 +22,20 @@ export function renderRailBox() {
   if (!wide || !store.boxDirty) return;
   host.textContent = '';
   for (const b of boxBlocks()) host.append(b);
+}
+
+/**
+ * The mark of a NEEDS YOU item: the same lamp as its card (runs night 4 T15,
+ * r10 Board 4-5): the guard's danger and a permission red ■, a question
+ * amber ▲, working grey ●, the rest grey ○. Never a hue-only dot. Pure.
+ */
+export function attentionP(a) {
+  if (a?.danger) return '1';
+  return STATE_P[a?.state] ?? 'off';
+}
+
+function attentionLamp(a) {
+  return lamp(attentionP(a), { label: a.danger ? `danger: ${a.danger}` : (STATE_LABEL[a.state] || a.state) });
 }
 
 export function renderAttention() {
@@ -37,7 +52,7 @@ export function renderAttention() {
     const b = el('button', `attention-item s-${a.danger ? 'danger' : a.state}`);
     if (a.danger) b.title = a.danger;
     b.append(el('span', 'idx', String(i + 1)));
-    b.append(stateDot(a.state, a.since));
+    b.append(attentionLamp(a));
     b.append(el('span', 'nm', a.name));
     b.append(el('span', 'ago', ago(a.since)));
     b.dataset.key = a.key;
@@ -46,7 +61,7 @@ export function renderAttention() {
     list.append(li);
 
     const chip = el('button', `chip s-${a.danger ? 'danger' : a.state}`);
-    chip.append(stateDot(a.state, a.since));
+    chip.append(attentionLamp(a));
     chip.append(el('span', 'nm', a.name));
     chip.append(el('span', 'ago', ago(a.since)));
     chip.dataset.key = a.key;

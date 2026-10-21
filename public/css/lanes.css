@@ -18,8 +18,13 @@
   bottom: 0;
   width: 3px;
   border-radius: var(--radius-l) 0 0 var(--radius-l);
-  background: oklch(70% 0.14 var(--lane-hue, 0));
+  background: var(--line-strong);
 }
+/* Grey unless trouble (runs night 4 T15, r10 Board 1): the bar takes the
+   card's trouble hue, set by board-card.js markTrouble(); the lane's own
+   hue stays on its chip and its rail swatch. */
+.card.has-lane[data-trouble="1"]::before { background: var(--p1); }
+.card.has-lane[data-trouble="2"]::before { background: var(--p2); }
 
 .lane-chip {
   font-family: var(--font-mono);

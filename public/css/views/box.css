@@ -83,10 +83,11 @@
 .lane-ready.not-ready .mk-kind { color: var(--text-3); }
 
 /* danger: the dev-stack guard. Always first in attention, and loud. */
-.card.danger { border-color: var(--crit); outline: var(--bw) solid var(--p1-line); }
+.card.danger { border-color: var(--crit); }
 .mk-danger .mk-kind { color: var(--bg-canvas); background: var(--crit); }
 .mk-danger .mk-text { color: var(--crit); }
-.attention-item.s-danger, .chip.s-danger { border-color: var(--crit); background: var(--p1-weak); color: var(--text-1); }
+/* A 1 px border and the red ■ of its lamp, no fill (runs night 4 T15). */
+.attention-item.s-danger, .chip.s-danger { border-color: var(--crit); color: var(--text-1); }
 .mrow.need-danger .mrow-kind { color: var(--bg-canvas); background: var(--crit); }
 .guard { font-family: var(--font-mono); font-size: 10px; padding: 0 5px; border-radius: var(--radius); }
 .guard-ok { color: var(--ok); background: var(--bg-hover); }

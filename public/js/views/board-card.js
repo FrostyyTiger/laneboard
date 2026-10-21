@@ -325,10 +325,48 @@ export const LAYOUT = Object.freeze({
   row: Object.freeze(['code', 'state', 'lane', 'stage', 'pr', 'checks', 'ctx', 'usd', 'age', 'flags']),
 });
 
-/** One `.db` line of the given fields. */
+/**
+ * True when a field has nothing to show: it is left out of the line instead of
+ * printing `—` (runs night 4 T15, r10 Board 2). The code plate hides by CSS
+ * when empty; state, lane and flags are always drawn. Pure.
+ */
+export function emptyField(db, name) {
+  switch (name) {
+    case 'stage': return db.stage === DASH;
+    case 'pr': return !db.pr;
+    case 'checks': return !db.checks.length;
+    case 'ctx': return db.ctx === DASH;
+    case 'usd': return db.usd5h === DASH;
+    case 'model': return db.model === DASH;
+    case 'age': return db.age === DASH;
+    case 'git': return !(db.git.dirty || db.git.ahead || db.git.behind);
+    default: return false;
+  }
+}
+
+/**
+ * The card's trouble, for its lane bar: '1' (red, broken or a permission),
+ * '2' (amber, a question or stuck), else null. A bar is grey unless there is
+ * trouble (runs night 4 T15, r10 Board 1); a builder that is not live is grey.
+ */
+export function troubleOf(db) {
+  if (!db || db.p === 'stale') return null;
+  if (db.p === '1' || db.flags.some((f) => f.p === '1')) return '1';
+  if (db.p === '2' || db.flags.some((f) => f.p === '2')) return '2';
+  return null;
+}
+
+/** Put the trouble on a card node (`data-trouble`), or take it off. */
+export function markTrouble(node, db) {
+  const t = troubleOf(db);
+  if (t) node.dataset.trouble = t;
+  else delete node.dataset.trouble;
+}
+
+/** One `.db` line of the given fields, the empty ones left out. */
 export function dbLine(db, names, cls, o = {}) {
   const line = el('div', `db ${cls}`);
-  for (const name of names) line.append(FIELDS[name](db, o));
+  for (const name of names) if (!emptyField(db, name)) line.append(FIELDS[name](db, o));
   return line;
 }
 
@@ -429,6 +467,7 @@ export function renderCard(s, { row = false } = {}) {
   const b = builderOf(s);
   const db = dataBlock(null, s, { code: builderCode(b), stale });
   const o = { ...sessionTitles(s), showCode: showCodes() };
+  markTrouble(card, db);
   if (row) {
     card.append(dbLine(db, LAYOUT.row, 'db-row', o));
   } else {
@@ -442,7 +481,9 @@ export function renderCard(s, { row = false } = {}) {
       chip.onclick = (e) => { e.stopPropagation(); toggleLane(lane.key ?? lane.id); };
       l1.insertBefore(chip, l1.children?.[3] ?? null);
     }
-    card.append(l1, dbLine(db, LAYOUT.line2, 'db-2', o));
+    const l2 = dbLine(db, LAYOUT.line2, 'db-2', o);
+    // A line with nothing to say is left out, not a row of gaps.
+    card.append(l1, ...(l2.children.length ? [l2] : []));
   }
 
   // The guard's finding, above everything else on the card (v3).

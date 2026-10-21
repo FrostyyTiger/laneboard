@@ -16,6 +16,9 @@
   padding: var(--sp-2);
   display: grid;
   gap: var(--sp-1);
+  /* Rows packed at the top: a card stretched to its neighbour's height keeps
+     the spare room below, never between its lines (runs night 4 T15). */
+  align-content: start;
   min-width: 0;
   scroll-margin-top: 74px;
   color: var(--text-1);
