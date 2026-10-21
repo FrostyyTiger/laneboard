@@ -296,7 +296,28 @@ export function morningModel(data, { hub = false, s = null } = {}) {
     runs,
   };
   m.empty = emptyFleetBlocks(m);
+  // T24: a builder that did not answer is "no answer" only when the header
+  // does not show it LIVE; a live one simply sent no Morning data. Either way
+  // a count of 0 is not known while one is missing.
+  const live = (id) => s?.builders?.get?.(id)?.status === 'live';
+  m.noAnswer = m.missing.filter((id) => !live(id));
+  m.noData = m.missing.filter(live);
+  const partial = m.missing.length > 0;
+  m.counts = {
+    needsYou: summaryCount(m.totals.needsYou, partial),
+    finished: summaryCount(m.totals.finished, partial),
+    spend: summaryCount(m.totals.usd, partial, money),
+    tokens: summaryCount(m.totals.tokens, partial, compactCount),
+  };
   return m;
+}
+
+/**
+ * One summary count (T24): `—` with `noData` when it is 0 while a builder
+ * gave no data (that 0 is not known), else the formatted value.
+ */
+export function summaryCount(v, partial, fmt = String) {
+  return partial && !v ? { text: '—', noData: true } : { text: fmt(v ?? 0), noData: false };
 }
 
 export async function loadMorning(force = false) {
@@ -368,30 +389,43 @@ function kv(k, v, cls = '') {
   return n;
 }
 
+/** A summary cell for a summaryCount(): `—` gets a dim "no data" after it (T24). */
+function kvCount(k, c, cls = '') {
+  const n = kv(k, c.text, c.noData ? '' : cls);
+  if (c.noData) {
+    n.classList.add('nodata');
+    n.append(el('span', 'mkv-nodata', 'no data'));
+  }
+  return n;
+}
+
 function morningSummary(m) {
   const sec = el('section', 'mblock morning-summary');
   const row = el('div', 'mrow-top');
   row.append(kv('builders', String(m.builders.length)));
-  row.append(kv('needs you', String(m.totals.needsYou), m.totals.needsYou ? 'warn' : ''));
+  row.append(kvCount('needs you', m.counts.needsYou, m.totals.needsYou ? 'warn' : ''));
   const { sessions, runs } = m.totals;
-  const finCell = kv('finished', String(m.totals.finished));
+  const finCell = kvCount('finished', m.counts.finished);
   finCell.title = `${sessions.finished} lanes + ${runs.finished} runs stopped`;
   row.append(finCell);
-  const spend = kv('spend', money(m.totals.usd));
+  const spend = kvCount('spend', m.counts.spend);
   spend.title = `sessions ${money(sessions.usd)} + runs ${money(runs.usd)}`;
   row.append(spend);
-  row.append(kv('tokens', compactCount(m.totals.tokens)));
+  row.append(kvCount('tokens', m.counts.tokens));
   row.append(kv('review', `${m.review.n} · ${m.review.waiting} waiting`));
   row.append(kv('approvals', String(m.approvals.answered)));
   sec.append(row);
-  if (m.missing.length) {
+  const why = new Map(m.builders.filter((b) => b.error).map((b) => [b.id, `${b.id}: ${b.error}`]));
+  const line = (ids, words, p, label) => {
     const miss = el('div', 'mrow-sub morning-missing');
-    miss.append(lamp('stale', { label: 'stale: did not answer' }));
-    miss.append(el('span', null, ` no answer from ${m.missing.join(', ')}`));
-    const why = m.builders.filter((b) => b.error).map((b) => `${b.id}: ${b.error}`);
-    if (why.length) miss.title = why.join('\n');
+    miss.append(lamp(p, { label }));
+    miss.append(el('span', null, ` ${words} ${ids.join(', ')}`));
+    const w = ids.map((id) => why.get(id)).filter(Boolean);
+    if (w.length) miss.title = w.join('\n');
     sec.append(miss);
-  }
+  };
+  if (m.noAnswer.length) line(m.noAnswer, 'no answer from', 'stale', 'stale: did not answer');
+  if (m.noData.length) line(m.noData, 'no Morning data from', 'off', 'live, but sent no Morning data');
   return sec;
 }
 
@@ -462,6 +496,18 @@ function runsBlock(list) {
 
 // --- needs you -------------------------------------------------------------
 
+/**
+ * The run a Morning need belongs to (T24, §8 Q9), or null: `run` on a
+ * builder's own answer; the hub's merge keeps only the id (`<builder>/run:<run>:<ts>`).
+ */
+export function runOfNeed(n) {
+  if (!isObj(n)) return null;
+  if (n.source === 'run' && typeof n.run === 'string') return RUN_ID_RX.test(n.run) ? n.run : null;
+  const id = typeof n.id === 'string' ? n.id : '';
+  const hit = /(?:^|\/)run:([^:/]{1,64}):[^:/]*$/.exec(id);
+  return hit && RUN_ID_RX.test(hit[1]) ? hit[1] : null;
+}
+
 function needsBlock(b) {
   const needs = block('Needs you', b.needsYou.length);
   if (!b.needsYou.length) needs.append(el('p', 'empty', 'Nothing is waiting.'));
@@ -482,11 +528,18 @@ function needsBlock(b) {
     if (n.text) main.append(el('div', 'mrow-text', txt(n.text)));
     row.append(main);
     const acts = el('div', 'mrow-acts');
-    const k = n.name ? morningKey(n, n.name) : null;
+    const run = runOfNeed(n);
+    const k = n.name && !run ? morningKey(n, n.name) : null;
     const ik = k ? toIndexKey(store, k) : null;
     if (ik && store.sessions.has(ik)) {
       const open = el('button', 'btn', 'Open');
       open.onclick = () => { setView('board'); openSheet(ik); };
+      acts.append(open);
+    }
+    if (run) {
+      const open = el('a', 'btn', 'Open');
+      open.setAttribute('href', runHref(run));
+      open.title = `run ${run}`;
       acts.append(open);
     }
     if (n.source === 'marker' && n.markerId != null) {

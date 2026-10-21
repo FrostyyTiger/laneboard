@@ -485,6 +485,12 @@
 }
 .mkv.warn .mkv-v { color: var(--p2); }
 .mkv.warn .mkv-v::before { content: "▲ "; }
+/* A count that is not known while a builder sent no data (T24): `—`, then this. */
+.mkv.nodata .mkv-v { color: var(--text-3); }
+.mkv-nodata {
+  font-size: var(--fs-10);
+  color: var(--text-3);
+}
 .mblock > .mrow-top { margin-bottom: var(--sp-2); }
 
 .morning-summary {

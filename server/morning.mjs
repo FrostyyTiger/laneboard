@@ -12,6 +12,8 @@ import * as runsCollector from './collector/runs.mjs';
 import { runsInWindow } from './runs/digest.mjs';
 
 const NEEDS_KINDS = ['danger', 'need', 'blocked', 'limit'];
+/** The attention states a person answers (public/js/core/inbox-model.js WAITING). */
+const WAITING = new Set(['waiting_permission', 'waiting_question']);
 
 /**
  * Spend from a session that no longer exists.
@@ -156,9 +158,16 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
   // The attention queue and the markers answer the same question from two
   // directions: one is "this session is sitting on a prompt", the other is
   // "this session said out loud that it needs you". Both belong in one list.
+  //
+  // T24: from the attention queue only what the Inbox's "Needs you" lists, so
+  // the two counts agree: a session waiting on a prompt, or a danger flag. A
+  // finished one is news (Finished), a held approval is an approval, and a
+  // merely stuck one is the stuck block's.
   const needs = [];
   for (const a of snap.attention ?? []) {
+    if (!a || a.stale) continue;
     const s = sessionByName.get(a.name);
+    if (!a.danger && (!WAITING.has(a.state) || s?.awaitingApproval)) continue;
     needs.push({
       source: 'attention',
       id: `attention:${a.name}`,
@@ -187,6 +196,9 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
       text: m.text,
     });
   }
+  // Open run needs (runs plan §8 Q9): the ones a person answers, as the Inbox lists them.
+  const runs = runsStore === undefined ? runsCollector.store() : runsStore;
+  needs.push(...morningRunNeeds(runs));
   // `danger` first, always (v3); then newest first.
   needs.sort((a, b) => Number(b.kind === 'danger') - Number(a.kind === 'danger') || (b.at ?? 0) - (a.at ?? 0));
 
@@ -263,7 +275,7 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
       label: 'API-equivalent',
     },
     rateLimits: freshestRateLimits(sessions),
-    runs: morningRuns(runsStore === undefined ? runsCollector.store() : runsStore, since, now),
+    runs: morningRuns(runs, since, now),
   };
   if (builder && typeof builder === 'object') out.builder = { id: builder.id ?? null, code: builder.code ?? null };
   return out;
@@ -276,6 +288,40 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
 export function morningRuns(store, since, now) {
   if (!store || typeof store.list !== 'function') return [];
   try { return runsInWindow(store.list(), { since, now }); } catch { return []; }
+}
+
+/**
+ * Every open need of a run that a person must answer (a `wait` need is the
+ * loop sleeping), whatever the window: an open need is still waiting this
+ * morning however long ago it was asked. The same rule as the Inbox's "Run
+ * needs" (public/js/core/inbox-model.js runRows), so the two counts agree.
+ * `id` is `run:<run>:<ts>` (the ts `needs.ack` names a need by); `name` is
+ * the run, `lane` null. A store that fails to fold gives none.
+ */
+export function morningRunNeeds(store) {
+  if (!store || typeof store.list !== 'function') return [];
+  let list;
+  try { list = store.list(); } catch { return []; }
+  const out = [];
+  for (const run of Array.isArray(list) ? list : []) {
+    for (const n of Array.isArray(run?.needs) ? run.needs : []) {
+      if (!n || n.open === false || n.kind === 'wait') continue;
+      out.push({
+        source: 'run',
+        id: `run:${run.run}:${n.ts ?? n.i}`,
+        run: run.run,
+        needIndex: n.i,
+        name: run.run,
+        lane: null,
+        hue: null,
+        state: run.state ?? null,
+        at: n.ts ?? null,
+        kind: n.kind || 'decision',
+        text: n.text ?? '',
+      });
+    }
+  }
+  return out;
 }
 
 /** The same rule the board's rail uses: whichever statusline fired last. */

@@ -165,7 +165,10 @@ const snapshot = {
     { id: 'sleepy', hue: 200, branch: 'feat/sleepy', merged: true, isMain: false,
       lastCommitAt: since - 200 * H, sessions: [], idle: true, progress: null },
   ],
-  attention: [{ name: 'horizon-v1', state: 'done', score: 50, since: since + 2 * H }],
+  attention: [
+    { name: 'horizon-v1', state: 'waiting_question', score: 80, since: since + 2 * H },
+    { name: 'watcher', state: 'done', score: 50, since: since + H },
+  ],
 };
 
 test('build returns the three blocks the view renders', () => {

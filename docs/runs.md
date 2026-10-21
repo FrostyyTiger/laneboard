@@ -280,6 +280,9 @@ in the window, `end` = the last, `better`), `stop` (the reason or null), `prs`
 (URLs of the `pr` artifacts given in the window), `usd` (the run's `cost` when
 the whole run is in the window, else the window's rounds' `usd`; null when
 nothing says), `usage`, `startedAt`, `updatedAt`. No runs means `runs: []`.
+Its `needsYou` also lists every open need of a run that a person answers (not
+a `wait`), whatever the window, as the Inbox's "Run needs" does: `source:
+"run"`, `id` `run:<run>:<ts>`, `run`, `name` (the run), `kind`, `text`, `at`.
 
 A posted event is written as sent, on one line, with `ts` set to the server's
 time if it had none; the answer is `201 {"ok": true, "run", "t"}`, and the run
