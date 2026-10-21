@@ -345,11 +345,31 @@ a.rn-tl-role-a:focus-visible { outline: var(--bw) solid var(--accent); outline-o
 }
 
 /* ---- phone: the rounds table drops its minor columns (TL_NARROW_HIDDEN in runs.js) so round,
-   role, outcome, commit and cost fit 390 px; task and duration stay in the row's title */
+   role, outcome, commit and cost fit 390 px on one line; each round's title and task id take a
+   second line under it in --text-2 (T23, reviews/13-designer.md Run page 6). The table becomes a
+   grid with the rows as `display: contents`, so the first-line columns still line up across rows. */
 @media (width < 700px) {
-  .rn-tl [data-col="task"],
   .rn-tl [data-col="span"],
   .rn-tl [data-col="sessions"] { display: none; }
+  /* dense: the task cell, between role and outcome in the markup, jumps to its own line and
+     outcome, commit and cost fill line one back in */
+  .rn-tl { display: grid; grid-template-columns: repeat(4, auto) minmax(0, 1fr); grid-auto-flow: row dense; }
+  .rn-tl thead,
+  .rn-tl tbody,
+  .rn-tl tr { display: contents; }
+  .rn-tl th[data-col="task"] { display: none; }
+  .rn-tl td { border-bottom: 0; }
+  .rn-tl td[data-col="task"] {
+    grid-column: 1 / -1;
+    max-width: none;
+    padding-top: 0;
+    border-bottom: var(--bw) solid var(--line-weak);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    color: var(--text-2);
+  }
+  /* a round with no title and no task keeps only the rule under its line */
+  .rn-tl td[data-col="task"][data-none] { padding-block: 0; font-size: 0; }
   /* the run page's goal wraps whole instead of ending in "…" (T26); the list row still clips */
   .rn-head .rn-goal,
   .rn-head .rn-goal-t { white-space: normal; overflow-wrap: anywhere; }

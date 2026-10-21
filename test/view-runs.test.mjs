@@ -654,6 +654,38 @@ test('runs.css: a phone drops the rounds table\'s minor columns and keeps round,
   }
 });
 
+// reviews/13-designer.md Run page 6: at 390 the round title, T4's addition, did not show at all.
+test('T23: a phone keeps each round\'s title and task id on a second line under the round', () => withDom(() => {
+  assert.ok(!TL_NARROW_HIDDEN.includes('task'), 'the task cell is drawn on a phone');
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const phone = css.slice(css.indexOf('@media (width < 700px)'));
+  assert.doesNotMatch(phone, /\.rn-tl \[data-col="task"\]/, 'no phone rule hides the task cell');
+  // the rows are grid contents, the task cell spans the row as line two, in --text-2
+  assert.match(phone, /\.rn-tl \{ display: grid;[^}]*grid-auto-flow: row dense;/, "line one fills back in after the task cell");
+  assert.match(phone, /\.rn-tl tr \{ display: contents; \}/);
+  const cell = phone.match(/\.rn-tl td\[data-col="task"\] \{([^}]*)\}/)?.[1] ?? '';
+  assert.match(cell, /grid-column: 1 \/ -1;/);
+  assert.match(cell, /color: var\(--text-2\);/);
+  assert.match(cell, /white-space: normal;/, 'a long title wraps instead of being cut');
+  assert.match(phone, /\.rn-tl th\[data-col="task"\] \{ display: none; \}/, 'no TASK header over line one');
+  // the markup a phone draws: the title and task id in the row, an empty task cell flagged
+  const run = JSON.parse(JSON.stringify(foldRun([
+    { t: 'run.start', goal: 'g', ts: 1000 },
+    { t: 'round.start', n: 1, role: 'builder', task: 'T4', title: 'The run page shows them', ts: 2000 },
+    { t: 'round.end', n: 1, outcome: 'kept', commit: 'c3e4a5b0', usd: 3.68, ts: 3000 },
+    { t: 'round.start', n: 2, role: 'reviewer', ts: 4000 },
+  ].map((e) => parseLine(JSON.stringify({ v: 1, run: 'demo', ...e }))).map((r) => r.event))));
+  const rows = byClass(renderRunPage(document.createElement('div'), run, { status: 'ok', id: 'demo' }, 9000), 'rn-tl-row');
+  const task = byClass(rows[0], 'rn-tl-task')[0];
+  assert.equal(task.dataset.col, 'task');
+  assert.equal(task.textContent, 'The run page shows themT4');
+  assert.equal(task.dataset.none, undefined);
+  assert.equal(byClass(rows[1], 'rn-tl-task')[0].dataset.none, '', 'no title, no task: no second line');
+  // line one, in column order: round, role, outcome, commit, cost
+  const one = rows[0].children.filter((c) => !['task', ...TL_NARROW_HIDDEN].includes(c.dataset.col));
+  assert.deepEqual(one.map((c) => c.textContent), ['1', 'builder', 'kept', 'c3e4a5b', '$3.68']);
+}));
+
 // Seen at 390 (shots r8-T3/before page/custom-*-390.png): the sparklines took half the row
 // and the goal ended in "…" with no way to read it.
 test('T26: a narrow run page stretches the score line to the row and wraps the goal whole', () => withDom(() => {

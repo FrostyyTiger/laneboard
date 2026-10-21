@@ -897,8 +897,11 @@ const TL_COLS = [
   ['n', 'round'], ['role', 'role'], ['task', 'task'], ['outcome', 'outcome'],
   ['commit', 'commit'], ['cost', 'cost'], ['span', 'duration'], ['sessions', 'sessions'],
 ];
-/** Columns a phone does not draw (runs.css, width < 700px, the phone breakpoint): the row carries task and duration as its title. */
-export const TL_NARROW_HIDDEN = ['task', 'span', 'sessions'];
+/**
+ * Columns a phone does not draw (runs.css, width < 700px, the phone breakpoint): the row carries the
+ * duration as its title. The task cell stays, as a second line under the round (T23).
+ */
+export const TL_NARROW_HIDDEN = ['span', 'sessions'];
 /** Columns drawn only when some row has a value (T40, reviews/25-designer.md: SESSIONS read `—` in every row). */
 const TL_OPTIONAL = { sessions: (r) => r.sessions.length > 0 };
 
@@ -953,7 +956,11 @@ function roleCell(r) {
  */
 function taskCell(r) {
   const task = r.wrapup ? null : r.task;
-  if (!r.title) return el('td', 'rn-tl-task', task ?? (r.wrapup ? '' : DASH));
+  if (!r.title) {
+    const td = el('td', 'rn-tl-task', task ?? (r.wrapup ? '' : DASH));
+    if (!task) td.dataset.none = ''; // a phone draws no second line for it (T23)
+    return td;
+  }
   const td = el('td', 'rn-tl-task');
   td.append(el('span', 'rn-tl-title', r.title));
   if (task) td.append(el('span', 'rn-tl-tid', task));
