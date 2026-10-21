@@ -13,6 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseLine, parseLines, foldRun } from '../server/runs/protocol.mjs';
 
+const RUN_SUB_NAMES = ['start', 'round', 'score', 'needs', 'ack', 'artifact', 'stop'];
 const BIN = fileURLToPath(new URL('../bin/laneboard', import.meta.url));
 
 function tmpDir(t) {
@@ -167,6 +168,36 @@ test('bad arguments exit 2 and write nothing', async (t) => {
   assert.match(help.stdout, /^  --run <id> .*\$LANEBOARD_RUN/m);
   assert.match(help.stdout, /^  --file f .*\$LANEBOARD_RUN_FILE/m);
   assert.match(help.stdout, /^  --post .*POST \/api\/runs\/events/m);
+});
+
+test('`run <sub> --help` prints that subcommand\'s usage, exit 0, and writes nothing (night 4 T33)', async (t) => {
+  const dir = tmpDir(t);
+  const env = envFor(dir, { LANEBOARD_RUN: 'r1/1' });
+  const cases = [
+    [['start', '--help'], /^usage: laneboard run start \[--goal g\]/m],
+    [['round', '-h'], /^usage: laneboard run round --n N --end /m],
+    [['score', '--run', 'r1', '--help'], /^usage: laneboard run score --name m --value x/m],
+    [['needs', '--kind', 'wait', '--help'], /^usage: laneboard run needs /m],
+    [['ack', '0', '--help'], /^usage: laneboard run ack \[<run>\] <ref>/m],
+    [['--post', 'stop', '--help'], /^usage: laneboard run stop \[--reason /m],
+  ];
+  for (const [args, want] of cases) {
+    const r = await run(['run', ...args], env, dir);
+    assert.equal(r.code, 0, `${args.join(' ')}: ${r.stderr}`);
+    assert.match(r.stdout, want, args.join(' '));
+    // Only that subcommand's lines, then the common flags.
+    const sub = args.find((a) => RUN_SUB_NAMES.includes(a));
+    const named = [...r.stdout.matchAll(/^usage: laneboard run (\S+)/gm)].map((m) => m[1]);
+    assert.deepEqual([...new Set(named)], [sub], args.join(' '));
+    assert.match(r.stdout, /^  --file f .*\$LANEBOARD_RUN_FILE/m);
+    assert.equal(r.stderr, '', args.join(' '));
+  }
+  assert.deepEqual(fs.readdirSync(dir), [], 'nothing was written');
+  // A --help that is a flag's value is the value, not a help request.
+  const text = await run(['run', 'needs', '--text', '--help'], env, dir);
+  assert.equal(text.code, 0, text.stderr);
+  const [line] = fs.readFileSync(path.join(dir, '.laneboard', 'run.jsonl'), 'utf8').trim().split('\n');
+  assert.equal(JSON.parse(line).text, '--help');
 });
 
 test('laneboard --help lists the run subcommand', async (t) => {

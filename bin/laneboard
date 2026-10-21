@@ -870,6 +870,23 @@ every subcommand:
 // prints the whole usage (that is what the user asked for).
 const runUsage = (msg) => die(msg ? `run: ${msg}\nsee: laneboard run --help` : RUN_USAGE, 2);
 
+/** `laneboard run <sub> … -h|--help`: a -h/--help word that is not a flag's value. */
+function wantsHelp(allowed) {
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '-h' || argv[i] === '--help') return true;
+    const spec = RUN_COMMON[argv[i]] ?? allowed[argv[i]];
+    if (spec && spec[1] !== 'bool') i += 1;
+  }
+  return false;
+}
+
+/** One subcommand's lines of RUN_USAGE, then the flags every subcommand takes. */
+function subUsage(sub) {
+  const lines = RUN_USAGE.split('\n');
+  const own = lines.filter((l) => l.startsWith(`  ${sub} `)).map((l) => `usage: laneboard run ${l.trim().replace(/^(\S+)\s+/, '$1 ')}`);
+  return [...own, ...lines.slice(lines.indexOf('every subcommand:'))].join('\n');
+}
+
 /** argv → {field: value} for the allowed flags; every other word is a usage error.
  *  `out` may hold flags already read (the common ones before the subcommand);
  *  with `until`, it stops at the first word that is not a flag in `allowed`. */
@@ -937,6 +954,10 @@ async function cmdRun() {
     return;
   }
   if (!Object.hasOwn(RUN_SUBS, sub ?? '')) runUsage(sub ? `unknown run subcommand: ${JSON.stringify(cleanTerm(sub))}` : '');
+  if (wantsHelp(RUN_SUBS[sub])) {
+    process.stdout.write(`${subUsage(sub)}\n`);
+    return;
+  }
   // `ack [<run>] <ref>`: up to two words that are not flags or flag values, anywhere
   // after `ack`; one is the ref, two are the run and the ref. A third is an error below.
   const words = [];
