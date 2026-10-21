@@ -93,6 +93,13 @@ The copy is not a clean slate for reads: it still sees this machine's real
 sessions and directories (`laneboard ls` against it lists them). It only
 reads them, it writes nothing there.
 
+The CLI follows the same variables: with `LANEBOARD_STATE_DIR` set, `laneboard
+pause`, `resume` and `paused` (with or without `--all`) read and write only that
+dir, never the real one. Two commands write outside it by design: `laneboard run`
+without `--post` appends to `./.laneboard/run.jsonl` in the current directory
+(or `--file`), and `laneboard fleet keygen` without `--out` writes the real hub key
+(`$XDG_CONFIG_HOME/laneboard/hub.key`, else `~/.config/laneboard/hub.key`).
+
 ## CLI
 
 `laneboard` is `bin/laneboard` in the checkout. Run it as `node bin/laneboard ls`,
