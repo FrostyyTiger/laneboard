@@ -43,6 +43,11 @@ npm test
 node server/index.mjs     # http://127.0.0.1:7777
 ```
 
+On a start with no config the first log line is a WARN, `fleet auth: no
+fleet.ingressPort (no fleet block) …`. That is expected: with no `fleet` block
+every request counts as local, and the line says so. It goes away once
+there is a `fleet` block (its ingress port defaults to `7778`, `docs/config.md`).
+
 Install it as a `systemd --user` service, put HTTPS in front of it and add it
 to a phone's home screen: see **[docs/install.md](docs/install.md)**.
 

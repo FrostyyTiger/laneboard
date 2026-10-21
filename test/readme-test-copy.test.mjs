@@ -83,3 +83,12 @@ test('README says where the builder id, code and Map title come from with no fle
     assert.ok(read('docs/config.md').includes(v), `docs/config.md documents ${v}`);
   }
 });
+
+test('README says the no-config startup WARN about fleet.ingressPort is expected (runs T39)', () => {
+  const readme = read('README.md');
+  assert.match(readme, /On a start with no config the first log line is a WARN, `fleet auth: no\s+fleet\.ingressPort/);
+  assert.match(readme, /That is expected: with no `fleet` block\s+every request counts as local/);
+  const src = read('server/boot/common.mjs');
+  assert.ok(src.includes("log.warn(`fleet auth: ${w}`)"), 'the boot path logs the warning with the fleet auth: prefix');
+  assert.ok(src.includes('no fleet.ingressPort (no fleet block)'), 'the warning text the README quotes');
+});
