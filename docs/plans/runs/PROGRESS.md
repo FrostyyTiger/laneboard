@@ -77,6 +77,8 @@ Planner notes (round 1), from reading the code:
 - [ ] T29 (3, review 27-designer, Board 5) [ui] Lane cards are as tall as their content: a red-framed card does not stretch to the tallest card in its row (`align-items: start` on the lane grid) — done when: a CSS test finds the rule on the lane grid; board shots at 1440 (dark + light), console clean
 - [ ] T30 (2, review 27-designer, Board 3) [ui] Board filter chips have equal left and right padding (`--sp-3`), no blank slot on the left — done when: a CSS test finds equal padding on the chip; board shots (dark + light, 1440 + 390), console clean
 - [ ] T31 (2, review 27-designer, Inbox 2) [ui] The `BASH` tool badge is outlined in both themes, like the lane plates, never a grey fill in light — done when: a CSS test finds no background fill on the badge in the light theme; inbox shots (light, 1440 + 390), console clean
+- [ ] T32 (2, review 34-stranger, 2) `laneboard run needs ack …` (a known subcommand as the bare word after another) says `did you mean: laneboard run ack [<run>] <ref>` instead of only `unexpected argument` (`bin/laneboard` run arg parsing; same close-match line the top-level unknown command prints) — done when: `test/cli-run.test.mjs` runs `run needs ack demo 0`, finds exit 2 and the `did you mean` line naming `run ack`
+- [ ] T33 (2, review 34-stranger, 5) `laneboard run artifact --help` and `docs/runs.md` say what the default `--kind` is and that only `kind: pr` artifacts appear in a run's `prs` — done when: `test/cli-run.test.mjs` finds the default kind named in the artifact help and `test/runs-docs.test.mjs` finds the `prs` sentence
 
 ## Research questions
 
@@ -147,6 +149,14 @@ Planner notes (round 1), from reading the code:
     stderr for every subcommand, or keep it quiet?
   - The README test-copy snippet hard-codes port 7788 and does not check it is free; a stranger tested
     the wrong board for a pass (third review to hit it). Later has it (n3 T57); consider moving it up.
+- From review 34-stranger (no task; say which you want):
+  - A copy that cannot bind its port could log which board answers instead (pid/title), so a
+    backgrounded start is not mistaken for a pass.
+  - `/api/box` and `/api/audit` are guessed from view names and 404 without a hint; the README maps
+    them to `/api/v1/health?history=1` and `/api/v1/audit`. A hint in the JSON 404 would need fenced
+    `server/http.mjs`.
+  - README's CLI section never names `laneboardctl` (only docs/install.md does), and it says Ctrl-C to
+    stop the copy, which does not work for a backgrounded one (`kill $!`; `pkill -f` kills every board).
 - Ideas from review 27-designer (none made a task; say which you want):
   - `shoot.mjs` (fenced): freeze the demo fleet's clock and seed so dark and light shots show the
     same fleet (BC online vs offline, NEED counts differed between shots seconds apart).
@@ -180,5 +190,8 @@ Planner notes (round 1), from reading the code:
   fill (T14), `$0.00` and bare MACHINE (T15, T17), phone RUN PRS cut (T16), stuck row in the Inbox
   (already For the owner from T13), light olive amber and heavy panels (review 6 ideas). Lane naming,
   shot freezing, phone nav/launch layout went to For the owner. Console clean.
+
+- reviews/34-stranger.md: 6 findings, 2 became tasks (T32, T33). Dropped as covered: taken test port
+  (Later n3 T57, third time reported). Items 3, 4 and 6 went to For the owner. No browser, pages not looked at.
 
 ## Morning
