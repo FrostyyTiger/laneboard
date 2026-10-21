@@ -100,6 +100,7 @@ the owner types `--by owner` (the docs' example). A refused ack is kept in `raw`
 
 ## For the owner
 
+- **Fenced `server/boot/common.mjs` (round 51): `/healthz` can answer before the ingress listener is bound.** `listenAll` binds `config.port` first and `fleet.ingressPort` second, so a health check passes while ingress is still coming up, or just before the process exits because the ingress port is taken. That made one test flake with ECONNREFUSED; the test helper now waits for the ingress port too. Binding the ingress port first (or registering `/healthz` only after every listener is up) would fix this in the server.
 - **T29 taste call (round 47): on a phone (≤ 480 px) healthy machines lose their labels too.** Following r22 Map 1 literally, only trouble, the selection and find matches are labelled, so BUILDER-A, HV1, VM-A etc. show only on tap (the builder squares still carry BA/BB/BC). If machines should keep their names, add `plate` kinds to the phone `show` test in `public/js/views/map/render.js` `labelPlan`; the collision pass then drops whatever does not fit.
 - **The night's list stops at T12 plus what triage adds.** The planner role caps a night at 12 tasks
   and the loop stops when none is open, so README §7 Night 4 items 3-9 are not tasks yet: the agreed

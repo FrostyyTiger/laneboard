@@ -67,6 +67,7 @@ export async function freePort({ exclude = [] } = {}) {
   throw new Error(`no free port in ${PORT_MIN}-${PORT_MAX}`);
 }
 
+const isPort = (v) => Number.isInteger(v) && v > 0 && v < 65536;
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 function loopbackHost(h) {
@@ -129,6 +130,33 @@ async function waitHealthy(url, child, timeoutMs, logs) {
     await new Promise((res) => setTimeout(res, 100));
   }
   throw new Error(`laneboard did not answer /healthz within ${timeoutMs} ms (${lastErr?.message})\n${logs().slice(-4000)}`);
+}
+
+function canConnect(port) {
+  return new Promise((resolve) => {
+    const s = net.connect({ port, host: '127.0.0.1' });
+    s.setTimeout(1000);
+    s.once('connect', () => { s.destroy(); resolve(true); });
+    s.once('error', () => resolve(false));
+    s.once('timeout', () => { s.destroy(); resolve(false); });
+  });
+}
+
+// listenAll binds the ingress port after the main one, so /healthz can answer
+// before ingress is up, or before a lost race for the ingress port makes the
+// child exit (EADDRINUSE). Wait for the ingress listener too.
+async function waitListening(port, child, timeoutMs, logs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      const err = new Error(`laneboard exited (${child.exitCode ?? child.signalCode}) before the ingress port ${port} listened\n${logs().slice(-4000)}`);
+      err.exited = true;
+      throw err;
+    }
+    if (await canConnect(port)) return;
+    await new Promise((res) => setTimeout(res, 50));
+  }
+  throw new Error(`laneboard did not listen on the ingress port ${port} within ${timeoutMs} ms\n${logs().slice(-4000)}`);
 }
 
 async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey }) {
@@ -247,6 +275,8 @@ async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey }) {
   let health;
   try {
     health = await waitHealthy(url, child, timeoutMs, logs);
+    const ingressListen = e.LANEBOARD_INGRESS_PORT !== undefined ? Number(e.LANEBOARD_INGRESS_PORT) : ingressPort;
+    if (isPort(ingressListen) && ingressListen !== Number(e.LANEBOARD_PORT)) await waitListening(ingressListen, child, timeoutMs, logs);
   } catch (err) {
     await stop();
     throw err;
