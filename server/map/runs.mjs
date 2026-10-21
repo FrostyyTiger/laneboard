@@ -31,7 +31,9 @@ export function runProgress(run) {
   const last = Array.isArray(list) && list.length ? list[list.length - 1] : null;
   if (last && num(last.max) > 0 && num(last.value) !== null) return Math.round(clamp01(last.value / last.max) * 100) / 100;
   const max = num(run?.budget?.rounds);
-  if (max > 0) return Math.round(clamp01((run.rounds?.length ?? 0) / max) * 100) / 100;
+  // a wrap-up round (after run.stop) is not one of the budget's rounds (runs-n5 T3/T4)
+  const done = Number.isInteger(run?.counted) ? run.counted : (run.rounds ?? []).filter((r) => !r?.wrapup).length;
+  if (max > 0) return Math.round(clamp01(done / max) * 100) / 100;
   return null;
 }
 

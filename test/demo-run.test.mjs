@@ -27,7 +27,10 @@ test('the fixture parses whole: every line known, nothing skipped', () => {
 test('the times move so the run stopped DEMO_RUN_AGO_MS before now; the deadline moves with them', () => {
   const run = demoRun(NOW);
   assert.equal(run.updatedAt, NOW - DEMO_RUN_AGO_MS);
-  assert.equal(run.stop.ts, NOW - DEMO_RUN_AGO_MS);
+  // the wrap-up round (runs-n5 T4) is the last thing, after the stop
+  assert.ok(run.stop.ts < run.updatedAt);
+  assert.equal(run.rounds.at(-1).wrapup, true);
+  assert.equal(run.rounds.at(-1).endedAt, NOW - DEMO_RUN_AGO_MS);
   assert.ok(run.deadlineAt > run.startedAt && run.deadlineAt > NOW, 'the deadline is still ahead');
   // The original gaps stay.
   const orig = parseLines(fs.readFileSync(DEMO_RUN_FILE, 'utf8')).events;
@@ -63,7 +66,11 @@ test('the list row: rounds, latest scores with trend, one open need, the stop re
 
 test('the run page: rounds with roles and outcomes, a pr artifact, the scores over rounds', () => {
   const run = demoRun(NOW);
-  assert.deepEqual(run.rounds.map((r) => r.n), [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(run.rounds.map((r) => r.n), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(run.rounds.filter((r) => r.wrapup).map((r) => r.n), [8], 'round 8 is the wrap-up');
+  assert.equal(run.counted, 7);
+  assert.ok(run.rounds.some((r) => r.title), 'some rounds carry a title');
+  assert.ok(run.stop.detail);
   assert.ok(run.rounds.every((r) => r.role && r.outcome && r.usd > 0));
   assert.ok(run.rounds.some((r) => r.outcome === 'no-task-done'), 'one round got nothing done');
   assert.deepEqual(run.artifacts.map((a) => a.kind), ['pr']);

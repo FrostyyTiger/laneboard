@@ -73,6 +73,10 @@ test('progress: the tasks score over its max beats rounds; none without either',
   // A tasks score without max falls back to rounds; values past max are clamped.
   assert.equal(runProgress(fold('y', [{ t: 'run.start', budget: { rounds: 4 } }, { t: 'round.start', n: 1 }, { t: 'score', name: 'tasks', value: 3 }])), 0.25);
   assert.equal(runProgress(fold('z', [{ t: 'run.start' }, { t: 'score', name: 'tasks', value: 20, max: 12 }])), 1);
+  // a wrap-up round after the stop does not move the ring past the rounds done (T4)
+  assert.equal(runProgress(fold('w', [{ t: 'run.start', budget: { rounds: 2 } }, { t: 'round.start', n: 1 }, { t: 'round.start', n: 2 },
+    { t: 'run.stop', reason: 'rounds' }, { t: 'round.start', n: 3, wrapup: true }])), 1);
+  assert.equal(runProgress(fold('v', [{ t: 'run.start', budget: { rounds: 4 } }, { t: 'round.start', n: 1 }, { t: 'run.stop', reason: 'x' }, { t: 'round.start', n: 2, wrapup: true }])), 0.25);
   assert.equal(runProgress(fold('w', [{ t: 'run.start' }, { t: 'score', name: 'tasks', value: 0, max: 12 }])), 0);
 });
 

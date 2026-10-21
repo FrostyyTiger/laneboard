@@ -319,6 +319,10 @@ function stateNode(row, stop = null) {
   if (stop) {
     n.append(el('span', 'rn-state-why', `· ${stop.why}`));
     n.title = s.title = stop.title;
+    if (stop.detail) {
+      n.dataset.detail = '';
+      n.append(el('span', 'rn-state-detail', stop.detail));
+    }
   }
   const stuck = stuckOf(row);
   if (stuck) {
@@ -586,11 +590,13 @@ function rnLastScores(run) {
 export function runSummaryOf(run) {
   if (!isObj(run)) return null;
   const rounds = Array.isArray(run.rounds) ? run.rounds.filter(isObj) : [];
-  const last = rounds[rounds.length - 1] ?? null;
+  // A wrap-up round (after run.stop) is not one of the budget's rounds: "63 / 63", never "64 / 63" (T4).
+  const counted = rounds.filter((r) => r.wrapup !== true);
+  const last = counted[counted.length - 1] ?? null;
   return {
     run: run.run, goal: run.goal, plan: run.plan, branch: run.branch, state: run.state,
     round: Number.isInteger(last?.n) ? last.n : null,
-    rounds: rounds.length,
+    rounds: Number.isInteger(run.counted) ? run.counted : counted.length,
     maxRounds: isObj(run.budget) ? run.budget.rounds ?? null : null,
     scores: rnLastScores(run),
     usage: run.usage, cost: run.cost, deadline: run.deadline, deadlineAt: run.deadlineAt,
@@ -604,9 +610,10 @@ export function runSummaryOf(run) {
 
 /**
  * The timeline: one entry per round, by `n`, at `now`:
- * {n, role, task, outcome, commit, usd, cost, ms, span, live, starts, sessions}.
+ * {n, role, task, title, wrapup, outcome, commit, usd, cost, ms, span, live, starts, sessions}.
  * A round with no end is `live` while the run is not stopped (its duration
- * runs to `now`); in a stopped run it just has no outcome.
+ * runs to `now`); in a stopped run it just has no outcome. An unknown cost is
+ * DASH, never $0.00; a `wrapup` round is the review after run.stop (T4).
  */
 export function roundRows(run, now = Date.now()) {
   const stopped = run?.state === 'stopped';
@@ -620,6 +627,8 @@ export function roundRows(run, now = Date.now()) {
       n: r.n,
       role: rnClean(r.role, 40),
       task: rnClean(r.task, 120),
+      title: rnClean(r.title, 200),
+      wrapup: r.wrapup === true,
       outcome: rnClean(r.outcome, 40) ?? (live ? 'running' : null),
       commit,
       short: commit ? commit.slice(0, 7) : null,
@@ -636,9 +645,11 @@ export function roundRows(run, now = Date.now()) {
 
 /**
  * The sessions tied to a round (T12, server/runs/bind.mjs), first seen first:
- * [{id, label, cost, usd, maybe, title}]. The label is the session's name, or
+ * [{id, label, href, cost, usd, maybe, title}]. The label is the session's name, or
  * the first 8 characters of its id; `maybe` when another run worked in the
  * same dir at the same time. Bare ids (a fold without the bind) are taken too.
+ * `href` opens the session's sheet (`#session=<name>`, core/router.js) when the
+ * board knows its name; a session known only by its id has none (T4).
  */
 export function roundSessions(r) {
   const list = Array.isArray(r?.sessions) ? r.sessions : [];
@@ -652,9 +663,11 @@ export function roundSessions(r) {
     const bits = [id, how];
     if (rnClean(s.cwd, 300)) bits.push(rnClean(s.cwd, 300));
     if (s.maybe) bits.push('possibly: another run worked in this dir at the same time');
+    const name = sessionName(s.name);
     out.push({
       id,
       label: rnClean(s.name, 40) ?? id.slice(0, 8),
+      href: name ? `#session=${encodeURIComponent(name)}` : null,
       usd,
       cost: usd === null ? DASH : money(usd),
       maybe: s.maybe === true,
@@ -664,10 +677,17 @@ export function roundSessions(r) {
   return out;
 }
 
+/** A session name the router's `#session=` takes (one segment, no control characters), or null. */
+function sessionName(v) {
+  if (typeof v !== 'string' || v === '' || v.length > 128) return null;
+  return /[\u0000-\u001f\u007f/]/.test(v) ? null : v;
+}
+
 /**
- * The stop of a folded run -> {reason, p, why, text, title}, or null while it runs.
+ * The stop of a folded run -> {reason, p, why, detail, text, title}, or null while it runs.
  * `why` ("budget · after 7 rounds") follows STOPPED in the run page's state label
  * (T17); the loop's own `usd` stays in the title, the head's cost cell has the sum.
+ * `detail` (the loop's own words, T4) goes on a line under it.
  */
 export function stopOf(run) {
   if (run?.state !== 'stopped') return null;
@@ -678,10 +698,13 @@ export function stopOf(run) {
   const why = bits.join(' · ');
   const title = [isNum(s.ts) ? `stopped at ${new Date(s.ts).toISOString()}` : `stopped: ${reason}`];
   if (isNum(s.usd)) title.push(`the loop reported ${money(s.usd)}`);
+  const detail = rnClean(s.detail, 300);
+  if (detail) title.push(detail);
   return {
     reason,
     p: STOP_P[reason] ?? 'off',
     why,
+    detail,
     text: `stopped · ${why}`,
     title: title.join(' · '),
   };
@@ -878,12 +901,22 @@ function sessionsCell(list) {
   const td = el('td', 'rn-tl-ses');
   if (!list.length) { td.textContent = DASH; return td; }
   for (const s of list) {
-    const span = el('span', 'rn-tl-s', `${s.maybe ? '? ' : ''}${s.label} ${s.cost}`);
+    const span = el(s.href ? 'a' : 'span', 'rn-tl-s', `${s.maybe ? '? ' : ''}${s.label} ${s.cost}`);
+    if (s.href) span.href = s.href;
     span.dataset.session = s.id;
     if (s.maybe) span.dataset.maybe = '';
     span.title = s.title;
     td.append(span);
   }
+  return td;
+}
+
+/** The round's title with its task id muted beside it; the task alone, or DASH, without one (T4). */
+function taskCell(r) {
+  if (!r.title) return el('td', 'rn-tl-task', r.task ?? DASH);
+  const td = el('td', 'rn-tl-task');
+  td.append(el('span', 'rn-tl-title', r.title));
+  if (r.task) td.append(el('span', 'rn-tl-tid', r.task));
   return td;
 }
 
@@ -907,8 +940,11 @@ function timelineSection(run, now) {
     const tr = el('tr', 'rn-tl-row');
     tr.dataset.n = String(r.n);
     if (r.live) tr.dataset.live = '';
-    tr.title = [r.task ? `task: ${r.task}` : null, r.span && r.span !== DASH ? `took ${r.span}` : null].filter(Boolean).join(' · ');
-    const nCell = el('td', 'rn-tl-n', String(r.n));
+    if (r.wrapup) tr.dataset.wrapup = '';
+    tr.title = [r.title, r.task ? `task: ${r.task}` : null, r.span && r.span !== DASH ? `took ${r.span}` : null].filter(Boolean).join(' · ');
+    // the wrap-up after run.stop is not a counted round: it reads "wrap-up", never "64" of 63 (T4)
+    const nCell = el('td', 'rn-tl-n', r.wrapup ? 'wrap-up' : String(r.n));
+    if (r.wrapup) nCell.title = `round ${r.n}: the wrap-up after the stop, not counted against the cap`;
     if (r.starts > 1) {
       const re = el('span', 'rn-tl-re', ` ×${r.starts}`);
       re.title = `started ${r.starts} times (retries)`;
@@ -921,7 +957,7 @@ function timelineSection(run, now) {
     const cells = {
       n: nCell,
       role: el('td', 'rn-tl-role', r.role ?? DASH),
-      task: el('td', 'rn-tl-task', r.task ?? DASH),
+      task: taskCell(r),
       outcome,
       commit,
       cost: el('td', 'rn-tl-cost', r.cost),

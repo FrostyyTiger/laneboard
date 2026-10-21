@@ -13,7 +13,7 @@ import { summarize } from '../server/routes/runs.mjs';
 import runsView, {
   renderRuns, mountRuns, unmountRuns, loadRuns, sortRuns, scoreList, scoreTrend, scoreText, burnOf,
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, EMPTY_HUB, LIST_URL, SCORE_MAX,
-  renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
+  renderRunPage, roundRows, roundSessions, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
   runHref, runUrl, LIST_HREF, needActions, ackNeed, ACK_BY, EVENTS_URL, TL_NARROW_HIDDEN, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
   needsCell, tlColumns, ackedNeedsOf, runCostOf,
 } from '../public/js/views/runs.js';
@@ -369,7 +369,7 @@ test('the timeline: a live round runs to now, retries are counted, rounds sort b
   });
   assert.equal(stopOf({ state: 'running' }), null);
   assert.deepEqual(stopOf({ state: 'stopped', stop: { reason: 'error', rounds: 1 } }),
-    { reason: 'error', p: '1', why: 'error · after 1 round', text: 'stopped · error · after 1 round', title: 'stopped: error' });
+    { reason: 'error', p: '1', why: 'error · after 1 round', detail: null, text: 'stopped · error · after 1 round', title: 'stopped: error' });
   assert.equal(stopOf({ state: 'stopped' }).text, 'stopped · unknown');
   assert.equal(stopOf({ state: 'stopped', stop: { reason: 'budget', ts: 0, usd: 9.98 } }).title,
     'stopped at 1970-01-01T00:00:00.000Z · the loop reported $9.98');
@@ -959,3 +959,79 @@ test('a run stopped with usd 2 and no cost event shows $2 on its row and page, m
   assert.equal(runCostOf({ cost: { usd: 3.75, rounds: 3 }, stopUsd: 9 }).loop, false);
   assert.equal(runCostOf({ cost: { usd: 0, rounds: 0 }, stopUsd: null }).text, '$0.00');
 }));
+
+test('T4: the run page shows round titles, session links, the stop detail and the wrap-up round', () => withDom(() => {
+  const events = [
+    { t: 'run.start', goal: 'Build it', budget: { rounds: 2 }, ts: 1000 },
+    { t: 'round.start', n: 1, role: 'builder', task: 'T4', title: 'The run page shows them', session: 'aaaaaaaa-1111-2222-3333-444444444444', ts: 2000 },
+    { t: 'round.end', n: 1, outcome: 'done', usd: 0.5, ts: 3000 },
+    { t: 'round.start', n: 2, role: 'builder', task: 'T5', session: 'bbbbbbbb-1111-2222-3333-444444444444', ts: 4000 },
+    { t: 'round.end', n: 2, outcome: 'done', ts: 5000 },
+    { t: 'run.stop', reason: 'rounds', rounds: 2, detail: 'the cap of 2 rounds was reached', ts: 6000 },
+    { t: 'round.start', n: 3, role: 'operator', task: 'wrap-up', wrapup: true, ts: 7000 },
+    { t: 'round.end', n: 3, outcome: 'done', ts: 8000 },
+  ].map((e) => parseLine(JSON.stringify({ v: 1, run: 'demo', ...e }))).map((r) => r.event);
+  const run = JSON.parse(JSON.stringify(foldRun(events)));
+  // the route's bind: round 1's session is one the board saw under a name, round 2's only an id
+  run.rounds[0].sessions = [{ sessionId: 'aaaaaaaa-1111-2222-3333-444444444444', name: 'builder-a-run', how: 'id' }];
+  run.rounds[1].sessions = [{ sessionId: 'bbbbbbbb-1111-2222-3333-444444444444', how: 'id' }];
+  assert.equal(run.state, 'stopped');
+
+  const sum = runSummaryOf(run);
+  assert.equal(sum.round, 2, 'the wrap-up is not the head round');
+  assert.equal(sum.rounds, 2);
+  assert.equal(roundText(sum), '2 / 2');
+
+  const page = renderRunPage(null, run, { status: 'ok', id: 'demo' }, 9000);
+  const t = page.textContent;
+  assert.doesNotMatch(t, /3 \/ 2|3 of 2/, 'never more rounds than the cap');
+  assert.doesNotMatch(t, /null|undefined|NaN/);
+
+  const rows = byClass(page, 'rn-tl-row');
+  assert.equal(rows.length, 3);
+  // the title, the task id muted beside it; a round without a title keeps its task
+  assert.equal(byClass(rows[0], 'rn-tl-title')[0].textContent, 'The run page shows them');
+  assert.equal(byClass(rows[0], 'rn-tl-tid')[0].textContent, 'T4');
+  assert.match(rows[0].title, /^The run page shows them · task: T4/);
+  assert.equal(byClass(rows[1], 'rn-tl-task')[0].textContent, 'T5');
+  assert.equal(byClass(rows[1], 'rn-tl-title').length, 0);
+  // an unknown round cost is a dash, a known one money
+  assert.equal(byClass(rows[0], 'rn-tl-cost')[0].textContent, '$0.50');
+  assert.equal(byClass(rows[1], 'rn-tl-cost')[0].textContent, '—');
+  // the wrap-up round
+  assert.equal(rows[2].dataset.wrapup, '');
+  assert.equal(byClass(rows[2], 'rn-tl-n')[0].textContent, 'wrap-up');
+  assert.match(byClass(rows[2], 'rn-tl-n')[0].title, /not counted/);
+
+  // a named session links to its sheet; an id-only one is plain text
+  const linked = byClass(rows[0], 'rn-tl-s')[0];
+  assert.equal(linked.tagName.toLowerCase(), 'a');
+  assert.equal(linked.href, '#session=builder-a-run');
+  assert.equal(parseHash(linked.href, { localId: 'builder-a' }).sel, 'builder-a/builder-a-run', 'the router opens that session');
+  const plain = byClass(rows[1], 'rn-tl-s')[0];
+  assert.equal(plain.tagName.toLowerCase(), 'span');
+  assert.equal(plain.href, undefined);
+  assert.equal(plain.textContent, 'bbbbbbbb —');
+
+  // the stop's detail on its own line under the reason
+  const state = byClass(page, 'rn-state')[0];
+  assert.equal(state.dataset.detail, '');
+  assert.equal(byClass(state, 'rn-state-why')[0].textContent, '· rounds · after 2 rounds');
+  assert.equal(byClass(state, 'rn-state-detail')[0].textContent, 'the cap of 2 rounds was reached');
+  assert.match(state.title, /the cap of 2 rounds was reached/);
+  // no detail, no line
+  const plainStop = renderRunPage(null, { ...run, stop: { ...run.stop, detail: null } }, { status: 'ok' }, 9000);
+  assert.equal(byClass(plainStop, 'rn-state-detail').length, 0);
+}));
+
+test('T4: a session name the router would refuse gets no link', () => {
+  const r = { sessions: [{ sessionId: 'x1', name: 'a/b' }, { sessionId: 'x2', name: 'ok\u0007' }, { sessionId: 'x3', name: 'web 1' }] };
+  const out = roundSessions(r);
+  assert.deepEqual(out.map((s) => s.href), [null, null, '#session=web%201']);
+});
+
+test('T4: the wrap-up and title rules have their CSS', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  assert.match(css, /\.rn-state-detail \{[^}]*flex-basis: 100%/);
+  assert.match(css, /\.rn-tl-tid \{[^}]*color: var\(--text-3\)/);
+});

@@ -62,6 +62,14 @@
 .rn-state-why { color: var(--text-1); }
 .rn-state[data-p="1"] .rn-state-why { color: var(--p1); }
 .rn-state[data-p="2"] .rn-state-why { color: var(--p2); }
+/* the loop's stop detail (T4): its own line under the reason, muted, wrapping (it is a sentence) */
+.rn-state[data-detail] { flex-wrap: wrap; max-width: 100%; }
+.rn-state-detail {
+  flex-basis: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+}
 /* the stuck badge (server/runs/stuck.mjs): Board's flag, the icon in p2 */
 .rn-stuck { display: inline-flex; color: var(--p2); }
 
@@ -274,9 +282,15 @@ a.rn-need-open { text-decoration: none; }
 /* minor columns stay narrow (T27): the task clips (full text in the row's title), sessions wrap */
 .rn-tl-task { max-width: 24ch; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
 .rn-tl-row[data-live] .rn-tl-outcome { color: var(--run); }
+/* a round's title with its task id muted beside it (T4); the wrap-up round's label is muted */
+.rn-tl-task:has(.rn-tl-title) { max-width: 48ch; }
+.rn-tl-tid { margin-left: var(--sp-2); color: var(--text-3); }
+.rn-tl-row[data-wrapup] .rn-tl-n { color: var(--text-3); }
 /* the sessions tied to a round (T12): one chip per session, a guess shared with another run is faint */
 .rn-tl td.rn-tl-ses { color: var(--text-2); white-space: normal; }
 .rn-tl-s { white-space: nowrap; }
+a.rn-tl-s { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
+a.rn-tl-s:hover { color: var(--text-1); }
 .rn-tl-s + .rn-tl-s { margin-left: var(--sp-2); }
 .rn-tl-s[data-maybe] { color: var(--text-3); }
 

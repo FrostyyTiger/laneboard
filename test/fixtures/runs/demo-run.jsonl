@@ -9,13 +9,13 @@
 {"v":1,"t":"usage","run":"acme-search","ts":1792488222000,"n":2,"fiveHourPct":22,"sevenDayPct":24,"fiveHourResetsAt":1792493640,"overage":false}
 {"v":1,"t":"cost","run":"acme-search","ts":1792488228000,"n":2,"usd":0.95}
 {"v":1,"t":"round.end","run":"acme-search","ts":1792488240000,"n":2,"outcome":"kept","commit":"b2d3f4a","usd":0.95}
-{"v":1,"t":"round.start","run":"acme-search","ts":1792488300000,"n":3,"role":"builder","task":"T1"}
+{"v":1,"t":"round.start","run":"acme-search","ts":1792488300000,"n":3,"role":"builder","task":"T1","title":"Paged search endpoint with a cursor"}
 {"v":1,"t":"usage","run":"acme-search","ts":1792491402000,"n":3,"fiveHourPct":33,"sevenDayPct":26,"fiveHourResetsAt":1792496820,"overage":false}
 {"v":1,"t":"cost","run":"acme-search","ts":1792491408000,"n":3,"usd":1.84}
 {"v":1,"t":"score","run":"acme-search","ts":1792491414000,"name":"tests","value":0.88,"better":"higher","n":3}
 {"v":1,"t":"score","run":"acme-search","ts":1792491414000,"name":"tasks","value":1,"better":"higher","n":3}
 {"v":1,"t":"round.end","run":"acme-search","ts":1792491420000,"n":3,"outcome":"kept","commit":"c3e4a5b","usd":1.84}
-{"v":1,"t":"round.start","run":"acme-search","ts":1792491480000,"n":4,"role":"builder","task":"T2"}
+{"v":1,"t":"round.start","run":"acme-search","ts":1792491480000,"n":4,"role":"builder","task":"T2","title":"Web client pages through results"}
 {"v":1,"t":"needs","run":"acme-search","ts":1792491600000,"n":4,"kind":"fence","text":"round 4 wanted to change fenced files: server/http.mjs"}
 {"v":1,"t":"needs.ack","run":"acme-search","ts":1792492200000,"ref":0,"by":"inbox"}
 {"v":1,"t":"artifact","run":"acme-search","ts":1792493280000,"kind":"pr","url":"https://example.invalid/acme/acme-api/pull/42","title":"Paged search (agent loop)","state":"open"}
@@ -29,16 +29,18 @@
 {"v":1,"t":"usage","run":"acme-search","ts":1792497282000,"n":5,"fiveHourPct":55,"sevenDayPct":30,"fiveHourResetsAt":1792502700,"overage":false}
 {"v":1,"t":"cost","run":"acme-search","ts":1792497288000,"n":5,"usd":0.88}
 {"v":1,"t":"round.end","run":"acme-search","ts":1792497300000,"n":5,"outcome":"reviewed","commit":"e5a6c7d","usd":0.88}
-{"v":1,"t":"round.start","run":"acme-search","ts":1792497360000,"n":6,"role":"builder","task":"T3"}
+{"v":1,"t":"round.start","run":"acme-search","ts":1792497360000,"n":6,"role":"builder","task":"T3","title":"Search box keeps the query in the URL"}
 {"v":1,"t":"usage","run":"acme-search","ts":1792500162000,"n":6,"fiveHourPct":66,"sevenDayPct":32,"fiveHourResetsAt":1792505580,"overage":false}
 {"v":1,"t":"cost","run":"acme-search","ts":1792500168000,"n":6,"usd":1.52}
 {"v":1,"t":"score","run":"acme-search","ts":1792500174000,"name":"tests","value":0.9,"better":"higher","n":6}
 {"v":1,"t":"score","run":"acme-search","ts":1792500174000,"name":"tasks","value":2,"better":"higher","n":6}
 {"v":1,"t":"round.end","run":"acme-search","ts":1792500180000,"n":6,"outcome":"no-task-done","usd":1.52}
-{"v":1,"t":"round.start","run":"acme-search","ts":1792500240000,"n":7,"role":"builder","task":"T3"}
+{"v":1,"t":"round.start","run":"acme-search","ts":1792500240000,"n":7,"role":"builder","task":"T3","title":"Search box keeps the query in the URL"}
 {"v":1,"t":"usage","run":"acme-search","ts":1792503522000,"n":7,"fiveHourPct":92,"sevenDayPct":34,"fiveHourResetsAt":1792508940,"overage":false}
 {"v":1,"t":"cost","run":"acme-search","ts":1792503528000,"n":7,"usd":1.97}
 {"v":1,"t":"score","run":"acme-search","ts":1792503534000,"name":"tests","value":0.94,"better":"higher","n":7}
 {"v":1,"t":"score","run":"acme-search","ts":1792503534000,"name":"tasks","value":3,"better":"higher","n":7}
 {"v":1,"t":"round.end","run":"acme-search","ts":1792503540000,"n":7,"outcome":"kept","commit":"f6b7d8e","usd":1.97}
-{"v":1,"t":"run.stop","run":"acme-search","ts":1792503600000,"reason":"budget","rounds":7,"usd":9.98}
+{"v":1,"t":"run.stop","run":"acme-search","ts":1792503600000,"reason":"budget","rounds":7,"usd":9.98,"detail":"the 5-hour window reached 92 %, over the 90 % stop level"}
+{"v":1,"t":"round.start","run":"acme-search","ts":1792503660000,"n":8,"role":"operator","task":"wrap-up","title":"Review the night and write the report","wrapup":true}
+{"v":1,"t":"round.end","run":"acme-search","ts":1792504200000,"n":8,"outcome":"reported","usd":0.41}
