@@ -260,6 +260,36 @@ Not on night 4: runs on the fleet hub (§8 Q11), plain-curl intake (§8 Q12: no)
 and `AUDIT_LOCKED` messages (`server/boot/common.mjs`) and `sleep 1` at the end of `windowScript`
 (`server/review/scripts.mjs`).
 
+### Night 5 (agreed 2026-10-21: what night 4 did not plan, and the owner's calls)
+Nights 1-4 are on `main` (#14). Night 4's notes are in `nights/n4/`; its "For the owner" list was
+decided by the owner's session (§8 Q14). The planner plans **every** item below (rest under
+`## Later`); the loop replans when tasks run out.
+1. **Night 4 item 6:** a PR leaves the Inbox when it is merged or closed (artifact `state`, §8 Q10).
+2. **Night 4 item 7:** the loop's fields shown: `title`, `session`, `max`, `detail` (kept by the
+   protocol, shown under the stop reason), `wrapup` (never "64 of 63"), unknown cost not $0. The
+   PR artifact shows its title and state (operator r64).
+3. **Night 4 item 8:** the CLI and docs list, as written there.
+4. **Night 3 T46-T63** (`nights/n3/PROGRESS.md`), T52 `pause --all` first; skip any that a later
+   night already did and say so.
+5. **The owner's calls on night 4's stranger ideas** (§8 Q14):
+   a. An unknown command prints one line `unknown command: <x>` before the help (exit 2) (r13 b).
+   b. `GET /api/runs?run=<id>` filters on it; `rounds` vs `maxRounds` gets one line in `docs/runs.md` (r25).
+   c. `laneboard morning` lists runs that stopped in the window under Finished (r33 b).
+   d. `laneboard ls/morning/credit` print `board: <url>` on stderr (r41 a).
+   e. `laneboard run start` without `--run` keeps an inherited `LANEBOARD_RUN` but says so on
+      stderr (r41 b). With no config, names come from config or the hostname only, never from other
+      environment variables, and `docs/config.md` lists the variables the board reads (r49 a).
+   f. Unknown `/api/*` paths answer a JSON 404 (the page fallback is for non-API paths only);
+      `/api/morning?window=bogus` is a 400 (r41 c).
+   g. `laneboard run needs "text"` accepts a bare text (r58 b).
+   h. README: the "All five variables" sentence and the test-copy paragraph shortened (r13 c, r49 b).
+6. **If time is left, `[ui]`:** designer r10 ideas 2-5 (header cost line dim unless over budget;
+   lane-sidebar bars grey unless trouble; Runs list without empty cells, need text under the
+   title; run page sparkline ≤ 50 %, rounds table ≤ ~900 px). The designer judges against `docs/design.md`.
+Not on night 5: runs on the fleet hub (§8 Q11), labels under the phone annunciator icons (they do
+not fit at 390 px), posting every "For the owner" item as a need (the report's "Needs you" list is
+the curated one), the hub-control work (`docs/plans/hub-control/`, attended only).
+
 ## 8. Decisions (2026-10-20)
 - **Q1 Look:** polish the current control-room style (§5). No new direction.
 - **Q2 Order:** Runs (Part A) on night 1, Map 2 (Part B) on night 2.
@@ -279,3 +309,7 @@ and `AUDIT_LOCKED` messages (`server/boot/common.mjs`) and `sleep 1` at the end 
   on `HOOK_PATHS`: no (the header is the guard); signed feed push: later, with the hub.
 - **Q13 Merging (2026-10-21):** the reviewed stack #10-#12 gets its fixes on night 4, then one
   squash-merge to `main` (keeps the run rooms' commit metadata out of main) and the branches deleted.
+- **Q14 Night 4's owner list (2026-10-21, the owner's session on the owner's say-so):** accent
+  violet (the designer's values), phone Map labels on (≤ 8 nodes), `/healthz` after ingress (done
+  in #14); the stranger ideas as Night 5 item 5; designer r10 ideas 2-5 if time; phone annunciator
+  labels no. Nights 1-4 merged as #14 and the run branches deleted.
