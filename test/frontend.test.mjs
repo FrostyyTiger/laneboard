@@ -339,7 +339,7 @@ test('the shell breakpoints: phone <700, tablet 700-1199, desktop >=1200, ultraw
 test('the shell grid: header, rail, main, tape; the inspector overlays main', () => {
   const shell = read('css/shell.css');
   assert.match(shell, /grid-template-areas:\s*"head head head"\s*"rail main insp"\s*"tape tape tape"/);
-  assert.match(shell, /var\(--header-h\)/, 'the header is the 40px token');
+  assert.match(shell, /var\(--header-h\)/, 'the header is the --header-h token');
   assert.match(shell, /var\(--tape-h\)/, 'the bottom bar is the tape token');
   const insp = /\.shell-insp\s*\{([^}]*)\}/.exec(shell);
   assert.ok(insp, '.shell-insp rule');

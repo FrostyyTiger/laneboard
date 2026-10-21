@@ -110,3 +110,28 @@ for (const f of files) {
     }
   });
 }
+
+// Runs night 4 T11: Night was picked (§8 Q6) and folded into tokens.css v2.
+test('tokens.css v2 is Night: every value night.css sets is the same in tokens.css', () => {
+  assert.match(TOKENS, /^\/\* =+\n\s*laneboard tokens v2 "Night"/, 'a version line at the top');
+  const night = blocks(fs.readFileSync(path.join(DIR, 'night.css'), 'utf8'));
+  let n = 0;
+  for (const [prelude, props] of night) {
+    for (const [prop, value] of props) {
+      assert.equal(BASE.get(prelude)?.get(prop), value, `${prelude} { ${prop} }`);
+      n++;
+    }
+  }
+  assert.ok(n >= 20, `night.css sets the rows, header and both themes (${n} values)`);
+});
+
+test('docs/design.md exists and names the colour rule', () => {
+  const doc = fs.readFileSync(path.join(ROOT, 'docs', 'design.md'), 'utf8');
+  assert.match(doc, /tokens v2/);
+  assert.match(doc, /grey[^\n]*news|news[^\n]*grey/i, 'grey = news');
+  assert.match(doc, /wants you[^\n]*amber[^\n]*▲/i, 'amber ▲ = wants you');
+  assert.match(doc, /broken[^\n]*red[^\n]*■/i, 'red ■ = broken');
+  assert.match(doc, /one accent/i);
+  assert.match(doc, /no blue or cyan in content/i);
+  for (const t of ['--fs-10', '--fs-28', '--row-dense', '--radius', '--bg-surface']) assert.ok(doc.includes(t), `names ${t}`);
+});

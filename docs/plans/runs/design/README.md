@@ -1,5 +1,10 @@
 # Design directions, night 1 (runs plan T10)
 
+**Picked: `night.css`** (§8 Q6, 2026-10-21). It is folded into `public/css/tokens.css` v2 (night 4
+T11) and its rules are written in `docs/design.md`; "as now" below means tokens v1. Laid over v2,
+`night.css` changes nothing; `test/design-directions.test.mjs` checks every value it sets is in
+`tokens.css`.
+
 README §5 and §8 Q1: keep the control-room logic (grey unless something needs you, hue and shape
 only for trouble, one accent, data first) and raise the craft. These are three ways to do that,
 for the owner to pick one in the morning. The pick becomes `public/css/tokens.css` v2 and a short

@@ -1,6 +1,12 @@
 /* ===========================================================================
-   laneboard tokens: an ISA-101 high-performance HMI (plan §4 2.2, fleet D1)
+   laneboard tokens v2 "Night" (runs plan §8 Q6; v1: fleet plan §4 2.2, D1)
    ---------------------------------------------------------------------------
+   v2 folds in the night direction (docs/plans/runs/design/night.css): rows
+   24/32/44, a 36px header and 24px tape, line height 1.3, a deeper dark
+   canvas, text and lines one step firmer in both themes. The rules these
+   tokens serve are written down in docs/design.md.
+
+   An ISA-101 high-performance HMI.
    Grey is the baseline and colour means abnormal. One accent (safety orange)
    is spent only on selection, focus and the primary call to action. Status
    hues always travel with a shape: p1 ■, p2 ▲, p3 ◆, ok ●. Depth comes from
@@ -73,7 +79,7 @@
   --fs-20: 20px;   /* annunciator count on phone, KPI */
   --fs-28: 28px;   /* map hero count */
   --lh-tight: 1.1;
-  --lh: 1.35;
+  --lh: 1.3;
 
   /* Spacing, 4px base. */
   --sp-1: 4px;
@@ -84,17 +90,17 @@
   --sp-8: 32px;
 
   /* Rows. --row-h resolves from density (section 6). */
-  --row-dense: 28px;
-  --row-comfy: 36px;
+  --row-dense: 24px;
+  --row-comfy: 32px;
   --row-touch: 44px;
   --row-h: var(--row-dense);
 
   /* Sizes. */
-  --header-h: 40px;
+  --header-h: 36px;
   --rail-w-min: 56px;
   --rail-w: 220px;
   --insp-w: 360px;
-  --tape-h: 28px;
+  --tape-h: 24px;
   --tape-h-open: 200px;
   --pip-clear: 0px;       /* room the minimap covers; views/map.js sets it while it shows */
   --sheet-peek: 96px;     /* the phone bottom sheet's peek (bar + status line); phone.css, misc.css */
@@ -140,20 +146,20 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-canvas: oklch(16% 0.004 250);
-  --bg-surface: oklch(19% 0.004 250);
-  --bg-elevated: oklch(22% 0.004 250);
-  --bg-sunken: oklch(13% 0.004 250);
+  --bg-canvas: oklch(12% 0.004 250);
+  --bg-surface: oklch(16% 0.004 250);
+  --bg-elevated: oklch(20% 0.004 250);
+  --bg-sunken: oklch(9% 0.004 250);
   --bg-hover: oklch(100% 0 0 / 0.04);
   --bg-selected: oklch(100% 0 0 / 0.07);
 
-  --line-weak: oklch(100% 0 0 / 0.07);
-  --line: oklch(100% 0 0 / 0.13);
-  --line-strong: oklch(100% 0 0 / 0.26);
+  --line-weak: oklch(100% 0 0 / 0.09);
+  --line: oklch(100% 0 0 / 0.17);
+  --line-strong: oklch(100% 0 0 / 0.32);
 
-  --text-1: oklch(92% 0.003 250);
-  --text-2: oklch(72% 0.004 250);
-  --text-3: oklch(55% 0.004 250);
+  --text-1: oklch(96% 0.002 250);
+  --text-2: oklch(78% 0.004 250);
+  --text-3: oklch(62% 0.004 250);
   --text-inv: oklch(14% 0 0);
 
   --accent: oklch(70% 0.19 45);
@@ -176,21 +182,21 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --bg-canvas: oklch(93% 0.003 250);
-  --bg-surface: oklch(97% 0.002 250);
+  --bg-canvas: oklch(95% 0.002 250);
+  --bg-surface: oklch(99% 0.001 250);
   --bg-elevated: oklch(100% 0 0);
-  --bg-sunken: oklch(89% 0.003 250);
+  --bg-sunken: oklch(91% 0.003 250);
   --bg-hover: oklch(0% 0 0 / 0.04);
   /* One surface step, like the dark theme's 7 % white (runs T14). */
   --bg-selected: oklch(0% 0 0 / 0.1);
 
-  --line-weak: oklch(0% 0 0 / 0.08);
-  --line: oklch(0% 0 0 / 0.16);
-  --line-strong: oklch(0% 0 0 / 0.32);
+  --line-weak: oklch(0% 0 0 / 0.1);
+  --line: oklch(0% 0 0 / 0.2);
+  --line-strong: oklch(0% 0 0 / 0.4);
 
-  --text-1: oklch(20% 0.004 250);
-  --text-2: oklch(38% 0.004 250);
-  --text-3: oklch(52% 0.004 250);
+  --text-1: oklch(15% 0.004 250);
+  --text-2: oklch(32% 0.004 250);
+  --text-3: oklch(46% 0.004 250);
   --text-inv: oklch(98% 0 0);
 
   --accent: oklch(60% 0.19 45);

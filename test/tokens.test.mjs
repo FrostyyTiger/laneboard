@@ -106,9 +106,9 @@ test('the scale values are the plan’s', () => {
   const want = {
     '--fs-10': '10px', '--fs-11': '11px', '--fs-12': '12px', '--fs-13': '13px', '--fs-16': '16px',
     '--fs-20': '20px', '--fs-28': '28px', '--sp-1': '4px', '--sp-2': '8px', '--sp-3': '12px',
-    '--sp-4': '16px', '--sp-6': '24px', '--sp-8': '32px', '--row-dense': '28px', '--row-comfy': '36px',
+    '--sp-4': '16px', '--sp-6': '24px', '--sp-8': '32px', '--row-dense': '24px', '--row-comfy': '32px',
     '--row-touch': '44px', '--radius': '2px', '--bw': '1px', '--dur': '120ms', '--ls-label': '0.06em',
-    '--header-h': '40px', '--rail-w': '220px', '--insp-w': '360px', '--lamp': '8px',
+    '--header-h': '36px', '--tape-h': '24px', '--lh': '1.3', '--rail-w': '220px', '--insp-w': '360px', '--lamp': '8px',
   };
   for (const [k, v] of Object.entries(want)) assert.equal(ROOT_T.get(k), v, k);
   assert.match(ROOT_T.get('--font-mono'), /^"JetBrains Mono", .*monospace$/);

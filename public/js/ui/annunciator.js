@@ -1,5 +1,5 @@
 // The annunciator (fleet plan §4 2.5, task D7): eight fixed alarm tiles in a
-// 2x4 grid in the 40px header (#ann). ISA-18.2 style states:
+// 2x4 grid in the 36px header (#ann). ISA-18.2 style states:
 //   normal  dark (grey text-3), empty count
 //   unack   filled --pN, --text-inv text, 1 Hz flash in phase with every other
 //           unacknowledged element (components.js syncFlash); with
