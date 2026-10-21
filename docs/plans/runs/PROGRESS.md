@@ -85,6 +85,8 @@ Planner notes (round 1), from reading the code:
 - [x] T36 (r41-stranger.md, 6) `docs/runs.md` says where a `score` without `--n` lands (round 0, shown as run `round: null` until a round starts) — done when: `test/runs-docs.test.mjs` finds the sentence and a protocol test posts a score before any round and finds `n: 0` (commit e4f0740)
 - [ ] T37 (r49-stranger.md, 1) [ui] No horizontal overflow at 390 on an empty copy: the document is no wider than the viewport on map, board, inbox, runs, morning; the bottom nav shows every segment (or scrolls/wraps so each view is reachable by touch), the Morning window row and "What it cost" table (Sessions column) fit, the Board lane card and the Map Find box stay inside the right edge — done when: a view/CSS test at 390 finds no fixed min-width wider than the viewport on those pieces and the nav segments all present, and a headless shot of each view at 390 on an empty `:memory:` copy has `scrollWidth <= innerWidth` (numbers in the commit message), no page error
 - [ ] T38 (r49-stranger.md, 2) A fresh empty copy shows no DOWN count: find why the header DOWN tile reads 1 when the one builder's `/api/map` link is `up` and nothing is configured (which source counts it), make it agree with the builder's link state, and say in `docs/design.md` or README what DOWN counts — done when: a model test with one local builder, link up, no config finds DOWN 0, and the README/docs sentence is found by a docs test
+- [ ] T39 (r58-stranger.md, 3) `laneboard run ack <ref>` on a need that is already acked says so (`need <ref> already acked, nothing posted`, exit 0 or non-zero as T35 chose for a missing ref, stated in the usage) instead of a second `ok ... needs.ack posted` — done when: a CLI test acks need 0 twice and finds the plain sentence on the second call and no second `needs.ack` line in the run file
+- [ ] T40 (r58-stranger.md, 5) `laneboard run round --help` and the usage line in `docs/runs.md` say the output is meant for `eval "$(laneboard run round --n 1 ...)"` — done when: a CLI test finds `eval` in the `run round --help` text and `test/runs-docs.test.mjs` finds it in `docs/runs.md`
 
 Builder note (round 12, T6): a fence need closes only on `by` = `inbox`, `run page` or `owner`
 (`FENCE_ACK_BY` in `server/runs/protocol.mjs`), chosen as an allowlist because the reference loop
@@ -147,6 +149,8 @@ the owner types `--by owner` (the docs' example). A refused ack is kept in `raw`
 
 - **Stranger r49, ideas (not tasks):** (a) with `LANEBOARD_CONFIG=/dev/null` the Map still shows a title `run-runs-n1` and a builder `RRN`, apparently from the shell's environment (the loop's run id): README could say which environment variables the board reads for its names, or the board could ignore them unless configured, your call (same family as r41 (b)); (b) the README test-copy paragraph is long and says things twice; shorten it when you next edit the README.
 
+- **Stranger r58, ideas (not tasks):** (a) a taken port answers with another board's data; `/healthz` or `/api/version` could return the pid or state dir so a visitor can tell their copy from the real board (extends r33 (a); `/healthz` lives in fenced boot code); (b) `laneboard run needs "text"` is rejected as an unexpected argument: accept a bare text, or make the error say "did you mean --text" (CLI taste).
+
 ## Reviews
 
 - reviews/r10-designer.md: 33 findings, 7 became tasks (T13-T19, the agreed taste calls of README §7 item 3 and n3 T13); lane-sidebar bars, accent vs amber, header density, run-list empty cells and widths, run page sparklines/table/width, Inbox phone layout, "cooperative control" badge, usage-bar tracks, RUNNING hourglass → For the owner (taste); hatched faded Board cards in light → dropped (T12 covers it); light pink/ochre fills → dropped (T12/T13 cover them); console clean.
@@ -158,5 +162,7 @@ the owner types `--by owner` (the docs' example). A refused ack is kept in `raw`
 
 - reviews/r41-stranger.md: 7 findings, 2 became tasks (T35 from 4, T36 from 6); 2, 3, 5 → For the owner (CLI output / env-id behaviour / API strictness); 1 → dropped (same as r33 idea (a), already under For the owner); 7 → dropped (README says so). No browser views were tested by the reviewer.
 - reviews/r49-stranger.md: 7 findings, 2 became tasks (T37 from 1, T38 from 2); 3, 6 (paragraph) → For the owner (env-derived names / README taste); 4 → dropped (same as r13 idea (a), already under For the owner); 5 → dropped (same as r41 idea (c)); 6 (`ls` URL line) → dropped (r41 idea (a)); 7 → dropped (README says so).
+
+- reviews/r58-stranger.md: 5 findings, 2 became tasks (T39 from 3, T40 from 5); 1 and 2 → For the owner (server identity / CLI taste); 4 → dropped (minor, the error is clear). No browser views were tested by the reviewer.
 
 ## Morning
