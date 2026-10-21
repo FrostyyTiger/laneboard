@@ -224,3 +224,9 @@ test('a round\'s --end --usd wins over stop --usd, and cost.from shows which (ni
   assert.match(flat, /a round's `--end --usd` wins over `stop --usd` for the run's cost/);
   assert.match(flat, /`cost\.from` shows which was used/);
 });
+
+test('docs/runs.md says a stop with no --reason records stop: "unknown" (night 5 T42)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.match(flat, /A `run\.stop` with no `reason` \(such as `laneboard run stop` with no `--reason`\) records `stop: "unknown"`/);
+  assert.match(flat, /\| `stop` \| `--reason` \(left out, the line carries no reason and the run records `stop: "unknown"`\)/);
+});

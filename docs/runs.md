@@ -184,6 +184,9 @@ Any reason is kept as written; these are the ones laneboard knows:
 | `error` | the loop could not go on (a session would not start, a tool failed) |
 | `human` | someone stopped it |
 
+A `run.stop` with no `reason` (such as `laneboard run stop` with no `--reason`)
+records `stop: "unknown"`, so pass a reason when the loop knows one.
+
 ### Stuck
 
 A run that has not stopped can look stuck. laneboard works it out again from
@@ -226,7 +229,7 @@ laneboard run stop   --run readiness --reason done
 | `needs` | `--text` (or the text as the one bare word: `needs "Drop the v1 export?"`), `--kind`, `--link`, `--n N` |
 | `ack` | **`<ref>`** (or `--ref`), `--by`; `ack <run> <ref>` names the run too |
 | `artifact` | **`--url`**, `--kind`, `--title`, `--state` |
-| `stop` | `--reason`, `--rounds N` (the count of rounds done, not the cap), `--usd x` |
+| `stop` | `--reason` (left out, the line carries no reason and the run records `stop: "unknown"`), `--rounds N` (the count of rounds done, not the cap), `--usd x` |
 | `cost` | **`--usd x`**, `--n N` (a `cost` event; the run's cost is the sum of these; a `round --end --usd` is the round's only, summed for the run when it sends no `cost`) |
 
 Every subcommand also takes `--run <id>`, `--file <path>` and `--post`, after

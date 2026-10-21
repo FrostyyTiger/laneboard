@@ -939,6 +939,7 @@ const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | -
            --kind defaults to link; only kind pr artifacts are listed in the run's prs (the Inbox)
   stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
            --rounds N on stop is the count of rounds done, not the cap
+           no --reason: the run records stop: "unknown" (the line carries no reason)
   cost     --usd x [--n N]                        what was spent (in round N); the run's cost is the sum of these
 every subcommand:
   --run <id>   the run; defaults to the run part of $LANEBOARD_RUN (which \`round\` exports); \`start\` says so on stderr when it uses it

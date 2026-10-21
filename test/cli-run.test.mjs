@@ -734,3 +734,16 @@ test('T40: a file ack says it went to the file, not the board, when a board answ
   assert.equal(off.code, 0, off.stderr);
   assert.doesNotMatch(off.stderr, /note:/);
 });
+
+test('stop with no --reason records stop "unknown", and the help says so (T42)', async (t) => {
+  const dir = tmpDir(t);
+  const file = path.join(dir, 'run.jsonl');
+  const stop = await run(['run', 'stop', '--run', 'r1', '--file', file], envFor(dir), dir);
+  assert.equal(stop.code, 0, stop.stderr);
+  const { events } = parseLines(lines(file).join('\n'));
+  assert.equal(foldRun(events).stop.reason, 'unknown');
+  for (const args of [['run', 'stop', '--help'], ['run', '--help']]) {
+    const help = await run(args, envFor(dir), dir);
+    assert.match(help.stdout, /no --reason: the run records stop: "unknown"/, args.join(' '));
+  }
+});
