@@ -57,7 +57,8 @@ export const LINK_KINDS = Object.freeze(['builder-down', 'builder-stale', 'audit
 
 /**
  * The annunciator's kind -> tile map (§4 2.5; the UI's copy is
- * public/js/core/alarm-tiles.js KIND_TO_TILE, §4 D7). `review` has no tile.
+ * public/js/core/alarm-tiles.js KIND_TO_TILE, §4 D7). `review`, `reboot` and
+ * `health-warn` have no tile (runs night 4 T38: DOWN is not a reboot hint).
  * Used by ackMany for `ack-alarm *` with `{tile}`.
  */
 export const KIND_TO_TILE = Object.freeze({
@@ -66,8 +67,7 @@ export const KIND_TO_TILE = Object.freeze({
   'blocked': 'BLKD', 'failed': 'BLKD', 'danger': 'BLKD',
   'stuck': 'STCK',
   'ci-red-main': 'CI-F', 'ci-red': 'CI-F',
-  'builder-down': 'DOWN', 'builder-stale': 'DOWN', 'health-crit': 'DOWN', 'health-warn': 'DOWN',
-  'reboot': 'DOWN', 'audit-fork': 'DOWN',
+  'builder-down': 'DOWN', 'builder-stale': 'DOWN', 'health-crit': 'DOWN', 'audit-fork': 'DOWN',
   'budget-warn': 'BUDG', 'budget-exceeded': 'BUDG',
   'conflict': 'CONF',
 });

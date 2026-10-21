@@ -31,6 +31,10 @@ signed, audited requests. Without one, nothing changes. See
 `g r` runs · `g c` credit · `g x` box · `g a` audit. `⌘K` opens the command palette, `[`
 `]` step through builders, `\` splits the Map, `?` shows every key.
 
+The top strip counts alarms in eight tiles (NEED, APPR, BLKD, STCK, CI-F, DOWN, BUDG, CONF);
+a click lists them. DOWN counts a builder whose link is down or stale, a crit host check and an
+audit fork; a host that wants a reboot or has a health warning shows it in the Box, not on DOWN.
+
 ## Run it
 
 ```bash

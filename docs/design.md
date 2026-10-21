@@ -57,6 +57,9 @@ laneboard is read from across the room at 3 a.m. It follows the high-performance
   BLKD and DOWN, whatever the alarms' own priorities (`TILE_FIXED_P` in
   `public/js/core/alarm-tiles.js`). An unacknowledged tile adds a 1 px flashing ring in the same
   hue.
+- **What DOWN counts** (runs night 4 T38): DOWN counts a builder whose link is down or stale, a
+  crit host check and an audit fork. A reboot hint or a health warning is not "down": it has no
+  tile and shows in the Box, so a fresh copy whose one builder is up shows DOWN as plain grey.
 - Amber on the light canvas needs its shape or a 1 px border next to it, never a pale fill alone.
 - **Board cards** (runs night 4 T15): the lane bar on a card's left edge is grey (`--line-strong`)
   and takes `--p1` / `--p2` only while the card is in trouble; the lane's own hue stays on its
