@@ -330,6 +330,21 @@ test('runs: a stopped run keeps its PR for RUN_PR_FRESH_MS after its last event,
   assert.equal(groupIds(live, 'runprs').length, 1);
 });
 
+test('runs: a PR with a state follows it: open stays in review, merged or closed leaves at once (§8 Q10)', () => {
+  const url = 'https://example.invalid/acme/acme-api/pull/9';
+  const at = (state, run = {}) => buildInbox(storeOf([]), { now: NOW, runs: [runRow('acme-api', { prs: [{ url, title: 'Paged search', state, ts: NOW - HOUR }], ...run })] });
+  assert.deepEqual(groupIds(at('open'), 'runprs'), [`rp:acme-api:${url}`]);
+  assert.deepEqual(groupIds(at('merged'), 'runprs'), []);
+  assert.deepEqual(groupIds(at('closed'), 'runprs'), []);
+  // An open PR outlives the 24 h rule; merged on a live run still leaves.
+  const old = { state: 'stopped', updatedAt: NOW - 3 * RUN_PR_FRESH_MS };
+  assert.equal(groupIds(at('open', old), 'runprs').length, 1);
+  // No state (or one the protocol does not know): the 24 h rule as before.
+  assert.equal(groupIds(at(null, old), 'runprs').length, 0);
+  assert.equal(groupIds(at('bogus', old), 'runprs').length, 0);
+  assert.equal(groupIds(at(null, { state: 'stopped', updatedAt: NOW - HOUR }), 'runprs').length, 1);
+});
+
 test('runs: `a` on a run need is the needs.ack of its ts; on a PR it does nothing', () => {
   const runs = [runRow('acme-search', { needs: [need(2, NOW)], prs: [{ url: 'https://example.invalid/p/1', title: 't', ts: NOW - 1 }] })];
   const m = buildInbox(storeOf([]), { now: NOW, runs });

@@ -194,6 +194,7 @@
 .rn-item-k { flex: none; min-width: 8ch; color: var(--text-3); }
 .rn-item-t { min-width: 0; overflow-wrap: anywhere; color: var(--text-1); }
 .rn-item-n,
+.rn-item-s,
 .rn-item-l { flex: none; color: var(--text-3); }
 a.rn-item-t,
 a.rn-item-l { text-decoration: underline; text-decoration-color: var(--line); }

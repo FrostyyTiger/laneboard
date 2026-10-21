@@ -66,13 +66,16 @@ export const LIMITS = Object.freeze({
 /** The run protocol's id (server/runs/protocol.mjs RUN_ID): other ids get no row. */
 const RUN_ID_RX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 /**
- * The protocol has no "merged" event, so a PR artifact is listed while its run
- * is live and for this long after the run's last event, then it drops.
+ * A PR artifact with no `state` is listed while its run is live and for this
+ * long after the run's last event, then it drops. One with a state follows it:
+ * `open` stays, `merged` and `closed` leave at once (README §8 Q10).
  */
 export const RUN_PR_FRESH_MS = 24 * 3600_000;
 /** Who an ack from the Inbox names (`needs.ack` `by`). */
 export const ACK_BY = 'inbox';
 
+/** The artifact states (server/runs/protocol.mjs ARTIFACT_STATES). */
+export const PR_STATES = new Set(['open', 'merged', 'closed']);
 const WAITING = new Set(['waiting_permission', 'waiting_question']);
 const MARKER_KINDS = new Set(['need', 'blocked']);
 const PAUSE_KINDS = new Set(['operator', 'budget', 'quota', 'stuck']);
@@ -341,8 +344,9 @@ function httpHref(v) {
 
 /**
  * Rows from GET /api/runs summaries: every open need a person must answer (a
- * `wait` need is the loop sleeping and is left out) and every PR artifact of a
- * run that is live or had an event in the last RUN_PR_FRESH_MS. Newest first.
+ * `wait` need is the loop sleeping and is left out) and every PR artifact still
+ * to review: `open`, or with no state on a run that is live or had an event in
+ * the last RUN_PR_FRESH_MS. Newest first.
  */
 function runRows(runs, now) {
   const rows = [];
@@ -361,10 +365,11 @@ function runRows(runs, now) {
     }
     const at = isNum(r.updatedAt) ? r.updatedAt : isNum(r.startedAt) ? r.startedAt : 0;
     const fresh = r.state !== 'stopped' || now - at <= RUN_PR_FRESH_MS;
-    if (!fresh) continue;
     for (const a of Array.isArray(r.prs) ? r.prs : []) {
       const link = a && typeof a === 'object' ? httpHref(a.url) : null;
       if (!link) continue;
+      const state = PR_STATES.has(a.state) ? a.state : null;
+      if (state === 'merged' || state === 'closed' || (state === null && !fresh)) continue;
       rows.push({
         // News, not trouble (README §5): the grey hollow lamp, never a hue.
         ...base, group: 'runprs', id: `rp:${r.run}:${link}`, kind: 'run-pr', p: 'off', lampLabel: 'pr to review',

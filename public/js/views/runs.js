@@ -40,7 +40,7 @@ import { money } from '../core/format.js';
 import { icon } from '../core/icons.js';
 import { lamp, panel, setPanel } from '../ui/components.js';
 import { confirmAction } from '../ui/confirm.js';
-import { needAckRef } from '../core/inbox-model.js';
+import { needAckRef, PR_STATES } from '../core/inbox-model.js';
 import { toast } from '../ui/toast.js';
 import { sparkRange } from '../ui/spark.js';
 
@@ -687,11 +687,12 @@ export function stopOf(run) {
   };
 }
 
-/** Artifacts -> [{kind, title, href, n}]: `href` only for an http(s) URL. */
+/** Artifacts -> [{kind, title, state, href, n}]: `href` only for an http(s) URL, `state` open/merged/closed or null. */
 export function artifactsOf(run) {
   return (Array.isArray(run?.artifacts) ? run.artifacts : []).filter(isObj).map((a) => ({
     kind: rnClean(a.kind, 32) ?? 'link',
     title: rnClean(a.title) ?? rnClean(a.url, 400) ?? '?',
+    state: PR_STATES.has(a.state) ? a.state : null,
     url: rnClean(a.url, 400),
     href: safeHref(a.url),
     n: Number.isInteger(a.n) ? a.n : null,
@@ -946,6 +947,7 @@ function artifactsSection(run) {
   for (const a of list) {
     const li = el('li', 'rn-item rn-art');
     li.append(el('span', 'rn-item-k', a.kind), rnLink('rn-item-t', a.title, a.href));
+    if (a.state) li.append(el('span', 'rn-item-s', a.state));
     if (a.n !== null) li.append(el('span', 'rn-item-n', `round ${a.n}`));
     if (!a.href && a.url) li.title = `${a.url} (not an http link)`;
     ul.append(li);

@@ -258,6 +258,25 @@ test('a row links to its page, and the link is a route the router parses back', 
   assert.equal(LIST_HREF, '#/runs');
 }));
 
+test('artifact rows print the PR title (the URL as fallback) and its state as a muted word', () => withDom(() => {
+  const url = 'https://example.invalid/acme/acme-api/pull/9';
+  const run = { run: 'r', state: 'running', rounds: [], scores: {}, better: {}, needs: [], raw: [], stop: null, cost: null, usage: null,
+    artifacts: [
+      { kind: 'pr', url, title: 'Paged search', state: 'merged', n: 2 },
+      { kind: 'pr', url: 'https://example.invalid/acme/acme-api/pull/10', title: null, state: 'bogus', n: 3 },
+    ] };
+  assert.deepEqual(artifactsOf(run).map((a) => [a.title, a.state]), [['Paged search', 'merged'], ['https://example.invalid/acme/acme-api/pull/10', null]]);
+  const host = document.createElement('div');
+  const page = renderRunPage(host, run, { status: 'ok', id: 'r' }, Date.now());
+  const items = byClass(page, 'rn-art');
+  assert.equal(items.length, 2);
+  assert.equal(byClass(items[0], 'rn-item-t')[0].textContent, 'Paged search');
+  assert.equal(byClass(items[0], 'rn-item-t')[0].href, url);
+  assert.deepEqual(byClass(items[0], 'rn-item-s').map((n) => n.textContent), ['merged']);
+  assert.equal(byClass(items[1], 'rn-item-t')[0].textContent, 'https://example.invalid/acme/acme-api/pull/10');
+  assert.equal(byClass(items[1], 'rn-item-s').length, 0, 'no state word for an unknown state');
+}));
+
 test('the run page shows the fixture: head, stop reason, open need, timeline, artifact, raw folded away', () => withDom(() => {
   const host = document.createElement('div');
   const page = renderRunPage(host, RUN, { status: 'ok', id: 'readiness' }, RUN.updatedAt);
