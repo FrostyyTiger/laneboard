@@ -1017,7 +1017,7 @@ function runEvent(sub, f) {
   }
   if (sub === 'start') {
     const { rounds, maxRounds, windowPct, ...fields } = f;
-    if (rounds !== undefined && maxRounds !== undefined) runUsage('--rounds on start is --max-rounds: give one');
+    if (rounds !== undefined && maxRounds !== undefined) runUsage('both --max-rounds and --rounds given; use --max-rounds');
     // `--rounds` on start is the cap's old name; on stop it is the count done.
     if (rounds !== undefined) process.stderr.write('--rounds on start means --max-rounds\n');
     const budget = {};

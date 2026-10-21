@@ -173,6 +173,15 @@ test('start --max-rounds N writes the cap; --rounds N on start is its alias with
   assert.match(usage.stdout, /--rounds N on stop is the count of rounds done/);
 });
 
+test('start with both --max-rounds and --rounds says which to keep and exits 2 (T35)', async (t) => {
+  const dir = tmpDir(t);
+  const file = path.join(dir, 'r.jsonl');
+  const both = await run(['run', 'start', '--run', 'r1', '--rounds', '3', '--max-rounds', '4', '--file', file], envFor(dir), dir);
+  assert.equal(both.code, 2);
+  assert.match(both.stderr, /both --max-rounds and --rounds given; use --max-rounds/);
+  assert.equal(fs.existsSync(file), false, 'nothing written');
+});
+
 test('$LANEBOARD_RUN_FILE is used when there is no --file; a relative path resolves against the cwd', async (t) => {
   const dir = tmpDir(t);
   const r = await run(['run', 'needs', '--run', 'r1', '--kind', 'wait', '--text', 'usage window'],
