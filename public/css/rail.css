@@ -42,28 +42,36 @@
 
 /* phone chip strip — the rail carries the same list from 700px up. This
    override must come AFTER the base rule: same specificity, later wins.
-   Scoped to the strip, so the kit's .chip (scope chips) keeps its own look. */
-.attention-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 4px; scrollbar-width: none; }
-.attention-strip::-webkit-scrollbar { display: none; }
+   Scoped to the strip, so the kit's .chip (scope chips) keeps its own look.
+   The strip wraps instead of scrolling: no chip is cut at the right edge,
+   and a fade would need a gradient outside tokens.css (guardrails) (T30). */
+.attention-strip { display: flex; flex-wrap: wrap; gap: var(--sp-2); padding-bottom: 10px; margin-bottom: 4px; }
 @media (min-width: 700px) { .attention-strip { display: none; } }
 
+/* Body mono on the type scale, not the kit chip's tracked caps label face:
+   a NEEDS YOU item is a session name, data (r22-designer Board 1, T30). */
 .attention-strip .chip {
-  flex: none;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
+  height: auto;
+  min-width: 0;
+  max-width: 100%;
   padding: 7px 13px 7px 9px;
   border-radius: var(--radius);
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
   cursor: pointer;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: var(--bw) solid var(--border);
   color: var(--text-1);
-  max-width: 68vw;
-  font: inherit;
 }
-.attention-strip .chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attention-strip .chip .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+.attention-strip .chip .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attention-strip .chip .ago { flex: none; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); }
 /* A NEEDS YOU chip is its lamp and a 1 px status border, no fill (T28). */
 .attention-strip .chip.s-waiting_permission { border-color: var(--p2-line); }
 .attention-strip .chip.s-waiting_question { border-color: var(--p2-line); }

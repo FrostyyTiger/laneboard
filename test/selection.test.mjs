@@ -41,7 +41,7 @@ for (const [name, re] of SELECTED) {
 test('a NEEDS YOU chip on the Board strip is a status border and its lamp, no fill (T28)', () => {
   const decls = on(/^\.attention-strip \.chip(?:\.[\w-]+)*$/);
   assert.ok(decls.length);
-  const fills = decls.filter((d) => FILL.has(d.prop) && d.value !== 'var(--bg-surface)');
+  const fills = decls.filter((d) => FILL.has(d.prop) && !['var(--bg-surface)', 'transparent'].includes(d.value));
   assert.deepEqual(fills.map((d) => `${d.prelude} { ${d.prop}: ${d.value} }`), [], 'no tinted fill on a NEEDS YOU chip');
   assert.ok(on(/^\.attention-strip \.chip\.s-waiting_permission$/).some((d) => d.prop === 'border-color'), 'the state rides on the border');
 });
