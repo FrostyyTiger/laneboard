@@ -17,7 +17,7 @@ what the run writes.
 **Where to look:** the Runs view, `#/runs` (keys `g r`), lists every run
 laneboard knows: goal, state, round n / max, the latest scores and their
 trend, the 5 h / 7 d burn, time left and open needs. A row opens the run page,
-`#/runs?run=<id>`: the timeline of rounds, one small score chart per metric
+`#/runs?run=<id>` (`#/runs/<id>` is the same page, a link to share): the timeline of rounds, one small score chart per metric
 over the rounds, the stop reason, the open needs and the artifacts.
 
 ## Where runs write

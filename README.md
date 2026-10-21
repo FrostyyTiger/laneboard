@@ -20,7 +20,7 @@ signed, audited requests. Without one, nothing changes. See
 | **Inbox** `#/inbox` | What is waiting for me? Pending approvals, lanes that need you, lanes ready for review, paused and stuck lanes, with keys to approve, deny, release and pause. |
 | **Packages** `#/packages` | What state is each package in? Its CI on main, untested commits, the lanes and PRs touching it, predicted conflicts and plan status. |
 | **Morning** `#/morning` | Over a window (12 h / tonight / 24 h / 7 d): what needs a human (`danger` first), what finished (with its PR), review waits, stuck incidents, what it cost. |
-| **Runs** `#/runs` | Is tonight's unattended loop getting anywhere? Each run's state, round, latest score and its trend, budget burn, time left and open needs; a run's page (`#/runs?run=<id>`) has the timeline of rounds, a chart per score, the stop reason and the PRs. Fed by run files a loop writes, see [docs/runs.md](docs/runs.md). |
+| **Runs** `#/runs` | Is tonight's unattended loop getting anywhere? Each run's state, round, latest score and its trend, budget burn, time left and open needs; a run's page (`#/runs?run=<id>`, or `#/runs/<id>`) has the timeline of rounds, a chart per score, the stop reason and the PRs. Fed by run files a loop writes, see [docs/runs.md](docs/runs.md). |
 | **Credit** `#/credit` | Where the 5 h and 7 d rate-limit windows have been, per account, and what each builder and lane spent. |
 | **Box** `#/box` | The machine and its health, a live stack next to it and its guard, the CI queue, the agent slots; on a hub, every builder's link, version, latency and health. |
 | **Audit** `#/audit` | What was done, by whom? The hash-chained action log, and on a hub each relayed action's reconciliation with the builder's own log. |
@@ -148,12 +148,17 @@ laneboard paused
 laneboard audit [verify]         # the fleet audit log, offline
 laneboard fleet keygen|pubkey    # the hub key (on the hub)
 laneboard run start|round|score|needs|ack|artifact|stop|cost   # report a loop's run, works offline
+laneboard feed tailscale|proxmox|docker   # read one source once, write one Map feed, offline
 ```
 
 `laneboard run` writes the run protocol of [docs/runs.md](docs/runs.md) (`laneboard run --help`).
 Each `run` subcommand appends one line to `./.laneboard/run.jsonl` in the current directory
 (or `--file f`, or `$LANEBOARD_RUN_FILE`) unless `--post` sends it to the server; `.laneboard/` is
 in `.gitignore`, add it to your own repo's ignore file too.
+
+`laneboard feed` turns one source into a feed for the Map (`--stdout`, `--out f` or `--push <url>`):
+see [docs/map.md](docs/map.md#pushing-a-feed) for pushing it and
+[docs/providers.md](docs/providers.md#feedprovider) for the feeders and how to add one.
 
 `LANEBOARD_URL` overrides the server address. `ls`, `morning` and `credit` print
 `board: <url>` on stderr (the board that answered), so stdout stays the table. An unknown

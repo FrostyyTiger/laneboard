@@ -249,3 +249,15 @@ test('docs/runs.md says a goal is a sentence about the run, not the run id (nigh
   assert.match(flat, /A goal is a sentence about what the run is for \(`--goal "Night 5: PR state in the Inbox"`\), not the run id/);
   assert.match(flat, /`start` with a `--goal` equal to the run id still writes the line \(exit 0\) and prints a one-line hint on stderr/);
 });
+
+test('README and docs/runs.md name `#/runs/<id>` beside `#/runs?run=<id>`; README lists `laneboard feed` with its docs (night 5 T50)', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  for (const [name, text] of [['README.md', readme], ['docs/runs.md', doc]]) {
+    assert.ok(text.includes('`#/runs?run=<id>`'), `${name}: #/runs?run=<id>`);
+    assert.ok(text.includes('`#/runs/<id>`'), `${name}: #/runs/<id>`);
+  }
+  const cli = readme.slice(readme.indexOf('\n## CLI'), readme.indexOf('\n## API'));
+  assert.match(cli, /^laneboard feed tailscale\|proxmox\|docker/m, 'feed in the CLI list');
+  assert.ok(cli.includes('(docs/map.md#pushing-a-feed)'), 'link to docs/map.md');
+  assert.ok(cli.includes('(docs/providers.md#feedprovider)'), 'link to docs/providers.md');
+});
