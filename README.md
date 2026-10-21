@@ -53,6 +53,13 @@ environment variable — **`docs/config.md`** documents all of them. With no
 config file at all laneboard is a board of every session and every worktree on
 the machine, with lane slots, the guard and CI all off.
 
+With no `fleet` block, names come from the machine's host name: the builder id
+is the host name sanitized (lowercase, other characters turned into `-`, cut to
+24, e.g. `builder-a`), its code is derived from that id (`BA`), and the Map's
+title is the host name unless the topology file sets `title`. Set
+`LANEBOARD_FLEET_ID`, `LANEBOARD_FLEET_CODE` and `LANEBOARD_HOSTNAME` to choose
+them (see `docs/config.md`).
+
 ```json
 {
   "publicUrl": "https://board.example.invalid:8443",

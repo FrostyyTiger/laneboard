@@ -74,3 +74,12 @@ test('the section says the state dir must be private and names the code a wide o
   assert.match(section, /`mktemp -d` makes one, a plain `mkdir -p/);
   assert.match(section, /AUDIT_UNSAFE_DIR/);
 });
+
+test('README says where the builder id, code and Map title come from with no fleet block (runs T38)', () => {
+  const readme = read('README.md');
+  assert.match(readme, /With no `fleet` block, names come from the machine's host name/);
+  for (const v of ['LANEBOARD_FLEET_ID', 'LANEBOARD_FLEET_CODE', 'LANEBOARD_HOSTNAME']) {
+    assert.ok(readme.includes(v), `README names ${v}`);
+    assert.ok(read('docs/config.md').includes(v), `docs/config.md documents ${v}`);
+  }
+});
