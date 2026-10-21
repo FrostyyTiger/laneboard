@@ -616,3 +616,43 @@ test('T32: a subcommand name as the bare word after another (`run needs ack demo
   assert.doesNotMatch(plain.stderr, /did you mean/);
   assert.equal(fs.existsSync(file), false, 'nothing written');
 });
+
+test('T34: `run needs` with no text, or empty text, exits 2 with `needs: give the text` and posts nothing', async (t) => {
+  const dir = tmpDir(t);
+  const posted = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      posted.push(body);
+      res.writeHead(201, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, run: 'r1', t: 'needs' }));
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const env = envFor(dir, { LANEBOARD_URL: `http://127.0.0.1:${server.address().port}` });
+  const file = path.join(dir, '.laneboard', 'run.jsonl');
+  const cases = [
+    ['needs', '--run', 'r1'],
+    ['needs', '--run', 'r1', '--kind', 'wait'],
+    ['needs', '--run', 'r1', '--text', ''],
+    ['needs', '--run', 'r1', '--text', '   '],
+    ['needs', '', '--run', 'r1'],
+  ];
+  for (const args of cases) {
+    for (const extra of [[], ['--post']]) {
+      const r = await run(['run', ...args, ...extra], env, dir);
+      const label = [...args, ...extra].join(' ');
+      assert.equal(r.code, 2, `${label}: ${r.stderr}`);
+      assert.match(r.stderr, /^laneboard: run: needs: give the text\n/, label);
+    }
+  }
+  assert.equal(fs.existsSync(file), false, 'no needs event in the run file');
+  assert.deepEqual(posted, [], 'nothing was posted');
+  // With text it still goes through, on both paths.
+  assert.equal((await run(['run', 'needs', '--run', 'r1', 'Merge it?'], env, dir)).code, 0);
+  assert.equal((await run(['run', 'needs', '--run', 'r1', '--text', 'Merge it?', '--post'], env, dir)).code, 0);
+  assert.equal(lines(file).length, 1);
+  assert.equal(posted.length, 1);
+});

@@ -1029,6 +1029,8 @@ function runEvent(sub, f) {
     if (f.name === undefined || f.value === undefined) runUsage('score needs --name and --value');
     if (f.better !== undefined && f.better !== 'higher' && f.better !== 'lower') runUsage('--better is higher or lower');
   }
+  // A need with no text says nothing on the board: refuse it like the other missing values.
+  if (sub === 'needs' && !f.text?.trim()) runUsage('needs: give the text');
   if (sub === 'artifact' && f.url === undefined) runUsage('artifact needs --url');
   if (sub === 'cost' && f.usd === undefined) runUsage('cost needs --usd');
   if (sub === 'ack') {
