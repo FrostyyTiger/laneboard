@@ -128,7 +128,9 @@ function boardLine() {
   if (answered) process.stderr.write(`board: ${cleanTerm(answered)}\n`);
 }
 
-async function api(path, { method = 'GET', body } = {}) {
+/** `onError(status, message)` may return a clearer message for a failed call
+ *  (a dead end that names the way out); it returns nothing to keep the server's. */
+async function api(path, { method = 'GET', body, onError } = {}) {
   let res;
   try {
     res = await fetch(`${BASE}${path}`, {
@@ -149,7 +151,10 @@ async function api(path, { method = 'GET', body } = {}) {
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
   // Server text is untrusted for the terminal: clean every string once, here.
   data = cleanDeep(data);
-  if (!res.ok) die(data.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const msg = data.error || `HTTP ${res.status}`;
+    die(onError?.(res.status, msg) || msg);
+  }
   return data;
 }
 
@@ -232,11 +237,14 @@ async function cmdLs() {
   }
 }
 
+/** A 404 for a session or lane name: say where the names are, not the raw API error. */
+const unknownName = (name) => (status) => (status === 404 ? `no session or lane ${name}; see laneboard ls` : undefined);
+
 async function cmdPeek() {
   const name = argv.shift();
   if (!name) die('usage: laneboard peek <name> [-n 40]', 2);
   const n = Number(takeFlag('-n', '40'));
-  const data = await api(`/api/sessions/${encodeURIComponent(name)}/preview?n=${n}`);
+  const data = await api(`/api/sessions/${encodeURIComponent(name)}/preview?n=${n}`, { onError: unknownName(name) });
   process.stdout.write(`${data.lines.join('\n')}\n`);
 }
 
@@ -555,7 +563,14 @@ async function cmdLaunch() {
   const fake = takeFlag('--fake-taken-slots');
   if (fake) body.fakeTakenSlots = fake.split(',').map(Number);
   if (!lane || !body.plan) die('usage: laneboard launch <lane> --plan docs/plans/<lane>.md [--repo <repo>] [--branch feat/<lane>] [--model opus] [--permission-mode auto]', 2);
-  const r = await api('/api/lanes', { method: 'POST', body });
+  const r = await api('/api/lanes', {
+    method: 'POST',
+    body,
+    // The server knows no repo: name both ways to give it one.
+    onError: (status, msg) => (/no repo given/.test(msg)
+      ? `${msg}; pass --repo <repo>, or list repos in the config's \`repos\` (the first is the default, docs/config.md)`
+      : undefined),
+  });
   process.stdout.write(`launching ${r.lane} on slot ${r.slot} (job ${r.job})\n`);
   if (noWait) return;
   if (!(await followJob(r.job))) process.exit(1);
@@ -576,7 +591,7 @@ async function cmdRetire() {
     confirmWith = confirmWith.trim();
   }
   const body = force ? { force: true, confirm: confirmWith } : {};
-  const r = await api(`/api/lanes/${encodeURIComponent(lane)}`, { method: 'DELETE', body });
+  const r = await api(`/api/lanes/${encodeURIComponent(lane)}`, { method: 'DELETE', body, onError: unknownName(lane) });
   await followJob(r.job, { timeoutMs: 10000 });
   if (!r.ok) process.exit(1);
   process.stdout.write(`retired ${lane}; the branch ${r.branchKept} is kept (deleting branches is yours)\n`);

@@ -243,8 +243,9 @@ test('cleanTerm: a session name carrying an OSC 52 sequence prints without ESC o
   assert.ok(!r.stdout.includes('\u007f'), 'no DEL');
   assert.ok(r.stdout.includes('evil]52;c;cm0gLXJmIH4=2Jname'));
 
-  // Server error text is cleaned too.
-  const e = await run(['peek', 'x'], envFor(home, { LANEBOARD_URL: url }));
+  // Server error text is cleaned too (`dirs` prints the server's error; `peek`
+  // turns a 404 into its own line since T48).
+  const e = await run(['dirs'], envFor(home, { LANEBOARD_URL: url }));
   assert.equal(e.code, 1);
   assert.ok(!e.stderr.includes('\u001b') && !e.stderr.includes('\u0007'), e.stderr);
   assert.match(e.stderr, /no route \]52;c;eA==/);
