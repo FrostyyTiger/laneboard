@@ -241,10 +241,15 @@ and nothing warns.
 - On success it prints one line on stderr: `ok <run> <type> appended to
   <file>`, or `ok <run> <type> posted` with `--post` (stdout stays free for
   `eval`).
-- `ack` checks its ref first, in the file it appends to or, with `--post`,
-  in the server's copy of the run (`GET /api/runs/<run>`). A ref that names
-  no need of the run is a typo, not an ack: it prints `laneboard: no need
+- `ack` checks its ref first, in the server's copy of the run (`GET
+  /api/runs/<run>`, which merges every source of the run by time) when the
+  server is reachable and knows the run. A ref that names no need there is a
+  typo, not an ack: it prints `laneboard: no need
   <ref> in run <run> …; nothing written` (or `nothing posted`) and exits 1.
+  Offline (or for a run the server does not know), a file ack can only check
+  the file it appends to, and that check is per file: another source of the
+  run may hold the need. So a ref missing from the file prints a warning on
+  stderr and the ack is still written (exit 0).
   A need that is already acked (closed) would not change: it prints `need
   <ref> already acked, nothing written` (or `nothing posted`), adds no line
   and exits 0, since the need is closed as asked.
@@ -254,6 +259,9 @@ and nothing warns.
   any `--by`, so there is no warning. When the server cannot tell (it is
   unreachable or older), an ack without one of those `--by` values warns
   that it would not close a fence need, if the need is one.
+  `by` is not enforced: nothing checks who wrote an ack, so `by` is an honesty
+  rule for the UI (an ack by a person shows as theirs), and a loop or round
+  never acks with `by` `owner`, `inbox` or `run page`.
 - `round` (without `--end`) prints `export LANEBOARD_RUN=<run>/<n>`, so after
   `eval` the sessions the round starts carry the run and round in their
   environment. `--run` defaults to the run part of `$LANEBOARD_RUN`, so a

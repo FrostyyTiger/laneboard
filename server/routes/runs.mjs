@@ -7,10 +7,12 @@
 //                           parseLine skips it; appended to <stateDir>/runs/<run>.jsonl
 //
 // Starts the run-file collector (server/collector/runs.mjs) and provides its
-// store as the `runs` service. The routes sit behind the normal local guards
-// (Host/Origin and the `x-laneboard` header, server/security.mjs), so a loop
-// posts through the CLI or writes its file. Builder only: runs on a hub need
-// server/hub/* (see PROGRESS "For the owner").
+// store as the `runs` service. The routes sit behind the normal request guards
+// (Host/Origin and the `x-laneboard` header, server/security.mjs): a local
+// caller and an allowed tailnet user coming in directly (auth kind `direct`,
+// fleet.allowedUsers) both get through, so a loop posts through the CLI or
+// writes its file, and a person may post from their device. Builder only:
+// runs on a hub need server/hub/* (see PROGRESS "For the owner").
 //
 // A posted event is written as the object it was, compacted to one line, with
 // `ts` set to the server's time when it had none (an API writer has no file

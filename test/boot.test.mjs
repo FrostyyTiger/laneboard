@@ -106,7 +106,17 @@ test('POST /api/runs/events through the real guards: no x-laneboard or a foreign
     const ok = await post({ 'x-laneboard': '1' }, 'taken');
     assert.equal(ok.status, 201, await ok.clone().text());
     assert.equal((await ok.json()).run, 'taken');
-    assert.equal((await fetch(`${b.url}/api/runs/taken`)).status, 200);
+    // /healthz answers before startModules starts the runs collector, so the
+    // run can be a 404 for a moment: wait for the collector to pick the file up.
+    let got = 0;
+    for (const end = Date.now() + 10_000; Date.now() < end;) {
+      const r = await fetch(`${b.url}/api/runs/taken`);
+      got = r.status;
+      await r.body?.cancel();
+      if (got === 200) break;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    assert.equal(got, 200, 'the taken run never showed up');
     assert.equal((await fetch(`${b.url}/api/runs/refused`)).status, 404, 'a refused event was written');
   } finally {
     await b.stop();

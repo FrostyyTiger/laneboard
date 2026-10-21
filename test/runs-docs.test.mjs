@@ -142,9 +142,15 @@ test('docs/runs.md names the CLI receipt and the ack warnings (night 4 T21)', ()
   assert.match(doc, /a warning on\s+stderr says it is advisory: the need stays open/);
 });
 
-test('docs/runs.md says an ack whose ref names no need writes nothing and exits 1 (night 4 T35)', () => {
+test('docs/runs.md says an ack whose ref names no need writes nothing and exits 1 (night 4 T35), offline per file only', async () => {
   assert.match(doc, /`laneboard: no need\s+<ref> in run <run> …; nothing written` \(or `nothing posted`\) and exits 1/);
   assert.match(doc, /`laneboard run ack` refuses one/);
+  // Offline the check is per file, so a missing ref warns and is still written;
+  // `by` is advisory (not enforced), and the loop prompts forbid a person's by.
+  assert.match(doc, /that check is per file/);
+  assert.match(doc, /`by` is not enforced/);
+  const common = await readFile(new URL('../docs/plans/runs/loop/prompts/common.md', import.meta.url), 'utf8');
+  assert.match(common, /Never ack a need with `by` `owner`, `inbox` or `run page`/);
   // T39: a second ack of a closed need sends nothing and exits 0.
   assert.match(doc, /`need\s+<ref> already acked, nothing written` \(or `nothing posted`\), adds no line\s+and exits 0/);
   for (const by of FENCE_ACK_BY) assert.ok(doc.includes(`\`${by}\``), by);

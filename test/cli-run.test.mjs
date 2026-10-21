@@ -409,23 +409,47 @@ test('ack warns (exit 0, still written) for a fence need without a person\'s --b
   }
   assert.equal(lines(file).length, closed, 'a second ack is not written');
 
-  // T35: r1 has two needs (place 2 is the other run's); a ts that matches none; a
-  // missing file. A ref that names no need is a typo: nothing written, exit 1.
-  const n0 = lines(file).length;
-  for (const ref of ['2', '2026-01-01T00:00:00Z']) {
-    const r = await go(['ack', 'r1', ref]);
-    assert.equal(r.code, 1, r.stderr);
-    assert.equal(r.stderr, `laneboard: no need ${ref} in run r1 in ${file}; nothing written\n`);
-  }
-  assert.equal(lines(file).length, n0, 'a missing ref is not written');
-  const fresh = path.join(dir, 'none.jsonl');
-  const none = await run(['run', 'ack', 'r1', '0', '--file', fresh], envFor(dir), dir);
-  assert.equal(none.code, 1);
-  assert.match(none.stderr, /no need 0 in run r1 in .+none\.jsonl; nothing written/);
-  assert.ok(!fs.existsSync(fresh), 'nothing written');
-
   const before = lines(file).length;
   const folded = foldRun(parseLines(fs.readFileSync(file, 'utf8')).events.filter((e) => e.run === 'r1'));
   assert.deepEqual(folded.needs.map((n) => [n.kind, n.open, n.by]), [['fence', false, 'owner'], ['decision', false, null]]);
   assert.equal(before, 3 + 4);
+
+  // r1 has two needs here (place 2 is the other run's); a ts that matches none; a
+  // missing file. Offline the check sees this file only, and the server merges
+  // every source of the run: a ref missing here is warned about and still written.
+  for (const ref of ['2', '2026-01-01T00:00:00Z']) {
+    const r = await go(['ack', 'r1', ref]);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stderr, new RegExp(`^ok r1 needs\\.ack appended to .+\\nwarning: no need ${ref} in run r1 in this file \\(offline: the server may know it from another source\\); written anyway\\n$`));
+  }
+  assert.equal(lines(file).length, before + 2, 'an offline ack of an unknown ref is written');
+  const fresh = path.join(dir, 'none.jsonl');
+  const none = await run(['run', 'ack', 'r1', '0', '--file', fresh], envFor(dir), dir);
+  assert.equal(none.code, 0, none.stderr);
+  assert.match(none.stderr, /\nwarning: no need 0 in run r1 in this file/);
+  assert.equal(lines(fresh).length, 1);
+});
+
+test('a file ack checks the server\'s merged needs when it knows the run; an unknown run falls back to the file', async (t) => {
+  const dir = tmpDir(t);
+  const file = path.join(dir, 'r.jsonl');
+  // The server knows r1 with one need from another source; the file has none.
+  const server = http.createServer((req, res) => {
+    const known = req.method === 'GET' && req.url === '/api/runs/r1';
+    res.writeHead(known ? 200 : 404, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(known ? { run: { id: 'r1', needs: [{ i: 0, kind: 'decision', ts: 1, acked: false }] } } : { error: 'unknown run' }));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const env = envFor(dir, { LANEBOARD_URL: `http://127.0.0.1:${server.address().port}` });
+  const ok = await run(['run', 'ack', 'r1', '0', '--file', file], env, dir);
+  assert.equal(ok.code, 0, ok.stderr);
+  assert.equal(ok.stderr, `ok r1 needs.ack appended to ${file}\n`, 'need 0 is the server\'s, no warning');
+  const typo = await run(['run', 'ack', 'r1', '5', '--file', file], env, dir);
+  assert.equal(typo.code, 1);
+  assert.equal(typo.stderr, `laneboard: no need 5 in run r1 on ${env.LANEBOARD_URL}; nothing written\n`);
+  assert.equal(lines(file).length, 1, 'a ref the server does not have is not written');
+  const other = await run(['run', 'ack', 'r2', '0', '--file', file], env, dir);
+  assert.equal(other.code, 0, other.stderr);
+  assert.match(other.stderr, /\nwarning: no need 0 in run r2 in this file \(offline/);
 });

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  parseLine, parseLines, foldRun, KNOWN_TYPES, MAX_LINE, MAX_TEXT, FENCE_ACK_BY,
+  parseLine, parseLines, foldRun, ackTarget, KNOWN_TYPES, MAX_LINE, MAX_TEXT, FENCE_ACK_BY,
 } from '../server/runs/protocol.mjs';
 
 const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'runs', 'readiness.jsonl');
@@ -279,6 +279,22 @@ test('a fence need closes only on an ack by a person (inbox, run page, owner), n
   }
   const other = foldRun([ok({ t: 'needs', kind: 'decision', text: 'x' }), ok({ t: 'needs.ack', ref: 0, by: 'loop' })]);
   assert.equal(other.needs[0].open, false, 'other kinds still close on any ack');
+});
+
+test('a ts ack skips a fence need of that time its by cannot close, and closes the next one', () => {
+  const ts = 1792483201000;
+  const run = foldRun([
+    ok({ t: 'needs', kind: 'fence', text: 'fenced', ts }),
+    ok({ t: 'needs', text: 'plain', ts }),
+    ok({ t: 'needs.ack', ref: ts, by: 'loop' }),
+  ]);
+  assert.deepEqual(run.needs.map((n) => [n.kind, n.open, n.by]), [['fence', true, null], ['decision', false, 'loop']]);
+  assert.deepEqual(run.raw, []);
+  // A person's by takes the fence need first; with only the fence need open, the
+  // loop's ack still names it (and is kept raw), not nothing.
+  assert.equal(ackTarget(run.needs, { refBy: 'ts', ref: ts, by: 'owner' }).kind, 'fence');
+  const only = foldRun([ok({ t: 'needs', kind: 'fence', text: 'fenced', ts }), ok({ t: 'needs.ack', ref: ts, by: 'loop' })]);
+  assert.deepEqual([only.needs[0].open, only.raw.length], [true, 1]);
 });
 
 test('run.start may name its host and a score its max (T9, the Map); a bad max is dropped', () => {

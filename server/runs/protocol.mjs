@@ -47,6 +47,18 @@ export const MAX_NEED_INDEX = 1e9;
  */
 export const FENCE_ACK_BY = ['inbox', 'run page', 'owner'];
 
+/**
+ * The need a `needs.ack` names in `needs`, or undefined. By place: that one. By
+ * ts: the first open need of that time this ack can close (a fence need only
+ * with a FENCE_ACK_BY `by`), else the first open one, else the first one.
+ */
+export function ackTarget(needs, ack) {
+  if (ack.refBy === 'index') return needs[ack.ref];
+  const at = needs.filter((x) => x.ts === ack.ref);
+  const closes = (x) => x.kind !== 'fence' || FENCE_ACK_BY.includes(ack.by);
+  return at.find((x) => !x.acked && closes(x)) ?? at.find((x) => !x.acked) ?? at[0];
+}
+
 function clamp(s, max = MAX_STR) {
   if (typeof s !== 'string') return null;
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
@@ -331,8 +343,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
           open: true, acked: false, ackedAt: null, by: null });
         break;
       case 'needs.ack': {
-        const need = e.refBy === 'index' ? run.needs[e.ref]
-          : run.needs.find((x) => x.ts === e.ref && !x.acked) ?? run.needs.find((x) => x.ts === e.ref);
+        const need = ackTarget(run.needs, e);
         if (!need || (need.kind === 'fence' && !need.acked && !FENCE_ACK_BY.includes(e.by))) { run.raw.push(e); break; }
         if (!need.acked) Object.assign(need, { open: false, acked: true, ackedAt: e.ts, by: e.by });
         break;

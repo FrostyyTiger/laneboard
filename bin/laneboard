@@ -976,7 +976,7 @@ async function cmdRun() {
   if (post && fileFlag !== undefined) runUsage('--file and --post do not go together');
   const run = runFlag ?? (process.env.LANEBOARD_RUN || '').split('/')[0];
   if (!run) runUsage('--run is required (or set LANEBOARD_RUN)');
-  const { parseLine, parseLines, foldRun, RUN_ID, FENCE_ACK_BY } = await runProtocol();
+  const { parseLine, parseLines, foldRun, ackTarget, RUN_ID, FENCE_ACK_BY } = await runProtocol();
   if (!RUN_ID.test(run)) runUsage(`not a run id: ${JSON.stringify(cleanTerm(run))} (letters, digits, . _ -; 64 at most)`);
   const ev = runEvent(sub, fields);
   const event = { v: 1, t: ev.t, run, ts: Date.now(), ...ev };
@@ -988,11 +988,17 @@ async function cmdRun() {
   // Read before the append: the ack's own line must not count as a need.
   let warnings = [];
   if (event.t === 'needs.ack') {
-    const needs = post ? await serverNeeds(run) : fileNeeds(file, run, { parseLines, foldRun });
-    const where = post ? `on ${BASE}` : `in ${file}`;
-    const r = ackCheck({ ...checked.event, given: event.ref }, needs, { FENCE_ACK_BY, verb: post ? 'posted' : 'written' });
+    // The server folds every source of a run by time, so its needs decide when it
+    // knows the run. Offline (or a run it does not know), a file ack can only see
+    // this file's needs: a ref missing there may be another source's, so it warns.
+    let needs = await serverNeeds(run, { unknown: post ? [] : null });
+    let where = `on ${BASE}`;
+    const offline = !post && !needs;
+    if (offline) { needs = fileNeeds(file, run, { parseLines, foldRun }); where = `in ${file}`; }
+    const r = ackCheck({ ...checked.event, given: event.ref }, needs, { ackTarget, FENCE_ACK_BY, verb: post ? 'posted' : 'written' });
     // A ref that names no need would only be kept raw: a typo, so write nothing and fail.
-    if (r.missing) return die(`no need ${cleanTerm(String(event.ref))} in run ${run} ${where}; nothing ${post ? 'posted' : 'written'}`);
+    if (r.missing && offline) r.warnings = [`no need ${String(event.ref)} in run ${run} in this file (offline: the server may know it from another source); written anyway`];
+    else if (r.missing) return die(`no need ${cleanTerm(String(event.ref))} in run ${run} ${where}; nothing ${post ? 'posted' : 'written'}`);
     // A closed need: a second ack would change nothing, so say so and add no line
     // (exit 0: the need is closed, which is what the caller asked for).
     if (r.acked) return void process.stderr.write(`need ${cleanTerm(String(event.ref))} already acked, nothing ${post ? 'posted' : 'written'}\n`);
@@ -1022,12 +1028,13 @@ function fileNeeds(file, run, { parseLines, foldRun }) {
   return foldRun(parseLines(text).events.filter((e) => e.run === run)).needs;
 }
 
-/** The needs of `run` as the server folded them: [] for an unknown run, null when
- *  the server cannot tell (unreachable, an error, an older server). */
-async function serverNeeds(run) {
+/** The needs of `run` as the server folded them: `unknown` ([] by default) for a
+ *  run it does not know, null when the server cannot tell (unreachable, an error,
+ *  an older server). */
+async function serverNeeds(run, { unknown = [] } = {}) {
   try {
-    const res = await fetch(`${BASE}/api/runs/${encodeURIComponent(run)}`, { headers: { 'x-laneboard': '1' } });
-    if (res.status === 404) return [];
+    const res = await fetch(`${BASE}/api/runs/${encodeURIComponent(run)}`, { headers: { 'x-laneboard': '1' }, signal: AbortSignal.timeout(3000) });
+    if (res.status === 404) return unknown;
     if (!res.ok) return null;
     const needs = (await res.json())?.run?.needs;
     return Array.isArray(needs) ? needs : null;
@@ -1038,13 +1045,12 @@ async function serverNeeds(run) {
  *  no need of the run, `{acked: true}` when that need is already closed, else warnings (the ack is still written, exit 0) for a `by`
  *  that cannot close a `fence` need (docs/runs.md). `needs` null = unknown, so the
  *  `by` hint is given as a maybe. */
-function ackCheck(ack, needs, { FENCE_ACK_BY, verb }) {
+function ackCheck(ack, needs, { ackTarget, FENCE_ACK_BY, verb }) {
   const byOk = FENCE_ACK_BY.includes(ack.by);
   const byHint = `${ack.by ? `--by ${JSON.stringify(ack.by)}` : 'no --by'}: a fence need closes only with --by ${FENCE_ACK_BY.map((b) => JSON.stringify(b)).join(', ')}`;
   if (!needs) return { warnings: byOk ? [] : [`${byHint}, if this need is one (advisory: the ack is ${verb} as it is)`] };
-  const need = ack.refBy === 'index' ? needs[ack.ref]
-    : needs.find((x) => x.ts === ack.ref && !x.acked) ?? needs.find((x) => x.ts === ack.ref);
-  if (!need) return { missing: true };
+  const need = ackTarget(needs, ack);
+  if (!need) return { missing: true, warnings: [] };
   if (need.acked) return { acked: true };
   if (need.kind === 'fence' && !need.acked && !byOk) return { warnings: [`${byHint}; advisory: the ack is ${verb}, need ${need.i} stays open`] };
   return { warnings: [] };
