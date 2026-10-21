@@ -159,6 +159,20 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS lane_archive_retired ON lane_archive(retired_at DESC)`,
 ];
 
+/**
+ * Re-runnable entries that need the `builder` column, so they run after
+ * migrateToV1 on every start (an entry in MIGRATIONS would fail on a fresh
+ * file, where the column does not exist yet). Append-only, like MIGRATIONS.
+ */
+const V1_MIGRATIONS = [
+  // runs-n4 T7. The run page's sessionsSeen: find the sessions with an event
+  // in a time window (covering, builder + ts range), then read each of them
+  // over its whole life (builder + session_id, in ts order). Without these the
+  // planner walks every row of the builder through events_builder.
+  `CREATE INDEX IF NOT EXISTS events_builder_ts ON events(builder, ts, session_id)`,
+  `CREATE INDEX IF NOT EXISTS events_builder_sid ON events(builder, session_id, ts)`,
+];
+
 /** The schema version this file migrates to (`PRAGMA user_version`). */
 export const SCHEMA_VERSION = 1;
 
@@ -224,6 +238,7 @@ export function migrate(database = db) {
   // keep NULL and are attributed by session name at query time instead.
   addColumn('cost_snapshots', 'lane', 'TEXT', database);
   if (version < 1) migrateToV1(database);
+  for (const sql of V1_MIGRATIONS) database.exec(sql);
 }
 
 migrate(db);
