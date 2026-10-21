@@ -4,11 +4,21 @@
 // `stuck` is the run rules' verdict (server/runs/stuck.mjs, `runs.stuck`).
 import { runStuck, DEFAULTS as STUCK_DEFAULTS } from './stuck.mjs';
 
-/** The latest value of a score series and the one before it (the list's trend). */
+/**
+ * The max of a score series: the latest one a line gave and the first one, so
+ * a moved max (scope that grew or shrank, research Q18) shows; nulls when no
+ * line gave one.
+ */
+export function scoreMax(list) {
+  const maxes = (Array.isArray(list) ? list : []).map((p) => p?.max).filter((m) => typeof m === 'number' && m > 0);
+  return { max: maxes.length ? maxes[maxes.length - 1] : null, firstMax: maxes.length ? maxes[0] : null };
+}
+
+/** The latest value of a score series, the one before it (the list's trend) and its max. */
 function lastScore(list, better) {
   const last = list[list.length - 1];
   const prev = list.length > 1 ? list[list.length - 2] : null;
-  return { n: last.n, value: last.value, prev: prev ? prev.value : null, better: better ?? null };
+  return { n: last.n, value: last.value, prev: prev ? prev.value : null, better: better ?? null, ...scoreMax(list) };
 }
 
 /**

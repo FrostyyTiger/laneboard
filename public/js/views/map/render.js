@@ -983,18 +983,22 @@ export function createRenderer(ctx, palette) {
         continue;
       }
       const { left, w, round } = e;
+      // The progress follows the name in reading order on either side of the
+      // node (runs-n5 T5): on the left side the name moves out to make room.
+      ctx.font = `10px ${P.mono}`;
+      const rw = round ? measure(round) : 0;
+      const nx = round && !left ? x - rw - 8 : x;
       ctx.font = e.font;
       ctx.textAlign = left ? 'left' : 'right';
-      const bx = left ? x - 2 : x - w - 2;
+      const bx = left ? nx - 2 : nx - w - 2;
       fillStyle(P.bg, 0.8 * fade);
       ctx.fillRect(bx, y - 7, w + 4, 14);
       fillStyle(e.col, fade);
-      tracked(e.text, x, y, 1);
+      tracked(e.text, nx, y, 1);
       if (round) {
-        // The round beside the name, in the data face.
+        // The numbers the ring draws, beside the name, in the data face.
         ctx.font = `10px ${P.mono}`;
-        const rw = measure(round);
-        const rx = left ? bx + w + 8 : bx - 6;
+        const rx = left ? bx + w + 8 : x;
         fillStyle(P.bg, 0.8 * fade);
         ctx.fillRect(left ? rx - 2 : rx - rw - 2, y - 7, rw + 4, 14);
         fillStyle(P.t3, fade);

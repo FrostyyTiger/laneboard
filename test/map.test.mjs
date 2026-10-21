@@ -536,9 +536,9 @@ test('fleet: server/map.mjs imports no builder-only module (the hub loads it)', 
   const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'server', 'map.mjs'), 'utf8');
   const imports = [...src.matchAll(/^import .* from '([^']+)';$/gm)].map((x) => x[1]).sort();
   assert.deepEqual(imports, ['./config.mjs', './fleet/keys.mjs', './log.mjs', './map/reach.mjs', './map/runs.mjs', 'node:fs', 'node:path']);
-  // Runs (T9) come in through setRunsSource; the node builder is pure.
+  // Runs (T9) come in through setRunsSource; the node builder is pure (summary.mjs, runs-n5 T5, imports stuck.mjs only).
   const runs = fs.readFileSync(path.join(import.meta.dirname, '..', 'server', 'map', 'runs.mjs'), 'utf8');
-  assert.deepEqual([...runs.matchAll(/^import .* from '([^']+)';$/gm)].map((x) => x[1]), ['../runs/stuck.mjs']);
+  assert.deepEqual([...runs.matchAll(/^import .* from '([^']+)';$/gm)].map((x) => x[1]), ['../runs/stuck.mjs', '../runs/summary.mjs']);
   // Reach (T11) is as hub-safe: the file system and its own HuJSON reader.
   const reach = fs.readFileSync(path.join(import.meta.dirname, '..', 'server', 'map', 'reach.mjs'), 'utf8');
   assert.deepEqual([...reach.matchAll(/^import .* from '([^']+)';$/gm)].map((x) => x[1]).sort(), ['./hujson.mjs', 'node:fs']);

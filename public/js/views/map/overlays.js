@@ -295,11 +295,31 @@ export function runRing(node) {
   return { progress: p, tone: 'grey', shape: 'disc', hollow: false, alpha: 1 };
 }
 
-/** "7/10" (or "7" without a budget) for a run node's label; null before its first round. */
+/** The `tasks` score a run node carries as {value, max, firstMax}, or null (server/map/runs.mjs runTasks). */
+function nodeTasks(node) {
+  const t = node?.tasks;
+  return t && Number.isFinite(t.value) && Number.isFinite(t.max) && t.max > 0 ? t : null;
+}
+
+/**
+ * What a run node's label prints after the name, the numbers the ring draws:
+ * "44 of 63" from the `tasks` score when it has a max, else rounds "7 of 10"
+ * (or "7" without a budget); null before its first round.
+ */
 export function runRound(node) {
+  const t = nodeTasks(node);
+  if (t) return `${t.value} of ${t.max}`;
   const n = Number.isFinite(node?.round) ? node.round : null;
   if (n === null) return null;
-  return Number.isFinite(node?.maxRounds) && node.maxRounds > 0 ? `${n}/${node.maxRounds}` : String(n);
+  return Number.isFinite(node?.maxRounds) && node.maxRounds > 0 ? `${n} of ${node.maxRounds}` : String(n);
+}
+
+/** "44 of 63 tasks", with "scope 12 → 63" when the max moved; null without a tasks max. */
+function tasksFact(node) {
+  const t = nodeTasks(node);
+  if (!t) return null;
+  const moved = Number.isFinite(t.firstMax) && t.firstMax !== t.max ? `, scope ${t.firstMax} → ${t.max}` : '';
+  return `${t.value} of ${t.max} tasks${moved}`;
 }
 
 /** The run page a run node links to, `#/runs?run=<id>`; null when it names no run. */
@@ -310,8 +330,8 @@ export function runHref(node) {
 
 /**
  * What the tip and the inspector say about a run node: `{goal, round, progress,
- * state, why, tone, href}`, plain strings (or null) for textContent.
- * `round` is "round 7 / 10", `progress` "70 %".
+ * state, why, tone, href, tasks}`, plain strings (or null) for textContent.
+ * `round` is "round 7 / 10", `progress` "70 %", `tasks` "44 of 63 tasks".
  */
 export function runFacts(node) {
   if (node?.kind !== 'run') return null;
@@ -323,6 +343,7 @@ export function runFacts(node) {
     goal: str(node.goal) ?? str(node.sub),
     round: n === null ? null : max ? `round ${n} / ${max}` : `round ${n}`,
     progress: ring.progress === null ? null : `${Math.round(ring.progress * 100)} %`,
+    tasks: tasksFact(node),
     state: str(node.state),
     why: str(node.why),
     tone: ring.tone,

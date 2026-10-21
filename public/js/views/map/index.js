@@ -891,7 +891,7 @@ export function createMap(root, opts = {}) {
     tip.append(top);
     const run = runFacts(n);
     const line = (shownOverlay() === 'drift' && driftText(n))
-      || (run && (run.tone !== 'grey' ? run.why : [run.round, run.progress].filter(Boolean).join(' · ')))
+      || (run && (run.tone !== 'grey' ? run.why : [run.round, run.tasks ?? run.progress].filter(Boolean).join(' · ')))
       || (n.why ?? n.sub);
     if (line) tip.append(h('div', 'map-tip-sub', String(line)));
     if (run?.goal && run.goal !== line) tip.append(h('div', 'map-tip-sub', run.goal));

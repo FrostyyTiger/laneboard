@@ -99,6 +99,8 @@
 .rn-score-k { color: var(--text-3); }
 .rn-score-v { color: var(--text-1); }
 .rn-score-m { color: var(--text-3); font-size: var(--fs-10); }
+.rn-scores:has(.rn-score-scope) { flex-wrap: wrap; row-gap: 0; }
+.rn-score-scope { flex: 1 1 100%; color: var(--text-3); font-size: var(--fs-11); white-space: nowrap; }
 .rn-score[data-trend="worse"] .rn-score-m,
 .rn-score[data-trend="worse"] .rn-score-v { color: var(--p2); }
 .rn-more { color: var(--text-3); }

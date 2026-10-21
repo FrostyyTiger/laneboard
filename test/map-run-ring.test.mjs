@@ -141,9 +141,14 @@ test('runRing / runFacts: tones, progress clamped, the stuck tone wins over a ru
   assert.equal(runRing(run('a', { progress: 1.7 })).progress, 1);
   assert.equal(runRing(run('a', { progress: -1 })).progress, 0);
   assert.equal(runRing(run('a', { progress: null })).progress, null);
-  assert.equal(runRound(run('a')), '3/10');
+  assert.equal(runRound(run('a')), '3 of 10');
   assert.equal(runRound(run('a', { maxRounds: null })), '3');
   assert.equal(runRound(run('a', { round: null })), null);
+  // T5: a tasks max wins, the label prints the numbers the ring draws
+  assert.equal(runRound(run('a', { tasks: { value: 44, max: 63, firstMax: 12 } })), '44 of 63');
+  assert.equal(runRound(run('a', { round: null, tasks: { value: 44, max: 63, firstMax: 63 } })), '44 of 63');
+  assert.equal(runFacts(run('a', { tasks: { value: 44, max: 63, firstMax: 12 } })).tasks, '44 of 63 tasks, scope 12 → 63');
+  assert.equal(runFacts(run('a')).tasks, null);
   assert.equal(runHref(run('a b')), '#/runs?run=a%20b');
   const f = runFacts(run('acme', { progress: 0.5, round: 5 }));
   assert.equal(f.goal, 'goal of acme');
@@ -162,7 +167,7 @@ test('labels: the run name in the label face, muted (t3), its round in mono besi
   assert.ok(name, 'caps name');
   assert.match(name.font, /600 11px LABEL/);
   assert.equal(name.fillStyle, 'T3', 'muted next to its machine (T19)');
-  const round = ctx.ops.find((o) => o.op === 'fillText' && o.text === '7/10');
+  const round = ctx.ops.find((o) => o.op === 'fillText' && o.text === '7 of 10');
   assert.ok(round, 'the round');
   assert.match(round.font, /MONO/);
   const sp = scene.toScreen(scene.nodes.get('run:acme-docs'));
@@ -170,7 +175,7 @@ test('labels: the run name in the label face, muted (t3), its round in mono besi
   assert.ok(d >= RUN_RING_MIN + 2, `label ${d.toFixed(1)}px out, past the ring`);
   const nameW = 'ACME-DOCS'.length * 6;
   if (name.align === 'left') assert.ok(round.x > name.x + nameW, 'round after the name');
-  else assert.ok(round.x < name.x - nameW, 'round before a right-aligned name');
+  else assert.ok(round.x > name.x, 'round after a right-aligned name too (T5), between it and the node');
 });
 
 test('inspector: a run sel opens the run panel with goal, round, progress and the run page link', () => {

@@ -1035,3 +1035,52 @@ test('T4: the wrap-up and title rules have their CSS', () => {
   assert.match(css, /\.rn-state-detail \{[^}]*flex-basis: 100%/);
   assert.match(css, /\.rn-tl-tid \{[^}]*color: var\(--text-3\)/);
 });
+
+// runs-n5 T5: the `tasks` score's max drives "44 of 63", and a moved max shows as scope (research Q18).
+const SCOPED = (() => {
+  const lines = [
+    { t: 'run.start', goal: 'Build the night', budget: { rounds: 80 } },
+    { t: 'round.start', n: 1, role: 'planner' },
+    { t: 'score', n: 1, name: 'tasks', value: 0, max: 12 },
+    { t: 'round.start', n: 2, role: 'builder' },
+    { t: 'score', n: 2, name: 'tasks', value: 30, max: 40 },
+    { t: 'round.start', n: 3, role: 'builder' },
+    { t: 'score', n: 3, name: 'tasks', value: 44, max: 63 },
+    { t: 'score', n: 3, name: 'tests', value: 0.9 },
+  ];
+  const events = lines.map((o, i) => parseLine(JSON.stringify({ v: 1, run: 'scoped', ts: 1_800_000_000_000 + i * MIN, ...o })))
+    .filter((r) => r.ok).map((r) => r.event);
+  return JSON.parse(JSON.stringify(foldRun(events)));
+})();
+
+test('T5: the summary gives a score its latest and first max; "44 of 63" and the scope line in the list and on the page', () => withDom(() => {
+  const row = JSON.parse(JSON.stringify(summarize(SCOPED)));
+  assert.deepEqual([row.scores.tasks.value, row.scores.tasks.max, row.scores.tasks.firstMax], [44, 63, 12]);
+  assert.deepEqual([row.scores.tests.max, row.scores.tests.firstMax], [null, null], 'no max given: none');
+  const [tasks, tests] = scoreList(row.scores);
+  assert.equal(tasks.text, '44 of 63');
+  assert.equal(tasks.scope, 'scope 12 → 63');
+  assert.match(tasks.title, /tasks: 44 of 63 \(was 30, better\), scope 12 → 63$/);
+  assert.equal(tests.text, '0.9');
+  assert.equal(tests.scope, null);
+  // the page builds its summary from the fold itself: the same numbers
+  assert.deepEqual(runSummaryOf(SCOPED).scores.tasks, row.scores.tasks);
+  const host = document.createElement('div');
+  renderRuns(host, [row], { status: 'ok' }, row.updatedAt);
+  const chip = byClass(host, 'rn-score')[0];
+  assert.equal(byClass(chip, 'rn-score-v')[0].textContent, '44 of 63');
+  assert.equal(byClass(host, 'rn-score-scope')[0].textContent, 'scope 12 → 63', 'on its own line in the scores cell');
+  const page = renderRunPage(document.createElement('div'), SCOPED, { status: 'ok', id: 'scoped' }, row.updatedAt);
+  const pchip = byClass(page, 'rn-score')[0];
+  assert.equal(byClass(pchip, 'rn-score-v')[0].textContent, '44 of 63');
+  assert.equal(byClass(page, 'rn-score-scope')[0].textContent, 'scope 12 → 63');
+  assert.match(fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8'), /\.rn-score-scope \{ flex: 1 1 100%/, 'the scope wraps to its own line');
+}));
+
+test('T5: a max that never moved prints no scope line', () => {
+  const [s] = scoreList({ tasks: { n: 2, value: 7, prev: 5, better: 'higher', max: 10, firstMax: 10 } });
+  assert.equal(s.text, '7 of 10');
+  assert.equal(s.scope, null);
+  const [old] = scoreList({ tasks: { n: 2, value: 7, prev: 5, better: 'higher' } });
+  assert.equal(old.text, '7', 'a summary without max (an older board) reads as before');
+});

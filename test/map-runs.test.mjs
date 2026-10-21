@@ -162,3 +162,23 @@ test('GET /api/map on a builder that reads a run file has the run node', async (
     await b.stop();
   }
 });
+
+test('T5: the tasks score\'s latest max drives the ring, and the node carries the numbers its label prints', () => {
+  const r = fold('acme-scope', [
+    { t: 'run.start', goal: 'Grow the plan', budget: { rounds: 80 } },
+    { t: 'round.start', n: 1, role: 'planner' },
+    { t: 'score', n: 1, name: 'tasks', value: 0, max: 12 },
+    { t: 'round.start', n: 2, role: 'builder' },
+    { t: 'score', n: 2, name: 'tasks', value: 44, max: 63 },
+    { t: 'round.start', n: 3, role: 'builder' },
+    { t: 'score', n: 3, name: 'tasks', value: 45 },
+  ]);
+  const n = runNode(buildFleet({ topology: null, now: NOW, hostname: 'builder-a', runs: [r] }));
+  assert.deepEqual(n.tasks, { value: 45, max: 63, firstMax: 12 }, 'a line without max keeps the latest max');
+  assert.equal(n.progress, Math.round((45 / 63) * 100) / 100, 'tasks over max, not rounds over budget');
+  assert.equal(runProgress(r), n.progress);
+  assert.equal(n.detail.Tasks, '45 of 63 (scope 12 → 63)');
+  const plain = runNode(buildFleet({ topology: null, now: NOW, hostname: 'builder-a', runs: [running()] }));
+  assert.equal(plain.tasks, null);
+  assert.equal(plain.detail.Tasks, undefined);
+});

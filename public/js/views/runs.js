@@ -136,16 +136,19 @@ export function scoreTrend(s) {
   return { dir, good, mark: dir === 'up' ? '↑' : dir === 'down' ? '↓' : '=', delta };
 }
 
-/** The row's scores, by name, each with its trend: [{name, value, text, dir, good, mark, title}]. */
+/** The row's scores, by name, each with its trend: [{name, value, text, scope, dir, good, mark, title}]. */
 export function scoreList(scores) {
   if (!isObj(scores)) return [];
   return Object.keys(scores).sort().map((k) => {
     const s = scores[k];
     const name = rnClean(k, 32) ?? '?';
     const t = scoreTrend(s);
-    const text = scoreText(s?.value);
+    // a score with a max reads "44 of 63"; a max that moved adds "scope 12 → 63" (research Q18)
+    const max = isNum(s?.max) && s.max > 0 ? s.max : null;
+    const text = max !== null && isNum(s?.value) ? `${scoreText(s.value)} of ${scoreText(max)}` : scoreText(s?.value);
+    const scope = max !== null && isNum(s?.firstMax) && s.firstMax > 0 && s.firstMax !== max ? `scope ${scoreText(s.firstMax)} → ${scoreText(max)}` : null;
     const was = t.dir ? ` (was ${scoreText(s.prev)}${t.good === true ? ', better' : t.good === false ? ', worse' : ''})` : '';
-    return { name, value: isNum(s?.value) ? s.value : null, text, ...t, title: `${name}: ${text}${was}` };
+    return { name, value: isNum(s?.value) ? s.value : null, text, scope, ...t, title: `${name}: ${text}${was}${scope ? `, ${scope}` : ''}` };
   });
 }
 
@@ -378,6 +381,8 @@ function scoresNode(row) {
     chip.title = s.title;
     n.append(chip);
   }
+  // a moved max on a line of its own under the chips, muted, never clipped (T5)
+  for (const s of list.slice(0, SCORE_MAX)) if (s.scope) n.append(rnField('rn-score-scope', s.scope, s.title));
   if (list.length > SCORE_MAX) {
     n.append(rnField('rn-more', `+${list.length - SCORE_MAX}`, list.slice(SCORE_MAX).map((s) => s.title).join('\n')));
   }
@@ -581,7 +586,12 @@ function rnLastScores(run) {
     if (!Array.isArray(list) || !list.length) continue;
     const last = list[list.length - 1];
     const prev = list.length > 1 ? list[list.length - 2] : null;
-    out[name] = { n: last?.n ?? null, value: last?.value ?? null, prev: prev ? prev.value : null, better: better[name] ?? null };
+    // the latest max a line gave and the first one (server/runs/summary.mjs scoreMax)
+    const maxes = list.map((p) => p?.max).filter((m) => isNum(m) && m > 0);
+    out[name] = {
+      n: last?.n ?? null, value: last?.value ?? null, prev: prev ? prev.value : null, better: better[name] ?? null,
+      max: maxes.length ? maxes[maxes.length - 1] : null, firstMax: maxes.length ? maxes[0] : null,
+    };
   }
   return out;
 }

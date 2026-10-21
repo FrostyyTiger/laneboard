@@ -9,10 +9,12 @@
 //   machine whose board reads the run file. A throwaway VM a feed lists
 //   carries its run; when the feed no longer lists it, the run falls back
 //   to the core and says its host is not on the Map.
-// - Progress 0-1: the latest `tasks` score over its `max` when it has one,
-//   else rounds over `budget.rounds`; none when neither is known.
+// - Progress 0-1: the latest `tasks` score over its latest `max` when a line
+//   gave one, else rounds over `budget.rounds`; none when neither is known.
+//   The label prints the same numbers the ring draws ("44 of 63").
 // - A stopped run stays `runs.mapKeepMin` minutes after its stop, then leaves.
 import { runStuck, DEFAULTS as STUCK_DEFAULTS } from '../runs/stuck.mjs';
+import { scoreMax } from '../runs/summary.mjs';
 
 export const PREFIX = 'run:';
 export const PROGRESS_SCORE = 'tasks';
@@ -25,11 +27,19 @@ const clip = (v) => (typeof v === 'string' && v !== '' ? (v.length > MAX_TEXT ? 
 const nameKey = (v) => (typeof v === 'string' && v.trim() ? v.trim().toLowerCase() : null);
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 
-/** 0-1 from the `tasks` score's max, else rounds / budget.rounds; null when unknown. */
-export function runProgress(run) {
+/** The `tasks` score as {value, max, firstMax} when a line gave it a max; else null. */
+export function runTasks(run) {
   const list = run?.scores?.[PROGRESS_SCORE];
   const last = Array.isArray(list) && list.length ? list[list.length - 1] : null;
-  if (last && num(last.max) > 0 && num(last.value) !== null) return Math.round(clamp01(last.value / last.max) * 100) / 100;
+  const { max, firstMax } = scoreMax(list);
+  if (!last || num(last.value) === null || max === null) return null;
+  return { value: last.value, max, firstMax };
+}
+
+/** 0-1 from the `tasks` score's max, else rounds / budget.rounds; null when unknown. */
+export function runProgress(run) {
+  const t = runTasks(run);
+  if (t) return Math.round(clamp01(t.value / t.max) * 100) / 100;
   const max = num(run?.budget?.rounds);
   // a wrap-up round (after run.stop) is not one of the budget's rounds (runs-n5 T3/T4)
   const done = Number.isInteger(run?.counted) ? run.counted : (run.rounds ?? []).filter((r) => !r?.wrapup).length;
@@ -76,9 +86,11 @@ export function runNodes(runs, { nodes = [], coreId = '__core', now = Date.now()
     const round = counted ? counted.n : null;
     const maxRounds = num(run.budget?.rounds);
     const progress = runProgress(run);
+    const tasks = runTasks(run);
     const detail = {};
     if (run.goal) detail.Goal = clip(run.goal);
     if (round !== null) detail.Round = maxRounds ? `${round} / ${maxRounds}` : String(round);
+    if (tasks) detail.Tasks = `${tasks.value} of ${tasks.max}${tasks.firstMax !== tasks.max ? ` (scope ${tasks.firstMax} → ${tasks.max})` : ''}`;
     if (progress !== null) detail.Progress = `${Math.round(progress * 100)} %`;
     if (host) detail.Host = parent === coreId && !hosts.has(nameKey(host)) ? `${host} (not on the Map)` : host;
     out.push({
@@ -94,6 +106,7 @@ export function runNodes(runs, { nodes = [], coreId = '__core', now = Date.now()
       state: run.state,
       round,
       maxRounds,
+      tasks,
       progress,
       stuck: s,
       detail: Object.keys(detail).length ? detail : undefined,

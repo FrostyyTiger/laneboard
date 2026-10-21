@@ -506,6 +506,7 @@ export function renderOverview(m, doc = globalThis.document) {
     if (r.goal) box.append(el('p', 'insp-say', r.goal));
     const dl = el('div', 'insp-data');
     if (r.round) dl.append(row('RND', r.round.replace(/^round /, '')));
+    if (r.tasks) dl.append(row('TASK', r.tasks));
     if (r.progress) dl.append(row('PROG', r.progress));
     if (r.why) dl.append(row('WHY', r.why));
     if (dl.childNodes.length) box.append(dl);

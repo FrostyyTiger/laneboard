@@ -100,7 +100,7 @@ test('scores tests and tasks over rounds, both higher is better', () => {
   assert.deepEqual(tests[0], [0, 0.9997], 'the check before round 1 belongs to round 0');
   assert.deepEqual(tests.find(([n]) => n === 4), [4, 0.9993]);
   assert.deepEqual(tests.at(-1), [11, 1]);
-  assert.deepEqual(ROW.scores.tasks, { n: 9, value: 3, prev: 2, better: 'higher' });
+  assert.deepEqual(ROW.scores.tasks, { n: 9, value: 3, prev: 2, better: 'higher', max: null, firstMax: null });
 });
 
 test('needs: waits close at the next round, the fence stays open; the PR is an artifact', () => {
