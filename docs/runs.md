@@ -125,7 +125,12 @@ the raw events, and how many lines were skipped. The run's `cost` is
 `{usd, rounds, from}`: `rounds` counts the `cost` events, and `usd` is their
 sum (`from: "cost"`). A run with no `cost` event sums its rounds' `round.end`
 `usd` (the CLI's `round --end --usd`) instead (`from: "rounds"`); with
-neither, `usd` and `from` are null, never 0.
+neither, `usd` and `from` are null, never 0. `cost.rounds` is the number of
+`cost` events, not a count of rounds: it is neither `counted` nor the rounds
+that carried a `round.end` `usd` (the CLI's `round --end --usd` adds nothing to
+it). So `cost.rounds` above 0 always goes with `from: "cost"`, and a run whose
+cost comes from its rounds shows `rounds: 0` next to `from: "rounds"` (one round
+ended with `--usd 2.5`: `{"usd": 2.5, "rounds": 0, "from": "rounds"}`).
 
 A stopped run carries two sets of numbers. `cost` (`usd`, `rounds`) is what
 laneboard adds up from the run's `cost` events (or its rounds' `usd`); `stop.usd` and `stop.rounds`

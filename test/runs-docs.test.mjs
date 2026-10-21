@@ -230,3 +230,9 @@ test('docs/runs.md says a stop with no --reason records stop: "unknown" (night 5
   assert.match(flat, /A `run\.stop` with no `reason` \(such as `laneboard run stop` with no `--reason`\) records `stop: "unknown"`/);
   assert.match(flat, /\| `stop` \| `--reason` \(left out, the line carries no reason and the run records `stop: "unknown"`\)/);
 });
+
+test('docs/runs.md says cost.rounds counts the cost events, not rounds, and is 0 with from rounds (night 5 T43)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.match(flat, /`cost\.rounds` is the number of `cost` events, not a count of rounds: it is neither `counted` nor the rounds that carried a `round\.end` `usd`/);
+  assert.match(flat, /shows `rounds: 0` next to `from: "rounds"`/);
+});
