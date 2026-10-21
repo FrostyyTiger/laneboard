@@ -105,7 +105,8 @@ test('the demo map: drift both ways and reach links on /api/map', { timeout: 60_
   assert.ok(m.reach.links.length >= 2, `reach links: ${m.reach.links.length}`);
   assert.ok(m.reach.links.some((l) => l.from === 'room-a' && l.to === 'ci'), 'builder-a reaches ci');
   assert.ok(m.reach.links.some((l) => l.from === 'ci' && l.to === 'lab' && l.ports.includes('tcp:8006')), 'ci reaches the hypervisor API');
-  assert.ok(m.reach.unresolved.some((u) => u.selector === 'group:admins'), 'a group rule is unresolved, not guessed');
+  assert.ok(m.reach.unresolved >= 1, 'a group rule is unresolved, not guessed');
+  assert.doesNotMatch(JSON.stringify(m.reach), /group:admins/, 'counted, never named');
   assert.equal(m.nodes.find((n) => n.id === 'builder:builder-a').parent, 'room-a', 'builder-a hangs under its room');
   assert.equal(m.title, DEMO_HOSTNAME);
 });

@@ -1107,7 +1107,7 @@ export function createMap(root, opts = {}) {
       zoom: cam.z, scope: b, drawn: drawnCount, total: model.nodes.length, overlay: ov,
       now: Date.now(), compact: W < 700, p95: perfOn ? p95() : null,
       drift: ov === 'drift' ? driftCounts(model.nodes) : null,
-      reach: rs ? { links: rs.links, touches: selected ? rs.touched.size : null } : null,
+      reach: rs ? { links: rs.links, touches: selected ? rs.touched.size : null, unresolved: model.reach?.unresolved ?? 0 } : null,
     });
     if (text !== readoutText) { readoutText = text; readoutEl.textContent = text; }
   }

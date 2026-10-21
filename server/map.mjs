@@ -1189,7 +1189,9 @@ export function buildFleet({
     const ids = new Set(nodes.map((n) => n.id));
     const r = policy ? reachLinks(policy, nodeIdentities(topo, feeds)) : { links: [], rules: 0, unresolved: [] };
     r.links = r.links.filter((l) => ids.has(l.from) && ids.has(l.to));
-    reach = { ...r, error: policyError ?? undefined };
+    // Unresolved selectors leave the server as a count only: their text
+    // (group names, users, aliases) is policy detail the Map does not show.
+    reach = { ...r, unresolved: r.unresolved.length, error: policyError ?? undefined };
   }
 
   return {

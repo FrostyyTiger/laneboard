@@ -45,7 +45,10 @@ export function normalize(model) {
     events: arr(m.events),
     // Reach (T11) is drawn only by the reach overlay; links are kept as given.
     reach: m.reach && Array.isArray(m.reach.links)
-      ? { links: m.reach.links.filter((l) => l && typeof l.from === 'string' && typeof l.to === 'string' && l.from !== l.to) }
+      ? {
+        links: m.reach.links.filter((l) => l && typeof l.from === 'string' && typeof l.to === 'string' && l.from !== l.to),
+        unresolved: Number.isInteger(m.reach.unresolved) && m.reach.unresolved > 0 ? m.reach.unresolved : 0,
+      }
       : null,
   };
 }

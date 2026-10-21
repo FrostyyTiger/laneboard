@@ -714,6 +714,8 @@ test('readout text: zoom, scope, node count, overlay, UTC', () => {
   assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: null }, now }), /OVL REACH {2}LINKS 12 {2}\d/);
   assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: 3 }, now }), /LINKS 12 {2}TOUCHES 3/);
   assert.doesNotMatch(r.readout({ overlay: 'status', reach: { links: 12, touches: 3 }, now }), /LINKS/);
+  assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: null, unresolved: 2 }, now }), /LINKS 12 {2}UNRESOLVED 2/);
+  assert.doesNotMatch(r.readout({ overlay: 'reach', reach: { links: 12, touches: null, unresolved: 0 }, now }), /UNRESOLVED/);
 });
 
 test('readout at phone width keeps the overlay and its count, drops the clock (T19)', () => {

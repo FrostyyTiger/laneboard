@@ -74,9 +74,9 @@ test('the fixture policy over the tailnet feed: the expected links', () => {
   }
   assert.equal(m.reach.rules, 5);
   // Not guessed: the group needs node owners; the range names no node.
-  assert.deepEqual(m.reach.unresolved.map((u) => u.selector), ['group:admins', 'lab-net']);
-  assert.match(m.reach.unresolved[0].why, /owns/);
-  assert.equal(m.reach.unresolved[1].why, 'no node matches');
+  // The model carries the count only, no selector text (runs T10).
+  assert.equal(m.reach.unresolved, 2);
+  assert.doesNotMatch(JSON.stringify(m), /group:admins|lab-net|owns each node|no node matches/);
   // Reach stays out of the drawn links: only its overlay shows it (T12).
   assert.ok(!m.links.some((l) => l.kind === 'reach'));
 });
@@ -154,4 +154,13 @@ test('selectors: what needs user data is unresolved, not guessed', () => {
   // A node that is not on the tailnet is never a source or a target.
   const r = reachLinks({ rules: [{ src: ['*'], dst: [{ sel: '*', ports: ['*'] }] }], ...p }, new Map([...nodes, ['c', { tags: new Set(), ips: [] }]]));
   assert.deepEqual(pairs(r), [['a', 'b', 'all ports'], ['b', 'a', 'all ports']]);
+});
+
+test('reachLinks still says which selectors are unresolved and why; the Map keeps the count', () => {
+  const nodes = new Map([['a', { tags: new Set(['tag:x']), ips: [parseAddr('192.0.2.1')] }]]);
+  const r = reachLinks({ rules: [{ src: ['group:eng'], dst: [{ sel: 'tag:x', ports: ['*'] }, { sel: 'tag:none', ports: ['*'] }] }], groups: {} }, nodes);
+  assert.deepEqual(r.unresolved.map((u) => u.selector), ['group:eng', 'tag:none']);
+  assert.equal(r.unresolved[1].why, 'no node matches');
+  const m = buildFleet({ topology: null, feeds: feeds(tsFeed()), now: NOW, hostname: 'h', policy: { rules: [{ src: ['*'], dst: [{ sel: '*', ports: ['*'] }] }] } });
+  assert.equal(m.reach.unresolved, 0);
 });

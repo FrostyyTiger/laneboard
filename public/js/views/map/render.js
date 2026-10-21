@@ -912,8 +912,9 @@ export function createRenderer(ctx, palette) {
    * In the drift overlay, `drift` ({missing, undeclared} counts) adds
    * `◌ NOT SEEN 2  □ NOT DECLARED 3` after the overlay, each count keyed by
    * the mark the nodes carry. In the reach overlay,
-   * `reach` ({links, touches}) adds `LINKS 12`, and `TOUCHES 3` while a node
-   * is selected (touches is then a number).
+   * `reach` ({links, touches, unresolved}) adds `LINKS 12`, `TOUCHES 3`
+   * while a node is selected (touches is then a number), and `UNRESOLVED 2`
+   * when the policy names selectors the Map cannot place (a count only).
    */
   function readout({ zoom = 1, scope = 'all', drawn = 0, total = 0, overlay = 'status', now = Date.now(), compact = false, p95 = null, drift = null, reach = null } = {}) {
     const z = `Z ${Number(zoom).toFixed(2)}×`;
@@ -934,6 +935,7 @@ export function createRenderer(ctx, palette) {
     if (overlay === 'reach' && reach) {
       parts.push(`LINKS ${reach.links ?? 0}`);
       if (Number.isFinite(reach.touches)) parts.push(`TOUCHES ${reach.touches}`);
+      if (reach.unresolved > 0) parts.push(`UNRESOLVED ${reach.unresolved}`);
     }
     parts.push(utc);
     if (Number.isFinite(p95)) parts.push(`P95 ${p95.toFixed(1)}MS`);
