@@ -86,6 +86,88 @@ test('a palette row keeps its label when the sub line is long (the sub ellipsize
   const css = fs.readFileSync(new URL('../public/css/palette.css', import.meta.url), 'utf8');
   const cols = /\.pal-o\s*\{[^}]*grid-template-columns:\s*([^;]+);/.exec(css)?.[1] ?? '';
   const parts = cols.match(/minmax\([^)]*\)|\S+/g);
-  assert.match(parts[2], /^minmax\(\d+(\.\d+)?em, max-content\)$/, 'the label column has a floor');
-  assert.equal(parts[3], 'minmax(0, 1fr)', 'the sub column takes what is left');
+  assert.match(parts[1], /^minmax\(\d+(\.\d+)?em, max-content\)$/, 'the label column has a floor');
+  assert.equal(parts[2], 'minmax(0, 1fr)', 'the sub column takes what is left');
+});
+
+// T52 (runs n5, n3 T49): no trailing `—` cell, one kind marker, the match marked,
+// the meta on a second line at 390.
+const { rowModel, markPieces } = await import('../public/js/ui/palette.js');
+const { fuzzyRanges, fuzzyScore } = await import('../public/js/ui/fuzzy.js');
+
+test('T52 fuzzyRanges: the best alignment as merged ranges, the same nulls as fuzzyScore', () => {
+  assert.deepEqual(fuzzyRanges('pos', 'postgres'), [[0, 3]]);
+  assert.deepEqual(fuzzyRanges(':5432', ':5432 on hv1/db'), [[0, 5]]);
+  assert.deepEqual(fuzzyRanges('pg', 'pg-tools'), [[0, 2]]);
+  assert.deepEqual(fuzzyRanges('dt', 'db-tools'), [[0, 1], [3, 4]], 'word starts win over the nearest letter');
+  assert.deepEqual(fuzzyRanges('', 'x'), []);
+  assert.equal(fuzzyRanges('zz', 'postgres'), null);
+  assert.equal(fuzzyRanges('longer', 'ab'), null);
+  for (const [q, s] of [['pos', 'postgres'], ['dt', 'db-tools'], ['hv', 'site · hv1'], ['zz', 'ab']]) {
+    assert.equal(fuzzyRanges(q, s) === null, fuzzyScore(q, s) === null, `${q} in ${s}`);
+  }
+});
+
+test('T52 rowModel: no empty trailing cell, one kind marker, the mark where the row matched', () => {
+  const items = nodeItems(MODEL);
+  for (const it of items) {
+    const m = rowModel(it, 'n:');
+    assert.equal(m.hint, null, 'a NODE row has no hint, so no kbd cell (the old trailing `—`)');
+    assert.ok(m.sub === null || m.sub.map((p) => p.text).join('').trim() !== '', 'no empty sub cell');
+    assert.equal(m.icon, 'map', 'the icon is the one kind marker');
+    assert.ok(!('plate' in m) && !('chip' in m), 'no second chip');
+  }
+  const pg = rowModel(items.find((it) => it.id === 'node:db-pg'), 'postgres');
+  assert.deepEqual(pg.label, [{ text: 'postgres', hit: true }]);
+  assert.deepEqual(pg.sub, [{ text: ':5432 on hv1/db', hit: false }], 'the label matched, so the sub is plain');
+  const port = rowModel(items.find((it) => it.id === 'node:db-pg'), ':5432');
+  assert.deepEqual(port.label, [{ text: 'postgres', hit: false }]);
+  assert.deepEqual(port.sub, [{ text: ':5432', hit: true }, { text: ' on hv1/db', hit: false }], 'the port is marked in the meta');
+  const pre = rowModel(items.find((it) => it.id === 'node:db'), 'n: db');
+  assert.deepEqual(pre.label, [{ text: 'db', hit: true }], 'the prefix is not part of the match');
+  assert.equal(rowModel({ type: 'ACT', label: 'Go', sub: '', hint: 'g b' }, '').sub, null, 'an empty sub is no cell');
+  assert.equal(rowModel({ type: 'ACT', label: 'Go', hint: 'g b' }, '').hint, 'g b');
+  assert.deepEqual(markPieces('abc', [[1, 2], [5, 9]]), [{ text: 'a', hit: false }, { text: 'b', hit: true }, { text: 'c', hit: false }], 'an out-of-range range is ignored');
+  assert.deepEqual(markPieces('', null), [{ text: '', hit: false }]);
+});
+
+test('T52 the palette DOM: icon, label, sub and a hint only when there is one, marks as <mark>', async () => {
+  const { makeDocument } = await import('./helpers/fakedom.mjs');
+  const doc = makeDocument();
+  const mk = doc.createElement;
+  doc.createElement = (t) => {
+    const el = mk(t);
+    el.hasAttribute = (n) => Object.hasOwn(el.attrs, n);
+    el.removeAttribute = (n) => { delete el.attrs[n]; };
+    return el;
+  };
+  const saved = { document: globalThis.document, localStorage: globalThis.localStorage };
+  const mem = new Map();
+  globalThis.document = doc;
+  globalThis.localStorage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)) };
+  try {
+    const pal = await import('../public/js/ui/palette.js');
+    pal.openPalette({ preset: ':5432', ctx: { store: { ...STORE, map: MODEL }, view: 'map', route: { sel: null } } });
+    const dlg = doc.body.children.find((c) => c.className === 'pal');
+    const rows = dlg.children[1].children;
+    assert.equal(rows[0].dataset.type, 'NODE');
+    const cls = rows[0].children.map((c) => c.className);
+    assert.deepEqual(cls, ['i i-s pal-i', 'pal-l', 'pal-s'], 'no type chip, no empty kbd at the end');
+    const sub = rows[0].children[2];
+    const marks = sub.children.filter((c) => c.tagName === 'MARK');
+    assert.deepEqual(marks.map((c) => c.textContent), [':5432']);
+    assert.equal(sub.textContent, ':5432 on hv1/db');
+    pal.closePalette();
+  } finally {
+    globalThis.document = saved.document;
+    globalThis.localStorage = saved.localStorage;
+  }
+});
+
+test('T52 at 390 the meta is a second line under the name', async () => {
+  const fs = await import('node:fs');
+  const css = fs.readFileSync(new URL('../public/css/palette.css', import.meta.url), 'utf8');
+  const phone = /@media \(max-width: 699px\)\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
+  assert.match(phone, /grid-template-areas:\s*"i l k"\s*"i s k"/);
+  assert.match(css, /\.pal-m\s*\{[^}]*font-weight/, 'the match is marked');
 });
