@@ -107,6 +107,25 @@ test('nothing but the name, image, state, ports and compose labels leaves the li
   }
 });
 
+test('Command, Mounts and NetworkSettings / networks never reach the feed', () => {
+  // The Engine's list carries these on every container; the fixture holds
+  // Command only, so the rest is added here with values that stand out.
+  const list = fixture().map((c, i) => ({
+    ...c,
+    Command: `secret-cmd-${i} --token=hunter2`,
+    Mounts: [{ Type: 'bind', Source: `/srv/secret-mount-${i}`, Destination: '/data', Mode: 'rw', RW: true }],
+    HostConfig: { NetworkMode: `secret-netmode-${i}` },
+    NetworkSettings: { Networks: { [`secret-net-${i}`]: { IPAddress: `192.0.2.${100 + i}`, Gateway: '192.0.2.1', MacAddress: '02:42:c0:00:02:64', NetworkID: `secret-netid-${i}` } } },
+  }));
+  const feed = docker.toFeed(list, { now: NOW });
+  const text = JSON.stringify(feed);
+  for (const word of ['secret-', 'hunter2', '--token', '/srv/', '/data', '192.0.2.1', '02:42:', 'Mounts', 'Networks', 'NetworkSettings', 'HostConfig', 'Command']) {
+    assert.equal(text.includes(word), false, `${word} stays out of the feed`);
+  }
+  // The same containers still arrive: the extra fields change nothing else.
+  assert.deepEqual(feed, docker.toFeed(fixture().map(({ Command, ...c }) => c), { now: NOW }));
+});
+
 test('missing pieces are unknown, never a throw', () => {
   for (const input of [null, {}, [], [null, 7, {}], { data: [] }]) {
     const feed = docker.toFeed(input, { now: NOW });
