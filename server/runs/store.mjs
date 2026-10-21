@@ -11,7 +11,8 @@
 // - A truncated or replaced file is `reset`: its events are dropped and it is
 //   read again from the start.
 // - A file that is no longer found keeps its events: a run outlives the
-//   worktree it ran in, until `keepDays` forgets it.
+//   worktree it ran in, until `keepDays` forgets it. If it comes back, the
+//   collector resets it before reading it again from the start.
 // - Over `maxEvents` for one run, the oldest events go first, except
 //   `run.start` lines (they carry the goal, the plan and the budget).
 // - Skipped lines have no trustworthy run id: they are counted for the run of

@@ -11,8 +11,9 @@
 // Tailing is by byte offset: only what was appended since the last read is
 // read, a half-written last line waits for its newline, and a file that
 // shrank or was replaced (another inode) is dropped from the store and read
-// again from the start. Reads are bounded per tick so a huge file catches up
-// over several ticks instead of blocking one.
+// again from the start; so is a file that left discovery (or was deleted)
+// and came back, its old events dropped first. Reads are bounded per tick
+// so a huge file catches up over several ticks instead of blocking one.
 //
 // With no config (`files: []`) and no lane holding a .laneboard/run.jsonl
 // nothing is read and the store stays empty.
@@ -172,9 +173,13 @@ export function createCollector(opts = {}) {
   }
 
   async function readOne(file) {
-    const r = await readTail(file, tails.get(file) ?? null, { fsImpl, readMax: opts.readMax });
+    const saved = tails.get(file) ?? null;
+    const r = await readTail(file, saved, { fsImpl, readMax: opts.readMax });
     if (r.gone) { tails.delete(file); return; }
-    if (r.reset) store.reset(file);
+    // No saved position means a read from the start: drop what the store still
+    // holds from this file (it left discovery or was deleted and came back),
+    // or every line it read before is counted twice.
+    if (r.reset || !saved) store.reset(file);
     tails.set(file, r.tail);
     if (r.lines.length) {
       const { events, skippedAt } = parseTailLines(r.lines);

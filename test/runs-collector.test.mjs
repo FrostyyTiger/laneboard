@@ -253,6 +253,42 @@ test('a deleted file keeps its runs (until keepDays)', async () => {
   assert.equal(c.store.get('r1').goal, 'Stays');
 });
 
+test('a file that leaves discovery and comes back is not counted twice', async () => {
+  const d = dir();
+  const f = path.join(d, 'run.jsonl');
+  append(f, ev('r1', 'run.start', { goal: 'Once' })
+    + ev('r1', 'round.start', { n: 1 }) + ev('r1', 'round.end', { n: 1, usd: 0.5 })
+    + ev('r1', 'cost', { usd: 0.5 }));
+  // Discovery through a files list the test can switch off and on.
+  let roots = [f];
+  const cg = collect({ cfg: { get files() { return roots; } } });
+  await cg.tick();
+  const once = (run) => {
+    assert.equal(run.events, 4);
+    assert.equal(run.rounds.length, 1);
+    assert.equal(run.rounds[0].usd, 0.5);
+    assert.equal(run.cost.usd, 0.5);
+  };
+  once(cg.store.get('r1'));
+  roots = [];
+  await cg.tick();
+  assert.deepEqual(cg.files(), []);
+  once(cg.store.get('r1'));
+  roots = [f];
+  await cg.tick();
+  once(cg.store.get('r1'));
+  // Deleted and written again: the new file replaces what the old one held.
+  fs.rmSync(f);
+  await cg.tick();
+  once(cg.store.get('r1'));
+  append(f, ev('r1', 'run.start', { goal: 'Again' }) + ev('r1', 'cost', { usd: 0.25 }));
+  await cg.tick();
+  const again = cg.store.get('r1');
+  assert.equal(again.goal, 'Again');
+  assert.equal(again.events, 2);
+  assert.equal(again.cost.usd, 0.25);
+});
+
 test('readTail and parseTailLines on their own', async () => {
   const f = path.join(dir(), 'run.jsonl');
   fs.writeFileSync(f, 'a\r\nb\nc');
