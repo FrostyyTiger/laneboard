@@ -8,7 +8,7 @@ import path from 'node:path';
 
 import {
   TILES, KIND_TO_TILE, TILE_META, tileOf, alarmP, tileModel, tileLabel, tileParam, tileFromParam,
-  alarmKey, tileKeys, ackRequest, tileTone, TILE_FIXED_P,
+  alarmKey, tileKeys, ackRequest, tileTone, TILE_FIXED_P, TONE_MARK,
 } from '../public/js/core/alarm-tiles.js';
 import { tileView } from '../public/js/ui/annunciator.js';
 import {
@@ -199,20 +199,45 @@ test('annunciator.js acks through act() with ack-alarm and filters through the r
 
 // ---------------------------------------------------------------- CSS
 
-test('annunciator.css: filled when active, flash only while unacked, reduced motion solid + UNACK', () => {
+test('annunciator.css: never filled, the count takes the tone, flash only while unacked, reduced motion steady + UNACK', () => {
   const css = read('public/css/annunciator.css');
-  // The flash is a ring on ::after (runs T14): the tile, its fill and its text never fade.
+  // The flash is a ring on ::after (runs T14): the tile and its count never fade.
   assert.match(css, /\.ann-tile\[data-unack\]\s*\{\s*animation:\s*none;\s*\}/);
   const ring = /\.ann-tile\[data-unack\]::after\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
   assert.match(ring, /animation:\s*lb-flash 1s linear infinite;/);
   assert.match(ring, /animation-delay:\s*inherit;/, 'the ring takes the phase syncFlash sets on the tile');
-  assert.match(ring, /border:\s*2px solid var\(--text-1\)/);
-  assert.match(css, /--text-inv/);
-  for (const p of [1, 2, 3]) assert.match(css, new RegExp(`\\[data-p="${p}"\\][^{]*\\{ background: var\\(--p${p}\\); \\}`));
+  assert.match(ring, /border:\s*var\(--bw\) solid var\(--ann-tone/, 'the ring is 1 px in the tile tone');
+  for (const p of [1, 2]) assert.match(css, new RegExp(`\\.ann-tile\\[data-p="${p}"\\] \\{ --ann-tone: var\\(--p${p}\\); \\}`));
+  assert.match(css, /\.ann-tile\[data-state="unack"\] \.ann-n,\s*\.ann-tile\[data-state="ack"\] \.ann-n \{ color: var\(--ann-tone/);
   const rm = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
   assert.match(rm, /animation:\s*none/);
   assert.match(rm, /\.ann-tag \{ display: inline; \}/);
   assert.match(read('public/js/ui/annunciator.js'), /'UNACK'/);
+});
+
+test('T13: the tiles are grey with a coloured count: no fill, no cyan, no inverse text', () => {
+  const css = read('public/css/annunciator.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const [, sel, body] = m;
+    if (!/ann-/.test(sel)) continue;
+    const bg = /background(?:-color)?:\s*([^;]+)/.exec(body)?.[1]?.trim();
+    if (bg) assert.equal(bg, 'var(--bg-sunken)', `${sel.trim()}: the only tile background is the grey well`);
+    assert.doesNotMatch(body, /--p3|--text-inv/, `${sel.trim()}: no cyan, no text on a fill`);
+  }
+  // Every tile draws amber (wants you) or red (broken), never p3, whatever its members.
+  assert.deepEqual(Object.keys(TILE_FIXED_P).sort(), [...TILES].sort());
+  for (const t of TILES) assert.equal(TILE_FIXED_P[t], ['BLKD', 'DOWN'].includes(t) ? 1 : 2, t);
+  assert.equal(TONE_MARK[1], '\u25a0');
+  assert.equal(TONE_MARK[2], '\u25b2');
+  const budg = tileView(byTile(tileModel([alarm('budget-warn', 'P3')]), 'BUDG'));
+  assert.equal(budg.p, '2', 'BUDG is amber, not the cyan p3');
+  assert.equal(budg.mark, '\u25b2');
+  assert.equal(budg.n, '1');
+  const blkd = tileView(byTile(tileModel([alarm('blocked', 'P2')]), 'BLKD'));
+  assert.equal(blkd.p, '1');
+  assert.equal(blkd.mark, '\u25a0');
+  const empty = tileView(byTile(tileModel([]), 'CONF'));
+  assert.deepEqual([empty.n, empty.mark, empty.p, empty.state], ['', '', '', 'normal'], 'an empty tile is plain grey');
 });
 
 test('tape.css: severity left bar, 200px drawer', () => {
@@ -324,8 +349,8 @@ test('emptyLine (T20): before the first event the line shows the latest session,
 
 // ---------------------------------------------------------------- T38: one hue for DOWN
 
-test('tileTone: DOWN draws the trouble red (p1) whatever its members, other tiles their worst', () => {
-  assert.deepEqual(TILE_FIXED_P, { DOWN: 1 });
+test('tileTone: DOWN draws the trouble red (p1) whatever its members, other tiles their fixed tone', () => {
+  assert.equal(TILE_FIXED_P.DOWN, 1);
   for (const [kind, pr] of [['builder-down', 'P1'], ['health-crit', 'P2'], ['builder-stale', 'P3'], ['health-warn', 'P3'], ['reboot', 'P4']]) {
     for (const acked of [false, true]) {
       const t = byTile(tileModel([alarm(kind, pr, { acked })]), 'DOWN');
@@ -336,13 +361,13 @@ test('tileTone: DOWN draws the trouble red (p1) whatever its members, other tile
   }
   assert.equal(tileTone(byTile(tileModel([]), 'DOWN')), null, 'clear has no tone');
   assert.equal(tileView(byTile(tileModel([]), 'DOWN')).p, '');
-  assert.equal(tileTone(byTile(tileModel([alarm('stuck', 'P3')]), 'STCK')), 3);
+  assert.equal(tileTone(byTile(tileModel([alarm('stuck', 'P3')]), 'STCK')), 2, 'stuck wants you: amber');
 });
 
 test('DOWN tile: the pulse never changes the fill, and p1 is the same red hue in both themes', () => {
   const css = read('public/css/annunciator.css');
-  // unack and ack share one fill per priority, so the blink phase cannot pick another one.
-  assert.match(css, /\.ann-tile\[data-state="unack"\]\[data-p="1"\],\s*\.ann-tile\[data-state="ack"\]\[data-p="1"\]\s*\{\s*background:\s*var\(--p1\);\s*\}/);
+  // unack and ack share one tone per priority, so the blink phase cannot pick another one.
+  assert.match(css, /\.ann-tile\[data-p="1"\] \{ --ann-tone: var\(--p1\); \}/);
   // the blink runs on the ::after ring only; the tile itself has no animation.
   assert.match(css, /\.ann-tile\[data-unack\]\s*\{\s*animation:\s*none;\s*\}/);
   assert.match(css, /\.ann-tile\[data-unack\]::after\s*\{[^}]*animation:\s*lb-flash/);

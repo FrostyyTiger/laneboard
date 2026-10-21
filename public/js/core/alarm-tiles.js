@@ -40,12 +40,19 @@ export const TILE_META = Object.freeze({
 });
 
 /**
- * Tiles that draw one fixed lamp priority whatever their members' priorities.
- * DOWN is trouble (a builder down, stale or unhealthy), so it is always the
- * trouble red: with its own worst priority it went red for builder-down (P1)
- * and blue for builder-stale (P3) as a demo builder flapped (runs T38).
+ * The lamp priority each tile draws in, fixed by what the tile means
+ * (docs/design.md, the colour rule): broken (BLKD, DOWN) is the red p1 with
+ * the ■ mark, everything else wants you and is the amber p2 with the ▲ mark.
+ * The members' own priorities still order them (tileModel `p`), but no tile
+ * draws in p3 any more: BUDG went cyan (runs night 4 T13), and DOWN flapped
+ * red/blue as a demo builder went down and stale (runs T38).
  */
-export const TILE_FIXED_P = Object.freeze({ 'DOWN': 1 });
+export const TILE_FIXED_P = Object.freeze({
+  'NEED': 2, 'APPR': 2, 'BLKD': 1, 'STCK': 2, 'CI-F': 2, 'DOWN': 1, 'BUDG': 2, 'CONF': 2,
+});
+
+/** The status shape of a lamp priority: 1 -> ■ (broken), 2 -> ▲ (wants you). */
+export const TONE_MARK = Object.freeze({ 1: '\u25a0', 2: '\u25b2' });
 
 /** The lamp priority a tile draws in: its fixed one, else its worst member's; null when clear. */
 export function tileTone(t) {

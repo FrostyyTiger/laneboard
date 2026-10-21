@@ -35,6 +35,11 @@ laneboard is read from across the room at 3 a.m. It follows the high-performance
 - **Green is not "ok".** `--ok` is a muted grey-green, used sparingly; the absence of colour is the
   ok state.
 - A tile or count is coloured only while it is non-zero; an empty one is plain grey with no fill.
+- **The header tiles are never filled.** Tile and label stay grey; only the count is coloured,
+  with its shape before it: `▲ 2` amber for NEED, APPR, STCK, CI-F, BUDG and CONF, `■ 1` red for
+  BLKD and DOWN, whatever the alarms' own priorities (`TILE_FIXED_P` in
+  `public/js/core/alarm-tiles.js`). An unacknowledged tile adds a 1 px flashing ring in the same
+  hue.
 - Amber on the light canvas needs its shape or a 1 px border next to it, never a pale fill alone.
 
 ## Type
@@ -101,5 +106,5 @@ The light block of `tokens.css` is held to the dark theme's finish by numbers, n
 - **Dim by colour, never by opacity.** A dead session or a builder that is not live is `--text-3`
   (plus the hatch for not live), not a faded card: opacity takes text under 3:1 on light.
 
-Not settled by tokens: the filled header tiles, the lane-bar working segment and the Map's dot
-grid. Those are rules of the view sheets (runs night 4 T13 and T27).
+Not settled by tokens: the lane-bar working segment and the Map's dot grid. Those are rules of
+the view sheets (runs night 4 T27).
