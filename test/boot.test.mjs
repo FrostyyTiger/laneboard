@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { boot, freePort, ingressFetch, ingressWs, ROOT } from './helpers/boot.mjs';
 import { fakeBuilder, hubSigner } from './helpers/fake-builder.mjs';
-import { bootErrorLine } from '../server/boot/common.mjs';
+import { bootErrorLine, listenPorts } from '../server/boot/common.mjs';
 import { publicKeyString, publicKeyPem } from '../server/fleet/keys-ed25519.mjs';
 
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/snapshot.json', import.meta.url), 'utf8'));
@@ -144,6 +144,13 @@ test('a busy port: one line naming the port and LANEBOARD_PORT, no stack, non-ze
   } finally {
     await new Promise((resolve) => holder.close(resolve));
   }
+});
+
+test('listenPorts binds the ingress port before the main one, so /healthz never answers half-bound', () => {
+  assert.deepEqual(listenPorts({ port: 7790, fleet: { ingressPort: 7791 } }),
+    [{ port: 7791, ingress: true }, { port: 7790, ingress: false }]);
+  assert.deepEqual(listenPorts({ port: 7790, fleet: {} }), [{ port: 7790, ingress: false }]);
+  assert.deepEqual(listenPorts({ port: 7790, fleet: { ingressPort: 7790 } }), [{ port: 7790, ingress: false }]);
 });
 
 test('bootErrorLine: one line for a busy port (local or ingress) and a held audit lock, null otherwise', () => {

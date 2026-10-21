@@ -101,7 +101,8 @@ NOW ($TZ_RUN): $(TZ=$TZ_RUN date '+%F %H:%M')   DEADLINE: $DEADLINE
 TESTS AFTER THE LAST ROUND: pass $TESTS_PASS, fail $TESTS_FAIL
 $( [ "$TESTS_OK" = 0 ] && printf 'FAILING TESTS (tail):\n%s\n' "$TEST_TAIL" )
 REVIEWS SO FAR: $(ls "$PLAN_DIR"/reviews/ 2>/dev/null | tr '\n' ' ')
-$( [ -n "${STOP_REASON:-}" ] && echo "STOP REASON: $STOP_REASON   OWNER NOTES: $RUN_DIR/owner-notes" )"
+$( [ -n "${STOP_REASON:-}" ] && echo "STOP REASON: $STOP_REASON   OWNER NOTES: $RUN_DIR/owner-notes" )
+$( [ -n "${REPLAN:-}" ] && echo "REPLAN: every task in PROGRESS.md is done; plan the next ones (planner.md, Replan)" )"
   # The researcher reads the open web, so it gets no shell, no git, no MCP: only files in the repo
   # and web tools. What it finds lands in a markdown file that later rounds read as data.
   local tools=()
@@ -202,7 +203,7 @@ if [ ! -f "$PLAN_DIR/PROGRESS.md" ]; then
   push
 fi
 
-STOP="" since_review=0 stale=0 fixes=0 researched=0 since_research=9 designed=0 since_design=9
+STOP="" replans=0 since_review=0 stale=0 fixes=0 researched=0 since_research=9 designed=0 since_design=9
 # screenshots the builders took since the last designer review (README §7: after UI tasks)
 new_shots() { find "$RUN_DIR/shots" -name '*.png' ${LAST_DESIGN:+-newer "$LAST_DESIGN"} 2>/dev/null | head -1; }
 LAST_DESIGN=""
@@ -219,7 +220,15 @@ while :; do
     log "5 h window at $U5 %, sleeping until $(TZ=$TZ_RUN date -d @$wake +%H:%M)"
     sleep $(( wake > $(now) ? wake - $(now) : 0 )); U5=0; continue
   fi
-  [ "$(tasks_open)" -eq 0 ] && [ -f "$PLAN_DIR/PROGRESS.md" ] && { STOP=done; break; }
+  # Out of tasks: a planner round looks for night items not planned yet (night 4 stopped with
+  # four items never planned, the first planner round stops at 12 tasks). Twice at most.
+  if [ "$(tasks_open)" -eq 0 ] && [ -f "$PLAN_DIR/PROGRESS.md" ]; then
+    [ $replans -ge 2 ] && { STOP=done; break; }
+    replans=$((replans + 1)); n=$((n + 1)); REPLAN=1 run_role $n planner "$MODEL_BUILD"
+    ev round.end n=$n outcome=replanned open="$(tasks_open)"; push
+    [ "$(tasks_open)" -eq 0 ] && { STOP=done; break; }
+    continue
+  fi
 
   if [ "$TESTS_OK" = 0 ]; then role=fix; fixes=$((fixes + 1))
     [ $fixes -gt 2 ] && { STOP=no-progress; log "tests red after 2 fix rounds"; break; }

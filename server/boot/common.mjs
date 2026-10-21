@@ -78,10 +78,12 @@ const isPort = (p) => Number.isInteger(p) && p >= 1 && p <= 65535;
  * serve` targets; every request on it is ingress, §2 2.3). Without a fleet
  * block there is no ingress port and nothing changes.
  */
+// The ingress listener comes first: /healthz on the main port must not answer
+// while the ingress port is still unbound (or about to fail with EADDRINUSE).
 export function listenPorts(cfg = config) {
   const out = [{ port: cfg.port, ingress: false }];
   const ip = cfg.fleet?.ingressPort;
-  if (isPort(ip) && ip !== cfg.port) out.push({ port: ip, ingress: true });
+  if (isPort(ip) && ip !== cfg.port) out.unshift({ port: ip, ingress: true });
   return out;
 }
 
