@@ -70,6 +70,8 @@ Planner notes (round 1), from reading the code:
 - [ ] T22 (3, review 13-designer, Run page 5) [ui] The round's session link is visible as a link (underline or ↗ after the role, like the artifact title), and the demo fleet (`test/tools/demo-fleet.mjs`) gives at least one demo round a known session so a shot shows it — done when: `test/view-runs.test.mjs` finds the anchor with the link marker; the run page shot shows one linked round (dark + light, 1440 + 390), console clean
 - [ ] T23 (3, review 13-designer, Run page 6 + 9) [ui] At 390 each round keeps its title: two lines per round (`3 builder kept c3e4a5b $3.68`, title and task id under it in `--text-2`), COMMIT dropped before TASK; the 390 shot scrolls to the end of the rounds table and the artifacts (include the wrap-up row; same scroll as T16) — done when: a view test finds the round title in the phone markup; shots at 390 (dark + light) show the title and the wrap-up row, console clean
 - [ ] T24 (2, review 16-stranger, 2) `laneboard run start` takes `--max-rounds N` for the cap; `--rounds N` on `start` stays as an alias and prints a stderr note (`--rounds on start means --max-rounds`); `--rounds` on `stop` stays the count done; the usage and `laneboard run start --help` say which is which (`bin/laneboard` `RUN_FLAGS`, `docs/runs.md`) — done when: `test/cli-run.test.mjs` writes `start --max-rounds 3` and finds `maxRounds: 3` in the line, `start --rounds 3` gives the same line plus the stderr note, and the help text names both flags
+- [ ] T25 (4, review 24-stranger, 5) `laneboard morning` never lists a running lane under a "Finished" heading: the "(1 lane active)" count moves to its own line or heading (`Still running`), and Finished holds only what finished in the window (`bin/laneboard` morning text, and the web Morning if it does the same) — done when: a CLI test with a fake `/api/morning` body that has one active lane and one stopped run finds the active lane outside the Finished block, and no line over 100 columns
+- [ ] T26 (4, review 24-stranger, 7) `laneboard fleet pubkey` with no key reads the key path from the state dir like `keygen` does, or, if it must read the real home, the error says which path it looked in and README's isolation paragraph lists `fleet pubkey` beside `fleet keygen` — done when: a `test/cli-*.test.mjs` case with `LANEBOARD_STATE_DIR=<tmp>` and `HOME=<other tmp>` checks the error text (or the path used) and the README sentence is there
 
 ## Research questions
 
@@ -129,6 +131,14 @@ Planner notes (round 1), from reading the code:
 - Idea from review 16-stranger (no task; say if you want it): a second `run needs ack` of the same
   need prints `need 0 already acked, nothing posted` (exit 0) while the first printed only `needs.ack
   posted`; naming the need's text in both would be clearer.
+- From review 24-stranger (no task; say which you want):
+  - `ls` BRANCH showed `-` on a fresh copy and the real branch on an older board for the same
+    session; maybe a collector warm-up, nobody has checked. Worth a look if it repeats.
+  - `laneboard run needs "x"` with `$LANEBOARD_RUN` set writes `./.laneboard/run.jsonl` in the cwd
+    without saying where the id came from (T10 chose a quiet inherit for non-`start`). Say it on
+    stderr for every subcommand, or keep it quiet?
+  - The README test-copy snippet hard-codes port 7788 and does not check it is free; a stranger tested
+    the wrong board for a pass (third review to hit it). Later has it (n3 T57); consider moving it up.
 
 ## Reviews
 
@@ -145,5 +155,8 @@ Planner notes (round 1), from reading the code:
 - reviews/16-stranger.md: 6 findings, 1 became a task (T24). Dropped as covered: taken test port
   (Later n3 T57), silent `$LANEBOARD_RUN` (T10), `run cost` vs round `--usd` hint (T6, done), `ls`
   lists real sessions (README says so). The double-ack wording went to For the owner. No broken view.
+- reviews/24-stranger.md: 7 findings, 2 became tasks (T25, T26). Dropped as covered: taken test port
+  (Later n3 T57, also For the owner), `?run=nope` empty list vs 404 (by design, T7), `--rounds` naming
+  (T24). The `ls` BRANCH mismatch and the quiet `$LANEBOARD_RUN` on `needs` went to For the owner.
 
 ## Morning
