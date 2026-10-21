@@ -279,6 +279,9 @@ and nothing warns.
   `by` is not enforced: nothing checks who wrote an ack, so `by` is an honesty
   rule for the UI (an ack by a person shows as theirs), and a loop or round
   never acks with `by` `owner`, `inbox` or `run page`.
+  A file ack (no `--post`) whose check a board answered adds a `note:` line on
+  stderr: the ack went to the file, not to that board, which sees it only if
+  it reads the file (a lane's root or `runs.files`); `--post` sends it there.
 - `round` (without `--end`) prints `export LANEBOARD_RUN=<run>/<n>`, so after
   `eval` the sessions the round starts carry the run and round in their
   environment. `--run` defaults to the run part of `$LANEBOARD_RUN`, so a

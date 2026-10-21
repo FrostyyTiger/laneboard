@@ -1105,11 +1105,14 @@ async function cmdRun() {
   const file = post ? null : path.resolve(fileFlag || process.env.LANEBOARD_RUN_FILE || path.join('.laneboard', 'run.jsonl'));
   // Read before the append: the ack's own line must not count as a need.
   let warnings = [];
+  let boardAnswered = false;
   if (event.t === 'needs.ack') {
     // The server folds every source of a run by time, so its needs decide when it
     // knows the run. Offline (or a run it does not know), a file ack can only see
     // this file's needs: a ref missing there may be another source's, so it warns.
-    let needs = await serverNeeds(run, { unknown: post ? [] : null });
+    const known = await serverNeeds(run);
+    boardAnswered = known.answered;
+    let needs = known.needs ?? (post && known.answered ? [] : null);
     let where = `on ${BASE}`;
     const offline = !post && !needs;
     if (offline) { needs = fileNeeds(file, run, { parseLines, foldRun }); where = `in ${file}`; }
@@ -1139,6 +1142,9 @@ async function cmdRun() {
   // stdout stays for `eval "$(laneboard run round …)"`; the receipt and warnings go to stderr.
   process.stderr.write(`${cleanTerm(done)}\n`);
   for (const w of warnings) process.stderr.write(`warning: ${cleanTerm(w)}\n`);
+  // A board answered the check but the ack went to a file: it closes the need on
+  // that board only if the board reads this file (a lane root, runs.files).
+  if (!post && boardAnswered) process.stderr.write(`note: ${cleanTerm(`the ack went to ${file}, not to the board at ${BASE}: the board sees it only if it reads that file (a lane's root or runs.files); --post sends it to the board`)}\n`);
   if (event.t === 'round.start') process.stdout.write(`export LANEBOARD_RUN=${run}/${event.n}\n`);
 }
 
@@ -1149,17 +1155,17 @@ function fileNeeds(file, run, { parseLines, foldRun }) {
   return foldRun(parseLines(text).events.filter((e) => e.run === run)).needs;
 }
 
-/** The needs of `run` as the server folded them: `unknown` ([] by default) for a
- *  run it does not know, null when the server cannot tell (unreachable, an error,
- *  an older server). */
-async function serverNeeds(run, { unknown = [] } = {}) {
+/** The needs of `run` as the server folded them, and whether a board answered
+ *  (200 or 404): `needs` is null for a run it does not know and when it cannot
+ *  tell (unreachable, an error, an older server). */
+async function serverNeeds(run) {
   try {
     const res = await fetch(`${BASE}/api/runs/${encodeURIComponent(run)}`, { headers: { 'x-laneboard': '1' }, signal: AbortSignal.timeout(3000) });
-    if (res.status === 404) return unknown;
-    if (!res.ok) return null;
+    if (res.status === 404) return { answered: true, needs: null };
+    if (!res.ok) return { answered: false, needs: null };
     const needs = (await res.json())?.run?.needs;
-    return Array.isArray(needs) ? needs : null;
-  } catch { return null; }
+    return { answered: true, needs: Array.isArray(needs) ? needs : null };
+  } catch { return { answered: false, needs: null }; }
 }
 
 /** What an ack will do, before it is written: `{missing: true}` when the ref names

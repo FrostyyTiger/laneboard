@@ -42,6 +42,9 @@ function run(args, env, cwd) {
   });
 }
 
+// T40: the stderr line a file ack adds when a board answered its check.
+const fileNote = (file, url) => `note: the ack went to ${file}, not to the board at ${url}: the board sees it only if it reads that file (a lane's root or runs.files); --post sends it to the board\n`;
+
 const lines = (f) => fs.readFileSync(f, 'utf8').split('\n').filter(Boolean);
 
 test('every subcommand writes one line parseLine accepts, to ./.laneboard/run.jsonl by default', async (t) => {
@@ -521,7 +524,7 @@ test('a file ack checks the server\'s merged needs when it knows the run; an unk
   const env = envFor(dir, { LANEBOARD_URL: `http://127.0.0.1:${server.address().port}` });
   const ok = await run(['run', 'ack', 'r1', '0', '--file', file], env, dir);
   assert.equal(ok.code, 0, ok.stderr);
-  assert.equal(ok.stderr, `ok r1 needs.ack appended to ${file}\n`, 'need 0 is the server\'s, no warning');
+  assert.equal(ok.stderr, `ok r1 needs.ack appended to ${file}\n${fileNote(file, env.LANEBOARD_URL)}`, 'need 0 is the server\'s, no warning');
   const typo = await run(['run', 'ack', 'r1', '5', '--file', file], env, dir);
   assert.equal(typo.code, 1);
   assert.equal(typo.stderr, `laneboard: no need 5 in run r1 on ${env.LANEBOARD_URL}; nothing written\n`);
@@ -664,4 +667,46 @@ test('T34: `run needs` with no text, or empty text, exits 2 with `needs: give th
   assert.equal((await run(['run', 'needs', '--run', 'r1', '--text', 'Merge it?', '--post'], env, dir)).code, 0);
   assert.equal(lines(file).length, 1);
   assert.equal(posted.length, 1);
+});
+
+test('T40: a file ack says it went to the file, not the board, when a board answered; offline and --post say nothing of it', async (t) => {
+  const dir = tmpDir(t);
+  const posted = [];
+  const needs = [{ i: 0, kind: 'decision', ts: 1, acked: false }];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      if (req.method === 'POST') {
+        posted.push(JSON.parse(body));
+        res.writeHead(201, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({ ok: true, run: 'demo', t: 'needs.ack' }));
+      }
+      const known = req.url === '/api/runs/demo';
+      res.writeHead(known ? 200 : 404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(known ? { run: { id: 'demo', needs } } : { error: 'unknown run' }));
+    });
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const env = envFor(dir, { LANEBOARD_URL: `http://127.0.0.1:${server.address().port}` });
+  const file = path.join(dir, '.laneboard', 'run.jsonl');
+  // The review's walk: no --file, no --post, a board named and up.
+  const r = await run(['run', 'ack', 'demo', '0'], env, dir);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  assert.equal(r.stderr, `ok demo needs.ack appended to ${file}\n${fileNote(file, env.LANEBOARD_URL)}`);
+  assert.equal(lines(file).length, 1);
+  // A run the board does not know: still a board that will not see the file.
+  const other = await run(['run', 'ack', 'r2', '0'], env, dir);
+  assert.equal(other.code, 0, other.stderr);
+  assert.ok(other.stderr.endsWith(fileNote(file, env.LANEBOARD_URL)), other.stderr);
+  // --post went to the board: no note.
+  const p = await run(['run', 'ack', 'demo', '0', '--post'], env, dir);
+  assert.equal(p.stderr, 'ok demo needs.ack posted\n');
+  assert.equal(posted.length, 1);
+  // No board answering (the closed port): nothing to compare with, no note.
+  const off = await run(['run', 'ack', 'demo', '0'], envFor(dir), dir);
+  assert.equal(off.code, 0, off.stderr);
+  assert.doesNotMatch(off.stderr, /note:/);
 });
