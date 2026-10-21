@@ -986,7 +986,15 @@ async function cmdRun() {
 
   const file = post ? null : path.resolve(fileFlag || process.env.LANEBOARD_RUN_FILE || path.join('.laneboard', 'run.jsonl'));
   // Read before the append: the ack's own line must not count as a need.
-  const warnings = event.t === 'needs.ack' ? ackWarnings({ ...checked.event, given: event.ref }, file, { parseLines, foldRun, FENCE_ACK_BY }) : [];
+  let warnings = [];
+  if (event.t === 'needs.ack') {
+    const needs = post ? await serverNeeds(run) : fileNeeds(file, run, { parseLines, foldRun });
+    const where = post ? `on ${BASE}` : `in ${file}`;
+    const r = ackCheck({ ...checked.event, given: event.ref }, needs, { FENCE_ACK_BY, verb: post ? 'posted' : 'written' });
+    // A ref that names no need would only be kept raw: a typo, so write nothing and fail.
+    if (r.missing) return die(`no need ${cleanTerm(String(event.ref))} in run ${run} ${where}; nothing ${post ? 'posted' : 'written'}`);
+    warnings = r.warnings;
+  }
   let done;
   if (post) {
     const r = await api('/api/runs/events', { method: 'POST', body: event });
@@ -1004,20 +1012,38 @@ async function cmdRun() {
   if (event.t === 'round.start') process.stdout.write(`export LANEBOARD_RUN=${run}/${event.n}\n`);
 }
 
-/** Warnings for an ack that will not do what it looks like (it is still written,
- *  exit 0): a ref that names no need in the file, or a `by` that cannot close a
- *  `fence` need (docs/runs.md) when the need is one or, with --post, may be one. */
-function ackWarnings(ack, file, { parseLines, foldRun, FENCE_ACK_BY }) {
-  const byOk = FENCE_ACK_BY.includes(ack.by);
-  const byHint = `${ack.by ? `--by ${JSON.stringify(ack.by)}` : 'no --by'}: a fence need closes only with --by ${FENCE_ACK_BY.map((b) => JSON.stringify(b)).join(', ')}`;
-  if (!file) return byOk ? [] : [`${byHint}, if this need is one`];
+/** The needs of `run` in the file an ack appends to ([] when there is no file yet). */
+function fileNeeds(file, run, { parseLines, foldRun }) {
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch { /* no file yet: no need either */ }
-  const needs = foldRun(parseLines(text).events.filter((e) => e.run === ack.run)).needs;
-  const need = ack.refBy === 'index' ? needs[ack.ref] : needs.find((x) => x.ts === ack.ref);
-  if (!need) return [`ref ${ack.given} names no need of run ${ack.run} in ${file}; the ack will be kept raw`];
-  if (need.kind === 'fence' && !need.acked && !byOk) return [`${byHint}; this ack leaves need ${need.i} open`];
-  return [];
+  return foldRun(parseLines(text).events.filter((e) => e.run === run)).needs;
+}
+
+/** The needs of `run` as the server folded them: [] for an unknown run, null when
+ *  the server cannot tell (unreachable, an error, an older server). */
+async function serverNeeds(run) {
+  try {
+    const res = await fetch(`${BASE}/api/runs/${encodeURIComponent(run)}`, { headers: { 'x-laneboard': '1' } });
+    if (res.status === 404) return [];
+    if (!res.ok) return null;
+    const needs = (await res.json())?.run?.needs;
+    return Array.isArray(needs) ? needs : null;
+  } catch { return null; }
+}
+
+/** What an ack will do, before it is written: `{missing: true}` when the ref names
+ *  no need of the run, else warnings (the ack is still written, exit 0) for a `by`
+ *  that cannot close a `fence` need (docs/runs.md). `needs` null = unknown, so the
+ *  `by` hint is given as a maybe. */
+function ackCheck(ack, needs, { FENCE_ACK_BY, verb }) {
+  const byOk = FENCE_ACK_BY.includes(ack.by);
+  const byHint = `${ack.by ? `--by ${JSON.stringify(ack.by)}` : 'no --by'}: a fence need closes only with --by ${FENCE_ACK_BY.map((b) => JSON.stringify(b)).join(', ')}`;
+  if (!needs) return { warnings: byOk ? [] : [`${byHint}, if this need is one (advisory: the ack is ${verb} as it is)`] };
+  const need = ack.refBy === 'index' ? needs[ack.ref]
+    : needs.find((x) => x.ts === ack.ref && !x.acked) ?? needs.find((x) => x.ts === ack.ref);
+  if (!need) return { missing: true };
+  if (need.kind === 'fence' && !need.acked && !byOk) return { warnings: [`${byHint}; advisory: the ack is ${verb}, need ${need.i} stays open`] };
+  return { warnings: [] };
 }
 
 // ---------------------------------------------------------------- feed (offline)

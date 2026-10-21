@@ -139,7 +139,12 @@ test('`laneboard run` leaves no untracked file: .laneboard/ is ignored and READM
 test('docs/runs.md names the CLI receipt and the ack warnings (night 4 T21)', () => {
   assert.match(doc, /`ok <run> <type> appended to\s+<file>`/);
   assert.match(doc, /`ok <run> <type> posted`/);
-  assert.match(doc, /`ack` still writes and exits 0, but warns on stderr/);
+  assert.match(doc, /a warning on\s+stderr says it is advisory: the need stays open/);
+});
+
+test('docs/runs.md says an ack whose ref names no need writes nothing and exits 1 (night 4 T35)', () => {
+  assert.match(doc, /`laneboard: no need\s+<ref> in run <run> …; nothing written` \(or `nothing posted`\) and exits 1/);
+  assert.match(doc, /`laneboard run ack` refuses one/);
   for (const by of FENCE_ACK_BY) assert.ok(doc.includes(`\`${by}\``), by);
 });
 

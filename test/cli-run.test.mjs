@@ -330,11 +330,20 @@ test('every subcommand prints one receipt on stderr: `ok <run> <type> appended t
   }
   assert.equal(lines(file).length, calls.length);
 
+  const posted = [];
+  // GET /api/runs/r1: one plain need and one fence need; any other run is unknown.
+  const needs = [{ i: 0, kind: 'decision', ts: 1, acked: false }, { i: 1, kind: 'fence', ts: 2, acked: false }];
   const server = http.createServer((req, res) => {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
+      if (req.method === 'GET') {
+        const known = req.url === '/api/runs/r1';
+        res.writeHead(known ? 200 : 404, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify(known ? { run: { id: 'r1', needs } } : { error: 'unknown run' }));
+      }
       const ev = JSON.parse(body);
+      posted.push(ev);
       res.writeHead(201, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ ok: true, run: ev.run, t: ev.t }));
     });
@@ -345,14 +354,28 @@ test('every subcommand prints one receipt on stderr: `ok <run> <type> appended t
   const p = await run(['run', 'score', '--run', 'r1', '--name', 'tests', '--value', '1', '--post'], env, dir);
   assert.equal(p.code, 0, p.stderr);
   assert.equal(p.stderr, 'ok r1 score posted\n');
+  // T35: the server's needs decide. Need 0 is plain: no --by warning.
   const pa = await run(['run', 'ack', 'r1', '0', '--post'], env, dir);
   assert.equal(pa.code, 0, pa.stderr);
-  assert.match(pa.stderr, /^ok r1 needs\.ack posted\nwarning: no --by: a fence need closes only with --by "inbox", "run page", "owner", if this need is one\n$/);
-  const pb = await run(['run', 'ack', 'r1', '0', '--by', 'inbox', '--post'], env, dir);
+  assert.equal(pa.stderr, 'ok r1 needs.ack posted\n');
+  // Need 1 is a fence need: the warning says it is advisory and the ack is still posted.
+  const pf = await run(['run', 'ack', 'r1', '1', '--post'], env, dir);
+  assert.equal(pf.code, 0, pf.stderr);
+  assert.equal(pf.stderr, 'ok r1 needs.ack posted\nwarning: no --by: a fence need closes only with --by "inbox", "run page", "owner"; advisory: the ack is posted, need 1 stays open\n');
+  const pb = await run(['run', 'ack', 'r1', '1', '--by', 'inbox', '--post'], env, dir);
   assert.equal(pb.stderr, 'ok r1 needs.ack posted\n');
+  // A ref that names no need (or a run the server does not know): nothing posted, exit 1.
+  const posts = () => posted.length;
+  const n0 = posts();
+  for (const args of [['r1', '3'], ['nope', '0']]) {
+    const r = await run(['run', 'ack', ...args, '--post'], env, dir);
+    assert.equal(r.code, 1, r.stderr);
+    assert.equal(r.stderr, `laneboard: no need ${args[1]} in run ${args[0]} on ${env.LANEBOARD_URL}; nothing posted\n`);
+  }
+  assert.equal(posts(), n0, 'a missing ref is not posted');
 });
 
-test('ack warns (exit 0, still written) for a fence need without a person\'s --by, and for a ref that names no need (night 4 T21)', async (t) => {
+test('ack warns (exit 0, still written) for a fence need without a person\'s --by; a ref that names no need writes nothing and exits 1 (night 4 T21, T35)', async (t) => {
   const dir = tmpDir(t);
   const file = path.join(dir, 'r.jsonl');
   const go = (args) => run(['run', ...args, '--file', file], envFor(dir), dir);
@@ -363,7 +386,7 @@ test('ack warns (exit 0, still written) for a fence need without a person\'s --b
   const bare = await go(['ack', 'r1', '0']);
   assert.equal(bare.code, 0);
   assert.equal(bare.stdout, '');
-  assert.match(bare.stderr, /^ok r1 needs\.ack appended to .+\nwarning: no --by: a fence need closes only with --by "inbox", "run page", "owner"; this ack leaves need 0 open\n$/);
+  assert.match(bare.stderr, /^ok r1 needs\.ack appended to .+\nwarning: no --by: a fence need closes only with --by "inbox", "run page", "owner"; advisory: the ack is written, need 0 stays open\n$/);
   const loop = await go(['ack', 'r1', '0', '--by', 'loop']);
   assert.match(loop.stderr, /\nwarning: --by "loop": a fence need closes only with/);
   // A plain need closes with any by; a person's by closes the fence need: no warning.
@@ -372,20 +395,23 @@ test('ack warns (exit 0, still written) for a fence need without a person\'s --b
   // Once closed, a later ack changes nothing and needs no warning about by.
   assert.doesNotMatch((await go(['ack', 'r1', '0'])).stderr, /warning/);
 
-  // r1 has two needs (place 2 is the other run's); a ts that matches none; a missing file.
-  for (const [args, ref, f] of [[['ack', 'r1', '2'], '2', file], [['ack', 'r1', '2026-01-01T00:00:00Z'], '2026-01-01T00:00:00Z', file]]) {
-    const r = await go(args);
-    assert.equal(r.code, 0);
-    assert.ok(r.stderr.endsWith(`\nwarning: ref ${ref} names no need of run r1 in ${f}; the ack will be kept raw\n`), r.stderr);
+  // T35: r1 has two needs (place 2 is the other run's); a ts that matches none; a
+  // missing file. A ref that names no need is a typo: nothing written, exit 1.
+  const n0 = lines(file).length;
+  for (const ref of ['2', '2026-01-01T00:00:00Z']) {
+    const r = await go(['ack', 'r1', ref]);
+    assert.equal(r.code, 1, r.stderr);
+    assert.equal(r.stderr, `laneboard: no need ${ref} in run r1 in ${file}; nothing written\n`);
   }
+  assert.equal(lines(file).length, n0, 'a missing ref is not written');
   const fresh = path.join(dir, 'none.jsonl');
   const none = await run(['run', 'ack', 'r1', '0', '--file', fresh], envFor(dir), dir);
-  assert.equal(none.code, 0);
-  assert.match(none.stderr, /warning: ref 0 names no need of run r1 in .+none\.jsonl/);
-  assert.equal(lines(fresh).length, 1, 'the ack is written anyway');
+  assert.equal(none.code, 1);
+  assert.match(none.stderr, /no need 0 in run r1 in .+none\.jsonl; nothing written/);
+  assert.ok(!fs.existsSync(fresh), 'nothing written');
 
   const before = lines(file).length;
   const folded = foldRun(parseLines(fs.readFileSync(file, 'utf8')).events.filter((e) => e.run === 'r1'));
   assert.deepEqual(folded.needs.map((n) => [n.kind, n.open, n.by]), [['fence', false, 'owner'], ['decision', false, null]]);
-  assert.equal(before, 3 + 7);
+  assert.equal(before, 3 + 5);
 });

@@ -77,7 +77,7 @@ Every line has these fields:
 | `round.end` | **`n`**, `outcome`, `commit`, `open`, `usd`, `session` | round `n` ended; `outcome` is free text (`kept`, `no-task-done`, `reviewed`, …); `usd` adds to the round's cost only, not to the run's `cost` (that is the sum of `cost` events); `session` (on either round event) names a Claude Code session of the round (see "Sessions of a round") |
 | `score` | **`name`** (64 chars), **`value`** (number), `better` (`higher` or `lower`, default `higher`), `n`, `max` (a positive number: the value that means done, such as the task count; the Map's progress ring) | one measurement of a metric; without `n` it belongs to the latest round (the highest `n` of a `round.start` or `round.end` so far in the file, even if that round has ended; 0 before any) |
 | `needs` | `kind` (default `decision`), `text`, `link`, `n` | the run needs a human; kind `wait` means the loop itself is waiting (a usage limit) and closes when the next round starts or the run stops; other kinds stay open until a `needs.ack` closes them; without `n` it belongs to the latest round, like `score` (even if that round has ended) |
-| `needs.ack` | **`ref`**, `by` (64 chars) | someone saw a need and closed it: `ref` is the need's place in the run's needs (`0` = the first `needs` line of the run, an integer below 10⁹) or its `ts` (epoch s or ms, or ISO; the first open need with that `ts`, else the first one). The first ack of a need counts (it records `ackedAt` and `by`); a second one changes nothing. A `ref` that names no need is kept raw. A `fence` need (the loop reverted a round that touched a fenced file) closes only on an ack by a person: `by` is `inbox` (the Inbox's `a`), `run page` (its Ack button) or `owner` (`laneboard run ack … --by owner`); an ack with any other `by` or none (the reference loop writes `by: "loop"`) leaves it open and is kept raw, and a new round or `run.stop` never closes it. |
+| `needs.ack` | **`ref`**, `by` (64 chars) | someone saw a need and closed it: `ref` is the need's place in the run's needs (`0` = the first `needs` line of the run, an integer below 10⁹) or its `ts` (epoch s or ms, or ISO; the first open need with that `ts`, else the first one). The first ack of a need counts (it records `ackedAt` and `by`); a second one changes nothing. A `ref` that names no need is kept raw (`laneboard run ack` refuses one, see below). A `fence` need (the loop reverted a round that touched a fenced file) closes only on an ack by a person: `by` is `inbox` (the Inbox's `a`), `run page` (its Ack button) or `owner` (`laneboard run ack … --by owner`); an ack with any other `by` or none (the reference loop writes `by: "loop"`) leaves it open and is kept raw, and a new round or `run.stop` never closes it. |
 | `artifact` | **`url`**, `kind` (default `link`; `pr` for pull requests, `report` for the run's report), `title` | something the run produced; the same URL twice is kept once |
 | `run.stop` | `reason` (default `unknown`), `rounds`, `usd` | the run stopped (reasons below) |
 | `usage` | `n`, `fiveHourPct`, `sevenDayPct`, `fiveHourResetsAt` (epoch s or ms), `overage` (boolean) | the account's usage windows after a round; a negative percentage means "not known" |
@@ -239,12 +239,16 @@ and nothing warns.
 - On success it prints one line on stderr: `ok <run> <type> appended to
   <file>`, or `ok <run> <type> posted` with `--post` (stdout stays free for
   `eval`).
-- `ack` still writes and exits 0, but warns on stderr when the ack will not do
-  what it looks like: the ref names no need of the run in the file it appends
-  to (it will be kept raw), or the need is a `fence` need and `--by` is
-  missing or not `inbox`, `run page` or `owner` (it stays open). With `--post`
-  the file is not read, so an ack without one of those `--by` values warns
-  that it would not close a fence need.
+- `ack` checks its ref first, in the file it appends to or, with `--post`,
+  in the server's copy of the run (`GET /api/runs/<run>`). A ref that names
+  no need of the run is a typo, not an ack: it prints `laneboard: no need
+  <ref> in run <run> …; nothing written` (or `nothing posted`) and exits 1.
+  When the need is a `fence` need and `--by` is missing or not `inbox`,
+  `run page` or `owner`, the ack is still written (exit 0) and a warning on
+  stderr says it is advisory: the need stays open. A plain need closes with
+  any `--by`, so there is no warning. When the server cannot tell (it is
+  unreachable or older), an ack without one of those `--by` values warns
+  that it would not close a fence need, if the need is one.
 - `round` (without `--end`) prints `export LANEBOARD_RUN=<run>/<n>`, so after
   `eval` the sessions the round starts carry the run and round in their
   environment. `--run` defaults to the run part of `$LANEBOARD_RUN`, so a
