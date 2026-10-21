@@ -446,14 +446,17 @@
 
 /* --------------------------------------------------- Morning fleet blocks */
 
+/* Dividers sit before each cell, and every cell is pulled left by the rule's
+   width: the rule of a cell that starts a line lands outside the strip and is
+   clipped, so no divider hangs at a line's end or start when it wraps (T37). */
 .mkv {
   display: inline-flex;
   align-items: baseline;
   gap: var(--sp-1);
-  padding: 0 var(--sp-2) 0 0;
-  border-right: var(--bw) solid var(--line-weak);
+  margin-left: calc(-1 * var(--bw));
+  padding: 0 0 0 var(--sp-2);
+  border-left: var(--bw) solid var(--line-weak);
 }
-.mkv:last-child { border-right: 0; }
 .mkv-k {
   font-family: var(--font-label);
   font-size: var(--fs-10);
@@ -478,7 +481,7 @@
   border-radius: var(--radius);
   background: var(--bg-surface);
 }
-.morning-summary > .mrow-top { gap: var(--sp-1) var(--sp-3); }
+.morning-summary > .mrow-top { gap: var(--sp-1) var(--sp-2); overflow: hidden; }
 .morning-missing {
   display: flex;
   align-items: center;
@@ -488,6 +491,8 @@
   border-top: var(--bw) solid var(--line-weak);
 }
 
+/* one reading width for the whole page, the run page's cap (T27, T37) */
+#morning-body { max-width: var(--read-max); }
 .morning-builder { margin: var(--sp-4) 0; }
 .morning-builder > .mblock:last-child { margin-bottom: 0; }
 .morning-quiet { margin: var(--sp-4) 0; }

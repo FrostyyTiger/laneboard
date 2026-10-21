@@ -110,3 +110,20 @@ test('T36: the Morning run state word has one treatment in both themes, no fill'
     && /mrow-kind/.test(d.prelude) && /^background/.test(d.prop));
   assert.deepEqual(themed, []);
 });
+
+test('T37: Morning has one reading width, its strip clips line-start dividers, panel labels touch', () => {
+  const all = sheets().flatMap((f) => declarations(fs.readFileSync(path.join(CSS_DIR, f), 'utf8')).decls);
+  const of = (sel, prop) => all.filter((d) => d.prelude.split(',').map((s) => s.trim()).includes(sel)
+    && d.prop === prop && !d.at.length).at(-1)?.value;
+  assert.equal(of('#morning-body', 'max-width'), 'var(--read-max)', 'the run page cap (T27) for the whole page');
+  assert.equal(of('.rn-page', 'max-width'), 'var(--read-max)', 'the same token as the run page');
+  // a divider before every cell, pulled left by its own width and clipped by the strip
+  assert.match(of('.mkv', 'border-left') ?? '', /var\(--bw\) solid/);
+  assert.equal(of('.mkv', 'margin-left'), 'calc(-1 * var(--bw))');
+  assert.equal(of('.mkv', 'border-right'), undefined, 'no trailing divider to hang at a line end');
+  assert.equal(of('.mkv:last-child', 'border-right'), undefined);
+  assert.equal(of('.morning-summary > .mrow-top', 'overflow'), 'hidden');
+  // the frame line never shows between NAME · SCOPE [n]: no flex gap between label parts
+  assert.equal(of('.panel-t', 'gap'), '0');
+  assert.match(of('.panel-t > span', 'background') ?? '', /var\(--bg-surface\)/);
+});

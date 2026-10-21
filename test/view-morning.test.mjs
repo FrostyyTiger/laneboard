@@ -411,3 +411,18 @@ test('render T33: every builder down draws the strip only; the full merge draws 
   assert.match(byClass(down, 'morning-missing')[0].textContent, /no answer from builder-a/);
   assert.equal(byClass(render(V.morningModel(merged(), { hub: true, s: store })), 'morning-quiet').length, 0);
 });
+
+test('render T37: a builder with nothing waiting has no lamp on its frame; one that needs you keeps the amber one', () => {
+  const data = {
+    builders: [
+      { id: 'builder-c', needsYou: [], finished: [fin('feat')], cost: { lanes: [costLane('feat', 1)] } },
+    ],
+  };
+  const quiet = byClass(render(V.morningModel(data, { hub: true, s: store })), 'morning-builder')[0];
+  const qTools = byClass(quiet, 'panel-tools')[0];
+  assert.equal(qTools.children.length, 0, 'no lone hollow circle at the end of the frame line');
+  const busy = byClass(render(V.morningModel(merged(), { hub: true, s: store })), 'morning-builder')[0];
+  const bTools = byClass(busy, 'panel-tools')[0];
+  assert.equal(bTools.children.length, 1);
+  assert.equal(bTools.children[0].dataset.p, '2');
+});

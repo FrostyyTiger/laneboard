@@ -118,18 +118,21 @@
   right: 8px;
   display: flex;
   align-items: center;
-  gap: var(--sp-1);
+  gap: 0;
   margin: 0;
   pointer-events: none;
   font-size: var(--fs-11);
   font-weight: 600;
   line-height: 1.2;
 }
+/* the label parts touch (no flex gap), so the frame line never shows between
+   NAME · SCOPE [n]; the padding is the space between them (T37) */
 .panel-t > span {
   background: var(--bg-surface);
-  padding: 0 2px;
+  padding: 0 3px;
 }
 .panel-t > span:first-child { padding-left: var(--sp-1); }
+.panel-t > span:empty:not(.panel-tools) { padding: 0; }
 .panel-name { color: var(--text-1); }
 .panel-scope { color: var(--text-3); }
 .panel-n { color: var(--text-2); font-family: var(--font-mono); letter-spacing: 0; }

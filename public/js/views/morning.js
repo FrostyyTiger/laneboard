@@ -384,7 +384,8 @@ function builderGroup(b, m) {
   const p = panel({ name: b.code, scope: b.id, n: b.needsYou.length });
   p.root.classList.add('morning-builder');
   p.root.dataset.builder = b.id;
-  p.tools.append(lamp(b.needsYou.length ? '2' : 'ok', { label: b.needsYou.length ? 'needs you' : 'nothing waiting' }));
+  // [0] already says nothing waits; a lone hollow lamp on the frame read as a toggle (T37)
+  if (b.needsYou.length) p.tools.append(lamp('2', { label: 'needs you' }));
   for (const n of builderBlocks(b, m)) p.body.append(n);
   return p.root;
 }
