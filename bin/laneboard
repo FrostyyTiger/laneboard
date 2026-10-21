@@ -24,7 +24,8 @@
 //   laneboard paused [--json]                          offline: list the pause sentinels
 //   laneboard run start|round|score|needs|ack|artifact|stop|cost [--run <id>] [flags] [--file f | --post]
 //                                                      offline: append one run-protocol line
-//     start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
+//     start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--max-rounds N] [--window-pct P]
+//              (--rounds N on start is --max-rounds' old name; on stop it is the count done)
 //     round    --n N [--role r] [--task t]             prints `export LANEBOARD_RUN=<run>/<n>` for eval
 //     round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
 //     score    --name m --value x [--better higher|lower] [--n N] [--max x]
@@ -881,7 +882,8 @@ const RUN_COMMON = { '--run': ['run', 'str'], '--file': ['file', 'str'], '--post
 const RUN_SUBS = {
   start: {
     '--goal': ['goal', 'str'], '--plan': ['plan', 'str'], '--branch': ['branch', 'str'], '--host': ['host', 'str'],
-    '--deadline': ['deadline', 'str'], '--rounds': ['rounds', 'int'], '--window-pct': ['windowPct', 'num'],
+    '--deadline': ['deadline', 'str'], '--max-rounds': ['maxRounds', 'int'], '--rounds': ['rounds', 'int'],
+    '--window-pct': ['windowPct', 'num'],
   },
   round: {
     '--n': ['n', 'int'], '--role': ['role', 'str'], '--task': ['task', 'str'], '--end': ['end', 'bool'],
@@ -899,7 +901,8 @@ const ROUND_START_ONLY = ['role', 'task'];
 const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 
 const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
-  start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
+  start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--max-rounds N] [--window-pct P]
+           --max-rounds N is the round cap; --rounds N on start is its old name (a note on stderr)
   round    --n N [--role r] [--task t]            prints export LANEBOARD_RUN=<run>/<n>, meant for: eval "$(laneboard run round --n N …)"
   round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]   --usd is this round only; the run sums them when it has no cost events
   score    --name m --value x [--better higher|lower] [--n N] [--max x]
@@ -907,6 +910,7 @@ const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | -
   ack      [<run>] <ref> [--by b]                 close a need: <ref> is its place (0 = the first) or its ts (no such need: exit 1; already acked: nothing sent, exit 0)
   artifact --url u [--kind pr|link|…] [--title t] [--state open|merged|closed]
   stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
+           --rounds N on stop is the count of rounds done, not the cap
   cost     --usd x [--n N]                        what was spent (in round N); the run's cost is the sum of these
 every subcommand:
   --run <id>   the run; defaults to the run part of $LANEBOARD_RUN (which \`round\` exports); \`start\` says so on stderr when it uses it
@@ -931,7 +935,13 @@ function wantsHelp(allowed) {
 /** One subcommand's lines of RUN_USAGE, then the flags every subcommand takes. */
 function subUsage(sub) {
   const lines = RUN_USAGE.split('\n');
-  const own = lines.filter((l) => l.startsWith(`  ${sub} `)).map((l) => `usage: laneboard run ${l.trim().replace(/^(\S+)\s+/, '$1 ')}`);
+  // A subcommand's lines, and the indented note lines right under them.
+  const own = lines.flatMap((l, i) => {
+    if (l.startsWith(`  ${sub} `)) return [`usage: laneboard run ${l.trim().replace(/^(\S+)\s+/, '$1 ')}`];
+    let j = i;
+    while (j > 0 && lines[j].startsWith('           ')) j -= 1;
+    return j < i && lines[j].startsWith(`  ${sub} `) ? [`  ${l.trim()}`] : [];
+  });
   return [...own, ...lines.slice(lines.indexOf('every subcommand:'))].join('\n');
 }
 
@@ -971,9 +981,12 @@ function runEvent(sub, f) {
     return { t: end ? 'round.end' : 'round.start', ...fields };
   }
   if (sub === 'start') {
-    const { rounds, windowPct, ...fields } = f;
+    const { rounds, maxRounds, windowPct, ...fields } = f;
+    if (rounds !== undefined && maxRounds !== undefined) runUsage('--rounds on start is --max-rounds: give one');
+    // `--rounds` on start is the cap's old name; on stop it is the count done.
+    if (rounds !== undefined) process.stderr.write('--rounds on start means --max-rounds\n');
     const budget = {};
-    if (rounds !== undefined) budget.rounds = rounds;
+    if ((maxRounds ?? rounds) !== undefined) budget.maxRounds = maxRounds ?? rounds;
     if (windowPct !== undefined) budget.windowPct = windowPct;
     return { t: 'run.start', ...fields, ...(Object.keys(budget).length ? { budget } : {}) };
   }

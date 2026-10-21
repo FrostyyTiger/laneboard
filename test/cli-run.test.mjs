@@ -49,7 +49,7 @@ test('every subcommand writes one line parseLine accepts, to ./.laneboard/run.js
   const env = envFor(dir);
   const calls = [
     ['start', '--run', 'readiness', '--goal', 'Make acme-api ready for review', '--plan', 'docs/plans/x.md',
-      '--branch', 'run/x', '--host', 'builder-a', '--deadline', '2026-10-21T05:00:00Z', '--rounds', '15', '--window-pct', '90'],
+      '--branch', 'run/x', '--host', 'builder-a', '--deadline', '2026-10-21T05:00:00Z', '--max-rounds', '15', '--window-pct', '90'],
     ['round', '--run', 'readiness', '--n', '3', '--role', 'builder', '--task', 'A2.4'],
     ['score', '--run', 'readiness', '--name', 'tests', '--value', '0.93', '--better', 'higher', '--max', '1'],
     ['round', '--run', 'readiness', '--n', '3', '--end', '--outcome', 'kept', '--commit', '0123456', '--open', '4', '--usd', '1.25'],
@@ -142,6 +142,36 @@ test('start without --run keeps an inherited $LANEBOARD_RUN and says so; with ne
   assert.match(help.stdout, /`start` says so on stderr/);
 });
 
+test('start --max-rounds N writes the cap; --rounds N on start is its alias with a stderr note (T24)', async (t) => {
+  const dir = tmpDir(t);
+  const file = path.join(dir, 'r.jsonl');
+  const max = await run(['run', 'start', '--run', 'r1', '--max-rounds', '3', '--file', file], envFor(dir), dir);
+  assert.equal(max.code, 0, max.stderr);
+  assert.doesNotMatch(max.stderr, /means --max-rounds/);
+  const old = await run(['run', 'start', '--run', 'r1', '--rounds', '3', '--file', file], envFor(dir), dir);
+  assert.equal(old.code, 0, old.stderr);
+  assert.match(old.stderr, /^--rounds on start means --max-rounds$/m);
+  const [a, b] = lines(file).map((l) => JSON.parse(l));
+  assert.deepEqual(a.budget, { maxRounds: 3 });
+  const { ts: _a, ...restA } = a;
+  const { ts: _b, ...restB } = b;
+  assert.deepEqual(restB, restA, 'both spellings write the same line');
+  // `--rounds` on stop stays the count done, with no note.
+  const stop = await run(['run', 'stop', '--run', 'r1', '--rounds', '2', '--file', file], envFor(dir), dir);
+  assert.equal(stop.code, 0, stop.stderr);
+  assert.doesNotMatch(stop.stderr, /max-rounds/);
+  assert.equal(JSON.parse(lines(file)[2]).rounds, 2);
+  const startHelp = await run(['run', 'start', '--help'], envFor(dir), dir);
+  assert.match(startHelp.stdout, /\[--max-rounds N\]/);
+  assert.match(startHelp.stdout, /--max-rounds N is the round cap; --rounds N on start is its old name/);
+  const stopHelp = await run(['run', 'stop', '--help'], envFor(dir), dir);
+  assert.match(stopHelp.stdout, /--rounds N on stop is the count of rounds done, not the cap/);
+  assert.doesNotMatch(stopHelp.stdout, /max-rounds/);
+  const usage = await run(['run', '--help'], envFor(dir), dir);
+  assert.match(usage.stdout, /--max-rounds N is the round cap/);
+  assert.match(usage.stdout, /--rounds N on stop is the count of rounds done/);
+});
+
 test('$LANEBOARD_RUN_FILE is used when there is no --file; a relative path resolves against the cwd', async (t) => {
   const dir = tmpDir(t);
   const r = await run(['run', 'needs', '--run', 'r1', '--kind', 'wait', '--text', 'usage window'],
@@ -165,6 +195,8 @@ test('bad arguments exit 2 and write nothing', async (t) => {
     ['start', '--run', 'r1', '--goal'],
     ['start', '--run', 'r1', '--rounds', 'many'],
     ['start', '--run', 'r1', '--rounds', '1.5'],
+    ['start', '--run', 'r1', '--max-rounds', 'many'],
+    ['start', '--run', 'r1', '--rounds', '3', '--max-rounds', '3'], // the cap under both names
     ['start', '--run', 'r1', '--goal', 'a', '--goal', 'b'],
     ['start', '--run', 'r1', '--name', 'tests'], // a flag of another subcommand
     ['round', '--run', 'r1'],

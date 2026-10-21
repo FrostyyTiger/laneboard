@@ -202,7 +202,7 @@ So loops do not hand-write JSON, `laneboard run` writes one line per call:
 
 ```sh
 laneboard run start  --run readiness --goal "Make acme-api ready for review" \
-                     --deadline 2026-10-21T05:00:00Z --rounds 15
+                     --deadline 2026-10-21T05:00:00Z --max-rounds 15
 eval "$(laneboard run round --run readiness --n 3 --role builder --task A2.4)"
 laneboard run score  --run readiness --name tests --value 0.93 --better higher
 laneboard run round  --run readiness --n 3 --end --outcome kept --commit abc1234
@@ -216,13 +216,13 @@ laneboard run stop   --run readiness --reason done
 
 | Subcommand | Flags |
 | --- | --- |
-| `start` | `--goal`, `--plan`, `--branch`, `--host`, `--deadline`, `--rounds N`, `--window-pct P` (the last two go into `budget`) |
+| `start` | `--goal`, `--plan`, `--branch`, `--host`, `--deadline`, `--max-rounds N` (the round cap), `--window-pct P` (the last two go into `budget`); `--rounds N` on `start` is the cap's old name, still read as `--max-rounds` with a note on stderr |
 | `round` | **`--n N`**, `--role`, `--task`; with `--end`: `--outcome`, `--commit`, `--open N`, `--usd x`. A round start prints `export LANEBOARD_RUN=<run>/<n>` on stdout, meant for `eval "$(laneboard run round --n 1 …)"` so later calls in that shell find the run |
 | `score` | **`--name`**, **`--value x`**, `--better higher\|lower`, `--n N`, `--max x` |
 | `needs` | `--text` (or the text as the one bare word: `needs "Drop the v1 export?"`), `--kind`, `--link`, `--n N` |
 | `ack` | **`<ref>`** (or `--ref`), `--by`; `ack <run> <ref>` names the run too |
 | `artifact` | **`--url`**, `--kind`, `--title`, `--state` |
-| `stop` | `--reason`, `--rounds N`, `--usd x` |
+| `stop` | `--reason`, `--rounds N` (the count of rounds done, not the cap), `--usd x` |
 | `cost` | **`--usd x`**, `--n N` (a `cost` event; the run's cost is the sum of these; a `round --end --usd` is the round's only, summed for the run when it sends no `cost`) |
 
 Every subcommand also takes `--run <id>`, `--file <path>` and `--post`, after
