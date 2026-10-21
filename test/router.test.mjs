@@ -9,7 +9,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { elementsFromHtml, makeDocument, loadEsModules } from './helpers/fakedom.mjs';
 import {
-  parseHash, formatHash, emptyRoute, patchRoute, VIEWS, HIDDEN_VIEWS, DEFAULT_VIEW, VIEW_KEYS,
+  parseHash, resolveHash, formatHash, emptyRoute, patchRoute, VIEWS, HIDDEN_VIEWS, DEFAULT_VIEW, VIEW_KEYS,
 } from '../public/js/core/router.js';
 import {
   VIEW_META, activateView, activeView, getView, isView, legacyView, updateActive, viewErrors, views,
@@ -88,6 +88,29 @@ test('unknown or empty input gives DEFAULT_VIEW', () => {
     assert.equal(parseHash(h).view, DEFAULT_VIEW, String(h));
   }
   assert.equal(parseHash('#/nonsense?b=all').b, 'all', 'parameters survive an unknown view');
+});
+
+test('T24: #/runs/<id> is the run page, an unknown view falls back with a reason', () => {
+  assert.deepEqual(parseHash('#/runs/acme-search'), { ...emptyRoute('runs'), run: 'acme-search' });
+  assert.deepEqual(resolveHash('#/runs/acme-search'), { route: { ...emptyRoute('runs'), run: 'acme-search' }, reason: null });
+  assert.equal(parseHash('#/runs/acme-search/').run, 'acme-search', 'a trailing slash is fine');
+  assert.equal(parseHash('#/runs/acme-search?run=other').run, 'acme-search', 'the path id wins');
+  assert.equal(parseHash('#/runs/acme-search?q=x').q, 'x', 'parameters survive');
+  const bad = resolveHash('#/runs/a%20b');
+  assert.deepEqual(bad.route, emptyRoute('runs'), 'a bad id lands on the run list');
+  assert.match(bad.reason, /not a run id/);
+
+  const miss = resolveHash('#/nonsense?b=all');
+  assert.equal(miss.route.view, DEFAULT_VIEW);
+  assert.equal(miss.route.b, 'all');
+  assert.match(miss.reason, /no view “nonsense”, showing the Map/);
+  assert.match(resolveHash('#machine').reason, /“machine”/, 'the legacy form says so too');
+  assert.match(resolveHash('#/__proto__').reason, /__proto__/);
+  assert.ok(resolveHash(`#/${'x'.repeat(100)}`).reason.length < 80, 'a long name is clipped');
+  assert.doesNotMatch(resolveHash('#/a%0Ab').reason, /\n/, 'no control characters in the toast');
+  for (const h of ['', '#', '#/', '#/?b=all', '#board', '#/runs', '#/runs?run=r1', '#/inbox', '#session=x', null]) {
+    assert.equal(resolveHash(h, LOCAL).reason, null, String(h));
+  }
 });
 
 test('#/inbox?b=all&sel=builder-b%2Fx round-trips (b=all is the default and drops)', () => {

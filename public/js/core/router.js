@@ -4,7 +4,8 @@
 // current give the shell and later views one way to move.
 //
 // Grammar: #/<view>?b=<builderId|all>&s=<state filter>&q=<query>&sel=<fkey>&open=<term|transcript>&run=<run id>
-// (`run` is a run id as the protocol checks it: the Runs view opens that run's page).
+// (`run` is a run id as the protocol checks it: the Runs view opens that run's page;
+// `#/runs/<run id>` is the same page, T24, and an unknown view says so in a toast).
 // `sel` is a lane/session fkey, `run:<run id>` for a run node on the Map (T10),
 // or `node:<map node id>` for any other Map node (the palette's NODE rows, T11).
 // Legacy forms keep working, because old push notifications already sit in
@@ -20,6 +21,7 @@ import { localBuilderId, store, toIndexKey } from './store.js';
 import { scheduleVisible } from './net.js';
 import { fitAll } from '../ui/terminal.js';
 import { openSheet } from '../ui/sheet.js';
+import { toast } from '../ui/toast.js';
 import { activateView } from '../views/index.js';
 
 // ---------------------------------------------------------------- views
@@ -83,8 +85,18 @@ function parseQuery(qs) {
  * A hash (with or without the leading '#') -> {view, b, s, q, sel, open, run}.
  * Values that do not fit their parameter are dropped (null); an unknown view
  * becomes DEFAULT_VIEW. `localId` is the local builder, for `#session=`.
+ * `#/runs/<id>` is the run page too (T24), the same as `#/runs?run=<id>`.
  */
-export function parseHash(h, { localId } = {}) {
+export function parseHash(h, opts) {
+  return resolveHash(h, opts).route;
+}
+
+/**
+ * parseHash plus why it fell back (T24): {route, reason}, `reason` null when
+ * the hash says what it shows, else one line for the user ("no view “x”,
+ * showing the Map"). An empty hash is home, not a miss.
+ */
+export function resolveHash(h, { localId } = {}) {
   const raw = String(h ?? '').replace(/^#/, '');
   const legacy = /^session=(.+)$/.exec(raw);
   if (legacy) {
@@ -94,13 +106,19 @@ export function parseHash(h, { localId } = {}) {
       r.sel = fkey(localId, name);
       r.open = 'term';
     }
-    return r;
+    return { route: r, reason: null };
   }
-  if (!raw.startsWith('/')) return emptyRoute(ROUTABLE.has(raw) ? raw : DEFAULT_VIEW);
+  if (!raw.startsWith('/')) {
+    if (raw === '' || ROUTABLE.has(raw)) return { route: emptyRoute(raw || DEFAULT_VIEW), reason: null };
+    return { route: emptyRoute(DEFAULT_VIEW), reason: missReason(safeDecode(raw) ?? raw) };
+  }
 
   const qAt = raw.indexOf('?');
   const path = (qAt < 0 ? raw : raw.slice(0, qAt)).replace(/^\/+|\/+$/g, '');
-  const r = emptyRoute(ROUTABLE.has(path) ? path : DEFAULT_VIEW);
+  const runPath = /^runs\/(.+)$/.exec(path);
+  const known = path === '' || ROUTABLE.has(path) || !!runPath;
+  const r = emptyRoute(runPath ? 'runs' : ROUTABLE.has(path) ? path : DEFAULT_VIEW);
+  let reason = known ? null : missReason(safeDecode(path) ?? path);
   const p = parseQuery(qAt < 0 ? '' : raw.slice(qAt + 1));
   if (p.b === 'all' || BUILDER_ID_RX.test(p.b ?? '')) r.b = p.b;
   if (STATE_RX.test(p.s ?? '')) r.s = p.s;
@@ -108,8 +126,17 @@ export function parseHash(h, { localId } = {}) {
   if (typeof p.sel === 'string' && p.sel.length <= MAX_SEL && !CONTROL_RX.test(p.sel) && (isFkey(p.sel) || isRunSel(p.sel) || isNodeSel(p.sel))) r.sel = p.sel;
   if (OPEN_KINDS.includes(p.open)) r.open = p.open;
   if (RUN_RX.test(p.run ?? '')) r.run = p.run;
-  return r;
+  if (runPath) {
+    // The path's id wins over a `run=` beside it.
+    const id = safeDecode(runPath[1]);
+    if (id !== null && RUN_RX.test(id)) r.run = id;
+    else reason = `“${clip(id ?? runPath[1])}” is not a run id, showing the run list`;
+  }
+  return { route: r, reason };
 }
+
+const clip = (s) => (s.length > 40 ? `${s.slice(0, 39)}…` : s).replace(/[\u0000-\u001f\u007f]/g, '');
+const missReason = (name) => `no view “${clip(String(name))}”, showing the Map`;
 
 /**
  * A route -> its hash, in the stable key order view, b, s, q, sel, open, run.
@@ -133,6 +160,9 @@ export function formatHash(r = {}) {
 export function currentRoute() {
   return parseHash(location.hash, { localId: localBuilderId(store) });
 }
+
+/** The last hash a fallback was said for, so a re-apply of the same hash does not toast again. */
+let toldMiss = null;
 
 /** Alias of currentRoute (plan §4 2.6 names it `current()`). */
 export function current() {
@@ -227,7 +257,9 @@ export function setView(name, { pushHash = true } = {}) {
  * select: no action is ever sent from here.
  */
 export function applyHash() {
-  const r = currentRoute();
+  const { route: r, reason } = resolveHash(location.hash, { localId: localBuilderId(store) });
+  if (reason && toldMiss !== location.hash) toast(reason, { kind: 'info' });
+  toldMiss = reason ? location.hash : null;
   const key = r.sel ? toIndexKey(store, r.sel) : null;
   if (key && (r.open === 'term' || r.view === 'board')) {
     setView('board', { pushHash: false });
