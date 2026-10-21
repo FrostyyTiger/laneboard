@@ -206,6 +206,9 @@
 .rn-item-n,
 .rn-item-s,
 .rn-item-l { flex: none; color: var(--text-3); }
+/* T16: an open PR is still live, a notch brighter than merged/closed; the ↗ hugs the title */
+.rn-item-s[data-state="open"] { color: var(--text-2); }
+.rn-item-arrow { display: inline-block; margin-left: .25em; color: var(--text-2); text-decoration: none; }
 a.rn-item-t,
 a.rn-item-l { text-decoration: underline; text-decoration-color: var(--line); }
 a.rn-item-t:focus-visible,

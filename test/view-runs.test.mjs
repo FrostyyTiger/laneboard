@@ -270,11 +270,16 @@ test('artifact rows print the PR title (the URL as fallback) and its state as a 
   const page = renderRunPage(host, run, { status: 'ok', id: 'r' }, Date.now());
   const items = byClass(page, 'rn-art');
   assert.equal(items.length, 2);
-  assert.equal(byClass(items[0], 'rn-item-t')[0].textContent, 'Paged search');
+  assert.equal(byClass(items[0], 'rn-item-t')[0].textContent, 'Paged search ↗');
+  assert.equal(byClass(items[0], 'rn-item-arrow')[0].getAttribute('aria-hidden'), 'true');
   assert.equal(byClass(items[0], 'rn-item-t')[0].href, url);
-  assert.deepEqual(byClass(items[0], 'rn-item-s').map((n) => n.textContent), ['merged']);
-  assert.equal(byClass(items[1], 'rn-item-t')[0].textContent, 'https://example.invalid/acme/acme-api/pull/10');
+  assert.deepEqual(byClass(items[0], 'rn-item-s').map((n) => n.textContent), ['· merged']);
+  assert.equal(byClass(items[0], 'rn-item-s')[0].dataset.state, 'merged');
+  // T16: `title ↗ · state · round n`, the state never runs into the round
+  assert.equal(items[0].textContent, 'prPaged search ↗· merged· round 2');
+  assert.equal(byClass(items[1], 'rn-item-t')[0].textContent, 'https://example.invalid/acme/acme-api/pull/10 ↗');
   assert.equal(byClass(items[1], 'rn-item-s').length, 0, 'no state word for an unknown state');
+  assert.equal(items[1].textContent, 'prhttps://example.invalid/acme/acme-api/pull/10 ↗· round 3');
 }));
 
 test('the run page shows the fixture: head, stop reason, open need, timeline, artifact, raw folded away', () => withDom(() => {
@@ -326,9 +331,9 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
   assert.equal(art.length, 1);
   const a = byClass(art[0], 'rn-item-t')[0];
   assert.equal(a.tagName, 'A');
-  assert.equal(a.textContent, 'Readiness (agent loop)');
+  assert.equal(a.textContent, 'Readiness (agent loop) ↗');
   assert.equal(a.href, 'https://example.invalid/acme/acme-api/pull/7');
-  assert.match(art[0].textContent, /^prReadiness \(agent loop\)round 2$/);
+  assert.match(art[0].textContent, /^prReadiness \(agent loop\) ↗· round 2$/);
   // the unknown event, folded away
   const raw = byClass(page, 'rn-raw')[0];
   assert.equal(raw.tagName, 'DETAILS');

@@ -995,9 +995,21 @@ function artifactsSection(run) {
   const ul = el('ul', 'rn-items');
   for (const a of list) {
     const li = el('li', 'rn-item rn-art');
-    li.append(el('span', 'rn-item-k', a.kind), rnLink('rn-item-t', a.title, a.href));
-    if (a.state) li.append(el('span', 'rn-item-s', a.state));
-    if (a.n !== null) li.append(el('span', 'rn-item-n', `round ${a.n}`));
+    // T16: `title ↗ · state · round n`, the ↗ inside a real link (it follows a wrapped title's
+    // last word), every part after it behind a `·`
+    const t = rnLink('rn-item-t', a.title, a.href);
+    if (a.href) {
+      const arrow = el('span', 'rn-item-arrow', ' ↗');
+      arrow.setAttribute('aria-hidden', 'true');
+      t.append(arrow);
+    }
+    li.append(el('span', 'rn-item-k', a.kind), t);
+    if (a.state) {
+      const s = el('span', 'rn-item-s', `· ${a.state}`);
+      s.dataset.state = a.state;
+      li.append(s);
+    }
+    if (a.n !== null) li.append(el('span', 'rn-item-n', `· round ${a.n}`));
     if (!a.href && a.url) li.title = `${a.url} (not an http link)`;
     ul.append(li);
   }

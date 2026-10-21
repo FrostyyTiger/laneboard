@@ -185,7 +185,9 @@ function inboxRowNode(r) {
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       a.title = r.link;
-      a.textContent = 'open ↗';
+      // T16: a phone PR row keeps only the ↗ (fleet-views.css), so the title gets the width
+      a.setAttribute('aria-label', 'open');
+      a.append(span('inbox-link-w', 'open '), span('inbox-link-a', '↗'));
       a.addEventListener('click', (e) => e.stopPropagation());
       head.append(a);
     }

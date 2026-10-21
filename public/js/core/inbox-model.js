@@ -373,7 +373,8 @@ function runRows(runs, now) {
       rows.push({
         // News, not trouble (README §5): the grey hollow lamp, never a hue.
         ...base, group: 'runprs', id: `rp:${r.run}:${link}`, kind: 'run-pr', p: 'off', lampLabel: 'pr to review',
-        reason: `pr: ${inboxClip(str(a.title), LIMITS.reason) ?? inboxClip(link, LIMITS.reason)}`,
+        // T16: the group head says RUN PRS, so the row is the title alone (no `pr:`)
+        reason: inboxClip(str(a.title), LIMITS.reason) ?? inboxClip(link, LIMITS.reason),
         link, since: isNum(a.ts) ? a.ts : 0,
       });
     }

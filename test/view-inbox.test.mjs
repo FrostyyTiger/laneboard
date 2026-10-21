@@ -119,3 +119,29 @@ test('T27: the approval\'s tool chip (BASH) is a sunken plate, never a dark slab
     'offline is a hollow grey ○');
   assert.match(shell, /\.conn\.down::before \{ border-radius: 0; background: var\(--p1\); \}/, 'red ■ only when down');
 });
+
+test('T16 (night 5): a RUN PRS row is the title alone, its link `open ↗` keeps only the ↗ on a phone', async () => {
+  const el = makeEl('div');
+  V.mount(el, { route: { view: 'inbox' } });
+  try {
+    await settle();
+    const row = all(el, (n) => n.classList?.contains('inbox-row') && n.dataset.group === 'runprs')[0];
+    assert.ok(row, 'the run PR row is drawn');
+    assert.doesNotMatch(row.textContent, /pr:/);
+    const sum = all(row, (n) => n.classList?.contains('inbox-sum'))[0];
+    assert.equal(sum.textContent, 'Paged search');
+    const link = all(row, (n) => n.classList?.contains('inbox-link'))[0];
+    assert.equal(link.href, 'https://example.invalid/acme/acme-api/pull/42');
+    assert.equal(link.textContent, 'open ↗');
+    assert.equal(link.getAttribute('aria-label'), 'open');
+    assert.equal(all(link, (n) => n.classList?.contains('inbox-link-w'))[0].textContent, 'open ');
+  } finally {
+    V.unmount();
+  }
+  const css = fs.readFileSync(path.join(import.meta.dirname, '..', 'public/css/views/fleet-views.css'), 'utf8');
+  const hide = declarations(css).decls.filter((d) => d.prelude === '.inbox-row[data-group="runprs"] .inbox-link-w');
+  assert.equal(hide.length, 1, 'one rule hides the word');
+  assert.equal(hide[0].prop, 'display');
+  assert.equal(hide[0].value, 'none');
+  assert.ok(hide[0].at.some((a) => /max-width: 700px/.test(a)), 'only on a phone');
+});

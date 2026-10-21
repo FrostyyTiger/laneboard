@@ -293,7 +293,7 @@ test('runs: open needs and recent PRs, newest first, each linking to the run pag
   assert.equal(r.reason, 'decision: need 2');
   assert.equal(r.link, 'https://example.invalid/acme/acme-api/pull/42');
   assert.equal(rowOf(m, 'rn:acme-docs:0').reason, 'fence: touched a fenced file');
-  assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').reason, 'pr: Paged search');
+  assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').reason, 'Paged search', 'T16: no `pr:` prefix, the group says RUN PRS');
   // T35: a PR is news, the grey hollow lamp; an open need keeps the amber triangle.
   assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').p, 'off');
   assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').lampLabel, 'pr to review');

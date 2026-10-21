@@ -625,6 +625,8 @@
     -webkit-line-clamp: 3;
     line-clamp: 3;
   }
+  .inbox-row[data-group="runprs"] .inbox-link-w { display: none; }
+  .inbox-row[data-group="runprs"] .inbox-link { padding: 0 var(--sp-1); }
   .rq-row { grid-template-columns: minmax(0, 1fr); }
   .rq-acts { grid-column: 1; grid-row: auto; flex-wrap: wrap; margin-top: var(--sp-1); }
   .rq-pull-l { grid-template-columns: minmax(0, 1fr) auto; }
