@@ -42,6 +42,22 @@ test('the section says how to point the CLI at the copy and how to stop it', () 
   assert.match(section, /Ctrl-C/);
 });
 
+// runs T46 (night 4 item 8): the safe recipe comes first, backgrounded with
+// `kill $!`, the variables are explained as the reason, and shoot.mjs is named.
+test('the section leads with the safe backgrounded recipe and names shoot.mjs (runs T46)', () => {
+  const section = testCopySection();
+  const block = section.match(/```bash\n([\s\S]*?)```/)?.[1] ?? '';
+  assert.ok(section.indexOf('```bash') < section.indexOf('AUDIT_LOCKED'), 'the recipe before the explanation');
+  assert.match(section, /`ss -ltn`/);
+  assert.match(block, /node server\/index\.mjs &\n/);
+  assert.match(block, /LANEBOARD_URL=http:\/\/127\.0\.0\.1:7788 node bin\/laneboard ls/);
+  assert.match(block, /kill \$!; rm -r "\$tmp"/);
+  assert.ok(!section.includes('All five variables are needed'), 'no correction-style sentence');
+  assert.match(section.replace(/\s+/g, ' '), /The state dir and audit file point at the temp dir so the copy never opens the real audit log/);
+  assert.match(section, /docs\/plans\/runs\/loop\/shoot\.mjs/);
+  assert.ok(fs.existsSync(path.join(ROOT, 'docs/plans/runs/loop/shoot.mjs')), 'shoot.mjs exists');
+});
+
 test('every env var the section names is documented and read by the code', () => {
   const names = [...new Set(testCopySection().match(/LANEBOARD_[A-Z0-9_]+/g))];
   assert.ok(names.length >= 6, names.join(' '));

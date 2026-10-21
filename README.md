@@ -74,26 +74,32 @@ them (see `docs/config.md`).
 
 A second copy for testing, which touches neither the config file, the database
 nor the state dir (audit log, hook token, run files go to a temp dir). Pick a
-port nothing listens on (`ss -ltn`) for `LANEBOARD_PORT`: on a taken port the
-copy exits, and the board already there answers instead:
+port nothing listens on (`ss -ltn` lists the taken ones; on a taken port the copy
+exits and the board already there answers instead), start the copy in the
+background, point the CLI at it with `LANEBOARD_URL`, and stop it with `kill $!`:
 
 ```bash
 tmp=$(mktemp -d)
 LANEBOARD_PORT=7788 LANEBOARD_DB=:memory: LANEBOARD_CONFIG=/dev/null \
   LANEBOARD_STATE_DIR="$tmp" LANEBOARD_AUDIT_FILE="$tmp/audit.jsonl" \
-  node server/index.mjs
+  node server/index.mjs &
+sleep 1
+LANEBOARD_URL=http://127.0.0.1:7788 node bin/laneboard ls
+kill $!; rm -r "$tmp"
 ```
 
-The CLI talks to `http://127.0.0.1:7777` unless told otherwise, so point it at
-the copy, or it writes into the real board: `LANEBOARD_URL=http://127.0.0.1:7788
-laneboard ls` (or `node bin/laneboard ls` from the checkout, see [CLI](#cli)). Stop the copy with
-Ctrl-C in its terminal, then `rm -r "$tmp"`.
+The CLI talks to `http://127.0.0.1:7777` unless told otherwise, so without
+`LANEBOARD_URL=http://127.0.0.1:7788` it writes into the real board (`laneboard ls`
+works the same once it is on the PATH, see [CLI](#cli)). Run in the foreground
+(no `&`), the copy stops with Ctrl-C in its terminal; remove `"$tmp"` after.
+The state dir and audit file point at the temp dir so the copy never opens the
+real audit log: with only the port, the database and the config set, it shares
+the real state dir, and while another board runs it finds that log locked
+(`AUDIT_LOCKED` in its log) and refuses every action.
 
-All five variables are needed. A shorter form with only the port, the database
-and the config still shares the real state dir: it opens the real audit log, and
-while another board runs it finds that log locked (`AUDIT_LOCKED` in its log)
-and refuses every action. `LANEBOARD_STATE_DIR` and `LANEBOARD_AUDIT_FILE`
-pointing at the temp dir avoid that.
+For a headless look at the copy (screenshots per view, theme and width, plus the
+page's console errors), run `node docs/plans/runs/loop/shoot.mjs --url
+http://127.0.0.1:7788 --out "$tmp/shots"`; it needs a Chromium (`$CHROME`).
 
 The state dir must be a private directory (mode 700, only you can read it):
 `mktemp -d` makes one, a plain `mkdir -p /tmp/lb` usually does not (mode 775
