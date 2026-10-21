@@ -69,6 +69,7 @@ Planner notes (round 1), from reading the code:
 - [ ] T21 (3, review 13-designer, Run page 3 + 4) [ui] Rounds table words: a wrap-up round says `wrap-up` in the ROUND cell only (task cell empty, ROUND cell left-aligned), and the outcome prints words (`no task done`, not the slug `no-task-done`; map in the view, the protocol value stays) — done when: `test/view-runs.test.mjs` finds one `wrap-up` in that row and `no task done` with no `no-task-done`; run page shots (dark + light, 1440 + 390), console clean
 - [ ] T22 (3, review 13-designer, Run page 5) [ui] The round's session link is visible as a link (underline or ↗ after the role, like the artifact title), and the demo fleet (`test/tools/demo-fleet.mjs`) gives at least one demo round a known session so a shot shows it — done when: `test/view-runs.test.mjs` finds the anchor with the link marker; the run page shot shows one linked round (dark + light, 1440 + 390), console clean
 - [ ] T23 (3, review 13-designer, Run page 6 + 9) [ui] At 390 each round keeps its title: two lines per round (`3 builder kept c3e4a5b $3.68`, title and task id under it in `--text-2`), COMMIT dropped before TASK; the 390 shot scrolls to the end of the rounds table and the artifacts (include the wrap-up row; same scroll as T16) — done when: a view test finds the round title in the phone markup; shots at 390 (dark + light) show the title and the wrap-up row, console clean
+- [ ] T24 (2, review 16-stranger, 2) `laneboard run start` takes `--max-rounds N` for the cap; `--rounds N` on `start` stays as an alias and prints a stderr note (`--rounds on start means --max-rounds`); `--rounds` on `stop` stays the count done; the usage and `laneboard run start --help` say which is which (`bin/laneboard` `RUN_FLAGS`, `docs/runs.md`) — done when: `test/cli-run.test.mjs` writes `start --max-rounds 3` and finds `maxRounds: 3` in the line, `start --rounds 3` gives the same line plus the stderr note, and the help text names both flags
 
 ## Research questions
 
@@ -125,6 +126,9 @@ Planner notes (round 1), from reading the code:
     (same as the review 6 idea).
   - `shoot.mjs` (fenced) should freeze animations so trouble halos compare between shots.
   - Map: BUILDER-A's lane dots include the accent violet; phone Fit leaves empty bands.
+- Idea from review 16-stranger (no task; say if you want it): a second `run needs ack` of the same
+  need prints `need 0 already acked, nothing posted` (exit 0) while the first printed only `needs.ack
+  posted`; naming the need's text in both would be clearer.
 
 ## Reviews
 
@@ -138,5 +142,8 @@ Planner notes (round 1), from reading the code:
   (Later r10 idea 4, n3 T50), Map CI-RETRY label and phone label pairing (Later n3 T48), `+2` badge
   (T18), the 390 shots ending above the artifacts (T16, T23). The rest went to For the owner as
   ideas. Console clean.
+- reviews/16-stranger.md: 6 findings, 1 became a task (T24). Dropped as covered: taken test port
+  (Later n3 T57), silent `$LANEBOARD_RUN` (T10), `run cost` vs round `--usd` hint (T6, done), `ls`
+  lists real sessions (README says so). The double-ack wording went to For the owner. No broken view.
 
 ## Morning
