@@ -105,7 +105,8 @@
 .rn-left[data-p="2"] { color: var(--p2); }
 .rn-cost { justify-content: flex-end; }
 .rn-needs { overflow: hidden; }
-.rn-needs-t { overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
+.rn-needs-n { flex: none; }
+.rn-needs-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
 .rn-needs[data-p="2"] .rn-needs-n { color: var(--p2); }
 .rn-needs[data-p="3"] .rn-needs-n { color: var(--p3); }
 
@@ -257,8 +258,9 @@ a.rn-need-open { text-decoration: none; }
     gap: var(--sp-1) var(--sp-2);
   }
   .rn-scores,
-  .rn-burn,
-  .rn-needs { grid-column: 1 / -1; flex-wrap: wrap; white-space: normal; }
+  .rn-burn { grid-column: 1 / -1; flex-wrap: wrap; white-space: normal; }
+  /* the needs cell stays one line, mark and text together, the text clipped (T29) */
+  .rn-needs { grid-column: 1 / -1; }
   .rn-left,
   .rn-cost { justify-content: flex-start; }
   .rn-tl-sec { overflow-x: auto; }

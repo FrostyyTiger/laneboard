@@ -392,19 +392,37 @@ function burnNode(row) {
   return n;
 }
 
-function needsNode(row) {
+/**
+ * The needs cell of a list row: one line "▲ decision: Keep the old…" (T29).
+ * `mark` is ▲ when a person must answer, ○ when the run only waits; `count`
+ * is the number of open needs, null when there is just one; `p` its hue.
+ * Null when nothing is open.
+ */
+export function needsCell(row) {
   const list = needsOf(row);
+  if (!list.length) return null;
+  const you = list.filter((x) => x.kind !== 'wait');
+  const first = you[0] ?? list[0];
+  return {
+    mark: you.length ? '▲' : '○',
+    count: list.length > 1 ? list.length : null,
+    p: you.length ? '2' : '3',
+    text: `${first.kind}: ${first.text}`,
+    title: list.map((x) => `${x.kind}: ${x.text}${x.link ? ` (${x.link})` : ''}`).join('\n'),
+  };
+}
+
+function needsNode(row) {
+  const c = needsCell(row);
   const n = el('span', 'rn-f rn-needs');
-  if (!list.length) {
+  if (!c) {
     n.textContent = DASH;
     n.title = 'nothing open';
     return n;
   }
-  const you = list.filter((x) => x.kind !== 'wait');
-  n.dataset.p = you.length ? '2' : '3';
-  const first = you[0] ?? list[0];
-  n.append(el('span', 'rn-needs-n', `${you.length ? '▲' : '○'} ${list.length}`), el('span', 'rn-needs-t', `${first.kind}: ${first.text}`));
-  n.title = list.map((x) => `${x.kind}: ${x.text}${x.link ? ` (${x.link})` : ''}`).join('\n');
+  n.dataset.p = c.p;
+  n.append(el('span', 'rn-needs-n', c.count ? `${c.mark} ${c.count}` : c.mark), el('span', 'rn-needs-t', c.text));
+  n.title = c.title;
   return n;
 }
 

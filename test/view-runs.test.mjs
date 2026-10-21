@@ -15,6 +15,7 @@ import runsView, {
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, EMPTY_HUB, LIST_URL, SCORE_MAX,
   renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
   runHref, runUrl, LIST_HREF, needActions, ackNeed, ACK_BY, EVENTS_URL, TL_NARROW_HIDDEN, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
+  needsCell,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
 
@@ -88,7 +89,7 @@ test('the fixture renders one row with goal, state, round, scores and trend, bur
   assert.equal(byClass(row, 'rn-cost')[0].textContent, 'cost$3.75');
   const needs = byClass(row, 'rn-needs')[0];
   assert.equal(needs.dataset.p, '2');
-  assert.match(needs.textContent, /▲ 1decision: Drop the v1 export endpoint/);
+  assert.match(needs.textContent, /^▲decision: Drop the v1 export endpoint/);
 }));
 
 test('a live run shows the time left, and a window at its stop level is marked', () => withDom(() => {
@@ -695,3 +696,29 @@ test('T28: ACK on the run page posts needs.ack to POST /api/runs/events and relo
   assert.equal(byClass(host, 'rn-need-ack').length, 0, 'the need is gone after the reload');
   unmountRuns();
 }));
+
+test('needs cell: one line, the count only when more than one need is open (T29)', () => {
+  const one = needsCell({ needs: [{ kind: 'decision', text: 'Keep the old flag?' }] });
+  assert.equal(one.count, null, 'one need: no count');
+  assert.equal(one.mark, '▲');
+  assert.equal(one.text, 'decision: Keep the old flag?');
+  const two = needsCell({ needs: [{ kind: 'wait', text: 'rate limit' }, { kind: 'decision', text: 'Keep the old flag?' }] });
+  assert.equal(two.count, 2);
+  assert.equal(two.text, 'decision: Keep the old flag?', 'the need a person answers is the one shown');
+  assert.equal(needsCell({ needs: [{ kind: 'wait', text: 'rate limit' }] }).mark, '○');
+  assert.equal(needsCell({ needs: [] }), null);
+  withDom(() => {
+    const host = document.createElement('div');
+    renderRuns(host, [{ run: 'r', state: 'running', needs: [{ kind: 'decision', text: 'a' }, { kind: 'review', text: 'b' }] }]);
+    assert.equal(byClass(host, 'rn-needs-n')[0].textContent, '▲ 2');
+  });
+});
+
+test('runs.css: on a narrow screen the needs cell does not wrap its count away from the text (T29)', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const narrow = css.slice(css.indexOf('@media (max-width: 1024px)'));
+  const rule = narrow.match(/\.rn-needs\s*\{([^}]*)\}/);
+  assert.ok(rule, 'a narrow .rn-needs rule');
+  assert.doesNotMatch(rule[1], /flex-wrap:\s*wrap|white-space:\s*normal/);
+  assert.match(css, /\.rn-needs-t\s*\{[^}]*min-width:\s*0[^}]*text-overflow:\s*ellipsis/);
+});
