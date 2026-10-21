@@ -41,8 +41,8 @@
     inset: -4px 0;
   }
   /* The selected builder chip is a 1 px accent border, no fill: the lamp
-     carries the state, a peach or brown plate would be one more tint (T25). */
-  .strip-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--bg-surface); }
+     carries the state, a peach or brown plate would be one more tint (T25, T28). */
+  .strip-chip[aria-pressed="true"] { border-color: var(--accent); }
 
   /* The bottom sheet: fixed at full height, moved by transform only. */
   .shell-sheet {
@@ -105,7 +105,8 @@
     cursor: pointer;
   }
   .ps-tab:first-child { border-left: 0; }
-  .ps-tab[aria-selected="true"] { background: var(--accent-weak); color: var(--text-1); }
+  /* The lit segment: a 1 px accent border drawn inside the cell, no fill (T28). */
+  .ps-tab[aria-selected="true"] { outline: var(--bw) solid var(--accent); outline-offset: -1px; color: var(--text-1); }
   .ps-more {
     flex: none;
     width: 44px;

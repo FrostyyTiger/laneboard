@@ -64,8 +64,9 @@
 }
 .attention-strip .chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attention-strip .chip .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
-.attention-strip .chip.s-waiting_permission { border-color: var(--p2-line); background: var(--p2-weak); }
-.attention-strip .chip.s-waiting_question { border-color: var(--p2-line); background: var(--p2-weak); }
+/* A NEEDS YOU chip is its lamp and a 1 px status border, no fill (T28). */
+.attention-strip .chip.s-waiting_permission { border-color: var(--p2-line); }
+.attention-strip .chip.s-waiting_question { border-color: var(--p2-line); }
 
 /* ===================== the pressure ring ================================= */
 /*

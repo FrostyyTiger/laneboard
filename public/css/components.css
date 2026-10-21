@@ -272,13 +272,9 @@
   cursor: pointer;
 }
 .chip:hover { background: var(--bg-hover); }
-/* Selected chip: the accent-weak fill (the full accent stays on focus;
-   test/render.test.mjs keeps var(--accent) to focus-like selectors). */
-.chip[aria-pressed="true"],
-.chip[aria-selected="true"] {
-  border-color: var(--line-strong);
-  background: var(--accent-weak);
-}
+/* Selected chip: a 1 px accent border, never a fill (runs night 4 T28): a
+   peach or brown plate reads as one more status tint next to amber and red. */
+.chip[aria-pressed="true"] { border-color: var(--accent); }
 .chip .i { color: var(--text-3); }
 
 /* --- Buttons ----------------------------------------------------------------- */

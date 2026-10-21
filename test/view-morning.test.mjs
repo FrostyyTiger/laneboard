@@ -516,6 +516,7 @@ test('CSS T25: the selected builder chip is a 1 px accent border with no fill', 
   const rule = /\.strip-chip\[aria-pressed="true"\] \{([^}]*)\}/.exec(css)?.[1];
   assert.ok(rule, 'a rule for the selected strip chip');
   assert.match(rule, /border-color: var\(--accent\)/);
-  assert.match(rule, /background: var\(--bg-surface\)/, 'the resting chip surface, not a tint');
+  // Since T28 the kit's selected .chip has no fill either, so no reset is needed.
+  assert.doesNotMatch(rule, /background/, 'no fill on the selected chip');
   assert.doesNotMatch(rule, /accent-weak|--p\d/);
 });

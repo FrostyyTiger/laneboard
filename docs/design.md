@@ -15,7 +15,11 @@ laneboard is read from across the room at 3 a.m. It follows the high-performance
 2. **Hue and shape only for trouble.** A status colour never travels alone: it comes with its
    shape and, where there is room, a word.
 3. **One accent.** Safety orange (hue 45) is spent only on selection, focus and the primary call to
-   action. It never means a state.
+   action. It never means a state. **Selection is a 1 px accent border, never a fill** (runs
+   night 4 T28): the selected builder chip, the phone bar's lit segment and a picked filter chip
+   take the accent border (the desktop sidebar adds its corner brackets); a peach, brown or pink
+   plate would read as one more status tint. The Board's NEEDS YOU chips are a 1 px status border
+   and their lamp, no fill. T16's focus ring and T25's builder chip follow the same rule.
 4. **Data first.** Numbers, names and times in the mono face; no decoration, no shadows, no glass,
    no blur. Depth comes from the surface step and a 1 px border.
 5. **Movement is data** (`docs/map.md`): nothing animates for decoration; transitions are opacity,
