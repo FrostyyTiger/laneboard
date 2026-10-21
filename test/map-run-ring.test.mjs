@@ -158,14 +158,14 @@ test('runRing / runFacts: tones, progress clamped, the stuck tone wins over a ru
   assert.equal(runFacts({ kind: 'lane' }), null);
 });
 
-test('labels: the run name in the label face, muted (t3), its round in mono beside it, clear of the ring', () => {
+test('labels: the run name in the lane label style (500, T51), muted (t3), its round in mono beside it, clear of the ring', () => {
   const nodes = [CORE, run('acme-docs', { round: 7, maxRounds: 10 })];
   const ctx = fakeCtx();
   const scene = sceneOf(nodes);
   createRenderer(ctx, PAL).drawLabels(scene);
   const name = ctx.ops.find((o) => o.op === 'fillText' && o.text === 'ACME-DOCS');
   assert.ok(name, 'caps name');
-  assert.match(name.font, /600 11px LABEL/);
+  assert.match(name.font, /^500 11px LABEL/, 'the weight and size a lane label has');
   assert.equal(name.fillStyle, 'T3', 'muted next to its machine (T19)');
   const round = ctx.ops.find((o) => o.op === 'fillText' && o.text === '7 of 10');
   assert.ok(round, 'the round');

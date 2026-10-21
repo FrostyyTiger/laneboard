@@ -214,6 +214,8 @@ export function createRenderer(ctx, palette) {
   const widths = new Map();
   /** Node id -> outer radius drawn this frame (drawNodes), read by drawLabels. */
   const outerR = new Map();
+  /** Node ids drawn with a trouble mark (▲/■, its own or rolled up) this frame (drawNodes), read by labelPlan. */
+  const marked = new Set();
 
   function setPalette(next) { P = next ?? P; }
 
@@ -277,37 +279,32 @@ export function createRenderer(ctx, palette) {
    * numeric bearings at the quarters.
    */
   function drawRings(scene) {
-    const s = scene.s ?? 1;
     const c0 = centre(scene);
-    const labels = ringLabels(scene.pos ?? new Map(), scene.byId ?? new Map());
+    const { rings, legends, dial, bearings } = ringGeometry(scene);
     const ux = Math.cos(LEGEND_ANGLE), uy = Math.sin(LEGEND_ANGLE);
     ctx.save();
-    let outer = RINGS[2] * s;
-    for (const { r: wr, label } of labels) {
-      const r = wr * s;
-      outer = Math.max(outer, r);
+    for (const r of rings) {
       strokeStyle(P.line, 0.5, 1, []);
       ctx.beginPath();
       arc(c0.x, c0.y, r, 0, TAU);
       ctx.stroke();
-      // A phone has no room for the legends: they sat under nodes and plates.
-      if ((scene.W ?? Infinity) <= PHONE) continue;
-      // The leader: a 6px tick out from the ring; the label ends at its tip
-      // and runs left, away from the ring (outward at this bearing).
+    }
+    // The leader: a 6px tick out from the ring; the label ends at its tip
+    // and runs left, away from the ring (outward at this bearing).
+    for (const l of legends) {
       strokeStyle(P.t3, 0.6, 1, []);
       ctx.beginPath();
-      ctx.moveTo(c0.x + ux * r, c0.y + uy * r);
-      ctx.lineTo(c0.x + ux * (r + 6), c0.y + uy * (r + 6));
+      ctx.moveTo(c0.x + ux * l.r, c0.y + uy * l.r);
+      ctx.lineTo(c0.x + ux * (l.r + 6), c0.y + uy * (l.r + 6));
       ctx.stroke();
       fillStyle(P.t3, 0.85);
       ctx.font = `500 10px ${P.label}`;
       ctx.textAlign = 'right';
       ctx.textBaseline = 'bottom';
-      tracked(label, c0.x + ux * (r + 8), c0.y + uy * (r + 8), 1);
+      tracked(l.text, l.x, l.y, 1);
     }
     // The dial: an instrument, not a decoration. It is what makes a bearing
     // readable when you tell someone "the red one at 120".
-    const dial = outer + 26;
     for (const t of ticks(dial)) {
       strokeStyle(P.t3, t.long ? 0.45 : 0.22, 1, []);
       const cx = Math.cos(t.a), sy = Math.sin(t.a);
@@ -315,16 +312,50 @@ export function createRenderer(ctx, palette) {
       ctx.moveTo(c0.x + cx * t.r0, c0.y + sy * t.r0);
       ctx.lineTo(c0.x + cx * t.r1, c0.y + sy * t.r1);
       ctx.stroke();
-      if (t.label) {
-        fillStyle(P.t3, 0.7);
-        ctx.font = `9px ${P.mono}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const rr = t.r1 + 9;
-        ctx.fillText(t.label, c0.x + cx * rr, c0.y + sy * rr);
-      }
+    }
+    for (const b of bearings) {
+      fillStyle(P.t3, 0.7);
+      ctx.font = `9px ${P.mono}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(b.text, b.x, b.y);
     }
     ctx.restore();
+  }
+
+  /**
+   * Where drawRings puts its rings (screen radii), ring legends and bearing
+   * numbers, each text with the box it covers: the label pass keeps clear of
+   * them (T51). A phone has no room for the legends: they sat under nodes
+   * and plates. Sets ctx.font while measuring; call inside save/restore.
+   */
+  function ringGeometry(scene) {
+    const s = scene.s ?? 1;
+    const c0 = centre(scene);
+    const ux = Math.cos(LEGEND_ANGLE), uy = Math.sin(LEGEND_ANGLE);
+    const phone = (scene.W ?? Infinity) <= PHONE;
+    const rings = [], legends = [], bearings = [];
+    let outer = RINGS[2] * s;
+    for (const { r: wr, label } of ringLabels(scene.pos ?? new Map(), scene.byId ?? new Map())) {
+      const r = wr * s;
+      outer = Math.max(outer, r);
+      rings.push(r);
+      if (phone) continue;
+      const x = c0.x + ux * (r + 8), y = c0.y + uy * (r + 8);
+      ctx.font = `500 10px ${P.label}`;
+      const w = measure(label) + ('letterSpacing' in ctx ? label.length : 0);
+      legends.push({ r, text: label, x, y, box: { x0: x - w - 1, y0: y - 12, x1: x + 1, y1: y } });
+    }
+    const dial = outer + 26;
+    ctx.font = `9px ${P.mono}`;
+    for (const t of ticks(dial)) {
+      if (!t.label) continue;
+      const rr = t.r1 + 9;
+      const x = c0.x + Math.cos(t.a) * rr, y = c0.y + Math.sin(t.a) * rr;
+      const w = measure(t.label);
+      bearings.push({ text: t.label, x, y, box: { x0: x - w / 2 - 1, y0: y - 6, x1: x + w / 2 + 1, y1: y + 6 } });
+    }
+    return { rings, legends, dial, bearings };
   }
 
   // ---------------------------------------------------------------- edges
@@ -642,6 +673,7 @@ export function createRenderer(ctx, palette) {
     const W = scene.W ?? Infinity, H = scene.H ?? Infinity;
     const badges = [];
     outerR.clear();
+    marked.clear();
     const reach = scene.overlay === 'reach' ? reachScope(scene.reach, scene.selected ?? null) : null;
     // The ring hairlines drawRings draws, for the fold plates to stay off.
     const c0 = centre(scene);
@@ -704,6 +736,7 @@ export function createRenderer(ctx, palette) {
       const alpha = fade * (st.alpha ?? 1);
       const col = tone(st.tone, st.level);
       outerR.set(id, outer);
+      if (st.abnormal && (st.tone === 'crit' || st.tone === 'warn')) marked.add(id);
 
       if (n.kind === 'core') {
         // The core: a solid point in two hairline rings. No glow, no breathing.
@@ -827,10 +860,14 @@ export function createRenderer(ctx, palette) {
     return same ? n.code ?? n.label ?? name : name;
   }
 
-  /** On a phone: labels only for trouble, the selection and what is in focus (others on tap). */
+  /**
+   * On a phone: labels only for trouble, the selection and what is in focus
+   * (others on tap). Trouble includes a node drawn with a ▲/■ it rolls up
+   * from what it holds (a site, a folded lane): a mark always has a name.
+   */
   function trouble(n, stuck) {
     return LOUD.has(n.status) || n.status === 'warn' || Boolean(n.flags?.stuck) || n.link === 'down'
-      || (n.kind === 'builder' && stuck.has(n.builder));
+      || (n.kind === 'builder' && stuck.has(n.builder)) || marked.has(n.id);
   }
 
   /**
@@ -863,7 +900,7 @@ export function createRenderer(ctx, palette) {
       const picked = id === focus || id === scene.selected || matches.has(id);
       const show = phone
         ? few || n.kind === 'builder' || n.kind === 'run' || picked || trouble(n, stuck)
-        : (c.depth ?? 0) <= 2 || n.kind === 'builder' || n.kind === 'run' || s > 1.25 || picked || near.has(id) || loud;
+        : (c.depth ?? 0) <= 2 || n.kind === 'builder' || n.kind === 'run' || s > 1.25 || picked || near.has(id) || loud || trouble(n, stuck);
       if (!show || fade < 0.12) continue;
       const sp = scene.toScreen(c);
       const r = (SIZE[n.kind] ?? 5) * ns;
@@ -887,13 +924,14 @@ export function createRenderer(ctx, palette) {
       let y = sp.y + Math.sin(ang) * out;
       let left = Math.cos(ang) >= 0;
       // One label style: every name in the label face, caps. Weight and grey
-      // step carry the rank (machines and places t1, what runs on them t2, a
-      // run muted to t3 like its round); trouble lifts a name to t1, and the
-      // hue stays on the node's ▲/■ mark, never on the text.
+      // step carry the rank (machines and places 600 t1, what runs on them
+      // 500 t2, a run in the lane's 500 but muted to t3 like its round, T51);
+      // trouble lifts a name to t1, and the hue stays on the node's ▲/■
+      // mark, never on the text.
       const plate = n.kind === 'site' || n.kind === 'host' || n.kind === 'room' || n.kind === 'builder';
       const raw = n.kind === 'builder' ? builderName(scene, n) : n.label ?? n.id;
       const text = String(raw).toUpperCase();
-      const font = `${plate || n.kind === 'run' ? 600 : 500} ${plate && n.kind !== 'room' ? 12 : 11}px ${P.label}`;
+      const font = `${plate ? 600 : 500} ${plate && n.kind !== 'room' ? 12 : 11}px ${P.label}`;
       ctx.font = font;
       const col = plate || loud ? P.t1 : n.kind === 'run' ? P.t3 : P.t2;
       // A backing so a label stays readable where an arc passes under it.
@@ -929,7 +967,7 @@ export function createRenderer(ctx, palette) {
       // Who keeps its place when two collide: the selection, then trouble,
       // then machines and places, then the rest.
       const rank = id === scene.selected ? 0 : picked ? 1 : loud || trouble(n, stuck) ? 2 : plate ? 3 : 4;
-      plan.push({ id, n, sx: sp.x, text, font, col, x, y, left, w, round, sub: subText, loud, fade, rank, box, low,
+      plan.push({ id, n, sx: sp.x, sy: sp.y, R, text, font, col, x, y, left, w, round, sub: subText, loud, fade, rank, box, low,
         lamps: n.kind === 'builder' ? lampColours(n, stuck.has(n.builder)) : null });
     }
     return plan;
@@ -940,9 +978,12 @@ export function createRenderer(ctx, palette) {
   /**
    * The collision pass: labels in rank order take their place, or the
    * nearest free one a line up or down (up to four lines), clear of the fold
-   * plates (`badges`) and inside the canvas, and off other nodes where a
-   * place allows it. On a phone a label with no free place is left for a
-   * tap (the selection always stays); wider, it keeps its first place.
+   * plates (`badges`), the ring legends and bearing numbers, inside the
+   * canvas, and off other nodes where a place allows it. On a phone a label
+   * also tries centred above, then below, its node; one with no free place
+   * is left for a tap (the node keeps its ring and mark), except the
+   * selection and trouble, which keep their first place (T51: a trouble
+   * node is always named). Wider, every label keeps its first place.
    * Returns the plan placed, each entry with `dy` applied.
    */
   function placeLabels(plan, scene, badges = []) {
@@ -950,6 +991,8 @@ export function createRenderer(ctx, palette) {
     const phone = (scene.W ?? Infinity) <= PHONE;
     const ns = nodeScale(scene);
     const taken = badges.map((b) => ({ x0: b.x - 1, y0: b.y - 1, x1: b.x + b.w + 1, y1: b.y + b.h + 1 }));
+    const rg = ringGeometry(scene);
+    for (const t of [...rg.legends, ...rg.bearings]) taken.push(t.box);
     // Drawn nodes, as the square their outermost ring fits in.
     const discs = [];
     for (const [id, c] of scene.nodes ?? []) {
@@ -962,7 +1005,7 @@ export function createRenderer(ctx, palette) {
     const order = plan.map((e, i) => [e, i]).sort((a, b) => a[0].rank - b[0].rank || a[1] - b[1]).map(([e]) => e);
     const out = [];
     const STEPS = [0, 14, -14, 28, -28, 42, -42, 56, -56];
-    const slot = (e, clear) => STEPS.find((d) => {
+    const slot = (e, clear) => (e.steps ?? STEPS).find((d) => {
       const b = { x0: e.box.x0, x1: e.box.x1, y0: e.box.y0 + d, y1: e.box.y1 + d };
       return b.y0 >= 0 && b.y1 <= H && !taken.some((t) => hits(t, b)) && clear(b);
     });
@@ -973,20 +1016,33 @@ export function createRenderer(ctx, palette) {
       const box = { ...e.box, x0: 2 * e.sx - e.box.x1, x1: 2 * e.sx - e.box.x0 };
       return box.x0 < 4 || box.x1 > W - 4 ? null : { ...e, x: 2 * e.sx - e.x, left: !e.left, box };
     };
+    /** On a phone: the label centred above (dir -1) or below (+1) its node, read left to right. */
+    const stack = (e, dir) => {
+      if (!phone || e.core || e.sx == null || e.sy == null) return null;
+      const bw = e.box.x1 - e.box.x0, bh = e.box.y1 - e.box.y0;
+      if (bw > W - 8) return null;
+      const x0 = clamp(e.sx - bw / 2, 4, W - 4 - bw);
+      const y0 = dir < 0 ? e.sy - e.R - 4 - bh : e.sy + e.R + 4;
+      // The name's line sits 7px under the box top, as in labelPlan; it may
+      // move one line further out, no more, or it reads as a neighbour's.
+      return { ...e, x: x0 + 2, y: y0 + 7, left: true, steps: [0, 14 * dir], box: { x0, y0, x1: x0 + bw, y1: y0 + bh } };
+    };
     for (const e0 of order) {
       const alt = mirror(e0);
+      const up = stack(e0, -1), down = stack(e0, 1);
       // Off every node, its own included: a label moved a line up or down
       // must not land on the plate it names.
-      const offNodes = () => (b) => !discs.some((n) => hits(n, b));
+      const offNodes = (b) => !discs.some((n) => hits(n, b));
+      const any = () => true;
       let e = e0;
       let dy = null;
-      for (const [cand, clear] of [[e0, offNodes(e0)], [alt, offNodes(e0)], [e0, () => true], [alt, () => true]]) {
+      for (const [cand, clear] of [[e0, offNodes], [alt, offNodes], [up, offNodes], [down, offNodes], [e0, any], [alt, any], [up, any], [down, any]]) {
         if (!cand) continue;
         dy = slot(cand, clear);
         if (dy != null) { e = cand; break; }
       }
       if (dy == null) {
-        if (phone && e.rank > 0) continue;
+        if (phone && e.rank > 2) continue;
         dy = 0;
       }
       const placed = { ...e, y: e.y + dy, box: { ...e.box, y0: e.box.y0 + dy, y1: e.box.y1 + dy } };
@@ -994,6 +1050,14 @@ export function createRenderer(ctx, palette) {
       out.push(placed);
     }
     return out;
+  }
+
+  /** The ring legend and bearing number boxes drawRings draws (for tests: labels keep clear of them). */
+  function ringTextBoxes(scene) {
+    ctx.save();
+    const g = ringGeometry(scene);
+    ctx.restore();
+    return [...g.legends, ...g.bearings].map((t) => ({ text: t.text, ...t.box }));
   }
 
   /** The label boxes drawLabels would draw, after the collision pass (for tests and hit checks). */
@@ -1200,6 +1264,7 @@ export function createRenderer(ctx, palette) {
     drawNodes,
     drawLabels,
     labelBoxes,
+    ringTextBoxes,
     drawReticle,
     drawTether,
     readout,

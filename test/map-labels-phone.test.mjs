@@ -9,6 +9,8 @@ import fs from 'node:fs';
 import { createRenderer, PHONE_ALL_LABELS } from '../public/js/views/map/render.js';
 import { layout } from '../public/js/views/map/layout.js';
 import { fitFrame } from '../public/js/views/map/interact.js';
+import { foldState, autoFold, rollup } from '../public/js/views/map/model.js';
+import { nodeStyle, rollsUp } from '../public/js/views/map/overlays.js';
 
 const DEMO = JSON.parse(fs.readFileSync(new URL('./fixtures/map-demo.json', import.meta.url), 'utf8'));
 
@@ -134,4 +136,97 @@ test('views/map.css gives the phone HUD the padding the fit reads, and find + fi
   const phone = css.slice(css.indexOf('@media (max-width: 699px)'));
   assert.match(phone, /\.map-hud\s*\{\s*padding:\s*40px 0 calc\(var\(--sheet-peek\)/);
   assert.match(phone, /\.map-find\s*\{\s*bottom:\s*calc\(var\(--sheet-peek\)/);
+});
+
+// T51 (n3 T48 rest): the demo fleet as the Map draws it at 390, the lanes
+// with sessions folded (model.autoFold) and sites and folded lanes showing
+// the rolled-up status (model.rollup): every node drawn with a ▲ or ■ keeps
+// its name, no label sits on another label or on a bearing number, and a
+// run label that cannot fit is dropped (the ring stays).
+function drawnScene(nodes, extra = {}) {
+  const fs0 = foldState(nodes, [], autoFold(nodes));
+  const shown = nodes.filter((n) => !fs0.hidden.has(n.id));
+  const lay = layout(shown);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let outer = 0;
+  for (const p of lay.pos.values()) outer = Math.max(outer, p.r);
+  const { s, y } = fitFrame(W, H, outer + 64, INSET);
+  const cur = new Map();
+  for (const [id, p] of lay.pos) cur.set(id, { x: p.x, y: p.y, r: p.r, t: p.angle, a: 1, node: byId.get(id) ?? lay.center, depth: p.depth });
+  const memo = new Map();
+  return {
+    ...phoneScene(), s, fitY: y, pos: lay.pos, nodes: cur, byId, kids: lay.kids, folded: fs0.folded,
+    toScreen: (p) => ({ x: W / 2 + p.x * s, y: H / 2 + (p.y - y) * s }),
+    rolled: (id) => rollup(id, byId, fs0.kids, memo),
+    ...extra,
+  };
+}
+
+/** Ids the renderer marks ▲/■ on the status overlay, as drawNodes decides it. */
+function markedIds(scene) {
+  const out = [];
+  for (const [id, c] of scene.nodes) {
+    const n = c.node;
+    if (!n || n.virtual || n.kind === 'core') continue;
+    const st = nodeStyle(n, 'status', rollsUp(n, scene.folded.has(id)) ? scene.rolled(id) : null);
+    if (st.abnormal && (st.tone === 'warn' || st.tone === 'crit')) out.push(id);
+  }
+  return out;
+}
+
+function checkDrawn(scene, label) {
+  const r = createRenderer(fakeCtx(), PAL);
+  const badges = r.drawNodes(scene);
+  const boxes = r.labelBoxes(scene, badges);
+  const named = new Set(boxes.map((b) => b.id));
+  const marked = markedIds(scene);
+  assert.ok(marked.length >= 3, `${label}: the scene has trouble to name (${marked})`);
+  for (const id of marked) assert.ok(named.has(id), `${label}: ${id} (▲/■) keeps its label: ${boxes.map((b) => b.text)}`);
+  assert.deepEqual(overlaps(boxes), [], label);
+  for (const b of boxes) for (const t of r.ringTextBoxes(scene)) assert.ok(!hits(b, t), `${label}: ${b.text} clear of the bearing ${t.text}`);
+  return { boxes, named, marked };
+}
+
+test('T51 390: the demo fleet folded as drawn names every ▲/■ node, rolled up included, with no label over a label or a bearing', () => {
+  const scene = drawnScene(DEMO.nodes);
+  assert.ok(scene.folded.size > 0, 'lanes with sessions are folded, as the Map draws them');
+  const { named, marked } = checkDrawn(scene, 'demo');
+  assert.ok(marked.includes('run:acme-billing'), 'the stuck run is marked');
+  assert.ok(named.has('run:acme-billing'), 'and named');
+  // A rolled-up mark: the site holding the trouble draws a ▲ and is named.
+  assert.ok(marked.some((id) => scene.byId.get(id)?.kind === 'site' || scene.folded.has(id)), `a rolled-up mark among ${marked}`);
+});
+
+test('T51 390: with every lane wanting attention and every run stuck, each ▲ keeps its name and labels still never overlap', () => {
+  const nodes = DEMO.nodes.map((n) => (n.kind === 'lane' ? { ...n, status: 'attention' }
+    : n.kind === 'run' ? { ...n, status: 'warn', stuck: true } : n));
+  const scene = drawnScene(nodes);
+  const { boxes } = checkDrawn(scene, 'all trouble');
+  for (const n of nodes.filter((x) => x.kind === 'run')) assert.ok(boxes.some((b) => b.id === n.id), `${n.id} (stuck) named`);
+});
+
+test('T51 390: a run label with no free place is dropped, not laid over another label', () => {
+  // Forty healthy runs on one host, side by side: not every name can fit.
+  const runs = Array.from({ length: 40 }, (_, i) => ({ id: `run:r${i}`, parent: 'room-a', kind: 'run', label: `night-run-${i}`, status: 'working', round: 3, maxRounds: 10 }));
+  const scene = drawnScene([...DEMO.nodes, ...runs]);
+  const r = createRenderer(fakeCtx(), PAL);
+  const boxes = r.labelBoxes(scene, r.drawNodes(scene));
+  assert.deepEqual(overlaps(boxes), []);
+  const named = runs.filter((n) => boxes.some((b) => b.id === n.id)).length;
+  assert.ok(named < runs.length, `some run names left for a tap (${named}/${runs.length})`);
+});
+
+test('T51: at 1440 every ▲/■ node is named and the labels keep clear of the ring legends and bearings; a phone has bearings only', () => {
+  const scene = drawnScene(DEMO.nodes, { W: 1440, H: 900 });
+  const { s } = fitFrame(1440, 900, 400);
+  Object.assign(scene, { s, toScreen: (p) => ({ x: 720 + p.x * s, y: 450 + p.y * s }) });
+  const r = createRenderer(fakeCtx(), PAL);
+  const rings = r.ringTextBoxes(scene);
+  assert.ok(rings.some((t) => !/^\d{3}$/.test(t.text)), `ring legends at 1440: ${rings.map((t) => t.text)}`);
+  const boxes = r.labelBoxes(scene, r.drawNodes(scene));
+  // A stuck lane deep in the tree is named wide too, not only on a phone.
+  const named = new Set(boxes.map((b) => b.id));
+  for (const id of markedIds(scene)) assert.ok(named.has(id), `${id} (▲/■) named at 1440`);
+  for (const b of boxes) for (const t of rings) assert.ok(!hits(b, t), `${b.text} clear of ${t.text}`);
+  assert.ok(r.ringTextBoxes(phoneScene()).every((t) => /^\d{3}$/.test(t.text)), 'a phone has bearings only');
 });
