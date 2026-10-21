@@ -515,6 +515,137 @@ test('text widths are measured once per font and text', () => {
   assert.equal(ctx.measured, first, 'the second frame hits the cache');
 });
 
+// --- label placement (T18) ----------------------------------------------------------
+
+/** How far out anything stroked around `sp` reaches: arcs centred there, rects around it (corners). */
+function drawnReach(ops, sp) {
+  let R = 0;
+  for (const o of ops) {
+    if (o.op === 'fill' && o.path[0]?.[0] === 'moveTo' && Math.abs(o.path[0][1] - sp.x) < 0.01 && Math.abs(o.path[0][2] - sp.y) < 20) {
+      // A glyph (triangle, diamond): its farthest vertex.
+      for (const p of o.path) if (p[0] === 'moveTo' || p[0] === 'lineTo') R = Math.max(R, Math.hypot(p[1] - sp.x, p[2] - sp.y));
+      continue;
+    }
+    if (o.op !== 'stroke' && o.op !== 'strokeRect') continue;
+    const half = (o.lineWidth ?? 1) / 2;
+    if (o.op === 'strokeRect') {
+      const [x, y, w, h] = o.rect;
+      if (Math.abs(x + w / 2 - sp.x) < 0.01 && Math.abs(y + h / 2 - sp.y) < 0.01) R = Math.max(R, Math.hypot(w / 2, h / 2) + half);
+      continue;
+    }
+    const p0 = o.path[0];
+    if (p0?.[0] === 'arc' && Math.abs(p0[1] - sp.x) < 0.01 && Math.abs(p0[2] - sp.y) < 0.01) R = Math.max(R, p0[3] + half);
+    if (p0?.[0] === 'rect' && Math.abs(p0[1] + p0[3] / 2 - sp.x) < 0.01 && Math.abs(p0[2] + p0[4] / 2 - sp.y) < 0.01) R = Math.max(R, Math.hypot(p0[3] / 2, p0[4] / 2) + half);
+  }
+  return R;
+}
+
+/** Distance from (x, y) to the nearest point of a rect [rx, ry, w, h]. */
+const rectDist = (x, y, [rx, ry, w, h]) => Math.hypot(Math.max(rx - x, 0, x - rx - w), Math.max(ry - y, 0, y - ry - h));
+
+/** The label's text op and the 14px backing drawn just before it. */
+function labelOf(ops, text) {
+  const i = ops.findIndex((o) => o.op === 'fillText' && o.text === text);
+  assert.ok(i >= 0, `label ${text} drawn`);
+  const back = ops.slice(0, i).reverse().find((o) => o.op === 'fillRect' && o.rect[3] === 14);
+  return { text: ops[i], back: back.rect };
+}
+
+test('labels keep 2px clear of the outermost ring a node draws: gauges, drift marks, folds, builder squares', () => {
+  const nodes = [
+    { id: '__core', kind: 'core', label: 'hub' },
+    { id: 'hq', kind: 'site', parent: '__core', label: 'hq', status: 'ok', metrics: { cpu: 0.4, mem: 0.5 } },
+    { id: 'backup', kind: 'room', parent: 'hq', label: 'backup', status: 'unknown', drift: 'missing' },
+    { id: 'repos', kind: 'room', parent: 'hq', label: 'repos', status: 'ok', metrics: { cpu: 0.2, mem: 0.9 } },
+    { id: 'new', kind: 'room', parent: 'hq', label: 'new', status: 'ok', drift: 'undeclared' },
+    { id: 'b', kind: 'builder', parent: 'hq', builder: 'builder-b', label: 'BB', code: 'BB', status: 'ok', drift: 'undeclared' },
+    { id: 'lane:b/x', kind: 'lane', parent: 'b', builder: 'builder-b', label: 'feat-x', status: 'attention' },
+    { id: 'lane:b/y', kind: 'lane', parent: 'b', builder: 'builder-b', label: 'fix-y', status: 'working' },
+  ];
+  for (const s of [1.3, 1.6]) {
+    const ctx = fakeCtx();
+    const scene = sceneOf(nodes, { overlay: 'drift', s, folded: new Set(['repos']), kids: new Map([['repos', [{ id: 'k1' }, { id: 'k2' }]]]) });
+    const r = createRenderer(ctx, PAL);
+    r.drawNodes(scene);
+    const nodeOps = [...ctx.ops];
+    r.drawLabels(scene);
+    for (const [id, text] of [['hq', 'HQ'], ['backup', 'BACKUP'], ['repos', 'REPOS'], ['new', 'NEW'], ['b', 'BUILDER-B'], ['lane:b/x', 'feat-x'], ['lane:b/y', 'fix-y']]) {
+      const sp = scene.toScreen(scene.nodes.get(id));
+      const R = drawnReach(nodeOps, sp);
+      assert.ok(R > 0, `${id} draws something`);
+      const { back } = labelOf(ctx.ops, text);
+      assert.ok(rectDist(sp.x, sp.y, back) >= R + 2 - 1e-6, `${id} at s=${s}: label ${rectDist(sp.x, sp.y, back).toFixed(1)} from centre, ring reaches ${R.toFixed(1)}`);
+    }
+  }
+});
+
+test('the +N plate sits outside the fold ring on a 45 degree diagonal, 2px clear, away from the label', () => {
+  const ctx = fakeCtx();
+  const nodes = FLEET.slice(0, 4);
+  const kids = new Map([['builder:builder-a', [FLEET[4], { id: 'lane:builder-a/b' }]]]);
+  const scene = sceneOf(nodes, { folded: new Set(['builder:builder-a']), kids, rolled: () => 'ok' });
+  const [plate] = createRenderer(ctx, PAL).drawNodes(scene);
+  const c = scene.nodes.get('builder:builder-a');
+  const sp = scene.toScreen(c);
+  const ring = ctx.ops.find((o) => o.op === 'stroke' && o.dash.length && o.path[0]?.[0] === 'arc' && Math.abs(o.path[0][1] - sp.x) < 0.01);
+  const rect = [plate.x, plate.y, plate.w, plate.h];
+  assert.ok(rectDist(sp.x, sp.y, rect) >= ring.path[0][3] + 2 - 1e-6, 'clear of the dotted ring');
+  const corner = [[plate.x, plate.y], [plate.x + plate.w, plate.y], [plate.x, plate.y + plate.h], [plate.x + plate.w, plate.y + plate.h]]
+    .sort((a, b) => Math.hypot(a[0] - sp.x, a[1] - sp.y) - Math.hypot(b[0] - sp.x, b[1] - sp.y))[0];
+  assert.ok(Math.abs(Math.abs(corner[0] - sp.x) - Math.abs(corner[1] - sp.y)) < 1e-6, 'its near corner is on the diagonal');
+  const mid = [plate.x + plate.w / 2 - sp.x, plate.y + plate.h / 2 - sp.y];
+  assert.ok(mid[0] * Math.cos(c.t) + mid[1] * Math.sin(c.t) < 0, 'on the side away from the label');
+});
+
+test('a label flips to the left of its node before it crosses the right edge, and over the node when neither side fits', () => {
+  const nodes = [...FLEET.slice(0, 2), { id: 'east', kind: 'room', parent: 'hq', label: 'eastern-room', status: 'ok' }];
+  const base = sceneOf(nodes);
+  const c = base.nodes.get('east');
+  // Put the room due east of the centre so its label wants to run right.
+  base.nodes.set('east', { ...c, t: 0 });
+  const sp = base.toScreen(c);
+  const ctx = fakeCtx();
+  createRenderer(ctx, PAL).drawLabels({ ...base, W: sp.x + 60 });
+  const { text, back } = labelOf(ctx.ops, 'EASTERN-ROOM');
+  assert.ok(back[0] + back[2] <= sp.x, 'the label is on the left of the node');
+  assert.ok(back[0] >= 4, 'and inside the canvas');
+  assert.ok(Math.abs(text.y - sp.y) < 1, 'on the node\'s row');
+
+  const ctx2 = fakeCtx();
+  const narrow = { ...base, W: 90, toScreen: () => ({ x: 45, y: 300 }) };
+  createRenderer(ctx2, PAL).drawLabels(narrow);
+  const over = labelOf(ctx2.ops, 'EASTERN-ROOM');
+  assert.ok(over.back[1] + 14 <= 300, 'neither side fits: it goes above the node');
+  assert.ok(over.back[0] >= 2 && over.back[0] + over.back[2] <= 90, 'kept inside the canvas');
+});
+
+test('a builder on a machine labelled with its name is labelled by its code; one without keeps its name', () => {
+  const host = { id: 'vm-a', kind: 'room', parent: 'hq', label: 'builder-a', status: 'ok', hosts: 'builder-a' };
+  const nodes = [...FLEET.slice(0, 2), host, { ...FLEET[3], parent: 'vm-a' }];
+  const ctx = fakeCtx();
+  createRenderer(ctx, PAL).drawLabels(sceneOf(nodes));
+  const texts = ctx.ops.filter((o) => o.op === 'fillText').map((o) => o.text);
+  assert.equal(texts.filter((t) => t === 'BUILDER-A').length, 1, 'the host says it once');
+  assert.ok(texts.includes('B1'), 'the builder says its code');
+  const ctx2 = fakeCtx();
+  createRenderer(ctx2, PAL).drawLabels(sceneOf(FLEET));
+  assert.ok(ctx2.ops.some((o) => o.op === 'fillText' && o.text === 'BUILDER-A'), 'a builder in a plain room keeps its name');
+  const vm = { ...host, label: 'vm-a' };
+  const ctx3 = fakeCtx();
+  createRenderer(ctx3, PAL).drawLabels(sceneOf([...FLEET.slice(0, 2), vm, { ...FLEET[3], parent: 'vm-a' }]));
+  assert.ok(ctx3.ops.some((o) => o.op === 'fillText' && o.text === 'BUILDER-A'), 'a builder on a machine with another name keeps its name');
+});
+
+test('the core\'s label is left to the map title on a phone-wide canvas', () => {
+  const draw = (W) => {
+    const ctx = fakeCtx();
+    createRenderer(ctx, PAL).drawLabels(sceneOf(FLEET, { W }));
+    return ctx.ops.some((o) => o.op === 'fillText' && o.text === 'FLEET');
+  };
+  assert.equal(draw(1600), true);
+  assert.equal(draw(390), false);
+});
+
 // --- selection --------------------------------------------------------------------------
 
 /** The four L-brackets of a reticle stroke: their corner distance from the node. */

@@ -133,6 +133,10 @@ function treeCurve(p, c) {
 }
 
 const LOUD = new Set(['attention', 'crit', 'down']);
+/** Kinds that draw cpu/mem gauge rings when they carry metrics. */
+const GAUGED = new Set(['room', 'site', 'host', 'builder']);
+/** Below this canvas width the core's name is left to the map title, the label would sit on the inner ring. */
+const NARROW = 600;
 const TEXT_CACHE_MAX = 4000;
 
 /**
@@ -144,6 +148,8 @@ const TEXT_CACHE_MAX = 4000;
 export function createRenderer(ctx, palette) {
   let P = palette ?? readPalette(null);
   const widths = new Map();
+  /** Node id -> outer radius drawn this frame (drawNodes), read by drawLabels. */
+  const outerR = new Map();
 
   function setPalette(next) { P = next ?? P; }
 
@@ -497,7 +503,29 @@ export function createRenderer(ctx, palette) {
     }
   }
 
-  /** Folded: a dotted ring for what is inside and a "+N" plate on the inner side. Returns its rect. */
+  /**
+   * How far out a node of radius `r` draws (its builder square's corner,
+   * gauges, the working arc, the fold ring, a run's track, an overlay mark),
+   * strokes included: labels and plates keep clear of this, not of the centre.
+   */
+  function ringOuter(n, r, { mark = null, folded = false, working = false } = {}) {
+    const q = n.kind === 'builder' ? r * 1.25 : r;
+    let R = (n.kind === 'builder' ? q * Math.SQRT2 : q) + 1;
+    if (n.kind === 'run') R = r + RUN_RING + 1;
+    if (n.metrics && GAUGED.has(n.kind)) R = Math.max(R, q + 1 + 6.5 + 1);
+    if (working) R = Math.max(R, r + 4 + 0.7);
+    if (folded) R = Math.max(R, r + (n.metrics ? 10 : 6) + 0.5);
+    if (mark) {
+      const ro = n.kind === 'run' ? r + RUN_RING + 5 : (n.kind === 'builder' ? q * Math.SQRT2 : r) + 6;
+      R = Math.max(R, (mark.shape === 'square' ? ro * Math.SQRT2 : ro) + 0.75);
+    }
+    return R;
+  }
+
+  /**
+   * Folded: a dotted ring for what is inside and a "+N" plate outside it, on
+   * the 45 degree diagonal away from the label, 2px clear of the ring. Returns its rect.
+   */
   function foldMark(scene, id, n, c, sp, r, alpha) {
     const inside = scene.kids?.get(id)?.length ?? 0;
     const ring = r + (n.metrics ? 10 : 6);
@@ -507,9 +535,11 @@ export function createRenderer(ctx, palette) {
     const text = `+${inside}`;
     ctx.font = `600 9.5px ${P.mono}`;
     const w = measure(text) + 8;
-    const ang = (scene.pos?.get(id)?.angle ?? c.t ?? 0) + Math.PI;
-    const off = r + (n.metrics ? 16 : 12);
-    const bx = sp.x + Math.cos(ang) * off - w / 2, by = sp.y + Math.sin(ang) * off - 7;
+    const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
+    const dx = Math.cos(ang) >= 0 ? -1 : 1, dy = Math.sin(ang) >= 0 ? -1 : 1;
+    const off = (ring + 0.5 + 2) / Math.SQRT2;
+    const cx = sp.x + dx * off, cy = sp.y + dy * off;
+    const bx = dx > 0 ? cx : cx - w, by = dy > 0 ? cy : cy - 14;
     fillStyle(P.sunken, 0.95 * alpha);
     ctx.fillRect(bx, by, w, 14);
     strokeStyle(P.line, alpha, 1, []);
@@ -532,6 +562,7 @@ export function createRenderer(ctx, palette) {
     const ns = nodeScale(scene);
     const W = scene.W ?? Infinity, H = scene.H ?? Infinity;
     const badges = [];
+    outerR.clear();
     const reach = scene.overlay === 'reach' ? reachScope(scene.reach, scene.selected ?? null) : null;
     ctx.save();
     if (!scene.reduced) {
@@ -562,6 +593,7 @@ export function createRenderer(ctx, palette) {
         : nodeStyle(n, scene.overlay, rolled, { budgetUsd: scene.budgetUsd?.(n), reach });
       const alpha = fade * (st.alpha ?? 1);
       const col = tone(st.tone, st.level);
+      outerR.set(id, ringOuter(n, r, { mark: st.mark, folded: isFolded, working: Boolean(st.arc) }));
 
       if (n.kind === 'core') {
         // The core: a solid point in two hairline rings. No glow, no breathing.
@@ -631,7 +663,7 @@ export function createRenderer(ctx, palette) {
         markRing(st.mark, sp, (n.kind === 'builder' ? r * 1.25 * Math.SQRT2 : r) + 6, alpha);
       }
 
-      if (n.kind === 'room' || n.kind === 'site' || n.kind === 'host' || n.kind === 'builder') gauges(n, sp.x, sp.y, n.kind === 'builder' ? r * 1.25 + 1 : r, alpha);
+      if (GAUGED.has(n.kind)) gauges(n, sp.x, sp.y, n.kind === 'builder' ? r * 1.25 + 1 : r, alpha);
       if (isFolded) {
         const b = foldMark(scene, id, n, c, sp, r, alpha);
         if ((c.a ?? 1) > 0.5) badges.push(b);
@@ -665,6 +697,17 @@ export function createRenderer(ctx, palette) {
     ];
   }
 
+  /**
+   * A builder's label: its name, or its short code when the machine it sits
+   * on is already labelled with that name (one BUILDER-A on the Map, not two).
+   */
+  function builderName(scene, n) {
+    const name = n.builder ?? n.label ?? n.id;
+    const host = n.parent != null ? scene.byId?.get?.(n.parent) : null;
+    const same = host && String(host.label ?? '').toLowerCase() === String(name).toLowerCase();
+    return same ? n.code ?? n.label ?? name : name;
+  }
+
   /** Names beside their nodes, readable over arcs; subs and lamps where there is room. */
   function drawLabels(scene) {
     const nodes = scene.nodes ?? new Map();
@@ -686,9 +729,12 @@ export function createRenderer(ctx, palette) {
         || matches.has(id) || loud || id === scene.selected;
       if (!show || fade < 0.12) continue;
       const sp = scene.toScreen(c);
-      const r = (SIZE[n.kind] ?? 5) * ns * (n.kind === 'builder' ? 1.25 : 1) + (n.kind === 'run' ? RUN_RING + 1 : 0);
+      const r = (SIZE[n.kind] ?? 5) * ns;
       const loudCol = status === 'attention' ? P.warn : P.crit;
       if (n.kind === 'core') {
+        // On a phone the name under the core lands on the first ring's nodes;
+        // the map title at the top left already says it.
+        if ((scene.W ?? Infinity) < NARROW) continue;
         ctx.textAlign = 'center';
         ctx.font = `600 11px ${P.label}`;
         fillStyle(P.t1, fade);
@@ -696,12 +742,15 @@ export function createRenderer(ctx, palette) {
         continue;
       }
       const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
-      const out = r + (n.metrics ? 12 : 8);
+      // From the outermost ring the node draws, plus half a text line where
+      // the label sits above or below it, so the backing never covers a ring.
+      const R = outerR.get(id) ?? ringOuter(n, r, { folded: Boolean(scene.folded?.has(id)) });
+      const out = R + 6 + 7 * Math.abs(Math.sin(ang));
       let x = sp.x + Math.cos(ang) * out;
       let y = sp.y + Math.sin(ang) * out;
-      const left = Math.cos(ang) >= 0;
+      let left = Math.cos(ang) >= 0;
       const plate = n.kind === 'site' || n.kind === 'host' || n.kind === 'room' || n.kind === 'builder' || n.kind === 'run';
-      const raw = n.kind === 'builder' ? n.builder ?? n.label ?? n.id : n.label ?? n.id;
+      const raw = n.kind === 'builder' ? builderName(scene, n) : n.label ?? n.id;
       const text = plate ? String(raw).toUpperCase() : String(raw);
       ctx.font = plate ? `600 ${n.kind === 'room' ? 11 : 12}px ${P.label}` : `11px ${P.mono}`;
       const col = loud ? loudCol : plate ? P.t1 : P.t2;
@@ -710,12 +759,17 @@ export function createRenderer(ctx, palette) {
       const round = n.kind === 'run' ? runRound(n) : null;
       const extra = round ? round.length * 7 + 8 : 0;
       const W = scene.W ?? Infinity;
-      if (left && x + w + extra > W - 4) {
-        // It would run off the right edge: the label goes over the node,
-        // centred on it and kept inside the canvas (labels beside and under
-        // a node belong to its neighbours on the outer rings).
-        x = clamp(sp.x - (w + extra) / 2, 4, W - 4 - w - extra);
-        y = sp.y - out - 6;
+      const off = (lft, px) => (lft ? px + w + extra > W - 4 : px - w - extra < 4);
+      if (off(left, x)) {
+        // It would run off the edge: it flips to the node's other side; when
+        // that does not fit either, it goes over the node, centred on it and
+        // kept inside the canvas (labels under a node belong to its neighbours).
+        const fx = 2 * sp.x - x;
+        if (!off(!left, fx)) { x = fx; left = !left; } else {
+          x = clamp(sp.x - (w + extra) / 2, 4, W - 4 - w - extra);
+          y = sp.y - out - 6;
+          left = true;
+        }
       }
       ctx.textAlign = left ? 'left' : 'right';
       const bx = left ? x - 2 : x - w - 2;
