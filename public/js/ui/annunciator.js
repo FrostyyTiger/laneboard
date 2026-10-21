@@ -20,7 +20,7 @@ import { icon } from '../core/icons.js';
 import { act } from '../core/actions.js';
 import { alarms, ingest, store, subscribe } from '../core/store.js';
 import { currentRoute, navigate, onRoute } from '../core/router.js';
-import { TILES, TILE_META, ackRequest, tileFromParam, tileLabel, tileModel, tileParam } from '../core/alarm-tiles.js';
+import { TILES, TILE_META, ackRequest, tileFromParam, tileLabel, tileModel, tileParam, tileTone } from '../core/alarm-tiles.js';
 import { syncFlash } from './components.js';
 import { toast } from './toast.js';
 
@@ -31,7 +31,7 @@ const TITLE_LINES = 6;
 
 /**
  * One tile's view: {tile, label, n, p, state, pressed, aria, title}. `n` is ''
- * when clear; `p` is the lamp priority as a string, or '' when clear. Pure.
+ * when clear; `p` is the lamp priority as a string (tileTone), or '' when clear. Pure.
  */
 export function tileView(t, route = null) {
   const sel = tileFromParam(route?.s ?? null);
@@ -47,7 +47,7 @@ export function tileView(t, route = null) {
     tile: t.tile,
     label: t.tile,
     n: t.n ? String(t.n) : '',
-    p: t.p == null ? '' : String(t.p),
+    p: tileTone(t) == null ? '' : String(tileTone(t)),
     state: t.state,
     pressed: sel === t.tile,
     aria,

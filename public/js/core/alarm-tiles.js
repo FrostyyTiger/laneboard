@@ -39,6 +39,20 @@ export const TILE_META = Object.freeze({
   'CONF': Object.freeze({ name: 'Conflict', icon: 'conflict', noun: 'conflict' }),
 });
 
+/**
+ * Tiles that draw one fixed lamp priority whatever their members' priorities.
+ * DOWN is trouble (a builder down, stale or unhealthy), so it is always the
+ * trouble red: with its own worst priority it went red for builder-down (P1)
+ * and blue for builder-stale (P3) as a demo builder flapped (runs T38).
+ */
+export const TILE_FIXED_P = Object.freeze({ 'DOWN': 1 });
+
+/** The lamp priority a tile draws in: its fixed one, else its worst member's; null when clear. */
+export function tileTone(t) {
+  if (!t || t.p == null) return null;
+  return Object.hasOwn(TILE_FIXED_P, t.tile) ? TILE_FIXED_P[t.tile] : t.p;
+}
+
 /** The tile of an alarm kind, or null (own keys only, never an inherited member). */
 export function tileOf(kind) {
   return typeof kind === 'string' && Object.hasOwn(KIND_TO_TILE, kind) ? KIND_TO_TILE[kind] : null;

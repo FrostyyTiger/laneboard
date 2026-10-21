@@ -8,7 +8,7 @@ import path from 'node:path';
 
 import {
   TILES, KIND_TO_TILE, TILE_META, tileOf, alarmP, tileModel, tileLabel, tileParam, tileFromParam,
-  alarmKey, tileKeys, ackRequest,
+  alarmKey, tileKeys, ackRequest, tileTone, TILE_FIXED_P,
 } from '../public/js/core/alarm-tiles.js';
 import { tileView } from '../public/js/ui/annunciator.js';
 import {
@@ -320,4 +320,37 @@ test('emptyLine (T20): before the first event the line shows the latest session,
   const src = fs.readFileSync(path.join(ROOT, 'public/js/ui/tape.js'), 'utf8');
   assert.doesNotMatch(src, /no events yet/);
   assert.match(src, /peekModel\(store/);
+});
+
+// ---------------------------------------------------------------- T38: one hue for DOWN
+
+test('tileTone: DOWN draws the trouble red (p1) whatever its members, other tiles their worst', () => {
+  assert.deepEqual(TILE_FIXED_P, { DOWN: 1 });
+  for (const [kind, pr] of [['builder-down', 'P1'], ['health-crit', 'P2'], ['builder-stale', 'P3'], ['health-warn', 'P3'], ['reboot', 'P4']]) {
+    for (const acked of [false, true]) {
+      const t = byTile(tileModel([alarm(kind, pr, { acked })]), 'DOWN');
+      assert.equal(tileTone(t), 1, `${kind} ${pr} acked=${acked}`);
+      assert.equal(tileView(t).p, '1');
+      assert.equal(t.p, alarmP(pr), 'the model keeps the worst priority (order, labels)');
+    }
+  }
+  assert.equal(tileTone(byTile(tileModel([]), 'DOWN')), null, 'clear has no tone');
+  assert.equal(tileView(byTile(tileModel([]), 'DOWN')).p, '');
+  assert.equal(tileTone(byTile(tileModel([alarm('stuck', 'P3')]), 'STCK')), 3);
+});
+
+test('DOWN tile: the pulse never changes the fill, and p1 is the same red hue in both themes', () => {
+  const css = read('public/css/annunciator.css');
+  // unack and ack share one fill per priority, so the blink phase cannot pick another one.
+  assert.match(css, /\.ann-tile\[data-state="unack"\]\[data-p="1"\],\s*\.ann-tile\[data-state="ack"\]\[data-p="1"\]\s*\{\s*background:\s*var\(--p1\);\s*\}/);
+  // the blink runs on the ::after ring only; the tile itself has no animation.
+  assert.match(css, /\.ann-tile\[data-unack\]\s*\{\s*animation:\s*none;\s*\}/);
+  assert.match(css, /\.ann-tile\[data-unack\]::after\s*\{[^}]*animation:\s*lb-flash/);
+  const tokens = read('public/css/tokens.css');
+  const flash = /@keyframes lb-flash\s*\{([\s\S]*?)\n\}/.exec(tokens)[1];
+  assert.doesNotMatch(flash, /background|color|filter/, 'lb-flash changes opacity only');
+  const hues = [...tokens.matchAll(/--p1:\s*oklch\(\s*[\d.]+%\s+[\d.]+\s+([\d.]+)\s*\)/g)].map((m) => Number(m[1]));
+  assert.ok(hues.length >= 2, 'p1 is set in dark and light');
+  assert.equal(new Set(hues).size, 1, `one p1 hue across themes: ${hues}`);
+  assert.ok(hues[0] < 40 || hues[0] > 340, 'p1 is a red');
 });
