@@ -1,7 +1,8 @@
 // The terminal sheet (L4) and its quick-bar, moved from public/app.js (fleet
 // F1), plus the phone shell (fleet D6b, plan §4 2.4 "Phone <700"): the builder
 // chip strip in #shell-strip and the three-snap bottom sheet in #shell-sheet
-// with the MAP/LIST/INBOX segmented control.
+// with the MAP/LIST/INBOX segmented control, whose lit segment follows the
+// route (routeTab: Board and Runs are LIST; a view with no segment lights none).
 //
 // Pure at import time: no `document` until init() or a builder runs. The
 // models (snapFor, snapTops, stepSnap, stripModel, peekModel, sheetRows) are
@@ -163,6 +164,23 @@ export function normTab(t) {
   return SHEET_TABS.includes(t) ? t : 'map';
 }
 
+/** The views each segment stands for: Board and Runs are lists, so they fall under LIST. */
+const ROUTE_TAB = Object.freeze({ map: 'map', board: 'list', runs: 'list', inbox: 'inbox' });
+
+/** The segment of route view `view`, or null for a view no segment stands for (Morning, Audit, ...). Pure. */
+export function routeTab(view) {
+  return Object.hasOwn(ROUTE_TAB, view) ? ROUTE_TAB[view] : null;
+}
+
+/**
+ * The one lit segment: the tab the user picked on this view, else the
+ * route's own segment, else none (null). The lit segment follows the route
+ * like the desktop tabs do, so MAP is not lit on the Inbox. Pure.
+ */
+export function litTab(view, picked = null) {
+  return SHEET_TABS.includes(picked) ? picked : routeTab(view);
+}
+
 function codeOf(b, id) {
   return (typeof b?.code === 'string' && b.code) || deriveCode(id);
 }
@@ -291,7 +309,9 @@ export function sheetRows(s, tab, scope = null) {
 
 // ---------------------------------------------------------------- phone DOM
 
-const phone = { built: false, snap: 'peek', tab: 'map', parts: null, drag: null, queued: false };
+// `tab` is the sheet's content, `view` the route view it was last painted
+// for, `picked` a tab the user chose on that view (null: the route's own).
+const phone = { built: false, snap: 'peek', tab: 'map', view: null, picked: null, parts: null, drag: null, queued: false };
 
 function loadTab() {
   try { return normTab(localStorage.getItem('lb.sheet.tab')); } catch { return 'map'; }
@@ -435,8 +455,10 @@ function toggleMoreMenu(open) {
   p.more.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
-function pickTab(t) {
+/** A tap on segment `t`: its content shows and it is lit until the view changes. */
+export function pickTab(t) {
   phone.tab = normTab(t);
+  phone.picked = phone.tab;
   saveTab(phone.tab);
   if (phone.snap === 'peek') setSnap('half');
   renderPhone();
@@ -498,16 +520,22 @@ export function renderPhone() {
     root.hidden = true;
     return;
   }
-  if (!phone.built) buildSheet(root);
+  if (!phone.built || phone.parts?.root !== root) buildSheet(root);
   root.hidden = false;
   const route = currentRoute();
   const scope = route.b && route.b !== 'all' ? route.b : null;
   renderStrip(strip, stripModel(store, route), pickBuilder);
+  if (route.view !== phone.view) {
+    // A new view: its segment's content shows (a view with none keeps the last content).
+    phone.view = route.view;
+    phone.picked = null;
+    phone.tab = routeTab(route.view) ?? phone.tab;
+  }
+  const lit = litTab(route.view, phone.picked);
   const p = phone.parts;
   for (const t of SHEET_TABS) {
-    const on = t === phone.tab;
-    p.tabs[t].setAttribute('aria-selected', on ? 'true' : 'false');
-    p.tabs[t].tabIndex = on ? 0 : -1;
+    p.tabs[t].setAttribute('aria-selected', t === lit ? 'true' : 'false');
+    p.tabs[t].tabIndex = t === phone.tab ? 0 : -1;
   }
   p.body.setAttribute('aria-labelledby', `ps-tab-${phone.tab}`);
   const pk = peekModel(store, scope);

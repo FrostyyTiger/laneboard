@@ -8,7 +8,7 @@ import path from 'node:path';
 import { makeDocument, makeEl, texts } from './helpers/fakedom.mjs';
 import {
   FLICK_PX_MS, FULL_GAP_PX, L4_MODES, MORE_VIEWS, PEEK_PX, SHEET_TABS, SNAPS,
-  builderP, normTab, peekModel, renderPhone, renderStrip, sheetRow, sheetRows,
+  builderP, litTab, normTab, peekModel, pickTab, renderPhone, routeTab, renderStrip, sheetRow, sheetRows,
   snapFor, snapTops, stepSnap, stripModel, openSheet, closeSheet, setSnap, currentSnap,
 } from '../public/js/ui/sheet.js';
 import { store } from '../public/js/core/store.js';
@@ -286,6 +286,53 @@ test('renderPhone fills #shell-strip and #shell-sheet on a phone, hides the shee
     await withPage(['shell-strip', 'shell-sheet'], { width: 1400 }, (byId) => {
       renderPhone();
       assert.equal(byId.get('shell-sheet').hidden, true);
+    });
+  } finally {
+    Object.assign(store, saved);
+  }
+});
+
+test('routeTab / litTab: Board and Runs fall under LIST, a view with no segment lights none, a pick wins', () => {
+  assert.equal(routeTab('map'), 'map');
+  assert.equal(routeTab('board'), 'list');
+  assert.equal(routeTab('runs'), 'list');
+  assert.equal(routeTab('inbox'), 'inbox');
+  for (const v of ['morning', 'packages', 'credit', 'box', 'audit', 'constructor', undefined]) assert.equal(routeTab(v), null, String(v));
+  assert.equal(litTab('inbox'), 'inbox');
+  assert.equal(litTab('morning'), null);
+  assert.equal(litTab('inbox', 'map'), 'map');
+  assert.equal(litTab('runs', 'bogus'), 'list');
+});
+
+test('renderPhone lights the one segment of the current route (r10-designer across 3)', async () => {
+  const saved = { builders: store.builders, attention: store.attention, alarms: store.alarms };
+  const f = fleet();
+  store.builders = f.builders;
+  store.attention = f.attention;
+  store.alarms = f.alarms;
+  const lit = (sheet) => sheet.children[0].children[1].children.filter((t) => t.attrs['aria-selected'] === 'true').map((t) => t.textContent);
+  try {
+    await withPage(['shell-strip', 'shell-sheet'], { width: 390 }, (byId) => {
+      const sheet = byId.get('shell-sheet');
+      const want = { '#/': ['MAP'], '#/board': ['LIST'], '#/runs': ['LIST'], '#/runs?run=acme-search': ['LIST'], '#/inbox': ['INBOX'], '#/morning': [], '#/audit': [] };
+      for (const [hash, tabs] of Object.entries(want)) {
+        location.hash = hash;
+        renderPhone();
+        assert.deepEqual(lit(sheet), tabs, hash);
+      }
+      // The content follows the route too: the Inbox shows the alarms.
+      location.hash = '#/inbox';
+      renderPhone();
+      assert.ok(sheet.children[2].children.some((n) => n.textContent === 'Open INBOX'));
+      // A tap lights the picked segment on this view; the next view lights its own again.
+      pickTab('map');
+      assert.deepEqual(lit(sheet), ['MAP']);
+      location.hash = '#/inbox?sel=builder-a/web';
+      renderPhone();
+      assert.deepEqual(lit(sheet), ['MAP'], 'a selection on the same view keeps the pick');
+      location.hash = '#/board';
+      renderPhone();
+      assert.deepEqual(lit(sheet), ['LIST']);
     });
   } finally {
     Object.assign(store, saved);
