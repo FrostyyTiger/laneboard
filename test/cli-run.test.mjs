@@ -176,6 +176,7 @@ test('`run <sub> --help` prints that subcommand\'s usage, exit 0, and writes not
   const cases = [
     [['start', '--help'], /^usage: laneboard run start \[--goal g\]/m],
     [['round', '-h'], /^usage: laneboard run round --n N --end /m],
+    [['round', '--help'], /^usage: laneboard run round --n N \[--role r\].*eval "\$\(laneboard run round --n N/m],
     [['score', '--run', 'r1', '--help'], /^usage: laneboard run score --name m --value x/m],
     [['needs', '--kind', 'wait', '--help'], /^usage: laneboard run needs /m],
     [['ack', '0', '--help'], /^usage: laneboard run ack \[<run>\] <ref>.*already acked: nothing sent, exit 0/m],

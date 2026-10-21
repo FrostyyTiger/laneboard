@@ -158,3 +158,10 @@ test('docs/runs.md says which cost a stopped run prints: the cost events, else t
 test('docs/runs.md says where a score without --n lands before any round (night 4 T36)', () => {
   assert.match(doc, /Before any round they land on round 0: the score gets `n: 0`, and the run\s+shows `round: null` in `GET \/api\/runs` until its first `round\.start`\./);
 });
+
+test('the helper CLI table says a round start is meant for eval (night 4 T40)', () => {
+  const row = doc.split('\n').find((l) => l.startsWith('| `round` |'));
+  assert.ok(row, 'no `round` row');
+  assert.match(row, /`eval "\$\(laneboard run round --n 1 [^`]*\)"`/);
+  assert.match(row, /export LANEBOARD_RUN=<run>\/<n>/);
+});

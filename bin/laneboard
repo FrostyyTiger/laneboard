@@ -853,7 +853,7 @@ const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 
 const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
   start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
-  round    --n N [--role r] [--task t]            prints: export LANEBOARD_RUN=<run>/<n>
+  round    --n N [--role r] [--task t]            prints export LANEBOARD_RUN=<run>/<n>, meant for: eval "$(laneboard run round --n N …)"
   round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
   score    --name m --value x [--better higher|lower] [--n N] [--max x]
   needs    [--kind decision|wait|…] [--text t] [--link url] [--n N]
