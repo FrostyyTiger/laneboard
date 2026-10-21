@@ -498,6 +498,9 @@ function compact(n) {
   return String(v);
 }
 
+const CREDIT_SAMPLER_HINT =
+  'the 5h/7d windows come from the status line; see docs/install.md (deploy/install-claude.sh)';
+
 async function cmdCredit() {
   const c = await api('/api/credit');
   boardLine();
@@ -507,7 +510,10 @@ async function cmdCredit() {
     : `${label}   -`);
   process.stdout.write(`${C.bold}Credit${C.off}   ${g(rl.fiveHour, '5h')}   ${g(rl.sevenDay, '7d')}\n`);
   const s = c.sampler || {};
-  process.stdout.write(`${C.dim}sampler: ${s.rows || 0} samples, last ${s.lastSampleAt ? ago(s.lastSampleAt) : 'never'}${C.off}\n\n`);
+  process.stdout.write(`${C.dim}sampler: ${s.rows || 0} samples, last ${s.lastSampleAt ? ago(s.lastSampleAt) : 'never'}${C.off}\n`);
+  // Zero samples is a missing status line far more often than a quiet box: say what feeds it.
+  if (!s.rows) process.stdout.write(`${C.dim}${CREDIT_SAMPLER_HINT}${C.off}\n`);
+  process.stdout.write('\n');
   const rows = c.lanes
     .filter((l) => (l.allTime ?? 0) > 0.005 || l.tonight > 0.005 || l.week > 0.005)
     .map((l) => [

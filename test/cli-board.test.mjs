@@ -101,3 +101,37 @@ test('ls, morning and credit print `board: <url>` on stderr, stdout keeps only t
   assert.doesNotMatch(down.stderr, /^board:/m);
   assert.match(down.stderr, /cannot reach the laneboard at http:\/\/127\.0\.0\.1:9/);
 });
+
+// T49: zero samples says what feeds the sampler and where that is documented;
+// a sampled board prints no hint.
+test('credit with zero samples points at the status line and docs/install.md, a sampled board does not', async (t) => {
+  let sampler = { rows: 0 };
+  const server = http.createServer((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({
+      rateLimits: {}, sampler, lanes: [], label: 'tonight',
+      totals: { tonight: 0, day: 0, week: 0, allTime: 0 },
+    }));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const env = envFor(t, { LANEBOARD_URL: `http://127.0.0.1:${server.address().port}` });
+
+  const empty = await run(['credit'], env);
+  assert.equal(empty.code, 0, empty.stderr);
+  assert.match(empty.stdout, /sampler: 0 samples, last never\nthe 5h\/7d windows come from the status line; see docs\/install\.md/);
+  for (const line of empty.stdout.split('\n')) assert.ok(line.length <= 100, line);
+
+  sampler = { rows: 42, lastSampleAt: Date.now() - 60000 };
+  const sampled = await run(['credit'], env);
+  assert.equal(sampled.code, 0, sampled.stderr);
+  assert.match(sampled.stdout, /sampler: 42 samples/);
+  assert.doesNotMatch(sampled.stdout, /status line|docs\/install\.md/);
+});
+
+test('docs/install.md says the rate-limit windows come only from the status line', () => {
+  const doc = fs.readFileSync(fileURLToPath(new URL('../docs/install.md', import.meta.url)), 'utf8');
+  const section = doc.slice(doc.indexOf('### The hooks and the status line'), doc.indexOf('## The config file'));
+  assert.match(section.replace(/\s+/g, ' '), /rate-limit windows on the Credit view and in `laneboard credit` come only from this status line/);
+  assert.match(section, /sampler: 0 samples, last never/);
+});
