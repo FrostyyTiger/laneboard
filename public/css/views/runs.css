@@ -5,7 +5,8 @@
    get a hue, and each always carries its shape or its word.
    =========================================================================== */
 
-#view-runs { overflow: auto; padding: var(--sp-2); }
+/* The bottom padding is shell.css's (it clears the minimap). */
+#view-runs { overflow: auto; padding-top: var(--sp-2); padding-inline: var(--sp-2); }
 
 .rn-list { list-style: none; margin: 0; padding: 0; }
 

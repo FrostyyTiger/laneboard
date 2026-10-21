@@ -96,6 +96,7 @@
   --insp-w: 360px;
   --tape-h: 28px;
   --tape-h-open: 200px;
+  --pip-clear: 0px;       /* room the minimap covers; views/map.js sets it while it shows */
   --icon-s: 14px;
   --icon-m: 16px;
   --icon-l: 20px;

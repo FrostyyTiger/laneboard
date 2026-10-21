@@ -124,11 +124,13 @@ export function splitState(stored, width) {
 
 /**
  * Where the PiP sits (CSS px from the right and the bottom of the window):
- * clear of the inspector when it is open (`inspW`), above the tape. Pure.
+ * clear of the inspector when it is open (`inspW`), above the tape. `clear`
+ * is the height it covers at the bottom of the main pane (which ends at the
+ * tape) plus a gap: other views pad their bottom by it (shell.css). Pure.
  */
 export function pipOffsets({ inspW = 0, gap = 12, tapeH = 28 } = {}) {
   const w = Number.isFinite(inspW) && inspW > 0 ? inspW : 0;
-  return { right: Math.round(w + gap), bottom: Math.round(tapeH + gap) };
+  return { right: Math.round(w + gap), bottom: Math.round(tapeH + gap), clear: PIP_SIZE + 2 * gap };
 }
 
 // ---------------------------------------------------------------- state
@@ -297,6 +299,7 @@ function syncPip() {
   const want = pipVisible({ view: store.view, width: width(), hidden: docHidden(), hasMap: Boolean(page.api) });
   if (!want) {
     if (page.pip) { page.pip.mini.stop(); page.pip.canvas.hidden = true; }
+    document.documentElement.style.removeProperty('--pip-clear');
     // Another view, a wide window, no map yet: load it so the PiP has a scene.
     if (!page.api && store.view !== 'map' && width() >= 700 && !docHidden() && page.inited) ensureMap();
     return;
@@ -327,6 +330,7 @@ function syncPip() {
   page.pip.canvas.style.right = `calc(${off.right}px + env(safe-area-inset-right, 0px))`;
   page.pip.canvas.style.bottom = `calc(${off.bottom}px + env(safe-area-inset-bottom, 0px))`;
   page.pip.canvas.hidden = false;
+  document.documentElement.style.setProperty('--pip-clear', `${off.clear}px`);
   page.pip.mini.start();
 }
 

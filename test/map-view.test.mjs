@@ -6,6 +6,7 @@
 // visibility (plus a draw against a fake canvas).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 
 import mapView, {
   laneActions, actionArgs, actionPulse, mapEventFor, routePlan, splitState, pipOffsets, getMapView, mapActions, nodeActions,
@@ -87,9 +88,33 @@ test('splitState: lb.split = "1" wants split; below 900px it is refused and the 
 });
 
 test('pipOffsets: above the tape, clear of an open inspector', () => {
-  assert.deepEqual(pipOffsets({}), { right: 12, bottom: 40 });
-  assert.deepEqual(pipOffsets({ inspW: 360, tapeH: 28 }), { right: 372, bottom: 40 });
-  assert.deepEqual(pipOffsets({ inspW: NaN }), { right: 12, bottom: 40 });
+  assert.deepEqual(pipOffsets({}), { right: 12, bottom: 40, clear: PIP_SIZE + 24 });
+  assert.deepEqual(pipOffsets({ inspW: 360, tapeH: 28 }), { right: 372, bottom: 40, clear: PIP_SIZE + 24 });
+  assert.deepEqual(pipOffsets({ inspW: NaN }), { right: 12, bottom: 40, clear: PIP_SIZE + 24 });
+});
+
+// The PiP covered the end of other views (run page artifacts at 1440, shots r8-T3): every view
+// that scrolls pads its bottom by the PiP's `clear`, so its last row scrolls out from under it.
+test('the PiP leaves room: views pad their bottom by --pip-clear, the map does not', () => {
+  const css = readFileSync(new URL('../public/css/shell.css', import.meta.url), 'utf8');
+  const rule = css.match(/([^{}]*)\{[^{}]*var\(--pip-clear[^{}]*\}/);
+  assert.ok(rule, 'shell.css has a rule that uses --pip-clear');
+  assert.match(rule[0], /padding-bottom:[^;]*var\(--pip-clear, 0px\)/);
+  assert.match(rule[1], /\.shell-main > \.view:not\(\.map-view\)/);
+  assert.match(rule[1], /\.shell-main > \.layout/);
+  assert.match(css, /@media \(min-width: 700px\) \{\s*\.shell-main > \.view:not\(\.map-view\)/, 'only where the PiP shows: phones keep the tab bar room');
+  assert.equal(PIP_MIN_VIEWPORT, 700);
+  // A view's own `#view-x { padding: … }` outranks that rule: views set top and sides only.
+  const dir = new URL('../public/css/', import.meta.url);
+  const files = ['', 'views/'].flatMap((d) => readdirSync(new URL(d, dir)).filter((f) => f.endsWith('.css')).map((f) => d + f));
+  for (const f of files) {
+    for (const [, sel, body] of readFileSync(new URL(f, dir), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*#view-[^{}]*)\{([^{}]*)\}/g)) {
+      assert.doesNotMatch(body, /(^|[;\s])padding(-bottom|-block(-end)?)?\s*:/, `${f}: ${sel.trim()} sets the bottom padding`);
+    }
+  }
+  const js = readFileSync(new URL('../public/js/views/map.js', import.meta.url), 'utf8');
+  assert.match(js, /setProperty\('--pip-clear'/, 'syncPip sets the clearance while the PiP shows');
+  assert.match(js, /removeProperty\('--pip-clear'\)/, 'and removes it when the PiP hides');
 });
 
 // --- inline actions (2.8) ---------------------------------------------------------
