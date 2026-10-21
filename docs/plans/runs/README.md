@@ -172,6 +172,29 @@ through the run protocol (A1), so from the night A1 lands, **the run shows up in
 Not tonight: the design pick (the owner chooses from night 1's directions), Playwright, the fenced
 files on the night-1 owner list.
 
+### Night 3 (runs everywhere, Find, docker; a day run on 2026-10-21)
+New tonight: the VM has a headless Chromium and `loop/shoot.mjs`, so every `[ui]` task is looked
+at in both themes and at phone width before it is marked done, and the designer reviews those
+screenshots (no Playwright dependency in the repo; that stays the owner's call).
+1. **Look first:** screenshot the Map with the Drift and Reach overlays on the demo fleet (give the
+   demo a declared-but-unseen node, an undeclared one and a small policy file with invented names,
+   so both overlays have something to draw) and the Runs view; fix what is broken.
+2. A3 **Inbox:** a run's open `needs` and its PRs ready for review appear next to approvals, with a
+   link to the run page; acknowledging one works like the other Inbox items (no new fenced route).
+3. A3 **Morning:** one block per run that ran in the window: rounds, score start → end, stop reason,
+   PRs, cost and usage.
+4. A3 **Stuck:** run rules next to the existing ones: no score change in N rounds, the same task
+   failed twice, rounds getting shorter, deadline near with no report; thresholds in `runs` config.
+5. A3 **Map:** a run is a node with a progress ring (tasks or rounds), attached to the machine its
+   run file lives on; a throwaway VM from a feed appears with it and leaves when it is gone.
+6. B2 **Find** (`⌘K`) reaches discovered nodes, services and ports, and flies the Map to them.
+7. B1 **`docker` feeder** (§8 Q3): the local socket, read-only, containers with health and ports;
+   recorded fixtures with invented names.
+8. If time is left: the night-2 stranger findings that are not fenced (README sentence on a busy
+   port, a route-per-view table in the docs), then B2 **Time** (a scrubber over 24 h of feed
+   snapshots).
+Not tonight: the fenced items and taste calls on the night-1 and night-2 owner lists.
+
 ## 8. Decisions (2026-10-20)
 - **Q1 Look:** polish the current control-room style (§5). No new direction.
 - **Q2 Order:** Runs (Part A) on night 1, Map 2 (Part B) on night 2.

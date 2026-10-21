@@ -4,22 +4,22 @@
 # throwaway VM:
 #
 #   bash docs/plans/runs/loop/run.sh --name runs-n1 --repo ~/code/laneboard-work \
-#     --base plan/runs --deadline "2026-10-21 07:00" [--max-rounds 15] [--pause-5h 90] [--stop-7d 85] [--tz Europe/Zurich]
+#     --base plan/runs --deadline "2026-10-21 07:00" [--pr-base main] [--max-rounds 15] [--pause-5h 90] [--stop-7d 85] [--tz Europe/Zurich]
 #
 # Stop it gently with `touch ~/runs/<name>/STOP` (it finishes the round and writes the report).
 # Everything it knows lives in ~/runs/<name>/: run.jsonl (the run protocol, §3 A1), log, rounds/.
 set -uo pipefail
 
-NAME="" REPO="" BASE="plan/runs" NIGHT="Night 1" DEADLINE="" MAX_ROUNDS=40 PAUSE_5H=90 STOP_7D=85 TZ_RUN="Europe/Zurich"
+NAME="" REPO="" BASE="plan/runs" PR_BASE="main" NIGHT="Night 1" DEADLINE="" MAX_ROUNDS=40 PAUSE_5H=90 STOP_7D=85 TZ_RUN="Europe/Zurich"
 while [ $# -gt 0 ]; do case $1 in
-  --name) NAME=$2; shift 2;; --repo) REPO=$2; shift 2;; --base) BASE=$2; shift 2;;
+  --name) NAME=$2; shift 2;; --repo) REPO=$2; shift 2;; --base) BASE=$2; shift 2;; --pr-base) PR_BASE=$2; shift 2;;
   --deadline) DEADLINE=$2; shift 2;; --night) NIGHT=$2; shift 2;; --max-rounds) MAX_ROUNDS=$2; shift 2;;
   --pause-5h) PAUSE_5H=$2; shift 2;; --stop-7d) STOP_7D=$2; shift 2;; --tz) TZ_RUN=$2; shift 2;; *) echo "unknown $1"; exit 1;; esac; done
 [ -n "$NAME" ] && [ -n "$REPO" ] && [ -n "$DEADLINE" ] || { echo "--name, --repo and --deadline are required"; exit 1; }
 
 PLAN_DIR=docs/plans/runs
 BRANCH="run/$NAME"
-RUN_DIR="$HOME/runs/$NAME"
+RUN_DIR="$HOME/runs/$NAME"; export RUN_DIR   # rounds put screenshots in $RUN_DIR/shots
 MODEL_BUILD=${MODEL_BUILD:-claude-opus-5-5}     # planner, builder, fix, designer, final
 MODEL_REVIEW=${MODEL_REVIEW:-claude-sonnet-5-5} # stranger, triage, operator
 ROUND_SECS=${ROUND_SECS:-2700}                  # 45 min per round, then it is stopped
@@ -84,6 +84,7 @@ count() { local c; c=$(grep -cE "$1" "$PLAN_DIR/PROGRESS.md" 2>/dev/null); echo 
 tasks_done() { count '^- \[x\] T[0-9]'; }
 questions_open() { count '^- \[ \] Q[0-9]'; }
 tasks_open() { count '^- \[ \] T[0-9]'; }
+next_task() { grep -m1 -oE '^- \[ \] T[0-9]+' "$PLAN_DIR/PROGRESS.md" 2>/dev/null | grep -oE 'T[0-9]+'; }
 
 SPENT=0 U5=0 R5=0 U7=0 OVERAGE=0 HARD=0
 # round <n> <role> <model>: one fresh session; returns 0 done, 2 rate-limited, 1 failed
@@ -91,7 +92,7 @@ round() {
   local n=$1 role=$2 model=$3 out="$RUN_DIR/rounds/$(printf %02d "$1")-$2.jsonl"
   local prompt; prompt="$(cat "$L/prompts/common.md" "$L/prompts/$role.md")
 
-RUN: $NAME   NIGHT: $NIGHT (README §7)   ROUND: $n   ROLE: $role
+RUN: $NAME   NIGHT: $NIGHT (README §7)   ROUND: $n   ROLE: $role   RUN_DIR: $RUN_DIR
 NOW ($TZ_RUN): $(TZ=$TZ_RUN date '+%F %H:%M')   DEADLINE: $DEADLINE
 TESTS AFTER THE LAST ROUND: pass $TESTS_PASS, fail $TESTS_FAIL
 $( [ "$TESTS_OK" = 0 ] && printf 'FAILING TESTS (tail):\n%s\n' "$TEST_TAIL" )
@@ -104,7 +105,8 @@ $( [ -n "${STOP_REASON:-}" ] && echo "STOP REASON: $STOP_REASON   OWNER NOTES: $
     research) tools=(--restricted --strict-mcp-config --tools "Read,Write,Edit,Glob,Grep,WebSearch,WebFetch") ;;
     triage) tools=(--restricted --strict-mcp-config --tools "Read,Write,Edit,Glob,Grep") ;;
   esac
-  ev round.start n="$n" role="$role"
+  local task=""; case $role in builder|fix) task=$(next_task);; esac
+  ev round.start n="$n" role="$role" ${task:+task="$task"}
   LANEBOARD_RUN="$NAME/$n" timeout "$ROUND_SECS" claude -p "$prompt" --model "$model" \
     --permission-mode auto "${tools[@]}" \
     --output-format stream-json --verbose > "$out" 2>&1
@@ -149,7 +151,7 @@ PY
 push() {
   git push -q -u origin "$BRANCH" 2>>"$RUN_DIR/log" || { log "push failed"; return; }
   if [ ! -f "$RUN_DIR/pr" ]; then
-    gh pr create --draft --base main --head "$BRANCH" --title "Runs: $NAME (agent loop)" \
+    gh pr create --draft --base "$PR_BASE" --head "$BRANCH" --title "Runs: $NAME (agent loop)" \
       --body-file "$L/pr-body.md" > "$RUN_DIR/pr" 2>>"$RUN_DIR/log" \
       && ev artifact kind=pr url="$(cat "$RUN_DIR/pr")" || rm -f "$RUN_DIR/pr"
   fi
@@ -190,7 +192,10 @@ if [ ! -f "$PLAN_DIR/PROGRESS.md" ]; then
   push
 fi
 
-STOP="" since_review=0 stale=0 fixes=0 researched=0 since_research=9
+STOP="" since_review=0 stale=0 fixes=0 researched=0 since_research=9 designed=0 since_design=9
+# screenshots the builders took since the last designer review (README §7: after UI tasks)
+new_shots() { find "$RUN_DIR/shots" -name '*.png' ${LAST_DESIGN:+-newer "$LAST_DESIGN"} 2>/dev/null | head -1; }
+LAST_DESIGN=""
 while :; do
   [ -f "$RUN_DIR/STOP" ] && { STOP=human; break; }
   [ "$(now)" -ge "$FINAL_S" ] && { STOP=deadline; break; }
@@ -210,7 +215,7 @@ while :; do
     [ $fixes -gt 2 ] && { STOP=no-progress; log "tests red after 2 fix rounds"; break; }
   elif [ "$(questions_open)" -gt 0 ] && [ $researched -lt "$RESEARCH_MAX" ] && [ $since_research -ge 2 ]; then role=research
   elif [ $since_review -ge "$REVIEW_EVERY" ]; then role=review-stranger
-  elif ls "$PLAN_DIR"/design/*.png >/dev/null 2>&1 && [ ! -f "$RUN_DIR/designer-done" ]; then role=review-designer
+  elif [ $designed -lt 3 ] && [ $since_design -ge 3 ] && [ -n "$(new_shots)" ]; then role=review-designer
   else role=builder; fi
 
   model=$MODEL_BUILD; case $role in review-stranger|triage|review-operator|research) model=$MODEL_REVIEW;; esac
@@ -221,13 +226,13 @@ while :; do
   check
   [ "$TESTS_OK" = 1 ] && fixes=0
   case $role in
-    builder) since_review=$((since_review + 1))
+    builder) since_review=$((since_review + 1)); since_design=$((since_design + 1))
       if [ "$(tasks_done)" -gt "$done_before" ]; then stale=0; ev round.end n=$n outcome=kept commit="$(git rev-parse --short HEAD)"
       else stale=$((stale + 1)); ev round.end n=$n outcome=no-task-done; fi
       [ $stale -ge 2 ] && { STOP=no-progress; push; break; } ;;
     research) researched=$((researched + 1)); since_research=0
       ev round.end n=$n outcome=researched open="$(questions_open)" ;;
-    review-*) [ $role = review-designer ] && touch "$RUN_DIR/designer-done"
+    review-*) [ $role = review-designer ] && { touch "$RUN_DIR/designer-done"; LAST_DESIGN="$RUN_DIR/designer-done"; designed=$((designed + 1)); since_design=0; }
       [ $role = review-stranger ] && since_review=0
       ev round.end n=$n outcome=reviewed
       n=$((n + 1)); run_role $n triage "$MODEL_REVIEW"; ev round.end n=$n outcome=triaged ;;
@@ -238,11 +243,24 @@ while :; do
 done
 
 log "stopping: $STOP"
+# Say so at once: the wrap-up rounds below (operator review, report) happen in a stopped run.
+ev run.stop reason="$STOP" rounds="$n" usd="$SPENT" wrapup=true
 # The operator review and the morning report run whatever stopped the loop (unless time is gone).
 if [ "$(now)" -lt "$DEADLINE_S" ] && [ "$STOP" != error ]; then
   n=$((n + 1)); run_role $n review-operator "$MODEL_REVIEW"
   STOP_REASON=$STOP; n=$((n + 1)); run_role $n final "$MODEL_BUILD"
   check; push
 fi
+# The report's "Needs you" list becomes needs events, so the Runs view and the Inbox show it.
+PR_URL=$(cat "$RUN_DIR/pr" 2>/dev/null)
+python3 - "$PLAN_DIR/PROGRESS.md" <<'PY' | while IFS= read -r line; do ev needs kind=owner text="$line" ${PR_URL:+link="$PR_URL"}; done
+import re, sys
+s = open(sys.argv[1], errors="replace").read()
+m = re.search(r"\*\*Needs you[^\n]*\n(.*?)(?:\n\*\*[A-Z]|\n## |\Z)", s, re.S)
+for item in re.findall(r"^\d+\.\s+(.+?)(?=^\d+\.\s|\Z)", m.group(1) if m else "", re.S | re.M):
+    head = re.match(r"\*\*(.+?)\*\*", item.strip())
+    text = head.group(1) if head else " ".join(item.split())[:200]
+    print(text.replace("\n", " ")[:300])
+PY
 ev run.stop reason="$STOP" rounds="$n" usd="$SPENT"
 log "end: $STOP after $n rounds, 5 h $U5 %, 7 d $U7 %, notional \$$SPENT (info only)"
