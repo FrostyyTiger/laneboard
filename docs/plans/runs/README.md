@@ -198,9 +198,19 @@ screenshots (no Playwright dependency in the repo; that stays the owner's call).
    snapshots).
 Not tonight: the fenced items and taste calls on the night-1 and night-2 owner lists.
 
+### Night 4 (draft; the rest of the list after the PR #12 review)
+1. **Apply the Night direction** (§8 Q6): `public/css/tokens.css` v2 from the `night` direction of
+   night 1 (shots in night 3's `shots/r11-designer/night/`), and a short `docs/design.md` that the
+   designer reviewer judges against from then on. Night's dark theme as it is; its **light theme is
+   the weak one** and is brought to the same finish (contrast, tile colors, Board cards). Every
+   view shot in both themes at 1440 and 390 before and after; the designer compares.
+2. The open night-3 tasks T46-T63 (CLI and docs gaps, four UI fixes; T52 `pause --all` first).
+
 ## 8. Decisions (2026-10-20)
 - **Q1 Look:** polish the current control-room style (§5). No new direction.
 - **Q2 Order:** Runs (Part A) on night 1, Map 2 (Part B) on night 2.
 - **Q3 Feeders:** `tailscale` + `proxmox` first, then `docker`.
 - **Q4 Reach overlay:** yes, opt-in by config only (§4 B2).
 - **Q5 Demo:** publish on GitHub Pages once it is ready.
+- **Q6 Design direction (2026-10-21):** **Night**, picked from the four directions shot on night 3
+  (current, refined, product, night). Its light theme needs lifting to match its dark one.
