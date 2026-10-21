@@ -44,7 +44,7 @@ import {
   normalize, foldState, autoFold, visibleLinks, neighbours as neighboursOf, rollup, scopeAlpha,
   idForSel, selForId, SEVERITY, FOLD_KEY, AUTO_UNFOLD_ZOOM,
 } from './model.js';
-import { layout, RINGS, SIZE, polar } from './layout.js';
+import { layout, RINGS, SIZE, polar, runRingR } from './layout.js';
 import { OVERLAY_KEY, validOverlay, availableOverlays, reachScope, nodeStyle, SHAPE_CODE, TONE_CODE, driftText, driftCounts, runFacts } from './overlays.js';
 import { createRenderer, readPalette } from './render.js';
 import {
@@ -818,7 +818,10 @@ export function createMap(root, opts = {}) {
         if (!n || n.virtual || c.leaving || c.a < 0.3) continue;
         const sp = toScreen(c);
         if (sp.x < -40 || sp.y < -40 || sp.x > W + 40 || sp.y > H + 40) continue;
-        items.push({ id, x: sp.x, y: sp.y, r: hitRadius(SIZE[n.kind] ?? 5, s) });
+        let r = hitRadius(SIZE[n.kind] ?? 5, s);
+        // A run is as big as its progress ring: a tap on the ring hits it.
+        if (n.kind === 'run') r = Math.max(r, runRingR(SIZE.run * Math.max(0.8, Math.min(1.6, s))) + 2);
+        items.push({ id, x: sp.x, y: sp.y, r });
       }
       grid.rebuild(items, frameNo);
     }
@@ -906,7 +909,7 @@ export function createMap(root, opts = {}) {
     }
     if (!raf) raf = requestAnimationFrame(frame);
   }
-  const onVisible = () => { lastFrame = 0; startClock(); kick(); };
+  const onVisible = () => { lastFrame = 0; kick(); };
   document.addEventListener('visibilitychange', onVisible);
 
   function frame(now) {
@@ -1105,22 +1108,11 @@ export function createMap(root, opts = {}) {
     const rs = ov === 'reach' ? reachScope(vreach, selected) : null;
     const text = renderer.readout({
       zoom: cam.z, scope: b, drawn: drawnCount, total: model.nodes.length, overlay: ov,
-      now: Date.now(), compact: W < 700, p95: perfOn ? p95() : null,
+      compact: W < 700, p95: perfOn ? p95() : null,
       drift: ov === 'drift' ? driftCounts(model.nodes) : null,
       reach: rs ? { links: rs.links, touches: selected ? rs.touched.size : null, unresolved: model.reach?.unresolved ?? 0 } : null,
     });
     if (text !== readoutText) { readoutText = text; readoutEl.textContent = text; }
-  }
-
-  // The UTC clock ticks once a second, only while the map can be seen.
-  let clockTimer = 0;
-  function startClock() {
-    if (clockTimer || pageHidden()) return;
-    clockTimer = setInterval(() => {
-      if (pageHidden()) { clearInterval(clockTimer); clockTimer = 0; return; }
-      if (root.isConnected === false || root.offsetParent === null) return;
-      renderReadout();
-    }, 1000);
   }
 
   // Theme or token changes repaint with the new colours: §4's shell
@@ -1168,7 +1160,6 @@ export function createMap(root, opts = {}) {
 
   root.dataset.mapMode = mode;
   resize();
-  startClock();
 
   return {
     update,
@@ -1202,7 +1193,6 @@ export function createMap(root, opts = {}) {
     selected: () => (selected ? selForId(selected) : null),
     destroy: () => {
       if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf);
-      clearInterval(clockTimer);
       clearTimeout(settleTimer);
       clearTimeout(panelOutTimer);
       unbind();

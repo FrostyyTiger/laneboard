@@ -155,6 +155,8 @@
   --line-weak: oklch(100% 0 0 / 0.09);
   --line: oklch(100% 0 0 / 0.17);
   --line-strong: oklch(100% 0 0 / 0.32);
+  /* The Map's topology edges (tree branches, grey links) at full weight. */
+  --map-edge-alpha: 1;
 
   --text-1: oklch(96% 0.002 250);
   --text-2: oklch(78% 0.004 250);
@@ -192,6 +194,9 @@
   --line-weak: oklch(0% 0 0 / 0.1);
   --line: oklch(0% 0 0 / 0.2);
   --line-strong: oklch(0% 0 0 / 0.4);
+  /* One step dimmer on light (runs night 4 T19): on a pale canvas the edges
+     otherwise weigh as much as the ring guides and the label ticks. */
+  --map-edge-alpha: 0.6;
 
   --text-1: oklch(15% 0.004 250);
   --text-2: oklch(32% 0.004 250);

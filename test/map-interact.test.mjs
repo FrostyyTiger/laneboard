@@ -328,7 +328,7 @@ test('createMap builds the readout and no HUD panels (needs, ticker, legend, sum
   map.update(fleetModel());
   dom.flush();
   const text = byClass(root, 'map-readout').textContent;
-  assert.match(text, /^Z 1\.00×  SCOPE ALL  N \d+\/10  OVL STATUS  \d\d:\d\d:\d\dZ$/);
+  assert.match(text, /^Z 1\.00×  SCOPE ALL  N \d+\/10  OVL STATUS$/);
 });
 
 test('the map registers no keydown handler of its own (the shell owns keys, §4 D8)', async (t) => {

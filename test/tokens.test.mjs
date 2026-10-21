@@ -68,6 +68,7 @@ const THEMED = [
   '--accent', '--accent-weak',
   '--p1', '--p2', '--p3', '--ok',
   '--p1-weak', '--p2-weak', '--p3-weak', '--p1-line', '--p2-line', '--p3-line',
+  '--map-edge-alpha',
 ];
 const INVARIANT = [
   '--font-mono', '--font-label', '--font-ui', '--ls-label',
@@ -360,4 +361,10 @@ test('the server hands the fonts out as font/woff2 from public/vendor', { timeou
   } finally {
     await b.stop();
   }
+});
+
+test('the Map\'s topology edges are one step dimmer on light than on dark (runs night 4 T19)', () => {
+  const dark = Number(DARK.get('--map-edge-alpha')), light = Number(LIGHT.get('--map-edge-alpha'));
+  assert.equal(dark, 1);
+  assert.ok(light > 0 && light < dark, `light ${light} < dark ${dark}`);
 });

@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createRenderer } from '../public/js/views/map/render.js';
-import { layout, RUN_RING } from '../public/js/views/map/layout.js';
+import { layout, RUN_RING, RUN_RING_MIN, runRingR } from '../public/js/views/map/layout.js';
 import { runRing, runRound, runHref, runFacts } from '../public/js/views/map/overlays.js';
 import { runInspectorModel, runNodeFor, modelFor, renderOverview, renderHeader } from '../public/js/ui/inspector.js';
 import { makeDocument, makeEl, texts } from './helpers/fakedom.mjs';
@@ -94,6 +94,7 @@ test('the ring: a full grey track and a progress arc from twelve o\'clock at 0, 
     assert.equal(track.path[0][5] - track.path[0][4], TAU, 'the track goes all round');
     const r = track.path[0][3];
     assert.ok(r >= RUN_RING, 'the ring sits outside the centre mark');
+    assert.ok(r >= 14, `the ring is at least 14px out (T19), got ${r}`);
     const prog = arcs.filter((o) => o.op === 'stroke' && o.strokeStyle === 'T2' && o.path[0][3] === r);
     if (sweep === null) assert.equal(prog.length, 0, 'no arc at 0');
     else {
@@ -152,20 +153,21 @@ test('runRing / runFacts: tones, progress clamped, the stuck tone wins over a ru
   assert.equal(runFacts({ kind: 'lane' }), null);
 });
 
-test('labels: the run name in the machine label face, its round in mono beside it, clear of the ring', () => {
+test('labels: the run name in the label face, muted (t3), its round in mono beside it, clear of the ring', () => {
   const nodes = [CORE, run('acme-docs', { round: 7, maxRounds: 10 })];
   const ctx = fakeCtx();
   const scene = sceneOf(nodes);
   createRenderer(ctx, PAL).drawLabels(scene);
   const name = ctx.ops.find((o) => o.op === 'fillText' && o.text === 'ACME-DOCS');
   assert.ok(name, 'caps name');
-  assert.match(name.font, /600 12px LABEL/);
+  assert.match(name.font, /600 11px LABEL/);
+  assert.equal(name.fillStyle, 'T3', 'muted next to its machine (T19)');
   const round = ctx.ops.find((o) => o.op === 'fillText' && o.text === '7/10');
   assert.ok(round, 'the round');
   assert.match(round.font, /MONO/);
   const sp = scene.toScreen(scene.nodes.get('run:acme-docs'));
   const d = Math.hypot(name.x - sp.x, name.y - sp.y);
-  assert.ok(d >= 5 + RUN_RING + 2, `label ${d.toFixed(1)}px out, past the ring`);
+  assert.ok(d >= RUN_RING_MIN + 2, `label ${d.toFixed(1)}px out, past the ring`);
   const nameW = 'ACME-DOCS'.length * 6;
   if (name.align === 'left') assert.ok(round.x > name.x + nameW, 'round after the name');
   else assert.ok(round.x < name.x - nameW, 'round before a right-aligned name');
@@ -213,5 +215,19 @@ test('a label that would cross the right edge moves over its node, inside the ca
     const right = name.align === 'left' ? name.x + 22 * 6 : name.x;
     assert.ok(right <= W, `inside ${W}: ends at ${right}`);
     if (W < 1600 && name.align === 'left') assert.ok(name.y < sp.y && name.x < sp.x, 'over the node, starting left of it');
+  }
+});
+
+test('the run ring is at least 14px in radius at every node scale, and grows past it when zoomed (T19)', () => {
+  assert.equal(RUN_RING_MIN, 14);
+  for (const r of [0, 4, 5, 8]) assert.ok(runRingR(r) >= 14, `r ${r}`);
+  assert.equal(runRingR(12), 12 + RUN_RING);
+  for (const s of [0.8, 1, 1.6]) {
+    const nodes = [CORE, run('r', { progress: 0.5 })];
+    const ctx = fakeCtx();
+    const scene = sceneOf(nodes, { s });
+    createRenderer(ctx, PAL).drawNodes(scene);
+    const track = arcsAt(ctx, scene, 'run:r').find((o) => o.op === 'stroke' && o.strokeStyle === 'LINE');
+    assert.ok(track.path[0][3] >= 14, `s ${s}: ${track.path[0][3]}`);
   }
 });

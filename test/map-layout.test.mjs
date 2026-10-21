@@ -1,7 +1,7 @@
 // The Map's geometry: rings by kind, sectors, clearance, stagger, labels, dial.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { layout, RINGS, RING_OF, SIZE, ringLabels, ticks, CLEARANCE } from '../public/js/views/map/layout.js';
+import { layout, RINGS, RING_OF, SIZE, ringLabels, ticks, CLEARANCE, LEGEND_BEARING, LEGEND_ANGLE } from '../public/js/views/map/layout.js';
 
 const N = (id, parent, kind, extra = {}) => ({ id, parent, kind, label: id, ...extra });
 const TAU = Math.PI * 2;
@@ -64,14 +64,16 @@ test('a child always sits outside its parent, unknown kinds fall back to depth',
   assert.equal(pos.get('x').ring, 2, 'unknown kind: its depth');
 });
 
-test('the twelve o\'clock clearance is kept', () => {
+test('the clearance for the ring legends is kept at bearing 330, off the 000 axis (T19)', () => {
+  assert.equal(LEGEND_BEARING, 330);
+  assert.ok(Math.abs(LEGEND_ANGLE - (-Math.PI / 2 - Math.PI / 6)) < 1e-9, 'canvas angle of bearing 330');
   const { pos } = layout(fleet());
-  const start = -Math.PI / 2 + CLEARANCE / 2;
+  const start = LEGEND_ANGLE + CLEARANCE / 2;
   for (const [id, p] of pos) {
     if (id === '__core') continue;
     assert.ok(p.a0 >= start - 1e-9 && p.a1 <= start + TAU - CLEARANCE + 1e-9, `${id} sector inside the dial`);
-    // No node centre within the cleared wedge around -90°.
-    const off = Math.abs(Math.atan2(Math.sin(p.angle + Math.PI / 2), Math.cos(p.angle + Math.PI / 2)));
+    // No node centre within the cleared wedge around bearing 330.
+    const off = Math.abs(Math.atan2(Math.sin(p.angle - LEGEND_ANGLE), Math.cos(p.angle - LEGEND_ANGLE)));
     assert.ok(off >= CLEARANCE / 2 - 1e-9, `${id} is in the clearance`);
   }
 });

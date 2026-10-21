@@ -6,8 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import * as render from '../public/js/views/map/render.js';
-import { createRenderer, readPalette } from '../public/js/views/map/render.js';
-import { layout } from '../public/js/views/map/layout.js';
+import { createRenderer, platePlace, readPalette } from '../public/js/views/map/render.js';
+import { layout, LEGEND_ANGLE } from '../public/js/views/map/layout.js';
 
 // --- fakes -------------------------------------------------------------------
 
@@ -115,8 +115,8 @@ function opsAt(ops, scene, id) {
 
 // --- readPalette ---------------------------------------------------------------
 
-test('exports exactly createRenderer and readPalette', () => {
-  assert.deepEqual(Object.keys(render).sort(), ['createRenderer', 'readPalette']);
+test('exports exactly createRenderer, platePlace and readPalette', () => {
+  assert.deepEqual(Object.keys(render).sort(), ['createRenderer', 'platePlace', 'readPalette']);
 });
 
 test('readPalette reads the §4 tokens through getComputedStyle', (t) => {
@@ -394,7 +394,7 @@ test('pulses are skipped under reduced motion, comets too', () => {
 
 // --- rings and dial ----------------------------------------------------------------
 
-test('rings: solid hairlines in --line at 0.5, labelled SITE/ROOM/BUILDER/LANE with a leader tick', () => {
+test('rings: solid hairlines in --line at 0.5, labelled SITE/ROOM/BUILDER/LANE with a leader tick at bearing 330', () => {
   const ctx = fakeCtx();
   const scene = sceneOf(FLEET);
   createRenderer(ctx, PAL).drawRings(scene);
@@ -408,13 +408,21 @@ test('rings: solid hairlines in --line at 0.5, labelled SITE/ROOM/BUILDER/LANE w
   }
   const words = ctx.ops.filter((o) => o.op === 'fillText' && /LABEL/.test(o.font)).map((o) => o.text);
   assert.deepEqual(words, ['SITE', 'ROOM', 'BUILDER', 'LANE']);
-  const label = ctx.ops.find((o) => o.op === 'fillText' && o.text === 'SITE');
-  assert.match(label.font, /10px/);
-  assert.equal(label.x, 800, 'at twelve o\'clock');
-  const leaders = ctx.ops.filter((o) => o.op === 'stroke' && o.path.length === 2 && o.path[0][1] === 800 && o.path[1][1] === 800
-    && Math.abs(o.path[0][2] - o.path[1][2]) === 6);
-  const tops = rings.map((o) => 600 - o.path[0][3]);
-  assert.deepEqual(leaders.map((o) => o.path[0][2]), tops, 'a 6px leader up from each ring at twelve o\'clock');
+  // T19: off the 000 axis, in the layout's gap at bearing 330 (upper left).
+  const ux = Math.cos(LEGEND_ANGLE), uy = Math.sin(LEGEND_ANGLE);
+  for (const o of rings) {
+    const R = o.path[0][3];
+    const word = ctx.ops.filter((t) => t.op === 'fillText' && /LABEL/.test(t.font))[rings.indexOf(o)];
+    assert.match(word.font, /10px/);
+    assert.ok(Math.abs(word.x - (800 + ux * (R + 8))) < 1e-6 && Math.abs(word.y - (600 + uy * (R + 8))) < 1e-6, `${word.text} at bearing 330`);
+    assert.ok(word.x < 800, `${word.text} is not on the 000 axis`);
+    const leader = ctx.ops.find((t) => t.op === 'stroke' && t.path.length === 2
+      && Math.abs(t.path[0][1] - (800 + ux * R)) < 1e-6 && Math.abs(t.path[0][2] - (600 + uy * R)) < 1e-6);
+    assert.ok(leader, `a leader from ring ${R}`);
+    assert.ok(Math.abs(Math.hypot(leader.path[1][1] - 800, leader.path[1][2] - 600) - (R + 6)) < 1e-6, 'a 6px radial leader');
+  }
+  const legends = ctx.ops.filter((o) => o.op === 'fillText' && /LABEL/.test(o.font));
+  assert.ok(legends.every((o) => Math.abs(o.x - 800) > 1), 'no ring legend on the 000 axis');
 });
 
 test('the dial: 72 degree ticks and mono bearings 000 090 180 270', () => {
@@ -491,17 +499,31 @@ test('builder lamps: link, approvals, stuck as 4x4 squares; off is --line', () =
   assert.deepEqual(lamps({}, [stuckLane]), ['T2', 'LINE', 'P2']);
 });
 
-test('labels: plates in the label face uppercase, lanes in mono, loud ones in their hue', () => {
-  const nodes = FLEET.map((n) => (n.kind === 'lane' ? { ...n, status: 'crit', why: 'CI failed' } : n));
+test('labels: one style, the label face in caps; trouble is t1 text, its hue only on the node mark (T19)', () => {
+  for (const status of ['crit', 'attention', 'down']) {
+    const nodes = FLEET.map((n) => (n.kind === 'lane' ? { ...n, status, why: 'CI failed' } : n));
+    const ctx = fakeCtx();
+    const scene = sceneOf(nodes, { s: 1.3 });
+    const r = createRenderer(ctx, PAL);
+    r.drawLabels(scene);
+    const text = (t) => ctx.ops.find((o) => o.op === 'fillText' && o.text === t);
+    assert.match(text('AGENTS').font, /LABEL/);
+    assert.match(text('BUILDER-A').font, /LABEL/);
+    assert.ok(!text('pay'), 'no lowercase mono name');
+    assert.match(text('PAY').font, /LABEL/);
+    assert.equal(text('PAY').fillStyle, 'T1', `${status}: the name is plain t1`);
+    assert.equal(text('CI failed').fillStyle, 'T2', `${status}: the why is grey`);
+    assert.ok(text('FLEET'), 'the core label');
+    const names = ctx.ops.filter((o) => o.op === 'fillText' && /LABEL/.test(o.font));
+    assert.ok(names.every((o) => !['P1', 'P2', 'P3', 'ACC'].includes(o.fillStyle)), `${status}: no hue on any name`);
+    // The hue lives on the lane's mark.
+    ctx.ops.length = 0;
+    r.drawNodes(scene);
+    assert.ok(opsAt(ctx.ops, scene, 'lane:builder-a/pay').some((o) => o.fillStyle === 'P1' || o.fillStyle === 'P2'), `${status}: the mark has the hue`);
+  }
   const ctx = fakeCtx();
-  createRenderer(ctx, PAL).drawLabels(sceneOf(nodes, { s: 1.3 }));
-  const text = (t) => ctx.ops.find((o) => o.op === 'fillText' && o.text === t);
-  assert.match(text('AGENTS').font, /LABEL/);
-  assert.match(text('BUILDER-A').font, /LABEL/);
-  assert.match(text('pay').font, /MONO/);
-  assert.equal(text('pay').fillStyle, 'P1');
-  assert.equal(text('CI failed').fillStyle, 'P1');
-  assert.ok(text('FLEET'), 'the core label');
+  createRenderer(ctx, PAL).drawLabels(sceneOf(FLEET, { s: 1.3 }));
+  assert.equal(ctx.ops.find((o) => o.op === 'fillText' && o.text === 'PAY').fillStyle, 'T2', 'a calm lane is t2');
 });
 
 test('text widths are measured once per font and text', () => {
@@ -569,7 +591,7 @@ test('labels keep 2px clear of the outermost ring a node draws: gauges, drift ma
     r.drawNodes(scene);
     const nodeOps = [...ctx.ops];
     r.drawLabels(scene);
-    for (const [id, text] of [['hq', 'HQ'], ['backup', 'BACKUP'], ['repos', 'REPOS'], ['new', 'NEW'], ['b', 'BUILDER-B'], ['lane:b/x', 'feat-x'], ['lane:b/y', 'fix-y']]) {
+    for (const [id, text] of [['hq', 'HQ'], ['backup', 'BACKUP'], ['repos', 'REPOS'], ['new', 'NEW'], ['b', 'BUILDER-B'], ['lane:b/x', 'FEAT-X'], ['lane:b/y', 'FIX-Y']]) {
       const sp = scene.toScreen(scene.nodes.get(id));
       const R = drawnReach(nodeOps, sp);
       assert.ok(R > 0, `${id} draws something`);
@@ -701,24 +723,27 @@ test('the tether runs from the selected node to the anchor, only on wide screens
 
 // --- readout and palette swap -----------------------------------------------------------------
 
-test('readout text: zoom, scope, node count, overlay, UTC', () => {
+test('readout text: zoom, scope, node count, overlay, and no clock (T19: the header has the time)', () => {
   const r = createRenderer(fakeCtx(), PAL);
   const now = Date.UTC(2026, 0, 2, 12, 4, 31);
-  assert.equal(r.readout({ zoom: 1.8, scope: 'B1', drawn: 214, total: 570, overlay: 'ci', now }), 'Z 1.80×  SCOPE B1  N 214/570  OVL CI  12:04:31Z');
-  assert.equal(r.readout({ zoom: 1, scope: 'all', drawn: 3, total: 3, now }), 'Z 1.00×  SCOPE ALL  N 3/3  OVL STATUS  12:04:31Z');
-  assert.equal(r.readout({ zoom: 2, drawn: 1, total: 2, now, compact: true }), 'Z 2.00× · N 1/2 · 12:04:31Z');
+  assert.equal(r.readout({ zoom: 1.8, scope: 'B1', drawn: 214, total: 570, overlay: 'ci', now }), 'Z 1.80×  SCOPE B1  N 214/570  OVL CI');
+  assert.equal(r.readout({ zoom: 1, scope: 'all', drawn: 3, total: 3, now }), 'Z 1.00×  SCOPE ALL  N 3/3  OVL STATUS');
+  assert.equal(r.readout({ zoom: 2, drawn: 1, total: 2, now, compact: true }), 'Z 2.00× · N 1/2');
   assert.match(r.readout({ now, p95: 3.24 }), /P95 3\.2MS$/);
   assert.equal(r.readout({ zoom: 1, drawn: 3, total: 3, overlay: 'drift', drift: { missing: 1, undeclared: 2 }, now }),
-    'Z 1.00×  SCOPE ALL  N 3/3  OVL DRIFT  ◌ NOT SEEN 1  □ NOT DECLARED 2  12:04:31Z');
+    'Z 1.00×  SCOPE ALL  N 3/3  OVL DRIFT  ◌ NOT SEEN 1  □ NOT DECLARED 2');
   assert.doesNotMatch(r.readout({ overlay: 'status', drift: { missing: 1, undeclared: 2 }, now }), /NOT SEEN/);
-  assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: null }, now }), /OVL REACH {2}LINKS 12 {2}\d/);
+  assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: null }, now }), /OVL REACH {2}LINKS 12$/);
   assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: 3 }, now }), /LINKS 12 {2}TOUCHES 3/);
   assert.doesNotMatch(r.readout({ overlay: 'status', reach: { links: 12, touches: 3 }, now }), /LINKS/);
   assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: null, unresolved: 2 }, now }), /LINKS 12 {2}UNRESOLVED 2/);
   assert.doesNotMatch(r.readout({ overlay: 'reach', reach: { links: 12, touches: null, unresolved: 0 }, now }), /UNRESOLVED/);
+  for (const ov of ['status', 'ci', 'drift', 'reach']) {
+    for (const compact of [false, true]) assert.doesNotMatch(r.readout({ overlay: ov, now, compact }), /\d\d:\d\d|UTC/, `${ov} ${compact}`);
+  }
 });
 
-test('readout at phone width keeps the overlay and its count, drops the clock (T19)', () => {
+test('readout at phone width keeps the overlay and its count, no clock', () => {
   const r = createRenderer(fakeCtx(), PAL);
   const now = Date.UTC(2026, 0, 2, 12, 4, 31);
   const base = { zoom: 1, drawn: 22, total: 24, now, compact: true };
@@ -727,7 +752,7 @@ test('readout at phone width keeps the overlay and its count, drops the clock (T
   assert.equal(r.readout({ ...base, overlay: 'reach', reach: { links: 9, touches: null } }), 'Z 1.00× · N 22/24 · REACH 9');
   assert.equal(r.readout({ ...base, overlay: 'reach', reach: { links: 9, touches: 3 } }), 'Z 1.00× · N 22/24 · REACH 3/9');
   assert.equal(r.readout({ ...base, overlay: 'ci' }), 'Z 1.00× · N 22/24 · OVL CI');
-  assert.equal(r.readout({ ...base, overlay: 'status' }), 'Z 1.00× · N 22/24 · 12:04:31Z');
+  assert.equal(r.readout({ ...base, overlay: 'status' }), 'Z 1.00× · N 22/24');
   // Fits the 390 corner: one short line, no clock once an overlay is on.
   for (const t of [drift, r.readout({ ...base, overlay: 'reach', reach: { links: 120, touches: 30 } })]) {
     assert.doesNotMatch(t, /\d\d:\d\d:\d\dZ/);
@@ -745,4 +770,65 @@ test('setPalette swaps colours for the next frame (lb:theme)', () => {
   assert.equal(r.palette.crit, 'LIGHT-P1');
   assert.equal(r.tone('accent', 2), 'A60');
   assert.equal(r.tone('grey'), 'T3');
+});
+
+// --- T19 Map polish -------------------------------------------------------------
+
+test('topology edges take the theme\'s edge weight (--map-edge-alpha: dimmer on light); trouble edges keep theirs (T19)', (t) => {
+  const prev = globalThis.getComputedStyle;
+  t.after(() => { globalThis.getComputedStyle = prev; });
+  for (const [raw, want] of [['0.6', 0.6], [' 1 ', 1], ['', 1], ['nope', 1], ['3', 1]]) {
+    globalThis.getComputedStyle = () => ({ getPropertyValue: (n) => (n === '--map-edge-alpha' ? raw : '') });
+    assert.equal(readPalette({}).edge, want, `"${raw}"`);
+  }
+  const nodes = [...FLEET, { id: 'lane:builder-a/api', kind: 'lane', parent: 'builder:builder-a', label: 'api', status: 'working' }];
+  const links = [
+    { id: 'c1', kind: 'conflict', from: 'lane:builder-a/pay', to: 'lane:builder-a/api', predicted: false, severity: 'crit' },
+    { id: 't', kind: 'touch', from: 'lane:builder-a/api', to: 'builder:builder-a' },
+  ];
+  const strokes = (edge) => {
+    const ctx = fakeCtx();
+    const r = createRenderer(ctx, { ...PAL, edge });
+    const scene = sceneOf(nodes, { links });
+    r.drawTree(scene);
+    const tree = ctx.ops.filter((o) => o.op === 'stroke');
+    ctx.ops.length = 0;
+    r.drawLinks(scene);
+    const [conflict, touch] = ctx.ops.filter((o) => o.op === 'stroke');
+    return { tree, conflict, touch };
+  };
+  const dark = strokes(1), light = strokes(0.6);
+  assert.ok(dark.tree.every((o) => o.alpha === 1));
+  assert.ok(light.tree.every((o) => Math.abs(o.alpha - 0.6) < 1e-9), 'tree branches one step dimmer');
+  assert.ok(Math.abs(light.touch.alpha - 0.35 * 0.6) < 1e-9, 'grey links too');
+  assert.equal(light.conflict.alpha, dark.conflict.alpha, 'a confirmed conflict keeps its weight');
+});
+
+test('the +N plate stays off every ring hairline, still away from the label (T19)', () => {
+  const W = 20, H = 14;
+  const span = (b, c0) => {
+    const dx = Math.max(b.x - c0.x, 0, c0.x - (b.x + b.w)), dy = Math.max(b.y - c0.y, 0, c0.y - (b.y + b.h));
+    const fx = Math.max(Math.abs(c0.x - b.x), Math.abs(c0.x - b.x - b.w)), fy = Math.max(Math.abs(c0.y - b.y), Math.abs(c0.y - b.y - b.h));
+    return [Math.hypot(dx, dy), Math.hypot(fx, fy)];
+  };
+  const c0 = { x: 0, y: 0 };
+  let moved = 0;
+  // A node at every bearing on a ring, or staggered off it (layout.js: -10,
+  // +16 px), the next ring in 130px and out 130px.
+  for (let deg = 0; deg < 360; deg += 5) {
+    const ang = (deg / 180) * Math.PI - Math.PI / 2;
+    for (const [R, st] of [[150, 0], [290, 0], [420, 0], [420, -10], [420, 16], [540, 16]]) {
+      const sp = { x: Math.cos(ang) * (R + st), y: Math.sin(ang) * (R + st) };
+      const hair = [R - 130, R, R + 130];
+      const plain = platePlace(sp, ang, 11, W, H);
+      const b = platePlace(sp, ang, 11, W, H, c0, hair);
+      if (b.x !== plain.x || b.y !== plain.y) moved++;
+      const [lo, hi] = span(b, c0);
+      assert.ok(hair.every((h) => h < lo - 1 || h > hi + 1), `bearing ${deg} on ${R}${st ? ` ${st}` : ''}: plate ${lo.toFixed(1)}..${hi.toFixed(1)} crosses a hairline`);
+      const mid = [b.x + W / 2 - sp.x, b.y + H / 2 - sp.y];
+      assert.ok(mid[0] * Math.cos(ang) + mid[1] * Math.sin(ang) < 0, `bearing ${deg}: away from the label`);
+      assert.ok(rectDist(sp.x, sp.y, [b.x, b.y, W, H]) >= 11 + 2 - 1e-6, 'clear of the fold ring');
+    }
+  }
+  assert.ok(moved > 0, 'some plates leave the straight-back diagonal for a side one');
 });

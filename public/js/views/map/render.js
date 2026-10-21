@@ -33,7 +33,7 @@
 // Text drawn here comes from builders (labels, subs, why) and is untrusted;
 // fillText never interprets it.
 
-import { RINGS, RUN_RING, SIZE, polar, ringLabels, ticks } from './layout.js';
+import { RINGS, SIZE, LEGEND_ANGLE, polar, ringLabels, runRingR, ticks } from './layout.js';
 import { nodeStyle, linkStyle, reachScope, reachLinkStyle, runRing, runRound, ACCENT_L, DRIFT_MARK } from './overlays.js';
 
 const TAU = Math.PI * 2;
@@ -54,6 +54,7 @@ const FALLBACK = {
   ok: 'oklch(66% 0.07 150)',
   mono: 'ui-monospace, monospace',
   label: 'system-ui, sans-serif',
+  edge: 1,
 };
 
 /** The accent at each overlay lightness step: same chroma and hue, L from ACCENT_L. */
@@ -61,6 +62,12 @@ function accentSteps(accent) {
   const m = /^oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)\s*\)$/i.exec(accent.trim());
   if (!m) return ACCENT_L.map(() => accent);
   return ACCENT_L.map((l) => `oklch(${l}% ${m[2]} ${m[3]})`);
+}
+
+/** `--map-edge-alpha` as a number in 0..1 (the topology edges' weight), 1 when unset or unreadable. */
+function edgeAlpha(raw) {
+  const x = Number.parseFloat(raw);
+  return Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : FALLBACK.edge;
 }
 
 /**
@@ -94,10 +101,52 @@ export function readPalette(el) {
     ok: v(['--ok'], FALLBACK.ok),
     mono: v(['--font-mono'], FALLBACK.mono),
     label: v(['--font-label', '--font-ui'], FALLBACK.label),
+    edge: edgeAlpha(v(['--map-edge-alpha'], '')),
   };
 }
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+/** Nearest and farthest distance from (px, py) to the rect [x, y, w, h]. */
+function rectSpan(px, py, x, y, w, h) {
+  const dx = Math.max(x - px, 0, px - (x + w)), dy = Math.max(y - py, 0, py - (y + h));
+  const fx = Math.max(Math.abs(px - x), Math.abs(px - x - w)), fy = Math.max(Math.abs(py - y), Math.abs(py - y - h));
+  return [Math.hypot(dx, dy), Math.hypot(fx, fy)];
+}
+
+/**
+ * Where a fold's "+N" plate (w x h) goes for a node at screen point `sp`
+ * whose label points along `ang`: its near corner on a 45 degree diagonal,
+ * 2px outside the fold ring of radius `ring`. The diagonal straight back from
+ * the label comes first, then the side ones that still point away from it,
+ * then a spot beside the node (for one staggered off its ring, where
+ * every diagonal back crosses it); the first plate that crosses no ring hairline (radii `hairlines` around
+ * `c0`, 1px of air) wins, else the first. Returns `{x, y, w, h}`.
+ */
+export function platePlace(sp, ang, ring, w, h, c0 = null, hairlines = []) {
+  const dx = Math.cos(ang) >= 0 ? -1 : 1, dy = Math.sin(ang) >= 0 ? -1 : 1;
+  const off = (ring + 0.5 + 2) / Math.SQRT2;
+  const at = ([ex, ey]) => {
+    const cx = sp.x + ex * off, cy = sp.y + ey * off;
+    return { x: ex > 0 ? cx : cx - w, y: ey > 0 ? cy : cy - h, w, h };
+  };
+  const away = ([ex, ey]) => ex * Math.cos(ang) + ey * Math.sin(ang) < -0.1;
+  // Beside the node, just past square to the label: its centre along u at
+  // the ring plus the plate's own reach that way, so it stays 2px clear.
+  const beside = (turn) => {
+    const ux = Math.cos(ang + turn), uy = Math.sin(ang + turn);
+    const d = ring + 2.5 + (Math.abs(ux) * w + Math.abs(uy) * h) / 2;
+    return { x: sp.x + ux * d - w / 2, y: sp.y + uy * d - h / 2, w, h };
+  };
+  const side = (95 / 180) * Math.PI;
+  const tries = [...[[dx, dy], [-dx, dy], [dx, -dy]].filter(away).map(at), beside(side), beside(-side)];
+  if (!c0 || !hairlines.length) return tries[0];
+  const clear = (b) => {
+    const [lo, hi] = rectSpan(c0.x, c0.y, b.x, b.y, b.w, b.h);
+    return hairlines.every((R) => R < lo - 1 || R > hi + 1);
+  };
+  return tries.find(clear) ?? tries[0];
+}
 /** A radius ctx.arc accepts: finite and >= 0. */
 const safeRadius = (r) => (Number.isFinite(r) && r > 0 ? r : 0);
 const ease = (t) => 1 - Math.pow(1 - t, 3);
@@ -207,14 +256,16 @@ export function createRenderer(ctx, palette) {
   // ---------------------------------------------------------------- rings
 
   /**
-   * Occupied rings as solid hairlines, each labelled at twelve o'clock with a
-   * leader tick, and the degree dial outside the outermost one with numeric
-   * bearings at the quarters.
+   * Occupied rings as solid hairlines, each labelled by the kinds on it with a
+   * leader tick in the layout's gap at LEGEND_BEARING (330, off the 000 axis
+   * and its bearing), and the degree dial outside the outermost one with
+   * numeric bearings at the quarters.
    */
   function drawRings(scene) {
     const s = scene.s ?? 1;
     const c0 = centre(scene);
     const labels = ringLabels(scene.pos ?? new Map(), scene.byId ?? new Map());
+    const ux = Math.cos(LEGEND_ANGLE), uy = Math.sin(LEGEND_ANGLE);
     ctx.save();
     let outer = RINGS[2] * s;
     for (const { r: wr, label } of labels) {
@@ -224,17 +275,18 @@ export function createRenderer(ctx, palette) {
       ctx.beginPath();
       arc(c0.x, c0.y, r, 0, TAU);
       ctx.stroke();
-      // The leader: a 6px tick up from the ring, the label above it.
+      // The leader: a 6px tick out from the ring; the label ends at its tip
+      // and runs left, away from the ring (outward at this bearing).
       strokeStyle(P.t3, 0.6, 1, []);
       ctx.beginPath();
-      ctx.moveTo(c0.x, c0.y - r);
-      ctx.lineTo(c0.x, c0.y - r - 6);
+      ctx.moveTo(c0.x + ux * r, c0.y + uy * r);
+      ctx.lineTo(c0.x + ux * (r + 6), c0.y + uy * (r + 6));
       ctx.stroke();
       fillStyle(P.t3, 0.85);
       ctx.font = `500 10px ${P.label}`;
-      ctx.textAlign = 'center';
+      ctx.textAlign = 'right';
       ctx.textBaseline = 'bottom';
-      tracked(label, c0.x, c0.y - r - 8, 1);
+      tracked(label, c0.x + ux * (r + 8), c0.y + uy * (r + 8), 1);
     }
     // The dial: an instrument, not a decoration. It is what makes a bearing
     // readable when you tell someone "the red one at 120".
@@ -260,9 +312,10 @@ export function createRenderer(ctx, palette) {
 
   // ---------------------------------------------------------------- edges
 
-  /** Parent to child branches: 1px --line, no gradient. */
+  /** Parent to child branches: 1px --line, no gradient, at the theme's edge weight. */
   function drawTree(scene) {
     const nodes = scene.nodes ?? new Map();
+    const k = P.edge ?? 1;
     ctx.save();
     strokeStyle(P.line, 1, 1, []);
     for (const [id, cc] of nodes) {
@@ -272,7 +325,7 @@ export function createRenderer(ctx, palette) {
       const pc = nodes.get(pid);
       if (!pc || (!cc.leaving && cc.entering)) continue;
       const [a, b, c, d] = treeCurve(pc, cc).map(scene.toScreen);
-      ctx.globalAlpha = clamp(Math.min(alphaOf(scene, id), alphaOf(scene, pid)) * (cc.a ?? 1), 0, 1);
+      ctx.globalAlpha = clamp(k * Math.min(alphaOf(scene, id), alphaOf(scene, pid)) * (cc.a ?? 1), 0, 1);
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.bezierCurveTo(b.x, b.y, c.x, c.y, d.x, d.y);
@@ -311,7 +364,9 @@ export function createRenderer(ctx, palette) {
       const fade = Math.min(alphaOf(scene, l.from), alphaOf(scene, l.to)) * Math.min(a.a ?? 1, b.a ?? 1);
       const hot = focus != null && (l.from === focus || l.to === focus);
       const col = tone(st.tone);
-      strokeStyle(col, (hot ? Math.max(0.85, st.alpha) : st.alpha) * fade, st.width + (hot ? 0.5 : 0), st.dash);
+      // Grey topology takes the theme's edge weight; a trouble hue keeps its own.
+      const k = st.tone === 'grey' || st.tone === 'line' ? P.edge ?? 1 : 1;
+      strokeStyle(col, (hot ? Math.max(0.85, st.alpha) : st.alpha * k) * fade, st.width + (hot ? 0.5 : 0), st.dash);
       ctx.lineDashOffset = st.animate && !scene.reduced ? -(scene.now ?? 0) / 60 : 0;
       ctx.beginPath();
       ctx.moveTo(A.x, A.y);
@@ -320,7 +375,7 @@ export function createRenderer(ctx, palette) {
       ctx.lineDashOffset = 0;
       // Undirected kinds (touch, conflict) carry no arrowhead.
       if (l.kind !== 'touch' && l.kind !== 'conflict') {
-        arrowHead(A, C, B, scene.byId?.get(l.to)?.kind, s, col, (hot ? 0.9 : Math.min(1, st.alpha + 0.15)) * fade);
+        arrowHead(A, C, B, scene.byId?.get(l.to)?.kind, s, col, (hot ? 0.9 : Math.min(1, st.alpha + 0.15) * k) * fade);
       }
       if (l.label && (hot || s > 1.35)) {
         const m = quad(A, C, B, 0.5);
@@ -476,16 +531,16 @@ export function createRenderer(ctx, palette) {
     const ring = runRing(n);
     const a = alpha * ring.alpha;
     const col = tone(ring.tone);
-    const rr = r + RUN_RING;
+    const rr = runRingR(r);
     strokeStyle(P.line, a, 2, []);
     ctx.beginPath(); arc(sp.x, sp.y, rr, 0, TAU); ctx.stroke();
     if (ring.progress > 0) {
       strokeStyle(ring.tone === 'grey' ? P.t2 : col, 0.95 * a, 2, []);
       ctx.beginPath(); arc(sp.x, sp.y, rr, -Math.PI / 2, -Math.PI / 2 + ring.progress * TAU); ctx.stroke();
     }
-    if (ring.hollow) glyph('disc', sp.x, sp.y, r * 0.55, P.t3, a, { hollow: true });
-    else if (ring.tone === 'grey') glyph('disc', sp.x, sp.y, r * 0.55, P.t3, a);
-    else glyph(ring.shape, sp.x, sp.y, r * 0.7, col, a);
+    if (ring.hollow) glyph('disc', sp.x, sp.y, r * 0.8, P.t3, a, { hollow: true });
+    else if (ring.tone === 'grey') glyph('disc', sp.x, sp.y, r * 0.8, P.t3, a);
+    else glyph(ring.shape, sp.x, sp.y, r * 1.1, col, a);
   }
 
   /** CPU on the inner arc, memory on the outer, both from twelve o'clock. */
@@ -511,12 +566,12 @@ export function createRenderer(ctx, palette) {
   function ringOuter(n, r, { mark = null, folded = false, working = false } = {}) {
     const q = n.kind === 'builder' ? r * 1.25 : r;
     let R = (n.kind === 'builder' ? q * Math.SQRT2 : q) + 1;
-    if (n.kind === 'run') R = r + RUN_RING + 1;
+    if (n.kind === 'run') R = runRingR(r) + 1;
     if (n.metrics && GAUGED.has(n.kind)) R = Math.max(R, q + 1 + 6.5 + 1);
     if (working) R = Math.max(R, r + 4 + 0.7);
     if (folded) R = Math.max(R, r + (n.metrics ? 10 : 6) + 0.5);
     if (mark) {
-      const ro = n.kind === 'run' ? r + RUN_RING + 5 : (n.kind === 'builder' ? q * Math.SQRT2 : r) + 6;
+      const ro = n.kind === 'run' ? runRingR(r) + 5 : (n.kind === 'builder' ? q * Math.SQRT2 : r) + 6;
       R = Math.max(R, (mark.shape === 'square' ? ro * Math.SQRT2 : ro) + 0.75);
     }
     return R;
@@ -524,9 +579,12 @@ export function createRenderer(ctx, palette) {
 
   /**
    * Folded: a dotted ring for what is inside and a "+N" plate outside it, on
-   * the 45 degree diagonal away from the label, 2px clear of the ring. Returns its rect.
+   * a 45 degree diagonal away from the label, 2px clear of the ring. Of those
+   * diagonals the first whose plate crosses no ring hairline (`hairlines`:
+   * screen radii around `c0`) wins: straight back from the label, then the
+   * two sides. Returns its rect.
    */
-  function foldMark(scene, id, n, c, sp, r, alpha) {
+  function foldMark(scene, id, n, c, sp, r, alpha, c0 = null, hairlines = []) {
     const inside = scene.kids?.get(id)?.length ?? 0;
     const ring = r + (n.metrics ? 10 : 6);
     strokeStyle(P.t2, 0.55 * alpha, 1, [1.5, 3]);
@@ -536,10 +594,7 @@ export function createRenderer(ctx, palette) {
     ctx.font = `600 9.5px ${P.mono}`;
     const w = measure(text) + 8;
     const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
-    const dx = Math.cos(ang) >= 0 ? -1 : 1, dy = Math.sin(ang) >= 0 ? -1 : 1;
-    const off = (ring + 0.5 + 2) / Math.SQRT2;
-    const cx = sp.x + dx * off, cy = sp.y + dy * off;
-    const bx = dx > 0 ? cx : cx - w, by = dy > 0 ? cy : cy - 14;
+    const { x: bx, y: by } = platePlace(sp, ang, ring, w, 14, c0, hairlines);
     fillStyle(P.sunken, 0.95 * alpha);
     ctx.fillRect(bx, by, w, 14);
     strokeStyle(P.line, alpha, 1, []);
@@ -564,6 +619,10 @@ export function createRenderer(ctx, palette) {
     const badges = [];
     outerR.clear();
     const reach = scene.overlay === 'reach' ? reachScope(scene.reach, scene.selected ?? null) : null;
+    // The ring hairlines drawRings draws, for the fold plates to stay off.
+    const c0 = centre(scene);
+    const hairlines = scene.folded?.size
+      ? ringLabels(scene.pos ?? new Map(), scene.byId ?? new Map()).map((l) => l.r * (scene.s ?? 1)) : [];
     ctx.save();
     if (!scene.reduced) {
       for (const p of scene.pulses ?? []) {
@@ -609,7 +668,7 @@ export function createRenderer(ctx, palette) {
         // A run: its progress as an arc on a full track, from twelve o'clock.
         runNode(n, sp, r, alpha);
         if (st.mark) {
-          markRing(st.mark, sp, r + RUN_RING + 5, alpha);
+          markRing(st.mark, sp, runRingR(r) + 5, alpha);
         }
         continue;
       }
@@ -665,7 +724,7 @@ export function createRenderer(ctx, palette) {
 
       if (GAUGED.has(n.kind)) gauges(n, sp.x, sp.y, n.kind === 'builder' ? r * 1.25 + 1 : r, alpha);
       if (isFolded) {
-        const b = foldMark(scene, id, n, c, sp, r, alpha);
+        const b = foldMark(scene, id, n, c, sp, r, alpha, c0, hairlines);
         if ((c.a ?? 1) > 0.5) badges.push(b);
       }
     }
@@ -730,7 +789,6 @@ export function createRenderer(ctx, palette) {
       if (!show || fade < 0.12) continue;
       const sp = scene.toScreen(c);
       const r = (SIZE[n.kind] ?? 5) * ns;
-      const loudCol = status === 'attention' ? P.warn : P.crit;
       if (n.kind === 'core') {
         // On a phone the name under the core lands on the first ring's nodes;
         // the map title at the top left already says it.
@@ -749,13 +807,17 @@ export function createRenderer(ctx, palette) {
       let x = sp.x + Math.cos(ang) * out;
       let y = sp.y + Math.sin(ang) * out;
       let left = Math.cos(ang) >= 0;
-      const plate = n.kind === 'site' || n.kind === 'host' || n.kind === 'room' || n.kind === 'builder' || n.kind === 'run';
+      // One label style: every name in the label face, caps. Weight and grey
+      // step carry the rank (machines and places t1, what runs on them t2, a
+      // run muted to t3 like its round); trouble lifts a name to t1, and the
+      // hue stays on the node's ▲/■ mark, never on the text.
+      const plate = n.kind === 'site' || n.kind === 'host' || n.kind === 'room' || n.kind === 'builder';
       const raw = n.kind === 'builder' ? builderName(scene, n) : n.label ?? n.id;
-      const text = plate ? String(raw).toUpperCase() : String(raw);
-      ctx.font = plate ? `600 ${n.kind === 'room' ? 11 : 12}px ${P.label}` : `11px ${P.mono}`;
-      const col = loud ? loudCol : plate ? P.t1 : P.t2;
+      const text = String(raw).toUpperCase();
+      ctx.font = `${plate || n.kind === 'run' ? 600 : 500} ${plate && n.kind !== 'room' ? 12 : 11}px ${P.label}`;
+      const col = plate || loud ? P.t1 : n.kind === 'run' ? P.t3 : P.t2;
       // A backing so a label stays readable where an arc passes under it.
-      const w = measure(text) + (plate && 'letterSpacing' in ctx ? text.length : 0);
+      const w = measure(text) + ('letterSpacing' in ctx ? text.length : 0);
       const round = n.kind === 'run' ? runRound(n) : null;
       const extra = round ? round.length * 7 + 8 : 0;
       const W = scene.W ?? Infinity;
@@ -776,7 +838,7 @@ export function createRenderer(ctx, palette) {
       fillStyle(P.bg, 0.8 * fade);
       ctx.fillRect(bx, y - 7, w + 4, 14);
       fillStyle(col, fade);
-      if (plate) tracked(text, x, y, 1); else ctx.fillText(text, x, y);
+      tracked(text, x, y, 1);
       if (round) {
         // The round beside the name, in the data face.
         ctx.font = `10px ${P.mono}`;
@@ -802,7 +864,7 @@ export function createRenderer(ctx, palette) {
       if (sub && (s > 1.05 || id === focus || id === scene.selected)) {
         const line = String(sub);
         ctx.font = `10px ${P.mono}`;
-        fillStyle(loud ? loudCol : P.t3, 0.95 * fade);
+        fillStyle(loud ? P.t2 : P.t3, 0.95 * fade);
         ctx.fillText(line.length > 38 ? `${line.slice(0, 37)}…` : line, x, below);
       }
     }
@@ -905,9 +967,9 @@ export function createRenderer(ctx, palette) {
   }
 
   /**
-   * The readout corner's text: `Z 1.80×  SCOPE B1  N 214/570  OVL CI  12:04:31Z`
-   * (compact on a phone: `Z 1.80× · N 214/570 · 12:04:31Z`, the clock
-   * giving way to the overlay and its count when one is on). `scope` is a
+   * The readout corner's text: `Z 1.80×  SCOPE B1  N 214/570  OVL CI`
+   * (compact on a phone: `Z 1.80× · N 214/570`, plus the overlay and its
+   * count when one is on). No clock: the header already shows the time. `scope` is a
    * builder code or id, or 'all'; `p95` (ms, from ?mapperf=1) is appended.
    * In the drift overlay, `drift` ({missing, undeclared} counts) adds
    * `◌ NOT SEEN 2  □ NOT DECLARED 3` after the overlay, each count keyed by
@@ -916,15 +978,14 @@ export function createRenderer(ctx, palette) {
    * while a node is selected (touches is then a number), and `UNRESOLVED 2`
    * when the policy names selectors the Map cannot place (a count only).
    */
-  function readout({ zoom = 1, scope = 'all', drawn = 0, total = 0, overlay = 'status', now = Date.now(), compact = false, p95 = null, drift = null, reach = null } = {}) {
+  function readout({ zoom = 1, scope = 'all', drawn = 0, total = 0, overlay = 'status', compact = false, p95 = null, drift = null, reach = null } = {}) {
     const z = `Z ${Number(zoom).toFixed(2)}×`;
     const n = `N ${drawn}/${total}`;
-    const utc = `${new Date(now).toISOString().slice(11, 19)}Z`;
     if (compact) {
-      // A phone keeps the overlay and its count and drops the clock first:
+      // A phone keeps the overlay and its count:
       // `Z 1.00× · N 22/24 · DRIFT ◌1 □1`, `… · REACH 9`, `… · OVL CI`.
       const ov = String(overlay || 'status');
-      if (ov === 'status') return [z, n, utc].join(' · ');
+      if (ov === 'status') return [z, n].join(' · ');
       let tag = `OVL ${ov.toUpperCase()}`;
       if (ov === 'drift' && drift) tag = `DRIFT ${DRIFT_MARK.missing.glyph}${drift.missing ?? 0} ${DRIFT_MARK.undeclared.glyph}${drift.undeclared ?? 0}`;
       if (ov === 'reach' && reach) tag = `REACH ${Number.isFinite(reach.touches) ? `${reach.touches}/` : ''}${reach.links ?? 0}`;
@@ -937,7 +998,6 @@ export function createRenderer(ctx, palette) {
       if (Number.isFinite(reach.touches)) parts.push(`TOUCHES ${reach.touches}`);
       if (reach.unresolved > 0) parts.push(`UNRESOLVED ${reach.unresolved}`);
     }
-    parts.push(utc);
     if (Number.isFinite(p95)) parts.push(`P95 ${p95.toFixed(1)}MS`);
     return parts.join('  ');
   }
