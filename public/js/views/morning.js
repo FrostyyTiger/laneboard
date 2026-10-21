@@ -31,7 +31,7 @@ import { block, gauge, laneStripe, prChip } from '../ui/widgets.js';
 import { lamp, panel } from '../ui/components.js';
 import { toast } from '../ui/shell.js';
 import { openSheet } from '../ui/sheet.js';
-import { STOP_P, STATE_META, burnOf, rnClean, runHref, safeHref, scoreText } from './runs.js';
+import { RUN_ID_RX, STOP_P, STATE_META, burnOf, rnClean, runHref, safeHref, scoreText } from './runs.js';
 
 // ---------------------------------------------------------------- morning
 //
@@ -124,8 +124,6 @@ function morningBuilderOf(x, s) {
 }
 
 // --- runs (T7) ----------------------------------------------------------------
-
-const RUN_ID_RX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /** One digest score {start, end, better} -> {name, text, dir, good, mark, title}. */
 export function runScoreOf(name, s) {

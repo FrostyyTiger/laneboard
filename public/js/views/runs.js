@@ -56,7 +56,7 @@ const SESSIONS_SHOW = 20; // sessions listed per round
 
 const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 /** The protocol's run id (server/runs/protocol.mjs RUN_ID): only such ids get a page link. */
-const RUN_ID_RX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+export const RUN_ID_RX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 // eslint-disable-next-line no-control-regex
