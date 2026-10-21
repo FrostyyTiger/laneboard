@@ -58,6 +58,12 @@ Planner notes (round 1), from reading the code:
 - [ ] T10 (3, 5e, n3 T59) Names come from config or the hostname only: with no config the Map title is the hostname and no fleet block shows, the branch still shows (find where an environment variable such as `LANEBOARD_RUN` reaches the title or the builder code today and remove that path); `docs/config.md` lists every environment variable the board reads; `laneboard run start` without `--run` keeps an inherited `LANEBOARD_RUN` and says so on stderr (`run id <x> from $LANEBOARD_RUN`), and with neither the error names `--run <id>` (said in the help and `docs/runs.md`) — done when: a config/map test with `LANEBOARD_CONFIG=/dev/null` and `LANEBOARD_RUN=run-x/3` in the env gets the hostname title; `test/cli-run.test.mjs` checks the stderr note and the error; a docs test finds the variable list
 - [ ] T11 (4, n3 T52) `laneboard pause --all` / `resume --all` / `paused` stay in the isolated copy: a test with `LANEBOARD_STATE_DIR=<tmp>` and `HOME=<other tmp>` finds `paused/ALL` under the state dir and nothing under `HOME`; if it fails, fix `bin/laneboard` (`resolveStateDir`, never `server/control/*`); README's isolation paragraph names which commands write the real dir by design (`run` without `--post` writes `./.laneboard/`) — done when: the `test/cli-pause.test.mjs` case passes and the README sentence is there
 - [ ] T12 (5a, 5d, 5g) Small CLI calls: an unknown command prints `unknown command: <x>` as the first line, then the help, exit 2 (`bin/laneboard` l.1237); `laneboard ls`, `morning` and `credit` print `board: <url>` on stderr (the URL that answered); `laneboard run needs "text"` takes a bare text as `--text` (a second bare word is still an error) — done when: CLI tests check the first line and exit code, the stderr `board:` line with `LANEBOARD_URL` set to a test server, and a bare-text need written to the file
+- [ ] T13 (4, review 6-designer, Across 1 + Board 1) [ui] One mark per state: a stuck lane reads `▲ STCK` (the header tile's word, from `STATE_MARK`) on the Board card, in the NEEDS YOU list and on the phone chip, never `▲ WORK` on one and a grey `●` on another; the hourglass stays a grey icon beside it — done when: a view test finds the same mark text in the card, the list row and the chip for the same stuck lane; shots of board and inbox (dark + light, 1440 + 390), console clean
+- [ ] T14 (4, review 6-designer, Across 3) [ui] The selected sidebar plate (`ALL`) is outlined like the others, never a fill (design.md: selection is a 1 px accent border, no dark slab in light) — done when: a CSS/token test or view test finds no background fill on the selected plate; shots of board (dark + light, 1440 + 390), console clean
+- [ ] T15 (4, review 6-designer, Across 4) [ui] The header cost tile prints `—` when no session reported a cost (not `$0.00`), at the size of the tiles around it (`--fs-12`, `--text-2`) — done when: a view test finds `—` for no cost and `$0.00` for a reported real zero; shots of board (dark + light, 1440 + 390), console clean
+- [ ] T16 (4, review 6-designer, Run page 1+2, Inbox 3) [ui] PR rows read as links: run page artifact rows print `title ↗ · state · round n` with `open` printing nothing or the same `·` form and `merged`/`closed` muted; the Inbox RUN PRS row drops the `pr:` prefix and shows only the ↗ at 390 so the title is not cut; the run page 390 check scrolls to the artifacts (`shoot.mjs --hash` or a DOM test, since it shoots the viewport only) — done when: `test/view-runs.test.mjs` and `test/inbox-model.test.mjs` or a view test find the new row text and no `pr:`; run page and inbox shots (dark + light, 1440 + 390) with the artifacts visible
+- [ ] T17 (5, review 6-designer, Board 3 + 8) [ui] Board left column empty states are one muted line (`Rate limits · none`, `Machine · none`) as design.md says; a phone offline card's hatch stops behind a solid strip under the title row, not under the text — done when: a view test finds the two lines and no bare section header; board shots (dark + light, 1440 + 390), console clean
+- [ ] T18 (5, review 6-designer, Map 6) [ui] The `+2` overflow badge sits outside its node's ring, not over it — done when: `test/map-runs.test.mjs` or a map test checks the badge offset is larger than the ring radius; map shots (dark + light, 1440 + 390)
 
 ## Research questions
 
@@ -88,7 +94,30 @@ Planner notes (round 1), from reading the code:
 - Nothing yet. The planner found no item that needs a fenced file: the `/api/*` JSON 404 already
   lives in fenced `server/http.mjs` and only gets a test (T8); if that test shows otherwise, the fix
   is yours.
+- Design ideas and taste calls from review 6-designer (none made a task; say which you want):
+  - Counts in one style `[n]` everywhere (Inbox/Runs/Lanes `[7]`, run page `(1)`, Board bare box), and
+    progress always `7 of 10` after the name (T5 settles the progress form for `44 of 63`).
+  - Inbox: counts next to "ALL" with a noun each (`9 sessions`, `7 items`); empty sections (`Review ·
+    none`) at dense row height grouped in one block; `COOPERATIVE CONTROL` dashed border as a sunken
+    plate; the approval countdown as `59:54 left`.
+  - Inbox row and run page use one open/ack control (the run page's buttons).
+  - Light theme: `--p2` hue toward ochre (not olive); header tiles on `--bg-surface` with a 1 px line;
+    nested session panels on `--bg-surface`; light is heavier than dark.
+  - Run page: goal first at `--fs-16` above the state line; stat line grouping (`5h ▬▬ 92%` hugging);
+    scores block alignment and en dash ranges; rounds table content-sized columns; one max width for
+    reading pages (run page vs Inbox/Runs); acked need in `--text-3`.
+  - Map: phone Fit uses the whole height between header and Find row; lane swatches avoid the accent
+    violet.
+  - Board: red cards use the left bar like amber ones (or all trouble cards get the frame); the two
+    notification buttons same width and spaced; idle lanes as chips; `LAUNCH A LANE…` with an accent
+    border as the primary call to action.
 
 ## Reviews
+
+- reviews/6-designer.md: about 50 findings, 6 became tasks (T13-T18). Dropped as covered: stuck
+  amber hourglass (Later n3 T50), Runs list empty cells/goal cut/need line (Later r10 idea 4), map
+  trouble label and phone collisions (Later n3 T48), run-label order and `7 / 10` alignment (T5), run
+  page sparkline/rounds table width (Later r10 idea 5). Rest went to For the owner as ideas. The
+  console was clean.
 
 ## Morning
