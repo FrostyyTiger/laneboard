@@ -1,15 +1,16 @@
 // The rail: attention, vitals, rate limits, the 49" box blocks. Moved from public/app.js (fleet F1).
 // Plus the builder rail in #shell-rail (fleet plan §4 2.4, task D5), at the end of this file.
 import { $, el } from '../core/dom.js';
-import { ago, resetsIn } from '../core/format.js';
+import { STATE_LABEL, ago, resetsIn } from '../core/format.js';
 import { alarms, builders, store, subscribe } from '../core/store.js';
 import { deriveCode } from '../core/keys.js';
 import { icon } from '../core/icons.js';
 import { currentRoute, navigate, onRoute } from '../core/router.js';
-import { lamp, lampLabel, laneMix, markSel, mixLabel, normP, plate, scopeSessions, segbar } from './components.js';
+import { builderMark, lamp, lampLabel, laneMix, markSel, mixLabel, plate, scopeSessions, segbar } from './components.js';
 import { setRail } from './shell.js';
-import { compactGauge, gauge, stateDot } from './widgets.js';
+import { compactGauge, gauge } from './widgets.js';
 import { focusSession } from '../views/board.js';
+import { STATE_P } from '../views/board-card.js';
 import { boxBlocks } from '../views/box.js';
 
 /** On the 49" the Box is rail blocks, not a tab (the CSS hides the tab there). */
@@ -21,6 +22,20 @@ export function renderRailBox() {
   if (!wide || !store.boxDirty) return;
   host.textContent = '';
   for (const b of boxBlocks()) host.append(b);
+}
+
+/**
+ * The mark of a NEEDS YOU item: the same lamp as its card (runs night 4 T15,
+ * r10 Board 4-5): the guard's danger and a permission red ■, a question
+ * amber ▲, working grey ●, the rest grey ○. Never a hue-only dot. Pure.
+ */
+export function attentionP(a) {
+  if (a?.danger) return '1';
+  return STATE_P[a?.state] ?? 'off';
+}
+
+function attentionLamp(a) {
+  return lamp(attentionP(a), { label: a.danger ? `danger: ${a.danger}` : (STATE_LABEL[a.state] || a.state) });
 }
 
 export function renderAttention() {
@@ -37,7 +52,7 @@ export function renderAttention() {
     const b = el('button', `attention-item s-${a.danger ? 'danger' : a.state}`);
     if (a.danger) b.title = a.danger;
     b.append(el('span', 'idx', String(i + 1)));
-    b.append(stateDot(a.state, a.since));
+    b.append(attentionLamp(a));
     b.append(el('span', 'nm', a.name));
     b.append(el('span', 'ago', ago(a.since)));
     b.dataset.key = a.key;
@@ -46,7 +61,7 @@ export function renderAttention() {
     list.append(li);
 
     const chip = el('button', `chip s-${a.danger ? 'danger' : a.state}`);
-    chip.append(stateDot(a.state, a.since));
+    chip.append(attentionLamp(a));
     chip.append(el('span', 'nm', a.name));
     chip.append(el('span', 'ago', ago(a.since)));
     chip.dataset.key = a.key;
@@ -114,9 +129,11 @@ export function renderRateLimits() {
 // Clicking a row, or Enter/Space on it, sets the scope `b=<id>` (ALL clears
 // it) through the router; routes only select and filter.
 //
-// The lamp is the builder's worst alarm (§7 `alarms`, plus its `health`
-// sample's own alarms), or its link state: down -> p1, stale -> p3, and both
-// rows are hatched. Builder names and codes are untrusted: they reach the DOM
+// The lamp is the shared builder mark (components.js builderMark, as the phone
+// chip): the worst of its alarms (§7 `alarms`, plus its `health`
+// sample's own alarms) and its lanes (permission p1, question p2), or its link state: down -> p1 (the trouble red), stale
+// -> the grey hollow `stale` lamp (as the phone sheet), and both rows are
+// hatched: the hatch is the shape cue, so no third hue (runs T31). Builder names and codes are untrusted: they reach the DOM
 // through textContent and setAttribute only.
 //
 // The collapse state lives in localStorage['lb.rail'] ('open' | 'min'). On a
@@ -134,7 +151,6 @@ export const CODE_MAX = 6;
 
 /** Severity order of a lamp `data-p`, worst first. */
 const LAMP_RANK = Object.freeze({ 1: 0, 2: 1, 3: 2, stale: 3, run: 4, ok: 5, off: 6 });
-const ALARM_P = new Set(['1', '2', '3']);
 const BUILDER_STATUS = new Set(['live', 'stale', 'down', 'connecting']);
 // eslint-disable-next-line no-control-regex
 const CONTROL_RX = /[\u0000-\u001f\u007f]/g;
@@ -170,40 +186,14 @@ export function worseP(a, b) {
   return (LAMP_RANK[b] ?? 9) < (LAMP_RANK[a] ?? 9) ? b : a;
 }
 
-/**
- * One builder's lamp: {p, unack, label, n}. `list` is the store's alarms
- * ({builder, priority 'P1'..'P4', acked}); `mix` its laneMix. Down -> p1,
- * stale -> p3, else the worst alarm (unack when an alarm at that priority is
- * not acked), else working (any lane running) or ok. Pure.
- */
+/** One builder's lamp: the shared builder mark (components.js `builderMark`, runs T43). */
 export function builderLamp(b, list = [], mix = null) {
-  if (!b || typeof b !== 'object') return { p: 'off', unack: false, label: 'unknown', n: 0 };
-  if (b.status === 'down') return { p: '1', unack: false, label: 'down', n: 0 };
-  if (b.status === 'stale') return { p: '3', unack: false, label: 'stale', n: 0 };
-  let p = null;
-  let unack = false;
-  let n = 0;
-  for (const a of Array.isArray(list) ? list : []) {
-    if (!a || typeof a !== 'object' || a.builder !== b.id) continue;
-    const q = normP(a.priority);
-    if (!ALARM_P.has(q)) continue;
-    n++;
-    const open = a.acked !== true;
-    if (p === null || LAMP_RANK[q] < LAMP_RANK[p]) { p = q; unack = open; } else if (q === p && open) unack = true;
-  }
-  // The health sample's own alarms (§7), in case the alarm feed lags or is absent.
-  for (const h of Array.isArray(b.health?.alarms) ? b.health.alarms : []) {
-    const q = h?.level === 'crit' ? '1' : h?.level === 'warn' ? '2' : null;
-    if (q && (p === null || LAMP_RANK[q] < LAMP_RANK[p])) { p = q; unack = false; }
-  }
-  if (p) return { p, unack, label: `${lampLabel(p)}${n ? `, ${n} ${n === 1 ? 'alarm' : 'alarms'}` : ''}`, n };
-  if (b.status === 'connecting') return { p: 'off', unack: false, label: 'connecting', n: 0 };
-  if (mix?.run > 0) return { p: 'run', unack: false, label: 'working', n: 0 };
-  return { p: 'ok', unack: false, label: 'ok', n: 0 };
+  return builderMark(b, list, mix);
 }
 
 function addMix(into, mix) {
-  for (const k of Object.keys(into)) into[k] += mix[k] || 0;
+  for (const k of Object.keys(into)) if (typeof into[k] === 'number') into[k] += mix[k] || 0;
+  if (mix.p === '1' || (mix.p === '2' && into.p !== '1')) into.p = mix.p;
   return into;
 }
 
@@ -288,6 +278,9 @@ function railOption(r, onSelect) {
   o.tabIndex = -1;
   o.dataset.b = r.id;
   o.dataset.status = r.status;
+  // One lane (or none) makes a bar that is one full-width segment: it says
+  // nothing the lamp does not, so rail.css hides it.
+  if (!(r.n > 1)) o.dataset.single = '';
   markSel(o, r.selected);
   const code = plate(r.code, { kind: r.id === 'all' ? 'solid' : null });
   code.classList.add('brail-code');

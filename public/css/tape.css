@@ -55,6 +55,8 @@
 .tape-c { color: var(--text-1); font-weight: 600; }
 .tape-n { color: var(--text-1); overflow: hidden; text-overflow: ellipsis; max-width: 18ch; }
 .tape-w { overflow: hidden; text-overflow: ellipsis; }
+/* The latest-session fallback (T20): name and state are one text, keep it whole. */
+.tape-i[data-latest="true"] .tape-n { max-width: none; }
 
 /* Severity: the left bar (and a shape-free colour, the bar is never the only cue:
    the event word says what happened). */

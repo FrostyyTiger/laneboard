@@ -159,6 +159,20 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS lane_archive_retired ON lane_archive(retired_at DESC)`,
 ];
 
+/**
+ * Re-runnable entries that need the `builder` column, so they run after
+ * migrateToV1 on every start (an entry in MIGRATIONS would fail on a fresh
+ * file, where the column does not exist yet). Append-only, like MIGRATIONS.
+ */
+const V1_MIGRATIONS = [
+  // runs-n4 T7. The run page's sessionsSeen: find the sessions with an event
+  // in a time window (covering, builder + ts range), then read each of them
+  // over its whole life (builder + session_id, in ts order). Without these the
+  // planner walks every row of the builder through events_builder.
+  `CREATE INDEX IF NOT EXISTS events_builder_ts ON events(builder, ts, session_id)`,
+  `CREATE INDEX IF NOT EXISTS events_builder_sid ON events(builder, session_id, ts)`,
+];
+
 /** The schema version this file migrates to (`PRAGMA user_version`). */
 export const SCHEMA_VERSION = 1;
 
@@ -224,6 +238,7 @@ export function migrate(database = db) {
   // keep NULL and are attributed by session name at query time instead.
   addColumn('cost_snapshots', 'lane', 'TEXT', database);
   if (version < 1) migrateToV1(database);
+  for (const sql of V1_MIGRATIONS) database.exec(sql);
 }
 
 migrate(db);
@@ -708,4 +723,49 @@ export function laneCostAllTime(lane, sessionNames = []) {
     if (t && typeof t === 'object') for (const v of Object.values(t)) tokens += Number(v) || 0;
   }
   return { usd, tokens, sessions: per.size };
+}
+
+/**
+ * Sessions this builder heard from (hook events) between `since` and
+ * `until`, for tying them to run rounds (server/runs/bind.mjs):
+ * `[{sessionId, name, cwd, firstAt, lastAt, usd}]`. `firstAt`/`lastAt` span
+ * the session's whole life in the table (a session open before `since` keeps
+ * its earlier start), `cwd` is the first one its events carried, `usd` its
+ * highest cost snapshot (cumulative per session), null when none.
+ */
+export function sessionsSeen(since, until = Date.now(), { limit = 2000 } = {}) {
+  const b = storedBuilder('');
+  const rows = db.prepare(
+    `SELECT session_id, MAX(session_name) AS name, MIN(ts) AS first_at, MAX(ts) AS last_at,
+            (SELECT json_extract(e2.payload, '$.cwd') FROM events e2
+              WHERE e2.session_id = e.session_id AND e2.builder = ?
+                AND json_extract(e2.payload, '$.cwd') IS NOT NULL
+              ORDER BY e2.ts ASC, e2.id ASC LIMIT 1) AS cwd
+       FROM events e
+      WHERE e.builder = ? AND e.session_id IN (
+        SELECT DISTINCT session_id FROM events
+         WHERE builder = ? AND session_id IS NOT NULL AND ts >= ? AND ts <= ?)
+      GROUP BY e.session_id
+      ORDER BY first_at ASC
+      LIMIT ?`
+  ).all(b, b, b, Number(since), Number(until), Math.max(1, Math.min(Number(limit) || 2000, 10000)));
+  if (!rows.length) return [];
+  const usd = new Map();
+  const ids = rows.map((r) => r.session_id);
+  for (let i = 0; i < ids.length; i += 500) {
+    const part = ids.slice(i, i + 500);
+    const got = db.prepare(
+      `SELECT session_id, MAX(usd) AS usd FROM cost_snapshots
+        WHERE builder = ? AND session_id IN (${part.map(() => '?').join(',')}) GROUP BY session_id`
+    ).all(b, ...part);
+    for (const r of got) usd.set(r.session_id, Number(r.usd));
+  }
+  return rows.map((r) => ({
+    sessionId: r.session_id,
+    name: r.name ?? null,
+    cwd: typeof r.cwd === 'string' ? r.cwd : null,
+    firstAt: r.first_at,
+    lastAt: r.last_at,
+    usd: usd.has(r.session_id) && Number.isFinite(usd.get(r.session_id)) ? usd.get(r.session_id) : null,
+  }));
 }

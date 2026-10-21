@@ -68,6 +68,7 @@
     "offline": "unplug",
     "theme": "sun-moon",
     "external": "external-link",
-    "more": "ellipsis"
+    "more": "ellipsis",
+    "runs": "repeat"
   }
 }

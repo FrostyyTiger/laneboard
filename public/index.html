@@ -28,6 +28,7 @@
 <link rel="stylesheet" href="/css/views/diff.css">
 <link rel="stylesheet" href="/css/views/packages.css">
 <link rel="stylesheet" href="/css/views/audit.css">
+<link rel="stylesheet" href="/css/views/runs.css">
 <link rel="stylesheet" href="/css/views/fleet-views.css">
 <link rel="stylesheet" href="/vendor/xterm.css">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -63,11 +64,12 @@
     <button class="nav-tab" type="button" data-view="credit" title="Credit (g c)" aria-label="Credit"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-credit"/></svg><span class="nav-l">CRED</span></button>
     <button class="nav-tab" type="button" data-view="box" title="Box (g x)" aria-label="Box"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-box"/></svg><span class="nav-l">BOX</span></button>
     <button class="nav-tab" type="button" data-view="audit" title="Audit (g a)" aria-label="Audit"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-audit"/></svg><span class="nav-l">AUD</span></button>
+    <button class="nav-tab" type="button" data-view="runs" title="Runs (g r)" aria-label="Runs"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-runs"/></svg><span class="nav-l">RUNS</span></button>
   </nav>
   <div class="scope" id="scope" role="toolbar" aria-label="Scope"></div>
   <div class="topbar-gauges" id="topbar-gauges"></div>
   <div class="head-right">
-    <span class="stat" id="stat-cost" title="API-equivalent spend today">—</span>
+    <span class="stat" id="stat-cost" title="API-equivalent spend of live sessions today">—</span>
     <div class="ann" id="ann" role="group" aria-label="Alarms"></div>
     <time class="clock" id="clock" aria-label="Time, UTC and local"><span class="clock-utc" id="clock-utc">--:--:--Z</span><span class="clock-local" id="clock-local">--:--</span></time>
     <button class="icon-btn" id="btn-refresh" type="button" title="Force refresh" aria-label="Force refresh"><svg class="i" aria-hidden="true" focusable="false"><use href="/vendor/lucide/sprite.svg#i-restart"/></svg></button>
@@ -171,6 +173,8 @@
 <section class="view" id="view-packages" aria-label="Packages" hidden></section>
 
 <section class="view" id="view-audit" aria-label="Audit" hidden></section>
+
+<section class="view" id="view-runs" aria-label="Runs" hidden></section>
 
 <section class="view" id="view-diff" aria-label="Diff" hidden></section>
 

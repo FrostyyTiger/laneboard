@@ -48,7 +48,8 @@
 
 .pal-o {
   display: grid;
-  grid-template-columns: var(--icon-s) 4.5em minmax(0, 1fr) minmax(0, auto) auto;
+  /* The label keeps its width (at least 6em); the sub line gives way and ellipsizes. */
+  grid-template-columns: var(--icon-s) 4.5em minmax(6em, max-content) minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--sp-2);
   height: var(--row-dense);
@@ -69,7 +70,7 @@
   text-overflow: ellipsis;
 }
 .pal-l { color: var(--text-1); }
-.pal-s { color: var(--text-3); }
+.pal-s { color: var(--text-3); text-align: right; }
 .pal-k {
   font-family: var(--font-mono);
   font-size: var(--fs-10);

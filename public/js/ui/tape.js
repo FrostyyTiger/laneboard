@@ -13,6 +13,9 @@
 // - Each item has a severity left bar (`data-p`, the lamp priorities).
 // - Filtered by the route scope: `b=` (builder), `q=` (text) and `s=<tile>`
 //   (the lanes of that annunciator tile).
+// - Before the first hook event the line shows what the phone peek shows
+//   (sheet.js peekModel: the top needs-you entry, else the latest session
+//   change), and stays empty when there is no session either (task T20).
 //
 // Pure at import time. The model functions (createRing, eventP, tapeItem,
 // filterItems, ...) are tested in test/annunciator.test.mjs. Event fields
@@ -24,6 +27,7 @@ import { currentRoute, navigate, onRoute } from '../core/router.js';
 import { tileFromParam, tileKeys, tileModel } from '../core/alarm-tiles.js';
 import { icon } from '../core/icons.js';
 import { dataTable } from './components.js';
+import { peekModel } from './sheet.js';
 
 export const TAPE_MAX = 500;
 export const DRAWER_ROWS = 200;
@@ -141,6 +145,38 @@ export function itemLabel(it) {
   return [it.time, it.code, it.name, it.what].filter(Boolean).join(' ');
 }
 
+/**
+ * A peekModel `latest` ({key, text, p, since}) as a tape item, or null. Pure.
+ */
+export function latestItem(latest) {
+  if (!latest || typeof latest.text !== 'string' || !latest.text) return null;
+  const ts = Number(latest.since) || 0;
+  const p = String(latest.p ?? 'run');
+  return {
+    uid: 'latest',
+    ts,
+    time: tapeTime(ts),
+    builder: '',
+    code: '',
+    name: clip(latest.text),
+    what: '',
+    p: ['1', '2', 'run', 'ok', 'off'].includes(p) ? p : 'run',
+    key: typeof latest.key === 'string' && isFkey(latest.key) ? latest.key : null,
+  };
+}
+
+/**
+ * What the line shows when no item passes the scope: `{kind: 'latest', item}`
+ * before the first event when a session exists, `{kind: 'scope', text}` when
+ * events exist but the scope hides them, else `{kind: 'none'}` (the line stays
+ * empty rather than saying there is nothing). Pure.
+ */
+export function emptyLine(ringSize, latest) {
+  if (ringSize > 0) return { kind: 'scope', text: 'no events in this scope' };
+  const item = latestItem(latest);
+  return item ? { kind: 'latest', item } : { kind: 'none' };
+}
+
 // ---------------------------------------------------------------- DOM
 
 const ring = createRing(TAPE_MAX);
@@ -171,6 +207,7 @@ function itemNode(it) {
   n.dataset.p = it.p;
   n.dataset.uid = it.uid;
   if (!it.key) n.disabled = true;
+  if (it.uid === 'latest') n.dataset.latest = 'true';
   const label = itemLabel(it);
   n.title = label;
   n.setAttribute('aria-label', label);
@@ -238,10 +275,19 @@ function paint() {
   const items = filterItems(ring.list(), tapeScope(currentRoute(), alarms(store)));
   byUid = new Map(items.map((it) => [it.uid, it]));
   if (!items.length) {
-    const empty = document.createElement('span');
-    empty.className = 'tape-empty';
-    empty.textContent = ring.size() ? 'no events in this scope' : 'no events yet';
-    setKids(line, [empty]);
+    const route = currentRoute();
+    const e = emptyLine(ring.size(), ring.size() ? null : peekModel(store, route?.b ?? null).latest);
+    if (e.kind === 'latest') {
+      byUid.set(e.item.uid, e.item);
+      setKids(line, [itemNode(e.item)]);
+    } else if (e.kind === 'scope') {
+      const empty = document.createElement('span');
+      empty.className = 'tape-empty';
+      empty.textContent = e.text;
+      setKids(line, [empty]);
+    } else {
+      setKids(line, []);
+    }
   } else {
     setKids(line, items.slice(0, LINE_ITEMS).map(itemNode));
   }
@@ -312,6 +358,7 @@ export function init() {
   subscribe((change) => {
     if (change.type === 'event' && change.event) pushEvent(change.event);
     else if (change.type === 'alarms' && tileFromParam(currentRoute().s)) schedule();
+    else if (!ring.size()) schedule(); // the latest-session fallback follows the store
   });
   onRoute(() => schedule());
   paint();

@@ -1,6 +1,7 @@
-// The minimap PiP (fleet plan §5 2.7, task M5): a 240x240 canvas fixed at the
-// bottom right of every view that is not the Map, so the fleet stays in the
-// corner of your eye. Click it to go back to the Map (b= and sel= kept).
+// The minimap PiP renderer (fleet plan §5 2.7, task M5): a 240x240 canvas of the
+// Map's scene. No view mounts it since runs-n4 T14 (the owner's taste call
+// "the minimap on the Map only": it covered the end of other views, and the Map
+// is its own overview); the renderer stays for a Map-side overview later.
 //
 // It draws the rings and one dot per node (status shape, 2-3 px); no labels, no comets. The points come from the main map's
 // snapshotScene() (`{version, pts: Float32Array [x, y, shapeCode, toneCode]...,
@@ -8,11 +9,10 @@
 //
 // Redraw throttle: at most PIP_FPS frames a second, driven by a slow
 // interval, and only when the scene's version changed or a pulse is due (a
-// node in trouble blinks once a second). No animation-frame loop. Hidden on
-// viewports under PIP_MIN_VIEWPORT and while the document is hidden.
+// node in trouble blinks once a second). No animation-frame loop.
 // Reduced motion: no blink, draw on change only.
 //
-// Pure parts (transform, redraw decision, visibility, dot list) are tested in
+// Pure parts (transform, redraw decision, dot list) are tested in
 // test/map-view.test.mjs.
 import { RINGS } from './layout.js';
 import { SHAPE_CODE, TONE_CODE } from './overlays.js';
@@ -24,8 +24,6 @@ export const PIP_SIZE = 240;
 export const PIP_FPS = 2;
 /** Minimum time between two PiP frames, ms. */
 export const PIP_FRAME_MS = 1000 / PIP_FPS;
-/** Viewports narrower than this get no PiP. */
-export const PIP_MIN_VIEWPORT = 700;
 /** Padding inside the canvas around the outermost ring, px. */
 const PAD = 10;
 
@@ -35,11 +33,6 @@ let codes = null;
 function codeNames() {
   codes ||= { shape: invert(SHAPE_CODE), tone: invert(TONE_CODE), trouble: new Set([TONE_CODE.crit, TONE_CODE.warn]) };
   return codes;
-}
-
-/** True when the PiP should show. Pure. */
-export function pipVisible({ view = 'map', width = 0, hidden = false, hasMap = false } = {}) {
-  return view !== 'map' && Number(width) >= PIP_MIN_VIEWPORT && !hidden && Boolean(hasMap);
 }
 
 /** World -> PiP px: scale and centre for a scene whose outermost radius is `outer`. Pure. */
@@ -98,11 +91,15 @@ export function dotsOf(scene, tf) {
 /** The ring radii (PiP px) up to the scene's outermost radius. Pure. */
 export function ringsOf(outer, tf) {
   const out = [];
+  if (!(tf?.s > 0)) return out;
   for (const r of RINGS) if (r > 0 && r <= (outer ?? 0) + 1) out.push(r * tf.s);
   return out;
 }
 
 // ---------------------------------------------------------------- DOM
+
+/** A radius ctx.arc accepts: finite and >= 0 (the browser throws on a negative one). */
+const safeRadius = (r) => (Number.isFinite(r) && r > 0 ? r : 0);
 
 const toneColour = (pal, tone) => (tone === 'crit' ? pal.crit : tone === 'warn' ? pal.warn
   : tone === 'low' ? pal.low : tone === 'accent' ? pal.accent : pal.t3);
@@ -117,8 +114,8 @@ function dot(ctx, d, size) {
     case 'diamond':
       ctx.moveTo(d.x, d.y - size * 1.2); ctx.lineTo(d.x + size * 1.2, d.y); ctx.lineTo(d.x, d.y + size * 1.2); ctx.lineTo(d.x - size * 1.2, d.y);
       ctx.closePath(); ctx.fill(); return;
-    case 'ring': ctx.arc(d.x, d.y, size, 0, Math.PI * 2); ctx.stroke(); return;
-    default: ctx.arc(d.x, d.y, size * 0.8, 0, Math.PI * 2); ctx.fill();
+    case 'ring': ctx.arc(d.x, d.y, safeRadius(size), 0, Math.PI * 2); ctx.stroke(); return;
+    default: ctx.arc(d.x, d.y, safeRadius(size * 0.8), 0, Math.PI * 2); ctx.fill();
   }
 }
 
@@ -135,6 +132,21 @@ export function createMinimap(canvas, sceneSource, opts = {}) {
   let last = null;
   let timer = 0;
   let pal = null;
+  let palKey = null;
+
+  // The theme the cached palette was read under: <html>'s data-theme and the
+  // OS scheme. A draw under another key re-reads the tokens, so the PiP
+  // follows the theme even when no `lb:theme` event reached it.
+  const themeKey = () => {
+    const html = globalThis.document?.documentElement;
+    const dark = globalThis.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+    return `${html?.dataset?.theme ?? html?.getAttribute?.('data-theme') ?? ''}|${html?.className ?? ''}|${dark ? 'dark' : 'light'}`;
+  };
+  const palette = () => {
+    const key = themeKey();
+    if (!pal || key !== palKey) { pal = readPalette(canvas); palKey = key; }
+    return pal;
+  };
 
   function draw(force = false) {
     let scene = null;
@@ -144,7 +156,7 @@ export function createMinimap(canvas, sceneSource, opts = {}) {
     if (!force && !shouldRedraw(last, scene, t, { reduced: reduced() })) return false;
     const phase = blinkPhase(t);
     last = { version: scene.version, at: t, phase };
-    pal ||= readPalette(canvas);
+    const pal = palette();
     const dpr = Math.min(2, globalThis.devicePixelRatio || 1);
     const px = Math.round(size * dpr);
     if (canvas.width !== px) canvas.width = px;
@@ -159,7 +171,7 @@ export function createMinimap(canvas, sceneSource, opts = {}) {
     ctx.lineWidth = 1;
     for (const r of ringsOf(scene.outer, tf)) {
       ctx.beginPath();
-      ctx.arc(tf.cx, tf.cy, r, 0, Math.PI * 2);
+      ctx.arc(tf.cx, tf.cy, safeRadius(r), 0, Math.PI * 2);
       ctx.stroke();
     }
     const blinkOff = !reduced() && phase === 1;
@@ -179,11 +191,19 @@ export function createMinimap(canvas, sceneSource, opts = {}) {
 
   const onClick = () => opts.onClick?.();
   canvas.addEventListener?.('click', onClick);
+  // Theme changes repaint with the new tokens: the shell's `lb:theme`, any
+  // other change of <html>'s theme attributes, and the OS scheme.
   const onTheme = () => { pal = null; draw(true); };
   globalThis.addEventListener?.('lb:theme', onTheme);
+  const mo = typeof MutationObserver === 'function' ? new MutationObserver(onTheme) : null;
+  const html = globalThis.document?.documentElement;
+  if (html) mo?.observe(html, { attributes: true, attributeFilter: ['data-theme', 'class'] });
+  const mq = globalThis.matchMedia?.('(prefers-color-scheme: dark)');
+  mq?.addEventListener?.('change', onTheme);
 
   function start() {
     if (timer) return;
+    pal = null;
     draw(true);
     timer = setInterval(() => draw(false), PIP_FRAME_MS);
   }
@@ -195,6 +215,8 @@ export function createMinimap(canvas, sceneSource, opts = {}) {
     stop();
     canvas.removeEventListener?.('click', onClick);
     globalThis.removeEventListener?.('lb:theme', onTheme);
+    mo?.disconnect();
+    mq?.removeEventListener?.('change', onTheme);
   }
   return { start, stop, draw, running: () => Boolean(timer), destroy };
 }

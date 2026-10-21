@@ -55,7 +55,17 @@
   color: var(--text-3);
   cursor: help;
 }
-.inbox-group > .empty { padding: 0 var(--sp-2); }
+/* T16: an empty group is one muted line ("Review · none"), below the filled ones. */
+.inbox-group:not([data-empty]) + .inbox-group[data-empty] { margin-top: var(--sp-2); }
+.inbox-empty {
+  display: flex;
+  align-items: center;
+  min-height: var(--row-h);
+  margin: 0;
+  padding: 0 var(--sp-2);
+  border-bottom: var(--bw) solid var(--line-weak);
+  color: var(--text-3);
+}
 
 .inbox-rows {
   margin: 0;
@@ -67,7 +77,9 @@
   cursor: pointer;
 }
 .inbox-row:hover { background: var(--bg-hover); }
-.inbox-row[aria-selected="true"] { background: var(--bg-selected); }
+/* T16: focus is a 2 px accent ring inside the row, never a fill. */
+.inbox-row[aria-selected="true"],
+.inbox-review-slot[data-focus] { outline: 2px solid var(--accent); outline-offset: -2px; }
 .inbox-row[data-closed] { color: var(--text-3); background: var(--tex-hatch); }
 .inbox-row[data-closed] .plate { color: var(--text-3); border-color: var(--line); }
 
@@ -93,6 +105,13 @@
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
 }
+.inbox-link {
+  flex: none;
+  font-size: var(--fs-11);
+  color: var(--text-2);
+}
+.inbox-link:hover { color: var(--text-1); }
+.inbox-ack { flex: none; }
 .inbox-status {
   font-family: var(--font-label);
   font-weight: 600;
@@ -439,17 +458,20 @@
 
 /* --------------------------------------------------- Morning fleet blocks */
 
+/* Dividers sit before each cell, and every cell is pulled left by the rule's
+   width: the rule of a cell that starts a line lands outside the strip and is
+   clipped, so no divider hangs at a line's end or start when it wraps (T37). */
 .mkv {
   display: inline-flex;
   align-items: baseline;
   gap: var(--sp-1);
-  padding: 0 var(--sp-2) 0 0;
-  border-right: var(--bw) solid var(--line-weak);
+  margin-left: calc(-1 * var(--bw));
+  padding: 0 0 0 var(--sp-2);
+  border-left: var(--bw) solid var(--line-weak);
 }
-.mkv:last-child { border-right: 0; }
 .mkv-k {
   font-family: var(--font-label);
-  font-size: var(--fs-10);
+  font-size: var(--fs-11);
   font-weight: 600;
   letter-spacing: var(--ls-label);
   text-transform: uppercase;
@@ -463,6 +485,12 @@
 }
 .mkv.warn .mkv-v { color: var(--p2); }
 .mkv.warn .mkv-v::before { content: "▲ "; }
+/* A count that is not known while a builder sent no data (T24): `—`, then this. */
+.mkv.nodata .mkv-v { color: var(--text-3); }
+.mkv-nodata {
+  font-size: var(--fs-11);
+  color: var(--text-3);
+}
 .mblock > .mrow-top { margin-bottom: var(--sp-2); }
 
 .morning-summary {
@@ -471,7 +499,28 @@
   border-radius: var(--radius);
   background: var(--bg-surface);
 }
-.morning-summary > .mrow-top { gap: var(--sp-1) var(--sp-3); }
+.morning-summary > .mrow-top { gap: var(--sp-1) var(--sp-2); overflow: hidden; }
+/* One label size (11 caps) and one value size (13 mono) in the strip, spend
+   included (T25). On a phone it is a 3-column grid of label-over-value cells
+   instead of a row that wraps: no dividers, the grid's gap is the rule. */
+.morning-summary .mkv-v { font-size: var(--fs-13); }
+@media (max-width: 699px) {
+  .morning-summary > .mrow-top {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--sp-2) var(--sp-3);
+  }
+  .morning-summary .mkv {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: baseline;
+    gap: 0 var(--sp-1);
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .morning-summary .mkv-k { grid-column: 1 / -1; }
+}
 .morning-missing {
   display: flex;
   align-items: center;
@@ -481,16 +530,43 @@
   border-top: var(--bw) solid var(--line-weak);
 }
 
+/* one reading width for the whole page, the run page's cap (T27, T37) */
+#morning-body { max-width: var(--read-max); }
+/* the head too, so the `since` date ends on the panel's right edge (T25) */
+#view-morning > .view-head { max-width: var(--read-max); }
 .morning-builder { margin: var(--sp-4) 0; }
 .morning-builder > .mblock:last-child { margin-bottom: 0; }
-.morning-error { padding: var(--sp-1) 0; }
-.morning-error::before { content: "◆ "; color: var(--p3); }
+.morning-quiet { margin: var(--sp-4) 0; }
 
 .morning-stuck,
+.morning-run,
 .morning-deferred { align-items: flex-start; }
 .morning-stuck > .lamp { margin-top: 4px; }
-.morning-deferred a.mrow-name { color: var(--text-1); text-decoration: underline; text-decoration-color: var(--line-strong); }
-.morning-deferred a.mrow-name:hover { text-decoration-color: var(--text-1); }
+/* Morning's links (run title, deferred item) read as text like every other
+   link: no resting underline, an underline on hover/focus, and a muted `›`
+   after the name saying it opens a page (T42). */
+.morning-run a.mrow-name,
+.morning-deferred a.mrow-name { color: var(--text-1); text-decoration: none; overflow-wrap: anywhere; }
+.morning-run a.mrow-name:hover,
+.morning-run a.mrow-name:focus-visible,
+.morning-deferred a.mrow-name:hover,
+.morning-deferred a.mrow-name:focus-visible { text-decoration: underline; text-decoration-color: var(--text-1); }
+.morning-deferred a.mrow-name::after { content: ' \203A'; color: var(--text-3); font-weight: 400; }
+/* A run row (T25): the title at the body step, not the biggest type on the
+   screen; the whole title is the link (no `›`). The state is the meta line's
+   leading mark + word, plain muted text in both themes, no chip (T36). */
+.morning-run .mrow-name { font-size: var(--fs-12); font-weight: 600; }
+.morning-run-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  color: var(--text-3);
+}
+.morning-run-state { background: none; padding: 0; min-width: 0; overflow-wrap: anywhere; }
+.morning-run-sub { margin-top: var(--sp-1); font-family: var(--font-mono); font-size: var(--fs-11); }
 
 .mrow-pkg {
   padding: 0 var(--sp-1);
@@ -536,6 +612,19 @@
 .np-sec > .empty { margin: var(--sp-1) 0 0; }
 
 @media (max-width: 700px) {
+  /* T34: a run need wraps (up to three lines) under the run name, OPEN/ACK on the right edge */
+  .inbox-row-h--need { flex-wrap: wrap; row-gap: 0; padding-bottom: var(--sp-1); }
+  .inbox-row-h--need > .plate { margin-right: auto; }
+  .inbox-row-h--need > .inbox-sum {
+    order: 1;
+    flex: 1 0 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
   .rq-row { grid-template-columns: minmax(0, 1fr); }
   .rq-acts { grid-column: 1; grid-row: auto; flex-wrap: wrap; margin-top: var(--sp-1); }
   .rq-pull-l { grid-template-columns: minmax(0, 1fr) auto; }

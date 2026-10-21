@@ -3,7 +3,8 @@
 // Eight fixed tiles, in this order, each covering some of §7's alarm kinds
 // (server/fleet/alarms.mjs KINDS; the server's own copy of this map is
 // server/fleet/alarms.mjs KIND_TO_TILE, used by `ack-alarm *` with {tile}).
-// `review` (P4) has no tile: it lives in the Inbox.
+// `review` (P4) has no tile: it lives in the Inbox; `reboot` and
+// `health-warn` have none either: the Box shows them.
 //
 // Pure: no DOM, no store. Tested in test/annunciator.test.mjs. Alarms come
 // from builders and the hub as §7 sends them:
@@ -14,15 +15,20 @@ import { BUILDER_ID_RX, fkey } from './keys.js';
 /** The tiles, in display order (also the `args.tile` values of ack-alarm). */
 export const TILES = Object.freeze(['NEED', 'APPR', 'BLKD', 'STCK', 'CI-F', 'DOWN', 'BUDG', 'CONF']);
 
-/** §7 alarm kind -> tile. Kinds not listed (review) have no tile. */
+/**
+ * §7 alarm kind -> tile. Kinds not listed have no tile: `review` lives in the
+ * Inbox, `reboot` and `health-warn` in the Box (runs night 4 T38: a host that
+ * wants a reboot is not a builder that is down, so a fresh copy with its link
+ * up shows DOWN 0). DOWN counts a lost or stale link, a crit host check and an
+ * audit fork.
+ */
 export const KIND_TO_TILE = Object.freeze({
   'needs-input': 'NEED', 'review-overdue': 'NEED',
   'approval': 'APPR',
   'blocked': 'BLKD', 'failed': 'BLKD', 'danger': 'BLKD',
   'stuck': 'STCK',
   'ci-red-main': 'CI-F', 'ci-red': 'CI-F',
-  'builder-down': 'DOWN', 'builder-stale': 'DOWN', 'health-crit': 'DOWN', 'health-warn': 'DOWN',
-  'reboot': 'DOWN', 'audit-fork': 'DOWN',
+  'builder-down': 'DOWN', 'builder-stale': 'DOWN', 'health-crit': 'DOWN', 'audit-fork': 'DOWN',
   'budget-warn': 'BUDG', 'budget-exceeded': 'BUDG',
   'conflict': 'CONF',
 });
@@ -38,6 +44,27 @@ export const TILE_META = Object.freeze({
   'BUDG': Object.freeze({ name: 'Budget', icon: 'budget', noun: 'alarm' }),
   'CONF': Object.freeze({ name: 'Conflict', icon: 'conflict', noun: 'conflict' }),
 });
+
+/**
+ * The lamp priority each tile draws in, fixed by what the tile means
+ * (docs/design.md, the colour rule): broken (BLKD, DOWN) is the red p1 with
+ * the ■ mark, everything else wants you and is the amber p2 with the ▲ mark.
+ * The members' own priorities still order them (tileModel `p`), but no tile
+ * draws in p3 any more: BUDG went cyan (runs night 4 T13), and DOWN flapped
+ * red/blue as a demo builder went down and stale (runs T38).
+ */
+export const TILE_FIXED_P = Object.freeze({
+  'NEED': 2, 'APPR': 2, 'BLKD': 1, 'STCK': 2, 'CI-F': 2, 'DOWN': 1, 'BUDG': 2, 'CONF': 2,
+});
+
+/** The status shape of a lamp priority: 1 -> ■ (broken), 2 -> ▲ (wants you). */
+export const TONE_MARK = Object.freeze({ 1: '\u25a0', 2: '\u25b2' });
+
+/** The lamp priority a tile draws in: its fixed one, else its worst member's; null when clear. */
+export function tileTone(t) {
+  if (!t || t.p == null) return null;
+  return Object.hasOwn(TILE_FIXED_P, t.tile) ? TILE_FIXED_P[t.tile] : t.p;
+}
 
 /** The tile of an alarm kind, or null (own keys only, never an inherited member). */
 export function tileOf(kind) {

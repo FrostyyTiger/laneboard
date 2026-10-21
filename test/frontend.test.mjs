@@ -339,7 +339,7 @@ test('the shell breakpoints: phone <700, tablet 700-1199, desktop >=1200, ultraw
 test('the shell grid: header, rail, main, tape; the inspector overlays main', () => {
   const shell = read('css/shell.css');
   assert.match(shell, /grid-template-areas:\s*"head head head"\s*"rail main insp"\s*"tape tape tape"/);
-  assert.match(shell, /var\(--header-h\)/, 'the header is the 40px token');
+  assert.match(shell, /var\(--header-h\)/, 'the header is the --header-h token');
   assert.match(shell, /var\(--tape-h\)/, 'the bottom bar is the tape token');
   const insp = /\.shell-insp\s*\{([^}]*)\}/.exec(shell);
   assert.ok(insp, '.shell-insp rule');
@@ -483,7 +483,7 @@ test('the client reports its own render timings', () => {
 
 // --- the view shell (fleet D4) ---------------------------------------------
 
-const SHELL_VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit'];
+const SHELL_VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs'];
 
 test('every view has a section and exactly one nav button; diff is routable but not in the nav', () => {
   const html = read('index.html');
@@ -498,7 +498,7 @@ test('every view has a section and exactly one nav button; diff is routable but 
   const nav = /<nav class="shell-nav" id="views"[^>]*>([\s\S]*?)<\/nav>/.exec(html);
   assert.ok(nav, 'the view nav');
   const order = [...nav[1].matchAll(/data-view="([a-z]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(order, SHELL_VIEWS, 'nav order MAP BRD INBX PKG MORN CRED BOX AUD');
+  assert.deepEqual(order, SHELL_VIEWS, 'nav order MAP BRD INBX PKG MORN CRED BOX AUD RUNS');
   for (const m of nav[1].matchAll(/<button([^>]*)>/g)) {
     assert.match(m[1], /aria-label="[A-Z][a-z]+"/, 'icon buttons carry the long name');
     assert.match(m[1], /title="[A-Z][a-z]+ \(g [a-z]\)"/, 'and the chord in the title');
@@ -522,7 +522,7 @@ test('the shell keeps every id the page depends on, and has a slot for every lat
 
 test('the view chord follows the plan: g m map, g o morning, g p packages', async () => {
   const { VIEW_KEYS } = await import('../public/js/core/router.js');
-  assert.deepEqual({ ...VIEW_KEYS }, { m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning' });
+  assert.deepEqual({ ...VIEW_KEYS }, { m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning', r: 'runs' });
   assert.ok(Object.isFrozen(VIEW_KEYS));
   for (const [k, v] of Object.entries(VIEW_KEYS)) {
     assert.match(read('index.html'), new RegExp(`data-view="${v}" title="[A-Za-z]+ \\(g ${k}\\)"`), `the ${v} button names g ${k}`);
@@ -589,6 +589,35 @@ test('shell: the clock shows UTC HH:MM:SSZ and local HH:MM with the zone', async
   assert.equal(berlin.local, '16:02');
   assert.match(berlin.tz, /^(CEST|GMT\+2)$/);
   assert.equal(clockParts(Date.UTC(2026, 0, 1, 0, 0, 0), { timeZone: 'UTC' }).utc, '00:00:00Z', 'a number is a date too');
+});
+
+test('shell: the header spend names what it counts, sessions only, beside a run that cost $9.98 (T39)', async () => {
+  const { topbarSpend } = await import('../public/js/ui/shell.js');
+  const sessions = [
+    { cost: { usdToday: 0.0004, usd: 1.2 } },
+    { cost: { usdToday: 0.02 } },
+    { cost: null },
+  ];
+  // A run's cost lives in /api/runs, which the header never reads: the run
+  // fixture must not change the figure, and the label must not claim it.
+  const run = { id: 'acme-billing', cost: { usd: 9.98 } };
+  const m = topbarSpend(sessions, [run]);
+  assert.equal(m.text, '$0.02');
+  assert.equal(m.label, ' sessions today');
+  assert.match(m.title, /runs show their own cost/);
+  assert.match(m.title, /\$1\.20/);
+  assert.equal(topbarSpend([]).text, '$0.00');
+  assert.equal(topbarSpend(undefined).text, '$0.00');
+});
+
+test('format: money uses 2 decimals everywhere ($9.98, $0.00), whole dollars from $100', async () => {
+  const { money } = await import('../public/js/core/format.js');
+  assert.equal(money(9.98), '$9.98');
+  assert.equal(money(0), '$0.00');
+  assert.equal(money(0.004), '$0.00');
+  assert.equal(money(0.081), '$0.08');
+  assert.equal(money(252.4), '$252');
+  assert.equal(money(null), '—');
 });
 
 test('shell: scope chips per active filter, builder code from the store', async () => {
@@ -810,6 +839,9 @@ test('the split is byte-identical to styles.css (minus the aliases) followed by 
     assert.equal(readCss(CSS_ORDER), before.join('\n') + git('show', 'HEAD:public/map.css'));
     return;
   }
+  // A shallow checkout (CI's default depth 1) has the commit but not its
+  // parent; the invariant cannot be checked there.
+  try { git('cat-file', '-e', `${commit}^:public/styles.css`); } catch { return t.skip(`parent of ${commit.slice(0, 7)} not in the history (shallow checkout)`); }
   const before = git('show', `${commit}^:public/styles.css`).split('\n');
   assert.match(before[84], /Aliases kept/, 'line 85 opens the alias block');
   assert.equal(before[104], '}', 'line 105 closes :root');

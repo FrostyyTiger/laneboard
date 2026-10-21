@@ -4,10 +4,15 @@
 // fake builders (test/helpers/fake-builder.mjs) carrying generic demo data,
 // plus a small loopback forwarder that plays `tailscale serve`.
 //
-//   node test/tools/demo-fleet.mjs [--port 7795] [--builders 3] [--tick 4000]
+//   node test/tools/demo-fleet.mjs [--port 7795] [--builders 3] [--tick 4000] [--design <name>]
+//     [--no-runs-route]
 //
 // Then open http://127.0.0.1:<port>/ (from another machine:
 // `ssh -L <port>:127.0.0.1:<port> <host>`). Ctrl-C stops everything.
+// `--design refined` lays docs/plans/runs/design/refined.css over the app's
+// tokens: the forwarder appends it to /css/tokens.css (runs plan T10).
+// `--no-runs-route` leaves GET /api/runs to the hub (404), so the Runs view
+// shows what a real hub shows (runs plan T21).
 //
 // What it shows:
 //   builder-a  lanes in working / waiting (permission + question) / review-ready
@@ -19,12 +24,28 @@
 //   repo `acme` with packages web/api/docs, a red `api-test` job on main and
 //   branches joined to the lanes above, so Packages, Map, Inbox and the
 //   annunciator all have something to show. Session states cycle every tick.
+//   the Map's infrastructure (test/helpers/demo-hub.mjs `writeDemoMap`): a
+//              topology with a room per builder on hypervisor `hv1`, the
+//              `hv1` feed (re-stamped every tick so it never goes stale) and
+//              a Tailscale policy, so Drift (`backup` declared but not seen,
+//              `scratch` seen but not declared) and Reach have something to draw
+//   a run      the recorded run test/fixtures/runs/demo-run.jsonl, answered by
+//              the forwarder at GET /api/runs and /api/runs/<id> (a hub has no
+//              runs route; test/helpers/demo-hub.mjs `demoRunsAnswer`), and added
+//              as `runs` to the hub's /api/fleet/morning (`demoMorningWithRuns`);
+//              two more, one running on `vm-a` and one stuck on `builder-b`,
+//              and all three as run nodes on the Map: the forwarder relays /ws
+//              message by message and adds them to each `map` message
+//              (`demoWsText`; a hub has no runs source)
 //
 // Isolation (RULES 3): the hub runs with its own temp HOME, TMUX_TMPDIR,
 // XDG_*_HOME, LANEBOARD_STATE_DIR, LANEBOARD_AUDIT_FILE, LANEBOARD_CONFIG and
 // LANEBOARD_DB=:memory: (boot.mjs does that, and drops TMUX/TMUX_PANE and every
-// inherited LANEBOARD_* variable). The fakes and the forwarder live in this
-// process and touch no file. Nothing here talks to tmux.
+// inherited LANEBOARD_* variable). Its `hostname` is `demo-host`
+// (test/helpers/demo-hub.mjs), so neither the header nor the Map's core node
+// shows the name of the machine running the demo. The fakes and the forwarder live in this
+// process; the only files it writes are the Map's, in its own temp dir, removed
+// on stop. Nothing here talks to tmux.
 //
 // No auth bypass: the forwarder only adds what serve adds on the ingress
 // listener (X-Forwarded-For/-Proto/-Host, Host = the public host,
@@ -34,10 +55,15 @@
 // relayed action with a throwaway key that the fakes pin with
 // read/control/term scopes; actions land in the fake builders' logs.
 import http from 'node:http';
+import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 import { parseArgs } from 'node:util';
+import { WebSocket, WebSocketServer } from 'ws';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed, demoRunsAnswer, demoMorningWithRuns, demoWsText, demoAttention, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -54,11 +80,13 @@ const { values: args } = parseArgs({
     port: { type: 'string', default: process.env.DEMO_PORT ?? '7795' },
     builders: { type: 'string', default: '3' },
     tick: { type: 'string', default: '4000' },
+    design: { type: 'string' },
+    'no-runs-route': { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h', default: false },
   },
 });
 if (args.help) {
-  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms]\n');
+  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms] [--design <name>] [--no-runs-route]\n');
   process.exit(0);
 }
 const PORT = Number(args.port);
@@ -68,6 +96,18 @@ if (!Number.isInteger(PORT) || PORT < MIN_PORT || PORT > 65535 || FORBIDDEN_PORT
 }
 const N_BUILDERS = Math.max(2, Math.min(3, Number(args.builders) || 3));
 const TICK_MS = Math.max(500, Number(args.tick) || 4000);
+
+// A design direction (docs/plans/runs/design/<name>.css), read once at start.
+const DESIGN_DIR = path.resolve(import.meta.dirname, '..', '..', 'docs', 'plans', 'runs', 'design');
+let DESIGN = null;
+if (args.design != null) {
+  const have = fs.readdirSync(DESIGN_DIR).filter((f) => f.endsWith('.css')).map((f) => f.slice(0, -4));
+  if (!have.includes(args.design)) {
+    process.stderr.write(`demo-fleet: --design must be one of ${have.join(', ')}\n`);
+    process.exit(2);
+  }
+  DESIGN = { name: args.design, css: fs.readFileSync(path.join(DESIGN_DIR, `${args.design}.css`), 'utf8') };
+}
 
 // --- demo data ---------------------------------------------------------------
 
@@ -311,8 +351,92 @@ function serveHeaders(inHeaders) {
   return h;
 }
 
+/** /css/tokens.css with the design direction appended, uncompressed and uncached. */
+function designTokens(ingressPort, req, res) {
+  const h = serveHeaders(req.headers);
+  for (const k of ['accept-encoding', 'if-none-match', 'if-modified-since']) delete h[k];
+  const up = http.request({ host: '127.0.0.1', port: ingressPort, method: 'GET', path: req.url, headers: h }, (r) => {
+    const chunks = [];
+    r.on('data', (c) => chunks.push(c));
+    r.on('end', () => {
+      if (r.statusCode !== 200) { res.writeHead(r.statusCode ?? 502, { 'content-type': 'text/plain' }); res.end(); return; }
+      const body = Buffer.concat([...chunks, Buffer.from(`\n/* demo-fleet --design ${DESIGN.name} */\n${DESIGN.css}`)]);
+      res.writeHead(200, { 'content-type': 'text/css; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store' });
+      res.end(body);
+    });
+  });
+  up.on('error', () => { if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' }); res.end('hub unreachable\n'); });
+  up.end();
+}
+
+// The hub's Morning merge drops `runs` (fenced), so the forwarder adds the
+// demo run's digest to /api/fleet/morning itself (night 3 T7).
+function morningWithRuns(ingressPort, req, res) {
+  const h = serveHeaders(req.headers);
+  delete h['accept-encoding'];
+  const up = http.request({ host: '127.0.0.1', port: ingressPort, method: 'GET', path: req.url, headers: h }, (r) => {
+    const chunks = [];
+    r.on('data', (c) => chunks.push(c));
+    r.on('end', () => {
+      let body = Buffer.concat(chunks);
+      if (r.statusCode === 200) {
+        try { body = Buffer.from(JSON.stringify(demoMorningWithRuns(JSON.parse(body.toString('utf8'))))); } catch { /* keep the hub's bytes */ }
+      }
+      res.writeHead(r.statusCode ?? 502, { 'content-type': r.headers['content-type'] ?? 'application/json; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store' });
+      res.end(body);
+    });
+  });
+  up.on('error', () => { if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain' }); res.end('hub unreachable\n'); });
+  up.end();
+}
+
+// The app's /ws, relayed message by message (the terminal sockets stay raw
+// pipes) so `map` messages get the demo's run nodes (night 3 T45).
+const APP_WS_PATH = '/ws';
+const relayWss = new WebSocketServer({ noServer: true });
+
+function relayAppWs(ingressPort, req, socket, head) {
+  const h = serveHeaders(req.headers);
+  for (const k of Object.keys(h)) if (k.startsWith('sec-websocket-')) delete h[k];
+  const protocols = String(req.headers['sec-websocket-protocol'] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  const up = new WebSocket(`ws://127.0.0.1:${ingressPort}${req.url}`, protocols, { headers: h, perMessageDeflate: false });
+  let client = null;
+  const early = [];
+  const toClient = (data, binary) => client.send(binary ? data : demoWsText(data.toString('utf8')), { binary });
+  // The hub may greet before the browser side is up: keep those until it is.
+  up.on('message', (data, binary) => {
+    if (!client) early.push([data, binary]);
+    else if (client.readyState === WebSocket.OPEN) toClient(data, binary);
+  });
+  up.on('error', () => { if (client) client.terminate(); else socket.destroy(); });
+  up.once('unexpected-response', (_q, r) => { socket.end(`HTTP/1.1 ${r.statusCode} ${r.statusMessage}\r\n\r\n`); });
+  up.once('open', () => {
+    relayWss.handleUpgrade(req, socket, head, (ws) => {
+      client = ws;
+      const close = (code, reason) => {
+        const c = code >= 1000 && code < 5000 && code !== 1005 && code !== 1006 ? code : 1000;
+        for (const w of [client, up]) if (w.readyState === WebSocket.OPEN) w.close(c, reason);
+      };
+      client.on('message', (data, binary) => { if (up.readyState === WebSocket.OPEN) up.send(data, { binary }); });
+      client.on('close', close);
+      client.on('error', () => up.terminate());
+      up.on('close', close);
+      for (const [data, binary] of early.splice(0)) toClient(data, binary);
+    });
+  });
+}
+
 function forwarder(ingressPort) {
   const server = http.createServer((req, res) => {
+    if (DESIGN && req.method === 'GET' && req.url.split('?')[0] === '/css/tokens.css') { designTokens(ingressPort, req, res); return; }
+    const runs = args['no-runs-route'] ? null : demoRunsAnswer(req.method, req.url);
+    if (runs) {
+      const body = Buffer.from(JSON.stringify(runs.body));
+      res.writeHead(runs.status, { 'content-type': 'application/json; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store' });
+      res.end(body);
+      return;
+    }
+    if (req.method === 'GET' && req.url.split('?')[0] === FLEET_MORNING_PATH) { morningWithRuns(ingressPort, req, res); return; }
     const up = http.request({ host: '127.0.0.1', port: ingressPort, method: req.method, path: req.url, headers: serveHeaders(req.headers) }, (r) => {
       const out = {};
       for (const [k, v] of Object.entries(r.headers)) if (!HOP_BY_HOP.has(k)) out[k] = v;
@@ -323,6 +447,7 @@ function forwarder(ingressPort) {
     req.pipe(up);
   });
   server.on('upgrade', (req, socket, head) => {
+    if (req.url.split('?')[0] === APP_WS_PATH) { relayAppWs(ingressPort, req, socket, head); return; }
     const h = serveHeaders(req.headers);
     h.connection = 'Upgrade';
     h.upgrade = req.headers.upgrade ?? 'websocket';
@@ -371,21 +496,19 @@ async function main() {
     hops.set(id, await hop(fb.port));
   }
 
+  const mapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-demo-map-'));
+  const map = writeDemoMap(mapDir);
   const origins = [`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`];
   const hub = await boot({
     mode: 'hub',
     hubKey,
     timeoutMs: 20_000,
-    config: {
-      publicUrl: `https://${PUBLIC_HOST}`,
-      fleet: {
-        builders: ids.map((id) => ({ id, url: `http://127.0.0.1:${hops.get(id).port}` })),
-        allowedOrigins: origins,
-        staleMs: 6000,
-        downMs: 15_000,
-        pingMs: 2000,
-      },
-    },
+    config: demoHubConfig({
+      builders: ids.map((id) => ({ id, url: `http://127.0.0.1:${hops.get(id).port}` })),
+      origins,
+      publicHost: PUBLIC_HOST,
+      map,
+    }),
   });
 
   const fwd = forwarder(hub.ingressPort);
@@ -398,7 +521,7 @@ async function main() {
   function pushExtras(id) {
     const fb = fakes.get(id);
     const d = DEMO[id];
-    fb.push({ type: 'delta', sessions: fb.sessions, lanes: d.lanes, budget: d.budget, generatedAt: Date.now() });
+    fb.push({ type: 'delta', sessions: fb.sessions, lanes: d.lanes, attention: demoAttention(id, fb.sessions), budget: d.budget, generatedAt: Date.now() });
     fb.push({ type: 'health', health: d.health });
     for (const a of d.approvals) fb.push({ type: 'approval', op: 'open', approval: a });
     for (const s of fb.sessions) if (s.stuck) fb.push({ type: 'stuck', name: s.name, stuck: s.stuck });
@@ -408,6 +531,7 @@ async function main() {
   let n = 0;
   const tick = async () => {
     n++;
+    try { writeDemoFeed(map.feedsDir); } catch (e) { log(`feed write failed: ${e.message}`); }
     for (const id of ids) {
       const fb = fakes.get(id);
       DEMO[id].cycle(n, fb.sessions);
@@ -425,8 +549,9 @@ async function main() {
   setTimeout(() => { for (const id of ids) pushExtras(id); }, 1500);
   const timer = setInterval(() => { tick().catch((e) => log(`tick failed: ${e.message}`)); }, TICK_MS);
 
-  log(`hub (mode hub) + ${ids.join(', ')}`);
+  log(`hub "${DEMO_HOSTNAME}" (mode hub) + ${ids.join(', ')}`);
   log(`open  http://127.0.0.1:${PORT}/   (signed in as ${DEMO_USER} via the serve-like forwarder)`);
+  if (DESIGN) log(`design direction "${DESIGN.name}" laid over /css/tokens.css`);
   log(`hub local listener http://127.0.0.1:${hub.port}/ (read-only), ingress ${hub.ingressPort}`);
   log('Ctrl-C to stop');
 
@@ -441,6 +566,7 @@ async function main() {
     await hub.stop().catch(() => {});
     for (const h of hops.values()) await h.down().catch(() => {});
     await Promise.all([...fakes.values()].map((f) => f.close().catch(() => {})));
+    fs.rmSync(mapDir, { recursive: true, force: true });
     process.exit(0);
   };
   process.on('SIGINT', () => stop('SIGINT'));

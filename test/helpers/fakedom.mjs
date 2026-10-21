@@ -105,6 +105,13 @@ export function makeEl(tag = 'div') {
       if (name === 'class') this.className = String(value);
     },
     getAttribute(name) { return this.attrs[name] ?? null; },
+    hasAttribute(name) { return Object.hasOwn(this.attrs, name); },
+    removeAttribute(name) { delete this.attrs[name]; },
+    toggleAttribute(name, on) {
+      const want = on === undefined ? !Object.hasOwn(this.attrs, name) : Boolean(on);
+      if (want) this.attrs[name] = ''; else delete this.attrs[name];
+      return want;
+    },
     querySelector() { return null; },
     querySelectorAll(sel) {
       const want = String(sel).replace(/^\./, '');

@@ -10,15 +10,16 @@
 //   split        `\` (D8) flips localStorage['lb.split'] and dispatches `lb:split`:
 //                Map 60% left, the dense lane table (map/split.js) 40% right,
 //                selection synced through the router, hover lit both ways
-//   PiP          map/minimap.js: 240x240 bottom right in every other view, 2 fps,
-//                click returns to the Map keeping b= and sel=
+//   minimap      none: the minimap sits on the Map only (runs-n4 T14, README §7 Night 4
+//                item 3), and the Map is its own overview, so no view mounts the
+//                map/minimap.js PiP; the map loads the first time #/map shows
 //   actions      nodeActions(node) (laneActions + run): the 2.8 list; the inspector runs them (its bar,
 //                plus the map's own fold/peek buttons registered on it); results
 //                pulse the node, status never changes optimistically
 //   events       hook events from the store pulse `lane:<builder>/<lane>`
 //
 // Pure at import time. The pure parts (laneActions, mapEventFor, actionPulse,
-// routePlan, pipOffsets, splitState) are tested in test/map-view.test.mjs.
+// routePlan, splitState) are tested in test/map-view.test.mjs.
 // Builder-supplied text reaches the page through textContent only.
 import { $ } from '../core/dom.js';
 import { store, toIndexKey } from '../core/store.js';
@@ -31,7 +32,6 @@ import { confirmAction } from '../ui/confirm.js';
 import { toast } from '../ui/toast.js';
 import { idForSel } from './map/model.js';
 import { createSplitTable, splitOn, canSplit, SPLIT_KEY } from './map/split.js';
-import { createMinimap, pipVisible, PIP_SIZE } from './map/minimap.js';
 
 // ---------------------------------------------------------------- pure
 
@@ -122,15 +122,6 @@ export function splitState(stored, width) {
   return { want, on, refused: want && !on };
 }
 
-/**
- * Where the PiP sits (CSS px from the right and the bottom of the window):
- * clear of the inspector when it is open (`inspW`), above the tape. Pure.
- */
-export function pipOffsets({ inspW = 0, gap = 12, tapeH = 28 } = {}) {
-  const w = Number.isFinite(inspW) && inspW > 0 ? inspW : 0;
-  return { right: Math.round(w + gap), bottom: Math.round(tapeH + gap) };
-}
-
 // ---------------------------------------------------------------- state
 
 const page = {
@@ -142,7 +133,6 @@ const page = {
   lastSel: null,        // the sel the map shows (so our own clicks do not fly)
   split: null,          // createSplitTable instance while split is on
   splitToasted: false,
-  pip: null,            // {canvas, mini}
   inited: false,
 };
 
@@ -155,7 +145,6 @@ export function sizeMap() {
 }
 
 const width = () => globalThis.innerWidth ?? 1200;
-const docHidden = () => globalThis.document?.visibilityState === 'hidden';
 const readSplit = () => { try { return globalThis.localStorage?.getItem(SPLIT_KEY) ?? null; } catch { return null; } };
 const writeSplit = (v) => { try { globalThis.localStorage?.setItem(SPLIT_KEY, v); } catch { /* private window */ } };
 const routeNow = () => { try { return currentRoute(); } catch { return page.route ?? { view: store.view }; } };
@@ -194,7 +183,6 @@ function ensureMap() {
     } else {
       api.setMode('pip');
     }
-    syncPip();
     return api;
   }).catch((err) => {
     page.loading = null;
@@ -237,8 +225,6 @@ function applyMapRoute(route) {
     page.split?.setSelected(route.sel ?? null);
     if (page.split && prevScope !== plan.scope) page.split.update(store.map, { scope: plan.scope });
   }
-  // After every route listener ran: the inspector may just have opened.
-  queueMicrotask(syncPip);
 }
 
 // ---------------------------------------------------------------- split
@@ -284,56 +270,6 @@ function teardownSplit() {
   sec.style.display = '';
   sec.style.gridTemplateColumns = '';
   sec.style.gridTemplateRows = '';
-}
-
-// ---------------------------------------------------------------- PiP
-
-function returnToMap() {
-  const r = routeNow();
-  navigate({ view: 'map', sel: r.sel ?? null });
-}
-
-function syncPip() {
-  const want = pipVisible({ view: store.view, width: width(), hidden: docHidden(), hasMap: Boolean(page.api) });
-  if (!want) {
-    if (page.pip) { page.pip.mini.stop(); page.pip.canvas.hidden = true; }
-    // Another view, a wide window, no map yet: load it so the PiP has a scene.
-    if (!page.api && store.view !== 'map' && width() >= 700 && !docHidden() && page.inited) ensureMap();
-    return;
-  }
-  if (!page.pip) {
-    const canvas = document.createElement('canvas');
-    canvas.className = 'map-pip';
-    canvas.setAttribute('role', 'button');
-    canvas.setAttribute('aria-label', 'Fleet minimap: back to the Map');
-    canvas.title = 'Back to the Map (g m)';
-    canvas.tabIndex = 0;
-    const s = canvas.style;
-    s.position = 'fixed';
-    s.width = `${PIP_SIZE}px`;
-    s.height = `${PIP_SIZE}px`;
-    s.zIndex = 'var(--z-rail)';
-    s.border = 'var(--bw) solid var(--line)';
-    s.borderRadius = 'var(--radius)';
-    s.background = 'var(--bg-canvas)';
-    s.cursor = 'pointer';
-    canvas.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); returnToMap(); } });
-    document.body.append(canvas);
-    const mini = createMinimap(canvas, () => page.api?.snapshotScene?.() ?? null, { onClick: returnToMap });
-    page.pip = { canvas, mini };
-  }
-  const insp = anchorEl();
-  const off = pipOffsets({ inspW: insp?.getBoundingClientRect?.().width ?? 0, tapeH: tapeHeight() });
-  page.pip.canvas.style.right = `calc(${off.right}px + env(safe-area-inset-right, 0px))`;
-  page.pip.canvas.style.bottom = `calc(${off.bottom}px + env(safe-area-inset-bottom, 0px))`;
-  page.pip.canvas.hidden = false;
-  page.pip.mini.start();
-}
-
-function tapeHeight() {
-  const t = $('tape');
-  const hgt = t?.getBoundingClientRect?.().height;
-  return Number.isFinite(hgt) && hgt > 0 ? hgt : 28;
 }
 
 // ---------------------------------------------------------------- actions
@@ -465,7 +401,6 @@ function mountMap(el) {
   setTimeout(() => {
     if (!page.mounted) return;
     sizeMap();
-    syncPip();
     ensureMap().then((api) => {
       if (!api || !page.mounted) return;
       api.setMode(page.split ? 'split' : 'full');
@@ -479,7 +414,7 @@ function mountMap(el) {
 
 function unmountMap() {
   page.mounted = false;
-  // The map stays loaded (the PiP draws its scene; switching back is instant).
+  // The map stays loaded, idle off screen: switching back is instant.
   teardownSplit();
   page.api?.setMode('pip');
 }
@@ -495,10 +430,8 @@ export function init() {
   page.inited = true;
   addEventListener('resize', () => {
     if (store.view === 'map') { sizeMap(); syncSplit(); }
-    syncPip();
   });
   addEventListener('lb:split', () => syncSplit({ fromKey: true }));
-  document.addEventListener('visibilitychange', () => syncPip());
   onRoute((r) => applyMapRoute(r));
   registerBarActions();
 }

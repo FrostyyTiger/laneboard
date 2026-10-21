@@ -8,14 +8,15 @@ import path from 'node:path';
 
 import {
   TILES, KIND_TO_TILE, TILE_META, tileOf, alarmP, tileModel, tileLabel, tileParam, tileFromParam,
-  alarmKey, tileKeys, ackRequest,
+  alarmKey, tileKeys, ackRequest, tileTone, TILE_FIXED_P, TONE_MARK,
 } from '../public/js/core/alarm-tiles.js';
 import { tileView } from '../public/js/ui/annunciator.js';
 import {
   TAPE_MAX, DRAWER_ROWS, createRing, eventP, tapeItem, filterItems, tapeScope, clip, tapeTime, itemLabel,
+  latestItem, emptyLine,
 } from '../public/js/ui/tape.js';
 import { ALARM_KINDS } from '../server/config/observability.mjs';
-import { KIND_TO_TILE as SERVER_KIND_TO_TILE, TILES as SERVER_TILES, KINDS } from '../server/fleet/alarms.mjs';
+import { KIND_TO_TILE as SERVER_KIND_TO_TILE, TILES as SERVER_TILES, KINDS, derive, fleetOfOne } from '../server/fleet/alarms.mjs';
 import { checkAck } from '../server/hub/routes/alarms.mjs';
 import { ICONS } from '../public/js/core/icons.js';
 
@@ -42,7 +43,7 @@ test('the 8 tiles, in the fixed order', () => {
   }
 });
 
-test('every §7 alarm kind maps to at most one tile; only review has none', () => {
+test('every §7 alarm kind maps to at most one tile; only review, reboot and health-warn have none', () => {
   const unmapped = [];
   for (const kind of ALARM_KINDS) {
     const tile = tileOf(kind);
@@ -50,7 +51,7 @@ test('every §7 alarm kind maps to at most one tile; only review has none', () =
     assert.ok(TILES.includes(tile), `${kind} -> ${tile} is a tile`);
     // A plain object maps a key to exactly one value; check no kind is listed twice in the source.
   }
-  assert.deepEqual(unmapped, ['review']);
+  assert.deepEqual(unmapped, ['health-warn', 'review', 'reboot']);
   const src = read('public/js/core/alarm-tiles.js');
   const block = /KIND_TO_TILE = Object\.freeze\(\{([\s\S]*?)\}\);/.exec(src)[1];
   const keys = [...block.matchAll(/'([a-z-]+)':/g)].map((m) => m[1]);
@@ -85,13 +86,13 @@ test('alarm priority -> data-p: P1 1, P2 2, P3 3, P4 3', () => {
 
 test('tileModel: the tile priority is the max over its members', () => {
   const m = tileModel([
-    alarm('builder-stale', 'P3'), alarm('health-crit', 'P2'), alarm('builder-down', 'P1'), alarm('reboot', 'P4'),
+    alarm('builder-stale', 'P3'), alarm('health-crit', 'P2'), alarm('builder-down', 'P1'), alarm('audit-fork', 'P1'),
     alarm('budget-warn', 'P4'), alarm('stuck', 'P3'), alarm('stuck', 'P2'),
   ]);
   const down = byTile(m, 'DOWN');
   assert.equal(down.n, 4);
   assert.equal(down.p, 1);
-  assert.deepEqual(down.members.map((a) => a.kind), ['builder-down', 'health-crit', 'builder-stale', 'reboot'], 'worst first');
+  assert.deepEqual(down.members.map((a) => a.kind), ['builder-down', 'audit-fork', 'health-crit', 'builder-stale'], 'worst first');
   assert.equal(byTile(m, 'BUDG').p, 3, 'P4 shows as 3');
   assert.equal(byTile(m, 'STCK').p, 2);
   assert.equal(byTile(m, 'STCK').n, 2);
@@ -198,15 +199,45 @@ test('annunciator.js acks through act() with ack-alarm and filters through the r
 
 // ---------------------------------------------------------------- CSS
 
-test('annunciator.css: filled when active, flash only while unacked, reduced motion solid + UNACK', () => {
+test('annunciator.css: never filled, the count takes the tone, flash only while unacked, reduced motion steady + UNACK', () => {
   const css = read('public/css/annunciator.css');
-  assert.match(css, /\.ann-tile\[data-unack\]\s*\{\s*animation:\s*lb-flash 1s linear infinite;/);
-  assert.match(css, /--text-inv/);
-  for (const p of [1, 2, 3]) assert.match(css, new RegExp(`\\[data-p="${p}"\\][^{]*\\{ background: var\\(--p${p}\\); \\}`));
+  // The flash is a ring on ::after (runs T14): the tile and its count never fade.
+  assert.match(css, /\.ann-tile\[data-unack\]\s*\{\s*animation:\s*none;\s*\}/);
+  const ring = /\.ann-tile\[data-unack\]::after\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  assert.match(ring, /animation:\s*lb-flash 1s linear infinite;/);
+  assert.match(ring, /animation-delay:\s*inherit;/, 'the ring takes the phase syncFlash sets on the tile');
+  assert.match(ring, /border:\s*var\(--bw\) solid var\(--ann-tone/, 'the ring is 1 px in the tile tone');
+  for (const p of [1, 2]) assert.match(css, new RegExp(`\\.ann-tile\\[data-p="${p}"\\] \\{ --ann-tone: var\\(--p${p}\\); \\}`));
+  assert.match(css, /\.ann-tile\[data-state="unack"\] \.ann-n,\s*\.ann-tile\[data-state="ack"\] \.ann-n \{ color: var\(--ann-tone/);
   const rm = /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
   assert.match(rm, /animation:\s*none/);
   assert.match(rm, /\.ann-tag \{ display: inline; \}/);
   assert.match(read('public/js/ui/annunciator.js'), /'UNACK'/);
+});
+
+test('T13: the tiles are grey with a coloured count: no fill, no cyan, no inverse text', () => {
+  const css = read('public/css/annunciator.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const [, sel, body] = m;
+    if (!/ann-/.test(sel)) continue;
+    const bg = /background(?:-color)?:\s*([^;]+)/.exec(body)?.[1]?.trim();
+    if (bg) assert.equal(bg, 'var(--bg-sunken)', `${sel.trim()}: the only tile background is the grey well`);
+    assert.doesNotMatch(body, /--p3|--text-inv/, `${sel.trim()}: no cyan, no text on a fill`);
+  }
+  // Every tile draws amber (wants you) or red (broken), never p3, whatever its members.
+  assert.deepEqual(Object.keys(TILE_FIXED_P).sort(), [...TILES].sort());
+  for (const t of TILES) assert.equal(TILE_FIXED_P[t], ['BLKD', 'DOWN'].includes(t) ? 1 : 2, t);
+  assert.equal(TONE_MARK[1], '\u25a0');
+  assert.equal(TONE_MARK[2], '\u25b2');
+  const budg = tileView(byTile(tileModel([alarm('budget-warn', 'P3')]), 'BUDG'));
+  assert.equal(budg.p, '2', 'BUDG is amber, not the cyan p3');
+  assert.equal(budg.mark, '\u25b2');
+  assert.equal(budg.n, '1');
+  const blkd = tileView(byTile(tileModel([alarm('blocked', 'P2')]), 'BLKD'));
+  assert.equal(blkd.p, '1');
+  assert.equal(blkd.mark, '\u25a0');
+  const empty = tileView(byTile(tileModel([]), 'CONF'));
+  assert.deepEqual([empty.n, empty.mark, empty.p, empty.state], ['', '', '', 'normal'], 'an empty tile is plain grey');
 });
 
 test('tape.css: severity left bar, 200px drawer', () => {
@@ -290,4 +321,110 @@ test('filterItems / tapeScope: b=, q= and s=<tile> scope the tape', () => {
   assert.deepEqual(filterItems(items, scope).map((i) => i.name), ['web']);
   assert.equal(tapeScope({ s: 'working' }, al).keys, null, 'a non-tile s= is not a tile filter');
   assert.deepEqual(filterItems(items, tapeScope({ s: 'conf' }, al)), []);
+});
+
+test('emptyLine (T20): before the first event the line shows the latest session, like the phone peek', () => {
+  const since = new Date(2026, 9, 21, 9, 5, 7).getTime();
+  const latest = { key: 'builder-a/search', text: 'BA/search working', p: 'run', since };
+  const e = emptyLine(0, latest);
+  assert.equal(e.kind, 'latest');
+  assert.equal(e.item.name, 'BA/search working');
+  assert.equal(e.item.time, '09:05:07');
+  assert.equal(e.item.key, 'builder-a/search');
+  assert.equal(e.item.p, 'run');
+  assert.notEqual(e.item.name, 'no events yet');
+  // No session either: the line stays empty, never "no events yet".
+  assert.deepEqual(emptyLine(0, null), { kind: 'none' });
+  // Events exist but the scope hides them.
+  assert.deepEqual(emptyLine(3, latest), { kind: 'scope', text: 'no events in this scope' });
+  // Junk: no key that is not a fleet key, unknown p falls back to run.
+  const j = latestItem({ key: 'nope', text: 'x', p: 'weird' });
+  assert.equal(j.key, null);
+  assert.equal(j.p, 'run');
+  assert.equal(latestItem({ text: '' }), null);
+  const src = fs.readFileSync(path.join(ROOT, 'public/js/ui/tape.js'), 'utf8');
+  assert.doesNotMatch(src, /no events yet/);
+  assert.match(src, /peekModel\(store/);
+});
+
+// ---------------------------------------------------------------- T38: one hue for DOWN
+
+test('tileTone: DOWN draws the trouble red (p1) whatever its members, other tiles their fixed tone', () => {
+  assert.equal(TILE_FIXED_P.DOWN, 1);
+  for (const [kind, pr] of [['builder-down', 'P1'], ['health-crit', 'P2'], ['builder-stale', 'P3'], ['audit-fork', 'P1']]) {
+    for (const acked of [false, true]) {
+      const t = byTile(tileModel([alarm(kind, pr, { acked })]), 'DOWN');
+      assert.equal(tileTone(t), 1, `${kind} ${pr} acked=${acked}`);
+      assert.equal(tileView(t).p, '1');
+      assert.equal(t.p, alarmP(pr), 'the model keeps the worst priority (order, labels)');
+    }
+  }
+  assert.equal(tileTone(byTile(tileModel([]), 'DOWN')), null, 'clear has no tone');
+  assert.equal(tileView(byTile(tileModel([]), 'DOWN')).p, '');
+  assert.equal(tileTone(byTile(tileModel([alarm('stuck', 'P3')]), 'STCK')), 2, 'stuck wants you: amber');
+});
+
+test('DOWN tile: the pulse never changes the fill, and p1 is the same red hue in both themes', () => {
+  const css = read('public/css/annunciator.css');
+  // unack and ack share one tone per priority, so the blink phase cannot pick another one.
+  assert.match(css, /\.ann-tile\[data-p="1"\] \{ --ann-tone: var\(--p1\); \}/);
+  // the blink runs on the ::after ring only; the tile itself has no animation.
+  assert.match(css, /\.ann-tile\[data-unack\]\s*\{\s*animation:\s*none;\s*\}/);
+  assert.match(css, /\.ann-tile\[data-unack\]::after\s*\{[^}]*animation:\s*lb-flash/);
+  const tokens = read('public/css/tokens.css');
+  const flash = /@keyframes lb-flash\s*\{([\s\S]*?)\n\}/.exec(tokens)[1];
+  assert.doesNotMatch(flash, /background|color|filter/, 'lb-flash changes opacity only');
+  const hues = [...tokens.matchAll(/--p1:\s*oklch\(\s*[\d.]+%\s+[\d.]+\s+([\d.]+)\s*\)/g)].map((m) => Number(m[1]));
+  assert.ok(hues.length >= 2, 'p1 is set in dark and light');
+  assert.equal(new Set(hues).size, 1, `one p1 hue across themes: ${hues}`);
+  assert.ok(hues[0] < 40 || hues[0] > 340, 'p1 is a red');
+});
+
+// ---------------------------------------------------------------- runs night 4 T38: DOWN on a fresh copy
+
+test('T38: one local builder, link up, no config: DOWN 0 even when the host wants a reboot', () => {
+  // A fresh `:memory:` copy on a host with /var/run/reboot-required used to open with a red DOWN 1:
+  // the builder's own `reboot` alarm (P4) sat on the DOWN tile while /api/map said `link: "up"`.
+  const now = 1_000_000;
+  const health = {
+    at: now, rebootRequired: true,
+    alarms: [
+      { key: 'rebootRequired', level: 'warn', text: 'reboot required' },
+      { key: 'disk', level: 'warn', text: 'disk / 86% used' },
+    ],
+  };
+  const fleet = fleetOfOne({ sessions: [], lanes: [] }, health, now, { builder: { id: 'builder-a', code: 'BA' } });
+  assert.equal(fleet.builders.length, 1);
+  assert.equal(fleet.builders[0].state, 'up', 'the link is up');
+  const alarms = derive(fleet, now);
+  assert.deepEqual(alarms.map((a) => a.kind).sort(), ['health-warn', 'reboot'], 'the host notes are still alarms (the Box shows them)');
+  const down = byTile(tileModel(alarms), 'DOWN');
+  assert.equal(down.n, 0);
+  assert.equal(tileTone(down), null, 'no red count');
+  assert.equal(tileView(down).p, '');
+  // Nothing at all: every tile is clear.
+  assert.ok(tileModel(derive(fleetOfOne({}, null, now), now)).every((t) => t.n === 0));
+  // A crit host check and a lost link still count.
+  const crit = derive(fleetOfOne({}, { at: now, alarms: [{ key: 'disk', level: 'crit', text: 'disk / 97% used' }] }, now), now);
+  assert.equal(byTile(tileModel(crit), 'DOWN').n, 1);
+  assert.equal(byTile(tileModel([alarm('builder-down', 'P1')]), 'DOWN').n, 1);
+});
+
+test('T38: docs/design.md and README say what DOWN counts', () => {
+  for (const f of ['docs/design.md', 'README.md']) {
+    const t = read(f).replace(/\s+/g, ' ');
+    assert.match(t, /DOWN counts a builder whose link is down or stale, a crit host check and an audit fork/, f);
+    assert.match(t, /reboot[^.]*health warning[^.]*Box/i, `${f}: where the reboot hint goes`);
+  }
+});
+
+test('the two tile rows fit the header and sit centred in it, not flush with its top', () => {
+  const shell = read('public/css/shell.css');
+  const ann = /\n\.ann \{([^}]*)\}/.exec(shell)?.[1] ?? '';
+  const row = Number(/grid-auto-rows:\s*(\d+)px/.exec(ann)?.[1]);
+  const gap = Number(/gap:\s*(\d+)px/.exec(ann)?.[1]);
+  const header = Number(/--header-h:\s*(\d+)px/.exec(read('public/css/tokens.css'))?.[1]);
+  assert.ok(2 * row + gap <= header - 2, `${2 * row + gap} px of tiles in a ${header} px header with its border`);
+  assert.match(ann, /align-self:\s*center/);
+  assert.match(read('public/css/annunciator.css'), new RegExp(`\\.ann-tile \\{[^}]*height: ${row}px`));
 });

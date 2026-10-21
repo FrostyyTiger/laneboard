@@ -23,6 +23,7 @@ import { laneById, store } from '../core/store.js';
 import { deriveCode } from '../core/keys.js';
 import { act } from '../core/actions.js';
 import { icon } from '../core/icons.js';
+import { itemP, markP } from '../core/marks.js';
 import { lamp, plate } from '../ui/components.js';
 import { toast } from '../ui/shell.js';
 import { togglePin } from '../ui/dock.js';
@@ -39,10 +40,9 @@ export const STATE_WORD = Object.freeze({
 });
 
 /** Session state -> lamp `data-p` (ISA-101: colour only for abnormal). */
-export const STATE_P = Object.freeze({
-  waiting_permission: '1', waiting_question: '2', working: 'run',
-  done: 'ok', idle: 'off', shell: 'off', dead: 'off',
-});
+export const STATE_P = Object.freeze(Object.fromEntries(
+  ['waiting_permission', 'waiting_question', 'working', 'done', 'idle', 'shell', 'dead'].map((st) => [st, markP(st)]),
+));
 
 const STATE_ORDER = Object.freeze({ waiting_permission: 0, waiting_question: 1, working: 2, done: 3, idle: 4, shell: 5, dead: 6 });
 
@@ -151,20 +151,20 @@ function reasonOf(v) {
   return typeof v === 'string' ? v : '';
 }
 
-/** Flags, in plan order: stuck, paused, approval, review. */
+/** Flags, in plan order: stuck, paused, approval, review. Grey icons: the lamp is the one trouble mark (T23). */
 function flagsOf(sessions, lane, extras) {
   const flags = [];
   const stuck = sessions.find((s) => s.stuck);
   if (stuck) {
     const why = reasonOf(stuck.stuck);
-    flags.push({ id: 'stuck', icon: 'stuck', p: '2', title: why ? `stuck: ${why}` : 'stuck' });
+    flags.push({ id: 'stuck', icon: 'stuck', p: null, title: why ? `stuck: ${why}` : 'stuck' });
   }
   const paused = sessions.find((s) => s.paused);
   if (paused) {
     const scope = paused.paused && typeof paused.paused === 'object' && paused.paused.scope ? String(paused.paused.scope) : '';
     flags.push({ id: 'paused', icon: 'pause', p: null, title: scope ? `paused (${scope})` : 'paused' });
   }
-  if (sessions.some((s) => s.awaitingApproval)) flags.push({ id: 'approval', icon: 'approval', p: '1', title: 'awaiting approval' });
+  if (sessions.some((s) => s.awaitingApproval)) flags.push({ id: 'approval', icon: 'approval', p: null, title: 'awaiting approval' });
   const rr = lane?.reviewReady ?? extras.reviewReady ?? null;
   if (rr && rr.ready === true) {
     const reasons = Array.isArray(rr.reasons) ? rr.reasons.filter((r) => typeof r === 'string') : [];
@@ -188,8 +188,13 @@ export function dataBlock(lane, session, extras = {}) {
   const sessions = session ? [session] : (Array.isArray(x.sessions) ? x.sessions.filter((s) => s && typeof s === 'object') : []);
   const lead = session ?? mostUrgent(sessions);
   const state = typeof lead?.state === 'string' ? lead.state : null;
-  let p = state ? (STATE_P[state] ?? 'off') : 'off';
-  if (sessions.some((s) => s.awaitingApproval || s.danger)) p = '1';
+  // One state, one mark (runs night 4 T23): danger anywhere on the lane is
+  // the red ■, an approval or a stuck session the amber ▲, else the lead's state.
+  let p = state ? markP(state) : 'off';
+  for (const x of sessions) {
+    const q = itemP(x);
+    if (q === '1' || (q === '2' && p !== '1')) p = q;
+  }
   if (x.stale) p = 'stale';
   const prog = lane?.progress;
   const pct = lead?.context?.usedPct;
@@ -225,6 +230,13 @@ export function builderOf(s) {
 /** A builder's short code plate: its own, else derived from its id. */
 export function builderCode(b) {
   return (b && typeof b.code === 'string' && b.code) || deriveCode(b?.id ?? '');
+}
+
+/** The one `offline` plate of a card whose builder is not live (runs night 4 T27). */
+export function offlinePlate() {
+  const n = plate('offline', { title: 'builder not live: no fresh data' });
+  n.classList.add('db-offline');
+  return n;
 }
 
 /** True when the session's builder is not live (hub: stale, down). */
@@ -325,10 +337,48 @@ export const LAYOUT = Object.freeze({
   row: Object.freeze(['code', 'state', 'lane', 'stage', 'pr', 'checks', 'ctx', 'usd', 'age', 'flags']),
 });
 
-/** One `.db` line of the given fields. */
+/**
+ * True when a field has nothing to show: it is left out of the line instead of
+ * printing `—` (runs night 4 T15, r10 Board 2). The code plate hides by CSS
+ * when empty; state, lane and flags are always drawn. Pure.
+ */
+export function emptyField(db, name) {
+  switch (name) {
+    case 'stage': return db.stage === DASH;
+    case 'pr': return !db.pr;
+    case 'checks': return !db.checks.length;
+    case 'ctx': return db.ctx === DASH;
+    case 'usd': return db.usd5h === DASH;
+    case 'model': return db.model === DASH;
+    case 'age': return db.age === DASH;
+    case 'git': return !(db.git.dirty || db.git.ahead || db.git.behind);
+    default: return false;
+  }
+}
+
+/**
+ * The card's trouble, for its lane bar: '1' (red, broken or a permission),
+ * '2' (amber, a question or stuck), else null. A bar is grey unless there is
+ * trouble (runs night 4 T15, r10 Board 1); a builder that is not live is grey.
+ */
+export function troubleOf(db) {
+  if (!db || db.p === 'stale') return null;
+  if (db.p === '1' || db.flags.some((f) => f.p === '1')) return '1';
+  if (db.p === '2' || db.flags.some((f) => f.p === '2')) return '2';
+  return null;
+}
+
+/** Put the trouble on a card node (`data-trouble`), or take it off. */
+export function markTrouble(node, db) {
+  const t = troubleOf(db);
+  if (t) node.dataset.trouble = t;
+  else delete node.dataset.trouble;
+}
+
+/** One `.db` line of the given fields, the empty ones left out. */
 export function dbLine(db, names, cls, o = {}) {
   const line = el('div', `db ${cls}`);
-  for (const name of names) line.append(FIELDS[name](db, o));
+  for (const name of names) if (!emptyField(db, name)) line.append(FIELDS[name](db, o));
   return line;
 }
 
@@ -429,6 +479,7 @@ export function renderCard(s, { row = false } = {}) {
   const b = builderOf(s);
   const db = dataBlock(null, s, { code: builderCode(b), stale });
   const o = { ...sessionTitles(s), showCode: showCodes() };
+  markTrouble(card, db);
   if (row) {
     card.append(dbLine(db, LAYOUT.row, 'db-row', o));
   } else {
@@ -442,7 +493,11 @@ export function renderCard(s, { row = false } = {}) {
       chip.onclick = (e) => { e.stopPropagation(); toggleLane(lane.key ?? lane.id); };
       l1.insertBefore(chip, l1.children?.[3] ?? null);
     }
-    card.append(l1, dbLine(db, LAYOUT.line2, 'db-2', o));
+    // After the lane name, so the plate reads "<lane> offline".
+    if (stale) l1.insertBefore(offlinePlate(), [...l1.children].find((c) => c.classList.contains('db-lane'))?.nextSibling ?? null);
+    const l2 = dbLine(db, LAYOUT.line2, 'db-2', o);
+    // A line with nothing to say is left out, not a row of gaps.
+    card.append(l1, ...(l2.children.length ? [l2] : []));
   }
 
   // The guard's finding, above everything else on the card (v3).

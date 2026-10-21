@@ -16,6 +16,9 @@
   padding: var(--sp-2);
   display: grid;
   gap: var(--sp-1);
+  /* Rows packed at the top: a card stretched to its neighbour's height keeps
+     the spare room below, never between its lines (runs night 4 T15). */
+  align-content: start;
   min-width: 0;
   scroll-margin-top: 74px;
   color: var(--text-1);
@@ -23,9 +26,14 @@
 .card:hover { border-color: var(--line-strong); }
 
 /* State reads on the border, in the priority colour of its lamp. */
-.card.s-waiting_permission { border-color: var(--p1-line); }
+.card.s-waiting_permission { border-color: var(--p2-line); }
 .card.s-waiting_question { border-color: var(--p2-line); }
-.card.s-dead { opacity: .5; }
+/* Dimmed by colour, not opacity: a faded card dropped text under 3:1 in
+   light (runs night 4 T12). */
+.card.s-dead,
+.card.s-dead .db,
+.card.s-dead .db-stage,
+.card.s-dead .db-usd { color: var(--text-3); }
 .card.s-dead .db-lane { text-decoration: line-through; }
 
 /* Selection: the corner brackets of the kit, and the keyboard cursor. */
@@ -38,13 +46,29 @@
   pointer-events: none;
 }
 
-/* A builder that is not live (hub: stale, down): dimmed and hatched. */
+/* A builder that is not live (hub: stale, down): grey text and hatched.
+   No opacity (runs night 4 T12): at .55 the light card's text fell to
+   ~2:1 over the hatch. */
 .card.stale {
-  opacity: .55;
   background-image: var(--tex-hatch);
+  color: var(--text-3);
 }
+.card.stale .db,
+.card.stale .db-stage,
+.card.stale .db-usd,
 .card.stale .db-word,
 .card.stale .db-lane { color: var(--text-3); }
+/* Grey through and through, marks included (runs night 4 T27): a builder
+   that is gone never shows amber or red on its cards; the one `offline`
+   plate on the first line says why. :is() lifts these above the mark rules
+   (.db-state[data-p] .db-word, .db-ctx[data-p], .mk-need .mk-kind). */
+.card.stale :is(.lamp, .db-word, .db-ctx, .db-flag, .db-pr, .ck, .tname, .targ, .mk-kind, .mk-text) {
+  color: var(--text-3);
+  filter: none;
+}
+.card.stale .mk-kind { background: none; }
+.card.stale:not(.cursor) { border-color: var(--line); }
+.db-offline { flex: none; color: var(--text-3); border-color: var(--line); }
 
 /* --- the data block ------------------------------------------------------- */
 .db {
@@ -58,6 +82,9 @@
   white-space: nowrap;
   overflow: hidden;
   color: var(--text-2);
+  /* The fields below drop whole on a narrow line (the @container rules at
+     the end of this block), never half a field cut at the edge. */
+  container-type: inline-size;
 }
 .db-f {
   display: inline-flex;
@@ -67,14 +94,18 @@
   min-width: 0;
 }
 .db-code:empty { display: none; }
-.db-state { width: 7ch; }
+.db-state { width: 7ch; min-width: 7ch; flex: none; }
 .db-word { color: var(--text-2); font-weight: 600; letter-spacing: 0; }
 .db-state[data-p="1"] .db-word { color: var(--p1); }
 .db-state[data-p="2"] .db-word { color: var(--p2); }
 .db-state[data-p="stale"] .db-word { color: var(--text-3); }
 .db-lane {
   display: block;
+  /* The one column that gives way: 18ch when there is room, an ellipsis
+     down to 6ch when there is not. */
+  flex: 0 1 18ch;
   width: 18ch;
+  min-width: 6ch;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-1);
@@ -83,10 +114,9 @@
 .db-stage { width: 5ch; color: var(--text-1); }
 .db-flags { margin-left: auto; gap: var(--sp-1); }
 .db-flags:empty { display: none; }
+/* Grey icons: the lamp carries the card's one trouble mark (runs night 4 T23). */
 .db-flag { display: inline-flex; color: var(--text-2); }
-.db-flag[data-p="1"] { color: var(--p1); }
-.db-flag[data-p="2"] { color: var(--p2); }
-.db-age { width: 4ch; justify-content: flex-end; color: var(--text-3); }
+.db-age { width: 4ch; min-width: 4ch; flex: none; justify-content: flex-end; color: var(--text-3); }
 .db-flags:empty + .db-age { margin-left: auto; }
 
 .db-pr { min-width: 6ch; color: var(--text-2); }
@@ -102,7 +132,9 @@
 .db-ctx[data-p="1"] { color: var(--p1); }
 .db-ctx[data-p="2"]::before { content: "▲"; }
 .db-ctx[data-p="1"]::before { content: "■"; }
-.db-usd { width: 7ch; color: var(--text-1); }
+/* A floor, not a width: `$1.01/5h` is 8ch and would spill into the gap and
+   run into the branch (`$1.01/5h⌥run/…`). */
+.db-usd { min-width: 7ch; color: var(--text-1); }
 .db-model {
   display: block;
   max-width: 12ch;
@@ -113,6 +145,26 @@
 .db-git:empty { display: none; }
 .db .dirty { color: var(--text-2); }
 .db .ahead { color: var(--text-2); }
+/* The branch is the first thing to give way on line 2: it shrinks before
+   anything else, with an ellipsis, down to nothing. */
+.db .branch {
+  flex: 0 1000 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A narrow line drops its minor fields whole, the least needed first. Code,
+   state, lane title, flags and age always stay. */
+@container (max-width: 480px) {
+  .db-row .db-usd, .db-row .db-checks, .db-2 .db-model { display: none; }
+}
+@container (max-width: 380px) {
+  .db-row .db-pr, .db-row .db-ctx { display: none; }
+}
+@container (max-width: 300px) {
+  .db-row .db-stage { display: none; }
+}
 
 /* The lane card's head is the same block; its chips keep the line. */
 .grid .lane-top { align-items: center; gap: var(--sp-2); }
@@ -132,15 +184,21 @@
 .card-meta .ahead { color: var(--text-2); }
 .card-meta .cost { color: var(--text-1); font-weight: 600; }
 
-/* A session inside a lane card: one line, recessed. */
+/* A session inside a lane card: one line, recessed. When the line and its
+   buttons do not fit side by side (code, state word and 12ch of title), the
+   buttons wrap under it instead of squeezing the state word. */
 .grid .card.card-row {
   background: var(--bg-sunken);
   border-color: var(--line-weak);
   padding: var(--sp-1) var(--sp-2);
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-1) var(--sp-2);
 }
+.grid .card.card-row > .db-row { flex: 1 1 32ch; }
+.grid .card.card-row > .card-actions { flex: none; margin-left: auto; }
+.grid .card.card-row > :not(.db-row):not(.card-actions):not(.menu) { flex: 1 1 100%; }
 .card.card-row > :not(.db-row):not(.card-actions):not(.menu) { grid-column: 1 / -1; }
 .card.card-row .db-flags { margin-left: 0; }
 

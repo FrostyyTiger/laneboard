@@ -27,6 +27,35 @@ export const clampZoom = (z) => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Number.isF
 
 // ------------------------------------------------------------------ camera
 
+/**
+ * The scale that fits a world of radius `outer` into W x H (a strip at the
+ * bottom kept for the readout). Always > 0: a hidden map (measured at 0 or 1
+ * px) would otherwise get a negative scale, and every radius drawn with it
+ * would throw in ctx.arc (night-1 bug: leaving the Map). Not positive -> 1.
+ */
+export function fitScaleOf(W, H, outer) {
+  const o = Number.isFinite(outer) && outer > 0 ? outer : 1;
+  const s = Math.min(W / (2 * o), (H - (W < 720 ? 40 : 20)) / (2 * o));
+  return Number.isFinite(s) && s > 0 ? s : 1;
+}
+
+/**
+ * The fit for a canvas whose top and bottom are covered (`inset` {top, bottom}
+ * in CSS px: the HUD row, a phone's bottom bar): the scale that fits a world
+ * of radius `outer` into the free height, and the camera's world y that puts
+ * the centre in the middle of it. No inset is fitScaleOf with the centre at 0.
+ */
+export function fitFrame(W, H, outer, inset = {}) {
+  const top = Math.max(0, Number(inset.top) || 0);
+  const bottom = Math.max(0, Number(inset.bottom) || 0);
+  if (!top && !bottom) return { s: fitScaleOf(W, H, outer), y: 0 };
+  const o = Number.isFinite(outer) && outer > 0 ? outer : 1;
+  const free = H - top - bottom;
+  const k = Math.min(W / (2 * o), free / (2 * o));
+  const s = Number.isFinite(k) && k > 0 ? k : fitScaleOf(W, H, outer);
+  return { s, y: free > 0 ? (bottom - top) / (2 * s) : 0 };
+}
+
 /** World -> screen scale for a view `{W, H, fitScale}` and a camera `{x, y, z}`. */
 export const viewScale = (view, cam) => (view.fitScale || 1) * cam.z;
 

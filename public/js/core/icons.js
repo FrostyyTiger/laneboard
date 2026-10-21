@@ -13,7 +13,7 @@ export const ICONS = Object.freeze([
   'broadcast', 'stuck', 'budget', 'conflict', 'blocked', 'review', 'ack', 'alarm', 'bell',
   'terminal', 'send', 'pin', 'spawn', 'retire', 'search', 'command', 'filter', 'split',
   'rail', 'inspector', 'chev-r', 'chev-l', 'chev-d', 'keyboard', 'clock', 'cpu', 'mem', 'disk',
-  'offline', 'theme', 'external', 'more',
+  'offline', 'theme', 'external', 'more', 'runs',
 ]);
 
 const KNOWN = new Set(ICONS);

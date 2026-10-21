@@ -78,10 +78,12 @@ const isPort = (p) => Number.isInteger(p) && p >= 1 && p <= 65535;
  * serve` targets; every request on it is ingress, §2 2.3). Without a fleet
  * block there is no ingress port and nothing changes.
  */
+// The ingress listener comes first: /healthz on the main port must not answer
+// while the ingress port is still unbound (or about to fail with EADDRINUSE).
 export function listenPorts(cfg = config) {
   const out = [{ port: cfg.port, ingress: false }];
   const ip = cfg.fleet?.ingressPort;
-  if (isPort(ip) && ip !== cfg.port) out.push({ port: ip, ingress: true });
+  if (isPort(ip) && ip !== cfg.port) out.unshift({ port: ip, ingress: true });
   return out;
 }
 
@@ -232,24 +234,55 @@ function refuseUpgrade(req, socket, err) {
  * come next, and anything still unhandled is destroyed. Every upgrade passes
  * auth.guardUpgrade first.
  */
-export async function listenAll({ onUpgrade = null } = {}) {
+export async function listenAll({ onUpgrade = null, exit = process.exit } = {}) {
   for (const w of bootWarnings()) log.warn(`fleet auth: ${w}`);
   for (const { port, ingress } of listenPorts()) {
     for (const addr of config.bindAddresses) {
       const server = createServer();
       if (ingress) server.on('connection', (socket) => recordPeerUid(socket));
       server.on('upgrade', (req, socket, head) => handleUpgrade(req, socket, head, { onUpgrade }));
-      await new Promise((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(port, addr, () => {
-          log.info(`listening on http://${addr}:${port}${ingress ? ' (ingress: tailscale serve)' : ''}`);
-          resolve();
+      try {
+        await new Promise((resolve, reject) => {
+          server.once('error', reject);
+          server.listen(port, addr, () => {
+            log.info(`listening on http://${addr}:${port}${ingress ? ' (ingress: tailscale serve)' : ''}`);
+            resolve();
+          });
         });
-      });
+      } catch (err) {
+        const line = bootErrorLine(err, { port, ingress });
+        if (!line) throw err;
+        // One line, not a stack, and a non-zero exit (a busy port used to log an
+        // uncaughtException and exit 0).
+        log.error(line);
+        for (const s of servers) s.close();
+        exit(1);
+        return servers;
+      }
       servers.push(server);
     }
   }
   return servers;
+}
+
+/**
+ * The one-line boot message for an error a person can fix, or null for any
+ * other error (which keeps its stack). EADDRINUSE on a listener names the port
+ * and the setting that moves it; AUDIT_LOCKED (fleet/audit.mjs) keeps its own
+ * message, which names the lock file and its holder (pid on host), and adds
+ * the variable that gives a second instance its own audit log.
+ */
+export function bootErrorLine(err, { port = err?.port, ingress = false } = {}) {
+  if (err?.code === 'EADDRINUSE') {
+    const knob = ingress ? 'set LANEBOARD_INGRESS_PORT or fleet.ingressPort' : 'set LANEBOARD_PORT or config.port';
+    return `laneboard: port ${port} is taken (is another laneboard running? ${knob})`;
+  }
+  if (err?.code === 'AUDIT_LOCKED') {
+    const msg = String(err.message || '').replace(/\s+/g, ' ').trim();
+    const hint = /LANEBOARD_AUDIT_FILE/.test(msg) ? '' : ' (set LANEBOARD_AUDIT_FILE or XDG_STATE_HOME to give this instance its own audit log)';
+    return `laneboard: ${msg || 'the audit log is locked by another writer'}${hint}`;
+  }
+  return null;
 }
 
 /**

@@ -18,8 +18,13 @@
   bottom: 0;
   width: 3px;
   border-radius: var(--radius-l) 0 0 var(--radius-l);
-  background: oklch(70% 0.14 var(--lane-hue, 0));
+  background: var(--line-strong);
 }
+/* Grey unless trouble (runs night 4 T15, r10 Board 1): the bar takes the
+   card's trouble hue, set by board-card.js markTrouble(); the lane's own
+   hue stays on its chip and its rail swatch. */
+.card.has-lane[data-trouble="1"]::before { background: var(--p1); }
+.card.has-lane[data-trouble="2"]::before { background: var(--p2); }
 
 .lane-chip {
   font-family: var(--font-mono);
@@ -131,8 +136,11 @@
   color: var(--text-3);
 }
 .mk-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mk-need .mk-kind { color: var(--crit); background: oklch(70% 0.2 12 / 0.15); }
-.mk-blocked .mk-kind { color: var(--warn); background: oklch(80% 0.15 78 / 0.15); }
+/* A need wants you (amber ▲), blocked is broken (red ■): runs night 4 T23. */
+.mk-need .mk-kind { color: var(--p2); background: none; }
+.mk-need .mk-kind::before { content: "▲ "; }
+.mk-blocked .mk-kind { color: var(--p1); background: none; }
+.mk-blocked .mk-kind::before { content: "■ "; }
 .mk-limit .mk-kind { color: var(--warn); background: oklch(80% 0.15 78 / 0.15); }
 .mk-done .mk-kind { color: var(--ok); background: oklch(78% 0.16 158 / 0.14); }
 .mk-progress .mk-kind { color: var(--info); background: oklch(75% 0.13 242 / 0.14); }

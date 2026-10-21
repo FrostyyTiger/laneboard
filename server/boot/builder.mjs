@@ -8,6 +8,8 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { route, json, readBody, readJson } from '../http.mjs';
 import { initV1, runAction, actionBody, auditLog } from '../fleet/api-v1.mjs';
+import { openAudit } from '../fleet/audit.mjs';
+import { auditErrorLine } from './audit-line.mjs';
 import { ansiLineToHtml } from '../ansi.mjs';
 import * as state from '../state.mjs';
 import * as db from '../db.mjs';
@@ -539,8 +541,20 @@ installSignalHandlers();
 // Audit log, rate limiter and the nonce pre-load (fleet §2 2.4, 2.8) before
 // any module registers or a request can arrive; the v1 module sets the
 // dispatch deps. ctx.audit: the budget module appends its automatic
-// pauses/lifts to the same log (C7-fix, SR17 L6).
-initV1();
+// pauses/lifts to the same log (C7-fix, SR17 L6). initV1 logs only the error
+// code; auditErrorLine adds the reason next to it (an unsafe dir: chmod 700 it;
+// a held lock: the holder and the variable that avoids it). The boot goes on.
+initV1({
+  openAuditFn: (opts) => {
+    try {
+      return openAudit(opts);
+    } catch (err) {
+      const line = auditErrorLine(err);
+      if (line) log.error(line);
+      throw err;
+    }
+  },
+});
 const ctx = createContext({
   audit: auditLog(),
   mode: config.mode,

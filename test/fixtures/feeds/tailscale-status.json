@@ -1,0 +1,102 @@
+{
+  "Version": "1.90.0-tinvented",
+  "TUN": true,
+  "BackendState": "Running",
+  "HaveNodeKey": true,
+  "AuthURL": "",
+  "TailscaleIPs": ["192.0.2.10", "2001:db8::10"],
+  "Self": {
+    "ID": "nSELF000CNTRL",
+    "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000010",
+    "HostName": "hub",
+    "DNSName": "hub.acme.example.invalid.",
+    "OS": "linux",
+    "UserID": 1001,
+    "TailscaleIPs": ["192.0.2.10", "2001:db8::10"],
+    "Tags": ["tag:hub"],
+    "Online": true,
+    "Active": false,
+    "ExitNode": false,
+    "ExitNodeOption": false,
+    "LastSeen": "0001-01-01T00:00:00Z",
+    "KeyExpiry": "2027-04-01T00:00:00Z"
+  },
+  "Health": [],
+  "MagicDNSSuffix": "acme.example.invalid",
+  "CurrentTailnet": {
+    "Name": "acme.example.invalid",
+    "StableID": "TINVENTED",
+    "MagicDNSSuffix": "acme.example.invalid",
+    "MagicDNSEnabled": true
+  },
+  "CertDomains": null,
+  "Peer": {
+    "nodekey:0000000000000000000000000000000000000000000000000000000000000011": {
+      "ID": "nPEER011CNTRL",
+      "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000011",
+      "HostName": "builder-a",
+      "DNSName": "builder-a.acme.example.invalid.",
+      "OS": "linux",
+      "UserID": 1001,
+      "TailscaleIPs": ["192.0.2.11", "2001:db8::11"],
+      "Tags": ["tag:builder", "tag:ci"],
+      "Online": true,
+      "Active": true,
+      "ExitNode": false,
+      "ExitNodeOption": false,
+      "LastSeen": "0001-01-01T00:00:00Z",
+      "KeyExpiry": "2027-04-01T00:00:00Z",
+      "sshHostKeys": ["ssh-ed25519 AAAAinvented"]
+    },
+    "nodekey:0000000000000000000000000000000000000000000000000000000000000012": {
+      "ID": "nPEER012CNTRL",
+      "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000012",
+      "HostName": "Laptop",
+      "DNSName": "laptop-1.acme.example.invalid.",
+      "OS": "macOS",
+      "UserID": 1001,
+      "TailscaleIPs": ["192.0.2.12", "2001:db8::12"],
+      "Online": false,
+      "Active": false,
+      "ExitNode": false,
+      "ExitNodeOption": false,
+      "LastSeen": "2026-10-20T18:30:00Z"
+    },
+    "nodekey:0000000000000000000000000000000000000000000000000000000000000013": {
+      "ID": "nPEER013CNTRL",
+      "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000013",
+      "HostName": "hv1",
+      "DNSName": "hv1.acme.example.invalid.",
+      "OS": "linux",
+      "UserID": 1001,
+      "TailscaleIPs": ["192.0.2.13"],
+      "PrimaryRoutes": ["10.0.0.0/24"],
+      "Tags": ["tag:infra"],
+      "Online": true,
+      "Active": false,
+      "ExitNode": false,
+      "ExitNodeOption": true,
+      "LastSeen": "0001-01-01T00:00:00Z",
+      "Expired": true,
+      "KeyExpiry": "2026-10-01T00:00:00Z"
+    },
+    "nodekey:0000000000000000000000000000000000000000000000000000000000000014": {
+      "ID": "nPEER014CNTRL",
+      "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000014",
+      "HostName": "shared-box",
+      "DNSName": "shared-box.other.example.invalid.",
+      "OS": "linux",
+      "UserID": 2002,
+      "AltSharerUserID": 2002,
+      "TailscaleIPs": ["192.0.2.14"],
+      "Online": true,
+      "ShareeNode": true,
+      "LastSeen": "0001-01-01T00:00:00Z"
+    }
+  },
+  "User": {
+    "1001": { "ID": 1001, "LoginName": "owner@example.invalid", "DisplayName": "Owner" },
+    "2002": { "ID": 2002, "LoginName": "friend@example.invalid", "DisplayName": "Friend" }
+  },
+  "ClientVersion": null
+}

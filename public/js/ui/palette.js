@@ -1,11 +1,16 @@
 // The command palette (fleet plan §4 2.5, task D8): a native <dialog class="pal">
-// with a combobox input and a listbox of typed rows (HOST LANE PKG ACT VIEW).
+// with a combobox input and a listbox of typed rows (HOST LANE PKG NODE ACT VIEW).
 //
 // Opens with ⌘K, Ctrl-K outside a terminal, or `:` (which presets `>`); the
 // keys live in ui/hotkeys.js. Prefixes `h:`/`host:`, `l:`/`lane:`,
-// `p:`/`pkg:`, `>`/`act:` narrow the type (ui/fuzzy.js parsePrefix). An empty
+// `p:`/`pkg:`, `n:`/`node:`, `>`/`act:` narrow the type (ui/fuzzy.js parsePrefix). An empty
 // query lists the recent ids (last 20, localStorage['lb.pal.recent']), then
 // the current alarms' lanes, then the views. Results are capped at 50.
+//
+// NODE rows (T11) come from the last Map model (store.map): one per machine
+// (core, site, host, room) and one per service, the ports each one has in its
+// sub text, so "postgres" and ":5432" both find it. Choosing one opens the
+// Map and flies there (`sel=node:<id>`). No model loaded: no NODE rows.
 //
 // ACT rows come from core/commands.js. A row that sends an action runs
 // through runAction(): confirmAction() (ui/confirm.js) with the action's tier
@@ -84,10 +89,84 @@ function repoNames(pk) {
   return out;
 }
 
+const MACHINE_KINDS = new Set(['core', 'site', 'host', 'room']);
+const NODES_MAX = 2000;
+const PORTS_MAX = 8;
+
+/** A port number (1-65535) out of 5432, "5432", "tcp:5432", "5432/tcp", or null. */
+function portOf(v) {
+  const m = typeof v === 'number' ? [null, String(v)] : /^(?:[a-z]+:)?(\d{1,5})(?:\/[a-z]+)?$/i.exec(String(v ?? '').trim());
+  const n = m ? Number(m[1]) : NaN;
+  return Number.isInteger(n) && n > 0 && n < 65536 ? n : null;
+}
+
+/** The port in a node's `href`, or null (none written = none known). */
+function hrefPort(href) {
+  if (typeof href !== 'string' || !href) return null;
+  try { return portOf(new URL(href).port); } catch { return null; }
+}
+
+/**
+ * What a node listens on, as `:<port>` words: its own `ports` (a feed's
+ * services may carry them), the port in its `href`, and the ports the
+ * Reach links into it name. Unique, at most PORTS_MAX. Pure.
+ */
+function portsOf(n, reachTo) {
+  const out = [];
+  const add = (p) => { if (p != null && !out.includes(`:${p}`) && out.length < PORTS_MAX) out.push(`:${p}`); };
+  for (const p of Array.isArray(n.ports) ? n.ports : []) add(portOf(p?.port ?? p?.publicPort ?? p));
+  add(hrefPort(n.href));
+  for (const p of reachTo.get(n.id) ?? []) add(portOf(p));
+  return out;
+}
+
+/**
+ * The NODE rows for a Map model (GET /api/map, a `map` frame): one per
+ * machine and one per service, labelled by the node, the sub saying where it
+ * is and what ports it has ("postgres" · ":5432 on hv1/db"). Builders, lanes,
+ * sessions and packages are HOST/LANE/PKG rows already. `go(sel)` moves to
+ * the node; the palette passes navigate to the Map. No model: []. Pure.
+ */
+export function nodeItems(model, opts = {}) {
+  const nodes = Array.isArray(model?.nodes) ? model.nodes.slice(0, NODES_MAX).filter((n) => n && typeof n.id === 'string' && n.id) : [];
+  if (!nodes.length) return [];
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const reachTo = new Map();
+  for (const l of Array.isArray(model?.reach?.links) ? model.reach.links : []) {
+    if (!l || typeof l.to !== 'string' || !Array.isArray(l.ports)) continue;
+    if (!reachTo.has(l.to)) reachTo.set(l.to, []);
+    reachTo.get(l.to).push(...l.ports);
+  }
+  // "hv1/db": the labels from the first site down, the core left out.
+  const pathOf = (id) => {
+    const parts = [];
+    const seen = new Set();
+    for (let n = byId.get(id); n && !seen.has(n.id) && parts.length < 8; n = byId.get(n.parent)) {
+      seen.add(n.id);
+      if (n.kind !== 'core') parts.unshift(String(n.label ?? n.id));
+    }
+    return parts.join('/');
+  };
+  const items = [];
+  for (const n of nodes) {
+    if (n.virtual || (n.kind !== 'service' && !MACHINE_KINDS.has(n.kind))) continue;
+    const sel = `node:${n.id}`;
+    const ports = portsOf(n, reachTo).join(' ');
+    const sub = n.kind === 'service'
+      ? [ports, `on ${pathOf(n.parent)}`].filter(Boolean).join(' ')
+      : [n.kind, n.parent ? pathOf(n.parent) : '', ports, typeof n.sub === 'string' ? n.sub : ''].filter(Boolean).join(' · ');
+    items.push({
+      id: `node:${n.id}`, type: 'NODE', label: clip(n.label ?? n.id), sub: clip(sub), icon: 'map', hint: '',
+      run: () => opts.go?.(sel),
+    });
+  }
+  return items;
+}
+
 /**
  * Every palette row for `ctx` ({store, view, route}):
  * {id, type, label, sub, icon, hint, run}. Commands (ACT/VIEW) first, then
- * HOST, LANE and PKG rows. `run` is called by the palette after it closes.
+ * HOST, LANE, PKG and NODE rows. `run` is called by the palette after it closes.
  */
 export function paletteItems(ctx = {}) {
   const s = ctx.store ?? store;
@@ -131,6 +210,7 @@ export function paletteItems(ctx = {}) {
       run: () => navigate({ view: 'packages', q: name.slice(0, 200) }),
     });
   }
+  items.push(...nodeItems(ctx.map ?? s.map, { go: (sel) => navigate({ view: 'map', sel }) }));
   return items;
 }
 
@@ -220,7 +300,7 @@ function build() {
   input.type = 'text';
   input.autocomplete = 'off';
   input.spellcheck = false;
-  input.placeholder = 'Search  ·  h: host  l: lane  p: pkg  > action';
+  input.placeholder = 'Search  ·  h: host  l: lane  p: pkg  n: node  > action';
   input.setAttribute('role', 'combobox');
   input.setAttribute('aria-expanded', 'true');
   input.setAttribute('aria-controls', 'pal-list');

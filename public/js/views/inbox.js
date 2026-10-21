@@ -18,17 +18,24 @@
 // ctx) owns its slot (`data-slot="review-queue"`), which this view keeps across
 // redraws; the inbox's 1 Hz clock calls its tick(). The review rows are still
 // in the model so that j/k, p and Enter reach them.
+//
+// The Runs group (runs plan T5): the view polls GET /api/runs (views/runs.js
+// loadRuns, every POLL_MS); a 404/503 (no runs route, e.g. a hub) leaves the
+// group out. Enter on a run row opens the run page; `a` on a run need posts a
+// `needs.ack` (core/inbox-model.js ackEvent) to POST /api/runs/events.
 import { store } from '../core/store.js';
+import { post } from '../core/net.js';
+import { loadRuns, POLL_MS as RUNS_POLL_MS } from './runs.js';
 import { act, tierOf } from '../core/actions.js';
 import { currentRoute, navigate as routerNavigate } from '../core/router.js';
 import { register } from '../core/commands.js';
 import { buildReviewQueue, formatWait, storeLookups } from '../core/review-queue.js';
 import { mountReviewQueue } from './review-queue.js';
 import {
-  buildInbox, COOPERATIVE_NOTE, REMOTE_ONLY_NOTE, effectiveTier, formatCountdown, keyAction,
+  ackEvent, buildInbox, COOPERATIVE_NOTE, REMOTE_ONLY_NOTE, effectiveTier, emptyLine, formatCountdown, keyAction,
   lineClass, moveFocus, reconcileFocus, rowOf, withNote,
 } from '../core/inbox-model.js';
-import { lamp, panel, plate, markSel, setPanel } from '../ui/components.js';
+import { lamp, panel, plate, setPanel } from '../ui/components.js';
 import { confirmAction } from '../ui/confirm.js';
 import { toast } from '../ui/toast.js';
 
@@ -45,7 +52,20 @@ const state = {
   busy: new Set(),  // row ids with an action in flight
   timer: null,
   review: null,     // {slot, handle} from mountReviewQueue
+  runs: null,       // the GET /api/runs list, null when there is no runs route
+  runsTimer: null,
 };
+
+/** GET /api/runs: kept on an error (a blip), dropped when there is no runs route. */
+async function refreshRuns() {
+  const r = await loadRuns();
+  if (!state.root) return;
+  if (r.kind === 'ok') state.runs = r.runs;
+  else if (r.kind === 'unavailable') state.runs = null;
+  else return;
+  if (state.noteFor) { compute(); return; }
+  inboxRefresh();
+}
 
 function inboxScopeOf(route) {
   const b = route?.b;
@@ -67,7 +87,7 @@ function compute(now = Date.now()) {
   let review = [];
   try { review = buildReviewQueue(store.lanes, now, storeLookups(store)); } catch { review = []; }
   const ghost = state.ghost && state.ghost.id === state.focusId ? state.ghost : null;
-  const model = buildInbox(store, { now, scope: inboxScopeOf(route), review, ghost });
+  const model = buildInbox(store, { now, scope: inboxScopeOf(route), review, ghost, runs: state.runs });
   state.focusId = reconcileFocus(model, state.focusId);
   const r = rowOf(model, state.focusId);
   state.ghost = r ?? null;
@@ -133,16 +153,15 @@ function inboxRowNode(r) {
   li.dataset.row = r.id;
   li.dataset.group = r.group;
   if (r.closed) li.dataset.closed = '';
-  const focused = r.id === state.focusId;
-  li.setAttribute('aria-selected', focused ? 'true' : 'false');
-  markSel(li, focused);
+  // T16: the focused row is a 2 px accent ring (fleet-views.css), no fill, no brackets.
+  li.setAttribute('aria-selected', r.id === state.focusId ? 'true' : 'false');
 
   const head = document.createElement('div');
   head.className = 'inbox-row-h';
-  head.append(lamp(r.closed ? 'off' : r.p, { label: r.closed ? 'closed' : null }));
+  head.append(lamp(r.closed ? 'off' : r.p, { label: r.closed ? 'closed' : r.lampLabel ?? null }));
   if (r.fkey || r.name) head.append(plate(r.fkey ?? r.name));
   if (r.kind === 'approval') {
-    head.append(plate(r.mcpServer ? `${r.mcpServer}:${r.tool}` : r.tool, { kind: 'solid' }));
+    head.append(plate(r.mcpServer ? `${r.mcpServer}:${r.tool}` : r.tool, { kind: 'sunken' }));
     head.append(span('inbox-sum', r.summary));
     if (r.closed) head.append(span('inbox-status', 'closed'));
     else if (r.expiresAt !== null) {
@@ -152,6 +171,39 @@ function inboxRowNode(r) {
       head.append(t);
     }
     if (state.busy.has(r.id)) head.append(span('inbox-status', 'sending…'));
+  } else if (r.group === 'runs' || r.group === 'runprs') {
+    const sum = span('inbox-sum', r.reason);
+    sum.title = r.reason;
+    // a run need is the one row that wants a written answer: on a phone its text
+    // takes a line of its own under the run name and OPEN/ACK (fleet-views.css)
+    if (r.kind === 'run-need') head.classList.add('inbox-row-h--need');
+    head.append(sum);
+    if (r.link) {
+      const a = document.createElement('a');
+      a.className = 'inbox-link';
+      a.href = r.link;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.title = r.link;
+      a.textContent = 'open ↗';
+      a.addEventListener('click', (e) => e.stopPropagation());
+      head.append(a);
+    }
+    if (r.closed) head.append(span('inbox-status', 'closed'));
+    else if (state.busy.has(r.id)) head.append(span('inbox-status', 'sending…'));
+    else if (r.kind === 'run-need') {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn btn--s inbox-ack';
+      b.textContent = 'ack';
+      b.title = 'Acknowledge this need (a): the run page and the Inbox stop showing it';
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.focusId = r.id;
+        runKey('a');
+      });
+      head.append(b);
+    }
   } else if (r.group === 'review') {
     head.append(span('inbox-sum', r.reason));
     head.append(span('inbox-timer', formatWait(r.waitMs)));
@@ -192,6 +244,17 @@ function groupNode(g) {
   const sec = document.createElement('section');
   sec.className = 'inbox-group';
   sec.dataset.group = g.id;
+  if (g.empty) {
+    // T16 (r10-designer Inbox 1): an empty group is one muted line, the same
+    // wording everywhere, and the model has put it below the filled ones.
+    sec.dataset.empty = '';
+    const p = document.createElement('p');
+    p.className = 'inbox-empty';
+    p.textContent = emptyLine(g.title);
+    if (g.note) p.title = g.note;
+    sec.append(p);
+    return sec;
+  }
   const h = document.createElement('h3');
   h.className = 'inbox-group-t';
   const hid = `inbox-g-${g.id}`;
@@ -210,15 +273,8 @@ function groupNode(g) {
 
   if (g.id === 'review' && state.review) {
     const { slot } = state.review;
-    markSel(slot, g.rows.some((r) => r.id === state.focusId));
+    slot.toggleAttribute('data-focus', g.rows.some((r) => r.id === state.focusId));
     sec.append(slot);
-    return sec;
-  }
-  if (!g.rows.length) {
-    const p = document.createElement('p');
-    p.className = 'empty';
-    p.textContent = 'Nothing here.';
-    sec.append(p);
     return sec;
   }
   const ul = document.createElement('ul');
@@ -345,6 +401,24 @@ async function perform(plan) {
   return res;
 }
 
+/** `a` on a run need: confirmAction (click tier), then post the needs.ack event. */
+async function ackRun(plan) {
+  const ok = await confirmAction({ action: 'ack', targets: [plan.run], tier: 'click' });
+  if (!ok.ok) return { ok: false, error: 'cancelled' };
+  state.busy.add(plan.rowId);
+  inboxRender();
+  let res;
+  try {
+    res = await post('/api/runs/events', ackEvent(plan));
+  } finally {
+    state.busy.delete(plan.rowId);
+  }
+  if (res?.ok === true) toast('Acknowledged', { kind: 'ok' });
+  inboxRefresh();
+  await refreshRuns();
+  return res;
+}
+
 /** Run inbox key `key` on the focused row. Returns false when it did nothing. */
 function runKey(key) {
   if (!state.model) compute();
@@ -354,6 +428,12 @@ function runKey(key) {
     return false;
   }
   if (plan.open) { nav({ sel: plan.open }); return true; }
+  if (plan.run) { nav({ view: 'runs', run: plan.run }); return true; }
+  if (plan.action === 'ack') {
+    if (state.busy.has(plan.rowId)) return false;
+    ackRun(plan);
+    return true;
+  }
   if (plan.needsNote) {
     state.noteFor = plan.rowId;
     inboxRender();
@@ -404,7 +484,7 @@ export function registerInboxCommands(regFn) {
   if (page) commandsRegistered = true;
   const reg = regFn ?? register;
   const when = (ctx) => ctx?.view === 'inbox' && state.root !== null;
-  reg({ id: 'inbox.approve', title: 'Approve the focused request', icon: 'approve', keys: ['a'], tier: 'ask', when, run: () => runKey('a') });
+  reg({ id: 'inbox.approve', title: 'Approve the focused request (on a run need: acknowledge it)', icon: 'approve', keys: ['a'], tier: 'ask', when, run: () => runKey('a') });
   reg({ id: 'inbox.deny', title: 'Deny the focused request', icon: 'deny', keys: ['d'], tier: 'click', when, run: () => runKey('d') });
   reg({ id: 'inbox.release', title: 'Release to the terminal', icon: 'chev-r', keys: ['r'], tier: 'click', when, run: () => runKey('r') });
   reg({ id: 'inbox.pause', title: 'Pause the focused lane', icon: 'pause', keys: ['p'], tier: 'click', when, run: () => runKey('p') });
@@ -435,11 +515,15 @@ export default {
     mountReview();
     inboxRefresh();
     state.timer = setInterval(tickTimers, 1000);
+    refreshRuns();
+    state.runsTimer = setInterval(refreshRuns, RUNS_POLL_MS);
     setTimeout(() => focusList(), 0);
   },
   unmount: () => {
     if (state.timer) clearInterval(state.timer);
     state.timer = null;
+    if (state.runsTimer) clearInterval(state.runsTimer);
+    state.runsTimer = null;
     try { state.review?.handle.unmount(); } catch { /* already gone */ }
     state.review = null;
     if (state.root) state.root.el.textContent = '';

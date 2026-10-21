@@ -3,7 +3,11 @@
 // views mount through the registry (views/index.js), and navigate/onRoute/
 // current give the shell and later views one way to move.
 //
-// Grammar: #/<view>?b=<builderId|all>&s=<state filter>&q=<query>&sel=<fkey>&open=<term|transcript>
+// Grammar: #/<view>?b=<builderId|all>&s=<state filter>&q=<query>&sel=<fkey>&open=<term|transcript>&run=<run id>
+// (`run` is a run id as the protocol checks it: the Runs view opens that run's page;
+// `#/runs/<run id>` is the same page, T24, and an unknown view says so in a toast).
+// `sel` is a lane/session fkey, `run:<run id>` for a run node on the Map (T10),
+// or `node:<map node id>` for any other Map node (the palette's NODE rows, T11).
 // Legacy forms keep working, because old push notifications already sit in
 // notification centres: `#board`, `#map`, ... map to the view, and
 // `#session=<name>` becomes {view:'board', sel: fkey(localId, name), open:'term'}.
@@ -17,6 +21,7 @@ import { localBuilderId, store, toIndexKey } from './store.js';
 import { scheduleVisible } from './net.js';
 import { fitAll } from '../ui/terminal.js';
 import { openSheet } from '../ui/sheet.js';
+import { toast } from '../ui/toast.js';
 import { activateView } from '../views/index.js';
 
 // ---------------------------------------------------------------- views
@@ -28,16 +33,16 @@ import { activateView } from '../views/index.js';
 // the capture-pane rate drops on its own while you are elsewhere.
 // Every view has a section (index.html `#view-<id>`) and a registry entry; a
 // view the page has no section for still lands on the default view.
-export const VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit'];
+export const VIEWS = ['map', 'board', 'inbox', 'packages', 'morning', 'credit', 'box', 'audit', 'runs'];
 /** Drill-down views: routable, never in the nav. */
 export const HIDDEN_VIEWS = ['diff'];
 export const DEFAULT_VIEW = 'map';
 /**
  * The `g <key>` view chord (plan §4 2.6, authoritative). `g m` is the map now
- * and morning moved to `g o`; `g p` is packages (it was the map). ui/hotkeys.js
+ * and morning moved to `g o`; `g p` is packages (it was the map); `g r` is runs. ui/hotkeys.js
  * (D8) reads this table; the router only registers the routes.
  */
-export const VIEW_KEYS = Object.freeze({ m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning' });
+export const VIEW_KEYS = Object.freeze({ m: 'map', b: 'board', i: 'inbox', p: 'packages', x: 'box', a: 'audit', c: 'credit', o: 'morning', r: 'runs' });
 export const OPEN_KINDS = ['term', 'transcript'];
 
 const ROUTABLE = new Set([...VIEWS, ...HIDDEN_VIEWS]);
@@ -46,6 +51,12 @@ const STATE_RX = new RegExp('^[a-z0-9_-]{1,24}(?:,[a-z0-9_-]{1,24}){0,15}$');
 const CONTROL_RX = /[\u0000-\u001f\u007f]/;
 const MAX_Q = 200;
 const MAX_SEL = 300;
+/** A run id, the protocol's own pattern (server/runs/protocol.mjs RUN_ID). */
+export const RUN_RX = new RegExp('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$');
+/** A Map run node's `sel`, `run:<run id>` (server/map/runs.mjs). */
+export const isRunSel = (v) => typeof v === 'string' && v.startsWith('run:') && RUN_RX.test(v.slice(4));
+/** Any other Map node's `sel`, `node:<id>` (map/model.js idForSel); the id is opaque text. */
+export const isNodeSel = (v) => typeof v === 'string' && v.startsWith('node:') && v.length > 5 && v.length <= MAX_SEL && !CONTROL_RX.test(v);
 
 function safeDecode(v) {
   try { return decodeURIComponent(v.replace(/\+/g, ' ')); } catch { return null; }
@@ -53,7 +64,7 @@ function safeDecode(v) {
 
 /** An empty route on `view`: every parameter null. */
 export function emptyRoute(view = DEFAULT_VIEW) {
-  return { view, b: null, s: null, q: null, sel: null, open: null };
+  return { view, b: null, s: null, q: null, sel: null, open: null, run: null };
 }
 
 /** The query part (no `?`) -> {key: decoded value}; the first of a repeated key wins. */
@@ -71,11 +82,21 @@ function parseQuery(qs) {
 }
 
 /**
- * A hash (with or without the leading '#') -> {view, b, s, q, sel, open}.
+ * A hash (with or without the leading '#') -> {view, b, s, q, sel, open, run}.
  * Values that do not fit their parameter are dropped (null); an unknown view
  * becomes DEFAULT_VIEW. `localId` is the local builder, for `#session=`.
+ * `#/runs/<id>` is the run page too (T24), the same as `#/runs?run=<id>`.
  */
-export function parseHash(h, { localId } = {}) {
+export function parseHash(h, opts) {
+  return resolveHash(h, opts).route;
+}
+
+/**
+ * parseHash plus why it fell back (T24): {route, reason}, `reason` null when
+ * the hash says what it shows, else one line for the user ("no view “x”,
+ * showing the Map"). An empty hash is home, not a miss.
+ */
+export function resolveHash(h, { localId } = {}) {
   const raw = String(h ?? '').replace(/^#/, '');
   const legacy = /^session=(.+)$/.exec(raw);
   if (legacy) {
@@ -85,31 +106,47 @@ export function parseHash(h, { localId } = {}) {
       r.sel = fkey(localId, name);
       r.open = 'term';
     }
-    return r;
+    return { route: r, reason: null };
   }
-  if (!raw.startsWith('/')) return emptyRoute(ROUTABLE.has(raw) ? raw : DEFAULT_VIEW);
+  if (!raw.startsWith('/')) {
+    if (raw === '' || ROUTABLE.has(raw)) return { route: emptyRoute(raw || DEFAULT_VIEW), reason: null };
+    return { route: emptyRoute(DEFAULT_VIEW), reason: missReason(safeDecode(raw) ?? raw) };
+  }
 
   const qAt = raw.indexOf('?');
   const path = (qAt < 0 ? raw : raw.slice(0, qAt)).replace(/^\/+|\/+$/g, '');
-  const r = emptyRoute(ROUTABLE.has(path) ? path : DEFAULT_VIEW);
+  const runPath = /^runs\/(.+)$/.exec(path);
+  const known = path === '' || ROUTABLE.has(path) || !!runPath;
+  const r = emptyRoute(runPath ? 'runs' : ROUTABLE.has(path) ? path : DEFAULT_VIEW);
+  let reason = known ? null : missReason(safeDecode(path) ?? path);
   const p = parseQuery(qAt < 0 ? '' : raw.slice(qAt + 1));
   if (p.b === 'all' || BUILDER_ID_RX.test(p.b ?? '')) r.b = p.b;
   if (STATE_RX.test(p.s ?? '')) r.s = p.s;
   if (typeof p.q === 'string' && p.q !== '' && !CONTROL_RX.test(p.q)) r.q = p.q.slice(0, MAX_Q);
-  if (typeof p.sel === 'string' && p.sel.length <= MAX_SEL && !CONTROL_RX.test(p.sel) && isFkey(p.sel)) r.sel = p.sel;
+  if (typeof p.sel === 'string' && p.sel.length <= MAX_SEL && !CONTROL_RX.test(p.sel) && (isFkey(p.sel) || isRunSel(p.sel) || isNodeSel(p.sel))) r.sel = p.sel;
   if (OPEN_KINDS.includes(p.open)) r.open = p.open;
-  return r;
+  if (RUN_RX.test(p.run ?? '')) r.run = p.run;
+  if (runPath) {
+    // The path's id wins over a `run=` beside it.
+    const id = safeDecode(runPath[1]);
+    if (id !== null && RUN_RX.test(id)) r.run = id;
+    else reason = `“${clip(id ?? runPath[1])}” is not a run id, showing the run list`;
+  }
+  return { route: r, reason };
 }
 
+const clip = (s) => (s.length > 40 ? `${s.slice(0, 39)}…` : s).replace(/[\u0000-\u001f\u007f]/g, '');
+const missReason = (name) => `no view “${clip(String(name))}”, showing the Map`;
+
 /**
- * A route -> its hash, in the stable key order view, b, s, q, sel, open.
+ * A route -> its hash, in the stable key order view, b, s, q, sel, open, run.
  * Defaults are left out: null/empty parameters, `b=all`, and the home view,
  * so the plain map is `#/`.
  */
 export function formatHash(r = {}) {
   const view = ROUTABLE.has(r.view) ? r.view : DEFAULT_VIEW;
   const parts = [];
-  for (const k of ['b', 's', 'q', 'sel', 'open']) {
+  for (const k of ['b', 's', 'q', 'sel', 'open', 'run']) {
     const v = r[k];
     if (v === null || v === undefined || v === '') continue;
     if (k === 'b' && v === 'all') continue;
@@ -124,6 +161,9 @@ export function currentRoute() {
   return parseHash(location.hash, { localId: localBuilderId(store) });
 }
 
+/** The last hash a fallback was said for, so a re-apply of the same hash does not toast again. */
+let toldMiss = null;
+
 /** Alias of currentRoute (plan §4 2.6 names it `current()`). */
 export function current() {
   return currentRoute();
@@ -131,7 +171,7 @@ export function current() {
 
 /**
  * The route after applying `patch` to `route`: only the routing keys, and a
- * view switch drops the selection unless the patch sets one. Pure.
+ * view switch drops the selection (sel, open, run) unless the patch sets it. Pure.
  */
 export function patchRoute(route, patch = {}) {
   const base = { ...emptyRoute(route?.view ?? DEFAULT_VIEW), ...pickRoute(route) };
@@ -140,11 +180,12 @@ export function patchRoute(route, patch = {}) {
   if ('view' in p && p.view !== base.view) {
     if (!('sel' in p)) next.sel = null;
     if (!('open' in p)) next.open = null;
+    if (!('run' in p)) next.run = null;
   }
   return next;
 }
 
-const ROUTE_KEYS = ['view', 'b', 's', 'q', 'sel', 'open'];
+const ROUTE_KEYS = ['view', 'b', 's', 'q', 'sel', 'open', 'run'];
 function pickRoute(r) {
   const out = {};
   if (!r || typeof r !== 'object') return out;
@@ -199,7 +240,7 @@ export function setView(name, { pushHash = true } = {}) {
   const cur = currentRoute();
   if (pushHash && !store.openSession) {
     // Keep the filters (b, s, q); a view switch drops the selection.
-    const want = formatHash({ ...cur, view, sel: null, open: null });
+    const want = formatHash({ ...cur, view, sel: null, open: null, run: null });
     if (location.hash !== want) history.replaceState(null, '', want);
   }
   // The registry mounts the view (a legacy adapter for the F1-moved ones runs
@@ -216,7 +257,9 @@ export function setView(name, { pushHash = true } = {}) {
  * select: no action is ever sent from here.
  */
 export function applyHash() {
-  const r = currentRoute();
+  const { route: r, reason } = resolveHash(location.hash, { localId: localBuilderId(store) });
+  if (reason && toldMiss !== location.hash) toast(reason, { kind: 'info' });
+  toldMiss = reason ? location.hash : null;
   const key = r.sel ? toIndexKey(store, r.sel) : null;
   if (key && (r.open === 'term' || r.view === 'board')) {
     setView('board', { pushHash: false });

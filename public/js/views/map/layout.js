@@ -18,14 +18,33 @@ export const RING_OF = {
 /** Radius of a node's dot, by kind. */
 export const SIZE = {
   core: 15, site: 10, host: 9, room: 6.5, repo: 6, builder: 7,
-  service: 4.2, package: 4, lane: 5, pr: 3.6, session: 3.4,
+  service: 4.2, package: 4, lane: 5, pr: 3.6, session: 3.4, run: 5,
 };
+
+/** A run node's progress ring sits this far outside its centre mark (r + RUN_RING), 2px wide. */
+export const RUN_RING = 4;
+
+/** ...and never closer than this to its centre (px): a run reads as a node, not a speck. */
+export const RUN_RING_MIN = 14;
+
+/** The radius a run's progress ring is drawn at, for a centre mark of radius `r`. */
+export const runRingR = (r) => Math.max(r + RUN_RING, RUN_RING_MIN);
 
 /** Rings from this index on stagger crowded neighbours in and out. */
 export const STAGGER_FROM = 3;
 
-/** Angle kept clear at twelve o'clock, where the ring labels sit. */
+/** Angle kept clear around LEGEND_BEARING, where the ring labels sit. */
 export const CLEARANCE = 0.26;
+
+/**
+ * The bearing (degrees clockwise from twelve o'clock) of the gap that holds
+ * the ring labels: off the 000 axis, so they meet neither the dial's 000 nor
+ * a branch that leaves the core straight up.
+ */
+export const LEGEND_BEARING = 330;
+
+/** LEGEND_BEARING as a canvas angle, counted back from twelve o'clock (-150°). */
+export const LEGEND_ANGLE = -Math.PI / 2 + ((LEGEND_BEARING - 360) / 360) * Math.PI * 2;
 
 /** Ring label word per kind, in the order the words are joined. */
 export const RING_WORD = [
@@ -101,7 +120,7 @@ export function layout(nodes) {
       a += share + gap;
     }
   };
-  const start = -Math.PI / 2 + CLEARANCE / 2;
+  const start = LEGEND_ANGLE + CLEARANCE / 2;
   place(center, 0, 0, start, start + TAU - CLEARANCE);
 
   // Crowded outer rings stagger in and out so neighbours' labels do not touch.

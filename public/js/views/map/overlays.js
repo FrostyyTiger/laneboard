@@ -1,5 +1,5 @@
 // The Map's overlays (plan §5 2.5, 2.6): how a node and a link look under the
-// status, ci, cost, context and age overlays.
+// status, ci, cost, context, age, drift and reach overlays.
 //
 // Pure: no DOM, no globals. Styles are abstract (a tone, a lightness level, a
 // shape, dash pattern); the renderer maps tones to the §4 tokens: grey ->
@@ -7,7 +7,7 @@
 // lightness ACCENT_L[level], line -> --line.
 
 /** The overlays, in the order `o` cycles them (`O` goes back). */
-export const OVERLAYS = ['status', 'ci', 'cost', 'context', 'age'];
+export const OVERLAYS = ['status', 'ci', 'cost', 'context', 'age', 'drift', 'reach'];
 
 /** localStorage key of the chosen overlay. */
 export const OVERLAY_KEY = 'laneboard.map.overlay';
@@ -28,16 +28,93 @@ export const TONE_CODE = { grey: 0, crit: 1, warn: 2, low: 3, accent: 4, line: 5
 /** Non-lane nodes in a non-status overlay are drawn at this alpha. */
 export const DIM = 0.5;
 
-/** The overlay after `cur` (dir 1) or before it (dir -1), wrapping. Unknown -> status. */
-export function nextOverlay(cur, dir = 1) {
+/**
+ * Drift (server/map.mjs driftOf): the words the readout, the tip and the
+ * panel use, and the ring the drift overlay draws around the node. A missing
+ * node stays at its declared place in a dashed warn ring, an undeclared one
+ * gets a solid warn square: both want a look (the amber of README §5), the
+ * shape tells which, and the accent stays for selection. `glyph` is the
+ * readout's key in front of each count.
+ */
+export const DRIFT_TEXT = { missing: 'declared, not seen', undeclared: 'seen, not declared' };
+export const DRIFT_MARK = {
+  missing: { tone: 'warn', level: 0, dash: [3, 3], shape: 'ring', glyph: '◌' },
+  undeclared: { tone: 'warn', level: 0, dash: [], shape: 'square', glyph: '□' },
+};
+
+/** The node's drift kind when it is one of DRIFT_TEXT's, else null. */
+const driftOf = (node) => (typeof node?.drift === 'string' && Object.hasOwn(DRIFT_TEXT, node.drift) ? node.drift : null);
+
+/** "declared, not seen" / "seen, not declared" for a drifting node, else null. */
+export const driftText = (node) => (driftOf(node) ? DRIFT_TEXT[driftOf(node)] : null);
+
+/** `{missing, undeclared}` counts over a node list. */
+export function driftCounts(nodes) {
+  const out = { missing: 0, undeclared: 0 };
+  for (const n of nodes ?? []) if (n && Object.hasOwn(out, n.drift)) out[n.drift]++;
+  return out;
+}
+
+/**
+ * The overlays a model can show: `reach` only when the model carries reach
+ * links (server/map.mjs, opt-in by `map.policyFile`), every other one always.
+ */
+export function availableOverlays(model) {
+  const reach = Array.isArray(model?.reach?.links) && model.reach.links.length > 0;
+  return OVERLAYS.filter((o) => o !== 'reach' || reach);
+}
+
+/**
+ * The overlay after `cur` (dir 1) or before it (dir -1), wrapping, skipping
+ * the ones not in `available` (availableOverlays). Unknown -> status.
+ */
+export function nextOverlay(cur, dir = 1, available = OVERLAYS) {
   const i = OVERLAYS.indexOf(cur);
   if (i < 0) return OVERLAYS[0];
   const n = OVERLAYS.length;
-  return OVERLAYS[(((i + (dir < 0 ? -1 : 1)) % n) + n) % n];
+  const step = dir < 0 ? -1 : 1;
+  for (let k = 1; k <= n; k++) {
+    const o = OVERLAYS[(((i + step * k) % n) + n) % n];
+    if (o === 'status' || available.includes(o)) return o;
+  }
+  return OVERLAYS[0];
 }
 
 /** A stored overlay name, or `status`. */
 export const validOverlay = (name) => (OVERLAYS.includes(name) ? name : 'status');
+
+/**
+ * Reach (server/map.mjs, T11): who can reach what, from the policy file.
+ * `reachScope(links, focus)` is what the overlay lights: with a focus (the
+ * selected node), the focus and the nodes it reaches directly ("if this is
+ * compromised, what can it touch?"); with none, every node a reach link names.
+ */
+export const REACH_MARK = { tone: 'accent', level: 3, dash: [] };
+
+/** `{focus, touched: Set, lit: Set, links}` for the reach overlay. */
+export function reachScope(links, focus = null) {
+  const list = Array.isArray(links) ? links.filter((l) => l && l.from != null && l.to != null && l.from !== l.to) : [];
+  const touched = new Set();
+  const lit = new Set();
+  if (focus != null) {
+    for (const l of list) if (l.from === focus) touched.add(l.to);
+    if (touched.size || list.some((l) => l.to === focus)) lit.add(focus);
+    for (const id of touched) lit.add(id);
+  } else {
+    for (const l of list) { lit.add(l.from); lit.add(l.to); }
+  }
+  return { focus: focus ?? null, touched, lit, links: list.length };
+}
+
+/**
+ * How a reach link is drawn: a thin grey arc with an arrowhead at the target
+ * (direction is the point); the focus's outgoing links in the accent, the rest
+ * faded while something is selected.
+ */
+export function reachLinkStyle(link, focus = null) {
+  if (focus != null && link?.from === focus) return { tone: 'accent', level: 2, width: 1.5, dash: [], alpha: 0.9 };
+  return { tone: 'grey', level: 0, width: 1, dash: [], alpha: focus != null ? 0.12 : 0.35 };
+}
 
 /** Cost in USD -> accent level 0..4 (bins [0,1,5,20,50]). */
 export function costLevel(usd) {
@@ -85,6 +162,16 @@ export function statusStyle(node, status = node?.status) {
   return { tone: 'grey', level: 0, shape: calmShape(node), abnormal: false, ...(s === 'working' ? { arc: true } : {}) };
 }
 
+/**
+ * True when a node draws the rolled-up status of what it holds: a site, a host
+ * or a folded node. Never the core (runs night 4 T23): the centre is the
+ * board's own host, grey unless it itself wants you, so a waiting lane does
+ * not paint it an amber disc with no ▲.
+ */
+export function rollsUp(node, folded = false) {
+  return node?.kind === 'site' || node?.kind === 'host' || (Boolean(folded) && node?.kind !== 'core');
+}
+
 /** The kinds each non-status overlay measures. */
 const MEASURED = {
   ci: new Set(['lane', 'package']),
@@ -99,13 +186,26 @@ const MEASURED = {
  * its own status is used. `opts.budgetUsd` is the builder's budget cap for the
  * cost overlay (`opts.warnPct`, default 80, of it turns ◆ low; at the cap ■ crit).
  *
- * Returns `{tone, level, shape, alpha, arc?, abnormal}`. An abnormal status
- * keeps its own tone and shape in every overlay: a crit lane never looks calm
- * because the overlay is cost.
+ * Returns `{tone, level, shape, alpha, arc?, mark?, abnormal}`. An abnormal
+ * status keeps its own tone and shape in every overlay: a crit lane never
+ * looks calm because the overlay is cost. The drift overlay keeps the status
+ * style, adds `mark` (DRIFT_MARK, a ring or square around the node) on a drifting node
+ * and dims every other node. The reach overlay does the same with
+ * `opts.reach` (reachScope): lit nodes full, the focus's reachable set marked
+ * with REACH_MARK, the rest dimmed.
  */
 export function nodeStyle(node, overlay = 'status', rolled = null, opts = {}) {
   const base = statusStyle(node, rolled ?? node?.status);
   const ov = validOverlay(overlay);
+  if (ov === 'drift') {
+    const mark = driftOf(node) && DRIFT_MARK[driftOf(node)];
+    return mark ? { ...base, alpha: 1, mark: { ...mark, dash: [...mark.dash] } } : { ...base, alpha: DIM };
+  }
+  if (ov === 'reach') {
+    const r = opts.reach;
+    if (!r?.lit?.has(node?.id)) return { ...base, alpha: DIM };
+    return r.touched?.has(node.id) ? { ...base, alpha: 1, mark: { ...REACH_MARK, dash: [] } } : { ...base, alpha: 1 };
+  }
   const measured = ov !== 'status' && MEASURED[ov].has(node?.kind);
   const alpha = ov === 'status' || measured ? 1 : DIM;
   if (base.abnormal || !measured) return { ...base, alpha };
@@ -177,4 +277,55 @@ export function linkStyle(link, overlay = 'status') {
     }
   }
   return { ...s, animate: live && (kind === 'ci' || !['tree', 'touch', 'conflict', 'pkg'].includes(kind)) };
+}
+
+/**
+ * A run node (server/map/runs.mjs runNodes): its progress ring. The arc is the
+ * progress from twelve o'clock on a full grey track; grey while the run is
+ * fine, the trouble hue and shape only when it is stuck (warn ▲) or stopped on
+ * an error (crit ■); a run that stopped fine is a hollow grey ring, faded, and
+ * never the accent. `progress` is 0-1, or null when the run does not say.
+ */
+export function runRing(node) {
+  const p = Number.isFinite(node?.progress) ? Math.max(0, Math.min(1, node.progress)) : null;
+  const stopped = node?.state === 'stopped';
+  if (node?.status === 'crit' || node?.status === 'down') return { progress: p, tone: 'crit', shape: 'square', hollow: false, alpha: 1 };
+  if (!stopped && (node?.stuck || node?.status === 'warn')) return { progress: p, tone: 'warn', shape: 'tri', hollow: false, alpha: 1 };
+  if (stopped) return { progress: p, tone: 'grey', shape: 'disc', hollow: true, alpha: 0.6 };
+  return { progress: p, tone: 'grey', shape: 'disc', hollow: false, alpha: 1 };
+}
+
+/** "7/10" (or "7" without a budget) for a run node's label; null before its first round. */
+export function runRound(node) {
+  const n = Number.isFinite(node?.round) ? node.round : null;
+  if (n === null) return null;
+  return Number.isFinite(node?.maxRounds) && node.maxRounds > 0 ? `${n}/${node.maxRounds}` : String(n);
+}
+
+/** The run page a run node links to, `#/runs?run=<id>`; null when it names no run. */
+export function runHref(node) {
+  const id = typeof node?.run === 'string' && node.run ? node.run : null;
+  return id ? `#/runs?run=${encodeURIComponent(id)}` : null;
+}
+
+/**
+ * What the tip and the inspector say about a run node: `{goal, round, progress,
+ * state, why, tone, href}`, plain strings (or null) for textContent.
+ * `round` is "round 7 / 10", `progress` "70 %".
+ */
+export function runFacts(node) {
+  if (node?.kind !== 'run') return null;
+  const ring = runRing(node);
+  const n = Number.isFinite(node.round) ? node.round : null;
+  const max = Number.isFinite(node.maxRounds) && node.maxRounds > 0 ? node.maxRounds : null;
+  const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
+  return {
+    goal: str(node.goal) ?? str(node.sub),
+    round: n === null ? null : max ? `round ${n} / ${max}` : `round ${n}`,
+    progress: ring.progress === null ? null : `${Math.round(ring.progress * 100)} %`,
+    state: str(node.state),
+    why: str(node.why),
+    tone: ring.tone,
+    href: runHref(node),
+  };
 }

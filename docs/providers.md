@@ -129,3 +129,124 @@ and the known review apps).
 
 `verdict` drives the chip and the `blocked` marker: red raises one marker per
 head commit, and green after red dismisses it.
+
+---
+
+## FeedProvider
+
+A feeder reads one source and turns it into one feed in the format of
+`docs/map.md` "The feed format". It runs next to the source, usually from a
+timer, and the Map only ever reads what it wrote: infrastructure data is
+pushed in, never pulled by the board. Unlike the three above, a feeder is
+chosen per command (`laneboard feed <kind>`), not by a config key, and nothing
+in the server imports one.
+
+```
+server/feeders/
+  index.mjs              TABLE, feeder(kind), collect(kind, opts)
+  none.mjs               an empty feed that says so
+  tailscale.mjs          `tailscale status --json` on this machine
+  proxmox.mjs            the PVE API's `/cluster/resources`, read-only token
+  docker.mjs             the local Docker socket's `/containers/json`, GET only
+```
+
+| Export | Signature | Contract |
+| --- | --- | --- |
+| `name` | `string` | The kind, as `laneboard feed` takes it. |
+| `toFeed(input, {source, now, every})` | `-> feed` | **Pure**: no clock, no I/O. `now` becomes `at`; `every` (seconds) defaults to 60. Tolerates missing and unknown fields (missing is unknown, never a throw). Never copies credentials or personal data into the feed. |
+| `read(opts)` | `-> {ok:true, input} \| {ok:false, error}` | Gets the input once, with a timeout. A missing tool, a refused connection or a source with nothing to report is `{ok:false}`: an empty feed would draw every node as gone. |
+
+`collect(kind, {source, now, every, ...readOpts})` in `index.mjs` is `read`
+then `toFeed`: `{ok:true, feed}` or `{ok:false, error}`; `source` defaults to
+the kind, and an unknown kind is a value, not an exception.
+
+**`none`** reads nothing and returns `{source, at, every, note, host:{sub:
+"no feeder"}, guests:[], events:[]}`.
+
+**`tailscale`** runs `tailscale status --json` (no API key, no network; it
+sees what this node may see). `read({bin, timeoutMs})` is `{ok:false}` when
+the binary is missing, the command fails or times out, or the daemon is not
+`Running` and logged in. `toFeed` makes this node the host and every peer a
+guest of `type: "tailnet"`:
+
+- the name is the MagicDNS label (the first label of `DNSName`, what `ssh
+  <name>` reaches), else `HostName`, lower case;
+- `status` is `running` while the peer is connected to the control plane
+  (`Online`), `stopped` otherwise; an offline peer carries `lastSeen` (ms);
+- `os`, `tags` and `ips` as fields, and in `detail` with subnet routes and
+  the exit-node role; an expired node key is a `warn` alert; tailscale's own
+  health messages are host alerts;
+- nodes shared in from another tailnet are left out, as the CLI's listing
+  does; login names, node keys and SSH host keys never reach the feed.
+
+**`proxmox`** makes one `GET /api2/json/cluster/resources` call to a Proxmox
+VE host with a read-only API token (`PVEAuditor`; the recipe is in
+`docs/map.md`). `read({url, tokenId, secretFile, ca, node, timeoutMs})`:
+
+- `url` is the API's `https://` origin (`https://hv1.example.invalid:8006`);
+  plain `http` is refused, since the token would travel in clear;
+- `tokenId` is `user@realm!name`; the secret is read from `secretFile`, else
+  from `LANEBOARD_PVE_SECRET`, and is never a flag value, never logged, never
+  in an error; the header is `Authorization: PVEAPIToken=<tokenId>=<secret>`;
+- `ca` is a PEM file to trust (the PVE cluster CA, or the node's own
+  certificate): the default certificate is self-signed, and there is no
+  switch that skips verification;
+- `{ok:false}` for a bad option, a refused connection, a timeout, an
+  untrusted certificate, 401 (bad token or expired), 403 (no privilege), any
+  other non-2xx, or an answer that lists no nodes.
+
+`toFeed` maps the flat list by `type`:
+
+- one `node` row is the host (`name`, `cpu`, `mem`/`maxmem`, root `disk`;
+  `sub` like `PVE · 64 GB · 5/7 guests running`); a cluster's feed is the
+  whole cluster (metrics summed over the online nodes, an offline node is a
+  `warn`, every guest carries `node`), unless `node` picks one of them;
+- `qemu` and `lxc` rows are guests (`vmid`, `name`, `type`, `status`, `cpu`,
+  `mem`/`maxmem` with `memCache: true`, `disk` only when PVE knows it, which
+  for a qemu guest it usually does not, `uptime`, `tags` split from PVE's
+  `;` string, lock and HA state in `detail`);
+- a template is a guest with `template: true`: listed, never counted as
+  running or stopped, and drawn at rest on the Map, never down;
+- a storage at 90% is a `warn` host alert, at 97% `crit` (a shared storage
+  once, at its fullest); pools and SDN rows are ignored.
+
+**`docker`** sends one `GET /containers/json?all=1` (what `docker ps -a`
+lists) over the Docker Engine's local unix socket, and no other request.
+`read({socket, timeoutMs})`:
+
+- `socket` defaults to `/var/run/docker.sock`; no version prefix is sent, so
+  the daemon answers in its own version;
+- `{ok:false}` for a missing socket, no permission (the user is not in the
+  `docker` group), a refused connection, a timeout, a 403 (a socket proxy
+  without `CONTAINERS=1`), any other non-2xx, or a body that is not a JSON
+  list. An empty list is an answer: the Engine has no containers.
+
+The socket has no read-only mode: write access to it is root on the machine.
+A user in the `docker` group trusts the feeder to send only that GET; a
+GET-only socket proxy (such as `docker-socket-proxy` with `CONTAINERS=1` and
+`POST=0`) takes that trust away, and `socket` can point at the proxy's own
+unix socket. `CONTAINERS=1` lets a proxy pass more than the list (logs, for
+one), so keep the proxy's socket readable by the feeder's user only.
+
+`toFeed` makes the Engine the host (`sub` like `docker · 4/6 containers
+running`; named by the feed's `source`) and every container a guest of
+`type: "container"`:
+
+- the name is the first of `Names` without its leading `/`; `State` (in any
+  case) `running` and `restarting` are `running`, `paused` is `paused`,
+  `exited`, `dead`, `created` and `removing` are `stopped`, with `why` giving
+  the exit code (`exited with code 1`);
+- health comes from the trailing `(healthy)`, `(unhealthy)` or
+  `(health: starting)` of `Status`, the only place the list has it: unhealthy
+  is a `crit` alert, `restarting` is a `crit` alert with its exit code;
+  starting and healthy are only in `detail`; no healthcheck is no health;
+- each published port (one per port and protocol; Docker lists IPv4 and IPv6
+  twice) is a service named `<port>/<proto>` (`8080/tcp`, so the ref is
+  `builder-a/acme-web-1/8080/tcp`) with `port`, `ok` while the container runs
+  (`crit` when unhealthy, `warn` while starting or paused); exposed ports that
+  are not published are left out; the image and the port words (`:8080`) are
+  the guest's `sub`, so Find reaches a container by its port;
+- `detail` has the image, the compose project and service
+  (`com.docker.compose.project` / `service`), Docker's `Status` text, health,
+  the ports and a 12-character id. `Command`, every other label, mounts and
+  network addresses never reach the feed.

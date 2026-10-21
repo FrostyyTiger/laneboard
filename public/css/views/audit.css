@@ -5,7 +5,8 @@
    each always carries its shape and its word.
    =========================================================================== */
 
-#view-audit { overflow: auto; padding: var(--sp-2); }
+/* The bottom padding is shell.css's (it clears the minimap). */
+#view-audit { overflow: auto; padding-top: var(--sp-2); padding-inline: var(--sp-2); }
 
 /* ---- fork alarms: the text the hub wrote, one line per builder */
 .au-forks { display: grid; gap: var(--sp-1); margin-bottom: var(--sp-2); }

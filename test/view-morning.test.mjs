@@ -93,7 +93,7 @@ test('model: the merge groups into builder rows with their stuck incidents; flee
   assert.deepEqual(c.stuck.map((x) => x.reason), ['spinning']);
   assert.deepEqual(m.stuck.map((x) => x.reason), ['orphan incident'], 'an incident with no known builder stays fleet-level');
   assert.deepEqual(m.missing, ['builder-b']);
-  assert.deepEqual(m.totals, { needsYou: 3, finished: 2, usd: 6, tokens: 300 });
+  assert.deepEqual(m.totals, { needsYou: 3, finished: 2, usd: 6, tokens: 300, sessions: { finished: 2, usd: 6 }, runs: { finished: 0, usd: 0 } });
   assert.equal(m.review.n, 4);
   assert.equal(m.review.waiting, 1);
   assert.equal(m.review.medianWaitMs, 30 * MIN);
@@ -148,8 +148,8 @@ test('helpers: durations, local parts, fleet keys that are already fkeyed', () =
 test('render: the merge fixture renders grouped by builder, then the fleet blocks', () => {
   const box = render(V.morningModel(merged(), { hub: true, s: store }));
   const groups = byClass(box, 'morning-builder');
-  assert.deepEqual(groups.map((g) => g.dataset.builder), ['builder-a', 'builder-c', 'builder-b'], 'one panel per builder, merge order');
-  const [a, c, b] = groups;
+  assert.deepEqual(groups.map((g) => g.dataset.builder), ['builder-a', 'builder-c'], 'one panel per builder that answered, merge order');
+  const [a, c] = groups;
   assert.match(a.textContent, /^BA/);
   assert.match(a.textContent, /Needs you2/);
   assert.match(a.textContent, /Finished2/);
@@ -160,9 +160,9 @@ test('render: the merge fixture renders grouped by builder, then the fleet block
   assert.match(a.textContent, /PACKAGE-DONE: web/);
   assert.doesNotMatch(a.textContent, /builder-a\/feat-1/, 'local names are shown without the builder prefix');
   assert.match(c.textContent, /spinning/);
-  assert.match(b.textContent, /No answer: builder timeout/);
-  assert.ok(walk(b).some((n) => n.dataset?.p === 'stale'), 'the down builder carries a stale lamp');
-  assert.doesNotMatch(b.textContent, /Needs you/);
+  const miss = byClass(box, 'morning-missing')[0];
+  assert.match(miss.title, /builder-b: builder timeout/, 'the down builder is the strip line, its error in the title');
+  assert.ok(walk(miss).some((n) => n.dataset?.p === 'stale'), 'the strip line carries a stale lamp');
 
   const text = box.textContent;
   assert.match(text, /no answer from builder-b/);
@@ -216,7 +216,7 @@ test('view: default export fits the registry; hub mode fetches the fleet merge a
     await new Promise((r) => setImmediate(r));
     assert.deepEqual(calls, ['/api/fleet/morning?window=tonight']);
     const body = byId.get('morning-body');
-    assert.equal(byClass(body, 'morning-builder').length, 3);
+    assert.equal(byClass(body, 'morning-builder').length, 2, 'builder-b did not answer: no block');
     assert.match(byId.get('morning-since').textContent, /^since /);
 
     // Same route: no refetch. Builder filter: one refetch with b=.
@@ -250,4 +250,273 @@ test('view: builder mode fetches GET /api/morning and renders ungrouped', async 
   } finally {
     delete globalThis.fetch;
   }
+});
+
+// --- runs (runs plan T7) ---------------------------------------------------------
+
+/** Digest rows as server/runs/digest.mjs runsInWindow gives them. */
+const RUNS = [
+  {
+    run: 'acme-search', goal: 'Add paged search to acme-api', state: 'stopped', rounds: 6,
+    scores: { tests: { start: 40, end: 52, better: 'higher' }, lint: { start: 3, end: 5, better: 'lower' }, size: { start: 7, end: 7, better: null } },
+    stop: 'done', prs: ['https://example.invalid/acme/api/pull/12', 'javascript:alert(1)'], usd: 9.98,
+    usage: { fiveHourPct: 92, sevenDayPct: 40, overage: false }, startedAt: T0 - 8 * H, updatedAt: T0 - H,
+  },
+  { run: 'acme docs!', goal: HOSTILE, state: 'running', rounds: 1, scores: {}, stop: null, prs: [], usd: null, usage: null },
+  { goal: 'no id' },
+];
+
+test('model T7: runs from /api/morning become blocks: goal link, rounds, score start → end with direction, stop, PRs, cost', () => {
+  const m = V.morningModel({ ...built(), runs: RUNS }, { hub: false, s: store });
+  assert.equal(m.runs.length, 2, 'a row without a run id is dropped');
+  const [a, b] = m.runs;
+  assert.equal(a.run, 'acme-search');
+  assert.equal(a.href, '#/runs?run=acme-search');
+  assert.equal(a.goal, 'Add paged search to acme-api');
+  assert.equal(a.rounds, 6);
+  assert.deepEqual(a.stop, { reason: 'done', p: 'ok' });
+  assert.equal(a.usd, 9.98);
+  assert.equal(a.usage.fiveHour.text, '92%');
+  assert.deepEqual(a.scores.map((s) => [s.name, s.text, s.dir, s.good, s.mark]), [
+    ['lint', '3 → 5', 'up', false, '↑'],
+    ['size', '7', 'same', null, '='],
+    ['tests', '40 → 52', 'up', true, '↑'],
+  ]);
+  assert.deepEqual(a.prs, [{ href: 'https://example.invalid/acme/api/pull/12', text: 'PR #12' }], 'only http(s) PR links');
+  assert.equal(b.href, null, 'an id outside the protocol pattern gets no page link');
+  assert.equal(b.stop, null);
+  assert.equal(b.usd, null);
+  assert.deepEqual(b.scores, []);
+});
+
+test('model T7: no runs (none sent, an older builder, the hub merge) is an empty list', () => {
+  assert.deepEqual(V.morningModel(built(), { hub: false, s: store }).runs, []);
+  assert.deepEqual(V.morningModel(merged(), { hub: true, s: store }).runs, []);
+  assert.deepEqual(V.morningModel({ ...built(), runs: 'nope' }, { hub: false, s: store }).runs, []);
+});
+
+test('model T7: a hub payload with runs on top or on a builder row keeps both', () => {
+  const data = merged();
+  data.runs = [RUNS[0]];
+  data.builders[0].runs = [{ ...RUNS[1], run: 'b-run' }];
+  const m = V.morningModel(data, { hub: true, s: store });
+  assert.deepEqual(m.runs.map((r) => [r.run, r.builder]), [['acme-search', null], ['b-run', 'builder-a']]);
+});
+
+test('model T7: the real digest of the demo run reads whole', async () => {
+  const { demoRun } = await import('./helpers/demo-hub.mjs');
+  const { runsInWindow } = await import('../server/runs/digest.mjs');
+  const now = Date.now();
+  const rows = runsInWindow([demoRun(now)], { since: now - 24 * H, now });
+  const [r] = V.morningModel({ ...built(), runs: rows }, { hub: false, s: store }).runs;
+  assert.ok(r.href.startsWith('#/runs?run='));
+  assert.ok(r.rounds > 0);
+  assert.ok(r.scores.length >= 2 && r.scores.every((s) => s.dir !== null));
+  assert.ok(r.stop && r.stop.reason);
+  assert.ok(r.prs.length >= 1);
+  assert.ok(r.usd > 0);
+});
+
+test('render T7: a Runs block first, one row per run, text as text, links only to the run page and http(s) PRs', () => {
+  const box = render(V.morningModel({ ...built({ needs: [need('x', 'need', T0)] }), runs: RUNS }, { hub: false, s: store }));
+  const titles = byClass(box, 'mblock').map((b) => b.children[0]._text);
+  assert.deepEqual(titles, ['Runs', 'Needs you', 'Finished', 'What it cost']);
+  const rows = byClass(box, 'morning-run');
+  assert.equal(rows.length, 2);
+  const nodes = walk(box);
+  assert.ok(!nodes.some((n) => n.tagName === 'IMG'));
+  assert.ok(texts(box).includes(HOSTILE), 'a hostile goal appears literally');
+  const all = texts(rows[0]);
+  for (const want of ['6 rounds', 'stopped · done', '$9.98', '40 → 52', 'PR #12']) assert.ok(all.some((t) => t.includes(want)), want);
+  const links = nodes.filter((n) => n.tagName === 'A').map((l) => l.attrs.href);
+  assert.deepEqual(links, ['#/runs?run=acme-search', 'https://example.invalid/acme/api/pull/12']);
+  const worse = byClass(rows[0], 'rn-score').filter((c) => c.dataset.trend === 'worse');
+  assert.equal(worse.length, 1, 'only the score that went the wrong way gets the trouble tone');
+});
+
+test('render T22: a score trend is an arrow, never the ▲/■ status shapes', () => {
+  const box = render(V.morningModel({ ...built(), runs: RUNS }, { hub: false, s: store }));
+  const marks = byClass(box, 'rn-score').flatMap((c) => byClass(c, 'rn-score-m')).map((m) => m._text ?? m.textContent);
+  assert.ok(marks.includes('↑'), 'a rising score shows ↑');
+  for (const c of byClass(box, 'rn-score')) assert.doesNotMatch(texts(c).join(''), /[▲▼■]/);
+  assert.deepEqual(['up', 'down', 'same'].map((d) => V.runScoreOf('x', { start: 2, end: d === 'up' ? 3 : d === 'down' ? 1 : 2 }).mark), ['↑', '↓', '=']);
+});
+
+test('model T32: a run that stopped in the window counts in FINISHED and its cost in SPEND; the package total stays sessions', () => {
+  const data = merged();
+  data.runs = [RUNS[0], RUNS[1]];
+  const m = V.morningModel(data, { hub: true, s: store });
+  assert.equal(m.totals.finished, 3, '2 lanes + the stopped run; the running one is not finished');
+  assert.equal(m.totals.usd, 6 + 9.98);
+  assert.deepEqual(m.totals.sessions, { finished: 2, usd: 6 });
+  assert.deepEqual(m.totals.runs, { finished: 1, usd: 9.98 });
+  const box = render(m);
+  const cells = byClass(box, 'mkv');
+  const cell = (k) => cells.find((c) => c.children[0]._text === k);
+  assert.equal(cell('finished').children[1]._text, '3');
+  assert.equal(cell('finished').title, '2 lanes + 1 runs stopped');
+  assert.match(cell('spend').children[1]._text, /^\$15\.98/);
+  assert.match(cell('spend').title, /sessions \$6\.0+ \+ runs \$9\.98/);
+});
+
+test('model T32: a builder answer with only a stopped run is not FINISHED 0 / SPEND $0', () => {
+  const m = V.morningModel({ ...built(), runs: [RUNS[0]] }, { hub: false, s: store });
+  assert.equal(m.totals.runs.finished, 1);
+  assert.equal(m.totals.runs.usd, 9.98);
+});
+
+test('render T7: hub mode puts the Runs block after the summary; no runs draws no block', () => {
+  const data = merged();
+  data.runs = [RUNS[0]];
+  let titles = byClass(render(V.morningModel(data, { hub: true, s: store })), 'mblock').map((b) => b.children[0]._text);
+  assert.equal(titles[1], 'Runs', 'right after the summary (an mblock with no title)');
+  assert.ok(titles.indexOf('Runs') < titles.indexOf('Needs you'));
+  titles = byClass(render(V.morningModel(merged(), { hub: true, s: store })), 'mblock').map((b) => b.children[0]._text);
+  assert.ok(!titles.includes('Runs'));
+});
+
+// --- T33: no block for a builder with no answer, empty fleet blocks in one line ------
+
+test('model T33: the empty fleet blocks are listed in drawing order; the merge fixture has none', () => {
+  assert.deepEqual(V.morningModel(merged(), { hub: true, s: store }).empty, []);
+  const quiet = V.morningModel({ builders: [{ id: 'builder-a', needsYou: [], finished: [], cost: { lanes: [] } }] }, { hub: true, s: store });
+  assert.deepEqual(quiet.empty, ['review wait', 'approvals', 'package cost', 'held back']);
+  const some = V.morningModel({ builders: [], review: { n: 2, waiting: 0, longest: [] }, deferred: [{ reason: 'quiet', title: 'x' }] }, { hub: true, s: store });
+  assert.deepEqual(some.empty, ['approvals', 'package cost'], 'reviews done with none waiting still draw the stats');
+});
+
+test('render T33: a builder with no answer draws no block, the strip names it; empty fleet blocks are one muted line', () => {
+  const data = {
+    builders: [
+      { id: 'builder-a', error: 'not found', stale: true },
+      { id: 'builder-b', error: 'builder down', stale: true },
+      { id: 'builder-c', needsYou: [], finished: [fin('feat')], cost: { lanes: [costLane('feat', 1)] } },
+    ],
+    missing: ['builder-a', 'builder-b'],
+  };
+  const box = render(V.morningModel(data, { hub: true, s: store }));
+  assert.deepEqual(byClass(box, 'morning-builder').map((g) => g.dataset.builder), ['builder-c']);
+  assert.doesNotMatch(box.textContent, /No answer:/);
+  const miss = byClass(box, 'morning-missing');
+  assert.equal(miss.length, 1);
+  assert.match(miss[0].textContent, /no answer from builder-a, builder-b$/);
+  assert.equal(miss[0].title, 'builder-a: not found\nbuilder-b: builder down');
+  const titles = byClass(box, 'mblock').map((b) => b.children[0]?._text);
+  for (const t of ['Review wait', 'Approvals answered', 'Cost by package', 'While you were away']) {
+    assert.ok(!titles.includes(t), `${t} is not drawn when empty`);
+  }
+  const quiet = byClass(box, 'morning-quiet');
+  assert.equal(quiet.length, 1, 'one line for every empty fleet block');
+  assert.ok(quiet[0].classList.contains('empty'), 'muted');
+  assert.equal(quiet[0].textContent, 'Nothing else waiting.', 'no window start in this payload');
+  assert.equal(quiet[0].title, 'Nothing on review wait, approvals, package cost, held back');
+  assert.equal(box.children.at(-1), quiet[0], 'at the end');
+});
+
+test('render T33: every builder down draws the strip only; the full merge draws no quiet line', () => {
+  const down = render(V.morningModel({ builders: [{ id: 'builder-a', error: 'not found' }] }, { hub: true, s: store }));
+  assert.equal(byClass(down, 'morning-builder').length, 0);
+  assert.doesNotMatch(down.textContent, /No builder is configured/);
+  assert.match(byClass(down, 'morning-missing')[0].textContent, /no answer from builder-a/);
+  assert.equal(byClass(render(V.morningModel(merged(), { hub: true, s: store })), 'morning-quiet').length, 0);
+});
+
+test('render T37: a builder with nothing waiting has no lamp on its frame; one that needs you keeps the amber one', () => {
+  const data = {
+    builders: [
+      { id: 'builder-c', needsYou: [], finished: [fin('feat')], cost: { lanes: [costLane('feat', 1)] } },
+    ],
+  };
+  const quiet = byClass(render(V.morningModel(data, { hub: true, s: store })), 'morning-builder')[0];
+  const qTools = byClass(quiet, 'panel-tools')[0];
+  assert.equal(qTools.children.length, 0, 'no lone hollow circle at the end of the frame line');
+  const busy = byClass(render(V.morningModel(merged(), { hub: true, s: store })), 'morning-builder')[0];
+  const bTools = byClass(busy, 'panel-tools')[0];
+  assert.equal(bTools.children.length, 1);
+  assert.equal(bTools.children[0].dataset.p, '2');
+});
+
+test('morningModel: the window start is short, local, without seconds or year (runs plan T41)', () => {
+  const since = new Date(2026, 9, 20, 18, 0, 37).getTime();
+  const m = V.morningModel({ window: 'tonight', since, now: since + 12 * 3600e3 }, { s: store });
+  assert.equal(m.sinceText, 'since 20 Oct 18:00');
+  assert.doesNotMatch(m.sinceText, /:\d\d:\d\d|2026/);
+  assert.equal(V.sinceText(new Date(2026, 0, 5, 7, 4).getTime()), 'since 5 Jan 07:04');
+  assert.equal(V.morningModel({ window: 'tonight' }, { s: store }).sinceText, null);
+});
+
+test('data.css: on a phone the view head keeps picker and since line on one row (runs plan T41)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const css = await readFile(new URL('../public/css/views/data.css', import.meta.url), 'utf8');
+  const phone = css.match(/@media \(max-width: 699px\) \{([\s\S]*?)\n\}/);
+  assert.ok(phone, 'a phone block in data.css');
+  assert.match(phone[1], /\.view-head \{ column-gap: 8px; \}/);
+  assert.match(phone[1], /\.window-picker button \{ padding: 3px 6px; \}/);
+});
+
+// --- T25: Morning layout (reviews/r17-designer.md, Morning 2, 3, 4, 6, 8) ---------
+
+const sheet = async (f) => (await import('node:fs/promises')).readFile(new URL(`../public/css/${f}`, import.meta.url), 'utf8');
+
+test('render T25: REVIEW and WAITING are two summary cells, each one label and one value', () => {
+  const data = merged();
+  const box = render(V.morningModel(data, { hub: true, s: store }));
+  const cells = byClass(byClass(box, 'morning-summary')[0], 'mkv');
+  const keys = cells.map((c) => c.children[0]._text);
+  assert.deepEqual(keys, ['builders', 'needs you', 'finished', 'spend', 'tokens', 'review', 'waiting', 'approvals']);
+  const cell = (k) => cells.find((c) => c.children[0]._text === k);
+  assert.equal(cell('review').children[1]._text, '4');
+  assert.equal(cell('waiting').children[1]._text, '1');
+  for (const c of cells) assert.doesNotMatch(c.children[1]._text, /waiting|·/, 'a value is a value, not a sentence');
+});
+
+test('CSS T25: one label size and one value size in the strip; a 3-column grid on a phone', async () => {
+  const css = await sheet('views/fleet-views.css');
+  assert.match(css, /\.mkv-k \{[^}]*font-size: var\(--fs-11\);/, 'labels at 11');
+  assert.match(css, /\.morning-summary \.mkv-v \{ font-size: var\(--fs-13\); \}/, 'every value at 13, spend included');
+  assert.doesNotMatch(css, /\.mkv(-v)?\.[a-z-]+[^{]*\{[^}]*font-size/, 'no cell is set larger than the others');
+  const phone = css.split('@media (max-width: 699px)').slice(1).find((b) => b.includes('.morning-summary'));
+  assert.ok(phone, 'a phone block for the strip');
+  assert.match(phone, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
+});
+
+test('CSS T25: one content width: the head with its `since` date stops where the panel does', async () => {
+  const css = await sheet('views/fleet-views.css');
+  assert.match(css, /#morning-body \{ max-width: var\(--read-max\); \}/);
+  assert.match(css, /#view-morning > \.view-head \{ max-width: var\(--read-max\); \}/);
+  assert.match(await sheet('views/data.css'), /\.view-since \{[^}]*margin-left: auto;/, 'the date sits at the head\'s right edge');
+});
+
+test('render T25: a run row is a body-size title, then a meta line led by its mark + word; no chevron', async () => {
+  const box = render(V.morningModel({ ...built(), runs: RUNS }, { hub: false, s: store }));
+  const [row] = byClass(box, 'morning-run');
+  assert.ok(!row.children.some((c) => c.classList?.contains('lamp')), 'no lamp before the title');
+  const main = byClass(row, 'mrow-main')[0];
+  assert.ok(main.children[0].classList.contains('mrow-name'), 'the title first');
+  const meta = main.children[1];
+  assert.ok(meta.classList.contains('morning-run-meta'));
+  assert.ok(meta.children[0].classList.contains('lamp'), 'the mark leads the meta line');
+  assert.match(meta.children[1]._text, /^stopped · done · 6 rounds · \$9\.98/);
+  assert.equal(byClass(row, 'mrow-kind').length, 0, 'no separate caps state word');
+  const css = await sheet('views/fleet-views.css');
+  assert.match(css, /\.morning-run \.mrow-name \{ font-size: var\(--fs-12\);/, 'the body step');
+  assert.doesNotMatch(css, /\.morning-run a\.mrow-name::after/, 'no › after a run title');
+  assert.equal(V.runMetaParts({ state: 'running', stop: null, rounds: 1, usd: null, usage: { fiveHour: { text: '92%' } } }).join(' · '),
+    'running · 1 round · usage 5h 92%', 'the 5h figure says what it is');
+});
+
+test('render T25: the empty line is a sentence with the window start', () => {
+  const since = new Date(2026, 9, 20, 18, 0).getTime();
+  const box = render(V.morningModel({ builders: [{ id: 'builder-a', needsYou: [], finished: [], cost: { lanes: [] } }], since }, { hub: true, s: store }));
+  assert.equal(byClass(box, 'morning-quiet')[0].textContent, 'Nothing else waiting since 20 Oct 18:00.');
+});
+
+test('CSS T25: the selected builder chip is a 1 px accent border with no fill', async () => {
+  const css = await sheet('phone.css');
+  const rule = /\.strip-chip\[aria-pressed="true"\] \{([^}]*)\}/.exec(css)?.[1];
+  assert.ok(rule, 'a rule for the selected strip chip');
+  assert.match(rule, /border-color: var\(--accent\)/);
+  // Since T28 the kit's selected .chip has no fill either, so no reset is needed.
+  assert.doesNotMatch(rule, /background/, 'no fill on the selected chip');
+  assert.doesNotMatch(rule, /accent-weak|--p\d/);
 });

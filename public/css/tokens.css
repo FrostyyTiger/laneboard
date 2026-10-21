@@ -1,8 +1,14 @@
 /* ===========================================================================
-   laneboard tokens: an ISA-101 high-performance HMI (plan §4 2.2, fleet D1)
+   laneboard tokens v2 "Night" (runs plan §8 Q6; v1: fleet plan §4 2.2, D1)
    ---------------------------------------------------------------------------
-   Grey is the baseline and colour means abnormal. One accent (safety orange)
-   is spent only on selection, focus and the primary call to action. Status
+   v2 folds in the night direction (docs/plans/runs/design/night.css): rows
+   24/32/44, a 36px header and 24px tape, line height 1.3, a deeper dark
+   canvas, text and lines one step firmer in both themes. The rules these
+   tokens serve are written down in docs/design.md.
+
+   An ISA-101 high-performance HMI.
+   Grey is the baseline and colour means abnormal. One accent (violet, hue
+   300: far from every status hue, so it never reads as a state) is spent only on selection, focus and the primary call to action. Status
    hues always travel with a shape: p1 ■, p2 ▲, p3 ◆, ok ●. Depth comes from
    borders and the surface step only: no shadows, no glass, no blur.
 
@@ -73,7 +79,7 @@
   --fs-20: 20px;   /* annunciator count on phone, KPI */
   --fs-28: 28px;   /* map hero count */
   --lh-tight: 1.1;
-  --lh: 1.35;
+  --lh: 1.3;
 
   /* Spacing, 4px base. */
   --sp-1: 4px;
@@ -84,22 +90,24 @@
   --sp-8: 32px;
 
   /* Rows. --row-h resolves from density (section 6). */
-  --row-dense: 28px;
-  --row-comfy: 36px;
+  --row-dense: 24px;
+  --row-comfy: 32px;
   --row-touch: 44px;
   --row-h: var(--row-dense);
 
   /* Sizes. */
-  --header-h: 40px;
+  --header-h: 36px;
   --rail-w-min: 56px;
   --rail-w: 220px;
   --insp-w: 360px;
-  --tape-h: 28px;
+  --tape-h: 24px;
   --tape-h-open: 200px;
+  --sheet-peek: 96px;     /* the phone bottom sheet's peek (bar + status line); phone.css, misc.css */
   --icon-s: 14px;
   --icon-m: 16px;
   --icon-l: 20px;
   --lamp: 8px;
+  --read-max: 1000px;     /* a page of reading (run page; Morning, T37) stops here at 1440 */
 
   /* Stacking. */
   --z-rail: 10;
@@ -137,24 +145,31 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-canvas: oklch(16% 0.004 250);
-  --bg-surface: oklch(19% 0.004 250);
-  --bg-elevated: oklch(22% 0.004 250);
-  --bg-sunken: oklch(13% 0.004 250);
+  --bg-canvas: oklch(12% 0.004 250);
+  --bg-surface: oklch(16% 0.004 250);
+  --bg-elevated: oklch(20% 0.004 250);
+  --bg-sunken: oklch(9% 0.004 250);
   --bg-hover: oklch(100% 0 0 / 0.04);
   --bg-selected: oklch(100% 0 0 / 0.07);
 
-  --line-weak: oklch(100% 0 0 / 0.07);
-  --line: oklch(100% 0 0 / 0.13);
-  --line-strong: oklch(100% 0 0 / 0.26);
+  --line-weak: oklch(100% 0 0 / 0.09);
+  --line: oklch(100% 0 0 / 0.17);
+  --line-strong: oklch(100% 0 0 / 0.32);
+  /* The Map's topology edges (tree branches, grey links) at full weight. */
+  --map-edge-alpha: 1;
+  /* The segment bar's working and idle steps, and the dot grid (runs night 4
+     T27): in dark the working grey is the light step, idle and dots fainter. */
+  --seg-run: var(--text-2);
+  --seg-off: var(--line-strong);
+  --grid-dot: var(--line);
 
-  --text-1: oklch(92% 0.003 250);
-  --text-2: oklch(72% 0.004 250);
-  --text-3: oklch(55% 0.004 250);
+  --text-1: oklch(96% 0.002 250);
+  --text-2: oklch(78% 0.004 250);
+  --text-3: oklch(62% 0.004 250);
   --text-inv: oklch(14% 0 0);
 
-  --accent: oklch(70% 0.19 45);
-  --accent-weak: oklch(70% 0.19 45 / 0.16);
+  --accent: oklch(72% 0.17 300);
+  --accent-weak: oklch(72% 0.17 300 / 0.16);
 
   --p1: oklch(62% 0.23 25);
   --p2: oklch(84% 0.16 95);
@@ -173,37 +188,55 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  --bg-canvas: oklch(93% 0.003 250);
-  --bg-surface: oklch(97% 0.002 250);
+  --bg-canvas: oklch(95% 0.002 250);
+  --bg-surface: oklch(99% 0.001 250);
   --bg-elevated: oklch(100% 0 0);
-  --bg-sunken: oklch(89% 0.003 250);
+  --bg-sunken: oklch(91% 0.003 250);
   --bg-hover: oklch(0% 0 0 / 0.04);
-  --bg-selected: oklch(0% 0 0 / 0.06);
+  /* One surface step, like the dark theme's 7 % white (runs T14). */
+  --bg-selected: oklch(0% 0 0 / 0.1);
 
-  --line-weak: oklch(0% 0 0 / 0.08);
-  --line: oklch(0% 0 0 / 0.16);
-  --line-strong: oklch(0% 0 0 / 0.32);
+  --line-weak: oklch(0% 0 0 / 0.1);
+  --line: oklch(0% 0 0 / 0.2);
+  --line-strong: oklch(0% 0 0 / 0.4);
+  /* One step dimmer on light (runs night 4 T19): on a pale canvas the edges
+     otherwise weigh as much as the ring guides and the label ticks. */
+  --map-edge-alpha: 0.6;
+  /* Light does not invert the bar (runs night 4 T27): working is a mid grey
+     lighter than the red and amber segments, idle lighter still, so trouble
+     is the darkest thing on a bar. The dot grid sits one step under
+     --line-weak, quieter than the Map's edges. */
+  --seg-run: oklch(66% 0.004 250);
+  --seg-off: oklch(82% 0.003 250);
+  --grid-dot: oklch(0% 0 0 / 0.06);
 
-  --text-1: oklch(20% 0.004 250);
-  --text-2: oklch(38% 0.004 250);
-  --text-3: oklch(52% 0.004 250);
+  --text-1: oklch(15% 0.004 250);
+  --text-2: oklch(32% 0.004 250);
+  --text-3: oklch(46% 0.004 250);
   --text-inv: oklch(98% 0 0);
 
-  --accent: oklch(60% 0.19 45);
-  --accent-weak: oklch(60% 0.19 45 / 0.14);
+  --accent: oklch(52% 0.20 300);
+  --accent-weak: oklch(52% 0.20 300 / 0.14);
 
   --p1: oklch(52% 0.22 25);
-  /* The plan's 66% gives 2.6:1 on the light canvas; 60% clears 3:1. */
-  --p2: oklch(60% 0.15 85);
+  /* Amber is also text (ctx %, Drift labels) and carries --text-inv on the
+     alarm tiles: 50% keeps 4.5:1 both ways (runs T14; 60% gave 3.2:1, 52%
+     4.2:1 on sunken). Hue 95 as in dark, a yellow-amber apart from p1. */
+  --p2: oklch(50% 0.12 95);
   --p3: oklch(52% 0.12 230);
   --ok: oklch(48% 0.08 150);
 
-  --p1-weak: oklch(52% 0.22 25 / 0.14);
-  --p2-weak: oklch(60% 0.15 85 / 0.14);
-  --p3-weak: oklch(52% 0.12 230 / 0.14);
-  --p1-line: oklch(52% 0.22 25 / 0.55);
-  --p2-line: oklch(60% 0.15 85 / 0.55);
-  --p3-line: oklch(52% 0.12 230 / 0.55);
+  /* Light finish (runs night 4 T12, docs/design.md "Light theme"): a weak
+     fill is never a heavier step on its surface than the dark one (red at 0.14
+     read as a pink plate), and a status line is a 1px border that carries
+     the state, so it keeps 3:1 on every surface step, sunken included
+     (0.55 gave amber 2.2:1). */
+  --p1-weak: oklch(52% 0.22 25 / 0.06);
+  --p2-weak: oklch(50% 0.12 95 / 0.12);
+  --p3-weak: oklch(52% 0.12 230 / 0.1);
+  --p1-line: oklch(52% 0.22 25 / 0.8);
+  --p2-line: oklch(50% 0.12 95 / 0.8);
+  --p3-line: oklch(52% 0.12 230 / 0.8);
 }
 
 /* --- 5. Derived tokens ------------------------------------------------------
@@ -216,7 +249,7 @@
   --off: var(--text-3);
 
   /* Textures: the only gradient functions allowed, hard stops only. */
-  --tex-dots: radial-gradient(circle, var(--line) 0.75px, transparent 1px) 0 0 / 16px 16px;
+  --tex-dots: radial-gradient(circle, var(--grid-dot) 0.75px, transparent 1px) 0 0 / 16px 16px;
   --tex-hatch: repeating-linear-gradient(45deg, var(--line) 0 1px, transparent 1px 6px);
   /* Four 8x2px L-corners in the accent, for `.sel::after { inset: -3px }`. */
   --bracket-img:

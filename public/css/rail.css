@@ -37,35 +37,44 @@
 .attention-item .idx { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); width: 12px; flex: none; }
 .attention-item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 .attention-item .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); flex: none; }
-.attention-item.s-waiting_permission { border-color: var(--p1-line); }
+.attention-item.s-waiting_permission { border-color: var(--p2-line); }
 .attention-item.s-waiting_question { border-color: var(--p2-line); }
 
 /* phone chip strip — the rail carries the same list from 700px up. This
    override must come AFTER the base rule: same specificity, later wins.
-   Scoped to the strip, so the kit's .chip (scope chips) keeps its own look. */
-.attention-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 4px; scrollbar-width: none; }
-.attention-strip::-webkit-scrollbar { display: none; }
+   Scoped to the strip, so the kit's .chip (scope chips) keeps its own look.
+   The strip wraps instead of scrolling: no chip is cut at the right edge,
+   and a fade would need a gradient outside tokens.css (guardrails) (T30). */
+.attention-strip { display: flex; flex-wrap: wrap; gap: var(--sp-2); padding-bottom: 10px; margin-bottom: 4px; }
 @media (min-width: 700px) { .attention-strip { display: none; } }
 
+/* Body mono on the type scale, not the kit chip's tracked caps label face:
+   a NEEDS YOU item is a session name, data (r22-designer Board 1, T30). */
 .attention-strip .chip {
-  flex: none;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
+  height: auto;
+  min-width: 0;
+  max-width: 100%;
   padding: 7px 13px 7px 9px;
   border-radius: var(--radius);
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-13);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
   cursor: pointer;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: var(--bw) solid var(--border);
   color: var(--text-1);
-  max-width: 68vw;
-  font: inherit;
 }
-.attention-strip .chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.attention-strip .chip .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
-.attention-strip .chip.s-waiting_permission { border-color: var(--p1-line); background: var(--p1-weak); }
-.attention-strip .chip.s-waiting_question { border-color: var(--p2-line); background: var(--p2-weak); }
+.attention-strip .chip .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attention-strip .chip .ago { flex: none; font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); }
+/* A NEEDS YOU chip is its lamp and a 1 px status border, no fill (T28). */
+.attention-strip .chip.s-waiting_permission { border-color: var(--p2-line); }
+.attention-strip .chip.s-waiting_question { border-color: var(--p2-line); }
 
 /* ===================== the pressure ring ================================= */
 /*
@@ -95,7 +104,7 @@
   opacity: calc(0.15 + var(--pressure) * 0.85);
 }
 .dot::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.dot.s-waiting_permission { color: var(--crit); }
+.dot.s-waiting_permission { color: var(--warn); }
 .dot.s-waiting_question { color: var(--warn); }
 .dot.s-working { color: var(--info); }
 .dot.s-done { color: var(--ok); }
@@ -179,7 +188,9 @@
   grid-template-areas: "lamp code n" ". seg seg";
   align-items: center;
   gap: 2px var(--sp-2);
-  margin-inline: var(--sp-1);
+  /* 8 px, so the selection's corner brackets (inset -3px) keep clear of the
+     viewport edge. */
+  margin-inline: var(--sp-2);
   padding: var(--sp-1) var(--sp-2);
   min-height: var(--row-h);
   border: var(--bw) solid transparent;
@@ -191,6 +202,8 @@
 .brail-code { grid-area: code; justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brail-n { grid-area: n; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
 .brail-seg { grid-area: seg; width: 100%; }
+/* A row of one lane: its bar would be one full-width segment, no information. */
+.brail-row[data-single] .brail-seg { display: none; }
 .brail-row:hover { background: var(--bg-hover); }
 .brail-row.sel { background: var(--bg-selected); color: var(--text-1); }
 .brail-row.sel .brail-n { color: var(--text-2); }

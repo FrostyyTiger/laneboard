@@ -78,9 +78,9 @@ test('KINDS matches the config fragment and every kind has a priority and at mos
   assert.deepEqual(Object.keys(KINDS).sort(), [...ALARM_KINDS].sort());
   for (const k of ALARM_KINDS) {
     assert.match(priorityOf(k, 'tool-loop'), /^P[1-4]$/, k);
-    if (k !== 'review') assert.ok(TILES.includes(KIND_TO_TILE[k]), `${k} has a tile`);
+    if (!['review', 'reboot', 'health-warn'].includes(k)) assert.ok(TILES.includes(KIND_TO_TILE[k]), `${k} has a tile`);
   }
-  assert.equal(KIND_TO_TILE.review, undefined);
+  for (const k of ['review', 'reboot', 'health-warn']) assert.equal(KIND_TO_TILE[k], undefined, k);
 });
 
 test('priorities per kind; stuck P2 for approval-wait/error-loop/tool-loop, else P3', () => {

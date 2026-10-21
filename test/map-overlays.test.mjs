@@ -4,18 +4,21 @@ import assert from 'node:assert/strict';
 import {
   OVERLAYS, nextOverlay, validOverlay, costLevel, ageLevel, contextBin, statusStyle,
   nodeStyle, linkStyle, confirmedConflict, DIM, SHAPE_CODE, TONE_CODE, ACCENT_L,
+  DRIFT_TEXT, driftText, driftCounts,
+  availableOverlays, reachScope, reachLinkStyle, REACH_MARK,
 } from '../public/js/views/map/overlays.js';
 
 const lane = (status = 'working', m = {}, extra = {}) => ({ id: 'lane:builder-a/x', kind: 'lane', status, m, ...extra });
 const MIN = 60e3, HOUR = 60 * MIN;
 
 test('nextOverlay cycles both ways and wraps', () => {
-  assert.deepEqual(OVERLAYS, ['status', 'ci', 'cost', 'context', 'age']);
+  assert.deepEqual(OVERLAYS, ['status', 'ci', 'cost', 'context', 'age', 'drift', 'reach']);
   let o = 'status';
   const seen = [];
   for (let i = 0; i < OVERLAYS.length; i++) { o = nextOverlay(o); seen.push(o); }
-  assert.deepEqual(seen, ['ci', 'cost', 'context', 'age', 'status']);
-  assert.equal(nextOverlay('status', -1), 'age');
+  assert.deepEqual(seen, ['ci', 'cost', 'context', 'age', 'drift', 'reach', 'status']);
+  assert.equal(nextOverlay('status', -1), 'reach');
+  assert.equal(nextOverlay('age'), 'drift');
   assert.equal(nextOverlay('ci', -1), 'status');
   for (const x of OVERLAYS) assert.equal(nextOverlay(nextOverlay(x, 1), -1), x);
   assert.equal(nextOverlay('bogus'), 'status');
@@ -134,4 +137,115 @@ test('codes for the packed minimap scene are distinct', () => {
   assert.equal(new Set(Object.values(SHAPE_CODE)).size, Object.keys(SHAPE_CODE).length);
   assert.equal(new Set(Object.values(TONE_CODE)).size, Object.keys(TONE_CODE).length);
   assert.equal(ACCENT_L.length, 5);
+});
+
+test('drift overlay: missing is a dashed warn ring, undeclared a solid warn square (not the accent), the rest dimmed', () => {
+  const missing = { kind: 'room', status: 'unknown', drift: 'missing' };
+  const undeclared = { kind: 'room', status: 'ok', drift: 'undeclared', discovered: true };
+  const calm = { kind: 'room', status: 'ok' };
+  const m = nodeStyle(missing, 'drift');
+  assert.equal(m.mark.tone, 'warn');
+  assert.ok(m.mark.dash.length === 2, 'dashed');
+  assert.equal(m.alpha, 1);
+  assert.equal(m.shape, 'ring', 'its unknown status still shows');
+  const u = nodeStyle(undeclared, 'drift');
+  assert.equal(u.mark.tone, 'warn', 'wants a look: amber, not the accent');
+  assert.notEqual(u.mark.tone, 'accent');
+  assert.deepEqual(u.mark.dash, [], 'solid');
+  assert.equal(m.mark.shape, 'ring');
+  assert.equal(u.mark.shape, 'square', 'a shape of its own');
+  assert.notEqual(m.mark.glyph, u.mark.glyph, 'the readout keys each count by its mark');
+  assert.equal(u.alpha, 1);
+  assert.equal(nodeStyle(calm, 'drift').alpha, DIM);
+  assert.equal(nodeStyle(calm, 'drift').mark, undefined);
+  assert.equal(nodeStyle(lane('working'), 'drift').alpha, DIM, 'lanes dim too');
+  // A crit node without drift keeps its hue, dimmed; no other overlay draws a mark.
+  assert.equal(nodeStyle({ kind: 'room', status: 'crit' }, 'drift').tone, 'crit');
+  for (const o of OVERLAYS.filter((x) => x !== 'drift')) assert.equal(nodeStyle(missing, o).mark, undefined, o);
+  // The style is a copy: changing it does not change the next one.
+  m.mark.dash.push(9);
+  assert.equal(nodeStyle(missing, 'drift').mark.dash.length, 2);
+});
+
+test('drift words and counts', () => {
+  assert.equal(driftText({ drift: 'missing' }), 'declared, not seen');
+  assert.equal(driftText({ drift: 'undeclared' }), 'seen, not declared');
+  assert.equal(driftText({}), null);
+  assert.equal(driftText({ drift: 'toString' }), null);
+  assert.deepEqual(Object.keys(DRIFT_TEXT), ['missing', 'undeclared']);
+  assert.deepEqual(driftCounts([{ drift: 'missing' }, { drift: 'undeclared' }, { drift: 'undeclared' }, {}, null]), { missing: 1, undeclared: 2 });
+  assert.deepEqual(driftCounts(undefined), { missing: 0, undeclared: 0 });
+});
+
+// --- reach (T12) ---------------------------------------------------------------
+
+const REACH = [
+  { id: 'reach:a>b', kind: 'reach', from: 'a', to: 'b', ports: ['tcp:22'], label: 'tcp:22' },
+  { id: 'reach:a>c', kind: 'reach', from: 'a', to: 'c', ports: ['*'], label: '*' },
+  { id: 'reach:c>d', kind: 'reach', from: 'c', to: 'd', ports: ['tcp:443'], label: 'tcp:443' },
+];
+
+test('reach is skipped by o (both ways) when the model has no reach links', () => {
+  for (const m of [null, {}, { reach: null }, { reach: { links: [] } }, { reach: { links: 'x' } }]) {
+    const av = availableOverlays(m);
+    assert.ok(!av.includes('reach'), JSON.stringify(m));
+    assert.equal(nextOverlay('drift', 1, av), 'status');
+    assert.equal(nextOverlay('status', -1, av), 'drift');
+    let o = 'status';
+    for (let i = 0; i < 20; i++) { o = nextOverlay(o, 1, av); assert.notEqual(o, 'reach'); }
+  }
+  const av = availableOverlays({ reach: { links: REACH } });
+  assert.deepEqual(av, OVERLAYS);
+  assert.equal(nextOverlay('drift', 1, av), 'reach');
+  assert.equal(nextOverlay('status', -1, av), 'reach');
+  assert.equal(nextOverlay('reach', 1, av), 'status');
+  // A stored reach with no links still moves on.
+  assert.equal(nextOverlay('reach', 1, availableOverlays(null)), 'status');
+  assert.equal(nextOverlay('reach', -1, availableOverlays(null)), 'drift');
+});
+
+test('reachScope: the focus and what it reaches directly; with no focus, every named node', () => {
+  const none = reachScope(REACH);
+  assert.deepEqual([...none.lit].sort(), ['a', 'b', 'c', 'd']);
+  assert.equal(none.touched.size, 0);
+  assert.equal(none.links, 3);
+  const a = reachScope(REACH, 'a');
+  assert.deepEqual([...a.touched].sort(), ['b', 'c'], 'one hop: a does not touch d');
+  assert.deepEqual([...a.lit].sort(), ['a', 'b', 'c']);
+  const d = reachScope(REACH, 'd');
+  assert.equal(d.touched.size, 0, 'd reaches nothing');
+  assert.deepEqual([...d.lit], ['d'], 'a reached node is still lit as the focus');
+  assert.equal(reachScope(REACH, 'zz').lit.size, 0, 'a node outside the policy lights nothing');
+  assert.equal(reachScope(null).links, 0);
+  assert.equal(reachScope([{ from: 'x', to: 'x' }, null]).links, 0, 'self-links and junk dropped');
+});
+
+test('reach arc style: thin grey, the focus\'s outgoing arcs in the accent, the rest faded', () => {
+  const calm = reachLinkStyle(REACH[0]);
+  assert.deepEqual(calm, { tone: 'grey', level: 0, width: 1, dash: [], alpha: 0.35 });
+  const out = reachLinkStyle(REACH[0], 'a');
+  assert.equal(out.tone, 'accent');
+  assert.equal(out.width, 1.5);
+  assert.deepEqual(out.dash, []);
+  assert.ok(out.alpha >= 0.85);
+  const other = reachLinkStyle(REACH[2], 'a');
+  assert.equal(other.tone, 'grey');
+  assert.ok(other.alpha < calm.alpha, 'unrelated arcs step back while something is selected');
+  assert.equal(reachLinkStyle(REACH[0], 'b').tone, 'grey', 'incoming arcs are not what b can touch');
+  assert.ok([calm, out, other].every((st) => st.width <= 1.5), 'thin');
+});
+
+test('reach node style: lit full, reachable ones marked, the rest dimmed, status kept', () => {
+  const rs = reachScope(REACH, 'a');
+  const node = (id, status = 'ok') => ({ id, kind: 'room', status });
+  assert.equal(nodeStyle(node('a'), 'reach', null, { reach: rs }).alpha, 1);
+  assert.equal(nodeStyle(node('a'), 'reach', null, { reach: rs }).mark, undefined, 'the focus itself is not marked');
+  const b = nodeStyle(node('b'), 'reach', null, { reach: rs });
+  assert.equal(b.alpha, 1);
+  assert.deepEqual(b.mark, REACH_MARK);
+  assert.equal(nodeStyle(node('d'), 'reach', null, { reach: rs }).alpha, DIM);
+  const crit = nodeStyle(node('c', 'crit'), 'reach', null, { reach: rs });
+  assert.deepEqual([crit.tone, crit.shape, crit.alpha], ['crit', 'square', 1], 'trouble keeps its own colour');
+  assert.equal(nodeStyle(node('a'), 'reach').alpha, DIM, 'no reach scope: nothing lit');
+  assert.equal(nodeStyle(node('b'), 'status', null, { reach: rs }).mark, undefined, 'no mark outside the overlay');
 });

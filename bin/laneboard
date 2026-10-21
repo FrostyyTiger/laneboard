@@ -22,6 +22,30 @@
 //   laneboard pause <name|--all> [--reason r]          offline: write a pause sentinel
 //   laneboard resume <name|--all>                      offline: lift an operator pause
 //   laneboard paused [--json]                          offline: list the pause sentinels
+//   laneboard run start|round|score|needs|ack|artifact|stop [--run <id>] [flags] [--file f | --post]
+//                                                      offline: append one run-protocol line
+//     start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
+//     round    --n N [--role r] [--task t]             prints `export LANEBOARD_RUN=<run>/<n>` for eval
+//     round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
+//     score    --name m --value x [--better higher|lower] [--n N] [--max x]
+//     needs    [--kind decision|wait] [--text t] [--link url] [--n N]
+//     ack      [<run>] <ref> [--by b]                  closes a need: ref = its place (0 = first) or its ts; a closed one: nothing sent
+//     artifact --url u [--kind pr|link] [--title t]
+//     stop     [--reason done|deadline|rounds|…] [--rounds N] [--usd x]
+//     The line goes to --file, else $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl;
+//     --post sends it to POST /api/runs/events instead. --run defaults to the run
+//     part of $LANEBOARD_RUN. --run/--file/--post may also come before <sub>.
+//     A bad argument prints one line and exits 2. See docs/runs.md.
+//   laneboard feed tailscale|proxmox|docker [--source s] [--every N] [--stdout | --out <file> | --push <url>]
+//                                                      offline: read one source once, write one feed
+//     proxmox  --url https://<host>:8006 --token-id user@realm!name [--secret-file f] [--ca pem] [--node n]
+//     docker   [--socket path]  (GET /containers/json only; default /var/run/docker.sock)
+//     every kind: [--timeout <s>]
+//     --stdout (the default) prints the feed, for an ssh forced command on the board;
+//     --out writes it atomically (temp + rename, mode 0600); --push POSTs it to <url>/api/map/feeds.
+//     The secret comes from --secret-file or $LANEBOARD_PVE_SECRET, never a flag.
+//     `none`, an unknown kind or a bad argument prints one line and exits 2;
+//     a source that cannot be read exits 1. See docs/map.md "Pushing a feed".
 //
 // Every string that came from a server (or an audit file) passes cleanTerm()
 // before it is printed, so a session name cannot carry terminal escapes
@@ -344,6 +368,12 @@ async function cmdMorning() {
     process.stdout.write(`${table(rows, ['LANE', 'STAGE', 'BRANCH', 'MERGED', 'COMMIT', 'DONE', 'SESSIONS'])}\n`);
   }
 
+  const runs = Array.isArray(m.runs) ? m.runs : [];
+  if (runs.length) {
+    process.stdout.write(`\n${C.bold}Runs${C.off} (${runs.length})\n`);
+    for (const r of runs) process.stdout.write(`  ${morningRunLine(r)}\n`);
+  }
+
   process.stdout.write(`\n${C.bold}What it cost${C.off} ${C.dim}(API-equivalent)${C.off}\n`);
   const rows = m.cost.lanes
     .filter((l) => l.usd > 0.0005)
@@ -355,6 +385,28 @@ async function cmdMorning() {
     const g = (x, label) => (x ? `${label} ${Math.round(x.usedPct)}% (resets ${new Date(x.resetsAt).toLocaleTimeString('en-GB', { hour12: false }).slice(0, 5)})` : '');
     process.stdout.write(`${C.dim}${g(rl.fiveHour, '5h')}   ${g(rl.sevenDay, '7d')}${C.off}\n`);
   }
+}
+
+/** One Morning run: id, rounds, each score start → end, stop reason, PRs, cost, goal. */
+function morningRunLine(r) {
+  const fmt = (v) => (typeof v === 'number' ? String(Math.round(v * 1000) / 1000) : '-');
+  const scores = Object.entries(r.scores || {}).map(([name, s]) => {
+    const moved = s.end - s.start;
+    const good = moved === 0 || !s.better ? null : (moved > 0) === (s.better !== 'lower');
+    const arrow = moved > 0 ? '↑' : moved < 0 ? '↓' : '=';
+    const tint = good === true ? C.green : good === false ? C.amber : '';
+    return `${name} ${fmt(s.start)}→${fmt(s.end)} ${tint}${arrow}${tint ? C.off : ''}`;
+  });
+  const prs = Array.isArray(r.prs) ? r.prs : [];
+  return [
+    `${C.bold}${r.run}${C.off}`,
+    `${r.rounds} round${r.rounds === 1 ? '' : 's'}`,
+    ...scores,
+    r.stop ? `stopped: ${r.stop}` : r.state || '',
+    prs.length ? `${prs.length} PR${prs.length === 1 ? '' : 's'}` : '',
+    r.usd == null ? '' : money(r.usd),
+    r.goal ? `${C.dim}${String(r.goal).replace(/\s+/g, ' ').slice(0, 60)}${C.off}` : '',
+  ].filter(Boolean).join('  ');
 }
 
 function compact(n) {
@@ -767,6 +819,363 @@ async function cmdPaused() {
   if (entries.some((e) => e.kind !== 'operator')) process.stdout.write(`${C.dim}${REMOTE_ONLY_HINT}${C.off}\n`);
 }
 
+// ---------------------------------------------------------------- offline: run protocol events
+// `laneboard run <sub>` writes one run-protocol line (docs/runs.md) so loops do
+// not hand-write JSON. The line is built from flags, stamped with `v` and `ts`,
+// and checked by parseLine before anything is written; a flag it does not know,
+// a missing value or a line parseLine would skip exits 2 and writes nothing.
+// It goes to --file, else $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl
+// (works with the server down), or with --post to POST /api/runs/events.
+// --run falls back to the run part of $LANEBOARD_RUN, which `round` exports.
+
+const runProtocol = () => import('../server/runs/protocol.mjs');
+
+// Per subcommand: flag → [event field, kind]. Kinds: str, int, num, bool.
+const RUN_COMMON = { '--run': ['run', 'str'], '--file': ['file', 'str'], '--post': ['post', 'bool'] };
+const RUN_SUBS = {
+  start: {
+    '--goal': ['goal', 'str'], '--plan': ['plan', 'str'], '--branch': ['branch', 'str'], '--host': ['host', 'str'],
+    '--deadline': ['deadline', 'str'], '--rounds': ['rounds', 'int'], '--window-pct': ['windowPct', 'num'],
+  },
+  round: {
+    '--n': ['n', 'int'], '--role': ['role', 'str'], '--task': ['task', 'str'], '--end': ['end', 'bool'],
+    '--outcome': ['outcome', 'str'], '--commit': ['commit', 'str'], '--open': ['open', 'int'], '--usd': ['usd', 'num'],
+  },
+  score: { '--name': ['name', 'str'], '--value': ['value', 'num'], '--better': ['better', 'str'], '--n': ['n', 'int'], '--max': ['max', 'num'] },
+  needs: { '--kind': ['kind', 'str'], '--text': ['text', 'str'], '--link': ['link', 'str'], '--n': ['n', 'int'] },
+  ack: { '--ref': ['ref', 'str'], '--by': ['by', 'str'] },
+  artifact: { '--url': ['url', 'str'], '--kind': ['kind', 'str'], '--title': ['title', 'str'] },
+  stop: { '--reason': ['reason', 'str'], '--rounds': ['rounds', 'int'], '--usd': ['usd', 'num'] },
+};
+const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', ack: 'needs.ack', artifact: 'artifact', stop: 'run.stop' };
+const ROUND_START_ONLY = ['role', 'task'];
+const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
+
+const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
+  start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
+  round    --n N [--role r] [--task t]            prints export LANEBOARD_RUN=<run>/<n>, meant for: eval "$(laneboard run round --n N …)"
+  round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
+  score    --name m --value x [--better higher|lower] [--n N] [--max x]
+  needs    [--kind decision|wait|…] [--text t] [--link url] [--n N]
+  ack      [<run>] <ref> [--by b]                 close a need: <ref> is its place (0 = the first) or its ts (no such need: exit 1; already acked: nothing sent, exit 0)
+  artifact --url u [--kind pr|link|…] [--title t]
+  stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
+every subcommand:
+  --run <id>   the run; defaults to the run part of $LANEBOARD_RUN (which \`round\` exports)
+  --file f     append the line to f; defaults to $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl
+  --post       send the line to POST /api/runs/events on the server instead of a file
+  --run, --file and --post may also come before <sub>.`;
+
+// A usage error is one line plus a pointer to the help; no subcommand at all
+// prints the whole usage (that is what the user asked for).
+const runUsage = (msg) => die(msg ? `run: ${msg}\nsee: laneboard run --help` : RUN_USAGE, 2);
+
+/** `laneboard run <sub> … -h|--help`: a -h/--help word that is not a flag's value. */
+function wantsHelp(allowed) {
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '-h' || argv[i] === '--help') return true;
+    const spec = RUN_COMMON[argv[i]] ?? allowed[argv[i]];
+    if (spec && spec[1] !== 'bool') i += 1;
+  }
+  return false;
+}
+
+/** One subcommand's lines of RUN_USAGE, then the flags every subcommand takes. */
+function subUsage(sub) {
+  const lines = RUN_USAGE.split('\n');
+  const own = lines.filter((l) => l.startsWith(`  ${sub} `)).map((l) => `usage: laneboard run ${l.trim().replace(/^(\S+)\s+/, '$1 ')}`);
+  return [...own, ...lines.slice(lines.indexOf('every subcommand:'))].join('\n');
+}
+
+/** argv → {field: value} for the allowed flags; every other word is a usage error.
+ *  `out` may hold flags already read (the common ones before the subcommand);
+ *  with `until`, it stops at the first word that is not a flag in `allowed`. */
+function parseRunFlags(allowed, out = {}, until = false) {
+  while (argv.length) {
+    if (until && !allowed[argv[0]]) break;
+    const flag = argv.shift();
+    const spec = allowed[flag];
+    if (!spec) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(flag))}`);
+    const [field, kind] = spec;
+    if (Object.hasOwn(out, field)) runUsage(`${flag} given twice`);
+    if (kind === 'bool') { out[field] = true; continue; }
+    const raw = argv.shift();
+    if (raw === undefined || (raw.startsWith('--') && allowed[raw])) runUsage(`${flag} needs a value`);
+    if (kind === 'str') out[field] = raw;
+    else {
+      const n = /^\s*-?\d+(\.\d+)?\s*$/.test(raw) ? Number(raw) : NaN;
+      if (!Number.isFinite(n) || (kind === 'int' && !Number.isInteger(n))) {
+        runUsage(`${flag} needs ${kind === 'int' ? 'an integer' : 'a number'}, got ${JSON.stringify(cleanTerm(raw))}`);
+      }
+      out[field] = n;
+    }
+  }
+  return out;
+}
+
+/** The subcommand's flags → one event object (without v/ts), or a usage exit. */
+function runEvent(sub, f) {
+  if (sub === 'round') {
+    if (f.n === undefined) runUsage('round needs --n');
+    const wrong = (f.end ? ROUND_START_ONLY : ROUND_END_ONLY).find((k) => f[k] !== undefined);
+    if (wrong) runUsage(`--${wrong} belongs to ${f.end ? 'a round start (no --end)' : 'a round end (--end)'}`);
+    const { end, ...fields } = f;
+    return { t: end ? 'round.end' : 'round.start', ...fields };
+  }
+  if (sub === 'start') {
+    const { rounds, windowPct, ...fields } = f;
+    const budget = {};
+    if (rounds !== undefined) budget.rounds = rounds;
+    if (windowPct !== undefined) budget.windowPct = windowPct;
+    return { t: 'run.start', ...fields, ...(Object.keys(budget).length ? { budget } : {}) };
+  }
+  if (sub === 'score') {
+    if (f.name === undefined || f.value === undefined) runUsage('score needs --name and --value');
+    if (f.better !== undefined && f.better !== 'higher' && f.better !== 'lower') runUsage('--better is higher or lower');
+  }
+  if (sub === 'artifact' && f.url === undefined) runUsage('artifact needs --url');
+  if (sub === 'ack') {
+    if (f.ref === undefined) runUsage('ack needs a ref (the need\'s place, 0 = the first, or its ts)');
+    // A place is written as a number, a time as given (epoch or ISO); parseLine tells them apart.
+    return { t: 'needs.ack', ...f, ref: /^\d+$/.test(f.ref) ? Number(f.ref) : f.ref };
+  }
+  return { t: RUN_TYPE[sub], ...f };
+}
+
+async function cmdRun() {
+  // --run/--file/--post may come before the subcommand too (`laneboard run --post score …`).
+  const first = parseRunFlags(RUN_COMMON, {}, true);
+  if (argv[0]?.startsWith('-') && !['-h', '--help'].includes(argv[0])) {
+    runUsage(`${JSON.stringify(cleanTerm(argv[0]))} goes after the subcommand (laneboard run <sub> [flags])`);
+  }
+  const sub = argv.shift();
+  if (sub === '-h' || sub === '--help' || sub === 'help') {
+    process.stdout.write(`${RUN_USAGE}\n`);
+    return;
+  }
+  if (!Object.hasOwn(RUN_SUBS, sub ?? '')) runUsage(sub ? `unknown run subcommand: ${JSON.stringify(cleanTerm(sub))}` : '');
+  if (wantsHelp(RUN_SUBS[sub])) {
+    process.stdout.write(`${subUsage(sub)}\n`);
+    return;
+  }
+  // `ack [<run>] <ref>`: up to two words that are not flags or flag values, anywhere
+  // after `ack`; one is the ref, two are the run and the ref. A third is an error below.
+  const words = [];
+  for (let i = 0; sub === 'ack' && i < argv.length && words.length < 2; i += 1) {
+    const spec = RUN_COMMON[argv[i]] ?? RUN_SUBS.ack[argv[i]];
+    if (spec) { if (spec[1] !== 'bool') i += 1; continue; }
+    if (!argv[i].startsWith('--')) { words.push(argv[i]); argv.splice(i, 1); i -= 1; }
+  }
+  if (words.length === 2) {
+    if (Object.hasOwn(first, 'run')) runUsage('--run given twice');
+    first.run = words.shift();
+  }
+  if (words.length) first.ref = words[0];
+  const f = parseRunFlags({ ...RUN_COMMON, ...RUN_SUBS[sub] }, first);
+  const { run: runFlag, file: fileFlag, post, ...fields } = f;
+  if (post && fileFlag !== undefined) runUsage('--file and --post do not go together');
+  const run = runFlag ?? (process.env.LANEBOARD_RUN || '').split('/')[0];
+  if (!run) runUsage('--run is required (or set LANEBOARD_RUN)');
+  const { parseLine, parseLines, foldRun, ackTarget, RUN_ID, FENCE_ACK_BY } = await runProtocol();
+  if (!RUN_ID.test(run)) runUsage(`not a run id: ${JSON.stringify(cleanTerm(run))} (letters, digits, . _ -; 64 at most)`);
+  const ev = runEvent(sub, fields);
+  const event = { v: 1, t: ev.t, run, ts: Date.now(), ...ev };
+  const line = JSON.stringify(event);
+  const checked = parseLine(line);
+  if (!checked.ok) runUsage(`the event would be skipped: ${checked.reason}`);
+
+  const file = post ? null : path.resolve(fileFlag || process.env.LANEBOARD_RUN_FILE || path.join('.laneboard', 'run.jsonl'));
+  // Read before the append: the ack's own line must not count as a need.
+  let warnings = [];
+  if (event.t === 'needs.ack') {
+    // The server folds every source of a run by time, so its needs decide when it
+    // knows the run. Offline (or a run it does not know), a file ack can only see
+    // this file's needs: a ref missing there may be another source's, so it warns.
+    let needs = await serverNeeds(run, { unknown: post ? [] : null });
+    let where = `on ${BASE}`;
+    const offline = !post && !needs;
+    if (offline) { needs = fileNeeds(file, run, { parseLines, foldRun }); where = `in ${file}`; }
+    const r = ackCheck({ ...checked.event, given: event.ref }, needs, { ackTarget, FENCE_ACK_BY, verb: post ? 'posted' : 'written' });
+    // A ref that names no need would only be kept raw: a typo, so write nothing and fail.
+    if (r.missing && offline) r.warnings = [`no need ${String(event.ref)} in run ${run} in this file (offline: the server may know it from another source); written anyway`];
+    else if (r.missing) return die(`no need ${cleanTerm(String(event.ref))} in run ${run} ${where}; nothing ${post ? 'posted' : 'written'}`);
+    // A closed need: a second ack would change nothing, so say so and add no line
+    // (exit 0: the need is closed, which is what the caller asked for).
+    if (r.acked) return void process.stderr.write(`need ${cleanTerm(String(event.ref))} already acked, nothing ${post ? 'posted' : 'written'}\n`);
+    warnings = r.warnings;
+  }
+  let done;
+  if (post) {
+    const r = await api('/api/runs/events', { method: 'POST', body: event });
+    done = `ok ${r.run || run} ${r.t || event.t} posted`;
+  } else {
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.appendFileSync(file, `${line}\n`);
+    } catch (err) { return fail(`cannot write ${file}: ${err?.message || err}`); }
+    done = `ok ${run} ${event.t} appended to ${file}`;
+  }
+  // stdout stays for `eval "$(laneboard run round …)"`; the receipt and warnings go to stderr.
+  process.stderr.write(`${cleanTerm(done)}\n`);
+  for (const w of warnings) process.stderr.write(`warning: ${cleanTerm(w)}\n`);
+  if (event.t === 'round.start') process.stdout.write(`export LANEBOARD_RUN=${run}/${event.n}\n`);
+}
+
+/** The needs of `run` in the file an ack appends to ([] when there is no file yet). */
+function fileNeeds(file, run, { parseLines, foldRun }) {
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf8'); } catch { /* no file yet: no need either */ }
+  return foldRun(parseLines(text).events.filter((e) => e.run === run)).needs;
+}
+
+/** The needs of `run` as the server folded them: `unknown` ([] by default) for a
+ *  run it does not know, null when the server cannot tell (unreachable, an error,
+ *  an older server). */
+async function serverNeeds(run, { unknown = [] } = {}) {
+  try {
+    const res = await fetch(`${BASE}/api/runs/${encodeURIComponent(run)}`, { headers: { 'x-laneboard': '1' }, signal: AbortSignal.timeout(3000) });
+    if (res.status === 404) return unknown;
+    if (!res.ok) return null;
+    const needs = (await res.json())?.run?.needs;
+    return Array.isArray(needs) ? needs : null;
+  } catch { return null; }
+}
+
+/** What an ack will do, before it is written: `{missing: true}` when the ref names
+ *  no need of the run, `{acked: true}` when that need is already closed, else warnings (the ack is still written, exit 0) for a `by`
+ *  that cannot close a `fence` need (docs/runs.md). `needs` null = unknown, so the
+ *  `by` hint is given as a maybe. */
+function ackCheck(ack, needs, { ackTarget, FENCE_ACK_BY, verb }) {
+  const byOk = FENCE_ACK_BY.includes(ack.by);
+  const byHint = `${ack.by ? `--by ${JSON.stringify(ack.by)}` : 'no --by'}: a fence need closes only with --by ${FENCE_ACK_BY.map((b) => JSON.stringify(b)).join(', ')}`;
+  if (!needs) return { warnings: byOk ? [] : [`${byHint}, if this need is one (advisory: the ack is ${verb} as it is)`] };
+  const need = ackTarget(needs, ack);
+  if (!need) return { missing: true, warnings: [] };
+  if (need.acked) return { acked: true };
+  if (need.kind === 'fence' && !need.acked && !byOk) return { warnings: [`${byHint}; advisory: the ack is ${verb}, need ${need.i} stays open`] };
+  return { warnings: [] };
+}
+
+// ---------------------------------------------------------------- feed (offline)
+//
+// `laneboard feed <kind>` runs one feeder (server/feeders/) once, next to the
+// source, and puts the feed where the board reads it. Only `--push` talks to a
+// server, and to the URL it is given, not to LANEBOARD_URL.
+
+const feedersMod = () => import('../server/feeders/index.mjs');
+
+const FEED_USAGE = `usage: laneboard feed <kind> [--source s] [--every N] [--timeout s] [--stdout | --out <file> | --push <url>]
+  tailscale  reads \`tailscale status --json\` on this machine
+  proxmox    --url https://<host>:8006 --token-id user@realm!name [--secret-file f] [--ca pem] [--node n]
+             the secret comes from --secret-file or $LANEBOARD_PVE_SECRET
+  docker     [--socket path]  the Docker socket (default /var/run/docker.sock); one GET, nothing else
+  --source s   the feed's name, and its file <feedsDir>/<s>.json on the board; defaults to the kind
+  --every N    seconds between runs (the board calls the feed stale after 3 × N)
+  --stdout     print the feed (the default; for an ssh forced command on the board)
+  --out f      write the feed to f atomically (temp + rename, mode 0600)
+  --push url   POST the feed to <url>/api/map/feeds (a board on this machine)`;
+
+const feedUsage = (msg) => die(msg ? `feed: ${msg}\nsee: laneboard feed --help` : FEED_USAGE, 2);
+
+// flag -> [option, kind, the feeder it belongs to (null = every kind)]
+const FEED_FLAGS = {
+  '--source': ['source', 'str', null], '--every': ['every', 'int', null], '--timeout': ['timeout', 'int', null],
+  '--stdout': ['stdout', 'bool', null], '--out': ['out', 'str', null], '--push': ['push', 'str', null],
+  '--url': ['url', 'str', 'proxmox'], '--token-id': ['tokenId', 'str', 'proxmox'],
+  '--secret-file': ['secretFile', 'str', 'proxmox'], '--ca': ['ca', 'str', 'proxmox'], '--node': ['node', 'str', 'proxmox'],
+  '--socket': ['socket', 'str', 'docker'],
+};
+
+function parseFeedFlags(kind) {
+  const out = {};
+  while (argv.length) {
+    const flag = argv.shift();
+    if (!Object.hasOwn(FEED_FLAGS, flag)) feedUsage(`unexpected argument: ${JSON.stringify(cleanTerm(flag))}`);
+    const [field, type, only] = FEED_FLAGS[flag];
+    if (only && only !== kind) feedUsage(`${flag} is for ${only} only`);
+    if (Object.hasOwn(out, field)) feedUsage(`${flag} given twice`);
+    if (type === 'bool') { out[field] = true; continue; }
+    const raw = argv.shift();
+    if (raw === undefined || raw === '' || Object.hasOwn(FEED_FLAGS, raw)) feedUsage(`${flag} needs a value`);
+    if (type === 'int') {
+      if (!/^\d{1,6}$/.test(raw) || Number(raw) < 1) feedUsage(`${flag} needs a whole number of seconds, got ${JSON.stringify(cleanTerm(raw))}`);
+      out[field] = Number(raw);
+    } else out[field] = raw;
+  }
+  return out;
+}
+
+/**
+ * Write `text` to `file` so that a reader sees the old file or the new one,
+ * never half. The file is 0600: a feed names machines, addresses and services
+ * (the board's own feeds dir is 0700 with 0600 files, server/routes/feeds.mjs).
+ */
+function writeAtomic(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+  try {
+    fs.writeFileSync(tmp, text, { mode: 0o600 });
+    fs.chmodSync(tmp, 0o600); // a stale temp of the same name kept its old mode
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* nothing to clean */ }
+    throw err;
+  }
+}
+
+async function cmdFeed() {
+  const kind = argv.shift();
+  if (kind === undefined || kind === '-h' || kind === '--help' || kind === 'help') {
+    if (kind === undefined) feedUsage('');
+    process.stdout.write(`${FEED_USAGE}\n`);
+    return;
+  }
+  const { feeder, feederNames, collect, SOURCE_ID } = await feedersMod();
+  const real = feederNames.filter((k) => k !== 'none');
+  if (kind === 'none') feedUsage(`none has nothing to read; pick ${real.join(' or ')}`);
+  if (!feeder(kind)) feedUsage(`unknown feeder: ${JSON.stringify(cleanTerm(kind))} (one of ${real.join(', ')})`);
+  const f = parseFeedFlags(kind);
+  const targets = ['stdout', 'out', 'push'].filter((k) => f[k] !== undefined);
+  if (targets.length > 1) feedUsage('--stdout, --out and --push do not go together');
+  const source = f.source ?? kind;
+  if (!SOURCE_ID.test(source)) feedUsage(`not a source name: ${JSON.stringify(cleanTerm(source))} (letters, digits, . _ -; 64 at most)`);
+  let pushUrl = null;
+  if (f.push !== undefined) {
+    try { pushUrl = new URL('/api/map/feeds', f.push); } catch { feedUsage(`--push needs an http(s) URL, got ${JSON.stringify(cleanTerm(f.push))}`); }
+    if (!/^https?:$/.test(pushUrl.protocol)) feedUsage(`--push needs an http(s) URL, got ${JSON.stringify(cleanTerm(f.push))}`);
+  }
+  if (kind === 'proxmox' && (f.url === undefined || f.tokenId === undefined)) feedUsage('proxmox needs --url and --token-id');
+
+  const readOpts = {};
+  for (const k of ['url', 'tokenId', 'secretFile', 'ca', 'node', 'socket']) if (f[k] !== undefined) readOpts[k] = f[k];
+  if (f.timeout !== undefined) readOpts.timeoutMs = f.timeout * 1000;
+  const r = await collect(kind, { source, every: f.every, ...readOpts });
+  if (!r.ok) return fail(r.error);
+  const text = `${JSON.stringify(r.feed)}\n`;
+
+  if (f.out !== undefined) {
+    const file = path.resolve(f.out);
+    try { writeAtomic(file, text); } catch (err) { return fail(`cannot write ${file}: ${err?.message || err}`); }
+  } else if (pushUrl) {
+    let res;
+    try {
+      res = await fetch(pushUrl, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-laneboard': '1' },
+        body: text,
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (err) { return fail(`cannot reach ${pushUrl.origin} (${err?.message || err})`); }
+    if (!res.ok) {
+      let why = '';
+      try { why = (await res.json())?.error || ''; } catch { /* not JSON */ }
+      return fail(`${pushUrl.origin} refused the feed: HTTP ${res.status}${why ? ` ${why}` : ''}`);
+    }
+  } else {
+    process.stdout.write(text);
+  }
+}
+
 function usage() {
   process.stdout.write(`laneboard — control the Claude sessions and lanes on this box
 
@@ -801,6 +1210,10 @@ Offline (no server needed):
                                       pause one session or all (writes the sentinel)
   laneboard resume <name|--all>         lift an operator pause (budget/quota: from the UI)
   laneboard paused [--json]             list the pauses
+  laneboard run start|round|score|needs|ack|artifact|stop [--run <id>] [flags]
+                                      append one run-protocol line (laneboard run --help)
+  laneboard feed tailscale|proxmox|docker [--source s] [--stdout | --out <file> | --push <url>]
+                                      read one source once into a Map feed (laneboard feed --help)
 
 Server: ${BASE}   (override with LANEBOARD_URL)
 `);
@@ -813,6 +1226,7 @@ const COMMANDS = {
   launch: cmdLaunch, job: cmdJob, retire: cmdRetire,
   fleet: cmdFleet, audit: cmdAudit,
   pause: cmdPause, resume: cmdResume, paused: cmdPaused,
+  run: cmdRun, feed: cmdFeed,
 };
 
 if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') {

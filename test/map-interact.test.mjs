@@ -12,7 +12,7 @@ import {
   ZOOM_MIN, ZOOM_MAX, LONG_PRESS_MS,
 } from '../public/js/views/map/interact.js';
 import { SCOPE_GHOST, FOLD_KEY } from '../public/js/views/map/model.js';
-import { OVERLAY_KEY } from '../public/js/views/map/overlays.js';
+import { OVERLAY_KEY, nextOverlay } from '../public/js/views/map/overlays.js';
 
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
 
@@ -328,7 +328,7 @@ test('createMap builds the readout and no HUD panels (needs, ticker, legend, sum
   map.update(fleetModel());
   dom.flush();
   const text = byClass(root, 'map-readout').textContent;
-  assert.match(text, /^Z 1\.00×  SCOPE ALL  N \d+\/10  OVL STATUS  \d\d:\d\d:\d\dZ$/);
+  assert.match(text, /^Z 1\.00×  SCOPE ALL  N \d+\/10  OVL STATUS$/);
 });
 
 test('the map registers no keydown handler of its own (the shell owns keys, §4 D8)', async (t) => {
@@ -398,6 +398,34 @@ test('overlays: setOverlay persists, invalid names fall back to status, the read
   assert.match(byClass(root, 'map-readout').textContent, /OVL CI/);
   assert.equal(map.setOverlay('nope'), 'status');
   assert.equal(map.overlay(), 'status');
+});
+
+test('reach: refused and skipped without reach links, shown with them; a stored reach waits for them', async (t) => {
+  const dom = installDom();
+  dom.storage.set(OVERLAY_KEY, 'reach');
+  const { createMap } = await import('../public/js/views/map/index.js');
+  const root = el('div', 1200, 800);
+  const map = createMap(root, {});
+  t.after(() => { map.destroy(); dom.restore(); });
+  map.update(fleetModel());
+  dom.flush();
+  assert.equal(map.overlay(), 'status', 'no reach links: the stored reach shows as status');
+  assert.ok(!map.overlays().includes('reach'));
+  assert.equal(map.setOverlay('drift'), 'drift');
+  assert.equal(map.setOverlay(nextOverlay(map.overlay(), 1, map.overlays())), 'status', 'o skips reach');
+  assert.equal(map.setOverlay('reach'), 'status', 'refused');
+  const withReach = fleetModel();
+  withReach.reach = { links: [
+    { id: 'reach:builder:builder-a>builder:builder-b', kind: 'reach', from: 'builder:builder-a', to: 'builder:builder-b', label: 'tcp:22' },
+  ] };
+  map.update(withReach);
+  assert.ok(map.overlays().includes('reach'));
+  map.setOverlay('drift');
+  assert.equal(map.setOverlay(nextOverlay(map.overlay(), 1, map.overlays())), 'reach');
+  map.select('builder:builder-a');
+  dom.flush();
+  assert.match(byClass(root, 'map-readout').textContent, /OVL REACH {2}LINKS 1 {2}TOUCHES 1/);
+  assert.equal(map.snapshotScene().overlay, 'reach');
 });
 
 test('the stored overlay is read back on mount', async (t) => {

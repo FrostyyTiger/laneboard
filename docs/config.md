@@ -35,7 +35,7 @@ A minimal file:
 | `port` | `7777` | `LANEBOARD_PORT` | The HTTP port. |
 | `bind` | `["127.0.0.1"]` | `LANEBOARD_BIND` | Addresses to listen on. **Loopback is the design**: laneboard has no login and can type into terminals. Anything that exposes it has to authenticate in front of it. |
 | `publicUrl` | `http://127.0.0.1:7777` | `LANEBOARD_PUBLIC_URL` | Where a browser reaches it. Used for the Web Push VAPID subject, and for the "needs HTTPS" hint on the notification button — Web Push needs an https origin. |
-| `hostname` | the system's | `LANEBOARD_HOSTNAME` | The label next to the brand in the header. |
+| `hostname` | the system's (`os.hostname()`) | `LANEBOARD_HOSTNAME` | The label next to the brand in the header, and the Map's title (its core node's name) when the topology file has no `title` or there is no topology file. |
 | `human` | `the human` | `LANEBOARD_HUMAN` | What a kickoff prompt calls the person it reports to. |
 | `timezone` | the system's | `LANEBOARD_TIMEZONE` | Used by the Morning and Credit windows. |
 | — | — | `LANEBOARD_DB` | The SQLite file. `:memory:` for a scratch instance; the test suite sets it. |
@@ -127,6 +127,7 @@ state with a back-off, not an error.
 | `map.feedsDir` | `~/.cache/laneboard/feeds` | `LANEBOARD_MAP_FEEDS` | Where other machines drop their snapshots. Read only. |
 | `map.feedStaleMs` | `300000` | — | A feed older than this, or 3x its own interval, shows as no data. |
 | `map.probeEverySec` | `60` | — | The default interval of a node's HTTP probe; at least 15. |
+| `map.policyFile` | `null` (none) | `LANEBOARD_MAP_POLICY` | A Tailscale policy file (HuJSON) the Reach overlay reads; laneboard never fetches a policy. |
 
 The file formats are in [map.md](map.md).
 
@@ -176,7 +177,7 @@ Details: [fleet/identity.md](fleet/identity.md).
 
 | Key | Default | Env | What |
 | --- | --- | --- | --- |
-| `fleet.id` | the hostname, sanitized | `LANEBOARD_FLEET_ID` | This builder's id, `^[a-z0-9-]{1,24}$`, e.g. `builder-a`. It prefixes every fleet key (`builder-a/web`). Refused, never rewritten, when it does not match. |
+| `fleet.id` | the hostname (`os.hostname()`, not `hostname`), sanitized: lowercased, every run of other characters turned into `-`, cut to 24; `builder` if nothing is left | `LANEBOARD_FLEET_ID` | This builder's id, `^[a-z0-9-]{1,24}$`, e.g. `builder-a`. It prefixes every fleet key (`builder-a/web`). Refused, never rewritten, when it does not match. |
 | `fleet.code` | `""` (derived from the id: `builder-a` → `BA`) | `LANEBOARD_FLEET_CODE` | The 2-3 character tag the UI shows, `^[A-Z0-9]{2,3}$` after uppercasing. |
 | `fleet.allowedOrigins` | `[]` | `LANEBOARD_ALLOWED_ORIGINS` (comma list) | Exact extra browser origins allowed on upgrades and mutating routes. `https`, or `http` on loopback only. Never same-site matching. A hub may not list a builder's origin. |
 
@@ -357,3 +358,24 @@ file.
 | `transcript.tailMaxBytes` | `1048576` (1 MiB) | Bytes read from the end of a transcript (at least 4096). |
 | `transcript.maxEntries` | `200` | Entries per transcript page. |
 | `transcript.textCap` | `4000` | Characters kept per entry. |
+
+### `runs` — the Runs view
+
+Where laneboard finds run event files (the protocol is [runs.md](runs.md)).
+No env layer: `LANEBOARD_RUN_FILE` is where the `laneboard run` CLI writes, not
+what the server reads. With no config, the only run files read are the lanes'
+own `.laneboard/run.jsonl`, and a machine without any shows no runs.
+
+| Key | Default | What |
+| --- | --- | --- |
+| `runs.files` | `[]` | Globs of `run.jsonl` files to read, e.g. `["~/runs/*/run.jsonl"]`. Absolute or `~/`, no `..`, at most 64. |
+| `runs.lanes` | `true` | Also read `<lane cwd>/.laneboard/run.jsonl` for every lane. |
+| `runs.maxEvents` | `5000` | Events kept per run, newest kept (100..100000). |
+| `runs.keepDays` | `30` | A run whose last event is older is forgotten (1..3650). |
+| `runs.mapKeepMin` | `60` | Minutes a stopped run stays a node on the Map, then it leaves (0..10080; `0` = it leaves when it stops). |
+| `runs.stuck` | see below | The run stuck rules (shown as a stuck badge on the Runs list). `false` turns every rule off; in an object, a count of `0` turns that rule off. A stopped run is never stuck, and a good round clears the badge. |
+| `runs.stuck.patience` | `3` | No score got better in this many ended rounds (0..100). |
+| `runs.stuck.minDelta` | `0` | How much a score must move in its `better` direction to count as better (0 = any change). |
+| `runs.stuck.sameTaskFails` | `2` | The same task failed in this many rounds in a row of that task (outcome `failed`, `error`, `no-task-done`, `still-red`, …) (0..100). |
+| `runs.stuck.shorterRounds` | `3` | The last this many rounds were each shorter than the one before: a hint at a usage limit (0..100). |
+| `runs.stuck.deadlineMin` | `30` | Kept for one version, no longer a threshold: `0` turns the deadline rule off, any other value (0..10080) is accepted and ignored. The rule fires once the deadline has passed and the run has no `run.stop`. |

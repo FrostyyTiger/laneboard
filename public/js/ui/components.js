@@ -7,6 +7,8 @@
 // are tested in test/components.test.mjs. Every text that may come from a
 // builder goes in through textContent or setAttribute, never as markup.
 import { icon } from '../core/icons.js';
+import { STATE_MARK, itemP } from '../core/marks.js';
+import { TILE_FIXED_P, tileOf } from '../core/alarm-tiles.js';
 
 // ---------------------------------------------------------------- priorities
 
@@ -21,12 +23,6 @@ export const P_WORDS = Object.freeze({
 /** The shape a priority is drawn with (guardrail 5: colour always has a shape). */
 export const P_SHAPE = Object.freeze({
   1: '■', 2: '▲', 3: '◆', ok: '●', run: '●', off: '○', stale: '○',
-});
-
-const SESSION_P = Object.freeze({
-  waiting_permission: '1', permission: '1',
-  waiting_question: '2', question: '2',
-  working: 'run', done: 'ok', idle: 'off', shell: 'off', dead: 'off',
 });
 
 /**
@@ -45,7 +41,7 @@ export function normP(p) {
   if (low === 'warn') return '2';
   if (low === 'info') return '3';
   if (low === 'dead' || low === 'down') return 'off';
-  return SESSION_P[low] ?? 'off';
+  return Object.hasOwn(STATE_MARK, low) ? STATE_MARK[low] : 'off';
 }
 
 /** The lamp's aria-label: the given label (or the priority word), plus ", unacknowledged". */
@@ -85,9 +81,9 @@ export function lamp(p, { unack = false, label = null } = {}) {
   return n;
 }
 
-const PLATE_KINDS = new Set(['solid', 'p1', 'p2']);
+const PLATE_KINDS = new Set(['solid', 'sunken', 'p1', 'p2']);
 
-/** <span class="plate [plate--solid|plate--p1|plate--p2]">B1</span>. */
+/** <span class="plate [plate--solid|plate--sunken|plate--p1|plate--p2]">B1</span>. */
 export function plate(text, { kind = null, title = null } = {}) {
   const n = document.createElement('span');
   n.className = PLATE_KINDS.has(kind) ? `plate plate--${kind}` : 'plate';
@@ -173,7 +169,9 @@ export function setPanel(root, { scope, n } = {}) {
 /** Segment order, worst first; `dead` is hatched. */
 export const MIX_ORDER = Object.freeze(['p1', 'p2', 'run', 'ok', 'off', 'dead']);
 const MIX_WORD = Object.freeze({ p1: 'permission', p2: 'question', run: 'working', ok: 'done', off: 'idle', dead: 'dead' });
-const MIX_P = Object.freeze({ p1: '1', p2: '2', run: 'run', ok: 'ok', off: 'off', dead: 'dead' });
+// The p1 (permission) and p2 (question) buckets both want you: one amber ▲
+// (runs night 4 T23, core/marks.js). The bucket names stay for the counts.
+const MIX_P = Object.freeze({ p1: '2', p2: '2', run: 'run', ok: 'ok', off: 'off', dead: 'dead' });
 
 /** One session or lane -> its mix bucket. */
 export function mixBucket(item) {
@@ -188,12 +186,21 @@ export function mixBucket(item) {
   return 'off';
 }
 
-/** lanes (sessions with a `state`) -> {p1, p2, run, ok, off, dead, total}. */
+/**
+ * lanes (sessions with a `state`) -> {p1, p2, run, ok, off, dead, total, p}.
+ * `p` is the worst trouble mark of the live lanes by itemP ('1' ■, '2' ▲, else
+ * null), so a stuck working lane marks its builder ▲ as the status line counts
+ * it, not the ● of its bucket.
+ */
 export function laneMix(lanes) {
-  const mix = { p1: 0, p2: 0, run: 0, ok: 0, off: 0, dead: 0, total: 0 };
+  const mix = { p1: 0, p2: 0, run: 0, ok: 0, off: 0, dead: 0, total: 0, p: null };
   for (const l of Array.isArray(lanes) ? lanes : []) {
-    mix[mixBucket(l)]++;
+    const k = mixBucket(l);
+    mix[k]++;
     mix.total++;
+    if (k === 'dead') continue;
+    const q = itemP(l);
+    if (q === '1' || (q === '2' && mix.p !== '1')) mix.p = q;
   }
   return mix;
 }
@@ -208,6 +215,62 @@ export function scopeSessions(s, scope = 'all') {
     for (const sess of b.sessions.values()) out.push(down ? { ...sess, stale: true } : sess);
   }
   return out;
+}
+
+const MARK_RANK = Object.freeze({ 1: 0, 2: 1, 3: 2, stale: 3, run: 4, ok: 5, off: 6 });
+const ALARM_P = new Set(['1', '2', '3']);
+
+/**
+ * One builder's mark, the single rule the 1440 rail row and the 390 scope
+ * chip share (runs T43): {p, unack, label, n}. `list` is the store's alarms
+ * ({builder, priority 'P1'..'P4', acked}), `mix` its laneMix. Down -> p1,
+ * stale -> 'stale', else the worst of its alarms (at their header tile's mark,
+ * and its health sample's) and its lanes (a permission or a question lane is
+ * p2, T23): unack when an open alarm sits at that priority. Else working (a lane running) or ok. Pure.
+ */
+export function builderMark(b, list = [], mix = null) {
+  if (!b || typeof b !== 'object') return { p: 'off', unack: false, label: 'unknown', n: 0 };
+  if (b.status === 'down') return { p: '1', unack: false, label: 'down', n: 0 };
+  if (b.status === 'stale') return { p: 'stale', unack: false, label: 'stale', n: 0 };
+  let p = null;
+  let unack = false;
+  let n = 0;
+  for (const a of Array.isArray(list) ? list : []) {
+    if (!a || typeof a !== 'object' || a.builder !== b.id) continue;
+    // A kind with no header tile (review: the Inbox; reboot, health-warn: the
+    // Box) is not counted by the header or the status line, so it does not
+    // mark the builder either: the rail never shows a ▲ the header calls 0.
+    if (typeof a.kind === 'string' && a.kind && !tileOf(a.kind)) continue;
+    // The alarm's tile mark wins over its priority, so the rail agrees with
+    // the header: an approval is the amber ▲ even when sent as P1 (T23).
+    const fixed = TILE_FIXED_P[tileOf(a.kind)];
+    const q = fixed != null ? String(fixed) : normP(a.priority);
+    if (!ALARM_P.has(q)) continue;
+    n++;
+    const open = a.acked !== true;
+    if (p === null || MARK_RANK[q] < MARK_RANK[p]) { p = q; unack = open; } else if (q === p && open) unack = true;
+  }
+  // The health sample's own alarms (§7), in case the alarm feed lags or is
+  // absent: crit is the DOWN tile's health-crit (■); warn is health-warn, which
+  // only the Box shows, so it marks nothing here.
+  for (const h of Array.isArray(b.health?.alarms) ? b.health.alarms : []) {
+    const q = h?.level === 'crit' ? '1' : null;
+    if (q && (p === null || MARK_RANK[q] < MARK_RANK[p])) { p = q; unack = false; }
+  }
+  // The worst lane, by the rule the status line counts with (core/marks.js
+  // itemP: stuck is ▲, the guard's danger ■), else the segment bar's buckets.
+  const lane = mix?.p ?? (mix?.p1 > 0 || mix?.p2 > 0 ? '2' : null);
+  if (lane && (p === null || MARK_RANK[lane] < MARK_RANK[p])) { p = lane; unack = false; }
+  if (p) {
+    const parts = [];
+    if (n) parts.push(`${n} ${n === 1 ? 'alarm' : 'alarms'}`);
+    if (mix?.p1 > 0) parts.push(`${mix.p1} permission`);
+    if (mix?.p2 > 0) parts.push(`${mix.p2} question`);
+    return { p, unack, label: [lampLabel(p), ...parts].join(', '), n };
+  }
+  if (b.status === 'connecting') return { p: 'off', unack: false, label: 'connecting', n: 0 };
+  if (mix?.run > 0) return { p: 'run', unack: false, label: 'working', n: 0 };
+  return { p: 'ok', unack: false, label: 'ok', n: 0 };
 }
 
 /** "12 lanes: 1 permission, 2 question, 6 working, 3 idle" (zero buckets omitted). */

@@ -97,7 +97,7 @@ test('inspectorModel: header, data block, flags and approval from the lane and i
   assert.equal(m.title, 'auth', 'the lane id titles the panel');
   assert.equal(m.sessionName, 'auth-2');
   assert.equal(m.word, 'PERM');
-  assert.equal(m.p, '1');
+  assert.equal(m.p, '2', 'a permission is the amber ▲ (T23)');
   assert.deepEqual(m.stage, { n: 3, m: 7 });
   assert.equal(m.branch, 'feat/auth');
   assert.equal(m.approvalId, '6f1c1a8e-0000-4000-8000-000000000001');

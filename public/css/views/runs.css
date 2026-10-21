@@ -1,0 +1,331 @@
+/* ===========================================================================
+   The Runs view (runs plan §3 A2, task T7). One row per unattended run.
+   Grey is normal: only a worse score (↓/↑ p2), a window near its stop level
+   (p2), an overage (■ p1), an error or no-progress stop and an open need
+   get a hue, and each always carries its shape or its word.
+   =========================================================================== */
+
+/* The bottom padding is shell.css's (it clears the minimap). */
+#view-runs { overflow: auto; padding-top: var(--sp-2); padding-inline: var(--sp-2); }
+
+/* The columns are the list's and every row is a subgrid of them, so a column has one width
+   down the list (T44). The goal is the one flexible column; state, round, scores, burn, stop/left
+   and cost have fixed widths, so a "—" sits where a value would (T31). The list sets the row font,
+   so a `ch` here is the mono digit the cells print. An open need is the goal's second line. */
+.rn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 14ch minmax(0, 1fr) 7ch 24ch 28ch 16ch 12ch;
+  column-gap: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+}
+
+.rn-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-3);
+  min-height: var(--row-comfy);
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: var(--bw) solid var(--line-weak);
+  font-family: var(--font-mono);
+  font-size: var(--fs-12);
+  color: var(--text-2);
+}
+.rn-row { position: relative; }
+.rn-row:hover { background: var(--bg-hover); }
+
+.rn-f {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- state: lamp + word */
+.rn-state-t {
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+}
+.rn-state[data-p="1"] .rn-state-t { color: var(--p1); }
+.rn-state[data-p="2"] .rn-state-t { color: var(--p2); }
+/* the run page's stop reason after STOPPED (T17): body text, the word's hue when it needs a look */
+.rn-state-why { color: var(--text-1); }
+.rn-state[data-p="1"] .rn-state-why { color: var(--p1); }
+.rn-state[data-p="2"] .rn-state-why { color: var(--p2); }
+/* the stuck badge (server/runs/stuck.mjs): Board's flag, the icon in p2 */
+.rn-stuck { display: inline-flex; color: var(--p2); }
+
+/* ---- goal: the goal text, the run id and branch under it */
+.rn-goal { flex-direction: column; align-items: flex-start; gap: 0; }
+.rn-goal-t,
+.rn-goal-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.rn-goal-t { color: var(--text-1); font-weight: 600; }
+/* the goal links to the run's page; its box covers the whole row, so the row is the target */
+.rn-open { text-decoration: none; }
+.rn-open::after { content: ""; position: absolute; inset: 0; }
+.rn-open:hover { text-decoration: underline; }
+.rn-open:focus-visible { outline: none; }
+.rn-row:has(.rn-open:focus-visible) { outline: var(--bw) solid var(--accent); outline-offset: -1px; }
+.rn-goal-sub { color: var(--text-3); font-size: var(--fs-11); }
+/* the second line: run id and branch (at most half the line), then the open need (T31) */
+.rn-goal-2 { display: flex; align-items: baseline; gap: var(--sp-3); max-width: 100%; min-width: 0; }
+.rn-goal-2 > .rn-goal-sub { flex: none; max-width: 50%; white-space: nowrap; }
+.rn-goal-2 > .rn-goal-sub:empty { display: none; }
+.rn-goal-2 > .rn-needs { flex: 0 1 auto; font-size: var(--fs-11); }
+
+.rn-round { justify-content: flex-end; color: var(--text-1); }
+
+/* ---- scores: name, value, trend mark; only a worse one gets a hue (all in the cell's title) */
+.rn-scores { gap: var(--sp-2); overflow: hidden; }
+.rn-score { display: inline-flex; align-items: baseline; gap: var(--sp-1); }
+.rn-score-k { color: var(--text-3); }
+.rn-score-v { color: var(--text-1); }
+.rn-score-m { color: var(--text-3); font-size: var(--fs-10); }
+.rn-score[data-trend="worse"] .rn-score-m,
+.rn-score[data-trend="worse"] .rn-score-v { color: var(--p2); }
+.rn-more { color: var(--text-3); }
+
+/* ---- budget burn: one thin meter per window */
+/* each window a fixed grid (label, bar, value) so the meters and their "—" line up; an
+   overage takes the cell's next line */
+.rn-burn { gap: var(--sp-1) var(--sp-2); flex-wrap: wrap; }
+.rn-win { display: inline-grid; grid-template-columns: 2ch 40px 4ch; align-items: center; gap: var(--sp-1); }
+.rn-win-k { color: var(--text-3); font-size: var(--fs-11); }
+.rn-win-v { min-width: 4ch; text-align: right; }
+.rn-bar {
+  position: relative;
+  width: 40px;
+  height: 4px;
+  background: var(--bg-sunken);
+  border: var(--bw) solid var(--line-weak);
+}
+.rn-bar-f {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: var(--text-3);
+}
+.rn-win[data-p="2"] .rn-bar-f { background: var(--p2); }
+.rn-win[data-p="2"] .rn-win-v { color: var(--p2); }
+.rn-over[data-p="1"] { color: var(--p1); }
+
+/* ---- time left or stop reason, cost, needs; a label sits in the cell of its value
+   ("stop budget", "cost $9.98"), never in a column of its own (T25) */
+.rn-k { color: var(--text-3); font-size: var(--fs-11); }
+.rn-v { color: var(--text-1); }
+.rn-left[data-p="1"] .rn-v,
+.rn-left[data-p="2"] .rn-v { color: inherit; }
+.rn-left[data-p="1"] { color: var(--p1); }
+.rn-left[data-p="2"] { color: var(--p2); }
+.rn-left .rn-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rn-cost { justify-content: flex-end; }
+.rn-needs { overflow: hidden; }
+.rn-needs-n { flex: none; }
+.rn-needs-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
+.rn-needs[data-p="2"] .rn-needs-n { color: var(--p2); }
+.rn-needs[data-p="3"] .rn-needs-n { color: var(--p3); }
+
+/* ---- empty state: what to run */
+.rn-empty { display: grid; gap: var(--sp-1); max-width: 72ch; }
+.rn-empty p { margin: 0; }
+.rn-empty-lead { color: var(--text-1); }
+.rn-empty-cmd {
+  display: block;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bw) solid var(--line-weak);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+/* ---- one run's page (T8): head, needs, timeline, artifacts, raw */
+/* a reading width: at 1440 the eye does not cross the screen per row (T27) */
+/* the run page's frame stops at the same token as the page in it: no empty gutter (T31) */
+#view-runs > .panel[data-page] { max-width: var(--read-max); }
+.rn-page { display: grid; gap: var(--sp-3); max-width: var(--read-max); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+.rn-back { justify-self: start; color: var(--text-3); text-decoration: none; }
+.rn-back:hover { color: var(--text-1); }
+.rn-back:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
+.rn-head { display: grid; gap: var(--sp-2); }
+.rn-head-top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-3); min-width: 0; }
+/* the state label keeps its width; the goal shrinks and ellipsizes (it ran under STOPPED at 390),
+   and below 24ch it takes its own line (the label carries the stop reason, T17) */
+.rn-head-top .rn-state { flex: none; }
+.rn-head-top .rn-goal { flex: 1 1 24ch; min-width: 0; }
+.rn-head .rn-goal-t { font-size: var(--fs-13); }
+.rn-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); }
+.rn-events[data-p="3"] { color: var(--p3); }
+
+.rn-stale { margin: 0; color: var(--text-3); }
+
+.rn-sec { display: grid; gap: var(--sp-1); }
+.rn-sec-t {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.rn-none { margin: 0; color: var(--text-3); }
+
+.rn-items { list-style: none; margin: 0; padding: 0; }
+.rn-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-height: var(--row-dense);
+  padding: var(--sp-1) 0;
+  border-bottom: var(--bw) solid var(--line-weak);
+}
+.rn-item-k { flex: none; min-width: 8ch; color: var(--text-3); }
+.rn-item-t { min-width: 0; overflow-wrap: anywhere; color: var(--text-1); }
+.rn-item-n,
+.rn-item-l { flex: none; color: var(--text-3); }
+a.rn-item-t,
+a.rn-item-l { text-decoration: underline; text-decoration-color: var(--line); }
+a.rn-item-t:focus-visible,
+a.rn-item-l:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
+/* a need row (night 4 T26): mark, a fixed kind column (the longest known kind, `decision`) so
+   open and closed texts start on one line, the text, and its end (acked by / OPEN, ACK) */
+.rn-need {
+  display: grid;
+  grid-template-columns: 2ch 8ch minmax(0, 1fr) auto;
+  column-gap: var(--sp-2);
+  row-gap: var(--sp-1);
+}
+.rn-need-m { text-align: center; }
+.rn-need-k { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a path breaks at its `/` (<wbr> in runs.js), never inside a word */
+.rn-need-t { overflow-wrap: break-word; }
+.rn-need-end { justify-self: end; }
+.rn-need[data-p="2"] .rn-need-m { color: var(--p2); }
+.rn-need[data-p="3"] .rn-need-m { color: var(--p3); }
+/* an open need's OPEN and ACK (T28): Board's YES/NO buttons, on the right edge */
+.rn-need-acts { flex: none; display: inline-flex; align-items: center; gap: var(--sp-2); margin-left: auto; align-self: center; }
+a.rn-need-open { text-decoration: none; }
+/* a closed need (night 4 T6): grey, with who acked it on the right edge */
+.rn-acked .rn-need-m,
+.rn-acked .rn-item-t { color: var(--text-3); }
+.rn-need-by { margin-left: auto; }
+
+/* score charts (T11): one line per metric, x by round, grey; a worse latest value is p2 */
+.rn-charts { list-style: none; margin: 0; padding: 0; }
+.rn-chart {
+  display: grid;
+  /* the line takes the room between the name and its value (T27) */
+  grid-template-columns: minmax(8ch, 16ch) minmax(0, 1fr) 10ch minmax(8ch, auto);
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--row-comfy);
+  padding: var(--sp-1) 0;
+  border-bottom: var(--bw) solid var(--line-weak);
+  font-variant-numeric: tabular-nums;
+}
+.rn-chart-k { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
+.rn-chart-v { color: var(--text-1); text-align: right; }
+.rn-chart-v[data-p="2"] { color: var(--p2); }
+.rn-chart-r { min-width: 0; color: var(--text-3); white-space: nowrap; }
+.rn-chart-svg { width: 100%; }
+/* the last value is a line with no length: a 2 px square at any stretch */
+.rn-chart-svg .spark-last { fill: none; stroke: var(--text-1); stroke-width: 2; stroke-linecap: square; vector-effect: non-scaling-stroke; }
+
+/* the timeline: one row per round, numbers right-aligned */
+.rn-tl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.rn-tl th {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: var(--bw) solid var(--line);
+  font-family: var(--font-label);
+  font-size: var(--fs-10);
+  font-weight: 600;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-3);
+}
+.rn-tl td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: var(--bw) solid var(--line-weak);
+  white-space: nowrap;
+}
+.rn-tl-row:hover { background: var(--bg-hover); }
+.rn-tl-n,
+.rn-tl-cost,
+.rn-tl-span { text-align: right; }
+.rn-tl th[data-col="n"],
+.rn-tl th[data-col="cost"],
+.rn-tl th[data-col="span"] { text-align: right; }
+.rn-tl-n { color: var(--text-1); }
+.rn-tl-re { color: var(--text-3); }
+/* minor columns stay narrow (T27): the task clips (full text in the row's title), sessions wrap */
+.rn-tl-task { max-width: 24ch; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
+.rn-tl-row[data-live] .rn-tl-outcome { color: var(--run); }
+/* the sessions tied to a round (T12): one chip per session, a guess shared with another run is faint */
+.rn-tl td.rn-tl-ses { color: var(--text-2); white-space: normal; }
+.rn-tl-s { white-space: nowrap; }
+.rn-tl-s + .rn-tl-s { margin-left: var(--sp-2); }
+.rn-tl-s[data-maybe] { color: var(--text-3); }
+
+/* unknown events, folded away */
+.rn-raw > summary { cursor: pointer; color: var(--text-3); }
+.rn-raw > summary:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
+.rn-raw-e {
+  margin: var(--sp-1) 0 0;
+  padding: var(--sp-1) var(--sp-2);
+  border: var(--bw) solid var(--line-weak);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- narrow: the row wraps into two lines */
+@media (max-width: 1024px) {
+  .rn-list {
+    grid-template-columns: minmax(10ch, auto) minmax(0, 1fr) auto;
+    column-gap: var(--sp-2);
+  }
+  .rn-row { gap: var(--sp-1) var(--sp-2); }
+  .rn-scores,
+  .rn-burn { grid-column: 1 / -1; flex-wrap: wrap; white-space: normal; }
+  /* the open need takes its own line under the run id, one line, mark and text together, the
+     text clipped (T29, T31) */
+  .rn-goal-2 { flex-wrap: wrap; row-gap: 0; }
+  .rn-goal-2 > .rn-goal-sub { max-width: 100%; }
+  .rn-goal-2 > .rn-needs { flex: 1 1 100%; min-width: 0; }
+  .rn-left,
+  .rn-cost { justify-content: flex-start; }
+  .rn-tl-sec { overflow-x: auto; }
+  /* a chart's line gets its own row: name, value and range stay whole on a phone */
+  .rn-chart { grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-1) var(--sp-3); }
+  .rn-chart-svg { grid-column: 1 / -1; grid-row: 2; width: 100%; max-width: 100%; }
+}
+
+/* ---- phone: the rounds table drops its minor columns (TL_NARROW_HIDDEN in runs.js) so round,
+   role, outcome, commit and cost fit 390 px; task and duration stay in the row's title */
+@media (width < 700px) {
+  .rn-tl [data-col="task"],
+  .rn-tl [data-col="span"],
+  .rn-tl [data-col="sessions"] { display: none; }
+  /* the run page's goal wraps whole instead of ending in "…" (T26); the list row still clips */
+  .rn-head .rn-goal,
+  .rn-head .rn-goal-t { white-space: normal; overflow-wrap: anywhere; }
+  .rn-head .rn-goal-t { overflow: visible; }
+  /* a need stacks (T26): mark, kind and text on the full width, then its end on its own line */
+  .rn-need { grid-template-columns: 2ch 8ch minmax(0, 1fr); }
+  .rn-need-end { grid-column: 1 / -1; }
+}

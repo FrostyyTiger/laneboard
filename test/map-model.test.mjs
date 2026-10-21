@@ -44,6 +44,13 @@ test('normalize fills the envelope and drops self-links and junk', () => {
   assert.deepEqual(normalize(undefined).nodes, []);
 });
 
+test('normalize keeps reach.unresolved as a count, never a list', () => {
+  assert.equal(normalize({ reach: { links: [], unresolved: 3 } }).reach.unresolved, 3);
+  for (const bad of [[{ selector: 'group:x' }], -1, 1.5, 'x', undefined]) {
+    assert.equal(normalize({ reach: { links: [], unresolved: bad } }).reach.unresolved, 0);
+  }
+});
+
 test('kidsOf maps parents to children and ignores missing parents', () => {
   const k = kidsOf([N('a', null, 'site'), N('b', 'a', 'room'), N('c', 'gone', 'room')]);
   assert.deepEqual(k.get('a').map((n) => n.id), ['b']);

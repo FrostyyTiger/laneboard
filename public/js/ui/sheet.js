@@ -1,7 +1,8 @@
 // The terminal sheet (L4) and its quick-bar, moved from public/app.js (fleet
 // F1), plus the phone shell (fleet D6b, plan §4 2.4 "Phone <700"): the builder
 // chip strip in #shell-strip and the three-snap bottom sheet in #shell-sheet
-// with the MAP/LIST/INBOX segmented control.
+// with the MAP/LIST/INBOX segmented control, whose lit segment follows the
+// route (routeTab: Board and Runs are LIST; a view with no segment lights none).
 //
 // Pure at import time: no `document` until init() or a builder runs. The
 // models (snapFor, snapTops, stepSnap, stripModel, peekModel, sheetRows) are
@@ -15,7 +16,8 @@ import { currentRoute, formatHash, navigate, onRoute } from '../core/router.js';
 import { scheduleVisible, sendKeys, sendText } from '../core/net.js';
 import { icon } from '../core/icons.js';
 import { closeTerminal, isLive, openTerminal, writeTo } from './terminal.js';
-import { lamp, normP } from './components.js';
+import { builderMark, lamp, laneMix, normP } from './components.js';
+import { itemP } from '../core/marks.js';
 import { layoutFor, toast } from './shell.js';
 
 /**
@@ -105,9 +107,9 @@ export const FLICK_PX_MS = 0.5;
 /** The segmented control's tabs. */
 export const SHEET_TABS = Object.freeze(['map', 'list', 'inbox']);
 /** The views behind the `⋯` menu (every routable nav view the tabs do not cover). */
-export const MORE_VIEWS = Object.freeze(['board', 'packages', 'morning', 'credit', 'box', 'audit']);
+export const MORE_VIEWS = Object.freeze(['board', 'packages', 'morning', 'credit', 'box', 'audit', 'runs']);
 const TAB_LABEL = Object.freeze({ map: 'MAP', list: 'LIST', inbox: 'INBOX' });
-const VIEW_LABEL = Object.freeze({ board: 'Board', packages: 'Packages', morning: 'Morning', credit: 'Credit', box: 'Box', audit: 'Audit' });
+const VIEW_LABEL = Object.freeze({ board: 'Board', packages: 'Packages', morning: 'Morning', credit: 'Credit', box: 'Box', audit: 'Audit', runs: 'Runs' });
 const MAX_ROWS = 200;
 
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
@@ -163,25 +165,57 @@ export function normTab(t) {
   return SHEET_TABS.includes(t) ? t : 'map';
 }
 
+/** The views each segment stands for: Board and Runs are lists, so they fall under LIST. */
+const ROUTE_TAB = Object.freeze({ map: 'map', board: 'list', runs: 'list', inbox: 'inbox' });
+
+/** The segment of route view `view`, or null for a view no segment stands for (Morning, Audit, ...). Pure. */
+export function routeTab(view) {
+  return Object.hasOwn(ROUTE_TAB, view) ? ROUTE_TAB[view] : null;
+}
+
+/** The views that have a segment of their own; Board and Runs only borrow LIST's content. */
+const OWN_TAB = Object.freeze({ map: 'map', inbox: 'inbox' });
+
+/**
+ * The one lit segment: the tab the user picked on this view, else the
+ * route's own segment, else none (null). The lit segment follows the route
+ * like the desktop tabs do, so MAP is not lit on the Inbox, and LIST is not
+ * lit on Board or Runs (they are reached through ⋯, which is lit instead). Pure.
+ */
+export function litTab(view, picked = null) {
+  if (SHEET_TABS.includes(picked)) return picked;
+  return Object.hasOwn(OWN_TAB, view) ? OWN_TAB[view] : null;
+}
+
+/** Is ⋯ the lit control: a view from its menu, with no segment picked on it. Pure. */
+export function moreLit(view, picked = null) {
+  return litTab(view, picked) === null && MORE_VIEWS.includes(view);
+}
+
 function codeOf(b, id) {
   return (typeof b?.code === 'string' && b.code) || deriveCode(id);
 }
 
-/** Worst lamp `data-p` of a builder: stale when its link is down, else its worst session. Pure. */
-export function builderP(b) {
-  if (!b) return 'off';
-  if (b.status === 'stale' || b.status === 'down') return 'stale';
-  let best = null;
-  const order = ['1', '2', '3', 'run', 'ok', 'off'];
-  for (const sess of b.sessions?.values?.() ?? []) {
-    const p = normP(sess?.state);
-    if (best === null || order.indexOf(p) < order.indexOf(best)) best = p;
-  }
-  return best ?? 'off';
+/**
+ * A builder's chip mark: the shared builder mark (components.js builderMark,
+ * the rail row's rule, runs T43) from its sessions and the alarms `list`.
+ * Returns {p, label}. Pure.
+ */
+export function builderChipMark(b, list = []) {
+  const sessions = [...(b?.sessions?.values?.() ?? [])];
+  const stale = b?.status === 'stale' || b?.status === 'down';
+  const mix = laneMix(stale ? sessions.map((x) => ({ ...x, stale: true })) : sessions);
+  const m = builderMark(b, list, mix);
+  return { p: m.p, label: m.label };
+}
+
+/** Worst lamp `data-p` of a builder (builderChipMark's `p`). Pure. */
+export function builderP(b, list = []) {
+  return builderChipMark(b, list).p;
 }
 
 function worstP(ps) {
-  const order = ['1', '2', '3', 'run', 'ok', 'off', 'stale'];
+  const order = ['1', '2', '3', 'stale', 'run', 'ok', 'off'];
   let best = null;
   for (const p of ps) if (best === null || order.indexOf(p) < order.indexOf(best)) best = p;
   return best ?? 'off';
@@ -189,17 +223,18 @@ function worstP(ps) {
 
 /**
  * The #shell-strip chips for store `s` and `route`: ALL first, then one per
- * builder by id, each {id, code, p, on, title}. `on` follows route.b. Pure.
+ * builder by id, each {id, code, p, label, on, title} (p and label from builderChipMark). `on` follows route.b. Pure.
  */
 export function stripModel(s, route) {
   const list = [...(s?.builders?.values?.() ?? [])].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const scope = route?.b && route.b !== 'all' ? route.b : null;
+  const al = Array.isArray(s?.alarms) ? s.alarms : [];
   const chips = list.map((b) => {
-    const p = builderP(b);
+    const m = builderChipMark(b, al);
     const status = typeof b.status === 'string' ? b.status : 'down';
-    return { id: b.id, code: codeOf(b, b.id), p, on: scope === b.id, title: `${b.id} · ${status}` };
+    return { id: b.id, code: codeOf(b, b.id), p: m.p, label: m.label, on: scope === b.id, title: `${b.id} · ${status} · ${m.label}` };
   });
-  const all = { id: 'all', code: 'ALL', p: worstP(chips.map((c) => (c.p === 'stale' ? 'off' : c.p))), on: !scope, title: 'Every builder' };
+  const all = { id: 'all', code: 'ALL', p: worstP(chips.map((c) => c.p)), on: !scope, title: 'Every builder' };
   return [all, ...chips];
 }
 
@@ -224,7 +259,9 @@ function laneName(s, item, name) {
 
 /**
  * The peek line for store `s` in builder scope `scope` (null = all):
- * {p1, p2, run, total, latest}. `latest` is the top needs-you entry, else the
+ * {p1, p2, run, total, latest}: p1 counts the broken lanes (red ■), p2 the
+ * ones that want you (amber ▲: a permission, an approval, a question, stuck;
+ * runs night 4 T23). `latest` is the top needs-you entry, else the
  * most recently changed session: {key, text, p, since}. Pure.
  */
 export function peekModel(s, scope = null) {
@@ -232,7 +269,7 @@ export function peekModel(s, scope = null) {
   const sess = scopedSessions(s, b);
   const out = { p1: 0, p2: 0, run: 0, total: sess.length, latest: null };
   for (const x of sess) {
-    const p = normP(x?.state);
+    const p = itemP(x);
     if (p === '1') out.p1++;
     else if (p === '2') out.p2++;
     else if (p === 'run') out.run++;
@@ -243,7 +280,7 @@ export function peekModel(s, scope = null) {
     out.latest = { key: a.key, text: `${laneName(s, a, a.name)} ${STATE_LABEL[a.state] || a.state || ''}`.trim(), p: a.danger ? '1' : normP(a.state), since: a.since ?? null };
   } else if (sess.length) {
     const x = sess.reduce((m, c) => (num(c.stateSince) > num(m.stateSince) ? c : m));
-    out.latest = { key: x.key, text: `${laneName(s, x, x.name)} ${STATE_LABEL[x.state] || x.state || ''}`.trim(), p: normP(x.state), since: x.stateSince ?? null };
+    out.latest = { key: x.key, text: `${laneName(s, x, x.name)} ${STATE_LABEL[x.state] || x.state || ''}`.trim(), p: itemP(x), since: x.stateSince ?? null };
   }
   return out;
 }
@@ -267,7 +304,7 @@ export function sheetRows(s, tab, scope = null) {
     rows = scopedSessions(s, b)
       .sort((x, y) => (STATE_RANK[x.state] ?? 9) - (STATE_RANK[y.state] ?? 9) || String(x.name).localeCompare(String(y.name)))
       .map((x) => ({
-        key: x.key, sel: x.key ?? null, p: normP(x.state), unack: false,
+        key: x.key, sel: x.key ?? null, p: itemP(x), unack: false,
         name: laneName(s, x, x.name), sub: STATE_LABEL[x.state] || String(x.state ?? ''), since: x.stateSince ?? null,
       }));
   } else {
@@ -285,7 +322,9 @@ export function sheetRows(s, tab, scope = null) {
 
 // ---------------------------------------------------------------- phone DOM
 
-const phone = { built: false, snap: 'peek', tab: 'map', parts: null, drag: null, queued: false };
+// `tab` is the sheet's content, `view` the route view it was last painted
+// for, `picked` a tab the user chose on that view (null: the route's own).
+const phone = { built: false, snap: 'peek', tab: 'map', view: null, picked: null, parts: null, drag: null, queued: false };
 
 function loadTab() {
   try { return normTab(localStorage.getItem('lb.sheet.tab')); } catch { return 'map'; }
@@ -324,7 +363,7 @@ export function renderStrip(box, model, onPick) {
     b.type = 'button';
     b.dataset.b = c.id;
     b.setAttribute('aria-pressed', c.on ? 'true' : 'false');
-    b.append(lamp(c.p, { label: c.p === 'stale' ? 'stale' : null }), el('span', 'chip-t', c.code));
+    b.append(lamp(c.p, { label: c.label ?? (c.p === 'stale' ? 'stale' : null) }), el('span', 'chip-t', c.code));
     b.title = c.title;
     b.setAttribute('aria-label', c.id === 'all' ? 'All builders' : `Builder ${c.title}`);
     if (onPick) b.addEventListener('click', () => onPick(c.id));
@@ -429,8 +468,10 @@ function toggleMoreMenu(open) {
   p.more.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
-function pickTab(t) {
+/** A tap on segment `t`: its content shows and it is lit until the view changes. */
+export function pickTab(t) {
   phone.tab = normTab(t);
+  phone.picked = phone.tab;
   saveTab(phone.tab);
   if (phone.snap === 'peek') setSnap('half');
   renderPhone();
@@ -492,23 +533,31 @@ export function renderPhone() {
     root.hidden = true;
     return;
   }
-  if (!phone.built) buildSheet(root);
+  if (!phone.built || phone.parts?.root !== root) buildSheet(root);
   root.hidden = false;
   const route = currentRoute();
   const scope = route.b && route.b !== 'all' ? route.b : null;
   renderStrip(strip, stripModel(store, route), pickBuilder);
+  if (route.view !== phone.view) {
+    // A new view: its segment's content shows (a view with none keeps the last content).
+    phone.view = route.view;
+    phone.picked = null;
+    phone.tab = routeTab(route.view) ?? phone.tab;
+  }
+  const lit = litTab(route.view, phone.picked);
   const p = phone.parts;
   for (const t of SHEET_TABS) {
-    const on = t === phone.tab;
-    p.tabs[t].setAttribute('aria-selected', on ? 'true' : 'false');
-    p.tabs[t].tabIndex = on ? 0 : -1;
+    p.tabs[t].setAttribute('aria-selected', t === lit ? 'true' : 'false');
+    p.tabs[t].tabIndex = t === phone.tab ? 0 : -1;
   }
+  if (moreLit(route.view, phone.picked)) p.more.dataset.on = '';
+  else delete p.more.dataset.on;
   p.body.setAttribute('aria-labelledby', `ps-tab-${phone.tab}`);
   const pk = peekModel(store, scope);
   p.peek.textContent = '';
   const counts = el('span', 'ps-counts');
-  counts.append(lamp('1', { label: `${pk.p1} permission` }), el('span', 'ps-n', String(pk.p1)),
-    lamp('2', { label: `${pk.p2} question` }), el('span', 'ps-n', String(pk.p2)),
+  counts.append(lamp('1', { label: `${pk.p1} broken` }), el('span', 'ps-n', String(pk.p1)),
+    lamp('2', { label: `${pk.p2} want you` }), el('span', 'ps-n', String(pk.p2)),
     lamp('run', { label: `${pk.run} working` }), el('span', 'ps-n', `${pk.run}/${pk.total}`));
   p.peek.append(counts);
   if (pk.latest) {

@@ -24,14 +24,16 @@ import path from 'node:path';
 import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { fkey, isFkey, BUILDER_ID_RX, deriveCode } from './fleet/keys.mjs';
+import { loadPolicy, reachLinks, parseAddr } from './map/reach.mjs';
+import { runNodes } from './map/runs.mjs';
 
-export const KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr', 'builder', 'session', 'repo', 'package'];
+export const KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr', 'builder', 'session', 'repo', 'package', 'run'];
 export const LINK_KINDS = ['dep', 'flow', 'share', 'touch', 'conflict', 'pkg', 'ci'];
 // What a topology file may use: the rest are nodes and links laneboard makes.
 export const TOPOLOGY_KINDS = ['core', 'site', 'host', 'room', 'service', 'lane', 'pr'];
 export const TOPOLOGY_LINK_KINDS = ['dep', 'flow', 'share'];
 // Id prefixes and synthetic ids laneboard owns; a topology may not use them.
-const RESERVED_PREFIXES = ['lane:', 'builder:', 'sess:', 'repo:', 'pkg:'];
+const RESERVED_PREFIXES = ['lane:', 'builder:', 'sess:', 'repo:', 'pkg:', 'feed:', 'run:'];
 const RESERVED_IDS = ['__core', '__fleet', '__repos'];
 const SEVERITY = ['idle', 'unknown', 'ok', 'working', 'warn', 'attention', 'crit', 'down'];
 const worse = (a, b) => (SEVERITY.indexOf(a) >= SEVERITY.indexOf(b) ? a : b);
@@ -139,6 +141,28 @@ export function loadTopology(file = config.map.file) {
 
 const feedCache = new Map(); // file -> { mtimeMs, value }
 
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * Why a parsed feed cannot be drawn, or null. Checks only the shape the Map
+ * leans on (docs/map.md "The feed format"); every field is optional and
+ * unknown ones pass, so a newer feeder still loads. readFeeds skips a file
+ * that fails; POST /api/map/feeds refuses the body (server/routes/feeds.mjs).
+ */
+export function feedProblem(v) {
+  if (!isObj(v)) return 'a feed must be a JSON object';
+  if (v.source != null && typeof v.source !== 'string') return 'source must be a string';
+  if (v.at != null && !(typeof v.at === 'number' && Number.isFinite(v.at))) return 'at must be a time in ms';
+  if (v.every != null && !(typeof v.every === 'number' && v.every > 0)) return 'every must be a number of seconds';
+  if (v.host != null && !isObj(v.host)) return 'host must be an object';
+  if (v.guests != null && !(Array.isArray(v.guests) && v.guests.every(isObj))) return 'guests must be a list of objects';
+  if (v.events != null && !Array.isArray(v.events)) return 'events must be a list';
+  // A feed that names no machine is a typo, not an empty feed: `host: {}` or
+  // `guests: []` is how a feeder says "nothing here" (the none feeder does).
+  if (v.host == null && v.guests == null) return 'a feed needs a host object or a guests list';
+  return null;
+}
+
 /** Every `*.json` in the feeds directory, keyed by its `source`. */
 export function readFeeds(dir = config.map.feedsDir) {
   const out = new Map();
@@ -153,6 +177,7 @@ export function readFeeds(dir = config.map.feedsDir) {
         hit = { mtimeMs: st.mtimeMs, value: JSON.parse(fs.readFileSync(file, 'utf8')) };
         feedCache.set(file, hit);
       }
+      if (feedProblem(hit.value)) continue;
       const source = String(hit.value?.source || name.replace(/\.json$/, ''));
       out.set(source, { ...hit.value, source, receivedAt: st.mtimeMs });
     } catch {
@@ -199,17 +224,41 @@ const agoWords = (ms) => {
   return `${Math.round(s / 3600)}h`;
 };
 
+const feedAge = (feed, now) => now - (Number(feed.at) || feed.receivedAt);
+
+/** A feed is fresh until three of its intervals (or `map.feedStaleMs`) pass. */
+export function feedFresh(feed, now) {
+  if (!feed) return false;
+  const every = Math.max(10, Number(feed.every) || 60) * 1000;
+  return feedAge(feed, now) <= Math.max(3 * every, config.map.feedStaleMs);
+}
+
+/**
+ * Declared against live (docs/map.md "Drift"): `missing` for a declared node
+ * whose fresh feed does not list its guest, `undeclared` for a node only a
+ * fresh feed knows. Needs a topology file (without one nothing is declared)
+ * and a fresh feed (no data is not drift).
+ */
+export function driftOf(node, feeds, now, { declared = true } = {}) {
+  if (!declared) return undefined;
+  const ref = feedRef(node.feed);
+  if (!ref || ref.service) return undefined;
+  const feed = feeds.get(ref.source);
+  if (!feedFresh(feed, now)) return undefined;
+  if (node.discovered) return 'undeclared';
+  if (ref.guest == null) return undefined;
+  const listed = arr(feed.guests).some((x) => String(x.vmid) === ref.guest || x.name === ref.guest);
+  return listed ? undefined : 'missing';
+}
+
 /** What a feed says about one node, or null when the node has no feed. */
 export function fromFeed(node, feeds, now) {
   const ref = feedRef(node.feed);
   if (!ref) return null;
   const feed = feeds.get(ref.source);
   if (!feed) return { status: 'unknown', why: `no feed from ${ref.source} yet` };
-  const at = Number(feed.at) || feed.receivedAt;
-  const every = Math.max(10, Number(feed.every) || 60) * 1000;
-  const age = now - at;
-  if (age > Math.max(3 * every, config.map.feedStaleMs)) {
-    return { status: 'unknown', why: `no data from ${ref.source} for ${agoWords(age)}` };
+  if (!feedFresh(feed, now)) {
+    return { status: 'unknown', why: `no data from ${ref.source} for ${agoWords(feedAge(feed, now))}` };
   }
   if (!ref.guest) {
     const h = feed.host ?? {};
@@ -231,11 +280,19 @@ export function fromFeed(node, feeds, now) {
     if (g.status !== 'running') return { status: g.status === 'stopped' ? 'down' : 'unknown', why: `${ref.guest} is ${g.status ?? 'not reported'}` };
     return fromService(g, ref);
   }
-  const expectStopped = node.expect === 'stopped';
+  // A tailnet peer that is not connected is a laptop asleep, not a VM down:
+  // at rest, with when it was last seen (docs/map.md "Feeds").
+  if (g.type === 'tailnet' && g.status !== 'running') {
+    const seen = Number(g.lastSeen);
+    const why = Number.isFinite(seen) && seen > 0 ? `offline, last seen ${agoWords(Math.max(0, now - seen))} ago` : 'offline';
+    return { status: 'idle', why: g.why ?? why, sub: g.sub, detail: { ...(g.detail ?? {}) } };
+  }
+  // A template never runs: stopped is its normal state, like `expect: "stopped"`.
+  const expectStopped = node.expect === 'stopped' || g.template === true;
   let status = g.status === 'running' ? (expectStopped ? 'warn' : 'ok')
     : g.status === 'stopped' ? (expectStopped ? 'idle' : 'down')
       : g.status === 'paused' || g.status === 'suspended' ? 'warn' : 'unknown';
-  let why = status === 'down' ? `${g.type === 'lxc' ? 'container' : 'VM'} is stopped`
+  let why = status === 'down' ? `${g.type === 'lxc' || g.type === 'container' ? 'container' : 'VM'} is stopped`
     : status === 'warn' && !expectStopped ? `guest is ${g.status}`
       : status === 'warn' ? 'running but expected to be stopped' : undefined;
   // Alerts from inside a running guest (its disk is full, say), as for a host.
@@ -482,6 +539,161 @@ export function attachBuilders(topology, builders, { localId = null, feeds = nul
   return out;
 }
 
+// ------------------------------------------------------------------ discovery
+
+const nameKey = (v) => (typeof v === 'string' && v.trim() ? v.trim().toLowerCase() : null);
+const hasNumbers = (g) => [g.cpu, g.mem, g.maxmem, g.memFrac].some((v) => typeof v === 'number' && Number.isFinite(v));
+
+/**
+ * The machines the feeds name: each source's host (named `host.name`, else
+ * the source) and each guest (named `name`, else its vmid), keyed inside its
+ * source by vmid (else name). A machine named in two feeds (a tailnet peer
+ * that is also a PVE guest) is one machine; two guests of one source with the
+ * same name (`web` on two cluster nodes) are two.
+ */
+function feedMachines(feeds) {
+  const out = [];
+  const sources = [...(feeds?.keys?.() ?? [])].sort();
+  for (const source of sources) {
+    const feed = feeds.get(source);
+    out.push({ source, guest: null, name: nameKey(feed?.host?.name) ?? nameKey(source) ?? source, label: feed?.host?.name ?? source, rank: 0 });
+    for (const g of arr(feed?.guests)) {
+      const key = g.vmid ?? g.name;
+      if (key == null || key === '') continue;
+      const label = typeof g.name === 'string' && g.name ? g.name : String(g.vmid);
+      // The richer view of a machine leads: a hypervisor's numbers beat a
+      // tailnet's "it is online".
+      out.push({ source, guest: String(key), name: nameKey(label) ?? String(key), label, rank: hasNumbers(g) ? 1 : 2 });
+    }
+  }
+  return out;
+}
+
+const refKey = (r) => `${r.source}/${r.guest ?? ''}`;
+const refOf = (m) => (m.guest == null ? m.source : `${m.source}/${m.guest}`);
+
+/**
+ * The topology with what the feeds discovered merged in, by name
+ * (docs/map.md "Discovered nodes"). A declared node claims a feed's host or
+ * guest by its `feed` ref, or by its `label`/`id` equal to the machine's name
+ * (case-insensitive); a claimed machine without a `feed` ref of its own gives
+ * the node its live data. Every machine nobody claims becomes a node: a
+ * `site` per feed source, a `room` per guest under it, `discovered: true`.
+ * `coreLabel` is the synthetic core's name: a feed naming that machine hangs
+ * its guests on the core instead of drawing the core twice.
+ */
+export function withDiscovered(topology, feeds, { coreLabel = null } = {}) {
+  const topo = topology ?? EMPTY_TOPOLOGY;
+  const machines = feedMachines(feeds);
+  if (!machines.length) return topo;
+  // A group is one machine: at most one entry per source, merged by name
+  // across sources. A second `web` in the same source starts a group of its
+  // own (key `web\u00002`), so it is never folded into the first.
+  const groups = new Map(); // group key -> machines, the best first
+  const byName = new Map(); // name -> group keys, in feed order
+  for (const m of machines) {
+    const keys = byName.get(m.name) ?? [];
+    let key = keys.find((k) => !groups.get(k).some((x) => x.source === m.source));
+    if (!key) {
+      key = keys.length ? `${m.name}\u0000${keys.length + 1}` : m.name;
+      keys.push(key);
+      byName.set(m.name, keys);
+      groups.set(key, []);
+    }
+    groups.get(key).push(m);
+    m.group = key;
+  }
+  for (const g of groups.values()) g.sort((a, b) => a.rank - b.rank);
+  const byRef = new Map(machines.map((m) => [refKey(m), m]));
+  const owner = new Map(); // group key -> node id
+  const nodes = topo.nodes.map((n) => ({ ...n }));
+  const hasCore = nodes.some((n) => n.kind === 'core');
+  // A `feed` ref claims first, so a name never steals what a ref names.
+  for (const n of nodes) {
+    const r = feedRef(n.feed);
+    if (!r || r.service) continue;
+    const m = byRef.get(refKey(r)) ?? (r.guest != null ? machines.find((x) => x.source === r.source && x.guest != null && nameKey(x.label) === nameKey(r.guest)) : null);
+    if (m && !owner.has(m.group)) owner.set(m.group, n.id);
+  }
+  for (const n of nodes) {
+    if (feedRef(n.feed)?.service) continue;
+    for (const name of [nameKey(n.label), nameKey(n.id)]) {
+      const key = name && byName.get(name)?.find((k) => !owner.has(k));
+      if (!key) continue;
+      owner.set(key, n.id);
+      if (!n.feed) n.feed = refOf(groups.get(key)[0]);
+      break;
+    }
+  }
+  // The other feeds naming the same machine add what they know (its IPs, say).
+  const claimed = new Map(nodes.map((n) => [n.id, n]));
+  for (const [key, id] of owner) {
+    const n = claimed.get(id);
+    const own = feedRef(n.feed);
+    const also = groups.get(key).filter((m) => !own || refKey(m) !== refKey(own)).map(refOf);
+    if (also.length) n.also = [...(n.also ?? []), ...also];
+  }
+  const core = hasCore ? nodes.find((n) => n.kind === 'core').id : '__core';
+  let coreRefs;
+  if (!hasCore && nameKey(coreLabel) && groups.has(nameKey(coreLabel)) && !owner.has(nameKey(coreLabel))) {
+    owner.set(nameKey(coreLabel), core);
+    coreRefs = groups.get(nameKey(coreLabel)).map(refOf);
+  }
+  // The rest: hosts first, so a guest knows the node its source became.
+  const ids = new Set(nodes.map((n) => n.id));
+  const found = [];
+  const place = (key) => {
+    if (owner.has(key)) return;
+    const [lead, ...rest] = groups.get(key);
+    const id = `feed:${refOf(lead)}`;
+    if (ids.has(id)) return;
+    ids.add(id);
+    owner.set(key, id);
+    const hostNode = owner.get(machines.find((x) => x.source === lead.source && x.guest == null).group);
+    const sources = [...new Set([lead, ...rest].map((x) => x.source))];
+    found.push({
+      id,
+      parent: lead.guest != null && hostNode && hostNode !== id && hostNode !== '__core' ? hostNode : (hasCore ? core : undefined),
+      kind: lead.guest == null ? 'site' : 'room',
+      label: lead.label,
+      feed: refOf(lead),
+      discovered: true,
+      also: rest.length ? rest.map(refOf) : undefined,
+      detail: sources.length > 1 ? { 'Seen by': sources.join(', ') } : undefined,
+    });
+  };
+  for (const m of machines) if (m.guest == null) place(m.group);
+  for (const m of machines) if (m.guest != null) place(m.group);
+  return { ...topo, nodes: [...nodes, ...found], coreRefs };
+}
+
+/**
+ * What the feeds say about each node's tailnet identity, for Reach: a Map
+ * node id -> `{tags: Set, ips: [parsed address]}`, from its `feed` ref and
+ * the `also` refs of the same machine (the synthetic core from `coreRefs`).
+ * A stale feed still counts: a node's tags and addresses outlive a missed push.
+ */
+export function nodeIdentities(topo, feeds) {
+  const out = new Map();
+  const add = (id, refs) => {
+    const tags = new Set();
+    const ips = [];
+    for (const ref of refs) {
+      const r = feedRef(ref);
+      const feed = r && !r.service ? feeds?.get?.(r.source) : null;
+      if (!feed) continue;
+      const m = r.guest == null ? feed.host : arr(feed.guests).find((x) => String(x.vmid) === r.guest || x.name === r.guest);
+      // Only tailnet tags: a hypervisor's own tags (`web`, `prod`) are not.
+      for (const t of arr(m?.tags)) if (typeof t === 'string' && t.startsWith('tag:')) tags.add(t);
+      for (const ip of arr(m?.ips)) { const a = parseAddr(ip); if (a) ips.push(a); }
+    }
+    if (tags.size || ips.length) out.set(id, { tags, ips });
+  };
+  for (const n of topo?.nodes ?? []) add(n.id, [n.feed, ...arr(n.also)].filter(Boolean));
+  if (topo?.coreRefs) add('__core', topo.coreRefs);
+  return out;
+}
+
 function builderNode(b, parent, lanes, now, { unclaimed }) {
   const metrics = healthMetrics(b.health, now) ?? vitalsMetrics(b.snapshot?.vitals) ?? undefined;
   let status = 'ok';
@@ -544,6 +756,15 @@ function toolLine(activity) {
 
 function sessionStatus(s) {
   if (s.danger) return ['crit', `guard: ${String(s.danger.reason ?? s.danger).slice(0, 120)}`];
+  // A lane that said it is blocked is broken (red ■), as on the Board and in
+  // the Inbox (runs night 4 T23); an open need wants you, like a question.
+  const m = s.lastMarker;
+  if (m && typeof m === 'object' && !m.dismissed_at && (m.kind === 'blocked' || m.kind === 'need')) {
+    const text = typeof m.text === 'string' && m.text ? `: ${m.text.slice(0, 100)}` : '';
+    if (m.kind === 'blocked') return ['crit', `blocked${text}`];
+    const own = SESSION_STATUS[s.state];
+    return own?.[0] === 'attention' ? own : ['attention', `need${text}`];
+  }
   return SESSION_STATUS[s.state] ?? ['unknown', null];
 }
 
@@ -854,12 +1075,16 @@ export function fleetLinks({ lanes = [], overlaps = [], topology = null, builder
  *   ciRuns    [{runner, builder, branch, status}]
  *   localId   the builder `self` aliases (builder mode); on a hub, none
  *   feedsOff  this board does not read feeds (a builder a hub watches)
+ *   policy    a parsed policy file (map/reach.mjs), or null: no Reach
+ *   runs      folded runs (the runs store's list), each a `run:<id>` node (map/runs.mjs)
+ *   runsCfg   `config.runs` (`mapKeepMin`, `stuck`)
  */
 export function buildFleet({
   topology, feeds = new Map(), probes = new Map(), now = Date.now(), topologyError = null, hostname = config.hostname,
   builders = [], repos = [], laneFacts = null, overlaps = [], ciRuns = [], localId = null, feedsOff = false,
+  policy = null, policyError = null, runs = [], runsCfg = config.runs,
 } = {}) {
-  const topo = topology ?? EMPTY_TOPOLOGY;
+  const topo = withDiscovered(topology, feeds, { coreLabel: topology?.title ?? hostname });
   const fleet = cleanBuilders(builders);
   const byBuilder = new Map(fleet.map((b) => [b.id, b]));
   const anchors = attachBuilders(topo, fleet, { localId, feeds });
@@ -891,6 +1116,10 @@ export function buildFleet({
       metrics = f?.metrics;
       memCache = Boolean(f?.memCache);
       Object.assign(detail, f?.detail ?? {}, p?.detail ?? {});
+      for (const ref of arr(n.also)) {
+        const o = fromFeed({ feed: ref }, feeds, now);
+        for (const [k, v] of Object.entries(o?.detail ?? {})) if (!(k in detail)) detail[k] = v;
+      }
       if (hosted) {
         // §7: a room that hosts a builder is as bad as its feed or its link.
         const ls = linkStatus(hosted.link);
@@ -937,6 +1166,9 @@ export function buildFleet({
       href: n.href,
       // The builder this node hosts; its events are the builder node's.
       hosts: hosted?.id,
+      // No topology node names it: a feed found it (docs/map.md "Discovered nodes").
+      discovered: n.discovered || undefined,
+      drift: driftOf(n, feeds, now, { declared: topology != null }),
     });
   }
 
@@ -956,9 +1188,20 @@ export function buildFleet({
     lanes.push(...laneList);
   }
   nodes.push(...repoNodes(repos, { parent: coreId }));
+  nodes.push(...runNodes(runs, { nodes, coreId, now, keepMin: runsCfg?.mapKeepMin, stuck: runsCfg?.stuck }));
 
   const links = fleetLinks({ lanes, overlaps, topology: topo, builders: fleet, ciRuns, nodeIds: new Set(nodes.map((n) => n.id)) });
   for (const n of lanes) { delete n.branch; delete n.packages; }
+  // Reach is opt-in and kept out of `links`: only its overlay draws it.
+  let reach;
+  if (policy || policyError) {
+    const ids = new Set(nodes.map((n) => n.id));
+    const r = policy ? reachLinks(policy, nodeIdentities(topo, feeds)) : { links: [], rules: 0, unresolved: [] };
+    r.links = r.links.filter((l) => ids.has(l.from) && ids.has(l.to));
+    // Unresolved selectors leave the server as a count only: their text
+    // (group names, users, aliases) is policy detail the Map does not show.
+    reach = { ...r, unresolved: r.unresolved.length, error: policyError ?? undefined };
+  }
 
   return {
     title: topo.title ?? hostname,
@@ -967,6 +1210,7 @@ export function buildFleet({
     links,
     error: topologyError ?? undefined,
     feeds: feedsOff ? false : undefined,
+    reach,
     generatedAt: now,
   };
 }
@@ -1101,7 +1345,8 @@ export function shapeKey(m) {
   return JSON.stringify(
     m.nodes.map((n) => [n.id, n.status, n.why, n.sub, n.label, n.parent, n.flags ?? null, n.stale ?? null])
       .concat(m.links.map((l) => [l.id, l.live, l.severity ?? null, l.predicted ?? null, l.label ?? null]))
-      .concat([(m.fleet?.builders ?? []).map((b) => [b.id, b.link])]),
+      .concat([(m.fleet?.builders ?? []).map((b) => [b.id, b.link])])
+      .concat([(m.reach?.links ?? []).map((l) => [l.id, l.label]), m.reach?.error ?? null]),
   );
 }
 
@@ -1125,13 +1370,26 @@ export function feedsEnabled(c = config) {
   return !(Array.isArray(keys) && keys.length > 0);
 }
 
+// Where builder mode takes its runs: set by the runs route module
+// (server/routes/runs.mjs, builder only), so this file, which the hub loads
+// too, imports no collector. Unset = no runs.
+let runsSource = null;
+
+/** `fn()` gives the folded runs to draw (the runs store's list), or null to stop. */
+export function setRunsSource(fn) {
+  runsSource = typeof fn === 'function' ? fn : null;
+}
+
 /** Builder mode: rebuild from the latest snapshot. Returns a message worth sending, or null. */
 export function tick(snapshot, now = Date.now()) {
   const t = loadTopology();
   const on = feedsEnabled();
   const feeds = on ? readFeeds() : new Map();
-  const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error, feedsOff: !on });
-  return emit(next, feeds, t.value, now, 5000);
+  const p = loadPolicy(config.map.policyFile);
+  let runs = [];
+  try { runs = runsSource?.() ?? []; } catch { runs = []; }
+  const next = build({ topology: t.value, feeds, probes: probeResults, snapshot, now, topologyError: t.error, feedsOff: !on, policy: p.value, policyError: p.error, runs });
+  return emit(next, feeds, withDiscovered(t.value, feeds, { coreLabel: next.title }), now, 5000);
 }
 
 /**
@@ -1144,12 +1402,13 @@ export function tickFleet(fleet, now = Date.now()) {
   const feeds = readFeeds();
   const raw = fleet ?? {};
   const f = arr(raw.builders).some((b) => b && 'snap' in b && !('snapshot' in b)) ? { ...raw, ...toMapFleet(raw, now) } : raw;
+  const p = loadPolicy(config.map.policyFile);
   const next = buildFleet({
-    topology: t.value, feeds, probes: probeResults, now, topologyError: t.error,
+    topology: t.value, feeds, probes: probeResults, now, topologyError: t.error, policy: p.value, policyError: p.error,
     builders: f.builders, repos: f.repos, laneFacts: f.laneFacts,
     overlaps: f.overlaps ?? normalizeOverlaps(f.edges), ciRuns: f.ciRuns,
   });
-  return emit(next, feeds, t.value, now, 10_000);
+  return emit(next, feeds, withDiscovered(t.value, feeds, { coreLabel: next.title }), now, 10_000);
 }
 
 export function model() {

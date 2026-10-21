@@ -8,6 +8,7 @@ import path from 'node:path';
 import {
   GROUPS, COOPERATIVE_NOTE, LIMITS, KEY_COMMANDS, buildInbox, keyAction, moveFocus, reconcileFocus,
   rowOf, withNote, effectiveTier, formatCountdown, lineClass, previewOf, inboxClip,
+  ackEvent, needAckRef, runPageHref, RUN_PR_FRESH_MS, ACK_BY,
 } from '../public/js/core/inbox-model.js';
 import { buildReviewQueue } from '../public/js/core/review-queue.js';
 import { createRegistry } from '../public/js/core/commands.js';
@@ -42,8 +43,10 @@ const groupIds = (m, g) => m.groups.find((x) => x.id === g).rows.map((r) => r.id
 
 test('groups come in the plan order and the approvals header carries the S7 note', () => {
   const m = buildInbox(storeOf([]), { now: NOW });
+  // No runs list (no runs route): the runs group is left out.
   assert.deepEqual(m.groups.map((g) => g.id), ['approvals', 'needs', 'review', 'paused', 'stale']);
-  assert.deepEqual(GROUPS, m.groups.map((g) => g.id));
+  assert.deepEqual(GROUPS, ['approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
+  assert.deepEqual(buildInbox(storeOf([]), { now: NOW, runs: [] }).groups.map((g) => g.id), GROUPS);
   assert.equal(m.groups[0].note, COOPERATIVE_NOTE);
   assert.match(COOPERATIVE_NOTE, /^Approvals, pause, budget and kill are cooperative on the builder: an agent with a shell there can bypass them$/);
   assert.equal(m.count, 0);
@@ -254,5 +257,157 @@ test('S20: the inbox sends actions only after confirmAction, never from the rout
     const block = body.slice(0, end);
     assert.ok(block.indexOf('confirmAction(') >= 0 && block.indexOf('confirmAction(') < block.indexOf('act('), `${fn}: dialog before act()`);
   }
+  // The run-need ack (T5) posts only after confirmAction too.
+  const ack = code.slice(code.indexOf('async function ackRun('));
+  const ackBlock = ack.slice(0, ack.indexOf('\n}\n'));
+  assert.ok(ackBlock.indexOf('confirmAction(') >= 0 && ackBlock.indexOf('confirmAction(') < ackBlock.indexOf('post('), 'ackRun: dialog before post()');
+  assert.equal([...code.matchAll(/\bpost\s*\(/g)].length, 1, 'one post(), in ackRun()');
   assert.doesNotMatch(code, /\.sel\b[^\n]*act\(|route[^\n]*\bact\(/);
+});
+
+// ---------------------------------------------------------------- runs (runs plan T5)
+
+const HOUR = 3600_000;
+function runRow(run, extra = {}) {
+  return { run, goal: 'g', state: 'running', needs: [], prs: [], startedAt: NOW - 5 * HOUR, updatedAt: NOW - 60_000, ...extra };
+}
+const need = (i, ts, extra = {}) => ({ i, kind: 'decision', text: `need ${i}`, link: null, n: 1, ts, open: true, acked: false, ...extra });
+
+test('runs: open needs and recent PRs, newest first, each linking to the run page', () => {
+  const runs = [
+    runRow('acme-search', {
+      needs: [need(0, NOW - 3 * HOUR), need(2, NOW - HOUR, { link: 'https://example.invalid/acme/acme-api/pull/42' }),
+        need(3, NOW - 10_000, { kind: 'wait', text: 'sleeping' })],
+      prs: [{ url: 'https://example.invalid/acme/acme-api/pull/42', title: 'Paged search', ts: NOW - 2 * HOUR }],
+    }),
+    runRow('acme-docs', { needs: [need(0, NOW - 30 * 60_000, { kind: 'fence', text: 'touched a fenced file' })] }),
+  ];
+  const m = buildInbox(storeOf([]), { now: NOW, runs });
+  // T16: the run needs and the run PRs are the filled groups, needs before PRs.
+  assert.deepEqual(m.groups.map((g) => g.id).slice(0, 2), ['runs', 'runprs']);
+  assert.deepEqual(groupIds(m, 'runs'), ['rn:acme-docs:0', 'rn:acme-search:2', 'rn:acme-search:0']);
+  assert.deepEqual(groupIds(m, 'runprs'), ['rp:acme-search:https://example.invalid/acme/acme-api/pull/42']);
+  const r = rowOf(m, 'rn:acme-search:2');
+  assert.equal(r.href, '#/runs?run=acme-search');
+  assert.equal(r.href, runPageHref('acme-search'));
+  assert.equal(r.reason, 'decision: need 2');
+  assert.equal(r.link, 'https://example.invalid/acme/acme-api/pull/42');
+  assert.equal(rowOf(m, 'rn:acme-docs:0').reason, 'fence: touched a fenced file');
+  assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').reason, 'pr: Paged search');
+  // T35: a PR is news, the grey hollow lamp; an open need keeps the amber triangle.
+  assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').p, 'off');
+  assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').lampLabel, 'pr to review');
+  assert.equal(r.p, '2');
+  // A `wait` need is the loop sleeping: no row.
+  assert.equal(rowOf(m, 'rn:acme-search:3'), null);
+  assert.equal(m.count, 4);
+  // Enter opens the run page, never the inspector.
+  assert.deepEqual(keyAction('Enter', 'rn:acme-search:2', m), { run: 'acme-search', rowId: 'rn:acme-search:2' });
+});
+
+test('runs: untrusted text is clipped, bad ids and links are dropped, acked needs are gone', () => {
+  const long = 'x'.repeat(5000);
+  const runs = [
+    runRow('acme-search', { needs: [need(0, NOW - 1000, { text: long, link: 'javascript:alert(1)' }), need(1, NOW, { open: false, acked: true })],
+      prs: [{ url: 'javascript:alert(1)', title: 'evil', ts: NOW }] }),
+    runRow('../etc', { needs: [need(0, NOW)] }),
+    runRow('acme-x', { needs: [{ kind: 'decision', text: 'no index', ts: NOW, open: true }] }),
+  ];
+  const m = buildInbox(storeOf([]), { now: NOW, runs });
+  assert.deepEqual(groupIds(m, 'runs'), ['rn:acme-search:0']);
+  const r = rowOf(m, 'rn:acme-search:0');
+  assert.ok(r.reason.length <= 'decision: '.length + LIMITS.reason);
+  assert.equal(r.link, null);
+});
+
+test('runs: a stopped run keeps its PR for RUN_PR_FRESH_MS after its last event, then drops it', () => {
+  const pr = { url: 'https://example.invalid/acme/acme-api/pull/7', title: 'PR', ts: NOW - 30 * HOUR };
+  const at = (ago) => buildInbox(storeOf([]), { now: NOW, runs: [runRow('acme-api', { state: 'stopped', updatedAt: NOW - ago, prs: [pr] })] });
+  assert.equal(groupIds(at(RUN_PR_FRESH_MS - 1000), 'runprs').length, 1);
+  assert.equal(groupIds(at(RUN_PR_FRESH_MS + 1000), 'runprs').length, 0);
+  // A live run keeps its PR whatever its age.
+  const live = buildInbox(storeOf([]), { now: NOW, runs: [runRow('acme-api', { updatedAt: NOW - 3 * RUN_PR_FRESH_MS, prs: [pr] })] });
+  assert.equal(groupIds(live, 'runprs').length, 1);
+});
+
+test('runs: `a` on a run need is the needs.ack of its ts; on a PR it does nothing', () => {
+  const runs = [runRow('acme-search', { needs: [need(2, NOW)], prs: [{ url: 'https://example.invalid/p/1', title: 't', ts: NOW - 1 }] })];
+  const m = buildInbox(storeOf([]), { now: NOW, runs });
+  const plan = keyAction('a', 'rn:acme-search:2', m);
+  assert.deepEqual(plan, { action: 'ack', run: 'acme-search', ref: NOW, rowId: 'rn:acme-search:2' });
+  assert.deepEqual(ackEvent(plan), { v: 1, t: 'needs.ack', run: 'acme-search', ref: NOW, by: ACK_BY });
+  // A need without a time falls back to its place.
+  assert.equal(needAckRef({ i: 3, ts: null }), 3);
+  assert.equal(needAckRef({ i: 3, ts: 0 }), 3);
+  assert.deepEqual(keyAction('a', 'rp:acme-search:https://example.invalid/p/1', m), { none: 'not-an-approval' });
+  assert.deepEqual(keyAction('d', 'rn:acme-search:2', m), { none: 'not-an-approval' });
+  assert.deepEqual(keyAction('p', 'rn:acme-search:2', m), { none: 'no-session' });
+  // Once acked the row is gone; the focused one stays as a closed ghost and `a` does nothing.
+  const ghost = rowOf(m, 'rn:acme-search:2');
+  const after = buildInbox(storeOf([]), { now: NOW, runs: [runRow('acme-search')], ghost });
+  assert.equal(rowOf(after, 'rn:acme-search:2').closed, true);
+  assert.deepEqual(keyAction('a', 'rn:acme-search:2', after), { none: 'closed' });
+  assert.equal(after.count, 0);
+});
+
+test('runs: the posted ack is one the protocol folds into a closed need', async () => {
+  const { parseLine, foldRun } = await import('../server/runs/protocol.mjs');
+  const start = { v: 1, t: 'run.start', run: 'acme-search', ts: NOW - HOUR };
+  const n = { v: 1, t: 'needs', run: 'acme-search', ts: NOW - 1000, kind: 'decision', text: 'keep it?' };
+  const ack = { ...ackEvent({ run: 'acme-search', ref: 0 }), ts: NOW };
+  const events = [start, n, ack].map((e) => { const p = parseLine(JSON.stringify(e)); assert.ok(p.ok, JSON.stringify(p)); return p.event; });
+  const run = foldRun(events);
+  assert.equal(run.needs[0].open, false);
+  assert.equal(run.needs[0].by, ACK_BY);
+});
+
+// T5 (review 1d): the store merges sources by time, so a source read later
+// that holds an older need shifts every place after it. The ack names the
+// need by its ts and still closes the one the person saw.
+test('runs: an ack by ts closes the need the row showed after a later-read source shifted the places', async () => {
+  const { parseLine } = await import('../server/runs/protocol.mjs');
+  const { createStore } = await import('../server/runs/store.mjs');
+  const { summarize } = await import('../server/runs/summary.mjs');
+  const ev = (o) => { const p = parseLine(JSON.stringify({ v: 1, run: 'acme-search', ...o })); assert.ok(p.ok, JSON.stringify(p)); return p.event; };
+  const store = createStore({ now: () => NOW });
+  store.ingest('loop.jsonl', [ev({ t: 'run.start', ts: NOW - HOUR }), ev({ t: 'needs', ts: NOW - 1000, text: 'keep the old export?' })]);
+  const before = buildInbox(storeOf([]), { now: NOW, runs: store.list().map((r) => summarize(r, { now: NOW })) });
+  assert.deepEqual(groupIds(before, 'runs'), ['rn:acme-search:0']);
+  const plan = keyAction('a', 'rn:acme-search:0', before);
+  assert.equal(plan.ref, NOW - 1000, 'the ack names the ts, not place 0');
+  // The API's own file is read later and holds an older need: it takes place 0.
+  store.ingest('api.jsonl', [ev({ t: 'needs', ts: NOW - 5000, text: 'fence: a round touched a fenced file', kind: 'fence' })]);
+  assert.equal(store.get('acme-search').needs[0].text, 'fence: a round touched a fenced file', 'the places shifted');
+  store.ingest('api.jsonl', [{ ...ev(ackEvent(plan)), ts: NOW }]);
+  const run = store.get('acme-search');
+  assert.deepEqual(run.needs.map((n) => [n.text, n.open, n.by]), [
+    ['fence: a round touched a fenced file', true, null],
+    ['keep the old export?', false, ACK_BY],
+  ]);
+  // The place the row had (0) would have closed the wrong need.
+  const byPlace = createStore({ now: () => NOW });
+  byPlace.ingest('loop.jsonl', [ev({ t: 'run.start', ts: NOW - HOUR }), ev({ t: 'needs', ts: NOW - 1000, text: 'keep the old export?' })]);
+  byPlace.ingest('api.jsonl', [ev({ t: 'needs', ts: NOW - 5000, text: 'fence', kind: 'fence' }), ev({ ...ackEvent({ run: 'acme-search', ref: 0 }), ts: NOW })]);
+  assert.equal(byPlace.get('acme-search').needs[0].open, false, 'by place, the fence need closes instead');
+});
+
+// Seen at 390 (reviews/20-designer.md, Inbox 1): the run decision was cut to
+// "decision: Keep the o…", one line beside OPEN and ACK.
+test('T34: on a phone a run need wraps on its own line instead of a one-line clamp', () => {
+  const root = path.join(import.meta.dirname, '..');
+  const css = fs.readFileSync(path.join(root, 'public/css/views/fleet-views.css'), 'utf8');
+  const at = css.indexOf('@media (max-width: 700px)');
+  assert.ok(at > 0, 'a phone block exists');
+  const phone = css.slice(at);
+  const rule = phone.match(/\.inbox-row-h--need > \.inbox-sum \{([^}]*)\}/);
+  assert.ok(rule, 'the phone block styles the need text');
+  assert.match(rule[1], /white-space: normal;/);
+  assert.match(rule[1], /flex: 1 0 100%;/, 'a line of its own');
+  assert.match(rule[1], /line-clamp: [2-9];/, 'more than one line');
+  assert.match(phone, /\.inbox-row-h--need \{[^}]*flex-wrap: wrap;/);
+  assert.match(phone, /\.inbox-row-h--need > \.plate \{[^}]*margin-right: auto;/, 'OPEN/ACK on the right edge');
+  // the desktop row stays one line, its title carries the whole text
+  assert.match(css.slice(0, at), /\.inbox-sum \{[^}]*white-space: nowrap;/);
+  const view = fs.readFileSync(path.join(root, 'public/js/views/inbox.js'), 'utf8');
+  assert.match(view, /r\.kind === 'run-need'\) head\.classList\.add\('inbox-row-h--need'\)/);
 });

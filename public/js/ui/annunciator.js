@@ -1,10 +1,12 @@
 // The annunciator (fleet plan §4 2.5, task D7): eight fixed alarm tiles in a
-// 2x4 grid in the 40px header (#ann). ISA-18.2 style states:
-//   normal  dark (grey text-3), empty count
-//   unack   filled --pN, --text-inv text, 1 Hz flash in phase with every other
-//           unacknowledged element (components.js syncFlash); with
-//           prefers-reduced-motion: no flash, solid fill plus an UNACK tag
-//   ack     filled, steady
+// 2x4 grid in the 36px header (#ann). ISA-18.2 style states:
+//   normal  grey (text-3), empty count, no fill
+//   unack   grey tile and label, the count in --p1 ■ (broken) or --p2 ▲ (wants
+//           you), a 1 Hz flashing ring in the same hue, in phase with every
+//           other unacknowledged element (components.js syncFlash); with
+//           prefers-reduced-motion: no flash, a steady ring plus an UNACK tag
+//   ack     grey tile, coloured count, no ring
+// Never a filled tile (runs night 4 T13, docs/design.md the colour rule).
 // A click toggles the scope filter `s=<tile>` through the router
 // (aria-pressed). `a` on a focused tile, the context menu or a long press
 // sends `ack-alarm` with target '*' and args {tile, builder?} through act()
@@ -20,7 +22,7 @@ import { icon } from '../core/icons.js';
 import { act } from '../core/actions.js';
 import { alarms, ingest, store, subscribe } from '../core/store.js';
 import { currentRoute, navigate, onRoute } from '../core/router.js';
-import { TILES, TILE_META, ackRequest, tileFromParam, tileLabel, tileModel, tileParam } from '../core/alarm-tiles.js';
+import { TILES, TILE_META, TONE_MARK, ackRequest, tileFromParam, tileLabel, tileModel, tileParam, tileTone } from '../core/alarm-tiles.js';
 import { syncFlash } from './components.js';
 import { toast } from './toast.js';
 
@@ -30,8 +32,10 @@ export const LONG_PRESS_MS = 600;
 const TITLE_LINES = 6;
 
 /**
- * One tile's view: {tile, label, n, p, state, pressed, aria, title}. `n` is ''
- * when clear; `p` is the lamp priority as a string, or '' when clear. Pure.
+ * One tile's view: {tile, label, n, mark, p, state, pressed, aria, title}. `n`
+ * and `mark` are '' when clear; `mark` is the status shape (▲ wants you, ■
+ * broken) drawn before the count; `p` is the lamp priority as a string
+ * (tileTone), or '' when clear. Pure.
  */
 export function tileView(t, route = null) {
   const sel = tileFromParam(route?.s ?? null);
@@ -43,11 +47,13 @@ export function tileView(t, route = null) {
     lines.push([who, text].filter(Boolean).join(' · ').slice(0, 160));
   }
   if ((t?.n ?? 0) > TITLE_LINES) lines.push(`+${t.n - TITLE_LINES} more`);
+  const tone = tileTone(t);
   return {
     tile: t.tile,
     label: t.tile,
     n: t.n ? String(t.n) : '',
-    p: t.p == null ? '' : String(t.p),
+    mark: t.n && tone != null ? (TONE_MARK[tone] ?? '') : '',
+    p: tone == null ? '' : String(tone),
     state: t.state,
     pressed: sel === t.tile,
     aria,
@@ -56,7 +62,7 @@ export function tileView(t, route = null) {
 }
 
 let root = null;
-const nodes = new Map(); // tile -> {btn, n}
+const nodes = new Map(); // tile -> {btn, mark, count}
 let lastModel = [];
 let pressTimer = 0;
 let pressFired = false;
@@ -77,13 +83,18 @@ function buildTiles(box) {
     label.textContent = tile;
     const n = document.createElement('span');
     n.className = 'ann-n';
+    const mark = document.createElement('span');
+    mark.className = 'ann-m';
+    mark.setAttribute('aria-hidden', 'true');
+    const count = document.createElement('span');
+    n.append(mark, count);
     const tag = document.createElement('span');
     tag.className = 'ann-tag';
     tag.textContent = 'UNACK';
     tag.setAttribute('aria-hidden', 'true');
     btn.append(ic, label, n, tag);
     box.append(btn);
-    nodes.set(tile, { btn, n });
+    nodes.set(tile, { btn, mark, count });
   }
 }
 
@@ -110,7 +121,8 @@ export function renderAnnunciator(route) {
       delete btn.dataset.unack;
       btn.style.animationDelay = '';
     }
-    if (node.n.textContent !== v.n) node.n.textContent = v.n;
+    if (node.mark.textContent !== v.mark) node.mark.textContent = v.mark;
+    if (node.count.textContent !== v.n) node.count.textContent = v.n;
     btn.setAttribute('aria-pressed', v.pressed ? 'true' : 'false');
     btn.setAttribute('aria-label', v.aria);
     btn.title = v.title;

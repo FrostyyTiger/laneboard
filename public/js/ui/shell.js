@@ -28,18 +28,34 @@ import { loadMorning, morning } from '../views/morning.js';
 // The kit's stacking toast (ui/toast.js, the component kit) under the old name.
 export { toast } from './toast.js';
 
-export function renderTopbar() {
+/**
+ * The header spend figure: {text, label, title}. Pure. It sums the live
+ * sessions' `cost.usdToday` and says so in its label ("sessions today"): runs
+ * are fetched by the Runs view only and a hub has no `/api/runs`, so a run's
+ * cost is not in this number and the label must not claim it is (T39).
+ */
+export function topbarSpend(sessions) {
   let today = 0;
   let all = 0;
-  for (const s of store.sessions.values()) {
-    today += s.cost?.usdToday || 0;
-    all += s.cost?.usd || 0;
+  for (const s of sessions || []) {
+    today += Number.isFinite(s?.cost?.usdToday) ? s.cost.usdToday : 0;
+    all += Number.isFinite(s?.cost?.usd) ? s.cost.usd : 0;
   }
+  return {
+    usd: today,
+    text: money(today),
+    label: ' sessions today',
+    title: `API-equivalent spend of live sessions today; runs show their own cost on the Runs view. All time across live sessions: ${money(all)}. On a subscription the rate-limit gauges are the real constraint.`,
+  };
+}
+
+export function renderTopbar() {
+  const m = topbarSpend(store.sessions.values());
   const n = $('stat-cost');
   n.textContent = '';
-  n.append(el('b', null, money(today)));
-  n.append(document.createTextNode(' today'));
-  n.title = `API-equivalent. All time across live sessions: ${money(all)}. On a subscription the rate-limit gauges are the real constraint.`;
+  n.append(el('b', null, m.text));
+  n.append(document.createTextNode(m.label));
+  n.title = m.title;
 }
 
 // ---------------------------------------------------------------- builders

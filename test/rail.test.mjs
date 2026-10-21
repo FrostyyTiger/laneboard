@@ -11,6 +11,7 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
 const R = await import('../public/js/ui/rail.js');
+const C = await import('../public/js/ui/components.js');
 const { createStore, applyBuilders, applySnapshot, ingest, setSourceKind } = await import('../public/js/core/store.js');
 
 // --- fixtures ----------------------------------------------------------------------
@@ -120,17 +121,18 @@ test('codes: the row code is upper case and short, derived from the id when abse
   assert.equal(R.codeText('   ', 'builder-a'), 'BA');
 });
 
-test('lamp: down -> p1, stale -> p3, both hatched; live with no alarm -> working/ok', () => {
+test('lamp: down -> p1, stale -> grey stale, both hatched; live with no alarm -> its worst lane, working or ok', () => {
   const [all, a, b, c] = R.railRows(fleet(), {});
   assert.equal(b.p, '1');
   assert.equal(b.hatched, true);
   assert.equal(b.status, 'down');
-  assert.equal(c.p, '3');
+  assert.equal(c.p, 'stale');
   assert.equal(c.hatched, true);
   assert.equal(c.status, 'stale');
-  assert.equal(a.p, 'run', 'a live builder with a working lane and no alarm is grey "working"');
+  assert.equal(a.p, '2', 'a live builder with a permission lane and no alarm is the amber ▲ (runs T43, T23)');
   assert.equal(a.hatched, false);
-  assert.equal(all.p, '1', 'ALL takes the worst row');
+  assert.equal(R.builderLamp({ id: 'x', status: 'live' }, [], { run: 2 }).p, 'run', 'a working lane and no alarm is grey "working"');
+  assert.equal(all.p, '1', 'ALL takes the worst row (the down builder)');
   assert.equal(R.builderLamp({ id: 'x', status: 'live' }, [], { run: 0 }).p, 'ok');
   assert.equal(R.builderLamp({ id: 'x', status: 'connecting' }, []).p, 'off');
   assert.equal(R.builderLamp(null).p, 'off');
@@ -138,32 +140,42 @@ test('lamp: down -> p1, stale -> p3, both hatched; live with no alarm -> working
 
 test('lamp: the worst alarm of that builder, unack while one at that priority is open', () => {
   const alarms = [
-    { id: '1', kind: 'stuck', priority: 'P3', builder: 'builder-a', acked: false },
+    { id: '1', kind: 'review', priority: 'P3', builder: 'builder-a', acked: false },
     { id: '2', kind: 'approval', priority: 'P2', builder: 'builder-a', acked: true },
     { id: '3', kind: 'needs-input', priority: 'P1', builder: 'builder-z', acked: false },
   ];
   const lp = R.builderLamp({ id: 'builder-a', status: 'live' }, alarms);
   assert.equal(lp.p, '2');
   assert.equal(lp.unack, false, 'the P2 is acked; the open P3 does not flash a P2 lamp');
-  assert.equal(lp.n, 2, 'other builders\' alarms do not count');
-  assert.match(lp.label, /2 alarms/);
+  assert.equal(lp.n, 1, 'other builders\' alarms and a tile-less review do not count');
+  assert.match(lp.label, /1 alarm/);
   const open = R.builderLamp({ id: 'builder-a', status: 'live' }, [...alarms, { id: '4', priority: 'P2', builder: 'builder-a' }]);
   assert.equal(open.unack, true);
   assert.equal(R.builderLamp({ id: 'builder-a', status: 'live' }, [{ priority: 'P4', builder: 'builder-a' }]).p, '3', 'P4 -> 3');
   assert.equal(R.builderLamp({ id: 'builder-a', status: 'live' }, [{ priority: '<b>', builder: 'builder-a' }]).p, 'ok', 'junk priorities are ignored');
   // The health sample's own alarms count too.
   assert.equal(R.builderLamp({ id: 'h', status: 'live', health: { alarms: [{ key: 'memAvailPct', level: 'crit' }] } }, []).p, '1');
-  assert.equal(R.builderLamp({ id: 'h', status: 'live', health: { alarms: [{ key: 'x', level: 'warn' }] } }, []).p, '2');
+  // A warn is health-warn, which only the Box shows: no ▲ the header and status line call 0.
+  assert.equal(R.builderLamp({ id: 'h', status: 'live', health: { alarms: [{ key: 'x', level: 'warn' }] } }, []).p, 'ok');
+  for (const kind of ['reboot', 'health-warn', 'review']) {
+    assert.equal(R.builderLamp({ id: 'h', status: 'live' }, [{ kind, priority: 'P2', builder: 'h' }]).p, 'ok', `${kind} has no tile`);
+  }
+  // A stuck working lane is ▲ as the status line counts it, not the ● of its bucket.
+  assert.equal(R.builderLamp({ id: 'h', status: 'live' }, [], C.laneMix([{ state: 'working', stuck: true }])).p, '2');
+  // An alarm with a header tile draws at the tile's mark, as the header (T23).
+  assert.equal(R.builderLamp({ id: 'builder-a', status: 'live' }, [{ kind: 'stuck', priority: 'P3', builder: 'builder-a' }]).p, '2', 'STCK is amber ▲');
+  assert.equal(R.builderLamp({ id: 'builder-a', status: 'live' }, [{ kind: 'blocked', priority: 'P2', builder: 'builder-a' }]).p, '1', 'BLKD is red ■');
   // A down builder is p1 whatever its alarms say.
   assert.equal(R.builderLamp({ id: 'builder-a', status: 'down' }, alarms).p, '1');
 });
 
 test('railRows: alarms from the store reach the rows and the ALL row', () => {
-  const s = fleet({ alarms: [{ id: '1', kind: 'approval', priority: 'P2', builder: 'builder-a', acked: false }] });
+  const s = fleet({ alarms: [{ id: '1', kind: 'approval', priority: 'P1', builder: 'builder-a', acked: false }] });
   applyBuilders(s, [{ id: 'builder-a', code: 'b1', state: 'up' }]);
   const [all, a] = R.railRows(s, {});
-  assert.equal(a.p, '2');
+  assert.equal(a.p, '2', 'an approval is the amber ▲ of its APPR tile, whatever its priority (T23)');
   assert.equal(a.unack, true);
+  assert.match(a.lampLabel, /1 alarm, 1 permission/);
   assert.equal(all.p, '2');
   assert.equal(all.unack, true);
   assert.match(all.label, /All 1 builder/);
@@ -239,16 +251,20 @@ test('buildRail: a listbox of options with aria-selected, lamp, plate, count and
   assert.ok(opts[1].classList.contains('sel'), 'the selected row carries the corner brackets');
   assert.deepEqual(opts.map((o) => o.dataset.b), ['all', 'builder-a', 'builder-b', 'builder-c']);
   const a = opts[1];
-  assert.equal(a.find('lamp')[0].dataset.p, 'run');
+  assert.equal(a.find('lamp')[0].dataset.p, '2', 'its permission lane');
   assert.equal(a.find('brail-code')[0].textContent, 'B1');
   assert.ok(a.find('brail-code')[0].classList.contains('plate'));
   assert.equal(a.find('brail-n')[0].textContent, '[3]');
   assert.ok(a.find('segbar')[0], 'segment bar');
+  assert.equal('single' in a.dataset, false, 'three lanes: the bar shows');
+  // A row of one lane or none: its bar would be one full segment, rail.css hides it.
+  for (const o of opts.filter((x) => Number(x.find('brail-n')[0].textContent.slice(1, -1)) <= 1)) assert.ok('single' in o.dataset, o.dataset.b);
+  assert.match(fs.readFileSync(path.join(ROOT, 'public/css/rail.css'), 'utf8'), /\.brail-row\[data-single\] \.brail-seg \{ display: none; \}/);
   assert.equal(opts[0].find('brail-n')[0].textContent, '[4]', 'ALL shows the aggregate count');
   assert.ok(opts[2].classList.contains('brail-row--hatch'), 'down is hatched');
   assert.ok(opts[3].classList.contains('brail-row--hatch'), 'stale is hatched');
   assert.equal(opts[2].find('lamp')[0].dataset.p, '1');
-  assert.equal(opts[3].find('lamp')[0].dataset.p, '3');
+  assert.equal(opts[3].find('lamp')[0].dataset.p, 'stale');
   const tog = root.find('brail-tog')[0];
   assert.equal(tog.getAttribute('aria-expanded'), 'true');
   assert.match(tog.getAttribute('aria-label'), /Collapse/);
@@ -329,4 +345,28 @@ test('rail.css: collapsed rows hide count and segbar, stale/down rows are hatche
   assert.match(css, /\.shell\[data-rail="open"\] \.shell-rail \{[^}]*width: var\(--rail-w\)/);
   assert.match(css, /\.brail-row:focus-visible \{[^}]*var\(--accent\)/);
   assert.doesNotMatch(css, /oklch\(|#[0-9a-f]{3,8}\b|rgb\(|gradient\(|box-shadow|backdrop-filter|@keyframes/i, 'rail.css keeps the guardrails');
+});
+
+// runs T31 (reviews/11-designer.md, new 8): a down or stale builder never takes
+// the blue p3 hue in the sidebar or the header chip, in either theme.
+test('T31: down is the p1 (red) token, stale is grey; neither uses p3', () => {
+  const lp = (status) => R.builderLamp({ id: 'x', status }, []);
+  assert.equal(lp('down').p, '1');
+  assert.equal(lp('stale').p, 'stale');
+  const comp = read('public/css/components.css');
+  assert.match(comp, /\.lamp\[data-p="1"\]\s*\{\s*color:\s*var\(--p1\)/);
+  assert.match(comp, /\.lamp\[data-p="stale"\]\s*\{[^}]*--tex-hatch/);
+  const shell = read('public/css/shell.css');
+  assert.match(shell, /\.conn\.down::before\s*\{[^}]*var\(--p1\)/);
+  const stale = shell.match(/\.builder-chip\.status-stale::before\s*\{([^}]*)\}/);
+  assert.ok(stale, 'a stale chip rule exists');
+  assert.doesNotMatch(stale[1], /--p3/);
+  // No theme-scoped rule gives the lamp or the chip another colour: one rule for both.
+  const tokens = read('public/css/tokens.css');
+  for (const m of (comp + shell).matchAll(/\[data-theme="(?:light|dark)"\][^{]*(?:\.lamp|builder-chip|\.conn)[^{]*\{([^}]*)\}/g)) {
+    assert.doesNotMatch(m[1], /color|background/, `theme rule ${m[0]}`);
+  }
+  // p1 is the red family (hue 25) in both themes.
+  const p1 = [...tokens.matchAll(/--p1:\s*oklch\(\d+% [\d.]+ (\d+)\)/g)].map((m) => Number(m[1]));
+  assert.ok(p1.length >= 2 && p1.every((h) => h === 25), `p1 hues ${p1}`);
 });

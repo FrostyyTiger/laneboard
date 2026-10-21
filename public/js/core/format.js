@@ -21,11 +21,11 @@ export function ago(ts) {
   return `${Math.round(s / 86400)}d`;
 }
 
+/** Dollars, one formatter everywhere: 2 decimals ($9.98, $0.00), whole dollars from $100 (T39). */
 export function money(v) {
   if (v == null) return '—';
   if (v >= 100) return `$${v.toFixed(0)}`;
-  if (v >= 1) return `$${v.toFixed(2)}`;
-  return `$${v.toFixed(3)}`;
+  return `$${v.toFixed(2)}`;
 }
 
 /** 12345 -> "12.3k". */

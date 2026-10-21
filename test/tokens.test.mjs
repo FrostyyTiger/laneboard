@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { boot } from './helpers/boot.mjs';
+import { contrast, luminance, oklch, oklchToLinearSrgb } from './helpers/oklch.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
@@ -67,6 +68,7 @@ const THEMED = [
   '--accent', '--accent-weak',
   '--p1', '--p2', '--p3', '--ok',
   '--p1-weak', '--p2-weak', '--p3-weak', '--p1-line', '--p2-line', '--p3-line',
+  '--map-edge-alpha', '--seg-run', '--seg-off', '--grid-dot',
 ];
 const INVARIANT = [
   '--font-mono', '--font-label', '--font-ui', '--ls-label',
@@ -105,9 +107,9 @@ test('the scale values are the plan’s', () => {
   const want = {
     '--fs-10': '10px', '--fs-11': '11px', '--fs-12': '12px', '--fs-13': '13px', '--fs-16': '16px',
     '--fs-20': '20px', '--fs-28': '28px', '--sp-1': '4px', '--sp-2': '8px', '--sp-3': '12px',
-    '--sp-4': '16px', '--sp-6': '24px', '--sp-8': '32px', '--row-dense': '28px', '--row-comfy': '36px',
+    '--sp-4': '16px', '--sp-6': '24px', '--sp-8': '32px', '--row-dense': '24px', '--row-comfy': '32px',
     '--row-touch': '44px', '--radius': '2px', '--bw': '1px', '--dur': '120ms', '--ls-label': '0.06em',
-    '--header-h': '40px', '--rail-w': '220px', '--insp-w': '360px', '--lamp': '8px',
+    '--header-h': '36px', '--tape-h': '24px', '--lh': '1.3', '--rail-w': '220px', '--insp-w': '360px', '--lamp': '8px',
   };
   for (const [k, v] of Object.entries(want)) assert.equal(ROOT_T.get(k), v, k);
   assert.match(ROOT_T.get('--font-mono'), /^"JetBrains Mono", .*monospace$/);
@@ -128,7 +130,7 @@ test('old names map onto the new tokens', () => {
 });
 
 test('textures use hard stops only', () => {
-  assert.match(DERIVED.get('--tex-dots'), /^radial-gradient\(circle, var\(--line\) 0\.75px, transparent 1px\) 0 0 \/ 16px 16px$/);
+  assert.match(DERIVED.get('--tex-dots'), /^radial-gradient\(circle, var\(--grid-dot\) 0\.75px, transparent 1px\) 0 0 \/ 16px 16px$/);
   assert.match(DERIVED.get('--tex-hatch'), /^repeating-linear-gradient\(45deg, var\(--line\) 0 1px, transparent 1px 6px\)$/);
   const layers = DERIVED.get('--bracket-img').split(/,\s*(?=linear-gradient)/);
   assert.equal(layers.length, 8, 'four corners, two bars each');
@@ -151,31 +153,6 @@ test('density, the one keyframe and reduced motion', () => {
 
 // --- contrast: OKLCH -> linear sRGB -> WCAG relative luminance ----------------
 
-function oklch(str) {
-  const m = /^oklch\(\s*([\d.]+)%\s+([\d.]+)\s+([\d.]+)\s*(?:\/\s*([\d.]+))?\)$/.exec(str);
-  assert.ok(m, `an oklch() literal: ${str}`);
-  return { L: +m[1] / 100, C: +m[2], H: +m[3], alpha: m[4] == null ? 1 : +m[4] };
-}
-
-/** OKLCH to linear sRGB, clipped to the gamut (Björn Ottosson's matrices). */
-function oklchToLinearSrgb({ L, C, H }) {
-  const h = (H * Math.PI) / 180;
-  const a = C * Math.cos(h), b = C * Math.sin(h);
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  return [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ].map((x) => Math.min(1, Math.max(0, x)));
-}
-const luminance = (c) => { const [r, g, b] = oklchToLinearSrgb(c); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-const contrast = (a, b) => {
-  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
-};
-
 test('the converter agrees with known points', () => {
   assert.ok(Math.abs(luminance({ L: 1, C: 0, H: 0 }) - 1) < 1e-3, 'white');
   assert.equal(luminance({ L: 0, C: 0, H: 0 }), 0, 'black');
@@ -195,12 +172,121 @@ test('text and status hues keep contrast against the canvas in both themes', () 
       const ratio = contrast(c, bg);
       assert.ok(ratio >= min, `${theme} ${t} on --bg-canvas: ${ratio.toFixed(2)} < ${min}`);
     }
-    // Text on the filled alarm tiles.
+    // Text on the filled alarm tiles: 11px labels, so 4.5:1 (runs T14).
     const inv = oklch(resolve('--text-inv', theme));
     for (const p of ['--p1', '--p2', '--p3']) {
       const r = contrast(inv, oklch(resolve(p, theme)));
-      assert.ok(r >= 3, `${theme} --text-inv on ${p}: ${r.toFixed(2)}`);
+      assert.ok(r >= 4.5, `${theme} --text-inv on ${p}: ${r.toFixed(2)} < 4.5`);
     }
+    // Amber is text too (Board ctx %, Drift labels): 4.5:1 on the canvas and the surfaces.
+    for (const s of ['--bg-canvas', '--bg-surface', '--bg-elevated']) {
+      const r = contrast(oklch(resolve('--p2', theme)), oklch(resolve(s, theme)));
+      assert.ok(r >= 4.5, `${theme} --p2 text on ${s}: ${r.toFixed(2)} < 4.5`);
+    }
+  }
+});
+
+// Alpha over an opaque surface, blended in gamma sRGB like the browser does.
+const toGamma = (x) => (x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055);
+const toLinear = (x) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+function lumOver(fg, bg) {
+  const f = oklchToLinearSrgb(fg).map(toGamma), b = oklchToLinearSrgb(bg).map(toGamma);
+  const [r, g, bl] = f.map((x, i) => toLinear(x * fg.alpha + b[i] * (1 - fg.alpha)));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+}
+const ratio = (x, y) => (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+
+test('the selected row is one visible surface step in both themes (runs T14)', () => {
+  const step = {};
+  for (const theme of ['dark', 'light']) {
+    const sel = oklch(resolve('--bg-selected', theme));
+    const steps = ['--bg-canvas', '--bg-surface'].map((s) => {
+      const bg = oklch(resolve(s, theme));
+      return ratio(lumOver(sel, bg), luminance(bg));
+    });
+    step[theme] = Math.min(...steps);
+  }
+  // The light step was 1.10:1 (#e3e4e6 on #f3f4f6, reviews/4-designer.md Inbox 4): barely seen.
+  assert.ok(step.light >= 1.15, `light --bg-selected step ${step.light.toFixed(3)} < 1.15`);
+  assert.ok(step.light >= step.dark * 0.95, `light step ${step.light.toFixed(3)} vs dark ${step.dark.toFixed(3)}`);
+});
+
+// --- the light theme's finish (runs night 4 T12, docs/design.md "Light theme") --
+
+const LIGHT_STEPS = ['--bg-sunken', '--bg-canvas', '--bg-surface', '--bg-elevated'];
+/** Contrast of a (maybe translucent) token over an opaque light surface step. */
+const over = (fg, bg, theme = 'light') => {
+  const f = oklch(resolve(fg, theme)), b = oklch(resolve(bg, theme));
+  return ratio(lumOver(f, b), luminance(b));
+};
+
+test('light: body and dim text keep 4.5:1 on every surface step, the selected row included', () => {
+  for (const t of ['--text-1', '--text-2', '--text-3']) {
+    for (const s of LIGHT_STEPS) {
+      const r = over(t, s);
+      assert.ok(r >= 4.5, `light ${t} on ${s}: ${r.toFixed(2)} < 4.5`);
+    }
+    // On a selected row: --bg-selected laid over the surface first.
+    const surf = oklch(resolve('--bg-surface', 'light'));
+    const selLum = lumOver(oklch(resolve('--bg-selected', 'light')), surf);
+    const r = ratio(luminance(oklch(resolve(t, 'light'))), selLum);
+    assert.ok(r >= 4.5, `light ${t} on a selected row: ${r.toFixed(2)} < 4.5`);
+  }
+});
+
+test('light: tile marks and counts (--p1, --p2) keep 3:1 as marks and 4.5:1 as text on every surface step', () => {
+  for (const p of ['--p1', '--p2']) {
+    for (const s of LIGHT_STEPS) {
+      const r = over(p, s);
+      assert.ok(r >= 4.5, `light ${p} on ${s}: ${r.toFixed(2)} < 4.5`);
+    }
+  }
+  for (const p of ['--p3', '--accent', '--ok']) {
+    for (const s of LIGHT_STEPS) assert.ok(over(p, s) >= 3, `light ${p} on ${s}: ${over(p, s).toFixed(2)} < 3`);
+  }
+});
+
+test('light: a status line is a visible 1px border, 3:1 on every surface step', () => {
+  // The question card, the attention chips, the inspector flags carry their
+  // state on this border alone (old light values: amber 2.2:1 on sunken).
+  for (const t of ['--p1-line', '--p2-line', '--p3-line']) {
+    for (const s of LIGHT_STEPS) {
+      const r = over(t, s);
+      assert.ok(r >= 3, `light ${t} on ${s}: ${r.toFixed(2)} < 3`);
+    }
+  }
+});
+
+test('light: a weak status fill is never a heavier step than the dark one', () => {
+  // The pink NEEDS YOU chip of the reviews: red at 0.14 was 1.29:1 on the light
+  // surface against 1.13:1 in dark. A fill is a hint next to the shape, never the state.
+  for (const t of ['--p1-weak', '--p2-weak', '--p3-weak']) {
+    for (const s of ['--bg-canvas', '--bg-surface']) {
+      const light = over(t, s, 'light'), dark = over(t, s, 'dark');
+      assert.ok(light <= dark + 0.005, `${t} on ${s}: light ${light.toFixed(3)} > dark ${dark.toFixed(3)}`);
+    }
+  }
+});
+
+test('Board cards dim by colour, never by opacity: a dead or stale card keeps its text readable in light', () => {
+  const css = fs.readFileSync(path.join(PUBLIC, 'css', 'board.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const sel of ['.card.s-dead', '.card.stale']) {
+    const own = rules(css).filter((r) => r.prelude.split(/\s*,\s*/).some((p) => p === sel || p.startsWith(`${sel} `)));
+    assert.ok(own.length, `board.css styles ${sel}`);
+    for (const r of own) assert.doesNotMatch(r.body, /opacity\s*:/, `${r.prelude} fades with opacity`);
+    assert.ok(own.some((r) => r.prelude.split(/\s*,\s*/).includes(sel) && /color:\s*var\(--text-3\)/.test(r.body)),
+      `${sel} greys its text with --text-3`);
+  }
+  // --text-3 on the card's surface: the floor of the light text test above holds.
+  assert.ok(over('--text-3', '--bg-surface') >= 4.5);
+});
+
+test('docs/design.md writes the light rules down', () => {
+  const doc = fs.readFileSync(path.join(ROOT, 'docs', 'design.md'), 'utf8');
+  const light = doc.split(/^## /m).find((x) => x.startsWith('Light theme'));
+  assert.ok(light, 'a "Light theme" section');
+  for (const w of ['4.5:1 on every surface step', '3:1 on every step', 'never a heavier step', 'never by opacity']) {
+    assert.ok(light.includes(w), `names "${w}"`);
   }
 });
 
@@ -209,10 +295,16 @@ test('one accent: a single hue, apart from p1 by lightness and chroma', () => {
     const a = oklch(resolve('--accent', theme));
     const w = oklch(resolve('--accent-weak', theme));
     assert.equal(w.H, a.H, 'accent-weak shares the accent hue');
-    assert.equal(a.H, 45, 'safety orange');
+    assert.equal(a.H, 300, 'violet');
     const p1 = oklch(resolve('--p1', theme));
-    assert.ok(Math.abs(a.H - p1.H) >= 15, 'accent and p1 differ in hue');
-    assert.ok(a.L !== p1.L && a.C !== p1.C, 'and in lightness and chroma');
+    const dh = Math.min(Math.abs(a.H - p1.H), 360 - Math.abs(a.H - p1.H));
+    assert.ok(dh >= 15, 'accent and p1 differ in hue');
+    // A hue near p1's must differ in lightness and chroma too; violet is far enough on its own.
+    if (dh < 60) assert.ok(a.L !== p1.L && a.C !== p1.C, 'and in lightness and chroma');
+    for (const p of ['--p2', '--p3', '--ok']) {
+      const q = oklch(resolve(p, theme));
+      assert.ok(Math.min(Math.abs(a.H - q.H), 360 - Math.abs(a.H - q.H)) >= 60, `${theme}: the accent is far from ${p} in hue`);
+    }
   }
 });
 
@@ -275,4 +367,33 @@ test('the server hands the fonts out as font/woff2 from public/vendor', { timeou
   } finally {
     await b.stop();
   }
+});
+
+test('the Map\'s topology edges are one step dimmer on light than on dark (runs night 4 T19)', () => {
+  const dark = Number(DARK.get('--map-edge-alpha')), light = Number(LIGHT.get('--map-edge-alpha'));
+  assert.equal(dark, 1);
+  assert.ok(light > 0 && light < dark, `light ${light} < dark ${dark}`);
+});
+
+test('light: the bar\'s working segment is lighter than the trouble segments, idle lighter still (runs night 4 T27)', () => {
+  // r22-designer across 3: in light the working segment was near-black, the
+  // heaviest thing on the bar. Trouble (red ■, amber ▲) is the darkest step.
+  const lum = (t) => lumOver(oklch(resolve(t, 'light')), oklch(resolve('--bg-surface', 'light')));
+  for (const p of ['--p1', '--p2']) {
+    assert.ok(lum('--seg-run') > lum(p), `light --seg-run (${lum('--seg-run').toFixed(3)}) lighter than ${p} (${lum(p).toFixed(3)})`);
+  }
+  assert.ok(lum('--seg-off') > lum('--seg-run'), 'idle is lighter than working');
+  // Still a visible segment on the surface it sits on.
+  assert.ok(over('--seg-off', '--bg-surface') >= 1.3, `idle segment ${over('--seg-off', '--bg-surface').toFixed(2)}:1`);
+  const css = fs.readFileSync(path.join(PUBLIC, 'css', 'components.css'), 'utf8');
+  assert.match(css, /\.segbar > i\[data-p="run"\] \{ background: var\(--seg-run\); \}/);
+  assert.match(css, /\.segbar > i\[data-p="off"\] \{ background: var\(--seg-off\); \}/);
+});
+
+test('light: --p2 text (a Map lane label, a ctx %) keeps 4.5:1 on the canvas; the dot grid is one step under --line-weak (runs night 4 T27)', () => {
+  assert.ok(over('--p2', '--bg-canvas') >= 4.5, `light --p2 on the canvas ${over('--p2', '--bg-canvas').toFixed(2)}`);
+  const a = (t, theme) => oklch(resolve(t, theme)).alpha;
+  assert.ok(a('--grid-dot', 'light') < a('--line-weak', 'light'), 'light dots are fainter than --line-weak');
+  assert.equal(resolve('--grid-dot', 'dark'), resolve('--line', 'dark'), 'dark keeps its grid');
+  assert.match(DERIVED.get('--tex-dots'), /var\(--grid-dot\)/, 'the texture draws its dots in --grid-dot');
 });

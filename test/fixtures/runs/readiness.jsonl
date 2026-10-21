@@ -1,0 +1,22 @@
+{"v":1,"t":"run.start","run":"readiness","ts":1792483200000,"goal":"Make acme-api ready for review: tests green, docs current","plan":"docs/plans/readiness.md","deadline":"2026-10-21T05:00:00Z","budget":{"rounds":6,"windowPct":90}}
+{"v":1,"t":"score","run":"readiness","ts":1792483210000,"name":"tests","value":0.81,"better":"higher"}
+{"v":1,"t":"round.start","run":"readiness","ts":1792483220000,"n":1,"role":"planner"}
+{"v":1,"t":"usage","run":"readiness","ts":1792483800000,"n":1,"fiveHourPct":4,"sevenDayPct":12,"fiveHourResetsAt":1792497600,"overage":0}
+{"v":1,"t":"cost","run":"readiness","ts":1792483800100,"n":1,"usd":0.9,"total":0.9}
+{"v":1,"t":"round.end","run":"readiness","ts":1792483800200,"n":1,"outcome":"kept","commit":"a1b2c3d"}
+{"v":1,"t":"round.start","run":"readiness","ts":1792483810000,"n":2,"role":"builder","task":"A2.4"}
+{"v":1,"t":"artifact","run":"readiness","ts":1792484000000,"kind":"pr","url":"https://example.invalid/acme/acme-api/pull/7","title":"Readiness (agent loop)"}
+{"v":1,"t":"usage","run":"readiness","ts":1792485600000,"n":2,"fiveHourPct":11,"sevenDayPct":13,"fiveHourResetsAt":1792497600,"overage":0}
+{"v":1,"t":"cost","run":"readiness","ts":1792485600100,"n":2,"usd":1.6,"total":2.5}
+{"v":1,"t":"score","run":"readiness","ts":1792485600200,"name":"tests","value":0.88,"better":"higher"}
+{"v":1,"t":"round.end","run":"readiness","ts":1792485600300,"n":2,"outcome":"kept","commit":"b2c3d4e"}
+{"v":1,"t":"score","run":"readiness","ts":1792485600400,"name":"lint","value":14,"better":"lower"}
+{"v":1,"t":"round.end","run":"readiness","ts":1792487400300,"n":3,"outcome":"no-task-done"}
+{"v":1,"t":"round.start","run":"readiness","ts":1792485610000,"n":3,"role":"builder","task":"A2.5"}
+{"v":1,"t":"usage","run":"readiness","ts":1792487400000,"n":3,"fiveHourPct":19,"sevenDayPct":14,"fiveHourResetsAt":1792497600,"overage":0}
+{"v":1,"t":"cost","run":"readiness","ts":1792487400100,"n":3,"usd":1.25,"total":3.75}
+{"v":1,"t":"score","run":"readiness","ts":1792487400200,"name":"tests","value":0.93,"better":"higher","n":3}
+{"v":1,"t":"score","run":"readiness","ts":1792487400400,"name":"lint","value":9,"better":"lower","n":3}
+{"v":1,"t":"needs","run":"readiness","ts":1792487400500,"kind":"decision","text":"Drop the v1 export endpoint or keep it behind a flag?","link":"https://example.invalid/acme/acme-api/pull/7"}
+{"v":1,"t":"review.note","run":"readiness","ts":1792487400600,"by":"stranger","text":"README install step 3 fails on a clean user"}
+{"v":1,"t":"run.stop","run":"readiness","ts":1792487410000,"reason":"no-progress","rounds":3,"usd":3.75}

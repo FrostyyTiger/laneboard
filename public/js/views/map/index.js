@@ -44,11 +44,11 @@ import {
   normalize, foldState, autoFold, visibleLinks, neighbours as neighboursOf, rollup, scopeAlpha,
   idForSel, selForId, SEVERITY, FOLD_KEY, AUTO_UNFOLD_ZOOM,
 } from './model.js';
-import { layout, RINGS, SIZE, polar } from './layout.js';
-import { OVERLAY_KEY, validOverlay, nodeStyle, SHAPE_CODE, TONE_CODE } from './overlays.js';
+import { layout, RINGS, SIZE, polar, runRingR } from './layout.js';
+import { OVERLAY_KEY, validOverlay, availableOverlays, reachScope, nodeStyle, rollsUp, SHAPE_CODE, TONE_CODE, driftText, driftCounts, runFacts } from './overlays.js';
 import { createRenderer, readPalette } from './render.js';
 import {
-  createHitGrid, bindPointer, hitRadius, boundingCircle, fitCircle, anchored, clampZoom,
+  createHitGrid, bindPointer, hitRadius, boundingCircle, fitCircle, anchored, clampZoom, fitFrame,
   laneOrder, nextInOrder, ZOOM_MIN, ZOOM_MAX,
 } from './interact.js';
 
@@ -187,6 +187,7 @@ export function createMap(root, opts = {}) {
   let folded = new Set();         // ids drawn folded (the user's and the automatic folds)
   let shownOf = (id) => id;       // the drawn node standing in for an id
   let vlinks = [];                // links to draw (model.visibleLinks)
+  let vreach = [];                // reach links, ends mapped to drawn nodes (reach overlay)
   // id -> the drawn state of a node: polar position r/t with velocities, its
   // appearance a (0..1), x/y derived, and when it may start moving. A node
   // that left stays here as a ghost (`leaving`) until it has faded into `into`.
@@ -222,6 +223,7 @@ export function createMap(root, opts = {}) {
   const sel = { id: null, t: 0, v: 0 }; // the selection mark, drawing in
   let userMoved = false;
   let W = 0, H = 0, dpr = 1, fitScale = 1;
+  let fitY = 0;                   // the camera y that centres a fit in the free height (fitFrame)
   let raf = 0, lastPing = 0, lastFrame = 0, frameNo = 0;
   const focusAlpha = new Map();   // id -> current emphasis 0..1
   const focusVel = new Map();     // id -> its spring velocity
@@ -242,13 +244,23 @@ export function createMap(root, opts = {}) {
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => resize()) : null;
   ro?.observe(root);
 
+  /** The HUD row and a phone's bottom bar, from the HUD's padding (views/map.css). */
+  function vInsets() {
+    const cs = typeof getComputedStyle === 'function' ? getComputedStyle(hud) : null;
+    return { top: parseFloat(cs?.paddingTop) || 0, bottom: parseFloat(cs?.paddingBottom) || 0 };
+  }
+
   function computeFit() {
-    const outer = maxRadius() + 64;
-    return Math.min(W / (2 * outer), (H - (W < 720 ? 40 : 20)) / (2 * outer)) || 1;
+    const f = fitFrame(W, H, maxRadius() + 64, vInsets());
+    fitY = f.y;
+    return f.s;
   }
 
   function resize() {
     const r = root.getBoundingClientRect();
+    // Hidden (another view is showing): keep the last size; the observer
+    // fires again when the Map comes back.
+    if (W && (!(r.width >= 1) || !(r.height >= 1))) return;
     W = Math.max(1, r.width);
     H = Math.max(1, r.height);
     dpr = Math.min(2.5, globalThis.devicePixelRatio || 1);
@@ -279,7 +291,7 @@ export function createMap(root, opts = {}) {
     const right = rightInset();
     const outer = maxRadius() + 64;
     const z = right ? clampZoom(Math.min(1, (W - right) / (2 * outer * (fitScale || 1)))) : 1;
-    flyCam({ x: right / (2 * (fitScale || 1) * z), y: 0, z }, instant);
+    flyCam({ x: right / (2 * (fitScale || 1) * z), y: fitY / z, z }, instant);
   }
 
   /** Width of world in view at zoom z. */
@@ -438,8 +450,23 @@ export function createMap(root, opts = {}) {
   /** The links to draw: they depend on the focus, the overlay and the scope. */
   function relink() {
     vlinks = visibleLinks(model.links, shownOf, {
-      focus: hover ?? highlighted ?? selected, overlay, scope, byId, drawn: lay.pos,
+      focus: hover ?? highlighted ?? selected, overlay: shownOverlay(), scope, byId, drawn: lay.pos,
     });
+    // Reach links whose ends are folded attach to the node standing in for them.
+    const seenReach = new Set();
+    vreach = [];
+    for (const l of model.reach?.links ?? []) {
+      const from = shownOf(l.from), to = shownOf(l.to);
+      const key = `${from}\u0000${to}`;
+      if (from === to || seenReach.has(key) || !lay.pos.has(from) || !lay.pos.has(to)) continue;
+      seenReach.add(key);
+      vreach.push({ ...l, from, to });
+    }
+  }
+
+  /** The overlay drawn: a stored `reach` shows as status while the model has no reach links. */
+  function shownOverlay() {
+    return availableOverlays(model).includes(overlay) ? overlay : 'status';
   }
 
   function rescope() {
@@ -598,9 +625,14 @@ export function createMap(root, opts = {}) {
     flyCam(fitCircle(circle, view(), { right: rightInset() }), reducedMotion());
   }
 
-  /** The overlay (2.6): persisted, instant, and shown in the readout. */
+  /**
+   * The overlay (2.6): persisted, instant, and shown in the readout. One the
+   * model cannot show (reach without reach links) is refused: the current
+   * overlay stays and is returned.
+   */
   function setOverlay(name) {
     const next = validOverlay(name);
+    if (!availableOverlays(model).includes(next)) return shownOverlay();
     if (next === overlay) return overlay;
     overlay = next;
     try { globalThis.localStorage?.setItem(OVERLAY_KEY, overlay); } catch { /* private window */ }
@@ -680,6 +712,7 @@ export function createMap(root, opts = {}) {
     const status = n.status ?? 'unknown';
     const pill = h('span', `map-pill s-${STATUS_WORD[status] ? status : 'unknown'}`, STATUS_WORD[status] ?? String(status));
     panel.append(close, eyebrow, name, pill);
+    if (driftText(n)) panel.append(h('p', 'map-drift', driftText(n)));
     if (n.why) panel.append(h('p', 'map-why', String(n.why)));
     if (n.sub) panel.append(h('p', 'map-sub', String(n.sub)));
 
@@ -794,7 +827,10 @@ export function createMap(root, opts = {}) {
         if (!n || n.virtual || c.leaving || c.a < 0.3) continue;
         const sp = toScreen(c);
         if (sp.x < -40 || sp.y < -40 || sp.x > W + 40 || sp.y > H + 40) continue;
-        items.push({ id, x: sp.x, y: sp.y, r: hitRadius(SIZE[n.kind] ?? 5, s) });
+        let r = hitRadius(SIZE[n.kind] ?? 5, s);
+        // A run is as big as its progress ring: a tap on the ring hits it.
+        if (n.kind === 'run') r = Math.max(r, runRingR(SIZE.run * Math.max(0.8, Math.min(1.6, s))) + 2);
+        items.push({ id, x: sp.x, y: sp.y, r });
       }
       grid.rebuild(items, frameNo);
     }
@@ -853,8 +889,12 @@ export function createMap(root, opts = {}) {
     const top = h('div', 'map-tip-top');
     top.append(h('i', `map-dot s-${STATUS_WORD[n.status] ? n.status : 'unknown'}`), h('b', null, n.label ?? n.id), h('span', 'map-tip-kind', n.kind));
     tip.append(top);
-    const line = n.why ?? n.sub;
+    const run = runFacts(n);
+    const line = (shownOverlay() === 'drift' && driftText(n))
+      || (run && (run.tone !== 'grey' ? run.why : [run.round, run.progress].filter(Boolean).join(' · ')))
+      || (n.why ?? n.sub);
     if (line) tip.append(h('div', 'map-tip-sub', String(line)));
+    if (run?.goal && run.goal !== line) tip.append(h('div', 'map-tip-sub', run.goal));
     tip.hidden = false;
     const tw = tip.offsetWidth, th = tip.offsetHeight;
     tip.style.left = `${Math.min(W - tw - 8, x + 14)}px`;
@@ -878,7 +918,7 @@ export function createMap(root, opts = {}) {
     }
     if (!raf) raf = requestAnimationFrame(frame);
   }
-  const onVisible = () => { lastFrame = 0; startClock(); kick(); };
+  const onVisible = () => { lastFrame = 0; kick(); };
   document.addEventListener('visibilitychange', onVisible);
 
   function frame(now) {
@@ -1031,7 +1071,7 @@ export function createMap(root, opts = {}) {
     const near = (hover ?? highlighted ?? selected) ? neighbours.get(hover ?? highlighted ?? selected) ?? new Set() : new Set();
     return {
       W, H, now, s: scale(), zoom: cam.z, toScreen,
-      pos: lay.pos, nodes: cur, byId, links: vlinks, overlay,
+      pos: lay.pos, nodes: cur, byId, links: vlinks, overlay: shownOverlay(), reach: vreach,
       rolled: (id) => rollup(id, byId, kidsRoll, memo),
       folded, kids: kidsAll,
       alpha: (id) => focusAlpha.get(id) ?? 1,
@@ -1073,22 +1113,15 @@ export function createMap(root, opts = {}) {
 
   function renderReadout() {
     const b = scope === 'all' ? 'all' : byId.get(`builder:${scope}`)?.code ?? scope;
+    const ov = shownOverlay();
+    const rs = ov === 'reach' ? reachScope(vreach, selected) : null;
     const text = renderer.readout({
-      zoom: cam.z, scope: b, drawn: drawnCount, total: model.nodes.length, overlay,
-      now: Date.now(), compact: W < 700, p95: perfOn ? p95() : null,
+      zoom: cam.z, scope: b, drawn: drawnCount, total: model.nodes.length, overlay: ov,
+      compact: W < 700, p95: perfOn ? p95() : null,
+      drift: ov === 'drift' ? driftCounts(model.nodes) : null,
+      reach: rs ? { links: rs.links, touches: selected ? rs.touched.size : null, unresolved: model.reach?.unresolved ?? 0 } : null,
     });
     if (text !== readoutText) { readoutText = text; readoutEl.textContent = text; }
-  }
-
-  // The UTC clock ticks once a second, only while the map can be seen.
-  let clockTimer = 0;
-  function startClock() {
-    if (clockTimer || pageHidden()) return;
-    clockTimer = setInterval(() => {
-      if (pageHidden()) { clearInterval(clockTimer); clockTimer = 0; return; }
-      if (root.isConnected === false || root.offsetParent === null) return;
-      renderReadout();
-    }, 1000);
   }
 
   // Theme or token changes repaint with the new colours: §4's shell
@@ -1113,18 +1146,18 @@ export function createMap(root, opts = {}) {
       list.push(c);
     }
     const pts = new Float32Array(list.length * 4);
+    const ov = shownOverlay();
     list.forEach((c, i) => {
       const n = c.node;
       const p = polar(c.goal.r, c.goal.t);
-      const rolled = n.kind === 'site' || n.kind === 'core' || n.kind === 'host' || folded.has(n.id)
-        ? rollup(n.id, byId, kidsRoll, memo) : null;
-      const st = n.virtual ? { shape: 'disc', tone: 'grey' } : nodeStyle(n, overlay, rolled);
+      const rolled = rollsUp(n, folded.has(n.id)) ? rollup(n.id, byId, kidsRoll, memo) : null;
+      const st = n.virtual ? { shape: 'disc', tone: 'grey' } : nodeStyle(n, ov, rolled);
       pts[i * 4] = p.x;
       pts[i * 4 + 1] = p.y;
       pts[i * 4 + 2] = SHAPE_CODE[st.shape] ?? 0;
       pts[i * 4 + 3] = TONE_CODE[st.tone] ?? 0;
     });
-    return { version, pts, count: list.length, overlay, scope, selected, outer: maxRadius() };
+    return { version, pts, count: list.length, overlay: ov, scope, selected, outer: maxRadius() };
   }
 
   function on(set, cb) {
@@ -1135,7 +1168,6 @@ export function createMap(root, opts = {}) {
 
   root.dataset.mapMode = mode;
   resize();
-  startClock();
 
   return {
     update,
@@ -1155,7 +1187,9 @@ export function createMap(root, opts = {}) {
     onSelect: (cb) => on(selectCbs, cb),
     onHover: (cb) => on(hoverCbs, cb),
     snapshotScene,
-    overlay: () => overlay,
+    overlay: shownOverlay,
+    // The overlays this model can show, in `o` order (reach only with reach links).
+    overlays: () => availableOverlays(model),
     scope: () => scope,
     // Where a node is drawn now (canvas px), e.g. to anchor an action list; null when not drawn.
     screenOf: (x) => {
@@ -1167,7 +1201,6 @@ export function createMap(root, opts = {}) {
     selected: () => (selected ? selForId(selected) : null),
     destroy: () => {
       if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf);
-      clearInterval(clockTimer);
       clearTimeout(settleTimer);
       clearTimeout(panelOutTimer);
       unbind();

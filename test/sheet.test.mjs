@@ -8,10 +8,12 @@ import path from 'node:path';
 import { makeDocument, makeEl, texts } from './helpers/fakedom.mjs';
 import {
   FLICK_PX_MS, FULL_GAP_PX, L4_MODES, MORE_VIEWS, PEEK_PX, SHEET_TABS, SNAPS,
-  builderP, normTab, peekModel, renderPhone, renderStrip, sheetRow, sheetRows,
+  builderP, litTab, moreLit, normTab, peekModel, pickTab, renderPhone, routeTab, renderStrip, sheetRow, sheetRows,
   snapFor, snapTops, stepSnap, stripModel, openSheet, closeSheet, setSnap, currentSnap,
 } from '../public/js/ui/sheet.js';
 import { store } from '../public/js/core/store.js';
+import { builderLamp as railLamp } from '../public/js/ui/rail.js';
+import { laneMix } from '../public/js/ui/components.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -121,13 +123,31 @@ test('tabs: MAP, LIST, INBOX; the ⋯ menu holds the other nav views', () => {
   assert.ok(MORE_VIEWS.includes('board') && MORE_VIEWS.includes('audit'));
 });
 
-test('builderP: worst session, stale when the link is down', () => {
+test('builderP: the shared builder mark (worst lane or alarm), p1 when the link is down, stale when stale', () => {
   const f = fleet();
-  assert.equal(builderP(f.builders.get('builder-a')), '1');
+  assert.equal(builderP(f.builders.get('builder-a')), '2', 'a permission lane: amber ▲ (T23)');
   assert.equal(builderP(f.builders.get('builder-b')), '2');
-  assert.equal(builderP(f.builders.get('builder-c')), 'stale');
-  assert.equal(builderP(builder('e', [])), 'off');
+  assert.equal(builderP(f.builders.get('builder-c')), '1', 'down is p1, as the rail row');
+  assert.equal(builderP(builder('s', [{ name: 'x', state: 'working' }], { status: 'stale' })), 'stale');
+  assert.equal(builderP(builder('e', [])), 'ok');
+  assert.equal(builderP(builder('w', [{ name: 'x', state: 'working' }])), 'run');
+  assert.equal(builderP(builder('e', []), [{ builder: 'e', priority: 'P1', acked: false }]), '1', 'an alarm counts too');
   assert.equal(builderP(null), 'off');
+});
+
+test('T43: one builder with a PERM and a QUES lane gets the same mark on the rail row and the phone chip', () => {
+  const b = builder('builder-a', [
+    { name: 'feat-search', state: 'waiting_permission' },
+    { name: 'fix-login', state: 'waiting_question' },
+  ], { code: 'BA' });
+  for (const al of [[], [{ id: 'q', kind: 'needs-input', priority: 'P2', builder: 'builder-a', acked: false }]]) {
+    const s = { builders: new Map([[b.id, b]]), attention: [], alarms: al };
+    const chip = stripModel(s, {})[1];
+    const row = railLamp(b, al, laneMix([...b.sessions.values()]));
+    assert.equal(chip.p, '2', 'both lanes want you: the amber ▲ (T23)');
+    assert.equal(row.p, chip.p);
+    assert.equal(chip.label, row.label);
+  }
 });
 
 test('stripModel: ALL first, then each builder by id, on follows b=', () => {
@@ -137,7 +157,7 @@ test('stripModel: ALL first, then each builder by id, on follows b=', () => {
   assert.deepEqual(all.map((c) => c.code), ['ALL', 'B1', 'B2', 'B3']);
   assert.deepEqual(all.map((c) => c.on), [true, false, false, false]);
   assert.equal(all[0].p, '1', 'ALL carries the worst live lamp');
-  assert.equal(all[3].p, 'stale');
+  assert.equal(all[3].p, '1', 'down is p1, as the rail row');
   const one = stripModel(f, { b: 'builder-b' });
   assert.deepEqual(one.map((c) => c.on), [false, false, true, false]);
   assert.deepEqual(stripModel({ builders: new Map() }, {}).map((c) => c.id), ['all']);
@@ -146,12 +166,12 @@ test('stripModel: ALL first, then each builder by id, on follows b=', () => {
 test('peekModel: counts in scope and the latest event', () => {
   const f = fleet();
   const pk = peekModel(f);
-  assert.equal(pk.p1, 1);
-  assert.equal(pk.p2, 1);
+  assert.equal(pk.p1, 0, 'nothing is broken');
+  assert.equal(pk.p2, 2, 'the permission and the question both want you (T23)');
   assert.equal(pk.run, 2);
   assert.equal(pk.total, 6);
   assert.equal(pk.latest.key, 'builder-a/auth');
-  assert.equal(pk.latest.p, '1');
+  assert.equal(pk.latest.p, '2');
   assert.match(pk.latest.text, /^B1\/auth /);
   const b = peekModel(f, 'builder-b');
   assert.equal(b.total, 2);
@@ -272,6 +292,63 @@ test('renderPhone fills #shell-strip and #shell-sheet on a phone, hides the shee
   }
 });
 
+test('routeTab / litTab: Board and Runs show LIST\'s content but light ⋯, not LIST; a pick wins', () => {
+  assert.equal(routeTab('map'), 'map');
+  assert.equal(routeTab('board'), 'list');
+  assert.equal(routeTab('runs'), 'list');
+  assert.equal(routeTab('inbox'), 'inbox');
+  for (const v of ['morning', 'packages', 'credit', 'box', 'audit', 'constructor', undefined]) assert.equal(routeTab(v), null, String(v));
+  assert.equal(litTab('inbox'), 'inbox');
+  assert.equal(litTab('morning'), null);
+  assert.equal(litTab('inbox', 'map'), 'map');
+  assert.equal(litTab('runs', 'bogus'), null);
+  for (const v of ['board', 'runs', 'morning']) {
+    assert.equal(litTab(v), null, v);
+    assert.equal(moreLit(v), true, v);
+  }
+  assert.equal(litTab('board', 'list'), 'list', 'a picked segment still lights');
+  assert.equal(moreLit('board', 'list'), false);
+  assert.equal(moreLit('map'), false);
+});
+
+test('renderPhone lights the one segment of the current route (r10-designer across 3)', async () => {
+  const saved = { builders: store.builders, attention: store.attention, alarms: store.alarms };
+  const f = fleet();
+  store.builders = f.builders;
+  store.attention = f.attention;
+  store.alarms = f.alarms;
+  const lit = (sheet) => sheet.children[0].children[1].children.filter((t) => t.attrs['aria-selected'] === 'true').map((t) => t.textContent);
+  try {
+    await withPage(['shell-strip', 'shell-sheet'], { width: 390 }, (byId) => {
+      const sheet = byId.get('shell-sheet');
+      const want = { '#/': ['MAP'], '#/board': [], '#/runs': [], '#/runs?run=acme-search': [], '#/inbox': ['INBOX'], '#/morning': [], '#/audit': [] };
+      const more = () => sheet.children[0].children[2];
+      for (const [hash, tabs] of Object.entries(want)) {
+        location.hash = hash;
+        renderPhone();
+        assert.deepEqual(lit(sheet), tabs, hash);
+        assert.equal('on' in more().dataset, !tabs.length, `${hash}: ⋯ is lit when no segment is`);
+      }
+      // The content follows the route too: the Inbox shows the alarms.
+      location.hash = '#/inbox';
+      renderPhone();
+      assert.ok(sheet.children[2].children.some((n) => n.textContent === 'Open INBOX'));
+      // A tap lights the picked segment on this view; the next view lights its own again.
+      pickTab('map');
+      assert.deepEqual(lit(sheet), ['MAP']);
+      location.hash = '#/inbox?sel=builder-a/web';
+      renderPhone();
+      assert.deepEqual(lit(sheet), ['MAP'], 'a selection on the same view keeps the pick');
+      location.hash = '#/board';
+      renderPhone();
+      assert.deepEqual(lit(sheet), []);
+      assert.ok('on' in more().dataset, 'Board lights ⋯');
+    });
+  } finally {
+    Object.assign(store, saved);
+  }
+});
+
 test('openSheet: L4 mode centre or sheet; a re-open without a mode keeps it', async () => {
   const savedSessions = store.sessions;
   store.sessions = new Map([['builder-a/web', { key: 'builder-a/web', name: 'web', state: 'working', builder: 'builder-a' }]]);
@@ -311,7 +388,25 @@ test('phone.css: 44px touch targets, transform-only snaps, linked by the page', 
   assert.match(css, /\.ps-peek, \.ps-row \{[^}]*min-height: var\(--row-touch\)/);
   assert.match(css, /\.strip-chip::after \{[^}]*inset: -4px 0;/, '36px chip, 44px hit area');
   assert.match(css, /\.shell-sheet\[data-snap="half"\] \{ transform: translateY\(calc\(100% - 50dvh\)\); \}/);
-  assert.match(css, /--sheet-peek: 96px;/);
+  assert.match(css, /translateY\(calc\(100% - var\(--sheet-peek\)/, 'the peek comes from the tokens.css token');
   assert.match(css, /\.sheet\[data-mode="centre"\]/);
   assert.doesNotMatch(css, /transition:[^;]*\b(height|top|bottom)\b/, 'the sheet moves by transform only');
+});
+
+// Seen at 390 (shots r8-T3 page-end): the last row of a view stayed under the sheet's peek,
+// because misc.css reserved 68 px for a peek of about 95 px.
+test('a phone view reserves at least the sheet peek at its bottom, from the one token (T23)', () => {
+  const tokens = fs.readFileSync(path.join(ROOT, 'public/css/tokens.css'), 'utf8');
+  const peek = Number(tokens.match(/--sheet-peek: (\d+)px;/)?.[1]);
+  assert.ok(peek >= 95, `the peek token covers the measured peek (${peek})`);
+  const phone = fs.readFileSync(path.join(ROOT, 'public/css/phone.css'), 'utf8');
+  assert.doesNotMatch(phone, /--sheet-peek:/, 'phone.css does not shadow the token');
+  const misc = fs.readFileSync(path.join(ROOT, 'public/css/misc.css'), 'utf8');
+  const block = misc.slice(misc.indexOf('@media (max-width: 699px)'));
+  const rule = block.match(/\.layout, \.view \{ padding-bottom: ([^;]+);/);
+  assert.ok(rule, 'the phone rule exists');
+  assert.match(rule[1], /^calc\(var\(--sheet-peek\) \+ var\(--gap\)/, 'the peek plus a gap');
+  assert.doesNotMatch(misc, /padding-bottom: \d+px/, 'no hardcoded reserve left');
+  const insp = fs.readFileSync(path.join(ROOT, 'public/css/inspector.css'), 'utf8');
+  assert.match(insp, /\.shell-insp \{ width: 100%; padding-bottom: var\(--sheet-peek\); \}/);
 });

@@ -11,7 +11,15 @@
 // stuck incidents, what it cost), then the fleet blocks: review wait, approvals
 // answered, cost by package (equal split, so "≈"), and what the notifier held
 // back while you were away (quiet hours or rate limit). A builder that did not
-// answer is a row with its error and a stale lamp, never dropped.
+// answer draws no block: the summary strip names it with a stale lamp (runs
+// plan T33). A fleet block with nothing in the window is not drawn either; the
+// empty ones share one muted line at the end ("Nothing else waiting since …").
+//
+// Runs (runs plan A3, T7): one block per run with events in the window
+// (server/runs/digest.mjs runsInWindow, `runs` in GET /api/morning): goal
+// linking to the run page, rounds, each score start -> end with its direction,
+// the stop reason, PR chips and the cost. A payload without `runs` (an older
+// builder, or the hub merge, which does not carry them yet) draws no block.
 //
 // Everything in the payload was written by a builder or its agents: it goes in
 // through textContent, title or dataset only, never markup.
@@ -25,6 +33,7 @@ import { block, gauge, laneStripe, prChip } from '../ui/widgets.js';
 import { lamp, panel } from '../ui/components.js';
 import { toast } from '../ui/shell.js';
 import { openSheet } from '../ui/sheet.js';
+import { RUN_ID_RX, STOP_P, STATE_META, burnOf, rnClean, runHref, safeHref, scoreText } from './runs.js';
 
 // ---------------------------------------------------------------- morning
 //
@@ -116,14 +125,101 @@ function morningBuilderOf(x, s) {
   };
 }
 
+// --- runs (T7) ----------------------------------------------------------------
+
+/** One digest score {start, end, better} -> {name, text, dir, good, mark, title}. */
+export function runScoreOf(name, s) {
+  const start = fin(s?.start);
+  const end = fin(s?.end);
+  const better = s?.better === 'higher' || s?.better === 'lower' ? s.better : null;
+  const dir = start === null || end === null ? null : end > start ? 'up' : end < start ? 'down' : 'same';
+  const good = dir === null || dir === 'same' || better === null ? null : (dir === 'up') === (better === 'higher');
+  const mark = dir === 'up' ? '↑' : dir === 'down' ? '↓' : dir === 'same' ? '=' : '';
+  const text = start === null || start === end ? scoreText(end ?? start) : `${scoreText(start)} → ${scoreText(end)}`;
+  const word = good === true ? ', better' : good === false ? ', worse' : '';
+  return { name, text, dir, good, mark, title: `${name}: ${scoreText(start)} → ${scoreText(end)}${word}` };
+}
+
+/** A PR URL -> {href, text} ("PR #12"), or null when it is not http(s). */
+export function runPrOf(url) {
+  const href = safeHref(url);
+  if (!href) return null;
+  const n = /\/pull\/(\d{1,9})(?:[/?#]|$)/.exec(href)?.[1];
+  return { href, text: n ? `PR #${n}` : 'PR' };
+}
+
+/** One digest row (server/runs/digest.mjs) -> what the block draws; null when it names no run. */
+export function morningRunOf(r, builder = null) {
+  if (!isObj(r)) return null;
+  const id = rnClean(r.run, 64);
+  if (!id) return null;
+  const state = Object.hasOwn(STATE_META, r.state) ? r.state : r.stop ? 'stopped' : 'running';
+  const reason = rnClean(r.stop, 32);
+  const scores = isObj(r.scores) ? r.scores : {};
+  const usage = burnOf(r.usage, state);
+  return {
+    run: id,
+    builder: typeof builder === 'string' && BUILDER_ID_RX.test(builder) ? builder : null,
+    href: RUN_ID_RX.test(id) ? runHref(id) : null,
+    goal: rnClean(r.goal) ?? id,
+    state,
+    rounds: Number.isInteger(r.rounds) && r.rounds >= 0 ? r.rounds : 0,
+    scores: Object.keys(scores).sort().map((k) => runScoreOf(rnClean(k, 32) ?? '?', scores[k])),
+    stop: state === 'stopped' ? { reason: reason ?? 'unknown', p: STOP_P[reason] ?? 'off' } : null,
+    prs: arr(r.prs).map(runPrOf).filter(Boolean),
+    usd: fin(r.usd),
+    usage,
+  };
+}
+
+/** The runs of a payload: its own `runs`, then any a builder row carries (a future hub merge). */
+export function morningRuns(data) {
+  const out = arr(data?.runs).map((r) => morningRunOf(r, typeof data?.builder === 'string' ? data.builder : null));
+  for (const b of arr(data?.builders).filter(isObj)) {
+    for (const r of arr(b.runs)) out.push(morningRunOf(r, b.id));
+  }
+  return out.filter(Boolean);
+}
+
 const EMPTY_REVIEW = Object.freeze({ n: 0, waiting: 0, medianWaitMs: null, p90WaitMs: null, longest: [] });
 const EMPTY_APPROVALS = Object.freeze({ answered: 0, approved: 0, denied: 0, released: 0, medianAnswerMs: null });
 
 /**
+ * The fleet blocks with nothing in the window, in drawing order, by the words
+ * the one muted line uses (T33): ['review wait', 'approvals', 'package cost', 'held back'].
+ */
+export function emptyFleetBlocks(m) {
+  const out = [];
+  const r = m.review;
+  if (!r.n && !r.waiting && !r.longest.length) out.push('review wait');
+  const a = m.approvals;
+  if (!a.answered && !a.approved && !a.denied && !a.released) out.push('approvals');
+  if (!m.costByPackage.length) out.push('package cost');
+  if (!m.deferred.length) out.push('held back');
+  return out;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * The window's start for the head row, short and in local time (`since 20 Oct
+ * 18:00`): no year, no seconds, so it stays on the picker's row at 390 (runs
+ * plan T41). null when there is no start.
+ */
+export function sinceText(ms) {
+  if (!Number.isFinite(ms)) return null;
+  const d = new Date(ms);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return `since ${d.getDate()} ${MONTHS[d.getMonth()]} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+
+/**
  * Any Morning payload -> one shape:
- *   {hub, error?, window, label, since, builders:[{id, code, error, stale, needsYou,
- *    finished, cost, stuck}], totals:{needsYou, finished, usd, tokens}, review,
- *    approvals, costByPackage, stuck (no known builder), deferred, missing, rateLimits}
+ *   {hub, error?, window, label, since, sinceText, builders:[{id, code, error, stale, needsYou,
+ *    finished, cost, stuck}], totals:{needsYou, finished, usd, tokens, sessions:{finished,
+ *    usd}, runs:{finished, usd}} (finished/usd = sessions + runs stopped in the window), review,
+ *    approvals, costByPackage, stuck (no known builder), deferred, missing, rateLimits,
+ *    runs:[morningRunOf()], empty:[emptyFleetBlocks()]}
  * `hub` is whether the page is fed by a hub. A hub merge has `builders[]`; a hub
  * `?b=` answer is one builder row; a builder's own answer is wrapped as one builder.
  */
@@ -150,17 +246,32 @@ export function morningModel(data, { hub = false, s = null } = {}) {
   const ap = isObj(data.approvals) ? data.approvals : EMPTY_APPROVALS;
   const missing = new Set(arr(data.missing).filter((m) => typeof m === 'string'));
   for (const r of rows) if (r.error) missing.add(r.id);
-  return {
+  const runs = morningRuns(data);
+  // A run that stopped in the window finished there too, and what it cost is
+  // spend (runs plan T32): the strip counts sessions and runs, kept apart below
+  // so the package table still totals sessions only.
+  const sessions = {
+    finished: rows.reduce((a, r) => a + r.finished.length, 0),
+    usd: fin(data.totalUsd) ?? rows.reduce((a, r) => a + r.cost.totalUsd, 0),
+  };
+  const runTotals = {
+    finished: runs.filter((r) => r.state === 'stopped').length,
+    usd: runs.reduce((a, r) => a + (r.usd ?? 0), 0),
+  };
+  const m = {
     hub,
     fleet: hub,
     window: typeof data.window === 'string' ? data.window : morning.window,
     label: typeof data.label === 'string' ? data.label : null,
     since: fin(data.since),
+    sinceText: sinceText(fin(data.since)),
     builders: rows,
     totals: {
       needsYou: rows.reduce((a, r) => a + r.needsYou.length, 0),
-      finished: rows.reduce((a, r) => a + r.finished.length, 0),
-      usd: fin(data.totalUsd) ?? rows.reduce((a, r) => a + r.cost.totalUsd, 0),
+      finished: sessions.finished + runTotals.finished,
+      usd: sessions.usd + runTotals.usd,
+      sessions,
+      runs: runTotals,
       tokens: fin(data.totalTokens) ?? rows.reduce((a, r) => a + r.cost.totalTokens, 0),
     },
     review: {
@@ -182,7 +293,31 @@ export function morningModel(data, { hub = false, s = null } = {}) {
     deferred: arr(data.deferred).filter(isObj),
     missing: [...missing].sort(),
     rateLimits: isObj(data.rateLimits) ? data.rateLimits : null,
+    runs,
   };
+  m.empty = emptyFleetBlocks(m);
+  // T24: a builder that did not answer is "no answer" only when the header
+  // does not show it LIVE; a live one simply sent no Morning data. Either way
+  // a count of 0 is not known while one is missing.
+  const live = (id) => s?.builders?.get?.(id)?.status === 'live';
+  m.noAnswer = m.missing.filter((id) => !live(id));
+  m.noData = m.missing.filter(live);
+  const partial = m.missing.length > 0;
+  m.counts = {
+    needsYou: summaryCount(m.totals.needsYou, partial),
+    finished: summaryCount(m.totals.finished, partial),
+    spend: summaryCount(m.totals.usd, partial, money),
+    tokens: summaryCount(m.totals.tokens, partial, compactCount),
+  };
+  return m;
+}
+
+/**
+ * One summary count (T24): `—` with `noData` when it is 0 while a builder
+ * gave no data (that 0 is not known), else the formatted value.
+ */
+export function summaryCount(v, partial, fmt = String) {
+  return partial && !v ? { text: '—', noData: true } : { text: fmt(v ?? 0), noData: false };
 }
 
 export async function loadMorning(force = false) {
@@ -217,7 +352,7 @@ export function renderMorning() {
   const m = morningModel(morning.data, { hub: morning.hub });
   if (m.error) { box.append(el('p', 'empty', `Could not load: ${m.error}`)); return; }
   const sinceEl = $('morning-since');
-  if (sinceEl && m.since !== null) sinceEl.textContent = `since ${new Date(m.since).toLocaleString('en-GB', { hour12: false })}`;
+  if (sinceEl && m.sinceText) sinceEl.textContent = m.sinceText;
   renderModel(box, m);
 }
 
@@ -225,19 +360,30 @@ export function renderMorning() {
 
 /** Paint a morningModel() into `box` (cleared by the caller). Exported for tests. */
 export function renderModel(box, m) {
+  const runs = m.runs?.length ? runsBlock(m.runs) : null;
   if (!m.hub) {
     const b = m.builders[0];
+    if (runs) box.append(runs);
     if (b) for (const n of builderBlocks(b, m)) box.append(n);
     return box;
   }
   box.append(morningSummary(m));
-  for (const b of m.builders) box.append(builderGroup(b, m));
+  if (runs) box.append(runs);
+  // A builder with no answer is the strip's "no answer from …" line, not a block.
+  for (const b of m.builders) if (!b.error) box.append(builderGroup(b, m));
   if (!m.builders.length) box.append(el('p', 'empty', 'No builder is configured.'));
-  box.append(reviewBlock(m.review, m));
+  const empty = new Set(m.empty ?? []);
+  if (!empty.has('review wait')) box.append(reviewBlock(m.review, m));
   if (m.stuck.length) box.append(stuckBlock(m.stuck, 'Stuck incidents · fleet'));
-  box.append(approvalsBlock(m.approvals));
-  box.append(packageBlock(m.costByPackage, m.totals.usd));
-  box.append(deferredBlock(m.deferred, m));
+  if (!empty.has('approvals')) box.append(approvalsBlock(m.approvals));
+  if (!empty.has('package cost')) box.append(packageBlock(m.costByPackage, m.totals.sessions.usd));
+  if (!empty.has('held back')) box.append(deferredBlock(m.deferred, m));
+  if (empty.size) {
+    // A sentence, not a list of section names (T25); the names stay in its title.
+    const quiet = el('p', 'empty morning-quiet', m.sinceText ? `Nothing else waiting ${m.sinceText}.` : 'Nothing else waiting.');
+    quiet.title = `Nothing on ${[...empty].join(', ')}`;
+    box.append(quiet);
+  }
   return box;
 }
 
@@ -248,23 +394,44 @@ function kv(k, v, cls = '') {
   return n;
 }
 
+/** A summary cell for a summaryCount(): `—` gets a dim "no data" after it (T24). */
+function kvCount(k, c, cls = '') {
+  const n = kv(k, c.text, c.noData ? '' : cls);
+  if (c.noData) {
+    n.classList.add('nodata');
+    n.append(el('span', 'mkv-nodata', 'no data'));
+  }
+  return n;
+}
+
 function morningSummary(m) {
   const sec = el('section', 'mblock morning-summary');
   const row = el('div', 'mrow-top');
   row.append(kv('builders', String(m.builders.length)));
-  row.append(kv('needs you', String(m.totals.needsYou), m.totals.needsYou ? 'warn' : ''));
-  row.append(kv('finished', String(m.totals.finished)));
-  row.append(kv('spend', money(m.totals.usd)));
-  row.append(kv('tokens', compactCount(m.totals.tokens)));
-  row.append(kv('review', `${m.review.n} · ${m.review.waiting} waiting`));
+  row.append(kvCount('needs you', m.counts.needsYou, m.totals.needsYou ? 'warn' : ''));
+  const { sessions, runs } = m.totals;
+  const finCell = kvCount('finished', m.counts.finished);
+  finCell.title = `${sessions.finished} lanes + ${runs.finished} runs stopped`;
+  row.append(finCell);
+  const spend = kvCount('spend', m.counts.spend);
+  spend.title = `sessions ${money(sessions.usd)} + runs ${money(runs.usd)}`;
+  row.append(spend);
+  row.append(kvCount('tokens', m.counts.tokens));
+  row.append(kv('review', String(m.review.n)));
+  row.append(kv('waiting', String(m.review.waiting)));
   row.append(kv('approvals', String(m.approvals.answered)));
   sec.append(row);
-  if (m.missing.length) {
+  const why = new Map(m.builders.filter((b) => b.error).map((b) => [b.id, `${b.id}: ${b.error}`]));
+  const line = (ids, words, p, label) => {
     const miss = el('div', 'mrow-sub morning-missing');
-    miss.append(lamp('stale', { label: 'stale: did not answer' }));
-    miss.append(el('span', null, ` no answer from ${m.missing.join(', ')}; their blocks are empty`));
+    miss.append(lamp(p, { label }));
+    miss.append(el('span', null, ` ${words} ${ids.join(', ')}`));
+    const w = ids.map((id) => why.get(id)).filter(Boolean);
+    if (w.length) miss.title = w.join('\n');
     sec.append(miss);
-  }
+  };
+  if (m.noAnswer.length) line(m.noAnswer, 'no answer from', 'stale', 'stale: did not answer');
+  if (m.noData.length) line(m.noData, 'no Morning data from', 'off', 'live, but sent no Morning data');
   return sec;
 }
 
@@ -272,12 +439,8 @@ function builderGroup(b, m) {
   const p = panel({ name: b.code, scope: b.id, n: b.needsYou.length });
   p.root.classList.add('morning-builder');
   p.root.dataset.builder = b.id;
-  const state = b.error ? lamp('stale', { label: `stale: ${b.error}` }) : lamp(b.needsYou.length ? '2' : 'ok', { label: b.needsYou.length ? 'needs you' : 'nothing waiting' });
-  p.tools.append(state);
-  if (b.error) {
-    p.body.append(el('p', 'empty morning-error', `No answer: ${b.error}`));
-    return p.root;
-  }
+  // [0] already says nothing waits; a lone hollow lamp on the frame read as a toggle (T37)
+  if (b.needsYou.length) p.tools.append(lamp('2', { label: 'needs you' }));
   for (const n of builderBlocks(b, m)) p.body.append(n);
   return p.root;
 }
@@ -289,7 +452,79 @@ function builderBlocks(b, m) {
   return out;
 }
 
+// --- runs ------------------------------------------------------------------
+
+/**
+ * The meta line of a Morning run row (T25): the state word, the stop reason,
+ * rounds, cost and usage, in that order; the row's lamp leads it.
+ */
+export function runMetaParts(r) {
+  const word = STATE_META[r.state].word;
+  const out = [r.stop && r.stop.reason !== 'unknown' ? `${word} · ${r.stop.reason}` : word];
+  out.push(`${r.rounds} ${r.rounds === 1 ? 'round' : 'rounds'}`);
+  if (r.usd !== null) out.push(money(r.usd));
+  if (r.usage.fiveHour) out.push(`usage 5h ${r.usage.fiveHour.text}`);
+  return out;
+}
+
+function runsBlock(list) {
+  const sec = block('Runs', list.length);
+  for (const r of list) {
+    // Title at body size on its own line, then the state as a leading mark +
+    // word in the meta line; the whole title is the link, no chevron (T25).
+    const row = el('div', 'mrow morning-run');
+    row.dataset.run = r.run;
+    const main = el('div', 'mrow-main');
+    const goal = r.href ? el('a', 'mrow-name', r.goal) : el('span', 'mrow-name', r.goal);
+    if (r.href) goal.setAttribute('href', r.href);
+    goal.title = r.run;
+    main.append(goal);
+    const meta = el('div', 'morning-run-meta');
+    const p = r.stop ? r.stop.p : STATE_META[r.state].p;
+    meta.append(lamp(p, { label: r.stop ? `stopped: ${r.stop.reason}` : STATE_META[r.state].word }));
+    meta.append(el('span', 'morning-run-state', runMetaParts(r).join(' · ')));
+    main.append(meta);
+    if (r.scores.length || r.prs.length) {
+      const sub = el('div', 'mrow-top morning-run-sub');
+      for (const s of r.scores) {
+        const chip = el('span', 'rn-score');
+        chip.title = s.title;
+        if (s.good === false) chip.dataset.trend = 'worse';
+        else if (s.good === true) chip.dataset.trend = 'better';
+        chip.append(el('span', 'rn-score-k', s.name));
+        chip.append(el('span', 'rn-score-v', s.text));
+        if (s.mark) chip.append(el('span', 'rn-score-m', s.mark));
+        sub.append(chip);
+      }
+      for (const pr of r.prs) {
+        const a = el('a', 'chip-pr pr-link', pr.text);
+        a.setAttribute('href', pr.href);
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.title = pr.href;
+        sub.append(a);
+      }
+      main.append(sub);
+    }
+    row.append(main);
+    sec.append(row);
+  }
+  return sec;
+}
+
 // --- needs you -------------------------------------------------------------
+
+/**
+ * The run a Morning need belongs to (T24, §8 Q9), or null: `run` on a
+ * builder's own answer; the hub's merge keeps only the id (`<builder>/run:<run>:<ts>`).
+ */
+export function runOfNeed(n) {
+  if (!isObj(n)) return null;
+  if (n.source === 'run' && typeof n.run === 'string') return RUN_ID_RX.test(n.run) ? n.run : null;
+  const id = typeof n.id === 'string' ? n.id : '';
+  const hit = /(?:^|\/)run:([^:/]{1,64}):[^:/]*$/.exec(id);
+  return hit && RUN_ID_RX.test(hit[1]) ? hit[1] : null;
+}
 
 function needsBlock(b) {
   const needs = block('Needs you', b.needsYou.length);
@@ -311,11 +546,18 @@ function needsBlock(b) {
     if (n.text) main.append(el('div', 'mrow-text', txt(n.text)));
     row.append(main);
     const acts = el('div', 'mrow-acts');
-    const k = n.name ? morningKey(n, n.name) : null;
+    const run = runOfNeed(n);
+    const k = n.name && !run ? morningKey(n, n.name) : null;
     const ik = k ? toIndexKey(store, k) : null;
     if (ik && store.sessions.has(ik)) {
       const open = el('button', 'btn', 'Open');
       open.onclick = () => { setView('board'); openSheet(ik); };
+      acts.append(open);
+    }
+    if (run) {
+      const open = el('a', 'btn', 'Open');
+      open.setAttribute('href', runHref(run));
+      open.title = `run ${run}`;
       acts.append(open);
     }
     if (n.source === 'marker' && n.markerId != null) {

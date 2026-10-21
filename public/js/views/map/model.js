@@ -43,6 +43,13 @@ export function normalize(model) {
     nodes: arr(m.nodes).filter((n) => n && typeof n.id === 'string'),
     links: arr(m.links).filter((l) => l && l.from != null && l.to != null && l.from !== l.to),
     events: arr(m.events),
+    // Reach (T11) is drawn only by the reach overlay; links are kept as given.
+    reach: m.reach && Array.isArray(m.reach.links)
+      ? {
+        links: m.reach.links.filter((l) => l && typeof l.from === 'string' && typeof l.to === 'string' && l.from !== l.to),
+        unresolved: Number.isInteger(m.reach.unresolved) && m.reach.unresolved > 0 ? m.reach.unresolved : 0,
+      }
+      : null,
   };
 }
 
@@ -239,12 +246,14 @@ export function scopeAlpha(node, scope, byId) {
 
 /**
  * The node a router `sel=` value names (2.3). A fleet key resolves to its
- * lane, then its session node, then the lane whose only session it is; any
- * other value is a raw node id. Null when nothing matches.
+ * lane, then its session node, then the lane whose only session it is;
+ * `node:<id>` (the palette's NODE rows) names node `<id>`; any other value is
+ * a raw node id. Null when nothing matches.
  */
 export function idForSel(sel, byId) {
   if (typeof sel !== 'string' || sel === '') return null;
   if (byId.has(sel)) return sel;
+  if (sel.startsWith('node:') && byId.has(sel.slice(5))) return sel.slice(5);
   const p = parseFkey(sel);
   if (!p) return null;
   const lane = laneNodeId(p.builder, p.name);

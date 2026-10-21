@@ -2,20 +2,21 @@
 // default export for the §4 registry, the route plan (b= / sel=), the 2.8
 // inline action list and its pulses, hook events keyed `lane:<builder>/<lane>`,
 // the split table's rows, sorting, formatting and virtual window (plus the
-// table against a small fake DOM), and the minimap's transform, throttle and
-// visibility (plus a draw against a fake canvas).
+// table against a small fake DOM), the minimap renderer's transform and throttle
+// (plus a draw against a fake canvas), and that no view mounts it (runs-n4 T14).
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 
 import mapView, {
-  laneActions, actionArgs, actionPulse, mapEventFor, routePlan, splitState, pipOffsets, getMapView, mapActions, nodeActions,
+  laneActions, actionArgs, actionPulse, mapEventFor, routePlan, splitState, getMapView, mapActions, nodeActions,
 } from '../public/js/views/map.js';
 import {
   SPLIT_KEY, SPLIT_MIN_W, ROW_H, VIRTUAL_FROM, COLUMNS, splitOn, canSplit, stateGlyph, stateWord,
   fmtCtx, fmtUsd, fmtAge, rowRank, compareRows, splitRows, rowCells, visibleWindow, createSplitTable,
 } from '../public/js/views/map/split.js';
 import {
-  PIP_SIZE, PIP_FPS, PIP_FRAME_MS, PIP_MIN_VIEWPORT, pipVisible, pipTransform, hasTrouble, shouldRedraw,
+  PIP_SIZE, PIP_FPS, PIP_FRAME_MS, pipTransform, hasTrouble, shouldRedraw,
   blinkPhase, dotsOf, ringsOf, createMinimap,
 } from '../public/js/views/map/minimap.js';
 import { SHAPE_CODE, TONE_CODE } from '../public/js/views/map/overlays.js';
@@ -86,10 +87,40 @@ test('splitState: lb.split = "1" wants split; below 900px it is refused and the 
   assert.equal(canSplit(NaN), false);
 });
 
-test('pipOffsets: above the tape, clear of an open inspector', () => {
-  assert.deepEqual(pipOffsets({}), { right: 12, bottom: 40 });
-  assert.deepEqual(pipOffsets({ inspW: 360, tapeH: 28 }), { right: 372, bottom: 40 });
-  assert.deepEqual(pipOffsets({ inspW: NaN }), { right: 12, bottom: 40 });
+// The minimap on the Map only (runs-n4 T14, review r10-designer across 2): the PiP covered
+// the end of Inbox, Runs, Board and the run page (the run page's ARTIFACTS row at 1440).
+// No module outside the renderer creates it, no view pads for it, and the Map still mounts.
+test('the minimap is mounted on no view: absent off the Map, the Map still mounts its canvas', () => {
+  const root = new URL('../public/js/', import.meta.url);
+  const files = readdirSync(root, { recursive: true }).filter((f) => f.endsWith('.js'));
+  assert.ok(files.includes('views/map.js') && files.includes('views/inbox.js') && files.includes('views/runs.js') && files.includes('views/board.js'));
+  for (const f of files) {
+    if (f === 'views/map/minimap.js') continue;
+    const js = readFileSync(new URL(f, root), 'utf8');
+    assert.doesNotMatch(js, /from '[^']*minimap\.js'|import\('[^']*minimap\.js'\)|createMinimap\(|map-pip|--pip-clear/, `${f} mounts the minimap`);
+  }
+  const map = readFileSync(new URL('views/map.js', root), 'utf8');
+  assert.match(map, /import\('\.\/map-canvas\.js'\)/, 'the Map loads its canvas');
+  assert.match(map, /function mountMap[\s\S]*ensureMap\(\)/, 'and mounts it when #/map shows');
+  assert.doesNotMatch(map, /store\.view !== 'map'[^\n]*ensureMap\(\)/, 'other views no longer load the map for a PiP');
+  assert.equal(mapView.id, 'map');
+  const css = new URL('../public/css/', import.meta.url);
+  for (const f of readdirSync(css, { recursive: true }).filter((x) => x.endsWith('.css'))) {
+    assert.doesNotMatch(readFileSync(new URL(f, css), 'utf8'), /pip-clear|map-pip/, `${f} still makes room for the minimap`);
+  }
+});
+
+// A view's own `#view-x { padding: … }` outranks shell.css's bottom gap: views set top and sides only.
+test('views keep the shell bottom gap: no view sheet sets its bottom padding', () => {
+  const shell = readFileSync(new URL('../public/css/shell.css', import.meta.url), 'utf8');
+  assert.match(shell, /@media \(min-width: 700px\) \{\s*\.shell-main > \.view:not\(\.map-view\), \.shell-main > \.layout \{\s*padding-bottom: max\(var\(--gap\)/);
+  const dir = new URL('../public/css/', import.meta.url);
+  const files = ['', 'views/'].flatMap((d) => readdirSync(new URL(d, dir)).filter((f) => f.endsWith('.css')).map((f) => d + f));
+  for (const f of files) {
+    for (const [, sel, body] of readFileSync(new URL(f, dir), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*#view-[^{}]*)\{([^{}]*)\}/g)) {
+      assert.doesNotMatch(body, /(^|[;\s])padding(-bottom|-block(-end)?)?\s*:/, `${f}: ${sel.trim()} sets the bottom padding`);
+    }
+  }
 });
 
 // --- inline actions (2.8) ---------------------------------------------------------
@@ -302,19 +333,10 @@ const scene = (version, tones = [TONE_CODE.grey]) => {
   return { version, pts, count: tones.length, outer: 540 };
 };
 
-test('pip constants: 240 px, 2 fps, hidden under 700 px', () => {
+test('pip constants: 240 px, 2 fps', () => {
   assert.equal(PIP_SIZE, 240);
   assert.equal(PIP_FPS, 2);
   assert.equal(PIP_FRAME_MS, 500);
-  assert.equal(PIP_MIN_VIEWPORT, 700);
-});
-
-test('pipVisible: only in other views, wide windows, a visible document, a loaded map', () => {
-  assert.equal(pipVisible({ view: 'board', width: 1400, hasMap: true }), true);
-  assert.equal(pipVisible({ view: 'map', width: 1400, hasMap: true }), false);
-  assert.equal(pipVisible({ view: 'board', width: 699, hasMap: true }), false);
-  assert.equal(pipVisible({ view: 'board', width: 1400, hidden: true, hasMap: true }), false);
-  assert.equal(pipVisible({ view: 'board', width: 1400, hasMap: false }), false);
 });
 
 test('pipTransform/ringsOf/dotsOf: the scene fits the canvas, centred', () => {

@@ -6,8 +6,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import * as render from '../public/js/views/map/render.js';
-import { createRenderer, readPalette } from '../public/js/views/map/render.js';
-import { layout } from '../public/js/views/map/layout.js';
+import { createRenderer, platePlace, readPalette } from '../public/js/views/map/render.js';
+import { layout, LEGEND_ANGLE } from '../public/js/views/map/layout.js';
 
 // --- fakes -------------------------------------------------------------------
 
@@ -115,8 +115,8 @@ function opsAt(ops, scene, id) {
 
 // --- readPalette ---------------------------------------------------------------
 
-test('exports exactly createRenderer and readPalette', () => {
-  assert.deepEqual(Object.keys(render).sort(), ['createRenderer', 'readPalette']);
+test('exports exactly createRenderer, platePlace, readPalette, codeFont and PHONE_ALL_LABELS', () => {
+  assert.deepEqual(Object.keys(render).sort(), ['PHONE_ALL_LABELS', 'codeFont', 'createRenderer', 'platePlace', 'readPalette']);
 });
 
 test('readPalette reads the §4 tokens through getComputedStyle', (t) => {
@@ -243,6 +243,29 @@ test('working adds a turning grey arc; reduced motion holds it still', () => {
   assert.equal(r1[0].path[0][4], r2[0].path[0][4], 'reduced motion: the same arc every frame');
 });
 
+test('the working arc runs on a faint full track of the same radius, so it never reads as a stray ")"', () => {
+  const nodes = [{ id: 'l', kind: 'lane', label: 'l', status: 'working' }];
+  const ctx = fakeCtx();
+  createRenderer(ctx, PAL).drawNodes(sceneOf(nodes, { now: 0 }));
+  const strokes = ctx.ops.filter((o) => o.op === 'stroke' && o.path[0]?.[0] === 'arc');
+  const turning = strokes.find((o) => o.strokeStyle === 'T2' && o.path[0][5] - o.path[0][4] < Math.PI);
+  assert.ok(turning, 'a turning arc');
+  const track = strokes.find((o) => o.strokeStyle === 'LINE' && Math.abs(o.path[0][5] - o.path[0][4] - 2 * Math.PI) < 1e-9
+    && o.path[0][3] === turning.path[0][3] && o.path[0][1] === turning.path[0][1] && o.path[0][2] === turning.path[0][2]);
+  assert.ok(track, 'a full track of the same radius around the same point');
+  assert.ok(strokes.indexOf(track) < strokes.indexOf(turning), 'the track is drawn first, under the arc');
+});
+
+test('codeFont: a builder code keeps 9px when it fits the plate, else shrinks to fit (never below 6)', () => {
+  const q = 8.75; // a builder at scale 1 (SIZE 7 x 1.25)
+  assert.equal(render.codeFont(2 * 5.4, q), 9, 'a two-letter code at 9px fits');
+  const f = render.codeFont(3 * 5.4, q);
+  assert.ok(f < 9 && f >= 6, `three letters shrink: ${f}`);
+  assert.ok((3 * 5.4 * f) / 9 <= 2 * q - 4, 'and then fit inside the outline');
+  assert.equal(render.codeFont(100, q), 6);
+  assert.equal(render.codeFont(0, q), 9);
+});
+
 test('a builder is a 2px square outline with its short code inside', () => {
   const ctx = fakeCtx();
   const scene = sceneOf(FLEET);
@@ -281,6 +304,91 @@ test('overlay: a cost-heavy calm lane takes an accent level, a crit lane keeps i
   assert.ok(opsAt(ctx.ops, scene, 'b').some((o) => o.op === 'fill' && shapeOf(o) === 'square' && o.fillStyle === 'P1'));
 });
 
+test('drift overlay: a dashed warn ring on a missing node, a solid warn square on an undeclared one, never the accent', () => {
+  const nodes = [
+    { id: '__core', kind: 'core', label: 'hub' },
+    { id: 'hq', kind: 'site', parent: '__core', label: 'hq', status: 'ok' },
+    { id: 'gone', kind: 'room', parent: 'hq', label: 'gone', status: 'unknown', drift: 'missing', why: 'hv1 does not list gone' },
+    { id: 'feed:hv1', kind: 'site', parent: '__core', label: 'hv1', status: 'ok', discovered: true, drift: 'undeclared' },
+    { id: 'feed:hv1/new', kind: 'room', parent: 'feed:hv1', label: 'new', status: 'ok', discovered: true, drift: 'undeclared' },
+    { id: 'b', kind: 'builder', parent: 'hq', label: 'B1', code: 'B1', status: 'ok', drift: 'undeclared' },
+    { id: 'calm', kind: 'room', parent: 'hq', label: 'calm', status: 'ok' },
+  ];
+  const ctx = fakeCtx();
+  const scene = sceneOf(nodes, { overlay: 'drift' });
+  const r = createRenderer(ctx, PAL);
+  assert.doesNotThrow(() => r.draw(scene));
+  const accent = [PAL.accent, ...PAL.accentL];
+  const mark = (id) => opsAt(ctx.ops, scene, id).filter((o) => o.op === 'stroke' && o.lineWidth === 1.5);
+  const gone = mark('gone');
+  assert.ok(gone.some((o) => o.strokeStyle === 'P2' && o.dash.length === 2 && shapeOf(o) === 'disc'), 'missing: dashed warn ring');
+  for (const id of ['feed:hv1', 'feed:hv1/new', 'b']) {
+    const m = mark(id).filter((o) => o.strokeStyle === 'P2');
+    assert.ok(m.some((o) => o.dash.length === 0 && shapeOf(o) === 'square'), `${id}: solid warn square`);
+    assert.ok(mark(id).every((o) => !accent.includes(o.strokeStyle)), `${id}: not the accent`);
+  }
+  assert.notEqual(shapeOf(gone.find((o) => o.strokeStyle === 'P2')), shapeOf(mark('b').find((o) => o.strokeStyle === 'P2')), 'the two differ in shape');
+  assert.equal(mark('calm').length, 0);
+  assert.ok(opsAt(ctx.ops, scene, 'calm').every((o) => o.alpha <= 0.5 + 1e-9), 'the rest is dimmed');
+  // Outside the drift overlay, no drift mark.
+  const ctx2 = fakeCtx();
+  const s2 = sceneOf(nodes);
+  createRenderer(ctx2, PAL).drawNodes(s2);
+  assert.ok(!ctx2.ops.some((o) => o.op === 'stroke' && o.lineWidth === 1.5 && o.strokeStyle === 'P2'));
+});
+
+test('reach overlay: arcs with arrowheads only there, the selected node\'s reach in the accent', () => {
+  const nodes = [
+    { id: '__core', kind: 'core', label: 'hub' },
+    { id: 'hq', kind: 'site', parent: '__core', label: 'hq', status: 'ok' },
+    { id: 'a', kind: 'room', parent: 'hq', label: 'a', status: 'ok' },
+    { id: 'b', kind: 'room', parent: 'hq', label: 'b', status: 'ok' },
+    { id: 'c', kind: 'room', parent: 'hq', label: 'c', status: 'ok' },
+    { id: 'calm', kind: 'room', parent: 'hq', label: 'calm', status: 'ok' },
+  ];
+  const reach = [
+    { id: 'reach:a>b', kind: 'reach', from: 'a', to: 'b', label: 'tcp:22' },
+    { id: 'reach:b>c', kind: 'reach', from: 'b', to: 'c', label: 'tcp:443' },
+    { id: 'reach:a>gone', kind: 'reach', from: 'a', to: 'gone', label: '*' },
+  ];
+  const arcs = (ops) => ops.filter((o) => o.op === 'stroke' && o.path.some((p) => p[0] === 'quad'));
+  const heads = (ops) => ops.filter((o) => o.op === 'fill' && o.path.filter((p) => p[0] === 'lineTo').length === 2 && o.path.at(-1)[0] === 'closePath');
+
+  // Not in the reach overlay: nothing drawn, even with reach links in the scene.
+  const ctx0 = fakeCtx();
+  createRenderer(ctx0, PAL).draw(sceneOf(nodes, { reach, overlay: 'status' }));
+  assert.equal(arcs(ctx0.ops).length, 0);
+
+  // Reach, nothing selected: thin grey arcs, an arrowhead each; a link to a node not drawn is skipped.
+  const ctx = fakeCtx();
+  const scene = sceneOf(nodes, { reach, overlay: 'reach' });
+  const r = createRenderer(ctx, PAL);
+  r.drawReach(scene);
+  assert.equal(arcs(ctx.ops).length, 2);
+  assert.ok(arcs(ctx.ops).every((o) => o.strokeStyle === 'T3' && o.lineWidth === 1 && o.dash.length === 0));
+  assert.equal(heads(ctx.ops).length, 2, 'direction is shown');
+  assert.ok(!ctx.ops.some((o) => o.op === 'fillText'), 'no port labels without a selection');
+
+  // Selected a: its arc in the accent with its ports, b marked, calm dimmed, b>c faded.
+  const ctx2 = fakeCtx();
+  const s2 = sceneOf(nodes, { reach, overlay: 'reach', selected: 'a' });
+  const r2 = createRenderer(ctx2, PAL);
+  assert.doesNotThrow(() => r2.draw(s2));
+  const [ab, bc] = arcs(ctx2.ops);
+  assert.equal(ab.strokeStyle, 'A60');
+  assert.equal(ab.lineWidth, 1.5);
+  assert.equal(bc.strokeStyle, 'T3');
+  assert.ok(bc.alpha < 0.35);
+  assert.ok(ctx2.ops.some((o) => o.op === 'fillText' && o.text === 'tcp:22'));
+  assert.ok(!ctx2.ops.some((o) => o.op === 'fillText' && o.text === 'tcp:443'));
+  const ring = (id) => opsAt(ctx2.ops, s2, id).filter((o) => o.op === 'stroke' && o.lineWidth === 1.5 && o.strokeStyle === 'A70');
+  assert.equal(ring('b').length, 1, 'what a can touch is ringed');
+  assert.equal(ring('a').length + ring('c').length + ring('calm').length, 0);
+  assert.ok(opsAt(ctx2.ops, s2, 'calm').every((o) => o.alpha <= 0.5 + 1e-9), 'the rest is dimmed');
+  assert.ok(opsAt(ctx2.ops, s2, 'c').every((o) => o.alpha <= 0.5 + 1e-9), 'two hops away is not lit');
+  assert.ok(ctx2.ops.every((o) => o.op !== 'gradient'));
+});
+
 test('a folded node draws a dotted ring and a +N plate, and returns the plate rect', () => {
   const ctx = fakeCtx();
   const nodes = FLEET.slice(0, 4);
@@ -309,7 +417,7 @@ test('pulses are skipped under reduced motion, comets too', () => {
 
 // --- rings and dial ----------------------------------------------------------------
 
-test('rings: solid hairlines in --line at 0.5, labelled SITE/ROOM/BUILDER/LANE with a leader tick', () => {
+test('rings: solid hairlines in --line at 0.5, labelled SITE/ROOM/BUILDER/LANE with a leader tick at bearing 330', () => {
   const ctx = fakeCtx();
   const scene = sceneOf(FLEET);
   createRenderer(ctx, PAL).drawRings(scene);
@@ -323,13 +431,21 @@ test('rings: solid hairlines in --line at 0.5, labelled SITE/ROOM/BUILDER/LANE w
   }
   const words = ctx.ops.filter((o) => o.op === 'fillText' && /LABEL/.test(o.font)).map((o) => o.text);
   assert.deepEqual(words, ['SITE', 'ROOM', 'BUILDER', 'LANE']);
-  const label = ctx.ops.find((o) => o.op === 'fillText' && o.text === 'SITE');
-  assert.match(label.font, /10px/);
-  assert.equal(label.x, 800, 'at twelve o\'clock');
-  const leaders = ctx.ops.filter((o) => o.op === 'stroke' && o.path.length === 2 && o.path[0][1] === 800 && o.path[1][1] === 800
-    && Math.abs(o.path[0][2] - o.path[1][2]) === 6);
-  const tops = rings.map((o) => 600 - o.path[0][3]);
-  assert.deepEqual(leaders.map((o) => o.path[0][2]), tops, 'a 6px leader up from each ring at twelve o\'clock');
+  // T19: off the 000 axis, in the layout's gap at bearing 330 (upper left).
+  const ux = Math.cos(LEGEND_ANGLE), uy = Math.sin(LEGEND_ANGLE);
+  for (const o of rings) {
+    const R = o.path[0][3];
+    const word = ctx.ops.filter((t) => t.op === 'fillText' && /LABEL/.test(t.font))[rings.indexOf(o)];
+    assert.match(word.font, /10px/);
+    assert.ok(Math.abs(word.x - (800 + ux * (R + 8))) < 1e-6 && Math.abs(word.y - (600 + uy * (R + 8))) < 1e-6, `${word.text} at bearing 330`);
+    assert.ok(word.x < 800, `${word.text} is not on the 000 axis`);
+    const leader = ctx.ops.find((t) => t.op === 'stroke' && t.path.length === 2
+      && Math.abs(t.path[0][1] - (800 + ux * R)) < 1e-6 && Math.abs(t.path[0][2] - (600 + uy * R)) < 1e-6);
+    assert.ok(leader, `a leader from ring ${R}`);
+    assert.ok(Math.abs(Math.hypot(leader.path[1][1] - 800, leader.path[1][2] - 600) - (R + 6)) < 1e-6, 'a 6px radial leader');
+  }
+  const legends = ctx.ops.filter((o) => o.op === 'fillText' && /LABEL/.test(o.font));
+  assert.ok(legends.every((o) => Math.abs(o.x - 800) > 1), 'no ring legend on the 000 axis');
 });
 
 test('the dial: 72 degree ticks and mono bearings 000 090 180 270', () => {
@@ -406,17 +522,31 @@ test('builder lamps: link, approvals, stuck as 4x4 squares; off is --line', () =
   assert.deepEqual(lamps({}, [stuckLane]), ['T2', 'LINE', 'P2']);
 });
 
-test('labels: plates in the label face uppercase, lanes in mono, loud ones in their hue', () => {
-  const nodes = FLEET.map((n) => (n.kind === 'lane' ? { ...n, status: 'crit', why: 'CI failed' } : n));
+test('labels: one style, the label face in caps; trouble is t1 text, its hue only on the node mark (T19)', () => {
+  for (const status of ['crit', 'attention', 'down']) {
+    const nodes = FLEET.map((n) => (n.kind === 'lane' ? { ...n, status, why: 'CI failed' } : n));
+    const ctx = fakeCtx();
+    const scene = sceneOf(nodes, { s: 1.3 });
+    const r = createRenderer(ctx, PAL);
+    r.drawLabels(scene);
+    const text = (t) => ctx.ops.find((o) => o.op === 'fillText' && o.text === t);
+    assert.match(text('AGENTS').font, /LABEL/);
+    assert.match(text('BUILDER-A').font, /LABEL/);
+    assert.ok(!text('pay'), 'no lowercase mono name');
+    assert.match(text('PAY').font, /LABEL/);
+    assert.equal(text('PAY').fillStyle, 'T1', `${status}: the name is plain t1`);
+    assert.equal(text('CI failed').fillStyle, 'T2', `${status}: the why is grey`);
+    assert.ok(text('FLEET'), 'the core label');
+    const names = ctx.ops.filter((o) => o.op === 'fillText' && /LABEL/.test(o.font));
+    assert.ok(names.every((o) => !['P1', 'P2', 'P3', 'ACC'].includes(o.fillStyle)), `${status}: no hue on any name`);
+    // The hue lives on the lane's mark.
+    ctx.ops.length = 0;
+    r.drawNodes(scene);
+    assert.ok(opsAt(ctx.ops, scene, 'lane:builder-a/pay').some((o) => o.fillStyle === 'P1' || o.fillStyle === 'P2'), `${status}: the mark has the hue`);
+  }
   const ctx = fakeCtx();
-  createRenderer(ctx, PAL).drawLabels(sceneOf(nodes, { s: 1.3 }));
-  const text = (t) => ctx.ops.find((o) => o.op === 'fillText' && o.text === t);
-  assert.match(text('AGENTS').font, /LABEL/);
-  assert.match(text('BUILDER-A').font, /LABEL/);
-  assert.match(text('pay').font, /MONO/);
-  assert.equal(text('pay').fillStyle, 'P1');
-  assert.equal(text('CI failed').fillStyle, 'P1');
-  assert.ok(text('FLEET'), 'the core label');
+  createRenderer(ctx, PAL).drawLabels(sceneOf(FLEET, { s: 1.3 }));
+  assert.equal(ctx.ops.find((o) => o.op === 'fillText' && o.text === 'PAY').fillStyle, 'T2', 'a calm lane is t2');
 });
 
 test('text widths are measured once per font and text', () => {
@@ -428,6 +558,138 @@ test('text widths are measured once per font and text', () => {
   assert.ok(first > 0);
   r.drawLabels(scene);
   assert.equal(ctx.measured, first, 'the second frame hits the cache');
+});
+
+// --- label placement (T18) ----------------------------------------------------------
+
+/** How far out anything stroked around `sp` reaches: arcs centred there, rects around it (corners). */
+function drawnReach(ops, sp) {
+  let R = 0;
+  for (const o of ops) {
+    if (o.op === 'fill' && o.path[0]?.[0] === 'moveTo' && Math.abs(o.path[0][1] - sp.x) < 0.01 && Math.abs(o.path[0][2] - sp.y) < 20) {
+      // A glyph (triangle, diamond): its farthest vertex.
+      for (const p of o.path) if (p[0] === 'moveTo' || p[0] === 'lineTo') R = Math.max(R, Math.hypot(p[1] - sp.x, p[2] - sp.y));
+      continue;
+    }
+    if (o.op !== 'stroke' && o.op !== 'strokeRect') continue;
+    const half = (o.lineWidth ?? 1) / 2;
+    if (o.op === 'strokeRect') {
+      const [x, y, w, h] = o.rect;
+      if (Math.abs(x + w / 2 - sp.x) < 0.01 && Math.abs(y + h / 2 - sp.y) < 0.01) R = Math.max(R, Math.hypot(w / 2, h / 2) + half);
+      continue;
+    }
+    const p0 = o.path[0];
+    if (p0?.[0] === 'arc' && Math.abs(p0[1] - sp.x) < 0.01 && Math.abs(p0[2] - sp.y) < 0.01) R = Math.max(R, p0[3] + half);
+    if (p0?.[0] === 'rect' && Math.abs(p0[1] + p0[3] / 2 - sp.x) < 0.01 && Math.abs(p0[2] + p0[4] / 2 - sp.y) < 0.01) R = Math.max(R, Math.hypot(p0[3] / 2, p0[4] / 2) + half);
+  }
+  return R;
+}
+
+/** Distance from (x, y) to the nearest point of a rect [rx, ry, w, h]. */
+const rectDist = (x, y, [rx, ry, w, h]) => Math.hypot(Math.max(rx - x, 0, x - rx - w), Math.max(ry - y, 0, y - ry - h));
+
+/** The label's text op and the 14px backing drawn just before it. */
+function labelOf(ops, text) {
+  const i = ops.findIndex((o) => o.op === 'fillText' && o.text === text);
+  assert.ok(i >= 0, `label ${text} drawn`);
+  const back = ops.slice(0, i).reverse().find((o) => o.op === 'fillRect' && o.rect[3] === 14);
+  return { text: ops[i], back: back.rect };
+}
+
+test('labels keep 2px clear of the outermost ring a node draws: gauges, drift marks, folds, builder squares', () => {
+  const nodes = [
+    { id: '__core', kind: 'core', label: 'hub' },
+    { id: 'hq', kind: 'site', parent: '__core', label: 'hq', status: 'ok', metrics: { cpu: 0.4, mem: 0.5 } },
+    { id: 'backup', kind: 'room', parent: 'hq', label: 'backup', status: 'unknown', drift: 'missing' },
+    { id: 'repos', kind: 'room', parent: 'hq', label: 'repos', status: 'ok', metrics: { cpu: 0.2, mem: 0.9 } },
+    { id: 'new', kind: 'room', parent: 'hq', label: 'new', status: 'ok', drift: 'undeclared' },
+    { id: 'b', kind: 'builder', parent: 'hq', builder: 'builder-b', label: 'BB', code: 'BB', status: 'ok', drift: 'undeclared' },
+    { id: 'lane:b/x', kind: 'lane', parent: 'b', builder: 'builder-b', label: 'feat-x', status: 'attention' },
+    { id: 'lane:b/y', kind: 'lane', parent: 'b', builder: 'builder-b', label: 'fix-y', status: 'working' },
+  ];
+  for (const s of [1.3, 1.6]) {
+    const ctx = fakeCtx();
+    const scene = sceneOf(nodes, { overlay: 'drift', s, folded: new Set(['repos']), kids: new Map([['repos', [{ id: 'k1' }, { id: 'k2' }]]]) });
+    const r = createRenderer(ctx, PAL);
+    r.drawNodes(scene);
+    const nodeOps = [...ctx.ops];
+    r.drawLabels(scene);
+    for (const [id, text] of [['hq', 'HQ'], ['backup', 'BACKUP'], ['repos', 'REPOS'], ['new', 'NEW'], ['b', 'BUILDER-B'], ['lane:b/x', 'FEAT-X'], ['lane:b/y', 'FIX-Y']]) {
+      const sp = scene.toScreen(scene.nodes.get(id));
+      const R = drawnReach(nodeOps, sp);
+      assert.ok(R > 0, `${id} draws something`);
+      const { back } = labelOf(ctx.ops, text);
+      assert.ok(rectDist(sp.x, sp.y, back) >= R + 2 - 1e-6, `${id} at s=${s}: label ${rectDist(sp.x, sp.y, back).toFixed(1)} from centre, ring reaches ${R.toFixed(1)}`);
+    }
+  }
+});
+
+test('the +N plate sits outside the fold ring on a 45 degree diagonal, 2px clear, away from the label', () => {
+  const ctx = fakeCtx();
+  const nodes = FLEET.slice(0, 4);
+  const kids = new Map([['builder:builder-a', [FLEET[4], { id: 'lane:builder-a/b' }]]]);
+  const scene = sceneOf(nodes, { folded: new Set(['builder:builder-a']), kids, rolled: () => 'ok' });
+  const [plate] = createRenderer(ctx, PAL).drawNodes(scene);
+  const c = scene.nodes.get('builder:builder-a');
+  const sp = scene.toScreen(c);
+  const ring = ctx.ops.find((o) => o.op === 'stroke' && o.dash.length && o.path[0]?.[0] === 'arc' && Math.abs(o.path[0][1] - sp.x) < 0.01);
+  const rect = [plate.x, plate.y, plate.w, plate.h];
+  assert.ok(rectDist(sp.x, sp.y, rect) >= ring.path[0][3] + 2 - 1e-6, 'clear of the dotted ring');
+  const corner = [[plate.x, plate.y], [plate.x + plate.w, plate.y], [plate.x, plate.y + plate.h], [plate.x + plate.w, plate.y + plate.h]]
+    .sort((a, b) => Math.hypot(a[0] - sp.x, a[1] - sp.y) - Math.hypot(b[0] - sp.x, b[1] - sp.y))[0];
+  assert.ok(Math.abs(Math.abs(corner[0] - sp.x) - Math.abs(corner[1] - sp.y)) < 1e-6, 'its near corner is on the diagonal');
+  const mid = [plate.x + plate.w / 2 - sp.x, plate.y + plate.h / 2 - sp.y];
+  assert.ok(mid[0] * Math.cos(c.t) + mid[1] * Math.sin(c.t) < 0, 'on the side away from the label');
+});
+
+test('a label flips to the left of its node before it crosses the right edge, and over the node when neither side fits', () => {
+  const nodes = [...FLEET.slice(0, 2), { id: 'east', kind: 'room', parent: 'hq', label: 'eastern-room', status: 'ok' }];
+  const base = sceneOf(nodes);
+  const c = base.nodes.get('east');
+  // Put the room due east of the centre so its label wants to run right.
+  base.nodes.set('east', { ...c, t: 0 });
+  const sp = base.toScreen(c);
+  const ctx = fakeCtx();
+  createRenderer(ctx, PAL).drawLabels({ ...base, W: sp.x + 60 });
+  const { text, back } = labelOf(ctx.ops, 'EASTERN-ROOM');
+  assert.ok(back[0] + back[2] <= sp.x, 'the label is on the left of the node');
+  assert.ok(back[0] >= 4, 'and inside the canvas');
+  assert.ok(Math.abs(text.y - sp.y) < 1, 'on the node\'s row');
+
+  const ctx2 = fakeCtx();
+  // 90px is a phone: only the selection (or trouble) keeps its label there.
+  const narrow = { ...base, W: 90, selected: 'east', toScreen: () => ({ x: 45, y: 300 }) };
+  createRenderer(ctx2, PAL).drawLabels(narrow);
+  const over = labelOf(ctx2.ops, 'EASTERN-ROOM');
+  assert.ok(over.back[1] + 14 <= 300, 'neither side fits: it goes above the node');
+  assert.ok(over.back[0] >= 2 && over.back[0] + over.back[2] <= 90, 'kept inside the canvas');
+});
+
+test('a builder on a machine labelled with its name is labelled by its code; one without keeps its name', () => {
+  const host = { id: 'vm-a', kind: 'room', parent: 'hq', label: 'builder-a', status: 'ok', hosts: 'builder-a' };
+  const nodes = [...FLEET.slice(0, 2), host, { ...FLEET[3], parent: 'vm-a' }];
+  const ctx = fakeCtx();
+  createRenderer(ctx, PAL).drawLabels(sceneOf(nodes));
+  const texts = ctx.ops.filter((o) => o.op === 'fillText').map((o) => o.text);
+  assert.equal(texts.filter((t) => t === 'BUILDER-A').length, 1, 'the host says it once');
+  assert.ok(texts.includes('B1'), 'the builder says its code');
+  const ctx2 = fakeCtx();
+  createRenderer(ctx2, PAL).drawLabels(sceneOf(FLEET));
+  assert.ok(ctx2.ops.some((o) => o.op === 'fillText' && o.text === 'BUILDER-A'), 'a builder in a plain room keeps its name');
+  const vm = { ...host, label: 'vm-a' };
+  const ctx3 = fakeCtx();
+  createRenderer(ctx3, PAL).drawLabels(sceneOf([...FLEET.slice(0, 2), vm, { ...FLEET[3], parent: 'vm-a' }]));
+  assert.ok(ctx3.ops.some((o) => o.op === 'fillText' && o.text === 'BUILDER-A'), 'a builder on a machine with another name keeps its name');
+});
+
+test('the core\'s label is left to the map title on a phone-wide canvas', () => {
+  const draw = (W) => {
+    const ctx = fakeCtx();
+    createRenderer(ctx, PAL).drawLabels(sceneOf(FLEET, { W }));
+    return ctx.ops.some((o) => o.op === 'fillText' && o.text === 'FLEET');
+  };
+  assert.equal(draw(1600), true);
+  assert.equal(draw(390), false);
 });
 
 // --- selection --------------------------------------------------------------------------
@@ -485,13 +747,41 @@ test('the tether runs from the selected node to the anchor, only on wide screens
 
 // --- readout and palette swap -----------------------------------------------------------------
 
-test('readout text: zoom, scope, node count, overlay, UTC', () => {
+test('readout text: zoom, scope, node count, overlay, and no clock (T19: the header has the time)', () => {
   const r = createRenderer(fakeCtx(), PAL);
   const now = Date.UTC(2026, 0, 2, 12, 4, 31);
-  assert.equal(r.readout({ zoom: 1.8, scope: 'B1', drawn: 214, total: 570, overlay: 'ci', now }), 'Z 1.80×  SCOPE B1  N 214/570  OVL CI  12:04:31Z');
-  assert.equal(r.readout({ zoom: 1, scope: 'all', drawn: 3, total: 3, now }), 'Z 1.00×  SCOPE ALL  N 3/3  OVL STATUS  12:04:31Z');
-  assert.equal(r.readout({ zoom: 2, drawn: 1, total: 2, now, compact: true }), 'Z 2.00× · N 1/2 · 12:04:31Z');
+  assert.equal(r.readout({ zoom: 1.8, scope: 'B1', drawn: 214, total: 570, overlay: 'ci', now }), 'Z 1.80×  SCOPE B1  N 214/570  OVL CI');
+  assert.equal(r.readout({ zoom: 1, scope: 'all', drawn: 3, total: 3, now }), 'Z 1.00×  SCOPE ALL  N 3/3  OVL STATUS');
+  assert.equal(r.readout({ zoom: 2, drawn: 1, total: 2, now, compact: true }), 'Z 2.00× · N 1/2');
   assert.match(r.readout({ now, p95: 3.24 }), /P95 3\.2MS$/);
+  assert.equal(r.readout({ zoom: 1, drawn: 3, total: 3, overlay: 'drift', drift: { missing: 1, undeclared: 2 }, now }),
+    'Z 1.00×  SCOPE ALL  N 3/3  OVL DRIFT  ◌ NOT SEEN 1  □ NOT DECLARED 2');
+  assert.doesNotMatch(r.readout({ overlay: 'status', drift: { missing: 1, undeclared: 2 }, now }), /NOT SEEN/);
+  assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: null }, now }), /OVL REACH {2}LINKS 12$/);
+  assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: 3 }, now }), /LINKS 12 {2}TOUCHES 3/);
+  assert.doesNotMatch(r.readout({ overlay: 'status', reach: { links: 12, touches: 3 }, now }), /LINKS/);
+  assert.match(r.readout({ overlay: 'reach', reach: { links: 12, touches: null, unresolved: 2 }, now }), /LINKS 12 {2}UNRESOLVED 2/);
+  assert.doesNotMatch(r.readout({ overlay: 'reach', reach: { links: 12, touches: null, unresolved: 0 }, now }), /UNRESOLVED/);
+  for (const ov of ['status', 'ci', 'drift', 'reach']) {
+    for (const compact of [false, true]) assert.doesNotMatch(r.readout({ overlay: ov, now, compact }), /\d\d:\d\d|UTC/, `${ov} ${compact}`);
+  }
+});
+
+test('readout at phone width keeps the overlay and its count, no clock', () => {
+  const r = createRenderer(fakeCtx(), PAL);
+  const now = Date.UTC(2026, 0, 2, 12, 4, 31);
+  const base = { zoom: 1, drawn: 22, total: 24, now, compact: true };
+  const drift = r.readout({ ...base, overlay: 'drift', drift: { missing: 1, undeclared: 1 } });
+  assert.equal(drift, 'Z 1.00× · N 22/24 · DRIFT ◌1 □1');
+  assert.equal(r.readout({ ...base, overlay: 'reach', reach: { links: 9, touches: null } }), 'Z 1.00× · N 22/24 · REACH 9');
+  assert.equal(r.readout({ ...base, overlay: 'reach', reach: { links: 9, touches: 3 } }), 'Z 1.00× · N 22/24 · REACH 3/9');
+  assert.equal(r.readout({ ...base, overlay: 'ci' }), 'Z 1.00× · N 22/24 · OVL CI');
+  assert.equal(r.readout({ ...base, overlay: 'status' }), 'Z 1.00× · N 22/24');
+  // Fits the 390 corner: one short line, no clock once an overlay is on.
+  for (const t of [drift, r.readout({ ...base, overlay: 'reach', reach: { links: 120, touches: 30 } })]) {
+    assert.doesNotMatch(t, /\d\d:\d\d:\d\dZ/);
+    assert.ok(t.length <= 34, t);
+  }
 });
 
 test('setPalette swaps colours for the next frame (lb:theme)', () => {
@@ -504,4 +794,65 @@ test('setPalette swaps colours for the next frame (lb:theme)', () => {
   assert.equal(r.palette.crit, 'LIGHT-P1');
   assert.equal(r.tone('accent', 2), 'A60');
   assert.equal(r.tone('grey'), 'T3');
+});
+
+// --- T19 Map polish -------------------------------------------------------------
+
+test('topology edges take the theme\'s edge weight (--map-edge-alpha: dimmer on light); trouble edges keep theirs (T19)', (t) => {
+  const prev = globalThis.getComputedStyle;
+  t.after(() => { globalThis.getComputedStyle = prev; });
+  for (const [raw, want] of [['0.6', 0.6], [' 1 ', 1], ['', 1], ['nope', 1], ['3', 1]]) {
+    globalThis.getComputedStyle = () => ({ getPropertyValue: (n) => (n === '--map-edge-alpha' ? raw : '') });
+    assert.equal(readPalette({}).edge, want, `"${raw}"`);
+  }
+  const nodes = [...FLEET, { id: 'lane:builder-a/api', kind: 'lane', parent: 'builder:builder-a', label: 'api', status: 'working' }];
+  const links = [
+    { id: 'c1', kind: 'conflict', from: 'lane:builder-a/pay', to: 'lane:builder-a/api', predicted: false, severity: 'crit' },
+    { id: 't', kind: 'touch', from: 'lane:builder-a/api', to: 'builder:builder-a' },
+  ];
+  const strokes = (edge) => {
+    const ctx = fakeCtx();
+    const r = createRenderer(ctx, { ...PAL, edge });
+    const scene = sceneOf(nodes, { links });
+    r.drawTree(scene);
+    const tree = ctx.ops.filter((o) => o.op === 'stroke');
+    ctx.ops.length = 0;
+    r.drawLinks(scene);
+    const [conflict, touch] = ctx.ops.filter((o) => o.op === 'stroke');
+    return { tree, conflict, touch };
+  };
+  const dark = strokes(1), light = strokes(0.6);
+  assert.ok(dark.tree.every((o) => o.alpha === 1));
+  assert.ok(light.tree.every((o) => Math.abs(o.alpha - 0.6) < 1e-9), 'tree branches one step dimmer');
+  assert.ok(Math.abs(light.touch.alpha - 0.35 * 0.6) < 1e-9, 'grey links too');
+  assert.equal(light.conflict.alpha, dark.conflict.alpha, 'a confirmed conflict keeps its weight');
+});
+
+test('the +N plate stays off every ring hairline, still away from the label (T19)', () => {
+  const W = 20, H = 14;
+  const span = (b, c0) => {
+    const dx = Math.max(b.x - c0.x, 0, c0.x - (b.x + b.w)), dy = Math.max(b.y - c0.y, 0, c0.y - (b.y + b.h));
+    const fx = Math.max(Math.abs(c0.x - b.x), Math.abs(c0.x - b.x - b.w)), fy = Math.max(Math.abs(c0.y - b.y), Math.abs(c0.y - b.y - b.h));
+    return [Math.hypot(dx, dy), Math.hypot(fx, fy)];
+  };
+  const c0 = { x: 0, y: 0 };
+  let moved = 0;
+  // A node at every bearing on a ring, or staggered off it (layout.js: -10,
+  // +16 px), the next ring in 130px and out 130px.
+  for (let deg = 0; deg < 360; deg += 5) {
+    const ang = (deg / 180) * Math.PI - Math.PI / 2;
+    for (const [R, st] of [[150, 0], [290, 0], [420, 0], [420, -10], [420, 16], [540, 16]]) {
+      const sp = { x: Math.cos(ang) * (R + st), y: Math.sin(ang) * (R + st) };
+      const hair = [R - 130, R, R + 130];
+      const plain = platePlace(sp, ang, 11, W, H);
+      const b = platePlace(sp, ang, 11, W, H, c0, hair);
+      if (b.x !== plain.x || b.y !== plain.y) moved++;
+      const [lo, hi] = span(b, c0);
+      assert.ok(hair.every((h) => h < lo - 1 || h > hi + 1), `bearing ${deg} on ${R}${st ? ` ${st}` : ''}: plate ${lo.toFixed(1)}..${hi.toFixed(1)} crosses a hairline`);
+      const mid = [b.x + W / 2 - sp.x, b.y + H / 2 - sp.y];
+      assert.ok(mid[0] * Math.cos(ang) + mid[1] * Math.sin(ang) < 0, `bearing ${deg}: away from the label`);
+      assert.ok(rectDist(sp.x, sp.y, [b.x, b.y, W, H]) >= 11 + 2 - 1e-6, 'clear of the fold ring');
+    }
+  }
+  assert.ok(moved > 0, 'some plates leave the straight-back diagonal for a side one');
 });

@@ -1,16 +1,19 @@
 /* The annunciator tiles (fleet plan §4 2.5, task D7). The 2x4 grid itself
-   (#ann, 64x18 tiles, 48x18 on a tablet) is in shell.css; this sheet draws
-   the tiles. normal: dark, grey label, empty count. unack: filled --pN,
-   --text-inv text, 1 Hz flash (lb-flash, phase-synced in JS). ack: filled,
-   steady. Reduced motion: no flash, the fill stays solid and an UNACK tag
-   shows. */
+   (#ann, 64x16 tiles, 48x16 on a tablet, 46x16 on a phone) is in shell.css; this sheet draws
+   the tiles. Grey unless something needs you (docs/design.md, runs night 4
+   T13): a tile is never filled. normal: grey label, empty count. unack and
+   ack: grey tile and label, only the count coloured with its shape, --p2 ▲
+   (wants you) or --p1 ■ (broken); unack adds a 1 Hz flashing ring in the
+   same hue (lb-flash on ::after, phase-synced in JS; the count never fades,
+   so it keeps 4.5:1 in both themes). Reduced motion: no flash, the ring
+   stays steady and an UNACK tag shows. */
 .ann-tile {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 2px;
   min-width: 0;
-  height: 18px;
+  height: 16px;
   padding: 0 var(--sp-1);
   border: var(--bw) solid var(--line);
   border-radius: var(--radius);
@@ -25,6 +28,7 @@
   white-space: nowrap;
   overflow: hidden;
   cursor: pointer;
+  position: relative;
 }
 .ann-tile:hover { border-color: var(--line-strong); }
 .ann-tile:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
@@ -32,6 +36,9 @@
 
 .ann-label { overflow: hidden; text-overflow: ellipsis; }
 .ann-n {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-family: var(--font-mono);
   font-size: var(--fs-10);
   font-variant-numeric: tabular-nums;
@@ -39,26 +46,38 @@
 .ann-i { display: none; flex: none; }
 .ann-tag { display: none; font-size: var(--fs-10); font-weight: 600; letter-spacing: 0; }
 
-/* Filled when active (unack or ack), in the tile's worst priority. */
+/* Active (unack or ack): the tile stays grey, the count takes the tone. */
+.ann-tile[data-p="1"] { --ann-tone: var(--p1); }
+.ann-tile[data-p="2"] { --ann-tone: var(--p2); }
 .ann-tile[data-state="unack"],
-.ann-tile[data-state="ack"] { color: var(--text-inv); border-color: transparent; }
-.ann-tile[data-state="unack"][data-p="1"],
-.ann-tile[data-state="ack"][data-p="1"] { background: var(--p1); }
-.ann-tile[data-state="unack"][data-p="2"],
-.ann-tile[data-state="ack"][data-p="2"] { background: var(--p2); }
-.ann-tile[data-state="unack"][data-p="3"],
-.ann-tile[data-state="ack"][data-p="3"] { background: var(--p3); }
+.ann-tile[data-state="ack"] { color: var(--text-2); }
+.ann-tile[data-state="unack"] .ann-n,
+.ann-tile[data-state="ack"] .ann-n { color: var(--ann-tone, var(--text-1)); font-weight: 600; }
+.ann-m { line-height: 1; }
 
-/* Unacknowledged: the shared 1 Hz blink. */
-.ann-tile[data-unack] { animation: lb-flash 1s linear infinite; }
+/* Unacknowledged: the shared 1 Hz blink, on a ring inside the tile only.
+   The tile itself does not fade (components.css's [data-unack] would);
+   the ring sits over the grey border in the tile's tone. */
+.ann-tile[data-unack] { animation: none; }
+.ann-tile[data-unack]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: var(--bw) solid var(--ann-tone, var(--text-1));
+  border-radius: var(--radius);
+  pointer-events: none;
+  animation: lb-flash 1s linear infinite;
+  animation-delay: inherit;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .ann-tile[data-unack] { animation: none; outline: none; }
+  .ann-tile[data-unack]::after { animation: none; }
   .ann-tile[data-state="unack"] .ann-tag { display: inline; }
 }
 
-/* Tablet: 48x18, icon plus count, no label. */
-@media (min-width: 700px) and (max-width: 1199px) {
+/* Tablet and phone: 48x16 (46x16), icon plus count, no label. */
+@media (max-width: 1199px) {
   .ann-i { display: inline-block; width: 12px; height: 12px; }
   .ann-label { display: none; }
 }
