@@ -66,6 +66,8 @@ Planner notes (round 1), from reading the code:
 - [ ] T17 (3) [ui] Run page stop line folded into the state label (r10-designer.md, Run page 2): `○ STOPPED · budget · after 7 rounds`, the duplicate stats text and stop line gone — done when: `test/view-runs.test.mjs` finds the one label and no second stop line; shot of the run page in both themes at 1440
 - [ ] T18 (n3 T13) [ui] The phone bar lights the segment of the current route (r10-designer.md, across 3): `public/js/ui/sheet.js`, Runs and Board under LIST — done when: a test sets each route and finds the one active segment; shots of inbox and runs at 390
 - [ ] T19 (3) [ui] Map polish (r10-designer.md, Map 1-5): topology edges dimmed one more step on light, run ring ≥ 14 px, muted run label, one label style (amber only on the ▲), the "+2" pill clear of the ring, ring legends by the kinds on them placed off the 000 axis, no clock in the HUD — done when: tests on the SVG/HUD model for each point that can be tested, shots of map in both themes at 1440 and 390
+- [ ] T20 (r13-stranger.md, 1) `laneboard run <sub>` no longer leaves an untracked `.laneboard/` in a checkout: add `.laneboard/` to `.gitignore` and say in README's CLI block that `run` subcommands append to `./.laneboard/run.jsonl` in the current directory unless `--post` — done when: a test (hygiene-safe, e.g. in `test/runs-docs.test.mjs`) finds `.laneboard/` in `.gitignore` and the default path named in README
+- [ ] T21 (r13-stranger.md, 2, 3) `laneboard run start/round/score/needs/ack` print one line on success (`appended to <file>` or `posted`), and `run ack` warns on stderr (still exit 0) when `--by` is missing or not one of `inbox`/`run page`/`owner` for a need that may be a fence need, and when the ref matches no need in the file being appended to — done when: `test/cli-run.test.mjs` (or the existing CLI run test) checks the echo for each subcommand and the warning for `ack 0` without `--by`, and `docs/runs.md` stays green in `test/runs-docs.test.mjs`
 
 Builder note (round 12, T6): a fence need closes only on `by` = `inbox`, `run page` or `owner`
 (`FENCE_ACK_BY` in `server/runs/protocol.mjs`), chosen as an allowlist because the reference loop
@@ -102,8 +104,16 @@ the owner types `--by owner` (the docs' example). A refused ack is kept in `raw`
   aligned and capped at ~900 px, one content width per panel; (6) Inbox on phone: actions on their
   own line; "COOPERATIVE CONTROL" badge as plain dim text.
 
+- **Stranger r13, ideas (not tasks):** (a) README names no API paths and guessable ones 404
+  (`/api/health`, `/api/sessions`, `/api/box`, `/api/audit`, `/api/inbox`; `/api/runs`, `/api/map`,
+  `/api/morning`, `/api/credit`, `/api/packages` work): a short list of the read endpoints in README
+  or `docs/` would help a `curl` visitor, or a `/api` index; (b) `laneboard bogus` prints the full
+  help and exits 2, same text as `--help` (exit 0): a one-line `unknown command` first would stand
+  out in logs; (c) README "All five variables are needed" reads as a correction of the block above.
+
 ## Reviews
 
 - reviews/r10-designer.md: 33 findings, 7 became tasks (T13-T19, the agreed taste calls of README §7 item 3 and n3 T13); lane-sidebar bars, accent vs amber, header density, run-list empty cells and widths, run page sparklines/table/width, Inbox phone layout, "cooperative control" badge, usage-bar tracks, RUNNING hourglass → For the owner (taste); hatched faded Board cards in light → dropped (T12 covers it); light pink/ochre fills → dropped (T12/T13 cover them); console clean.
+- reviews/r13-stranger.md: 7 findings, 2 became tasks (T20 from 1; T21 from 2 and 3 together); 4, 5, 6 → For the owner (docs/taste); 7 → dropped (not a bug, README says so). No browser views were tested by the reviewer.
 
 ## Morning
