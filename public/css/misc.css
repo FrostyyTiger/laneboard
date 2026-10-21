@@ -75,10 +75,11 @@
 @media (min-width: 700px) { .tabs { display: none; } }
 @media (max-width: 699px) {
   .views { display: none; }
-  /* The tab bar sits over the page, so give the last card somewhere to go —
-     and lift the disconnected banner clear of it. */
-  .layout, .view { padding-bottom: 68px; }
+  /* The bottom sheet's peek sits over the page, so give the last card somewhere
+     to go (the peek's height plus a gap, T23) — and lift the disconnected banner
+     clear of it. */
+  .layout, .view { padding-bottom: calc(var(--sheet-peek) + var(--gap) + env(safe-area-inset-bottom)); }
   .view.map-view { padding-bottom: 0; height: calc(100dvh - var(--topbar-h, 49px) - 52px - env(safe-area-inset-bottom)); }
-  .banner { bottom: calc(52px + env(safe-area-inset-bottom)); }
+  .banner { bottom: calc(var(--sheet-peek) + env(safe-area-inset-bottom)); }
 }
 

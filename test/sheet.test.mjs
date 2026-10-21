@@ -311,7 +311,25 @@ test('phone.css: 44px touch targets, transform-only snaps, linked by the page', 
   assert.match(css, /\.ps-peek, \.ps-row \{[^}]*min-height: var\(--row-touch\)/);
   assert.match(css, /\.strip-chip::after \{[^}]*inset: -4px 0;/, '36px chip, 44px hit area');
   assert.match(css, /\.shell-sheet\[data-snap="half"\] \{ transform: translateY\(calc\(100% - 50dvh\)\); \}/);
-  assert.match(css, /--sheet-peek: 96px;/);
+  assert.match(css, /translateY\(calc\(100% - var\(--sheet-peek\)/, 'the peek comes from the tokens.css token');
   assert.match(css, /\.sheet\[data-mode="centre"\]/);
   assert.doesNotMatch(css, /transition:[^;]*\b(height|top|bottom)\b/, 'the sheet moves by transform only');
+});
+
+// Seen at 390 (shots r8-T3 page-end): the last row of a view stayed under the sheet's peek,
+// because misc.css reserved 68 px for a peek of about 95 px.
+test('a phone view reserves at least the sheet peek at its bottom, from the one token (T23)', () => {
+  const tokens = fs.readFileSync(path.join(ROOT, 'public/css/tokens.css'), 'utf8');
+  const peek = Number(tokens.match(/--sheet-peek: (\d+)px;/)?.[1]);
+  assert.ok(peek >= 95, `the peek token covers the measured peek (${peek})`);
+  const phone = fs.readFileSync(path.join(ROOT, 'public/css/phone.css'), 'utf8');
+  assert.doesNotMatch(phone, /--sheet-peek:/, 'phone.css does not shadow the token');
+  const misc = fs.readFileSync(path.join(ROOT, 'public/css/misc.css'), 'utf8');
+  const block = misc.slice(misc.indexOf('@media (max-width: 699px)'));
+  const rule = block.match(/\.layout, \.view \{ padding-bottom: ([^;]+);/);
+  assert.ok(rule, 'the phone rule exists');
+  assert.match(rule[1], /^calc\(var\(--sheet-peek\) \+ var\(--gap\)/, 'the peek plus a gap');
+  assert.doesNotMatch(misc, /padding-bottom: \d+px/, 'no hardcoded reserve left');
+  const insp = fs.readFileSync(path.join(ROOT, 'public/css/inspector.css'), 'utf8');
+  assert.match(insp, /\.shell-insp \{ width: 100%; padding-bottom: var\(--sheet-peek\); \}/);
 });

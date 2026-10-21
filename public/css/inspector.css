@@ -209,7 +209,7 @@
 
 /* --- phone: the panel takes the whole centre, above the bottom sheet's peek ---- */
 @media (max-width: 699px) {
-  .shell-insp { width: 100%; padding-bottom: 96px; }
+  .shell-insp { width: 100%; padding-bottom: var(--sheet-peek); }
   .insp-act { width: 44px; height: 44px; }
   .insp-tab { min-height: 44px; }
 }

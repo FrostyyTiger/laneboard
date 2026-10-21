@@ -44,7 +44,6 @@
   /* The bottom sheet: fixed at full height, moved by transform only. */
   .shell-sheet {
     --sheet-gap: 80px;
-    --sheet-peek: 96px;
     display: flex;
     flex-direction: column;
     height: calc(100dvh - var(--sheet-gap) - env(safe-area-inset-top));
