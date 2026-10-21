@@ -596,22 +596,29 @@ export function createRenderer(ctx, palette) {
 
   /**
    * Folded: a dotted ring for what is inside and a "+N" plate outside it, on
-   * a 45 degree diagonal away from the label, 2px clear of the ring. Of those
+   * a 45 degree diagonal away from the label, 2px clear of the node's
+   * outermost ring (`outer`: ringOuter, the fold ring at least). Of those
    * diagonals the first whose plate crosses no ring hairline (`hairlines`:
    * screen radii around `c0`) wins: straight back from the label, then the
-   * two sides. Returns its rect.
+   * two sides. Pure placement, no drawing: `{text, ring, x, y, w, h}`.
    */
-  function foldMark(scene, id, n, c, sp, r, alpha, c0 = null, hairlines = []) {
-    const inside = scene.kids?.get(id)?.length ?? 0;
+  function foldPlate(scene, id, n, c, sp, r, outer, c0 = null, hairlines = []) {
     const ring = r + (n.metrics ? 10 : 6);
-    strokeStyle(P.t2, 0.55 * alpha, 1, [1.5, 3]);
-    ctx.beginPath(); arc(sp.x, sp.y, ring, 0, TAU); ctx.stroke();
-    ctx.setLineDash([]);
-    const text = `+${inside}`;
+    const text = `+${scene.kids?.get(id)?.length ?? 0}`;
     ctx.font = `600 9.5px ${P.mono}`;
     const w = measure(text) + 8;
     const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
-    const { x: bx, y: by } = platePlace(sp, ang, ring, w, 14, c0, hairlines);
+    const { x, y } = platePlace(sp, ang, Math.max(ring, outer - 0.5), w, 14, c0, hairlines);
+    return { text, ring, x, y, w, h: 14 };
+  }
+
+  /** Draws a folded node's dotted ring and its plate (from foldPlate). Returns the plate's rect. */
+  function foldMark(id, sp, plate, alpha) {
+    const { text, ring, x: bx, y: by, w } = plate;
+    strokeStyle(P.t2, 0.55 * alpha, 1, [1.5, 3]);
+    ctx.beginPath(); arc(sp.x, sp.y, ring, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = `600 9.5px ${P.mono}`;
     fillStyle(P.sunken, 0.95 * alpha);
     ctx.fillRect(bx, by, w, 14);
     strokeStyle(P.line, alpha, 1, []);
@@ -640,8 +647,40 @@ export function createRenderer(ctx, palette) {
     const c0 = centre(scene);
     const hairlines = scene.folded?.size
       ? ringLabels(scene.pos ?? new Map(), scene.byId ?? new Map()).map((l) => l.r * (scene.s ?? 1)) : [];
+    // A node's look and reach, shared by the plate pass and the draw pass.
+    const look = (id, c) => {
+      const n = c.node;
+      const r = (SIZE[n.kind] ?? 5) * ns * (0.4 + 0.6 * (c.a ?? 1));
+      const isFolded = Boolean(scene.folded?.has(id)) && !c.leaving;
+      const rolled = rollsUp(n, isFolded) ? scene.rolled?.(id) ?? null : null;
+      const st = n.virtual ? { tone: 'grey', level: 0, shape: 'disc', alpha: 1, abnormal: false }
+        : nodeStyle(n, scene.overlay, rolled, { budgetUsd: scene.budgetUsd?.(n), reach });
+      const outer = ringOuter(n, r, { mark: st.mark, folded: isFolded, working: Boolean(st.arc) });
+      return { n, r, isFolded, st, outer };
+    };
+    const shown = (c) => c.node && (c.a ?? 1) > 0.001;
+    const onScreen = (sp) => !(sp.x < -40 || sp.y < -40 || sp.x > W + 40 || sp.y > H + 40);
+    // The fold plates first, so the pings below can leave them clear.
+    const plates = new Map();
+    for (const id of scene.folded ?? []) {
+      const c = nodes.get(id);
+      if (!c || !shown(c) || c.leaving || c.node.kind === 'core' || c.node.kind === 'run') continue;
+      const sp = scene.toScreen(c);
+      if (!onScreen(sp)) continue;
+      const { n, r, outer } = look(id, c);
+      plates.set(id, foldPlate(scene, id, n, c, sp, r, outer, c0, hairlines));
+    }
     ctx.save();
     if (!scene.reduced) {
+      // A ping is a ripple round its node: it passes behind a +N plate, never through it.
+      const clipped = plates.size > 0 && typeof ctx.clip === 'function';
+      if (clipped) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-1e5, -1e5, 2e5, 2e5);
+        for (const b of plates.values()) ctx.rect(b.x - 2, b.y - 2, b.w + 4, b.h + 4);
+        ctx.clip('evenodd');
+      }
       for (const p of scene.pulses ?? []) {
         const c = nodes.get(p.id);
         if (!c) continue;
@@ -654,21 +693,17 @@ export function createRenderer(ctx, palette) {
         arc(sp.x, sp.y, r0 + ease(t) * (p.soft ? 18 : 30), 0, TAU);
         ctx.stroke();
       }
+      if (clipped) ctx.restore();
     }
     for (const [id, c] of nodes) {
-      const n = c.node;
-      if (!n || (c.a ?? 1) <= 0.001) continue;
+      if (!shown(c)) continue;
       const sp = scene.toScreen(c);
-      if (sp.x < -40 || sp.y < -40 || sp.x > W + 40 || sp.y > H + 40) continue;
+      if (!onScreen(sp)) continue;
       const fade = alphaOf(scene, id) * (c.a ?? 1);
-      const r = (SIZE[n.kind] ?? 5) * ns * (0.4 + 0.6 * (c.a ?? 1));
-      const isFolded = Boolean(scene.folded?.has(id)) && !c.leaving;
-      const rolled = rollsUp(n, isFolded) ? scene.rolled?.(id) ?? null : null;
-      const st = n.virtual ? { tone: 'grey', level: 0, shape: 'disc', alpha: 1, abnormal: false }
-        : nodeStyle(n, scene.overlay, rolled, { budgetUsd: scene.budgetUsd?.(n), reach });
+      const { n, r, isFolded, st, outer } = look(id, c);
       const alpha = fade * (st.alpha ?? 1);
       const col = tone(st.tone, st.level);
-      outerR.set(id, ringOuter(n, r, { mark: st.mark, folded: isFolded, working: Boolean(st.arc) }));
+      outerR.set(id, outer);
 
       if (n.kind === 'core') {
         // The core: a solid point in two hairline rings. No glow, no breathing.
@@ -749,7 +784,7 @@ export function createRenderer(ctx, palette) {
 
       if (GAUGED.has(n.kind)) gauges(n, sp.x, sp.y, n.kind === 'builder' ? r * 1.25 + 1 : r, alpha);
       if (isFolded) {
-        const b = foldMark(scene, id, n, c, sp, r, alpha, c0, hairlines);
+        const b = foldMark(id, sp, plates.get(id) ?? foldPlate(scene, id, n, c, sp, r, outer, c0, hairlines), alpha);
         if ((c.a ?? 1) > 0.5) badges.push(b);
       }
     }
