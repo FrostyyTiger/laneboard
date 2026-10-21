@@ -64,6 +64,11 @@ Planner notes (round 1), from reading the code:
 - [ ] T16 (4, review 6-designer, Run page 1+2, Inbox 3) [ui] PR rows read as links: run page artifact rows print `title ↗ · state · round n` with `open` printing nothing or the same `·` form and `merged`/`closed` muted; the Inbox RUN PRS row drops the `pr:` prefix and shows only the ↗ at 390 so the title is not cut; the run page 390 check scrolls to the artifacts (`shoot.mjs --hash` or a DOM test, since it shoots the viewport only) — done when: `test/view-runs.test.mjs` and `test/inbox-model.test.mjs` or a view test find the new row text and no `pr:`; run page and inbox shots (dark + light, 1440 + 390) with the artifacts visible
 - [ ] T17 (5, review 6-designer, Board 3 + 8) [ui] Board left column empty states are one muted line (`Rate limits · none`, `Machine · none`) as design.md says; a phone offline card's hatch stops behind a solid strip under the title row, not under the text — done when: a view test finds the two lines and no bare section header; board shots (dark + light, 1440 + 390), console clean
 - [ ] T18 (5, review 6-designer, Map 6) [ui] The `+2` overflow badge sits outside its node's ring, not over it — done when: `test/map-runs.test.mjs` or a map test checks the badge offset is larger than the ring radius; map shots (dark + light, 1440 + 390)
+- [ ] T19 (2, review 13-designer, Across 2) [ui] The run page SCORES block agrees with the stat line: a score with a `max` reads `3 of 10` in the value column and its spark is drawn against 0..max; the min–max range stays only for scores with no max (`public/js/views/runs.js`) — done when: `test/view-runs.test.mjs` renders `tasks` 3 of max 10 and finds `3 of 10` and no `0–3` in the block, and a score with no max still shows its range; run page shots (dark + light, 1440 + 390), console clean
+- [ ] T20 (3, review 13-designer, Run page 2 + Runs list 1) [ui] The scope note never makes the stat line two lines tall: `tasks 3 of 10 · scope 8 → 10` stays inline (scope muted, `--text-3`), on the run page and in the Runs list row; if it must wrap, the whole line is top-aligned — done when: a view test finds the scope text in the same stat element as the tasks text (no block-level break); run page and runs shots (dark + light, 1440 + 390), console clean
+- [ ] T21 (3, review 13-designer, Run page 3 + 4) [ui] Rounds table words: a wrap-up round says `wrap-up` in the ROUND cell only (task cell empty, ROUND cell left-aligned), and the outcome prints words (`no task done`, not the slug `no-task-done`; map in the view, the protocol value stays) — done when: `test/view-runs.test.mjs` finds one `wrap-up` in that row and `no task done` with no `no-task-done`; run page shots (dark + light, 1440 + 390), console clean
+- [ ] T22 (3, review 13-designer, Run page 5) [ui] The round's session link is visible as a link (underline or ↗ after the role, like the artifact title), and the demo fleet (`test/tools/demo-fleet.mjs`) gives at least one demo round a known session so a shot shows it — done when: `test/view-runs.test.mjs` finds the anchor with the link marker; the run page shot shows one linked round (dark + light, 1440 + 390), console clean
+- [ ] T23 (3, review 13-designer, Run page 6 + 9) [ui] At 390 each round keeps its title: two lines per round (`3 builder kept c3e4a5b $3.68`, title and task id under it in `--text-2`), COMMIT dropped before TASK; the 390 shot scrolls to the end of the rounds table and the artifacts (include the wrap-up row; same scroll as T16) — done when: a view test finds the round title in the phone markup; shots at 390 (dark + light) show the title and the wrap-up row, console clean
 
 ## Research questions
 
@@ -111,6 +116,15 @@ Planner notes (round 1), from reading the code:
   - Board: red cards use the left bar like amber ones (or all trouble cards get the frame); the two
     notification buttons same width and spaced; idle lanes as chips; `LAUNCH A LANE…` with an accent
     border as the primary call to action.
+- Ideas from review 13-designer (none made a task; say which you want):
+  - Noun before every `x of y` (`tasks 3 of 10`, `round 7 of 10`) on Map, Runs list and run page, the
+    slash nowhere (the Map's ring can count rounds or tasks and the label does not say which).
+  - One `↑` trend glyph at number size after the whole phrase (`tasks 3 of 10 ↑`); one type style for
+    Map run labels (`ACME-DOCS · 3 OF 10`); one `--row-dense` gap between phone stat lines.
+  - Run page head: goal first at `--fs-16` for every state, state line and detail under it, ids muted
+    (same as the review 6 idea).
+  - `shoot.mjs` (fenced) should freeze animations so trouble halos compare between shots.
+  - Map: BUILDER-A's lane dots include the accent violet; phone Fit leaves empty bands.
 
 ## Reviews
 
@@ -119,5 +133,10 @@ Planner notes (round 1), from reading the code:
   trouble label and phone collisions (Later n3 T48), run-label order and `7 / 10` alignment (T5), run
   page sparkline/rounds table width (Later r10 idea 5). Rest went to For the owner as ideas. The
   console was clean.
+- reviews/13-designer.md: about 30 findings, 5 became tasks (T19-T23). Dropped as covered: sparkline
+  and rounds table width (Later r10 idea 5), goal cut / hourglass / slash alignment in the Runs list
+  (Later r10 idea 4, n3 T50), Map CI-RETRY label and phone label pairing (Later n3 T48), `+2` badge
+  (T18), the 390 shots ending above the artifacts (T16, T23). The rest went to For the owner as
+  ideas. Console clean.
 
 ## Morning
