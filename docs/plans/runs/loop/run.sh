@@ -267,17 +267,18 @@ if [ "$(now)" -lt "$DEADLINE_S" ] && [ "$STOP" != error ]; then
   check; push
 fi
 # The report's "Needs you" list becomes needs events, so the Runs view and the Inbox show it.
-# It replaces what earlier stops of this run raised: those owner needs are acked first (by: loop).
-python3 - "$EV" <<'PY' | while IFS= read -r i; do ev needs.ack ref="$i" by=loop; done
+# It replaces what earlier stops of this run raised: those owner needs are acked first (by: loop),
+# by their ts, not their place: laneboard merges a run's sources by time, so places can shift.
+python3 - "$EV" <<'PY' | while IFS= read -r ts; do ev needs.ack ref="$ts" by=loop; done
 import json, sys
 needs, acked = [], set()
 for line in open(sys.argv[1], errors="replace"):
     try: e = json.loads(line)
     except Exception: continue
     if e.get("t") == "needs": needs.append(e)
-    if e.get("t") == "needs.ack" and isinstance(e.get("ref"), int): acked.add(e["ref"])
+    if e.get("t") == "needs.ack": acked.add(e.get("ref"))
 for i, e in enumerate(needs):
-    if e.get("kind") == "owner" and i not in acked: print(i)
+    if e.get("kind") == "owner" and e["ts"] not in acked and i not in acked: print(e["ts"])
 PY
 PR_URL=$(cat "$RUN_DIR/pr" 2>/dev/null)
 python3 - "$PLAN_DIR/PROGRESS.md" <<'PY' | while IFS= read -r line; do ev needs kind=owner text="$line" ${PR_URL:+link="$PR_URL"}; done
