@@ -46,7 +46,7 @@ import json, sys, time, re
 path, run, t, *kv = sys.argv[1:]
 d = {"v": 1, "t": t, "run": run, "ts": int(time.time() * 1000)}
 NUM = {"n", "value", "rounds", "pause5h", "stop7d", "usd", "total", "fiveHourPct", "sevenDayPct",
-       "fiveHourResetsAt", "overage", "open"}
+       "fiveHourResetsAt", "overage", "open", "max", "ref"}
 for item in kv:
     k, _, v = item.partition("=")
     if k in NUM and re.fullmatch(r"-?\d+(\.\d+)?", v):
@@ -85,6 +85,10 @@ tasks_done() { count '^- \[x\] T[0-9]'; }
 questions_open() { count '^- \[ \] Q[0-9]'; }
 tasks_open() { count '^- \[ \] T[0-9]'; }
 next_task() { grep -m1 -oE '^- \[ \] T[0-9]+' "$PLAN_DIR/PROGRESS.md" 2>/dev/null | grep -oE 'T[0-9]+'; }
+# the task's headline for round.start: the line after "T<n>", markdown stripped, 120 chars
+task_title() { grep -m1 -E "^- \[ \] $1\b" "$PLAN_DIR/PROGRESS.md" 2>/dev/null | sed -E "s/^- \[ \] $1[:.]? *//; s/[*\`]//g" | cut -c1-120; }
+# the run's cost over every start of it (SPENT restarts with the loop; the run.stop total must not)
+run_total() { python3 -c "import json,sys; print(round(sum(json.loads(l).get('usd',0) for l in open(sys.argv[1]) if '\"t\": \"cost\"' in l),2))" "$EV"; }
 
 SPENT=0 U5=0 R5=0 U7=0 OVERAGE=0 HARD=0
 # round <n> <role> <model>: one fresh session; returns 0 done, 2 rate-limited, 1 failed
@@ -105,11 +109,16 @@ $( [ -n "${STOP_REASON:-}" ] && echo "STOP REASON: $STOP_REASON   OWNER NOTES: $
     research) tools=(--restricted --strict-mcp-config --tools "Read,Write,Edit,Glob,Grep,WebSearch,WebFetch") ;;
     triage) tools=(--restricted --strict-mcp-config --tools "Read,Write,Edit,Glob,Grep") ;;
   esac
-  local task=""; case $role in builder|fix) task=$(next_task);; esac
-  ev round.start n="$n" role="$role" ${task:+task="$task"}
-  LANEBOARD_RUN="$NAME/$n" timeout "$ROUND_SECS" claude -p "$prompt" --model "$model" \
+  local task="" title=""; case $role in builder|fix) task=$(next_task); [ -n "$task" ] && title=$(task_title "$task");; esac
+  # rounds after run.stop (operator review, report) say so, so a stopped run does not read "81 of 80"
+  # its own session id, so laneboard binds the round to its session exactly (night 1 T12)
+  local sid; sid=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen | tr A-Z a-z)
+  ev round.start n="$n" role="$role" session="$sid" ${task:+task="$task"} ${title:+title="$title"} ${WRAPUP:+wrapup=true}
+  # The prompt goes in on stdin, not argv: a round that runs `pkill -f <something the prompt names>`
+  # must not match (and kill) its own session (night 3, rounds 3/16/18/22).
+  LANEBOARD_RUN="$NAME/$n" timeout "$ROUND_SECS" claude -p --model "$model" --session-id "$sid" \
     --permission-mode auto "${tools[@]}" \
-    --output-format stream-json --verbose > "$out" 2>&1
+    --output-format stream-json --verbose <<<"$prompt" > "$out" 2>&1
   local rc=$?
   read -r cost err u5 r5 u7 over limited text < <(python3 - "$out" <<'PY'
 import json, sys, re
@@ -139,12 +148,13 @@ PY
 )
   [ "$u5" -ge 0 ] && { U5=$u5; R5=$r5; }; [ "$u7" -ge 0 ] && U7=$u7; [ "$over" = 1 ] && OVERAGE=1
   ev usage n="$n" fiveHourPct="$U5" sevenDayPct="$U7" fiveHourResetsAt="$R5" overage="$OVERAGE"
+  # No result message at all = Claude did not run (PATH, login, crash): a hard error, not a bad round.
+  # Such a round writes no cost event: its cost is unknown, not $0.
+  grep -q '"type":"result"' "$out" || { [ "$limited" = 1 ] && return 2; log "round $n: no session ($(head -c 200 "$out" | tr '\n' ' '))"; return 3; }
   SPENT=$(python3 -c "print(round($SPENT+${cost:-0},2))")
   ev cost n="$n" usd="${cost:-0}" total="$SPENT"
   [ "$limited" = 1 ] && return 2
   [ $rc -eq 124 ] && log "round $n timed out"
-  # No result message at all = Claude did not run (PATH, login, crash): a hard error, not a bad round.
-  grep -q '"type":"result"' "$out" || { log "round $n: no session ($(head -c 200 "$out" | tr '\n' ' '))"; return 3; }
   [ "${err:-1}" = 0 ] && [ $rc -eq 0 ] && return 0 || return 1
 }
 
@@ -238,13 +248,20 @@ while :; do
       n=$((n + 1)); run_role $n triage "$MODEL_REVIEW"; ev round.end n=$n outcome=triaged ;;
     *) ev round.end n=$n outcome="$( [ "$TESTS_OK" = 1 ] && echo fixed || echo still-red )" ;;
   esac
-  ev score name=tasks value="$(tasks_done)" better=higher
+  ev score name=tasks value="$(tasks_done)" better=higher max="$(( $(tasks_done) + $(tasks_open) ))"
   push
 done
 
 log "stopping: $STOP"
+case $STOP in
+  rounds) DETAIL="used its $MAX_ROUNDS-round budget";; deadline) DETAIL="30 min before the deadline $DEADLINE";;
+  done) DETAIL="no open tasks left";; human) DETAIL="STOP file";; no-progress) DETAIL="two builder rounds without a ticked task, or tests red after two fix rounds";;
+  error) DETAIL="two rounds without a session";; overage) DETAIL="the account went into extra usage";; 7d-window) DETAIL="7 d window at $U7 %";;
+  *) DETAIL="";;
+esac
 # Say so at once: the wrap-up rounds below (operator review, report) happen in a stopped run.
-ev run.stop reason="$STOP" rounds="$n" usd="$SPENT" wrapup=true
+ev run.stop reason="$STOP" rounds="$n" usd="$(run_total)" ${DETAIL:+detail="$DETAIL"} wrapup=true
+WRAPUP=1
 # The operator review and the morning report run whatever stopped the loop (unless time is gone).
 if [ "$(now)" -lt "$DEADLINE_S" ] && [ "$STOP" != error ]; then
   n=$((n + 1)); run_role $n review-operator "$MODEL_REVIEW"
@@ -252,6 +269,19 @@ if [ "$(now)" -lt "$DEADLINE_S" ] && [ "$STOP" != error ]; then
   check; push
 fi
 # The report's "Needs you" list becomes needs events, so the Runs view and the Inbox show it.
+# It replaces what earlier stops of this run raised: those owner needs are acked first (by: loop),
+# by their ts, not their place: laneboard merges a run's sources by time, so places can shift.
+python3 - "$EV" <<'PY' | while IFS= read -r ts; do ev needs.ack ref="$ts" by=loop; done
+import json, sys
+needs, acked = [], set()
+for line in open(sys.argv[1], errors="replace"):
+    try: e = json.loads(line)
+    except Exception: continue
+    if e.get("t") == "needs": needs.append(e)
+    if e.get("t") == "needs.ack": acked.add(e.get("ref"))
+for i, e in enumerate(needs):
+    if e.get("kind") == "owner" and e["ts"] not in acked and i not in acked: print(e["ts"])
+PY
 PR_URL=$(cat "$RUN_DIR/pr" 2>/dev/null)
 python3 - "$PLAN_DIR/PROGRESS.md" <<'PY' | while IFS= read -r line; do ev needs kind=owner text="$line" ${PR_URL:+link="$PR_URL"}; done
 import re, sys
@@ -262,5 +292,5 @@ for item in re.findall(r"^\d+\.\s+(.+?)(?=^\d+\.\s|\Z)", m.group(1) if m else ""
     text = head.group(1) if head else " ".join(item.split())[:200]
     print(text.replace("\n", " ")[:300])
 PY
-ev run.stop reason="$STOP" rounds="$n" usd="$SPENT"
+ev run.stop reason="$STOP" rounds="$n" usd="$(run_total)" ${DETAIL:+detail="$DETAIL"}
 log "end: $STOP after $n rounds, 5 h $U5 %, 7 d $U7 %, notional \$$SPENT (info only)"
