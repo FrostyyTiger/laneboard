@@ -83,6 +83,9 @@ Planner notes (round 1), from reading the code:
 - [ ] T34 (4, review 42-stranger, 1) `laneboard run needs` with no text (and no `--text`, or empty text) exits 2 with `needs: give the text` and posts nothing, like the other missing values (`bin/laneboard` run needs) — done when: `test/cli-run.test.mjs` runs it with and without `--post`, finds exit 2, the message, and no `needs` event in the run file
 - [ ] T35 (2, review 42-stranger, 2) `run start` with both `--max-rounds` and `--rounds` says `both --max-rounds and --rounds given; use --max-rounds` (exit 2 stays) — done when: `test/cli-run.test.mjs` finds the new sentence
 - [ ] T36 (2, review 42-stranger, 4) `docs/runs.md` says that a round's `--end --usd` wins over `stop --usd` for the run cost and that `cost.from` shows which was used — done when: `test/runs-docs.test.mjs` finds the sentence
+- [ ] T37 (4, review 50-stranger, 1) `laneboard morning --window 3d` (an unknown window) exits 2 with a usage line naming the valid windows, as README says for usage errors — done when: a `test/cli-*.test.mjs` case runs it, finds exit 2 and the valid windows in the message
+- [ ] T38 (2, review 50-stranger, 3) README says where a builder's id, code and the map title come from with no fleet block (the host name) — done when: the README test finds the sentence
+- [ ] T39 (2, review 50-stranger, 6) README says the first startup log line on a no-config start, the `fleet auth: no fleet.ingressPort …` WARN, is expected — done when: the README test finds the sentence
 
 ## Research questions
 
@@ -110,6 +113,9 @@ Planner notes (round 1), from reading the code:
 
 ## For the owner
 
+- Review 50-stranger, item 7: the README paragraph on which CLI commands write outside the state dir
+  (`run`, `fleet keygen`, `fleet pubkey`) is one long block; a list would read better. A rewrite of
+  your README, so not a task; say if you want it.
 - T29 (review 27-designer, Board 5) wants `align-items: start` on the lane grid so a short red card
   is not stretched to its row (about 130 px of empty red frame under YES/NO at 1440). That reverses
   your Night 4 taste call "equal heights" (§8 Q12), so it is `[!]` blocked. If you want it: add
@@ -212,5 +218,9 @@ Planner notes (round 1), from reading the code:
   (Later n3 T57, third time reported). Items 3, 4 and 6 went to For the owner. No browser, pages not looked at.
 - reviews/42-stranger.md: 6 findings, 3 became tasks (T34-T36). Dropped as covered: `pkill` note
   (review 34 owner item). Items 3, 5 and 6 went to For the owner. No browser, pages not looked at.
+- reviews/50-stranger.md: 7 findings, 3 became tasks (T37-T39). Dropped as covered: README CLI list
+  missing `feed` (Later n3 T56), `run needs` with no text (T34), `ls` shows real sessions (README
+  warns). Item 7 (README paragraph on CLI writes outside the state dir is hard to read; a list would
+  do) went to For the owner as a taste call. No browser, pages not looked at.
 
 ## Morning
