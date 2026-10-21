@@ -53,7 +53,8 @@
   gap: 7px;
   font: inherit;
   font-size: 12px;
-  padding: 4px 10px 4px 8px;
+  /* Equal sides: the text sits centred, no blank slot on the left (review 27 Board 3). */
+  padding: var(--sp-1) var(--sp-3);
   border-radius: var(--radius-pill);
   cursor: pointer;
   background: oklch(100% 0 0 / 0.04);

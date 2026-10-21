@@ -439,6 +439,32 @@ test('T15 Board 6: the IDLE line prints a lane\'s name once, the branch only whe
   }
 });
 
+test('T30: lane filter chips have equal side padding and no blank swatch slot when a lane has no hue', () => {
+  const pill = css('public/css/lanes.css').match(/\n\.lane-pill \{[^}]*\}/)[0];
+  assert.match(pill, /padding: var\(--sp-1\) var\(--sp-3\);/, 'one value for left and right');
+  const rail = makeEl('div');
+  const saved = { doc: globalThis.document, lanes: store.lanes };
+  globalThis.document = makeDocument({ byId: new Map([['lane-rail', rail]]) });
+  try {
+    store.lanes = [
+      { id: 'feat-search', key: 'hub/feat-search', idle: false, root: '/r/a', sessions: ['a', 'b'] },
+      { id: 'fix-login', key: 'hub/fix-login', idle: false, hue: 40, root: '/r/b', sessions: ['c'] },
+      { id: 'docs-refresh', key: 'hub/docs-refresh', idle: true, root: '/r/c', sessions: [] },
+    ];
+    renderLanes();
+    const pills = find(rail, 'lane-pill');
+    assert.equal(pills.length, 2);
+    assert.equal(find(pills[0], 'lane-swatch').length, 0, 'no hue: no empty swatch');
+    assert.ok(!String(pills[0].style.getPropertyValue?.('--lane-hue') ?? '').includes('undefined'));
+    assert.equal(find(pills[1], 'lane-swatch').length, 1, 'a lane with a hue keeps its swatch');
+    assert.equal(find(find(rail, 'lane-idle')[0], 'lane-swatch').length, 0, 'the idle row too');
+  } finally {
+    store.lanes = saved.lanes;
+    if (saved.doc === undefined) delete globalThis.document;
+    else globalThis.document = saved.doc;
+  }
+});
+
 test('an offline builder\'s card is grey, marks included, with one `offline` plate (runs night 4 T27)', () => withDom(() => {
   const saved = { builders: store.builders, kind: store.source.kind };
   try {
