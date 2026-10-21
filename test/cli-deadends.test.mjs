@@ -62,6 +62,29 @@ test('launch with no repo known names --repo and the config repos', async (t) =>
   assert.equal(r.stderr.trim().split('\n').length, 1);
 });
 
+// T58 (review 75-stranger 1 + 5): with no `--repo` and no config, dispatch's argument check
+// answers before the launcher does, in its own words; the hint must show for those too.
+test('launch with no repo and no config: the args.repo refusal gets the --repo / repos hint', async (t) => {
+  const url = await stub(t, {
+    'POST /api/lanes': [400, { error: 'args.repo is required', code: 'bad_args' }],
+  });
+  const r = await run(['launch', 'foo', '--plan', 'x.md'], envFor(t, { LANEBOARD_URL: url }));
+  assert.equal(r.code, 1);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /--repo <repo>/);
+  assert.match(r.stderr, /`repos`/);
+  assert.ok(!r.stderr.includes('args.repo'), r.stderr);
+  assert.equal(r.stderr.trim().split('\n').length, 1);
+});
+
+test('the top-level help says --repo is needed unless the config lists repos', async (t) => {
+  const r = await run(['--help'], envFor(t));
+  const at = r.stdout.indexOf('laneboard launch <lane>');
+  assert.ok(at >= 0, r.stdout);
+  const block = r.stdout.slice(at, r.stdout.indexOf('laneboard job', at));
+  assert.match(block, /--repo is needed unless the config lists `repos`/);
+});
+
 test('launch keeps any other server error as it is', async (t) => {
   const url = await stub(t, { 'POST /api/lanes': [400, { error: 'invalid repo "x y"' }] });
   const r = await run(['launch', 'demo', '--plan', 'p.md', '--repo', 'x y', '--no-wait'], envFor(t, { LANEBOARD_URL: url }));

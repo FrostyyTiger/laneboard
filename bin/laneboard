@@ -572,9 +572,10 @@ async function cmdLaunch() {
   const r = await api('/api/lanes', {
     method: 'POST',
     body,
-    // The server knows no repo: name both ways to give it one.
-    onError: (status, msg) => (/no repo given/.test(msg)
-      ? `${msg}; pass --repo <repo>, or list repos in the config's \`repos\` (the first is the default, docs/config.md)`
+    // The server knows no repo: name both ways to give it one. The launcher says
+    // `no repo given …`; dispatch's argument check says `args.repo is required` first.
+    onError: (status, msg) => (/no repo given|\bargs\.repo is required/.test(msg)
+      ? "no repo given and no default repo configured; pass --repo <repo>, or list repos in the config's `repos` (the first is the default, docs/config.md)"
       : undefined),
   });
   process.stdout.write(`launching ${r.lane} on slot ${r.slot} (job ${r.job})\n`);
@@ -1380,7 +1381,8 @@ function usage(out = process.stdout) {
   laneboard dirs                        git repos you can spawn into
   laneboard launch <lane> --plan docs/plans/<lane>.md [--repo <repo>]
                  [--branch feat/<lane>] [--model opus] [--permission-mode auto]
-                                      worktree + venv + slot + session + kickoff
+                                      worktree + venv + slot + session + kickoff;
+                                      --repo is needed unless the config lists \`repos\`
   laneboard job <job-id>                follow a launch or retire
   laneboard retire <lane> [--force]     slot down + volumes, worktree removed, record kept
   laneboard spawn <name> <dir> ["prompt"] [--model m]
