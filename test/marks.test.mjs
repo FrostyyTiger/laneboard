@@ -153,5 +153,8 @@ test('T23: the sheets: no fill on the danger pill, grey card flags, a permission
   const board = css('public/css/board.css');
   assert.doesNotMatch(board, /\.db-flag\[data-p/, 'flag icons take no status hue');
   assert.match(board, /\.card\.s-waiting_permission \{ border-color: var\(--p2-line\); \}/);
+  // The NEEDS YOU items of a permission lane are amber like their lamp, not red.
+  const rail = css('public/css/rail.css');
+  assert.doesNotMatch(rail, /s-waiting_permission[^{]*\{[^}]*(--p1|--crit)/, 'no red on a permission item');
   assert.match(css('public/css/components.css'), /\.lamp\[data-unack\] \{ animation: none; \}/, 'a red ■ never blinks to maroon');
 });

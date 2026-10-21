@@ -37,7 +37,7 @@
 .attention-item .idx { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); width: 12px; flex: none; }
 .attention-item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 .attention-item .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); flex: none; }
-.attention-item.s-waiting_permission { border-color: var(--p1-line); }
+.attention-item.s-waiting_permission { border-color: var(--p2-line); }
 .attention-item.s-waiting_question { border-color: var(--p2-line); }
 
 /* phone chip strip — the rail carries the same list from 700px up. This
@@ -64,7 +64,7 @@
 }
 .attention-strip .chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attention-strip .chip .ago { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
-.attention-strip .chip.s-waiting_permission { border-color: var(--p1-line); background: var(--p1-weak); }
+.attention-strip .chip.s-waiting_permission { border-color: var(--p2-line); background: var(--p2-weak); }
 .attention-strip .chip.s-waiting_question { border-color: var(--p2-line); background: var(--p2-weak); }
 
 /* ===================== the pressure ring ================================= */
@@ -95,7 +95,7 @@
   opacity: calc(0.15 + var(--pressure) * 0.85);
 }
 .dot::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.dot.s-waiting_permission { color: var(--crit); }
+.dot.s-waiting_permission { color: var(--warn); }
 .dot.s-waiting_question { color: var(--warn); }
 .dot.s-working { color: var(--info); }
 .dot.s-done { color: var(--ok); }
