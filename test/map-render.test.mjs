@@ -634,7 +634,8 @@ test('a label flips to the left of its node before it crosses the right edge, an
   assert.ok(Math.abs(text.y - sp.y) < 1, 'on the node\'s row');
 
   const ctx2 = fakeCtx();
-  const narrow = { ...base, W: 90, toScreen: () => ({ x: 45, y: 300 }) };
+  // 90px is a phone: only the selection (or trouble) keeps its label there.
+  const narrow = { ...base, W: 90, selected: 'east', toScreen: () => ({ x: 45, y: 300 }) };
   createRenderer(ctx2, PAL).drawLabels(narrow);
   const over = labelOf(ctx2.ops, 'EASTERN-ROOM');
   assert.ok(over.back[1] + 14 <= 300, 'neither side fits: it goes above the node');

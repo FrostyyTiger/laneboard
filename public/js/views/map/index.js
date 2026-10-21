@@ -48,7 +48,7 @@ import { layout, RINGS, SIZE, polar, runRingR } from './layout.js';
 import { OVERLAY_KEY, validOverlay, availableOverlays, reachScope, nodeStyle, rollsUp, SHAPE_CODE, TONE_CODE, driftText, driftCounts, runFacts } from './overlays.js';
 import { createRenderer, readPalette } from './render.js';
 import {
-  createHitGrid, bindPointer, hitRadius, boundingCircle, fitCircle, anchored, clampZoom, fitScaleOf,
+  createHitGrid, bindPointer, hitRadius, boundingCircle, fitCircle, anchored, clampZoom, fitFrame,
   laneOrder, nextInOrder, ZOOM_MIN, ZOOM_MAX,
 } from './interact.js';
 
@@ -223,6 +223,7 @@ export function createMap(root, opts = {}) {
   const sel = { id: null, t: 0, v: 0 }; // the selection mark, drawing in
   let userMoved = false;
   let W = 0, H = 0, dpr = 1, fitScale = 1;
+  let fitY = 0;                   // the camera y that centres a fit in the free height (fitFrame)
   let raf = 0, lastPing = 0, lastFrame = 0, frameNo = 0;
   const focusAlpha = new Map();   // id -> current emphasis 0..1
   const focusVel = new Map();     // id -> its spring velocity
@@ -243,8 +244,16 @@ export function createMap(root, opts = {}) {
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => resize()) : null;
   ro?.observe(root);
 
+  /** The HUD row and a phone's bottom bar, from the HUD's padding (views/map.css). */
+  function vInsets() {
+    const cs = typeof getComputedStyle === 'function' ? getComputedStyle(hud) : null;
+    return { top: parseFloat(cs?.paddingTop) || 0, bottom: parseFloat(cs?.paddingBottom) || 0 };
+  }
+
   function computeFit() {
-    return fitScaleOf(W, H, maxRadius() + 64);
+    const f = fitFrame(W, H, maxRadius() + 64, vInsets());
+    fitY = f.y;
+    return f.s;
   }
 
   function resize() {
@@ -282,7 +291,7 @@ export function createMap(root, opts = {}) {
     const right = rightInset();
     const outer = maxRadius() + 64;
     const z = right ? clampZoom(Math.min(1, (W - right) / (2 * outer * (fitScale || 1)))) : 1;
-    flyCam({ x: right / (2 * (fitScale || 1) * z), y: 0, z }, instant);
+    flyCam({ x: right / (2 * (fitScale || 1) * z), y: fitY / z, z }, instant);
   }
 
   /** Width of world in view at zoom z. */

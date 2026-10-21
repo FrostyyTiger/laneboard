@@ -211,6 +211,13 @@
 }
 @media (max-width: 699px) {
   .map-readout { top: var(--sp-2); right: var(--sp-2); font-size: var(--fs-10); }
+  /* The phone sheet's peek covers the canvas bottom: find + fit sit above it,
+     and the HUD's padding tells the fit (index.js vInsets) what is covered, so
+     the orbit centres in the free height between the HUD row and that bar. */
+  .map:not([data-map-mode="pip"]) .map-hud {
+    padding: 40px 0 calc(var(--sheet-peek) + env(safe-area-inset-bottom, 0px) + 44px);
+  }
+  .map-find { bottom: calc(var(--sheet-peek) + env(safe-area-inset-bottom, 0px) + var(--sp-2)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

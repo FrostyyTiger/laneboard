@@ -186,6 +186,8 @@ const LOUD = new Set(['attention', 'crit', 'down']);
 const GAUGED = new Set(['room', 'site', 'host', 'builder']);
 /** Below this canvas width the core's name is left to the map title, the label would sit on the inner ring. */
 const NARROW = 600;
+/** At or below this canvas width (a phone): no ring legends, labels for trouble and the selection only. */
+const PHONE = 480;
 const TEXT_CACHE_MAX = 4000;
 
 /**
@@ -275,6 +277,8 @@ export function createRenderer(ctx, palette) {
       ctx.beginPath();
       arc(c0.x, c0.y, r, 0, TAU);
       ctx.stroke();
+      // A phone has no room for the legends: they sat under nodes and plates.
+      if ((scene.W ?? Infinity) <= PHONE) continue;
       // The leader: a 6px tick out from the ring; the label ends at its tip
       // and runs left, away from the ring (outward at this bearing).
       strokeStyle(P.t3, 0.6, 1, []);
@@ -768,36 +772,50 @@ export function createRenderer(ctx, palette) {
     return same ? n.code ?? n.label ?? name : name;
   }
 
-  /** Names beside their nodes, readable over arcs; subs and lamps where there is room. */
-  function drawLabels(scene) {
+  /** On a phone: labels only for trouble, the selection and what is in focus (others on tap). */
+  function trouble(n, stuck) {
+    return LOUD.has(n.status) || n.status === 'warn' || Boolean(n.flags?.stuck) || n.link === 'down'
+      || (n.kind === 'builder' && stuck.has(n.builder));
+  }
+
+  /**
+   * Where each label goes before the collision pass: its text, side, anchor
+   * and the box it covers (backing, round, lamps and sub line), in screen px.
+   * Sets ctx.font while measuring; call inside save/restore.
+   */
+  function labelPlan(scene) {
     const nodes = scene.nodes ?? new Map();
     const s = scene.s ?? 1;
     const ns = nodeScale(scene);
+    const W = scene.W ?? Infinity;
+    const phone = W <= PHONE;
     const focus = scene.hover ?? scene.highlight ?? scene.selected ?? null;
     const near = scene.near ?? new Set();
     const matches = scene.matches ?? new Set();
     const stuck = stuckBuilders(scene.byId);
-    ctx.save();
-    ctx.textBaseline = 'middle';
+    const plan = [];
     for (const [id, c] of nodes) {
       const n = c.node;
       if (!n || n.virtual) continue;
       const fade = alphaOf(scene, id) * (c.a ?? 1);
       const status = n.status ?? 'unknown';
       const loud = LOUD.has(status);
-      const show = (c.depth ?? 0) <= 2 || n.kind === 'builder' || n.kind === 'run' || s > 1.25 || id === focus || near.has(id)
-        || matches.has(id) || loud || id === scene.selected;
+      const picked = id === focus || id === scene.selected || matches.has(id);
+      const show = phone
+        ? picked || trouble(n, stuck)
+        : (c.depth ?? 0) <= 2 || n.kind === 'builder' || n.kind === 'run' || s > 1.25 || picked || near.has(id) || loud;
       if (!show || fade < 0.12) continue;
       const sp = scene.toScreen(c);
       const r = (SIZE[n.kind] ?? 5) * ns;
       if (n.kind === 'core') {
         // On a phone the name under the core lands on the first ring's nodes;
         // the map title at the top left already says it.
-        if ((scene.W ?? Infinity) < NARROW) continue;
-        ctx.textAlign = 'center';
+        if (W < NARROW) continue;
         ctx.font = `600 11px ${P.label}`;
-        fillStyle(P.t1, fade);
-        tracked(String(n.label ?? '').toUpperCase(), sp.x, sp.y + r * 2.3 + 10, 2);
+        const text = String(n.label ?? '').toUpperCase();
+        const w = measure(text) + ('letterSpacing' in ctx ? text.length * 2 : 0);
+        const y = sp.y + r * 2.3 + 10;
+        plan.push({ id, n, core: true, text, x: sp.x, y, fade, rank: 0, box: { x0: sp.x - w / 2, y0: y - 7, x1: sp.x + w / 2, y1: y + 7 } });
         continue;
       }
       const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
@@ -815,13 +833,13 @@ export function createRenderer(ctx, palette) {
       const plate = n.kind === 'site' || n.kind === 'host' || n.kind === 'room' || n.kind === 'builder';
       const raw = n.kind === 'builder' ? builderName(scene, n) : n.label ?? n.id;
       const text = String(raw).toUpperCase();
-      ctx.font = `${plate || n.kind === 'run' ? 600 : 500} ${plate && n.kind !== 'room' ? 12 : 11}px ${P.label}`;
+      const font = `${plate || n.kind === 'run' ? 600 : 500} ${plate && n.kind !== 'room' ? 12 : 11}px ${P.label}`;
+      ctx.font = font;
       const col = plate || loud ? P.t1 : n.kind === 'run' ? P.t3 : P.t2;
       // A backing so a label stays readable where an arc passes under it.
       const w = measure(text) + ('letterSpacing' in ctx ? text.length : 0);
       const round = n.kind === 'run' ? runRound(n) : null;
       const extra = round ? round.length * 7 + 8 : 0;
-      const W = scene.W ?? Infinity;
       const off = (lft, px) => (lft ? px + w + extra > W - 4 : px - w - extra < 4);
       if (off(left, x)) {
         // It would run off the edge: it flips to the node's other side; when
@@ -834,12 +852,117 @@ export function createRenderer(ctx, palette) {
           left = true;
         }
       }
+      const rawSub = n.why && loud ? n.why : n.sub;
+      const sub = rawSub && (s > 1.05 || id === focus || id === scene.selected) ? String(rawSub) : null;
+      const subText = sub && (sub.length > 38 ? `${sub.slice(0, 37)}…` : sub);
+      const bx = left ? x - 2 : x - w - 2;
+      const box = { x0: bx, y0: y - 7, x1: bx + w + 4, y1: y + 7 };
+      if (round) { if (left) box.x1 += extra; else box.x0 -= extra; }
+      let low = n.kind === 'builder' ? 22 : 13;
+      if (n.kind === 'builder') box.y1 = y + 13;
+      if (subText) {
+        ctx.font = `10px ${P.mono}`;
+        const sw = measure(subText);
+        box.y1 = y + low + 6;
+        if (left) box.x1 = Math.max(box.x1, x + sw); else box.x0 = Math.min(box.x0, x - sw);
+      }
+      // Who keeps its place when two collide: the selection, then trouble,
+      // then machines and places, then the rest.
+      const rank = id === scene.selected ? 0 : picked ? 1 : loud || trouble(n, stuck) ? 2 : plate ? 3 : 4;
+      plan.push({ id, n, sx: sp.x, text, font, col, x, y, left, w, round, sub: subText, loud, fade, rank, box, low,
+        lamps: n.kind === 'builder' ? lampColours(n, stuck.has(n.builder)) : null });
+    }
+    return plan;
+  }
+
+  const hits = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+
+  /**
+   * The collision pass: labels in rank order take their place, or the
+   * nearest free one a line up or down (up to four lines), clear of the fold
+   * plates (`badges`) and inside the canvas, and off other nodes where a
+   * place allows it. On a phone a label with no free place is left for a
+   * tap (the selection always stays); wider, it keeps its first place.
+   * Returns the plan placed, each entry with `dy` applied.
+   */
+  function placeLabels(plan, scene, badges = []) {
+    const H = scene.H ?? Infinity;
+    const phone = (scene.W ?? Infinity) <= PHONE;
+    const ns = nodeScale(scene);
+    const taken = badges.map((b) => ({ x0: b.x - 1, y0: b.y - 1, x1: b.x + b.w + 1, y1: b.y + b.h + 1 }));
+    // Drawn nodes, as the square their outermost ring fits in.
+    const discs = [];
+    for (const [id, c] of scene.nodes ?? []) {
+      const n = c.node;
+      if (!n || n.virtual || alphaOf(scene, id) * (c.a ?? 1) < 0.12) continue;
+      const sp = scene.toScreen(c);
+      const R = outerR.get(id) ?? (SIZE[n.kind] ?? 5) * ns;
+      discs.push({ id, x0: sp.x - R, y0: sp.y - R, x1: sp.x + R, y1: sp.y + R });
+    }
+    const order = plan.map((e, i) => [e, i]).sort((a, b) => a[0].rank - b[0].rank || a[1] - b[1]).map(([e]) => e);
+    const out = [];
+    const STEPS = [0, 14, -14, 28, -28, 42, -42, 56, -56];
+    const slot = (e, clear) => STEPS.find((d) => {
+      const b = { x0: e.box.x0, x1: e.box.x1, y0: e.box.y0 + d, y1: e.box.y1 + d };
+      return b.y0 >= 0 && b.y1 <= H && !taken.some((t) => hits(t, b)) && clear(b);
+    });
+    const W = scene.W ?? Infinity;
+    /** The label on the node's other side, or null when that leaves the canvas. */
+    const mirror = (e) => {
+      if (e.core || e.sx == null) return null;
+      const box = { ...e.box, x0: 2 * e.sx - e.box.x1, x1: 2 * e.sx - e.box.x0 };
+      return box.x0 < 4 || box.x1 > W - 4 ? null : { ...e, x: 2 * e.sx - e.x, left: !e.left, box };
+    };
+    for (const e0 of order) {
+      const alt = mirror(e0);
+      const offNodes = (e) => (b) => !discs.some((n) => n.id !== e.id && hits(n, b));
+      let e = e0;
+      let dy = null;
+      for (const [cand, clear] of [[e0, offNodes(e0)], [alt, offNodes(e0)], [e0, () => true], [alt, () => true]]) {
+        if (!cand) continue;
+        dy = slot(cand, clear);
+        if (dy != null) { e = cand; break; }
+      }
+      if (dy == null) {
+        if (phone && e.rank > 0) continue;
+        dy = 0;
+      }
+      const placed = { ...e, y: e.y + dy, box: { ...e.box, y0: e.box.y0 + dy, y1: e.box.y1 + dy } };
+      taken.push(placed.box);
+      out.push(placed);
+    }
+    return out;
+  }
+
+  /** The label boxes drawLabels would draw, after the collision pass (for tests and hit checks). */
+  function labelBoxes(scene, badges = []) {
+    ctx.save();
+    const boxes = placeLabels(labelPlan(scene), scene, badges).map((e) => ({ id: e.id, text: e.text, ...e.box }));
+    ctx.restore();
+    return boxes;
+  }
+
+  /** Names beside their nodes, readable over arcs; subs and lamps where there is room. */
+  function drawLabels(scene, badges = []) {
+    ctx.save();
+    ctx.textBaseline = 'middle';
+    for (const e of placeLabels(labelPlan(scene), scene, badges)) {
+      const { x, y, fade } = e;
+      if (e.core) {
+        ctx.textAlign = 'center';
+        ctx.font = `600 11px ${P.label}`;
+        fillStyle(P.t1, fade);
+        tracked(e.text, x, y, 2);
+        continue;
+      }
+      const { left, w, round } = e;
+      ctx.font = e.font;
       ctx.textAlign = left ? 'left' : 'right';
       const bx = left ? x - 2 : x - w - 2;
       fillStyle(P.bg, 0.8 * fade);
       ctx.fillRect(bx, y - 7, w + 4, 14);
-      fillStyle(col, fade);
-      tracked(text, x, y, 1);
+      fillStyle(e.col, fade);
+      tracked(e.text, x, y, 1);
       if (round) {
         // The round beside the name, in the data face.
         ctx.font = `10px ${P.mono}`;
@@ -850,23 +973,18 @@ export function createRenderer(ctx, palette) {
         fillStyle(P.t3, fade);
         ctx.fillText(round, rx, y);
       }
-      let below = y + 13;
-      if (n.kind === 'builder') {
+      if (e.lamps) {
         // Lamps: 4x4 squares, 2px apart, under the label.
-        const lamps = lampColours(n, stuck.has(n.builder));
-        const lx = left ? x : x - (lamps.length * 6 - 2);
-        lamps.forEach((lc, i) => {
+        const lx = left ? x : x - (e.lamps.length * 6 - 2);
+        e.lamps.forEach((lc, i) => {
           fillStyle(lc, fade);
           ctx.fillRect(lx + i * 6, y + 9, 4, 4);
         });
-        below = y + 22;
       }
-      const sub = n.why && loud ? n.why : n.sub;
-      if (sub && (s > 1.05 || id === focus || id === scene.selected)) {
-        const line = String(sub);
+      if (e.sub) {
         ctx.font = `10px ${P.mono}`;
-        fillStyle(loud ? P.t2 : P.t3, 0.95 * fade);
-        ctx.fillText(line.length > 38 ? `${line.slice(0, 37)}…` : line, x, below);
+        fillStyle(e.loud ? P.t2 : P.t3, 0.95 * fade);
+        ctx.fillText(e.sub, x, y + e.low);
       }
     }
     ctx.restore();
@@ -960,7 +1078,7 @@ export function createRenderer(ctx, palette) {
     drawReach(scene);
     drawComets(scene);
     const badges = drawNodes(scene);
-    drawLabels(scene);
+    drawLabels(scene, badges);
     drawReticle(scene);
     drawTether(scene);
     ctx.globalAlpha = 1;
@@ -1015,6 +1133,7 @@ export function createRenderer(ctx, palette) {
     drawComets,
     drawNodes,
     drawLabels,
+    labelBoxes,
     drawReticle,
     drawTether,
     readout,
