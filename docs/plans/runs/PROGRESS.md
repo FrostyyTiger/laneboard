@@ -129,3 +129,35 @@ Notes for builders, from reading the code (planner, round 1):
 - Triage of `reviews/20-designer.md`: about 25 findings, 6 became tasks (T32-T37: Morning strip vs runs, empty blocks/sections, Inbox 390 wrap, grey news marks, stop chip per theme, Morning strip/legend/width). Dropped: console.txt (no finding), Inbox 3 and run-page open/width/amber/390 items (covered, T28, T27, T30, T22, T26), Board/Map/Runs "unchanged" (covered, T16-T20, T25, T29, T31), Inbox 6 (covered, T14), Morning 9 minimap (owner idea (b)). Inbox 4-5, the run-page stop line and the cross-cutting empty-state rule are owner lines (a-e).
 
 ## Morning
+
+Done: the demo now shows Drift, Reach and a recorded run, a screenshot pass fixed the minimap covering views, and runs reach the protocol (`needs.ack`), the Inbox and the Morning server side (T1-T6), plus the Morning view block for runs (T7, built but not ticked).
+Not done: T8-T12 (stuck runs, runs on the Map, Find, the `docker` feeder) and all 24 bug tasks from the reviews (T14-T37); T13 is blocked on a fenced file.
+Why it stopped: `no-progress` after 22 of 40 rounds at 11:43, more than 8 h before the deadline, with 5 % of the 5 h limit used ($13.85). The cause is not the work: rounds 18 and 22 (and 16) killed their own session with `pgrep -f "node test/tools/demo-fleet.mjs"` + `kill`, because the pattern also matches the agent's own shell (exit 137, the loop log says "no session"). Round 22 had already checked T7 and was about to tick it in the same command.
+
+**Tasks.**
+- Done: T1 (06aac11), T2 (486357f), T3 (577e6cf), T4 (f40422a), T5 (14cc818), T6 (2cd8e68); fix 7a51752 (morning.js reuses `RUN_ID_RX`).
+- Built, not ticked: T7, Morning view draws runs (8e8928a). Round 22 checked the tests and the shots r22-T7 (no page error); this round re-ran `test/view-morning.test.mjs` + `test/design-guardrails.test.mjs`: 21/21 pass.
+- Open: T8-T12 (A3 stuck, Map server + ring, B2 Find, B1 docker); bugs T14-T37.
+- Blocked: T13 (phone MAP/LIST/INBOX bar lives in fenced `public/js/ui/sheet.js`).
+
+**Tests.** `npm test` after the last round: 3117 pass, 0 fail.
+
+**Needs you, worst first.**
+1. **Fix the loop's self-kill before the next run.** Agents stop the demo with `pgrep -f "node test/tools/demo-fleet.mjs"`, which matches their own shell too, so the round dies and counts as no-task-done; two of those in a row ended this run 8 h early. The fenced loop files (`docs/plans/runs/loop/*`) could have the demo write a pid file (or the round prompt could say `kill %1` / `pkill -x`). The PROGRESS notes for builders tell agents to start the demo but not how to stop it. Also tick T7 (8e8928a) if you agree it is done.
+2. **Review PR #12 before merging.** Builder rounds landed T1-T7 in `test/tools/demo-fleet.mjs`, `test/helpers/demo-hub.mjs`, `server/runs/protocol.mjs` (new `needs.ack` event, still `"v":1`), `server/morning.mjs` and `public/js/views/{inbox,morning,runs}.js`, plus a CSS change so views scroll clear of the minimap (`--pip-clear`). No fenced file changed.
+3. **Decide on the protocol: `needs.ack` in v1.** It is additive and written through the existing `POST /api/runs/events`; the other option is keeping v1 frozen and making acks a client-side "seen" (T4).
+4. **Runs on a hub need a fenced file.** The hub has no `/api/runs` (`server/hub/routes`), and `server/hub/morning.mjs` `mergeMorning` drops `runs` from the fleet Morning. Both are your call (relay, or `modes: ['builder','hub']`, and a sanitized `runs` copy in the merge).
+5. **Fenced `sheet.js` blocks T13.** The phone bar shows the sheet tab you last picked, so MAP stays marked on every view; following the route needs a change in `public/js/ui/sheet.js`.
+6. **Pick a design direction from the screenshots.** `$RUN_DIR/shots/r11-designer/{none,refined,product,night}`: the reviewer leans to refined or night; product needs header/tile fixes first. Also yes/no on the minimap on the Map only (still the largest object on Runs and Inbox at 1440).
+7. **Decide when a run's PR leaves the Inbox.** Today: while the run is live and 24 h after its last event (`RUN_PR_FRESH_MS`), because the protocol has no "merged"; an `artifact` `state` field would fix it.
+8. **The operator's gaps for the loop and protocol** (`reviews/23-operator.md`, not triaged since the run stopped): a `detail` on `run.stop` and a need raised by itself for a non-success stop; the Morning strip still says $0.08 while the run row says $13.85 (T32); a missing cost should fold to `null`/"n/a", not $0; a `max` on the `tasks` score and a one-sentence goal; `wrapup` is the string `"true"`; PR #12 has `title: null`.
+9. **Taste calls** from the designer rounds 4 and 20 (the lists (a)-(h) and (a)-(e) under For the owner), and the earlier nights' Morning items in `nights/n1/` and `nights/n2/PROGRESS.md`.
+
+**Reviews and research.**
+- Designer round 4: the phone tab bar, light-theme contrast, the Drift accent and Board clipping became T13-T21; the rest are taste items.
+- Designer round 11: the run page width, need buttons, the 390 need line, the stopped-run quota tone and the down-builder hue became T27-T31; the three design directions were shot.
+- Designer round 20: the Morning strip vs runs, empty blocks, Inbox wrap at 390, the cyan news marks, the stop chip and the Morning layout became T32-T37.
+- Operator round 23: the run data answers "what did it cost" but not "why did it stop" or "what needs me"; not triaged, see item 8.
+- Research: Q9 (Docker container list, for T12), Q10 (inbox and digest, T5/T7), Q11 (stuck detection, T8) and Q12 (go to anything, T11) are all answered under `research/`. No open questions.
+
+**Owner notes.** None (the script's `owner-notes` file does not exist for this run).
