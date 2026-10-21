@@ -45,15 +45,22 @@ test('no sheet fixes a width or min-width wider than 390 px at 390 (T37)', () =>
   assert.ok(on(/^\.chart-scroll$/).some((d) => d.prop === 'overflow-x' && d.value === 'auto'), 'the chart scrolls in its box');
 });
 
-test('the phone header fits 390: 48 px icon tiles, no clock (T37)', () => {
+test('the phone header fits 390: 46 px icon tiles, no clock, the view icon whole (T37)', () => {
   const cols = last(on(/^\.ann$/), 'grid-template-columns');
-  assert.equal(cols, 'repeat(4, 48px)', 'the annunciator is four 48 px tiles at 390');
+  assert.equal(cols, 'repeat(4, 46px)', 'the annunciator is four 46 px tiles at 390');
+  // The view icon never shrinks behind the annunciator: a fixed 28 px, the current tab only.
+  assert.equal(last(on(/^\.shell-nav$/), 'flex'), 'none');
+  assert.equal(last(on(/^\.shell-nav$/), 'width'), '28px');
+  assert.equal(last(on(/^\.nav-tab:not\(\[aria-current="page"\]\)$/), 'display'), 'none');
   assert.equal(last(on(/^\.clock$/), 'display'), 'none', 'the clock is hidden on a phone');
   assert.equal(last(on(/^\.ann-label$/), 'display'), 'none', 'a tile shows icon and count, no label');
   assert.equal(last(on(/^\.ann-i$/), 'display'), 'inline-block', 'a tile shows its icon');
-  // head-right starts at x 125 at 390 (padding, brand, LIVE, gaps; measured headless), then
-  // 4 x 48 tiles + 3 x 2 px gaps, an 8 px gap, the 28 px refresh button and 12 px padding.
-  assert.ok(125 + 4 * 48 + 3 * 2 + 8 + 28 + 12 <= W);
+  // The brand and LIVE end at x 109 at 390 (padding, brand, gaps; measured headless), then a
+  // 4 px gap, the 28 px view icon, a 4 px gap, 4 x 46 tiles + 3 x 2 px gaps, an 8 px gap,
+  // the 28 px refresh button and 12 px padding.
+  assert.equal(last(on(/^\.shell-head$/), 'gap'), 'var(--sp-1)');
+  assert.equal(last(on(/^\.head-right$/), 'gap'), 'var(--sp-2)');
+  assert.ok(109 + 4 + 28 + 4 + 4 * 46 + 3 * 2 + 8 + 28 + 12 <= W);
 });
 
 test('the phone bar reaches every view: segments plus the ⋯ menu (T37)', () => {

@@ -173,13 +173,23 @@ export function routeTab(view) {
   return Object.hasOwn(ROUTE_TAB, view) ? ROUTE_TAB[view] : null;
 }
 
+/** The views that have a segment of their own; Board and Runs only borrow LIST's content. */
+const OWN_TAB = Object.freeze({ map: 'map', inbox: 'inbox' });
+
 /**
  * The one lit segment: the tab the user picked on this view, else the
  * route's own segment, else none (null). The lit segment follows the route
- * like the desktop tabs do, so MAP is not lit on the Inbox. Pure.
+ * like the desktop tabs do, so MAP is not lit on the Inbox, and LIST is not
+ * lit on Board or Runs (they are reached through ⋯, which is lit instead). Pure.
  */
 export function litTab(view, picked = null) {
-  return SHEET_TABS.includes(picked) ? picked : routeTab(view);
+  if (SHEET_TABS.includes(picked)) return picked;
+  return Object.hasOwn(OWN_TAB, view) ? OWN_TAB[view] : null;
+}
+
+/** Is ⋯ the lit control: a view from its menu, with no segment picked on it. Pure. */
+export function moreLit(view, picked = null) {
+  return litTab(view, picked) === null && MORE_VIEWS.includes(view);
 }
 
 function codeOf(b, id) {
@@ -540,6 +550,8 @@ export function renderPhone() {
     p.tabs[t].setAttribute('aria-selected', t === lit ? 'true' : 'false');
     p.tabs[t].tabIndex = t === phone.tab ? 0 : -1;
   }
+  if (moreLit(route.view, phone.picked)) p.more.dataset.on = '';
+  else delete p.more.dataset.on;
   p.body.setAttribute('aria-labelledby', `ps-tab-${phone.tab}`);
   const pk = peekModel(store, scope);
   p.peek.textContent = '';

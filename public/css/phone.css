@@ -119,6 +119,8 @@
     color: var(--text-2);
     cursor: pointer;
   }
+  /* A view from the ⋯ menu (Board, Runs, Morning, ...): ⋯ is lit, no segment is. */
+  .ps-more[data-on] { outline: var(--bw) solid var(--accent); outline-offset: -1px; color: var(--text-1); }
   .ps-menu {
     position: absolute;
     right: var(--sp-1);

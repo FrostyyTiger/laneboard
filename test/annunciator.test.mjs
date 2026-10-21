@@ -417,3 +417,14 @@ test('T38: docs/design.md and README say what DOWN counts', () => {
     assert.match(t, /reboot[^.]*health warning[^.]*Box/i, `${f}: where the reboot hint goes`);
   }
 });
+
+test('the two tile rows fit the header and sit centred in it, not flush with its top', () => {
+  const shell = read('public/css/shell.css');
+  const ann = /\n\.ann \{([^}]*)\}/.exec(shell)?.[1] ?? '';
+  const row = Number(/grid-auto-rows:\s*(\d+)px/.exec(ann)?.[1]);
+  const gap = Number(/gap:\s*(\d+)px/.exec(ann)?.[1]);
+  const header = Number(/--header-h:\s*(\d+)px/.exec(read('public/css/tokens.css'))?.[1]);
+  assert.ok(2 * row + gap <= header - 2, `${2 * row + gap} px of tiles in a ${header} px header with its border`);
+  assert.match(ann, /align-self:\s*center/);
+  assert.match(read('public/css/annunciator.css'), new RegExp(`\\.ann-tile \\{[^}]*height: ${row}px`));
+});

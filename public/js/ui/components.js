@@ -7,7 +7,7 @@
 // are tested in test/components.test.mjs. Every text that may come from a
 // builder goes in through textContent or setAttribute, never as markup.
 import { icon } from '../core/icons.js';
-import { STATE_MARK } from '../core/marks.js';
+import { STATE_MARK, itemP } from '../core/marks.js';
 import { TILE_FIXED_P, tileOf } from '../core/alarm-tiles.js';
 
 // ---------------------------------------------------------------- priorities
@@ -186,12 +186,21 @@ export function mixBucket(item) {
   return 'off';
 }
 
-/** lanes (sessions with a `state`) -> {p1, p2, run, ok, off, dead, total}. */
+/**
+ * lanes (sessions with a `state`) -> {p1, p2, run, ok, off, dead, total, p}.
+ * `p` is the worst trouble mark of the live lanes by itemP ('1' ■, '2' ▲, else
+ * null), so a stuck working lane marks its builder ▲ as the status line counts
+ * it, not the ● of its bucket.
+ */
 export function laneMix(lanes) {
-  const mix = { p1: 0, p2: 0, run: 0, ok: 0, off: 0, dead: 0, total: 0 };
+  const mix = { p1: 0, p2: 0, run: 0, ok: 0, off: 0, dead: 0, total: 0, p: null };
   for (const l of Array.isArray(lanes) ? lanes : []) {
-    mix[mixBucket(l)]++;
+    const k = mixBucket(l);
+    mix[k]++;
     mix.total++;
+    if (k === 'dead') continue;
+    const q = itemP(l);
+    if (q === '1' || (q === '2' && mix.p !== '1')) mix.p = q;
   }
   return mix;
 }
@@ -228,6 +237,10 @@ export function builderMark(b, list = [], mix = null) {
   let n = 0;
   for (const a of Array.isArray(list) ? list : []) {
     if (!a || typeof a !== 'object' || a.builder !== b.id) continue;
+    // A kind with no header tile (review: the Inbox; reboot, health-warn: the
+    // Box) is not counted by the header or the status line, so it does not
+    // mark the builder either: the rail never shows a ▲ the header calls 0.
+    if (typeof a.kind === 'string' && a.kind && !tileOf(a.kind)) continue;
     // The alarm's tile mark wins over its priority, so the rail agrees with
     // the header: an approval is the amber ▲ even when sent as P1 (T23).
     const fixed = TILE_FIXED_P[tileOf(a.kind)];
@@ -237,13 +250,16 @@ export function builderMark(b, list = [], mix = null) {
     const open = a.acked !== true;
     if (p === null || MARK_RANK[q] < MARK_RANK[p]) { p = q; unack = open; } else if (q === p && open) unack = true;
   }
-  // The health sample's own alarms (§7), in case the alarm feed lags or is absent.
+  // The health sample's own alarms (§7), in case the alarm feed lags or is
+  // absent: crit is the DOWN tile's health-crit (■); warn is health-warn, which
+  // only the Box shows, so it marks nothing here.
   for (const h of Array.isArray(b.health?.alarms) ? b.health.alarms : []) {
-    const q = h?.level === 'crit' ? '1' : h?.level === 'warn' ? '2' : null;
+    const q = h?.level === 'crit' ? '1' : null;
     if (q && (p === null || MARK_RANK[q] < MARK_RANK[p])) { p = q; unack = false; }
   }
-  // The worst lane: the same order the segment bar and the chips draw.
-  const lane = mix?.p1 > 0 || mix?.p2 > 0 ? '2' : null;
+  // The worst lane, by the rule the status line counts with (core/marks.js
+  // itemP: stuck is ▲, the guard's danger ■), else the segment bar's buckets.
+  const lane = mix?.p ?? (mix?.p1 > 0 || mix?.p2 > 0 ? '2' : null);
   if (lane && (p === null || MARK_RANK[lane] < MARK_RANK[p])) { p = lane; unack = false; }
   if (p) {
     const parts = [];

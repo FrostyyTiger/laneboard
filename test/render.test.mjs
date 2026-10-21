@@ -1128,10 +1128,11 @@ test('the accent is spent only on focus and pins', () => {
     .filter((sel) => (sel.startsWith('.') || sel.startsWith(':')) && sel !== ':root');
   for (const sel of accentUsers) {
     assert.ok(
-      // focus, the keyboard cursor, a pin, the active view, an active filter,
-      // a drop target, a filing a human overrode and a picked filter chip — all
-      // of them transient "you did this" marks rather than a property of the data.
-      /focus|cursor|dropping|btn\.on|tab|lane-clear|qb-form|foverride|aria-pressed/.test(sel),
+      // focus, the keyboard cursor, a pin, the active view (a tab, or the phone
+      // bar's ⋯ lit for a view from its menu), an active filter, a drop target, a
+      // filing a human overrode and a picked filter chip — all of them transient
+      // "you did this" marks rather than a property of the data.
+      /focus|cursor|dropping|btn\.on|tab|ps-more\[data-on\]|lane-clear|qb-form|foverride|aria-pressed/.test(sel),
       `${sel} spends the accent on something that is not focus, a pin or an interaction`
     );
   }

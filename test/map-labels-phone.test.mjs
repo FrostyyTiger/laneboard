@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { createRenderer } from '../public/js/views/map/render.js';
+import { createRenderer, PHONE_ALL_LABELS } from '../public/js/views/map/render.js';
 import { layout } from '../public/js/views/map/layout.js';
 import { fitFrame } from '../public/js/views/map/interact.js';
 
@@ -75,16 +75,27 @@ function boxesOf(scene) {
   return { boxes: r.labelBoxes(scene, badges), badges };
 }
 
-test('390: the demo fleet labels trouble only, and no two label boxes intersect', () => {
+test('390: the demo fleet (27 nodes) labels builders, runs and trouble, and no two label boxes intersect', () => {
   const { boxes, badges } = boxesOf(phoneScene());
   const texts = boxes.map((b) => b.text);
   for (const t of ['FEAT-SEARCH', 'FIX-LOGIN', 'DEPS-BUMP', 'ACME-BILLING']) assert.ok(texts.includes(t), `${t} (trouble) keeps its label: ${texts}`);
+  const named = new Set(boxes.map((b) => b.id));
+  for (const n of DEMO.nodes.filter((x) => x.kind === 'builder' || x.kind === 'run')) assert.ok(named.has(n.id), `${n.id} (${n.kind}) is labelled: ${texts}`);
   for (const t of ['SCRATCH', 'BACKUP', 'REPOS', 'DOCS-REFRESH']) assert.ok(!texts.includes(t), `${t} (healthy) is left for a tap`);
   assert.deepEqual(overlaps(boxes), []);
   for (const b of boxes) for (const p of badges) {
     assert.ok(!hits(b, { x0: p.x, y0: p.y, x1: p.x + p.w, y1: p.y + p.h }), `${b.text} clear of the +${p.id} plate`);
   }
   for (const b of boxes) assert.ok(b.y0 >= 0 && b.y1 <= H, `${b.text} inside the canvas`);
+});
+
+test(`390: a map of ${PHONE_ALL_LABELS} nodes or fewer labels every one`, () => {
+  const keep = new Set(DEMO.nodes.filter((n) => n.kind === 'core' || n.kind === 'host' || n.kind === 'room' || n.kind === 'builder').slice(0, PHONE_ALL_LABELS).map((n) => n.id));
+  const scene = phoneScene();
+  for (const id of [...scene.nodes.keys()]) if (!keep.has(id)) scene.nodes.delete(id);
+  assert.ok(scene.nodes.size <= PHONE_ALL_LABELS && scene.nodes.size > 3, `${scene.nodes.size} nodes`);
+  const named = new Set(boxesOf(scene).boxes.map((b) => b.id));
+  for (const [id, c] of scene.nodes) if (c.node.kind !== 'core') assert.ok(named.has(id), `${id} is labelled`);
 });
 
 test('390: with any one node selected its label shows and still no two boxes intersect', () => {

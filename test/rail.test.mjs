@@ -11,6 +11,7 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
 
 const R = await import('../public/js/ui/rail.js');
+const C = await import('../public/js/ui/components.js');
 const { createStore, applyBuilders, applySnapshot, ingest, setSourceKind } = await import('../public/js/core/store.js');
 
 // --- fixtures ----------------------------------------------------------------------
@@ -146,15 +147,21 @@ test('lamp: the worst alarm of that builder, unack while one at that priority is
   const lp = R.builderLamp({ id: 'builder-a', status: 'live' }, alarms);
   assert.equal(lp.p, '2');
   assert.equal(lp.unack, false, 'the P2 is acked; the open P3 does not flash a P2 lamp');
-  assert.equal(lp.n, 2, 'other builders\' alarms do not count');
-  assert.match(lp.label, /2 alarms/);
+  assert.equal(lp.n, 1, 'other builders\' alarms and a tile-less review do not count');
+  assert.match(lp.label, /1 alarm/);
   const open = R.builderLamp({ id: 'builder-a', status: 'live' }, [...alarms, { id: '4', priority: 'P2', builder: 'builder-a' }]);
   assert.equal(open.unack, true);
   assert.equal(R.builderLamp({ id: 'builder-a', status: 'live' }, [{ priority: 'P4', builder: 'builder-a' }]).p, '3', 'P4 -> 3');
   assert.equal(R.builderLamp({ id: 'builder-a', status: 'live' }, [{ priority: '<b>', builder: 'builder-a' }]).p, 'ok', 'junk priorities are ignored');
   // The health sample's own alarms count too.
   assert.equal(R.builderLamp({ id: 'h', status: 'live', health: { alarms: [{ key: 'memAvailPct', level: 'crit' }] } }, []).p, '1');
-  assert.equal(R.builderLamp({ id: 'h', status: 'live', health: { alarms: [{ key: 'x', level: 'warn' }] } }, []).p, '2');
+  // A warn is health-warn, which only the Box shows: no ▲ the header and status line call 0.
+  assert.equal(R.builderLamp({ id: 'h', status: 'live', health: { alarms: [{ key: 'x', level: 'warn' }] } }, []).p, 'ok');
+  for (const kind of ['reboot', 'health-warn', 'review']) {
+    assert.equal(R.builderLamp({ id: 'h', status: 'live' }, [{ kind, priority: 'P2', builder: 'h' }]).p, 'ok', `${kind} has no tile`);
+  }
+  // A stuck working lane is ▲ as the status line counts it, not the ● of its bucket.
+  assert.equal(R.builderLamp({ id: 'h', status: 'live' }, [], C.laneMix([{ state: 'working', stuck: true }])).p, '2');
   // An alarm with a header tile draws at the tile's mark, as the header (T23).
   assert.equal(R.builderLamp({ id: 'builder-a', status: 'live' }, [{ kind: 'stuck', priority: 'P3', builder: 'builder-a' }]).p, '2', 'STCK is amber ▲');
   assert.equal(R.builderLamp({ id: 'builder-a', status: 'live' }, [{ kind: 'blocked', priority: 'P2', builder: 'builder-a' }]).p, '1', 'BLKD is red ■');
@@ -249,6 +256,10 @@ test('buildRail: a listbox of options with aria-selected, lamp, plate, count and
   assert.ok(a.find('brail-code')[0].classList.contains('plate'));
   assert.equal(a.find('brail-n')[0].textContent, '[3]');
   assert.ok(a.find('segbar')[0], 'segment bar');
+  assert.equal('single' in a.dataset, false, 'three lanes: the bar shows');
+  // A row of one lane or none: its bar would be one full segment, rail.css hides it.
+  for (const o of opts.filter((x) => Number(x.find('brail-n')[0].textContent.slice(1, -1)) <= 1)) assert.ok('single' in o.dataset, o.dataset.b);
+  assert.match(fs.readFileSync(path.join(ROOT, 'public/css/rail.css'), 'utf8'), /\.brail-row\[data-single\] \.brail-seg \{ display: none; \}/);
   assert.equal(opts[0].find('brail-n')[0].textContent, '[4]', 'ALL shows the aggregate count');
   assert.ok(opts[2].classList.contains('brail-row--hatch'), 'down is hatched');
   assert.ok(opts[3].classList.contains('brail-row--hatch'), 'stale is hatched');

@@ -295,10 +295,16 @@ test('one accent: a single hue, apart from p1 by lightness and chroma', () => {
     const a = oklch(resolve('--accent', theme));
     const w = oklch(resolve('--accent-weak', theme));
     assert.equal(w.H, a.H, 'accent-weak shares the accent hue');
-    assert.equal(a.H, 45, 'safety orange');
+    assert.equal(a.H, 300, 'violet');
     const p1 = oklch(resolve('--p1', theme));
-    assert.ok(Math.abs(a.H - p1.H) >= 15, 'accent and p1 differ in hue');
-    assert.ok(a.L !== p1.L && a.C !== p1.C, 'and in lightness and chroma');
+    const dh = Math.min(Math.abs(a.H - p1.H), 360 - Math.abs(a.H - p1.H));
+    assert.ok(dh >= 15, 'accent and p1 differ in hue');
+    // A hue near p1's must differ in lightness and chroma too; violet is far enough on its own.
+    if (dh < 60) assert.ok(a.L !== p1.L && a.C !== p1.C, 'and in lightness and chroma');
+    for (const p of ['--p2', '--p3', '--ok']) {
+      const q = oklch(resolve(p, theme));
+      assert.ok(Math.min(Math.abs(a.H - q.H), 360 - Math.abs(a.H - q.H)) >= 60, `${theme}: the accent is far from ${p} in hue`);
+    }
   }
 });
 

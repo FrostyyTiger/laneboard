@@ -14,7 +14,8 @@ laneboard is read from across the room at 3 a.m. It follows the high-performance
    screen where nothing is wrong has no colour but the one accent.
 2. **Hue and shape only for trouble.** A status colour never travels alone: it comes with its
    shape and, where there is room, a word.
-3. **One accent.** Safety orange (hue 45) is spent only on selection, focus and the primary call to
+3. **One accent.** Violet (hue 300: `oklch(72% 0.17 300)` dark, `oklch(52% 0.20 300)` light, far from
+   every status hue) is spent only on selection, focus and the primary call to
    action. It never means a state. **Selection is a 1 px accent border, never a fill** (runs
    night 4 T28): the selected builder chip, the phone bar's lit segment and a picked filter chip
    take the accent border (the desktop sidebar adds its corner brackets); a peach, brown or pink

@@ -115,8 +115,8 @@ function opsAt(ops, scene, id) {
 
 // --- readPalette ---------------------------------------------------------------
 
-test('exports exactly createRenderer, platePlace and readPalette', () => {
-  assert.deepEqual(Object.keys(render).sort(), ['createRenderer', 'platePlace', 'readPalette']);
+test('exports exactly createRenderer, platePlace, readPalette, codeFont and PHONE_ALL_LABELS', () => {
+  assert.deepEqual(Object.keys(render).sort(), ['PHONE_ALL_LABELS', 'codeFont', 'createRenderer', 'platePlace', 'readPalette']);
 });
 
 test('readPalette reads the §4 tokens through getComputedStyle', (t) => {
@@ -241,6 +241,29 @@ test('working adds a turning grey arc; reduced motion holds it still', () => {
   assert.notEqual(a[0].path[0][4], b[0].path[0][4], 'the arc turns with the clock');
   const r1 = arcs(true, 0), r2 = arcs(true, 700);
   assert.equal(r1[0].path[0][4], r2[0].path[0][4], 'reduced motion: the same arc every frame');
+});
+
+test('the working arc runs on a faint full track of the same radius, so it never reads as a stray ")"', () => {
+  const nodes = [{ id: 'l', kind: 'lane', label: 'l', status: 'working' }];
+  const ctx = fakeCtx();
+  createRenderer(ctx, PAL).drawNodes(sceneOf(nodes, { now: 0 }));
+  const strokes = ctx.ops.filter((o) => o.op === 'stroke' && o.path[0]?.[0] === 'arc');
+  const turning = strokes.find((o) => o.strokeStyle === 'T2' && o.path[0][5] - o.path[0][4] < Math.PI);
+  assert.ok(turning, 'a turning arc');
+  const track = strokes.find((o) => o.strokeStyle === 'LINE' && Math.abs(o.path[0][5] - o.path[0][4] - 2 * Math.PI) < 1e-9
+    && o.path[0][3] === turning.path[0][3] && o.path[0][1] === turning.path[0][1] && o.path[0][2] === turning.path[0][2]);
+  assert.ok(track, 'a full track of the same radius around the same point');
+  assert.ok(strokes.indexOf(track) < strokes.indexOf(turning), 'the track is drawn first, under the arc');
+});
+
+test('codeFont: a builder code keeps 9px when it fits the plate, else shrinks to fit (never below 6)', () => {
+  const q = 8.75; // a builder at scale 1 (SIZE 7 x 1.25)
+  assert.equal(render.codeFont(2 * 5.4, q), 9, 'a two-letter code at 9px fits');
+  const f = render.codeFont(3 * 5.4, q);
+  assert.ok(f < 9 && f >= 6, `three letters shrink: ${f}`);
+  assert.ok((3 * 5.4 * f) / 9 <= 2 * q - 4, 'and then fit inside the outline');
+  assert.equal(render.codeFont(100, q), 6);
+  assert.equal(render.codeFont(0, q), 9);
 });
 
 test('a builder is a 2px square outline with its short code inside', () => {

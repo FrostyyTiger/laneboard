@@ -1,5 +1,5 @@
 /* The annunciator tiles (fleet plan §4 2.5, task D7). The 2x4 grid itself
-   (#ann, 64x18 tiles, 48x18 on a tablet) is in shell.css; this sheet draws
+   (#ann, 64x16 tiles, 48x16 on a tablet, 46x16 on a phone) is in shell.css; this sheet draws
    the tiles. Grey unless something needs you (docs/design.md, runs night 4
    T13): a tile is never filled. normal: grey label, empty count. unack and
    ack: grey tile and label, only the count coloured with its shape, --p2 ▲
@@ -13,7 +13,7 @@
   justify-content: space-between;
   gap: 2px;
   min-width: 0;
-  height: 18px;
+  height: 16px;
   padding: 0 var(--sp-1);
   border: var(--bw) solid var(--line);
   border-radius: var(--radius);
@@ -76,7 +76,7 @@
   .ann-tile[data-state="unack"] .ann-tag { display: inline; }
 }
 
-/* Tablet and phone: 48x18, icon plus count, no label. */
+/* Tablet and phone: 48x16 (46x16), icon plus count, no label. */
 @media (max-width: 1199px) {
   .ann-i { display: inline-block; width: 12px; height: 12px; }
   .ann-label { display: none; }

@@ -192,7 +192,8 @@ export function builderLamp(b, list = [], mix = null) {
 }
 
 function addMix(into, mix) {
-  for (const k of Object.keys(into)) into[k] += mix[k] || 0;
+  for (const k of Object.keys(into)) if (typeof into[k] === 'number') into[k] += mix[k] || 0;
+  if (mix.p === '1' || (mix.p === '2' && into.p !== '1')) into.p = mix.p;
   return into;
 }
 
@@ -277,6 +278,9 @@ function railOption(r, onSelect) {
   o.tabIndex = -1;
   o.dataset.b = r.id;
   o.dataset.status = r.status;
+  // One lane (or none) makes a bar that is one full-width segment: it says
+  // nothing the lamp does not, so rail.css hides it.
+  if (!(r.n > 1)) o.dataset.single = '';
   markSel(o, r.selected);
   const code = plate(r.code, { kind: r.id === 'all' ? 'solid' : null });
   code.classList.add('brail-code');

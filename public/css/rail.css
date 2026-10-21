@@ -188,7 +188,9 @@
   grid-template-areas: "lamp code n" ". seg seg";
   align-items: center;
   gap: 2px var(--sp-2);
-  margin-inline: var(--sp-1);
+  /* 8 px, so the selection's corner brackets (inset -3px) keep clear of the
+     viewport edge. */
+  margin-inline: var(--sp-2);
   padding: var(--sp-1) var(--sp-2);
   min-height: var(--row-h);
   border: var(--bw) solid transparent;
@@ -200,6 +202,8 @@
 .brail-code { grid-area: code; justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brail-n { grid-area: n; color: var(--text-3); font-variant-numeric: tabular-nums; text-align: right; }
 .brail-seg { grid-area: seg; width: 100%; }
+/* A row of one lane: its bar would be one full-width segment, no information. */
+.brail-row[data-single] .brail-seg { display: none; }
 .brail-row:hover { background: var(--bg-hover); }
 .brail-row.sel { background: var(--bg-selected); color: var(--text-1); }
 .brail-row.sel .brail-n { color: var(--text-2); }

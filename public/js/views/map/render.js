@@ -47,7 +47,7 @@ const FALLBACK = {
   t1: 'oklch(92% 0.003 250)',
   t2: 'oklch(72% 0.004 250)',
   t3: 'oklch(55% 0.004 250)',
-  accent: 'oklch(70% 0.19 45)',
+  accent: 'oklch(72% 0.17 300)',
   crit: 'oklch(62% 0.23 25)',
   warn: 'oklch(84% 0.16 95)',
   low: 'oklch(74% 0.11 220)',
@@ -147,6 +147,17 @@ export function platePlace(sp, ang, ring, w, h, c0 = null, hairlines = []) {
   };
   return tries.find(clear) ?? tries[0];
 }
+/**
+ * The font size (px) of a builder code `w` px wide at 9px inside a plate of
+ * half-side `q`: 9 when it fits inside the 2px outline (its inner edge is 1px
+ * in) with 1px clear, else scaled down to fit, never below 6. Pure.
+ */
+export function codeFont(w, q) {
+  const room = 2 * q - 4;
+  if (!(w > 0) || !(room > 0) || w <= room) return 9;
+  return Math.max(6, Math.floor((9 * room / w) * 2) / 2);
+}
+
 /** A radius ctx.arc accepts: finite and >= 0. */
 const safeRadius = (r) => (Number.isFinite(r) && r > 0 ? r : 0);
 const ease = (t) => 1 - Math.pow(1 - t, 3);
@@ -186,8 +197,10 @@ const LOUD = new Set(['attention', 'crit', 'down']);
 const GAUGED = new Set(['room', 'site', 'host', 'builder']);
 /** Below this canvas width the core's name is left to the map title, the label would sit on the inner ring. */
 const NARROW = 600;
-/** At or below this canvas width (a phone): no ring legends, labels for trouble and the selection only. */
+/** At or below this canvas width (a phone): no ring legends; labels for builders, runs, trouble and the selection. */
 const PHONE = 480;
+/** On a phone, a map of this many nodes or fewer labels every one. */
+export const PHONE_ALL_LABELS = 8;
 const TEXT_CACHE_MAX = 4000;
 
 /**
@@ -697,10 +710,14 @@ export function createRenderer(ctx, palette) {
         strokeStyle(st.abnormal ? col : P.t2, alpha, 2, []);
         ctx.strokeRect(sp.x - q, sp.y - q, q * 2, q * 2);
         fillStyle(st.abnormal ? col : P.t1, alpha);
+        // The code fits inside the plate: 9px when it can, smaller for a
+        // three-letter code ("RRN") that would run over the outline.
+        const code = String(n.code ?? n.label ?? '').slice(0, 3);
         ctx.font = `600 9px ${P.mono}`;
+        ctx.font = `600 ${codeFont(measure(code), q)}px ${P.mono}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(String(n.code ?? n.label ?? '').slice(0, 3), sp.x, sp.y + 0.5);
+        ctx.fillText(code, sp.x, sp.y + 0.5);
         if (st.abnormal) glyph(st.shape, sp.x + q, sp.y - q, 3, col, alpha);
       } else if (!st.abnormal && st.tone === 'grey' && st.shape === 'diamond') {
         // A calm lane keeps its diamond outline, so lane-vs-machine still reads.
@@ -714,6 +731,9 @@ export function createRenderer(ctx, palette) {
       if (st.arc) {
         // Working: a grey arc turning around it (data motion; still under reduced motion).
         const a0 = scene.reduced ? -Math.PI / 2 : (now / 520) % TAU;
+        // On a faint full track, so the arc reads as the node's, not a stray ")".
+        strokeStyle(P.line, 0.8 * alpha, 1, []);
+        ctx.beginPath(); arc(sp.x, sp.y, r + 4, 0, TAU); ctx.stroke();
         strokeStyle(P.t2, 0.9 * alpha, 1.4, []);
         ctx.beginPath();
         arc(sp.x, sp.y, r + 4, a0, a0 + 1.6);
@@ -793,6 +813,11 @@ export function createRenderer(ctx, palette) {
     const near = scene.near ?? new Set();
     const matches = scene.matches ?? new Set();
     const stuck = stuckBuilders(scene.byId);
+    // A phone with a small fleet names every node; a bigger one names its
+    // builders and runs, the rest only when in trouble or picked.
+    let real = 0;
+    for (const c of nodes.values()) if (c.node && !c.node.virtual) real++;
+    const few = real <= PHONE_ALL_LABELS;
     const plan = [];
     for (const [id, c] of nodes) {
       const n = c.node;
@@ -802,7 +827,7 @@ export function createRenderer(ctx, palette) {
       const loud = LOUD.has(status);
       const picked = id === focus || id === scene.selected || matches.has(id);
       const show = phone
-        ? picked || trouble(n, stuck)
+        ? few || n.kind === 'builder' || n.kind === 'run' || picked || trouble(n, stuck)
         : (c.depth ?? 0) <= 2 || n.kind === 'builder' || n.kind === 'run' || s > 1.25 || picked || near.has(id) || loud;
       if (!show || fade < 0.12) continue;
       const sp = scene.toScreen(c);
@@ -915,7 +940,9 @@ export function createRenderer(ctx, palette) {
     };
     for (const e0 of order) {
       const alt = mirror(e0);
-      const offNodes = (e) => (b) => !discs.some((n) => n.id !== e.id && hits(n, b));
+      // Off every node, its own included: a label moved a line up or down
+      // must not land on the plate it names.
+      const offNodes = () => (b) => !discs.some((n) => hits(n, b));
       let e = e0;
       let dy = null;
       for (const [cand, clear] of [[e0, offNodes(e0)], [alt, offNodes(e0)], [e0, () => true], [alt, () => true]]) {

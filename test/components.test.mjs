@@ -147,8 +147,12 @@ test('laneMix counts sessions into p1 p2 run ok off dead', () => {
     { state: 'idle' }, { state: 'shell' }, { state: 'weird' },
     { state: 'dead' }, { state: 'working', stale: true },
   ]);
-  assert.deepEqual(mix, { p1: 2, p2: 2, run: 2, ok: 1, off: 3, dead: 2, total: 12 });
-  assert.deepEqual(C.laneMix([]), { p1: 0, p2: 0, run: 0, ok: 0, off: 0, dead: 0, total: 0 });
+  assert.deepEqual(mix, { p1: 2, p2: 2, run: 2, ok: 1, off: 3, dead: 2, total: 12, p: '2' });
+  // `p` is the status line's rule (itemP): a stuck working lane is ▲, a danger ■, a dead one nothing.
+  assert.equal(C.laneMix([{ state: 'working', stuck: true }]).p, '2');
+  assert.equal(C.laneMix([{ state: 'working', danger: 'rm -rf' }, { state: 'question' }]).p, '1');
+  assert.equal(C.laneMix([{ state: 'question', stale: true }]).p, null);
+  assert.deepEqual(C.laneMix([]), { p1: 0, p2: 0, run: 0, ok: 0, off: 0, dead: 0, total: 0, p: null });
   assert.deepEqual(C.laneMix(null).total, 0);
   assert.deepEqual(C.MIX_ORDER, ['p1', 'p2', 'run', 'ok', 'off', 'dead']);
 });

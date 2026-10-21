@@ -188,6 +188,11 @@ test('board.css: the state word, code and age never shrink; the title and the br
   assert.ok(Number(/^0 (\d+)/.exec(get('.db .branch', 'flex'))[1]) > 1, 'the branch shrinks before the title');
   assert.equal(get('.db .branch', 'text-overflow'), 'ellipsis');
   assert.equal(get('.db', 'container-type'), 'inline-size');
+  // The usd field has a floor, never a fixed width: a longer figure ($1.01/5h)
+  // must not overflow into the gap before the branch.
+  assert.equal(get('.db-usd', 'width'), undefined);
+  assert.equal(get('.db-usd', 'min-width'), '7ch');
+  assert.ok(decls.some((d) => d.prelude === '.card-meta' && d.prop === 'gap'), 'the meta line has a gap');
   // A narrow line drops minor fields whole; code, state, title, flags and age always stay.
   const hidden = decls.filter((d) => d.at.some((a) => a.startsWith('@container')) && d.prop === 'display' && d.value === 'none');
   assert.ok(hidden.length >= 3, 'some fields drop on a narrow line');

@@ -132,7 +132,9 @@
 .db-ctx[data-p="1"] { color: var(--p1); }
 .db-ctx[data-p="2"]::before { content: "▲"; }
 .db-ctx[data-p="1"]::before { content: "■"; }
-.db-usd { width: 7ch; color: var(--text-1); }
+/* A floor, not a width: `$1.01/5h` is 8ch and would spill into the gap and
+   run into the branch (`$1.01/5h⌥run/…`). */
+.db-usd { min-width: 7ch; color: var(--text-1); }
 .db-model {
   display: block;
   max-width: 12ch;

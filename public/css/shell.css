@@ -160,12 +160,14 @@
 .stat { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); white-space: nowrap; }
 .stat b { color: var(--text-1); font-weight: 600; }
 
-/* The annunciator slot: 2 x 4 tiles of 64 x 18 (D7 draws the tiles). */
+/* The annunciator slot: 2 x 4 tiles of 64 x 16 (D7 draws the tiles): two rows and their
+   2 px gap are 34 px, so they sit centred in the 36 px header, not flush with its top. */
 .ann {
   display: grid;
   grid-template-columns: repeat(4, 64px);
-  grid-auto-rows: 18px;
+  grid-auto-rows: 16px;
   gap: 2px;
+  align-self: center;
 }
 .ann:empty { display: none; }
 
@@ -348,7 +350,8 @@
     grid-template-rows: calc(var(--header-h) + 4px + env(safe-area-inset-top)) auto minmax(0, 1fr);
     grid-template-columns: minmax(0, 1fr);
   }
-  .shell-head { padding-top: env(safe-area-inset-top); gap: var(--sp-2); }
+  .shell-head { padding-top: env(safe-area-inset-top); gap: var(--sp-1); }
+  .head-right { gap: var(--sp-2); }
   .shell-rail, .shell-bar { display: none; }
   .shell-strip {
     grid-area: strip;
@@ -360,11 +363,14 @@
     border-bottom: var(--bw) solid var(--line);
   }
   .shell-strip:empty { display: none; }
-  .shell-nav { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  /* The phone bar switches views; the header keeps only the current view's
+     icon, whole: a fixed 28 px that never shrinks behind the annunciator. */
+  .shell-nav { flex: none; width: 28px; overflow: hidden; }
+  .nav-tab:not([aria-current="page"]) { display: none; }
   .scope, .topbar-gauges, .stat, .builders, .clock-local, .brand-host { display: none; }
-  /* 390 px holds no 4 x 64 px annunciator plus the clock: the tiles go 48 px, icon and
+  /* 390 px holds no 4 x 64 px annunciator plus the clock: the tiles go 46 px, icon and
      count (annunciator.css), and the clock goes (the phone shows its own). runs-n4 T37. */
-  .ann { grid-template-columns: repeat(4, 48px); }
+  .ann { grid-template-columns: repeat(4, 46px); }
   .clock { display: none; }
   .shell-insp { width: 100%; }
 }

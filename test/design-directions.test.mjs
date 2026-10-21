@@ -83,7 +83,7 @@ for (const f of files) {
       for (const m of d.value.matchAll(/oklch\(\s*[\d.]+%\s+([\d.]+)\s+([\d.]+)/g)) {
         if (+m[1] > 0.02) assert.match(d.prop, /^--(accent(-weak)?|p[123](-weak|-line)?|ok)$/, `${d.prop} is chromatic outside the accent/status set`);
       }
-      if (/^--accent/.test(d.prop)) assert.match(d.value, /oklch\(\s*[\d.]+%\s+[\d.]+\s+45\b/, 'the accent keeps its hue');
+      if (/^--accent/.test(d.prop)) assert.match(d.value, /oklch\(\s*[\d.]+%\s+[\d.]+\s+300\b/, 'the accent keeps its hue');
     }
   });
 

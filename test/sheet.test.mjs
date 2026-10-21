@@ -8,7 +8,7 @@ import path from 'node:path';
 import { makeDocument, makeEl, texts } from './helpers/fakedom.mjs';
 import {
   FLICK_PX_MS, FULL_GAP_PX, L4_MODES, MORE_VIEWS, PEEK_PX, SHEET_TABS, SNAPS,
-  builderP, litTab, normTab, peekModel, pickTab, renderPhone, routeTab, renderStrip, sheetRow, sheetRows,
+  builderP, litTab, moreLit, normTab, peekModel, pickTab, renderPhone, routeTab, renderStrip, sheetRow, sheetRows,
   snapFor, snapTops, stepSnap, stripModel, openSheet, closeSheet, setSnap, currentSnap,
 } from '../public/js/ui/sheet.js';
 import { store } from '../public/js/core/store.js';
@@ -292,7 +292,7 @@ test('renderPhone fills #shell-strip and #shell-sheet on a phone, hides the shee
   }
 });
 
-test('routeTab / litTab: Board and Runs fall under LIST, a view with no segment lights none, a pick wins', () => {
+test('routeTab / litTab: Board and Runs show LIST\'s content but light ⋯, not LIST; a pick wins', () => {
   assert.equal(routeTab('map'), 'map');
   assert.equal(routeTab('board'), 'list');
   assert.equal(routeTab('runs'), 'list');
@@ -301,7 +301,14 @@ test('routeTab / litTab: Board and Runs fall under LIST, a view with no segment 
   assert.equal(litTab('inbox'), 'inbox');
   assert.equal(litTab('morning'), null);
   assert.equal(litTab('inbox', 'map'), 'map');
-  assert.equal(litTab('runs', 'bogus'), 'list');
+  assert.equal(litTab('runs', 'bogus'), null);
+  for (const v of ['board', 'runs', 'morning']) {
+    assert.equal(litTab(v), null, v);
+    assert.equal(moreLit(v), true, v);
+  }
+  assert.equal(litTab('board', 'list'), 'list', 'a picked segment still lights');
+  assert.equal(moreLit('board', 'list'), false);
+  assert.equal(moreLit('map'), false);
 });
 
 test('renderPhone lights the one segment of the current route (r10-designer across 3)', async () => {
@@ -314,11 +321,13 @@ test('renderPhone lights the one segment of the current route (r10-designer acro
   try {
     await withPage(['shell-strip', 'shell-sheet'], { width: 390 }, (byId) => {
       const sheet = byId.get('shell-sheet');
-      const want = { '#/': ['MAP'], '#/board': ['LIST'], '#/runs': ['LIST'], '#/runs?run=acme-search': ['LIST'], '#/inbox': ['INBOX'], '#/morning': [], '#/audit': [] };
+      const want = { '#/': ['MAP'], '#/board': [], '#/runs': [], '#/runs?run=acme-search': [], '#/inbox': ['INBOX'], '#/morning': [], '#/audit': [] };
+      const more = () => sheet.children[0].children[2];
       for (const [hash, tabs] of Object.entries(want)) {
         location.hash = hash;
         renderPhone();
         assert.deepEqual(lit(sheet), tabs, hash);
+        assert.equal('on' in more().dataset, !tabs.length, `${hash}: ⋯ is lit when no segment is`);
       }
       // The content follows the route too: the Inbox shows the alarms.
       location.hash = '#/inbox';
@@ -332,7 +341,8 @@ test('renderPhone lights the one segment of the current route (r10-designer acro
       assert.deepEqual(lit(sheet), ['MAP'], 'a selection on the same view keeps the pick');
       location.hash = '#/board';
       renderPhone();
-      assert.deepEqual(lit(sheet), ['LIST']);
+      assert.deepEqual(lit(sheet), []);
+      assert.ok('on' in more().dataset, 'Board lights ⋯');
     });
   } finally {
     Object.assign(store, saved);
