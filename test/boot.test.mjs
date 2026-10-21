@@ -6,11 +6,13 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
+import net from 'node:net';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
 import { boot, freePort, ingressFetch, ingressWs, ROOT } from './helpers/boot.mjs';
 import { fakeBuilder, hubSigner } from './helpers/fake-builder.mjs';
+import { bootErrorLine } from '../server/boot/common.mjs';
 import { publicKeyString, publicKeyPem } from '../server/fleet/keys-ed25519.mjs';
 
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/snapshot.json', import.meta.url), 'utf8'));
@@ -96,6 +98,40 @@ test('boot refuses the live port and a non-memory database', async () => {
   await assert.rejects(boot({ env: { LANEBOARD_PORT: '7777' } }), /7777/);
   await assert.rejects(boot({ env: { LANEBOARD_DB: '/tmp/x.db' } }), /:memory:/);
   await assert.rejects(boot({ env: { TMUX: '/tmp/tmux-0/default,1,0' } }), /TMUX/);
+});
+
+test('a busy port: one line naming the port and LANEBOARD_PORT, no stack, non-zero exit', async () => {
+  const port = await freePort();
+  const holder = net.createServer();
+  await new Promise((resolve) => holder.listen(port, '127.0.0.1', resolve));
+  try {
+    const err = await boot({ env: { LANEBOARD_PORT: String(port) } }).then(() => null, (e) => e);
+    assert.ok(err, 'laneboard booted on a taken port');
+    assert.equal(err.exited, true, err.message);
+    assert.match(err.message, /laneboard exited \(1\)/);
+    const line = `laneboard: port ${port} is taken (is another laneboard running? set LANEBOARD_PORT or config.port)`;
+    assert.equal(err.message.split('\n').filter((l) => l.includes(line)).length, 1, err.message);
+    assert.doesNotMatch(err.message, /uncaughtException|EADDRINUSE|^\s+at /m);
+  } finally {
+    await new Promise((resolve) => holder.close(resolve));
+  }
+});
+
+test('bootErrorLine: one line for a busy port (local or ingress) and a held audit lock, null otherwise', () => {
+  const inUse = Object.assign(new Error('listen EADDRINUSE'), { code: 'EADDRINUSE', port: 7791 });
+  assert.equal(bootErrorLine(inUse), 'laneboard: port 7791 is taken (is another laneboard running? set LANEBOARD_PORT or config.port)');
+  assert.equal(bootErrorLine(inUse, { port: 7792, ingress: true }),
+    'laneboard: port 7792 is taken (is another laneboard running? set LANEBOARD_INGRESS_PORT or fleet.ingressPort)');
+  const locked = Object.assign(new Error('audit: /s/audit.jsonl.lock is held by pid 42 on h; only one writer may open '
+    + 'the audit log (set LANEBOARD_AUDIT_FILE to a private path for a second instance, or remove the lock if that writer is gone)'),
+  { code: 'AUDIT_LOCKED' });
+  const l = bootErrorLine(locked);
+  assert.equal(l, `laneboard: ${locked.message}`);
+  assert.ok(!l.includes('\n'));
+  const bare = Object.assign(new Error('audit: lost the race for /s/audit.jsonl.lock to another writer'), { code: 'AUDIT_LOCKED' });
+  assert.match(bootErrorLine(bare), /^laneboard: audit: lost the race .*LANEBOARD_AUDIT_FILE or XDG_STATE_HOME/);
+  assert.equal(bootErrorLine(new Error('boom')), null);
+  assert.equal(bootErrorLine(Object.assign(new Error('x'), { code: 'EACCES' })), null);
 });
 
 test('a hub with one unreachable builder boots and never loads the builder graph', async () => {

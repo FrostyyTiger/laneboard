@@ -290,7 +290,7 @@ export async function boot({ mode = 'builder', config = null, env = {}, trace = 
       return await bootOnce({ mode, config, env, trace, timeoutMs, hubKey });
     } catch (err) {
       lastErr = err;
-      if (!err.exited || !/EADDRINUSE/.test(err.message)) throw err;
+      if (!err.exited || !/EADDRINUSE|port \d+ is taken/.test(err.message)) throw err;
     }
   }
   throw lastErr;
