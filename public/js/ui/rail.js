@@ -6,7 +6,7 @@ import { alarms, builders, store, subscribe } from '../core/store.js';
 import { deriveCode } from '../core/keys.js';
 import { icon } from '../core/icons.js';
 import { currentRoute, navigate, onRoute } from '../core/router.js';
-import { lamp, lampLabel, laneMix, markSel, mixLabel, normP, plate, scopeSessions, segbar } from './components.js';
+import { builderMark, lamp, lampLabel, laneMix, markSel, mixLabel, plate, scopeSessions, segbar } from './components.js';
 import { setRail } from './shell.js';
 import { compactGauge, gauge, stateDot } from './widgets.js';
 import { focusSession } from '../views/board.js';
@@ -114,8 +114,9 @@ export function renderRateLimits() {
 // Clicking a row, or Enter/Space on it, sets the scope `b=<id>` (ALL clears
 // it) through the router; routes only select and filter.
 //
-// The lamp is the builder's worst alarm (§7 `alarms`, plus its `health`
-// sample's own alarms), or its link state: down -> p1 (the trouble red), stale
+// The lamp is the shared builder mark (components.js builderMark, as the phone
+// chip): the worst of its alarms (§7 `alarms`, plus its `health`
+// sample's own alarms) and its lanes (permission p1, question p2), or its link state: down -> p1 (the trouble red), stale
 // -> the grey hollow `stale` lamp (as the phone sheet), and both rows are
 // hatched: the hatch is the shape cue, so no third hue (runs T31). Builder names and codes are untrusted: they reach the DOM
 // through textContent and setAttribute only.
@@ -135,7 +136,6 @@ export const CODE_MAX = 6;
 
 /** Severity order of a lamp `data-p`, worst first. */
 const LAMP_RANK = Object.freeze({ 1: 0, 2: 1, 3: 2, stale: 3, run: 4, ok: 5, off: 6 });
-const ALARM_P = new Set(['1', '2', '3']);
 const BUILDER_STATUS = new Set(['live', 'stale', 'down', 'connecting']);
 // eslint-disable-next-line no-control-regex
 const CONTROL_RX = /[\u0000-\u001f\u007f]/g;
@@ -171,36 +171,9 @@ export function worseP(a, b) {
   return (LAMP_RANK[b] ?? 9) < (LAMP_RANK[a] ?? 9) ? b : a;
 }
 
-/**
- * One builder's lamp: {p, unack, label, n}. `list` is the store's alarms
- * ({builder, priority 'P1'..'P4', acked}); `mix` its laneMix. Down -> p1,
- * stale -> 'stale' (grey, hatched), else the worst alarm (unack when an alarm at that priority is
- * not acked), else working (any lane running) or ok. Pure.
- */
+/** One builder's lamp: the shared builder mark (components.js `builderMark`, runs T43). */
 export function builderLamp(b, list = [], mix = null) {
-  if (!b || typeof b !== 'object') return { p: 'off', unack: false, label: 'unknown', n: 0 };
-  if (b.status === 'down') return { p: '1', unack: false, label: 'down', n: 0 };
-  if (b.status === 'stale') return { p: 'stale', unack: false, label: 'stale', n: 0 };
-  let p = null;
-  let unack = false;
-  let n = 0;
-  for (const a of Array.isArray(list) ? list : []) {
-    if (!a || typeof a !== 'object' || a.builder !== b.id) continue;
-    const q = normP(a.priority);
-    if (!ALARM_P.has(q)) continue;
-    n++;
-    const open = a.acked !== true;
-    if (p === null || LAMP_RANK[q] < LAMP_RANK[p]) { p = q; unack = open; } else if (q === p && open) unack = true;
-  }
-  // The health sample's own alarms (§7), in case the alarm feed lags or is absent.
-  for (const h of Array.isArray(b.health?.alarms) ? b.health.alarms : []) {
-    const q = h?.level === 'crit' ? '1' : h?.level === 'warn' ? '2' : null;
-    if (q && (p === null || LAMP_RANK[q] < LAMP_RANK[p])) { p = q; unack = false; }
-  }
-  if (p) return { p, unack, label: `${lampLabel(p)}${n ? `, ${n} ${n === 1 ? 'alarm' : 'alarms'}` : ''}`, n };
-  if (b.status === 'connecting') return { p: 'off', unack: false, label: 'connecting', n: 0 };
-  if (mix?.run > 0) return { p: 'run', unack: false, label: 'working', n: 0 };
-  return { p: 'ok', unack: false, label: 'ok', n: 0 };
+  return builderMark(b, list, mix);
 }
 
 function addMix(into, mix) {

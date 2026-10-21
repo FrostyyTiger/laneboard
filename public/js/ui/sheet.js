@@ -15,7 +15,7 @@ import { currentRoute, formatHash, navigate, onRoute } from '../core/router.js';
 import { scheduleVisible, sendKeys, sendText } from '../core/net.js';
 import { icon } from '../core/icons.js';
 import { closeTerminal, isLive, openTerminal, writeTo } from './terminal.js';
-import { lamp, normP } from './components.js';
+import { builderMark, lamp, laneMix, normP } from './components.js';
 import { layoutFor, toast } from './shell.js';
 
 /**
@@ -167,21 +167,26 @@ function codeOf(b, id) {
   return (typeof b?.code === 'string' && b.code) || deriveCode(id);
 }
 
-/** Worst lamp `data-p` of a builder: stale when its link is down, else its worst session. Pure. */
-export function builderP(b) {
-  if (!b) return 'off';
-  if (b.status === 'stale' || b.status === 'down') return 'stale';
-  let best = null;
-  const order = ['1', '2', '3', 'run', 'ok', 'off'];
-  for (const sess of b.sessions?.values?.() ?? []) {
-    const p = normP(sess?.state);
-    if (best === null || order.indexOf(p) < order.indexOf(best)) best = p;
-  }
-  return best ?? 'off';
+/**
+ * A builder's chip mark: the shared builder mark (components.js builderMark,
+ * the rail row's rule, runs T43) from its sessions and the alarms `list`.
+ * Returns {p, label}. Pure.
+ */
+export function builderChipMark(b, list = []) {
+  const sessions = [...(b?.sessions?.values?.() ?? [])];
+  const stale = b?.status === 'stale' || b?.status === 'down';
+  const mix = laneMix(stale ? sessions.map((x) => ({ ...x, stale: true })) : sessions);
+  const m = builderMark(b, list, mix);
+  return { p: m.p, label: m.label };
+}
+
+/** Worst lamp `data-p` of a builder (builderChipMark's `p`). Pure. */
+export function builderP(b, list = []) {
+  return builderChipMark(b, list).p;
 }
 
 function worstP(ps) {
-  const order = ['1', '2', '3', 'run', 'ok', 'off', 'stale'];
+  const order = ['1', '2', '3', 'stale', 'run', 'ok', 'off'];
   let best = null;
   for (const p of ps) if (best === null || order.indexOf(p) < order.indexOf(best)) best = p;
   return best ?? 'off';
@@ -189,17 +194,18 @@ function worstP(ps) {
 
 /**
  * The #shell-strip chips for store `s` and `route`: ALL first, then one per
- * builder by id, each {id, code, p, on, title}. `on` follows route.b. Pure.
+ * builder by id, each {id, code, p, label, on, title} (p and label from builderChipMark). `on` follows route.b. Pure.
  */
 export function stripModel(s, route) {
   const list = [...(s?.builders?.values?.() ?? [])].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const scope = route?.b && route.b !== 'all' ? route.b : null;
+  const al = Array.isArray(s?.alarms) ? s.alarms : [];
   const chips = list.map((b) => {
-    const p = builderP(b);
+    const m = builderChipMark(b, al);
     const status = typeof b.status === 'string' ? b.status : 'down';
-    return { id: b.id, code: codeOf(b, b.id), p, on: scope === b.id, title: `${b.id} · ${status}` };
+    return { id: b.id, code: codeOf(b, b.id), p: m.p, label: m.label, on: scope === b.id, title: `${b.id} · ${status} · ${m.label}` };
   });
-  const all = { id: 'all', code: 'ALL', p: worstP(chips.map((c) => (c.p === 'stale' ? 'off' : c.p))), on: !scope, title: 'Every builder' };
+  const all = { id: 'all', code: 'ALL', p: worstP(chips.map((c) => c.p)), on: !scope, title: 'Every builder' };
   return [all, ...chips];
 }
 
@@ -324,7 +330,7 @@ export function renderStrip(box, model, onPick) {
     b.type = 'button';
     b.dataset.b = c.id;
     b.setAttribute('aria-pressed', c.on ? 'true' : 'false');
-    b.append(lamp(c.p, { label: c.p === 'stale' ? 'stale' : null }), el('span', 'chip-t', c.code));
+    b.append(lamp(c.p, { label: c.label ?? (c.p === 'stale' ? 'stale' : null) }), el('span', 'chip-t', c.code));
     b.title = c.title;
     b.setAttribute('aria-label', c.id === 'all' ? 'All builders' : `Builder ${c.title}`);
     if (onPick) b.addEventListener('click', () => onPick(c.id));

@@ -12,6 +12,8 @@ import {
   snapFor, snapTops, stepSnap, stripModel, openSheet, closeSheet, setSnap, currentSnap,
 } from '../public/js/ui/sheet.js';
 import { store } from '../public/js/core/store.js';
+import { builderLamp as railLamp } from '../public/js/ui/rail.js';
+import { laneMix } from '../public/js/ui/components.js';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -121,13 +123,31 @@ test('tabs: MAP, LIST, INBOX; the ⋯ menu holds the other nav views', () => {
   assert.ok(MORE_VIEWS.includes('board') && MORE_VIEWS.includes('audit'));
 });
 
-test('builderP: worst session, stale when the link is down', () => {
+test('builderP: the shared builder mark (worst lane or alarm), p1 when the link is down, stale when stale', () => {
   const f = fleet();
   assert.equal(builderP(f.builders.get('builder-a')), '1');
   assert.equal(builderP(f.builders.get('builder-b')), '2');
-  assert.equal(builderP(f.builders.get('builder-c')), 'stale');
-  assert.equal(builderP(builder('e', [])), 'off');
+  assert.equal(builderP(f.builders.get('builder-c')), '1', 'down is p1, as the rail row');
+  assert.equal(builderP(builder('s', [{ name: 'x', state: 'working' }], { status: 'stale' })), 'stale');
+  assert.equal(builderP(builder('e', [])), 'ok');
+  assert.equal(builderP(builder('w', [{ name: 'x', state: 'working' }])), 'run');
+  assert.equal(builderP(builder('e', []), [{ builder: 'e', priority: 'P1', acked: false }]), '1', 'an alarm counts too');
   assert.equal(builderP(null), 'off');
+});
+
+test('T43: one builder with a PERM and a QUES lane gets the same mark on the rail row and the phone chip', () => {
+  const b = builder('builder-a', [
+    { name: 'feat-search', state: 'waiting_permission' },
+    { name: 'fix-login', state: 'waiting_question' },
+  ], { code: 'BA' });
+  for (const al of [[], [{ id: 'q', kind: 'needs-input', priority: 'P2', builder: 'builder-a', acked: false }]]) {
+    const s = { builders: new Map([[b.id, b]]), attention: [], alarms: al };
+    const chip = stripModel(s, {})[1];
+    const row = railLamp(b, al, laneMix([...b.sessions.values()]));
+    assert.equal(chip.p, '1', 'worst lane state wins: the permission lane');
+    assert.equal(row.p, chip.p);
+    assert.equal(chip.label, row.label);
+  }
 });
 
 test('stripModel: ALL first, then each builder by id, on follows b=', () => {
@@ -137,7 +157,7 @@ test('stripModel: ALL first, then each builder by id, on follows b=', () => {
   assert.deepEqual(all.map((c) => c.code), ['ALL', 'B1', 'B2', 'B3']);
   assert.deepEqual(all.map((c) => c.on), [true, false, false, false]);
   assert.equal(all[0].p, '1', 'ALL carries the worst live lamp');
-  assert.equal(all[3].p, 'stale');
+  assert.equal(all[3].p, '1', 'down is p1, as the rail row');
   const one = stripModel(f, { b: 'builder-b' });
   assert.deepEqual(one.map((c) => c.on), [false, false, true, false]);
   assert.deepEqual(stripModel({ builders: new Map() }, {}).map((c) => c.id), ['all']);

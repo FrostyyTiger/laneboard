@@ -210,6 +210,52 @@ export function scopeSessions(s, scope = 'all') {
   return out;
 }
 
+const MARK_RANK = Object.freeze({ 1: 0, 2: 1, 3: 2, stale: 3, run: 4, ok: 5, off: 6 });
+const ALARM_P = new Set(['1', '2', '3']);
+
+/**
+ * One builder's mark, the single rule the 1440 rail row and the 390 scope
+ * chip share (runs T43): {p, unack, label, n}. `list` is the store's alarms
+ * ({builder, priority 'P1'..'P4', acked}), `mix` its laneMix. Down -> p1,
+ * stale -> 'stale', else the worst of its alarms (and its health sample's)
+ * and its lanes (a permission lane is p1, a question lane p2): unack when an
+ * open alarm sits at that priority. Else working (a lane running) or ok. Pure.
+ */
+export function builderMark(b, list = [], mix = null) {
+  if (!b || typeof b !== 'object') return { p: 'off', unack: false, label: 'unknown', n: 0 };
+  if (b.status === 'down') return { p: '1', unack: false, label: 'down', n: 0 };
+  if (b.status === 'stale') return { p: 'stale', unack: false, label: 'stale', n: 0 };
+  let p = null;
+  let unack = false;
+  let n = 0;
+  for (const a of Array.isArray(list) ? list : []) {
+    if (!a || typeof a !== 'object' || a.builder !== b.id) continue;
+    const q = normP(a.priority);
+    if (!ALARM_P.has(q)) continue;
+    n++;
+    const open = a.acked !== true;
+    if (p === null || MARK_RANK[q] < MARK_RANK[p]) { p = q; unack = open; } else if (q === p && open) unack = true;
+  }
+  // The health sample's own alarms (§7), in case the alarm feed lags or is absent.
+  for (const h of Array.isArray(b.health?.alarms) ? b.health.alarms : []) {
+    const q = h?.level === 'crit' ? '1' : h?.level === 'warn' ? '2' : null;
+    if (q && (p === null || MARK_RANK[q] < MARK_RANK[p])) { p = q; unack = false; }
+  }
+  // The worst lane: the same order the segment bar and the chips draw.
+  const lane = mix?.p1 > 0 ? '1' : mix?.p2 > 0 ? '2' : null;
+  if (lane && (p === null || MARK_RANK[lane] < MARK_RANK[p])) { p = lane; unack = false; }
+  if (p) {
+    const parts = [];
+    if (n) parts.push(`${n} ${n === 1 ? 'alarm' : 'alarms'}`);
+    if (mix?.p1 > 0) parts.push(`${mix.p1} permission`);
+    if (mix?.p2 > 0) parts.push(`${mix.p2} question`);
+    return { p, unack, label: [lampLabel(p), ...parts].join(', '), n };
+  }
+  if (b.status === 'connecting') return { p: 'off', unack: false, label: 'connecting', n: 0 };
+  if (mix?.run > 0) return { p: 'run', unack: false, label: 'working', n: 0 };
+  return { p: 'ok', unack: false, label: 'ok', n: 0 };
+}
+
 /** "12 lanes: 1 permission, 2 question, 6 working, 3 idle" (zero buckets omitted). */
 export function mixLabel(mix) {
   const total = mix?.total ?? 0;
