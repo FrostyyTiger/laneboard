@@ -25,7 +25,12 @@
 /* State reads on the border, in the priority colour of its lamp. */
 .card.s-waiting_permission { border-color: var(--p1-line); }
 .card.s-waiting_question { border-color: var(--p2-line); }
-.card.s-dead { opacity: .5; }
+/* Dimmed by colour, not opacity: a faded card dropped text under 3:1 in
+   light (runs night 4 T12). */
+.card.s-dead,
+.card.s-dead .db,
+.card.s-dead .db-stage,
+.card.s-dead .db-usd { color: var(--text-3); }
 .card.s-dead .db-lane { text-decoration: line-through; }
 
 /* Selection: the corner brackets of the kit, and the keyboard cursor. */
@@ -38,11 +43,16 @@
   pointer-events: none;
 }
 
-/* A builder that is not live (hub: stale, down): dimmed and hatched. */
+/* A builder that is not live (hub: stale, down): grey text and hatched.
+   No opacity (runs night 4 T12): at .55 the light card's text fell to
+   ~2:1 over the hatch. */
 .card.stale {
-  opacity: .55;
   background-image: var(--tex-hatch);
+  color: var(--text-3);
 }
+.card.stale .db,
+.card.stale .db-stage,
+.card.stale .db-usd,
 .card.stale .db-word,
 .card.stale .db-lane { color: var(--text-3); }
 

@@ -210,6 +210,85 @@ test('the selected row is one visible surface step in both themes (runs T14)', (
   assert.ok(step.light >= step.dark * 0.95, `light step ${step.light.toFixed(3)} vs dark ${step.dark.toFixed(3)}`);
 });
 
+// --- the light theme's finish (runs night 4 T12, docs/design.md "Light theme") --
+
+const LIGHT_STEPS = ['--bg-sunken', '--bg-canvas', '--bg-surface', '--bg-elevated'];
+/** Contrast of a (maybe translucent) token over an opaque light surface step. */
+const over = (fg, bg, theme = 'light') => {
+  const f = oklch(resolve(fg, theme)), b = oklch(resolve(bg, theme));
+  return ratio(lumOver(f, b), luminance(b));
+};
+
+test('light: body and dim text keep 4.5:1 on every surface step, the selected row included', () => {
+  for (const t of ['--text-1', '--text-2', '--text-3']) {
+    for (const s of LIGHT_STEPS) {
+      const r = over(t, s);
+      assert.ok(r >= 4.5, `light ${t} on ${s}: ${r.toFixed(2)} < 4.5`);
+    }
+    // On a selected row: --bg-selected laid over the surface first.
+    const surf = oklch(resolve('--bg-surface', 'light'));
+    const selLum = lumOver(oklch(resolve('--bg-selected', 'light')), surf);
+    const r = ratio(luminance(oklch(resolve(t, 'light'))), selLum);
+    assert.ok(r >= 4.5, `light ${t} on a selected row: ${r.toFixed(2)} < 4.5`);
+  }
+});
+
+test('light: tile marks and counts (--p1, --p2) keep 3:1 as marks and 4.5:1 as text on every surface step', () => {
+  for (const p of ['--p1', '--p2']) {
+    for (const s of LIGHT_STEPS) {
+      const r = over(p, s);
+      assert.ok(r >= 4.5, `light ${p} on ${s}: ${r.toFixed(2)} < 4.5`);
+    }
+  }
+  for (const p of ['--p3', '--accent', '--ok']) {
+    for (const s of LIGHT_STEPS) assert.ok(over(p, s) >= 3, `light ${p} on ${s}: ${over(p, s).toFixed(2)} < 3`);
+  }
+});
+
+test('light: a status line is a visible 1px border, 3:1 on every surface step', () => {
+  // The question card, the attention chips, the inspector flags carry their
+  // state on this border alone (old light values: amber 2.2:1 on sunken).
+  for (const t of ['--p1-line', '--p2-line', '--p3-line']) {
+    for (const s of LIGHT_STEPS) {
+      const r = over(t, s);
+      assert.ok(r >= 3, `light ${t} on ${s}: ${r.toFixed(2)} < 3`);
+    }
+  }
+});
+
+test('light: a weak status fill is never a heavier step than the dark one', () => {
+  // The pink NEEDS YOU chip of the reviews: red at 0.14 was 1.29:1 on the light
+  // surface against 1.13:1 in dark. A fill is a hint next to the shape, never the state.
+  for (const t of ['--p1-weak', '--p2-weak', '--p3-weak']) {
+    for (const s of ['--bg-canvas', '--bg-surface']) {
+      const light = over(t, s, 'light'), dark = over(t, s, 'dark');
+      assert.ok(light <= dark + 0.005, `${t} on ${s}: light ${light.toFixed(3)} > dark ${dark.toFixed(3)}`);
+    }
+  }
+});
+
+test('Board cards dim by colour, never by opacity: a dead or stale card keeps its text readable in light', () => {
+  const css = fs.readFileSync(path.join(PUBLIC, 'css', 'board.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const sel of ['.card.s-dead', '.card.stale']) {
+    const own = rules(css).filter((r) => r.prelude.split(/\s*,\s*/).some((p) => p === sel || p.startsWith(`${sel} `)));
+    assert.ok(own.length, `board.css styles ${sel}`);
+    for (const r of own) assert.doesNotMatch(r.body, /opacity\s*:/, `${r.prelude} fades with opacity`);
+    assert.ok(own.some((r) => r.prelude.split(/\s*,\s*/).includes(sel) && /color:\s*var\(--text-3\)/.test(r.body)),
+      `${sel} greys its text with --text-3`);
+  }
+  // --text-3 on the card's surface: the floor of the light text test above holds.
+  assert.ok(over('--text-3', '--bg-surface') >= 4.5);
+});
+
+test('docs/design.md writes the light rules down', () => {
+  const doc = fs.readFileSync(path.join(ROOT, 'docs', 'design.md'), 'utf8');
+  const light = doc.split(/^## /m).find((x) => x.startsWith('Light theme'));
+  assert.ok(light, 'a "Light theme" section');
+  for (const w of ['4.5:1 on every surface step', '3:1 on every step', 'never a heavier step', 'never by opacity']) {
+    assert.ok(light.includes(w), `names "${w}"`);
+  }
+});
+
 test('one accent: a single hue, apart from p1 by lightness and chroma', () => {
   for (const theme of ['dark', 'light']) {
     const a = oklch(resolve('--accent', theme));

@@ -336,7 +336,7 @@ test('board.js and board-card.js never write markup or wholesale style', () => {
 
 test('board.css styles the data block, the stale class and both modes', () => {
   const css = fs.readFileSync(path.join(ROOT, 'public/css/board.css'), 'utf8');
-  assert.match(css, /\.card\.stale \{[^}]*opacity:[^}]*var\(--tex-hatch\)/, 'stale cards are dimmed and hatched');
+  assert.match(css, /\.card\.stale \{[^}]*var\(--tex-hatch\)[^}]*color: var\(--text-3\)/, 'stale cards are grey and hatched');
   assert.match(css, /\.db-lane \{[^}]*width: 18ch/, 'the lane column is 18ch');
   assert.match(css, /\.card-detail \{ display: none;/);
   assert.match(css, /\.card\.cursor \.card-detail \{ display: grid; \}/, 'the detail shows for the selected card');

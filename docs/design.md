@@ -82,3 +82,24 @@ on the canvas, the surface and the elevated layer in both themes (`test/design-d
 The dark theme is the reference. The light theme is the same design, not an inversion: same
 surfaces in the same order, the status hues darkened until they keep their contrast on a light
 canvas.
+
+## Light theme
+
+The light block of `tokens.css` is held to the dark theme's finish by numbers, not by eye
+(`test/tokens.test.mjs`, the "light:" tests; the method of `docs/plans/runs/research/Q13-light-theme-from-dark.md`):
+
+- **Text** `--text-1/2/3` keeps 4.5:1 on every surface step (sunken, canvas, surface, elevated)
+  and on a selected row. Dim text is still body text.
+- **Marks and counts** `--p1` / `--p2` keep 4.5:1 on every step, so a tile count is readable as
+  text; `--p3`, `--accent` and `--ok` keep 3:1 as marks.
+- **Status lines** `--p1-line` / `--p2-line` / `--p3-line` are a 1 px border that carries the state
+  on its own (a question card, an attention chip): 3:1 on every step. They sit at 0.8 alpha in
+  light against 0.5 in dark, because dark-on-light lines read fainter.
+- **Weak fills** `--p1-weak` / `--p2-weak` / `--p3-weak` are never a heavier step on the canvas or
+  the surface than the same fill in dark. In light red goes pink and amber goes ochre quickly; a
+  fill only hints next to its shape and border, it is never the state.
+- **Dim by colour, never by opacity.** A dead session or a builder that is not live is `--text-3`
+  (plus the hatch for not live), not a faded card: opacity takes text under 3:1 on light.
+
+Not settled by tokens: the filled header tiles, the lane-bar working segment and the Map's dot
+grid. Those are rules of the view sheets (runs night 4 T13 and T27).

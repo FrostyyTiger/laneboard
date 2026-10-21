@@ -209,12 +209,17 @@
   --p3: oklch(52% 0.12 230);
   --ok: oklch(48% 0.08 150);
 
-  --p1-weak: oklch(52% 0.22 25 / 0.14);
-  --p2-weak: oklch(50% 0.12 80 / 0.14);
-  --p3-weak: oklch(52% 0.12 230 / 0.14);
-  --p1-line: oklch(52% 0.22 25 / 0.55);
-  --p2-line: oklch(50% 0.12 80 / 0.55);
-  --p3-line: oklch(52% 0.12 230 / 0.55);
+  /* Light finish (runs night 4 T12, docs/design.md "Light theme"): a weak
+     fill is never a heavier step on its surface than the dark one (red at 0.14
+     read as a pink plate), and a status line is a 1px border that carries
+     the state, so it keeps 3:1 on every surface step, sunken included
+     (0.55 gave amber 2.2:1). */
+  --p1-weak: oklch(52% 0.22 25 / 0.06);
+  --p2-weak: oklch(50% 0.12 80 / 0.12);
+  --p3-weak: oklch(52% 0.12 230 / 0.1);
+  --p1-line: oklch(52% 0.22 25 / 0.8);
+  --p2-line: oklch(50% 0.12 80 / 0.8);
+  --p3-line: oklch(52% 0.12 230 / 0.8);
 }
 
 /* --- 5. Derived tokens ------------------------------------------------------
