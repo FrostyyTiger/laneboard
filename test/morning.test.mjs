@@ -231,3 +231,136 @@ test('v3: a finished lane carries its PR and check state', async () => {
   assert.equal(m.finished[0].lane, 'bauplan');
   assert.deepEqual(m.finished[0].pr, pr);
 });
+
+// --- runs (T6) ---------------------------------------------------------------
+// A runs store is the collector's (server/runs/store.mjs); the tests build one
+// from protocol lines, so the fold is the real one.
+import { createStore } from '../server/runs/store.mjs';
+import { parseLine } from '../server/runs/protocol.mjs';
+import { runsInWindow } from '../server/runs/digest.mjs';
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const M = 60 * 1000;
+const runNow = since + 12 * H;
+
+function storeOf(events) {
+  const store = createStore({ now: () => runNow });
+  const bySource = new Map();
+  for (const e of events) {
+    const parsed = parseLine(JSON.stringify({ v: 1, ...e }));
+    assert.ok(parsed.ok, `fixture line ${JSON.stringify(e)}: ${parsed.reason}`);
+    const src = `${e.run}.jsonl`;
+    if (!bySource.has(src)) bySource.set(src, []);
+    bySource.get(src).push(parsed.event);
+  }
+  for (const [src, evs] of bySource) store.ingest(src, evs);
+  return store;
+}
+
+// inside: started and stopped tonight. before: ended before the window opened.
+// across: started 2 h before the window, ran on into it.
+const runEvents = [
+  { t: 'run.start', run: 'inside', ts: since + 1 * H, goal: 'Paged search for acme-api', budget: { rounds: 4 } },
+  { t: 'score', run: 'inside', ts: since + 1 * H + M, name: 'tests', value: 0.8, better: 'higher', n: 0 },
+  { t: 'round.start', run: 'inside', ts: since + 1 * H + 2 * M, n: 1, role: 'builder' },
+  { t: 'cost', run: 'inside', ts: since + 2 * H, n: 1, usd: 1.5 },
+  { t: 'round.end', run: 'inside', ts: since + 2 * H, n: 1, outcome: 'kept' },
+  { t: 'round.start', run: 'inside', ts: since + 2 * H + M, n: 2, role: 'builder' },
+  { t: 'cost', run: 'inside', ts: since + 3 * H, n: 2, usd: 2 },
+  { t: 'round.end', run: 'inside', ts: since + 3 * H, n: 2, outcome: 'kept' },
+  { t: 'score', run: 'inside', ts: since + 3 * H, name: 'tests', value: 0.95, better: 'higher', n: 2 },
+  { t: 'artifact', run: 'inside', ts: since + 3 * H, kind: 'pr', url: 'https://example.invalid/acme/acme-api/pull/7' },
+  { t: 'usage', run: 'inside', ts: since + 3 * H, fiveHourPct: 40, sevenDayPct: 12 },
+  { t: 'run.stop', run: 'inside', ts: since + 3 * H + M, reason: 'done', rounds: 2 },
+
+  { t: 'run.start', run: 'before', ts: since - 30 * H, goal: 'Old run' },
+  { t: 'round.start', run: 'before', ts: since - 29 * H, n: 1 },
+  { t: 'run.stop', run: 'before', ts: since - 28 * H, reason: 'deadline' },
+
+  { t: 'run.start', run: 'across', ts: since - 2 * H, goal: 'Readiness of acme-web' },
+  { t: 'round.start', run: 'across', ts: since - 2 * H, n: 1 },
+  { t: 'score', run: 'across', ts: since - 90 * M, name: 'lint', value: 40, better: 'lower', n: 1 },
+  { t: 'round.end', run: 'across', ts: since - 1 * H, n: 1, usd: 5 },
+  { t: 'artifact', run: 'across', ts: since - 1 * H, kind: 'pr', url: 'https://example.invalid/acme/acme-web/pull/3' },
+  { t: 'round.start', run: 'across', ts: since + 1 * H, n: 2 },
+  { t: 'score', run: 'across', ts: since + 2 * H, name: 'lint', value: 12, better: 'lower', n: 2 },
+  { t: 'round.end', run: 'across', ts: since + 2 * H, n: 2, usd: 0.75 },
+  { t: 'round.start', run: 'across', ts: since + 3 * H, n: 3 },
+  { t: 'score', run: 'across', ts: since + 4 * H, name: 'lint', value: 3, better: 'lower', n: 3 },
+  { t: 'round.end', run: 'across', ts: since + 4 * H, n: 3, usd: 0.25 },
+];
+
+// '12h' read at runNow opens exactly at `since`.
+const morningOf = (store) => build({ window: '12h', now: runNow, snapshot, prFor: () => null, runsStore: store });
+
+test('T6: a run inside the window is one row with its rounds, scores, stop, PRs, cost and usage', () => {
+  const runs = morningOf(storeOf(runEvents)).runs;
+  const inside = runs.find((r) => r.run === 'inside');
+  assert.ok(inside, 'the run that ran tonight is listed');
+  assert.equal(inside.goal, 'Paged search for acme-api');
+  assert.equal(inside.rounds, 2);
+  assert.deepEqual(inside.scores, { tests: { start: 0.8, end: 0.95, better: 'higher' } });
+  assert.equal(inside.stop, 'done');
+  assert.equal(inside.state, 'stopped');
+  assert.deepEqual(inside.prs, ['https://example.invalid/acme/acme-api/pull/7']);
+  assert.equal(inside.usd, 3.5, 'the whole run is in the window: its cost events');
+  assert.equal(inside.usage.fiveHourPct, 40);
+});
+
+test('T6: a run whose last event is before the window is not listed', () => {
+  const runs = morningOf(storeOf(runEvents)).runs;
+  assert.ok(!runs.some((r) => r.run === 'before'));
+  assert.deepEqual(runs.map((r) => r.run).sort(), ['across', 'inside']);
+});
+
+test('T6: a run that started before the window counts only what happened in it', () => {
+  const across = morningOf(storeOf(runEvents)).runs.find((r) => r.run === 'across');
+  assert.equal(across.rounds, 2, 'round 1 ended before the window opened');
+  assert.deepEqual(across.scores.lint, { start: 12, end: 3, better: 'lower' }, 'start = the first value in the window');
+  assert.deepEqual(across.prs, [], 'its PR was given before the window');
+  assert.equal(across.usd, 1, 'the rounds of the window, not the $5 of round 1');
+  assert.equal(across.stop, null);
+  assert.equal(across.state, 'running');
+});
+
+test('T6: no runs store (a hub, or the collector not started) gives runs: []', () => {
+  assert.deepEqual(morningOf(null).runs, []);
+  assert.deepEqual(morningOf(storeOf([])).runs, []);
+  assert.deepEqual(morningOf({ list() { throw new Error('broken fold'); } }).runs, [], 'a failing store loses only the runs');
+  assert.deepEqual(runsInWindow(undefined, { since, now: runNow }), []);
+});
+
+test('T6: laneboard morning prints one line per run', async (t) => {
+  const store = storeOf(runEvents);
+  const body = morningOf(store);
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(req.url.startsWith('/api/morning') ? body : {}));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  t.after(() => server.close());
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-morning-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const env = {
+    PATH: process.env.PATH,
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, 'config'),
+    XDG_STATE_HOME: path.join(home, 'xdg-state'),
+    LANEBOARD_CONFIG: path.join(home, 'no-config.json'),
+    LANEBOARD_URL: `http://127.0.0.1:${server.address().port}`,
+  };
+  const bin = fileURLToPath(new URL('../bin/laneboard', import.meta.url));
+  const out = await new Promise((resolve) => {
+    execFile(process.execPath, [bin, 'morning'], { env, cwd: home, timeout: 20000 }, (err, stdout, stderr) => resolve({ err, stdout, stderr }));
+  });
+  assert.equal(out.err, null, out.stderr);
+  assert.match(out.stdout, /Runs \(2\)/);
+  const line = (id) => out.stdout.split('\n').find((l) => l.trim().startsWith(id));
+  assert.match(line('inside'), /2 rounds\s+tests 0\.8→0\.95 ↑\s+stopped: done\s+1 PR\s+\$3\.50/);
+  assert.match(line('across'), /2 rounds\s+lint 12→3 ↓\s+running\s+\$1\.00/);
+});

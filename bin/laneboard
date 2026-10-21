@@ -367,6 +367,12 @@ async function cmdMorning() {
     process.stdout.write(`${table(rows, ['LANE', 'STAGE', 'BRANCH', 'MERGED', 'COMMIT', 'DONE', 'SESSIONS'])}\n`);
   }
 
+  const runs = Array.isArray(m.runs) ? m.runs : [];
+  if (runs.length) {
+    process.stdout.write(`\n${C.bold}Runs${C.off} (${runs.length})\n`);
+    for (const r of runs) process.stdout.write(`  ${morningRunLine(r)}\n`);
+  }
+
   process.stdout.write(`\n${C.bold}What it cost${C.off} ${C.dim}(API-equivalent)${C.off}\n`);
   const rows = m.cost.lanes
     .filter((l) => l.usd > 0.0005)
@@ -378,6 +384,28 @@ async function cmdMorning() {
     const g = (x, label) => (x ? `${label} ${Math.round(x.usedPct)}% (resets ${new Date(x.resetsAt).toLocaleTimeString('en-GB', { hour12: false }).slice(0, 5)})` : '');
     process.stdout.write(`${C.dim}${g(rl.fiveHour, '5h')}   ${g(rl.sevenDay, '7d')}${C.off}\n`);
   }
+}
+
+/** One Morning run: id, rounds, each score start → end, stop reason, PRs, cost, goal. */
+function morningRunLine(r) {
+  const fmt = (v) => (typeof v === 'number' ? String(Math.round(v * 1000) / 1000) : '-');
+  const scores = Object.entries(r.scores || {}).map(([name, s]) => {
+    const moved = s.end - s.start;
+    const good = moved === 0 || !s.better ? null : (moved > 0) === (s.better !== 'lower');
+    const arrow = moved > 0 ? '↑' : moved < 0 ? '↓' : '=';
+    const tint = good === true ? C.green : good === false ? C.amber : '';
+    return `${name} ${fmt(s.start)}→${fmt(s.end)} ${tint}${arrow}${tint ? C.off : ''}`;
+  });
+  const prs = Array.isArray(r.prs) ? r.prs : [];
+  return [
+    `${C.bold}${r.run}${C.off}`,
+    `${r.rounds} round${r.rounds === 1 ? '' : 's'}`,
+    ...scores,
+    r.stop ? `stopped: ${r.stop}` : r.state || '',
+    prs.length ? `${prs.length} PR${prs.length === 1 ? '' : 's'}` : '',
+    r.usd == null ? '' : money(r.usd),
+    r.goal ? `${C.dim}${String(r.goal).replace(/\s+/g, ' ').slice(0, 60)}${C.off}` : '',
+  ].filter(Boolean).join('  ');
 }
 
 function compact(n) {

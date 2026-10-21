@@ -8,6 +8,8 @@ import { windowStart, windowLabel, WINDOWS } from './util.mjs';
 import * as db from './db.mjs';
 import * as state from './state.mjs';
 import * as prs from './collector/pr.mjs';
+import * as runsCollector from './collector/runs.mjs';
+import { runsInWindow } from './runs/digest.mjs';
 
 const NEEDS_KINDS = ['danger', 'need', 'blocked', 'limit'];
 
@@ -133,9 +135,10 @@ export function reviewFieldsOf(lane) {
 /**
  * Build the whole view. Pure apart from the database and the live snapshot,
  * both of which are passed in by the caller in tests. `builder` ({id, code})
- * is echoed as `builder` when given (the v1 route, fleet R7).
+ * is echoed as `builder` when given (the v1 route, fleet R7). `runsStore` is
+ * the runs store (default: the collector's; none, or none started, = `runs: []`).
  */
-export function build({ window = 'tonight', now = Date.now(), snapshot = null, prFor = null, builder = null } = {}) {
+export function build({ window = 'tonight', now = Date.now(), snapshot = null, prFor = null, builder = null, runsStore } = {}) {
   const prOf = (id) => {
     const p = (prFor ?? prs.get)(id);
     return p && !p.none && !p.error ? { number: p.number, url: p.url, state: p.state, isDraft: p.isDraft, verdict: p.verdict, checks: p.checks } : null;
@@ -260,9 +263,19 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
       label: 'API-equivalent',
     },
     rateLimits: freshestRateLimits(sessions),
+    runs: morningRuns(runsStore === undefined ? runsCollector.store() : runsStore, since, now),
   };
   if (builder && typeof builder === 'object') out.builder = { id: builder.id ?? null, code: builder.code ?? null };
   return out;
+}
+
+/**
+ * --- 4. runs: every run with events in the window (server/runs/digest.mjs).
+ * A store that fails to fold is no reason to lose the rest of the morning.
+ */
+export function morningRuns(store, since, now) {
+  if (!store || typeof store.list !== 'function') return [];
+  try { return runsInWindow(store.list(), { since, now }); } catch { return []; }
 }
 
 /** The same rule the board's rail uses: whichever statusline fired last. */

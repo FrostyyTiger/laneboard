@@ -247,6 +247,14 @@ round has `sessions`, the sessions tied to it (`sessionId`, `name`, `cwd`,
 `firstAt`, `lastAt`, `usd`, `how` = `id` or `cwd`, `maybe`), and `sessionsUsd`,
 their summed cost (null when none is known).
 
+`GET /api/morning` (and `laneboard morning`, one line per run) carries `runs`:
+every run with an event in the window, as `run`, `goal`, `state`, `rounds`
+(started or ended in the window), `scores` (per name: `start` = the first value
+in the window, `end` = the last, `better`), `stop` (the reason or null), `prs`
+(URLs of the `pr` artifacts given in the window), `usd` (the run's `cost` when
+the whole run is in the window, else the window's rounds' `usd`; null when
+nothing says), `usage`, `startedAt`, `updatedAt`. No runs means `runs: []`.
+
 A posted event is written as sent, on one line, with `ts` set to the server's
 time if it had none; the answer is `201 {"ok": true, "run", "t"}`, and the run
 is in the list at once. A body over 64 KiB is 413.
