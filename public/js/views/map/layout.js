@@ -18,8 +18,11 @@ export const RING_OF = {
 /** Radius of a node's dot, by kind. */
 export const SIZE = {
   core: 15, site: 10, host: 9, room: 6.5, repo: 6, builder: 7,
-  service: 4.2, package: 4, lane: 5, pr: 3.6, session: 3.4,
+  service: 4.2, package: 4, lane: 5, pr: 3.6, session: 3.4, run: 5,
 };
+
+/** A run node's progress ring sits this far outside its centre mark (r + RUN_RING), 2px wide. */
+export const RUN_RING = 4;
 
 /** Rings from this index on stagger crowded neighbours in and out. */
 export const STAGGER_FROM = 3;

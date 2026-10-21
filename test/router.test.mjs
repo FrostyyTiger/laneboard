@@ -396,3 +396,11 @@ pageTest('the page source: hello first, then fleet keys in the visible message',
   assert.ok(Array.isArray(last.keys), 'keys, not legacy names, once hello named the builder');
   assert.ok(last.keys.every((k) => k.startsWith('builder-a/')), JSON.stringify(last.keys));
 });
+
+test('sel: a Map run node `run:<run id>` survives the hash (T10); a bad run id or a plain word does not', () => {
+  assert.equal(parseHash('#/map?sel=run%3Aacme-docs').sel, 'run:acme-docs');
+  assert.equal(parseHash(formatHash({ view: 'map', sel: 'run:acme-docs' })).sel, 'run:acme-docs');
+  for (const bad of ['run%3A', 'run%3A-x', 'run%3Aa%2Fb', 'vm-a', 'run%3A' + 'x'.repeat(65)]) {
+    assert.equal(parseHash(`#/map?sel=${bad}`).sel, null, bad);
+  }
+});

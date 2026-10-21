@@ -37,6 +37,7 @@ import { toast } from './toast.js';
 import { openSheet } from './sheet.js';
 import { layoutFor, setInspector } from './shell.js';
 import { renderActionBar } from './actionbar.js';
+import { runFacts } from '../views/map/overlays.js';
 
 // ---------------------------------------------------------------- constants
 
@@ -227,8 +228,37 @@ export function inspectorModel(lane, opts = {}) {
   };
 }
 
+/** The Map's run node a `run:<id>` sel names in store `s`, or null. */
+export function runNodeFor(s, sel) {
+  if (typeof sel !== 'string' || !sel.startsWith('run:')) return null;
+  const nodes = Array.isArray(s?.map?.nodes) ? s.map.nodes : [];
+  return nodes.find((n) => n && n.kind === 'run' && n.id === sel) ?? null;
+}
+
+/**
+ * A run node's panel model (server/map/runs.mjs; overlays.js runFacts): the
+ * header says the run and its state, the overview its goal, round, progress
+ * and the run page link. Not `found` (no lane, no session: no actions). Pure.
+ */
+export function runInspectorModel(node, key = null) {
+  const base = inspectorModel(null, { key });
+  const f = runFacts(node);
+  if (!f) return base;
+  const word = f.tone === 'crit' ? 'FAIL' : f.tone === 'warn' ? 'STCK' : f.state === 'stopped' ? 'STOP' : 'RUN';
+  return {
+    ...base,
+    title: str(node.label, 200) ?? str(node.run, 200) ?? base.title,
+    p: f.tone === 'crit' ? '1' : f.tone === 'warn' ? '2' : 'off',
+    word,
+    stateLabel: f.why ?? f.state ?? 'run',
+    run: { ...f, goal: f.goal ? str(f.goal) : null },
+  };
+}
+
 /** The model for `sel` in store `s` (resolveSel + inspectorModel). */
 export function modelFor(s, sel, { history = null } = {}) {
+  const runNode = runNodeFor(s, sel);
+  if (runNode) return runInspectorModel(runNode, sel);
   const r = resolveSel(s, sel);
   const builderInfo = r.builder ? s.builders?.get?.(r.builder) ?? null : null;
   return inspectorModel(r.lane, {
@@ -470,6 +500,21 @@ export function renderHeader(m) {
 /** The OVERVIEW tab body for model `m`. */
 export function renderOverview(m, doc = globalThis.document) {
   const box = el('div', 'insp-ovw');
+  if (m.run) {
+    const r = m.run;
+    if (r.goal) box.append(el('p', 'insp-say', r.goal));
+    const dl = el('div', 'insp-data');
+    if (r.round) dl.append(row('RND', r.round.replace(/^round /, '')));
+    if (r.progress) dl.append(row('PROG', r.progress));
+    if (r.why) dl.append(row('WHY', r.why));
+    if (dl.childNodes.length) box.append(dl);
+    if (r.href) {
+      const a = el('a', 'insp-pr insp-run-open', 'Open run ›');
+      a.href = r.href;
+      box.append(a);
+    }
+    return box;
+  }
   if (!m.found) {
     box.append(el('p', 'insp-empty', 'Nothing by that key on any builder this board can see.'));
     return box;
@@ -534,6 +579,13 @@ export function renderOverview(m, doc = globalThis.document) {
 }
 
 function renderTabs(m, strip, body) {
+  if (m.run) {
+    // A run node has no lane to peek at or diff: its overview only.
+    strip.hidden = true;
+    unmountTab();
+    body.append(renderOverview(m));
+    return;
+  }
   const list = registeredTabs();
   const tabs = tabsModel(list, page.tab);
   const active = tabs.find((t) => t.active).id;

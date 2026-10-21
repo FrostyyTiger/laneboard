@@ -460,6 +460,12 @@ Every run the board reads (the runs protocol, [runs.md](runs.md)) is a node,
   else `idle`. Also `state`, `round`, `maxRounds`, `goal`.
 - A stopped run stays `runs.mapKeepMin` minutes (default 60), then leaves.
   No runs, no run nodes. A hub has no runs yet, so its Map has none.
+- **How it looks:** a small dot in a ring; the arc over the grey track is the
+  progress, from twelve o'clock. Grey while the run is fine, amber with ▲
+  when it is stuck, red with ■ when it stopped on an error; a run that
+  stopped fine is hollow and faded. The label is the run's name with its
+  round beside it (`7/10`). Selecting it opens the inspector with the goal,
+  round, progress, why it is stuck, and **Open run ›** to its page.
 
 ## On a hub
 

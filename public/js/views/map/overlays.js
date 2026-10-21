@@ -266,3 +266,54 @@ export function linkStyle(link, overlay = 'status') {
   }
   return { ...s, animate: live && (kind === 'ci' || !['tree', 'touch', 'conflict', 'pkg'].includes(kind)) };
 }
+
+/**
+ * A run node (server/map/runs.mjs runNodes): its progress ring. The arc is the
+ * progress from twelve o'clock on a full grey track; grey while the run is
+ * fine, the trouble hue and shape only when it is stuck (warn ▲) or stopped on
+ * an error (crit ■); a run that stopped fine is a hollow grey ring, faded, and
+ * never the accent. `progress` is 0-1, or null when the run does not say.
+ */
+export function runRing(node) {
+  const p = Number.isFinite(node?.progress) ? Math.max(0, Math.min(1, node.progress)) : null;
+  const stopped = node?.state === 'stopped';
+  if (node?.status === 'crit' || node?.status === 'down') return { progress: p, tone: 'crit', shape: 'square', hollow: false, alpha: 1 };
+  if (!stopped && (node?.stuck || node?.status === 'warn')) return { progress: p, tone: 'warn', shape: 'tri', hollow: false, alpha: 1 };
+  if (stopped) return { progress: p, tone: 'grey', shape: 'disc', hollow: true, alpha: 0.6 };
+  return { progress: p, tone: 'grey', shape: 'disc', hollow: false, alpha: 1 };
+}
+
+/** "7/10" (or "7" without a budget) for a run node's label; null before its first round. */
+export function runRound(node) {
+  const n = Number.isFinite(node?.round) ? node.round : null;
+  if (n === null) return null;
+  return Number.isFinite(node?.maxRounds) && node.maxRounds > 0 ? `${n}/${node.maxRounds}` : String(n);
+}
+
+/** The run page a run node links to, `#/runs?run=<id>`; null when it names no run. */
+export function runHref(node) {
+  const id = typeof node?.run === 'string' && node.run ? node.run : null;
+  return id ? `#/runs?run=${encodeURIComponent(id)}` : null;
+}
+
+/**
+ * What the tip and the inspector say about a run node: `{goal, round, progress,
+ * state, why, tone, href}`, plain strings (or null) for textContent.
+ * `round` is "round 7 / 10", `progress` "70 %".
+ */
+export function runFacts(node) {
+  if (node?.kind !== 'run') return null;
+  const ring = runRing(node);
+  const n = Number.isFinite(node.round) ? node.round : null;
+  const max = Number.isFinite(node.maxRounds) && node.maxRounds > 0 ? node.maxRounds : null;
+  const str = (v) => (typeof v === 'string' && v !== '' ? v : null);
+  return {
+    goal: str(node.goal) ?? str(node.sub),
+    round: n === null ? null : max ? `round ${n} / ${max}` : `round ${n}`,
+    progress: ring.progress === null ? null : `${Math.round(ring.progress * 100)} %`,
+    state: str(node.state),
+    why: str(node.why),
+    tone: ring.tone,
+    href: runHref(node),
+  };
+}

@@ -5,6 +5,7 @@
 //
 // Grammar: #/<view>?b=<builderId|all>&s=<state filter>&q=<query>&sel=<fkey>&open=<term|transcript>&run=<run id>
 // (`run` is a run id as the protocol checks it: the Runs view opens that run's page).
+// `sel` is a lane/session fkey, or `run:<run id>` for a run node on the Map (T10).
 // Legacy forms keep working, because old push notifications already sit in
 // notification centres: `#board`, `#map`, ... map to the view, and
 // `#session=<name>` becomes {view:'board', sel: fkey(localId, name), open:'term'}.
@@ -49,6 +50,8 @@ const MAX_Q = 200;
 const MAX_SEL = 300;
 /** A run id, the protocol's own pattern (server/runs/protocol.mjs RUN_ID). */
 export const RUN_RX = new RegExp('^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$');
+/** A Map run node's `sel`, `run:<run id>` (server/map/runs.mjs). */
+export const isRunSel = (v) => typeof v === 'string' && v.startsWith('run:') && RUN_RX.test(v.slice(4));
 
 function safeDecode(v) {
   try { return decodeURIComponent(v.replace(/\+/g, ' ')); } catch { return null; }
@@ -99,7 +102,7 @@ export function parseHash(h, { localId } = {}) {
   if (p.b === 'all' || BUILDER_ID_RX.test(p.b ?? '')) r.b = p.b;
   if (STATE_RX.test(p.s ?? '')) r.s = p.s;
   if (typeof p.q === 'string' && p.q !== '' && !CONTROL_RX.test(p.q)) r.q = p.q.slice(0, MAX_Q);
-  if (typeof p.sel === 'string' && p.sel.length <= MAX_SEL && !CONTROL_RX.test(p.sel) && isFkey(p.sel)) r.sel = p.sel;
+  if (typeof p.sel === 'string' && p.sel.length <= MAX_SEL && !CONTROL_RX.test(p.sel) && (isFkey(p.sel) || isRunSel(p.sel))) r.sel = p.sel;
   if (OPEN_KINDS.includes(p.open)) r.open = p.open;
   if (RUN_RX.test(p.run ?? '')) r.run = p.run;
   return r;

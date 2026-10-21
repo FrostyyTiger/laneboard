@@ -45,7 +45,7 @@ import {
   idForSel, selForId, SEVERITY, FOLD_KEY, AUTO_UNFOLD_ZOOM,
 } from './model.js';
 import { layout, RINGS, SIZE, polar } from './layout.js';
-import { OVERLAY_KEY, validOverlay, availableOverlays, reachScope, nodeStyle, SHAPE_CODE, TONE_CODE, driftText, driftCounts } from './overlays.js';
+import { OVERLAY_KEY, validOverlay, availableOverlays, reachScope, nodeStyle, SHAPE_CODE, TONE_CODE, driftText, driftCounts, runFacts } from './overlays.js';
 import { createRenderer, readPalette } from './render.js';
 import {
   createHitGrid, bindPointer, hitRadius, boundingCircle, fitCircle, anchored, clampZoom, fitScaleOf,
@@ -877,8 +877,12 @@ export function createMap(root, opts = {}) {
     const top = h('div', 'map-tip-top');
     top.append(h('i', `map-dot s-${STATUS_WORD[n.status] ? n.status : 'unknown'}`), h('b', null, n.label ?? n.id), h('span', 'map-tip-kind', n.kind));
     tip.append(top);
-    const line = (shownOverlay() === 'drift' && driftText(n)) || (n.why ?? n.sub);
+    const run = runFacts(n);
+    const line = (shownOverlay() === 'drift' && driftText(n))
+      || (run && (run.tone !== 'grey' ? run.why : [run.round, run.progress].filter(Boolean).join(' · ')))
+      || (n.why ?? n.sub);
     if (line) tip.append(h('div', 'map-tip-sub', String(line)));
+    if (run?.goal && run.goal !== line) tip.append(h('div', 'map-tip-sub', run.goal));
     tip.hidden = false;
     const tw = tip.offsetWidth, th = tip.offsetHeight;
     tip.style.left = `${Math.min(W - tw - 8, x + 14)}px`;

@@ -33,8 +33,8 @@
 // Text drawn here comes from builders (labels, subs, why) and is untrusted;
 // fillText never interprets it.
 
-import { RINGS, SIZE, polar, ringLabels, ticks } from './layout.js';
-import { nodeStyle, linkStyle, reachScope, reachLinkStyle, ACCENT_L } from './overlays.js';
+import { RINGS, RUN_RING, SIZE, polar, ringLabels, ticks } from './layout.js';
+import { nodeStyle, linkStyle, reachScope, reachLinkStyle, runRing, runRound, ACCENT_L } from './overlays.js';
 
 const TAU = Math.PI * 2;
 
@@ -447,6 +447,28 @@ export function createRenderer(ctx, palette) {
     ctx.fill();
   }
 
+  /**
+   * A run node (overlays.js runRing): a grey track all round, the progress
+   * arc over it (grey, or the trouble hue when stuck or failed), and a centre
+   * mark: a grey dot, ▲ when stuck, ■ when stopped on an error, hollow and
+   * faded once it stopped fine.
+   */
+  function runNode(n, sp, r, alpha) {
+    const ring = runRing(n);
+    const a = alpha * ring.alpha;
+    const col = tone(ring.tone);
+    const rr = r + RUN_RING;
+    strokeStyle(P.line, a, 2, []);
+    ctx.beginPath(); arc(sp.x, sp.y, rr, 0, TAU); ctx.stroke();
+    if (ring.progress > 0) {
+      strokeStyle(ring.tone === 'grey' ? P.t2 : col, 0.95 * a, 2, []);
+      ctx.beginPath(); arc(sp.x, sp.y, rr, -Math.PI / 2, -Math.PI / 2 + ring.progress * TAU); ctx.stroke();
+    }
+    if (ring.hollow) glyph('disc', sp.x, sp.y, r * 0.55, P.t3, a, { hollow: true });
+    else if (ring.tone === 'grey') glyph('disc', sp.x, sp.y, r * 0.55, P.t3, a);
+    else glyph(ring.shape, sp.x, sp.y, r * 0.7, col, a);
+  }
+
   /** CPU on the inner arc, memory on the outer, both from twelve o'clock. */
   function gauges(n, x, y, r, alpha) {
     const m = n.metrics;
@@ -535,6 +557,17 @@ export function createRenderer(ctx, palette) {
           ctx.beginPath(); arc(sp.x, sp.y, r * k, 0, TAU); ctx.stroke();
         }
         glyph('disc', sp.x, sp.y, r * 0.45, st.abnormal ? col : P.t1, alpha);
+        continue;
+      }
+
+      if (n.kind === 'run') {
+        // A run: its progress as an arc on a full track, from twelve o'clock.
+        runNode(n, sp, r, alpha);
+        if (st.mark) {
+          strokeStyle(tone(st.mark.tone, st.mark.level), alpha, 1.5, st.mark.dash);
+          ctx.beginPath(); arc(sp.x, sp.y, r + RUN_RING + 5, 0, TAU); ctx.stroke();
+          ctx.setLineDash([]);
+        }
         continue;
       }
 
@@ -642,11 +675,11 @@ export function createRenderer(ctx, palette) {
       const fade = alphaOf(scene, id) * (c.a ?? 1);
       const status = n.status ?? 'unknown';
       const loud = LOUD.has(status);
-      const show = (c.depth ?? 0) <= 2 || n.kind === 'builder' || s > 1.25 || id === focus || near.has(id)
+      const show = (c.depth ?? 0) <= 2 || n.kind === 'builder' || n.kind === 'run' || s > 1.25 || id === focus || near.has(id)
         || matches.has(id) || loud || id === scene.selected;
       if (!show || fade < 0.12) continue;
       const sp = scene.toScreen(c);
-      const r = (SIZE[n.kind] ?? 5) * ns * (n.kind === 'builder' ? 1.25 : 1);
+      const r = (SIZE[n.kind] ?? 5) * ns * (n.kind === 'builder' ? 1.25 : 1) + (n.kind === 'run' ? RUN_RING + 1 : 0);
       const loudCol = status === 'attention' ? P.warn : P.crit;
       if (n.kind === 'core') {
         ctx.textAlign = 'center';
@@ -657,22 +690,42 @@ export function createRenderer(ctx, palette) {
       }
       const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
       const out = r + (n.metrics ? 12 : 8);
-      const x = sp.x + Math.cos(ang) * out;
-      const y = sp.y + Math.sin(ang) * out;
+      let x = sp.x + Math.cos(ang) * out;
+      let y = sp.y + Math.sin(ang) * out;
       const left = Math.cos(ang) >= 0;
-      ctx.textAlign = left ? 'left' : 'right';
-      const plate = n.kind === 'site' || n.kind === 'host' || n.kind === 'room' || n.kind === 'builder';
+      const plate = n.kind === 'site' || n.kind === 'host' || n.kind === 'room' || n.kind === 'builder' || n.kind === 'run';
       const raw = n.kind === 'builder' ? n.builder ?? n.label ?? n.id : n.label ?? n.id;
       const text = plate ? String(raw).toUpperCase() : String(raw);
       ctx.font = plate ? `600 ${n.kind === 'room' ? 11 : 12}px ${P.label}` : `11px ${P.mono}`;
       const col = loud ? loudCol : plate ? P.t1 : P.t2;
       // A backing so a label stays readable where an arc passes under it.
       const w = measure(text) + (plate && 'letterSpacing' in ctx ? text.length : 0);
+      const round = n.kind === 'run' ? runRound(n) : null;
+      const extra = round ? round.length * 7 + 8 : 0;
+      const W = scene.W ?? Infinity;
+      if (left && x + w + extra > W - 4) {
+        // It would run off the right edge: the label goes over the node,
+        // centred on it and kept inside the canvas (labels beside and under
+        // a node belong to its neighbours on the outer rings).
+        x = clamp(sp.x - (w + extra) / 2, 4, W - 4 - w - extra);
+        y = sp.y - out - 6;
+      }
+      ctx.textAlign = left ? 'left' : 'right';
       const bx = left ? x - 2 : x - w - 2;
       fillStyle(P.bg, 0.8 * fade);
       ctx.fillRect(bx, y - 7, w + 4, 14);
       fillStyle(col, fade);
       if (plate) tracked(text, x, y, 1); else ctx.fillText(text, x, y);
+      if (round) {
+        // The round beside the name, in the data face.
+        ctx.font = `10px ${P.mono}`;
+        const rw = measure(round);
+        const rx = left ? bx + w + 8 : bx - 6;
+        fillStyle(P.bg, 0.8 * fade);
+        ctx.fillRect(left ? rx - 2 : rx - rw - 2, y - 7, rw + 4, 14);
+        fillStyle(P.t3, fade);
+        ctx.fillText(round, rx, y);
+      }
       let below = y + 13;
       if (n.kind === 'builder') {
         // Lamps: 4x4 squares, 2px apart, under the label.
