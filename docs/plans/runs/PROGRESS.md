@@ -90,6 +90,8 @@ Planner notes (round 1), from reading the code:
 - [x] T41 (2, review 58-stranger, 2) `laneboard run <cmd> --id x` fails with `did you mean: --run`, like the command suggestion (`bin/laneboard` run arg parsing) — done when: `test/cli-run.test.mjs` finds exit 2 and the `--run` hint (commit 747bfd1; `flagHint` in `bin/laneboard`: `RUN_FLAG_GUESSES` maps `--id`/`--run-id`/`--runid` to `--run`, else the one allowed flag within edit distance 2 (`--max-round` → `--max-rounds`); `run --id x stop` before the subcommand gets the same hint instead of "goes after the subcommand"; `editDistance` is shared with `closeCommand`)
 - [x ] T42 (2, review 58-stranger, 4) `laneboard run --help` and `docs/runs.md` say that `run stop` with no `--reason` records `stop: "unknown"` — done when: `test/cli-run.test.mjs` and `test/runs-docs.test.mjs` find the sentence (commit 7942251; help line under `stop` in RUN_USAGE, so `run stop --help` shows it too; docs: the CLI table's `stop` row and a sentence after the stop reasons table, which stays the known reasons only)
 - [ ] T43 (2, review 58-stranger, 5) `docs/runs.md` says what `cost.rounds` counts (rounds that carried a `--usd`, not `counted`) and how it relates to `cost.from` — done when: `test/runs-docs.test.mjs` finds the sentence (check the code first and write what it does)
+- [ ] T44 (3, review 66-stranger, 1) `laneboard run round|score|stop|ack` on a run id with no `run.start` line in the file prints a one-line stderr note (`<id> has no run.start in this file`), still appends, exit code unchanged — done when: `test/cli-run.test.mjs` finds the note on a never-started run and none on a started one
+- [ ] T45 (2, review 66-stranger, 2) `laneboard run --help` and `docs/runs.md` say a run has no budget flag and how the budget burn column gets its numbers (check the code first and write what it does) — done when: `test/cli-run.test.mjs` and `test/runs-docs.test.mjs` find the sentence
 
 ## Research questions
 
@@ -191,6 +193,13 @@ Planner notes (round 1), from reading the code:
   - Phone: `LAUNCH A LANE…` as a `+` icon at the end of the plate row (saves ~100 px).
   - Idle chip row could carry the state mark in the left slot (`▲ feat-search 2`, `○` for idle).
   - Light amber still olive and nested panels heavy: same as review 6 ideas.
+- From review 66-stranger (no task; say which you want):
+  - `run stop --reason` accepts any text (`--reason dne` shows as the stop reason) while `morning
+    --window foo` exits 2: validate against the known reasons, or keep it free text?
+  - `run ack` exits 0 both for a fresh ack and for "already acked, nothing posted": a distinct code
+    for the repeat, or leave it?
+  - `laneboard credit` prints `sampler: 0 samples, last never` on a fresh board with no hint that this
+    is expected or where it is documented: add a pointer?
 - From review 42-stranger (no task; say which you want):
   - A run that reports rounds only in `stop --rounds N` (no `round` events) shows `rounds: 0` in
     `/api/runs` but `stop.rounds` in `/api/runs/<id>`; which is the truth for the list? The loop
@@ -234,5 +243,8 @@ Planner notes (round 1), from reading the code:
   the host name (T38), silent `$LANEBOARD_RUN` (T10, earlier owner item). Item 3 (a later `artifact
   --kind pr` stays `link`) and the choice to default `ack` to the server when `LANEBOARD_URL` is set
   went to For the owner. No browser, pages not looked at.
+- reviews/66-stranger.md: 5 findings, 2 became tasks (T44, T45). Items 3 (`run stop --reason` takes
+  any text), 4 (`run ack` exit 0 for both fresh and repeat ack) and 5 (`credit` prints `sampler: 0
+  samples` with no pointer to a doc) went to For the owner as taste calls. No browser, pages not looked at.
 
 ## Morning
