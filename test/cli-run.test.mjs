@@ -121,6 +121,27 @@ test('round prints an export line for eval; --run then defaults from $LANEBOARD_
   assert.equal(fs.existsSync(path.join(dir, '.laneboard')), false, '--file wins over the default');
 });
 
+test('start without --run keeps an inherited $LANEBOARD_RUN and says so; with neither the error names --run <id>', async (t) => {
+  const dir = tmpDir(t);
+  const file = path.join(dir, 'r.jsonl');
+  const r = await run(['run', 'start', '--goal', 'g', '--file', file], envFor(dir, { LANEBOARD_RUN: 'old-run/7' }), dir);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(r.stderr.split('\n')[0], 'run id old-run from $LANEBOARD_RUN');
+  assert.equal(JSON.parse(lines(file)[0]).run, 'old-run');
+  // An explicit --run wins and needs no note; other subcommands inherit quietly.
+  const own = await run(['run', 'start', '--run', 'new-run', '--file', file], envFor(dir, { LANEBOARD_RUN: 'old-run/7' }), dir);
+  assert.equal(own.code, 0, own.stderr);
+  assert.doesNotMatch(own.stderr, /LANEBOARD_RUN/);
+  const sc = await run(['run', 'score', '--name', 'tasks', '--value', '1', '--file', file], envFor(dir, { LANEBOARD_RUN: 'old-run/7' }), dir);
+  assert.equal(sc.code, 0, sc.stderr);
+  assert.doesNotMatch(sc.stderr, /from \$LANEBOARD_RUN/);
+  const none = await run(['run', 'start', '--goal', 'g', '--file', file], envFor(dir), dir);
+  assert.equal(none.code, 2);
+  assert.match(none.stderr, /--run <id> is required \(or set \$LANEBOARD_RUN\)/);
+  const help = await run(['run', 'start', '--help'], envFor(dir), dir);
+  assert.match(help.stdout, /`start` says so on stderr/);
+});
+
 test('$LANEBOARD_RUN_FILE is used when there is no --file; a relative path resolves against the cwd', async (t) => {
   const dir = tmpDir(t);
   const r = await run(['run', 'needs', '--run', 'r1', '--kind', 'wait', '--text', 'usage window'],

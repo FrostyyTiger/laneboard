@@ -35,7 +35,8 @@
 //     cost     --usd x [--n N]                         the run's cost is the sum of these (else of the rounds' --usd)
 //     The line goes to --file, else $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl;
 //     --post sends it to POST /api/runs/events instead. --run defaults to the run
-//     part of $LANEBOARD_RUN. --run/--file/--post may also come before <sub>.
+//     part of $LANEBOARD_RUN (start says so on stderr). --run/--file/--post may
+//     also come before <sub>.
 //     A bad argument prints one line and exits 2. See docs/runs.md.
 //   laneboard feed tailscale|proxmox|docker [--source s] [--every N] [--stdout | --out <file> | --push <url>]
 //                                                      offline: read one source once, write one feed
@@ -895,7 +896,7 @@ const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | -
   stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
   cost     --usd x [--n N]                        what was spent (in round N); the run's cost is the sum of these
 every subcommand:
-  --run <id>   the run; defaults to the run part of $LANEBOARD_RUN (which \`round\` exports)
+  --run <id>   the run; defaults to the run part of $LANEBOARD_RUN (which \`round\` exports); \`start\` says so on stderr when it uses it
   --file f     append the line to f; defaults to $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl
   --post       send the line to POST /api/runs/events on the server instead of a file
   --run, --file and --post may also come before <sub>.`;
@@ -1009,8 +1010,12 @@ async function cmdRun() {
   const f = parseRunFlags({ ...RUN_COMMON, ...RUN_SUBS[sub] }, first);
   const { run: runFlag, file: fileFlag, post, ...fields } = f;
   if (post && fileFlag !== undefined) runUsage('--file and --post do not go together');
-  const run = runFlag ?? (process.env.LANEBOARD_RUN || '').split('/')[0];
-  if (!run) runUsage('--run is required (or set LANEBOARD_RUN)');
+  const inherited = (process.env.LANEBOARD_RUN || '').split('/')[0];
+  const run = runFlag ?? inherited;
+  if (!run) runUsage('--run <id> is required (or set $LANEBOARD_RUN)');
+  // A new run that inherits its id from the shell is usually a leftover export
+  // of another run's round: keep it (scripts rely on it), but say where it came from.
+  if (sub === 'start' && runFlag === undefined) process.stderr.write(`run id ${cleanTerm(run)} from $LANEBOARD_RUN\n`);
   const { parseLine, parseLines, foldRun, ackTarget, droppedFields, RUN_ID, FENCE_ACK_BY } = await runProtocol();
   if (!RUN_ID.test(run)) runUsage(`not a run id: ${JSON.stringify(cleanTerm(run))} (letters, digits, . _ -; 64 at most)`);
   const ev = runEvent(sub, fields);

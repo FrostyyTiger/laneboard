@@ -379,3 +379,42 @@ own `.laneboard/run.jsonl`, and a machine without any shows no runs.
 | `runs.stuck.sameTaskFails` | `2` | The same task failed in this many rounds in a row of that task (outcome `failed`, `error`, `no-task-done`, `still-red`, …) (0..100). |
 | `runs.stuck.shorterRounds` | `3` | The last this many rounds were each shorter than the one before: a hint at a usage limit (0..100). |
 | `runs.stuck.deadlineMin` | `30` | Kept for one version, no longer a threshold: `0` turns the deadline rule off, any other value (0..10080) is accepted and ignored. The rule fires once the deadline has passed and the run has no `run.stop`. |
+
+## Environment variables
+
+Every variable laneboard reads, in one place. The `LANEBOARD_*` ones that set a
+key are in the tables above; this list adds the ones that are not keys. Nothing
+else in the environment names anything: with no config, the header, the Map's
+title and this builder's id and code come from `LANEBOARD_HOSTNAME` /
+`LANEBOARD_FLEET_ID` / `LANEBOARD_FLEET_CODE` if set, else from the hostname. A
+shell that exports a run's `LANEBOARD_RUN` (a loop's VM, say) changes no name on
+the board; if the Map shows something unexpected, it is the machine's hostname.
+
+The server (`laneboard`'s process): `LANEBOARD_CONFIG`, `LANEBOARD_DB`,
+`LANEBOARD_PORT`, `LANEBOARD_BIND`, `LANEBOARD_PUBLIC_URL`, `LANEBOARD_HOSTNAME`,
+`LANEBOARD_HUMAN`, `LANEBOARD_TIMEZONE`, `LANEBOARD_NODE_BIN`,
+`LANEBOARD_CLAUDE_BIN`, `LANEBOARD_CODE_DIR`, `LANEBOARD_LANES_DIR`,
+`LANEBOARD_KICKOFF`, `LANEBOARD_REPOS`, `LANEBOARD_DIR_ROOTS`,
+`LANEBOARD_SLOTS_PROVIDER`, `LANEBOARD_AGENT_STACK`, `LANEBOARD_LANE_SLOTS`,
+`LANEBOARD_RESERVED_SLOTS`, `LANEBOARD_GUARD_PROVIDER`, `LANEBOARD_GUARD_PORTS`,
+`LANEBOARD_GUARD_CONTAINERS`, `LANEBOARD_PLATFORM_REPO`, `LANEBOARD_CI_PROVIDER`,
+`LANEBOARD_CI_REPO`, `LANEBOARD_MAP_FILE`, `LANEBOARD_MAP_FEEDS`,
+`LANEBOARD_MAP_POLICY`, `LANEBOARD_MODE`, `LANEBOARD_FLEET_ID`,
+`LANEBOARD_FLEET_CODE`, `LANEBOARD_FLEET_BUILDERS`, `LANEBOARD_ALLOWED_ORIGINS`,
+`LANEBOARD_INGRESS_PORT`, `LANEBOARD_STATE_DIR`, `LANEBOARD_AUDIT_FILE`; and from
+outside laneboard, `HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`
+(where state, the hub key and the git cache live), `TMUX_PANE` (the kill switch
+never kills its own pane) and `LC_ALL` (passed to tmux, `C.UTF-8` if unset).
+
+| Variable | Read by | What |
+| --- | --- | --- |
+| `LANEBOARD_DIR_ROOTS` | the server | Comma-separated roots `GET /api/dirs` offers (depth 2), and the only places a fleet `spawn` may start a session. Default: `codeDir`. |
+| `LANEBOARD_URL` | the `laneboard` CLI | The board it talks to (`ls`, `morning`, `credit`, `run … --post`, …). Default `http://127.0.0.1:7777`. |
+| `LANEBOARD_RUN` | the `laneboard run` CLI | `<run>/<n>`, exported by `laneboard run round`; `--run` defaults to its run part, and `run start` says so on stderr when it uses it ([runs.md](runs.md)). The server does not read it. |
+| `LANEBOARD_RUN_FILE` | the `laneboard run` CLI | The file a run event is appended to when there is no `--file`. The server does not read it. |
+| `LANEBOARD_STATE_DIR` | the server and the CLI | The control state dir (pause sentinels, the token); see `stateDir`. |
+| `LANEBOARD_CONFIG` | the server and the CLI | The config file. |
+| `LANEBOARD_PVE_SECRET` | `laneboard feed proxmox` | The API token's secret when there is no `--secret-file` ([map.md](map.md)). |
+| `LANEBOARD_NODE` | `bin/laneboardctl` | The `node` binary the service script runs. |
+| `LANEBOARD_FORCE_TMUX` | `bin/laneboardctl` | Set: never start the board under systemd, always in tmux. |
+| `DATABASE_URL`, `DATABASE_ADMIN_URL`, `DATABASE_APP_URL`, `DATABASE_READONLY_URL` | the guard and launch checks | Read from a session's or a slot's environment, never from the board's own: which database a lane's tests would reach. |

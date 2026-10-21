@@ -279,6 +279,10 @@ and nothing warns.
   `eval` the sessions the round starts carry the run and round in their
   environment. `--run` defaults to the run part of `$LANEBOARD_RUN`, so a
   session inside a round can send `laneboard run score --name … --value …`.
+  `start` takes it too, but says so on stderr (`run id <x> from
+  $LANEBOARD_RUN`): a new run that inherits a leftover export would otherwise
+  write into another run. With neither, every subcommand stops with
+  `--run <id> is required (or set $LANEBOARD_RUN)` (exit 2).
 - Bad arguments (an unknown flag, a missing value, a number that is not one,
   a line `parseLine` would skip) exit 2, print one line saying what is wrong
   and write nothing. `laneboard run --help` prints the flags.
