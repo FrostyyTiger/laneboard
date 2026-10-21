@@ -722,3 +722,16 @@ test('runs.css: on a narrow screen the needs cell does not wrap its count away f
   assert.doesNotMatch(rule[1], /flex-wrap:\s*wrap|white-space:\s*normal/);
   assert.match(css, /\.rn-needs-t\s*\{[^}]*min-width:\s*0[^}]*text-overflow:\s*ellipsis/);
 });
+
+test('T30: a stopped run\'s windows stay grey at 92 %; a running one near the limit is amber', () => withDom(() => {
+  assert.equal(burnOf(LIVE.usage, 'running').fiveHour.warn, true);
+  assert.equal(burnOf(LIVE.usage, 'waiting').fiveHour.warn, true);
+  assert.equal(burnOf(LIVE.usage, 'stopped').fiveHour.warn, false);
+  assert.equal(burnOf({ sevenDayPct: 99 }, 'stopped').sevenDay.warn, false);
+  assert.equal(burnOf(LIVE.usage, 'stopped').fiveHour.text, '92%', 'the value still shows');
+  const host = document.createElement('div');
+  renderRuns(host, [{ ...LIVE, state: 'stopped', stop: 'budget' }], { status: 'ok' }, FIX.updatedAt);
+  const wins = byClass(byClass(host, 'rn-row')[0], 'rn-win');
+  assert.equal(wins[0].dataset.p, undefined, 'no hue on a stopped run');
+  assert.doesNotMatch(wins[0].attrs['aria-label'], /near the stop level/);
+}));

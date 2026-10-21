@@ -154,12 +154,16 @@ function windowBurn(pct, warnAt) {
   return { pct, text: `${Math.round(pct)}%`, warn: pct >= warnAt };
 }
 
-/** usage {fiveHourPct, sevenDayPct, overage} -> {fiveHour, sevenDay, overage} (each null when unknown). */
-export function burnOf(usage) {
+/**
+ * usage {fiveHourPct, sevenDayPct, overage} -> {fiveHour, sevenDay, overage} (each null when unknown).
+ * A stopped run burns nothing more, so its windows never warn (grey unless something needs you, T30).
+ */
+export function burnOf(usage, state = null) {
   if (!isObj(usage)) return { fiveHour: null, sevenDay: null, overage: false };
+  const live = state !== 'stopped';
   return {
-    fiveHour: windowBurn(usage.fiveHourPct, WARN_5H),
-    sevenDay: windowBurn(usage.sevenDayPct, WARN_7D),
+    fiveHour: windowBurn(usage.fiveHourPct, live ? WARN_5H : Infinity),
+    sevenDay: windowBurn(usage.sevenDayPct, live ? WARN_7D : Infinity),
     overage: usage.overage === true,
   };
 }
@@ -381,7 +385,7 @@ function meterNode(label, w) {
 }
 
 function burnNode(row) {
-  const b = burnOf(row.usage);
+  const b = burnOf(row.usage, row.state);
   const n = el('span', 'rn-f rn-burn');
   n.append(meterNode('5h', b.fiveHour), meterNode('7d', b.sevenDay));
   if (b.overage) {

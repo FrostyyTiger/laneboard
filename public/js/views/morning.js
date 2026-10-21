@@ -154,7 +154,7 @@ export function morningRunOf(r, builder = null) {
   const state = Object.hasOwn(STATE_META, r.state) ? r.state : r.stop ? 'stopped' : 'running';
   const reason = rnClean(r.stop, 32);
   const scores = isObj(r.scores) ? r.scores : {};
-  const usage = burnOf(r.usage);
+  const usage = burnOf(r.usage, state);
   return {
     run: id,
     builder: typeof builder === 'string' && BUILDER_ID_RX.test(builder) ? builder : null,
