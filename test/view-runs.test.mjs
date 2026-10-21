@@ -15,7 +15,7 @@ import runsView, {
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, EMPTY_HUB, LIST_URL, SCORE_MAX,
   renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
   runHref, runUrl, LIST_HREF, needActions, ackNeed, ACK_BY, EVENTS_URL, TL_NARROW_HIDDEN, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
-  needsCell, tlColumns, ackedNeedsOf,
+  needsCell, tlColumns, ackedNeedsOf, runCostOf,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
 
@@ -912,4 +912,31 @@ test('night 4 T26: a need row has a fixed kind column, a path breaks at `/`, and
   assert.match(phone, /\.rn-need\s*\{\s*grid-template-columns:\s*2ch 8ch minmax\(0, 1fr\);/, 'three columns on a phone');
   assert.match(phone, /\.rn-need-end\s*\{\s*grid-column:\s*1 \/ -1;/, 'the end on its own line');
   assert.match(wide, /\.rn-need-end\s*\{\s*justify-self:\s*end;/, 'right-aligned');
+}));
+
+test('a run stopped with usd 2 and no cost event shows $2 on its row and page, marked as the loop\'s (night 4 T34)', () => withDom(() => {
+  const events = [
+    { t: 'run.start', goal: 'Try it' },
+    { t: 'round.start', n: 1 },
+    { t: 'run.stop', reason: 'budget', rounds: 1, usd: 2 },
+  ].map((e) => parseLine(JSON.stringify({ v: 1, run: 'demo', ...e }))).map((r) => r.event);
+  const run = JSON.parse(JSON.stringify(foldRun(events)));
+  assert.deepEqual(run.cost, { usd: 0, rounds: 0 });
+  const row = JSON.parse(JSON.stringify(summarize(run)));
+  assert.equal(row.stopUsd, 2);
+  const host = document.createElement('div');
+  renderRuns(host, [row], { status: 'ok' }, run.updatedAt);
+  const li = byClass(host, 'rn-row')[0];
+  const cell = byClass(li, 'rn-cost')[0];
+  assert.equal(cell.textContent, 'cost$2.00loop');
+  assert.equal(cell.dataset.src, 'stop');
+  assert.match(cell.title, /loop reported at run\.stop/);
+  const page = renderRunPage(document.createElement('div'), run, { status: 'ok', id: 'demo' }, run.updatedAt);
+  const pcell = byClass(page, 'rn-cost')[0];
+  assert.equal(pcell.textContent, 'cost$2.00loop');
+  assert.ok(!pcell.textContent.includes('$0'));
+  // a run with cost events keeps their sum, whatever the stop says
+  assert.deepEqual(runCostOf({ cost: { usd: 3.75, rounds: 3 }, stopUsd: 9 }).text, '$3.75');
+  assert.equal(runCostOf({ cost: { usd: 3.75, rounds: 3 }, stopUsd: 9 }).loop, false);
+  assert.equal(runCostOf({ cost: { usd: 0, rounds: 0 }, stopUsd: null }).text, '$0.00');
 }));

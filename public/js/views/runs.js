@@ -403,10 +403,32 @@ function leftNode(row, now) {
   return n;
 }
 
-/** "cost $9.98" in one cell. */
+/**
+ * The cost a row shows -> {usd, text, title, loop}: the sum of the run's `cost`
+ * events; when none was sent and the loop reported a `usd` at `run.stop`, that
+ * figure instead, marked as the loop's own (`loop` true, T34).
+ */
+export function runCostOf(row) {
+  const sum = isNum(row?.cost?.usd) ? row.cost.usd : null;
+  const none = !(row?.cost?.rounds > 0) && !(sum > 0);
+  if (none && isNum(row?.stopUsd)) {
+    return {
+      usd: row.stopUsd, text: money(row.stopUsd), loop: true,
+      title: 'what the loop reported at run.stop (no cost events were sent)',
+    };
+  }
+  return { usd: sum, text: sum === null ? DASH : money(sum), loop: false, title: 'cost of the run (sum of its cost events)' };
+}
+
+/** "cost $9.98" in one cell; "cost $2.00 loop" when the figure is the stop's (T34). */
 function costNode(row) {
-  const cost = isNum(row.cost?.usd) ? money(row.cost.usd) : DASH;
-  return keyedField('rn-cost', 'cost', cost, 'cost of the run (sum of its cost events)');
+  const c = runCostOf(row);
+  const n = keyedField('rn-cost', 'cost', c.text, c.title);
+  if (c.loop) {
+    n.dataset.src = 'stop';
+    n.append(el('span', 'rn-k', 'loop'));
+  }
+  return n;
 }
 
 function meterNode(label, w) {
@@ -575,6 +597,7 @@ export function runSummaryOf(run) {
     needs: (Array.isArray(run.needs) ? run.needs : []).filter((x) => isObj(x) && x.open !== false),
     artifacts: Array.isArray(run.artifacts) ? run.artifacts.length : 0,
     stop: isObj(run.stop) ? run.stop.reason : null,
+    stopUsd: isObj(run.stop) && isNum(run.stop.usd) ? run.stop.usd : null,
     startedAt: run.startedAt, updatedAt: run.updatedAt,
   };
 }

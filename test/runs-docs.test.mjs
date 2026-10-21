@@ -142,3 +142,8 @@ test('docs/runs.md names the CLI receipt and the ack warnings (night 4 T21)', ()
   assert.match(doc, /`ack` still writes and exits 0, but warns on stderr/);
   for (const by of FENCE_ACK_BY) assert.ok(doc.includes(`\`${by}\``), by);
 });
+
+test('docs/runs.md says which cost a stopped run prints: the cost events, else the stop usd (night 4 T34)', () => {
+  assert.match(doc, /The list row and the run page print `cost\.usd`; only\s+when no `cost` event was sent \(`cost\.rounds` is 0\) and `stop\.usd` is set do\s+they print `stop\.usd` instead, marked `loop` as the loop's own figure\./);
+  assert.match(doc, /`stopUsd` \(`stop\.usd`/);
+});

@@ -120,6 +120,13 @@ a `round.end` `usd` (the CLI's `round --end --usd`) fills that round's
 `usd` but leaves the run's `cost` at 0. A loop that wants a run total sends
 `cost` events.
 
+A stopped run carries two sets of numbers. `cost` (`usd`, `rounds`) is what
+laneboard adds up from the run's `cost` events; `stop.usd` and `stop.rounds`
+are what the loop itself reported in `run.stop` (its own `total`, which
+restarts with the loop). The list row and the run page print `cost.usd`; only
+when no `cost` event was sent (`cost.rounds` is 0) and `stop.usd` is set do
+they print `stop.usd` instead, marked `loop` as the loop's own figure.
+
 ### Sessions of a round
 
 The run page lists, per round, the Claude Code sessions that ran in it, with
@@ -266,7 +273,7 @@ many), `maxRounds` (`budget.rounds`), `scores` (per name: the latest `n` and
 `cost` events, see above), `deadline`,
 `deadlineAt`, the open `needs`, `artifacts` (a count), `prs` (the `pr`
 artifacts as `url`, `title`, `ts`; the Inbox lists them), `stop` (the reason or
-null), `stuck` (`{rule, reason}` from the rules above, or null), `startedAt`,
+null), `stopUsd` (`stop.usd`, the loop's own figure, or null), `stuck` (`{rule, reason}` from the rules above, or null), `startedAt`,
 `updatedAt`. `GET /api/runs/<run>` answers `{"run": …}`
 with the whole fold (rounds, every score, needs, artifacts, raw events); each
 round has `sessions`, the sessions tied to it (`sessionId`, `name`, `cwd`,
