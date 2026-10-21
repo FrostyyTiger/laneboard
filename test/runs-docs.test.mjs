@@ -218,3 +218,9 @@ test('T8: README has the API route table with /api/health, and every route in it
   const all = server.join('\n');
   for (const p of paths) assert.ok(all.includes(`'${p}`), `${p} is in the README table but no server file names it`);
 });
+
+test('a round\'s --end --usd wins over stop --usd, and cost.from shows which (night 5 T36)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.match(flat, /a round's `--end --usd` wins over `stop --usd` for the run's cost/);
+  assert.match(flat, /`cost\.from` shows which was used/);
+});

@@ -133,6 +133,10 @@ are what the loop itself reported in `run.stop` (its own `total`, which
 restarts with the loop). The list row and the run page print `cost.usd`; only
 when no `cost` event was sent and the rounds give none above 0 (`cost.rounds` is 0,
 `cost.usd` null or 0) and `stop.usd` is set do they print `stop.usd` instead, marked `loop` as the loop's own figure.
+So a round's `--end --usd` wins over `stop --usd` for the run's cost: with
+`run round --end --usd 0.5` and `run stop --usd 2`, `cost.usd` is 0.5 and
+`stop.usd` stays 2, and `cost.from` shows which was used (`cost`, `rounds`, or
+null when neither gave one; then `stop.usd` is printed).
 
 ### Sessions of a round
 
