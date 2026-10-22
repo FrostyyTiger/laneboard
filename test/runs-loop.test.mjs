@@ -154,3 +154,54 @@ test('the run page lists every round with its cost, retries and the numeric comm
   assert.equal(model[0].outcome, null, 'a stopped run\'s planner round without round.end is not "running"');
   assert.equal(model[3].cost, '$2.10');
 }));
+
+// Review n5: the PR artifact follows the PR. push() is run from run.sh itself,
+// with git, gh and ev stubbed, so the test reads the loop's own code.
+test('run.sh parses, and push() re-sends the PR artifact when its title or state changes', async (t) => {
+  const { execFileSync } = await import('node:child_process');
+  const os = await import('node:os');
+  const sh = path.join(ROOT, 'docs/plans/runs/loop/run.sh');
+  execFileSync('bash', ['-n', sh]);
+  const src = fs.readFileSync(sh, 'utf8');
+  const fn = (name) => {
+    const m = new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?^\\}\\n`, 'm').exec(src);
+    assert.ok(m, `run.sh defines ${name}()`);
+    return m[0];
+  };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-loop-push-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin);
+  const URL = 'https://example.invalid/acme/laneboard/pull/15';
+  // gh: `pr create` prints the URL; `pr view` answers from $DIR/gh-view ("STATE<TAB>title").
+  fs.writeFileSync(path.join(bin, 'gh'), `#!/bin/bash
+case "$1 $2" in
+  "pr create") echo "${URL}";;
+  "pr view") cat "$DIR/gh-view";;
+esac
+`, { mode: 0o755 });
+  const script = `set -uo pipefail
+git() { :; }
+log() { :; }
+ev() { printf '%s' "$1" >> "$DIR/ev"; shift; printf ' [%s]' "$@" >> "$DIR/ev"; echo >> "$DIR/ev"; }
+RUN_DIR="$DIR" BRANCH=run/x PR_BASE=main NAME=runs-x L="$DIR"
+${fn('push')}
+${fn('pr_update')}
+push
+`;
+  const runPush = (view) => {
+    if (view !== undefined) fs.writeFileSync(path.join(dir, 'gh-view'), view);
+    execFileSync('bash', ['-c', script], { env: { ...process.env, DIR: dir, PATH: `${bin}:${process.env.PATH}` } });
+    return fs.existsSync(path.join(dir, 'ev')) ? fs.readFileSync(path.join(dir, 'ev'), 'utf8').trim().split('\n') : [];
+  };
+  assert.deepEqual(runPush(), [`artifact [kind=pr] [url=${URL}] [title=Runs: runs-x (agent loop)] [state=open]`],
+    'the first artifact carries the title');
+  assert.equal(runPush('OPEN\tRuns: runs-x (agent loop)').length, 1, 'nothing changed: nothing sent');
+  assert.equal(runPush('OPEN\tRuns: night 5, PR state').at(-1),
+    `artifact [kind=pr] [url=${URL}] [title=Runs: night 5, PR state] [state=open]`);
+  assert.equal(runPush('MERGED\tRuns: night 5, PR state').at(-1),
+    `artifact [kind=pr] [url=${URL}] [title=Runs: night 5, PR state] [state=merged]`);
+  assert.equal(runPush('MERGED\tRuns: night 5, PR state').length, 3);
+  assert.equal(runPush('CLOSED\tRuns: night 5, PR state').at(-1).endsWith('[state=closed]'), true);
+  assert.equal(runPush('').length, 4, 'gh says nothing: nothing sent');
+});

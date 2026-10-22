@@ -162,10 +162,27 @@ PY
 push() {
   git push -q -u origin "$BRANCH" 2>>"$RUN_DIR/log" || { log "push failed"; return; }
   if [ ! -f "$RUN_DIR/pr" ]; then
-    gh pr create --draft --base "$PR_BASE" --head "$BRANCH" --title "Runs: $NAME (agent loop)" \
+    local title="Runs: $NAME (agent loop)"
+    gh pr create --draft --base "$PR_BASE" --head "$BRANCH" --title "$title" \
       --body-file "$L/pr-body.md" > "$RUN_DIR/pr" 2>>"$RUN_DIR/log" \
-      && ev artifact kind=pr url="$(cat "$RUN_DIR/pr")" || rm -f "$RUN_DIR/pr"
+      && ev artifact kind=pr url="$(cat "$RUN_DIR/pr")" title="$title" state=open \
+      && printf 'open\t%s\n' "$title" > "$RUN_DIR/pr-sent" || rm -f "$RUN_DIR/pr"
+  else
+    pr_update
   fi
+}
+
+# The PR's title and state as GitHub has them now; the artifact is sent again when
+# either changed since the last one sent ($RUN_DIR/pr-sent: "<state>\t<title>").
+pr_update() {
+  local url raw state title
+  url=$(cat "$RUN_DIR/pr")
+  raw=$(gh pr view "$url" --json title,state --jq '.state + "\t" + .title' 2>>"$RUN_DIR/log") || return 0
+  case "${raw%%$'\t'*}" in OPEN) state=open;; MERGED) state=merged;; CLOSED) state=closed;; *) return 0;; esac
+  title=${raw#*$'\t'}
+  [ "$(printf '%s\t%s' "$state" "$title")" = "$(cat "$RUN_DIR/pr-sent" 2>/dev/null)" ] && return 0
+  ev artifact kind=pr url="$url" title="$title" state="$state" \
+    && printf '%s\t%s\n' "$state" "$title" > "$RUN_DIR/pr-sent"
 }
 
 run_role() {  # with rate-limit waits; a waited round does not count
