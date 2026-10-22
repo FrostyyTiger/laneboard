@@ -521,6 +521,12 @@ test('builder lamps: link, approvals, stuck as 4x4 squares; off is --line', () =
   assert.deepEqual(lamps({ link: 'stale', counts: { lanes: 3, waiting: 2 } }), ['P2', 'ACC', 'LINE']);
   const stuckLane = { ...FLEET[4], flags: { stuck: { rule: 'idle' } } };
   assert.deepEqual(lamps({}, [stuckLane]), ['T2', 'LINE', 'P2']);
+  // Review n5: focus elsewhere dims the label and its off lamps, never a lit one.
+  const ctx = fakeCtx();
+  const nodes = [...FLEET.slice(0, 3), { ...FLEET[3], link: 'stale', counts: { waiting: 1 } }];
+  createRenderer(ctx, PAL).drawLabels(sceneOf(nodes, { alpha: () => 0.3 }));
+  const alphas = ctx.ops.filter((o) => o.op === 'fillRect' && o.rect[2] === 4 && o.rect[3] === 4).map((o) => [o.fillStyle, o.alpha]);
+  assert.deepEqual(alphas, [['P2', 1], ['ACC', 1], ['LINE', 0.3]]);
 });
 
 test('labels: one style, the label face in caps; trouble is t1 text, its hue only on the node mark (T19)', () => {
@@ -897,4 +903,20 @@ test('the +N plate stays off every ring hairline, still away from the label (T19
     }
   }
   assert.ok(moved > 0, 'some plates leave the straight-back diagonal for a side one');
+});
+
+test('review n5: focus dims the calm nodes, never a lamp (▲/■ keep full alpha)', () => {
+  const nodes = [
+    ...FLEET,
+    { id: 'lane:builder-a/web', kind: 'lane', parent: 'builder:builder-a', builder: 'builder-a', label: 'web', status: 'crit' },
+    { id: 'lane:builder-a/api', kind: 'lane', parent: 'builder:builder-a', builder: 'builder-a', label: 'api', status: 'warn' },
+  ];
+  const ctx = fakeCtx();
+  const scene = sceneOf(nodes, { selected: 'lane:builder-a/pay', alpha: (id) => (id === 'lane:builder-a/pay' ? 1 : 0.3) });
+  createRenderer(ctx, PAL).drawNodes(scene);
+  const lampFill = (id, shape) => opsAt(ctx.ops, scene, id).find((o) => o.op === 'fill' && shapeOf(o) === shape);
+  assert.equal(lampFill('lane:builder-a/web', 'square').alpha, 1, 'the crit square is not dimmed');
+  assert.equal(lampFill('lane:builder-a/api', 'tri').alpha, 1, 'the warn triangle is not dimmed');
+  const hq = opsAt(ctx.ops, scene, 'hq').find((o) => o.op === 'fill');
+  assert.ok(Math.abs(hq.alpha - 0.3) < 1e-9, 'a calm node still dims');
 });

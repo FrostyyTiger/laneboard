@@ -741,6 +741,9 @@ export function createRenderer(ctx, palette) {
       const fade = alphaOf(scene, id) * (c.a ?? 1);
       const { n, r, isFolded, st, outer } = look(id, c);
       const alpha = fade * (st.alpha ?? 1);
+      // A lamp never fades (docs/design.md): a ▲/■ keeps its full weight when
+      // focus dims the rest; only its enter/leave animation thins it.
+      const lampA = st.shape === 'tri' || st.shape === 'square' ? (c.a ?? 1) * (st.alpha ?? 1) : alpha;
       const col = tone(st.tone, st.level);
       outerR.set(id, outer);
       if (st.abnormal && (st.tone === 'crit' || st.tone === 'warn')) marked.add(id);
@@ -752,7 +755,7 @@ export function createRenderer(ctx, palette) {
           ctx.beginPath(); arc(sp.x, sp.y, r * k, 0, TAU); ctx.stroke();
         }
         // Grey unless the host itself is in trouble, then its ▲/■ (T23).
-        if (st.abnormal && st.shape !== 'ring') glyph(st.shape, sp.x, sp.y, r * 0.6, col, alpha);
+        if (st.abnormal && st.shape !== 'ring') glyph(st.shape, sp.x, sp.y, r * 0.6, col, lampA);
         else glyph('disc', sp.x, sp.y, r * 0.45, P.t1, alpha);
         continue;
       }
@@ -772,7 +775,7 @@ export function createRenderer(ctx, palette) {
         ctx.beginPath(); arc(sp.x, sp.y, r, 0, TAU); ctx.fill();
         strokeStyle(st.abnormal ? col : P.t2, alpha, 1.5, []);
         ctx.stroke();
-        if (st.abnormal && st.shape !== 'ring') glyph(st.shape, sp.x, sp.y, r * 0.45, col, alpha);
+        if (st.abnormal && st.shape !== 'ring') glyph(st.shape, sp.x, sp.y, r * 0.45, col, lampA);
         else {
           strokeStyle(P.t3, 0.6 * alpha, 1, []);
           ctx.beginPath(); arc(sp.x, sp.y, r * 0.55, 0, TAU); ctx.stroke();
@@ -793,14 +796,14 @@ export function createRenderer(ctx, palette) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(code, sp.x, sp.y + 0.5);
-        if (st.abnormal) glyph(st.shape, sp.x + q, sp.y - q, 3, col, alpha);
+        if (st.abnormal) glyph(st.shape, sp.x + q, sp.y - q, 3, col, lampA);
       } else if (!st.abnormal && st.tone === 'grey' && st.shape === 'diamond') {
         // A calm lane keeps its diamond outline, so lane-vs-machine still reads.
         glyph('diamond', sp.x, sp.y, r * 0.85, P.t3, alpha, { hollow: true });
       } else if (!st.abnormal && st.tone === 'grey' && st.shape === 'disc') {
         glyph('disc', sp.x, sp.y, r, P.t3, alpha);
       } else {
-        glyph(st.shape, sp.x, sp.y, st.shape === 'disc' || st.shape === 'ring' ? r : r * 0.9, col, alpha);
+        glyph(st.shape, sp.x, sp.y, st.shape === 'disc' || st.shape === 'ring' ? r : r * 0.9, col, lampA);
       }
 
       if (st.arc) {
@@ -992,7 +995,7 @@ export function createRenderer(ctx, palette) {
       // Who keeps its place when two collide: the selection, then trouble,
       // then machines and places, then the rest.
       const rank = id === scene.selected ? 0 : picked ? 1 : loud || trouble(n, stuck) ? 2 : plate ? 3 : 4;
-      plan.push({ id, n, sx: sp.x, sy: sp.y, R, text, font, col, x, y, left, w, round, sub: subText, loud, fade, rank, box, low,
+      plan.push({ id, n, sx: sp.x, sy: sp.y, R, text, font, col, x, y, left, w, round, sub: subText, loud, fade, enter: c.a ?? 1, rank, box, low,
         lamps: n.kind === 'builder' ? lampColours(n, stuck.has(n.builder)) : null });
     }
     return plan;
@@ -1134,8 +1137,9 @@ export function createRenderer(ctx, palette) {
       if (e.lamps) {
         // Lamps: 4x4 squares, 2px apart, under the label.
         const lx = left ? x : x - (e.lamps.length * 6 - 2);
+        // A lit lamp never fades with focus (docs/design.md); off lamps go with the label.
         e.lamps.forEach((lc, i) => {
-          fillStyle(lc, fade);
+          fillStyle(lc, lc === P.crit || lc === P.warn || lc === P.accent ? e.enter ?? 1 : fade);
           ctx.fillRect(lx + i * 6, y + 9, 4, 4);
         });
       }
