@@ -71,6 +71,17 @@ const RUN_ID_RX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
  * `open` stays, `merged` and `closed` leave at once (README §8 Q10).
  */
 export const RUN_PR_FRESH_MS = 24 * 3600_000;
+/**
+ * A run whose last event is older than this asks nothing any more: its open
+ * needs are left out of the Inbox and Morning (server/morning.mjs
+ * morningRunNeeds), so an old hand-made run cannot top the list.
+ */
+export const RUN_NEED_MAX_AGE_MS = 7 * 24 * 3600_000;
+
+/** When a run last moved: its last event, else its start, else 0. */
+export function runLastAt(r) {
+  return isNum(r?.updatedAt) ? r.updatedAt : isNum(r?.startedAt) ? r.startedAt : 0;
+}
 /** Who an ack from the Inbox names (`needs.ack` `by`). */
 export const ACK_BY = 'inbox';
 
@@ -369,7 +380,8 @@ function httpHref(v) {
 
 /**
  * Rows from GET /api/runs summaries: every open need a person must answer (a
- * `wait` need is the loop sleeping and is left out) and every PR artifact still
+ * `wait` need is the loop sleeping and is left out; none from a run idle for
+ * over RUN_NEED_MAX_AGE_MS) and every PR artifact still
  * to review: `open`, or with no state on a run that is live or had an event in
  * the last RUN_PR_FRESH_MS. Newest first.
  */
@@ -378,7 +390,9 @@ function runRows(runs, now) {
   for (const r of Array.isArray(runs) ? runs : []) {
     if (!r || typeof r !== 'object' || typeof r.run !== 'string' || !RUN_ID_RX.test(r.run)) continue;
     const base = { group: 'runs', builder: null, fkey: null, run: r.run, name: r.run, lane: null, href: runPageHref(r.run) };
-    for (const n of Array.isArray(r.needs) ? r.needs : []) {
+    const at = runLastAt(r);
+    const needs = now - at > RUN_NEED_MAX_AGE_MS ? [] : Array.isArray(r.needs) ? r.needs : [];
+    for (const n of needs) {
       if (!n || typeof n !== 'object' || n.open === false || !Number.isInteger(n.i) || n.i < 0) continue;
       const kind = inboxClip(str(n.kind), 32) ?? 'decision';
       if (kind === 'wait') continue;
@@ -388,7 +402,6 @@ function runRows(runs, now) {
         link: httpHref(n.link), since: isNum(n.ts) ? n.ts : 0,
       });
     }
-    const at = isNum(r.updatedAt) ? r.updatedAt : isNum(r.startedAt) ? r.startedAt : 0;
     const fresh = r.state !== 'stopped' || now - at <= RUN_PR_FRESH_MS;
     for (const a of Array.isArray(r.prs) ? r.prs : []) {
       const link = a && typeof a === 'object' ? httpHref(a.url) : null;
