@@ -741,12 +741,18 @@ test('T40: a file ack says it went to the file, not the board, when a board answ
   const r = await run(['run', 'ack', 'demo', '0'], env, dir);
   assert.equal(r.code, 0, r.stderr);
   assert.equal(r.stdout, '');
-  assert.equal(r.stderr, `ok demo needs.ack appended to ${file}\n${fileNote(file, env.LANEBOARD_URL)}`);
+  // The CLI names the file by its cwd, which may be the tmp dir's real path
+  // (macOS: /var -> /private/var): compare the real paths, then the words.
+  const said = /^ok demo needs\.ack appended to (.+)\nnote: the ack went to (.+?), not to the board at /.exec(r.stderr);
+  assert.ok(said, r.stderr);
+  assert.equal(fs.realpathSync(said[1]), fs.realpathSync(file));
+  assert.equal(fs.realpathSync(said[2]), fs.realpathSync(file));
+  assert.equal(r.stderr, `ok demo needs.ack appended to ${said[1]}\n${fileNote(said[1], env.LANEBOARD_URL)}`);
   assert.equal(lines(file).length, 1);
   // A run the board does not know: still a board that will not see the file.
   const other = await run(['run', 'ack', 'r2', '0'], env, dir);
   assert.equal(other.code, 0, other.stderr);
-  assert.ok(other.stderr.endsWith(fileNote(file, env.LANEBOARD_URL)), other.stderr);
+  assert.ok(other.stderr.endsWith(fileNote(said[1], env.LANEBOARD_URL)), other.stderr);
   // --post went to the board: no note.
   const p = await run(['run', 'ack', 'demo', '0', '--post'], env, dir);
   assert.equal(p.stderr, 'ok demo needs.ack posted\n');
