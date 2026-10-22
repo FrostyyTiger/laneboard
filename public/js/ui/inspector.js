@@ -535,6 +535,9 @@ export function renderHeader(m) {
 }
 
 /** The OVERVIEW tab body for model `m`. */
+/** A line needs two samples: with fewer, the row shows only the value (review n5). */
+const charted = (h) => Array.isArray(h) && h.filter((v) => typeof v === 'number' && Number.isFinite(v)).length >= 2;
+
 export function renderOverview(m, doc = globalThis.document) {
   const box = el('div', 'insp-ovw');
   if (m.run) {
@@ -578,7 +581,7 @@ export function renderOverview(m, doc = globalThis.document) {
   if (m.model) dl.append(row('MDL', m.model));
   if (m.ctx != null) {
     const v = el('span', 'insp-spark');
-    v.append(sparkline(m.ctxHistory, { label: `ctx ${m.ctx}%`, threshold: 65, min: 0, max: 100 }));
+    if (charted(m.ctxHistory)) v.append(sparkline(m.ctxHistory, { label: `ctx ${m.ctx}%`, threshold: 65, min: 0, max: 100 }));
     const pct = el('span', `insp-n${m.ctx >= 85 ? ' is-p1' : m.ctx >= 65 ? ' is-p2' : ''}`,
       `${m.ctx}%${m.ctxSize ? ` of ${Math.round(m.ctxSize / 1000)}k` : ''}`);
     v.append(pct);
@@ -586,7 +589,7 @@ export function renderOverview(m, doc = globalThis.document) {
   }
   if (m.usd != null) {
     const v = el('span', 'insp-spark');
-    v.append(sparkline(m.usdHistory, { label: `cost ${money(m.usd)}` }));
+    if (charted(m.usdHistory)) v.append(sparkline(m.usdHistory, { label: `cost ${money(m.usd)}` }));
     const n = el('span', 'insp-n', money(m.usd));
     n.title = `API-equivalent, all time. Today ${money(m.usdToday ?? 0)}.`;
     v.append(n);

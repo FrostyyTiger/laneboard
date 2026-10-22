@@ -366,6 +366,27 @@ test('header, overview and action bar carry builder text as text, with icon + ar
   });
 });
 
+test('review n5: the overview draws a ctx or $ sparkline only from two samples; with fewer, only the value', async () => {
+  await withPage([], {}, () => {
+    const at = (ctxHistory, usdHistory) => {
+      const m = inspectorModel({ id: 'auth', builder: 'builder-a', sessions: ['auth'] }, {
+        session: { key: 'builder-a/auth', name: 'auth', state: 'working', builder: 'builder-a', stateSince: Date.now(), context: { usedPct: 40 }, cost: { usd: 1 } },
+        sessionKey: 'builder-a/auth',
+      });
+      const ovw = renderOverview({ ...m, ctxHistory, usdHistory }, globalThis.document);
+      const svgs = [];
+      const walk = (n) => { if (n.tagName === 'SVG' || n.tagName === 'svg') svgs.push(n); for (const c of n.children ?? []) walk(c); };
+      walk(ovw);
+      return { n: svgs.length, t: texts(ovw) };
+    };
+    const one = at([40], [1]);
+    assert.equal(one.n, 0, 'one sample: no line, no dot');
+    assert.ok(one.t.includes('40%'));
+    assert.equal(at([], []).n, 0);
+    assert.equal(at([30, 40], [0.5, 1]).n, 2);
+  });
+});
+
 test('applyRoute opens on sel=, closes on sel=null; anchorEl follows; the map gets its inset', async () => {
   const saved = { sessions: store.sessions, lanes: store.lanes, keyMode: store.keyMode, builders: store.builders, kind: store.source.kind };
   const f = fleetStore();
