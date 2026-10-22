@@ -48,11 +48,14 @@
 
 .pal-o {
   display: grid;
-  /* The label keeps its width (at least 6em); the sub line gives way and ellipsizes. */
-  grid-template-columns: var(--icon-s) 4.5em minmax(6em, max-content) minmax(0, 1fr) auto;
+  /* One kind marker (the icon), then the label; it keeps its width (at least
+     6em), the sub line gives way and ellipsizes. Cells are placed by area, so a
+     row without a sub or a hint has no empty cell (runs n5 T52). */
+  grid-template-columns: var(--icon-s) minmax(6em, max-content) minmax(0, 1fr) auto;
+  grid-template-areas: "i l s k";
   align-items: center;
-  gap: var(--sp-2);
-  height: var(--row-dense);
+  column-gap: var(--sp-2);
+  min-height: var(--row-dense);
   padding: 0 var(--sp-3);
   cursor: pointer;
   color: var(--text-2);
@@ -63,7 +66,10 @@
   outline: var(--bw) solid var(--accent);
   outline-offset: -1px;
 }
-.pal-type { justify-self: start; }
+.pal-i { grid-area: i; color: var(--text-3); }
+.pal-l { grid-area: l; }
+.pal-s { grid-area: s; }
+.pal-k { grid-area: k; }
 .pal-l, .pal-s {
   overflow: hidden;
   white-space: nowrap;
@@ -75,6 +81,26 @@
   font-family: var(--font-mono);
   font-size: var(--fs-10);
   color: var(--text-3);
+}
+/* The matched characters: the text colour at full weight, no fill. */
+.pal-m {
+  background: none;
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+/* Phone: the meta goes on a second muted line under the name, so a port at
+   the end is not clipped behind ` · …`. */
+@media (max-width: 699px) {
+  .pal-o {
+    grid-template-columns: var(--icon-s) minmax(0, 1fr) auto;
+    grid-template-areas: "i l k" "i s k";
+    padding: var(--sp-1) var(--sp-3);
+  }
+  .pal-s {
+    text-align: left;
+    font-size: var(--fs-11);
+  }
 }
 .pal-empty {
   padding: var(--sp-2) var(--sp-3);

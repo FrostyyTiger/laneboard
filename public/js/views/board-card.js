@@ -23,7 +23,7 @@ import { laneById, store } from '../core/store.js';
 import { deriveCode } from '../core/keys.js';
 import { act } from '../core/actions.js';
 import { icon } from '../core/icons.js';
-import { itemP, markP } from '../core/marks.js';
+import { STATE_WORD, itemP, markP, markWord } from '../core/marks.js';
 import { lamp, plate } from '../ui/components.js';
 import { toast } from '../ui/shell.js';
 import { togglePin } from '../ui/dock.js';
@@ -33,11 +33,9 @@ import { cardNodes, toggleLane } from './board.js';
 /** What a missing field renders as. */
 export const DASH = '—';
 
-/** The 4-character state words (plan §4 2.7). */
-export const STATE_WORD = Object.freeze({
-  waiting_permission: 'PERM', waiting_question: 'QUES', working: 'WORK',
-  done: 'DONE', idle: 'IDLE', shell: 'SHEL', dead: 'DEAD',
-});
+// The state words and markWord live in core/marks.js (runs n5 T27: the Inbox
+// prints them too); re-exported for the callers that import them from here.
+export { STATE_WORD, markWord };
 
 /** Session state -> lamp `data-p` (ISA-101: colour only for abnormal). */
 export const STATE_P = Object.freeze(Object.fromEntries(
@@ -190,10 +188,13 @@ export function dataBlock(lane, session, extras = {}) {
   const state = typeof lead?.state === 'string' ? lead.state : null;
   // One state, one mark (runs night 4 T23): danger anywhere on the lane is
   // the red ■, an approval or a stuck session the amber ▲, else the lead's state.
+  // The word follows the session that raised the ▲ (markWord).
   let p = state ? markP(state) : 'off';
+  let src = lead;
   for (const x of sessions) {
     const q = itemP(x);
-    if (q === '1' || (q === '2' && p !== '1')) p = q;
+    if (q === '1' && p !== '1') p = q;
+    else if (q === '2' && p !== '1' && p !== '2') { p = q; src = x; }
   }
   if (x.stale) p = 'stale';
   const prog = lane?.progress;
@@ -206,7 +207,7 @@ export function dataBlock(lane, session, extras = {}) {
     name: typeof lead?.name === 'string' ? lead.name : null,
     state,
     p,
-    word: state ? (STATE_WORD[state] ?? state.slice(0, 4).toUpperCase()) : DASH,
+    word: src ? markWord(src) : DASH,
     stage: prog && prog.m != null ? `${prog.n ?? 0}/${prog.m}` : DASH,
     pr: prModel(x.pr),
     checks: checkGlyphs(x.checks ?? x.pr?.checks ?? null),

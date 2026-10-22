@@ -49,7 +49,8 @@ folded node unfolds what hides it. Folds are remembered in this browser.
 
 **The look.** Healthy nodes are grey; hue and shape appear only on trouble
 (■ crit, ▲ warn, ◆ low), so what is coloured is what needs you. The rings carry
-labels and a bearing dial; the readout corner (top right) shows zoom, scope,
+labels and a bearing dial (its 000/090/180/270 numbers only while the whole
+dial is in view, so a cut-off one never reads as a node's label); the readout corner (top right) shows zoom, scope,
 node count, overlay and the clock. On a phone it is shorter and drops the
 clock first while an overlay is on: `Z 1.00× · N 22/24 · DRIFT ◌1 □1`,
 `… · REACH 9` (`REACH 3/9` with a node selected: touches/links).

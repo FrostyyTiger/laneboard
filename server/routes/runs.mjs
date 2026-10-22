@@ -1,10 +1,13 @@
 // Route module: runs (docs/plans/runs/README.md §3 A1; protocol in docs/runs.md).
 //
-//   GET  /api/runs          -> {runs: [summary]}   latest activity first
+//   GET  /api/runs          -> {runs: [summary]}   latest activity first; `?run=<id>`
+//                           keeps only that run (an empty list for an unknown id)
 //   GET  /api/runs/:run     -> {run}               the folded run, each round with the
-//                           sessions tied to it (server/runs/bind.mjs); 404 if unknown
-//   POST /api/runs/events   one event as JSON -> 201 {ok, run, t}; 400 {error} if
-//                           parseLine skips it; appended to <stateDir>/runs/<run>.jsonl
+//                           sessions tied to it (server/runs/bind.mjs); 404 if unknown,
+//                           its error naming the list route
+//   POST /api/runs/events   one event as JSON -> 201 {ok, run, t, dropped}; 400 {error}
+//                           if parseLine skips it; appended to <stateDir>/runs/<run>.jsonl;
+//                           `dropped` names the fields the fold will not use
 //
 // Starts the run-file collector (server/collector/runs.mjs) and provides its
 // store as the `runs` service. The routes sit behind the normal request guards
@@ -23,7 +26,7 @@ import path from 'node:path';
 import * as collector from '../collector/runs.mjs';
 import { knownWorktrees } from '../collector/lanes.mjs';
 import { config as globalConfig } from '../config.mjs';
-import { parseLine, MAX_LINE, RUN_ID } from '../runs/protocol.mjs';
+import { parseLine, droppedFields, MAX_LINE, RUN_ID } from '../runs/protocol.mjs';
 import { bindRuns, runDirs, withSessions } from '../runs/bind.mjs';
 import { summarize } from '../runs/summary.mjs';
 import { sessionsSeen } from '../db.mjs';
@@ -59,15 +62,27 @@ export function runWithSessions(store, run, { seen = sessionsSeen, now = Date.no
 
 /**
  * The body of GET /api/runs from a store (null before the collector started).
- * `opts` go to summarize: `{stuck}` is `runs.stuck`, `{now}` the time.
+ * `opts.run` keeps only that run id; the rest go to summarize: `{stuck}` is
+ * `runs.stuck`, `{now}` the time.
  */
 export function listBody(store, opts = {}) {
-  return { runs: store ? store.list().map((run) => summarize(run, opts)) : [] };
+  const { run: only, ...rest } = opts;
+  const runs = store ? store.list() : [];
+  const kept = typeof only === 'string' ? runs.filter((r) => r.run === only) : runs;
+  return { runs: kept.map((run) => summarize(run, rest)) };
 }
+
+/** The 404 text for GET /api/runs/<id>: the id (clipped) and where the list is. */
+export function noRunError(id) {
+  return `no run ${String(id ?? '').slice(0, 64)}; the list is GET ${LIST_PATH}`;
+}
+
+const query = (req) => req.query ?? new URL(req.url ?? '/', 'http://localhost').searchParams;
 
 /**
  * Check one posted body and give the line to append, or why not:
- * `{ok: true, run, t, line}` or `{ok: false, error}`.
+ * `{ok: true, run, t, dropped, line}` or `{ok: false, error}`; `dropped` lists
+ * the fields the checked event leaves out (droppedFields).
  */
 export function eventLine(text, now = Date.now()) {
   if (typeof text !== 'string' || !text.trim()) return { ok: false, error: 'empty' };
@@ -80,7 +95,7 @@ export function eventLine(text, now = Date.now()) {
   if (line.length > MAX_LINE) return { ok: false, error: 'too long' };
   const again = parseLine(line);
   if (!again.ok) return { ok: false, error: again.reason };
-  return { ok: true, run: again.event.run, t: again.event.t, line: `${line}\n` };
+  return { ok: true, run: again.event.run, t: again.event.t, dropped: droppedFields(o, again.event), line: `${line}\n` };
 }
 
 /** `<stateDir>/runs/<run>.jsonl`, or null for an id that is not a safe file name. */
@@ -107,13 +122,14 @@ export default {
 
     ctx.route('GET', LIST_PATH, (req, res) => {
       const cfg = ctx.config ?? globalConfig;
-      return ctx.json(res, listBody(collector.store(), { stuck: cfg.runs?.stuck }));
+      const only = query(req).get('run');
+      return ctx.json(res, listBody(collector.store(), { stuck: cfg.runs?.stuck, ...(only !== null ? { run: only } : {}) }));
     });
 
     ctx.route('GET', RUN_PATH, (req, res) => {
       const id = req.params?.run;
       const run = typeof id === 'string' && RUN_ID.test(id) ? collector.store()?.get(id) : null;
-      if (!run) return ctx.json(res, { error: 'unknown run' }, 404);
+      if (!run) return ctx.json(res, { error: noRunError(id) }, 404);
       return ctx.json(res, { run: runWithSessions(collector.store(), run) });
     });
 
@@ -134,7 +150,7 @@ export default {
         return ctx.json(res, { error: 'could not write the event' }, 500);
       }
       await collector.track(file).catch(() => {});
-      return ctx.json(res, { ok: true, run: r.run, t: r.t }, 201);
+      return ctx.json(res, { ok: true, run: r.run, t: r.t, dropped: r.dropped }, 201);
     });
   },
   start(ctx) {

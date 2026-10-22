@@ -891,7 +891,7 @@ export function createMap(root, opts = {}) {
     tip.append(top);
     const run = runFacts(n);
     const line = (shownOverlay() === 'drift' && driftText(n))
-      || (run && (run.tone !== 'grey' ? run.why : [run.round, run.progress].filter(Boolean).join(' · ')))
+      || (run && (run.tone !== 'grey' ? run.why : [run.round, run.tasks ?? run.progress].filter(Boolean).join(' · ')))
       || (n.why ?? n.sub);
     if (line) tip.append(h('div', 'map-tip-sub', String(line)));
     if (run?.goal && run.goal !== line) tip.append(h('div', 'map-tip-sub', run.goal));
@@ -1063,7 +1063,7 @@ export function createMap(root, opts = {}) {
     if (!el || typeof el.getBoundingClientRect !== 'function') return null;
     const rr = root.getBoundingClientRect(), pr = el.getBoundingClientRect();
     if (!pr.width && !pr.height) return null;
-    return { left: pr.left - rr.left, top: pr.top - rr.top, bottom: pr.bottom - rr.top };
+    return { left: pr.left - rr.left, top: pr.top - rr.top, bottom: pr.bottom - rr.top, right: pr.right - rr.left };
   }
 
   function scene(now) {
@@ -1080,6 +1080,9 @@ export function createMap(root, opts = {}) {
       pulses, comets,
       reduced: reducedMotion(),
       anchor: W > 760 && mode !== 'pip' ? anchorRect() : null,
+      // What covers the canvas (the inspector on the right, the sheet on a
+      // phone): labels keep clear of it, as of the canvas edges.
+      covers: mode !== 'pip' ? [anchorRect()].filter(Boolean) : [],
       budgetUsd: typeof opts.budgetUsd === 'function' ? opts.budgetUsd : undefined,
     };
   }

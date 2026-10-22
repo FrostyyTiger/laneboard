@@ -12,7 +12,7 @@ import {
   selTarget, resolveSel, inspectorModel, modelFor, prFor, pushSample,
   registerTab, unregisterTab, registeredTabs, tabsModel, _resetTabs,
   touchMessage, shouldTouch, l4Mode, hairline,
-  renderHeader, renderOverview, applyRoute, anchorEl, selected, bindMap,
+  renderHeader, renderOverview, applyRoute, anchorEl, selected, bindMap, openSnap,
 } from '../public/js/ui/inspector.js';
 import {
   ACTIONBAR_BUTTONS, actionBarModel, actionList, actionTarget, registerAction, unregisterAction,
@@ -366,6 +366,27 @@ test('header, overview and action bar carry builder text as text, with icon + ar
   });
 });
 
+test('review n5: the overview draws a ctx or $ sparkline only from two samples; with fewer, only the value', async () => {
+  await withPage([], {}, () => {
+    const at = (ctxHistory, usdHistory) => {
+      const m = inspectorModel({ id: 'auth', builder: 'builder-a', sessions: ['auth'] }, {
+        session: { key: 'builder-a/auth', name: 'auth', state: 'working', builder: 'builder-a', stateSince: Date.now(), context: { usedPct: 40 }, cost: { usd: 1 } },
+        sessionKey: 'builder-a/auth',
+      });
+      const ovw = renderOverview({ ...m, ctxHistory, usdHistory }, globalThis.document);
+      const svgs = [];
+      const walk = (n) => { if (n.tagName === 'SVG' || n.tagName === 'svg') svgs.push(n); for (const c of n.children ?? []) walk(c); };
+      walk(ovw);
+      return { n: svgs.length, t: texts(ovw) };
+    };
+    const one = at([40], [1]);
+    assert.equal(one.n, 0, 'one sample: no line, no dot');
+    assert.ok(one.t.includes('40%'));
+    assert.equal(at([], []).n, 0);
+    assert.equal(at([30, 40], [0.5, 1]).n, 2);
+  });
+});
+
 test('applyRoute opens on sel=, closes on sel=null; anchorEl follows; the map gets its inset', async () => {
   const saved = { sessions: store.sessions, lanes: store.lanes, keyMode: store.keyMode, builders: store.builders, kind: store.source.kind };
   const f = fleetStore();
@@ -433,4 +454,68 @@ test('the inspector modules use no HTML sinks', () => {
     const src = read(f);
     assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(src), f);
   }
+});
+
+// T53 (n3 T51): on a phone's Map a selection (Find + Enter, a tap) opens the
+// inspector as a bottom sheet at peek, the header over the map the camera
+// flew to, as 1440 opens the panel beside it; the grip takes it to full.
+test('openSnap: peek on a phone Map, full on other views and wider', () => {
+  assert.equal(openSnap(390, 'map'), 'peek');
+  assert.equal(openSnap(390, 'board'), 'full');
+  assert.equal(openSnap(390, 'inbox'), 'full');
+  assert.equal(openSnap(1440, 'map'), 'full');
+  assert.equal(openSnap(800, 'map'), 'full');
+});
+
+test('T53 390: Enter on a Map node opens the inspector at peek with that node, covering no side of the map; the grip goes full and back', async () => {
+  const saved = { sessions: store.sessions, lanes: store.lanes, keyMode: store.keyMode, builders: store.builders, kind: store.source.kind };
+  const f = fleetStore();
+  Object.assign(store, { sessions: f.sessions, lanes: f.lanes, builders: f.builders, keyMode: 'fkey' });
+  store.source.kind = 'local';
+  try {
+    await withPage(['shell', 'shell-insp', 'shell-main', 'map-root'], { width: 390 }, (byId) => {
+      const insp = byId.get('shell-insp');
+      const insets = [];
+      bindMap({ setInsets: (x) => insets.push(x.right), screenOf: () => ({ x: 10, y: 20 }) }, { root: byId.get('map-root') });
+      applyRoute({ view: 'map', sel: 'builder-a/auth' });
+      assert.equal(byId.get('shell').dataset.insp, 'open');
+      assert.equal(insp.dataset.snap, 'peek', 'the sheet opens at peek');
+      assert.ok(texts(insp).includes('auth'), "the peek holds that node's inspector");
+      assert.ok(insets.length >= 1 && insets.every((r) => r === 0), `a bottom sheet takes no right inset: ${insets}`);
+      const grip = insp.children.find((c) => c.className === 'insp-grip');
+      assert.ok(grip, 'a grip on top');
+      assert.equal(grip.getAttribute('aria-expanded'), 'false');
+      grip.onclick();
+      assert.equal(insp.dataset.snap, 'full');
+      assert.equal(grip.getAttribute('aria-expanded'), 'true');
+      grip.onclick();
+      assert.equal(insp.dataset.snap, 'peek');
+      // Another view on a phone opens the whole panel.
+      applyRoute({ view: 'board', sel: null });
+      applyRoute({ view: 'board', sel: 'builder-a/auth' });
+      assert.equal(insp.dataset.snap, 'full');
+      applyRoute({ view: 'board', sel: null });
+      bindMap(null);
+    });
+    await withPage(['shell', 'shell-insp', 'shell-main', 'map-root'], { width: 1440 }, (byId) => {
+      applyRoute({ view: 'map', sel: 'builder-a/auth' });
+      assert.equal(byId.get('shell-insp').dataset.snap, 'full', '1440 opens the panel beside the map');
+      applyRoute({ view: 'map', sel: null });
+    });
+  } finally {
+    store.sessions = saved.sessions;
+    store.lanes = saved.lanes;
+    store.builders = saved.builders;
+    store.keyMode = saved.keyMode;
+    store.source.kind = saved.kind;
+  }
+});
+
+test('inspector.css: on a phone the panel is a bottom sheet whose peek shows the grip and header only', () => {
+  const css = fs.readFileSync(new URL('../public/css/inspector.css', import.meta.url), 'utf8');
+  const phone = css.slice(css.indexOf('@media (max-width: 699px)'));
+  assert.match(phone, /\.shell-insp\[data-snap="peek"\] \{ top: auto;/);
+  assert.match(phone, /\.shell-insp\[data-snap="peek"\] > :not\(\.insp-grip, \.insp-head\) \{ display: none; \}/);
+  assert.match(phone, /transform: translateY\(100%\)/);
+  assert.match(css, /^\.insp-grip \{ display: none; \}/m, 'no grip wider');
 });

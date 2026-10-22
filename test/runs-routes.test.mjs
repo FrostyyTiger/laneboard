@@ -36,12 +36,12 @@ test.after(() => {
 });
 
 /** Call a registered route with a fake request; resolves to {status, body}. */
-async function call(method, pattern, { params = {}, body = '' } = {}) {
+async function call(method, pattern, { params = {}, body = '', url = pattern } = {}) {
   const r = routes.find((x) => x.method === method && x.pattern === pattern);
   assert.ok(r, `${method} ${pattern} is registered`);
   const req = Readable.from(body ? [Buffer.from(body)] : []);
   req.method = method;
-  req.url = pattern;
+  req.url = url;
   req.headers = {};
   req.params = params;
   return new Promise((resolve, reject) => {
@@ -97,7 +97,7 @@ test('GET /api/runs/:run gives the folded run, 404 for an unknown or bad id', as
   for (const id of ['nope', '../etc', '', '.hidden']) {
     const r = await call('GET', '/api/runs/:run', { params: { run: id } });
     assert.equal(r.status, 404, id);
-    assert.equal(r.body.error, 'unknown run');
+    assert.match(r.body.error, /^no run .*; the list is GET \/api\/runs$/);
   }
 });
 
@@ -131,7 +131,7 @@ test('POST /api/runs/events: a good event is appended and shows up in the list',
   const start = { t: 'run.start', run: 'nightly', goal: 'Make the tests green', budget: { rounds: 3 } };
   const r = await call('POST', '/api/runs/events', { body: JSON.stringify(start, null, 2) });
   assert.equal(r.status, 201);
-  assert.deepEqual(r.body, { ok: true, run: 'nightly', t: 'run.start' });
+  assert.deepEqual(r.body, { ok: true, run: 'nightly', t: 'run.start', dropped: [] });
   const file = path.join(stateDir, 'runs', 'nightly.jsonl');
   const lines = fs.readFileSync(file, 'utf8').split('\n');
   assert.equal(lines.length, 2, 'one compact line plus the final newline');
@@ -142,6 +142,10 @@ test('POST /api/runs/events: a good event is appended and shows up in the list',
 
   const round = await call('POST', '/api/runs/events', { body: '{"t":"round.start","run":"nightly","n":1,"role":"builder","ts":1792483300000}' });
   assert.equal(round.status, 201);
+  // T6: the 201 names the fields the fold will not use.
+  const art = await call('POST', '/api/runs/events', { body: '{"t":"artifact","run":"nightly","url":"https://example.invalid/acme/pull/1","state":"shipped","ts":1792483300000}' });
+  assert.equal(art.status, 201);
+  assert.deepEqual(art.body.dropped, ['state']);
   assert.equal(JSON.parse(fs.readFileSync(file, 'utf8').split('\n')[1]).ts, 1792483300000, 'a given ts is kept');
 
   // Read at once (track), not after the next discovery pass.
@@ -172,6 +176,26 @@ test('POST /api/runs/events: a score before any round lands on n 0, the run on r
   assert.deepEqual(one.body.run.scores.tests.map((x) => x.n), [0]);
 });
 
+test('POST /api/runs/events: a stop keeps its detail, a wrap-up round leaves the count at the stop\'s (night 5 T3)', async () => {
+  await ready();
+  for (const e of [
+    { t: 'run.start', run: 'wrapped', goal: 'Two rounds', budget: { rounds: 2 } },
+    { t: 'round.start', run: 'wrapped', n: 1, role: 'builder', task: 'T1', title: 'Add the thing' },
+    { t: 'round.start', run: 'wrapped', n: 2, role: 'builder' },
+    { t: 'run.stop', run: 'wrapped', reason: 'rounds', rounds: 2, detail: 'used its 2-round budget', wrapup: true },
+    { t: 'round.start', run: 'wrapped', n: 3, role: 'final', wrapup: true },
+  ]) assert.equal((await call('POST', '/api/runs/events', { body: JSON.stringify(e) })).status, 201);
+  const row = (await call('GET', '/api/runs')).body.runs.find((x) => x.run === 'wrapped');
+  assert.equal(row.state, 'stopped');
+  assert.equal(row.rounds, 2, 'not 3 of 2');
+  assert.equal(row.round, 2);
+  assert.equal(row.wrapup, true);
+  const one = await call('GET', '/api/runs/:run', { params: { run: 'wrapped' } });
+  assert.equal(one.body.run.stop.detail, 'used its 2-round budget');
+  assert.equal(one.body.run.rounds[0].title, 'Add the thing');
+  assert.equal(one.body.run.rounds[2].wrapup, true);
+});
+
 test('eventLine and eventsFile are strict about what reaches the disk', () => {
   assert.equal(eventLine('{"t":"x.custom","run":"r1","ts":5000000000000,"a":1}').ok, true);
   assert.deepEqual(eventLine('   '), { ok: false, error: 'empty' });
@@ -188,4 +212,18 @@ test('appendEvent refuses an unsafe id', async () => {
 
 test('listBody before the collector started is an empty list', () => {
   assert.deepEqual(listBody(null), { runs: [] });
+});
+
+test('T7: GET /api/runs?run=<id> keeps only that run, an unknown id gives an empty list; the 404 names the list', async () => {
+  await ready();
+  const all = await call('GET', '/api/runs');
+  assert.ok(all.body.runs.length > 1, 'the earlier tests posted more runs');
+  const one = await call('GET', '/api/runs', { url: '/api/runs?run=readiness' });
+  assert.equal(one.status, 200);
+  assert.deepEqual(one.body.runs.map((r) => r.run), ['readiness']);
+  const none = await call('GET', '/api/runs', { url: '/api/runs?run=nope' });
+  assert.deepEqual(none.body, { runs: [] });
+  const miss = await call('GET', '/api/runs/:run', { params: { run: 'nope' } });
+  assert.equal(miss.status, 404);
+  assert.equal(miss.body.error, 'no run nope; the list is GET /api/runs');
 });

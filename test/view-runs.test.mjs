@@ -13,9 +13,9 @@ import { summarize } from '../server/routes/runs.mjs';
 import runsView, {
   renderRuns, mountRuns, unmountRuns, loadRuns, sortRuns, scoreList, scoreTrend, scoreText, burnOf,
   timeLeft, roundText, stateOf, needsOf, needsYou, spanText, EMPTY_HOW, EMPTY_HUB, LIST_URL, SCORE_MAX,
-  renderRunPage, roundRows, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
+  renderRunPage, roundRows, roundSessions, stopOf, artifactsOf, rawOf, runSummaryOf, loadRun, safeHref, updateRuns,
   runHref, runUrl, LIST_HREF, needActions, ackNeed, ACK_BY, EVENTS_URL, TL_NARROW_HIDDEN, RAW_SHOW, stuckOf, scoreCharts, chartPoints, chartDomain, chartNum, CHART_W, CHART_H,
-  needsCell, tlColumns, ackedNeedsOf, runCostOf,
+  needsCell, tlColumns, ackedNeedsOf, runCostOf, outcomeText,
 } from '../public/js/views/runs.js';
 import { parseHash, emptyRoute } from '../public/js/core/router.js';
 
@@ -258,6 +258,30 @@ test('a row links to its page, and the link is a route the router parses back', 
   assert.equal(LIST_HREF, '#/runs');
 }));
 
+test('artifact rows print the PR title (the URL as fallback) and its state as a muted word', () => withDom(() => {
+  const url = 'https://example.invalid/acme/acme-api/pull/9';
+  const run = { run: 'r', state: 'running', rounds: [], scores: {}, better: {}, needs: [], raw: [], stop: null, cost: null, usage: null,
+    artifacts: [
+      { kind: 'pr', url, title: 'Paged search', state: 'merged', n: 2 },
+      { kind: 'pr', url: 'https://example.invalid/acme/acme-api/pull/10', title: null, state: 'bogus', n: 3 },
+    ] };
+  assert.deepEqual(artifactsOf(run).map((a) => [a.title, a.state]), [['Paged search', 'merged'], ['https://example.invalid/acme/acme-api/pull/10', null]]);
+  const host = document.createElement('div');
+  const page = renderRunPage(host, run, { status: 'ok', id: 'r' }, Date.now());
+  const items = byClass(page, 'rn-art');
+  assert.equal(items.length, 2);
+  assert.equal(byClass(items[0], 'rn-item-t')[0].textContent, 'Paged search ↗');
+  assert.equal(byClass(items[0], 'rn-item-arrow')[0].getAttribute('aria-hidden'), 'true');
+  assert.equal(byClass(items[0], 'rn-item-t')[0].href, url);
+  assert.deepEqual(byClass(items[0], 'rn-item-s').map((n) => n.textContent), ['· merged']);
+  assert.equal(byClass(items[0], 'rn-item-s')[0].dataset.state, 'merged');
+  // T16: `title ↗ · state · round n`, the state never runs into the round
+  assert.equal(items[0].textContent, 'prPaged search ↗· merged· round 2');
+  assert.equal(byClass(items[1], 'rn-item-t')[0].textContent, 'https://example.invalid/acme/acme-api/pull/10 ↗');
+  assert.equal(byClass(items[1], 'rn-item-s').length, 0, 'no state word for an unknown state');
+  assert.equal(items[1].textContent, 'prhttps://example.invalid/acme/acme-api/pull/10 ↗· round 3');
+}));
+
 test('the run page shows the fixture: head, stop reason, open need, timeline, artifact, raw folded away', () => withDom(() => {
   const host = document.createElement('div');
   const page = renderRunPage(host, RUN, { status: 'ok', id: 'readiness' }, RUN.updatedAt);
@@ -294,8 +318,11 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
   assert.deepEqual(rows.map((r) => r.children.map((c) => c.textContent)), [
     ['1', 'planner', '—', 'kept', 'a1b2c3d', '$0.90', '9m'],
     ['2', 'builder', 'A2.4', 'kept', 'b2c3d4e', '$1.60', '29m'],
-    ['3', 'builder', 'A2.5', 'no-task-done', '—', '$1.25', '29m'],
+    ['3', 'builder', 'A2.5', 'no task done', '—', '$1.25', '29m'],
   ]);
+  // T21: the outcome prints words, the protocol slug stays on the cell
+  assert.equal(rows[2].children[3].dataset.outcome, 'no-task-done');
+  assert.equal(rows[2].children[3].title, 'outcome: no-task-done');
   assert.equal(byClass(page, 'rn-tl')[0].children[0].children[0].children.some((th) => th.dataset.col === 'sessions'), false, 'no sessions header either');
   assert.equal(rows.some((r) => 'live' in r.dataset), false, 'a stopped run has no live round');
   // every cell names its column, so a phone can drop the minor ones (T22); task and duration stay as title
@@ -307,9 +334,9 @@ test('the run page shows the fixture: head, stop reason, open need, timeline, ar
   assert.equal(art.length, 1);
   const a = byClass(art[0], 'rn-item-t')[0];
   assert.equal(a.tagName, 'A');
-  assert.equal(a.textContent, 'Readiness (agent loop)');
+  assert.equal(a.textContent, 'Readiness (agent loop) ↗');
   assert.equal(a.href, 'https://example.invalid/acme/acme-api/pull/7');
-  assert.match(art[0].textContent, /^prReadiness \(agent loop\)round 2$/);
+  assert.match(art[0].textContent, /^prReadiness \(agent loop\) ↗· round 2$/);
   // the unknown event, folded away
   const raw = byClass(page, 'rn-raw')[0];
   assert.equal(raw.tagName, 'DETAILS');
@@ -350,7 +377,7 @@ test('the timeline: a live round runs to now, retries are counted, rounds sort b
   });
   assert.equal(stopOf({ state: 'running' }), null);
   assert.deepEqual(stopOf({ state: 'stopped', stop: { reason: 'error', rounds: 1 } }),
-    { reason: 'error', p: '1', why: 'error · after 1 round', text: 'stopped · error · after 1 round', title: 'stopped: error' });
+    { reason: 'error', p: '1', why: 'error · after 1 round', detail: null, text: 'stopped · error · after 1 round', title: 'stopped: error' });
   assert.equal(stopOf({ state: 'stopped' }).text, 'stopped · unknown');
   assert.equal(stopOf({ state: 'stopped', stop: { reason: 'budget', ts: 0, usd: 9.98 } }).title,
     'stopped at 1970-01-01T00:00:00.000Z · the loop reported $9.98');
@@ -391,7 +418,7 @@ test('a run made only of a posted run.stop: the id is the title, no null or unde
     const li = byClass(host, 'rn-row')[0];
     assert.doesNotMatch(li.textContent, /null|undefined|NaN/);
     assert.equal(byClass(li, 'rn-goal-t')[0].textContent, 'demo', 'the id stands in for the goal');
-    assert.equal(byClass(li, 'rn-goal-sub')[0].textContent, '', 'no id repeated under itself');
+    assert.equal(byClass(li, 'rn-goal-sub').length, 0, 'no id repeated under itself, no empty line (T54)');
     assert.equal(byClass(li, 'rn-round')[0].textContent, '—');
     assert.equal(byClass(byClass(li, 'rn-left')[0], 'rn-v')[0].textContent, reason);
     assert.equal(li.dataset.state, 'stopped');
@@ -536,6 +563,37 @@ test('charts on the page: one SVG line per metric between the needs and the time
   assert.doesNotMatch(SRC.slice(SRC.indexOf('score charts')), /animate|transition|requestAnimationFrame/);
 }));
 
+test('charts: a score with a max reads "3 of 10" and is drawn against 0..max; no max keeps its range (T19)', () => withDom(() => {
+  const base = { run: 'docs', state: 'running', rounds: [{ n: 1 }, { n: 2 }, { n: 3 }], needs: [], artifacts: [], raw: [], stop: null, cost: null, usage: null };
+  const run = {
+    ...base,
+    scores: {
+      tasks: [{ n: 1, value: 1, max: 8 }, { n: 2, value: 2, max: 10 }, { n: 3, value: 3, max: 10 }],
+      tests: [{ n: 1, value: 0.84 }, { n: 3, value: 0.94 }],
+    },
+    better: { tasks: 'higher', tests: 'higher' },
+  };
+  const [tasks, tests] = scoreCharts(run);
+  assert.equal(tasks.max, 10);
+  // y = 1 + (1 - v / 10) * 30: 3 of 10 sits at 70% down, not at the top as its own 1..3 range would put it
+  assert.deepEqual(tasks.points.map((p) => p.y), [28, 25, 22]);
+  assert.equal(tasks.title, 'tasks: 1 at round 1 to 3 of 10 at round 3, scope 8 → 10, higher is better');
+  assert.equal(tests.max, null);
+  assert.deepEqual(tests.points.map((p) => p.y), [31, 1]);
+  const page = renderRunPage(null, run, { status: 'ok' }, 0);
+  const sec = byClass(page, 'rn-charts-sec')[0];
+  assert.deepEqual(byClass(sec, 'rn-chart-v').map((n) => n.textContent), ['3 of 10 ↑', '0.94 ↑']);
+  assert.deepEqual(byClass(sec, 'rn-chart-r').map((n) => n.textContent), ['scope 8 → 10', '0.84–0.94']);
+  assert.doesNotMatch(sec.textContent, /1–3|0–3/);
+  // a max that never moved: no scope note, an empty range cell
+  const still = { ...run, scores: { tasks: [{ n: 1, value: 1, max: 10 }, { n: 3, value: 3, max: 10 }] } };
+  const p2 = renderRunPage(null, still, { status: 'ok' }, 0);
+  assert.equal(byClass(p2, 'rn-chart-r')[0].textContent, '');
+  // a value past its max widens the scale, the line stays in the box
+  const over = scoreCharts({ ...run, scores: { tasks: [{ n: 1, value: 2, max: 10 }, { n: 3, value: 12, max: 10 }] } })[0];
+  for (const p of over.points) assert.ok(p.y >= 0 && p.y <= CHART_H);
+}));
+
 test('charts: `better` decides which way is good; a worse latest value is p2', () => withDom(() => {
   // readiness: lint 14 -> 9 with lower better is good, tests 0.88 -> 0.93 higher is good
   const page = renderRunPage(null, RUN, { status: 'ok', id: 'readiness' }, RUN.updatedAt);
@@ -596,6 +654,38 @@ test('runs.css: a phone drops the rounds table\'s minor columns and keeps round,
   }
 });
 
+// reviews/13-designer.md Run page 6: at 390 the round title, T4's addition, did not show at all.
+test('T23: a phone keeps each round\'s title and task id on a second line under the round', () => withDom(() => {
+  assert.ok(!TL_NARROW_HIDDEN.includes('task'), 'the task cell is drawn on a phone');
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const phone = css.slice(css.indexOf('@media (width < 700px)'));
+  assert.doesNotMatch(phone, /\.rn-tl \[data-col="task"\]/, 'no phone rule hides the task cell');
+  // the rows are grid contents, the task cell spans the row as line two, in --text-2
+  assert.match(phone, /\.rn-tl \{ display: grid;[^}]*grid-auto-flow: row dense;/, "line one fills back in after the task cell");
+  assert.match(phone, /\.rn-tl tr \{ display: contents; \}/);
+  const cell = phone.match(/\.rn-tl td\[data-col="task"\] \{([^}]*)\}/)?.[1] ?? '';
+  assert.match(cell, /grid-column: 1 \/ -1;/);
+  assert.match(cell, /color: var\(--text-2\);/);
+  assert.match(cell, /white-space: normal;/, 'a long title wraps instead of being cut');
+  assert.match(phone, /\.rn-tl th\[data-col="task"\] \{ display: none; \}/, 'no TASK header over line one');
+  // the markup a phone draws: the title and task id in the row, an empty task cell flagged
+  const run = JSON.parse(JSON.stringify(foldRun([
+    { t: 'run.start', goal: 'g', ts: 1000 },
+    { t: 'round.start', n: 1, role: 'builder', task: 'T4', title: 'The run page shows them', ts: 2000 },
+    { t: 'round.end', n: 1, outcome: 'kept', commit: 'c3e4a5b0', usd: 3.68, ts: 3000 },
+    { t: 'round.start', n: 2, role: 'reviewer', ts: 4000 },
+  ].map((e) => parseLine(JSON.stringify({ v: 1, run: 'demo', ...e }))).map((r) => r.event))));
+  const rows = byClass(renderRunPage(document.createElement('div'), run, { status: 'ok', id: 'demo' }, 9000), 'rn-tl-row');
+  const task = byClass(rows[0], 'rn-tl-task')[0];
+  assert.equal(task.dataset.col, 'task');
+  assert.equal(task.textContent, 'The run page shows themT4');
+  assert.equal(task.dataset.none, undefined);
+  assert.equal(byClass(rows[1], 'rn-tl-task')[0].dataset.none, '', 'no title, no task: no second line');
+  // line one, in column order: round, role, outcome, commit, cost
+  const one = rows[0].children.filter((c) => !['task', ...TL_NARROW_HIDDEN].includes(c.dataset.col));
+  assert.deepEqual(one.map((c) => c.textContent), ['1', 'builder', 'kept', 'c3e4a5b', '$3.68']);
+}));
+
 // Seen at 390 (shots r8-T3/before page/custom-*-390.png): the sparklines took half the row
 // and the goal ended in "…" with no way to read it.
 test('T26: a narrow run page stretches the score line to the row and wraps the goal whole', () => withDom(() => {
@@ -622,16 +712,44 @@ test('T27: the run page stops at a reading width and its score line fills the ro
   const tokens = fs.readFileSync(path.join(ROOT, 'public/css/tokens.css'), 'utf8');
   const px = Number(tokens.match(/--read-max: (\d+)px;/)?.[1]);
   assert.ok(px >= 960 && px <= 1100, `a reading width near 1000 px, got ${px}`);
+  const runsMax = Number(tokens.match(/--runs-max: (\d+)px;/)?.[1]);
+  assert.ok(runsMax >= px && runsMax <= 1280, `the Runs frame stops near the list's width at 1440, got ${runsMax}`);
   const wide = css.slice(0, css.indexOf('@media (max-width: 1024px)'));
-  assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--read-max\);/);
-  // name, line, value, range: the line is the one flexible column, and the svg takes it
-  assert.match(wide, /\.rn-chart \{[^}]*grid-template-columns: minmax\(8ch, 16ch\) minmax\(0, 1fr\) 10ch minmax\(8ch, auto\);/);
+  assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--runs-max\);/);
+  // review n5: the value starts right after the line, and a wrap-up round adds no room after it
+  assert.match(wide, /\.rn-chart-v \{[^}]*text-align: left;/);
+  assert.deepEqual(chartDomain({ rounds: [{ n: 1 }, { n: 2 }, { n: 3, wrapup: true }], scores: { t: [{ n: 1, value: 1 }, { n: 2, value: 2 }] } }), { lo: 1, hi: 2 });
+  // name, line, value, range: the svg fills its column (T57 caps that column at half the row)
+  assert.match(wide, /\.rn-chart \{[^}]*grid-template-columns: minmax\(8ch, 16ch\) minmax\(0, 50%\) minmax\(10ch, max-content\) minmax\(8ch, 1fr\);/);
   assert.match(wide, /\.rn-chart-svg \{ width: 100%; \}/);
   // the minor columns stay narrow
   const task = Number(wide.match(/\.rn-tl-task \{ max-width: (\d+)ch;/)?.[1]);
   assert.ok(task > 0 && task <= 24, `task column at most 24ch, got ${task}`);
   assert.match(wide, /\.rn-tl td\.rn-tl-ses \{[^}]*white-space: normal;/);
   assert.match(wide, /\.rn-tl-s \{ white-space: nowrap; \}/);
+});
+
+// Designer r10 idea 5: at 1440 the score line ran 600 px with no axes and the rounds table spread
+// outcome and cost to the page edge, far from the round they belong to.
+test('T57: the score line is at most half the row and the rounds table is content-sized, at most 900 px', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const tokens = fs.readFileSync(path.join(ROOT, 'public/css/tokens.css'), 'utf8');
+  const wide = css.slice(0, css.indexOf('@media (max-width: 1024px)'));
+  const cols = wide.match(/\.rn-chart \{[^}]*grid-template-columns:\s*([^;]+);/)[1].trim().match(/[a-z-]+\([^)]*\)|\S+/g);
+  assert.equal(cols.length, 4, 'name, line, value, range');
+  const cap = Number(cols[1].match(/^minmax\(0, (\d+)%\)$/)?.[1]);
+  assert.ok(cap > 0 && cap <= 50, `the line's column is at most 50 % of the row, got ${cols[1]}`);
+  assert.match(cols[2], /max-content/, 'the value sits right after the line, not mid-row');
+  assert.equal(cols.filter((c) => /fr\b/.test(c)).length, 1, 'the range takes what is left');
+  assert.match(cols[3], /1fr/);
+  // the table: content-sized columns, capped by a token near 900 px, never wider than the page
+  const tl = wide.match(/\.rn-tl \{([^}]*)\}/)[1];
+  assert.match(tl, /width: auto;/);
+  assert.doesNotMatch(tl, /(^|[^-])width: 100%/);
+  assert.match(tl, /max-width: min\(100%, var\(--table-max\)\);/);
+  const px = Number(tokens.match(/--table-max: (\d+)px;/)?.[1]);
+  assert.ok(px >= 860 && px <= 940, `a table width near 900 px, got ${px}`);
+  assert.ok(px < Number(tokens.match(/--read-max: (\d+)px;/)?.[1]), 'inside the page\'s reading width');
 });
 
 test('T25: a label and its value share one cell: "stop budget", "cost $9.98"', () => withDom(() => {
@@ -739,10 +857,11 @@ test('T31: the list columns have fixed widths, the need sits under the goal, the
   assert.match(byClass(line, 'rn-needs-t')[0].textContent, /^decision: Drop the v1 export endpoint/);
   assert.equal(byClass(row, 'rn-cost')[0], row.children.at(-1), 'cost closes the row');
   // the run page: its frame stops at the token the page does
-  assert.match(wide, /#view-runs > \.panel\[data-page\] \{ max-width: var\(--read-max\); \}/);
-  assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--read-max\);/);
+  // review n5: the list's frame and the run page's are one width, so opening a run does not jump
+  assert.match(wide, /#view-runs > \.panel \{ max-width: var\(--runs-max\); \}/);
+  assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--runs-max\);/);
   const tokens = css.match(/max-width: var\(--[a-z-]+\)/g).filter((x) => !/100%/.test(x));
-  assert.deepEqual([...new Set(tokens)], ['max-width: var(--read-max)'], 'one width token on the page and its frame');
+  assert.deepEqual([...new Set(tokens)], ['max-width: var(--runs-max)'], 'one width token on the page and its frame');
 }));
 
 test('T28: an open need gives the needs.ack payload and its link; a closed or waiting one no ack', () => {
@@ -921,7 +1040,7 @@ test('a run stopped with usd 2 and no cost event shows $2 on its row and page, m
     { t: 'run.stop', reason: 'budget', rounds: 1, usd: 2 },
   ].map((e) => parseLine(JSON.stringify({ v: 1, run: 'demo', ...e }))).map((r) => r.event);
   const run = JSON.parse(JSON.stringify(foldRun(events)));
-  assert.deepEqual(run.cost, { usd: 0, rounds: 0 });
+  assert.deepEqual(run.cost, { usd: null, rounds: 0, from: null });
   const row = JSON.parse(JSON.stringify(summarize(run)));
   assert.equal(row.stopUsd, 2);
   const host = document.createElement('div');
@@ -939,4 +1058,248 @@ test('a run stopped with usd 2 and no cost event shows $2 on its row and page, m
   assert.deepEqual(runCostOf({ cost: { usd: 3.75, rounds: 3 }, stopUsd: 9 }).text, '$3.75');
   assert.equal(runCostOf({ cost: { usd: 3.75, rounds: 3 }, stopUsd: 9 }).loop, false);
   assert.equal(runCostOf({ cost: { usd: 0, rounds: 0 }, stopUsd: null }).text, '$0.00');
+  // T6: no cost events, the rounds' usd summed: that sum, not the stop's figure
+  const fromRounds = runCostOf({ cost: { usd: 1.75, rounds: 0, from: 'rounds' }, stopUsd: 9 });
+  assert.equal(fromRounds.text, '$1.75');
+  assert.equal(fromRounds.loop, false);
+  assert.match(fromRounds.title, /rounds' usd/);
+  assert.equal(runCostOf({ cost: { usd: null, rounds: 0, from: null }, stopUsd: null }).text, '—');
+}));
+
+test('T4: the run page shows round titles, session links, the stop detail and the wrap-up round', () => withDom(() => {
+  const events = [
+    { t: 'run.start', goal: 'Build it', budget: { rounds: 2 }, ts: 1000 },
+    { t: 'round.start', n: 1, role: 'builder', task: 'T4', title: 'The run page shows them', session: 'aaaaaaaa-1111-2222-3333-444444444444', ts: 2000 },
+    { t: 'round.end', n: 1, outcome: 'done', usd: 0.5, ts: 3000 },
+    { t: 'round.start', n: 2, role: 'builder', task: 'T5', session: 'bbbbbbbb-1111-2222-3333-444444444444', ts: 4000 },
+    { t: 'round.end', n: 2, outcome: 'done', ts: 5000 },
+    { t: 'run.stop', reason: 'rounds', rounds: 2, detail: 'the cap of 2 rounds was reached', ts: 6000 },
+    { t: 'round.start', n: 3, role: 'operator', task: 'wrap-up', wrapup: true, ts: 7000 },
+    { t: 'round.end', n: 3, outcome: 'done', ts: 8000 },
+  ].map((e) => parseLine(JSON.stringify({ v: 1, run: 'demo', ...e }))).map((r) => r.event);
+  const run = JSON.parse(JSON.stringify(foldRun(events)));
+  // the route's bind: round 1's session is one the board saw under a name, round 2's only an id
+  run.rounds[0].sessions = [{ sessionId: 'aaaaaaaa-1111-2222-3333-444444444444', name: 'builder-a-run', how: 'id' }];
+  run.rounds[1].sessions = [{ sessionId: 'bbbbbbbb-1111-2222-3333-444444444444', how: 'id' }];
+  assert.equal(run.state, 'stopped');
+
+  const sum = runSummaryOf(run);
+  assert.equal(sum.round, 2, 'the wrap-up is not the head round');
+  assert.equal(sum.rounds, 2);
+  assert.equal(roundText(sum), '2 / 2');
+
+  const page = renderRunPage(null, run, { status: 'ok', id: 'demo' }, 9000);
+  const t = page.textContent;
+  assert.doesNotMatch(t, /3 \/ 2|3 of 2/, 'never more rounds than the cap');
+  assert.doesNotMatch(t, /null|undefined|NaN/);
+
+  const rows = byClass(page, 'rn-tl-row');
+  assert.equal(rows.length, 3);
+  // the title, the task id muted beside it; a round without a title keeps its task
+  assert.equal(byClass(rows[0], 'rn-tl-title')[0].textContent, 'The run page shows them');
+  assert.equal(byClass(rows[0], 'rn-tl-tid')[0].textContent, 'T4');
+  assert.match(rows[0].title, /^The run page shows them · task: T4/);
+  assert.equal(byClass(rows[1], 'rn-tl-task')[0].textContent, 'T5');
+  assert.equal(byClass(rows[1], 'rn-tl-title').length, 0);
+  // an unknown round cost is a dash, a known one money
+  assert.equal(byClass(rows[0], 'rn-tl-cost')[0].textContent, '$0.50');
+  assert.equal(byClass(rows[1], 'rn-tl-cost')[0].textContent, '—');
+  // the wrap-up round
+  assert.equal(rows[2].dataset.wrapup, '');
+  assert.equal(byClass(rows[2], 'rn-tl-n')[0].textContent, 'wrap-up');
+  assert.match(byClass(rows[2], 'rn-tl-n')[0].title, /not counted/);
+  // T21: `wrap-up` once in the row, in the ROUND cell; the task cell is empty, the tooltip has no task
+  assert.equal(rows[2].textContent.match(/wrap-up/g).length, 1);
+  assert.equal(byClass(rows[2], 'rn-tl-task')[0].textContent, '');
+  assert.doesNotMatch(rows[2].title, /task: wrap-up/);
+
+  // a named session links to its sheet; an id-only one is plain text
+  const linked = byClass(rows[0], 'rn-tl-s')[0];
+  assert.equal(linked.tagName.toLowerCase(), 'a');
+  assert.equal(linked.href, '#session=builder-a-run');
+  assert.equal(parseHash(linked.href, { localId: 'builder-a' }).sel, 'builder-a/builder-a-run', 'the router opens that session');
+  const plain = byClass(rows[1], 'rn-tl-s')[0];
+  assert.equal(plain.tagName.toLowerCase(), 'span');
+  assert.equal(plain.href, undefined);
+  assert.equal(plain.textContent, 'bbbbbbbb —');
+
+  // T22: the link is marked: a ↗ inside the session anchor, and the role links to the same session
+  assert.equal(byClass(linked, 'rn-item-arrow')[0].textContent, ' ↗');
+  assert.equal(byClass(linked, 'rn-item-arrow')[0].getAttribute('aria-hidden'), 'true');
+  const role = byClass(rows[0], 'rn-tl-role')[0];
+  const roleLink = byClass(role, 'rn-tl-role-a')[0];
+  assert.equal(roleLink.tagName.toLowerCase(), 'a');
+  assert.equal(roleLink.href, '#session=builder-a-run');
+  assert.match(roleLink.textContent, / ↗$/);
+  assert.equal(byClass(rows[1], 'rn-tl-role-a').length, 0, 'a session known only by its id links nothing');
+  assert.equal(byClass(rows[1], 'rn-item-arrow').length, 0);
+
+  // the stop's detail on its own line under the reason
+  const state = byClass(page, 'rn-state')[0];
+  assert.equal(state.dataset.detail, '');
+  assert.equal(byClass(state, 'rn-state-why')[0].textContent, '· rounds · after 2 rounds');
+  assert.equal(byClass(state, 'rn-state-detail')[0].textContent, 'the cap of 2 rounds was reached');
+  assert.match(state.title, /the cap of 2 rounds was reached/);
+  // no detail, no line
+  const plainStop = renderRunPage(null, { ...run, stop: { ...run.stop, detail: null } }, { status: 'ok' }, 9000);
+  assert.equal(byClass(plainStop, 'rn-state-detail').length, 0);
+}));
+
+test('T4: a session name the router would refuse gets no link', () => {
+  const r = { sessions: [{ sessionId: 'x1', name: 'a/b' }, { sessionId: 'x2', name: 'ok\u0007' }, { sessionId: 'x3', name: 'web 1' }] };
+  const out = roundSessions(r);
+  assert.deepEqual(out.map((s) => s.href), [null, null, '#session=web%201']);
+});
+
+test('T4: the wrap-up and title rules have their CSS', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  assert.match(css, /\.rn-state-detail \{[^}]*flex-basis: 100%/);
+  assert.match(css, /\.rn-tl-tid \{[^}]*color: var\(--text-3\)/);
+});
+
+// runs-n5 T5: the `tasks` score's max drives "44 of 63", and a moved max shows as scope (research Q18).
+const SCOPED = (() => {
+  const lines = [
+    { t: 'run.start', goal: 'Build the night', budget: { rounds: 80 } },
+    { t: 'round.start', n: 1, role: 'planner' },
+    { t: 'score', n: 1, name: 'tasks', value: 0, max: 12 },
+    { t: 'round.start', n: 2, role: 'builder' },
+    { t: 'score', n: 2, name: 'tasks', value: 30, max: 40 },
+    { t: 'round.start', n: 3, role: 'builder' },
+    { t: 'score', n: 3, name: 'tasks', value: 44, max: 63 },
+    { t: 'score', n: 3, name: 'tests', value: 0.9 },
+  ];
+  const events = lines.map((o, i) => parseLine(JSON.stringify({ v: 1, run: 'scoped', ts: 1_800_000_000_000 + i * MIN, ...o })))
+    .filter((r) => r.ok).map((r) => r.event);
+  return JSON.parse(JSON.stringify(foldRun(events)));
+})();
+
+test('T5: the summary gives a score its latest and first max; "44 of 63" and the scope line in the list and on the page', () => withDom(() => {
+  const row = JSON.parse(JSON.stringify(summarize(SCOPED)));
+  assert.deepEqual([row.scores.tasks.value, row.scores.tasks.max, row.scores.tasks.firstMax], [44, 63, 12]);
+  assert.deepEqual([row.scores.tests.max, row.scores.tests.firstMax], [null, null], 'no max given: none');
+  const [tasks, tests] = scoreList(row.scores);
+  assert.equal(tasks.text, '44 of 63');
+  assert.equal(tasks.scope, 'scope 12 → 63');
+  assert.match(tasks.title, /tasks: 44 of 63 \(was 30, better\), scope 12 → 63$/);
+  assert.equal(tests.text, '0.9');
+  assert.equal(tests.scope, null);
+  // the page builds its summary from the fold itself: the same numbers
+  assert.deepEqual(runSummaryOf(SCOPED).scores.tasks, row.scores.tasks);
+  const host = document.createElement('div');
+  renderRuns(host, [row], { status: 'ok' }, row.updatedAt);
+  const chip = byClass(host, 'rn-score')[0];
+  assert.equal(byClass(chip, 'rn-score-v')[0].textContent, '44 of 63');
+  assert.equal(byClass(host, 'rn-score-scope')[0].textContent, 'scope 12 → 63', 'in the scores cell');
+  const page = renderRunPage(document.createElement('div'), SCOPED, { status: 'ok', id: 'scoped' }, row.updatedAt);
+  const pchip = byClass(page, 'rn-score')[0];
+  assert.equal(byClass(pchip, 'rn-score-v')[0].textContent, '44 of 63');
+  assert.equal(byClass(page, 'rn-score-scope')[0].textContent, 'scope 12 → 63');
+}));
+
+// runs-n5 T20 (review 13-designer, Run page 2 + Runs list 1): the scope note stays inline in the
+// tasks chip, so the stat line is one line; a cell too narrow wraps in the chip, the row top-aligned.
+test('T20: the scope note sits inside the tasks chip, never on a line of its own', () => withDom(() => {
+  const row = runSummaryOf(SCOPED);
+  const host = document.createElement('div');
+  renderRuns(host, [row], { status: 'ok' }, row.updatedAt);
+  const page = renderRunPage(document.createElement('div'), SCOPED, { status: 'ok', id: 'scoped' }, row.updatedAt);
+  for (const root of [host, page]) {
+    const scope = byClass(root, 'rn-score-scope');
+    assert.equal(scope.length, 1);
+    const chip = scope[0].parent;
+    assert.ok(chip.classList.contains('rn-score'), 'the scope is a child of the chip');
+    assert.equal(byClass(chip, 'rn-score-k')[0].textContent, 'tasks');
+    assert.equal(byClass(chip, 'rn-score-v')[0].textContent, '44 of 63');
+    assert.equal(chip.children.at(-1), scope[0], 'after the value and the mark');
+  }
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  const rule = css.match(/\.rn-score-scope \{([^}]*)\}/)[1];
+  assert.doesNotMatch(rule, /flex: 1 1 100%|display: block|flex-basis/, 'no block-level break');
+  assert.match(rule, /--text-3/, 'muted');
+  assert.match(css, /\.rn-score-scope::before \{ content: "· "; \}/);
+  assert.doesNotMatch(css, /\.rn-scores:has\(\.rn-score-scope\) \{ flex-wrap/, 'the cell does not wrap the scope to its own line');
+  assert.match(css, /\.rn-row:has\(\.rn-score-scope\) \{ align-items: start; \}/, 'a wrapped row is top-aligned');
+}));
+
+test('T5: a max that never moved prints no scope line', () => {
+  const [s] = scoreList({ tasks: { n: 2, value: 7, prev: 5, better: 'higher', max: 10, firstMax: 10 } });
+  assert.equal(s.text, '7 of 10');
+  assert.equal(s.scope, null);
+  const [old] = scoreList({ tasks: { n: 2, value: 7, prev: 5, better: 'higher' } });
+  assert.equal(old.text, '7', 'a summary without max (an older board) reads as before');
+});
+
+// runs-n5 T21 (reviews/13-designer.md Run page 3 + 4): rounds table words.
+test('T21: outcome slugs print as words, plain words stay', () => {
+  assert.equal(outcomeText('no-task-done'), 'no task done');
+  assert.equal(outcomeText('still-red'), 'still red');
+  assert.equal(outcomeText('timed_out'), 'timed out');
+  assert.equal(outcomeText('kept'), 'kept');
+  assert.equal(outcomeText(''), null);
+  assert.equal(outcomeText(null), null);
+});
+
+test('T21: a titled wrap-up round says wrap-up only in the ROUND cell, the title stays', () => withDom(() => {
+  const events = [
+    { t: 'run.start', goal: 'Build it', budget: { rounds: 1 }, ts: 1000 },
+    { t: 'round.start', n: 1, role: 'builder', task: 'T3', ts: 2000 },
+    { t: 'round.end', n: 1, outcome: 'no-task-done', ts: 3000 },
+    { t: 'run.stop', reason: 'rounds', rounds: 1, ts: 4000 },
+    { t: 'round.start', n: 2, role: 'operator', task: 'wrap-up', title: 'Review the night and write the report', wrapup: true, ts: 5000 },
+    { t: 'round.end', n: 2, outcome: 'reported', ts: 6000 },
+  ].map((e) => parseLine(JSON.stringify({ v: 1, run: 'demo', ...e }))).map((r) => r.event);
+  const page = renderRunPage(null, JSON.parse(JSON.stringify(foldRun(events))), { status: 'ok', id: 'demo' }, 9000);
+  const rows = byClass(page, 'rn-tl-row');
+  assert.equal(rows[1].textContent.match(/wrap-up/g).length, 1);
+  assert.equal(byClass(rows[1], 'rn-tl-n')[0].textContent, 'wrap-up');
+  assert.equal(byClass(rows[1], 'rn-tl-title')[0].textContent, 'Review the night and write the report');
+  assert.equal(byClass(rows[1], 'rn-tl-tid').length, 0);
+  assert.match(page.textContent, /no task done/);
+  assert.doesNotMatch(page.textContent, /no-task-done/);
+}));
+
+test('T21: the wrap-up ROUND cell is left-aligned in --text-2', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  assert.match(css, /\.rn-tl-row\[data-wrapup\] \.rn-tl-n \{[^}]*color: var\(--text-2\);[^}]*text-align: left/);
+});
+
+// n3 T50 + review 10 idea 4: a stuck run says so in its state cell, a run with no usage shows one dash.
+test('T54: a stuck list row reads ▲ STUCK in p2 with the reason under it; no usage is one muted —; no empty cell', () => withDom(() => {
+  const stuck = { ...LIVE, run: 'loopy', needs: [], stuck: { rule: 'same-task', reason: 'task T7 failed in rounds 4, 5' } };
+  const bare = { run: 'fresh', state: 'running', usage: null, needs: [] };
+  const host = document.createElement('div');
+  renderRuns(host, [stuck, bare], { status: 'ok' }, FIX.updatedAt);
+  const [row, fresh] = byClass(host, 'rn-row');
+  const st = byClass(row, 'rn-state')[0];
+  assert.equal(st.dataset.p, '2');
+  assert.match(st.textContent, /^▲stuck/);
+  assert.equal(byClass(st, 'rn-state-t')[0].textContent.toUpperCase(), 'STUCK');
+  assert.equal(byClass(st, 'rn-state-t').length, 1, 'no RUNNING beside it');
+  assert.equal(byClass(st, 'rn-state-sub')[0].textContent, 'task T7 failed in rounds 4, 5');
+  assert.match(st.title, /stuck: task T7 failed in rounds 4, 5/);
+  // the run page keeps the lamp, the state word and the stuck icon
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
+  assert.match(css, /\.rn-state\[data-p="2"\] \.rn-state-t \{ color: var\(--p2\); \}/);
+  assert.match(css, /\.rn-state-sub \{[^}]*contain: inline-size;[^}]*color: var\(--text-3\)/);
+  // review n5: the reason wraps whole, never "task T2 faile…"
+  const sub = css.match(/\.rn-state-sub \{[^}]*\}/)[0];
+  assert.match(sub, /white-space: normal;/);
+  assert.doesNotMatch(sub, /text-overflow: ellipsis/);
+  // no usage: one dash, no bar tracks
+  const burn = byClass(fresh, 'rn-burn')[0];
+  assert.equal(burn.textContent, '—');
+  assert.equal(byClass(burn, 'rn-bar').length, 0);
+  assert.equal(burn.title, 'no usage reported');
+  assert.match(css, /\.rn-burn\[data-none\] \{ color: var\(--text-3\); \}/);
+  const narrow = css.slice(css.indexOf('@media (max-width: 1024px)'));
+  assert.match(narrow, /\.rn-burn\[data-none\] \{ display: none; \}/, 'no line of its own on a phone');
+  // a partial usage keeps both meters, the unknown one reading —
+  renderRuns(host, [{ ...bare, usage: { sevenDayPct: 30 } }], { status: 'ok' }, FIX.updatedAt);
+  assert.equal(byClass(host, 'rn-bar').length, 2);
+  // no empty cell in either row
+  for (const r of [row, fresh]) {
+    for (const cell of r.children) assert.notEqual(cell.textContent.trim(), '', `${cell.className} is empty`);
+    for (const sub of byClass(r, 'rn-goal-sub')) assert.notEqual(sub.textContent, '', 'no empty goal line');
+  }
 }));

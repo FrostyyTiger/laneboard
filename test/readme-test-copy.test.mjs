@@ -42,6 +42,22 @@ test('the section says how to point the CLI at the copy and how to stop it', () 
   assert.match(section, /Ctrl-C/);
 });
 
+// runs T46 (night 4 item 8): the safe recipe comes first, backgrounded with
+// `kill $!`, the variables are explained as the reason, and shoot.mjs is named.
+test('the section leads with the safe backgrounded recipe and names shoot.mjs (runs T46)', () => {
+  const section = testCopySection();
+  const block = section.match(/```bash\n([\s\S]*?)```/)?.[1] ?? '';
+  assert.ok(section.indexOf('```bash') < section.indexOf('AUDIT_LOCKED'), 'the recipe before the explanation');
+  assert.match(section, /`ss -ltn`/);
+  assert.match(block, /node server\/index\.mjs &\n/);
+  assert.match(block, /LANEBOARD_URL=http:\/\/127\.0\.0\.1:7788 node bin\/laneboard ls/);
+  assert.match(block, /kill \$!; rm -r "\$tmp"/);
+  assert.ok(!section.includes('All five variables are needed'), 'no correction-style sentence');
+  assert.match(section.replace(/\s+/g, ' '), /The state dir and audit file point at the temp dir so the copy never opens the real audit log/);
+  assert.match(section, /docs\/plans\/runs\/loop\/shoot\.mjs/);
+  assert.ok(fs.existsSync(path.join(ROOT, 'docs/plans/runs/loop/shoot.mjs')), 'shoot.mjs exists');
+});
+
 test('every env var the section names is documented and read by the code', () => {
   const names = [...new Set(testCopySection().match(/LANEBOARD_[A-Z0-9_]+/g))];
   assert.ok(names.length >= 6, names.join(' '));
@@ -73,4 +89,22 @@ test('the section says the state dir must be private and names the code a wide o
   assert.match(section, /state dir must be a private directory \(mode 700/);
   assert.match(section, /`mktemp -d` makes one, a plain `mkdir -p/);
   assert.match(section, /AUDIT_UNSAFE_DIR/);
+});
+
+test('README says where the builder id, code and Map title come from with no fleet block (runs T38)', () => {
+  const readme = read('README.md');
+  assert.match(readme, /With no `fleet` block, names come from the machine's host name/);
+  for (const v of ['LANEBOARD_FLEET_ID', 'LANEBOARD_FLEET_CODE', 'LANEBOARD_HOSTNAME']) {
+    assert.ok(readme.includes(v), `README names ${v}`);
+    assert.ok(read('docs/config.md').includes(v), `docs/config.md documents ${v}`);
+  }
+});
+
+test('README says the no-config startup WARN about fleet.ingressPort is expected (runs T39)', () => {
+  const readme = read('README.md');
+  assert.match(readme, /On a start with no config the first log line is a WARN, `fleet auth: no\s+fleet\.ingressPort/);
+  assert.match(readme, /That is expected: with no `fleet` block\s+every request counts as local/);
+  const src = read('server/boot/common.mjs');
+  assert.ok(src.includes("log.warn(`fleet auth: ${w}`)"), 'the boot path logs the warning with the fleet auth: prefix');
+  assert.ok(src.includes('no fleet.ingressPort (no fleet block)'), 'the warning text the README quotes');
 });

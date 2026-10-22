@@ -1,5 +1,6 @@
 // The command palette (fleet plan §4 2.5, task D8): a native <dialog class="pal">
-// with a combobox input and a listbox of typed rows (HOST LANE PKG NODE ACT VIEW).
+// with a combobox input and a listbox of typed rows (HOST LANE PKG NODE ACT VIEW;
+// the icon is the one kind marker, the type sits in data-type, runs n5 T52).
 //
 // Opens with ⌘K, Ctrl-K outside a terminal, or `:` (which presets `>`); the
 // keys live in ui/hotkeys.js. Prefixes `h:`/`host:`, `l:`/`lane:`,
@@ -26,10 +27,9 @@ import { currentRoute, navigate } from '../core/router.js';
 import { act, tierOf } from '../core/actions.js';
 import { icon } from '../core/icons.js';
 import * as commands from '../core/commands.js';
-import { plate } from './components.js';
 import { confirmAction, DESTRUCTIVE } from './confirm.js';
 import { toast } from './toast.js';
-import { rankItems, parsePrefix, CAP } from './fuzzy.js';
+import { rankItems, parsePrefix, fuzzyRanges, CAP } from './fuzzy.js';
 import { attentionKeys, keysFor } from './hotkeys.js';
 
 export const RECENT_KEY = 'lb.pal.recent';
@@ -334,27 +334,81 @@ function build() {
   return { dlg, input, list, rows: [], active: -1, ctx: {}, items: [] };
 }
 
-function rowNode(it, i) {
+/** `text` cut at `ranges` into [{text, hit}] pieces, in order, none empty. Pure. */
+export function markPieces(text, ranges) {
+  const str = String(text ?? '');
+  const out = [];
+  let at = 0;
+  for (const [a, b] of Array.isArray(ranges) ? ranges : []) {
+    if (!(a >= at && b > a && b <= str.length)) continue;
+    if (a > at) out.push({ text: str.slice(at, a), hit: false });
+    out.push({ text: str.slice(a, b), hit: true });
+    at = b;
+  }
+  if (at < str.length || !out.length) out.push({ text: str.slice(at), hit: false });
+  return out;
+}
+
+/**
+ * What a row shows for query `q` (runs n5 T52): one kind marker (the icon;
+ * the type stays on the row as data, never a second chip), the label and
+ * the sub as marked pieces (the match goes where rankItems scored it: the
+ * label, else the sub), and the hint only when there is one. An empty sub
+ * or hint is no cell at all. Pure.
+ */
+export function rowModel(it, q = '') {
+  const { text } = parsePrefix(q);
+  const label = String(it?.label ?? '');
+  const sub = String(it?.sub ?? '');
+  const inLabel = text ? fuzzyRanges(text, label) : null;
+  const inSub = text && !inLabel && sub ? fuzzyRanges(text, sub) : null;
+  return {
+    type: String(it?.type ?? ''),
+    icon: it?.icon ?? 'command',
+    label: markPieces(label, inLabel),
+    sub: sub ? markPieces(sub, inSub) : null,
+    hint: it?.hint ? String(it.hint) : null,
+  };
+}
+
+function piecesInto(el, pieces) {
   const doc = globalThis.document;
+  if (pieces.length === 1 && !pieces[0].hit) { el.textContent = pieces[0].text; return el; }
+  for (const p of pieces) {
+    const n = doc.createElement(p.hit ? 'mark' : 'span');
+    if (p.hit) n.className = 'pal-m';
+    n.textContent = p.text;
+    el.append(n);
+  }
+  return el;
+}
+
+function rowNode(it, i, q) {
+  const doc = globalThis.document;
+  const m = rowModel(it, q);
   const li = doc.createElement('li');
   li.setAttribute('role', 'option');
   li.id = `pal-o-${i}`;
   li.dataset.i = String(i);
+  li.dataset.type = m.type;
   li.setAttribute('aria-selected', 'false');
   li.className = 'pal-o';
-  const ic = icon(it.icon ?? 'command', { size: 's' });
-  const tag = plate(it.type);
-  tag.classList.add('pal-type');
+  const ic = icon(m.icon, { size: 's', cls: 'pal-i' });
   const label = doc.createElement('span');
   label.className = 'pal-l';
-  label.textContent = it.label;
-  const sub = doc.createElement('span');
-  sub.className = 'pal-s';
-  sub.textContent = it.sub ?? '';
-  const hint = doc.createElement('kbd');
-  hint.className = 'pal-k';
-  hint.textContent = it.hint ?? '';
-  li.append(ic, tag, label, sub, hint);
+  piecesInto(label, m.label);
+  li.append(ic, label);
+  if (m.sub) {
+    const sub = doc.createElement('span');
+    sub.className = 'pal-s';
+    li.append(piecesInto(sub, m.sub));
+  }
+  if (m.hint) {
+    const hint = doc.createElement('kbd');
+    hint.className = 'pal-k';
+    hint.textContent = m.hint;
+    li.append(hint);
+  }
   return li;
 }
 
@@ -386,7 +440,7 @@ function refresh() {
   });
   ui.list.textContent = '';
   ui.active = -1;
-  ui.rows.forEach((it, i) => ui.list.append(rowNode(it, i)));
+  ui.rows.forEach((it, i) => ui.list.append(rowNode(it, i, ui.input.value)));
   if (!ui.rows.length) {
     const li = globalThis.document.createElement('li');
     li.className = 'pal-empty';

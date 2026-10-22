@@ -98,6 +98,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* T27: the mark word after the shape, as the Board's NEEDS YOU list (rail.css .wd) */
+.inbox-wd {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  color: var(--text-2);
+}
+.inbox-wd[data-p="1"] { color: var(--p1); }
+.inbox-wd[data-p="2"] { color: var(--p2); }
+.inbox-sum--fallback { color: var(--text-3); }
 .inbox-timer,
 .inbox-status {
   flex: none;
@@ -625,6 +636,8 @@
     -webkit-line-clamp: 3;
     line-clamp: 3;
   }
+  .inbox-row[data-group="runprs"] .inbox-link-w { display: none; }
+  .inbox-row[data-group="runprs"] .inbox-link { padding: 0 var(--sp-1); }
   .rq-row { grid-template-columns: minmax(0, 1fr); }
   .rq-acts { grid-column: 1; grid-row: auto; flex-wrap: wrap; margin-top: var(--sp-1); }
   .rq-pull-l { grid-template-columns: minmax(0, 1fr) auto; }

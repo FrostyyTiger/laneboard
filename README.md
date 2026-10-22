@@ -20,7 +20,7 @@ signed, audited requests. Without one, nothing changes. See
 | **Inbox** `#/inbox` | What is waiting for me? Pending approvals, lanes that need you, lanes ready for review, paused and stuck lanes, with keys to approve, deny, release and pause. |
 | **Packages** `#/packages` | What state is each package in? Its CI on main, untested commits, the lanes and PRs touching it, predicted conflicts and plan status. |
 | **Morning** `#/morning` | Over a window (12 h / tonight / 24 h / 7 d): what needs a human (`danger` first), what finished (with its PR), review waits, stuck incidents, what it cost. |
-| **Runs** `#/runs` | Is tonight's unattended loop getting anywhere? Each run's state, round, latest score and its trend, budget burn, time left and open needs; a run's page (`#/runs?run=<id>`) has the timeline of rounds, a chart per score, the stop reason and the PRs. Fed by run files a loop writes, see [docs/runs.md](docs/runs.md). |
+| **Runs** `#/runs` | Is tonight's unattended loop getting anywhere? Each run's state, round, latest score and its trend, budget burn, time left and open needs; a run's page (`#/runs?run=<id>`, or `#/runs/<id>`) has the timeline of rounds, a chart per score, the stop reason and the PRs. Fed by run files a loop writes, see [docs/runs.md](docs/runs.md). |
 | **Credit** `#/credit` | Where the 5 h and 7 d rate-limit windows have been, per account, and what each builder and lane spent. |
 | **Box** `#/box` | The machine and its health, a live stack next to it and its guard, the CI queue, the agent slots; on a hub, every builder's link, version, latency and health. |
 | **Audit** `#/audit` | What was done, by whom? The hash-chained action log, and on a hub each relayed action's reconciliation with the builder's own log. |
@@ -43,6 +43,11 @@ npm test
 node server/index.mjs     # http://127.0.0.1:7777
 ```
 
+On a start with no config the first log line is a WARN, `fleet auth: no
+fleet.ingressPort (no fleet block) …`. That is expected: with no `fleet` block
+every request counts as local, and the line says so. It goes away once
+there is a `fleet` block (its ingress port defaults to `7778`, `docs/config.md`).
+
 Install it as a `systemd --user` service, put HTTPS in front of it and add it
 to a phone's home screen: see **[docs/install.md](docs/install.md)**.
 
@@ -53,6 +58,13 @@ environment variable — **`docs/config.md`** documents all of them. With no
 config file at all laneboard is a board of every session and every worktree on
 the machine, with lane slots, the guard and CI all off.
 
+With no `fleet` block, names come from the machine's host name: the builder id
+is the host name sanitized (lowercase, other characters turned into `-`, cut to
+24, e.g. `builder-a`), its code is derived from that id (`BA`), and the Map's
+title is the host name unless the topology file sets `title`. Set
+`LANEBOARD_FLEET_ID`, `LANEBOARD_FLEET_CODE` and `LANEBOARD_HOSTNAME` to choose
+them (see `docs/config.md`).
+
 ```json
 {
   "publicUrl": "https://board.example.invalid:8443",
@@ -62,26 +74,34 @@ the machine, with lane slots, the guard and CI all off.
 
 A second copy for testing, which touches neither the config file, the database
 nor the state dir (audit log, hook token, run files go to a temp dir). Pick a
-port nothing listens on (`ss -ltn`) for `LANEBOARD_PORT`: on a taken port the
-copy exits, and the board already there answers instead:
+port nothing listens on (`ss -ltn` lists the taken ones; on a taken port the copy
+exits and the board already there answers instead), start the copy in the
+background, point the CLI at it with `LANEBOARD_URL`, and stop it with `kill $!`:
 
 ```bash
 tmp=$(mktemp -d)
 LANEBOARD_PORT=7788 LANEBOARD_DB=:memory: LANEBOARD_CONFIG=/dev/null \
   LANEBOARD_STATE_DIR="$tmp" LANEBOARD_AUDIT_FILE="$tmp/audit.jsonl" \
-  node server/index.mjs
+  node server/index.mjs &
+sleep 1
+LANEBOARD_URL=http://127.0.0.1:7788 node bin/laneboard ls
+kill $!; rm -r "$tmp"
 ```
 
-The CLI talks to `http://127.0.0.1:7777` unless told otherwise, so point it at
-the copy, or it writes into the real board: `LANEBOARD_URL=http://127.0.0.1:7788
-laneboard ls` (or `node bin/laneboard ls` from the checkout, see [CLI](#cli)). Stop the copy with
-Ctrl-C in its terminal, then `rm -r "$tmp"`.
+The CLI talks to `http://127.0.0.1:7777` unless told otherwise, so without
+`LANEBOARD_URL=http://127.0.0.1:7788` it writes into the real board (`laneboard ls`
+works the same once it is on the PATH, see [CLI](#cli)). `laneboard run …` is the exception:
+it writes to `./.laneboard/run.jsonl` unless `--post` is given, so the copy's `#/runs` stays
+empty; add `--post` (it takes no value, the board is `$LANEBOARD_URL`). Run in the foreground
+(no `&`), the copy stops with Ctrl-C in its terminal; remove `"$tmp"` after.
+The state dir and audit file point at the temp dir so the copy never opens the
+real audit log: with only the port, the database and the config set, it shares
+the real state dir, and while another board runs it finds that log locked
+(`AUDIT_LOCKED` in its log) and refuses every action.
 
-All five variables are needed. A shorter form with only the port, the database
-and the config still shares the real state dir: it opens the real audit log, and
-while another board runs it finds that log locked (`AUDIT_LOCKED` in its log)
-and refuses every action. `LANEBOARD_STATE_DIR` and `LANEBOARD_AUDIT_FILE`
-pointing at the temp dir avoid that.
+For a headless look at the copy (screenshots per view, theme and width, plus the
+page's console errors), run `node docs/plans/runs/loop/shoot.mjs --url
+http://127.0.0.1:7788 --out "$tmp/shots"`; it needs a Chromium (`$CHROME`).
 
 The state dir must be a private directory (mode 700, only you can read it):
 `mktemp -d` makes one, a plain `mkdir -p /tmp/lb` usually does not (mode 775
@@ -92,6 +112,16 @@ until you `chmod 700` it.
 The copy is not a clean slate for reads: it still sees this machine's real
 sessions and directories (`laneboard ls` against it lists them). It only
 reads them, it writes nothing there.
+
+The CLI follows the same variables: with `LANEBOARD_STATE_DIR` set, `laneboard
+pause`, `resume` and `paused` (with or without `--all`) read and write only that
+dir, never the real one. Two commands write outside it by design: `laneboard run`
+without `--post` appends to `./.laneboard/run.jsonl` in the current directory
+(or `--file`), and `laneboard fleet keygen` without `--out` writes the real hub key
+(`$XDG_CONFIG_HOME/laneboard/hub.key`, else `~/.config/laneboard/hub.key`).
+`laneboard fleet pubkey` without `--key` reads that same file, so with no key there
+its error names that real path, not the state dir. Pass `--out` and `--key` to keep
+both inside the temp dir.
 
 ## CLI
 
@@ -119,7 +149,8 @@ laneboard resume <name|--all>
 laneboard paused
 laneboard audit [verify]         # the fleet audit log, offline
 laneboard fleet keygen|pubkey    # the hub key (on the hub)
-laneboard run start|round|score|needs|ack|artifact|stop   # report a loop's run, works offline
+laneboard run start|round|score|needs|ack|artifact|stop|cost   # report a loop's run, works offline
+laneboard feed tailscale|proxmox|docker   # read one source once, write one Map feed, offline
 ```
 
 `laneboard run` writes the run protocol of [docs/runs.md](docs/runs.md) (`laneboard run --help`).
@@ -127,7 +158,39 @@ Each `run` subcommand appends one line to `./.laneboard/run.jsonl` in the curren
 (or `--file f`, or `$LANEBOARD_RUN_FILE`) unless `--post` sends it to the server; `.laneboard/` is
 in `.gitignore`, add it to your own repo's ignore file too.
 
-`LANEBOARD_URL` overrides the server address.
+`laneboard feed` turns one source into a feed for the Map (`--stdout`, `--out f` or `--push <url>`):
+see [docs/map.md](docs/map.md#pushing-a-feed) for pushing it and
+[docs/providers.md](docs/providers.md#feedprovider) for the feeders and how to add one.
+
+`laneboard morning`'s `tonight` (the default window) reaches back to 18:00 local time of the
+evening that has begun (today's after 18:00, else yesterday's) or 12 hours, whichever is further
+back: at 07:00 that is 13 hours, at 02:00 it is 12. Local time is the config's `timezone`.
+
+`LANEBOARD_URL` overrides the server address. `ls`, `morning` and `credit` print
+`board: <url>` on stderr (the board that answered), so stdout stays the table. An unknown
+command prints `laneboard: unknown command: <x>` first, a close match if there is one, then
+the help, all on stderr; exit 2 is a usage error, exit 1 a failure.
+
+## API
+
+Every view reads JSON you can `curl` (builder mode; a hub serves the same views from
+`/api/fleet/*`). The live views also get pushes over `/ws`.
+
+| View | Reads |
+| --- | --- |
+| Map | `GET /api/map` |
+| Board, Inbox | `GET /api/state` (the `/ws` snapshot); the Inbox acks a need with `POST /api/runs/events` |
+| Packages | `GET /api/packages` |
+| Morning | `GET /api/morning?window=12h\|tonight\|24h\|7d` (another window is a 400) |
+| Runs | `GET /api/runs`, `GET /api/runs?run=<id>`, `GET /api/runs/<id>` |
+| Credit | `GET /api/credit` |
+| Box | `GET /api/v1/health?history=1` |
+| Audit | `GET /api/v1/audit` |
+| Archive | `GET /api/v1/archive` |
+| (none) | `GET /api/health`: `{ok, version, mode}`, nothing else |
+
+`/healthz` adds the process's pid, uptime and memory. An unknown `/api/*` path is a JSON 404;
+any other unknown path gets the page.
 
 ## Nothing destructive happens on its own
 

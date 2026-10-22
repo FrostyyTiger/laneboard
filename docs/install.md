@@ -81,6 +81,11 @@ deploy/install-claude.sh --uninstall [--statusline]
 `--uninstall` strips laneboard's entries and `~/.claude/laneboard/`, and
 leaves `.statusLine` alone unless you also pass `--statusline`.
 
+The 5 h and 7 d rate-limit windows on the Credit view and in `laneboard credit`
+come only from this status line: the board samples them once a minute from the
+freshest session's sidecar file. Without it `laneboard credit` prints
+`sampler: 0 samples, last never` and points here.
+
 ## The config file
 
 `~/.config/laneboard/config.json`, every key optional. **`docs/config.md`

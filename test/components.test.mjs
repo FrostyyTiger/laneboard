@@ -147,12 +147,12 @@ test('laneMix counts sessions into p1 p2 run ok off dead', () => {
     { state: 'idle' }, { state: 'shell' }, { state: 'weird' },
     { state: 'dead' }, { state: 'working', stale: true },
   ]);
-  assert.deepEqual(mix, { p1: 2, p2: 2, run: 2, ok: 1, off: 3, dead: 2, total: 12, p: '2' });
+  assert.deepEqual(mix, { p1: 2, p2: 2, run: 2, ok: 1, off: 3, dead: 2, total: 12, p: '2', t1: 0, t2: 4, calmRun: 2 });
   // `p` is the status line's rule (itemP): a stuck working lane is ▲, a danger ■, a dead one nothing.
   assert.equal(C.laneMix([{ state: 'working', stuck: true }]).p, '2');
   assert.equal(C.laneMix([{ state: 'working', danger: 'rm -rf' }, { state: 'question' }]).p, '1');
   assert.equal(C.laneMix([{ state: 'question', stale: true }]).p, null);
-  assert.deepEqual(C.laneMix([]), { p1: 0, p2: 0, run: 0, ok: 0, off: 0, dead: 0, total: 0, p: null });
+  assert.deepEqual(C.laneMix([]), { p1: 0, p2: 0, run: 0, ok: 0, off: 0, dead: 0, total: 0, p: null, t1: 0, t2: 0, calmRun: 0 });
   assert.deepEqual(C.laneMix(null).total, 0);
   assert.deepEqual(C.MIX_ORDER, ['p1', 'p2', 'run', 'ok', 'off', 'dead']);
 });
@@ -173,6 +173,25 @@ test('segbar() renders segments in order with flex-grow and an aria-label', () =
   const empty = C.segbar([]);
   assert.match(empty.className, /segbar--empty/);
   assert.equal(empty.children.length, 0);
+}));
+
+test('segbar is grey unless the lane is in trouble: no green, no hatch, stuck amber, danger red (runs n5 T56)', () => withDom(() => {
+  const segs = (lanes) => C.segbar(lanes).children.map((i) => [i.dataset.p, i.style.flexGrow]);
+  // Ok lanes (working, done, idle, dead) are neutral: working grey, the rest one lighter grey.
+  assert.deepEqual(segs([{ state: 'working' }, { state: 'done' }, { state: 'idle' }, { state: 'dead' }]), [['run', '1'], ['off', '3']]);
+  assert.deepEqual(segs([{ state: 'working', stale: true }]), [['off', '1']], 'a down builder\'s lanes are grey, not hatched');
+  // A lane in trouble takes the trouble hue, by the status line's rule (itemP).
+  assert.deepEqual(segs([{ state: 'working', stuck: true }, { state: 'working' }]), [['2', '1'], ['run', '1']]);
+  assert.deepEqual(segs([{ state: 'working', danger: 'rm -rf' }, { state: 'waiting_question' }, { state: 'done' }]), [['1', '1'], ['2', '1'], ['off', '1']]);
+  // A meter mix (no trouble counts) keeps its used part grey and amber when alarming.
+  assert.deepEqual(C.barSegs({ p1: 0, p2: 0, run: 40, ok: 0, off: 60, dead: 0, total: 100 }), [['run', 40], ['off', 60]]);
+  assert.deepEqual(C.barSegs({ p1: 0, p2: 40, run: 0, ok: 0, off: 60, dead: 0, total: 100 }), [['2', 40], ['off', 60]]);
+  // The CSS: no green and no hatch on a bar segment, trouble only in p1/p2.
+  const css = read('public/css/components.css');
+  const rules = css.match(/\.segbar[^{]*\{[^}]*\}/g).join('\n');
+  assert.doesNotMatch(rules, /tex-hatch|var\(--ok\)/);
+  assert.match(rules, /\.segbar > i\[data-p="1"\] \{ background: var\(--p1\); \}/);
+  assert.match(rules, /\.segbar > i\[data-p="2"\] \{ background: var\(--p2\); \}/);
 }));
 
 test('scopeSessions reads the F8a store per builder and marks down builders stale', () => {

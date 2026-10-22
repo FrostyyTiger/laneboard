@@ -137,6 +137,13 @@ function sessionId(v) {
   return typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(v) ? v : null;
 }
 
+/** Where a PR stands: `open`, `merged` or `closed` (any case, as `gh pr view` prints them); anything else is null. */
+export const ARTIFACT_STATES = ['open', 'merged', 'closed'];
+function artifactState(v) {
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : null;
+  return ARTIFACT_STATES.includes(s) ? s : null;
+}
+
 function rawCopy(obj) {
   const out = {};
   for (const [k, v] of Object.entries(obj).slice(0, MAX_RAW_KEYS)) {
@@ -153,8 +160,12 @@ const skip = (reason) => ({ ok: false, reason });
 const SHAPES = {
   'run.start'(o) {
     const b = o.budget && typeof o.budget === 'object' ? o.budget : {};
+    // `maxRounds` is the cap (top level or in budget); `rounds` is its old name,
+    // read until 0.2.0 and kept in the fold as a copy for readers of 0.1.x.
+    const maxRounds = int(b.maxRounds ?? o.maxRounds ?? b.rounds ?? o.rounds);
     const budget = {
-      rounds: int(b.rounds ?? o.rounds),
+      maxRounds,
+      rounds: maxRounds,
       windowPct: num(b.windowPct ?? o.windowPct),
       pause5h: num(b.pause5h ?? o.pause5h),
       stop7d: num(b.stop7d ?? o.stop7d),
@@ -173,7 +184,8 @@ const SHAPES = {
   'round.start'(o) {
     const n = int(o.n);
     if (n === null || n < 0) return 'bad n';
-    return { n, role: str(o.role), task: str(o.task), session: sessionId(o.session) };
+    return { n, role: str(o.role), task: str(o.task), title: str(o.title), session: sessionId(o.session),
+      wrapup: bool(o.wrapup) === true };
   },
   'round.end'(o) {
     const n = int(o.n);
@@ -200,10 +212,11 @@ const SHAPES = {
   artifact(o) {
     const url = str(o.url);
     if (!url) return 'no url';
-    return { kind: str(o.kind, 32) || 'link', url, title: str(o.title) };
+    return { kind: str(o.kind, 32) || 'link', url, title: str(o.title), state: artifactState(o.state) };
   },
   'run.stop'(o) {
-    return { reason: str(o.reason, 32) || 'unknown', rounds: int(o.rounds), usd: num(o.usd) };
+    return { reason: str(o.reason, 32) || 'unknown', rounds: int(o.rounds), usd: num(o.usd), detail: str(o.detail),
+      wrapup: bool(o.wrapup) === true };
   },
   usage(o) {
     return {
@@ -257,10 +270,31 @@ export function parseLines(text) {
   return { events, skipped };
 }
 
+/**
+ * The fields of a written object `o` that its checked `event` (parseLine) left
+ * out or set to null: a bad value, an unknown field. A `budget` field is
+ * checked key by key (`budget.rounds`), and a top-level budget key that the
+ * event keeps in `budget` counts as kept. An unknown type keeps everything (raw).
+ */
+export function droppedFields(o, event) {
+  if (!o || typeof o !== 'object' || !event?.known) return [];
+  const gone = (v) => v === null || v === undefined;
+  const out = [];
+  for (const [k, v] of Object.entries(o)) {
+    if (['v', 't', 'run', 'ts'].includes(k) || v === null) continue;
+    if (k === 'budget' && v && typeof v === 'object' && !Array.isArray(v)) {
+      for (const [bk, bv] of Object.entries(v)) if (bv !== null && gone(event.budget?.[bk])) out.push(`budget.${bk}`);
+      continue;
+    }
+    if (gone(event[k]) && gone(event.budget?.[k])) out.push(k);
+  }
+  return out;
+}
+
 function round(rounds, n) {
   let r = rounds.get(n);
   if (!r) {
-    r = { n, role: null, task: null, starts: 0, startedAt: null, endedAt: null, outcome: null,
+    r = { n, role: null, task: null, title: null, wrapup: false, starts: 0, startedAt: null, endedAt: null, outcome: null,
       commit: null, usd: null, open: null, usage: null, sessions: [] };
     rounds.set(n, r);
   }
@@ -274,7 +308,16 @@ function round(rounds, n) {
  * - Rounds are keyed by `n` and sorted, whatever order they came in; a round
  *   started twice (a retry) counts its `starts` and adds up its cost.
  * - A score without `n` belongs to the latest round started before it (0 = before any).
- * - `cost.usd` is summed: `total` restarts when the loop does.
+ * - An artifact is listed once per URL, where it first came; a later line with
+ *   the same URL updates its `state` and (when not empty) its `title`.
+ * - `cost.usd` is the sum of the `cost` events (`total` restarts when the loop
+ *   does); a run with no `cost` event sums its rounds' `round.end` `usd`
+ *   instead, null when none has one. `cost.from` says which: `cost`, `rounds`
+ *   or null.
+ * - A `wrapup` round (the operator review and report after `run.stop`) is
+ *   flagged and leaves the run stopped; `counted` (rounds against the
+ *   `maxRounds` cap) leaves it out. A round's `usd` stays null until a
+ *   `round.end` or `cost` gives one.
  * - A `wait` need closes when the next round starts or the run stops; any need
  *   closes when a `needs.ack` names it (by its place in the list or its `ts`).
  *   The first ack counts; a second one changes nothing. An ack naming no need is
@@ -285,14 +328,16 @@ function round(rounds, n) {
 export function foldRun(events, { skipped = 0 } = {}) {
   const run = {
     run: null, goal: null, plan: null, branch: null, cwd: null, host: null, state: 'running', deadline: null, deadlineAt: null,
-    budget: null, rounds: [], scores: {}, better: {}, needs: [], artifacts: [], stop: null,
-    cost: { usd: 0, rounds: 0 }, usage: null, raw: [], startedAt: null, updatedAt: null,
+    budget: null, rounds: [], counted: 0, scores: {}, better: {}, needs: [], artifacts: [], stop: null,
+    cost: { usd: 0, rounds: 0, from: null }, usage: null, raw: [], startedAt: null, updatedAt: null,
     events: 0, skipped: typeof skipped === 'number' ? skipped : Object.values(skipped).reduce((a, b) => a + b, 0),
   };
   const rounds = new Map();
-  const urls = new Set();
+  const urls = new Map();
   let current = 0;
   let last = null;
+  let endUsd = 0;
+  let endSeen = false;
 
   for (const e of events) {
     if (!e || typeof e !== 'object') continue;
@@ -317,6 +362,8 @@ export function foldRun(events, { skipped = 0 } = {}) {
         r.starts++;
         if (e.role) r.role = e.role;
         if (e.task) r.task = e.task;
+        if (e.title) r.title = e.title;
+        if (e.wrapup) r.wrapup = true;
         if (e.session && !r.sessions.includes(e.session)) r.sessions.push(e.session);
         if (e.ts && (r.startedAt === null || e.ts < r.startedAt)) r.startedAt = e.ts;
         current = Math.max(current, e.n);
@@ -326,7 +373,7 @@ export function foldRun(events, { skipped = 0 } = {}) {
       case 'round.end': {
         const r = round(rounds, e.n);
         for (const k of ['outcome', 'commit', 'open']) if (e[k] !== null) r[k] = e[k];
-        if (e.usd !== null) r.usd = (r.usd ?? 0) + e.usd;
+        if (e.usd !== null) { r.usd = (r.usd ?? 0) + e.usd; endUsd += e.usd; endSeen = true; }
         if (e.session && !r.sessions.includes(e.session)) r.sessions.push(e.session);
         if (e.ts) r.endedAt = e.ts;
         current = Math.max(current, e.n);
@@ -348,14 +395,20 @@ export function foldRun(events, { skipped = 0 } = {}) {
         if (!need.acked) Object.assign(need, { open: false, acked: true, ackedAt: e.ts, by: e.by });
         break;
       }
-      case 'artifact':
-        if (!urls.has(e.url)) {
-          urls.add(e.url);
-          run.artifacts.push({ kind: e.kind, url: e.url, title: e.title, n: current, ts: e.ts });
+      case 'artifact': {
+        const a = urls.get(e.url);
+        if (!a) {
+          const next = { kind: e.kind, url: e.url, title: e.title, state: e.state, n: current, ts: e.ts };
+          urls.set(e.url, next);
+          run.artifacts.push(next);
+        } else {
+          if (e.state !== null) a.state = e.state;
+          if (e.title) a.title = e.title;
         }
         break;
+      }
       case 'run.stop':
-        run.stop = { reason: e.reason, rounds: e.rounds, usd: e.usd, ts: e.ts };
+        run.stop = { reason: e.reason, rounds: e.rounds, usd: e.usd, detail: e.detail, wrapup: e.wrapup, ts: e.ts };
         for (const need of run.needs) if (need.kind === 'wait') need.open = false;
         break;
       case 'usage': {
@@ -375,8 +428,10 @@ export function foldRun(events, { skipped = 0 } = {}) {
   }
 
   const cents = (x) => Math.round(x * 1e6) / 1e6;
-  run.cost.usd = cents(run.cost.usd);
+  if (run.cost.rounds > 0) Object.assign(run.cost, { usd: cents(run.cost.usd), from: 'cost' });
+  else Object.assign(run.cost, endSeen ? { usd: cents(endUsd), from: 'rounds' } : { usd: null, from: null });
   run.rounds = [...rounds.values()].sort((a, b) => a.n - b.n);
+  run.counted = run.rounds.filter((r) => !r.wrapup).length;
   for (const r of run.rounds) if (r.usd !== null) r.usd = cents(r.usd);
   for (const list of Object.values(run.scores)) list.sort((a, b) => a.n - b.n);
   if (run.stop) run.state = 'stopped';

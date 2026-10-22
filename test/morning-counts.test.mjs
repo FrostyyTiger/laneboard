@@ -10,7 +10,7 @@ import { build, morningRunNeeds } from '../server/morning.mjs';
 import { createStore } from '../server/runs/store.mjs';
 import { parseLine } from '../server/runs/protocol.mjs';
 import { summarize } from '../server/runs/summary.mjs';
-import { buildInbox } from '../public/js/core/inbox-model.js';
+import { buildInbox, RUN_NEED_MAX_AGE_MS } from '../public/js/core/inbox-model.js';
 
 const byId = new Map(['morning-body', 'morning-since', 'morning-window'].map((id) => [id, makeEl('div')]));
 globalThis.document = makeDocument({ byId });
@@ -82,6 +82,23 @@ test('T24: open run needs a person answers are in /api/morning needsYou, whateve
   assert.equal(got[0].lane, null);
   assert.deepEqual(morningRunNeeds(null), []);
   assert.deepEqual(morningRunNeeds({ list() { throw new Error('broken fold'); } }), [], 'a failing store loses only its needs');
+});
+
+test('review n5: a run idle for over RUN_NEED_MAX_AGE_MS asks nothing in Morning or the Inbox', () => {
+  const old = [
+    { t: 'run.start', run: 'demo', ts: NOW - RUN_NEED_MAX_AGE_MS - 2 * H, goal: 'Hand-made' },
+    { t: 'needs', run: 'demo', ts: NOW - RUN_NEED_MAX_AGE_MS - H, kind: 'decision', text: 'still there?' },
+  ];
+  const runs = runsStoreOf([...runEvents, ...old]);
+  assert.deepEqual(morningRunNeeds(runs, NOW).map((n) => n.run), ['acme-search', 'acme-docs'], 'the old run gives no need');
+  const inbox = buildInbox({ builders: new Map() }, { now: NOW, runs: runs.list().map((r) => summarize(r, { now: NOW })) });
+  assert.deepEqual(inbox.groups.find((g) => g.id === 'runs').rows.map((r) => r.run), ['acme-search', 'acme-docs']);
+  // Just inside the limit the need is still listed.
+  const edge = runsStoreOf([
+    { t: 'run.start', run: 'demo', ts: NOW - RUN_NEED_MAX_AGE_MS + H, goal: 'Hand-made' },
+    { t: 'needs', run: 'demo', ts: NOW - RUN_NEED_MAX_AGE_MS + 2 * H, kind: 'decision', text: 'still there?' },
+  ]);
+  assert.deepEqual(morningRunNeeds(edge, NOW).map((n) => n.run), ['demo']);
 });
 
 test('T24: with every builder answering, Morning and the Inbox count the same needs', () => {

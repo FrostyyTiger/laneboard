@@ -33,29 +33,54 @@ export { toast } from './toast.js';
  * sessions' `cost.usdToday` and says so in its label ("sessions today"): runs
  * are fetched by the Runs view only and a hub has no `/api/runs`, so a run's
  * cost is not in this number and the label must not claim it is (T39).
+ * When no session reported a cost today the figure is `—`, not `$0.00`: an
+ * unknown cost is never shown as a zero; a reported zero stays `$0.00` (T15).
+ * Until a session reports one the header hides the line (`hidden`): a lone
+ * "— sessions today" read as a broken figure (review n5).
+ * The line is dim (`cls: 'dim'`) unless a builder's whole-builder budget row
+ * (the `budget` snapshot key, scope `builder`) is at level `over`, then it
+ * takes the warn hue (`cls: 'over'`); with no budget configured it stays dim
+ * (T55, designer r10 idea 2). `budgets` is the builders' budget rows, flat.
  */
-export function topbarSpend(sessions) {
+export function topbarSpend(sessions, budgets) {
   let today = 0;
   let all = 0;
+  let reported = false;
   for (const s of sessions || []) {
-    today += Number.isFinite(s?.cost?.usdToday) ? s.cost.usdToday : 0;
+    if (Number.isFinite(s?.cost?.usdToday)) {
+      today += s.cost.usdToday;
+      reported = true;
+    }
     all += Number.isFinite(s?.cost?.usd) ? s.cost.usd : 0;
   }
+  const over = (budgets || []).filter((r) => r?.scope === 'builder' && r.level === 'over');
+  const overNote = over.length
+    ? ` Over the builder budget: ${over.map((r) => `${money(r.usd)} of ${money(r.limit)}`).join(', ')}.`
+    : '';
   return {
-    usd: today,
-    text: money(today),
+    usd: reported ? today : null,
+    hidden: !reported,
+    text: reported ? money(today) : '—',
     label: ' sessions today',
-    title: `API-equivalent spend of live sessions today; runs show their own cost on the Runs view. All time across live sessions: ${money(all)}. On a subscription the rate-limit gauges are the real constraint.`,
+    cls: over.length ? 'over' : 'dim',
+    title: `API-equivalent spend of live sessions today; runs show their own cost on the Runs view. All time across live sessions: ${money(all)}. On a subscription the rate-limit gauges are the real constraint.${overNote}`,
   };
 }
 
+/** Every builder's budget rows, flat (store.js keeps the `budget` snapshot key per builder). */
+function budgetRows() {
+  return builders(store).flatMap((b) => (Array.isArray(b.budget) ? b.budget : []));
+}
+
 export function renderTopbar() {
-  const m = topbarSpend(store.sessions.values());
+  const m = topbarSpend(store.sessions.values(), budgetRows());
   const n = $('stat-cost');
   n.textContent = '';
   n.append(el('b', null, m.text));
   n.append(document.createTextNode(m.label));
+  n.className = `stat stat-${m.cls}`;
   n.title = m.title;
+  n.hidden = m.hidden;
 }
 
 // ---------------------------------------------------------------- builders

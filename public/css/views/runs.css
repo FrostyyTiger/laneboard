@@ -62,8 +62,29 @@
 .rn-state-why { color: var(--text-1); }
 .rn-state[data-p="1"] .rn-state-why { color: var(--p1); }
 .rn-state[data-p="2"] .rn-state-why { color: var(--p2); }
+/* the loop's stop detail (T4): its own line under the reason, muted, wrapping (it is a sentence) */
+.rn-state[data-detail] { flex-wrap: wrap; max-width: 100%; }
+.rn-state-detail {
+  flex-basis: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+}
 /* the stuck badge (server/runs/stuck.mjs): Board's flag, the icon in p2 */
 .rn-stuck { display: inline-flex; color: var(--p2); }
+/* a list row's stuck state (T54): `▲ STUCK`, the reason on muted lines under it, wrapping whole
+   (review n5: "task T2 faile…" said nothing); it adds nothing to the column's width (contain),
+   so a long reason makes the row taller, never the state column wider */
+.rn-state[data-stuck] { flex-wrap: wrap; row-gap: 0; max-width: 100%; }
+.rn-state-sub {
+  flex-basis: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  contain: inline-size;
+  color: var(--text-3);
+  font-size: var(--fs-11);
+}
 
 /* ---- goal: the goal text, the run id and branch under it */
 .rn-goal { flex-direction: column; align-items: flex-start; gap: 0; }
@@ -91,6 +112,12 @@
 .rn-score-k { color: var(--text-3); }
 .rn-score-v { color: var(--text-1); }
 .rn-score-m { color: var(--text-3); font-size: var(--fs-10); }
+/* a moved max sits inline in its chip (T20); a list cell too narrow for it wraps inside the chip,
+   and the row then aligns every cell to the top so nothing floats against a two-line cell */
+.rn-score:has(.rn-score-scope) { flex-wrap: wrap; row-gap: 0; min-width: 0; }
+.rn-score-scope { color: var(--text-3); white-space: nowrap; }
+.rn-score-scope::before { content: "· "; }
+.rn-row:has(.rn-score-scope) { align-items: start; }
 .rn-score[data-trend="worse"] .rn-score-m,
 .rn-score[data-trend="worse"] .rn-score-v { color: var(--p2); }
 .rn-more { color: var(--text-3); }
@@ -99,6 +126,8 @@
 /* each window a fixed grid (label, bar, value) so the meters and their "—" line up; an
    overage takes the cell's next line */
 .rn-burn { gap: var(--sp-1) var(--sp-2); flex-wrap: wrap; }
+/* no usage reported: one muted dash (T54) */
+.rn-burn[data-none] { color: var(--text-3); }
 .rn-win { display: inline-grid; grid-template-columns: 2ch 40px 4ch; align-items: center; gap: var(--sp-1); }
 .rn-win-k { color: var(--text-3); font-size: var(--fs-11); }
 .rn-win-v { min-width: 4ch; text-align: right; }
@@ -152,9 +181,11 @@
 
 /* ---- one run's page (T8): head, needs, timeline, artifacts, raw */
 /* a reading width: at 1440 the eye does not cross the screen per row (T27) */
-/* the run page's frame stops at the same token as the page in it: no empty gutter (T31) */
-#view-runs > .panel[data-page] { max-width: var(--read-max); }
-.rn-page { display: grid; gap: var(--sp-3); max-width: var(--read-max); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+/* the run page's frame stops at the same token as the page in it: no empty gutter (T31), and the
+   list's frame at that token too, so opening a run does not change the card's width (review n5);
+   the timeline and the score lines keep their own caps inside it */
+#view-runs > .panel { max-width: var(--runs-max); }
+.rn-page { display: grid; gap: var(--sp-3); max-width: var(--runs-max); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
 .rn-back { justify-self: start; color: var(--text-3); text-decoration: none; }
 .rn-back:hover { color: var(--text-1); }
 .rn-back:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
@@ -194,7 +225,11 @@
 .rn-item-k { flex: none; min-width: 8ch; color: var(--text-3); }
 .rn-item-t { min-width: 0; overflow-wrap: anywhere; color: var(--text-1); }
 .rn-item-n,
+.rn-item-s,
 .rn-item-l { flex: none; color: var(--text-3); }
+/* T16: an open PR is still live, a notch brighter than merged/closed; the ↗ hugs the title */
+.rn-item-s[data-state="open"] { color: var(--text-2); }
+.rn-item-arrow { display: inline-block; margin-left: .25em; color: var(--text-2); text-decoration: none; }
 a.rn-item-t,
 a.rn-item-l { text-decoration: underline; text-decoration-color: var(--line); }
 a.rn-item-t:focus-visible,
@@ -226,8 +261,9 @@ a.rn-need-open { text-decoration: none; }
 .rn-charts { list-style: none; margin: 0; padding: 0; }
 .rn-chart {
   display: grid;
-  /* the line takes the room between the name and its value (T27) */
-  grid-template-columns: minmax(8ch, 16ch) minmax(0, 1fr) 10ch minmax(8ch, auto);
+  /* the line is at most half the page and its value sits right after it; the range takes the
+     rest (T27, T57: a 600 px line read as a chart without axes) */
+  grid-template-columns: minmax(8ch, 16ch) minmax(0, 50%) minmax(10ch, max-content) minmax(8ch, 1fr);
   align-items: center;
   gap: var(--sp-3);
   min-height: var(--row-comfy);
@@ -236,15 +272,17 @@ a.rn-need-open { text-decoration: none; }
   font-variant-numeric: tabular-nums;
 }
 .rn-chart-k { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
-.rn-chart-v { color: var(--text-1); text-align: right; }
+/* the value right after the line's end, not at the far side of its column (review n5) */
+.rn-chart-v { color: var(--text-1); text-align: left; white-space: nowrap; }
 .rn-chart-v[data-p="2"] { color: var(--p2); }
 .rn-chart-r { min-width: 0; color: var(--text-3); white-space: nowrap; }
 .rn-chart-svg { width: 100%; }
 /* the last value is a line with no length: a 2 px square at any stretch */
 .rn-chart-svg .spark-last { fill: none; stroke: var(--text-1); stroke-width: 2; stroke-linecap: square; vector-effect: non-scaling-stroke; }
 
-/* the timeline: one row per round, numbers right-aligned */
-.rn-tl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+/* the timeline: one row per round, numbers right-aligned; its columns are as wide as their content
+   and the table stops at --table-max, so outcome and cost do not drift to the page edge (T57) */
+.rn-tl { width: auto; max-width: min(100%, var(--table-max)); border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .rn-tl th {
   padding: var(--sp-1) var(--sp-2);
   border-bottom: var(--bw) solid var(--line);
@@ -273,9 +311,20 @@ a.rn-need-open { text-decoration: none; }
 /* minor columns stay narrow (T27): the task clips (full text in the row's title), sessions wrap */
 .rn-tl-task { max-width: 24ch; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
 .rn-tl-row[data-live] .rn-tl-outcome { color: var(--run); }
+/* a round's title with its task id muted beside it (T4); the wrap-up round's label is muted */
+.rn-tl-task:has(.rn-tl-title) { max-width: 48ch; }
+.rn-tl-tid { margin-left: var(--sp-2); color: var(--text-3); }
+.rn-tl-row[data-wrapup] .rn-tl-n { color: var(--text-2); text-align: left; } /* T21: right-aligned it overhung the numbers */
 /* the sessions tied to a round (T12): one chip per session, a guess shared with another run is faint */
 .rn-tl td.rn-tl-ses { color: var(--text-2); white-space: normal; }
 .rn-tl-s { white-space: nowrap; }
+a.rn-tl-s { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
+a.rn-tl-s:hover { color: var(--text-1); }
+/* T22: a round with a named session links its role, underlined with a ↗ like an artifact title */
+a.rn-tl-role-a { color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; }
+a.rn-tl-role-a:hover { color: var(--text-1); }
+a.rn-tl-s:focus-visible,
+a.rn-tl-role-a:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
 .rn-tl-s + .rn-tl-s { margin-left: var(--sp-2); }
 .rn-tl-s[data-maybe] { color: var(--text-3); }
 
@@ -302,6 +351,8 @@ a.rn-need-open { text-decoration: none; }
   .rn-row { gap: var(--sp-1) var(--sp-2); }
   .rn-scores,
   .rn-burn { grid-column: 1 / -1; flex-wrap: wrap; white-space: normal; }
+  /* a lone unlabelled dash on its own line says nothing here (T54) */
+  .rn-burn[data-none] { display: none; }
   /* the open need takes its own line under the run id, one line, mark and text together, the
      text clipped (T29, T31) */
   .rn-goal-2 { flex-wrap: wrap; row-gap: 0; }
@@ -316,11 +367,31 @@ a.rn-need-open { text-decoration: none; }
 }
 
 /* ---- phone: the rounds table drops its minor columns (TL_NARROW_HIDDEN in runs.js) so round,
-   role, outcome, commit and cost fit 390 px; task and duration stay in the row's title */
+   role, outcome, commit and cost fit 390 px on one line; each round's title and task id take a
+   second line under it in --text-2 (T23, reviews/13-designer.md Run page 6). The table becomes a
+   grid with the rows as `display: contents`, so the first-line columns still line up across rows. */
 @media (width < 700px) {
-  .rn-tl [data-col="task"],
   .rn-tl [data-col="span"],
   .rn-tl [data-col="sessions"] { display: none; }
+  /* dense: the task cell, between role and outcome in the markup, jumps to its own line and
+     outcome, commit and cost fill line one back in */
+  .rn-tl { display: grid; grid-template-columns: repeat(4, auto) minmax(0, 1fr); grid-auto-flow: row dense; }
+  .rn-tl thead,
+  .rn-tl tbody,
+  .rn-tl tr { display: contents; }
+  .rn-tl th[data-col="task"] { display: none; }
+  .rn-tl td { border-bottom: 0; }
+  .rn-tl td[data-col="task"] {
+    grid-column: 1 / -1;
+    max-width: none;
+    padding-top: 0;
+    border-bottom: var(--bw) solid var(--line-weak);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    color: var(--text-2);
+  }
+  /* a round with no title and no task keeps only the rule under its line */
+  .rn-tl td[data-col="task"][data-none] { padding-block: 0; font-size: 0; }
   /* the run page's goal wraps whole instead of ending in "…" (T26); the list row still clips */
   .rn-head .rn-goal,
   .rn-head .rn-goal-t { white-space: normal; overflow-wrap: anywhere; }

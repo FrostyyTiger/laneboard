@@ -73,6 +73,10 @@ test('progress: the tasks score over its max beats rounds; none without either',
   // A tasks score without max falls back to rounds; values past max are clamped.
   assert.equal(runProgress(fold('y', [{ t: 'run.start', budget: { rounds: 4 } }, { t: 'round.start', n: 1 }, { t: 'score', name: 'tasks', value: 3 }])), 0.25);
   assert.equal(runProgress(fold('z', [{ t: 'run.start' }, { t: 'score', name: 'tasks', value: 20, max: 12 }])), 1);
+  // a wrap-up round after the stop does not move the ring past the rounds done (T4)
+  assert.equal(runProgress(fold('w', [{ t: 'run.start', budget: { rounds: 2 } }, { t: 'round.start', n: 1 }, { t: 'round.start', n: 2 },
+    { t: 'run.stop', reason: 'rounds' }, { t: 'round.start', n: 3, wrapup: true }])), 1);
+  assert.equal(runProgress(fold('v', [{ t: 'run.start', budget: { rounds: 4 } }, { t: 'round.start', n: 1 }, { t: 'run.stop', reason: 'x' }, { t: 'round.start', n: 2, wrapup: true }])), 0.25);
   assert.equal(runProgress(fold('w', [{ t: 'run.start' }, { t: 'score', name: 'tasks', value: 0, max: 12 }])), 0);
 });
 
@@ -157,4 +161,24 @@ test('GET /api/map on a builder that reads a run file has the run node', async (
   } finally {
     await b.stop();
   }
+});
+
+test('T5: the tasks score\'s latest max drives the ring, and the node carries the numbers its label prints', () => {
+  const r = fold('acme-scope', [
+    { t: 'run.start', goal: 'Grow the plan', budget: { rounds: 80 } },
+    { t: 'round.start', n: 1, role: 'planner' },
+    { t: 'score', n: 1, name: 'tasks', value: 0, max: 12 },
+    { t: 'round.start', n: 2, role: 'builder' },
+    { t: 'score', n: 2, name: 'tasks', value: 44, max: 63 },
+    { t: 'round.start', n: 3, role: 'builder' },
+    { t: 'score', n: 3, name: 'tasks', value: 45 },
+  ]);
+  const n = runNode(buildFleet({ topology: null, now: NOW, hostname: 'builder-a', runs: [r] }));
+  assert.deepEqual(n.tasks, { value: 45, max: 63, firstMax: 12 }, 'a line without max keeps the latest max');
+  assert.equal(n.progress, Math.round((45 / 63) * 100) / 100, 'tasks over max, not rounds over budget');
+  assert.equal(runProgress(r), n.progress);
+  assert.equal(n.detail.Tasks, '45 of 63 (scope 12 → 63)');
+  const plain = runNode(buildFleet({ topology: null, now: NOW, hostname: 'builder-a', runs: [running()] }));
+  assert.equal(plain.tasks, null);
+  assert.equal(plain.detail.Tasks, undefined);
 });

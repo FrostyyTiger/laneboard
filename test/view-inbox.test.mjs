@@ -82,7 +82,7 @@ test('T16: the focused inbox row is a 2 px accent ring with no fill', () => {
   assert.match(of.find((d) => d.prop === 'outline')?.value ?? '', /^2px solid var\(--accent\)$/);
 });
 
-test('T27: the approval\'s tool chip (BASH) is a sunken plate, never a dark slab; the header builder chip is never filled', async () => {
+test('T27: the approval\'s tool chip (BASH) is an outlined quiet plate in both themes (night 5 T31), never a fill; the header builder chip is never filled', async () => {
   const { store } = await import('../public/js/core/store.js');
   const saved = store.builders;
   store.builders = new Map([['builder-a', {
@@ -98,16 +98,23 @@ test('T27: the approval\'s tool chip (BASH) is a sunken plate, never a dark slab
     const plates = all(row, (n) => n.classList?.contains('plate'));
     const tool = plates.find((p) => p.textContent === 'Bash');
     assert.ok(tool, 'the tool chip');
-    assert.ok(tool.classList.contains('plate--sunken'), `tool chip class: ${tool.className}`);
+    assert.ok(tool.classList.contains('plate--quiet'), `tool chip class: ${tool.className}`);
     assert.ok(!plates.some((p) => p.classList.contains('plate--solid')), 'no solid plate in an Inbox row');
   } finally {
     V.unmount();
     store.builders = saved;
   }
   const kit = fs.readFileSync(path.join(import.meta.dirname, '..', 'public/css/components.css'), 'utf8');
-  const sunken = declarations(kit).decls.filter((d) => d.prelude === '.plate--sunken');
-  assert.equal(sunken.find((d) => d.prop === 'background')?.value, 'var(--bg-sunken)');
-  assert.equal(sunken.find((d) => d.prop === 'color')?.value, 'var(--text-2)');
+  const quiet = declarations(kit).decls.filter((d) => d.prelude === '.plate--quiet');
+  assert.equal(quiet.find((d) => d.prop === 'background')?.value, 'transparent', 'no fill in either theme');
+  assert.equal(quiet.find((d) => d.prop === 'border-color')?.value, 'var(--line)');
+  assert.equal(quiet.find((d) => d.prop === 'color')?.value, 'var(--text-2)');
+  // No theme rule puts a fill back on it (light included).
+  const css = fs.readdirSync(path.join(import.meta.dirname, '..', 'public/css'), { recursive: true })
+    .filter((f) => f.endsWith('.css'))
+    .map((f) => fs.readFileSync(path.join(import.meta.dirname, '..', 'public/css', f), 'utf8')).join('\n');
+  const fills = declarations(css).decls.filter((d) => /plate--quiet/.test(d.prelude) && /^background/.test(d.prop) && d.value !== 'transparent');
+  assert.deepEqual(fills.map((d) => `${d.prelude} { ${d.prop}: ${d.value} }`), [], 'a fill on the quiet plate');
 
   // The header builder chip: outlined, its mark carries the state.
   const shell = fs.readFileSync(path.join(import.meta.dirname, '..', 'public/css/shell.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -118,4 +125,75 @@ test('T27: the approval\'s tool chip (BASH) is a sunken plate, never a dark slab
   assert.match(shell, /\.builder-chip\.status-stale::before \{[^}]*background: transparent;[^}]*border: var\(--bw\) solid var\(--off\)/,
     'offline is a hollow grey ○');
   assert.match(shell, /\.conn\.down::before \{ border-radius: 0; background: var\(--p1\); \}/, 'red ■ only when down');
+});
+
+test('T16 (night 5): a RUN PRS row is the title alone, its link `open ↗` keeps only the ↗ on a phone', async () => {
+  const el = makeEl('div');
+  V.mount(el, { route: { view: 'inbox' } });
+  try {
+    await settle();
+    const row = all(el, (n) => n.classList?.contains('inbox-row') && n.dataset.group === 'runprs')[0];
+    assert.ok(row, 'the run PR row is drawn');
+    assert.doesNotMatch(row.textContent, /pr:/);
+    const sum = all(row, (n) => n.classList?.contains('inbox-sum'))[0];
+    assert.equal(sum.textContent, 'Paged search');
+    const link = all(row, (n) => n.classList?.contains('inbox-link'))[0];
+    assert.equal(link.href, 'https://example.invalid/acme/acme-api/pull/42');
+    assert.equal(link.textContent, 'open ↗');
+    assert.equal(link.getAttribute('aria-label'), 'open');
+    assert.equal(all(link, (n) => n.classList?.contains('inbox-link-w'))[0].textContent, 'open ');
+  } finally {
+    V.unmount();
+  }
+  const css = fs.readFileSync(path.join(import.meta.dirname, '..', 'public/css/views/fleet-views.css'), 'utf8');
+  const hide = declarations(css).decls.filter((d) => d.prelude === '.inbox-row[data-group="runprs"] .inbox-link-w');
+  assert.equal(hide.length, 1, 'one rule hides the word');
+  assert.equal(hide[0].prop, 'display');
+  assert.equal(hide[0].value, 'none');
+  assert.ok(hide[0].at.some((a) => /max-width: 700px/.test(a)), 'only on a phone');
+});
+
+// review 27-designer Across 3 (runs n5 T27)
+test('T27: an Inbox question row reads QUES after the shape, then the question; `question` only without text', async () => {
+  const { store } = await import('../public/js/core/store.js');
+  const saved = { builders: store.builders, attention: store.attention };
+  store.builders = new Map([['builder-a', {
+    id: 'builder-a', online: true, lanes: [], approvals: [],
+    sessions: new Map([
+      ['ask', { name: 'ask', state: 'waiting_question', activity: { lastAssistant: 'Keep the old export?' } }],
+      ['mute', { name: 'mute', state: 'waiting_question' }],
+    ]),
+  }]]);
+  store.attention = ['ask', 'mute'].map((name, i) => ({ builder: 'builder-a', name, state: 'waiting_question', score: 90 - i, since: 1 }));
+  const el = makeEl('div');
+  V.mount(el, { route: { view: 'inbox' } });
+  try {
+    await settle();
+    const rows = all(el, (n) => n.classList?.contains('inbox-row') && n.dataset.group === 'needs');
+    assert.equal(rows.length, 2);
+    const [ask, mute] = rows.map((r) => r.children[0].children);
+    assert.ok(ask[0].classList.contains('lamp'), 'the shape first');
+    assert.ok(ask[1].classList.contains('inbox-wd'), 'then the word');
+    assert.equal(ask[1].textContent, 'QUES');
+    assert.equal(ask[1].dataset.p, '2', 'amber like the mark');
+    const sum = (cells) => cells.find((c) => c.classList.contains('inbox-sum'));
+    assert.equal(sum(ask).textContent, 'Keep the old export?');
+    assert.ok(!sum(ask).classList.contains('inbox-sum--fallback'));
+    assert.doesNotMatch(rows[0].textContent, /question/);
+    assert.equal(mute[1].textContent, 'QUES');
+    assert.equal(sum(mute).textContent, 'question');
+    assert.ok(sum(mute).classList.contains('inbox-sum--fallback'), 'the fallback word is muted');
+  } finally {
+    V.unmount();
+    Object.assign(store, saved);
+  }
+});
+
+test('T27: the fallback text is --text-3 and the word is coloured by its mark', () => {
+  const css = fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'css', 'views', 'fleet-views.css'), 'utf8');
+  const decls = declarations(css).decls;
+  const of = (sel, prop) => decls.find((d) => d.prelude.trim() === sel && d.prop === prop)?.value;
+  assert.equal(of('.inbox-sum--fallback', 'color'), 'var(--text-3)');
+  assert.equal(of('.inbox-wd[data-p="2"]', 'color'), 'var(--p2)');
+  assert.equal(of('.inbox-wd', 'font-family'), 'var(--font-mono)');
 });

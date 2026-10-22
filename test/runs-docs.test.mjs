@@ -34,6 +34,23 @@ test('the needs.ack row names every `by` that may close a fence need (night 4 T6
   for (const by of FENCE_ACK_BY) assert.ok(row.includes(`\`${by}\``), by);
 });
 
+test('the artifact row documents `state` and the update rule (night 5 T1)', () => {
+  const row = doc.split('\n').find((l) => l.startsWith('| `artifact` |'));
+  assert.ok(row, 'no artifact row');
+  for (const s of ['`state`', '`open`', '`merged`', '`closed`']) assert.ok(row.includes(s), s);
+  assert.match(row, /later line with that URL updates its `state`/);
+  assert.match(row, /default `link`/);
+  assert.match(row, /only `kind: pr` artifacts appear in a run's `prs`/);
+});
+
+test('round.start documents `title` and `wrapup`, run.stop `detail` (night 5 T3)', () => {
+  const rows = doc.split('\n');
+  const start = rows.find((l) => l.startsWith('| `round.start` |'));
+  const stop = rows.find((l) => l.startsWith('| `run.stop` |'));
+  for (const f of ['`title`', '`wrapup`']) assert.ok(start.includes(f), f);
+  assert.ok(stop.includes('`detail`'), 'detail');
+});
+
 test('the states table matches STATES', () => {
   assert.deepEqual([...tableNames('States')].sort(), [...STATES].sort());
 });
@@ -157,7 +174,7 @@ test('docs/runs.md says an ack whose ref names no need writes nothing and exits 
 });
 
 test('docs/runs.md says which cost a stopped run prints: the cost events, else the stop usd (night 4 T34)', () => {
-  assert.match(doc, /The list row and the run page print `cost\.usd`; only\s+when no `cost` event was sent \(`cost\.rounds` is 0\) and `stop\.usd` is set do\s+they print `stop\.usd` instead, marked `loop` as the loop's own figure\./);
+  assert.match(doc, /The list row and the run page print `cost\.usd`; only\s+when no `cost` event was sent and the rounds give none above 0 \(`cost\.rounds` is 0,\s+`cost\.usd` null or 0\) and `stop\.usd` is set do\s+they print `stop\.usd` instead, marked `loop` as the loop's own figure\./);
   assert.match(doc, /`stopUsd` \(`stop\.usd`/);
 });
 
@@ -170,4 +187,109 @@ test('the helper CLI table says a round start is meant for eval (night 4 T40)', 
   assert.ok(row, 'no `round` row');
   assert.match(row, /`eval "\$\(laneboard run round --n 1 [^`]*\)"`/);
   assert.match(row, /export LANEBOARD_RUN=<run>\/<n>/);
+});
+
+test('T6: docs/runs.md documents `run cost`, the run cost from rounds and what --post prints', () => {
+  assert.match(doc, /^\| `cost` \| \*\*`--usd x`\*\*, `--n N`/m);
+  assert.match(doc, /A run with no `cost` event sums its rounds' `round\.end`\s+`usd`/);
+  assert.match(doc, /neither, `usd` and `from` are null, never 0/);
+  assert.match(doc, /`, dropped: <fields>`/);
+  assert.match(doc, /201 `\{ok, run, t, dropped\}`/);
+});
+
+test('T7: docs/runs.md says `rounds` is rounds done and `maxRounds` the cap, the alias with its version, and `?run=`', () => {
+  assert.ok(doc.includes('`rounds` is rounds done, `maxRounds` the cap'));
+  assert.match(doc, /`budget\.rounds`[^|]*old name, still read as `maxRounds` in 0\.1\.x\s+and dropped in 0\.2\.0/);
+  assert.ok(doc.includes('`?run=<id>`'));
+  assert.ok(doc.includes('no run <run>; the list is GET /api/runs'));
+});
+
+test('T8: README has the API route table with /api/health, and every route in it exists', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  assert.match(readme, /^## API$/m);
+  assert.match(readme, /^\| View \| Reads \|$/m);
+  assert.ok(readme.includes('`GET /api/health`: `{ok, version, mode}`'));
+  const table = readme.slice(readme.indexOf('| View | Reads |'), readme.indexOf('`/healthz` adds'));
+  const paths = [...table.matchAll(/`(?:GET|POST) (\/api\/[a-z0-9/_-]+)/g)].map((m) => m[1].replace(/\/<id>$/, ''));
+  assert.ok(paths.length >= 10, `only ${paths.length} routes in the table`);
+  const server = await Promise.all(['server/boot/builder.mjs', 'server/routes/runs.mjs', 'server/routes/api-health.mjs',
+    'server/routes/packages.mjs', 'server/routes/health.mjs', 'server/fleet/api-v1.mjs', 'server/routes/archive.mjs']
+    .map((f) => readFile(new URL(`../${f}`, import.meta.url), 'utf8').catch(() => '')));
+  const all = server.join('\n');
+  for (const p of paths) assert.ok(all.includes(`'${p}`), `${p} is in the README table but no server file names it`);
+});
+
+test('a round\'s --end --usd wins over stop --usd, and cost.from shows which (night 5 T36)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.match(flat, /a round's `--end --usd` wins over `stop --usd` for the run's cost/);
+  assert.match(flat, /`cost\.from` shows which was used/);
+});
+
+test('docs/runs.md says a stop with no --reason records stop: "unknown" (night 5 T42)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.match(flat, /A `run\.stop` with no `reason` \(such as `laneboard run stop` with no `--reason`\) records `stop: "unknown"`/);
+  assert.match(flat, /\| `stop` \| `--reason` \(left out, the line carries no reason and the run records `stop: "unknown"`\)/);
+});
+
+test('docs/runs.md says cost.rounds counts the cost events, not rounds, and is 0 with from rounds (night 5 T43)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.match(flat, /`cost\.rounds` is the number of `cost` events, not a count of rounds: it is neither `counted` nor the rounds that carried a `round\.end` `usd`/);
+  assert.match(flat, /shows `rounds: 0` next to `from: "rounds"`/);
+});
+
+test('docs/runs.md says there is no --budget flag and where the burn column gets its numbers (night 5 T45)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.match(flat, /There is no `--budget` flag: a run's budget is `--max-rounds` and `--window-pct` on `start`/);
+  assert.match(flat, /shows `fiveHourPct` and `sevenDayPct` of the run's last `usage` event, and no `laneboard run` subcommand writes one/);
+  assert.match(flat, /warn at 90 % \(5 h\) and 85 % \(7 d\), fixed/);
+});
+
+test('docs/runs.md says a goal is a sentence about the run, not the run id (night 5 T47)', () => {
+  const flat = doc.replace(/\s+/g, ' ');
+  assert.match(flat, /A goal is a sentence about what the run is for \(`--goal "Night 5: PR state in the Inbox"`\), not the run id/);
+  assert.match(flat, /`start` with a `--goal` equal to the run id still writes the line \(exit 0\) and prints a one-line hint on stderr/);
+});
+
+test('README and docs/runs.md name `#/runs/<id>` beside `#/runs?run=<id>`; README lists `laneboard feed` with its docs (night 5 T50)', async () => {
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  for (const [name, text] of [['README.md', readme], ['docs/runs.md', doc]]) {
+    assert.ok(text.includes('`#/runs?run=<id>`'), `${name}: #/runs?run=<id>`);
+    assert.ok(text.includes('`#/runs/<id>`'), `${name}: #/runs/<id>`);
+  }
+  const cli = readme.slice(readme.indexOf('\n## CLI'), readme.indexOf('\n## API'));
+  assert.match(cli, /^laneboard feed tailscale\|proxmox\|docker/m, 'feed in the CLI list');
+  assert.ok(cli.includes('(docs/map.md#pushing-a-feed)'), 'link to docs/map.md');
+  assert.ok(cli.includes('(docs/providers.md#feedprovider)'), 'link to docs/providers.md');
+});
+
+test('README: the test-copy recipe says `laneboard run` writes the file unless --post; README, docs/runs.md and `morning --help` say how far back tonight reaches (night 5 T60)', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const { windowStart } = await import('../server/util.mjs');
+  const readme = await readFile(new URL('../README.md', import.meta.url), 'utf8');
+  const flat = (s) => s.replace(/\s+/g, ' ');
+
+  // The --post sentence sits right after the test-copy block (the one with LANEBOARD_URL).
+  const recipe = readme.indexOf('LANEBOARD_URL=http://127.0.0.1:7788 node bin/laneboard ls');
+  assert.ok(recipe > 0, 'no test-copy recipe');
+  const after = flat(readme.slice(recipe, recipe + 900));
+  assert.match(after, /`laneboard run …` is the exception: it writes to `\.\/\.laneboard\/run\.jsonl` unless `--post` is given, so the copy's `#\/runs` stays empty/);
+
+  // The window sentence, in the docs and in the help, and the rule it states is the server's.
+  const rule = /`?tonight`?,? (?:\(the default window\) |the default, )?reaches back to 18:00 local time of the evening that has begun \(today's after 18:00, else yesterday's\) or 12 hours, whichever is further back/;
+  assert.match(flat(readme), rule, 'README');
+  assert.match(flat(doc), rule, 'docs/runs.md');
+  const help = execFileSync(process.execPath, [new URL('../bin/laneboard', import.meta.url).pathname, 'morning', '--help'], {
+    env: { PATH: process.env.PATH, LANEBOARD_URL: 'http://127.0.0.1:9' }, encoding: 'utf8',
+  });
+  assert.match(flat(help), rule, 'morning --help');
+  assert.match(help, /^usage: laneboard morning \[--window tonight\|12h\|24h\|7d\]/);
+
+  const H = 3600000;
+  const at7 = Date.parse('2026-10-22T05:00:00Z'); // 07:00 in Zurich
+  const at2 = Date.parse('2026-10-22T00:00:00Z'); // 02:00 in Zurich
+  const at22 = Date.parse('2026-10-21T20:00:00Z'); // 22:00 in Zurich
+  assert.equal((at7 - windowStart('tonight', 'Europe/Zurich', at7)) / H, 13);
+  assert.equal((at2 - windowStart('tonight', 'Europe/Zurich', at2)) / H, 12);
+  assert.equal((at22 - windowStart('tonight', 'Europe/Zurich', at22)) / H, 12);
+  assert.match(flat(readme), /at 07:00 that is 13 hours, at 02:00 it is 12/);
 });

@@ -394,11 +394,11 @@ test('T15 Board 2: no empty `—` field on a card or a row, and a line with noth
   for (const f of ['code', 'state', 'lane', 'flags']) assert.equal(emptyField(db, f), false, `${f} always stays`);
 }));
 
-test('T15 Board 2: equal card heights with the rows packed at the top', () => {
+test('T15 Board 2: the rows packed at the top; each card its own height (review n5)', () => {
   const card = css('public/css/board.css').match(/\n\.card \{[^}]*\}/)[0];
   assert.match(card, /display: grid;/);
   assert.match(card, /align-content: start;/, 'spare height goes below the rows, not between them');
-  assert.doesNotMatch(css('public/css/shell.css').match(/\.grid \{[^}]*\}/)[0], /align-items/, 'the grid still stretches cards to one height');
+  assert.match(css('public/css/shell.css').match(/\.grid \{[^}]*\}/)[0], /align-items: start;/, 'no card stretched to its row (the owner\'s call)');
 });
 
 test('T15 Board 4-5: NEEDS YOU items carry the card\'s shape, the guard a red ■ with a 1 px border and no fill', () => {
@@ -432,6 +432,32 @@ test('T15 Board 6: the IDLE line prints a lane\'s name once, the branch only whe
     assert.equal(text.split('docs-refresh').length - 1, 1, 'docs-refresh once');
     assert.ok(!text.includes('⌥docs-refresh'));
     assert.ok(text.includes('⌥release-notes'), 'a branch that differs still shows');
+  } finally {
+    store.lanes = saved.lanes;
+    if (saved.doc === undefined) delete globalThis.document;
+    else globalThis.document = saved.doc;
+  }
+});
+
+test('T30: lane filter chips have equal side padding and no blank swatch slot when a lane has no hue', () => {
+  const pill = css('public/css/lanes.css').match(/\n\.lane-pill \{[^}]*\}/)[0];
+  assert.match(pill, /padding: var\(--sp-1\) var\(--sp-3\);/, 'one value for left and right');
+  const rail = makeEl('div');
+  const saved = { doc: globalThis.document, lanes: store.lanes };
+  globalThis.document = makeDocument({ byId: new Map([['lane-rail', rail]]) });
+  try {
+    store.lanes = [
+      { id: 'feat-search', key: 'hub/feat-search', idle: false, root: '/r/a', sessions: ['a', 'b'] },
+      { id: 'fix-login', key: 'hub/fix-login', idle: false, hue: 40, root: '/r/b', sessions: ['c'] },
+      { id: 'docs-refresh', key: 'hub/docs-refresh', idle: true, root: '/r/c', sessions: [] },
+    ];
+    renderLanes();
+    const pills = find(rail, 'lane-pill');
+    assert.equal(pills.length, 2);
+    assert.equal(find(pills[0], 'lane-swatch').length, 0, 'no hue: no empty swatch');
+    assert.ok(!String(pills[0].style.getPropertyValue?.('--lane-hue') ?? '').includes('undefined'));
+    assert.equal(find(pills[1], 'lane-swatch').length, 1, 'a lane with a hue keeps its swatch');
+    assert.equal(find(find(rail, 'lane-idle')[0], 'lane-swatch').length, 0, 'the idle row too');
   } finally {
     store.lanes = saved.lanes;
     if (saved.doc === undefined) delete globalThis.document;

@@ -100,8 +100,18 @@ export function windowStart(name, tz = 'Europe/Zurich', now = Date.now()) {
   }
 }
 
-export function windowLabel(name) {
-  return { '12h': 'last 12 h', tonight: 'tonight', '24h': 'last 24 h', '7d': 'last 7 days' }[name] || name;
+/**
+ * The words for a window. `tonight` is said while its night is still running
+ * (18:00 to 06:00 local) and `last night` once it is morning or day: the
+ * window is the same, only the word follows the clock. The web Morning shows
+ * the server's `label` and the CLI prints it, so both read this one rule.
+ */
+export function windowLabel(name, tz = 'Europe/Zurich', now = Date.now()) {
+  if (name === 'tonight') {
+    const hour = Math.floor((now - startOfLocalDay(tz, now)) / 3600000);
+    return hour >= 6 && hour < 18 ? 'last night' : 'tonight';
+  }
+  return { '12h': 'last 12 h', '24h': 'last 24 h', '7d': 'last 7 days' }[name] || name;
 }
 
 /** Session names may contain spaces and parens — never split on whitespace. */

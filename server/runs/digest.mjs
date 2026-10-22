@@ -1,7 +1,7 @@
 // What the Morning digest says about runs (docs/plans/runs/README.md §3 A3, T6).
 //
 //   runsInWindow(runs, {since, now}) -> [{run, goal, state, rounds, scores, stop, prs, usd, usage,
-//                                         startedAt, updatedAt}]
+//                                         startedAt, updatedAt, stoppedAt}]
 //
 // `runs` are folded runs (server/runs/protocol.mjs foldRun, as the store's
 // list() gives them, latest activity first). Pure: no database, no config, so
@@ -9,16 +9,18 @@
 //
 // - A run is listed when it had an event in the window: `updatedAt` at or after
 //   `since` and a start no later than `now`.
-// - `rounds` counts the rounds that started or ended in the window.
+// - `rounds` counts the rounds that started or ended in the window, not the
+//   wrap-up rounds (the operator review and report after `run.stop`); their
+//   `usd` still counts.
 // - A score's `start` is its first value in the window, `end` its last; a value
 //   without `ts` takes its round's start, and one with neither counts as in
 //   the window (nothing says it is not). A score with no value in the window is
 //   left out.
 // - `prs` are the URLs of `pr` artifacts given in the window.
 // - `usd`: the run's own `cost` total when the whole run is in the window and
-//   it sent `cost` events; otherwise the sum of the window's rounds' `usd`
+//   it has one (its `cost` events, else its rounds' `usd`); otherwise the sum of the window's rounds' `usd`
 //   (`cost` events keep no time once folded), null when no round says.
-// - `stop` is the stop reason or null; `usage` the latest usage the run sent.
+// - `stop` is the stop reason or null, `stoppedAt` the stop's ts (null when none); `usage` the latest usage the run sent.
 
 const inWindow = (ts, since, now) => ts >= since && ts <= now;
 
@@ -47,16 +49,17 @@ export function runsInWindow(runs, { since, now = Date.now() } = {}) {
       return ts.some((t) => inWindow(t, since, now));
     });
     const roundUsd = rounds.filter((r) => r.usd !== null);
-    const whole = run.startedAt !== null && run.startedAt >= since && run.cost?.rounds > 0;
+    const whole = run.startedAt !== null && run.startedAt >= since && typeof run.cost?.usd === 'number';
     const usd = whole ? run.cost.usd
       : roundUsd.length ? Math.round(roundUsd.reduce((a, r) => a + r.usd, 0) * 1e6) / 1e6 : null;
     out.push({
       run: run.run,
       goal: run.goal,
       state: run.state,
-      rounds: rounds.length,
+      rounds: rounds.filter((r) => !r.wrapup).length,
       scores: windowScores(run, since, now),
       stop: run.stop ? run.stop.reason : null,
+      stoppedAt: run.stop ? run.stop.ts ?? null : null,
       prs: run.artifacts
         .filter((a) => a.kind === 'pr' && (a.ts === null || inWindow(a.ts, since, now)))
         .map((a) => a.url),

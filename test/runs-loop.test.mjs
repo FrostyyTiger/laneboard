@@ -50,7 +50,7 @@ test('run.start: goal, plan, branch, deadline and the top-level budget', () => {
   assert.equal(RUN.branch, 'run/runs-n1');
   assert.equal(RUN.deadline, '2026-10-21 07:00');
   assert.equal(RUN.deadlineAt, Date.parse('2026-10-21 07:00'), 'no zone: read in laneboard\'s local time');
-  assert.deepEqual(RUN.budget, { rounds: 15, windowPct: null, pause5h: 90, stop7d: 85 });
+  assert.deepEqual(RUN.budget, { maxRounds: 15, rounds: 15, windowPct: null, pause5h: 90, stop7d: 85 });
 });
 
 test('rounds: roles, retries, outcomes, commits and the cost of each', () => {
@@ -72,7 +72,7 @@ test('rounds: roles, retries, outcomes, commits and the cost of each', () => {
 });
 
 test('cost is the sum of every cost event, across the restart; the loop\'s own total starts over', () => {
-  assert.deepEqual(RUN.cost, { usd: 12.15, rounds: 13 });
+  assert.deepEqual(RUN.cost, { usd: 12.15, rounds: 13, from: 'cost' });
   assert.equal(RUN.stop.usd, 10.11, 'run.stop carries the loop\'s total since its last start');
   const perRound = RUN.rounds.reduce((a, r) => a + (r.usd ?? 0), 0);
   assert.equal(Math.round(perRound * 100) / 100, 12.15);
@@ -100,7 +100,7 @@ test('scores tests and tasks over rounds, both higher is better', () => {
   assert.deepEqual(tests[0], [0, 0.9997], 'the check before round 1 belongs to round 0');
   assert.deepEqual(tests.find(([n]) => n === 4), [4, 0.9993]);
   assert.deepEqual(tests.at(-1), [11, 1]);
-  assert.deepEqual(ROW.scores.tasks, { n: 9, value: 3, prev: 2, better: 'higher' });
+  assert.deepEqual(ROW.scores.tasks, { n: 9, value: 3, prev: 2, better: 'higher', max: null, firstMax: null });
 });
 
 test('needs: waits close at the next round, the fence stays open; the PR is an artifact', () => {
@@ -121,7 +121,7 @@ test('a run whose last event is a wait need is waiting', () => {
 
 test('the stop: reason, rounds and the loop\'s total', () => {
   assert.equal(RUN.state, 'stopped');
-  assert.deepEqual({ ...RUN.stop, ts: undefined }, { reason: 'deadline', rounds: 11, usd: 10.11, ts: undefined });
+  assert.deepEqual({ ...RUN.stop, ts: undefined }, { reason: 'deadline', rounds: 11, usd: 10.11, detail: null, wrapup: false, ts: undefined });
   assert.equal(ROW.stop, 'deadline');
   assert.equal(ROW.round, 11);
   assert.equal(ROW.maxRounds, 15);
@@ -154,3 +154,54 @@ test('the run page lists every round with its cost, retries and the numeric comm
   assert.equal(model[0].outcome, null, 'a stopped run\'s planner round without round.end is not "running"');
   assert.equal(model[3].cost, '$2.10');
 }));
+
+// Review n5: the PR artifact follows the PR. push() is run from run.sh itself,
+// with git, gh and ev stubbed, so the test reads the loop's own code.
+test('run.sh parses, and push() re-sends the PR artifact when its title or state changes', async (t) => {
+  const { execFileSync } = await import('node:child_process');
+  const os = await import('node:os');
+  const sh = path.join(ROOT, 'docs/plans/runs/loop/run.sh');
+  execFileSync('bash', ['-n', sh]);
+  const src = fs.readFileSync(sh, 'utf8');
+  const fn = (name) => {
+    const m = new RegExp(`^${name}\\(\\) \\{\\n[\\s\\S]*?^\\}\\n`, 'm').exec(src);
+    assert.ok(m, `run.sh defines ${name}()`);
+    return m[0];
+  };
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-loop-push-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin);
+  const URL = 'https://example.invalid/acme/laneboard/pull/15';
+  // gh: `pr create` prints the URL; `pr view` answers from $DIR/gh-view ("STATE<TAB>title").
+  fs.writeFileSync(path.join(bin, 'gh'), `#!/bin/bash
+case "$1 $2" in
+  "pr create") echo "${URL}";;
+  "pr view") cat "$DIR/gh-view";;
+esac
+`, { mode: 0o755 });
+  const script = `set -uo pipefail
+git() { :; }
+log() { :; }
+ev() { printf '%s' "$1" >> "$DIR/ev"; shift; printf ' [%s]' "$@" >> "$DIR/ev"; echo >> "$DIR/ev"; }
+RUN_DIR="$DIR" BRANCH=run/x PR_BASE=main NAME=runs-x L="$DIR"
+${fn('push')}
+${fn('pr_update')}
+push
+`;
+  const runPush = (view) => {
+    if (view !== undefined) fs.writeFileSync(path.join(dir, 'gh-view'), view);
+    execFileSync('bash', ['-c', script], { env: { ...process.env, DIR: dir, PATH: `${bin}:${process.env.PATH}` } });
+    return fs.existsSync(path.join(dir, 'ev')) ? fs.readFileSync(path.join(dir, 'ev'), 'utf8').trim().split('\n') : [];
+  };
+  assert.deepEqual(runPush(), [`artifact [kind=pr] [url=${URL}] [title=Runs: runs-x (agent loop)] [state=open]`],
+    'the first artifact carries the title');
+  assert.equal(runPush('OPEN\tRuns: runs-x (agent loop)').length, 1, 'nothing changed: nothing sent');
+  assert.equal(runPush('OPEN\tRuns: night 5, PR state').at(-1),
+    `artifact [kind=pr] [url=${URL}] [title=Runs: night 5, PR state] [state=open]`);
+  assert.equal(runPush('MERGED\tRuns: night 5, PR state').at(-1),
+    `artifact [kind=pr] [url=${URL}] [title=Runs: night 5, PR state] [state=merged]`);
+  assert.equal(runPush('MERGED\tRuns: night 5, PR state').length, 3);
+  assert.equal(runPush('CLOSED\tRuns: night 5, PR state').at(-1).endsWith('[state=closed]'), true);
+  assert.equal(runPush('').length, 4, 'gh says nothing: nothing sent');
+});

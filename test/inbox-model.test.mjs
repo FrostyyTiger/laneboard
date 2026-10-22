@@ -114,7 +114,38 @@ test('needs you: waiting_* from attention, in attention order, then need/blocked
   });
   const m = buildInbox(s, { now: NOW });
   assert.deepEqual(groupIds(m, 'needs'), ['nd:builder-a/perm', 'nd:builder-a/q', 'nd:builder-a/mk']);
-  assert.match(rowOf(m, 'nd:builder-a/mk').reason, /^blocked: needs a key$/);
+  // T27: the word says the kind (`▲ BLKD`), so the text is the marker's own
+  assert.equal(rowOf(m, 'nd:builder-a/mk').reason, 'needs a key');
+  assert.equal(rowOf(m, 'nd:builder-a/mk').word, 'BLKD');
+});
+
+// review 27-designer Across 3 (runs n5 T27): the Inbox row reads `▲ QUES`
+// like the Board, then the session's own question; `question` only as a fallback.
+test('T27: needs rows carry the Board word and the session\'s own text; the generic word only as fallback', () => {
+  const s = storeOf([builder('builder-a', {
+    sessions: [
+      { name: 'q', state: 'waiting_question', activity: { lastAssistant: 'Keep the old export or drop it?' } },
+      { name: 'bare', state: 'waiting_question' },
+      { name: 'perm', state: 'waiting_permission', activity: { tool: 'Bash', toolInput: 'npm run bench', lastAssistant: 'x' } },
+      { name: 'stk', state: 'waiting_question', stuck: { reason: 'r' }, activity: { lastAssistant: '' } },
+      { name: 'nd', state: 'idle', lastMarker: { kind: 'need', text: '', ts: NOW - 10 } },
+    ],
+  })], {
+    attention: ['q', 'bare', 'perm', 'stk'].map((name, i) => ({
+      builder: 'builder-a', name, state: name === 'perm' ? 'waiting_permission' : 'waiting_question', score: 90 - i, since: 1,
+    })),
+  });
+  const m = buildInbox(s, { now: NOW });
+  const q = rowOf(m, 'nd:builder-a/q');
+  assert.deepEqual([q.word, q.reason, q.fallback], ['QUES', 'Keep the old export or drop it?', false]);
+  const bare = rowOf(m, 'nd:builder-a/bare');
+  assert.deepEqual([bare.word, bare.reason, bare.fallback], ['QUES', 'question', true]);
+  const perm = rowOf(m, 'nd:builder-a/perm');
+  assert.deepEqual([perm.word, perm.reason, perm.fallback], ['PERM', 'Bash npm run bench', false]);
+  assert.equal(rowOf(m, 'nd:builder-a/stk').word, 'QUES', 'a waiting state keeps its word, as the card');
+  assert.equal(rowOf(m, 'nd:builder-a/stk').fallback, true);
+  const nd = rowOf(m, 'nd:builder-a/nd');
+  assert.deepEqual([nd.word, nd.reason, nd.fallback], ['NEED', 'need', true]);
 });
 
 test('review rows come from the review queue (longest wait first); paused with kind; stale has stuck reasons and archive candidates', () => {
@@ -293,7 +324,7 @@ test('runs: open needs and recent PRs, newest first, each linking to the run pag
   assert.equal(r.reason, 'decision: need 2');
   assert.equal(r.link, 'https://example.invalid/acme/acme-api/pull/42');
   assert.equal(rowOf(m, 'rn:acme-docs:0').reason, 'fence: touched a fenced file');
-  assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').reason, 'pr: Paged search');
+  assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').reason, 'Paged search', 'T16: no `pr:` prefix, the group says RUN PRS');
   // T35: a PR is news, the grey hollow lamp; an open need keeps the amber triangle.
   assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').p, 'off');
   assert.equal(rowOf(m, 'rp:acme-search:https://example.invalid/acme/acme-api/pull/42').lampLabel, 'pr to review');
@@ -328,6 +359,21 @@ test('runs: a stopped run keeps its PR for RUN_PR_FRESH_MS after its last event,
   // A live run keeps its PR whatever its age.
   const live = buildInbox(storeOf([]), { now: NOW, runs: [runRow('acme-api', { updatedAt: NOW - 3 * RUN_PR_FRESH_MS, prs: [pr] })] });
   assert.equal(groupIds(live, 'runprs').length, 1);
+});
+
+test('runs: a PR with a state follows it: open stays in review, merged or closed leaves at once (§8 Q10)', () => {
+  const url = 'https://example.invalid/acme/acme-api/pull/9';
+  const at = (state, run = {}) => buildInbox(storeOf([]), { now: NOW, runs: [runRow('acme-api', { prs: [{ url, title: 'Paged search', state, ts: NOW - HOUR }], ...run })] });
+  assert.deepEqual(groupIds(at('open'), 'runprs'), [`rp:acme-api:${url}`]);
+  assert.deepEqual(groupIds(at('merged'), 'runprs'), []);
+  assert.deepEqual(groupIds(at('closed'), 'runprs'), []);
+  // An open PR outlives the 24 h rule; merged on a live run still leaves.
+  const old = { state: 'stopped', updatedAt: NOW - 3 * RUN_PR_FRESH_MS };
+  assert.equal(groupIds(at('open', old), 'runprs').length, 1);
+  // No state (or one the protocol does not know): the 24 h rule as before.
+  assert.equal(groupIds(at(null, old), 'runprs').length, 0);
+  assert.equal(groupIds(at('bogus', old), 'runprs').length, 0);
+  assert.equal(groupIds(at(null, { state: 'stopped', updatedAt: NOW - HOUR }), 'runprs').length, 1);
 });
 
 test('runs: `a` on a run need is the needs.ack of its ts; on a PR it does nothing', () => {

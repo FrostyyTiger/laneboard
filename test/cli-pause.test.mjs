@@ -201,3 +201,31 @@ test('paused cleans terminal escapes from sentinel text (S11b)', async (t) => {
   // Still valid JSON carrying the original text (escaped, not dropped).
   assert.equal(JSON.parse(j.stdout).paused[0].reason, 'r\u001b[2Jz\u009b');
 });
+
+test('pause/paused/resume --all with LANEBOARD_STATE_DIR touch the state dir only, nothing under HOME (n3 T52)', async (t) => {
+  const home = tmpHome(t);
+  const sd = tmpHome(t); // a separate tree: anything written outside it shows up under home
+  const env = envFor(home, { LANEBOARD_STATE_DIR: sd });
+  const before = fs.readdirSync(home);
+  const p = await run(['pause', '--all'], env, home);
+  assert.equal(p.code, 0, p.stderr);
+  assert.equal(read(path.join(sd, 'paused', 'ALL')).kind, 'operator');
+  const l = await run(['paused', '--json'], env, home);
+  assert.equal(l.code, 0, l.stderr);
+  const j = JSON.parse(l.stdout);
+  assert.equal(j.stateDir, sd);
+  assert.deepEqual(j.paused.map((e) => e.scope), ['ALL']);
+  assert.deepEqual(fs.readdirSync(home), before, 'nothing written under HOME (cwd too)');
+  const r = await run(['resume', '--all'], env, home);
+  assert.equal(r.code, 0, r.stderr);
+  assert.equal(fs.existsSync(path.join(sd, 'paused')), false);
+  assert.deepEqual(fs.readdirSync(home), before, 'nothing written under HOME (cwd too)');
+});
+
+test('README says which CLI commands stay in LANEBOARD_STATE_DIR and which write elsewhere by design', () => {
+  const readme = fs.readFileSync(fileURLToPath(new URL('../README.md', import.meta.url)), 'utf8');
+  assert.match(readme, /with `LANEBOARD_STATE_DIR` set, `laneboard\s+pause`, `resume` and `paused`/);
+  assert.match(readme, /`laneboard run`\s+without `--post` appends to `\.\/\.laneboard\/run\.jsonl`/);
+  assert.match(readme, /`laneboard fleet keygen` without `--out`/);
+  assert.match(readme, /`laneboard fleet pubkey` without `--key` reads that same file/);
+});

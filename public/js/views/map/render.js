@@ -202,6 +202,13 @@ const PHONE = 480;
 /** On a phone, a map of this many nodes or fewer labels every one. */
 export const PHONE_ALL_LABELS = 8;
 const TEXT_CACHE_MAX = 4000;
+/** The selected node's label keeps this far (px) outside its closed reticle (T53). */
+export const RETICLE_GAP = 4;
+
+/** Half the side of the selection reticle's square when closed: the brackets' corner distance. Pure. */
+export function reticleD(kind, ns = 1) {
+  return (SIZE[kind] ?? 5) * ns * (kind === 'builder' ? 1.25 : 1) + 6;
+}
 
 /**
  * A renderer bound to one 2D context. `palette` is readPalette's shape; swap
@@ -214,6 +221,8 @@ export function createRenderer(ctx, palette) {
   const widths = new Map();
   /** Node id -> outer radius drawn this frame (drawNodes), read by drawLabels. */
   const outerR = new Map();
+  /** Node ids drawn with a trouble mark (▲/■, its own or rolled up) this frame (drawNodes), read by labelPlan. */
+  const marked = new Set();
 
   function setPalette(next) { P = next ?? P; }
 
@@ -274,40 +283,35 @@ export function createRenderer(ctx, palette) {
    * Occupied rings as solid hairlines, each labelled by the kinds on it with a
    * leader tick in the layout's gap at LEGEND_BEARING (330, off the 000 axis
    * and its bearing), and the degree dial outside the outermost one with
-   * numeric bearings at the quarters.
+   * numeric bearings at the quarters while the whole dial is in view.
    */
   function drawRings(scene) {
-    const s = scene.s ?? 1;
     const c0 = centre(scene);
-    const labels = ringLabels(scene.pos ?? new Map(), scene.byId ?? new Map());
+    const { rings, legends, dial, bearings } = ringGeometry(scene);
     const ux = Math.cos(LEGEND_ANGLE), uy = Math.sin(LEGEND_ANGLE);
     ctx.save();
-    let outer = RINGS[2] * s;
-    for (const { r: wr, label } of labels) {
-      const r = wr * s;
-      outer = Math.max(outer, r);
+    for (const r of rings) {
       strokeStyle(P.line, 0.5, 1, []);
       ctx.beginPath();
       arc(c0.x, c0.y, r, 0, TAU);
       ctx.stroke();
-      // A phone has no room for the legends: they sat under nodes and plates.
-      if ((scene.W ?? Infinity) <= PHONE) continue;
-      // The leader: a 6px tick out from the ring; the label ends at its tip
-      // and runs left, away from the ring (outward at this bearing).
+    }
+    // The leader: a 6px tick out from the ring; the label ends at its tip
+    // and runs left, away from the ring (outward at this bearing).
+    for (const l of legends) {
       strokeStyle(P.t3, 0.6, 1, []);
       ctx.beginPath();
-      ctx.moveTo(c0.x + ux * r, c0.y + uy * r);
-      ctx.lineTo(c0.x + ux * (r + 6), c0.y + uy * (r + 6));
+      ctx.moveTo(c0.x + ux * l.r, c0.y + uy * l.r);
+      ctx.lineTo(c0.x + ux * (l.r + 6), c0.y + uy * (l.r + 6));
       ctx.stroke();
       fillStyle(P.t3, 0.85);
       ctx.font = `500 10px ${P.label}`;
       ctx.textAlign = 'right';
       ctx.textBaseline = 'bottom';
-      tracked(label, c0.x + ux * (r + 8), c0.y + uy * (r + 8), 1);
+      tracked(l.text, l.x, l.y, 1);
     }
     // The dial: an instrument, not a decoration. It is what makes a bearing
     // readable when you tell someone "the red one at 120".
-    const dial = outer + 26;
     for (const t of ticks(dial)) {
       strokeStyle(P.t3, t.long ? 0.45 : 0.22, 1, []);
       const cx = Math.cos(t.a), sy = Math.sin(t.a);
@@ -315,16 +319,56 @@ export function createRenderer(ctx, palette) {
       ctx.moveTo(c0.x + cx * t.r0, c0.y + sy * t.r0);
       ctx.lineTo(c0.x + cx * t.r1, c0.y + sy * t.r1);
       ctx.stroke();
-      if (t.label) {
-        fillStyle(P.t3, 0.7);
-        ctx.font = `9px ${P.mono}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        const rr = t.r1 + 9;
-        ctx.fillText(t.label, c0.x + cx * rr, c0.y + sy * rr);
-      }
+    }
+    for (const b of bearings) {
+      fillStyle(P.t3, 0.7);
+      ctx.font = `9px ${P.mono}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(b.text, b.x, b.y);
     }
     ctx.restore();
+  }
+
+  /**
+   * Where drawRings puts its rings (screen radii), ring legends and bearing
+   * numbers, each text with the box it covers: the label pass keeps clear of
+   * them (T51). A phone has no room for the legends: they sat under nodes
+   * and plates. Sets ctx.font while measuring; call inside save/restore.
+   */
+  function ringGeometry(scene) {
+    const s = scene.s ?? 1;
+    const c0 = centre(scene);
+    const ux = Math.cos(LEGEND_ANGLE), uy = Math.sin(LEGEND_ANGLE);
+    const phone = (scene.W ?? Infinity) <= PHONE;
+    const rings = [], legends = [], bearings = [];
+    let outer = RINGS[2] * s;
+    for (const { r: wr, label } of ringLabels(scene.pos ?? new Map(), scene.byId ?? new Map())) {
+      const r = wr * s;
+      outer = Math.max(outer, r);
+      rings.push(r);
+      if (phone) continue;
+      const x = c0.x + ux * (r + 8), y = c0.y + uy * (r + 8);
+      ctx.font = `500 10px ${P.label}`;
+      const w = measure(label) + ('letterSpacing' in ctx ? label.length : 0);
+      legends.push({ r, text: label, x, y, box: { x0: x - w - 1, y0: y - 12, x1: x + 1, y1: y } });
+    }
+    const dial = outer + 26;
+    ctx.font = `9px ${P.mono}`;
+    for (const t of ticks(dial)) {
+      if (!t.label) continue;
+      const rr = t.r1 + 9;
+      const x = c0.x + Math.cos(t.a) * rr, y = c0.y + Math.sin(t.a) * rr;
+      const w = measure(t.label);
+      bearings.push({ text: t.label, x, y, box: { x0: x - w / 2 - 1, y0: y - 6, x1: x + w / 2 + 1, y1: y + 6 } });
+    }
+    // The numbers name the dial's quarters: they read as a dial only all four
+    // together. Cut by an edge or under the inspector or sheet, a lone "000"
+    // over a node read as a stray label (review n5), so then none is drawn.
+    const W = scene.W ?? Infinity, H = scene.H ?? Infinity;
+    const whole = bearings.every(({ box: b }) => b.x0 >= 0 && b.y0 >= 0 && b.x1 <= W && b.y1 <= H && !covered(scene, b));
+    if (!whole) bearings.length = 0;
+    return { rings, legends, dial, bearings };
   }
 
   // ---------------------------------------------------------------- edges
@@ -596,22 +640,29 @@ export function createRenderer(ctx, palette) {
 
   /**
    * Folded: a dotted ring for what is inside and a "+N" plate outside it, on
-   * a 45 degree diagonal away from the label, 2px clear of the ring. Of those
+   * a 45 degree diagonal away from the label, 2px clear of the node's
+   * outermost ring (`outer`: ringOuter, the fold ring at least). Of those
    * diagonals the first whose plate crosses no ring hairline (`hairlines`:
    * screen radii around `c0`) wins: straight back from the label, then the
-   * two sides. Returns its rect.
+   * two sides. Pure placement, no drawing: `{text, ring, x, y, w, h}`.
    */
-  function foldMark(scene, id, n, c, sp, r, alpha, c0 = null, hairlines = []) {
-    const inside = scene.kids?.get(id)?.length ?? 0;
+  function foldPlate(scene, id, n, c, sp, r, outer, c0 = null, hairlines = []) {
     const ring = r + (n.metrics ? 10 : 6);
-    strokeStyle(P.t2, 0.55 * alpha, 1, [1.5, 3]);
-    ctx.beginPath(); arc(sp.x, sp.y, ring, 0, TAU); ctx.stroke();
-    ctx.setLineDash([]);
-    const text = `+${inside}`;
+    const text = `+${scene.kids?.get(id)?.length ?? 0}`;
     ctx.font = `600 9.5px ${P.mono}`;
     const w = measure(text) + 8;
     const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
-    const { x: bx, y: by } = platePlace(sp, ang, ring, w, 14, c0, hairlines);
+    const { x, y } = platePlace(sp, ang, Math.max(ring, outer - 0.5), w, 14, c0, hairlines);
+    return { text, ring, x, y, w, h: 14 };
+  }
+
+  /** Draws a folded node's dotted ring and its plate (from foldPlate). Returns the plate's rect. */
+  function foldMark(id, sp, plate, alpha) {
+    const { text, ring, x: bx, y: by, w } = plate;
+    strokeStyle(P.t2, 0.55 * alpha, 1, [1.5, 3]);
+    ctx.beginPath(); arc(sp.x, sp.y, ring, 0, TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.font = `600 9.5px ${P.mono}`;
     fillStyle(P.sunken, 0.95 * alpha);
     ctx.fillRect(bx, by, w, 14);
     strokeStyle(P.line, alpha, 1, []);
@@ -635,13 +686,46 @@ export function createRenderer(ctx, palette) {
     const W = scene.W ?? Infinity, H = scene.H ?? Infinity;
     const badges = [];
     outerR.clear();
+    marked.clear();
     const reach = scene.overlay === 'reach' ? reachScope(scene.reach, scene.selected ?? null) : null;
     // The ring hairlines drawRings draws, for the fold plates to stay off.
     const c0 = centre(scene);
     const hairlines = scene.folded?.size
       ? ringLabels(scene.pos ?? new Map(), scene.byId ?? new Map()).map((l) => l.r * (scene.s ?? 1)) : [];
+    // A node's look and reach, shared by the plate pass and the draw pass.
+    const look = (id, c) => {
+      const n = c.node;
+      const r = (SIZE[n.kind] ?? 5) * ns * (0.4 + 0.6 * (c.a ?? 1));
+      const isFolded = Boolean(scene.folded?.has(id)) && !c.leaving;
+      const rolled = rollsUp(n, isFolded) ? scene.rolled?.(id) ?? null : null;
+      const st = n.virtual ? { tone: 'grey', level: 0, shape: 'disc', alpha: 1, abnormal: false }
+        : nodeStyle(n, scene.overlay, rolled, { budgetUsd: scene.budgetUsd?.(n), reach });
+      const outer = ringOuter(n, r, { mark: st.mark, folded: isFolded, working: Boolean(st.arc) });
+      return { n, r, isFolded, st, outer };
+    };
+    const shown = (c) => c.node && (c.a ?? 1) > 0.001;
+    const onScreen = (sp) => !(sp.x < -40 || sp.y < -40 || sp.x > W + 40 || sp.y > H + 40);
+    // The fold plates first, so the pings below can leave them clear.
+    const plates = new Map();
+    for (const id of scene.folded ?? []) {
+      const c = nodes.get(id);
+      if (!c || !shown(c) || c.leaving || c.node.kind === 'core' || c.node.kind === 'run') continue;
+      const sp = scene.toScreen(c);
+      if (!onScreen(sp)) continue;
+      const { n, r, outer } = look(id, c);
+      plates.set(id, foldPlate(scene, id, n, c, sp, r, outer, c0, hairlines));
+    }
     ctx.save();
     if (!scene.reduced) {
+      // A ping is a ripple round its node: it passes behind a +N plate, never through it.
+      const clipped = plates.size > 0 && typeof ctx.clip === 'function';
+      if (clipped) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(-1e5, -1e5, 2e5, 2e5);
+        for (const b of plates.values()) ctx.rect(b.x - 2, b.y - 2, b.w + 4, b.h + 4);
+        ctx.clip('evenodd');
+      }
       for (const p of scene.pulses ?? []) {
         const c = nodes.get(p.id);
         if (!c) continue;
@@ -654,21 +738,21 @@ export function createRenderer(ctx, palette) {
         arc(sp.x, sp.y, r0 + ease(t) * (p.soft ? 18 : 30), 0, TAU);
         ctx.stroke();
       }
+      if (clipped) ctx.restore();
     }
     for (const [id, c] of nodes) {
-      const n = c.node;
-      if (!n || (c.a ?? 1) <= 0.001) continue;
+      if (!shown(c)) continue;
       const sp = scene.toScreen(c);
-      if (sp.x < -40 || sp.y < -40 || sp.x > W + 40 || sp.y > H + 40) continue;
+      if (!onScreen(sp)) continue;
       const fade = alphaOf(scene, id) * (c.a ?? 1);
-      const r = (SIZE[n.kind] ?? 5) * ns * (0.4 + 0.6 * (c.a ?? 1));
-      const isFolded = Boolean(scene.folded?.has(id)) && !c.leaving;
-      const rolled = rollsUp(n, isFolded) ? scene.rolled?.(id) ?? null : null;
-      const st = n.virtual ? { tone: 'grey', level: 0, shape: 'disc', alpha: 1, abnormal: false }
-        : nodeStyle(n, scene.overlay, rolled, { budgetUsd: scene.budgetUsd?.(n), reach });
+      const { n, r, isFolded, st, outer } = look(id, c);
       const alpha = fade * (st.alpha ?? 1);
+      // A lamp never fades (docs/design.md): a ▲/■ keeps its full weight when
+      // focus dims the rest; only its enter/leave animation thins it.
+      const lampA = st.shape === 'tri' || st.shape === 'square' ? (c.a ?? 1) * (st.alpha ?? 1) : alpha;
       const col = tone(st.tone, st.level);
-      outerR.set(id, ringOuter(n, r, { mark: st.mark, folded: isFolded, working: Boolean(st.arc) }));
+      outerR.set(id, outer);
+      if (st.abnormal && (st.tone === 'crit' || st.tone === 'warn')) marked.add(id);
 
       if (n.kind === 'core') {
         // The core: a solid point in two hairline rings. No glow, no breathing.
@@ -677,7 +761,7 @@ export function createRenderer(ctx, palette) {
           ctx.beginPath(); arc(sp.x, sp.y, r * k, 0, TAU); ctx.stroke();
         }
         // Grey unless the host itself is in trouble, then its ▲/■ (T23).
-        if (st.abnormal && st.shape !== 'ring') glyph(st.shape, sp.x, sp.y, r * 0.6, col, alpha);
+        if (st.abnormal && st.shape !== 'ring') glyph(st.shape, sp.x, sp.y, r * 0.6, col, lampA);
         else glyph('disc', sp.x, sp.y, r * 0.45, P.t1, alpha);
         continue;
       }
@@ -697,7 +781,7 @@ export function createRenderer(ctx, palette) {
         ctx.beginPath(); arc(sp.x, sp.y, r, 0, TAU); ctx.fill();
         strokeStyle(st.abnormal ? col : P.t2, alpha, 1.5, []);
         ctx.stroke();
-        if (st.abnormal && st.shape !== 'ring') glyph(st.shape, sp.x, sp.y, r * 0.45, col, alpha);
+        if (st.abnormal && st.shape !== 'ring') glyph(st.shape, sp.x, sp.y, r * 0.45, col, lampA);
         else {
           strokeStyle(P.t3, 0.6 * alpha, 1, []);
           ctx.beginPath(); arc(sp.x, sp.y, r * 0.55, 0, TAU); ctx.stroke();
@@ -718,14 +802,14 @@ export function createRenderer(ctx, palette) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(code, sp.x, sp.y + 0.5);
-        if (st.abnormal) glyph(st.shape, sp.x + q, sp.y - q, 3, col, alpha);
+        if (st.abnormal) glyph(st.shape, sp.x + q, sp.y - q, 3, col, lampA);
       } else if (!st.abnormal && st.tone === 'grey' && st.shape === 'diamond') {
         // A calm lane keeps its diamond outline, so lane-vs-machine still reads.
         glyph('diamond', sp.x, sp.y, r * 0.85, P.t3, alpha, { hollow: true });
       } else if (!st.abnormal && st.tone === 'grey' && st.shape === 'disc') {
         glyph('disc', sp.x, sp.y, r, P.t3, alpha);
       } else {
-        glyph(st.shape, sp.x, sp.y, st.shape === 'disc' || st.shape === 'ring' ? r : r * 0.9, col, alpha);
+        glyph(st.shape, sp.x, sp.y, st.shape === 'disc' || st.shape === 'ring' ? r : r * 0.9, col, lampA);
       }
 
       if (st.arc) {
@@ -749,7 +833,7 @@ export function createRenderer(ctx, palette) {
 
       if (GAUGED.has(n.kind)) gauges(n, sp.x, sp.y, n.kind === 'builder' ? r * 1.25 + 1 : r, alpha);
       if (isFolded) {
-        const b = foldMark(scene, id, n, c, sp, r, alpha, c0, hairlines);
+        const b = foldMark(id, sp, plates.get(id) ?? foldPlate(scene, id, n, c, sp, r, outer, c0, hairlines), alpha);
         if ((c.a ?? 1) > 0.5) badges.push(b);
       }
     }
@@ -792,10 +876,14 @@ export function createRenderer(ctx, palette) {
     return same ? n.code ?? n.label ?? name : name;
   }
 
-  /** On a phone: labels only for trouble, the selection and what is in focus (others on tap). */
+  /**
+   * On a phone: labels only for trouble, the selection and what is in focus
+   * (others on tap). Trouble includes a node drawn with a ▲/■ it rolls up
+   * from what it holds (a site, a folded lane): a mark always has a name.
+   */
   function trouble(n, stuck) {
     return LOUD.has(n.status) || n.status === 'warn' || Boolean(n.flags?.stuck) || n.link === 'down'
-      || (n.kind === 'builder' && stuck.has(n.builder));
+      || (n.kind === 'builder' && stuck.has(n.builder)) || marked.has(n.id);
   }
 
   /**
@@ -808,6 +896,7 @@ export function createRenderer(ctx, palette) {
     const s = scene.s ?? 1;
     const ns = nodeScale(scene);
     const W = scene.W ?? Infinity;
+    const H = scene.H ?? Infinity;
     const phone = W <= PHONE;
     const focus = scene.hover ?? scene.highlight ?? scene.selected ?? null;
     const near = scene.near ?? new Set();
@@ -828,9 +917,12 @@ export function createRenderer(ctx, palette) {
       const picked = id === focus || id === scene.selected || matches.has(id);
       const show = phone
         ? few || n.kind === 'builder' || n.kind === 'run' || picked || trouble(n, stuck)
-        : (c.depth ?? 0) <= 2 || n.kind === 'builder' || n.kind === 'run' || s > 1.25 || picked || near.has(id) || loud;
+        : (c.depth ?? 0) <= 2 || n.kind === 'builder' || n.kind === 'run' || s > 1.25 || picked || near.has(id) || loud || trouble(n, stuck);
       if (!show || fade < 0.12) continue;
       const sp = scene.toScreen(c);
+      // A node off the canvas, or under the inspector or sheet, is not named:
+      // its label would stand alone at an edge (review n5).
+      if (!(sp.x >= 0 && sp.x <= W && sp.y >= 0 && sp.y <= H) || covered(scene, { x0: sp.x, y0: sp.y, x1: sp.x, y1: sp.y })) continue;
       const r = (SIZE[n.kind] ?? 5) * ns;
       if (n.kind === 'core') {
         // On a phone the name under the core lands on the first ring's nodes;
@@ -846,68 +938,96 @@ export function createRenderer(ctx, palette) {
       const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
       // From the outermost ring the node draws, plus half a text line where
       // the label sits above or below it, so the backing never covers a ring.
-      const R = outerR.get(id) ?? ringOuter(n, r, { folded: Boolean(scene.folded?.has(id)) });
+      let R = outerR.get(id) ?? ringOuter(n, r, { folded: Boolean(scene.folded?.has(id)) });
+      // The selection's name sits outside its reticle, not on a bracket (T53).
+      const sel = id === scene.selected;
+      if (sel) R = Math.max(R, reticleD(n.kind, ns) + RETICLE_GAP);
       const out = R + 6 + 7 * Math.abs(Math.sin(ang));
       let x = sp.x + Math.cos(ang) * out;
       let y = sp.y + Math.sin(ang) * out;
       let left = Math.cos(ang) >= 0;
       // One label style: every name in the label face, caps. Weight and grey
-      // step carry the rank (machines and places t1, what runs on them t2, a
-      // run muted to t3 like its round); trouble lifts a name to t1, and the
-      // hue stays on the node's ▲/■ mark, never on the text.
+      // step carry the rank (machines and places 600 t1, what runs on them
+      // 500 t2, a run in the lane's 500 but muted to t3 like its round, T51);
+      // trouble lifts a name to t1, and the hue stays on the node's ▲/■
+      // mark, never on the text.
       const plate = n.kind === 'site' || n.kind === 'host' || n.kind === 'room' || n.kind === 'builder';
       const raw = n.kind === 'builder' ? builderName(scene, n) : n.label ?? n.id;
       const text = String(raw).toUpperCase();
-      const font = `${plate || n.kind === 'run' ? 600 : 500} ${plate && n.kind !== 'room' ? 12 : 11}px ${P.label}`;
+      const font = `${plate ? 600 : 500} ${plate && n.kind !== 'room' ? 12 : 11}px ${P.label}`;
       ctx.font = font;
       const col = plate || loud ? P.t1 : n.kind === 'run' ? P.t3 : P.t2;
       // A backing so a label stays readable where an arc passes under it.
       const w = measure(text) + ('letterSpacing' in ctx ? text.length : 0);
       const round = n.kind === 'run' ? runRound(n) : null;
       const extra = round ? round.length * 7 + 8 : 0;
-      const off = (lft, px) => (lft ? px + w + extra > W - 4 : px - w - extra < 4);
+      const rawSub = n.why && loud ? n.why : n.sub;
+      const sub = rawSub && (s > 1.05 || id === focus || id === scene.selected) ? String(rawSub) : null;
+      const subText = sub && (sub.length > 38 ? `${sub.slice(0, 37)}…` : sub);
+      let sw = 0;
+      if (subText) { ctx.font = `10px ${P.mono}`; sw = measure(subText); ctx.font = font; }
+      // The widest line decides whether the label fits on this side (T53: a sub line ran off the edge).
+      const wide = Math.max(w + extra, sw);
+      const off = (lft, px) => (lft ? px + wide > W - 4 : px - wide < 4);
       if (off(left, x)) {
         // It would run off the edge: it flips to the node's other side; when
         // that does not fit either, it goes over the node, centred on it and
         // kept inside the canvas (labels under a node belong to its neighbours).
         const fx = 2 * sp.x - x;
         if (!off(!left, fx)) { x = fx; left = !left; } else {
-          x = clamp(sp.x - (w + extra) / 2, 4, W - 4 - w - extra);
+          x = clamp(sp.x - wide / 2, 4, W - 4 - wide);
           y = sp.y - out - 6;
           left = true;
         }
       }
-      const rawSub = n.why && loud ? n.why : n.sub;
-      const sub = rawSub && (s > 1.05 || id === focus || id === scene.selected) ? String(rawSub) : null;
-      const subText = sub && (sub.length > 38 ? `${sub.slice(0, 37)}…` : sub);
       const bx = left ? x - 2 : x - w - 2;
       const box = { x0: bx, y0: y - 7, x1: bx + w + 4, y1: y + 7 };
       if (round) { if (left) box.x1 += extra; else box.x0 -= extra; }
       let low = n.kind === 'builder' ? 22 : 13;
       if (n.kind === 'builder') box.y1 = y + 13;
       if (subText) {
-        ctx.font = `10px ${P.mono}`;
-        const sw = measure(subText);
         box.y1 = y + low + 6;
         if (left) box.x1 = Math.max(box.x1, x + sw); else box.x0 = Math.min(box.x0, x - sw);
+      }
+      if (sel) {
+        // On a diagonal the box corner can still reach the reticle's square:
+        // step it out along the bearing until it is clear.
+        const d = reticleD(n.kind, ns) + RETICLE_GAP;
+        const ret = { x0: sp.x - d, y0: sp.y - d, x1: sp.x + d, y1: sp.y + d };
+        const cx = (box.x0 + box.x1) / 2 - sp.x, cy = (box.y0 + box.y1) / 2 - sp.y;
+        // Sideways only while the canvas has room; else straight up or down.
+        const room = cx > 0 ? box.x1 + 40 <= W - 4 : box.x0 - 40 >= 4;
+        const dx = Math.abs(cx) > 2 && room ? Math.sign(cx) * 2 : 0, dy = (Math.sign(cy) || -1) * 2;
+        for (let k = 0; k < 40 && hits(box, ret); k++) {
+          x += dx; y += dy; box.x0 += dx; box.x1 += dx; box.y0 += dy; box.y1 += dy;
+        }
       }
       // Who keeps its place when two collide: the selection, then trouble,
       // then machines and places, then the rest.
       const rank = id === scene.selected ? 0 : picked ? 1 : loud || trouble(n, stuck) ? 2 : plate ? 3 : 4;
-      plan.push({ id, n, sx: sp.x, text, font, col, x, y, left, w, round, sub: subText, loud, fade, rank, box, low,
+      plan.push({ id, n, sx: sp.x, sy: sp.y, R, text, font, col, x, y, left, w, round, sub: subText, loud, fade, enter: c.a ?? 1, rank, box, low,
         lamps: n.kind === 'builder' ? lampColours(n, stuck.has(n.builder)) : null });
     }
     return plan;
   }
 
   const hits = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+  /** The scene's covers (inspector, sheet: {left, top, right, bottom}) as boxes. */
+  const coverBoxes = (scene) => (Array.isArray(scene.covers) ? scene.covers : [])
+    .filter((c) => c && Number.isFinite(c.left) && Number.isFinite(c.top))
+    .map((c) => ({ x0: c.left, y0: c.top, x1: Number.isFinite(c.right) ? c.right : Infinity, y1: Number.isFinite(c.bottom) ? c.bottom : Infinity }));
+  /** Whether box `b` (or a point as a zero box) is under a cover; a point on its edge counts. */
+  const covered = (scene, b) => coverBoxes(scene).some((c) => b.x0 <= c.x1 && c.x0 <= b.x1 && b.y0 <= c.y1 && c.y0 <= b.y1);
 
   /**
    * The collision pass: labels in rank order take their place, or the
    * nearest free one a line up or down (up to four lines), clear of the fold
-   * plates (`badges`) and inside the canvas, and off other nodes where a
-   * place allows it. On a phone a label with no free place is left for a
-   * tap (the selection always stays); wider, it keeps its first place.
+   * plates (`badges`), the ring legends and bearing numbers, inside the
+   * canvas, and off other nodes where a place allows it. On a phone a label
+   * also tries centred above, then below, its node; one with no free place
+   * is left for a tap (the node keeps its ring and mark), except the
+   * selection and trouble, which keep their first place (T51: a trouble
+   * node is always named). Wider, every label keeps its first place.
    * Returns the plan placed, each entry with `dy` applied.
    */
   function placeLabels(plan, scene, badges = []) {
@@ -915,43 +1035,66 @@ export function createRenderer(ctx, palette) {
     const phone = (scene.W ?? Infinity) <= PHONE;
     const ns = nodeScale(scene);
     const taken = badges.map((b) => ({ x0: b.x - 1, y0: b.y - 1, x1: b.x + b.w + 1, y1: b.y + b.h + 1 }));
+    // The inspector and the sheet are no place for a label (review n5).
+    const covers = coverBoxes(scene).map((c) => ({ x0: c.x0 - 4, y0: c.y0 - 4, x1: c.x1 + 4, y1: c.y1 + 4 }));
+    taken.push(...covers);
+    const rg = ringGeometry(scene);
+    for (const t of [...rg.legends, ...rg.bearings]) taken.push(t.box);
     // Drawn nodes, as the square their outermost ring fits in.
     const discs = [];
     for (const [id, c] of scene.nodes ?? []) {
       const n = c.node;
       if (!n || n.virtual || alphaOf(scene, id) * (c.a ?? 1) < 0.12) continue;
       const sp = scene.toScreen(c);
-      const R = outerR.get(id) ?? (SIZE[n.kind] ?? 5) * ns;
+      let R = outerR.get(id) ?? (SIZE[n.kind] ?? 5) * ns;
+      if (id === scene.selected) R = Math.max(R, reticleD(n.kind, ns) + RETICLE_GAP);
       discs.push({ id, x0: sp.x - R, y0: sp.y - R, x1: sp.x + R, y1: sp.y + R });
     }
     const order = plan.map((e, i) => [e, i]).sort((a, b) => a[0].rank - b[0].rank || a[1] - b[1]).map(([e]) => e);
     const out = [];
     const STEPS = [0, 14, -14, 28, -28, 42, -42, 56, -56];
-    const slot = (e, clear) => STEPS.find((d) => {
+    const slot = (e, clear) => (e.steps ?? STEPS).find((d) => {
       const b = { x0: e.box.x0, x1: e.box.x1, y0: e.box.y0 + d, y1: e.box.y1 + d };
-      return b.y0 >= 0 && b.y1 <= H && !taken.some((t) => hits(t, b)) && clear(b);
+      return b.y0 >= 0 && b.y1 <= H && b.x0 >= 0 && b.x1 <= W && !taken.some((t) => hits(t, b)) && clear(b);
     });
     const W = scene.W ?? Infinity;
+    /** Cut by a canvas edge or under a cover: a label there is not read, it is not drawn. */
+    const unseen = (b) => b.x0 < 0 || b.x1 > W || b.y0 < 0 || b.y1 > H || covers.some((c) => hits(c, b));
     /** The label on the node's other side, or null when that leaves the canvas. */
     const mirror = (e) => {
       if (e.core || e.sx == null) return null;
       const box = { ...e.box, x0: 2 * e.sx - e.box.x1, x1: 2 * e.sx - e.box.x0 };
       return box.x0 < 4 || box.x1 > W - 4 ? null : { ...e, x: 2 * e.sx - e.x, left: !e.left, box };
     };
+    /** On a phone: the label centred above (dir -1) or below (+1) its node, read left to right. */
+    const stack = (e, dir) => {
+      if (!phone || e.core || e.sx == null || e.sy == null) return null;
+      const bw = e.box.x1 - e.box.x0, bh = e.box.y1 - e.box.y0;
+      if (bw > W - 8) return null;
+      const x0 = clamp(e.sx - bw / 2, 4, W - 4 - bw);
+      const y0 = dir < 0 ? e.sy - e.R - 4 - bh : e.sy + e.R + 4;
+      // The name's line sits 7px under the box top, as in labelPlan; it may
+      // move one line further out, no more, or it reads as a neighbour's.
+      return { ...e, x: x0 + 2, y: y0 + 7, left: true, steps: [0, 14 * dir], box: { x0, y0, x1: x0 + bw, y1: y0 + bh } };
+    };
     for (const e0 of order) {
       const alt = mirror(e0);
+      const up = stack(e0, -1), down = stack(e0, 1);
       // Off every node, its own included: a label moved a line up or down
       // must not land on the plate it names.
-      const offNodes = () => (b) => !discs.some((n) => hits(n, b));
+      const offNodes = (b) => !discs.some((n) => hits(n, b));
+      // The selection never moves onto its own reticle, even with no clear place.
+      const own = e0.id === scene.selected ? discs.find((n) => n.id === e0.id) : null;
+      const any = own ? (b) => !hits(own, b) : () => true;
       let e = e0;
       let dy = null;
-      for (const [cand, clear] of [[e0, offNodes(e0)], [alt, offNodes(e0)], [e0, () => true], [alt, () => true]]) {
+      for (const [cand, clear] of [[e0, offNodes], [alt, offNodes], [up, offNodes], [down, offNodes], [e0, any], [alt, any], [up, any], [down, any]]) {
         if (!cand) continue;
         dy = slot(cand, clear);
         if (dy != null) { e = cand; break; }
       }
       if (dy == null) {
-        if (phone && e.rank > 0) continue;
+        if ((phone && e.rank > 2) || unseen(e.box)) continue;
         dy = 0;
       }
       const placed = { ...e, y: e.y + dy, box: { ...e.box, y0: e.box.y0 + dy, y1: e.box.y1 + dy } };
@@ -959,6 +1102,14 @@ export function createRenderer(ctx, palette) {
       out.push(placed);
     }
     return out;
+  }
+
+  /** The ring legend and bearing number boxes drawRings draws (for tests: labels keep clear of them). */
+  function ringTextBoxes(scene) {
+    ctx.save();
+    const g = ringGeometry(scene);
+    ctx.restore();
+    return [...g.legends, ...g.bearings].map((t) => ({ text: t.text, ...t.box }));
   }
 
   /** The label boxes drawLabels would draw, after the collision pass (for tests and hit checks). */
@@ -983,18 +1134,22 @@ export function createRenderer(ctx, palette) {
         continue;
       }
       const { left, w, round } = e;
+      // The progress follows the name in reading order on either side of the
+      // node (runs-n5 T5): on the left side the name moves out to make room.
+      ctx.font = `10px ${P.mono}`;
+      const rw = round ? measure(round) : 0;
+      const nx = round && !left ? x - rw - 8 : x;
       ctx.font = e.font;
       ctx.textAlign = left ? 'left' : 'right';
-      const bx = left ? x - 2 : x - w - 2;
+      const bx = left ? nx - 2 : nx - w - 2;
       fillStyle(P.bg, 0.8 * fade);
       ctx.fillRect(bx, y - 7, w + 4, 14);
       fillStyle(e.col, fade);
-      tracked(e.text, x, y, 1);
+      tracked(e.text, nx, y, 1);
       if (round) {
-        // The round beside the name, in the data face.
+        // The numbers the ring draws, beside the name, in the data face.
         ctx.font = `10px ${P.mono}`;
-        const rw = measure(round);
-        const rx = left ? bx + w + 8 : bx - 6;
+        const rx = left ? bx + w + 8 : x;
         fillStyle(P.bg, 0.8 * fade);
         ctx.fillRect(left ? rx - 2 : rx - rw - 2, y - 7, rw + 4, 14);
         fillStyle(P.t3, fade);
@@ -1003,8 +1158,9 @@ export function createRenderer(ctx, palette) {
       if (e.lamps) {
         // Lamps: 4x4 squares, 2px apart, under the label.
         const lx = left ? x : x - (e.lamps.length * 6 - 2);
+        // A lit lamp never fades with focus (docs/design.md); off lamps go with the label.
         e.lamps.forEach((lc, i) => {
-          fillStyle(lc, fade);
+          fillStyle(lc, lc === P.crit || lc === P.warn || lc === P.accent ? e.enter ?? 1 : fade);
           ctx.fillRect(lx + i * 6, y + 9, 4, 4);
         });
       }
@@ -1049,8 +1205,7 @@ export function createRenderer(ctx, palette) {
       const c = nodes.get(id);
       if (!c?.node) continue;
       const sp = scene.toScreen(c);
-      const r = (SIZE[c.node.kind] ?? 5) * ns * (c.node.kind === 'builder' ? 1.25 : 1);
-      const d = r + 6 + (1 - t) * 12;
+      const d = reticleD(c.node.kind, ns) + (1 - t) * 12;
       strokeStyle(P.accent, a * (0.35 + 0.65 * t) * (c.a ?? 1), 1.5, []);
       brackets(sp.x, sp.y, d, 6);
     }
@@ -1161,6 +1316,7 @@ export function createRenderer(ctx, palette) {
     drawNodes,
     drawLabels,
     labelBoxes,
+    ringTextBoxes,
     drawReticle,
     drawTether,
     readout,

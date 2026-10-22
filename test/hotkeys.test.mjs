@@ -316,8 +316,8 @@ test('the palette and the help overlay render in a fake DOM with text only', asy
     // `:` presets `>`: only ACT/VIEW rows.
     pal.openPalette({ preset: '>', ctx: { store: s, view: 'board', route: { sel: null } } });
     assert.equal(input.value, '>');
-    const plates = list.children.map((r) => r.children.find((c) => c.classList.contains('pal-type'))?.textContent);
-    assert.ok(plates.length && plates.every((t) => t === 'ACT' || t === 'VIEW'), plates.join(','));
+    const types = list.children.map((r) => r.dataset.type);
+    assert.ok(types.length && types.every((t) => t === 'ACT' || t === 'VIEW'), types.join(','));
     pal.closePalette();
     assert.equal(pal.isPaletteOpen(), false);
 

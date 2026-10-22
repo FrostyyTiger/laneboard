@@ -44,7 +44,8 @@ function fakeCtx() {
     measureText(text) { measured++; return { width: String(text).length * 6 }; },
     setLineDash(d) { dash = [...d]; },
     getLineDash() { return [...dash]; },
-    save() {}, restore() {},
+    save() { ops.push({ op: 'save' }); }, restore() { ops.push({ op: 'restore' }); },
+    clip(rule) { ops.push({ op: 'clip', rule, path: [...path] }); },
     setTransform() {},
     createRadialGradient() { ops.push({ op: 'gradient' }); return { addColorStop() {} }; },
     createLinearGradient() { ops.push({ op: 'gradient' }); return { addColorStop() {} }; },
@@ -115,8 +116,8 @@ function opsAt(ops, scene, id) {
 
 // --- readPalette ---------------------------------------------------------------
 
-test('exports exactly createRenderer, platePlace, readPalette, codeFont and PHONE_ALL_LABELS', () => {
-  assert.deepEqual(Object.keys(render).sort(), ['PHONE_ALL_LABELS', 'codeFont', 'createRenderer', 'platePlace', 'readPalette']);
+test('exports exactly createRenderer, platePlace, readPalette, codeFont, PHONE_ALL_LABELS and the reticle geometry (T53)', () => {
+  assert.deepEqual(Object.keys(render).sort(), ['PHONE_ALL_LABELS', 'RETICLE_GAP', 'codeFont', 'createRenderer', 'platePlace', 'readPalette', 'reticleD']);
 });
 
 test('readPalette reads the §4 tokens through getComputedStyle', (t) => {
@@ -461,6 +462,19 @@ test('the dial: 72 degree ticks and mono bearings 000 090 180 270', () => {
   assert.ok(Math.abs(north.x - 800) < 1e-6 && north.y < 600, '000 is at twelve o\'clock');
 });
 
+test('review n5: the bearing numbers show only while the whole dial is in view, clear of the inspector', () => {
+  const nums = (extra) => {
+    const ctx = fakeCtx();
+    createRenderer(ctx, PAL).drawRings(sceneOf(FLEET, extra));
+    return ctx.ops.filter((o) => o.op === 'fillText' && /9px MONO/.test(o.font)).map((o) => o.text);
+  };
+  assert.deepEqual(nums({}), ['000', '090', '180', '270']);
+  // A phone-wide canvas cuts the dial: no lone 000 over a node.
+  assert.deepEqual(nums({ W: 390, toScreen: (p) => ({ x: 195 + p.x, y: 600 + p.y }) }), []);
+  // The inspector over the 090 side.
+  assert.deepEqual(nums({ covers: [{ left: 1200, top: 0, right: 1600, bottom: 1200 }] }), []);
+});
+
 // --- edges -------------------------------------------------------------------------
 
 test('edges: tree 1px --line without gradients; confirmed conflict is the only crit edge', () => {
@@ -520,6 +534,12 @@ test('builder lamps: link, approvals, stuck as 4x4 squares; off is --line', () =
   assert.deepEqual(lamps({ link: 'stale', counts: { lanes: 3, waiting: 2 } }), ['P2', 'ACC', 'LINE']);
   const stuckLane = { ...FLEET[4], flags: { stuck: { rule: 'idle' } } };
   assert.deepEqual(lamps({}, [stuckLane]), ['T2', 'LINE', 'P2']);
+  // Review n5: focus elsewhere dims the label and its off lamps, never a lit one.
+  const ctx = fakeCtx();
+  const nodes = [...FLEET.slice(0, 3), { ...FLEET[3], link: 'stale', counts: { waiting: 1 } }];
+  createRenderer(ctx, PAL).drawLabels(sceneOf(nodes, { alpha: () => 0.3 }));
+  const alphas = ctx.ops.filter((o) => o.op === 'fillRect' && o.rect[2] === 4 && o.rect[3] === 4).map((o) => [o.fillStyle, o.alpha]);
+  assert.deepEqual(alphas, [['P2', 1], ['ACC', 1], ['LINE', 0.3]]);
 });
 
 test('labels: one style, the label face in caps; trouble is t1 text, its hue only on the node mark (T19)', () => {
@@ -640,6 +660,47 @@ test('the +N plate sits outside the fold ring on a 45 degree diagonal, 2px clear
   assert.ok(Math.abs(Math.abs(corner[0] - sp.x) - Math.abs(corner[1] - sp.y)) < 1e-6, 'its near corner is on the diagonal');
   const mid = [plate.x + plate.w / 2 - sp.x, plate.y + plate.h / 2 - sp.y];
   assert.ok(mid[0] * Math.cos(c.t) + mid[1] * Math.sin(c.t) < 0, 'on the side away from the label');
+});
+
+test('the +N plate clears the outermost ring its node draws, not only the dotted fold ring (review 6, Map 6)', () => {
+  const nodes = [
+    ...FLEET.slice(0, 3),
+    { id: 'b', kind: 'builder', parent: 'agents', builder: 'builder-b', label: 'BB', code: 'BB', status: 'ok', drift: 'undeclared', metrics: { cpu: 0.5, mem: 0.6 } },
+  ];
+  for (const s of [1, 1.6]) {
+    const ctx = fakeCtx();
+    const scene = sceneOf(nodes, { overlay: 'drift', s, folded: new Set(['b']), kids: new Map([['b', [{ id: 'k1' }, { id: 'k2' }]]]) });
+    const [plate] = createRenderer(ctx, PAL).drawNodes(scene);
+    const sp = scene.toScreen(scene.nodes.get('b'));
+    const R = drawnReach(ctx.ops.filter((o) => o.op !== 'strokeRect' || o.strokeStyle !== 'LINE'), sp);
+    const d = rectDist(sp.x, sp.y, [plate.x, plate.y, plate.w, plate.h]);
+    assert.ok(d >= R + 2 - 1e-6, `s=${s}: plate ${d.toFixed(1)} from centre, the drift square reaches ${R.toFixed(1)}`);
+  }
+});
+
+test('an ambient ping round a folded node passes behind its +N plate: the plate is clipped out of the ping', () => {
+  const nodes = [...FLEET.slice(0, 4), { id: 'lane:builder-a/x', kind: 'lane', parent: 'builder:builder-a', builder: 'builder-a', label: 'feat-x', status: 'attention' }];
+  const id = 'lane:builder-a/x';
+  const ctx = fakeCtx();
+  const scene = sceneOf(nodes, {
+    folded: new Set([id]), kids: new Map([[id, [{ id: 's1' }, { id: 's2' }]]]),
+    now: 1000, pulses: [{ id, t0: 400, tone: 'warn', soft: true }],
+  });
+  const [plate] = createRenderer(ctx, PAL).drawNodes(scene);
+  assert.equal(plate.id, id);
+  const sp = scene.toScreen(scene.nodes.get(id));
+  const i = ctx.ops.findIndex((o) => o.op === 'stroke' && o.path[0]?.[0] === 'arc' && Math.abs(o.path[0][1] - sp.x) < 0.01 && o.path[0][3] > 11);
+  assert.ok(i > 0, 'the ping is drawn');
+  const clip = ctx.ops.slice(0, i).findLast((o) => o.op === 'clip');
+  assert.ok(clip, 'under a clip');
+  assert.equal(clip.rule, 'evenodd');
+  const hole = clip.path.find((p) => p[0] === 'rect' && p[3] < 1000);
+  assert.ok(hole, 'with a hole');
+  const [, hx, hy, hw, hh] = hole;
+  assert.ok(hx <= plate.x && hy <= plate.y && hx + hw >= plate.x + plate.w && hy + hh >= plate.y + plate.h, 'the hole covers the plate');
+  const back = ctx.ops.findIndex((o, k) => k > i && o.op === 'restore');
+  const plateAt = ctx.ops.findIndex((o) => o.op === 'fillRect' && o.rect[0] === plate.x);
+  assert.ok(back > i && back < plateAt, 'the clip ends before the nodes and the plate are drawn');
 });
 
 test('a label flips to the left of its node before it crosses the right edge, and over the node when neither side fits', () => {
@@ -855,4 +916,20 @@ test('the +N plate stays off every ring hairline, still away from the label (T19
     }
   }
   assert.ok(moved > 0, 'some plates leave the straight-back diagonal for a side one');
+});
+
+test('review n5: focus dims the calm nodes, never a lamp (▲/■ keep full alpha)', () => {
+  const nodes = [
+    ...FLEET,
+    { id: 'lane:builder-a/web', kind: 'lane', parent: 'builder:builder-a', builder: 'builder-a', label: 'web', status: 'crit' },
+    { id: 'lane:builder-a/api', kind: 'lane', parent: 'builder:builder-a', builder: 'builder-a', label: 'api', status: 'warn' },
+  ];
+  const ctx = fakeCtx();
+  const scene = sceneOf(nodes, { selected: 'lane:builder-a/pay', alpha: (id) => (id === 'lane:builder-a/pay' ? 1 : 0.3) });
+  createRenderer(ctx, PAL).drawNodes(scene);
+  const lampFill = (id, shape) => opsAt(ctx.ops, scene, id).find((o) => o.op === 'fill' && shapeOf(o) === shape);
+  assert.equal(lampFill('lane:builder-a/web', 'square').alpha, 1, 'the crit square is not dimmed');
+  assert.equal(lampFill('lane:builder-a/api', 'tri').alpha, 1, 'the warn triangle is not dimmed');
+  const hq = opsAt(ctx.ops, scene, 'hq').find((o) => o.op === 'fill');
+  assert.ok(Math.abs(hq.alpha - 0.3) < 1e-9, 'a calm node still dims');
 });

@@ -10,6 +10,7 @@ import * as state from './state.mjs';
 import * as prs from './collector/pr.mjs';
 import * as runsCollector from './collector/runs.mjs';
 import { runsInWindow } from './runs/digest.mjs';
+import { RUN_NEED_MAX_AGE_MS, runLastAt } from '../public/js/core/inbox-model.js';
 
 const NEEDS_KINDS = ['danger', 'need', 'blocked', 'limit'];
 /** The attention states a person answers (public/js/core/inbox-model.js WAITING). */
@@ -198,7 +199,7 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
   }
   // Open run needs (runs plan §8 Q9): the ones a person answers, as the Inbox lists them.
   const runs = runsStore === undefined ? runsCollector.store() : runsStore;
-  needs.push(...morningRunNeeds(runs));
+  needs.push(...morningRunNeeds(runs, now));
   // `danger` first, always (v3); then newest first.
   needs.sort((a, b) => Number(b.kind === 'danger') - Number(a.kind === 'danger') || (b.at ?? 0) - (a.at ?? 0));
 
@@ -263,7 +264,7 @@ export function build({ window = 'tonight', now = Date.now(), snapshot = null, p
 
   const out = {
     window: win,
-    label: windowLabel(win),
+    label: windowLabel(win, config.timezone, now),
     since,
     now,
     needsYou: needs,
@@ -296,14 +297,17 @@ export function morningRuns(store, since, now) {
  * morning however long ago it was asked. The same rule as the Inbox's "Run
  * needs" (public/js/core/inbox-model.js runRows), so the two counts agree.
  * `id` is `run:<run>:<ts>` (the ts `needs.ack` names a need by); `name` is
- * the run, `lane` null. A store that fails to fold gives none.
+ * the run, `lane` null. A run whose last event is older than
+ * RUN_NEED_MAX_AGE_MS gives none (the Inbox's rule too). A store that fails to
+ * fold gives none.
  */
-export function morningRunNeeds(store) {
+export function morningRunNeeds(store, now = Date.now()) {
   if (!store || typeof store.list !== 'function') return [];
   let list;
   try { list = store.list(); } catch { return []; }
   const out = [];
   for (const run of Array.isArray(list) ? list : []) {
+    if (now - runLastAt(run) > RUN_NEED_MAX_AGE_MS) continue;
     for (const n of Array.isArray(run?.needs) ? run.needs : []) {
       if (!n || n.open === false || n.kind === 'wait') continue;
       out.push({

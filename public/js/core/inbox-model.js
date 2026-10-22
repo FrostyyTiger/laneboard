@@ -28,7 +28,7 @@
 // last row it saw as `ghost`) and every action key on it does nothing.
 
 import { fkey as makeFkey, BUILDER_ID_RX } from './keys.js';
-import { markP } from './marks.js';
+import { markP, markWord } from './marks.js';
 
 export const GROUPS = Object.freeze(['approvals', 'needs', 'runs', 'review', 'runprs', 'paused', 'stale']);
 
@@ -66,15 +66,46 @@ export const LIMITS = Object.freeze({
 /** The run protocol's id (server/runs/protocol.mjs RUN_ID): other ids get no row. */
 const RUN_ID_RX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 /**
- * The protocol has no "merged" event, so a PR artifact is listed while its run
- * is live and for this long after the run's last event, then it drops.
+ * A PR artifact with no `state` is listed while its run is live and for this
+ * long after the run's last event, then it drops. One with a state follows it:
+ * `open` stays, `merged` and `closed` leave at once (README §8 Q10).
  */
 export const RUN_PR_FRESH_MS = 24 * 3600_000;
+/**
+ * A run whose last event is older than this asks nothing any more: its open
+ * needs are left out of the Inbox and Morning (server/morning.mjs
+ * morningRunNeeds), so an old hand-made run cannot top the list.
+ */
+export const RUN_NEED_MAX_AGE_MS = 7 * 24 * 3600_000;
+
+/** When a run last moved: its last event, else its start, else 0. */
+export function runLastAt(r) {
+  return isNum(r?.updatedAt) ? r.updatedAt : isNum(r?.startedAt) ? r.startedAt : 0;
+}
 /** Who an ack from the Inbox names (`needs.ack` `by`). */
 export const ACK_BY = 'inbox';
 
+/** The artifact states (server/runs/protocol.mjs ARTIFACT_STATES). */
+export const PR_STATES = new Set(['open', 'merged', 'closed']);
 const WAITING = new Set(['waiting_permission', 'waiting_question']);
 const MARKER_KINDS = new Set(['need', 'blocked']);
+/** A marker's word beside its mark: the header tile's word (core/alarm-tiles.js). */
+const MARKER_WORD = Object.freeze({ need: 'NEED', blocked: 'BLKD' });
+
+/**
+ * What a waiting session asks, in its own words (as Morning and the push
+ * body read it): a question is the assistant's last line, a permission the
+ * tool and its input. Null when the session sent nothing.
+ */
+function waitingText(state, activity) {
+  if (!activity || typeof activity !== 'object') return null;
+  const said = str(activity.lastAssistant);
+  if (state === 'waiting_permission') {
+    const input = str(activity.toolInput);
+    if (input) return `${str(activity.tool) ?? ''} ${input}`.trim();
+  }
+  return said;
+}
 const PAUSE_KINDS = new Set(['operator', 'budget', 'quota', 'stuck']);
 const TIER_RANK = Object.freeze({ read: 0, click: 1, ask: 2, confirm: 3 });
 /**
@@ -215,9 +246,14 @@ function needsRows(s, scope, sessions) {
     if (!e) continue;
     const danger = str(a.danger);
     if (!WAITING.has(a.state) && !danger) continue;
+    // Runs n5 T27: the Board's word after the shape (`▲ QUES`), then the
+    // session's own words; the generic `question` only when it has none.
+    const text = danger ?? waitingText(a.state, e.session.activity);
     add(e, {
       p: danger ? markP('danger') : markP(a.state),
-      reason: danger ? inboxClip(danger, LIMITS.reason) : a.state === 'waiting_permission' ? 'permission' : 'question',
+      word: markWord({ state: a.state, stuck: e.session.stuck }),
+      reason: text ? inboxClip(text, LIMITS.reason) : a.state === 'waiting_permission' ? 'permission' : 'question',
+      fallback: !text,
       since: isNum(a.since) ? a.since : 0,
     });
   }
@@ -228,9 +264,12 @@ function needsRows(s, scope, sessions) {
   }).sort((x, y) => (x.session.lastMarker.ts ?? 0) - (y.session.lastMarker.ts ?? 0) || (x.fkey < y.fkey ? -1 : 1));
   for (const e of marked) {
     const m = e.session.lastMarker;
+    const text = inboxClip(str(m.text), LIMITS.reason);
     add(e, {
       p: markP(m.kind),
-      reason: `${m.kind}: ${inboxClip(str(m.text), LIMITS.reason) ?? ''}`.trim(),
+      word: MARKER_WORD[m.kind],
+      reason: text ?? m.kind,
+      fallback: !text,
       since: isNum(m.ts) ? m.ts : 0,
     });
   }
@@ -341,15 +380,19 @@ function httpHref(v) {
 
 /**
  * Rows from GET /api/runs summaries: every open need a person must answer (a
- * `wait` need is the loop sleeping and is left out) and every PR artifact of a
- * run that is live or had an event in the last RUN_PR_FRESH_MS. Newest first.
+ * `wait` need is the loop sleeping and is left out; none from a run idle for
+ * over RUN_NEED_MAX_AGE_MS) and every PR artifact still
+ * to review: `open`, or with no state on a run that is live or had an event in
+ * the last RUN_PR_FRESH_MS. Newest first.
  */
 function runRows(runs, now) {
   const rows = [];
   for (const r of Array.isArray(runs) ? runs : []) {
     if (!r || typeof r !== 'object' || typeof r.run !== 'string' || !RUN_ID_RX.test(r.run)) continue;
     const base = { group: 'runs', builder: null, fkey: null, run: r.run, name: r.run, lane: null, href: runPageHref(r.run) };
-    for (const n of Array.isArray(r.needs) ? r.needs : []) {
+    const at = runLastAt(r);
+    const needs = now - at > RUN_NEED_MAX_AGE_MS ? [] : Array.isArray(r.needs) ? r.needs : [];
+    for (const n of needs) {
       if (!n || typeof n !== 'object' || n.open === false || !Number.isInteger(n.i) || n.i < 0) continue;
       const kind = inboxClip(str(n.kind), 32) ?? 'decision';
       if (kind === 'wait') continue;
@@ -359,16 +402,17 @@ function runRows(runs, now) {
         link: httpHref(n.link), since: isNum(n.ts) ? n.ts : 0,
       });
     }
-    const at = isNum(r.updatedAt) ? r.updatedAt : isNum(r.startedAt) ? r.startedAt : 0;
     const fresh = r.state !== 'stopped' || now - at <= RUN_PR_FRESH_MS;
-    if (!fresh) continue;
     for (const a of Array.isArray(r.prs) ? r.prs : []) {
       const link = a && typeof a === 'object' ? httpHref(a.url) : null;
       if (!link) continue;
+      const state = PR_STATES.has(a.state) ? a.state : null;
+      if (state === 'merged' || state === 'closed' || (state === null && !fresh)) continue;
       rows.push({
         // News, not trouble (README §5): the grey hollow lamp, never a hue.
         ...base, group: 'runprs', id: `rp:${r.run}:${link}`, kind: 'run-pr', p: 'off', lampLabel: 'pr to review',
-        reason: `pr: ${inboxClip(str(a.title), LIMITS.reason) ?? inboxClip(link, LIMITS.reason)}`,
+        // T16: the group head says RUN PRS, so the row is the title alone (no `pr:`)
+        reason: inboxClip(str(a.title), LIMITS.reason) ?? inboxClip(link, LIMITS.reason),
         link, since: isNum(a.ts) ? a.ts : 0,
       });
     }

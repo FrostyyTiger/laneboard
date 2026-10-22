@@ -157,8 +157,10 @@
 
 .topbar-gauges { display: flex; gap: var(--sp-4); margin-left: auto; align-items: center; min-width: 0; }
 .head-right { display: flex; align-items: center; gap: var(--sp-3); flex: none; }
-.stat { font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); white-space: nowrap; }
-.stat b { color: var(--text-1); font-weight: 600; }
+/* The spend line at nav size and dim; the warn hue only when a builder is over its budget (T55). */
+.stat { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--text-3); white-space: nowrap; }
+.stat b { color: inherit; font-weight: 400; }  /* the figure at tile weight, no louder than the tiles around it (T15) */
+.stat.stat-over { color: var(--warn); }
 
 /* The annunciator slot: 2 x 4 tiles of 64 x 16 (D7 draws the tiles): two rows and their
    2 px gap are 34 px, so they sit centred in the 36 px header, not flush with its top. */
@@ -325,7 +327,8 @@
 }
 .rail, .dock { display: none; }
 .grid-wrap { min-width: 0; }
-.grid { display: grid; grid-template-columns: 1fr; gap: var(--gap); }
+/* cards keep their own height (owner's call, review n5): a short card is not stretched to its row's tallest */
+.grid { display: grid; grid-template-columns: 1fr; gap: var(--gap); align-items: start; }
 
 @media (min-width: 700px) {
   .layout { grid-template-columns: var(--rail-w) minmax(0, 1fr); }

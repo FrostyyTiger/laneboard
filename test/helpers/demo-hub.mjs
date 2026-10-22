@@ -32,7 +32,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseLines, foldRun } from '../../server/runs/protocol.mjs';
 import { summarize } from '../../server/runs/summary.mjs';
-import { withSessions } from '../../server/runs/bind.mjs';
+import { bindRuns, withSessions } from '../../server/runs/bind.mjs';
 import { runsInWindow } from '../../server/runs/digest.mjs';
 import { runNodes } from '../../server/map/runs.mjs';
 import { attentionList, attentionScore } from '../../server/state.mjs';
@@ -140,6 +140,15 @@ export const RUNS_PATH = '/api/runs';
 export const DEMO_RUN_FILE = path.resolve(import.meta.dirname, '..', 'fixtures', 'runs', 'demo-run.jsonl');
 export const DEMO_RUN_AGO_MS = 25 * 60_000;
 
+/**
+ * The sessions the demo's board knows by id (runs T22): round 3 of
+ * `acme-search` names the first in its `round.start`, so the run page shows
+ * one round linked to its session (`search api` on builder-a).
+ */
+export const DEMO_RUN_SESSIONS = Object.freeze([
+  Object.freeze({ sessionId: '5e1c0a7d-3b2f-4c19-9a6e-2d8f40b1c7e3', name: 'search api', cwd: null, firstAt: null, lastAt: null, usd: 1.84 }),
+]);
+
 /** Move a time by `d` ms, keeping its form (epoch ms, epoch s, ISO); anything else as is. */
 function shiftTime(v, d) {
   if (typeof v === 'number') return v < 1e11 ? Math.round(v + d / 1000) : v + d;
@@ -196,7 +205,7 @@ export function demoRunsAnswer(method, url, now = Date.now()) {
   try { id = decodeURIComponent(p.slice(RUNS_PATH.length + 1)); } catch { return { status: 404, body: { error: 'unknown run' } }; }
   const run = demoRuns(now).find((r) => r.run === id);
   if (!run) return { status: 404, body: { error: 'unknown run' } };
-  return { status: 200, body: { run: withSessions(run, null) } };
+  return { status: 200, body: { run: withSessions(run, bindRuns([{ run, dirs: [] }], DEMO_RUN_SESSIONS, now)) } };
 }
 
 /** The hub's fleet Morning path (server/hub/routes, fenced; its merge drops `runs`). */
@@ -210,7 +219,35 @@ export const FLEET_MORNING_PATH = '/api/fleet/morning';
 export function demoMorningWithRuns(body, now = Date.now()) {
   if (!body || typeof body !== 'object' || Array.isArray(body) || body.runs !== undefined) return body;
   const since = typeof body.since === 'number' && Number.isFinite(body.since) ? body.since : now - 12 * 3600_000;
-  return { ...body, runs: runsInWindow(demoRuns(now), { since, now }) };
+  if (!Array.isArray(body.builders)) return { ...body, runs: runsInWindow(demoRuns(now), { since, now }) };
+  const builders = demoMovedLanes(body.builders, now);
+  const answered = new Set(builders.filter((b) => b && !b.error).map((b) => b.id));
+  const missing = Array.isArray(body.missing) ? body.missing.filter((id) => !answered.has(id)) : body.missing;
+  return { ...body, builders, missing, runs: runsInWindow(demoRuns(now), { since, now }) };
+}
+
+/**
+ * The demo builders serve no /api/morning (the hub merges `not found` for
+ * each) and their sessions have no git lanes, so no builder block ever drew:
+ * the first builder with no moved lane answers here with two (runs n5 T25b),
+ * one with a done marker (Finished) and one with a session still working
+ * (Still running), so the Morning shots show both blocks.
+ */
+function demoMovedLanes(builders, now) {
+  const i = builders.findIndex((b) => b && typeof b === 'object' && Array.isArray(b.finished) && !b.finished.length);
+  if (i < 0) return builders;
+  const lane = (name, hue, extra) => ({
+    lane: name, hue, branch: `lane/${name}`, merged: false, isMain: false, idle: false, progress: { n: 2, m: 3 },
+    lastCommitAt: now - 40 * 60_000, newCommit: true, doneMarkers: [], pr: null, packages: ['web'], ...extra,
+  });
+  const finished = [
+    lane('search-index', 200, {
+      doneMarkers: [{ id: 1, ts: now - 50 * 60_000, text: 'PACKAGE-DONE: search index rebuilt', session: 'search-1' }],
+      sessions: [{ name: 'search-1', state: 'idle', since: now - 45 * 60_000 }],
+    }),
+    lane('billing-export', 30, { sessions: [{ name: 'billing-1', state: 'working', since: now - 5 * 60_000 }] }),
+  ];
+  return builders.map((b, j) => (j === i ? { ...b, error: undefined, stale: false, finished } : b));
 }
 
 /**

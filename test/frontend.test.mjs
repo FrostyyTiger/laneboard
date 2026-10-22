@@ -606,8 +606,52 @@ test('shell: the header spend names what it counts, sessions only, beside a run 
   assert.equal(m.label, ' sessions today');
   assert.match(m.title, /runs show their own cost/);
   assert.match(m.title, /\$1\.20/);
-  assert.equal(topbarSpend([]).text, '$0.00');
-  assert.equal(topbarSpend(undefined).text, '$0.00');
+});
+
+test('shell: the header spend is — when no session reported a cost, $0.00 for a reported zero (T15)', async () => {
+  const { topbarSpend } = await import('../public/js/ui/shell.js');
+  for (const none of [[], undefined, [{ cost: null }, {}, { cost: { usd: 3 } }]]) {
+    const m = topbarSpend(none);
+    assert.equal(m.text, '—');
+    assert.equal(m.usd, null);
+    assert.equal(m.label, ' sessions today');
+    assert.equal(m.hidden, true, 'review n5: no figure yet, no line');
+  }
+  const zero = topbarSpend([{ cost: { usdToday: 0 } }, { cost: null }]);
+  assert.equal(zero.text, '$0.00');
+  assert.equal(zero.usd, 0);
+  assert.equal(zero.hidden, false);
+  assert.match(read('index.html'), /id="stat-cost"[^>]*\bhidden>/, 'hidden until the first report');
+  // At nav size and dim (T55), never a loud bold figure.
+  const shell = read('css/shell.css');
+  assert.match(shell, /\.stat \{[^}]*font-size: var\(--fs-11\);[^}]*color: var\(--text-3\)/);
+  const b = shell.match(/\.stat b \{([^}]*)\}/)[1];
+  assert.match(b, /color: inherit/);
+  assert.doesNotMatch(b, /font-size|--text-1/);
+});
+
+test('shell: the header spend is dim with no budget and under it, the warn hue over the builder budget (T55)', async () => {
+  const { topbarSpend } = await import('../public/js/ui/shell.js');
+  const sessions = [{ cost: { usdToday: 12.5 } }];
+  // No budget configured: no rows at all, or a builder without the key.
+  assert.equal(topbarSpend(sessions).cls, 'dim');
+  assert.equal(topbarSpend(sessions, []).cls, 'dim');
+  assert.equal(topbarSpend([], []).cls, 'dim', 'no cost reported is dim too');
+  // Under budget (ok and warn), and a lane over its own cap: the day is not over.
+  const under = [
+    { scope: 'builder', key: '*', usd: 12.5, limit: 50, pct: 25, level: 'ok' },
+    { scope: 'lane', key: 'feat-search', usd: 11, limit: 10, pct: 110, level: 'over' },
+  ];
+  assert.equal(topbarSpend(sessions, under).cls, 'dim');
+  assert.equal(topbarSpend(sessions, [{ scope: 'builder', key: '*', usd: 45, limit: 50, pct: 90, level: 'warn' }]).cls, 'dim');
+  // Over the builder budget: the warn class, and the title says by how much.
+  const over = topbarSpend(sessions, [{ scope: 'builder', key: '*', usd: 52, limit: 50, pct: 104, level: 'over' }]);
+  assert.equal(over.cls, 'over');
+  assert.match(over.title, /Over the builder budget: \$52\.00 of \$50\.00/);
+  const shell = read('css/shell.css');
+  assert.match(shell, /\.stat\.stat-over \{[^}]*color: var\(--warn\)/);
+  assert.match(read('index.html'), /class="stat stat-dim" id="stat-cost"/);
+  assert.match(read('js/ui/shell.js'), /n\.className = `stat stat-\$\{m\.cls\}`/);
 });
 
 test('format: money uses 2 decimals everywhere ($9.98, $0.00), whole dollars from $100', async () => {

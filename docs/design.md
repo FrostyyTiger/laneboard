@@ -139,8 +139,9 @@ The light block of `tokens.css` is held to the dark theme's finish by numbers, n
   `--seg-run` is a mid grey lighter than the red and amber segments, idle `--seg-off` lighter
   still: trouble is the darkest thing on a bar. The Map's dot grid `--grid-dot` is one step under
   `--line-weak`, quieter than the edges.
-- **No dark slabs.** A label plate next to outlined plates is outlined or sunken
-  (`plate--sunken`: `--bg-sunken` + `--text-2`, the Inbox tool chip), never a black plate.
+- **No dark slabs.** A label plate next to outlined plates is outlined too, in both themes
+  (`plate--quiet`: no fill, `--line` border, `--text-2`, the Inbox tool chip), never a grey
+  or black fill (runs night 5 T31).
 - **A builder chip is never filled.** The header chip is outlined; its mark carries the state:
   ● live, ○ grey offline, ■ red only when down.
 - **An offline builder's cards are grey through and through**, marks included, with one

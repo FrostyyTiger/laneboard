@@ -13,8 +13,9 @@
 //   budget burn against the 5 h / 7 d windows (from the last `usage` event)
 //   time left to the deadline, or the stop reason · cost · open needs
 // A run the stuck rules flag (server/runs/stuck.mjs, `stuck: {rule, reason}`)
-// carries the Board's stuck badge (the `stuck` icon, p2) next to its state
-// word, and sorts after the runs that need you.
+// reads `▲ STUCK` in p2 in its list row, the reason on a muted second line
+// (T54); its page keeps the Board's stuck badge (the `stuck` icon) next to the
+// state word. It sorts after the runs that need you.
 // Grey unless something needs you: a hue only for a worse score, a window
 // near its stop level, an overage, an error or no-progress stop, an open need;
 // each also carries a shape or a word.
@@ -40,7 +41,7 @@ import { money } from '../core/format.js';
 import { icon } from '../core/icons.js';
 import { lamp, panel, setPanel } from '../ui/components.js';
 import { confirmAction } from '../ui/confirm.js';
-import { needAckRef } from '../core/inbox-model.js';
+import { needAckRef, PR_STATES } from '../core/inbox-model.js';
 import { toast } from '../ui/toast.js';
 import { sparkRange } from '../ui/spark.js';
 
@@ -136,16 +137,19 @@ export function scoreTrend(s) {
   return { dir, good, mark: dir === 'up' ? '↑' : dir === 'down' ? '↓' : '=', delta };
 }
 
-/** The row's scores, by name, each with its trend: [{name, value, text, dir, good, mark, title}]. */
+/** The row's scores, by name, each with its trend: [{name, value, text, scope, dir, good, mark, title}]. */
 export function scoreList(scores) {
   if (!isObj(scores)) return [];
   return Object.keys(scores).sort().map((k) => {
     const s = scores[k];
     const name = rnClean(k, 32) ?? '?';
     const t = scoreTrend(s);
-    const text = scoreText(s?.value);
+    // a score with a max reads "44 of 63"; a max that moved adds "scope 12 → 63" (research Q18)
+    const max = isNum(s?.max) && s.max > 0 ? s.max : null;
+    const text = max !== null && isNum(s?.value) ? `${scoreText(s.value)} of ${scoreText(max)}` : scoreText(s?.value);
+    const scope = max !== null && isNum(s?.firstMax) && s.firstMax > 0 && s.firstMax !== max ? `scope ${scoreText(s.firstMax)} → ${scoreText(max)}` : null;
     const was = t.dir ? ` (was ${scoreText(s.prev)}${t.good === true ? ', better' : t.good === false ? ', worse' : ''})` : '';
-    return { name, value: isNum(s?.value) ? s.value : null, text, ...t, title: `${name}: ${text}${was}` };
+    return { name, value: isNum(s?.value) ? s.value : null, text, scope, ...t, title: `${name}: ${text}${was}${scope ? `, ${scope}` : ''}` };
   });
 }
 
@@ -309,8 +313,11 @@ function rnField(cls, text, title) {
   return n;
 }
 
-/** Lamp + word; on the run page a stopped run's `stop` (stopOf) follows the word (T17). */
-function stateNode(row, stop = null) {
+/**
+ * Lamp + word; on the run page a stopped run's `stop` (stopOf) follows the word (T17).
+ * A list row (`list`) of a stuck run reads `▲ STUCK` with the reason under it (T54).
+ */
+function stateNode(row, stop = null, list = false) {
   const s = stateOf(row);
   const n = el('span', 'rn-f rn-state');
   n.dataset.p = s.p;
@@ -319,9 +326,26 @@ function stateNode(row, stop = null) {
   if (stop) {
     n.append(el('span', 'rn-state-why', `· ${stop.why}`));
     n.title = s.title = stop.title;
+    if (stop.detail) {
+      n.dataset.detail = '';
+      n.append(el('span', 'rn-state-detail', stop.detail));
+    }
   }
   const stuck = stuckOf(row);
-  if (stuck) {
+  if (stuck && list) {
+    // a list row (T54): the state word itself says it, `▲ STUCK` in p2, the reason under it
+    const words = `stuck: ${stuck.reason}`;
+    n.textContent = '';
+    n.dataset.p = '2';
+    n.dataset.stuck = '';
+    const m = el('span', 'rn-stuck rn-state-m', '▲');
+    m.dataset.p = '2';
+    if (stuck.rule) m.dataset.rule = stuck.rule;
+    m.setAttribute('aria-hidden', 'true');
+    m.title = words;
+    n.append(m, el('span', 'rn-state-t', 'stuck'), el('span', 'rn-state-sub', stuck.reason));
+    n.title = `${s.title}\n${words}`;
+  } else if (stuck) {
     const words = `stuck: ${stuck.reason}`;
     const f = el('span', 'rn-stuck flag-stuck');
     f.dataset.p = '2';
@@ -355,8 +379,8 @@ function goalNode(row, asLink = false, extra = null) {
     const line = el('span', 'rn-goal-2');
     line.append(subEl, extra);
     n.append(line);
-  } else {
-    n.append(subEl);
+  } else if (subEl.textContent) {
+    n.append(subEl); // no empty second line under a goal-less, branch-less id (T54)
   }
   n.title = [goal, sub, rnClean(row.plan)].filter(Boolean).join('\n');
   return n;
@@ -371,6 +395,8 @@ function scoresNode(row) {
     else if (s.good === true) chip.dataset.trend = 'better';
     chip.append(el('span', 'rn-score-k', s.name), el('span', 'rn-score-v', s.text));
     if (s.mark) chip.append(el('span', 'rn-score-m', s.mark));
+    // a moved max stays in the chip, muted after a "·": `tasks 3 of 10 ↑ · scope 8 → 10` (T5, T20)
+    if (s.scope) chip.append(el('span', 'rn-score-scope', s.scope));
     chip.title = s.title;
     n.append(chip);
   }
@@ -405,8 +431,9 @@ function leftNode(row, now) {
 
 /**
  * The cost a row shows -> {usd, text, title, loop}: the sum of the run's `cost`
- * events; when none was sent and the loop reported a `usd` at `run.stop`, that
- * figure instead, marked as the loop's own (`loop` true, T34).
+ * events, or with none of those the sum of its rounds' `usd` (`cost.from`
+ * `rounds`); when neither is known and the loop reported a `usd` at
+ * `run.stop`, that figure instead, marked as the loop's own (`loop` true, T34).
  */
 export function runCostOf(row) {
   const sum = isNum(row?.cost?.usd) ? row.cost.usd : null;
@@ -417,7 +444,9 @@ export function runCostOf(row) {
       title: 'what the loop reported at run.stop (no cost events were sent)',
     };
   }
-  return { usd: sum, text: sum === null ? DASH : money(sum), loop: false, title: 'cost of the run (sum of its cost events)' };
+  const title = row?.cost?.from === 'rounds' ? 'cost of the run (sum of its rounds\' usd; no cost events were sent)'
+    : 'cost of the run (sum of its cost events)';
+  return { usd: sum, text: sum === null ? DASH : money(sum), loop: false, title };
 }
 
 /** "cost $9.98" in one cell; "cost $2.00 loop" when the figure is the stop's (T34). */
@@ -450,6 +479,13 @@ function meterNode(label, w) {
 function burnNode(row) {
   const b = burnOf(row.usage, row.state);
   const n = el('span', 'rn-f rn-burn');
+  if (!b.fiveHour && !b.sevenDay && !b.overage) {
+    // no usage reported: one muted dash, not two empty bar tracks (T54)
+    n.dataset.none = '';
+    n.textContent = DASH;
+    n.title = 'no usage reported';
+    return n;
+  }
   n.append(meterNode('5h', b.fiveHour), meterNode('7d', b.sevenDay));
   if (b.overage) {
     const o = rnField('rn-over', '■ overage', 'the account is in paid extra usage');
@@ -501,7 +537,7 @@ export function runRow(row, now = Date.now()) {
   const stopP = row.state === 'stopped' ? STOP_P[rnClean(row.stop, 32)] : null;
   if (stopP && stopP !== 'ok') leftEl.dataset.p = stopP;
   li.append(
-    stateNode(row),
+    stateNode(row, null, true),
     goalNode(row, true, needsNode(row)),
     rnField('rn-round', roundText(row), `round ${roundText(row)}${isNum(row.rounds) ? `, ${row.rounds} recorded` : ''}`),
     scoresNode(row),
@@ -577,7 +613,9 @@ function rnLastScores(run) {
     if (!Array.isArray(list) || !list.length) continue;
     const last = list[list.length - 1];
     const prev = list.length > 1 ? list[list.length - 2] : null;
-    out[name] = { n: last?.n ?? null, value: last?.value ?? null, prev: prev ? prev.value : null, better: better[name] ?? null };
+    // the latest max a line gave and the first one (server/runs/summary.mjs scoreMax)
+    const { max, firstMax } = seriesMax(list);
+    out[name] = { n: last?.n ?? null, value: last?.value ?? null, prev: prev ? prev.value : null, better: better[name] ?? null, max, firstMax };
   }
   return out;
 }
@@ -586,12 +624,14 @@ function rnLastScores(run) {
 export function runSummaryOf(run) {
   if (!isObj(run)) return null;
   const rounds = Array.isArray(run.rounds) ? run.rounds.filter(isObj) : [];
-  const last = rounds[rounds.length - 1] ?? null;
+  // A wrap-up round (after run.stop) is not one of the budget's rounds: "63 / 63", never "64 / 63" (T4).
+  const counted = rounds.filter((r) => r.wrapup !== true);
+  const last = counted[counted.length - 1] ?? null;
   return {
     run: run.run, goal: run.goal, plan: run.plan, branch: run.branch, state: run.state,
     round: Number.isInteger(last?.n) ? last.n : null,
-    rounds: rounds.length,
-    maxRounds: isObj(run.budget) ? run.budget.rounds ?? null : null,
+    rounds: Number.isInteger(run.counted) ? run.counted : counted.length,
+    maxRounds: isObj(run.budget) ? run.budget.maxRounds ?? run.budget.rounds ?? null : null,
     scores: rnLastScores(run),
     usage: run.usage, cost: run.cost, deadline: run.deadline, deadlineAt: run.deadlineAt,
     needs: (Array.isArray(run.needs) ? run.needs : []).filter((x) => isObj(x) && x.open !== false),
@@ -604,9 +644,10 @@ export function runSummaryOf(run) {
 
 /**
  * The timeline: one entry per round, by `n`, at `now`:
- * {n, role, task, outcome, commit, usd, cost, ms, span, live, starts, sessions}.
+ * {n, role, task, title, wrapup, outcome, commit, usd, cost, ms, span, live, starts, sessions}.
  * A round with no end is `live` while the run is not stopped (its duration
- * runs to `now`); in a stopped run it just has no outcome.
+ * runs to `now`); in a stopped run it just has no outcome. An unknown cost is
+ * DASH, never $0.00; a `wrapup` round is the review after run.stop (T4).
  */
 export function roundRows(run, now = Date.now()) {
   const stopped = run?.state === 'stopped';
@@ -620,6 +661,8 @@ export function roundRows(run, now = Date.now()) {
       n: r.n,
       role: rnClean(r.role, 40),
       task: rnClean(r.task, 120),
+      title: rnClean(r.title, 200),
+      wrapup: r.wrapup === true,
       outcome: rnClean(r.outcome, 40) ?? (live ? 'running' : null),
       commit,
       short: commit ? commit.slice(0, 7) : null,
@@ -636,9 +679,11 @@ export function roundRows(run, now = Date.now()) {
 
 /**
  * The sessions tied to a round (T12, server/runs/bind.mjs), first seen first:
- * [{id, label, cost, usd, maybe, title}]. The label is the session's name, or
+ * [{id, label, href, cost, usd, maybe, title}]. The label is the session's name, or
  * the first 8 characters of its id; `maybe` when another run worked in the
  * same dir at the same time. Bare ids (a fold without the bind) are taken too.
+ * `href` opens the session's sheet (`#session=<name>`, core/router.js) when the
+ * board knows its name; a session known only by its id has none (T4).
  */
 export function roundSessions(r) {
   const list = Array.isArray(r?.sessions) ? r.sessions : [];
@@ -652,9 +697,11 @@ export function roundSessions(r) {
     const bits = [id, how];
     if (rnClean(s.cwd, 300)) bits.push(rnClean(s.cwd, 300));
     if (s.maybe) bits.push('possibly: another run worked in this dir at the same time');
+    const name = sessionName(s.name);
     out.push({
       id,
       label: rnClean(s.name, 40) ?? id.slice(0, 8),
+      href: name ? `#session=${encodeURIComponent(name)}` : null,
       usd,
       cost: usd === null ? DASH : money(usd),
       maybe: s.maybe === true,
@@ -664,10 +711,17 @@ export function roundSessions(r) {
   return out;
 }
 
+/** A session name the router's `#session=` takes (one segment, no control characters), or null. */
+function sessionName(v) {
+  if (typeof v !== 'string' || v === '' || v.length > 128) return null;
+  return /[\u0000-\u001f\u007f/]/.test(v) ? null : v;
+}
+
 /**
- * The stop of a folded run -> {reason, p, why, text, title}, or null while it runs.
+ * The stop of a folded run -> {reason, p, why, detail, text, title}, or null while it runs.
  * `why` ("budget · after 7 rounds") follows STOPPED in the run page's state label
  * (T17); the loop's own `usd` stays in the title, the head's cost cell has the sum.
+ * `detail` (the loop's own words, T4) goes on a line under it.
  */
 export function stopOf(run) {
   if (run?.state !== 'stopped') return null;
@@ -678,20 +732,24 @@ export function stopOf(run) {
   const why = bits.join(' · ');
   const title = [isNum(s.ts) ? `stopped at ${new Date(s.ts).toISOString()}` : `stopped: ${reason}`];
   if (isNum(s.usd)) title.push(`the loop reported ${money(s.usd)}`);
+  const detail = rnClean(s.detail, 300);
+  if (detail) title.push(detail);
   return {
     reason,
     p: STOP_P[reason] ?? 'off',
     why,
+    detail,
     text: `stopped · ${why}`,
     title: title.join(' · '),
   };
 }
 
-/** Artifacts -> [{kind, title, href, n}]: `href` only for an http(s) URL. */
+/** Artifacts -> [{kind, title, state, href, n}]: `href` only for an http(s) URL, `state` open/merged/closed or null. */
 export function artifactsOf(run) {
   return (Array.isArray(run?.artifacts) ? run.artifacts : []).filter(isObj).map((a) => ({
     kind: rnClean(a.kind, 32) ?? 'link',
     title: rnClean(a.title) ?? rnClean(a.url, 400) ?? '?',
+    state: PR_STATES.has(a.state) ? a.state : null,
     url: rnClean(a.url, 400),
     href: safeHref(a.url),
     n: Number.isInteger(a.n) ? a.n : null,
@@ -863,8 +921,11 @@ const TL_COLS = [
   ['n', 'round'], ['role', 'role'], ['task', 'task'], ['outcome', 'outcome'],
   ['commit', 'commit'], ['cost', 'cost'], ['span', 'duration'], ['sessions', 'sessions'],
 ];
-/** Columns a phone does not draw (runs.css, width < 700px, the phone breakpoint): the row carries task and duration as its title. */
-export const TL_NARROW_HIDDEN = ['task', 'span', 'sessions'];
+/**
+ * Columns a phone does not draw (runs.css, width < 700px, the phone breakpoint): the row carries the
+ * duration as its title. The task cell stays, as a second line under the round (T23).
+ */
+export const TL_NARROW_HIDDEN = ['span', 'sessions'];
 /** Columns drawn only when some row has a value (T40, reviews/25-designer.md: SESSIONS read `—` in every row). */
 const TL_OPTIONAL = { sessions: (r) => r.sessions.length > 0 };
 
@@ -877,13 +938,66 @@ function sessionsCell(list) {
   const td = el('td', 'rn-tl-ses');
   if (!list.length) { td.textContent = DASH; return td; }
   for (const s of list) {
-    const span = el('span', 'rn-tl-s', `${s.maybe ? '? ' : ''}${s.label} ${s.cost}`);
+    const span = el(s.href ? 'a' : 'span', 'rn-tl-s', `${s.maybe ? '? ' : ''}${s.label} ${s.cost}`);
+    if (s.href) {
+      span.href = s.href;
+      span.append(linkArrow());
+    }
     span.dataset.session = s.id;
     if (s.maybe) span.dataset.maybe = '';
     span.title = s.title;
     td.append(span);
   }
   return td;
+}
+
+/** The ↗ that marks a link (T16 artifact titles, T22 sessions): inside the anchor, hidden from screen readers. */
+function linkArrow() {
+  const arrow = el('span', 'rn-item-arrow', ' ↗');
+  arrow.setAttribute('aria-hidden', 'true');
+  return arrow;
+}
+
+/**
+ * The round's role; a link with a ↗ to the round's first session the board knows by name (T22,
+ * reviews/13-designer.md Run page 5), so a phone, which drops the SESSIONS column, still has it.
+ */
+function roleCell(r) {
+  const td = el('td', 'rn-tl-role');
+  const s = r.sessions.find((x) => x.href);
+  if (!s) { td.textContent = r.role ?? DASH; return td; }
+  const a = el('a', 'rn-tl-role-a', r.role ?? 'session');
+  a.href = s.href;
+  a.title = `open session ${s.label}`;
+  a.append(linkArrow());
+  td.append(a);
+  return td;
+}
+
+/**
+ * The round's title with its task id muted beside it; the task alone, or DASH, without one (T4).
+ * A wrap-up round's ROUND cell already says `wrap-up`: its task id is left out, the title stays (T21).
+ */
+function taskCell(r) {
+  const task = r.wrapup ? null : r.task;
+  if (!r.title) {
+    const td = el('td', 'rn-tl-task', task ?? (r.wrapup ? '' : DASH));
+    if (!task) td.dataset.none = ''; // a phone draws no second line for it (T23)
+    return td;
+  }
+  const td = el('td', 'rn-tl-task');
+  td.append(el('span', 'rn-tl-title', r.title));
+  if (task) td.append(el('span', 'rn-tl-tid', task));
+  return td;
+}
+
+/** Outcome slugs the loop writes, as words (T21, reviews/13-designer.md Run page 4); the protocol value stays in `data-outcome`. */
+const OUTCOME_WORDS = Object.freeze({ 'no-task-done': 'no task done', 'still-red': 'still red', 'timed-out': 'timed out' });
+
+/** The outcome as words: a known slug from OUTCOME_WORDS, any other `-`/`_` slug with spaces. Pure. */
+export function outcomeText(outcome) {
+  if (typeof outcome !== 'string' || !outcome) return null;
+  return OUTCOME_WORDS[outcome] ?? outcome.replace(/[-_]+/g, ' ').trim();
 }
 
 function timelineSection(run, now) {
@@ -906,8 +1020,11 @@ function timelineSection(run, now) {
     const tr = el('tr', 'rn-tl-row');
     tr.dataset.n = String(r.n);
     if (r.live) tr.dataset.live = '';
-    tr.title = [r.task ? `task: ${r.task}` : null, r.span && r.span !== DASH ? `took ${r.span}` : null].filter(Boolean).join(' · ');
-    const nCell = el('td', 'rn-tl-n', String(r.n));
+    if (r.wrapup) tr.dataset.wrapup = '';
+    tr.title = [r.title, r.task && !r.wrapup ? `task: ${r.task}` : null, r.span && r.span !== DASH ? `took ${r.span}` : null].filter(Boolean).join(' · ');
+    // the wrap-up after run.stop is not a counted round: it reads "wrap-up", never "64" of 63 (T4)
+    const nCell = el('td', 'rn-tl-n', r.wrapup ? 'wrap-up' : String(r.n));
+    if (r.wrapup) nCell.title = `round ${r.n}: the wrap-up after the stop, not counted against the cap`;
     if (r.starts > 1) {
       const re = el('span', 'rn-tl-re', ` ×${r.starts}`);
       re.title = `started ${r.starts} times (retries)`;
@@ -915,12 +1032,13 @@ function timelineSection(run, now) {
     }
     const commit = el('td', 'rn-tl-commit', r.short ?? DASH);
     if (r.commit) commit.title = r.commit;
-    const outcome = el('td', 'rn-tl-outcome', r.outcome ?? DASH);
+    const outcome = el('td', 'rn-tl-outcome', outcomeText(r.outcome) ?? DASH);
     if (r.outcome) outcome.dataset.outcome = r.outcome;
+    if (r.outcome && outcomeText(r.outcome) !== r.outcome) outcome.title = `outcome: ${r.outcome}`;
     const cells = {
       n: nCell,
-      role: el('td', 'rn-tl-role', r.role ?? DASH),
-      task: el('td', 'rn-tl-task', r.task ?? DASH),
+      role: roleCell(r),
+      task: taskCell(r),
       outcome,
       commit,
       cost: el('td', 'rn-tl-cost', r.cost),
@@ -945,8 +1063,17 @@ function artifactsSection(run) {
   const ul = el('ul', 'rn-items');
   for (const a of list) {
     const li = el('li', 'rn-item rn-art');
-    li.append(el('span', 'rn-item-k', a.kind), rnLink('rn-item-t', a.title, a.href));
-    if (a.n !== null) li.append(el('span', 'rn-item-n', `round ${a.n}`));
+    // T16: `title ↗ · state · round n`, the ↗ inside a real link (it follows a wrapped title's
+    // last word), every part after it behind a `·`
+    const t = rnLink('rn-item-t', a.title, a.href);
+    if (a.href) t.append(linkArrow());
+    li.append(el('span', 'rn-item-k', a.kind), t);
+    if (a.state) {
+      const s = el('span', 'rn-item-s', `· ${a.state}`);
+      s.dataset.state = a.state;
+      li.append(s);
+    }
+    if (a.n !== null) li.append(el('span', 'rn-item-n', `· round ${a.n}`));
     if (!a.href && a.url) li.title = `${a.url} (not an http link)`;
     ul.append(li);
   }
@@ -967,7 +1094,8 @@ export const chartNum = (v) => (!isNum(v) ? DASH : Number.isInteger(v) ? String(
 /** The rounds every chart spans: the run's round and score `n`s, {lo, hi}, or null. */
 export function chartDomain(run) {
   const ns = [];
-  for (const r of Array.isArray(run?.rounds) ? run.rounds : []) if (Number.isInteger(r?.n)) ns.push(r.n);
+  // A wrap-up round (after the stop) has no scores: it would only push the line's end off the right edge.
+  for (const r of Array.isArray(run?.rounds) ? run.rounds : []) if (Number.isInteger(r?.n) && !r.wrapup) ns.push(r.n);
   const scores = isObj(run?.scores) ? run.scores : {};
   for (const list of Object.values(scores)) {
     for (const p of Array.isArray(list) ? list : []) if (Number.isInteger(p?.n) && isNum(p?.value)) ns.push(p.n);
@@ -976,18 +1104,31 @@ export function chartDomain(run) {
   return { lo: Math.min(...ns), hi: Math.max(...ns) };
 }
 
+/** A series' latest and first `max` (positive numbers only), as the stat line has them (rnLastScores). */
+export function seriesMax(list) {
+  const maxes = (Array.isArray(list) ? list : []).map((p) => p?.max).filter((m) => isNum(m) && m > 0);
+  return { max: maxes.length ? maxes[maxes.length - 1] : null, firstMax: maxes.length ? maxes[0] : null };
+}
+
+/** The y range: the values' own, or 0..max widened to any value past it (never off the box). */
+function chartRange(values, max) {
+  if (!isNum(max)) return sparkRange(values);
+  return { lo: Math.min(0, ...values), hi: Math.max(max, ...values) };
+}
+
 /**
  * One series [{n, value}] -> [{n, value, x, y}] in a w x h box: x by round n
  * on `dom` (a one-round domain sits at the right edge, like a sparkline's
  * single point), y in the series' own range (top is high, flat sits in the
- * middle). Several scores in one round: the last one counts.
+ * middle), or 0..max when the score has a `max` (the line ends where the
+ * ring ends, T19). Several scores in one round: the last one counts.
  */
-export function chartPoints(list, dom, w = CHART_W, h = CHART_H) {
+export function chartPoints(list, dom, w = CHART_W, h = CHART_H, max = null) {
   const byN = new Map();
   for (const p of Array.isArray(list) ? list : []) if (Number.isInteger(p?.n) && isNum(p?.value)) byN.set(p.n, p.value);
   if (!byN.size || !dom) return [];
   const pts = [...byN].sort((a, b) => a[0] - b[0]);
-  const { lo, hi } = sparkRange(pts.map((p) => p[1]));
+  const { lo, hi } = chartRange(pts.map((p) => p[1]), max);
   const span = dom.hi - dom.lo;
   return pts.map(([n, value]) => {
     const x = span === 0 ? w - CHART_PAD : r2(CHART_PAD + ((n - dom.lo) * (w - 2 * CHART_PAD)) / span);
@@ -1007,7 +1148,8 @@ export function scoreCharts(run) {
   const dom = chartDomain(run);
   const out = [];
   for (const key of Object.keys(scores).sort()) {
-    const points = chartPoints(scores[key], dom);
+    const { max, firstMax } = seriesMax(scores[key]);
+    const points = chartPoints(scores[key], dom, CHART_W, CHART_H, max);
     if (!points.length) continue;
     const name = rnClean(key, 32) ?? '?';
     const better = betterOf[key] === 'lower' ? 'lower' : betterOf[key] === 'higher' ? 'higher' : null;
@@ -1017,10 +1159,15 @@ export function scoreCharts(run) {
     const trend = scoreTrend({ value: last.value, prev: prev ? prev.value : null, better });
     const { lo, hi } = sparkRange(points.map((p) => p.value));
     const way = better ? `, ${better} is better` : '';
+    // a score with a max reads "3 of 10" like the stat line, and its moved max "scope 8 → 10" (T19, T5)
+    const of = max !== null ? ` of ${chartNum(max)}` : '';
+    const scope = max !== null && firstMax !== max ? `scope ${chartNum(firstMax)} → ${chartNum(max)}` : null;
     const title = points.length === 1
-      ? `${name}: ${chartNum(last.value)} at round ${last.n}${way}`
-      : `${name}: ${chartNum(first.value)} at round ${first.n} to ${chartNum(last.value)} at round ${last.n}, range ${chartNum(lo)} to ${chartNum(hi)}${way}`;
-    out.push({ name, better, points, lo, hi, first, last, trend, title });
+      ? `${name}: ${chartNum(last.value)}${of} at round ${last.n}${way}`
+      : max !== null
+        ? `${name}: ${chartNum(first.value)} at round ${first.n} to ${chartNum(last.value)}${of} at round ${last.n}${scope ? `, ${scope}` : ''}${way}`
+        : `${name}: ${chartNum(first.value)} at round ${first.n} to ${chartNum(last.value)} at round ${last.n}, range ${chartNum(lo)} to ${chartNum(hi)}${way}`;
+    out.push({ name, better, points, lo, hi, max, scope, first, last, trend, title });
   }
   return out;
 }
@@ -1059,9 +1206,11 @@ function chartsSection(run) {
     const li = el('li', 'rn-chart');
     li.dataset.metric = c.name;
     li.title = c.title;
-    const val = el('span', 'rn-chart-v', `${chartNum(c.last.value)}${c.trend.mark ? ` ${c.trend.mark}` : ''}`);
+    const of = c.max !== null ? ` of ${chartNum(c.max)}` : '';
+    const val = el('span', 'rn-chart-v', `${chartNum(c.last.value)}${of}${c.trend.mark ? ` ${c.trend.mark}` : ''}`);
     if (c.trend.good === false) val.dataset.p = '2';
-    const range = c.points.length > 1 ? `${chartNum(c.lo)}–${chartNum(c.hi)}` : `round ${c.last.n}`;
+    // the min–max range only for a score with no max: with one, "of 10" already says the scale
+    const range = c.max !== null ? (c.scope ?? '') : c.points.length > 1 ? `${chartNum(c.lo)}–${chartNum(c.hi)}` : `round ${c.last.n}`;
     li.append(el('span', 'rn-chart-k', c.name), chartSvg(c), val, el('span', 'rn-chart-r', range));
     ul.append(li);
   }

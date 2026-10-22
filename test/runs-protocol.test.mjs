@@ -5,8 +5,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  parseLine, parseLines, foldRun, ackTarget, KNOWN_TYPES, MAX_LINE, MAX_TEXT, FENCE_ACK_BY,
+  parseLine, parseLines, foldRun, ackTarget, droppedFields, KNOWN_TYPES, MAX_LINE, MAX_TEXT, FENCE_ACK_BY,
 } from '../server/runs/protocol.mjs';
+import { summarize } from '../server/runs/summary.mjs';
 
 const FIXTURE = path.join(import.meta.dirname, 'fixtures', 'runs', 'readiness.jsonl');
 const line = (o) => JSON.stringify({ v: 1, run: 'r1', ts: 1792483200000, ...o });
@@ -32,7 +33,7 @@ test('every known type parses, with its checked fields', () => {
   };
   check({ t: 'run.start', goal: 'g', plan: 'p.md', deadline: '2026-10-21T05:00:00Z', budget: { rounds: 15, windowPct: 90 } },
     { goal: 'g', plan: 'p.md', deadlineAt: Date.parse('2026-10-21T05:00:00Z'),
-      budget: { rounds: 15, windowPct: 90, pause5h: null, stop7d: null } });
+      budget: { maxRounds: 15, rounds: 15, windowPct: 90, pause5h: null, stop7d: null } });
   check({ t: 'round.start', n: 3, role: 'builder', task: 'A2.4' }, { n: 3, role: 'builder', task: 'A2.4' });
   check({ t: 'round.end', n: 3, outcome: 'kept', commit: 'abc1234' }, { n: 3, outcome: 'kept', commit: 'abc1234' });
   check({ t: 'score', name: 'tests', value: 0.93, better: 'higher' }, { name: 'tests', value: 0.93, better: 'higher', n: null });
@@ -49,7 +50,7 @@ test('every known type parses, with its checked fields', () => {
 
 test('the reference loop\'s shapes: floats, top-level budget, numeric commit', () => {
   const start = ok({ t: 'run.start', goal: 'g', deadline: '2026-10-21 07:00', rounds: 15.0, pause5h: 90.0, stop7d: 85.0, branch: 'run/x' });
-  assert.deepEqual(start.budget, { rounds: 15, windowPct: null, pause5h: 90, stop7d: 85 });
+  assert.deepEqual(start.budget, { maxRounds: 15, rounds: 15, windowPct: null, pause5h: 90, stop7d: 85 });
   assert.equal(start.deadline, '2026-10-21 07:00');
   assert.equal(start.branch, 'run/x');
   const r = ok({ t: 'round.start', n: 3.0, role: 'fix' });
@@ -116,9 +117,9 @@ test('the fixture folds into the run', () => {
   assert.equal(run.run, 'readiness');
   assert.match(run.goal, /acme-api/);
   assert.equal(run.state, 'stopped');
-  assert.deepEqual(run.budget, { rounds: 6, windowPct: 90, pause5h: null, stop7d: null });
+  assert.deepEqual(run.budget, { maxRounds: 6, rounds: 6, windowPct: 90, pause5h: null, stop7d: null });
   assert.equal(run.deadlineAt, Date.parse('2026-10-21T05:00:00Z'));
-  assert.deepEqual(run.stop, { reason: 'no-progress', rounds: 3, usd: 3.75, ts: 1792487410000 });
+  assert.deepEqual(run.stop, { reason: 'no-progress', rounds: 3, usd: 3.75, detail: null, wrapup: false, ts: 1792487410000 });
 
   assert.deepEqual(run.rounds.map((r) => [r.n, r.role, r.task, r.outcome, r.commit, r.usd]), [
     [1, 'planner', null, 'kept', 'a1b2c3d', 0.9],
@@ -137,7 +138,7 @@ test('the fixture folds into the run', () => {
   assert.equal(run.needs[0].open, true);
   assert.equal(run.needs[0].kind, 'decision');
   assert.deepEqual(run.artifacts.map((a) => [a.kind, a.url]), [['pr', 'https://example.invalid/acme/acme-api/pull/7']]);
-  assert.deepEqual(run.cost, { usd: 3.75, rounds: 3 });
+  assert.deepEqual(run.cost, { usd: 3.75, rounds: 3, from: 'cost' });
   assert.equal(run.usage.fiveHourPct, 19);
   assert.equal(run.usage.fiveHourResetsAt, 1792497600000);
   assert.deepEqual(run.raw.map((e) => e.t), ['review.note']);
@@ -179,6 +180,34 @@ test('a retried round counts its starts and adds its costs; a restart reopens th
   assert.equal(run.needs[0].open, false, 'a wait closes when the next round starts');
 });
 
+test('a round keeps its title, a stop its detail; a wrap-up round after the stop is flagged and not counted (night 5 T3)', () => {
+  assert.equal(ok({ t: 'round.start', n: 1, wrapup: 'true' }).wrapup, true);
+  assert.equal(ok({ t: 'round.start', n: 1 }).wrapup, false);
+  assert.equal(ok({ t: 'round.start', n: 1, title: 7 }).title, '7');
+  assert.equal(ok({ t: 'run.stop', reason: 'done' }).detail, null);
+  const run = foldRun([
+    ok({ t: 'run.start', goal: 'g', budget: { rounds: 2 } }),
+    ok({ t: 'round.start', n: 1, role: 'builder', task: 'T3', title: 'The protocol keeps the loop\'s fields' }),
+    ok({ t: 'round.end', n: 1, outcome: 'done' }),
+    ok({ t: 'round.start', n: 2, role: 'builder' }),
+    ok({ t: 'round.end', n: 2, outcome: 'done', usd: 0.5 }),
+    ok({ t: 'run.stop', reason: 'rounds', rounds: 2, usd: 0.5, detail: 'used its 2-round budget', wrapup: true }),
+    ok({ t: 'round.start', n: 3, role: 'review-operator', wrapup: true }),
+    ok({ t: 'round.end', n: 3, outcome: 'reviewed' }),
+  ]);
+  assert.equal(run.rounds[0].title, 'The protocol keeps the loop\'s fields');
+  assert.equal(run.rounds[0].task, 'T3');
+  assert.equal(run.rounds[1].title, null);
+  assert.equal(run.stop.detail, 'used its 2-round budget');
+  assert.equal(run.stop.wrapup, true);
+  assert.equal(run.state, 'stopped', 'a wrap-up round does not restart the run');
+  assert.deepEqual(run.rounds.map((r) => r.wrapup), [false, false, true]);
+  assert.equal(run.counted, run.stop.rounds);
+  assert.equal(run.rounds[0].usd, null, 'no usd and no cost event: unknown, not 0');
+  assert.equal(run.rounds[2].usd, null);
+  assert.equal(run.rounds[1].usd, 0.5);
+});
+
 test('a run whose last word is a wait need is waiting', () => {
   const run = foldRun([
     ok({ t: 'run.start' }),
@@ -206,6 +235,34 @@ test('duplicate artifacts are kept once', () => {
     ok({ t: 'artifact', kind: 'pr', url: 'https://example.invalid/pull/1' }),
   ]);
   assert.equal(run.artifacts.length, 1);
+});
+
+test('artifact state: open, merged or closed in any case; anything else is null (night 5 T1)', () => {
+  const url = 'https://example.invalid/acme/acme-api/pull/7';
+  assert.equal(ok({ t: 'artifact', kind: 'pr', url }).state, null);
+  assert.equal(ok({ t: 'artifact', kind: 'pr', url, state: 'open' }).state, 'open');
+  assert.equal(ok({ t: 'artifact', kind: 'pr', url, state: 'MERGED' }).state, 'merged', 'gh pr view prints upper case');
+  assert.equal(ok({ t: 'artifact', kind: 'pr', url, state: ' closed ' }).state, 'closed');
+  for (const bad of ['draft', 'gone', '', 3, true, ['open'], { s: 'open' }]) {
+    assert.equal(ok({ t: 'artifact', kind: 'pr', url, state: bad }).state, null, JSON.stringify(bad));
+  }
+});
+
+test('a later artifact line with the same URL updates state and title, in its first place (night 5 T1)', () => {
+  const pr = 'https://example.invalid/acme/acme-api/pull/7';
+  const run = foldRun([
+    ok({ t: 'artifact', kind: 'report', url: 'https://example.invalid/report' }),
+    ok({ t: 'artifact', kind: 'pr', url: pr, title: 'v2 export (draft)', state: 'open' }),
+    ok({ t: 'artifact', kind: 'link', url: 'https://example.invalid/other' }),
+    ok({ t: 'artifact', kind: 'pr', url: pr, title: 'v2 export', state: 'merged' }),
+    ok({ t: 'artifact', kind: 'pr', url: pr, title: '', state: 'bogus' }),
+  ]);
+  assert.equal(run.artifacts.length, 3);
+  assert.equal(run.artifacts[1].url, pr, 'keeps its place');
+  assert.equal(run.artifacts[1].state, 'merged', 'a bad state later does not clear it');
+  assert.equal(run.artifacts[1].title, 'v2 export', 'the later title; an empty one does not clear it');
+  assert.equal(run.artifacts[1].kind, 'pr');
+  assert.equal(run.artifacts[0].state, null);
 });
 
 test('needs.ack: a ref is a place (below 1e9) or a time; anything else is skipped', () => {
@@ -313,4 +370,54 @@ test('run.start may name its host and a score its max (T9, the Map); a bad max i
 test('a score before any round lands on round 0 (night 4 T36)', () => {
   const run = foldRun([ok({ t: 'run.start' }), ok({ t: 'score', name: 'tests', value: 0.5 }), ok({ t: 'round.start', n: 1 }), ok({ t: 'score', name: 'tests', value: 0.7 })]);
   assert.deepEqual(run.scores.tests.map((x) => [x.n, x.value]), [[0, 0.5], [1, 0.7]]);
+});
+
+test('T6: with no cost event the run\'s cost is the sum of its rounds\' round.end usd, null with none', () => {
+  const rounds = foldRun([
+    ok({ t: 'run.start' }),
+    ok({ t: 'round.start', n: 1 }),
+    ok({ t: 'round.end', n: 1, usd: 1.25 }),
+    ok({ t: 'round.start', n: 2 }),
+    ok({ t: 'round.end', n: 2, usd: 0.5 }),
+    ok({ t: 'round.start', n: 3 }),
+    ok({ t: 'round.end', n: 3 }),
+  ]);
+  assert.deepEqual(rounds.cost, { usd: 1.75, rounds: 0, from: 'rounds' });
+  const none = foldRun([ok({ t: 'run.start' }), ok({ t: 'round.start', n: 1 }), ok({ t: 'round.end', n: 1 })]);
+  assert.deepEqual(none.cost, { usd: null, rounds: 0, from: null }, 'unknown, never 0');
+  // Once a cost event is sent, only cost events add up.
+  const both = foldRun([
+    ok({ t: 'round.end', n: 1, usd: 1.25 }),
+    ok({ t: 'cost', n: 2, usd: 0.4 }),
+  ]);
+  assert.deepEqual(both.cost, { usd: 0.4, rounds: 1, from: 'cost' });
+  const zero = foldRun([ok({ t: 'round.end', n: 1, usd: 0 })]);
+  assert.deepEqual(zero.cost, { usd: 0, rounds: 0, from: 'rounds' }, 'a reported 0 is a real 0');
+});
+
+test('T6: droppedFields names what the checked event leaves out', () => {
+  const art = { v: 1, t: 'artifact', run: 'r1', ts: 1, url: 'https://example.invalid/acme/pull/1', state: 'shipped', title: 'x' };
+  assert.deepEqual(droppedFields(art, parseLine(JSON.stringify(art)).event), ['state']);
+  const start = { t: 'run.start', run: 'r1', rounds: 5, goal: 'g', budget: { windowPct: 'lots' }, colour: 'red' };
+  assert.deepEqual(droppedFields(start, parseLine(JSON.stringify(start)).event), ['budget.windowPct', 'colour']);
+  const raw = { t: 'review.note', run: 'r1', anything: 1 };
+  assert.deepEqual(droppedFields(raw, parseLine(JSON.stringify(raw)).event), [], 'an unknown type is kept raw');
+  const cost = { t: 'cost', run: 'r1', usd: 0.5, n: 2 };
+  assert.deepEqual(droppedFields(cost, parseLine(JSON.stringify(cost)).event), []);
+});
+
+test('T7: `maxRounds` (top level or in budget) and the old `budget.rounds` fold to the same cap', () => {
+  const caps = [
+    { maxRounds: 7 },
+    { budget: { maxRounds: 7 } },
+    { budget: { rounds: 7 } },
+    { rounds: 7 },
+  ].map((extra) => {
+    const run = foldRun([ok({ t: 'run.start', goal: 'g', ...extra })]);
+    return [run.budget.maxRounds, summarize(run).maxRounds];
+  });
+  assert.deepEqual(caps, [[7, 7], [7, 7], [7, 7], [7, 7]]);
+  assert.equal(ok({ t: 'run.start', budget: { maxRounds: 4, rounds: 9 } }).budget.maxRounds, 4, 'the new name wins');
+  const start = { t: 'run.start', run: 'r1', maxRounds: 5, budget: { rounds: 5 } };
+  assert.deepEqual(droppedFields(start, parseLine(JSON.stringify(start)).event), [], 'neither spelling is reported dropped');
 });

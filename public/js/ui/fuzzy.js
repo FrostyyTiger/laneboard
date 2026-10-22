@@ -7,6 +7,9 @@
 //     directly and +1 when its case is exact; every skipped character between
 //     two matches costs -1. The best alignment wins (dynamic programming, not
 //     the first greedy one). No match is null; an empty query scores 0.
+//   fuzzyRanges(q, s) -> [[start, end), ...] | null
+//     where that best alignment matched, as merged half-open ranges (runs
+//     n5 T52: the palette marks them). Same rules, same nulls; '' -> [].
 //   parsePrefix(q)  -> {type: 'HOST'|'LANE'|'PKG'|'NODE'|'ACT'|null, text}
 //   rankItems(items, q, {recent, cap}) -> the matching items, best first
 
@@ -27,45 +30,93 @@ function wordStart(s, i) {
   return prev === prev.toLowerCase() && prev !== prev.toUpperCase() && c !== c.toLowerCase() && c === c.toUpperCase();
 }
 
-export function fuzzyScore(q, s) {
+/**
+ * The alignment table: best[i][j] is the best score with query[0..i] matched
+ * and query[i] at str[j]; from[i][j] is where query[i-1] sat on that path.
+ * Returns {best, from, m, n} or null when nothing can match.
+ */
+function align(q, s) {
   const query = String(q ?? '').slice(0, MAX_Q);
   const str = String(s ?? '').slice(0, MAX_S);
-  if (query === '') return 0;
   const m = query.length;
   const n = str.length;
   if (m > n) return null;
   const ql = query.toLowerCase();
   const sl = str.toLowerCase();
   const NEG = -Infinity;
-  // prev[j]: best score with query[0..i-1] matched and query[i-1] at str[j].
-  let prev = new Array(n).fill(NEG);
+  const best = [];
+  const from = [];
+  let prev = null;
   for (let i = 0; i < m; i++) {
     const cur = new Array(n).fill(NEG);
+    const back = new Array(n).fill(-1);
     // run = max over k < j-1 of (prev[k] - gap*k): a gap of (j - k - 1)
     // chars costs gap*(j-k-1) = (prev[k] - gap*k) + gap*(j-1) - prev[k].
     let run = NEG;
+    let runAt = -1;
     for (let j = i; j < n; j++) {
-      if (i > 0 && j - 2 >= 0 && prev[j - 2] !== NEG) run = Math.max(run, prev[j - 2] - SCORE.gap * (j - 2));
+      if (i > 0 && j - 2 >= 0 && prev[j - 2] !== NEG) {
+        const v = prev[j - 2] - SCORE.gap * (j - 2);
+        if (v > run) { run = v; runAt = j - 2; }
+      }
       if (sl[j] !== ql[i]) continue;
       let bonus = 0;
       if (wordStart(str, j)) bonus += SCORE.wordStart;
       if (str[j] === query[i]) bonus += SCORE.caseExact;
-      let best;
+      let b;
+      let at = -1;
       if (i === 0) {
-        best = 0; // a leading gap is free: word starts already favour prefixes
+        b = 0; // a leading gap is free: word starts already favour prefixes
       } else {
         const adj = j >= 1 && prev[j - 1] !== NEG ? prev[j - 1] + SCORE.consecutive : NEG;
         const viaGap = run === NEG ? NEG : run + SCORE.gap * (j - 1);
-        best = Math.max(adj, viaGap);
+        if (adj >= viaGap) { b = adj; at = j - 1; } else { b = viaGap; at = runAt; }
       }
-      if (best === NEG) continue;
-      cur[j] = best + bonus;
+      if (b === NEG) continue;
+      cur[j] = b + bonus;
+      back[j] = at;
     }
+    best.push(cur);
+    from.push(back);
     prev = cur;
   }
-  let out = NEG;
-  for (const v of prev) if (v > out) out = v;
-  return out === NEG ? null : out;
+  return { best, from, m, n };
+}
+
+/** The end column of the best alignment, or -1. */
+function bestEnd(t) {
+  const last = t.best[t.m - 1];
+  let at = -1;
+  for (let j = 0; j < t.n; j++) if (last[j] !== -Infinity && (at < 0 || last[j] > last[at])) at = j;
+  return at;
+}
+
+export function fuzzyScore(q, s) {
+  if (String(q ?? '').slice(0, MAX_Q) === '') return 0;
+  const t = align(q, s);
+  if (!t) return null;
+  const at = bestEnd(t);
+  return at < 0 ? null : t.best[t.m - 1][at];
+}
+
+export function fuzzyRanges(q, s) {
+  if (String(q ?? '').slice(0, MAX_Q) === '') return [];
+  const t = align(q, s);
+  if (!t) return null;
+  let at = bestEnd(t);
+  if (at < 0) return null;
+  const pos = [];
+  for (let i = t.m - 1; i >= 0 && at >= 0; i--) {
+    pos.unshift(at);
+    at = t.from[i][at];
+  }
+  const out = [];
+  for (const p of pos) {
+    const last = out[out.length - 1];
+    if (last && last[1] === p) last[1] = p + 1;
+    else out.push([p, p + 1]);
+  }
+  return out;
 }
 
 const PREFIXES = [

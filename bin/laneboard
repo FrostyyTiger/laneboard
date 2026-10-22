@@ -22,19 +22,22 @@
 //   laneboard pause <name|--all> [--reason r]          offline: write a pause sentinel
 //   laneboard resume <name|--all>                      offline: lift an operator pause
 //   laneboard paused [--json]                          offline: list the pause sentinels
-//   laneboard run start|round|score|needs|ack|artifact|stop [--run <id>] [flags] [--file f | --post]
+//   laneboard run start|round|score|needs|ack|artifact|stop|cost [--run <id>] [flags] [--file f | --post]
 //                                                      offline: append one run-protocol line
-//     start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
-//     round    --n N [--role r] [--task t]             prints `export LANEBOARD_RUN=<run>/<n>` for eval
+//     start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--max-rounds N] [--window-pct P]
+//              (--rounds N on start is --max-rounds' old name; on stop it is the count done)
+//     round    --n N [--role r] [--task t] [--title t] [--wrapup]   prints `export LANEBOARD_RUN=<run>/<n>` for eval
 //     round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
 //     score    --name m --value x [--better higher|lower] [--n N] [--max x]
 //     needs    [--kind decision|wait] [--text t] [--link url] [--n N]
 //     ack      [<run>] <ref> [--by b]                  closes a need: ref = its place (0 = first) or its ts; a closed one: nothing sent
-//     artifact --url u [--kind pr|link] [--title t]
-//     stop     [--reason done|deadline|rounds|…] [--rounds N] [--usd x]
+//     artifact --url u [--kind pr|link] [--title t] [--state open|merged|closed]
+//     stop     [--reason done|deadline|rounds|…] [--rounds N] [--usd x] [--detail d]
+//     cost     --usd x [--n N]                         the run's cost is the sum of these (else of the rounds' --usd)
 //     The line goes to --file, else $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl;
 //     --post sends it to POST /api/runs/events instead. --run defaults to the run
-//     part of $LANEBOARD_RUN. --run/--file/--post may also come before <sub>.
+//     part of $LANEBOARD_RUN (start says so on stderr). --run/--file/--post may
+//     also come before <sub>.
 //     A bad argument prints one line and exits 2. See docs/runs.md.
 //   laneboard feed tailscale|proxmox|docker [--source s] [--every N] [--stdout | --out <file> | --push <url>]
 //                                                      offline: read one source once, write one feed
@@ -117,7 +120,17 @@ function cleanDeep(v) {
 
 // ---------------------------------------------------------------- http
 
-async function api(path, { method = 'GET', body } = {}) {
+let answered = null;
+
+/** `board: <url>` on stderr once the board answered, so stdout stays parseable
+ *  (`laneboard ls | …`) and a reader sees which board the numbers came from. */
+function boardLine() {
+  if (answered) process.stderr.write(`board: ${cleanTerm(answered)}\n`);
+}
+
+/** `onError(status, message)` may return a clearer message for a failed call
+ *  (a dead end that names the way out); it returns nothing to keep the server's. */
+async function api(path, { method = 'GET', body, onError } = {}) {
   let res;
   try {
     res = await fetch(`${BASE}${path}`, {
@@ -131,12 +144,17 @@ async function api(path, { method = 'GET', body } = {}) {
     e.unreachable = true;
     throw e;
   }
+  // The board that answered (after any redirect), for `board: <url>` (boardLine).
+  answered = res.redirected ? new URL(res.url).origin : BASE;
   const text = await res.text();
   let data;
   try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
   // Server text is untrusted for the terminal: clean every string once, here.
   data = cleanDeep(data);
-  if (!res.ok) die(data.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const msg = data.error || `HTTP ${res.status}`;
+    die(onError?.(res.status, msg) || msg);
+  }
   return data;
 }
 
@@ -171,7 +189,18 @@ function ago(ts) {
   return `${Math.round(s / 86400)}d`;
 }
 
-const money = (v) => (v == null ? '-' : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toFixed(3)}`);
+const money = (v) => (v == null ? '-' : `$${v.toFixed(2)}`);
+
+/** `2026-10-21 18:00` in the terminal's local time: the ISO order, no seconds. */
+function isoLocal(ts) {
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '-';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const clip = (v, n) => { const t = String(v ?? '').replace(/\s+/g, ' '); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
 /** Width ignoring ANSI, so coloured columns still line up. */
 const width = (s) => String(s).replace(/\u001b\[[0-9;]*m/g, '').length;
@@ -189,6 +218,7 @@ function table(rows, headers) {
 
 async function cmdLs() {
   const { sessions, attention } = await api('/api/state');
+  boardLine();
   const order = { waiting_permission: 0, waiting_question: 1, working: 2, done: 3, idle: 4, shell: 5, dead: 6 };
   sessions.sort((a, b) => (order[a.state] ?? 9) - (order[b.state] ?? 9) || a.name.localeCompare(b.name));
   const rows = sessions.map((s) => [
@@ -207,11 +237,14 @@ async function cmdLs() {
   }
 }
 
+/** A 404 for a session or lane name: say where the names are, not the raw API error. */
+const unknownName = (name) => (status) => (status === 404 ? `no session or lane ${name}; see laneboard ls` : undefined);
+
 async function cmdPeek() {
   const name = argv.shift();
   if (!name) die('usage: laneboard peek <name> [-n 40]', 2);
   const n = Number(takeFlag('-n', '40'));
-  const data = await api(`/api/sessions/${encodeURIComponent(name)}/preview?n=${n}`);
+  const data = await api(`/api/sessions/${encodeURIComponent(name)}/preview?n=${n}`, { onError: unknownName(name) });
   process.stdout.write(`${data.lines.join('\n')}\n`);
 }
 
@@ -334,50 +367,69 @@ async function cmdRestart() {
   process.stdout.write(`restarted ${name}${r.resumed ? ` (resumed ${r.resumed})` : ''}\n`);
 }
 
+/** The widest line `laneboard morning` prints, so it reads in an 100-column terminal. */
+const MORNING_COLS = 100;
+
+const MORNING_USAGE = `usage: laneboard morning [--window tonight|12h|24h|7d]
+  what needs you, what finished, what it cost, over one window (default tonight).
+  tonight reaches back to 18:00 local time of the evening that has begun (today's
+  after 18:00, else yesterday's) or 12 hours, whichever is further back: at 07:00
+  that is 13 hours. Local time is the config's \`timezone\` (LANEBOARD_TIMEZONE).
+`;
+
 async function cmdMorning() {
+  if (argv.includes('-h') || argv.includes('--help')) return process.stdout.write(MORNING_USAGE);
   const window = takeFlag('--window', 'tonight');
+  // An unknown window is a usage error (exit 2), not a silent `tonight`.
+  const { WINDOWS } = await import('../server/util.mjs');
+  if (!WINDOWS.includes(window)) die(`unknown window ${JSON.stringify(window)}; usage: laneboard morning [--window ${WINDOWS.join('|')}]`, 2);
   const m = await api(`/api/morning?window=${encodeURIComponent(window)}`);
-  const since = new Date(m.since).toLocaleString('en-GB', { hour12: false });
-  process.stdout.write(`${C.bold}Morning — ${m.label}${C.off} ${C.dim}(since ${since})${C.off}\n\n`);
+  boardLine();
+  process.stdout.write(`${C.bold}Morning — ${m.label}${C.off} ${C.dim}(since ${isoLocal(m.since)})${C.off}\n\n`);
 
   process.stdout.write(`${C.bold}Needs you${C.off} (${m.needsYou.length})\n`);
   if (!m.needsYou.length) process.stdout.write('  (nothing)\n');
   else {
     const rows = m.needsYou.map((n) => [
       `${STATE_COLOUR[n.state] || C.amber}${n.kind}${C.off}`,
-      n.name || '-',
-      n.lane || '-',
+      clip(n.name || '-', 24),
+      clip(n.lane || '-', 20),
       ago(n.at),
-      (n.text || '').replace(/\s+/g, ' ').slice(0, 70),
+      n.text || '',
     ]);
-    process.stdout.write(`${table(rows, ['WHAT', 'SESSION', 'LANE', 'AGE', 'DETAIL'])}\n`);
+    process.stdout.write(`${fitLast(rows, ['WHAT', 'SESSION', 'LANE', 'AGE', 'DETAIL'])}\n`);
   }
 
-  process.stdout.write(`\n${C.bold}Finished${C.off} (${m.finished.length} lanes active)\n`);
-  if (!m.finished.length) process.stdout.write('  (nothing moved)\n');
-  else {
-    const rows = m.finished.map((f) => [
-      f.lane,
-      f.progress?.n != null ? `${f.progress.n}/${f.progress.m}` : '-',
-      f.branch || '-',
-      f.isMain ? '-' : f.merged === true ? `${C.green}merged${C.off}` : f.merged === false ? `${C.amber}unmerged${C.off}` : '?',
-      f.lastCommitAt ? ago(f.lastCommitAt) : '-',
-      f.doneMarkers.length ? `${C.green}${f.doneMarkers.length} done${C.off}` : '',
-      f.sessions.map((s) => `${s.name}:${s.state}`).join(' ').slice(0, 40) || '(idle)',
-    ]);
-    process.stdout.write(`${table(rows, ['LANE', 'STAGE', 'BRANCH', 'MERGED', 'COMMIT', 'DONE', 'SESSIONS'])}\n`);
-  }
-
+  // A run that stopped in the window is news of the night, said with its
+  // reason under Finished; the runs still going stay under Runs. A lane that
+  // moved but still has a session at work is not finished: it gets its own
+  // Still running block (T25).
   const runs = Array.isArray(m.runs) ? m.runs : [];
-  if (runs.length) {
-    process.stdout.write(`\n${C.bold}Runs${C.off} (${runs.length})\n`);
-    for (const r of runs) process.stdout.write(`  ${morningRunLine(r)}\n`);
+  const stopped = runs.filter((r) => r.state === 'stopped' && (r.stoppedAt == null || r.stoppedAt >= m.since));
+  const going = runs.filter((r) => !stopped.includes(r));
+  const moved = Array.isArray(m.finished) ? m.finished : [];
+  const running = moved.filter(laneStillRunning);
+  const lanes = moved.filter((f) => !running.includes(f));
+  const counts = [stopped.length ? `${plural(stopped.length, 'run')} stopped` : '', lanes.length || !stopped.length ? plural(lanes.length, 'lane') : ''];
+  process.stdout.write(`\n${C.bold}Finished${C.off} (${counts.filter(Boolean).join(', ')})\n`);
+  for (const r of stopped) process.stdout.write(`  ${morningRunLine(r)}\n`);
+  if (lanes.length) process.stdout.write(`${morningLaneTable(lanes)}\n`);
+  else if (!stopped.length) process.stdout.write(running.length ? '  (nothing finished)\n' : '  (nothing moved)\n');
+
+  if (running.length) {
+    process.stdout.write(`\n${C.bold}Still running${C.off} (${plural(running.length, 'lane')})\n`);
+    process.stdout.write(`${morningLaneTable(running)}\n`);
+  }
+
+  if (going.length) {
+    process.stdout.write(`\n${C.bold}Runs${C.off} (${going.length})\n`);
+    for (const r of going) process.stdout.write(`  ${morningRunLine(r)}\n`);
   }
 
   process.stdout.write(`\n${C.bold}What it cost${C.off} ${C.dim}(API-equivalent)${C.off}\n`);
   const rows = m.cost.lanes
     .filter((l) => l.usd > 0.0005)
-    .map((l) => [l.lane || '(no lane)', money(l.usd), compact(l.tokens), l.sessions.slice(0, 3).join(' ')]);
+    .map((l) => [clip(l.lane || '(no lane)', 24), money(l.usd), compact(l.tokens), plural((l.sessions || []).length, 'session')]);
   process.stdout.write(`${table(rows, ['LANE', 'SPEND', 'TOKENS', 'SESSIONS'])}\n`);
   process.stdout.write(`total ${money(m.cost.totalUsd)}   ${compact(m.cost.totalTokens)} tokens\n`);
   const rl = m.rateLimits;
@@ -385,6 +437,41 @@ async function cmdMorning() {
     const g = (x, label) => (x ? `${label} ${Math.round(x.usedPct)}% (resets ${new Date(x.resetsAt).toLocaleTimeString('en-GB', { hour12: false }).slice(0, 5)})` : '');
     process.stdout.write(`${C.dim}${g(rl.fiveHour, '5h')}   ${g(rl.sevenDay, '7d')}${C.off}\n`);
   }
+}
+
+/** Session states that mean an agent is still at work (or waiting on you mid-task). */
+const RUNNING_STATES = new Set(['working', 'waiting_permission', 'waiting_question']);
+
+/**
+ * A Morning lane that moved but is not finished: no done marker, not merged,
+ * and a session still working or waiting. Idle, done and dead sessions do not
+ * keep a lane open.
+ */
+function laneStillRunning(f) {
+  const news = (Array.isArray(f.doneMarkers) && f.doneMarkers.length) || (f.merged === true && !f.isMain);
+  return !news && Array.isArray(f.sessions) && f.sessions.some((s) => RUNNING_STATES.has(s?.state));
+}
+
+/** Morning's lane rows: lane, stage, branch, merged, last commit, done markers, sessions. */
+function morningLaneTable(lanes) {
+  const rows = lanes.map((f) => [
+    clip(f.lane, 24),
+    f.progress?.n != null ? `${f.progress.n}/${f.progress.m}` : '-',
+    clip(f.branch || '-', 28),
+    f.isMain ? '-' : f.merged === true ? `${C.green}merged${C.off}` : f.merged === false ? `${C.amber}unmerged${C.off}` : '?',
+    f.lastCommitAt ? ago(f.lastCommitAt) : '-',
+    f.doneMarkers?.length ? `${C.green}${f.doneMarkers.length} done${C.off}` : '',
+    f.sessions?.length ? plural(f.sessions.length, 'session') : '(idle)',
+  ]);
+  return table(rows, ['LANE', 'STAGE', 'BRANCH', 'MERGED', 'COMMIT', 'DONE', 'SESSIONS']);
+}
+
+/** A table whose last column is cut to what is left of MORNING_COLS. */
+function fitLast(rows, headers) {
+  const last = headers.length - 1;
+  const rest = headers.slice(0, last).map((h, i) => Math.max(width(h), ...rows.map((r) => width(r[i] ?? ''))));
+  const room = Math.max(10, MORNING_COLS - rest.reduce((a, w) => a + w + 2, 0));
+  return table(rows.map((r) => [...r.slice(0, last), clip(r[last], room)]), headers);
 }
 
 /** One Morning run: id, rounds, each score start → end, stop reason, PRs, cost, goal. */
@@ -398,15 +485,17 @@ function morningRunLine(r) {
     return `${name} ${fmt(s.start)}→${fmt(s.end)} ${tint}${arrow}${tint ? C.off : ''}`;
   });
   const prs = Array.isArray(r.prs) ? r.prs : [];
-  return [
-    `${C.bold}${r.run}${C.off}`,
-    `${r.rounds} round${r.rounds === 1 ? '' : 's'}`,
+  const line = [
+    `${C.bold}${clip(r.run, 32)}${C.off}`,
+    plural(r.rounds, 'round'),
     ...scores,
-    r.stop ? `stopped: ${r.stop}` : r.state || '',
-    prs.length ? `${prs.length} PR${prs.length === 1 ? '' : 's'}` : '',
+    r.stop ? `stopped: ${clip(r.stop, 30)}` : r.state || '',
+    prs.length ? plural(prs.length, 'PR') : '',
     r.usd == null ? '' : money(r.usd),
-    r.goal ? `${C.dim}${String(r.goal).replace(/\s+/g, ' ').slice(0, 60)}${C.off}` : '',
   ].filter(Boolean).join('  ');
+  // The goal takes what is left of the line (2 for the indent, 2 for the gap).
+  const room = MORNING_COLS - 4 - width(line);
+  return r.goal && room >= 10 ? `${line}  ${C.dim}${clip(r.goal, room)}${C.off}` : line;
 }
 
 function compact(n) {
@@ -417,15 +506,22 @@ function compact(n) {
   return String(v);
 }
 
+const CREDIT_SAMPLER_HINT =
+  'the 5h/7d windows come from the status line; see docs/install.md (deploy/install-claude.sh)';
+
 async function cmdCredit() {
   const c = await api('/api/credit');
+  boardLine();
   const rl = c.rateLimits || {};
   const g = (x, label) => (x
     ? `${label} ${String(Math.round(x.usedPct)).padStart(3)}%  resets ${new Date(x.resetsAt).toLocaleString('en-GB', { hour12: false }).slice(-8, -3)}`
     : `${label}   -`);
   process.stdout.write(`${C.bold}Credit${C.off}   ${g(rl.fiveHour, '5h')}   ${g(rl.sevenDay, '7d')}\n`);
   const s = c.sampler || {};
-  process.stdout.write(`${C.dim}sampler: ${s.rows || 0} samples, last ${s.lastSampleAt ? ago(s.lastSampleAt) : 'never'}${C.off}\n\n`);
+  process.stdout.write(`${C.dim}sampler: ${s.rows || 0} samples, last ${s.lastSampleAt ? ago(s.lastSampleAt) : 'never'}${C.off}\n`);
+  // Zero samples is a missing status line far more often than a quiet box: say what feeds it.
+  if (!s.rows) process.stdout.write(`${C.dim}${CREDIT_SAMPLER_HINT}${C.off}\n`);
+  process.stdout.write('\n');
   const rows = c.lanes
     .filter((l) => (l.allTime ?? 0) > 0.005 || l.tonight > 0.005 || l.week > 0.005)
     .map((l) => [
@@ -481,7 +577,15 @@ async function cmdLaunch() {
   const fake = takeFlag('--fake-taken-slots');
   if (fake) body.fakeTakenSlots = fake.split(',').map(Number);
   if (!lane || !body.plan) die('usage: laneboard launch <lane> --plan docs/plans/<lane>.md [--repo <repo>] [--branch feat/<lane>] [--model opus] [--permission-mode auto]', 2);
-  const r = await api('/api/lanes', { method: 'POST', body });
+  const r = await api('/api/lanes', {
+    method: 'POST',
+    body,
+    // The server knows no repo: name both ways to give it one. The launcher says
+    // `no repo given …`; dispatch's argument check says `args.repo is required` first.
+    onError: (status, msg) => (/no repo given|\bargs\.repo is required/.test(msg)
+      ? "no repo given and no default repo configured; pass --repo <repo>, or list repos in the config's `repos` (the first is the default, docs/config.md)"
+      : undefined),
+  });
   process.stdout.write(`launching ${r.lane} on slot ${r.slot} (job ${r.job})\n`);
   if (noWait) return;
   if (!(await followJob(r.job))) process.exit(1);
@@ -502,7 +606,7 @@ async function cmdRetire() {
     confirmWith = confirmWith.trim();
   }
   const body = force ? { force: true, confirm: confirmWith } : {};
-  const r = await api(`/api/lanes/${encodeURIComponent(lane)}`, { method: 'DELETE', body });
+  const r = await api(`/api/lanes/${encodeURIComponent(lane)}`, { method: 'DELETE', body, onError: unknownName(lane) });
   await followJob(r.job, { timeoutMs: 10000 });
   if (!r.ok) process.exit(1);
   process.stdout.write(`retired ${lane}; the branch ${r.branchKept} is kept (deleting branches is yours)\n`);
@@ -835,40 +939,83 @@ const RUN_COMMON = { '--run': ['run', 'str'], '--file': ['file', 'str'], '--post
 const RUN_SUBS = {
   start: {
     '--goal': ['goal', 'str'], '--plan': ['plan', 'str'], '--branch': ['branch', 'str'], '--host': ['host', 'str'],
-    '--deadline': ['deadline', 'str'], '--rounds': ['rounds', 'int'], '--window-pct': ['windowPct', 'num'],
+    '--deadline': ['deadline', 'str'], '--max-rounds': ['maxRounds', 'int'], '--rounds': ['rounds', 'int'],
+    '--window-pct': ['windowPct', 'num'],
   },
   round: {
-    '--n': ['n', 'int'], '--role': ['role', 'str'], '--task': ['task', 'str'], '--end': ['end', 'bool'],
-    '--outcome': ['outcome', 'str'], '--commit': ['commit', 'str'], '--open': ['open', 'int'], '--usd': ['usd', 'num'],
+    '--n': ['n', 'int'], '--role': ['role', 'str'], '--task': ['task', 'str'], '--title': ['title', 'str'],
+    '--wrapup': ['wrapup', 'bool'], '--end': ['end', 'bool'], '--outcome': ['outcome', 'str'], '--commit': ['commit', 'str'], '--open': ['open', 'int'], '--usd': ['usd', 'num'],
   },
   score: { '--name': ['name', 'str'], '--value': ['value', 'num'], '--better': ['better', 'str'], '--n': ['n', 'int'], '--max': ['max', 'num'] },
   needs: { '--kind': ['kind', 'str'], '--text': ['text', 'str'], '--link': ['link', 'str'], '--n': ['n', 'int'] },
   ack: { '--ref': ['ref', 'str'], '--by': ['by', 'str'] },
-  artifact: { '--url': ['url', 'str'], '--kind': ['kind', 'str'], '--title': ['title', 'str'] },
-  stop: { '--reason': ['reason', 'str'], '--rounds': ['rounds', 'int'], '--usd': ['usd', 'num'] },
+  artifact: { '--url': ['url', 'str'], '--kind': ['kind', 'str'], '--title': ['title', 'str'], '--state': ['state', 'str'] },
+  stop: { '--reason': ['reason', 'str'], '--rounds': ['rounds', 'int'], '--usd': ['usd', 'num'], '--detail': ['detail', 'str'] },
+  cost: { '--usd': ['usd', 'num'], '--n': ['n', 'int'] },
 };
-const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', ack: 'needs.ack', artifact: 'artifact', stop: 'run.stop' };
-const ROUND_START_ONLY = ['role', 'task'];
+const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', ack: 'needs.ack', artifact: 'artifact', stop: 'run.stop', cost: 'cost' };
+const ROUND_START_ONLY = ['role', 'task', 'title', 'wrapup'];
 const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 
 const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
-  start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--rounds N] [--window-pct P]
-  round    --n N [--role r] [--task t]            prints export LANEBOARD_RUN=<run>/<n>, meant for: eval "$(laneboard run round --n N …)"
-  round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
+  start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--max-rounds N] [--window-pct P]
+           --goal is a sentence about what the run is for (--goal "Night 5: PR state in the Inbox"), not the run id
+           --max-rounds N is the round cap; --rounds N on start is its old name (a note on stderr)
+           there is no --budget flag: a run's budget is --max-rounds and --window-pct, kept in run.start's budget
+           the budget burn column is the 5 h / 7 d usage % of the run's last usage event, which no subcommand writes:
+           the loop appends a usage line itself (docs/runs.md); the bars warn at 90 % / 85 %, not at --window-pct
+  round    --n N [--role r] [--task t] [--title t] [--wrapup]   prints export LANEBOARD_RUN=<run>/<n>, meant for: eval "$(laneboard run round --n N …)"
+           --title is the task's title; --wrapup marks a round after stop (a final review or report), not counted
+  round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]   --usd is this round only; the run sums them when it has no cost events
   score    --name m --value x [--better higher|lower] [--n N] [--max x]
-  needs    [--kind decision|wait|…] [--text t] [--link url] [--n N]
+  needs    ["text" | --text t] [--kind decision|wait|…] [--link url] [--n N]
   ack      [<run>] <ref> [--by b]                 close a need: <ref> is its place (0 = the first) or its ts (no such need: exit 1; already acked: nothing sent, exit 0)
-  artifact --url u [--kind pr|link|…] [--title t]
-  stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
+  artifact --url u [--kind pr|link|…] [--title t] [--state open|merged|closed]
+           --kind defaults to link; only kind pr artifacts are listed in the run's prs (the Inbox)
+  stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x] [--detail d]
+           --detail is one line on why, shown under the reason
+           --rounds N on stop is the count of rounds done, not the cap
+           no --reason: the run records stop: "unknown" (the line carries no reason)
+  cost     --usd x [--n N]                        what was spent (in round N); the run's cost is the sum of these
 every subcommand:
-  --run <id>   the run; defaults to the run part of $LANEBOARD_RUN (which \`round\` exports)
+  --run <id>   the run; defaults to the run part of $LANEBOARD_RUN (which \`round\` exports); \`start\` says so on stderr when it uses it
   --file f     append the line to f; defaults to $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl
   --post       send the line to POST /api/runs/events on the server instead of a file
   --run, --file and --post may also come before <sub>.`;
 
 // A usage error is one line plus a pointer to the help; no subcommand at all
 // prints the whole usage (that is what the user asked for).
-const runUsage = (msg) => die(msg ? `run: ${msg}\nsee: laneboard run --help` : RUN_USAGE, 2);
+// `runHint` is a close match for an unexpected argument (set by cmdRun).
+// `hint` is a close match for this one argument (a flag), it wins over runHint.
+let runHint = '';
+const runUsage = (msg, hint = '') => die(msg
+  ? `run: ${msg}\n${hint || (msg.startsWith('unexpected argument') ? runHint : '')}see: laneboard run --help`
+  : RUN_USAGE, 2);
+
+// Words people guess for a flag that edit distance does not reach (the README says "run id").
+const RUN_FLAG_GUESSES = { '--id': '--run', '--run-id': '--run', '--runid': '--run' };
+
+/** `did you mean: --flag` for an unknown flag: a known guess, or the one allowed flag within edit distance 2. */
+function flagHint(word, allowed) {
+  if (!String(word).startsWith('--')) return '';
+  const w = word.toLowerCase();
+  const guess = RUN_FLAG_GUESSES[w];
+  if (guess && Object.hasOwn(allowed, guess)) return `did you mean: ${guess}\n`;
+  const hits = Object.keys(allowed).filter((f) => editDistance(w, f) <= Math.min(2, f.length - 3));
+  return hits.length === 1 ? `did you mean: ${hits[0]}\n` : '';
+}
+
+/** `--post http://…`: --post is a switch, the board comes from $LANEBOARD_URL (review 83-stranger 1). */
+function postHint(prev, word) {
+  if (prev !== '--post' || !/^([a-z][a-z0-9+.-]*:\/\/\S|[\w.-]+:\d+(\/|$))/i.test(String(word))) return '';
+  return `--post takes no value: it sends to the board at $LANEBOARD_URL (now ${cleanTerm(BASE)}), e.g. LANEBOARD_URL=${cleanTerm(word)} laneboard run … --post\n`;
+}
+
+/** `did you mean: laneboard run <sub> <its args>` for a subcommand name, from RUN_USAGE. */
+function subHint(sub) {
+  const line = RUN_USAGE.split('\n').find((l) => l.startsWith(`  ${sub} `));
+  return `did you mean: laneboard run ${sub} ${line.trim().slice(sub.length).trim().split(/\s{2,}/)[0]}\n`;
+}
 
 /** `laneboard run <sub> … -h|--help`: a -h/--help word that is not a flag's value. */
 function wantsHelp(allowed) {
@@ -883,7 +1030,13 @@ function wantsHelp(allowed) {
 /** One subcommand's lines of RUN_USAGE, then the flags every subcommand takes. */
 function subUsage(sub) {
   const lines = RUN_USAGE.split('\n');
-  const own = lines.filter((l) => l.startsWith(`  ${sub} `)).map((l) => `usage: laneboard run ${l.trim().replace(/^(\S+)\s+/, '$1 ')}`);
+  // A subcommand's lines, and the indented note lines right under them.
+  const own = lines.flatMap((l, i) => {
+    if (l.startsWith(`  ${sub} `)) return [`usage: laneboard run ${l.trim().replace(/^(\S+)\s+/, '$1 ')}`];
+    let j = i;
+    while (j > 0 && lines[j].startsWith('           ')) j -= 1;
+    return j < i && lines[j].startsWith(`  ${sub} `) ? [`  ${l.trim()}`] : [];
+  });
   return [...own, ...lines.slice(lines.indexOf('every subcommand:'))].join('\n');
 }
 
@@ -891,11 +1044,17 @@ function subUsage(sub) {
  *  `out` may hold flags already read (the common ones before the subcommand);
  *  with `until`, it stops at the first word that is not a flag in `allowed`. */
 function parseRunFlags(allowed, out = {}, until = false) {
+  let prev = '';
   while (argv.length) {
-    if (until && !allowed[argv[0]]) break;
+    if (until && !allowed[argv[0]]) {
+      // `laneboard run --post http://… start`: the URL is not the subcommand.
+      if (postHint(prev, argv[0])) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(argv[0]))}`, postHint(prev, argv[0]));
+      break;
+    }
     const flag = argv.shift();
     const spec = allowed[flag];
-    if (!spec) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(flag))}`);
+    if (!spec) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(flag))}`, postHint(prev, flag) || flagHint(flag, allowed));
+    prev = flag;
     const [field, kind] = spec;
     if (Object.hasOwn(out, field)) runUsage(`${flag} given twice`);
     if (kind === 'bool') { out[field] = true; continue; }
@@ -923,9 +1082,12 @@ function runEvent(sub, f) {
     return { t: end ? 'round.end' : 'round.start', ...fields };
   }
   if (sub === 'start') {
-    const { rounds, windowPct, ...fields } = f;
+    const { rounds, maxRounds, windowPct, ...fields } = f;
+    if (rounds !== undefined && maxRounds !== undefined) runUsage('both --max-rounds and --rounds given; use --max-rounds');
+    // `--rounds` on start is the cap's old name; on stop it is the count done.
+    if (rounds !== undefined) process.stderr.write('--rounds on start means --max-rounds\n');
     const budget = {};
-    if (rounds !== undefined) budget.rounds = rounds;
+    if ((maxRounds ?? rounds) !== undefined) budget.maxRounds = maxRounds ?? rounds;
     if (windowPct !== undefined) budget.windowPct = windowPct;
     return { t: 'run.start', ...fields, ...(Object.keys(budget).length ? { budget } : {}) };
   }
@@ -933,7 +1095,10 @@ function runEvent(sub, f) {
     if (f.name === undefined || f.value === undefined) runUsage('score needs --name and --value');
     if (f.better !== undefined && f.better !== 'higher' && f.better !== 'lower') runUsage('--better is higher or lower');
   }
+  // A need with no text says nothing on the board: refuse it like the other missing values.
+  if (sub === 'needs' && !f.text?.trim()) runUsage('needs: give the text');
   if (sub === 'artifact' && f.url === undefined) runUsage('artifact needs --url');
+  if (sub === 'cost' && f.usd === undefined) runUsage('cost needs --usd');
   if (sub === 'ack') {
     if (f.ref === undefined) runUsage('ack needs a ref (the need\'s place, 0 = the first, or its ts)');
     // A place is written as a number, a time as given (epoch or ISO); parseLine tells them apart.
@@ -945,6 +1110,9 @@ function runEvent(sub, f) {
 async function cmdRun() {
   // --run/--file/--post may come before the subcommand too (`laneboard run --post score …`).
   const first = parseRunFlags(RUN_COMMON, {}, true);
+  // `laneboard run --id x start`: a misspelt common flag, not one that belongs after <sub>.
+  const early = argv[0]?.startsWith('--') ? flagHint(argv[0], RUN_COMMON) : '';
+  if (early) runUsage(`unexpected argument: ${JSON.stringify(cleanTerm(argv[0]))}`, early);
   if (argv[0]?.startsWith('-') && !['-h', '--help'].includes(argv[0])) {
     runUsage(`${JSON.stringify(cleanTerm(argv[0]))} goes after the subcommand (laneboard run <sub> [flags])`);
   }
@@ -958,6 +1126,9 @@ async function cmdRun() {
     process.stdout.write(`${subUsage(sub)}\n`);
     return;
   }
+  // `run needs ack …`: a subcommand name as the first word after another is most
+  // likely a second subcommand; if the words end up refused, the error names it.
+  if (Object.hasOwn(RUN_SUBS, argv[0] ?? '') && argv[0] !== sub) runHint = subHint(argv[0]);
   // `ack [<run>] <ref>`: up to two words that are not flags or flag values, anywhere
   // after `ack`; one is the ref, two are the run and the ref. A third is an error below.
   const words = [];
@@ -971,14 +1142,31 @@ async function cmdRun() {
     first.run = words.shift();
   }
   if (words.length) first.ref = words[0];
+  // `needs "text"`: the first word that is not a flag or a flag's value is the text;
+  // a second one, or --text as well, is left for parseRunFlags to refuse.
+  for (let i = 0; sub === 'needs' && i < argv.length; i += 1) {
+    const spec = RUN_COMMON[argv[i]] ?? RUN_SUBS.needs[argv[i]];
+    if (spec) { if (spec[1] !== 'bool') i += 1; continue; }
+    if (argv[i].startsWith('--')) continue;
+    first.text = argv.splice(i, 1)[0];
+    break;
+  }
   const f = parseRunFlags({ ...RUN_COMMON, ...RUN_SUBS[sub] }, first);
   const { run: runFlag, file: fileFlag, post, ...fields } = f;
   if (post && fileFlag !== undefined) runUsage('--file and --post do not go together');
-  const run = runFlag ?? (process.env.LANEBOARD_RUN || '').split('/')[0];
-  if (!run) runUsage('--run is required (or set LANEBOARD_RUN)');
-  const { parseLine, parseLines, foldRun, ackTarget, RUN_ID, FENCE_ACK_BY } = await runProtocol();
+  const inherited = (process.env.LANEBOARD_RUN || '').split('/')[0];
+  const run = runFlag ?? inherited;
+  if (!run) runUsage('--run <id> is required (or set $LANEBOARD_RUN)');
+  // A new run that inherits its id from the shell is usually a leftover export
+  // of another run's round: keep it (scripts rely on it), but say where it came from.
+  if (sub === 'start' && runFlag === undefined) process.stderr.write(`run id ${cleanTerm(run)} from $LANEBOARD_RUN\n`);
+  const { parseLine, parseLines, foldRun, ackTarget, droppedFields, RUN_ID, FENCE_ACK_BY } = await runProtocol();
   if (!RUN_ID.test(run)) runUsage(`not a run id: ${JSON.stringify(cleanTerm(run))} (letters, digits, . _ -; 64 at most)`);
   const ev = runEvent(sub, fields);
+  // The board shows the goal as the run's title: the id again tells nobody what the run is for.
+  if (sub === 'start' && ev.goal?.trim() === run) {
+    process.stderr.write(`hint: --goal is the run id; a goal says what the run is for (--goal "Night 5: PR state in the Inbox")\n`);
+  }
   const event = { v: 1, t: ev.t, run, ts: Date.now(), ...ev };
   const line = JSON.stringify(event);
   const checked = parseLine(line);
@@ -987,11 +1175,16 @@ async function cmdRun() {
   const file = post ? null : path.resolve(fileFlag || process.env.LANEBOARD_RUN_FILE || path.join('.laneboard', 'run.jsonl'));
   // Read before the append: the ack's own line must not count as a need.
   let warnings = [];
+  let boardAnswered = false;
+  let boardKnows = false;
   if (event.t === 'needs.ack') {
     // The server folds every source of a run by time, so its needs decide when it
     // knows the run. Offline (or a run it does not know), a file ack can only see
     // this file's needs: a ref missing there may be another source's, so it warns.
-    let needs = await serverNeeds(run, { unknown: post ? [] : null });
+    const known = await serverNeeds(run);
+    boardAnswered = known.answered;
+    boardKnows = Boolean(known.needs);
+    let needs = known.needs ?? (post && known.answered ? [] : null);
     let where = `on ${BASE}`;
     const offline = !post && !needs;
     if (offline) { needs = fileNeeds(file, run, { parseLines, foldRun }); where = `in ${file}`; }
@@ -1004,10 +1197,18 @@ async function cmdRun() {
     if (r.acked) return void process.stderr.write(`need ${cleanTerm(String(event.ref))} already acked, nothing ${post ? 'posted' : 'written'}\n`);
     warnings = r.warnings;
   }
+  // A round, score, stop or ack for a run this file never started is usually a
+  // mistyped id or a start written elsewhere: say so once, append anyway (T44).
+  // An ack the board answered for a known run is not a typo: no note then.
+  const unstarted = !post && ['round', 'score', 'stop', 'ack'].includes(sub)
+    && !(sub === 'ack' && boardKnows) && !fileStarted(file, run, parseLines);
   let done;
   if (post) {
+    // The receipt is what the server accepted: its run and type, and the fields
+    // it will not use (an older server sends no `dropped`: the local check says).
     const r = await api('/api/runs/events', { method: 'POST', body: event });
-    done = `ok ${r.run || run} ${r.t || event.t} posted`;
+    const dropped = Array.isArray(r.dropped) ? r.dropped : droppedFields(event, checked.event);
+    done = `ok ${r.run || run} ${r.t || event.t} posted${dropped.length ? `, dropped: ${dropped.join(', ')}` : ''}`;
   } else {
     try {
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -1018,7 +1219,18 @@ async function cmdRun() {
   // stdout stays for `eval "$(laneboard run round …)"`; the receipt and warnings go to stderr.
   process.stderr.write(`${cleanTerm(done)}\n`);
   for (const w of warnings) process.stderr.write(`warning: ${cleanTerm(w)}\n`);
+  if (unstarted) process.stderr.write(`note: ${cleanTerm(run)} has no run.start in this file (${cleanTerm(file)}); appended anyway\n`);
+  // A board answered the check but the ack went to a file: it closes the need on
+  // that board only if the board reads this file (a lane root, runs.files).
+  if (!post && boardAnswered) process.stderr.write(`note: ${cleanTerm(`the ack went to ${file}, not to the board at ${BASE}: the board sees it only if it reads that file (a lane's root or runs.files); --post sends it to the board`)}\n`);
   if (event.t === 'round.start') process.stdout.write(`export LANEBOARD_RUN=${run}/${event.n}\n`);
+}
+
+/** Whether `file` already has a run.start line for `run` (false when there is no file yet). */
+function fileStarted(file, run, parseLines) {
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf8'); } catch { /* no file yet: no start either */ }
+  return parseLines(text).events.some((e) => e.run === run && e.t === 'run.start');
 }
 
 /** The needs of `run` in the file an ack appends to ([] when there is no file yet). */
@@ -1028,17 +1240,17 @@ function fileNeeds(file, run, { parseLines, foldRun }) {
   return foldRun(parseLines(text).events.filter((e) => e.run === run)).needs;
 }
 
-/** The needs of `run` as the server folded them: `unknown` ([] by default) for a
- *  run it does not know, null when the server cannot tell (unreachable, an error,
- *  an older server). */
-async function serverNeeds(run, { unknown = [] } = {}) {
+/** The needs of `run` as the server folded them, and whether a board answered
+ *  (200 or 404): `needs` is null for a run it does not know and when it cannot
+ *  tell (unreachable, an error, an older server). */
+async function serverNeeds(run) {
   try {
     const res = await fetch(`${BASE}/api/runs/${encodeURIComponent(run)}`, { headers: { 'x-laneboard': '1' }, signal: AbortSignal.timeout(3000) });
-    if (res.status === 404) return unknown;
-    if (!res.ok) return null;
+    if (res.status === 404) return { answered: true, needs: null };
+    if (!res.ok) return { answered: false, needs: null };
     const needs = (await res.json())?.run?.needs;
-    return Array.isArray(needs) ? needs : null;
-  } catch { return null; }
+    return { answered: true, needs: Array.isArray(needs) ? needs : null };
+  } catch { return { answered: false, needs: null }; }
 }
 
 /** What an ack will do, before it is written: `{missing: true}` when the ref names
@@ -1176,8 +1388,8 @@ async function cmdFeed() {
   }
 }
 
-function usage() {
-  process.stdout.write(`laneboard — control the Claude sessions and lanes on this box
+function usage(out = process.stdout) {
+  out.write(`laneboard — control the Claude sessions and lanes on this box
 
   laneboard ls                          every session, attention first
   laneboard peek <name> [-n 40]         the last N lines of a pane
@@ -1191,7 +1403,8 @@ function usage() {
   laneboard dirs                        git repos you can spawn into
   laneboard launch <lane> --plan docs/plans/<lane>.md [--repo <repo>]
                  [--branch feat/<lane>] [--model opus] [--permission-mode auto]
-                                      worktree + venv + slot + session + kickoff
+                                      worktree + venv + slot + session + kickoff;
+                                      --repo is needed unless the config lists \`repos\`
   laneboard job <job-id>                follow a launch or retire
   laneboard retire <lane> [--force]     slot down + volumes, worktree removed, record kept
   laneboard spawn <name> <dir> ["prompt"] [--model m]
@@ -1210,13 +1423,34 @@ Offline (no server needed):
                                       pause one session or all (writes the sentinel)
   laneboard resume <name|--all>         lift an operator pause (budget/quota: from the UI)
   laneboard paused [--json]             list the pauses
-  laneboard run start|round|score|needs|ack|artifact|stop [--run <id>] [flags]
+  laneboard run start|round|score|needs|ack|artifact|stop|cost [--run <id>] [flags]
                                       append one run-protocol line (laneboard run --help)
   laneboard feed tailscale|proxmox|docker [--source s] [--stdout | --out <file> | --push <url>]
                                       read one source once into a Map feed (laneboard feed --help)
 
 Server: ${BASE}   (override with LANEBOARD_URL)
 `);
+}
+
+/** The one command within edit distance 2 of `word`, or the one it is a prefix of; else null. */
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i += 1) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j += 1) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+function closeCommand(word) {
+  const w = String(word).toLowerCase();
+  const dist = editDistance;
+  const names = Object.keys(COMMANDS);
+  const hits = names.filter((n) => (w.length > 1 && n.startsWith(w)) || dist(w, n) <= Math.min(2, n.length - 1));
+  // `ls` and its alias `list` are one command.
+  const fns = new Set(hits.map((n) => COMMANDS[n]));
+  return fns.size === 1 ? hits[0] : null;
 }
 
 const COMMANDS = {
@@ -1234,7 +1468,16 @@ if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') {
   process.exit(cmd ? 0 : 2);
 }
 const fn = COMMANDS[cmd];
-if (!fn) { usage(); die(`unknown command: ${cmd}`, 2); }
+if (!fn) {
+  // The error first (what a script or a person greps), then a close match, then the
+  // help; all on stderr. Exit 2 = a usage error.
+  process.stderr.write(`laneboard: unknown command: ${cleanTerm(cmd)}\n`);
+  const near = closeCommand(cmd);
+  if (near) process.stderr.write(`did you mean: laneboard ${near}\n`);
+  process.stderr.write('\n');
+  usage(process.stderr);
+  process.exit(2);
+}
 try {
   await fn();
 } catch (err) {

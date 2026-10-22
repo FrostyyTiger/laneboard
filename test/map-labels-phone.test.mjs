@@ -6,9 +6,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-import { createRenderer, PHONE_ALL_LABELS } from '../public/js/views/map/render.js';
+import { createRenderer, PHONE_ALL_LABELS, reticleD, RETICLE_GAP } from '../public/js/views/map/render.js';
 import { layout } from '../public/js/views/map/layout.js';
 import { fitFrame } from '../public/js/views/map/interact.js';
+import { foldState, autoFold, rollup } from '../public/js/views/map/model.js';
+import { nodeStyle, rollsUp } from '../public/js/views/map/overlays.js';
 
 const DEMO = JSON.parse(fs.readFileSync(new URL('./fixtures/map-demo.json', import.meta.url), 'utf8'));
 
@@ -134,4 +136,165 @@ test('views/map.css gives the phone HUD the padding the fit reads, and find + fi
   const phone = css.slice(css.indexOf('@media (max-width: 699px)'));
   assert.match(phone, /\.map-hud\s*\{\s*padding:\s*40px 0 calc\(var\(--sheet-peek\)/);
   assert.match(phone, /\.map-find\s*\{\s*bottom:\s*calc\(var\(--sheet-peek\)/);
+});
+
+// T51 (n3 T48 rest): the demo fleet as the Map draws it at 390, the lanes
+// with sessions folded (model.autoFold) and sites and folded lanes showing
+// the rolled-up status (model.rollup): every node drawn with a ▲ or ■ keeps
+// its name, no label sits on another label or on a bearing number, and a
+// run label that cannot fit is dropped (the ring stays).
+function drawnScene(nodes, extra = {}) {
+  const fs0 = foldState(nodes, [], autoFold(nodes));
+  const shown = nodes.filter((n) => !fs0.hidden.has(n.id));
+  const lay = layout(shown);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let outer = 0;
+  for (const p of lay.pos.values()) outer = Math.max(outer, p.r);
+  const { s, y } = fitFrame(W, H, outer + 64, INSET);
+  const cur = new Map();
+  for (const [id, p] of lay.pos) cur.set(id, { x: p.x, y: p.y, r: p.r, t: p.angle, a: 1, node: byId.get(id) ?? lay.center, depth: p.depth });
+  const memo = new Map();
+  return {
+    ...phoneScene(), s, fitY: y, pos: lay.pos, nodes: cur, byId, kids: lay.kids, folded: fs0.folded,
+    toScreen: (p) => ({ x: W / 2 + p.x * s, y: H / 2 + (p.y - y) * s }),
+    rolled: (id) => rollup(id, byId, fs0.kids, memo),
+    ...extra,
+  };
+}
+
+/** Ids the renderer marks ▲/■ on the status overlay, as drawNodes decides it. */
+function markedIds(scene) {
+  const out = [];
+  for (const [id, c] of scene.nodes) {
+    const n = c.node;
+    if (!n || n.virtual || n.kind === 'core') continue;
+    const st = nodeStyle(n, 'status', rollsUp(n, scene.folded.has(id)) ? scene.rolled(id) : null);
+    if (st.abnormal && (st.tone === 'warn' || st.tone === 'crit')) out.push(id);
+  }
+  return out;
+}
+
+function checkDrawn(scene, label) {
+  const r = createRenderer(fakeCtx(), PAL);
+  const badges = r.drawNodes(scene);
+  const boxes = r.labelBoxes(scene, badges);
+  const named = new Set(boxes.map((b) => b.id));
+  const marked = markedIds(scene);
+  assert.ok(marked.length >= 3, `${label}: the scene has trouble to name (${marked})`);
+  for (const id of marked) assert.ok(named.has(id), `${label}: ${id} (▲/■) keeps its label: ${boxes.map((b) => b.text)}`);
+  assert.deepEqual(overlaps(boxes), [], label);
+  for (const b of boxes) for (const t of r.ringTextBoxes(scene)) assert.ok(!hits(b, t), `${label}: ${b.text} clear of the bearing ${t.text}`);
+  return { boxes, named, marked };
+}
+
+test('T51 390: the demo fleet folded as drawn names every ▲/■ node, rolled up included, with no label over a label or a bearing', () => {
+  const scene = drawnScene(DEMO.nodes);
+  assert.ok(scene.folded.size > 0, 'lanes with sessions are folded, as the Map draws them');
+  const { named, marked } = checkDrawn(scene, 'demo');
+  assert.ok(marked.includes('run:acme-billing'), 'the stuck run is marked');
+  assert.ok(named.has('run:acme-billing'), 'and named');
+  // A rolled-up mark: the site holding the trouble draws a ▲ and is named.
+  assert.ok(marked.some((id) => scene.byId.get(id)?.kind === 'site' || scene.folded.has(id)), `a rolled-up mark among ${marked}`);
+});
+
+test('T51 390: with every lane wanting attention and every run stuck, each ▲ keeps its name and labels still never overlap', () => {
+  const nodes = DEMO.nodes.map((n) => (n.kind === 'lane' ? { ...n, status: 'attention' }
+    : n.kind === 'run' ? { ...n, status: 'warn', stuck: true } : n));
+  const scene = drawnScene(nodes);
+  const { boxes } = checkDrawn(scene, 'all trouble');
+  for (const n of nodes.filter((x) => x.kind === 'run')) assert.ok(boxes.some((b) => b.id === n.id), `${n.id} (stuck) named`);
+});
+
+test('T51 390: a run label with no free place is dropped, not laid over another label', () => {
+  // Forty healthy runs on one host, side by side: not every name can fit.
+  const runs = Array.from({ length: 40 }, (_, i) => ({ id: `run:r${i}`, parent: 'room-a', kind: 'run', label: `night-run-${i}`, status: 'working', round: 3, maxRounds: 10 }));
+  const scene = drawnScene([...DEMO.nodes, ...runs]);
+  const r = createRenderer(fakeCtx(), PAL);
+  const boxes = r.labelBoxes(scene, r.drawNodes(scene));
+  assert.deepEqual(overlaps(boxes), []);
+  const named = runs.filter((n) => boxes.some((b) => b.id === n.id)).length;
+  assert.ok(named < runs.length, `some run names left for a tap (${named}/${runs.length})`);
+});
+
+test('T51: at 1440 every ▲/■ node is named and the labels keep clear of the ring legends and bearings; a phone has bearings only', () => {
+  const scene = drawnScene(DEMO.nodes, { W: 1440, H: 900 });
+  const { s } = fitFrame(1440, 900, 400);
+  Object.assign(scene, { s, toScreen: (p) => ({ x: 720 + p.x * s, y: 450 + p.y * s }) });
+  const r = createRenderer(fakeCtx(), PAL);
+  const rings = r.ringTextBoxes(scene);
+  assert.ok(rings.some((t) => !/^\d{3}$/.test(t.text)), `ring legends at 1440: ${rings.map((t) => t.text)}`);
+  const boxes = r.labelBoxes(scene, r.drawNodes(scene));
+  // A stuck lane deep in the tree is named wide too, not only on a phone.
+  const named = new Set(boxes.map((b) => b.id));
+  // Every one on the canvas: a node drawn off it has no label (review n5, a lone label at an edge).
+  const onCanvas = (id) => { const p = scene.toScreen(scene.nodes.get(id)); return p.x >= 0 && p.x <= 1440 && p.y >= 0 && p.y <= 900; };
+  const marked = markedIds(scene).filter(onCanvas);
+  assert.ok(marked.length >= 3, `marked nodes on the canvas: ${marked}`);
+  for (const id of marked) assert.ok(named.has(id), `${id} (▲/■) named at 1440`);
+  for (const id of markedIds(scene).filter((x) => !onCanvas(x))) assert.ok(!named.has(id), `${id} is off the canvas: no label`);
+  for (const b of boxes) for (const t of rings) assert.ok(!hits(b, t), `${b.text} clear of ${t.text}`);
+  assert.ok(r.ringTextBoxes(phoneScene()).every((t) => /^\d{3}$/.test(t.text)), 'a phone has bearings only');
+});
+
+// T53 (n3 T51): after Find and fly-to at 390 the selected node's name is
+// laid outside its selection brackets, 4 px clear, wherever the node sits.
+test('T53 390: a selected node, at the fit and after a fly-to, keeps its label box clear of the bracket box (+4 px)', () => {
+  const base = drawnScene(DEMO.nodes);
+  let checked = 0;
+  for (const [id, c] of base.nodes) {
+    const n = c.node;
+    if (!n || n.virtual || n.kind === 'core') continue;
+    // The fit as drawn, then the flight: zoom 1.9 with the node 60 px above the centre (map/index.js flyTo).
+    const s2 = base.s * 1.9;
+    const views = [
+      { s: base.s, toScreen: base.toScreen },
+      { s: s2, toScreen: (p) => ({ x: W / 2 + (p.x - c.x) * s2, y: H / 2 + (p.y - c.y) * s2 - 60 }) },
+    ];
+    for (const v of views) {
+      const scene = { ...base, ...v, selected: id };
+      const r = createRenderer(fakeCtx(), PAL);
+      const boxes = r.labelBoxes(scene, r.drawNodes(scene));
+      const mine = boxes.find((b) => b.id === id);
+      assert.ok(mine, `${id} (selected) is named at s=${v.s.toFixed(2)}`);
+      const sp = v.toScreen(c);
+      const d = reticleD(n.kind, Math.min(1.6, Math.max(0.8, v.s))) + RETICLE_GAP;
+      const ret = { x0: sp.x - d, y0: sp.y - d, x1: sp.x + d, y1: sp.y + d };
+      assert.ok(!hits(mine, ret), `${id} label ${JSON.stringify(mine)} clear of its brackets ${JSON.stringify(ret)}`);
+      // Its sub line too stays on the canvas (it ran off the right edge before).
+      assert.ok(mine.x0 >= 0 && mine.x1 <= W, `${id} label inside the canvas: ${JSON.stringify(mine)}`);
+      assert.deepEqual(overlaps(boxes), [], `${id} selected`);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 20, `nodes checked: ${checked}`);
+});
+
+// Review n5: labels keep clear of the canvas edges and of what covers the
+// canvas: the inspector at 1440, the bottom sheet at 390.
+test('review n5: no label is cut by a canvas edge or drawn under the inspector or the sheet', () => {
+  const wide = drawnScene(DEMO.nodes, { W: 1440, H: 900 });
+  const { s } = fitFrame(1440, 900, 400);
+  Object.assign(wide, { s, toScreen: (p) => ({ x: 620 + p.x * s, y: 450 + p.y * s }) });
+  const cases = [
+    ['1440 inspector', wide, 1440, 900, { left: 1040, top: 0, right: 1440, bottom: 900 }],
+    ['390 sheet', drawnScene(DEMO.nodes), W, H, { left: 0, top: H - 260, right: W, bottom: H }],
+  ];
+  for (const [name, scene0, w, h, cover] of cases) {
+    const scene = { ...scene0, covers: [cover] };
+    const r = createRenderer(fakeCtx(), PAL);
+    const boxes = r.labelBoxes(scene, r.drawNodes(scene));
+    assert.ok(boxes.length > 3, `${name}: some labels`);
+    const cb = { x0: cover.left, y0: cover.top, x1: cover.right, y1: cover.bottom };
+    for (const b of boxes) {
+      assert.ok(!hits(b, cb), `${name}: ${b.text} under the cover`);
+      assert.ok(b.x0 >= 0 && b.x1 <= w && b.y0 >= 0 && b.y1 <= h, `${name}: ${b.text} cut by an edge ${JSON.stringify(b)}`);
+    }
+    // A node under the cover has no name sticking out of it.
+    for (const [id, c] of scene.nodes) {
+      const p = scene.toScreen(c);
+      if (p.x >= cover.left && p.x <= cover.right && p.y >= cover.top && p.y <= cover.bottom) {
+        assert.ok(!boxes.some((b) => b.id === id), `${name}: ${id} is under the cover, unnamed`);
+      }
+    }
+  }
 });

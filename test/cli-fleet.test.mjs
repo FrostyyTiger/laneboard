@@ -243,8 +243,9 @@ test('cleanTerm: a session name carrying an OSC 52 sequence prints without ESC o
   assert.ok(!r.stdout.includes('\u007f'), 'no DEL');
   assert.ok(r.stdout.includes('evil]52;c;cm0gLXJmIH4=2Jname'));
 
-  // Server error text is cleaned too.
-  const e = await run(['peek', 'x'], envFor(home, { LANEBOARD_URL: url }));
+  // Server error text is cleaned too (`dirs` prints the server's error; `peek`
+  // turns a 404 into its own line since T48).
+  const e = await run(['dirs'], envFor(home, { LANEBOARD_URL: url }));
   assert.equal(e.code, 1);
   assert.ok(!e.stderr.includes('\u001b') && !e.stderr.includes('\u0007'), e.stderr);
   assert.match(e.stderr, /no route \]52;c;eA==/);
@@ -258,4 +259,27 @@ test('usage lists the offline fleet and audit commands', async (t) => {
   assert.match(r.stdout, /laneboard audit verify/);
   const sub = await run(['fleet', 'nope'], envFor(tmpHome(t)));
   assert.equal(sub.code, 2);
+});
+
+test('fleet pubkey with LANEBOARD_STATE_DIR set still reads the hub key under HOME, and the error names that path', async (t) => {
+  const home = tmpHome(t);
+  const sd = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-cli-fleet-sd-'));
+  t.after(() => fs.rmSync(sd, { recursive: true, force: true }));
+  // No XDG_CONFIG_HOME: the key path falls back to $HOME/.config/laneboard/hub.key.
+  const env = { PATH: process.env.PATH, HOME: home, LANEBOARD_STATE_DIR: sd, LANEBOARD_URL: 'http://127.0.0.1:9' };
+  const want = path.join(home, '.config', 'laneboard', 'hub.key');
+  const missing = await run(['fleet', 'pubkey'], env);
+  assert.equal(missing.code, 1);
+  assert.ok(missing.stderr.includes(`no hub key at ${want};`), missing.stderr);
+  assert.ok(!missing.stderr.includes(sd), 'the state dir is not where the key is looked for');
+  assert.match(missing.stderr, /laneboard fleet keygen/);
+
+  // keygen and pubkey agree on the file: what keygen wrote, pubkey reads.
+  const gen = await run(['fleet', 'keygen'], env);
+  assert.equal(gen.code, 0, gen.stderr);
+  assert.ok(fs.existsSync(want));
+  const ok = await run(['fleet', 'pubkey'], env);
+  assert.equal(ok.code, 0, ok.stderr);
+  assert.equal(ok.stdout.trim(), publicKeyString(loadPrivateKey(want)));
+  assert.deepEqual(fs.readdirSync(sd), [], 'nothing written into the state dir');
 });

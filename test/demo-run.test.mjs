@@ -27,7 +27,10 @@ test('the fixture parses whole: every line known, nothing skipped', () => {
 test('the times move so the run stopped DEMO_RUN_AGO_MS before now; the deadline moves with them', () => {
   const run = demoRun(NOW);
   assert.equal(run.updatedAt, NOW - DEMO_RUN_AGO_MS);
-  assert.equal(run.stop.ts, NOW - DEMO_RUN_AGO_MS);
+  // the wrap-up round (runs-n5 T4) is the last thing, after the stop
+  assert.ok(run.stop.ts < run.updatedAt);
+  assert.equal(run.rounds.at(-1).wrapup, true);
+  assert.equal(run.rounds.at(-1).endedAt, NOW - DEMO_RUN_AGO_MS);
   assert.ok(run.deadlineAt > run.startedAt && run.deadlineAt > NOW, 'the deadline is still ahead');
   // The original gaps stay.
   const orig = parseLines(fs.readFileSync(DEMO_RUN_FILE, 'utf8')).events;
@@ -63,7 +66,11 @@ test('the list row: rounds, latest scores with trend, one open need, the stop re
 
 test('the run page: rounds with roles and outcomes, a pr artifact, the scores over rounds', () => {
   const run = demoRun(NOW);
-  assert.deepEqual(run.rounds.map((r) => r.n), [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(run.rounds.map((r) => r.n), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(run.rounds.filter((r) => r.wrapup).map((r) => r.n), [8], 'round 8 is the wrap-up');
+  assert.equal(run.counted, 7);
+  assert.ok(run.rounds.some((r) => r.title), 'some rounds carry a title');
+  assert.ok(run.stop.detail);
   assert.ok(run.rounds.every((r) => r.role && r.outcome && r.usd > 0));
   assert.ok(run.rounds.some((r) => r.outcome === 'no-task-done'), 'one round got nothing done');
   assert.deepEqual(run.artifacts.map((a) => a.kind), ['pr']);
@@ -82,7 +89,11 @@ test('demoRunsAnswer: GET /api/runs and GET /api/runs/<id>; anything else is not
   const one = demoRunsAnswer('GET', runUrl('acme-search'), NOW);
   assert.equal(one.status, 200);
   assert.equal(one.body.run.run, 'acme-search');
-  assert.ok(one.body.run.rounds.every((r) => Array.isArray(r.sessions) && r.sessionsUsd === null), 'rounds carry (no) sessions like the route');
+  assert.ok(one.body.run.rounds.every((r) => Array.isArray(r.sessions)), 'rounds carry sessions like the route');
+  // T22: round 3 names a session the demo knows, so the run page shows one linked round
+  const named = one.body.run.rounds.filter((r) => r.sessions.length);
+  assert.deepEqual(named.map((r) => [r.n, r.sessions.map((s) => [s.name, s.how])]), [[3, [['search api', 'id']]]]);
+  assert.equal(named[0].sessionsUsd, 1.84);
   assert.equal(demoRunsAnswer('GET', runUrl('acme-billing'), NOW).body.run.run, 'acme-billing');
   assert.equal(demoRunsAnswer('GET', '/api/runs/other', NOW).status, 404);
   assert.equal(demoRunsAnswer('GET', '/api/runs/%E0%A4%A', NOW).status, 404);
@@ -188,4 +199,17 @@ test('demoWsText: a map message gets the run nodes, anything else passes byte fo
   for (const t of ['{"type":"delta","map":"x"}', '{"type":"hello"}', 'not json "map"', '{"type":"map"}']) {
     assert.equal(demoWsText(t, NOW), t);
   }
+});
+
+test('demoMorningWithRuns gives the first builder with no moved lane a done lane and a working one (T25b)', async () => {
+  const { demoMorningWithRuns } = await import('./helpers/demo-hub.mjs');
+  const now = Date.now();
+  const b = (id) => ({ id, error: 'not found', stale: true, needsYou: [], finished: [], cost: { lanes: [] } });
+  const out = demoMorningWithRuns({ since: now - 3600_000, builders: [b('builder-a'), b('builder-b')], missing: ['builder-a', 'builder-b'] }, now);
+  const [a, other] = out.builders;
+  assert.equal(a.error, undefined);
+  assert.deepEqual(a.finished.map((f) => f.sessions[0].state), ['idle', 'working']);
+  assert.equal(a.finished[0].doneMarkers.length, 1);
+  assert.equal(other.error, 'not found', 'only one builder is filled in');
+  assert.deepEqual(out.missing, ['builder-b']);
 });

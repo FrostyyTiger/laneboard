@@ -315,6 +315,16 @@ function renderLaneHead(head, id, d, sessions = []) {
 }
 
 /**
+ * A lane's colour swatch, only when the lane has a hue: a hub lane may come
+ * without one, and an uncoloured swatch is a blank slot (review 27 Board 3).
+ */
+function laneSwatch(node, lane) {
+  if (!Number.isFinite(lane.hue)) return;
+  node.style.setProperty('--lane-hue', String(lane.hue));
+  node.append(el('span', 'lane-swatch'));
+}
+
+/**
  * The lane rail: filter, never reorder.
  *
  * This is the "show me only the character epic" view, on demand, without
@@ -341,8 +351,7 @@ export function renderLanes() {
     const lk = lane.key ?? lane.id;
     const on = store.laneFilter.has(lk);
     const pill = el('button', `lane-pill${on ? ' on' : ''}`);
-    pill.style.setProperty('--lane-hue', String(lane.hue));
-    pill.append(el('span', 'lane-swatch'));
+    laneSwatch(pill, lane);
     pill.append(el('span', 'lane-id', lane.id));
     // TODO: a plain count. The useful version is not "3 sessions" but
     // "one of them wants you".
@@ -373,8 +382,7 @@ export function renderLanes() {
   idleRow.append(el('span', 'lane-idle-label', 'idle'));
   for (const lane of idle) {
     const item = el('span', 'lane-idle');
-    item.style.setProperty('--lane-hue', String(lane.hue));
-    item.append(el('span', 'lane-swatch'));
+    laneSwatch(item, lane);
     item.append(el('span', 'lane-id', lane.id));
     // The name once: the branch only when it differs from the lane's id (r10 Board 6).
     if (lane.branch && lane.branch !== lane.id) item.append(el('span', 'lane-branch', `⌥${lane.branch}`));
