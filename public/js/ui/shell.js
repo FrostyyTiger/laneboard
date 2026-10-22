@@ -35,6 +35,8 @@ export { toast } from './toast.js';
  * cost is not in this number and the label must not claim it is (T39).
  * When no session reported a cost today the figure is `—`, not `$0.00`: an
  * unknown cost is never shown as a zero; a reported zero stays `$0.00` (T15).
+ * Until a session reports one the header hides the line (`hidden`): a lone
+ * "— sessions today" read as a broken figure (review n5).
  * The line is dim (`cls: 'dim'`) unless a builder's whole-builder budget row
  * (the `budget` snapshot key, scope `builder`) is at level `over`, then it
  * takes the warn hue (`cls: 'over'`); with no budget configured it stays dim
@@ -57,6 +59,7 @@ export function topbarSpend(sessions, budgets) {
     : '';
   return {
     usd: reported ? today : null,
+    hidden: !reported,
     text: reported ? money(today) : '—',
     label: ' sessions today',
     cls: over.length ? 'over' : 'dim',
@@ -77,6 +80,7 @@ export function renderTopbar() {
   n.append(document.createTextNode(m.label));
   n.className = `stat stat-${m.cls}`;
   n.title = m.title;
+  n.hidden = m.hidden;
 }
 
 // ---------------------------------------------------------------- builders

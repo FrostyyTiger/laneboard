@@ -615,10 +615,13 @@ test('shell: the header spend is — when no session reported a cost, $0.00 for 
     assert.equal(m.text, '—');
     assert.equal(m.usd, null);
     assert.equal(m.label, ' sessions today');
+    assert.equal(m.hidden, true, 'review n5: no figure yet, no line');
   }
   const zero = topbarSpend([{ cost: { usdToday: 0 } }, { cost: null }]);
   assert.equal(zero.text, '$0.00');
   assert.equal(zero.usd, 0);
+  assert.equal(zero.hidden, false);
+  assert.match(read('index.html'), /id="stat-cost"[^>]*\bhidden>/, 'hidden until the first report');
   // At nav size and dim (T55), never a loud bold figure.
   const shell = read('css/shell.css');
   assert.match(shell, /\.stat \{[^}]*font-size: var\(--fs-11\);[^}]*color: var\(--text-3\)/);
