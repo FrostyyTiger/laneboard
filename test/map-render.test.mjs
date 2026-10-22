@@ -462,6 +462,19 @@ test('the dial: 72 degree ticks and mono bearings 000 090 180 270', () => {
   assert.ok(Math.abs(north.x - 800) < 1e-6 && north.y < 600, '000 is at twelve o\'clock');
 });
 
+test('review n5: the bearing numbers show only while the whole dial is in view, clear of the inspector', () => {
+  const nums = (extra) => {
+    const ctx = fakeCtx();
+    createRenderer(ctx, PAL).drawRings(sceneOf(FLEET, extra));
+    return ctx.ops.filter((o) => o.op === 'fillText' && /9px MONO/.test(o.font)).map((o) => o.text);
+  };
+  assert.deepEqual(nums({}), ['000', '090', '180', '270']);
+  // A phone-wide canvas cuts the dial: no lone 000 over a node.
+  assert.deepEqual(nums({ W: 390, toScreen: (p) => ({ x: 195 + p.x, y: 600 + p.y }) }), []);
+  // The inspector over the 090 side.
+  assert.deepEqual(nums({ covers: [{ left: 1200, top: 0, right: 1600, bottom: 1200 }] }), []);
+});
+
 // --- edges -------------------------------------------------------------------------
 
 test('edges: tree 1px --line without gradients; confirmed conflict is the only crit edge', () => {

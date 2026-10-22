@@ -283,7 +283,7 @@ export function createRenderer(ctx, palette) {
    * Occupied rings as solid hairlines, each labelled by the kinds on it with a
    * leader tick in the layout's gap at LEGEND_BEARING (330, off the 000 axis
    * and its bearing), and the degree dial outside the outermost one with
-   * numeric bearings at the quarters.
+   * numeric bearings at the quarters while the whole dial is in view.
    */
   function drawRings(scene) {
     const c0 = centre(scene);
@@ -362,6 +362,12 @@ export function createRenderer(ctx, palette) {
       const w = measure(t.label);
       bearings.push({ text: t.label, x, y, box: { x0: x - w / 2 - 1, y0: y - 6, x1: x + w / 2 + 1, y1: y + 6 } });
     }
+    // The numbers name the dial's quarters: they read as a dial only all four
+    // together. Cut by an edge or under the inspector or sheet, a lone "000"
+    // over a node read as a stray label (review n5), so then none is drawn.
+    const W = scene.W ?? Infinity, H = scene.H ?? Infinity;
+    const whole = bearings.every(({ box: b }) => b.x0 >= 0 && b.y0 >= 0 && b.x1 <= W && b.y1 <= H && !covered(scene, b));
+    if (!whole) bearings.length = 0;
     return { rings, legends, dial, bearings };
   }
 
