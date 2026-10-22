@@ -333,6 +333,20 @@ test('T6: a run that started before the window counts only what happened in it',
   assert.equal(across.state, 'running');
 });
 
+test('review n5: a wrap-up round is not in the round count, its cost is', () => {
+  const evs = [
+    { t: 'run.start', run: 'wrapped', ts: since + 1 * H, goal: 'Wrap-up' },
+    { t: 'round.start', run: 'wrapped', ts: since + 1 * H + M, n: 1, role: 'builder' },
+    { t: 'round.end', run: 'wrapped', ts: since + 2 * H, n: 1, outcome: 'ok', usd: 2 },
+    { t: 'run.stop', run: 'wrapped', ts: since + 2 * H + M, reason: 'done', wrapup: true },
+    { t: 'round.start', run: 'wrapped', ts: since + 2 * H + 2 * M, n: 2, role: 'operator', wrapup: true },
+    { t: 'round.end', run: 'wrapped', ts: since + 3 * H, n: 2, outcome: 'ok', usd: 1 },
+  ];
+  const [row] = runsInWindow(storeOf(evs).list(), { since, now: runNow });
+  assert.equal(row.rounds, 1, 'the operator wrap-up round is not counted');
+  assert.equal(row.usd, 3);
+});
+
 test('T6: no runs store (a hub, or the collector not started) gives runs: []', () => {
   assert.deepEqual(morningOf(null).runs, []);
   assert.deepEqual(morningOf(storeOf([])).runs, []);

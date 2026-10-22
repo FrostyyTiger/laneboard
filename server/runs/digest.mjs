@@ -9,7 +9,9 @@
 //
 // - A run is listed when it had an event in the window: `updatedAt` at or after
 //   `since` and a start no later than `now`.
-// - `rounds` counts the rounds that started or ended in the window.
+// - `rounds` counts the rounds that started or ended in the window, not the
+//   wrap-up rounds (the operator review and report after `run.stop`); their
+//   `usd` still counts.
 // - A score's `start` is its first value in the window, `end` its last; a value
 //   without `ts` takes its round's start, and one with neither counts as in
 //   the window (nothing says it is not). A score with no value in the window is
@@ -54,7 +56,7 @@ export function runsInWindow(runs, { since, now = Date.now() } = {}) {
       run: run.run,
       goal: run.goal,
       state: run.state,
-      rounds: rounds.length,
+      rounds: rounds.filter((r) => !r.wrapup).length,
       scores: windowScores(run, since, now),
       stop: run.stop ? run.stop.reason : null,
       stoppedAt: run.stop ? run.stop.ts ?? null : null,
