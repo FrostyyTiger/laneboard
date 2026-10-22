@@ -117,7 +117,8 @@ test('T37: Morning has one reading width, its strip clips line-start dividers, p
   const of = (sel, prop) => all.filter((d) => d.prelude.split(',').map((s) => s.trim()).includes(sel)
     && d.prop === prop && !d.at.length).at(-1)?.value;
   assert.equal(of('#morning-body', 'max-width'), 'var(--read-max)', 'the run page cap (T27) for the whole page');
-  assert.equal(of('.rn-page', 'max-width'), 'var(--read-max)', 'the same token as the run page');
+  // review n5: the run page now shares the Runs list's frame (--runs-max); Morning keeps the reading width
+  assert.equal(of('.rn-page', 'max-width'), 'var(--runs-max)', 'the run page and the Runs list share one width');
   // a divider before every cell, pulled left by its own width and clipped by the strip
   assert.match(of('.mkv', 'border-left') ?? '', /var\(--bw\) solid/);
   assert.equal(of('.mkv', 'margin-left'), 'calc(-1 * var(--bw))');

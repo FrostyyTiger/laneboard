@@ -712,8 +712,13 @@ test('T27: the run page stops at a reading width and its score line fills the ro
   const tokens = fs.readFileSync(path.join(ROOT, 'public/css/tokens.css'), 'utf8');
   const px = Number(tokens.match(/--read-max: (\d+)px;/)?.[1]);
   assert.ok(px >= 960 && px <= 1100, `a reading width near 1000 px, got ${px}`);
+  const runsMax = Number(tokens.match(/--runs-max: (\d+)px;/)?.[1]);
+  assert.ok(runsMax >= px && runsMax <= 1280, `the Runs frame stops near the list's width at 1440, got ${runsMax}`);
   const wide = css.slice(0, css.indexOf('@media (max-width: 1024px)'));
-  assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--read-max\);/);
+  assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--runs-max\);/);
+  // review n5: the value starts right after the line, and a wrap-up round adds no room after it
+  assert.match(wide, /\.rn-chart-v \{[^}]*text-align: left;/);
+  assert.deepEqual(chartDomain({ rounds: [{ n: 1 }, { n: 2 }, { n: 3, wrapup: true }], scores: { t: [{ n: 1, value: 1 }, { n: 2, value: 2 }] } }), { lo: 1, hi: 2 });
   // name, line, value, range: the svg fills its column (T57 caps that column at half the row)
   assert.match(wide, /\.rn-chart \{[^}]*grid-template-columns: minmax\(8ch, 16ch\) minmax\(0, 50%\) minmax\(10ch, max-content\) minmax\(8ch, 1fr\);/);
   assert.match(wide, /\.rn-chart-svg \{ width: 100%; \}/);
@@ -852,10 +857,11 @@ test('T31: the list columns have fixed widths, the need sits under the goal, the
   assert.match(byClass(line, 'rn-needs-t')[0].textContent, /^decision: Drop the v1 export endpoint/);
   assert.equal(byClass(row, 'rn-cost')[0], row.children.at(-1), 'cost closes the row');
   // the run page: its frame stops at the token the page does
-  assert.match(wide, /#view-runs > \.panel\[data-page\] \{ max-width: var\(--read-max\); \}/);
-  assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--read-max\);/);
+  // review n5: the list's frame and the run page's are one width, so opening a run does not jump
+  assert.match(wide, /#view-runs > \.panel \{ max-width: var\(--runs-max\); \}/);
+  assert.match(wide, /\.rn-page \{[^}]*max-width: var\(--runs-max\);/);
   const tokens = css.match(/max-width: var\(--[a-z-]+\)/g).filter((x) => !/100%/.test(x));
-  assert.deepEqual([...new Set(tokens)], ['max-width: var(--read-max)'], 'one width token on the page and its frame');
+  assert.deepEqual([...new Set(tokens)], ['max-width: var(--runs-max)'], 'one width token on the page and its frame');
 }));
 
 test('T28: an open need gives the needs.ack payload and its link; a closed or waiting one no ack', () => {

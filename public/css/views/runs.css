@@ -181,9 +181,11 @@
 
 /* ---- one run's page (T8): head, needs, timeline, artifacts, raw */
 /* a reading width: at 1440 the eye does not cross the screen per row (T27) */
-/* the run page's frame stops at the same token as the page in it: no empty gutter (T31) */
-#view-runs > .panel[data-page] { max-width: var(--read-max); }
-.rn-page { display: grid; gap: var(--sp-3); max-width: var(--read-max); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
+/* the run page's frame stops at the same token as the page in it: no empty gutter (T31), and the
+   list's frame at that token too, so opening a run does not change the card's width (review n5);
+   the timeline and the score lines keep their own caps inside it */
+#view-runs > .panel { max-width: var(--runs-max); }
+.rn-page { display: grid; gap: var(--sp-3); max-width: var(--runs-max); font-family: var(--font-mono); font-size: var(--fs-12); color: var(--text-2); }
 .rn-back { justify-self: start; color: var(--text-3); text-decoration: none; }
 .rn-back:hover { color: var(--text-1); }
 .rn-back:focus-visible { outline: var(--bw) solid var(--accent); outline-offset: 1px; }
@@ -270,7 +272,8 @@ a.rn-need-open { text-decoration: none; }
   font-variant-numeric: tabular-nums;
 }
 .rn-chart-k { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-3); }
-.rn-chart-v { color: var(--text-1); text-align: right; white-space: nowrap; }
+/* the value right after the line's end, not at the far side of its column (review n5) */
+.rn-chart-v { color: var(--text-1); text-align: left; white-space: nowrap; }
 .rn-chart-v[data-p="2"] { color: var(--p2); }
 .rn-chart-r { min-width: 0; color: var(--text-3); white-space: nowrap; }
 .rn-chart-svg { width: 100%; }

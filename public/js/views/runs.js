@@ -1094,7 +1094,8 @@ export const chartNum = (v) => (!isNum(v) ? DASH : Number.isInteger(v) ? String(
 /** The rounds every chart spans: the run's round and score `n`s, {lo, hi}, or null. */
 export function chartDomain(run) {
   const ns = [];
-  for (const r of Array.isArray(run?.rounds) ? run.rounds : []) if (Number.isInteger(r?.n)) ns.push(r.n);
+  // A wrap-up round (after the stop) has no scores: it would only push the line's end off the right edge.
+  for (const r of Array.isArray(run?.rounds) ? run.rounds : []) if (Number.isInteger(r?.n) && !r.wrapup) ns.push(r.n);
   const scores = isObj(run?.scores) ? run.scores : {};
   for (const list of Object.values(scores)) {
     for (const p of Array.isArray(list) ? list : []) if (Number.isInteger(p?.n) && isNum(p?.value)) ns.push(p.n);
