@@ -327,7 +327,8 @@
 }
 .rail, .dock { display: none; }
 .grid-wrap { min-width: 0; }
-.grid { display: grid; grid-template-columns: 1fr; gap: var(--gap); }
+/* cards keep their own height (owner's call, review n5): a short card is not stretched to its row's tallest */
+.grid { display: grid; grid-template-columns: 1fr; gap: var(--gap); align-items: start; }
 
 @media (min-width: 700px) {
   .layout { grid-template-columns: var(--rail-w) minmax(0, 1fr); }

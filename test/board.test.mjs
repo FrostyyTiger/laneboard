@@ -394,11 +394,11 @@ test('T15 Board 2: no empty `—` field on a card or a row, and a line with noth
   for (const f of ['code', 'state', 'lane', 'flags']) assert.equal(emptyField(db, f), false, `${f} always stays`);
 }));
 
-test('T15 Board 2: equal card heights with the rows packed at the top', () => {
+test('T15 Board 2: the rows packed at the top; each card its own height (review n5)', () => {
   const card = css('public/css/board.css').match(/\n\.card \{[^}]*\}/)[0];
   assert.match(card, /display: grid;/);
   assert.match(card, /align-content: start;/, 'spare height goes below the rows, not between them');
-  assert.doesNotMatch(css('public/css/shell.css').match(/\.grid \{[^}]*\}/)[0], /align-items/, 'the grid still stretches cards to one height');
+  assert.match(css('public/css/shell.css').match(/\.grid \{[^}]*\}/)[0], /align-items: start;/, 'no card stretched to its row (the owner\'s call)');
 });
 
 test('T15 Board 4-5: NEEDS YOU items carry the card\'s shape, the guard a red ■ with a 1 px border and no fill', () => {
