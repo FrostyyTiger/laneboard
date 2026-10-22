@@ -229,12 +229,12 @@ laneboard run stop   --run readiness --reason done
 | Subcommand | Flags |
 | --- | --- |
 | `start` | `--goal`, `--plan`, `--branch`, `--host`, `--deadline`, `--max-rounds N` (the round cap), `--window-pct P` (the last two go into `budget`); `--rounds N` on `start` is the cap's old name, still read as `--max-rounds` with a note on stderr |
-| `round` | **`--n N`**, `--role`, `--task`; with `--end`: `--outcome`, `--commit`, `--open N`, `--usd x`. A round start prints `export LANEBOARD_RUN=<run>/<n>` on stdout, meant for `eval "$(laneboard run round --n 1 …)"` so later calls in that shell find the run |
+| `round` | **`--n N`**, `--role`, `--task`, `--title` (the task's title), `--wrapup` (a round after `stop`, such as a final review or report; not counted against the cap); with `--end`: `--outcome`, `--commit`, `--open N`, `--usd x`. A round start prints `export LANEBOARD_RUN=<run>/<n>` on stdout, meant for `eval "$(laneboard run round --n 1 …)"` so later calls in that shell find the run |
 | `score` | **`--name`**, **`--value x`**, `--better higher\|lower`, `--n N`, `--max x` |
 | `needs` | `--text` (or the text as the one bare word: `needs "Drop the v1 export?"`), `--kind`, `--link`, `--n N` |
 | `ack` | **`<ref>`** (or `--ref`), `--by`; `ack <run> <ref>` names the run too |
 | `artifact` | **`--url`**, `--kind`, `--title`, `--state` |
-| `stop` | `--reason` (left out, the line carries no reason and the run records `stop: "unknown"`), `--rounds N` (the count of rounds done, not the cap), `--usd x` |
+| `stop` | `--reason` (left out, the line carries no reason and the run records `stop: "unknown"`), `--rounds N` (the count of rounds done, not the cap), `--usd x`, `--detail` (one line on why, shown under the reason) |
 | `cost` | **`--usd x`**, `--n N` (a `cost` event; the run's cost is the sum of these; a `round --end --usd` is the round's only, summed for the run when it sends no `cost`) |
 
 A goal is a sentence about what the run is for (`--goal "Night 5: PR state in the Inbox"`),

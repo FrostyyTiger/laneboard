@@ -93,6 +93,27 @@ test('every subcommand writes one line parseLine accepts, to ./.laneboard/run.js
   assert.equal(run1.artifacts.length, 1);
 });
 
+test('review n5: round --title/--wrapup and stop --detail reach the line', async (t) => {
+  const dir = tmpDir(t);
+  const env = envFor(dir);
+  const calls = [
+    ['stop', '--run', 'r1', '--reason', 'done', '--detail', 'every task done'],
+    ['round', '--run', 'r1', '--n', '4', '--role', 'operator', '--title', 'Final review', '--wrapup'],
+  ];
+  for (const args of calls) {
+    const r = await run(['run', ...args], env, dir);
+    assert.equal(r.code, 0, `${args.join(' ')}: ${r.stderr}`);
+  }
+  const [stop, round] = lines(path.join(dir, '.laneboard', 'run.jsonl')).map((l) => parseLine(l).event);
+  assert.equal(stop.detail, 'every task done');
+  assert.equal(round.title, 'Final review');
+  assert.equal(round.wrapup, true);
+  const bad = await run(['run', 'round', '--run', 'r1', '--n', '4', '--end', '--wrapup'], env, dir);
+  assert.notEqual(bad.code, 0, '--wrapup belongs to a round start');
+  const help = await run(['run', 'round', '--help'], env, dir);
+  assert.match(help.stdout, /--title t\] \[--wrapup\]/);
+});
+
 test('artifact --state merged writes the state; the help names it (night 5 T1)', async (t) => {
   const dir = tmpDir(t);
   const url = 'https://example.invalid/acme/acme-api/pull/7';

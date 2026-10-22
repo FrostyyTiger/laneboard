@@ -26,13 +26,13 @@
 //                                                      offline: append one run-protocol line
 //     start    [--goal g] [--plan p] [--branch b] [--host h] [--deadline iso] [--max-rounds N] [--window-pct P]
 //              (--rounds N on start is --max-rounds' old name; on stop it is the count done)
-//     round    --n N [--role r] [--task t]             prints `export LANEBOARD_RUN=<run>/<n>` for eval
+//     round    --n N [--role r] [--task t] [--title t] [--wrapup]   prints `export LANEBOARD_RUN=<run>/<n>` for eval
 //     round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]
 //     score    --name m --value x [--better higher|lower] [--n N] [--max x]
 //     needs    [--kind decision|wait] [--text t] [--link url] [--n N]
 //     ack      [<run>] <ref> [--by b]                  closes a need: ref = its place (0 = first) or its ts; a closed one: nothing sent
 //     artifact --url u [--kind pr|link] [--title t] [--state open|merged|closed]
-//     stop     [--reason done|deadline|rounds|…] [--rounds N] [--usd x]
+//     stop     [--reason done|deadline|rounds|…] [--rounds N] [--usd x] [--detail d]
 //     cost     --usd x [--n N]                         the run's cost is the sum of these (else of the rounds' --usd)
 //     The line goes to --file, else $LANEBOARD_RUN_FILE, else ./.laneboard/run.jsonl;
 //     --post sends it to POST /api/runs/events instead. --run defaults to the run
@@ -943,18 +943,18 @@ const RUN_SUBS = {
     '--window-pct': ['windowPct', 'num'],
   },
   round: {
-    '--n': ['n', 'int'], '--role': ['role', 'str'], '--task': ['task', 'str'], '--end': ['end', 'bool'],
-    '--outcome': ['outcome', 'str'], '--commit': ['commit', 'str'], '--open': ['open', 'int'], '--usd': ['usd', 'num'],
+    '--n': ['n', 'int'], '--role': ['role', 'str'], '--task': ['task', 'str'], '--title': ['title', 'str'],
+    '--wrapup': ['wrapup', 'bool'], '--end': ['end', 'bool'], '--outcome': ['outcome', 'str'], '--commit': ['commit', 'str'], '--open': ['open', 'int'], '--usd': ['usd', 'num'],
   },
   score: { '--name': ['name', 'str'], '--value': ['value', 'num'], '--better': ['better', 'str'], '--n': ['n', 'int'], '--max': ['max', 'num'] },
   needs: { '--kind': ['kind', 'str'], '--text': ['text', 'str'], '--link': ['link', 'str'], '--n': ['n', 'int'] },
   ack: { '--ref': ['ref', 'str'], '--by': ['by', 'str'] },
   artifact: { '--url': ['url', 'str'], '--kind': ['kind', 'str'], '--title': ['title', 'str'], '--state': ['state', 'str'] },
-  stop: { '--reason': ['reason', 'str'], '--rounds': ['rounds', 'int'], '--usd': ['usd', 'num'] },
+  stop: { '--reason': ['reason', 'str'], '--rounds': ['rounds', 'int'], '--usd': ['usd', 'num'], '--detail': ['detail', 'str'] },
   cost: { '--usd': ['usd', 'num'], '--n': ['n', 'int'] },
 };
 const RUN_TYPE = { start: 'run.start', score: 'score', needs: 'needs', ack: 'needs.ack', artifact: 'artifact', stop: 'run.stop', cost: 'cost' };
-const ROUND_START_ONLY = ['role', 'task'];
+const ROUND_START_ONLY = ['role', 'task', 'title', 'wrapup'];
 const ROUND_END_ONLY = ['outcome', 'commit', 'open', 'usd'];
 
 const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | --post]
@@ -964,14 +964,16 @@ const RUN_USAGE = `usage: laneboard run <sub> [--run <id>] [flags] [--file f | -
            there is no --budget flag: a run's budget is --max-rounds and --window-pct, kept in run.start's budget
            the budget burn column is the 5 h / 7 d usage % of the run's last usage event, which no subcommand writes:
            the loop appends a usage line itself (docs/runs.md); the bars warn at 90 % / 85 %, not at --window-pct
-  round    --n N [--role r] [--task t]            prints export LANEBOARD_RUN=<run>/<n>, meant for: eval "$(laneboard run round --n N …)"
+  round    --n N [--role r] [--task t] [--title t] [--wrapup]   prints export LANEBOARD_RUN=<run>/<n>, meant for: eval "$(laneboard run round --n N …)"
+           --title is the task's title; --wrapup marks a round after stop (a final review or report), not counted
   round    --n N --end [--outcome o] [--commit sha] [--open N] [--usd x]   --usd is this round only; the run sums them when it has no cost events
   score    --name m --value x [--better higher|lower] [--n N] [--max x]
   needs    ["text" | --text t] [--kind decision|wait|…] [--link url] [--n N]
   ack      [<run>] <ref> [--by b]                 close a need: <ref> is its place (0 = the first) or its ts (no such need: exit 1; already acked: nothing sent, exit 0)
   artifact --url u [--kind pr|link|…] [--title t] [--state open|merged|closed]
            --kind defaults to link; only kind pr artifacts are listed in the run's prs (the Inbox)
-  stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x]
+  stop     [--reason done|deadline|rounds|budget|no-progress|error|human|…] [--rounds N] [--usd x] [--detail d]
+           --detail is one line on why, shown under the reason
            --rounds N on stop is the count of rounds done, not the cap
            no --reason: the run records stop: "unknown" (the line carries no reason)
   cost     --usd x [--n N]                        what was spent (in round N); the run's cost is the sum of these
