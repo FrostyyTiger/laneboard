@@ -72,14 +72,15 @@
 }
 /* the stuck badge (server/runs/stuck.mjs): Board's flag, the icon in p2 */
 .rn-stuck { display: inline-flex; color: var(--p2); }
-/* a list row's stuck state (T54): `▲ STUCK`, the reason on a muted second line, clipped; it adds
-   nothing to the column's width (contain), so a long reason never widens the state column */
+/* a list row's stuck state (T54): `▲ STUCK`, the reason on muted lines under it, wrapping whole
+   (review n5: "task T2 faile…" said nothing); it adds nothing to the column's width (contain),
+   so a long reason makes the row taller, never the state column wider */
 .rn-state[data-stuck] { flex-wrap: wrap; row-gap: 0; max-width: 100%; }
 .rn-state-sub {
   flex-basis: 100%;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
   contain: inline-size;
   color: var(--text-3);
   font-size: var(--fs-11);

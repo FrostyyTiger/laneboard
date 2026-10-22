@@ -1276,6 +1276,10 @@ test('T54: a stuck list row reads ▲ STUCK in p2 with the reason under it; no u
   const css = fs.readFileSync(path.join(ROOT, 'public/css/views/runs.css'), 'utf8');
   assert.match(css, /\.rn-state\[data-p="2"\] \.rn-state-t \{ color: var\(--p2\); \}/);
   assert.match(css, /\.rn-state-sub \{[^}]*contain: inline-size;[^}]*color: var\(--text-3\)/);
+  // review n5: the reason wraps whole, never "task T2 faile…"
+  const sub = css.match(/\.rn-state-sub \{[^}]*\}/)[0];
+  assert.match(sub, /white-space: normal;/);
+  assert.doesNotMatch(sub, /text-overflow: ellipsis/);
   // no usage: one dash, no bar tracks
   const burn = byClass(fresh, 'rn-burn')[0];
   assert.equal(burn.textContent, '—');
