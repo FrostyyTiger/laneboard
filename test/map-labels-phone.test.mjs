@@ -226,7 +226,12 @@ test('T51: at 1440 every ▲/■ node is named and the labels keep clear of the 
   const boxes = r.labelBoxes(scene, r.drawNodes(scene));
   // A stuck lane deep in the tree is named wide too, not only on a phone.
   const named = new Set(boxes.map((b) => b.id));
-  for (const id of markedIds(scene)) assert.ok(named.has(id), `${id} (▲/■) named at 1440`);
+  // Every one on the canvas: a node drawn off it has no label (review n5, a lone label at an edge).
+  const onCanvas = (id) => { const p = scene.toScreen(scene.nodes.get(id)); return p.x >= 0 && p.x <= 1440 && p.y >= 0 && p.y <= 900; };
+  const marked = markedIds(scene).filter(onCanvas);
+  assert.ok(marked.length >= 3, `marked nodes on the canvas: ${marked}`);
+  for (const id of marked) assert.ok(named.has(id), `${id} (▲/■) named at 1440`);
+  for (const id of markedIds(scene).filter((x) => !onCanvas(x))) assert.ok(!named.has(id), `${id} is off the canvas: no label`);
   for (const b of boxes) for (const t of rings) assert.ok(!hits(b, t), `${b.text} clear of ${t.text}`);
   assert.ok(r.ringTextBoxes(phoneScene()).every((t) => /^\d{3}$/.test(t.text)), 'a phone has bearings only');
 });
@@ -262,4 +267,34 @@ test('T53 390: a selected node, at the fit and after a fly-to, keeps its label b
     }
   }
   assert.ok(checked >= 20, `nodes checked: ${checked}`);
+});
+
+// Review n5: labels keep clear of the canvas edges and of what covers the
+// canvas: the inspector at 1440, the bottom sheet at 390.
+test('review n5: no label is cut by a canvas edge or drawn under the inspector or the sheet', () => {
+  const wide = drawnScene(DEMO.nodes, { W: 1440, H: 900 });
+  const { s } = fitFrame(1440, 900, 400);
+  Object.assign(wide, { s, toScreen: (p) => ({ x: 620 + p.x * s, y: 450 + p.y * s }) });
+  const cases = [
+    ['1440 inspector', wide, 1440, 900, { left: 1040, top: 0, right: 1440, bottom: 900 }],
+    ['390 sheet', drawnScene(DEMO.nodes), W, H, { left: 0, top: H - 260, right: W, bottom: H }],
+  ];
+  for (const [name, scene0, w, h, cover] of cases) {
+    const scene = { ...scene0, covers: [cover] };
+    const r = createRenderer(fakeCtx(), PAL);
+    const boxes = r.labelBoxes(scene, r.drawNodes(scene));
+    assert.ok(boxes.length > 3, `${name}: some labels`);
+    const cb = { x0: cover.left, y0: cover.top, x1: cover.right, y1: cover.bottom };
+    for (const b of boxes) {
+      assert.ok(!hits(b, cb), `${name}: ${b.text} under the cover`);
+      assert.ok(b.x0 >= 0 && b.x1 <= w && b.y0 >= 0 && b.y1 <= h, `${name}: ${b.text} cut by an edge ${JSON.stringify(b)}`);
+    }
+    // A node under the cover has no name sticking out of it.
+    for (const [id, c] of scene.nodes) {
+      const p = scene.toScreen(c);
+      if (p.x >= cover.left && p.x <= cover.right && p.y >= cover.top && p.y <= cover.bottom) {
+        assert.ok(!boxes.some((b) => b.id === id), `${name}: ${id} is under the cover, unnamed`);
+      }
+    }
+  }
 });

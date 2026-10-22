@@ -1063,7 +1063,7 @@ export function createMap(root, opts = {}) {
     if (!el || typeof el.getBoundingClientRect !== 'function') return null;
     const rr = root.getBoundingClientRect(), pr = el.getBoundingClientRect();
     if (!pr.width && !pr.height) return null;
-    return { left: pr.left - rr.left, top: pr.top - rr.top, bottom: pr.bottom - rr.top };
+    return { left: pr.left - rr.left, top: pr.top - rr.top, bottom: pr.bottom - rr.top, right: pr.right - rr.left };
   }
 
   function scene(now) {
@@ -1080,6 +1080,9 @@ export function createMap(root, opts = {}) {
       pulses, comets,
       reduced: reducedMotion(),
       anchor: W > 760 && mode !== 'pip' ? anchorRect() : null,
+      // What covers the canvas (the inspector on the right, the sheet on a
+      // phone): labels keep clear of it, as of the canvas edges.
+      covers: mode !== 'pip' ? [anchorRect()].filter(Boolean) : [],
       budgetUsd: typeof opts.budgetUsd === 'function' ? opts.budgetUsd : undefined,
     };
   }

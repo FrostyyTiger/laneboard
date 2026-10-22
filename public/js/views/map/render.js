@@ -890,6 +890,7 @@ export function createRenderer(ctx, palette) {
     const s = scene.s ?? 1;
     const ns = nodeScale(scene);
     const W = scene.W ?? Infinity;
+    const H = scene.H ?? Infinity;
     const phone = W <= PHONE;
     const focus = scene.hover ?? scene.highlight ?? scene.selected ?? null;
     const near = scene.near ?? new Set();
@@ -913,6 +914,9 @@ export function createRenderer(ctx, palette) {
         : (c.depth ?? 0) <= 2 || n.kind === 'builder' || n.kind === 'run' || s > 1.25 || picked || near.has(id) || loud || trouble(n, stuck);
       if (!show || fade < 0.12) continue;
       const sp = scene.toScreen(c);
+      // A node off the canvas, or under the inspector or sheet, is not named:
+      // its label would stand alone at an edge (review n5).
+      if (!(sp.x >= 0 && sp.x <= W && sp.y >= 0 && sp.y <= H) || covered(scene, { x0: sp.x, y0: sp.y, x1: sp.x, y1: sp.y })) continue;
       const r = (SIZE[n.kind] ?? 5) * ns;
       if (n.kind === 'core') {
         // On a phone the name under the core lands on the first ring's nodes;
@@ -1002,6 +1006,12 @@ export function createRenderer(ctx, palette) {
   }
 
   const hits = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+  /** The scene's covers (inspector, sheet: {left, top, right, bottom}) as boxes. */
+  const coverBoxes = (scene) => (Array.isArray(scene.covers) ? scene.covers : [])
+    .filter((c) => c && Number.isFinite(c.left) && Number.isFinite(c.top))
+    .map((c) => ({ x0: c.left, y0: c.top, x1: Number.isFinite(c.right) ? c.right : Infinity, y1: Number.isFinite(c.bottom) ? c.bottom : Infinity }));
+  /** Whether box `b` (or a point as a zero box) is under a cover; a point on its edge counts. */
+  const covered = (scene, b) => coverBoxes(scene).some((c) => b.x0 <= c.x1 && c.x0 <= b.x1 && b.y0 <= c.y1 && c.y0 <= b.y1);
 
   /**
    * The collision pass: labels in rank order take their place, or the
@@ -1019,6 +1029,9 @@ export function createRenderer(ctx, palette) {
     const phone = (scene.W ?? Infinity) <= PHONE;
     const ns = nodeScale(scene);
     const taken = badges.map((b) => ({ x0: b.x - 1, y0: b.y - 1, x1: b.x + b.w + 1, y1: b.y + b.h + 1 }));
+    // The inspector and the sheet are no place for a label (review n5).
+    const covers = coverBoxes(scene).map((c) => ({ x0: c.x0 - 4, y0: c.y0 - 4, x1: c.x1 + 4, y1: c.y1 + 4 }));
+    taken.push(...covers);
     const rg = ringGeometry(scene);
     for (const t of [...rg.legends, ...rg.bearings]) taken.push(t.box);
     // Drawn nodes, as the square their outermost ring fits in.
@@ -1036,9 +1049,11 @@ export function createRenderer(ctx, palette) {
     const STEPS = [0, 14, -14, 28, -28, 42, -42, 56, -56];
     const slot = (e, clear) => (e.steps ?? STEPS).find((d) => {
       const b = { x0: e.box.x0, x1: e.box.x1, y0: e.box.y0 + d, y1: e.box.y1 + d };
-      return b.y0 >= 0 && b.y1 <= H && !taken.some((t) => hits(t, b)) && clear(b);
+      return b.y0 >= 0 && b.y1 <= H && b.x0 >= 0 && b.x1 <= W && !taken.some((t) => hits(t, b)) && clear(b);
     });
     const W = scene.W ?? Infinity;
+    /** Cut by a canvas edge or under a cover: a label there is not read, it is not drawn. */
+    const unseen = (b) => b.x0 < 0 || b.x1 > W || b.y0 < 0 || b.y1 > H || covers.some((c) => hits(c, b));
     /** The label on the node's other side, or null when that leaves the canvas. */
     const mirror = (e) => {
       if (e.core || e.sx == null) return null;
@@ -1073,7 +1088,7 @@ export function createRenderer(ctx, palette) {
         if (dy != null) { e = cand; break; }
       }
       if (dy == null) {
-        if (phone && e.rank > 2) continue;
+        if ((phone && e.rank > 2) || unseen(e.box)) continue;
         dy = 0;
       }
       const placed = { ...e, y: e.y + dy, box: { ...e.box, y0: e.box.y0 + dy, y1: e.box.y1 + dy } };
