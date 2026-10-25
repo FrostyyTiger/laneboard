@@ -91,11 +91,20 @@ Notes for every builder round (planner, night 1):
   one, fade out on leave; driven by the tour — done when: `test/wall-caption.test.mjs` covers the
   lines for a calm site, a site in trouble and a node without detail; a filmstrip frame shows a
   caption typed in, legible and not cut off.
-- [ ] T7 (§7.2) [ui] Target lock: `public/js/wall/lock.js`, four corner brackets that close in
+- [x] T7 (§7.2) [ui] Target lock: `public/js/wall/lock.js`, four corner brackets that close in
   around the focused node at `map.screenOf(id)` as the camera arrives and open as it leaves,
   tracked every frame through `map.onDraw` — done when: a filmstrip frame shows the brackets on
   the visited node, and a test (`test/wall-lock.test.mjs`) checks the bracket geometry function
-  (pure: size from node radius and zoom, closing over time).
+  (pure: size from node radius and zoom, closing over time) (commit 31e86d2; `lockGeometry`,
+  `lockProgress`, `nodeScaleAt`, `lockTone` pure; closing starts 600 ms before arrival, shut 700 ms
+  later, opens over 350 ms when the next leg starts, the next lock waits until it has; size = the
+  node's drawn radius at the Map's node scale for the tour zoom (from `snapshotScene().outer`, no Map
+  change) + 2.2 % of the short side, starting 7 % further out; grey on calm, status colour on
+  trouble; DOM corners moved by transform only. Filmstrip `$RUN_DIR/shots/r17-radial/`: red lock on
+  hv2, amber on hv1, grey on cloud/remote, none at the overview, 0 console errors; fps 7.3 is the
+  SwiftShader-plus-screenshots number, the lock adds four style writes a frame. Seen: the Map's own
+  site label (`HV2`) sits on the bottom-right bracket; T24/T15 (label placement) can keep labels
+  clear of the lock box, or the lock can skip that corner.)
 - [ ] T8 (§7.2, D3) [ui] Glow layer: `public/js/wall/glow.js`, a canvas under the Map's
   transparent canvas that paints soft radial glows at `screenOf(id)` for nodes with `glow`
   (their colour, size by `level`) and a progress ring for nodes with `ring`; no work when no node
