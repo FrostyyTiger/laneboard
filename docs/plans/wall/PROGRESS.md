@@ -154,6 +154,39 @@ Notes for every builder round (planner, night 1):
   halo, rooms one ring, halo only on the focused node and nodes in trouble; room-to-service
   edges short stubs at the overview, full fan only when the camera is in that site — done when:
   a still shows no halo on calm services and no hairball at `hv1`; option defaults off, map tests unchanged.
+- [ ] T20 (§2 north star 1) [ui] [variant:radial, all] (r14-operator #1) Caption reads at 3 m: on a
+  trouble site the trouble word (`STORAGE FULL 97%`, condensed, status colour, ~180 device px cap at
+  the tablet's 2x, per Q3) is the biggest text on the plate, the site name under it at the 1.5 m step
+  (~95 px); HARDWARE/WHERE/HOLDS drop to a small step below a gap on trouble sites; calm sites keep
+  today's order — done when: `test/wall-caption.test.mjs` checks the step sizes (trouble > name) and
+  the order for a trouble and a calm site; a filmstrip frame shows the trouble word legible and not cut off.
+- [ ] T21 (§2, T9) [ui] [variant:all] (r14-operator #2) The fleet line is big: in T9's `worstLine`, while
+  anything is crit the bottom-right line is set at the 3 m step (`■ HV2 · STORAGE 97% FULL`) with a
+  `+2 more` count under it, always on, also when the camera is not in a trouble site. Build T9 before
+  T7/T8 if the loop allows — done when: `test/wall-frame.test.mjs` covers the text, count and
+  step for crit, attention-only and calm; a filmstrip frame of an overview and of a calm-site visit shows it.
+- [ ] T22 (§2) [ui] [variant:all] (r14-operator #5) Caption status is a severity count and names the
+  worst three: `1 crit · 5 attention`, then the worst problem, then the next two, one per line at the
+  1 m step (today "6 of 41 in trouble" names one) — done when: `captionLines` test covers a site with
+  1 crit and several attention nodes (counts and three named lines, worst first).
+- [ ] T23 (§2) [ui] [variant:all] (r14-operator #6) No dead plate: on a trouble site the trouble word
+  shows at once with the plate (untyped), only the site name types; the plate grows with its lines
+  instead of starting at full height; in demo timing the typing starts during the last 0.5 s of the
+  flight — done when: a filmstrip frame at the start of a hold shows the trouble word and no empty
+  plate; the pure part (plate height from line count) is tested in `test/wall-caption.test.mjs`.
+- [ ] T24 (bug) [ui] [variant:all] (r14-operator #7) Map labels cut by the plate's edge and showing
+  through it as ghost text: plate at least 95 % opaque, and Map labels whose box falls under the
+  plate rectangle are hidden (the Wall has the rectangle and `screenOf`; any Map change is an option
+  that defaults off) — done when: a still/filmstrip frame at 1:1 shows no cut or ghost label near the
+  plate, and the app's Map tests pass unchanged.
+- [ ] T25 (§2 north star 1, T7) [ui] [variant:all] (r14-operator #8) The lock goes on the worst node
+  inside the visited site (e.g. `storage` in hv2), not only on the site node, with a thin leader line
+  from the caption's trouble line to it — done when: a test (`test/wall-lock.test.mjs`) picks the
+  worst descendant by status for a site and falls back to the site when calm; a filmstrip frame shows
+  the lock and leader on the trouble node.
+- [ ] T26 (§2) [ui] [variant:all] (r14-operator #9) Caption kicker on a trouble site is set in the
+  status colour with the shape: `■ CRIT · SITE 01 / 05`; calm sites keep the grey kicker — done when:
+  `captionLines` test covers kicker text and status for crit, attention and calm.
 
 ## Research questions
 
@@ -203,16 +236,23 @@ Notes for every builder round (planner, night 1):
 - (r9-film-ui) Hide the outermost rings (lanes, runs) at the overview, rolling their trouble up into
   the builder? Changes what the radial shows; owner's call.
 - (r9-film-ui) Redesign the bearing dial as a thin tick ring with four numerals in the mono step: taste.
+- (r14-operator #3) Tour dwell: while anything is warn or worse, hold calm sites short (~8 s) and
+  trouble sites long (~25 s), or alternate worst site and calm ones. Changes T5's timing: owner's call.
+- (r14-operator #4) At the overview, label only nodes at warn or worse, in status colour, so the only
+  words are the problems (the halo part is T16). Changes what the overview shows: owner's call.
 
 ## Reviews
 
 - r9-film-ui.md: 9 findings, 5 became tasks (T15-T19: #2+#7, #3, #4, #5, #6+#8); #1 covered by T5 (phrasing
   to owner), #9 covered by T9; hiding lanes and dial redesign went to the owner.
+- r14-operator.md: 9 findings, 7 became tasks (T20-T26: #1, #2, #5, #6, #7, #8, #9); #4 halo part covered
+  by T16; #3 and the overview-labels part of #4 went to the owner.
 
 ## Scores
 
 | round | persona | overview | legibility | status | touch | wow | calm | performance |
 |---|---|---|---|---|---|---|---|---|
 | 9 (radial) | film-ui | 3 | 2 | 4 | 1 | 4 | 6 | 6 |
+| 14 (radial) | operator | 3 | 3 | 5 | 2 | 5 | 5 | 6 |
 
 ## Morning
