@@ -110,7 +110,7 @@ Notes for every builder round (planner, night 1):
   studios behind well-known screen graphics) keep a "movie UI" readable while it looks dense:
   hierarchy, type choices, motion timing (typing speed, fade lengths, hold times), what they leave
   out? Numbers where they give them. — for T6, T7, T9
-- [ ] Q2 Calm technology and ambient displays: what makes an always-on screen glanceable without
+- [x] Q2 (→ research/Q2-calm-ambient-displays.md; no sourced motion-budget number, the table there is proposals) Calm technology and ambient displays: what makes an always-on screen glanceable without
   being noticed until something is wrong (peripheral attention, how trouble should escalate, how
   much motion is too much for a screen in a room all day)? — for T5, T9
 - [ ] Q3 Legibility at distance: minimum cap height or x-height per metre of viewing distance for a
