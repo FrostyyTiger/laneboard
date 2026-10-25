@@ -15,13 +15,14 @@ Notes for every builder round (planner, night 1):
 - Trouble comes from the existing status words (`server/map.mjs` `SEVERITY`: warn, attention, crit,
   down) and the Map's shapes (■ crit, ▲ warn, ◆ low, `overlays.js` `SHAPE_CODE`), never new ones.
 
-- [ ] T1 (§7.1) Large demo fleet, static part: `test/tools/demo-fleet.mjs --size large` writes a
+- [x] T1 (§7.1) Large demo fleet, static part: `test/tools/demo-fleet.mjs --size large` writes a
   topology and feeds built in `test/helpers/demo-hub.mjs` (`DEMO_TOPOLOGY_LARGE`, one `demoFeed*`
   per source, next to `DEMO_TOPOLOGY`/`demoFeed`): 5 sites (`hv1` and `hv2` hypervisors, a `cloud`
   site, a `remote` site, a `home` site with lights and a 3D printer), rooms and services under
   them, 100-150 nodes in `/api/map`, demo names only; the default size is unchanged — done when:
   `test/wall-demo-large.test.mjs` boots the large map model and counts 5 sites and 100-150 nodes,
-  `test/demo-fleet.test.mjs` passes unchanged, and `curl /api/map` on the running demo agrees.
+  `test/demo-fleet.test.mjs` passes unchanged, and `curl /api/map` on the running demo agrees. (commit d35cac0; 98 model nodes, 114 on `/api/map` with the
+  builders, 3 run nodes more over `/ws`; all calm but `backup` (drift missing), trouble is T3)
 - [ ] T2 (§7.1, D3) Feed extras: `server/map.mjs` carries `glow: {rgb, level}` and
   `ring: {progress}` from a feed's guest or service onto its node (validated: rgb three 0-255
   ints, level and progress 0..1, anything else dropped); the large demo's lights carry `glow`
