@@ -237,6 +237,8 @@ half-written file.
   its hypervisor). The gauge is then drawn neutral and never as a warning.
 - A guest's `alerts` work like the host's: while the guest runs, the worst one
   sets its status and its text says why (`{ "level": "crit", "text": "disk 99% full" }`).
+  An alert's `level` is `crit`, `attention` (a person has to act: a paper jam,
+  a print to take off the bed) or `warn`; anything else counts as `warn`.
 - A guest's `services` are what runs inside it, for a topology node whose
   `feed` names one (`"hv1/104/runner-1"`).
   - `status` is `ok`, `working` (busy, like a runner on a job), `idle` (up,
@@ -267,6 +269,8 @@ half-written file.
 - `events` appear once each, in the event tape and as a pulse on the node.
   - Events already in the file when laneboard first reads it are not replayed.
   - `guest` targets one of the host's guests.
+  - `link` names a topology link the event travelled (its `id`, or
+    `"from>to"`): the Map sends a comet along it.
 
 ### Discovered nodes
 

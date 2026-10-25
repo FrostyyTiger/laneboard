@@ -16,6 +16,10 @@
 // `--size large` swaps the Map's one-hypervisor topology for five sites and
 // 100-150 nodes (`DEMO_TOPOLOGY_LARGE`, one feed per site), the fleet the
 // Wall is judged on (docs/plans/wall/README.md §7.1); the builders are the same.
+// Its live part (`demoLargeCycle`) runs on the ticks: a crit, an attention and
+// a warn on three sites, each clearing and returning over 90 ticks, the front
+// door opening three times, and an event along a flow link (a comet) every
+// third tick.
 //
 // What it shows:
 //   builder-a  lanes in working / waiting (permission + question) / review-ready
@@ -66,7 +70,7 @@ import { parseArgs } from 'node:util';
 import { WebSocket, WebSocketServer } from 'ws';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoMapLarge, writeDemoFeeds, demoRunsAnswer, demoMorningWithRuns, demoWsText, demoAttention, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoMapLarge, writeDemoFeeds, createLargeLive, demoRunsAnswer, demoMorningWithRuns, demoWsText, demoAttention, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -538,9 +542,12 @@ async function main() {
   }
 
   let n = 0;
+  // The large demo's trouble, door and flow events, one step per tick (T3).
+  const live = SIZE === 'large' ? createLargeLive() : null;
   const tick = async () => {
     n++;
-    try { writeDemoFeeds(map.feedsDir, Date.now(), SIZE); } catch (e) { log(`feed write failed: ${e.message}`); }
+    const now = Date.now();
+    try { writeDemoFeeds(map.feedsDir, now, SIZE, live?.(n, now)); } catch (e) { log(`feed write failed: ${e.message}`); }
     for (const id of ids) {
       const fb = fakes.get(id);
       DEMO[id].cycle(n, fb.sessions);

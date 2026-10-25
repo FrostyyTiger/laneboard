@@ -204,6 +204,10 @@ export function feedRef(ref) {
 // (a runner on a job), `idle` is up with nothing to do.
 const SERVICE_STATUS = ['ok', 'working', 'idle', 'warn', 'crit', 'down'];
 
+// An alert's level as a status: `crit`, `attention` (a person has to act:
+// a paper jam, a print waiting to be taken off), anything else `warn`.
+const alertStatus = (a) => (a?.level === 'crit' || a?.level === 'attention' ? a.level : 'warn');
+
 const unit = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
 const byte = (v) => Number.isInteger(v) && v >= 0 && v <= 255;
 
@@ -286,7 +290,7 @@ export function fromFeed(node, feeds, now) {
     const h = feed.host ?? {};
     const alerts = Array.isArray(h.alerts) ? h.alerts : [];
     let status = h.status ?? 'ok';
-    for (const a of alerts) status = worse(status, a.level === 'crit' ? 'crit' : 'warn');
+    for (const a of alerts) status = worse(status, alertStatus(a));
     return {
       status,
       why: alerts[0]?.text ?? h.why,
@@ -321,7 +325,7 @@ export function fromFeed(node, feeds, now) {
   // Alerts from inside a running guest (its disk is full, say), as for a host.
   const alerts = g.status === 'running' && Array.isArray(g.alerts) ? g.alerts : [];
   for (const a of alerts) {
-    const next = worse(status, a.level === 'crit' ? 'crit' : 'warn');
+    const next = worse(status, alertStatus(a));
     if (next !== status) { status = next; why = a.text; }
   }
   const mem = g.maxmem ? g.mem / g.maxmem : g.memFrac;
@@ -1350,7 +1354,9 @@ export function feedEvents(feeds, topology, seen) {
       if (!at || at <= (last ?? 0)) continue;
       newest = Math.max(newest, at);
       const node = nodesByRef.get(`${source}/${e.guest ?? ''}`) ?? nodesByRef.get(`${source}/`);
-      mine.push({ at, node, kind: e.kind ?? 'ok', text: String(e.text ?? '').slice(0, 200) });
+      // `link` names a topology link the event travelled (`from>to`): a comet.
+      const link = typeof e.link === 'string' && e.link ? { link: e.link.slice(0, 200) } : {};
+      mine.push({ at, node, kind: e.kind ?? 'ok', text: String(e.text ?? '').slice(0, 200), ...link });
     }
     seen.set(source, newest);
     // The first read of a feed sets the mark without replaying its history.

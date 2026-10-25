@@ -479,10 +479,77 @@ export function demoFeedsLarge(now = Date.now()) {
   return [demoFeedHv1(now), demoFeedHv2(now), demoFeedCloud(now), demoFeedRemote(now), demoFeedHome(now)];
 }
 
-/** Write the feeds of a demo size into `feedsDir`, each to a temp name then renamed. */
-export function writeDemoFeeds(feedsDir, now = Date.now(), size = 'small') {
+// The live part of the large demo (Wall plan T3): trouble that comes and goes
+// and things that happen, counted in demo ticks (4 s by default) so a slower
+// `--tick` slows all of it. Over one period of 90 ticks (six minutes):
+//   crit       hv2 `storage`, ticks 0-39     its pool fills up
+//   attention  remote `office-printer`, 27-66   a paper jam a person must clear
+//   warn       cloud `api-prod`, 54-84       slow answers
+// so trouble overlaps, every one clears and returns, and ticks 85-89 are calm.
+// The front door opens three times a period (tick 5, 35, 65), and every third
+// tick something travels one of the topology's flow links, round robin: a feed
+// event with `link`, which the Map draws as a comet.
+export const LARGE_PERIOD_TICKS = 90;
+
+/** Each trouble of the period: where (feed source, guest name), its alert, its window in ticks. */
+export const LARGE_TROUBLE = Object.freeze([
+  { source: 'hv2', guest: 'storage', level: 'crit', text: 'pool 97% full', from: 0, to: 40 },
+  { source: 'remote', guest: 'office-printer', level: 'attention', text: 'paper jam, needs a person', from: 27, to: 67 },
+  { source: 'cloud', guest: 'api-prod', level: 'warn', text: 'p95 latency 1.8 s', from: 54, to: 85 },
+]);
+
+const DOOR_TICKS = [5, 35, 65];
+const LARGE_FLOWS = LARGE_LINKS.filter((l) => l.kind === 'flow');
+// Which feed and guest a flow event belongs to: its link's `from` room, named
+// as its topology ref names it (the hub finds the node by `source/guest`).
+const roomSource = new Map(DEMO_SITES_LARGE.flatMap((site) => site.rooms.map((r) => [r.id, { source: site.source, guest: String(r.vmid) }])));
+
+/**
+ * What the large demo does on tick `n`: the alerts standing now and the
+ * events that happen on this tick (`{source, guest, kind, text, link?}`).
+ */
+export function demoLargeCycle(n) {
+  const t = ((n % LARGE_PERIOD_TICKS) + LARGE_PERIOD_TICKS) % LARGE_PERIOD_TICKS;
+  const alerts = LARGE_TROUBLE.filter((x) => t >= x.from && t < x.to)
+    .map(({ source, guest, level, text }) => ({ source, guest, level, text }));
+  const events = [];
+  if (DOOR_TICKS.includes(t)) events.push({ source: 'home', guest: 'front-door', kind: 'ok', text: 'front door opened' });
+  if (n % 3 === 0) {
+    const l = LARGE_FLOWS[(n / 3) % LARGE_FLOWS.length];
+    events.push({ ...roomSource.get(l.from), kind: 'ok', text: `${l.from} ${l.label} → ${l.to}`, link: `${l.from}>${l.to}` });
+  }
+  return { alerts, events };
+}
+
+/**
+ * The large demo's feeds on tick `n` at `now`: the static feeds with the
+ * cycle's alerts on their guests and the last few events (`keep` of them),
+ * each stamped once when it happened so the hub reads it once.
+ */
+export function createLargeLive({ keep = 8 } = {}) {
+  let recent = [];
+  return function feedsAt(n, now = Date.now()) {
+    const { alerts, events } = demoLargeCycle(n);
+    recent = [...recent, ...events.map((e, i) => ({ ...e, at: now + i }))].slice(-keep);
+    return demoFeedsLarge(now).map((feed) => {
+      for (const g of feed.guests) {
+        const mine = alerts.filter((a) => a.source === feed.source && a.guest === g.name);
+        if (mine.length) g.alerts = mine.map(({ level, text }) => ({ level, text }));
+      }
+      const own = recent.filter((e) => e.source === feed.source);
+      if (own.length) feed.events = own.map(({ at, kind, text, guest, link }) => ({ at, kind, text, guest, ...(link ? { link } : {}) }));
+      return feed;
+    });
+  };
+}
+
+/**
+ * Write the feeds of a demo size into `feedsDir`, each to a temp name then
+ * renamed. `feeds` replaces the large demo's static ones (`createLargeLive`).
+ */
+export function writeDemoFeeds(feedsDir, now = Date.now(), size = 'small', feeds = null) {
   if (size !== 'large') { writeDemoFeed(feedsDir, now); return; }
-  for (const feed of demoFeedsLarge(now)) {
+  for (const feed of feeds ?? demoFeedsLarge(now)) {
     const file = path.join(feedsDir, `${feed.source}.json`);
     fs.writeFileSync(`${file}.tmp`, JSON.stringify(feed, null, 2));
     fs.renameSync(`${file}.tmp`, file);
