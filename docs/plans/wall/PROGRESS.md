@@ -83,7 +83,7 @@ Notes for every builder round (planner, night 1):
   0 console errors; fps 6.7 is the SwiftShader-plus-screenshots number from the filming note, the
   tour adds no per-frame work. The r9 camera phrasing (anticipation, beat on arrival) is not in:
   still the owner's call.)
-- [ ] T6 (§7.2) [ui] Captions: `public/js/wall/caption.js` with a pure `captionLines(node, model,
+- [x] T6 (§7.2) [ui] Captions: `public/js/wall/caption.js` with a pure `captionLines(node, model,
   index, count)` (kicker `TARGET 02 / 05 · SITE`, name, 3-6 lines: the trouble line first in its
   status colour with its shape, status, cpu/mem with thin bars, hardware/where/uptime from
   `detail`, room count) and the DOM part: top-left plate (dark translucent, two corner brackets),
