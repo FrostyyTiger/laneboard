@@ -167,7 +167,7 @@ Notes for every builder round (planner, night 1):
 - [x] Q3 (→ research/Q3-legibility-at-distance.md; arc-minute rule sourced second-hand, the 3 s glance size and the width/tracking advice are proposals) Legibility at distance: minimum cap height or x-height per metre of viewing distance for a
   glance (3 s) at 1-3 m, contrast ratios needed on a dark ground, condensed vs normal widths,
   tracking for caps; in px for a 2736x1824 12.3" tablet and a 1920x1080 24" screen. — for T6, T9, T11
-- [ ] Q4 Graph layouts that use a wide screen for 100-150 nodes over 4-6 sites: elliptical/orbital,
+- [x] Q4 (→ research/Q4-wide-screen-graph-layouts.md; beta values second-hand, site-slot clamp is a proposal) Graph layouts that use a wide screen for 100-150 nodes over 4-6 sites: elliptical/orbital,
   cluster (grouped force, treemap-of-clusters), hierarchical edge bundling for the long links;
   their parameters, and how ops tools draw infrastructure (open-source network/topology maps,
   service maps) — what holds up and what turns to hairballs. — for T11, T12, T13
