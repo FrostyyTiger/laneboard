@@ -105,12 +105,23 @@ Notes for every builder round (planner, night 1):
   SwiftShader-plus-screenshots number, the lock adds four style writes a frame. Seen: the Map's own
   site label (`HV2`) sits on the bottom-right bracket; T24/T15 (label placement) can keep labels
   clear of the lock box, or the lock can skip that corner.)
-- [ ] T8 (§7.2, D3) [ui] Glow layer: `public/js/wall/glow.js`, a canvas under the Map's
+- [x] T8 (§7.2, D3) [ui] Glow layer: `public/js/wall/glow.js`, a canvas under the Map's
   transparent canvas that paints soft radial glows at `screenOf(id)` for nodes with `glow`
   (their colour, size by `level`) and a progress ring for nodes with `ring`; no work when no node
   carries either — done when: `test/wall-glow.test.mjs` covers which nodes paint and how
   (pure part), and a still frame of the large demo shows the home lights glowing and the printer
-  ring under the throttle without fps dropping under 27.
+  ring under the throttle without fps dropping under 27. (commit SHA; `glowMarks`, `glowGeometry`,
+  `ringGeometry`, `zoomAt` pure; a sprite per colour drawn with `drawImage`, radius max(7 node radii,
+  5 % of the short side) scaled 0.55-1 by level, centre alpha 0.42 at full level; the ring grey (track
+  `--line-weak`, arc `--text-2`) outside the node; the layer follows `onDraw` only while a node
+  carries an extra, clears only the boxes it painted; zoom eased from the tour's legs (the Map does
+  not expose its zoom). The ground (`--tex-dots`, `--bg-canvas`) moved from `.map` to `.wall-stage`
+  so the glow sits between it and the Map's canvas. Round 18 built T8 before T9 because T9's
+  done-when films the glow. Filmstrip `$RUN_DIR/shots/r18-radial/`: four lights glow (violet, warm,
+  white), the printer ring shows, crit and attention still the loudest, 0 console errors. Script
+  time per frame at 4x, 20 s each, with the glow: 7.2-11.5 ms; without it: 10.4-11.4 ms. The glow's
+  cost is lost in run-to-run noise. fps 6.2 is the SwiftShader-plus-screenshots number from the
+  filming note. A 1x glow canvas was tried: no measurable gain.)
 - [ ] T9 (§7.2) [ui] Frame: vignette (edges darkened so text sits on quiet ground), a big clock
   bottom left, bottom right one line for the worst fleet problem (status colour and shape) and one
   ambient fact, a small tag top right; `public/js/wall/frame.js` with a pure `worstLine(model)` —

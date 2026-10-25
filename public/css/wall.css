@@ -38,11 +38,24 @@ html.wall body {
   position: fixed;
   inset: 0;
   overflow: hidden;
+  background: var(--tex-dots), var(--bg-canvas);
 }
 
+/* The ground moves to the stage so the glow canvas (js/wall/glow.js) can sit
+   between it and the Map's transparent canvas. */
 .wall-map {
   position: absolute;
   inset: 0;
+}
+.wall .wall-map.map { background: transparent; }
+
+.wall-glow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
 }
 
 /* Ambient takes no input (README §3); the hand cursor would promise some. */

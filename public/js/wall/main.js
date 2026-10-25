@@ -13,6 +13,7 @@ import { createPerf } from './perf.js';
 import { createTour, timingFor } from './tour.js';
 import { createCaption, captionLines, captionTimingFor, STILL_CAPTION_TIMING } from './caption.js';
 import { createLock, LOCK_TIMING, STILL_LOCK_TIMING } from './lock.js';
+import { createGlow } from './glow.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -45,8 +46,12 @@ export function boot() {
   const lock = createLock(document.getElementById('wall-lock'), map, {
     timing: still ? STILL_LOCK_TIMING : LOCK_TIMING,
   });
+  // Lights and jobs from the feeds, under the Map, growing with its zoom.
+  const glow = createGlow(document.getElementById('wall-glow'), map);
   let latest = null;
   tour.onLeg((leg) => {
+    const ms = still ? 0 : (leg.arriveMs ?? timingFor(pick.demo).flyMs);
+    glow.zoomTo(leg.kind === 'site' ? timingFor(pick.demo).zoom : 1, ms);
     const node = leg.kind === 'site' ? latest?.nodes?.find((n) => n?.id === leg.id) : null;
     if (node) {
       caption.show(leg, captionLines(node, latest, leg.index, leg.count));
@@ -63,6 +68,7 @@ export function boot() {
     have = true;
     latest = model;
     map.update(model);
+    glow.update(model);
     tour.update(model);
     tour.start();
   };
@@ -93,7 +99,7 @@ export function boot() {
   openSocket(BACKOFF_START_MS);
 
   // For the console and later tasks (caption, lock follow `tour.onLeg`).
-  globalThis.__wall = { map, tour, caption, lock, variant: pick.id, demo: pick.demo };
+  globalThis.__wall = { map, tour, caption, lock, glow, variant: pick.id, demo: pick.demo };
 }
 
 boot();
