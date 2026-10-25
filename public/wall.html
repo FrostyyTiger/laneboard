@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-theme="dark" class="wall">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1014">
+<title>laneboard · wall</title>
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2">
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/barlow-condensed/BarlowCondensed-SemiBold.woff2">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/views/map.css">
+<link rel="stylesheet" href="/css/wall.css">
+<link rel="icon" href="/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+<!-- The Wall (docs/plans/wall/README.md): the Map in ambient mode, full screen.
+     Captions, lock, glow and frame are layers the later tasks add over it. -->
+<main class="wall-stage" id="wall-stage">
+  <div class="wall-map" id="wall-map"></div>
+</main>
+<script type="module" src="/js/wall/main.js"></script>
+</body>
+</html>

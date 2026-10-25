@@ -1,0 +1,50 @@
+/* ===========================================================================
+   The Wall (docs/plans/wall/README.md, D1): the Map full screen, looked at
+   from a metre or three. Only public/wall.html loads this sheet.
+
+   Brighter tokens for distance, dark only (the Wall has no light theme):
+   text-2 at 88 % lightness, text-3 at 74 %, lines at 0.16 / 0.30 / 0.48
+   alpha, against the app's 78 % / 62 % and 0.09 / 0.17 / 0.32. Every colour
+   literal lives in tokens.css (design guardrail 4), so the steps are mixed
+   from its tokens: text-1 (96 %) toward the canvas (12 %) for the text,
+   text-1 over transparent for the lines. The Map reads these through
+   readPalette on its root, so its labels and edges brighten too.
+   =========================================================================== */
+
+html.wall {
+  --text-2: color-mix(in oklch, var(--text-1) 90.5%, var(--bg-canvas));
+  --text-3: color-mix(in oklch, var(--text-1) 74%, var(--bg-canvas));
+  --line-weak: color-mix(in oklch, var(--text-1) 16%, transparent);
+  --line: color-mix(in oklch, var(--text-1) 30%, transparent);
+  --line-strong: color-mix(in oklch, var(--text-1) 48%, transparent);
+}
+
+html.wall,
+html.wall body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--bg-canvas);
+}
+
+/* A screen nobody reads with a cursor: no selection, no tap flash. */
+.wall body {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wall-stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.wall-map {
+  position: absolute;
+  inset: 0;
+}
+
+/* Ambient takes no input (README §3); the hand cursor would promise some. */
+.wall .map-canvas,
+.wall .map-canvas:active { cursor: default; }
