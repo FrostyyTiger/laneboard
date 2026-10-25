@@ -204,7 +204,7 @@ Notes for every builder round (planner, night 1):
   cluster (grouped force, treemap-of-clusters), hierarchical edge bundling for the long links;
   their parameters, and how ops tools draw infrastructure (open-source network/topology maps,
   service maps) — what holds up and what turns to hairballs. — for T11, T12, T13
-- [ ] Q5 The wild card: the most promising way to lay out 100-150 nodes over 4-6 sites on a wide
+- [x] Q5 (→ research/Q5-hex-mosaic-wild-card.md; recommends a hex mosaic, one tile per node; region-growth algorithm is a proposal, sizes are arithmetic) The wild card: the most promising way to lay out 100-150 nodes over 4-6 sites on a wide
   (3:2 or 16:9) screen that is neither radial, nor orbits, nor islands; one recommendation with
   why it suits a camera tour, trouble first and labels at 3 m, and its layout algorithm in enough
   detail to build in a day. — for T14
