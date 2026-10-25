@@ -530,7 +530,11 @@ import { createMap } from './js/views/map/index.js';
 const map = createMap(el, { ambient: true });   // or { ambient: { drift: radiansPerSecond, fps } }
 map.update(await (await fetch('/api/map')).json());
 map.onDraw(() => { /* after every frame: map.screenOf(id) is where a node is drawn now */ });
+map.focus('m87', 2.4);  /* … */  map.fit();   // a camera tour: fly in, hold, fly out
 ```
+
+The turn is around the centre of the view, so a node the camera flew to turns
+in place; flights in this mode take 2.5 times as long (`flight`).
 
 `prefers-reduced-motion` stops the turn like every other animation. A page
 that wakes on touch puts its own layer over the Map; the Map never takes input

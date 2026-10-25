@@ -420,6 +420,21 @@ test('ambient: no HUD, no input, the constellation turns around the core and onD
   assert.ok(Math.abs(r(a) - r(b)) < 0.5, 'around the core, at the same radius');
 });
 
+test('ambient: a focused node lands in the middle and turns in place', async (t) => {
+  const { dom, map } = await mount({ ambient: { drift: 1, fps: 30 } }, { reduced: false });
+  t.after(() => { map.destroy(); dom.restore(); });
+  map.update(fleetModel());
+  dom.flush(80);
+  map.focus('builder:builder-b', 2.4);
+  dom.flush(800);
+  const p = map.screenOf('builder:builder-b');
+  assert.ok(Math.hypot(p.x - 600, p.y - 400) < 3, `in the middle, got ${p.x},${p.y}`);
+  const kid = map.screenOf('lane:builder-b/docs');
+  dom.flush(30);
+  const kid2 = map.screenOf('lane:builder-b/docs');
+  assert.ok(Math.hypot(kid2.x - kid.x, kid2.y - kid.y) > 1, 'its children turn around it');
+});
+
 test('ambient under reduced motion stands still', async (t) => {
   const { dom, map } = await mount({ ambient: true }, { reduced: true });
   t.after(() => { map.destroy(); dom.restore(); });

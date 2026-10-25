@@ -43,6 +43,7 @@
 //
 //   const map = createMap(el, { ambient: true });          // or { drift, fps }
 //   map.onDraw(() => paintUnder(map.screenOf('lamp')));     // after every frame
+//   map.focus('m87', 2.4); … map.fit();                      // a camera tour
 
 import { damp, settled, wrapAngle, flight, inertia, stage, easeInOut } from '../../core/motion.js';
 import {
@@ -78,9 +79,11 @@ const MODES = ['full', 'split', 'pip'];
  * Ambient: the Map as something to look at from across a room (a wall or desk
  * screen). No HUD and no input; the constellation turns slowly inside a still
  * dial, and frames are capped so a small machine stays cool. Drift is radians
- * per second (one turn in ten minutes by default).
+ * per second (one turn in ten minutes by default); the turn is around the
+ * centre of the view, so a node the camera flew to turns in place. Flights
+ * take `flight` times as long: a tour, not a jump.
  */
-const AMBIENT = { drift: TAU / 600, fps: 30 };
+const AMBIENT = { drift: TAU / 600, fps: 30, flight: 2.5 };
 
 const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 const pageHidden = () => globalThis.document?.visibilityState === 'hidden';
@@ -252,22 +255,25 @@ export function createMap(root, opts = {}) {
   const selectCbs = new Set();
   const hoverCbs = new Set();
   const drawCbs = new Set();
-  let spin = 0;                   // ambient turn of the constellation around the core, radians
+  let spin = 0;                   // ambient turn of the view around its centre, radians
+  let follow = null;              // ambient: the node the camera flew to and stays on until fit()
+  const followV = { x: 0, y: 0 };
   const perfOn = opts.perf ?? /[?&#]mapperf=1\b/.test(`${globalThis.location?.search ?? ''}${globalThis.location?.hash ?? ''}`);
   const drawMs = [];
 
   const view = () => ({ W, H, fitScale });
   const scale = () => fitScale * cam.z;
-  // The spin turns the world around the core before the camera sees it.
+  // The spin turns the view around its centre (the camera), so a flight still
+  // lands its node in the middle and the overview turns around the core.
   const toScreen = (p) => {
     const cs = Math.cos(spin), sn = Math.sin(spin);
-    const x = p.x * cs - p.y * sn, y = p.x * sn + p.y * cs;
-    return { x: W / 2 + (x - cam.x) * scale(), y: H / 2 + (y - cam.y) * scale() };
+    const dx = p.x - cam.x, dy = p.y - cam.y;
+    return { x: W / 2 + (dx * cs - dy * sn) * scale(), y: H / 2 + (dx * sn + dy * cs) * scale() };
   };
   const toWorld = (sx, sy) => {
-    const x = (sx - W / 2) / scale() + cam.x, y = (sy - H / 2) / scale() + cam.y;
+    const dx = (sx - W / 2) / scale(), dy = (sy - H / 2) / scale();
     const cs = Math.cos(spin), sn = Math.sin(spin);
-    return { x: x * cs + y * sn, y: -x * sn + y * cs };
+    return { x: cam.x + dx * cs + dy * sn, y: cam.y - dx * sn + dy * cs };
   };
 
   // --- sizing
@@ -319,6 +325,7 @@ export function createMap(root, opts = {}) {
 
   function fit(instant) {
     userMoved = false;
+    follow = null;
     const right = rightInset();
     const outer = maxRadius() + 64;
     const z = right ? clampZoom(Math.min(1, (W - right) / (2 * outer * (fitScale || 1)))) : 1;
@@ -339,7 +346,7 @@ export function createMap(root, opts = {}) {
       return;
     }
     const path = flight([cam.x, cam.y, viewW(cam.z)], [to.x, to.y, viewW(to.z)]);
-    fl = { path, t0: clock(), ms: path.ms, to };
+    fl = { path, t0: clock(), ms: path.ms * (amb?.flight ?? 1), to };
     kick();
   }
 
@@ -612,6 +619,7 @@ export function createMap(root, opts = {}) {
     const p = lay.pos.get(id);
     if (!p) return;
     userMoved = true;
+    if (amb) follow = id;
     const tz = Math.max(camGoal().z, z);
     const right = rightInset();
     // Keep the node clear of the inspector on the right; on a narrow screen, of the sheet below.
@@ -1053,6 +1061,16 @@ export function createMap(root, opts = {}) {
       glide.vx = inertia(glide.vx, dt); glide.vy = inertia(glide.vy, dt);
       if (jump || Math.hypot(glide.vx, glide.vy) * scale() < 0.01) glide = null; else moving = true;
     }
+    // Ambient: the camera stays on the node it flew to while the layout around
+    // it settles (an unfold re-balances the circle and moves it).
+    if (amb && follow && !fl) {
+      const c = cur.get(follow);
+      if (c && !c.leaving) {
+        [cam.x, followV.x] = damp(cam.x, followV.x, c.x, hl('move') * 3, dt);
+        [cam.y, followV.y] = damp(cam.y, followV.y, c.y, hl('move') * 3, dt);
+        if (!settled(cam.x, followV.x, c.x, 0.05) || !settled(cam.y, followV.y, c.y, 0.05)) moving = true;
+      } else follow = null;
+    }
     // Zooming past the threshold grows (or folds) the lanes' sessions in beats.
     if ((cam.z >= AUTO_UNFOLD_ZOOM) !== zoomedIn) { relayout(); moving = true; }
 
@@ -1217,7 +1235,7 @@ export function createMap(root, opts = {}) {
     update,
     event,
     select: (x, o = {}) => pick(x, { fly: Boolean(o.fly) }),
-    focus: (x) => flyTo(x),
+    focus: (x, z) => flyTo(x, z),
     fit: () => fit(false),
     resize,
     setScope,
