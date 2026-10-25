@@ -32,12 +32,16 @@ Notes for every builder round (planner, night 1):
   and service; level defaults to 1; a stale feed carries neither; four lights glow, porch off;
   the ring is a ten-minute job from the clock, so it moves every tick and wraps; `/api/map` on
   the live demo shows both)
-- [ ] T3 (§7.1) Large demo fleet, live part: trouble that comes and goes on a schedule (one crit,
+- [x] T3 (§7.1) Large demo fleet, live part: trouble that comes and goes on a schedule (one crit,
   one attention, one warn, each on a different site, each clearing and returning), a door-like
   feed event every few minutes (fewer with `--tick` slow), and `flow` links whose events make
   comets — done when: `test/wall-demo-large.test.mjs` steps the large demo's cycle function
   through a full period and sees each of crit, attention and warn appear and clear, and at least
-  one event per period.
+  one event per period. (commit 3a575ea; `demoLargeCycle(n)` in ticks, period 90 = 6 min at 4 s:
+  crit hv2 `storage` ticks 0-39, attention remote `office-printer` 27-66, warn cloud `api-prod`
+  54-84, calm 85-89; door at 5/35/65; a flow event with `link` every third tick. Two generic feed
+  fields made it possible: alert level `attention`, and `link` on feed events (a comet), both in
+  docs/map.md. Lanes on hv1 add their own attention from the builders.)
 - [ ] T4 (§7.2) [ui] The Wall page ground: `public/wall.html`, `public/css/wall.css` (brighter
   tokens scoped to the page: text-2 88 %, text-3 74 %, lines 0.16/0.30/0.48, dark only),
   `public/js/wall/main.js` loading `/api/map` and the `/ws` map messages into
