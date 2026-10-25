@@ -228,7 +228,7 @@ Notes for every builder round (planner, night 1):
   (3:2 or 16:9) screen that is neither radial, nor orbits, nor islands; one recommendation with
   why it suits a camera tour, trouble first and labels at 3 m, and its layout algorithm in enough
   detail to build in a day. — for T14
-- [ ] Q6 Touch on wall and kiosk screens: target sizes (mm and px at the tablet's density), gestures
+- [x] Q6 (→ research/Q6-touch-on-wall-and-kiosk.md; mm-based sizes are arithmetic, idle 45 s is a proposal, no timeout research exists) Touch on wall and kiosk screens: target sizes (mm and px at the tablet's density), gestures
   that work for people who did not set the screen up (tap, back, pinch), idle timeouts and how a
   kiosk shows "touch to explore" without clutter. — for night 2 (touch explorer)
 
