@@ -133,7 +133,7 @@ Notes for every builder round (planner, night 1):
 - [x] Q2 (→ research/Q2-calm-ambient-displays.md; no sourced motion-budget number, the table there is proposals) Calm technology and ambient displays: what makes an always-on screen glanceable without
   being noticed until something is wrong (peripheral attention, how trouble should escalate, how
   much motion is too much for a screen in a room all day)? — for T5, T9
-- [ ] Q3 Legibility at distance: minimum cap height or x-height per metre of viewing distance for a
+- [x] Q3 (→ research/Q3-legibility-at-distance.md; arc-minute rule sourced second-hand, the 3 s glance size and the width/tracking advice are proposals) Legibility at distance: minimum cap height or x-height per metre of viewing distance for a
   glance (3 s) at 1-3 m, contrast ratios needed on a dark ground, condensed vs normal widths,
   tracking for caps; in px for a 2736x1824 12.3" tablet and a 1920x1080 24" screen. — for T6, T9, T11
 - [ ] Q4 Graph layouts that use a wide screen for 100-150 nodes over 4-6 sites: elliptical/orbital,
