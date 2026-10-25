@@ -102,7 +102,7 @@ Notes for every builder round (planner, night 1):
 
 ## Research questions
 
-- [ ] Q1 How do film and TV interface designers (practitioners' own write-ups and talks: e.g. the
+- [x] Q1 (→ research/Q1-film-ui-readability.md; designers give no timing numbers, the table there is marked as proposals) How do film and TV interface designers (practitioners' own write-ups and talks: e.g. the
   studios behind well-known screen graphics) keep a "movie UI" readable while it looks dense:
   hierarchy, type choices, motion timing (typing speed, fade lengths, hold times), what they leave
   out? Numbers where they give them. — for T6, T7, T9
