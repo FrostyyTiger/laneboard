@@ -10,6 +10,7 @@
 import { createMap } from '../views/map/index.js';
 import { pickVariant } from './variants.js';
 import { createPerf } from './perf.js';
+import { createTour, timingFor } from './tour.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -30,11 +31,16 @@ export function boot() {
   map.onDraw(() => perf.frame(performance.now()));
   document.addEventListener('visibilitychange', () => perf.pause());
 
+  // The tour is the screensaver (D4): it starts with the first model.
+  const tour = createTour(map, { timing: timingFor(pick.demo) });
+
   let have = false;
   const showModel = (model) => {
     if (!model || typeof model !== 'object') return;
     have = true;
     map.update(model);
+    tour.update(model);
+    tour.start();
   };
 
   fetch('/api/map')
@@ -62,8 +68,8 @@ export function boot() {
   };
   openSocket(BACKOFF_START_MS);
 
-  // For the console and later tasks (the tour drives it): the map and the pick.
-  globalThis.__wall = { map, variant: pick.id, demo: pick.demo };
+  // For the console and later tasks (caption, lock follow `tour.onLeg`).
+  globalThis.__wall = { map, tour, variant: pick.id, demo: pick.demo };
 }
 
 boot();
