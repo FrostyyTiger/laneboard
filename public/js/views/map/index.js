@@ -43,7 +43,7 @@
 //
 //   const map = createMap(el, { ambient: true });          // or { drift, fps }
 //   map.onDraw(() => paintUnder(map.screenOf('lamp')));     // after every frame
-//   map.focus('m87', 2.4); … map.fit();                      // a camera tour
+//   map.focus('hv1', 2.4); … map.fit();                      // a camera tour
 
 import { damp, settled, wrapAngle, flight, inertia, stage, easeInOut } from '../../core/motion.js';
 import {

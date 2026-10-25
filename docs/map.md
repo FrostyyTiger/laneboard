@@ -530,7 +530,7 @@ import { createMap } from './js/views/map/index.js';
 const map = createMap(el, { ambient: true });   // or { ambient: { drift: radiansPerSecond, fps } }
 map.update(await (await fetch('/api/map')).json());
 map.onDraw(() => { /* after every frame: map.screenOf(id) is where a node is drawn now */ });
-map.focus('m87', 2.4);  /* … */  map.fit();   // a camera tour: fly in, hold, fly out
+map.focus('hv1', 2.4);  /* … */  map.fit();   // a camera tour: fly in, hold, fly out
 ```
 
 The turn is around the centre of the view, so a node the camera flew to turns
