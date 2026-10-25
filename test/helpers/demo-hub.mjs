@@ -295,7 +295,7 @@ export function demoAttention(id, sessions, now = Date.now()) {
 // the house services), `hv2` (storage, media, a GPU box, a small cluster),
 // `cloud` (edges, the production API, its database), `remote` (tailnet peers
 // at an office, one laptop asleep) and `home` (lights and a 3D printer, the
-// nodes Wall's glow and ring extras will ride on, T2). Guest names are unique
+// nodes that carry Wall's `glow` and `ring` extras, T2). Guest names are unique
 // across sources: the Map merges same-named machines of different feeds.
 // Calm on its own; the trouble that comes and goes is the live part (T3).
 
@@ -368,12 +368,12 @@ export const DEMO_SITES_LARGE = Object.freeze([
     host: { cpu: 0.09, mem: 0.41, sub: 'home hub', detail: { Where: 'hallway closet' } },
     rooms: [
       room('automation', 'automation', 'home automation', [svc('zigbee', '23 devices'), svc('rules', '31 rules')], { type: 'device' }),
-      room('hall-light', 'hall-light', 'light', [], { type: 'device' }),
-      room('desk-light', 'desk-light', 'light', [], { type: 'device' }),
-      room('living-light', 'living-light', 'light', [], { type: 'device' }),
-      room('kitchen-light', 'kitchen-light', 'light', [], { type: 'device' }),
+      room('hall-light', 'hall-light', 'light', [], { type: 'device', glow: { rgb: [255, 196, 137], level: 0.35 } }),
+      room('desk-light', 'desk-light', 'light', [], { type: 'device', glow: { rgb: [255, 214, 170], level: 0.9 } }),
+      room('living-light', 'living-light', 'light', [], { type: 'device', glow: { rgb: [140, 120, 255], level: 0.6 } }),
+      room('kitchen-light', 'kitchen-light', 'light', [], { type: 'device', glow: { rgb: [235, 242, 255], level: 1 } }),
       room('porch-light', 'porch-light', 'light', [], { type: 'device' }),
-      room('printer-3d', 'printer-3d', '3D printer', [svc('print-job', 'idle', 'idle')], { type: 'device' }),
+      room('printer-3d', 'printer-3d', '3D printer', [svc('print-job', 'printing', 'working')], { type: 'device', printing: true }),
       room('thermostat', 'thermostat', 'heating', [], { type: 'device' }),
       room('front-door', 'front-door', 'door sensor', [], { type: 'device' }),
     ],
@@ -419,6 +419,10 @@ export const DEMO_TOPOLOGY_LARGE = Object.freeze({
 });
 
 const LARGE_DAY = 86_400;
+// The printer's job runs ten minutes and starts over, so its ring (T2) moves
+// on every tick of the demo, whatever the tick.
+export const LARGE_PRINT_MS = 10 * 60_000;
+const printProgress = (now) => Math.round(((now % LARGE_PRINT_MS) / LARGE_PRINT_MS) * 1000) / 1000;
 
 /** One site's feed as its feeder would push it, stamped `now`. */
 function siteFeed(site, now) {
@@ -438,6 +442,13 @@ function siteFeed(site, now) {
     };
     if (r.offline) { g.lastSeen = now - 3 * 3600_000; delete g.cpu; delete g.memFrac; }
     if (r.services.length) g.services = r.services.map((s) => ({ ...s }));
+    // Feed extras the Wall paints (T2): a light's colour, a print's progress.
+    if (r.glow) g.glow = { rgb: [...r.glow.rgb], level: r.glow.level };
+    if (r.printing) {
+      const progress = printProgress(now);
+      g.ring = { progress };
+      for (const s of g.services ?? []) s.sub = `printing · ${Math.round(progress * 100)}%`;
+    }
     return g;
   });
   if (site.source === 'hv1') {

@@ -257,6 +257,13 @@ half-written file.
   down: a peer that sleeps is not broken. A stopped `qemu`/`lxc` guest stays
   down. `note` on the feed says why it
   is empty (the `none` feeder).
+- Optional extras for a screen that paints them (the Wall,
+  `docs/plans/wall/README.md` D3), on the host, a guest or a service:
+  `glow: { "rgb": [255, 200, 120], "level": 0.8 }` (a light's colour, three
+  integers 0-255, and its brightness 0-1, 1 when left out) and
+  `ring: { "progress": 0.42 }` (a job's progress, 0-1). Each is kept whole or
+  dropped when invalid, and gone while the feed is stale. The app's Map draws
+  neither.
 - `events` appear once each, in the event tape and as a pulse on the node.
   - Events already in the file when laneboard first reads it are not replayed.
   - `guest` targets one of the host's guests.
