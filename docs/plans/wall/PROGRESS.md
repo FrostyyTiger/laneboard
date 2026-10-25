@@ -68,13 +68,21 @@ Notes for every builder round (planner, night 1):
   (`source: wall`), but see the filming note above: under the throttle this VM only films with
   SwiftShader, which caps fps near 17-21 even unthrottled, so 27 fps cannot be shown here yet;
   the Map's own script is 6.7 ms/frame average, 27 ms worst, at 4x.)
-- [ ] T5 (§7.2) The camera tour: `public/js/wall/tour.js`, pure order and timing
+- [x] T5 (§7.2) The camera tour: `public/js/wall/tour.js`, pure order and timing
   (`tourOrder(nodes)`: sites with anything at warn or worse first, worst first, then calm ones;
   re-ordered every cycle; overview ~20 s, fly in at zoom ~2.3, hold ~25 s, out, next; `?demo=1`
   ~4 s per site) plus a small driver that calls `map.focus(id, zoom)` / `map.fit()` — done when:
   `test/wall-tour.test.mjs` shows trouble visited first, a cleared site falling back into the calm
   order next cycle, and demo timings; a filmstrip of `radial&demo=1` shows the camera going in and
-  out of sites.
+  out of sites (commit 8dcf5f4; sites ranked by
+  their subtree's rollup (`model.js` `rollup`), the order taken again before every site so trouble
+  that starts mid-cycle jumps ahead of the calm sites still to come, one visit per site per cycle;
+  `__repos` toured only in trouble; legs `{kind, id, status, index, count, arriveMs, ms}` through
+  `tour.onLeg` for T6/T7; demo: 4 s overview, 2.25 s flight + 1.75 s hold. Filmstrip
+  `$RUN_DIR/shots/r11-radial/`: overview, hv2 (crit) first, in and out of sites, back to the overview;
+  0 console errors; fps 6.7 is the SwiftShader-plus-screenshots number from the filming note, the
+  tour adds no per-frame work. The r9 camera phrasing (anticipation, beat on arrival) is not in:
+  still the owner's call.)
 - [ ] T6 (§7.2) [ui] Captions: `public/js/wall/caption.js` with a pure `captionLines(node, model,
   index, count)` (kicker `TARGET 02 / 05 · SITE`, name, 3-6 lines: the trouble line first in its
   status colour with its shape, status, cpu/mem with thin bars, hardware/where/uptime from
