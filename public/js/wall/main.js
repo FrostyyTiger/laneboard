@@ -12,6 +12,7 @@ import { pickVariant } from './variants.js';
 import { createPerf } from './perf.js';
 import { createTour, timingFor } from './tour.js';
 import { createCaption, captionLines, captionTimingFor, STILL_CAPTION_TIMING } from './caption.js';
+import { createLock, LOCK_TIMING, STILL_LOCK_TIMING } from './lock.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -40,11 +41,20 @@ export function boot() {
   const caption = createCaption(document.getElementById('wall-caption'), {
     timing: still ? STILL_CAPTION_TIMING : captionTimingFor(pick.demo),
   });
+  // The lock closes on the same node as the camera gets there.
+  const lock = createLock(document.getElementById('wall-lock'), map, {
+    timing: still ? STILL_LOCK_TIMING : LOCK_TIMING,
+  });
   let latest = null;
   tour.onLeg((leg) => {
     const node = leg.kind === 'site' ? latest?.nodes?.find((n) => n?.id === leg.id) : null;
-    if (node) caption.show(leg, captionLines(node, latest, leg.index, leg.count));
-    else caption.hide();
+    if (node) {
+      caption.show(leg, captionLines(node, latest, leg.index, leg.count));
+      lock.lockOn({ ...leg, node }, timingFor(pick.demo).zoom);
+    } else {
+      caption.hide();
+      lock.release();
+    }
   });
 
   let have = false;
@@ -83,7 +93,7 @@ export function boot() {
   openSocket(BACKOFF_START_MS);
 
   // For the console and later tasks (caption, lock follow `tour.onLeg`).
-  globalThis.__wall = { map, tour, caption, variant: pick.id, demo: pick.demo };
+  globalThis.__wall = { map, tour, caption, lock, variant: pick.id, demo: pick.demo };
 }
 
 boot();

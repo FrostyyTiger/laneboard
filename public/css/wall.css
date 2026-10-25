@@ -212,3 +212,41 @@ html.wall body {
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------------------
+   Target lock (js/wall/lock.js): four corner brackets that close in on the
+   node the camera flies to. Each corner is an L of two 2px strokes, placed by
+   transform only (script, every Map frame), so a frame lays nothing out.
+   Grey on a calm target; the status colour only on trouble.
+   --------------------------------------------------------------------------- */
+
+.wall-lock-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wall-lock {
+  --lock-arm: 16px;
+  --lock-stroke: 2px;
+  --lock-colour: var(--text-2);
+  position: absolute;
+  inset: 0;
+}
+.wall-lock[data-tone="crit"] { --lock-colour: var(--crit); }
+.wall-lock[data-tone="warn"] { --lock-colour: var(--warn); }
+
+.wall-lock-c {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--lock-arm);
+  height: var(--lock-arm);
+  border: 0 solid var(--lock-colour);
+  will-change: transform;
+}
+.wall-lock-tl { border-top-width: var(--lock-stroke); border-left-width: var(--lock-stroke); }
+.wall-lock-tr { border-top-width: var(--lock-stroke); border-right-width: var(--lock-stroke); }
+.wall-lock-bl { border-bottom-width: var(--lock-stroke); border-left-width: var(--lock-stroke); }
+.wall-lock-br { border-bottom-width: var(--lock-stroke); border-right-width: var(--lock-stroke); }
