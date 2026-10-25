@@ -23,12 +23,15 @@ Notes for every builder round (planner, night 1):
   `test/wall-demo-large.test.mjs` boots the large map model and counts 5 sites and 100-150 nodes,
   `test/demo-fleet.test.mjs` passes unchanged, and `curl /api/map` on the running demo agrees. (commit d35cac0; 98 model nodes, 114 on `/api/map` with the
   builders, 3 run nodes more over `/ws`; all calm but `backup` (drift missing), trouble is T3)
-- [ ] T2 (§7.1, D3) Feed extras: `server/map.mjs` carries `glow: {rgb, level}` and
+- [x] T2 (§7.1, D3) Feed extras: `server/map.mjs` carries `glow: {rgb, level}` and
   `ring: {progress}` from a feed's guest or service onto its node (validated: rgb three 0-255
   ints, level and progress 0..1, anything else dropped); the large demo's lights carry `glow`
   and the printer a `ring` whose progress advances every tick; the app ignores both — done when:
   `test/wall-feed-extras.test.mjs` shows valid extras pass, invalid ones drop, and the app's
-  `test/map.test.mjs` passes unchanged.
+  `test/map.test.mjs` passes unchanged (commit 11a0a2a; `feedExtras` in `server/map.mjs`, host, guest
+  and service; level defaults to 1; a stale feed carries neither; four lights glow, porch off;
+  the ring is a ten-minute job from the clock, so it moves every tick and wraps; `/api/map` on
+  the live demo shows both)
 - [ ] T3 (§7.1) Large demo fleet, live part: trouble that comes and goes on a schedule (one crit,
   one attention, one warn, each on a different site, each clearing and returning), a door-like
   feed event every few minutes (fewer with `--tick` slow), and `flow` links whose events make
