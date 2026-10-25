@@ -48,3 +48,167 @@ html.wall body {
 /* Ambient takes no input (README §3); the hand cursor would promise some. */
 .wall .map-canvas,
 .wall .map-canvas:active { cursor: default; }
+
+/* ---------------------------------------------------------------------------
+   Caption (js/wall/caption.js): the plate top left that names a site as the
+   camera arrives. One type scale in vmin so it holds from a 12" tablet to a
+   wall screen, ratio about 1.6: kicker and keys 1.7, lines 2.7, name 6.9.
+   Mono for the kicker, keys and numbers; the condensed label face for the
+   name and the values. Grey throughout, but the trouble line in its status
+   colour with its shape. The plate's fades and the typing run in script
+   (the plan's motion, README §3); nothing here transitions.
+   --------------------------------------------------------------------------- */
+
+.wall-caption-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.wall-caption {
+  --cap-key: 1.7vmin;
+  --cap-line: 2.7vmin;
+  --cap-name: 6.9vmin;
+  --cap-pad: 2.4vmin;
+  --cap-bracket: 2.6vmin;
+  position: absolute;
+  top: 8vh;
+  left: 6vw;
+  max-width: 44vw;
+  padding: var(--cap-pad) calc(var(--cap-pad) * 1.25) calc(var(--cap-pad) * 1.1);
+  background: color-mix(in oklch, var(--bg-canvas) 92%, transparent);
+  opacity: 0;
+}
+
+/* Two corner brackets, top left and bottom right. */
+.wall-caption::before,
+.wall-caption::after {
+  content: "";
+  position: absolute;
+  width: var(--cap-bracket);
+  height: var(--cap-bracket);
+  border: 0 solid var(--line-strong);
+}
+.wall-caption::before { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+.wall-caption::after { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; }
+.wall-caption[data-status="crit"]::before,
+.wall-caption[data-status="crit"]::after,
+.wall-caption[data-status="down"]::before,
+.wall-caption[data-status="down"]::after { border-color: var(--crit); }
+.wall-caption[data-status="warn"]::before,
+.wall-caption[data-status="warn"]::after,
+.wall-caption[data-status="attention"]::before,
+.wall-caption[data-status="attention"]::after { border-color: var(--warn); }
+
+.wall-caption-kicker {
+  font-family: var(--font-mono);
+  font-size: var(--cap-key);
+  line-height: 1;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.wall-caption-name {
+  margin: 0.9vmin 0 1.6vmin;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: var(--cap-name);
+  line-height: 0.92;
+  letter-spacing: 0.04em;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+/* The letters still to type hold their place, so the plate never grows. */
+.wall-caption-rest { visibility: hidden; }
+
+/* A block the height of the caps; it takes no room of its own. */
+.wall-caption-cursor {
+  display: inline-block;
+  width: 0.42em;
+  height: 0.7em;
+  margin-right: -0.42em;
+  vertical-align: baseline;
+  background: var(--text-1);
+}
+.wall-caption-cursor[hidden] { display: none; }
+.wall-caption-cursor.is-blink { animation: lb-flash 1s linear infinite; }
+
+.wall-caption-lines {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1.8vmin;
+  row-gap: 0.9vmin;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each line spans both columns on the list's grid, so keys and values align. */
+.wall-caption-line {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+}
+
+.wall-caption-key {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.8vmin;
+  font-family: var(--font-mono);
+  font-size: var(--cap-key);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.wall-caption-val {
+  font-family: var(--font-label);
+  font-weight: 500;
+  font-size: var(--cap-line);
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wall-caption-line[data-kind="trouble"] > * { color: var(--crit); }
+.wall-caption-line[data-kind="trouble"][data-tone="warn"] > * { color: var(--warn); }
+.wall-caption-line[data-kind="trouble"][data-tone="low"] > * { color: var(--info); }
+.wall-caption-line[data-kind="trouble"] .wall-caption-val { font-weight: 600; }
+.wall-caption-glyph { font-size: var(--cap-line); line-height: 1; }
+
+/* cpu and mem side by side across both columns, a thin bar each. */
+.wall-caption-line[data-kind="metrics"] {
+  display: flex;
+  grid-column: 1 / -1;
+  gap: 3vmin;
+  align-items: baseline;
+}
+.wall-caption-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 1vmin;
+}
+.wall-caption-bar {
+  position: relative;
+  width: 9vmin;
+  height: 0.4vmin;
+  background: var(--line-weak);
+}
+.wall-caption-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--text-2);
+}
+.wall-caption-num {
+  font-family: var(--font-mono);
+  font-size: var(--cap-key);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}

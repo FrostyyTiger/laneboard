@@ -11,6 +11,7 @@ import { createMap } from '../views/map/index.js';
 import { pickVariant } from './variants.js';
 import { createPerf } from './perf.js';
 import { createTour, timingFor } from './tour.js';
+import { createCaption, captionLines, captionTimingFor, STILL_CAPTION_TIMING } from './caption.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -34,10 +35,23 @@ export function boot() {
   // The tour is the screensaver (D4): it starts with the first model.
   const tour = createTour(map, { timing: timingFor(pick.demo) });
 
+  // The caption names each site as the camera gets there, from the newest model.
+  const still = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const caption = createCaption(document.getElementById('wall-caption'), {
+    timing: still ? STILL_CAPTION_TIMING : captionTimingFor(pick.demo),
+  });
+  let latest = null;
+  tour.onLeg((leg) => {
+    const node = leg.kind === 'site' ? latest?.nodes?.find((n) => n?.id === leg.id) : null;
+    if (node) caption.show(leg, captionLines(node, latest, leg.index, leg.count));
+    else caption.hide();
+  });
+
   let have = false;
   const showModel = (model) => {
     if (!model || typeof model !== 'object') return;
     have = true;
+    latest = model;
     map.update(model);
     tour.update(model);
     tour.start();
@@ -69,7 +83,7 @@ export function boot() {
   openSocket(BACKOFF_START_MS);
 
   // For the console and later tasks (caption, lock follow `tour.onLeg`).
-  globalThis.__wall = { map, tour, variant: pick.id, demo: pick.demo };
+  globalThis.__wall = { map, tour, caption, variant: pick.id, demo: pick.demo };
 }
 
 boot();
