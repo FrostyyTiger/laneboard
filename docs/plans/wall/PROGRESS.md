@@ -110,7 +110,7 @@ Notes for every builder round (planner, night 1):
   (their colour, size by `level`) and a progress ring for nodes with `ring`; no work when no node
   carries either — done when: `test/wall-glow.test.mjs` covers which nodes paint and how
   (pure part), and a still frame of the large demo shows the home lights glowing and the printer
-  ring under the throttle without fps dropping under 27. (commit SHA; `glowMarks`, `glowGeometry`,
+  ring under the throttle without fps dropping under 27. (commit 01cd9f7; `glowMarks`, `glowGeometry`,
   `ringGeometry`, `zoomAt` pure; a sprite per colour drawn with `drawImage`, radius max(7 node radii,
   5 % of the short side) scaled 0.55-1 by level, centre alpha 0.42 at full level; the ring grey (track
   `--line-weak`, arc `--text-2`) outside the node; the layer follows `onDraw` only while a node
