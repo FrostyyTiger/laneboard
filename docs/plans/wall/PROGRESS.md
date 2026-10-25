@@ -207,6 +207,25 @@ Notes for every builder round (planner, night 1):
 - [ ] T26 (§2) [ui] [variant:all] (r14-operator #9) Caption kicker on a trouble site is set in the
   status colour with the shape: `■ CRIT · SITE 01 / 05`; calm sites keep the grey kicker — done when:
   `captionLines` test covers kicker text and status for crit, attention and calm.
+- [ ] T27 (bug) [ui] [variant:all] (r20-skeptic #1) Edge labels collide with node labels (`deploys` on a node,
+  `clones` on `demo hypervisor`) and cannot be read at 3 m: a Map option `edgeLabels: false` (defaults
+  on, so the app is unchanged) and the Wall sets it off — done when: a test shows the option drops link
+  labels from the scene and the default keeps them; a still shows no link label; `test/map-*.test.mjs`
+  pass unchanged.
+- [ ] T28 (§2 north star 2) [ui] [variant:all] (r20-skeptic #3) The ground must not slide under a moving
+  camera: the fixed `--tex-dots` on `.wall-stage` stays still during flights and the turn. Drop the dots
+  on the Wall (keep `--bg-canvas`; T9's vignette is the quiet ground) — done when: `wall.css` has no
+  dot texture on the stage and a film frame mid-flight shows a plain ground.
+- [ ] T29 (bug) [ui] [variant:all] (r20-skeptic #4) Two bracket vocabularies: the caption plate's corner
+  brackets (red on a crit site) look like a second lock, one sits 300 px from the real one. Remove the
+  plate's brackets; brackets mean the lock only — done when: `caption.js`/`wall.css` draw none and a
+  frame of HV2 shows one set of brackets.
+- [ ] T30 (bug) [ui] [variant:all] (r20-skeptic #8) The plate covers the site it is about (HOME's rooms
+  under it, ghost printer text): shift the tour's focus point by the plate's width so the site and its
+  subtree land in the free two-thirds, or choose the plate corner from the empty side (needs a focus
+  offset in the Wall's driver; any Map change is an option defaulting off) — done when: a pure test
+  checks the offset from plate width and screen size, and frames of HOME and REMOTE show the subtree
+  clear of the plate.
 
 ## Research questions
 
@@ -260,6 +279,14 @@ Notes for every builder round (planner, night 1):
   trouble sites long (~25 s), or alternate worst site and calm ones. Changes T5's timing: owner's call.
 - (r14-operator #4) At the overview, label only nodes at warn or worse, in status colour, so the only
   words are the problems (the halo part is T16). Changes what the overview shows: owner's call.
+- (r20-skeptic, all taste or plan changes) Wall mode = Map annotations off by default, each back only
+  where it says something. Specifically: #2 sublabels only when they hold a number (overview: only
+  warn+); #5 no lock on calm sites, lock only on trouble (T25 covers the node, not this); #6 calm
+  caption = name + `ok · all 12 calm`, CPU/MEM only at warn+, HARDWARE/WHERE to night 2's sheet; #10
+  `cursorMs: 0` (the cursor stops blinking once the name is typed; typing is your favourite moment);
+  #11 remove the bearing dial and ring legends rather than redesign (conflicts with T18 "dial stays");
+  #12 remove monograms and pips, `+2` only if it counts trouble; #13 hide the work ribbons on the
+  Wall; #15 drop `printing · 28%` text at the overview, keep the ring.
 
 ## Reviews
 
@@ -267,6 +294,8 @@ Notes for every builder round (planner, night 1):
   to owner), #9 covered by T9; hiding lanes and dial redesign went to the owner.
 - r14-operator.md: 9 findings, 7 became tasks (T20-T26: #1, #2, #5, #6, #7, #8, #9); #4 halo part covered
   by T16; #3 and the overview-labels part of #4 went to the owner.
+- r20-skeptic.md: 17 findings, 4 became tasks (T27-T30: #1, #3, #4, #8); covered: #7 (T20/T22), #9 (T23),
+  #14 (T16), #16 (T15), #17 (T16); #2, #5, #6, #10, #11, #12, #13, #15 went to the owner (taste or plan change).
 
 ## Scores
 
@@ -274,5 +303,6 @@ Notes for every builder round (planner, night 1):
 |---|---|---|---|---|---|---|---|---|
 | 9 (radial) | film-ui | 3 | 2 | 4 | 1 | 4 | 6 | 6 |
 | 14 (radial) | operator | 3 | 3 | 5 | 2 | 5 | 5 | 6 |
+| 20 (radial) | skeptic | 3 | 3 | 4 | 1 | 5 | 3 | 6 |
 
 ## Morning
