@@ -123,6 +123,29 @@ Notes for every builder round (planner, night 1):
   `public/js/wall/variants/<name>.js`; waits for Q5 — done when: a test checks its layout's main
   property (from the research), and a filmstrip `$RUN_DIR/shots/<round>-<name>/` shows the tour,
   caption, lock and trouble first, fps >= 27.
+- [ ] T15 (§2, §5) [variant:radial] (r9-film-ui #2, #7) Type hierarchy and stable labels: three steps
+  from mm via `devicePixelRatio` (Q3): sites condensed semibold caps for 1.5-2 m, rooms one step
+  down, services/leaves/lanes unlabelled at the overview (named only when the camera is in that
+  site); each label pinned outward from its node and not re-placed while on screen — done when: a
+  test checks the label-size function (site > room, mm to px) and a label's side stays fixed
+  across two draws; a still and a filmstrip show no overlapping or hopping labels. Option on the
+  Map defaults off.
+- [ ] T16 (§2) [variant:radial] (r9-film-ui #3) Trouble is the loudest thing: at the overview a crit
+  node is the only saturated area (halo a few node radii wide, via T8's glow layer), attention in
+  lanes stays at mark size and does not outshout a crit elsewhere — done when: a still of the
+  large demo during the crit window shows the crit as the first thing the eye lands on (reviewer
+  check), and a test checks the halo size ranks crit > attention > warn.
+- [ ] T17 (§5) [variant:radial] (r9-film-ui #4) Overview fit and safe area: fit to the bounds of the
+  drawn nodes and labels, not the outer ring; safe area 8 % top/bottom, 6 % sides; top-left
+  caption area kept clear — done when: a test checks no node or label lies outside the safe
+  area at 3:2 and 16:9, and the still no longer touches the top edge.
+- [ ] T18 (§5, T10) [variant:radial] (r9-film-ui #5) Wall hides desk chrome: ring legends and lane
+  pips off (with `rings: false` from T10, option defaults off); the bearing dial stays — done
+  when: a still shows no ring legend or pip, dial still drawn, and `test/map-*.test.mjs` pass unchanged.
+- [ ] T19 (§5) [variant:radial] (r9-film-ui #6, #8) Less ornament: calm services plain dots with no
+  halo, rooms one ring, halo only on the focused node and nodes in trouble; room-to-service
+  edges short stubs at the overview, full fan only when the camera is in that site — done when:
+  a still shows no halo on calm services and no hairball at `hv1`; option defaults off, map tests unchanged.
 
 ## Research questions
 
@@ -166,9 +189,22 @@ Notes for every builder round (planner, night 1):
   fps number is the VM's software raster (~17-21 fps), so the "fps >= 27 under the throttle" gate cannot
   pass on this VM for any variant. Options: let `film.mjs` (fenced) launch with SwiftShader and report
   script ms/frame next to fps, or judge fps on the real tablet. Rounds use the wrapper meanwhile.
+- (r9-film-ui) Camera phrasing for T5, as a taste proposal: ~0.6 s anticipation (turn eases out, target
+  brightens), flight on one ease-in-out, ~0.4 s stillness before the lock closes and the name types,
+  caption fades before the camera leaves. Adopt into T5?
+- (r9-film-ui) Hide the outermost rings (lanes, runs) at the overview, rolling their trouble up into
+  the builder? Changes what the radial shows; owner's call.
+- (r9-film-ui) Redesign the bearing dial as a thin tick ring with four numerals in the mono step: taste.
 
 ## Reviews
 
+- r9-film-ui.md: 9 findings, 5 became tasks (T15-T19: #2+#7, #3, #4, #5, #6+#8); #1 covered by T5 (phrasing
+  to owner), #9 covered by T9; hiding lanes and dial redesign went to the owner.
+
 ## Scores
+
+| round | persona | overview | legibility | status | touch | wow | calm | performance |
+|---|---|---|---|---|---|---|---|---|
+| 9 (radial) | film-ui | 3 | 2 | 4 | 1 | 4 | 6 | 6 |
 
 ## Morning
