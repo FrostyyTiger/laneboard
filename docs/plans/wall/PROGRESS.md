@@ -1,0 +1,143 @@
+# Wall: progress
+
+Night 1 (README §7): explore. The ground first, then one complete idle screen per direction, each
+filmed under the throttle; the panel reviews them; the owner picks in the morning.
+
+## Tasks
+
+Notes for every builder round (planner, night 1):
+- New tests are `test/wall-*.test.mjs`. `test/map-*.test.mjs` and `test/map.test.mjs` are fenced: a
+  new or changed file there is reverted, so never put Wall tests under that name.
+- Wall code lives in `public/wall.html`, `public/js/wall/`, `public/css/wall.css` (D1). Pure logic
+  (tour order, caption lines, variant choice, layouts) goes in its own module with no DOM, so a
+  test can import it directly (the pattern of `public/js/views/map/layout.js` and `model.js`).
+- A change to `public/js/views/map/` is an option that defaults off; the app's Map tests stay green.
+- Trouble comes from the existing status words (`server/map.mjs` `SEVERITY`: warn, attention, crit,
+  down) and the Map's shapes (■ crit, ▲ warn, ◆ low, `overlays.js` `SHAPE_CODE`), never new ones.
+
+- [ ] T1 (§7.1) Large demo fleet, static part: `test/tools/demo-fleet.mjs --size large` writes a
+  topology and feeds built in `test/helpers/demo-hub.mjs` (`DEMO_TOPOLOGY_LARGE`, one `demoFeed*`
+  per source, next to `DEMO_TOPOLOGY`/`demoFeed`): 5 sites (`hv1` and `hv2` hypervisors, a `cloud`
+  site, a `remote` site, a `home` site with lights and a 3D printer), rooms and services under
+  them, 100-150 nodes in `/api/map`, demo names only; the default size is unchanged — done when:
+  `test/wall-demo-large.test.mjs` boots the large map model and counts 5 sites and 100-150 nodes,
+  `test/demo-fleet.test.mjs` passes unchanged, and `curl /api/map` on the running demo agrees.
+- [ ] T2 (§7.1, D3) Feed extras: `server/map.mjs` carries `glow: {rgb, level}` and
+  `ring: {progress}` from a feed's guest or service onto its node (validated: rgb three 0-255
+  ints, level and progress 0..1, anything else dropped); the large demo's lights carry `glow`
+  and the printer a `ring` whose progress advances every tick; the app ignores both — done when:
+  `test/wall-feed-extras.test.mjs` shows valid extras pass, invalid ones drop, and the app's
+  `test/map.test.mjs` passes unchanged.
+- [ ] T3 (§7.1) Large demo fleet, live part: trouble that comes and goes on a schedule (one crit,
+  one attention, one warn, each on a different site, each clearing and returning), a door-like
+  feed event every few minutes (fewer with `--tick` slow), and `flow` links whose events make
+  comets — done when: `test/wall-demo-large.test.mjs` steps the large demo's cycle function
+  through a full period and sees each of crit, attention and warn appear and clear, and at least
+  one event per period.
+- [ ] T4 (§7.2) [ui] The Wall page ground: `public/wall.html`, `public/css/wall.css` (brighter
+  tokens scoped to the page: text-2 88 %, text-3 74 %, lines 0.16/0.30/0.48, dark only),
+  `public/js/wall/main.js` loading `/api/map` and the `/ws` map messages into
+  `createMap(el, { ambient: true })` (the app's `public/js/core/net.js` shows the message shape;
+  do not change it), `public/js/wall/variants.js` (`pickVariant(search)`: `?variant=` from a
+  registry, unknown or missing falls back to `radial`, `?demo=1` read here too), and
+  `window.__wallPerf = {frames, worstGapMs}` counted in `map.onDraw` — done when:
+  `test/wall-variant.test.mjs` covers the variant switch and demo flag, a still frame of
+  `wall.html?variant=radial` on the large demo shows the Map with no console error, and
+  `perf.json` from `film.mjs` reports frames.
+- [ ] T5 (§7.2) The camera tour: `public/js/wall/tour.js`, pure order and timing
+  (`tourOrder(nodes)`: sites with anything at warn or worse first, worst first, then calm ones;
+  re-ordered every cycle; overview ~20 s, fly in at zoom ~2.3, hold ~25 s, out, next; `?demo=1`
+  ~4 s per site) plus a small driver that calls `map.focus(id, zoom)` / `map.fit()` — done when:
+  `test/wall-tour.test.mjs` shows trouble visited first, a cleared site falling back into the calm
+  order next cycle, and demo timings; a filmstrip of `radial&demo=1` shows the camera going in and
+  out of sites.
+- [ ] T6 (§7.2) [ui] Captions: `public/js/wall/caption.js` with a pure `captionLines(node, model,
+  index, count)` (kicker `TARGET 02 / 05 · SITE`, name, 3-6 lines: the trouble line first in its
+  status colour with its shape, status, cpu/mem with thin bars, hardware/where/uptime from
+  `detail`, room count) and the DOM part: top-left plate (dark translucent, two corner brackets),
+  the name typed letter by letter in big condensed caps with a block cursor, lines fading in one by
+  one, fade out on leave; driven by the tour — done when: `test/wall-caption.test.mjs` covers the
+  lines for a calm site, a site in trouble and a node without detail; a filmstrip frame shows a
+  caption typed in, legible and not cut off.
+- [ ] T7 (§7.2) [ui] Target lock: `public/js/wall/lock.js`, four corner brackets that close in
+  around the focused node at `map.screenOf(id)` as the camera arrives and open as it leaves,
+  tracked every frame through `map.onDraw` — done when: a filmstrip frame shows the brackets on
+  the visited node, and a test (`test/wall-lock.test.mjs`) checks the bracket geometry function
+  (pure: size from node radius and zoom, closing over time).
+- [ ] T8 (§7.2, D3) [ui] Glow layer: `public/js/wall/glow.js`, a canvas under the Map's
+  transparent canvas that paints soft radial glows at `screenOf(id)` for nodes with `glow`
+  (their colour, size by `level`) and a progress ring for nodes with `ring`; no work when no node
+  carries either — done when: `test/wall-glow.test.mjs` covers which nodes paint and how
+  (pure part), and a still frame of the large demo shows the home lights glowing and the printer
+  ring under the throttle without fps dropping under 27.
+- [ ] T9 (§7.2) [ui] Frame: vignette (edges darkened so text sits on quiet ground), a big clock
+  bottom left, bottom right one line for the worst fleet problem (status colour and shape) and one
+  ambient fact, a small tag top right; `public/js/wall/frame.js` with a pure `worstLine(model)` —
+  done when: `test/wall-frame.test.mjs` covers the worst line (crit beats attention beats warn,
+  calm fleet says so), and a filmstrip of `radial&demo=1` (the baseline for every direction) shows
+  caption, lock, glow and frame together with fps at or over 27.
+- [ ] T10 (§5) Map layout option: `createMap(el, { layout })` takes a layout function with the
+  shape of `layout.js` `layout` (`{pos, center, kids}`), and `{ rings: false }` hides the ring
+  circles, ring labels and bearing dial; both default off (the radial layout and today's drawing)
+  — done when: `test/wall-map-layout.test.mjs` shows a custom layout places nodes where it says
+  and rings off draws no dial, and every `test/map-*.test.mjs` passes unchanged.
+- [ ] T11 (§5) [variant:radial] Today's constellation refined for a wall: spacing for 100-150
+  nodes, line density, label sizes for distance (sites and rooms legible at the overview,
+  services and leaves may be dots), in `public/js/wall/variants/radial.js` — done when: a
+  filmstrip `$RUN_DIR/shots/<round>-radial/` under the throttle shows site and room labels
+  legible at the overview, trouble the loudest thing, the tour visiting it first, fps >= 27.
+- [ ] T12 (§5) [variant:orbits] The rings as ellipses that use the full width; sites as planets
+  with their rooms in orbit around them, in `public/js/wall/variants/orbits.js` (a pure layout
+  through T10's option, `rings: false` plus its own orbit lines) — done when: a test checks the
+  layout fills the screen's aspect (no node outside the frame, width used); a filmstrip
+  `$RUN_DIR/shots/<round>-orbits/` shows the tour, caption, lock and trouble first, fps >= 27.
+- [ ] T13 (§5) [variant:islands] Each site its own cluster laid out across the screen, links between
+  sites as long arcs, the camera touring island to island, in `public/js/wall/variants/islands.js`
+  — done when: a test checks islands do not overlap and fill the aspect; a filmstrip
+  `$RUN_DIR/shots/<round>-islands/` shows the tour, caption, lock and trouble first, fps >= 27.
+- [ ] T14 (§5) [variant:wild] The wild-card direction from Q5's answer (named after it), in
+  `public/js/wall/variants/<name>.js`; waits for Q5 — done when: a test checks its layout's main
+  property (from the research), and a filmstrip `$RUN_DIR/shots/<round>-<name>/` shows the tour,
+  caption, lock and trouble first, fps >= 27.
+
+## Research questions
+
+- [ ] Q1 How do film and TV interface designers (practitioners' own write-ups and talks: e.g. the
+  studios behind well-known screen graphics) keep a "movie UI" readable while it looks dense:
+  hierarchy, type choices, motion timing (typing speed, fade lengths, hold times), what they leave
+  out? Numbers where they give them. — for T6, T7, T9
+- [ ] Q2 Calm technology and ambient displays: what makes an always-on screen glanceable without
+  being noticed until something is wrong (peripheral attention, how trouble should escalate, how
+  much motion is too much for a screen in a room all day)? — for T5, T9
+- [ ] Q3 Legibility at distance: minimum cap height or x-height per metre of viewing distance for a
+  glance (3 s) at 1-3 m, contrast ratios needed on a dark ground, condensed vs normal widths,
+  tracking for caps; in px for a 2736x1824 12.3" tablet and a 1920x1080 24" screen. — for T6, T9, T11
+- [ ] Q4 Graph layouts that use a wide screen for 100-150 nodes over 4-6 sites: elliptical/orbital,
+  cluster (grouped force, treemap-of-clusters), hierarchical edge bundling for the long links;
+  their parameters, and how ops tools draw infrastructure (open-source network/topology maps,
+  service maps) — what holds up and what turns to hairballs. — for T11, T12, T13
+- [ ] Q5 The wild card: the most promising way to lay out 100-150 nodes over 4-6 sites on a wide
+  (3:2 or 16:9) screen that is neither radial, nor orbits, nor islands; one recommendation with
+  why it suits a camera tour, trouble first and labels at 3 m, and its layout algorithm in enough
+  detail to build in a day. — for T14
+- [ ] Q6 Touch on wall and kiosk screens: target sizes (mm and px at the tablet's density), gestures
+  that work for people who did not set the screen up (tap, back, pinch), idle timeouts and how a
+  kiosk shows "touch to explore" without clutter. — for night 2 (touch explorer)
+
+## Later
+
+- §7.1 `?demo-map=<file>`: a static fixture the Wall loads when no hub runs (not needed while
+  `demo-fleet.mjs --size large` covers the night; useful for filming without a hub).
+- §7.2 Reduced motion (D5) on the Wall page: night 2 (README §7 Night 2).
+- §7.5 The persona panel over every filmstrip: done by the review rounds, not builder tasks.
+- §7.6 The morning report comparing the directions with their scores and filmstrips: the last round.
+- Night 2 touch explorer (tap, fly, detail sheet, back, resume after a minute): written after the
+  owner's pick; Q6 prepares it.
+
+## For the owner
+
+## Reviews
+
+## Scores
+
+## Morning
