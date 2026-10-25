@@ -5,7 +5,7 @@
 // plus a small loopback forwarder that plays `tailscale serve`.
 //
 //   node test/tools/demo-fleet.mjs [--port 7795] [--builders 3] [--tick 4000] [--design <name>]
-//     [--no-runs-route]
+//     [--no-runs-route] [--size small|large]
 //
 // Then open http://127.0.0.1:<port>/ (from another machine:
 // `ssh -L <port>:127.0.0.1:<port> <host>`). Ctrl-C stops everything.
@@ -13,6 +13,9 @@
 // tokens: the forwarder appends it to /css/tokens.css (runs plan T10).
 // `--no-runs-route` leaves GET /api/runs to the hub (404), so the Runs view
 // shows what a real hub shows (runs plan T21).
+// `--size large` swaps the Map's one-hypervisor topology for five sites and
+// 100-150 nodes (`DEMO_TOPOLOGY_LARGE`, one feed per site), the fleet the
+// Wall is judged on (docs/plans/wall/README.md §7.1); the builders are the same.
 //
 // What it shows:
 //   builder-a  lanes in working / waiting (permission + question) / review-ready
@@ -63,7 +66,7 @@ import { parseArgs } from 'node:util';
 import { WebSocket, WebSocketServer } from 'ws';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoFeed, demoRunsAnswer, demoMorningWithRuns, demoWsText, demoAttention, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoMapLarge, writeDemoFeeds, demoRunsAnswer, demoMorningWithRuns, demoWsText, demoAttention, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -82,11 +85,12 @@ const { values: args } = parseArgs({
     tick: { type: 'string', default: '4000' },
     design: { type: 'string' },
     'no-runs-route': { type: 'boolean', default: false },
+    size: { type: 'string', default: 'small' },
     help: { type: 'boolean', short: 'h', default: false },
   },
 });
 if (args.help) {
-  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms] [--design <name>] [--no-runs-route]\n');
+  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms] [--design <name>] [--no-runs-route] [--size small|large]\n');
   process.exit(0);
 }
 const PORT = Number(args.port);
@@ -94,6 +98,11 @@ if (!Number.isInteger(PORT) || PORT < MIN_PORT || PORT > 65535 || FORBIDDEN_PORT
   process.stderr.write(`demo-fleet: --port must be an integer >= ${MIN_PORT} and not 7777/7778\n`);
   process.exit(2);
 }
+if (!['small', 'large'].includes(args.size)) {
+  process.stderr.write('demo-fleet: --size must be small or large\n');
+  process.exit(2);
+}
+const SIZE = args.size;
 const N_BUILDERS = Math.max(2, Math.min(3, Number(args.builders) || 3));
 const TICK_MS = Math.max(500, Number(args.tick) || 4000);
 
@@ -497,7 +506,7 @@ async function main() {
   }
 
   const mapDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lb-demo-map-'));
-  const map = writeDemoMap(mapDir);
+  const map = SIZE === 'large' ? writeDemoMapLarge(mapDir) : writeDemoMap(mapDir);
   const origins = [`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`];
   const hub = await boot({
     mode: 'hub',
@@ -531,7 +540,7 @@ async function main() {
   let n = 0;
   const tick = async () => {
     n++;
-    try { writeDemoFeed(map.feedsDir); } catch (e) { log(`feed write failed: ${e.message}`); }
+    try { writeDemoFeeds(map.feedsDir, Date.now(), SIZE); } catch (e) { log(`feed write failed: ${e.message}`); }
     for (const id of ids) {
       const fb = fakes.get(id);
       DEMO[id].cycle(n, fb.sessions);
@@ -549,7 +558,7 @@ async function main() {
   setTimeout(() => { for (const id of ids) pushExtras(id); }, 1500);
   const timer = setInterval(() => { tick().catch((e) => log(`tick failed: ${e.message}`)); }, TICK_MS);
 
-  log(`hub "${DEMO_HOSTNAME}" (mode hub) + ${ids.join(', ')}`);
+  log(`hub "${DEMO_HOSTNAME}" (mode hub) + ${ids.join(', ')}, map size ${SIZE}`);
   log(`open  http://127.0.0.1:${PORT}/   (signed in as ${DEMO_USER} via the serve-like forwarder)`);
   if (DESIGN) log(`design direction "${DESIGN.name}" laid over /css/tokens.css`);
   log(`hub local listener http://127.0.0.1:${hub.port}/ (read-only), ingress ${hub.ingressPort}`);

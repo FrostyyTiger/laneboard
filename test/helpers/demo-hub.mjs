@@ -285,3 +285,207 @@ export function demoAttention(id, sessions, now = Date.now()) {
   for (const s of sessions) s.attentionScore = attentionScore(s, now);
   return attentionList(sessions, (name) => fkey(id, name), now).map((a) => ({ ...a, builder: id }));
 }
+
+// ------------------------------------------------------------ the large fleet
+//
+// `--size large` (Wall plan T1, docs/plans/wall/README.md §7.1): the Wall is
+// judged on a fleet the size of a real one, 100-150 nodes over five sites.
+// One table per site drives both the topology and that site's feed, so the
+// two always agree: `hv1` (the small demo's rooms, the builders and CI, plus
+// the house services), `hv2` (storage, media, a GPU box, a small cluster),
+// `cloud` (edges, the production API, its database), `remote` (tailnet peers
+// at an office, one laptop asleep) and `home` (lights and a 3D printer, the
+// nodes Wall's glow and ring extras will ride on, T2). Guest names are unique
+// across sources: the Map merges same-named machines of different feeds.
+// Calm on its own; the trouble that comes and goes is the live part (T3).
+
+const room = (id, vmid, sub, services = [], over = {}) => ({ id, vmid, sub, services, ...over });
+const svc = (name, sub, status = 'ok') => ({ name, sub, status });
+
+/** Every site of the large demo: its host as the feed says it, its rooms with their services. */
+export const DEMO_SITES_LARGE = Object.freeze([
+  {
+    id: 'lab', source: 'hv1', label: 'hv1', sub: 'hypervisor', ip: '192.0.2.10',
+    host: { cpu: 0.34, mem: 0.62, disk: 0.48, sub: 'demo hypervisor · 128 GB', detail: { Hardware: '2× 16-core · 128 GB', Where: 'rack 1' } },
+    rooms: [
+      room('room-a', 101, undefined, [], { label: 'vm-a', builder: 'builder-a', tags: ['tag:builder'] }),
+      room('room-b', 102, undefined, [], { label: 'vm-b', builder: 'builder-b', tags: ['tag:builder'] }),
+      room('room-c', 103, undefined, [], { label: 'vm-c', builder: 'builder-c', tags: ['tag:builder'] }),
+      room('ci', 104, 'CI runners', [svc('runner-1', 'job · 4m', 'working'), svc('runner-2', 'waiting for a job', 'idle'), svc('runner-3', 'waiting for a job', 'idle')], { tags: ['tag:ci'], ci: { runner: true, for: '*' } }),
+      room('backup', 105, 'nightly backups', [], { unlisted: true }),
+      room('proxy', 110, 'reverse proxy', [svc('ingress', 'tls · 42 routes'), svc('certs', 'renews in 41d')]),
+      room('db', 111, 'databases', [svc('postgres', '14 dbs'), svc('redis', 'cache'), svc('db-dumps', 'hourly')]),
+      room('monitor', 112, 'metrics and logs', [svc('metrics', '1.2k series'), svc('logs', '9 GB/day'), svc('alerting', '12 rules')]),
+      room('dns', 113, 'resolver', [svc('resolver', 'cache 94%'), svc('dhcp', '61 leases')]),
+      room('git-mirror', 114, 'git mirror', [svc('mirror', '38 repos')]),
+      room('registry', 115, 'images', [svc('images', '212 tags')]),
+      room('template', 199, 'base image', [], { expect: 'stopped', stopped: true }),
+    ],
+  },
+  {
+    id: 'hv2', source: 'hv2', label: 'hv2', sub: 'hypervisor', ip: '192.0.2.20',
+    host: { cpu: 0.41, mem: 0.71, disk: 0.66, gpu: 0.38, sub: 'demo hypervisor · GPU', detail: { Hardware: '24-core · 192 GB · 1 GPU', Where: 'rack 2' } },
+    rooms: [
+      room('storage', 201, 'file server', [svc('nfs', '18 TB'), svc('smb', '4 shares'), svc('scrub', 'weekly', 'idle')]),
+      room('media', 202, 'media', [svc('library', '3.1k items'), svc('transcode', 'idle', 'idle')]),
+      room('gpu-box', 203, 'inference', [svc('inference', '2 models', 'working'), svc('queue', '0 waiting', 'idle'), svc('trainer', 'idle', 'idle')]),
+      room('k8s-1', 204, 'cluster node', [svc('ingress-1', 'nginx'), svc('apps-1', '23 pods')]),
+      room('k8s-2', 205, 'cluster node', [svc('apps-2', '19 pods')]),
+      room('k8s-3', 206, 'cluster node', [svc('apps-3', '21 pods')]),
+      room('secrets', 207, 'secrets', [svc('vault', 'unsealed'), svc('audit-log', 'shipping')]),
+      room('build-cache', 208, 'build cache', [svc('cache', '61% hit')]),
+      room('sandbox', 209, 'scratch VM', [], { expect: 'stopped', stopped: true }),
+    ],
+  },
+  {
+    id: 'cloud', source: 'cloud', label: 'cloud', sub: 'provider · eu-1', ip: '198.51.100.10',
+    host: { cpu: 0.22, mem: 0.47, sub: 'provider · eu-1', detail: { Where: 'eu-1' } },
+    rooms: [
+      room('edge-1', 'edge-1', 'edge', [svc('cdn-1', '98% cached'), svc('waf-1', '3 rules hit')], { type: 'cloud' }),
+      room('edge-2', 'edge-2', 'edge', [svc('cdn-2', '97% cached')], { type: 'cloud' }),
+      room('api-prod', 'api-prod', 'production', [svc('api', '420 req/s'), svc('worker', '3 jobs', 'working'), svc('scheduler', '14 cron')], { type: 'cloud' }),
+      room('api-staging', 'api-staging', 'staging', [svc('api-stg', '4 req/s')], { type: 'cloud' }),
+      room('db-prod', 'db-prod', 'database', [svc('primary', 'lag 0s'), svc('replica', 'lag 1s')], { type: 'cloud' }),
+      room('object-store', 'object-store', 'buckets', [svc('buckets', '7 buckets')], { type: 'cloud' }),
+      room('mail', 'mail', 'mail', [svc('smtp', 'queue 0'), svc('imap', '12 users')], { type: 'cloud' }),
+      room('status-page', 'status-page', 'status page', [], { type: 'cloud' }),
+    ],
+  },
+  {
+    id: 'remote', source: 'remote', label: 'remote', sub: 'office · tailnet', ip: '203.0.113.10',
+    host: { cpu: 0.12, mem: 0.33, sub: 'office gateway', detail: { Where: 'office' } },
+    rooms: [
+      room('office-nas', 'office-nas', 'office storage', [svc('restic', 'last 2h ago'), svc('verify', 'weekly', 'idle')], { type: 'tailnet' }),
+      room('office-printer', 'office-printer', 'printer', [], { type: 'tailnet' }),
+      room('laptop-1', 'laptop-1', 'laptop', [], { type: 'tailnet' }),
+      room('laptop-2', 'laptop-2', 'laptop', [], { type: 'tailnet', offline: true }),
+      room('phone-1', 'phone-1', 'phone', [], { type: 'tailnet' }),
+      room('vpn-gw', 'vpn-gw', 'exit node', [], { type: 'tailnet' }),
+    ],
+  },
+  {
+    id: 'home', source: 'home', label: 'home', sub: 'house', ip: '203.0.113.20',
+    host: { cpu: 0.09, mem: 0.41, sub: 'home hub', detail: { Where: 'hallway closet' } },
+    rooms: [
+      room('automation', 'automation', 'home automation', [svc('zigbee', '23 devices'), svc('rules', '31 rules')], { type: 'device' }),
+      room('hall-light', 'hall-light', 'light', [], { type: 'device' }),
+      room('desk-light', 'desk-light', 'light', [], { type: 'device' }),
+      room('living-light', 'living-light', 'light', [], { type: 'device' }),
+      room('kitchen-light', 'kitchen-light', 'light', [], { type: 'device' }),
+      room('porch-light', 'porch-light', 'light', [], { type: 'device' }),
+      room('printer-3d', 'printer-3d', '3D printer', [svc('print-job', 'idle', 'idle')], { type: 'device' }),
+      room('thermostat', 'thermostat', 'heating', [], { type: 'device' }),
+      room('front-door', 'front-door', 'door sensor', [], { type: 'device' }),
+    ],
+  },
+]);
+
+// Links that say how the sites depend on each other: a few long ones between
+// sites, so a layout has something to bundle.
+const LARGE_LINKS = [
+  { from: 'ci', to: 'registry', kind: 'flow', label: 'pushes images' },
+  { from: 'ci', to: 'git-mirror', kind: 'dep', label: 'clones' },
+  { from: 'registry', to: 'k8s-1', kind: 'flow', label: 'deploys' },
+  { from: 'ci', to: 'api-staging', kind: 'flow', label: 'deploys' },
+  { from: 'api-staging', to: 'api-prod', kind: 'flow', label: 'promotes' },
+  { from: 'api-prod', to: 'db-prod', kind: 'dep', label: 'reads and writes' },
+  { from: 'edge-1', to: 'api-prod', kind: 'dep' },
+  { from: 'edge-2', to: 'api-prod', kind: 'dep' },
+  { from: 'db', to: 'storage', kind: 'flow', label: 'dumps' },
+  { from: 'storage', to: 'office-nas', kind: 'flow', label: 'offsite copy' },
+  { from: 'monitor', to: 'status-page', kind: 'flow', label: 'publishes' },
+  { from: 'gpu-box', to: 'build-cache', kind: 'share', label: 'same NVMe' },
+  { from: 'automation', to: 'monitor', kind: 'flow', label: 'sensor data' },
+  { from: 'proxy', to: 'k8s-1', kind: 'dep' },
+];
+
+const svcId = (r, s) => `${r.id}-${s.name}`;
+const refOf = (site, r) => `${site.source}/${r.vmid}`;
+
+/** The large demo's topology: five sites, their rooms and services, and links. */
+export const DEMO_TOPOLOGY_LARGE = Object.freeze({
+  nodes: DEMO_SITES_LARGE.flatMap((site) => [
+    { id: site.id, kind: 'site', label: site.label, feed: site.source, sub: site.sub },
+    ...site.rooms.flatMap((r) => [
+      {
+        id: r.id, parent: site.id, kind: 'room', label: r.label ?? r.id, feed: refOf(site, r),
+        ...(r.sub ? { sub: r.sub } : {}), ...(r.builder ? { builder: r.builder } : {}), ...(r.ci ? { ci: r.ci } : {}),
+        ...(r.expect ? { expect: r.expect } : {}),
+      },
+      ...r.services.map((s) => ({ id: svcId(r, s), parent: r.id, kind: 'service', label: s.name, feed: `${refOf(site, r)}/${s.name}` })),
+    ]),
+  ]),
+  links: LARGE_LINKS,
+});
+
+const LARGE_DAY = 86_400;
+
+/** One site's feed as its feeder would push it, stamped `now`. */
+function siteFeed(site, now) {
+  const ip = site.ip.split('.');
+  const guests = site.rooms.filter((r) => !r.unlisted).map((r, i) => {
+    const n = typeof r.vmid === 'number' ? r.vmid : 7 * (i + 1);
+    const g = {
+      vmid: typeof r.vmid === 'number' ? r.vmid : undefined,
+      name: r.label ?? r.id,
+      type: r.type ?? 'qemu',
+      status: r.stopped ? 'stopped' : r.offline ? 'offline' : 'running',
+      cpu: Math.round((0.04 + (n % 7) * 0.07) * 100) / 100,
+      memFrac: Math.round((0.22 + (n % 5) * 0.11) * 100) / 100,
+      uptime: LARGE_DAY * (1 + (n % 23)),
+      tags: r.tags ?? [],
+      ips: [`${ip.slice(0, 3).join('.')}.${Number(ip[3]) + i + 1}`],
+    };
+    if (r.offline) { g.lastSeen = now - 3 * 3600_000; delete g.cpu; delete g.memFrac; }
+    if (r.services.length) g.services = r.services.map((s) => ({ ...s }));
+    return g;
+  });
+  if (site.source === 'hv1') {
+    guests.push({ vmid: 106, name: 'scratch', type: 'qemu', status: 'running', cpu: 0.18, memFrac: 0.3, uptime: 3600, tags: ['tag:builder'], ips: ['192.0.2.16'], sub: 'not in the topology' });
+  }
+  return {
+    source: site.source,
+    at: now,
+    every: 30,
+    host: { name: site.label, tags: site.source === 'hv1' ? ['tag:infra'] : [], ips: [site.ip], ...site.host },
+    guests,
+  };
+}
+
+/** The `hv1` feed of the large demo (the small demo's rooms and more), stamped `now`. */
+export const demoFeedHv1 = (now = Date.now()) => siteFeed(DEMO_SITES_LARGE[0], now);
+/** The `hv2` feed: storage, media, a GPU box, a three-node cluster. */
+export const demoFeedHv2 = (now = Date.now()) => siteFeed(DEMO_SITES_LARGE[1], now);
+/** The `cloud` feed: edges, the production API and its database. */
+export const demoFeedCloud = (now = Date.now()) => siteFeed(DEMO_SITES_LARGE[2], now);
+/** The `remote` feed: tailnet peers at an office, one laptop asleep. */
+export const demoFeedRemote = (now = Date.now()) => siteFeed(DEMO_SITES_LARGE[3], now);
+/** The `home` feed: the automation hub, lights, a 3D printer, a door sensor. */
+export const demoFeedHome = (now = Date.now()) => siteFeed(DEMO_SITES_LARGE[4], now);
+
+/** Every feed of the large demo, one per source. */
+export function demoFeedsLarge(now = Date.now()) {
+  return [demoFeedHv1(now), demoFeedHv2(now), demoFeedCloud(now), demoFeedRemote(now), demoFeedHome(now)];
+}
+
+/** Write the feeds of a demo size into `feedsDir`, each to a temp name then renamed. */
+export function writeDemoFeeds(feedsDir, now = Date.now(), size = 'small') {
+  if (size !== 'large') { writeDemoFeed(feedsDir, now); return; }
+  for (const feed of demoFeedsLarge(now)) {
+    const file = path.join(feedsDir, `${feed.source}.json`);
+    fs.writeFileSync(`${file}.tmp`, JSON.stringify(feed, null, 2));
+    fs.renameSync(`${file}.tmp`, file);
+  }
+}
+
+/** `writeDemoMap` for the large demo: its topology, its five feeds, the same policy. */
+export function writeDemoMapLarge(dir, now = Date.now()) {
+  const file = path.join(dir, 'map.json');
+  const feedsDir = path.join(dir, 'feeds');
+  const policyFile = path.join(dir, 'policy.hujson');
+  fs.mkdirSync(feedsDir, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(DEMO_TOPOLOGY_LARGE, null, 2));
+  fs.writeFileSync(policyFile, DEMO_POLICY);
+  writeDemoFeeds(feedsDir, now, 'large');
+  return { file, feedsDir, policyFile };
+}
