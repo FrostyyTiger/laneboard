@@ -518,6 +518,24 @@ A builder without a hub key keeps reading feeds as before.
 
 Probes run on the hub too, from the hub's own topology file.
 
+## Ambient: the Map on a wall or desk screen
+
+The Map module can run on its own as something to look at from across a room:
+no HUD and no input, the constellation turning slowly inside a still dial (one
+turn in ten minutes), frames capped at 30 per second so a small machine stays
+cool. The movement on it still means what the table above says.
+
+```js
+import { createMap } from './js/views/map/index.js';
+const map = createMap(el, { ambient: true });   // or { ambient: { drift: radiansPerSecond, fps } }
+map.update(await (await fetch('/api/map')).json());
+map.onDraw(() => { /* after every frame: map.screenOf(id) is where a node is drawn now */ });
+```
+
+`prefers-reduced-motion` stops the turn like every other animation. A page
+that wakes on touch puts its own layer over the Map; the Map never takes input
+in this mode.
+
 ## API
 
 - `GET /api/map` returns the model the view draws: `{ title, fleet: {builders}, nodes, links, events, error?, feeds?, generatedAt }`. `feeds: false` means this board does not read feeds (a builder a hub watches).

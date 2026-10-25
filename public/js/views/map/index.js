@@ -38,6 +38,11 @@
 //   map.update({ nodes, links, events });
 //   map.event({ node: 'x', kind: 'ok', text: '…' });
 //   map.onSelect((sel, node) => navigate({ sel }));
+//
+// Ambient (a wall or desk screen, see AMBIENT): no HUD, no input, a slow turn.
+//
+//   const map = createMap(el, { ambient: true });          // or { drift, fps }
+//   map.onDraw(() => paintUnder(map.screenOf('lamp')));     // after every frame
 
 import { damp, settled, wrapAngle, flight, inertia, stage, easeInOut } from '../../core/motion.js';
 import {
@@ -68,6 +73,14 @@ const AMBIENT_COMETS = 16;
 const SEEN_MAX = 400;
 
 const MODES = ['full', 'split', 'pip'];
+
+/**
+ * Ambient: the Map as something to look at from across a room (a wall or desk
+ * screen). No HUD and no input; the constellation turns slowly inside a still
+ * dial, and frames are capped so a small machine stays cool. Drift is radians
+ * per second (one turn in ten minutes by default).
+ */
+const AMBIENT = { drift: TAU / 600, fps: 30 };
 
 const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 const pageHidden = () => globalThis.document?.visibilityState === 'hidden';
@@ -136,6 +149,8 @@ export function migrateFolds(list, localId) {
 export function createMap(root, opts = {}) {
   root.classList.add('map');
   root.replaceChildren();
+  const amb = opts.ambient ? { ...AMBIENT, ...(opts.ambient === true ? {} : opts.ambient) } : null;
+  if (amb) root.classList.add('map-ambient');
 
   const canvas = h('canvas', 'map-canvas');
   canvas.setAttribute('role', 'img');
@@ -173,6 +188,10 @@ export function createMap(root, opts = {}) {
 
   hud.append(head, readoutEl, find, ...(legacyPanel ? [panel] : []), tip);
   root.append(canvas, hud);
+  if (amb) {
+    hud.hidden = true;
+    canvas.style.pointerEvents = 'none';
+  }
 
   const ctx = canvas.getContext('2d');
   const renderer = createRenderer(ctx, readPalette(root));
@@ -232,13 +251,24 @@ export function createMap(root, opts = {}) {
   let readoutText = '';
   const selectCbs = new Set();
   const hoverCbs = new Set();
+  const drawCbs = new Set();
+  let spin = 0;                   // ambient turn of the constellation around the core, radians
   const perfOn = opts.perf ?? /[?&#]mapperf=1\b/.test(`${globalThis.location?.search ?? ''}${globalThis.location?.hash ?? ''}`);
   const drawMs = [];
 
   const view = () => ({ W, H, fitScale });
   const scale = () => fitScale * cam.z;
-  const toScreen = (p) => ({ x: W / 2 + (p.x - cam.x) * scale(), y: H / 2 + (p.y - cam.y) * scale() });
-  const toWorld = (x, y) => ({ x: (x - W / 2) / scale() + cam.x, y: (y - H / 2) / scale() + cam.y });
+  // The spin turns the world around the core before the camera sees it.
+  const toScreen = (p) => {
+    const cs = Math.cos(spin), sn = Math.sin(spin);
+    const x = p.x * cs - p.y * sn, y = p.x * sn + p.y * cs;
+    return { x: W / 2 + (x - cam.x) * scale(), y: H / 2 + (y - cam.y) * scale() };
+  };
+  const toWorld = (sx, sy) => {
+    const x = (sx - W / 2) / scale() + cam.x, y = (sy - H / 2) / scale() + cam.y;
+    const cs = Math.cos(spin), sn = Math.sin(spin);
+    return { x: x * cs + y * sn, y: -x * sn + y * cs };
+  };
 
   // --- sizing
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => resize()) : null;
@@ -246,6 +276,7 @@ export function createMap(root, opts = {}) {
 
   /** The HUD row and a phone's bottom bar, from the HUD's padding (views/map.css). */
   function vInsets() {
+    if (amb) return { top: 0, bottom: 0 };
     const cs = typeof getComputedStyle === 'function' ? getComputedStyle(hud) : null;
     return { top: parseFloat(cs?.paddingTop) || 0, bottom: parseFloat(cs?.paddingBottom) || 0 };
   }
@@ -923,6 +954,11 @@ export function createMap(root, opts = {}) {
 
   function frame(now) {
     raf = 0;
+    // Ambient frames are capped: skip this one if the last came too recently.
+    if (amb?.fps && lastFrame && now - lastFrame < 1000 / amb.fps - 2) {
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     // Easing is by elapsed time, not per frame: a browser throttles frames in
     // a hidden or occluded window, and a map caught half-way out after one
     // late frame looks broken rather than slow.
@@ -1043,6 +1079,10 @@ export function createMap(root, opts = {}) {
     pulses = pulses.filter((p) => now - p.t0 < 1500);
     comets = comets.filter((c) => now - c.t0 < c.dur);
     if (pulses.length || comets.length) moving = true;
+    if (amb && !still && amb.drift) {
+      spin = (spin + amb.drift * dt / 1000) % TAU;
+      if (!pageHidden()) moving = true;
+    }
     if (!still) {
       // The ambient layer: pings on nodes that wait for someone, spinners on
       // working lanes, and a slow drift of comets along live flows.
@@ -1070,7 +1110,7 @@ export function createMap(root, opts = {}) {
     const memo = new Map();
     const near = (hover ?? highlighted ?? selected) ? neighbours.get(hover ?? highlighted ?? selected) ?? new Set() : new Set();
     return {
-      W, H, now, s: scale(), zoom: cam.z, toScreen,
+      W, H, now, s: scale(), zoom: cam.z, toScreen, spin,
       pos: lay.pos, nodes: cur, byId, links: vlinks, overlay: shownOverlay(), reach: vreach,
       rolled: (id) => rollup(id, byId, kidsRoll, memo),
       folded, kids: kidsAll,
@@ -1104,7 +1144,8 @@ export function createMap(root, opts = {}) {
       if (sp.x >= -40 && sp.y >= -40 && sp.x <= W + 40 && sp.y <= H + 40) n++;
     }
     drawnCount = n;
-    renderReadout();
+    if (!amb) renderReadout();
+    for (const cb of drawCbs) cb(now);
   }
 
   /** p95 of the recent draw times (ms), or null. */
@@ -1189,6 +1230,8 @@ export function createMap(root, opts = {}) {
     highlight,
     onSelect: (cb) => on(selectCbs, cb),
     onHover: (cb) => on(hoverCbs, cb),
+    // Called after every drawn frame (ambient: to paint in step with the spin).
+    onDraw: (cb) => on(drawCbs, cb),
     snapshotScene,
     overlay: shownOverlay,
     // The overlays this model can show, in `o` order (reach only with reach links).
@@ -1214,6 +1257,7 @@ export function createMap(root, opts = {}) {
       document.removeEventListener('visibilitychange', onVisible);
       selectCbs.clear();
       hoverCbs.clear();
+      drawCbs.clear();
       root.replaceChildren();
     },
   };

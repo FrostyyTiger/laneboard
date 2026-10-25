@@ -651,7 +651,7 @@ export function createRenderer(ctx, palette) {
     const text = `+${scene.kids?.get(id)?.length ?? 0}`;
     ctx.font = `600 9.5px ${P.mono}`;
     const w = measure(text) + 8;
-    const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
+    const ang = (c.t ?? scene.pos?.get(id)?.angle ?? 0) + (scene.spin ?? 0);
     const { x, y } = platePlace(sp, ang, Math.max(ring, outer - 0.5), w, 14, c0, hairlines);
     return { text, ring, x, y, w, h: 14 };
   }
@@ -935,7 +935,7 @@ export function createRenderer(ctx, palette) {
         plan.push({ id, n, core: true, text, x: sp.x, y, fade, rank: 0, box: { x0: sp.x - w / 2, y0: y - 7, x1: sp.x + w / 2, y1: y + 7 } });
         continue;
       }
-      const ang = c.t ?? scene.pos?.get(id)?.angle ?? 0;
+      const ang = (c.t ?? scene.pos?.get(id)?.angle ?? 0) + (scene.spin ?? 0);
       // From the outermost ring the node draws, plus half a text line where
       // the label sits above or below it, so the backing never covers a ring.
       let R = outerR.get(id) ?? ringOuter(n, r, { folded: Boolean(scene.folded?.has(id)) });

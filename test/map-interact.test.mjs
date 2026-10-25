@@ -400,6 +400,36 @@ test('overlays: setOverlay persists, invalid names fall back to status, the read
   assert.equal(map.overlay(), 'status');
 });
 
+test('ambient: no HUD, no input, the constellation turns around the core and onDraw follows every frame', async (t) => {
+  const { dom, root, map, canvas } = await mount({ ambient: { drift: 1, fps: 30 } }, { reduced: false });
+  t.after(() => { map.destroy(); dom.restore(); });
+  assert.ok(root.classList.contains('map-ambient'));
+  assert.equal(byClass(root, 'map-hud').hidden, true, 'the HUD is hidden');
+  assert.equal(canvas.style.pointerEvents, 'none', 'no input');
+  let drawn = 0;
+  map.onDraw(() => { drawn++; });
+  map.update(fleetModel());
+  dom.flush(80);
+  const centre = map.screenOf('__core');
+  const a = map.screenOf('builder:builder-a');
+  dom.flush(30);
+  const b = map.screenOf('builder:builder-a');
+  assert.ok(drawn > 0, 'onDraw ran');
+  assert.ok(Math.hypot(b.x - a.x, b.y - a.y) > 1, 'it turned');
+  const r = (p) => Math.hypot(p.x - centre.x, p.y - centre.y);
+  assert.ok(Math.abs(r(a) - r(b)) < 0.5, 'around the core, at the same radius');
+});
+
+test('ambient under reduced motion stands still', async (t) => {
+  const { dom, map } = await mount({ ambient: true }, { reduced: true });
+  t.after(() => { map.destroy(); dom.restore(); });
+  map.update(fleetModel());
+  dom.flush(80);
+  const a = map.screenOf('builder:builder-a');
+  dom.flush(30);
+  assert.deepEqual(map.screenOf('builder:builder-a'), a);
+});
+
 test('reach: refused and skipped without reach links, shown with them; a stored reach waits for them', async (t) => {
   const dom = installDom();
   dom.storage.set(OVERLAY_KEY, 'reach');
