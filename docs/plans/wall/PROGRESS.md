@@ -14,6 +14,16 @@ Notes for every builder round (planner, night 1):
 - A change to `public/js/views/map/` is an option that defaults off; the app's Map tests stay green.
 - Trouble comes from the existing status words (`server/map.mjs` `SEVERITY`: warn, attention, crit,
   down) and the Map's shapes (■ crit, ▲ warn, ◆ low, `overlays.js` `SHAPE_CODE`), never new ones.
+- Filming (round 7): headless Chromium on this VM hangs on ANY page with an animated `<canvas>`
+  once CPU throttling is on (a 7-line canvas page hangs too; 1x is fine), so `film.mjs` as-is
+  never finishes on the Wall. Workaround that does not touch the fenced tool: a wrapper
+  `$RUN_DIR/chrome-swiftshader.sh` that `exec`s the playwright chromium with
+  `--use-angle=swiftshader --enable-unsafe-swiftshader "$@"`, then `CHROME=$RUN_DIR/chrome-swiftshader.sh
+  node docs/plans/wall/loop/film.mjs …`. SwiftShader rasterises on the CPU at 2736x1824, so its
+  fps measures this VM's software GL, not the page (wall: ~21 fps at 1x, ~17 at 4x without
+  screenshots, 5 with them). Judge the page's cost by script time per frame instead (wrap
+  `requestAnimationFrame` callbacks and time them; T4: 6.7 ms average at 4x) until the owner
+  decides (see For the owner).
 
 - [x] T1 (§7.1) Large demo fleet, static part: `test/tools/demo-fleet.mjs --size large` writes a
   topology and feeds built in `test/helpers/demo-hub.mjs` (`DEMO_TOPOLOGY_LARGE`, one `demoFeed*`
@@ -42,7 +52,7 @@ Notes for every builder round (planner, night 1):
   54-84, calm 85-89; door at 5/35/65; a flow event with `link` every third tick. Two generic feed
   fields made it possible: alert level `attention`, and `link` on feed events (a comet), both in
   docs/map.md. Lanes on hv1 add their own attention from the builders.)
-- [ ] T4 (§7.2) [ui] The Wall page ground: `public/wall.html`, `public/css/wall.css` (brighter
+- [x] T4 (§7.2) [ui] The Wall page ground: `public/wall.html`, `public/css/wall.css` (brighter
   tokens scoped to the page: text-2 88 %, text-3 74 %, lines 0.16/0.30/0.48, dark only),
   `public/js/wall/main.js` loading `/api/map` and the `/ws` map messages into
   `createMap(el, { ambient: true })` (the app's `public/js/core/net.js` shows the message shape;
@@ -51,7 +61,13 @@ Notes for every builder round (planner, night 1):
   `window.__wallPerf = {frames, worstGapMs}` counted in `map.onDraw` — done when:
   `test/wall-variant.test.mjs` covers the variant switch and demo flag, a still frame of
   `wall.html?variant=radial` on the large demo shows the Map with no console error, and
-  `perf.json` from `film.mjs` reports frames.
+  `perf.json` from `film.mjs` reports frames. (commit 68c058b; the tokens are `color-mix` of
+  `--text-1` in `wall.css` because guardrail 4 keeps colour literals in tokens.css, and the
+  canvas takes them; `window.__wall = {map, variant, demo}` for the tour; `frontend.test.mjs`
+  now knows `wall.css` and `js/wall/` are another page. Still frame clean, film reports frames
+  (`source: wall`), but see the filming note above: under the throttle this VM only films with
+  SwiftShader, which caps fps near 17-21 even unthrottled, so 27 fps cannot be shown here yet;
+  the Map's own script is 6.7 ms/frame average, 27 ms worst, at 4x.)
 - [ ] T5 (§7.2) The camera tour: `public/js/wall/tour.js`, pure order and timing
   (`tourOrder(nodes)`: sites with anything at warn or worse first, worst first, then calm ones;
   re-ordered every cycle; overview ~20 s, fly in at zoom ~2.3, hold ~25 s, out, next; `?demo=1`
@@ -143,6 +159,13 @@ Notes for every builder round (planner, night 1):
   owner's pick; Q6 prepares it.
 
 ## For the owner
+
+- Filming under the CPU throttle (round 7): `loop/film.mjs` hangs on every animated canvas page here
+  (headless Chromium + `Emulation.setCPUThrottlingRate`, default GL; `--disable-gpu`, headless_shell
+  and `--disable-accelerated-2d-canvas` all hang too; only SwiftShader GL works). With SwiftShader the
+  fps number is the VM's software raster (~17-21 fps), so the "fps >= 27 under the throttle" gate cannot
+  pass on this VM for any variant. Options: let `film.mjs` (fenced) launch with SwiftShader and report
+  script ms/frame next to fps, or judge fps on the real tablet. Rounds use the wrapper meanwhile.
 
 ## Reviews
 
