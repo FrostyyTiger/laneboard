@@ -302,11 +302,30 @@ Notes for every builder round (planner, night 1):
   home cluster some names still sit a line or two from their node (THERMOSTAT, FRONT-DOOR,
   PRINTER-3D; the room ring is full there, T19/T27); in a site the caption plate covers big site
   names behind it (T30).)
-- [ ] T47 (§2, T15) [variant:orbits, islands, mosaic] Type steps from distance for the other
-  directions: their layouts space names for radial's `BASE_STEPS` (26 / 15); move them to
-  `type.js` `stepsFor` (35 / 15 on the tablet) with their spacing re-measured, and `pinLabels` where
-  names flip — done when: each variant's layout tests pass at the new steps and a still per variant
-  shows no overlapping names.
+- [x] T47 (§2, T15) [variant:orbits] Type steps from distance for orbits (split round 36: one
+  variant a task, each layout is its own measuring; islands T48, mosaic T49): its layout spaced names
+  for radial's `BASE_STEPS` (26 / 15); move it to `type.js` `stepsFor` (35 / 15 on the tablet) with
+  its spacing re-measured, and `pinLabels` — done when: its layout tests pass at the new steps and a
+  still shows no overlapping names. (commit efc5c84; `optionsFor(aspect, screen)` takes the steps from
+  the screen like radial (tablet without one: radial's own `labelSize`), `planet`/`layoutFor` take
+  `steps` (the name gap at six o'clock and the box below the orbit sized for them); `OVERVIEW_SCALE`
+  0.7 -> 0.68, as the overview on the large demo at 1368 x 912 is 0.682 at 35 px (0.726 at 26).
+  `pinLabels` on: no turn here, but the collision pass re-placed names as the zoom changed. Test: at
+  the tablet's, the desk's and the old steps each planet's name fits between its nearest moons at the
+  overview scale (a small system with every moon above its centre: inside its box). Still
+  `$RUN_DIR/shots/r36-still/`, filmstrip `r36-orbits/`: five site names at 35 px clearly the first
+  read, no overlapping names, tour with caption, lock and trouble first, 0 console errors; fps 4.3 is
+  SwiftShader plus screenshots (filming note). Seen and left to their tasks: label clouds still loose
+  around HV1 and HV2 (T45), cursor-only caption frames (T42), K8S-1 near the top edge (T17).)
+- [ ] T48 (§2, T15, T47) [variant:islands] Type steps from distance for islands: `islands.js`
+  measures names at `BASE_STEPS` (`nameW`, `siteNameW`); move it to `type.js` `stepsFor` per screen
+  (`optionsFor(aspect, screen)`, as orbits), re-measure the island sizes and title strip (with T43),
+  `pinLabels` — done when: `test/wall-islands.test.mjs` passes at the new steps and a still shows no
+  overlapping names.
+- [ ] T49 (§2, T15, T47) [variant:mosaic] Type steps from distance for mosaic: its `labelSize` borrows
+  `baseLabelSize` (26 / 15); move it to `stepsFor` per screen with names that still fit their tiles
+  (with T44), `pinLabels`; then drop `BASE_STEPS`/`baseLabelSize` from radial.js if nothing uses them —
+  done when: `test/wall-mosaic.test.mjs` passes at the new steps and a still shows no overlapping names.
 - [ ] T16 (§2) [variant:radial] (r9-film-ui #3) Trouble is the loudest thing: at the overview a crit
   node is the only saturated area (halo a few node radii wide, via T8's glow layer), attention in
   lanes stays at mark size and does not outshout a crit elsewhere — done when: a still of the
