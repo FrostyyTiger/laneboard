@@ -461,7 +461,7 @@ Notes for every builder round (planner, round 1):
   the held lock target is the far fleet line's subject, the line steps down to the next problem (with `+N MORE`)
   — done when: a test with two problems shows the banner naming the second while the first is held and the
   first otherwise; do it in `hud.js` by choosing which model/problem is fed to `frame` (`frame.js` is fenced; if
-  that cannot work, write the needed change under `## For the owner`). (commit SHA)
+  that cannot work, write the needed change under `## For the owner`). (commit 57762ee)
   `hud.js bannerModel(model, heldId)` (pure): the held node's problem (up to the topmost node in trouble above
   it, and all in trouble under that) reads `ok` in a copy, so `worstLine` names the next problem and counts
   `+N more` past the two; the model itself when nothing is held, the held thing is calm, the line names another
