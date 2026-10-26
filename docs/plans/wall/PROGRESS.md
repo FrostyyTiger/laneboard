@@ -77,11 +77,22 @@ Notes for every builder round (planner, round 1):
   with the lock. `snapshotScene` gives only a `version` (no 2D points, `fitScale` null), so `lock.js`
   falls back to its own scale until T9. Seen: the open crit system's bottom planet touches the frame edge
   (Later), the sun fills the top of some holds (T16), the dust is coarse close up (Later).
-- [ ] T5 (§7.A1) [ui] [variant:galaxy] Caption, frame and clock on `galaxy.html` from `caption.js` and
+- [x] T5 (§7.A1) [ui] [variant:galaxy] Caption, frame and clock on `galaxy.html` from `caption.js` and
   `frame.js` (vignette, clock, worst fleet line, tag), fed from `tour.onLeg` with `captionLines` as on
   `wall.html`; the sketch's own caption and clock are not ported — done when: a test checks `galaxy.html`
   has the ids `caption.js` and `frame.js` need and the module wires `onLeg`, and a filmstrip shows the name
   typing in at each arrival and the clock bottom left.
+  (commit f97dcc7) `galaxy/hud.js` `createHud({ caption, frame, tour })` (test/wall-galaxy-hud.test.mjs
+  drives it with the real `createTour` and fakes): a site leg shows `captionLines` from the newest model,
+  the overview hides it; the frame gets every model and `live(on)`; `covers()` gives the caption plate and
+  the far fleet block for T6's labels (also `__galaxyHud.covers`). Layers `#wall-frame`, `#wall-caption`
+  over the canvas, same ids as `wall.html`; `?at=` shows the parked system's caption at once (still timing).
+  Filmstrip `$RUN_DIR/shots/r12-galaxy/sheet.png`: names typing in (`HOME█`, `HV█`), the trouble word on
+  feat-search and vm-c, the clock bottom left, the far fleet line bottom right; no console errors. A frame
+  shows a plate's last row cut: it is caught mid-grow at the throttled 2 fps (the settled still
+  `r12-still`, `?at=cloud`, is clean). Seen: at the overview and in the calm holds the far fleet line
+  (`■ HV2 · STORAGE`) is the loudest thing, as §2.1 wants; the open crit system's lower planets go under
+  the far fleet block at 63 s (adds to the Later line on the reach past the bottom edge).
 - [ ] T6 (§7.A1, §7.A3) [ui] [variant:galaxy] `galaxy/labels.js`: names that always face the camera, drawn
   over everything, plus a pure screen-space pass `placeLabels(boxes)` (priority: trouble, then site, then
   host/room, then the rest; lower ones hidden where they overlap); lanes named only in trouble or when the
@@ -165,7 +176,8 @@ Notes for every builder round (planner, round 1):
   close (`?at=`).
 - §7.B (T4, builder r11) At the tour's zoom an open system with many planets reaches past the frame's
   bottom edge (`siteShot` distance `max(560, reach * 1.9)`): fit the distance to the open reach and the
-  aspect, or aim a little below the star.
+  aspect, or aim a little below the star; since T5 the far fleet block (bottom right, opaque) also covers
+  that edge, so aim the held system above it.
 - §7.B (r8-film-ui 5) Camera rhythm: the overview holds still ~2 s at each cycle's start, a status change at
   the overview gets a ~600 ms 5 % push-in before the leg, and the turn stops while the camera flies (T4's
   pacing, to tune after T4).
