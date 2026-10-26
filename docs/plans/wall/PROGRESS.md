@@ -212,6 +212,20 @@ Notes for every builder round (planner, round 1):
   does when the subjects differ), and the held planet's own label is hidden while the hero names it — done when:
   a test shows the banner hidden or on another subject and the planet label hidden while the plate names the
   same thing, and `?at=hv2` shows one headline plus the planet's bracket.
+- [ ] T21 (r17-operator galaxy 1) [ui] [variant:galaxy] A crit is visited first, visited site or not: in
+  `tour.js nextLeg` a site whose worst status rose since its visit this cycle (or any crit not yet shown as crit)
+  jumps the queue at the next leg — done when: a test on a model where a visited site turns crit mid-cycle gets
+  it as the next leg, and a film of `galaxy.html?demo=1&pace=wall&quality=0` reaches a new crit within one leg.
+- [ ] T22 (r17-operator galaxy 7) [ui] [variant:galaxy] A calm plate does not shrink the banner: `data-plate`
+  carries the plate's tone, and under a calm plate the crit banner keeps full size (or one step down, never level
+  with the calm name); under a trouble plate T4's step stays — done when: a test sees the tone in `data-plate`
+  and a `wall.css` test pins the banner larger than `--cap-name` under a calm plate, and `?at=home` with a crit
+  elsewhere shows the red banner clearly above the white name.
+- [ ] T23 (r17-operator galaxy 9 + across) [ui] [variant:galaxy] Trouble rows at the second step: the plate's
+  trouble rows (status shape, word, age, in hue; the crit plate takes the warn plate's row format instead of a
+  white `1 crit`) are set at the caption's second step; hardware/where/holds stay small — done when: a test pins
+  the row size and the crit plate's row format in `test/wall-galaxy-hud.test.mjs`/`wall.css`, and `?at=hv2` shows
+  the trouble rows readable in a 3 m shrunk still.
 
 ## Research questions
 
@@ -282,6 +296,17 @@ Night 3's list, not yet a task (README §7 Night 3; replan takes from here in or
 - (was night 2's T32, r43-stranger 6; not named by Night 3, fits E) Screen Wake Lock in `galaxy/main.js`: request
   at start and again on visible, silent when denied or missing (Q15).
 - §7 Night 3 D unbuilt, staying unbuilt: `fx=storm`, `fx=lights`, `fx=rings`, `fx=arrive`.
+
+From r17-operator (not tasks yet):
+- (r17-operator galaxy 6) When stale, the tag moves to the clock's size next to the clock (`STALE 2M`, `--text-1`).
+- (r17-operator galaxy 8) The `1 crit` status line in the crit hue with its shape (the rest is T20).
+- (r17-operator galaxy 5) Crit nebula eats its own label (`■ HV(`): same as A4 T34 above, plus a test that no nebula
+  sprite is drawn over a trouble label's box.
+- (r17-operator fx-beacon 1-3) Beacon: floor at the overview, fade while its system is held, age as width: T9 and the
+  beacon Later lines; also fade the beacon out while its own system is held.
+- (r17-operator across) Add `revisitEvery` to `DEMO_TIMING` so demo films show the revisit rule; operator rounds film `?pace=wall`.
+- (r17-operator touch 1, 2) Explore mode shows a thin 60 s countdown line at the bottom edge (`--text-3`) and the
+  overview's trouble glyphs are the biggest hit targets: inputs for T13/T14 and T10.
 
 Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/`; triage decides per review):
 - (r31-touch 1, 3, 4, 7-11, fx notes; the touch design note, input for T7-T14) Hit-test in screen space over
@@ -388,6 +413,10 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 - r4-film-ui.md: 12 findings (9 galaxy, 3 fx-beacon) + 2 across; 3 became tasks (T15, T16, T17); galaxy 2 and 9 and
   beacon 1, 2 dropped (covered by T4, T3, T9); galaxy 3, 5, 6, 8 and beacon 3 went to Later; across 1 dropped
   (observation), across 2 to the owner.
+- r17-operator.md: 9 galaxy + 3 fx-beacon + 2 touch + 3 across; 3 became tasks (T21, T22, T23); galaxy 2 (= T18; operator
+  wants it ahead of the fx tasks: do T18 before T9/T12), 3 (= T15), 4 (= T16) and fx-beacon 1-3 (= T9) dropped
+  (covered); galaxy 5, 6, 8, fx-beacon notes, touch 1-2 and the demo-pace note went to Later; lanes/comets/twinkle
+  not filmed, dropped (retired). No dreamer proposals in this review.
 
 ## Scores
 
@@ -403,5 +432,10 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 | r11 | dreamer, fx-comets | – | – | – | – | 2 | 8 | – |
 | r11 | dreamer, fx-twinkle | – | – | – | – | 2 | 9 | – |
 | r11 | dreamer, fx-lanes | – | – | – | – | 2 | 8 | – |
+| r17 | operator, galaxy | 7 | 6 | 5 | 2 | 6 | 5 | 6 |
+| r17 | operator, fx-beacon | – | – | – | – | 5 | 5 | – |
+| r17 | operator, fx-lanes | – | – | – | – | 2 | 7 | – |
+| r17 | operator, fx-comets | – | – | – | – | 2 | 7 | – |
+| r17 | operator, fx-twinkle | – | – | – | – | 2 | 8 | – |
 
 ## Morning
