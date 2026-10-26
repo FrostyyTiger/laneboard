@@ -523,11 +523,24 @@ Notes for every builder round (planner, night 1):
   SwiftShader plus screenshots (filming note). Seen, left: a node's ring still shows faintly through
   the 96 % plate (marks, not labels; T30 moves the site out from under it), and the lock can sit under
   the plate on a site at the left (T30).)
-- [ ] T25 (§2 north star 1, T7) [ui] [variant:all] (r14-operator #8) The lock goes on the worst node
+- [x] T25 (§2 north star 1, T7) [ui] [variant:all] (r14-operator #8) The lock goes on the worst node
   inside the visited site (e.g. `storage` in hv2), not only on the site node, with a thin leader line
   from the caption's trouble line to it — done when: a test (`test/wall-lock.test.mjs`) picks the
   worst descendant by status for a site and falls back to the site when calm; a filmstrip frame shows
   the lock and leader on the trouble node.
+  (commit 85e6838; `lockTarget(site, model)` in lock.js is the node the caption's trouble word names
+  (`captionLines`' trouble line now carries `id`, so the two never disagree) and its parents up to the site;
+  the driver locks on the first one `screenOf` draws, so a lane folded away at the hold's zoom is found on its
+  nearest drawn parent; calm sites lock on themselves. Leader: a 1px `.wall-lock-leader` in the lock's colour
+  at 0.7, from `caption.leaderFrom()` (the plate's right edge, level with the hero word, read once a leg in
+  `build`) to the nearest bracket's corner, drawn out with the close (scaleX, no layout); none on a calm
+  target, without a plate, or when the node stands left of the plate's right edge. Tests in
+  `test/wall-lock.test.mjs` (worst descendant and chain, calm and down sites, leader geometry, driver on the
+  drawn parent then the node, leader only on trouble). Filmstrip `$RUN_DIR/shots/r57-radial/`: frame 12 (HV2)
+  red brackets on STORAGE inside the site, the leader from the plate to it; 0 console errors; fps 2.6 is
+  SwiftShader plus screenshots (filming note). Seen: on HV1 (`FEAT-SEARCH`, a lane) the lane is not drawn at
+  the hold's zoom, so the lock stands on the site, which sits left of the plate's edge, so no leader; T30
+  (the plate covers its site) is the fix for that, and whether lanes should unfold at a hold is open.)
 - [ ] T26 (§2) [ui] [variant:all] (r14-operator #9) Caption kicker on a trouble site is set in the
   status colour with the shape: `■ CRIT · SITE 01 / 05`; calm sites keep the grey kicker — done when:
   `captionLines` test covers kicker text and status for crit, attention and calm.
