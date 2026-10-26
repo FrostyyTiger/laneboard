@@ -5,12 +5,16 @@
 // (perf.js), so the filmstrip tool reads it as it does on wall.html.
 //
 // The tour (tour.js, trouble first) drives the 3D camera (camera.js) as it
-// drives the Map on wall.html; `?demo=1` is its video speed.
+// drives the Map on wall.html; `?demo=1` is its video speed. The Wall's
+// caption and frame (hud.js) sit over the canvas and follow the tour's legs.
 // `?at=<site>&open=0..1` parks the camera on one system, for stills.
 
 import { createPerf } from '../perf.js';
-import { createTour, timingFor } from '../tour.js';
+import { createTour, timingFor, tourOrder } from '../tour.js';
+import { createCaption, captionTimingFor, STILL_CAPTION_TIMING } from '../caption.js';
+import { createFrame } from '../frame.js';
 import { createGalaxyCamera } from './camera.js';
+import { createHud } from './hud.js';
 import { paletteFrom } from './palette.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 
@@ -50,6 +54,17 @@ export function boot() {
   const cam = createGalaxyCamera(galaxy);
   const tour = createTour(cam, { timing: timingFor(page.dataset.demo === '1') });
 
+  // The words over the canvas: the caption names each system as the camera
+  // gets there; the frame (vignette, clock, fleet line, tag) stays put.
+  // A parked still gets its caption at once, nothing typing.
+  const still = Boolean(park) || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const caption = createCaption(document.getElementById('wall-caption'), {
+    timing: still ? STILL_CAPTION_TIMING : captionTimingFor(page.dataset.demo === '1'),
+  });
+  const frame = createFrame(document.getElementById('wall-frame'));
+  const hud = createHud({ caption, frame, tour: park ? null : tour });
+  let parkedSaid = false;
+
   const tick = (now) => {
     requestAnimationFrame(tick);
     const w = galaxy.world;
@@ -70,8 +85,16 @@ export function boot() {
     if (!model || typeof model !== 'object') return;
     have = true;
     galaxy.update(model);
+    hud.update(model);
     tour.update(model);
     if (!park) tour.start();
+    const at = parked();
+    if (at && !parkedSaid) {
+      parkedSaid = true;
+      const order = tourOrder(model.nodes ?? []);
+      const i = order.findIndex((s) => s.id === at.id);
+      hud.park({ id: at.id, index: i >= 0 ? i + 1 : null, count: order.length || null });
+    }
   };
 
   fetch('/api/map')
@@ -83,7 +106,7 @@ export function boot() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}/ws`);
     let opened = false;
-    ws.addEventListener('open', () => { opened = true; page.dataset.live = '1'; });
+    ws.addEventListener('open', () => { opened = true; page.dataset.live = '1'; hud.live(true); });
     ws.addEventListener('message', (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
@@ -91,6 +114,7 @@ export function boot() {
     });
     ws.addEventListener('close', () => {
       delete page.dataset.live;
+      hud.live(false);
       // Keep the last galaxy on screen and try again.
       const next = opened ? BACKOFF_START_MS : Math.min(backoff * 2, BACKOFF_MAX_MS);
       setTimeout(() => openSocket(next), next);
@@ -103,6 +127,7 @@ export function boot() {
   // For the console and later tasks.
   globalThis.__galaxy = galaxy;
   globalThis.__galaxyTour = tour;
+  globalThis.__galaxyHud = { caption, frame, covers: hud.covers };
 }
 
 boot();

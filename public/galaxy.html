@@ -17,9 +17,12 @@
 </head>
 <body>
 <!-- The Wall's galaxy (docs/plans/wall/README.md §5): the fleet as one
-     spiral galaxy in WebGL, the hub its sun, the sites star clusters. -->
+     spiral galaxy in WebGL, the hub its sun, the sites star clusters. The
+     Wall's frame (vignette, clock, fleet line, tag) over it, then the caption. -->
 <main class="wall-stage galaxy-stage" id="galaxy-stage">
   <canvas class="galaxy-canvas" id="galaxy" aria-hidden="true"></canvas>
+  <div class="wall-frame-layer" id="wall-frame"></div>
+  <div class="wall-caption-layer" id="wall-caption"></div>
 </main>
 <script type="module" src="/js/wall/galaxy/main.js"></script>
 </body>
