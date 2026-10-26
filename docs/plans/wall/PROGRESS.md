@@ -569,12 +569,26 @@ Notes for every builder round (planner, round 1):
   `$RUN_DIR/shots/r56-galaxy/` (`?demo=1&perf=1`, 4x, 0 console errors, 3.6 fps is SwiftShader): the budget
   steps L1 ×1.5 → L2 ×1.25 with no jump. SwiftShader single-frame times are too noisy to price the fill-rate
   saving; that needs the tablet. The demo fleet on :7795 (started by an earlier round) was used and left running.
-- [ ] T29 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 3) Two forced layouts per frame:
+- [x] T29 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 3) Two forced layouts per frame:
   `hud.js tagCover()` reads `offsetLeft/Top/Width/Height` on every call (twice a frame), and `clientWidth/Height`
   are read in `scene.js resize()`, `labels.js draw` and `camera.js screenOf` after style writes. Cache the tag's
   box (re-read on resize or when the frame's text changes, as `frame.js` does) and the canvas size (one
   `ResizeObserver`) — done when: a test counts layout-property reads over several fake frames (tag box read
   once, none per frame after the first) and a 4x CDP run shows style recalcs/layouts near 1 per frame.
+  (commit 059a37f) `galaxy/stage.js createStageSize(el)` reads the canvas's css size once and again only from
+  one `ResizeObserver` (its callback runs after layout, so that read is free); without one (node fakes) it reads
+  each call, as before. The scene keeps it (`stage` option) and gives `size()`; `scene.resize`, `camera.screenOf`,
+  `labels.draw` (via `sizeOf(galaxy)`), the lock (`size: galaxy.size`), main's free box and overview fit read it.
+  `hud.js` takes `size` too: the tag's box is re-read only when its text or the stage changes, the warn line's
+  key uses the stage size instead of `innerWidth` (itself a layout read). Test `wall-galaxy-stage` counts reads
+  over fake frames of the real scene, camera, labels and hud: canvas 2 reads at start, tag 4, none after; a text
+  change re-reads the tag once; a fired observer re-sizes the renderer and the camera aspect. CDP, large demo,
+  `?demo=1&quality=0`, 4x, 2x (`$RUN_DIR/tools/r37-metrics.mjs`, `$RUN_DIR/shots/r57-metrics-{before,after}.txt`):
+  style recalcs/frame 3.37/2.65/3.04 → 1.73/1.80/1.12, layouts 2.05/1.29/1.69 → 1.30/1.25/0.63 (three 15 s
+  windows each; what is left over 1 is the caption typing and the lock's writes). A viewport turned from
+  1368x912 to 912x1368 mid-run (`$RUN_DIR/tools/r57-resize.mjs`) re-sizes the buffer and the aspect (1.5 →
+  0.667). Filmstrip `$RUN_DIR/shots/r57-galaxy/` (0 console errors, 2.5 fps is SwiftShader): as before. The
+  demo fleet on :7795 (started by an earlier round; its pid file is stale) was used and left running.
 - [ ] T30 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r43-stranger.md galaxy 1) The fleet line flips red ↔ yellow
   when a crit link clears and returns within seconds (builder-c "no contact for 19s" red, then yellow, then red
   again): from 3 m the loudest thing comes and goes. In `hud.js` (frame.js is fenced) hold a crit that cleared
