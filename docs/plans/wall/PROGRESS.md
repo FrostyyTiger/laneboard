@@ -190,10 +190,23 @@ Notes for every builder round (planner, round 1):
   `r23-still-q0`/`-q2` (`?at=hv1&quality=…`): the same scene, L2 only thinner dust and coarser spheres.
   **Note for filming rounds:** on this VM the budget always goes to L2 (SwiftShader frames are ~100+ ms), so
   films that judge looks should add `&quality=0` to see the tablet's level; leave it off to see the budget.
-- [ ] T11 (§7.A7) [ui] [variant:galaxy] Reduced motion (D5): no flights, no drift; the overview with every
+- [x] T11 (§7.A7) [ui] [variant:galaxy] Reduced motion (D5): no flights, no drift; the overview with every
   cluster folded and the caption rotating through the sites, trouble first, with `STILL_CAPTION_TIMING` —
   done when: a test with `prefers-reduced-motion` stubbed shows no `focus()` flight and the caption cycling,
   and a filmstrip with emulated reduced motion shows a still galaxy and changing captions.
+  (commit dee4a91) `galaxy/still.js`: `prefersStill(matchMedia)`, `STILL_TOUR_TIMING` (flyMs 0, overview 8 s,
+  each site's caption 12 s; demo 2 s / 3 s), `breathWave`/`dustTurn`. `createGalaxyCamera(galaxy, { still })`
+  holds `overviewShot(sites, 0)` (no turn), ignores flights and opens nothing; `fit`/`focus` only move the
+  tour, so `hud.js` shows each site's caption at once (`STILL_CAPTION_TIMING`) and the lock shuts round it
+  where it lies on the overview. `createGalaxyScene(…, { still })` holds crit/warn halos and the crit nebula
+  at their peak, the dust still. `<html data-motion="still">` marks it. Tests
+  (`test/wall-galaxy-still.test.mjs`): 7 legs of frames all on one pose, no `setOpen`, trouble first; the
+  caption order and `arriveMs` 0; halo opacity and nebula size constant (and at the moving one's peak).
+  Filmstrip `$RUN_DIR/shots/r24-galaxy-still/sheet.png` (wrapper `$RUN_DIR/chrome-still.sh` =
+  SwiftShader + `--force-prefers-reduced-motion`, `?demo=1&quality=0`): the galaxy never moves, captions go
+  STORAGE (crit) → FEAT-SEARCH → REMOTE/CLOUD/HOME → overview → STORAGE; 0 console errors. Seen (for T19,
+  worse here since the camera never leaves the overview): HV2, the crit site, lies under its own caption
+  plate, and CLOUD under the far fleet block (its lock brackets land on the fleet line's text).
 - [ ] T12 (§7.C) [ui] [variant:galaxy] `galaxy/fx.js`: `parseFx(search)` (comma-separated, unknown names
   ignored, all off by default, D9) and the first effect, `lanes`: a light pulse along a hyperlane while a
   link between two sites is live — done when: a test covers `parseFx` (none by default, `?fx=lanes,bogus` →
@@ -226,7 +239,8 @@ Notes for every builder round (planner, round 1):
   `?at=hv1&open=1` and `?at=hv2&open=1` stills show the star and the attention planet clear of the plate.
 - [ ] T19 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 2) CLOUD is missing from the overview (under
   the far fleet block): `overviewShot` offsets its look-at toward the sites' centroid until no site's folded
-  box meets `hud.covers()` — done when: a test shows every site's label is shown at the overview on the large
+  box meets `hud.covers()` (in reduced motion too, where the overview is all there is and the plate is up
+  most of the time: r24 saw HV2 under its own plate) — done when: a test shows every site's label is shown at the overview on the large
   fixture, and the overview still shows all five site names.
 - [ ] T20 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 3) At the overview, tie the far fleet line
   to the cluster it names: a thin hairline in the status hue from the line to the named site's cluster, drawn
