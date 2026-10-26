@@ -334,6 +334,22 @@ html.wall body {
 .wall-lock-bl { border-bottom-width: var(--lock-stroke); border-left-width: var(--lock-stroke); }
 .wall-lock-br { border-bottom-width: var(--lock-stroke); border-right-width: var(--lock-stroke); }
 
+/* The leader (T25): a hairline from the plate's trouble word to the bracket
+   nearest it, in the lock's status colour, quieter than the brackets. One px
+   wide, stretched by scaleX from its left end. */
+.wall-lock-leader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--lock-colour);
+  opacity: 0.7;
+  transform-origin: 0 50%;
+  will-change: transform;
+}
+
 /* ---------------------------------------------------------------------------
    Frame (js/wall/frame.js): what stays put while the camera moves. The
    vignette darkens the edges, most at the bottom where the clock and the

@@ -12,7 +12,7 @@ import { pickVariant, mapOptionsFor } from './variants.js';
 import { createPerf } from './perf.js';
 import { createTour, timingFor } from './tour.js';
 import { createCaption, captionLines, captionTimingFor, STILL_CAPTION_TIMING } from './caption.js';
-import { createLock, LOCK_TIMING, STILL_LOCK_TIMING } from './lock.js';
+import { createLock, lockTarget, LOCK_TIMING, STILL_LOCK_TIMING } from './lock.js';
 import { createGlow } from './glow.js';
 import { createFrame } from './frame.js';
 import { screenOf } from './type.js';
@@ -55,9 +55,11 @@ export function boot() {
   const caption = createCaption(document.getElementById('wall-caption'), {
     timing: still ? STILL_CAPTION_TIMING : captionTimingFor(pick.demo),
   });
-  // The lock closes on the same node as the camera gets there.
+  // The lock closes as the camera gets there, on the node the caption's
+  // trouble word names (the site when calm), a leader joining the two (T25).
   const lock = createLock(document.getElementById('wall-lock'), map, {
     timing: still ? STILL_LOCK_TIMING : LOCK_TIMING,
+    leaderFrom: () => caption.leaderFrom(),
   });
   // Lights and jobs from the feeds, under the Map, growing with its zoom; and
   // the trouble halos where the variant asks for them.
@@ -73,7 +75,7 @@ export function boot() {
     const node = leg.kind === 'site' ? latest?.nodes?.find((n) => n?.id === leg.id) : null;
     if (node) {
       caption.show(leg, captionLines(node, latest, leg.index, leg.count));
-      lock.lockOn({ ...leg, node }, zoom);
+      lock.lockOn({ ...leg, node, target: lockTarget(node, latest) }, zoom);
     } else {
       caption.hide();
       lock.release();

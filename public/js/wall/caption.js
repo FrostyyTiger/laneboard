@@ -133,7 +133,8 @@ export const NAMED_PROBLEMS = 3;
  * `nodes`); `index`/`count` number the tour's targets (1-based), either may
  * be missing. Returns `{ kicker, name, status, lines }`: `status` the rolled
  * up status; each line is one of
- *   `{ kind: 'trouble', label, text, status, tone, shape, glyph }`
+ *   `{ kind: 'trouble', id, label, text, status, tone, shape, glyph }` (`id`
+ *     the node it is about: the lock closes on it, T25)
  *   `{ kind: 'status', label, text }`
  *   `{ kind: 'problem', label, text, status, tone, shape, glyph }`
  *   `{ kind: 'metrics', bars: [{ label, value, text }] }`
@@ -179,6 +180,7 @@ export function captionLines(node, model, index = null, count = null) {
     lines.push({
       kind: 'trouble',
       step: 'hero',
+      id: bad.id,
       label,
       text,
       word: (own ? text : label).toUpperCase(),
@@ -407,6 +409,8 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
   // The plate's box with every row in, and whether it covers the map now (T24).
   let box = null;
   let covering = false;
+  // Where the lock's leader leaves the plate: its right edge, level with the trouble word (T25).
+  let anchor = null;
   let uncover = null;
   const later = (ms, fn) => {
     const t = timers.setTimeout(() => { pending.delete(t); fn(); }, Math.max(0, ms));
@@ -473,6 +477,8 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     // names keep clear of all of it from the start, so none pops out from
     // under a row as it wipes in.
     box = coverOf({ left: plate.offsetLeft, top: plate.offsetTop, width: plate.offsetWidth, height: plate.offsetHeight });
+    const mid = plate.offsetTop + heroWord.offsetTop + heroWord.offsetHeight / 2;
+    anchor = lead && box && Number.isFinite(mid) ? { x: box.right, y: mid } : null;
     // A row takes no room until its beat: the plate opens on kicker, word and name.
     for (const li of list.children) { li.hidden = true; li.style.opacity = '0'; }
     grow(cap, 0, 0);
@@ -516,6 +522,8 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
 
   /** The plate as a Map cover while it is on screen, else null (T24). */
   const cover = () => (covering ? box : null);
+  /** Where a leader to the trouble node leaves the plate while it shows a trouble word, else null (T25). */
+  const leaderFrom = () => (covering ? anchor : null);
 
-  return { show, hide, cover, el: plate };
+  return { show, hide, cover, leaderFrom, el: plate };
 }

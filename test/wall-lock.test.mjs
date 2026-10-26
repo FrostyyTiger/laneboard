@@ -5,7 +5,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   lockGeometry, lockProgress, nodeScaleAt, lockTone, createLock, LOCK_TIMING, STILL_LOCK_TIMING, LOCK_SIZE,
+  lockTarget, leaderGeometry, LEADER_MIN_ARMS,
 } from '../public/js/wall/lock.js';
+import { captionLines } from '../public/js/wall/caption.js';
 import { SIZE } from '../public/js/views/map/layout.js';
 import { DEMO_TIMING, TIMING } from '../public/js/wall/tour.js';
 import { makeDocument, makeEl } from './helpers/fakedom.mjs';
@@ -171,6 +173,113 @@ test('lock: the driver follows the node every frame and hands over between legs'
 
     lock.destroy();
     assert.equal(map.listeners(), 0);
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});
+
+// --- T25: the lock on the worst node inside the site, a leader from the plate
+
+const fleet = () => [
+  { id: 'hv2', kind: 'site', status: 'ok', label: 'hv2' },
+  { id: 'hv2/rack', kind: 'host', parent: 'hv2', status: 'ok' },
+  { id: 'hv2/storage', kind: 'service', parent: 'hv2/rack', status: 'crit', label: 'storage', why: 'pool 97% full' },
+  { id: 'hv2/backup', kind: 'service', parent: 'hv2', status: 'warn', label: 'backup' },
+  { id: 'hv1', kind: 'site', status: 'ok', label: 'hv1' },
+  { id: 'hv1/vm-a', kind: 'guest', parent: 'hv1', status: 'ok' },
+  { id: 'hv3', kind: 'site', status: 'down', label: 'hv3' },
+  { id: 'hv3/vm-b', kind: 'guest', parent: 'hv3', status: 'warn' },
+];
+
+test('lockTarget: the worst node inside the site, then its parents up to the site', () => {
+  const nodes = fleet();
+  const site = nodes[0];
+  assert.deepEqual(lockTarget(site, { nodes }), [
+    { id: 'hv2/storage', kind: 'service' }, { id: 'hv2/rack', kind: 'host' }, { id: 'hv2', kind: 'site' },
+  ]);
+  // The same node the caption's trouble word names.
+  assert.equal(captionLines(site, nodes).lines[0].id, 'hv2/storage');
+  // The crit clears: the warn is now the worst.
+  nodes[2].status = 'ok';
+  assert.deepEqual(lockTarget(site, nodes).map((c) => c.id), ['hv2/backup', 'hv2']);
+});
+
+test('lockTarget: a calm site, a site down itself, and bad input lock on the site', () => {
+  const nodes = fleet();
+  assert.deepEqual(lockTarget(nodes[4], nodes), [{ id: 'hv1', kind: 'site' }]);
+  // The site's own status speaks first (the caption's word is the site's).
+  assert.deepEqual(lockTarget(nodes[6], nodes), [{ id: 'hv3', kind: 'site' }]);
+  // A site the model does not know, or no model: itself.
+  assert.deepEqual(lockTarget({ id: 'x', kind: 'site' }, null), [{ id: 'x', kind: 'site' }]);
+  assert.deepEqual(lockTarget(null, nodes), []);
+});
+
+test('leaderGeometry: from the plate to the nearest bracket corner, drawn out with t', () => {
+  const from = { x: 500, y: 200 };
+  const l = leaderGeometry(from, { x: 900, y: 500 }, 40, 16, 1);
+  // Below the anchor: the top-left corner.
+  assert.deepEqual([l.x, l.y], [500, 200]);
+  assert.ok(Math.abs(l.len - Math.hypot(360, 260)) < 1e-9);
+  assert.ok(Math.abs(l.angle - Math.atan2(260, 360)) < 1e-9);
+  // Above the anchor: the bottom-left corner.
+  const up = leaderGeometry(from, { x: 900, y: 100 }, 40, 16, 1);
+  assert.ok(Math.abs(up.angle - Math.atan2(140 - 200, 360)) < 1e-9);
+  // Half drawn: half as long.
+  assert.ok(Math.abs(leaderGeometry(from, { x: 900, y: 500 }, 40, 16, 0.5).len - l.len / 2) < 1e-9);
+  // A node left of the anchor (under or beside the plate), or too close: none.
+  assert.equal(leaderGeometry(from, { x: 520, y: 500 }, 40, 16, 1), null);
+  assert.equal(leaderGeometry(from, { x: 500 + 40 + 16 * LEADER_MIN_ARMS - 1, y: 160 }, 40, 16, 1), null);
+  assert.equal(leaderGeometry(null, { x: 900, y: 500 }, 40, 16, 1), null);
+});
+
+test('lock: the driver closes on the first drawn node of the target, the leader only on trouble', () => {
+  const prevDoc = globalThis.document;
+  globalThis.document = makeDocument();
+  try {
+    let now = 0;
+    const where = { hv2: { x: 600, y: 400 }, 'hv2/rack': { x: 700, y: 450 } };
+    const map = fakeMap(where);
+    let from = { x: 300, y: 150 };
+    const lock = createLock(makeEl('div'), map, {
+      clock: { now: () => now }, size: () => ({ W: 1368, H: 912 }), leaderFrom: () => from,
+    });
+    const [tl] = lock.el.children;
+    const leader = lock.el.children[4];
+    const target = lockTarget(fleet()[0], fleet());
+    lock.lockOn({ kind: 'site', id: 'hv2', status: 'crit', arriveMs: 2250, node: fleet()[0], target }, 2.3);
+    assert.equal(lock.state().next.id, 'hv2/storage');
+
+    // storage is folded away at this zoom: the lock stands on its drawn parent.
+    now = 2250 - LOCK_TIMING.leadMs + LOCK_TIMING.closeMs;
+    map.frame();
+    const gh = lockGeometry({ kind: 'host', ns: 1.6, side: 912, t: 1 });
+    assert.equal(tl.style.transform, `translate3d(${(700 - gh.d).toFixed(1)}px, ${(450 - gh.d).toFixed(1)}px, 0)`);
+
+    // It unfolds: the lock is on storage, the leader runs from the plate to its top-left bracket.
+    where['hv2/storage'] = { x: 800, y: 500 };
+    map.frame();
+    const gs = lockGeometry({ kind: 'service', ns: 1.6, side: 912, t: 1 });
+    assert.equal(tl.style.transform, `translate3d(${(800 - gs.d).toFixed(1)}px, ${(500 - gs.d).toFixed(1)}px, 0)`);
+    const l = leaderGeometry(from, where['hv2/storage'], gs.d, Math.round(gs.arm), 1);
+    assert.equal(leader.style.transform,
+      `translate3d(300.0px, 150.0px, 0) rotate(${l.angle.toFixed(4)}rad) scaleX(${l.len.toFixed(1)})`);
+    assert.notEqual(leader.style.opacity, '0');
+
+    // No plate anchor (the caption gone): no leader.
+    from = null;
+    map.frame();
+    assert.equal(leader.style.opacity, '0');
+
+    // A calm site: grey brackets on the site, never a leader.
+    from = { x: 300, y: 150 };
+    now = 10000;
+    lock.lockOn({ kind: 'site', id: 'hv2', status: 'ok', arriveMs: 2250, node: fleet()[0] }, 2.3);
+    now = 10000 + 2250 + LOCK_TIMING.closeMs;
+    map.frame();
+    assert.equal(lock.state().cur.id, 'hv2');
+    assert.equal(lock.el.dataset.tone, 'calm');
+    assert.equal(leader.style.opacity, '0');
+    lock.destroy();
   } finally {
     globalThis.document = prevDoc;
   }

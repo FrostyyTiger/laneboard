@@ -10,10 +10,16 @@
 //
 // Colour follows laneboard's rule: the brackets are grey on a calm target and
 // take the target's status colour only when it is in trouble.
+//
+// On a site in trouble the lock closes on the worst node inside it, the one
+// the caption's trouble word names (`lockTarget`, T25), and a thin leader
+// draws out from the plate, level with that word, to the bracket nearest it:
+// the word and the place it is about, joined.
 
 import { SIZE } from '../views/map/layout.js';
 import { fitScaleOf } from '../views/map/interact.js';
-import { TROUBLE } from '../views/map/model.js';
+import { TROUBLE, byIdOf } from '../views/map/model.js';
+import { captionLines } from './caption.js';
 
 /**
  * Normal and `?demo=1` speed alike: the brackets start closing `leadMs`
@@ -90,6 +96,52 @@ export function lockGeometry({ kind, ns = 1, side = 0, t = 1 }) {
 export const lockTone = (status) => (status === 'crit' || status === 'down' ? 'crit'
   : TROUBLE.includes(status) ? 'warn' : 'calm');
 
+/**
+ * What the lock closes on for a toured `site` in `model` (a map model or its
+ * nodes): the node the caption's trouble word names (the worst inside the
+ * site, or the site itself), then its parents up to the site, as
+ * `[{ id, kind }]`. The driver locks on the first of them the Map draws, so
+ * a node folded away at the hold's zoom is found on its nearest drawn
+ * parent. A calm site is just itself. Pure.
+ */
+export function lockTarget(site, model) {
+  if (typeof site?.id !== 'string') return [];
+  const nodes = (Array.isArray(model) ? model : Array.isArray(model?.nodes) ? model.nodes : [])
+    .filter((n) => n && typeof n.id === 'string');
+  const byId = byIdOf(nodes);
+  const lead = captionLines(site, nodes).lines.find((l) => l.kind === 'trouble');
+  const chain = [];
+  const seen = new Set();
+  for (let id = lead?.id; byId.has(id) && !seen.has(id); id = byId.get(id).parent) {
+    seen.add(id);
+    chain.push({ id, kind: byId.get(id).kind });
+    if (id === site.id) break;
+  }
+  // Only a node inside the site counts; else the site alone.
+  if (chain.at(-1)?.id !== site.id) return [{ id: site.id, kind: site.kind }];
+  return chain;
+}
+
+/** The leader's length never under this many arms (shorter reads as a tick, not a line). */
+export const LEADER_MIN_ARMS = 2;
+
+/**
+ * The leader from the plate's anchor `from` ({x, y}) to the bracket corner
+ * nearest it, for brackets `d` from the node's centre `at`, drawn out to
+ * fraction `t` (0..1, eased by the caller). Returns `{ x, y, len, angle }`
+ * (start, drawn length, radians) or null when the node is not to the right
+ * of the anchor (it would run back under the plate) or too close to it. Pure.
+ */
+export function leaderGeometry(from, at, d, arm, t = 1) {
+  if (![from?.x, from?.y, at?.x, at?.y, d].every(Number.isFinite)) return null;
+  const bx = at.x - d;
+  const by = from.y < at.y ? at.y - d : at.y + d;
+  const dx = bx - from.x, dy = by - from.y;
+  const full = Math.hypot(dx, dy);
+  if (dx <= 0 || full < LEADER_MIN_ARMS * (Number.isFinite(arm) ? arm : 0)) return null;
+  return { x: from.x, y: from.y, len: full * clamp01(t), angle: Math.atan2(dy, dx) };
+}
+
 // --- the DOM part ------------------------------------------------------------
 
 const CORNERS = ['tl', 'tr', 'bl', 'br'];
@@ -97,11 +149,16 @@ const CORNERS = ['tl', 'tr', 'bl', 'br'];
 /**
  * The lock inside `root` (an empty element over the map), following `map`
  * (`onDraw`, `screenOf`, `snapshotScene`). `lockOn(leg, zoom)` locks onto a
- * site leg's node (`leg.node`), `release()` opens the lock (an overview leg).
- * The old lock keeps opening on its node while the camera flies on; the new
- * one takes over when it starts closing. `clock` and `size` are injectable.
+ * site leg: on `leg.target` (lockTarget's chain) when given, else the site's
+ * node (`leg.node`); `release()` opens the lock (an overview leg). The old
+ * lock keeps opening on its node while the camera flies on; the new one
+ * takes over when it starts closing. `leaderFrom()` says where the leader
+ * leaves the caption plate (null: no leader); a calm target never has one.
+ * `clock` and `size` are injectable.
  */
-export function createLock(root, map, { timing = LOCK_TIMING, clock = globalThis.performance, size = null } = {}) {
+export function createLock(root, map, {
+  timing = LOCK_TIMING, clock = globalThis.performance, size = null, leaderFrom = null,
+} = {}) {
   const box = document.createElement('div');
   box.className = 'wall-lock';
   const corners = CORNERS.map((c) => {
@@ -110,18 +167,38 @@ export function createLock(root, map, { timing = LOCK_TIMING, clock = globalThis
     box.append(e);
     return e;
   });
+  // One px wide, stretched by scaleX: a frame moves it without layout.
+  const leader = document.createElement('span');
+  leader.className = 'wall-lock-leader';
+  leader.style.opacity = '0';
+  box.append(leader);
   box.style.opacity = '0';
   root.append(box);
 
   const measure = size ?? (() => ({ W: root.clientWidth, H: root.clientHeight }));
-  let cur = null;  // { id, kind, ns, tone, startAt, leaveAt }: the lock on screen
+  let cur = null;  // { id, kind, chain, ns, tone, startAt, leaveAt }: the lock on screen
   let next = null; // the one waiting for the camera
   let armPx = -1;
   let shown = false;
+  let led = false;
 
+  const hideLeader = () => {
+    if (led) leader.style.opacity = '0';
+    led = false;
+  };
   const hideBox = () => {
     if (shown) box.style.opacity = '0';
     shown = false;
+    hideLeader();
+  };
+
+  // The first node of the chain the Map draws now, and where.
+  const drawn = (chain) => {
+    for (const c of chain) {
+      const sp = map.screenOf(c.id);
+      if (sp) return { c, sp };
+    }
+    return null;
   };
 
   const paint = () => {
@@ -138,10 +215,11 @@ export function createLock(root, map, { timing = LOCK_TIMING, clock = globalThis
       hideBox();
       return;
     }
-    const sp = t > 0 ? map.screenOf(cur.id) : null;
-    if (!sp) { hideBox(); return; }
+    const hit = t > 0 ? drawn(cur.chain) : null;
+    if (!hit) { hideBox(); return; }
+    const { sp } = hit;
     const { W, H } = measure();
-    const g = lockGeometry({ kind: cur.kind, ns: cur.ns, side: Math.min(W, H), t });
+    const g = lockGeometry({ kind: hit.c.kind, ns: cur.ns, side: Math.min(W, H), t });
     const arm = Math.round(g.arm);
     if (arm !== armPx) {
       armPx = arm;
@@ -155,6 +233,13 @@ export function createLock(root, map, { timing = LOCK_TIMING, clock = globalThis
     corners[3].style.transform = `translate3d(${x1}px, ${y1}px, 0)`;
     box.style.opacity = g.alpha.toFixed(3);
     shown = true;
+    // The leader draws out with the close and in with the open.
+    const from = cur.tone !== 'calm' && typeof leaderFrom === 'function' ? leaderFrom() : null;
+    const l = from ? leaderGeometry(from, sp, g.d, arm, g.alpha) : null;
+    if (!l) { hideLeader(); return; }
+    leader.style.transform = `translate3d(${l.x.toFixed(1)}px, ${l.y.toFixed(1)}px, 0) rotate(${l.angle.toFixed(4)}rad) scaleX(${l.len.toFixed(1)})`;
+    if (!led) leader.style.opacity = '';
+    led = true;
   };
   const off = map.onDraw(paint);
 
@@ -173,9 +258,11 @@ export function createLock(root, map, { timing = LOCK_TIMING, clock = globalThis
     let startAt = clock.now() + Math.max(0, arrive - timing.leadMs);
     // Never take the box from a lock that is still opening.
     if (cur) startAt = Math.max(startAt, cur.leaveAt + timing.outMs);
+    const chain = Array.isArray(leg.target) && leg.target.length ? leg.target : [{ id: leg.id, kind: node.kind }];
     next = {
-      id: leg.id,
-      kind: node.kind,
+      id: chain[0].id,
+      kind: chain[0].kind,
+      chain,
       ns: nodeScaleAt(W, H, snap?.outer, zoom, snap?.fitScale),
       tone: lockTone(leg.status),
       startAt,
