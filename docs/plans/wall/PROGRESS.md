@@ -166,6 +166,22 @@ Notes for every builder round (planner, round 1):
   site label to the star's projected point of the same frame, never a stale one — done when: a test moves the
   camera between two draws and finds the label's anchor equal to `screenOf(star)` plus the fixed offset each
   time, and a still at the overview shows `HV2`'s glyph beside its nebula.
+- [ ] T18 (r11-dreamer galaxy 1; = Later r59-dreamer 7) [ui] [variant:galaxy] The red goes when the trouble goes:
+  a cleared crit's banner drops at once to the fleet line's calm size in `--text-2` with only a small red glyph,
+  and reads like `HV1 · VM-C OK · WAS DOWN 6 MIN` — done when: a test shows the banner of a cleared trouble
+  without the crit slab class or the banner size, calm size and `--text-2`, and the "was down" text with its
+  age, and a film of `galaxy.html?demo=1&quality=0` has no full-size red banner while its line says `CLEARED`.
+- [ ] T19 (r11-dreamer galaxy 2) [ui] [variant:galaxy] The overview reads as a spiral (follow-up to T3, whose
+  ribbon the panel cannot see): narrow the ribbon (half 170) and lay a tighter band at 8-10 % along the spine
+  near each site only, never above `--text-3`; soften the vignette's banding (stretched gradient or dither) so no
+  concentric rings show — done when: a test pins the near-site band's opacity inside (0.08, 0.10) and the
+  ribbon's width, and a still of `galaxy.html?at=overview&quality=0` shows two arms through the sites and no
+  ring bands in the vignette, crit nebulae still the brightest things.
+- [ ] T20 (r11-dreamer galaxy 3) [ui] [variant:galaxy] Not three reds saying one thing: while a caption plate is
+  up and the banner's subject is the plate's subject, the banner drops out (or shows the next problem, as T23
+  does when the subjects differ), and the held planet's own label is hidden while the hero names it — done when:
+  a test shows the banner hidden or on another subject and the planet label hidden while the plate names the
+  same thing, and `?at=hv2` shows one headline plus the planet's bracket.
 
 ## Research questions
 
@@ -321,8 +337,24 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 - (r4-film-ui, across the variants; taste) Idea: the folded trouble cluster at the overview could take the beacon's
   vertical silhouette, so shape carries where colour does not. Not a task.
 
+- (r11-dreamer galaxy 4, taste) A calm plate could carry one or two quiet facts (`12 rooms · 3 working · last
+  deploy 14m`) so a calm hold says why it is calm. Not a task.
+- (r11-dreamer galaxy 9, taste) Put the best accidental frame on purpose: hold the camera's last ~0.8 s of a
+  trouble arrival at the mid-open angle with nebula, brackets and plate. Not a task.
+- (r11-dreamer across 2, taste) Calm open systems could take the trouble system's composition: centred, large,
+  stems for depth, without the red. Not a task.
+- (r11-dreamer, `fx` candidates, none asked for) `fx=tide`: calm nebulae breathe at ~8 s by how busy the site is,
+  a silent site stops breathing (≤ 6 % swing, trouble stays louder). `fx=telemetry`: in a held system a ring round
+  each planet drawn to cpu and mem, status hue on trouble members. `fx=trail`: a faint dotted arc between the
+  systems the tour visited this cycle.
+
 ## Reviews
 
+- r11-dreamer.md: 9 galaxy + 3 beacon + 2 across + 3 unforgettable; 3 became tasks (T18, T19, T20); galaxy 4 (the
+  frame idea is in Later; the calm facts to the owner), 9 to the owner; galaxy 5, 6, 7, 8 and beacon 1, 3 dropped
+  (covered by T16, T9, Later A4 feathered plates, Later r15-dreamer 4, Later r26-skeptic 4); beacon 2, comets,
+  twinkle, lanes dropped (observation, retired); across 1 already with the owner, across 2 to the owner; the three
+  `fx` ideas to the owner.
 - r4-film-ui.md: 12 findings (9 galaxy, 3 fx-beacon) + 2 across; 3 became tasks (T15, T16, T17); galaxy 2 and 9 and
   beacon 1, 2 dropped (covered by T4, T3, T9); galaxy 3, 5, 6, 8 and beacon 3 went to Later; across 1 dropped
   (observation), across 2 to the owner.
@@ -336,5 +368,10 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 | r4 | film-ui, fx-lanes | – | – | – | – | 2 | 8 | – |
 | r4 | film-ui, fx-comets | – | – | – | – | 3 | 7 | – |
 | r4 | film-ui, fx-twinkle | – | – | – | – | 2 | 9 | – |
+| r11 | dreamer, galaxy | 5 | 6 | 6 | 1 | 5 | 4 | 6 |
+| r11 | dreamer, fx-beacon | – | – | – | – | 6 | 6 | – |
+| r11 | dreamer, fx-comets | – | – | – | – | 2 | 8 | – |
+| r11 | dreamer, fx-twinkle | – | – | – | – | 2 | 9 | – |
+| r11 | dreamer, fx-lanes | – | – | – | – | 2 | 8 | – |
 
 ## Morning
