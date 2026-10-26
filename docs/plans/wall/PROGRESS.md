@@ -166,11 +166,30 @@ Notes for every builder round (planner, round 1):
   VM's software render (22 geometries, 3 textures, unchanged). Seen (for T18): at `?at=lab` the trouble lane
   feat-search is under the caption plate, so its brackets are hidden and no leader (it runs back left); on
   hv2 the lower brackets touch the far fleet block.
-- [ ] T10 (§7.A6) [variant:galaxy] Speed: script ms per frame in `__wallPerf`-style stats and a `?perf=1`
+- [x] T10 (§7.A6) [variant:galaxy] Speed: script ms per frame in `__wallPerf`-style stats and a `?perf=1`
   overlay (ms/frame, fps, `performance.memory` when there, renderer info: calls, geometries, textures); a
   pure `budgetStep(stats)` that lowers sphere segments, dust and star sprites when frames miss the budget;
   geometries and textures disposed on relayout — done when: a test covers `budgetStep` stepping down and back
   up, and an hour-proxy run (10 min of `?demo=1` on the large demo) shows renderer geometries/textures flat.
+  (commit c3603b9) `galaxy/budget.js` (pure): `createFrameWindow` times frames in 1 s windows (mean gap,
+  script ms, fps; a hidden page starts again); `budgetStep(state, window)`: 3 windows over 20.8 ms (1.25 × a
+  60 Hz frame) step down, 20 windows at ≤ 18 ms with script < 6 ms step up, and each step up that did not
+  hold doubles that wait (≤ 320 windows), so a page on the edge settles instead of popping its dust.
+  `LEVELS`: L0 full, L1 segments 0.65 / dust and stars 0.6, L2 0.45 / 0.35. `scene.setQuality(n)` gives every
+  mesh new shared spheres (old ones disposed; a member laid out later gets the current ones) and thins dust
+  and far stars by draw range (both are in random order, so it is an even thinning). `__wallPerf` adds
+  `scriptMs`, `frameMs`, `level`; `?perf=1` prints three mono lines in the top margin above the tag (script
+  ms · ms/frame · fps · level; calls · geo · tex; heap MB); `?quality=<0..2>` pins a level and turns the
+  budget off. Tests (`test/wall-galaxy-budget.test.mjs`): steps down and back up, the doubling wait, the
+  windows, the overlay lines, the sphere swap, and 36 tree-change + quality cycles leave the live geometry
+  count flat (it fails when `setMembers` stops disposing). Hour proxy (`$RUN_DIR/shots/r23-hourproxy.txt`,
+  10 min of `?demo=1` on the large demo, SwiftShader, 36 relayout swaps): geometries 22, textures 3, programs 8
+  flat throughout; heap 7.4-10.7 MB, ended at 7.7; script 0.8-1.8 ms/frame; 0 errors. Filmstrip
+  `$RUN_DIR/shots/r23-galaxy/sheet.png` (`?demo=1&perf=1`, 4x): the overlay steps L0 → L1 → L2 in the first
+  ~10 s, as it should on the VM's software GL; script 4-18 ms/frame at 4x; 0 console errors. Stills
+  `r23-still-q0`/`-q2` (`?at=hv1&quality=…`): the same scene, L2 only thinner dust and coarser spheres.
+  **Note for filming rounds:** on this VM the budget always goes to L2 (SwiftShader frames are ~100+ ms), so
+  films that judge looks should add `&quality=0` to see the tablet's level; leave it off to see the budget.
 - [ ] T11 (§7.A7) [ui] [variant:galaxy] Reduced motion (D5): no flights, no drift; the overview with every
   cluster folded and the caption rotating through the sites, trouble first, with `STILL_CAPTION_TIMING` —
   done when: a test with `prefers-reduced-motion` stubbed shows no `focus()` flight and the caption cycling,
