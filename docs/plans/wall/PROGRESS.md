@@ -599,6 +599,29 @@ Notes for every builder round (planner, round 1):
   re-typing, brackets recoloured); a fall waits for the leg's end — done when: a test with a fake tour feeds a
   held site warn → crit and sees the caption lines and lock target updated at once, and warn ← crit unchanged
   until the next leg.
+- [ ] T36 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r54-film-ui.md galaxy 3) The camera flies through clusters:
+  film frames at 66.7 s (a blown-out amber/red cluster over the bottom-left quarter) and 44.9 s (HV2's nebula
+  across half the frame) are the ugliest of the strip; §7.B says no flight through the sun or a cluster. In
+  `camera.js flightPose` keep the path at least `1.5 × reach` from every star but the two ends (bend the arc
+  up, as it already lifts by 0.18 of the hop) and fade nebula lobes and spheres whose screen size passes ~40 %
+  of the frame height — done when: a test shows `flightPose` over every site pair of the large fixture never
+  nearer than `1.5 × reach` to a third site's star, the ends unchanged and the path continuous, and a film
+  of `galaxy.html?demo=1&quality=0` shows no frame filled by one cluster.
+- [ ] T37 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r54-film-ui.md galaxy 1) Two headlines in every trouble
+  frame: the caption hero `■ STORAGE` and the banner `■ HV1 · VM-C` have the same face, weight, hue and cap
+  height (~130 px at 2x), so two crits read as equals although the camera chose one. In `wall.css`, while a
+  caption plate is up (a state `hud.js` already knows; set an attribute on `#wall-frame` or `html`) the banner
+  and its glyph drop to the caption's name size (`--cap-name`); at the overview, with no plate, it keeps
+  today's size — done when: a test (hud) shows the attribute set while the plate shows and cleared at the
+  overview, `wall.css` has the smaller banner rule under it, and `?at=hv2` shows the banner clearly below the
+  hero while `?at=overview` is unchanged.
+- [ ] T38 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r54-film-ui.md galaxy 2, fx beacon) Hard-edged dark
+  boxes cut the soft world: the fleet block's ground slices HV2's nebula with a straight edge, the caption plate
+  cuts the beacon's sheath flat (fx frame 10). In `wall.css` give both plates a feathered edge (`mask-image:
+  linear-gradient(...)`, ~4 vmin falloff to transparent) or drop the ground for a text-shadow halo; the corner
+  brackets stay as the only hard lines; the beacon's sheath fades to zero over its top 20 % (`scene.js`) — done
+  when: a test pins the mask (or no ground) on both plates in `wall.css` and the sheath's tip alpha, and a still
+  of `?at=hv2&fx=beacon&quality=0` shows no straight cut through a nebula.
 
 ## Research questions
 
@@ -720,6 +743,24 @@ Notes for every builder round (planner, round 1):
 - §7.B (r49-accessibility 8) In still mode a new crit should cut the caption rotation (next caption is that site, at once).
 - §7.C (r49-accessibility fx) `fx=beacon`: brighten the pillar's core toward white at the base so it carries in
   greyscale/protanopia (after T33).
+- §7.B (r54-film-ui 4) The caption arrives before the camera: start the caption at flight progress ~0.9 and draw
+  the leader only after the name has typed (`hud.js`).
+- §7.B (r54-film-ui 5) The status glyph `■` is a slab off the baseline: size it to the cap height (0.7em), on the
+  baseline, gap 0.22em (caption hero and banner).
+- §7.B (r54-film-ui 6) Two type scales: caption/frame sizes in vmin steps beside `type.js` steps; set `--cap-*` from
+  `stepsFor` at boot (extend upward 63, 84, 112).
+- §7.B (r54-film-ui 7) Doubled marks and piled halos in `?at=lab`: `▲` on the sphere and in the label; keep one;
+  members closer than a halo radius share one halo (overlaps r49-accessibility 5).
+- §7.B (r54-film-ui 8) Calm holds waste half the frame: remember two plate boxes (calm, trouble) in `main.js freeBox`
+  and frame a leg with the one its caption uses (`main.js` is fenced: the galaxy's own `main.js` is meant).
+- §7.B (r54-film-ui 9) The held star is named twice (caption and label): hide its label while its caption is up.
+- §7.B (r54-film-ui 10) The hub's name competes with the sites: mono caps at the room step, `--text-3` (= r26-skeptic 4;
+  T31 covers the collision).
+- §7.B (r54-film-ui 11) The overview is a constellation, not a galaxy since T26: faint arm ribbon at 4-6 % under the
+  dust at `fit()` only (= r15-dreamer 9).
+- §7.B (r54-film-ui 12) The tether ends ~45 px short of the banner glyph and crosses a hyperlane: land it on the glyph's
+  top centre with a tick.
+- §7.C (r54-film-ui fx) `fx=beacon` dims to the open level while the camera flies close to it (with T36).
 - §7.B Polish (tour pacing, camera paths, how far a system opens, nebula shapes and colours, the sun, the
   dust, type at 3 m): triage turns at most 3 findings per review into tasks; the rest land here.
 - §7.C `fx=storm`: a crit nebula as a slow storm (swirl, flicker of lightning).
@@ -779,6 +820,9 @@ Notes for every builder round (planner, round 1):
   letter-by-letter plate and the far fleet line has no live region. Needs fenced `caption.js`/`frame.js`: plate
   `aria-live="off"` while typing plus one visually hidden live node with the full text; fleet line `role="status"`,
   announcing only when subject or tone changes.
+- (r54-film-ui, fx) `lanes`, `comets` and `twinkle` are invisible in every sheet and still, so they are calm but not
+  effects. Idea: a comet's landing flashes the target planet once; a lane pulse brightens its hyperlane by a step while
+  it passes. Taste question, not turned into a task: keep, rework or drop them?
 - (r31-touch 5) The far fleet line's `+3 MORE` is 10 px mono: unreadable at 3 m and too small to tap. Making
   it a 48 px chip needs fenced `frame.js`; for night 3 a tap on the fleet line should also fly to its node.
 
@@ -814,6 +858,10 @@ Notes for every builder round (planner, round 1):
   protanopia the crit cluster loses to warn), 3 became tasks (T33 crit luminance = 1, T34 trouble name size = 4,
   T35 caption follows status = 3); 2/5/6/8 and the beacon note under Later, 7 needs fenced files (For the owner).
   No `fx` proposals. Flashing, reduced-motion film and calm-grey contrast checked fine: dropped.
+- r54-film-ui.md: 12 galaxy findings + fx notes + 3 m check (yes; DEMO-HOST reads as a sixth site), 3 became
+  tasks (T36 flight through clusters = 3, T37 two headlines = 1, T38 hard-edged plates + beacon tip = 2 and fx);
+  4/5/6/7/8/9/10/11/12 under Later (10 = r26-skeptic 4, covered in part by T31), the lanes/comets/twinkle note
+  under For the owner. No `fx` proposals.
 
 ## Scores
 
@@ -841,5 +889,10 @@ Notes for every builder round (planner, round 1):
 | 49 | accessibility (fx-comets) | - | - | - | - | 4 | 6 | - |
 | 49 | accessibility (fx-twinkle) | - | - | - | - | 2 | 9 | - |
 | 49 | accessibility (fx-beacon) | - | - | - | - | 6 | 7 | - |
+| 54 | film-ui (galaxy) | 6 | 6 | 7 | 2 | 6 | 5 | 6 |
+| 54 | film-ui (fx-lanes) | - | - | - | - | 2 | 8 | - |
+| 54 | film-ui (fx-comets) | - | - | - | - | 3 | 7 | - |
+| 54 | film-ui (fx-twinkle) | - | - | - | - | 2 | 9 | - |
+| 54 | film-ui (fx-beacon) | - | - | - | - | 7 | 6 | - |
 
 ## Morning
