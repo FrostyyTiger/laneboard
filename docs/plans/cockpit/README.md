@@ -120,6 +120,44 @@ Rules: **display only**. These change what a screen shows, never the fleet. Ever
 appears as a line in the conversation, and the owner can undo it with one tap. Show commands go
 room → hub → screens; the hub relays view state and gains no new authority over builders.
 
+### C4b. Canvas: a screen the agent draws on
+
+A screen (or half of one) can be a **canvas** instead of the tour: an open surface where the agent
+puts things for the owner. Any screen can be tour, explore or canvas; with one screen they split
+or switch.
+
+- **Kit blocks, in seconds.** A small set of ready-made blocks the agent places by naming the block
+  and its data: timer, countdown, chart, table, live log, checklist, status tile, "zoom the map
+  here". A block bound to real data stays live: a countdown for a scheduled job shows the job and
+  cancels it.
+- **Custom cards, in about a minute.** Anything the kit lacks, the agent writes as a small HTML card
+  rendered in a sandboxed frame that can read board data and nothing else (no network, no
+  credentials, no actions).
+- **Promotion.** A custom card that proves useful becomes a kit block, so the canvas gets faster
+  with use.
+- Cards persist until dismissed; every card says who made it and when; one tap removes it.
+
+### Proactive: the agent speaks up
+
+The agent does not only answer. It watches the same alerts, Morning and Stuck data the board shows
+and raises what needs a human ("a runner's disk is at 90 %, clean it?", "last night's run has been
+stuck for an hour"), as a line in the conversation and, if it matters, a card on the canvas.
+Quiet hours and a per-kind mute in config.
+
+### Scheduled jobs are visible
+
+Anything the agent schedules ("shut this off in 3 hours") is a job the board knows about: shown on
+the Map at its target and as a countdown on the canvas, cancellable with one tap, listed in the
+audit log. No hidden timers.
+
+### Knowing what should be there
+
+- The agent's room keeps a read-only clone of the owner's infrastructure repo (whatever declares
+  the fleet), pulled on a timer, so it always knows the intended state.
+- Comparing intended with running (drift) is one of its standing jobs, raised proactively.
+- **Whoever changes something writes it down in the same place.** The agent's own changes go to
+  the repo as a branch or a small PR for the owner to merge, never straight to the main branch.
+
 ### C5. Voice out
 
 - Optional text-to-speech of the agent's reply, from a configurable endpoint (local by default).
