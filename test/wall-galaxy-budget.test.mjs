@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../public/vendor/three/three.module.js';
 import {
-  BUDGET, LEVELS, budgetStart, budgetStep, createFrameWindow, perfLine,
+  BUDGET, LEVELS, budgetStart, budgetStep, createFrameWindow, perfLine, pixelRatioFor, ratioPin,
 } from '../public/js/wall/galaxy/budget.js';
 import { paletteFrom } from '../public/js/wall/galaxy/palette.js';
 import { createGalaxyScene, DUST_LOOK } from '../public/js/wall/galaxy/scene.js';
@@ -112,15 +112,17 @@ const fakeDoc = {
   }),
 };
 
-function sceneAt({ dpr = 1, render = () => {} } = {}) {
+function sceneAt({ dpr = 1, render = () => {}, ratio = null, ratios = [], sizes = [] } = {}) {
   const clock = { now: 1000 };
   const galaxy = createGalaxyScene({ clientWidth: 1600, clientHeight: 900 }, {
     dpr,
+    ratio,
     palette: paletteFrom(),
     doc: fakeDoc,
     clock: () => clock.now,
     makeRenderer: (canvas) => ({
-      domElement: canvas, setPixelRatio() {}, setClearColor() {}, setSize() {}, dispose() {}, render,
+      domElement: canvas, setPixelRatio: (r) => ratios.push(r), setClearColor() {},
+      setSize: (w, h) => sizes.push([w, h]), dispose() {}, render,
     }),
   });
   const at = (ms) => { clock.now = ms; galaxy.frame(ms); };
@@ -295,4 +297,75 @@ test('nebula lobes and system planes draw in one pass, so three never rebuilds t
     if (m && !Array.isArray(m) && m.transparent && m.side === THREE.DoubleSide) assert.equal(m.forceSinglePass, true, o.name || o.type);
   });
   galaxy.dispose();
+});
+
+test('each level brings a pixel ratio, best first, capped by the screen (T28)', () => {
+  assert.deepEqual(LEVELS.map((L) => L.ratio), [2, 1.5, 1.25]);
+  assert.equal(pixelRatioFor(0, 2), 2);
+  assert.equal(pixelRatioFor(1, 2), 1.5);
+  assert.equal(pixelRatioFor(2, 2), 1.25);
+  assert.equal(pixelRatioFor(0, 3), 2, 'a 3x phone still draws at 2');
+  assert.equal(pixelRatioFor(1, 1), 1, 'never above the screen');
+  assert.equal(pixelRatioFor(9, 2), 1.25, 'levels are clamped');
+  assert.equal(pixelRatioFor(0, 2, 1), 1, 'a pin wins over the level');
+  assert.equal(pixelRatioFor(2, 2, 1.75), 1.75);
+  assert.equal(pixelRatioFor(0, 1, 2), 1, 'a pin is capped by the screen too');
+  assert.equal(ratioPin(null), null);
+  assert.equal(ratioPin(''), null);
+  assert.equal(ratioPin('1'), 1);
+  assert.equal(ratioPin('1.5'), 1.5);
+  for (const bad of ['x', '0', '-1', '9']) assert.equal(ratioPin(bad), null, bad);
+  assert.equal(perfLine({ w: { scriptMs: 1, frameMs: 16.7, fps: 60 }, level: 2, ratio: 1.25 })[0],
+    '1.00 ms script · 16.7 ms/frame · 60 fps · L2 ×1.25');
+});
+
+test('setQuality draws at the level\'s pixel ratio and moves nothing; ?ratio= pins it (T28)', () => {
+  const ratios = [], sizes = [];
+  const { galaxy, at } = sceneAt({ dpr: 2, ratios, sizes });
+  galaxy.update(fleet());
+  at(1000);
+  assert.equal(ratios.at(-1), 2);
+  assert.equal(galaxy.pixelRatio, 2);
+  const pose = () => [...galaxy.camera.position.toArray(), ...galaxy.camera.quaternion.toArray(), galaxy.camera.aspect];
+  const before = pose();
+  const sized = sizes.length;
+  let root = galaxy.world.sites[0].star;
+  while (root.parent) root = root.parent;
+  const capOf = () => {
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.points.vertexShader, fragmentShader: '' };
+    root.getObjectByName('dust').material.onBeforeCompile(sh);
+    return sh.uniforms.dustCap.value;
+  };
+  for (const [level, r] of [[1, 1.5], [2, 1.25], [0, 2]]) {
+    galaxy.setQuality(level);
+    assert.equal(ratios.at(-1), r, `L${level}`);
+    assert.equal(galaxy.pixelRatio, r);
+    assert.equal(capOf(), DUST_LOOK.maxPx * r, 'the dust cap follows the ratio');
+    at(1000);
+    assert.deepEqual(pose(), before, 'the same framing at every level');
+  }
+  assert.equal(sizes.length, sized, 'the css size is not set again');
+  galaxy.dispose();
+
+  const pinned = [];
+  const p = sceneAt({ dpr: 2, ratio: 1, ratios: pinned });
+  assert.equal(pinned.at(-1), 1);
+  p.galaxy.setQuality(2);
+  assert.equal(pinned.at(-1), 1, 'the pin holds at every level');
+  p.galaxy.setQuality(0);
+  assert.equal(p.galaxy.pixelRatio, 1);
+  p.galaxy.dispose();
+
+  const low = [];
+  const l = sceneAt({ dpr: 1, ratios: low });
+  l.galaxy.setQuality(1);
+  assert.deepEqual(low, [1, 1], 'a 1x screen stays at 1');
+  l.galaxy.dispose();
+});
+
+test('galaxy/main.js passes ?ratio= to the scene and reports the ratio (T28)', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../public/js/wall/galaxy/main.js', import.meta.url), 'utf8');
+  assert.match(src, /ratio: ratioPin\(q\.get\('ratio'\)\)/);
+  assert.match(src, /ratio: galaxy\.pixelRatio/);
 });

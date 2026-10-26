@@ -9,12 +9,34 @@
 // Pure: the caller passes the clock and the numbers (main.js feeds it, the
 // `?perf=1` overlay prints `perfLine`).
 
-/** The quality levels, best first: fractions of the full segments, dust and far stars. */
+/**
+ * The quality levels, best first: fractions of the full segments, dust and
+ * far stars, and the pixel `ratio` the canvas is drawn at (capped by the
+ * screen's): the tablet's iGPU is bound by fill rate at 2736x1824, so a
+ * lower level also shades fewer pixels (T28).
+ */
 export const LEVELS = Object.freeze([
-  Object.freeze({ seg: 1, dust: 1, stars: 1 }),
-  Object.freeze({ seg: 0.65, dust: 0.6, stars: 0.6 }),
-  Object.freeze({ seg: 0.45, dust: 0.35, stars: 0.35 }),
+  Object.freeze({ seg: 1, dust: 1, stars: 1, ratio: 2 }),
+  Object.freeze({ seg: 0.65, dust: 0.6, stars: 0.6, ratio: 1.5 }),
+  Object.freeze({ seg: 0.45, dust: 0.35, stars: 0.35, ratio: 1.25 }),
 ]);
+
+/** `?ratio=`'s value as a pin: a number from 0.5 to 4, else null (no pin). */
+export function ratioPin(raw) {
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0.5 && n <= 4 ? n : null;
+}
+
+/**
+ * The pixel ratio to draw at: the level's, or `pin` (`?ratio=`) when it is
+ * a positive number, never above the screen's `dpr`.
+ */
+export function pixelRatioFor(level, dpr = 1, pin = null) {
+  const L = LEVELS[Math.max(0, Math.min(LEVELS.length - 1, Math.round(Number(level) || 0)))];
+  const want = Number(pin) > 0 ? Number(pin) : L.ratio;
+  return Math.min(Number(dpr) > 0 ? Number(dpr) : 1, want);
+}
 
 /**
  * The budget: a window of `windowMs`; a window misses when its mean frame
@@ -100,11 +122,13 @@ const fixed = (x, d = 1) => (Number.isFinite(x) ? x.toFixed(d) : '–');
 
 /**
  * The overlay's lines: `w` a closed window, `level`, `info` three's
- * `renderer.info`, `memory` `performance.memory` when the browser has it.
+ * `renderer.info`, `memory` `performance.memory` when the browser has it,
+ * `ratio` the pixel ratio drawn at (printed after the level when given).
  */
-export function perfLine({ w, level = 0, info = null, memory = null } = {}) {
+export function perfLine({ w, level = 0, info = null, memory = null, ratio = null } = {}) {
+  const at = Number(ratio) > 0 ? ` ×${Number(ratio)}` : '';
   const lines = [
-    `${fixed(w?.scriptMs, 2)} ms script · ${fixed(w?.frameMs)} ms/frame · ${fixed(w?.fps, 0)} fps · L${level}`,
+    `${fixed(w?.scriptMs, 2)} ms script · ${fixed(w?.frameMs)} ms/frame · ${fixed(w?.fps, 0)} fps · L${level}${at}`,
   ];
   if (info) {
     lines.push(`${info.render?.calls ?? '–'} calls · ${info.memory?.geometries ?? '–'} geo · ${info.memory?.textures ?? '–'} tex`);

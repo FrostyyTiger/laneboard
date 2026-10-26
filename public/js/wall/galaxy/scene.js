@@ -19,7 +19,7 @@ import { galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, CLOSED } f
 import { tourOrder, tourSites } from '../tour.js';
 import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
-import { LEVELS } from './budget.js';
+import { LEVELS, pixelRatioFor } from './budget.js';
 import { breathWave, dustTurn } from './still.js';
 import { armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
@@ -312,18 +312,20 @@ const pageClock = () => globalThis.performance.now();
  * `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets,
  * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them).
  * Returns `{ update, setOpen, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize,
- * setQuality, camera, world, quality, routes, comets, twinkles, beacons, renderer, dispose }`.
+ * setQuality, camera, world, quality, pixelRatio, routes, comets, twinkles, beacons, renderer, dispose }`.
+ * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
  */
 export function createGalaxyScene(canvas, {
   palette, doc = globalThis.document, dpr = globalThis.devicePixelRatio || 1,
-  clock = pageClock, makeRenderer = webgl, still = false, fx = null,
+  clock = pageClock, makeRenderer = webgl, still = false, fx = null, ratio = null,
 } = {}) {
   const col = (rgb) => new THREE.Color().setRGB(rgb[0], rgb[1], rgb[2], THREE.SRGBColorSpace);
   const tone = Object.fromEntries(TONES.map((t) => [t, col(palette[t])]));
   const bg = col(palette.bg);
 
   const renderer = makeRenderer(canvas);
-  renderer.setPixelRatio(Math.min(2, dpr));
+  let pixelRatio = pixelRatioFor(0, dpr, ratio);
+  renderer.setPixelRatio(pixelRatio);
   renderer.setClearColor(bg, 1);
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(bg, 0.00008);
@@ -381,8 +383,8 @@ export function createGalaxyScene(canvas, {
     return pts;
   })();
   const dustHold = { value: new THREE.Vector4(0, 0, 0, 1) }, dustOpen = { value: 0 };
-  // The cap in device px (gl_PointSize is), at the renderer's pixel ratio.
-  const dustCap = { value: DUST_LOOK.maxPx * Math.min(2, dpr) };
+  // The cap in device px (gl_PointSize is), at the renderer's pixel ratio (setQuality keeps it so).
+  const dustCap = { value: DUST_LOOK.maxPx * pixelRatio };
   const dust = (() => {
     const { positions, t } = dustPoints(DUST);
     const colours = new Float32Array(t.length * 3);
@@ -1103,7 +1105,9 @@ export function createGalaxyScene(canvas, {
   /**
    * Draws at one of budget.js's levels: new spheres at its segments on every
    * mesh (the old ones disposed), the dust and far stars thinned by their
-   * draw range. Nothing moves; the next frame just has less to draw.
+   * draw range, the canvas at the level's pixel ratio (or the `ratio` pin).
+   * Nothing moves: the canvas keeps its css size and the camera its pose;
+   * the next frame just has less to draw and fewer pixels to fill.
    */
   let quality = 0;
   const setQuality = (level) => {
@@ -1120,6 +1124,9 @@ export function createGalaxyScene(canvas, {
     for (const k of Object.keys(geo)) { geo[k].dispose(); geo[k] = next[k]; }
     dust.geometry.setDrawRange(0, Math.round(DUST * L.dust));
     stars.geometry.setDrawRange(0, Math.round(STARS * L.stars));
+    pixelRatio = pixelRatioFor(q, dpr, ratio);
+    renderer.setPixelRatio(pixelRatio);
+    dustCap.value = DUST_LOOK.maxPx * pixelRatio;
     return true;
   };
 
@@ -1136,6 +1143,8 @@ export function createGalaxyScene(canvas, {
     renderer, dispose,
     get world() { return world; },
     get quality() { return quality; },
+    /** The pixel ratio the canvas is drawn at now (the level's, capped by dpr, or the pin). */
+    get pixelRatio() { return pixelRatio; },
     get routes() { return routes; },
     get comets() { return comets.flying; },
     get twinkles() { return twinkles; },

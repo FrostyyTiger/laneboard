@@ -13,6 +13,8 @@
 // miss the frame budget step the scene's quality down, roomy ones back up.
 // `__wallPerf` also carries `scriptMs`, `frameMs` and `level`; `?perf=1`
 // shows them with three's renderer counts; `?quality=<0..2>` pins a level.
+// Each level draws at its own pixel ratio (T28, capped by the screen's);
+// `?ratio=<n>` pins it (still capped by the screen's), for filming or comparing frames.
 // Reduced motion (T11, D5, still.js): no flights, no turn, no drift; the
 // overview with every cluster folded and the caption rotating through the
 // sites, trouble first.
@@ -33,7 +35,7 @@ import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
 import { fallbackHref, hasWebGL } from './fallback.js';
 import { paletteFrom } from './palette.js';
-import { budgetStart, budgetStep, createFrameWindow, perfLine } from './budget.js';
+import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { prefersStill, stillTourTimingFor } from './still.js';
 import { critAges, flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
@@ -65,19 +67,22 @@ export function boot() {
   if (!hasWebGL(() => document.createElement('canvas'))) { toFallback('no context'); return; }
   let galaxy;
   try {
-    galaxy = createGalaxyScene(canvas, { palette, still: reduced, fx });
+    galaxy = createGalaxyScene(canvas, { palette, still: reduced, fx, ratio: ratioPin(q.get('ratio')) });
   } catch (err) {
     toFallback(err);
     return;
   }
 
   const perf = createPerf();
-  Object.assign(perf.stats, { scriptMs: 0, frameMs: 0, level: 0 });
+  Object.assign(perf.stats, { scriptMs: 0, frameMs: 0, level: 0, ratio: galaxy.pixelRatio });
   globalThis.__wallPerf = perf.stats;
   const windows = createFrameWindow();
   let budget = budgetStart();
   const pinned = q.has('quality') ? Number(q.get('quality')) : null;
-  if (pinned != null) { galaxy.setQuality(pinned); perf.stats.level = galaxy.quality; }
+  if (pinned != null) {
+    galaxy.setQuality(pinned);
+    Object.assign(perf.stats, { level: galaxy.quality, ratio: galaxy.pixelRatio });
+  }
   document.addEventListener('visibilitychange', () => { perf.pause(); windows.pause(); });
   let overlay = null;
   if (q.get('perf') === '1') {
@@ -96,9 +101,12 @@ export function boot() {
       scriptMs: Math.round(w.scriptMs * 100) / 100,
       frameMs: Math.round(w.frameMs * 10) / 10,
       level: galaxy.quality,
+      ratio: galaxy.pixelRatio,
     });
     if (!overlay) return;
-    const lines = perfLine({ w, level: galaxy.quality, info: galaxy.renderer.info, memory: performance.memory });
+    const lines = perfLine({
+      w, level: galaxy.quality, ratio: galaxy.pixelRatio, info: galaxy.renderer.info, memory: performance.memory,
+    });
     overlay.replaceChildren(...lines.map((t) => {
       const row = document.createElement('div');
       row.textContent = t;
