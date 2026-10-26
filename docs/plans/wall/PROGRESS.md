@@ -162,7 +162,7 @@ Notes for every builder round (planner, round 1):
   sprite budgets for 30-60 fps, instanced meshes vs many sprites, names as canvas-texture sprites vs a 2D
   overlay vs SDF text, how to measure script ms and GPU time per frame (timer queries), and how to avoid
   memory growth over hours (dispose rules, texture caches) — for T6, T10
-- [ ] Q10 Camera paths in a 3D map: how games and data tools fly between points without passing through
+- [x] Q10 → research/Q10-camera-paths.md (thin: no comfort threshold found). Camera paths in a 3D map: how games and data tools fly between points without passing through
   obstacles (the sun, other clusters), easing and duration rules, and how slow an orbit drift can be and
   still read as depth without causing discomfort — for T4 and the B polish (camera paths)
 - [ ] Q11 Cheap glow and nebulae in three.js without a post-processing pass: additive sprites and
