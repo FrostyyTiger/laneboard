@@ -179,11 +179,36 @@ Notes for every builder round (planner, night 1):
   labels T27. Seen and left to their tasks: some room labels still pushed a line or two off their
   node by the collision pass (PROXY, FRONT-DOOR; T15 pins them), and the larger rings bring the
   bottom nodes near the fleet line (T17's safe area).)
-- [ ] T12 (§5) [variant:orbits] The rings as ellipses that use the full width; sites as planets
+- [x] T12 (§5) [variant:orbits] The rings as ellipses that use the full width; sites as planets
   with their rooms in orbit around them, in `public/js/wall/variants/orbits.js` (a pure layout
   through T10's option, `rings: false` plus its own orbit lines) — done when: a test checks the
   layout fills the screen's aspect (no node outside the frame, width used); a filmstrip
   `$RUN_DIR/shots/<round>-orbits/` shows the tour, caption, lock and trouble first, fps >= 27.
+  (commit 0a7e10c; the core is the sun, sites are planets on an ellipse `(stretch·t, t)` at even
+  angles; `arrange` tries both phases and stretches 1-3.2 and keeps the largest overview scale,
+  then of near ties the widest (at 16:9 the height binds, so the width is free air). Each planet's
+  children and grandchildren ride one circle (named 34, dot 11 world units of arc, min radius 72),
+  the planet's name sits on the orbit at six o'clock in a gap the moons leave for it; deeper
+  nodes (sessions) a step outside; a run on the core circles the sun. Names point away from the
+  planet. Labels are radial's `labelSize`. No turn (`ambient: {drift: 0}`): a turning ellipse
+  leaves the screen. Map hooks, all inert without a custom layout that sets them: `guides`
+  (ellipses drawn where the rings were), `bounds {x, y, cy}` (the fit uses the layout's own view,
+  `cy` puts the camera below the origin so the bottom 20 % stays for the clock and fleet line),
+  per-position `branch` ('none' / 'straight' / an arc around a point, `layout.js branchCurve`;
+  in layout.js because a fenced test pins render.js's exports), `labelAngle`, `labelAt`.
+  Variants may give `optionsFor(aspect)` and `ambient`; `variants.js mapOptionsFor` builds them,
+  main.js passes the stage's aspect. Tests `test/wall-orbits.test.mjs` (3:2 and 16:9: inside the
+  safe area, >60 % of the width spanned, systems clear of each other and the sun, members on
+  their orbit and out of the name's gap, the Map hooks off by default). Filmstrip
+  `$RUN_DIR/shots/r27-orbits/`, still `r27-still/`: tour HV1 (attention) first, then CLOUD
+  (warn), the calm ones, overview, HV1 again first once crit; caption and lock on each; 0 console
+  errors; fps 4.1 is SwiftShader plus screenshots (filming note); script 8.5 ms/frame average,
+  47 ms worst at 4x (radial measured 11.4/69 in the same minute: the VM was busy). Seen and left
+  to their tasks: HV1's left side is crowded (builders, lanes and their trouble labels pushed off
+  their nodes by the collision pass, T15); a crit service's name is white, the hue only on its
+  mark (T16); `ACME-BILLING` reaches 16 px from the left edge (labels extend past the node safe
+  area, T17); a flight between planets swings along an arc round the sun (the Map springs in
+  polar, T10's note).)
 - [ ] T13 (§5) [variant:islands] Each site its own cluster laid out across the screen, links between
   sites as long arcs, the camera touring island to island, in `public/js/wall/variants/islands.js`
   — done when: a test checks islands do not overlap and fill the aspect; a filmstrip
