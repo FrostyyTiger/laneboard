@@ -1113,3 +1113,8 @@ The camera phrasing, type case rule, radial site names outside the ring and othe
 Open research questions: none.
 
 Owner notes: the script left none this night (`$RUN_DIR/owner-notes` does not exist).
+
+## The owner's pick (2026-10-26)
+None of the four as built: the **galaxy** sketched the morning after (README §5, branch
+`sketch/wall-galaxy`), with islands-tiles as the 2D fallback. Filming: still open, night 2 measures
+script ms per frame (README §7 Night 2 A6).

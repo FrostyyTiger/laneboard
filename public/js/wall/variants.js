@@ -16,8 +16,6 @@ import * as radial from './variants/radial.js';
 import * as orbits from './variants/orbits.js';
 import * as islands from './variants/islands.js';
 import * as mosaic from './variants/mosaic.js';
-import * as islandsTiles from './variants/islands-tiles.js';
-import * as orbitsTiles from './variants/orbits-tiles.js';
 
 /** The directions, in the order a morning report lists them. */
 export const VARIANTS = Object.freeze([
@@ -36,14 +34,6 @@ export const VARIANTS = Object.freeze([
   Object.freeze({
     id: 'mosaic', label: 'Mosaic', mapOptions: mosaic.mapOptions,
     optionsFor: mosaic.optionsFor, ambient: mosaic.ambient,
-  }),
-  Object.freeze({
-    id: 'islands-tiles', label: 'Islands + tiles (sketch)', mapOptions: islandsTiles.mapOptions,
-    optionsFor: islandsTiles.optionsFor, ambient: islandsTiles.ambient, links: 'focus',
-  }),
-  Object.freeze({
-    id: 'orbits-tiles', label: 'Orbits + tiles (sketch)', mapOptions: orbitsTiles.mapOptions,
-    optionsFor: orbitsTiles.optionsFor, ambient: orbitsTiles.ambient, links: 'focus',
   }),
 ]);
 

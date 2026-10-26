@@ -75,27 +75,49 @@ The owner's words, which are the brief:
 - D6 **Repo is public**: demo names only (`hv1`, `builder-a`, `acme`, `example.invalid`). The hygiene
   test is the gate.
 - D7 **Nights are explore, build, polish** (§7). Night 1 builds several directions and picks none.
+- D8 **The galaxy is WebGL through three.js**, pinned (owner to confirm before night 2 starts; the
+  sketch vendored `public/vendor/three/three.module.js` 0.170.0, MIT). No other 3D or UI framework.
+- D9 **Effects are switches, the owner picks** (`galaxy.html?fx=<name>`, off by default). The loop builds
+  and films them and the panel scores them; it never turns one on by default.
 
-## 5. Layout is open (night 1 explores it)
+## 5. Layout: the galaxy (the owner's pick after night 1, 2026-10-26)
 
-The circle came from the desk Map. On a 3:2 or 16:9 screen it uses only the middle square. Night 1
-builds **3 or 4 directions** behind `wall.html?variant=<name>`, each a complete idle screen with the
-tour, on the large demo fleet, so they can be compared like for like:
+Night 1 built `radial`, `orbits`, `islands` and `mosaic` (`nights/night-1/`). The owner looked at them
+and at sketches made the morning after, and picked **one 3D galaxy**. The sketches are reference, not
+code of this branch: `docs/plans/wall/sketch/` (the galaxy is `galaxy.js` + `galaxy.html`; the 2D
+fallback `islands-tiles.js` + `tiles.js` + the links change in `main.js.diff`); runnable on branch
+`sketch/wall-galaxy` (`/galaxy.html?demo=1`, `?at=<site>&open=0..1`). They break this repo's guardrails on
+purpose (inline colours, top-level DOM, `innerHTML`, an absolute three.js import). What is fixed:
 
-- `radial`: today's constellation, refined (spacing, line density, label sizes for distance).
-- `orbits`: the rings as ellipses that use the full width; sites as planets with their rooms in orbit.
-- `islands`: each site its own cluster ("island") laid out across the screen, links as long arcs between
-  islands; the camera tours island to island.
-- one **wild card** from the research (a direction nobody listed: the researcher's best find).
+- **One galaxy, not islands.** The hub is the sun in the middle; the sites are star clusters along
+  spiral arms in a band of dust, a faint hyperlane from the sun to each. Seen from above at an angle.
+- **Grouped, and they open up.** At the overview a site is folded tight inside a nebula that takes its
+  worst status (calm: faint; warn: yellow; crit: red, breathing). When the camera flies to a site its
+  cluster opens into a 3D system; when the camera leaves it folds back.
+- **Real 3D, still readable.** Planets (rooms, builders) are lit spheres on inclined orbits, above and
+  below their system's plane by at most about half their distance from the star; each has a **stem**
+  down to the plane with a small ring where it lands. Names are drawn over everything and always face
+  the camera. The camera drifts slowly round a held system, so the depth reads.
+- **The red effect stays**: things in trouble glow from inside and pulse; a crit nebula breathes. The
+  owner: "ideas like that make this amazing". Trouble is still the loudest thing on screen (§2.1).
+- **Fallback**: `wall.html?variant=islands-tiles` (islands, trouble as filled hex tiles, links only on the
+  held site) stays as the 2D page for a machine without WebGL. Not polished further.
 
-Each must keep: trouble first and readable, the caption, the lock, the glow layer, 30 fps under the
-CPU throttle, labels legible at the overview for sites and rooms (services and leaves may be dots).
+What the sketches leave open is night 2's work (§7). The other directions and sketch variants stay in
+the code until night 3 decides what to delete.
 
 ## 6. Personas (the review panel)
 
 One persona per review round, in rotation (`loop/personas.txt`, prompts in `loop/prompts/personas/`).
 Each writes findings worst first with a concrete fix, and scores every variant 1-10 on the rubric
 (overview, legibility at 3 m, status, touch, wow, calm, performance). The scores go to `run.jsonl`.
+
+From night 2: the panel judges the `galaxy` (the variant name in its score lines) and every built `fx`
+(`score fx-<name> wow|calm <n>`). A **dreamer** persona joins the rotation: it says what is missing, not
+only what is wrong. Every reviewer adds a **3 m check**: one still at the overview, shrunk to what 3 m
+away looks like, and whether trouble and site names still read. **Triage turns at most 3 findings of a
+review into tasks** (the worst); the rest go to `## Later` with the review named (night 1: ten reviews
+made 52 tasks and 35 were left open).
 
 ## 7. Nights
 
@@ -120,9 +142,53 @@ Explore. Build the ground, then several directions; review them all; decide noth
    pick (or combine).
 
 ### Night 2
-Build the chosen direction properly: touch explorer (tap a node: fly, unfold, detail sheet; back;
-resume after a minute), reduced motion, docs (`docs/wall.md`: what it is, how to run it on a tablet in
-kiosk mode, the feed fields), tests. Written after the owner's pick.
+Build the galaxy properly, polish it with the panel, and **explore effects** for the owner to pick from.
+The loop picks no effect: it builds each behind a switch, the panel scores it, the owner decides.
+
+**A. Solid** (first, in this order):
+1. The sketch (§5, `docs/plans/wall/sketch/`) into Wall code, inside the guardrails
+   (`test/frontend.test.mjs`): `public/js/wall/galaxy/` modules (layout: arms, cluster offsets, heights,
+   fold/open as pure functions with tests; scene; camera; labels), the page `galaxy.html` using the
+   Wall's caption, frame and clock (`caption.js`, `frame.js`) instead of the sketch's own, the tour from
+   `tour.js` (trouble first) driving the 3D camera. `window.__wallPerf` counts frames as on `wall.html`.
+2. three.js as a pinned dependency (D8), served like the other vendored files (with its licence), and
+   the `islands-tiles` fallback variant from the sketch (`tiles.js`, focus-only links) with its tests.
+3. Labels in 3D: no two names on top of each other (the sketch piles lane names at a busy builder):
+   a screen-space collision pass, lanes named only when in trouble or the camera is close.
+4. Live data: a status change recolours and re-glows without a rebuild or a jump; a tree change folds
+   the cluster, re-lays it, opens it again. The camera never cuts.
+5. The target lock and the caption's trouble word on the 3D camera (project the node to the screen).
+6. Speed on the tablet (§2.4): a frame budget, fewer segments and sprites when it is missed, no growth
+   in memory over an hour (`?perf=1` overlay). Measure script ms per frame; fps under SwiftShader
+   measures the VM, not the page (filming note in `nights/night-1/PROGRESS.md`).
+7. Reduced motion (D5): no flights; the overview with all clusters folded and the caption rotating.
+
+**B. Polish** (the panel's findings, through triage, §6): tour pacing, camera paths (no flight through
+the sun or a cluster), how far a system opens, nebula shapes and colours, the sun, the dust and how it
+drifts, type at 3 m.
+
+**C. Explore: effects behind `galaxy.html?fx=<name>`** (comma-separated, all off by default). One builder
+task each, each ending in a filmstrip with and without it. Start with these; research and the dreamer
+persona add more (at most 4 new ones a night):
+- `lanes`: a light pulse runs along a hyperlane while a link between two sites is live.
+- `comets`: a running job or deploy is a small comet with a tail from its builder to where it lands.
+- `twinkle`: a planet with a working session twinkles softly (calm stays calm: slow, low contrast).
+- `storm`: a crit nebula turns into a slow storm (swirl, flicker of lightning), not just a brighter cloud.
+- `lights`: feed `glow` (D3: the home's lights) colours its planet's halo in the light's real colour.
+- `rings`: feed `ring` (a print job) as a ring of light filling round its planet.
+- `arrive`: a short shockwave on the plane when the camera arrives at a system in trouble.
+Each effect: what it means is in its caption line or `docs/wall.md`; nothing moves without meaning.
+
+**D. Research, as an idea hunt** (research.md, mode `ideas`): Stellaris, Homeworld, Elite Dangerous,
+EVE's map, No Man's Sky's galaxy map, sci-fi interface work (practitioners' write-ups), data-art and
+generative pieces that show live systems. Each question returns 2-3 concrete proposals for this Wall
+(what it would show, what it means, a cost guess); the planner turns the best into `fx` tasks.
+
+**E. Docs**: `docs/wall.md` (what it is, how to run it on a tablet in kiosk mode, the feed fields, the
+`fx` switches) and a Wall row in README's views table.
+
+The morning report lists every `fx` with its filmstrip and scores, and asks the owner: keep, drop, or
+more of it. Touch (D4) waits for night 3, after the owner has seen the galaxy on the tablet.
 
 ### Night 3
 Polish with the panel: every persona at least once on the built Wall, triage, fixes. Written after night 2.

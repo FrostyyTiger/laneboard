@@ -11,6 +11,9 @@ answered one again, and number new questions after the highest one there.
 - Order for night 1: the large demo fleet first, then the Wall page's ground (tour, captions, lock,
   glow, frame, `__wallPerf`, `?variant=`), then one task per direction (README §5), each ending in a
   filmstrip. The wild card waits for its research question to be answered.
+- Order for night 2: README §7 Night 2 A in its order (the sketch into Wall code first), then the
+  `fx` tasks of C, one each, interleaved with B fixes as triage adds them; E last. Two of the research
+  questions are `IDEAS:` questions (research.md, mode ideas) for D.
 - Each task line: `- [ ] T<n> (<plan part, e.g. §7.2>) <what> — done when: <a check a test, a
   screenshot or a filmstrip can show>`. Mark UI tasks with `[ui]`, direction tasks with `[variant:<name>]`.
 - Read the code first (`public/js/views/map/`, `test/tools/demo-fleet.mjs`, `test/helpers/demo-hub.mjs`,

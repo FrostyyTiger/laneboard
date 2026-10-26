@@ -1,5 +1,6 @@
 # The review panel, in rotation (README §6). One per review round; prompts in prompts/personas/<name>.md.
 film-ui
+dreamer
 operator
 skeptic
 touch
