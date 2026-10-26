@@ -94,7 +94,7 @@ Notes for every builder round (planner, round 1):
 
 ## Research questions
 
-- [ ] Q7 IDEAS: Strategy and space games' galaxy maps (Stellaris, Homeworld, Elite Dangerous' galaxy map,
+- [x] Q7 → research/Q7-galaxy-map-ideas.md (thin sources, see the file's "not confirmed"). IDEAS: Strategy and space games' galaxy maps (Stellaris, Homeworld, Elite Dangerous' galaxy map,
   EVE Online's map, No Man's Sky's galaxy map): how do they show the state, trouble and activity of many
   systems at a glance, and how do they move the camera between systems? 2-3 concrete proposals for the
   galaxy (what it shows, what it means, a cost guess) the planner can turn into `fx` tasks — for Later (fx)
