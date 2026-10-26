@@ -71,12 +71,18 @@ Notes for every builder round (planner, round 1):
   is two clean arms through the five sites. Film r8-galaxy: gone in every open frame, 0 console errors. At 5 %
   it is subtle on this VM's still; if the panel still sees "crumbs", the next step is narrowing it (half 170)
   rather than raising it past the plan's 6 %.
-- [ ] T4 (§7 Night 3 A3) [ui] [variant:galaxy] One headline per trouble frame (was night 2's T37, r54-film-ui 1):
+- [x] T4 (§7 Night 3 A3) [ui] [variant:galaxy] One headline per trouble frame (was night 2's T37, r54-film-ui 1):
   while a caption plate is up, `galaxy/hud.js` sets an attribute on `#wall-frame` (or `html`) and `wall.css`
   drops the banner and its glyph to the caption's name size (`--cap-name`); at the overview, no plate, today's
   size — done when: a test in `test/wall-galaxy-hud.test.mjs` sees the attribute set while the plate shows and
   cleared at the overview, a test pins the smaller banner rule in `wall.css`, and `?at=hv2` shows the banner
-  clearly below the hero while `?at=overview` is unchanged.
+  clearly below the hero while `?at=overview` is unchanged. (commit 198d096) Builder r10: `frame.js plate(on)`
+  sets `data-plate` on `#wall-frame` (and re-reads the far cover); `hud.js` calls it at the leg's `arriveMs`,
+  not at the leg's start: the first film had the banner small through whole flights with no plate up, so no
+  headline at all. `--cap-name` moved to `.wall-stage` so caption and frame share it. Stills r10-t4-hv2 and
+  r10-t4-overview, film r10-galaxy: big in flights, the name step under a plate, 0 console errors. Left: a calm
+  plate fades in `leadMs` before arrival with the big banner still up (no hero on a calm plate, so not two
+  headlines); the step is a cut, timed with the plate.
 - [ ] T5 (§7 Night 3 B) [ui] [variant:galaxy] A dead feed, the state: a pure `galaxy/fresh.js`
   (`freshness(lastFrameAt, now)` → `{ state: 'live'|'stale'|'dead', ageMs, text }`, stale after 30 s with no
   `/ws` map frame, `text` like `STALE 2M`), fed by `galaxy/main.js` on every map message and on socket close;
