@@ -16,7 +16,7 @@
 // Reduced motion (T11, D5, still.js): no flights, no turn, no drift; the
 // overview with every cluster folded and the caption rotating through the
 // sites, trouble first.
-// Effects (§7.C, fx.js): `?fx=lanes` (comma-separated, all off by default);
+// Effects (§7.C, fx.js): `?fx=lanes,comets` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
 import { createPerf } from '../perf.js';
@@ -34,7 +34,7 @@ import { paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { prefersStill, stillTourTimingFor } from './still.js';
-import { parseFx, siteRoutes } from './fx.js';
+import { flowComets, parseFx, siteRoutes } from './fx.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -165,6 +165,7 @@ export function boot() {
     have = true;
     galaxy.update(model);
     if (fx.has('lanes')) galaxy.setRoutes(siteRoutes(model, galaxy.world?.byId.keys() ?? []));
+    if (fx.has('comets')) galaxy.setComets(flowComets(model, galaxy.drawn()));
     hud.update(model);
     tour.update(model);
     if (!park) tour.start();

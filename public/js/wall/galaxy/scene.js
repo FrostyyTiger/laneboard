@@ -21,7 +21,7 @@ import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
 import { LEVELS } from './budget.js';
 import { breathWave, dustTurn } from './still.js';
-import { LANES, pulseAt, routePath, trackRoutes } from './fx.js';
+import { COMETS, LANES, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes } from './fx.js';
 
 /** World sizes: the sun, a site's star, a planet (named kind), a dot (the rest). */
 export const SIZE = Object.freeze({ sun: 60, sunHalo: 900, star: 24, planet: 15, dot: 4, landing: 7 });
@@ -145,8 +145,10 @@ const pageClock = () => globalThis.performance.now();
  * sprite textures; `clock` is the time the eases count in (the frames'
  * `now`), `makeRenderer` the WebGL renderer (both injectable for tests).
  * `still` (reduced motion, still.js): trouble glows without breathing, the dust stays put.
- * `fx` (fx.js `parseFx`): the effects asked for; `lanes` draws `setRoutes`' pulses.
- * Returns `{ update, setOpen, setRoutes, frame, resize, setQuality, camera, world, quality, renderer, dispose }`.
+ * `fx` (fx.js `parseFx`): the effects asked for; `lanes` draws `setRoutes`' pulses,
+ * `comets` flies `setComets`' comets.
+ * Returns `{ update, setOpen, setRoutes, setComets, drawn, frame, resize, setQuality, camera, world, quality,
+ * routes, comets, renderer, dispose }`.
  */
 export function createGalaxyScene(canvas, {
   palette, doc = globalThis.document, dpr = globalThis.devicePixelRatio || 1,
@@ -613,6 +615,71 @@ export function createGalaxyScene(canvas, {
     }
   };
 
+  // --- fx=comets (T13, fx.js): something just travelled a link ----------
+  // One pool again (a head and its tail per comet). Each frame the arc is
+  // read off where its two ends are drawn now (a planet unfolding, a star
+  // gliding), falling back to their sites' stars. Under reduced motion a
+  // comet is its whole arc, still and faint, for the time it would fly.
+  let comets = { flying: [], seen: new Set() };
+  const tails = [];
+  const perComet = 1 + COMETS.tail;
+  if (fx?.has('comets')) {
+    for (let i = 0; i < COMETS.max * perComet; i++) {
+      const sp = new THREE.Sprite(keep(new THREE.SpriteMaterial({
+        map: glowTex, color: tone.calm, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+      })));
+      sp.name = 'fx-comet';
+      sp.visible = false;
+      tails.push(sp);
+      scene.add(sp);
+    }
+  }
+  /** Every id the galaxy draws (its sites and their members): flowComets' `drawn`. */
+  const drawn = () => new Set((world?.sites ?? []).filter((s) => !s.gone).flatMap((s) => [s.id, ...s.members.map((m) => m.id)]));
+  let where = null, whereVersion = -1;
+  const pointOf = (id, siteId) => {
+    if (whereVersion !== world.version) {
+      where = new Map();
+      for (const s of world.sites) {
+        if (s.gone) continue;
+        where.set(s.id, s.star.position);
+        for (const m of s.members) where.set(m.id, m.mesh.position);
+      }
+      whereVersion = world.version;
+    }
+    return where.get(id) ?? where.get(siteId) ?? null;
+  };
+  /** The comets in the last model (fx.js `flowComets`); ignored unless `fx=comets`. */
+  const setComets = (list) => {
+    if (!tails.length) return;
+    comets = trackComets(comets, list, clock());
+  };
+  const drawComets = (now) => {
+    for (const sp of tails) sp.visible = false;
+    comets.flying = comets.flying.filter((c) => cometAt(c, now) !== undefined);
+    if (!world) return;
+    comets.flying.forEach((c, n) => {
+      const at = cometAt(c, now);
+      const a = pointOf(c.from, c.fromSite), b = pointOf(c.to, c.toSite);
+      if (!at || !a || !b) return;
+      const path = cometPath(a, b);
+      const head = Math.max(COMETS.headMin, Math.min(COMETS.headMax, path.length * COMETS.head));
+      for (let i = 0; i < perComet; i++) {
+        const sp = tails[n * perComet + i];
+        // Still: the whole arc, evenly lit and faint; flying: the head and a tail thinning behind it.
+        const u = still ? (i + 0.5) / perComet : at.u - i * COMETS.gap;
+        if (u < 0) continue;
+        const fall = still ? 0.4 : (1 - i / perComet) ** 1.5 * at.k;
+        const p = path.at(u);
+        sp.material.color.copy(tone[c.tone] ?? tone.calm);
+        sp.position.set(p.x, p.y, p.z);
+        sp.scale.setScalar(head * (still ? 0.5 : 1 - (0.75 * i) / perComet));
+        sp.material.opacity = COMETS.opacity * fall;
+        sp.visible = sp.material.opacity > 0.01;
+      }
+    });
+  };
+
   /** One frame at `now` (ms): trouble breathes, the dust drifts, then draw. */
   const frame = (now) => {
     resize();
@@ -629,6 +696,7 @@ export function createGalaxyScene(canvas, {
     // The dust turns once in about 26 minutes: alive under a held camera, never a motion you notice.
     dust.rotation.y = dustTurn(now, still);
     if (pulses.length) drawPulses(now);
+    if (tails.length) drawComets(now);
     renderer.render(scene, camera);
   };
 
@@ -664,9 +732,10 @@ export function createGalaxyScene(canvas, {
   };
 
   return {
-    update, setOpen, setRoutes, frame, resize, setQuality, camera, renderer, dispose,
+    update, setOpen, setRoutes, setComets, drawn, frame, resize, setQuality, camera, renderer, dispose,
     get world() { return world; },
     get quality() { return quality; },
     get routes() { return routes; },
+    get comets() { return comets.flying; },
   };
 }

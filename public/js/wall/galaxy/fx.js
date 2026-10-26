@@ -8,9 +8,17 @@
 // event that travelled it (`event.link`, docs/map.md) in the last
 // `LANES.windowMs`. Grey like everything calm: it says "these two are
 // talking", never "look here". Pure: the scene (scene.js) draws it.
+//
+// `comets` (T13): something that just travelled a link (an event with
+// `link`: a job's image pushed, a deploy, a dump; the Map's comet) is one
+// small comet with a tail, once, from the planet it left to the planet it
+// lands on, arcing over the plane (a lane pulse follows the hyperlanes; a
+// comet flies straight). Grey unless the event itself is trouble.
+
+import { toneOf } from './palette.js';
 
 /** Every effect this page knows, in the order the README lists them. */
-export const FX_NAMES = Object.freeze(['lanes']);
+export const FX_NAMES = Object.freeze(['lanes', 'comets']);
 
 /** The effects `?fx=` asks for (a `location.search` string or URLSearchParams): a Set of known names. */
 export function parseFx(search = '') {
@@ -155,4 +163,118 @@ export function routePath(fromLane, toLane) {
     return { x: a[0] + (b[0] - a[0]) * f, y: a[1] + (b[1] - a[1]) * f, z: a[2] + (b[2] - a[2]) * f };
   };
   return { at, length: total };
+}
+
+/**
+ * The comet's timing and look: one flight takes `travelMs` (eased), once
+ * per event; an event older than `windowMs` (by the model's clock) when
+ * the page first sees it flies no more; at most `max` in the sky at once.
+ * `head` is the bright sprite's size as a share of the flight's length
+ * (clamped to `headMin`..`headMax` world units), `tail` how many smaller
+ * ones follow it, `gap` their spacing along the arc (0..1), `lift` how high
+ * the arc rises over the straight line (a share of its length, `liftMin`).
+ */
+export const COMETS = Object.freeze({
+  travelMs: 3200, windowMs: 10000, max: 6,
+  head: 0.07, headMin: 22, headMax: 90, tail: 10, gap: 0.016, opacity: 0.55,
+  lift: 0.3, liftMin: 60,
+});
+
+/**
+ * The comets in `model`: one per event that travelled a link (`event.link`,
+ * by the link's id or `from>to`) in the last `windowMs`, by the model's own
+ * clock. Each end is the nearest thing the galaxy draws (`drawn`: ids of
+ * sites and their members) up the node's parents: `{ key, from, to,
+ * fromSite, toSite, tone, ageMs }`, `key` the event's own (time and link),
+ * so the same event in the next model is the same comet. A link whose two
+ * ends are drawn as one thing (a folded service in its own room) is none.
+ */
+export function flowComets(model, drawn, { windowMs = COMETS.windowMs } = {}) {
+  const nodes = Array.isArray(model?.nodes) ? model.nodes : [];
+  const links = Array.isArray(model?.links) ? model.links : [];
+  const events = Array.isArray(model?.events) ? model.events : [];
+  const byId = new Map(nodes.filter((n) => n && n.id != null).map((n) => [n.id, n]));
+  const shown = drawn instanceof Set ? drawn : new Set(drawn ?? []);
+  const now = Number.isFinite(model?.generatedAt) ? model.generatedAt : Math.max(0, ...events.map((e) => Number(e?.at) || 0));
+  const named = new Map();
+  for (const l of links) {
+    if (!l || l.from == null || l.to == null) continue;
+    named.set(`${l.from}>${l.to}`, l);
+    if (l.id != null) named.set(String(l.id), l);
+  }
+  const up = (id) => {
+    let n = byId.get(id);
+    for (let k = 0; n && !shown.has(n.id) && k < MAX_DEPTH; k++) n = byId.get(n.parent);
+    return n && shown.has(n.id) ? n.id : null;
+  };
+  const out = [];
+  const seen = new Set();
+  for (const e of events) {
+    if (!e || e.link == null) continue;
+    const l = named.get(String(e.link));
+    const ageMs = now - (Number(e.at) || 0);
+    if (!l || !(ageMs >= 0 && ageMs < windowMs)) continue;
+    const from = up(l.from), to = up(l.to);
+    const fromSite = placeOf(l.from, byId), toSite = placeOf(l.to, byId);
+    if (!from || !to || from === to || !fromSite || !toSite) continue;
+    const key = `${Number(e.at) || 0}:${e.link}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ key, from, to, fromSite, toSite, tone: toneOf(e.kind), ageMs });
+  }
+  return out.sort((a, b) => b.ageMs - a.ageMs);
+}
+
+/**
+ * The comets the page flies at page time `now`: `prev` (`{ flying, seen }`
+ * or null) with `list` (flowComets') added. A comet starts when the page
+ * first sees its event and flies once; `seen` remembers the keys it has
+ * flown (the last few hundred) so the next model's copy of the same event
+ * never flies it again. A finished comet leaves `flying`; when `max` are in
+ * the sky a new one waits for the next model (and is dropped once too old).
+ */
+export function trackComets(prev, list, now, timing = COMETS) {
+  const seen = new Set(prev?.seen ?? []);
+  const flying = [...(prev?.flying ?? [])].filter((c) => cometAt(c, now, timing) !== undefined);
+  for (const c of list ?? []) {
+    if (seen.has(c.key) || flying.length >= timing.max) continue;
+    seen.add(c.key);
+    flying.push({ key: c.key, from: c.from, to: c.to, fromSite: c.fromSite, toSite: c.toSite, tone: c.tone, t0: now });
+  }
+  const keep = [...seen].slice(-400);
+  return { flying, seen: new Set(keep) };
+}
+
+/**
+ * Where a comet is at `now`: `{ u, k }`, `u` 0..1 along its arc (eased: it
+ * leaves and lands gently), `k` 0..1 its strength (in at the start, out as
+ * it lands); `null` before it starts; `undefined` once it has landed.
+ */
+export function cometAt(comet, now, timing = COMETS) {
+  const p = (now - comet.t0) / timing.travelMs;
+  if (p < 0) return null;
+  if (p >= 1) return undefined;
+  const u = p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2;
+  const k = Math.min(1, p / 0.1, (1 - p) / 0.15);
+  return { u, k };
+}
+
+/**
+ * A comet's arc from `a` to `b` (`{ x, y, z }`): a curve lifted over the
+ * straight line by `lift` of its length (at least `liftMin`), so it flies
+ * over the plane, not along it. Returns `{ at(u), length }`.
+ */
+export function cometPath(a, b, timing = COMETS) {
+  const length = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+  const h = Math.max(timing.liftMin, length * timing.lift);
+  const c = { x: (a.x + b.x) / 2, y: Math.max(a.y, b.y) + h, z: (a.z + b.z) / 2 };
+  const at = (u) => {
+    const t = Math.max(0, Math.min(1, u)), s = 1 - t;
+    return {
+      x: s * s * a.x + 2 * s * t * c.x + t * t * b.x,
+      y: s * s * a.y + 2 * s * t * c.y + t * t * b.y,
+      z: s * s * a.z + 2 * s * t * c.z + t * t * b.z,
+    };
+  };
+  return { at, length };
 }

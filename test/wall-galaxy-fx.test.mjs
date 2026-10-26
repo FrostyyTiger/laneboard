@@ -1,10 +1,14 @@
 // The galaxy's effects (Wall plan night 2 T12, README §7.C, D9): `?fx=`
 // turns them on one by one, none by default; `lanes` runs a light pulse
 // along the hyperlanes between two sites while a link between them is live
-// (the model's `live`, or an event that travelled it a moment ago).
+// (the model's `live`, or an event that travelled it a moment ago);
+// `comets` (T13) flies one comet per event that travelled a link, once,
+// from the planet it left to the one it lands on.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { FX_NAMES, LANES, parseFx, pulseAt, routePath, siteRoutes, trackRoutes } from '../public/js/wall/galaxy/fx.js';
+import {
+  COMETS, FX_NAMES, LANES, cometAt, cometPath, flowComets, parseFx, pulseAt, routePath, siteRoutes, trackComets, trackRoutes,
+} from '../public/js/wall/galaxy/fx.js';
 import { paletteFrom } from '../public/js/wall/galaxy/palette.js';
 import { createGalaxyScene } from '../public/js/wall/galaxy/scene.js';
 
@@ -17,6 +21,8 @@ test('parseFx: nothing by default, known names only, comma-separated or repeated
   assert.deepEqual([...parseFx('?fx=bogus&fx=lanes')], ['lanes']);
   assert.deepEqual([...parseFx(new URLSearchParams('fx=lanes'))], ['lanes']);
   assert.ok(FX_NAMES.includes('lanes'));
+  assert.deepEqual([...parseFx('?fx=comets,lanes')].sort(), ['comets', 'lanes']);
+  assert.deepEqual([...parseFx('?fx=lanes')], ['lanes'], 'comets only when asked');
 });
 
 /** Three sites under a core; `db` in hv1, `storage` in hv2, `nas` in remote, `api` a second hv1 room. */
@@ -215,4 +221,141 @@ test('with fx=lanes under reduced motion the route is a still row of lights', ()
   at(1000 + LANES.travelMs * 1.1); // the moving one would be resting here
   assert.equal(a.length, 1 + LANES.trail);
   assert.deepEqual(lit(), a, 'nothing moves');
+});
+
+// --- fx=comets ------------------------------------------------------------------
+
+test('flowComets: an event along a link is a comet from the drawn thing it left to the one it lands on', () => {
+  const links = [{ id: 'dump', from: 'db-svc', to: 'storage', kind: 'flow' }, { from: 'db', to: 'api', kind: 'flow' }];
+  const events = [
+    { at: 97_000, node: 'db', kind: 'ok', text: 'db dumps → storage', link: 'dump' },
+    { at: 99_000, node: 'db', kind: 'crit', text: 'deploy failed', link: 'db>api' },
+    { at: 99_500, node: 'db', kind: 'ok', text: 'no link' },
+  ];
+  // db-svc is drawn: it is its own end.
+  const drawn = ['hv1', 'hv2', 'remote', 'db', 'api', 'db-svc', 'storage', 'nas'];
+  assert.deepEqual(flowComets(model({ links, events }), drawn), [
+    { key: '97000:dump', from: 'db-svc', to: 'storage', fromSite: 'hv1', toSite: 'hv2', tone: 'calm', ageMs: 3000 },
+    { key: '99000:db>api', from: 'db', to: 'api', fromSite: 'hv1', toSite: 'hv1', tone: 'crit', ageMs: 1000 },
+  ], 'oldest first; a failed one in its hue');
+  // db-svc not drawn: the comet leaves its room.
+  assert.equal(flowComets(model({ links, events }), drawn.filter((d) => d !== 'db-svc'))[0].from, 'db');
+});
+
+test('flowComets: too old, unknown link, two ends drawn as one, or nothing drawn is no comet', () => {
+  const links = [{ from: 'db-svc', to: 'db', kind: 'flow' }, { from: 'db', to: 'storage', kind: 'flow' }];
+  const old = { at: 100_000 - COMETS.windowMs - 1, link: 'db>storage' };
+  const events = [old, { at: 99_000, link: 'nowhere>else' }, { at: 99_000, link: 'db-svc>db' }];
+  assert.deepEqual(flowComets(model({ links, events }), ['hv1', 'hv2', 'db', 'storage']), [], 'db-svc folds into db');
+  assert.deepEqual(flowComets(model({ links, events: [{ at: 99_000, link: 'db>storage' }] }), []), []);
+  assert.deepEqual(flowComets({}, ['hv1']), []);
+  assert.deepEqual(flowComets(null, null), []);
+  // The same event twice in one model is one comet.
+  const twice = [{ at: 99_000, link: 'db>storage' }, { at: 99_000, link: 'db>storage' }];
+  assert.equal(flowComets(model({ links, events: twice }), ['hv1', 'hv2', 'db', 'storage']).length, 1);
+});
+
+const CT = { ...COMETS, travelMs: 1000, max: 2 };
+const comet = (key) => ({ key, from: 'db', to: 'storage', fromSite: 'hv1', toSite: 'hv2', tone: 'calm', ageMs: 0 });
+
+test('trackComets: each event flies once, even when the next model repeats it; at most max at once', () => {
+  let t = trackComets(null, [comet('1:a')], 5000, CT);
+  assert.deepEqual(t.flying.map((c) => [c.key, c.t0]), [['1:a', 5000]]);
+  t = trackComets(t, [comet('1:a')], 5400, CT);
+  assert.deepEqual(t.flying.map((c) => [c.key, c.t0]), [['1:a', 5000]], 'the same event: no second start');
+  t = trackComets(t, [comet('1:a')], 6200, CT);
+  assert.equal(t.flying.length, 0, 'landed and never again');
+  t = trackComets(t, [comet('2:a'), comet('3:a'), comet('4:a')], 7000, CT);
+  assert.deepEqual(t.flying.map((c) => c.key), ['2:a', '3:a'], 'the sky is full');
+  t = trackComets(t, [comet('3:a'), comet('4:a')], 8100, CT);
+  assert.deepEqual(t.flying.map((c) => c.key), ['4:a'], 'the waiting one flies when there is room');
+});
+
+test('cometAt and cometPath: one eased flight over the plane, fading in and out, then over', () => {
+  const c = { t0: 1000 };
+  assert.equal(cometAt(c, 900, CT), null);
+  assert.deepEqual(cometAt(c, 1000, CT), { u: 0, k: 0 });
+  assert.equal(cometAt(c, 1500, CT).u, 0.5);
+  assert.equal(cometAt(c, 1500, CT).k, 1);
+  assert.ok(cometAt(c, 1100, CT).u < 0.05, 'eased out of the planet');
+  assert.ok(cometAt(c, 1990, CT).k < 0.1, 'fades as it lands');
+  assert.equal(cometAt(c, 2000, CT), undefined);
+  const a = { x: 0, y: 0, z: 0 }, b = { x: 1000, y: 0, z: 0 };
+  const p = cometPath(a, b);
+  assert.equal(p.length, 1000);
+  assert.deepEqual(p.at(0), a);
+  assert.deepEqual(p.at(1), b);
+  const mid = p.at(0.5);
+  assert.equal(mid.x, 500);
+  assert.ok(mid.y > 100, 'arcs over the plane');
+  assert.ok(cometPath(a, { x: 10, y: 0, z: 0 }).at(0.5).y >= COMETS.liftMin / 2, 'a short hop still lifts');
+});
+
+/** The scene's comet lights (named `fx-comet`). */
+function cometSprites(galaxy) {
+  let root = galaxy.world.sites[0].star;
+  while (root.parent) root = root.parent;
+  return root.children.filter((o) => o.isSprite && o.name === 'fx-comet');
+}
+
+const flowModel = () => model({
+  links: [{ from: 'db', to: 'storage', kind: 'flow' }],
+  events: [{ at: 99_000, node: 'db', kind: 'ok', text: 'db dumps → storage', link: 'db>storage' }],
+});
+
+test('without fx=comets the scene makes no comet and ignores flows', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['lanes']) });
+  const m = flowModel();
+  galaxy.update(m);
+  galaxy.setComets(flowComets(m, galaxy.drawn()));
+  at(1000 + COMETS.travelMs / 2);
+  assert.equal(cometSprites(galaxy).length, 0);
+  assert.equal(galaxy.comets.length, 0);
+});
+
+test('with fx=comets a flow event flies once from its planet to where it lands, grey and capped', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['comets']) });
+  const m = flowModel();
+  galaxy.update(m);
+  const pool = cometSprites(galaxy);
+  assert.equal(pool.length, COMETS.max * (1 + COMETS.tail), 'one pool, made once');
+  assert.ok(galaxy.drawn().has('db') && galaxy.drawn().has('hv2'));
+  galaxy.setComets(flowComets(m, galaxy.drawn()));
+  assert.deepEqual(galaxy.comets.map((c) => [c.from, c.to]), [['db', 'storage']]);
+  const member = (site, id) => galaxy.world.byId.get(site).members.find((x) => x.id === id).mesh.position;
+  const db = member('hv1', 'db'), storage = member('hv2', 'storage');
+  const lit = () => pool.filter((s) => s.visible);
+  const head = () => lit().reduce((a, s) => (s.scale.x > a.scale.x ? s : a));
+  const near = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
+  at(1000 + COMETS.travelMs * 0.05);
+  assert.ok(near(head().position, db) < near(head().position, storage), 'leaves db');
+  at(1000 + COMETS.travelMs * 0.5);
+  assert.ok(head().position.y > Math.max(db.y, storage.y) + COMETS.liftMin / 2, 'high over the plane midway');
+  assert.ok(lit().length > 3, 'a tail behind it');
+  for (const s of lit()) {
+    assert.ok(s.material.opacity <= COMETS.opacity, 'never brighter than its cap');
+    assert.equal(s.material.color.getHexString(), cometSprites(galaxy)[0].material.color.getHexString());
+  }
+  at(1000 + COMETS.travelMs * 0.95);
+  assert.ok(near(head().position, storage) < near(head().position, db), 'lands at storage');
+  // The next model repeats the event: it does not fly again.
+  galaxy.setComets(flowComets(m, galaxy.drawn()));
+  at(1000 + COMETS.travelMs * 1.5);
+  assert.equal(lit().length, 0);
+  assert.equal(galaxy.comets.length, 0);
+});
+
+test('with fx=comets under reduced motion a comet is its arc, still, for as long as it would fly', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['comets']), still: true });
+  const m = flowModel();
+  galaxy.update(m);
+  galaxy.setComets(flowComets(m, galaxy.drawn()));
+  const lit = () => cometSprites(galaxy).filter((s) => s.visible).map((s) => [s.position.x, s.position.y, s.position.z, s.material.opacity]);
+  at(1000 + COMETS.travelMs * 0.2);
+  const a = lit();
+  assert.equal(a.length, 1 + COMETS.tail);
+  at(1000 + COMETS.travelMs * 0.8);
+  assert.deepEqual(lit(), a, 'nothing moves');
+  at(1000 + COMETS.travelMs * 1.1);
+  assert.equal(lit().length, 0, 'gone after');
 });
