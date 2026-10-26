@@ -549,9 +549,12 @@ export function createGalaxyScene(canvas, {
     const starHalo = new THREE.Sprite(haloMat.calm);
     // The nebula round the cluster (T17): two or three lobes flat in the plane, each its own
     // material, stretched along the arm; it thins as the system opens.
+    // forceSinglePass (T27): three draws a transparent DoubleSide material twice, back then front,
+    // and flags it for a new program before each pass, every frame; an additive flat quad needs no
+    // sort of its own faces, so one pass draws the same thing.
     const lobes = nebulaLobes(lay.id).map((shape) => {
       const mesh = new THREE.Mesh(lobeGeo, new THREE.MeshBasicMaterial({
-        map: cloudTex, color: tone[neb.tone], transparent: true, depthWrite: false, side: THREE.DoubleSide,
+        map: cloudTex, color: tone[neb.tone], transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true,
         blending: THREE.AdditiveBlending, opacity: neb.opacity * shape.share,
       }));
       mesh.name = 'nebula';
@@ -562,7 +565,8 @@ export function createGalaxyScene(canvas, {
     lines.frustumCulled = false;
     // The system's plane: one thin circle round its star.
     const plane = new THREE.Mesh(new THREE.RingGeometry(1, 1.006, 128), new THREE.MeshBasicMaterial({
-      color: col(palette.line.rgb), side: THREE.DoubleSide, transparent: true, opacity: 0, depthWrite: false,
+      color: col(palette.line.rgb), side: THREE.DoubleSide, forceSinglePass: true, transparent: true, opacity: 0,
+      depthWrite: false,
     }));
     plane.rotation.x = -Math.PI / 2;
     const lane = new THREE.Line(new THREE.BufferGeometry(), lineMat(palette.line.rgb, 0));

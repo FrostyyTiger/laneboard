@@ -112,7 +112,7 @@ const fakeDoc = {
   }),
 };
 
-function sceneAt({ dpr = 1 } = {}) {
+function sceneAt({ dpr = 1, render = () => {} } = {}) {
   const clock = { now: 1000 };
   const galaxy = createGalaxyScene({ clientWidth: 1600, clientHeight: 900 }, {
     dpr,
@@ -120,7 +120,7 @@ function sceneAt({ dpr = 1 } = {}) {
     doc: fakeDoc,
     clock: () => clock.now,
     makeRenderer: (canvas) => ({
-      domElement: canvas, setPixelRatio() {}, setClearColor() {}, setSize() {}, dispose() {}, render() {},
+      domElement: canvas, setPixelRatio() {}, setClearColor() {}, setSize() {}, dispose() {}, render,
     }),
   });
   const at = (ms) => { clock.now = ms; galaxy.frame(ms); };
@@ -258,4 +258,41 @@ test('a dust grain is attenuated by distance and capped at DUST_LOOK.maxPx css p
     galaxy.dispose();
   }
   assert.ok(DUST_LOOK.maxPx <= 3, 'a speck, not a dot');
+});
+
+/** three r170's renderObject, the part that matters (three.module.js, `forceSinglePass === false`):
+ * a transparent DoubleSide material is drawn back then front, each pass flagged `needsUpdate`, which
+ * bumps its `version` and sends three through getParameters/getProgram again. */
+function twoPassRender(scene) {
+  scene.traverseVisible((o) => {
+    const m = o.material;
+    if (!m || Array.isArray(m)) return;
+    if (m.transparent === true && m.side === THREE.DoubleSide && m.forceSinglePass === false) {
+      m.side = THREE.BackSide; m.needsUpdate = true;
+      m.side = THREE.FrontSide; m.needsUpdate = true;
+      m.side = THREE.DoubleSide;
+    }
+  });
+}
+
+test('nebula lobes and system planes draw in one pass, so three never rebuilds their state per frame (T27)', () => {
+  const { galaxy, at } = sceneAt({ render: twoPassRender });
+  galaxy.update(fleet());
+  galaxy.setOpen('hv1', 1);
+  at(1016);
+  const site = galaxy.world.byId.get('hv1');
+  const mats = [...site.lobes.map((l) => l.mesh.material), site.plane.material];
+  assert.ok(mats.length >= 3);
+  const before = mats.map((m) => m.version);
+  at(1033);
+  at(1050);
+  assert.deepEqual(mats.map((m) => m.version), before, 'no material flagged by the draw');
+  // And nothing else in the scene takes the two-pass path.
+  let root = site.star;
+  while (root.parent) root = root.parent;
+  root.traverse((o) => {
+    const m = o.material;
+    if (m && !Array.isArray(m) && m.transparent && m.side === THREE.DoubleSide) assert.equal(m.forceSinglePass, true, o.name || o.type);
+  });
+  galaxy.dispose();
 });
