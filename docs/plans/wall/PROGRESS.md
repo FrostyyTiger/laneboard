@@ -153,7 +153,7 @@ Notes for every builder round (planner, round 1):
   how they tell tap, drag and palm apart (slop px, ms, contact size); and how a small moving 3D target is hit
   in screen space. Night 1's Q6 already has target sizes in mm and idle defaults: do not repeat them — for T8,
   T10
-- [ ] Q13 Waking a screensaver by touch and handing back to it: how kiosks, museum interactives and
+- [x] Q13 (→ research/Q13-wake-and-handback.md) Waking a screensaver by touch and handing back to it: how kiosks, museum interactives and
   attract-mode displays treat the first touch (wake only, or act on it), how they show that the screen is now
   yours, and how they hand back to the attract loop after idle (a warning cue, easing from the user's view,
   what happens when an alarm arrives mid-session). Q6 already has the 30-60 s timeout defaults — for T7, T14
