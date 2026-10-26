@@ -453,11 +453,24 @@ Notes for every builder round (planner, night 1):
   SwiftShader plus screenshots (filming note). Seen, for their tasks: the plate's bottom-right bracket next to
   the lock (T29), a ghost `HV1` map label under the plate (T24), the plate now taller (about half the height
   on a trouble site), so T30's focus offset matters more.)
-- [ ] T21 (§2, T9) [ui] [variant:all] (r14-operator #2) The fleet line is big: in T9's `worstLine`, while
+- [x] T21 (§2, T9) [ui] [variant:all] (r14-operator #2) The fleet line is big: in T9's `worstLine`, while
   anything is crit the bottom-right line is set at the 3 m step (`■ HV2 · STORAGE 97% FULL`) with a
   `+2 more` count under it, always on, also when the camera is not in a trouble site. Build T9 before
   T7/T8 if the loop allows — done when: `test/wall-frame.test.mjs` covers the text, count and
   step for crit, attention-only and calm; a filmstrip frame of an overview and of a calm-site visit shows it.
+  (commit 2997990; `worstLine` carries `step` (`far` while the worst is crit or down, `line` for attention/warn,
+  `calm`) and `word` (`site · name`). Far: `■ HV2 · STORAGE` at the caption hero's step (14vmin, fitted to 64vw by
+  `fleetSize`, never under 9; the demo's word lands ~12vmin on the tablet), one line, cut not wrapped; under it
+  the why at the why step (4.3) in crit and `+4 MORE` in the key step on its baseline; the ambient fact gives way
+  (one hero in the band). Attention and warn keep T9's line. The far block stands on an opaque `--bg-canvas`
+  ground out to the screen's corner: at 92-96 % map labels showed through the word as ghosts. Tests in
+  `test/wall-frame.test.mjs` (step, word, count for crit, down, attention-only, calm; the fitted size; the DOM
+  rows). Still `$RUN_DIR/shots/r53-still3/`, filmstrip `r53-radial/`: the crit word at the overview and on calm
+  visits (HOME, CLOUD), attention back at the line step, 0 console errors; fps 2.4 is SwiftShader plus
+  screenshots (filming note). Seen: the word's top reaches ~76 % of the height, over radial's bottom ring, so a
+  map label at the ground's top edge is cut (`EDGE-2`, `REMOTE`): T24's hiding of Map labels under a plate
+  should take this rectangle too; and on HV2's hold the plate's hero and the fleet word say the same thing
+  twice (r41 shared #2, with the owner).)
 - [ ] T22 (§2) [ui] [variant:all] (r14-operator #5) Caption status is a severity count and names the
   worst three: `1 crit · 5 attention`, then the worst problem, then the next two, one per line at the
   1 m step (today "6 of 41 in trouble" names one) — done when: `captionLines` test covers a site with
@@ -778,6 +791,11 @@ Notes for every builder round (planner, night 1):
   mosaic and orbits; a very slow drift or glow parallax to give the no-turn layouts a breath at the
   overview (T28: the ground must not slide under a moving camera). Mosaic's scores favour it; the
   reviewer notes the overview is spent 15 % on the whole fleet in demo timing (radial #4, no change).
+
+- (round 53, T21) The crit fleet word at the 3 m step stands on an opaque ground that covers the bottom-right
+  of radial's lowest ring (overview and holds) while anything is crit. The alternative is a larger bottom safe
+  area for every variant (a smaller overview, all day, for a band used only while crit) or the word at 9vmin
+  (the 2 m step, fits the band). Kept readable trouble over the ring: your call.
 
 - (r50-skeptic, taste or plan changes; items already listed above are not repeated) Shared #4: drop the
   ambient line (`5 sites · 115 nodes · N working`) while anything is warn or worse, `all calm · 115 nodes`
