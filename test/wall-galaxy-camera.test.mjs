@@ -8,9 +8,9 @@ import fs from 'node:fs';
 import * as THREE from '../public/vendor/three/three.module.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
 import { galaxyLayout, OPEN_MS, ease } from '../public/js/wall/galaxy/layout.js';
-import { overviewShot, FOV } from '../public/js/wall/galaxy/scene.js';
+import { overviewShot, FOV, SIZE } from '../public/js/wall/galaxy/scene.js';
 import {
-  createGalaxyCamera, flightPose, openStep, zoomedSiteShot, FLIGHT,
+  createGalaxyCamera, flightPose, openStep, zoomedSiteShot, FLIGHT, FLIGHT_CLEAR,
 } from '../public/js/wall/galaxy/camera.js';
 
 /** Five sites under a core, each with a room and a builder; `bad` sets statuses by id. */
@@ -260,4 +260,105 @@ test('T1: the camera flies from site to site with a star in frame, even when a f
     assert.ok(dist(prev, p.pos) < 200, 'no jump when cut short');
     prev = p.pos;
   }
+});
+
+// Night 3 T2 (r54-film-ui 3): no flight through a cluster or the sun. Every
+// step of every flight of the large demo keeps 1.5 x reach from each third
+// system's star and FLIGHT_CLEAR.sun from the sun, or, where a shot itself
+// stands nearer (cloud's held shot is 0.96 of that from lab), no nearer than
+// the shot does: an end is where it is. T1's rule holds over the same flights.
+test('T2: no flight of the large demo comes nearer a third system or the sun than its own ends do', () => {
+  const lay = galaxyLayout(LARGE);
+  const aspect = 1368 / 912;
+  const view = { fov: FOV, aspect, free: { x0: 0.3, y0: 0, x1: 1, y1: 0.8 } };
+  const sun = { x: 0, y: 0, z: 0 };
+  const shots = [
+    { id: 'overview', star: sun, shot: overviewShot(lay.sites) },
+    ...lay.sites.map((s) => ({ id: s.id, star: s.home, shot: zoomedSiteShot(s, 0, DEMO_TIMING.zoom, view) })),
+  ];
+  const cam = new THREE.PerspectiveCamera(FOV, aspect, 1, 30000);
+  const inFrame = (pose, p) => {
+    cam.position.set(pose.pos.x, pose.pos.y, pose.pos.z);
+    cam.lookAt(pose.look.x, pose.look.y, pose.look.z);
+    cam.updateMatrixWorld();
+    const v = new THREE.Vector3(p.x, p.y, p.z).project(cam);
+    return v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1;
+  };
+  for (const a of shots) for (const b of shots) {
+    if (a === b) continue;
+    const avoid = [
+      { ...sun, r: FLIGHT_CLEAR.sun, id: 'sun' },
+      ...lay.sites.filter((s) => s.id !== a.id && s.id !== b.id).map((s) => ({ ...s.home, r: FLIGHT_CLEAR.reach * s.reach, id: s.id })),
+    ];
+    const frame = { fov: FOV, aspect, ends: [a.star, b.star], avoid };
+    assert.deepEqual(flightPose(a.shot, b.shot, 0, FLIGHT, frame), flightPose(a.shot, b.shot, 0), `${a.id} → ${b.id}: starts where it was`);
+    const end = flightPose(a.shot, b.shot, 1, FLIGHT, frame);
+    assert.ok(dist(end.pos, b.shot.pos) < 1e-6, `${a.id} → ${b.id}: lands on the shot`);
+    for (let i = 0; i <= 140; i++) {
+      const pose = flightPose(a.shot, b.shot, ease(i / 140), FLIGHT, frame);
+      for (const o of avoid) {
+        const room = Math.min(o.r, dist(a.shot.pos, o), dist(b.shot.pos, o));
+        assert.ok(dist(pose.pos, o) >= room - 1e-6, `${a.id} → ${b.id} at step ${i}: ${dist(pose.pos, o).toFixed(0)} from ${o.id}, wants ${room.toFixed(0)}`);
+      }
+      assert.ok(dist(pose.pos, sun) > SIZE.sun, `${a.id} → ${b.id} at step ${i}: outside the sun`);
+      assert.ok(inFrame(pose, a.star) || inFrame(pose, b.star), `${a.id} → ${b.id} at step ${i}: T1, an end in frame`);
+    }
+  }
+});
+
+test('T2: a star on the way bends the arc up over it, smoothly, and the ends stay', () => {
+  const a = { pos: { x: -2000, y: 400, z: 0 }, look: { x: -2000, y: 0, z: -600 } };
+  const b = { pos: { x: 2000, y: 400, z: 0 }, look: { x: 2000, y: 0, z: -600 } };
+  const mid = flightPose(a, b, 0.5);
+  const star = { x: mid.pos.x, y: mid.pos.y - 100, z: mid.pos.z, r: 600 };
+  assert.ok(dist(mid.pos, star) < star.r, 'without avoid the arc goes through it (the test can fail)');
+  const frame = { fov: FOV, aspect: 16 / 9, avoid: [star] };
+  assert.deepEqual(flightPose(a, b, 0, FLIGHT, frame), flightPose(a, b, 0), 'starts where it was');
+  assert.deepEqual(flightPose(a, b, 1, FLIGHT, frame), flightPose(a, b, 1), 'lands where it was');
+  const steps = [];
+  let prev = null;
+  for (let i = 0; i <= 140; i++) {
+    const pose = flightPose(a, b, ease(i / 140), FLIGHT, frame);
+    assert.ok(dist(pose.pos, star) >= star.r - 1e-6, `step ${i}: ${dist(pose.pos, star).toFixed(0)} from the star`);
+    assert.ok(pose.pos.y >= flightPose(a, b, ease(i / 140)).pos.y - 1e-9, 'it only ever rises');
+    if (prev) steps.push(dist(prev, pose.pos));
+    prev = pose.pos;
+  }
+  const mean = steps.reduce((x, y) => x + y, 0) / steps.length;
+  assert.ok(Math.max(...steps) < mean * 3.6, `no jolt (${(Math.max(...steps) / mean).toFixed(2)}x the mean step)`);
+  // a star the ends already stand nearer than its room asks no more of the flight than they give
+  const near = { ...a.pos, y: 0, r: 5000 };
+  const pose = flightPose(a, b, 0.5, FLIGHT, { avoid: [near] });
+  assert.ok(Number.isFinite(pose.pos.y) && dist(pose.pos, near) >= dist(a.pos, near) - 1e-6);
+});
+
+test('T2: the camera tells the scene which system it flies to, and keeps the others clear', () => {
+  const nodes = fleet({ 'cloud-b': 'crit' });
+  const galaxy = fakeGalaxy(nodes);
+  const held = [];
+  galaxy.setHeld = (id) => held.push(id);
+  const cam = createGalaxyCamera(galaxy);
+  let t = 0;
+  cam.frame(t);
+  assert.equal(held.at(-1), null, 'the overview holds no system');
+  cam.focus('cloud', DEMO_TIMING.zoom);
+  t += 16; cam.frame(t);
+  assert.equal(held.at(-1), 'cloud', 'the destination is the subject from the first frame of the flight');
+  for (const id of ['hv1', 'remote', 'home', 'hv2']) {
+    cam.focus(id, DEMO_TIMING.zoom);
+    const left = galaxy.world.sites.find((s) => s.id === held.at(-1));
+    for (let s = 0; s <= FLIGHT.ms; s += 16) {
+      t += 16;
+      const p = cam.frame(t).pos;
+      for (const o of galaxy.world.sites) {
+        if (o.id === id || o === left) continue;
+        // the room it wants, or what the flight's start already had (the held drift moves the start)
+        assert.ok(dist(p, o.home) >= Math.min(FLIGHT_CLEAR.reach * o.reach, 300), `to ${id} at ${s} ms: ${dist(p, o.home).toFixed(0)} from ${o.id}`);
+      }
+    }
+    assert.equal(held.at(-1), id);
+  }
+  cam.fit();
+  t += 16; cam.frame(t);
+  assert.equal(held.at(-1), null);
 });

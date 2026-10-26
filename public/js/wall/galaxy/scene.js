@@ -126,6 +126,25 @@ const SEGS = Object.freeze({ sun: [32, 20], star: [20, 14], planet: [32, 22], do
  */
 export const DUST_LOOK = Object.freeze({ size: 20, maxPx: 3 });
 
+/**
+ * What the camera passes close to fades (night 3 T2, r54-film-ui 3): a
+ * nebula lobe, a star or the sun's halo taller than `from` of the frame's
+ * height is a smash cut nobody asked for, so it fades out, gone at `to`.
+ */
+export const NEAR_FADE = Object.freeze({ from: 0.4, to: 0.7 });
+
+/**
+ * How much of a thing `size` world units across, `dist` from the camera
+ * with a vertical field of view `fov` (degrees), is drawn: 1 up to
+ * NEAR_FADE.from of the frame's height, 0 from NEAR_FADE.to, smooth between.
+ */
+export function nearFade(size, dist, fov = FOV) {
+  if (!(size > 0)) return 1;
+  if (!(dist > 0)) return 0;
+  const share = size / (2 * Math.tan((fov * Math.PI) / 360) * dist);
+  return 1 - smoothstep(NEAR_FADE.from, NEAR_FADE.to, share);
+}
+
 /** The far stars and dust grains at the best level. */
 const STARS = 2500, DUST = 9000;
 
@@ -647,9 +666,7 @@ export function createGalaxyScene(canvas, {
       s.unfold = k;
       const a = s.alive;
       s.star.position.set(s.home.x, s.home.y, s.home.z);
-      s.star.scale.setScalar(a);
       s.starHalo.position.copy(s.star.position);
-      s.starHalo.scale.setScalar(Math.max(1e-3, s.starHaloSize * a));
       placeLobes(s);
       s.plane.position.copy(s.star.position);
       const arr = s.lines.geometry.attributes.position.array;
@@ -685,8 +702,7 @@ export function createGalaxyScene(canvas, {
       s.lines.material.opacity = palette.line.alpha * (0.3 + 1.2 * e) * a;
       s.plane.scale.setScalar(Math.max(60, s.reach * 0.9) * spread + 20);
       s.plane.material.opacity = palette.line.alpha * 0.6 * e * a;
-      // You are inside the nebula now: it thins as the system opens.
-      for (const l of s.lobes) l.mesh.material.opacity = s.neb.opacity * l.shape.share * s.peak * (1 - 0.7 * e) * a;
+      fadeNear(s);
     }
     dirty = false;
   };
@@ -1084,6 +1100,31 @@ export function createGalaxyScene(canvas, {
     dustOpen.value = h.k;
   };
 
+  /**
+   * What the camera is close to fades (T2, nearFade): every site's lobes,
+   * star and halo, and the sun's halo. Not the system the camera flies to
+   * or holds (`held`, setHeld): that one is the subject, and as it opens
+   * you are inside its nebula, which thins on its own; a system the camera
+   * leaves fades as it folds, so leaving it is never a cut.
+   */
+  let held = null;
+  const at = new THREE.Vector3();
+  const nearOf = (size, p) => nearFade(size, at.set(p.x, p.y, p.z).distanceTo(camera.position), camera.fov);
+  const fadeNear = (s) => {
+    const e = ease(s.unfold), a = s.alive;
+    const w = s.id === held ? 0 : 1 - e;
+    const near = (size, p) => 1 - (1 - nearOf(size, p)) * w;
+    // You are inside the nebula now: it thins as the system opens.
+    const size = s.neb.size * (s.breath ?? 1) * a;
+    for (const l of s.lobes) {
+      l.mesh.material.opacity = s.neb.opacity * l.shape.share * s.peak * (1 - 0.7 * e) * a * near(l.shape.len * size, l.mesh.position);
+    }
+    const star = near(s.starHaloSize * a, s.home);
+    s.star.scale.setScalar(Math.max(1e-3, a * star));
+    s.starHalo.scale.setScalar(Math.max(1e-3, s.starHaloSize * a * star));
+  };
+  const fadeSun = () => { sunHalo.material.opacity = SUN_HALO * nearOf(SIZE.sunHalo, sun.position); };
+
   /** One frame at `now` (ms): trouble breathes, the dust drifts, then draw. */
   const frame = (now) => {
     resize();
@@ -1095,8 +1136,10 @@ export function createGalaxyScene(canvas, {
       for (const s of world.sites) {
         s.breath = s.nebula.breathes ? 1 + PULSE.nebula * wave : 1;
         placeLobes(s);
+        fadeNear(s);
       }
     }
+    fadeSun();
     // The dust turns once in about 26 minutes: alive under a held camera, never a motion you notice.
     dust.rotation.y = dustTurn(now, still);
     holdDust();
@@ -1145,7 +1188,7 @@ export function createGalaxyScene(canvas, {
   };
 
   return {
-    update, setOpen, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize, setQuality, camera,
+    update, setOpen, setHeld: (id) => { held = id ?? null; }, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize, setQuality, camera,
     size: sized.get,
     renderer, dispose,
     get world() { return world; },

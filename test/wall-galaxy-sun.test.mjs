@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import * as THREE from '../public/vendor/three/three.module.js';
 import { galaxyLayout } from '../public/js/wall/galaxy/layout.js';
 import { NEBULA, paletteFrom } from '../public/js/wall/galaxy/palette.js';
-import { createGalaxyScene, siteShot, FOV, SIZE, SUN_HALO } from '../public/js/wall/galaxy/scene.js';
+import { createGalaxyScene, overviewShot, siteShot, FOV, SIZE, SUN_HALO } from '../public/js/wall/galaxy/scene.js';
 import { zoomedSiteShot } from '../public/js/wall/galaxy/camera.js';
 
 const FLEET = JSON.parse(fs.readFileSync(new URL('./fixtures/wall-large-map.json', import.meta.url), 'utf8')).nodes;
@@ -36,6 +36,9 @@ function drawnScene() {
     }),
   });
   galaxy.update({ nodes: FLEET });
+  // The camera at the overview, as the page puts it (inside the sun its halo fades, T2).
+  const shot = overviewShot(galaxy.world.sites);
+  galaxy.camera.position.set(shot.pos.x, shot.pos.y, shot.pos.z);
   galaxy.frame(1000);
   return { galaxy, scene: drawn };
 }
@@ -117,4 +120,15 @@ test('the held drift still moves with time, and starts slowly', () => {
   assert.ok(d(a, b) > 0 && d(a, b) < 20);
   assert.ok(d(a, c) > d(a, b));
   assert.deepEqual(c.look, s.home);
+});
+
+test('T2: a flight that passes near the sun fades its halo, never a frame of grey', () => {
+  const { galaxy, scene } = drawnScene();
+  const halo = scene.children.find((o) => o.isSprite && o.scale.x === SIZE.sunHalo);
+  assert.equal(halo.material.opacity, SUN_HALO, 'at the overview, whole');
+  galaxy.camera.position.set(0, 300, 200);
+  galaxy.camera.lookAt(0, 0, 0);
+  galaxy.frame(1100);
+  assert.equal(halo.material.opacity, 0, 'close by, gone');
+  galaxy.dispose();
 });

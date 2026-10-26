@@ -10,7 +10,7 @@ import * as THREE from '../public/vendor/three/three.module.js';
 import { LOBES, PEAK, armTangent, nebulaLobes, nebulaPeaks } from '../public/js/wall/galaxy/nebula.js';
 import { MIN_SITE_GAP, armPoint, galaxyLayout } from '../public/js/wall/galaxy/layout.js';
 import { NEBULA, paletteFrom } from '../public/js/wall/galaxy/palette.js';
-import { createGalaxyScene } from '../public/js/wall/galaxy/scene.js';
+import { NEAR_FADE, createGalaxyScene, nearFade, overviewShot } from '../public/js/wall/galaxy/scene.js';
 
 const LARGE = JSON.parse(fs.readFileSync(new URL('./fixtures/wall-large-map.json', import.meta.url), 'utf8')).nodes;
 
@@ -33,7 +33,14 @@ function sceneAt() {
       domElement: canvas, setPixelRatio() {}, setClearColor() {}, setSize() {}, dispose() {}, render() {},
     }),
   });
-  const at = (ms) => { clock.now = ms; galaxy.frame(ms); };
+  // The camera where the page puts it at the overview (inside the sun everything near fades, T2).
+  const at = (ms) => {
+    clock.now = ms;
+    const shot = overviewShot(galaxy.world?.sites ?? []);
+    galaxy.camera.position.set(shot.pos.x, shot.pos.y, shot.pos.z);
+    galaxy.camera.lookAt(shot.look.x, shot.look.y, shot.look.z);
+    galaxy.frame(ms);
+  };
   return { galaxy, at };
 }
 
@@ -183,4 +190,53 @@ test('the large demo with lab gone crit too: its two crits differ in shape and b
   assert.notEqual(a.peak, b.peak, 'not the same brightness');
   const draws = new Set(galaxy.world.sites.flatMap((s) => s.lobes.map((l) => l.mesh.geometry)));
   assert.equal(draws.size, 1, 'one shared lobe geometry');
+});
+
+// Night 3 T2 (r54-film-ui 3): a cluster the camera passes close to never
+// fills the frame; past ~40 % of the frame's height it fades out.
+test('T2: nearFade is whole up to 40 % of the frame height, gone by 70 %, and falls as the camera closes in', () => {
+  const t = Math.tan((42 * Math.PI) / 360);
+  const distFor = (share, size) => size / (2 * t * share);
+  assert.equal(NEAR_FADE.from, 0.4);
+  assert.equal(nearFade(680, distFor(0.3, 680), 42), 1);
+  assert.equal(nearFade(680, distFor(NEAR_FADE.from, 680), 42), 1);
+  assert.equal(nearFade(680, distFor(NEAR_FADE.to, 680), 42), 0);
+  assert.equal(nearFade(680, distFor(1.5, 680), 42), 0);
+  let prev = 1;
+  for (let d = 4000; d >= 100; d -= 50) {
+    const f = nearFade(680, d, 42);
+    assert.ok(f <= prev + 1e-12 && f >= 0 && f <= 1, `monotonic at ${d}`);
+    prev = f;
+  }
+  assert.equal(nearFade(0, 10), 1, 'nothing to fade');
+  assert.equal(nearFade(100, 0), 0, 'the camera inside it');
+});
+
+test('T2: a folded cluster the camera passes close to fades, the one it flies to does not', () => {
+  const { galaxy, at } = sceneAt();
+  galaxy.update(fleet({ 'hv1-b': 'crit' }));
+  at(1000);
+  at(5000); // the crit painted in
+  const hv1 = galaxy.world.byId.get('hv1');
+  const lobe = () => hv1.lobes[0].mesh.material.opacity;
+  const far = lobe();
+  assert.ok(far > 0.5, `at the overview the crit nebula is whole: ${far}`);
+  const halo = hv1.starHalo.scale.x;
+  // the camera 150 above hv1's star, looking down at it: its nebula is many frames tall
+  const close = () => {
+    galaxy.camera.position.set(hv1.home.x, hv1.home.y + 150, hv1.home.z + 10);
+    galaxy.camera.lookAt(hv1.home.x, hv1.home.y, hv1.home.z);
+    galaxy.frame(6000);
+  };
+  close();
+  assert.equal(lobe(), 0, 'passing close, the cluster fades out');
+  assert.ok(halo > 50 && hv1.starHalo.scale.x < 0.01, `and its star halo with it: ${halo} → ${hv1.starHalo.scale.x}`);
+  galaxy.setHeld('hv1');
+  close();
+  assert.ok(Math.abs(lobe() - far) < 1e-9, 'the system the camera flies to is the subject: never faded for being near');
+  galaxy.setHeld(null);
+  close();
+  assert.equal(lobe(), 0);
+  at(6000);
+  assert.ok(Math.abs(lobe() - far) < 1e-9, 'back at the overview it is whole again');
 });

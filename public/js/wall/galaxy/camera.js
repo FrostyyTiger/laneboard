@@ -58,22 +58,70 @@ const FLIGHT_SAMPLES = 24;
 const swell = (k) => Math.sin(Math.PI * Math.min(1, Math.max(0, k))) ** 2;
 
 /**
+ * How far a flight stays from what it does not fly to (night 3 T2,
+ * r54-film-ui 3): `reach` times a third system's reach from its star, and
+ * `sun` world units from the sun (half again its halo's radius, so the
+ * halo never fills the frame).
+ */
+export const FLIGHT_CLEAR = Object.freeze({ reach: 1.5, sun: SIZE.sunHalo * 0.75 });
+
+/** The arc between shots `a` and `b` at `k`, raised by `extra` more at its middle. */
+function arcPose(a, b, k, flight, extra = 0) {
+  const dist = Math.hypot(b.pos.x - a.pos.x, b.pos.y - a.pos.y, b.pos.z - a.pos.z);
+  const rise = k > 0 && k < 1 ? (Math.min(flight.maxLift, dist * flight.lift) + extra) * Math.sin(Math.PI * k) : 0;
+  return {
+    pos: { x: lerp(a.pos.x, b.pos.x, k), y: lerp(a.pos.y, b.pos.y, k) + rise, z: lerp(a.pos.z, b.pos.z, k) },
+    look: { x: lerp(a.look.x, b.look.x, k), y: lerp(a.look.y, b.look.y, k), z: lerp(a.look.z, b.look.z, k) },
+  };
+}
+
+const gap = (p, q) => Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z);
+
+/**
+ * How much higher than `p` the camera must be to stand `r` from each of
+ * `avoid` (`[{ x, y, z, r }]`, world): 0 when it already does. Rising is
+ * the way out because the stars lie on the plane and the camera above it.
+ */
+function liftFrom(p, avoid) {
+  let need = 0;
+  for (const o of avoid) {
+    const across = Math.hypot(p.x - o.x, p.z - o.z);
+    if (across < o.r) need = Math.max(need, o.y + Math.sqrt(o.r * o.r - across * across) - p.y);
+  }
+  return need;
+}
+
+/**
  * Where the camera is `k` (0..1, already eased) of the way from shot `a` to
  * shot `b` (`{ pos, look }`): a straight line for the look-at, from the
  * start's target to the destination, and an arc for the position that rises
  * in the middle with the hop's length. With a `frame` (`{ fov, aspect,
- * ends: [from, to] }`, the two stars, night 3 T1, r59-dreamer 1) the camera
- * steps back along its line of sight just far enough that one of the two
- * ends stays within FLIGHT_KEEP of the frame, so no flight frame is empty
- * sky; at either end it is already in, so the ends do not change. Pure.
+ * ends: [from, to], avoid }`):
+ * - `avoid` (`[{ x, y, z, r }]`: the stars of the other systems and the
+ *   sun, each with the room it wants, FLIGHT_CLEAR; night 3 T2) bends the
+ *   arc up just enough that no step comes nearer than `r` to one, nor
+ *   nearer than either shot itself already stands (an end is where it is);
+ * - `ends` (the two stars, night 3 T1, r59-dreamer 1) steps the camera back
+ *   along its line of sight just far enough that one of the two ends stays
+ *   within FLIGHT_KEEP of the frame, so no flight frame is empty sky.
+ * At either end both are 0, so the ends do not change. Pure.
  */
 export function flightPose(a, b, k, flight = FLIGHT, frame = null) {
-  const dist = Math.hypot(b.pos.x - a.pos.x, b.pos.y - a.pos.y, b.pos.z - a.pos.z);
-  const rise = Math.min(flight.maxLift, dist * flight.lift) * Math.sin(Math.PI * k);
-  const pose = {
-    pos: { x: lerp(a.pos.x, b.pos.x, k), y: lerp(a.pos.y, b.pos.y, k) + rise, z: lerp(a.pos.z, b.pos.z, k) },
-    look: { x: lerp(a.look.x, b.look.x, k), y: lerp(a.look.y, b.look.y, k), z: lerp(a.look.z, b.look.z, k) },
-  };
+  const avoid = (frame?.avoid ?? [])
+    .filter((o) => o && [o.x, o.y, o.z, o.r].every(Number.isFinite))
+    .map((o) => ({ ...o, r: Math.min(o.r, gap(a.pos, o), gap(b.pos, o)) }))
+    .filter((o) => o.r > 0);
+  // One extra rise over the whole flight (the arc's own sin shape, so the
+  // path stays one smooth curve) that covers the need at every sample.
+  let extra = 0;
+  if (avoid.length) {
+    for (let i = 1; i < FLIGHT_SAMPLES; i++) {
+      const j = i / FLIGHT_SAMPLES;
+      extra = Math.max(extra, liftFrom(arcPose(a, b, j, flight).pos, avoid) / Math.sin(Math.PI * j));
+    }
+    extra *= 1.1; // a need that peaks between two samples stays under the curve
+  }
+  const pose = arcPose(a, b, k, flight, extra);
   const ends = frame?.ends?.filter(Boolean) ?? [];
   if (!ends.length) return pose;
   // How far back each step of the flight needs to be (the base pose, sampled),
@@ -85,7 +133,7 @@ export function flightPose(a, b, k, flight = FLIGHT, frame = null) {
   let scale = 0;
   for (let i = 1; i < FLIGHT_SAMPLES; i++) {
     const j = i / FLIGHT_SAMPLES;
-    scale = Math.max(scale, need(flightPose(a, b, j, flight)) / swell(j));
+    scale = Math.max(scale, need(arcPose(a, b, j, flight, extra)) / swell(j));
   }
   // 10 % over the samples, so a need that peaks between two of them stays under the swell.
   const back = Math.max(scale * 1.1 * swell(k), need(pose));
@@ -133,6 +181,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   let want = { kind: 'overview', t0: null };
   let from = null; // the pose the current flight left from
   let fromEnd = null; // the star the current flight keeps in frame as it leaves (T1)
+  let fromId = null; // the site the current flight leaves, if it left one (T2)
   let pose = null; // where the camera is now
   let last = null;
   let version = 0;
@@ -167,9 +216,21 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   // lands where it is), else the middle of its frame.
   const endFor = (shot, stars) => stars.find((p) => shows(shot, p)) ?? shot?.look ?? null;
 
+  // What a flight keeps clear of (T2): the sun and every system's star but
+  // the one it flies to and the one it leaves (its start is where it is).
+  const avoid = () => {
+    const out = [{ ...SUN, r: FLIGHT_CLEAR.sun }];
+    for (const s of sites()) {
+      if (s.gone || (want.kind === 'site' && s.id === want.id) || s.id === fromId) continue;
+      out.push({ ...s.home, r: FLIGHT_CLEAR.reach * (s.reach || 0) });
+    }
+    return out;
+  };
+
   const go = (next) => {
     from = still ? null : pose;
     fromEnd = from ? endFor(from, [starOf(want), fromEnd]) : null;
+    fromId = want.kind === 'site' ? want.id : null;
     want = { ...next, t0: null };
     version += 1;
   };
@@ -185,7 +246,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     freeNow = box ? blendRect(freeNow, box, freeNow ? 1 - Math.exp(-dt / FREE_EASE_MS) : 1) : null;
     const k = from ? ease((now - want.t0) / flight.ms) : 1;
     const to = target(now);
-    pose = from && k < 1 ? flightPose(from, to, k, flight, { ...view(), ends: [fromEnd, endFor(to, [starOf(want)])] }) : to;
+    pose = from && k < 1 ? flightPose(from, to, k, flight, { ...view(), ends: [fromEnd, endFor(to, [starOf(want)])], avoid: avoid() }) : to;
     if (k >= 1) from = null;
 
     // The held system opens once the camera is most of the way there; the rest fold.
@@ -195,6 +256,8 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
       if (o !== s.open) galaxy.setOpen(s.id, o);
     }
 
+    // The system it flies to or holds is the subject: the scene never fades it for being near (T2).
+    galaxy.setHeld?.(want.kind === 'site' && !still ? want.id : null);
     galaxy.camera.position.set(pose.pos.x, pose.pos.y, pose.pos.z);
     galaxy.camera.lookAt(pose.look.x, pose.look.y, pose.look.z);
     return pose;
