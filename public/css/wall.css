@@ -542,3 +542,42 @@ html.wall body {
   display: block;
   touch-action: none;
 }
+
+/* The galaxy's names (js/wall/galaxy/labels.js): a layer between the canvas
+   and the frame, one span per name moved by transform. Sites and the sun in
+   the label face, caps, at the site step (--gl-site, type.js stepsFor);
+   planets and dots in mono lowercase at the room step (--gl-room). Grey;
+   trouble in its hue (its shape leads the word). A halo of the canvas colour
+   keeps a name readable over the dust. labels.js measures the boxes from
+   the same numbers (textW, mono 0.62 em, line 1.25), so keep them in step. */
+.galaxy-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.galaxy-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  line-height: 1.25;
+  color: var(--text-3);
+  text-shadow: 0 0 4px var(--bg-canvas), 0 0 2px var(--bg-canvas);
+  will-change: transform, opacity;
+}
+.galaxy-label[data-face="label"] {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: var(--gl-site);
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+.galaxy-label[data-face="mono"] {
+  font-family: var(--font-mono);
+  font-size: var(--gl-room);
+  letter-spacing: 0.02em;
+}
+.galaxy-label[data-tone="crit"] { color: var(--crit); }
+.galaxy-label[data-tone="warn"] { color: var(--warn); }
+.galaxy-label[data-tone="low"] { color: var(--p3); }

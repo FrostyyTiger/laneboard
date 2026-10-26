@@ -6,15 +6,18 @@
 //
 // The tour (tour.js, trouble first) drives the 3D camera (camera.js) as it
 // drives the Map on wall.html; `?demo=1` is its video speed. The Wall's
-// caption and frame (hud.js) sit over the canvas and follow the tour's legs.
+// caption and frame (hud.js) sit over the canvas and follow the tour's legs;
+// the names (labels.js) sit between them and the canvas.
 // `?at=<site>&open=0..1` parks the camera on one system, for stills.
 
 import { createPerf } from '../perf.js';
 import { createTour, timingFor, tourOrder } from '../tour.js';
 import { createCaption, captionTimingFor, STILL_CAPTION_TIMING } from '../caption.js';
 import { createFrame } from '../frame.js';
+import { pxPerMm, screenOf, stepsFor } from '../type.js';
 import { createGalaxyCamera } from './camera.js';
 import { createHud } from './hud.js';
+import { createLabels } from './labels.js';
 import { paletteFrom } from './palette.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 
@@ -64,6 +67,14 @@ export function boot() {
   const frame = createFrame(document.getElementById('wall-frame'));
   const hud = createHud({ caption, frame, tour: park ? null : tour });
   let parkedSaid = false;
+
+  // The names, over the scene and under the words: placed after each frame
+  // where the camera is now, clear of the caption plate and the fleet line.
+  const labels = createLabels(document.getElementById('galaxy-labels'), galaxy, {
+    steps: stepsFor(pxPerMm(screenOf(q, { dpr: globalThis.devicePixelRatio || 1, cssHeight: innerHeight }))),
+    covers: hud.covers,
+  });
+  cam.onDraw(labels.draw);
 
   const tick = (now) => {
     requestAnimationFrame(tick);
@@ -128,6 +139,7 @@ export function boot() {
   globalThis.__galaxy = galaxy;
   globalThis.__galaxyTour = tour;
   globalThis.__galaxyHud = { caption, frame, covers: hud.covers };
+  globalThis.__galaxyLabels = labels;
 }
 
 boot();
