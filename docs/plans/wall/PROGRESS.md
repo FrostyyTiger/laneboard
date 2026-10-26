@@ -274,13 +274,39 @@ Notes for every builder round (planner, night 1):
   T15); inside a site the Map's sublabels crowd the tiles (r20-skeptic #2, owner); the hub is a
   lone tile with a big core mark; the cross-site flow links run across the honeycomb as the Map's
   arcs (Q5 asks bundles between region centres: not built).)
-- [ ] T15 (§2, §5) [variant:radial] (r9-film-ui #2, #7) Type hierarchy and stable labels: three steps
+- [x] T15 (§2, §5) [variant:radial] (r9-film-ui #2, #7) Type hierarchy and stable labels: three steps
   from mm via `devicePixelRatio` (Q3): sites condensed semibold caps for 1.5-2 m, rooms one step
   down, services/leaves/lanes unlabelled at the overview (named only when the camera is in that
   site); each label pinned outward from its node and not re-placed while on screen — done when: a
   test checks the label-size function (site > room, mm to px) and a label's side stays fixed
   across two draws; a still and a filmstrip show no overlapping or hopping labels. Option on the
   Map defaults off.
+  (commit 6607e27; `public/js/wall/type.js`: cap height from arc minutes (16' at the read distance),
+  CSS px per mm from `?mm=<screen height mm>` or else `devicePixelRatio` (2x and up = the 12.3" tablet,
+  10.5 device px/mm; 1x = a 24" monitor, 3.6), snapped to the 4:3 scale 11·15·20·26·35·47. Sites are
+  read at 1 m, rooms at 0.45 m: the tablet gets 35 / 15 (sites were 26), a desk monitor 26 / 11.
+  Rooms at 0.6 m (20 px) were tried and did not fit radial's 45 rooms (names pushed off their nodes,
+  still `r35-still` first take), so rooms are an arm's-length tier; Q3's own conclusion is that the
+  3 m read on a tablet is shape, colour and the trouble line. The face was already Barlow Condensed
+  600 caps. Map option `pinLabels` (defaults off; radial sets it): a name keeps its side until its
+  bearing is ~20° past the vertical (PIN_FLIP 0.35), and the collision pass's line while drawn; a
+  name that leaves the screen is placed afresh. Services, leaves and lanes stay unnamed at the
+  overview unless in trouble (T11's rule kept: north star 1 names trouble). Orbits, islands and mosaic
+  keep 26 / 15 (`BASE_STEPS`): their layouts are spaced for it (T47). Tests `test/wall-type.test.mjs`
+  (arc minutes, px/mm, scale snap, site > room on every density, `?mm=`, radial options per screen),
+  `test/wall-radial.test.mjs` (a pinned name keeps its side and line across two draws, the app's
+  flips; past the hysteresis it turns over). Still `$RUN_DIR/shots/r35-still/`, filmstrip
+  `r35-radial/`: five site names clearly the first read, no overlapping labels; 0 console errors;
+  fps 2 is SwiftShader plus screenshots (filming note); script 10.7-12.3 ms/frame at 4x against
+  9.1 for the commit before, at load 36 (noise level per r32). Seen and left to their tasks: in the
+  home cluster some names still sit a line or two from their node (THERMOSTAT, FRONT-DOOR,
+  PRINTER-3D; the room ring is full there, T19/T27); in a site the caption plate covers big site
+  names behind it (T30).)
+- [ ] T47 (§2, T15) [variant:orbits, islands, mosaic] Type steps from distance for the other
+  directions: their layouts space names for radial's `BASE_STEPS` (26 / 15); move them to
+  `type.js` `stepsFor` (35 / 15 on the tablet) with their spacing re-measured, and `pinLabels` where
+  names flip — done when: each variant's layout tests pass at the new steps and a still per variant
+  shows no overlapping names.
 - [ ] T16 (§2) [variant:radial] (r9-film-ui #3) Trouble is the loudest thing: at the overview a crit
   node is the only saturated area (halo a few node radii wide, via T8's glow layer), attention in
   lanes stays at mark size and does not outshout a crit elsewhere — done when: a still of the
