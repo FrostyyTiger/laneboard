@@ -80,9 +80,11 @@ export function zoomedSiteShot(site, heldMs, zoom, view = null) {
  * overview (above). `free()` (T18) gives the box of the frame the words
  * leave free (framing.js `freeRect`, fractions) or null for all of it; a
  * held system is framed in it, the box eased over FREE_EASE_MS so a plate
- * that comes or goes moves the camera, never cuts it.
+ * that comes or goes moves the camera, never cuts it. `fitOverview(shot,
+ * sites, now)` (T19, overview.js createOverviewFit) slides the overview so
+ * no site sits under the words; without it the overview is as scene.js gives it.
  */
-export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, free = null } = {}) {
+export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, free = null, fitOverview = null } = {}) {
   // What the camera wants: the overview or one site, since `t0` (ms).
   let want = { kind: 'overview', t0: null };
   let from = null; // the pose the current flight left from
@@ -95,8 +97,10 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   const sites = () => galaxy.world?.sites ?? [];
   const siteOf = (id) => galaxy.world?.byId.get(id) ?? null;
 
+  // The overview, fitted clear of the words when given a fitter (T19, overview.js).
+  const overview = (now, t) => (fitOverview ? fitOverview(overviewShot(sites(), t), sites(), now) : overviewShot(sites(), t));
   const target = (now) => {
-    if (still) return overviewShot(sites(), 0);
+    if (still) return overview(now, 0);
     if (want.kind === 'site') {
       const s = siteOf(want.id);
       if (s) {
@@ -104,7 +108,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
         return zoomedSiteShot(s, Math.max(0, now - want.t0 - flight.ms), want.zoom, view);
       }
     }
-    return overviewShot(sites(), now);
+    return overview(now, now);
   };
 
   const go = (next) => {

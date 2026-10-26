@@ -36,6 +36,7 @@ import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { prefersStill, stillTourTimingFor } from './still.js';
 import { flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
+import { createOverviewFit, siteMarks } from './overview.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -122,7 +123,19 @@ export function boot() {
     return freeRect(canvas.clientWidth, canvas.clientHeight, kept.filter(Boolean));
   };
   const view = () => ({ fov: galaxy.camera.fov, aspect: galaxy.camera.aspect, free: freeBox() });
-  const cam = createGalaxyCamera(galaxy, { still: reduced, free: freeBox });
+  // The overview slides (stands back if it must) until no site or its name
+  // is under the words (T19, overview.js). The caption plate is gone at the
+  // overview unless the camera stays there all along (reduced motion), where
+  // its widest box counts; the fleet block and the tag always do.
+  const steps = stepsFor(pxPerMm(screenOf(q, { dpr: globalThis.devicePixelRatio || 1, cssHeight: innerHeight })));
+  const overviewFit = (withPlate, easeMs) => createOverviewFit({
+    // `kept` is fresh: the camera reads freeBox() each frame before its shot.
+    view: () => ({ fov: galaxy.camera.fov, W: canvas.clientWidth, H: canvas.clientHeight, covers: (withPlate ? kept : kept.slice(1)).filter(Boolean) }),
+    marks: (sites) => siteMarks(sites, steps.site),
+    ...(easeMs != null ? { easeMs } : {}),
+  });
+  const cam = createGalaxyCamera(galaxy, { still: reduced, free: freeBox, fitOverview: overviewFit(reduced, reduced ? 0 : null) });
+  const parkedOverview = overviewFit(false, 0);
   const tour = createTour(cam, { timing: reduced ? stillTourTimingFor(demo) : timingFor(demo) });
 
   // The words over the canvas: the caption names each system as the camera
@@ -146,7 +159,7 @@ export function boot() {
   // where the camera is now, clear of the caption plate, the fleet line and
   // the lock's brackets (drawn first: the lock's onDraw comes before theirs).
   const labels = createLabels(document.getElementById('galaxy-labels'), galaxy, {
-    steps: stepsFor(pxPerMm(screenOf(q, { dpr: globalThis.devicePixelRatio || 1, cssHeight: innerHeight }))),
+    steps,
     covers: hud.covers,
     held: lock.held,
   });
@@ -162,7 +175,10 @@ export function boot() {
       if (at.open !== parkOpen) galaxy.setOpen(at.id, parkOpen);
       aim(siteShot(at, 0, view()));
     } else if (!park) cam.frame(now);
-    else aim(overviewShot(w.sites, reduced ? 0 : now));
+    else {
+      freeBox();
+      aim(parkedOverview(overviewShot(w.sites, reduced ? 0 : now), w.sites, now));
+    }
     galaxy.frame(now);
     cam.drawn();
     const t1 = performance.now();
