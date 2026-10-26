@@ -250,6 +250,13 @@ Notes for every builder round (planner, night 1):
   offset in the Wall's driver; any Map change is an option defaulting off) — done when: a pure test
   checks the offset from plate width and screen size, and frames of HOME and REMOTE show the subtree
   clear of the plate.
+- [ ] T31 (bug) [ui] [variant:all] (r24-touch #2) A pinch, palm or long press breaks the page: no
+  `touch-action` on the stage and no `maximum-scale` in the viewport, so a two-finger brush zooms
+  the page and the clock and fleet line slide off-screen. Set `touch-action: none` and
+  `user-select: none` on `.wall-stage`, `maximum-scale=1, user-scalable=no` in `wall.html`, and a
+  `contextmenu` → `preventDefault` listener in `main.js`; a plain tap still does nothing (the
+  explorer is night 2) — done when: `test/wall-*.test.mjs` checks `wall.css` carries the
+  `touch-action` rule and `wall.html` the viewport limit, and `npm test` passes.
 
 ## Research questions
 
@@ -317,6 +324,17 @@ Notes for every builder round (planner, night 1):
   used by wall.css only. If soft gradients should stay out of tokens.css, the alternative is a guardrail
   exception for wall.css (test/helpers/css-guardrails.mjs): your call.
 
+- (r24-touch, night 2 inputs for the explorer, not tasks) #1 a tap gives no feedback: decide between a
+  lock-bracket answer within 100 ms, a "touch explorer: night 2" toast, or nothing on purpose; #3 the
+  fleet line as first tap target (hit box 79 px high, `+N more` list); #4 at the overview a tap
+  resolves to the site (53 px circles; REPOS sits 55 px from HOME, move it or give it no target);
+  #5 home lights are 36 px apart zoomed, so zoom further or show a two-row chooser; #6 the plate
+  becomes the detail sheet (T30/T24 cover the overlap now); #7 history entry plus `popstate` as back,
+  and a 79 px Back control top left; #8 freeze drift and tour at `pointerdown`; #9 idle timer 45-60 s
+  with a shrinking line in the last 5 s, trouble must not move the camera while exploring; #10
+  `touch to explore` hint in the tag line, once per idle cycle. Across variants: islands keep gaps of
+  53 px or more, orbits no planets closer than that, hex tiles need the site fallback.
+
 ## Reviews
 
 - r9-film-ui.md: 9 findings, 5 became tasks (T15-T19: #2+#7, #3, #4, #5, #6+#8); #1 covered by T5 (phrasing
@@ -325,6 +343,8 @@ Notes for every builder round (planner, night 1):
   by T16; #3 and the overview-labels part of #4 went to the owner.
 - r20-skeptic.md: 17 findings, 4 became tasks (T27-T30: #1, #3, #4, #8); covered: #7 (T20/T22), #9 (T23),
   #14 (T16), #16 (T15), #17 (T16); #2, #5, #6, #10, #11, #12, #13, #15 went to the owner (taste or plan change).
+- r24-touch.md: 10 findings, 1 became a task (T31: #2); #6 covered (T30, T24); #1, #3, #4, #5, #7, #8, #9, #10
+  are night 2 explorer design and went to the owner as inputs; #1 includes a taste choice.
 
 ## Scores
 
@@ -333,5 +353,6 @@ Notes for every builder round (planner, night 1):
 | 9 (radial) | film-ui | 3 | 2 | 4 | 1 | 4 | 6 | 6 |
 | 14 (radial) | operator | 3 | 3 | 5 | 2 | 5 | 5 | 6 |
 | 20 (radial) | skeptic | 3 | 3 | 4 | 1 | 5 | 3 | 6 |
+| 24 (radial) | touch | 4 | 3 | 5 | 1 | 5 | 4 | 6 |
 
 ## Morning
