@@ -263,3 +263,115 @@ html.wall body {
 .wall-lock-tr { border-top-width: var(--lock-stroke); border-right-width: var(--lock-stroke); }
 .wall-lock-bl { border-bottom-width: var(--lock-stroke); border-left-width: var(--lock-stroke); }
 .wall-lock-br { border-bottom-width: var(--lock-stroke); border-right-width: var(--lock-stroke); }
+
+/* ---------------------------------------------------------------------------
+   Frame (js/wall/frame.js): what stays put while the camera moves. The
+   vignette darkens the edges, most at the bottom where the clock and the
+   fleet line sit, so text never stands on a busy part of the map. The text
+   keeps the caption's margins (8vh, 6vw) and its scale (1.7 / 2.7 / 4.3 /
+   6.9 vmin). Grey, the clock the quietest big thing on screen (text-3, light
+   weight), so the fleet line in its status colour is louder at a smaller
+   size. Nothing here transitions.
+   --------------------------------------------------------------------------- */
+
+.wall-frame-layer {
+  --frame-y: 8vh;
+  --frame-x: 6vw;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.wall-vignette {
+  position: absolute;
+  inset: 0;
+  background: var(--tex-vignette);
+}
+
+/* Top right, on the caption kicker's line. */
+.wall-tag {
+  position: absolute;
+  top: calc(var(--frame-y) + 2.4vmin);
+  right: var(--frame-x);
+  display: flex;
+  gap: 1.6vmin;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 1.7vmin;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.wall-tag-live:empty { display: none; }
+.wall-tag[data-live="0"] .wall-tag-live { color: var(--warn); }
+
+/* Bottom left and bottom right share one baseline: the last line of each. */
+.wall-clock,
+.wall-fleet {
+  position: absolute;
+  bottom: var(--frame-y);
+  white-space: nowrap;
+}
+
+.wall-clock { left: var(--frame-x); }
+.wall-clock-time {
+  font-family: var(--font-label);
+  font-weight: 500;
+  font-size: 6.9vmin;
+  line-height: 0.86;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.wall-clock-date,
+.wall-fleet-fact {
+  margin-top: 1.2vmin;
+  font-family: var(--font-mono);
+  font-size: 1.7vmin;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.wall-fleet {
+  right: var(--frame-x);
+  max-width: 50vw;
+  text-align: right;
+}
+.wall-fleet-line {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 4.3vmin;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  /* A long problem wraps onto a second line (balanced) rather than lose its end. */
+  white-space: normal;
+  text-wrap: balance;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.wall-fleet-name { white-space: nowrap; }
+.wall-fleet-glyph {
+  margin-right: 0.3em;
+  font-size: 0.8em;
+}
+.wall-fleet[data-tone="crit"] .wall-fleet-line { color: var(--crit); }
+.wall-fleet[data-tone="warn"] .wall-fleet-line { color: var(--warn); }
+.wall-fleet[data-tone="low"] .wall-fleet-line { color: var(--info); }
+/* A calm fleet says so quietly, at the fact's size: nothing needs you. */
+.wall-fleet[data-tone="grey"] .wall-fleet-line {
+  font-weight: 500;
+  font-size: 2.7vmin;
+  color: var(--text-3);
+}
+
+.wall-fleet-fact { display: flex; justify-content: flex-end; gap: 4vmin; }
+.wall-fleet-more { color: var(--text-2); }
+.wall-fleet-more[hidden] { display: none; }

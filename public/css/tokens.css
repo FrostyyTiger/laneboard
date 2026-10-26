@@ -253,6 +253,13 @@
   /* Textures: the only gradient functions allowed, hard stops only. */
   --tex-dots: radial-gradient(circle, var(--grid-dot) 0.75px, transparent 1px) 0 0 / 16px 16px;
   --tex-hatch: repeating-linear-gradient(45deg, var(--line) 0 1px, transparent 1px 6px);
+  /* The Wall's vignette (docs/plans/wall/README.md §2.5: Wall may be bolder),
+     the one soft gradient: edges and the bottom band darkened toward the
+     canvas so its clock and fleet line sit on quiet ground. Only wall.css uses
+     it; the app keeps hard-stop textures. */
+  --tex-vignette:
+    linear-gradient(to top, color-mix(in oklch, var(--bg-canvas) 88%, transparent) 0, transparent 26vh),
+    radial-gradient(ellipse 75% 70% at 50% 46%, transparent 55%, color-mix(in oklch, var(--bg-canvas) 82%, transparent) 100%);
   /* Four 8x2px L-corners in the accent, for `.sel::after { inset: -3px }`. */
   --bracket-img:
     linear-gradient(var(--accent) 0 0) left top / 8px 2px no-repeat,

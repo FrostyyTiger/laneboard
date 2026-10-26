@@ -14,6 +14,7 @@ import { createTour, timingFor } from './tour.js';
 import { createCaption, captionLines, captionTimingFor, STILL_CAPTION_TIMING } from './caption.js';
 import { createLock, LOCK_TIMING, STILL_LOCK_TIMING } from './lock.js';
 import { createGlow } from './glow.js';
+import { createFrame } from './frame.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -48,6 +49,8 @@ export function boot() {
   });
   // Lights and jobs from the feeds, under the Map, growing with its zoom.
   const glow = createGlow(document.getElementById('wall-glow'), map);
+  // What stays put while the camera moves: vignette, clock, the fleet's worst line, the tag.
+  const frame = createFrame(document.getElementById('wall-frame'));
   let latest = null;
   tour.onLeg((leg) => {
     const ms = still ? 0 : (leg.arriveMs ?? timingFor(pick.demo).flyMs);
@@ -69,6 +72,7 @@ export function boot() {
     latest = model;
     map.update(model);
     glow.update(model);
+    frame.update(model);
     tour.update(model);
     tour.start();
   };
@@ -82,7 +86,7 @@ export function boot() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}/ws`);
     let opened = false;
-    ws.addEventListener('open', () => { opened = true; page.dataset.live = '1'; });
+    ws.addEventListener('open', () => { opened = true; page.dataset.live = '1'; frame.live(true); });
     ws.addEventListener('message', (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
@@ -90,6 +94,7 @@ export function boot() {
     });
     ws.addEventListener('close', () => {
       delete page.dataset.live;
+      frame.live(false);
       // Keep the last model on screen and try again.
       const next = opened ? BACKOFF_START_MS : Math.min(backoff * 2, BACKOFF_MAX_MS);
       setTimeout(() => openSocket(next), next);
@@ -99,7 +104,7 @@ export function boot() {
   openSocket(BACKOFF_START_MS);
 
   // For the console and later tasks (caption, lock follow `tour.onLeg`).
-  globalThis.__wall = { map, tour, caption, lock, glow, variant: pick.id, demo: pick.demo };
+  globalThis.__wall = { map, tour, caption, lock, glow, frame, variant: pick.id, demo: pick.demo };
 }
 
 boot();
