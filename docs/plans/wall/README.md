@@ -193,3 +193,15 @@ more of it. Touch (D4) waits for night 3, after the owner has seen the galaxy on
 
 ### Night 3
 Polish with the panel: every persona at least once on the built Wall, triage, fixes. Written after night 2.
+
+**Owner picks so far** (2026-10-26, during night 2; the rest is written after night 2's morning report).
+Two effects proposed by the dreamer (night 2, `reviews/r15-dreamer.md`), wanted by the owner: build both,
+behind switches like every effect (D9), each ending in a filmstrip with and without it.
+- `afterglow`: when trouble clears, its cluster keeps a faint ring in the old status hue on the plane,
+  cooling red to amber to grey and gone after about 30 min. It shows recent history: in the morning you see
+  where something went wrong in the night though it is green now. Quieter than any live trouble (outline
+  only, never filled, never pulsing, §2.1). The page remembers the clears it has seen (no new server
+  route, D2); a reload forgets them.
+- `sweep`: once per tour cycle, at the overview only, one faint sensor line from the sun turns once round
+  the plane. Each cluster it crosses pings softly, but only if its site sent new data since the last
+  sweep: a silent site stays dark and the gap shows. One gesture for freshness instead of many heartbeats.
