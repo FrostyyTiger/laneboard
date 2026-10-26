@@ -345,11 +345,33 @@ Notes for every builder round (planner, round 1):
   (frames 2, 6, 9) a trouble site sits in a broad band of its hue under the plate (thinned to 30 % open);
   if a review finds it loud, the open thinning can go further. The newest-crit difference (1 vs 0.88) is
   subtle at the overview; r15-dreamer 4 (banner ranks by age) and T21 (beacon) carry age more strongly.
-- [ ] T18 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 1) The held system hides under its own
+- [x] T18 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 1) The held system hides under its own
   caption plate: `siteShot` aims the star at the centre of the free rect (frame minus `hud.covers()`) and fits
   the distance so the open `reach` fits that rect (also fixes the Later line on reach past the bottom edge) —
   done when: a test shows the projected star and the open reach lie outside every `covers()` rect, and
   `?at=hv1&open=1` and `?at=hv2&open=1` stills show the star and the attention planet clear of the plate.
+  (commit SHA) Pure `galaxy/framing.js`: `freeRect(W, H, covers)` (the box beside the covers, 24 px off them,
+  a circle fitting best; the whole frame when covers leave under a quarter), `panShot` (slides the camera, never
+  turns it, so what was behind it stays behind), `fitDistance` (reach × 1.25 over the box's narrow half; 1.15
+  was the least that held every large-demo system over a whole sway), `freeCentre`, `blendRect`, `unionBox`.
+  `siteShot(site, now, view)` / `zoomedSiteShot(…, view)` frame in the box with a view, unchanged without.
+  `createGalaxyCamera(galaxy, { free })` eases the box (450 ms), never a cut; `main.js` feeds it the caption
+  plate, the fleet block and the tag, each remembered as the widest box seen, so the shot stays put from leg
+  to leg. `hud.covers()` now has the tag too (`tagCover()`): names keep off it. Measured on the tablet frame
+  (1368×912): plate up to 711×487, far fleet block 873×237, so the free box is right of the plate, above the
+  fleet block, ~550×520 px: held systems are about half as large on screen as before, but whole and clear.
+  **Decision:** a system needing the camera farther back than the hub is (reach > 0.33 of its distance from
+  the hub; on the large demo only `lab`/HV1) is shot from outside looking in, steeper (`FRAMING.inward`,
+  `inwardRise` 1.4): from the sun's side the camera hung over the sun (a 5 % white disc), looking in the hub
+  is a small grey point at the top edge (test: < 2 % of the frame for every site over 6 min, T16 allows 15).
+  Tests `test/wall-galaxy-framing.test.mjs` (6): every star at the box's middle and every open planet and the
+  lock target inside the box (clear of all three covers) for every site at 0/40/160 s; the hub's share; the
+  eased reframe. Stills `$RUN_DIR/shots/r36-t18-hv2`, `r36-t18b-lab` (`?at=…&open=1`): HV2 whole right of the
+  plate; HV1's attention lanes and the lock brackets clear of the plate. Filmstrip `$RUN_DIR/shots/r36-galaxy/`
+  (`?demo=1&quality=0`, 0 console errors); a probe over 60 s of the tour put every open system's star at
+  (1093, 390), the box's middle. Seen: on HV1 the hub and its `DEMO-HOST` name sit at the top, just above the
+  tag (the Later line on the sun's label, r26-skeptic 4, would quieten it); the fleet line is the loudest
+  thing in calm holds, as §2.1 wants.
 - [ ] T19 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 2) CLOUD is missing from the overview (under
   the far fleet block): `overviewShot` offsets its look-at toward the sites' centroid until no site's folded
   box meets `hud.covers()` (in reduced motion too, where the overview is all there is and the plate is up

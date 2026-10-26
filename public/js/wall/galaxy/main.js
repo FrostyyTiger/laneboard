@@ -35,6 +35,7 @@ import { budgetStart, budgetStep, createFrameWindow, perfLine } from './budget.j
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { prefersStill, stillTourTimingFor } from './still.js';
 import { flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
+import { freeRect, unionBox } from './framing.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -110,7 +111,18 @@ export function boot() {
   const parked = () => (park ? galaxy.world?.sites.find((s) => s.id === park || String(s.node.label ?? '').toLowerCase() === park.toLowerCase()) : null);
 
   const demo = page.dataset.demo === '1';
-  const cam = createGalaxyCamera(galaxy, { still: reduced });
+  // A held system is framed in what the caption plate, the fleet block and
+  // the tag leave free (T18, framing.js). Each one's box is remembered as the widest
+  // seen, so the shot does not move each time a plate comes, goes or changes
+  // length; before the first plate it eases over once.
+  const kept = [null, null, null];
+  const freeBox = () => {
+    const now = [caption.cover?.() ?? null, frame.cover?.() ?? null, hud.tagCover()];
+    for (let i = 0; i < kept.length; i++) kept[i] = unionBox(kept[i], now[i]);
+    return freeRect(canvas.clientWidth, canvas.clientHeight, kept.filter(Boolean));
+  };
+  const view = () => ({ fov: galaxy.camera.fov, aspect: galaxy.camera.aspect, free: freeBox() });
+  const cam = createGalaxyCamera(galaxy, { still: reduced, free: freeBox });
   const tour = createTour(cam, { timing: reduced ? stillTourTimingFor(demo) : timingFor(demo) });
 
   // The words over the canvas: the caption names each system as the camera
@@ -148,7 +160,7 @@ export function boot() {
     const at = parked();
     if (at) {
       if (at.open !== parkOpen) galaxy.setOpen(at.id, parkOpen);
-      aim(siteShot(at, 0));
+      aim(siteShot(at, 0, view()));
     } else if (!park) cam.frame(now);
     else aim(overviewShot(w.sites, reduced ? 0 : now));
     galaxy.frame(now);

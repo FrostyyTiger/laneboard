@@ -21,6 +21,7 @@ import * as THREE from '../../../vendor/three/three.module.js';
 import { ease, OPEN_MS } from './layout.js';
 import { overviewShot, siteShot, SIZE } from './scene.js';
 import { TIMING } from '../tour.js';
+import { blendRect } from './framing.js';
 
 /**
  * A flight takes the tour's `flyMs` (tour.js TIMING, 2250 ms); the target system starts opening at
@@ -28,6 +29,9 @@ import { TIMING } from '../tour.js';
  * hop rises by `lift` of its length at the middle, at most `maxLift`.
  */
 export const FLIGHT = Object.freeze({ ms: 2250, openAt: 0.45, lift: 0.18, maxLift: 900 });
+
+/** How quickly a held shot follows a change of the free box (ms, exponential). */
+export const FREE_EASE_MS = 450;
 
 /** The longest frame step the opening follows (ms). */
 const MAX_STEP_MS = 500;
@@ -54,10 +58,14 @@ export function openStep(open, want, dtMs, openMs) {
   return want > open ? Math.min(want, open + step) : Math.max(want, open - step);
 }
 
-/** The shot for a site at `zoom` (the tour's zoom is siteShot's distance), `heldMs` into its drift. */
-export function zoomedSiteShot(site, heldMs, zoom) {
-  const s = siteShot(site, heldMs);
+/**
+ * The shot for a site at `zoom` (the tour's zoom is siteShot's distance), `heldMs` into its drift;
+ * with a `view` (siteShot's, T18) the star sits in the free box at that zoom.
+ */
+export function zoomedSiteShot(site, heldMs, zoom, view = null) {
   const z = Number.isFinite(zoom) && zoom > 0 ? TIMING.zoom / zoom : 1;
+  if (view?.free) return siteShot(site, heldMs, { ...view, scale: z });
+  const s = siteShot(site, heldMs);
   if (z === 1) return s;
   return {
     pos: { x: s.look.x + (s.pos.x - s.look.x) * z, y: s.look.y + (s.pos.y - s.look.y) * z, z: s.look.z + (s.pos.z - s.look.z) * z },
@@ -69,9 +77,12 @@ export function zoomedSiteShot(site, heldMs, zoom) {
  * The camera over `galaxy` (scene.js `createGalaxyScene`: `world`,
  * `setOpen`, `camera`). Call `frame(now)` before the scene draws and
  * `drawn()` after it. `flight` is injectable for tests; `still` holds the
- * overview (above).
+ * overview (above). `free()` (T18) gives the box of the frame the words
+ * leave free (framing.js `freeRect`, fractions) or null for all of it; a
+ * held system is framed in it, the box eased over FREE_EASE_MS so a plate
+ * that comes or goes moves the camera, never cuts it.
  */
-export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false } = {}) {
+export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, free = null } = {}) {
   // What the camera wants: the overview or one site, since `t0` (ms).
   let want = { kind: 'overview', t0: null };
   let from = null; // the pose the current flight left from
@@ -79,6 +90,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false } = 
   let last = null;
   let version = 0;
   const drawCbs = new Set();
+  let freeNow = null; // the free box the shot uses, eased toward `free()`
 
   const sites = () => galaxy.world?.sites ?? [];
   const siteOf = (id) => galaxy.world?.byId.get(id) ?? null;
@@ -87,7 +99,10 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false } = 
     if (still) return overviewShot(sites(), 0);
     if (want.kind === 'site') {
       const s = siteOf(want.id);
-      if (s) return zoomedSiteShot(s, Math.max(0, now - want.t0 - flight.ms), want.zoom);
+      if (s) {
+        const view = freeNow ? { fov: galaxy.camera.fov, aspect: galaxy.camera.aspect, free: freeNow } : null;
+        return zoomedSiteShot(s, Math.max(0, now - want.t0 - flight.ms), want.zoom, view);
+      }
     }
     return overviewShot(sites(), now);
   };
@@ -105,6 +120,8 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false } = 
     // only a long gap (a hidden tab) is cut short.
     const dt = last == null ? 0 : Math.min(MAX_STEP_MS, now - last);
     last = now;
+    const box = typeof free === 'function' ? free() : null;
+    freeNow = box ? blendRect(freeNow, box, freeNow ? 1 - Math.exp(-dt / FREE_EASE_MS) : 1) : null;
     const k = from ? ease((now - want.t0) / flight.ms) : 1;
     const to = target(now);
     pose = from && k < 1 ? flightPose(from, to, k, flight) : to;

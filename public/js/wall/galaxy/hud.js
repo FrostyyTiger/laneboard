@@ -11,7 +11,7 @@
 // test/wall-galaxy-hud.test.mjs drives it with fakes); galaxy/main.js makes
 // the real ones.
 
-import { captionLines } from '../caption.js';
+import { captionLines, coverOf } from '../caption.js';
 import { lockTarget } from '../lock.js';
 
 /** The node a site leg is about in `model`, or null (an overview leg, or a site the model no longer has). */
@@ -27,7 +27,8 @@ export function legNode(leg, model) {
  * (`onLeg(cb)`). `update(model)` gives both the newest
  * model, `live(on)` the socket's state, `park(site)` shows a parked system's
  * caption (`?at=`, for stills) without a tour, and `covers()` the boxes the
- * words take over the canvas (for the labels, T6).
+ * words take over the canvas (for the labels, T6; the tag top right since T18,
+ * so neither a name nor a held planet sits on it), `tagCover()` the tag's alone.
  */
 export function createHud({ caption, frame, tour = null, lock = null }) {
   let latest = null;
@@ -45,6 +46,10 @@ export function createHud({ caption, frame, tour = null, lock = null }) {
     }
   };
   const off = tour ? tour.onLeg(say) : () => {};
+  const tagCover = () => {
+    const t = frame.el?.tag;
+    return t ? coverOf({ left: t.offsetLeft, top: t.offsetTop, width: t.offsetWidth, height: t.offsetHeight }) : null;
+  };
   return {
     update: (model) => {
       if (!model || typeof model !== 'object') return;
@@ -53,7 +58,8 @@ export function createHud({ caption, frame, tour = null, lock = null }) {
     },
     live: (on) => frame.live(Boolean(on)),
     park: (leg) => say({ arriveMs: 0, ...leg, kind: 'site' }),
-    covers: () => [caption.cover?.(), frame.cover?.()].filter(Boolean),
+    covers: () => [caption.cover?.(), frame.cover?.(), tagCover()].filter(Boolean),
+    tagCover,
     stop: () => off(),
   };
 }
