@@ -4,10 +4,13 @@
 // drawn by scene.js in WebGL. `window.__wallPerf` counts rendered frames
 // (perf.js), so the filmstrip tool reads it as it does on wall.html.
 //
-// No tour yet (T4 brings the camera): the camera holds the overview and
-// turns slowly. `?at=<site>&open=0..1` parks it on one system, for stills.
+// The tour (tour.js, trouble first) drives the 3D camera (camera.js) as it
+// drives the Map on wall.html; `?demo=1` is its video speed.
+// `?at=<site>&open=0..1` parks the camera on one system, for stills.
 
 import { createPerf } from '../perf.js';
+import { createTour, timingFor } from '../tour.js';
+import { createGalaxyCamera } from './camera.js';
 import { paletteFrom } from './palette.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 
@@ -44,6 +47,9 @@ export function boot() {
   };
   const parked = () => (park ? galaxy.world?.sites.find((s) => s.id === park || String(s.node.label ?? '').toLowerCase() === park.toLowerCase()) : null);
 
+  const cam = createGalaxyCamera(galaxy);
+  const tour = createTour(cam, { timing: timingFor(page.dataset.demo === '1') });
+
   const tick = (now) => {
     requestAnimationFrame(tick);
     const w = galaxy.world;
@@ -52,8 +58,10 @@ export function boot() {
     if (at) {
       if (at.open !== parkOpen) galaxy.setOpen(at.id, parkOpen);
       aim(siteShot(at, 0));
-    } else aim(overviewShot(w.sites, now));
+    } else if (!park) cam.frame(now);
+    else aim(overviewShot(w.sites, now));
     galaxy.frame(now);
+    cam.drawn();
     perf.frame(performance.now());
   };
 
@@ -62,6 +70,8 @@ export function boot() {
     if (!model || typeof model !== 'object') return;
     have = true;
     galaxy.update(model);
+    tour.update(model);
+    if (!park) tour.start();
   };
 
   fetch('/api/map')
@@ -92,6 +102,7 @@ export function boot() {
 
   // For the console and later tasks.
   globalThis.__galaxy = galaxy;
+  globalThis.__galaxyTour = tour;
 }
 
 boot();
