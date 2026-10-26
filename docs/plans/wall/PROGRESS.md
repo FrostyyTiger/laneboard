@@ -106,7 +106,7 @@ Notes for every builder round (planner, round 1):
   swell, the grey sun only — done when: a test maps frame arrivals and `fresh.js` state to corona scale and sun
   colour (swell decays, stale → grey, still mode no swell), and a film of `galaxy.html?demo=1&quality=0` on
   `demo-fleet.mjs --size large --quiet-after 5` shows the sun turn grey and the tag read `STALE` while the crit
-  cluster stays red and brightest. (commit SHA) Builder r15: pure `fresh.js` `sunLook(ageMs, { still })` →
+  cluster stays red and brightest. (commit 8811158) Builder r15: pure `fresh.js` `sunLook(ageMs, { still })` →
   `{ scale, glow, cold }` (`SUN`: swell +6 % size, +30 % glow, up in 250 ms, gone in ~3 s; old data eases over 2 s to
   60 % size, 40 % glow, cold 1) and `easeToward`; `scene.js` `setSun(look)` eases the drawn sun toward it (120 ms
   swell, 500 ms cold, so a frame after a cold spell warms it, never a cut) and lerps core and halo from `sunCore`
