@@ -545,6 +545,27 @@ Notes for every builder round (planner, round 1):
   when present, again on `visibilitychange` to visible, never throwing (denied or missing is silent) — done
   when: a test with a fake `navigator.wakeLock` sees one request at start, a re-request after hidden → visible,
   and no error when it is missing or rejects. (Manifest and fullscreen: the owner decides, see For the owner.)
+- [ ] T33 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r49-accessibility.md galaxy 1) Crit is the dimmest status on
+  screen (4.98:1 on the canvas vs warn 12.5, calm text-2 14.2) and under protanopia the crit name drops to 3.36:1
+  and the crit nebula is a dull olive smudge beside a bright warn cloud. On the Wall only (`html.wall` token
+  override, `paletteFrom` reads it): lift `--crit` toward oklch 70 % (hue kept, about 7:1), raise the crit nebula's
+  core lightness, and put the far banner's crit `■` and word on a `--p1` slab with `--bg-canvas` letters if
+  `frame.js` markup allows it from `wall.css` — done when: a test on `paletteFrom` shows luminance of crit >=
+  warn >= calm text-2 in the wall palette and crit text on `--bg-canvas` >= 7:1, and a protanopia still
+  (`Emulation.setEmulatedVisionDeficiency`) of the overview shows the crit cluster brighter than the warn one.
+- [ ] T34 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r49-accessibility.md galaxy 4) Planet and lane names in
+  trouble are too small for low vision (15 css px on the tablet, thin amber strokes, 5.0:1 measured): in `labels.js`
+  every warn/crit member of the held system gets at least the room step + 1 (20 px tablet) at weight 500 and a
+  `--bg-canvas` plate (padding 0.2 em, opacity 0.85) instead of only the text-shadow halo; calm names stay at the
+  room step — done when: a test shows `labels.js` sizes trouble members of the held system above calm ones, and
+  `?at=hv1&open=1` shows `▲ ci-retry` and `▲ search ui` clearly larger than calm names, on a plate.
+- [ ] T35 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r49-accessibility.md galaxy 3) The held caption does not follow
+  a status change during its 25 s hold: `?at=hv1` showed `▲ ATTENTION · FEAT-SEARCH` and amber brackets for
+  seconds after `vm-c` went crit (banner already `■ HV1 · VM-C`). In `hud.js`, when the held site's worst tone
+  rises (warn → crit), re-feed the caption lines and the lock target at once (new kicker and hero word, no
+  re-typing, brackets recoloured); a fall waits for the leg's end — done when: a test with a fake tour feeds a
+  held site warn → crit and sees the caption lines and lock target updated at once, and warn ← crit unchanged
+  until the next leg.
 
 ## Research questions
 
@@ -656,6 +677,16 @@ Notes for every builder round (planner, round 1):
 - §7.A (r43-stranger 4) A hub answers 404 to `POST /api/map/feeds` while map.md promises 201/409: a clear
   405/409 naming the ssh forced command, or serve it. Server work, outside the Wall.
 - §7.D (r43-stranger 5; = r31-touch) `?at=` is the only way to stop the tour and nothing handles touch: night 3.
+- §7.B (r49-accessibility 2) No way to turn motion off for a shared wall: `?motion=still|full` in `galaxy.html`
+  overriding `prefers-reduced-motion` (`still.js prefersStill`), documented in `docs/wall.md`'s kiosk section;
+  during a flight thin the near-plane dust. Comets (fx) share the vection concern in miniature.
+- §7.B (r49-accessibility 5) The status shape on a sphere is a dark cut-out (crit ■ measured 3.81:1, ~8 px; warn ▲
+  ~6 px): draw it as an outline ring/frame in its hue at 1.6x the sphere's radius instead.
+- §7.B (r49-accessibility 6) In reduced motion the banner flips red ↔ amber every few seconds: hold its tone for one
+  caption rotation (12 s); T30 holds a cleared crit.
+- §7.B (r49-accessibility 8) In still mode a new crit should cut the caption rotation (next caption is that site, at once).
+- §7.C (r49-accessibility fx) `fx=beacon`: brighten the pillar's core toward white at the base so it carries in
+  greyscale/protanopia (after T33).
 - §7.B Polish (tour pacing, camera paths, how far a system opens, nebula shapes and colours, the sun, the
   dust, type at 3 m): triage turns at most 3 findings per review into tasks; the rest land here.
 - §7.C `fx=storm`: a crit nebula as a slow storm (swirl, flicker of lightning).
@@ -711,6 +742,10 @@ Notes for every builder round (planner, round 1):
   and no fullscreen request. A Wall manifest (`start_url: "/galaxy.html"`, `display: "fullscreen"`, landscape) is
   a new file in `public/` and a `<link>`: say if wanted. Also (stranger 7): a read-only route for a wall screen
   does not exist; docs must say so or the hub needs one.
+- (r49-accessibility 7) Screen readers get the typing, not the trouble: `caption.js` has `aria-live="polite"` on the
+  letter-by-letter plate and the far fleet line has no live region. Needs fenced `caption.js`/`frame.js`: plate
+  `aria-live="off"` while typing plus one visually hidden live node with the full text; fleet line `role="status"`,
+  announcing only when subject or tone changes.
 - (r31-touch 5) The far fleet line's `+3 MORE` is 10 px mono: unreadable at 3 m and too small to tap. Making
   it a 48 px chip needs fenced `frame.js`; for night 3 a tap on the fleet line should also fly to its node.
 
@@ -742,6 +777,10 @@ Notes for every builder round (planner, round 1):
   label), 3 became tasks (T30 red/yellow flip = galaxy 1, T31 words on words = galaxy 2, T32 wake lock = stranger
   6); stranger 1/2/3/4/5/7 and galaxy 3/4/5/6 under Later (3 = `fx=lights`/`rings`), 6's manifest and 7 under For the
   owner, galaxy 7 covered (T27/T28/T29). fx note: judged together, scores are guesses, dropped. No `fx` proposals.
+- r49-accessibility.md: 8 galaxy findings + fx notes + 3 m check (yes for what/where, no for site names; under
+  protanopia the crit cluster loses to warn), 3 became tasks (T33 crit luminance = 1, T34 trouble name size = 4,
+  T35 caption follows status = 3); 2/5/6/8 and the beacon note under Later, 7 needs fenced files (For the owner).
+  No `fx` proposals. Flashing, reduced-motion film and calm-grey contrast checked fine: dropped.
 
 ## Scores
 
@@ -764,5 +803,10 @@ Notes for every builder round (planner, round 1):
 | 43 | stranger (fx-lanes) | - | - | - | - | 3 | 8 | - |
 | 43 | stranger (fx-comets) | - | - | - | - | 3 | 8 | - |
 | 43 | stranger (fx-twinkle) | - | - | - | - | 3 | 8 | - |
+| 49 | accessibility (galaxy) | 6 | 5 | 5 | 2 | 7 | 6 | 6 |
+| 49 | accessibility (fx-lanes) | - | - | - | - | 2 | 8 | - |
+| 49 | accessibility (fx-comets) | - | - | - | - | 4 | 6 | - |
+| 49 | accessibility (fx-twinkle) | - | - | - | - | 2 | 9 | - |
+| 49 | accessibility (fx-beacon) | - | - | - | - | 6 | 7 | - |
 
 ## Morning
