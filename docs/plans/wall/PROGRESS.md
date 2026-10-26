@@ -161,6 +161,23 @@ Notes for every builder round (planner, round 1):
   brightness ordered by severity and age so the newest crit is hottest — done when: a test checks the
   billboard count/orientation from a site and that a newer crit has the higher peak, and the overview still
   shows two crits that differ in shape and brightness.
+- [ ] T18 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 1) The held system hides under its own
+  caption plate: `siteShot` aims the star at the centre of the free rect (frame minus `hud.covers()`) and fits
+  the distance so the open `reach` fits that rect (also fixes the Later line on reach past the bottom edge) —
+  done when: a test shows the projected star and the open reach lie outside every `covers()` rect, and
+  `?at=hv1&open=1` and `?at=hv2&open=1` stills show the star and the attention planet clear of the plate.
+- [ ] T19 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 2) CLOUD is missing from the overview (under
+  the far fleet block): `overviewShot` offsets its look-at toward the sites' centroid until no site's folded
+  box meets `hud.covers()` — done when: a test shows every site's label is shown at the overview on the large
+  fixture, and the overview still shows all five site names.
+- [ ] T20 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 3) At the overview, tie the far fleet line
+  to the cluster it names: a thin hairline in the status hue from the line to the named site's cluster, drawn
+  in once (~600 ms) and then still — done when: a test maps the fleet line's named site to the hairline's end
+  points, and the overview still shows the line reaching the cluster.
+- [ ] T21 (§7.C) [ui] [variant:galaxy] (reviews/r15-dreamer.md, unforgettable 1) `fx=beacon`: above each crit
+  cluster a thin pillar of light rises from the plane, its height the crit's age (log scale, capped), calm
+  clusters get none, so two crits are no longer twins — done when: a test maps crit age to pillar height
+  (monotonic, capped, none for calm), and filmstrips with and without `?fx=beacon` show it only with it.
 
 ## Research questions
 
@@ -206,6 +223,16 @@ Notes for every builder round (planner, round 1):
   the r7 line above).
 - §7.B (r8-film-ui 1, hints for T5/T6) Type hierarchy: caption name, site name (condensed caps, short leader
   from the nebula, one baseline grid), planet name (mono lowercase, only when open); no fourth step.
+- §7.B (r15-dreamer 4) The banner becomes wallpaper: rank crits by age, the newest takes the full slab, older
+  ones drop to the second line (overlaps T17, T21).
+- §7.B (r15-dreamer 6) The flight passes through the sun and the best frame says nothing: T16's hub-out-of-shot
+  plus the flight arc over the plane (Q10).
+- §7.B (r15-dreamer 7) No arrival beat in 3D: member labels fade in in orbit order from the star outwards, timed
+  with the caption's `TYPE_MS` typing.
+- §7.B (r15-dreamer 8) The open system reads as a debug view: rooms in the label face, services only as dots
+  unless in trouble, drop the spokes (same as r8-film-ui 8).
+- §7.B (r15-dreamer 9) The arms do not read as arms: thin the dust between the arms to ~20 %, brighten along
+  each arm's spine in `dustPoints`.
 - §7.B Polish (tour pacing, camera paths, how far a system opens, nebula shapes and colours, the sun, the
   dust, type at 3 m): triage turns at most 3 findings per review into tasks; the rest land here.
 - §7.C `fx=storm`: a crit nebula as a slow storm (swirl, flicker of lightning).
@@ -237,16 +264,26 @@ Notes for every builder round (planner, round 1):
   next flake fixable, `loop/run.sh` (fenced) `check()` could add `✖` to the `TEST_TAIL` grep, take the
   lines after `failing tests:` rather than `head -40`, and save `$out` to `$RUN_DIR`.
 
+- fx candidate (r15-dreamer): `fx=afterglow`: a cleared trouble leaves a faint outline ring in its old hue on
+  the plane, cooling red → amber → grey over ~30 min (recent history; never filled, never pulsing).
+- fx candidate (r15-dreamer): `fx=sweep`: once per tour cycle at the overview, one faint sensor sweep turns
+  round the plane; a cluster pings only if new data came from its site since the last sweep (freshness).
+- (`fx=beacon` from the same review became T21.)
+
 ## Reviews
 
 - r8-film-ui.md: 9 findings + 3 m check, 3 became tasks (T15 trouble size = 3, T16 sun = 2, T17 nebula = 4);
   1 covered (T5/T6, hierarchy hint kept under Later), 5/6/7/8/9 under Later. No `fx` proposals. 3 m check: no
   (names missing, sun first).
+- r15-dreamer.md: 9 findings + 3 m check (half yes), 3 became tasks (T18 held system under plate = 1, T19 CLOUD
+  missing = 2, T20 fleet line hairline = 3); 4 covered by T17 (kept under Later), 5 covered (T12/T13), 6 covered
+  (T16), 7/8/9 under Later. 3 `fx` proposals: `beacon` became T21, `afterglow` and `sweep` under For the owner.
 
 ## Scores
 
 | round | persona | overview | legibility | status | touch | wow | calm | performance |
 |---|---|---|---|---|---|---|---|---|
 | 8 | film-ui (galaxy) | 5 | 1 | 4 | 2 | 5 | 6 | 6 |
+| 15 | dreamer (galaxy) | 5 | 6 | 6 | 2 | 5 | 5 | 6 |
 
 ## Morning
