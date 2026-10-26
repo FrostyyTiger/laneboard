@@ -83,14 +83,23 @@ Notes for every builder round (planner, round 1):
   r10-t4-overview, film r10-galaxy: big in flights, the name step under a plate, 0 console errors. Left: a calm
   plate fades in `leadMs` before arrival with the big banner still up (no hero on a calm plate, so not two
   headlines); the step is a cut, timed with the plate.
-- [ ] T5 (§7 Night 3 B) [ui] [variant:galaxy] A dead feed, the state: a pure `galaxy/fresh.js`
+- [x] T5 (§7 Night 3 B) [ui] [variant:galaxy] A dead feed, the state: a pure `galaxy/fresh.js`
   (`freshness(lastFrameAt, now)` → `{ state: 'live'|'stale'|'dead', ageMs, text }`, stale after 30 s with no
   `/ws` map frame, `text` like `STALE 2M`), fed by `galaxy/main.js` on every map message and on socket close;
   the tag reads `STALE <age>` and the caption gets one line saying the data is old (grey, never in a trouble
   hue); `test/tools/demo-fleet.mjs` gets `--quiet-after <s>` (the hub stays up, map frames stop) so the state can
   be filmed — done when: a test with a fake clock walks live → stale at 30 s → the age text growing → live on
   the next frame, a hud test shows the tag text and the caption line, and a demo-fleet test shows no map frame
-  after `--quiet-after`.
+  after `--quiet-after`. (commit cad582c) Builder r14: `fresh.js freshness(lastFrameAt, now, { open })` also
+  returns `line` (the plate's words, `''` while fresh); `dead` = the socket closed (`OFFLINE`, its age once old),
+  so a reconnect blip says offline at once as before; ages in tens of seconds under a minute so the tag does not
+  tick each second. The first `/api/map` answer counts as a frame; the tag stays empty until the socket first opens
+  or fails. Tag `STALE <age>` at `--text-1` (grey, `data-live="stale"`); `hud.staleCaption` puts a grey `DATA ·
+  no new data for 2m` row right under the trouble word (from the next leg on, not mid-plate). `demoQuiet` in
+  `test/helpers/demo-hub.mjs` drops relayed `map` messages; checked live: 12 s on /ws, no map frame, other types
+  flowing, /api/map answering. Film r14-galaxy (`--size large --quiet-after 5`): tag LIVE → STALE 30S → 1M, the
+  plate's grey line, HV2's red banner still the loudest, 0 console errors. The tag alone is small at 3 m: T6's sun
+  carries the distance.
 - [ ] T6 (§7 Night 3 B) [ui] [variant:galaxy] A dead feed, the look: the sun's corona swells softly once per
   map frame that arrives; stale, it shrinks and the sun goes cold flat grey (`scene.js`, tokens through
   `palette.js`), never louder than live trouble (crit nebulae stay the brightest things); reduced motion: no
