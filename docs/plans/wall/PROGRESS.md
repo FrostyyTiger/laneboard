@@ -350,7 +350,7 @@ Notes for every builder round (planner, round 1):
   the distance so the open `reach` fits that rect (also fixes the Later line on reach past the bottom edge) —
   done when: a test shows the projected star and the open reach lie outside every `covers()` rect, and
   `?at=hv1&open=1` and `?at=hv2&open=1` stills show the star and the attention planet clear of the plate.
-  (commit SHA) Pure `galaxy/framing.js`: `freeRect(W, H, covers)` (the box beside the covers, 24 px off them,
+  (commit b399ee0) Pure `galaxy/framing.js`: `freeRect(W, H, covers)` (the box beside the covers, 24 px off them,
   a circle fitting best; the whole frame when covers leave under a quarter), `panShot` (slides the camera, never
   turns it, so what was behind it stays behind), `fitDistance` (reach × 1.25 over the box's narrow half; 1.15
   was the least that held every large-demo system over a whole sway), `freeCentre`, `blendRect`, `unionBox`.
