@@ -595,7 +595,7 @@ Notes for every builder round (planner, round 1):
   as the fed problem for one tour cycle, dimmed with "cleared Ns ago", unless a newer crit replaces it — done
   when: a test feeds crit → warn → crit within 20 s and the line never drops below crit meanwhile, and the held
   line ends one cycle after the crit clears for good; a film of `galaxy.html?demo=1` shows no red/yellow flip.
-  (commit SHA) `hud.js`: `farNode(model)` (the far line's node), `heldModel(model, hold, now)` (a cleared crit put
+  (commit f4a5ee3) `hud.js`: `farNode(model)` (the far line's node), `heldModel(model, hold, now)` (a cleared crit put
   back at its status with the why `cleared 12s ago`, `agoText`), `CRIT_HOLD.minMs` 30 s. A crit that leaves the far
   line is held until the tour's first overview at least 30 s after it cleared (no tour: 30 s); the same crit back or
   a newer one takes the line at once. While held `#wall-frame .wall-fleet[data-held]`: the word at opacity 0.72,
