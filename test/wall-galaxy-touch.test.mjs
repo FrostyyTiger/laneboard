@@ -8,7 +8,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { makeEl } from './helpers/fakedom.mjs';
-import { TOUCH, createTouch, touchStep } from '../public/js/wall/galaxy/touch.js';
+import {
+  ORBIT, TOUCH, atRest, createGestures, createTouch, inertia, orbitLimits, orbitOf, orbitPose, orbitStep, planeAt,
+  touchStep, zoomStep,
+} from '../public/js/wall/galaxy/touch.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
 import { createGalaxyCamera } from '../public/js/wall/galaxy/camera.js';
 import { galaxyLayout } from '../public/js/wall/galaxy/layout.js';
@@ -139,6 +142,26 @@ test('a second finger during the waking touch is its own pointer; the waking one
   assert.deepEqual(heard.at(-1), 'pointerdown 7');
 });
 
+function fakeGalaxy() {
+  const nodes = [{ id: '__core', kind: 'core', status: 'ok' }];
+  for (const s of ['hv1', 'hv2', 'cloud']) {
+    nodes.push({ id: s, kind: 'site', status: 'ok', parent: '__core' });
+    nodes.push({ id: `${s}-a`, kind: 'room', status: 'ok', parent: s });
+  }
+  const lay = galaxyLayout(nodes);
+  const sites = lay.sites.map((s) => ({
+    id: s.id, node: s.node, home: s.home, reach: s.reach, open: 0,
+    members: s.members.map((m) => ({ id: m.id, mesh: { position: new THREE.Vector3(s.home.x + m.off.x, s.home.y + m.off.y, s.home.z + m.off.z) } })),
+  }));
+  return {
+    world: { sites, byId: new Map(sites.map((s) => [s.id, s])) },
+    setOpen(id, k) { this.world.byId.get(id).open = k; },
+    camera: new THREE.PerspectiveCamera(42, 16 / 9, 1, 30000),
+    renderer: { domElement: { clientWidth: 1600, clientHeight: 900 } },
+    size: () => ({ W: 1600, H: 900 }),
+  };
+}
+
 test('camera fit({ ms }) flies back to the overview in that time, the tour\'s fit() in FLIGHT.ms', () => {
   const nodes = [{ id: '__core', kind: 'core', status: 'ok' }];
   for (const s of ['hv1', 'hv2', 'cloud']) {
@@ -194,4 +217,264 @@ test('galaxy/main.js wires the first touch: tour stopped, the camera fit in TOUC
   assert.match(wake, /hud\.release\(\)/);
   // A new model does not start a stopped tour again (T14 brings it back).
   assert.match(js, /if \(!park && touch\?\.mode\(\) === 'tour'\) tour\.start\(\);/);
+});
+
+// ---- T8: drag, pinch, the wheel ----
+
+const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
+/** How far yaw `b` turned from `a` (rad, in (-π, π]): atan2 wraps, turns do not. */
+const turned = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+const orbit0 = () => ({ look: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0.9, dist: 5000 });
+const LIM = { near: ORBIT.near, far: 5000, centre: { x: 0, y: 0, z: 0 }, reach: 3000 };
+
+test('orbitStep: the pitch stays clamped at both ends, never edge-on or over the top; 0 px changes nothing', () => {
+  const o = orbit0();
+  assert.equal(orbitStep(o, 0, 0), o, 'a drag of 0 px is the same orbit');
+  const [lo, hi] = ORBIT.pitch;
+  assert.ok(lo > 0.2 && hi < Math.PI / 2, 'the range keeps clear of edge-on (0) and straight down (90°)');
+  const up = orbitStep(o, 0, 1e5);
+  const down = orbitStep(o, 0, -1e5);
+  assert.equal(up.pitch, hi);
+  assert.equal(down.pitch, lo);
+  // The camera stays above the plane at both ends.
+  assert.ok(orbitPose(down).pos.y > 0 && orbitPose(up).pos.y > 0);
+  // A drag right turns the galaxy with the finger: the camera's yaw goes the other way.
+  assert.ok(orbitStep(o, 40, 0).yaw < o.yaw);
+  assert.ok(near(orbitStep(o, 40, 0).yaw, -40 * ORBIT.perPx));
+});
+
+test('orbitOf and orbitPose stand in the same place; the overview shot reads back as itself', () => {
+  const shot = overviewShot(fakeGalaxy().world.sites);
+  const back = orbitPose(orbitOf(shot));
+  for (const k of ['x', 'y', 'z']) {
+    assert.ok(near(back.pos[k], shot.pos[k], 1e-6), `pos.${k}`);
+    assert.ok(near(back.look[k], shot.look[k], 1e-9), `look.${k}`);
+  }
+});
+
+test('zoomStep: the distance stays in [overview, close]; zooming all the way out lands on the overview\'s centre', () => {
+  const o = orbit0();
+  assert.equal(zoomStep(o, 1e-6, LIM).dist, LIM.near, 'no closer than a close system');
+  assert.equal(zoomStep(o, 1e6, LIM).dist, LIM.far, 'no farther than the overview');
+  assert.equal(zoomStep(o, 1, LIM), o, 'a factor of 1 changes nothing');
+  // Closing in on a point moves the look toward it, then out again brings it home.
+  const at = { x: 2000, y: 0, z: 0 };
+  const inn = zoomStep(o, 0.3, LIM, at);
+  assert.ok(inn.look.x > 0 && inn.look.x < at.x, `look toward the point: ${inn.look.x}`);
+  const out = zoomStep(inn, 100, LIM);
+  assert.equal(out.dist, LIM.far);
+  assert.ok(near(out.look.x, 0) && near(out.look.z, 0), 'at the widest the look is the centre');
+  // The look never leaves the galaxy.
+  let z = o;
+  for (let i = 0; i < 40; i++) z = zoomStep(z, 0.9, LIM, { x: 1e6, y: 0, z: 0 });
+  assert.ok(Math.hypot(z.look.x, z.look.z) <= LIM.reach + 1e-6);
+});
+
+test('inertia decays to rest: monotonic, then exactly zero', () => {
+  let v = { x: 2, y: -1, zoom: 0.003 };
+  let prev = Infinity, steps = 0;
+  while (!atRest(v)) {
+    const speed = Math.hypot(v.x, v.y) + Math.abs(v.zoom) * 1000;
+    assert.ok(speed < prev, 'slower every frame');
+    prev = speed;
+    v = inertia(v, 16);
+    steps++;
+    assert.ok(steps < 400, 'comes to rest within seconds');
+  }
+  assert.deepEqual(v, { x: 0, y: 0, zoom: 0 });
+  assert.ok(steps * 16 > 500, 'a throw coasts, it does not stop dead');
+  assert.deepEqual(inertia(v, 16), { x: 0, y: 0, zoom: 0 }, 'rest stays rest');
+});
+
+test('planeAt: the frame\'s middle is the look point; above the horizon is nothing', () => {
+  const shot = overviewShot(fakeGalaxy().world.sites);
+  const p = planeAt(shot, 800, 450, 1600, 900, 42);
+  assert.ok(near(p.x, 0, 1e-6) && near(p.z, 0, 1e-6) && p.y === 0);
+  const low = orbitPose({ look: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: 0.1, dist: 5000 });
+  assert.equal(planeAt(low, 800, 0, 1600, 900, 42), null);
+  assert.equal(planeAt(shot, 0, 0, 0, 0, 42), null);
+});
+
+test('orbitLimits: far is the overview\'s distance, near a close system, reach the farthest site', () => {
+  const sites = fakeGalaxy().world.sites;
+  const shot = overviewShot(sites);
+  const l = orbitLimits(shot, sites);
+  assert.ok(near(l.far, orbitOf(shot).dist, 1e-6));
+  assert.equal(l.near, ORBIT.near);
+  assert.ok(l.reach > 0 && l.reach === Math.max(...sites.map((s) => Math.hypot(s.home.x, s.home.z))));
+});
+
+test('the camera\'s steer is behind an option: without it (the tour\'s camera) a steer does nothing', () => {
+  const cam = createGalaxyCamera(fakeGalaxy());
+  cam.frame(0);
+  const before = cam.pose();
+  cam.steer({ pos: { x: 1, y: 2, z: 3 }, look: { x: 0, y: 0, z: 0 } });
+  assert.deepEqual(cam.frame(16), before);
+  assert.equal(cam.want().kind, 'overview');
+  const still = createGalaxyCamera(fakeGalaxy(), { steer: true, still: true });
+  still.frame(0);
+  still.steer({ pos: { x: 1, y: 2, z: 3 }, look: { x: 0, y: 0, z: 0 } });
+  assert.equal(still.want().kind, 'overview', 'reduced motion: no steering');
+});
+
+/** The page's touch path on a fake clock: stage → createTouch → createGestures → the camera. */
+function touchPage() {
+  let now = 100_000;
+  const stage = stageEl();
+  const galaxy = fakeGalaxy();
+  const cam = createGalaxyCamera(galaxy, { steer: true });
+  const touch = createTouch(stage, { clock: () => now, wake: () => cam.fit({ ms: TOUCH.fitMs }) });
+  let moves = 0;
+  const gestures = createGestures(stage, touch, cam, {
+    clock: () => now,
+    limits: () => orbitLimits(cam.home(), galaxy.world.sites),
+    view: () => ({ ...galaxy.size(), fov: galaxy.camera.fov }),
+    moved: () => { moves++; },
+  });
+  const tick = (ms = 16) => { now += ms; touch.mode(); gestures.frame(now); return cam.frame(now); };
+  const run = (ms) => { let p; for (let t = 0; t < ms; t += 16) p = tick(16); return p; };
+  // The tour has the camera on hv2; the first touch brings it out, then explore.
+  cam.focus('hv2', DEMO_TIMING.zoom);
+  run(4000);
+  stage.dispatch('pointerdown', { pointerId: 1 });
+  stage.dispatch('pointerup', { pointerId: 1 });
+  run(TOUCH.fitMs + 100);
+  assert.equal(touch.mode(), 'explore');
+  const drag = (id, path, msPer = 16) => {
+    stage.dispatch('pointerdown', { pointerId: id, clientX: path[0][0], clientY: path[0][1] });
+    for (const [x, y] of path.slice(1)) { stage.dispatch('pointermove', { pointerId: id, clientX: x, clientY: y }); tick(msPer); }
+    stage.dispatch('pointerup', { pointerId: id, clientX: path.at(-1)[0], clientY: path.at(-1)[1] });
+  };
+  return { stage, cam, touch, gestures, galaxy, tick, run, drag, now: () => now, moves: () => moves };
+}
+
+test('pointer events on the page: a one-finger drag turns the camera round the galaxy, then it coasts to rest', () => {
+  const p = touchPage();
+  const start = orbitOf(p.cam.pose());
+  const over = orbitOf(overviewShot(p.galaxy.world.sites));
+  assert.ok(near(start.dist, over.dist, 1) && near(start.yaw, over.yaw, 1e-6), 'explore starts at the overview');
+
+  // A drag of 0 px (a finger down and up in place) changes nothing.
+  p.drag(5, [[600, 400], [600, 400]]);
+  p.run(200);
+  assert.ok(near(orbitOf(p.cam.pose()).yaw, start.yaw, 1e-9), 'no turn from a finger that did not move');
+  assert.equal(p.moves(), 0, 'and the page is not told of a move');
+
+  // A finger throws right: the galaxy turns with it, and keeps turning a little after the lift.
+  const path = [];
+  for (let i = 0; i <= 15; i++) path.push([500 + i * 20, 400]);
+  p.drag(6, path);
+  const lifted = orbitOf(p.cam.pose());
+  assert.ok(turned(start.yaw, lifted.yaw) < -0.5, `turned: ${start.yaw} → ${lifted.yaw}`);
+  assert.ok(near(lifted.pitch, start.pitch, 1e-9), 'a level drag keeps the pitch');
+  assert.ok(near(lifted.dist, start.dist, 1e-6), 'and the distance');
+  assert.equal(p.cam.want().kind, 'free');
+  assert.equal(p.moves(), 1, 'the page is told once when the drag starts moving the camera (it fades the tether)');
+  assert.ok(p.gestures.busy(), 'coasting');
+  p.tick();
+  const coasted = orbitOf(p.cam.pose()).yaw;
+  assert.ok(turned(lifted.yaw, coasted) < 0, 'it keeps turning after the lift');
+  p.run(4000);
+  assert.ok(!p.gestures.busy(), 'and comes to rest');
+  const rest = orbitOf(p.cam.pose()).yaw;
+  p.run(1000);
+  assert.ok(near(orbitOf(p.cam.pose()).yaw, rest, 1e-12), 'at rest it stays');
+  assert.ok(turned(coasted, rest) < -0.1, 'the coast carried it on');
+
+  // Dragging down a long way: the pitch stops at the top of its range.
+  const tall = [];
+  for (let i = 0; i <= 40; i++) tall.push([600, 100 + i * 40]);
+  p.drag(7, tall, 200); // slow: no throw
+  assert.ok(near(orbitOf(p.cam.pose()).pitch, ORBIT.pitch[1], 1e-6));
+});
+
+test('pointer events on the page: a two-finger pinch zooms in toward the fingers, the wheel back out to the overview', () => {
+  const p = touchPage();
+  const start = orbitOf(p.cam.pose());
+  // Two fingers down left of the middle, spreading apart.
+  p.stage.dispatch('pointerdown', { pointerId: 11, clientX: 500, clientY: 450 });
+  p.stage.dispatch('pointerdown', { pointerId: 12, clientX: 560, clientY: 450 });
+  for (let i = 1; i <= 10; i++) {
+    p.stage.dispatch('pointermove', { pointerId: 11, clientX: 500 - i * 15, clientY: 450 });
+    p.stage.dispatch('pointermove', { pointerId: 12, clientX: 560 + i * 15, clientY: 450 });
+    p.tick(200);
+  }
+  const pinched = orbitOf(p.cam.pose());
+  assert.ok(pinched.dist < start.dist * 0.5, `closer: ${start.dist} → ${pinched.dist}`);
+  assert.ok(pinched.look.x < 0, 'toward the fingers (left of the middle)');
+  assert.ok(near(pinched.yaw, start.yaw, 1e-9), 'a pinch does not turn');
+  p.stage.dispatch('pointerup', { pointerId: 11 });
+  p.stage.dispatch('pointerup', { pointerId: 12 });
+  p.run(3000);
+
+  // Pinch as far as it goes: a close system, no closer.
+  p.stage.dispatch('pointerdown', { pointerId: 13, clientX: 790, clientY: 450 });
+  p.stage.dispatch('pointerdown', { pointerId: 14, clientX: 810, clientY: 450 });
+  p.stage.dispatch('pointermove', { pointerId: 13, clientX: 100, clientY: 450 });
+  p.stage.dispatch('pointermove', { pointerId: 14, clientX: 1500, clientY: 450 });
+  p.tick(200);
+  assert.ok(near(orbitOf(p.cam.pose()).dist, ORBIT.near, 1e-6));
+  p.stage.dispatch('pointerup', { pointerId: 13 });
+  p.stage.dispatch('pointerup', { pointerId: 14 });
+  p.run(3000);
+
+  // The wheel out, a lot: eased (not all at once), then at the overview, centred again.
+  const w = p.stage.dispatch('wheel', { deltaY: 300, deltaMode: 0, clientX: 800, clientY: 450 });
+  assert.ok(w.defaultPrevented, 'the wheel never zooms or scrolls the page');
+  const a = orbitOf(p.tick()).dist;
+  const b = orbitOf(p.tick()).dist;
+  assert.ok(a > ORBIT.near && b > a, 'it eases out over frames');
+  for (let i = 0; i < 10; i++) p.stage.dispatch('wheel', { deltaY: 500, deltaMode: 0, clientX: 800, clientY: 450 });
+  p.run(4000);
+  const out = orbitOf(p.cam.pose());
+  assert.ok(near(out.dist, start.dist, 1), `back at the overview's distance: ${out.dist}`);
+  assert.ok(Math.hypot(out.look.x - start.look.x, out.look.z - start.look.z) < 1e-6, 'centred');
+});
+
+test('during the tour and the first touch\'s flight, fingers and the wheel move nothing', () => {
+  let now = 0;
+  const stage = stageEl();
+  const galaxy = fakeGalaxy();
+  const cam = createGalaxyCamera(galaxy, { steer: true });
+  const touch = createTouch(stage, { clock: () => now, wake: () => cam.fit({ ms: TOUCH.fitMs }) });
+  const gestures = createGestures(stage, touch, cam, {
+    clock: () => now,
+    limits: () => orbitLimits(overviewShot(galaxy.world.sites), galaxy.world.sites),
+    view: () => ({ ...galaxy.size(), fov: galaxy.camera.fov }),
+  });
+  cam.frame(now);
+  stage.dispatch('wheel', { deltaY: 500 });
+  gestures.frame(now += 16);
+  assert.equal(cam.want().kind, 'overview', 'the tour keeps the camera');
+  stage.dispatch('pointerdown', { pointerId: 1, clientX: 100 });
+  stage.dispatch('pointerdown', { pointerId: 2, clientX: 100 }); // easing: a second finger
+  stage.dispatch('pointermove', { pointerId: 2, clientX: 600 });
+  gestures.frame(now += 16);
+  assert.equal(cam.want().kind, 'overview', 'the first touch\'s flight is not interrupted');
+  assert.ok(!gestures.busy());
+  gestures.stop();
+  assert.equal(stage.listeners('wheel'), 0);
+});
+
+test('galaxy/main.js wires drag and pinch: gestures step before the camera, the steer option on, the tether faded on a move', () => {
+  const js = read('js/wall/galaxy/main.js');
+  assert.match(js, /createGalaxyCamera\(galaxy, \{[^}]*steer: !park && !reduced,/);
+  assert.match(js, /createGestures\(document\.getElementById\('galaxy-stage'\), touch, cam, \{/);
+  assert.match(js, /moved: \(\) => tether\.hide\(\)/);
+  assert.match(js, /limits: \(\) => orbitLimits\(cam\.home\(\), /);
+  assert.match(js, /gestures\?\.frame\(now\);\s*cam\.frame\(now\);/);
+});
+
+test('camera home() is the overview it last aimed at, the fitted one where a fitter slides it', () => {
+  const galaxy = fakeGalaxy();
+  const plain = overviewShot(galaxy.world.sites);
+  const slid = (shot) => ({ pos: { ...shot.pos, z: shot.pos.z + 400 }, look: { ...shot.look, z: shot.look.z + 400 } });
+  const cam = createGalaxyCamera(galaxy, { steer: true, fitOverview: (shot) => slid(shot) });
+  assert.deepEqual(cam.home(), plain, 'before a frame: the plain overview');
+  cam.frame(0);
+  assert.deepEqual(cam.home(), slid(plain));
+  // Wheeled all the way out, a finger lands on that overview, not the plain one.
+  const l = orbitLimits(cam.home(), galaxy.world.sites);
+  const o = zoomStep({ ...orbitOf(cam.home()), dist: 2000, look: { x: 900, y: 0, z: 0 } }, 1e6, l);
+  assert.ok(near(o.look.x, 0) && near(o.look.z, 400) && near(o.dist, l.far));
 });

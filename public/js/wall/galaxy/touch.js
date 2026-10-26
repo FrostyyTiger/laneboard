@@ -11,6 +11,14 @@
 // `onPointer`, which never hears the waking pointer: not its down, not its
 // move, not its up.
 //
+// Drag and pinch (T8, README §7 Night 3 C2): in `explore` one finger orbits
+// the galaxy, two pinch, the wheel zooms; all of it coasts to rest after the
+// finger lifts. The camera is an orbit `{ look, yaw, pitch, dist }` round a
+// point on the plane (the overview's centre at the widest): `orbitOf`,
+// `orbitPose`, `orbitStep`, `zoomStep`, `inertia` and `planeAt` are pure;
+// `createGestures` turns pointer events into them and steers the camera
+// (camera.js `steer`, which only this sets).
+//
 // The page itself never scrolls, zooms or shows a menu under a finger: the
 // viewport has no user scaling (galaxy.html), the stage `touch-action: none`
 // (wall.css), and the context menu (a long press) is refused here.
@@ -65,6 +73,7 @@ export function createTouch(stage, opts = {}) {
     if (!r.swallow) tell(ev);
   };
   const rest = (ev) => {
+    state = touchStep(state, 'tick', o.clock(), { fitMs }).state; // the mode it is now, not at the last down
     if (waking.has(ev.pointerId)) {
       if (ev.type === 'pointerup' || ev.type === 'pointercancel') waking.delete(ev.pointerId);
       ev.preventDefault?.();
@@ -89,5 +98,281 @@ export function createTouch(stage, opts = {}) {
       return () => cbs.delete(cb);
     },
     stop: () => { for (const [type, fn] of on) stage.removeEventListener(type, fn); },
+  };
+}
+
+/**
+ * The orbit's feel (T8): `perPx` rad of turn per css px dragged; `pitch` the
+ * elevation's range in rad (20° to 83°: never edge-on, never over the top);
+ * `near` the closest the camera comes to what it looks at (a close system,
+ * scene.js siteShot's nearest); `slopPx` how far a finger moves before it
+ * drags (T10's tap is within it, so a tap never turns the galaxy); `tauMs`
+ * the coast's time constant after release; `stillMs` a finger held that long
+ * before lifting throws nothing; `wheel` log-zoom per wheel px.
+ */
+export const ORBIT = Object.freeze({
+  perPx: 0.005, pitch: Object.freeze([0.35, 1.45]), near: 700, slopPx: 12, tauMs: 250, stillMs: 80, wheel: 0.0015,
+});
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+/** The orbit a pose stands in (`{ pos, look }`), pitch clamped to ORBIT's range. Pure. */
+export function orbitOf(pose, { pitch = ORBIT.pitch } = {}) {
+  const v = { x: pose.pos.x - pose.look.x, y: pose.pos.y - pose.look.y, z: pose.pos.z - pose.look.z };
+  const dist = Math.hypot(v.x, v.y, v.z) || 1;
+  return {
+    look: { ...pose.look },
+    yaw: Math.atan2(v.x, v.z),
+    pitch: clamp(Math.asin(clamp(v.y / dist, -1, 1)), pitch[0], pitch[1]),
+    dist,
+  };
+}
+
+/** The pose `{ pos, look }` of an orbit. Pure. */
+export function orbitPose(o) {
+  const c = Math.cos(o.pitch);
+  return {
+    pos: { x: o.look.x + o.dist * c * Math.sin(o.yaw), y: o.look.y + o.dist * Math.sin(o.pitch), z: o.look.z + o.dist * c * Math.cos(o.yaw) },
+    look: { ...o.look },
+  };
+}
+
+/**
+ * The orbit after a drag of `dx`, `dy` css px: right turns the galaxy with
+ * the finger (the camera goes the other way), down looks from higher; the
+ * pitch stays in ORBIT's range. A drag of 0 px returns the same orbit. Pure.
+ */
+export function orbitStep(o, dx, dy, { perPx = ORBIT.perPx, pitch = ORBIT.pitch } = {}) {
+  if (!dx && !dy) return o;
+  return { ...o, yaw: o.yaw - dx * perPx, pitch: clamp(o.pitch + dy * perPx, pitch[0], pitch[1]) };
+}
+
+/**
+ * The orbit zoomed by `factor` (< 1 closer), its distance kept in
+ * `[limits.near, limits.far]`. With `at` (a point on the plane, `planeAt`)
+ * the look moves toward it as the camera closes in, so what is under the
+ * fingers stays under them; the look stays within `limits.reach` of
+ * `limits.centre`, a reach that shrinks to 0 at the widest, so zooming all
+ * the way out lands on the overview's own centre. Pure.
+ */
+export function zoomStep(o, factor, limits, at = null) {
+  const { near, far } = limits;
+  const dist = clamp(o.dist * (factor > 0 ? factor : 1), near, far);
+  let look = o.look;
+  if (at && dist < o.dist) {
+    const k = 1 - dist / o.dist;
+    look = { x: look.x + (at.x - look.x) * k, y: look.y, z: look.z + (at.z - look.z) * k };
+  }
+  const c = limits.centre ?? { x: 0, y: 0, z: 0 };
+  const room = (limits.reach ?? 0) * (far > near ? clamp((far - dist) / (far - near), 0, 1) : 0);
+  const off = Math.hypot(look.x - c.x, look.z - c.z);
+  if (off > room) {
+    const k = off > 0 ? room / off : 0;
+    look = { x: c.x + (look.x - c.x) * k, y: look.y, z: c.z + (look.z - c.z) * k };
+  }
+  if (dist === o.dist && look === o.look) return o;
+  return { ...o, dist, look };
+}
+
+/** Speeds below these are rest (px/ms for the turn, log-zoom/ms). */
+const REST = Object.freeze({ turn: 0.002, zoom: 0.00001 });
+
+/**
+ * The coast's speeds `{ x, y, zoom }` (px/ms dragged, log-zoom/ms) `dtMs`
+ * later: decaying as exp(-dt/tau), exactly 0 once below rest. Pure.
+ */
+export function inertia(v, dtMs, { tauMs = ORBIT.tauMs } = {}) {
+  const e = Math.exp(-Math.max(0, dtMs) / tauMs);
+  const x = v.x * e, y = v.y * e, zoom = v.zoom * e;
+  const turning = Math.hypot(x, y) >= REST.turn;
+  return { x: turning ? x : 0, y: turning ? y : 0, zoom: Math.abs(zoom) >= REST.zoom ? zoom : 0 };
+}
+
+/** Whether a coast has come to rest. */
+export const atRest = (v) => !v || (v.x === 0 && v.y === 0 && v.zoom === 0);
+
+/**
+ * The point on the plane (y = 0) under css px `x`, `y` of a `W`×`H` frame
+ * seen from `pose` with vertical `fov` (deg), or null when that ray never
+ * meets it (above the horizon). Pure.
+ */
+export function planeAt(pose, x, y, W, H, fov) {
+  if (!(W > 0 && H > 0)) return null;
+  const f = norm({ x: pose.look.x - pose.pos.x, y: pose.look.y - pose.pos.y, z: pose.look.z - pose.pos.z });
+  const r = norm({ x: -f.z, y: 0, z: f.x }); // f × up
+  const u = { x: r.y * f.z - r.z * f.y, y: r.z * f.x - r.x * f.z, z: r.x * f.y - r.y * f.x };
+  const t = Math.tan((fov * Math.PI) / 360);
+  const nx = ((2 * x) / W - 1) * t * (W / H), ny = (1 - (2 * y) / H) * t;
+  const d = { x: f.x + r.x * nx + u.x * ny, y: f.y + r.y * nx + u.y * ny, z: f.z + r.z * nx + u.z * ny };
+  if (!(d.y < 0)) return null;
+  const k = -pose.pos.y / d.y;
+  return { x: pose.pos.x + d.x * k, y: 0, z: pose.pos.z + d.z * k };
+}
+
+function norm(v) {
+  const l = Math.hypot(v.x, v.y, v.z) || 1;
+  return { x: v.x / l, y: v.y / l, z: v.z / l };
+}
+
+/**
+ * The orbit's limits from the overview's shot (scene.js overviewShot, or the
+ * fitted one) and the sites: `far` the overview's own distance, `near`
+ * ORBIT's, `centre` where the overview looks, `reach` the farthest site from
+ * it. Pure.
+ */
+export function orbitLimits(overview, sites = [], { near = ORBIT.near } = {}) {
+  const far = Math.hypot(overview.pos.x - overview.look.x, overview.pos.y - overview.look.y, overview.pos.z - overview.look.z);
+  let reach = 0;
+  for (const s of sites) if (s?.home) reach = Math.max(reach, Math.hypot(s.home.x - overview.look.x, s.home.z - overview.look.z));
+  return { near: Math.min(near, far), far, centre: { ...overview.look }, reach };
+}
+
+/**
+ * Drag, pinch and the wheel (T8). `createGestures(stage, touch, cam, {
+ * limits, view, clock })`: `touch` is createTouch's (its `onPointer`, its
+ * mode); `cam` gives `pose()` (where it is) and `steer(pose)` (camera.js,
+ * the free pose); `limits()` is `orbitLimits`; `view()` is `{ W, H, fov }`.
+ * Only in `explore` does a finger move the camera. Call `frame(now)` once a
+ * frame before the camera's: a coast steps there, and the gesture's newest
+ * orbit is handed to the camera then (one steer a frame, however many
+ * pointer events came). `moved()` (optional) is told each time a gesture
+ * starts to move the camera from rest (the page fades what belongs to the
+ * overview's pose: the tether). Returns `{ frame, busy(), stop() }`.
+ */
+export function createGestures(stage, touch, cam, opts = {}) {
+  const o = { clock: () => performance.now(), ...opts };
+  const pointers = new Map(); // id → { x, y }
+  let orbit = null; // the orbit being steered, null when the camera is someone else's
+  let dirty = false;
+  let vel = { x: 0, y: 0, zoom: 0 };
+  let zoomAt = null; // where a coasting zoom closes in on
+  let drag = null; // { id, sx, sy, moved, t } the one finger turning
+  let pinch = null; // { span, t }
+  let last = null;
+  let far = 0;
+
+  const limits = () => {
+    const l = o.limits();
+    return { ...l, far: Math.max(l.far, far) };
+  };
+  const take = () => {
+    if (orbit) return orbit;
+    const p = cam.pose?.();
+    if (!p) return null;
+    orbit = orbitOf(p);
+    far = orbit.dist; // a fitted overview may stand farther back than the plain one: it stays reachable
+    return orbit;
+  };
+  let still = true; // no gesture has moved the camera since it was last at rest
+  const set = (next) => {
+    if (next === orbit) return;
+    orbit = next;
+    dirty = true;
+    if (still) { still = false; o.moved?.(); }
+  };
+  const at = (x, y) => {
+    const v = o.view();
+    return orbit ? planeAt(orbitPose(orbit), x, y, v.W, v.H, v.fov) : null;
+  };
+  const span = () => {
+    const [a, b] = [...pointers.values()];
+    return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  };
+  const regrip = () => {
+    const now = o.clock();
+    const was = pinch; // a finger left of a pinch: its lift may still throw the pinch's zoom
+    drag = null;
+    pinch = null;
+    if (pointers.size === 1) {
+      const [[id, p]] = [...pointers];
+      drag = { id, sx: p.x, sy: p.y, x: p.x, y: p.y, moved: false, t: now, afterPinch: Boolean(was) };
+    } else if (pointers.size === 2) {
+      pinch = { ...span(), t: now };
+    }
+  };
+
+  const onPointer = (ev, mode) => {
+    const now = o.clock();
+    if (ev.type === 'pointerdown') {
+      if (mode !== 'explore') return;
+      pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      vel = { x: 0, y: 0, zoom: 0 }; // a finger down catches a coast
+      if (!take()) return;
+      regrip();
+      return;
+    }
+    if (!pointers.has(ev.pointerId)) return;
+    if (ev.type === 'pointermove') {
+      pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+      if (!orbit) return;
+      if (drag && drag.id === ev.pointerId) {
+        if (!drag.moved && Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy) < ORBIT.slopPx) return;
+        const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y, dt = Math.max(1, now - drag.t);
+        if (!drag.moved) {
+          // Past the slop: the turn starts from here, so it does not jump by the slop.
+          const d = Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy);
+          const k = (d - ORBIT.slopPx) / d;
+          drag.moved = true;
+          set(orbitStep(orbit, dx * k, dy * k));
+        } else {
+          set(orbitStep(orbit, dx, dy));
+          vel = { x: (vel.x + dx / dt) / 2, y: (vel.y + dy / dt) / 2, zoom: 0 };
+        }
+        Object.assign(drag, { x: ev.clientX, y: ev.clientY, t: now });
+      } else if (pinch && pointers.size === 2) {
+        const s = span();
+        if (s.d > 0 && pinch.d > 0) {
+          const f = pinch.d / s.d; // fingers apart: closer
+          zoomAt = at(s.x, s.y);
+          set(zoomStep(orbit, f, limits(), zoomAt));
+          vel = { x: 0, y: 0, zoom: Math.log(f) / Math.max(1, now - pinch.t) };
+        }
+        pinch = { ...s, t: now };
+      }
+      return;
+    }
+    // pointerup / pointercancel
+    pointers.delete(ev.pointerId);
+    const held = drag?.id === ev.pointerId ? now - drag.t : pinch ? now - pinch.t : Infinity;
+    if (ev.type === 'pointercancel' || held > ORBIT.stillMs || (drag && !drag.moved && !drag.afterPinch)) vel = { x: 0, y: 0, zoom: 0 };
+    regrip();
+  };
+
+  const wheel = (ev) => {
+    ev.preventDefault?.(); // never the page's zoom (ctrl+wheel) or scroll
+    if (touch.mode() !== 'explore' || !take()) return;
+    const px = ev.deltaY * (ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? 400 : 1);
+    if (!px) return;
+    // An impulse that coasts out to exactly this much zoom: ∫ v e^(-t/τ) dt = v τ.
+    zoomAt = at(ev.clientX, ev.clientY);
+    vel = { x: 0, y: 0, zoom: vel.zoom + (px * ORBIT.wheel) / ORBIT.tauMs };
+  };
+
+  const off = touch.onPointer(onPointer);
+  stage.addEventListener('wheel', wheel, { passive: false });
+
+  const frame = (now) => {
+    const dt = last == null ? 0 : Math.min(100, now - last);
+    last = now;
+    const fingers = pointers.size > 0;
+    if (orbit && !fingers && !atRest(vel) && dt > 0) {
+      let next = orbitStep(orbit, vel.x * dt, vel.y * dt);
+      if (vel.zoom) next = zoomStep(next, Math.exp(vel.zoom * dt), limits(), zoomAt);
+      set(next);
+      vel = inertia(vel, dt);
+    }
+    if (dirty && orbit) {
+      cam.steer(orbitPose(orbit));
+      dirty = false;
+    }
+    // At rest with no finger down, the camera is free for others (a tap's flight, T10; the tour, T14):
+    // the next gesture starts from wherever it is then.
+    if (!fingers && atRest(vel)) { orbit = null; still = true; }
+  };
+
+  return {
+    frame,
+    busy: () => pointers.size > 0 || !atRest(vel),
+    stop: () => { off(); stage.removeEventListener('wheel', wheel, { passive: false }); },
   };
 }

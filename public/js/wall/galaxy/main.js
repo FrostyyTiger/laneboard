@@ -29,6 +29,9 @@
 // Touch (night 3 T7, touch.js): the first touch anywhere stops the tour and
 // eases the camera to the overview in TOUCH.fitMs; nothing under that touch
 // is activated. `<html data-touch>` says the mode (`easing`, `explore`).
+// Then (T8) one finger orbits the galaxy, a pinch or the wheel zooms between
+// the overview and a close system, and both coast to rest (touch.js
+// createGestures steering camera.js's free pose). Reduced motion: no steering yet (T14).
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
@@ -52,7 +55,7 @@ import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { createTether } from './tether.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
-import { TOUCH, createTouch } from './touch.js';
+import { TOUCH, createGestures, createTouch, orbitLimits } from './touch.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -174,7 +177,9 @@ export function boot() {
     marks: (sites) => siteMarks(sites, steps.site),
     ...(easeMs != null ? { easeMs } : {}),
   });
-  const cam = createGalaxyCamera(galaxy, { still: reduced, free: freeBox, fitOverview: overviewFit(reduced, reduced ? 0 : null) });
+  const cam = createGalaxyCamera(galaxy, {
+    still: reduced, free: freeBox, fitOverview: overviewFit(reduced, reduced ? 0 : null), steer: !park && !reduced,
+  });
   const parkedOverview = overviewFit(false, 0);
   // `?pace=wall`: the demo's data at the normal, readable speed (the demo's own
   // speed is for films).
@@ -246,6 +251,13 @@ export function boot() {
     },
   });
   let touchSaid = 'tour';
+  // Drag, pinch and the wheel in `explore` (T8): the orbit's far end is the overview, as fitted.
+  const gestures = touch && !reduced ? createGestures(document.getElementById('galaxy-stage'), touch, cam, {
+    limits: () => orbitLimits(cam.home(), galaxy.world?.sites ?? []),
+    view: () => ({ ...galaxy.size(), fov: galaxy.camera.fov }),
+    // The tether is the overview pose's: a turned or closer galaxy would leave it across empty sky.
+    moved: () => tether.hide(),
+  }) : null;
 
   const tick = (now) => {
     requestAnimationFrame(tick);
@@ -264,7 +276,10 @@ export function boot() {
     if (at) {
       if (at.open !== parkOpen) galaxy.setOpen(at.id, parkOpen);
       aim(siteShot(at, 0, view()));
-    } else if (!park) cam.frame(now);
+    } else if (!park) {
+      gestures?.frame(now);
+      cam.frame(now);
+    }
     else {
       freeBox();
       aim(parkedOverview(overviewShot(w.sites), w.sites, now));
@@ -351,6 +366,7 @@ export function boot() {
   globalThis.__galaxyLabels = labels;
   globalThis.__galaxyTether = tether;
   globalThis.__galaxyTouch = touch;
+  globalThis.__galaxyCam = cam;
 }
 
 boot();

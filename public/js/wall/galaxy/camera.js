@@ -13,6 +13,12 @@
 //
 // The overview is one fixed pose (T24); only a held system drifts.
 //
+// `steer` (night 3 T8, touch.js createGestures): a finger's free pose. Only
+// a page that passes the option gets `steer(pose)`; the tour never does, and
+// without it `steer` does nothing. A steered pose is held as given, no
+// flight (the gesture is its own motion), every system folded; the next
+// `focus` or `fit` flies from it.
+//
 // `still` (reduced motion, T11, still.js): the camera never leaves the
 // overview; `focus`/`fit` only say where the tour is (the
 // caption and lock follow it), and every system stays folded.
@@ -176,7 +182,7 @@ export function zoomedSiteShot(site, heldMs, zoom, view = null) {
  * sites, now)` (T19, overview.js createOverviewFit) slides the overview so
  * no site sits under the words; without it the overview is as scene.js gives it.
  */
-export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, free = null, fitOverview = null } = {}) {
+export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, free = null, fitOverview = null, steer = false } = {}) {
   // What the camera wants: the overview or one site, since `t0` (ms).
   let want = { kind: 'overview', t0: null };
   let from = null; // the pose the current flight left from
@@ -192,9 +198,14 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   const siteOf = (id) => galaxy.world?.byId.get(id) ?? null;
 
   // The overview, fitted clear of the words when given a fitter (T19, overview.js).
-  const overview = (now) => (fitOverview ? fitOverview(overviewShot(sites()), sites(), now) : overviewShot(sites()));
+  let home = null; // the last overview shot aimed at (fitted): a finger's widest (T8)
+  const overview = (now) => {
+    home = fitOverview ? fitOverview(overviewShot(sites()), sites(), now) : overviewShot(sites());
+    return home;
+  };
   const target = (now) => {
     if (still) return overview(now);
+    if (want.kind === 'free') return want.pose;
     if (want.kind === 'site') {
       const s = siteOf(want.id);
       if (s) {
@@ -314,5 +325,18 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     // changes with every move; no 2D points, no fit scale.
     snapshotScene: () => ({ version, pts: new Float32Array(0), count: 0, outer: 0, fitScale: null }),
     want: () => ({ ...want }),
+    // The overview as last aimed at (fitted clear of the words), else the plain one.
+    home: () => home ?? overviewShot(sites()),
+    // Where the camera is now (`{ pos, look }`), null before its first frame.
+    pose: () => (pose ? { pos: { ...pose.pos }, look: { ...pose.look } } : null),
+    // A finger's pose (T8): held from the next frame on, the flight under way dropped.
+    steer: (p) => {
+      if (!steer || still || !p) return;
+      from = null;
+      fromEnd = null;
+      fromId = want.kind === 'site' ? want.id : fromId;
+      want = { kind: 'free', pose: { pos: { ...p.pos }, look: { ...p.look } }, t0: null };
+      version += 1;
+    },
   };
 }
