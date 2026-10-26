@@ -361,11 +361,26 @@ Notes for every builder round (planner, night 1):
   12.0 for the commit before in the same minute (load 35, noise). Seen and left to T44: room names still
   leave their tile where 13-14 characters meet an 86 px tile (KITCHEN-LIGHT, PORCH-LIGHT pushed below,
   OBJECT-STORE over a mark's ring); T42's cursor-only caption frames.)
-- [ ] T16 (§2) [variant:radial] (r9-film-ui #3) Trouble is the loudest thing: at the overview a crit
+- [x] T16 (§2) [variant:radial] (r9-film-ui #3) Trouble is the loudest thing: at the overview a crit
   node is the only saturated area (halo a few node radii wide, via T8's glow layer), attention in
   lanes stays at mark size and does not outshout a crit elsewhere — done when: a still of the
   large demo during the crit window shows the crit as the first thing the eye lands on (reviewer
-  check), and a test checks the halo size ranks crit > attention > warn.
+  check), and a test checks the halo size ranks crit > attention > warn. (commit 5361303; `glow.js`
+  `haloMarks`, `haloGeometry`, `HALO`: a node whose OWN status is crit or down (not a site rolled up from
+  below) gets a soft halo in `--p1`, 6 node radii, floor 4.5 % and ceiling 11 % of the short side (a
+  hold does not wash the screen red), centre alpha 0.6; attention 2.2 radii capped at 3 %, alpha 0.22,
+  in the warn tone (at mark size); warn none (its ▲ is enough); a node under a parent with an equal or
+  louder halo is one problem, one halo; worst painted last. A halo fades in over 600 ms; while any crit
+  halo shows the lights paint at half their alpha (they were the other saturated area). Sprites are
+  now tinted from a white falloff, so token colours in oklch work. Off by default: `createGlow(…,
+  {halos})`, the variant's `halos` flag (variants.js), radial sets it; orbits and islands could take it
+  with one line, mosaic has its toned tiles (T61). Tests `test/wall-glow.test.mjs` (ranking, sizes at
+  the overview and in a hold, which nodes, the driver: off unless asked, order, hush, fade, the large
+  demo's crit window). Still `$RUN_DIR/shots/r43-still/`: STORAGE's red halo is the first read, the
+  waiting lanes keep to their ▲, lights hushed; filmstrip `r43-radial/`: halos on STORAGE and the lost
+  VM-C at the overview and in holds, 0 console errors; fps 1.8 is SwiftShader plus screenshots
+  (filming note); the cost is one `drawImage` per halo on a layer already following the frame for
+  the lights.)
 - [ ] T17 (§5) [variant:radial] (r9-film-ui #4) Overview fit and safe area: fit to the bounds of the
   drawn nodes and labels, not the outer ring; safe area 8 % top/bottom, 6 % sides; top-left
   caption area kept clear — done when: a test checks no node or label lies outside the safe
