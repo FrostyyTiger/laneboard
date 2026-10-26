@@ -4,8 +4,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  tourSites, tourOrder, nextLeg, initialTour, createTour, TIMING, DEMO_TIMING, timingFor,
+  tourSites, tourOrder, nextLeg, initialTour, createTour, TIMING, DEMO_TIMING, timingFor, holdFor,
 } from '../public/js/wall/tour.js';
+
+/** TIMING without the trouble revisits: each site once per cycle. */
+const ONCE = { ...TIMING, revisitEvery: 0 };
 
 /** Five sites under a core, each with a room and a service; `bad` sets statuses by id. */
 function fleet(bad = {}) {
@@ -56,10 +59,10 @@ test('tour: trouble first, worst first, then the calm sites in model order', () 
 
 test('tour: a cycle visits each site once, trouble first; a cleared site falls back next cycle', () => {
   const bad = fleet({ 'home-svc': 'crit' });
-  const c1 = cycle(initialTour(), bad);
+  const c1 = cycle(initialTour(), bad, ONCE);
   assert.deepEqual(c1.ids, ['home', 'hv1', 'hv2', 'cloud', 'remote']);
   const calm = fleet();
-  const c2 = cycle(c1.state, calm);
+  const c2 = cycle(c1.state, calm, ONCE);
   assert.deepEqual(c2.ids, ['hv1', 'hv2', 'cloud', 'remote', 'home'], 'home is calm again: last, in model order');
 });
 
@@ -83,10 +86,29 @@ test('tour: legs carry index and count for the caption, and the timing', () => {
   assert.equal(r.leg.index, 1);
   assert.equal(r.leg.count, 5);
   assert.equal(r.leg.arriveMs, TIMING.flyMs);
-  assert.equal(r.leg.ms, TIMING.flyMs + TIMING.holdMs);
+  assert.equal(r.leg.ms, TIMING.flyMs + TIMING.troubleHoldMs, 'trouble holds longer');
+  r = nextLeg(r.state, fleet({ 'cloud-svc': 'crit' }));
+  assert.equal(r.leg.ms, TIMING.flyMs + TIMING.holdMs, 'a calm site the normal hold');
   // the next cycle counts up
   const c = cycle(initialTour(), fleet());
   assert.equal(nextLeg(c.state, fleet()).leg.cycle, 1);
+});
+
+test('tour: at normal speed trouble comes back after every two calm sites, in turn', () => {
+  const c = cycle(initialTour(), fleet({ 'home-svc': 'crit', 'cloud-svc': 'warn' }));
+  assert.deepEqual(c.ids, ['home', 'cloud', 'hv1', 'hv2', 'home', 'remote']);
+  const legs = [];
+  let r = nextLeg(initialTour(), fleet({ 'home-svc': 'crit' }));
+  for (let i = 0; i < 7; i++) {
+    r = nextLeg(r.state, fleet({ 'home-svc': 'crit' }));
+    legs.push(r.leg);
+  }
+  assert.deepEqual(legs.map((l) => l.kind === 'site' ? l.id : 'overview'),
+    ['home', 'hv1', 'hv2', 'home', 'cloud', 'remote', 'overview']);
+  assert.equal(legs[3].index, 1, 'a revisit keeps the index of its first visit');
+  assert.ok(legs.every((l) => l.kind !== 'site' || l.index <= l.count));
+  // without trouble the cycle is the plain calm round
+  assert.deepEqual(cycle(initialTour(), fleet()).ids, ['hv1', 'hv2', 'cloud', 'remote', 'home']);
 });
 
 test('tour: no sites means the overview, cycle after cycle', () => {
@@ -100,8 +122,11 @@ test('tour: no sites means the overview, cycle after cycle', () => {
 test('tour: timing, normal and demo', () => {
   assert.equal(timingFor(false), TIMING);
   assert.equal(timingFor(true), DEMO_TIMING);
-  assert.equal(TIMING.overviewMs, 20000);
-  assert.equal(TIMING.holdMs, 25000);
+  assert.equal(TIMING.overviewMs, 10000);
+  assert.equal(TIMING.holdMs, 6000);
+  assert.equal(TIMING.troubleHoldMs, 14000);
+  assert.equal(TIMING.revisitEvery, 2);
+  assert.equal(holdFor({ trouble: true }, DEMO_TIMING), DEMO_TIMING.holdMs, 'the demo holds trouble no longer');
   assert.equal(TIMING.zoom, 2.3);
   assert.equal(DEMO_TIMING.zoom, TIMING.zoom);
   const perSite = DEMO_TIMING.flyMs + DEMO_TIMING.holdMs;

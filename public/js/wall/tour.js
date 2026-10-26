@@ -11,22 +11,31 @@
 // The order is taken again before every site, from the model as it is then:
 // a site that turns bad mid-cycle jumps ahead of the calm ones still to come,
 // and a site that cleared falls back into the calm order. A site is visited
-// once per cycle.
+// once per cycle, except trouble at the normal speed: it holds longer, and
+// after every `revisitEvery` calm sites the camera goes back to it (in turn,
+// worst first), so a crit is never long out of sight (owner, 2026-10-26).
 
 import { SEVERITY, TROUBLE, byIdOf, kidsOf, rollup } from '../views/map/model.js';
 
 /**
- * Normal speed: the overview ~20 s, then each site ~25 s once the camera is
- * there. `flyMs` is the time a flight takes in ambient mode (the Map's
- * longest flight, 900 ms, times its ambient 2.5), counted before the hold so
- * the hold starts on arrival.
+ * Normal speed, slow enough to read from across the room (owner, 2026-10-26):
+ * the overview 10 s, a calm site 6 s and a site in trouble 14 s once the
+ * camera is there, and trouble revisited after every 2 calm sites. `flyMs` is
+ * the time a flight takes in ambient mode (the Map's longest flight, 900 ms,
+ * times its ambient 2.5), counted before the hold so the hold starts on arrival.
  */
-export const TIMING = Object.freeze({ overviewMs: 20000, flyMs: 2250, holdMs: 25000, zoom: 2.3 });
+export const TIMING = Object.freeze({
+  overviewMs: 10000, flyMs: 2250, holdMs: 6000, troubleHoldMs: 14000, revisitEvery: 2, zoom: 2.3,
+});
 
 /** `?demo=1`, for videos: ~4 s per site, overview included. */
 export const DEMO_TIMING = Object.freeze({ overviewMs: 4000, flyMs: 2250, holdMs: 1750, zoom: 2.3 });
 
 export const timingFor = (demo) => (demo ? DEMO_TIMING : TIMING);
+
+/** How long the camera holds on `site` (a tourSites entry). */
+export const holdFor = (site, timing = TIMING) =>
+  (site.trouble && timing.troubleHoldMs > 0 ? timing.troubleHoldMs : timing.holdMs);
 
 // laneboard's repo index is a site in the model but no place in the fleet:
 // toured only when something in it is in trouble.
@@ -87,19 +96,34 @@ export function nextLeg(state, nodes, timing = TIMING) {
     };
   }
   const seen = new Set(state.visited);
-  const next = order.find((s) => !seen.has(s.id));
+  let next = order.find((s) => !seen.has(s.id));
   if (!next) {
     return nextLeg({ ...state, phase: 'done' }, nodes, timing);
   }
-  const visited = [...state.visited, next.id];
+  // After `revisitEvery` calm sites in a row, back to trouble already seen
+  // this cycle (in turn, worst first) before the next calm one.
+  const every = timing.revisitEvery > 0 ? timing.revisitEvery : 0;
+  let calmRun = state.calmRun ?? 0;
+  let revisits = state.revisits ?? 0;
+  let again = false;
+  if (!next.trouble && every && calmRun >= every) {
+    const seenTrouble = order.filter((s) => s.trouble && seen.has(s.id));
+    if (seenTrouble.length) {
+      next = seenTrouble[revisits % seenTrouble.length];
+      revisits += 1;
+      again = true;
+    }
+  }
+  calmRun = next.trouble ? 0 : calmRun + 1;
+  const visited = again ? state.visited : [...state.visited, next.id];
   // Sites that appear mid-cycle count from the next one; the index never passes the count.
   const count = Math.max(state.count, visited.length);
   return {
-    state: { cycle: state.cycle, phase: 'site', visited, count },
+    state: { cycle: state.cycle, phase: 'site', visited, count, calmRun, revisits },
     leg: {
       kind: 'site', id: next.id, label: next.label, status: next.status,
-      index: visited.length, count, cycle: state.cycle,
-      arriveMs: timing.flyMs, ms: timing.flyMs + timing.holdMs,
+      index: visited.indexOf(next.id) + 1, count, cycle: state.cycle,
+      arriveMs: timing.flyMs, ms: timing.flyMs + holdFor(next, timing),
     },
   };
 }

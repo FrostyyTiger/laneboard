@@ -165,14 +165,17 @@ export function boot() {
   });
   const cam = createGalaxyCamera(galaxy, { still: reduced, free: freeBox, fitOverview: overviewFit(reduced, reduced ? 0 : null) });
   const parkedOverview = overviewFit(false, 0);
-  const tour = createTour(cam, { timing: reduced ? stillTourTimingFor(demo) : timingFor(demo) });
+  // `?pace=wall`: the demo's data at the normal, readable speed (the demo's own
+  // speed is for films).
+  const fast = demo && q.get('pace') !== 'wall';
+  const tour = createTour(cam, { timing: reduced ? stillTourTimingFor(demo) : timingFor(fast) });
 
   // The words over the canvas: the caption names each system as the camera
   // gets there; the frame (vignette, clock, fleet line, tag) stays put.
   // A parked still gets its caption at once, nothing typing.
   const still = Boolean(park) || reduced;
   const caption = createCaption(document.getElementById('wall-caption'), {
-    timing: still ? STILL_CAPTION_TIMING : captionTimingFor(demo),
+    timing: still ? STILL_CAPTION_TIMING : captionTimingFor(fast),
   });
   const frame = createFrame(document.getElementById('wall-frame'));
   // The lock closes on the node the caption's trouble word names (the system
