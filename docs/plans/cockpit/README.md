@@ -235,3 +235,47 @@ below closes both. `spec-input.md` holds the owner's intent from the planning co
 4. How long does one conversation live before it starts fresh with written context?
 5. Can the Wall's tour mode and C4 share one camera controller? (Likely yes; check with the Wall
    work once it merges.)
+
+## 8. Nights
+
+### Spec night
+
+Loop: `docs/plans/cockpit/loop/` (forked from the Wall loop; writes only `docs/plans/cockpit/spec/`,
+`PROGRESS.md`, `reviews/`, `research/`; everything else is reverted). Output goes to
+`docs/plans/cockpit/spec/`:
+
+1. **Index and glossary** (`spec/README.md`): every spec file in one line; the words (screen, room,
+   canvas, card, block, show command, focus, stand-in) defined once.
+2. **Screens and modes** (`spec/screens.md`): tour, explore and canvas; one screen vs. two; how a
+   screen pairs with the room (device token) and what it shows while unpaired, offline or when the
+   room is down. Sketches.
+3. **C1 Talk** (`spec/c1-talk.md`): the pane, the conversation, rendering of replies and tool
+   activity, typing, new conversation, several screens on one conversation, the raw terminal toggle.
+   Scenarios, edge cases (talk while it answers, long replies, errors). Sketches.
+4. **C2 Voice in** (`spec/c2-voice.md`): tap and hold, live words, fixing a word, cancel, send; the
+   DE/EN choice; the physical-button API; what happens when speech-to-text is slow or down. Scenarios
+   with timings. Sketches of every state of the talk button and input.
+5. **C3 See** (`spec/c3-see.md`): the MCP tools, each with parameters, result shape and an example;
+   `focus`; "Ask about this".
+6. **C4 Show and canvas** (`spec/c4-show-canvas.md`): show commands with parameters; one camera with
+   the Wall's tour; undo; the canvas, the first kit blocks (each: data, look, live behaviour), custom
+   cards and their sandbox, promotion, how cards leave. Sketches.
+7. **Proactive, jobs, drift** (`spec/coworker.md`): when the agent speaks up and how loud, quiet
+   hours; scheduled jobs on the Map and the canvas; the repo pull and the drift check; the agent's
+   changes as PRs.
+8. **C5 Voice out and C6 Act** (`spec/c5-c6.md`): lighter: enough to not paint the earlier parts into
+   a corner. C6 waits for the control review; spec the confirm card and the rules only.
+9. **Protocols** (`spec/protocols.md`): screen ⇄ room (conversation, audio, show commands, focus),
+   room ⇄ agent bridge (text in, streamed reply and tool events out), room ⇄ speech-to-text; message
+   by message, with errors and timeouts.
+10. **Security** (`spec/security.md`): tokens and what each can do, injection paths (logs, cards, web
+    pages, spoken text), audio and transcript handling, audit; against the plan's §4.
+11. **Stand-ins** (`spec/stand-ins.md`): the fake speech service (replays recorded utterances with timed
+    partials), the fake agent (replays scripted turns, tool calls and show commands), the demo fleet
+    additions; enough to write them in one round each. They double as the public demo.
+12. **One machine** (`spec/single-machine.md`): everything on one box, no tailnet, no GPU (typing
+    only), another agent than Claude Code: what changes, what config.
+13. **Slices** (`spec/slices.md`): the build nights in order, each with its scenarios, its stand-ins
+    and its done-when; C1 and C2 first.
+14. **Decisions and questions** (`spec/DECISIONS.md`, `spec/QUESTIONS.md`): kept throughout; seeded from
+    `spec-input.md` §7.
