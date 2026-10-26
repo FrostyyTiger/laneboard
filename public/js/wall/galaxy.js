@@ -330,8 +330,25 @@ function nextLeg(now) {
   legAt = now + FLY + HOLD;
 }
 
+// `?fps=1`: frames per second and script ms per frame, top left (for the tablet test).
+const fpsEl = q.has('fps') ? Object.assign(document.body.appendChild(document.createElement('div')), {
+  style: 'position:fixed;left:2vw;top:2vh;font:600 3vh monospace;color:#9fe0a8;z-index:9;text-shadow:0 0 6px #000',
+}) : null;
+let fpsN = 0, fpsT = 0, fpsMs = 0;
 function frame(now) {
   requestAnimationFrame(frame);
+  const t0 = performance.now();
+  try { draw(now); } finally {
+    if (fpsEl) {
+      fpsN++; fpsMs += performance.now() - t0;
+      if (now - fpsT >= 1000) {
+        fpsEl.textContent = `${Math.round((fpsN * 1000) / (now - fpsT))} fps · ${(fpsMs / fpsN).toFixed(1)} ms`;
+        fpsN = 0; fpsMs = 0; fpsT = now;
+      }
+    }
+  }
+}
+function draw(now) {
   const dt = last ? Math.min(100, now - last) : 16; last = now;
   const w = canvas.clientWidth, h = canvas.clientHeight;
   if (canvas.width !== Math.floor(w * renderer.getPixelRatio())) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
