@@ -117,14 +117,25 @@ Notes for every builder round (planner, round 1):
   measure). Stills r15-sun-live / r15-sun-stale (`?at=overview`, 3 s vs 40 s in): the sun's grey corona is gone
   and the core a step dimmer. Honest note for a panel: it is quiet, by design; from 3 m it reads as "the hub went
   dim", not as an alarm. Q14's `freeze` (stop liveness motion on stale) would make it unmistakable and is not built.
-- [ ] T7 (§7 Night 3 C1, C6) [ui] [variant:galaxy] Touch, the first touch: a new `galaxy/touch.js` (a state
+- [x] T7 (§7 Night 3 C1, C6) [ui] [variant:galaxy] Touch, the first touch: a new `galaxy/touch.js` (a state
   machine with an injected clock: `tour` → `easing` → `explore`) wired in `galaxy/main.js` with one `pointerdown`
   listener on the stage; the first touch anywhere stops the tour and eases the camera to the overview in about
   1.5 s, and nothing under that first touch is activated; `galaxy.html` and `wall.css` block page scroll,
   page pinch-zoom and the context menu (`touch-action: none`, `overscroll-behavior: none`, `user-select:
   none`, a viewport without user scaling) — night 1's T31 — done when: a test drives pointer events on the page
   through `fakedom.mjs` with a fake clock and sees the tour stopped, `fit()` asked once, no tap handled for the
-  first touch, and a test pins `touch-action: none` and the viewport meta in `galaxy.html`/`wall.css`.
+  first touch, and a test pins `touch-action: none` and the viewport meta in `galaxy.html`/`wall.css` (commit cbd8389)
+  Builder r16: `touch.js` pure `touchStep(state, 'down'|'tick', now)` (`easing` ends by itself after `TOUCH.fitMs`
+  1500, read lazily, no timer) and `createTouch(stage, { wake, clock })` → `{ mode(), onPointer(cb), stop() }`:
+  pointerdown/move/up/cancel on `#galaxy-stage`, the waking pointer's events are swallowed until it lifts (a second
+  finger meanwhile is its own touch), `contextmenu` refused. `onPointer` is the hook for T8/T10 (never hears the
+  waking pointer). `camera.js fit({ ms })` flies in its own time (the tour's `fit()` unchanged); `hud.release()`
+  hides the plate and lets the lock go; `main.js` wake = `tour.stop()`, `fit({ ms: 1500 })`, `release()`, the tether
+  drawn in as it lands; a new model no longer restarts a stopped tour (T14 brings it back); `<html data-touch>`
+  says `easing`/`explore`. `.galaxy-stage` gets `touch-action: none` + `overscroll-behavior: none`, the viewport
+  `maximum-scale=1, user-scalable=no` (selection was already off). Checked: film r16-galaxy (tour unchanged, 0
+  errors) and a CDP touch script (r16-touch: one tap on a held hv2 → overview, plate gone, tour still stopped 25 s
+  later, a two-finger pinch left `visualViewport.scale` 1 and `scrollY` 0, 0 errors).
 - [ ] T8 (§7 Night 3 C2) [ui] [variant:galaxy] Touch, drag and pinch: in `explore`, a one-finger drag orbits
   the galaxy round its centre (pitch clamped so the plane is never edge-on or upside down), a pinch and the
   wheel zoom between the overview and a close system, with eased inertia after release; pure functions in
