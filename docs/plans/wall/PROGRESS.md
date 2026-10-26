@@ -24,12 +24,16 @@ Notes for every builder round (planner, round 1):
 
 ## Tasks
 
-- [ ] T1 (§7.A1) [ui] `public/js/wall/galaxy/layout.js`, pure, from `sketch/galaxy.js`: sites on two spiral
+- [x] T1 (§7.A1) [ui] `public/js/wall/galaxy/layout.js`, pure, from `sketch/galaxy.js`: sites on two spiral
   arms (`armPoint(i, n)`), the dust band's points, a system's planets from the orbits layout
   (`variants/orbits.js`) with inclined orbits whose height stays within half the planet's distance from the
   star, and `foldAt(open, p)` folding a system to `CLOSED` (0.16) of its size; no DOM, no three — done when:
   `test/wall-galaxy-layout.test.mjs` shows arms are deterministic for one model, no two sites closer than a
   minimum, every height |y| <= 0.5 * distance, `foldAt(0)` = folded and `foldAt(1)` = open positions.
+  (commit c6161a4) Nothing to film yet (no page before T3); checked on the large fixture instead: min site gap
+  1116 (MIN_SITE_GAP 700), widest open system reach 397, folded ≤ 64, so open systems never meet. API for
+  T3/T4: `galaxyLayout(nodes)` → `{ core, sites: [{ id, node, home, members: [{ id, node, off, planet }],
+  reach }] }`, `dustPoints(n)` → `{ positions, t }` (t: 0 sun..1 rim, for the colour), `farStars(n)`, `ease`.
 - [ ] T2 (§7.A2) Vendor three.js 0.170.0 from branch `sketch/wall-galaxy` as
   `public/vendor/three/three.module.js` with its MIT `LICENSE` beside it, served by the existing `/vendor/`
   fall-through — done when: a test (`test/wall-galaxy-vendor.test.mjs`) checks the file's `REVISION` is
