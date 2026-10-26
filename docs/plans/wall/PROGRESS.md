@@ -408,6 +408,23 @@ Notes for every builder round (planner, round 1):
   white and as large as the `apps-*` dots. Draw dust darker than any node mark (below `--text-3`), point size
   attenuated by distance and capped (~2 px) — done when: a test checks the dust colour is darker than the
   dimmest node colour in `paletteFrom` and the size cap, and `?at=hv2&open=1` shows no grain as bright as a dot.
+- [ ] T27 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 1) The 19 nebula lobes and landing planes are
+  `transparent` + `DoubleSide`, so three rebuilds their shader state twice per frame (~2.4 ms/frame at 4x, 56 KB
+  of allocation): add `forceSinglePass: true` to both material constructors (`scene.js` lobes and system plane)
+  — done when: a test builds the scene and a lobe's and a plane's `material.version` is the same after two
+  `frame()` calls, and a 4x profile or `__wallPerf.scriptMs` is no worse (record before/after).
+- [ ] T28 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 2) The budget has no lever on fill rate, the
+  bottleneck of the tablet's iGPU at 2736x1824: give each `budget.js LEVELS` entry a pixel `ratio` (L0 2, L1 1.5,
+  L2 1.25), have `scene.setQuality` call `renderer.setPixelRatio(min(dpr, ratio))` (resize only, no camera move;
+  labels stay DOM), consider `antialias: false` at ratio ≥ 1.5, and add a `?ratio=` pin for filming — done when:
+  a test shows each level's ratio is applied (capped by dpr) and `?ratio=1` pins it, and a still at L2 shows
+  the same framing as L0.
+- [ ] T29 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 3) Two forced layouts per frame:
+  `hud.js tagCover()` reads `offsetLeft/Top/Width/Height` on every call (twice a frame), and `clientWidth/Height`
+  are read in `scene.js resize()`, `labels.js draw` and `camera.js screenOf` after style writes. Cache the tag's
+  box (re-read on resize or when the frame's text changes, as `frame.js` does) and the canvas size (one
+  `ResizeObserver`) — done when: a test counts layout-property reads over several fake frames (tag box read
+  once, none per frame after the first) and a 4x CDP run shows style recalcs/layouts near 1 per frame.
 
 ## Research questions
 
@@ -490,6 +507,18 @@ Notes for every builder round (planner, round 1):
   tap feedback is brackets, never brightness. Next/step order = `tourOrder` (trouble first).
 - §7.B (r31-touch 3) Trouble planets in a held system sit 10-25 css px apart (under one fingertip): spread the
   orbit layout so trouble members are at least ~48 px apart at the tour's zoom.
+- §7.A6 (r37-performance 4) `scene.js setOpen` re-places every site per call (up to 3 full `place()` passes a
+  frame in flights): set `s.open` and dirty only, place once in `advance()`; `foldAt(k, p, out)` writes into a
+  passed object, hoist the `push` closure.
+- §7.A6 (r37-performance 5) Every socket message runs `galaxyLayout(nodes)` before the tree key is compared
+  (~1.7 MB, ~7 ms per message): compute `treeKey` first, recolour by id on an unchanged tree, reuse one scratch
+  array in `orbits.js arrange`'s `at()`.
+- §7.A6 (r37-performance 6) The loop draws at display rate all day: a `frameCap` in `galaxy/main.js` (60 during a
+  flight or open/fold, 30 otherwise), `budget.js` judging against the cap in force (§2.4 no heat).
+- §7.A6 (r37-performance 7) `labels.draw` rebuilds arrays, Sets and `labelSize` per frame (1.68 ms at 4x): memoise
+  `labelSize` by `text|px|face`, reuse arrays, skip the pass when pose, `world.version` and `unfold` are unchanged.
+- §7.A6 (r37-performance 8) At the overview every folded calm member is still a mesh (220 calls vs 36-56 held):
+  hide calm members' mesh and halo while `s.unfold === 0` (trouble keeps its halo); later an `InstancedMesh` per tone.
 - §7.B Polish (tour pacing, camera paths, how far a system opens, nebula shapes and colours, the sun, the
   dust, type at 3 m): triage turns at most 3 findings per review into tasks; the rest land here.
 - §7.C `fx=storm`: a crit nebula as a slow storm (swirl, flicker of lightning).
@@ -560,6 +589,9 @@ Notes for every builder round (planner, round 1):
   banner tap needs night 3 (its `+3 MORE` size is fenced `frame.js`: For the owner), 9 praise (palm/scroll
   safety already holds: dropped, keep it so); fx findings are all night-3 input rules (Later). No `fx`
   proposals.
+- r37-performance.md: 8 galaxy findings + 3 m check (yes for what/where, no for every site; CLOUD missing = T19),
+  3 became tasks (T27 forceSinglePass = 1, T28 pixel ratio lever = 2, T29 forced layouts = 3); 4/5/6/7/8 under
+  Later. Memory flat (clean). No `fx` proposals; fx scores from code and films.
 
 ## Scores
 
@@ -574,5 +606,9 @@ Notes for every builder round (planner, round 1):
 | 31 | touch (fx-lanes) | - | - | - | - | 3 | 8 | - |
 | 31 | touch (fx-comets) | - | - | - | - | 3 | 7 | - |
 | 31 | touch (fx-twinkle) | - | - | - | - | 3 | 8 | - |
+| 37 | performance (galaxy) | 6 | 6 | 7 | 2 | 6 | 5 | 6 |
+| 37 | performance (fx-lanes) | - | - | - | - | 3 | 8 | - |
+| 37 | performance (fx-comets) | - | - | - | - | 4 | 7 | - |
+| 37 | performance (fx-twinkle) | - | - | - | - | 3 | 8 | - |
 
 ## Morning
