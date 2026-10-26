@@ -16,11 +16,12 @@
 
 import * as THREE from '../../../vendor/three/three.module.js';
 import { galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, CLOSED } from './layout.js';
-import { tourSites } from '../tour.js';
+import { tourOrder, tourSites } from '../tour.js';
 import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
 import { LEVELS } from './budget.js';
 import { breathWave, dustTurn } from './still.js';
+import { armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import {
   COMETS, LANES, TWINKLE, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles, twinkleAt,
 } from './fx.js';
@@ -284,7 +285,10 @@ export function createGalaxyScene(canvas, {
     k, new THREE.SphereGeometry(SIZE[k], Math.max(6, Math.round(w * seg)), Math.max(4, Math.round(h * seg))),
   ]));
   const geo = spheres(1);
-  const shared = [glowTex, dotTex, cloudTex];
+  // A nebula lobe: a flat square in the galaxy's plane, stretched by its scale (nebula.js).
+  const lobeGeo = new THREE.PlaneGeometry(1, 1);
+  lobeGeo.rotateX(-Math.PI / 2);
+  const shared = [glowTex, dotTex, cloudTex, lobeGeo];
   const keep = (m) => { shared.push(m); return m; };
   const flatMat = Object.fromEntries(TONES.map((t) => [t, keep(new THREE.MeshBasicMaterial({ color: tone[t] }))]));
   // Calm planets are matte grey with a faint glow of their own; trouble
@@ -412,6 +416,7 @@ export function createGalaxyScene(canvas, {
     s.star.material = flatMat[t];
     s.starHalo.material = haloMat[t];
     const neb = nebulaFor(s.status);
+    if (neb.tone !== s.nebula?.tone) s.since = clock(); // how old its trouble is (nebulaPeaks)
     s.nebula = neb;
     const nebTo = { color: tone[neb.tone].clone(), opacity: neb.opacity, size: neb.size };
     const starTo = SIZE.star * HALO[t].k;
@@ -424,7 +429,7 @@ export function createGalaxyScene(canvas, {
       s.starHaloSize = glide(s.starHaloFrom, starTo, k);
       s.lane.material.color.lerpColors(lf.color, laneEnd.color, ease(k));
       s.lane.material.opacity = glide(lf.opacity, laneEnd.opacity, k);
-      s.nebulaSprite.material.color.copy(s.neb.color);
+      for (const l of s.lobes) l.mesh.material.color.copy(s.neb.color);
     };
     s.nebFrom = { color: s.neb.color.clone(), opacity: s.neb.opacity, size: s.neb.size };
     s.laneFrom = { color: s.lane.material.color.clone(), opacity: s.lane.material.opacity };
@@ -475,11 +480,17 @@ export function createGalaxyScene(canvas, {
     const neb = nebulaFor(status);
     const star = new THREE.Mesh(geo.star, flatMat.calm);
     const starHalo = new THREE.Sprite(haloMat.calm);
-    // The nebula round the cluster, its own material: it thins as the system opens.
-    const nebulaSprite = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: cloudTex, color: tone[neb.tone], transparent: true, depthWrite: false,
-      blending: THREE.AdditiveBlending, opacity: neb.opacity, rotation: hash(`${lay.id}~neb`) * Math.PI * 2,
-    }));
+    // The nebula round the cluster (T17): two or three lobes flat in the plane, each its own
+    // material, stretched along the arm; it thins as the system opens.
+    const lobes = nebulaLobes(lay.id).map((shape) => {
+      const mesh = new THREE.Mesh(lobeGeo, new THREE.MeshBasicMaterial({
+        map: cloudTex, color: tone[neb.tone], transparent: true, depthWrite: false, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, opacity: neb.opacity * shape.share,
+      }));
+      mesh.name = 'nebula';
+      return { shape, mesh };
+    });
+    const nebulaSprite = lobes[0].mesh;
     const lines = new THREE.LineSegments(new THREE.BufferGeometry(), lineMat(palette.line.rgb, 0));
     lines.frustumCulled = false;
     // The system's plane: one thin circle round its star.
@@ -488,10 +499,10 @@ export function createGalaxyScene(canvas, {
     }));
     plane.rotation.x = -Math.PI / 2;
     const lane = new THREE.Line(new THREE.BufferGeometry(), lineMat(palette.line.rgb, 0));
-    group.add(star, starHalo, nebulaSprite, lines, plane, lane);
+    group.add(star, starHalo, ...lobes.map((l) => l.mesh), lines, plane, lane);
     const s = {
-      id: lay.id, node: lay.node, home: { ...lay.home }, reach: lay.reach, status, nebula: neb,
-      star, starHalo, members: [], nebulaSprite, lines, plane, lane,
+      id: lay.id, node: lay.node, home: { ...lay.home }, reach: lay.reach, status, nebula: null, since: clock(), peak: 1,
+      star, starHalo, members: [], nebulaSprite, lobes, lines, plane, lane,
       open: 0, squeeze: 1, alive: 1, unfold: 0, relay: null, gone: false,
       neb: { color: tone[neb.tone].clone(), opacity: neb.opacity, size: neb.size }, starHaloSize: 0,
     };
@@ -504,13 +515,51 @@ export function createGalaxyScene(canvas, {
   const dropSite = (s) => {
     for (const key of tweens.keys()) if (key.startsWith(`${s.id}:`)) tweens.delete(key);
     for (const m of s.members) group.remove(m.mesh, m.halo, m.mark);
-    group.remove(s.star, s.starHalo, s.nebulaSprite, s.lines, s.plane, s.lane);
-    for (const o of [s.nebulaSprite.material, s.lines.geometry, s.lines.material, s.plane.geometry, s.plane.material, s.lane.geometry, s.lane.material]) o.dispose();
+    group.remove(s.star, s.starHalo, ...s.lobes.map((l) => l.mesh), s.lines, s.plane, s.lane);
+    for (const o of [...s.lobes.map((l) => l.mesh.material), s.lines.geometry, s.lines.material, s.plane.geometry, s.plane.material, s.lane.geometry, s.lane.material]) o.dispose();
   };
 
   const index = (sites, core) => {
     world = { sites, core, byId: new Map(sites.map((s) => [s.id, s])), version: (world?.version ?? 0) + 1, sunRadius: SIZE.sun };
     dirty = true;
+  };
+
+  /** A site's nebula lobes on its star, lying along the arm there; `breath` scales them (frame). */
+  const basis = new THREE.Matrix4(), up = new THREE.Vector3(0, 1, 0), tx = new THREE.Vector3(), nx = new THREE.Vector3();
+  const lobeTwist = new THREE.Quaternion();
+  const lobeTurn = [0, Math.PI].map((r) => new THREE.Quaternion().setFromAxisAngle(up, r));
+  const placeLobes = (s, breath = s.breath ?? 1) => {
+    const t = armTangent(s.home);
+    tx.set(t.x, 0, t.z);
+    nx.set(-t.z, 0, t.x); // tx × up: a right-handed basis, so no lobe is a mirror by accident
+    basis.makeBasis(tx, up, nx);
+    const size = s.neb.size * breath * s.alive;
+    for (const { shape, mesh } of s.lobes) {
+      mesh.position.set(
+        s.home.x + (tx.x * shape.along + nx.x * shape.across) * size,
+        s.home.y,
+        s.home.z + (tx.z * shape.along + nx.z * shape.across) * size,
+      );
+      lobeTwist.setFromAxisAngle(up, shape.turn);
+      mesh.quaternion.setFromRotationMatrix(basis).multiply(lobeTwist).multiply(lobeTurn[shape.flip & 1]);
+      mesh.scale.set(Math.max(1e-3, shape.len * size), 1, Math.max(1e-3, shape.wid * size) * (shape.flip & 2 ? -1 : 1));
+    }
+  };
+
+  /**
+   * The crits ranked by age, the newest the hottest (nebula.js nebulaPeaks), a tie in the tour's
+   * order (`order`: site ids, tourOrder); each site's peak eases there over `ms`.
+   */
+  const rankPeaks = (order, ms = LIVE.recolourMs) => {
+    const at = new Map(order.map((id, i) => [id, i]));
+    const live = world.sites.filter((s) => !s.gone).sort((a, b) => (at.get(a.id) ?? 1e9) - (at.get(b.id) ?? 1e9));
+    const peaks = nebulaPeaks(live.map((s) => ({ id: s.id, tone: s.nebula.tone, since: s.since })));
+    for (const s of world.sites) {
+      const to = peaks.get(s.id) ?? 1, from = s.peak;
+      if (to === from) continue;
+      if (!ms) { s.peak = to; dirty = true; continue; }
+      tween(`${s.id}:peak`, ms, (k) => { s.peak = glide(from, to, k); });
+    }
   };
 
   /** Puts every member where its system's opening (times a relayout's squeeze) says. */
@@ -523,7 +572,7 @@ export function createGalaxyScene(canvas, {
       s.star.scale.setScalar(a);
       s.starHalo.position.copy(s.star.position);
       s.starHalo.scale.setScalar(Math.max(1e-3, s.starHaloSize * a));
-      s.nebulaSprite.position.copy(s.star.position);
+      placeLobes(s);
       s.plane.position.copy(s.star.position);
       const arr = s.lines.geometry.attributes.position.array;
       let j = 0;
@@ -559,7 +608,7 @@ export function createGalaxyScene(canvas, {
       s.plane.scale.setScalar(Math.max(60, s.reach * 0.9) * spread + 20);
       s.plane.material.opacity = palette.line.alpha * 0.6 * e * a;
       // You are inside the nebula now: it thins as the system opens.
-      s.nebulaSprite.material.opacity = s.neb.opacity * (1 - 0.7 * e) * a;
+      for (const l of s.lobes) l.mesh.material.opacity = s.neb.opacity * l.shape.share * s.peak * (1 - 0.7 * e) * a;
     }
     dirty = false;
   };
@@ -687,6 +736,7 @@ export function createGalaxyScene(canvas, {
     if (!world) build(lay, shown);
     else if (tree === lastTree) recolour(lay, shown);
     else relive(lay, shown);
+    rankPeaks(tourOrder(nodes).map((s) => s.id), lastTree === null ? 0 : LIVE.recolourMs);
     lastTree = tree;
     place();
     return true;
@@ -897,8 +947,8 @@ export function createGalaxyScene(canvas, {
     advance(now);
     if (world) {
       for (const s of world.sites) {
-        const breath = s.nebula.breathes ? 1 + PULSE.nebula * wave : 1;
-        s.nebulaSprite.scale.setScalar(Math.max(1e-3, s.neb.size * breath * s.alive));
+        s.breath = s.nebula.breathes ? 1 + PULSE.nebula * wave : 1;
+        placeLobes(s);
       }
     }
     // The dust turns once in about 26 minutes: alive under a held camera, never a motion you notice.

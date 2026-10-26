@@ -318,11 +318,33 @@ Notes for every builder round (planner, round 1):
   4x (was 11.5-12.9). Seen: the background of a hold is now the outer arm and the dark sky, quieter than
   before; `r34-t16-lab` caught a demo relayout mid-fold (a lumpy ball, the Later line); the caption plate
   still covers half of `lab` (T18).
-- [ ] T17 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 4) The crit nebula is a flat disc: two or
+- [x] T17 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 4) The crit nebula is a flat disc: two or
   three offset billboards per nebula, stretched along the arm tangent, breathing at one period (crit only),
   brightness ordered by severity and age so the newest crit is hottest — done when: a test checks the
   billboard count/orientation from a site and that a newer crit has the higher peak, and the overview still
   shows two crits that differ in shape and brightness.
+  (commit SHA) Pure `galaxy/nebula.js`: `armTangent(home)` (the derivative of `armPoint`'s spiral at a star),
+  `nebulaLobes(id)` (2 or 3 lobes from the site's hash: a main lobe on the star 1.3 × the size long, 0.8-0.92
+  across; side lobes 0.26-0.36 before/after on the tangent, off it by up to 0.16, turned 0.12-0.36 rad, 0.5-0.68
+  of its strength; mirrored/turned texture so none repeat), `nebulaPeaks` (crits newest first: 1, then 0.12 per
+  place down to a floor of 0.84, so the quietest crit (0.71) stays over warn (0.7); ties in `tourOrder`).
+  **Decision:** the lobes are flat meshes in the galaxy's plane, not sprites: a sprite can only stretch in
+  screen space, while a lobe on the plane keeps the arm's direction from any camera (always above the plane).
+  `scene.js`: one shared `PlaneGeometry`, one material per lobe (+1-2 draw calls per site, no new texture);
+  `s.since` is set when a site's nebula tone changes (the scene's clock), `rankPeaks` eases each `s.peak`
+  over `LIVE.recolourMs` after every update (at once on the first). `s.nebulaSprite` is now the main lobe.
+  First try was far too quiet (lobes inside the old radius, seen at a slant: the red at HV2 a thin smudge,
+  `$RUN_DIR/shots/r35-t17-still`), so the lobes got longer and stronger; most of a lobe's light stays within
+  0.42 × 680 of its star, its faint rim within 476 (rims meet only under 952 apart; the large demo's closest
+  pair is 1116, test). Tests `test/wall-galaxy-nebula.test.mjs` (+6): lobe count and bounds, tangent against
+  `armPoint`, the scene's lobes flat and on the tangent, `nebulaPeaks`, a newer crit hotter (eased, the older
+  one steps down and back up), the large demo with lab crit too: two crits differ in shape and peak.
+  Stills `$RUN_DIR/shots/r35-t17-still3` (overview: HV2 red, HV1 and REMOTE amber, each cloud lopsided along
+  its arm), `r35-t17-still2` (two crits); filmstrip `$RUN_DIR/shots/r35-galaxy/` (`?demo=1&quality=0`, 4x,
+  0 console errors; 1.6 fps is SwiftShader): frame 1 two crits of different shape, no jumps. Seen: close up
+  (frames 2, 6, 9) a trouble site sits in a broad band of its hue under the plate (thinned to 30 % open);
+  if a review finds it loud, the open thinning can go further. The newest-crit difference (1 vs 0.88) is
+  subtle at the overview; r15-dreamer 4 (banner ranks by age) and T21 (beacon) carry age more strongly.
 - [ ] T18 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 1) The held system hides under its own
   caption plate: `siteShot` aims the star at the centre of the free rect (frame minus `hud.covers()`) and fits
   the distance so the open `reach` fits that rect (also fixes the Later line on reach past the bottom edge) —
