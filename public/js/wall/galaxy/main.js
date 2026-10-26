@@ -32,11 +32,13 @@
 // Then (T8) one finger orbits the galaxy, a pinch or the wheel zooms between
 // the overview and a close system, and both coast to rest (touch.js
 // createGestures steering camera.js's free pose). Reduced motion: no steering yet (T14).
+// A tap on a site (T10, touch.js createTaps, hitTest) flies there and opens
+// it: brackets at once, the plate as the camera arrives.
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
 import { createPerf } from '../perf.js';
-import { createTour, timingFor, tourOrder } from '../tour.js';
+import { TIMING, createTour, timingFor, tourOrder } from '../tour.js';
 import { createCaption, captionTimingFor, STILL_CAPTION_TIMING } from '../caption.js';
 import { createFrame } from '../frame.js';
 import { LOCK_TIMING, STILL_LOCK_TIMING } from '../lock.js';
@@ -55,7 +57,7 @@ import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { createTether } from './tether.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
-import { TOUCH, createGestures, createTouch, orbitLimits } from './touch.js';
+import { TOUCH, createGestures, createTaps, createTouch, hitTest, orbitLimits, tapPoints } from './touch.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -258,6 +260,26 @@ export function boot() {
     // The tether is the overview pose's: a turned or closer galaxy would leave it across empty sky.
     moved: () => tether.hide(),
   }) : null;
+  // A tap on a site (T10): the camera flies there at the tour's zoom and opens
+  // it, the brackets close on it at once, its plate comes as the camera does.
+  // A tap on empty sky does nothing yet (T13 makes it a step back).
+  const stageEl = document.getElementById('galaxy-stage');
+  let latestModel = null;
+  const openSite = (id) => {
+    const order = tourOrder(latestModel?.nodes ?? []);
+    const i = order.findIndex((s) => s.id === id);
+    cam.focus(id, TIMING.zoom);
+    hud.open({ id, index: i >= 0 ? i + 1 : null, count: order.length || null, arriveMs: FLIGHT.ms });
+    tether.hide();
+    fromSite = true;
+  };
+  const taps = touch && !reduced ? createTaps(touch, {
+    pick: (x, y) => {
+      const o = stageEl.getBoundingClientRect();
+      return hitTest(tapPoints(galaxy.world?.sites, cam.screenOf, labels.shown()), x - o.left, y - o.top);
+    },
+    tap: (hit) => { if (hit) openSite(hit.id); },
+  }) : null;
 
   const tick = (now) => {
     requestAnimationFrame(tick);
@@ -297,6 +319,7 @@ export function boot() {
   const showModel = (model) => {
     if (!model || typeof model !== 'object') return;
     have = true;
+    latestModel = model;
     galaxy.update(model);
     if (fx.has('lanes')) galaxy.setRoutes(siteRoutes(model, galaxy.world?.byId.keys() ?? []));
     if (fx.has('comets')) galaxy.setComets(flowComets(model, galaxy.drawn()));
@@ -366,6 +389,7 @@ export function boot() {
   globalThis.__galaxyLabels = labels;
   globalThis.__galaxyTether = tether;
   globalThis.__galaxyTouch = touch;
+  globalThis.__galaxyTaps = taps;
   globalThis.__galaxyCam = cam;
 }
 

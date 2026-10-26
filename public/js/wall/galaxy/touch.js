@@ -19,9 +19,17 @@
 // `createGestures` turns pointer events into them and steers the camera
 // (camera.js `steer`, which only this sets).
 //
+// A tap (T10, README §7 Night 3 C3): a finger down and up within TAP.ms and
+// the drag's slop, alone and not a palm. `hitTest` finds the site under it in
+// screen space (a finger-sized disc round each star, or its shown name;
+// `tapPoints` lists them), worst tone first, then the nearest; `createTaps`
+// tells the page, which flies there and opens it.
+//
 // The page itself never scrolls, zooms or shows a menu under a finger: the
 // viewport has no user scaling (galaxy.html), the stage `touch-action: none`
 // (wall.css), and the context menu (a long press) is refused here.
+
+import { toneOf, worseTone } from './palette.js';
 
 /** How long the camera takes from wherever it is back to the overview on the first touch (ms). */
 export const TOUCH = Object.freeze({ fitMs: 1500 });
@@ -414,6 +422,27 @@ export function hitTest(points, x, y, radius = TAP.radiusPx) {
     if (worse < 0 || (worse === 0 && d < bestD)) { best = p; bestD = d; }
   }
   return best;
+}
+
+/**
+ * The things a tap can hit now (T10), for hitTest: every site drawn at least
+ * half grown (as labels.js names them), at `screenOf(id)` (camera.js: css px
+ * and drawn radius; null behind the camera), in its nebula's tone (the worst
+ * of the site and what it holds), with its shown name's box from `names`
+ * (labels.js `shown()`: `[{ id, box }]`). Sites only, at the overview and in
+ * a system alike: a planet is T11's. Pure but for `screenOf`.
+ */
+export function tapPoints(sites, screenOf, names = []) {
+  const boxes = new Map();
+  for (const n of names ?? []) if (n?.id != null && n.box) boxes.set(n.id, n.box);
+  const out = [];
+  for (const s of sites ?? []) {
+    if (!s || s.gone || (s.alive ?? 1) < 0.5) continue;
+    const sp = screenOf(s.id);
+    if (!sp) continue;
+    out.push({ id: s.id, x: sp.x, y: sp.y, r: sp.r, tone: worseTone(toneOf(s.node), toneOf(s.status)), box: boxes.get(s.id) ?? null });
+  }
+  return out;
 }
 
 /**

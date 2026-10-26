@@ -9,11 +9,11 @@ import path from 'node:path';
 
 import { makeEl } from './helpers/fakedom.mjs';
 import {
-  ORBIT, TOUCH, atRest, createGestures, createTouch, inertia, orbitLimits, orbitOf, orbitPose, orbitStep, planeAt,
-  touchStep, zoomStep,
+  ORBIT, TAP, TOUCH, atRest, createGestures, createTaps, createTouch, hitTest, inertia, isPalm, orbitLimits, orbitOf,
+  orbitPose, orbitStep, planeAt, tapPoints, touchStep, zoomStep,
 } from '../public/js/wall/galaxy/touch.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
-import { createGalaxyCamera } from '../public/js/wall/galaxy/camera.js';
+import { FLIGHT, createGalaxyCamera } from '../public/js/wall/galaxy/camera.js';
 import { galaxyLayout } from '../public/js/wall/galaxy/layout.js';
 import { overviewShot } from '../public/js/wall/galaxy/scene.js';
 import * as THREE from '../public/vendor/three/three.module.js';
@@ -477,4 +477,166 @@ test('camera home() is the overview it last aimed at, the fitted one where a fit
   const l = orbitLimits(cam.home(), galaxy.world.sites);
   const o = zoomStep({ ...orbitOf(cam.home()), dist: 2000, look: { x: 900, y: 0, z: 0 } }, 1e6, l);
   assert.ok(near(o.look.x, 0) && near(o.look.z, 400) && near(o.dist, l.far));
+});
+
+// ---- T10: tap a site ----
+
+test('a tap is a finger: 300 ms, the drag\'s slop, a disc of at least 10 mm (48 css px floor) round each thing', () => {
+  assert.equal(TAP.ms, 300);
+  assert.equal(TAP.slopPx, ORBIT.slopPx, 'what turns the galaxy is never a tap');
+  assert.ok(2 * TAP.radiusPx >= 48, `${2 * TAP.radiusPx} px across`);
+});
+
+test('hitTest: a near miss is a miss, a near hit a hit; a drawn sphere bigger than the finger counts whole', () => {
+  const pts = [{ id: 'hv1', x: 400, y: 300, r: 4, tone: 'calm', box: null }];
+  assert.equal(hitTest(pts, 400 + TAP.radiusPx - 1, 300)?.id, 'hv1');
+  assert.equal(hitTest(pts, 400 + TAP.radiusPx + 1, 300), null, 'a near miss');
+  assert.equal(hitTest([{ ...pts[0], r: 80 }], 470, 300)?.id, 'hv1', 'inside a big drawn star');
+  assert.equal(hitTest([], 1, 1), null);
+  assert.equal(hitTest([{ id: 'x', x: NaN, y: 0, tone: 'crit' }], 0, 0), null, 'nothing placed, nothing hit');
+});
+
+test('hitTest: a tie goes to the worst status, then to the nearest', () => {
+  const calm = { id: 'near-calm', x: 402, y: 300, r: 4, tone: 'calm', box: null };
+  const warn = { id: 'far-warn', x: 420, y: 300, r: 4, tone: 'warn', box: null };
+  const crit = { id: 'far-crit', x: 380, y: 310, r: 4, tone: 'crit', box: null };
+  assert.equal(hitTest([calm, warn], 400, 300)?.id, 'far-warn', 'worse beats nearer');
+  assert.equal(hitTest([calm, warn, crit], 400, 300)?.id, 'far-crit');
+  const warn2 = { ...warn, id: 'near-warn', x: 405 };
+  assert.equal(hitTest([warn, warn2], 400, 300)?.id, 'near-warn', 'same status: the nearest');
+  assert.equal(hitTest([warn2, warn], 400, 300)?.id, 'near-warn', 'whatever the order');
+});
+
+test('hitTest: a site\'s shown name is a target, wherever on it the finger lands', () => {
+  const p = { id: 'hv2', x: 100, y: 100, r: 4, tone: 'calm', box: { x: 130, y: 90, w: 160, h: 24 } };
+  assert.equal(hitTest([p], 280, 100)?.id, 'hv2', 'far end of the name, 180 px from the star');
+  assert.equal(hitTest([p], 280, 130), null, 'below the name');
+  // A finger on a calm site's name beats a calm star it merely brushes (the name counts as 0 away).
+  const other = { id: 'hv1', x: 300, y: 100, r: 4, tone: 'calm', box: null };
+  assert.equal(hitTest([other, p], 285, 100)?.id, 'hv2');
+});
+
+test('isPalm: a contact over TAP.palmPx is a palm; a device that does not measure reports 1, a finger', () => {
+  assert.equal(isPalm({ width: 1, height: 1 }), false);
+  assert.equal(isPalm({ width: 30, height: 40 }), false);
+  assert.equal(isPalm({ width: TAP.palmPx + 1, height: 40 }), true);
+  assert.equal(isPalm({ width: 20, height: 200 }), true);
+  assert.equal(isPalm({}), false);
+});
+
+test('tapPoints: each grown site at its drawn point, in its nebula\'s tone, with its shown name', () => {
+  const sites = [
+    { id: 'hv1', node: { status: 'ok' }, status: 'crit' }, // calm itself, a crit inside
+    { id: 'hv2', node: { status: 'warn' } },
+    { id: 'new', node: { status: 'ok' }, alive: 0.2 }, // still growing in
+    { id: 'old', node: { status: 'ok' }, gone: true },
+    { id: 'behind', node: { status: 'ok' } },
+  ];
+  const at = { hv1: { x: 10, y: 20, r: 5 }, hv2: { x: 30, y: 40, r: 6 }, new: { x: 0, y: 0, r: 1 }, old: { x: 0, y: 0, r: 1 } };
+  const pts = tapPoints(sites, (id) => at[id] ?? null, [{ id: 'hv2', box: { x: 1, y: 2, w: 3, h: 4 } }, { id: 'hv2-a', box: { x: 0, y: 0, w: 9, h: 9 } }]);
+  assert.deepEqual(pts, [
+    { id: 'hv1', x: 10, y: 20, r: 5, tone: 'crit', box: null },
+    { id: 'hv2', x: 30, y: 40, r: 6, tone: 'warn', box: { x: 1, y: 2, w: 3, h: 4 } },
+  ]);
+  assert.deepEqual(tapPoints(null, () => null), []);
+});
+
+test('createTaps: down and up in place is a tap; too long, moved, a second finger, a palm or not exploring is none', () => {
+  let now = 0;
+  const stage = stageEl();
+  const touch = createTouch(stage, { clock: () => now });
+  const taps = [];
+  const picks = [];
+  createTaps(touch, {
+    clock: () => now,
+    pick: (x, y) => { picks.push([x, y]); return x < 500 ? { id: 'hv1' } : null; },
+    tap: (hit, at) => taps.push([hit?.id ?? null, at.x, at.y]),
+  });
+  const tap = (id, init = {}, { ms = 80, dx = 0 } = {}) => {
+    stage.dispatch('pointerdown', { pointerId: id, ...init });
+    now += ms;
+    if (dx) stage.dispatch('pointermove', { pointerId: id, ...init, clientX: (init.clientX ?? 100) + dx });
+    stage.dispatch('pointerup', { pointerId: id, ...init, clientX: (init.clientX ?? 100) + dx });
+  };
+  tap(1); // the waking touch: reaches nothing
+  now += 100;
+  tap(2); // easing: no tap yet
+  assert.deepEqual(taps, []);
+  now += TOUCH.fitMs;
+  tap(3, { clientX: 120, clientY: 90 });
+  assert.deepEqual(taps, [['hv1', 120, 90]], 'a tap on a site');
+  tap(4, { clientX: 900, clientY: 90 });
+  assert.deepEqual(taps.at(-1), [null, 900, 90], 'a tap on empty sky is told as null');
+  const n = taps.length;
+  tap(5, {}, { ms: TAP.ms + 1 });
+  tap(6, {}, { dx: TAP.slopPx });
+  tap(7, { width: 200, height: 160 });
+  // Two fingers down together: a pinch's start, neither is a tap.
+  stage.dispatch('pointerdown', { pointerId: 8 });
+  stage.dispatch('pointerdown', { pointerId: 9, clientX: 160 });
+  stage.dispatch('pointerup', { pointerId: 9, clientX: 160 });
+  stage.dispatch('pointerup', { pointerId: 8 });
+  assert.equal(taps.length, n, 'held, moved, a palm, a pinch: none a tap');
+  tap(10, {}, { dx: TAP.slopPx - 1 });
+  assert.equal(taps.length, n + 1, 'a finger that wobbles inside the slop still taps');
+  assert.ok(!picks.some(([x]) => x === 160), 'a second finger is never even picked');
+});
+
+test('pointer events on the page: a tap on a site\'s screen point flies the camera there and opens it, brackets at once', () => {
+  const p = touchPage();
+  const opened = [];
+  createTaps(p.touch, {
+    clock: p.now,
+    pick: (x, y) => hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), x, y),
+    // As main.js: focus at the tour's zoom, the hud's open (brackets now, plate on arrival).
+    tap: (hit) => { if (!hit) return; p.cam.focus(hit.id, DEMO_TIMING.zoom); opened.push({ id: hit.id, at: p.now(), arriveMs: FLIGHT.ms }); },
+  });
+  p.run(200);
+  const sp = p.cam.screenOf('cloud');
+  assert.ok(sp && sp.x > 0 && sp.x < 1600 && sp.y > 0 && sp.y < 900, 'cloud is on screen at the overview');
+  // A finger 15 px off the star, a short press.
+  p.stage.dispatch('pointerdown', { pointerId: 21, clientX: sp.x + 15, clientY: sp.y });
+  p.tick(90);
+  p.stage.dispatch('pointerup', { pointerId: 21, clientX: sp.x + 15, clientY: sp.y });
+  assert.deepEqual(opened.map((o) => o.id), ['cloud']);
+  assert.deepEqual([p.cam.want().kind, p.cam.want().id], ['site', 'cloud'], 'the camera flies to it');
+  p.run(FLIGHT.ms + 1500);
+  assert.ok(p.galaxy.world.byId.get('cloud').open > 0.9, 'and it opens');
+  for (const s of ['hv1', 'hv2']) assert.equal(p.galaxy.world.byId.get(s).open, 0, `${s} stays folded`);
+  assert.ok(!p.gestures.busy(), 'a tap never turns or zooms the galaxy');
+  // Empty sky (the frame's corner): nothing opens.
+  p.stage.dispatch('pointerdown', { pointerId: 22, clientX: 5, clientY: 5 });
+  p.stage.dispatch('pointerup', { pointerId: 22, clientX: 5, clientY: 5 });
+  assert.equal(opened.length, 1);
+});
+
+test('the hud opens a tapped site with its brackets at once and its plate when the camera arrives', async () => {
+  const { createHud } = await import('../public/js/wall/galaxy/hud.js');
+  const shown = [], locked = [], plates = [];
+  const timers = fakeTimers();
+  const hud = createHud({
+    caption: { show: (leg) => shown.push(leg), hide: () => {}, cover: () => null },
+    frame: { update: () => {}, plate: (on) => plates.push(on), el: {} },
+    lock: { lockOn: (leg) => locked.push(leg), release: () => {} },
+    size: () => ({ W: 1600, H: 900 }),
+    timers,
+  });
+  hud.update({ nodes: [{ id: '__core', kind: 'core', status: 'ok' }, { id: 'hv2', kind: 'site', status: 'crit', parent: '__core' }] });
+  hud.open({ id: 'hv2', index: 1, count: 1, arriveMs: FLIGHT.ms });
+  assert.equal(locked.length, 1);
+  assert.equal(locked[0].arriveMs, 0, 'the brackets lock at once');
+  assert.equal(locked[0].cut, true, 'taking the box from any lock still opening');
+  assert.equal(shown[0].id, 'hv2');
+  assert.deepEqual(plates, [false], 'no plate yet');
+  assert.deepEqual([...timers.live.values()].map((t) => t.ms), [FLIGHT.ms], 'the plate waits for the camera');
+});
+
+test('galaxy/main.js wires taps: sites hit-tested in the stage\'s px, a hit flies there and opens it', () => {
+  const js = read('js/wall/galaxy/main.js');
+  assert.match(js, /createTaps\(touch, \{/);
+  assert.match(js, /hitTest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, labels\.shown\(\)\), x - o\.left, y - o\.top\)/);
+  const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
+  assert.match(open, /cam\.focus\(id, TIMING\.zoom\)/);
+  assert.match(open, /hud\.open\(\{[^}]*arriveMs: FLIGHT\.ms \}\)/);
+  assert.match(open, /tether\.hide\(\)/);
 });
