@@ -549,12 +549,26 @@ Notes for every builder round (planner, round 1):
   script 9.7/12.1/7.1 (SwiftShader-noisy, but no worse). Filmstrip `$RUN_DIR/shots/r53-galaxy/` (0 console
   errors, 1.8 fps is SwiftShader) and still `r53-still-hv1`: nebulae and the system plane look as before.
   The demo fleet on :7795 (started by an earlier round) was used and left running.
-- [ ] T28 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 2) The budget has no lever on fill rate, the
+- [x] T28 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 2) The budget has no lever on fill rate, the
   bottleneck of the tablet's iGPU at 2736x1824: give each `budget.js LEVELS` entry a pixel `ratio` (L0 2, L1 1.5,
   L2 1.25), have `scene.setQuality` call `renderer.setPixelRatio(min(dpr, ratio))` (resize only, no camera move;
   labels stay DOM), consider `antialias: false` at ratio ≥ 1.5, and add a `?ratio=` pin for filming — done when:
   a test shows each level's ratio is applied (capped by dpr) and `?ratio=1` pins it, and a still at L2 shows
-  the same framing as L0.
+  the same framing as L0. (commit 32277f2)
+  `budget.js LEVELS` carry `ratio` 2 / 1.5 / 1.25; pure `pixelRatioFor(level, dpr, pin)` (min of the screen's dpr
+  and the level's ratio or the pin) and `ratioPin(raw)` (`?ratio=` 0.5-4, else no pin). `scene.setQuality`
+  calls `renderer.setPixelRatio` (three re-sizes the drawing buffer at the same css size: no camera move,
+  labels are DOM) and moves the dust's device-px cap with it (T26's note); `scene.pixelRatio`, `__wallPerf.ratio`
+  and the `?perf=1` line (`L2 ×1.25`) report it. **Decision:** `antialias` stays on at every level: it is
+  fixed when the WebGL context is made, so turning it off would mean a new context and a full rebuild on a
+  step, and at 1.25-1.5 on a 2x screen the MSAA is what keeps the hairlines from crawling. Tests (+3 in
+  `wall-galaxy-budget`): the ratios, dpr cap and pin; the scene's setPixelRatio, dust cap and an unchanged
+  camera pose/aspect at L1/L2/L0, no css re-size; the pin holds at every level; main.js wires `?ratio=`.
+  Stills (2x) `$RUN_DIR/shots/r56-still-q0`, `-q2` (`?at=hv1&perf=1&quality=…`): same framing, every planet
+  and name in place, overlay `L0 ×2` / `L2 ×1.25`; `r56-still-r1` (`&ratio=1`) shows `L0 ×1`. Filmstrip
+  `$RUN_DIR/shots/r56-galaxy/` (`?demo=1&perf=1`, 4x, 0 console errors, 3.6 fps is SwiftShader): the budget
+  steps L1 ×1.5 → L2 ×1.25 with no jump. SwiftShader single-frame times are too noisy to price the fill-rate
+  saving; that needs the tablet. The demo fleet on :7795 (started by an earlier round) was used and left running.
 - [ ] T29 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 3) Two forced layouts per frame:
   `hud.js tagCover()` reads `offsetLeft/Top/Width/Height` on every call (twice a frame), and `clientWidth/Height`
   are read in `scene.js resize()`, `labels.js draw` and `camera.js screenOf` after style writes. Cache the tag's
