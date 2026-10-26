@@ -41,7 +41,7 @@
 //
 // Ambient (a wall or desk screen, see AMBIENT): no HUD, no input, a slow turn.
 //
-//   const map = createMap(el, { ambient: true });          // or { drift, fps }
+//   const map = createMap(el, { ambient: true });          // or { drift, fps, centerY }
 //   map.onDraw(() => paintUnder(map.screenOf('lamp')));     // after every frame
 //   map.focus('hv1', 2.4); … map.fit();                      // a camera tour
 
@@ -81,9 +81,12 @@ const MODES = ['full', 'split', 'pip'];
  * dial, and frames are capped so a small machine stays cool. Drift is radians
  * per second (one turn in ten minutes by default); the turn is around the
  * centre of the view, so a node the camera flew to turns in place. Flights
- * take `flight` times as long: a tour, not a jump.
+ * take `flight` times as long: a tour, not a jump. `centerY` is where on the
+ * screen the view's centre (and the turn's) sits, as a share of the height
+ * from the top: a page with a band of its own at the bottom (the Wall's
+ * clock and fleet line) lifts it. Default the middle.
  */
-const AMBIENT = { drift: TAU / 600, fps: 30, flight: 2.5 };
+const AMBIENT = { drift: TAU / 600, fps: 30, flight: 2.5, centerY: 0.5 };
 
 const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 const pageHidden = () => globalThis.document?.visibilityState === 'hidden';
@@ -155,6 +158,9 @@ export function migrateFolds(list, localId) {
  *   labelSize(node, {s, trouble}) -> px for the node's name, 0 for none at this
  *                            zoom (s), undefined for today's 11/12px. Default: today's
  *   pinLabels             true: a name keeps its side and line while it stays on screen
+ *   labelInset            {top, right, bottom, left}, shares of the canvas: the collision
+                             pass moves a name a line up or down only inside them (the Wall's
+                             safe area). Default: the canvas edges
  *                            (the Wall: the turn no longer flips names). Default off
  *
  * Returns the API of plan §5 2.2 plus the shell hooks (§4 D8).
@@ -165,6 +171,8 @@ export function createMap(root, opts = {}) {
   const layOut = typeof opts.layout === 'function' ? (nodes) => polarLayout(opts.layout(nodes)) : layout;
   const amb = opts.ambient ? { ...AMBIENT, ...(opts.ambient === true ? {} : opts.ambient) } : null;
   if (amb) root.classList.add('map-ambient');
+  // Where the camera's point sits on screen, a share of the height (ambient `centerY`).
+  const midY = amb && Number.isFinite(amb.centerY) ? Math.min(0.8, Math.max(0.2, amb.centerY)) : 0.5;
 
   const canvas = h('canvas', 'map-canvas');
   canvas.setAttribute('role', 'img');
@@ -279,10 +287,10 @@ export function createMap(root, opts = {}) {
   const toScreen = (p) => {
     const cs = Math.cos(spin), sn = Math.sin(spin);
     const dx = p.x - cam.x, dy = p.y - cam.y;
-    return { x: W / 2 + (dx * cs - dy * sn) * scale(), y: H / 2 + (dx * sn + dy * cs) * scale() };
+    return { x: W / 2 + (dx * cs - dy * sn) * scale(), y: H * midY + (dx * sn + dy * cs) * scale() };
   };
   const toWorld = (sx, sy) => {
-    const dx = (sx - W / 2) / scale(), dy = (sy - H / 2) / scale();
+    const dx = (sx - W / 2) / scale(), dy = (sy - H * midY) / scale();
     const cs = Math.cos(spin), sn = Math.sin(spin);
     return { x: cam.x + dx * cs + dy * sn, y: cam.y - dx * sn + dy * cs };
   };
@@ -1165,6 +1173,7 @@ export function createMap(root, opts = {}) {
       guides: lay.guides,
       labelSize: typeof opts.labelSize === 'function' ? opts.labelSize : undefined,
       pinLabels: opts.pinLabels === true,
+      labelInset: opts.labelInset && typeof opts.labelInset === 'object' ? opts.labelInset : undefined,
     };
   }
 
@@ -1222,6 +1231,8 @@ export function createMap(root, opts = {}) {
    * The scene for the minimap (2.7): the goals of every drawn node, packed as
    * `[x, y, shapeCode, toneCode]` per node, and a version that changes with
    * the model, the layout and the overlay. No springs are computed for it.
+   * `outer` is the layout's outer radius, `fitScale` the overview's world to
+   * screen scale (a page drawing in step with the Map: its node size).
    */
   function snapshotScene() {
     const list = [];
@@ -1242,7 +1253,7 @@ export function createMap(root, opts = {}) {
       pts[i * 4 + 2] = SHAPE_CODE[st.shape] ?? 0;
       pts[i * 4 + 3] = TONE_CODE[st.tone] ?? 0;
     });
-    return { version, pts, count: list.length, overlay: ov, scope, selected, outer: maxRadius() };
+    return { version, pts, count: list.length, overlay: ov, scope, selected, outer: maxRadius(), fitScale };
   }
 
   function on(set, cb) {

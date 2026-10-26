@@ -40,12 +40,15 @@ const easeOut = (t) => 1 - (1 - t) ** 3;
 
 /**
  * The Map's node scale at zoom `zoom` (render.js nodeScale: world scale
- * clamped 0.8..1.6), from the canvas size and the layout's outer radius as
- * the overview fits it (index.js computeFit, ambient: no insets).
+ * clamped 0.8..1.6), from the overview's scale (`fit`, the Map's
+ * snapshotScene `fitScale`) or, without it, from the canvas size and the
+ * layout's outer radius as the default fit takes them (index.js computeFit,
+ * ambient: no insets).
  */
-export function nodeScaleAt(W, H, outer, zoom) {
+export function nodeScaleAt(W, H, outer, zoom, fit) {
   const z = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
-  const s = fitScaleOf(W, H, (Number.isFinite(outer) ? outer : 0) + 64) * z;
+  const k = Number.isFinite(fit) && fit > 0 ? fit : fitScaleOf(W, H, (Number.isFinite(outer) ? outer : 0) + 64);
+  const s = k * z;
   return Math.min(1.6, Math.max(0.8, s));
 }
 
@@ -166,13 +169,14 @@ export function createLock(root, map, { timing = LOCK_TIMING, clock = globalThis
     if (typeof leg?.id !== 'string' || !node) return;
     const { W, H } = measure();
     const arrive = Number.isFinite(leg.arriveMs) ? leg.arriveMs : 0;
+    const snap = map.snapshotScene?.();
     let startAt = clock.now() + Math.max(0, arrive - timing.leadMs);
     // Never take the box from a lock that is still opening.
     if (cur) startAt = Math.max(startAt, cur.leaveAt + timing.outMs);
     next = {
       id: leg.id,
       kind: node.kind,
-      ns: nodeScaleAt(W, H, map.snapshotScene?.()?.outer, zoom),
+      ns: nodeScaleAt(W, H, snap?.outer, zoom, snap?.fitScale),
       tone: lockTone(leg.status),
       startAt,
       leaveAt: null,

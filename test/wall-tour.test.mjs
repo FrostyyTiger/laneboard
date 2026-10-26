@@ -139,3 +139,23 @@ test('tour driver: fits, flies to each site at the tour zoom on the timer, stops
   run();
   assert.equal(calls.length, n, 'stopped: no more moves');
 });
+
+test('tour driver: a page\'s zoomFor sets the zoom of each site leg, the timing\'s when it gives none', () => {
+  const calls = [];
+  const map = { fit: () => calls.push(['fit']), focus: (id, z) => calls.push(['focus', id, z]) };
+  const queue = [];
+  const timers = { setTimeout: (fn, ms) => { queue.push({ fn, ms }); return queue.length; }, clearTimeout: () => {} };
+  let z = 3.2;
+  const tour = createTour(map, { timing: DEMO_TIMING, timers, zoomFor: () => z });
+  const legs = [];
+  tour.onLeg((l) => legs.push(l));
+  tour.update({ nodes: fleet({ 'hv2-svc': 'warn' }) });
+  tour.start();
+  queue.at(-1).fn();
+  assert.deepEqual(calls.at(-1), ['focus', 'hv2', 3.2]);
+  assert.equal(legs.at(-1).zoom, 3.2, 'the leg says the zoom, for the lock and the glow');
+  z = NaN;
+  queue.at(-1).fn();
+  assert.deepEqual(calls.at(-1), ['focus', 'hv1', DEMO_TIMING.zoom]);
+  assert.equal(legs[0].zoom, undefined, 'an overview leg has none');
+});

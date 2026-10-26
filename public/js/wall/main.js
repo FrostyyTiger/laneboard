@@ -41,7 +41,10 @@ export function boot() {
   document.addEventListener('visibilitychange', () => perf.pause());
 
   // The tour is the screensaver (D4): it starts with the first model.
-  const tour = createTour(map, { timing: timingFor(pick.demo) });
+  // A variant may ask for its holds at a scale of their own (`holdZoom`).
+  const zoomFor = typeof pick.variant.holdZoom === 'function'
+    ? () => pick.variant.holdZoom(map.snapshotScene().fitScale, timingFor(pick.demo).zoom) : null;
+  const tour = createTour(map, { timing: timingFor(pick.demo), zoomFor });
 
   // The caption names each site as the camera gets there, from the newest model.
   const still = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -60,11 +63,12 @@ export function boot() {
   let latest = null;
   tour.onLeg((leg) => {
     const ms = still ? 0 : (leg.arriveMs ?? timingFor(pick.demo).flyMs);
-    glow.zoomTo(leg.kind === 'site' ? timingFor(pick.demo).zoom : 1, ms);
+    const zoom = leg.zoom ?? timingFor(pick.demo).zoom;
+    glow.zoomTo(leg.kind === 'site' ? zoom : 1, ms);
     const node = leg.kind === 'site' ? latest?.nodes?.find((n) => n?.id === leg.id) : null;
     if (node) {
       caption.show(leg, captionLines(node, latest, leg.index, leg.count));
-      lock.lockOn({ ...leg, node }, timingFor(pick.demo).zoom);
+      lock.lockOn({ ...leg, node }, zoom);
     } else {
       caption.hide();
       lock.release();

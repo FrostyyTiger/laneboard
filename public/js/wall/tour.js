@@ -107,10 +107,12 @@ export function nextLeg(state, nodes, timing = TIMING) {
 /**
  * The driver: runs legs on a timer and moves the map. `map` needs
  * `focus(id, zoom)` and `fit()`; `update(model)` gives it the newest model;
- * `onLeg(cb)` tells later layers (caption, lock) where the camera goes.
- * `timers` is injectable for tests.
+ * `onLeg(cb)` tells later layers (caption, lock) where the camera goes,
+ * each site leg with the `zoom` it flies to: `zoomFor(leg)` when the page
+ * gives one (a variant whose overview is not the scale its holds want),
+ * else the timing's. `timers` is injectable for tests.
  */
-export function createTour(map, { timing = TIMING, timers = globalThis } = {}) {
+export function createTour(map, { timing = TIMING, timers = globalThis, zoomFor = null } = {}) {
   let nodes = [];
   let state = initialTour();
   let timer = null;
@@ -125,7 +127,11 @@ export function createTour(map, { timing = TIMING, timers = globalThis } = {}) {
     state = r.state;
     current = r.leg;
     if (current.kind === 'overview') map.fit();
-    else map.focus(current.id, timing.zoom);
+    else {
+      const z = typeof zoomFor === 'function' ? zoomFor(current) : null;
+      current = { ...current, zoom: Number.isFinite(z) && z > 0 ? z : timing.zoom };
+      map.focus(current.id, current.zoom);
+    }
     for (const cb of legCbs) cb(current);
     timer = timers.setTimeout(step, current.ms);
   };

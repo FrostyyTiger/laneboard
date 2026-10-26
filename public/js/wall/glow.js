@@ -201,7 +201,7 @@ export function createGlow(canvas, map, {
   let troubles = [];
   const since = new Map(); // halo id -> when it first showed
   let off = null;
-  let outer = 0;
+  let outer = 0, fit = 0;
   let zoom = { from: 1, to: 1, startAt: 0, ms: 0 };
   let dirty = []; // [x, y, w, h] in css px: what the last frame painted
   let cw = 0, ch = 0, dpr = 1;
@@ -252,7 +252,7 @@ export function createGlow(canvas, map, {
     clear();
     const side = Math.min(W, H);
     const now = clock.now();
-    const ns = nodeScaleAt(W, H, outer, zoomAt(now, zoom));
+    const ns = nodeScaleAt(W, H, outer, zoomAt(now, zoom), fit);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // Trouble first and under the lights' rings; a crit halo hushes the lights.
     let hush = 1;
@@ -309,7 +309,9 @@ export function createGlow(canvas, map, {
     }
     for (const key of since.keys()) if (!keep.has(key)) since.delete(key);
     if (marks.length || troubles.length) {
-      outer = map.snapshotScene?.()?.outer ?? outer;
+      const snap = map.snapshotScene?.();
+      outer = snap?.outer ?? outer;
+      fit = snap?.fitScale ?? fit;
       if (!off) off = map.onDraw(paint);
     } else if (off) {
       off();

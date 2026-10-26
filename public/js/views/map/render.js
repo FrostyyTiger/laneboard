@@ -29,6 +29,7 @@
 //     anchor,                  // tether target {left, top, bottom} in canvas px, or null
 //     budgetUsd(node),         // optional: the builder budget cap for the cost overlay
 //     rings,                   // false: no ring hairlines, ring legends or bearing dial (the Wall)
+//     labelInset,              // {top, right, bottom, left} shares: where a name may move to (the Wall)
 //   }
 //
 // Text drawn here comes from builders (labels, subs, why) and is untrusted;
@@ -1150,11 +1151,17 @@ export function createRenderer(ctx, palette) {
     const order = plan.map((e, i) => [e, i]).sort((a, b) => a[0].rank - b[0].rank || a[1] - b[1]).map(([e]) => e);
     const out = [];
     const STEPS = [0, 14, -14, 28, -28, 42, -42, 56, -56];
+    const W = scene.W ?? Infinity;
+    // Where a name may go: the canvas, or the page's safe area inside it (`labelInset`).
+    const ins = scene.labelInset ?? null;
+    const share = (v) => (Number.isFinite(v) ? Math.min(0.45, Math.max(0, v)) : 0);
+    const area = ins
+      ? { x0: W * share(ins.left), y0: H * share(ins.top), x1: W * (1 - share(ins.right)), y1: H * (1 - share(ins.bottom)) }
+      : { x0: 0, y0: 0, x1: W, y1: H };
     const slot = (e, clear) => (e.steps ?? STEPS).find((d) => {
       const b = { x0: e.box.x0, x1: e.box.x1, y0: e.box.y0 + d, y1: e.box.y1 + d };
-      return b.y0 >= 0 && b.y1 <= H && b.x0 >= 0 && b.x1 <= W && !taken.some((t) => hits(t, b)) && clear(b);
+      return b.y0 >= area.y0 && b.y1 <= area.y1 && b.x0 >= area.x0 && b.x1 <= area.x1 && !taken.some((t) => hits(t, b)) && clear(b);
     });
-    const W = scene.W ?? Infinity;
     /** Cut by a canvas edge or under a cover: a label there is not read, it is not drawn. */
     const unseen = (b) => b.x0 < 0 || b.x1 > W || b.y0 < 0 || b.y1 > H || covers.some((c) => hits(c, b));
     /** The label on the node's other side, or null when that leaves the canvas. */

@@ -146,7 +146,10 @@ test('radial layout: the Map\'s rings on wall radii, angles and staggers kept, r
   const rings = ringLabels(polarLayout(wall).pos, NODES);
   assert.deepEqual(rings.map((r) => r.r), rings.map((r) => WALL_RINGS[r.ring]), 'legends and hairlines on the wall radii');
   assert.deepEqual(ringLabels(base.pos, NODES).map((r) => r.r), rings.map((r) => RINGS[r.ring]), 'default: RINGS');
-  assert.equal(mapOptions.layout, wallLayout);
+  // The Map gets the same positions with the overview's fit (T17, test/wall-radial-fit.test.mjs).
+  const fitted = mapOptions.layout(NODES);
+  assert.deepEqual(fitted.pos, wall.pos);
+  assert.ok(fitted.bounds.x > 0 && fitted.bounds.y > 0);
 });
 
 test('renderer: a pinned name keeps its side as the turn carries its bearing past the vertical', () => {

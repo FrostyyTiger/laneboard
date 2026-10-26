@@ -248,8 +248,9 @@ test('orbits registered: options for the screen\'s aspect, no turn; radial as be
   const wide = o.layout(fleet()).bounds, tablet = optionsFor(1.5).layout(fleet()).bounds;
   assert.ok(wide.x / wide.y > tablet.x / tablet.y, 'a wider screen, a wider view');
   const radial = mapOptionsFor(VARIANTS.find((x) => x.id === 'radial'), 16 / 9);
-  assert.equal(radial.ambient, true);
-  assert.equal(radial.layout, VARIANTS.find((x) => x.id === 'radial').mapOptions.layout);
+  assert.equal(radial.ambient.drift, undefined, 'radial keeps the Map\'s turn');
+  assert.ok(radial.ambient.centerY < 0.5, 'its centre lifted off the bottom band (T17)');
+  assert.equal(typeof radial.layout, 'function');
   assert.equal(mapOptionsFor(v, NaN).layout, mapOptions.layout, 'no aspect: the tablet\'s');
 });
 

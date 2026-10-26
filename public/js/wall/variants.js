@@ -7,8 +7,10 @@
 // (`mapOptions`, from its module in variants/; the page adds `ambient`), and
 // may add `optionsFor(aspect, screen)` (the options for the screen's width / height
 // and density, type.js `screenOf`)
-// and `ambient` (its own ambient settings, over the Map's defaults), and
-// `halos` (glow.js trouble halos under the Map, T16).
+// and `ambient` (its own ambient settings, over the Map's defaults),
+// `halos` (glow.js trouble halos under the Map, T16), and
+// `holdZoom(fitScale, zoom)` (the tour's zoom into a site, from the overview's
+// scale and the timing's zoom, when its holds want a scale of their own).
 
 import * as radial from './variants/radial.js';
 import * as orbits from './variants/orbits.js';
@@ -19,7 +21,7 @@ import * as mosaic from './variants/mosaic.js';
 export const VARIANTS = Object.freeze([
   Object.freeze({
     id: 'radial', label: 'Radial', mapOptions: radial.mapOptions,
-    optionsFor: radial.optionsFor, halos: radial.halos,
+    optionsFor: radial.optionsFor, ambient: radial.ambient, halos: radial.halos, holdZoom: radial.holdZoom,
   }),
   Object.freeze({
     id: 'orbits', label: 'Orbits', mapOptions: orbits.mapOptions,

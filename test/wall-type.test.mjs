@@ -55,16 +55,16 @@ test('screenOf: ?mm= is the screen height, anything else is no size', () => {
 test('radial: the tablet steps by default, the screen\'s through optionsFor and mapOptionsFor', () => {
   assert.deepEqual(STEPS, stepsFor(pxPerMm({ dpr: 2 })));
   assert.equal(mapOptions.pinLabels, true, 'radial pins its names');
-  assert.equal(optionsFor(1.5), mapOptions, 'no screen: the tablet\'s');
+  assert.equal(optionsFor(1.5).labelSize, mapOptions.labelSize, 'no screen: the tablet\'s');
   const desk = optionsFor(16 / 9, { dpr: 1 });
-  assert.equal(desk.layout, mapOptions.layout);
+  assert.notEqual(desk.layout, mapOptions.layout, 'the overview fitted to the screen (T17)');
   assert.equal(desk.pinLabels, true);
   assert.deepEqual(desk.labelSize({ id: 'hv1', kind: 'site' }), { px: 26, inward: true });
   assert.equal(desk.labelSize({ kind: 'room' }), 11);
   assert.equal(labelSize({ kind: 'room' }), 15);
   const v = VARIANTS.find((x) => x.id === 'radial');
   const o = mapOptionsFor(v, 1.5, { dpr: 1 });
-  assert.equal(o.ambient, true);
+  assert.equal(o.ambient, v.ambient);
   assert.equal(o.labelSize({ kind: 'builder' }), 11);
   assert.equal(mapOptionsFor(v, 1.5).labelSize, labelSize);
 });
