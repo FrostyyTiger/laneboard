@@ -8,11 +8,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BEACON, COMETS, FX_NAMES, LANES, TWINKLE, beaconAt, beaconHeight, cometAt, critAges, cometPath, flowComets, parseFx, pulseAt, routePath, siteRoutes, trackComets,
+  BEACON, COMETS, FX_NAMES, LANES, TWINKLE, beaconAt, beaconHeight, beaconNear, beaconScale, beaconWidth, beamProfile, coreProfile, cometAt, critAges, cometPath, flowComets, parseFx, pulseAt, routePath, siteRoutes, trackComets,
   trackRoutes, trackTwinkles, twinkleAt, workingPlanets,
 } from '../public/js/wall/galaxy/fx.js';
 import { paletteFrom } from '../public/js/wall/galaxy/palette.js';
-import { createGalaxyScene } from '../public/js/wall/galaxy/scene.js';
+import { FOV, createGalaxyScene, overviewShot } from '../public/js/wall/galaxy/scene.js';
+import { ndcOf } from '../public/js/wall/galaxy/framing.js';
 
 test('parseFx: nothing by default, known names only, comma-separated or repeated, any case', () => {
   assert.deepEqual([...parseFx('')], []);
@@ -527,22 +528,75 @@ test('with fx=twinkle under reduced motion the light is steady', () => {
 
 const MIN = 60_000, HOUR = 60 * MIN;
 
-test('beaconHeight: grows with the crit\'s age, by log, capped; none for calm, warn or no age', () => {
+test('beaconHeight and beaconWidth: both grow with the crit\'s age, by log, capped; none for calm, warn or no age', () => {
   const ages = [0, 5000, MIN, 10 * MIN, HOUR, 6 * HOUR, 24 * HOUR];
-  const hs = ages.map((a) => beaconHeight(a));
-  for (let i = 1; i < hs.length; i++) assert.ok(hs[i] > hs[i - 1], `${ages[i]} ms is taller than ${ages[i - 1]} ms`);
-  assert.equal(hs[0], BEACON.low, 'a crit that just began stands low');
-  assert.equal(beaconHeight(24 * HOUR), BEACON.high);
-  assert.equal(beaconHeight(30 * 24 * HOUR), BEACON.high, 'capped');
-  // Log: the first hour takes more of the height than the next 23.
+  for (const size of [beaconHeight, beaconWidth]) {
+    const hs = ages.map((a) => size(a));
+    for (let i = 1; i < hs.length; i++) assert.ok(hs[i] > hs[i - 1], `${size.name}: ${ages[i]} ms is more than ${ages[i - 1]} ms`);
+    assert.equal(size(30 * 24 * HOUR), size(24 * HOUR), 'capped');
+    assert.equal(size(HOUR, 'calm'), 0);
+    assert.equal(size(HOUR, 'warn'), 0);
+    assert.equal(size(HOUR, 'low'), 0);
+    assert.equal(size(NaN), 0);
+    assert.equal(size(-5), size(0), 'a clock a hair ahead is just begun');
+  }
+  // A crit that just began already stands a quarter of the frame (shows at once from 3 m).
+  assert.equal(beaconHeight(0), BEACON.floor);
+  assert.ok(BEACON.floor >= 0.22 && BEACON.floor <= 0.28);
+  assert.equal(beaconHeight(24 * HOUR), BEACON.top);
+  assert.equal(beaconWidth(0), BEACON.wide[0]);
+  assert.equal(beaconWidth(24 * HOUR), BEACON.wide[1]);
+  // Log: the first hour takes more of the growth than the next 23.
   assert.ok(beaconHeight(HOUR) - beaconHeight(0) > beaconHeight(24 * HOUR) - beaconHeight(HOUR));
-  // Two crits ten minutes and an hour old are visibly different (not twins).
-  assert.ok(beaconHeight(HOUR) / beaconHeight(10 * MIN) > 1.3);
-  assert.equal(beaconHeight(HOUR, 'calm'), 0);
-  assert.equal(beaconHeight(HOUR, 'warn'), 0);
-  assert.equal(beaconHeight(HOUR, 'low'), 0);
-  assert.equal(beaconHeight(NaN), 0);
-  assert.equal(beaconHeight(-5), BEACON.low, 'a clock a hair ahead is just begun');
+  // Two crits ten minutes and a day old are visibly different (not twins): taller and wider.
+  assert.ok(beaconHeight(24 * HOUR) - beaconHeight(10 * MIN) > 0.08);
+  assert.ok(beaconWidth(24 * HOUR) / beaconWidth(10 * MIN) > 1.5);
+});
+
+test('beaconScale: a height lands its share of the frame above its base on screen, never past the room', () => {
+  const shot = { pos: { x: 0, y: 6000, z: 4800 }, look: { x: 0, y: 0, z: 0 } };
+  for (const base of [{ x: 0, y: 0, z: 0 }, { x: -1800, y: 40, z: 900 }, { x: 1500, y: -30, z: -400 }]) {
+    const sc = beaconScale(shot, base, FOV);
+    const span = (h) => (ndcOf(shot, { ...base, y: base.y + h }, FOV, 16 / 9).y - ndcOf(shot, base, FOV, 16 / 9).y) / 2;
+    assert.ok(Math.abs(span(sc.rise(BEACON.floor)) - BEACON.floor) < 1e-9, 'a quarter of the frame');
+    assert.ok(Math.abs(span(sc.rise(0.1)) - 0.1) < 1e-9);
+    assert.equal(sc.rise(0), 0);
+    assert.ok(sc.rise(0.4) > sc.rise(0.2));
+    // Its width is its share of the frame's height at its depth.
+    const z = Math.hypot(base.x - shot.pos.x, base.y - shot.pos.y, base.z - shot.pos.z);
+    assert.ok(sc.across(0.02) > 0 && sc.across(0.02) < 0.02 * 2 * z * Math.tan((FOV * Math.PI) / 360) * 1.001);
+  }
+  // Near the frame's top the tip stops at the room; a base above it gets nothing.
+  const high = { x: 0, y: 0, z: -3000 }; // ndc y 0.64: a quarter of the frame would pass the room
+  const sc = beaconScale(shot, high, FOV);
+  const tip = ndcOf(shot, { ...high, y: sc.rise(0.9) }, FOV, 16 / 9).y;
+  assert.ok(Math.abs(tip - BEACON.room) < 1e-9, `stops at the room: ${tip}`);
+  assert.equal(beaconScale(shot, high, FOV, sc.ndc0 - 0.01).rise(0.3), 0);
+  assert.equal(beaconScale(shot, { x: 0, y: 9000, z: 9000 }, FOV), null, 'behind the camera');
+});
+
+test('beaconNear: full until it looks much wider than at the overview, then eased out', () => {
+  assert.equal(beaconNear(1), 1);
+  assert.equal(beaconNear(BEACON.near[0]), 1);
+  assert.equal(beaconNear(BEACON.near[1]), 0);
+  assert.equal(beaconNear(50), 0);
+  assert.equal(beaconNear(NaN), 1);
+  for (let r = 1; r < 4; r += 0.1) assert.ok(beaconNear(r + 0.1) <= beaconNear(r));
+});
+
+test('beamProfile: full at the foot, gone at the tip over its top fifth, smooth; the core is brightest at the foot', () => {
+  assert.equal(beamProfile(0), 1);
+  assert.equal(beamProfile(1), 0, 'no flat end at the tip');
+  assert.ok(BEACON.fade >= 0.2);
+  assert.ok(beamProfile(1 - BEACON.fade) > 0.5, 'the body is still strong where the fade begins');
+  for (let v = 0.01; v <= 1; v += 0.01) assert.ok(beamProfile(v) <= beamProfile(v - 0.01) + 1e-12, `falls: ${v}`);
+  // No step where the fade begins.
+  const e = 1 - BEACON.fade;
+  assert.ok(Math.abs(beamProfile(e - 1e-6) - beamProfile(e + 1e-6)) < 1e-4);
+  assert.ok(beamProfile(0.99) < 0.01);
+  assert.equal(coreProfile(0), 1);
+  assert.equal(coreProfile(1), 0);
+  for (let v = 0.01; v <= 1; v += 0.01) assert.ok(coreProfile(v) <= coreProfile(v - 0.01) + 1e-12);
 });
 
 /** `model()` with storage (hv2) and nas (remote) in crit, each with the events that began it. */
@@ -582,6 +636,7 @@ test('beaconAt: rises eased from the plane, sinks when the crit clears, at once 
   assert.equal(beaconAt(b, 1000 + 5 * BEACON.riseMs).rise, 1);
   assert.equal(beaconAt(b, 1000, BEACON, true).rise, 1, 'still: stands at once');
   assert.equal(beaconAt(b, HOUR).height, beaconHeight(HOUR), 'its height is its age');
+  assert.equal(beaconAt(b, HOUR).width, beaconWidth(HOUR), 'and so is its width');
   const gone = { ...b, crit: false, t0: 5000, k0: 1 };
   assert.equal(beaconAt(gone, 5000).rise, 1);
   assert.equal(beaconAt(gone, 5000 + BEACON.riseMs).rise, 0);
@@ -593,9 +648,28 @@ function beaconParts(galaxy) {
   while (root.parent) root = root.parent;
   return {
     pillars: root.children.filter((o) => o.isMesh && o.name === 'fx-beacon'),
+    cores: root.children.filter((o) => o.isMesh && o.name === 'fx-beacon-core'),
     tips: root.children.filter((o) => o.isSprite && o.name === 'fx-beacon-tip'),
   };
 }
+
+/** How much of the frame's height `p` (a pillar) spans seen from the overview, and its foot's ndc y. */
+function overviewSpan(galaxy, p) {
+  const shot = overviewShot(galaxy.world.sites);
+  const foot = ndcOf(shot, p.position, FOV, 16 / 9).y;
+  const top = ndcOf(shot, { x: p.position.x, y: p.position.y + p.scale.y, z: p.position.z }, FOV, 16 / 9).y;
+  return { span: (top - foot) / 2, foot, top };
+}
+
+/** Puts the scene's camera at the overview (the tests' scene never moves it itself). */
+function toOverview(galaxy) {
+  const { pos, look } = overviewShot(galaxy.world.sites);
+  galaxy.camera.position.set(pos.x, pos.y, pos.z);
+  galaxy.camera.lookAt(look.x, look.y, look.z);
+}
+
+/** The share of the frame a beacon `share` tall should span from `foot` (the room caps it). */
+const wantSpan = (share, foot) => Math.min(share, (BEACON.room - foot) / 2);
 
 test('without fx=beacon the scene makes no pillar and ignores crit ages', () => {
   const { galaxy, at } = sceneAt({ fx: new Set(['lanes']) });
@@ -611,6 +685,7 @@ test('with fx=beacon each crit cluster stands a pillar as tall as its crit is ol
   const { galaxy, at } = sceneAt({ fx: new Set(['beacon']) });
   const m = critModel();
   galaxy.update(m);
+  toOverview(galaxy);
   const { pillars, tips } = beaconParts(galaxy);
   assert.equal(pillars.length, BEACON.max, 'one pool, made once');
   galaxy.setCritAges(critAges(m, galaxy.world.byId.keys()));
@@ -622,27 +697,54 @@ test('with fx=beacon each crit cluster stands a pillar as tall as its crit is ol
     return shown().find((p) => p.position.x === h.x && p.position.z === h.z);
   };
   assert.ok(on('hv2') && on('remote') && !on('hv1'));
-  const hv2 = on('hv2').scale.y, remote = on('remote').scale.y;
-  assert.ok(Math.abs(hv2 - beaconHeight(HOUR)) < 5, `an hour of crit: ${hv2}`);
-  assert.ok(Math.abs(remote - beaconHeight(5 * MIN)) < 5, `five minutes: ${remote}`);
-  assert.ok(hv2 > remote * 1.3, 'the older crit stands taller');
-  // Each tip sits on its pillar's top, in the crit hue like the pillar.
+  const hv2 = on('hv2').scale.y;
+  // Sized in the overview's screen: as tall as its age says, in shares of the frame.
+  const sHv2 = overviewSpan(galaxy, on('hv2')), sRemote = overviewSpan(galaxy, on('remote'));
+  assert.ok(Math.abs(sHv2.span - wantSpan(beaconHeight(HOUR), sHv2.foot)) < 1e-3, `an hour of crit: ${sHv2.span}`);
+  assert.ok(Math.abs(sRemote.span - wantSpan(beaconHeight(5 * MIN), sRemote.foot)) < 1e-3, `five minutes: ${sRemote.span}`);
+  assert.ok(sRemote.span >= Math.min(BEACON.floor, (BEACON.room - sRemote.foot) / 2) - 1e-3, 'a young crit already stands the floor');
+  assert.ok(sHv2.top <= BEACON.room + 1e-9 && sRemote.top <= BEACON.room + 1e-9, 'short of the frame\'s top');
+  assert.ok(on('hv2').scale.x > on('remote').scale.x, 'the older crit is wider');
+  // Each tip sits on its pillar's top; each pillar has its white core, as tall, narrower.
+  const { cores } = beaconParts(galaxy);
   for (const p of shown()) {
     const tip = tips.find((t) => t.visible && t.position.x === p.position.x && t.position.z === p.position.z);
     assert.ok(Math.abs(tip.position.y - (p.position.y + p.scale.y)) < 1e-6);
     assert.ok(p.material.opacity <= BEACON.opacity + 1e-9);
+    const core = cores.find((c) => c.visible && c.position.x === p.position.x && c.position.z === p.position.z);
+    assert.ok(core, 'a core in every pillar');
+    assert.equal(core.scale.y, p.scale.y);
+    assert.ok(Math.abs(core.scale.x - p.scale.x * BEACON.core) < 1e-9);
+    assert.ok(core.material.opacity > p.material.opacity * 0.9, 'the core is the brightest part');
+    // White-hot: the text's white (--text-1), no hue, so it carries in greyscale and without red.
+    const { r, g, b } = core.material.color;
+    assert.ok(Math.min(r, g, b) > 0.8 && Math.max(r, g, b) - Math.min(r, g, b) < 0.05, `white core: ${r} ${g} ${b}`);
+    assert.ok(p.material.color.r > p.material.color.g * 2, 'the sheath is the crit hue');
   }
+  // A camera close by (held in a system next to it): the pillar sized for the
+  // overview fades rather than stand as a red wall across the shot.
+  const far = on('remote').material.opacity;
+  const rh = galaxy.world.byId.get('remote').home;
+  galaxy.camera.position.set(rh.x + 300, rh.y + 400, rh.z + 300);
+  galaxy.camera.lookAt(rh.x, rh.y, rh.z);
+  at(1000 + BEACON.riseMs * 2 + 8);
+  assert.ok(far > 0.3, `at the overview it stands: ${far}`);
+  assert.ok(!on('remote'), 'close by it is gone');
+  toOverview(galaxy);
+  at(1000 + BEACON.riseMs * 2 + 12);
+  assert.ok(on('remote'), 'back at the overview it stands again');
   // A crit that begins while the page looks rises from the plane, not at once
   // (those already there on the first frame stand: they did not just begin).
   const fresh = sceneAt({ fx: new Set(['beacon']) });
   fresh.galaxy.update(model());
+  toOverview(fresh.galaxy);
   fresh.at(1000);
   assert.equal(beaconParts(fresh.galaxy).pillars.filter((p) => p.visible).length, 0, 'calm: none');
   fresh.galaxy.update(m);
   fresh.at(1016);
   fresh.at(1016 + BEACON.riseMs * 0.25);
   const rising = beaconParts(fresh.galaxy).pillars.filter((p) => p.visible);
-  assert.ok(rising.length === 2 && rising.every((p) => p.scale.y < beaconHeight(0)), 'still rising');
+  assert.ok(rising.length === 2 && rising.every((p) => overviewSpan(fresh.galaxy, p).span < BEACON.floor * 0.9), 'still rising');
   // The site opens: the pillar dims, its system is the loud thing.
   const open0 = on('hv2').material.opacity;
   galaxy.setOpen('hv2', 1);
@@ -667,10 +769,18 @@ test('with fx=beacon a crit with no event is dated from when the page first saw 
   const { galaxy, at } = sceneAt({ fx: new Set(['beacon']), still: true });
   const m = critModel({ events: [] });
   galaxy.update(m);
+  toOverview(galaxy);
   galaxy.setCritAges(critAges(m, galaxy.world.byId.keys()));
   at(1000);
-  const tall = () => Math.max(...beaconParts(galaxy).pillars.filter((p) => p.visible).map((p) => p.scale.y));
-  assert.ok(Math.abs(tall() - BEACON.low) < 1e-6, 'still: stands at once, just begun');
+  const hv2 = () => {
+    const h = galaxy.world.byId.get('hv2').home;
+    return beaconParts(galaxy).pillars.find((p) => p.visible && p.position.x === h.x && p.position.z === h.z);
+  };
+  const s0 = overviewSpan(galaxy, hv2());
+  assert.ok(Math.abs(s0.span - wantSpan(BEACON.floor, s0.foot)) < 1e-3, `still: stands at once, just begun: ${s0.span}`);
+  const w0 = hv2().scale.x;
   at(1000 + HOUR);
-  assert.ok(Math.abs(tall() - beaconHeight(HOUR)) < 1e-6, 'an hour later, an hour tall');
+  const s1 = overviewSpan(galaxy, hv2());
+  assert.ok(Math.abs(s1.span - wantSpan(beaconHeight(HOUR), s1.foot)) < 1e-3, 'an hour later, an hour tall');
+  assert.ok(hv2().scale.x > w0, 'and wider');
 });

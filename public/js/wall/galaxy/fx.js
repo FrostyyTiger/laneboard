@@ -25,7 +25,10 @@
 // scale, capped), so two crits are no longer twins: the tall one has been
 // burning for hours, the short one just began. Calm and warn get none. It
 // grows only as the crit ages (a motion nobody sees), rises once when the
-// crit starts and sinks when it clears.
+// crit starts and sinks when it clears. Night 3 T9 finished it: sized in
+// the overview's screen (a young crit already stands a quarter of the
+// frame), a white-hot core at its foot, wider as well as taller with age,
+// its sheath fading to nothing at the top.
 
 import { hash } from './layout.js';
 import { toneOf } from './palette.js';
@@ -379,30 +382,120 @@ export function twinkleAt(tw, now, timing = TWINKLE, still = false) {
 }
 
 /**
- * The beacon's scale and look: a crit that just began stands `low` (world
- * units; a site's star is 24), one `capMs` old or more `high`, by log of
- * its age in `unitMs` (1 min 285, 10 min 444, 1 h 604, 6 h 771, 1 d 900).
- * At the overview `low` is about a sun's height on screen, `high` stops
- * short of the frame's top from the highest site. It rises over and
- * sinks over `riseMs`; `width` is the pillar's, `top` the light at its tip
- * (which marks the height, so two pillars compare at a glance). `opacity`
- * is its core's peak, `held` its share while its system is open (the
- * system is the loud thing then). At most `max` at once.
+ * The beacon's scale and look, in the overview's screen (night 3 T9): a
+ * crit that just began stands `floor` of the frame's height (seen from the
+ * overview shot, so a young crit shows at once from 3 m), one `capMs` old
+ * or more `top`, by log of its age in `unitMs` (1 min 0.29, 10 min 0.33,
+ * 1 h 0.36, 6 h 0.40, 1 d 0.42); its tip never rises past `room` (ndc y) so
+ * it stops short of the frame's top. Its width grows with its age too, from
+ * `wide[0]` to `wide[1]` of the frame's height, so an old crit is a column
+ * and a new one a thread. `core` is the white-hot core's share of the
+ * width (it carries in greyscale and without red: it is the brightest
+ * line on screen), `fade` the top share over which the sheath goes to
+ * nothing (no flat end for the plate to cut). It rises over and sinks over
+ * `riseMs`; `tip` is the soft light at its top (world units, it marks the
+ * height so two pillars compare at a glance). `opacity` is the sheath's
+ * peak, `coreOpacity` the core's, `held` their share while its system is
+ * open (the system is the loud thing then). `near` fades it while the
+ * camera is close (beaconNear). At most `max` at once.
  */
 export const BEACON = Object.freeze({
-  unitMs: 60_000, capMs: 24 * 3_600_000, low: 220, high: 900,
-  riseMs: 1400, width: 44, top: 120, opacity: 0.8, held: 0.3, max: 8,
+  unitMs: 60_000, capMs: 24 * 3_600_000, floor: 0.25, top: 0.42, room: 0.9,
+  wide: Object.freeze([0.016, 0.036]), core: 0.3, fade: 0.2,
+  riseMs: 1400, tip: 90, opacity: 0.75, coreOpacity: 0.9, held: 0.3, max: 8,
+  near: Object.freeze([1.8, 3.5]),
 });
+
+/** How far a crit `ageMs` old has grown, 0 (just began) to 1 (`capMs` or older), by log. */
+function beaconGrowth(ageMs, timing = BEACON) {
+  const k = Math.log1p(Math.max(0, ageMs) / timing.unitMs) / Math.log1p(timing.capMs / timing.unitMs);
+  return Math.min(1, k);
+}
 
 /**
  * How tall a beacon stands for a cluster whose worst tone is `tone`, in
- * crit for `ageMs`: 0 for anything but crit (or no age); else from `low`
- * (just began) up to `high` at `capMs`, by log, never past it.
+ * crit for `ageMs`, as a share of the frame's height at the overview: 0
+ * for anything but crit (or no age); else from `floor` (just began) up to
+ * `top` at `capMs`, by log, never past it.
  */
 export function beaconHeight(ageMs, tone = 'crit', timing = BEACON) {
   if (tone !== 'crit' || !Number.isFinite(ageMs)) return 0;
-  const k = Math.log1p(Math.max(0, ageMs) / timing.unitMs) / Math.log1p(timing.capMs / timing.unitMs);
-  return timing.low + (timing.high - timing.low) * Math.min(1, k);
+  return timing.floor + (timing.top - timing.floor) * beaconGrowth(ageMs, timing);
+}
+
+/** How wide a beacon is (its sheath, a share of the frame's height), as beaconHeight: grows with age. */
+export function beaconWidth(ageMs, tone = 'crit', timing = BEACON) {
+  if (tone !== 'crit' || !Number.isFinite(ageMs)) return 0;
+  const [lo, hi] = timing.wide;
+  return lo + (hi - lo) * beaconGrowth(ageMs, timing);
+}
+
+const vsub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+const vdot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const vnorm = (a) => { const l = Math.hypot(a.x, a.y, a.z) || 1; return { x: a.x / l, y: a.y / l, z: a.z / l }; };
+
+/**
+ * A beacon on `base` (`{ x, y, z }`, its star) in world units, seen from
+ * `shot` (`{ pos, look }`, the overview) with vertical field of view `fov`
+ * (degrees): `rise(share)` is the height whose tip lands `share` of the
+ * frame's height above the base on screen (straight up the plane's normal,
+ * so foreshortened by the camera's pitch), never past `room` (ndc y, 0
+ * when the base is already there); `across(share)` the width that is
+ * `share` of the frame's height at the base's depth. Closed form, cheap
+ * enough for every frame. Null when the base is behind the camera.
+ */
+export function beaconScale(shot, base, fov, room = BEACON.room) {
+  const f = vnorm(vsub(shot.look, shot.pos));
+  const r = vnorm({ x: -f.z, y: 0, z: f.x }); // f × up
+  const u = { x: r.y * f.z - r.z * f.y, y: r.z * f.x - r.x * f.z, z: r.x * f.y - r.y * f.x };
+  const d = vsub(base, shot.pos);
+  const z0 = vdot(d, f), y0 = vdot(d, u);
+  if (!(z0 > 0)) return null;
+  const t = Math.tan((fov * Math.PI) / 360);
+  const ndc0 = y0 / (z0 * t);
+  // The tip (base + h up) at ndc y T: y0 + h u.y = T t (z0 + h f.y).
+  const rise = (share) => {
+    const T = Math.min(ndc0 + 2 * Math.max(0, share), room);
+    const den = u.y - T * t * f.y;
+    if (!(T > ndc0) || !(den > 0)) return 0;
+    return Math.max(0, (T * t * z0 - y0) / den);
+  };
+  const across = (share) => share * 2 * z0 * t;
+  return { rise, across, ndc0 };
+}
+
+/**
+ * How strong a beacon stays when it looks `ratio` times as wide on screen
+ * as it does at the overview (the camera is close: held in a system near
+ * it): 1 up to `near[0]`, eased to 0 at `near[1]`, so a pillar sized for
+ * the overview never stands as a red wall across a close shot.
+ */
+export function beaconNear(ratio, timing = BEACON) {
+  const [a, b] = timing.near;
+  if (!(ratio > a)) return 1;
+  if (ratio >= b) return 0;
+  const k = (ratio - a) / (b - a);
+  return 1 - k * k * (3 - 2 * k);
+}
+
+/**
+ * The sheath's strength up its height, `v` 0 (foot) to 1 (tip): full at
+ * the foot, easing down, then gone over the top `fade` (smooth, so no
+ * edge: a plate over it never cuts a flat end).
+ */
+export function beamProfile(v, timing = BEACON) {
+  const x = Math.max(0, Math.min(1, v));
+  const body = 1 - 0.45 * (x / (1 - timing.fade));
+  if (x <= 1 - timing.fade) return body;
+  const k = (1 - x) / timing.fade; // 1 at the fade's start, 0 at the tip
+  return 0.55 * k * k * (3 - 2 * k);
+}
+
+/** The white-hot core's strength up the pillar: brightest at its foot, gone by two thirds of the way up. */
+export function coreProfile(v) {
+  const x = Math.max(0, Math.min(1, v)) / 0.66;
+  if (x >= 1) return 0;
+  return (1 - x) ** 1.5;
 }
 
 /**
@@ -442,11 +535,13 @@ export function critAges(model, sites) {
  * `still`), `height` its full height for its age. `b` is the scene's
  * `{ from, crit, t0 }`: `from` when its crit began (page time), `crit`
  * whether it is in crit now, `t0` when that last changed, `k0` its rise then.
+ * `height` and `width` are its full size for its age (shares of the frame,
+ * beaconHeight and beaconWidth).
  */
 export function beaconAt(b, now, timing = BEACON, still = false) {
   const to = b.crit ? 1 : 0;
   const p = still ? 1 : Math.max(0, Math.min(1, (now - b.t0) / timing.riseMs));
   const e = p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2;
   const rise = (b.k0 ?? 0) + (to - (b.k0 ?? 0)) * e;
-  return { rise, height: beaconHeight(now - b.from, 'crit', timing) };
+  return { rise, height: beaconHeight(now - b.from, 'crit', timing), width: beaconWidth(now - b.from, 'crit', timing) };
 }

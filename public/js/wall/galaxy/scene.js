@@ -26,7 +26,7 @@ import { createStageSize } from './stage.js';
 import { armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
 import {
-  BEACON, COMETS, LANES, TWINKLE, beaconAt, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles,
+  BEACON, COMETS, LANES, TWINKLE, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles,
   twinkleAt,
 } from './fx.js';
 
@@ -281,26 +281,26 @@ function markTexture(doc, shape) {
 }
 
 /**
- * A beacon's pillar (fx=beacon): a thin bright core in a soft sheath, full
- * at its foot and thinning upwards (never to nothing: its tip is its height).
+ * A beacon's pillar (fx=beacon): a soft band across (`peak` its middle's
+ * strength), up its height by `profile` (fx.js beamProfile for the sheath,
+ * coreProfile for the white-hot core). Canvas top is the pillar's tip.
  */
-function beamTexture(doc) {
+function beamTexture(doc, profile, peak) {
   const c = doc.createElement('canvas');
   c.width = 32;
   c.height = 128;
   const x = c.getContext('2d');
   const g = x.createLinearGradient(0, 0, 32, 0);
   g.addColorStop(0, 'rgb(255 255 255 / 0)');
-  g.addColorStop(0.3, 'rgb(255 255 255 / 0.12)');
-  g.addColorStop(0.5, 'rgb(255 255 255 / 1)');
-  g.addColorStop(0.7, 'rgb(255 255 255 / 0.12)');
+  g.addColorStop(0.3, `rgb(255 255 255 / ${0.25 * peak})`);
+  g.addColorStop(0.5, `rgb(255 255 255 / ${peak})`);
+  g.addColorStop(0.7, `rgb(255 255 255 / ${0.25 * peak})`);
   g.addColorStop(1, 'rgb(255 255 255 / 0)');
   x.fillStyle = g;
   x.fillRect(0, 0, 32, 128);
   x.globalCompositeOperation = 'destination-in';
   const v = x.createLinearGradient(0, 0, 0, 128);
-  v.addColorStop(0, 'rgb(0 0 0 / 0.35)');
-  v.addColorStop(1, 'rgb(0 0 0 / 1)');
+  for (let i = 0; i <= 16; i++) v.addColorStop(i / 16, `rgb(0 0 0 / ${profile(1 - i / 16).toFixed(3)})`);
   x.fillStyle = v;
   x.fillRect(0, 0, 32, 128);
   return new THREE.CanvasTexture(c);
@@ -1079,32 +1079,44 @@ export function createGalaxyScene(canvas, {
     }
   };
 
-  // --- fx=beacon (T21, fx.js): how long a crit has lasted ------------------
-  // One pillar and one tip light per crit cluster, from a pool made once.
-  // A cluster's crit began at the older of when the page saw its nebula
-  // turn crit (`s.since`) and what the model's events say (`setCritAges`).
-  // The pillar turns round its own axis to face the camera, so it is a
-  // line of light from any side; it fades to `held` while its system is
-  // open. Under reduced motion it stands and goes at once; so does every
-  // crit already there when the page first draws (it did not just begin).
+  // --- fx=beacon (T21, night 3 T9; fx.js): how long a crit has lasted -----
+  // One pillar (a crit sheath and a white-hot core) and one tip light per
+  // crit cluster, from a pool made once. A cluster's crit began at the
+  // older of when the page saw its nebula turn crit (`s.since`) and what
+  // the model's events say (`setCritAges`). Its size is set in the
+  // overview's screen (fx.js beaconScale from overviewShot): the same world
+  // size in every shot, so it stands as tall over an open system as the
+  // overview made it, and fades once the camera is so close it looks much
+  // wider than there (fx.js beaconNear). The pillar turns round its own axis to face the
+  // camera, so it is a line of light from any side; it fades to `held`
+  // while its system is open. Under reduced motion it stands and goes at
+  // once; so does every crit already there when the page first draws (it
+  // did not just begin).
   const beacons = new Map(); // site id → { from, crit, t0, k0 } (fx.js beaconAt)
   let critFrom = new Map(), beamsSeen = false;
+  let beamScales = { version: -1, of: new Map() }; // site id → beaconScale, per world
   const pillars = [];
   if (fx?.has('beacon')) {
-    const beamTex = keep(beamTexture(doc));
+    const sheathTex = keep(beamTexture(doc, beamProfile, 0.7));
+    const coreTex = keep(beamTexture(doc, coreProfile, 1));
     const beamGeo = keep(new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0));
+    const beamMat = (map, color) => keep(new THREE.MeshBasicMaterial({
+      map, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+    }));
     for (let i = 0; i < BEACON.max; i++) {
-      const pillar = new THREE.Mesh(beamGeo, keep(new THREE.MeshBasicMaterial({
-        map: beamTex, color: tone.crit, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
-      })));
+      const pillar = new THREE.Mesh(beamGeo, beamMat(sheathTex, tone.crit));
       pillar.name = 'fx-beacon';
+      // The core is the text's white (palette.sun, --text-1): bright in greyscale and without red.
+      const core = new THREE.Mesh(beamGeo, beamMat(coreTex, white));
+      core.name = 'fx-beacon-core';
+      core.renderOrder = 1;
       const tip = new THREE.Sprite(keep(new THREE.SpriteMaterial({
         map: glowTex, color: tone.crit, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
       })));
       tip.name = 'fx-beacon-tip';
-      pillar.visible = tip.visible = false;
-      pillars.push({ pillar, tip });
-      scene.add(pillar, tip);
+      pillar.visible = core.visible = tip.visible = false;
+      pillars.push({ pillar, core, tip });
+      scene.add(pillar, core, tip);
     }
   }
   /** How old each crit is by the model (fx.js `critAges`: site id → ms); ignored unless `fx=beacon`. */
@@ -1113,8 +1125,18 @@ export function createGalaxyScene(canvas, {
     const now = clock();
     critFrom = new Map([...(ages ?? [])].map(([id, ms]) => [id, now - ms]));
   };
+  /** A site's beaconScale from the overview (made once per world). */
+  const beamScaleOf = (s) => {
+    if (beamScales.version !== world.version) beamScales = { version: world.version, of: new Map() };
+    let sc = beamScales.of.get(s.id);
+    if (sc === undefined) {
+      sc = beaconScale(overviewShot(world.sites.filter((w) => !w.gone)), s.home, FOV);
+      beamScales.of.set(s.id, sc);
+    }
+    return sc;
+  };
   const drawBeacons = (now) => {
-    for (const { pillar, tip } of pillars) pillar.visible = tip.visible = false;
+    for (const { pillar, core, tip } of pillars) pillar.visible = core.visible = tip.visible = false;
     if (!world) return;
     for (const s of world.sites) {
       const crit = !s.gone && s.nebula?.tone === 'crit';
@@ -1130,20 +1152,31 @@ export function createGalaxyScene(canvas, {
       const s = world.byId.get(id);
       const at = beaconAt(b, now, BEACON, still);
       if (!s || (!b.crit && at.rise <= 0.001)) { beacons.delete(id); continue; }
+      const sc = beamScaleOf(s);
+      if (!sc) continue;
       const slot = pillars[i];
       if (!slot) break;
       i += 1;
-      const h = Math.max(1e-3, at.height * at.rise * s.alive);
-      const k = Math.min(1, at.rise * 2) * s.alive * (1 - (1 - BEACON.held) * ease(s.unfold));
-      const { pillar, tip } = slot;
-      pillar.position.set(s.home.x, s.home.y, s.home.z);
-      pillar.rotation.set(0, Math.atan2(camera.position.x - s.home.x, camera.position.z - s.home.z), 0);
-      pillar.scale.set(BEACON.width, h, 1);
+      const h = Math.max(1e-3, sc.rise(at.height) * at.rise * s.alive);
+      const w = Math.max(1e-3, sc.across(at.width));
+      // Close by, it looks wider than at the overview: fade it (beaconNear).
+      const seen = Math.hypot(camera.position.x - s.home.x, camera.position.y - s.home.y - h / 2, camera.position.z - s.home.z);
+      const ratio = w / Math.max(1, 2 * seen * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1e-6, at.width);
+      const k = Math.min(1, at.rise * 2) * s.alive * (1 - (1 - BEACON.held) * ease(s.unfold)) * beaconNear(ratio);
+      const { pillar, core, tip } = slot;
+      const turn = Math.atan2(camera.position.x - s.home.x, camera.position.z - s.home.z);
+      for (const m of [pillar, core]) {
+        m.position.set(s.home.x, s.home.y, s.home.z);
+        m.rotation.set(0, turn, 0);
+      }
+      pillar.scale.set(w, h, 1);
       pillar.material.opacity = BEACON.opacity * k;
+      core.scale.set(w * BEACON.core, h, 1);
+      core.material.opacity = BEACON.coreOpacity * k;
       tip.position.set(s.home.x, s.home.y + h, s.home.z);
-      tip.scale.setScalar(BEACON.top);
-      tip.material.opacity = BEACON.opacity * k;
-      pillar.visible = tip.visible = pillar.material.opacity > 0.005;
+      tip.scale.setScalar(BEACON.tip);
+      tip.material.opacity = BEACON.opacity * 0.6 * k;
+      pillar.visible = core.visible = tip.visible = pillar.material.opacity > 0.005;
     }
   };
 
