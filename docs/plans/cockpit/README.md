@@ -197,7 +197,36 @@ audit log. No hidden timers.
 - **Demo**: the demo shows the cockpit with a recorded conversation that flies the demo fleet.
   This doubles as the video's second half.
 
-## 6. Open questions
+## 6. How the loop builds this
+
+Loops get details right because they take many short rounds and get reviewed; they lose details
+in two ways: choices a builder makes silently, and intent that was never written down. The method
+below closes both. `spec-input.md` holds the owner's intent from the planning conversation.
+
+1. **Spec night (no code).** The loop turns this plan and `spec-input.md` into
+   `docs/plans/cockpit/spec/`: concrete scenarios ("07:00, the owner taps Talk and says 'how did the
+   night go?' → words appear live → release → text reply within N s, the map flies to the stuck run,
+   a card appears"), edge cases, and rough screen sketches at the owner's screen size. It ends with
+   a short **question list for the owner** (`spec/QUESTIONS.md`), seeded from `spec-input.md` §7.
+2. **Owner Q&A (morning, ~15 min).** The owner answers; answers go into the spec.
+3. **Decision rule for build nights.** Small, reversible choices: make them and log them in
+   `spec/DECISIONS.md` (the owner may overrule). Taste or one-way choices: stop, add to
+   `QUESTIONS.md`, move on to another task.
+4. **Scenarios become tests.** Each scenario is an acceptance test (Playwright against the demo
+   setup). A build night continues until its scenarios pass; a detail in a test cannot get lost.
+5. **An owner reviewer.** Besides the stranger, designer and operator reviewers
+   (`docs/plans/runs/README.md` §7): one that uses the cockpit as the owner would, touch only, at
+   the owner's screen size, in the owner's words, judged by "does this help me see my fleet?".
+6. **One slice per night, each usable.** C1, then C2, then C3, and so on. Every morning there is
+   something to try on the real screen.
+7. **Stand-ins for real hardware.** The loop's VM has no LAN: no screen, no microphone, no GPU, no
+   fleet. It builds against stand-ins: a fake speech service that replays recorded speech with
+   timed partials, a fake agent that replays scripted turns and tool calls, and the demo fleet.
+   A normal session then wires the real services. The stand-ins stay: they are the demo.
+8. **Use, then the next spec.** After each slice the owner uses it for a few days; what bothers
+   them feeds the next spec night.
+
+## 7. Open questions
 
 1. Streaming speech-to-text engine for the owner's GPU: which model and server give live partials
    with good German and English? (Research before C2.)
