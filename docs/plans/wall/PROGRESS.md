@@ -196,7 +196,7 @@ Notes for every builder round (planner, round 1):
 - [x] Q10 → research/Q10-camera-paths.md (thin: no comfort threshold found). Camera paths in a 3D map: how games and data tools fly between points without passing through
   obstacles (the sun, other clusters), easing and duration rules, and how slow an orbit drift can be and
   still read as depth without causing discomfort — for T4 and the B polish (camera paths)
-- [ ] Q11 Cheap glow and nebulae in three.js without a post-processing pass: additive sprites and
+- [x] Q11 → research/Q11-cheap-glow-nebulae-storm.md (thin: no iGPU measurements; skip bloom, use baked additive sprites). Cheap glow and nebulae in three.js without a post-processing pass: additive sprites and
   billboards, noise in a fragment shader, the cost of a bloom pass on an integrated GPU, and how to make a
   "storm" (swirl, lightning flicker) cheaply — for T3, Later (`fx=storm`)
 
