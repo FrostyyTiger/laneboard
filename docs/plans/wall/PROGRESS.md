@@ -519,10 +519,22 @@ Notes for every builder round (planner, round 1):
   facts. Seen: the short plate's bottom-right bracket sits a name's height below the name (plateHeight's
   bottom padding, caption.js fenced); it reads as a frame, left as it is. A demo fleet left by an earlier
   round was still holding :7795 (started 13:42); this round used it and did not stop it.
-- [ ] T26 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 5) Dust looks exactly like data: grains as
+- [x] T26 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 5) Dust looks exactly like data: grains as
   white and as large as the `apps-*` dots. Draw dust darker than any node mark (below `--text-3`), point size
   attenuated by distance and capped (~2 px) — done when: a test checks the dust colour is darker than the
-  dimmest node colour in `paletteFrom` and the size cap, and `?at=hv2&open=1` shows no grain as bright as a dot.
+  dimmest node colour in `paletteFrom` and the size cap, and `?at=hv2&open=1` shows no grain as bright as a dot. (commit 1dc9e7a)
+  The dust was text-2, brighter than every node, and unbounded close up. `palette.js DUST_INK` (0.4 by the
+  sun, 0.68 at the rim, from text-3 toward the ground): luminance 0.14 under the Wall tokens against crit
+  0.21, the dimmest node colour today (T33), calm 0.41. `scene.js DUST_LOOK` caps `gl_PointSize` at 3 css px
+  after the attenuation (a `dustCap` uniform at `min(2, dpr)`; T28 must update it with the ratio). Tests: the
+  dust below every node colour by a clear step, wall tokens and fallback (palette); the compiled shader caps
+  after the attenuation, the cap follows dpr 1/2/3 (budget). Stills `$RUN_DIR/shots/r52-before-hv2` vs
+  `r52-still-hv2` (`?at=hv2&open=1&quality=0`): the grains that were as big and white as `cache`'s dot are
+  specks now; `r52-before-overview` vs `r52-still-overview`: the band is fainter but its arms still read
+  (first try at 0.45 dimmed it too far). Filmstrip `$RUN_DIR/shots/r52-galaxy/` (`?demo=1&quality=0`, 4x,
+  0 console errors, 1.4 fps is SwiftShader). Seen, not this task: the red/yellow banner flip (T30) and, in
+  `r52-still-overview`, CLOUD's name hidden behind the fleet block. The demo fleet on :7795 (started 13:42 by
+  an earlier round) was used and left running.
 - [ ] T27 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 1) The 19 nebula lobes and landing planes are
   `transparent` + `DoubleSide`, so three rebuilds their shader state twice per frame (~2.4 ms/frame at 4x, 56 KB
   of allocation): add `forceSinglePass: true` to both material constructors (`scene.js` lobes and system plane)
