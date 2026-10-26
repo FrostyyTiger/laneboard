@@ -16,7 +16,9 @@
 //
 // Type (r8-film-ui 1): sites and the sun in the label face, caps, at the
 // Wall's site step (type.js `stepsFor`); planets and dots in mono lowercase
-// at the room step. No fourth step.
+// at the room step. No fourth step. The one exception (r21-operator 8): the
+// thing the target lock holds, while in trouble, is named like a site, caps
+// at the site step, so its own name reads from three metres.
 //
 // `placeLabels`, `candidates`, `dotNamed`, `labelRank`, `labelText` and
 // `labelSize` are pure (test/wall-galaxy-labels.test.mjs); `createLabels`
@@ -63,12 +65,25 @@ export function labelRank(kind, tone) {
 const SHAPE = Object.freeze({ crit: 'square', warn: 'tri', low: 'diamond' });
 const shapeOf = (tone) => (SHAPE[tone] ? GLYPH[SHAPE[tone]] : null);
 
-/** The words of a name in `tone`: sites caps, the rest lowercase; trouble leads with its shape. */
-export function labelText(node, toneIn) {
+/**
+ * The face of a name: 'label' (condensed caps at the site step) for sites,
+ * the sun and the held thing while in trouble (`held`, r21-operator 8),
+ * 'mono' (lowercase at the room step) for the rest.
+ */
+export function labelFace(kind, tone, held = false) {
+  if (kind === 'site' || kind === 'core') return 'label';
+  return held && troubled(tone) ? 'label' : 'mono';
+}
+
+/**
+ * The words of a name in `tone`: in the label face (`face`, by default the
+ * node's own: labelFace) caps, else lowercase; trouble leads with its shape.
+ */
+export function labelText(node, toneIn, faceIn) {
   const tone = toneIn ?? toneOf(node);
   const raw = String(node?.label ?? node?.id ?? '').trim();
-  const big = node?.kind === 'site' || node?.kind === 'core';
-  const word = big ? raw.toUpperCase() : raw.toLowerCase();
+  const face = faceIn ?? labelFace(node?.kind, tone);
+  const word = face === 'label' ? raw.toUpperCase() : raw.toLowerCase();
   const glyph = shapeOf(tone);
   return glyph ? `${glyph} ${word}` : word;
 }
@@ -225,12 +240,12 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
       const tone = toneIn ?? toneOf(node);
       const sp = project(pos, W, H);
       if (!sp || sp.x < -W || sp.x > 2 * W || sp.y < -H || sp.y > 2 * H) return;
-      const big = kind === 'site' || kind === 'core';
-      const face = big ? 'label' : 'mono';
-      const text = labelText(node, tone);
-      const { w: bw, h: bh } = labelSize(text, big ? steps.site : steps.room, face);
+      const isHeld = id === lock?.id;
+      const face = labelFace(kind, tone, isHeld);
+      const text = labelText(node, tone, face);
+      const { w: bw, h: bh } = labelSize(text, face === 'label' ? steps.site : steps.room, face);
       const rank = labelRank(kind, tone);
-      const r = id === lock?.id ? Math.max(radius * sp.unit, lock.r) : radius * sp.unit;
+      const r = isHeld ? Math.max(radius * sp.unit, lock.r) : radius * sp.unit;
       body(id, sp, r);
       items.push({ id, rank, near: r, prefer: last.get(id)?.at, cands: candidates(sp.x, sp.y, r, bw, bh, rank === RANK.trouble) });
       meta.set(id, { text, tone, face, alpha });
@@ -286,8 +301,11 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
 
   return {
     draw,
-    /** The names on screen now: `[{ id, text, tone, box }]`, for tests, stills and the console. */
-    shown: () => [...last].map(([id, { box }]) => ({ id, text: pool.get(id)?.text, tone: pool.get(id)?.tone, box: { ...box } })),
+    /** The names on screen now: `[{ id, text, tone, face, box }]`, for tests, stills and the console. */
+    shown: () => [...last].map(([id, { box }]) => {
+      const p = pool.get(id);
+      return { id, text: p?.text, tone: p?.tone, face: p?.face, box: { ...box } };
+    }),
     destroy: () => { for (const p of pool.values()) p.el.remove(); pool.clear(); },
   };
 }

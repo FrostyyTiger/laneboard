@@ -9,7 +9,7 @@ import path from 'node:path';
 
 import * as THREE from '../public/vendor/three/three.module.js';
 import {
-  placeLabels, candidates, overlaps, boxOf, dotNamed, labelRank, labelText, labelSize,
+  placeLabels, candidates, overlaps, boxOf, dotNamed, labelRank, labelText, labelSize, labelFace,
   createLabels, RANK, DOT_NAMED_PX, OPEN_FADE,
 } from '../public/js/wall/galaxy/labels.js';
 import { galaxyLayout, rng } from '../public/js/wall/galaxy/layout.js';
@@ -189,6 +189,56 @@ test('createLabels: the name of what the lock holds goes outside its shut bracke
   for (const s of shown.filter((x) => x.id === id || x.tone === 'calm')) {
     assert.ok(!overlaps(s.box, ring), `${s.text} clear of the brackets`);
   }
+});
+
+test('labelFace: the held thing in trouble is named like a site, caps at the site step (T22, r21-operator 8)', () => {
+  assert.equal(labelFace('site', 'calm'), 'label');
+  assert.equal(labelFace('core', 'calm'), 'label');
+  assert.equal(labelFace('room', 'crit'), 'mono', 'trouble not held: mono');
+  assert.equal(labelFace('room', 'crit', true), 'label');
+  assert.equal(labelFace('lane', 'warn', true), 'label');
+  assert.equal(labelFace('room', 'calm', true), 'mono', 'a calm held thing keeps its size');
+  assert.equal(labelFace('builder', 'low', true), 'mono', 'low is not trouble');
+  const storage = { kind: 'room', label: 'Storage', status: 'crit' };
+  assert.equal(labelText(storage), '■ storage');
+  assert.equal(labelText(storage, 'crit', 'label'), '■ STORAGE');
+});
+
+test('createLabels: the held trouble target is big caps; others, and the same thing unheld, unchanged (T22)', () => {
+  const world = worldOf('lab');
+  const lab = world.byId.get('lab');
+  const id = 'lane:builder-a/feat-search';
+  const steps = { site: 26, room: 15 };
+  const galaxy = galaxyAt(world, siteShot(lab, 0));
+  const a = fakeDoc();
+  const free = createLabels(a.root, galaxy, { steps, doc: a.doc });
+  free.draw();
+  const b = fakeDoc();
+  const held = createLabels(b.root, galaxy, { steps, held: () => ({ id, r: 30 }), doc: b.doc });
+  held.draw();
+  const before = new Map(free.shown().map((s) => [s.id, s]));
+  const after = new Map(held.shown().map((s) => [s.id, s]));
+  assert.equal(before.get(id).face, 'mono');
+  assert.equal(before.get(id).text, '▲ feat-search');
+  const big = after.get(id);
+  assert.ok(big, 'the held trouble is named');
+  assert.equal(big.face, 'label');
+  assert.equal(big.text, '▲ FEAT-SEARCH');
+  assert.equal(big.box.h, labelSize(big.text, steps.site, 'label').h, 'the site step');
+  assert.equal(big.box.w, labelSize(big.text, steps.site, 'label').w);
+  noOverlap(held.shown().map((s) => s.box));
+  for (const [k, s] of after) {
+    if (k === id) continue;
+    const want = world.byId.has(k) || k === world.core.id ? 'label' : 'mono';
+    assert.equal(s.face, want, `${s.text} keeps its face`);
+  }
+  // A calm thing held keeps its mono name.
+  const calm = lab.members.find((m) => m.planet && m.tone === 'calm');
+  const c = fakeDoc();
+  const calmHeld = createLabels(c.root, galaxy, { steps, held: () => ({ id: calm.id, r: 30 }), doc: c.doc });
+  calmHeld.draw();
+  const named = calmHeld.shown().find((s) => s.id === calm.id);
+  if (named) assert.equal(named.face, 'mono');
 });
 
 test('createLabels: at the overview only sites are named, a site in trouble in its hue; caption covers are kept clear', () => {
