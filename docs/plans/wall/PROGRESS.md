@@ -100,13 +100,23 @@ Notes for every builder round (planner, round 1):
   flowing, /api/map answering. Film r14-galaxy (`--size large --quiet-after 5`): tag LIVE → STALE 30S → 1M, the
   plate's grey line, HV2's red banner still the loudest, 0 console errors. The tag alone is small at 3 m: T6's sun
   carries the distance.
-- [ ] T6 (§7 Night 3 B) [ui] [variant:galaxy] A dead feed, the look: the sun's corona swells softly once per
+- [x] T6 (§7 Night 3 B) [ui] [variant:galaxy] A dead feed, the look: the sun's corona swells softly once per
   map frame that arrives; stale, it shrinks and the sun goes cold flat grey (`scene.js`, tokens through
   `palette.js`), never louder than live trouble (crit nebulae stay the brightest things); reduced motion: no
   swell, the grey sun only — done when: a test maps frame arrivals and `fresh.js` state to corona scale and sun
   colour (swell decays, stale → grey, still mode no swell), and a film of `galaxy.html?demo=1&quality=0` on
   `demo-fleet.mjs --size large --quiet-after 5` shows the sun turn grey and the tag read `STALE` while the crit
-  cluster stays red and brightest.
+  cluster stays red and brightest. (commit SHA) Builder r15: pure `fresh.js` `sunLook(ageMs, { still })` →
+  `{ scale, glow, cold }` (`SUN`: swell +6 % size, +30 % glow, up in 250 ms, gone in ~3 s; old data eases over 2 s to
+  60 % size, 40 % glow, cold 1) and `easeToward`; `scene.js` `setSun(look)` eases the drawn sun toward it (120 ms
+  swell, 500 ms cold, so a frame after a cold spell warms it, never a cut) and lerps core and halo from `sunCore`
+  (text-2) to the new `palette.sunCold` (text-3); `main.js` asks each frame from `Date.now() - lastFrameAt`. The
+  swell's peak halo (0.39) stays under half the crit nebula and its size under a crit nebula's (tests). Film
+  r15-galaxy (`--size large --quiet-after 5`): tag LIVE → STALE 30S → 1M, the crit and warn clusters still the
+  loudest, 0 console errors (1.4 fps, as every SwiftShader film on this VM under load 50; script ms is the
+  measure). Stills r15-sun-live / r15-sun-stale (`?at=overview`, 3 s vs 40 s in): the sun's grey corona is gone
+  and the core a step dimmer. Honest note for a panel: it is quiet, by design; from 3 m it reads as "the hub went
+  dim", not as an alarm. Q14's `freeze` (stop liveness motion on stale) would make it unmistakable and is not built.
 - [ ] T7 (§7 Night 3 C1, C6) [ui] [variant:galaxy] Touch, the first touch: a new `galaxy/touch.js` (a state
   machine with an injected clock: `tour` → `easing` → `explore`) wired in `galaxy/main.js` with one `pointerdown`
   listener on the stage; the first touch anywhere stops the tour and eases the camera to the overview in about

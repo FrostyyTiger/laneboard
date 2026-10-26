@@ -21,6 +21,7 @@ import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
 import { LEVELS, pixelRatioFor } from './budget.js';
 import { breathWave, dustTurn } from './still.js';
+import { SUN, easeToward } from './fresh.js';
 import { createStageSize } from './stage.js';
 import { armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
@@ -341,7 +342,7 @@ const pageClock = () => globalThis.performance.now();
  * `fx` (fx.js `parseFx`): the effects asked for; `lanes` draws `setRoutes`' pulses,
  * `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets,
  * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them).
- * Returns `{ update, setOpen, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize,
+ * Returns `{ update, setOpen, setSun, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize,
  * setQuality, size, camera, world, quality, pixelRatio, routes, comets, twinkles, beacons, renderer, dispose }`.
  * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
  * `stage` (stage.js, T29) keeps the canvas's css size so no frame reads layout; `size()` gives it to the
@@ -499,6 +500,25 @@ export function createGalaxyScene(canvas, {
   })));
   sunHalo.scale.setScalar(SIZE.sunHalo);
   scene.add(sun, sunHalo);
+  // How fresh the data is shows on the sun (night 3 T6, fresh.js `sunLook`):
+  // `setSun` gives the look asked for, each frame eases the drawn one toward it.
+  const sunCold = col(palette.sunCold ?? palette.calm);
+  let sunWant = { scale: 1, glow: 1, cold: 0 };
+  const sunShown = { scale: 1, glow: 1, cold: 0 };
+  let sunAt = null;
+  const easeSun = (now) => {
+    const dt = sunAt == null ? 0 : now - sunAt;
+    sunAt = now;
+    const was = sunShown.cold;
+    sunShown.scale = easeToward(sunShown.scale, sunWant.scale, dt, SUN.ease.swellMs);
+    sunShown.glow = easeToward(sunShown.glow, sunWant.glow, dt, SUN.ease.swellMs);
+    sunShown.cold = easeToward(sunShown.cold, sunWant.cold, dt, SUN.ease.coldMs);
+    sunHalo.scale.setScalar(SIZE.sunHalo * sunShown.scale);
+    if (sunShown.cold !== was) {
+      sun.material.color.copy(sunCore).lerp(sunCold, sunShown.cold);
+      sunHalo.material.color.copy(sun.material.color);
+    }
+  };
 
   // --- the galaxy: built once, then kept up to date (T8, live.js) ----------
   // A status change recolours the same objects; a tree change folds the
@@ -1169,7 +1189,7 @@ export function createGalaxyScene(canvas, {
     s.star.scale.setScalar(Math.max(1e-3, a * star));
     s.starHalo.scale.setScalar(Math.max(1e-3, s.starHaloSize * a * star));
   };
-  const fadeSun = () => { sunHalo.material.opacity = SUN_HALO * nearOf(SIZE.sunHalo, sun.position); };
+  const fadeSun = () => { sunHalo.material.opacity = SUN_HALO * sunShown.glow * nearOf(SIZE.sunHalo * sunShown.scale, sun.position); };
 
   /** One frame at `now` (ms): trouble breathes, the dust drifts, then draw. */
   const frame = (now) => {
@@ -1185,6 +1205,7 @@ export function createGalaxyScene(canvas, {
         fadeNear(s);
       }
     }
+    easeSun(now);
     fadeSun();
     // The dust turns once in about 26 minutes: alive under a held camera, never a motion you notice.
     dust.rotation.y = dustTurn(now, still);
@@ -1235,7 +1256,8 @@ export function createGalaxyScene(canvas, {
   };
 
   return {
-    update, setOpen, setHeld: (id) => { held = id ?? null; }, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize, setQuality, camera,
+    update, setOpen, setHeld: (id) => { held = id ?? null; },
+    setSun: (look) => { if (look) sunWant = look; }, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize, setQuality, camera,
     size: sized.get,
     renderer, dispose,
     get world() { return world; },
@@ -1248,6 +1270,8 @@ export function createGalaxyScene(canvas, {
     get beacons() { return beacons; },
     /** What the dust thins round now (`{ x, y, z, r, k }`, dustFade's uniforms). */
     get dustHold() { return heldDust(); },
+    /** The sun as drawn now (`{ scale, glow, cold }`, T6) and its core and halo. */
+    get sun() { return { ...sunShown, core: sun, halo: sunHalo }; },
     /** The arm ribbon's mesh (T3): its opacity and colour, for tests. */
     get ribbon() { return ribbon; },
   };

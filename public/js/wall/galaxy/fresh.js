@@ -44,3 +44,54 @@ export function freshness(lastFrameAt, now, { open = true, staleMs = FRESH.stale
 
 /** Whether two answers read the same (the tag and the caption need no write). */
 export const sameFresh = (a, b) => Boolean(a && b) && a.state === b.state && a.text === b.text && a.line === b.line;
+
+// The sun says it too (night 3 T6, README §7 Night 3 B): its corona swells
+// softly once per map frame that arrives, and once the data is old it
+// shrinks and the sun goes cold, a flat dimmer grey. Its absence is the
+// alarm, so even the swell's peak stays under half the crit nebula's
+// strength (test/wall-galaxy-fresh.test.mjs): trouble stays the loudest.
+
+/**
+ * The sun's look. `swell`: how much the halo grows (scale) and brightens
+ * (glow) at a frame's peak, `riseMs` up, then fading with `fallMs` as its
+ * time constant. `cold`: at old data the halo shrinks to `scale` and dims
+ * to `glow` of its strength while the core and halo turn the text-3 grey,
+ * over `ms` after the data went old. `ease`: how fast the drawn sun follows
+ * (time constants, ms), so a frame after a cold spell warms it, not cuts it.
+ */
+export const SUN = Object.freeze({
+  swell: Object.freeze({ scale: 0.06, glow: 0.3, riseMs: 250, fallMs: 700 }),
+  cold: Object.freeze({ scale: 0.6, glow: 0.4, ms: 2000 }),
+  ease: Object.freeze({ swellMs: 120, coldMs: 500 }),
+});
+
+const smooth = (x) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
+
+/** The swell's envelope `ageMs` after a frame, 0..1 (0 before the first frame). Pure. */
+export function swellAt(ageMs, s = SUN.swell) {
+  if (!Number.isFinite(ageMs) || ageMs < 0) return 0;
+  return ageMs < s.riseMs ? smooth(ageMs / s.riseMs) : Math.exp(-(ageMs - s.riseMs) / s.fallMs);
+}
+
+/**
+ * The sun the data asks for, `ageMs` after the last map frame (null before
+ * the first: as live, no swell): `{ scale, glow, cold }`, the halo's size
+ * and strength as factors and how far the greys have gone cold (0..1).
+ * `still` (reduced motion): no swell, the cold sun only. Pure.
+ */
+export function sunLook(ageMs, { still = false, staleMs = FRESH.staleMs } = {}) {
+  const old = Number.isFinite(ageMs) ? smooth((ageMs - staleMs) / SUN.cold.ms) : 0;
+  const up = still || old > 0 ? 0 : swellAt(ageMs);
+  return {
+    scale: 1 + SUN.swell.scale * up - (1 - SUN.cold.scale) * old,
+    glow: 1 + SUN.swell.glow * up - (1 - SUN.cold.glow) * old,
+    cold: old,
+  };
+}
+
+/** `from` toward `to` after `dtMs` with time constant `tauMs` (no overshoot). Pure. */
+export function easeToward(from, to, dtMs, tauMs) {
+  if (!(tauMs > 0)) return to;
+  if (!(dtMs > 0)) return from;
+  return to + (from - to) * Math.exp(-dtMs / tauMs);
+}

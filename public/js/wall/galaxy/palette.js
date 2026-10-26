@@ -194,6 +194,8 @@ export function paletteFrom(readVar = unset) {
     sun: t1,
     // The sun's own disc and halo: a step down from the light it gives (r8-film-ui 2).
     sunCore: t2,
+    // The sun once the data is old (night 3 T6): cold, the text-3 grey, never a trouble hue.
+    sunCold: t3,
     bg,
     line: { rgb: line.slice(0, 3), alpha: line[3] },
     // The dust: a backdrop, so darker than the dimmest node (calm, text-3) even

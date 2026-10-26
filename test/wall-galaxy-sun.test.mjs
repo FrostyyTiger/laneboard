@@ -11,6 +11,7 @@ import { galaxyLayout } from '../public/js/wall/galaxy/layout.js';
 import { NEBULA, paletteFrom } from '../public/js/wall/galaxy/palette.js';
 import { createGalaxyScene, overviewShot, siteShot, FOV, SIZE, SUN_HALO } from '../public/js/wall/galaxy/scene.js';
 import { zoomedSiteShot } from '../public/js/wall/galaxy/camera.js';
+import { FRESH, SUN, sunLook } from '../public/js/wall/galaxy/fresh.js';
 
 const FLEET = JSON.parse(fs.readFileSync(new URL('./fixtures/wall-large-map.json', import.meta.url), 'utf8')).nodes;
 
@@ -131,4 +132,41 @@ test('T2: a flight that passes near the sun fades its halo, never a frame of gre
   galaxy.frame(1100);
   assert.equal(halo.material.opacity, 0, 'close by, gone');
   galaxy.dispose();
+});
+
+test('T6: the drawn sun eases toward its look: a swell grows the halo, old data shrinks it and turns it the cold grey', () => {
+  const { galaxy, scene } = drawnScene();
+  const p = paletteFrom();
+  const core = new THREE.Color().setRGB(...p.sunCore, THREE.SRGBColorSpace);
+  const cold = new THREE.Color().setRGB(...p.sunCold, THREE.SRGBColorSpace);
+  assert.deepEqual(p.sunCold, p.calm, 'cold is the text-3 grey, no hue');
+  const halo = galaxy.sun.halo;
+  // A frame arrives: the swell's peak, held a while so the drawn sun catches up.
+  let t = 1000;
+  for (let i = 0; i < 30; i++) { t += 16; galaxy.setSun(sunLook(SUN.swell.riseMs)); galaxy.frame(t); }
+  assert.ok(galaxy.sun.scale > 1.05, `swollen ${galaxy.sun.scale}`);
+  assert.ok(halo.scale.x > SIZE.sunHalo * 1.05);
+  assert.ok(halo.material.opacity > SUN_HALO && halo.material.opacity <= NEBULA.crit.opacity / 2);
+  assert.ok(galaxy.sun.core.material.color.equals(core), 'still the warm core grey');
+  // One frame step does not jump to the target: eased.
+  galaxy.setSun(sunLook(FRESH.staleMs + SUN.cold.ms));
+  t += 16; galaxy.frame(t);
+  assert.ok(galaxy.sun.cold > 0 && galaxy.sun.cold < 0.2, `eased, ${galaxy.sun.cold}`);
+  for (let i = 0; i < 300; i++) { t += 16; galaxy.frame(t); }
+  assert.ok(galaxy.sun.cold > 0.999);
+  assert.ok(Math.abs(galaxy.sun.scale - SUN.cold.scale) < 1e-3);
+  assert.ok(Math.abs(halo.material.opacity - SUN_HALO * SUN.cold.glow) < 1e-3);
+  const c = galaxy.sun.core.material.color;
+  assert.ok(Math.abs(c.r - cold.r) < 1e-3 && Math.abs(c.g - cold.g) < 1e-3 && Math.abs(c.b - cold.b) < 1e-3, 'the cold grey');
+  assert.ok(halo.material.color.equals(c));
+  // The next frame warms it back.
+  for (let i = 0; i < 300; i++) { t += 16; galaxy.setSun(sunLook(9000)); galaxy.frame(t); }
+  assert.ok(galaxy.sun.cold < 1e-3 && Math.abs(galaxy.sun.scale - 1) < 1e-3);
+  galaxy.dispose();
+});
+
+test('T6: the crit nebula stays brighter than the cold sun and the swollen one', () => {
+  const peak = Math.max(...Array.from({ length: 100 }, (_, i) => sunLook(i * 20).glow));
+  assert.ok(SUN_HALO * peak < NEBULA.crit.opacity);
+  assert.ok(SIZE.sunHalo * (1 + SUN.swell.scale) < NEBULA.crit.size, 'the swollen halo still narrower than a crit nebula');
 });

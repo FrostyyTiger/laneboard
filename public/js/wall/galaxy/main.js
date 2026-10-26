@@ -23,7 +23,9 @@
 // A dead feed (night 3 T5, fresh.js): every map frame (and the first
 // /api/map answer) stamps the time; 30 s without one, the tag reads
 // `STALE <age>` and the next plate says the data is old; a closed socket
-// reads `OFFLINE`. `<html data-fresh>` carries the state.
+// reads `OFFLINE`. `<html data-fresh>` carries the state. The sun says it
+// from 3 m (T6, fresh.js `sunLook`): its corona swells once per frame, and
+// on old data it shrinks and goes a cold grey.
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
@@ -46,7 +48,7 @@ import { critAges, flowComets, parseFx, siteRoutes, workingPlanets } from './fx.
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { createTether } from './tether.js';
-import { freshness, sameFresh } from './fresh.js';
+import { freshness, sameFresh, sunLook } from './fresh.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -242,6 +244,7 @@ export function boot() {
       freeBox();
       aim(parkedOverview(overviewShot(w.sites), w.sites, now));
     }
+    galaxy.setSun(sunLook(lastFrameAt == null ? null : Date.now() - lastFrameAt, { still: reduced }));
     galaxy.frame(now);
     cam.drawn();
     const t1 = performance.now();
