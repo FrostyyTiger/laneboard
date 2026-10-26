@@ -410,9 +410,17 @@ Notes for every builder round (planner, night 1):
   SwiftShader plus screenshots (filming note). The real `fitScale` reaches the lock and glow in every
   variant, so orbits', islands' and mosaic's locks and lights (which have fits of their own) are now
   sized from their real scale, not the radial guess: not filmed this round.)
-- [ ] T18 (§5, T10) [variant:radial] (r9-film-ui #5) Wall hides desk chrome: ring legends and lane
+- [x] T18 (§5, T10) [variant:radial] (r9-film-ui #5) Wall hides desk chrome: ring legends and lane
   pips off (with `rings: false` from T10, option defaults off); the bearing dial stays — done
   when: a still shows no ring legend or pip, dial still drawn, and `test/map-*.test.mjs` pass unchanged.
+  (commit d36ed56; `rings: false` would also take the dial, so two new Map options, both default on:
+  `legends: false` (ring legends gone, hairlines and dial kept; `ringGeometry` returns no legend boxes, as on
+  a phone) and `lamps: false` (the "pips" are the builder lamp strip under the name: link, approvals,
+  stuck). Radial sets both. What the lamps said still shows: a down builder by its mark, a stuck or waiting
+  lane by its ▲; the accent approvals lamp has no Wall stand-in (night 2's detail sheet). Tests
+  `test/wall-chrome.test.mjs`; map tests unchanged. Still `$RUN_DIR/shots/r48-still/`, filmstrip
+  `r48-radial/`: no legend or lamp at the overview or in holds, dial at 000/090/180/270, 0 console errors;
+  fps 2 is SwiftShader plus screenshots (filming note).)
 - [ ] T19 (§5) [variant:radial] (r9-film-ui #6, #8) Less ornament: calm services plain dots with no
   halo, rooms one ring, halo only on the focused node and nodes in trouble; room-to-service
   edges short stubs at the overview, full fan only when the camera is in that site — done when:
