@@ -1,0 +1,200 @@
+// The `mosaic` direction for a wall (Wall plan T14, the wild card from
+// research/Q5-hex-mosaic-wild-card.md): a honeycomb, one tile per place,
+// each site one connected region with an empty channel round it, the site in
+// the middle and the worst rooms nearest it, trouble as the tile's tone.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { polarLayout } from '../public/js/views/map/layout.js';
+import { createRenderer } from '../public/js/views/map/render.js';
+import {
+  layoutFor, mosaic, tilesOf, slots, grow, hexDist, hexToPx, hexCorners, labelSize, optionsFor, mapOptions, ambient,
+  SAFE, SIZES, ASPECT,
+} from '../public/js/wall/variants/mosaic.js';
+import { VARIANTS, mapOptionsFor } from '../public/js/wall/variants.js';
+
+/** A fleet the size of the large demo (islands' fixture): five sites, a builder with lanes, a repo index, a run. */
+function fleet() {
+  const nodes = [{ id: '__core', kind: 'core', label: 'acme', status: 'ok' }];
+  const rooms = { hv1: 14, hv2: 9, cloud: 8, remote: 5, home: 9 };
+  for (const [site, n] of Object.entries(rooms)) {
+    nodes.push({ id: site, kind: 'site', parent: '__core', label: site, status: 'ok' });
+    for (let i = 0; i < n; i++) {
+      const room = `${site}/room-${i}`;
+      nodes.push({ id: room, kind: 'room', parent: site, label: `room-${i}`, status: 'ok' });
+      for (let j = 0; j < i % 4; j++) nodes.push({ id: `${room}/svc-${j}`, kind: 'service', parent: room, label: `svc-${j}`, status: 'ok' });
+    }
+  }
+  nodes.push({ id: 'builder:builder-a', kind: 'builder', parent: 'hv1/room-0', label: 'builder-a', status: 'working' });
+  for (let i = 0; i < 3; i++) nodes.push({ id: `lane:a/${i}`, kind: 'lane', parent: 'builder:builder-a', label: `lane-${i}`, status: 'working' });
+  nodes.push({ id: 'sess:1', kind: 'session', parent: 'lane:a/0', label: 's1', status: 'working' });
+  nodes.push({ id: '__repos', kind: 'site', parent: '__core', label: 'REPOS', status: 'ok' });
+  nodes.push({ id: 'repo:acme', kind: 'repo', parent: '__repos', label: 'acme', status: 'ok' });
+  nodes.push({ id: 'run:x', kind: 'run', parent: '__core', label: 'search', status: 'working' });
+  return nodes;
+}
+
+const FREE = (aspect) => (aspect * (1 - 2 * SAFE.side)) / (1 - SAFE.top - SAFE.bottom);
+const SQ3 = Math.sqrt(3);
+
+test('hex geometry: pixel centres one step apart, corners on the circumradius', () => {
+  const s = 10;
+  const a = hexToPx(0, 0, s);
+  for (const [q, r] of [[1, 0], [0, 1], [-1, 1]]) {
+    const b = hexToPx(q, r, s);
+    assert.ok(Math.abs(Math.hypot(b.x - a.x, b.y - a.y) - SQ3 * s) < 1e-9, 'neighbours √3·s apart');
+    assert.equal(hexDist({ q: 0, r: 0 }, { q, r }), 1);
+  }
+  assert.equal(hexDist({ q: 0, r: 0 }, { q: 2, r: -1 }), 2);
+  const cs = hexCorners(5, 5, s);
+  assert.equal(cs.length, 6);
+  for (const [x, y] of cs) assert.ok(Math.abs(Math.hypot(x - 5, y - 5) - s) < 1e-9);
+  assert.ok(cs.some(([x, y]) => Math.abs(x - 5) < 1e-9 && y > 5), 'pointy top: a corner straight below');
+});
+
+for (const [name, aspect] of [['3:2', 3 / 2], ['16:9', 16 / 9]]) {
+  test(`mosaic at ${name}: one cell per place, each region connected, a channel between regions`, () => {
+    const nodes = fleet();
+    const m = mosaic(nodes, FREE(aspect));
+    const places = nodes.filter((n) => ['core', 'site', 'room', 'builder', 'repo'].includes(n.kind));
+    assert.equal(m.tiles.length, places.length, 'a tile per place, none for a service, lane or run');
+    const keys = new Set(m.tiles.map((t) => `${t.cell.q},${t.cell.r}`));
+    assert.equal(keys.size, m.tiles.length, 'no two tiles on a cell');
+    const owner = new Map(m.tiles.map((t) => [`${t.cell.q},${t.cell.r}`, t.region]));
+    for (const t of m.tiles) {
+      for (const u of m.tiles) {
+        if (t.region !== u.region && hexDist(t.cell, u.cell) < 2) assert.fail(`${t.node.id} next to ${u.node.id} of another site`);
+      }
+    }
+    m.regions.forEach((reg, i) => {
+      // Connected: every cell reached from the first by steps of one inside the region.
+      const mine = reg.cells.filter((c) => owner.get(`${c.q},${c.r}`) === i);
+      const seen = new Set([`${mine[0].q},${mine[0].r}`]);
+      const todo = [mine[0]];
+      while (todo.length) {
+        const c = todo.pop();
+        for (const d of mine) {
+          const k = `${d.q},${d.r}`;
+          if (!seen.has(k) && hexDist(c, d) === 1) { seen.add(k); todo.push(d); }
+        }
+      }
+      assert.equal(seen.size, mine.length, `${reg.site.id} in one piece`);
+    });
+    // The site's own tile is the region's first: everything else spirals out from it.
+    for (const reg of m.regions) {
+      const t = m.tiles.find((x) => x.node.id === reg.site.id);
+      assert.deepEqual([t.cell.q, t.cell.r], [reg.cells[0].q, reg.cells[0].r]);
+    }
+  });
+
+  test(`mosaic layout at ${name}: inside the safe area, the width used, dots in their tile`, () => {
+    const nodes = fleet();
+    const lay = layoutFor(aspect)(nodes);
+    const H = 912, W = H * aspect;
+    const k = Math.min(W / (2 * lay.bounds.x), H / (2 * lay.bounds.y));
+    const toScreen = (p) => ({ x: W / 2 + p.x * k, y: H / 2 + (p.y - lay.bounds.cy) * k });
+    let x0 = Infinity, x1 = -Infinity;
+    for (const g of lay.guides) {
+      for (const p of g.pts) {
+        const sp = toScreen({ x: p[0], y: p[1] });
+        assert.ok(sp.x >= W * SAFE.side - 1 && sp.x <= W * (1 - SAFE.side) + 1, 'inside the sides');
+        assert.ok(sp.y >= H * SAFE.top - 1 && sp.y <= H * (1 - SAFE.bottom) + 1, 'above the bottom band, below the tag');
+        x0 = Math.min(x0, sp.x); x1 = Math.max(x1, sp.x);
+      }
+    }
+    assert.ok((x1 - x0) / W > 0.6, `the width used (${((x1 - x0) / W).toFixed(2)})`);
+    for (const n of nodes) assert.ok(lay.pos.has(n.id), `${n.id} placed`);
+    // Every dot (a service, lane, session, run) inside the tile of the place that holds it.
+    const m = mosaic(nodes, FREE(aspect));
+    for (const t of m.tiles) {
+      for (const d of t.dots) {
+        const p = lay.pos.get(d.id);
+        assert.ok(Math.hypot(p.x - t.cell.x, p.y - t.cell.y) < SIZES.hex * SIZES.tile, `${d.id} in ${t.node.id}'s tile`);
+      }
+    }
+    assert.equal(lay.pos.get('builder:builder-a').branch, 'none');
+    assert.equal(lay.pos.get('hv1/room-3').labelAngle, Math.PI / 2, 'names under their marks');
+  });
+}
+
+test('mosaic: the worst rooms nearest the site, a builder after its room', () => {
+  const nodes = fleet().map((n) => (n.id === 'hv1/room-12' ? { ...n, status: 'crit' } : n.id === 'hv1/room-9/svc-0' ? { ...n, status: 'warn' } : n));
+  const kids = new Map();
+  for (const n of nodes) if (n.parent) kids.set(n.parent, [...(kids.get(n.parent) ?? []), n]);
+  const order = tilesOf(nodes.find((n) => n.id === 'hv1'), kids).map((t) => t.node.id);
+  assert.deepEqual(order.slice(0, 3), ['hv1', 'hv1/room-12', 'hv1/room-9'], 'site, crit room, room with a warn service');
+  assert.equal(order[order.indexOf('hv1/room-0') + 1], 'builder:builder-a');
+  const m = mosaic(nodes, FREE(ASPECT));
+  const cell = (id) => m.tiles.find((t) => t.node.id === id).cell;
+  assert.equal(hexDist(cell('hv1'), cell('hv1/room-12')), 1, 'the crit room next to the site');
+});
+
+test('mosaic layout: a status change keeps every tile and recolours it; a new node lays out again', () => {
+  const layout = layoutFor(ASPECT);
+  const nodes = fleet();
+  const a = layout(nodes);
+  assert.ok(a.guides.every((g) => !g.tone), 'a calm fleet: no toned tile');
+  assert.equal(layout(nodes).guides, a.guides, 'the same statuses: the same guides');
+  const hot = layout(nodes.map((n) => (n.id === 'lane:a/1' ? { ...n, status: 'crit' } : n.id === 'hv2/room-1' ? { ...n, status: 'attention' } : n)));
+  assert.equal(hot.pos, a.pos, 'nothing moves for a status');
+  assert.deepEqual(hot.guides.filter((g) => g.tone).map((g) => g.tone).sort(), ['crit', 'warn'], 'the lane colours its builder tile');
+  const m = mosaic(nodes, FREE(ASPECT));
+  const bi = m.tiles.findIndex((t) => t.node.id === 'builder:builder-a');
+  assert.equal(hot.guides[bi].tone, 'crit');
+  const more = layout([...nodes, { id: 'hv2/room-x', kind: 'room', parent: 'hv2', label: 'x', status: 'ok' }]);
+  assert.notEqual(more.pos, a.pos);
+  assert.ok(more.pos.has('hv2/room-x'));
+  // The same fleet, the same picture.
+  assert.deepEqual([...layoutFor(ASPECT)(nodes).pos], [...a.pos]);
+  // Polar for the Map, guides and bounds passed on.
+  const polar = polarLayout(a);
+  assert.equal(polar.guides, a.guides);
+  assert.deepEqual(polar.bounds, a.bounds);
+});
+
+test('slots and grow: slots tile the area, a region with no room fails the grid', () => {
+  const sl = slots([10, 10, 10, 10], 400, 200);
+  assert.equal(sl.length, 4);
+  const area = sl.reduce((s, x) => s + x.w * x.h, 0);
+  assert.ok(Math.abs(area - 400 * 200) < 1e-6);
+  assert.equal(grow([30], [{ x: 0, y: 0, w: 100, h: 100 }], 3, 3, 10), null, '30 cells on a 3 x 3 grid');
+  const two = grow([3, 3], [{ x: -30, y: 0, w: 50, h: 50 }, { x: 30, y: 0, w: 50, h: 50 }], 6, 3, 10);
+  assert.ok(two && two[0].length === 3 && two[1].length === 3);
+  for (const c of two[0]) for (const d of two[1]) assert.ok(hexDist(c, d) >= 2, 'a channel between them');
+});
+
+test('mosaic labels: sites at the site step, places at the room step, dots unnamed at the overview', () => {
+  assert.equal(labelSize({ id: 'hv1', kind: 'site' }), 26);
+  assert.equal(labelSize({ id: 'r', kind: 'room' }), 15);
+  assert.equal(labelSize({ id: 'b', kind: 'builder' }), 15);
+  assert.equal(labelSize({ id: 'l', kind: 'lane' }, { s: 1, trouble: true }), 0, 'the tile says it at the overview');
+  assert.equal(labelSize({ id: 'l', kind: 'lane' }, { s: 2, trouble: true }), 15, 'named in its site');
+  assert.equal(labelSize({ id: '__core', kind: 'core' }), 0);
+});
+
+test('mosaic variant: registered with its options, no turn', () => {
+  const v = VARIANTS.find((x) => x.id === 'mosaic');
+  assert.ok(v, 'in the registry');
+  assert.equal(mapOptions.rings, false);
+  assert.equal(typeof optionsFor(16 / 9).layout, 'function');
+  const o = mapOptionsFor(v, 16 / 9);
+  assert.deepEqual(o.ambient, { drift: 0 });
+  assert.equal(o.labelSize, labelSize);
+  assert.equal(ambient.drift, 0);
+});
+
+test('renderer: a polygon guide is a closed path, a toned one filled in its tone', () => {
+  const calls = [];
+  const ctx = new Proxy({}, {
+    get: (o, k) => (k in o ? o[k] : (...a) => calls.push([k, ...a])),
+    set: (o, k, v) => { if (k === 'fillStyle' || k === 'strokeStyle') calls.push([`set:${k}`, v]); o[k] = v; return true; },
+  });
+  const r = createRenderer(ctx, { crit: '#f00', line: '#888', t3: '#666' });
+  const sc = { W: 1200, H: 800, s: 1, toScreen: (p) => ({ x: p.x + 600, y: p.y + 400 }), pos: new Map(), byId: new Map(), nodes: new Map(), rings: false };
+  const hex = hexCorners(0, 0, 10);
+  r.drawRings({ ...sc, guides: [{ pts: hex }, { pts: hex, tone: 'crit' }, { pts: [[0, 0], [1, 1]] }] });
+  assert.equal(calls.filter(([k]) => k === 'closePath').length, 2, 'two tiles; two points are no tile');
+  assert.equal(calls.filter(([k]) => k === 'lineTo').length, 10);
+  assert.equal(calls.filter(([k]) => k === 'fill').length, 1, 'only the toned tile is filled');
+  assert.ok(calls.some(([k, v]) => k === 'set:fillStyle' && v === '#f00'), 'in its tone');
+  assert.equal(calls.filter(([k]) => k === 'ellipse').length, 0);
+});

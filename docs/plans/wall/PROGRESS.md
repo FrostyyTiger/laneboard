@@ -240,10 +240,40 @@ Notes for every builder round (planner, night 1):
   above their dots and pushes VM-B a line (T15); the hub is a lone mark at the left edge of the
   second row; a few names pushed a line by the collision pass where a crit mark's ring is wider
   than the pitch allows.)
-- [ ] T14 (§5) [variant:wild] The wild-card direction from Q5's answer (named after it), in
+- [x] T14 (§5) [variant:wild] The wild-card direction from Q5's answer (named after it), in
   `public/js/wall/variants/<name>.js`; waits for Q5 — done when: a test checks its layout's main
   property (from the research), and a filmstrip `$RUN_DIR/shots/<round>-<name>/` shows the tour,
   caption, lock and trouble first, fps >= 27.
+  (commit SHA; `?variant=mosaic`, `public/js/wall/variants/mosaic.js`: a pointy-top honeycomb,
+  each site one connected region with an empty one-cell channel round it (Q5's gap rule), regions
+  grown on the grid from treemap slots (model order, hub in the middle, 1-3 rows), the region
+  furthest behind its size claiming next. Two departures from Q5, both for its fixed-name
+  promise: a tile per PLACE (site, room, builder, repo, core: 56 tiles on the large demo), not per
+  node (114 tiles would not hold a 15 px name on the tablet); services, lanes, sessions, packages
+  and runs are a row of dots at the top of their place's tile (dots, mark, name: a card). And a dot
+  in trouble is not named at the overview (it would spill into the tile above): its tile takes the
+  tone; the Map names it once the camera is in the site (s > 1.25). The site's tile is the region's
+  first cell (its slot's centre), its name at the site step; rooms spiral out from it worst first
+  (own or a dot's status), a builder after its room. The order is taken when the tree changes
+  (memo on ids/parents/kinds/names, T13's lesson), so a status change only recolours. Hex 50 px at
+  scale 1 (87 px across); the large demo fits at 0.99 (3:2) and 0.95 (16:9), height-bound, so a
+  larger hex only shrinks the scale: the tile pitch stays 86 px on the glass. Map hook, inert
+  without it: a `guides` entry may be a polygon `{pts, tone?}` (render.js `drawPolyGuide`): calm
+  tiles a 1 px --line at 0.85, a toned tile (crit/warn/low) its edge in the tone at 1.5 px and a
+  0.14 fill, the loudest thing at the overview. Tests `test/wall-mosaic.test.mjs` (hex geometry;
+  3:2 and 16:9: a tile per place, no two on a cell, regions connected, no two regions adjacent,
+  inside the safe area, >60 % of the width, dots inside their tile; worst room next to the site;
+  status keeps positions and recolours, the lane's crit colours its builder's tile; determinism;
+  the polygon renderer; labels; registry). Filmstrip `$RUN_DIR/shots/r31-mosaic/`, still
+  `r31-still/`: crit tiles (VM-C, BUILDER-C) red in HV1 and the tour there first, caption and lock
+  on each site, the overview reads as six regions; 0 console errors; fps 3.4 is SwiftShader plus
+  screenshots (filming note); script 6.6 ms/frame average, 39 ms worst at 4x (islands 6.6/89 in
+  the same minute). Seen and left to their tasks: neighbouring 12-character names (LIVING-LIGHT
+  DESK-LIGHT, PORCH-LIGHT AUTOMATION) nearly touch at the 86 px pitch; the collision pass still
+  moves a few names off their tile (OBJECT-STORE above its mark, FRONT-DOOR under KITCHEN-LIGHT,
+  T15); inside a site the Map's sublabels crowd the tiles (r20-skeptic #2, owner); the hub is a
+  lone tile with a big core mark; the cross-site flow links run across the honeycomb as the Map's
+  arcs (Q5 asks bundles between region centres: not built).)
 - [ ] T15 (§2, §5) [variant:radial] (r9-film-ui #2, #7) Type hierarchy and stable labels: three steps
   from mm via `devicePixelRatio` (Q3): sites condensed semibold caps for 1.5-2 m, rooms one step
   down, services/leaves/lanes unlabelled at the overview (named only when the camera is in that

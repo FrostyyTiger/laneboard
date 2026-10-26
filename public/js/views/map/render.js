@@ -338,7 +338,9 @@ export function createRenderer(ctx, palette) {
   /**
    * A custom layout's own orbit lines (`guides`: world ellipses `{x, y, rx,
    * ry}`, Wall T12) as the ring hairlines are drawn: 1px --line at half.
-   * None from the radial layout.
+   * A guide may instead be a polygon (`pts: [[x, y], ...]`, world, Wall T14's
+   * tiles), drawn a step brighter, or with `tone` (crit, warn, low) its edge in that
+   * tone and a faint fill. None from the radial layout.
    */
   function drawGuides(scene) {
     const guides = scene.guides;
@@ -347,6 +349,10 @@ export function createRenderer(ctx, palette) {
     ctx.save();
     strokeStyle(P.line, 0.5, 1, []);
     for (const g of guides) {
+      if (Array.isArray(g?.pts)) {
+        drawPolyGuide(scene, g);
+        continue;
+      }
       if (!Number.isFinite(g?.x) || !Number.isFinite(g?.y) || !(g.rx > 0) || !(g.ry > 0)) continue;
       const c = scene.toScreen(g);
       ctx.beginPath();
@@ -354,6 +360,29 @@ export function createRenderer(ctx, palette) {
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  /** One polygon guide (drawGuides); leaves the calm hairline style set. */
+  function drawPolyGuide(scene, g) {
+    if (g.pts.length < 3) return;
+    ctx.beginPath();
+    g.pts.forEach(([x, y], i) => {
+      const c = scene.toScreen({ x, y });
+      if (i) ctx.lineTo(c.x, c.y); else ctx.moveTo(c.x, c.y);
+    });
+    ctx.closePath();
+    if (g.tone === 'crit' || g.tone === 'warn' || g.tone === 'low') {
+      fillStyle(tone(g.tone), 0.14);
+      ctx.fill();
+      strokeStyle(tone(g.tone), 0.9, 1.5, []);
+      ctx.stroke();
+      strokeStyle(P.line, 0.5, 1, []);
+    } else {
+      // A calm tile is the honeycomb itself: a step above the rings' half.
+      strokeStyle(P.line, 0.85, 1, []);
+      ctx.stroke();
+      strokeStyle(P.line, 0.5, 1, []);
+    }
   }
 
   /**
