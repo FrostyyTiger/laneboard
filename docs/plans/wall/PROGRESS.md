@@ -112,12 +112,21 @@ Notes for every builder round (planner, round 1):
   filmstrip `$RUN_DIR/shots/r14-galaxy/sheet.png`: no two names overlap, no console errors. Seen: at the
   overview CLOUD sits under the far fleet block and is hidden (adds to the composition line in Later);
   at the VM's 1x the 11 px planet names are small in the sheet (the tablet gets 15).
-- [ ] T7 (§7.A2) [ui] The 2D fallback modules from the sketch: `public/js/wall/variants/tiles.js`
+- [x] T7 (§7.A2) [ui] The 2D fallback modules from the sketch: `public/js/wall/variants/tiles.js`
   (`withTiles`) and `variants/islands-tiles.js`, plus the focus-only link filter as a pure function in
   `variants/tiles.js`; `galaxy/main.js` sends a browser without WebGL to `wall.html?variant=islands-tiles`.
   Registering the variant needs fenced `variants.js` / `main.js`: the diff goes to `## For the owner` — done
   when: `test/wall-tiles.test.mjs` covers the tile for a warn/crit place, none for calm, and the link filter
   keeping only the held site's links.
+  (commit ac3e3e6) `variants/tiles.js`: `troublePlaces(nodes)` (id → warn|crit, counted for the nearest
+  named place: site, host, room, repo, builder; `low` gets none), `tiledOptions`/`withTiles` (tiles as
+  render.js polygon guides, new guides only when a tone or the base layout changes), `focusLinks(model,
+  heldSite)` + `siteOf`. `variants/islands-tiles.js` exports `links = 'focus'` for the registry. The galaxy
+  asks `galaxy/fallback.js hasWebGL()` before three.js (three's own context errors gone) and
+  `location.replace(fallbackHref(search))` → `wall.html?variant=islands-tiles[&demo=1]`. Seen with Chromium
+  `--disable-webgl --disable-3d-apis` (`$RUN_DIR/chrome-nowebgl.sh`, still `$RUN_DIR/shots/r18-nowebgl`):
+  `galaxy.html?demo=1` lands on wall.html, no console errors; it shows radial until the owner registers the
+  variant (For the owner). The WebGL path is unchanged (`r18-galaxy`, `?at=lab`, no errors).
 - [ ] T8 (§7.A4) [ui] [variant:galaxy] Live data in `scene.js`: a status change recolours and re-glows the
   same objects (no rebuild, no jump); a tree change (node added or gone) folds the cluster, re-lays it and
   opens it again; the camera never cuts — done when: a test shows `update()` with a status change keeps
