@@ -28,7 +28,7 @@
 // Pure: no DOM, so test/wall-islands.test.mjs imports it directly.
 
 import { labelSizeFor, STEPS } from './radial.js';
-import { stepsFor, pxPerMm } from '../type.js';
+import { stepsFor, pxPerMm, textW } from '../type.js';
 
 /** The tablet's 2736 x 1824: what the layout stretches to when nobody says. */
 export const ASPECT = 3 / 2;
@@ -64,17 +64,12 @@ const PLACE = new Set(['site', 'host']);
 /** What may be in trouble under a builder and is then named above its dot. */
 const LOUD_KINDS = new Set(['lane', 'session', 'run']);
 
-/**
- * A name's width at the room step: the label face is condensed, a caps
- * character takes about 0.44 em (`OFFICE-PRINTER` measures 97 px at 15 px
- * on the tablet), plus the Map's tracking.
- */
-const charW = (px) => 0.44 * px + Math.max(1, Math.round(px * 0.06));
-const nameW = (n, steps) => String(n?.label ?? n?.id ?? '').length * charW(steps.room);
+/** A name's width at the room step (type.js `textW`: the condensed label face). */
+const nameW = (n, steps) => textW(n?.label ?? n?.id ?? '', steps.room);
 
 /** A site's name width at the site step (the same condensed face). */
 export function siteNameW(n, steps) {
-  return String(n?.label ?? n?.id ?? '').length * charW((steps ?? STEPS).site);
+  return textW(n?.label ?? n?.id ?? '', (steps ?? STEPS).site);
 }
 
 /**

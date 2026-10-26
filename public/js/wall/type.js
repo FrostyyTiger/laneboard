@@ -18,6 +18,16 @@ export const DENSITY = Object.freeze({ tablet: 10.5, desk: 3.6 });
 /** Barlow Condensed's cap height, in em (the label face, tokens.css --font-label). */
 export const CAP_EM = 0.7;
 
+/**
+ * A caps name's width in CSS px at `px` in the label face, without a canvas:
+ * the face is condensed, a caps character about 0.44 em (`OFFICE-PRINTER`
+ * measures 97 px at 15 px on the tablet), plus the Map's tracking (render.js:
+ * 6 % of the size a character, 1 px at least).
+ */
+export function textW(text, px) {
+  return String(text ?? '').length * (0.44 * px + Math.max(1, Math.round(px * 0.06)));
+}
+
 /** One arc minute, in radians. */
 const ARCMIN = Math.PI / (180 * 60);
 

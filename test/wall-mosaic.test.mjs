@@ -7,9 +7,10 @@ import assert from 'node:assert/strict';
 import { polarLayout } from '../public/js/views/map/layout.js';
 import { createRenderer } from '../public/js/views/map/render.js';
 import {
-  layoutFor, mosaic, tilesOf, slots, grow, hexDist, hexToPx, hexCorners, labelSize, optionsFor, mapOptions, ambient,
-  SAFE, SIZES, ASPECT,
+  layoutFor, mosaic, tilesOf, slots, grow, hexDist, hexToPx, hexCorners, plateCorners, plateRoom, siteStep, labelSize, labelSizeOn,
+  optionsFor, mapOptions, ambient, SAFE, SIZES, ASPECT, REF_H, NAME_MARGIN,
 } from '../public/js/wall/variants/mosaic.js';
+import { stepsFor, pxPerMm, textW } from '../public/js/wall/type.js';
 import { VARIANTS, mapOptionsFor } from '../public/js/wall/variants.js';
 
 /** A fleet the size of the large demo (islands' fixture): five sites, a builder with lanes, a repo index, a run. */
@@ -57,12 +58,23 @@ for (const [name, aspect] of [['3:2', 3 / 2], ['16:9', 16 / 9]]) {
     const m = mosaic(nodes, FREE(aspect));
     const places = nodes.filter((n) => ['core', 'site', 'room', 'builder', 'repo'].includes(n.kind));
     assert.equal(m.tiles.length, places.length, 'a tile per place, none for a service, lane or run');
-    const keys = new Set(m.tiles.map((t) => `${t.cell.q},${t.cell.r}`));
-    assert.equal(keys.size, m.tiles.length, 'no two tiles on a cell');
-    const owner = new Map(m.tiles.map((t) => [`${t.cell.q},${t.cell.r}`, t.region]));
+    const cellsOf = (t) => t.cells ?? [t.cell];
+    const all = m.tiles.flatMap((t) => cellsOf(t).map((c) => ({ c, t })));
+    const keys = new Set(all.map(({ c }) => `${c.q},${c.r}`));
+    assert.equal(keys.size, all.length, 'no two tiles on a cell');
+    const owner = new Map(all.map(({ c, t }) => [`${c.q},${c.r}`, t.region]));
+    for (const a of all) {
+      for (const b of all) {
+        if (a.t.region !== b.t.region && hexDist(a.c, b.c) < 2) assert.fail(`${a.t.node.id} next to ${b.t.node.id} of another site`);
+      }
+    }
+    // Each site's tile is a plate of two cells side by side; the hub's and REPOS' one cell.
     for (const t of m.tiles) {
-      for (const u of m.tiles) {
-        if (t.region !== u.region && hexDist(t.cell, u.cell) < 2) assert.fail(`${t.node.id} next to ${u.node.id} of another site`);
+      const plate = ['site', 'host'].includes(t.node.kind) && !String(t.node.id).startsWith('__');
+      assert.equal(Boolean(t.cells), plate, `${t.node.id}: ${plate ? 'a plate' : 'one cell'}`);
+      if (plate) {
+        assert.deepEqual([t.cells[1].q - t.cells[0].q, t.cells[1].r - t.cells[0].r], [1, 0], 'the second cell east of the first');
+        assert.ok(Math.abs(t.cell.x - (t.cells[0].x + t.cells[1].x) / 2) < 1e-9, 'its centre between them');
       }
     }
     m.regions.forEach((reg, i) => {
@@ -163,7 +175,9 @@ test('slots and grow: slots tile the area, a region with no room fails the grid'
 });
 
 test('mosaic labels: sites at the site step, places at the room step, dots unnamed at the overview', () => {
-  assert.equal(labelSize({ id: 'hv1', kind: 'site' }), 26);
+  const lone = labelSizeOn();
+  assert.deepEqual(lone({ id: 'hv1', kind: 'site' }), { px: 35, inward: true }, 'the tablet\'s site step before any layout, centred on its labelAt');
+  assert.equal(lone({ id: '__repos', kind: 'site' }), 15, 'the hub\'s grouping at the room step');
   assert.equal(labelSize({ id: 'r', kind: 'room' }), 15);
   assert.equal(labelSize({ id: 'b', kind: 'builder' }), 15);
   assert.equal(labelSize({ id: 'l', kind: 'lane' }, { s: 1, trouble: true }), 0, 'the tile says it at the overview');
@@ -178,7 +192,8 @@ test('mosaic variant: registered with its options, no turn', () => {
   assert.equal(typeof optionsFor(16 / 9).layout, 'function');
   const o = mapOptionsFor(v, 16 / 9);
   assert.deepEqual(o.ambient, { drift: 0 });
-  assert.equal(o.labelSize, labelSize);
+  assert.equal(typeof o.labelSize, 'function');
+  assert.equal(o.pinLabels, undefined, 'no pins: nothing turns (round 40 still)');
   assert.equal(ambient.drift, 0);
 });
 
@@ -197,4 +212,73 @@ test('renderer: a polygon guide is a closed path, a toned one filled in its tone
   assert.equal(calls.filter(([k]) => k === 'fill').length, 1, 'only the toned tile is filled');
   assert.ok(calls.some(([k, v]) => k === 'set:fillStyle' && v === '#f00'), 'in its tone');
   assert.equal(calls.filter(([k]) => k === 'ellipse').length, 0);
+});
+
+test('siteStep: the screen\'s site step when the longest name fits, else the next that does, never the room step', () => {
+  const tablet = { site: 35, room: 15 };
+  const n = (label) => ({ id: label, kind: 'site', label });
+  assert.equal(siteStep([n('hv1'), n('remote')], tablet, 160), 35, 'REMOTE at 35 is ~104 px');
+  assert.equal(siteStep([n('hv1'), n('remote')], tablet, 100), 26, 'not at 35, at 26');
+  assert.equal(siteStep([n('hv1'), n('remote')], tablet, 70), 20);
+  assert.equal(siteStep([n('a-very-long-site-name')], tablet, 70), 20, 'a step above the rooms whatever the name');
+  assert.equal(siteStep([n('hv1')], { site: 26, room: 11 }, 160), 26, 'a desk monitor\'s step');
+  assert.equal(siteStep([], tablet, 10), 35, 'no sites: nothing to fit');
+  for (const px of [35, 26, 20]) {
+    const want = textW('REMOTE', px) + 2 * NAME_MARGIN;
+    assert.equal(siteStep([n('remote')], tablet, want), px, `exactly fits at ${px}`);
+  }
+});
+
+for (const [name, aspect] of [['3:2', 3 / 2], ['16:9', 16 / 9]]) {
+  test(`mosaic at ${name}: every site name fits its plate at the overview, on the tablet and a desk monitor`, () => {
+    for (const screen of [{ dpr: 2, cssHeight: REF_H }, { dpr: 1, cssHeight: 1080 }]) {
+      const steps = stepsFor(pxPerMm(screen));
+      const o = optionsFor(aspect, screen);
+      const nodes = fleet();
+      const lay = o.layout(nodes);
+      const H = screen.cssHeight, W = H * aspect;
+      const k = Math.min(W / (2 * lay.bounds.x), H / (2 * lay.bounds.y));
+      const px = o.labelSize(nodes.find((x) => x.id === 'remote'), { s: k }).px;
+      assert.equal(px, steps.site, `the screen's site step (${steps.site}) for a short-named fleet`);
+      assert.ok(px > o.labelSize({ id: 'r', kind: 'room' }, { s: k }), 'sites a step above rooms');
+      const plateW = plateRoom() * k;
+      // The name centred between the mark and the plate's right side, on its middle line.
+      const site = mosaic(nodes, FREE(aspect)).tiles.find((t) => t.node.id === 'remote');
+      const p = lay.pos.get('remote');
+      assert.equal(p.labelAt.y, site.cell.y);
+      assert.ok(p.x < site.cells[0].x && p.labelAt.x > site.cells[0].x, 'the mark left in the plate, the name after it');
+      // Flush left a step after the mark: the name's left edge at the same place on every plate, its right inside the plate.
+      for (const id of ['hv1', 'remote']) {
+        const t = mosaic(nodes, FREE(aspect)).tiles.find((x) => x.node.id === id);
+        const q = lay.pos.get(id);
+        const w = textW(id.toUpperCase(), px) / k;
+        assert.ok(Math.abs(q.labelAt.x - w / 2 - (t.cells[0].x + SIZES.hex * SIZES.plateName)) < 1e-9, `${id} flush left`);
+        assert.ok(q.labelAt.x + w / 2 <= t.cells[1].x + (SQ3 / 2) * SIZES.hex * SIZES.tile + 1e-9, `${id} inside its plate`);
+      }
+      for (const id of ['hv1', 'hv2', 'cloud', 'remote', 'home']) {
+        assert.ok(textW(id.toUpperCase(), px) + 2 * NAME_MARGIN <= plateW, `${id} at ${px} px in a ${plateW.toFixed(0)} px plate`);
+      }
+      // A fleet with a long site name: every site steps down together.
+      const long = nodes.map((x) => (x.id === 'cloud' ? { ...x, label: 'cloud-frankfurt-north-1' } : x));
+      const o2 = optionsFor(aspect, screen);
+      o2.layout(long);
+      const px2 = o2.labelSize({ id: 'hv1', kind: 'site' }, { s: k }).px;
+      assert.ok(px2 < steps.site, `${px2} below ${steps.site}`);
+      assert.equal(o2.labelSize({ id: 'cloud', kind: 'site' }, { s: k }).px, px2, 'one size for every site');
+    }
+  });
+}
+
+test('plateCorners: two hexes as one outline, ten corners, the joint at the middle', () => {
+  const s = 10, pitch = SQ3 * s;
+  const pts = plateCorners(0, 0, s, pitch);
+  assert.equal(pts.length, 10);
+  const xs = pts.map((p) => p[0]);
+  assert.ok(Math.abs(Math.min(...xs) + pitch / 2) < 1e-9 && Math.abs(Math.max(...xs) - 1.5 * pitch) < 1e-9, 'flat sides of both cells');
+  const joints = pts.filter((p) => Math.abs(p[0] - pitch / 2) < 1e-9);
+  assert.equal(joints.length, 2, 'the shared edge\'s ends, top and bottom');
+  for (const [x, y] of pts) {
+    const inA = Math.hypot(x, y) <= s + 1e-9, inB = Math.hypot(x - pitch, y) <= s + 1e-9;
+    assert.ok(inA || inB, 'every corner on one of the two hexes');
+  }
 });

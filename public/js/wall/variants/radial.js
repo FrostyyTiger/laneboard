@@ -50,13 +50,6 @@ export const IN_SITE = 1.25;
  */
 export const STEPS = Object.freeze({ site: 35, room: 15 });
 
-/**
- * The steps mosaic is spaced for (round 11's 26 / 15):
- * its layout measures names at these sizes, so it keeps them until its
- * own task (T49) moves them to type.js.
- */
-export const BASE_STEPS = Object.freeze({ site: 26, room: 15 });
-
 const PLACE = new Set(['site', 'host']);
 const ROOM = new Set(['room', 'repo', 'builder']);
 
@@ -84,9 +77,6 @@ export function labelSizeFor(steps = STEPS) {
 
 /** The tablet's labelSize. */
 export const labelSize = labelSizeFor(STEPS);
-
-/** BASE_STEPS' labelSize, for the directions that borrow radial's. */
-export const baseLabelSize = labelSizeFor(BASE_STEPS);
 
 /**
  * What `createMap` takes for this direction, next to `{ ambient: true }`.
