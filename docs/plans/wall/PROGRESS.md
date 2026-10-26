@@ -60,12 +60,23 @@ Notes for every builder round (planner, round 1):
   `{ update, setOpen(id, k), frame(now), camera, world: { sites: [{ id, home, reach, open, … }] } }`,
   `overviewShot(sites, now)`, `siteShot(site, now)`. `test/frontend-static.test.mjs` now lets a relative
   import land on a vendored module under `public/vendor/`.
-- [ ] T4 (§7.A1) [ui] [variant:galaxy] `galaxy/camera.js`: the Map look-alike (`focus(id, zoom)`, `fit()`,
+- [x] T4 (§7.A1) [ui] [variant:galaxy] `galaxy/camera.js`: the Map look-alike (`focus(id, zoom)`, `fit()`,
   `onDraw`, `screenOf`, `snapshotScene`) that flies the 3D camera from the overview to a system, opens it
   (T1 `foldAt` over `OPEN_MS`) while arriving, drifts slowly round it while held, folds it when leaving;
   `createTour` from `tour.js` drives it (trouble first) — done when: a test drives `createTour` with fake
   timers over the camera and sees the crit site focused first and `fit()` after the cycle, and a filmstrip
   of `galaxy.html?demo=1` shows overview → crit system opening → next system.
+  (commit fd0dcdf) Filmstrip `$RUN_DIR/shots/r11-galaxy/sheet.png` (large demo, `?demo=1`, 4x): overview →
+  the crit system mid-flight then open → the calm systems in turn → overview → the crit system first again;
+  no console errors. API: `createGalaxyCamera(galaxy)` → the Map methods plus `frame(now)` (before the scene
+  draws) and `drawn()` (after, runs `onDraw`); pure `flightPose` (eased lerp, the position arcs up by 0.18 of
+  the hop, at most 900), `openStep`, `zoomedSiteShot` (the tour's 2.3 is siteShot's distance, more zoom is
+  closer). The held drift is `siteShot`'s, counted from arrival so nothing jumps. The opening follows frame
+  steps up to 500 ms: with a 100 ms cap (the sketch's), at the throttled film's ~3 fps no system opened in a
+  demo leg. `screenOf` projects a site or member to canvas css px (null behind the camera); T9 checks it
+  with the lock. `snapshotScene` gives only a `version` (no 2D points, `fitScale` null), so `lock.js`
+  falls back to its own scale until T9. Seen: the open crit system's bottom planet touches the frame edge
+  (Later), the sun fills the top of some holds (T16), the dust is coarse close up (Later).
 - [ ] T5 (§7.A1) [ui] [variant:galaxy] Caption, frame and clock on `galaxy.html` from `caption.js` and
   `frame.js` (vignette, clock, worst fleet line, tag), fed from `tour.onLeg` with `captionLines` as on
   `wall.html`; the sketch's own caption and clock are not ported — done when: a test checks `galaxy.html`
@@ -152,6 +163,9 @@ Notes for every builder round (planner, round 1):
 - §7.B (T3, builder r7) The overview turns 39° in 45 s (`overviewShot`, the sketch's 0.000015 rad/ms):
   in the filmstrip the turn reads as motion, not depth; and the dust grains look coarse when the camera is
   close (`?at=`).
+- §7.B (T4, builder r11) At the tour's zoom an open system with many planets reaches past the frame's
+  bottom edge (`siteShot` distance `max(560, reach * 1.9)`): fit the distance to the open reach and the
+  aspect, or aim a little below the star.
 - §7.B (r8-film-ui 5) Camera rhythm: the overview holds still ~2 s at each cycle's start, a status change at
   the overview gets a ~600 ms 5 % push-in before the leg, and the turn stops while the camera flies (T4's
   pacing, to tune after T4).
