@@ -7,7 +7,8 @@
 // (`mapOptions`, from its module in variants/; the page adds `ambient`), and
 // may add `optionsFor(aspect, screen)` (the options for the screen's width / height
 // and density, type.js `screenOf`)
-// and `ambient` (its own ambient settings, over the Map's defaults).
+// and `ambient` (its own ambient settings, over the Map's defaults), and
+// `halos` (glow.js trouble halos under the Map, T16).
 
 import * as radial from './variants/radial.js';
 import * as orbits from './variants/orbits.js';
@@ -16,7 +17,10 @@ import * as mosaic from './variants/mosaic.js';
 
 /** The directions, in the order a morning report lists them. */
 export const VARIANTS = Object.freeze([
-  Object.freeze({ id: 'radial', label: 'Radial', mapOptions: radial.mapOptions, optionsFor: radial.optionsFor }),
+  Object.freeze({
+    id: 'radial', label: 'Radial', mapOptions: radial.mapOptions,
+    optionsFor: radial.optionsFor, halos: radial.halos,
+  }),
   Object.freeze({
     id: 'orbits', label: 'Orbits', mapOptions: orbits.mapOptions,
     optionsFor: orbits.optionsFor, ambient: orbits.ambient,

@@ -52,8 +52,9 @@ export function boot() {
   const lock = createLock(document.getElementById('wall-lock'), map, {
     timing: still ? STILL_LOCK_TIMING : LOCK_TIMING,
   });
-  // Lights and jobs from the feeds, under the Map, growing with its zoom.
-  const glow = createGlow(document.getElementById('wall-glow'), map);
+  // Lights and jobs from the feeds, under the Map, growing with its zoom; and
+  // the trouble halos where the variant asks for them.
+  const glow = createGlow(document.getElementById('wall-glow'), map, { halos: Boolean(pick.variant.halos) });
   // What stays put while the camera moves: vignette, clock, the fleet's worst line, the tag.
   const frame = createFrame(document.getElementById('wall-frame'));
   let latest = null;

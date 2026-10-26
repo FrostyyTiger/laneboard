@@ -86,6 +86,12 @@ export const labelSize = labelSizeFor(STEPS);
 export const mapOptions = Object.freeze({ layout, labelSize, pinLabels: true });
 
 /**
+ * Trouble halos on the glow layer (glow.js `HALO`, T16): at the overview a
+ * crit node is the one saturated area; a waiting lane keeps to its ▲.
+ */
+export const halos = true;
+
+/**
  * The options for a screen (`screen`: `{dpr, cssHeight, screenMm}`, type.js
  * `screenOf`): the type steps from its density; the layout is the same at
  * every aspect.
