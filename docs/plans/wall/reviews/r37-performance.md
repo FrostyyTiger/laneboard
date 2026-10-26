@@ -52,7 +52,7 @@ a 33 ms frame (30 fps). It does not fit the 16.7 ms frame the owner wants to kee
    tag's `offsetLeft/Top/Width/Height` on every call. It is called twice per frame: from `main.js freeBox()`
    (via `camera.js frame` → `free()`) and from `hud.covers()` in `labels.draw`. `labels.draw` runs after the
    lock (`galaxy/lock.js:55-62`) has written `--lock-arm` and four transforms. In between, `scene.js resize()`
-   (`:776`) and `labels.js draw` (`:215`) and `camera.js screenOf` (`:172`) read `clientWidth/clientHeight`.
+   (`:776`) and `labels.js draw` (`:216`) and `camera.js screenOf` (`:173`) read `clientWidth/clientHeight`.
    Measured: 2.2 style recalcs and 0.75-1.2 layouts per frame (one of each is the normal frame). `tagCover`
    is 2.23 ms/frame of self time at 4x. Fenced `frame.js cover` (0.46 ms) caches its box after the text
    changes. The tag never moves.
