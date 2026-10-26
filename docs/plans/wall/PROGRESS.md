@@ -394,10 +394,33 @@ Notes for every builder round (planner, round 1):
   `$RUN_DIR/shots/r39-galaxy/` (`?demo=1&quality=0`, 4x, 0 console errors, 1.9 fps is SwiftShader): the three
   overviews name all five. Reduced motion probe: all five named. Seen: the overview's turn still puts each
   name somewhere else every time (T24); with T24's fixed pose the fit becomes one pose.
-- [ ] T20 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 3) At the overview, tie the far fleet line
+- [x] T20 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 3) At the overview, tie the far fleet line
   to the cluster it names: a thin hairline in the status hue from the line to the named site's cluster, drawn
   in once (~600 ms) and then still — done when: a test maps the fleet line's named site to the hairline's end
   points, and the overview still shows the line reaching the cluster.
+  (commit f1ae228) New `galaxy/tether.js`: `tetherSite(model, drawn)` finds the site `frame.js worstLine` names
+  (its node by label and status inside the named site; the site alone when it is the problem; null calm or
+  outside any site), `tetherLine(box, star, t)` (pure), `tetherProgress` (eased out, `TETHER.drawMs` 600),
+  `createTether` (one 1 px span at 0.7, scaleX from its left end, as the lock's leader; layer
+  `#galaxy-tether` between the frame and the lock). **Decision:** it leaves the words from their top edge,
+  above the shape when the place is left of it and above the word's own letters when right of it, never
+  across the letters; from their left edge when the place is not above them; it stops 10 px short of the
+  star's rim. Drawn on every line with a shape (warn too, not only the far step): tying word to place helps
+  at any step. `main.js` shows it on an overview leg after `FLIGHT.ms` (at once on the first leg and in
+  reduced motion), hides it on a site leg; the fade is by script over 400 ms (`--tether-k`), since wall.css
+  may not transition over 120 ms (design guardrail). A new place named while it shows draws in again from
+  the word. The words' box is read on a new model or resize, never per frame (test). `?at=overview` shows it
+  at once. Also: the names now keep off the warn-step fleet line (`hud.js fleetCover`, read once per words):
+  the film caught `CLOUD` running into `▲ REMOTE · OFFICE-PRINTER`, because `frame.js` gives a cover only
+  at the far step. The overview fit (T19) still ignores the warn block (Later). Tests
+  `test/wall-galaxy-tether.test.mjs` (5, on a real three camera at the overview: the far end is the named
+  site's star, short of its rim) and +1 in `wall-galaxy-hud`. Still `$RUN_DIR/shots/r42-t20-still`
+  (`?at=overview&quality=0`): a red hairline from `■` up to HV2. Filmstrip `$RUN_DIR/shots/r42-galaxy/`
+  (`?demo=1&quality=0`, 4x, 0 console errors, 1.4 fps is SwiftShader): at 77 s the line is mid draw-in
+  toward HV2; an earlier film showed it whole from `▲ HV1` (warn). Probe `$RUN_DIR/tools/r42-tetherprobe.mjs`:
+  drawn on each overview leg, gone 400 ms into the site leg. Seen: in demo timing (4 s overview, 2.25 s
+  flight) the line is up for only ~1.7 s per overview, so many sheet frames miss it; at real timing it holds
+  ~17 s. The line can cross another site's name on its way (it is 1 px and under the names' halos).
 - [ ] T21 (§7.C) [ui] [variant:galaxy] (reviews/r15-dreamer.md, unforgettable 1) `fx=beacon`: above each crit
   cluster a thin pillar of light rises from the plane, its height the crit's age (log scale, capped), calm
   clusters get none, so two crits are no longer twins — done when: a test maps crit age to pillar height
@@ -484,6 +507,9 @@ Notes for every builder round (planner, round 1):
 
 ## Later
 
+- §7.B (T20, builder r42) At the warn step the fleet line has no `frame.js` cover, so the overview fit (T19)
+  does not keep sites clear of it; the names now step aside (`hud.js fleetCover`) but a star can still sit
+  under the words. Feed the fit the warn block too (main.js `kept[1]`), widest seen.
 - §7.B (T3, builder r7) ~~The overview turns 39° in 45 s~~ (done: T24, no turn); the dust grains look
   coarse when the camera is close (`?at=`).
 - §7.B (T4, builder r11) At the tour's zoom an open system with many planets reaches past the frame's
