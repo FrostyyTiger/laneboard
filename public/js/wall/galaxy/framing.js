@@ -76,6 +76,20 @@ export function ndcOf(shot, p, fov, aspect) {
 }
 
 /**
+ * How far `shot`'s camera must step back along its line of sight (world
+ * units, 0 when it need not) so `p` lands within `keep` (0..1) of the frame's
+ * half-width and half-height (camera.js flightPose, night 3 T1). Stepping
+ * back keeps the look-at, so the frame's middle stays where it was.
+ */
+export function standBack(shot, p, fov, aspect, keep = 1) {
+  const { f, r, u } = axes(shot.pos, shot.look);
+  const d = sub(p, shot.pos);
+  const t = Math.tan((fov * Math.PI) / 360) * keep;
+  const need = Math.max(Math.abs(dot(d, r)) / (t * aspect), Math.abs(dot(d, u)) / t, 1e-6);
+  return Math.max(0, need - dot(d, f));
+}
+
+/**
  * `shot` slid sideways and up or down (it keeps its direction, so what was
  * behind the camera, the sun, stays behind it) so `p`, at its look-at, lands
  * at `ndc` ({x, y}, -1..1, y up).

@@ -6,8 +6,9 @@
 //
 // One camera with intent: a flight eases from wherever the camera is to the
 // shot it wants, rising over a long hop so it never skims the plane or the
-// sun; the system it flies to opens once the camera is most of the way there
-// (layout.js OPEN_MS), the one it leaves folds while it goes; held, the camera
+// sun, and keeps the star it left or the one it flies to in frame (night 3
+// T1: it steps back rather than look at empty sky); the system it flies to
+// opens once the camera is most of the way there (layout.js OPEN_MS), the one it leaves folds while it goes; held, the camera
 // drifts slowly round the system so the depth reads (scene.js `siteShot`).
 //
 // The overview is one fixed pose (T24); only a held system drifts.
@@ -21,9 +22,9 @@
 
 import * as THREE from '../../../vendor/three/three.module.js';
 import { ease, OPEN_MS } from './layout.js';
-import { overviewShot, siteShot, SIZE } from './scene.js';
+import { overviewShot, siteShot, SIZE, FOV } from './scene.js';
 import { TIMING } from '../tour.js';
-import { blendRect } from './framing.js';
+import { blendRect, ndcOf, standBack } from './framing.js';
 import { sizeOf } from './stage.js';
 
 /**
@@ -32,6 +33,9 @@ import { sizeOf } from './stage.js';
  * hop rises by `lift` of its length at the middle, at most `maxLift`.
  */
 export const FLIGHT = Object.freeze({ ms: 2250, openAt: 0.45, lift: 0.18, maxLift: 900 });
+
+/** Where the sun is: the overview's star. */
+const SUN = Object.freeze({ x: 0, y: 0, z: 0 });
 
 /** How quickly a held shot follows a change of the free box (ms, exponential). */
 export const FREE_EASE_MS = 450;
@@ -42,17 +46,54 @@ const MAX_STEP_MS = 500;
 const lerp = (a, b, k) => a + (b - a) * k;
 
 /**
- * Where the camera is `k` (0..1, already eased) of the way from shot `a` to
- * shot `b` (`{ pos, look }`): a straight line for the look-at, an arc for the
- * position that rises in the middle with the hop's length. Pure.
+ * How much of the frame's half-width and half-height an end of a flight must
+ * stay inside (night 3 T1): 0.85 keeps it clear of the very edge.
  */
-export function flightPose(a, b, k, flight = FLIGHT) {
+export const FLIGHT_KEEP = 0.85;
+
+/** How many points of a flight `flightPose` samples to size its step back. */
+const FLIGHT_SAMPLES = 24;
+
+/** The step back's shape over a flight: 0 at both ends, 1 in the middle, smooth. */
+const swell = (k) => Math.sin(Math.PI * Math.min(1, Math.max(0, k))) ** 2;
+
+/**
+ * Where the camera is `k` (0..1, already eased) of the way from shot `a` to
+ * shot `b` (`{ pos, look }`): a straight line for the look-at, from the
+ * start's target to the destination, and an arc for the position that rises
+ * in the middle with the hop's length. With a `frame` (`{ fov, aspect,
+ * ends: [from, to] }`, the two stars, night 3 T1, r59-dreamer 1) the camera
+ * steps back along its line of sight just far enough that one of the two
+ * ends stays within FLIGHT_KEEP of the frame, so no flight frame is empty
+ * sky; at either end it is already in, so the ends do not change. Pure.
+ */
+export function flightPose(a, b, k, flight = FLIGHT, frame = null) {
   const dist = Math.hypot(b.pos.x - a.pos.x, b.pos.y - a.pos.y, b.pos.z - a.pos.z);
   const rise = Math.min(flight.maxLift, dist * flight.lift) * Math.sin(Math.PI * k);
-  return {
+  const pose = {
     pos: { x: lerp(a.pos.x, b.pos.x, k), y: lerp(a.pos.y, b.pos.y, k) + rise, z: lerp(a.pos.z, b.pos.z, k) },
     look: { x: lerp(a.look.x, b.look.x, k), y: lerp(a.look.y, b.look.y, k), z: lerp(a.look.z, b.look.z, k) },
   };
+  const ends = frame?.ends?.filter(Boolean) ?? [];
+  if (!ends.length) return pose;
+  // How far back each step of the flight needs to be (the base pose, sampled),
+  // then one smooth swell over the whole flight that covers every one of
+  // them: a step back that follows the need frame by frame would kink where
+  // the nearer end changes and jolt the camera.
+  const fov = frame.fov ?? FOV, aspect = frame.aspect ?? 16 / 9, keep = frame.keep ?? FLIGHT_KEEP;
+  const need = (pz) => Math.min(...ends.map((p) => standBack(pz, p, fov, aspect, keep)));
+  let scale = 0;
+  for (let i = 1; i < FLIGHT_SAMPLES; i++) {
+    const j = i / FLIGHT_SAMPLES;
+    scale = Math.max(scale, need(flightPose(a, b, j, flight)) / swell(j));
+  }
+  // 10 % over the samples, so a need that peaks between two of them stays under the swell.
+  const back = Math.max(scale * 1.1 * swell(k), need(pose));
+  if (!(back > 0)) return pose;
+  const f = { x: pose.look.x - pose.pos.x, y: pose.look.y - pose.pos.y, z: pose.look.z - pose.pos.z };
+  const l = Math.hypot(f.x, f.y, f.z) || 1;
+  pose.pos = { x: pose.pos.x - (f.x / l) * back, y: pose.pos.y - (f.y / l) * back, z: pose.pos.z - (f.z / l) * back };
+  return pose;
 }
 
 /** A system's opening `open` moved `dtMs` toward `want` (0 or 1) at OPEN_MS a full turn. Pure. */
@@ -91,6 +132,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   // What the camera wants: the overview or one site, since `t0` (ms).
   let want = { kind: 'overview', t0: null };
   let from = null; // the pose the current flight left from
+  let fromEnd = null; // the star the current flight keeps in frame as it leaves (T1)
   let pose = null; // where the camera is now
   let last = null;
   let version = 0;
@@ -114,8 +156,20 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     return overview(now);
   };
 
+  // The star a shot is about: the held site's, or the sun for the overview.
+  const starOf = (w) => (w.kind === 'site' ? siteOf(w.id)?.home ?? null : SUN);
+  const view = () => ({ fov: galaxy.camera.fov, aspect: galaxy.camera.aspect });
+  const shows = (shot, p) => {
+    const n = p && shot ? ndcOf(shot, p, galaxy.camera.fov, galaxy.camera.aspect) : null;
+    return n != null && Math.abs(n.x) <= FLIGHT_KEEP && Math.abs(n.y) <= FLIGHT_KEEP;
+  };
+  // An end of a flight the camera already shows (so the flight starts and
+  // lands where it is), else the middle of its frame.
+  const endFor = (shot, stars) => stars.find((p) => shows(shot, p)) ?? shot?.look ?? null;
+
   const go = (next) => {
     from = still ? null : pose;
+    fromEnd = from ? endFor(from, [starOf(want), fromEnd]) : null;
     want = { ...next, t0: null };
     version += 1;
   };
@@ -131,7 +185,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     freeNow = box ? blendRect(freeNow, box, freeNow ? 1 - Math.exp(-dt / FREE_EASE_MS) : 1) : null;
     const k = from ? ease((now - want.t0) / flight.ms) : 1;
     const to = target(now);
-    pose = from && k < 1 ? flightPose(from, to, k, flight) : to;
+    pose = from && k < 1 ? flightPose(from, to, k, flight, { ...view(), ends: [fromEnd, endFor(to, [starOf(want)])] }) : to;
     if (k >= 1) from = null;
 
     // The held system opens once the camera is most of the way there; the rest fold.

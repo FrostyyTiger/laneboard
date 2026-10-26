@@ -4,10 +4,11 @@
 // opens just after the camera arrives and folds when it leaves.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import * as THREE from '../public/vendor/three/three.module.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
-import { galaxyLayout, OPEN_MS } from '../public/js/wall/galaxy/layout.js';
-import { overviewShot } from '../public/js/wall/galaxy/scene.js';
+import { galaxyLayout, OPEN_MS, ease } from '../public/js/wall/galaxy/layout.js';
+import { overviewShot, FOV } from '../public/js/wall/galaxy/scene.js';
 import {
   createGalaxyCamera, flightPose, openStep, zoomedSiteShot, FLIGHT,
 } from '../public/js/wall/galaxy/camera.js';
@@ -180,4 +181,83 @@ test('T24: the overview holds one pose at any time, a held system still drifts',
   cam.fit();
   cam.frame(3_700_000);
   assert.deepEqual(cam.frame(3_700_000 + FLIGHT.ms + 1), once, 'back at the same overview pose');
+});
+
+// Night 3 T1 (r59-dreamer 1): a flight never shows only empty sky. Over every
+// pair of the large demo's shots (and overview ↔ site), at every step, the
+// star it left or the star it flies to is inside the frame, as a real three
+// camera projects it; the ends are the shots themselves and the path has no jolt.
+const LARGE = JSON.parse(fs.readFileSync(new URL('./fixtures/wall-large-map.json', import.meta.url), 'utf8')).nodes;
+
+test('T1: every flight of the large demo keeps the star it left or the one it flies to in frame', () => {
+  const lay = galaxyLayout(LARGE);
+  const aspect = 1368 / 912;
+  const view = { fov: FOV, aspect, free: { x0: 0.3, y0: 0, x1: 1, y1: 0.8 } };
+  const shots = [
+    { id: 'overview', star: { x: 0, y: 0, z: 0 }, shot: overviewShot(lay.sites) },
+    ...lay.sites.map((s) => ({ id: s.id, star: s.home, shot: zoomedSiteShot(s, 0, DEMO_TIMING.zoom, view) })),
+  ];
+  assert.ok(shots.length >= 6);
+  const cam = new THREE.PerspectiveCamera(FOV, aspect, 1, 30000);
+  const inFrame = (pose, p) => {
+    cam.position.set(pose.pos.x, pose.pos.y, pose.pos.z);
+    cam.lookAt(pose.look.x, pose.look.y, pose.look.z);
+    cam.updateMatrixWorld();
+    const v = new THREE.Vector3(p.x, p.y, p.z).applyMatrix4(cam.matrixWorldInverse);
+    if (v.z >= 0) return false; // behind
+    v.applyMatrix4(cam.projectionMatrix);
+    return Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1;
+  };
+  let lostBefore = 0;
+  const N = 140; // 60 fps over FLIGHT.ms
+  for (const a of shots) for (const b of shots) {
+    if (a === b) continue;
+    const frame = { fov: FOV, aspect, ends: [a.star, b.star] };
+    assert.deepEqual(flightPose(a.shot, b.shot, 0, FLIGHT, frame), flightPose(a.shot, b.shot, 0), `${a.id} → ${b.id}: starts where it was`);
+    const end = flightPose(a.shot, b.shot, 1, FLIGHT, frame);
+    assert.ok(dist(end.pos, b.shot.pos) < 1e-6 && dist(end.look, b.shot.look) < 1e-6, `${a.id} → ${b.id}: lands on the shot`);
+    let prev = null;
+    const steps = [];
+    for (let i = 0; i <= N; i++) {
+      const k = ease(i / N);
+      const pose = flightPose(a.shot, b.shot, k, FLIGHT, frame);
+      if (![a.star, b.star].some((p) => inFrame(flightPose(a.shot, b.shot, k), p))) lostBefore += 1;
+      assert.ok(inFrame(pose, a.star) || inFrame(pose, b.star), `${a.id} → ${b.id} at step ${i}: an end in frame`);
+      if (prev) steps.push(dist(prev, pose.pos));
+      prev = pose.pos;
+    }
+    // the eased flight alone has a peak step ~2.9x its mean; stepping back may add little to that
+    const mean = steps.reduce((x, y) => x + y, 0) / steps.length;
+    assert.ok(Math.max(...steps) < mean * 3.6, `${a.id} → ${b.id}: no jolt (${(Math.max(...steps) / mean).toFixed(2)}x the mean step)`);
+  }
+  assert.ok(lostBefore > 0, 'without the frame, some flights do show only empty sky (the test can fail)');
+});
+
+test('T1: the camera flies from site to site with a star in frame, even when a flight is cut short', () => {
+  const nodes = fleet({ 'cloud-b': 'crit' });
+  const galaxy = fakeGalaxy(nodes);
+  const cam = createGalaxyCamera(galaxy);
+  const homes = galaxy.world.sites.map((s) => s.home);
+  const anyStar = () => homes.some((h) => {
+    const v = new THREE.Vector3(h.x, h.y, h.z).project(galaxy.camera);
+    return v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1;
+  }) || (() => { const v = new THREE.Vector3(0, 0, 0).project(galaxy.camera); return v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1; })();
+  let t = 0;
+  cam.frame(t);
+  for (const id of ['hv1', 'remote', 'cloud', 'home']) {
+    cam.focus(id, DEMO_TIMING.zoom);
+    for (let s = 0; s <= FLIGHT.ms + 200; s += 16) { t += 16; cam.frame(t); assert.ok(anyStar(), `to ${id} at ${s} ms`); }
+  }
+  // cut short halfway, sent on elsewhere
+  cam.focus('hv2', DEMO_TIMING.zoom);
+  for (let s = 0; s < FLIGHT.ms / 2; s += 16) { t += 16; cam.frame(t); }
+  let prev = cam.frame(t).pos;
+  cam.fit();
+  for (let s = 0; s <= FLIGHT.ms; s += 16) {
+    t += 16;
+    const p = cam.frame(t);
+    assert.ok(anyStar(), `to the overview at ${s} ms`);
+    assert.ok(dist(prev, p.pos) < 200, 'no jump when cut short');
+    prev = p.pos;
+  }
 });
