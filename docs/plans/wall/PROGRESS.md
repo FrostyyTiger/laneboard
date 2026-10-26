@@ -535,11 +535,20 @@ Notes for every builder round (planner, round 1):
   0 console errors, 1.4 fps is SwiftShader). Seen, not this task: the red/yellow banner flip (T30) and, in
   `r52-still-overview`, CLOUD's name hidden behind the fleet block. The demo fleet on :7795 (started 13:42 by
   an earlier round) was used and left running.
-- [ ] T27 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 1) The 19 nebula lobes and landing planes are
+- [x] T27 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 1) The 19 nebula lobes and landing planes are
   `transparent` + `DoubleSide`, so three rebuilds their shader state twice per frame (~2.4 ms/frame at 4x, 56 KB
   of allocation): add `forceSinglePass: true` to both material constructors (`scene.js` lobes and system plane)
   — done when: a test builds the scene and a lobe's and a plane's `material.version` is the same after two
-  `frame()` calls, and a 4x profile or `__wallPerf.scriptMs` is no worse (record before/after).
+  `frame()` calls, and a 4x profile or `__wallPerf.scriptMs` is no worse (record before/after). (commit e5c2a17)
+  `forceSinglePass: true` on the lobe and plane materials in `scene.js`. Test (`wall-galaxy-budget`): the
+  fake renderer copies three r170's renderObject two-pass branch over the real scene; a lobe's and the
+  plane's `version` stay put over two frames (they climbed 2 → 6 without the fix), and no transparent
+  DoubleSide material in the scene lacks the flag. Browser, large demo, `?demo=1&quality=0`, 4x
+  (`$RUN_DIR/tools/r53-version.mjs`, `scriptms.mjs`): before 19 materials climbing (24 → 46 in 3 s), 10
+  programs, script 12.0/14.2/13.6 ms per frame over three 40 s windows; after 0 climbing, 8 programs,
+  script 9.7/12.1/7.1 (SwiftShader-noisy, but no worse). Filmstrip `$RUN_DIR/shots/r53-galaxy/` (0 console
+  errors, 1.8 fps is SwiftShader) and still `r53-still-hv1`: nebulae and the system plane look as before.
+  The demo fleet on :7795 (started by an earlier round) was used and left running.
 - [ ] T28 (§7.A6) [variant:galaxy] (reviews/r37-performance.md 2) The budget has no lever on fill rate, the
   bottleneck of the tablet's iGPU at 2736x1824: give each `budget.js LEVELS` entry a pixel `ratio` (L0 2, L1 1.5,
   L2 1.25), have `scene.setQuality` call `renderer.setPixelRatio(min(dpr, ratio))` (resize only, no camera move;
