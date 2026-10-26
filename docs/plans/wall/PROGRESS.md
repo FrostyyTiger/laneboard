@@ -471,10 +471,20 @@ Notes for every builder round (planner, night 1):
   map label at the ground's top edge is cut (`EDGE-2`, `REMOTE`): T24's hiding of Map labels under a plate
   should take this rectangle too; and on HV2's hold the plate's hero and the fleet word say the same thing
   twice (r41 shared #2, with the owner).)
-- [ ] T22 (§2) [ui] [variant:all] (r14-operator #5) Caption status is a severity count and names the
+- [x] T22 (§2) [ui] [variant:all] (r14-operator #5) Caption status is a severity count and names the
   worst three: `1 crit · 5 attention`, then the worst problem, then the next two, one per line at the
   1 m step (today "6 of 41 in trouble" names one) — done when: `captionLines` test covers a site with
   1 crit and several attention nodes (counts and three named lines, worst first).
+  (commit 8b47e01; problems below the site are grouped the way `worstLine` groups them (a lane and its
+  waiting session are one problem, the worst node in it speaks), sorted worst first, ties in model order. The
+  status line is the count (`3 attention · 1 warn`), calm sites keep `ok · all N calm`. The three named are
+  the hero (T20's trouble word, the worst) plus up to two `problem` lines right under the count (key `▲
+  attention` in the mono key step, value `FIX-LOGIN · asked a question · 6m` at the line step (the 1 m
+  step, 2.7vmin), in the status colour), so the worst is not said twice on the plate. `NAMED_PROBLEMS` = 3.
+  Facts give way first under MAX_LINES (HV2's plate keeps hardware, drops where). Test in
+  `test/wall-caption.test.mjs`. Filmstrip `$RUN_DIR/shots/r54-radial/`, dense unthrottled strip `r54-dense/`
+  (frame 18: HV1's plate with the count and two named lanes, keys aligned, nothing cut), 0 console errors;
+  fps 2.5 is SwiftShader plus screenshots (filming note).)
 - [ ] T23 (§2) [ui] [variant:all] (r14-operator #6) No dead plate: on a trouble site the trouble word
   shows at once with the plate (untyped), only the site name types; the plate grows with its lines
   instead of starting at full height; in demo timing the typing starts during the last 0.5 s of the
