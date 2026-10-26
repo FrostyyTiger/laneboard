@@ -41,6 +41,33 @@ export function galaxyCaption(cap, kind = 'site') {
 }
 
 /**
+ * What a tapped thing's sheet says (night 3 T11, README §7 Night 3 C3): the
+ * person asked, so every line `captionLines` has (a calm site's status,
+ * bars, facts and counts too, which the tour's plate drops from 3 m), worst
+ * first as it ranks them: the trouble word, the count by severity, the next
+ * problems, then the rest. A site's kicker is `galaxyCaption`'s; a planet's
+ * (anything below a site) names the site it is in (`ROOM · IN HV2`). The
+ * plate's own type steps: the sheet is the plate, so nothing new competes
+ * for the eye. `sheet: true` on the answer. Pure.
+ */
+export function sheetCaption(node, model, index = null, count = null) {
+  const nodes = nodeList(model).filter((n) => n && typeof n.id === 'string');
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const kind = node?.kind || 'node';
+  const cap = captionLines(node, model, index, count);
+  const sheet = { ...galaxyCaption(cap, kind), lines: cap.lines, sheet: true };
+  if (kind === 'site') return sheet;
+  // The nearest site above it, if any.
+  const seen = new Set();
+  let site = null;
+  for (let p = byId.get(node?.parent); p && !seen.has(p.id); p = byId.get(p.parent)) {
+    seen.add(p.id);
+    if (p.kind === 'site') { site = p; break; }
+  }
+  return site ? { ...sheet, kicker: `${sheet.kicker} · IN ${String(site.label ?? site.id).toUpperCase()}` } : sheet;
+}
+
+/**
  * The model the fleet line is fed while `heldId` is the lock's target (T23,
  * reviews/r21-operator.md 5): when the line would name the problem the
  * caption already holds, the banner steps down to the next one. The held
@@ -148,7 +175,7 @@ export function staleCaption(cap, fresh) {
  * line remembers it quietly, and through `bannerModel`, so it never repeats the held
  * caption), `live(on)` the socket's state, `fresh(f)` the feed's (fresh.js:
  * the tag's word, and the caption's grey line from the next leg on), `park(site)` shows a parked system's
- * caption (`?at=`, for stills) without a tour, `open(leg)` a tapped one's
+ * caption (`?at=`, for stills) without a tour, `open(leg)` a tapped site's or planet's sheet (sheetCaption)
  * (its brackets at once, its plate at `leg.arriveMs`), and `covers()` the boxes the
  * words take over the canvas (for the labels, T6; the tag top right since T18,
  * so neither a name nor a held planet sits on it; the warn-step fleet line
@@ -194,7 +221,9 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     if (leg?.kind === 'overview' && hold && now() - hold.clearedAt >= CRIT_HOLD.minMs) hold = null;
     const node = legNode(leg, latest);
     if (node) {
-      const cap = staleCaption(galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node'), feedState);
+      const cap = staleCaption(leg.sheet
+        ? sheetCaption(node, latest, leg.index ?? null, leg.count ?? null)
+        : galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node'), feedState);
       const target = lockTarget(node, latest);
       heldId = target[0]?.id ?? null;
       feed();
@@ -273,8 +302,9 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     park: (leg) => say({ arriveMs: 0, ...leg, kind: 'site' }),
     // A finger took the camera (night 3 T7, touch.js): the words of an overview leg, no plate, no lock.
     release: () => say({ kind: 'overview' }),
-    // A finger tapped a site (night 3 T10): its plate as the camera gets there, its brackets at once.
-    open: (leg) => say({ arriveMs: 0, ...leg, kind: 'site', lockMs: 0, cut: true }),
+    // A finger tapped a site (night 3 T10) or a planet in an open system (T11): its sheet (every line,
+    // sheetCaption) as the camera gets there, its brackets at once.
+    open: (leg) => say({ arriveMs: 0, ...leg, kind: 'site', lockMs: 0, cut: true, sheet: true }),
     covers: () => [caption.cover?.(), fleetCover(), tagCover()].filter(Boolean),
     fleetCover,
     tagCover,

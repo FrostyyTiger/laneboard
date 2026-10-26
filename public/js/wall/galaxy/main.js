@@ -33,7 +33,9 @@
 // the overview and a close system, and both coast to rest (touch.js
 // createGestures steering camera.js's free pose). Reduced motion: no steering yet (T14).
 // A tap on a site (T10, touch.js createTaps, hitTest) flies there and opens
-// it: brackets at once, the plate as the camera arrives.
+// it: brackets at once, the plate as the camera arrives. The plate is then the
+// site's sheet (T11, hud.js sheetCaption: every line, worst first); in an
+// open system a tap on a planet shows the planet's sheet where the camera is.
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
@@ -57,7 +59,7 @@ import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { createTether } from './tether.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
-import { TOUCH, createGestures, createTaps, createTouch, hitTest, orbitLimits, tapPoints } from './touch.js';
+import { TOUCH, createGestures, createTaps, createTouch, hitTest, memberPoints, orbitLimits, tapPoints } from './touch.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -273,12 +275,16 @@ export function boot() {
     tether.hide();
     fromSite = true;
   };
+  // A planet in an open system (T11) is asked first: the camera stays, its sheet comes at once.
+  const openPlanet = (id) => hud.open({ id, arriveMs: 0 });
   const taps = touch && !reduced ? createTaps(touch, {
     pick: (x, y) => {
       const o = stageEl.getBoundingClientRect();
-      return hitTest(tapPoints(galaxy.world?.sites, cam.screenOf, labels.shown()), x - o.left, y - o.top);
+      const names = labels.shown();
+      return hitTest(memberPoints(galaxy.world?.sites, cam.screenOf, names), x - o.left, y - o.top)
+        ?? hitTest(tapPoints(galaxy.world?.sites, cam.screenOf, labels.shown()), x - o.left, y - o.top);
     },
-    tap: (hit) => { if (hit) openSite(hit.id); },
+    tap: (hit) => { if (hit?.site) openPlanet(hit.id); else if (hit) openSite(hit.id); },
   }) : null;
 
   const tick = (now) => {

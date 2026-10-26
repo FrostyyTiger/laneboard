@@ -23,7 +23,9 @@
 // the drag's slop, alone and not a palm. `hitTest` finds the site under it in
 // screen space (a finger-sized disc round each star, or its shown name;
 // `tapPoints` lists them), worst tone first, then the nearest; `createTaps`
-// tells the page, which flies there and opens it.
+// tells the page, which flies there and opens it. In an open system a tap
+// on a planet (T11, `memberPoints`, asked before the sites) opens its own
+// sheet (hud.js `sheetCaption`).
 //
 // The page itself never scrolls, zooms or shows a menu under a finger: the
 // viewport has no user scaling (galaxy.html), the stage `touch-action: none`
@@ -430,7 +432,7 @@ export function hitTest(points, x, y, radius = TAP.radiusPx) {
  * and drawn radius; null behind the camera), in its nebula's tone (the worst
  * of the site and what it holds), with its shown name's box from `names`
  * (labels.js `shown()`: `[{ id, box }]`). Sites only, at the overview and in
- * a system alike: a planet is T11's. Pure but for `screenOf`.
+ * a system alike: a planet is memberPoints'. Pure but for `screenOf`.
  */
 export function tapPoints(sites, screenOf, names = []) {
   const boxes = new Map();
@@ -441,6 +443,28 @@ export function tapPoints(sites, screenOf, names = []) {
     const sp = screenOf(s.id);
     if (!sp) continue;
     out.push({ id: s.id, x: sp.x, y: sp.y, r: sp.r, tone: worseTone(toneOf(s.node), toneOf(s.status)), box: boxes.get(s.id) ?? null });
+  }
+  return out;
+}
+
+/**
+ * The things in an open system a tap can hit (T11, README §7 Night 3 C3):
+ * every member (planet or dot) of a site at least `minOpen` open, at
+ * `screenOf(id)`, in its own tone, with its shown name's box. The page asks
+ * these first, so a finger on a planet beside its star opens the planet, not
+ * the star. Pure but for `screenOf`.
+ */
+export function memberPoints(sites, screenOf, names = [], minOpen = 0.5) {
+  const boxes = new Map();
+  for (const n of names ?? []) if (n?.id != null && n.box) boxes.set(n.id, n.box);
+  const out = [];
+  for (const s of sites ?? []) {
+    if (!s || s.gone || !((s.open ?? 0) >= minOpen)) continue;
+    for (const m of s.members ?? []) {
+      const sp = m?.id != null ? screenOf(m.id) : null;
+      if (!sp) continue;
+      out.push({ id: m.id, site: s.id, x: sp.x, y: sp.y, r: sp.r, tone: toneOf(m.node), box: boxes.get(m.id) ?? null });
+    }
   }
   return out;
 }
