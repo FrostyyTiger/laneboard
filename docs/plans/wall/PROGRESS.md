@@ -31,13 +31,16 @@ Notes for every builder round (planner, round 1):
 
 ## Tasks
 
-- [ ] T1 (§7 Night 3 A1) [ui] [variant:galaxy] Flights keep an end in frame (was night 2's T39, reviews
+- [x] T1 (§7 Night 3 A1) [ui] [variant:galaxy] Flights keep an end in frame (was night 2's T39, reviews
   r59-dreamer 1): in `galaxy/camera.js flightPose` the look-at moves from the start target to the destination,
   never at empty sky, and the pose keeps at least one of the two ends inside the projected frame at every step
   — done when: a test in `test/wall-galaxy-camera.test.mjs` runs `flightPose` over every site pair of the large
   fixture (and overview ↔ site) and finds the start or the target star inside the frame at every step, ends
   unchanged, path continuous; and a film of `galaxy.html?demo=1&quality=0` has no flight frame without a
-  cluster or the sun.
+  cluster or the sun. (commit 68d02f0) Builder r3: the camera steps back along its line of sight in one smooth
+  swell (`sin²`, sized from 24 samples +10 %) so one star stays within 85 % of the frame (`framing.js standBack`);
+  before, 34 of 42 large-demo pairs showed only empty sky for up to 39 % of a flight. Peak step back ~5000 on
+  home ↔ __repos: T2 (bend the arc) may want to fold this into its path. Film r3-galaxy: a star in every frame.
 - [ ] T2 (§7 Night 3 A1) [ui] [variant:galaxy] No flight through a cluster or the sun (was night 2's T36,
   reviews r54-film-ui 3): `flightPose` keeps the path at least `1.5 × reach` from every star but the two ends
   and clear of the sun (bend the arc up, as it already lifts by `FLIGHT.lift`), keeping T1's rule; nebula lobes
