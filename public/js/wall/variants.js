@@ -40,12 +40,13 @@ export const VARIANTS = Object.freeze([
 /**
  * The Map options a page creates its Map with for `variant` on a screen of
  * `aspect` (width / height): the variant's own, `ambient` its settings or on.
+ * Link labels are off in every direction (T27: at 3 m they collide with names).
  * `screen` (type.js `screenOf`) is passed on for the type steps.
  */
 export function mapOptionsFor(variant, aspect, screen) {
   const own = typeof variant?.optionsFor === 'function' && Number.isFinite(aspect) && aspect > 0
     ? variant.optionsFor(aspect, screen) : variant?.mapOptions;
-  return { ...own, ambient: variant?.ambient ?? true };
+  return { ...own, edgeLabels: false, ambient: variant?.ambient ?? true };
 }
 
 /** What an unknown or missing `?variant=` falls back to. */

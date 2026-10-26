@@ -157,6 +157,8 @@ export function migrateFolds(list, localId) {
  *   rings                 false: no ring hairlines, ring legends or bearing dial (default on)
  *   legends               false: no ring legends; the hairlines and the dial stay (default on)
  *   lamps                 false: no lamp strip under a builder's name (default on)
+ *   edgeLabels            false: no link labels (`deploys`, `clones`), the links themselves
+ *                            stay; the Wall, where they collide with names (default on)
  *   gauges                'trouble': cpu/mem rings only on a node in trouble, in focus or with a
  *                            metric past the warn line (default: on every gauged node)
  *   branch(child, parent, {s}) -> the share 0..1 of a tree branch drawn from the child's
@@ -1197,6 +1199,7 @@ export function createMap(root, opts = {}) {
       rings: opts.rings !== false,
       legends: opts.legends !== false,
       lamps: opts.lamps !== false,
+      edgeLabels: opts.edgeLabels !== false,
       gauges: opts.gauges === 'trouble' ? 'trouble' : undefined,
       branch: typeof opts.branch === 'function' ? opts.branch : undefined,
       follow: amb ? follow : null,

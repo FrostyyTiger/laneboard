@@ -31,6 +31,7 @@
 //     rings,                   // false: no ring hairlines, ring legends or bearing dial (the Wall)
 //     legends,                 // false: no ring legends, hairlines and dial kept (the Wall's radial)
 //     lamps,                   // false: no lamp strip under builder names (the Wall)
+//     edgeLabels,              // false: no link labels, the links stay (the Wall)
 //     gauges,                  // 'trouble': cpu/mem rings only on trouble, the focus and a hot metric (the Wall)
 //     branch(child, parent, {s}) // share 0..1 of a tree branch drawn from the child's end (the Wall), undefined: all
 //     follow,                  // the node an ambient camera stays on (the Wall's tour), or null
@@ -527,7 +528,7 @@ export function createRenderer(ctx, palette) {
       if (l.kind !== 'touch' && l.kind !== 'conflict') {
         arrowHead(A, C, B, scene.byId?.get(l.to)?.kind, s, col, (hot ? 0.9 : Math.min(1, st.alpha + 0.15) * k) * fade);
       }
-      if (l.label && (hot || s > 1.35)) {
+      if (l.label && scene.edgeLabels !== false && (hot || s > 1.35)) {
         const m = quad(A, C, B, 0.5);
         ctx.setLineDash([]);
         ctx.font = `10px ${P.mono}`;
@@ -568,7 +569,7 @@ export function createRenderer(ctx, palette) {
       ctx.quadraticCurveTo(C.x, C.y, B.x, B.y);
       ctx.stroke();
       arrowHead(A, C, B, scene.byId?.get(l.to)?.kind, s, col, Math.min(1, st.alpha + 0.15) * fade);
-      if (l.label && focus != null && l.from === focus) {
+      if (l.label && scene.edgeLabels !== false && focus != null && l.from === focus) {
         const m = quad(A, C, B, 0.5);
         ctx.font = `10px ${P.mono}`;
         ctx.textAlign = 'center';
