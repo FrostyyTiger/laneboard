@@ -104,6 +104,43 @@ export function worstLine(model) {
 }
 
 /**
+ * The fleet line for a crit that just cleared (night 3 T18, reviews
+ * r11-dreamer 1, r17-operator 2): the red goes when the trouble goes. While
+ * the rest of the fleet is calm the line remembers it in the calm voice,
+ * `■ hv1 · vm-c ok · was down 6m`: the calm step (never the 3 m step), grey,
+ * only the glyph in its old hue (wall.css `data-tone="cleared"`). `cleared`
+ * is `{ id, status, forMs }` (galaxy hud.js CRIT_HOLD: the node, its status
+ * before it cleared, how long it was in trouble). Null with no `cleared` or
+ * when its node is gone. Pure.
+ */
+export function clearedLine(model, cleared) {
+  if (!cleared || typeof cleared.id !== 'string') return null;
+  const list = nodesOf(model);
+  const node = list.find((n) => n.id === cleared.id);
+  if (!node) return null;
+  const st = statusStyle(node, cleared.status);
+  const site = siteOf(node, byIdOf(list));
+  const siteName = site && site !== node ? String(site.label ?? site.id) : null;
+  const name = `${String(node.label ?? node.id)} ok`;
+  const s = Math.max(0, Math.round((Number(cleared.forMs) || 0) / 1000));
+  const why = `was ${cleared.status === 'down' ? 'down' : 'crit'} ${s < 60 ? `${s}s` : `${Math.round(s / 60)}m`}`;
+  return {
+    status: 'ok',
+    tone: 'cleared',
+    was: st.tone,
+    step: 'calm',
+    shape: st.shape,
+    glyph: GLYPH[st.shape] ?? GLYPH.square,
+    site: siteName,
+    name,
+    why,
+    word: [siteName, name].filter(Boolean).join(' · '),
+    text: clip([siteName, name, why].filter(Boolean).join(' · ')),
+    more: 0,
+  };
+}
+
+/**
  * The far step's size in vmin for a stage `width` x `height`: as big as the
  * caption's hero while `word` fits `FLEET_FAR.maxVw`, smaller when it does
  * not, never under `STEPS.heroMin` (a longer word is cut by the CSS).
@@ -201,8 +238,9 @@ function setLine(line, w) {
 }
 
 /**
- * The frame inside `root` (an empty element over the map). `update(model)`
- * sets the lines from a model, `live(on)` the tag's state (`fresh(f)` with
+ * The frame inside `root` (an empty element over the map). `update(model,
+ * { cleared })` sets the lines from a model (and a crit that just cleared,
+ * `clearedLine`), `live(on)` the tag's state (`fresh(f)` with
  * the galaxy's feed state instead, galaxy/fresh.js); the clock runs by
  * itself on `timers` and `now` (injectable). `stop()` ends the clock.
  * `plate(on)` says whether a caption plate is up over the frame (the galaxy's
@@ -250,13 +288,17 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   let farBox = null;
   let farDirty = false;
 
-  const update = (model) => {
+  const update = (model, { cleared = null } = {}) => {
     if (!model || typeof model !== 'object') return;
-    const w = worstLine(model);
+    let w = worstLine(model);
+    // A crit that just cleared (T18): remembered in the calm voice, and only while nothing else is in trouble.
+    if (w.step === 'calm') w = clearedLine(model, cleared) ?? w;
     const far = w.step === 'far';
     const was = `${fleet.dataset.step}|${line.dataset.key ?? ''}|${subWhy.textContent}|${subMore.textContent}`;
     fleet.dataset.tone = w.tone;
     fleet.dataset.step = w.step;
+    if (w.was) fleet.dataset.was = w.was;
+    else delete fleet.dataset.was;
     setLine(line, w);
     if (far) {
       const size = `${fleetSize(w.word, root.clientWidth, root.clientHeight)}vmin`;

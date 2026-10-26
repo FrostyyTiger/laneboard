@@ -212,11 +212,23 @@ Notes for every builder round (planner, round 1):
   site label to the star's projected point of the same frame, never a stale one — done when: a test moves the
   camera between two draws and finds the label's anchor equal to `screenOf(star)` plus the fixed offset each
   time, and a still at the overview shows `HV2`'s glyph beside its nebula.
-- [ ] T18 (r11-dreamer galaxy 1; = Later r59-dreamer 7) [ui] [variant:galaxy] The red goes when the trouble goes:
+- [x] T18 (r11-dreamer galaxy 1; = Later r59-dreamer 7) [ui] [variant:galaxy] The red goes when the trouble goes:
   a cleared crit's banner drops at once to the fleet line's calm size in `--text-2` with only a small red glyph,
   and reads like `HV1 · VM-C OK · WAS DOWN 6 MIN` — done when: a test shows the banner of a cleared trouble
   without the crit slab class or the banner size, calm size and `--text-2`, and the "was down" text with its
   age, and a film of `galaxy.html?demo=1&quality=0` has no full-size red banner while its line says `CLEARED`.
+  (commit SHA_T18) Builder r20: `frame.js clearedLine(model, { id, status, forMs })` → a calm-step line, tone
+  `cleared`, `data-was` = the old tone, text `hv1 · vm-c ok · was down 6m` (`was crit 41s` for a crit; the units as
+  the tag's `STALE 2M`, not "6 min"); `update(model, { cleared })` uses it only while `worstLine` is calm.
+  `hud.js`: `heldModel` (the crit put back at full size, dimmed) is gone; the hold (CRIT_HOLD, T30, same end rule)
+  keeps `since`, the first time this page saw that crit (a flap back within the hold keeps it), and feeds
+  `clearedOf(hold)`; `fleetCover` covers the cleared line too. `wall.css`: `data-held` dimming gone; cleared =
+  2.7vmin, weight 500, `--text-2`, the glyph alone in `--crit`. Decision: a live warn elsewhere (or the same node
+  flapping to warn) takes the line over the memory: honest before steady, so T30's "never below crit while it
+  flaps" is given up; a flap now reads red slab → amber line → red slab. Film r20-galaxy (`--size large`, 115 s):
+  no red slab over a cleared crit (HV2's standing crit takes the line when VM-C clears), 0 console errors, 1.5 fps
+  as every SwiftShader film here; still `shots/r20-cleared.png` (frame markup + wall.css): the grey calm line with
+  one small red square. The large demo almost never shows the memory itself (some live trouble always stands).
 - [ ] T19 (r11-dreamer galaxy 2) [ui] [variant:galaxy] The overview reads as a spiral (follow-up to T3, whose
   ribbon the panel cannot see): narrow the ribbon (half 170) and lay a tighter band at 8-10 % along the spine
   near each site only, never above `--text-3`; soften the vignette's banding (stretched gradient or dither) so no

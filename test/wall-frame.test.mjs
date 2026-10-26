@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  worstLine, ambientLine, clockText, msToNextMinute, MAX_LINE, fleetSize, FLEET_FAR,
+  worstLine, ambientLine, clockText, msToNextMinute, MAX_LINE, fleetSize, FLEET_FAR, clearedLine,
 } from '../public/js/wall/frame.js';
 import { STEPS } from '../public/js/wall/caption.js';
 import { buildFleet, parseTopology } from '../server/map.mjs';
@@ -209,6 +209,49 @@ test('frame: the DOM part sets the line, keeps names whole, says live, and ticks
     assert.equal(tag.dataset.live, '1');
     frame.live(false);
     assert.equal(tag.textContent, 'laneboard · demo-hostoffline');
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});
+
+test('frame: a crit that cleared reads calm, grey, with its old glyph and how long it was down (night 3 T18)', () => {
+  assert.equal(clearedLine(fleet(), null), null);
+  assert.equal(clearedLine(fleet(), { id: 'gone', status: 'crit', forMs: 1 }), null, 'a node that went: nothing to remember');
+  const w = clearedLine(fleet(), { id: 'storage', status: 'down', forMs: 6 * 60000 + 10000 });
+  assert.equal(w.step, 'calm', 'never the 3 m step');
+  assert.equal(w.tone, 'cleared');
+  assert.equal(w.was, 'crit', 'the glyph keeps its old hue');
+  assert.equal(w.glyph, '■');
+  assert.equal(w.status, 'ok');
+  assert.equal(w.text, 'hv2 · storage ok · was down 6m');
+  assert.equal(clearedLine(fleet(), { id: 'storage', status: 'crit', forMs: 41400 }).why, 'was crit 41s');
+
+  const prevDoc = globalThis.document;
+  globalThis.document = makeDocument();
+  try {
+    const timers = { setTimeout: () => 1, clearTimeout() {} };
+    const root = makeEl('div');
+    const frame = createFrame(root, { timers, now: () => 0 });
+    const box = frame.el.fleet;
+    const [line, sub, fact] = box.children;
+    frame.update(fleet({ storage: { status: 'crit', why: 'pool 97% full' } }));
+    assert.equal(box.dataset.step, 'far');
+    frame.update(fleet(), { cleared: { id: 'storage', status: 'crit', forMs: 6 * 60000 } });
+    assert.equal(box.dataset.step, 'calm', 'the red slab goes when the trouble goes');
+    assert.equal(box.dataset.tone, 'cleared');
+    assert.equal(box.dataset.was, 'crit');
+    assert.equal(line.textContent, '■hv2 · storage ok · was crit 6m');
+    assert.equal(line.children[0].className, 'wall-fleet-glyph');
+    assert.equal(sub.hidden, true, 'no why row of the far step');
+    assert.equal(fact.hidden, false, 'the ambient fact stays');
+    assert.equal(frame.cover(), null, 'no far block');
+    // A live problem is louder than a memory: it takes the line.
+    frame.update(fleet({ 'lane:a/fix': { status: 'attention', why: 'asked a question' } }), { cleared: { id: 'storage', status: 'crit', forMs: 1 } });
+    assert.equal(box.dataset.tone, 'warn');
+    assert.equal(box.dataset.was, undefined);
+    assert.equal(line.textContent, '▲hv1 · fix-login · asked a question');
+    frame.update(fleet());
+    assert.equal(line.textContent, 'all calm');
   } finally {
     globalThis.document = prevDoc;
   }

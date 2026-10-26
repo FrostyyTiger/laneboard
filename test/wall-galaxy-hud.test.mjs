@@ -6,9 +6,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { CRIT_HOLD, agoText, bannerModel, createHud, farNode, galaxyCaption, heldModel, legNode, staleCaption } from '../public/js/wall/galaxy/hud.js';
+import { CRIT_HOLD, agoText, bannerModel, clearedOf, createHud, farNode, galaxyCaption, legNode, staleCaption } from '../public/js/wall/galaxy/hud.js';
 import { captionLines } from '../public/js/wall/caption.js';
-import { worstLine } from '../public/js/wall/frame.js';
+import { clearedLine, worstLine } from '../public/js/wall/frame.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
 import { freshness } from '../public/js/wall/galaxy/fresh.js';
 
@@ -252,99 +252,112 @@ const contact = (status, why) => ({
   ],
 });
 
-test('farNode is the far line\'s node; heldModel puts a cleared crit back with how long ago', () => {
+// The line the frame sets from what the hud feeds it (frame.js update: a memory only while calm).
+const shown = (m, opts = {}) => {
+  const w = worstLine(m);
+  return w.step === 'calm' ? clearedLine(m, opts.cleared) ?? w : w;
+};
+// `contact` without the printer's warn: the fleet is calm once vm-c clears.
+const alone = (status, why) => {
+  const m = contact(status, why);
+  m.nodes[4] = { ...m.nodes[4], status: 'ok', why: undefined };
+  return m;
+};
+
+test('farNode is the far line\'s node; clearedOf says how long a cleared crit was in trouble', () => {
   assert.equal(farNode(contact('crit', 'no contact for 19s')).id, 'vm-c');
   assert.equal(farNode(contact('ok')), null, 'a warn line is not far');
-  const m = contact('ok');
-  assert.equal(heldModel(m, null, 0), m);
-  const kept = heldModel(m, { id: 'vm-c', status: 'crit', clearedAt: 1000 }, 13400);
-  const w = worstLine(kept);
-  assert.equal(w.step, 'far');
-  assert.equal(w.word, 'hv1 · builder-c');
-  assert.equal(w.why, 'cleared 12s ago');
-  assert.equal(m.nodes[2].status, 'ok', 'the model itself is not touched');
-  assert.equal(heldModel(m, { id: 'gone', status: 'crit', clearedAt: 0 }, 5), m, 'a node that went: no hold');
+  assert.equal(clearedOf(null), null);
+  assert.deepEqual(clearedOf({ id: 'vm-c', status: 'crit', since: 1000, clearedAt: 361000 }), { id: 'vm-c', status: 'crit', forMs: 360000 });
+  assert.equal(clearedLine(alone('ok'), clearedOf({ id: 'vm-c', status: 'down', since: 0, clearedAt: 360000 })).text,
+    'hv1 · builder-c ok · was down 6m');
   assert.equal(agoText(59400), '59s');
   assert.equal(agoText(185000), '3m');
 });
 
-test('crit → warn → crit within 20 s never drops the line below crit; it ends one cycle after the crit clears', () => {
+test('the red goes when the trouble goes (night 3 T18): a cleared crit is a calm grey line until one cycle after', () => {
   const pending = [];
   const timers = { setTimeout: (fn, ms) => { pending.push({ fn, ms }); return pending.length; }, clearTimeout: () => {} };
   const tour = createTour({ focus() {}, fit() {} }, { timing: DEMO_TIMING, timers });
   const fed = [];
-  const fleet = { dataset: {} };
-  const frame = { update: (m) => fed.push({ line: worstLine(m), held: fleet.dataset.held }), live() {}, cover: () => null, el: { fleet } };
+  const frame = { update: (m, opts) => fed.push(shown(m, opts)), live() {}, cover: () => null, el: { fleet: { dataset: {} } } };
   let t = 0;
   const hud = createHud({ caption: { show() {}, hide() {} }, frame, tour, now: () => t });
   const leg = () => pending.shift().fn();
-  hud.update(contact('crit', 'no contact for 19s'));
-  tour.update(contact('crit', 'no contact for 19s'));
+  hud.update(alone('crit', 'no contact for 19s'));
+  tour.update(alone('crit', 'no contact for 19s'));
   tour.start();
-  assert.equal(fed.at(-1).line.step, 'far');
-  assert.equal(fed.at(-1).held, undefined);
-  // Flapping: down to warn at 4 s, crit again at 9 s, calm at 14 s, crit at 18 s.
-  for (const [at, m] of [[4000, contact('warn', 'slow contact')], [9000, contact('crit', 'no contact for 3s')],
-    [14000, contact('ok')], [18000, contact('crit', 'no contact for 2s')]]) {
-    t = at;
-    hud.update(m);
-    assert.equal(fed.at(-1).line.status, 'crit', `at ${at} ms the line is still crit`);
-    assert.equal(fed.at(-1).line.word, 'hv1 · builder-c');
-  }
-  // Clears for good at 20 s: held, dimmed, through the legs of this cycle.
+  assert.equal(fed.at(-1).step, 'far');
+  // Flapping: warn at 4 s shows the live warn (honest before steady), crit again at 9 s keeps its start.
+  t = 4000;
+  hud.update(alone('warn', 'slow contact'));
+  assert.equal(fed.at(-1).status, 'warn');
+  assert.equal(fed.at(-1).step, 'line');
+  t = 9000;
+  hud.update(alone('crit', 'no contact for 3s'));
+  assert.equal(fed.at(-1).step, 'far');
+  // Clears for good at 20 s: at once no red slab, the calm step, how long it was crit (from 0 s).
   t = 20000;
+  hud.update(alone('ok'));
+  assert.equal(fed.at(-1).step, 'calm');
+  assert.equal(fed.at(-1).tone, 'cleared');
+  assert.equal(fed.at(-1).text, 'hv1 · builder-c ok · was crit 20s');
+  // A warn elsewhere while remembered: the live warn takes the line, the memory comes back after it.
+  t = 22000;
   hud.update(contact('ok'));
-  assert.equal(fed.at(-1).line.why, 'cleared 0s ago');
-  assert.equal(fed.at(-1).held, '1');
-  t = 26000;
-  hud.update(contact('ok'));
-  assert.equal(fed.at(-1).line.why, 'cleared 6s ago');
-  // The tour flies on: hv1, remote, then the overview. Too soon (< minMs): still held.
+  assert.equal(fed.at(-1).text, 'remote · office-printer · paper jam');
+  t = 24000;
+  hud.update(alone('ok'));
+  assert.equal(fed.at(-1).tone, 'cleared');
+  // The tour flies on: hv1, remote, then the overview. Too soon (< minMs): still remembered.
   leg(); leg();
   t = 40000;
   leg();
-  hud.update(contact('ok'));
-  assert.equal(fed.at(-1).line.status, 'crit', 'the overview at 20 s after the clear keeps it');
-  // The next cycle's overview, past minMs: the line goes to the warn that is left.
+  hud.update(alone('ok'));
+  assert.equal(fed.at(-1).tone, 'cleared', 'the overview 20 s after the clear keeps it');
+  // The next cycle's overview, past minMs: all calm.
   leg(); leg();
   t = 20000 + CRIT_HOLD.minMs + 5000;
   leg();
-  assert.equal(fed.at(-1).line.status, 'warn');
-  assert.equal(fed.at(-1).line.word, 'remote · office-printer');
-  assert.equal(fed.at(-1).held, undefined, 'no longer dimmed');
+  assert.equal(fed.at(-1).text, 'all calm');
+  assert.equal(fed.at(-1).tone, 'grey');
 });
 
-test('a newer crit takes the line from a held one at once', () => {
-  const fleet = { dataset: {} };
+test('a newer crit takes the line from a remembered one at once', () => {
   const fed = [];
-  const frame = { update: (m) => fed.push(worstLine(m)), live() {}, cover: () => null, el: { fleet } };
+  const frame = { update: (m, opts) => fed.push(shown(m, opts)), live() {}, cover: () => null, el: { fleet: { dataset: {} } } };
   let t = 0;
   const hud = createHud({ caption: { show() {}, hide() {} }, frame, now: () => t });
-  hud.update(contact('crit', 'no contact'));
+  hud.update(alone('crit', 'no contact'));
   t = 1000;
-  hud.update(contact('ok'));
-  assert.equal(fed.at(-1).name, 'builder-c');
-  const other = contact('ok');
+  hud.update(alone('ok'));
+  assert.equal(fed.at(-1).tone, 'cleared');
+  const other = alone('ok');
   other.nodes[4] = { ...other.nodes[4], status: 'crit', why: 'on fire' };
   t = 2000;
   hud.update(other);
   assert.equal(fed.at(-1).name, 'office-printer');
   assert.equal(fed.at(-1).status, 'crit');
-  assert.equal(fleet.dataset.held, undefined);
-  // Without a tour (a parked view) a hold ends after minMs.
-  hud.update(contact('crit', 'no contact'));
+  assert.equal(fed.at(-1).step, 'far');
+  // Without a tour (a parked view) a memory ends after minMs.
+  hud.update(alone('crit', 'no contact'));
   t = 3000;
-  hud.update(contact('ok'));
-  assert.equal(fed.at(-1).name, 'builder-c');
+  hud.update(alone('ok'));
+  assert.equal(fed.at(-1).tone, 'cleared');
   t = 3000 + CRIT_HOLD.minMs;
-  hud.update(contact('ok'));
-  assert.equal(fed.at(-1).status, 'warn');
+  hud.update(alone('ok'));
+  assert.equal(fed.at(-1).text, 'all calm');
 });
 
-test('wall.css dims a held crit line and greys its why', () => {
+test('wall.css sets a cleared crit at the calm step in --text-2 with only its glyph in the old hue (T18)', () => {
   const css = read('css/wall.css');
-  assert.match(css, /\.wall-fleet\[data-held\] \.wall-fleet-line \{ opacity: 0\.72; \}/);
-  assert.match(css, /\.wall-fleet\[data-held\] \.wall-fleet-sub-why \{ color: var\(--text-2\); \}/);
+  const rule = css.match(/\.wall-fleet\[data-tone="cleared"\] \.wall-fleet-line \{([^}]*)\}/);
+  assert.ok(rule, 'a rule for the cleared line');
+  assert.match(rule[1], /font-size: 2\.7vmin;/, 'the calm line\'s size');
+  assert.match(rule[1], /color: var\(--text-2\);/);
+  assert.match(css, /\.wall-fleet\[data-was="crit"\] \.wall-fleet-glyph \{ color: var\(--crit\); \}/);
+  assert.doesNotMatch(css, /data-held/, 'no dimmed red slab any more');
+  assert.doesNotMatch(css, /\[data-tone="cleared"\][^{]*\{[^}]*--crit/, 'no crit hue on the words');
 });
 
 test('one headline per trouble frame (night 3 T4): data-plate on the frame while the plate shows, cleared at the overview', async () => {
