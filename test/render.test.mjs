@@ -1087,7 +1087,10 @@ test('the render budget of v2 holds with 3 lanes and 6 sessions', async () => {
   };
   const three = v3Snapshot([{ id: 'a', sessions: 2 }, { id: 'b', sessions: 2 }, { id: 'c', sessions: 2 }]);
   await time(three);
-  const ms = await time(three);
+  // Best of three: the budget is the render's, not the scheduler's. On a box
+  // shared with other test runs a single wall-clock sample can lose its CPU
+  // mid-measure; a render that is really slow is slow every time.
+  const ms = Math.min(await time(three), await time(three), await time(three));
   assert.ok(ms < 50, `a snapshot and ten deltas took ${ms.toFixed(1)} ms in the harness`);
 });
 
