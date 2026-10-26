@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" data-theme="dark" class="wall">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1014">
+<title>laneboard · galaxy</title>
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2">
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/barlow-condensed/BarlowCondensed-SemiBold.woff2">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/wall.css">
+<link rel="icon" href="/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+<!-- The Wall's galaxy (docs/plans/wall/README.md §5): the fleet as one
+     spiral galaxy in WebGL, the hub its sun, the sites star clusters. -->
+<main class="wall-stage galaxy-stage" id="galaxy-stage">
+  <canvas class="galaxy-canvas" id="galaxy" aria-hidden="true"></canvas>
+</main>
+<script type="module" src="/js/wall/galaxy/main.js"></script>
+</body>
+</html>

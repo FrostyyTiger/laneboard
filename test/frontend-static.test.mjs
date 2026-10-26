@@ -16,6 +16,8 @@ const list = (dir, ext) => fs.readdirSync(path.join(PUBLIC, dir), { recursive: t
   .map((f) => f.split(path.sep).join('/')).filter((f) => f.endsWith(ext)).sort().map((f) => `${dir}/${f}`);
 
 const JS = list('js', '.js');
+// Vendored ES modules a page module may import by a relative path (three.js for the Wall's galaxy, D8).
+const VENDOR_JS = list('vendor', '.js');
 const CSS = list('css', '.css');
 const HTML = ['index.html', ...list('dev', '.html')];
 
@@ -145,7 +147,7 @@ for (const file of JS) {
     for (const { spec, names } of importsOf(read(file))) {
       assert.ok(spec.startsWith('./') || spec.startsWith('../'), `${file}: '${spec}' must be relative (no bare or remote imports)`);
       const target = path.posix.join(path.posix.dirname(file), spec);
-      assert.ok(JS.includes(target), `${file}: '${spec}' does not resolve`);
+      assert.ok(JS.includes(target) || VENDOR_JS.includes(target), `${file}: '${spec}' does not resolve`);
       const exp = exportsOf(read(target));
       for (const n of names) assert.ok(exp.has(n), `${file}: ${target} does not export ${n}`);
     }

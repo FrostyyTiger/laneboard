@@ -528,3 +528,17 @@ html.wall body {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
+
+/* ---------------------------------------------------------------------------
+   The galaxy (public/galaxy.html, Wall plan night 2): one WebGL canvas over
+   the whole stage. Its colours are read from the tokens by
+   js/wall/galaxy/palette.js; nothing here paints it.
+   --------------------------------------------------------------------------- */
+.galaxy-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
