@@ -420,6 +420,17 @@ Notes for every builder round (planner, round 1):
 - §7.B (r26-skeptic 11) Hyperlanes grey at the dimmest weight; no status tint (nebula and label carry it).
 - §7.C (r26-skeptic fx-lanes 1, 2) `fx=lanes` is invisible at 3 m and its meaning is unclear: pulse only links that
   changed state (went live / failed) in the last minute, with a faint tick at the arrival star so direction reads.
+- §7.D (r31-touch 1, 3, 4, 7, 8, 9, 10, 11, fx notes; for night 3's explorer) Hit-test in screen space over
+  `screenOf` discs of 48 css px, not raycasts: at the overview hits resolve to sites only (label counts as
+  target); in a held system pick the worst status then the nearest, a fan of name chips on a tie, trouble
+  labels join their planet's hit area; during a flight resolve at `pointerdown`, sites only, members once open
+  ≥ 0.85; one `pointerdown` on the stage, brackets within 100 ms, a ring where an empty tap lands; tap on
+  empty space goes back one level, plus a 56 px corner button while exploring; ignore multi-pointer or
+  contact > 120 px, a tap is `pointerup` within 300 ms and 12 px; 60 s countdown line then `fit()`; ease
+  drift to 0 over 400 ms on touch; comets/lanes take no hits and a new comet waits while a finger is down;
+  tap feedback is brackets, never brightness. Next/step order = `tourOrder` (trouble first).
+- §7.B (r31-touch 3) Trouble planets in a held system sit 10-25 css px apart (under one fingertip): spread the
+  orbit layout so trouble members are at least ~48 px apart at the tour's zoom.
 - §7.B Polish (tour pacing, camera paths, how far a system opens, nebula shapes and colours, the sun, the
   dust, type at 3 m): triage turns at most 3 findings per review into tasks; the rest land here.
 - §7.C `fx=storm`: a crit nebula as a slow storm (swirl, flicker of lightning).
@@ -466,6 +477,8 @@ Notes for every builder round (planner, round 1):
 - fx candidate (r15-dreamer): `fx=sweep`: once per tour cycle at the overview, one faint sensor sweep turns
   round the plane; a cluster pings only if new data came from its site since the last sweep (freshness).
 - (`fx=beacon` from the same review became T21.)
+- (r31-touch 5) The far fleet line's `+3 MORE` is 10 px mono: unreadable at 3 m and too small to tap. Making
+  it a 48 px chip needs fenced `frame.js`; for night 3 a tap on the fleet line should also fly to its node.
 
 ## Reviews
 
@@ -482,6 +495,12 @@ Notes for every builder round (planner, round 1):
   tasks (T24 overview turn = 7, T25 calm captions = 8, T26 dust = 5); 1/2/3/4 covered by T18/T23/T19/T16 (extra
   points kept under Later), 6/9/10/11 under Later, fx-lanes 1/2 under Later (fx-lanes 3 is praise: dropped). No
   new `fx` proposals.
+- r31-touch.md: 11 galaxy + 3 fx findings (one each lanes/comets/twinkle) + 3 m check (yes for four of five
+  sites, CLOUD missing), 0 became tasks: the touch explorer is night 3 (README §7, D4), so the input findings
+  (1, 3, 4, 7-11, fx notes) are kept as one design note under Later; 2 covered (T18), 6 covered (T19), 5
+  banner tap needs night 3 (its `+3 MORE` size is fenced `frame.js`: For the owner), 9 praise (palm/scroll
+  safety already holds: dropped, keep it so); fx findings are all night-3 input rules (Later). No `fx`
+  proposals.
 
 ## Scores
 
@@ -492,5 +511,9 @@ Notes for every builder round (planner, round 1):
 | 21 | operator (galaxy) | 6 | 6 | 6 | 2 | 7 | 6 | 6 |
 | 26 | skeptic (galaxy) | 5 | 5 | 6 | 2 | 6 | 4 | 6 |
 | 26 | skeptic (fx-lanes) | - | - | - | - | 3 | 8 | - |
+| 31 | touch (galaxy) | 6 | 6 | 6 | 2 | 6 | 5 | 6 |
+| 31 | touch (fx-lanes) | - | - | - | - | 3 | 8 | - |
+| 31 | touch (fx-comets) | - | - | - | - | 3 | 7 | - |
+| 31 | touch (fx-twinkle) | - | - | - | - | 3 | 8 | - |
 
 ## Morning
