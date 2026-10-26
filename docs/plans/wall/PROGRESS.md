@@ -553,11 +553,19 @@ Notes for every builder round (planner, night 1):
   wall.css). Filmstrip `$RUN_DIR/shots/r58-radial/`: frame 2 (HV1) `▲ ATTENTION · TARGET 02 / 05 · SITE` in
   amber over the word, HOME and REMOTE grey; 0 console errors; fps 2 is SwiftShader plus screenshots (filming
   note).)
-- [ ] T27 (bug) [ui] [variant:all] (r20-skeptic #1) Edge labels collide with node labels (`deploys` on a node,
+- [x] T27 (bug) [ui] [variant:all] (r20-skeptic #1) Edge labels collide with node labels (`deploys` on a node,
   `clones` on `demo hypervisor`) and cannot be read at 3 m: a Map option `edgeLabels: false` (defaults
   on, so the app is unchanged) and the Wall sets it off — done when: a test shows the option drops link
   labels from the scene and the default keeps them; a still shows no link label; `test/map-*.test.mjs`
   pass unchanged.
+  (commit dcfcf52; `createMap(el, { edgeLabels: false })` passes `edgeLabels` on the scene and
+  `render.js` skips the label of a cross-link and of a reach link (the Wall shows no reach overlay, but
+  "no link labels" is one rule); the links, arrowheads and comets stay. `mapOptionsFor` in variants.js sets
+  it off for every direction, so no variant module changed. Tests in `test/wall-edge-labels.test.mjs`
+  (renderer zoomed in and hot, default and off; the link still stroked; createMap with a selected node;
+  all four variants at any aspect). Filmstrip `$RUN_DIR/shots/r59-radial/` and stills
+  `$RUN_DIR/shots/r59-still-<variant>/`: no link label in the holds or the overview, 0 console errors;
+  fps 2.1 is SwiftShader plus screenshots (filming note).)
 - [ ] T28 (§2 north star 2) [ui] [variant:all] (r20-skeptic #3) The ground must not slide under a moving
   camera: the fixed `--tex-dots` on `.wall-stage` stays still during flights and the turn. Drop the dots
   on the Wall (keep `--bg-canvas`; T9's vignette is the quiet ground) — done when: `wall.css` has no
