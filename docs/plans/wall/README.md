@@ -77,6 +77,10 @@ The owner's words, which are the brief:
 - D7 **Nights are explore, build, polish** (§7). Night 1 builds several directions and picks none.
 - D8 **The galaxy is WebGL through three.js**, pinned (owner OK 2026-10-26; the
   sketch vendored `public/vendor/three/three.module.js` 0.170.0, MIT). No other 3D or UI framework.
+- D10 **One camera director** (owner via the cockpit plan, 2026-10-26; `docs/plans/cockpit/README.md` §C4,
+  open question 5): the tour, touch (explore) and later the cockpit agent's `fly_to`/`highlight` all move the
+  camera through one controller that decides who drives, so they never fight. Precedence: a finger first,
+  then a show command, then the tour. Show commands are display-only (they never change the fleet).
 - D9 **Effects are switches, the owner picks** (`galaxy.html?fx=<name>`, off by default). The loop builds
   and films them and the panel scores them; it never turns one on by default.
 
@@ -272,3 +276,40 @@ guardrails. `wall.html?variant=galaxy` opens the galaxy instead of silently fall
 Order: A1-A3 first (they make both the tour and touch better), then B, then C in its order, interleaved
 with D and A4-A6 as triage adds panel findings; E last. The dreamer stays in the panel's rotation; triage
 keeps its cap of 3 tasks per review.
+
+### Night 4 (draft, written during night 3)
+The Wall's last night before its PRs merge (`docs/plans/product.md` §4: Wall finishes → merge → demo mode
+→ hygiene → hosted demo, video, README → cockpit C1/C2). Read `docs/plans/product.md` and
+`docs/plans/cockpit/README.md` (both on `main`) first: the Wall is the cockpit's first screen. Planned
+after night 3's morning report; what night 3 leaves open in its own list comes first.
+
+**A. One camera director (D10).** Night 3's `galaxy/touch.js` already hands the camera between tour and
+explore; make that the one controller: `galaxy/director.js` with three sources, `tour`, `touch` and
+`show`, the precedence of D10, an eased hand-over between any two (never a cut), and the rule that the
+tour resumes a minute after the last touch or show. `tour.js` and `touch.js` drive the camera only
+through it. Pure state with tests (fake clock): touch during a show, a show during touch, a show while
+the tour flies.
+
+**B. The show interface, client side only.** The cockpit's C4 tools as page commands:
+`flyTo(nodeId)`, `highlight(nodeIds, note)`, `clear()`, plus `pin(nodeId, card)` as a plain text card
+next to a node. Each is display-only, undoable with one tap, and shown as one line on screen ("shown by
+the agent"). Commands reach the page through one small, documented message shape (for now a
+`BroadcastChannel`/`postMessage` and a `?show=demo` script); the relay room → hub → screens is cockpit
+work and touches fenced hub files: not this night. Demo: `?demo=1&show=demo` plays a recorded
+conversation's show commands over the demo fleet (fly to the crit, highlight what it breaks, pin a
+note), which is also the video's second half (cockpit §5).
+
+**C. Scheduled jobs on the Map.** A generic feed field `countdown: { at, label }` (D3 style, like
+`glow` and `ring`): the galaxy draws a small countdown at that node, readable at the site step and quiet
+at the overview; the caption names it when the camera holds there. Display only (cancelling is C6, not
+the Wall). Demo data carries one.
+
+**D. Any screen can be tour, explore or canvas.** The Wall must look right in half a screen (a split
+with a canvas): `galaxy.html` at 50 % width keeps the 3 m check (names, trouble, caption) and its touch
+targets. `?role=tour|explore` starts it in that mode (explore: no tour until asked). The canvas itself
+is cockpit work.
+
+**E. Ready to merge.** `docs/wall.md` covers D10, the show messages, `countdown` and `?role`; every
+feature has demo data (product §3.2); README's views table row; the morning report lists what a
+reviewer should read first.
+
