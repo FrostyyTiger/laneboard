@@ -566,10 +566,16 @@ Notes for every builder round (planner, night 1):
   all four variants at any aspect). Filmstrip `$RUN_DIR/shots/r59-radial/` and stills
   `$RUN_DIR/shots/r59-still-<variant>/`: no link label in the holds or the overview, 0 console errors;
   fps 2.1 is SwiftShader plus screenshots (filming note).)
-- [ ] T28 (§2 north star 2) [ui] [variant:all] (r20-skeptic #3) The ground must not slide under a moving
+- [x] T28 (§2 north star 2) [ui] [variant:all] (r20-skeptic #3) The ground must not slide under a moving
   camera: the fixed `--tex-dots` on `.wall-stage` stays still during flights and the turn. Drop the dots
   on the Wall (keep `--bg-canvas`; T9's vignette is the quiet ground) — done when: `wall.css` has no
   dot texture on the stage and a film frame mid-flight shows a plain ground.
+  (commit bf9e2dc; `.wall-stage` is `background: var(--bg-canvas)`, the Map's own dotted ground stays off
+  through `.wall .wall-map.map { background: transparent }`. Test in `test/wall-variant.test.mjs`: no
+  `--tex-dots`/`--grid-dot` anywhere in wall.css. Filmstrip `$RUN_DIR/shots/r60-radial/`: the frames mid-flight
+  (16 s, 25 s, 28 s) show plain ground under the vignette, 0 console errors; fps 8.7 is SwiftShader plus
+  screenshots (filming note). The demo on :7795 was a leftover from an earlier round (same checkout,
+  `--size large`) and is still running; this round did not start it, so it did not stop it.)
 - [ ] T29 (bug) [ui] [variant:all] (r20-skeptic #4) Two bracket vocabularies: the caption plate's corner
   brackets (red on a crit site) look like a second lock, one sits 300 px from the real one. Remove the
   plate's brackets; brackets mean the lock only — done when: `caption.js`/`wall.css` draw none and a
