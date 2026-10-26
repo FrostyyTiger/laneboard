@@ -47,7 +47,7 @@ Notes for every builder round (planner, round 1):
   and spheres whose screen size passes ~40 % of the frame height fade out (`scene.js`) — done when: a test shows
   `flightPose` over every site pair never nearer than `1.5 × reach` to a third site's star nor inside the sun's
   radius, T1's test still green, and a film of `galaxy.html?demo=1&quality=0` shows no frame filled by one
-  cluster. (commit SHA) Builder r7: `flightPose` takes
+  cluster. (commit 9262e60) Builder r7: `flightPose` takes
   `frame.avoid` (third stars at `FLIGHT_CLEAR.reach` 1.5 × reach, the sun at 480 = 0.75 × its halo) and adds one
   `sin`-shaped rise over the whole flight, sized from 24 samples +10 %, then T1's step back; a shot that itself
   stands nearer (cloud's held shot is 0.96 of 1.5 × reach from lab) only asks the flight not to go nearer than it.
