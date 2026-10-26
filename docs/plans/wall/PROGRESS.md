@@ -541,9 +541,18 @@ Notes for every builder round (planner, night 1):
   SwiftShader plus screenshots (filming note). Seen: on HV1 (`FEAT-SEARCH`, a lane) the lane is not drawn at
   the hold's zoom, so the lock stands on the site, which sits left of the plate's edge, so no leader; T30
   (the plate covers its site) is the fix for that, and whether lanes should unfold at a hold is open.)
-- [ ] T26 (§2) [ui] [variant:all] (r14-operator #9) Caption kicker on a trouble site is set in the
+- [x] T26 (§2) [ui] [variant:all] (r14-operator #9) Caption kicker on a trouble site is set in the
   status colour with the shape: `■ CRIT · SITE 01 / 05`; calm sites keep the grey kicker — done when:
   `captionLines` test covers kicker text and status for crit, attention and calm.
+  (commit 6996b00; `captionLines` returns `mark {status, tone, shape, glyph}`, taken from the trouble line so
+  kicker and word never disagree, null when calm, and the kicker becomes `CRIT · TARGET 01 / 05 · SITE`: the
+  status word goes ahead of the existing kicker rather than the task's reordered `SITE 01 / 05`, so calm and
+  trouble kickers keep one grammar (dropping `· SITE` is r50 #5, with the owner). The plate sets the glyph ahead
+  of it at the kicker's own size (the line keeps its 1.7vmin height, `plateHeight` unchanged), `data-tone`
+  colours it crit / warn / info. Tests in `test/wall-caption.test.mjs` (crit, attention, calm, the DOM kicker,
+  wall.css). Filmstrip `$RUN_DIR/shots/r58-radial/`: frame 2 (HV1) `▲ ATTENTION · TARGET 02 / 05 · SITE` in
+  amber over the word, HOME and REMOTE grey; 0 console errors; fps 2 is SwiftShader plus screenshots (filming
+  note).)
 - [ ] T27 (bug) [ui] [variant:all] (r20-skeptic #1) Edge labels collide with node labels (`deploys` on a node,
   `clones` on `demo hypervisor`) and cannot be read at 3 m: a Map option `edgeLabels: false` (defaults
   on, so the app is unchanged) and the Wall sets it off — done when: a test shows the option drops link
