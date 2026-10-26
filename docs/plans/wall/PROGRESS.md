@@ -209,10 +209,37 @@ Notes for every builder round (planner, night 1):
   mark (T16); `ACME-BILLING` reaches 16 px from the left edge (labels extend past the node safe
   area, T17); a flight between planets swings along an arc round the sun (the Map springs in
   polar, T10's note).)
-- [ ] T13 (§5) [variant:islands] Each site its own cluster laid out across the screen, links between
+- [x] T13 (§5) [variant:islands] Each site its own cluster laid out across the screen, links between
   sites as long arcs, the camera touring island to island, in `public/js/wall/variants/islands.js`
   — done when: a test checks islands do not overlap and fill the aspect; a filmstrip
   `$RUN_DIR/shots/<round>-islands/` shows the tour, caption, lock and trouble first, fps >= 27.
+  (commit 8b38cfa; chosen to look unlike orbits, whose planets already read as clusters: an island
+  is set like a paragraph in a lens. Rooms are words on rows (long in the middle, short at the
+  ends), each a mark with its name flush left under it (`labelAngle` down, zoom-stable, one
+  baseline per row), what it holds a row of dots to its right (a dot in trouble is named above
+  it), a builder a word of its own with its lanes and sessions as its dots. The site's mark is a
+  word in the middle row, so the camera lands mid-island; the site's name sits on a faint
+  coastline (a `guides` ellipse, `labelAt` at its top, `__repos` too at the room step). No
+  branches inside an island. Islands go in one to three rows in model order, each row spread
+  edge to edge across the safe area, each next row tucked into the corners of the one above
+  (ellipse clearance with `clearOf`, not boxes); the hub (core plus any run) is a small island
+  in the middle of the order. The Map's own cross-links are the long arcs (`linkCtrl` bows them
+  toward the middle). Sizes are CSS px at scale 1 on a 912 px high screen, names measured for
+  the condensed face (0.44 em a character: orbits' 0.62 overestimates by about 40 %). The large
+  demo fits at scale 0.87 (height-bound; orbits 0.7). More row pitch does not help: the scale
+  falls by the same factor. Word spacing has about 25 % slack, so names still clear at 0.87.
+  `SAFE.top` is 12 % here (CLOUD's name ran into the top-right tag at 8 %). The layout is
+  memoised on ids/parents/kinds/names, so `/ws` status frames reuse it (the T36 lesson). Tests
+  `test/wall-islands.test.mjs` (3:2 and 16:9 inside the safe area and >60 % of the width, every
+  node inside its own coastline and outside the others, coastlines never cross, words on a row
+  do not run into each other, the memo, the registry). Filmstrip `$RUN_DIR/shots/r30-islands/`,
+  still `r30-still/`: tour HV2 (crit) first in each cycle, then HV1, CLOUD, REMOTE; caption and
+  lock on each; 0 console errors; fps 2.8 is SwiftShader plus screenshots (filming note); script
+  7.5 ms/frame average, 56 ms worst at 4x (orbits 10.7/55 in the same minute). Seen and left to
+  their tasks: HV1's top row (three builders with lanes in trouble) still stacks the lane names
+  above their dots and pushes VM-B a line (T15); the hub is a lone mark at the left edge of the
+  second row; a few names pushed a line by the collision pass where a crit mark's ring is wider
+  than the pitch allows.)
 - [ ] T14 (§5) [variant:wild] The wild-card direction from Q5's answer (named after it), in
   `public/js/wall/variants/<name>.js`; waits for Q5 — done when: a test checks its layout's main
   property (from the research), and a filmstrip `$RUN_DIR/shots/<round>-<name>/` shows the tour,
