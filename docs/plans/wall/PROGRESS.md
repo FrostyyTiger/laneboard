@@ -490,7 +490,7 @@ Notes for every builder round (planner, night 1):
   instead of starting at full height; in demo timing the typing starts during the last 0.5 s of the
   flight — done when: a filmstrip frame at the start of a hold shows the trouble word and no empty
   plate; the pure part (plate height from line count) is tested in `test/wall-caption.test.mjs`.
-  (commit COMMIT; the word and its why were already in with the plate (T20), only the name types. New:
+  (commit ec802c5; the word and its why were already in with the plate (T20), only the name types. New:
   `plateHeight(cap, shown, heroVmin)` in caption.js sums the plate's rhythm (`PLATE`: padding, kicker, word at
   0.86 of its size, why, name at 0.92, rows 3.2 / 2.3vmin by step, 0.9 gaps, 1.6 before the small facts) and
   wall.css now sets those heights on every block, so the layout is that sum, not font metrics. A row is
