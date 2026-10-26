@@ -24,7 +24,8 @@ import { breathWave, dustTurn } from './still.js';
 import { armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
 import {
-  COMETS, LANES, TWINKLE, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles, twinkleAt,
+  BEACON, COMETS, LANES, TWINKLE, beaconAt, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles,
+  twinkleAt,
 } from './fx.js';
 
 /**
@@ -240,6 +241,32 @@ function markTexture(doc, shape) {
   return new THREE.CanvasTexture(c);
 }
 
+/**
+ * A beacon's pillar (fx=beacon): a thin bright core in a soft sheath, full
+ * at its foot and thinning upwards (never to nothing: its tip is its height).
+ */
+function beamTexture(doc) {
+  const c = doc.createElement('canvas');
+  c.width = 32;
+  c.height = 128;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 32, 0);
+  g.addColorStop(0, 'rgb(255 255 255 / 0)');
+  g.addColorStop(0.3, 'rgb(255 255 255 / 0.12)');
+  g.addColorStop(0.5, 'rgb(255 255 255 / 1)');
+  g.addColorStop(0.7, 'rgb(255 255 255 / 0.12)');
+  g.addColorStop(1, 'rgb(255 255 255 / 0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 32, 128);
+  x.globalCompositeOperation = 'destination-in';
+  const v = x.createLinearGradient(0, 0, 0, 128);
+  v.addColorStop(0, 'rgb(0 0 0 / 0.35)');
+  v.addColorStop(1, 'rgb(0 0 0 / 1)');
+  x.fillStyle = v;
+  x.fillRect(0, 0, 32, 128);
+  return new THREE.CanvasTexture(c);
+}
+
 /** A nebula: a lumpy cloud of a few offset blobs inside a round mask, the same on every load. */
 function cloudTexture(doc, seed = 3) {
   const rand = rng(seed);
@@ -274,9 +301,10 @@ const pageClock = () => globalThis.performance.now();
  * `now`), `makeRenderer` the WebGL renderer (both injectable for tests).
  * `still` (reduced motion, still.js): trouble glows without breathing, the dust stays put.
  * `fx` (fx.js `parseFx`): the effects asked for; `lanes` draws `setRoutes`' pulses,
- * `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets.
- * Returns `{ update, setOpen, setRoutes, setComets, setTwinkles, drawn, planets, frame, resize, setQuality,
- * camera, world, quality, routes, comets, twinkles, renderer, dispose }`.
+ * `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets,
+ * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them).
+ * Returns `{ update, setOpen, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize,
+ * setQuality, camera, world, quality, routes, comets, twinkles, beacons, renderer, dispose }`.
  */
 export function createGalaxyScene(canvas, {
   palette, doc = globalThis.document, dpr = globalThis.devicePixelRatio || 1,
@@ -950,6 +978,74 @@ export function createGalaxyScene(canvas, {
     }
   };
 
+  // --- fx=beacon (T21, fx.js): how long a crit has lasted ------------------
+  // One pillar and one tip light per crit cluster, from a pool made once.
+  // A cluster's crit began at the older of when the page saw its nebula
+  // turn crit (`s.since`) and what the model's events say (`setCritAges`).
+  // The pillar turns round its own axis to face the camera, so it is a
+  // line of light from any side; it fades to `held` while its system is
+  // open. Under reduced motion it stands and goes at once; so does every
+  // crit already there when the page first draws (it did not just begin).
+  const beacons = new Map(); // site id → { from, crit, t0, k0 } (fx.js beaconAt)
+  let critFrom = new Map(), beamsSeen = false;
+  const pillars = [];
+  if (fx?.has('beacon')) {
+    const beamTex = keep(beamTexture(doc));
+    const beamGeo = keep(new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0));
+    for (let i = 0; i < BEACON.max; i++) {
+      const pillar = new THREE.Mesh(beamGeo, keep(new THREE.MeshBasicMaterial({
+        map: beamTex, color: tone.crit, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+      })));
+      pillar.name = 'fx-beacon';
+      const tip = new THREE.Sprite(keep(new THREE.SpriteMaterial({
+        map: glowTex, color: tone.crit, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+      })));
+      tip.name = 'fx-beacon-tip';
+      pillar.visible = tip.visible = false;
+      pillars.push({ pillar, tip });
+      scene.add(pillar, tip);
+    }
+  }
+  /** How old each crit is by the model (fx.js `critAges`: site id → ms); ignored unless `fx=beacon`. */
+  const setCritAges = (ages) => {
+    if (!pillars.length) return;
+    const now = clock();
+    critFrom = new Map([...(ages ?? [])].map(([id, ms]) => [id, now - ms]));
+  };
+  const drawBeacons = (now) => {
+    for (const { pillar, tip } of pillars) pillar.visible = tip.visible = false;
+    if (!world) return;
+    for (const s of world.sites) {
+      const crit = !s.gone && s.nebula?.tone === 'crit';
+      const from = Math.min(s.since, critFrom.get(s.id) ?? Infinity);
+      const b = beacons.get(s.id);
+      if (crit && !b) beacons.set(s.id, { from, crit, t0: now, k0: beamsSeen ? 0 : 1 });
+      else if (b && b.crit !== crit) beacons.set(s.id, { from: crit ? from : b.from, crit, t0: now, k0: beaconAt(b, now, BEACON, still).rise });
+      else if (b && crit) b.from = from;
+    }
+    beamsSeen = true;
+    let i = 0;
+    for (const [id, b] of beacons) {
+      const s = world.byId.get(id);
+      const at = beaconAt(b, now, BEACON, still);
+      if (!s || (!b.crit && at.rise <= 0.001)) { beacons.delete(id); continue; }
+      const slot = pillars[i];
+      if (!slot) break;
+      i += 1;
+      const h = Math.max(1e-3, at.height * at.rise * s.alive);
+      const k = Math.min(1, at.rise * 2) * s.alive * (1 - (1 - BEACON.held) * ease(s.unfold));
+      const { pillar, tip } = slot;
+      pillar.position.set(s.home.x, s.home.y, s.home.z);
+      pillar.rotation.set(0, Math.atan2(camera.position.x - s.home.x, camera.position.z - s.home.z), 0);
+      pillar.scale.set(BEACON.width, h, 1);
+      pillar.material.opacity = BEACON.opacity * k;
+      tip.position.set(s.home.x, s.home.y + h, s.home.z);
+      tip.scale.setScalar(BEACON.top);
+      tip.material.opacity = BEACON.opacity * k;
+      pillar.visible = tip.visible = pillar.material.opacity > 0.005;
+    }
+  };
+
   /** The most open system's star, fade radius and opening (eased), or none: what the dust thins round. */
   const heldDust = () => {
     let best = null;
@@ -982,6 +1078,7 @@ export function createGalaxyScene(canvas, {
     if (pulses.length) drawPulses(now);
     if (tails.length) drawComets(now);
     if (glints.length) drawTwinkles(now);
+    if (pillars.length) drawBeacons(now);
     renderer.render(scene, camera);
   };
 
@@ -1017,12 +1114,14 @@ export function createGalaxyScene(canvas, {
   };
 
   return {
-    update, setOpen, setRoutes, setComets, setTwinkles, drawn, planets, frame, resize, setQuality, camera, renderer, dispose,
+    update, setOpen, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize, setQuality, camera,
+    renderer, dispose,
     get world() { return world; },
     get quality() { return quality; },
     get routes() { return routes; },
     get comets() { return comets.flying; },
     get twinkles() { return twinkles; },
+    get beacons() { return beacons; },
     /** What the dust thins round now (`{ x, y, z, r, k }`, dustFade's uniforms). */
     get dustHold() { return heldDust(); },
   };

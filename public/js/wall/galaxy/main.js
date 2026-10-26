@@ -18,7 +18,7 @@
 // sites, trouble first.
 // At the overview a hairline ties the far fleet line to the cluster it names
 // (T20, tether.js), drawn in once the camera is back out.
-// Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle` (comma-separated, all off by default);
+// Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
 import { createPerf } from '../perf.js';
@@ -36,7 +36,7 @@ import { paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { prefersStill, stillTourTimingFor } from './still.js';
-import { flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
+import { critAges, flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { createTether } from './tether.js';
@@ -237,6 +237,7 @@ export function boot() {
     if (fx.has('lanes')) galaxy.setRoutes(siteRoutes(model, galaxy.world?.byId.keys() ?? []));
     if (fx.has('comets')) galaxy.setComets(flowComets(model, galaxy.drawn()));
     if (fx.has('twinkle')) galaxy.setTwinkles(workingPlanets(model, galaxy.planets()));
+    if (fx.has('beacon')) galaxy.setCritAges(critAges(model, galaxy.world?.byId.keys() ?? []));
     hud.update(model);
     tether.update(model, galaxy.world?.byId.keys() ?? null);
     tour.update(model);

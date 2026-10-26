@@ -8,7 +8,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  COMETS, FX_NAMES, LANES, TWINKLE, cometAt, cometPath, flowComets, parseFx, pulseAt, routePath, siteRoutes, trackComets,
+  BEACON, COMETS, FX_NAMES, LANES, TWINKLE, beaconAt, beaconHeight, cometAt, critAges, cometPath, flowComets, parseFx, pulseAt, routePath, siteRoutes, trackComets,
   trackRoutes, trackTwinkles, twinkleAt, workingPlanets,
 } from '../public/js/wall/galaxy/fx.js';
 import { paletteFrom } from '../public/js/wall/galaxy/palette.js';
@@ -26,6 +26,7 @@ test('parseFx: nothing by default, known names only, comma-separated or repeated
   assert.deepEqual([...parseFx('?fx=comets,lanes')].sort(), ['comets', 'lanes']);
   assert.deepEqual([...parseFx('?fx=lanes')], ['lanes'], 'comets only when asked');
   assert.deepEqual([...parseFx('?fx=twinkle,bogus')], ['twinkle']);
+  assert.deepEqual([...parseFx('?fx=beacon')], ['beacon']);
 });
 
 /** Three sites under a core; `db` in hv1, `storage` in hv2, `nas` in remote, `api` a second hv1 room. */
@@ -149,6 +150,7 @@ const fakeDoc = {
     width: 0, height: 0,
     getContext: () => ({
       createRadialGradient: () => ({ addColorStop() {} }),
+      createLinearGradient: () => ({ addColorStop() {} }),
       fillRect() {}, set fillStyle(_) {}, set globalCompositeOperation(_) {},
       beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, fill() {},
     }),
@@ -519,4 +521,156 @@ test('with fx=twinkle under reduced motion the light is steady', () => {
   assert.equal(a.length, 1);
   at(1000 + TWINKLE.fadeMs + 2345);
   assert.deepEqual(lit(), a, 'nothing moves');
+});
+
+// --- fx=beacon --------------------------------------------------------------------
+
+const MIN = 60_000, HOUR = 60 * MIN;
+
+test('beaconHeight: grows with the crit\'s age, by log, capped; none for calm, warn or no age', () => {
+  const ages = [0, 5000, MIN, 10 * MIN, HOUR, 6 * HOUR, 24 * HOUR];
+  const hs = ages.map((a) => beaconHeight(a));
+  for (let i = 1; i < hs.length; i++) assert.ok(hs[i] > hs[i - 1], `${ages[i]} ms is taller than ${ages[i - 1]} ms`);
+  assert.equal(hs[0], BEACON.low, 'a crit that just began stands low');
+  assert.equal(beaconHeight(24 * HOUR), BEACON.high);
+  assert.equal(beaconHeight(30 * 24 * HOUR), BEACON.high, 'capped');
+  // Log: the first hour takes more of the height than the next 23.
+  assert.ok(beaconHeight(HOUR) - beaconHeight(0) > beaconHeight(24 * HOUR) - beaconHeight(HOUR));
+  // Two crits ten minutes and an hour old are visibly different (not twins).
+  assert.ok(beaconHeight(HOUR) / beaconHeight(10 * MIN) > 1.3);
+  assert.equal(beaconHeight(HOUR, 'calm'), 0);
+  assert.equal(beaconHeight(HOUR, 'warn'), 0);
+  assert.equal(beaconHeight(HOUR, 'low'), 0);
+  assert.equal(beaconHeight(NaN), 0);
+  assert.equal(beaconHeight(-5), BEACON.low, 'a clock a hair ahead is just begun');
+});
+
+/** `model()` with storage (hv2) and nas (remote) in crit, each with the events that began it. */
+function critModel({ now = 10 * HOUR, events = null } = {}) {
+  const m = model({ generatedAt: now });
+  for (const n of m.nodes) if (n.id === 'storage' || n.id === 'nas') n.status = 'crit';
+  m.events = events ?? [
+    { at: now - 3 * HOUR, node: 'storage', kind: 'crit', text: 'storage is failing' },
+    { at: now - 2 * HOUR, node: 'storage', kind: 'ok', text: 'storage is back' },
+    { at: now - HOUR, node: 'storage', kind: 'crit', text: 'storage is failing again' },
+    { at: now - 5 * MIN, node: 'nas', kind: 'crit', text: 'nas is down' },
+    { at: now - 4 * HOUR, node: 'db', kind: 'crit', text: 'db was down (it is fine now)' },
+  ];
+  return m;
+}
+
+test('critAges: per crit site, from the newest crit event on each node still in crit, the oldest wins', () => {
+  const ages = critAges(critModel(), SITES);
+  assert.deepEqual([...ages].sort(), [['hv2', HOUR], ['remote', 5 * MIN]], 'storage\'s spell began an hour ago; db is calm');
+  // Two crit rooms in one site: the site has been in crit since the older one.
+  const m = critModel();
+  m.nodes.find((n) => n.id === 'api').status = 'crit';
+  m.nodes.find((n) => n.id === 'db').status = 'crit';
+  assert.equal(critAges(m, SITES).get('hv1'), 4 * HOUR);
+  // A site not drawn, a crit with no event: nothing (the page dates it itself).
+  assert.deepEqual([...critAges(critModel(), ['hv1', 'hv2']).keys()], ['hv2']);
+  assert.equal(critAges(critModel({ events: [] }), SITES).size, 0);
+  assert.equal(critAges({}, SITES).size, 0);
+});
+
+test('beaconAt: rises eased from the plane, sinks when the crit clears, at once when still', () => {
+  const b = { from: 0, crit: true, t0: 1000, k0: 0 };
+  assert.equal(beaconAt(b, 1000).rise, 0);
+  const mid = beaconAt(b, 1000 + BEACON.riseMs / 2).rise;
+  assert.ok(mid > 0.4 && mid < 0.6);
+  assert.equal(beaconAt(b, 1000 + BEACON.riseMs).rise, 1);
+  assert.equal(beaconAt(b, 1000 + 5 * BEACON.riseMs).rise, 1);
+  assert.equal(beaconAt(b, 1000, BEACON, true).rise, 1, 'still: stands at once');
+  assert.equal(beaconAt(b, HOUR).height, beaconHeight(HOUR), 'its height is its age');
+  const gone = { ...b, crit: false, t0: 5000, k0: 1 };
+  assert.equal(beaconAt(gone, 5000).rise, 1);
+  assert.equal(beaconAt(gone, 5000 + BEACON.riseMs).rise, 0);
+});
+
+/** The scene's beacon pillars and their tips. */
+function beaconParts(galaxy) {
+  let root = galaxy.world.sites[0].star;
+  while (root.parent) root = root.parent;
+  return {
+    pillars: root.children.filter((o) => o.isMesh && o.name === 'fx-beacon'),
+    tips: root.children.filter((o) => o.isSprite && o.name === 'fx-beacon-tip'),
+  };
+}
+
+test('without fx=beacon the scene makes no pillar and ignores crit ages', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['lanes']) });
+  const m = critModel();
+  galaxy.update(m);
+  galaxy.setCritAges(critAges(m, galaxy.world.byId.keys()));
+  at(1000 + BEACON.riseMs * 2);
+  assert.equal(beaconParts(galaxy).pillars.length, 0);
+  assert.equal(galaxy.beacons.size, 0);
+});
+
+test('with fx=beacon each crit cluster stands a pillar as tall as its crit is old; calm gets none; it sinks when cleared', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['beacon']) });
+  const m = critModel();
+  galaxy.update(m);
+  const { pillars, tips } = beaconParts(galaxy);
+  assert.equal(pillars.length, BEACON.max, 'one pool, made once');
+  galaxy.setCritAges(critAges(m, galaxy.world.byId.keys()));
+  at(1000 + BEACON.riseMs * 2);
+  const shown = () => pillars.filter((p) => p.visible);
+  assert.equal(shown().length, 2, 'hv2 and remote, not hv1');
+  const on = (id) => {
+    const h = galaxy.world.byId.get(id).home;
+    return shown().find((p) => p.position.x === h.x && p.position.z === h.z);
+  };
+  assert.ok(on('hv2') && on('remote') && !on('hv1'));
+  const hv2 = on('hv2').scale.y, remote = on('remote').scale.y;
+  assert.ok(Math.abs(hv2 - beaconHeight(HOUR)) < 5, `an hour of crit: ${hv2}`);
+  assert.ok(Math.abs(remote - beaconHeight(5 * MIN)) < 5, `five minutes: ${remote}`);
+  assert.ok(hv2 > remote * 1.3, 'the older crit stands taller');
+  // Each tip sits on its pillar's top, in the crit hue like the pillar.
+  for (const p of shown()) {
+    const tip = tips.find((t) => t.visible && t.position.x === p.position.x && t.position.z === p.position.z);
+    assert.ok(Math.abs(tip.position.y - (p.position.y + p.scale.y)) < 1e-6);
+    assert.ok(p.material.opacity <= BEACON.opacity + 1e-9);
+  }
+  // A crit that begins while the page looks rises from the plane, not at once
+  // (those already there on the first frame stand: they did not just begin).
+  const fresh = sceneAt({ fx: new Set(['beacon']) });
+  fresh.galaxy.update(model());
+  fresh.at(1000);
+  assert.equal(beaconParts(fresh.galaxy).pillars.filter((p) => p.visible).length, 0, 'calm: none');
+  fresh.galaxy.update(m);
+  fresh.at(1016);
+  fresh.at(1016 + BEACON.riseMs * 0.25);
+  const rising = beaconParts(fresh.galaxy).pillars.filter((p) => p.visible);
+  assert.ok(rising.length === 2 && rising.every((p) => p.scale.y < beaconHeight(0)), 'still rising');
+  // The site opens: the pillar dims, its system is the loud thing.
+  const open0 = on('hv2').material.opacity;
+  galaxy.setOpen('hv2', 1);
+  at(1000 + BEACON.riseMs * 2 + 16);
+  assert.ok(on('hv2').material.opacity < open0 * 0.5);
+  // hv2 clears: its pillar sinks and goes; remote's stays.
+  const calm = critModel();
+  calm.nodes.find((n) => n.id === 'storage').status = 'ok';
+  galaxy.update(calm);
+  galaxy.setCritAges(critAges(calm, galaxy.world.byId.keys()));
+  const t1 = 1000 + BEACON.riseMs * 3;
+  at(t1);
+  at(t1 + BEACON.riseMs / 2);
+  assert.ok(on('hv2').scale.y < hv2 * 0.6, 'sinking');
+  at(t1 + BEACON.riseMs + 16);
+  assert.equal(shown().length, 1);
+  assert.ok(on('remote') && !on('hv2'));
+  assert.deepEqual([...galaxy.beacons.keys()], ['remote']);
+});
+
+test('with fx=beacon a crit with no event is dated from when the page first saw it, and grows', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['beacon']), still: true });
+  const m = critModel({ events: [] });
+  galaxy.update(m);
+  galaxy.setCritAges(critAges(m, galaxy.world.byId.keys()));
+  at(1000);
+  const tall = () => Math.max(...beaconParts(galaxy).pillars.filter((p) => p.visible).map((p) => p.scale.y));
+  assert.ok(Math.abs(tall() - BEACON.low) < 1e-6, 'still: stands at once, just begun');
+  at(1000 + HOUR);
+  assert.ok(Math.abs(tall() - beaconHeight(HOUR)) < 1e-6, 'an hour later, an hour tall');
 });

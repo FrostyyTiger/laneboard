@@ -19,12 +19,19 @@
 // a lane or session whose status is `working` and calm) glimmers softly,
 // slow and low, in the grey of a calm thing: "busy", never "look here". A
 // planet in trouble does not twinkle (it breathes already: one motion per thing).
+//
+// `beacon` (T21, r15-dreamer): above each cluster in crit a thin pillar of
+// light rises from the plane, its height how long the crit has lasted (log
+// scale, capped), so two crits are no longer twins: the tall one has been
+// burning for hours, the short one just began. Calm and warn get none. It
+// grows only as the crit ages (a motion nobody sees), rises once when the
+// crit starts and sinks when it clears.
 
 import { hash } from './layout.js';
 import { toneOf } from './palette.js';
 
 /** Every effect this page knows, in the order the README lists them. */
-export const FX_NAMES = Object.freeze(['lanes', 'comets', 'twinkle']);
+export const FX_NAMES = Object.freeze(['lanes', 'comets', 'twinkle', 'beacon']);
 
 /** The effects `?fx=` asks for (a `location.search` string or URLSearchParams): a Set of known names. */
 export function parseFx(search = '') {
@@ -369,4 +376,77 @@ export function twinkleAt(tw, now, timing = TWINKLE, still = false) {
   const [p0, p1] = timing.periods.map((p) => p * pace);
   const glimmer = 0.5 + 0.3 * Math.sin((now / p0) * Math.PI * 2 + ph) + 0.2 * Math.sin((now / p1) * Math.PI * 2 + ph * 2);
   return { k, glimmer };
+}
+
+/**
+ * The beacon's scale and look: a crit that just began stands `low` (world
+ * units; a site's star is 24), one `capMs` old or more `high`, by log of
+ * its age in `unitMs` (1 min 285, 10 min 444, 1 h 604, 6 h 771, 1 d 900).
+ * At the overview `low` is about a sun's height on screen, `high` stops
+ * short of the frame's top from the highest site. It rises over and
+ * sinks over `riseMs`; `width` is the pillar's, `top` the light at its tip
+ * (which marks the height, so two pillars compare at a glance). `opacity`
+ * is its core's peak, `held` its share while its system is open (the
+ * system is the loud thing then). At most `max` at once.
+ */
+export const BEACON = Object.freeze({
+  unitMs: 60_000, capMs: 24 * 3_600_000, low: 220, high: 900,
+  riseMs: 1400, width: 44, top: 120, opacity: 0.8, held: 0.3, max: 8,
+});
+
+/**
+ * How tall a beacon stands for a cluster whose worst tone is `tone`, in
+ * crit for `ageMs`: 0 for anything but crit (or no age); else from `low`
+ * (just began) up to `high` at `capMs`, by log, never past it.
+ */
+export function beaconHeight(ageMs, tone = 'crit', timing = BEACON) {
+  if (tone !== 'crit' || !Number.isFinite(ageMs)) return 0;
+  const k = Math.log1p(Math.max(0, ageMs) / timing.unitMs) / Math.log1p(timing.capMs / timing.unitMs);
+  return timing.low + (timing.high - timing.low) * Math.min(1, k);
+}
+
+/**
+ * How long each site in `sites` (ids the galaxy draws) has been in crit,
+ * by the model's events: for each node in crit now, the newest crit event
+ * on it (the one that began this spell); a site's age is its oldest such
+ * crit. `Map` site id → ageMs by the model's clock (`generatedAt`). A crit
+ * with no event (the hub's list is short) is not here: the page counts it
+ * from when it first saw it.
+ */
+export function critAges(model, sites) {
+  const nodes = Array.isArray(model?.nodes) ? model.nodes : [];
+  const events = Array.isArray(model?.events) ? model.events : [];
+  const byId = new Map(nodes.filter((n) => n && n.id != null).map((n) => [n.id, n]));
+  const shown = sites instanceof Set ? sites : new Set(sites ?? []);
+  const now = Number.isFinite(model?.generatedAt) ? model.generatedAt : Math.max(0, ...events.map((e) => Number(e?.at) || 0));
+  const began = new Map();
+  for (const e of events) {
+    if (!e || e.node == null || toneOf(e.kind) !== 'crit') continue;
+    const at = Number(e.at);
+    if (Number.isFinite(at) && at > (began.get(e.node) ?? -Infinity)) began.set(e.node, at);
+  }
+  const out = new Map();
+  for (const n of nodes) {
+    if (!n || toneOf(n) !== 'crit' || !began.has(n.id)) continue;
+    const site = placeOf(n.id, byId);
+    if (!site || !shown.has(site)) continue;
+    const age = Math.max(0, now - began.get(n.id));
+    out.set(site, Math.max(out.get(site) ?? 0, age));
+  }
+  return out;
+}
+
+/**
+ * Where a beacon stands at page time `now`: `rise` 0..1 (eased up from
+ * the plane when the crit starts, down when it clears; at once when
+ * `still`), `height` its full height for its age. `b` is the scene's
+ * `{ from, crit, t0 }`: `from` when its crit began (page time), `crit`
+ * whether it is in crit now, `t0` when that last changed, `k0` its rise then.
+ */
+export function beaconAt(b, now, timing = BEACON, still = false) {
+  const to = b.crit ? 1 : 0;
+  const p = still ? 1 : Math.max(0, Math.min(1, (now - b.t0) / timing.riseMs));
+  const e = p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2;
+  const rise = (b.k0 ?? 0) + (to - (b.k0 ?? 0)) * e;
+  return { rise, height: beaconHeight(now - b.from, 'crit', timing) };
 }
