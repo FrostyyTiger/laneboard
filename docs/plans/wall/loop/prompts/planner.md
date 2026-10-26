@@ -14,6 +14,11 @@ answered one again, and number new questions after the highest one there.
 - Order for night 2: README §7 Night 2 A in its order (the sketch into Wall code first), then the
   `fx` tasks of C, one each, interleaved with B fixes as triage adds them; E last. Two of the research
   questions are `IDEAS:` questions (research.md, mode ideas) for D.
+- Order for night 3: README §7 Night 3's own `Order:` line. Night 2's open tasks (T31-T42 in
+  `nights/night-2/PROGRESS.md`) that Night 3 names become tasks here, renumbered from T1, each naming its
+  night-2 number (`was night 2's T39`); the rest of night 2's `## Later` stays under `## Later`. 3 to 4
+  research questions: touch on a wall screen (gestures, hit radius, how long until the tour resumes), and
+  one `IDEAS:` question about making a dead or stale feed unmistakable from 3 m.
 - Each task line: `- [ ] T<n> (<plan part, e.g. §7.2>) <what> — done when: <a check a test, a
   screenshot or a filmstrip can show>`. Mark UI tasks with `[ui]`, direction tasks with `[variant:<name>]`.
 - Read the code first (`public/js/views/map/`, `test/tools/demo-fleet.mjs`, `test/helpers/demo-hub.mjs`,

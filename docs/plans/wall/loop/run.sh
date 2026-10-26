@@ -75,13 +75,18 @@ fenced_hits() {  # paths changed since $1 that match a fence glob
   done
 }
 
-TESTS_OK=1 TESTS_PASS=0 TESTS_FAIL=0 TEST_TAIL=""
+TESTS_OK=1 TESTS_PASS=0 TESTS_FAIL=0 TEST_TAIL="" CHECK_LOG=""
 check() {  # the checker is not an agent: npm test, hygiene included
   local out; out=$(timeout 900 npm test 2>&1); local rc=$?
   TESTS_PASS=$(grep -E '^ℹ pass ' <<<"$out" | awk '{print $3}' | tail -1); TESTS_PASS=${TESTS_PASS:-0}
   TESTS_FAIL=$(grep -E '^ℹ fail ' <<<"$out" | awk '{print $3}' | tail -1); TESTS_FAIL=${TESTS_FAIL:-0}
   [ $rc -eq 0 ] && TESTS_OK=1 || TESTS_OK=0
-  TEST_TAIL=$(grep -E 'not ok|Error|assert' <<<"$out" | head -40)
+  # The failing tests by name (node's summary after `failing tests:`, then any `✖`/`not ok` line), then
+  # error lines, deduplicated; the whole output is kept in $RUN_DIR so a flake can be read later.
+  TEST_TAIL=$( { sed -n '/failing tests:/,$p' <<<"$out" | head -60; grep -E '✖|^not ok' <<<"$out";
+    grep -E 'Error|assert' <<<"$out"; } | awk '!seen[$0]++' | head -60)
+  CHECK_LOG=""
+  if [ $rc -ne 0 ]; then CHECK_LOG="$RUN_DIR/check-$(date +%m%d-%H%M%S).log"; printf '%s\n' "$out" > "$CHECK_LOG"; fi
   local total=$(( TESTS_PASS + TESTS_FAIL ))
   [ $total -gt 0 ] && ev score name=tests value="$(python3 -c "print(round($TESTS_PASS/$total,4))")" better=higher
 }
@@ -113,7 +118,7 @@ $( [ "$role" = review-panel ] && { echo; echo "PERSONA: $PERSONA"; cat "$L/promp
 RUN: $NAME   NIGHT: $NIGHT (README §7)   ROUND: $n   ROLE: $role${PERSONA:+ ($PERSONA)}   RUN_DIR: $RUN_DIR
 NOW ($TZ_RUN): $(TZ=$TZ_RUN date '+%F %H:%M')   DEADLINE: $DEADLINE
 TESTS AFTER THE LAST ROUND: pass $TESTS_PASS, fail $TESTS_FAIL
-$( [ "$TESTS_OK" = 0 ] && printf 'FAILING TESTS (tail):\n%s\n' "$TEST_TAIL" )
+$( [ "$TESTS_OK" = 0 ] && printf 'FAILING TESTS:\n%s\nFULL OUTPUT: %s\n' "$TEST_TAIL" "$CHECK_LOG" )
 REVIEWS SO FAR: $(ls "$PLAN_DIR"/reviews/ 2>/dev/null | tr '\n' ' ')
 $( [ -n "${STOP_REASON:-}" ] && echo "STOP REASON: $STOP_REASON   OWNER NOTES: $RUN_DIR/owner-notes" )
 $( [ -n "${REPLAN:-}" ] && echo "REPLAN: every task in PROGRESS.md is done; plan the next ones (planner.md, Replan)" )"

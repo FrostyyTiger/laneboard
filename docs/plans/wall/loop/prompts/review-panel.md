@@ -15,7 +15,8 @@ Write `docs/plans/wall/reviews/<round>-<persona>.md`:
    wow, calm, performance. Score as your persona; a criterion your persona cannot judge gets your
    honest guess, not a 5 by default.
    From night 2 the variant is `galaxy`; for each built `fx` add `score fx-<name> wow <n>` and
-   `score fx-<name> calm <n>`.
+   `score fx-<name> calm <n>`. From night 3, once touch is built, score `touch` on a filmstrip of the
+   gestures (touch, drag, tap a site, back), not as a guess; until then say it is not built.
 4. The 3 m check: one overview still scaled to a quarter of its width (`$RUN_DIR/shots/<round>-3m.png`):
    can you still tell from it whether something is wrong and where, and read the site names? Yes or no, and why.
 5. Every line of each `console.txt`.

@@ -192,14 +192,61 @@ The morning report lists every `fx` with its filmstrip and scores, and asks the 
 more of it. Touch (D4) waits for night 3, after the owner has seen the galaxy on the tablet.
 
 ### Night 3
-Polish with the panel: every persona at least once on the built Wall, triage, fixes. Written after night 2.
+Make it feel finished: fix what the panel hated, make touch work, make a dead feed look dead, and grow
+the effects the owner kept. Night 2 is archived in `nights/night-2/` (PROGRESS with its morning report,
+reviews r8-r59, research Q7-Q11): read its `## Later` and `## For the owner` before planning.
 
-**Owner picks so far** (2026-10-26, during night 2; the rest is written after night 2's morning report).
-Two effects proposed by the dreamer (night 2, `reviews/r15-dreamer.md`), wanted by the owner: build both,
-behind switches like every effect (D9), each ending in a filmstrip with and without it.
-- Night 2's galaxy on the real tablet (Surface Pro 7 kiosk, `galaxy.html?demo=1&fx=beacon&perf=1`, owner
-  2026-10-26): "running good, looks good on the Surface, even the colours are pretty nice". Keep the palette;
-  nothing added in night 3 may make it slower there.
+**The owner, 2026-10-26** (after night 2's morning report, on the real tablet):
+- Night 2's galaxy on the Surface Pro 7 kiosk (`galaxy.html?demo=1&fx=beacon&perf=1`): "running good, looks
+  good on the Surface, even the colours are pretty nice". Keep the palette; nothing added tonight may make it
+  slower there (§7 Night 2 A6, `?perf=1`).
+- The tour was too fast to read. Done before the night (`tour.js`, commit on this branch): normal speed is
+  now overview 10 s, a calm site 6 s, a site in trouble 14 s, and trouble is revisited after every 2 calm
+  sites; `?pace=wall` gives the demo data that speed (`?demo=1` alone keeps the film speed). Tune it, do not
+  undo it: a name must be readable before the camera leaves.
+- Effects: keep `beacon` and finish it; build `afterglow`, `sweep` and `warp`; rework `comets` and `twinkle`
+  into one; drop `lanes`. `corona` is not an effect: a dead feed must look dead (B below).
+- **No Wall module is fenced any more.** Night 2 kept away from `caption.js`, `frame.js`, `glow.js`,
+  `lock.js`, `main.js`, `perf.js`, `tour.js`, `type.js`, `variants.js` on its own rule; tonight they may change,
+  with their tests, as long as `wall.html` keeps working (its tests stay green). `loop/fenced.txt` is unchanged.
+
+**A. Fix what the panel hated** (night 2's open T31-T42 and its morning report, worst first):
+1. Flights: no dead air. The camera keeps an end of the flight in frame (T39), never flies through a cluster
+   or the sun (T36), and `warp` (C) gives the flight a direction and a tint.
+2. The overview looks like a galaxy again (T40 arm ribbon): dimmed dust made it "five grey crumbs and a black
+   disc"; bring back the arms' shape without making dust look like data (T26).
+3. One headline per trouble frame (T37): the banner and the caption never say the same thing at the same size.
+4. No words on words (T31), the trouble planet's name readable at 3 m (T34), crit the most visible status
+   for low vision too (T33), the caption follows a status that rises while held (T35), feathered plates (T38).
+5. Accessibility from night 2's r49 7: no letter-by-letter typing for screen readers (plate `aria-live` off
+   while typing, one hidden live node), the fleet line `role="status"`; `+N MORE` readable and tappable.
+6. `wall.html?variant=islands-tiles` registered (the diff in `sketch/main.js.diff`; T7's modules exist), so
+   the galaxy's no-WebGL fallback lands on it, not on radial.
+
+**B. A dead feed looks dead** (core, not an `fx`; arguably a bug against §2): when `/ws` map frames stop,
+from 3 m the page must say so. The sun's corona swells softly once per frame that arrives; with no frame
+for 30 s it shrinks, the sun goes cold flat grey, the tag reads `STALE <age>`, and the caption says the
+data is old. Never louder than live trouble; its absence is the alarm (night 2's r59 2, `corona`).
+
+**C. Touch** (D4; the owner's words, 2026-10-26: "when I touch it, it snaps back to an outside view, and
+then I can drag it and click around myself"):
+1. First touch anywhere: the tour stops and the camera eases back to the overview (about 1.5 s), so the
+   person starts from the whole galaxy. Nothing under that first touch is activated.
+2. Drag turns the galaxy round its centre (orbit, clamped so the plane never goes edge-on or upside down);
+   pinch (and the wheel on a desktop) zooms between the overview and a close system; inertia, eased.
+3. Tap a site: the camera flies there and opens it, with a detail sheet in big type (the site's worst
+   things first, from the model). Tap a planet in an open system: its own details. Hit-testing in screen
+   space with a finger-sized radius (night 2's `## Later`, r31-touch).
+4. Back: a big back control and a tap on empty sky return one step (planet → system → overview).
+5. One minute without touch: ease back into the tour from where the camera is. Reduced motion (D5):
+   the same steps without flights (cuts with a short fade).
+6. No page scroll or pinch-zoom of the page itself (night 1's T31), and touch never breaks the kiosk.
+Done when a test drives the gestures through pointer events on the page (fake clock) and a filmstrip shows
+touch → overview → drag → tap a site → detail → back → tour resumes.
+
+**D. Effects behind `?fx=`** (D9: switches, off by default; each ends in a filmstrip with and without):
+- `beacon` (keep, finish): a floor height so a young crit is visible at once, a white core, age as width as
+  well as height; a soft tip that the caption plate never cuts (night 2's T41, T38).
 - `afterglow`: when trouble clears, its cluster keeps a faint ring in the old status hue on the plane,
   cooling red to amber to grey and gone after about 30 min. It shows recent history: in the morning you see
   where something went wrong in the night though it is green now. Quieter than any live trouble (outline
@@ -208,3 +255,20 @@ behind switches like every effect (D9), each ending in a filmstrip with and with
 - `sweep`: once per tour cycle, at the overview only, one faint sensor line from the sun turns once round
   the plane. Each cluster it crosses pings softly, but only if its site sent new data since the last
   sweep: a silent site stays dark and the gap shows. One gesture for freshness instead of many heartbeats.
+- `warp`: during a flight, dust and far stars stretch into short streaks along the direction of travel,
+  tinted toward the destination's status, and snap back on arrival: you know the next target is red before
+  the caption types it (night 2's r59 1, T42).
+- `activity` (replaces `comets` and `twinkle`): what is at work comes forward, what is quiet recedes
+  (research Q8 `fade`): a planet with a working session or a running job is brighter and slightly larger
+  and carries a slow visible ring; a job that lands flashes its target once; a failed one visibly does not
+  land (Q8 `miss`). Must be visible at the overview from 3 m, unlike night 2's two.
+- `lanes` is removed (code, tests and docs). `storm`, `lights`, `rings`, `arrive` stay unbuilt (`## Later`).
+
+**E. Docs and kiosk**: `docs/wall.md` (what it is, running it on a tablet in kiosk mode, the URL switches
+`?demo`, `?pace`, `?fx`, `?perf`, `?at`, the feed fields, touch), a Wall row in README's views table, and a
+web manifest for the galaxy (`start_url: "/galaxy.html"`, fullscreen, landscape) if it fits the
+guardrails. `wall.html?variant=galaxy` opens the galaxy instead of silently falling back to radial.
+
+Order: A1-A3 first (they make both the tour and touch better), then B, then C in its order, interleaved
+with D and A4-A6 as triage adds panel findings; E last. The dreamer stays in the panel's rotation; triage
+keeps its cap of 3 tasks per review.
