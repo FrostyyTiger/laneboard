@@ -10,8 +10,10 @@
 // (layout.js OPEN_MS), the one it leaves folds while it goes; held, the camera
 // drifts slowly round the system so the depth reads (scene.js `siteShot`).
 //
+// The overview is one fixed pose (T24); only a held system drifts.
+//
 // `still` (reduced motion, T11, still.js): the camera never leaves the
-// overview and never turns; `focus`/`fit` only say where the tour is (the
+// overview; `focus`/`fit` only say where the tour is (the
 // caption and lock follow it), and every system stays folded.
 //
 // `flightPose` and `openStep` are pure (test/wall-galaxy-camera.test.mjs);
@@ -98,9 +100,9 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   const siteOf = (id) => galaxy.world?.byId.get(id) ?? null;
 
   // The overview, fitted clear of the words when given a fitter (T19, overview.js).
-  const overview = (now, t) => (fitOverview ? fitOverview(overviewShot(sites(), t), sites(), now) : overviewShot(sites(), t));
+  const overview = (now) => (fitOverview ? fitOverview(overviewShot(sites()), sites(), now) : overviewShot(sites()));
   const target = (now) => {
-    if (still) return overview(now, 0);
+    if (still) return overview(now);
     if (want.kind === 'site') {
       const s = siteOf(want.id);
       if (s) {
@@ -108,7 +110,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
         return zoomedSiteShot(s, Math.max(0, now - want.t0 - flight.ms), want.zoom, view);
       }
     }
-    return overview(now, now);
+    return overview(now);
   };
 
   const go = (next) => {

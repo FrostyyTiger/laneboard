@@ -6,11 +6,11 @@
 // the least it can, until every site's star and one side for its name are
 // clear of the words over the canvas (hud.js covers, grown by a gap).
 //
-// `createOverviewFit` keeps a fit while it still clears (the overview turns,
-// so a site drifts toward a cover; the check uses half the gap, the search
-// the whole, so it does not flip at the edge), searches again when it does
-// not or when the covers change, and eases the camera to the new fit: one
-// camera, never a cut. `fitOverview`, `fitShot`, `siteClear`, `siteMarks` are pure
+// `createOverviewFit` keeps a fit while it still clears (the overview holds one
+// pose since T24, but a site grows, goes or changes its name's tone; the check
+// uses half the gap, the search the whole, so it does not flip at the edge;
+// new covers keep it too while it clears), searches near it when it does
+// not, and eases the camera to the new fit: one camera, never a cut. `fitOverview`, `fitShot`, `siteClear`, `siteMarks` are pure
 // (test/wall-galaxy-overview.test.mjs).
 
 import { panShot } from './framing.js';
@@ -131,6 +131,18 @@ export function fitOverview(shot, marks, view, gap = OVERVIEW_FIT.gap, near = nu
 }
 
 /**
+ * The far fleet block as wide as it can get, `maxW` css px (its line's cap
+ * plus the block's padding), kept on its right edge. The overview fit
+ * reserves that from the first far block seen, so a longer problem later
+ * does not move the galaxy (T24: every overview finds the names where the
+ * last one left them). Pure.
+ */
+export function widestFar(box, maxW) {
+  if (!box || !(maxW > 0)) return box ?? null;
+  return { ...box, left: Math.min(box.left, box.right - maxW) };
+}
+
+/**
  * The overview's fit over time. `view()` gives `{ fov, W, H, covers }` now,
  * `marks(sites)` the sites as fitOverview's marks; `easeMs` 0 snaps (reduced
  * motion: no camera motion but the fit itself). Returns `(shot, sites, now)`
@@ -146,13 +158,16 @@ export function createOverviewFit({ view, marks, easeMs = OVERVIEW_FIT.easeMs, r
     const ms = marks(sites);
     const k = JSON.stringify([v.W, v.H, v.covers, ms.map((m) => [m.w, m.h, m.trouble])]);
     const aspect = v.W / v.H;
-    const stale = want == null || k !== key
-      || (!want.clear && now - tried >= retryMs)
+    // New covers, a new frame or a renamed site keep the fit held while it
+    // still clears: the widest fleet block grows over the first minutes, and
+    // each overview should find the names where the last one left them (T24).
+    const stale = want == null
+      || (!want.clear && (k !== key || now - tried >= retryMs))
       || (want.clear && clearCount(fitShot(shot, want, v.fov, aspect), ms, v, OVERVIEW_FIT.gap / 2) < ms.length);
+    key = k;
     if (stale) {
-      // A new frame or new covers start afresh; a fit the turn wore out moves on from where it is.
-      const next = fitOverview(shot, ms, v, OVERVIEW_FIT.gap, want && k === key ? want : null);
-      key = k;
+      // A fit worn out moves on from where it is, the least it can.
+      const next = fitOverview(shot, ms, v, OVERVIEW_FIT.gap, want);
       tried = now;
       // The first fit is taken at once; a new one is flown to, eased in and out.
       if (want == null || !(easeMs > 0)) at = { k: next.k, dx: next.dx, dy: next.dy };

@@ -83,7 +83,7 @@ test('reduced motion: the tour never flies the camera, the overview stands still
   const tour = createTour(cam, { timing: STILL_TOUR_TIMING, timers });
   tour.update({ nodes });
   tour.start();
-  const shot = overviewShot(galaxy.world.sites, 0);
+  const shot = overviewShot(galaxy.world.sites);
   const wants = [];
   let now = 1000;
   for (let leg = 0; leg < 7; leg++) {

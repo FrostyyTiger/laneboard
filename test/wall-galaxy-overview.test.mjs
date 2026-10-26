@@ -12,7 +12,7 @@ import { createGalaxyCamera } from '../public/js/wall/galaxy/camera.js';
 import { candidates, labelRank, labelSize, labelText, placeLabels, RANK } from '../public/js/wall/galaxy/labels.js';
 import { toneOf, worseTone } from '../public/js/wall/galaxy/palette.js';
 import {
-  createOverviewFit, fitOverview, fitShot, siteMarks, NO_FIT, OVERVIEW_FIT,
+  createOverviewFit, fitOverview, fitShot, siteMarks, widestFar, NO_FIT, OVERVIEW_FIT,
 } from '../public/js/wall/galaxy/overview.js';
 import { tourSites } from '../public/js/wall/tour.js';
 import { pxPerMm, screenOf, stepsFor } from '../public/js/wall/type.js';
@@ -62,48 +62,51 @@ const view = (covers) => ({ fov: FOV, W, H, covers });
 test('without the fit the overview hides a site under the fleet block (the bug); with it every site is named', () => {
   const sites = world();
   const covers = [FLEET_BLOCK, TAG];
-  const bare = shownFrom(overviewShot(sites, 0), sites, covers);
+  const bare = shownFrom(overviewShot(sites), sites, covers);
   assert.ok(sites.some((s) => !bare.has(s.id)), 'the plain overview loses a site (CLOUD on round 37)');
-  const fit = fitOverview(overviewShot(sites, 0), siteMarks(sites, STEPS.site), view(covers));
+  const fit = fitOverview(overviewShot(sites), siteMarks(sites, STEPS.site), view(covers));
   assert.equal(fit.clear, true);
-  const shown = shownFrom(fitShot(overviewShot(sites, 0), fit, FOV, W / H), sites, covers);
+  const shown = shownFrom(fitShot(overviewShot(sites), fit, FOV, W / H), sites, covers);
   for (const s of sites) assert.ok(shown.has(s.id), `${s.id} named at the overview`);
 });
 
-test('as the overview turns, the eased fit keeps every site named, and never jumps', () => {
+test('the fitted overview holds one pose over 7 min with every site named (T24: no turn)', () => {
   const sites = world();
   const covers = [FLEET_BLOCK, TAG];
   const fit = createOverviewFit({ view: () => view(covers), marks: (ss) => siteMarks(ss, STEPS.site) });
-  let prev = null, maxStep = 0;
-  for (let t = 0; t <= 7 * 60_000; t += 50) {
-    const shot = fit(overviewShot(sites, t), sites, t);
-    if (prev) {
-      const step = Math.hypot(shot.pos.x - prev.pos.x, shot.pos.y - prev.pos.y, shot.pos.z - prev.pos.z);
-      maxStep = Math.max(maxStep, step);
-      assert.ok(step < 30, `@${t}: the camera moved ${step.toFixed(1)} world units in one 50 ms frame`);
-    }
-    prev = shot;
-    // Checked once the ease after a refit has settled (a refit starts at half the gap).
-    if (t % 15_000 === 0) {
-      const shown = shownFrom(shot, sites, covers);
-      for (const s of sites) assert.ok(shown.has(s.id), `@${t}: ${s.id} named`);
-    }
+  const first = fit(overviewShot(sites), sites, 0);
+  const shown = shownFrom(first, sites, covers);
+  for (const s of sites) assert.ok(shown.has(s.id), `${s.id} named`);
+  for (let t = 50; t <= 7 * 60_000; t += 50) {
+    const shot = fit(overviewShot(sites), sites, t);
+    assert.deepEqual(shot, first, `@${t}: the overview moved`);
   }
+});
+
+test('covers that grow a little keep the fit held while it clears: every overview finds the names in one place', () => {
+  const sites = world();
+  // a short fleet line first, then a longer one (main.js keeps the widest block seen)
+  let covers = [{ ...FLEET_BLOCK, left: 800, top: 720 }, TAG];
+  const fit = createOverviewFit({ view: () => view(covers), marks: (ss) => siteMarks(ss, STEPS.site) });
+  const first = fit(overviewShot(sites), sites, 0);
+  covers = [{ ...FLEET_BLOCK, left: 788, top: 708 }, TAG];
+  for (let t = 50; t <= 5000; t += 50) assert.deepEqual(fit(overviewShot(sites), sites, t), first, `@${t}: a fresh search moved it`);
+  for (const s of sites) assert.ok(shownFrom(first, sites, covers).has(s.id), `${s.id} still named`);
 });
 
 test('reduced motion: the overview with the widest plate up as well still names every site', () => {
   const sites = world();
   const covers = [PLATE, FLEET_BLOCK, TAG];
   const fit = createOverviewFit({ view: () => view(covers), marks: (ss) => siteMarks(ss, STEPS.site), easeMs: 0 });
-  const shot = fit(overviewShot(sites, 0), sites, 0);
+  const shot = fit(overviewShot(sites), sites, 0);
   const shown = shownFrom(shot, sites, covers);
   for (const s of sites) assert.ok(shown.has(s.id), `${s.id} named beside the plate`);
-  assert.deepEqual(fit(overviewShot(sites, 0), sites, 5000), shot, 'and it holds: nothing moves in reduced motion');
+  assert.deepEqual(fit(overviewShot(sites), sites, 5000), shot, 'and it holds: nothing moves in reduced motion');
 });
 
 test('fitShot slides and stands back without turning; no covers, no change', () => {
   const sites = world();
-  const shot = overviewShot(sites, 0);
+  const shot = overviewShot(sites);
   assert.deepEqual(fitShot(shot, NO_FIT, FOV, W / H), shot);
   const dir = (q) => { const l = Math.hypot(q.look.x - q.pos.x, q.look.y - q.pos.y, q.look.z - q.pos.z); return [(q.look.x - q.pos.x) / l, (q.look.y - q.pos.y) / l, (q.look.z - q.pos.z) / l]; };
   const moved = fitShot(shot, { k: 1.3, dx: -0.2, dy: 0.15 }, FOV, W / H);
@@ -131,7 +134,7 @@ test('siteMarks: the folded name in its worst tone, trouble flagged, a going sit
   assert.equal(siteMarks([{ ...sites[0], alive: 0.2 }], STEPS.site).length, 0);
 });
 
-test('the camera uses the fitter at the overview, still or turning, and not on a held site', () => {
+test('the camera uses the fitter at the overview, still or touring, and not on a held site', () => {
   const sites = world();
   const galaxy = {
     world: { sites, byId: new Map(sites.map((s) => [s.id, s])) },
@@ -142,11 +145,23 @@ test('the camera uses the fitter at the overview, still or turning, and not on a
   const fitOv = (shot, ss, now) => { calls.push(now); return { pos: { ...shot.pos, y: shot.pos.y + 1 }, look: shot.look }; };
   const cam = createGalaxyCamera(galaxy, { fitOverview: fitOv });
   const pose = cam.frame(1000);
-  assert.equal(pose.pos.y, overviewShot(sites, 1000).pos.y + 1);
+  assert.equal(pose.pos.y, overviewShot(sites).pos.y + 1);
   cam.focus(sites[0].id);
   cam.frame(1100);
   cam.frame(10_000);
   assert.ok(calls.length >= 1 && calls.length <= 2, 'the overview is only asked for while it is a flight\'s start or the target');
   const still = createGalaxyCamera(galaxy, { still: true, fitOverview: fitOv });
-  assert.equal(still.frame(5000).pos.y, overviewShot(sites, 0).pos.y + 1);
+  assert.equal(still.frame(5000).pos.y, overviewShot(sites).pos.y + 1);
+});
+
+test('widestFar: the far block reserved at its widest, on its right edge; no box or no width, unchanged', () => {
+  assert.deepEqual(widestFar(FLEET_BLOCK, 950), { ...FLEET_BLOCK, left: FLEET_BLOCK.right - 950 });
+  assert.deepEqual(widestFar(FLEET_BLOCK, 100), FLEET_BLOCK, 'never narrower than seen');
+  assert.equal(widestFar(null, 950), null);
+  assert.deepEqual(widestFar(FLEET_BLOCK, NaN), FLEET_BLOCK);
+  // the fit with the widest block still names every site
+  const sites = world();
+  const covers = [widestFar(FLEET_BLOCK, 0.64 * W + 22 + 55), TAG];
+  const fit = fitOverview(overviewShot(sites), siteMarks(sites, STEPS.site), view(covers));
+  assert.equal(fit.clear, true);
 });

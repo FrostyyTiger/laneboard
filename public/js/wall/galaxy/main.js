@@ -36,7 +36,7 @@ import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { prefersStill, stillTourTimingFor } from './still.js';
 import { flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
-import { createOverviewFit, siteMarks } from './overview.js';
+import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -128,9 +128,23 @@ export function boot() {
   // overview unless the camera stays there all along (reduced motion), where
   // its widest box counts; the fleet block and the tag always do.
   const steps = stepsFor(pxPerMm(screenOf(q, { dpr: globalThis.devicePixelRatio || 1, cssHeight: innerHeight })));
+  // The far fleet block counts as wide as it can get (its line's max-width,
+  // read once per new box, not per frame), so the overview holds one pose.
+  let farSeen = '', farWide = null;
+  const farCover = () => {
+    const box = kept[1];
+    const k = box ? `${box.left},${box.top},${box.right},${box.bottom}` : '';
+    if (k !== farSeen) {
+      farSeen = k;
+      const el = frame.el.fleet, line = el?.querySelector('.wall-fleet-line');
+      const st = line ? getComputedStyle(el) : null;
+      farWide = widestFar(box, st ? parseFloat(getComputedStyle(line).maxWidth) + parseFloat(st.paddingLeft) + parseFloat(st.paddingRight) : NaN);
+    }
+    return farWide;
+  };
   const overviewFit = (withPlate, easeMs) => createOverviewFit({
     // `kept` is fresh: the camera reads freeBox() each frame before its shot.
-    view: () => ({ fov: galaxy.camera.fov, W: canvas.clientWidth, H: canvas.clientHeight, covers: (withPlate ? kept : kept.slice(1)).filter(Boolean) }),
+    view: () => ({ fov: galaxy.camera.fov, W: canvas.clientWidth, H: canvas.clientHeight, covers: [withPlate ? kept[0] : null, farCover(), kept[2]].filter(Boolean) }),
     marks: (sites) => siteMarks(sites, steps.site),
     ...(easeMs != null ? { easeMs } : {}),
   });
@@ -177,7 +191,7 @@ export function boot() {
     } else if (!park) cam.frame(now);
     else {
       freeBox();
-      aim(parkedOverview(overviewShot(w.sites, reduced ? 0 : now), w.sites, now));
+      aim(parkedOverview(overviewShot(w.sites), w.sites, now));
     }
     galaxy.frame(now);
     cam.drawn();

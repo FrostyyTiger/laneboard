@@ -129,16 +129,18 @@ const LANE_SEGS = 40;
 export const FOV = 42;
 
 /**
- * Where the camera sits for the whole galaxy at `now`: above, at an angle,
- * turning once in about 7 minutes so the arms read as depth, not as motion.
+ * Where the camera sits for the whole galaxy: above, at an angle, and always
+ * the same pose (T24, reviews/r26-skeptic.md 7). It used to turn once in about
+ * 7 minutes, so every name stood somewhere else at each overview and the
+ * hallway had to find HOME again; depth comes from the drift round a held
+ * system (`siteShot`), the overview holds still.
  */
-export function overviewShot(sites, now = 0, fov = FOV) {
+export function overviewShot(sites, fov = FOV) {
   let r = 0;
   for (const s of sites) r = Math.max(r, Math.hypot(s.home.x, s.home.z));
   const d = ((r + 400) / Math.tan((fov * Math.PI) / 360)) * 0.9;
-  const a = now * 0.000015;
   return {
-    pos: { x: Math.sin(a) * d * 0.62, y: d * 0.78, z: Math.cos(a) * d * 0.62 },
+    pos: { x: 0, y: d * 0.78, z: d * 0.62 },
     look: { x: 0, y: 0, z: 0 },
   };
 }

@@ -149,7 +149,7 @@ test('sceneKey changes with a tone or the tree, not with a metric', () => {
 
 test('the overview shot looks at the sun from above, the site shot at its star', () => {
   const sites = [{ id: 'hv1', home: { x: 1000, y: 0, z: 0 }, reach: 300 }, { id: 'cloud', home: { x: -1500, y: 40, z: 800 }, reach: 200 }];
-  const o = overviewShot(sites, 0);
+  const o = overviewShot(sites);
   assert.deepEqual(o.look, { x: 0, y: 0, z: 0 });
   assert.ok(o.pos.y > 0 && Math.hypot(o.pos.x, o.pos.z) > 0);
   const s = siteShot(sites[1], 0);

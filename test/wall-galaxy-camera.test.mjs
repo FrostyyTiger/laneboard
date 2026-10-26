@@ -73,7 +73,7 @@ test('galaxy camera: a flight eases from the overview to the system, never jumps
   const cam = createGalaxyCamera(galaxy);
   cam.fit();
   const start = cam.frame(1000);
-  assert.deepEqual(start, overviewShot(galaxy.world.sites, 1000));
+  assert.deepEqual(start, overviewShot(galaxy.world.sites));
   cam.focus('cloud', DEMO_TIMING.zoom);
   const cloud = galaxy.world.byId.get('cloud');
   let prev = start.pos;
@@ -160,4 +160,24 @@ test('galaxy camera: onDraw runs after each drawn frame until removed; the snaps
   assert.ok(cam.snapshotScene().version > v0);
   assert.equal(cam.focus('nowhere', 2.3), undefined);
   assert.equal(cam.want().id, 'hv1', 'an unknown site does not move the camera');
+});
+
+test('T24: the overview holds one pose at any time, a held system still drifts', () => {
+  const nodes = fleet({ 'cloud-b': 'crit' });
+  const galaxy = fakeGalaxy(nodes);
+  const sites = galaxy.world.sites;
+  const once = overviewShot(sites);
+  assert.deepEqual(overviewShot(sites), once);
+  const cam = createGalaxyCamera(galaxy);
+  cam.fit();
+  for (const t of [1000, 61_000, 7 * 60_000, 3_600_000]) assert.deepEqual(cam.frame(t), once, `the overview at ${t} ms`);
+  cam.focus('cloud', DEMO_TIMING.zoom);
+  cam.frame(3_600_100);
+  const held = cam.frame(3_600_000 + FLIGHT.ms + 1000);
+  const later = cam.frame(3_600_000 + FLIGHT.ms + 31_000);
+  assert.deepEqual(held.look, later.look, 'held on the same star');
+  assert.ok(dist(held.pos, later.pos) > 50, 'the drift round a held system goes on (the only depth motion left)');
+  cam.fit();
+  cam.frame(3_700_000);
+  assert.deepEqual(cam.frame(3_700_000 + FLIGHT.ms + 1), once, 'back at the same overview pose');
 });
