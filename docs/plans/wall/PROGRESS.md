@@ -244,7 +244,7 @@ Notes for every builder round (planner, night 1):
   `public/js/wall/variants/<name>.js`; waits for Q5 — done when: a test checks its layout's main
   property (from the research), and a filmstrip `$RUN_DIR/shots/<round>-<name>/` shows the tour,
   caption, lock and trouble first, fps >= 27.
-  (commit SHA; `?variant=mosaic`, `public/js/wall/variants/mosaic.js`: a pointy-top honeycomb,
+  (commit c6d1e2d; `?variant=mosaic`, `public/js/wall/variants/mosaic.js`: a pointy-top honeycomb,
   each site one connected region with an empty one-cell channel round it (Q5's gap rule), regions
   grown on the grid from treemap slots (model order, hub in the middle, 1-3 rows), the region
   furthest behind its size claiming next. Two departures from Q5, both for its fixed-name
