@@ -12,7 +12,7 @@
 
 import { SEVERITY, TROUBLE, byIdOf } from '../views/map/model.js';
 import { statusStyle } from '../views/map/overlays.js';
-import { GLYPH, STEPS, heroEms } from './caption.js';
+import { GLYPH, STEPS, heroEms, coverOf } from './caption.js';
 
 /** The fleet line is cut with an ellipsis past this: two lines at most, so it never runs into the clock. */
 export const MAX_LINE = 64;
@@ -241,10 +241,16 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   };
   tick();
 
+  // The far block stands on an opaque ground over the map's bottom ring: a
+  // Map cover (T24), its box read again only after the words changed.
+  let farBox = null;
+  let farDirty = false;
+
   const update = (model) => {
     if (!model || typeof model !== 'object') return;
     const w = worstLine(model);
     const far = w.step === 'far';
+    const was = `${fleet.dataset.step}|${line.dataset.key ?? ''}|${subWhy.textContent}|${subMore.textContent}`;
     fleet.dataset.tone = w.tone;
     fleet.dataset.step = w.step;
     setLine(line, w);
@@ -263,6 +269,7 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     more.hidden = far || !w.more;
     put(ambient, far ? '' : ambientLine(model));
     fact.hidden = far;
+    if (`${fleet.dataset.step}|${line.dataset.key ?? ''}|${subWhy.textContent}|${subMore.textContent}` !== was) farDirty = true;
     if (typeof model.title === 'string' && model.title.trim()) put(tagName, `laneboard · ${clip(model.title, 24)}`);
   };
 
@@ -273,5 +280,15 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
 
   const stop = () => { if (timer != null) timers.clearTimeout(timer); timer = null; };
 
-  return { update, live, stop, el: { vignette, tag, clock, fleet } };
+  /** The far block as a Map cover while the fleet line is at the far step, else null. */
+  const cover = () => {
+    if (fleet.dataset.step !== 'far') return null;
+    if (farDirty || !farBox) {
+      farDirty = false;
+      farBox = coverOf({ left: fleet.offsetLeft, top: fleet.offsetTop, width: fleet.offsetWidth, height: fleet.offsetHeight });
+    }
+    return farBox;
+  };
+
+  return { update, live, stop, cover, el: { vignette, tag, clock, fleet } };
 }

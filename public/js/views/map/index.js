@@ -168,6 +168,11 @@ export function migrateFolds(list, localId) {
                              pass moves a name a line up or down only inside them (the Wall's
                              safe area). Default: the canvas edges
  *                            (the Wall: the turn no longer flips names). Default off
+ *   covers()              -> [{left, top, right, bottom}] in canvas px, asked every frame: what the
+ *                            page lays over the canvas (the Wall's caption plate). Names keep clear
+ *                            of it as of the inspector; one with no free place there is not drawn,
+ *                            nor is a link label it touches.
+ *                            Default: none
  *
  * Returns the API of plan §5 2.2 plus the shell hooks (§4 D8).
  */
@@ -1157,8 +1162,20 @@ export function createMap(root, opts = {}) {
     return { left: pr.left - rr.left, top: pr.top - rr.top, bottom: pr.bottom - rr.top, right: pr.right - rr.left };
   }
 
+  /**
+   * What a page lays over the canvas (`createMap(el, { covers })`, the Wall's
+   * caption plate): a function returning `{left, top, right, bottom}` boxes in
+   * canvas px, asked every frame. Off by default: no box.
+   */
+  function pageCovers() {
+    if (typeof opts.covers !== 'function') return [];
+    const got = opts.covers();
+    return Array.isArray(got) ? got : [];
+  }
+
   function scene(now) {
     const memo = new Map();
+    const own = pageCovers();
     const near = (hover ?? highlighted ?? selected) ? neighbours.get(hover ?? highlighted ?? selected) ?? new Set() : new Set();
     return {
       W, H, now, s: scale(), zoom: cam.z, toScreen, spin,
@@ -1173,7 +1190,9 @@ export function createMap(root, opts = {}) {
       anchor: W > 760 && mode !== 'pip' ? anchorRect() : null,
       // What covers the canvas (the inspector on the right, the sheet on a
       // phone): labels keep clear of it, as of the canvas edges.
-      covers: mode !== 'pip' ? [anchorRect()].filter(Boolean) : [],
+      // A page's own covers (`covers`, the Wall's caption plate) count too.
+      covers: mode !== 'pip' ? [anchorRect(), ...own].filter(Boolean) : [],
+      pageCovers: own.length ? own : undefined,
       budgetUsd: typeof opts.budgetUsd === 'function' ? opts.budgetUsd : undefined,
       rings: opts.rings !== false,
       legends: opts.legends !== false,

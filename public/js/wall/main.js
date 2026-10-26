@@ -33,7 +33,11 @@ export function boot() {
   const aspect = (stage.clientWidth || innerWidth) / (stage.clientHeight || innerHeight);
   // The type steps come from the screen's density (`?mm=<screen height>` when known).
   const screen = screenOf(location.search, { dpr: globalThis.devicePixelRatio || 1, cssHeight: stage.clientHeight || innerHeight });
-  const map = createMap(stage, mapOptionsFor(pick.variant, aspect, screen));
+  // What lies over the map (the caption plate, the far fleet block): the Map
+  // keeps its names clear of it, none cut or ghosted under it (T24). Asked
+  // every frame, filled in once the plate and the frame exist.
+  let covers = () => [];
+  const map = createMap(stage, { ...mapOptionsFor(pick.variant, aspect, screen), covers: () => covers() });
 
   const perf = createPerf();
   globalThis.__wallPerf = perf.stats;
@@ -60,6 +64,7 @@ export function boot() {
   const glow = createGlow(document.getElementById('wall-glow'), map, { halos: Boolean(pick.variant.halos) });
   // What stays put while the camera moves: vignette, clock, the fleet's worst line, the tag.
   const frame = createFrame(document.getElementById('wall-frame'));
+  covers = () => [caption.cover(), frame.cover()].filter(Boolean);
   let latest = null;
   tour.onLeg((leg) => {
     const ms = still ? 0 : (leg.arriveMs ?? timingFor(pick.demo).flyMs);

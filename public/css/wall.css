@@ -94,7 +94,7 @@ html.wall body {
   max-width: 44vw;
   padding: var(--cap-pad) calc(var(--cap-pad) * 1.25) calc(var(--cap-pad) * 1.1);
   overflow: hidden;
-  background: color-mix(in oklch, var(--bg-canvas) 92%, transparent);
+  background: color-mix(in oklch, var(--bg-canvas) 96%, transparent);
   opacity: 0;
 }
 

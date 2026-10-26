@@ -323,6 +323,18 @@ export function captionSchedule(leg, name, lineCount, timing = CAPTION_TIMING) {
   return { startMs, nameAt, nameDoneAt, lineAt, doneAt, cursorOffAt: nameDoneAt + timing.cursorMs };
 }
 
+/**
+ * A block laid over the map as a Map cover (`createMap(el, { covers })`,
+ * T24): `{left, top, right, bottom}` in the stage's px from an element's
+ * offset box, or null when it takes no room. Map names keep clear of it, so
+ * none is cut by its edge or shows through it as a ghost.
+ */
+export function coverOf(box) {
+  const { left, top, width, height } = box ?? {};
+  if (![left, top, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+  return { left, top, right: left + width, bottom: top + height };
+}
+
 // --- the DOM part ------------------------------------------------------------
 
 const EASE = 'cubic-bezier(.2, 0, 0, 1)';
@@ -392,6 +404,10 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
 
   let pending = new Set();
   let shown = false;
+  // The plate's box with every row in, and whether it covers the map now (T24).
+  let box = null;
+  let covering = false;
+  let uncover = null;
   const later = (ms, fn) => {
     const t = timers.setTimeout(() => { pending.delete(t); fn(); }, Math.max(0, ms));
     pending.add(t);
@@ -413,6 +429,10 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     shown = false;
     fade(plate, 0, timing.outMs);
     delete plate.dataset.status;
+    // Names come back once the plate has gone, not through its fade (its own
+    // timer: a show or hide that cancels the beats must not keep it covering).
+    if (uncover != null) timers.clearTimeout(uncover);
+    uncover = timers.setTimeout(() => { uncover = null; covering = false; }, Math.max(0, timing.outMs));
   };
 
   // The plate's height follows its rows (plateHeight), eased as each comes in.
@@ -447,10 +467,14 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     cursor.hidden = false;
     cursor.classList.remove('is-blink');
     list.replaceChildren(...rows.map(lineEl));
-    // A row takes no room until its beat: the plate opens on kicker, word and name.
-    for (const li of list.children) { li.hidden = true; li.style.opacity = '0'; }
     plate.dataset.status = cap.status;
     plate.style.height = '';
+    // Where the plate stands once every row is in, read once a leg: the map's
+    // names keep clear of all of it from the start, so none pops out from
+    // under a row as it wipes in.
+    box = coverOf({ left: plate.offsetLeft, top: plate.offsetTop, width: plate.offsetWidth, height: plate.offsetHeight });
+    // A row takes no room until its beat: the plate opens on kicker, word and name.
+    for (const li of list.children) { li.hidden = true; li.style.opacity = '0'; }
     grow(cap, 0, 0);
   };
 
@@ -461,7 +485,12 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     const s = captionSchedule(leg, cap.name, rows.length, timing);
     const swapAt = wasShown ? timing.outMs : 0;
     later(swapAt, () => build(cap, rows));
-    later(Math.max(s.startMs, swapAt), () => { shown = true; fade(plate, 1, timing.inMs); });
+    later(Math.max(s.startMs, swapAt), () => {
+      shown = true;
+      if (uncover != null) { timers.clearTimeout(uncover); uncover = null; }
+      covering = true;
+      fade(plate, 1, timing.inMs);
+    });
     const letters = [...cap.name];
     letters.forEach((_, i) => later(Math.max(s.nameAt + (i + 1) * timing.letterMs, swapAt), () => {
       typed.textContent = letters.slice(0, i + 1).join('');
@@ -485,5 +514,8 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     }));
   };
 
-  return { show, hide, el: plate };
+  /** The plate as a Map cover while it is on screen, else null (T24). */
+  const cover = () => (covering ? box : null);
+
+  return { show, hide, cover, el: plate };
 }

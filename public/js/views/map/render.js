@@ -35,6 +35,8 @@
 //     branch(child, parent, {s}) // share 0..1 of a tree branch drawn from the child's end (the Wall), undefined: all
 //     follow,                  // the node an ambient camera stays on (the Wall's tour), or null
 //     labelInset,              // {top, right, bottom, left} shares: where a name may move to (the Wall)
+//     covers, pageCovers,      // [{left, top, right, bottom}]: what lies over the canvas; pageCovers only
+//                              // a page's own (the Wall's plate), which link labels keep clear of too
 //   }
 //
 // Text drawn here comes from builders (labels, subs, why) and is untrusted;
@@ -532,6 +534,8 @@ export function createRenderer(ctx, palette) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const w = measure(l.label) + 8;
+        // Under (or cut by) a page's own cover (the Wall's plate): not drawn.
+        if (pageCovered(scene, { x0: m.x - w / 2 - 4, y0: m.y - 11, x1: m.x + w / 2 + 4, y1: m.y + 11 })) continue;
         fillStyle(P.bg, 0.9 * fade);
         ctx.fillRect(m.x - w / 2, m.y - 7, w, 14);
         fillStyle(st.tone === 'grey' || st.tone === 'line' ? P.t2 : col, fade);
@@ -1152,6 +1156,9 @@ export function createRenderer(ctx, palette) {
   const coverBoxes = (scene) => (Array.isArray(scene.covers) ? scene.covers : [])
     .filter((c) => c && Number.isFinite(c.left) && Number.isFinite(c.top))
     .map((c) => ({ x0: c.left, y0: c.top, x1: Number.isFinite(c.right) ? c.right : Infinity, y1: Number.isFinite(c.bottom) ? c.bottom : Infinity }));
+  /** Whether box `b` touches one of a page's own covers (`scene.pageCovers`, the Wall); none by default. */
+  const pageCovered = (scene, b) => (Array.isArray(scene.pageCovers) ? scene.pageCovers : [])
+    .some((c) => c && b.x0 <= c.right && c.left <= b.x1 && b.y0 <= c.bottom && c.top <= b.y1);
   /** Whether box `b` (or a point as a zero box) is under a cover; a point on its edge counts. */
   const covered = (scene, b) => coverBoxes(scene).some((c) => b.x0 <= c.x1 && c.x0 <= b.x1 && b.y0 <= c.y1 && c.y0 <= b.y1);
 
