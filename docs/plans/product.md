@@ -45,6 +45,13 @@ Roughly **70 % the owner, 30 % everyone else.**
 
 ## 4. What to do, in what order
 
+### Sequence (agreed 2026-10-26)
+
+1. The Wall loop finishes its nights; the owner tries it on a tablet; the Wall PRs merge.
+2. Demo mode revived across today's views (Map, Runs, Morning, Wall), as a loop night.
+3. Public-repo hygiene pass.
+4. Hosted demo, then the tour video, then the README.
+
 ### Now (cheap, helps both sides)
 
 | Item | Done when |
