@@ -166,6 +166,9 @@ html.wall body {
 .wall-caption-hero-sub[hidden] { display: none; }
 
 .wall-caption-kicker {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8vmin;
   font-family: var(--font-mono);
   height: var(--cap-key);
   font-size: var(--cap-key);
@@ -174,6 +177,13 @@ html.wall body {
   color: var(--text-3);
   white-space: nowrap;
 }
+/* On trouble (T26) the kicker takes the worst status's colour, its shape
+   ahead at the kicker's own size so the line keeps its height. */
+.wall-caption-kicker[data-tone="crit"] { color: var(--crit); }
+.wall-caption-kicker[data-tone="warn"] { color: var(--warn); }
+.wall-caption-kicker[data-tone="low"] { color: var(--info); }
+.wall-caption-kicker .wall-caption-glyph { font-size: 1em; }
+.wall-caption-kicker .wall-caption-glyph[hidden] { display: none; }
 
 .wall-caption-name {
   height: calc(var(--cap-name) * 0.92);

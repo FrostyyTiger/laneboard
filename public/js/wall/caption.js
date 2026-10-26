@@ -131,8 +131,11 @@ export const NAMED_PROBLEMS = 3;
 /**
  * What the caption says about `node`. `model` is a map model (or its
  * `nodes`); `index`/`count` number the tour's targets (1-based), either may
- * be missing. Returns `{ kicker, name, status, lines }`: `status` the rolled
- * up status; each line is one of
+ * be missing. Returns `{ kicker, mark, name, status, lines }`: `status` the
+ * rolled up status; `mark` `{ status, tone, shape, glyph }` of the worst
+ * problem on a node in trouble (the kicker then starts with its status word,
+ * the page sets the glyph ahead of it in its tone), null when calm; each line
+ * is one of
  *   `{ kind: 'trouble', id, label, text, status, tone, shape, glyph }` (`id`
  *     the node it is about: the lock closes on it, T25)
  *   `{ kind: 'status', label, text }`
@@ -159,7 +162,7 @@ export function captionLines(node, model, index = null, count = null) {
   const target = Number.isInteger(index) && index > 0
     ? `TARGET ${pad2(index)}${Number.isInteger(count) && count >= index ? ` / ${pad2(count)}` : ''} · `
     : '';
-  const kicker = `${target}${kind.toUpperCase()}`;
+  let kicker = `${target}${kind.toUpperCase()}`;
   const name = clip(n.label ?? n.id ?? '').toUpperCase();
 
   const known = typeof n.id === 'string' && byId.has(n.id);
@@ -191,6 +194,10 @@ export function captionLines(node, model, index = null, count = null) {
       glyph: GLYPH[st.shape] ?? GLYPH.square,
     });
   }
+  // On trouble the kicker leads with the worst status in its colour and shape
+  // (T26): `■ CRIT · TARGET 01 / 05 · SITE`; a calm kicker stays grey and plain.
+  const mark = bad ? { status: bad.status, tone: lines[0].tone, shape: lines[0].shape, glyph: lines[0].glyph } : null;
+  if (mark) kicker = `${mark.status.toUpperCase()} · ${kicker}`;
 
   let statusText = status;
   if (problems.length) statusText = severityCount(problems);
@@ -244,7 +251,7 @@ export function captionLines(node, model, index = null, count = null) {
   lines.push(...facts.slice(0, Math.max(0, room)));
   if (countLine) lines.push(countLine);
 
-  return { kicker, name, status, hero: Boolean(bad), lines };
+  return { kicker, mark, name, status, hero: Boolean(bad), lines };
 }
 
 /**
@@ -386,6 +393,9 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
   const plate = el('section', 'wall-caption');
   plate.setAttribute('aria-live', 'polite');
   const kicker = el('div', 'wall-caption-kicker');
+  const kickerGlyph = el('span', 'wall-caption-glyph');
+  const kickerText = el('span', null);
+  kicker.append(kickerGlyph, kickerText);
   const name = el('h1', 'wall-caption-name');
   const typed = el('span', 'wall-caption-typed');
   const cursor = el('span', 'wall-caption-cursor');
@@ -452,7 +462,10 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
 
   // The content is swapped once the last plate has faded out.
   const build = (cap, rows) => {
-    kicker.textContent = cap.kicker;
+    kickerText.textContent = cap.kicker;
+    kickerGlyph.textContent = cap.mark?.glyph ?? '';
+    kickerGlyph.hidden = !cap.mark;
+    if (cap.mark) kicker.dataset.tone = cap.mark.tone; else delete kicker.dataset.tone;
     const lead = cap.lines.find((l) => l.step === 'hero');
     hero.hidden = !lead;
     if (lead) {

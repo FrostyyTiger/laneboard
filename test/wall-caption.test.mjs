@@ -59,7 +59,7 @@ test('caption: a calm site says calm, in grey, with its metrics, facts and what 
 test('caption: a site in trouble leads with its worst problem, in its status colour and shape', () => {
   const m = model();
   const c = captionLines(node(m, 'hv2'), m, 1, 5);
-  assert.equal(c.kicker, 'TARGET 01 / 05 · SITE');
+  assert.equal(c.kicker, 'CRIT · TARGET 01 / 05 · SITE');
   assert.equal(c.status, 'crit');
   const [first] = c.lines;
   assert.deepEqual(
@@ -84,9 +84,30 @@ test('caption: a site in trouble leads with its worst problem, in its status col
 
   // a node in trouble itself names its own status and why
   const own = captionLines(node(m, 'storage'), m, 3, 5);
-  assert.equal(own.kicker, 'TARGET 03 / 05 · ROOM');
+  assert.equal(own.kicker, 'CRIT · TARGET 03 / 05 · ROOM');
   assert.equal(own.lines[0].label, 'crit');
   assert.equal(own.lines[0].text, 'pool 97% full');
+});
+
+test('caption: the kicker of a node in trouble leads with the worst status, its tone and shape (T26)', () => {
+  const m = model();
+  const crit = captionLines(node(m, 'hv2'), m, 1, 5);
+  assert.equal(crit.kicker, 'CRIT · TARGET 01 / 05 · SITE');
+  assert.deepEqual(crit.mark, { status: 'crit', tone: 'crit', shape: 'square', glyph: '■' });
+
+  const a = model();
+  node(a, 'storage').status = 'ok';
+  node(a, 'media').status = 'attention';
+  const att = captionLines(node(a, 'hv2'), a, 4, 5);
+  assert.equal(att.kicker, 'ATTENTION · TARGET 04 / 05 · SITE');
+  assert.deepEqual(att.mark, { status: 'attention', tone: 'warn', shape: 'tri', glyph: '▲' });
+  // the kicker's mark is the trouble line's, so the plate never says two things
+  assert.equal(att.mark.glyph, att.lines[0].glyph);
+
+  const calm = captionLines(node(m, 'lab'), m, 2, 5);
+  assert.equal(calm.kicker, 'TARGET 02 / 05 · SITE', 'a calm kicker stays plain');
+  assert.equal(calm.mark, null);
+  assert.equal(captionLines(node(m, 'room-b'), m).mark, null);
 });
 
 test('caption: a node without detail or metrics still gives a status line, nothing undefined', () => {
@@ -291,4 +312,51 @@ test('caption: wall.css sets the heights plateHeight adds up', () => {
 test('caption: in demo timing the name types during the last 0.5 s of the flight', () => {
   const s = captionSchedule({ arriveMs: DEMO_TIMING.flyMs }, 'HV2', 4, DEMO_CAPTION_TIMING);
   assert.ok(s.nameAt >= DEMO_TIMING.flyMs - 500 && s.nameAt < DEMO_TIMING.flyMs, `types from ${s.nameAt} ms`);
+});
+
+test('caption: the page sets the trouble kicker in its tone with its shape, a calm kicker grey with none (T26)', async () => {
+  const { makeDocument, makeEl } = await import('./helpers/fakedom.mjs');
+  const { createCaption } = await import('../public/js/wall/caption.js');
+  const prevDoc = globalThis.document;
+  const doc = makeDocument();
+  const make = doc.createElement.bind(doc);
+  doc.createElement = (tag) => {
+    const e = make(tag);
+    e.replaceChildren = (...kids) => { e.textContent = ''; e.append(...kids); };
+    return e;
+  };
+  globalThis.document = doc;
+  try {
+    const waits = [];
+    const timers = { setTimeout: (fn, ms) => { waits.push({ fn, ms }); return waits.length; }, clearTimeout: () => {} };
+    const root = makeEl('div');
+    root.clientWidth = 1368;
+    root.clientHeight = 912;
+    const caption = createCaption(root, { timers, timing: CAPTION_TIMING });
+    const kicker = caption.el.children[0];
+    const [glyph, text] = kicker.children;
+    const m = model();
+    const leg = { kind: 'site', id: 'hv2', index: 1, count: 5, arriveMs: 0 };
+    const play = (cap) => { waits.length = 0; caption.show(leg, cap); waits.find((w) => w.ms === 0).fn(); };
+
+    play(captionLines(node(m, 'hv2'), m, 1, 5));
+    assert.equal(kicker.dataset.tone, 'crit');
+    assert.equal(glyph.hidden, false);
+    assert.equal(glyph.textContent, '■');
+    assert.equal(text.textContent, 'CRIT · TARGET 01 / 05 · SITE');
+
+    play(captionLines(node(m, 'lab'), m, 2, 5));
+    assert.equal(kicker.dataset.tone, undefined, 'a calm kicker keeps the grey');
+    assert.equal(glyph.hidden, true);
+    assert.equal(text.textContent, 'TARGET 02 / 05 · SITE');
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});
+
+test('wall.css: the trouble kicker takes the status colours and keeps the kicker\'s height (T26)', () => {
+  const css = readFileSync(new URL('../public/css/wall.css', import.meta.url), 'utf8');
+  assert.match(css, /\.wall-caption-kicker\[data-tone="crit"\] \{ color: var\(--crit\); \}/);
+  assert.match(css, /\.wall-caption-kicker\[data-tone="warn"\] \{ color: var\(--warn\); \}/);
+  assert.match(css, /\.wall-caption-kicker \.wall-caption-glyph \{ font-size: 1em; \}/);
 });
