@@ -144,6 +144,13 @@ Notes for every builder round (planner, round 1):
   its fps is the VM's. Night 2 reports script ms per frame (T10); real fps needs the tablet.
 - No wild-card layout question this night: the owner picked the galaxy (README §5), so the planner asked
   none.
+- Round 5 (fix): the check after round 4 had one failure, `Error: socket hang up`, but the tail doesn't
+  say which test. On 7a2110c, 17 full `npm test` runs came back green, so it doesn't reproduce. Round 4
+  touched no server code (only `layout.js`, vendored three.js and their tests), so nothing was changed on a
+  guess. A stress run (6 HTTP suites at once) does show load-timing flakes in `hub-boot.test.mjs:86`
+  (builder still stale, 503) and `term-proxy.test.mjs:518` (ping timeout), but not this error. To make the
+  next flake fixable, `loop/run.sh` (fenced) `check()` could add `✖` to the `TEST_TAIL` grep, take the
+  lines after `failing tests:` rather than `head -40`, and save `$out` to `$RUN_DIR`.
 
 ## Reviews
 
