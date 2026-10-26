@@ -13,6 +13,9 @@
 // miss the frame budget step the scene's quality down, roomy ones back up.
 // `__wallPerf` also carries `scriptMs`, `frameMs` and `level`; `?perf=1`
 // shows them with three's renderer counts; `?quality=<0..2>` pins a level.
+// Reduced motion (T11, D5, still.js): no flights, no turn, no drift; the
+// overview with every cluster folded and the caption rotating through the
+// sites, trouble first.
 
 import { createPerf } from '../perf.js';
 import { createTour, timingFor, tourOrder } from '../tour.js';
@@ -28,6 +31,7 @@ import { fallbackHref, hasWebGL } from './fallback.js';
 import { paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
+import { prefersStill, stillTourTimingFor } from './still.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -40,6 +44,8 @@ export function boot() {
 
   const style = getComputedStyle(page);
   const palette = paletteFrom((name) => style.getPropertyValue(name));
+  const reduced = prefersStill();
+  if (reduced) page.dataset.motion = 'still';
   // No WebGL here: the 2D page instead (islands with trouble tiles).
   const toFallback = (why) => {
     page.dataset.webgl = '0';
@@ -49,7 +55,7 @@ export function boot() {
   if (!hasWebGL(() => document.createElement('canvas'))) { toFallback('no context'); return; }
   let galaxy;
   try {
-    galaxy = createGalaxyScene(canvas, { palette });
+    galaxy = createGalaxyScene(canvas, { palette, still: reduced });
   } catch (err) {
     toFallback(err);
     return;
@@ -98,15 +104,16 @@ export function boot() {
   };
   const parked = () => (park ? galaxy.world?.sites.find((s) => s.id === park || String(s.node.label ?? '').toLowerCase() === park.toLowerCase()) : null);
 
-  const cam = createGalaxyCamera(galaxy);
-  const tour = createTour(cam, { timing: timingFor(page.dataset.demo === '1') });
+  const demo = page.dataset.demo === '1';
+  const cam = createGalaxyCamera(galaxy, { still: reduced });
+  const tour = createTour(cam, { timing: reduced ? stillTourTimingFor(demo) : timingFor(demo) });
 
   // The words over the canvas: the caption names each system as the camera
   // gets there; the frame (vignette, clock, fleet line, tag) stays put.
   // A parked still gets its caption at once, nothing typing.
-  const still = Boolean(park) || globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const still = Boolean(park) || reduced;
   const caption = createCaption(document.getElementById('wall-caption'), {
-    timing: still ? STILL_CAPTION_TIMING : captionTimingFor(page.dataset.demo === '1'),
+    timing: still ? STILL_CAPTION_TIMING : captionTimingFor(demo),
   });
   const frame = createFrame(document.getElementById('wall-frame'));
   // The lock closes on the node the caption's trouble word names (the system
@@ -138,7 +145,7 @@ export function boot() {
       if (at.open !== parkOpen) galaxy.setOpen(at.id, parkOpen);
       aim(siteShot(at, 0));
     } else if (!park) cam.frame(now);
-    else aim(overviewShot(w.sites, now));
+    else aim(overviewShot(w.sites, reduced ? 0 : now));
     galaxy.frame(now);
     cam.drawn();
     const t1 = performance.now();

@@ -10,6 +10,10 @@
 // (layout.js OPEN_MS), the one it leaves folds while it goes; held, the camera
 // drifts slowly round the system so the depth reads (scene.js `siteShot`).
 //
+// `still` (reduced motion, T11, still.js): the camera never leaves the
+// overview and never turns; `focus`/`fit` only say where the tour is (the
+// caption and lock follow it), and every system stays folded.
+//
 // `flightPose` and `openStep` are pure (test/wall-galaxy-camera.test.mjs);
 // `createGalaxyCamera` is the small part that moves the scene's camera.
 
@@ -64,9 +68,10 @@ export function zoomedSiteShot(site, heldMs, zoom) {
 /**
  * The camera over `galaxy` (scene.js `createGalaxyScene`: `world`,
  * `setOpen`, `camera`). Call `frame(now)` before the scene draws and
- * `drawn()` after it. `flight` is injectable for tests.
+ * `drawn()` after it. `flight` is injectable for tests; `still` holds the
+ * overview (above).
  */
-export function createGalaxyCamera(galaxy, { flight = FLIGHT } = {}) {
+export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false } = {}) {
   // What the camera wants: the overview or one site, since `t0` (ms).
   let want = { kind: 'overview', t0: null };
   let from = null; // the pose the current flight left from
@@ -79,6 +84,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT } = {}) {
   const siteOf = (id) => galaxy.world?.byId.get(id) ?? null;
 
   const target = (now) => {
+    if (still) return overviewShot(sites(), 0);
     if (want.kind === 'site') {
       const s = siteOf(want.id);
       if (s) return zoomedSiteShot(s, Math.max(0, now - want.t0 - flight.ms), want.zoom);
@@ -87,7 +93,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT } = {}) {
   };
 
   const go = (next) => {
-    from = pose;
+    from = still ? null : pose;
     want = { ...next, t0: null };
     version += 1;
   };
@@ -105,7 +111,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT } = {}) {
     if (k >= 1) from = null;
 
     // The held system opens once the camera is most of the way there; the rest fold.
-    const opening = want.kind === 'site' && now - want.t0 >= flight.ms * flight.openAt ? want.id : null;
+    const opening = !still && want.kind === 'site' && now - want.t0 >= flight.ms * flight.openAt ? want.id : null;
     for (const s of sites()) {
       const o = openStep(s.open, s.id === opening ? 1 : 0, dt);
       if (o !== s.open) galaxy.setOpen(s.id, o);

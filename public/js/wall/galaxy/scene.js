@@ -20,6 +20,7 @@ import { tourSites } from '../tour.js';
 import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
 import { LEVELS } from './budget.js';
+import { breathWave, dustTurn } from './still.js';
 
 /** World sizes: the sun, a site's star, a planet (named kind), a dot (the rest). */
 export const SIZE = Object.freeze({ sun: 60, sunHalo: 900, star: 24, planet: 15, dot: 4, landing: 7 });
@@ -142,11 +143,12 @@ const pageClock = () => globalThis.performance.now();
  * The scene on `canvas`. `palette` is paletteFrom's; `doc` makes the
  * sprite textures; `clock` is the time the eases count in (the frames'
  * `now`), `makeRenderer` the WebGL renderer (both injectable for tests).
+ * `still` (reduced motion, still.js): trouble glows without breathing, the dust stays put.
  * Returns `{ update, setOpen, frame, resize, setQuality, camera, world, quality, renderer, dispose }`.
  */
 export function createGalaxyScene(canvas, {
   palette, doc = globalThis.document, dpr = globalThis.devicePixelRatio || 1,
-  clock = pageClock, makeRenderer = webgl,
+  clock = pageClock, makeRenderer = webgl, still = false,
 } = {}) {
   const col = (rgb) => new THREE.Color().setRGB(rgb[0], rgb[1], rgb[2], THREE.SRGBColorSpace);
   const tone = Object.fromEntries(TONES.map((t) => [t, col(palette[t])]));
@@ -559,7 +561,7 @@ export function createGalaxyScene(canvas, {
   /** One frame at `now` (ms): trouble breathes, the dust drifts, then draw. */
   const frame = (now) => {
     resize();
-    const wave = Math.sin((now / PULSE.periodMs) * Math.PI * 2); // -1..1
+    const wave = breathWave(now, PULSE.periodMs, still); // -1..1, its peak when still (T11)
     haloMat.crit.opacity = HALO.crit.opacity * (1 - PULSE.crit / 2 + (PULSE.crit / 2) * wave);
     haloMat.warn.opacity = HALO.warn.opacity * (1 - PULSE.warn / 2 + (PULSE.warn / 2) * wave);
     advance(now);
@@ -570,7 +572,7 @@ export function createGalaxyScene(canvas, {
       }
     }
     // The dust turns once in about 26 minutes: alive under a held camera, never a motion you notice.
-    dust.rotation.y = now * 0.000004;
+    dust.rotation.y = dustTurn(now, still);
     renderer.render(scene, camera);
   };
 
