@@ -19,6 +19,7 @@ import { galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, CLOSED } f
 import { tourSites } from '../tour.js';
 import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
+import { LEVELS } from './budget.js';
 
 /** World sizes: the sun, a site's star, a planet (named kind), a dot (the rest). */
 export const SIZE = Object.freeze({ sun: 60, sunHalo: 900, star: 24, planet: 15, dot: 4, landing: 7 });
@@ -33,6 +34,12 @@ const HALO = Object.freeze({
 
 /** Trouble breathes: one slow period (ms), crit deep, warn shallow. */
 export const PULSE = Object.freeze({ periodMs: 2600, crit: 0.4, warn: 0.15, nebula: 0.08 });
+
+/** Sphere segments (width, height) at the best level; budget.js's levels scale them. */
+const SEGS = Object.freeze({ sun: [32, 20], star: [20, 14], planet: [32, 22], dot: [10, 8] });
+
+/** The far stars and dust grains at the best level. */
+const STARS = 2500, DUST = 9000;
 
 /** Segments of a landing ring (a small circle under a planet, on the plane). */
 const RING_SEGS = 16;
@@ -135,7 +142,7 @@ const pageClock = () => globalThis.performance.now();
  * The scene on `canvas`. `palette` is paletteFrom's; `doc` makes the
  * sprite textures; `clock` is the time the eases count in (the frames'
  * `now`), `makeRenderer` the WebGL renderer (both injectable for tests).
- * Returns `{ update, setOpen, frame, resize, camera, world, renderer, dispose }`.
+ * Returns `{ update, setOpen, frame, resize, setQuality, camera, world, quality, renderer, dispose }`.
  */
 export function createGalaxyScene(canvas, {
   palette, doc = globalThis.document, dpr = globalThis.devicePixelRatio || 1,
@@ -165,13 +172,11 @@ export function createGalaxyScene(canvas, {
   const glowTex = glowTexture(doc);
   const dotTex = dotTexture(doc);
   const cloudTex = cloudTexture(doc);
-  const geo = {
-    sun: new THREE.SphereGeometry(SIZE.sun, 32, 20),
-    star: new THREE.SphereGeometry(SIZE.star, 20, 14),
-    planet: new THREE.SphereGeometry(SIZE.planet, 32, 22),
-    dot: new THREE.SphereGeometry(SIZE.dot, 10, 8),
-  };
-  const shared = [glowTex, dotTex, cloudTex, ...Object.values(geo)];
+  const spheres = (seg) => Object.fromEntries(Object.entries(SEGS).map(([k, [w, h]]) => [
+    k, new THREE.SphereGeometry(SIZE[k], Math.max(6, Math.round(w * seg)), Math.max(4, Math.round(h * seg))),
+  ]));
+  const geo = spheres(1);
+  const shared = [glowTex, dotTex, cloudTex];
   const keep = (m) => { shared.push(m); return m; };
   const flatMat = Object.fromEntries(TONES.map((t) => [t, keep(new THREE.MeshBasicMaterial({ color: tone[t] }))]));
   // Calm planets are matte grey with a faint glow of their own; trouble
@@ -186,15 +191,18 @@ export function createGalaxyScene(canvas, {
   }))]));
 
   // --- the sky: far stars and the dust band, never rebuilt ------------------
-  {
+  // Both are in random order, so a shorter draw range is an even thinning (setQuality).
+  const stars = (() => {
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(farStars(2500), 3));
+    g.setAttribute('position', new THREE.BufferAttribute(farStars(STARS), 3));
     const m = new THREE.PointsMaterial({ color: col(palette.stars), size: 7, fog: false });
-    scene.add(new THREE.Points(g, m));
+    const pts = new THREE.Points(g, m);
+    scene.add(pts);
     shared.push(g, m);
-  }
+    return pts;
+  })();
   const dust = (() => {
-    const { positions, t } = dustPoints(9000);
+    const { positions, t } = dustPoints(DUST);
     const colours = new Float32Array(t.length * 3);
     const a = col(palette.dustIn), b = col(palette.dustOut), c = new THREE.Color();
     for (let i = 0; i < t.length; i++) {
@@ -566,16 +574,40 @@ export function createGalaxyScene(canvas, {
     renderer.render(scene, camera);
   };
 
+  /**
+   * Draws at one of budget.js's levels: new spheres at its segments on every
+   * mesh (the old ones disposed), the dust and far stars thinned by their
+   * draw range. Nothing moves; the next frame just has less to draw.
+   */
+  let quality = 0;
+  const setQuality = (level) => {
+    const q = Math.max(0, Math.min(LEVELS.length - 1, Math.round(Number(level) || 0)));
+    if (q === quality) return false;
+    quality = q;
+    const L = LEVELS[q];
+    const next = spheres(L.seg);
+    sun.geometry = next.sun;
+    for (const s of world?.sites ?? []) {
+      s.star.geometry = next.star;
+      for (const m of s.members) m.mesh.geometry = m.planet ? next.planet : next.dot;
+    }
+    for (const k of Object.keys(geo)) { geo[k].dispose(); geo[k] = next[k]; }
+    dust.geometry.setDrawRange(0, Math.round(DUST * L.dust));
+    stars.geometry.setDrawRange(0, Math.round(STARS * L.stars));
+    return true;
+  };
+
   const dispose = () => {
     for (const s of world?.sites ?? []) dropSite(s);
     tweens.clear();
     world = null;
-    for (const o of shared) o.dispose();
+    for (const o of [...shared, ...Object.values(geo)]) o.dispose();
     renderer.dispose();
   };
 
   return {
-    update, setOpen, frame, resize, camera, renderer, dispose,
+    update, setOpen, frame, resize, setQuality, camera, renderer, dispose,
     get world() { return world; },
+    get quality() { return quality; },
   };
 }

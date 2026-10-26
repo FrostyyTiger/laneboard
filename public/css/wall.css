@@ -581,3 +581,21 @@ html.wall body {
 .galaxy-label[data-tone="crit"] { color: var(--crit); }
 .galaxy-label[data-tone="warn"] { color: var(--warn); }
 .galaxy-label[data-tone="low"] { color: var(--p3); }
+
+/* The galaxy's speed overlay (`galaxy.html?perf=1`, js/wall/galaxy/budget.js):
+   a few mono lines in the top margin, above the tag, grey. For whoever tunes
+   the page, never on by default. */
+.galaxy-perf {
+  position: absolute;
+  top: 2.4vh;
+  right: 6vw;
+  font-family: var(--font-mono);
+  font-size: 1.5vmin;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  white-space: nowrap;
+  pointer-events: none;
+}

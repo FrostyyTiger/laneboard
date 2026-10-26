@@ -9,6 +9,10 @@
 // caption and frame (hud.js) sit over the canvas and follow the tour's legs;
 // the names (labels.js) sit between them and the canvas.
 // `?at=<site>&open=0..1` parks the camera on one system, for stills.
+// Speed (T10, budget.js): every frame's script time is timed; windows that
+// miss the frame budget step the scene's quality down, roomy ones back up.
+// `__wallPerf` also carries `scriptMs`, `frameMs` and `level`; `?perf=1`
+// shows them with three's renderer counts; `?quality=<0..2>` pins a level.
 
 import { createPerf } from '../perf.js';
 import { createTour, timingFor, tourOrder } from '../tour.js';
@@ -22,6 +26,7 @@ import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
 import { fallbackHref, hasWebGL } from './fallback.js';
 import { paletteFrom } from './palette.js';
+import { budgetStart, budgetStep, createFrameWindow, perfLine } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 
 const BACKOFF_START_MS = 1000;
@@ -51,8 +56,39 @@ export function boot() {
   }
 
   const perf = createPerf();
+  Object.assign(perf.stats, { scriptMs: 0, frameMs: 0, level: 0 });
   globalThis.__wallPerf = perf.stats;
-  document.addEventListener('visibilitychange', () => perf.pause());
+  const windows = createFrameWindow();
+  let budget = budgetStart();
+  const pinned = q.has('quality') ? Number(q.get('quality')) : null;
+  if (pinned != null) { galaxy.setQuality(pinned); perf.stats.level = galaxy.quality; }
+  document.addEventListener('visibilitychange', () => { perf.pause(); windows.pause(); });
+  let overlay = null;
+  if (q.get('perf') === '1') {
+    overlay = document.createElement('div');
+    overlay.className = 'galaxy-perf';
+    overlay.setAttribute('aria-hidden', 'true');
+    document.getElementById('galaxy-stage').append(overlay);
+  }
+  // One closed window of frames: the budget's verdict, the numbers, the overlay.
+  const measured = (w) => {
+    if (pinned == null) {
+      budget = budgetStep(budget, w);
+      galaxy.setQuality(budget.level);
+    }
+    Object.assign(perf.stats, {
+      scriptMs: Math.round(w.scriptMs * 100) / 100,
+      frameMs: Math.round(w.frameMs * 10) / 10,
+      level: galaxy.quality,
+    });
+    if (!overlay) return;
+    const lines = perfLine({ w, level: galaxy.quality, info: galaxy.renderer.info, memory: performance.memory });
+    overlay.replaceChildren(...lines.map((t) => {
+      const row = document.createElement('div');
+      row.textContent = t;
+      return row;
+    }));
+  };
 
   const park = q.get('at');
   const parkOpen = Math.max(0, Math.min(1, Number(q.get('open') ?? 1) || 0));
@@ -96,6 +132,7 @@ export function boot() {
     requestAnimationFrame(tick);
     const w = galaxy.world;
     if (!w) return;
+    const t0 = performance.now();
     const at = parked();
     if (at) {
       if (at.open !== parkOpen) galaxy.setOpen(at.id, parkOpen);
@@ -104,7 +141,10 @@ export function boot() {
     else aim(overviewShot(w.sites, now));
     galaxy.frame(now);
     cam.drawn();
-    perf.frame(performance.now());
+    const t1 = performance.now();
+    perf.frame(t1);
+    const closed = windows.frame(now, t1 - t0);
+    if (closed) measured(closed);
   };
 
   let have = false;
