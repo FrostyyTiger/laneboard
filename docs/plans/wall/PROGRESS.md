@@ -298,11 +298,26 @@ Notes for every builder round (planner, round 1):
   trouble lane still lies under the caption plate (T18); a folded cluster flown past mid-tour shows its
   trouble lanes as planet-sized lumps (Later: r26-skeptic 10 / r8-film-ui 7); the 20 % dust is still visible
   as grains (T26 makes it darker and smaller).
-- [ ] T16 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 2) The sun outshouts the trouble: core in
+- [x] T16 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 2) The sun outshouts the trouble: core in
   the text-2 grey at 70 % of its radius, halo at most half the crit nebula's peak, dust depth-tested against
   it, and `siteShot` keeps the hub out of shot (behind the camera or under 15 % of the frame) — done when: a
   test checks the palette/halo ratio and that `siteShot` puts the hub under 15 % of the frame, and the
   overview still shows a red nebula brighter than the sun.
+  (commit b4b3fd3) `palette.js` `sunCore` (= text-2); `scene.js` `SIZE.sun` 42 (70 % of 60), `sunHalo` 640
+  (crit nebula 680), `SUN_HALO` 0.3 (crit nebula 0.85; a literal, the evaluation-time guardrail forbids reading
+  `NEBULA`), the sun's light stays white (`palette.sun`). The dust was already depth-tested (PointsMaterial
+  default; the test pins it). **Decision:** `siteShot` now sits on the sun's side of a held system, up, looking
+  out across it (`SITE_SHOT`: jitter 0.7, sway 0.5 rad, speed as before), so the sun is behind and below the
+  camera and lights the faces we see; the drift is a slow sway (≈2.6 min a swing, same start speed) instead
+  of a full circle, since on a long touch hold the circle brought the sun round to the top edge.
+  `world.sunRadius` feeds labels. Tests `test/wall-galaxy-sun.test.mjs` (+5): on the large fixture the
+  sun's bright middle is 0 % of the frame for every site over 6 min, zoom 2.3 and 3.5, 3:2 and 16:9.
+  Stills `$RUN_DIR/shots/r34-before-*` vs `r34-t16-{non,lab2,hv2}`: overview, the sun is a small grey point
+  and both trouble nebulae outshine it; held, no sun in frame (before: a white disc cut at the top).
+  Filmstrip `$RUN_DIR/shots/r34-galaxy/` (0 console errors; 2.6 fps is SwiftShader), script 12.4 ms avg at
+  4x (was 11.5-12.9). Seen: the background of a hold is now the outer arm and the dark sky, quieter than
+  before; `r34-t16-lab` caught a demo relayout mid-fold (a lumpy ball, the Later line); the caption plate
+  still covers half of `lab` (T18).
 - [ ] T17 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 4) The crit nebula is a flat disc: two or
   three offset billboards per nebula, stretched along the arm tangent, breathing at one period (crit only),
   brightness ordered by severity and age so the newest crit is hottest — done when: a test checks the
