@@ -148,7 +148,8 @@ export function staleCaption(cap, fresh) {
  * line remembers it quietly, and through `bannerModel`, so it never repeats the held
  * caption), `live(on)` the socket's state, `fresh(f)` the feed's (fresh.js:
  * the tag's word, and the caption's grey line from the next leg on), `park(site)` shows a parked system's
- * caption (`?at=`, for stills) without a tour, and `covers()` the boxes the
+ * caption (`?at=`, for stills) without a tour, `open(leg)` a tapped one's
+ * (its brackets at once, its plate at `leg.arriveMs`), and `covers()` the boxes the
  * words take over the canvas (for the labels, T6; the tag top right since T18,
  * so neither a name nor a held planet sits on it; the warn-step fleet line
  * too), `fleetCover()` the fleet line's at either step, `tagCover()` the tag's alone.
@@ -201,7 +202,8 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
       caption.show(leg, cap);
       // The brackets take the trouble word's hue (a parked leg has no status of its own).
       const lead = cap.lines.find((l) => l.kind === 'trouble');
-      lock?.lockOn({ ...leg, node, status: lead?.status ?? leg.status ?? node.status, target });
+      // A tapped site (T10) is locked at once (`lockMs` 0, `cut`), the plate still waiting for the camera.
+      lock?.lockOn({ ...leg, arriveMs: leg.lockMs ?? leg.arriveMs, node, status: lead?.status ?? leg.status ?? node.status, target });
     } else {
       heldId = null;
       feed();
@@ -271,6 +273,8 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     park: (leg) => say({ arriveMs: 0, ...leg, kind: 'site' }),
     // A finger took the camera (night 3 T7, touch.js): the words of an overview leg, no plate, no lock.
     release: () => say({ kind: 'overview' }),
+    // A finger tapped a site (night 3 T10): its plate as the camera gets there, its brackets at once.
+    open: (leg) => say({ arriveMs: 0, ...leg, kind: 'site', lockMs: 0, cut: true }),
     covers: () => [caption.cover?.(), fleetCover(), tagCover()].filter(Boolean),
     fleetCover,
     tagCover,

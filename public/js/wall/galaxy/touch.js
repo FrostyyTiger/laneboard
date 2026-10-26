@@ -376,3 +376,85 @@ export function createGestures(stage, touch, cam, opts = {}) {
     stop: () => { off(); stage.removeEventListener('wheel', wheel, { passive: false }); },
   };
 }
+
+/**
+ * A tap (T10, README §7 Night 3 C3; night 2's r31-touch note): `ms` the
+ * longest a finger may stay down, `slopPx` the farthest it may move (the
+ * drag's slop: what turns the galaxy is never a tap); `radiusPx` the finger's
+ * reach round a thing's drawn centre, a disc 54 px across (night 1's Q6: 10 mm
+ * is 53 css px on the tablet; above night 2's 48 px floor); `palmPx` a contact
+ * wider or taller than this is a palm, not a finger.
+ */
+export const TAP = Object.freeze({ ms: 300, slopPx: ORBIT.slopPx, radiusPx: 27, palmPx: 120 });
+
+/** Louder first: the order a tie is broken in. */
+const TAP_TONES = ['crit', 'warn', 'low', 'calm'];
+const toneRank = (t) => {
+  const i = TAP_TONES.indexOf(t);
+  return i < 0 ? TAP_TONES.length : i;
+};
+
+/**
+ * What a tap at `x`, `y` (css px) hits among `points` (`[{ id, x, y, r,
+ * tone, box }]`: a thing's drawn centre and radius on screen, its tone, its
+ * shown name's box `{ x, y, w, h }` or null). A point is hit within
+ * `max(radius, r)` of its centre, or anywhere on its name. Of several, the
+ * worst tone wins, then the nearest (a name under the finger counts as 0
+ * away). Returns the point or null. Pure.
+ */
+export function hitTest(points, x, y, radius = TAP.radiusPx) {
+  let best = null, bestD = Infinity;
+  for (const p of points ?? []) {
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+    const b = p.box;
+    const onName = b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+    const d = onName ? 0 : Math.hypot(x - p.x, y - p.y);
+    if (!onName && d > Math.max(radius, Number(p.r) || 0)) continue;
+    const worse = best ? toneRank(p.tone) - toneRank(best.tone) : -1;
+    if (worse < 0 || (worse === 0 && d < bestD)) { best = p; bestD = d; }
+  }
+  return best;
+}
+
+/**
+ * True when a pointer event's contact is palm-sized: `width` or `height`
+ * over `palmPx`. A device that does not measure its contacts reports 1
+ * (Pointer Events): never a palm.
+ */
+export const isPalm = (ev, palmPx = TAP.palmPx) => (Number(ev?.width) || 0) > palmPx || (Number(ev?.height) || 0) > palmPx;
+
+/**
+ * Taps (T10). `createTaps(touch, { pick, tap, clock })`: `touch` is
+ * createTouch's; `pick(x, y)` says what is under a finger (hitTest over the
+ * page's points), asked at the `pointerdown` so a thing that drifts under
+ * the finger is not lost by the lift; `tap(hit, { x, y })` hears a tap that
+ * landed, with `hit` null on empty sky. Only in `explore`; a finger that
+ * moves past the slop, stays down past `TAP.ms`, is a palm or has company (a
+ * second finger at any time while it is down) is no tap. Returns `{ stop() }`.
+ */
+export function createTaps(touch, opts = {}) {
+  const o = { pick: () => null, tap: () => {}, clock: () => performance.now(), ...opts };
+  const downs = new Map(); // id → { x, y, t, hit, ok }
+  const onPointer = (ev, mode) => {
+    if (ev.type === 'pointerdown') {
+      if (mode !== 'explore') return;
+      const crowd = downs.size > 0;
+      for (const d of downs.values()) d.ok = false; // a second finger: a pinch, nobody's tap
+      const ok = !crowd && !isPalm(ev);
+      downs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, t: o.clock(), ok, hit: ok ? o.pick(ev.clientX, ev.clientY) : null });
+      return;
+    }
+    const d = downs.get(ev.pointerId);
+    if (!d) return;
+    if (ev.type === 'pointermove') {
+      if (Math.hypot(ev.clientX - d.x, ev.clientY - d.y) >= TAP.slopPx || isPalm(ev)) d.ok = false;
+      return;
+    }
+    downs.delete(ev.pointerId);
+    if (ev.type !== 'pointerup' || !d.ok || mode !== 'explore') return;
+    if (o.clock() - d.t > TAP.ms || Math.hypot(ev.clientX - d.x, ev.clientY - d.y) >= TAP.slopPx) return;
+    o.tap(d.hit ?? null, { x: d.x, y: d.y });
+  };
+  const off = touch.onPointer(onPointer);
+  return { stop: () => off() };
+}

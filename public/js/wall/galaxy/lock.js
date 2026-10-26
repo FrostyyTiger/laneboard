@@ -40,7 +40,8 @@ const CORNERS = ['tl', 'tr', 'bl', 'br'];
  * The lock inside `root` over the galaxy camera `cam` (camera.js: `onDraw`,
  * `screenOf`). `lockOn(leg)` locks onto a site leg's `target` chain
  * (lockTarget; the first id the camera can place wins), else the site;
- * `release()` opens it. `leaderFrom()` says where the leader leaves the
+ * `release()` opens it; a leg with `cut` (a tap, night 3 T10) takes the box
+ * at once instead of waiting for the last lock to open. `leaderFrom()` says where the leader leaves the
  * caption plate (null: none); a calm target never has one. `clock` and
  * `size` are injectable.
  */
@@ -141,8 +142,10 @@ export function createGalaxyLock(root, cam, {
     if (typeof leg?.id !== 'string') return;
     const arrive = Number.isFinite(leg.arriveMs) ? leg.arriveMs : 0;
     let startAt = clock.now() + Math.max(0, arrive - timing.leadMs);
-    // Never take the box from a lock that is still opening.
-    if (cur) startAt = Math.max(startAt, cur.leaveAt + timing.outMs);
+    // Never take the box from a lock that is still opening, unless a finger
+    // chose the target (night 3 T10, `leg.cut`): an answer comes at once.
+    if (cur && leg.cut) cur = null;
+    else if (cur) startAt = Math.max(startAt, cur.leaveAt + timing.outMs);
     const chain = Array.isArray(leg.target) && leg.target.length ? leg.target : [{ id: leg.id }];
     next = { id: chain[0].id, chain, tone: lockTone(leg.status), startAt, leaveAt: null };
   };
