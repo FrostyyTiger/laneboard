@@ -226,9 +226,29 @@ Notes for every builder round (planner, round 1):
   on the HV1 → sun lane under the red/amber trouble; the probe logged routes `home>lab`, `lab>hv2`,
   `lab>cloud` coming and going with the demo's flow events. Meaning for `docs/wall.md` (E): "a grey light
   running between two systems: they are talking (a live link, or something just travelled it)".
-- [ ] T13 (§7.C) [ui] [variant:galaxy] `fx=comets`: a running job or deploy (the large demo's flow events)
+- [x] T13 (§7.C) [ui] [variant:galaxy] `fx=comets`: a running job or deploy (the large demo's flow events)
   is a small comet with a tail from its builder to where it lands — done when: a test maps a flow event to
   a comet's start and end, and filmstrips with and without `?fx=comets` show it only with it.
+  (commit b34858f) `galaxy/fx.js`: `COMETS` timing, `flowComets(model, drawn)`, `trackComets`, `cometAt`,
+  `cometPath`. **Decision:** a comet is any event with `link` (the Map's own comet rule, docs/map.md), not
+  only `kind: flow`; each end is the nearest drawn thing up the node's parents (a planet, else its site's
+  star), so a comet runs planet to planet inside one system or across the galaxy. It flies **once** per
+  event (key = event time + link; the next model's copy never re-fires), 3.2 s eased, on an arc lifted over
+  the plane (30 % of its length, min 60) so it reads apart from `lanes` (which follows the hyperlanes
+  through the sun); head 22-90 world units by length, 10-sprite tail, `--text-1` grey ≤ 0.55 opacity, in
+  its hue only when the event itself is warn/crit (a failed deploy). Max 6 at once; events older than 10 s
+  when first seen are skipped. Reduced motion: the whole arc, still and faint, for the time it would fly.
+  `scene.js`: `setComets`, `drawn()`, pool only with `fx=comets`. Tests in `test/wall-galaxy-fx.test.mjs`
+  (+7). Filmstrips `$RUN_DIR/shots/r28-galaxy-comets/` and `r28-galaxy-off/` (`?demo=1&quality=0`, 0
+  console errors either); at 3.2 s per 12 s the 12-frame sheet catches none, so probe
+  `$RUN_DIR/tools/cometprobe.mjs` (`FREEZE=0.5` holds comets mid-flight) logged one comet per demo flow event
+  (`registry>k8s-1`, `ci>api-staging`, `db>storage`, …) and `$RUN_DIR/shots/r28-comet/comet-1.png`
+  (`?at=none`, overview) shows a grey streak with a tail from HV1 toward CLOUD, quieter than both red
+  nebulae. Script ms the same with and without (11.6 vs 12.7 avg at 4x). Seen: held on one system, a comet
+  to another site leaves the frame at the top (its arc rises toward the camera); fine for a flight, but a
+  reviewer may want a lower lift for cross-site arcs. With `fx=lanes,comets` a cross-site event shows both.
+  Meaning for `docs/wall.md` (E): "a small grey comet: something just went from one machine to another (a
+  push, a deploy, a backup); red or amber when it failed".
 - [ ] T14 (§7.C) [ui] [variant:galaxy] `fx=twinkle`: a planet with a working session twinkles softly (slow,
   low contrast, calm stays calm) — done when: a test picks the twinkling planets from a model (working
   sessions only), and filmstrips with and without `?fx=twinkle` show it only with it.
