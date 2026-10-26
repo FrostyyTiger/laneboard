@@ -217,7 +217,7 @@ Notes for every builder round (planner, round 1):
   and reads like `HV1 · VM-C OK · WAS DOWN 6 MIN` — done when: a test shows the banner of a cleared trouble
   without the crit slab class or the banner size, calm size and `--text-2`, and the "was down" text with its
   age, and a film of `galaxy.html?demo=1&quality=0` has no full-size red banner while its line says `CLEARED`.
-  (commit SHA_T18) Builder r20: `frame.js clearedLine(model, { id, status, forMs })` → a calm-step line, tone
+  (commit 348f646) Builder r20: `frame.js clearedLine(model, { id, status, forMs })` → a calm-step line, tone
   `cleared`, `data-was` = the old tone, text `hv1 · vm-c ok · was down 6m` (`was crit 41s` for a crit; the units as
   the tag's `STALE 2M`, not "6 min"); `update(model, { cleared })` uses it only while `worstLine` is calm.
   `hud.js`: `heldModel` (the crit put back at full size, dimmed) is gone; the hold (CRIT_HOLD, T30, same end rule)
