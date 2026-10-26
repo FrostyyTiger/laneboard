@@ -345,3 +345,95 @@ test('wall.css dims a held crit line and greys its why', () => {
   assert.match(css, /\.wall-fleet\[data-held\] \.wall-fleet-line \{ opacity: 0\.72; \}/);
   assert.match(css, /\.wall-fleet\[data-held\] \.wall-fleet-sub-why \{ color: var\(--text-2\); \}/);
 });
+
+test('one headline per trouble frame (night 3 T4): data-plate on the frame while the plate shows, cleared at the overview', async () => {
+  const { makeDocument, makeEl } = await import('./helpers/fakedom.mjs');
+  const { createFrame } = await import('../public/js/wall/frame.js');
+  const prevDoc = globalThis.document;
+  globalThis.document = makeDocument();
+  try {
+    const pending = [];
+    const timers = {
+      setTimeout: (fn, ms) => { pending.push({ fn, ms }); return pending.length; },
+      clearTimeout: () => {},
+    };
+    const root = makeEl('div');
+    const frame = createFrame(root, { timers: { setTimeout: () => 0, clearTimeout() {} } });
+    const { caption } = fakes();
+    const tour = createTour({ focus: () => {}, fit: () => {} }, { timing: DEMO_TIMING, timers });
+    const waits = [];
+    const hudTimers = {
+      setTimeout: (fn, ms) => { waits.push({ fn, ms, live: true }); return waits.length; },
+      clearTimeout: (id) => { if (waits[id - 1]) waits[id - 1].live = false; },
+    };
+    const hud = createHud({ caption, frame, tour, timers: hudTimers });
+    const m = model();
+    hud.update(m);
+    tour.update(m);
+    tour.start();
+    assert.equal('plate' in root.dataset, false, 'the overview: no plate, the banner at its far size');
+    pending.shift().fn();
+    assert.equal('plate' in root.dataset, false, 'in the flight the banner is still the headline');
+    assert.equal(waits.at(-1).ms, DEMO_TIMING.flyMs, 'it steps down as the camera arrives with the plate');
+    waits.at(-1).fn();
+    assert.equal(root.dataset.plate, '1', 'a system held, its plate up: the banner steps down');
+    pending.shift().fn();
+    assert.equal('plate' in root.dataset, false, 'the next flight: the banner again');
+    const next = waits.at(-1);
+    pending.shift().fn();
+    assert.equal(next.live, false, 'a leg that ends before its arrival leaves no late step-down');
+    assert.equal('plate' in root.dataset, false, 'back at the overview');
+    // A parked still shows its plate too.
+    hud.park({ id: 'lab' });
+    assert.equal(root.dataset.plate, '1');
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});
+
+test('frame.plate reads the far block again: its size changed with the attribute', async () => {
+  const { makeDocument, makeEl } = await import('./helpers/fakedom.mjs');
+  const { createFrame } = await import('../public/js/wall/frame.js');
+  const prevDoc = globalThis.document;
+  globalThis.document = makeDocument();
+  try {
+    const root = makeEl('div');
+    const frame = createFrame(root, { timers: { setTimeout: () => 0, clearTimeout() {} } });
+    frame.update(model());
+    const fleet = frame.el.fleet;
+    assert.equal(fleet.dataset.step, 'far');
+    let h = 200;
+    for (const [k, v] of [['offsetLeft', 900], ['offsetTop', 600], ['offsetWidth', 400]]) {
+      Object.defineProperty(fleet, k, { value: v, configurable: true });
+    }
+    Object.defineProperty(fleet, 'offsetHeight', { get: () => h, configurable: true });
+    assert.equal(frame.cover().bottom, 800);
+    h = 120;
+    assert.equal(frame.cover().bottom, 800, 'cached while nothing changed');
+    frame.plate(true);
+    assert.equal(frame.cover().bottom, 720, 'read again after the plate came');
+    h = 200;
+    frame.plate(true);
+    assert.equal(frame.cover().bottom, 720, 'the same state twice reads nothing');
+    frame.plate(false);
+    assert.equal(frame.cover().bottom, 800, 'and again when it goes');
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});
+
+test('wall.css: with a plate up the far line is set at the caption name step, at the overview at its own', () => {
+  const css = read('css/wall.css');
+  const rule = (sel) => {
+    const at = css.indexOf(`${sel} {`);
+    assert.ok(at >= 0, sel);
+    return css.slice(at, css.indexOf('}', at));
+  };
+  assert.match(rule('.wall-frame-layer[data-plate] .wall-fleet[data-step="far"] .wall-fleet-line'), /font-size: var\(--cap-name\)/);
+  assert.match(rule('.wall-fleet[data-step="far"] .wall-fleet-line'), /font-size: var\(--fleet-far\)/, 'no plate: the 3 m size');
+  // The glyph is in em, so it steps down with the line.
+  assert.match(rule('.wall-fleet[data-step="far"] .wall-fleet-glyph'), /font-size: 0\.62em/);
+  // The name step lives on the stage, where caption and frame both read it.
+  assert.match(rule('.wall-stage'), /--cap-name: 6\.9vmin/);
+  assert.match(rule('.wall-caption-name'), /font-size: var\(--cap-name\)/);
+});

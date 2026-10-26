@@ -129,7 +129,7 @@ export function heldModel(model, hold, now) {
 
 /**
  * Wires `caption` (`show(leg, cap)`, `hide()`), `frame` (`update(model)`,
- * `live(on)`) and, when given, `lock` (`lockOn(leg)`, `release()`) to `tour`
+ * `live(on)`, `plate(on)` while a plate shows) and, when given, `lock` (`lockOn(leg)`, `release()`) to `tour`
  * (`onLeg(cb)`). `update(model)` gives both the newest
  * model (the frame's through `heldModel`, so a crit that just cleared stays
  * on its line, dimmed, and `bannerModel`, so the line never repeats the held
@@ -141,9 +141,10 @@ export function heldModel(model, hold, now) {
  * `size()` is the stage's css size (stage.js, the scene's `size`); the line's
  * and the tag's boxes are read again only when it or their words change
  * (T29: both are asked for twice a frame, after the lock's style writes).
- * `now()` is the clock the crit hold counts on (injectable for tests).
+ * `now()` is the clock the crit hold counts on, `timers` the plate's arrival
+ * waits on (both injectable for tests).
  */
-export function createHud({ caption, frame, tour = null, lock = null, size = null, now = () => Date.now() }) {
+export function createHud({ caption, frame, tour = null, lock = null, size = null, now = () => Date.now(), timers = globalThis }) {
   const stage = size ?? (() => ({ W: globalThis.innerWidth, H: globalThis.innerHeight }));
   let latest = null;
   // The lock target's node (lockTarget's first), as the leg's caption and
@@ -168,6 +169,18 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     }
     frame.update(fed);
   };
+  // One headline per trouble frame (night 3 T4): the far line steps down
+  // while the plate is up, from the leg's arrival (the plate comes with the
+  // camera; in the flight the banner is still the only headline) until the
+  // next leg.
+  let plateTimer = null;
+  const plate = (on, atMs = 0) => {
+    if (plateTimer != null) { timers.clearTimeout(plateTimer); plateTimer = null; }
+    if (!frame.plate) return;
+    // The last plate fades as the next leg starts: the banner is the headline again until the camera arrives.
+    frame.plate(Boolean(on) && !(atMs > 0));
+    if (on && atMs > 0) plateTimer = timers.setTimeout(() => { plateTimer = null; frame.plate(true); }, atMs);
+  };
   const say = (leg) => {
     if (leg?.kind === 'overview' && hold && now() - hold.clearedAt >= CRIT_HOLD.minMs) hold = null;
     const node = legNode(leg, latest);
@@ -176,6 +189,7 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
       const target = lockTarget(node, latest);
       heldId = target[0]?.id ?? null;
       feed();
+      plate(true, leg.arriveMs);
       caption.show(leg, cap);
       // The brackets take the trouble word's hue (a parked leg has no status of its own).
       const lead = cap.lines.find((l) => l.kind === 'trouble');
@@ -183,6 +197,7 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     } else {
       heldId = null;
       feed();
+      plate(false);
       caption.hide();
       lock?.release();
     }
@@ -241,6 +256,6 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     covers: () => [caption.cover?.(), fleetCover(), tagCover()].filter(Boolean),
     fleetCover,
     tagCover,
-    stop: () => off(),
+    stop: () => { off(); plate(false); },
   };
 }

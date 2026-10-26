@@ -41,6 +41,8 @@ html.wall body {
   /* Plain ground, no --tex-dots (T28, r20-skeptic #3): a fixed texture slides
      against a camera that flies and turns. The vignette is the quiet ground. */
   background: var(--bg-canvas);
+  /* The caption's name step, on the stage so the frame can share it (T4). */
+  --cap-name: 6.9vmin;
 }
 
 /* The ground moves to the stage so the glow canvas (js/wall/glow.js) can sit
@@ -87,7 +89,6 @@ html.wall body {
 .wall-caption {
   --cap-key: 1.7vmin;
   --cap-line: 2.7vmin;
-  --cap-name: 6.9vmin;
   --cap-pad: 2.4vmin;
   --cap-bracket: 2.6vmin;
   position: absolute;
@@ -500,6 +501,10 @@ html.wall body {
 }
 /* The shape at the caps' height, as on the plate. */
 .wall-fleet[data-step="far"] .wall-fleet-glyph { font-size: 0.62em; }
+/* One headline per trouble frame (night 3 T4, r54-film-ui 1): while a caption
+   plate is up (galaxy hud.js sets data-plate) its hero is the headline and
+   the far line steps down to the plate's name step, its glyph with it (em). */
+.wall-frame-layer[data-plate] .wall-fleet[data-step="far"] .wall-fleet-line { font-size: var(--cap-name); }
 .wall-fleet-sub {
   display: flex;
   justify-content: flex-end;

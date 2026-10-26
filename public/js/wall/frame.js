@@ -204,6 +204,9 @@ function setLine(line, w) {
  * The frame inside `root` (an empty element over the map). `update(model)`
  * sets the lines from a model, `live(on)` the tag's state; the clock runs by
  * itself on `timers` and `now` (injectable). `stop()` ends the clock.
+ * `plate(on)` says whether a caption plate is up over the frame (the galaxy's
+ * hud.js, night 3 T4): `data-plate` on `root`, and wall.css sets the far line
+ * at the plate's name step then, so a trouble frame has one headline.
  */
 export function createFrame(root, { timers = globalThis, now = () => Date.now() } = {}) {
   const vignette = el('div', 'wall-vignette');
@@ -290,5 +293,13 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     return farBox;
   };
 
-  return { update, live, stop, cover, el: { vignette, tag, clock, fleet } };
+  // The far line changes size with the plate (wall.css), so its box is read again.
+  const plate = (on) => {
+    if (('plate' in root.dataset) === Boolean(on)) return;
+    if (on) root.dataset.plate = '1';
+    else delete root.dataset.plate;
+    farDirty = true;
+  };
+
+  return { update, live, stop, cover, plate, el: { vignette, tag, clock, fleet } };
 }
