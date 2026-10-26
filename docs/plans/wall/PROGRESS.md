@@ -130,6 +130,20 @@ Notes for every builder round (planner, round 1):
   on the page with a fake clock drives touch → overview → drag → tap a site → detail → back → 60 s → tour
   resumed (and the same in still mode with fades), and a filmstrip of `galaxy.html?demo=1&quality=0` with
   scripted touches (CDP `Input.dispatchTouchEvent`) shows that sequence.
+- [ ] T15 (r4-film-ui galaxy 1) [ui] [variant:galaxy] The caption names only a target the camera is on: the
+  plate's typing starts at flight progress ~0.9 (night 2's r54-film-ui 4), and during a flight passing sites'
+  labels dim to `--text-3` while only the destination's name stays full — done when: a test shows no caption
+  characters typed before progress 0.9 of the leg and the non-destination labels at `--text-3` in a flight, and
+  a film of `galaxy.html?demo=1&quality=0` has no frame with a typing plate whose site is out of shot.
+- [ ] T16 (r4-film-ui galaxy 4) [ui] [variant:galaxy] No stray hard lines: no banner-to-node tether at the
+  overview (the node carries its glyph); the caption's leader to its star is one style (2 px, 90° or 45° elbow,
+  routed clear of other labels) — done when: a test shows no tether at the overview and a leader that crosses no
+  shown label box on the large fixture, and a film shows no straight red line from banner to node or across empty
+  sky.
+- [ ] T17 (r4-film-ui galaxy 7) [ui] [variant:galaxy] A site label stays on its star: `labels.js` anchors each
+  site label to the star's projected point of the same frame, never a stale one — done when: a test moves the
+  camera between two draws and finds the label's anchor equal to `screenOf(star)` plus the fixed offset each
+  time, and a still at the overview shows `HV2`'s glyph beside its nebula.
 
 ## Research questions
 
@@ -266,6 +280,10 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 - (r37-performance 6) A `frameCap` in `galaxy/main.js` (60 in a flight, 30 otherwise), `budget.js` judging against it.
 - (r37-performance 7) `labels.draw` rebuilds per frame: memoise `labelSize`, reuse arrays, skip unchanged passes.
 - (r37-performance 8) Folded calm members are still meshes at the overview: hide them while `unfold === 0`.
+- (r4-film-ui galaxy 3) The banner flips subject between cuts: hold the slab for a whole tour cycle (with r15-dreamer 4 above).
+- (r4-film-ui galaxy 5) Calm member names at ~20 % contrast overlap the lock brackets: `--text-3`, no word under a bracket (with r54-film-ui 8 above).
+- (r4-film-ui galaxy 6, 8) Labels at the frame edge or on plates, the held name twice: covered by A4 T31 and r54-film-ui 9 above.
+- (r4-film-ui fx-beacon 3) The beacon doubles the red glow: pillar thin with a white core, the nebula one step down while a beacon stands (after T9).
 - fx candidates from night 2 not asked for by the owner: `blast` (r59-dreamer: red threads from a held crit to
   what depends on it), `heat`, `realm`, `route` (research Q7), `pulse` (Q8).
 - Night 1's shared bugs that may apply (`worstGapMs` a lifetime max in `perf.js` (T39), clock and caption
@@ -273,11 +291,23 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 
 ## For the owner
 
+- (r4-film-ui, across the variants; taste) Idea: the folded trouble cluster at the overview could take the beacon's
+  vertical silhouette, so shape carries where colour does not. Not a task.
+
 ## Reviews
+
+- r4-film-ui.md: 12 findings (9 galaxy, 3 fx-beacon) + 2 across; 3 became tasks (T15, T16, T17); galaxy 2 and 9 and
+  beacon 1, 2 dropped (covered by T4, T3, T9); galaxy 3, 5, 6, 8 and beacon 3 went to Later; across 1 dropped
+  (observation), across 2 to the owner.
 
 ## Scores
 
 | round | persona | overview | legibility | status | touch | wow | calm | performance |
 |---|---|---|---|---|---|---|---|---|
+| r4 | film-ui, galaxy | 6 | 6 | 7 | 1 | 6 | 5 | 6 |
+| r4 | film-ui, fx-beacon | – | – | – | – | 6 | 6 | – |
+| r4 | film-ui, fx-lanes | – | – | – | – | 2 | 8 | – |
+| r4 | film-ui, fx-comets | – | – | – | – | 3 | 7 | – |
+| r4 | film-ui, fx-twinkle | – | – | – | – | 2 | 9 | – |
 
 ## Morning
