@@ -148,3 +148,41 @@ test('radial layout: the Map\'s rings on wall radii, angles and staggers kept, r
   assert.deepEqual(ringLabels(base.pos, NODES).map((r) => r.r), rings.map((r) => RINGS[r.ring]), 'default: RINGS');
   assert.equal(mapOptions.layout, wallLayout);
 });
+
+test('renderer: a pinned name keeps its side as the turn carries its bearing past the vertical', () => {
+  // hv1/rack's bearing, turned to just right of straight up, then just left.
+  const lay = layout(NODES);
+  const t = lay.pos.get('hv1/rack').angle;
+  const right = -Math.PI / 2 + 0.15 - t, leftward = -Math.PI / 2 - 0.15 - t;
+  const centreX = (b) => (b.x0 + b.x1) / 2;
+  const draw = (r, sc) => new Map(r.labelBoxes(sc, r.drawNodes(sc)).map((b) => [b.text, b]));
+
+  // Off (the app): the name flips to the node's other side.
+  const plain = createRenderer(fakeCtx(), PAL);
+  const a = draw(plain, scene(1, { labelSize, spin: right }));
+  const b = draw(plain, scene(1, { labelSize, spin: leftward }));
+  const sx = scene(1).toScreen(scene(1).nodes.get('hv1/rack')).x;
+  assert.ok(a.get('RACK').x0 >= sx - 4, 'right of the vertical: reads rightward from the node');
+  assert.ok(b.get('RACK').x1 <= sx + 4, 'left of it: flipped to read leftward');
+
+  // On (the Wall): the same two frames keep the first frame's side.
+  const pinned = createRenderer(fakeCtx(), PAL);
+  const p = draw(pinned, scene(1, { labelSize, pinLabels: true, spin: right }));
+  const q = draw(pinned, scene(1, { labelSize, pinLabels: true, spin: leftward }));
+  assert.ok(p.get('RACK').x0 >= sx - 4);
+  assert.ok(q.get('RACK').x0 >= sx - 30, 'still on its first side');
+  assert.ok(Math.abs(centreX(q.get('RACK')) - centreX(p.get('RACK'))) < 30, 'and about where it was');
+  assert.equal(Math.round(q.get('RACK').y0) - Math.round(p.get('RACK').y0) <= 2, true, 'on the same line');
+
+  // Well past the vertical it does turn over.
+  const far = draw(pinned, scene(1, { labelSize, pinLabels: true, spin: -Math.PI / 2 - 0.9 - t }));
+  assert.ok(far.get('RACK').x1 <= sx + 4, 'past the hysteresis it reads leftward');
+});
+
+test('renderer: a pinned name keeps the line the collision pass gave it while a neighbour comes and goes', () => {
+  const pinned = createRenderer(fakeCtx(), PAL);
+  const sc = scene(1, { labelSize, pinLabels: true });
+  const first = new Map(pinned.labelBoxes(sc, pinned.drawNodes(sc)).map((b) => [b.text, b]));
+  const again = new Map(pinned.labelBoxes(sc, pinned.drawNodes(sc)).map((b) => [b.text, b]));
+  for (const [k, v] of first) assert.deepEqual(again.get(k), v, `${k} drawn twice in the same place`);
+});

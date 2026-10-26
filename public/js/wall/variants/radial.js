@@ -10,6 +10,7 @@
 // Pure: no DOM, so test/wall-radial.test.mjs imports it directly.
 
 import { layout as ringLayout, RINGS } from '../../views/map/layout.js';
+import { stepsFor, pxPerMm } from '../type.js';
 
 /**
  * The ring radii on a wall, in the Map's world units (its RINGS: 0 150 290
@@ -40,33 +41,66 @@ export function layout(nodes) {
 export const IN_SITE = 1.25;
 
 /**
- * The type steps in CSS px, a 4:3 scale from the Map's 11px: 11 · 15 · 20 · 26.
- * `site` reads first, `room` one step down, `near` for what the camera is in
- * (the Map's own sizes, so undefined).
+ * The type steps in CSS px on the tablet (2x, 10.5 device px per mm): from
+ * the distance each is read at (type.js READ: sites at 1 m, rooms at 0.45 m,
+ * 16 arc minutes of cap), on the 4:3 scale 11 · 15 · 20 · 26 · 35: 35 / 15,
+ * two steps apart. A desk monitor gets 26 / 11 (`optionsFor` with its screen). `site` reads first,
+ * `room` one step down or more, `near` for what the camera is in (the Map's
+ * own sizes, so undefined).
  */
-export const STEPS = Object.freeze({ site: 26, room: 15 });
+export const STEPS = Object.freeze({ site: 35, room: 15 });
+
+/**
+ * The steps orbits, islands and mosaic are spaced for (round 11's 26 / 15):
+ * their layouts measure names at these sizes, so they keep them until their
+ * own task moves them to type.js.
+ */
+export const BASE_STEPS = Object.freeze({ site: 26, room: 15 });
 
 const PLACE = new Set(['site', 'host']);
 const ROOM = new Set(['room', 'repo', 'builder']);
 
 /**
- * The Map's `labelSize` for this direction: px for `node`'s name at map scale
- * `s` (`{px, inward}` for a site), 0 for no name, undefined for the Map's own size. `trouble` is the Map's
- * (status warn or worse, stuck, or a ▲/■ rolled up into it).
+ * The Map's `labelSize` for this direction on `steps`: px for `node`'s name
+ * at map scale `s` (`{px, inward}` for a site), 0 for no name, undefined for
+ * the Map's own size. `trouble` is the Map's (status warn or worse, stuck,
+ * or a ▲/■ rolled up into it).
  */
-export function labelSize(node, { s = 1, trouble = false } = {}) {
-  const kind = node?.kind;
-  // The core's name is the tag's, top right; under the core it sat among the sites'.
-  if (kind === 'core') return 0;
-  // A site's name faces the core, centred on it: pointing outward it would
-  // land on its own rooms. A grouping the hub makes up (`__repos`) is no
-  // place: the room step.
-  if (PLACE.has(kind) && !String(node.id ?? '').startsWith('__')) return { px: STEPS.site, inward: true };
-  if (PLACE.has(kind)) return STEPS.room;
-  if (ROOM.has(kind)) return STEPS.room;
-  if (s > IN_SITE) return trouble ? STEPS.room : undefined;
-  return trouble ? STEPS.room : 0;
+export function labelSizeFor(steps = STEPS) {
+  return function labelSize(node, { s = 1, trouble = false } = {}) {
+    const kind = node?.kind;
+    // The core's name is the tag's, top right; under the core it sat among the sites'.
+    if (kind === 'core') return 0;
+    // A site's name faces the core, centred on it: pointing outward it would
+    // land on its own rooms. A grouping the hub makes up (`__repos`) is no
+    // place: the room step.
+    if (PLACE.has(kind) && !String(node.id ?? '').startsWith('__')) return { px: steps.site, inward: true };
+    if (PLACE.has(kind)) return steps.room;
+    if (ROOM.has(kind)) return steps.room;
+    if (s > IN_SITE) return trouble ? steps.room : undefined;
+    return trouble ? steps.room : 0;
+  };
 }
 
-/** What `createMap` takes for this direction, next to `{ ambient: true }`. */
-export const mapOptions = Object.freeze({ layout, labelSize });
+/** The tablet's labelSize. */
+export const labelSize = labelSizeFor(STEPS);
+
+/** BASE_STEPS' labelSize, for the directions that borrow radial's. */
+export const baseLabelSize = labelSizeFor(BASE_STEPS);
+
+/**
+ * What `createMap` takes for this direction, next to `{ ambient: true }`.
+ * `pinLabels`: a name keeps its side and line while it is on screen (the
+ * turn used to flip names across their node as it passed the vertical).
+ */
+export const mapOptions = Object.freeze({ layout, labelSize, pinLabels: true });
+
+/**
+ * The options for a screen (`screen`: `{dpr, cssHeight, screenMm}`, type.js
+ * `screenOf`): the type steps from its density; the layout is the same at
+ * every aspect.
+ */
+export function optionsFor(aspect, screen) {
+  if (!screen) return mapOptions;
+  return Object.freeze({ ...mapOptions, labelSize: labelSizeFor(stepsFor(pxPerMm(screen))) });
+}

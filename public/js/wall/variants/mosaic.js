@@ -27,7 +27,7 @@
 //
 // Pure: no DOM, so test/wall-mosaic.test.mjs imports it directly.
 
-import { labelSize as radialLabelSize, IN_SITE } from './radial.js';
+import { baseLabelSize as radialLabelSize, IN_SITE } from './radial.js';
 import { statusStyle } from '../../views/map/overlays.js';
 
 /** The tablet's 2736 x 1824: what the layout stretches to when nobody says. */

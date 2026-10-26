@@ -12,7 +12,7 @@ import {
   layoutFor, planet, arrange, optionsFor, mapOptions, ambient, SAFE, SIZES, ASPECT,
 } from '../public/js/wall/variants/orbits.js';
 import { VARIANTS, mapOptionsFor } from '../public/js/wall/variants.js';
-import { labelSize } from '../public/js/wall/variants/radial.js';
+import { baseLabelSize as labelSize } from '../public/js/wall/variants/radial.js';
 
 /**
  * A fleet the size of the large demo: five sites of 3-14 rooms with 0-3
@@ -237,7 +237,7 @@ test('orbits registered: options for the screen\'s aspect, no turn; radial as be
   const v = VARIANTS.find((x) => x.id === 'orbits');
   assert.equal(v.mapOptions, mapOptions);
   assert.equal(mapOptions.rings, false);
-  assert.equal(mapOptions.labelSize, labelSize, 'the radial type steps');
+  assert.equal(mapOptions.labelSize, labelSize, 'the radial base steps (26 / 15) its layout is spaced for');
   assert.deepEqual(ambient, { drift: 0 });
   const o = mapOptionsFor(v, 16 / 9);
   assert.equal(o.ambient, ambient);

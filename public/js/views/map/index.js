@@ -154,6 +154,8 @@ export function migrateFolds(list, localId) {
  *   rings                 false: no ring hairlines, ring legends or bearing dial (default on)
  *   labelSize(node, {s, trouble}) -> px for the node's name, 0 for none at this
  *                            zoom (s), undefined for today's 11/12px. Default: today's
+ *   pinLabels             true: a name keeps its side and line while it stays on screen
+ *                            (the Wall: the turn no longer flips names). Default off
  *
  * Returns the API of plan §5 2.2 plus the shell hooks (§4 D8).
  */
@@ -1162,6 +1164,7 @@ export function createMap(root, opts = {}) {
       rings: opts.rings !== false,
       guides: lay.guides,
       labelSize: typeof opts.labelSize === 'function' ? opts.labelSize : undefined,
+      pinLabels: opts.pinLabels === true,
     };
   }
 

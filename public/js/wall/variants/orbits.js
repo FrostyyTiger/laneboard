@@ -15,7 +15,7 @@
 //
 // Pure: no DOM, so test/wall-orbits.test.mjs imports it directly.
 
-import { labelSize, STEPS } from './radial.js';
+import { baseLabelSize as labelSize, BASE_STEPS as STEPS } from './radial.js';
 
 /** The tablet's 2736 x 1824: what the layout stretches to when nobody says. */
 export const ASPECT = 3 / 2;

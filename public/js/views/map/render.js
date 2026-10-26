@@ -201,6 +201,8 @@ const GAUGED = new Set(['room', 'site', 'host', 'builder']);
 const NARROW = 600;
 /** At or below this canvas width (a phone): no ring legends; labels for builders, runs, trouble and the selection. */
 const PHONE = 480;
+/** A pinned name changes side only once |cos| of its bearing passes this (about 20° past the vertical). */
+const PIN_FLIP = 0.35;
 /** On a phone, a map of this many nodes or fewer labels every one. */
 export const PHONE_ALL_LABELS = 8;
 const TEXT_CACHE_MAX = 4000;
@@ -225,6 +227,8 @@ export function createRenderer(ctx, palette) {
   const outerR = new Map();
   /** Node ids drawn with a trouble mark (▲/■, its own or rolled up) this frame (drawNodes), read by labelPlan. */
   const marked = new Set();
+  /** Node id -> {left, dy}: where a pinned name (`scene.pinLabels`) was placed last, while it is drawn. */
+  const pins = new Map();
 
   function setPalette(next) { P = next ?? P; }
 
@@ -1018,6 +1022,14 @@ export function createRenderer(ctx, palette) {
       let x = sp.x + Math.cos(ang) * out;
       let y = sp.y + Math.sin(ang) * out;
       let left = Math.cos(ang) >= 0;
+      // A pinned name (`pinLabels`, the Wall) keeps its side until its
+      // bearing is well past the vertical, so the turn does not flip it
+      // back and forth across the node.
+      const pin = scene.pinLabels ? pins.get(id) : null;
+      if (pin && pin.left !== left) {
+        // Past it the name turns over and is placed afresh.
+        if (Math.abs(Math.cos(ang)) < PIN_FLIP) left = pin.left; else pins.delete(id);
+      }
       // One label style: every name in the label face, caps. Weight and grey
       // step carry the rank (machines and places 600 t1, what runs on them
       // 500 t2, a run in the lane's 500 but muted to t3 like its round, T51);
@@ -1134,6 +1146,7 @@ export function createRenderer(ctx, palette) {
       if (id === scene.selected) R = Math.max(R, reticleD(n.kind, ns) + RETICLE_GAP);
       discs.push({ id, x0: sp.x - R, y0: sp.y - R, x1: sp.x + R, y1: sp.y + R });
     }
+    const pinned = scene.pinLabels === true;
     const order = plan.map((e, i) => [e, i]).sort((a, b) => a[0].rank - b[0].rank || a[1] - b[1]).map(([e]) => e);
     const out = [];
     const STEPS = [0, 14, -14, 28, -28, 42, -42, 56, -56];
@@ -1161,7 +1174,12 @@ export function createRenderer(ctx, palette) {
       // move one line further out, no more, or it reads as a neighbour's.
       return { ...e, x: x0 + 2, y: y0 + 7, left: true, steps: [0, 14 * dir], box: { x0, y0, x1: x0 + bw, y1: y0 + bh } };
     };
-    for (const e0 of order) {
+    for (const e00 of order) {
+      // A pinned name tries its last frame's side and line first.
+      const pin = pinned ? pins.get(e00.id) : null;
+      const side = pin && pin.left !== e00.left ? mirror(e00) ?? e00 : e00;
+      const e0 = pin && pin.left === side.left && pin.dy !== 0
+        ? { ...side, steps: [pin.dy, ...(side.steps ?? STEPS).filter((d) => d !== pin.dy)] } : side;
       const alt = mirror(e0);
       const up = stack(e0, -1), down = stack(e0, 1);
       // Off every node, its own included: a label moved a line up or down
@@ -1181,9 +1199,20 @@ export function createRenderer(ctx, palette) {
         if ((phone && e.rank > 2) || unseen(e.box)) continue;
         dy = 0;
       }
-      const placed = { ...e, y: e.y + dy, box: { ...e.box, y0: e.box.y0 + dy, y1: e.box.y1 + dy } };
+      const placed = { ...e, y: e.y + dy, dy, box: { ...e.box, y0: e.box.y0 + dy, y1: e.box.y1 + dy } };
       taken.push(placed.box);
       out.push(placed);
+    }
+    if (pinned) {
+      // Pins live while their name is drawn: one that leaves the screen is
+      // placed afresh when it comes back.
+      const seen = new Set();
+      for (const e of out) {
+        if (e.core || e.sx == null) continue;
+        seen.add(e.id);
+        pins.set(e.id, { left: e.left, dy: e.dy });
+      }
+      for (const id of pins.keys()) if (!seen.has(id)) pins.delete(id);
     }
     return out;
   }

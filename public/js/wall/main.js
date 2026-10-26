@@ -15,6 +15,7 @@ import { createCaption, captionLines, captionTimingFor, STILL_CAPTION_TIMING } f
 import { createLock, LOCK_TIMING, STILL_LOCK_TIMING } from './lock.js';
 import { createGlow } from './glow.js';
 import { createFrame } from './frame.js';
+import { screenOf } from './type.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -30,7 +31,9 @@ export function boot() {
 
   const stage = document.getElementById('wall-map');
   const aspect = (stage.clientWidth || innerWidth) / (stage.clientHeight || innerHeight);
-  const map = createMap(stage, mapOptionsFor(pick.variant, aspect));
+  // The type steps come from the screen's density (`?mm=<screen height>` when known).
+  const screen = screenOf(location.search, { dpr: globalThis.devicePixelRatio || 1, cssHeight: stage.clientHeight || innerHeight });
+  const map = createMap(stage, mapOptionsFor(pick.variant, aspect, screen));
 
   const perf = createPerf();
   globalThis.__wallPerf = perf.stats;
