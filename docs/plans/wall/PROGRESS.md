@@ -398,6 +398,33 @@ Notes for every builder round (planner, night 1):
   Set, filter pulses in place, skip the `drawnCount` loop when ambient, compute `stuckBuilders` once per
   model; ambient only, low priority — done when: map tests pass unchanged and the ambient frame path
   creates no `new Set`/`new Map` per frame.
+- [ ] T41 (bug, docs) [variant:all] (r32-stranger #2, #3, #6, #8) A stranger cannot find or set up the Wall:
+  add a Wall row to the README views table and a "Wall" section in `docs/map.md` (URL `/wall.html`, the
+  four `?variant=` values, `demo`, what the tour does, where `glow` and `ring` show and the stale
+  threshold in seconds from the code); fix the 409 text and the API docs: `POST /api/map/feeds` is
+  builder-only (404 on a hub, which takes files in its feeds dir); an unknown `?variant=` shows a one-line
+  note on the page, not only `console.warn` — done when: `npm test` passes (docs tests included) and
+  the README and `docs/map.md` carry the rows and the section.
+- [ ] T42 (bug) [ui] [variant:orbits, islands, mosaic] (r32-stranger orbits #2, islands #2, mosaic #2) A hold
+  on a site or node can show no caption, or only a cursor with no name: every leg shows its kicker and
+  name at once (the first letter at least), a node leg is captioned by the node — done when:
+  `test/wall-caption.test.mjs` shows a caption for every leg kind and a filmstrip has no cursor-only frame.
+- [ ] T43 (bug) [variant:islands] (r32-stranger islands #1, #3) A site title overprints its rooms (CLOUD over
+  EDGE-1/REGISTRY), room labels sit under the wrong dots, THERMOSTAT runs into the clock: reserve a title
+  strip above each lens, place room labels inside their own island, keep the clock box label-free —
+  done when: `test/wall-islands.test.mjs` checks the title strip clear of every room label and a 768x900 still shows no overprint.
+- [ ] T44 (bug) [variant:mosaic] (r32-stranger mosaic #1, #3) Labels leave their tile (DB, REGISTRY, KITCHEN-LIGHT,
+  PRINTER-3D over the clock) and a red tile is clipped at the screen edge during a hold: clip, shrink or
+  drop a label that does not fit its tile; frame the visited site with its troubled tiles whole — done
+  when: `test/wall-mosaic.test.mjs` checks every label box inside its tile's hex and a 768x900 still agrees.
+- [ ] T45 (bug) [variant:orbits] (r32-stranger orbits #3) Label clouds are loose: HV1's labels stand in a
+  column off the planet and "ACME-BILLING 1 of 6" overprints nodes; put labels on the orbit's outward
+  side at the dot's own radius — done when: `test/wall-orbits.test.mjs` checks each label sits within a
+  fixed distance of its dot and a 768x900 still shows no overprint.
+- [ ] T46 (§2, D3) [ui] [variant:all] (r32-stranger #7) A job `ring` looks like every node's status arc: draw it
+  in its own style in the glow layer (thicker, a tick at the head), percent label while the camera is on
+  its site — done when: `test/wall-glow.test.mjs` checks the ring geometry is wider than the node arc
+  and a still shows the printer ring distinct.
 
 ## Research questions
 
@@ -483,6 +510,16 @@ Notes for every builder round (planner, night 1):
   2736x1824 tablet; type from 3 m may not need 2x. A legibility trade, so film 1:1 crops at 1.5 and 2
   before deciding: your call.
 
+- (r32-stranger, ideas and plan changes) #1 tap to pause the tour, a "paused, resumes in 60 s" chip and
+  `?tour=off` (night 2 explorer; same ground as r24-touch #8/#9). #4 kiosk: `wall.webmanifest` with
+  `start_url: "/wall.html"` and `display: fullscreen`, Wake Lock, fullscreen on first tap, a kiosk
+  paragraph. #5 a Wall-only read-only listener or proxy recipe so a hallway tablet need not see the
+  Board (a security and config decision). Orbits #1/#4: cut or zoom out on long flights, fill the
+  short side (direction). Radial #3 / islands #4 / mosaic #4: overview labels only for troubled nodes
+  (same as r14-operator #4). Radial #4: fade the name in rather than typing (conflicts with the typing
+  you like; r20 #10). Radial #5: dim the fleet line on calm sites. Across: fill the troubled node's area
+  in every variant (mosaic's idea); the stranger would pick mosaic, islands second.
+
 ## Reviews
 
 - r9-film-ui.md: 9 findings, 5 became tasks (T15-T19: #2+#7, #3, #4, #5, #6+#8); #1 covered by T5 (phrasing
@@ -496,6 +533,11 @@ Notes for every builder round (planner, night 1):
 - r28-performance.md: 16 findings (10 radial, 6 orbits), 9 became tasks (T32-T40: radial #1, #3, #4, #5+#6+#10, #8, #9;
   orbits #2, #4, #6); orbits #1 and #5 covered by the radial ones (shared code), orbits #3 covered by T34;
   radial #2 and #7 went to the owner (they change the look or legibility).
+- r32-stranger.md: 29 findings (8 shared, 5 radial, 4 orbits, 4 islands, 4 mosaic, 4 across), 6 became tasks
+  (T41-T46: shared #2+#3+#6+#8, #7; orbits #2 and #3, islands #1+#3, mosaic #1+#3; captions blank on three
+  variants merged as T42); covered: radial #1 (T17), radial #2 (T15), mosaic #3 partly T44; dropped: islands #4
+  and across "keep" notes (praise); the rest (#1, #4, #5, radial #3-#5, orbits #1/#4, mosaic #4, across)
+  went to the owner. The numbers were taken at load 31 and are noise.
 
 ## Scores
 
@@ -507,5 +549,9 @@ Notes for every builder round (planner, night 1):
 | 24 (radial) | touch | 4 | 3 | 5 | 1 | 5 | 4 | 6 |
 | 28 (radial) | performance | 4 | 3 | 5 | 2 | 5 | 4 | 5 |
 | 28 (orbits) | performance | 6 | 4 | 5 | 3 | 6 | 6 | 6 |
+| 32 (radial) | stranger | 4 | 3 | 6 | 1 | 6 | 4 | 4 |
+| 32 (orbits) | stranger | 4 | 4 | 5 | 1 | 5 | 6 | 3 |
+| 32 (islands) | stranger | 7 | 5 | 6 | 1 | 5 | 6 | 4 |
+| 32 (mosaic) | stranger | 6 | 4 | 8 | 1 | 7 | 5 | 4 |
 
 ## Morning
