@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { bannerModel, createHud, legNode } from '../public/js/wall/galaxy/hud.js';
+import { bannerModel, createHud, galaxyCaption, legNode } from '../public/js/wall/galaxy/hud.js';
 import { captionLines } from '../public/js/wall/caption.js';
 import { worstLine } from '../public/js/wall/frame.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
@@ -86,7 +86,7 @@ test('the tour\'s legs show the caption at each system with captionLines, and hi
   assert.equal(kind, 'show');
   assert.equal(leg.id, 'lab', 'trouble first');
   assert.equal(leg.arriveMs, DEMO_TIMING.flyMs);
-  assert.deepEqual(cap, captionLines(m.nodes[3], m, 1, 2));
+  assert.deepEqual(cap, galaxyCaption(captionLines(m.nodes[3], m, 1, 2), 'site'));
   assert.equal(cap.status, 'crit');
   pending.shift().fn();
   assert.equal(calls.at(-1)[1].id, 'hv1');
@@ -142,6 +142,39 @@ test('a parked system gets its caption at once, without a tour', () => {
   assert.equal(leg.arriveMs, 0);
   assert.match(cap.name, /hv1/i);
   assert.match(cap.kicker, /02 \/ 02/);
+});
+
+// T25 (reviews/r26-skeptic.md 8): a calm hold says its number and its name, nothing else.
+test('galaxyCaption: a calm site is kicker and name, a site in trouble keeps its lines; no `· SITE`', () => {
+  const m = model();
+  m.nodes[2].metrics = { cpu: 0.4, mem: 0.6 };
+  m.nodes[1].detail = { where: 'office' };
+  const calm = galaxyCaption(captionLines(m.nodes[1], m, 4, 5), 'site');
+  assert.equal(calm.kicker, 'TARGET 04 / 05');
+  assert.equal(calm.name, 'HV1');
+  assert.deepEqual(calm.lines, []);
+  assert.ok(captionLines(m.nodes[1], m, 4, 5).lines.length > 0, 'captionLines itself still lists them');
+  const bad = galaxyCaption(captionLines(m.nodes[3], m, 1, 5), 'site');
+  assert.equal(bad.kicker, 'CRIT · TARGET 01 / 05');
+  assert.deepEqual(bad.lines, captionLines(m.nodes[3], m, 1, 5).lines);
+  assert.ok(bad.lines.some((l) => l.kind === 'trouble') && bad.lines.some((l) => l.kind === 'status'));
+  // Unnumbered (a parked still without a tour), the kind is the kicker's only word: kept.
+  assert.equal(galaxyCaption(captionLines(m.nodes[1], m), 'site').kicker, 'SITE');
+});
+
+test('the hud feeds the caption the short plate on a calm leg and the trouble lines on a trouble leg', () => {
+  const { calls, caption, frame } = fakes();
+  const hud = createHud({ caption, frame });
+  hud.update(model());
+  hud.park({ id: 'hv1', index: 2, count: 2 });
+  const calm = calls.at(-1)[2];
+  assert.equal(calm.kicker, 'TARGET 02 / 02');
+  assert.deepEqual(calm.lines, []);
+  hud.park({ id: 'lab', index: 1, count: 2 });
+  const bad = calls.at(-1)[2];
+  assert.equal(bad.kicker, 'CRIT · TARGET 01 / 02');
+  assert.equal(bad.lines[0].kind, 'trouble');
+  assert.equal(bad.lines[1].kind, 'status');
 });
 
 // T23 (reviews/r21-operator.md 5): the banner does not repeat the caption.

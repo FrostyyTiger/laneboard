@@ -24,6 +24,23 @@ export function legNode(leg, model) {
 }
 
 /**
+ * What the galaxy's plate says (T25, reviews/r26-skeptic.md 8): `cap` from
+ * `captionLines`, cut for the wall. A calm hold is the kicker and the name,
+ * nothing else: its status, bars, facts and counts are lists nobody reads
+ * from 3 m and none of them calls for anything. A hold in trouble keeps its
+ * lines. Every galaxy leg is a site, so a numbered kicker loses its
+ * ` · SITE` (`TARGET 04 / 05`); an unnumbered one keeps its kind, the only
+ * word it has. Pure.
+ */
+export function galaxyCaption(cap, kind = 'site') {
+  const tail = ` · ${String(kind).toUpperCase()}`;
+  const kicker = /TARGET \d/.test(cap.kicker) && cap.kicker.endsWith(tail)
+    ? cap.kicker.slice(0, -tail.length)
+    : cap.kicker;
+  return { ...cap, kicker, lines: cap.mark ? cap.lines : [] };
+}
+
+/**
  * The model the fleet line is fed while `heldId` is the lock's target (T23,
  * reviews/r21-operator.md 5): when the line would name the problem the
  * caption already holds, the banner steps down to the next one. The held
@@ -88,7 +105,7 @@ export function createHud({ caption, frame, tour = null, lock = null }) {
   const say = (leg) => {
     const node = legNode(leg, latest);
     if (node) {
-      const cap = captionLines(node, latest, leg.index ?? null, leg.count ?? null);
+      const cap = galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node');
       const target = lockTarget(node, latest);
       heldId = target[0]?.id ?? null;
       feed();
