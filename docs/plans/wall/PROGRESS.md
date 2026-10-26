@@ -249,9 +249,29 @@ Notes for every builder round (planner, round 1):
   reviewer may want a lower lift for cross-site arcs. With `fx=lanes,comets` a cross-site event shows both.
   Meaning for `docs/wall.md` (E): "a small grey comet: something just went from one machine to another (a
   push, a deploy, a backup); red or amber when it failed".
-- [ ] T14 (§7.C) [ui] [variant:galaxy] `fx=twinkle`: a planet with a working session twinkles softly (slow,
+- [x] T14 (§7.C) [ui] [variant:galaxy] `fx=twinkle`: a planet with a working session twinkles softly (slow,
   low contrast, calm stays calm) — done when: a test picks the twinkling planets from a model (working
   sessions only), and filmstrips with and without `?fx=twinkle` show it only with it.
+  (commit 187f6cf) `galaxy/fx.js`: `TWINKLE`, `workingPlanets(model, planets)`, `trackTwinkles`, `twinkleAt`.
+  **Decision:** a working session is a `lane` or `session` node with status `working` whose tone is calm (a
+  stuck one is warn, so it is trouble's to show; a `working` service, a runner on a job, is no session). It
+  lights the nearest planet or star up its parents (in the demo: the builders BA/BB in HV1), once however
+  many sessions. A planet whose own tone is trouble does not twinkle (it breathes already: one motion per
+  thing). Look: one soft `--text-1`-grey light on the sphere (5x its radius), two slow waves (5.6 s and 3.7 s,
+  each planet its own phase and a ±15 % pace by a salted hash of its id: unsalted, `builder:builder-a` and
+  `…-b` hashed a hair apart and glimmered in step, seen in the probe and fixed), opacity 0.09-0.30 (a calm
+  halo is 0.22, warn 0.8, crit 0.9), 1.2 s fade in and out as work starts and stops; a planet back while
+  fading picks up from its light. Max 24. Reduced motion: steady at half its swing. `scene.js`:
+  `setTwinkles`, `planets()`, `twinkles`, pool only with `fx=twinkle`. Tests in `test/wall-galaxy-fx.test.mjs`
+  (+7). Filmstrips `$RUN_DIR/shots/r29-galaxy-twinkle/` and `r29-galaxy-off/` (`?demo=1&quality=0`, 0
+  console errors either); the light is too small for the 12-frame sheet, so probe
+  `$RUN_DIR/tools/twinkleprobe.mjs` (`HIDE=<css>` hides the caption for the shot) logged the lit sprites on
+  the two builders and `$RUN_DIR/shots/r29-twinkle/twinkle-*.png` (`?at=lab&open=1`) show them. Script ms
+  the same with and without (7.9 vs 6.8 avg at 4x, noise). Seen: at `?at=lab` both builders lie under the
+  caption plate (T18), and they sit beside their lanes' amber dots, so the grey glimmer is subtle; a
+  reviewer may want it brighter. The demo flips its sessions every ~4 s, so there the twinkles come and go
+  more than a real fleet's would. Meaning for `docs/wall.md` (E): "a planet glimmering softly: an agent is
+  at work on it".
 - [ ] T15 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 3) Trouble inside an open system is the
   smallest thing: a planet or moon in warn/crit is drawn at least the size of a calm planet, with its status
   shape (▲ ◆ ■) as a flat glyph facing the camera and its glow ring, and dust within the held system's `reach`
