@@ -122,12 +122,27 @@ Notes for every builder round (planner, night 1):
   time per frame at 4x, 20 s each, with the glow: 7.2-11.5 ms; without it: 10.4-11.4 ms. The glow's
   cost is lost in run-to-run noise. fps 6.2 is the SwiftShader-plus-screenshots number from the
   filming note. A 1x glow canvas was tried: no measurable gain.)
-- [ ] T9 (§7.2) [ui] Frame: vignette (edges darkened so text sits on quiet ground), a big clock
+- [x] T9 (§7.2) [ui] Frame: vignette (edges darkened so text sits on quiet ground), a big clock
   bottom left, bottom right one line for the worst fleet problem (status colour and shape) and one
   ambient fact, a small tag top right; `public/js/wall/frame.js` with a pure `worstLine(model)` —
   done when: `test/wall-frame.test.mjs` covers the worst line (crit beats attention beats warn,
   calm fleet says so), and a filmstrip of `radial&demo=1` (the baseline for every direction) shows
-  caption, lock, glow and frame together with fps at or over 27.
+  caption, lock, glow and frame together with fps at or over 27. (commit 1fc2f71; `worstLine`
+  groups nodes in trouble under their topmost node in trouble (a lane and its waiting session are
+  one problem), down > crit > attention > warn, `site · name · why`, `more` = other problems, calm
+  says `all calm`; `ambientLine` `5 sites · 115 nodes · 7 working` (no core, no `__repos`); clock
+  `HH:MM` 24 h + `mon 26 oct`, one tick a minute; tag `laneboard · <title>` + `live`/`offline`
+  (warn when offline). Type on the caption's scale: clock 6.9vmin in text-3 (big but quiet), fleet
+  line 4.3vmin in its status colour, calm line 2.7vmin grey, facts 1.7vmin mono; margins 8vh/6vw as
+  the caption, tag on the kicker's line. The line wraps onto two balanced lines rather than cut,
+  never inside a name or a hyphenated word (`builder-c`). The vignette is `--tex-vignette` in
+  tokens.css: the guardrail allows gradients only in `--tex-*` tokens (see For the owner). T21's
+  `+N more` count is shown already; its 3 m step size is still T21. Filmstrip
+  `$RUN_DIR/shots/r22-radial/`: caption, lock, glow and frame together, trouble the loudest, 0
+  console errors; fps 3.3 is the SwiftShader-plus-screenshots number (filming note); script time
+  6.67 ms/frame average, 23 ms worst at 4x, same as T4's Map alone. Seen: in zoomed frames map nodes
+  run under the clock and fleet line (the vignette quiets them; T17/T30's safe area should keep
+  the bottom band clear). The `why` of a lost builder counts seconds, so the line changes every tick.)
 - [ ] T10 (§5) Map layout option: `createMap(el, { layout })` takes a layout function with the
   shape of `layout.js` `layout` (`{pos, center, kids}`), and `{ rings: false }` hides the ring
   circles, ring labels and bearing dial; both default off (the radial layout and today's drawing)
@@ -287,6 +302,11 @@ Notes for every builder round (planner, night 1):
   #11 remove the bearing dial and ring legends rather than redesign (conflicts with T18 "dial stays");
   #12 remove monograms and pips, `+2` only if it counts trouble; #13 hide the work ribbons on the
   Wall; #15 drop `printing · 28%` text at the overview, keep the ring.
+
+- (round 22, T9) The vignette is a soft gradient. The design guardrail allows gradients only in
+  `--tex-*` tokens in tokens.css (the app's textures are hard-stop), so it is `--tex-vignette` there,
+  used by wall.css only. If soft gradients should stay out of tokens.css, the alternative is a guardrail
+  exception for wall.css (test/helpers/css-guardrails.mjs): your call.
 
 ## Reviews
 
