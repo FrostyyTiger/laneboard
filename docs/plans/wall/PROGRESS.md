@@ -173,7 +173,7 @@ Notes for every builder round (planner, round 1):
   attract-mode displays treat the first touch (wake only, or act on it), how they show that the screen is now
   yours, and how they hand back to the attract loop after idle (a warning cue, easing from the user's view,
   what happens when an alarm arrives mid-session). Q6 already has the 30-60 s timeout defaults — for T7, T14
-- [ ] Q14 IDEAS: making a dead or stale feed unmistakable from 3 m without shouting louder than live trouble:
+- [x] Q14 (→ research/Q14-stale-feed-ideas.md) IDEAS: making a dead or stale feed unmistakable from 3 m without shouting louder than live trouble:
   how control rooms (ISA-101 / high-performance HMI "stale" or "bad quality" values, SCADA comms-loss),
   aviation displays (failure flags, red X), broadcast "signal lost" and film interfaces show that the data
   itself is old. 2-3 concrete proposals for the galaxy (what it shows, what it means, a cost guess) beside the
@@ -306,6 +306,11 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
   (T57/T58)): triage decides per review.
 
 ## For the owner
+
+- (Q14 research, for T6; taste) A stale feed that keeps its crit nebula red and brightest looks like live trouble.
+  The research suggests freezing all liveness motion (`freeze`, small), a slashed grey ring at the sun (`flag`),
+  and marking last-known trouble with a hatch and one step less brightness (`lastknown`). Not tasks; see
+  research/Q14-stale-feed-ideas.md.
 
 - (r4-film-ui, across the variants; taste) Idea: the folded trouble cluster at the overview could take the beacon's
   vertical silhouette, so shape carries where colour does not. Not a task.
