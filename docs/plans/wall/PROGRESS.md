@@ -34,10 +34,12 @@ Notes for every builder round (planner, round 1):
   1116 (MIN_SITE_GAP 700), widest open system reach 397, folded ≤ 64, so open systems never meet. API for
   T3/T4: `galaxyLayout(nodes)` → `{ core, sites: [{ id, node, home, members: [{ id, node, off, planet }],
   reach }] }`, `dustPoints(n)` → `{ positions, t }` (t: 0 sun..1 rim, for the colour), `farStars(n)`, `ease`.
-- [ ] T2 (§7.A2) Vendor three.js 0.170.0 from branch `sketch/wall-galaxy` as
+- [x] T2 (§7.A2) Vendor three.js 0.170.0 from branch `sketch/wall-galaxy` as
   `public/vendor/three/three.module.js` with its MIT `LICENSE` beside it, served by the existing `/vendor/`
   fall-through — done when: a test (`test/wall-galaxy-vendor.test.mjs`) checks the file's `REVISION` is
   `'170'`, the LICENSE is there, and `GET /vendor/three/three.module.js` is served as JavaScript.
+  (commit 46fd6fa) Copied unchanged from the sketch; `public/vendor/three/SOURCES.txt` pins its sha256 (the
+  test checks it). Import it as `../../../vendor/three/three.module.js` from `public/js/wall/galaxy/`.
 - [ ] T3 (§7.A1) [ui] [variant:galaxy] `public/js/wall/galaxy/scene.js` (sun, dust, far stars, hyperlanes,
   nebulae by worst status, planets, stems with their landing rings, from T1's layout; colours from a pure
   `paletteFrom(readVar)` over the status tokens) and the page `public/galaxy.html` + `galaxy/main.js` (fetch
