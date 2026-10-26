@@ -272,11 +272,32 @@ Notes for every builder round (planner, round 1):
   reviewer may want it brighter. The demo flips its sessions every ~4 s, so there the twinkles come and go
   more than a real fleet's would. Meaning for `docs/wall.md` (E): "a planet glimmering softly: an agent is
   at work on it".
-- [ ] T15 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 3) Trouble inside an open system is the
+- [x] T15 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 3) Trouble inside an open system is the
   smallest thing: a planet or moon in warn/crit is drawn at least the size of a calm planet, with its status
   shape (▲ ◆ ■) as a flat glyph facing the camera and its glow ring, and dust within the held system's `reach`
   fades to 20 % — done when: a test shows the trouble planet's radius >= a calm planet's and the dust fade
   factor inside/outside `reach`, and `?at=lab&open=1` shows the attention lanes clearly above the dust.
+  (commit 99a7f86) `scene.js`: `memberRadius(planet, tone)` (a planet, or anything in warn/crit, at
+  `SIZE.planet`; the rest dots), eased over `LIVE.recolourMs` (the sphere for the larger size, scaled), lit
+  in its hue (`planetMat`) with its halo at the planet's `HALO.k`; `MARK_SHAPE` (warn ▲, crit ■, the labels'
+  shapes) as a sprite in `--bg-canvas` on the sphere (0.6 of its width, `depthTest` off), growing in between
+  `unfold` 0.25 and 0.6 (folded, the nebula and the site name carry it). `camera.js` `screenOf` reads the drawn
+  radius (sphere × scale), `labels.js` already used `m.radius`. Dust: `DUST_FADE` (floor 0.2, full to 1.05×
+  reach, back at 1.4×, min 160), `dustFade(dist, reach, open)` pure and the same sum in the dust shader
+  (`onBeforeCompile`, two uniforms, no new draw). **Decision:** the distance is measured along the line of
+  sight (`dustSightDist`: how far from the star a grain *looks*, at the star's depth): a 3D sphere left the
+  grains on the arm behind the system bright right beside the ▲s (seen in the first probe). Since the held
+  frame is mostly the system, holding one thins nearly all dust in view (probe: 1166 of 1295 grains on
+  screen at 0.2, all 271 within 80 px of a mark); the overview is unchanged. Tests
+  `test/wall-galaxy-trouble.test.mjs` (+8); the scene tests' fake canvases got `beginPath`/`moveTo`/… for
+  the ▲ texture. Stills `$RUN_DIR/shots/r30-t15-lab/`, `r30-t15-hv2/` and probe `r30-t15-probe/mark-1.png`
+  (`$RUN_DIR/tools/markprobe.mjs`, caption hidden by `HIDE`): at `?at=lab&open=1` the three attention lanes
+  and two more are amber spheres with a dark ▲, the largest and brightest things in the system. Filmstrip
+  `$RUN_DIR/shots/r30-galaxy/` (0 console errors): HV1's lanes as ▲ badges (frame 6), HV2's storage as a red ■
+  (frame 11). Script ms the same (12.4 / 10.3 vs 11.5 / 12.9 avg at 4x, 40 s each). Seen: at `?at=lab` every
+  trouble lane still lies under the caption plate (T18); a folded cluster flown past mid-tour shows its
+  trouble lanes as planet-sized lumps (Later: r26-skeptic 10 / r8-film-ui 7); the 20 % dust is still visible
+  as grains (T26 makes it darker and smaller).
 - [ ] T16 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 2) The sun outshouts the trouble: core in
   the text-2 grey at 70 % of its radius, halo at most half the crit nebula's peak, dust depth-tested against
   it, and `siteShot` keeps the hub out of shot (behind the camera or under 15 % of the frame) — done when: a
