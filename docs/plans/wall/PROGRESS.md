@@ -217,6 +217,15 @@ Notes for every builder round (planner, round 1):
   cluster a thin pillar of light rises from the plane, its height the crit's age (log scale, capped), calm
   clusters get none, so two crits are no longer twins — done when: a test maps crit age to pillar height
   (monotonic, capped, none for calm), and filmstrips with and without `?fx=beacon` show it only with it.
+- [ ] T22 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r21-operator.md 8) The trouble planet's own name is too
+  small at 3 m: the lock target's label while in trouble at the site step is caps at the site step's size
+  (35 px on the tablet) — done when: a test shows `labels.js` gives the held trouble target the site-step size
+  and caps (others unchanged), and `?at=hv2` shows `■ STORAGE` large beside the brackets.
+- [ ] T23 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r21-operator.md 5) The banner repeats the caption: while
+  the held lock target is the far fleet line's subject, the line steps down to the next problem (with `+N MORE`)
+  — done when: a test with two problems shows the banner naming the second while the first is held and the
+  first otherwise; do it in `hud.js` by choosing which model/problem is fed to `frame` (`frame.js` is fenced; if
+  that cannot work, write the needed change under `## For the owner`).
 
 ## Research questions
 
@@ -248,6 +257,13 @@ Notes for every builder round (planner, round 1):
   bottom edge (`siteShot` distance `max(560, reach * 1.9)`): fit the distance to the open reach and the
   aspect, or aim a little below the star; since T5 the far fleet block (bottom right, opaque) also covers
   that edge, so aim the held system above it.
+- §7.B (r21-operator 7) In demo legs (`?demo=1`) the caption typing starts at flight midpoint, not on arrival,
+  so a 4 s hold is readable under the throttle.
+- §7.B (r21-operator 1, 2, 3 sharpen T18, T19, T17) T18's test also: with `?at=<site>` and the site in trouble,
+  `screenOf(lockTarget)` lies outside every cover; T19 fits every site's folded box into the frame minus
+  `hud.covers()`; T17: crit nebula at least 1.5x warn in size and brightness.
+- §7.B (r21-operator "across") Night 1's trouble tile owned its area and read better from afar than a soft
+  glow: check the nebula against it after T17.
 - §7.B (r8-film-ui 5) Camera rhythm: the overview holds still ~2 s at each cycle's start, a status change at
   the overview gets a ~600 ms 5 % push-in before the leg, and the turn stops while the camera flies (T4's
   pacing, to tune after T4).
@@ -309,6 +325,10 @@ Notes for every builder round (planner, round 1):
   next flake fixable, `loop/run.sh` (fenced) `check()` could add `✖` to the `TEST_TAIL` grep, take the
   lines after `failing tests:` rather than `head -40`, and save `$out` to `$RUN_DIR`.
 
+- (r21-operator 4) Trouble waits ~95 s behind calm sites in each two-minute cycle. Fix needs `tour.js`
+  (fenced): a hold-time option to `createTour` (calm a third of trouble's hold) and revisiting a trouble site
+  between calm ones when several calm are queued. Without it the galaxy camera could shorten calm legs via
+  `focus`'s zoom argument, which is a weaker fix.
 - fx candidate (r15-dreamer): `fx=afterglow`: a cleared trouble leaves a faint outline ring in its old hue on
   the plane, cooling red → amber → grey over ~30 min (recent history; never filled, never pulsing).
 - fx candidate (r15-dreamer): `fx=sweep`: once per tour cycle at the overview, one faint sensor sweep turns
@@ -323,6 +343,9 @@ Notes for every builder round (planner, round 1):
 - r15-dreamer.md: 9 findings + 3 m check (half yes), 3 became tasks (T18 held system under plate = 1, T19 CLOUD
   missing = 2, T20 fleet line hairline = 3); 4 covered by T17 (kept under Later), 5 covered (T12/T13), 6 covered
   (T16), 7/8/9 under Later. 3 `fx` proposals: `beacon` became T21, `afterglow` and `sweep` under For the owner.
+- r21-operator.md: 8 findings + 3 m check (yes for what/where, no for every site), 2 became tasks (T22 trouble
+  name size = 8, T23 banner repeats caption = 5); 1/2/3 covered by T18/T19/T17 (sharpened under Later), 6
+  covered (T16), 7 under Later, 4 needs fenced `tour.js` (For the owner). No `fx` proposals.
 
 ## Scores
 
@@ -330,5 +353,6 @@ Notes for every builder round (planner, round 1):
 |---|---|---|---|---|---|---|---|---|
 | 8 | film-ui (galaxy) | 5 | 1 | 4 | 2 | 5 | 6 | 6 |
 | 15 | dreamer (galaxy) | 5 | 6 | 6 | 2 | 5 | 5 | 6 |
+| 21 | operator (galaxy) | 6 | 6 | 6 | 2 | 7 | 6 | 6 |
 
 ## Morning
