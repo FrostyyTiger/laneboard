@@ -1,7 +1,8 @@
 // The galaxy's camera (Wall plan night 2 T4, README §5): a Map look-alike, so
 // the Wall's tour (tour.js `createTour`) and later its lock and glow drive the
 // 3D camera as they drive the Map: `focus(id, zoom)`, `fit()`, `onDraw(cb)`,
-// `screenOf(id)`, `snapshotScene()`.
+// `screenOf(id)` (with the drawn radius, for the lock: galaxy/lock.js),
+// `snapshotScene()`.
 //
 // One camera with intent: a flight eases from wherever the camera is to the
 // shot it wants, rising over a long hop so it never skims the plane or the
@@ -14,7 +15,7 @@
 
 import * as THREE from '../../../vendor/three/three.module.js';
 import { ease, OPEN_MS } from './layout.js';
-import { overviewShot, siteShot } from './scene.js';
+import { overviewShot, siteShot, SIZE } from './scene.js';
 import { TIMING } from '../tour.js';
 
 /**
@@ -116,26 +117,38 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT } = {}) {
   };
 
   const v = new THREE.Vector3();
-  /** Where a site or a node in one is drawn now (canvas css px), null when behind the camera or unknown. */
+  /**
+   * Where a site or a node in one is drawn now: canvas css px and `r`, its
+   * drawn radius in css px (the world radius over its distance, so it grows
+   * as the camera closes in). Null when behind the camera or unknown.
+   */
   const screenOf = (id) => {
     const w = galaxy.world;
     if (!w) return null;
-    let p = w.byId.get(id)?.home ?? null;
+    const s = w.byId.get(id);
+    let p = s?.home ?? null;
+    let radius = SIZE.star * (s?.alive ?? 1);
     if (!p) {
-      for (const s of w.sites) {
-        const m = s.members.find((x) => x.id === id);
-        if (m) { p = m.mesh.position; break; }
+      for (const site of w.sites) {
+        const m = site.members.find((x) => x.id === id);
+        if (m) {
+          p = m.mesh.position;
+          radius = (m.planet ? SIZE.planet : SIZE.dot) * (m.mesh.scale?.x ?? 1);
+          break;
+        }
       }
     }
     if (!p) return null;
     const cam = galaxy.camera;
     cam.updateMatrixWorld();
     v.set(p.x, p.y, p.z).applyMatrix4(cam.matrixWorldInverse);
-    if (v.z >= 0) return null; // behind the camera
+    const depth = -v.z;
+    if (depth <= 0) return null; // behind the camera
     v.applyMatrix4(cam.projectionMatrix);
     const el = galaxy.renderer?.domElement;
     const W = el?.clientWidth ?? 0, H = el?.clientHeight ?? 0;
-    return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H };
+    const unit = H / (2 * Math.tan((cam.fov * Math.PI) / 360) * depth);
+    return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, r: radius * unit };
   };
 
   return {

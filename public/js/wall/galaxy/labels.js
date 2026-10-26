@@ -157,11 +157,15 @@ export function placeLabels(items, { W = Infinity, H = Infinity, covers = [], wa
  * The names over `galaxy` (scene.js: `world`, `camera`, `renderer`), in
  * `root` (an empty layer over the canvas). `steps` are type.js stepsFor's
  * `{ site, room }` (css px); `covers()` the boxes the words over the canvas
- * take (hud.js). Call `draw()` after the scene renders (camera.js `onDraw`).
+ * take (hud.js); `held()` the thing the target lock holds, `{ id, r }` (css
+ * px to its shut brackets, galaxy/lock.js), whose name goes outside the
+ * brackets and which the other names keep clear of. Call `draw()` after the
+ * scene renders (camera.js `onDraw`).
  */
-export function createLabels(root, galaxy, { steps, covers = () => [], doc = globalThis.document } = {}) {
+export function createLabels(root, galaxy, { steps, covers = () => [], held = null, doc = globalThis.document } = {}) {
   root.style.setProperty('--gl-site', `${steps.site}px`);
   root.style.setProperty('--gl-room', `${steps.room}px`);
+  const heldNow = typeof held === 'function' ? held : () => null;
   const pool = new Map(); // id → { el, text, tone, size, x, y, alpha }
   let last = new Map();
   const v = new THREE.Vector3();
@@ -214,6 +218,7 @@ export function createLabels(root, galaxy, { steps, covers = () => [], doc = glo
     galaxy.camera.updateMatrixWorld();
     const items = [];
     const meta = new Map();
+    const lock = heldNow();
     const bodies = [];
     const body = (id, sp, r) => { if (r >= 2) bodies.push({ x: sp.x - r, y: sp.y - r, w: 2 * r, h: 2 * r, owner: id }); };
     const add = (id, node, pos, radius, alpha, kind = node?.kind, toneIn = null) => {
@@ -225,7 +230,7 @@ export function createLabels(root, galaxy, { steps, covers = () => [], doc = glo
       const text = labelText(node, tone);
       const { w: bw, h: bh } = labelSize(text, big ? steps.site : steps.room, face);
       const rank = labelRank(kind, tone);
-      const r = radius * sp.unit;
+      const r = id === lock?.id ? Math.max(radius * sp.unit, lock.r) : radius * sp.unit;
       body(id, sp, r);
       items.push({ id, rank, near: r, prefer: last.get(id)?.at, cands: candidates(sp.x, sp.y, r, bw, bh, rank === RANK.trouble) });
       meta.set(id, { text, tone, face, alpha });

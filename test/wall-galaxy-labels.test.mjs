@@ -161,6 +161,36 @@ test('createLabels: the busiest builder held (lab, open) names its trouble lanes
   }
 });
 
+test('createLabels: the name of what the lock holds goes outside its shut brackets (T9)', () => {
+  const world = worldOf('lab');
+  const lab = world.byId.get('lab');
+  const id = 'lane:builder-a/feat-search';
+  const galaxy = galaxyAt(world, siteShot(lab, 0));
+  const { doc, root } = fakeDoc();
+  const free = createLabels(root, galaxy, { steps: { site: 26, room: 15 }, doc });
+  free.draw();
+  const before = free.shown().find((s) => s.id === id);
+  assert.ok(before, 'named without a lock');
+  // Where the lane is drawn, and brackets well wider than its dot.
+  const m = lab.members.find((x) => x.id === id);
+  const v = m.mesh.position.clone().project(galaxy.camera);
+  const at = { x: (v.x + 1) / 2 * 1368, y: (1 - v.y) / 2 * 912 };
+  const r = 40;
+  const fd = fakeDoc();
+  const held = createLabels(fd.root, galaxy, { steps: { site: 26, room: 15 }, held: () => ({ id, r }), doc: fd.doc });
+  held.draw();
+  const shown = held.shown();
+  noOverlap(shown.map((s) => s.box));
+  const after = shown.find((s) => s.id === id);
+  assert.ok(after, 'still named: trouble wins');
+  const ring = { x: at.x - r, y: at.y - r, w: 2 * r, h: 2 * r };
+  // Its own name and every calm one stay off the brackets (another trouble
+  // name may cross them when it has no free side: trouble wins over bodies).
+  for (const s of shown.filter((x) => x.id === id || x.tone === 'calm')) {
+    assert.ok(!overlaps(s.box, ring), `${s.text} clear of the brackets`);
+  }
+});
+
 test('createLabels: at the overview only sites are named, a site in trouble in its hue; caption covers are kept clear', () => {
   const world = worldOf(null);
   const shot = { pos: { x: 0, y: 5200, z: 4200 }, look: { x: 0, y: 0, z: 0 } };

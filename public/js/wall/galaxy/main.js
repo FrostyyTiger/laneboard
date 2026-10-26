@@ -14,9 +14,11 @@ import { createPerf } from '../perf.js';
 import { createTour, timingFor, tourOrder } from '../tour.js';
 import { createCaption, captionTimingFor, STILL_CAPTION_TIMING } from '../caption.js';
 import { createFrame } from '../frame.js';
+import { LOCK_TIMING, STILL_LOCK_TIMING } from '../lock.js';
 import { pxPerMm, screenOf, stepsFor } from '../type.js';
 import { createGalaxyCamera } from './camera.js';
 import { createHud } from './hud.js';
+import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
 import { fallbackHref, hasWebGL } from './fallback.js';
 import { paletteFrom } from './palette.js';
@@ -71,14 +73,22 @@ export function boot() {
     timing: still ? STILL_CAPTION_TIMING : captionTimingFor(page.dataset.demo === '1'),
   });
   const frame = createFrame(document.getElementById('wall-frame'));
-  const hud = createHud({ caption, frame, tour: park ? null : tour });
+  // The lock closes on the node the caption's trouble word names (the system
+  // when calm) as the camera gets there, a leader joining the two (T9).
+  const lock = createGalaxyLock(document.getElementById('wall-lock'), cam, {
+    timing: still ? STILL_LOCK_TIMING : LOCK_TIMING,
+    leaderFrom: () => caption.leaderFrom(),
+  });
+  const hud = createHud({ caption, frame, tour: park ? null : tour, lock });
   let parkedSaid = false;
 
   // The names, over the scene and under the words: placed after each frame
-  // where the camera is now, clear of the caption plate and the fleet line.
+  // where the camera is now, clear of the caption plate, the fleet line and
+  // the lock's brackets (drawn first: the lock's onDraw comes before theirs).
   const labels = createLabels(document.getElementById('galaxy-labels'), galaxy, {
     steps: stepsFor(pxPerMm(screenOf(q, { dpr: globalThis.devicePixelRatio || 1, cssHeight: innerHeight }))),
     covers: hud.covers,
+    held: lock.held,
   });
   cam.onDraw(labels.draw);
 
@@ -144,7 +154,7 @@ export function boot() {
   // For the console and later tasks.
   globalThis.__galaxy = galaxy;
   globalThis.__galaxyTour = tour;
-  globalThis.__galaxyHud = { caption, frame, covers: hud.covers };
+  globalThis.__galaxyHud = { caption, frame, lock, covers: hud.covers };
   globalThis.__galaxyLabels = labels;
 }
 
