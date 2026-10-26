@@ -75,7 +75,7 @@ The owner's words, which are the brief:
 - D6 **Repo is public**: demo names only (`hv1`, `builder-a`, `acme`, `example.invalid`). The hygiene
   test is the gate.
 - D7 **Nights are explore, build, polish** (§7). Night 1 builds several directions and picks none.
-- D8 **The galaxy is WebGL through three.js**, pinned (owner to confirm before night 2 starts; the
+- D8 **The galaxy is WebGL through three.js**, pinned (owner OK 2026-10-26; the
   sketch vendored `public/vendor/three/three.module.js` 0.170.0, MIT). No other 3D or UI framework.
 - D9 **Effects are switches, the owner picks** (`galaxy.html?fx=<name>`, off by default). The loop builds
   and films them and the panel scores them; it never turns one on by default.
