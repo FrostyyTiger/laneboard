@@ -197,6 +197,9 @@ Polish with the panel: every persona at least once on the built Wall, triage, fi
 **Owner picks so far** (2026-10-26, during night 2; the rest is written after night 2's morning report).
 Two effects proposed by the dreamer (night 2, `reviews/r15-dreamer.md`), wanted by the owner: build both,
 behind switches like every effect (D9), each ending in a filmstrip with and without it.
+- Night 2's galaxy on the real tablet (Surface Pro 7 kiosk, `galaxy.html?demo=1&fx=beacon&perf=1`, owner
+  2026-10-26): "running good, looks good on the Surface, even the colours are pretty nice". Keep the palette;
+  nothing added in night 3 may make it slower there.
 - `afterglow`: when trouble clears, its cluster keeps a faint ring in the old status hue on the plane,
   cooling red to amber to grey and gone after about 30 min. It shows recent history: in the morning you see
   where something went wrong in the night though it is green now. Quieter than any live trouble (outline
