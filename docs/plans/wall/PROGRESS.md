@@ -956,3 +956,160 @@ Notes for every builder round (planner, night 1):
 | 50 (mosaic) | skeptic | 6 | 4 | 7 | 3 | 6 | 4 | 4 |
 
 ## Morning
+
+Night 1, run `wall-n1`, final round 61 (2026-10-26 05:51 Europe/Zurich).
+
+**Done:** the ground (large demo fleet, feed extras, Wall page, tour, captions, lock, glow, frame), all four
+directions (`radial`, `orbits`, `islands`, `mosaic`), research Q1-Q6 and ten panel reviews; 31 tasks.
+**Not done:** 35 review tasks are still open (T29-T46, T50-T66), among them two that matter before a tablet runs
+all day (T31 pinch breaks the page, T32 glow cache leak). Nothing is blocked.
+**Why it stopped:** the round budget ran out (stop reason `rounds`), not the deadline or a failure.
+
+### The four directions
+
+**radial** (`?variant=radial`): today's constellation, set for a wall: type steps from distance, wider site and
+room rings, an overview fitted into a safe area, crit halos on the glow layer, desk chrome off (T18/T19), and a
+slow turn. It got by far the most work (T15-T19 went into radial first) and the most reviews (10). The panel
+loved the slow turn ("the one thing that makes the overview breathe", r41), T16's crit halo ("the brightest pixel
+on screen", r46) and the bottom trouble line. It hated the circle using only the middle square of a 3:2 screen,
+the lane cluster at the top ("the densest text on screen, and it tells the least", r50), labels that move with the
+turn (its biggest legibility cost, r37), the bearing dial, and its cost: the turn re-plans every label each frame
+(1.5-2x orbits' script time, r28). Lowest average of the four (4.0).
+
+**orbits** (`?variant=orbits`): the rings as one screen-wide ellipse, each site a planet with its rooms in orbit,
+no turn. The panel loved its negative space ("the only overview where the black is composed", r41), the calmest
+motion (short hops between neighbours, r32) and the full width with a clear bottom band (r46); it scores best on
+calm (6.0) with islands. It hated the unlabelled core dead centre, loose label clouds (ACME-BILLING flung to the
+left edge), long flights, a hold that stays wide (T59), and the desk annotation it still carries (gauge rings on
+every calm node, lamp pips, monograms: T66 sets radial's options for it). Average 4.6.
+
+**islands** (`?variant=islands`): each site its own named cluster in its coastline, islands in rows across the
+screen, the camera tours island to island. The panel loved the overview ("where is what" before the tour starts;
+best overview of the night, 6.6), its label grid (name centred under its dot, "the only variant where no two names
+collide", r41), and the only clean caption timing (no dead plate, r50). It hated its weak status (5.2: the crit
+is the size of everything else, T64; no halo yet), site titles over their rooms (T43), lane ▲ marks packed
+shoulder to shoulder (T55), the lone hub dot and the gauges and `•••` tails on calm nodes (T60, T66).
+Average 4.9, best on legibility (5.0) and tied best on calm.
+
+**mosaic** (`?variant=mosaic`, the wild card from Q5): a pointy-top honeycomb, one hex tile per place, each site
+a connected region separated by an empty channel. The panel loved the filled trouble tile: "a red or yellow
+hexagon reads from the far end of a hallway" (r32, who would put mosaic on their own wall), "the only device on
+the night that a viewer reads from three metres without words" (r41), and its `◉ HV1` title plates. It hated
+about 60 empty hex outlines that double the line count, crit and warn tiles that differ by hue alone (T56), labels
+leaving their tile (T44), the overview cropped mid-flight (T65), amber attention tiles as loud as crit (T61), and
+the full desk annotation when zoomed (T66). Best on status (7.2), wow (6.4) and touch (2.4); worst on calm (4.8)
+and performance (4.0). Highest average (5.1).
+
+Score averages over every review in `## Scores` (1-10; radial n=10 since round 9, orbits n=6 since 28, islands
+and mosaic n=5 since 32). Touch is a guess from target sizes: no variant takes input yet. Performance is weak
+evidence: every film ran through SwiftShader at load 31-37 (filming note above), so the fps only rank the
+variants (radial costliest).
+
+| variant | overview | legibility | status | touch | wow | calm | performance | mean |
+|---|---|---|---|---|---|---|---|---|
+| radial | 3.8 | 3.1 | 5.2 | 1.6 | 5.3 | 4.2 | 4.9 | 4.0 |
+| orbits | 5.3 | 4.0 | 4.8 | 2.0 | 5.3 | 6.0 | 4.7 | 4.6 |
+| islands | 6.6 | 5.0 | 5.2 | 1.8 | 5.0 | 6.0 | 4.6 | 4.9 |
+| mosaic | 6.4 | 4.2 | 7.2 | 2.4 | 6.4 | 4.8 | 4.0 | 5.1 |
+
+(Radial over the same five reviews as islands and mosaic, rounds 32-50: 4.2, 3.4, 5.8, 1.8, 5.8, 4.0, 4.0. Its
+low mean is not only its early scores.)
+
+Newest filmstrips (12 frames over 30 s, CPU 4x, SwiftShader), shot by this round after T20-T28, which changed
+captions, fleet line, lock and ground for every variant (the round-50 films of orbits, islands and mosaic predate
+them):
+- radial: `$RUN_DIR/shots/r61-radial/sheet.png` (previous: `r60-radial`)
+- orbits: `$RUN_DIR/shots/r61-orbits/sheet.png` (previous: `r50-orbits`)
+- islands: `$RUN_DIR/shots/r61-islands/sheet.png` (previous: `r50-islands`)
+- mosaic: `$RUN_DIR/shots/r61-mosaic/sheet.png` (previous: `r50-mosaic`)
+
+What this round saw in the r61 sheets (load ~33, so 12 frames span 50-57 s, not 30; 0 console errors in all four):
+- Shared: the crit fleet line (`■ HV2 · STORAGE / POOL 97% FULL`) reads from across the room in every frame of every
+  variant, and the trouble plates (`■ STORAGE`, `▲ FEAT-SEARCH`, `▲ OFFICE-PRINTER` in status colour at the 3 m step,
+  then the site) are the night's best frames. The near-empty plate (only `TARGET 0n / 05 · SITE` and the typing
+  cursor) is still there despite T23: radial 3 of 12 frames, islands 1, mosaic 1, orbits 0. That may be typing
+  slowed by load and throttle, or T23 not covering calm legs: check it live before calling T23 closed.
+- radial: the STORAGE hold (halo, lock, leader to the trouble word) is the best single shot; the overview is a
+  small circle in the middle of the screen.
+- orbits: 7 of 12 frames have no caption at all (T42 open); the screen is the calmest.
+- islands: the overview reads at a glance with names on their clusters; trouble on the map is still specks (T64).
+- mosaic: the filled red VM-C tiles at the overview (26 s) are readable from the door; in the second half the demo's
+  crit cleared and the amber attention tile carried the screen just as well.
+
+`$RUN_DIR` is `~/runs/wall-n1`. Live: `node test/tools/demo-fleet.mjs --port 7795 --size large`, then
+`http://127.0.0.1:7795/wall.html?variant=<radial|orbits|islands|mosaic>&demo=1`.
+
+### Tasks
+
+Done (31): T1 d35cac0 · T2 11a0a2a · T3 3a575ea · T4 68c058b · T5 8dcf5f4 · T6 d3f65ff · T7 31e86d2 ·
+T8 01cd9f7 · T9 1fc2f71 · T10 a8aae66 · T11 9e6471f (radial) · T12 0a7e10c (orbits) · T13 8b38cfa (islands) ·
+T14 c6d1e2d (mosaic) · T15 6607e27 · T47 efc5c84 · T48 9d546e6 · T49 883d06f · T16 5361303 · T17 01d7d4a ·
+T18 d36ed56 · T19 0a75c9b · T20 4e32bce · T21 2997990 · T22 8b47e01 · T23 ec802c5 · T24 7caf9c9 ·
+T25 85e6838 · T26 6996b00 · T27 dcfcf52 · T28 bf9e2dc.
+
+Open (35), none blocked: shared bugs T29 (two bracket vocabularies), T30 (plate covers its site), T31 (pinch or
+palm zooms the page), T32 (glow cache never shrinks, ~360 MB a day), T35 (forced style recalcs), T39
+(`worstGapMs` is a lifetime max), T50 (reduced motion: caption late after the cut), T51 (map labels through the frame's text),
+T54 (glows behind labels), T57 (two clocks), T58 (caption outlives the shot); performance T33, T34, T37, T40;
+north star T46, T52, T53, T62; per variant T36, T38, T45, T59 (orbits), T43, T55 (islands), T44, T56, T61, T65
+(mosaic), T60 (islands, mosaic), T63 (radial), T64 (orbits, islands), T66 (desk options for the other three);
+docs T41 (a stranger cannot find or set up the Wall).
+
+Tests now: `npm test` 3673 pass, 0 fail (re-run by this round). The app's Map tests (fenced) are unchanged.
+
+### Needs you, worst first.
+
+1. **Pick for night 2.** The panel's numbers favour mosaic and islands; radial, the most worked on, scores
+   lowest. The loop's suggestion is a mix: **islands' layout with mosaic's filled trouble area** (tone the
+   troubled island's coastline and fill the node), plus radial's T16 halo and T18/T19 options (T66). Four of the
+   five latest reviewers asked for exactly this "paint the troubled area" move. The case for each:
+   - *mosaic*: the only status you read from the door without words (status 7.2, wow 6.4, the stranger's pick);
+     costs calm (60 outlines) and needs shape fills for colour blindness (T56).
+   - *islands*: the best overview and legibility, no name collisions, no dead plate; status is weak until
+     trouble fills the island (T64).
+   - *orbits*: the calmest, most composed screen and full width; legibility and status mid-table, long flights.
+   - *radial*: the turn and the halo are the wow; the circle wastes a 3:2 screen, turning labels cost
+     legibility and CPU. Keep its parts (halo, turn as an idle breath), not its layout.
+2. **The fps gate cannot be judged here (fenced `loop/film.mjs`).** Headless Chromium hangs on any animated
+   canvas under the CPU throttle; only SwiftShader works, and then fps measures the VM's software raster. Either
+   let `film.mjs` launch with SwiftShader and report script ms per frame, or measure fps on the real tablet.
+3. **Bugs to fix before a tablet runs all day, and before merging.** T32 (the glow cache leaks ~360 MB a day on a
+   colour-temperature feed), T31 (a two-finger brush zooms the page and pushes the clock and fleet line
+   off-screen), T50 (with reduced motion the site is on screen unexplained for half of each leg).
+4. **Look at the shared code before merging.** The branch changes the app's Map module behind options that
+   default off (`public/js/views/map/index.js` +149, `render.js` +231, `layout.js` +77), `server/map.mjs`
+   (feed extras `glow`, `ring`), `public/css/tokens.css` (`--tex-vignette`, a soft gradient where the guardrail
+   allows only hard-stop textures: keep it there or give wall.css a guardrail exception), and
+   `test/render.test.mjs`, whose v2 render budget test now takes up to ten samples under load (fccb2d1, budget
+   still 50 ms): a loosened app test, check you accept it.
+5. **Tour dwell and overview words (asked by five reviewers).** Hold calm sites ~8 s and trouble ~25 s while
+   anything is warn or worse (r14 #3, r46 #2); at the overview name only nodes at warn or worse (r14 #4, r32,
+   r37, r50). Both change what T5 and the overview do.
+6. **Wall mode = desk annotations off (r20, r50).** Calm caption = name + `ok · all 8 calm`; no ambient
+   `N working` line; no `· SITE` in the kicker; a smaller clock; remove the bearing dial (conflicts with T18's
+   "dial stays"); one `BUILDERS` node at the overview; no monograms or lane ribbons.
+7. **One hero per shot (r41 #2, r50 #2).** When the toured site holds the worst problem, the plate drops its
+   trouble line (or the fleet line steps down): conflicts with T21's always-big fleet line. Related: T21's crit
+   word covers the bottom-right of radial's lowest ring while anything is crit (round 53).
+8. **Radial's turn and the pixel budget (r28).** `ambient: {drift: 0}` would halve radial's cost but remove the
+   turn; a Map `maxDpr: 1.5` would cut canvas pixels by 44 % on the tablet. Film 1:1 crops before deciding.
+9. **A hallway tablet that cannot see the Board (r32 #5).** A Wall-only read-only listener or proxy recipe is a
+   security and config decision; the kiosk manifest and Wake Lock (r32 #4) belong with it.
+10. **Night 2 explorer inputs.** r24-touch #1-#10 and Q6 (tap feedback, back, idle 45-60 s, `touch to explore`)
+    and r32 #1 (tap pauses the tour, `?tour=off`): decide tap feedback before night 2 is planned.
+
+The camera phrasing, type case rule, radial site names outside the ring and other taste notes are in
+`## For the owner` above; none blocks night 2.
+
+### Research
+
+- Q1 film UI: hierarchy and what designers leave out; they publish no timing numbers, the timings there are proposals.
+- Q2 calm displays: calm is a steady hum in the periphery, trouble is a change in what is already there (no banners), escalated in steps; no sourced motion budget, the table is proposals.
+- Q3 legibility at distance: the arc-minute rule (second-hand) sets the type steps; 3 s glance size and tracking are proposals.
+- Q4 wide-screen layouts: a grouped force layout on fixed site anchors is the base; hairballs come from links, so draw few (ops tools cap, group and filter); bundling beta values second-hand.
+- Q5 wild card: a hex mosaic, one tile per node, site regions grown on the grid (built as `mosaic`).
+- Q6 touch on kiosks: target sizes in mm converted to px (arithmetic), idle 45 s proposed, no timeout research exists.
+
+Open research questions: none.
+
+Owner notes: the script left none this night (`$RUN_DIR/owner-notes` does not exist).
