@@ -93,11 +93,25 @@ Notes for every builder round (planner, round 1):
   `r12-still`, `?at=cloud`, is clean). Seen: at the overview and in the calm holds the far fleet line
   (`■ HV2 · STORAGE`) is the loudest thing, as §2.1 wants; the open crit system's lower planets go under
   the far fleet block at 63 s (adds to the Later line on the reach past the bottom edge).
-- [ ] T6 (§7.A1, §7.A3) [ui] [variant:galaxy] `galaxy/labels.js`: names that always face the camera, drawn
+- [x] T6 (§7.A1, §7.A3) [ui] [variant:galaxy] `galaxy/labels.js`: names that always face the camera, drawn
   over everything, plus a pure screen-space pass `placeLabels(boxes)` (priority: trouble, then site, then
   host/room, then the rest; lower ones hidden where they overlap); lanes named only in trouble or when the
   camera is close — done when: `test/wall-galaxy-labels.test.mjs` shows no two shown boxes overlap and a
   trouble name always wins, and a still of the busiest builder held shows no two names on top of each other.
+  (commit 72d101b) A DOM layer `#galaxy-labels` between the canvas and the frame (Q9: a 2D overlay, not
+  canvas-texture sprites), one span per name moved by transform; 0.12 ms/frame of script for 32 names
+  (unthrottled, node bench). Pass: each name tries right, left, above, below (trouble two more steps down),
+  keeps last frame's side while it is free (no hopping under the drift), and keeps clear of `hud.covers()`
+  and other spheres (trouble may cover a sphere when nothing else is free). Builders rank with rooms (they
+  are planets); services, lanes and sessions are "the rest", named in trouble or when their dot is ≥ 9 px.
+  Seen first: at the overview the folded `lab` piled five trouble names and lost its site name, so a
+  folded cluster is one name, its site's, in its worst hue with its shape (`■ HV2`, `▲ HV1`); members
+  are named once the system opens (fade over open 0.45-0.85). Type: sites/sun in the label face caps at
+  the site step, planets and dots mono lowercase at the room step (`type.js stepsFor`: 26/11 px on the VM's
+  1x, 35/15 on the tablet). Stills `$RUN_DIR/shots/r14-still{1,2,3}` (`?at=lab`, `?at=hv2`, overview),
+  filmstrip `$RUN_DIR/shots/r14-galaxy/sheet.png`: no two names overlap, no console errors. Seen: at the
+  overview CLOUD sits under the far fleet block and is hidden (adds to the composition line in Later);
+  at the VM's 1x the 11 px planet names are small in the sheet (the tablet gets 15).
 - [ ] T7 (§7.A2) [ui] The 2D fallback modules from the sketch: `public/js/wall/variants/tiles.js`
   (`withTiles`) and `variants/islands-tiles.js`, plus the focus-only link filter as a pure function in
   `variants/tiles.js`; `galaxy/main.js` sends a browser without WebGL to `wall.html?variant=islands-tiles`.
@@ -183,6 +197,7 @@ Notes for every builder round (planner, round 1):
   pacing, to tune after T4).
 - §7.B (r8-film-ui 6) Overview composition is lopsided: sites sit left/low, the right third is empty; spread
   `armPoint` or offset `overviewShot`'s look-at to the sites' centroid; keep the bottom-right free for the fleet line.
+  (T6, builder r14: one site, CLOUD, sits under the far fleet block at the overview, so its name is hidden.)
 - §7.B (r8-film-ui 7) Folded calm systems read as lumpy spheres: below a screen-size threshold draw one
   sprite (core + faint halo), swap to spheres at `foldAt` > 0.3.
 - §7.B (r8-film-ui 8) The open system is a wheel: drop the spokes (stem + ring say it), keep the orbit ring at
