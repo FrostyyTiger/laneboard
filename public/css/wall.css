@@ -528,6 +528,11 @@ html.wall body {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
+/* A crit that cleared a moment ago (galaxy hud.js CRIT_HOLD, T30) keeps the
+   line, so a contact that drops and returns does not flip it red, yellow,
+   red: its word dimmed, its why ("cleared 12s ago") grey, no longer trouble. */
+.wall-fleet[data-held] .wall-fleet-line { opacity: 0.72; }
+.wall-fleet[data-held] .wall-fleet-sub-why { color: var(--text-2); }
 
 /* ---------------------------------------------------------------------------
    The galaxy (public/galaxy.html, Wall plan night 2): one WebGL canvas over

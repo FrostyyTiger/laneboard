@@ -49,7 +49,10 @@ export function galaxyCaption(cap, kind = 'site') {
  * `worstLine` names the next and counts `+N more` past the two. `model`
  * itself when nothing is held, the held thing is calm, the line names
  * another problem anyway, or there is no other problem (the line never says
- * "all calm" while the caption says trouble). Pure.
+ * "all calm" while the caption says trouble). Nor does it step down a size
+ * (T30, reviews/r43-stranger.md galaxy 1): past a held crit only to another
+ * crit, never to a warn, or the 3 m line went red, yellow, red with every
+ * visit to the crit system; repeating the caption is the lesser harm. Pure.
  */
 export function bannerModel(model, heldId) {
   const nodes = Array.isArray(model?.nodes) ? model.nodes : null;
@@ -76,15 +79,61 @@ export function bannerModel(model, heldId) {
   const before = worstLine(model);
   const after = worstLine(masked);
   // Masking another problem leaves the line as it was: then it was not the held one.
-  if (after.step === 'calm' || after.text === before.text) return model;
+  if (after.step === 'calm' || after.text === before.text || after.step !== before.step) return model;
   return masked;
+}
+
+/**
+ * How long a crit that cleared stays on the fleet line (T30,
+ * reviews/r43-stranger.md galaxy 1): a contact that drops and comes back
+ * within seconds made the line flip red, yellow, red. A crit that clears is
+ * held, dimmed, until the tour's next overview at least `minMs` after it
+ * cleared (the end of the cycle it cleared in, or the one after); a crit
+ * that comes back, or a newer one, takes the line at once. Without a tour
+ * (a parked `?at=`) it is held `minMs`.
+ */
+export const CRIT_HOLD = Object.freeze({ minMs: 30000 });
+
+const nodeList = (model) => (Array.isArray(model?.nodes) ? model.nodes : []);
+
+/**
+ * The node the fleet line speaks for while it is at the far step (crit or
+ * down), as `worstLine` picks it, or null below that. Pure.
+ */
+export function farNode(model) {
+  const w = worstLine(model);
+  if (w.step !== 'far') return null;
+  return nodeList(model).find((n) => n && typeof n.id === 'string'
+    && String(n.label ?? n.id) === w.name && n.status === w.status) ?? null;
+}
+
+/** `12s`, `3m`: how long ago, in the fleet line's words. */
+export const agoText = (ms) => {
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s < 60 ? `${s}s` : `${Math.round(s / 60)}m`;
+};
+
+/**
+ * `model` with a cleared crit still on it (T30): `hold` (`{ id, status,
+ * clearedAt }`) puts its node back at its old status with the why `cleared
+ * 12s ago`, so `worstLine` keeps the line at the far step. `model` itself
+ * with no hold, or when the node is gone. Pure.
+ */
+export function heldModel(model, hold, now) {
+  if (!hold) return model;
+  const nodes = nodeList(model);
+  if (!nodes.some((n) => n?.id === hold.id)) return model;
+  const why = `cleared ${agoText(now - hold.clearedAt)} ago`;
+  return { ...model, nodes: nodes.map((n) => (n?.id === hold.id ? { ...n, status: hold.status, why } : n)) };
 }
 
 /**
  * Wires `caption` (`show(leg, cap)`, `hide()`), `frame` (`update(model)`,
  * `live(on)`) and, when given, `lock` (`lockOn(leg)`, `release()`) to `tour`
  * (`onLeg(cb)`). `update(model)` gives both the newest
- * model (the frame's through `bannerModel`, so its line never repeats the held caption), `live(on)` the socket's state, `park(site)` shows a parked system's
+ * model (the frame's through `heldModel`, so a crit that just cleared stays
+ * on its line, dimmed, and `bannerModel`, so the line never repeats the held
+ * caption), `live(on)` the socket's state, `park(site)` shows a parked system's
  * caption (`?at=`, for stills) without a tour, and `covers()` the boxes the
  * words take over the canvas (for the labels, T6; the tag top right since T18,
  * so neither a name nor a held planet sits on it; the warn-step fleet line
@@ -92,21 +141,35 @@ export function bannerModel(model, heldId) {
  * `size()` is the stage's css size (stage.js, the scene's `size`); the line's
  * and the tag's boxes are read again only when it or their words change
  * (T29: both are asked for twice a frame, after the lock's style writes).
+ * `now()` is the clock the crit hold counts on (injectable for tests).
  */
-export function createHud({ caption, frame, tour = null, lock = null, size = null }) {
+export function createHud({ caption, frame, tour = null, lock = null, size = null, now = () => Date.now() }) {
   const stage = size ?? (() => ({ W: globalThis.innerWidth, H: globalThis.innerHeight }));
   let latest = null;
   // The lock target's node (lockTarget's first), as the leg's caption and
   // brackets name it: the fleet line steps past its problem (bannerModel).
-  // The frame is fed again only when the model or the held thing changes.
-  let heldId = null, fedFor = null, fedHeld = null;
+  // The frame is fed again only when the model, the held thing or the
+  // cleared crit's hold changes.
+  let heldId = null, fedFor = null, fedHeld = null, fedHold = null;
+  // The far line's node in the newest model, and a crit that cleared (CRIT_HOLD).
+  let crit = null, hold = null;
   const feed = () => {
-    if (!latest || (fedFor === latest && fedHeld === heldId)) return;
+    if (!latest || (fedFor === latest && fedHeld === heldId && fedHold === hold)) return;
     fedFor = latest;
     fedHeld = heldId;
-    frame.update(bannerModel(latest, heldId));
+    fedHold = hold;
+    const kept = heldModel(latest, hold, now());
+    const fed = bannerModel(kept, heldId);
+    // Dimmed while the line is the cleared crit (wall.css), not when the caption holds it and the line steps past.
+    const fleet = frame.el?.fleet;
+    if (fleet?.dataset) {
+      if (kept !== latest && fed === kept) fleet.dataset.held = '1';
+      else delete fleet.dataset.held;
+    }
+    frame.update(fed);
   };
   const say = (leg) => {
+    if (leg?.kind === 'overview' && hold && now() - hold.clearedAt >= CRIT_HOLD.minMs) hold = null;
     const node = legNode(leg, latest);
     if (node) {
       const cap = galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node');
@@ -161,6 +224,16 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     update: (model) => {
       if (!model || typeof model !== 'object') return;
       latest = model;
+      const far = farNode(model);
+      if (far) {
+        crit = { id: far.id, status: far.status };
+        hold = null;
+      } else if (crit) {
+        hold = { ...crit, clearedAt: now() };
+        crit = null;
+      } else if (hold && !tour && now() - hold.clearedAt >= CRIT_HOLD.minMs) {
+        hold = null;
+      }
       feed();
     },
     live: (on) => frame.live(Boolean(on)),

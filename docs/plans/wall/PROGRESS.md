@@ -589,12 +589,28 @@ Notes for every builder round (planner, round 1):
   1368x912 to 912x1368 mid-run (`$RUN_DIR/tools/r57-resize.mjs`) re-sizes the buffer and the aspect (1.5 →
   0.667). Filmstrip `$RUN_DIR/shots/r57-galaxy/` (0 console errors, 2.5 fps is SwiftShader): as before. The
   demo fleet on :7795 (started by an earlier round; its pid file is stale) was used and left running.
-- [ ] T30 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r43-stranger.md galaxy 1) The fleet line flips red ↔ yellow
+- [x] T30 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r43-stranger.md galaxy 1) The fleet line flips red ↔ yellow
   when a crit link clears and returns within seconds (builder-c "no contact for 19s" red, then yellow, then red
   again): from 3 m the loudest thing comes and goes. In `hud.js` (frame.js is fenced) hold a crit that cleared
   as the fed problem for one tour cycle, dimmed with "cleared Ns ago", unless a newer crit replaces it — done
   when: a test feeds crit → warn → crit within 20 s and the line never drops below crit meanwhile, and the held
   line ends one cycle after the crit clears for good; a film of `galaxy.html?demo=1` shows no red/yellow flip.
+  (commit SHA) `hud.js`: `farNode(model)` (the far line's node), `heldModel(model, hold, now)` (a cleared crit put
+  back at its status with the why `cleared 12s ago`, `agoText`), `CRIT_HOLD.minMs` 30 s. A crit that leaves the far
+  line is held until the tour's first overview at least 30 s after it cleared (no tour: 30 s); the same crit back or
+  a newer one takes the line at once. While held `#wall-frame .wall-fleet[data-held]`: the word at opacity 0.72,
+  the why in `--text-2` (wall.css). **Second cause, found filming:** T23's `bannerModel` stepped the banner past the
+  held crit to the next problem, a warn, so every visit to the crit system flipped the line red → yellow → red
+  too. **Decision:** `bannerModel` now steps past a held problem only to one at the same step (crit → another
+  crit), never down; repeating the caption is the lesser harm (T37 makes the banner smaller while the plate is up).
+  Tests (+4 in `wall-galaxy-hud`, T23's fixture now has two crits): crit → warn → crit → ok → crit within 20 s stays
+  crit; the hold ends at the overview past 30 s; a newer crit replaces it; no tour ends after 30 s; the CSS.
+  Probe `$RUN_DIR/tools/r58-lineprobe.mjs` (fleet line every ~0.7 s, large demo, `?demo=1&quality=0`): before
+  the bannerModel fix, warn at 48, 76, 96, 120 s between crits (`$RUN_DIR/shots/r58-flip/line.txt`); after
+  (`$RUN_DIR/shots/r58-flip2/line.txt`), 170 s red throughout, `CLEARED` held twice, one 4 s warn
+  at 116 s after the crit had been gone 46 s (a real clear). Still `r58-flip/held-2.png`: dimmed `■ HV1 · VM-C`,
+  grey `CLEARED 6S AGO`. Filmstrip `$RUN_DIR/shots/r58-galaxy/` (0 console errors, 1.6 fps is SwiftShader).
+  The demo fleet on :7795 (started by an earlier round) was used and left running.
 - [ ] T31 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r43-stranger.md galaxy 2) Words sit on words: the clock
   "13:12" over the `thermostat` label and `printer-3d` planet in a parked view, "HOME" on the plate's bracket and
   above the clock, "DEMO-HOST" touching the tag. Add the clock block to `hud.covers()` (like the caption and the
