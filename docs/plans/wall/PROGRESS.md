@@ -503,11 +503,26 @@ Notes for every builder round (planner, night 1):
   hold starts with `■ STORAGE` / `▲ OFFICE-PRINTER` and the why up, the name typing, no empty rows; 0 console
   errors; fps 2.1 is SwiftShader plus screenshots (filming note). Seen, for T24: a map label (`HOME`) cut by
   the plate's right edge.)
-- [ ] T24 (bug) [ui] [variant:all] (r14-operator #7) Map labels cut by the plate's edge and showing
+- [x] T24 (bug) [ui] [variant:all] (r14-operator #7) Map labels cut by the plate's edge and showing
   through it as ghost text: plate at least 95 % opaque, and Map labels whose box falls under the
   plate rectangle are hidden (the Wall has the rectangle and `screenOf`; any Map change is an option
   that defaults off) — done when: a still/filmstrip frame at 1:1 shows no cut or ghost label near the
   plate, and the app's Map tests pass unchanged.
+  (commit 7caf9c9; Map option `covers()` -> `[{left, top, right, bottom}]` canvas px, asked every frame,
+  default none: the boxes join the inspector's `scene.covers`, so the label pass already keeps names 4 px
+  clear of them (a line up or down) and drops one with no free place or whose node is under it; as
+  `scene.pageCovers` link labels touching one are not drawn either (the app's inspector does not change
+  that). The Wall's covers: the plate's full box with every row in (`offset*` read once a leg in `build`,
+  before the rows hide), from its fade-in until its fade-out ends (own timer, so a cancelled beat cannot
+  leave it covering), so no name pops out from under a row as it wipes in; and T21's far fleet block,
+  its box read again only when its words change. Plate ground 92 -> 96 %. Tests
+  `test/wall-covers.test.mjs` (`coverOf`, names and a link label under a cover gone and the rest kept,
+  off by default, caption and frame cover timing, the plate's opacity). Filmstrip
+  `$RUN_DIR/shots/r56-radial/`: frame 6 at 1:1 (HV1's plate) no name or link label cut or ghosted by
+  the plate or the fleet block, `VM-C` stands just clear of its edge; 0 console errors; fps 2.4 is
+  SwiftShader plus screenshots (filming note). Seen, left: a node's ring still shows faintly through
+  the 96 % plate (marks, not labels; T30 moves the site out from under it), and the lock can sit under
+  the plate on a site at the left (T30).)
 - [ ] T25 (§2 north star 1, T7) [ui] [variant:all] (r14-operator #8) The lock goes on the worst node
   inside the visited site (e.g. `storage` in hv2), not only on the site node, with a thin leader line
   from the caption's trouble line to it — done when: a test (`test/wall-lock.test.mjs`) picks the
