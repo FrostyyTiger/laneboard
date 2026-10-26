@@ -117,6 +117,14 @@ export const PULSE = Object.freeze({ periodMs: 2600, crit: 0.4, warn: 0.15, nebu
 /** Sphere segments (width, height) at the best level; budget.js's levels scale them. */
 const SEGS = Object.freeze({ sun: [32, 20], star: [20, 14], planet: [32, 22], dot: [10, 8] });
 
+/**
+ * A dust grain on screen: its size in world units, attenuated by distance,
+ * and never more than `maxPx` css px across (the soft disc shows about 2 px
+ * of it), so close up, where the nodes are big, a grain stays a speck
+ * (T26, reviews/r26-skeptic.md 5).
+ */
+export const DUST_LOOK = Object.freeze({ size: 20, maxPx: 3 });
+
 /** The far stars and dust grains at the best level. */
 const STARS = 2500, DUST = 9000;
 
@@ -373,6 +381,8 @@ export function createGalaxyScene(canvas, {
     return pts;
   })();
   const dustHold = { value: new THREE.Vector4(0, 0, 0, 1) }, dustOpen = { value: 0 };
+  // The cap in device px (gl_PointSize is), at the renderer's pixel ratio.
+  const dustCap = { value: DUST_LOOK.maxPx * Math.min(2, dpr) };
   const dust = (() => {
     const { positions, t } = dustPoints(DUST);
     const colours = new Float32Array(t.length * 3);
@@ -385,14 +395,17 @@ export function createGalaxyScene(canvas, {
     g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
     const m = new THREE.PointsMaterial({
-      size: 20, map: dotTex, vertexColors: true, transparent: true, opacity: 0.7,
+      size: DUST_LOOK.size, map: dotTex, vertexColors: true, transparent: true, opacity: 0.7,
       depthWrite: false, blending: THREE.AdditiveBlending,
     });
     // dustFade on the GPU: the grains round the held system thin to the floor.
     m.onBeforeCompile = (sh) => {
       sh.uniforms.dustHold = dustHold;
       sh.uniforms.dustOpen = dustOpen;
-      sh.vertexShader = `uniform vec4 dustHold;\nuniform float dustOpen;\n${sh.vertexShader}`.replace('#include <project_vertex>', [
+      sh.uniforms.dustCap = dustCap;
+      sh.vertexShader = `uniform vec4 dustHold;\nuniform float dustOpen;\nuniform float dustCap;\n${sh.vertexShader}`
+        .replace('#include <logdepthbuf_vertex>', 'gl_PointSize = min(gl_PointSize, dustCap);\n#include <logdepthbuf_vertex>')
+        .replace('#include <project_vertex>', [
         '#include <project_vertex>',
         // dustSightDist in view space (the camera at the origin).
         'vec3 dustS = (viewMatrix * vec4(dustHold.xyz, 1.0)).xyz;',
@@ -403,6 +416,7 @@ export function createGalaxyScene(canvas, {
       ].join('\n').replace('EDGE', DUST_EDGE.toFixed(4)).replace('FLOOR', DUST_FADE.floor.toFixed(3)));
     };
     const pts = new THREE.Points(g, m);
+    pts.name = 'dust';
     scene.add(pts);
     shared.push(g, m);
     return pts;

@@ -55,6 +55,13 @@ export function nebulaFor(status) {
   return { tone, ...NEBULA[tone] };
 }
 
+/**
+ * How far the dust's grey sits from text-3 toward the ground (0: text-3, 1:
+ * the ground), by the sun and at the rim: below every node mark, so a grain
+ * never reads as a node (T26, reviews/r26-skeptic.md 5).
+ */
+export const DUST_INK = Object.freeze({ in: 0.4, out: 0.68 });
+
 /** A lookup that knows no property. */
 const unset = () => '';
 
@@ -189,9 +196,10 @@ export function paletteFrom(readVar = unset) {
     sunCore: t2,
     bg,
     line: { rgb: line.slice(0, 3), alpha: line[3] },
-    // The dust: the light grey by the sun, fading toward the ground at the rim.
-    dustIn: t2,
-    dustOut: mixRgb(t3, bg, 0.45),
+    // The dust: a backdrop, so darker than the dimmest node (calm, text-3) even
+    // by the sun, fading further toward the ground at the rim (T26, r26-skeptic 5).
+    dustIn: mixRgb(t3, bg, DUST_INK.in),
+    dustOut: mixRgb(t3, bg, DUST_INK.out),
     // Far stars: a dim grey, behind everything.
     stars: mixRgb(t3, bg, 0.35),
   };

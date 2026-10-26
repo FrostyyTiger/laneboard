@@ -10,7 +10,7 @@ import {
   BUDGET, LEVELS, budgetStart, budgetStep, createFrameWindow, perfLine,
 } from '../public/js/wall/galaxy/budget.js';
 import { paletteFrom } from '../public/js/wall/galaxy/palette.js';
-import { createGalaxyScene } from '../public/js/wall/galaxy/scene.js';
+import { createGalaxyScene, DUST_LOOK } from '../public/js/wall/galaxy/scene.js';
 import { LIVE } from '../public/js/wall/galaxy/live.js';
 
 const slow = { frameMs: 40, scriptMs: 12 };
@@ -112,9 +112,10 @@ const fakeDoc = {
   }),
 };
 
-function sceneAt() {
+function sceneAt({ dpr = 1 } = {}) {
   const clock = { now: 1000 };
   const galaxy = createGalaxyScene({ clientWidth: 1600, clientHeight: 900 }, {
+    dpr,
     palette: paletteFrom(),
     doc: fakeDoc,
     clock: () => clock.now,
@@ -232,4 +233,29 @@ test('tree changes and quality steps over and over leave the live geometry count
   } finally {
     probe.restore();
   }
+});
+
+test('a dust grain is attenuated by distance and capped at DUST_LOOK.maxPx css px (T26)', () => {
+  for (const dpr of [1, 2, 3]) {
+    const { galaxy } = sceneAt({ dpr });
+    galaxy.update(fleet());
+    let root = galaxy.world.sites[0].star;
+    while (root.parent) root = root.parent;
+    const dust = root.getObjectByName('dust');
+    assert.ok(dust?.isPoints);
+    const m = dust.material;
+    assert.equal(m.sizeAttenuation, true, 'smaller the farther');
+    assert.equal(m.size, DUST_LOOK.size);
+    // Compile it as three would: the points shader through onBeforeCompile.
+    const sh = { uniforms: {}, vertexShader: THREE.ShaderLib.points.vertexShader, fragmentShader: '' };
+    m.onBeforeCompile(sh);
+    const v = sh.vertexShader;
+    const cap = v.indexOf('gl_PointSize = min(gl_PointSize, dustCap);');
+    assert.ok(cap > v.indexOf('gl_PointSize *= ( scale / - mvPosition.z )'), 'the cap comes after the attenuation');
+    assert.ok(v.includes('uniform float dustCap;'));
+    // gl_PointSize is in device px: the cap follows the pixel ratio (at most 2, as the renderer).
+    assert.equal(sh.uniforms.dustCap.value, DUST_LOOK.maxPx * Math.min(2, dpr));
+    galaxy.dispose();
+  }
+  assert.ok(DUST_LOOK.maxPx <= 3, 'a speck, not a dot');
 });

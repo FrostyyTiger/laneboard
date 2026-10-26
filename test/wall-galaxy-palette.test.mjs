@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {
-  paletteFrom, parseColor, oklchToRgb, toneOf, nebulaFor, worseTone, NEBULA, TONES,
+  paletteFrom, parseColor, oklchToRgb, toneOf, nebulaFor, worseTone, NEBULA, TONES, DUST_INK,
 } from '../public/js/wall/galaxy/palette.js';
 import { sceneKey, overviewShot, siteShot } from '../public/js/wall/galaxy/scene.js';
 import { tourSites } from '../public/js/wall/tour.js';
@@ -80,6 +80,22 @@ test('paletteFrom: the status hues from --p1/--p2/--p3, everything calm in greys
   // The dust fades from the light grey by the sun to darker at the rim; the ground is darkest.
   assert.ok(p.dustIn[0] > p.dustOut[0] && p.dustOut[0] > p.bg[0]);
   assert.ok(p.line.alpha > 0 && p.line.alpha < 1);
+});
+
+test('the dust is darker than any node mark, by the sun and at the rim (T26)', () => {
+  // Relative luminance (WCAG), the eye's measure of how bright a grey reads.
+  const lin = (x) => (x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4);
+  const lum = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+  for (const p of [paletteFrom(tokens()), paletteFrom(() => '')]) {
+    // The node marks: calm (text-3), the brighter grey and the status hues (crit is
+    // the dimmest of them today, T33); the dust stays below whichever is lowest.
+    const dimmest = Math.min(...['calm', 'bright', 'low', 'warn', 'crit'].map((k) => lum(p[k])));
+    assert.ok(lum(p.dustIn) < dimmest, `dust by the sun ${byte(p.dustIn)} below every node colour`);
+    assert.ok(lum(p.dustOut) < lum(p.dustIn) && lum(p.dustOut) > lum(p.bg), 'darker at the rim, still above the ground');
+    // Not a hair below: a clear step, so a grain does not pass for a dim node.
+    assert.ok(lum(p.dustIn) < dimmest * 0.75);
+  }
+  assert.ok(DUST_INK.in > 0 && DUST_INK.in < DUST_INK.out && DUST_INK.out < 1);
 });
 
 test('paletteFrom falls back to the dark tokens when nothing is set', () => {
