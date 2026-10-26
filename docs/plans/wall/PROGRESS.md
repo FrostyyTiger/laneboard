@@ -539,6 +539,31 @@ Notes for every builder round (planner, night 1):
   is about 10 px): give the shape a pattern at the tile's own scale (crit: solid inner square; warn:
   dashed or two-of-six-sides edge) — done when: `test/wall-mosaic.test.mjs` checks crit and warn tiles
   differ in shape data, not only tone, and a still shows it.
+- [ ] T57 (bug) [ui] [variant:all] (r41-film-ui shared #1) Two clocks in one frame: the caption's trouble
+  line freezes its age (`no contact for 25s`) while the map label and the fleet line show 29s. Build the
+  age text in one shared formatter used by `captionLines` and `worstLine` (with T52's stable step), so
+  the plate and the fleet line never disagree — done when: a test shows `captionLines` and `worstLine`
+  give the same age text for the same node and time, and a caption typed in earlier does not keep an older value.
+- [ ] T58 (bug) [ui] [variant:all, radial seen] (r41-film-ui shared #6) The caption outlives the shot: the
+  plate stands fully typed while the camera is back at the overview, pointing at a subject the frame no
+  longer shows. Fade the plate out on the first frame of the flight away, before the zoom changes — done
+  when: a test of the caption driver shows the fade-out starts at the leg change (not after it), and a
+  filmstrip frame at overview scale has no plate.
+- [ ] T59 (§2, spelled out as it zooms in) [variant:orbits] (r41-film-ui orbits #1) The hold is a wide
+  shot: the visited planet fills about a quarter of the frame height, moon labels are micro-text. Take
+  the per-leg zoom from the planet's own bounds (`bounds` per layout) so the planet and its moons' labels
+  fill about 60 % of the frame height, inside the safe area and clear of the plate (with T30) — done when:
+  a pure test checks the leg zoom is the fit of the planet's bounds for 3:2 and 16:9, and a hold frame
+  shows moon names at the room step or larger.
+- [ ] T60 (bug) [variant:islands, mosaic] (r41-film-ui islands #2) The hub (core) stands alone as two
+  unlabelled rings (islands, left of REMOTE above the clock; mosaic a lone tile): give it a small titled
+  island/tile of its own with the tag's name — done when: the layout test checks the hub has a title
+  inside its own coastline/tile and a still shows no unlabelled orphan mark.
+- [ ] T61 (§2 north star 1) [variant:mosaic] (r41-film-ui mosaic #1) At the overview amber attention tiles
+  outshout the red crit tiles (brighter fill, same area): the eye lands on amber first. Rank fill
+  lightness crit > attention > warn, attention and warn keep outline and mark with no fill — done when:
+  `test/wall-mosaic.test.mjs` checks the fill alpha ranks crit highest and attention/warn have none,
+  and a still of the crit window shows red as the only filled tiles.
 
 ## Research questions
 
@@ -644,6 +669,24 @@ Notes for every builder round (planner, night 1):
   paint the troubled node's area in every variant, and give radial and orbits the reserved bottom band
   (T17) instead of relying on the vignette. Plate at 100 % opaque rather than 95 % (T24 says 95).
 
+- (r41-film-ui, ideas, taste or plan changes) Shared #2: when the visited site holds the worst problem,
+  the fleet line steps down to the calm size and shows the next problem or `+N more` (one hero per shot;
+  conflicts with T21's always-big line). #4 extra: the plate's brackets stay neutral and hug the text, or
+  go (T29 removes them). #5 one case rule: names and site/node words in caps, prose and values sentence
+  case on plate and fleet line, units lowercase with a thin space. #3 extra: plate opens on the lock's
+  close (flight, beat, lock, plate), giving up the demo's `leadMs: 900` (T42/T23 cover the empty plate).
+  Radial #1: site names tangent on the outside of the site ring at the bearing of their subtree (reverses
+  T11's inward names). Radial #3: stubs at the overview and the fan drawn on after the lock shuts.
+  Orbits #3: the sun carries the fleet's identity (tag title in small mono caps) and a ring in the worst
+  status colour. Islands #1 / across: tone the troubled island's coastline (status colour at 0.48 and a
+  faint fill), visited coastline to line-strong; same for orbits' ring and radial's sector (same ground as
+  the earlier "paint the troubled area" notes). Mosaic #4: a tile holds one name and one detail line at
+  zoom, lanes and runs a count chip (`3 lanes ▲2`) until night 2. Across: the title plate `◉ HV1` (mark,
+  gap, name) in islands and radial; the islands label grid (name centred under its dot) as the rule for
+  mosaic and orbits; a very slow drift or glow parallax to give the no-turn layouts a breath at the
+  overview (T28: the ground must not slide under a moving camera). Mosaic's scores favour it; the
+  reviewer notes the overview is spent 15 % on the whole fleet in demo timing (radial #4, no change).
+
 ## Reviews
 
 - r9-film-ui.md: 9 findings, 5 became tasks (T15-T19: #2+#7, #3, #4, #5, #6+#8); #1 covered by T5 (phrasing
@@ -667,6 +710,11 @@ Notes for every builder round (planner, night 1):
   shared #4 (T24), #5 (T20/T21), #9 (T42), radial #3 (T17), radial #4 (T27), orbits #1 (T42), orbits #3 (T45),
   islands #1 (T48), islands #2 (T42), mosaic #1 (T44), #3 (T42), #4 (T44), orbits #4 (task T51); dropped: islands #4,
   mosaic #5 and across "keep" notes (praise); shared #1, #8 and the overview-naming findings went to the owner.
+- r41-film-ui.md: 29 findings (7 shared, 4 radial, 3 orbits, 4 islands, 4 mosaic, 5 across "steal" notes + 1
+  console note), 5 became tasks (T57-T61: shared #1, #6; orbits #1; islands #2; mosaic #1); covered: shared #3
+  (T42, T23), #4 (T29), #7 (T51), radial #2 (T17, T18), orbits #2 (T45), islands #3 (T25), islands #4 (T43, T55),
+  mosaic #2, #3 (T44); dropped: radial #4 (no change needed, said so), console note (empty); shared #2, #5,
+  radial #1, #3, orbits #3, islands #1, mosaic #4 and the across ideas went to the owner (taste or plan change).
 
 ## Scores
 
@@ -686,5 +734,9 @@ Notes for every builder round (planner, night 1):
 | 37 (orbits) | accessibility | 4 | 4 | 5 | 2 | 5 | 6 | 4 |
 | 37 (islands) | accessibility | 5 | 4 | 5 | 2 | 5 | 6 | 4 |
 | 37 (mosaic) | accessibility | 6 | 4 | 7 | 2 | 6 | 5 | 4 |
+| 41 (radial) | film-ui | 4 | 4 | 6 | 2 | 6 | 4 | 4 |
+| 41 (orbits) | film-ui | 6 | 4 | 5 | 2 | 6 | 7 | 5 |
+| 41 (islands) | film-ui | 7 | 6 | 5 | 2 | 5 | 6 | 5 |
+| 41 (mosaic) | film-ui | 7 | 5 | 7 | 3 | 7 | 5 | 4 |
 
 ## Morning
