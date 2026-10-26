@@ -136,7 +136,7 @@ Notes for every builder round (planner, round 1):
   generative pieces that show live systems (network traffic, infrastructure, sensor feeds): what would make
   a 3D fleet galaxy feel alive without moving meaninglessly? 2-3 concrete proposals (what, meaning, cost) —
   for Later (fx)
-- [ ] Q9 three.js on an integrated Intel GPU (UHD G1, i3-1005G1) in Chromium at 2736x1824: draw-call and
+- [x] Q9 → research/Q9-threejs-integrated-gpu.md (thin: no measured iGPU numbers; adaptive pixel ratio is the main lever). three.js on an integrated Intel GPU (UHD G1, i3-1005G1) in Chromium at 2736x1824: draw-call and
   sprite budgets for 30-60 fps, instanced meshes vs many sprites, names as canvas-texture sprites vs a 2D
   overlay vs SDF text, how to measure script ms and GPU time per frame (timer queries), and how to avoid
   memory growth over hours (dispose rules, texture caches) — for T6, T10
