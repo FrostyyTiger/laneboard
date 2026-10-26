@@ -573,7 +573,7 @@ Notes for every builder round (planner, round 1):
   next flake fixable, `loop/run.sh` (fenced) `check()` could add `✖` to the `TEST_TAIL` grep, take the
   lines after `failing tests:` rather than `head -40`, and save `$out` to `$RUN_DIR`.
 - Round 40 (fix): the same unnamed `Error: socket hang up` came back after round 39 (third time this
-  night: the tests score was 0.9997 after rounds 4, ~30 and 39). Round 39 touched only client code
+  night: the tests score was 0.9997 after rounds 4, 31 and 39). Round 39 touched only client code
   (`public/js/wall/galaxy/*`, one Wall test). On e985d80 a full `npm test` came back 3880/3880 green,
   and four parallel runs of the 33 test files that use `node:http`/WebSocket/`net` came back green
   too, so nothing was changed on a guess. The `run.sh` change above is what would name the test.
