@@ -666,6 +666,33 @@ Notes for every builder round (planner, round 1):
   brackets stay as the only hard lines; the beacon's sheath fades to zero over its top 20 % (`scene.js`) — done
   when: a test pins the mask (or no ground) on both plates in `wall.css` and the sheath's tip alpha, and a still
   of `?at=hv2&fx=beacon&quality=0` shows no straight cut through a nebula.
+- [ ] T39 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r59-dreamer.md galaxy 1) Flights are dead air: at 20.7 s
+  the whole frame is black with one hairline under a red banner, at 13 s a cursor and a grey ball in nothing,
+  so "the screen lost the crit". In `camera.js flightPose` the look-at moves from the start target to the
+  destination (never at empty sky) and the pose keeps at least one of the two ends in frame all along (with
+  T36's clearance from other clusters) — done when: a test shows `flightPose` over every site pair of the large
+  fixture keeps the start or the target star inside the projected frame at every step, and a film of
+  `galaxy.html?demo=1&quality=0` shows no frame in a flight without a cluster or the sun.
+- [ ] T40 (§7.B, §2.2) [ui] [variant:galaxy] (reviews/r59-dreamer.md galaxy 2; = r54-film-ui 11, r15-dreamer 9,
+  asked three times) The overview no longer says galaxy: five grey crumbs and a black disc. In `scene.js`, at
+  the overview only, a faint arm ribbon along `armPoint` (4-6 % luminance, under the dust, never above
+  `--text-3`) that fades out as a system opens; one still shape, no motion — done when: a test shows the
+  ribbon's opacity is 0 for an open system and in (0.04, 0.06) at the fit, its colour from a token, and
+  `?at=overview&quality=0` shows two arms and the dust band with the crit nebulae still the brightest things.
+- [ ] T41 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r59-dreamer.md galaxy 5) The beacon is a stub: two red
+  sticks ~60 px tall in the same red as the nebula behind, and a young crit gets the least pillar when
+  noticing it matters most. In `fx.js` beacon give the pillar a floor of ~0.25 of the frame height at the
+  overview, a white-hot core at its base (also r49-accessibility fx, for greyscale), and let age show as width
+  or rings on the shaft, not only height — done when: a test pins the floor in screen terms at the
+  overview, the core colour, and that age changes width as well as height (monotonic), and a still of
+  `?at=overview&quality=0&fx=beacon` shows the pillar clearly apart from the nebula.
+- [ ] T42 (§7.C, fx) [ui] [variant:galaxy] (reviews/r59-dreamer.md unforgettable 1) `fx=warp`: during a flight
+  the near dust and far stars stretch into short streaks along the direction of travel, tinted toward the
+  destination's status (grey for calm, a faint amber/red edge for trouble), and snap back to points on arrival
+  (meaning: "the camera is going to trouble", visible one second before the caption). Off by default, reduced
+  motion: none; thin the near-plane dust during the flight — done when: a test maps flight progress and
+  destination tone to streak length and tint (zero outside a flight, zero for still mode, none without
+  `?fx=warp`), and filmstrips with and without `?fx=warp` show streaks only with it.
 
 ## Research questions
 
@@ -807,6 +834,17 @@ Notes for every builder round (planner, round 1):
 - §7.C (r54-film-ui fx) `fx=beacon` dims to the open level while the camera flies close to it (with T36).
 - §7.B Polish (tour pacing, camera paths, how far a system opens, nebula shapes and colours, the sun, the
   dust, type at 3 m): triage turns at most 3 findings per review into tasks; the rest land here.
+- §7.B (r59-dreamer 3) Every planet is the same grey ball: radius from what it holds (log of children or cpu
+  cores), two or three grey values by kind (host lighter, room mid, service darker), no hue.
+- §7.B (r59-dreamer 4) The tether is 1 px and ends in air: 2 px, landing on the glyph, a slow travelling tick
+  from cluster to banner every ~4 s while the crit lasts (= r54-film-ui 12).
+- §7.B (r59-dreamer 6) Calm holds are a name in an empty room: frame the system centred with T25's short plate
+  (= r54-film-ui 8), give the hold one living thing.
+- §7.B (r59-dreamer 7) A cleared crit (T30) reads as present, in the loudest red at banner size: `--text-2`,
+  red glyph only, one step smaller; the place keeps a faint outline (`afterglow`, For the owner).
+- §7.B (r59-dreamer 8) Labels hit the frame (`HOME` cut at the corner, `bc` by the brackets): `placeLabels`
+  treats the frame's safe margin and caption corner brackets as covers (the rest is T31).
+- §7.B (r59-dreamer 4, banner part) held by T37.
 - §7.C `fx=storm`: a crit nebula as a slow storm (swirl, flicker of lightning).
 - §7.C `fx=lights`: feed `glow` colours its planet's halo in the light's real colour.
 - §7.C `fx=rings`: feed `ring` (a print job) as a ring of light filling round its planet.
@@ -867,6 +905,13 @@ Notes for every builder round (planner, round 1):
 - (r54-film-ui, fx) `lanes`, `comets` and `twinkle` are invisible in every sheet and still, so they are calm but not
   effects. Idea: a comet's landing flashes the target planet once; a lane pulse brightens its hyperlane by a step while
   it passes. Taste question, not turned into a task: keep, rework or drop them?
+- fx candidate (r59-dreamer): `fx=corona`: the sun's soft corona swells once per `/ws` map frame; when frames
+  stop it shrinks, goes cold flat grey and the tag reads `STALE 2M`. A dead feed otherwise looks like a calm fleet.
+  (Arguably a bug against §2: the stale feed is not visible from 3 m; the owner decides if it is an fx or core.)
+- fx candidate (r59-dreamer): `fx=blast`: while a crit is held, faint red threads from the crit node to every
+  node that depends on it (its `links`), those planets with a faint red rim: the blast radius.
+- (`fx=warp` from r59-dreamer became T42.)
+- (r59-dreamer) Taste: lanes/comets/twinkle scored wow 2-3 again (invisible in every frame); see the r54 line above.
 - (r31-touch 5) The far fleet line's `+3 MORE` is 10 px mono: unreadable at 3 m and too small to tap. Making
   it a 48 px chip needs fenced `frame.js`; for night 3 a tap on the fleet line should also fly to its node.
 
@@ -906,6 +951,9 @@ Notes for every builder round (planner, round 1):
   tasks (T36 flight through clusters = 3, T37 two headlines = 1, T38 hard-edged plates + beacon tip = 2 and fx);
   4/5/6/7/8/9/10/11/12 under Later (10 = r26-skeptic 4, covered in part by T31), the lanes/comets/twinkle note
   under For the owner. No `fx` proposals.
+- r59-dreamer.md: 8 galaxy findings + fx notes + 3 m check (yes for whether/where, no for wow), 3 became tasks
+  (T39 dead-air flights = 1, T40 arm ribbon = 2, T41 beacon stub = 5); 3/4/6/7/8 under Later (4 banner part held by
+  T37, 8 mostly T31). 3 `fx` proposals: `warp` became T42, `corona` and `blast` under For the owner.
 
 ## Scores
 
@@ -938,5 +986,10 @@ Notes for every builder round (planner, round 1):
 | 54 | film-ui (fx-comets) | - | - | - | - | 3 | 7 | - |
 | 54 | film-ui (fx-twinkle) | - | - | - | - | 2 | 9 | - |
 | 54 | film-ui (fx-beacon) | - | - | - | - | 7 | 6 | - |
+| 59 | dreamer (galaxy) | 6 | 7 | 7 | 3 | 5 | 6 | 6 |
+| 59 | dreamer (fx-lanes) | - | - | - | - | 2 | 8 | - |
+| 59 | dreamer (fx-comets) | - | - | - | - | 3 | 7 | - |
+| 59 | dreamer (fx-twinkle) | - | - | - | - | 2 | 8 | - |
+| 59 | dreamer (fx-beacon) | - | - | - | - | 5 | 7 | - |
 
 ## Morning
