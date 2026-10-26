@@ -104,7 +104,7 @@ Notes for every builder round (planner, round 1):
   EVE Online's map, No Man's Sky's galaxy map): how do they show the state, trouble and activity of many
   systems at a glance, and how do they move the camera between systems? 2-3 concrete proposals for the
   galaxy (what it shows, what it means, a cost guess) the planner can turn into `fx` tasks — for Later (fx)
-- [ ] Q8 IDEAS: Sci-fi interface practitioners' write-ups (film and game UI studios) and data-art or
+- [x] Q8 → research/Q8-alive-without-meaningless-motion.md (best: `fx=fade`; then `fx=miss`, `fx=pulse`). IDEAS: Sci-fi interface practitioners' write-ups (film and game UI studios) and data-art or
   generative pieces that show live systems (network traffic, infrastructure, sensor feeds): what would make
   a 3D fleet galaxy feel alive without moving meaninglessly? 2-3 concrete proposals (what, meaning, cost) —
   for Later (fx)
