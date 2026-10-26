@@ -165,11 +165,13 @@ export function createLabels(root, galaxy, { steps, covers = () => [], doc = glo
   const pool = new Map(); // id → { el, text, tone, size, x, y, alpha }
   let last = new Map();
   const v = new THREE.Vector3();
-  // Every id the world names, made again when the galaxy is laid out again.
-  let idsWorld = null, ids = new Set();
+  // Every id the world names, made again when the galaxy is laid out again
+  // (a new world, or a new version of it: scene.js T8 swaps members in place).
+  let idsWorld = null, idsVersion = null, ids = new Set();
   const idsOf = (w) => {
-    if (w !== idsWorld) {
+    if (w !== idsWorld || w.version !== idsVersion) {
       idsWorld = w;
+      idsVersion = w.version;
       ids = new Set(w.core ? [w.core.id] : []);
       for (const s of w.sites) { ids.add(s.id); for (const m of s.members) ids.add(m.id); }
     }
@@ -231,7 +233,10 @@ export function createLabels(root, galaxy, { steps, covers = () => [], doc = glo
 
     if (w.core) add(w.core.id, w.core, { x: 0, y: 0, z: 0 }, w.sunRadius ?? 60, 1, 'core');
     for (const s of w.sites) {
-      const k = Math.max(0, Math.min(1, s.open));
+      // A site growing in or shrinking away is named from half its size.
+      if ((s.alive ?? 1) < 0.5) continue;
+      // How open it is drawn: the camera's opening, times a relayout's fold (scene.js).
+      const k = Math.max(0, Math.min(1, s.unfold ?? s.open));
       const fade = Math.max(0, Math.min(1, (k - OPEN_FADE.from) / (OPEN_FADE.to - OPEN_FADE.from)));
       // Folded, the site's name carries the worst of what it holds (its
       // nebula's tone); open, each thing in trouble names itself.
