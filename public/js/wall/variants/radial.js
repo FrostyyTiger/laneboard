@@ -51,9 +51,9 @@ export const IN_SITE = 1.25;
 export const STEPS = Object.freeze({ site: 35, room: 15 });
 
 /**
- * The steps islands and mosaic are spaced for (round 11's 26 / 15):
- * their layouts measure names at these sizes, so they keep them until their
- * own task moves them to type.js.
+ * The steps mosaic is spaced for (round 11's 26 / 15):
+ * its layout measures names at these sizes, so it keeps them until its
+ * own task (T49) moves them to type.js.
  */
 export const BASE_STEPS = Object.freeze({ site: 26, room: 15 });
 

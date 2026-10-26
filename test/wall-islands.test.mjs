@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { installDom, el } from './helpers/fake-map-dom.mjs';
 import { polarLayout } from '../public/js/views/map/layout.js';
 import {
-  layoutFor, island, shapeOf, clearOf, arrange, labelSize, optionsFor, mapOptions, ambient, SAFE, SIZES, ASPECT,
+  layoutFor, island, shapeOf, clearOf, arrange, labelSize, optionsFor, mapOptions, ambient, SAFE, SIZES, ASPECT, sizesFor, siteNameW,
 } from '../public/js/wall/variants/islands.js';
 import { VARIANTS, mapOptionsFor } from '../public/js/wall/variants.js';
 
@@ -79,7 +79,7 @@ for (const [name, aspect] of [['3:2', 3 / 2], ['16:9', 16 / 9]]) {
     for (const g of lay.guides) {
       inside(screen({ x: g.x - g.rx, y: g.y }), 'a coastline\'s west end');
       inside(screen({ x: g.x + g.rx, y: g.y }), 'its east end');
-      inside(screen({ x: g.x, y: g.y - g.ry - SIZES.title }), 'its name');
+      inside(screen({ x: g.x, y: g.y - g.ry - sizesFor().title }), 'its name');
       inside(screen({ x: g.x, y: g.y + g.ry }), 'its south end');
     }
     assert.equal(lay.guides.length, SITES.length, 'one coastline per site, none round the hub');
@@ -236,10 +236,63 @@ test('islands registered: options for the screen\'s aspect, no turn, every place
   assert.ok(wide.x / wide.y > tablet.x / tablet.y, 'a wider screen, a wider view');
   assert.equal(mapOptionsFor(v, NaN).layout, mapOptions.layout, 'no aspect: the tablet\'s');
   // The radial steps; a place's name centred on its coastline, the repo index's at the room step.
-  assert.deepEqual(labelSize({ id: 'hv1', kind: 'site' }), { px: 26, inward: true });
+  assert.deepEqual(labelSize({ id: 'hv1', kind: 'site' }), { px: 35, inward: true });
   assert.deepEqual(labelSize({ id: '__repos', kind: 'site' }), { px: 15, inward: true });
   assert.equal(labelSize({ id: 'r', kind: 'room' }), 15);
   assert.equal(labelSize({ id: 's', kind: 'service' }, { s: 1 }), 0);
   assert.equal(labelSize({ id: 's', kind: 'service' }, { s: 1, trouble: true }), 15);
   assert.equal(labelSize({ id: '__core', kind: 'core' }), 0);
 });
+
+test('islands type steps from the screen: the tablet 35 / 15, a desk monitor 26 / 11, the title strip sized for them', () => {
+  const tablet = optionsFor(1.5, { dpr: 2 }), desk = optionsFor(1.5, { dpr: 1 });
+  assert.equal(tablet.labelSize, labelSize, 'the tablet\'s steps are the default');
+  assert.deepEqual(tablet.labelSize({ id: 'hv1', kind: 'site' }), { px: 35, inward: true });
+  assert.deepEqual(desk.labelSize({ id: 'hv1', kind: 'site' }), { px: 26, inward: true });
+  assert.equal(desk.labelSize({ id: 'r', kind: 'room' }), 11);
+  assert.deepEqual(desk.labelSize({ id: '__repos', kind: 'site' }), { px: 11, inward: true });
+  assert.ok(!tablet.pinLabels, 'nothing turns: names keep the layout\'s side, not the first frame\'s line');
+  assert.equal(sizesFor({ site: 26, room: 15 }), SIZES, 'round 11\'s steps: the sizes as they were');
+  assert.equal(sizesFor({ site: 35, room: 15 }).title, 22);
+  assert.ok(siteNameW({ label: 'cloud' }, { site: 35, room: 15 }) > siteNameW({ label: 'cloud' }, { site: 26, room: 15 }));
+});
+
+for (const steps of [{ site: 35, room: 15 }, { site: 26, room: 11 }, { site: 26, room: 15 }]) {
+  test(`islands at ${steps.site} / ${steps.room}: site names inside the view and clear of each other, room names clear in their rows`, () => {
+    const nodes = fleet();
+    const lay = layoutFor(ASPECT, undefined, steps)(nodes);
+    const sizes = sizesFor(steps);
+    const { x: bx, y: by, cy } = lay.bounds;
+    const H = 912, W = H * ASPECT;
+    const s = Math.min(W / (2 * bx), H / (2 * by));
+    // Each site's name on screen: centred on the top of its coastline, its width at the site step, its line 1.28 em.
+    const titles = SITES.map((id) => {
+      const at = lay.pos.get(id).labelAt;
+      const x = W / 2 + at.x * s, y = H / 2 + (at.y - cy) * s;
+      const px = id === '__repos' ? steps.room : steps.site;
+      const w = siteNameW({ label: id === '__repos' ? 'REPOS' : id }, { site: px }) / 2;
+      return { id, x0: x - w, x1: x + w, y0: y - px * 0.64, y1: y + px * 0.64 };
+    });
+    for (const t of titles) {
+      assert.ok(t.x0 >= W * SAFE.side - 1 && t.x1 <= W * (1 - SAFE.side) + 1, `${t.id}'s name inside the sides`);
+      assert.ok(t.y0 >= H * SAFE.top * 0.5, `${t.id}'s name clear of the top edge`);
+      for (const u of titles) {
+        if (u === t) continue;
+        assert.ok(t.x1 <= u.x0 || u.x1 <= t.x0 || t.y1 <= u.y0 || u.y1 <= t.y0, `${t.id}'s name clear of ${u.id}'s`);
+      }
+    }
+    // The title strip holds the name: shapeOf's strip as wide as the name at this step.
+    for (const id of ['hv1', 'cloud', 'home']) {
+      const isle = island(nodes.find((n) => n.id === id), kidsOf(nodes), sizes, steps);
+      const sh = shapeOf(isle, sizes, steps);
+      assert.ok(sh.title.x1 - sh.title.x0 >= siteNameW({ label: id }, steps), `${id}'s strip holds its name`);
+      assert.ok(sh.title.y1 - sh.title.y0 >= 2 * Math.round(0.62 * steps.site), `${id}'s strip a line of the site step tall`);
+      // Room names flush left under their marks: each word wide enough for its name at the room step.
+      for (const row of isle.rows) for (const w of row) {
+        if (w.site) continue;
+        const name = String(w.node.label ?? w.node.id).length * (0.44 * steps.room + Math.max(1, Math.round(steps.room * 0.06)));
+        assert.ok(w.w - sizes.word >= name - sizes.mark - 1e-6, `${w.node.id}'s name fits its word`);
+      }
+    }
+  });
+}

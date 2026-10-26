@@ -18,14 +18,17 @@
 // a gap on the glass and the names (set in px) take the room counted for
 // them. A fleet too big for that fits smaller.
 //
-// Labels are the radial direction's steps (sites big, rooms one step
-// down, services dots at the overview); the Map's rings are off and the
+// Labels are the radial direction's (sites big, rooms one step down,
+// services dots at the overview) on the steps type.js gives the screen
+// (35 / 15 on the tablet); the names are measured
+// and the title strips sized at those steps. The Map's rings are off and the
 // coastlines are the layout's `guides`. No turn: islands that turn leave
 // the screen.
 //
 // Pure: no DOM, so test/wall-islands.test.mjs imports it directly.
 
-import { baseLabelSize as radialLabelSize, BASE_STEPS as STEPS } from './radial.js';
+import { labelSizeFor, STEPS } from './radial.js';
+import { stepsFor, pxPerMm } from '../type.js';
 
 /** The tablet's 2736 x 1824: what the layout stretches to when nobody says. */
 export const ASPECT = 3 / 2;
@@ -66,10 +69,26 @@ const LOUD_KINDS = new Set(['lane', 'session', 'run']);
  * character takes about 0.44 em (`OFFICE-PRINTER` measures 97 px at 15 px
  * on the tablet), plus the Map's tracking.
  */
-const nameW = (n) => String(n?.label ?? n?.id ?? '').length * (0.44 * STEPS.room + Math.max(1, Math.round(STEPS.room * 0.06)));
+const charW = (px) => 0.44 * px + Math.max(1, Math.round(px * 0.06));
+const nameW = (n, steps) => String(n?.label ?? n?.id ?? '').length * charW(steps.room);
 
 /** A site's name width at the site step (the same condensed face). */
-const siteNameW = (n) => String(n?.label ?? n?.id ?? '').length * (0.44 * STEPS.site + Math.max(1, Math.round(STEPS.site * 0.06)));
+export function siteNameW(n, steps) {
+  return String(n?.label ?? n?.id ?? '').length * charW((steps ?? STEPS).site);
+}
+
+/**
+ * `sizes` for type `steps`: the title strip (half the site name's line, it
+ * sits on the coastline) as tall as the site step needs, 0.62 of it (16 at
+ * round 11's 26 px, 22 at the tablet's 35), never less than `sizes.title`.
+ * The rest does not depend on the steps: `below` and the dots are counted for
+ * the room step's 15 px, the largest any screen gets.
+ */
+export function sizesFor(steps, sizes = SIZES) {
+  steps ??= STEPS;
+  const title = Math.max(sizes.title, Math.round(0.62 * steps.site));
+  return title === sizes.title ? sizes : Object.freeze({ ...sizes, title });
+}
 
 /** The proportions an island is set to: wider than tall, as the screen is. */
 const ISLE_ASPECT = 2;
@@ -103,7 +122,7 @@ function tree(nodes) {
  * as its dots (depth first), then each named thing under it (a builder in a
  * room) as a word of its own, right after it.
  */
-function wordsOf(n, kids, seen, sizes, out) {
+function wordsOf(n, kids, seen, sizes, steps, out) {
   const dots = [];
   const named = [];
   const walk = (p) => {
@@ -121,12 +140,12 @@ function wordsOf(n, kids, seen, sizes, out) {
   // A lane in trouble is named above its dot, the names of neighbouring
   // dots a line apart: room for up to three of those lines.
   const loud = Math.min(3, dots.filter((d) => LOUD_KINDS.has(d.kind)).length);
-  const w = Math.max(nameW(n), dots.length ? sizes.dotX + (across - 0.5) * sizes.dot : 0) + sizes.mark + sizes.word;
+  const w = Math.max(nameW(n, steps), dots.length ? sizes.dotX + (across - 0.5) * sizes.dot : 0) + sizes.mark + sizes.word;
   const up = Math.max(sizes.mark, lines ? 6 + (lines - 1) * sizes.dot : 0) + (loud ? sizes.named + (loud - 1) * sizes.line : 0);
   // A builder's name carries its lamps on a second line.
   const down = sizes.below + (n.kind === 'builder' ? sizes.lamps : 0);
   out.push({ node: n, dots, w, up, down });
-  for (const c of named) wordsOf(c, kids, seen, sizes, out);
+  for (const c of named) wordsOf(c, kids, seen, sizes, steps, out);
   return out;
 }
 
@@ -136,13 +155,13 @@ function wordsOf(n, kids, seen, sizes, out) {
  * middle. A word is `{node, dots, w, up}`: `w` the width it takes with the
  * space after it, `up` how far it reaches above its centre.
  */
-function words(site, kids, sizes) {
+function words(site, kids, sizes, steps) {
   const seen = new Set([site.id]);
   const list = [];
   for (const c of kids.get(site.id) ?? []) {
     if (seen.has(c.id)) continue;
     seen.add(c.id);
-    wordsOf(c, kids, seen, sizes, list);
+    wordsOf(c, kids, seen, sizes, steps, list);
   }
   const mid = Math.floor(list.length / 2);
   list.splice(mid, 0, { node: site, dots: [], w: sizes.site, up: sizes.mark, down: sizes.below, site: true });
@@ -166,10 +185,12 @@ function fill(ws, R, lens) {
  * One island around its site, in px with the site's mark at (0, 0) give or
  * take: `{ site, rows, place: Map id -> {x, y, dot, of}, coast: {x, y, rx, ry}, box: {x0, y0, x1, y1} }`.
  * Rows are tried from one to many; each takes the narrowest lens that holds
- * the words, and the island with the smallest coastline wins.
+ * the words, and the island with the smallest coastline wins. `steps` are
+ * the label sizes (px) the names are measured at.
  */
-export function island(site, kids, sizes = SIZES) {
-  const ws = words(site, kids, sizes);
+export function island(site, kids, sizes = SIZES, steps) {
+  steps ??= STEPS;
+  const ws = words(site, kids, sizes, steps);
   const total = ws.reduce((s, w) => s + w.w, 0);
   const widest = Math.max(...ws.map((w) => w.w));
   let best = null;
@@ -267,13 +288,13 @@ const hOf = (b) => b.y1 - b.y0;
  * its coastline (the hub: a circle round its box) and the site name's
  * line on top of it (`title`, a box, or null).
  */
-export function shapeOf(isle, sizes = SIZES) {
+export function shapeOf(isle, sizes = SIZES, steps) {
   const b = isle.box;
   if (!isle.coast) {
     return { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2, rx: wOf(b) / 2, ry: hOf(b) / 2, title: null, box: b };
   }
   const c = isle.coast;
-  const tw = (siteNameW(isle.site) + 16) / 2;
+  const tw = (siteNameW(isle.site, steps) + 16) / 2;
   return {
     x: c.x, y: c.y, rx: c.rx, ry: c.ry, box: b,
     title: { x0: c.x - tw, x1: c.x + tw, y0: c.y - c.ry - sizes.title, y1: c.y - c.ry + sizes.title },
@@ -413,26 +434,29 @@ function shapeKey(nodes) {
  * `{ pos, center, kids, guides, bounds }`. No branches inside an island
  * (`branch: 'none'`); each room's name flush left under it
  * (`labelAngle` straight down), a dot's name above it, the site's name on
- * its coastline (`labelAt`).
+ * its coastline (`labelAt`). `steps`: the label sizes the names are
+ * measured and the title strips sized for (type.js `stepsFor`).
  */
-export function layoutFor(aspect = ASPECT, sizes = SIZES) {
+export function layoutFor(aspect = ASPECT, sizes, steps) {
   const A = Number.isFinite(aspect) && aspect > 0 ? aspect : ASPECT;
   // The search runs again only when the tree or a name changes, not on
   // every model frame (a status is no reason to move an island).
   let memo = null;
   return function layout(nodes) {
+    steps ??= STEPS;
+    sizes ??= sizesFor(steps);
     const { kids, center } = tree(nodes);
     const key = shapeKey(nodes);
     if (memo && memo.key === key) return { pos: memo.pos, center, kids, guides: memo.guides, bounds: memo.bounds };
     const top = kids.get(center.id) ?? [];
     const sites = top.filter((n) => PLACE.has(n.kind));
     const inner = top.filter((n) => !PLACE.has(n.kind));
-    const isles = sites.map((s) => island(s, kids, sizes));
+    const isles = sites.map((s) => island(s, kids, sizes, steps));
     // The hub sits among the islands, in the middle of the order.
     isles.splice(Math.floor(isles.length / 2), 0, hubIsland(center, inner, sizes));
     const fh = REF_H * (1 - SAFE.top - SAFE.bottom);
     const fw = REF_H * A * (1 - 2 * SAFE.side);
-    const { W, H, at } = arrange(isles.map((i) => shapeOf(i, sizes)), fw, fh, sizes);
+    const { W, H, at } = arrange(isles.map((i) => shapeOf(i, sizes, steps)), fw, fh, sizes);
     const pos = new Map();
     const guides = [];
     isles.forEach((isle, i) => {
@@ -466,18 +490,34 @@ export function layoutFor(aspect = ASPECT, sizes = SIZES) {
 export const layout = layoutFor(ASPECT);
 
 /**
- * The radial direction's steps, with every place's name on its coastline
- * (the hub's grouping `__repos` too, at the room step).
+ * The radial direction's labelSize on `steps`, with every place's name on
+ * its coastline (the hub's grouping `__repos` too, at the room step).
  */
-export function labelSize(node, ctx = {}) {
-  const v = radialLabelSize(node, ctx);
-  if (PLACE.has(node?.kind) && typeof v === 'number' && v > 0) return { px: v, inward: true };
-  return v;
+export function labelSizeOn(steps) {
+  let radial = null;
+  return function labelSize(node, ctx = {}) {
+    radial ??= labelSizeFor(steps ?? STEPS);
+    const v = radial(node, ctx);
+    if (PLACE.has(node?.kind) && typeof v === 'number' && v > 0) return { px: v, inward: true };
+    return v;
+  };
 }
 
-/** The Map's options for a screen of `aspect`, next to the page's `ambient`. */
-export function optionsFor(aspect = ASPECT) {
-  return { layout: layoutFor(aspect), labelSize, rings: false };
+/** The tablet's labelSize. */
+export const labelSize = labelSizeOn();
+
+/**
+ * The Map's options for a screen of `aspect`, next to the page's `ambient`:
+ * the type steps from `screen`'s density (type.js `screenOf`; the tablet's
+ * without one), the islands measured for them. No `pinLabels`: nothing
+ * turns here and every name has its side from the layout; pinned, the line
+ * the collision pass gave a name in the first frames (the camera still
+ * flying in) stayed, and names stood a row or two off their marks (round 39).
+ */
+export function optionsFor(aspect = ASPECT, screen) {
+  const steps = screen ? stepsFor(pxPerMm(screen)) : undefined;
+  const same = !steps || (steps.site === STEPS.site && steps.room === STEPS.room);
+  return { layout: layoutFor(aspect, undefined, steps), labelSize: same ? labelSize : labelSizeOn(steps), rings: false };
 }
 
 /** What `createMap` takes for this direction at the tablet's aspect. */
