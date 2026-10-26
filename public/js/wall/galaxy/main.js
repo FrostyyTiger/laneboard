@@ -16,6 +16,8 @@
 // Reduced motion (T11, D5, still.js): no flights, no turn, no drift; the
 // overview with every cluster folded and the caption rotating through the
 // sites, trouble first.
+// Effects (§7.C, fx.js): `?fx=lanes` (comma-separated, all off by default);
+// `<html data-fx>` lists those on.
 
 import { createPerf } from '../perf.js';
 import { createTour, timingFor, tourOrder } from '../tour.js';
@@ -32,6 +34,7 @@ import { paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { prefersStill, stillTourTimingFor } from './still.js';
+import { parseFx, siteRoutes } from './fx.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -46,6 +49,8 @@ export function boot() {
   const palette = paletteFrom((name) => style.getPropertyValue(name));
   const reduced = prefersStill();
   if (reduced) page.dataset.motion = 'still';
+  const fx = parseFx(q);
+  if (fx.size) page.dataset.fx = [...fx].join(' ');
   // No WebGL here: the 2D page instead (islands with trouble tiles).
   const toFallback = (why) => {
     page.dataset.webgl = '0';
@@ -55,7 +60,7 @@ export function boot() {
   if (!hasWebGL(() => document.createElement('canvas'))) { toFallback('no context'); return; }
   let galaxy;
   try {
-    galaxy = createGalaxyScene(canvas, { palette, still: reduced });
+    galaxy = createGalaxyScene(canvas, { palette, still: reduced, fx });
   } catch (err) {
     toFallback(err);
     return;
@@ -159,6 +164,7 @@ export function boot() {
     if (!model || typeof model !== 'object') return;
     have = true;
     galaxy.update(model);
+    if (fx.has('lanes')) galaxy.setRoutes(siteRoutes(model, galaxy.world?.byId.keys() ?? []));
     hud.update(model);
     tour.update(model);
     if (!park) tour.start();

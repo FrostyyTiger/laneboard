@@ -21,6 +21,7 @@ import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
 import { LEVELS } from './budget.js';
 import { breathWave, dustTurn } from './still.js';
+import { LANES, pulseAt, routePath, trackRoutes } from './fx.js';
 
 /** World sizes: the sun, a site's star, a planet (named kind), a dot (the rest). */
 export const SIZE = Object.freeze({ sun: 60, sunHalo: 900, star: 24, planet: 15, dot: 4, landing: 7 });
@@ -144,11 +145,12 @@ const pageClock = () => globalThis.performance.now();
  * sprite textures; `clock` is the time the eases count in (the frames'
  * `now`), `makeRenderer` the WebGL renderer (both injectable for tests).
  * `still` (reduced motion, still.js): trouble glows without breathing, the dust stays put.
- * Returns `{ update, setOpen, frame, resize, setQuality, camera, world, quality, renderer, dispose }`.
+ * `fx` (fx.js `parseFx`): the effects asked for; `lanes` draws `setRoutes`' pulses.
+ * Returns `{ update, setOpen, setRoutes, frame, resize, setQuality, camera, world, quality, renderer, dispose }`.
  */
 export function createGalaxyScene(canvas, {
   palette, doc = globalThis.document, dpr = globalThis.devicePixelRatio || 1,
-  clock = pageClock, makeRenderer = webgl, still = false,
+  clock = pageClock, makeRenderer = webgl, still = false, fx = null,
 } = {}) {
   const col = (rgb) => new THREE.Color().setRGB(rgb[0], rgb[1], rgb[2], THREE.SRGBColorSpace);
   const tone = Object.fromEntries(TONES.map((t) => [t, col(palette[t])]));
@@ -558,6 +560,59 @@ export function createGalaxyScene(canvas, {
     camera.updateProjectionMatrix();
   };
 
+  // --- fx=lanes (T12, fx.js): a light pulse between two sites that talk ----
+  // One pool of sprites (a head and its trail per route), made once and
+  // reused; each route's path is read off the two hyperlanes every frame,
+  // so it follows a star that glides. Under reduced motion the route is a
+  // still row of faint lights instead of a moving pulse.
+  let routes = new Map();
+  const pulses = [];
+  const perRoute = 1 + LANES.trail;
+  if (fx?.has('lanes')) {
+    const light = col(palette.sun);
+    for (let i = 0; i < LANES.maxRoutes * perRoute; i++) {
+      const sp = new THREE.Sprite(keep(new THREE.SpriteMaterial({
+        map: glowTex, color: light, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+      })));
+      sp.name = 'fx-lane';
+      sp.visible = false;
+      pulses.push(sp);
+      scene.add(sp);
+    }
+  }
+  /** The live routes (fx.js `siteRoutes`); ignored unless `fx=lanes`. */
+  const setRoutes = (list) => {
+    if (!pulses.length) return;
+    routes = trackRoutes(routes, list, clock());
+  };
+  const lanePoints = (s) => s.lane.geometry.attributes.position?.array ?? null;
+  const drawPulses = (now) => {
+    for (const sp of pulses) sp.visible = false;
+    let r0 = 0;
+    for (const [key, r] of routes) {
+      const at = pulseAt(r, now);
+      if (at === undefined) { routes.delete(key); continue; }
+      const a = world?.byId.get(r.from), b = world?.byId.get(r.to);
+      const pa = a && !a.gone && lanePoints(a), pb = b && !b.gone && lanePoints(b);
+      if (!pa || !pb || (!still && at === null)) { r0 += perRoute; continue; }
+      const path = routePath(pa, pb);
+      for (let i = 0; i < perRoute; i++) {
+        const sp = pulses[r0 + i];
+        if (!sp) break;
+        // Still: an even row of faint lights; moving: the head and a fading trail behind it.
+        const u = still ? (i + 0.5) / perRoute : at.u - i * LANES.gap;
+        if (u < 0) continue;
+        const fall = still ? 0.45 : (1 - i / perRoute) * at.k;
+        const p = path.at(u);
+        sp.position.set(p.x, p.y, p.z);
+        sp.scale.setScalar(LANES.head * (still ? 0.6 : 1 - (0.5 * i) / perRoute));
+        sp.material.opacity = LANES.opacity * fall;
+        sp.visible = sp.material.opacity > 0.01;
+      }
+      r0 += perRoute;
+    }
+  };
+
   /** One frame at `now` (ms): trouble breathes, the dust drifts, then draw. */
   const frame = (now) => {
     resize();
@@ -573,6 +628,7 @@ export function createGalaxyScene(canvas, {
     }
     // The dust turns once in about 26 minutes: alive under a held camera, never a motion you notice.
     dust.rotation.y = dustTurn(now, still);
+    if (pulses.length) drawPulses(now);
     renderer.render(scene, camera);
   };
 
@@ -608,8 +664,9 @@ export function createGalaxyScene(canvas, {
   };
 
   return {
-    update, setOpen, frame, resize, setQuality, camera, renderer, dispose,
+    update, setOpen, setRoutes, frame, resize, setQuality, camera, renderer, dispose,
     get world() { return world; },
     get quality() { return quality; },
+    get routes() { return routes; },
   };
 }
