@@ -207,10 +207,25 @@ Notes for every builder round (planner, round 1):
   STORAGE (crit) → FEAT-SEARCH → REMOTE/CLOUD/HOME → overview → STORAGE; 0 console errors. Seen (for T19,
   worse here since the camera never leaves the overview): HV2, the crit site, lies under its own caption
   plate, and CLOUD under the far fleet block (its lock brackets land on the fleet line's text).
-- [ ] T12 (§7.C) [ui] [variant:galaxy] `galaxy/fx.js`: `parseFx(search)` (comma-separated, unknown names
+- [x] T12 (§7.C) [ui] [variant:galaxy] `galaxy/fx.js`: `parseFx(search)` (comma-separated, unknown names
   ignored, all off by default, D9) and the first effect, `lanes`: a light pulse along a hyperlane while a
   link between two sites is live — done when: a test covers `parseFx` (none by default, `?fx=lanes,bogus` →
   `lanes`), and two filmstrips, with and without `?fx=lanes`, show the pulse only with it.
+  (commit 551ddc5) `galaxy/fx.js`: `FX_NAMES`, `parseFx` (also repeated `fx=`, any case), `LANES` timing,
+  `siteRoutes(model, sites)`, `trackRoutes`, `pulseAt`, `routePath`. **Live** (decision: the large demo has
+  no `live: true` link between sites, only flow events): a link with `live: true`, or one an event travelled
+  (`event.link`, by id or `from>to`) less than 20 s ago by the model's `generatedAt`; one route per site pair.
+  The pulse runs from the source star in along its hyperlane, through the sun, out to the target (no new
+  line on screen), 4.8 s eased + 1.6 s rest, head + 7-sprite trail in `--text-1` grey at ≤ 0.6 opacity,
+  additive: quieter than any nebula. Routes already running keep their place (max 6, no churn); a route the
+  model drops lands its pulse first. Reduced motion: a still row of faint lights. `scene.js` takes
+  `fx` (default off: no sprite made), `setRoutes`; `main.js` feeds it every model; `<html data-fx>`.
+  Tests `test/wall-galaxy-fx.test.mjs` (10). Filmstrips `$RUN_DIR/shots/r25-galaxy-lanes/` and
+  `r25-galaxy-off/` (`?demo=1&quality=0`, 0 console errors either); the pulse is small on the 12-frame sheet,
+  so `$RUN_DIR/shots/r25-pulse/pulse-*.png` (probe `$RUN_DIR/tools/pulseprobe.mjs`, overview, 2x) show it
+  on the HV1 → sun lane under the red/amber trouble; the probe logged routes `home>lab`, `lab>hv2`,
+  `lab>cloud` coming and going with the demo's flow events. Meaning for `docs/wall.md` (E): "a grey light
+  running between two systems: they are talking (a live link, or something just travelled it)".
 - [ ] T13 (§7.C) [ui] [variant:galaxy] `fx=comets`: a running job or deploy (the large demo's flow events)
   is a small comet with a tail from its builder to where it lands — done when: a test maps a flow event to
   a comet's start and end, and filmstrips with and without `?fx=comets` show it only with it.
