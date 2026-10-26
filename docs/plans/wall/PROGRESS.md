@@ -56,13 +56,21 @@ Notes for every builder round (planner, round 1):
   past 40 % of the frame height (gone at 70 %), weighted by how folded the system is, never the one the camera
   flies to (`galaxy.setHeld`, set by `camera.js`); the sun's halo fades the same. Film r7-galaxy: no frame filled
   by a cluster or the sun, 0 console errors (1.8 fps, as every SwiftShader film on this VM).
-- [ ] T3 (§7 Night 3 A2) [ui] [variant:galaxy] The overview looks like a galaxy again (was night 2's T40;
+- [x] T3 (§7 Night 3 A2) [ui] [variant:galaxy] The overview looks like a galaxy again (was night 2's T40;
   r59-dreamer 2 = r54-film-ui 11 = r15-dreamer 9): in `scene.js`, at the overview only, a faint arm ribbon along
   `layout.js armPoint` (4-6 % luminance, under the dust, never above `--text-3`, colour from a token through
   `palette.js`) that fades out as a system opens; one still shape, no motion; dust stays unlike data (night 2's
   T26) — done when: a test shows the ribbon's opacity 0 for an open system and in (0.04, 0.06) at the fit and
   its colour from the palette, and a still of `galaxy.html?at=overview&quality=0` shows two arms and the dust
-  band with the crit nebulae still the brightest things.
+  band with the crit nebulae still the brightest things. (commit 6119ed0) Builder r8: `layout.js armRibbon(n)` lays two
+  soft strips on the plane along `armSpine` (the spiral `armPoint` uses; every site sits on the bright spine),
+  fading in from the sun and out a step past each arm's last site; `scene.js` draws it additive in `palette.arm`
+  (= text-3) at `RIBBON.opacity` 0.05 × (1 − the most open system's eased opening), before the dust, no depth
+  write, never turned. Test: `test/wall-galaxy-ribbon.test.mjs`. Still r8-ribbon: a faint ground under the
+  arms, HV2's crit nebula and HV1's warn still the brightest; at 0.4 (shot r8-ribbon-loud, not kept) the shape
+  is two clean arms through the five sites. Film r8-galaxy: gone in every open frame, 0 console errors. At 5 %
+  it is subtle on this VM's still; if the panel still sees "crumbs", the next step is narrowing it (half 170)
+  rather than raising it past the plan's 6 %.
 - [ ] T4 (§7 Night 3 A3) [ui] [variant:galaxy] One headline per trouble frame (was night 2's T37, r54-film-ui 1):
   while a caption plate is up, `galaxy/hud.js` sets an attribute on `#wall-frame` (or `html`) and `wall.css`
   drops the banner and its glyph to the caption's name size (`--cap-name`); at the overview, no plate, today's
