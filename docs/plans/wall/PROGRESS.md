@@ -572,6 +572,11 @@ Notes for every builder round (planner, round 1):
   (builder still stale, 503) and `term-proxy.test.mjs:518` (ping timeout), but not this error. To make the
   next flake fixable, `loop/run.sh` (fenced) `check()` could add `✖` to the `TEST_TAIL` grep, take the
   lines after `failing tests:` rather than `head -40`, and save `$out` to `$RUN_DIR`.
+- Round 40 (fix): the same unnamed `Error: socket hang up` came back after round 39 (third time this
+  night: the tests score was 0.9997 after rounds 4, ~30 and 39). Round 39 touched only client code
+  (`public/js/wall/galaxy/*`, one Wall test). On e985d80 a full `npm test` came back 3880/3880 green,
+  and four parallel runs of the 33 test files that use `node:http`/WebSocket/`net` came back green
+  too, so nothing was changed on a guess. The `run.sh` change above is what would name the test.
 
 - (r21-operator 4) Trouble waits ~95 s behind calm sites in each two-minute cycle. Fix needs `tour.js`
   (fenced): a hold-time option to `createTour` (calm a third of trouble's hold) and revisiting a trouble site
