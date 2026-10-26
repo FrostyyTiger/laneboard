@@ -604,6 +604,22 @@ Notes for every builder round (planner, night 1):
   lightness crit > attention > warn, attention and warn keep outline and mark with no fill — done when:
   `test/wall-mosaic.test.mjs` checks the fill alpha ranks crit highest and attention/warn have none,
   and a still of the crit window shows red as the only filled tiles.
+- [ ] T62 (bug) [variant:radial, all with halos] (r46-operator radial #2) Crit halos at the frame's rim are
+  darkened by the vignette (two halos at the edges in a hold): paint the halos above the vignette or let the
+  vignette stop short of glows — done when: a test or a CSS check shows the glow layer is stacked above the
+  vignette (or the vignette excludes it), and a still of a hold with a crit near the rim shows the halo undimmed.
+- [ ] T63 (bug) [variant:radial] (r46-operator radial #5) The first frame after a load is off-centre: the circle is
+  smaller and up-left until the first fit settles, so a glance after a reload sees a lopsided screen: fit before
+  the first paint, or keep the stage hidden until the first fit (fade in) — done when: a test of the start-up
+  order shows no paint before the first fit, and the first film frame matches the overview's centre.
+- [ ] T64 (§2 north star 1) [variant:orbits, islands] (r46-operator orbits #1, islands #1) The crit is the size of
+  a calm moon (orbits) or a thin red rim (islands): T16's halo is radial-only. Turn `halos` on for both in
+  `variants.js` (T16 said one line) — done when: `test/wall-glow.test.mjs` or `test/wall-variant.test.mjs`
+  shows both variants carry the flag, and a still of the crit window on each shows the halo as the first read.
+- [ ] T65 (§5) [variant:mosaic] (r46-operator mosaic #2) Mosaic's overview is cropped mid-flight (EDGE-1,
+  OBJECT-STORE, ACME cut at the right edge; the fleet line covers HOME's lights): give mosaic T17's safe-area
+  fit (`bounds`, bottom band 16 %) — done when: a test like `test/wall-radial-fit.test.mjs` checks every tile
+  and name inside the safe area at 3:2 and 16:9, and an overview frame shows the whole fleet.
 
 ## Research questions
 
@@ -755,6 +771,12 @@ Notes for every builder round (planner, night 1):
   (T42, T23), #4 (T29), #7 (T51), radial #2 (T17, T18), orbits #2 (T45), islands #3 (T25), islands #4 (T43, T55),
   mosaic #2, #3 (T44); dropped: radial #4 (no change needed, said so), console note (empty); shared #2, #5,
   radial #1, #3, orbits #3, islands #1, mosaic #4 and the across ideas went to the owner (taste or plan change).
+- r46-operator.md: 33 findings (6 shared, 5 radial, 4 orbits, 4 islands, 4 mosaic, across notes), 4 became tasks
+  (T62-T65: radial #2, radial #5, orbits #1 + islands #1 halo, mosaic #2); covered: shared #1 (T21), #3 (T23, T42),
+  #4 (T52, T57), #5 (T51), #6 (T25), radial #3 (T19), radial #4 (T18), orbits #2 (T51, T24), #3 (T45), #4 (T59),
+  islands #3 (T60), #4 (T55), mosaic #1 (T56, T61), #3 (T44); already with the owner: shared #2 (tour dwell,
+  r14 #3), radial #1, islands #1 coastline tint, mosaic #4, the across "steal" ideas; dropped: islands #2 (praise),
+  console note (empty).
 
 ## Scores
 
@@ -778,5 +800,9 @@ Notes for every builder round (planner, night 1):
 | 41 (orbits) | film-ui | 6 | 4 | 5 | 2 | 6 | 7 | 5 |
 | 41 (islands) | film-ui | 7 | 6 | 5 | 2 | 5 | 6 | 5 |
 | 41 (mosaic) | film-ui | 7 | 5 | 7 | 3 | 7 | 5 | 4 |
+| 46 (radial) | operator | 5 | 3 | 6 | 2 | 6 | 4 | 4 |
+| 46 (orbits) | operator | 6 | 4 | 4 | 2 | 5 | 6 | 5 |
+| 46 (islands) | operator | 7 | 5 | 5 | 2 | 5 | 6 | 5 |
+| 46 (mosaic) | operator | 7 | 4 | 7 | 3 | 6 | 5 | 4 |
 
 ## Morning
