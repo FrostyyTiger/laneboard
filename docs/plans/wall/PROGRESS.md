@@ -110,6 +110,21 @@ Notes for every builder round (planner, round 1):
 - [ ] T14 (§7.C) [ui] [variant:galaxy] `fx=twinkle`: a planet with a working session twinkles softly (slow,
   low contrast, calm stays calm) — done when: a test picks the twinkling planets from a model (working
   sessions only), and filmstrips with and without `?fx=twinkle` show it only with it.
+- [ ] T15 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 3) Trouble inside an open system is the
+  smallest thing: a planet or moon in warn/crit is drawn at least the size of a calm planet, with its status
+  shape (▲ ◆ ■) as a flat glyph facing the camera and its glow ring, and dust within the held system's `reach`
+  fades to 20 % — done when: a test shows the trouble planet's radius >= a calm planet's and the dust fade
+  factor inside/outside `reach`, and `?at=lab&open=1` shows the attention lanes clearly above the dust.
+- [ ] T16 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 2) The sun outshouts the trouble: core in
+  the text-2 grey at 70 % of its radius, halo at most half the crit nebula's peak, dust depth-tested against
+  it, and `siteShot` keeps the hub out of shot (behind the camera or under 15 % of the frame) — done when: a
+  test checks the palette/halo ratio and that `siteShot` puts the hub under 15 % of the frame, and the
+  overview still shows a red nebula brighter than the sun.
+- [ ] T17 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r8-film-ui.md 4) The crit nebula is a flat disc: two or
+  three offset billboards per nebula, stretched along the arm tangent, breathing at one period (crit only),
+  brightness ordered by severity and age so the newest crit is hottest — done when: a test checks the
+  billboard count/orientation from a site and that a newer crit has the higher peak, and the overview still
+  shows two crits that differ in shape and brightness.
 
 ## Research questions
 
@@ -137,6 +152,19 @@ Notes for every builder round (planner, round 1):
 - §7.B (T3, builder r7) The overview turns 39° in 45 s (`overviewShot`, the sketch's 0.000015 rad/ms):
   in the filmstrip the turn reads as motion, not depth; and the dust grains look coarse when the camera is
   close (`?at=`).
+- §7.B (r8-film-ui 5) Camera rhythm: the overview holds still ~2 s at each cycle's start, a status change at
+  the overview gets a ~600 ms 5 % push-in before the leg, and the turn stops while the camera flies (T4's
+  pacing, to tune after T4).
+- §7.B (r8-film-ui 6) Overview composition is lopsided: sites sit left/low, the right third is empty; spread
+  `armPoint` or offset `overviewShot`'s look-at to the sites' centroid; keep the bottom-right free for the fleet line.
+- §7.B (r8-film-ui 7) Folded calm systems read as lumpy spheres: below a screen-size threshold draw one
+  sprite (core + faint halo), swap to spheres at `foldAt` > 0.3.
+- §7.B (r8-film-ui 8) The open system is a wheel: drop the spokes (stem + ring say it), keep the orbit ring at
+  text-3, give moons a short tether at half the stem weight.
+- §7.B (r8-film-ui 9) Dust too coarse close up: point size attenuates with distance, capped ~2 px (same as
+  the r7 line above).
+- §7.B (r8-film-ui 1, hints for T5/T6) Type hierarchy: caption name, site name (condensed caps, short leader
+  from the nebula, one baseline grid), planet name (mono lowercase, only when open); no fourth step.
 - §7.B Polish (tour pacing, camera paths, how far a system opens, nebula shapes and colours, the sun, the
   dust, type at 3 m): triage turns at most 3 findings per review into tasks; the rest land here.
 - §7.C `fx=storm`: a crit nebula as a slow storm (swirl, flicker of lightning).
@@ -170,6 +198,14 @@ Notes for every builder round (planner, round 1):
 
 ## Reviews
 
+- r8-film-ui.md: 9 findings + 3 m check, 3 became tasks (T15 trouble size = 3, T16 sun = 2, T17 nebula = 4);
+  1 covered (T5/T6, hierarchy hint kept under Later), 5/6/7/8/9 under Later. No `fx` proposals. 3 m check: no
+  (names missing, sun first).
+
 ## Scores
+
+| round | persona | overview | legibility | status | touch | wow | calm | performance |
+|---|---|---|---|---|---|---|---|---|
+| 8 | film-ui (galaxy) | 5 | 1 | 4 | 2 | 5 | 6 | 6 |
 
 ## Morning
