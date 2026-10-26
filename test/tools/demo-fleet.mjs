@@ -5,7 +5,7 @@
 // plus a small loopback forwarder that plays `tailscale serve`.
 //
 //   node test/tools/demo-fleet.mjs [--port 7795] [--builders 3] [--tick 4000] [--design <name>]
-//     [--no-runs-route] [--size small|large]
+//     [--no-runs-route] [--size small|large] [--quiet-after <s>]
 //
 // Then open http://127.0.0.1:<port>/ (from another machine:
 // `ssh -L <port>:127.0.0.1:<port> <host>`). Ctrl-C stops everything.
@@ -20,6 +20,8 @@
 // a warn on three sites, each clearing and returning over 90 ticks, the front
 // door opening three times, and an event along a flow link (a comet) every
 // third tick.
+// `--quiet-after <s>` stops the /ws `map` messages <s> seconds after start
+// while the hub stays up (`demoQuiet`): the Wall's stale feed, to film (night 3 T5).
 //
 // What it shows:
 //   builder-a  lanes in working / waiting (permission + question) / review-ready
@@ -70,7 +72,7 @@ import { parseArgs } from 'node:util';
 import { WebSocket, WebSocketServer } from 'ws';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoMapLarge, writeDemoFeeds, createLargeLive, demoRunsAnswer, demoMorningWithRuns, demoWsText, demoAttention, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoMapLarge, writeDemoFeeds, createLargeLive, demoRunsAnswer, demoMorningWithRuns, demoWsText, demoQuiet, demoAttention, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -90,11 +92,12 @@ const { values: args } = parseArgs({
     design: { type: 'string' },
     'no-runs-route': { type: 'boolean', default: false },
     size: { type: 'string', default: 'small' },
+    'quiet-after': { type: 'string' },
     help: { type: 'boolean', short: 'h', default: false },
   },
 });
 if (args.help) {
-  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms] [--design <name>] [--no-runs-route] [--size small|large]\n');
+  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms] [--design <name>] [--no-runs-route] [--size small|large] [--quiet-after <s>]\n');
   process.exit(0);
 }
 const PORT = Number(args.port);
@@ -107,6 +110,12 @@ if (!['small', 'large'].includes(args.size)) {
   process.exit(2);
 }
 const SIZE = args.size;
+const QUIET_AFTER_MS = args['quiet-after'] != null ? Number(args['quiet-after']) * 1000 : null;
+if (QUIET_AFTER_MS != null && !(QUIET_AFTER_MS >= 0)) {
+  process.stderr.write('demo-fleet: --quiet-after must be a number of seconds\n');
+  process.exit(2);
+}
+const STARTED_AT = Date.now();
 const N_BUILDERS = Math.max(2, Math.min(3, Number(args.builders) || 3));
 const TICK_MS = Math.max(500, Number(args.tick) || 4000);
 
@@ -415,7 +424,11 @@ function relayAppWs(ingressPort, req, socket, head) {
   const up = new WebSocket(`ws://127.0.0.1:${ingressPort}${req.url}`, protocols, { headers: h, perMessageDeflate: false });
   let client = null;
   const early = [];
-  const toClient = (data, binary) => client.send(binary ? data : demoWsText(data.toString('utf8')), { binary });
+  const toClient = (data, binary) => {
+    const text = binary ? null : data.toString('utf8');
+    if (text != null && demoQuiet(text, Date.now() - STARTED_AT, QUIET_AFTER_MS)) return;
+    client.send(binary ? data : demoWsText(text), { binary });
+  };
   // The hub may greet before the browser side is up: keep those until it is.
   up.on('message', (data, binary) => {
     if (!client) early.push([data, binary]);
@@ -565,7 +578,7 @@ async function main() {
   setTimeout(() => { for (const id of ids) pushExtras(id); }, 1500);
   const timer = setInterval(() => { tick().catch((e) => log(`tick failed: ${e.message}`)); }, TICK_MS);
 
-  log(`hub "${DEMO_HOSTNAME}" (mode hub) + ${ids.join(', ')}, map size ${SIZE}`);
+  log(`hub "${DEMO_HOSTNAME}" (mode hub) + ${ids.join(', ')}, map size ${SIZE}${QUIET_AFTER_MS != null ? `, map frames stop after ${QUIET_AFTER_MS / 1000}s` : ''}`);
   log(`open  http://127.0.0.1:${PORT}/   (signed in as ${DEMO_USER} via the serve-like forwarder)`);
   if (DESIGN) log(`design direction "${DESIGN.name}" laid over /css/tokens.css`);
   log(`hub local listener http://127.0.0.1:${hub.port}/ (read-only), ingress ${hub.ingressPort}`);

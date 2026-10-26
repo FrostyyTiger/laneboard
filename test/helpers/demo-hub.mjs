@@ -276,6 +276,19 @@ export function demoWsText(text, now = Date.now()) {
 }
 
 /**
+ * `--quiet-after <s>` (Wall plan night 3 T5): from `quietAfterMs` after the
+ * demo started the relay drops every `map` message, so the page sees a hub
+ * that is up (the socket stays open, /api/map answers) whose map frames have
+ * stopped: a stale feed, to film. True when `text` is to be dropped `elapsedMs`
+ * after the start; never without a quiet time. Other messages always pass.
+ */
+export function demoQuiet(text, elapsedMs, quietAfterMs) {
+  if (quietAfterMs == null || !Number.isFinite(quietAfterMs) || elapsedMs < quietAfterMs) return false;
+  if (typeof text !== 'string' || !text.includes('"map"')) return false;
+  try { return JSON.parse(text)?.type === 'map'; } catch { return false; }
+}
+
+/**
  * The attention queue builder `id` would send for `sessions` (danger, waiting,
  * stuck first). Like a real builder's snapshot (`decorateSessions`) it first
  * rescores every session in place: the fake's sessions inherit the fixture

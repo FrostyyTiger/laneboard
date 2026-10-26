@@ -6,10 +6,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { CRIT_HOLD, agoText, bannerModel, createHud, farNode, galaxyCaption, heldModel, legNode } from '../public/js/wall/galaxy/hud.js';
+import { CRIT_HOLD, agoText, bannerModel, createHud, farNode, galaxyCaption, heldModel, legNode, staleCaption } from '../public/js/wall/galaxy/hud.js';
 import { captionLines } from '../public/js/wall/caption.js';
 import { worstLine } from '../public/js/wall/frame.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
+import { freshness } from '../public/js/wall/galaxy/fresh.js';
 
 const PUBLIC = path.resolve(import.meta.dirname, '..', 'public');
 const read = (f) => fs.readFileSync(path.join(PUBLIC, f), 'utf8');
@@ -54,8 +55,8 @@ test('galaxy/main.js makes the Wall caption and frame from those ids and wires t
   assert.match(js, /createFrame\(document\.getElementById\('wall-frame'\)\)/);
   assert.match(js, /createHud\(\{ caption, frame, tour:/);
   assert.match(js, /hud\.update\(model\)/);
-  assert.match(js, /hud\.live\(true\)/);
-  assert.match(js, /hud\.live\(false\)/);
+  // The socket's state reaches the tag through the feed's (night 3 T5, fresh.js).
+  assert.match(js, /hud\.fresh\(f\)/);
 });
 
 test('legNode finds a site leg\'s node, null for the overview or a gone site', () => {
@@ -436,4 +437,75 @@ test('wall.css: with a plate up the far line is set at the caption name step, at
   // The name step lives on the stage, where caption and frame both read it.
   assert.match(rule('.wall-stage'), /--cap-name: 6\.9vmin/);
   assert.match(rule('.wall-caption-name'), /font-size: var\(--cap-name\)/);
+});
+
+// A dead feed, the words (night 3 T5): the tag reads STALE <age>, the next plate says the data is old, in grey.
+test('hud.fresh: the tag gets the feed state; the next plate carries the grey line, gone when live again', () => {
+  const { calls, caption, frame } = fakes();
+  frame.fresh = (f) => calls.push(['fresh', f.text]);
+  const hud = createHud({ caption, frame });
+  hud.update(model());
+  const stale = freshness(0, 150_000);
+  hud.fresh(stale);
+  assert.deepEqual(calls.at(-1), ['fresh', 'STALE 2M']);
+  hud.park({ id: 'hv1', index: 2, count: 2 });
+  const calm = calls.at(-1)[2];
+  assert.deepEqual(calm.lines, [{ kind: 'stale', step: 'line', label: 'data', text: 'no new data for 2m' }]);
+  hud.park({ id: 'lab', index: 1, count: 2 });
+  const bad = calls.at(-1)[2];
+  assert.equal(bad.lines[0].kind, 'trouble', 'the trouble word stays the hero');
+  assert.equal(bad.lines[1].kind, 'stale', 'the old-data line right under it');
+  assert.equal(bad.lines[1].status, undefined, 'no status, so no hue');
+  hud.fresh(freshness(150_000, 150_000));
+  assert.deepEqual(calls.at(-1), ['fresh', 'LIVE']);
+  hud.park({ id: 'hv1', index: 2, count: 2 });
+  assert.deepEqual(calls.at(-1)[2].lines, []);
+});
+
+test('hud.fresh without frame.fresh falls back to live(on)', () => {
+  const { calls, caption, frame } = fakes();
+  const hud = createHud({ caption, frame });
+  hud.fresh(freshness(0, 1000, { open: true }));
+  hud.fresh(freshness(0, 1000, { open: false }));
+  hud.fresh(null);
+  assert.deepEqual(calls, [['live', true], ['live', false]]);
+});
+
+test('staleCaption: after the hero, never past MAX_LINES, the cap itself while fresh', () => {
+  const cap = { kicker: 'K', name: 'N', lines: [{ kind: 'trouble', step: 'hero' }, ...Array.from({ length: 5 }, (_, i) => ({ kind: 'fact', step: 'small', text: String(i) }))] };
+  assert.equal(staleCaption(cap, freshness(0, 1000)), cap);
+  assert.equal(staleCaption(cap, null), cap);
+  const out = staleCaption(cap, freshness(0, 40_000));
+  assert.equal(out.lines.length, 6);
+  assert.equal(out.lines[1].kind, 'stale');
+  assert.equal(out.lines.at(-1).text, '3', 'the last fact gave way');
+});
+
+test('frame.fresh writes the tag: STALE <age> grey, OFFLINE in the offline hue, LIVE', async () => {
+  const { makeDocument, makeEl } = await import('./helpers/fakedom.mjs');
+  const { createFrame } = await import('../public/js/wall/frame.js');
+  const prevDoc = globalThis.document;
+  globalThis.document = makeDocument();
+  try {
+    const frame = createFrame(makeEl('div'), { timers: { setTimeout: () => 0, clearTimeout() {} } });
+    const tag = frame.el.tag;
+    const word = () => tag.children.find((c) => c.className === 'wall-tag-live').textContent;
+    frame.fresh(freshness(0, 150_000));
+    assert.equal(tag.dataset.live, 'stale');
+    assert.equal(word(), 'stale 2m');
+    frame.fresh(freshness(0, 1000, { open: false }));
+    assert.equal(tag.dataset.live, '0');
+    assert.equal(word(), 'offline');
+    frame.fresh(freshness(0, 0));
+    assert.equal(tag.dataset.live, '1');
+    assert.equal(word(), 'live');
+  } finally {
+    globalThis.document = prevDoc;
+  }
+  const css = read('css/wall.css');
+  assert.match(css, /\.wall-tag\[data-live="stale"\] \.wall-tag-live \{ color: var\(--text-1\); \}/);
+  // The caption's stale line takes no status colour: no rule names it with a trouble hue.
+  for (const m of css.matchAll(/[^}]*data-kind="stale"[^{]*\{[^}]*\}/g)) {
+    assert.doesNotMatch(m[0], /--(crit|warn|info|down|attention)/);
+  }
 });

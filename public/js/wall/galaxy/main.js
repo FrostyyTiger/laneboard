@@ -20,6 +20,10 @@
 // sites, trouble first.
 // At the overview a hairline ties the far fleet line to the cluster it names
 // (T20, tether.js), drawn in once the camera is back out.
+// A dead feed (night 3 T5, fresh.js): every map frame (and the first
+// /api/map answer) stamps the time; 30 s without one, the tag reads
+// `STALE <age>` and the next plate says the data is old; a closed socket
+// reads `OFFLINE`. `<html data-fresh>` carries the state.
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
@@ -42,6 +46,7 @@ import { critAges, flowComets, parseFx, siteRoutes, workingPlanets } from './fx.
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { createTether } from './tether.js';
+import { freshness, sameFresh } from './fresh.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -269,24 +274,39 @@ export function boot() {
     }
   };
 
+  // When the last map frame came and whether the socket is open (fresh.js),
+  // said again each second so the age grows; written only when it reads otherwise.
+  let lastFrameAt = null, open = false, said = null;
+  const sayFresh = () => {
+    const f = freshness(lastFrameAt, Date.now(), { open });
+    if (sameFresh(f, said)) return;
+    said = f;
+    page.dataset.fresh = f.state;
+    hud.fresh(f);
+  };
+  const frameCame = () => { lastFrameAt = Date.now(); if (said) sayFresh(); };
+  // The tag stays empty until the socket first opens or fails (as before T5).
+  setInterval(() => { if (said) sayFresh(); }, 1000);
+
   fetch('/api/map')
     .then((r) => (r.ok ? r.json() : null))
-    .then((m) => { if (!have) showModel(m); })
+    .then((m) => { if (!have && m) { frameCame(); showModel(m); } })
     .catch(() => { /* the socket brings the model when the hub is back */ });
 
   const openSocket = (backoff) => {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${proto}//${location.host}/ws`);
     let opened = false;
-    ws.addEventListener('open', () => { opened = true; page.dataset.live = '1'; hud.live(true); });
+    ws.addEventListener('open', () => { opened = true; open = true; page.dataset.live = '1'; sayFresh(); });
     ws.addEventListener('message', (ev) => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
-      if (msg?.type === 'map') showModel(msg.map);
+      if (msg?.type === 'map') { frameCame(); showModel(msg.map); }
     });
     ws.addEventListener('close', () => {
       delete page.dataset.live;
-      hud.live(false);
+      open = false;
+      sayFresh();
       // Keep the last galaxy on screen and try again.
       const next = opened ? BACKOFF_START_MS : Math.min(backoff * 2, BACKOFF_MAX_MS);
       setTimeout(() => openSocket(next), next);

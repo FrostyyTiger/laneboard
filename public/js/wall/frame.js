@@ -202,7 +202,8 @@ function setLine(line, w) {
 
 /**
  * The frame inside `root` (an empty element over the map). `update(model)`
- * sets the lines from a model, `live(on)` the tag's state; the clock runs by
+ * sets the lines from a model, `live(on)` the tag's state (`fresh(f)` with
+ * the galaxy's feed state instead, galaxy/fresh.js); the clock runs by
  * itself on `timers` and `now` (injectable). `stop()` ends the clock.
  * `plate(on)` says whether a caption plate is up over the frame (the galaxy's
  * hud.js, night 3 T4): `data-plate` on `root`, and wall.css sets the far line
@@ -281,6 +282,14 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     put(tagLive, on ? 'live' : 'offline');
   };
 
+  // The galaxy's feed state (galaxy/fresh.js, night 3 T5): `STALE 2M` in the
+  // tag, grey; a closed socket keeps the offline hue.
+  const fresh = (f) => {
+    if (!f || typeof f.text !== 'string') return;
+    tag.dataset.live = f.state === 'live' ? '1' : f.state === 'stale' ? 'stale' : '0';
+    put(tagLive, f.text.toLowerCase());
+  };
+
   const stop = () => { if (timer != null) timers.clearTimeout(timer); timer = null; };
 
   /** The far block as a Map cover while the fleet line is at the far step, else null. */
@@ -301,5 +310,5 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     farDirty = true;
   };
 
-  return { update, live, stop, cover, plate, el: { vignette, tag, clock, fleet } };
+  return { update, live, fresh, stop, cover, plate, el: { vignette, tag, clock, fleet } };
 }

@@ -11,7 +11,7 @@
 // test/wall-galaxy-hud.test.mjs drives it with fakes); galaxy/main.js makes
 // the real ones.
 
-import { captionLines, coverOf } from '../caption.js';
+import { MAX_LINES, captionLines, coverOf } from '../caption.js';
 import { worstLine } from '../frame.js';
 import { lockTarget } from '../lock.js';
 import { TROUBLE } from '../../views/map/model.js';
@@ -128,12 +128,27 @@ export function heldModel(model, hold, now) {
 }
 
 /**
+ * `cap` with the feed's grey line (night 3 T5, galaxy/fresh.js): once no map
+ * frame came for 30 s the plate says the data is old, first after the trouble
+ * word (a `fact`-like row in the line step, never in a status hue), the last
+ * row giving way past MAX_LINES. `cap` itself while the data is fresh. Pure.
+ */
+export function staleCaption(cap, fresh) {
+  if (!fresh?.line) return cap;
+  const lines = Array.isArray(cap?.lines) ? cap.lines : [];
+  const at = lines[0]?.step === 'hero' ? 1 : 0;
+  const row = { kind: 'stale', step: 'line', label: 'data', text: fresh.line };
+  return { ...cap, lines: [...lines.slice(0, at), row, ...lines.slice(at)].slice(0, MAX_LINES) };
+}
+
+/**
  * Wires `caption` (`show(leg, cap)`, `hide()`), `frame` (`update(model)`,
  * `live(on)`, `plate(on)` while a plate shows) and, when given, `lock` (`lockOn(leg)`, `release()`) to `tour`
  * (`onLeg(cb)`). `update(model)` gives both the newest
  * model (the frame's through `heldModel`, so a crit that just cleared stays
  * on its line, dimmed, and `bannerModel`, so the line never repeats the held
- * caption), `live(on)` the socket's state, `park(site)` shows a parked system's
+ * caption), `live(on)` the socket's state, `fresh(f)` the feed's (fresh.js:
+ * the tag's word, and the caption's grey line from the next leg on), `park(site)` shows a parked system's
  * caption (`?at=`, for stills) without a tour, and `covers()` the boxes the
  * words take over the canvas (for the labels, T6; the tag top right since T18,
  * so neither a name nor a held planet sits on it; the warn-step fleet line
@@ -174,6 +189,8 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
   // camera; in the flight the banner is still the only headline) until the
   // next leg.
   let plateTimer = null;
+  // The feed's state (fresh.js), the last one given.
+  let feedState = null;
   const plate = (on, atMs = 0) => {
     if (plateTimer != null) { timers.clearTimeout(plateTimer); plateTimer = null; }
     if (!frame.plate) return;
@@ -185,7 +202,7 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     if (leg?.kind === 'overview' && hold && now() - hold.clearedAt >= CRIT_HOLD.minMs) hold = null;
     const node = legNode(leg, latest);
     if (node) {
-      const cap = galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node');
+      const cap = staleCaption(galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node'), feedState);
       const target = lockTarget(node, latest);
       heldId = target[0]?.id ?? null;
       feed();
@@ -252,6 +269,12 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
       feed();
     },
     live: (on) => frame.live(Boolean(on)),
+    fresh: (f) => {
+      if (!f || typeof f.text !== 'string') return;
+      feedState = f;
+      if (frame.fresh) frame.fresh(f);
+      else frame.live(f.state === 'live');
+    },
     park: (leg) => say({ arriveMs: 0, ...leg, kind: 'site' }),
     covers: () => [caption.cover?.(), fleetCover(), tagCover()].filter(Boolean),
     fleetCover,

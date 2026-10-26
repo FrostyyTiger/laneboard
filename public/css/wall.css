@@ -405,6 +405,8 @@ html.wall body {
 }
 .wall-tag-live:empty { display: none; }
 .wall-tag[data-live="0"] .wall-tag-live { color: var(--warn); }
+/* No map frame for 30 s (galaxy/fresh.js, night 3 T5): old data reads grey, at the brightest grey, never in a trouble hue. */
+.wall-tag[data-live="stale"] .wall-tag-live { color: var(--text-1); }
 
 /* Bottom left and bottom right share one baseline: the last line of each. */
 .wall-clock,
