@@ -248,10 +248,13 @@ Notes for every builder round (planner, round 1):
 
 ## For the owner
 
-- (T7) `wall.html?variant=islands-tiles` needs two fenced files: the `VARIANTS` entry in
-  `public/js/wall/variants.js` (with `links: 'focus'`) and the focus-only link filter in `main.js`; the
-  sketch's `docs/plans/wall/sketch/main.js.diff` is the change. T7 builds the modules and tests; until the
-  entry exists the variant falls back to radial.
+- (T7, built) `wall.html?variant=islands-tiles` needs two fenced files. `variants.js`: import
+  `./variants/islands-tiles.js` and add `{ id: 'islands-tiles', label: 'Islands + tiles', mapOptions,
+  optionsFor, ambient, links: islandsTiles.links }` (`links` is `'focus'`). `main.js`: import `focusLinks`
+  from `./variants/tiles.js`, keep `heldSite` (set in `tour.onLeg` to `leg.kind === 'site' ? leg.id : null`,
+  re-`map.update` the latest model when it changes) and pass `pick.variant.links === 'focus' ?
+  focusLinks(model, heldSite) : model` to `map.update` (the sketch's `main.js.diff`, without its `?tilt`
+  part and with the filter now pure). Until then the galaxy's no-WebGL redirect lands on radial.
 - Filming (night 1, still open): `loop/film.mjs` (fenced) only runs here through the SwiftShader wrapper, so
   its fps is the VM's. Night 2 reports script ms per frame (T10); real fps needs the tablet.
 - No wild-card layout question this night: the owner picked the galaxy (README §5), so the planner asked

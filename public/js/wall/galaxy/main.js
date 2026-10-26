@@ -18,6 +18,7 @@ import { pxPerMm, screenOf, stepsFor } from '../type.js';
 import { createGalaxyCamera } from './camera.js';
 import { createHud } from './hud.js';
 import { createLabels } from './labels.js';
+import { fallbackHref, hasWebGL } from './fallback.js';
 import { paletteFrom } from './palette.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 
@@ -32,13 +33,18 @@ export function boot() {
 
   const style = getComputedStyle(page);
   const palette = paletteFrom((name) => style.getPropertyValue(name));
+  // No WebGL here: the 2D page instead (islands with trouble tiles).
+  const toFallback = (why) => {
+    page.dataset.webgl = '0';
+    console.warn('galaxy: no WebGL, going to the 2D page', why);
+    location.replace(fallbackHref(location.search));
+  };
+  if (!hasWebGL(() => document.createElement('canvas'))) { toFallback('no context'); return; }
   let galaxy;
   try {
     galaxy = createGalaxyScene(canvas, { palette });
   } catch (err) {
-    // No WebGL here (T7 sends such a browser to the 2D page).
-    page.dataset.webgl = '0';
-    console.warn('galaxy: no WebGL', err);
+    toFallback(err);
     return;
   }
 
