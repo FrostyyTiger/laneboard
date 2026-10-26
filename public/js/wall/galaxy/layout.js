@@ -74,11 +74,77 @@ export const ease = (x) => {
  * added at the end leaves the others where they were.
  */
 export function armPoint(i, n) {
-  const arm = i % 2;
-  const t = Math.floor(i / 2) + 0.6;
+  return armSpine(i % 2, Math.floor(i / 2) + 0.6);
+}
+
+/** A point on arm `arm` (0 or 1) at `t` steps out: the spiral armPoint puts the sites on. */
+export function armSpine(arm, t) {
   const r = ARM.r0 + ARM.step * t;
   const a = arm * Math.PI + t * ARM.turn;
   return { x: Math.cos(a) * r, y: 0, z: Math.sin(a) * r };
+}
+
+/**
+ * The arm ribbon (night 3 T3, r59-dreamer 2): a soft band along each arm's
+ * spine, under the dust, so the overview reads as a galaxy and not as five
+ * crumbs on a black disc. `from`/`tail`: where it starts (steps, before the
+ * first site, fading in from the sun) and how far it runs past an arm's last
+ * site; `half` its half width at the start and `grow` per step out; `fadeIn`
+ * and `fadeOut` the steps it takes to come and go along the arm; `steps` and
+ * `across` its grid. Its strength and colour are the scene's (scene.js RIBBON).
+ */
+export const ARM_RIBBON = Object.freeze({
+  from: -0.9, tail: 1.1, minTo: 2.4, half: 170, grow: 40, fadeIn: 1.1, fadeOut: 1.3, steps: 72, across: 9,
+});
+
+/** How far out the ribbon runs on arm `arm` with `n` sites: past the arm's last site. */
+export function ribbonEnd(arm, n) {
+  const count = Math.max(0, Math.ceil((Math.max(0, n) - arm) / 2));
+  return Math.max(ARM_RIBBON.minTo, count ? count - 1 + 0.6 + ARM_RIBBON.tail : 0);
+}
+
+const smooth01 = (x) => {
+  const k = Math.max(0, Math.min(1, x));
+  return k * k * (3 - 2 * k);
+};
+
+/**
+ * The ribbon's mesh for `n` sites: `{ positions, shade, index }`, two strips
+ * (one per arm) on the plane, `shade` 0..1 per vertex (0 at the edges and
+ * both ends, 1 on the spine), triangles in `index`. One still shape: the
+ * same `n` gives the same ribbon.
+ */
+export function armRibbon(n) {
+  const { from, half, grow, fadeIn, fadeOut, steps, across } = ARM_RIBBON;
+  const rows = steps + 1, perArm = rows * across;
+  const positions = new Float32Array(2 * perArm * 3);
+  const shade = new Float32Array(2 * perArm);
+  const index = [];
+  for (let arm = 0; arm < 2; arm++) {
+    const to = ribbonEnd(arm, n);
+    for (let i = 0; i < rows; i++) {
+      const t = from + ((to - from) * i) / steps;
+      const p = armSpine(arm, t);
+      // The tangent of the spiral (as nebula.js armTangent), its normal on the plane.
+      const r = ARM.r0 + ARM.step * t, a = arm * Math.PI + t * ARM.turn;
+      const tx = ARM.step * Math.cos(a) - r * ARM.turn * Math.sin(a);
+      const tz = ARM.step * Math.sin(a) + r * ARM.turn * Math.cos(a);
+      const l = Math.hypot(tx, tz) || 1;
+      const nx = -tz / l, nz = tx / l;
+      const w = half + grow * Math.max(0, t - from);
+      const along = smooth01((t - from) / fadeIn) * smooth01((to - t) / fadeOut);
+      for (let j = 0; j < across; j++) {
+        const u = (2 * j) / (across - 1) - 1;
+        const k = arm * perArm + i * across + j;
+        positions[k * 3] = p.x + nx * w * u;
+        positions[k * 3 + 1] = 0;
+        positions[k * 3 + 2] = p.z + nz * w * u;
+        shade[k] = along * (1 - u * u) ** 2;
+        if (i < steps && j < across - 1) index.push(k, k + across, k + 1, k + 1, k + across, k + across + 1);
+      }
+    }
+  }
+  return { positions, shade, index };
 }
 
 /**

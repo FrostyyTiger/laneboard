@@ -200,6 +200,8 @@ export function paletteFrom(readVar = unset) {
     // by the sun, fading further toward the ground at the rim (T26, r26-skeptic 5).
     dustIn: mixRgb(t3, bg, DUST_INK.in),
     dustOut: mixRgb(t3, bg, DUST_INK.out),
+    // The arm ribbon (night 3 T3): text-3 at most, drawn at a few per cent under the dust.
+    arm: t3,
     // Far stars: a dim grey, behind everything.
     stars: mixRgb(t3, bg, 0.35),
   };

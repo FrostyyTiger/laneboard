@@ -15,7 +15,7 @@
 // `update(model)`, `setOpen(id, k)`, `frame(now)`.
 
 import * as THREE from '../../../vendor/three/three.module.js';
-import { galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, CLOSED } from './layout.js';
+import { armRibbon, galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, CLOSED } from './layout.js';
 import { tourOrder, tourSites } from '../tour.js';
 import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
@@ -144,6 +144,16 @@ export function nearFade(size, dist, fov = FOV) {
   const share = size / (2 * Math.tan((fov * Math.PI) / 360) * dist);
   return 1 - smoothstep(NEAR_FADE.from, NEAR_FADE.to, share);
 }
+
+/**
+ * The arm ribbon's strength at the fit (night 3 T3, r59-dreamer 2): a few
+ * per cent of the text-3 grey, added under the dust, so the arms read as a
+ * shape at the overview and never as data. It fades out as a system opens.
+ */
+export const RIBBON = Object.freeze({ opacity: 0.05 });
+
+/** The ribbon's opacity with the most open system at `open` (0..1, eased). */
+export const ribbonOpacity = (open) => RIBBON.opacity * (1 - Math.max(0, Math.min(1, Number(open) || 0)));
 
 /** The far stars and dust grains at the best level. */
 const STARS = 2500, DUST = 9000;
@@ -447,6 +457,36 @@ export function createGalaxyScene(canvas, {
     shared.push(g, m);
     return pts;
   })();
+
+  // The arm ribbon (T3): one still shape along the arms' spines, under the
+  // dust (drawn first, no depth write), rebuilt only when the site count changes.
+  const ribbon = (() => {
+    const g = new THREE.BufferGeometry();
+    const m = new THREE.MeshBasicMaterial({
+      color: col(palette.arm), vertexColors: true, transparent: true, opacity: RIBBON.opacity,
+      depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, forceSinglePass: true,
+    });
+    const mesh = new THREE.Mesh(g, m);
+    mesh.name = 'arm-ribbon';
+    mesh.renderOrder = -1;
+    mesh.userData.sites = -1;
+    scene.add(mesh);
+    shared.push(m);
+    return mesh;
+  })();
+  const shapeRibbon = (n) => {
+    if (ribbon.userData.sites === n) return;
+    ribbon.userData.sites = n;
+    const { positions, shade, index } = armRibbon(n);
+    const colours = new Float32Array(shade.length * 3);
+    for (let i = 0; i < shade.length; i++) colours[i * 3] = colours[i * 3 + 1] = colours[i * 3 + 2] = shade[i];
+    ribbon.geometry.dispose();
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+    g.setIndex(index);
+    ribbon.geometry = g;
+  };
 
   // The sun: the hub, at the origin. Its halo is a soft grey, quieter
   // than any nebula in trouble (README §2.1: trouble is the loudest thing).
@@ -1098,6 +1138,12 @@ export function createGalaxyScene(canvas, {
     const h = heldDust();
     dustHold.value.set(h.x, h.y, h.z, h.r);
     dustOpen.value = h.k;
+    // The ribbon is the overview's: it fades as a system opens.
+    let n = 0;
+    for (const s of world?.sites ?? []) if (!s.gone) n++;
+    shapeRibbon(n);
+    ribbon.material.opacity = ribbonOpacity(h.k);
+    ribbon.visible = ribbon.material.opacity > 0.001;
   };
 
   /**
@@ -1182,6 +1228,7 @@ export function createGalaxyScene(canvas, {
     for (const s of world?.sites ?? []) dropSite(s);
     tweens.clear();
     world = null;
+    ribbon.geometry.dispose();
     for (const o of [...shared, ...Object.values(geo)]) o.dispose();
     renderer.dispose();
     sized.stop();
@@ -1201,5 +1248,7 @@ export function createGalaxyScene(canvas, {
     get beacons() { return beacons; },
     /** What the dust thins round now (`{ x, y, z, r, k }`, dustFade's uniforms). */
     get dustHold() { return heldDust(); },
+    /** The arm ribbon's mesh (T3): its opacity and colour, for tests. */
+    get ribbon() { return ribbon; },
   };
 }
