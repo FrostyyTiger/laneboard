@@ -34,7 +34,7 @@
 // Text drawn here comes from builders (labels, subs, why) and is untrusted;
 // fillText never interprets it.
 
-import { RINGS, SIZE, LEGEND_ANGLE, polar, ringLabels, runRingR, ticks } from './layout.js';
+import { RINGS, SIZE, LEGEND_ANGLE, polar, branchCurve, ringLabels, runRingR, ticks } from './layout.js';
 import { nodeStyle, rollsUp, linkStyle, reachScope, reachLinkStyle, runRing, runRound, ACCENT_L, DRIFT_MARK } from './overlays.js';
 
 const TAU = Math.PI * 2;
@@ -193,6 +193,7 @@ function treeCurve(p, c) {
   return [p, polar(midR, a0), polar(midR, c.t), c];
 }
 
+
 const LOUD = new Set(['attention', 'crit', 'down']);
 /** Kinds that draw cpu/mem gauge rings when they carry metrics. */
 const GAUGED = new Set(['room', 'site', 'host', 'builder']);
@@ -288,6 +289,7 @@ export function createRenderer(ctx, palette) {
    * `scene.rings === false` draws none of it (a layout without rings).
    */
   function drawRings(scene) {
+    drawGuides(scene);
     if (scene.rings === false) return;
     const c0 = centre(scene);
     const { rings, legends, dial, bearings } = ringGeometry(scene);
@@ -329,6 +331,27 @@ export function createRenderer(ctx, palette) {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(b.text, b.x, b.y);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * A custom layout's own orbit lines (`guides`: world ellipses `{x, y, rx,
+   * ry}`, Wall T12) as the ring hairlines are drawn: 1px --line at half.
+   * None from the radial layout.
+   */
+  function drawGuides(scene) {
+    const guides = scene.guides;
+    if (!Array.isArray(guides) || !guides.length || typeof ctx.ellipse !== 'function') return;
+    const s = scene.s ?? 1;
+    ctx.save();
+    strokeStyle(P.line, 0.5, 1, []);
+    for (const g of guides) {
+      if (!Number.isFinite(g?.x) || !Number.isFinite(g?.y) || !(g.rx > 0) || !(g.ry > 0)) continue;
+      const c = scene.toScreen(g);
+      ctx.beginPath();
+      ctx.ellipse(c.x, c.y, g.rx * s, g.ry * s, scene.spin ?? 0, 0, TAU);
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -389,7 +412,9 @@ export function createRenderer(ctx, palette) {
       if (!n || pid == null || id === pid || n.kind === 'core') continue;
       const pc = nodes.get(pid);
       if (!pc || (!cc.leaving && cc.entering)) continue;
-      const [a, b, c, d] = treeCurve(pc, cc).map(scene.toScreen);
+      const how = scene.pos?.get(id)?.branch;
+      if (how === 'none') continue;
+      const [a, b, c, d] = (how && branchCurve(pc, cc, how) || treeCurve(pc, cc)).map(scene.toScreen);
       ctx.globalAlpha = clamp(k * Math.min(alphaOf(scene, id), alphaOf(scene, pid)) * (cc.a ?? 1), 0, 1);
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
@@ -655,7 +680,7 @@ export function createRenderer(ctx, palette) {
     const text = `+${scene.kids?.get(id)?.length ?? 0}`;
     ctx.font = `600 9.5px ${P.mono}`;
     const w = measure(text) + 8;
-    const ang = (c.t ?? scene.pos?.get(id)?.angle ?? 0) + (scene.spin ?? 0);
+    const ang = (scene.pos?.get(id)?.labelAngle ?? c.t ?? scene.pos?.get(id)?.angle ?? 0) + (scene.spin ?? 0);
     const { x, y } = platePlace(sp, ang, Math.max(ring, outer - 0.5), w, 14, c0, hairlines);
     return { text, ring, x, y, w, h: 14 };
   }
@@ -948,7 +973,9 @@ export function createRenderer(ctx, palette) {
         plan.push({ id, n, core: true, text, x: sp.x, y, fade, rank: 0, box: { x0: sp.x - w / 2, y0: y - 7, x1: sp.x + w / 2, y1: y + 7 } });
         continue;
       }
-      const ang = (c.t ?? scene.pos?.get(id)?.angle ?? 0) + (scene.spin ?? 0);
+      // A custom layout may say which way a name points (`labelAngle`, the
+      // Wall's orbits: away from the planet); otherwise away from the core.
+      const ang = (scene.pos?.get(id)?.labelAngle ?? c.t ?? scene.pos?.get(id)?.angle ?? 0) + (scene.spin ?? 0);
       // From the outermost ring the node draws, plus half a text line where
       // the label sits above or below it, so the backing never covers a ring.
       let R = outerR.get(id) ?? ringOuter(n, r, { folded: Boolean(scene.folded?.has(id)) });
@@ -989,9 +1016,13 @@ export function createRenderer(ctx, palette) {
         // Centred on the bearing toward the centre, clear of the node: a big
         // name pointing outward would land on what the node holds.
         const ext = Math.abs(Math.cos(ang)) * (w / 2 + 2) + Math.abs(Math.sin(ang)) * half;
-        const cx = sp.x - Math.cos(ang) * (R + 4 + ext);
+        // A custom layout may say where the name centres instead (`labelAt`,
+        // a world point: the Wall's orbits set it in its planet's orbit).
+        const at = scene.pos?.get(id)?.labelAt;
+        const ap = at && Number.isFinite(at.x) && Number.isFinite(at.y) ? scene.toScreen(at) : null;
+        const cx = ap ? ap.x : sp.x - Math.cos(ang) * (R + 4 + ext);
         x = clamp(cx - w / 2, 4, W - 4 - w);
-        y = sp.y - Math.sin(ang) * (R + 4 + ext);
+        y = ap ? ap.y : sp.y - Math.sin(ang) * (R + 4 + ext);
         left = true;
       } else if (off(left, x)) {
         // It would run off the edge: it flips to the node's other side; when

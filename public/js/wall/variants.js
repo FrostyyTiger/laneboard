@@ -4,14 +4,31 @@
 //
 // Pure: no DOM, so test/wall-variant.test.mjs imports it directly. Each
 // direction's task adds its entry to VARIANTS with the Map options it needs
-// (`mapOptions`, from its module in variants/; the page adds `ambient`).
+// (`mapOptions`, from its module in variants/; the page adds `ambient`), and
+// may add `optionsFor(aspect)` (the options for the screen's width / height)
+// and `ambient` (its own ambient settings, over the Map's defaults).
 
 import * as radial from './variants/radial.js';
+import * as orbits from './variants/orbits.js';
 
 /** The directions, in the order a morning report lists them. */
 export const VARIANTS = Object.freeze([
   Object.freeze({ id: 'radial', label: 'Radial', mapOptions: radial.mapOptions }),
+  Object.freeze({
+    id: 'orbits', label: 'Orbits', mapOptions: orbits.mapOptions,
+    optionsFor: orbits.optionsFor, ambient: orbits.ambient,
+  }),
 ]);
+
+/**
+ * The Map options a page creates its Map with for `variant` on a screen of
+ * `aspect` (width / height): the variant's own, `ambient` its settings or on.
+ */
+export function mapOptionsFor(variant, aspect) {
+  const own = typeof variant?.optionsFor === 'function' && Number.isFinite(aspect) && aspect > 0
+    ? variant.optionsFor(aspect) : variant?.mapOptions;
+  return { ...own, ambient: variant?.ambient ?? true };
+}
 
 /** What an unknown or missing `?variant=` falls back to. */
 export const DEFAULT_VARIANT = 'radial';

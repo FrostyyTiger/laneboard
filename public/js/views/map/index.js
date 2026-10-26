@@ -147,7 +147,9 @@ export function migrateFolds(list, localId) {
  *   budgetUsd(node)       the builder's budget cap for the cost overlay
  *   perf                  print p95 draw time in the readout (default: ?mapperf=1)
  *   layout(nodes)         -> {pos, center, kids} with the shape of layout.js `layout`;
- *                            pos gives world x/y (r and angle follow from them, polarLayout).
+ *                            pos gives world x/y (r and angle follow from them, polarLayout),
+ *                            and may carry `labelAngle`, `labelAt` and `branch` (render.js branchCurve);
+ *                            the result may carry `guides` (orbit lines) and `bounds` (the fit).
  *                            Default: the radial rings
  *   rings                 false: no ring hairlines, ring legends or bearing dial (default on)
  *   labelSize(node, {s, trouble}) -> px for the node's name, 0 for none at this
@@ -295,6 +297,14 @@ export function createMap(root, opts = {}) {
   }
 
   function computeFit() {
+    // A layout with its own extents (the Wall's orbits) fits them to the
+    // width and the height apart: a wide layout uses the wide screen.
+    const b = lay.bounds;
+    if (b) {
+      fitY = b.cy ?? 0;
+      const k = Math.min(W / (2 * b.x), H / (2 * b.y));
+      return Number.isFinite(k) && k > 0 ? k : 1;
+    }
     const f = fitFrame(W, H, maxRadius() + 64, vInsets());
     fitY = f.y;
     return f.s;
@@ -1150,6 +1160,7 @@ export function createMap(root, opts = {}) {
       covers: mode !== 'pip' ? [anchorRect()].filter(Boolean) : [],
       budgetUsd: typeof opts.budgetUsd === 'function' ? opts.budgetUsd : undefined,
       rings: opts.rings !== false,
+      guides: lay.guides,
       labelSize: typeof opts.labelSize === 'function' ? opts.labelSize : undefined,
     };
   }

@@ -8,7 +8,7 @@
 // reconnect with backoff.
 
 import { createMap } from '../views/map/index.js';
-import { pickVariant } from './variants.js';
+import { pickVariant, mapOptionsFor } from './variants.js';
 import { createPerf } from './perf.js';
 import { createTour, timingFor } from './tour.js';
 import { createCaption, captionLines, captionTimingFor, STILL_CAPTION_TIMING } from './caption.js';
@@ -28,7 +28,9 @@ export function boot() {
     console.warn(`wall: unknown variant "${pick.asked}", showing ${pick.id}`);
   }
 
-  const map = createMap(document.getElementById('wall-map'), { ...pick.variant.mapOptions, ambient: true });
+  const stage = document.getElementById('wall-map');
+  const aspect = (stage.clientWidth || innerWidth) / (stage.clientHeight || innerHeight);
+  const map = createMap(stage, mapOptionsFor(pick.variant, aspect));
 
   const perf = createPerf();
   globalThis.__wallPerf = perf.stats;

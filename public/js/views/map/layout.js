@@ -59,6 +59,30 @@ const LAST = RINGS.length - 1;
 export const polar = (r, a) => ({ x: Math.cos(a) * r, y: Math.sin(a) * r });
 
 /**
+ * The branch a custom layout asks for with its child's `branch` (Wall T12):
+ * 'straight', or `{x, y}`, an arc around that world point (a cubic per
+ * quarter turn or less); anything else null (render.js draws its own curve
+ * along the rings). 'none' is not drawn (drawTree skips it). Pure.
+ */
+export function branchCurve(p, c, how) {
+  if (how === 'straight') {
+    return [p, { x: p.x + (c.x - p.x) / 3, y: p.y + (c.y - p.y) / 3 }, { x: p.x + (c.x - p.x) * 2 / 3, y: p.y + (c.y - p.y) * 2 / 3 }, c];
+  }
+  if (how && Number.isFinite(how.x) && Number.isFinite(how.y)) {
+    const a0 = Math.atan2(p.y - how.y, p.x - how.x), a1 = Math.atan2(c.y - how.y, c.x - how.x);
+    const r0 = Math.hypot(p.x - how.x, p.y - how.y), r1 = Math.hypot(c.x - how.x, c.y - how.y);
+    let d = a1 - a0;
+    while (d > Math.PI) d -= TAU;
+    while (d <= -Math.PI) d += TAU;
+    const k = (4 / 3) * Math.tan(d / 4);
+    return [p,
+      { x: p.x - Math.sin(a0) * r0 * k, y: p.y + Math.cos(a0) * r0 * k },
+      { x: c.x + Math.sin(a1) * r1 * k, y: c.y - Math.cos(a1) * r1 * k }, c];
+  }
+  return null;
+}
+
+/**
  * Lay the tree out on rings. Each node gets an angular sector proportional to
  * the leaves under it, so a room with twelve lanes gets the room it needs and
  * a room with nothing inside it does not waste an arc. Siblings on the first
@@ -148,7 +172,8 @@ export function layout(nodes) {
  * the Map draws and springs in polar, so each position gets its `r` and
  * `angle` from x/y, and a `depth` from the tree in `kids` when it has none
  * (the centre 0). `ring` stays what the layout gave (0 when none). A position
- * without finite x/y is dropped: that node is not drawn.
+ * without finite x/y is dropped: that node is not drawn. `guides` and
+ * `bounds` pass through when the layout gives them.
  */
 export function polarLayout(lay) {
   const center = lay?.center ?? { id: '__core', kind: 'core', label: '', virtual: true };
@@ -174,7 +199,16 @@ export function polarLayout(lay) {
       ring: Number.isFinite(p.ring) ? p.ring : 0,
     });
   }
-  return { pos, center, kids };
+  const out = { pos, center, kids };
+  // What a layout may add for the Map to draw and fit by (Wall T12): its own
+  // orbit lines, world ellipses `{x, y, rx, ry}`, and the half extents
+  // `{x, y}` of the view the overview fits instead of a circle.
+  if (Array.isArray(lay?.guides)) out.guides = lay.guides;
+  // `cy` is the world y the overview's camera looks at (0 when not given).
+  if (lay?.bounds && lay.bounds.x > 0 && lay.bounds.y > 0) {
+    out.bounds = { x: lay.bounds.x, y: lay.bounds.y, cy: Number.isFinite(lay.bounds.cy) ? lay.bounds.cy : 0 };
+  }
+  return out;
 }
 
 /**
