@@ -323,7 +323,7 @@ Notes for every builder round (planner, round 1):
   brightness ordered by severity and age so the newest crit is hottest — done when: a test checks the
   billboard count/orientation from a site and that a newer crit has the higher peak, and the overview still
   shows two crits that differ in shape and brightness.
-  (commit SHA) Pure `galaxy/nebula.js`: `armTangent(home)` (the derivative of `armPoint`'s spiral at a star),
+  (commit 2c12909) Pure `galaxy/nebula.js`: `armTangent(home)` (the derivative of `armPoint`'s spiral at a star),
   `nebulaLobes(id)` (2 or 3 lobes from the site's hash: a main lobe on the star 1.3 × the size long, 0.8-0.92
   across; side lobes 0.26-0.36 before/after on the tangent, off it by up to 0.16, turned 0.12-0.36 rad, 0.5-0.68
   of its strength; mirrored/turned texture so none repeat), `nebulaPeaks` (crits newest first: 1, then 0.12 per
