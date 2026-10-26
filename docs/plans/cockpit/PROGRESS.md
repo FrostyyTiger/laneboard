@@ -35,7 +35,7 @@ its file names).
 
 ## Research questions
 
-- [ ] Q1 Touch target and type sizes for a slanted desk tablet at arm's length (~50-70 cm), 1368x912 CSS px at 2x: minimum targets (WCAG 2.5.5/2.5.8, Apple HIG, Material), body and label type sizes, hold-vs-tap thresholds in ms used by platforms — for T2, T4, T6
+- [x] Q1 Touch target and type sizes for a slanted desk tablet at arm's length (~50-70 cm), 1368x912 CSS px at 2x: minimum targets (WCAG 2.5.5/2.5.8, Apple HIG, Material), body and label type sizes, hold-vs-tap thresholds in ms used by platforms — for T2, T4, T6 → research/Q1-touch-targets-and-type.md
 - [ ] Q2 How does Claude Code in headless mode (`claude -p --output-format stream-json`, `--input-format stream-json`, `--include-partial-messages`) report partial text, tool use and tool results, how is a running turn interrupted, and how are sessions resumed? Exact event types and fields — for T5, T16
 - [ ] Q3 Chromium kiosk microphone without a prompt: which flags or managed policies (`AudioCaptureAllowed`, `AudioCaptureAllowedUrls`, …) work on Linux/ChromeOS/Android tablets, and does `getUserMedia` need a secure context on a LAN or tailnet address? — for T3, T7
 - [ ] Q4 WhisperLiveKit's WebSocket protocol: audio format the client sends, message shapes for partial and final text, language selection, typical latency to first partial and to final, behaviour on silence and disconnect — for T6, T16
