@@ -159,14 +159,27 @@ Notes for every builder round (planner, round 1):
   errors) and film r19-galaxy (tour unchanged, 0 errors; 1.5 fps as r10-r16 on this VM at load 51, not a regression).
   Note for T10/T14: under SwiftShader here CDP touch moves arrive ~1 s apart, so a scripted throw never coasts in
   the browser; the coast is pinned by the fake-clock page test.
-- [ ] T9 (§7 Night 3 D, beacon) [ui] [variant:galaxy] `fx=beacon` finished (was night 2's T41 and the tip of
+- [x] T9 (§7 Night 3 D, beacon) [ui] [variant:galaxy] `fx=beacon` finished (was night 2's T41 and the tip of
   night 2's T38; r59-dreamer 5, r54-film-ui 2, r49-accessibility fx): in `galaxy/fx.js` a floor height of ~0.25
   of the frame height at the overview so a young crit shows at once, a white-hot core at its base (carries in
   greyscale and protanopia), age as width as well as height (monotonic), and the sheath fading to zero over its
   top 20 % so the caption plate never cuts it flat — done when: a test in `test/wall-galaxy-fx.test.mjs` pins the
   floor in screen terms at the overview, the core colour, width and height both monotonic in age, the tip alpha
   0, and filmstrips of `galaxy.html?demo=1&quality=0` with and without `&fx=beacon` show the pillar clearly apart
-  from the nebula and uncut by the plate.
+  from the nebula and uncut by the plate. (commit 72c122c)
+  Builder r21: `fx.js` sizes are shares of the frame at the overview: `beaconHeight` floor 0.25 → top 0.42 at a
+  day (log), `beaconWidth` 0.016 → 0.036, both monotonic; `beaconScale(shot, base, fov)` turns a share into world
+  units in closed form from `overviewShot` (the same world size in every shot), tip capped at ndc y 0.9 (a site
+  near the frame's top gets less than the floor: the only case two pillars of one age differ). Scene: a sheath
+  (crit) and a narrower white core (`palette.sun`, --text-1, brightest at the foot, `coreProfile`) per pillar;
+  `beamProfile` gives the sheath its fade to exactly 0 over the top 20 %; the tip light smaller (90) and dimmer.
+  Found by filming: a pillar sized for the overview stood as a full-height red wall across the close shot of a
+  neighbouring system (`r21-galaxy-beacon` first take, 87 s); `beaconNear` now fades a beacon once it looks
+  1.8-3.5x wider on screen than at the overview (also fades its own system's pillar when held close, as
+  r17-operator asked). Films `shots/r21-galaxy-beacon` and `shots/r21-galaxy` (without): pillar a thin red line
+  with a white foot, clearly apart from the nebula, no red wall, 0 errors, 1.5 fps as every SwiftShader film here.
+  Stills `shots/r21-before`/`r21-after` (`at=overview`). Left for others: the tether (T16) still draws a red line
+  from the banner to the node, which at the overview can read as a second beacon.
 - [ ] T10 (§7 Night 3 C3) [ui] [variant:galaxy] Touch, tap a site: hit-testing in screen space over
   `screenOf` discs with a finger-sized radius (48 css px floor, Q6's 10 mm; labels count as targets) — at the
   overview hits resolve to sites only; a tap is `pointerup` within 300 ms and 12 px; a tap on a site flies the
