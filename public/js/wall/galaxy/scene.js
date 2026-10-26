@@ -25,8 +25,18 @@ import {
   COMETS, LANES, TWINKLE, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles, twinkleAt,
 } from './fx.js';
 
-/** World sizes: the sun, a site's star, a planet (named kind), a dot (the rest). */
-export const SIZE = Object.freeze({ sun: 60, sunHalo: 900, star: 24, planet: 15, dot: 4, landing: 7 });
+/**
+ * World sizes: the sun, a site's star, a planet (named kind), a dot (the
+ * rest). The sun is 70 % of the sketch's 60 and its halo narrower than a
+ * crit nebula (r8-film-ui 2: the sun outshouted the trouble).
+ */
+export const SIZE = Object.freeze({ sun: 42, sunHalo: 640, star: 24, planet: 15, dot: 4, landing: 7 });
+
+/**
+ * The sun's halo strength: at most half the crit nebula's 0.85 (README
+ * §2.1: trouble is the loudest thing; test/wall-galaxy-sun.test.mjs).
+ */
+export const SUN_HALO = 0.3;
 
 /** A halo's size against its sphere, and its resting strength, per tone. */
 const HALO = Object.freeze({
@@ -131,9 +141,17 @@ export function overviewShot(sites, now = 0, fov = FOV) {
   };
 }
 
-/** Where the camera sits for one open system: outside it, looking in toward the sun. */
+/**
+ * Where the camera sits for one open system: on the sun's side of it, up,
+ * looking out across it, so the sun is behind and below the camera and
+ * never in the frame (r8-film-ui 2), and the sun lights the faces we see.
+ * The drift sways round that side (±SWAY rad, about 2.6 min a swing)
+ * rather than circling, so a long hold never brings the sun round.
+ */
+export const SITE_SHOT = Object.freeze({ jitter: 0.7, sway: 0.5, speed: 0.00002 });
 export function siteShot(site, now = 0) {
-  const out = Math.atan2(site.home.x, site.home.z) + (hash(site.id) - 0.5) * 0.9 + now * 0.00002;
+  const { jitter, sway, speed } = SITE_SHOT;
+  const out = Math.atan2(-site.home.x, -site.home.z) + (hash(site.id) - 0.5) * jitter + sway * Math.sin((now * speed) / sway);
   const d = Math.max(560, site.reach * 1.9);
   return {
     pos: { x: site.home.x + Math.sin(out) * d, y: site.home.y + d * 0.75, z: site.home.z + Math.cos(out) * d },
@@ -335,9 +353,12 @@ export function createGalaxyScene(canvas, {
 
   // The sun: the hub, at the origin. Its halo is a soft grey, quieter
   // than any nebula in trouble (README §2.1: trouble is the loudest thing).
-  const sun = new THREE.Mesh(geo.sun, keep(new THREE.MeshBasicMaterial({ color: white })));
+  // The core is the text-2 grey, not white (r8-film-ui 2); the light stays white.
+  // The dust is depth-tested (PointsMaterial's default), so no grain is drawn over the core.
+  const sunCore = col(palette.sunCore);
+  const sun = new THREE.Mesh(geo.sun, keep(new THREE.MeshBasicMaterial({ color: sunCore })));
   const sunHalo = new THREE.Sprite(keep(new THREE.SpriteMaterial({
-    map: glowTex, color: white, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.4,
+    map: glowTex, color: sunCore, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: SUN_HALO,
   })));
   sunHalo.scale.setScalar(SIZE.sunHalo);
   scene.add(sun, sunHalo);
@@ -488,7 +509,7 @@ export function createGalaxyScene(canvas, {
   };
 
   const index = (sites, core) => {
-    world = { sites, core, byId: new Map(sites.map((s) => [s.id, s])), version: (world?.version ?? 0) + 1 };
+    world = { sites, core, byId: new Map(sites.map((s) => [s.id, s])), version: (world?.version ?? 0) + 1, sunRadius: SIZE.sun };
     dirty = true;
   };
 

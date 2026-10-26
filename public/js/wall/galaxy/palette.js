@@ -185,6 +185,8 @@ export function paletteFrom(readVar = unset) {
     calm: t3,
     bright: t2,
     sun: t1,
+    // The sun's own disc and halo: a step down from the light it gives (r8-film-ui 2).
+    sunCore: t2,
     bg,
     line: { rgb: line.slice(0, 3), alpha: line[3] },
     // The dust: the light grey by the sun, fading toward the ground at the rim.
