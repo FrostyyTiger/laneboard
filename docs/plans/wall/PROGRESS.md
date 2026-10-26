@@ -993,3 +993,139 @@ Notes for every builder round (planner, round 1):
 | 59 | dreamer (fx-beacon) | - | - | - | - | 5 | 7 | - |
 
 ## Morning
+
+Night 2, final report (round 61, 2026-10-26 16:11). Shots live in `$RUN_DIR` = the run's own directory on the VM.
+
+- **Done:** the galaxy is real Wall code (§7.A: all 7 steps, T1-T11), 15 polish tasks from the panel (T15-T20,
+  T22-T30) and 4 effects behind `?fx=` (`lanes`, `comets`, `twinkle`, `beacon`; T12-T14, T21). 30 tasks, 0 console
+  errors in any film. Tests: 3923 pass, 0 fail.
+- **Not done:** 12 panel tasks are still open (T31-T42, none blocked). `fx=storm/lights/rings/arrive` were not
+  built. The §7.E docs (`docs/wall.md`, README row) were not written. Touch waits for night 3 (D4).
+- **Why it stopped:** the loop used all its rounds (stop reason `rounds`) at 16:11, seven hours before the
+  23:00 deadline. There is no owner-notes file from the script (`$RUN_DIR/owner-notes` does not exist).
+
+### The directions side by side
+
+The owner picked the galaxy before the night (README §5), so there is one direction. The effects are the
+variants the panel scored: each is a switch on top of it, all off by default (D9).
+
+**galaxy** (`galaxy.html`): five sites as star clusters on two spiral arms around the hub. The tour flies trouble
+first, opens each system on arrival, puts the lock on the trouble planet and types the caption. The far fleet
+line names the worst thing and a hairline ties it to its cluster. *Loved:* it tells the truth from 3 m: trouble
+comes first, every site is named, the red `■ HV2` matches its banner. The parked still (one system large, with
+lock and leader) is "the best frame it makes", and the stranger (r43) would put it on their own wall.
+*Hated:* the flights are dead air, black frames under a red banner (r59 1, r54 3). The overview stopped looking
+like a galaxy after T26 dimmed the dust: "five grey crumbs and a black disc" (r59 2, asked three times). Every
+trouble frame has two headlines at the same size (r54 1). Words sit on words (r43). Crit is the dimmest
+status for low vision (r49). There is no touch yet.
+
+**fx-beacon** (`?fx=beacon`): a red pillar of light stands over each crit cluster, and its height is the
+crit's age. *Loved:* "the one effect that composes". It adds a vertical to a frame full of ellipses, so the
+eye reads it as a sign at overview scale. *Hated:* it is a stub, about 60 px of red on a red nebula, and a
+young crit gets the shortest pillar just when it matters most (r59 5). The caption plate cuts its top flat
+(r54 2). T38 and T41 are open for these.
+
+**fx-comets** (`?fx=comets`): something that went from one machine to another (a push, a deploy, a backup) is
+a small grey comet on an arc, red or amber when it failed. *Loved:* calm, and it uses the Map's own comet
+rule. *Hated:* the panel saw one in 12 frames, once. The landing is the moment that matters and it has no
+mark.
+
+**fx-lanes** (`?fx=lanes`): a grey light runs along the hyperlanes, through the sun, between two sites that
+are talking. *Loved:* it never competes with trouble. *Hated:* "calm to the point of absence". No reviewer
+found it in any sheet. Its meaning is also unclear: a live link and a link something just used look the
+same (r26).
+
+**fx-twinkle** (`?fx=twinkle`): a planet with an agent at work on it glimmers softly. *Loved:* the calmest
+thing on screen. *Hated:* the most alive fact the fleet has is the least visible thing on screen. It is too
+small to see except in a close probe.
+
+Averages over every review this night (`## Scores`; galaxy 10 reviews, lanes 7, comets 6, twinkle 6, beacon 3):
+
+| variant | overview | legibility | status | touch | wow | calm | performance |
+|---|---|---|---|---|---|---|---|
+| galaxy | 5.6 | 5.4 | 6.0 | 2.0 | 6.1 | 5.3 | 5.8 |
+| fx-lanes | - | - | - | - | 2.6 | 8.0 | - |
+| fx-comets | - | - | - | - | 3.3 | 7.0 | - |
+| fx-twinkle | - | - | - | - | 2.5 | 8.3 | - |
+| fx-beacon | - | - | - | - | 6.0 | 6.7 | - |
+
+The galaxy's trend is better than its average: legibility went from 1 (r8) to 7 (r59) and status from 4 to 7.
+Wow peaked at 8 (r43) and is now 5. Performance is a guess: the VM films at about 2 fps under SwiftShader.
+The 10-minute hour proxy stayed flat (T10), and real fps needs the tablet.
+
+Newest filmstrips. To see one live, run `node test/tools/demo-fleet.mjs --port 7795 --size large` and open the URL:
+- galaxy: `$RUN_DIR/shots/r59-galaxy/sheet.png`, live `galaxy.html?demo=1&quality=0`.
+- all effects together: `$RUN_DIR/shots/r59-fx-all/sheet.png`, live
+  `galaxy.html?demo=1&quality=0&fx=lanes,comets,twinkle,beacon`.
+- beacon: `$RUN_DIR/shots/r46-galaxy-beacon/sheet.png` (still `r46-ov2`), live `galaxy.html?demo=1&quality=0&fx=beacon`.
+- comets: `$RUN_DIR/shots/r28-galaxy-comets/sheet.png` (frozen mid-flight `r28-comet/comet-1.png`), live `…&fx=comets`.
+- lanes: `$RUN_DIR/shots/r25-galaxy-lanes/sheet.png` (pulse frames `r25-pulse/pulse-*.png`), live `…&fx=lanes`.
+- twinkle: `$RUN_DIR/shots/r29-galaxy-twinkle/sheet.png` (close up `r29-twinkle/twinkle-*.png`), live `…&fx=twinkle`.
+- The 3 m view: `$RUN_DIR/shots/r59-3m.png`. Best single frames: `r59-still-hv2`, `r48-still-hv2b`.
+The page itself is `galaxy.html`, not `wall.html?variant=galaxy`, which silently loads radial (Later, r43).
+The sheets use `quality=0`. Without it, the budget drops to L2 on this VM in about 10 s.
+
+### Tasks
+
+Done: T1 c6161a4, T2 46fd6fa, T3 a28786b, T4 fd0dcdf, T5 f97dcc7, T6 72d101b, T7 ac3e3e6, T8 6b3ae25,
+T9 6a03398, T10 c3603b9, T11 dee4a91, T12 551ddc5, T13 b34858f, T14 187f6cf, T15 99a7f86, T16 b4b3fd3,
+T17 2c12909, T18 b399ee0, T19 b8b4dc0, T20 f1ae228, T21 cda1090, T22 3718702, T23 57762ee, T24 a75ce49,
+T25 ce47d92, T26 1dc9e7a, T27 e5c2a17, T28 32277f2, T29 059a37f, T30 f4a5ee3.
+Open (12, triaged from reviews, none blocked): T31 words on words, T32 wake lock, T33 crit luminance, T34 trouble
+name size, T35 caption follows a rising status, T36 no flight through clusters, T37 one headline, T38 feathered
+plates, T39 flights keep an end in frame, T40 arm ribbon, T41 beacon floor and core, T42 `fx=warp`.
+Tests now: 3923 pass, 0 fail (after round 60). An unnamed `socket hang up` failed once each after rounds 4, 31
+and 39 and never reproduced (see For the owner).
+
+**Needs you, worst first.**
+
+1. **Pick for night 2's effects: keep beacon, rework or drop the other three.** The galaxy itself is settled.
+   §7 asks keep, drop or more for each `fx`:
+   - *beacon, keep and grow* (wow 6.0). Panel: "the one effect that composes". A vertical is readable at the
+     overview, unlike anything else on screen. It needs T41 (floor height, white core, age as width) and T38
+     (soft tip). The case against: it is red on red and repeats the nebula unless T41 lands.
+   - *comets, rework* (wow 3.3). Panel: the right meaning, but invisible. Give it a landing (the target
+     planet flashes once) or Q8's `fx=miss` (a failed job visibly does not land). Otherwise drop it.
+   - *lanes, drop or rework* (wow 2.6). Panel: never seen in any sheet, and its meaning is unclear. Rework
+     would mean pulsing only links that changed state in the last minute and brightening the hyperlane by
+     one step while the pulse passes.
+   - *twinkle, rework* (wow 2.5). Panel: the most alive fact, shown least. Make it a visible ring or a
+     brighter planet, or fold it into Q8's `fx=fade` (quiet things recede, active ones come forward).
+   - Next to build, if you want more: `warp` (T42, open), `corona`, which also fixes a dead feed that looks
+     calm, then `blast`, `afterglow` and `sweep` (For the owner). Research's best: `fade`, `heat`.
+   My pick for night 3: the galaxy plus beacon. Finish T31-T41 first, starting with T39/T36 flights and T40
+   overview, which are the two biggest "hated" items. Then touch.
+2. **A dead feed looks like a calm fleet.** When `/ws` frames stop, nothing visible changes from 3 m; only
+   the small `LIVE` tag does (r59, `corona`). Decide whether this is core work (a `STALE` state on the page)
+   or an fx. Arguably it is a bug against §2.
+3. **Look at the real tablet before night 3.** Every fps number this night is SwiftShader on the VM. The budget
+   (T10, T28: pixel ratio 2, 1.5, 1.25) was never seen on the Surface. Open `galaxy.html?demo=1&perf=1` there
+   and note the level it settles on and the ms per frame.
+4. **Fenced `tour.js`: trouble waits about 95 s behind calm sites in each cycle** (r21 4). A hold-time option
+   (calm holds a third of trouble's) and revisiting trouble between calm sites. The diff is in For the owner.
+5. **Fenced `variants.js` + `main.js`: register `islands-tiles`.** Until then the galaxy's no-WebGL fallback lands
+   on radial (T7, diff in For the owner).
+6. **Fenced `loop/run.sh`: name the flaky test.** Add `✖` to the `TEST_TAIL` grep, take the lines after
+   `failing tests:` and save the output, so the next `socket hang up` is fixable.
+7. **Fenced `caption.js` / `frame.js`: accessibility and size.** Screen readers get the letter-by-letter typing
+   (plate `aria-live` off while typing, one hidden live node, fleet line `role="status"`; r49 7). `+3 MORE` is
+   10 px, unreadable at 3 m and too small to tap (r31 5).
+8. **Fenced `lock.js`: a drawn radius** (`r` in `lockGeometry`). This lets `galaxy/lock.js` drop its DOM copy (T9).
+9. **Kiosk: a Wall manifest and fullscreen?** A new `public/` file (`start_url: "/galaxy.html"`, fullscreen,
+   landscape) if you want it. Also, no read-only route for a wall screen exists (r43 6, 7).
+10. **Before merging, look at:** 193 commits on `run/wall-n2`. The vendored three.js 0.170.0
+    (`public/vendor/three/`, MIT, sha256 pinned in `SOURCES.txt`). `test/frontend-static.test.mjs` now lets a
+    relative import land under `public/vendor/` (a guardrail widened, T3). T30 reversed part of T23: the banner
+    no longer steps down from a crit to a warn, so it may repeat the caption until T37 makes it smaller.
+
+### Research
+
+- Q7 galaxy maps in games: thin sources; best proposals are `fx=heat` (halo size = recent activity), `fx=realm`
+  (territory shell per site), `fx=route` (the tour's next stop as a faint line).
+- Q8 alive without meaningless motion: best is `fx=fade` (quiet things recede), then `fx=miss` (a failed job's comet
+  does not land) and `fx=pulse` (a heartbeat at the real freshness).
+- Q9 three.js on the tablet's iGPU: no measured numbers found; adaptive pixel ratio is the main lever (built in
+  T28), a DOM overlay for names (T6).
+- Q10 camera paths: no comfort threshold found; arcs over the plane and eased flights (used in T4, T16).
+- Q11 cheap glow: skip bloom on an iGPU, use baked additive sprites (as the nebulae do); a storm is untested.
+- Open questions: none in `## Research questions`. Open measurement: real fps and GPU time on the tablet.
