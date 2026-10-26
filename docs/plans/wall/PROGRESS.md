@@ -425,7 +425,7 @@ Notes for every builder round (planner, night 1):
   halo, rooms one ring, halo only on the focused node and nodes in trouble; room-to-service
   edges short stubs at the overview, full fan only when the camera is in that site — done when:
   a still shows no halo on calm services and no hairball at `hv1`; option defaults off, map tests unchanged.
-  (commit COMMIT; the "halo" was the cpu/mem gauge rings on rooms and sites (the review's "services" are
+  (commit 0a75c9b; the "halo" was the cpu/mem gauge rings on rooms and sites (the review's "services" are
   kind `room`, its "rooms" kind `site`). Two new Map options, both default off: `gauges: 'trouble'` (gauges only
   on a node in trouble, in focus (hover, selection, or the ambient camera's `follow`, new in the scene) or with
   cpu/mem past 0.75, where the arc takes a hue) and `branch(child, parent, {s})` (share of a tree branch drawn
