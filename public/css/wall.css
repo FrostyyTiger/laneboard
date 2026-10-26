@@ -546,6 +546,14 @@ html.wall body {
    the whole stage. Its colours are read from the tokens by
    js/wall/galaxy/palette.js; nothing here paints it.
    --------------------------------------------------------------------------- */
+/* A finger on the galaxy (night 3 T7, js/wall/galaxy/touch.js): the page never
+   pans, pinch-zooms or bounces under it, over the canvas or the words alike;
+   the camera takes every gesture. */
+.galaxy-stage {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
 .galaxy-canvas {
   position: absolute;
   inset: 0;

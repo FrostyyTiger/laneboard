@@ -244,7 +244,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     last = now;
     const box = typeof free === 'function' ? free() : null;
     freeNow = box ? blendRect(freeNow, box, freeNow ? 1 - Math.exp(-dt / FREE_EASE_MS) : 1) : null;
-    const k = from ? ease((now - want.t0) / flight.ms) : 1;
+    const k = from ? ease((now - want.t0) / (want.ms > 0 ? want.ms : flight.ms)) : 1;
     const to = target(now);
     pose = from && k < 1 ? flightPose(from, to, k, flight, { ...view(), ends: [fromEnd, endFor(to, [starOf(want)])], avoid: avoid() }) : to;
     if (k >= 1) from = null;
@@ -300,7 +300,8 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
 
   return {
     focus: (id, zoom) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom }); },
-    fit: () => go({ kind: 'overview' }),
+    // `{ ms }` flies there in its own time (a first touch, night 3 T7, touch.js); the tour's is FLIGHT.ms.
+    fit: (opts) => go({ kind: 'overview', ...(opts?.ms > 0 ? { ms: opts.ms } : {}) }),
     frame,
     drawn: () => { for (const cb of drawCbs) cb(); },
     onDraw: (cb) => {

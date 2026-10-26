@@ -26,6 +26,9 @@
 // reads `OFFLINE`. `<html data-fresh>` carries the state. The sun says it
 // from 3 m (T6, fresh.js `sunLook`): its corona swells once per frame, and
 // on old data it shrinks and goes a cold grey.
+// Touch (night 3 T7, touch.js): the first touch anywhere stops the tour and
+// eases the camera to the overview in TOUCH.fitMs; nothing under that touch
+// is activated. `<html data-touch>` says the mode (`easing`, `explore`).
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
@@ -49,6 +52,7 @@ import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { createTether } from './tether.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
+import { TOUCH, createTouch } from './touch.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -230,11 +234,32 @@ export function boot() {
     });
   }
 
+  // The first touch (T7): the tour stops where it is, the camera eases out
+  // to the overview, the plate and the lock go, the tether draws in as it lands.
+  const touch = park ? null : createTouch(document.getElementById('galaxy-stage'), {
+    wake: () => {
+      tour.stop();
+      cam.fit({ ms: TOUCH.fitMs });
+      hud.release();
+      tether.show(fromSite && !reduced ? TOUCH.fitMs : 0);
+      fromSite = false;
+    },
+  });
+  let touchSaid = 'tour';
+
   const tick = (now) => {
     requestAnimationFrame(tick);
     const w = galaxy.world;
     if (!w) return;
     const t0 = performance.now();
+    if (touch) {
+      const m = touch.mode();
+      if (m !== touchSaid) {
+        touchSaid = m;
+        if (m === 'tour') delete page.dataset.touch;
+        else page.dataset.touch = m;
+      }
+    }
     const at = parked();
     if (at) {
       if (at.open !== parkOpen) galaxy.setOpen(at.id, parkOpen);
@@ -265,7 +290,7 @@ export function boot() {
     hud.update(model);
     tether.update(model, galaxy.world?.byId.keys() ?? null);
     tour.update(model);
-    if (!park) tour.start();
+    if (!park && touch?.mode() === 'tour') tour.start();
     const at = parked();
     // A parked overview (`?at=overview`, for stills) has its tether at once.
     if (park && !at && galaxy.world) tether.show(0);
@@ -325,6 +350,7 @@ export function boot() {
   globalThis.__galaxyHud = { caption, frame, lock, covers: hud.covers };
   globalThis.__galaxyLabels = labels;
   globalThis.__galaxyTether = tether;
+  globalThis.__galaxyTouch = touch;
 }
 
 boot();

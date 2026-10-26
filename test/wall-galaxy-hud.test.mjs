@@ -509,3 +509,23 @@ test('frame.fresh writes the tag: STALE <age> grey, OFFLINE in the offline hue, 
     assert.doesNotMatch(m[0], /--(crit|warn|info|down|attention)/);
   }
 });
+
+test('night 3 T7: release() (a finger took the camera) hides the plate and lets the lock go', () => {
+  const pending = [];
+  const timers = { setTimeout: (fn, ms) => { pending.push({ fn, ms }); return pending.length; }, clearTimeout: () => {} };
+  const tour = createTour({ focus: () => {}, fit: () => {} }, { timing: DEMO_TIMING, timers });
+  const { calls, caption, frame } = fakes();
+  const lockCalls = [];
+  const lock = { lockOn: (l) => lockCalls.push(['on', l.id]), release: () => lockCalls.push(['release']) };
+  const hud = createHud({ caption, frame, tour, lock });
+  const m = model();
+  hud.update(m);
+  tour.update(m);
+  tour.start();
+  pending.shift().fn();
+  assert.equal(calls.at(-1)[0], 'show', 'the plate is up on lab');
+  tour.stop();
+  hud.release();
+  assert.deepEqual(calls.at(-1), ['hide']);
+  assert.deepEqual(lockCalls.at(-1), ['release']);
+});

@@ -276,6 +276,8 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
       else frame.live(f.state === 'live');
     },
     park: (leg) => say({ arriveMs: 0, ...leg, kind: 'site' }),
+    // A finger took the camera (night 3 T7, touch.js): the words of an overview leg, no plate, no lock.
+    release: () => say({ kind: 'overview' }),
     covers: () => [caption.cover?.(), fleetCover(), tagCover()].filter(Boolean),
     fleetCover,
     tagCover,
