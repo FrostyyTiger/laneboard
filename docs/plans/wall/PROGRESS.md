@@ -411,11 +411,29 @@ Notes for every builder round (planner, round 1):
   — done when: a test with two problems shows the banner naming the second while the first is held and the
   first otherwise; do it in `hud.js` by choosing which model/problem is fed to `frame` (`frame.js` is fenced; if
   that cannot work, write the needed change under `## For the owner`).
-- [ ] T24 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 7) The overview turns, so every label moves
+- [x] T24 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 7) The overview turns, so every label moves
   for no reason (HOME at three places in three overviews): no turn at the overview (`overviewShot` fixed
   pose); depth comes only from the drift round a held system — done when: a test shows `overviewShot(sites, t)`
   gives one pose for any `t` (and the held drift still changes with `t`), and the filmstrip shows three
   overviews with every site name in the same place.
+  (commit a75ce49) Taken before T20 (round 41, builder): T20's hairline is drawn in once "and then still",
+  which only holds on an overview that stands still. `overviewShot(sites, fov)` lost its `now`: one pose
+  (the turn's old pose at 0, the one reduced motion and `?at=overview` already used), every caller updated.
+  First film showed the overview still moving between legs: not the turn but the fit (T19) searching again
+  from nothing whenever the covers changed (the widest fleet block grows as longer problems come). So
+  `createOverviewFit` keeps the held fit while it clears new covers (half the gap, as before) and searches
+  near it when not, and `main.js` gives the overview fit the far fleet block at its widest (`widestFar`:
+  the line's computed max-width plus the block's padding, read once per new box). Tests: the camera's
+  overview is one pose at 1 s, 1 min, 7 min, 1 h and back after a held site, whose drift still moves (camera
+  test); the fitted overview identical over 7 min; covers grown 12 px keep the fit (fails on the old code);
+  `widestFar`. Probe over 75 s of `?demo=1` (camera pose 1.4 per s, `$RUN_DIR/tools/r41-coverprobe.mjs`):
+  every overview leg at the same pose (0, 4058, 3913), while the far block came and went. Filmstrip
+  `$RUN_DIR/shots/r41-galaxy/` (`?demo=1&quality=0`, 4x, 0 console errors, 1.6 fps is SwiftShader): the
+  overviews at 3 s and 49 s name all five sites in nearly the same places; the 3 s one was before the
+  first far block was measured. **Decision:** the overview settles once per page life, eased over 1.5 s,
+  when the first crit puts the far block up; a calm fleet's corner is not reserved (it would push the calm
+  overview off-centre for words that are not there). The dust's own turn (once in 26 min, still.js) is kept:
+  it moves no name.
 - [ ] T25 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 8) Calm captions are lists nobody reads: a
   calm hold shows the kicker (`TARGET 04 / 05`, without `· SITE`) and the name only; a held site in trouble
   keeps its trouble lines and bars — done when: a test on `hud.js` (the lines fed to the caption) shows a calm
@@ -466,9 +484,8 @@ Notes for every builder round (planner, round 1):
 
 ## Later
 
-- §7.B (T3, builder r7) The overview turns 39° in 45 s (`overviewShot`, the sketch's 0.000015 rad/ms):
-  in the filmstrip the turn reads as motion, not depth; and the dust grains look coarse when the camera is
-  close (`?at=`).
+- §7.B (T3, builder r7) ~~The overview turns 39° in 45 s~~ (done: T24, no turn); the dust grains look
+  coarse when the camera is close (`?at=`).
 - §7.B (T4, builder r11) At the tour's zoom an open system with many planets reaches past the frame's
   bottom edge (`siteShot` distance `max(560, reach * 1.9)`): fit the distance to the open reach and the
   aspect, or aim a little below the star; since T5 the far fleet block (bottom right, opaque) also covers
