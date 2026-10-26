@@ -372,11 +372,28 @@ Notes for every builder round (planner, round 1):
   (1093, 390), the box's middle. Seen: on HV1 the hub and its `DEMO-HOST` name sit at the top, just above the
   tag (the Later line on the sun's label, r26-skeptic 4, would quieten it); the fleet line is the loudest
   thing in calm holds, as §2.1 wants.
-- [ ] T19 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 2) CLOUD is missing from the overview (under
+- [x] T19 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 2) CLOUD is missing from the overview (under
   the far fleet block): `overviewShot` offsets its look-at toward the sites' centroid until no site's folded
   box meets `hud.covers()` (in reduced motion too, where the overview is all there is and the plate is up
   most of the time: r24 saw HV2 under its own plate) — done when: a test shows every site's label is shown at the overview on the large
   fixture, and the overview still shows all five site names.
+  (commit b8b4dc0) New `galaxy/overview.js`: `fitOverview` slides the overview (`panShot`, never turns) and only
+  if sliding is not enough stands it back (up to 1.6×), the least it can, until every site's star and one side
+  for its folded name (labels.js `candidates`, at the site step) are 24 px clear of the covers. **Decision:**
+  not "look at the centroid": a grid of slides/pulls, nearest first, covers the same need and any frame.
+  The covers at the overview are the fleet block and the tag (the plate is hidden on an overview leg); in
+  reduced motion the widest plate counts too (`main.js`, the kept boxes). `createOverviewFit` keeps a fit while
+  it clears at half the gap, refits when it does not or the covers change, and **refits near the held fit**
+  (first try: least change from none hopped the galaxy across the frame as the overview turned, 0.4 → -0.4);
+  a new fit is flown to over 1.5 s, eased in and out (largest step over an hour of turn 18 world units per
+  50 ms, ~4 px; ~37 refits an hour, ~1 ms each at 1x). `?at=overview` uses it too. Tests
+  `test/wall-galaxy-overview.test.mjs` (6): the plain overview loses a site, the fitted one names all (real
+  three camera + `placeLabels`); over 7 min of turn every site named, no jump; reduced motion with the plate;
+  `fitShot` slides without turning; `siteMarks`; the camera asks the fitter only at the overview. Still
+  `$RUN_DIR/shots/r39-t19-still` (all five sites and the sun named, CLOUD above the fleet block); filmstrip
+  `$RUN_DIR/shots/r39-galaxy/` (`?demo=1&quality=0`, 4x, 0 console errors, 1.9 fps is SwiftShader): the three
+  overviews name all five. Reduced motion probe: all five named. Seen: the overview's turn still puts each
+  name somewhere else every time (T24); with T24's fixed pose the fit becomes one pose.
 - [ ] T20 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r15-dreamer.md 3) At the overview, tie the far fleet line
   to the cluster it names: a thin hairline in the status hue from the line to the named site's cluster, drawn
   in once (~600 ms) and then still — done when: a test maps the fleet line's named site to the hairline's end
