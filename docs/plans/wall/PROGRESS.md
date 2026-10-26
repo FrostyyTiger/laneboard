@@ -421,10 +421,20 @@ Notes for every builder round (planner, night 1):
   `test/wall-chrome.test.mjs`; map tests unchanged. Still `$RUN_DIR/shots/r48-still/`, filmstrip
   `r48-radial/`: no legend or lamp at the overview or in holds, dial at 000/090/180/270, 0 console errors;
   fps 2 is SwiftShader plus screenshots (filming note).)
-- [ ] T19 (§5) [variant:radial] (r9-film-ui #6, #8) Less ornament: calm services plain dots with no
+- [x] T19 (§5) [variant:radial] (r9-film-ui #6, #8) Less ornament: calm services plain dots with no
   halo, rooms one ring, halo only on the focused node and nodes in trouble; room-to-service
   edges short stubs at the overview, full fan only when the camera is in that site — done when:
   a still shows no halo on calm services and no hairball at `hv1`; option defaults off, map tests unchanged.
+  (commit COMMIT; the "halo" was the cpu/mem gauge rings on rooms and sites (the review's "services" are
+  kind `room`, its "rooms" kind `site`). Two new Map options, both default off: `gauges: 'trouble'` (gauges only
+  on a node in trouble, in focus (hover, selection, or the ambient camera's `follow`, new in the scene) or with
+  cpu/mem past 0.75, where the arc takes a hue) and `branch(child, parent, {s})` (share of a tree branch drawn
+  from the child's end). Radial: stubs keep 25 % below map scale 0.8, then a smoothstep to the whole fan by
+  IN_SITE 1.25, so the fan unfolds as the camera flies in; the core's spokes stay whole. Tests
+  `test/wall-ornament.test.mjs`; map tests unchanged. Still `$RUN_DIR/shots/r49-still/`, filmstrip
+  `r49-radial/`: no ring on calm rooms, no fan at HV1/HV2 at the overview, the crit glow the loudest thing,
+  0 console errors; fps 1.8 is SwiftShader plus screenshots (filming note). Seen but not this task: label
+  collisions in the builder cluster at 12 o'clock (BUILDER-B/BUILDER-C, DEPS/VM-C), which is T27's territory.)
 - [ ] T20 (§2 north star 1) [ui] [variant:radial, all] (r14-operator #1) Caption reads at 3 m: on a
   trouble site the trouble word (`STORAGE FULL 97%`, condensed, status colour, ~180 device px cap at
   the tablet's 2x, per Q3) is the biggest text on the plate, the site name under it at the 1.5 m step

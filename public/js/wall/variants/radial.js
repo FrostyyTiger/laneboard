@@ -208,6 +208,25 @@ export function labelSizeFor(steps = STEPS) {
 /** The tablet's labelSize. */
 export const labelSize = labelSizeFor(STEPS);
 
+/** The share of a branch a stub keeps at the overview (T19): a short tick off the child, toward its parent. */
+export const STUB = 0.25;
+/** Below this map scale a branch is a stub; it grows to the full branch by IN_SITE. */
+export const STUB_UNTIL = 0.8;
+
+/**
+ * The Map's `branch` for this direction (T19, r9-film-ui #8): at the overview
+ * a branch below a site is a stub off the child, so fifteen rooms do not meet
+ * in one hairball at their site; as the camera flies in (map scale from
+ * STUB_UNTIL to IN_SITE) the branches grow back to their parent, and in a
+ * site the fan is whole: the reveal. The core's spokes to the sites stay.
+ */
+export function branch(child, parent, { s = 1 } = {}) {
+  if (!parent || parent.kind === 'core') return 1;
+  const t = Math.min(1, Math.max(0, (s - STUB_UNTIL) / (IN_SITE - STUB_UNTIL)));
+  const e = t * t * (3 - 2 * t);
+  return STUB + (1 - STUB) * e;
+}
+
 /**
  * What `createMap` takes for this direction, next to `{ ambient: true }`.
  * `pinLabels`: a name keeps its side and line while it is on screen (the
@@ -217,9 +236,15 @@ export const labelSize = labelSizeFor(STEPS);
  * lamp strip under a builder's name are desk chrome, 4 px specks from across
  * the room; a builder's trouble is still its mark, a stuck lane its ▲. The
  * ring hairlines and the bearing dial stay: they say "instrument".
+ * `gauges: 'trouble'` and `branch` (T19, r9-film-ui #6, #8): the cpu/mem
+ * rings were the same double halo on eighty nodes; now a calm room is a plain
+ * dot and a site its ring, and the gauges mark "look here" (trouble, the site
+ * the camera is in, a metric past the warn line). Branches are stubs at the
+ * overview (`branch`).
  */
 export const mapOptions = Object.freeze({
   layout: layoutFor(), labelSize, pinLabels: true, labelInset: LABEL_INSET, legends: false, lamps: false,
+  gauges: 'trouble', branch,
 });
 
 /**

@@ -31,6 +31,9 @@
 //     rings,                   // false: no ring hairlines, ring legends or bearing dial (the Wall)
 //     legends,                 // false: no ring legends, hairlines and dial kept (the Wall's radial)
 //     lamps,                   // false: no lamp strip under builder names (the Wall)
+//     gauges,                  // 'trouble': cpu/mem rings only on trouble, the focus and a hot metric (the Wall)
+//     branch(child, parent, {s}) // share 0..1 of a tree branch drawn from the child's end (the Wall), undefined: all
+//     follow,                  // the node an ambient camera stays on (the Wall's tour), or null
 //     labelInset,              // {top, right, bottom, left} shares: where a name may move to (the Wall)
 //   }
 //
@@ -187,6 +190,18 @@ function linkCtrl(a, b) {
   const d = Math.hypot(a.x - b.x, a.y - b.y);
   const pull = Math.min(0.62, 0.2 + d / 1400);
   return { x: mx * (1 - pull), y: my * (1 - pull) };
+}
+
+/**
+ * The last `share` of the cubic a-b-c-d (from t = 1 - share to its end), as
+ * a cubic of its own (de Casteljau): a branch cut down to a stub off the child.
+ */
+function bezierTail(a, b, c, d, share) {
+  const t = 1 - clamp(share, 0, 1);
+  const mix = (p, q) => ({ x: p.x + (q.x - p.x) * t, y: p.y + (q.y - p.y) * t });
+  const ab = mix(a, b), bc = mix(b, c), cd = mix(c, d);
+  const abc = mix(ab, bc), bcd = mix(bc, cd);
+  return [mix(abc, bcd), bcd, cd, d];
 }
 
 /** The branch from a parent to a child, bent along the rings. */
@@ -451,7 +466,13 @@ export function createRenderer(ctx, palette) {
       if (!pc || (!cc.leaving && cc.entering)) continue;
       const how = scene.pos?.get(id)?.branch;
       if (how === 'none') continue;
-      const [a, b, c, d] = (how && branchCurve(pc, cc, how) || treeCurve(pc, cc)).map(scene.toScreen);
+      let [a, b, c, d] = (how && branchCurve(pc, cc, how) || treeCurve(pc, cc)).map(scene.toScreen);
+      // A page may draw a branch as a stub off the child (the Wall's overview: no fan at a busy site).
+      const share = typeof scene.branch === 'function' ? scene.branch(n, pc.node, { s: scene.s ?? 1 }) : undefined;
+      if (Number.isFinite(share) && share < 1) {
+        if (!(share > 0)) continue;
+        [a, b, c, d] = bezierTail(a, b, c, d, share);
+      }
       ctx.globalAlpha = clamp(k * Math.min(alphaOf(scene, id), alphaOf(scene, pid)) * (cc.a ?? 1), 0, 1);
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
@@ -670,6 +691,20 @@ export function createRenderer(ctx, palette) {
     else glyph(ring.shape, sp.x, sp.y, r * 1.1, col, a);
   }
 
+  /**
+   * Whether a node wears its cpu/mem gauges. Everywhere by default; with
+   * `scene.gauges === 'trouble'` (the Wall) only where they say "look here":
+   * a node in trouble, the one in focus (hover, selection, the ambient
+   * camera's), and a metric past the warn line (the arc takes its hue).
+   */
+  function gaugesOn(scene, id, n, st) {
+    if (!n.metrics || !GAUGED.has(n.kind)) return false;
+    if (scene.gauges !== 'trouble') return true;
+    if (st.abnormal || id === scene.selected || id === scene.hover || id === scene.follow) return true;
+    const m = n.metrics;
+    return (typeof m.cpu === 'number' && m.cpu > 0.75) || (!n.memCache && typeof m.mem === 'number' && m.mem > 0.75);
+  }
+
   /** CPU on the inner arc, memory on the outer, both from twelve o'clock. */
   function gauges(n, x, y, r, alpha) {
     const m = n.metrics;
@@ -690,11 +725,11 @@ export function createRenderer(ctx, palette) {
    * gauges, the working arc, the fold ring, a run's track, an overlay mark),
    * strokes included: labels and plates keep clear of this, not of the centre.
    */
-  function ringOuter(n, r, { mark = null, folded = false, working = false } = {}) {
+  function ringOuter(n, r, { mark = null, folded = false, working = false, gauged = true } = {}) {
     const q = n.kind === 'builder' ? r * 1.25 : r;
     let R = (n.kind === 'builder' ? q * Math.SQRT2 : q) + 1;
     if (n.kind === 'run') R = runRingR(r) + 1;
-    if (n.metrics && GAUGED.has(n.kind)) R = Math.max(R, q + 1 + 6.5 + 1);
+    if (gauged && n.metrics && GAUGED.has(n.kind)) R = Math.max(R, q + 1 + 6.5 + 1);
     if (working) R = Math.max(R, r + 4 + 0.7);
     if (folded) R = Math.max(R, r + (n.metrics ? 10 : 6) + 0.5);
     if (mark) {
@@ -766,8 +801,9 @@ export function createRenderer(ctx, palette) {
       const rolled = rollsUp(n, isFolded) ? scene.rolled?.(id) ?? null : null;
       const st = n.virtual ? { tone: 'grey', level: 0, shape: 'disc', alpha: 1, abnormal: false }
         : nodeStyle(n, scene.overlay, rolled, { budgetUsd: scene.budgetUsd?.(n), reach });
-      const outer = ringOuter(n, r, { mark: st.mark, folded: isFolded, working: Boolean(st.arc) });
-      return { n, r, isFolded, st, outer };
+      const gauged = gaugesOn(scene, id, n, st);
+      const outer = ringOuter(n, r, { mark: st.mark, folded: isFolded, working: Boolean(st.arc), gauged });
+      return { n, r, isFolded, st, outer, gauged };
     };
     const shown = (c) => c.node && (c.a ?? 1) > 0.001;
     const onScreen = (sp) => !(sp.x < -40 || sp.y < -40 || sp.x > W + 40 || sp.y > H + 40);
@@ -811,7 +847,7 @@ export function createRenderer(ctx, palette) {
       const sp = scene.toScreen(c);
       if (!onScreen(sp)) continue;
       const fade = alphaOf(scene, id) * (c.a ?? 1);
-      const { n, r, isFolded, st, outer } = look(id, c);
+      const { n, r, isFolded, st, outer, gauged } = look(id, c);
       const alpha = fade * (st.alpha ?? 1);
       // A lamp never fades (docs/design.md): a ▲/■ keeps its full weight when
       // focus dims the rest; only its enter/leave animation thins it.
@@ -897,7 +933,7 @@ export function createRenderer(ctx, palette) {
         markRing(st.mark, sp, (n.kind === 'builder' ? r * 1.25 * Math.SQRT2 : r) + 6, alpha);
       }
 
-      if (GAUGED.has(n.kind)) gauges(n, sp.x, sp.y, n.kind === 'builder' ? r * 1.25 + 1 : r, alpha);
+      if (gauged) gauges(n, sp.x, sp.y, n.kind === 'builder' ? r * 1.25 + 1 : r, alpha);
       if (isFolded) {
         const b = foldMark(id, sp, plates.get(id) ?? foldPlate(scene, id, n, c, sp, r, outer, c0, hairlines), alpha);
         if ((c.a ?? 1) > 0.5) badges.push(b);
