@@ -180,16 +180,20 @@ export function polarLayout(lay) {
 /**
  * The label of each occupied ring: the kinds on it, joined in RING_WORD order
  * (`BUILDER · SVC · PKG`). `nodes` is an array or an id -> node map. Ring 0
- * and virtual nodes carry no label. Returns `[{ring, r, kinds, label}]`.
+ * and virtual nodes carry no label. `r` is RINGS[ring], or the `ringR` a
+ * custom layout gives the ring's positions (the Wall's own radii).
+ * Returns `[{ring, r, kinds, label}]`.
  */
 export function ringLabels(pos, nodes) {
   const byId = nodes instanceof Map ? nodes : new Map((nodes ?? []).map((n) => [n.id, n]));
   const kinds = new Map();
+  const radius = new Map();
   for (const [id, p] of pos) {
     const n = byId.get(id);
     if (!n || n.virtual || !p.ring) continue;
     if (!kinds.has(p.ring)) kinds.set(p.ring, new Set());
     kinds.get(p.ring).add(n.kind);
+    if (Number.isFinite(p.ringR) && !radius.has(p.ring)) radius.set(p.ring, p.ringR);
   }
   const out = [];
   for (const ring of [...kinds.keys()].sort((a, b) => a - b)) {
@@ -197,7 +201,7 @@ export function ringLabels(pos, nodes) {
     const known = RING_WORD.filter(([k]) => present.has(k));
     const other = [...present].filter((k) => !RING_WORD.some(([w]) => w === k)).sort();
     const words = [...known.map(([, word]) => word), ...other.map((k) => String(k).toUpperCase())];
-    out.push({ ring, r: RINGS[ring], kinds: [...known.map(([k]) => k), ...other], label: words.join(' · ') });
+    out.push({ ring, r: radius.get(ring) ?? RINGS[ring], kinds: [...known.map(([k]) => k), ...other], label: words.join(' · ') });
   }
   return out;
 }

@@ -28,7 +28,7 @@ export function boot() {
     console.warn(`wall: unknown variant "${pick.asked}", showing ${pick.id}`);
   }
 
-  const map = createMap(document.getElementById('wall-map'), { ambient: true });
+  const map = createMap(document.getElementById('wall-map'), { ...pick.variant.mapOptions, ambient: true });
 
   const perf = createPerf();
   globalThis.__wallPerf = perf.stats;

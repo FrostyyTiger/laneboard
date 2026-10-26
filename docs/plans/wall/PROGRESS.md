@@ -157,11 +157,28 @@ Notes for every builder round (planner, night 1):
   islands or orbits: those variants likely need a straight-branch option next (defaults off). Fit
   still uses the farthest node's radius (`maxRadius`), a circle, so a wide layout fits by its
   corner; T17 owns the fit. `test/helpers/fake-map-dom.mjs` copies the fenced Map test's fake DOM.)
-- [ ] T11 (§5) [variant:radial] Today's constellation refined for a wall: spacing for 100-150
+- [x] T11 (§5) [variant:radial] Today's constellation refined for a wall: spacing for 100-150
   nodes, line density, label sizes for distance (sites and rooms legible at the overview,
   services and leaves may be dots), in `public/js/wall/variants/radial.js` — done when: a
   filmstrip `$RUN_DIR/shots/<round>-radial/` under the throttle shows site and room labels
   legible at the overview, trouble the loudest thing, the tour visiting it first, fps >= 27.
+  (commit SHA; variants carry `mapOptions` (variants.js), main.js spreads them under `ambient`.
+  Two Map options, both default off: `labelSize(node, {s, trouble})` -> px, 0 (no name at this
+  zoom) or `{px, inward}` (centred on the bearing toward the centre); and a custom layout's
+  `ringR` on its positions, which `ringLabels` (so hairlines and legends) uses instead of RINGS.
+  Radial: type steps 11 · 15 · 20 · 26 (4:3), sites 26 facing the core (pointing outward they
+  landed on their own rooms), rooms/builders 15, calm services and leaves no name at the
+  overview (named at the Map's size once s > 1.25), trouble at least at 15, core unnamed (the tag
+  names it; it collided with the site names), `__repos` at the room step (a grouping, no place).
+  Spacing: `WALL_RINGS` 0 200 380 490 575 650 (Map: 0 150 290 420 540 640): sites and rooms a
+  third further out, the dot rings close up, the outermost about where it was. Tests
+  `test/wall-radial.test.mjs`. Filmstrip `$RUN_DIR/shots/r26-radial/`, still `r26-still/`: sites
+  read at the overview, the tour goes to HV1 (attention/crit) first, 0 console errors; fps 7.8 is
+  SwiftShader plus screenshots (filming note); script 5.66 ms/frame average, 19.8 ms worst at 4x
+  (T9: 6.67/23). Line density not changed here: the room->service fans are T19's stubs, the edge
+  labels T27. Seen and left to their tasks: some room labels still pushed a line or two off their
+  node by the collision pass (PROXY, FRONT-DOOR; T15 pins them), and the larger rings bring the
+  bottom nodes near the fleet line (T17's safe area).)
 - [ ] T12 (§5) [variant:orbits] The rings as ellipses that use the full width; sites as planets
   with their rooms in orbit around them, in `public/js/wall/variants/orbits.js` (a pure layout
   through T10's option, `rings: false` plus its own orbit lines) — done when: a test checks the

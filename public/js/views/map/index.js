@@ -150,6 +150,8 @@ export function migrateFolds(list, localId) {
  *                            pos gives world x/y (r and angle follow from them, polarLayout).
  *                            Default: the radial rings
  *   rings                 false: no ring hairlines, ring legends or bearing dial (default on)
+ *   labelSize(node, {s, trouble}) -> px for the node's name, 0 for none at this
+ *                            zoom (s), undefined for today's 11/12px. Default: today's
  *
  * Returns the API of plan §5 2.2 plus the shell hooks (§4 D8).
  */
@@ -1148,6 +1150,7 @@ export function createMap(root, opts = {}) {
       covers: mode !== 'pip' ? [anchorRect()].filter(Boolean) : [],
       budgetUsd: typeof opts.budgetUsd === 'function' ? opts.budgetUsd : undefined,
       rings: opts.rings !== false,
+      labelSize: typeof opts.labelSize === 'function' ? opts.labelSize : undefined,
     };
   }
 

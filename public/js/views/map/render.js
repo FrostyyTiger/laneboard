@@ -922,7 +922,16 @@ export function createRenderer(ctx, palette) {
       const show = phone
         ? few || n.kind === 'builder' || n.kind === 'run' || picked || trouble(n, stuck)
         : (c.depth ?? 0) <= 2 || n.kind === 'builder' || n.kind === 'run' || s > 1.25 || picked || near.has(id) || loud || trouble(n, stuck);
-      if (!show || fade < 0.12) continue;
+      // A page's own type steps (`createMap(el, { labelSize })`, the Wall):
+      // px for this node's name, 0 for none at this zoom; undefined keeps
+      // today's 11/12px; `{px, inward: true}` centres the name on the bearing
+      // toward the centre. The selection is always named.
+      const asked = typeof scene.labelSize === 'function'
+        ? scene.labelSize(n, { s, trouble: loud || trouble(n, stuck) }) : undefined;
+      const step = asked && typeof asked === 'object' ? asked.px : asked;
+      const inward = Boolean(asked?.inward);
+      const sized = Number.isFinite(step) && step > 0;
+      if (!show || fade < 0.12 || (step === 0 && !picked)) continue;
       const sp = scene.toScreen(c);
       // A node off the canvas, or under the inspector or sheet, is not named:
       // its label would stand alone at an edge (review n5).
@@ -946,7 +955,10 @@ export function createRenderer(ctx, palette) {
       // The selection's name sits outside its reticle, not on a bracket (T53).
       const sel = id === scene.selected;
       if (sel) R = Math.max(R, reticleD(n.kind, ns) + RETICLE_GAP);
-      const out = R + 6 + 7 * Math.abs(Math.sin(ang));
+      // Half the label's line: 7px at today's sizes, in step with a page's own.
+      const half = sized ? Math.round(step * 0.64) : 7;
+      const track = sized ? Math.max(1, Math.round(step * 0.06)) : 1;
+      const out = R + 6 + half * Math.abs(Math.sin(ang));
       let x = sp.x + Math.cos(ang) * out;
       let y = sp.y + Math.sin(ang) * out;
       let left = Math.cos(ang) >= 0;
@@ -958,11 +970,11 @@ export function createRenderer(ctx, palette) {
       const plate = n.kind === 'site' || n.kind === 'host' || n.kind === 'room' || n.kind === 'builder';
       const raw = n.kind === 'builder' ? builderName(scene, n) : n.label ?? n.id;
       const text = String(raw).toUpperCase();
-      const font = `${plate ? 600 : 500} ${plate && n.kind !== 'room' ? 12 : 11}px ${P.label}`;
+      const font = `${plate ? 600 : 500} ${sized ? step : plate && n.kind !== 'room' ? 12 : 11}px ${P.label}`;
       ctx.font = font;
       const col = plate || loud ? P.t1 : n.kind === 'run' ? P.t3 : P.t2;
       // A backing so a label stays readable where an arc passes under it.
-      const w = measure(text) + ('letterSpacing' in ctx ? text.length : 0);
+      const w = measure(text) + ('letterSpacing' in ctx ? text.length * track : 0);
       const round = n.kind === 'run' ? runRound(n) : null;
       const extra = round ? round.length * 7 + 8 : 0;
       const rawSub = n.why && loud ? n.why : n.sub;
@@ -973,7 +985,15 @@ export function createRenderer(ctx, palette) {
       // The widest line decides whether the label fits on this side (T53: a sub line ran off the edge).
       const wide = Math.max(w + extra, sw);
       const off = (lft, px) => (lft ? px + wide > W - 4 : px - wide < 4);
-      if (off(left, x)) {
+      if (sized && inward) {
+        // Centred on the bearing toward the centre, clear of the node: a big
+        // name pointing outward would land on what the node holds.
+        const ext = Math.abs(Math.cos(ang)) * (w / 2 + 2) + Math.abs(Math.sin(ang)) * half;
+        const cx = sp.x - Math.cos(ang) * (R + 4 + ext);
+        x = clamp(cx - w / 2, 4, W - 4 - w);
+        y = sp.y - Math.sin(ang) * (R + 4 + ext);
+        left = true;
+      } else if (off(left, x)) {
         // It would run off the edge: it flips to the node's other side; when
         // that does not fit either, it goes over the node, centred on it and
         // kept inside the canvas (labels under a node belong to its neighbours).
@@ -985,10 +1005,10 @@ export function createRenderer(ctx, palette) {
         }
       }
       const bx = left ? x - 2 : x - w - 2;
-      const box = { x0: bx, y0: y - 7, x1: bx + w + 4, y1: y + 7 };
+      const box = { x0: bx, y0: y - half, x1: bx + w + 4, y1: y + half };
       if (round) { if (left) box.x1 += extra; else box.x0 -= extra; }
-      let low = n.kind === 'builder' ? 22 : 13;
-      if (n.kind === 'builder') box.y1 = y + 13;
+      let low = (n.kind === 'builder' ? 22 : 13) + half - 7;
+      if (n.kind === 'builder') box.y1 = y + 13 + half - 7;
       if (subText) {
         box.y1 = y + low + 6;
         if (left) box.x1 = Math.max(box.x1, x + sw); else box.x0 = Math.min(box.x0, x - sw);
@@ -1009,7 +1029,7 @@ export function createRenderer(ctx, palette) {
       // Who keeps its place when two collide: the selection, then trouble,
       // then machines and places, then the rest.
       const rank = id === scene.selected ? 0 : picked ? 1 : loud || trouble(n, stuck) ? 2 : plate ? 3 : 4;
-      plan.push({ id, n, sx: sp.x, sy: sp.y, R, text, font, col, x, y, left, w, round, sub: subText, loud, fade, enter: c.a ?? 1, rank, box, low,
+      plan.push({ id, n, sx: sp.x, sy: sp.y, R, text, font, col, x, y, left, w, half, track, round, sub: subText, loud, fade, enter: c.a ?? 1, rank, box, low,
         lamps: n.kind === 'builder' ? lampColours(n, stuck.has(n.builder)) : null });
     }
     return plan;
@@ -1147,9 +1167,9 @@ export function createRenderer(ctx, palette) {
       ctx.textAlign = left ? 'left' : 'right';
       const bx = left ? nx - 2 : nx - w - 2;
       fillStyle(P.bg, 0.8 * fade);
-      ctx.fillRect(bx, y - 7, w + 4, 14);
+      ctx.fillRect(bx, y - e.half, w + 4, e.half * 2);
       fillStyle(e.col, fade);
-      tracked(e.text, nx, y, 1);
+      tracked(e.text, nx, y, e.track);
       if (round) {
         // The numbers the ring draws, beside the name, in the data face.
         ctx.font = `10px ${P.mono}`;
@@ -1165,7 +1185,7 @@ export function createRenderer(ctx, palette) {
         // A lit lamp never fades with focus (docs/design.md); off lamps go with the label.
         e.lamps.forEach((lc, i) => {
           fillStyle(lc, lc === P.crit || lc === P.warn || lc === P.accent ? e.enter ?? 1 : fade);
-          ctx.fillRect(lx + i * 6, y + 9, 4, 4);
+          ctx.fillRect(lx + i * 6, y + e.half + 2, 4, 4);
         });
       }
       if (e.sub) {

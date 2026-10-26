@@ -3,11 +3,14 @@
 // `?demo=1` speed flag (the tour runs ~4 s per site, for filming).
 //
 // Pure: no DOM, so test/wall-variant.test.mjs imports it directly. Each
-// direction's task adds its entry to VARIANTS (`radial` is today's Map).
+// direction's task adds its entry to VARIANTS with the Map options it needs
+// (`mapOptions`, from its module in variants/; the page adds `ambient`).
+
+import * as radial from './variants/radial.js';
 
 /** The directions, in the order a morning report lists them. */
 export const VARIANTS = Object.freeze([
-  Object.freeze({ id: 'radial', label: 'Radial' }),
+  Object.freeze({ id: 'radial', label: 'Radial', mapOptions: radial.mapOptions }),
 ]);
 
 /** What an unknown or missing `?variant=` falls back to. */
