@@ -485,11 +485,24 @@ Notes for every builder round (planner, night 1):
   `test/wall-caption.test.mjs`. Filmstrip `$RUN_DIR/shots/r54-radial/`, dense unthrottled strip `r54-dense/`
   (frame 18: HV1's plate with the count and two named lanes, keys aligned, nothing cut), 0 console errors;
   fps 2.5 is SwiftShader plus screenshots (filming note).)
-- [ ] T23 (§2) [ui] [variant:all] (r14-operator #6) No dead plate: on a trouble site the trouble word
+- [x] T23 (§2) [ui] [variant:all] (r14-operator #6) No dead plate: on a trouble site the trouble word
   shows at once with the plate (untyped), only the site name types; the plate grows with its lines
   instead of starting at full height; in demo timing the typing starts during the last 0.5 s of the
   flight — done when: a filmstrip frame at the start of a hold shows the trouble word and no empty
   plate; the pure part (plate height from line count) is tested in `test/wall-caption.test.mjs`.
+  (commit COMMIT; the word and its why were already in with the plate (T20), only the name types. New:
+  `plateHeight(cap, shown, heroVmin)` in caption.js sums the plate's rhythm (`PLATE`: padding, kicker, word at
+  0.86 of its size, why, name at 0.92, rows 3.2 / 2.3vmin by step, 0.9 gaps, 1.6 before the small facts) and
+  wall.css now sets those heights on every block, so the layout is that sum, not font metrics. A row is
+  `hidden` until its beat; then the plate's height eases to the next sum over the line's fade (WAAPI, overflow
+  hidden, so the row wipes in as the plate opens). Demo `leadMs` 900 -> 800: the name types from 0.5 s before
+  arrival. Probe on the live demo: the settled plate is exactly its content (scrollHeight = clientHeight, the
+  bottom pad 24 px = 2.64vmin); it opens at 142 px on a calm site and grows to 284, 315 -> 484 on HV2. Tests in
+  `test/wall-caption.test.mjs` (growth row by row, the trouble head, the small gap, wall.css carries the same
+  heights, demo typing in the last 0.5 s). Filmstrip `$RUN_DIR/shots/r55-radial/`: frames 29 s, 39 s, 56 s are
+  hold starts with `■ STORAGE` / `▲ OFFICE-PRINTER` and the why up, the name typing, no empty rows; 0 console
+  errors; fps 2.1 is SwiftShader plus screenshots (filming note). Seen, for T24: a map label (`HOME`) cut by
+  the plate's right edge.)
 - [ ] T24 (bug) [ui] [variant:all] (r14-operator #7) Map labels cut by the plate's edge and showing
   through it as ghost text: plate at least 95 % opaque, and Map labels whose box falls under the
   plate rectangle are hidden (the Wall has the rectangle and `screenOf`; any Map change is an option

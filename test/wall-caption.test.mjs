@@ -5,8 +5,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   captionLines, captionSchedule, captionTimingFor, CAPTION_TIMING, DEMO_CAPTION_TIMING,
-  MAX_LINES, MAX_TEXT, STEPS, HERO_PLATE, heroSize,
+  MAX_LINES, MAX_TEXT, STEPS, HERO_PLATE, heroSize, PLATE, plateHeight,
 } from '../public/js/wall/caption.js';
+import { readFileSync } from 'node:fs';
 import { TIMING, DEMO_TIMING } from '../public/js/wall/tour.js';
 
 /** Two sites as the large demo has them: hv1 calm, hv2 with a full pool. */
@@ -225,4 +226,69 @@ test('caption: the trouble word is 14vmin where it fits, fitted to the plate whe
   // wider screens give the word more room
   assert.ok(heroSize('OFFICE-PRINTER', 1920, 1080) > heroSize('OFFICE-PRINTER', 1368, 912));
   assert.equal(heroSize('STORAGE', 0, 0), STEPS.hero, 'no stage yet: the full step');
+});
+
+// T23 (r14-operator #6): no dead plate. The trouble word is in with the
+// plate, only the name types, and the plate grows with its rows instead of
+// opening at its full height with empty rows under the name.
+test('caption: the plate grows with its rows, one row height and gap at a time', () => {
+  const m = model();
+  const calm = captionLines(node(m, 'lab'), m, 2, 5);
+  const rows = calm.lines.filter((l) => l.step !== 'hero');
+  const opened = plateHeight(calm, 0);
+  // kicker and name, nothing under them
+  const head = PLATE.padTop + PLATE.kicker + PLATE.nameAbove + STEPS.name * PLATE.nameLead + PLATE.nameBelow + PLATE.padBottom;
+  assert.ok(Math.abs(opened - head) < 0.01, `${opened} vs ${head}`);
+  assert.ok(Math.abs(plateHeight(calm, 1) - opened - PLATE.rows.line) < 0.01, 'the first row adds its height, no gap');
+  assert.ok(Math.abs(plateHeight(calm, 2) - plateHeight(calm, 1) - PLATE.rows.line - PLATE.rowGap) < 0.01, 'the next adds a gap too');
+  for (let i = 1; i <= rows.length; i++) assert.ok(plateHeight(calm, i) > plateHeight(calm, i - 1), `row ${i} grows it`);
+  assert.equal(plateHeight(calm), plateHeight(calm, rows.length), 'all rows by default');
+  assert.equal(plateHeight(calm, 99), plateHeight(calm, rows.length));
+  assert.equal(plateHeight(calm, -3), opened);
+  assert.ok(opened < plateHeight(calm) * 0.6, 'it opens well under its full height');
+  assert.equal(plateHeight(null, 0), plateHeight({ lines: [] }, 3));
+});
+
+test('caption: a trouble plate opens with its word and why, the facts below a gap at the small step', () => {
+  const m = model();
+  const c = captionLines(node(m, 'hv2'), m, 1, 5);
+  const lead = c.lines.find((l) => l.step === 'hero');
+  const rows = c.lines.filter((l) => l.step !== 'hero');
+  const calmHead = plateHeight({ lines: [] }, 0);
+  // the word (at its fitted size) and its why are there from the first frame
+  const word = PLATE.heroAbove + 12 * PLATE.heroLead + PLATE.subGap + PLATE.sub + Math.max(PLATE.heroBelow, PLATE.nameAbove) - PLATE.nameAbove;
+  assert.ok(lead.sub, 'hv2 has a why under its word');
+  assert.ok(Math.abs(plateHeight(c, 0, 12) - calmHead - word) < 0.01);
+  assert.ok(plateHeight(c, 0, 14) > plateHeight(c, 0, 9), 'a bigger word, a taller plate');
+  const noSub = { lines: [{ ...lead, sub: '' }] };
+  assert.ok(Math.abs(plateHeight(c, 0, 12) - plateHeight(noSub, 0, 12) - PLATE.subGap - PLATE.sub) < 0.01);
+  // the first small row after a line row brings the extra gap, the next does not
+  const i = rows.findIndex((r) => r.step === 'small');
+  assert.ok(i > 0 && rows[i - 1].step === 'line', 'hv2 has facts after its lines');
+  const step = (k) => plateHeight(c, k + 1, 12) - plateHeight(c, k, 12);
+  assert.ok(Math.abs(step(i) - PLATE.rowGap - PLATE.smallGap - PLATE.rows.small) < 0.01);
+  if (rows[i + 1]?.step === 'small') assert.ok(Math.abs(step(i + 1) - PLATE.rowGap - PLATE.rows.small) < 0.01);
+});
+
+test('caption: wall.css sets the heights plateHeight adds up', () => {
+  const css = readFileSync(new URL('../public/css/wall.css', import.meta.url), 'utf8');
+  const rule = (sel) => {
+    const at = css.indexOf(`\n${sel} {`);
+    assert.ok(at >= 0, sel);
+    return css.slice(at, css.indexOf('}', at));
+  };
+  assert.match(rule('.wall-caption-line'), new RegExp(`height: ${PLATE.rows.line}vmin`));
+  assert.match(rule('.wall-caption-line[data-kind="metrics"]'), new RegExp(`height: ${PLATE.rows.line}vmin`));
+  assert.match(rule('.wall-caption-line[data-step="small"]'), new RegExp(`height: ${PLATE.rows.small}vmin`));
+  assert.match(rule('.wall-caption-name'), new RegExp(`height: calc\\(var\\(--cap-name\\) \\* ${PLATE.nameLead}\\)`));
+  assert.match(rule('.wall-caption-hero-word'), new RegExp(`height: calc\\(var\\(--cap-hero\\) \\* ${PLATE.heroLead}\\)`));
+  assert.match(rule('.wall-caption-hero-sub'), new RegExp(`height: ${PLATE.sub}vmin`));
+  assert.match(rule('.wall-caption-kicker'), /height: var\(--cap-key\)/);
+  assert.match(rule('.wall-caption'), /overflow: hidden/);
+  assert.match(css, /\.wall-caption-lines > \.wall-caption-line\[hidden\] \{ display: none; \}/);
+});
+
+test('caption: in demo timing the name types during the last 0.5 s of the flight', () => {
+  const s = captionSchedule({ arriveMs: DEMO_TIMING.flyMs }, 'HV2', 4, DEMO_CAPTION_TIMING);
+  assert.ok(s.nameAt >= DEMO_TIMING.flyMs - 500 && s.nameAt < DEMO_TIMING.flyMs, `types from ${s.nameAt} ms`);
 });

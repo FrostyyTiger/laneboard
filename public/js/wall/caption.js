@@ -245,6 +245,47 @@ export function captionLines(node, model, index = null, count = null) {
   return { kicker, name, status, hero: Boolean(bad), lines };
 }
 
+/**
+ * The plate's vertical rhythm in vmin (wall.css sets the same heights, so
+ * the layout is this sum and not the fonts' metrics): its padding, the
+ * kicker, the trouble word (a fraction of its size) and its why, the name,
+ * and each row by its step with the gaps between them. Adjacent margins
+ * collapse, so the hero and the name share the larger of their two.
+ */
+export const PLATE = Object.freeze({
+  padTop: 2.4, padBottom: 2.64, kicker: 1.7,
+  heroAbove: 1.2, heroLead: 0.86, subGap: 0.9, sub: 4.3, heroBelow: 1.4,
+  nameAbove: 0.9, nameLead: 0.92, nameBelow: 1.6,
+  rowGap: 0.9, smallGap: 1.6, rows: Object.freeze({ line: 3.2, small: 2.3 }),
+});
+
+/**
+ * The plate's height in vmin with the first `shown` rows in (T23: the plate
+ * grows with its lines, it does not open at its full height with empty rows
+ * under the name). `cap` is `captionLines`' answer; the trouble line is the
+ * hero, in with the plate, so it is always counted, at `heroVmin`.
+ */
+export function plateHeight(cap, shown = Infinity, heroVmin = STEPS.hero) {
+  const all = Array.isArray(cap?.lines) ? cap.lines : [];
+  const lead = all.find((l) => l.step === 'hero');
+  const rows = all.filter((l) => l.step !== 'hero');
+  const n = Math.max(0, Math.min(rows.length, Number.isFinite(shown) ? Math.floor(shown) : rows.length));
+  let h = PLATE.padTop + PLATE.kicker;
+  if (lead) {
+    h += PLATE.heroAbove + heroVmin * PLATE.heroLead + (lead.sub ? PLATE.subGap + PLATE.sub : 0);
+    h += Math.max(PLATE.heroBelow, PLATE.nameAbove);
+  } else {
+    h += PLATE.nameAbove;
+  }
+  h += STEPS.name * PLATE.nameLead + PLATE.nameBelow;
+  for (let i = 0; i < n; i++) {
+    const step = rows[i].step === 'small' ? 'small' : 'line';
+    if (i) h += PLATE.rowGap + (step === 'small' && rows[i - 1].step !== 'small' ? PLATE.smallGap : 0);
+    h += PLATE.rows[step];
+  }
+  return Math.round((h + PLATE.padBottom) * 100) / 100;
+}
+
 /** Normal speed: the sequence starts when the camera is there (research Q1: arrive, then type). */
 export const CAPTION_TIMING = Object.freeze({
   leadMs: 0, inMs: 320, letterMs: 35, lineGapMs: 170, lineFadeMs: 280, outMs: 220, cursorMs: 2000,
@@ -252,10 +293,11 @@ export const CAPTION_TIMING = Object.freeze({
 
 /**
  * `?demo=1`: the hold is only 1.75 s (tour.js DEMO_TIMING), so the plate
- * starts while the flight eases out, and every beat is a little shorter.
+ * starts while the flight eases out and the name types in its last 0.5 s
+ * (T23: `leadMs - inMs`), and every beat is a little shorter.
  */
 export const DEMO_CAPTION_TIMING = Object.freeze({
-  leadMs: 900, inMs: 300, letterMs: 30, lineGapMs: 140, lineFadeMs: 220, outMs: 200, cursorMs: 800,
+  leadMs: 800, inMs: 300, letterMs: 30, lineGapMs: 140, lineFadeMs: 220, outMs: 200, cursorMs: 800,
 });
 
 /** Everything at once, nothing moving (prefers-reduced-motion; D5 is night 2's). */
@@ -373,6 +415,17 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     delete plate.dataset.status;
   };
 
+  // The plate's height follows its rows (plateHeight), eased as each comes in.
+  let heroVmin = STEPS.hero;
+  const grow = (cap, shown, ms) => {
+    const to = `${plateHeight(cap, shown, heroVmin)}vmin`;
+    const from = plate.style.height;
+    plate.style.height = to;
+    if (ms && from && from !== to && typeof plate.animate === 'function') {
+      plate.animate([{ height: from }, { height: to }], { duration: ms, easing: EASE });
+    }
+  };
+
   // The content is swapped once the last plate has faded out.
   const build = (cap, rows) => {
     kicker.textContent = cap.kicker;
@@ -385,7 +438,8 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
       heroSub.textContent = lead.sub;
       heroSub.hidden = !lead.sub;
       // Sized once a leg from the stage, not per frame.
-      hero.style.setProperty('--cap-hero', `${heroSize(lead.word, root.clientWidth, root.clientHeight)}vmin`);
+      heroVmin = heroSize(lead.word, root.clientWidth, root.clientHeight);
+      hero.style.setProperty('--cap-hero', `${heroVmin}vmin`);
     }
     if (lead) plate.dataset.hero = ''; else delete plate.dataset.hero;
     typed.textContent = '';
@@ -393,8 +447,11 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     cursor.hidden = false;
     cursor.classList.remove('is-blink');
     list.replaceChildren(...rows.map(lineEl));
-    for (const li of list.children) li.style.opacity = '0';
+    // A row takes no room until its beat: the plate opens on kicker, word and name.
+    for (const li of list.children) { li.hidden = true; li.style.opacity = '0'; }
     plate.dataset.status = cap.status;
+    plate.style.height = '';
+    grow(cap, 0, 0);
   };
 
   const show = (leg, cap) => {
@@ -418,7 +475,13 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     later(Math.max(s.cursorOffAt, swapAt), () => { cursor.hidden = true; cursor.classList.remove('is-blink'); });
     rows.forEach((_, i) => later(Math.max(s.lineAt[i], swapAt), () => {
       const li = list.children[i];
-      if (li) fade(li, 1, timing.lineFadeMs);
+      if (!li) return;
+      li.hidden = false;
+      grow(cap, i + 1, timing.lineFadeMs);
+      li.style.opacity = '1';
+      if (timing.lineFadeMs && typeof li.animate === 'function') {
+        li.animate([{ opacity: 0 }, { opacity: 1 }], { duration: timing.lineFadeMs, easing: EASE });
+      }
     }));
   };
 
