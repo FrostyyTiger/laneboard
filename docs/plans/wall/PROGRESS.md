@@ -180,13 +180,22 @@ Notes for every builder round (planner, round 1):
   with a white foot, clearly apart from the nebula, no red wall, 0 errors, 1.5 fps as every SwiftShader film here.
   Stills `shots/r21-before`/`r21-after` (`at=overview`). Left for others: the tether (T16) still draws a red line
   from the banner to the node, which at the overview can read as a second beacon.
-- [ ] T10 (§7 Night 3 C3) [ui] [variant:galaxy] Touch, tap a site: hit-testing in screen space over
+- [x] T10 (§7 Night 3 C3) [ui] [variant:galaxy] Touch, tap a site: hit-testing in screen space over
   `screenOf` discs with a finger-sized radius (48 css px floor, Q6's 10 mm; labels count as targets) — at the
   overview hits resolve to sites only; a tap is `pointerup` within 300 ms and 12 px; a tap on a site flies the
   camera there and opens it, brackets show within 100 ms; multi-pointer or a palm-sized contact is ignored (the
   night-2 r31-touch note under Later) — done when: a test of `hitTest(points, x, y, radius)` covers a near miss,
   a tie (the worst status wins, then the nearest), a label hit and a palm, and a pointer-event test on the page
-  sees a tap on a site's screen point focus and open that site.
+  sees a tap on a site's screen point focus and open that site. (commit b5d248e)
+  Builder r28 (code by r24-r25, which ran out before marking it): `touch.js` `TAP` (300 ms, the drag's 12 px slop,
+  radius 27 px = a 54 px disc, Q6's 10 mm; palm over 120 px), pure `hitTest` (worst tone, then nearest; a shown
+  name counts as 0 away), `tapPoints` (sites at least half grown, `screenOf`, nebula tone, `labels.shown()` boxes),
+  `isPalm`, `createTaps` (asked at the down, so a star drifting under the finger is not lost; a second finger,
+  a move past the slop, 300 ms or a palm is no tap; only in `explore`). `hud.open(leg)` brackets at once, plate on
+  arrival; main flies at the tour's zoom. Empty sky does nothing yet (T13). Checked: CDP script r28-touch (wake →
+  overview → drag → tap HV2's point: brackets on it 400 ms later, the system open and its plate 4 s later, page
+  scale 1, 0 errors) and film r28-galaxy (tour unchanged, 0 errors, 12.5 fps under SwiftShader as every film here;
+  a tap costs nothing per frame: the hit test runs only on a pointerdown).
 - [ ] T11 (§7 Night 3 C3) [ui] [variant:galaxy] Touch, the detail sheet: a tapped site shows a sheet in big
   type (`wall.css`, the caption's type steps) with the site's worst things first (from the model, as
   `galaxy/hud.js galaxyCaption` ranks them); in an open system a tap on a planet (hit-tested as T10, worst then
