@@ -16,6 +16,8 @@
 // Reduced motion (T11, D5, still.js): no flights, no turn, no drift; the
 // overview with every cluster folded and the caption rotating through the
 // sites, trouble first.
+// At the overview a hairline ties the far fleet line to the cluster it names
+// (T20, tether.js), drawn in once the camera is back out.
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
@@ -25,7 +27,7 @@ import { createCaption, captionTimingFor, STILL_CAPTION_TIMING } from '../captio
 import { createFrame } from '../frame.js';
 import { LOCK_TIMING, STILL_LOCK_TIMING } from '../lock.js';
 import { pxPerMm, screenOf, stepsFor } from '../type.js';
-import { createGalaxyCamera } from './camera.js';
+import { FLIGHT, createGalaxyCamera } from './camera.js';
 import { createHud } from './hud.js';
 import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
@@ -37,6 +39,7 @@ import { prefersStill, stillTourTimingFor } from './still.js';
 import { flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
+import { createTether } from './tether.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -179,6 +182,31 @@ export function boot() {
   });
   cam.onDraw(labels.draw);
 
+  // The fleet line's words, in the stage's px, for the tether (T20): read
+  // when a model came or the stage resized, never per frame.
+  const tetherRoot = document.getElementById('galaxy-tether');
+  const fleetAnchor = () => {
+    const el = frame.el.fleet;
+    const line = el?.querySelector('.wall-fleet-line');
+    const glyph = el?.querySelector('.wall-fleet-glyph');
+    if (!line || !glyph) return null;
+    const o = tetherRoot.getBoundingClientRect();
+    const l = line.getBoundingClientRect(), g = glyph.getBoundingClientRect();
+    return { left: g.left - o.left, top: l.top - o.top, right: l.right - o.left, bottom: l.bottom - o.top, glyph: (g.left + g.right) / 2 - o.left };
+  };
+  const tether = createTether(tetherRoot, cam, { anchor: fleetAnchor });
+  addEventListener('resize', tether.remeasure);
+  // Drawn in on each overview leg once the flight back out is over (the
+  // first one has no flight: at once); gone on a site leg.
+  let fromSite = false;
+  if (!park) {
+    tour.onLeg((leg) => {
+      if (leg.kind === 'overview') tether.show(fromSite && !reduced ? FLIGHT.ms : 0);
+      else tether.hide();
+      fromSite = leg.kind === 'site';
+    });
+  }
+
   const tick = (now) => {
     requestAnimationFrame(tick);
     const w = galaxy.world;
@@ -210,9 +238,12 @@ export function boot() {
     if (fx.has('comets')) galaxy.setComets(flowComets(model, galaxy.drawn()));
     if (fx.has('twinkle')) galaxy.setTwinkles(workingPlanets(model, galaxy.planets()));
     hud.update(model);
+    tether.update(model, galaxy.world?.byId.keys() ?? null);
     tour.update(model);
     if (!park) tour.start();
     const at = parked();
+    // A parked overview (`?at=overview`, for stills) has its tether at once.
+    if (park && !at && galaxy.world) tether.show(0);
     if (at && !parkedSaid) {
       parkedSaid = true;
       const order = tourOrder(model.nodes ?? []);
@@ -253,6 +284,7 @@ export function boot() {
   globalThis.__galaxyTour = tour;
   globalThis.__galaxyHud = { caption, frame, lock, covers: hud.covers };
   globalThis.__galaxyLabels = labels;
+  globalThis.__galaxyTether = tether;
 }
 
 boot();

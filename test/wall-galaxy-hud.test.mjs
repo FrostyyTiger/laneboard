@@ -105,6 +105,32 @@ test('the frame gets every model and the socket state; covers are the shown boxe
   assert.deepEqual(hud.covers(), [{ left: 0, top: 0, right: 10, bottom: 10 }]);
 });
 
+test('covers: the warn-step fleet line keeps the names off it too, its box read once per words', () => {
+  const { caption } = fakes();
+  let reads = 0;
+  const line = { dataset: { key: 'line|▲|remote · office-printer · paper jam' } };
+  const fleet = {
+    dataset: { step: 'line' },
+    querySelector: (sel) => (sel === '.wall-fleet-line' ? line : null),
+    get offsetLeft() { reads += 1; return 800; }, offsetTop: 700, offsetWidth: 500, offsetHeight: 90,
+  };
+  let far = null;
+  const frame = { update() {}, live() {}, cover: () => far, el: { fleet } };
+  const hud = createHud({ caption: { ...caption, cover: () => null }, frame });
+  assert.deepEqual(hud.covers(), [{ left: 800, top: 700, right: 1300, bottom: 790 }]);
+  hud.covers(); hud.covers();
+  assert.equal(reads, 1, 'not per frame');
+  line.dataset.key = 'line|▲|hv1 · feat-search · waiting';
+  hud.covers();
+  assert.equal(reads, 2, 'again when the words change');
+  // The far step: frame.js's own cover; calm: none.
+  far = { left: 1, top: 2, right: 3, bottom: 4 };
+  assert.deepEqual(hud.covers(), [far]);
+  far = null;
+  fleet.dataset.step = 'calm';
+  assert.deepEqual(hud.covers(), []);
+});
+
 test('a parked system gets its caption at once, without a tour', () => {
   const { calls, caption, frame } = fakes();
   const hud = createHud({ caption, frame });

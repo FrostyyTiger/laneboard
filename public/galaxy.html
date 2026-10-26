@@ -19,11 +19,13 @@
 <!-- The Wall's galaxy (docs/plans/wall/README.md §5): the fleet as one
      spiral galaxy in WebGL, the hub its sun, the sites star clusters. The
      names over it, the Wall's frame (vignette, clock, fleet line, tag) over
-     them, the target lock, then the caption. -->
+     them, the tether from the fleet line to its cluster, the target lock,
+     then the caption. -->
 <main class="wall-stage galaxy-stage" id="galaxy-stage">
   <canvas class="galaxy-canvas" id="galaxy" aria-hidden="true"></canvas>
   <div class="galaxy-labels" id="galaxy-labels" aria-hidden="true"></div>
   <div class="wall-frame-layer" id="wall-frame"></div>
+  <div class="galaxy-tether-layer" id="galaxy-tether" aria-hidden="true"></div>
   <div class="wall-lock-layer" id="wall-lock"></div>
   <div class="wall-caption-layer" id="wall-caption"></div>
 </main>

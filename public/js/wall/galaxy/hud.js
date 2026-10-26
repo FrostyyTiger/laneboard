@@ -28,7 +28,8 @@ export function legNode(leg, model) {
  * model, `live(on)` the socket's state, `park(site)` shows a parked system's
  * caption (`?at=`, for stills) without a tour, and `covers()` the boxes the
  * words take over the canvas (for the labels, T6; the tag top right since T18,
- * so neither a name nor a held planet sits on it), `tagCover()` the tag's alone.
+ * so neither a name nor a held planet sits on it; the warn-step fleet line
+ * too), `tagCover()` the tag's alone.
  */
 export function createHud({ caption, frame, tour = null, lock = null }) {
   let latest = null;
@@ -46,6 +47,24 @@ export function createHud({ caption, frame, tour = null, lock = null }) {
     }
   };
   const off = tour ? tour.onLeg(say) : () => {};
+  // Below the far step frame.js gives no cover, but the warn line's words
+  // are there all the same: the names keep off them too (round 42, seen with
+  // T20: `CLOUD` ran into `▲ REMOTE · OFFICE-PRINTER`). Read again only when
+  // the line's words or the window change, never per frame.
+  let lineSeen = null, lineBox = null;
+  const fleetCover = () => {
+    const far = frame.cover?.() ?? null;
+    if (far) return far;
+    const f = frame.el?.fleet;
+    const line = f?.querySelector?.('.wall-fleet-line');
+    if (!f || f.dataset.step !== 'line' || !line) return null;
+    const k = `${line.dataset.key}|${globalThis.innerWidth}x${globalThis.innerHeight}`;
+    if (k !== lineSeen) {
+      lineSeen = k;
+      lineBox = coverOf({ left: f.offsetLeft, top: f.offsetTop, width: f.offsetWidth, height: f.offsetHeight });
+    }
+    return lineBox;
+  };
   const tagCover = () => {
     const t = frame.el?.tag;
     return t ? coverOf({ left: t.offsetLeft, top: t.offsetTop, width: t.offsetWidth, height: t.offsetHeight }) : null;
@@ -58,7 +77,7 @@ export function createHud({ caption, frame, tour = null, lock = null }) {
     },
     live: (on) => frame.live(Boolean(on)),
     park: (leg) => say({ arriveMs: 0, ...leg, kind: 'site' }),
-    covers: () => [caption.cover?.(), frame.cover?.(), tagCover()].filter(Boolean),
+    covers: () => [caption.cover?.(), fleetCover(), tagCover()].filter(Boolean),
     tagCover,
     stop: () => off(),
   };
