@@ -299,6 +299,48 @@ Notes for every builder round (planner, night 1):
   `contextmenu` → `preventDefault` listener in `main.js`; a plain tap still does nothing (the
   explorer is night 2) — done when: `test/wall-*.test.mjs` checks `wall.css` carries the
   `touch-action` rule and `wall.html` the viewport limit, and `npm test` passes.
+- [ ] T32 (bug) [ui] [variant:all] (r28-performance radial #1) The glow sprite cache in `glow.js` never
+  shrinks (a 256x256 canvas per distinct rgb, a colour-temperature feed leaks ~360 MB a day): quantise
+  the key (`v & ~7`) and cap the cache at 32 entries, deleting the oldest on insert — done when:
+  `test/wall-glow.test.mjs` feeds 1000 colours and the cache stays at 32 or fewer.
+- [ ] T33 (§2 north star 4) [variant:all] (r28-performance radial #3) `measure` in `render.js` keys its
+  cache on `ctx.font` read back every call (top JS self-time): keep the font the renderer last set in a
+  local and key on it. Output must be identical; if that cannot be shown, put it behind an option that
+  defaults off — done when: `test/map-*.test.mjs` pass unchanged and a Wall test or timing shows no
+  `ctx.font` getter read in `measure`.
+- [ ] T34 (§2 north star 4) [variant:all] (r28-performance radial #4, orbits #3) The Map repaints the full
+  canvas 30 times a second all day (`hasLife` is always true in a busy fleet): a Map option
+  `ambient.idleFps` (defaults off, Wall sets ~12) used while no flight, comet or lock/caption arrival
+  runs and the turn is off or slow; 30 fps otherwise — done when: a test of the pure frame-rate choice
+  covers idle, flight and comet, and the map tests pass unchanged.
+- [ ] T35 (bug) [ui] [variant:all] (r28-performance radial #5, #6, #10) Forced style recalcs per frame:
+  one `ResizeObserver` on the stage in `main.js` caches `{W, H}` and passes it as `size` to `createLock`
+  and `createGlow` (no `clientWidth/clientHeight` in `onDraw`); the lock skips its style writes when
+  `x0,y0,x1,y1,alpha` are unchanged; `caption.js` fades keep the target opacity in JS instead of
+  `getComputedStyle` — done when: a test checks the lock writes nothing on a still frame, and grep finds
+  no `clientWidth`/`getComputedStyle` on the draw path.
+- [ ] T36 (bug) [variant:orbits] (r28-performance orbits #2) `arrange` in `orbits.js` searches
+  (2 phases x 45 stretches x bisection x O(n²) `clear()`) inside a flight frame at every zoom crossing
+  and every `/ws` frame: memoise it on `aspect` plus each system's `hx,hy` rounded to 1 unit, and make
+  `clear()` allocate nothing per candidate — done when: `test/wall-orbits.test.mjs` shows a second
+  call with the same inputs returns the cached layout and results are unchanged.
+- [ ] T37 (§2 north star 4) [ui] [variant:all] (r28-performance orbits #4) The glow layer repaints every
+  frame for nodes that do not move: skip `paint()` when every mark's `screenOf` and the eased zoom match
+  last frame (compare a short string) — done when: a test shows no paint on an unchanged frame and a
+  paint when a mark moves.
+- [ ] T38 (bug) [ui] [variant:orbits] (r28-performance orbits #6) No resize path: `main.js` reads the
+  aspect once, so a kiosk that boots before the display settles or a rotated tablet keeps the wrong
+  layout until reload. Rebuild `mapOptionsFor` when the stage aspect changes by more than 5 % (reuse
+  T35's observer) — done when: a pure test of the "aspect changed enough" check passes.
+- [ ] T39 (bug) [ui] [variant:all] (r28-performance #9) `__wallPerf.worstGapMs` is a lifetime maximum
+  and only climbs: add `__wallPerf.reset()` and a rolling `worst10s` in `perf.js` (`film.mjs` is fenced,
+  so Wall-side only) — done when: a test shows reset clears and the rolling value forgets a gap older
+  than 10 s.
+- [ ] T40 (§2 north star 4) [variant:all] (r28-performance radial #8) Per-frame allocation on the ambient
+  frame path in the Map (`scene()`, `step`, `stuckBuilders`, the `drawnCount` loop): hoist a frozen empty
+  Set, filter pulses in place, skip the `drawnCount` loop when ambient, compute `stuckBuilders` once per
+  model; ambient only, low priority — done when: map tests pass unchanged and the ambient frame path
+  creates no `new Set`/`new Map` per frame.
 
 ## Research questions
 
@@ -377,6 +419,13 @@ Notes for every builder round (planner, night 1):
   `touch to explore` hint in the tag line, once per idle cycle. Across variants: islands keep gaps of
   53 px or more, orbits no planets closer than that, hex tiles need the site fallback.
 
+- (r28-performance #2, radial) The turn forces a full label re-plan every frame (radial's script time is
+  1.5-2x orbits'). Giving radial `ambient: {drift: 0}` removes the turn, which changes what radial looks
+  like: your call (T34's idle rate only helps while the turn is slow or off).
+- (r28-performance #7) A Map option `maxDpr` set to 1.5 by the Wall would cut canvas pixels by 44 % on the
+  2736x1824 tablet; type from 3 m may not need 2x. A legibility trade, so film 1:1 crops at 1.5 and 2
+  before deciding: your call.
+
 ## Reviews
 
 - r9-film-ui.md: 9 findings, 5 became tasks (T15-T19: #2+#7, #3, #4, #5, #6+#8); #1 covered by T5 (phrasing
@@ -387,6 +436,9 @@ Notes for every builder round (planner, night 1):
   #14 (T16), #16 (T15), #17 (T16); #2, #5, #6, #10, #11, #12, #13, #15 went to the owner (taste or plan change).
 - r24-touch.md: 10 findings, 1 became a task (T31: #2); #6 covered (T30, T24); #1, #3, #4, #5, #7, #8, #9, #10
   are night 2 explorer design and went to the owner as inputs; #1 includes a taste choice.
+- r28-performance.md: 16 findings (10 radial, 6 orbits), 9 became tasks (T32-T40: radial #1, #3, #4, #5+#6+#10, #8, #9;
+  orbits #2, #4, #6); orbits #1 and #5 covered by the radial ones (shared code), orbits #3 covered by T34;
+  radial #2 and #7 went to the owner (they change the look or legibility).
 
 ## Scores
 
@@ -396,5 +448,7 @@ Notes for every builder round (planner, night 1):
 | 14 (radial) | operator | 3 | 3 | 5 | 2 | 5 | 5 | 6 |
 | 20 (radial) | skeptic | 3 | 3 | 4 | 1 | 5 | 3 | 6 |
 | 24 (radial) | touch | 4 | 3 | 5 | 1 | 5 | 4 | 6 |
+| 28 (radial) | performance | 4 | 3 | 5 | 2 | 5 | 4 | 5 |
+| 28 (orbits) | performance | 6 | 4 | 5 | 3 | 6 | 6 | 6 |
 
 ## Morning
