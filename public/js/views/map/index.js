@@ -50,7 +50,7 @@ import {
   normalize, foldState, autoFold, visibleLinks, neighbours as neighboursOf, rollup, scopeAlpha,
   idForSel, selForId, SEVERITY, FOLD_KEY, AUTO_UNFOLD_ZOOM,
 } from './model.js';
-import { layout, RINGS, SIZE, polar, runRingR } from './layout.js';
+import { layout, polarLayout, RINGS, SIZE, polar, runRingR } from './layout.js';
 import { OVERLAY_KEY, validOverlay, availableOverlays, reachScope, nodeStyle, rollsUp, SHAPE_CODE, TONE_CODE, driftText, driftCounts, runFacts } from './overlays.js';
 import { createRenderer, readPalette } from './render.js';
 import {
@@ -146,12 +146,17 @@ export function migrateFolds(list, localId) {
  *   onSelect(node)        legacy callback on every selection change
  *   budgetUsd(node)       the builder's budget cap for the cost overlay
  *   perf                  print p95 draw time in the readout (default: ?mapperf=1)
+ *   layout(nodes)         -> {pos, center, kids} with the shape of layout.js `layout`;
+ *                            pos gives world x/y (r and angle follow from them, polarLayout).
+ *                            Default: the radial rings
+ *   rings                 false: no ring hairlines, ring legends or bearing dial (default on)
  *
  * Returns the API of plan §5 2.2 plus the shell hooks (§4 D8).
  */
 export function createMap(root, opts = {}) {
   root.classList.add('map');
   root.replaceChildren();
+  const layOut = typeof opts.layout === 'function' ? (nodes) => polarLayout(opts.layout(nodes)) : layout;
   const amb = opts.ambient ? { ...AMBIENT, ...(opts.ambient === true ? {} : opts.ambient) } : null;
   if (amb) root.classList.add('map-ambient');
 
@@ -407,7 +412,7 @@ export function createMap(root, opts = {}) {
     if (selected && hidden.has(selected)) selected = shownOf(selected);
 
     const prev = new Map([...cur].filter(([, c]) => !c.leaving).map(([id, c]) => [id, c.goal]));
-    lay = layout(model.nodes.filter((n) => !hidden.has(n.id)));
+    lay = layOut(model.nodes.filter((n) => !hidden.has(n.id)));
     if (lay.center.virtual) byId.set(lay.center.id, lay.center);
     kidsRoll = new Map(kidsAll);
     kidsRoll.set(lay.center.id, lay.kids.get(lay.center.id) ?? []);
@@ -1142,6 +1147,7 @@ export function createMap(root, opts = {}) {
       // phone): labels keep clear of it, as of the canvas edges.
       covers: mode !== 'pip' ? [anchorRect()].filter(Boolean) : [],
       budgetUsd: typeof opts.budgetUsd === 'function' ? opts.budgetUsd : undefined,
+      rings: opts.rings !== false,
     };
   }
 

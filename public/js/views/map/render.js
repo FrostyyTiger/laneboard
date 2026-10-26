@@ -28,6 +28,7 @@
 //     reduced,                 // prefers-reduced-motion: no comets, pulses, turning arcs or dash flow
 //     anchor,                  // tether target {left, top, bottom} in canvas px, or null
 //     budgetUsd(node),         // optional: the builder budget cap for the cost overlay
+//     rings,                   // false: no ring hairlines, ring legends or bearing dial (the Wall)
 //   }
 //
 // Text drawn here comes from builders (labels, subs, why) and is untrusted;
@@ -284,8 +285,10 @@ export function createRenderer(ctx, palette) {
    * leader tick in the layout's gap at LEGEND_BEARING (330, off the 000 axis
    * and its bearing), and the degree dial outside the outermost one with
    * numeric bearings at the quarters while the whole dial is in view.
+   * `scene.rings === false` draws none of it (a layout without rings).
    */
   function drawRings(scene) {
+    if (scene.rings === false) return;
     const c0 = centre(scene);
     const { rings, legends, dial, bearings } = ringGeometry(scene);
     const ux = Math.cos(LEGEND_ANGLE), uy = Math.sin(LEGEND_ANGLE);
@@ -337,6 +340,7 @@ export function createRenderer(ctx, palette) {
    * and plates. Sets ctx.font while measuring; call inside save/restore.
    */
   function ringGeometry(scene) {
+    if (scene.rings === false) return { rings: [], legends: [], dial: 0, bearings: [] };
     const s = scene.s ?? 1;
     const c0 = centre(scene);
     const ux = Math.cos(LEGEND_ANGLE), uy = Math.sin(LEGEND_ANGLE);
@@ -690,7 +694,7 @@ export function createRenderer(ctx, palette) {
     const reach = scene.overlay === 'reach' ? reachScope(scene.reach, scene.selected ?? null) : null;
     // The ring hairlines drawRings draws, for the fold plates to stay off.
     const c0 = centre(scene);
-    const hairlines = scene.folded?.size
+    const hairlines = scene.folded?.size && scene.rings !== false
       ? ringLabels(scene.pos ?? new Map(), scene.byId ?? new Map()).map((l) => l.r * (scene.s ?? 1)) : [];
     // A node's look and reach, shared by the plate pass and the draw pass.
     const look = (id, c) => {

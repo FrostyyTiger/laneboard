@@ -143,6 +143,41 @@ export function layout(nodes) {
 }
 
 /**
+ * A layout from somewhere else (`createMap(el, { layout })`, the Wall's
+ * variants) made fit for the Map: it says where each node goes in world x/y,
+ * the Map draws and springs in polar, so each position gets its `r` and
+ * `angle` from x/y, and a `depth` from the tree in `kids` when it has none
+ * (the centre 0). `ring` stays what the layout gave (0 when none). A position
+ * without finite x/y is dropped: that node is not drawn.
+ */
+export function polarLayout(lay) {
+  const center = lay?.center ?? { id: '__core', kind: 'core', label: '', virtual: true };
+  const kids = lay?.kids instanceof Map ? lay.kids : new Map();
+  const depthOf = new Map([[center.id, 0]]);
+  const queue = [center.id];
+  while (queue.length) {
+    const id = queue.shift();
+    for (const c of kids.get(id) ?? []) {
+      if (depthOf.has(c.id)) continue;
+      depthOf.set(c.id, depthOf.get(id) + 1);
+      queue.push(c.id);
+    }
+  }
+  const pos = new Map();
+  for (const [id, p] of lay?.pos ?? []) {
+    if (!Number.isFinite(p?.x) || !Number.isFinite(p?.y)) continue;
+    pos.set(id, {
+      ...p,
+      r: Math.hypot(p.x, p.y),
+      angle: Math.atan2(p.y, p.x),
+      depth: Number.isFinite(p.depth) ? p.depth : depthOf.get(id) ?? 1,
+      ring: Number.isFinite(p.ring) ? p.ring : 0,
+    });
+  }
+  return { pos, center, kids };
+}
+
+/**
  * The label of each occupied ring: the kinds on it, joined in RING_WORD order
  * (`BUILDER · SVC · PKG`). `nodes` is an array or an id -> node map. Ring 0
  * and virtual nodes carry no label. Returns `[{ring, r, kinds, label}]`.
