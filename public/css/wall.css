@@ -432,3 +432,58 @@ html.wall body {
 .wall-fleet-fact { display: flex; justify-content: flex-end; gap: 4vmin; }
 .wall-fleet-more { color: var(--text-2); }
 .wall-fleet-more[hidden] { display: none; }
+.wall-fleet-fact[hidden] { display: none; }
+
+/* While anything is crit or down (T21) the line is read from across the
+   room: where the trouble is at the caption hero's 3 m step (14vmin, fitted
+   by frame.js `fleetSize` to 64vw, 9 at the least), one line, cut rather
+   than wrapped; its why under it at the why step with the count beside it in
+   the key step, baselines shared; the ambient fact gives way. */
+/* The word runs over the map's bottom ring, so it stands on the plate's
+   ground, out to the corner: no map label shows through or under it. */
+.wall-fleet[data-step="far"] {
+  right: 0;
+  bottom: 0;
+  max-width: none;
+  padding: 1vmin var(--frame-x) var(--frame-y) 2.4vmin;
+  background: var(--bg-canvas);
+}
+.wall-fleet[data-step="far"] .wall-fleet-line {
+  --fleet-far: 14vmin;
+  display: block;
+  max-width: 64vw;
+  font-size: var(--fleet-far);
+  line-height: 0.86;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* The shape at the caps' height, as on the plate. */
+.wall-fleet[data-step="far"] .wall-fleet-glyph { font-size: 0.62em; }
+.wall-fleet-sub {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 2.4vmin;
+  margin-top: 1.2vmin;
+  white-space: nowrap;
+}
+.wall-fleet-sub[hidden] { display: none; }
+.wall-fleet-sub-why {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 4.3vmin;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--crit);
+}
+.wall-fleet-sub .wall-fleet-more {
+  font-family: var(--font-mono);
+  font-size: 1.7vmin;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}

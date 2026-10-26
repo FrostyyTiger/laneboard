@@ -4,8 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  worstLine, ambientLine, clockText, msToNextMinute, MAX_LINE,
+  worstLine, ambientLine, clockText, msToNextMinute, MAX_LINE, fleetSize, FLEET_FAR,
 } from '../public/js/wall/frame.js';
+import { STEPS } from '../public/js/wall/caption.js';
 import { buildFleet, parseTopology } from '../server/map.mjs';
 import { DEMO_TOPOLOGY_LARGE, createLargeLive } from './helpers/demo-hub.mjs';
 import { makeDocument, makeEl } from './helpers/fakedom.mjs';
@@ -31,7 +32,7 @@ function fleet(set = {}) {
 
 test('frame: a calm fleet says so, with no shape and no count', () => {
   const w = worstLine(fleet());
-  assert.deepEqual(w, { status: 'ok', tone: 'grey', text: 'all calm', more: 0 });
+  assert.deepEqual(w, { status: 'ok', tone: 'grey', step: 'calm', text: 'all calm', more: 0 });
   assert.deepEqual(worstLine({}), w, 'no model reads as calm, not as an error');
   assert.deepEqual(worstLine(null), w);
 });
@@ -66,6 +67,41 @@ test('frame: crit beats attention beats warn, whatever the model order', () => {
   assert.equal(d.status, 'down');
   assert.equal(d.tone, 'crit');
   assert.equal(d.text, 'cloud · down', 'a site down names itself once, and the status stands in for a missing why');
+});
+
+test('frame: crit sets the line at the 3 m step with its count, attention and calm do not (T21)', () => {
+  const warn = { 'api-prod': { status: 'warn', why: 'p95 latency 840 ms' } };
+  const attention = { 'lane:a/fix': { status: 'attention', why: 'asked a question · 3m' } };
+  const crit = { storage: { status: 'crit', why: 'pool 97% full' } };
+
+  const c = worstLine(fleet({ ...warn, ...attention, ...crit }));
+  assert.deepEqual(
+    { step: c.step, word: c.word, why: c.why, more: c.more },
+    { step: 'far', word: 'hv2 · storage', why: 'pool 97% full', more: 2 },
+    'crit: where it is big, the why and +2 more under it',
+  );
+  assert.equal(worstLine(fleet({ cloud: { status: 'down' } })).step, 'far', 'down is read from across the room too');
+  assert.equal(worstLine(fleet({ cloud: { status: 'down' } })).word, 'cloud');
+
+  const a = worstLine(fleet({ ...warn, ...attention }));
+  assert.deepEqual({ step: a.step, word: a.word, more: a.more }, { step: 'line', word: 'hv1 · fix-login', more: 1 },
+    'attention only: today\'s line step, the whole line on it');
+  assert.equal(worstLine(fleet(warn)).step, 'line');
+  assert.equal(worstLine(fleet()).step, 'calm');
+});
+
+test('frame: the far step is the caption hero, fitted by width, never under the hero minimum (T21)', () => {
+  // A short word on the tablet (1368 x 912 CSS px) takes the full 3 m step.
+  assert.equal(fleetSize('hv2', 1368, 912), STEPS.hero);
+  // The demo's word fits 64vw a step down from the hero, still far above the name.
+  const demo = fleetSize('hv2 · storage', 1368, 912);
+  assert.ok(demo < STEPS.hero && demo > STEPS.name + 4, `hv2 · storage at ${demo}vmin`);
+  assert.ok(fleetSize('hv2 · storage', 1920, 1080) > demo, 'a wider screen gives the word more of the step');
+  assert.equal(fleetSize('x'.repeat(80), 1368, 912), STEPS.heroMin, 'a long word bottoms out, the CSS cuts it');
+  assert.equal(fleetSize('hv2', 0, 0), STEPS.hero, 'no stage yet: the CSS default');
+  // The word at its size never runs wider than the band allows.
+  const ems = 1.1 + [...'hv2 · storage'].length * 0.47;
+  assert.ok((demo * ems * 912) / 100 <= (FLEET_FAR.maxVw * 1368) / 100 + 1);
 });
 
 test('frame: a node in trouble under one in trouble is the same problem, counted once', () => {
@@ -131,8 +167,17 @@ test('frame: the DOM part sets the line, keeps names whole, says live, and ticks
 
     frame.update(fleet());
     assert.equal(box.dataset.tone, 'grey');
-    assert.equal(box.children[0].textContent, 'all calm');
-    assert.equal(box.children[1].textContent, '3 sites · 8 nodes · 1 working');
+    assert.equal(box.dataset.step, 'calm');
+    const [lineEl, sub, fact] = box.children;
+    assert.equal(lineEl.textContent, 'all calm');
+    assert.equal(sub.hidden, true);
+    assert.equal(fact.textContent, '3 sites · 8 nodes · 1 working');
+
+    frame.update(fleet({ 'lane:a/fix': { status: 'attention', why: 'asked a question' } }));
+    assert.equal(box.dataset.step, 'line');
+    assert.equal(lineEl.textContent, '▲hv1 · fix-login · asked a question');
+    assert.equal(sub.hidden, true, 'attention keeps one line and the fact under it');
+    assert.equal(fact.hidden, false);
 
     frame.update(fleet({
       'lane:a/fix': { status: 'attention', why: 'asked a question' },
@@ -140,11 +185,24 @@ test('frame: the DOM part sets the line, keeps names whole, says live, and ticks
       storage: { status: 'crit', why: 'builder-c no contact' },
     }));
     assert.equal(box.dataset.tone, 'crit');
+    assert.equal(box.dataset.step, 'far');
     const line = box.children[0];
-    assert.equal(line.textContent, '■hv2 · storage · builder-c no contact');
+    assert.equal(line.textContent, '■hv2 · storage', 'crit: where, big, on its own line');
     const whole = (el) => (el.classList.contains('wall-fleet-name') ? [el.textContent] : el.children.flatMap(whole));
-    assert.deepEqual(whole(line), ['hv2', 'storage', 'builder-c'], 'site, name and hyphenated words never break');
-    assert.equal(box.children[1].textContent, '+1 more3 sites · 8 nodes · 1 working');
+    assert.deepEqual(whole(line), ['hv2 · storage'], 'the word never breaks');
+    assert.equal(sub.hidden, false);
+    assert.equal(sub.textContent, 'builder-c no contact+1 more', 'the why and the count under it');
+    assert.equal(fact.hidden, true, 'the ambient fact gives way');
+
+    frame.update(fleet({ storage: { status: 'crit', why: 'pool 97% full' } }));
+    assert.equal(sub.textContent, 'pool 97% full');
+    assert.equal(sub.children[1].hidden, true, 'no other problem, no count');
+
+    frame.update(fleet());
+    assert.equal(box.dataset.step, 'calm');
+    assert.equal(sub.hidden, true);
+    assert.equal(fact.hidden, false, 'the fact comes back with calm');
+    assert.equal(lineEl.textContent, 'all calm');
 
     assert.equal(tag.textContent, 'laneboard · demo-host');
     frame.live(true);

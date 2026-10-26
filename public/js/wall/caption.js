@@ -50,6 +50,9 @@ export const STEPS = Object.freeze({ key: 1.7, line: 2.7, why: 4.3, name: 6.9, h
 const HERO_EM_PER_CHAR = 0.47;
 const HERO_GLYPH_EM = 1.1;
 
+/** A trouble word's width in em at the hero face and tracking, its shape ahead of it (frame.js fits the fleet line by it too). */
+export const heroEms = (word) => HERO_GLYPH_EM + [...String(word ?? '')].length * HERO_EM_PER_CHAR;
+
 /** The plate's widest (vw) on a trouble site, and its side padding (vmin, both sides). */
 export const HERO_PLATE = Object.freeze({ maxVw: 56, padVmin: 6 });
 
@@ -64,8 +67,7 @@ export function heroSize(word, width, height) {
   const short = Math.min(w, h);
   if (!(short > 0)) return STEPS.hero;
   const avail = (HERO_PLATE.maxVw * w) / short - HERO_PLATE.padVmin;
-  const ems = HERO_GLYPH_EM + [...String(word ?? '')].length * HERO_EM_PER_CHAR;
-  const fit = avail / ems;
+  const fit = avail / heroEms(word);
   return Math.round(Math.min(STEPS.hero, Math.max(STEPS.heroMin, fit)) * 10) / 10;
 }
 

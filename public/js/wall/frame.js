@@ -12,10 +12,19 @@
 
 import { SEVERITY, TROUBLE, byIdOf } from '../views/map/model.js';
 import { statusStyle } from '../views/map/overlays.js';
-import { GLYPH } from './caption.js';
+import { GLYPH, STEPS, heroEms } from './caption.js';
 
 /** The fleet line is cut with an ellipsis past this: two lines at most, so it never runs into the clock. */
 export const MAX_LINE = 64;
+
+/**
+ * While anything is crit or down (T21) the fleet line is read from across
+ * the room: where the trouble is (`■ HV2 · STORAGE`) at the 3 m step, the
+ * caption's hero (`STEPS.hero`, fitted down to `STEPS.heroMin` by width),
+ * its why under it at the why step with the `+N more` count. `maxVw` is the
+ * widest the line may run: the clock keeps the bottom left.
+ */
+export const FLEET_FAR = Object.freeze({ maxVw: 64 });
 
 const clip = (s, max = MAX_LINE) => {
   const t = String(s).replace(/\s+/g, ' ').trim();
@@ -43,9 +52,11 @@ function siteOf(node, byId) {
  * node in it, and that node speaks for it. Worst first: down, crit,
  * attention, warn; a tie keeps model order. Returns
  *   `{ status, tone, shape, glyph, site, name, why, text, more }`
- * with `text` = `site · name · why` (the parts it has), `more` the number of
- * other problems; a calm fleet gives `{ status: 'ok', tone: 'grey', text:
- * 'all calm', more: 0 }` and no glyph.
+ * with `text` = `site · name · why` (the parts it has), `word` = `site ·
+ * name` (where it is), `more` the number of other problems, and `step` the
+ * size it is set at: `far` (the 3 m step) while the worst is crit or down,
+ * else `line`; a calm fleet gives `{ status: 'ok', tone: 'grey', step:
+ * 'calm', text: 'all calm', more: 0 }` and no glyph.
  */
 export function worstLine(model) {
   const list = nodesOf(model);
@@ -66,7 +77,7 @@ export function worstLine(model) {
     if (!p) problems.set(root.id, { worst: n });
     else if (rank(n.status) > rank(p.worst.status)) p.worst = n;
   }
-  if (!problems.size) return { status: 'ok', tone: 'grey', text: 'all calm', more: 0 };
+  if (!problems.size) return { status: 'ok', tone: 'grey', step: 'calm', text: 'all calm', more: 0 };
 
   let worst = null;
   for (const p of problems.values()) {
@@ -80,14 +91,29 @@ export function worstLine(model) {
   return {
     status: worst.status,
     tone: st.tone,
+    step: worst.status === 'crit' || worst.status === 'down' ? 'far' : 'line',
     shape: st.shape,
     glyph: GLYPH[st.shape] ?? GLYPH.square,
     site: siteName,
     name,
     why,
+    word: [siteName, name].filter(Boolean).join(' · '),
     text: clip([siteName, name, why].filter(Boolean).join(' · ')),
     more: problems.size - 1,
   };
+}
+
+/**
+ * The far step's size in vmin for a stage `width` x `height`: as big as the
+ * caption's hero while `word` fits `FLEET_FAR.maxVw`, smaller when it does
+ * not, never under `STEPS.heroMin` (a longer word is cut by the CSS).
+ */
+export function fleetSize(word, width, height) {
+  const w = Number(width);
+  const short = Math.min(w, Number(height));
+  if (!(short > 0)) return STEPS.hero;
+  const fit = ((FLEET_FAR.maxVw * w) / short) / heroEms(word);
+  return Math.round(Math.min(STEPS.hero, Math.max(STEPS.heroMin, fit)) * 10) / 10;
 }
 
 /**
@@ -149,13 +175,16 @@ function whyEl(text) {
  * may wrap onto a second line between its words. Rebuilt only when the text changes.
  */
 function setLine(line, w) {
-  const key = `${w.glyph ?? ''}|${w.text}`;
+  const key = `${w.step}|${w.glyph ?? ''}|${w.text}`;
   if (line.dataset.key === key) return;
   line.dataset.key = key;
   const kids = [];
   if (w.glyph) kids.push(el('span', 'wall-fleet-glyph', w.glyph));
   const head = [w.site, w.name].filter(Boolean);
-  if (!w.glyph) {
+  if (w.step === 'far') {
+    // Where, only: the why goes on the row under it.
+    kids.push(el('span', 'wall-fleet-name', w.word));
+  } else if (!w.glyph) {
     kids.push(whyEl(w.text));
   } else {
     head.forEach((h, i) => {
@@ -190,11 +219,16 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
 
   const fleet = el('div', 'wall-fleet');
   const line = el('div', 'wall-fleet-line');
+  // The far step's why and count, one row under the word; hidden otherwise.
+  const sub = el('div', 'wall-fleet-sub');
+  const subWhy = el('span', 'wall-fleet-sub-why');
+  const subMore = el('span', 'wall-fleet-more');
+  sub.append(subWhy, subMore);
   const fact = el('div', 'wall-fleet-fact');
   const more = el('span', 'wall-fleet-more');
   const ambient = el('span', 'wall-fleet-ambient');
   fact.append(more, ambient);
-  fleet.append(line, fact);
+  fleet.append(line, sub, fact);
 
   root.append(vignette, tag, clock, fleet);
 
@@ -210,11 +244,25 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   const update = (model) => {
     if (!model || typeof model !== 'object') return;
     const w = worstLine(model);
+    const far = w.step === 'far';
     fleet.dataset.tone = w.tone;
+    fleet.dataset.step = w.step;
     setLine(line, w);
-    put(more, w.more ? `+${w.more} more` : '');
-    more.hidden = !w.more;
-    put(ambient, ambientLine(model));
+    if (far) {
+      const size = `${fleetSize(w.word, root.clientWidth, root.clientHeight)}vmin`;
+      if (line.dataset.size !== size) { line.dataset.size = size; line.style.setProperty('--fleet-far', size); }
+    }
+    const count = w.more ? `+${w.more} more` : '';
+    // Far: the count rides with the why, and the ambient fact gives way (one
+    // hero in the band, and the band no taller than it must be).
+    put(subWhy, far ? clip(w.why, MAX_LINE) : '');
+    put(subMore, far ? count : '');
+    subMore.hidden = !(far && w.more);
+    sub.hidden = !far;
+    put(more, far ? '' : count);
+    more.hidden = far || !w.more;
+    put(ambient, far ? '' : ambientLine(model));
+    fact.hidden = far;
     if (typeof model.title === 'string' && model.title.trim()) put(tagName, `laneboard · ${clip(model.title, 24)}`);
   };
 
