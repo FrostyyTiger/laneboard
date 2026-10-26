@@ -435,12 +435,24 @@ Notes for every builder round (planner, night 1):
   `r49-radial/`: no ring on calm rooms, no fan at HV1/HV2 at the overview, the crit glow the loudest thing,
   0 console errors; fps 1.8 is SwiftShader plus screenshots (filming note). Seen but not this task: label
   collisions in the builder cluster at 12 o'clock (BUILDER-B/BUILDER-C, DEPS/VM-C), which is T27's territory.)
-- [ ] T20 (§2 north star 1) [ui] [variant:radial, all] (r14-operator #1) Caption reads at 3 m: on a
+- [x] T20 (§2 north star 1) [ui] [variant:radial, all] (r14-operator #1) Caption reads at 3 m: on a
   trouble site the trouble word (`STORAGE FULL 97%`, condensed, status colour, ~180 device px cap at
   the tablet's 2x, per Q3) is the biggest text on the plate, the site name under it at the 1.5 m step
   (~95 px); HARDWARE/WHERE/HOLDS drop to a small step below a gap on trouble sites; calm sites keep
   today's order — done when: `test/wall-caption.test.mjs` checks the step sizes (trouble > name) and
   the order for a trouble and a calm site; a filmstrip frame shows the trouble word legible and not cut off.
+  (commit 4e32bce; the trouble line is now the plate's hero: `word` = where the trouble is (`■ STORAGE`, the
+  troubled node's name; a node in its own trouble leads with its why) at 14vmin (~128 CSS px, a ~180 device px
+  cap on the tablet), fitted by `heroSize(word, W, H)` to a trouble plate up to 56vw wide and never under 9vmin
+  (a step above the name); its why under it at 4.3vmin in caps, both in the status colour, shown with the plate
+  (not staggered, part of T23); the name types under it at 6.9vmin (kept on the caption's scale, ~88 device px
+  cap, close to the ~95 asked); status and metrics at the line step; facts and holds at the key step after a
+  1.6vmin gap. Lines carry `step` (hero/line/small); `STEPS` in caption.js mirrors wall.css. Calm plates
+  unchanged. Tests in `test/wall-caption.test.mjs`. Filmstrip `$RUN_DIR/shots/r52-radial/`: `▲ FEAT-SEARCH`
+  over HV1 and `■ STORAGE` over HV2 are the biggest text on screen, not cut off, 0 console errors; fps 2.3 is
+  SwiftShader plus screenshots (filming note). Seen, for their tasks: the plate's bottom-right bracket next to
+  the lock (T29), a ghost `HV1` map label under the plate (T24), the plate now taller (about half the height
+  on a trouble site), so T30's focus offset matters more.)
 - [ ] T21 (§2, T9) [ui] [variant:all] (r14-operator #2) The fleet line is big: in T9's `worstLine`, while
   anything is crit the bottom-right line is set at the 3 m step (`■ HV2 · STORAGE 97% FULL`) with a
   `+2 more` count under it, always on, also when the camera is not in a trouble site. Build T9 before
