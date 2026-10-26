@@ -162,7 +162,7 @@ Notes for every builder round (planner, night 1):
   services and leaves may be dots), in `public/js/wall/variants/radial.js` — done when: a
   filmstrip `$RUN_DIR/shots/<round>-radial/` under the throttle shows site and room labels
   legible at the overview, trouble the loudest thing, the tour visiting it first, fps >= 27.
-  (commit SHA; variants carry `mapOptions` (variants.js), main.js spreads them under `ambient`.
+  (commit 9e6471f; variants carry `mapOptions` (variants.js), main.js spreads them under `ambient`.
   Two Map options, both default off: `labelSize(node, {s, trouble})` -> px, 0 (no name at this
   zoom) or `{px, inward}` (centred on the bearing toward the centre); and a custom layout's
   `ringR` on its positions, which `ringLabels` (so hairlines and legends) uses instead of RINGS.
