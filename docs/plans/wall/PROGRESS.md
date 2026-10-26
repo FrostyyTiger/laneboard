@@ -443,10 +443,20 @@ Notes for every builder round (planner, round 1):
   open HV2; 30 s calm: none) and `$RUN_DIR/shots/r46-galaxy/` without (no pillar). Seen: the demo's crits
   are seconds old, so its pillars are all near the floor; the height only tells apart at real ages
   (minutes to hours). The overview looks down steeply, so a pillar reads shorter than its world height.
-- [ ] T22 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r21-operator.md 8) The trouble planet's own name is too
+- [x] T22 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r21-operator.md 8) The trouble planet's own name is too
   small at 3 m: the lock target's label while in trouble at the site step is caps at the site step's size
   (35 px on the tablet) — done when: a test shows `labels.js` gives the held trouble target the site-step size
   and caps (others unchanged), and `?at=hv2` shows `■ STORAGE` large beside the brackets.
+  (commit 3718702) `labels.js labelFace(kind, tone, held)`: sites and the sun 'label', the lock's held target
+  'label' while warn/crit, the rest 'mono'; `labelText(node, tone, face)` caps in the label face; the box is
+  measured at the site step, so the pass places it as a site-sized name outside the brackets. A calm held
+  thing keeps its mono name (the caption already carries it big). `shown()` adds `face`. Tests (+2 in
+  `wall-galaxy-labels`): `labelFace` by case; on the large fixture the held `feat-search` turns
+  `▲ FEAT-SEARCH` at the site step, unheld it stays mono, no other name changes face, nothing overlaps.
+  Still `$RUN_DIR/shots/r47-still` (`?at=hv2&quality=0`): `■ STORAGE` in red caps beside the shut
+  brackets, as large as `HV2`. Filmstrip `$RUN_DIR/shots/r47-galaxy/` (`?demo=1&quality=0`, 4x,
+  0 console errors, 1.5 fps is SwiftShader): no frame lands on a held trouble system (holds are short in demo
+  timing). Seen: the `■` glyph in the condensed face is as wide as two letters, as in the caption.
 - [ ] T23 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r21-operator.md 5) The banner repeats the caption: while
   the held lock target is the far fleet line's subject, the line steps down to the next problem (with `+N MORE`)
   — done when: a test with two problems shows the banner naming the second while the first is held and the
