@@ -381,10 +381,35 @@ Notes for every builder round (planner, night 1):
   VM-C at the overview and in holds, 0 console errors; fps 1.8 is SwiftShader plus screenshots
   (filming note); the cost is one `drawImage` per halo on a layer already following the frame for
   the lights.)
-- [ ] T17 (§5) [variant:radial] (r9-film-ui #4) Overview fit and safe area: fit to the bounds of the
+- [x] T17 (§5) [variant:radial] (r9-film-ui #4) Overview fit and safe area: fit to the bounds of the
   drawn nodes and labels, not the outer ring; safe area 8 % top/bottom, 6 % sides; top-left
   caption area kept clear — done when: a test checks no node or label lies outside the safe
-  area at 3:2 and 16:9, and the still no longer touches the top edge.
+  area at 3:2 and 16:9, and the still no longer touches the top edge. (commit COMMIT; radial's layout
+  carries `bounds` from `fitBounds`: the largest scale at which every node, its rings and any name it
+  could carry (trouble names any node at the room step, so the fit does not jump when trouble comes or
+  goes; a run's round counted) lie inside the safe rectangle at every bearing of the turn (a name runs
+  sideways from its anchor, so at 3/9 o'clock it takes its width, at 12/6 its line), plus the bearing
+  dial. Safe area `SAFE` 6 % sides, 8 % top, and at the bottom 16 %, the frame's band (the clock and a
+  two-line fleet line reach up to ~81 % on the tablet): 8 % there put the rim under the fleet line. The
+  turn is around the camera, so an off-centre fit would wobble the constellation: a new ambient Map
+  option `centerY` (default 0.5) lifts the view's centre to the safe rectangle's middle (0.46). The
+  collision pass moved names up to four lines outward, past the top: a new Map option `labelInset`
+  (default off: canvas edges) keeps its moves inside the safe area. The fit is 0.51 on the tablet
+  (was 0.70), so `WALL_RINGS` went to 0 280 470 535 580 625: the dots outside gave up world units and the
+  sites and rooms took them (room ring as wide on the glass as before, site names no longer collide at
+  the core; overlapping-name frames over a turn 68 against 186 with the old rings, 5 at the old full
+  fit: the top builder cluster and HOME's lights, T27's ground). Holds keep their scale: `holdZoom`
+  (variant field, 1.45 / fitScale, here ~2.9 instead of 2.3) through a new tour option `zoomFor`, legs
+  carry `zoom`; lock and glow read the Map's real `fitScale` (snapshotScene, added) instead of
+  guessing it from the outer ring. Caption: no node under its head at the overview; one name
+  (ACME-BILLING) can pass the corner, and the caption only shows in holds. Tests
+  `test/wall-radial-fit.test.mjs` (the real renderer over a whole turn in 3° steps at 3:2 and 16:9 on
+  the large demo as the Wall gets it, `test/fixtures/wall-large-map.json`; stable under trouble; reach;
+  hold zoom; options), a tour test for `zoomFor`; map tests unchanged. Still `$RUN_DIR/shots/r44-still/`,
+  filmstrip `r44-radial/`: overview inside the margins, holds as before, 0 console errors; fps 2.3 is
+  SwiftShader plus screenshots (filming note). The real `fitScale` reaches the lock and glow in every
+  variant, so orbits', islands' and mosaic's locks and lights (which have fits of their own) are now
+  sized from their real scale, not the radial guess: not filmed this round.)
 - [ ] T18 (§5, T10) [variant:radial] (r9-film-ui #5) Wall hides desk chrome: ring legends and lane
   pips off (with `rings: false` from T10, option defaults off); the bearing dial stays — done
   when: a still shows no ring legend or pip, dial still drawn, and `test/map-*.test.mjs` pass unchanged.
