@@ -143,11 +143,20 @@ Notes for every builder round (planner, night 1):
   6.67 ms/frame average, 23 ms worst at 4x, same as T4's Map alone. Seen: in zoomed frames map nodes
   run under the clock and fleet line (the vignette quiets them; T17/T30's safe area should keep
   the bottom band clear). The `why` of a lost builder counts seconds, so the line changes every tick.)
-- [ ] T10 (§5) Map layout option: `createMap(el, { layout })` takes a layout function with the
+- [x] T10 (§5) Map layout option: `createMap(el, { layout })` takes a layout function with the
   shape of `layout.js` `layout` (`{pos, center, kids}`), and `{ rings: false }` hides the ring
   circles, ring labels and bearing dial; both default off (the radial layout and today's drawing)
   — done when: `test/wall-map-layout.test.mjs` shows a custom layout places nodes where it says
-  and rings off draws no dial, and every `test/map-*.test.mjs` passes unchanged.
+  and rings off draws no dial, and every `test/map-*.test.mjs` passes unchanged. (commit a8aae66;
+  `polarLayout` in `layout.js` gives a custom layout's x/y the `r`/`angle` the Map springs in, `depth`
+  from `kids` when missing, `ring` 0, positions without finite x/y dropped; `rings: false` reaches the
+  renderer as `scene.rings`, so `drawRings` draws nothing and `ringGeometry` returns no boxes (labels
+  stop keeping clear of a dial that is not there). For T12/T13: nodes spring in polar around the
+  world origin, so a move swings along an arc around (0, 0); and the parent-child branches
+  (`render.js` `treeCurve`) still bend along circles around the origin, which will look wrong on
+  islands or orbits: those variants likely need a straight-branch option next (defaults off). Fit
+  still uses the farthest node's radius (`maxRadius`), a circle, so a wide layout fits by its
+  corner; T17 owns the fit. `test/helpers/fake-map-dom.mjs` copies the fenced Map test's fake DOM.)
 - [ ] T11 (§5) [variant:radial] Today's constellation refined for a wall: spacing for 100-150
   nodes, line density, label sizes for distance (sites and rooms legible at the overview,
   services and leaves may be dots), in `public/js/wall/variants/radial.js` — done when: a
