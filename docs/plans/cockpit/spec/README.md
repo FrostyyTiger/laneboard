@@ -13,7 +13,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | File | What it settles | Scenario ids | Task | Status |
 | --- | --- | --- | --- | --- |
 | `README.md` | this index and the glossary | none | T1 | written |
-| `screens.md` | tour, explore and canvas; one screen vs. two; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3 | planned |
+| `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3 | part 1 written (T2), part 2 planned (T3) |
 | `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, new conversation, several screens, raw terminal | `S-C1-` | T4, T5 | planned |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the physical-button API, speech-to-text slow or down | `S-C2-` | T6, T7 | planned |
 | `c3-see.md` | C3: the MCP read tools, `focus`, "Ask about this" | `S-C3-` | T8, T9 | planned |
@@ -27,7 +27,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `slices.md` | the build nights in order, each with its scenario ids, stand-ins and done-when | none (lists every id once) | T20 | planned |
 | `DECISIONS.md` | small reversible choices made during the night, each with how to overrule | none | all | written (running list) |
 | `QUESTIONS.md` | what only the owner can decide, with options and a recommendation | none | all | written (running list) |
-| `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task | none | T2-T4, T6, T9, T11, T14 | planned |
+| `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2) | none | T2-T4, T6, T9, T11, T14 | in progress |
 
 ## Glossary
 
@@ -37,6 +37,8 @@ Each word is defined here once; the other files link here instead of redefining 
   screen, a laptop tab). A window only: it holds one device token and nothing else worth stealing.
   Each screen is in one mode at a time, or two modes side by side on one screen (`screens.md`).
 - **mode**: what a screen shows: tour, explore or canvas.
+- **layout**: how the Wall page arranges modes on one screen: `wall`, `canvas`, `split` or `switch` (`screens.md` §1).
+- **cockpit button**: the `AGENT` button that opens the pane, on every view and on the Wall (`screens.md` §4).
 - **tour**: the Wall's idle mode: the camera flies the fleet on its own, trouble first (Wall plan
   D4, on `origin/plan/wall`).
 - **explore**: the mode after a touch on the tour: the camera goes where the finger says. One

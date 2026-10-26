@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>S-SCR-01 split: wall half + canvas (screens.md)</title>
+<style>
+/* Values copied from public/css/tokens.css (dark). Sketch only, not product code. */
+:root{--bg-canvas:oklch(12% 0.004 250);--bg-surface:oklch(16% 0.004 250);--bg-elevated:oklch(20% 0.004 250);--bg-sunken:oklch(9% 0.004 250);
+--line-weak:oklch(100% 0 0 / .09);--line:oklch(100% 0 0 / .17);--line-strong:oklch(100% 0 0 / .32);
+--text-1:oklch(96% .002 250);--text-2:oklch(78% .004 250);--text-3:oklch(62% .004 250);
+--accent:oklch(72% .17 300);--p1:oklch(62% .23 25);--p2:oklch(84% .16 95);
+--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--label:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;}
+*{box-sizing:border-box;margin:0}
+html,body{width:1368px;height:912px;overflow:hidden;background:var(--bg-canvas);color:var(--text-1);font-family:var(--mono)}
+.root{display:flex;width:1368px;height:912px}
+.wall{position:relative;width:759px;height:912px;background:radial-gradient(ellipse at center,transparent 55%,oklch(0% 0 0 / .55) 100%),var(--bg-canvas);border-right:1px solid var(--line)}
+.lab{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em}
+.cap{position:absolute;left:32px;top:32px;width:400px;padding:16px 20px;background:oklch(9% .004 250 / .8)}
+.cap .k{font-size:16px;color:var(--text-2)}
+.cap .n{font-family:var(--label);font-weight:600;font-size:48px;line-height:1.05;text-transform:uppercase;margin:4px 0 8px}
+.cap .n i{display:inline-block;width:22px;height:40px;background:var(--text-1);vertical-align:-4px;margin-left:4px}
+.cap p{font-size:18px;line-height:1.45;color:var(--text-2)}
+.cap p.t{color:var(--p2)}
+.clock{position:absolute;left:32px;bottom:28px;font-size:56px;font-weight:600;color:var(--text-1)}
+.clock small{display:block;font-size:16px;color:var(--text-3);font-weight:400}
+.st{position:absolute;right:24px;bottom:32px;text-align:right;font-size:18px;line-height:1.5;color:var(--text-2)}
+.st .w{color:var(--p2)}
+svg.map{position:absolute;left:0;top:0}
+.tag{position:absolute;right:24px;top:28px;font-size:16px;color:var(--text-3)}
+.canvas{position:relative;width:608px;height:912px;background:var(--bg-surface);padding:16px}
+.chead{display:flex;justify-content:space-between;align-items:center;height:40px;margin-bottom:8px}
+.chead .lab{font-size:20px;color:var(--text-2)}
+.chead span:last-child{font-size:16px;color:var(--text-3)}
+.grid{display:grid;grid-template-columns:284px 284px;gap:8px}
+.card{position:relative;background:var(--bg-elevated);border:1px solid var(--line);padding:12px 14px}
+.card.wide{grid-column:span 2}
+.card h3{font-family:var(--label);font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:22px;color:var(--text-1);padding-right:52px}
+.card .by{font-size:16px;color:var(--text-3);margin-top:2px}
+.x{position:absolute;right:0;top:0;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text-2)}
+.big{font-size:56px;font-weight:600;margin:10px 0 4px}
+.row{display:flex;justify-content:space-between;align-items:center;font-size:18px;color:var(--text-2)}
+.btn{height:48px;min-width:120px;padding:0 16px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-family:var(--label);font-size:20px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-1)}
+.tile .s{font-size:28px;margin:10px 0 4px}
+.tile p{font-size:16px;color:var(--text-2);line-height:1.4}
+.agent{position:absolute;right:24px;bottom:24px;width:64px;height:64px;background:var(--bg-elevated);border:1px solid var(--accent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.agent .lab{font-size:16px;color:var(--text-1);line-height:1;letter-spacing:.02em}
+.note{position:absolute;left:16px;bottom:24px;width:480px;font-size:16px;line-height:1.4;color:var(--text-3)}
+</style></head><body>
+<div class="root" data-layout="split" data-wall-state="tour">
+  <section class="wall" aria-label="Wall half, tour">
+    <svg class="map" width="759" height="912" viewBox="0 0 759 912">
+      <g fill="none" stroke="oklch(100% 0 0 / .17)">
+        <circle cx="400" cy="480" r="150"/><circle cx="400" cy="480" r="270" stroke="oklch(100% 0 0 / .09)"/>
+        <path d="M400 480 L520 390 M400 480 L300 380 M400 480 L470 610 M400 480 L250 560 M520 390 L600 300 M520 390 L640 430"/>
+      </g>
+      <g fill="oklch(78% .004 250)">
+        <circle cx="400" cy="480" r="6"/><circle cx="300" cy="380" r="7"/><circle cx="470" cy="610" r="7"/><circle cx="250" cy="560" r="7"/>
+        <circle cx="600" cy="300" r="5"/><circle cx="640" cy="430" r="5"/>
+      </g>
+      <rect x="512" y="382" width="16" height="16" fill="none"/>
+      <polygon points="520,378 530,396 510,396" fill="oklch(84% .16 95)"/>
+      <g stroke="oklch(72% .17 300)" stroke-width="2" fill="none">
+        <path d="M494 364 h12 M494 364 v12 M546 364 h-12 M546 364 v12 M494 416 h12 M494 416 v-12 M546 416 h-12 M546 416 v-12"/>
+      </g>
+      <text x="470" y="352" fill="oklch(96% .002 250)" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-size="20">BUILDER-A</text>
+    </svg>
+    <div class="cap">
+      <div class="k">TARGET 02 / 05 · SITE</div>
+      <div class="n">HV1<i></i></div>
+      <p class="t">▲ builder-a · stuck 1 h 12</p>
+      <p>cpu 41 % · mem 63 %</p>
+      <p>3 builders · up 12 d</p>
+    </div>
+    <div class="tag">TOUR · DEMO</div>
+    <div class="clock">22:41<small>Mon 26 Oct</small></div>
+    <div class="st"><div class="w">▲ 1 run stuck</div><div>4 runs tonight</div></div>
+  </section>
+  <section class="canvas" aria-label="Canvas">
+    <div class="chead"><span class="lab">Canvas</span><span>3 cards</span></div>
+    <div class="grid">
+      <div class="card wide">
+        <h3>Nightly run starts in</h3><div class="by">agent · 22:38 · job nightly-ci on builder-a</div>
+        <div class="x">×</div>
+        <div class="big">01:18:42</div>
+        <div class="row"><span>at 00:00 · cancellable</span><span class="btn">Cancel job</span></div>
+      </div>
+      <div class="card tile">
+        <h3>builder-a</h3><div class="by">agent · 22:39</div><div class="x">×</div>
+        <div class="s" style="color:var(--p2)">▲ stuck</div>
+        <p>round 7 of 12<br>no output for 72 min</p>
+      </div>
+      <div class="card">
+        <h3>CPU hv1</h3><div class="by">agent · 22:40</div><div class="x">×</div>
+        <svg width="254" height="84" viewBox="0 0 254 84" style="margin-top:8px">
+          <path d="M0 70 L30 62 L60 66 L90 40 L120 44 L150 30 L180 36 L210 22 L254 28" fill="none" stroke="oklch(78% .004 250)" stroke-width="2"/>
+          <path d="M0 83 H254" stroke="oklch(100% 0 0 / .17)"/>
+        </svg>
+        <div class="row" style="font-size:16px"><span>last 6 h</span><span>41 %</span></div>
+      </div>
+    </div>
+    <p class="note">Sketch for S-SCR-01 (screens.md §1). Wall half 759 px, divider 1 px, canvas 608 px. Card looks are T11's; the bottom 104 px stay free for the AGENT button.</p>
+    <div class="agent" data-cockpit-button>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="oklch(96% .002 250)" stroke-width="2"><path d="M4 5h16v11H9l-5 4z"/></svg>
+      <span class="lab">Agent</span>
+    </div>
+  </section>
+</div>
+</body></html>
