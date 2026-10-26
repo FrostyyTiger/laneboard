@@ -41,13 +41,21 @@ Notes for every builder round (planner, round 1):
   swell (`sin²`, sized from 24 samples +10 %) so one star stays within 85 % of the frame (`framing.js standBack`);
   before, 34 of 42 large-demo pairs showed only empty sky for up to 39 % of a flight. Peak step back ~5000 on
   home ↔ __repos: T2 (bend the arc) may want to fold this into its path. Film r3-galaxy: a star in every frame.
-- [ ] T2 (§7 Night 3 A1) [ui] [variant:galaxy] No flight through a cluster or the sun (was night 2's T36,
+- [x] T2 (§7 Night 3 A1) [ui] [variant:galaxy] No flight through a cluster or the sun (was night 2's T36,
   reviews r54-film-ui 3): `flightPose` keeps the path at least `1.5 × reach` from every star but the two ends
   and clear of the sun (bend the arc up, as it already lifts by `FLIGHT.lift`), keeping T1's rule; nebula lobes
   and spheres whose screen size passes ~40 % of the frame height fade out (`scene.js`) — done when: a test shows
   `flightPose` over every site pair never nearer than `1.5 × reach` to a third site's star nor inside the sun's
   radius, T1's test still green, and a film of `galaxy.html?demo=1&quality=0` shows no frame filled by one
-  cluster.
+  cluster. (commit SHA) Builder r7: `flightPose` takes
+  `frame.avoid` (third stars at `FLIGHT_CLEAR.reach` 1.5 × reach, the sun at 480 = 0.75 × its halo) and adds one
+  `sin`-shaped rise over the whole flight, sized from 24 samples +10 %, then T1's step back; a shot that itself
+  stands nearer (cloud's held shot is 0.96 of 1.5 × reach from lab) only asks the flight not to go nearer than it.
+  On the large demo no ideal-shot flight came near a third star even before; the frames r54 saw were the
+  departing system's own nebula, so the fade carries most of it: `scene.js nearFade` fades lobes, star and halo
+  past 40 % of the frame height (gone at 70 %), weighted by how folded the system is, never the one the camera
+  flies to (`galaxy.setHeld`, set by `camera.js`); the sun's halo fades the same. Film r7-galaxy: no frame filled
+  by a cluster or the sun, 0 console errors (1.8 fps, as every SwiftShader film on this VM).
 - [ ] T3 (§7 Night 3 A2) [ui] [variant:galaxy] The overview looks like a galaxy again (was night 2's T40;
   r59-dreamer 2 = r54-film-ui 11 = r15-dreamer 9): in `scene.js`, at the overview only, a faint arm ribbon along
   `layout.js armPoint` (4-6 % luminance, under the dust, never above `--text-3`, colour from a token through
