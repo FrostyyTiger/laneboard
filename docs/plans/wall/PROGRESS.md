@@ -421,10 +421,28 @@ Notes for every builder round (planner, round 1):
   drawn on each overview leg, gone 400 ms into the site leg. Seen: in demo timing (4 s overview, 2.25 s
   flight) the line is up for only ~1.7 s per overview, so many sheet frames miss it; at real timing it holds
   ~17 s. The line can cross another site's name on its way (it is 1 px and under the names' halos).
-- [ ] T21 (§7.C) [ui] [variant:galaxy] (reviews/r15-dreamer.md, unforgettable 1) `fx=beacon`: above each crit
+- [x] T21 (§7.C) [ui] [variant:galaxy] (reviews/r15-dreamer.md, unforgettable 1) `fx=beacon`: above each crit
   cluster a thin pillar of light rises from the plane, its height the crit's age (log scale, capped), calm
   clusters get none, so two crits are no longer twins — done when: a test maps crit age to pillar height
   (monotonic, capped, none for calm), and filmstrips with and without `?fx=beacon` show it only with it.
+  (commit cda1090) `fx.js`: `BEACON`, `beaconHeight(ageMs, tone)` (0 unless crit; 220 just begun → 900 at a
+  day by log: 1 min 285, 10 min 444, 1 h 604, 6 h 771), `critAges(model, sites)` and `beaconAt`. **Decision:**
+  the model has no "crit since", so a crit's age is the newest crit event on each node still in crit (a
+  site's oldest such), else when the page saw the nebula turn crit (`s.since`), the older of the two. A
+  pool of 8 pillars (a plane turned round its own axis to the camera, a core in a soft sheath thinning
+  upward, additive, crit hue) with a tip light at the height, so two pillars compare at a glance. A crit
+  that begins while the page looks rises over 1.4 s, eased; one already there on the first frame stands
+  at once (it did not just begin, and `?at=` stills need it); it sinks when it clears; it dims to 0.3 while
+  its system is open (the system is the loud thing then); reduced motion: no rise. Tests (+7 in
+  `wall-galaxy-fx`): height monotonic/capped/none for calm-warn-low, `critAges` by spell, the rise, and the
+  real scene (pillar per crit site at its age's height, tip on top, none calm, dims open, sinks on clear,
+  a page-dated crit grows). First still: 120 units was a ~45 px hairline lost in the nebula; raised.
+  Still `$RUN_DIR/shots/r46-ov2` (`?at=overview&quality=0&fx=beacon`, hv2 crit): a red pillar with its
+  tip above HV2, clear of the name. Filmstrips (`?demo=1&quality=0`, 4x, 0 console errors, 1.5/2.1 fps is
+  SwiftShader): `$RUN_DIR/shots/r46-galaxy-beacon/` (3.7 s: pillars on HV1 and HV2; 9.4 s: dimmed inside the
+  open HV2; 30 s calm: none) and `$RUN_DIR/shots/r46-galaxy/` without (no pillar). Seen: the demo's crits
+  are seconds old, so its pillars are all near the floor; the height only tells apart at real ages
+  (minutes to hours). The overview looks down steeply, so a pillar reads shorter than its world height.
 - [ ] T22 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r21-operator.md 8) The trouble planet's own name is too
   small at 3 m: the lock target's label while in trouble at the site step is caps at the site step's size
   (35 px on the tablet) — done when: a test shows `labels.js` gives the held trouble target the site-step size
