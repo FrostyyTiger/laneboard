@@ -158,7 +158,8 @@ The loop picks no effect: it builds each behind a switch, the panel scores it, t
 4. Live data: a status change recolours and re-glows without a rebuild or a jump; a tree change folds
    the cluster, re-lays it, opens it again. The camera never cuts.
 5. The target lock and the caption's trouble word on the 3D camera (project the node to the screen).
-6. Speed on the tablet (§2.4): a frame budget, fewer segments and sprites when it is missed, no growth
+6. Speed on the tablet (§2.4; the sketch ran at 60 fps on the Surface Pro 7, i3-1005G1, owner 2026-10-26:
+   keep it there, the real code adds labels, lock and effects): a frame budget, fewer segments and sprites when it is missed, no growth
    in memory over an hour (`?perf=1` overlay). Measure script ms per frame; fps under SwiftShader
    measures the VM, not the page (filming note in `nights/night-1/PROGRESS.md`).
 7. Reduced motion (D5): no flights; the overview with all clusters folded and the caption rotating.
