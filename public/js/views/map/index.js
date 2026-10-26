@@ -155,6 +155,8 @@ export function migrateFolds(list, localId) {
  *                            the result may carry `guides` (orbit lines) and `bounds` (the fit).
  *                            Default: the radial rings
  *   rings                 false: no ring hairlines, ring legends or bearing dial (default on)
+ *   legends               false: no ring legends; the hairlines and the dial stay (default on)
+ *   lamps                 false: no lamp strip under a builder's name (default on)
  *   labelSize(node, {s, trouble}) -> px for the node's name, 0 for none at this
  *                            zoom (s), undefined for today's 11/12px. Default: today's
  *   pinLabels             true: a name keeps its side and line while it stays on screen
@@ -1170,6 +1172,8 @@ export function createMap(root, opts = {}) {
       covers: mode !== 'pip' ? [anchorRect()].filter(Boolean) : [],
       budgetUsd: typeof opts.budgetUsd === 'function' ? opts.budgetUsd : undefined,
       rings: opts.rings !== false,
+      legends: opts.legends !== false,
+      lamps: opts.lamps !== false,
       guides: lay.guides,
       labelSize: typeof opts.labelSize === 'function' ? opts.labelSize : undefined,
       pinLabels: opts.pinLabels === true,

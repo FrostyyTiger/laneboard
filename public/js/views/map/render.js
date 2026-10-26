@@ -29,6 +29,8 @@
 //     anchor,                  // tether target {left, top, bottom} in canvas px, or null
 //     budgetUsd(node),         // optional: the builder budget cap for the cost overlay
 //     rings,                   // false: no ring hairlines, ring legends or bearing dial (the Wall)
+//     legends,                 // false: no ring legends, hairlines and dial kept (the Wall's radial)
+//     lamps,                   // false: no lamp strip under builder names (the Wall)
 //     labelInset,              // {top, right, bottom, left} shares: where a name may move to (the Wall)
 //   }
 //
@@ -401,14 +403,15 @@ export function createRenderer(ctx, palette) {
     const s = scene.s ?? 1;
     const c0 = centre(scene);
     const ux = Math.cos(LEGEND_ANGLE), uy = Math.sin(LEGEND_ANGLE);
-    const phone = (scene.W ?? Infinity) <= PHONE;
+    // A phone has no room for the legends; the Wall reads them as noise from across the room.
+    const bare = (scene.W ?? Infinity) <= PHONE || scene.legends === false;
     const rings = [], legends = [], bearings = [];
     let outer = RINGS[2] * s;
     for (const { r: wr, label } of ringLabels(scene.pos ?? new Map(), scene.byId ?? new Map())) {
       const r = wr * s;
       outer = Math.max(outer, r);
       rings.push(r);
-      if (phone) continue;
+      if (bare) continue;
       const x = c0.x + ux * (r + 8), y = c0.y + uy * (r + 8);
       ctx.font = `500 10px ${P.label}`;
       const w = measure(label) + ('letterSpacing' in ctx ? label.length : 0);
@@ -1103,7 +1106,7 @@ export function createRenderer(ctx, palette) {
       // then machines and places, then the rest.
       const rank = id === scene.selected ? 0 : picked ? 1 : loud || trouble(n, stuck) ? 2 : plate ? 3 : 4;
       plan.push({ id, n, sx: sp.x, sy: sp.y, R, text, font, col, x, y, left, w, half, track, round, sub: subText, loud, fade, enter: c.a ?? 1, rank, box, low,
-        lamps: n.kind === 'builder' ? lampColours(n, stuck.has(n.builder)) : null });
+        lamps: n.kind === 'builder' && scene.lamps !== false ? lampColours(n, stuck.has(n.builder)) : null });
     }
     return plan;
   }

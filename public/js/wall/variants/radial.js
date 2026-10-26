@@ -213,8 +213,14 @@ export const labelSize = labelSizeFor(STEPS);
  * `pinLabels`: a name keeps its side and line while it is on screen (the
  * turn used to flip names across their node as it passed the vertical).
  * `labelInset`: the collision pass keeps names inside the safe area (T17).
+ * `legends` and `lamps` off (T18): the ring legends (`ROOM · REPO`) and the
+ * lamp strip under a builder's name are desk chrome, 4 px specks from across
+ * the room; a builder's trouble is still its mark, a stuck lane its ▲. The
+ * ring hairlines and the bearing dial stay: they say "instrument".
  */
-export const mapOptions = Object.freeze({ layout: layoutFor(), labelSize, pinLabels: true, labelInset: LABEL_INSET });
+export const mapOptions = Object.freeze({
+  layout: layoutFor(), labelSize, pinLabels: true, labelInset: LABEL_INSET, legends: false, lamps: false,
+});
 
 /**
  * Trouble halos on the glow layer (glow.js `HALO`, T16): at the overview a
