@@ -457,11 +457,28 @@ Notes for every builder round (planner, round 1):
   brackets, as large as `HV2`. Filmstrip `$RUN_DIR/shots/r47-galaxy/` (`?demo=1&quality=0`, 4x,
   0 console errors, 1.5 fps is SwiftShader): no frame lands on a held trouble system (holds are short in demo
   timing). Seen: the `■` glyph in the condensed face is as wide as two letters, as in the caption.
-- [ ] T23 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r21-operator.md 5) The banner repeats the caption: while
+- [x] T23 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r21-operator.md 5) The banner repeats the caption: while
   the held lock target is the far fleet line's subject, the line steps down to the next problem (with `+N MORE`)
   — done when: a test with two problems shows the banner naming the second while the first is held and the
   first otherwise; do it in `hud.js` by choosing which model/problem is fed to `frame` (`frame.js` is fenced; if
-  that cannot work, write the needed change under `## For the owner`).
+  that cannot work, write the needed change under `## For the owner`). (commit SHA)
+  `hud.js bannerModel(model, heldId)` (pure): the held node's problem (up to the topmost node in trouble above
+  it, and all in trouble under that) reads `ok` in a copy, so `worstLine` names the next problem and counts
+  `+N more` past the two; the model itself when nothing is held, the held thing is calm, the line names another
+  problem anyway (masking it leaves the text the same), or there is no other problem. **Decisions:** at any step
+  (warn too: the caption carries the held one at both); with one problem the line keeps it (never "all calm"
+  while the caption says trouble); `+N more` does not count the held one (the caption shows it); the held id is
+  the leg's `lockTarget` first, fixed for the leg as the caption and brackets are. The frame is fed again only
+  when the model or the held id changes, before the caption shows. Since the stepped-down line is often at
+  the warn step, where `frame.cover()` is null, `main.js freeBox` now also keeps the warn line's box
+  (`hud.fleetCover()`, a fourth kept slot; the overview fit still reads the first three): the first still had
+  `build-cache` under `▲ HV1 · FEAT-SEARCH`. Tests (+2 in `wall-galaxy-hud`): `bannerModel` cases and
+  `createHud` with a fake tour (second named while the first is held, the first at the overview and when the
+  other site is held, not re-fed for the same model). Stills `$RUN_DIR/shots/r48-still-hv2` (banner
+  `▲ HV1 · FEAT-SEARCH · +3 MORE` under `■ STORAGE`) and `r48-still-hv2b` (after the fix and a demo tick:
+  `■ HV1 · VM-C`, `+4 MORE`, the system clear of it). Filmstrip `$RUN_DIR/shots/r48-galaxy/` (`?demo=1&quality=0`,
+  4x, 0 console errors, 1.3 fps is SwiftShader): held FEAT-SEARCH keeps `■ HV2 · STORAGE` (it was not the
+  subject); no frame lands on held HV2 in demo timing.
 - [x] T24 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 7) The overview turns, so every label moves
   for no reason (HOME at three places in three overviews): no turn at the overview (`overviewShot` fixed
   pose); depth comes only from the drift round a held system — done when: a test shows `overviewShot(sites, t)`

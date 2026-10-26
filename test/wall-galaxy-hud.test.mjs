@@ -6,8 +6,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { createHud, legNode } from '../public/js/wall/galaxy/hud.js';
+import { bannerModel, createHud, legNode } from '../public/js/wall/galaxy/hud.js';
 import { captionLines } from '../public/js/wall/caption.js';
+import { worstLine } from '../public/js/wall/frame.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
 
 const PUBLIC = path.resolve(import.meta.dirname, '..', 'public');
@@ -141,4 +142,62 @@ test('a parked system gets its caption at once, without a tour', () => {
   assert.equal(leg.arriveMs, 0);
   assert.match(cap.name, /hv1/i);
   assert.match(cap.kicker, /02 \/ 02/);
+});
+
+// T23 (reviews/r21-operator.md 5): the banner does not repeat the caption.
+const twoProblems = () => {
+  const m = model();
+  m.nodes.push(
+    { id: 'hv1-c', parent: 'hv1', kind: 'builder', label: 'builder-c', status: 'warn', why: 'no contact' },
+    { id: 'hv1-s', parent: 'hv1-c', kind: 'session', label: 's1', status: 'warn' },
+  );
+  return m;
+};
+
+test('bannerModel: the held problem reads calm so the line names the next, else the model as it is', () => {
+  const m = twoProblems();
+  assert.match(worstLine(m).text, /^lab · crit/);
+  const held = bannerModel(m, 'lab-b');
+  assert.notEqual(held, m);
+  assert.match(worstLine(held).text, /hv1 · builder-c · no contact/);
+  assert.equal(m.nodes.find((n) => n.id === 'lab-b').status, 'crit', 'the model itself is untouched');
+  // The held site is in trouble too (its root is lab): all of it steps aside.
+  assert.equal(held.nodes.find((n) => n.id === 'lab').status, 'ok');
+  // Holding the second problem (or a node inside it): the line already names another.
+  assert.equal(bannerModel(m, 'hv1-c'), m);
+  assert.equal(bannerModel(m, 'hv1-s'), m);
+  // Nothing held, a calm node held, an unknown id: as it is.
+  assert.equal(bannerModel(m, null), m);
+  assert.equal(bannerModel(m, 'hv1-b'), m);
+  assert.equal(bannerModel(m, 'nope'), m);
+  // One problem only: never "all calm" while the caption says trouble.
+  const one = model();
+  assert.equal(bannerModel(one, 'lab-b'), one);
+  // +N more counts the problems past the two.
+  m.nodes.push({ id: 'hv1-d', parent: 'hv1', kind: 'builder', label: 'builder-d', status: 'warn' });
+  assert.equal(worstLine(bannerModel(m, 'lab-b')).more, 1);
+  assert.equal(worstLine(m).more, 2);
+});
+
+test('the frame names the second problem while the first is held, the first otherwise', () => {
+  const { calls, caption, frame } = fakes();
+  const legs = [];
+  const tour = { onLeg: (cb) => { legs.push(cb); return () => {}; } };
+  const hud = createHud({ caption, frame, tour });
+  const fed = () => worstLine(calls.filter((c) => c[0] === 'frame').at(-1)[1]).text;
+  const frames = () => calls.filter((c) => c[0] === 'frame').length;
+  const m = twoProblems();
+  hud.update(m);
+  assert.match(fed(), /^lab · crit/, 'the overview: the worst');
+  legs[0]({ kind: 'site', id: 'lab', index: 1, count: 2 });
+  assert.match(fed(), /^hv1 · builder-c/, 'lab held: the next problem');
+  const n = frames();
+  hud.update(m);
+  assert.equal(frames(), n, 'the same model and held thing: not fed again');
+  hud.update(twoProblems());
+  assert.match(fed(), /^hv1 · builder-c/, 'a new model while held: still the next');
+  legs[0]({ kind: 'site', id: 'hv1', index: 2, count: 2 });
+  assert.match(fed(), /^lab · crit/, 'hv1 held: lab is the line again');
+  legs[0]({ kind: 'overview' });
+  assert.match(fed(), /^lab · crit/);
 });

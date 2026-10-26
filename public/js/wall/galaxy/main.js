@@ -119,9 +119,12 @@ export function boot() {
   // the tag leave free (T18, framing.js). Each one's box is remembered as the widest
   // seen, so the shot does not move each time a plate comes, goes or changes
   // length; before the first plate it eases over once.
-  const kept = [null, null, null];
+  // The fourth is the fleet line at the warn step (T23: while a crit is held
+  // the banner steps down to the next problem, often a warn, whose words
+  // frame.js gives no cover); the overview fit reads only the first three.
+  const kept = [null, null, null, null];
   const freeBox = () => {
-    const now = [caption.cover?.() ?? null, frame.cover?.() ?? null, hud.tagCover()];
+    const now = [caption.cover?.() ?? null, frame.cover?.() ?? null, hud.tagCover(), frame.cover?.() ? null : hud.fleetCover()];
     for (let i = 0; i < kept.length; i++) kept[i] = unionBox(kept[i], now[i]);
     return freeRect(canvas.clientWidth, canvas.clientHeight, kept.filter(Boolean));
   };
