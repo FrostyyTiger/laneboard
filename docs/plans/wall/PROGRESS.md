@@ -483,6 +483,23 @@ Notes for every builder round (planner, round 1):
   box (re-read on resize or when the frame's text changes, as `frame.js` does) and the canvas size (one
   `ResizeObserver`) — done when: a test counts layout-property reads over several fake frames (tag box read
   once, none per frame after the first) and a 4x CDP run shows style recalcs/layouts near 1 per frame.
+- [ ] T30 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r43-stranger.md galaxy 1) The fleet line flips red ↔ yellow
+  when a crit link clears and returns within seconds (builder-c "no contact for 19s" red, then yellow, then red
+  again): from 3 m the loudest thing comes and goes. In `hud.js` (frame.js is fenced) hold a crit that cleared
+  as the fed problem for one tour cycle, dimmed with "cleared Ns ago", unless a newer crit replaces it — done
+  when: a test feeds crit → warn → crit within 20 s and the line never drops below crit meanwhile, and the held
+  line ends one cycle after the crit clears for good; a film of `galaxy.html?demo=1` shows no red/yellow flip.
+- [ ] T31 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r43-stranger.md galaxy 2) Words sit on words: the clock
+  "13:12" over the `thermostat` label and `printer-3d` planet in a parked view, "HOME" on the plate's bracket and
+  above the clock, "DEMO-HOST" touching the tag. Add the clock block to `hud.covers()` (like the caption and the
+  fleet block) and keep site labels out of the plate's and the tag's boxes — done when: a test shows no shown
+  label box meets the clock, plate or tag box on the large fixture (`?at=home`, overview), and a still of
+  `galaxy.html?at=home` shows the clock clear of every name.
+- [ ] T32 (§7.B, §2.4) [ui] [variant:galaxy] (reviews/r43-stranger.md stranger 6) A hallway tablet falls asleep:
+  `galaxy.html` never requests a Screen Wake Lock. In `galaxy/main.js` call `navigator.wakeLock.request('screen')`
+  when present, again on `visibilitychange` to visible, never throwing (denied or missing is silent) — done
+  when: a test with a fake `navigator.wakeLock` sees one request at start, a re-request after hidden → visible,
+  and no error when it is missing or rejects. (Manifest and fullscreen: the owner decides, see For the owner.)
 
 ## Research questions
 
@@ -579,6 +596,21 @@ Notes for every builder round (planner, round 1):
   `labelSize` by `text|px|face`, reuse arrays, skip the pass when pose, `world.version` and `unfold` are unchanged.
 - §7.A6 (r37-performance 8) At the overview every folded calm member is still a mesh (220 calls vs 36-56 held):
   hide calm members' mesh and halo while `s.unfold === 0` (trouble keeps its halo); later an `InstancedMesh` per tone.
+- §7.E (r43-stranger 1) README never names the Wall and `docs/map.md` points into the plan: the planned
+  `docs/wall.md` and README views-table row must give `galaxy.html` / `wall.html`, URL flags (`?at=`, `?open=`,
+  `?fx=`, `?perf=`, `?quality=`), kiosk setup, `glow`/`ring`, and how to stop the tour; map.md should say which page
+  paints `glow`/`ring`.
+- §7.B (r43-stranger 2) `wall.html?variant=galaxy` silently loads radial: redirect to `galaxy.html` (as
+  `fallback.js` goes the other way) and show "unknown variant, showing radial" briefly on the tag.
+- §7.C (r43-stranger 3) The galaxy paints neither `glow` nor `ring` (wall.html does): = `fx=lights` / `fx=rings`
+  above; a stranger's first wish, so build them early. Keep the tint under trouble so a lamp never reads as alarm.
+- §7.B (r43-stranger 7 of galaxy 2-3) Plate cut off mid-row and typing cursors in stills are the plate caught
+  mid-grow at throttled fps (T5 saw it settled): size the bracket to the full plate before typing starts.
+- §7.B (r43-stranger galaxy 5, 6) Empty frames between legs (shorter fly-outs or keep the overview up); the
+  overview is small (five sites in the middle third, no counts per site).
+- §7.A (r43-stranger 4) A hub answers 404 to `POST /api/map/feeds` while map.md promises 201/409: a clear
+  405/409 naming the ssh forced command, or serve it. Server work, outside the Wall.
+- §7.D (r43-stranger 5; = r31-touch) `?at=` is the only way to stop the tour and nothing handles touch: night 3.
 - §7.B Polish (tour pacing, camera paths, how far a system opens, nebula shapes and colours, the sun, the
   dust, type at 3 m): triage turns at most 3 findings per review into tasks; the rest land here.
 - §7.C `fx=storm`: a crit nebula as a slow storm (swirl, flicker of lightning).
@@ -630,6 +662,10 @@ Notes for every builder round (planner, round 1):
 - fx candidate (r15-dreamer): `fx=sweep`: once per tour cycle at the overview, one faint sensor sweep turns
   round the plane; a cluster pings only if new data came from its site since the last sweep (freshness).
 - (`fx=beacon` from the same review became T21.)
+- (r43-stranger 6) Kiosk: `galaxy.html` has no manifest (Android "Install app" installs the Board, `start_url: "/"`)
+  and no fullscreen request. A Wall manifest (`start_url: "/galaxy.html"`, `display: "fullscreen"`, landscape) is
+  a new file in `public/` and a `<link>`: say if wanted. Also (stranger 7): a read-only route for a wall screen
+  does not exist; docs must say so or the hub needs one.
 - (r31-touch 5) The far fleet line's `+3 MORE` is 10 px mono: unreadable at 3 m and too small to tap. Making
   it a 48 px chip needs fenced `frame.js`; for night 3 a tap on the fleet line should also fly to its node.
 
@@ -657,6 +693,10 @@ Notes for every builder round (planner, round 1):
 - r37-performance.md: 8 galaxy findings + 3 m check (yes for what/where, no for every site; CLOUD missing = T19),
   3 became tasks (T27 forceSinglePass = 1, T28 pixel ratio lever = 2, T29 forced layouts = 3); 4/5/6/7/8 under
   Later. Memory flat (clean). No `fx` proposals; fx scores from code and films.
+- r43-stranger.md: 7 stranger + 7 galaxy findings + fx note + 3 m check (mostly yes; HOME reads as the clock's
+  label), 3 became tasks (T30 red/yellow flip = galaxy 1, T31 words on words = galaxy 2, T32 wake lock = stranger
+  6); stranger 1/2/3/4/5/7 and galaxy 3/4/5/6 under Later (3 = `fx=lights`/`rings`), 6's manifest and 7 under For the
+  owner, galaxy 7 covered (T27/T28/T29). fx note: judged together, scores are guesses, dropped. No `fx` proposals.
 
 ## Scores
 
@@ -675,5 +715,9 @@ Notes for every builder round (planner, round 1):
 | 37 | performance (fx-lanes) | - | - | - | - | 3 | 8 | - |
 | 37 | performance (fx-comets) | - | - | - | - | 4 | 7 | - |
 | 37 | performance (fx-twinkle) | - | - | - | - | 3 | 8 | - |
+| 43 | stranger (galaxy) | 5 | 6 | 6 | 1 | 8 | 5 | 4 |
+| 43 | stranger (fx-lanes) | - | - | - | - | 3 | 8 | - |
+| 43 | stranger (fx-comets) | - | - | - | - | 3 | 8 | - |
+| 43 | stranger (fx-twinkle) | - | - | - | - | 3 | 8 | - |
 
 ## Morning
