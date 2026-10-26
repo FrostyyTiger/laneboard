@@ -502,11 +502,23 @@ Notes for every builder round (planner, round 1):
   when the first crit puts the far block up; a calm fleet's corner is not reserved (it would push the calm
   overview off-centre for words that are not there). The dust's own turn (once in 26 min, still.js) is kept:
   it moves no name.
-- [ ] T25 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 8) Calm captions are lists nobody reads: a
+- [x] T25 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 8) Calm captions are lists nobody reads: a
   calm hold shows the kicker (`TARGET 04 / 05`, without `· SITE`) and the name only; a held site in trouble
   keeps its trouble lines and bars — done when: a test on `hud.js` (the lines fed to the caption) shows a calm
   leg with kicker + name and a trouble leg with its status lines; `?at=cloud` shows the short plate. If
-  `captionLines` (`caption.js`, fenced) cannot give this, write the change under `## For the owner`.
+  `captionLines` (`caption.js`, fenced) cannot give this, write the change under `## For the owner`. (commit ce47d92)
+  `hud.js galaxyCaption(cap, kind)` (pure) cuts `captionLines` for the galaxy, so the fenced caption.js is not
+  touched: a calm cap (no `mark`) keeps no lines; a numbered kicker drops its ` · SITE` at every step (the
+  trouble kicker reads `CRIT · TARGET 01 / 05`); an unnumbered kicker (`SITE`, a still without a tour) keeps
+  it, since it is its only word. The lock and the leader are unchanged (a calm cap had no trouble line before
+  either). Tests (+2 in `wall-galaxy-hud`): calm → `TARGET 04 / 05` with no lines, crit → the same lines as
+  `captionLines`; the hud feeds a parked calm leg the short plate and a crit leg trouble + status first.
+  Stills `$RUN_DIR/shots/r51-still-cloud`, `r51-still-hv2` (`?at=…&quality=0`): `TARGET 04 / 05` over
+  `CLOUD` and nothing else. Filmstrip `$RUN_DIR/shots/r51-galaxy/` (`?demo=1&quality=0`, 4x, 0 console errors,
+  1.4 fps is SwiftShader): calm HV2/CLOUD legs short, FEAT-SEARCH and API-PROD keep the word, status, bars,
+  facts. Seen: the short plate's bottom-right bracket sits a name's height below the name (plateHeight's
+  bottom padding, caption.js fenced); it reads as a frame, left as it is. A demo fleet left by an earlier
+  round was still holding :7795 (started 13:42); this round used it and did not stop it.
 - [ ] T26 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 5) Dust looks exactly like data: grains as
   white and as large as the `apps-*` dots. Draw dust darker than any node mark (below `--text-3`), point size
   attenuated by distance and capped (~2 px) — done when: a test checks the dust colour is darker than the
