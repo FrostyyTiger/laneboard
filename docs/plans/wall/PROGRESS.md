@@ -317,11 +317,25 @@ Notes for every builder round (planner, night 1):
   read, no overlapping names, tour with caption, lock and trouble first, 0 console errors; fps 4.3 is
   SwiftShader plus screenshots (filming note). Seen and left to their tasks: label clouds still loose
   around HV1 and HV2 (T45), cursor-only caption frames (T42), K8S-1 near the top edge (T17).)
-- [ ] T48 (§2, T15, T47) [variant:islands] Type steps from distance for islands: `islands.js`
+- [x] T48 (§2, T15, T47) [variant:islands] Type steps from distance for islands: `islands.js`
   measures names at `BASE_STEPS` (`nameW`, `siteNameW`); move it to `type.js` `stepsFor` per screen
   (`optionsFor(aspect, screen)`, as orbits), re-measure the island sizes and title strip (with T43),
   `pinLabels` — done when: `test/wall-islands.test.mjs` passes at the new steps and a still shows no
-  overlapping names.
+  overlapping names. (commit 9d546e6; `optionsFor(aspect, screen)` takes the steps from the screen
+  (35 / 15 on the tablet, 26 / 11 on a desk monitor), `island`/`shapeOf`/`layoutFor` take `steps`, and
+  `sizesFor(steps)` sizes the title strip (`title` 0.62 of the site step: 22 at 35, 16 as before at 26).
+  `pinLabels` is NOT on for islands. Tried in still `$RUN_DIR/shots/r39-still` (first take): the pins
+  held the line the collision pass gave names during the intro flight, so CI, GIT-MIRROR and CLOUD stood
+  a row or more off their marks (CLOUD into the tag). Islands has no turn and every name already gets its
+  side from `labelAngle`, so pinning only freezes the bad intro placements. Overview scale on the large
+  demo is 0.85 at 35 px (0.87 at 26): the names in px are ~15 % wider in world units than measured. The
+  word spacing absorbs that, so no feedback loop was added. Tests: the steps for each screen, the title
+  strip, and at 35/15, 26/11 and 26/15 the site names stay inside the view and clear of each other and the
+  room names fit their words. Still `r39-still/` (final), filmstrip `r39-islands/`: five site names at
+  35 px clearly the first read, sitting on their coastlines, no overlapping names, tour with caption and
+  lock, 0 console errors. fps 3.9 is SwiftShader plus screenshots (filming note). Seen and left to their
+  tasks: lane names stacked above HV1's builders (FIX-LOGIN / FEAT-SEARCH, ACME-BILLING), the caption
+  plate over the visited island (T30), HV1's hold labels dense (T43).)
 - [ ] T49 (§2, T15, T47) [variant:mosaic] Type steps from distance for mosaic: its `labelSize` borrows
   `baseLabelSize` (26 / 15); move it to `stepsFor` per screen with names that still fit their tiles
   (with T44), `pinLabels`; then drop `BASE_STEPS`/`baseLabelSize` from radial.js if nothing uses them —
