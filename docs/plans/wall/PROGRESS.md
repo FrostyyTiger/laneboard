@@ -146,10 +146,26 @@ Notes for every builder round (planner, round 1):
   injecting three builders into `home` (`$RUN_DIR/tools/treechange.mjs`, frames `$RUN_DIR/shots/r19-tree/`):
   fold → swap with the new planets named → open, then the next socket frame took them out again the same way;
   0 errors. Seen: the folded system is a lumpy ball for a moment mid-relayout (the Later line on folded spheres).
-- [ ] T9 (§7.A5) [ui] [variant:galaxy] The target lock (`lock.js`, with `lockTarget`) and the caption's
+- [x] T9 (§7.A5) [ui] [variant:galaxy] The target lock (`lock.js`, with `lockTarget`) and the caption's
   trouble word on the 3D camera: `screenOf` projects the node, its screen size from its distance — done when:
   a test checks `screenOf` of a node at the camera's look-at is the screen centre and grows with zoom, and a
   still shows the four brackets closed round the trouble planet with the leader to the caption.
+  (commit 6a03398) `camera.js screenOf(id)` → `{ x, y, r }`, `r` the drawn radius in css px (scene SIZE
+  star/planet/dot × scale over the distance). Fenced `createLock` sizes brackets from the Map's `SIZE[kind]`
+  × a node scale clamped 0.8-1.6 and fixed at lock start (a planet held is ~25 px, the Map's room ≤ 10), so
+  `galaxy/lock.js createGalaxyLock` is its DOM part again with `lockGeometry3d({ r, side, t })` (same gaps
+  as `lockGeometry`, a test checks they agree), sized every frame, so the brackets track the planet through
+  the approach; progress, leader, tone and `lockTarget` are lock.js's. `hud.js` takes `lock`: a site leg
+  locks on `lockTarget`, in the trouble word's hue (a parked `?at=` leg has no status: it was grey, no
+  leader, until fixed). `labels.js` takes `held()` (`{ id, r }` from `lock.held()`): the held thing's name
+  goes outside its shut brackets (as a plain cover, the trouble name lost every spot and vanished). Layer
+  `#wall-lock` between the frame and the caption, as on wall.html. Still `$RUN_DIR/shots/r20-still-hv2-crit`
+  (`?at=hv2`, storage crit): red brackets shut round storage, the leader from the plate's STORAGE to the
+  top-left bracket, `■ storage` beside them; filmstrip `$RUN_DIR/shots/r20-galaxy/sheet.png`: grey brackets
+  on calm HV2/CLOUD, amber on remote's office-printer; 0 console errors; script 13.8 ms/frame avg incl. the
+  VM's software render (22 geometries, 3 textures, unchanged). Seen (for T18): at `?at=lab` the trouble lane
+  feat-search is under the caption plate, so its brackets are hidden and no leader (it runs back left); on
+  hv2 the lower brackets touch the far fleet block.
 - [ ] T10 (§7.A6) [variant:galaxy] Speed: script ms per frame in `__wallPerf`-style stats and a `?perf=1`
   overlay (ms/frame, fps, `performance.memory` when there, renderer info: calls, geometries, textures); a
   pure `budgetStep(stats)` that lowers sphere segments, dust and star sprites when frames miss the budget;
@@ -278,6 +294,9 @@ Notes for every builder round (planner, round 1):
   re-`map.update` the latest model when it changes) and pass `pick.variant.links === 'focus' ?
   focusLinks(model, heldSite) : model` to `map.update` (the sketch's `main.js.diff`, without its `?tilt`
   part and with the filter now pure). Until then the galaxy's no-WebGL redirect lands on radial.
+- (T9) `lock.js` (fenced) could take a drawn radius: `lockGeometry({ kind, ns, side, t, r })` using `r` when
+  finite, and `createLock`'s paint passing `r: sp.r` (the Map's `screenOf` has none, so wall.html is
+  unchanged). Then `galaxy/lock.js` would shrink to `createLock(root, cam, …)` and its DOM copy could go.
 - Filming (night 1, still open): `loop/film.mjs` (fenced) only runs here through the SwiftShader wrapper, so
   its fps is the VM's. Night 2 reports script ms per frame (T10); real fps needs the tablet.
 - No wild-card layout question this night: the owner picked the galaxy (README §5), so the planner asked
