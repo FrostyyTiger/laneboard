@@ -274,6 +274,20 @@ Notes for every builder round (planner, round 1):
   — done when: a test with two problems shows the banner naming the second while the first is held and the
   first otherwise; do it in `hud.js` by choosing which model/problem is fed to `frame` (`frame.js` is fenced; if
   that cannot work, write the needed change under `## For the owner`).
+- [ ] T24 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 7) The overview turns, so every label moves
+  for no reason (HOME at three places in three overviews): no turn at the overview (`overviewShot` fixed
+  pose); depth comes only from the drift round a held system — done when: a test shows `overviewShot(sites, t)`
+  gives one pose for any `t` (and the held drift still changes with `t`), and the filmstrip shows three
+  overviews with every site name in the same place.
+- [ ] T25 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 8) Calm captions are lists nobody reads: a
+  calm hold shows the kicker (`TARGET 04 / 05`, without `· SITE`) and the name only; a held site in trouble
+  keeps its trouble lines and bars — done when: a test on `hud.js` (the lines fed to the caption) shows a calm
+  leg with kicker + name and a trouble leg with its status lines; `?at=cloud` shows the short plate. If
+  `captionLines` (`caption.js`, fenced) cannot give this, write the change under `## For the owner`.
+- [ ] T26 (§7.B, §2.1) [ui] [variant:galaxy] (reviews/r26-skeptic.md 5) Dust looks exactly like data: grains as
+  white and as large as the `apps-*` dots. Draw dust darker than any node mark (below `--text-3`), point size
+  attenuated by distance and capped (~2 px) — done when: a test checks the dust colour is darker than the
+  dimmest node colour in `paletteFrom` and the size cap, and `?at=hv2&open=1` shows no grain as bright as a dot.
 
 ## Research questions
 
@@ -336,6 +350,15 @@ Notes for every builder round (planner, round 1):
   unless in trouble, drop the spokes (same as r8-film-ui 8).
 - §7.B (r15-dreamer 9) The arms do not read as arms: thin the dust between the arms to ~20 %, brighten along
   each arm's spine in `dustPoints`.
+- §7.B (r26-skeptic 1, sharpens T18) While a held site is in trouble, calm services and lanes are dots with no
+  name; only rooms, builders and trouble get a name.
+- §7.B (r26-skeptic 4, sharpens T16) Drop the sun's label to the planet step or remove it: the tag already names the hub.
+- §7.B (r26-skeptic 6; also r8-film-ui 8, r15-dreamer 8) Remove spokes; landing ring becomes a tick at half the stem weight.
+- §7.B (r26-skeptic 9) Clock at half size in text-3, date line gone.
+- §7.B (r26-skeptic 10, = r8-film-ui 7) A folded cluster in trouble at the overview is its shape glyph at the site step, no lumps.
+- §7.B (r26-skeptic 11) Hyperlanes grey at the dimmest weight; no status tint (nebula and label carry it).
+- §7.C (r26-skeptic fx-lanes 1, 2) `fx=lanes` is invisible at 3 m and its meaning is unclear: pulse only links that
+  changed state (went live / failed) in the last minute, with a faint tick at the arrival star so direction reads.
 - §7.B Polish (tour pacing, camera paths, how far a system opens, nebula shapes and colours, the sun, the
   dust, type at 3 m): triage turns at most 3 findings per review into tasks; the rest land here.
 - §7.C `fx=storm`: a crit nebula as a slow storm (swirl, flicker of lightning).
@@ -394,6 +417,10 @@ Notes for every builder round (planner, round 1):
 - r21-operator.md: 8 findings + 3 m check (yes for what/where, no for every site), 2 became tasks (T22 trouble
   name size = 8, T23 banner repeats caption = 5); 1/2/3 covered by T18/T19/T17 (sharpened under Later), 6
   covered (T16), 7 under Later, 4 needs fenced `tour.js` (For the owner). No `fx` proposals.
+- r26-skeptic.md: 11 galaxy + 3 fx-lanes findings + 3 m check (yes for what/where, no for every site), 3 became
+  tasks (T24 overview turn = 7, T25 calm captions = 8, T26 dust = 5); 1/2/3/4 covered by T18/T23/T19/T16 (extra
+  points kept under Later), 6/9/10/11 under Later, fx-lanes 1/2 under Later (fx-lanes 3 is praise: dropped). No
+  new `fx` proposals.
 
 ## Scores
 
@@ -402,5 +429,7 @@ Notes for every builder round (planner, round 1):
 | 8 | film-ui (galaxy) | 5 | 1 | 4 | 2 | 5 | 6 | 6 |
 | 15 | dreamer (galaxy) | 5 | 6 | 6 | 2 | 5 | 5 | 6 |
 | 21 | operator (galaxy) | 6 | 6 | 6 | 2 | 7 | 6 | 6 |
+| 26 | skeptic (galaxy) | 5 | 5 | 6 | 2 | 6 | 4 | 6 |
+| 26 | skeptic (fx-lanes) | - | - | - | - | 3 | 8 | - |
 
 ## Morning
