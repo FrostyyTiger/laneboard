@@ -40,13 +40,26 @@ Notes for every builder round (planner, round 1):
   `'170'`, the LICENSE is there, and `GET /vendor/three/three.module.js` is served as JavaScript.
   (commit 46fd6fa) Copied unchanged from the sketch; `public/vendor/three/SOURCES.txt` pins its sha256 (the
   test checks it). Import it as `../../../vendor/three/three.module.js` from `public/js/wall/galaxy/`.
-- [ ] T3 (§7.A1) [ui] [variant:galaxy] `public/js/wall/galaxy/scene.js` (sun, dust, far stars, hyperlanes,
+- [x] T3 (§7.A1) [ui] [variant:galaxy] `public/js/wall/galaxy/scene.js` (sun, dust, far stars, hyperlanes,
   nebulae by worst status, planets, stems with their landing rings, from T1's layout; colours from a pure
   `paletteFrom(readVar)` over the status tokens) and the page `public/galaxy.html` + `galaxy/main.js` (fetch
   `/api/map`, `/ws` map frames with backoff as `main.js` does, `window.__wallPerf` from `perf.js` counting
   rendered frames), styles in `wall.css` — done when: a test covers `paletteFrom` and the nebula status
   mapping, `test/frontend.test.mjs` passes, and a still of `galaxy.html` on the large demo shows the sun, five
-  clusters and a red nebula, with `__wallPerf.frames` growing.
+  clusters and a red nebula, with `__wallPerf.frames` growing. (commit a28786b)
+  Looked at it on the large demo (`$RUN_DIR/shots/r7-galaxy/sheet.png`, stills `r7-galaxy-still*`): the sun,
+  five clusters on the arms, `lab` red, `cloud` yellow, trouble coming and going, no console errors; `?at=hv1`
+  shows the open system with spokes, stems and landing rings. The sun's halo was as loud as the trouble, so
+  it went down to 0.4. Colours: a pure `paletteFrom(readVar)` in `galaxy/palette.js` reads `--p1/--p2/--p3`
+  and the Wall's greys (it parses `color-mix(in oklch)`); calm, the sun, the dust and the stars are grey, so
+  the sketch's warm sun and blue dust are gone (only the accent and status hues may carry colour). The calm
+  `__repos` draws no cluster (tour.js `tourSites`). Speed at 4x under SwiftShader: 35 ms/frame, and 34.9 of
+  that is `renderer.render` (the VM's software GL); the rest of the page is ~0.4 ms; a rebuild on a tone
+  change is 26-54 ms (T8 removes those); 198 draw calls, 22 geometries, 3 textures (T10). No labels yet (T6).
+  `?at=<site>&open=0..1` parks the camera, for stills. API for T4: `createGalaxyScene(canvas, {palette})` →
+  `{ update, setOpen(id, k), frame(now), camera, world: { sites: [{ id, home, reach, open, … }] } }`,
+  `overviewShot(sites, now)`, `siteShot(site, now)`. `test/frontend-static.test.mjs` now lets a relative
+  import land on a vendored module under `public/vendor/`.
 - [ ] T4 (§7.A1) [ui] [variant:galaxy] `galaxy/camera.js`: the Map look-alike (`focus(id, zoom)`, `fit()`,
   `onDraw`, `screenOf`, `snapshotScene`) that flies the 3D camera from the overview to a system, opens it
   (T1 `foldAt` over `OPEN_MS`) while arriving, drifts slowly round it while held, folds it when leaving;
@@ -121,6 +134,9 @@ Notes for every builder round (planner, round 1):
 
 ## Later
 
+- §7.B (T3, builder r7) The overview turns 39° in 45 s (`overviewShot`, the sketch's 0.000015 rad/ms):
+  in the filmstrip the turn reads as motion, not depth; and the dust grains look coarse when the camera is
+  close (`?at=`).
 - §7.B Polish (tour pacing, camera paths, how far a system opens, nebula shapes and colours, the sun, the
   dust, type at 3 m): triage turns at most 3 findings per review into tasks; the rest land here.
 - §7.C `fx=storm`: a crit nebula as a slow storm (swirl, flicker of lightning).
