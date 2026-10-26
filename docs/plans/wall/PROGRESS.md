@@ -336,10 +336,31 @@ Notes for every builder round (planner, night 1):
   lock, 0 console errors. fps 3.9 is SwiftShader plus screenshots (filming note). Seen and left to their
   tasks: lane names stacked above HV1's builders (FIX-LOGIN / FEAT-SEARCH, ACME-BILLING), the caption
   plate over the visited island (T30), HV1's hold labels dense (T43).)
-- [ ] T49 (§2, T15, T47) [variant:mosaic] Type steps from distance for mosaic: its `labelSize` borrows
+- [x] T49 (§2, T15, T47) [variant:mosaic] Type steps from distance for mosaic: its `labelSize` borrows
   `baseLabelSize` (26 / 15); move it to `stepsFor` per screen with names that still fit their tiles
   (with T44), `pinLabels`; then drop `BASE_STEPS`/`baseLabelSize` from radial.js if nothing uses them —
-  done when: `test/wall-mosaic.test.mjs` passes at the new steps and a still shows no overlapping names.
+  done when: `test/wall-mosaic.test.mjs` passes at the new steps and a still shows no overlapping names. (commit 883d06f; `optionsFor(aspect, screen)` takes the steps from the screen (35 / 15
+  on the tablet, 26 / 11 on a desk monitor). At 35 a site name does not fit one hex (86 px on the glass,
+  REMOTE ~104 px): one hex per site forced sites down to 20, a step above rooms (still
+  `$RUN_DIR/shots/r40-still-a`). So a site's tile is now a **plate of two cells** side by side
+  (`plateCorners`, one cell more per site, the scale unchanged at 3:2), set as a title plate: mark on the
+  left of the middle line, name flush left a fixed gap after it (`labelAt`, `plateName`), dots over the
+  left cell. It uses the middle line because the plate is only half a hex tall where its cells join: a
+  name under the mark crossed the joint and the next row's dots (still `r40-still-b`). `siteStep`: one
+  step for every site, the screen's own if the longest name fits its plate at the overview (`plateRoom`
+  at the overview scale for the screen height), else the next that fits, never the room step;
+  `layoutFor` sets it per fleet, `labelSizeOn` reads it. `textW` (the condensed face's width estimate)
+  moved to type.js, islands uses it too; `BASE_STEPS`/`baseLabelSize` removed from radial.js. `pinLabels`
+  NOT on, as for islands (round 39): tried in `r40-still-pin`, names kept their intro-flight lines, a row
+  off their tiles, DESK-LIGHT on the fleet line. Tests: siteStep, plate geometry, a plate per site (two
+  cells east of each other) and none for the hub or REPOS, names fit their plates on the tablet and a desk
+  monitor at 3:2 and 16:9, a long site name steps every site down together, flush left. Still
+  `r40-still/`, filmstrip `r40-mosaic/`: five site names at 35 px clearly the first read, `◉ HV1`
+  `◉ CLOUD` with one gap, no overlapping names, tour with caption and lock, trouble tiles toned, 0 console
+  errors; fps 2.7 is SwiftShader plus screenshots (filming note); script 8.3-11.9 ms/frame at 4x against
+  12.0 for the commit before in the same minute (load 35, noise). Seen and left to T44: room names still
+  leave their tile where 13-14 characters meet an 86 px tile (KITCHEN-LIGHT, PORCH-LIGHT pushed below,
+  OBJECT-STORE over a mark's ring); T42's cursor-only caption frames.)
 - [ ] T16 (§2) [variant:radial] (r9-film-ui #3) Trouble is the loudest thing: at the overview a crit
   node is the only saturated area (halo a few node radii wide, via T8's glow layer), attention in
   lanes stays at mark size and does not outshout a crit elsewhere — done when: a still of the
