@@ -38,7 +38,9 @@ html.wall body {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: var(--tex-dots), var(--bg-canvas);
+  /* Plain ground, no --tex-dots (T28, r20-skeptic #3): a fixed texture slides
+     against a camera that flies and turns. The vignette is the quiet ground. */
+  background: var(--bg-canvas);
 }
 
 /* The ground moves to the stage so the glow canvas (js/wall/glow.js) can sit

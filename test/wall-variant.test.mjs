@@ -85,6 +85,14 @@ test('wall.css: keeps the design guardrails and brightens the four tokens from t
   assert.match(block, /--line-strong:[^;]*48%/);
 });
 
+test('wall.css: the stage ground is plain, no dot texture under a moving camera (T28)', () => {
+  const css = read('css/wall.css').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.doesNotMatch(css, /--tex-dots|--grid-dot/, 'no dot texture anywhere on the Wall');
+  const stage = /\.wall-stage\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  assert.match(stage, /background:\s*var\(--bg-canvas\);/);
+  assert.match(css, /\.wall \.wall-map\.map\s*\{\s*background:\s*transparent;/, 'the Map\'s own dotted ground stays off');
+});
+
 test('the app does not load the Wall', () => {
   const html = read('index.html');
   assert.doesNotMatch(html, /wall\.css|js\/wall\//);
