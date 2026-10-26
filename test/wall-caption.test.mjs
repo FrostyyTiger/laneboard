@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   captionLines, captionSchedule, captionTimingFor, CAPTION_TIMING, DEMO_CAPTION_TIMING,
-  MAX_LINES, MAX_TEXT,
+  MAX_LINES, MAX_TEXT, STEPS, HERO_PLATE, heroSize,
 } from '../public/js/wall/caption.js';
 import { TIMING, DEMO_TIMING } from '../public/js/wall/tour.js';
 
@@ -101,7 +101,7 @@ test('caption: a node without detail or metrics still gives a status line, nothi
   const stray = captionLines({ id: 'x', status: 'unknown', sub: 'no feed', metrics: { cpu: 'high', mem: -1 }, detail: [1, 2] }, m);
   assert.equal(stray.kicker, 'NODE');
   assert.equal(stray.name, 'X');
-  assert.deepEqual(stray.lines, [{ kind: 'status', label: 'status', text: 'unknown · no feed' }]);
+  assert.deepEqual(stray.lines, [{ kind: 'status', step: 'line', label: 'status', text: 'unknown · no feed' }]);
   assert.deepEqual(captionLines(null, null).lines.map((l) => l.kind), ['status']);
 });
 
@@ -131,4 +131,52 @@ test('caption: every beat fits the tour leg, and the plate is then still for the
   // normal speed waits for the camera (Q1: arrive, then type)
   assert.equal(captionSchedule({ arriveMs: 2250 }, 'HV1', 3).startMs, 2250);
   assert.deepEqual(captionSchedule({}, '', 0, CAPTION_TIMING).lineAt, []);
+});
+
+// T20 (r14-operator #1): read from three metres. The trouble word is the
+// biggest text on a trouble plate, the name under it, the facts small.
+test('caption: a trouble site leads with the trouble word at the 3 m step, the name under it, facts small', () => {
+  const m = model();
+  const c = captionLines(node(m, 'hv2'), m, 1, 5);
+  assert.equal(c.hero, true);
+  const [lead, ...rest] = c.lines;
+  assert.equal(lead.step, 'hero');
+  assert.equal(lead.word, 'STORAGE', 'where the trouble is, in caps');
+  assert.equal(lead.sub, 'pool 97% full', 'what it is, under the word');
+  assert.deepEqual(rest.map((l) => [l.kind, l.step]), [
+    ['status', 'line'], ['metrics', 'line'], ['fact', 'small'], ['fact', 'small'], ['count', 'small'],
+  ]);
+  // the steps: trouble word > name > why > line > key, and the word stays above the name when it shrinks
+  assert.ok(STEPS.hero > STEPS.heroMin && STEPS.heroMin > STEPS.name, 'the word, even fitted, beats the name');
+  assert.ok(STEPS.name > STEPS.why && STEPS.why > STEPS.line && STEPS.line > STEPS.key);
+
+  // a node in its own trouble leads with what is wrong
+  const own = captionLines(node(m, 'storage'), m).lines[0];
+  assert.equal(own.word, 'POOL 97% FULL');
+  assert.equal(own.sub, 'crit');
+});
+
+test('caption: a calm site keeps its order, the name first and every line at the line step', () => {
+  const m = model();
+  const c = captionLines(node(m, 'lab'), m, 2, 5);
+  assert.equal(c.hero, false);
+  assert.deepEqual(c.lines.map((l) => [l.kind, l.step]), [
+    ['status', 'line'], ['metrics', 'line'], ['fact', 'line'], ['fact', 'line'], ['count', 'line'],
+  ]);
+});
+
+test('caption: the trouble word is 14vmin where it fits, fitted to the plate where not, 9 at the least', () => {
+  // the tablet (3:2) and a 16:9 screen, landscape
+  for (const [w, h] of [[1368, 912], [1920, 1080]]) {
+    assert.equal(heroSize('STORAGE', w, h), STEPS.hero, `short word at ${w}x${h}`);
+    const long = heroSize('OFFICE-PRINTER', w, h);
+    assert.ok(long < STEPS.hero && long >= STEPS.heroMin, `${long} at ${w}x${h}`);
+    // the fitted word fits the plate's width: glyph plus letters inside maxVw less the padding
+    const avail = (HERO_PLATE.maxVw * w) / Math.min(w, h) - HERO_PLATE.padVmin;
+    assert.ok(long * (1.1 + 14 * 0.47) <= avail + 0.5, `${long} vmin fits ${avail} vmin`);
+    assert.equal(heroSize('X'.repeat(40), w, h), STEPS.heroMin, 'never under the floor');
+  }
+  // wider screens give the word more room
+  assert.ok(heroSize('OFFICE-PRINTER', 1920, 1080) > heroSize('OFFICE-PRINTER', 1368, 912));
+  assert.equal(heroSize('STORAGE', 0, 0), STEPS.hero, 'no stage yet: the full step');
 });

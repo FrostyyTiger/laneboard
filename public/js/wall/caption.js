@@ -6,6 +6,13 @@
 // mem with thin bars, hardware / where / uptime from `detail`, what it holds.
 // It fades out when the camera leaves.
 //
+// On a site in trouble the plate is read from across the room (T20, research
+// Q3): the trouble word (`■ STORAGE`, its why under it) leads at the 3 m step,
+// the biggest text on the plate, shown with the plate; the name types under
+// it at the 1.5 m step; status and metrics keep the line step; hardware,
+// where and what it holds drop to the small step below a gap. A calm site
+// keeps the plain order: name, then the lines.
+//
 // `captionLines` and `captionSchedule` are pure (test/wall-caption.test.mjs
 // imports them); `createCaption` is the DOM part, driven by the tour's legs.
 //
@@ -29,6 +36,38 @@ export const GLYPH = Object.freeze({ square: '■', tri: '▲', diamond: '◆', 
 
 // Detail keys the plan names, in its order; any other key follows them.
 const FACT_ORDER = ['hardware', 'where', 'uptime'];
+
+/**
+ * The plate's type steps in vmin (wall.css keeps the same numbers): ratio
+ * about 1.6 from the key up; `hero` is the trouble word's largest size (a
+ * 20' cap at 3 m on the 12.3" tablet, research Q3: ~180 device px), shrunk
+ * to fit the plate's width but never under `heroMin`, a step above the name.
+ */
+export const STEPS = Object.freeze({ key: 1.7, line: 2.7, why: 4.3, name: 6.9, heroMin: 9, hero: 14 });
+
+// The trouble word's width in em, in the label face's caps with the plate's
+// tracking (0.43 em a letter plus 0.04 em), the shape and its gap ahead of it.
+const HERO_EM_PER_CHAR = 0.47;
+const HERO_GLYPH_EM = 1.1;
+
+/** The plate's widest (vw) on a trouble site, and its side padding (vmin, both sides). */
+export const HERO_PLATE = Object.freeze({ maxVw: 56, padVmin: 6 });
+
+/**
+ * The trouble word's size in vmin for a stage `width` x `height` (any unit):
+ * as big as `STEPS.hero` while the word fits the plate's width, smaller when
+ * it does not, `STEPS.heroMin` at the least (a longer word is cut by the CSS).
+ */
+export function heroSize(word, width, height) {
+  const w = Number(width);
+  const h = Number(height);
+  const short = Math.min(w, h);
+  if (!(short > 0)) return STEPS.hero;
+  const avail = (HERO_PLATE.maxVw * w) / short - HERO_PLATE.padVmin;
+  const ems = HERO_GLYPH_EM + [...String(word ?? '')].length * HERO_EM_PER_CHAR;
+  const fit = avail / ems;
+  return Math.round(Math.min(STEPS.hero, Math.max(STEPS.heroMin, fit)) * 10) / 10;
+}
 
 const PLURAL = { room: 'rooms', host: 'hosts', service: 'services', site: 'sites', lane: 'lanes', builder: 'builders', session: 'sessions', repo: 'repos', package: 'packages', run: 'runs', pr: 'PRs' };
 
@@ -73,6 +112,8 @@ function troubleOf(node, under) {
  *   `{ kind: 'count', label, text }`
  * in that order, at most MAX_LINES (facts give way first). Labels are short
  * words the page sets in caps; texts are as the model says them, clipped.
+ * Every line carries its `step`: `hero` (the trouble line: `word` big, `sub`
+ * under it), `line`, or `small` (facts and the count on a trouble site).
  */
 export function captionLines(node, model, index = null, count = null) {
   const nodes = Array.isArray(model) ? model : Array.isArray(model?.nodes) ? model.nodes : [];
@@ -98,10 +139,17 @@ export function captionLines(node, model, index = null, count = null) {
   if (bad) {
     const st = statusStyle(bad);
     const why = bad.why ?? bad.sub;
+    const label = clip(bad === n ? bad.status : (bad.label ?? bad.id));
+    const text = clip(why ?? bad.status);
+    // The word is where the trouble is (a node below), or what it is (the node's own).
+    const own = bad === n;
     lines.push({
       kind: 'trouble',
-      label: clip(bad === n ? bad.status : (bad.label ?? bad.id)),
-      text: clip(why ?? bad.status),
+      step: 'hero',
+      label,
+      text,
+      word: (own ? text : label).toUpperCase(),
+      sub: own ? (text === label ? '' : label) : text,
       status: bad.status,
       tone: st.tone,
       shape: st.shape,
@@ -113,14 +161,14 @@ export function captionLines(node, model, index = null, count = null) {
   let statusText = status;
   if (under.length) statusText += inTrouble ? ` · ${inTrouble} of ${under.length} in trouble` : ` · all ${under.length} calm`;
   else if (typeof n.sub === 'string' && n.sub) statusText += ` · ${n.sub}`;
-  lines.push({ kind: 'status', label: 'status', text: clip(statusText) });
+  lines.push({ kind: 'status', step: 'line', label: 'status', text: clip(statusText) });
 
   const m = n.metrics && typeof n.metrics === 'object' ? n.metrics : {};
   const bars = [['cpu', m.cpu], ['mem', m.mem]]
     .map(([label, v]) => [label, frac(v)])
     .filter(([, v]) => v != null)
     .map(([label, value]) => ({ label, value, text: `${Math.round(value * 100)}%` }));
-  if (bars.length) lines.push({ kind: 'metrics', bars });
+  if (bars.length) lines.push({ kind: 'metrics', step: 'line', bars });
 
   const direct = kids.get(n.id) ?? [];
   let countLine = null;
@@ -131,7 +179,7 @@ export function captionLines(node, model, index = null, count = null) {
       byKind.set(k, (byKind.get(k) ?? 0) + 1);
     }
     const text = [...byKind].map(([k, c]) => `${c} ${c === 1 ? k : (PLURAL[k] ?? `${k}s`)}`).join(' · ');
-    countLine = { kind: 'count', label: 'holds', text: clip(text) };
+    countLine = { kind: 'count', step: bad ? 'small' : 'line', label: 'holds', text: clip(text) };
   }
 
   const detail = n.detail && typeof n.detail === 'object' && !Array.isArray(n.detail) ? n.detail : {};
@@ -139,12 +187,12 @@ export function captionLines(node, model, index = null, count = null) {
     .filter(([k, v]) => k && (typeof v === 'string' ? v.trim() : Number.isFinite(v)))
     .map(([k, v], i) => ({ k, v, i, rank: FACT_ORDER.indexOf(k.toLowerCase()) }))
     .sort((a, b) => (a.rank < 0 ? 99 : a.rank) - (b.rank < 0 ? 99 : b.rank) || a.i - b.i)
-    .map(({ k, v }) => ({ kind: 'fact', label: clip(k.toLowerCase()), text: clip(v) }));
+    .map(({ k, v }) => ({ kind: 'fact', step: bad ? 'small' : 'line', label: clip(k.toLowerCase()), text: clip(v) }));
   const room = MAX_LINES - lines.length - (countLine ? 1 : 0);
   lines.push(...facts.slice(0, Math.max(0, room)));
   if (countLine) lines.push(countLine);
 
-  return { kicker, name, status, lines };
+  return { kicker, name, status, hero: Boolean(bad), lines };
 }
 
 /** Normal speed: the sequence starts when the camera is there (research Q1: arrive, then type). */
@@ -197,6 +245,7 @@ function el(tag, cls, text) {
 function lineEl(line) {
   const li = el('li', 'wall-caption-line');
   li.dataset.kind = line.kind;
+  li.dataset.step = line.step ?? 'line';
   if (line.kind === 'metrics') {
     for (const b of line.bars) {
       const cell = el('span', 'wall-caption-metric');
@@ -236,8 +285,17 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
   const cursor = el('span', 'wall-caption-cursor');
   const rest = el('span', 'wall-caption-rest');
   name.append(typed, cursor, rest);
+  // The trouble word, on a site in trouble: above the name, in with the plate.
+  const hero = el('div', 'wall-caption-hero');
+  const heroWord = el('div', 'wall-caption-hero-word');
+  const heroGlyph = el('span', 'wall-caption-glyph');
+  const heroText = el('span', 'wall-caption-hero-text');
+  heroWord.append(heroGlyph, heroText);
+  const heroSub = el('div', 'wall-caption-hero-sub');
+  hero.append(heroWord, heroSub);
+  hero.hidden = true;
   const list = el('ul', 'wall-caption-lines');
-  plate.append(kicker, name, list);
+  plate.append(kicker, hero, name, list);
   root.append(plate);
 
   let pending = new Set();
@@ -266,13 +324,25 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
   };
 
   // The content is swapped once the last plate has faded out.
-  const build = (cap) => {
+  const build = (cap, rows) => {
     kicker.textContent = cap.kicker;
+    const lead = cap.lines.find((l) => l.step === 'hero');
+    hero.hidden = !lead;
+    if (lead) {
+      hero.dataset.tone = lead.tone;
+      heroGlyph.textContent = lead.glyph;
+      heroText.textContent = lead.word;
+      heroSub.textContent = lead.sub;
+      heroSub.hidden = !lead.sub;
+      // Sized once a leg from the stage, not per frame.
+      hero.style.setProperty('--cap-hero', `${heroSize(lead.word, root.clientWidth, root.clientHeight)}vmin`);
+    }
+    if (lead) plate.dataset.hero = ''; else delete plate.dataset.hero;
     typed.textContent = '';
     rest.textContent = cap.name;
     cursor.hidden = false;
     cursor.classList.remove('is-blink');
-    list.replaceChildren(...cap.lines.map(lineEl));
+    list.replaceChildren(...rows.map(lineEl));
     for (const li of list.children) li.style.opacity = '0';
     plate.dataset.status = cap.status;
   };
@@ -280,9 +350,10 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
   const show = (leg, cap) => {
     const wasShown = shown;
     hide();
-    const s = captionSchedule(leg, cap.name, cap.lines.length, timing);
+    const rows = cap.lines.filter((l) => l.step !== 'hero');
+    const s = captionSchedule(leg, cap.name, rows.length, timing);
     const swapAt = wasShown ? timing.outMs : 0;
-    later(swapAt, () => build(cap));
+    later(swapAt, () => build(cap, rows));
     later(Math.max(s.startMs, swapAt), () => { shown = true; fade(plate, 1, timing.inMs); });
     const letters = [...cap.name];
     letters.forEach((_, i) => later(Math.max(s.nameAt + (i + 1) * timing.letterMs, swapAt), () => {
@@ -295,7 +366,7 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
       cursor.classList.add('is-blink');
     });
     later(Math.max(s.cursorOffAt, swapAt), () => { cursor.hidden = true; cursor.classList.remove('is-blink'); });
-    cap.lines.forEach((_, i) => later(Math.max(s.lineAt[i], swapAt), () => {
+    rows.forEach((_, i) => later(Math.max(s.lineAt[i], swapAt), () => {
       const li = list.children[i];
       if (li) fade(li, 1, timing.lineFadeMs);
     }));
