@@ -127,11 +127,25 @@ Notes for every builder round (planner, round 1):
   `--disable-webgl --disable-3d-apis` (`$RUN_DIR/chrome-nowebgl.sh`, still `$RUN_DIR/shots/r18-nowebgl`):
   `galaxy.html?demo=1` lands on wall.html, no console errors; it shows radial until the owner registers the
   variant (For the owner). The WebGL path is unchanged (`r18-galaxy`, `?at=lab`, no errors).
-- [ ] T8 (§7.A4) [ui] [variant:galaxy] Live data in `scene.js`: a status change recolours and re-glows the
+- [x] T8 (§7.A4) [ui] [variant:galaxy] Live data in `scene.js`: a status change recolours and re-glows the
   same objects (no rebuild, no jump); a tree change (node added or gone) folds the cluster, re-lays it and
   opens it again; the camera never cuts — done when: a test shows `update()` with a status change keeps
   object identity and a tree change schedules fold → relayout → open, and a 30 s filmstrip on the large
-  demo shows trouble coming and going with no jump.
+  demo shows trouble coming and going with no jump. (commit 6b3ae25)
+  Pure planner `galaxy/live.js` (`treeKey`, `siteKeys`, `planLive` → kept/changed/added/removed, `relayPhase`,
+  `glide`, timings `LIVE`: recolour 700, fold 700, reopen 1100, glide 1600 ms). `scene.js` builds sites once
+  and keeps them: a status change swaps meshes to the tone's shared material and eases halos, nebula and
+  hyperlane in place (a calm dot's halo shrinks to nothing, a dot in trouble grows one); a tree change folds
+  the touched system (`s.squeeze` times the camera's `open`; `s.unfold` is what is drawn, labels read it),
+  swaps the new members in at the bottom and opens again; a site that came or went grows/shrinks on its spot
+  (`s.alive`), a star whose arm slot moved glides (`s.home` mutated, so the camera follows). `world.version`
+  bumps on swaps (labels re-learn ids). `createGalaxyScene` takes `clock` and `makeRenderer` so
+  `test/wall-galaxy-live.test.mjs` drives the real scene in node. Filmstrip `$RUN_DIR/shots/r19-galaxy/sheet.png`
+  (large demo, 4x): hv1 goes warn → crit, trouble comes and goes, no jump, no console errors. The large demo
+  has no tree changes (12 polls over 48 s: 1 tree, 7 status variants), so the tree path was checked by
+  injecting three builders into `home` (`$RUN_DIR/tools/treechange.mjs`, frames `$RUN_DIR/shots/r19-tree/`):
+  fold → swap with the new planets named → open, then the next socket frame took them out again the same way;
+  0 errors. Seen: the folded system is a lumpy ball for a moment mid-relayout (the Later line on folded spheres).
 - [ ] T9 (§7.A5) [ui] [variant:galaxy] The target lock (`lock.js`, with `lockTarget`) and the caption's
   trouble word on the 3D camera: `screenOf` projects the node, its screen size from its distance — done when:
   a test checks `screenOf` of a node at the camera's look-at is the screen centre and grows with zoom, and a
