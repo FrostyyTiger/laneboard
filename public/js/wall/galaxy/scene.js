@@ -21,6 +21,7 @@ import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
 import { LEVELS, pixelRatioFor } from './budget.js';
 import { breathWave, dustTurn } from './still.js';
+import { createStageSize } from './stage.js';
 import { armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
 import {
@@ -312,17 +313,21 @@ const pageClock = () => globalThis.performance.now();
  * `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets,
  * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them).
  * Returns `{ update, setOpen, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize,
- * setQuality, camera, world, quality, pixelRatio, routes, comets, twinkles, beacons, renderer, dispose }`.
+ * setQuality, size, camera, world, quality, pixelRatio, routes, comets, twinkles, beacons, renderer, dispose }`.
  * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
+ * `stage` (stage.js, T29) keeps the canvas's css size so no frame reads layout; `size()` gives it to the
+ * camera, the labels and the lock.
  */
 export function createGalaxyScene(canvas, {
   palette, doc = globalThis.document, dpr = globalThis.devicePixelRatio || 1,
   clock = pageClock, makeRenderer = webgl, still = false, fx = null, ratio = null,
+  stage = null,
 } = {}) {
   const col = (rgb) => new THREE.Color().setRGB(rgb[0], rgb[1], rgb[2], THREE.SRGBColorSpace);
   const tone = Object.fromEntries(TONES.map((t) => [t, col(palette[t])]));
   const bg = col(palette.bg);
 
+  const sized = stage ?? createStageSize(canvas);
   const renderer = makeRenderer(canvas);
   let pixelRatio = pixelRatioFor(0, dpr, ratio);
   renderer.setPixelRatio(pixelRatio);
@@ -823,7 +828,7 @@ export function createGalaxyScene(canvas, {
   };
 
   let cw = 0, ch = 0;
-  const resize = (w = canvas.clientWidth, h = canvas.clientHeight) => {
+  const resize = (w = sized.get().W, h = sized.get().H) => {
     if (w === cw && h === ch) return;
     cw = w; ch = h;
     renderer.setSize(w, h, false);
@@ -1136,10 +1141,12 @@ export function createGalaxyScene(canvas, {
     world = null;
     for (const o of [...shared, ...Object.values(geo)]) o.dispose();
     renderer.dispose();
+    sized.stop();
   };
 
   return {
     update, setOpen, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize, setQuality, camera,
+    size: sized.get,
     renderer, dispose,
     get world() { return world; },
     get quality() { return quality; },

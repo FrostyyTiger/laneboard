@@ -134,7 +134,8 @@ export function boot() {
   const freeBox = () => {
     const now = [caption.cover?.() ?? null, frame.cover?.() ?? null, hud.tagCover(), frame.cover?.() ? null : hud.fleetCover()];
     for (let i = 0; i < kept.length; i++) kept[i] = unionBox(kept[i], now[i]);
-    return freeRect(canvas.clientWidth, canvas.clientHeight, kept.filter(Boolean));
+    const { W, H } = galaxy.size();
+    return freeRect(W, H, kept.filter(Boolean));
   };
   const view = () => ({ fov: galaxy.camera.fov, aspect: galaxy.camera.aspect, free: freeBox() });
   // The overview slides (stands back if it must) until no site or its name
@@ -158,7 +159,7 @@ export function boot() {
   };
   const overviewFit = (withPlate, easeMs) => createOverviewFit({
     // `kept` is fresh: the camera reads freeBox() each frame before its shot.
-    view: () => ({ fov: galaxy.camera.fov, W: canvas.clientWidth, H: canvas.clientHeight, covers: [withPlate ? kept[0] : null, farCover(), kept[2]].filter(Boolean) }),
+    view: () => ({ fov: galaxy.camera.fov, ...galaxy.size(), covers: [withPlate ? kept[0] : null, farCover(), kept[2]].filter(Boolean) }),
     marks: (sites) => siteMarks(sites, steps.site),
     ...(easeMs != null ? { easeMs } : {}),
   });
@@ -179,8 +180,9 @@ export function boot() {
   const lock = createGalaxyLock(document.getElementById('wall-lock'), cam, {
     timing: still ? STILL_LOCK_TIMING : LOCK_TIMING,
     leaderFrom: () => caption.leaderFrom(),
+    size: galaxy.size,
   });
-  const hud = createHud({ caption, frame, tour: park ? null : tour, lock });
+  const hud = createHud({ caption, frame, tour: park ? null : tour, size: galaxy.size, lock });
   let parkedSaid = false;
 
   // The names, over the scene and under the words: placed after each frame

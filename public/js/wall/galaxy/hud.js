@@ -89,8 +89,12 @@ export function bannerModel(model, heldId) {
  * words take over the canvas (for the labels, T6; the tag top right since T18,
  * so neither a name nor a held planet sits on it; the warn-step fleet line
  * too), `fleetCover()` the fleet line's at either step, `tagCover()` the tag's alone.
+ * `size()` is the stage's css size (stage.js, the scene's `size`); the line's
+ * and the tag's boxes are read again only when it or their words change
+ * (T29: both are asked for twice a frame, after the lock's style writes).
  */
-export function createHud({ caption, frame, tour = null, lock = null }) {
+export function createHud({ caption, frame, tour = null, lock = null, size = null }) {
+  const stage = size ?? (() => ({ W: globalThis.innerWidth, H: globalThis.innerHeight }));
   let latest = null;
   // The lock target's node (lockTarget's first), as the leg's caption and
   // brackets name it: the fleet line steps past its problem (bannerModel).
@@ -132,16 +136,26 @@ export function createHud({ caption, frame, tour = null, lock = null }) {
     const f = frame.el?.fleet;
     const line = f?.querySelector?.('.wall-fleet-line');
     if (!f || f.dataset.step !== 'line' || !line) return null;
-    const k = `${line.dataset.key}|${globalThis.innerWidth}x${globalThis.innerHeight}`;
+    const { W, H } = stage();
+    const k = `${line.dataset.key}|${W}x${H}`;
     if (k !== lineSeen) {
       lineSeen = k;
       lineBox = coverOf({ left: f.offsetLeft, top: f.offsetTop, width: f.offsetWidth, height: f.offsetHeight });
     }
     return lineBox;
   };
+  // The tag never moves: its box changes only with its words (title, live) or the stage.
+  let tagSeen = null, tagBox = null;
   const tagCover = () => {
     const t = frame.el?.tag;
-    return t ? coverOf({ left: t.offsetLeft, top: t.offsetTop, width: t.offsetWidth, height: t.offsetHeight }) : null;
+    if (!t) return null;
+    const { W, H } = stage();
+    const k = `${t.textContent}|${W}x${H}`;
+    if (k !== tagSeen) {
+      tagSeen = k;
+      tagBox = coverOf({ left: t.offsetLeft, top: t.offsetTop, width: t.offsetWidth, height: t.offsetHeight });
+    }
+    return tagBox;
   };
   return {
     update: (model) => {

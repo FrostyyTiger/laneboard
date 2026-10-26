@@ -28,6 +28,7 @@ import * as THREE from '../../../vendor/three/three.module.js';
 import { GLYPH } from '../caption.js';
 import { textW } from '../type.js';
 import { toneOf, worseTone } from './palette.js';
+import { sizeOf } from './stage.js';
 
 /** Who wins a place: lower first. */
 export const RANK = Object.freeze({ trouble: 0, site: 1, room: 2, rest: 3 });
@@ -227,8 +228,7 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
 
   const draw = () => {
     const w = galaxy.world;
-    const el = galaxy.renderer?.domElement;
-    const W = el?.clientWidth ?? 0, H = el?.clientHeight ?? 0;
+    const { W, H } = sizeOf(galaxy);
     if (!w || !W || !H) return;
     galaxy.camera.updateMatrixWorld();
     const items = [];

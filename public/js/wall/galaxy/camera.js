@@ -24,6 +24,7 @@ import { ease, OPEN_MS } from './layout.js';
 import { overviewShot, siteShot, SIZE } from './scene.js';
 import { TIMING } from '../tour.js';
 import { blendRect } from './framing.js';
+import { sizeOf } from './stage.js';
 
 /**
  * A flight takes the tour's `flyMs` (tour.js TIMING, 2250 ms); the target system starts opening at
@@ -175,8 +176,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     const depth = -v.z;
     if (depth <= 0) return null; // behind the camera
     v.applyMatrix4(cam.projectionMatrix);
-    const el = galaxy.renderer?.domElement;
-    const W = el?.clientWidth ?? 0, H = el?.clientHeight ?? 0;
+    const { W, H } = sizeOf(galaxy);
     const unit = H / (2 * Math.tan((cam.fov * Math.PI) / 360) * depth);
     return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, r: radius * unit };
   };
