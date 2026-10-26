@@ -14,11 +14,17 @@
 // small comet with a tail, once, from the planet it left to the planet it
 // lands on, arcing over the plane (a lane pulse follows the hyperlanes; a
 // comet flies straight). Grey unless the event itself is trouble.
+//
+// `twinkle` (T14): a planet with a working session on it (an agent at work:
+// a lane or session whose status is `working` and calm) glimmers softly,
+// slow and low, in the grey of a calm thing: "busy", never "look here". A
+// planet in trouble does not twinkle (it breathes already: one motion per thing).
 
+import { hash } from './layout.js';
 import { toneOf } from './palette.js';
 
 /** Every effect this page knows, in the order the README lists them. */
-export const FX_NAMES = Object.freeze(['lanes', 'comets']);
+export const FX_NAMES = Object.freeze(['lanes', 'comets', 'twinkle']);
 
 /** The effects `?fx=` asks for (a `location.search` string or URLSearchParams): a Set of known names. */
 export function parseFx(search = '') {
@@ -277,4 +283,90 @@ export function cometPath(a, b, timing = COMETS) {
     };
   };
   return { at, length };
+}
+
+/**
+ * The twinkle's timing and look: two slow waves (`periods`, ms, not
+ * multiples of each other, so it never ticks like a clock) set how bright
+ * the glimmer is, each planet at its own pace within `spread` of them; it comes and goes over `fadeMs`; at most `max` at once.
+ * `size` is the light's size against the sphere it sits on, `opacity` its
+ * peak and `floor` its low share of it (low contrast: never off, never loud).
+ */
+export const TWINKLE = Object.freeze({
+  periods: [5600, 3700], spread: 0.3, fadeMs: 1200, max: 24, size: 5, opacity: 0.3, floor: 0.3,
+});
+
+const AT_WORK = new Set(['lane', 'session']);
+
+/**
+ * The planets that twinkle in `model`: one per planet with a working
+ * session below it (a `lane` or `session` node whose status is `working`
+ * and whose tone is calm: a stuck one is warn, trouble's to show). Each is
+ * the nearest thing up the session's parents in `planets` (ids the galaxy
+ * draws as planets or stars), so a session in a folded lane twinkles its
+ * builder. `{ id, site, count }`, `count` the working sessions on it, `site`
+ * its site (the star to fall back on). In the model's order.
+ */
+export function workingPlanets(model, planets) {
+  const nodes = Array.isArray(model?.nodes) ? model.nodes : [];
+  const byId = new Map(nodes.filter((n) => n && n.id != null).map((n) => [n.id, n]));
+  const shown = planets instanceof Set ? planets : new Set(planets ?? []);
+  const out = new Map();
+  for (const n of nodes) {
+    if (!n || !AT_WORK.has(n.kind) || n.status !== 'working' || toneOf(n) !== 'calm') continue;
+    let p = byId.get(n.parent);
+    for (let k = 0; p && !shown.has(p.id) && k < MAX_DEPTH; k++) p = byId.get(p.parent);
+    if (!p || !shown.has(p.id)) continue;
+    const had = out.get(p.id);
+    if (had) { had.count += 1; continue; }
+    out.set(p.id, { id: p.id, site: placeOf(p.id, byId), count: 1 });
+  }
+  return [...out.values()];
+}
+
+/**
+ * The twinkles the page draws at page time `now`: `prev` (a Map by id, or
+ * null) with `list` (workingPlanets'). One that stays keeps its start; one
+ * the model drops fades out from `now` (`until`); one that comes back while
+ * fading picks up from where its light is. At most `max`, the oldest first.
+ */
+export function trackTwinkles(prev, list, now, timing = TWINKLE) {
+  const old = prev instanceof Map ? prev : new Map();
+  const next = new Map();
+  for (const w of list ?? []) {
+    const had = old.get(w.id);
+    let t0 = now;
+    if (had) {
+      const lit = twinkleAt(had, now, timing);
+      t0 = had.until === Infinity ? had.t0 : now - (lit ? lit.k : 0) * timing.fadeMs;
+    }
+    next.set(w.id, { id: w.id, site: w.site, t0, until: Infinity });
+  }
+  for (const [id, w] of old) {
+    if (next.has(id)) continue;
+    const gone = { ...w, until: Math.min(w.until, now) };
+    if (twinkleAt(gone, now, timing) !== undefined) next.set(id, gone);
+  }
+  const keep = [...next.values()].sort((a, b) => a.t0 - b.t0).slice(0, timing.max);
+  return new Map(keep.map((w) => [w.id, w]));
+}
+
+/**
+ * How a twinkle shines at `now`: `{ k, glimmer }`, `k` 0..1 its fade in or
+ * out, `glimmer` 0..1 the slow waves (each planet at its own phase, by
+ * its id; 0.5 and still when `still`); `undefined` once it has faded out.
+ */
+export function twinkleAt(tw, now, timing = TWINKLE, still = false) {
+  const into = Math.max(0, Math.min(1, (now - tw.t0) / timing.fadeMs));
+  const out = tw.until === Infinity ? 1 : 1 - (now - tw.until) / timing.fadeMs;
+  if (out <= 0) return undefined;
+  const k = Math.min(into, Math.min(1, out));
+  if (still) return { k, glimmer: 0.5 };
+  // Its own phase and pace by its id (salted after the id: `builder-a` and
+  // `builder-b` would otherwise hash a hair apart and glimmer in step).
+  const ph = hash(`${tw.id}|twinkle`) * Math.PI * 2;
+  const pace = 1 - timing.spread / 2 + timing.spread * hash(`${tw.id}|pace`);
+  const [p0, p1] = timing.periods.map((p) => p * pace);
+  const glimmer = 0.5 + 0.3 * Math.sin((now / p0) * Math.PI * 2 + ph) + 0.2 * Math.sin((now / p1) * Math.PI * 2 + ph * 2);
+  return { k, glimmer };
 }

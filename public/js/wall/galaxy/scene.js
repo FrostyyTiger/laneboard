@@ -21,7 +21,9 @@ import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
 import { LEVELS } from './budget.js';
 import { breathWave, dustTurn } from './still.js';
-import { COMETS, LANES, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes } from './fx.js';
+import {
+  COMETS, LANES, TWINKLE, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles, twinkleAt,
+} from './fx.js';
 
 /** World sizes: the sun, a site's star, a planet (named kind), a dot (the rest). */
 export const SIZE = Object.freeze({ sun: 60, sunHalo: 900, star: 24, planet: 15, dot: 4, landing: 7 });
@@ -146,9 +148,9 @@ const pageClock = () => globalThis.performance.now();
  * `now`), `makeRenderer` the WebGL renderer (both injectable for tests).
  * `still` (reduced motion, still.js): trouble glows without breathing, the dust stays put.
  * `fx` (fx.js `parseFx`): the effects asked for; `lanes` draws `setRoutes`' pulses,
- * `comets` flies `setComets`' comets.
- * Returns `{ update, setOpen, setRoutes, setComets, drawn, frame, resize, setQuality, camera, world, quality,
- * routes, comets, renderer, dispose }`.
+ * `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets.
+ * Returns `{ update, setOpen, setRoutes, setComets, setTwinkles, drawn, planets, frame, resize, setQuality,
+ * camera, world, quality, routes, comets, twinkles, renderer, dispose }`.
  */
 export function createGalaxyScene(canvas, {
   palette, doc = globalThis.document, dpr = globalThis.devicePixelRatio || 1,
@@ -636,19 +638,23 @@ export function createGalaxyScene(canvas, {
   }
   /** Every id the galaxy draws (its sites and their members): flowComets' `drawn`. */
   const drawn = () => new Set((world?.sites ?? []).filter((s) => !s.gone).flatMap((s) => [s.id, ...s.members.map((m) => m.id)]));
+  /** Every id the galaxy draws as a sphere (its stars and planets): workingPlanets' `planets`. */
+  const planets = () => new Set((world?.sites ?? []).filter((s) => !s.gone).flatMap((s) => [s.id, ...s.members.filter((m) => m.planet).map((m) => m.id)]));
+  // What is drawn where, by id (`{ pos, site, member }`), rebuilt when the world's members change.
   let where = null, whereVersion = -1;
-  const pointOf = (id, siteId) => {
+  const thingOf = (id) => {
     if (whereVersion !== world.version) {
       where = new Map();
       for (const s of world.sites) {
         if (s.gone) continue;
-        where.set(s.id, s.star.position);
-        for (const m of s.members) where.set(m.id, m.mesh.position);
+        where.set(s.id, { pos: s.star.position, site: s, member: null });
+        for (const m of s.members) where.set(m.id, { pos: m.mesh.position, site: s, member: m });
       }
       whereVersion = world.version;
     }
-    return where.get(id) ?? where.get(siteId) ?? null;
+    return where.get(id) ?? null;
   };
+  const pointOf = (id, siteId) => (thingOf(id) ?? thingOf(siteId))?.pos ?? null;
   /** The comets in the last model (fx.js `flowComets`); ignored unless `fx=comets`. */
   const setComets = (list) => {
     if (!tails.length) return;
@@ -680,6 +686,51 @@ export function createGalaxyScene(canvas, {
     });
   };
 
+  // --- fx=twinkle (T14, fx.js): a planet with an agent at work on it ------
+  // One soft light per twinkling planet, from a pool made once, on the
+  // sphere it sits on (it follows the planet as its system opens). Low and
+  // slow; a planet whose own tone is trouble is skipped (it breathes
+  // already). Under reduced motion the light is steady, at half its swing.
+  let twinkles = new Map();
+  const glints = [];
+  if (fx?.has('twinkle')) {
+    const light = col(palette.sun);
+    for (let i = 0; i < TWINKLE.max; i++) {
+      const sp = new THREE.Sprite(keep(new THREE.SpriteMaterial({
+        map: glowTex, color: light, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+      })));
+      sp.name = 'fx-twinkle';
+      sp.visible = false;
+      glints.push(sp);
+      scene.add(sp);
+    }
+  }
+  /** The planets with a working session (fx.js `workingPlanets`); ignored unless `fx=twinkle`. */
+  const setTwinkles = (list) => {
+    if (!glints.length) return;
+    twinkles = trackTwinkles(twinkles, list, clock());
+  };
+  const drawTwinkles = (now) => {
+    for (const sp of glints) sp.visible = false;
+    if (!world) return;
+    let i = 0;
+    for (const [id, tw] of twinkles) {
+      const lit = twinkleAt(tw, now, TWINKLE, still);
+      if (lit === undefined) { twinkles.delete(id); continue; }
+      const at = thingOf(id);
+      const sp = glints[i];
+      if (!sp || !at || at.site.gone) continue;
+      const tone = at.member ? at.member.tone : toneOf(at.site.node);
+      if (tone !== 'calm') continue;
+      i += 1;
+      const r = at.member ? SIZE.planet : SIZE.star;
+      sp.position.copy(at.pos);
+      sp.scale.setScalar(Math.max(1e-3, r * TWINKLE.size * at.site.alive));
+      sp.material.opacity = TWINKLE.opacity * lit.k * (TWINKLE.floor + (1 - TWINKLE.floor) * lit.glimmer);
+      sp.visible = sp.material.opacity > 0.005;
+    }
+  };
+
   /** One frame at `now` (ms): trouble breathes, the dust drifts, then draw. */
   const frame = (now) => {
     resize();
@@ -697,6 +748,7 @@ export function createGalaxyScene(canvas, {
     dust.rotation.y = dustTurn(now, still);
     if (pulses.length) drawPulses(now);
     if (tails.length) drawComets(now);
+    if (glints.length) drawTwinkles(now);
     renderer.render(scene, camera);
   };
 
@@ -732,10 +784,11 @@ export function createGalaxyScene(canvas, {
   };
 
   return {
-    update, setOpen, setRoutes, setComets, drawn, frame, resize, setQuality, camera, renderer, dispose,
+    update, setOpen, setRoutes, setComets, setTwinkles, drawn, planets, frame, resize, setQuality, camera, renderer, dispose,
     get world() { return world; },
     get quality() { return quality; },
     get routes() { return routes; },
     get comets() { return comets.flying; },
+    get twinkles() { return twinkles; },
   };
 }
