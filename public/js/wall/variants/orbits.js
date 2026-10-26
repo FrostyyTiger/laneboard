@@ -8,14 +8,16 @@
 // leave a gap for it.
 //
 // Labels are the radial direction's (sites big, rooms one step down,
-// services dots at the overview), the Map's rings are off and the layout
+// services dots at the overview) on the steps type.js gives the screen
+// (35 / 15 on the tablet), pinned to their side; the Map's rings are off and the layout
 // draws its own orbit lines (`guides`) and fits by its own extents
 // (`bounds`), see views/map/layout.js polarLayout. No turn: an ellipse
 // that turns would leave the screen.
 //
 // Pure: no DOM, so test/wall-orbits.test.mjs imports it directly.
 
-import { baseLabelSize as labelSize, BASE_STEPS as STEPS } from './radial.js';
+import { labelSize, labelSizeFor, STEPS } from './radial.js';
+import { stepsFor, pxPerMm } from '../type.js';
 
 /** The tablet's 2736 x 1824: what the layout stretches to when nobody says. */
 export const ASPECT = 3 / 2;
@@ -44,17 +46,18 @@ const TAU = Math.PI * 2;
 const LABEL_CAP = 130;
 
 /** A site's name width at the site step (px), 0.62 em a character plus its tracking. */
-const siteW = (n) => String(n?.label ?? n?.id ?? '').length * (0.62 * STEPS.site + 1.5);
+const siteW = (n, steps) => String(n?.label ?? n?.id ?? '').length * (0.62 * steps.site + 1.5);
 
 /**
- * The overview's scale on the large demo fleet at 1368 x 912 (about 0.7):
+ * The overview's scale on the large demo fleet at 1368 x 912 (0.69 at the
+ * tablet's 35 px site names, 0.73 at 26):
  * names are set in screen px, so a gap meant to hold one is that much wider
  * in world units.
  */
-export const OVERVIEW_SCALE = 0.7;
+export const OVERVIEW_SCALE = 0.68;
 
 /** A name's width at the room step, the 0.62 em a caps character takes plus 1px tracking. */
-const nameW = (n) => Math.min(LABEL_CAP, String(n?.label ?? n?.id ?? '').length * (0.62 * STEPS.room + 1));
+const nameW = (n, steps) => Math.min(LABEL_CAP, String(n?.label ?? n?.id ?? '').length * (0.62 * steps.room + 1));
 
 /**
  * The tree the Map's layouts use: parents from `parent`, roots and orphans
@@ -85,8 +88,10 @@ function tree(nodes) {
  * grandchildren, depth first, each at its angle), what hangs deeper, the
  * orbit radius and the half extents the system takes with its names:
  * `{ orbit, members: [{node, depth, angle}], deep: [{node, parent, level}], hx, hy }`.
+ * `steps` are the label sizes (px) the names are measured at.
  */
-export function planet(site, kids, sizes = SIZES) {
+export function planet(site, kids, sizes = SIZES, steps) {
+  steps ??= STEPS;
   const members = [];
   const deep = [];
   const seen = new Set([site.id]);
@@ -101,7 +106,7 @@ export function planet(site, kids, sizes = SIZES) {
   };
   walk(site, 1);
   if (!members.length) {
-    const w = String(site.label ?? site.id).length * 0.62 * STEPS.site;
+    const w = String(site.label ?? site.id).length * 0.62 * steps.site;
     return { orbit: 0, members, deep, hx: Math.max(40, w / 2 + 12), hy: 50 };
   }
   const arcs = members.map((m) => (NAMED.has(m.node.kind) ? sizes.named : sizes.dot));
@@ -109,7 +114,7 @@ export function planet(site, kids, sizes = SIZES) {
   // The planet's name sits in its orbit at six o'clock, in a gap the moons
   // leave for it: the name's width at the site step, in world units at the
   // overview's usual scale, plus air.
-  const gapLen = siteW(site) / OVERVIEW_SCALE + 2 * sizes.gap;
+  const gapLen = siteW(site, steps) / OVERVIEW_SCALE + 2 * sizes.gap;
   const orbit = Math.max(sizes.minOrbit, (sum + gapLen) / TAU);
   const gapA = Math.min(Math.PI, gapLen / orbit);
   // From just past the gap, clockwise, each member in the middle of its arc;
@@ -118,9 +123,11 @@ export function planet(site, kids, sizes = SIZES) {
   let a = Math.PI / 2 + gapA / 2;
   members.forEach((m, i) => { m.angle = a + (arcs[i] * k) / 2; a += arcs[i] * k; });
   const levels = deep.reduce((mx, d) => Math.max(mx, d.level), 0);
-  const label = members.reduce((mx, m) => (NAMED.has(m.node.kind) ? Math.max(mx, nameW(m.node)) : mx), 0);
+  const label = members.reduce((mx, m) => (NAMED.has(m.node.kind) ? Math.max(mx, nameW(m.node, steps)) : mx), 0);
   const out = orbit + levels * sizes.sat;
-  return { orbit, members, deep, hx: out + 8 + Math.max(label, 24), hy: out + 30 };
+  // Below, the planet's name hangs half its line under the orbit at six o'clock.
+  const below = Math.max(30, Math.round((steps.site * 0.64) / OVERVIEW_SCALE) + 4);
+  return { orbit, members, deep, hx: out + 8 + Math.max(label, 24), hy: out + below };
 }
 
 /**
@@ -183,9 +190,11 @@ export function arrange(systems, aspect = ASPECT, sizes = SIZES, sunBox = { hx: 
  * from the parent is drawn (`branch`: none from the sun, a straight spoke
  * from a planet to a room, an arc along the orbit from a room to what it
  * holds) and which way its name points (`labelAngle`, away from its planet;
- * a planet's name centred in the gap of its orbit, `labelAt`).
+ * a planet's name centred in the gap of its orbit, `labelAt`). `steps`:
+ * the label sizes the names are spaced for (type.js `stepsFor`).
  */
-export function layoutFor(aspect = ASPECT, sizes = SIZES) {
+export function layoutFor(aspect = ASPECT, sizes = SIZES, steps) {
+  steps ??= STEPS;
   const A = Number.isFinite(aspect) && aspect > 0 ? aspect : ASPECT;
   return function layout(nodes) {
     const { kids, center } = tree(nodes);
@@ -193,8 +202,8 @@ export function layoutFor(aspect = ASPECT, sizes = SIZES) {
     const top = kids.get(center.id) ?? [];
     const sites = top.filter((n) => PLACE.has(n.kind));
     const inner = top.filter((n) => !PLACE.has(n.kind));
-    const systems = sites.map((s) => planet(s, kids, sizes));
-    const innerW = inner.reduce((mx, n) => Math.max(mx, nameW(n)), 0);
+    const systems = sites.map((s) => planet(s, kids, sizes, steps));
+    const innerW = inner.reduce((mx, n) => Math.max(mx, nameW(n, steps)), 0);
     const sunBox = inner.length
       ? { hx: sizes.inner + 8 + Math.max(innerW, 24), hy: sizes.inner + 30 }
       : { hx: sizes.sun, hy: sizes.sun };
@@ -264,9 +273,17 @@ export function layoutFor(aspect = ASPECT, sizes = SIZES) {
 /** The layout for the tablet's aspect. */
 export const layout = layoutFor(ASPECT);
 
-/** The Map's options for a screen of `aspect`, next to the page's `ambient`. */
-export function optionsFor(aspect = ASPECT) {
-  return { layout: layoutFor(aspect), labelSize, rings: false };
+/**
+ * The Map's options for a screen of `aspect`, next to the page's `ambient`:
+ * the type steps from `screen`'s density (type.js `screenOf`; the tablet's
+ * without one), the layout spaced for them. `pinLabels`: a name keeps its
+ * side and line while the camera flies (the collision pass re-placed names
+ * as the zoom changed).
+ */
+export function optionsFor(aspect = ASPECT, screen) {
+  const steps = screen ? stepsFor(pxPerMm(screen)) : STEPS;
+  const same = steps.site === STEPS.site && steps.room === STEPS.room;
+  return { layout: layoutFor(aspect, SIZES, steps), labelSize: same ? labelSize : labelSizeFor(steps), rings: false, pinLabels: true };
 }
 
 /** What `createMap` takes for this direction at the tablet's aspect. */

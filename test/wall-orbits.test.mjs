@@ -12,7 +12,8 @@ import {
   layoutFor, planet, arrange, optionsFor, mapOptions, ambient, SAFE, SIZES, ASPECT,
 } from '../public/js/wall/variants/orbits.js';
 import { VARIANTS, mapOptionsFor } from '../public/js/wall/variants.js';
-import { baseLabelSize as labelSize } from '../public/js/wall/variants/radial.js';
+import { labelSize, STEPS } from '../public/js/wall/variants/radial.js';
+import { stepsFor, pxPerMm } from '../public/js/wall/type.js';
 
 /**
  * A fleet the size of the large demo: five sites of 3-14 rooms with 0-3
@@ -237,7 +238,8 @@ test('orbits registered: options for the screen\'s aspect, no turn; radial as be
   const v = VARIANTS.find((x) => x.id === 'orbits');
   assert.equal(v.mapOptions, mapOptions);
   assert.equal(mapOptions.rings, false);
-  assert.equal(mapOptions.labelSize, labelSize, 'the radial base steps (26 / 15) its layout is spaced for');
+  assert.equal(mapOptions.labelSize, labelSize, 'the tablet\'s steps (35 / 15), as radial');
+  assert.equal(mapOptions.pinLabels, true, 'names keep their side and line while the camera flies');
   assert.deepEqual(ambient, { drift: 0 });
   const o = mapOptionsFor(v, 16 / 9);
   assert.equal(o.ambient, ambient);
@@ -249,4 +251,48 @@ test('orbits registered: options for the screen\'s aspect, no turn; radial as be
   assert.equal(radial.ambient, true);
   assert.equal(radial.layout, VARIANTS.find((x) => x.id === 'radial').mapOptions.layout);
   assert.equal(mapOptionsFor(v, NaN).layout, mapOptions.layout, 'no aspect: the tablet\'s');
+});
+
+function kidsOf() {
+  const kids = new Map();
+  for (const n of fleet()) if (n.parent) kids.set(n.parent, [...(kids.get(n.parent) ?? []), n]);
+  return kids;
+}
+
+test('orbits type steps: from the screen\'s density, the planet\'s name gap sized for them', () => {
+  assert.deepEqual(STEPS, { site: 35, room: 15 });
+  const desk = optionsFor(16 / 9, { dpr: 1 });
+  const steps = stepsFor(pxPerMm({ dpr: 1 }));
+  assert.deepEqual(desk.labelSize({ id: 'hv1', kind: 'site' }), { px: steps.site, inward: true });
+  assert.equal(desk.labelSize({ id: 'r', kind: 'room' }), steps.room);
+  assert.equal(desk.pinLabels, true);
+  assert.equal(optionsFor(1.5, { dpr: 2 }).labelSize, labelSize, 'the tablet: radial\'s own function');
+  // At every screen's steps, each planet's name fits the gap its moons leave
+  // at six o'clock, at the overview scale the layout gets on a 1368 x 912 stage.
+  for (const st of [STEPS, steps, { site: 26, room: 15 }]) {
+    const lay = layoutFor(ASPECT, SIZES, st)(fleet());
+    const s = Math.min(1368 / (2 * lay.bounds.x), 912 / (2 * lay.bounds.y));
+    for (const site of SITES) {
+      const c = lay.pos.get(site);
+      const node = fleet().find((n) => n.id === site);
+      const name = String(node.label).length * (0.62 * st.site + 1.5);
+      const ring = lay.guides.find((g) => g.x === c.x && g.y === c.y);
+      // The nearest moon on either side of six o'clock, as a chord on screen.
+      const angles = [...lay.pos].filter(([id, p]) => id !== site && Math.abs(Math.hypot(p.x - c.x, p.y - c.y) - ring.rx) < 1e-6)
+        .map(([, p]) => Math.atan2(p.y - c.y, p.x - c.x) - Math.PI / 2);
+      const half = Math.min(...angles.map((a) => Math.abs(Math.atan2(Math.sin(a), Math.cos(a)))));
+      if (half < Math.PI / 2) {
+        const chord = 2 * ring.rx * Math.sin(half) * s;
+        assert.ok(chord >= name, `${site} at ${st.site}px: a ${name.toFixed(0)} px name in a ${chord.toFixed(0)} px gap`);
+      }
+      // Moons all above the centre (a small system): the name has the lower
+      // half to itself and only has to stay in the system's box.
+      const sys = planet(node, kidsOf(), SIZES, st);
+      assert.ok(name / 2 <= sys.hx * s, `${site} at ${st.site}px: the name inside its system`);
+    }
+  }
+  // Bigger site names, a wider gap and a larger orbit.
+  const kids = kidsOf();
+  const hv1 = fleet().find((n) => n.id === 'hv1');
+  assert.ok(planet(hv1, kids, SIZES, STEPS).orbit > planet(hv1, kids, SIZES, { site: 26, room: 15 }).orbit);
 });
