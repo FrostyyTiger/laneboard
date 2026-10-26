@@ -136,13 +136,29 @@ Notes for every builder round (planner, round 1):
   `maximum-scale=1, user-scalable=no` (selection was already off). Checked: film r16-galaxy (tour unchanged, 0
   errors) and a CDP touch script (r16-touch: one tap on a held hv2 → overview, plate gone, tour still stopped 25 s
   later, a two-finger pinch left `visualViewport.scale` 1 and `scrollY` 0, 0 errors).
-- [ ] T8 (§7 Night 3 C2) [ui] [variant:galaxy] Touch, drag and pinch: in `explore`, a one-finger drag orbits
+- [x] T8 (§7 Night 3 C2) [ui] [variant:galaxy] Touch, drag and pinch: in `explore`, a one-finger drag orbits
   the galaxy round its centre (pitch clamped so the plane is never edge-on or upside down), a pinch and the
   wheel zoom between the overview and a close system, with eased inertia after release; pure functions in
   `touch.js` (`orbitStep`, `zoomStep`, `inertia`) and a free pose in `galaxy/camera.js` behind an option that
   the tour never sets — done when: tests show the pitch clamp at both ends, zoom clamped to [overview, close],
   inertia decaying to rest, a drag of 0 px changing nothing, and pointer-event tests on the page see a drag
-  turn the camera and a two-pointer pinch zoom it.
+  turn the camera and a two-pointer pinch zoom it. (commit 3467b89)
+  Builder r19: `touch.js` orbit `{ look, yaw, pitch, dist }` round a point on the plane; pure `orbitOf`, `orbitPose`,
+  `orbitStep` (ORBIT.perPx 0.005 rad/px, pitch [0.35, 1.45] rad), `zoomStep` (dist in [ORBIT.near 700, far]; closes
+  in toward `planeAt` the fingers; the look's room round the overview's centre shrinks to 0 at the widest, so zooming
+  all the way out lands on the overview), `inertia` (exp, tau 250 ms, exactly 0 at rest), `orbitLimits`.
+  `createGestures(stage, touch, cam, { limits, view, moved })` listens through `touch.onPointer` (only in `explore`)
+  plus `wheel` (passive false, always preventDefault; a wheel is an impulse that coasts out to exactly its zoom); a
+  drag starts past ORBIT.slopPx 12 (T10's tap slop: a tap never turns); a finger held 80 ms before lifting throws
+  nothing; one `cam.steer()` per frame; at rest the camera is free again for T10/T14. `camera.js`: option `steer`
+  (only main sets it, off in still/park), `want.kind 'free'` held as given, all systems fold; `pose()`, `home()`
+  (the fitted overview last aimed at = the orbit's far end). `touch.js` `rest` now ticks the mode before telling.
+  main: `gestures.frame(now)` before `cam.frame(now)`; the tether fades on the first move. Reduced motion: no
+  steering yet (T14 decides). Checked: CDP script r19-touch (wake → explore at the overview, drag turned yaw 0 →
+  -2.44 and pitch 0.90 → 1.29, pinch to dist 700, wheel back out to dist 5611 at the fitted look, page scale 1, 0
+  errors) and film r19-galaxy (tour unchanged, 0 errors; 1.5 fps as r10-r16 on this VM at load 51, not a regression).
+  Note for T10/T14: under SwiftShader here CDP touch moves arrive ~1 s apart, so a scripted throw never coasts in
+  the browser; the coast is pinned by the fake-clock page test.
 - [ ] T9 (§7 Night 3 D, beacon) [ui] [variant:galaxy] `fx=beacon` finished (was night 2's T41 and the tip of
   night 2's T38; r59-dreamer 5, r54-film-ui 2, r49-accessibility fx): in `galaxy/fx.js` a floor height of ~0.25
   of the frame height at the overview so a young crit shows at once, a white-hot core at its base (carries in
