@@ -176,7 +176,10 @@ async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey }) {
   };
   for (const d of Object.values(dirs)) fs.mkdirSync(d, { recursive: true, mode: 0o700 });
 
-  const port = await freePort();
+  // The port the child listens on: the test's own LANEBOARD_PORT if it set one.
+  // Polling a second free port instead let /healthz be answered by another test
+  // file's laneboard that took that port, so a child that lost its port "booted".
+  const port = env.LANEBOARD_PORT !== undefined ? Number(env.LANEBOARD_PORT) : await freePort();
   let cfg = config === null || config === undefined ? null : structuredClone(config);
   if (mode && mode !== 'builder') cfg = { ...(cfg ?? {}), mode };
   else if (mode === 'builder' && cfg && cfg.mode === undefined) cfg.mode = 'builder';
