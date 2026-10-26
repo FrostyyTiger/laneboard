@@ -470,6 +470,40 @@ Notes for every builder round (planner, night 1):
   in its own style in the glow layer (thicker, a tick at the head), percent label while the camera is on
   its site — done when: `test/wall-glow.test.mjs` checks the ring geometry is wider than the node arc
   and a still shows the printer ring distinct.
+- [ ] T50 (bug) [ui] [variant:all] (r37-accessibility shared #2) With `prefers-reduced-motion` the camera cuts
+  into a site but caption and lock only appear at `arriveMs`, so the site is on screen unexplained for
+  about half of each leg: when `still`, show the caption and the lock at once (`arriveMs: 0` for the leg
+  in `main.js`) — done when: a test of the leg rewrite shows `arriveMs` 0 in still mode and unchanged
+  otherwise, and a reduced-motion still taken mid-leg shows plate and lock.
+- [ ] T51 (bug) [ui] [variant:all, radial worst] (r37-accessibility shared #3, radial #1) The fleet line, clock
+  and tag are printed over Map labels (red over white label is 2.8:1; `HV2 · STORAGE` over SECRETS): give
+  each frame text block a solid backing (95 % `--bg-canvas`, padded 1.2vmin) and hide Map labels whose
+  box meets a frame rectangle (the mechanism T24 builds for the plate; any Map change is an option that
+  defaults off) — done when: a pure test checks label-vs-rectangle hiding for the frame blocks and a
+  zoomed still shows no label under the fleet line, clock or tag.
+- [ ] T52 (§2 north star 2) [ui] [variant:all] (r37-accessibility shared #6) The fleet line counts seconds
+  (`NO CONTACT FOR 20S`, `25S`…): the loudest text changes every tick with no new meaning. In `worstLine`
+  round the age to a stable step (`1 min`, `5 min`) or say `since 02:10` — done when:
+  `test/wall-frame.test.mjs` shows the text unchanged across ticks inside one step and changing at its edge.
+- [ ] T53 (§2 north star 1) [ui] [variant:all] (r37-accessibility shared #7) The lock carries status by hue
+  alone (red, amber, grey brackets differ little in lightness for colour-blind viewers): add the node's
+  shape (■ / ▲ / ◆, `SHAPE_CODE`) at the lock's top-left corner in the status colour on trouble — done
+  when: `test/wall-lock.test.mjs` checks the shape chosen per status (none on calm) and a frame of HV2
+  shows it.
+- [ ] T54 (bug) [ui] [variant:all] (r37-accessibility shared #10) Glows sit behind labels (KITCHEN-LIGHT,
+  LIVING-LIGHT, DESK-LIGHT on their own glow: text-2 falls to about 2.5:1): the glow layer leaves a
+  radius of 1.5 node radii plus the label box clear, or labels of glowing nodes get a 2 px
+  `--bg-canvas` halo (an option on the Map, defaults off) — done when: a test shows no glow alpha
+  inside the label box and the app's Map tests pass unchanged.
+- [ ] T55 (bug) [variant:islands] (r37-accessibility islands #3) Lane ▲ marks pack shoulder to shoulder
+  (▲▲▲ around FEAT-SEARCH) and merge into one amber blob at distance, losing the shape cue: keep a
+  minimum gap of one mark diameter between trouble marks, or roll them into the builder's mark with a
+  count — done when: `test/wall-islands.test.mjs` checks the gap between neighbouring trouble marks.
+- [ ] T56 (§2 north star 1) [variant:mosaic] (r37-accessibility mosaic #2) Crit and warn tiles differ by
+  hue only at a distance (red and amber fills read as brown and olive for protan/deutan viewers; the mark
+  is about 10 px): give the shape a pattern at the tile's own scale (crit: solid inner square; warn:
+  dashed or two-of-six-sides edge) — done when: `test/wall-mosaic.test.mjs` checks crit and warn tiles
+  differ in shape data, not only tone, and a still shows it.
 
 ## Research questions
 
@@ -565,6 +599,16 @@ Notes for every builder round (planner, night 1):
   you like; r20 #10). Radial #5: dim the fleet line on calm sites. Across: fill the troubled node's area
   in every variant (mosaic's idea); the stranger would pick mosaic, islands second.
 
+- (r37-accessibility, plan changes or taste) #1 reduced motion should do D5 (no `map.focus` cuts: stay on
+  `map.fit()`, rotate the caption over the overview with a static lock, 10 s minimum dwell even in demo);
+  it is night 2 work in "Later", say if it should come earlier. #5 the clock drops to 4.3vmin and the
+  fleet line's trouble word goes to 11vmin or more while anything is crit (T21 sets the fleet line; the
+  clock size is taste). #8 put the status word (`attention` / `warn`) in the fleet line as the caption does.
+  Orbits #2 / islands #1: at the overview name only the planet or island title and nodes in trouble (same
+  ground as r14-operator #4); orbits #3: roll repeated lane trouble into one `3 waiting` label. Across:
+  paint the troubled node's area in every variant, and give radial and orbits the reserved bottom band
+  (T17) instead of relying on the vignette. Plate at 100 % opaque rather than 95 % (T24 says 95).
+
 ## Reviews
 
 - r9-film-ui.md: 9 findings, 5 became tasks (T15-T19: #2+#7, #3, #4, #5, #6+#8); #1 covered by T5 (phrasing
@@ -583,6 +627,11 @@ Notes for every builder round (planner, night 1):
   variants merged as T42); covered: radial #1 (T17), radial #2 (T15), mosaic #3 partly T44; dropped: islands #4
   and across "keep" notes (praise); the rest (#1, #4, #5, radial #3-#5, orbits #1/#4, mosaic #4, across)
   went to the owner. The numbers were taken at load 31 and are noise.
+- r37-accessibility.md: 36 findings (10 shared, 4 radial, 4 orbits, 4 islands, 5 mosaic, 4 across notes + contrast
+  notes), 7 became tasks (T50-T56: shared #2, #3 (+radial #1), #6, #7, #10; islands #3; mosaic #2); covered:
+  shared #4 (T24), #5 (T20/T21), #9 (T42), radial #3 (T17), radial #4 (T27), orbits #1 (T42), orbits #3 (T45),
+  islands #1 (T48), islands #2 (T42), mosaic #1 (T44), #3 (T42), #4 (T44), orbits #4 (task T51); dropped: islands #4,
+  mosaic #5 and across "keep" notes (praise); shared #1, #8 and the overview-naming findings went to the owner.
 
 ## Scores
 
@@ -598,5 +647,9 @@ Notes for every builder round (planner, night 1):
 | 32 (orbits) | stranger | 4 | 4 | 5 | 1 | 5 | 6 | 3 |
 | 32 (islands) | stranger | 7 | 5 | 6 | 1 | 5 | 6 | 4 |
 | 32 (mosaic) | stranger | 6 | 4 | 8 | 1 | 7 | 5 | 4 |
+| 37 (radial) | accessibility | 3 | 3 | 5 | 2 | 5 | 3 | 4 |
+| 37 (orbits) | accessibility | 4 | 4 | 5 | 2 | 5 | 6 | 4 |
+| 37 (islands) | accessibility | 5 | 4 | 5 | 2 | 5 | 6 | 4 |
+| 37 (mosaic) | accessibility | 6 | 4 | 7 | 2 | 6 | 5 | 4 |
 
 ## Morning
