@@ -200,7 +200,7 @@ Notes for every builder round (planner, round 1):
   aviation displays (failure flags, red X), broadcast "signal lost" and film interfaces show that the data
   itself is old. 2-3 concrete proposals for the galaxy (what it shows, what it means, a cost guess) beside the
   plan's grey sun and `STALE <age>` tag — for T5, T6
-- [ ] Q15 Touch that never breaks a kiosk: Chromium on a Windows touch tablet in kiosk or fullscreen mode
+- [x] Q15 (→ research/Q15-touch-kiosk-and-wake-lock.md) Touch that never breaks a kiosk: Chromium on a Windows touch tablet in kiosk or fullscreen mode
   (the Surface Pro 7 class): which edge swipes, long-press, pinch-zoom and pull-to-refresh behaviours the page
   can stop (`touch-action`, `overscroll-behavior`, the viewport meta, `contextmenu`) and which only the OS or
   Chromium flags can, and how Screen Wake Lock behaves there — for T7, Later (wake lock)
