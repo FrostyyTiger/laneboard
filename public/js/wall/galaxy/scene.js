@@ -36,6 +36,68 @@ const HALO = Object.freeze({
   crit: { k: 9, opacity: 0.9 },
 });
 
+/** True for the tones that need you (tour.js visits them first). */
+const troubled = (t) => t === 'warn' || t === 'crit';
+
+/**
+ * A member's drawn radius: a planet (named kind) at the planet size, and
+ * so is anything in trouble (r8-film-ui 3: a problem is never the smallest
+ * thing in the frame); the rest are dots.
+ */
+export const memberRadius = (planet, tone) => (planet || troubled(tone) ? SIZE.planet : SIZE.dot);
+
+/** The shape a trouble member carries on its sphere (docs/design.md: ▲ wants you, ■ broken), null when calm. */
+export const MARK_SHAPE = Object.freeze({ warn: 'tri', crit: 'square' });
+
+/** The mark's size against its sphere's diameter, and how open its system must be before it shows. */
+export const MARK = Object.freeze({ k: 0.6, from: 0.25, to: 0.6 });
+
+/**
+ * The dust round a held system thins so what it holds stands above it
+ * (r8-film-ui 3): to `floor` out to `inner` times its reach, back to whole
+ * at `outer` times it (never nearer than `min`). Measured along the line of
+ * sight (dustSightDist), so the grains behind the system and in front of it
+ * thin too: on screen they lie on it just the same.
+ */
+export const DUST_FADE = Object.freeze({ floor: 0.2, inner: 1.05, outer: 1.4, min: 160 });
+
+const smoothstep = (a, b, x) => {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * How far from the star `s` a grain at `p` looks, seen from `cam` (all
+ * world points): the distance, at the star's depth, between the star and
+ * the grain's line of sight. Behind the camera: Infinity. The dust shader
+ * does the same sum in view space.
+ */
+export function dustSightDist(p, s, cam) {
+  const P = [p.x - cam.x, p.y - cam.y, p.z - cam.z], S = [s.x - cam.x, s.y - cam.y, s.z - cam.z];
+  const lp = Math.hypot(...P), ls = Math.hypot(...S);
+  if (!lp || !ls) return 0;
+  const c = (P[0] * S[0] + P[1] * S[1] + P[2] * S[2]) / (lp * ls);
+  if (c <= 1e-3) return Infinity;
+  return (ls * Math.sqrt(Math.max(0, 1 - c * c))) / c;
+}
+
+/** The dust fade's radius round a system that reaches `reach`. */
+export const dustFadeRadius = (reach) => Math.max(DUST_FADE.min, (Number(reach) || 0) * DUST_FADE.outer);
+
+/** Where the fade starts back up, as a share of dustFadeRadius. */
+const DUST_EDGE = DUST_FADE.inner / DUST_FADE.outer;
+
+/**
+ * How bright a dust grain `dist` (dustSightDist) from a held system's star is drawn (1:
+ * as ever), the system reaching `reach` and open `open` (0..1, eased by
+ * the caller). The dust shader does the same sum on the GPU.
+ */
+export function dustFade(dist, reach, open = 1) {
+  const r = dustFadeRadius(reach);
+  const inside = 1 - smoothstep(r * DUST_EDGE, r, dist);
+  return 1 - (1 - DUST_FADE.floor) * inside * Math.max(0, Math.min(1, open));
+}
+
 /** Trouble breathes: one slow period (ms), crit deep, warn shallow. */
 export const PULSE = Object.freeze({ periodMs: 2600, crit: 0.4, warn: 0.15, nebula: 0.08 });
 
@@ -111,6 +173,26 @@ function dotTexture(doc) {
   g.addColorStop(1, 'rgb(255 255 255 / 0)');
   x.fillStyle = g;
   x.fillRect(0, 0, 32, 32);
+  return new THREE.CanvasTexture(c);
+}
+
+/** A status shape (MARK_SHAPE) in white, flat, to tint: ▲ or ■ filling most of the square. */
+function markTexture(doc, shape) {
+  const c = doc.createElement('canvas');
+  c.width = c.height = 64;
+  const x = c.getContext('2d');
+  x.fillStyle = 'rgb(255 255 255 / 1)';
+  if (shape === 'square') {
+    x.fillRect(12, 12, 40, 40);
+  } else {
+    // An even triangle, its centre of mass on the sphere's.
+    x.beginPath();
+    x.moveTo(32, 6);
+    x.lineTo(60, 54);
+    x.lineTo(4, 54);
+    x.closePath();
+    x.fill();
+  }
   return new THREE.CanvasTexture(c);
 }
 
@@ -198,6 +280,12 @@ export function createGalaxyScene(canvas, {
     blending: THREE.AdditiveBlending, opacity: HALO[t].opacity,
   }))]));
 
+  // A trouble member's shape: dark on its lit sphere, facing the camera, over it.
+  const markMat = Object.fromEntries(Object.entries(MARK_SHAPE).map(([t, shape]) => {
+    const tex = keep(markTexture(doc, shape));
+    return [t, keep(new THREE.SpriteMaterial({ map: tex, color: bg.clone(), transparent: true, depthTest: false, depthWrite: false }))];
+  }));
+
   // --- the sky: far stars and the dust band, never rebuilt ------------------
   // Both are in random order, so a shorter draw range is an even thinning (setQuality).
   const stars = (() => {
@@ -209,6 +297,7 @@ export function createGalaxyScene(canvas, {
     shared.push(g, m);
     return pts;
   })();
+  const dustHold = { value: new THREE.Vector4(0, 0, 0, 1) }, dustOpen = { value: 0 };
   const dust = (() => {
     const { positions, t } = dustPoints(DUST);
     const colours = new Float32Array(t.length * 3);
@@ -224,6 +313,20 @@ export function createGalaxyScene(canvas, {
       size: 20, map: dotTex, vertexColors: true, transparent: true, opacity: 0.7,
       depthWrite: false, blending: THREE.AdditiveBlending,
     });
+    // dustFade on the GPU: the grains round the held system thin to the floor.
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.dustHold = dustHold;
+      sh.uniforms.dustOpen = dustOpen;
+      sh.vertexShader = `uniform vec4 dustHold;\nuniform float dustOpen;\n${sh.vertexShader}`.replace('#include <project_vertex>', [
+        '#include <project_vertex>',
+        // dustSightDist in view space (the camera at the origin).
+        'vec3 dustS = (viewMatrix * vec4(dustHold.xyz, 1.0)).xyz;',
+        'float dustC = dot(normalize(mvPosition.xyz), normalize(dustS));',
+        'float dustD = dustC > 0.001 ? length(dustS) * sqrt(max(0.0, 1.0 - dustC * dustC)) / dustC : 1e9;',
+        'float dustIn = 1.0 - smoothstep(dustHold.w * EDGE, dustHold.w, dustD);',
+        'vColor *= 1.0 - (1.0 - FLOOR) * dustIn * dustOpen;',
+      ].join('\n').replace('EDGE', DUST_EDGE.toFixed(4)).replace('FLOOR', DUST_FADE.floor.toFixed(3)));
+    };
     const pts = new THREE.Points(g, m);
     scene.add(pts);
     shared.push(g, m);
@@ -255,7 +358,8 @@ export function createGalaxyScene(canvas, {
     dirty = true;
   };
 
-  const haloSize = (m, t) => (m.planet ? SIZE.planet * HALO[t].k : t === 'calm' ? 0 : SIZE.dot * 2 * HALO[t].k);
+  const haloSize = (m, t) => (m.planet || troubled(t) ? memberRadius(m.planet, t) * HALO[t].k : t === 'calm' ? 0 : SIZE.dot * 2 * HALO[t].k);
+  const sphereOf = (m) => (m.radius === SIZE.planet ? geo.planet : geo.dot);
   const laneLook = (t) => (t === 'calm'
     ? { color: col(palette.line.rgb), opacity: palette.line.alpha * 0.6 }
     : { color: tone[t].clone(), opacity: 0.5 });
@@ -263,11 +367,22 @@ export function createGalaxyScene(canvas, {
   /** A member's tone: its mesh swaps to the shared material; its halo eases to its new size. */
   const paintMember = (s, m, t, ms) => {
     m.tone = t;
-    m.mesh.material = m.planet ? planetMat[t] : flatMat[t];
+    const r0 = m.size ?? memberRadius(m.planet, t);
+    m.radius = memberRadius(m.planet, t);
+    // The sphere for the larger of the two sizes, so one growing in is never a coarse dot blown up.
+    m.mesh.geometry = sphereOf({ radius: Math.max(r0, m.radius) });
+    m.mesh.material = m.planet || troubled(t) ? planetMat[t] : flatMat[t];
     m.halo.material = haloMat[t];
+    m.mark.material = markMat[t] ?? markMat.crit;
     const from = m.haloSize, to = haloSize(m, t);
-    if (!ms || from === to) { m.haloSize = to; dirty = true; return; }
-    tween(`${s.id}:halo:${m.id}`, ms, (k) => { m.haloSize = glide(from, to, k); });
+    if (!ms || (from === to && r0 === m.radius)) {
+      m.haloSize = to; m.size = m.radius; m.mesh.geometry = sphereOf(m); dirty = true; return;
+    }
+    tween(`${s.id}:halo:${m.id}`, ms, (k) => {
+      m.haloSize = glide(from, to, k);
+      m.size = glide(r0, m.radius, k);
+      if (k >= 1) m.mesh.geometry = sphereOf(m);
+    });
   };
 
   /** A site's star, nebula and hyperlane to its tone and status, eased over `ms` (0: at once). */
@@ -299,13 +414,16 @@ export function createGalaxyScene(canvas, {
 
   /** A site's members from its layout: the old ones go, the new ones come at their tones. */
   const setMembers = (s, list) => {
-    for (const m of s.members) group.remove(m.mesh, m.halo);
+    for (const m of s.members) group.remove(m.mesh, m.halo, m.mark);
     for (const key of tweens.keys()) if (key.startsWith(`${s.id}:halo:`)) tweens.delete(key);
     s.members = list.map((lm) => {
       const m = { id: lm.id, node: lm.node, off: { ...lm.off }, planet: lm.planet, tone: 'calm', haloSize: 0 };
       m.mesh = new THREE.Mesh(m.planet ? geo.planet : geo.dot, flatMat.calm);
       m.halo = new THREE.Sprite(haloMat.calm);
-      group.add(m.mesh, m.halo);
+      m.mark = new THREE.Sprite(markMat.crit);
+      m.mark.name = 'mark';
+      m.mark.renderOrder = 2;
+      group.add(m.mesh, m.halo, m.mark);
       paintMember(s, m, toneOf(lm.node), 0);
       return m;
     });
@@ -364,7 +482,7 @@ export function createGalaxyScene(canvas, {
 
   const dropSite = (s) => {
     for (const key of tweens.keys()) if (key.startsWith(`${s.id}:`)) tweens.delete(key);
-    for (const m of s.members) group.remove(m.mesh, m.halo);
+    for (const m of s.members) group.remove(m.mesh, m.halo, m.mark);
     group.remove(s.star, s.starHalo, s.nebulaSprite, s.lines, s.plane, s.lane);
     for (const o of [s.nebulaSprite.material, s.lines.geometry, s.lines.material, s.plane.geometry, s.plane.material, s.lane.geometry, s.lane.material]) o.dispose();
   };
@@ -395,10 +513,15 @@ export function createGalaxyScene(canvas, {
         const o = foldAt(k, m.off);
         const x = s.home.x + o.x * a, y = s.home.y + o.y * a, z = s.home.z + o.z * a;
         m.mesh.position.set(x, y, z);
-        m.mesh.scale.setScalar(a);
+        m.mesh.scale.setScalar((a * m.size) / m.mesh.geometry.parameters.radius);
         m.halo.position.set(x, y, z);
         m.halo.visible = m.haloSize * a > 0.5;
         m.halo.scale.setScalar(Math.max(1e-3, m.haloSize * a));
+        // The shape shows as the system opens (folded, the nebula and the site's name carry it).
+        m.mark.position.set(x, y, z);
+        m.markShown = MARK_SHAPE[m.tone] ? smoothstep(MARK.from, MARK.to, k) * a : 0;
+        m.mark.scale.setScalar(Math.max(1e-3, m.size * 2 * MARK.k * m.markShown));
+        m.mark.visible = m.markShown > 0.02;
         if (!m.planet) continue;
         push(s.home.x, s.home.y, s.home.z); push(x, y, z); // the spoke to its star
         push(x, y, z); push(x, s.home.y, z); // the stem down to the plane
@@ -731,6 +854,19 @@ export function createGalaxyScene(canvas, {
     }
   };
 
+  /** The most open system's star, fade radius and opening (eased), or none: what the dust thins round. */
+  const heldDust = () => {
+    let best = null;
+    for (const s of world?.sites ?? []) if (!s.gone && s.unfold > (best?.unfold ?? 0)) best = s;
+    if (!best) return { x: 0, y: 0, z: 0, r: 1, k: 0 };
+    return { ...best.home, r: dustFadeRadius(best.reach), k: ease(best.unfold) * best.alive };
+  };
+  const holdDust = () => {
+    const h = heldDust();
+    dustHold.value.set(h.x, h.y, h.z, h.r);
+    dustOpen.value = h.k;
+  };
+
   /** One frame at `now` (ms): trouble breathes, the dust drifts, then draw. */
   const frame = (now) => {
     resize();
@@ -746,6 +882,7 @@ export function createGalaxyScene(canvas, {
     }
     // The dust turns once in about 26 minutes: alive under a held camera, never a motion you notice.
     dust.rotation.y = dustTurn(now, still);
+    holdDust();
     if (pulses.length) drawPulses(now);
     if (tails.length) drawComets(now);
     if (glints.length) drawTwinkles(now);
@@ -767,7 +904,7 @@ export function createGalaxyScene(canvas, {
     sun.geometry = next.sun;
     for (const s of world?.sites ?? []) {
       s.star.geometry = next.star;
-      for (const m of s.members) m.mesh.geometry = m.planet ? next.planet : next.dot;
+      for (const m of s.members) m.mesh.geometry = m.mesh.geometry === geo.planet ? next.planet : next.dot;
     }
     for (const k of Object.keys(geo)) { geo[k].dispose(); geo[k] = next[k]; }
     dust.geometry.setDrawRange(0, Math.round(DUST * L.dust));
@@ -790,5 +927,7 @@ export function createGalaxyScene(canvas, {
     get routes() { return routes; },
     get comets() { return comets.flying; },
     get twinkles() { return twinkles; },
+    /** What the dust thins round now (`{ x, y, z, r, k }`, dustFade's uniforms). */
+    get dustHold() { return heldDust(); },
   };
 }

@@ -139,7 +139,8 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false } = 
         const m = site.members.find((x) => x.id === id);
         if (m) {
           p = m.mesh.position;
-          radius = (m.planet ? SIZE.planet : SIZE.dot) * (m.mesh.scale?.x ?? 1);
+          // Its sphere's radius times its scale: a member in trouble is drawn at the planet size (scene.js memberRadius).
+          radius = (m.mesh.geometry?.parameters?.radius ?? (m.planet ? SIZE.planet : SIZE.dot)) * (m.mesh.scale?.x ?? 1);
           break;
         }
       }

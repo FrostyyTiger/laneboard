@@ -143,6 +143,7 @@ const fakeDoc = {
     getContext: () => ({
       createRadialGradient: () => ({ addColorStop() {} }),
       fillRect() {}, set fillStyle(_) {}, set globalCompositeOperation(_) {},
+      beginPath() {}, moveTo() {}, lineTo() {}, closePath() {}, fill() {},
     }),
   }),
 };
