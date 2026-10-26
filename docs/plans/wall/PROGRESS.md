@@ -638,6 +638,12 @@ Notes for every builder round (planner, night 1):
   OBJECT-STORE, ACME cut at the right edge; the fleet line covers HOME's lights): give mosaic T17's safe-area
   fit (`bounds`, bottom band 16 %) — done when: a test like `test/wall-radial-fit.test.mjs` checks every tile
   and name inside the safe area at 3:2 and 16:9, and an overview frame shows the whole fleet.
+- [ ] T66 (§5, T18, T19) [variant:orbits, islands, mosaic] (r50-skeptic orbits #2 #3, islands #1, mosaic #3 #4)
+  T18/T19's Map options went into radial only; the other three still draw a gauge ring on every calm node,
+  builder lamp pips and ring legends: set `gauges: 'trouble'`, `lamps: false` and `legends: false` in each
+  variant's `mapOptions` (they already exist and default off; no Map change) — done when:
+  `test/wall-chrome.test.mjs` or `test/wall-ornament.test.mjs` shows all four variants carry the three
+  options, and a still of each shows no ring on calm nodes and no lamp pip.
 
 ## Research questions
 
@@ -761,6 +767,18 @@ Notes for every builder round (planner, night 1):
   overview (T28: the ground must not slide under a moving camera). Mosaic's scores favour it; the
   reviewer notes the overview is spent 15 % on the whole fleet in demo timing (radial #4, no change).
 
+- (r50-skeptic, taste or plan changes; items already listed above are not repeated) Shared #4: drop the
+  ambient line (`5 sites · 115 nodes · N working`) while anything is warn or worse, `all calm · 115 nodes`
+  when calm, no `working` count (it ticks 6, 7, 8 for no reason). #5: drop `· SITE` from the kicker. #2
+  (same ground as r41 shared #2): the plate drops its trouble line and status row when the fleet line
+  already shows the same problem, keeping `+5 more here`. #6: clock at the fleet line's facts size.
+  Radial #3: one `BUILDERS` node with a ▲ count at the overview, lanes unfold only in a hold. Orbits #1:
+  hide the core or draw it as a 4 px dot. Orbits #4 / mosaic #2: a site node shows trouble as a thin ring,
+  not the shape. Islands #3: no site node at the overview, the ellipse and big name are the site. Mosaic
+  #1: only each site's outline plus filled trouble tiles, no per-tile outline on calm tiles. Mosaic #3: link
+  labels and sublabels without a digit dropped in all variants (r20 #2). Across: the Wall options of T18/T19
+  to all four is T66; islands' plate timing (no dead plate) as the model for T23.
+
 ## Reviews
 
 - r9-film-ui.md: 9 findings, 5 became tasks (T15-T19: #2+#7, #3, #4, #5, #6+#8); #1 covered by T5 (phrasing
@@ -795,6 +813,12 @@ Notes for every builder round (planner, night 1):
   islands #3 (T60), #4 (T55), mosaic #1 (T56, T61), #3 (T44); already with the owner: shared #2 (tour dwell,
   r14 #3), radial #1, islands #1 coastline tint, mosaic #4, the across "steal" ideas; dropped: islands #2 (praise),
   console note (empty).
+- r50-skeptic.md: 31 findings (8 shared, 5 radial, 5 orbits, 4 islands, 5 mosaic, across notes), 1 became a task
+  (T66: orbits #2 #3, islands #1, mosaic #3 #4 — T18/T19 options for the other three); covered: shared #1 (T23,
+  T42), #7 (T51), #8 (T28), radial #1 edge labels (T27), radial #4 (T46), orbits #5 (T45), islands #2 and mosaic #5
+  (T60), islands #4 (T30); dropped: radial #5 (the reviewer keeps the echo), orbits #1 core (r41 owner line on the
+  sun), the across "steal" notes (restate T66, T23); shared #2-#6, radial #2 #3, orbits #3 #4, islands #1 tails #3,
+  mosaic #1 #2 and sublabels went to the owner (taste or plan change). Load 35-37: its fps are noise.
 
 ## Scores
 
@@ -822,5 +846,9 @@ Notes for every builder round (planner, night 1):
 | 46 (orbits) | operator | 6 | 4 | 4 | 2 | 5 | 6 | 5 |
 | 46 (islands) | operator | 7 | 5 | 5 | 2 | 5 | 6 | 5 |
 | 46 (mosaic) | operator | 7 | 4 | 7 | 3 | 6 | 5 | 4 |
+| 50 (radial) | skeptic | 5 | 4 | 6 | 2 | 6 | 5 | 4 |
+| 50 (orbits) | skeptic | 6 | 4 | 5 | 2 | 5 | 5 | 5 |
+| 50 (islands) | skeptic | 7 | 5 | 5 | 2 | 5 | 6 | 5 |
+| 50 (mosaic) | skeptic | 6 | 4 | 7 | 3 | 6 | 4 | 4 |
 
 ## Morning
