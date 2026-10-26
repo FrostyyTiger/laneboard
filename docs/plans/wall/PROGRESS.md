@@ -130,7 +130,7 @@ Notes for every builder round (planner, round 1):
 
 ## Research questions
 
-- [ ] Q12 Touch on a 3D map on a wall or tablet screen: how do 3D map tools (Google Earth, CesiumJS, Mapbox GL's
+- [x] Q12 (→ research/Q12-touch-3d-map.md) Touch on a 3D map on a wall or tablet screen: how do 3D map tools (Google Earth, CesiumJS, Mapbox GL's
   pitch and bearing, three.js `OrbitControls`) map one-finger drag, two-finger pinch and the wheel to orbit and
   dolly; their pitch clamps, inertia damping (time constants), how a pinch maps to zoom (log or linear), and
   how they tell tap, drag and palm apart (slop px, ms, contact size); and how a small moving 3D target is hit
