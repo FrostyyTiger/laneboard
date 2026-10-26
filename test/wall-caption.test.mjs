@@ -65,12 +65,12 @@ test('caption: a site in trouble leads with its worst problem, in its status col
     { kind: first.kind, label: first.label, text: first.text, tone: first.tone, shape: first.shape, glyph: first.glyph },
     { kind: 'trouble', label: 'storage', text: 'pool 97% full', tone: 'crit', shape: 'square', glyph: '■' },
   );
-  assert.equal(c.lines[1].text, 'crit · 2 of 3 in trouble');
+  assert.equal(c.lines[1].text, '1 crit · 1 warn');
   // never more than six lines: the extra facts give way, the count stays last
   assert.equal(c.lines.length, MAX_LINES);
   assert.equal(c.lines.at(-1).kind, 'count');
   assert.equal(c.lines.at(-1).text, '3 rooms');
-  assert.deepEqual(c.lines.filter((l) => l.kind === 'fact').map((l) => l.label), ['hardware', 'where']);
+  assert.deepEqual(c.lines.filter((l) => l.kind === 'fact').map((l) => l.label), ['hardware']);
 
   // a warn alone shows the triangle in the warn tone; attention reads as warn too
   const w = model();
@@ -144,7 +144,7 @@ test('caption: a trouble site leads with the trouble word at the 3 m step, the n
   assert.equal(lead.word, 'STORAGE', 'where the trouble is, in caps');
   assert.equal(lead.sub, 'pool 97% full', 'what it is, under the word');
   assert.deepEqual(rest.map((l) => [l.kind, l.step]), [
-    ['status', 'line'], ['metrics', 'line'], ['fact', 'small'], ['fact', 'small'], ['count', 'small'],
+    ['status', 'line'], ['problem', 'line'], ['metrics', 'line'], ['fact', 'small'], ['count', 'small'],
   ]);
   // the steps: trouble word > name > why > line > key, and the word stays above the name when it shrinks
   assert.ok(STEPS.hero > STEPS.heroMin && STEPS.heroMin > STEPS.name, 'the word, even fitted, beats the name');
@@ -154,6 +154,52 @@ test('caption: a trouble site leads with the trouble word at the 3 m step, the n
   const own = captionLines(node(m, 'storage'), m).lines[0];
   assert.equal(own.word, 'POOL 97% FULL');
   assert.equal(own.sub, 'crit');
+});
+
+// T22 (r14-operator #5): the status is a severity count, and the plate names
+// the worst three, the worst as the hero, the next two one per line.
+test('caption: a site with 1 crit and several attention counts them and names the worst three', () => {
+  const m = model();
+  const hv2 = node(m, 'hv2');
+  node(m, 'media').status = 'ok';
+  m.nodes.push(
+    { id: 'b1', parent: 'hv2', kind: 'builder', label: 'builder-a', status: 'ok' },
+    { id: 'l1', parent: 'b1', kind: 'lane', label: 'feat-search', status: 'attention', why: 'waiting for approval' },
+    { id: 's1', parent: 'l1', kind: 'session', label: 's1', status: 'attention', why: 'prompt' },
+    { id: 'l2', parent: 'b1', kind: 'lane', label: 'fix-login', status: 'attention', why: 'stuck 12 min' },
+    { id: 'l3', parent: 'b1', kind: 'lane', label: 'docs-map', status: 'attention' },
+    { id: 'l4', parent: 'b1', kind: 'lane', label: 'deps', status: 'attention' },
+    { id: 'l5', parent: 'b1', kind: 'lane', label: 'ci-cache', status: 'attention' },
+  );
+  // the crit last in model order still leads
+  m.nodes.push(m.nodes.splice(m.nodes.indexOf(node(m, 'storage')), 1)[0]);
+  const c = captionLines(hv2, m, 1, 5);
+  const [lead, status, ...rest] = c.lines;
+  assert.equal(lead.word, 'STORAGE', 'the worst is the hero');
+  assert.equal(status.text, '1 crit · 5 attention', 'a lane and its waiting session are one problem');
+  const named = rest.filter((l) => l.kind === 'problem');
+  assert.deepEqual(named.map((l) => [l.label, l.text, l.glyph, l.tone, l.step]), [
+    ['attention', 'FEAT-SEARCH · waiting for approval', '▲', 'warn', 'line'],
+    ['attention', 'FIX-LOGIN · stuck 12 min', '▲', 'warn', 'line'],
+  ]);
+  assert.deepEqual(c.lines.slice(0, 4).map((l) => l.kind), ['trouble', 'status', 'problem', 'problem'], 'worst first, right under the count');
+  assert.ok(c.lines.length <= MAX_LINES);
+  assert.equal(c.lines.at(-1).kind, 'count');
+
+  // a warn below a crit sorts after it, however the model orders them
+  node(m, 'l2').status = 'warn';
+  const w = captionLines(hv2, m);
+  assert.equal(w.lines[1].text, '1 crit · 4 attention · 1 warn');
+  assert.deepEqual(w.lines.filter((l) => l.kind === 'problem').map((l) => l.text.split(' · ')[0]), ['FEAT-SEARCH', 'DOCS-MAP']);
+
+  // one problem: the count and the hero, no problem line
+  const one = model();
+  node(one, 'media').status = 'ok';
+  const c1 = captionLines(node(one, 'hv2'), one);
+  assert.equal(c1.lines[1].text, '1 crit');
+  assert.ok(!c1.lines.some((l) => l.kind === 'problem'));
+  // a calm site: no count, no problem line
+  assert.ok(!captionLines(node(one, 'lab'), one).lines.some((l) => l.kind === 'problem'));
 });
 
 test('caption: a calm site keeps its order, the name first and every line at the line step', () => {

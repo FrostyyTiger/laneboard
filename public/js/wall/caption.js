@@ -91,16 +91,42 @@ function below(id, kids, out = [], seen = new Set()) {
   return out;
 }
 
-/** The trouble the caption leads with: the node's own, or the worst below it (first in model order on a tie). */
-function troubleOf(node, under) {
-  if (TROUBLE.includes(node.status)) return node;
-  let worst = null;
-  for (const n of under) {
-    if (!TROUBLE.includes(n.status)) continue;
-    if (!worst || SEVERITY.indexOf(n.status) > SEVERITY.indexOf(worst.status)) worst = n;
+/**
+ * The problems below a node, worst first: a node in trouble whose parent
+ * (below `node`) is not is one problem with everything in trouble under it,
+ * as the fleet line counts them (frame.js `worstLine`: a lane and its waiting
+ * session are one); the worst node in it speaks for it. A tie keeps model order.
+ */
+function problemsBelow(node, under, byId) {
+  const bad = (x) => x && x !== node && TROUBLE.includes(x.status);
+  const problems = new Map();
+  for (const u of under) {
+    if (!bad(u)) continue;
+    let root = u;
+    const seen = new Set([u.id]);
+    while (bad(byId.get(root.parent)) && !seen.has(root.parent)) {
+      root = byId.get(root.parent);
+      seen.add(root.id);
+    }
+    const p = problems.get(root.id);
+    if (!p) problems.set(root.id, u);
+    else if (SEVERITY.indexOf(u.status) > SEVERITY.indexOf(p.status)) problems.set(root.id, u);
   }
-  return worst;
+  return [...problems.values()]
+    .map((worst, i) => ({ worst, i }))
+    .sort((a, b) => SEVERITY.indexOf(b.worst.status) - SEVERITY.indexOf(a.worst.status) || a.i - b.i)
+    .map(({ worst }) => worst);
 }
+
+/** `1 crit · 5 attention`: how many problems at each status, worst first. */
+function severityCount(problems) {
+  const by = new Map();
+  for (const p of problems) by.set(p.status, (by.get(p.status) ?? 0) + 1);
+  return [...by].sort((a, b) => SEVERITY.indexOf(b[0]) - SEVERITY.indexOf(a[0])).map(([s, c]) => `${c} ${s}`).join(' · ');
+}
+
+/** How many problems the plate names (T22: the worst, the hero, then the next two). */
+export const NAMED_PROBLEMS = 3;
 
 /**
  * What the caption says about `node`. `model` is a map model (or its
@@ -109,10 +135,14 @@ function troubleOf(node, under) {
  * up status; each line is one of
  *   `{ kind: 'trouble', label, text, status, tone, shape, glyph }`
  *   `{ kind: 'status', label, text }`
+ *   `{ kind: 'problem', label, text, status, tone, shape, glyph }`
  *   `{ kind: 'metrics', bars: [{ label, value, text }] }`
  *   `{ kind: 'fact', label, text }`
  *   `{ kind: 'count', label, text }`
- * in that order, at most MAX_LINES (facts give way first). Labels are short
+ * in that order, at most MAX_LINES (facts give way first). Below a site in
+ * trouble the status line counts the problems by severity (`1 crit · 5
+ * attention`); the trouble line is the worst, and up to two `problem` lines
+ * (label the status, text `NAME · why`) name the next ones. Labels are short
  * words the page sets in caps; texts are as the model says them, clipped.
  * Every line carries its `step`: `hero` (the trouble line: `word` big, `sub`
  * under it), `line`, or `small` (facts and the count on a trouble site).
@@ -137,7 +167,8 @@ export function captionLines(node, model, index = null, count = null) {
 
   const lines = [];
 
-  const bad = troubleOf(n, under);
+  const problems = problemsBelow(n, under, byId);
+  const bad = TROUBLE.includes(n.status) ? n : (problems[0] ?? null);
   if (bad) {
     const st = statusStyle(bad);
     const why = bad.why ?? bad.sub;
@@ -159,11 +190,28 @@ export function captionLines(node, model, index = null, count = null) {
     });
   }
 
-  const inTrouble = under.filter((u) => TROUBLE.includes(u.status)).length;
   let statusText = status;
-  if (under.length) statusText += inTrouble ? ` · ${inTrouble} of ${under.length} in trouble` : ` · all ${under.length} calm`;
+  if (problems.length) statusText = severityCount(problems);
+  else if (under.length) statusText += bad ? '' : ` · all ${under.length} calm`;
   else if (typeof n.sub === 'string' && n.sub) statusText += ` · ${n.sub}`;
   lines.push({ kind: 'status', step: 'line', label: 'status', text: clip(statusText) });
+
+  // The next problems after the one the plate leads with, one per line.
+  const named = problems.filter((p) => p !== bad).slice(0, NAMED_PROBLEMS - (bad ? 1 : 0));
+  for (const p of named) {
+    const st = statusStyle(p);
+    const why = p.why ?? p.sub;
+    lines.push({
+      kind: 'problem',
+      step: 'line',
+      label: p.status,
+      text: clip([String(p.label ?? p.id).toUpperCase(), why].filter(Boolean).join(' · ')),
+      status: p.status,
+      tone: st.tone,
+      shape: st.shape,
+      glyph: GLYPH[st.shape] ?? GLYPH.square,
+    });
+  }
 
   const m = n.metrics && typeof n.metrics === 'object' ? n.metrics : {};
   const bars = [['cpu', m.cpu], ['mem', m.mem]]
@@ -261,7 +309,7 @@ function lineEl(line) {
     }
     return li;
   }
-  if (line.kind === 'trouble') {
+  if (line.kind === 'trouble' || line.kind === 'problem') {
     li.dataset.tone = line.tone;
     const key = el('span', 'wall-caption-key');
     key.append(el('span', 'wall-caption-glyph', line.glyph), el('span', null, line.label));

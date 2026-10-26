@@ -247,9 +247,12 @@ html.wall body {
   color: var(--text-3);
 }
 
-.wall-caption-line[data-kind="trouble"] > * { color: var(--crit); }
-.wall-caption-line[data-kind="trouble"][data-tone="warn"] > * { color: var(--warn); }
-.wall-caption-line[data-kind="trouble"][data-tone="low"] > * { color: var(--info); }
+.wall-caption-line[data-kind="trouble"] > *,
+.wall-caption-line[data-kind="problem"] > * { color: var(--crit); }
+.wall-caption-line[data-kind="trouble"][data-tone="warn"] > *,
+.wall-caption-line[data-kind="problem"][data-tone="warn"] > * { color: var(--warn); }
+.wall-caption-line[data-kind="trouble"][data-tone="low"] > *,
+.wall-caption-line[data-kind="problem"][data-tone="low"] > * { color: var(--info); }
 .wall-caption-line[data-kind="trouble"] .wall-caption-val { font-weight: 600; }
 .wall-caption-glyph { font-size: var(--cap-line); line-height: 1; }
 
