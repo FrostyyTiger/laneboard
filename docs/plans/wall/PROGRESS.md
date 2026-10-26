@@ -384,7 +384,7 @@ Notes for every builder round (planner, night 1):
 - [x] T17 (§5) [variant:radial] (r9-film-ui #4) Overview fit and safe area: fit to the bounds of the
   drawn nodes and labels, not the outer ring; safe area 8 % top/bottom, 6 % sides; top-left
   caption area kept clear — done when: a test checks no node or label lies outside the safe
-  area at 3:2 and 16:9, and the still no longer touches the top edge. (commit COMMIT; radial's layout
+  area at 3:2 and 16:9, and the still no longer touches the top edge. (commit 01d7d4a, with a46934a; radial's layout
   carries `bounds` from `fitBounds`: the largest scale at which every node, its rings and any name it
   could carry (trouble names any node at the room step, so the fit does not jump when trouble comes or
   goes; a run's round counted) lie inside the safe rectangle at every bearing of the turn (a name runs
