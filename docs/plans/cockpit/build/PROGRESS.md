@@ -226,6 +226,11 @@ What the slice itself says waits; nothing else moved here.
   §3), its test `test/cockpit-security.test.mjs` (S-SEC-01, injected stat, then real starts), and
   its call `prepareRoomFiles()` in `server/boot/cockpit.mjs` (also from `server/boot/builder.mjs`
   before the one box listens). Each check names its decision; B47-B53.
+- T8: `docs/cockpit/protocol.md` is now the protocol the test reads (D136, B54). `protocols.md` §9
+  says its first line should then point to the copy and changes go there only; I left the spec
+  untouched (fenced beyond typo fixes). Until that pointer is added, a spec fix in `protocols.md`
+  must be made in the copy too, or the two drift.
+
 - T7, two places that disagree (the one box's default layout): security.md §3 / D210 "the audit
   file and its directory … have any group or other bit set" stops the room, and single-machine.md
   §3.3 "walks every directory from `/` to `{stateDir}/cockpit-agent/` … Run: setfacl -m

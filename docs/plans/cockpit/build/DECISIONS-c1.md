@@ -320,3 +320,31 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   (c3-see.md §1) and comes after the bridge (T9) that spawns the agent; T7's test asserts D209's
   directory modes — because neither the MCP server nor the bridge exists at T7 — spec:
   security.md §7 S-SEC-01, c3-see.md §1 — overrule: none; T35 closes the scenario.
+- B54 (T8) The night's copy of the protocol (D136) is made in T8, not in the night's first commit
+  (no earlier round made it): `docs/cockpit/protocol.md` is `protocols.md` byte for byte, and the spec
+  file's first line is left as it is (a pointer would be more than a typo fix) — because T8 is the
+  first task whose test reads it — spec: `protocols.md` §9 "Where the test reads it" — overrule: add
+  the pointer line to `protocols.md` and from then on edit only the copy.
+- B55 (T8) A "with X" field present outside its case is `bad-message` (`not allowed here`), as is a
+  `tool` item with only one of `endedAt`/`isError`, and `hello` with only one of `epoch`/`lastSeq`;
+  `prompt.text` is refused when empty after trimming or over `maxPromptChars`, not when it has
+  outer white space — because §2.4 says "required only in that case and absent otherwise" and
+  "both or neither"; a screen trims, the room needs only the bounds — spec: `protocols.md` §2.4,
+  §3.1 — overrule: the `when:` branch of `walk()` in `server/cockpit/protocol.mjs`.
+- B56 (T8) Value rules the spec leaves open: ids the room makes (`turnId`, `card`, `epoch` …) are
+  1-128 characters of `[A-Za-z0-9._:/-]`; node ids (`about`, `inSight`, `target`) any text of
+  1-128 without control characters; `route` keys `view`, `b`, `s`, `q`, `sel`, `open`, `run` as
+  strings within router.js's bounds, other keys not refused (parseHash drops them, which is the link
+  handler's job); names (`screen`, `by`) 1-64; `title` 200 (a job's 60, coworker.md §6.1);
+  `toolUseId` on the room link must be `tu-` and a counter (D102); `lang` a language code or `auto`,
+  and one of `opts.languages` when given — because these keep a hostile frame bounded without
+  refusing anything a correct room or screen sends — spec: `protocols.md` §2.4, `c3-see.md` §8.1 —
+  overrule: the rule constants at the top of `server/cockpit/protocol.mjs`.
+- B57 (T8) The checks answer only `bad-message` and `unknown-type`; `unknown-id` and `not-now` are
+  state, the link handler's (T13). The fixtures are read from `docs/cockpit/protocol.md` only, and
+  the hand-written range cases live in the test file: no `test/cockpit/fixtures/` directory, which
+  would be a second copy of examples the protocol already holds. The `json bridge` checks are
+  `server/cockpit/bridge-events.mjs` (§13, T9); T8's test asserts only §9's reverse rule for them
+  (every §11.3 type has a fixture) and that `json claude`/`json stt` blocks parse — because the
+  bridge module is T9's and `stt` belongs to C2 — spec: `protocols.md` §9, §13 — overrule: T9 adds
+  its class to `test/cockpit-protocol.test.mjs`.
