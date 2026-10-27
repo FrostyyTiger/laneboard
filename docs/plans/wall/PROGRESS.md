@@ -206,13 +206,22 @@ Notes for every builder round (planner, round 1):
   the ribbon at the banner's top-left is gone; the ribbon fades into the ground), `hv2-edge1.png` (stars fade into
   the plate, brackets crisp, no tile seams). Film `shots/r20-galaxy`: no console errors, 11.6 fps under
   SwiftShader (12-13 in earlier rounds; the gradients are painted only when the plate repaints).
-- [ ] T11 (§7 Night 4 0a; was night 3's T39, r56-performance galaxy 1 = night 1's T39) [ui] [variant:galaxy] The
+- [x] T11 (§7 Night 4 0a; was night 3's T39, r56-performance galaxy 1 = night 1's T39) [ui] [variant:galaxy] The
   stutter number moves: `budget.js createFrameWindow` keeps `worstMs` per window (reset each window, as `frameMs` is)
   and `perf.js` reports in `worstGapMs` the worst gap of the last ~10 s, with the boot gap apart as `bootGapMs` (gaps
   before the first model is drawn plus 2 s do not count); `wall.html` gets the same numbers (shared `perf.js`) —
   done when: a test with a fake clock, a 400 ms first gap and 16 ms gaps after it reads `worstGapMs` under 20 ms
   after 10 s and `bootGapMs` 400, and a film's `perf.json` (fenced `film.mjs` reads `worstGapMs` from
-  `__wallPerf`) shows the windowed number.
+  `__wallPerf`) shows the windowed number. (commit 2ca8017) Builder r23: `perf.js` keeps the worst gap in
+  one-second buckets over `PERF.spanMs` 10 s (so the window is 9-10 s); the boot starts at the first drawn frame,
+  which on both pages is the first model drawn (the galaxy's tick draws nothing before `galaxy.world`), and its gaps
+  up to 2 s later go to `bootGapMs` only. `createFrameWindow`'s closed window carries `worstMs`, reset with it (not
+  shown in `perfLine`, whose lines are pinned). Tests: `test/wall-variant.test.mjs` (400 ms first gap then 16 ms:
+  `worstGapMs` < 20 after 10 s, `bootGapMs` 400; a 120 ms hitch reads 8 s later and is gone 11 s later; the old
+  test runs with `bootMs: 0`), `test/wall-galaxy-budget.test.mjs` (a window's `worstMs` and its reset). Film
+  `shots/r23-galaxy` (SwiftShader, CPU x4): `worstGapMs` 270, the worst of the last 10 s, against 346-403 for the
+  whole-run number in r19-r21; 13.7 fps, no console errors, page unchanged. `film.mjs` is fenced and does not copy
+  `bootGapMs` into `perf.json`; it is on `__wallPerf`.
 - [ ] T12 (§7 Night 4 0a; was night 3's T40 and T41, r56-performance galaxy 3a and across) [ui] [variant:galaxy] Two
   small savings: member dots use a fixed 8x6 sphere segments at every quality level (`scene.js` `spheres`; 87k
   triangles and 205 draw calls with HV1 open against 13k and 45 at the overview), planets unchanged; and
