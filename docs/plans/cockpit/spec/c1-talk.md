@@ -60,7 +60,7 @@ of the list below, top to bottom, with these rects at 1368x912:
 ### Inside the pane, top to bottom
 
 1. **Header**, 64 px, 1 px `--line` bottom border. Left, 24 px in: `COCKPIT` (`--font-label` caps
-   16 px, `--text-2`), then 16 px later the turn state (§2) in 16 px caps `--text-3`. Right, 16 px
+   16 px, `--text-2`), then 16 px later the turn state (§2) `[data-cockpit-turn]` in 18 px caps `--text-2` (D167: the state the owner looks for at a glance is not the faintest text in the header). Right, 16 px
    in: `CLOSE` `[data-cockpit-close]`, and on the Wall page `SCREEN` `[data-cockpit-screen]` to its
    left (`screens.md` §1), 8 px apart. Each
    header button is 48 px tall, ≥ 96 px wide, 16 px caps `--text-1`, 1 px `--line-strong` border.
@@ -84,11 +84,14 @@ from the input row's top edge upwards, in this order, each one only while it is 
 
 1. **The line slot** `[data-cockpit-line]`, `data-line="room-down|error|hint|length"`: exactly one
    message, on the row's top edge. Text left-aligned at x 784, at most 480 px wide (it ends at
-   x ≤ 1264), its last line's bottom 8 px above the row's top edge, 4 px free above its first line.
-   One line of today's 16 px type (line height 20 px) makes the slot 32 px; each more line adds its
-   line height, at most 3 lines (72 px), then the text is cut with `…` (no message in this spec
-   needs 3: the longest, `NotAllowedError`'s, is 2 lines). The type of each message is its own
-   section's (T43 changes their sizes, not this rule; T97 left them alone). Which one, highest first (D133):
+   x ≤ 1264), its last line box ending 4 px above the row's top edge, 4 px free above its first line.
+   **Type** (D167, T43): every message is 18 px `--font-label` weight 500, line height 24 px,
+   `--text-1`; the hint and the length note in caps with 0.08 em letter spacing, the room-down and
+   error lines in sentence case. One line makes the slot 32 px (4 + 24 + 4); each more line adds
+   24 px, at most 3 lines (80 px), then the text is cut with `…`. No message in this spec needs 3:
+   measured in Chromium with the vendored Barlow Condensed Medium, the longest error
+   (`stt-down` with the `token` detail, `c2-voice.md` §10) is 842 px on one line, so 2 lines; the
+   longest hint (`RELEASE TO SEND · SLIDE OFF TO KEEP`) 279 px, one line. Which one, highest first (D133):
    1. `room-down`: `Sending and voice come back with the room.` (`screens.md` §7);
    2. `error`: the microphone or speech line `[data-talk-error]` (`c2-voice.md` §5, §10);
    3. `hint`: the talk hints (`c2-voice.md` §3, §4);
@@ -114,7 +117,7 @@ Rects at 1368x912 with a one-line input (row top y 808, on the Wall, in the app 
 | a one-line message | y 776-808 | none | x 1016-1112, y 712-760 | y 776 |
 | a chip | none | y 744-808 (y 752-800) | x 1168-1264, y 680-728 | y 744 |
 | a one-line message and a chip | y 776-808 | y 712-776 (y 720-768) | x 1168-1264, y 648-696 | y 712 |
-| a two-line message and a chip | y 756-808 | y 692-756 (y 700-748) | x 1168-1264, y 628-676 | y 692 |
+| a two-line message and a chip | y 752-808 | y 688-752 (y 696-744) | x 1168-1264, y 624-672 | y 688 |
 
 - A taller input (§7) or the keyboard (§7.1) moves the row's top edge; every rect moves with it by
   the same amount (keyboard up: subtract 364 px, so a chip alone is y 380-444).
@@ -124,8 +127,8 @@ Rects at 1368x912 with a one-line input (row top y 808, on the Wall, in the app 
   test (S-SCR-25).
 - In a `split` column (§1) the conversation never drops under 96 px: when the status line, the
   stack and the input's growth together would leave less, the column's top moves up over the card
-  area by what is missing (the most: 80 px status line, 136 px of stack and 118 px of input growth put the column at
-  y 314-912).
+  area by what is missing (the most: 80 px status line, 144 px of stack (an 80 px three-line slot
+  and the 64 px chip row) and 118 px of input growth put the column at y 306-912).
 
 ## 2. Opening and closing
 
@@ -233,7 +236,7 @@ anything else: a word "down" with no mark stays grey.
 
 **Code.** Mono 18 px, line height 1.4, `--bg-sunken`, 1 px `--line` border, 12 px / 16 px padding.
 Lines never wrap; the block scrolls sideways on its own. The fence's language, if given, sits top
-right in 13 px caps `--text-3`. A block of more than 12 lines shows its first 12 and a full-width
+right in 16 px caps `--text-3` (D21's floor). A block of more than 12 lines shows its first 12 and a full-width
 button under it, 48 px tall, 16 px caps: `SHOW ALL 40 LINES`; tapped, it shows every line and reads
 `SHOW LESS`.
 
@@ -655,8 +658,8 @@ Plan C1: "Typing works everywhere (on-screen keyboard, a paired keyboard)." `spe
   turn its job changes (§8).
 - **Keys** (D30): `Enter` sends, on a paired keyboard and on the on-screen keyboard alike (the
   terminal's habit); `Shift+Enter` makes a new line. `Esc` closes the pane (§2), the draft stays.
-- **Length.** A prompt is at most 8 000 characters. Above that, a 13 px caps note in `--text-2`
-  shows in the line slot (§1.1, `data-line="length"`, the lowest of its four): `8 214 / 8 000
+- **Length.** A prompt is at most 8 000 characters. Above that, a note in the line slot's
+  type (18 px caps `--text-1`, §1.1, D167) shows there (`data-line="length"`, the lowest of its four): `8 214 / 8 000
   CHARACTERS`, and `SEND` is disabled. Pasting is never cut short by the screen (D30).
 - **What is sent**: the text with white space trimmed at both ends; inside, unchanged.
 
@@ -1359,6 +1362,34 @@ the `snapshot` frames with `framereceived` (`turns.length` 23, `olderTurns` 0); 
 `[data-turn-id]` elements (the first `t-0101`); text of the error line; `fakeAgent.starts()` and its `start` lines;
 `fs.statSync(...).mode & 0o777` is `0o600` and the file's lines parsed. The start steps' edge
 cases (torn line, 31-day-old turn, missing `session.json`) are `protocols.md` §13's store test.
+
+### S-C1-40 The type floor: no text under 16 px, no instruction under 18 px (T43, D21, D167)
+Given the Wall page in `wall` at 1368x912 (`hasTouch: true`), `document.fonts.ready` resolved and
+`document.fonts.check('500 18px "Barlow Condensed"')` true (the vendored face, not a fallback: the
+line counts below hold only with it), the pane open, the script `c1-render`,
+When the page is brought through four states, one after the other: (1) idle, the header `READY`;
+(2) the owner sends a prompt and the reply streams S-C1-05's 4-column table, S-C1-08's 40-line `sh`
+block and two tool lines, one of them opened (header `● WORKING`); (3) after its end, 8 214
+characters pasted into the input (S-C1-15's note); (4) the room's link stopped until
+`data-cockpit="room-down"`,
+Then in every state each text node under `[data-cockpit-conversation]` with non-white-space text,
+whose parent has a non-empty `getClientRects()`, computed `visibility` `visible` and `opacity`
+above 0, has a parent whose computed `font-size` is ≥ 16 px (the fence label `SH` included);
+`[data-cockpit-turn]`, `[data-cockpit-line]` and `[data-cockpit-status]` are ≥ 18 px;
+`[data-cockpit-turn]`'s colour is `--text-2`'s and `[data-cockpit-line]`'s `--text-1`'s; in (3)
+the line slot reads `8 214 / 8 000 CHARACTERS`, y 776-808 (one line, 32 px); in (4) it reads
+`Sending and voice come back with the room.`, y 776-808.
+And the C2 slice runs the same walk in three voice states: a hold past 400 ms (`RELEASE TO SEND ·
+SLIDE OFF TO KEEP`, one line; `[data-send="cancel"]` holds only `✕` at a computed 28 px with the
+accessible name `Cancel`), a slide off (`MICROPHONE OFF · TEXT KEPT`), and `[data-talk-error="stt-down"]`
+with `data-talk-detail="token"`: 2 lines, the slot y 752-808 (56 px), the text not cut (no `…`,
+it ends with `Tap TALK to try again.`).
+Test: Playwright; one `page.evaluate` with a `TreeWalker` over `NodeFilter.SHOW_TEXT` returning
+`{text, px, path}` for every node under the floor, asserted empty per state; computed styles and
+rects of the three selectors; colours compared with `getComputedStyle(document.documentElement)`
+values of `--text-1` and `--text-2`; for C2 the fake speech scripts `c2-tap` (hold, slide off) and
+`c2-faults` (its `"401"` utterance, `stand-ins.md` §3.3). The walk is a helper the later slices
+reuse on the canvas (`[data-card]`).
 
 ## 15. The demo (`?demo=1`, T36/T76/T93)
 

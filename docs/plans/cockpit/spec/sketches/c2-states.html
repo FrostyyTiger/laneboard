@@ -20,13 +20,14 @@ h1{position:absolute;left:24px;top:8px;font-size:16px;color:var(--text-2);font-w
 .lr{font-size:16px;color:var(--text-3);height:20px;line-height:20px}
 .t3{color:var(--text-3)}
 .prompt{font-size:22px;line-height:1.4;background:var(--bg-surface);border:1px solid var(--line-weak);padding:4px 16px;margin-top:2px}
-.hint{position:absolute;right:24px;top:72px;font-size:13px;color:var(--text-2);height:16px}
+/* the line slot (c1-talk.md §1.1, D167): 18 px label face, 24 px lines, --text-1, x 784 = 24 px into the pane, last line box 4 px above the row */
+.hint{position:absolute;left:24px;top:68px;width:480px;font-size:18px;line-height:24px;color:var(--text-1);font-weight:500;letter-spacing:.08em}
 .ir{position:absolute;left:0;top:96px;width:606px;height:96px;border-top:1px solid var(--line)}
 .inp{position:absolute;left:24px;top:16px;width:400px;height:64px;background:var(--bg-sunken);border:1px solid var(--line);font-size:22px;line-height:1.4;padding:0 16px;display:flex;align-items:center;white-space:nowrap;overflow:hidden;color:var(--text-1)}
 .inp.ph{color:var(--text-3)}
 .inp.tt .firm{color:var(--text-1)} .inp.tt .tail{color:var(--text-2);margin-left:.6em}
 .send{position:absolute;left:440px;top:16px;width:64px;height:64px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1)}
-.send.cx{flex-direction:column;gap:2px;font-size:13px}.send.cx b{font-size:20px;font-weight:400;line-height:1}
+.send.cx{font-family:var(--mono);font-size:28px;line-height:1;text-transform:none;letter-spacing:0}
 .send.dis{color:var(--text-3);border-color:var(--line)}
 .talk{position:absolute;left:520px;top:16px;width:64px;height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:16px}
 .talk .lab{line-height:1}
@@ -36,7 +37,7 @@ h1{position:absolute;left:24px;top:8px;font-size:16px;color:var(--text-2);font-w
 .talk.off{background:var(--bg-elevated);border:1px solid var(--line);color:var(--text-3)}
 .bar{position:absolute;left:12px;bottom:4px;width:40px;height:4px}
 .bar::after{content:"";position:absolute;left:0;top:0;height:4px;width:26px;background:var(--bg-canvas)}
-.below{position:absolute;left:24px;bottom:120px;width:560px;font-size:16px;color:var(--text-2);line-height:1.25}
+.below{position:absolute;left:24px;bottom:120px;width:480px;font-family:var(--label);font-weight:500;font-size:18px;color:var(--text-1);line-height:24px}
 </style></head><body>
 <h1 class="lab">Talk button and input · every state · the bottom of the 608 px pane, real size</h1>
 <div class="grid">
@@ -57,7 +58,7 @@ h1{position:absolute;left:24px;top:8px;font-size:16px;color:var(--text-2);font-w
   <div class="hint lab">Listening</div>
   <div class="ir">
     <div class="inp ph">Listening…</div>
-    <div class="send lab cx"><b>✕</b>Cancel</div>
+    <div class="send cx" aria-label="Cancel" data-send="cancel">✕</div>
     <div class="talk inv" data-talk><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Send</span><span class="bar"></span></div>
   </div>
   <div class="below"></div>
@@ -68,7 +69,7 @@ h1{position:absolute;left:24px;top:8px;font-size:16px;color:var(--text-2);font-w
   <div class="hint lab">Release to send · slide off to keep</div>
   <div class="ir">
     <div class="inp tt"><span class="firm">How did the</span> <span class="tail">night go</span></div>
-    <div class="send lab cx"><b>✕</b>Cancel</div>
+    <div class="send cx" aria-label="Cancel" data-send="cancel">✕</div>
     <div class="talk inv" data-talk><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Send</span><span class="bar"></span></div>
   </div>
   <div class="below"></div>
@@ -79,7 +80,7 @@ h1{position:absolute;left:24px;top:8px;font-size:16px;color:var(--text-2);font-w
   <div class="hint lab">Tap send when done</div>
   <div class="ir">
     <div class="inp tt"><span class="firm">on builder-a, restart</span> <span class="tail">the run</span></div>
-    <div class="send lab cx"><b>✕</b>Cancel</div>
+    <div class="send cx" aria-label="Cancel" data-send="cancel">✕</div>
     <div class="talk inv" data-talk><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Send</span><span class="bar"></span></div>
   </div>
   <div class="below"></div>
@@ -90,7 +91,7 @@ h1{position:absolute;left:24px;top:8px;font-size:16px;color:var(--text-2);font-w
   <div class="hint lab">Finishing…</div>
   <div class="ir">
     <div class="inp tt"><span class="tail" style="margin:0">How did the night go</span></div>
-    <div class="send lab cx"><b>✕</b>Cancel</div>
+    <div class="send cx" aria-label="Cancel" data-send="cancel">✕</div>
     <div class="talk inv" data-talk><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">…</span></div>
   </div>
   <div class="below"></div>

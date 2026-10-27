@@ -56,7 +56,7 @@ Listening starts on `pointerdown` in both gestures (D29, B1). The gesture is dec
 `data-talk` on the button carries the state. It is the "mic state attribute" `screens.md` S-SCR-20
 asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-talk.md` §8).
 
-| `data-talk` | When | Talk button | `SEND` slot | Input | Hint line (13 px caps `--text-2`) |
+| `data-talk` | When | Talk button | `SEND` slot | Input | Hint line (18 px caps `--text-1`, `c1-talk.md` §1.1, D167) |
 | --- | --- | --- | --- | --- | --- |
 | `idle` | microphone closed | `--bg-elevated`, 1 px `--accent` border, glyph and `TALK` in `--text-1` | `SEND` or `STOP` (`c1-talk.md` §7-§8) | the textarea, placeholder `Type or hold to talk` | none |
 | `listening` | microphone open, no word yet | **inverse**: fill `--text-1`, glyph and `SEND` in `--bg-canvas`, 1 px `--accent` border; the level bar (below) | `CANCEL` (`data-send="cancel"`) | `Listening…` in `--text-3` | `LISTENING`; after 400 ms held `RELEASE TO SEND · SLIDE OFF TO KEEP`; after a tap `TAP SEND WHEN DONE` |
@@ -76,8 +76,10 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   set once per animation frame with no transition. It is data (the microphone hears something), so
   it stays under reduced motion (`docs/design.md` rule 5). A bar at 0 px for 2 s while the room
   receives frames says "silence", not a fault.
-- **`CANCEL`** (D42): in the 64x64 `SEND` slot a 20 px `✕` over `CANCEL` in 13 px caps (16 px
-  `CANCEL` does not fit 64 px; sketch `c2-states.html`). It closes the microphone within 0.1 s, removes the spoken words, keeps a draft
+- **`CANCEL`** (D42, D167): in the 64x64 `SEND` slot a `✕` alone, 28 px `--text-1`, centred, with
+  `aria-label="Cancel"` and `data-send="cancel"`; no word (16 px `CANCEL` does not fit 64 px, and
+  13 px is under D21's floor; sketch `c2-states.html`). This spec still calls it `CANCEL`, by its
+  accessible name; tests find it as `[data-send="cancel"]`. It closes the microphone within 0.1 s, removes the spoken words, keeps a draft
   typed before the press, sends nothing, `data-talk="idle"`. Fixing one word by tapping the text is
   §7.
 - The **hint line** is the line slot above the input row (`c1-talk.md` §1.1, `data-line="hint"`):
@@ -133,10 +135,11 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   audio channel is open is held on the screen and sent first, so the first word is not cut off. The
   frame format and channel are `protocols.md` §6 (D96).
 - **Cannot open** → `data-talk="error"`, the input stays the textarea and typing works. The
-  message (exact) is `[data-talk-error]`, 16 px mono `--text-2`, line height 1.25, in the line slot
-  above the input row (`c1-talk.md` §1.1, `data-line="error"`): x 784-1264, its last line 8 px above
-  the row; it wraps (2 lines at 480 px for the longest line below, a 52 px slot) and takes its
-  height from the conversation. Not under the input row: on the Wall the row ends 24 px above the
+  message (exact) is `[data-talk-error]`, in the line slot's type (18 px `--font-label`, line
+  height 24 px, `--text-1`, D167) above the input row (`c1-talk.md` §1.1, `data-line="error"`):
+  x 784-1264, its last line box 4 px above the row; it wraps (the longest line below,
+  `NotAllowedError`'s, is 573 px on one line: 2 lines, a 56 px slot) and takes its height from
+  the conversation. Not under the input row: on the Wall the row ends 24 px above the
   screen's edge.
 
 | Cause (`getUserMedia` error) | Line |
@@ -167,7 +170,7 @@ Given the fake speech scripted: partials `what` at 0.6 s, `what failed` at 1.1 s
 tonight` at 1.6 s; final `What failed tonight?` 0.15 s after the end frame,
 When the owner taps the talk button (down t = 0, up t = 0.12 s),
 Then by t = 0.2 s `data-talk="listening"`, `data-talk-gesture="tap"` after the up, the button reads
-`SEND` on the inverse fill, the `SEND` slot reads `CANCEL`, the input shows `Listening…`, the hint
+`SEND` on the inverse fill, the `SEND` slot shows the `✕` (`data-send="cancel"`, accessible name `Cancel`), the input shows `Listening…`, the hint
 `TAP SEND WHEN DONE`; `what` is in `[data-talk-text]` by t = 1.0 s (B2), `what failed` by 1.5 s,
 `what failed tonight` by 2.0 s; nothing is sent while listening.
 When the owner taps again at t = 3.0 s (down 3.0 s, up 3.1 s),

@@ -637,9 +637,9 @@ lost.
   NOW` button (48 px tall, 16 px caps, 16 px from the pane's right edge) at its right end. The minutes and the retry count down each second; the
   retry shows `Retrying now…` while a try runs. The conversation so far stays readable. The input
   stays editable (a draft can be written); `SEND` and the talk button are disabled, with the line
-  `Sending and voice come back with the room.` above the input row, 16 px `--text-3`, in the
-  line slot (`c1-talk.md` §1.1, `data-line="room-down"`, the highest of its four): left-aligned at
-  x 784, its last line 8 px above the row's top border (on the Wall the row ends 24 px above the
+  `Sending and voice come back with the room.` above the input row, in the line slot's type
+  (18 px `--font-label`, `--text-1`, D167) (`c1-talk.md` §1.1, `data-line="room-down"`, the highest of its four): left-aligned at
+  x 784, its last line box 4 px above the row's top border (on the Wall the row ends 24 px above the
   screen's edge, nothing fits under it).
 - **Canvas:** the canvas half of room down (strip, `STALE` plates, frozen values, a job's countdown,
   removing offline, the empty canvas) is `c4-show-canvas.md` §7.6, built with the canvas (D120).
