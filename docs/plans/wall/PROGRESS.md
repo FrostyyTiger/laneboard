@@ -642,6 +642,22 @@ Notes for every builder round (planner, round 1):
   it is soon or late — done when: a test pins the scene countdown's size ≤ 0.65 of the member name's and its colour
   `--text-3` for a countdown two hours away, none drawn while the system is not held, and a still of `galaxy.html?at=cloud&open=1`
   shows the countdown smaller than the member name.
+- [ ] T57 (§7 Night 4, §2.1; r50-skeptic galaxy 1 and 2; amends T53 and T56) [ui] [variant:galaxy] One countdown, never the
+  loudest mover on a trouble plate: while a plate's hero is trouble (crit/warn/down) it carries no countdown row, unless the
+  countdown's own node is the hero (T53's row is for calm holds and sheets); while any plate carries a countdown row, the
+  scene does not draw that countdown's label (T56's label is for a system open without a plate: touch explore) (`hud.js
+  countdownCaption`, `countdown.js`, `labels.js`) — done when: a test with VM-C held crit and a DB dump due finds no
+  countdown row on the plate, a test with a calm held CLOUD finds the row on the plate and no scene label for the same
+  node, and a film of `galaxy.html?demo=1&quality=0&pace=wall` shows no ticking number beside a held crit.
+- [ ] T58 (§7 Night 4, §2.1; r50-skeptic galaxy 3) [ui] [variant:galaxy] Late says late: an overdue countdown reads
+  `LATE 13 MIN` in the scene and `13:10 LATE` on the plate (words, not a `+` that looks like a bullet), still no hue
+  (late is not trouble) (`countdown.js countdownText`, `caption.js`, tests that pin `+`) — done when: tests map an overdue
+  `at` to both strings at overview, site and held formats and no string for a future `at` contains `LATE`, and a still of
+  `galaxy.html?at=cloud&open=1` shows `LATE` for the object-store lifecycle.
+- [ ] T59 (§7 Night 4, §2.1; r50-skeptic show 1) [ui] [variant:galaxy] A pinned card outlives its fact: when the pinned
+  node's status drops below the level it had at pin time, the card goes `--text-3` with `WAS` before the title (or is
+  dropped when it has cleared for good) (`show.js`, `wall.css`) — done when: a test pins a card on a crit node, clears the
+  node on the model, and finds the card dimmed with `WAS`, and the card unchanged while the status stays.
 
 ## Research questions
 
@@ -915,6 +931,16 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 - (r40-dreamer 1f.1) `fx=activity` ring when held at most 2.5 planet radii, keeping the slow breath.
 - (r40-dreamer 1g.1) `fx=sweep`: a silent site's name dims one step until the next sweep reaches it with news.
 - (r40-dreamer 4) Warn and crit nebulae about equally loud at 3 m without the banner (T23); the tag is unreadable at 684 px, so `STALE` would not carry from 3 m (T41 may take it).
+- (r50-skeptic 5) Extends T30: a change to anything but the hero's subject or level (a mild count) updates in place and never moves the camera or restarts the hold; seen at 42 s of `r50-fx-sweep` (plate gone, camera wide).
+- (r50-skeptic 7) Calm plate: no plate, or one fact line, never an empty frame or the star's name alone (owner's question (b)).
+- (r50-skeptic 8) Trouble plates: drop the kicker's count, the `STATUS` row and CPU/MEM; secondary lines name + age, one step smaller, never cut (= r21 6).
+- (r50-skeptic 10) Hyperlanes: remove at the overview, or give them one job (dashed when the site's feed is silent).
+- (r50-skeptic 11, 13) `+N MORE` and fleet facts flicker without meaning; the date under the clock goes (= r21 8, 12).
+- (r50-skeptic 1b.1) The sheet repeats the site and crit: kicker `SITE` only, no `STATUS` row when the hero carries the level.
+- (r50-skeptic 1b.2) The director accepts a `show` move not sent by `show.js`: take them only from `show.js` so a moved camera always has its `SHOWN BY` line.
+- (r50-skeptic 1b.3) Explore from 3 m is only the tag's 10 px `MANUAL` line (= r45 touch 1).
+- (r50-skeptic 1c.2) One show row `SHOWN BY COCKPIT ✕` that clears the whole show; per-command undo dropped.
+- (r50-skeptic 1d.1, 1g.1, 1g.2, 1h.1) Beacon hairlines tell nothing the nebula does not; `fx=activity` is invisible at the overview (one step of brightness on a working site's knot or remove; rings at most 2.5 planet radii, none in a trouble system); `fx=sweep` needs the silent site's name dim with `SILENT 4M` or it goes.
 
 ## For the owner
 
@@ -1003,6 +1029,10 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
   findings; 3 became tasks (T54 camera leaves a crit under its plate, T55 banner corner never empty during an echo, T56 scene
   countdown quiet). Dropped as covered: galaxy 1 (T30), 4 (T19), 5 (T28), 6 (T50), 7 (T48), 8 (T23), 9 (T25, T27), warp 1
   (T21), afterglow 1 (T47); touch 2 (praise, no fix). Rest in Later; no fx proposals.
+- r50 skeptic → reviews/r50-skeptic.md. 13 galaxy + 4 touch + 3 show + 1 beacon + 1 warp + 1 afterglow + 2 activity + 1 sweep
+  findings; 3 became tasks (T57 one countdown, not on a trouble plate nor twice, T58 `LATE` in words, T59 pinned card
+  outlives its fact). Dropped as covered: galaxy 4 (T29), 6 (T55), 9 (T28), 12 (T27), show 3 (T51, T52), warp 1 (taste),
+  afterglow 1 (T47), touch 4 (no fix). Rest in Later; no fx proposals.
 
 ## Scores
 
@@ -1046,5 +1076,11 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 45 | operator (fx-afterglow) | - | - | - | - | 6 | 8 | - |
 | 45 | operator (fx-activity) | - | - | - | - | 4 | 6 | - |
 | 45 | operator (fx-sweep) | - | - | - | - | 5 | 8 | - |
+| 50 | skeptic (galaxy) | 7 | 7 | 5 | 7 | 6 | 5 | 6 |
+| 50 | skeptic (fx-beacon) | - | - | - | - | 3 | 5 | - |
+| 50 | skeptic (fx-warp) | - | - | - | - | 6 | 4 | - |
+| 50 | skeptic (fx-afterglow) | - | - | - | - | 5 | 8 | - |
+| 50 | skeptic (fx-activity) | - | - | - | - | 3 | 6 | - |
+| 50 | skeptic (fx-sweep) | - | - | - | - | 4 | 8 | - |
 
 ## Morning
