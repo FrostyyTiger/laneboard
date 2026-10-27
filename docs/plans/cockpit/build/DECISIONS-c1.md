@@ -676,3 +676,37 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   `colourVsToken()` in `e2e/cockpit/fixtures.mjs`); B115's split stands (S-C1-02 to T16, S-C1-12 to
   T22) — because S-C1-02's Given is the Wall's open pane and S-C1-12 reads `↓ NEW` and tool lines,
   none of which exist before builds 7 (Wall), 9 and 10 — spec: `slices.md` §3.1 — overrule: the task lines.
+- B121 (T16) S-C1-02's "the owner taps the map at (400, 480) … with the camera moved to the tap" runs
+  as two steps on the galaxy: the literal tap at (400, 480) (the pane stays open, `explore`), then a
+  tap on the site the tour held, drawn left of the pane (`map.screenOf`), after which the camera's
+  target is that site — because on the galaxy (400, 480) is empty sky at the overview and at a held
+  site: the overview's only site is under the open pane, and the tour's legs leave the Wall's own
+  `place` at the overview, so a tap there has no step back and moves nothing. The galaxy's tap rule
+  ("tap a site to fly there") is the only move "to the tap" — spec: `c1-talk.md` S-C1-02, D19 —
+  overrule: the second step of S-C1-02 in `e2e/cockpit/c1-wall.spec.mjs` (or a Wall change that
+  makes empty sky act).
+- B122 (T16) The Wall tests open `galaxy.html?ratio=0.5` (docs/wall.md's own switch) — because this
+  VM draws WebGL in software: at the test's device ratio 2 a galaxy frame costs 30-40 ms and the pane
+  was in place 215-238 ms after the tap; at 0.5 it is 155-200 ms (8 of 8 runs ≤ 200). B7's 200 ms is
+  asserted as written; only the galaxy's pixel count is lower — spec: `README.md` B7, `slices.md` §2
+  — overrule: drop `?ratio=0.5` in `openWall()` when the test machine has a GPU.
+- B123 (T16) The Wall half of the handle (`screens.md` §9.1 W1-W6) is built in `galaxy/main.js` and
+  `galaxy/touch.js`: W3 `pause()` is a show-like cut to the camera's current pose (a `STAY` in
+  reduced motion), so the director stops the tour's flight where it is; W5 is touch.js's minute with
+  `hold()`/`restart(ms)`/`holding()` (a restarted length lives on the touch state until the next
+  touch); W6's `by` is `call` for the handle, a show or an undo, `touch` for a finger and `▶ TOUR`,
+  `idle` for the minute — because §9.1 asks the Wall for exactly these and the Wall's one minute
+  already is touch.js's — spec: `screens.md` §2, §9.1 — overrule: `pauseTour`/`resumeTourNow` in
+  `galaxy/main.js`, `createTouch` in `touch.js`.
+- B124 (T16) The pane drives the Wall through `public/js/cockpit/wall-hold.js` `paneOnWall(view, open)`:
+  open → `tour.pause()` + `idle.hold()`, close → `idle.restart(60000)`; the Wall page loads the cockpit
+  from `public/js/cockpit/wall-page.js` after its own module, and the cockpit sets
+  `data-cockpit-layout="wall"` there — spec: `screens.md` §1, §2, c1-talk.md §2 — overrule: those two files.
+- B125 (T16) The Wall's fleet line ends at `right: max(6vw, 112px)` while the cockpit is configured
+  (x 1256 at 1368 wide, x 688 at 800) in `wall.css` — spec: `screens.md` §4 "Wall page, `wall`" —
+  overrule: the rule under `.wall-fleet` in `public/css/wall.css`.
+- B126 (T16) T16 is split: S-SCR-35 moves to T16b (its app steps need the Map's M1, M3, M5 in page px
+  and M6 on `#/map`, and the router swapping `map`; its Wall steps use B123's W1-W6), S-SCR-25 moves
+  to T24b after T24 (its state B needs `↓ NEW`, T22, and its state H the keyboard layout,
+  `data-keyboard`, T24) — because a test of either now would skip steps the night may not skip —
+  spec: `slices.md` §3.1 — overrule: PROGRESS.md's task lines.

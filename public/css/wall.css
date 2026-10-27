@@ -490,6 +490,9 @@ html.wall body {
   max-width: 50vw;
   text-align: right;
 }
+/* With the cockpit's corner cluster (cockpit spec screens.md §4): the fleet line ends 24 px
+   left of the talk button's place, at x 1256 on a 1368 px screen, never under `CHAT`. */
+:root[data-cockpit]:not([data-cockpit="unconfigured"]) .wall-fleet { right: max(var(--frame-x), 112px); }
 .wall-fleet-line {
   font-family: var(--font-label);
   font-weight: 600;

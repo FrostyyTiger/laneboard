@@ -1,7 +1,7 @@
 // C1, build 7: the cockpit button and the pane on the app (spec c1-talk.md §1-§2,
 // §5.1; screens.md §4, §7). C1 boots with `stt.url: none` (D265): no talk button,
 // SEND in its rect (screens.md §4.1).
-import { test, expect, VIEWS, rectOf, cockpitDecided, intersects, holdOutbound, seedLane, colourVsToken } from './fixtures.mjs';
+import { test, expect, VIEWS, WALL_PAGE, rectOf, cockpitDecided, intersects, holdOutbound, seedLane, colourVsToken } from './fixtures.mjs';
 
 // screens.md §4 / §4.1 at 1368x912
 const CHAT = { x1: 1288, x2: 1336, y1: 760, y2: 808 };
@@ -26,6 +26,19 @@ async function openApp(page, room, hash = '#/map') {
 test('S-SCR-09 The cockpit button on every app view, in the same place as on the Wall (pending Q-O11)', async ({ page, room }) => {
   await test.step('configured: one CHAT on every view, at its rect, clear of the bar, the header and the toasts', async () => {
     await room.start({ turns: 3 });
+    // The Wall page's rects first (S-SCR-01 reads them there; B119): the app's must equal them.
+    await page.goto(`${room.url}${WALL_PAGE}?ratio=0.5`);
+    await cockpitDecided(page);
+    await expect(page.locator('[data-cockpit-open]')).toHaveText('CHAT');
+    const wallChat = await rectOf(page, '[data-cockpit-open]');
+    expect(wallChat, 'the Wall page: CHAT at screens.md §4\'s rect').toEqual(CHAT);
+    await expect(page.locator('[data-talk]'), 'the Wall page: no talk button with stt none').toHaveCount(0);
+    await page.locator('[data-cockpit-open]').tap();
+    await expect(page.locator('[data-cockpit-open]')).toHaveText('CLOSE');
+    await expect.poll(() => rectOf(page, '[data-cockpit-conversation]'), 'the Wall page: the pane in place')
+      .toEqual({ x1: 760, x2: 1368, y1: 0, y2: 912 });
+    const wallClose = await rectOf(page, '[data-cockpit-open]');
+    const wallSend = await rectOf(page, '[data-cockpit-send]');
     await openApp(page, room);
     await expect(page.locator(':root')).toHaveAttribute('data-cockpit', /connecting|live/);
     await page.evaluate(() => import('/js/ui/toast.js').then((m) => { m.toast('A toast to keep in sight', { timeout: 0 }); }));
@@ -39,6 +52,7 @@ test('S-SCR-09 The cockpit button on every app view, in the same place as on the
       // The rects of screens.md §4, the Wall page's (D116), to the pixel.
       const chat = await rectOf(page, '[data-cockpit-open]');
       expect(chat, `${view}: CHAT rect`).toEqual(CHAT);
+      expect(chat, `${view}: CHAT where the Wall page has it, to the pixel`).toEqual(wallChat);
       const bar = await rectOf(page, 'footer.shell-bar');
       expect(bar.y1, `${view}: the bar at y 888`).toBe(888);
       expect(intersects(chat, bar), `${view}: CHAT clear of the bar`).toBe(false);
@@ -53,7 +67,9 @@ test('S-SCR-09 The cockpit button on every app view, in the same place as on the
       await expect(page.locator(':root')).toHaveAttribute('data-pane', 'open');
       await expect(page.locator('[data-cockpit-open]')).toHaveText('CLOSE');
       expect(await rectOf(page, '[data-cockpit-open]'), `${view}: CLOSE in CHAT's rect`).toEqual(CHAT);
+      expect(await rectOf(page, '[data-cockpit-open]'), `${view}: CLOSE where the Wall page has it`).toEqual(wallClose);
       await expect.poll(() => rectOf(page, '[data-cockpit-conversation]'), `${view}: the pane over the view`).toEqual(APP_PANE);
+      expect(await rectOf(page, '[data-cockpit-send]'), `${view}: SEND where the Wall page has it`).toEqual(wallSend);
       await expectNoneLayout(page, view);
       expect(await page.evaluate(() => location.hash), `${view}: the hash is unchanged`).toBe(hash);
       await page.locator('[data-cockpit-open]').tap();

@@ -3,7 +3,7 @@
 // the room link; without one, `data-cockpit="unconfigured"` and nothing else
 // changes (the board works as today).
 //
-//   initCockpit({ page: 'app', configured })   // configured(cb): cb(true|false) once
+//   initCockpit({ page: 'app' | 'wall', configured })   // configured(cb): cb(true|false) once
 //
 // On the app, `configured` is `boardSaysCockpit`: the board's /ws hello as the
 // store keeps it, once docs/plans/cockpit/build/patches/T15-store-hello-cockpit.diff
@@ -13,6 +13,7 @@ import { store, subscribe } from '../core/store.js';
 import { COCKPIT_PREFIX } from '../core/cockpit-constants.js';
 import { createRoomLink } from './link.js';
 import { createPane } from './pane.js';
+import { paneOnWall } from './wall-hold.js';
 
 /** cb(true|false) once: the board's word on whether it has a cockpit (D93). */
 export function boardSaysCockpit(cb) {
@@ -51,8 +52,15 @@ export function initCockpit({ page = 'app', configured = boardSaysCockpit } = {}
       document.documentElement.dataset.cockpit = 'unconfigured';
       return;
     }
+    // The Wall page has one layout until the Canvas slice (screens.md §1, Q-O22 b).
+    if (page === 'wall') document.documentElement.dataset.cockpitLayout = 'wall';
     let link = null;
-    const pane = createPane({ page, onRetryNow: () => link?.retryNow() });
+    const pane = createPane({
+      page,
+      onRetryNow: () => link?.retryNow(),
+      // The pane holds the Wall's tour and idle timer while open (screens.md §2).
+      onOpenChange: (open) => paneOnWall(globalThis.__cockpitView, open),
+    });
     link = createRoomLink({
       url: roomLinkUrl(),
       page,
