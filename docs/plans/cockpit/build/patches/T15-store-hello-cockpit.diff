@@ -1,0 +1,53 @@
+diff --git a/public/js/core/store.js b/public/js/core/store.js
+index b1f7628..c7b551e 100644
+--- a/public/js/core/store.js
++++ b/public/js/core/store.js
+@@ -95,7 +95,7 @@ export function createStore({ keyMode = 'fkey', pinned = new Set() } = {}) {
+     /** Set when the box payload changed, so lane heads and the Box re-render. */
+     boxDirty: true,
+     keyMode,
+-    source: { kind: 'local', status: 'connecting', id: null, code: null, hello: null },
++    source: { kind: 'local', status: 'connecting', id: null, code: null, hello: null, cockpit: null },
+     listeners: new Set(),
+   };
+ }
+@@ -434,6 +434,9 @@ function applyHello(s, msg) {
+   b.code = s.source.code;
+   b.mode = typeof msg.mode === 'string' ? msg.mode : null;
+   b.version = typeof msg.version === 'string' ? msg.version : null;
++  // The board says whether it has a cockpit (cockpit protocols.md §1, D93):
++  // only `true` draws the cockpit button; anything else is no cockpit (D17).
++  s.source.cockpit = msg.cockpit === true;
+   derive(s);
+   return { type: 'hello', builder: id };
+ }
+@@ -470,6 +473,7 @@ export function ingest(s, msg, now = Date.now()) {
+   if (msg.type === 'hello') out = applyHello(s, msg);
+   else if (msg.type === 'fleet') {
+     s.hub = msg.hub && typeof msg.hub === 'object' ? msg.hub : null;
++    s.source.cockpit = msg.cockpit === true; // the hub's `fleet` frame (D93, D129)
+     s.aggregates = msg.aggregates ?? null;
+     out = applyBuilders(s, msg.builders);
+   } else if (msg.type === 'map') {
+diff --git a/test/store.test.mjs b/test/store.test.mjs
+index 90951be..eca74a0 100644
+--- a/test/store.test.mjs
++++ b/test/store.test.mjs
+@@ -460,3 +460,17 @@ test('SR8 L4: an auto source passes builder-less legacy frames straight through'
+   assert.equal(src.pending.length, 1);
+   src.close();
+ });
++
++test('cockpit D93: hello.cockpit and the fleet frame\'s cockpit are kept as a boolean, only true is true', () => {
++  const s = createStore();
++  assert.equal(s.source.cockpit, null, 'unknown before the first frame');
++  ingest(s, { type: 'hello', builder: { id: 'b1', code: 'B1' }, cockpit: true });
++  assert.equal(s.source.cockpit, true);
++  ingest(s, { type: 'hello', builder: { id: 'b1', code: 'B1' }, cockpit: 'yes' });
++  assert.equal(s.source.cockpit, false);
++  const h = hubStore();
++  ingest(h, { type: 'fleet', builders: [], cockpit: true });
++  assert.equal(h.source.cockpit, true);
++  ingest(h, { type: 'fleet', builders: [] });
++  assert.equal(h.source.cockpit, false);
++});

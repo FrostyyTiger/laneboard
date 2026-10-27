@@ -616,3 +616,63 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   §1.2) sends no ping and answers none (`autoPong: false`, the pong goes through the outbound hook as
   `{type:'pong'}`); 4402 `revoked` waits for pairing — because "the room sends nothing on them, no
   pings answered" — spec: `stand-ins.md` §1.2, `protocols.md` §2.3 — overrule: `createLink()`.
+- B107 (T15) The page learns `cockpit` from a `cockpit` field in `GET /api/v1/hello` (builder only,
+  `server/routes/cockpit-hello.mjs`, the same `cockpitConfigured()` as the `/ws` hello) until the owner
+  applies `patches/T15-store-hello-cockpit.diff`, which makes the fenced store keep `hello.cockpit`
+  and the hub's `fleet` frame's `cockpit` as `store.source.cockpit`; `boardSaysCockpit()` in
+  `public/js/cockpit/main.js` reads the store first and the v1 field as the fallback — because
+  `store.js` and `net.js` are fenced and drop the field, and without it no button is ever drawn;
+  the field tells nothing a page could not learn by opening `/api/cockpit/ws` — spec: `protocols.md`
+  §1, D93 — overrule: apply the patch and delete the route module and the fetch.
+- B108 (T15) The harness pins `@playwright/test` 1.56.1 (its Chromium is revision 1194, the one in
+  `~/.cache/ms-playwright`), `trace: 'retain-on-first-failure'`, the `list` reporter, a 60 s test
+  timeout, `test-results/` at the repo root — because slices §2 names the rest and these are the
+  smallest choices that keep the run offline — spec: `slices.md` §2 — overrule: `e2e/playwright.config.mjs`.
+- B109 (T15) `public/js/core/cockpit-constants.js` holds every D150/D287 name (and `HINT_MS`, the
+  §1.2 widths, `PROTOCOL`, the 30 s retries, `MAX_PROMPT_CHARS`); the room's own modules keep their
+  constants (`link.mjs` `HEARTBEAT_MS`, …) until a task touches them — because rewiring the room's
+  imports is outside a page task and the values agree — spec: D150, D287 — overrule: import the
+  names in `server/cockpit/*`.
+- B110 (T15) A reply's label row `AGENT · HH:MM` takes the turn's first item's `startedAt`, else its
+  `end.at`, else its `at` — because the snapshot's text items carry no time — spec: `c1-talk.md` §3,
+  §5.1 — overrule: `replyAt()` in `public/js/cockpit/turns.js`.
+- B111 (T15) `NEW` is drawn in its rect and disabled until T29 builds it; `SEND` is enabled only
+  while `live` with a non-blank input and sends nothing until T18 — because a live button that does
+  nothing reads as broken — spec: `c1-talk.md` §1, §5.1, §7 — overrule: T18/T29 wire them.
+- B112 (T15) The `room` fixture boots one room per test (`room.start()`), not per file — because
+  S-C1-26 needs a second room and a fresh room keeps one test's turns out of the next — spec:
+  `slices.md` §2 — overrule: a worker-scoped fixture in `e2e/cockpit/fixtures.mjs`.
+- B113 (T15) S-C1-26's "welcome held back 2 s" is done at the page's end of the link
+  (`holdOutbound()` with Playwright's `routeWebSocket`: the welcome and every frame after it wait
+  2 s, in order) — because the control API has no delay verb and the outbound hook can only drop —
+  spec: `stand-ins.md` §1.1, §1.2 — overrule: a `POST /hold` verb on the room under test.
+- B114 (T15) The fixtures' room has `fleet.id` `builder-a` and the demo topology (`writeDemoMap`) on
+  its Map; S-C1-03's "a node selected and the inspector open" hands the page's store one lane
+  snapshot (`seedLane()`) — because the room under test reads an empty HOME, has no lane, and the
+  inspector opens only on a lane (a Map room node selects without one) — spec: `c1-talk.md` S-C1-03
+  — overrule: a builder with a real lane behind the room (the demo fleet's `--cockpit`, T43).
+- B115 (T15) T15 is split: S-C1-02 moves to T16 (its Given is S-C1-01's open pane on the Wall and a
+  tap on the wall), S-C1-12 to T22 (it reads `[data-cockpit-follow]` and tool lines, which come with
+  builds 9-10, where slices §3.1 puts reduced motion); the pane's slide already uses `--dur`, 0 ms
+  with reduced motion — because a test of either now would have to skip steps the night may not
+  skip — spec: `slices.md` §3.1 builds 7, 10 — overrule: PROGRESS.md's task lines.
+- B116 (T15) The time module `public/js/core/cockpit-time.js` and its 13-row test
+  (`test/cockpit-time.test.mjs`) are built now, the room-down line needs them; T32 keeps its three
+  scenarios — spec: `README.md` "Times on the screen" — overrule: none needed.
+- B117 (T15) "24 px in" counts from the pane's outer edge: 23 px padding after the 1 px left
+  border (`--ck-in`), so the input starts at x 784 and the text column is 560 px — spec:
+  `c1-talk.md` §1 — overrule: `--ck-in` in `public/css/cockpit.css`.
+- B118 (T15) A fresh page whose room is down before any snapshot shows screens.md §7's reload line
+  `The conversation shows again when the room is back.` where `Connecting…` was — because D118 says
+  that line goes and the pane is never blank — spec: `c1-talk.md` §5.1, `screens.md` §7 — overrule:
+  `drawNote()` in `pane.js`.
+- B119 (T15) S-SCR-09 compares each view's rects with the Wall's rects as `screens.md` §4 writes
+  them (the Wall page draws no cockpit before T16); T16 adds the live Wall page to S-SCR-09 — spec:
+  `screens.md` S-SCR-09, D116 — overrule: T16.
+- B120 (T15, round 20) Round 17's T15 (commit 57dede7, reverted by the package guard) is taken back
+  whole, with the lockfile's `packages[""].license` line removed (review 18-owner finding 1;
+  `pkg_guard` run locally on the HEAD and new files: exit 0); S-C1-26 now also asserts the header's
+  `READY` in `--text-3` while `connecting` and `room-down` and in `--text-2` once `live` (finding 4,
+  `colourVsToken()` in `e2e/cockpit/fixtures.mjs`); B115's split stands (S-C1-02 to T16, S-C1-12 to
+  T22) — because S-C1-02's Given is the Wall's open pane and S-C1-12 reads `↓ NEW` and tool lines,
+  none of which exist before builds 7 (Wall), 9 and 10 — spec: `slices.md` §3.1 — overrule: the task lines.

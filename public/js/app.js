@@ -20,6 +20,7 @@ import { init as initMap } from './views/map.js';
 import { views } from './views/index.js';
 import { init as initArchive } from './views/archive.js';
 import { init as initPeek } from './views/peek.js';
+import { initCockpit } from './cockpit/main.js';
 
 export function boot() {
   initNet(); // app.js:208 (resize: scheduleVisible + fitAll)
@@ -66,6 +67,7 @@ export function boot() {
 
   initPush(); // app.js:1953-2025 (push / PWA)
   initNotifyPrefs(); // fleet D14: hub-only notification prefs sheet, entry in #push-box
+  initCockpit({ page: 'app' }); // cockpit C1: the button and the pane once the board says it has a cockpit (D93)
 }
 
 boot();
