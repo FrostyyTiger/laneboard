@@ -817,8 +817,12 @@ The page root carries `data-cockpit`: `unconfigured`, `unpaired`, `connecting`, 
 
 ### 7.1 The room link's retries (D11)
 
-The room link reconnects exactly as `createSource` in `public/js/core/net.js` does today, with its
-`nextBackoff` and constants (`BACKOFF_START_MS` 500, `BACKOFF_FACTOR` 1.8, `BACKOFF_MAX_MS` 15000):
+The room link has **its own loop**, not `createSource`: it needs the 5 s grace, the 25 s silence
+check, close codes that stop retrying (`protocols.md` §2.3), `RETRY NOW` and the marks below, and
+`createSource` has none of them. The loop imports `nextBackoff`, `BACKOFF_START_MS`,
+`BACKOFF_FACTOR` and `BACKOFF_MAX_MS` from `public/js/core/net.js` and copies no number, so both
+links keep one rule (D263). It reconnects exactly as `createSource` does today
+(`BACKOFF_START_MS` 500, `BACKOFF_FACTOR` 1.8, `BACKOFF_MAX_MS` 15000; `net.js` lines 62, 117):
 the delay starts at 500 ms; at each loss or failed try it becomes `nextBackoff(delay)` and the next
 try is scheduled that long after; a link that opens resets it to 500 ms. So the **first** try comes
 0.9 s after the loss, not 0.5 s:
@@ -1007,13 +1011,25 @@ log shows no new user turn). (The canvas catching up is S-C4-23.)
 When the owner taps `RETRY NOW` during a later outage, 3 s after its 3rd try (at t = 8.436 s), a
 try starts at once (a `cockpit:retry` mark with `attempt` 4 and `delayMs` 0); it fails, and the
 next try comes 9447.84 ms later (`attempt` 5).
-Test: Playwright with `page.clock` (it fakes `Date`, timers and `performance.now` in the page) and
-the stand-in's log of received turns; assert texts and the log. The retry times are asserted on
-the page side only: read `performance.getEntriesByName('cockpit:retry')`, assert the `attempt`
-values 1..8 and each `detail.delayMs` exactly against §7.1's table, and each mark's `startTime`
-minus the loss's `cockpit:close` mark against the table's time ± 50 ms. The stand-in's connection
-log (`stand-ins.md` §1.2) runs on the real clock, so it is only checked for the first outage's 8
-attempts, the last one `accepted: true`.
+Test: two Playwright tests (D263).
+- **The series, on the real clock** (no `page.clock`; about 85 s, tagged `@slow`). The room's link
+  is stopped with `POST /link {"up":false}` and started at t = 60 s with `{"up":true}`, real
+  seconds. `GET /connections` (`stand-ins.md` §1.2) gives the upgrade attempts after the stop; for
+  each pair of attempts k and k + 1 (k = 1..7) assert `atMs[k+1] − atMs[k]` equals §7.1's delay
+  before try k + 1 (1620, 2916, 5248.8, 9447.84, 15000, 15000, 15000 ms) ± 100 ms, and
+  `atMs[1]` minus the stop's own `atMs` (the time the test took just before `POST /link`, from the
+  same machine's `Date.now()`) equals 900 ms ± 100 ms. The time a failed try takes (a few ms) and
+  timer delay fit in the 100 ms; times after the loss are not asserted, because they add up those
+  ms. Attempts 1-7 have `accepted: false`, the 8th `accepted: true`. On the page side,
+  `performance.getEntriesByName('cockpit:retry')` has `attempt` 1..8 and each `detail.delayMs`
+  exactly §7.1's value (the page computes them; no tolerance). The `RETRY NOW` case runs in the
+  same test after a second stop: the test taps 3.0 s after the 3rd attempt's `atMs`; assert a 4th
+  attempt arrives within 300 ms of the tap with a mark `{attempt:4, delayMs:0}`, and the 5th attempt
+  `atMs[5] − atMs[4]` = 9447.84 ms ± 100 ms with `delayMs` 9447.84.
+- **What the screen shows, on `page.clock`** (it fakes `Date`, timers and `performance.now` in the
+  page). From S-SCR-17's 06:41, `fastForward` past each retry; assert the texts, `Back since 06:42.`
+  for 5 s, the missed turn in order, `SEND` and the talk button enabled, the draft in the input and
+  the stand-in's log of received turns with no new user turn. This test asserts no retry time.
 
 ### S-SCR-20 The room goes away mid-reply and mid-speech
 Given a live screen, the fake agent streaming a reply, half shown,
