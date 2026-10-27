@@ -607,6 +607,8 @@ html.wall body {
 .galaxy-label[data-tone="crit"] { color: var(--crit); }
 .galaxy-label[data-tone="warn"] { color: var(--warn); }
 .galaxy-label[data-tone="low"] { color: var(--p3); }
+/* In a flight every name but the destination's steps back (T15): after the tones, so it wins over them. */
+.galaxy-label[data-dim] { color: var(--text-3); }
 
 /* The tether (js/wall/galaxy/tether.js, T20): at the overview a hairline in
    the status hue from the far fleet line to the cluster it names, over the

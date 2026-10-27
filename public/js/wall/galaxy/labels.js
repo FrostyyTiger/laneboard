@@ -20,6 +20,10 @@
 // thing the target lock holds, while in trouble, is named like a site, caps
 // at the site step, so its own name reads from three metres.
 //
+// In a flight to a site (night 3 T15, r4-film-ui galaxy 1) every name but
+// the destination's (its site and what it holds) dims to `--text-3`
+// (`data-dim`): the star the camera passes is not the one it is going to.
+//
 // `placeLabels`, `candidates`, `dotNamed`, `labelRank`, `labelText` and
 // `labelSize` are pure (test/wall-galaxy-labels.test.mjs); `createLabels`
 // is the small part that moves the spans.
@@ -175,13 +179,15 @@ export function placeLabels(items, { W = Infinity, H = Infinity, covers = [], wa
  * `{ site, room }` (css px); `covers()` the boxes the words over the canvas
  * take (hud.js); `held()` the thing the target lock holds, `{ id, r }` (css
  * px to its shut brackets, galaxy/lock.js), whose name goes outside the
- * brackets and which the other names keep clear of. Call `draw()` after the
- * scene renders (camera.js `onDraw`).
+ * brackets and which the other names keep clear of; `flight()` the flight
+ * under way, `{ k, to }` or null (camera.js), whose passing names dim. Call
+ * `draw()` after the scene renders (camera.js `onDraw`).
  */
-export function createLabels(root, galaxy, { steps, covers = () => [], held = null, doc = globalThis.document } = {}) {
+export function createLabels(root, galaxy, { steps, covers = () => [], held = null, flight = null, doc = globalThis.document } = {}) {
   root.style.setProperty('--gl-site', `${steps.site}px`);
   root.style.setProperty('--gl-room', `${steps.room}px`);
   const heldNow = typeof held === 'function' ? held : () => null;
+  const flightNow = typeof flight === 'function' ? flight : () => null;
   const pool = new Map(); // id → { el, text, tone, size, x, y, alpha }
   let last = new Map();
   const v = new THREE.Vector3();
@@ -198,19 +204,23 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
     return ids;
   };
 
-  const spanFor = (id, text, tone, face) => {
+  const spanFor = (id, text, tone, face, dim) => {
     let p = pool.get(id);
     if (!p) {
       const el = doc.createElement('span');
       el.className = 'galaxy-label';
       el.style.opacity = '0';
       root.append(el);
-      p = { el, text: null, tone: null, face: null, key: '', alpha: 0 };
+      p = { el, text: null, tone: null, face: null, dim: false, key: '', alpha: 0 };
       pool.set(id, p);
     }
     if (p.text !== text) { p.el.textContent = text; p.text = text; }
     if (p.tone !== tone) { p.el.dataset.tone = tone; p.tone = tone; }
     if (p.face !== face) { p.el.dataset.face = face; p.face = face; }
+    if (p.dim !== dim) {
+      if (dim) p.el.dataset.dim = ''; else delete p.el.dataset.dim;
+      p.dim = dim;
+    }
     return p;
   };
 
@@ -234,9 +244,12 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
     const items = [];
     const meta = new Map();
     const lock = heldNow();
+    // The site a flight goes to: every other name dims until it lands (a flight out to the overview dims none).
+    const to = flightNow()?.to;
+    const dimOf = (site) => typeof to === 'string' && site !== to;
     const bodies = [];
     const body = (id, sp, r) => { if (r >= 2) bodies.push({ x: sp.x - r, y: sp.y - r, w: 2 * r, h: 2 * r, owner: id }); };
-    const add = (id, node, pos, radius, alpha, kind = node?.kind, toneIn = null) => {
+    const add = (id, node, pos, radius, alpha, kind = node?.kind, toneIn = null, site = null) => {
       const tone = toneIn ?? toneOf(node);
       const sp = project(pos, W, H);
       if (!sp || sp.x < -W || sp.x > 2 * W || sp.y < -H || sp.y > 2 * H) return;
@@ -248,7 +261,7 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
       const r = isHeld ? Math.max(radius * sp.unit, lock.r) : radius * sp.unit;
       body(id, sp, r);
       items.push({ id, rank, near: r, prefer: last.get(id)?.at, cands: candidates(sp.x, sp.y, r, bw, bh, rank === RANK.trouble) });
-      meta.set(id, { text, tone, face, alpha });
+      meta.set(id, { text, tone, face, alpha, dim: dimOf(site) });
     };
 
     if (w.core) add(w.core.id, w.core, { x: 0, y: 0, z: 0 }, w.sunRadius ?? 60, 1, 'core');
@@ -261,19 +274,19 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
       // Folded, the site's name carries the worst of what it holds (its
       // nebula's tone); open, each thing in trouble names itself.
       const folded = fade <= 0;
-      add(s.id, s.node, s.home, s.starRadius ?? 24, 1, 'site', folded ? worseTone(toneOf(s.node), toneOf(s.status)) : toneOf(s.node));
+      add(s.id, s.node, s.home, s.starRadius ?? 24, 1, 'site', folded ? worseTone(toneOf(s.node), toneOf(s.status)) : toneOf(s.node), s.id);
       if (folded) continue;
       for (const m of s.members) {
         const t = m.tone ?? toneOf(m.node);
         const trouble = troubled(t);
         if (m.planet) {
-          add(m.id, m.node, m.mesh.position, m.radius ?? 15, trouble ? 1 : fade);
+          add(m.id, m.node, m.mesh.position, m.radius ?? 15, trouble ? 1 : fade, m.node?.kind, null, s.id);
           continue;
         }
         const sp = project(m.mesh.position, W, H);
         if (!sp) continue;
         if (!dotNamed(t, 2 * (m.radius ?? 4) * sp.unit)) { body(m.id, sp, (m.radius ?? 4) * sp.unit); continue; }
-        add(m.id, m.node, m.mesh.position, m.radius ?? 4, trouble ? 1 : fade);
+        add(m.id, m.node, m.mesh.position, m.radius ?? 4, trouble ? 1 : fade, m.node?.kind, null, s.id);
       }
     }
 
@@ -281,7 +294,7 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
     const shown = placeLabels(items, { W, H, covers: covers(), was, bodies });
     for (const [id, { box }] of shown) {
       const m = meta.get(id);
-      const p = spanFor(id, m.text, m.tone, m.face);
+      const p = spanFor(id, m.text, m.tone, m.face, m.dim);
       const key = `${box.x.toFixed(1)},${box.y.toFixed(1)}`;
       if (key !== p.key) { p.el.style.transform = `translate3d(${key.replace(',', 'px, ')}px, 0)`; p.key = key; }
       const a = Math.round(m.alpha * 20) / 20;
@@ -301,10 +314,10 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
 
   return {
     draw,
-    /** The names on screen now: `[{ id, text, tone, face, box }]`, for tests, stills and the console. */
+    /** The names on screen now: `[{ id, text, tone, face, dim, box }]`, for tests, stills and the console. */
     shown: () => [...last].map(([id, { box }]) => {
       const p = pool.get(id);
-      return { id, text: p?.text, tone: p?.tone, face: p?.face, box: { ...box } };
+      return { id, text: p?.text, tone: p?.tone, face: p?.face, dim: Boolean(p?.dim), box: { ...box } };
     }),
     destroy: () => { for (const p of pool.values()) p.el.remove(); pool.clear(); },
   };

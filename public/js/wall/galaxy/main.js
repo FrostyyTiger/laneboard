@@ -51,7 +51,7 @@
 
 import { createPerf } from '../perf.js';
 import { TIMING, createTour, timingFor, tourOrder } from '../tour.js';
-import { createCaption, captionTimingFor, coverOf, STILL_CAPTION_TIMING } from '../caption.js';
+import { arrivedTimingFor, createCaption, coverOf, STILL_CAPTION_TIMING } from '../caption.js';
 import { createFrame } from '../frame.js';
 import { LOCK_TIMING, STILL_LOCK_TIMING } from '../lock.js';
 import { pxPerMm, screenOf, stepsFor } from '../type.js';
@@ -208,7 +208,7 @@ export function boot() {
   // A parked still gets its caption at once, nothing typing.
   const still = Boolean(park) || reduced;
   const caption = createCaption(document.getElementById('wall-caption'), {
-    timing: still ? STILL_CAPTION_TIMING : captionTimingFor(fast),
+    timing: still ? STILL_CAPTION_TIMING : arrivedTimingFor(fast),
   });
   const frame = createFrame(document.getElementById('wall-frame'));
   // The lock closes on the node the caption's trouble word names (the system
@@ -233,6 +233,7 @@ export function boot() {
       return b ? [...c, b] : c;
     },
     held: lock.held,
+    flight: cam.flight,
   });
   cam.onDraw(labels.draw);
 

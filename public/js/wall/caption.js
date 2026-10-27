@@ -317,14 +317,32 @@ export const STILL_CAPTION_TIMING = Object.freeze({
 export const captionTimingFor = (demo) => (demo ? DEMO_CAPTION_TIMING : CAPTION_TIMING);
 
 /**
+ * How far into a leg's flight (0..1 of `arriveMs`) the plate may start, at
+ * the earliest (night 3 T15, r4-film-ui galaxy 1): a plate that types while
+ * the camera still passes other sites names a target nobody can find. The
+ * galaxy sets it as the timing's `fromK`; `leadMs` still pulls the plate
+ * forward, never before this.
+ */
+export const CAPTION_FROM_K = 0.9;
+
+/**
+ * The galaxy's caption timing (T15): the plate held until `CAPTION_FROM_K`
+ * of the flight. In the demo (a 1.75 s hold) the name types with the plate's
+ * fade and a little faster, so a full plate is still still for half a second.
+ */
+export const ARRIVED_CAPTION_TIMING = Object.freeze({ ...CAPTION_TIMING, fromK: CAPTION_FROM_K });
+export const ARRIVED_DEMO_CAPTION_TIMING = Object.freeze({ ...DEMO_CAPTION_TIMING, fromK: CAPTION_FROM_K, inMs: 160, letterMs: 25 });
+export const arrivedTimingFor = (demo) => (demo ? ARRIVED_DEMO_CAPTION_TIMING : ARRIVED_CAPTION_TIMING);
+
+/**
  * When each beat happens, in ms from the leg's start: the plate fades in at
- * `startMs`, the name types from `nameAt` to `nameDoneAt`, line i starts
+ * `startMs` (never before `timing.fromK` of `arriveMs`), the name types from `nameAt` to `nameDoneAt`, line i starts
  * fading at `lineAt[i]`, and everything stands still from `doneAt`; the
  * cursor goes at `cursorOffAt`.
  */
 export function captionSchedule(leg, name, lineCount, timing = CAPTION_TIMING) {
   const arrive = Number.isFinite(leg?.arriveMs) ? leg.arriveMs : 0;
-  const startMs = Math.max(0, arrive - timing.leadMs);
+  const startMs = Math.max(0, arrive - timing.leadMs, arrive * (timing.fromK ?? 0));
   const nameAt = startMs + timing.inMs;
   const nameDoneAt = nameAt + String(name ?? '').length * timing.letterMs;
   const lineAt = Array.from({ length: lineCount }, (_, i) => nameDoneAt + i * timing.lineGapMs);
