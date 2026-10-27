@@ -8,13 +8,17 @@ the owner answers, the answer goes on the `Answer:` line and the marked text is 
 
 Numbers and option letters are never reused or renumbered (the spec cites them), so a list may skip
 a letter. Q-O1 to Q-O9 come from `../spec-input.md` §7; the rest came from writing and reviewing
-the spec. The final round (71) cut each question to its options and one line of recommendation;
-the longer reasoning is in git history (commit `cc2474c` and before) and in the reviews named.
+the spec. The final rounds (71, 171) cut each question to its options and one line of recommendation
+and put them in order; the longer reasoning is in git history (commit `cc2474c` and before) and in
+the reviews named. Round 171 checked that every `(pending Q-O<n>)` marker in `spec/` names an open
+question below (none names a closed one).
 
 ## For the morning, worst first
 
-The first fourteen (thirteen plus Q-O30), about 15 minutes: a letter per question is enough. Ordered by what the C1 build
-night needs first, then C2. The first five change what C1 builds; the rest change a slice or a size.
+Fourteen, about 15 minutes: a letter per question is enough. Ordered by what the C1 build night
+needs first (Q-O11 to Q-O18), then C2 (Q-O19), the screen sizes every slice uses (Q-O9), and last
+Q-O30, the owner's own example (`spec-input.md` §3) that the Jobs slice waits on. The first five
+change what C1 builds; the rest change a slice or a size.
 
 ## Q-O11 How talking starts
 
@@ -44,17 +48,12 @@ S-C1-16, S-C1-23, S-C1-27, S-C1-28, S-C1-29, S-C2-09, D32/D33, D121-D124 (writte
 - d) Steer: the new words go into the running turn at its next tool boundary (Claude Code's
   default, research Q8); `STOP` is the separate way to end it; an agent that cannot steer queues.
 
-Recommendation: d) — it is what the owner's terminal does, and nothing already said is thrown away.
-With d), "stop, do this instead" is `STOP` then the new words; a send while a long tool call runs
-waits for that call (minutes, research Q8), shown as `· QUEUED`. Choosing a) instead: D32's overrule
-and the old §8 (git history before T85) come back.
+Recommendation: d) — it is what the owner's terminal does, and nothing already said is thrown away
+("stop, do this instead" is `STOP`, then the new words; a send during a long tool call shows `· QUEUED`).
 
-Sub-question (review 81-touch.md): where does `STOP` live under d)? s1) in the `SEND` slot (x 1200-1264,
-y 824-888) as D32 has it, inert for 1.0 s after any send or cancel from the slot, acting on
-`pointerup` only, with a `■` glyph; s2) a header `STOP`, away from the hand (D32's overrule).
-Recommendation: s1 with the guard, because "stop, do this instead" with a draft in the input is rare
-and the slot is where a terminal user's Ctrl+C habit goes; s2 removes the double-tap risk entirely
-if the owner mistrusts the guard. Written for s1 (T121): `c1-talk.md` §8, D268, S-C1-16, S-C2-09.
+And where `STOP` lives under d) (review 81-touch.md): s1) in the `SEND` slot, inert for 1.0 s after
+a send, acting on release only, glyph `■` (written so, T121, D268); s2) a header `STOP`, away from
+the hand. Recommendation: s1 — the slot is where the Ctrl+C habit goes; s2 if the guard feels risky.
 
 Answer: (open)
 
@@ -77,26 +76,6 @@ Recommendation: a) — "look freely, change only with a yes" (`spec-input.md` §
 Note (T72): under any answer the list is enforced only by a Claude Code flag (`--allowedTools`).
 Another agent (`kind: bridge`) is held to it by its own word plus a tripwire, and the agent's own
 user is the only fence that holds whatever the program does (`protocols.md` §11.11, D240, D241).
-
-Answer: (open)
-
-## Q-O30 May a scheduled job touch another machine, before C6
-
-From `reviews/73-owner.md` (3). Spec: `slices.md` §3.7 (slice Jobs), D115. `spec-input.md` §3's
-example is shutting something off in three hours.
-
-- a) As written: a job only reminds, or runs a script from `cockpit.jobs.scripts` on the room's own
-  machine; a job that changes another machine waits for C6. The agent says
-  `I can remind you at 15:10, but stopping builder-b needs the act step (C6).`
-- b) A script listed in `cockpit.jobs.scripts` (the owner's own config, reviewed in the infra repo)
-  may touch other machines; a job is created and cancelled only through the confirm card, one audit
-  line per fire. The agent says `I can run stop-builder-b at 15:10. Confirm?`.
-  The cost: a stolen device token can then run a listed script by asking and saying yes on its own
-  screen; every other screen shows the open card (`security.md` §2).
-
-Recommendation: b) — a listed script is already the owner's yes; a) leaves only an alarm clock and
-C6 has no date. The confirm card is `c5-c6.md` §8 (T14). Spec written for b): `slices.md` §3.7,
-D115, `coworker.md` §6 (T103).
 
 Answer: (open)
 
@@ -160,10 +139,7 @@ The pairing code goes with this answer too: D13 (6 characters, 300 s, 10 open co
 - c) Any already paired screen may approve a new one.
 
 Recommendation: a) — nobody off the box, and not the agent on it, can add a screen; `unpair` is one command.
-One-box cost: a) needs the agent on a second unix user and one sudo rule (`single-machine.md` §3,
-D214, D215); on a one-user box pairing is refused, and whether the room starts at all is Q-O36.
-With a): from another machine the owner, or the owner's laptop agent, runs `pair` over SSH as the
-room's user and reads back the request block before the yes (`screens.md` §6.1).
+Its cost on one box: the agent needs its own unix user (D214, D215; else pairing is refused, Q-O36).
 
 Answer: (open)
 
@@ -252,6 +228,26 @@ layout would be a new task.
 
 Answer: (open)
 
+## Q-O30 May a scheduled job touch another machine, before C6
+
+From `reviews/73-owner.md` (3). Spec: `slices.md` §3.7 (slice Jobs), D115. `spec-input.md` §3's
+example is shutting something off in three hours.
+
+- a) As written: a job only reminds, or runs a script from `cockpit.jobs.scripts` on the room's own
+  machine; a job that changes another machine waits for C6. The agent says
+  `I can remind you at 15:10, but stopping builder-b needs the act step (C6).`
+- b) A script listed in `cockpit.jobs.scripts` (the owner's own config, reviewed in the infra repo)
+  may touch other machines; a job is created and cancelled only through the confirm card, one audit
+  line per fire. The agent says `I can run stop-builder-b at 15:10. Confirm?`.
+  The cost: a stolen device token can then run a listed script by asking and saying yes on its own
+  screen; every other screen shows the open card (`security.md` §2).
+
+Recommendation: b) — a listed script is already the owner's yes; a) leaves only an alarm clock and
+C6 has no date. The confirm card is `c5-c6.md` §8 (T14). Spec written for b): `slices.md` §3.7,
+D115, `coworker.md` §6 (T103).
+
+Answer: (open)
+
 ## Decided instead
 
 Asked earlier, closed as D-lines because the strict choice is safe by default (`reviews/52-owner.md`
@@ -266,7 +262,8 @@ also in PROGRESS.md's "Needs you" list, because D89, D90 and D91 are security-re
 
 ## Can wait
 
-Not needed before the C1 and C2 build nights. Same rules; listed in slice order.
+Not needed before the C1 and C2 build nights. Same rules; listed in slice order (`slices.md` §1):
+C1's raw view, Speak, Canvas, Jobs, C2b, Canvas 2, C5, C6, One.
 
 ## Q-O17 What the raw view shows
 
@@ -279,6 +276,52 @@ Security (what a screen can read). Plan C1: "a raw terminal view … as a toggle
 - d) Not in C1: the opened tool lines (input, ms, `ok|failed`) are the raw view.
 
 Recommendation: d) — the laptop keeps full access (`spec-input.md` §3); b) if the owner wants the toggle later.
+
+Answer: (open)
+
+## Q-O5 How loud the agent is when it speaks up, and quiet hours
+
+Speak slice. `spec-input.md` §7.5. Spec: `coworker.md` §2-§4 (written for b by T13), D185, D188.
+
+- a) Always a line only.
+- b) Tiered: info a line; needs-you a line and a card; urgent adds a sound; quiet hours on by default.
+- c) Everything at full volume.
+
+Recommendation: b) — follows the board's trouble ranking (alerts, Stuck).
+With b): P1 urgent, P2 needs-you, P3/P4 info (`server/fleet/alarms.mjs`); quiet hours default to
+`notify.quietHours`, else 22:00-07:00; in them urgent shows without the chime and the rest waits for
+one block at 07:00. A spoken sentence is C5's, never a speak-up's own.
+
+Answer: (open)
+
+## Q-O28 What the always-on agent may spend, and which standing jobs start on
+
+Coworker slice. From `reviews/48-stranger.md` (7).
+
+- a) A cap (`cockpit.agent.maxTurnsPerHour`, default 20, then `The cockpit paused itself …`), spend as lane `cockpit` on Credit and Morning, standing jobs off until turned on.
+- b) Same, but standing jobs on by default for the owner's setup only.
+- c) No cap; report spend only.
+
+Recommendation: a) — safe by default; the owner turns things on once and sees the cost. Written
+for a) in `coworker.md` §5 (D197): speak-ups, the infra pull and the repo drift check are off until
+turned on; confirmed jobs and reminders work regardless. The cap itself is `protocols.md` §11.12
+(D247): it counts and holds only the turns the room starts on its own, never the owner's prompts;
+if the owner wants the cap to stop their own prompts too, say so here (S-CW-18 changes).
+
+Answer: (open)
+
+## Q-O33 How the agent hands over a change to the infra repo
+
+Security, after the Speak slice. From T13 (`coworker.md` §9). `spec-input.md` §6: "the agent's own
+changes arrive as a branch or a small PR the owner merges".
+
+- a) A `diff` card only: the agent shows the change, the owner applies it from the laptop.
+- b) A second clone the agent's user owns and a key that can push only `cockpit/*` branches (the
+  repo host's branch rule); the agent pushes a branch and opens a PR, never merges.
+- c) b), but the PR is opened by the room after a confirm card, not by the agent.
+
+Recommendation: a) while Q-O23 is a) (no `Bash`/`Write`, so no branch can be made); c) once the
+agent may write, because a push key on the agent's side is a one-way door.
 
 Answer: (open)
 
@@ -331,77 +374,6 @@ Recommendation: c) — nothing wanted vanishes, finished countdowns do not pile 
 
 Answer: (open)
 
-## Q-O31 Who turns a custom card into a saved one
-
-C4, Canvas 2 slice. Plan C4b "Promotion". Spec: `c4-show-canvas.md` §13 (written for a).
-
-- a) The agent saves only when the owner asks in words ("keep this card"); a line with `UNDO`.
-- b) A `KEEP` button in every custom card's header; one tap saves it.
-- c) The agent saves on its own a card it placed 3 times.
-
-Recommendation: a) — no new tappable in a 48 px header, and nothing grows behind the owner's back.
-
-Answer: (open)
-
-## Q-O32 Custom cards on by default
-
-Security, Canvas 2 slice. Plan C4b; `research/Q6-sandboxing-html-cards.md` (WebRTC and a frame's
-own navigation are not fully closed). Spec: `c4-show-canvas.md` §11 (written for a).
-
-- a) On, in the sandbox of §11.3; if research Q15 finds Chromium does not enforce `webrtc 'block'`, the default flips to b).
-- b) Off until `cockpit.canvas.customCards: true`; `place` with `custom` then says `Custom cards are off (cockpit.canvas.customCards).`
-- c) No custom cards in v1; the kit and saved cards only.
-
-Recommendation: a) — a card holds only board data the agent already read, and `spec-input.md` §5 counts custom cards in the answer.
-
-Answer: (open)
-
-## Q-O5 How loud the agent is when it speaks up, and quiet hours
-
-Speak slice. `spec-input.md` §7.5. Spec: `coworker.md` §2-§4 (written for b by T13), D185, D188.
-
-- a) Always a line only.
-- b) Tiered: info a line; needs-you a line and a card; urgent adds a sound; quiet hours on by default.
-- c) Everything at full volume.
-
-Recommendation: b) — follows the board's trouble ranking (alerts, Stuck).
-With b): P1 urgent, P2 needs-you, P3/P4 info (`server/fleet/alarms.mjs`); quiet hours default to
-`notify.quietHours`, else 22:00-07:00; in them urgent shows without the chime and the rest waits for
-one block at 07:00. A spoken sentence is C5's, never a speak-up's own.
-
-Answer: (open)
-
-## Q-O28 What the always-on agent may spend, and which standing jobs start on
-
-Coworker slice. From `reviews/48-stranger.md` (7).
-
-- a) A cap (`cockpit.agent.maxTurnsPerHour`, default 20, then `The cockpit paused itself …`), spend as lane `cockpit` on Credit and Morning, standing jobs off until turned on.
-- b) Same, but standing jobs on by default for the owner's setup only.
-- c) No cap; report spend only.
-
-Recommendation: a) — safe by default; the owner turns things on once and sees the cost. Written
-for a) in `coworker.md` §5 (D197): speak-ups, the infra pull and the repo drift check are off until
-turned on; confirmed jobs and reminders work regardless. The cap itself is `protocols.md` §11.12
-(D247): it counts and holds only the turns the room starts on its own, never the owner's prompts;
-if the owner wants the cap to stop their own prompts too, say so here (S-CW-18 changes).
-
-Answer: (open)
-
-## Q-O33 How the agent hands over a change to the infra repo
-
-Security, after the Speak slice. From T13 (`coworker.md` §9). `spec-input.md` §6: "the agent's own
-changes arrive as a branch or a small PR the owner merges".
-
-- a) A `diff` card only: the agent shows the change, the owner applies it from the laptop.
-- b) A second clone the agent's user owns and a key that can push only `cockpit/*` branches (the
-  repo host's branch rule); the agent pushes a branch and opens a PR, never merges.
-- c) b), but the PR is opened by the room after a confirm card, not by the agent.
-
-Recommendation: a) while Q-O23 is a) (no `Bash`/`Write`, so no branch can be made); c) once the
-agent may write, because a push key on the agent's side is a one-way door.
-
-Answer: (open)
-
 ## Q-O25 A scheduled job while no screen can reach the room
 
 Security, jobs slice. From `reviews/44-operator.md` (contradictions). `spec-input.md` §6: "No hidden timers."
@@ -439,18 +411,28 @@ Recommendation: a) — b) lets anything on the network open a microphone on the 
 
 Answer: (open)
 
-## Q-O7 The first "act" list, and which actions always need a confirm
+## Q-O31 Who turns a custom card into a saved one
 
-C6, after the control-plane review. `spec-input.md` §7.7. Spec: `c5-c6.md` §7 (T14: the rules, D208).
+C4, Canvas 2 slice. Plan C4b "Promotion". Spec: `c4-show-canvas.md` §13 (written for a).
 
-- a) No act in version 1.
-- b) A short list of reversible actions (stop a run, restart a service), each confirmed.
-- c) Every control-plane action, each confirmed.
+- a) The agent saves only when the owner asks in words ("keep this card"); a line with `UNDO`.
+- b) A `KEEP` button in every custom card's header; one tap saves it.
+- c) The agent saves on its own a card it placed 3 times.
 
-Recommendation: open until the control-plane review; the spec assumes a), and every act ever added needs a confirm.
-Note for the review (T14): the room is `local` on the box of the laneboard it reads (D91); a hub
-refuses every action from `local` and a single board its remote-only ones, so C6 also needs a way for the room to carry the owner's yes to the control
-plane (a room key with an act scope, or the yes forwarded as the `direct` user who gave it).
+Recommendation: a) — no new tappable in a 48 px header, and nothing grows behind the owner's back.
+
+Answer: (open)
+
+## Q-O32 Custom cards on by default
+
+Security, Canvas 2 slice. Plan C4b; `research/Q6-sandboxing-html-cards.md` (WebRTC and a frame's
+own navigation are not fully closed). Spec: `c4-show-canvas.md` §11 (written for a).
+
+- a) On, in the sandbox of §11.3; if research Q15 finds Chromium does not enforce `webrtc 'block'`, the default flips to b).
+- b) Off until `cockpit.canvas.customCards: true`; `place` with `custom` then says `Custom cards are off (cockpit.canvas.customCards).`
+- c) No custom cards in v1; the kit and saved cards only.
+
+Recommendation: a) — a card holds only board data the agent already read, and `spec-input.md` §5 counts custom cards in the answer.
 
 Answer: (open)
 
@@ -463,6 +445,21 @@ C5. Plan C5: "Optional text-to-speech of the agent's reply". Spec: `c5-c6.md` §
 - c) Only when the owner asks (`say it`), never on its own.
 
 Recommendation: b) — talking gets an answer by voice as well as text; someone typing is often somewhere quiet.
+
+Answer: (open)
+
+## Q-O7 The first "act" list, and which actions always need a confirm
+
+C6, after the control-plane review. `spec-input.md` §7.7. Spec: `c5-c6.md` §7 (T14: the rules, D208).
+
+- a) No act in version 1.
+- b) A short list of reversible actions (stop a run, restart a service), each confirmed.
+- c) Every control-plane action, each confirmed.
+
+Recommendation: open until the control-plane review; the spec assumes a), and every act ever added needs a confirm.
+Note for the review (T14): the room is `local` on the box of the laneboard it reads (D91); a hub
+refuses every action from `local` and a single board its remote-only ones, so C6 also needs a way for the room to carry the owner's yes to the control
+plane (a room key with an act scope, or the yes forwarded as the `direct` user who gave it).
 
 Answer: (open)
 

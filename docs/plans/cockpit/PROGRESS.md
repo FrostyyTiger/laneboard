@@ -271,104 +271,108 @@ budgets in `spec/README.md` (B2 ≤ 1.0 s, B3 ≤ 0.3 s, B9 ≤ 15 s).
 
 ## Morning
 
-Written by the final round (71), 2026-10-27 05:02.
+Written by the final round (171), 2026-10-27 11:50. Replaces round 71's report (git history).
 
-- **Written:** the C1-C4 parts (screens, talk, voice, see, show/canvas: 114 scenarios), both
-  protocols, the stand-ins, the build order (`slices.md`), 120 decisions, 10 reviews triaged.
-- **Not written:** `security.md` (T17), `coworker.md` (T13), `c5-c6.md` (T14), `single-machine.md`
-  (T19), canvas part 3 (T12); and 64 fix tasks from the reviews, several of which C1 needs (below).
-  Since written: `c5-c6.md` (T14), which slice Jobs needed for the confirm card; Jobs now waits only
-  on Canvas and Q-O30 (T103).
-- **Why it stopped:** the round limit (71 rounds), not the 20:00 deadline and not a failure.
+- **Written:** all of README §8's spec files plus `stand-ins.md` and `slices.md`: 219 live scenarios
+  in 9 parts, the protocols with 115 fixtures that parse, D1-D294, 7 sketches; 13 reviews triaged.
+  137 of 142 tasks are done, every "before a C1 night" task among them.
+- **Not written:** T138-T142 (slice recount, final passes on DECISIONS and QUESTIONS, 13 timing
+  rows with no scenario); research Q12-Q19; no review after round 81, so rounds 82-170 have no score.
+- **Why it stopped:** its 170-round budget was used up. It did not reach the 20:00 deadline and nothing
+  failed. Tests after the last round: 3454 pass, 0 fail.
 
 ### The spec at a glance
 
 | file | what | scenarios |
 |---|---|---|
-| `spec/README.md` | index, glossary, speed budget (T24), room process | 0 |
-| `spec/screens.md` | modes, layouts (pending Q-O22), cockpit button, pairing (pending Q-O21), room down | 23 `S-SCR-` |
-| `spec/c1-talk.md` | the pane, replies at arm's length, typing, events, stop, new conversation | 26 `S-C1-` |
-| `spec/c2-voice.md` | talk button, live words, fix, cancel, language, speech down; C2b the button | 21 `S-C2-`, 2 `S-C2B-` |
-| `spec/c3-see.md` | MCP read tools, focus, "Ask about this" | 18 `S-C3-` |
-| `spec/c4-show-canvas.md` | show commands, canvas, kit blocks, cards leaving (part 3 missing) | 24 `S-C4-` |
-| `spec/protocols.md` | screen ⇄ room message by message; room ⇄ agent bridge and ⇄ speech | 0 (message examples, fixtures) |
-| `spec/stand-ins.md` | fake speech, fake agent, real room with a fake agent, control API | 0 (used by the scenarios) |
-| `spec/slices.md` | build nights in order, ids per slice, acceptance harness (D88) | 0 (every id in one slice) |
-| `spec/DECISIONS.md` | D1-D120 | — |
-| `spec/QUESTIONS.md` | 14 for the morning, 11 that can wait, 4 closed as D-lines | — |
+| `spec/README.md` | index, room process, times on screen, speed budget, pressed state, selectors, glossary | 0 |
+| `spec/screens.md` | modes and layouts (pending Q-O22), cockpit button, split's idle strip, pairing, `screen` port, room down | 38 `S-SCR-` |
+| `spec/c1-talk.md` | the pane, replies at 28 px, typing and keyboard, events and tool lines, steer and `STOP`, `NEW`, §16 times at a glance | 46 `S-C1-` (S-C1-24 retired) |
+| `spec/c2-voice.md` | talk button, live words, fix, cancel and `UNDO`, DE/EN, speech down, §15 times; C2b the button | 21 `S-C2-`, 2 `S-C2B-` |
+| `spec/c3-see.md` | MCP read tools, focus, "Ask about this" | 23 `S-C3-` |
+| `spec/c4-show-canvas.md` | show commands, canvas, kit blocks, cards leaving, custom cards, promotion | 35 `S-C4-` |
+| `spec/coworker.md` | speak-ups and their loudness, quiet hours, scheduled jobs, infra pull, drift | 18 `S-CW-` |
+| `spec/c5-c6.md` | C5 voice out, C6 act rules and the confirm card | 7 `S-C5-`, 7 `S-C6-` |
+| `spec/security.md` | credentials, a device token verb by verb, the agent's user, untrusted text, retention | 6 `S-SEC-` |
+| `spec/single-machine.md` | the one box: agent user and sudo, `doctor`, setups, one box vs two processes | 16 `S-ONE-` |
+| `spec/protocols.md` | screen ⇄ room message by message, room ⇄ agent bridge, room ⇄ speech; fixtures | 0 (115 fixtures) |
+| `spec/stand-ins.md` | room under test, fake agent, fake speech, demo fleet, scripts per scenario family | 0 (used by all) |
+| `spec/slices.md` | 14 build nights in order, ids per slice, the Playwright harness (D88, D113) | 0 (219 ids, each in one slice) |
+| `spec/DECISIONS.md` | D1-D294 | — |
+| `spec/QUESTIONS.md` | 14 for the morning, 17 that can wait, 5 closed as D-lines | — |
 
 ### Sketches (newest shots, dark, 1368)
 
-| sketch | newest shot | behind the spec |
+| sketch | newest shot (in `$RUN_DIR/shots/`) | last redrawn by |
 |---|---|---|
-| `spec/sketches/c1-pane.html` | `$RUN_DIR/shots/152-c1-pane-b/` | no (T47, T43, T45, T120: the `· QUEUED` block, D267; shot round 152); the opener's `CLOSE` overflows its 48 px box: T126 (a) |
-| `spec/sketches/c2-states.html` | `$RUN_DIR/shots/157-c2-states/`, `157-c2-states-turn/` (`#turn`) | no (T42/T95, round 106; T125 the `#turn` sheet, round 157); sheet 1 still draws 22 px type (T97); the `#turn` opener's `CLOSE` overflows its 48 px box: T126 (a) |
-| `spec/sketches/c3-ask.html` | `$RUN_DIR/shots/99-c3-ask/` | no (T101, round 99); the opener's `CLOSE` overflows its 48 px box: T126 (a) |
-| `spec/sketches/c4-canvas.html` | `$RUN_DIR/shots/99-c4-canvas/` | no (T82, T101, round 99) |
-| `spec/sketches/screens-room-down.html` | `$RUN_DIR/shots/102-rd/`, `102-rdp/` (`#pane`) | no (T70, round 102); the `#pane` opener's `CLOSE` overflows its 48 px box: T126 (a) |
-| `spec/sketches/screens-split.html` | `$RUN_DIR/shots/139-screens-split/` | no (T25, T21; shot round 139, linked from Q-O11/Q-O22) |
+| `spec/sketches/c1-pane.html` | `155-c1-pane/` (also `152-c1-pane-b/`, linked from Q-O11/Q-O22) | T120, T126 |
+| `spec/sketches/c2-states.html` | `163-c2-states/`, `157-c2-states-turn/` (`#turn`) | T42/T95, T125, T131 |
+| `spec/sketches/c3-ask.html` | `121-c3-ask/` | T101, T82 |
+| `spec/sketches/c4-canvas.html` | `158-c4-canvas/` | T82, T101, T126 |
+| `spec/sketches/c6-confirm.html` | `113-c6-confirm/` | T14 |
+| `spec/sketches/screens-room-down.html` | `102-rd/`, `102-rdp/` (`#pane`) | T70 |
+| `spec/sketches/screens-split.html` | `139-screens-split/` | T25, T21 (before T130's idle strip) |
 
 `$RUN_DIR` is the run's folder outside the repo; each shot folder holds `custom-dark-1368.png`.
 
-### Scores (10 reviews, rounds 21-63)
+### Scores (13 reviews, rounds 21-81)
 
 | | concrete | complete | consistent | testable | ownerfit | simple | safe |
 |---|---|---|---|---|---|---|---|
-| average | 7.7 | 3.2 | 4.6 | 6.4 | 5.3 | 4.9 | 5.8 |
+| average | 7.8 | 3.5 | 4.5 | 6.5 | 5.5 | 4.8 | 5.8 |
 | lowest | 7 | 2 | 4 | 4 | 4 | 3 | 3 |
+| last (81 touch) | 8 | 4 | 4 | 7 | 6 | 5 | 5 |
 
 The panel's three biggest worries:
-1. **C1 cannot be built as written yet** (complete 3.2). The C1 parts exist, but the fixes reviews
-   asked for are open: steer instead of interrupt (T85, T88), the read-only launch line (T57), the
-   on-screen keyboard (T40, T94), the room's process (T86), close codes (T89). Review 52 asked to
-   freeze new content for this; the night did, but ran out of rounds.
-2. **Files disagree with each other** (consistent 4.6). D89 vs D92 on who serves the page; the spec
-   recommends Q-O1 d) but is written for a); every sketch is behind its spec.
-3. **Setups other than the owner's, and the agent's power** (simple 4.9, safe 5.8). No tailnet, no
-   GPU, another agent: Q-O27 and `single-machine.md` (T19, T74) are open; what the agent may run
-   before C6 (Q-O23) and `security.md` (T17, T61) decide whether C1 is safe on any box.
+1. **Files disagree with each other** (consistent 4 in every review since round 52). Rounds 82-170
+   fixed what was named (steer in C1, `STOP`'s place, D89/D92) and folded C5-C6, the coworker and
+   the one box into their owner files. Nothing has re-checked the whole spec since: T138-T140, the
+   cross-checks, are open, and no review has run since round 81.
+2. **Too big for what C1 and C2 need** (simple 4.8; skeptic and stranger 3). 13,000 lines, 219
+   scenarios and 294 decisions. C1 alone has 46 scenarios. The freeze held new chapters back, but
+   audits and folds still grew the files.
+3. **The agent's power and setups other than the owner's** (safe 5.8, lowest 3). C1 is safe only
+   with Q-O23 a) (read-only launch line, enforced by a Claude Code flag; for a bridge agent, by
+   that agent's own word). A tablet without a tailnet needs Q-O27, and one box needs a second unix
+   user (Q-O36, D214).
 
 ### Tasks
 
-Done, 38: T1 `bb2249b`, T2 `269e375`, T3 `ba70963`, T4 `ef19310`, T5 `e601b02`, T6 `f6d0043`, T7
-`5ef3c54`, T8 `7309f15`, T9 `fd7ed05`, T10 `00c4e56`, T11 `69d5114`, T15 `24d1e5d`, T16 `039c6e0`,
-T18 `11fd3d8`, T20 `0adeebd`, T22 `ba70963`, T24 `9419a10`, T26 `a67ee3e`, T27 `c6420dc`, T29
-`fb5080c`, T30 `0adeebd`, T32 `11fd3d8`, T37 `0adeebd`, T38 `cc2474c`, T39 `ba70963`, T41
-`a67ee3e`, T48 `b9e3e22`, T49 `cb582bb`, T50 `9f82145`, T51 `6815c45`, T52 `84a7cf0`, T54
-`ab1b92a`, T55 `cc2474c`, T62 `0adeebd`, T80 `0adeebd`, T81 `0adeebd`, T87 `11fd3d8`; final report
-(this commit).
+Done, 137: T1 `bb2249b`, T2 `269e375`, T3 `ba70963`, T4 `ef19310`, T5 `e601b02`, T6 `f6d0043`, T7 `5ef3c54`, T8 `7309f15`, T9 `fd7ed05`, T10 `00c4e56`, T11 `69d5114`, T12 `c2b974b`, T13 `42de5a6`, T14 `f521e4d`, T15 `24d1e5d`, T16 `039c6e0`, T17 `27bed28`, T18 `11fd3d8`, T19 `c84d0de`, T20 `0adeebd`, T21 `c68272e`, T22 `ba70963`, T23 `ba79a22`, T24 `9419a10`, T25 `175b7b1`, T26 `a67ee3e`, T27 `c6420dc`, T28 `773ad29`, T29 `fb5080c`, T30 `0adeebd`, T31 `27e98cb`, T32 `11fd3d8`, T33 `9cd7431`, T34 `d874b7d`, T35 `ed1895b`, T36 `7b0167f`, T37 `0adeebd`, T38 `cc2474c`, T39 `ba70963`, T40 `8d73d19`, T41 `a67ee3e`, T42 `2a6383a`, T43 `c745fce`, T44 `0dc7177`, T45 `924a869`, T46 `69d5114`, T47 `175b7b1`, T48 `b9e3e22`, T49 `cb582bb`, T50 `9f82145`, T51 `6815c45`, T52 `84a7cf0`, T53 `ed1895b`, T54 `ab1b92a`, T55 `cc2474c`, T56 `c55b726`, T57 `3f7c8d8`, T58 `fbf5ee3`, T59 `5c1abe4`, T60 `288485a`, T61 `3d7dfa6`, T62 `0adeebd`, T63 `f125cf9`, T64 `c9e3eb7`, T65 `50eddf6`, T66 `d82912c`, T67 `cba52c7`, T68 `0620927`, T69 `dd8b45e`, T70 `6e4f45a`, T71 `9f9c222`, T72 `47452a6`, T73 `8e800ac`, T74 `0bfd3ce`, T75 `fbf5ee3`, T76 `7b0167f`, T77 `284dd40`, T78 `2301dd9`, T79 `0d9f9ad`, T80 `0adeebd`, T81 `0adeebd`, T82 `5eab92e`, T83 `8a722e7`, T84 `cdf6019`, T85 `0eb8c0e`, T86 `8aaeae2`, T87 `11fd3d8`, T88 `bc7a2b3`, T89 `75b4bb3`, T90 `f98b544`, T91 `e507432`, T92 `d90302d`, T93 `7b0167f`, T94 `8d73d19`, T95 `2a6383a`, T96 `cda67ad`, T97 `2e77bc7`, T98 `a73d1ab`, T99 `76b04b2`, T100 `a183e08`, T101 `5eab92e`, T102 `b3ada4d`, T103 `5e9b982`, T104 `1a41354`, T105 `ccb44ad`, T106 `34f413e`, T107 `f8e8d13`, T108 `9a0ffde`, T109 `f239111`, T110 `c82f8dc`, T111 `a7083b6`, T112 `d45e205`, T113 `cba49c2`, T114 `4c28675`, T115 `dc2559f`, T116 `8e47cfd`, T117 `f98b544`, T118 `0dd553a`, T119 `f91fa78`, T120 `4788a06`, T121 `19be944`, T122 `b214afa`, T123 `e9fffca`, T124 `61e9a2e`, T125 `0df0022`, T126 `0cce041`, T127 `7229781`, T128 `6fba876`, T129 `11d5f1c`, T130 `6e8726b`, T131 `6d55776`, T132 `354beba`, T133 `43bad5b`, T134 `c87b9f3`, T135 `cb4b3e2`, T136 `e16e5cc`, T137 `2130c43`.
 
-Open, 64, none blocked:
-- **before a C1 night** (owner answers change some of them): T85, T88 (steer), T57 (launch line),
-  T86 (room process), T89, T90, T92 (protocol rules), T40, T94 (keyboard), T96, T97, T100 (pane
-  layout and type), T56, T60, T71 (pairing, audit, `screen` kind — only if Q-O21 a/c or Q-O27 a),
-  T33, T34, T36, T76, T93 (selectors, renderer, demo), T68, T91 (login check, restart);
-- **before C2:** T42, T95, T64 (done), T102 (done), T69, T84, T58, T78;
-- **the rest:** T12, T13, T14, T17, T19, T21, T23, T25, T28, T31, T35, T43, T44, T45, T47, T53,
-  T59, T61, T63, T65, T66, T67, T70, T72, T73, T74, T75, T77, T79, T82, T83, T98, T99, T101.
+Open, 5, none blocked: T138 (`slices.md` §4 recount), T139 (final pass on DECISIONS), T140 (final
+pass on QUESTIONS; this round checked its first condition: every pending marker names an open
+question), T141 (9 C1 timing rows with no scenario), T142 (4 C2/C2b timing rows with no scenario).
+None blocks a C1 night; T141 and T142 are the ones its builder would feel.
 
-Tests after round 70: `npm test` 3454 pass, 0 fail. The night wrote no code; the one red run (round
-55) was a flake in `test/term-proxy.test.mjs` (see For the owner).
+Tests: `npm test` 3454 pass, 0 fail after round 170. The night wrote no code. The one red run
+(round 55) was a flake in `test/term-proxy.test.mjs` (see For the owner).
 
 **Needs you, worst first.**
 
-1. **Answer spec/QUESTIONS.md.** The first 14, a letter each, about 15 minutes; Q-O11, Q-O1, Q-O23,
-   Q-O21 and Q-O27 change what C1 builds. The rest can wait.
-2. **Give C1 one more spec night or a fix night first.** The C1/C2 tasks listed above are open;
-   a builder night started now would have to guess at steering, the launch line and the keyboard.
-   Suggested: one short spec night on that list after your answers.
-3. **Check the security decisions taken without you.** D89-D92 (the room is a laneboard server
-   with a `cockpit` section, on the page's origin, reading the hub's loopback as `local`, a front
-   forwarding `/api/cockpit/`; Q-O29 asks the routing), D90 (D14 nothing in
-   browser storage, D22 links not tappable, D66 the chip sends only a node id; D13 pairing codes moved to Q-O10 by T61), D108 (the agent's
-   environment is a short allowlist) and D103 (stop escalates to `SIGINT` at 5 s, `SIGTERM` at 8 s).
-   Strike a line to reopen it.
-4. **A browser on the `ci` VM.** D88 keeps the Playwright acceptance tests out of `npm test`
+1. **Answer spec/QUESTIONS.md.** The 14 at the top, a letter each, about 15 minutes. Q-O11, Q-O1
+   (and where `STOP` lives), Q-O23, Q-O21 and Q-O27 change what C1 builds. The 17 under "Can wait"
+   wait for their slice.
+2. **Check the security decisions taken without you.** D89-D92 (the room is a laneboard server on
+   the page's origin, reads its board's loopback as `local`, a front forwards `/api/cockpit/`;
+   Q-O29 asks the routing). D90 (nothing in browser storage, links not tappable, the chip sends
+   only a node id). D108 (the agent's environment is a short allowlist). D154 (the conversation is
+   kept on disk, 0600, pending Q-O24). D163 (the device token cookie). D214/D215 (a sudoers drop-in
+   to run the agent as its own user). D236 (a third listener for LAN tablets). D240/D241 (a bridge
+   agent enforces its own tool list; `allowUnrestricted`). D247 (the spend cap counts only the
+   room's own turns). Strike a line to reopen it.
+3. **Confirm the Claude Code facts the bridge rests on, on one real run.** Research Q10 found the
+   `interrupt` request shape and that `request_id` sits inside `response`. Three things need a real
+   CLI: where `cancel_queued` sits, the order of `system/init`, and what a failed login prints. Q12
+   (`claude auth status`) and Q13 (where `--resume` transcripts live, how long) are open.
+4. **Decide when C1 is built.** The "before a C1 night" list is empty. A builder night can start
+   once item 1 is answered; T141's timing scenarios can be written by that night or one short
+   spec round. Answers that differ from the recommendation reopen the text marked `(pending Q-O<n>)`.
+5. **A browser on the `ci` VM.** D88 keeps the Playwright acceptance tests out of `npm test`
    until `ci` has a browser; until then nobody runs them on a PR.
-5. **Confirm three Claude Code facts on a real run** (research Q10, open): the raw `interrupt`
-   control request and its response, whether `system/init` comes before the first stdin line, and
-   what a failed login prints. `protocols.md` §11 rests on them; research could not confirm them.
-6. **The `term-proxy` test flake.** Its wait helper (`test/term-proxy.test.mjs` line 92) times out
+6. **Two plan texts outside this night's paths** (For the owner): README §C2/§C4 lines that read as
+   your setup (T79), and the Wall page's two names (T31).
+7. **The `term-proxy` test flake.** Its wait helper (`test/term-proxy.test.mjs` line 92) times out
    on a loaded box; a longer deadline is outside this night's allowed paths.
 
 ### Research
@@ -376,11 +380,11 @@ Tests after round 70: `npm test` 3454 pass, 0 fail. The night wrote no code; the
 - Q1 Touch and type: 48 px targets minimum, 56+ for frequent or hard-to-undo, 8 px apart; hold
   400-500 ms with 8-10 px slop; 26-30 px for text read while talking.
 - Q2 Claude Code headless: stream-json events for text deltas, tool use and results, `resume` by
-  session id; the raw stdin interrupt JSON is unconfirmed (Q10).
+  session id.
 - Q3 Kiosk microphone: needs a secure context and `AudioCaptureAllowedUrls` (Chrome/ChromeOS, not
   Android); `OverrideSecurityRestrictionsOnInsecureOrigin` for plain HTTP.
-- Q4 WhisperLiveKit: `ws://…/asr?language=`, binary 16 kHz PCM with `--pcm-input`, full-mode
-  updates resend `lines` plus a `buffer_transcription` partial; no latency figures found.
+- Q4 WhisperLiveKit: `ws://…/asr?language=`, binary 16 kHz PCM with `--pcm-input`, `lines` plus a
+  `buffer_transcription` partial; no latency figures found.
 - Q5 MCP for Claude Code: stdio or Streamable HTTP via `--mcp-config` and `--strict-mcp-config`,
   tools `mcp__<server>__<tool>`; no push to the model, so focus must be pulled.
 - Q6 HTML cards: `sandbox="allow-scripts"` only, never `allow-same-origin`, CSP as a header on a
@@ -388,10 +392,18 @@ Tests after round 70: `npm test` 3454 pass, 0 fail. The night wrote no code; the
 - Q7 Android microphone: no no-prompt route found; Linux managed-policy path assumed.
 - Q8 Prompt while a turn runs: queued into the running turn after the current tool calls
   (`priority:"next"`); interrupting is a separate request; steering is native.
-- Q9 Path mounts: `tailscale serve --set-path` strips the prefix (give a full target URL), passes
-  `Origin`; Caddy `reverse_proxy` keeps the path; nginx needs `Upgrade` headers and a long read timeout.
-- Open: Q10 (three Claude Code facts, item 5 above).
+- Q9 Path mounts: `tailscale serve --set-path` strips the prefix, passes `Origin`; Caddy keeps the
+  path; nginx needs `Upgrade` headers and a long read timeout.
+- Q10 Bridge wire, in part: `interrupt` is a `control_request` with `subtype: interrupt`, the
+  response carries `request_id` inside `response`; `system/init` likely comes after the first stdin
+  line; a failed login is undocumented.
+- Q11 On-screen keyboard: since Chromium 108 it shrinks only the visual viewport everywhere;
+  `navigator.virtualKeyboard` is Chromium only; floating and split keyboards are unconfirmed.
+- Open: Q12 (`claude auth status`), Q13 (session transcripts and their cleanup), Q14 (`Secure`
+  cookie on plain `http://127.0.0.1`), Q15 (sandboxed iframe process, `webrtc 'block'`), Q16
+  (`focus()` 2 s after a tap brings the keyboard?), Q17 (local TTS servers), Q18 (`sudo` signal
+  relay and `!use_pty`), Q19 (browser floor Chromium 108 / Safari 16).
 
 ### Owner notes
 
-The script left no owner-notes file for this run.
+The script left no owner-notes file for this run (`$RUN_DIR/owner-notes` does not exist).
