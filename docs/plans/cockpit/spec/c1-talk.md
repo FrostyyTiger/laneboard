@@ -1326,13 +1326,15 @@ When the owner opens the pane at t = 0.5 s,
 Then `data-cockpit="connecting"`, the conversation shows exactly `Connecting to the cockpit room…`,
 `SEND` is disabled and the input takes typed text; by 2.5 s the 3 turns are drawn with the last
 one's end in sight and the line is gone.
-And with an empty conversation the line becomes `Nothing said yet. Type a question, or hold the
-talk button and speak.` and stays until a prompt is sent.
+And with an empty conversation the line becomes `Nothing said yet. Type a question below.` (the
+`none` variant of §6: C1 boots with `"stt":{"url":"none"}`, `stand-ins.md` §1.1, D265) and stays
+until a prompt is sent.
 And with the room not answering at all, at 5 s `data-cockpit="room-down"` and the status line says
 `Cockpit room unreachable since` the load's `HH:MM`.
 Test: Playwright against the room under test; hold back `welcome` with the fault hook; assert
 `data-cockpit`, the conversation's text and `SEND`'s `disabled` at 0.5 s and 2.5 s; restart with an
-empty conversation, then with the room stopped.
+empty conversation and assert the line's text exactly (the variant `…or hold the talk button and
+speak.` is asserted in the C2 step `with voice`, `slices.md` §3.2), then with the room stopped.
 
 ### S-C1-27 STOP during a turn drops a queued prompt and says so (pending Q-O1)
 Given the fake agent on a turn calling a tool from t = 0.5 s to t = 20 s, `onInterrupt`

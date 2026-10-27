@@ -79,7 +79,8 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 **Builds** (one round each, in this order; fix and review rounds come on top):
 
 1. `stand-ins.md` §7 steps 1-3 (fake agent, fake speech, room under test) and step 4 for the C1
-   scripts.
+   scripts. The fake speech is built and passes its own `node:test` file here; no C1 Playwright
+   test starts it (D265).
 2. The room process: `server/boot/cockpit.mjs` (`startRoom()` and the `mode: cockpit` wiring),
    the third `MODES` entry, `cockpit.forwarded`, `server/config/cockpit.mjs`,
    `server/cockpit/clock.mjs` and `faults.mjs` (`README.md` "The room process", D128, D129); the
@@ -111,7 +112,13 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 
 **Stand-ins and scripts**: room under test, fake agent (dialect `claude`), demo hub; scripts
 `c1-render`, `c1-typing`, `c1-errors`, `c1-login`, `c1-long`, `c1-session`, `c1-voice` (S-C3-18), `scr-room`,
-`c3-tools` (S-C3-03, S-C3-22, S-C3-23). No fake speech yet.
+`c3-tools` (S-C3-03, S-C3-22, S-C3-23). No fake speech yet: every C1 test boots the room with
+`"stt":{"url":"none"}` (`stand-ins.md` §1.1, D265), so no talk button is drawn. Where a C1
+scenario names the talk button (its rect, `enabled`, `data-talk`), the C1 test asserts the `none`
+layout in its place (`screens.md` §4.1: no `[data-talk]`, `SEND` in the talk button's rect, the
+input to 16 px left of it; at 1024 and 800 wide the same shift, `SEND` x 936-1000 or x 712-776)
+and nothing about the talk button; the talk button's half runs in C2 (§3.2). These are S-C1-01,
+S-C1-26 (its empty line is the `none` variant), S-C1-32, S-C1-37, S-C1-45, S-C1-46, S-SCR-09, S-SCR-17, S-SCR-19 and S-SCR-25's second case.
 
 **Scenarios** (73):
 S-C1-01 S-C1-02 S-C1-03 S-C1-04 S-C1-05 S-C1-06 S-C1-07 S-C1-08 S-C1-09 S-C1-10 S-C1-11 S-C1-12
@@ -187,13 +194,19 @@ S-C1-13 S-SCR-20 S-SCR-32 S-SEC-05
   an open microphone.
 - **S-SCR-32** (room down on the Wall: the away caption, a press on the `off` talk button opens the
   pane, no microphone) is C2's: C1 runs with `stt.url: none`, so it has no talk button (D179).
+- **The talk button's half of ten C1 scenarios** (§3.1's list, D265): each of those C1 tests
+  gains one `test.step('with voice', …)` that boots the room with the fake speech
+  (`"stt":{"url":speech.url,"language":"de"}`, `stand-ins.md` §1.1) and asserts the talk button
+  as the scenario writes it (rect, `enabled`, `data-talk`; S-C1-26's empty line `Nothing said yet.
+  Type a question, or hold the talk button and speak.`); nothing is pressed. The C2 run's `-g`
+  adds the ten ids, and none of the ten steps is skipped.
 
 **Done-when**: §2's slice rule for the 25 ids; B1-B3 hold; `docs/cockpit.md` gains the speech
 service setup and the kiosk microphone note (`c2-voice.md` §12). Two checks are named because a
 C2 night can pass the 25 ids and still miss them (D255, review 73-owner.md findings 4, 8):
 - **The type floor in the voice states** (T43, D21, D167): S-C1-40's C1 test gains three
   `test.step`s, the hold past 400 ms, the slide off and `stt-down` with `token` (S-C1-40's last
-  paragraph); the C2 run is `-g '<the 25 ids>|S-C1-40'` and none of the seven steps is skipped.
+  paragraph); the C2 run is `-g '<the 25 ids>|S-C1-40|<§3.1's ten ids>'` and none of the seven steps is skipped.
 - **The hint after a limit stays** (T84, D168): S-C2-06 asserts `MICROPHONE OFF` at 35 s and
   290 s and `MICROPHONE OFF · TEXT KEPT` at 126 s, and S-C2-05's 5 s close still goes; a C2 build
   that gives every close D45's 5 s fails S-C2-06, not only a review.

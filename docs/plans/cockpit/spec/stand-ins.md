@@ -71,7 +71,7 @@ How older phrases in the spec map onto these:
    "agent":{"kind":"claude-code","command":["node","test/cockpit/stand-ins/fake-agent.mjs"],
             "cwd":"<tmp>","env":["FAKE_AGENT_DIR"],
             "loginCheck":["node","test/cockpit/stand-ins/fake-agent.mjs","auth","status"]},
-   "stt":{"url":"ws://127.0.0.1:<fake speech port>/asr","language":"de"},
+   "stt":{"url":"none"},
    "board":{"url":"http://127.0.0.1:<demo hub port>"},
    "mcp":{"port":0}}}
 ```
@@ -93,6 +93,11 @@ How older phrases in the spec map onto these:
   acceptance test. `FAKE_AGENT_DIR` (§2.1) reaches the child only because it is listed in
   `cockpit.agent.env` (D108). The test passes `--dialect bridge` in `command` for the few tests
   that need the `bridge` dialect.
+  `"stt":{"url":"none"}` (D265): C1 starts no fake speech (`slices.md` §3.1), so its tests draw no
+  talk button, never connect to a speech service and log no connect failure; the layout is
+  `c2-voice.md` §9's `none` row (`SEND` x 1280-1344, the input x 784-1264, `screens.md` §4.1). A
+  test that starts the fake speech (§3.1: C2 and later, and the C2 runs of C1 scenarios,
+  `slices.md` §3.2) writes `"stt":{"url":speech.url,"language":"de"}` instead.
   `"language":"de"` is one code on purpose: the default list `["en", "de"]` (`c2-voice.md` §8)
   would put the language button in every C2 rect; S-C2-13 removes the key to test the default.
 - **Clock modes.** `real` (the default) or `manual`. In `manual` the room's time stands still and
