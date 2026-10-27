@@ -404,11 +404,18 @@ Notes for every builder round (planner, round 1):
   r48-galaxy (`--size large --tick 1000`, pace=wall): HV1 shown as attention (target 02), then CLOUD, during which
   `HV1 · VM-C` goes down; the next leg (59.2 s) is HV1 again, `DOWN · TARGET 02 / 05`, VM-C as hero. 0 errors,
   11.3 fps (SwiftShader, as earlier rounds; the change is tour logic only).
-- [ ] T22 (r17-operator galaxy 7; widened by T30, do T30 first) [ui] [variant:galaxy] A calm plate does not shrink the banner: `data-plate`
+- [x] T22 (r17-operator galaxy 7; widened by T30, do T30 first) [ui] [variant:galaxy] A calm plate does not shrink the banner: `data-plate`
   carries the plate's tone, and under a calm plate the crit banner keeps full size (or one step down, never level
   with the calm name); under a trouble plate T4's step stays — done when: a test sees the tone in `data-plate`
   and a `wall.css` test pins the banner larger than `--cap-name` under a calm plate, and `?at=home` with a crit
-  elsewhere shows the red banner clearly above the white name.
+  elsewhere shows the red banner clearly above the white name. (commit T22MARK)
+  Builder r50: built by T30 (1542f7c: a calm plate is `data-plate="grey"`, only `"crit"` steps the banner; its
+  tests see the grey tone and pin the css). Added the missing guard: `fleetSize` (the banner's fitted far size) over
+  long words and four screen shapes never drops under `STEPS.heroMin` 9 nor 1.25x the plate name step 6.9, so
+  "never level with the calm name" holds whatever the banner has to fit (`wall-galaxy-hud.test.mjs`, T22). Still
+  `shots/r50-at-home` (`?at=home&quality=0`, large demo): white `HOME` on a calm plate, the red `■ HV2 · STORAGE`
+  at full 3 m size far above it, 0 console errors. Seen, not in scope: `HOME` twice (the plate's name and the
+  star's label right under it) and `printer-3d` crossed by a member's orbit ring (T26's ground).
 - [ ] T23 (r17-operator galaxy 9 + across) [ui] [variant:galaxy] Trouble rows at the second step: the plate's
   trouble rows (status shape, word, age, in hue; the crit plate takes the warn plate's row format instead of a
   white `1 crit`) are set at the caption's second step; hardware/where/holds stay small — done when: a test pins

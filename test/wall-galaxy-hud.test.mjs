@@ -594,6 +594,21 @@ test('wall.css (T30): the far line steps down under a crit plate only; the echo 
   assert.ok(css.includes('.wall-frame-layer[data-plate] .wall-fleet[data-echo] {'), 'T20 holds under any plate');
 });
 
+// A calm plate does not shrink the banner (night 3 T22, r17-operator galaxy 7; built by T30): under a calm
+// plate the crit line keeps its fitted 3 m size, and that size is never level with the calm name it sits above.
+test('T22: under a calm plate the crit banner stays a clear step above the plate\'s name, whatever it has to fit', async () => {
+  const { STEPS } = await import('../public/js/wall/caption.js');
+  const { fleetSize } = await import('../public/js/wall/frame.js');
+  const css = read('css/wall.css');
+  assert.match(css, new RegExp(`--cap-name: ${STEPS.name}vmin;`), 'the plate name step is STEPS.name');
+  for (const word of ['DOWN', 'STORAGE', 'HV2 · STORAGE', 'BUILDER-A · FEAT-SEARCH-REINDEX']) {
+    for (const [w, h] of [[1368, 912], [2736, 1824], [1920, 1080], [800, 1280]]) {
+      const size = fleetSize(word, w, h);
+      assert.ok(size >= STEPS.heroMin && size >= STEPS.name * 1.25, `${word} at ${w}x${h}: ${size}vmin over ${STEPS.name}`);
+    }
+  }
+});
+
 // A dead feed, the words (night 3 T5): the tag reads STALE <age>, the next plate says the data is old, in grey.
 test('hud.fresh: the tag gets the feed state; the next plate carries the grey line, gone when live again', () => {
   const { calls, caption, frame } = fakes();
