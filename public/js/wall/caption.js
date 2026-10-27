@@ -54,8 +54,17 @@ const HERO_GLYPH_EM = 1.1;
 /** A trouble word's width in em at the hero face and tracking, its shape ahead of it (frame.js fits the fleet line by it too). */
 export const heroEms = (word) => HERO_GLYPH_EM + [...String(word ?? '')].length * HERO_EM_PER_CHAR;
 
-/** The plate's widest (vw) on a trouble site, and its side padding (vmin, both sides). */
-export const HERO_PLATE = Object.freeze({ maxVw: 56, padVmin: 6 });
+/**
+ * The plate's widest (vw) on a trouble site, and its side padding (vmin, both
+ * sides). On a stage narrower than it is high (half a screen, night 4 T41)
+ * 56vw left an 11-letter name under the floor and cut it; there it takes
+ * `narrowVw`, the far fleet line's band, still short of the back control and
+ * the manual line on the right (wall.css keeps the same numbers).
+ */
+export const HERO_PLATE = Object.freeze({ maxVw: 56, narrowVw: 64, padVmin: 6 });
+
+/** The plate's widest in vw on a `width` x `height` stage. */
+export const heroPlateVw = (width, height) => (Number(width) < Number(height) ? HERO_PLATE.narrowVw : HERO_PLATE.maxVw);
 
 /**
  * The trouble word's size in vmin for a stage `width` x `height` (any unit):
@@ -67,7 +76,7 @@ export function heroSize(word, width, height) {
   const h = Number(height);
   const short = Math.min(w, h);
   if (!(short > 0)) return STEPS.hero;
-  const avail = (HERO_PLATE.maxVw * w) / short - HERO_PLATE.padVmin;
+  const avail = (heroPlateVw(w, h) * w) / short - HERO_PLATE.padVmin;
   const fit = avail / heroEms(word);
   return Math.round(Math.min(STEPS.hero, Math.max(STEPS.heroMin, fit)) * 10) / 10;
 }

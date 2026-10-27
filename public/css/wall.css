@@ -547,6 +547,12 @@ html.wall body {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The why under it keeps to the same band and is cut, never wider: in half a
+   screen (night 4 T41, 684 px) a long why ran left into the clock. */
+.wall-fleet[data-step="far"] .wall-fleet-sub {
+  max-width: 64vw;
+  margin-left: auto;
+}
 /* The shape at the caps' height, as on the plate. */
 .wall-fleet[data-step="far"] .wall-fleet-glyph { font-size: 0.62em; }
 /* One headline per trouble frame (night 3 T4, r54-film-ui 1): while a crit
@@ -965,4 +971,18 @@ html.wall body {
   color: var(--text-3);
   white-space: nowrap;
   pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Half a screen (night 4 T41): a stage narrower than it is high, a split
+   with the cockpit's canvas. The trouble plate takes the far fleet line's
+   band (caption.js HERO_PLATE.narrowVw) so an 11-letter name is not cut;
+   at that width it reaches under the tag and the manual line, so those two
+   rise into the band above the plate (the 8vh margin), the same 2.7vmin
+   apart as below it. The back control is clear of the plate as it is.
+   --------------------------------------------------------------------------- */
+@media (max-aspect-ratio: 1/1) {
+  .wall-caption[data-hero] { max-width: 64vw; }
+  .wall-tag { top: calc(8vh - 4.6vmin); }
+  .galaxy-manual { top: calc(8vh - 1.9vmin); }
 }
