@@ -75,8 +75,9 @@ sentence is C5's (`c5-c6.md` §1, D201: speak-ups are never spoken) and goes no 
 
 **Caps.** At most 6 raised blocks per rolling hour (`cockpit.speakUp.maxPerHour`). Triggers past
 the cap gather until a slot frees, then raise as one block. Speak-up turns count against
-`cockpit.agent.maxTurnsPerHour` (Q-O28, T73); when that cap is reached the blocks still go out and
-the agent's sentences wait for it.
+`cockpit.agent.maxTurnsPerHour` (Q-O28, `protocols.md` §11.12, D247); when that cap is reached the
+blocks still go out, the agent's sentences wait for it, and the block carries the line
+`The cockpit paused itself: 20 turns this hour. It answers again at 08:01.` (S-CW-18).
 
 **Agent down** (`status` `agent-down`, `c1-talk.md` §10): the block, cards, marker and chime go out
 as usual; under the block, 18 px `--text-2`: `The agent is down; it will add its words when it is
@@ -201,7 +202,7 @@ and when that is `null`, `22:00` to `07:00` (D188; Q-O5 b: "quiet hours on by de
 
 ## 5. Config
 
-All under `cockpit` in the room's config (`docs/config.md` style; the `cockpit.agent` table is T73's,
+All under `cockpit` in the room's config (`docs/config.md` style; the `cockpit.agent` table is `protocols.md` §11.12,
 the speech keys `c2-voice.md` §9's). A bad value is fatal at start with the key named, as there:
 `cockpit.quietHours.from: "7:00" is not HH:MM`.
 
@@ -600,6 +601,22 @@ Then one block `▲ drift · vm-c · declared: retired · running: up 3 d` (the 
 shown anywhere); the conversation agent then gets the speak-up prompt as S-CW-01;
 And when the next check prints `NO DRIFT`, the key clears and nothing is raised.
 Test: `/tick`; block text; `speakup.json` cleared at.
+
+### S-CW-18 The agent's own turns wait at the cap; the owner's prompts do not (pending Q-O28)
+
+Given `cockpit.agent.maxTurnsPerHour: 2`, the fake agent's script `cw-speak`, the pane open on
+`desk`, the room's clock `manual` at 07:00:00,
+When P2 alarms are added at 07:00:00, 07:05:00 and 07:10:00 (three blocks, three gather windows),
+Then the first two blocks get their agent turns (started at about 07:00:25 and 07:05:25); the third
+block is drawn at 07:10:20 with the line `The cockpit paused itself: 2 turns this hour. It answers
+again at 08:01.` under it, and `fakeAgent.prompts()` stays at 2;
+And when the owner types `still there?` and taps `SEND` at 07:11:00, the prompt goes out at once
+(`prompts()` 3) and is answered; no line about the cap appears in that turn;
+And when the clock passes 08:00:30 (the slot frees at 08:00:25, plus §3.1 step 4's 5 s), the third block's turn starts (`prompts()` 4, its first line
+`(From the cockpit, not the owner.`), and the paused line is gone.
+Test: Playwright, `POST /alarms` and `POST /tick` steps; `[data-raised]` text, the paused line's text
+and its absence after; `fakeAgent.prompts()` length; the room log holds `agent cap: 2 turns in the
+last 60 min; its own turns wait until 08:01` once.
 
 ## 11. What other files need (task T127)
 

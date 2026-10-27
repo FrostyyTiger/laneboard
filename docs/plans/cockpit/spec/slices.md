@@ -210,8 +210,8 @@ talk button (pending Q-O11); the `SINCE YOU LOOKED` divider (`c1-talk.md` §2.1,
 **Builds also** (`coworker.md` §7-§8): the infra repo pull and the `infra` tool, the Map drift
 trigger, the repo drift check; the `speakup` message (T127).
 
-**Scenarios** (14): S-CW-01 S-CW-02 S-CW-03 S-CW-04 S-CW-05 S-CW-06 S-CW-07 S-CW-08 S-CW-09
-S-CW-15 S-CW-16 S-CW-17 S-SCR-34 S-C1-44. The slice
+**Scenarios** (15): S-CW-01 S-CW-02 S-CW-03 S-CW-04 S-CW-05 S-CW-06 S-CW-07 S-CW-08 S-CW-09
+S-CW-15 S-CW-16 S-CW-17 S-CW-18 S-SCR-34 S-C1-44. The slice
 cannot be built until T127 is written. The touring-screen hold (`screens.md` §2.1) needs `flyTo(id)`,
 a node lookup and the idle hook of the Wall contract (`screens.md` §9): this slice builds them, Show reuses them.
 
@@ -285,7 +285,7 @@ S-C6-03 S-C6-04 S-C6-05. The confirm card is `c5-c6.md` §8. The job format, too
 | History | none written; planned with §5.2 | the board change of §5.2 |
 | C5 | S-C5-01 S-C5-02 S-C5-03 S-C5-04 S-C5-05 S-C5-06 S-C5-07 | Q-O34; T128 (messages, fake voice service) |
 | C6 | S-C6-06 S-C6-07 | the control-plane review, Q-O7, Q-O35; fenced for unattended work |
-| One | S-ONE-01 S-ONE-02 S-ONE-03 S-ONE-04 S-ONE-05 S-ONE-06 S-ONE-07 S-ONE-08 S-ONE-09 S-ONE-10 S-ONE-11 | C1; Q-O36 (under a) S-ONE-02's first step changes to a warning; under c) `allowSameUser` goes); research Q18 (`sudo` relaying signals, D214); the admin status route of `single-machine.md` §5; the bridge's allowlist check (`protocols.md` §11.11, D240) |
+| One | S-ONE-01 S-ONE-02 S-ONE-03 S-ONE-04 S-ONE-05 S-ONE-06 S-ONE-07 S-ONE-08 S-ONE-09 S-ONE-10 S-ONE-11 S-ONE-12 | C1; Q-O36 (under a) S-ONE-02's first step changes to a warning; under c) `allowSameUser` goes); research Q18 (`sudo` relaying signals, D214); the admin status route of `single-machine.md` §5; the bridge's allowlist check (`protocols.md` §11.11, D240) |
 
 `S-SEC-` (T17) and `S-ONE-` (T19) ids go to the slice whose code they test, written into this file
 by the task that writes them.
@@ -309,7 +309,7 @@ by the task that writes them.
 | S-C4-13, 24 | Jobs |
 | S-C4-14..23 | Canvas |
 | S-C4-25..33 | Canvas 2 |
-| S-CW-01..09, 15, 16, 17; S-SCR-34; S-C1-44 | Speak |
+| S-CW-01..09, 15..18; S-SCR-34; S-C1-44 | Speak |
 | S-CW-10..14 | Jobs |
 | S-C5-01..07 | C5 |
 | S-C6-01..05 | Jobs |
@@ -317,10 +317,10 @@ by the task that writes them.
 | S-SEC-01, 02, 03, 06 | C1 |
 | S-SEC-04 | Pair |
 | S-SEC-05 | C2 |
-| S-ONE-01..11 | One |
+| S-ONE-01..12 | One |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 207 live ids in all (round 129, S-ONE-08..11 by T72).
+D55). 209 live ids in all (round 130, S-CW-18 and S-ONE-12 by T73).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

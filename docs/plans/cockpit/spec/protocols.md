@@ -825,7 +825,7 @@ fixture too, but of a different checker; §13 says which.
   JSON object per line on the child's stdin (room → agent) and stdout (agent → room), UTF-8, `\n`
   at the end. The child's stderr goes to the room's log; the bridge keeps its last 20 lines for
   `detail` (cut to 120 characters, `c1-talk.md` §10).
-- Two **dialects**, chosen by `cockpit.agent.kind` (the config table is T73's):
+- Two **dialects**, chosen by `cockpit.agent.kind` (the config table is §11.12):
   - `claude-code`: the child is Claude Code in headless streaming mode (§11.2). It speaks its own
     native events; an adapter (`server/cockpit/agents/claude-code.mjs`) maps them onto the bridge
     events with the table in §11.4. This is the first-class agent (plan §5).
@@ -834,13 +834,13 @@ fixture too, but of a different checker; §13 says which.
     such an agent must offer, and the read-only rule for it, is §11.11.
 - Everything above the adapter (turn ids, `seq`, stop timing, restarts, the screen messages) works
   on bridge events only, so it is the same code for both dialects.
-- The agent runs as the agent's own unix user when `cockpit.agent.user` is set (D91, T56, T73);
-  how the room starts a process as another user is T73's. Signals below go to the child's process
+- The agent runs as the agent's own unix user when `cockpit.agent.user` is set (D91, T56, §11.12);
+  how the room starts a process as another user is `single-machine.md` §3.2 (D214). Signals below go to the child's process
   group.
 
 ### 11.2 Launching Claude Code (D101)
 
-The room starts the child in `cockpit.agent.cwd` (T73), with this argument list (`{…}` filled by the
+The room starts the child in `cockpit.agent.cwd` (§11.12), with this argument list (`{…}` filled by the
 room; one argument per line here, no shell in between):
 
 ```text
@@ -862,7 +862,7 @@ claude -p
   (plan C1, `c1-talk.md` §11).
 - `--max-turns 40` is the step limit behind E7 (`c1-talk.md` §10); it counts per prompt.
 - **Environment** (D108): the child gets `PATH`, `HOME`, `LANG`, `USER`, `LANEBOARD_MCP_TOKEN`
-  (`c3-see.md` §1) and the names listed in `cockpit.agent.env` (T73), nothing else of the room's
+  (`c3-see.md` §1) and the names listed in `cockpit.agent.env` (§11.12), nothing else of the room's
   environment.
 - The child lives as long as its session: between turns it waits on stdin. It is not started per
   prompt.
@@ -1142,7 +1142,7 @@ A turn that thinks or works for a long time with signs of life is not an error (
 The agent's login is checked by the room, so a logged-out agent is named before the owner sends
 anything (`c1-talk.md` §10.1).
 
-- **Command**: `cockpit.agent.loginCheck`, an argument list (T73 adds it to its table). Default for
+- **Command**: `cockpit.agent.loginCheck`, an argument list (§11.12's table). Default for
   kind `claude-code`: `["claude","auth","status"]` (pending research Q12); for `bridge`: `null`.
   `null`, or a command research Q12 finds missing, means no check: only the reactive rows below set
   the condition.
@@ -1235,7 +1235,7 @@ program cannot be held to a flag. Three fences, the strongest first:
      `ready.allowlist` to the list it launched with.
 
 **`cockpit.agent.allowUnrestricted`** (boolean, default `false`,
-`LANEBOARD_COCKPIT_AGENT_ALLOW_UNRESTRICTED=1`; T73 adds it to its table): `true` runs a bridge
+`LANEBOARD_COCKPIT_AGENT_ALLOW_UNRESTRICTED=1`; in §11.12's table): `true` runs a bridge
 agent that declares no allowlist, or a wider one. The room's check of fence 3 is off and every tool
 is drawn by `c1-talk.md` §5.2's table. Then, at start:
 
@@ -1250,6 +1250,85 @@ is drawn by `c1-talk.md` §5.2's table. Then, at start:
 Scenarios: `single-machine.md` S-ONE-06 (a bridge agent answers), S-ONE-08 (an unknown tool reads
 `used search_wiki`), S-ONE-09 (no allowlist: refused, no restart), S-ONE-10 (the tripwire),
 S-ONE-11 (`allowUnrestricted`'s start lines).
+
+### 11.12 The agent's config: `cockpit.agent` (T73, D243-D247)
+
+The keys live in the room's config (`docs/config.md`'s layers: defaults, file, `LANEBOARD_*`), in the
+style of `c2-voice.md` §9. A `cockpit.agent` block in the file is what makes a process a room (D17,
+D128). One file with every cockpit key at its default is `single-machine.md` §2.6.
+
+| Key | Default | Env | What |
+| --- | --- | --- | --- |
+| `cockpit.agent.kind` | `"claude-code"` | `LANEBOARD_COCKPIT_AGENT_KIND` | The dialect (§11.1): `claude-code` (the adapter, §11.2) or `bridge` (any other agent, §11.11). |
+| `cockpit.agent.command` | `["claude"]` for `claude-code`; none for `bridge` (required) | `LANEBOARD_COCKPIT_AGENT_COMMAND` (a JSON array: `'["/opt/acme-agent/bin/acme-agent","--bridge"]'`) | The program and its first arguments, one array entry per argument, no shell. `claude-code`: the room appends §11.2's arguments after these (D244). `bridge`: the whole argv. An absolute `[0]` when `user` is set (D217). |
+| `cockpit.agent.cwd` | `"{stateDir}/cockpit-agent"` | `LANEBOARD_COCKPIT_AGENT_CWD` | The agent's working directory: the written context it reads, as a laptop session in that directory would (plan C1; a `CLAUDE.md` there is read, §11.2). An existing directory; the room never writes in it (D246). |
+| `cockpit.agent.user` | unset | `LANEBOARD_COCKPIT_AGENT_USER` | The agent's own unix user (`single-machine.md` §3, D214). Unset: `single-machine.md` §4 (pending Q-O36). Its model login lives in that user's home (`security.md` §1). |
+| `cockpit.agent.allowSameUser` | `false` | `LANEBOARD_COCKPIT_AGENT_ALLOW_SAME_USER` (`1`) | Accept the agent on the room's own user (`single-machine.md` §4, pending Q-O36). Ignored when `user` is set. |
+| `cockpit.agent.allowedTools` | `["mcp__laneboard__*","Read","Grep","Glob"]` for `claude-code`; `["mcp__laneboard__*"]` for `bridge` | `LANEBOARD_COCKPIT_AGENT_ALLOWED_TOOLS` (comma list) | The tools the agent may use (§11.11, Q-O23 a). |
+| `cockpit.agent.allowUnrestricted` | `false` | `LANEBOARD_COCKPIT_AGENT_ALLOW_UNRESTRICTED` (`1`) | `bridge` only, needs `user`: no tool limit (§11.11, D241). |
+| `cockpit.agent.env` | `[]` | `LANEBOARD_COCKPIT_AGENT_ENV` (comma list: `ANTHROPIC_MODEL,ACME_AGENT_MODEL`) | Names of the room's environment variables the agent also gets (D108). Names only: the values stay in the room's environment, never in the file, the log or a screen (`c1-talk.md` §5.2's redaction). |
+| `cockpit.agent.loginCheck` | `["claude","auth","status"]` for `claude-code`; `null` for `bridge` | `LANEBOARD_COCKPIT_AGENT_LOGIN_CHECK` (a JSON array, or `null`) | The login check's argv (§11.10); `null`: none. |
+| `cockpit.agent.maxTurnsPerHour` | `20` (pending Q-O28) | `LANEBOARD_COCKPIT_AGENT_MAX_TURNS_PER_HOUR` | The cap on turns the room starts on its own, per rolling 60 min (below, D247); `0`: no cap. |
+
+**Fatal at start.** A bad value stops the room before it listens: exit 1 within 2 s, one stderr line
+that starts with the key, as every config fragment does (`docs/config.md`). The lines, exact apart
+from the value they quote:
+
+| Key | When | stderr (exact) |
+| --- | --- | --- |
+| `kind` | not one of the two | `cockpit.agent.kind: "acme" is not supported; use "claude-code" or "bridge" (docs/cockpit.md)` |
+| `command` | missing with `kind: bridge` | `cockpit.agent.command: required for kind bridge (the argv of a program that speaks the bridge protocol, docs/cockpit.md)` |
+| `command` | not a non-empty array of non-empty strings, or the env var not a JSON array | `cockpit.agent.command: must be an array of strings, one per argument (["claude"])` |
+| `command` | `kind: claude-code` and an entry after `[0]` starts with `-` | `cockpit.agent.command: "--model" is a flag; for kind claude-code the room sets the flags itself (protocols.md §11.2); a model goes in cockpit.agent.env (ANTHROPIC_MODEL)` |
+| `command` | `user` set and `[0]` not absolute | D217's line |
+| `cwd` | not absolute after `{stateDir}` and `~` are filled in | `cockpit.agent.cwd: "work" must be an absolute path` |
+| `cwd` | set, and not an existing directory | `cockpit.agent.cwd: /srv/notes is not a directory` |
+| `user` | not matching `^[a-z_][a-z0-9_-]{0,31}$` | `cockpit.agent.user: "Lb Agent" is not a user name` |
+| `user` | no such user on the machine | `cockpit.agent.user: no user "lb-agent" on this machine (laneboard cockpit agent-user prints the commands to make one)` |
+| `user` | uid 0 | `cockpit.agent.user: "root" would give the agent every file and process; give it its own user (laneboard cockpit agent-user)` |
+| `user` | the room's own uid | `cockpit.agent.user: "user" is the room's own user; give the agent its own (laneboard cockpit agent-user), or leave it unset and see cockpit.agent.allowSameUser` |
+| `allowSameUser`, `allowUnrestricted` | not a boolean (env: not `1` or `0`) | `cockpit.agent.allowSameUser: must be true or false` |
+| `allowUnrestricted` | the two cases of §11.11 | §11.11's lines |
+| `allowedTools` | empty, an entry not matching `^[A-Za-z0-9_.-]{1,128}\*?$` (a `*` only at the end) | `cockpit.agent.allowedTools: "Bash(*)" is not a tool name or a prefix ending in *` |
+| `env` | an entry not matching `^[A-Z_][A-Z0-9_]{0,63}$` | `cockpit.agent.env: "acme-model" is not an environment variable name` |
+| `env` | `PATH`, `HOME`, `LANG`, `USER` or a name starting `LANEBOARD_` | `cockpit.agent.env: LANEBOARD_MCP_TOKEN is set by the room itself` |
+| `loginCheck` | neither `null` nor a non-empty array of strings | `cockpit.agent.loginCheck: must be null or an array of strings (["claude","auth","status"])` |
+| `maxTurnsPerHour` | not an integer from 0 to 600 | `cockpit.agent.maxTurnsPerHour: "lots" is not a whole number from 0 to 600` |
+| any `LANEBOARD_COCKPIT_AGENT_*` | set while the file has no `cockpit.agent` | `LANEBOARD_COCKPIT_AGENT_KIND is set, but the config file has no cockpit.agent; a room is made in the file (docs/cockpit.md)` (D245) |
+
+Several bad keys: the first in the table's order is printed, alone. Not fatal:
+
+- an `env` name the room's own environment does not hold: one stderr line at start,
+  `cockpit.agent.env: ACME_AGENT_MODEL is not set here; the agent starts without it`, and the agent
+  starts;
+- a directory on the way to `cwd` the agent's user cannot enter: `single-machine.md` §3.3's line.
+
+**`cwd`** (D246). The default is `{stateDir}/cockpit-agent/` (D209: 0755, the room's user owns it,
+`mcp.json` and the standing instructions in it); the room makes it at start if it is missing. A
+`cwd` the owner sets must exist; the room makes nothing there and writes nothing in it. To give the
+agent the same notes a laptop session reads, point `cwd` at a checkout the agent's user may read
+(`/srv/notes`), not at the owner's home.
+
+**`maxTurnsPerHour`** (D247, pending Q-O28). It caps what the agent spends while nobody asks:
+
+- **Counts**: each turn the room starts without an owner's prompt, at the moment it starts: a
+  speak-up's turn (`coworker.md` §3.2) and a repo drift check's one-shot run (`coworker.md` §8.2).
+  The owner's own prompts (typed, spoken, the button, `RETRY`, `GO ON`) are not counted and never
+  held by the cap. The window is the last 60 min of the room's clock (`stand-ins.md` §1.1's `manual`
+  mode moves it), kept in memory: a restart starts it empty.
+- **At the cap**: a speak-up's block, cards, marker and chime go out as usual (`coworker.md` §3.1);
+  its turn waits. Under the block, 18 px `--text-2`, as the agent-down line there:
+  `The cockpit paused itself: 20 turns this hour. It answers again at 08:01.` The time is when the
+  oldest counted turn of the window is 60 min old, rounded up to the next whole minute; the line
+  goes when the turn starts. A drift check that comes due waits the same way, with no line.
+- **When a slot frees**: the waiting turns start one at a time in the order they came due, each
+  as soon as no turn runs (`coworker.md` §3.1 step 4); gathered speak-ups that waited together are
+  one turn.
+- **Log**: one room-log line when the cap is reached, `agent cap: 20 turns in the last 60 min; its
+  own turns wait until 08:01`, and one when the first waiting turn starts.
+- Spend shown as its own lane on Credit and Morning is the rest of Q-O28 a), not this key.
+
+Scenarios: `single-machine.md` S-ONE-12 (fatal lines), `coworker.md` S-CW-18 (the cap).
 
 ## 12. Room ⇄ speech-to-text (D107)
 

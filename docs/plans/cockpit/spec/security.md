@@ -20,7 +20,7 @@ changes with one of them carries `(pending Q-O<n>)`.
 ## 1. Credentials
 
 Each thing that proves who is asking, one row each. "Room" is the laneboard process with a
-`cockpit.agent` (D89); "the agent's user" is `cockpit.agent.user` (T73).
+`cockpit.agent` (D89); "the agent's user" is `cockpit.agent.user` (`protocols.md` §11.12).
 
 | Credential | Made by, form | Kept where | Gives | Never gives | Ends |
 | --- | --- | --- | --- | --- | --- |

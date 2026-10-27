@@ -376,7 +376,9 @@ Coworker slice. From `reviews/48-stranger.md` (7).
 
 Recommendation: a) — safe by default; the owner turns things on once and sees the cost. Written
 for a) in `coworker.md` §5 (D197): speak-ups, the infra pull and the repo drift check are off until
-turned on; confirmed jobs and reminders work regardless.
+turned on; confirmed jobs and reminders work regardless. The cap itself is `protocols.md` §11.12
+(D247): it counts and holds only the turns the room starts on its own, never the owner's prompts;
+if the owner wants the cap to stop their own prompts too, say so here (S-CW-18 changes).
 
 Answer: (open)
 

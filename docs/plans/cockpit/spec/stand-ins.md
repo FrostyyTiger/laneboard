@@ -63,7 +63,7 @@ How older phrases in the spec map onto these:
 - Production has no test route at all (D109): the control port exists only in this wrapper, never
   on the room's own port, and no environment variable turns anything on in `server/`.
 - **Config** the test writes (`cockpit` section; keys as `protocols.md` §11 and `c2-voice.md` §9;
-  `cockpit.agent.*` is T73's):
+  `cockpit.agent.*` is `protocols.md` §11.12):
 
 ```json
 {"mode":"builder","port":0,

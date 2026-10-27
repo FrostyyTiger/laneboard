@@ -495,7 +495,7 @@ every process on a box `local`. So `local` alone cannot be the test: one injecte
   (`socketPeerUid`, `server/fleet/peercred.mjs`, as `fleet.ingressPeerUid` does) and accepts an
   admin request only when that uid is the room's own uid (`process.getuid()`). Not 0: a front
   such as `tailscaled` runs as root. It fails closed: an unknown uid is a refusal.
-  - The agent's uid (`cockpit.agent.user`, T73): `403 {"error":"agent-uid"}`; the CLI prints
+  - The agent's uid (`cockpit.agent.user`, `protocols.md` §11.12): `403 {"error":"agent-uid"}`; the CLI prints
     `refused: the agent cannot pair screens` (for `unpair`: `refused: the agent cannot unpair
     screens`; for `button`: `refused: the agent cannot add or remove buttons`) and exits 1.
   - Any other uid: `403 {"error":"wrong-uid"}`; the CLI prints `refused: only the room's own user

@@ -47,7 +47,7 @@ start with the agent on its own user unless told to). Text that changes with one
 
 All examples are the file `~/.config/laneboard/config.json` of the room's user (`docs/config.md`'s
 layers). Keys not shown keep their defaults. The `cockpit.agent` table (defaults, env vars, the
-fatal-at-start lines) is T73's; this file uses its keys as `stand-ins.md` §1.1 does: `kind`,
+fatal-at-start lines) is `protocols.md` §11.12; this file uses its keys as `stand-ins.md` §1.1 does: `kind`,
 `command`, `cwd`, `user`, `env`, `loginCheck`, plus `allowSameUser` (§4, pending Q-O36) and
 `allowedTools`, `allowUnrestricted` (`protocols.md` §11.11).
 
@@ -196,10 +196,10 @@ without them). Each key's own table is linked.
   "port": 7777,                                   // docs/config.md
   "publicUrl": "http://127.0.0.1:7777",           // docs/config.md; https for a tablet (§2.2, §2.3)
   "cockpit": {
-    "agent": {                                    // T73's table; protocols.md §11
+    "agent": {                                    // protocols.md §11.12
       "kind": "claude-code",                      // or "bridge" (§2.5)
       "command": ["claude"],                      // absolute when "user" is set (D217)
-      "cwd": "{stateDir}/cockpit-agent",          // T73
+      "cwd": "{stateDir}/cockpit-agent",          // D246
       "user": "lb-agent",                         // unset: §4 (pending Q-O36)
       "allowSameUser": false,                     // §4 (pending Q-O36)
       "allowedTools": ["mcp__laneboard__*", "Read", "Grep", "Glob"],  // protocols.md §11.11; ["mcp__laneboard__*"] for "bridge"
@@ -559,6 +559,27 @@ has no `allowlist`, the room accepts it and `doctor` check 7 prints
 
 Test: `node:test` on the config module and the room's start (no Playwright); the doctor module with
 only the `agent` check enabled and a stubbed admin status answer.
+
+### S-ONE-12 A bad `cockpit.agent` key stops the start, naming the key
+
+Given the config parser and start checks with an injected user lookup (`lb-agent` uid 998, `root`
+uid 0, the caller `user` uid 1000) and an injected environment,
+When the config is, one case at a time: (a) `kind: "acme"`; (b) `kind: "bridge"` with no
+`command`; (c) `command: ["node","fake-agent.mjs","--model","x"]` with `kind: "claude-code"`;
+(d) `cwd: "/nonexistent/notes"`; (e) `user: "nobody-here"`; (f) `user: "root"`; (g) `user: "user"`;
+(h) `allowedTools: ["Bash(*)"]`; (i) `env: ["LANEBOARD_MCP_TOKEN"]`; (j) `maxTurnsPerHour: 1000`;
+(k) no `cockpit.agent` in the file and `LANEBOARD_COCKPIT_AGENT_KIND=bridge` in the environment;
+(l) cases (a) and (j) together,
+Then each exits 1 within 2 s, nothing listens, and stderr is exactly the line of `protocols.md`
+§11.12's fatal table for that key with that value; (l) prints only (a)'s line.
+When the config is valid and `env: ["ACME_AGENT_MODEL"]` names a variable the room's environment
+does not hold,
+Then the room starts and stderr holds `cockpit.agent.env: ACME_AGENT_MODEL is not set here; the
+agent starts without it` once, and the fake agent's log `start` line (`stand-ins.md` §2.6) lists
+no `ACME_AGENT_MODEL` in `env`.
+
+Test: `node:test` on the config module and the room's start (no Playwright), one `boot({expectExit:true})`
+per case comparing stderr's first line and the exit code; the last step against the fake agent.
 
 ## 8. Not in v1
 
