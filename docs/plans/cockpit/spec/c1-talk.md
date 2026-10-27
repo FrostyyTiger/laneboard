@@ -20,8 +20,8 @@ main")."
 | App, every view in `VIEWS` | x 760-1368, y 36-888 (608 x 852): under the 36 px header, above the 24 px tape | covers the inspector (360 px) while open; `z-index` 35, between `--z-tape` 30 and `--z-sheet` 40 |
 
 - The width is **608 px** everywhere, the same constant as the canvas column (`screens.md` §1, D6),
-  so a reply wraps the same way in the pane and in the column (D18). Narrower than 1216 px the pane
-  is `min(608px, 100vw)` wide.
+  so a reply wraps the same way in the pane and in the column (D18). Smaller screens, the
+  full-width pane below 900 px and the browser floor: §1.2.
 - Background `--bg-elevated` (a floating layer, `docs/design.md` "Surfaces"), a 1 px `--line`
   left border, no shadow.
 - While the pane is open, the view behind keeps working in the part that is in sight: the Wall
@@ -132,6 +132,60 @@ Rects at 1368x912 with a one-line input (row top y 808, on the Wall, in the app 
   stack and the input's growth together would leave less, the column's top moves up over the card
   area by what is missing (the most: 80 px status line, 144 px of stack (an 80 px three-line slot
   and the 64 px chip row) and 118 px of input growth put the column at y 306-912).
+
+### 1.2 Smaller screens and the browser floor (T77, D18, D249, D250, pending Q-O9)
+
+The pane's parts keep their offsets from the pane's left edge and from the viewport's right and
+bottom edges (the talk button and `CHAT`: `screens.md` §4), so at any size the input row, `SEND`
+and the talk button stay inside the viewport. Two widths decide the pane's own width:
+
+| Viewport width | Pane | The view behind |
+| --- | --- | --- |
+| ≥ 900 px | 608 px, the right 608 px (`min(608px, 100vw)` is 608 here) | in sight left of the pane and usable, as at 1368 (§1) |
+| 700-899 px | the whole width (`100vw`), no left border | covered: `inert` while the pane is open; `CLOSE` (the corner `CLOSE` or the header's) or `Esc` is the only way back (D249) |
+| < 700 px, or the window < 560 px tall | not offered (D250) | the board as today |
+
+- **Widths inside the pane.** The input runs from the pane's left edge + 24 px to the viewport's
+  right edge − 184 px; the line slot, chip row and `↓ NEW` end at the right edge − 104 px (§1.1's
+  x ≤ 1264 at 1368); the text column is the pane's width − 48 px. Everything else keeps its 1368
+  size. Widths at 1368 in §1 and §1.1 grow or shrink by (pane width − 608 px).
+- **Heights.** On the Wall page the pane is the full height; in the app it runs from the header's
+  bottom (36 px) to the bottom bar's top (`--tape-h` 24 px), as at 1368. The app's tablet shell
+  (`shell.js` `layoutFor()`, 700-1199 px) has the same 36 px header and 24 px bar.
+- **Crossing 900 px** with the pane open (a resize or a rotation) changes the pane's rect in the
+  next frame, with no slide; the draft, the scroll position (§7.1's pin rule) and a running turn
+  are unchanged.
+- **A show command** (`c4-show-canvas.md` §2) while a full-width pane is open moves the camera as on
+  a screen with the pane closed (centred in the whole viewport), behind the pane; the pane stays
+  open; its show line (`c4-show-canvas.md` §4, with `UNDO`) is how the owner learns it, and
+  `CLOSE` shows the result.
+- **Below the floor** (`innerWidth` < 700 px or `innerHeight` < 560 px; the layout viewport, so the
+  on-screen keyboard never trips it): `[data-talk]` and `[data-cockpit-open]` are not rendered, an
+  open pane closes as with `CLOSE` (§2), a running turn keeps running and the draft stays. Back
+  above the floor, both controls are drawn again and the pane is closed. The phone shell (< 700 px)
+  has its own chip strip and bottom sheet where the corner cluster would sit.
+
+**The browser floor** (D250, versions to confirm by research Q19): Chromium 108 (Chrome, Edge, the
+Android WebView; the version that made the keyboard resize only the visual viewport and honours
+`interactive-widget`, `research/Q11-on-screen-keyboard-signals.md`) and Safari 16 on iPadOS. The
+page does not read the version; at load it checks features, and what is missing degrades as follows:
+
+| Missing | What the screen does |
+| --- | --- |
+| `WebSocket`, CSS `min()` (`CSS.supports('width','min(1px, 100vw)')`) or the `inert` attribute (`'inert' in HTMLElement.prototype`) | `CHAT` opens a pane with only the header and, in the conversation's place, `[data-cockpit-unsupported]`: `This browser is too old for the cockpit. It needs Chrome 108 or Safari 16 or newer.` (18 px `--font-label`, `--text-1`, 24 px in); no input row, no talk button, no room link is opened. The board works as today. |
+| `navigator.mediaDevices.getUserMedia` or `AudioWorklet` | no talk button, as with `cockpit.stt.url: none` (`c2-voice.md` §9): `SEND` takes its rect; typing works |
+| `navigator.virtualKeyboard` | the visual viewport alone tells the keyboard (§7.1, D130) |
+| `window.visualViewport` | `data-keyboard` stays `down`; the input row stays at the viewport's bottom and the browser scrolls the focused input into sight |
+| `performance.mark` | no speed marks (`README.md` §"Speed budget"); nothing the owner sees changes |
+
+Rects with a one-line input, nothing in §1.1's stack:
+
+| Viewport, page | Pane | Input row | Input | `SEND` | Talk button | Corner `CLOSE` | Header `CLOSE` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1024x768, Wall | x 416-1024, y 0-768 | y 664-768 | x 440-840, y 680-744 | x 856-920, y 680-744 | x 936-1000, y 680-744 | x 944-992, y 616-664 | x 912-1008, y 8-56 |
+| 1024x768, app | x 416-1024, y 36-744 | y 664-744 | same | same | same | same | x 912-1008, y 44-92 |
+| 800x1280, Wall | x 0-800, y 0-1280 | y 1176-1280 | x 24-616, y 1192-1256 | x 632-696, y 1192-1256 | x 712-776, y 1192-1256 | x 720-768, y 1128-1176 | x 688-784, y 8-56 |
+| 800x1280, app | x 0-800, y 36-1256 | y 1176-1256 | same | same | same | same | x 688-784, y 44-92 |
 
 ## 2. Opening and closing
 
@@ -1631,6 +1685,54 @@ Test: Playwright, two contexts, `page.clock` and the room's clock moved together
 `[data-cockpit-conversation]`'s; `[data-cockpit-follow]` visible; `data-speakup` absent; the
 `welcome` frame's `lookedAt` read with `page.on('websocket')` after the reload. Runs in the Speak
 slice (`slices.md` §3.4).
+
+### S-C1-45 At 1024x768 the pane is 608 px and the input row is inside the viewport (T77, D249)
+Given the app on `#/map` at 1024x768 (the tablet shell) and the Wall page in `wall` at 1024x768,
+each with the pane closed and the fake agent idle,
+When the owner taps `[data-cockpit-open]` on each,
+Then by 200 ms the pane is x 416-1024 (y 0-768 on the Wall, y 36-744 in the app); the input is
+x 440-840, `SEND` x 856-920, the talk button x 936-1000, all y 680-744; the corner `CLOSE` is
+x 944-992, y 616-664 (§1.2's table); the Map left of x 416 still pans on a drag at (200, 400).
+When the owner types `how is builder-a` and taps `SEND`,
+Then the prompt block's right edge is ≤ 1000 px and the reply's text column is 560 px wide.
+Test: Playwright `viewport: {width: 1024, height: 768}`, `hasTouch: true`, script `c1-render`; for
+the input, `SEND`, `[data-talk]` and the corner `[data-cockpit-open]` assert the rect (± 1 px) and
+that it lies inside `0..innerWidth` x `0..innerHeight`; drag on the Map and read its camera; after
+the send read `[data-reply]`'s `clientWidth` minus its padding.
+
+### S-C1-46 At 800x1280 the pane is the whole screen and CLOSE is the way back (T77, D249)
+Given the app on `#/map` at 800x1280 portrait with a node selected, the pane closed,
+When the owner taps `[data-cockpit-open]`,
+Then by 200 ms the pane is x 0-800, y 36-1256, with no left border; the input is x 24-616,
+`SEND` x 632-696, the talk button x 712-776, all y 1192-1256; the corner `CLOSE` is x 720-768,
+y 1128-1176; the Map's container has the `inert` attribute and `document.elementFromPoint(300, 400)`
+is inside `[data-cockpit-conversation]`.
+When the fake agent runs a `show` of `builder-a` (`c4-show-canvas.md` §2) in its reply,
+Then the pane stays open (`data-pane="open"`), the reply has its show line, and once `CLOSE` is
+tapped `builder-a` is centred in the whole 800 px (at x 400 ± 24 px), the `inert` attribute is
+gone and a tap at (300, 400) reaches the Map.
+When the window turns to 1280x800 with the pane open and the draft `next`,
+Then in the next frame the pane is x 672-1280 with its left border, the Map is no longer `inert`,
+and the draft is still `next`.
+Test: Playwright `viewport: {width: 800, height: 1280}`, `hasTouch: true`, script `c1-render`
+plus one `show` call (the show steps run in the Show slice, `slices.md` §3.6; the rest in C1);
+assert the rects inside the viewport, `hasAttribute('inert')`, `elementFromPoint`, `screenOf('builder-a')`
+after `CLOSE`; `setViewportSize({width: 1280, height: 800})` and read the rect and the input value.
+
+### S-C1-47 Below the floor and in an old browser the board stays and says why (T77, D250)
+Given the app on `#/map` at 640x900 with the cockpit configured,
+Then `[data-talk]` and `[data-cockpit-open]` are absent and the board's phone shell is unchanged.
+When the window grows to 1024x768,
+Then both controls are drawn at §1.2's rects within 0.5 s and `data-pane="closed"`.
+Given instead a page at 1368x912 where `'inert' in HTMLElement.prototype` is false,
+When the owner taps `[data-cockpit-open]`,
+Then the pane opens with its header and `[data-cockpit-unsupported]` reading
+`This browser is too old for the cockpit. It needs Chrome 108 or Safari 16 or newer.`; there is no
+input and no `[data-talk]`, and the room saw no link (the control API's `GET /connections`, `stand-ins.md` §1.2, has no
+items).
+Test: Playwright `setViewportSize` 640x900 then 1024x768, assert presence; a second context with
+`addInitScript(() => { delete HTMLElement.prototype.inert })`, tap, read the text, count inputs,
+`room.control('GET', '/connections')`.
 
 ## 15. The demo (`?demo=1`, T36/T76/T93)
 

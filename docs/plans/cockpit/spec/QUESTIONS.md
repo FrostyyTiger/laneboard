@@ -235,6 +235,9 @@ Shapes every screen. `spec-input.md` §7.9 and §2. Spec: `screens.md` §1, D9.
 - c) b) plus portrait.
 
 Recommendation: b). Also tell us: how many screens today, which layout on each, the panel size and distance.
+Written meanwhile for every size (T77, D249, D250): the pane is full width under 900 px, the
+cockpit is offered from 700x560 px, in Chromium 108 or Safari 16 (`c1-talk.md` §1.2); a phone
+layout would be a new task.
 
 Answer: (open)
 

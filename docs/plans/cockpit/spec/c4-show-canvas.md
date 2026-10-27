@@ -63,7 +63,8 @@ functions. A show command is treated like a touch that did not come from the own
   speed budget). A command that only draws (a `highlight` whose nodes are all in sight, `clear`,
   `pin`) has no flight; its marks are drawn within the same 0.3 s.
 - **Where the target lands.** Centred in the part of the Map in sight: left of the pane when it is
-  open (x 0-759, `c1-talk.md` §1), left of the inspector when it is open (the Map's insets,
+  open (x 0-759, `c1-talk.md` §1; the whole viewport, behind the pane, when the pane is full width
+  under 900 px, §1.2, D249), left of the inspector when it is open (the Map's insets,
   `setInsets`), the whole wall half in `split` (x 0-759).
 - **The owner's finger wins** (D70). If the owner touched that screen's camera (a pointer on the Map
   or the wall half, not on the pane) in the last 3 s, or a finger is still down, the command waits

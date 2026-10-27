@@ -74,7 +74,7 @@ without touch: the tour resumes"). The cockpit adds three things that hold the t
 The pane closes on its own after **300 s** with no touch, no running turn and the microphone
 closed (D5). The conversation and a typed draft stay; the next open shows them unchanged.
 
-The numbers (60 s, 300 s, 1280 px, 608 px) are named constants in one client module, so the owner
+The numbers (60 s, 300 s, 1280 px, 608 px; the pane's 900 px full-width and 700 x 560 px floor, `c1-talk.md` §1.2) are named constants in one client module, so the owner
 changes them in one place (D6).
 
 **The canvas never idles.** Nothing on it moves or leaves because nobody touched the screen; cards
