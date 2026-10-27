@@ -471,7 +471,7 @@ Notes for every builder round (planner, round 1):
   `hud.covers()` includes the clock block, tag and plate; every label keeps a safe margin from the frame edge
   (`HOME` was cut by the top edge) and out of the plate's box (`CLOUD` under `HOLDS`) and the lock bracket — done
   when: a test on the large fixture (`?at=home`, overview, a held site) finds no shown label box meeting a cover or
-  crossing the frame edge. (commit SHA_T26)
+  crossing the frame edge. (commit 13eef79)
   Builder r58: measured first with a CDP probe (`tools/r58-margins.mjs`: each shown label's DOM rect, every frame, against
   the clock, tag, fleet line, plate, back and bracket corners and a 12 px edge; large demo, pace=wall, 90 s). Before:
   names 0-8 px from the edge (`HOME` 1 px from the top, `kitchen-light`, `phone-1`, `edge-1` at the right), `HV2` on the
