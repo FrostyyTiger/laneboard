@@ -455,6 +455,23 @@ Notes for every builder round (planner, round 1):
   done when: a test on the large fixture finds, over `flightPose` samples, no lobe drawn at more than that distance
   from its label anchor, and a film of `galaxy.html?demo=1&quality=0&fx=warp` has no red blob at the edge without
   a label near it.
+- [ ] T33 (r46-skeptic galaxy 1) [ui] [variant:galaxy] The banner does not change subject with the camera: with
+  more than one crit standing the banner names them in a fixed order (oldest first, `■ 2 CRIT · HV2 · HV1`, the
+  reason line for the oldest), never picking the subject by where the camera is — done when: a test on a model
+  with two crits gets the same banner text for every held site/camera position and the oldest crit's reason, and
+  a film of `galaxy.html?demo=1&quality=0` (`--size large`) has no banner subject change while the fleet is the same.
+- [ ] T34 (r46-skeptic galaxy 2; follows T20) [ui] [variant:galaxy] T20 holds with a second crit standing: the
+  echo test is "the banner's line names the held problem", whatever else stands (then the banner shows the next
+  problem or drops out), and `hud.named()` hides the planet's own label on every plate that names it, not only the
+  first visit — done when: a test with two crits (HV2 STORAGE held, HV1 VM-C also crit) finds no banner naming
+  STORAGE and no shown label for the planet while the hero names it, and a film frame at the second crit's
+  target shows the hero once.
+- [ ] T35 (r46-skeptic galaxy 3; = Later r41-operator galaxy 8, A4 T38) [ui] [variant:galaxy] No dark rectangle
+  over the galaxy: the banner's ground (the far cover) and the caption plate's ground are removed or become a
+  feathered edge / text-shadow halo, so no star, nebula or label is cut flat by a box (HV1's yellow nebula and
+  `▲ HV1` sliced at 13.7 s of r46-galaxy-beacon) — done when: a `wall.css` test pins no hard-edged opaque ground
+  on `.wall-fleet` and the plate (halo or mask-image instead), and a still of `galaxy.html?at=overview&quality=0`
+  with a site under the banner shows no step in the ribbon at the banner's edge.
 
 ## Research questions
 
@@ -525,6 +542,24 @@ Night 3's list, not yet a task (README §7 Night 3; replan takes from here in or
 - (was night 2's T32, r43-stranger 6; not named by Night 3, fits E) Screen Wake Lock in `galaxy/main.js`: request
   at start and again on visible, silent when denied or missing (Q15).
 - §7 Night 3 D unbuilt, staying unbuilt: `fx=storm`, `fx=lights`, `fx=rings`, `fx=arrive`.
+
+From r46-skeptic (not tasks yet):
+- (r46-skeptic galaxy 4 = T31; touch 1 = T25; touch 2 = T30; touch 3 = r41-operator touch 1 above) covered, dropped.
+- (galaxy 5) Plate kicker, `STATUS` row and attention row repeat the hero: kicker the site's kind only, `STATUS` only
+  when more than the hero (`+1 warn`), in hue (with T23).
+- (galaxy 7) Calm planets tinted pink inside a crit nebula: the nebula's light must not reach the planets' material.
+- (galaxy 8) A red hairline from HV2 off the frame (hyperlane in the site's tone): hyperlanes stay grey at every zoom
+  (= r26-skeptic 11), or fade a lane whose far end is off screen.
+- (galaxy 10) `+N MORE` changes with the camera: count all open problems, at the reason line's size, or remove it.
+- (galaxy 11) Ambient line `5 SITES · 115 NODES · 8 WORKING`: keep only `8 WORKING` or remove.
+- (galaxy 12) Warn banner wraps after its separator: break at the separator (site · node / reason).
+- (galaxy 13) Leader line repeats the brackets: film one round without it, keep only if a panel cannot find the target.
+- (galaxy 14) The date under the clock unreadable at 3 m (= r26-skeptic 9): remove, or put in the tag.
+- (fx-beacon 2, 3) Beacon flares into a streak in flights near its site: fade it in flights; billboard it
+  screen-vertical (= r31-film-ui galaxy 6).
+- (fx-warp 1, 2, 3) No streaks on a flight to a calm site; the trouble tint at full token value (T28); streak far
+  stars only, not the near dust, or cap opacity at the ribbon's (the overview's S turns to scratches in out-flights).
+- (touch 4) `afterglow` is what a cleared crit lacks (HV2 went grey with no trace): already Later.
 
 From r41-operator (not tasks yet):
 - (r41-operator touch 1; = r36-dreamer touch 1) In explore the overview looks like the tour's: `MANUAL · TOUR IN 0:40`
@@ -644,6 +679,11 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 
 ## For the owner
 
+- (r46-skeptic, taste, decisions) Keep or cut: (a) `TARGET 02 / 05` in the kicker (the skeptic: nobody at 3 m needs it; it is
+  in your brief, so yours to drop); (b) the calm plate that only types the site's name (galaxy 6: give it one real
+  line, or no plate; = the calm-facts idea below); (c) the sun's name above the tag's hub name (galaxy 9: drop one);
+  (d) `fx=beacon`: the fourth mark for the same crit; keep only if the crit nebula alone does not find the crit
+  in the galaxy (fx-beacon 1); (e) `fx=warp`: scores 4/4 (skeptic), silent for calm flights would help (Later).
 - (r40) The r38 Chromes are gone by 02:14 VM time (load 1.2); nothing for the owner to stop any more.
 - (r39) The two r38 Chromes below were still running at 03:01 (gpu processes 3299849, 3300253 at ~250 % CPU each);
   round 39 left them, as round 38's kill was refused.
@@ -710,6 +750,11 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
   fx-beacon 1-3, touch 1, 4 went to Later; fx-warp 1 dropped (= T28), fx-warp 2 dropped (observation); touch 2 (= T25)
   dropped (covered), touch 3 dropped (works); across dropped (covered/observation). No dreamer proposals in this review.
 
+- r46-skeptic.md: 14 galaxy + 3 fx-beacon + 3 fx-warp + 4 touch + across; 3 became tasks (T33 = galaxy 1, T34 = galaxy 2,
+  T35 = galaxy 3); galaxy 4 (= T31), touch 1 (= T25), touch 2 (= T30) dropped (covered); galaxy 5, 7, 8, 10-14, fx-beacon
+  2, 3, fx-warp 1-3, touch 3 went to Later; galaxy 6, 9, fx-beacon 1 and the warp's worth to the owner; touch 4 dropped
+  (works / afterglow). No dreamer proposals in this review.
+
 ## Scores
 
 | round | persona | overview | legibility | status | touch | wow | calm | performance |
@@ -743,5 +788,8 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 | r41 | operator, galaxy | 7 | 6 | 6 | 6 | 6 | 6 | 6 |
 | r41 | operator, fx-beacon | – | – | – | – | 5 | 6 | – |
 | r41 | operator, fx-warp | – | – | – | – | 3 | 7 | – |
+| r46 | skeptic, galaxy | 7 | 6 | 5 | 6 | 6 | 5 | 6 |
+| r46 | skeptic, fx-beacon | – | – | – | – | 5 | 5 | – |
+| r46 | skeptic, fx-warp | – | – | – | – | 4 | 4 | – |
 
 ## Morning
