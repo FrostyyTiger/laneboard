@@ -26,7 +26,7 @@ import { createStageSize } from './stage.js';
 import { LOBES, armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
 import {
-  BEACON, COMETS, LANES, TWINKLE, WARP, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles,
+  BEACON, COMETS, TWINKLE, WARP, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, cometAt, cometPath, trackComets, trackTwinkles,
   twinkleAt, warpAt,
 } from './fx.js';
 
@@ -404,12 +404,11 @@ const pageClock = () => globalThis.performance.now();
  * sprite textures; `clock` is the time the eases count in (the frames'
  * `now`), `makeRenderer` the WebGL renderer (both injectable for tests).
  * `still` (reduced motion, still.js): trouble glows without breathing, the dust stays put.
- * `fx` (fx.js `parseFx`): the effects asked for; `lanes` draws `setRoutes`' pulses,
- * `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets,
+ * `fx` (fx.js `parseFx`): the effects asked for; `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets,
  * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them),
  * `warp` streaks the sky while `setWarp` says the camera flies.
- * Returns `{ update, setOpen, setSun, setRoutes, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, beams, frame, resize,
- * setQuality, size, camera, world, quality, pixelRatio, routes, comets, twinkles, beacons, warp, renderer, dispose }`.
+ * Returns `{ update, setOpen, setSun, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, beams, frame, resize,
+ * setQuality, size, camera, world, quality, pixelRatio, comets, twinkles, beacons, warp, renderer, dispose }`.
  * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
  * `stage` (stage.js, T29) keeps the canvas's css size so no frame reads layout; `size()` gives it to the
  * camera, the labels and the lock.
@@ -980,59 +979,6 @@ export function createGalaxyScene(canvas, {
     camera.updateProjectionMatrix();
   };
 
-  // --- fx=lanes (T12, fx.js): a light pulse between two sites that talk ----
-  // One pool of sprites (a head and its trail per route), made once and
-  // reused; each route's path is read off the two hyperlanes every frame,
-  // so it follows a star that glides. Under reduced motion the route is a
-  // still row of faint lights instead of a moving pulse.
-  let routes = new Map();
-  const pulses = [];
-  const perRoute = 1 + LANES.trail;
-  if (fx?.has('lanes')) {
-    const light = col(palette.sun);
-    for (let i = 0; i < LANES.maxRoutes * perRoute; i++) {
-      const sp = new THREE.Sprite(keep(new THREE.SpriteMaterial({
-        map: glowTex, color: light, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
-      })));
-      sp.name = 'fx-lane';
-      sp.visible = false;
-      pulses.push(sp);
-      scene.add(sp);
-    }
-  }
-  /** The live routes (fx.js `siteRoutes`); ignored unless `fx=lanes`. */
-  const setRoutes = (list) => {
-    if (!pulses.length) return;
-    routes = trackRoutes(routes, list, clock());
-  };
-  const lanePoints = (s) => s.lane.geometry.attributes.position?.array ?? null;
-  const drawPulses = (now) => {
-    for (const sp of pulses) sp.visible = false;
-    let r0 = 0;
-    for (const [key, r] of routes) {
-      const at = pulseAt(r, now);
-      if (at === undefined) { routes.delete(key); continue; }
-      const a = world?.byId.get(r.from), b = world?.byId.get(r.to);
-      const pa = a && !a.gone && lanePoints(a), pb = b && !b.gone && lanePoints(b);
-      if (!pa || !pb || (!still && at === null)) { r0 += perRoute; continue; }
-      const path = routePath(pa, pb);
-      for (let i = 0; i < perRoute; i++) {
-        const sp = pulses[r0 + i];
-        if (!sp) break;
-        // Still: an even row of faint lights; moving: the head and a fading trail behind it.
-        const u = still ? (i + 0.5) / perRoute : at.u - i * LANES.gap;
-        if (u < 0) continue;
-        const fall = still ? 0.45 : (1 - i / perRoute) * at.k;
-        const p = path.at(u);
-        sp.position.set(p.x, p.y, p.z);
-        sp.scale.setScalar(LANES.head * (still ? 0.6 : 1 - (0.5 * i) / perRoute));
-        sp.material.opacity = LANES.opacity * fall;
-        sp.visible = sp.material.opacity > 0.01;
-      }
-      r0 += perRoute;
-    }
-  };
-
   // --- fx=comets (T13, fx.js): something just travelled a link ----------
   // One pool again (a head and its tail per comet). Each frame the arc is
   // read off where its two ends are drawn now (a planet unfolding, a star
@@ -1457,7 +1403,6 @@ export function createGalaxyScene(canvas, {
     // The dust turns once in about 26 minutes: alive under a held camera, never a motion you notice.
     dust.rotation.y = dustTurn(now, still);
     holdDust();
-    if (pulses.length) drawPulses(now);
     if (tails.length) drawComets(now);
     if (glints.length) drawTwinkles(now);
     if (pillars.length) drawBeacons(now);
@@ -1507,14 +1452,13 @@ export function createGalaxyScene(canvas, {
 
   return {
     update, setOpen, setHeld: (id) => { held = id ?? null; },
-    setSun: (look) => { if (look) sunWant = look; }, setRoutes, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, beams, frame, resize, setQuality, camera,
+    setSun: (look) => { if (look) sunWant = look; }, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, beams, frame, resize, setQuality, camera,
     size: sized.get,
     renderer, dispose,
     get world() { return world; },
     get quality() { return quality; },
     /** The pixel ratio the canvas is drawn at now (the level's, capped by dpr, or the pin). */
     get pixelRatio() { return pixelRatio; },
-    get routes() { return routes; },
     get comets() { return comets.flying; },
     get twinkles() { return twinkles; },
     get beacons() { return beacons; },

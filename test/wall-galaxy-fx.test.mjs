@@ -1,15 +1,13 @@
 // The galaxy's effects (Wall plan night 2 T12, README §7.C, D9): `?fx=`
-// turns them on one by one, none by default; `lanes` runs a light pulse
-// along the hyperlanes between two sites while a link between them is live
-// (the model's `live`, or an event that travelled it a moment ago);
+// turns them on one by one, none by default (night 4 T15 removed `lanes`);
 // `comets` (T13) flies one comet per event that travelled a link, once,
 // from the planet it left to the one it lands on; `twinkle` (T14) lights a
 // planet softly while a session on it is at work.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BEACON, COMETS, FX_NAMES, LANES, TWINKLE, WARP, beaconAt, beaconHeight, beaconNear, beaconScale, beaconWidth, beamProfile, coreProfile, cometAt, critAges, cometPath, flowComets, parseFx, pulseAt, routePath, siteRoutes, trackComets,
-  trackRoutes, trackTwinkles, twinkleAt, workingPlanets,
+  BEACON, COMETS, FX_NAMES, TWINKLE, WARP, beaconAt, beaconHeight, beaconNear, beaconScale, beaconWidth, beamProfile, coreProfile, cometAt, critAges, cometPath, flowComets, parseFx, trackComets,
+  trackTwinkles, twinkleAt, workingPlanets,
   warpAt, warpTail,
 } from '../public/js/wall/galaxy/fx.js';
 import * as THREE from '../public/vendor/three/three.module.js';
@@ -21,14 +19,13 @@ import { ndcOf } from '../public/js/wall/galaxy/framing.js';
 test('parseFx: nothing by default, known names only, comma-separated or repeated, any case', () => {
   assert.deepEqual([...parseFx('')], []);
   assert.deepEqual([...parseFx('?demo=1')], []);
-  assert.deepEqual([...parseFx('?fx=lanes,bogus')], ['lanes']);
+  assert.deepEqual([...parseFx('?fx=comets,bogus')], ['comets']);
   assert.deepEqual([...parseFx('?fx=bogus')], []);
-  assert.deepEqual([...parseFx('?fx= Lanes ')], ['lanes']);
-  assert.deepEqual([...parseFx('?fx=bogus&fx=lanes')], ['lanes']);
-  assert.deepEqual([...parseFx(new URLSearchParams('fx=lanes'))], ['lanes']);
-  assert.ok(FX_NAMES.includes('lanes'));
-  assert.deepEqual([...parseFx('?fx=comets,lanes')].sort(), ['comets', 'lanes']);
-  assert.deepEqual([...parseFx('?fx=lanes')], ['lanes'], 'comets only when asked');
+  assert.deepEqual([...parseFx('?fx= Comets ')], ['comets']);
+  assert.deepEqual([...parseFx('?fx=bogus&fx=comets')], ['comets']);
+  assert.deepEqual([...parseFx(new URLSearchParams('fx=comets'))], ['comets']);
+  assert.deepEqual([...parseFx('?fx=comets,beacon')].sort(), ['beacon', 'comets']);
+  assert.deepEqual([...parseFx('?fx=beacon')], ['beacon'], 'comets only when asked');
   assert.deepEqual([...parseFx('?fx=twinkle,bogus')], ['twinkle']);
   assert.deepEqual([...parseFx('?fx=beacon')], ['beacon']);
   assert.deepEqual([...parseFx('?fx=warp,beacon')].sort(), ['beacon', 'warp']);
@@ -50,103 +47,10 @@ function model({ links = [], events = [], generatedAt = 100_000 } = {}) {
 }
 const SITES = ['hv1', 'hv2', 'remote'];
 
-test('siteRoutes: a live link between two sites is a route, by the sites its ends are in', () => {
-  const m = model({ links: [{ from: 'db-svc', to: 'storage', kind: 'flow', live: true }] });
-  assert.deepEqual(siteRoutes(m, SITES), [{ key: 'hv1>hv2', from: 'hv1', to: 'hv2', live: true, ageMs: 0 }]);
-});
-
-test('siteRoutes: an idle link, a link inside one site, or to a site not drawn is no route', () => {
-  const m = model({
-    links: [
-      { from: 'db', to: 'storage', kind: 'flow', live: false },
-      { from: 'db', to: 'api', kind: 'flow', live: true },
-      { from: 'storage', to: 'nas', kind: 'flow', live: true },
-    ],
-  });
-  assert.deepEqual(siteRoutes(m, SITES).map((r) => r.key), ['hv2>remote']);
-  assert.deepEqual(siteRoutes(m, ['hv1', 'hv2']), [], 'remote is not drawn');
-  assert.deepEqual(siteRoutes({}, SITES), []);
-  assert.deepEqual(siteRoutes(null, SITES), []);
-});
-
-test('siteRoutes: an event that travelled a link makes it live for the window, by the model clock', () => {
-  const links = [{ id: 'dump', from: 'db', to: 'storage', kind: 'flow' }, { from: 'storage', to: 'nas', kind: 'flow' }];
-  const events = [
-    { at: 95_000, node: 'db', kind: 'ok', text: 'dump', link: 'dump' }, // by id, 5 s ago
-    { at: 100_000 - LANES.windowMs - 1, node: 'storage', kind: 'ok', text: 'copy', link: 'storage>nas' }, // too old
-    { at: 99_000, node: 'db', kind: 'ok', text: '?', link: 'nowhere>else' },
-  ];
-  const got = siteRoutes(model({ links, events }), SITES);
-  assert.deepEqual(got, [{ key: 'hv1>hv2', from: 'hv1', to: 'hv2', live: false, ageMs: 5000 }]);
-  // A fresh copy along the second link too, by `from>to`.
-  events.push({ at: 99_500, node: 'storage', kind: 'ok', text: 'copy', link: 'storage>nas' });
-  assert.deepEqual(siteRoutes(model({ links, events }), SITES).map((r) => [r.key, r.ageMs]), [['hv1>hv2', 5000], ['hv2>remote', 500]]);
-  // Two links between the same two sites are one route, the newest age.
-  const two = siteRoutes(model({
-    links: [{ from: 'db', to: 'storage' }, { from: 'api', to: 'storage' }],
-    events: [{ at: 90_000, link: 'db>storage' }, { at: 98_000, link: 'api>storage' }],
-  }), SITES);
-  assert.deepEqual(two.map((r) => [r.key, r.ageMs]), [['hv1>hv2', 2000]]);
-});
-
-const T = { ...LANES, travelMs: 1000, restMs: 500, windowMs: 4000 };
-
-test('pulseAt: one eased pass per period, fading at both ends, nothing in the rest, over after until', () => {
-  const r = { t0: 1000, until: Infinity };
-  assert.equal(pulseAt(r, 500, T), null, 'not started');
-  const start = pulseAt(r, 1000, T);
-  assert.equal(start.u, 0);
-  assert.equal(start.k, 0, 'fades in');
-  const mid = pulseAt(r, 1500, T);
-  assert.equal(mid.u, 0.5);
-  assert.equal(mid.k, 1);
-  assert.ok(pulseAt(r, 1100, T).u < 0.1, 'eased out of the star');
-  assert.equal(pulseAt(r, 2200, T), null, 'resting');
-  assert.equal(pulseAt(r, 2500, T).u, 0, 'the next pulse');
-  // Until 2000: the first pulse lands, the second never starts.
-  const ending = { t0: 1000, until: 1800 };
-  assert.ok(pulseAt(ending, 1900, T).u > 0.8);
-  assert.equal(pulseAt(ending, 2200, T), null);
-  assert.equal(pulseAt(ending, 2600, T), undefined);
-});
-
-test('trackRoutes: an event keeps its route for the rest of the window; a live one until it is not', () => {
-  let m = trackRoutes(null, [{ key: 'a>b', from: 'a', to: 'b', live: false, ageMs: 1000 }], 10_000, T);
-  assert.deepEqual(m.get('a>b'), { key: 'a>b', from: 'a', to: 'b', t0: 10_000, until: 13_000 });
-  // The same route again later keeps its start (no jump), takes the new window.
-  m = trackRoutes(m, [{ key: 'a>b', from: 'a', to: 'b', live: false, ageMs: 0 }], 11_200, T);
-  assert.equal(m.get('a>b').t0, 10_000);
-  assert.equal(m.get('a>b').until, 15_200);
-  // Live: no end while the model says so; gone from the model mid-pulse, it lands and stops.
-  let l = trackRoutes(null, [{ key: 'c>d', from: 'c', to: 'd', live: true, ageMs: 0 }], 0, T);
-  assert.equal(l.get('c>d').until, Infinity);
-  l = trackRoutes(l, [], 3200, T);
-  assert.equal(l.get('c>d').until, 3200, 'kept: the pulse that started at 3000 is on its way');
-  assert.ok(pulseAt(l.get('c>d'), 3900, T).u > 0.5);
-  l = trackRoutes(l, [], 4600, T);
-  assert.equal(l.size, 0, 'gone once it is over');
-  // A route that ended and comes back starts fresh.
-  const back = trackRoutes(new Map([['a>b', { key: 'a>b', from: 'a', to: 'b', t0: 0, until: 100 }]]), [{ key: 'a>b', from: 'a', to: 'b', live: false, ageMs: 0 }], 9000, T);
-  assert.equal(back.get('a>b').t0, 9000);
-  // At most maxRoutes: those already running keep their place.
-  const many = Array.from({ length: 9 }, (_, i) => ({ key: `s${i}>x`, from: `s${i}`, to: 'x', live: true, ageMs: 0 }));
-  let k = new Map();
-  for (const [i, r] of many.entries()) k = trackRoutes(k, many.slice(0, i + 1), i * 10, T);
-  assert.equal(k.size, T.maxRoutes);
-  assert.ok(k.has('s0>x') && !k.has('s8>x'));
-});
-
-test('routePath: out of the first star, through the sun, out to the second, by length', () => {
-  // Two straight lanes from the sun: to (1000,0,0) and to (0,0,500).
-  const lane = (x, z, n = 10) => Float32Array.from({ length: (n + 1) * 3 }, (_, i) => [x, 0, z][i % 3] * Math.floor(i / 3) / n);
-  const p = routePath(lane(1000, 0), lane(0, 500));
-  assert.equal(Math.round(p.length), 1500);
-  const at = (u) => Object.values(p.at(u)).map((v) => Math.round(v));
-  assert.deepEqual(at(0), [1000, 0, 0]);
-  assert.deepEqual(at(1 / 3), [500, 0, 0]);
-  assert.deepEqual(at(2 / 3), [0, 0, 0], 'the sun');
-  assert.deepEqual(at(1), [0, 0, 500]);
-  assert.deepEqual(at(2), [0, 0, 500], 'clamped');
+test('lanes is gone (night 4 T15): not a name, and ?fx=lanes is ignored', () => {
+  assert.equal(FX_NAMES.includes('lanes'), false);
+  assert.deepEqual([...parseFx('?fx=lanes')], []);
+  assert.deepEqual([...parseFx('?fx=lanes,warp')], ['warp']);
 });
 
 // --- in the scene ---------------------------------------------------------------
@@ -173,67 +77,6 @@ function sceneAt(opts = {}) {
   const at = (ms) => { clock.now = ms; galaxy.frame(ms); };
   return { galaxy, at };
 }
-
-/** The scene's pulse lights (named `fx-lane`). */
-function pulseSprites(galaxy) {
-  let root = galaxy.world.sites[0].star;
-  while (root.parent) root = root.parent;
-  return root.children.filter((o) => o.isSprite && o.name === 'fx-lane');
-}
-
-const liveModel = () => model({ links: [{ from: 'db', to: 'storage', kind: 'flow', live: true }] });
-
-test('without fx=lanes the scene makes no pulse and ignores routes', () => {
-  const { galaxy, at } = sceneAt();
-  const m = liveModel();
-  galaxy.update(m);
-  assert.equal(pulseSprites(galaxy).length, 0, 'no pool');
-  galaxy.setRoutes(siteRoutes(m, galaxy.world.byId.keys()));
-  at(1000 + LANES.travelMs / 2);
-  assert.equal(galaxy.routes.size, 0);
-  assert.equal(pulseSprites(galaxy).length, 0);
-});
-
-test('with fx=lanes a live link runs a pulse from one star to the other, and stops after it goes', () => {
-  const { galaxy, at } = sceneAt({ fx: new Set(['lanes']) });
-  const m = liveModel();
-  galaxy.update(m);
-  const pool = pulseSprites(galaxy);
-  assert.equal(pool.length, LANES.maxRoutes * (1 + LANES.trail), 'one pool, made once');
-  galaxy.setRoutes(siteRoutes(m, galaxy.world.byId.keys()));
-  assert.deepEqual([...galaxy.routes.keys()], ['hv1>hv2']);
-  const hv1 = galaxy.world.byId.get('hv1').home, hv2 = galaxy.world.byId.get('hv2').home;
-  const head = () => pool.find((s) => s.visible && s.scale.x === LANES.head);
-  at(1000 + LANES.travelMs * 0.02);
-  const near = (p, h) => Math.hypot(p.x - h.x, p.z - h.z);
-  assert.ok(near(head().position, hv1) < near(head().position, hv2), 'leaves hv1');
-  at(1000 + LANES.travelMs * 0.5);
-  assert.ok(Math.hypot(head().position.x, head().position.z) < Math.hypot(hv1.x, hv1.z) * 0.5, 'by the sun halfway');
-  assert.ok(pool.filter((s) => s.visible).length > 1, 'a trail behind it');
-  at(1000 + LANES.travelMs * 0.98);
-  assert.ok(near(head().position, hv2) < near(head().position, hv1), 'lands at hv2');
-  for (const s of pool.filter((x) => x.visible)) assert.ok(s.material.opacity <= LANES.opacity, 'never brighter than its cap');
-  at(1000 + LANES.travelMs + LANES.restMs / 2);
-  assert.equal(pool.filter((s) => s.visible).length, 0, 'rest between pulses');
-  // The link idles: the next pulse never starts and the route is dropped.
-  galaxy.setRoutes([]);
-  at(1000 + 3 * (LANES.travelMs + LANES.restMs));
-  assert.equal(galaxy.routes.size, 0);
-  assert.equal(pool.filter((s) => s.visible).length, 0);
-});
-
-test('with fx=lanes under reduced motion the route is a still row of lights', () => {
-  const { galaxy, at } = sceneAt({ fx: new Set(['lanes']), still: true });
-  const m = liveModel();
-  galaxy.update(m);
-  galaxy.setRoutes(siteRoutes(m, galaxy.world.byId.keys()));
-  const lit = () => pulseSprites(galaxy).filter((s) => s.visible).map((s) => [s.position.x, s.position.z, s.material.opacity]);
-  at(1000 + LANES.travelMs * 0.3);
-  const a = lit();
-  at(1000 + LANES.travelMs * 1.1); // the moving one would be resting here
-  assert.equal(a.length, 1 + LANES.trail);
-  assert.deepEqual(lit(), a, 'nothing moves');
-});
 
 // --- fx=comets ------------------------------------------------------------------
 
@@ -316,7 +159,7 @@ const flowModel = () => model({
 });
 
 test('without fx=comets the scene makes no comet and ignores flows', () => {
-  const { galaxy, at } = sceneAt({ fx: new Set(['lanes']) });
+  const { galaxy, at } = sceneAt({ fx: new Set(['warp']) });
   const m = flowModel();
   galaxy.update(m);
   galaxy.setComets(flowComets(m, galaxy.drawn()));
@@ -677,7 +520,7 @@ function toOverview(galaxy) {
 const wantSpan = (share, foot) => Math.min(share, (BEACON.room - foot) / 2);
 
 test('without fx=beacon the scene makes no pillar and ignores crit ages', () => {
-  const { galaxy, at } = sceneAt({ fx: new Set(['lanes']) });
+  const { galaxy, at } = sceneAt({ fx: new Set(['warp']) });
   const m = critModel();
   galaxy.update(m);
   galaxy.setCritAges(critAges(m, galaxy.world.byId.keys()));
@@ -798,24 +641,25 @@ test('warpAt: zero outside a flight, in still mode and from 0.9 on; length follo
   for (const k of [0.1, 0.5, 0.85]) assert.deepEqual(warpAt(k, 'crit', true), zero, 'still: no warp');
   // T28: at rest before the plate types (T15 types it at arrival, after 0.9 of the flight).
   for (let k = 0.9; k < 1; k += 0.005) assert.deepEqual(warpAt(k, 'crit'), zero, `at rest by 0.9: ${k}`);
-  const mid = warpAt(0.5, 'calm');
+  const mid = warpAt(0.5, 'warn');
   assert.equal(mid.k, 1);
   assert.equal(mid.len, WARP.len);
-  assert.equal(mid.head, 'calm', 'calm: grey streaks');
+  assert.equal(mid.head, 'warn');
   assert.equal(mid.thin, WARP.thin);
   assert.equal(warpAt(0.5, 'crit').head, 'crit');
-  assert.equal(warpAt(0.5, 'warn').head, 'warn');
-  assert.equal(warpAt(0.5, 'low').head, 'calm');
-  assert.equal(warpAt(0.5, 'bogus').head, 'calm');
+  // T15: a flight to a calm site (or the overview, whose tone is calm) draws nothing.
+  for (const t of ['calm', 'low', 'bogus', undefined]) {
+    for (const k of [0.1, 0.5, 0.85]) assert.deepEqual(warpAt(k, t), zero, `quiet toward ${t} at ${k}`);
+  }
   // Tied to the camera's speed (the cubic ease's slope): longer where it flies faster, before the cut.
   const slope = (k) => (ease(k + 1e-4) - ease(k - 1e-4)) / 2e-4;
   for (const [x, y] of [[0.1, 0.3], [0.2, 0.45], [0.75, 0.6], [0.7, 0.55]]) {
-    assert.ok(slope(x) < slope(y) && warpAt(x).len < warpAt(y).len, `${x} slower and shorter than ${y}`);
+    assert.ok(slope(x) < slope(y) && warpAt(x, 'crit').len < warpAt(y, 'crit').len, `${x} slower and shorter than ${y}`);
   }
   for (const k of [0.1, 0.25, 0.4, 0.6, 0.75]) {
-    assert.ok(Math.abs(warpAt(k).k - Math.sqrt(slope(k) / slope(0.5))) < 1e-3, `speed share at ${k}`);
+    assert.ok(Math.abs(warpAt(k, 'crit').k - Math.sqrt(slope(k) / slope(0.5))) < 1e-3, `speed share at ${k}`);
   }
-  assert.ok(warpAt(0.02).len < 0.05 * WARP.len, 'barely there as it leaves');
+  assert.ok(warpAt(0.02, 'crit').len < 0.05 * WARP.len, 'barely there as it leaves');
   // Every number scales with the stretch.
   const q = warpAt(0.15, 'crit');
   assert.ok(q.k > 0 && q.k < 1);
@@ -915,12 +759,13 @@ test('with fx=warp a flight streaks the sky out of the destination, its head in 
   const grains = lines.find((l) => l.name === 'fx-warp-dust').material.uniforms.warpLen.value;
   assert.ok(stars < grains, 'the far stars streak shorter than the dust');
 
-  // To a calm site: grey streaks.
+  // To a calm site: quiet, no streaks (T15), the dust as it was.
   galaxy.setWarp({ k: 0.5, to: 'hv1' });
   flyStep(galaxy, at, 1048);
   assert.equal(galaxy.warp.tone, 'calm');
-  assert.equal(galaxy.warp.head, 'calm');
-  assert.deepEqual(u.warpHead.value.toArray(), u.warpBody.value.toArray(), 'calm: the head stays grey');
+  assert.equal(galaxy.warp.len, 0);
+  assert.ok(lines.every((l) => !l.visible), 'calm: nothing drawn');
+  assert.equal(dust.material.opacity, 0.7);
 
   // A warn destination: the head at the warn token.
   const warned = critModel();
@@ -931,11 +776,13 @@ test('with fx=warp a flight streaks the sky out of the destination, its head in 
   assert.equal(galaxy.warp.tone, 'warn');
   assert.ok(colourNear(u.warpHead.value.toArray(), want(pal.warn)), 'head = warn');
 
-  // To the overview: no aim, along the travel.
+  // To the overview: no aim, and quiet like a calm site (T15).
   galaxy.setWarp({ k: 0.5, to: null });
   flyStep(galaxy, at, 1060);
   assert.equal(galaxy.warp.aim, null);
   assert.equal(u.warpAimOn.value, 0);
+  assert.equal(galaxy.warp.len, 0);
+  assert.ok(lines.every((l) => !l.visible), 'the overview: nothing drawn');
 
   // Landed: snapped back, the dust as it was.
   galaxy.setWarp(null);

@@ -69,7 +69,7 @@
 // finger (wake, taps, back, gestures) through `finger`, a show command
 // through `show`; the director plays the one that has the camera (touch >
 // show > tour) and refuses the rest, every hand-over eased from the pose.
-// Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon,warp` (comma-separated, all off by default);
+// Effects (§7.C, fx.js): `?fx=comets,twinkle,beacon,warp` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
 import { createPerf } from '../perf.js';
@@ -89,7 +89,7 @@ import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from '
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
 import { createDirector } from './director.js';
-import { critAges, flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
+import { critAges, flowComets, parseFx, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
@@ -468,7 +468,6 @@ export function boot() {
     if (!model || typeof model !== 'object') return;
     have = true;
     galaxy.update(model);
-    if (fx.has('lanes')) galaxy.setRoutes(siteRoutes(model, galaxy.world?.byId.keys() ?? []));
     if (fx.has('comets')) galaxy.setComets(flowComets(model, galaxy.drawn()));
     if (fx.has('twinkle')) galaxy.setTwinkles(workingPlanets(model, galaxy.planets()));
     if (fx.has('beacon')) galaxy.setCritAges(critAges(model, galaxy.world?.byId.keys() ?? []));
