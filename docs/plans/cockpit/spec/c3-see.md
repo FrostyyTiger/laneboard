@@ -76,12 +76,32 @@ action, control, terminal or push change.
   the unit in the field name (`ageS`, `waitMin`).
 - **`asOf`.** Every result starts with `asOf`: one entry per source it read, the time that source's
   data is from (a feed's `at`, a builder snapshot's `generatedAt`, the hub's `now`), and its `ageS`.
+  A hub's own entry is `"source":"hub"`, a single board's `"source":"board"`.
   A source older than 600 s carries `"stale": true` (review 44 finding 2; T63 adds what the agent says
   about it).
 
   ```json
   "asOf": [{"source":"hub","at":"2026-10-27T07:12:04+01:00","ageS":1},
            {"source":"feed:hv1","at":"2026-10-27T02:10:00+01:00","ageS":18124,"stale":true}]
+  ```
+
+- **`sources` and `hint`: an empty board says why** (D184, review 48 finding 10). `runs` and
+  `morning` carry `sources`, one entry per place the board finds runs and lanes in that has any:
+  `[{"kind":"runs","count":3},{"kind":"lanes","count":5}]`, the counts from `GET /api/runs` and
+  `GET /api/lanes` (on a hub: the summed builder snapshots' lanes; runs as §6), both read through
+  the 5 s cache. When neither has one, `sources` is `[]` and the result adds one `hint`, word for
+  word: `No run file and no lane on this board: loops that write no run file (docs/runs.md) and
+  agents that are not Claude Code sessions are invisible to it.` An empty list with a non-empty
+  `sources` is a quiet night, not an empty board; there is no `hint` then. A source that did not
+  answer is `missing`, not `[]`: a hub whose builders are all down never gets the `hint`.
+
+  ```json
+  {"asOf":[{"source":"board","at":"2026-10-27T07:12:04+01:00","ageS":1}],
+   "window":"tonight","label":"last night","since":"2026-10-26T18:00:00+01:00",
+   "needsYou":[],"finished":[],"stuck":[],"review":{"waiting":0,"medianWaitMin":null},
+   "approvals":{"answered":0,"approved":0,"denied":0},"costUsd":0,"costByPackage":[],
+   "sources":[],
+   "hint":"No run file and no lane on this board: loops that write no run file (docs/runs.md) and agents that are not Claude Code sessions are invisible to it."}
   ```
 
 - **`missing`**: the sources that did not answer, with why
@@ -307,7 +327,7 @@ Tool line target: `node`, else `run`.
 
 ## 5. What the agent is told
 
-The bridge's standing instructions (`protocols.md` §11.8) include these five sentences about the
+The bridge's standing instructions (`protocols.md` §11.8) include these six sentences about the
 tools, word for word:
 
 1. `The laneboard tools show the fleet as the board sees it; each result says how old its data is.`
@@ -315,6 +335,7 @@ tools, word for word:
 3. `Name the node or run you are talking about by its label, as the board shows it.`
 4. `If a tool says a source is missing or stale, say so in your answer.`
 5. `When the owner says here, this or that without naming it, call focus first.` (T9, §8)
+6. `If a result has an empty sources list and a hint, open your answer with: I see no runs: your loops write no run file (docs/runs.md). Never say nothing happened.` (§3, D184)
 
 ## 6. Gaps in the board today
 
@@ -730,3 +751,20 @@ When the owner taps the chip's `✕`,
 Then the chip is gone, the input still has the focus (D132), the conversation is y 64-444.
 Test: Playwright `tap`, `setViewportSize`; rects ± 1 px; `document.activeElement` is
 `[data-cockpit-input]` after the `✕`.
+
+### S-C3-20 An empty board: `sources` is empty and the agent says why
+
+Added by T78 (review 48 finding 10, D184). Runs on the C1 night (`morning` and `runs` are C1's).
+Given a single board booted with `boot({ mode: 'builder' })` (`test/helpers/boot.mjs`) in a fresh
+state directory: no `runs.files`, `runs.lanes` off, no tmux session, so `GET /api/runs` and
+`GET /api/lanes` both answer empty lists; the room's `cockpit.board.url` points at it,
+When the agent calls `morning` `{"window":"tonight"}` and then `runs` `{}`,
+Then both results carry `"sources": []` and the `hint` of §3 word for word, `needsYou`,
+`finished`, `stuck` and `runs` are `[]`, and neither is `isError`.
+When a run file with one `run.start` line is added to `runs.files` and the agent calls `runs` again
+6 s later (past the 5 s cache),
+Then `sources` is `[{"kind":"runs","count":1}]` and there is no `hint`.
+Test: node:test calls the tools by JSON-RPC as in §7 and asserts the two results field by field
+(the `hint` string compared exactly); a second case boots the board with its port closed after
+start and asserts `missing` holds `board` and `hint` is absent. The standing instruction (§5, line
+6) is asserted by `protocols.md` §11.8's test, not here: the fake agent does not read it.

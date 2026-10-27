@@ -110,11 +110,11 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 `c1-render`, `c1-typing`, `c1-errors`, `c1-login`, `c1-long`, `c1-session`, `c1-voice` (S-C3-18), `scr-room`,
 `c3-tools` (S-C3-03 only). No fake speech yet.
 
-**Scenarios** (57):
+**Scenarios** (58):
 S-C1-01 S-C1-02 S-C1-03 S-C1-04 S-C1-05 S-C1-06 S-C1-07 S-C1-08 S-C1-09 S-C1-10 S-C1-11 S-C1-12
 S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33 S-C1-34 S-C1-35 S-C1-36 S-C1-37 S-C1-38 S-C1-39 S-C1-40
 S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23 S-SCR-24 S-SCR-25 S-SCR-30 S-SCR-31
-S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
+S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18 S-C3-20
 
 - S-SCR-30 and S-SCR-31 (the audit lines, T60) are C1's: prompt, stop and new are; their
   `Under Q-O21 a)` steps run with the Pair slice.
@@ -287,7 +287,7 @@ by the task that writes them.
 | S-C1-13 | C2 |
 | S-C2-01..17, 20..23 | C2 |
 | S-C2B-01, 02 | C2b |
-| S-C3-03, 04, 05, 07, 08, 18 | C1 |
+| S-C3-03, 04, 05, 07, 08, 18, 20 | C1 |
 | S-C3-01, 02, 06, 09..17, 19 | C3 |
 | S-C4-01..12 | Show |
 | S-C4-13, 24 | Jobs |
@@ -295,7 +295,7 @@ by the task that writes them.
 | S-C4-25..33 | Canvas 2 |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 147 live ids in all (round 110, S-SCR-33).
+D55). 148 live ids in all (round 111, S-C3-20).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired
@@ -334,4 +334,4 @@ changing it needs C6 (`c1-talk.md` §5).
 
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
 says go without them): none left. T26, T27, T29, T41, T44 (the button, pane and corner-cluster
-rects), T56 (pairing refusals and cross-site checks, `screens.md` §6.1-§6.3), T57 and T89 are done. The bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are written. For C2 also: T78 (T42/T95, T84, T69 and T58 are done).
+rects), T56 (pairing refusals and cross-site checks, `screens.md` §6.1-§6.3), T57 and T89 are done. The bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are written. For C2: none left (T42/T95, T84, T69, T58 and T78 are done).

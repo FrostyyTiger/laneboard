@@ -424,9 +424,28 @@ which process is the room: D89).
 | `cockpit.stt.url` | `"none"` | `LANEBOARD_COCKPIT_STT_URL` | The streaming speech service, `ws://` or `wss://` (`wss://stt.example.invalid/asr`). `ws://` only on a loopback host, as `fleet.builders` takes `http` only on loopback (`server/config/hub.mjs`). `none`: no voice. |
 | `cockpit.stt.language` | `["en", "de"]` | `LANEBOARD_COCKPIT_STT_LANGUAGE` (comma list: `en,de`; one code: `en`) | §8. |
 | `cockpit.stt.tokenFile` | unset | `LANEBOARD_COCKPIT_STT_TOKEN_FILE` | A file holding the service's bearer token, sent as `Authorization: Bearer` on connect, never in the URL's query (research Q4: query strings end up in logs). Mode 0600, as the audit file (`docs/fleet/auth.md`). Unset: no token. |
+| `cockpit.stt.protocol` | `"whisperlivekit"` | `LANEBOARD_COCKPIT_STT_PROTOCOL` | The wire protocol the room speaks to the service (D183). v1 has one value, `whisperlivekit` (`protocols.md` §12). Any other value is fatal at start: `cockpit.stt.protocol: "deepgram" is not supported; v1 speaks "whisperlivekit" only (put a shim in front of another service, docs/cockpit.md)`. Ignored when `url` is `none`. |
 
 - A bad value (a URL with credentials, a query or another scheme; a code that is not two letters)
   is fatal at start, naming the key, as every config fragment does (`docs/config.md`).
+- **Another speech service needs a shim** (D183). Plan C2 says "any service that streams partial
+  results works"; v1 keeps that true through a shim, not a second client. A shim is a small
+  WebSocket server in front of the other service that takes what the room sends (the query
+  `language` and `mode=full`, binary frames of 16 kHz mono 16-bit PCM, one empty binary frame at the
+  end of audio, `protocols.md` §12.1, §12.3) and sends back exactly these four messages, as JSON
+  text frames:
+
+  | # | Message | When | Without it |
+  | --- | --- | --- | --- |
+  | 1 | `{"type":"config","useAudioWorklet":true,"mode":"full"}` | first, within 2.0 s of the upgrade | `stt-down` `no-answer` after 2.0 s |
+  | 2 | `{"status":"active_transcription","lines":[{"text":"wie lief"}],"buffer_transcription":"die Na"}` | each time the words change; `lines` is every firm segment so far, the buffer the unfirm tail | no live words; the final is empty, so nothing is sent |
+  | 3 | `{"status":"error","error":"…"}` | the service failed | a close other than 1000 does the same |
+  | 4 | `{"type":"ready_to_stop"}`, then close 1000 | after the last update, within 3.0 s of the empty frame | `stt-failed` (or `stt-down` `failed`) at 3.0 s |
+
+  401 and 403 on the upgrade keep their meaning (§10: `token`, `busy`). Fields not listed
+  (`speaker`, `start`, `end`, `remaining_time_transcription`) are optional. The shim is the
+  owner's or a stranger's to run; laneboard ships none in v1, and `docs/cockpit.md` lists these four
+  messages.
 - No `context` (research Q4's word list) in v1: one less thing that can make the service refuse
   the session (close 4400).
 - **`none`** (also what a stranger without a speech service gets): the talk button is not drawn;
