@@ -42,8 +42,19 @@ Answer: (open)
 - b) **Queue** the new prompt until the turn ends.
 - c) **Ignore**: talk is disabled until the turn ends.
 
+- d) **Steer**: deliver the new prompt into the running turn when the agent supports it (it is read
+  at the next tool boundary, nothing is thrown away), else queue it as b). The bridge needs a
+  stdin channel that accepts a user message mid-turn and an event telling when it was taken in;
+  with an agent that cannot, it falls back to b), never to a).
+
+Caution (`reviews/52-owner.md` finding 4): the argument "waiting would lose the terminal's speed"
+assumes the owner's terminal interrupts. It may queue or inject instead, and then the habit is
+"steer", and a) throws away half an answer each time the owner adds "and builder-b too". Nobody has
+checked; research question Q8 asks what Claude Code does. Until Q8 is answered the recommendation
+is a) only as a placeholder: **decide after Q8** (if Claude Code injects or queues, d)).
+
 Recommendation: a) — speaking again mid-answer is almost always a correction; c) breaks the
-terminal-like speed of `spec-input.md` §1.
+terminal-like speed of `spec-input.md` §1. (pending Q8; d) wins if it shows steering is native.)
 
 Answer: (open)
 
@@ -264,6 +275,12 @@ the agent cannot set "scripts and timers on its own machine" ("shut this off in 
 cancel a job, and cannot stop or start things over SSH, until C6; it answers "I cannot schedule jobs
 yet (C6)." instead of trying `Bash`. Only c) keeps them, with nothing between the agent and the room's
 shell. Until C3 (the fleet read tools) exists, the agent in C1 also sees nothing of the fleet (finding 1).
+
+Date, not just a wait (`reviews/52-owner.md` finding 6): C6 waits on a control-plane review with no
+date, so a) alone turns the coworker into a reader for weeks. Recommended addition: `slices.md` gives
+**scheduled jobs on the room's own machine** (create with a confirm, shown on the Map, cancel with a
+confirm, audited) a slice of their own before the rest of C6 (T81). The answer to a) should be given
+knowing that slice's place in the order; the bridge's refusal line names it.
 
 Answer: (open)
 

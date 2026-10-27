@@ -67,7 +67,7 @@ its file names).
 - [ ] T52 (2) `screens.md` §7, S-SCR-17, D53/D54: for C1/C2 room-down is the 80 px status line, `RETRY NOW`, `SEND` and talk `off`, draft kept, cut-off line; canvas half (STALE plates, job countdown, empty-canvas variant, offline remove) moves to C4/coworker; cut the talk-button ring (finding 10)
 - [ ] T53 (2) `spec/README.md` speed budget and D28: drop `?perf=1` and the "share" column, keep end-to-end marks for tests; B5/B6 move to C4 (finding 11; merges with T35)
 - [ ] T54 (2) Layout and pairing carry marks per Q-O22 and Q-O21: tag `screens.md` §1/S-SCR-01/06/07/08/10/11, D2/D3/D8/D9 `(pending Q-O22)` and §6/S-SCR-13..16 `(pending Q-O21)`; say which scenarios C1's done-when contains in each case (findings 1, 3)
-- [ ] T55 (2) `QUESTIONS.md` housekeeping: order C1's first (Q-O11, Q-O1, Q-O2, Q-O15, then C2), move Q-O12/Q-O13 under "Can wait", turn Q-O16 into a D-line (strict defaults are safe by default; supersedes T38), Q-O14 into a D-line the owner can strike (finding 12)
+- [ ] T55 (2) `QUESTIONS.md` housekeeping: order C1's first (Q-O11, Q-O1, Q-O2, Q-O15, then C2), move Q-O12/Q-O13 under "Can wait", turn Q-O16 into a D-line (strict defaults are safe by default; supersedes T38), Q-O14 into a D-line the owner can strike (finding 12). Also (review 52-owner.md finding 3): Q-O15 and Q-O26 become D-lines with an overrule too; Q-O13, Q-O17, Q-O24 move under "Can wait"; the top of the list is the eight that change what the owner sees or the agent may do (Q-O1, Q-O2, Q-O9, Q-O11, Q-O18, Q-O21, Q-O22, Q-O23), each one line plus the recommendation; Q-O10's security text stays (T61)
 - [ ] T56 (2) `screens.md` §6 and S-SCR-13..16 (pending Q-O10/Q-O21): `pair`, `unpair`, `button add|remove` refused for the agent's uid (`refused: the agent cannot pair screens`, audit line, no token); `pairSecret` returned by `POST /api/cockpit/pair`, required by the `GET` (else 404), CLI shows address and `User-Agent` and asks y/N; every cockpit upgrade and mutating request gets `auth.md`'s Host/Origin/`Sec-Fetch-Site`/`X-Laneboard: 1` checks, cookie `HttpOnly; Secure; SameSite=Strict; Path=/api/cockpit`; `SCREEN desk2 PAIRED · 07:12` line on every paired screen; scenarios: agent runs `pair`, second client polls the code, upgrade from `Origin: https://evil.example.invalid` gets 403 `bad-origin` — review 40-security.md findings 1, 4, 5, 7
 - [ ] T57 (2) `c1-talk.md` §5/§13 per Q-O23 (pending Q-O23): the launch line (`--strict-mcp-config --allowedTools … --permission-prompts none`), `Bash`/`Edit`/`Write` rows marked "not allowed in v1", `system/permission_denied` → grey `tried {tool}, not allowed`, scenario with a scripted `Bash` call that is denied; tools that change things never fold and show the whole input wrapped, `Bash` target = command cut at 32 chars; values matching the redaction rules show `[redacted]` in open rows (no raw view in C1, T50); `toolOutput` per-screen, off by default — review 40-security.md findings 2, 10, 15
 - [ ] T58 (2) `c2-voice.md` §12: item 5 says sent text and what the agent reads goes to the agent's model service (with Claude Code: Anthropic); the insecure-origin fallback notes that token and audio travel unencrypted, and does not pair unless `cockpit.allowInsecure: true` (warned at boot) — review 40-security.md findings 6, 12
@@ -93,6 +93,17 @@ its file names).
 - [ ] T78 (2) `c2-voice.md` §9/§10: `cockpit.stt.protocol` with one v1 value `whisperlivekit`, the four messages a shim must send, a D-line that other services need a shim (plan C2 says "any service"); `c3-see.md` §2: `morning` and `runs` return `"sources": []` plus a `hint` when no run file or lane exists, standing instruction `I see no runs: your loops write no run file (docs/runs.md).`, one `S-C3-` scenario on an empty board — review 48-stranger.md findings 9, 10
 - [ ] T79 (2) Public-docs wording sweep over `spec/` and the plan: name the general case first ("the laneboard that serves the page: a hub, or the one box"; "the speech service on a GPU host, or none"), the owner's case second or not at all; no "the hub"/"the tailnet" as a requirement — review 48-stranger.md finding 11
 
+- [ ] T80 (13) `slices.md` (with T20, T62): name the slice that brings the speak-up (guess: right after C3, before the canvas) and say which scenario of T23 it owns; keep C4's first night to the six blocks of D83 and nothing else, so it lands soon after C3; fix the order C1 (+ `morning`, `runs`, `alerts`), C2, rest of C3, speak-up, C4 — review 52-owner.md findings 5, 11
+- [ ] T81 (13) `slices.md` (with T20): a slice "scheduled jobs on the room's own machine" (create with confirm, visible on the Map, cancel with confirm, audited) before the rest of C6; the bridge's line `I cannot schedule jobs yet ({slice}).` names it (T62, T57); Q-O23 already carries the note — review 52-owner.md finding 6
+- [ ] T82 (3) Sketch wording: `c4-canvas.html` tool line `looked at the fleet` (not `read the fleet`), talk button shows the microphone, not a dot; `screens-split.html` redrawn to D78 and the talk button plus `CHAT` (this is T25; same round) — review 52-owner.md finding 7
+- [ ] T83 (2) `spec/README.md` index and glossary: `screens.md` part 2 is done (ba70963), the cockpit button is the talk button plus `CHAT` and the talk button sits in the input row (both `(pending Q-O11)`), the `?perf=1` "header menu" note goes (T53) — review 52-owner.md finding 8
+- [ ] T84 (2) `c2-voice.md` §4 and D45: after a silence or length limit closes the microphone, `MICROPHONE OFF` stays until the next touch or press (the other automatic closes keep 5 s); one D-line, update S-C2 scenario timings — review 52-owner.md finding 10
+
+Priority note (round 53, review 52-owner.md finding 1): FREEZE NEW CONTENT. T12, T13, T14, T17 (beyond
+what C1 needs), T19 wait. Order for the remaining rounds: T55 (question list, now including finding 3
+below), T15, T16, T18, T20 with T37/T62/T80/T81, then the C1/C2 fixes (T26, T27, T29, T41, T52,
+T54-T56), then the rest. Sketch and wording tasks (T25, T47, T70, T82, T83) go last of these.
+
 Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do T4-T7 before T8+ and before T21-T25 sketches if rounds are short; T24 comes right after T4.
 
 ## Research questions
@@ -104,6 +115,8 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 - [x] Q5 How an MCP server exposes tools to Claude Code (stdio vs. streamable HTTP, tool input schema, result content types and size limits, how a headless session is configured with it, `--allowedTools`), and how a long-lived server can push state (for `focus`) — for T8, T10 → research/Q5-mcp-tools-for-claude-code.md (channels and exact `--mcp-config` JSON unconfirmed; no push to the model, state must be pulled)
 - [x] Q6 Sandboxing agent-written HTML cards in a browser: `iframe sandbox` attributes, `srcdoc` vs. blob URLs, CSP that blocks all network (`connect-src 'none'` etc.), a `postMessage` data bridge, known escapes — for T12, T17 → research/Q6-sandboxing-html-cards.md (WebRTC exfiltration gap and Chromium `webrtc` directive support unconfirmed)
 - [x] Q7 Android tablet microphone without a prompt: does Chrome on Android honour `AudioCaptureAllowed` / any managed policy or a kiosk app setting that grants the microphone to one origin; and the managed-policy directory for Chrome and Chromium on Linux — for `c2-voice.md` §12 (the later `docs/cockpit.md`) → research/Q7-android-mic-and-linux-policy-dir.md (no Android no-prompt route found; Chromium `managed/` path assumed)
+
+- [ ] Q8 What does Claude Code do with a prompt sent while a turn runs (queue, inject at the next tool boundary, interrupt)? — for T5/T16 (Q-O1 option d)
 
 ## Later
 
@@ -121,6 +134,7 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 ## Reviews
 
+- round 53 triage of `reviews/52-owner.md`: 11 findings plus a decided-where-it-should-not list. Tasks: 1 → priority note (freeze new content), 3 → extended T55, 5/11 → T80, 6 → T81, 7 → T82 (T25, T47, T70 cover the rest), 8 → T83, 10 → T84. Questions: 4 → option d and a caution in Q-O1 plus research question Q8, 6 → date note in Q-O23. Already covered: 2 (T62 recommends exactly this), 9 (T43; Q-O18 goes to the top via T55). 9 findings became tasks or questions; 2 dropped as covered. Scores complete 3 and simple 3: the spec is wide, not yet buildable.
 - round 49 triage of `reviews/48-stranger.md`: 11 findings plus a contradictions list. Tasks: 1 → T71, 2 → T72, 3/7 → T73, 4 → T74, 5 → T75, 6 → T76, 8 → T77, 9/10 → T78, 11 → T79. Questions: 1 → Q-O27 (new), 7 → Q-O28 (new), the one-machine cost → note in T74 for Q-O10, the Claude-Code-only allowlist → note for Q-O23 in T72, D17 vs `product.md` rule 2 → T76. 11 findings became tasks or questions; none dropped. Scores complete 2 and simple 3: the setups other than the owner's are the gap.
 - round 45 triage of `reviews/44-operator.md`: 11 findings plus a contradictions list. Tasks: 1/6 → T62, 2/7/8 → T63, 3 → T64, 4 → T65, 5 → T66, 8 → T67, 9 → T68, 10 → T69, 11 → T70 (T47 covers the rest). Questions: 6 → text added to Q-O23, `CANCEL JOB` with the room down → Q-O25 (new). Already covered: D14/Q-O24 dependency (Q-O24 exists, T66 notes it). 11 findings became tasks or questions; none dropped. The review scores complete 3 and ownerfit 4: C3 and the morning view are the gaps.
 - round 41 triage of `reviews/40-security.md`: 15 findings plus a contradictions list. Tasks: 1/4/5/7 → T56, 2/10/15 → T57, 6/12 → T58, 13/14 → T59, 8 → T60, 6/7/contradictions → T61. Questions: 2 → Q-O23 (new), 6 retention → Q-O24 (new), 1 and 4 → Q-O10 text, 3 → option c in Q-O21, 9 → note in Q-O2, 11 → option d in Q-O20. 15 findings became tasks or questions; none dropped. The review scores safe 3 and complete 3: Q-O23 and the uid refusal (T56) are the two that block C1.
@@ -145,5 +159,6 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 | 40 | security | 7 | 3 | 4 | 6 | 6 | 6 | 3 |
 | 44 | operator | 7 | 3 | 5 | 7 | 4 | 6 | 7 |
 | 48 | stranger | 7 | 2 | 5 | 6 | 4 | 3 | 4 |
+| 52 | owner | 8 | 3 | 4 | 7 | 5 | 3 | 7 |
 
 ## Morning
