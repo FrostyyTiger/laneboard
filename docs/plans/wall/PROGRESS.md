@@ -236,7 +236,7 @@ Notes for every builder round (planner, round 1):
   css px on the tablet, only while exploring) and a tap on empty sky each go one step back: planet → system →
   overview; the sheet closes with its step — done when: a test walks planet → system → overview through both
   the control and an empty-sky tap, a test pins the control's hit size in `wall.css`, and the control is absent
-  during the tour. (commit COMMIT)
+  during the tour. (commit c25ed45)
   Builder r35: `touch.js` pure `placeOf`/`backStep`/`canGoBack`/`backShown` (overview → site → planet; back from a
   planet is its system, from a system the overview, the overview stays) and `createBack(button, { back })`: a `<button
   id="galaxy-back" hidden>` on top of the stage in galaxy.html, whose pointers stop at it (a press is never also an
