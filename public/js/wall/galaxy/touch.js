@@ -673,6 +673,27 @@ export function backStep(place) {
 }
 
 /**
+ * Where back to the overview goes (night 4 T4, r36-dreamer touch 3): the pose
+ * a finger held when it left the overview, not the default fit. `leave(place,
+ * cam)` is called as a site opens: only a step off the overview remembers,
+ * and only a pose a finger steered (`cam.want().kind === 'free'`); a fitted
+ * overview remembers nothing. `pose()` is what back flies to (null: the
+ * fit); `clear()` forgets it (a wake, the tour taking the page back).
+ * Returns `{ leave, pose, clear }`.
+ */
+export function createReturn() {
+  let kept = null;
+  return {
+    leave: (place, cam) => {
+      if (place != null && place.level !== 'overview') return;
+      kept = cam.want().kind === 'free' ? cam.pose() : null;
+    },
+    pose: () => (kept ? { pos: { ...kept.pos }, look: { ...kept.look } } : null),
+    clear: () => { kept = null; },
+  };
+}
+
+/**
  * The back control (T13): `button` (a `<button>` on the stage) shows while
  * `show(true)` and goes with `show(false)`; a press on it calls `back()`.
  * Its pointers never reach the stage, so a press on the control is not also

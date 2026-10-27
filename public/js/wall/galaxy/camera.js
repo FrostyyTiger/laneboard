@@ -17,7 +17,8 @@
 // a page that passes the option gets `steer(pose)`; the tour never does, and
 // without it `steer` does nothing. A steered pose is held as given, no
 // flight (the gesture is its own motion), every system folded; the next
-// `focus` or `fit` flies from it.
+// `focus` or `fit` flies from it. `fly(pose, { ms })` (night 4 T4, back to
+// where a finger left the overview) flies to a free pose and holds it there.
 //
 // `still` (reduced motion, T11, still.js): the camera never leaves the
 // overview; `focus`/`fit` only say where the tour is (the
@@ -361,6 +362,11 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
       fromId = want.kind === 'site' ? want.id : fromId;
       want = { kind: 'free', pose: { pos: { ...p.pos }, look: { ...p.look } }, t0: null };
       version += 1;
+    },
+    // A flight to a finger's pose (night 4 T4: back to the pose it left the overview in), held there.
+    fly: (p, opts) => {
+      if (!steer || still || !p) return;
+      go({ kind: 'free', pose: { pos: { ...p.pos }, look: { ...p.look } }, ...(opts?.ms > 0 ? { ms: opts.ms } : {}) });
     },
   };
 }

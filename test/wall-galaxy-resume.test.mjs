@@ -11,8 +11,8 @@ import path from 'node:path';
 
 import { makeEl } from './helpers/fakedom.mjs';
 import {
-  AT_OVERVIEW, IDLE, TOUCH, backShown, backStep, canGoBack, createBack, createGestures, createTaps, createTouch,
-  hitTest, memberPoints, orbitLimits, placeOf, tapPoints, touchStep,
+  AT_OVERVIEW, IDLE, TOUCH, backShown, backStep, canGoBack, createBack, createGestures, createReturn, createTaps, createTouch,
+  hitTest, memberPoints, orbitLimits, orbitOf, placeOf, tapPoints, touchStep,
 } from '../public/js/wall/galaxy/touch.js';
 import { DEMO_TIMING, TIMING, createTour, initialTour, nextLeg, resumeTour } from '../public/js/wall/tour.js';
 import { FLIGHT, createGalaxyCamera, zoomedSiteShot } from '../public/js/wall/galaxy/camera.js';
@@ -106,16 +106,18 @@ function page({ still = false } = {}) {
   let place = AT_OVERVIEW;
   let wakes = 0;
   const cutAway = () => { if (fade && cam.want().cut) fade.cut(); };
-  const toOverview = () => {
+  const left = createReturn();
+  const toOverview = (pose = null) => {
     cutAway();
-    cam.fit({ ms: TOUCH.fitMs });
+    if (pose) cam.fly(pose, { ms: TOUCH.fitMs });
+    else cam.fit({ ms: TOUCH.fitMs });
     sheets.push(null);
     place = AT_OVERVIEW;
   };
   const touch = createTouch(stage, {
     clock,
-    wake: () => { wakes++; tour.stop(); toOverview(); },
-    resume: () => { cutAway(); sheets.push(null); place = AT_OVERVIEW; tour.resume(); },
+    wake: () => { wakes++; tour.stop(); left.clear(); toOverview(); },
+    resume: () => { cutAway(); sheets.push(null); left.clear(); place = AT_OVERVIEW; tour.resume(); },
   });
   const gestures = still ? null : createGestures(stage, touch, cam, {
     clock,
@@ -123,6 +125,7 @@ function page({ still = false } = {}) {
     view: () => ({ ...galaxy.size(), fov: galaxy.camera.fov }),
   });
   const openSite = (id) => {
+    left.leave(place, cam);
     const w = cam.want();
     const there = w.kind === 'site' && w.id === id && (!still || w.cut);
     if (!there && still) { cam.cut(id, TIMING.zoom); fade.cut(); } else if (!there) cam.focus(id, TIMING.zoom);
@@ -135,7 +138,7 @@ function page({ still = false } = {}) {
     if (!canGoBack(place)) return;
     const next = backStep(place);
     if (next.level === 'site') openSite(next.site);
-    else toOverview();
+    else toOverview(left.pose());
   };
   const back = createBack(button, { back: goBack });
   createTaps(touch, {
@@ -394,6 +397,124 @@ test('reduced motion on the page: every step a cut with a short fade, no flights
   assert.ok(Number(p.canvas.style.opacity) < 1, 'with a fade');
   for (let t = 0; t < 30; t++) p.tick(16);
   assert.equal(p.cam.flight(), null, 'never a flight');
+});
+
+const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
+const sameOrbit = (a, b, eps = 1e-6) => close(a.yaw, b.yaw, eps) && close(a.pitch, b.pitch, eps)
+  && close(a.dist, b.dist, eps * Math.max(1, b.dist)) && ['x', 'y', 'z'].every((k) => close(a.look[k], b.look[k], eps * Math.max(1, b.dist)));
+
+test('back returns to the pose you left (night 4 T4): drag, tap a site, a planet, back twice: the dragged orbit, eased', () => {
+  const p = page();
+  p.tour.start();
+  p.run(500);
+  p.stage.dispatch('pointerdown', { pointerId: 1 });
+  p.stage.dispatch('pointerup', { pointerId: 1 });
+  p.run(TOUCH.fitMs + 100);
+  const fit = orbitOf(p.cam.pose());
+  // Drag to a yaw and let it coast to rest: the person's pose.
+  p.drag(2, [[800, 450], [830, 450], [900, 460], [960, 470]]);
+  p.run(2500);
+  const dragged = orbitOf(p.cam.pose());
+  assert.ok(Math.abs(dragged.yaw - fit.yaw) > 0.1, 'the drag turned the galaxy');
+  // A site, then a planet in it.
+  p.tapAt(3, p.cam.screenOf('hv2'));
+  p.run(FLIGHT.ms + 1500);
+  p.tapAt(4, p.cam.screenOf('hv2-a'));
+  p.tick(16);
+  assert.equal(p.place().level, 'planet');
+  // Back once: the system; back again: the overview, at the dragged orbit.
+  p.press();
+  p.tick(16);
+  assert.equal(p.place().level, 'site');
+  p.press();
+  p.tick(16);
+  assert.equal(p.place(), AT_OVERVIEW);
+  assert.ok(p.cam.flight(), 'flown there, not cut');
+  p.run(TOUCH.fitMs + 200);
+  assert.equal(p.cam.flight(), null);
+  assert.ok(sameOrbit(orbitOf(p.cam.pose()), dragged), 'the orbit the person left');
+  assert.ok(!sameOrbit(orbitOf(p.cam.pose()), fit, 1e-3), 'not the default fit');
+  // A tap on empty sky from a site is the same step back.
+  p.tapAt(5, p.cam.screenOf('cloud'));
+  p.run(FLIGHT.ms + 1500);
+  p.tapAt(6, { x: 5, y: 5 });
+  p.run(TOUCH.fitMs + 200);
+  assert.equal(p.place(), AT_OVERVIEW);
+  assert.ok(sameOrbit(orbitOf(p.cam.pose()), dragged), 'empty sky too');
+});
+
+test('back with no drag lands on the fit; a wake after the hand-back lands on the default fit, not the old pose', () => {
+  const p = page();
+  p.tour.start();
+  p.run(500);
+  p.stage.dispatch('pointerdown', { pointerId: 1 });
+  p.stage.dispatch('pointerup', { pointerId: 1 });
+  p.run(TOUCH.fitMs + 100);
+  const fit = orbitOf(p.cam.pose());
+  // No drag: a site and back is the fit.
+  p.tapAt(2, p.cam.screenOf('hv1'));
+  p.run(FLIGHT.ms + 1500);
+  p.press();
+  p.run(TOUCH.fitMs + 200);
+  assert.equal(p.cam.want().kind, 'overview');
+  assert.ok(sameOrbit(orbitOf(p.cam.pose()), fit, 1e-3));
+  // Drag, open a site, let the tour take the page back.
+  p.drag(3, [[800, 450], [830, 450], [900, 460], [960, 470]]);
+  p.run(2500);
+  const dragged = orbitOf(p.cam.pose());
+  p.tapAt(4, p.cam.screenOf('cloud'));
+  p.run(IDLE.ms + 1000);
+  assert.equal(p.touch.mode(), 'tour');
+  p.run(DEMO_TIMING.overviewMs);
+  // The wake: the default fit, never the old dragged pose.
+  p.stage.dispatch('pointerdown', { pointerId: 9 });
+  p.stage.dispatch('pointerup', { pointerId: 9 });
+  p.run(TOUCH.fitMs + 200);
+  assert.equal(p.cam.want().kind, 'overview');
+  assert.ok(!sameOrbit(orbitOf(p.cam.pose()), dragged, 1e-3));
+  // And from there, a site and back is the fit again: the wake forgot the pose.
+  p.tapAt(5, p.cam.screenOf('hv1'));
+  p.run(FLIGHT.ms + 1500);
+  p.press();
+  p.run(TOUCH.fitMs + 200);
+  assert.equal(p.cam.want().kind, 'overview');
+});
+
+test('camera fly: a free pose reached over its ms, held there; nothing without steer or in still mode', () => {
+  const galaxy = fakeGalaxy();
+  const cam = createGalaxyCamera(galaxy, { steer: true });
+  cam.frame(0);
+  const start = cam.pose();
+  const to = { pos: { x: start.pos.x + 400, y: start.pos.y, z: start.pos.z - 300 }, look: { ...start.look } };
+  cam.fly(to, { ms: 1000 });
+  cam.frame(16);
+  assert.ok(cam.flight());
+  assert.ok(gap(cam.pose(), start) < gap(to, start) * 0.05, 'eased from where it was');
+  cam.frame(1100);
+  assert.equal(cam.flight(), null);
+  assert.ok(gap(cam.pose(), to) < 1e-6);
+  cam.frame(5000);
+  assert.ok(gap(cam.pose(), to) < 1e-6, 'held, no drift');
+  for (const opts of [{ steer: false }, { steer: true, still: true }]) {
+    const c = createGalaxyCamera(fakeGalaxy(), opts);
+    c.frame(0);
+    c.fly(to, { ms: 1000 });
+    assert.equal(c.want().kind, 'overview', JSON.stringify(opts));
+  }
+});
+
+test('galaxy/main.js wires the return (night 4 T4): leave on open, fly back on the last step, clear on wake and resume', () => {
+  const js = read('js/wall/galaxy/main.js');
+  assert.match(js, /const left = createReturn\(\)/);
+  const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
+  assert.match(open, /left\.leave\(place, cam\)/);
+  const go = js.slice(js.indexOf('const goBack = '), js.indexOf('};', js.indexOf('const goBack = ')));
+  assert.match(go, /toOverview\(left\.pose\(\)\)/);
+  for (const key of ['wake: () => {', 'resume: () => {']) {
+    const body = js.slice(js.indexOf(key), js.indexOf('},', js.indexOf(key)));
+    assert.match(body, /left\.clear\(\)/, key);
+  }
+  assert.match(js, /if \(pose\) cam\.fly\(pose, \{ ms: TOUCH\.fitMs \}\)/);
 });
 
 test('galaxy/main.js wires the hand-back (T14): resume releases the sheet and resumes the tour; cuts and the fade in reduced motion', () => {

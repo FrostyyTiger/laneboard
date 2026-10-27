@@ -50,6 +50,9 @@
 // Every planet can be picked (night 4 T3, fan.js): a tap whose finger holds
 // two or more planets opens none; they fan out round it as rows, and the
 // next tap on a row opens that planet (anywhere else closes the fan).
+// Back returns to the pose you left (night 4 T4, touch.js createReturn): back
+// to the overview flies to where the finger had turned the galaxy before it
+// opened a site, not the default fit; a wake and the tour's hand-back fit.
 // The tour resumes (T14, touch.js IDLE): a minute after the last touch the
 // tour takes the page back at its next leg, trouble first (tour.js
 // `resume`), the camera flying there from where the finger left it. In
@@ -80,7 +83,7 @@ import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
 import {
-  AT_OVERVIEW, COVERED, TOUCH, backShown, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createTaps, createTouch, hitAll, hitTest,
+  AT_OVERVIEW, COVERED, TOUCH, backShown, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createReturn, createTaps, createTouch, hitAll, hitTest,
   memberPoints, orbitLimits, placeOf, tapPoints,
 } from './touch.js';
 
@@ -269,11 +272,14 @@ export function boot() {
   const cutAway = () => {
     if (fade && cam.want().cut) fade.cut();
   };
-  // Out to the whole galaxy in TOUCH.fitMs: the plate and the lock go.
-  const toOverview = () => {
+  // The pose a finger left the overview in (night 4 T4): back flies there, not to the fit.
+  const left = createReturn();
+  // Out to the whole galaxy in TOUCH.fitMs (or to the pose it was left in): the plate and the lock go.
+  const toOverview = (pose = null) => {
     cutAway();
     fan?.hide();
-    cam.fit({ ms: TOUCH.fitMs });
+    if (pose) cam.fly(pose, { ms: TOUCH.fitMs });
+    else cam.fit({ ms: TOUCH.fitMs });
     hud.release();
     place = AT_OVERVIEW;
   };
@@ -281,6 +287,7 @@ export function boot() {
   const touch = park ? null : createTouch(document.getElementById('galaxy-stage'), {
     wake: () => {
       tour.stop();
+      left.clear();
       toOverview();
     },
     // A minute untouched (T14): the sheet goes, the tour flies on from here to its worst site.
@@ -288,6 +295,7 @@ export function boot() {
       cutAway();
       fan?.hide();
       hud.release();
+      left.clear();
       place = AT_OVERVIEW;
       tour.resume();
     },
@@ -305,6 +313,7 @@ export function boot() {
   const stageEl = document.getElementById('galaxy-stage');
   // A site's sheet; the camera flies there unless it already holds it (a step back from a planet).
   const openSite = (id) => {
+    left.leave(place, cam); // off the overview: where the finger had it is where back returns
     const w = cam.want();
     // In reduced motion the tour's site legs leave the camera on the overview: only a cut is there.
     const there = w.kind === 'site' && w.id === id && (!reduced || w.cut);
@@ -328,7 +337,7 @@ export function boot() {
     if (!canGoBack(place)) return;
     const next = backStep(place);
     if (next.level === 'site') openSite(next.site);
-    else toOverview();
+    else toOverview(left.pose());
   };
   const backEl = document.getElementById('galaxy-back');
   const back = touch ? createBack(backEl, { back: goBack }) : null;

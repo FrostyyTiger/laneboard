@@ -880,7 +880,7 @@ test('galaxy/main.js wires back (T13): the control and an empty-sky tap step bac
   const go = js.slice(js.indexOf('const goBack = '), js.indexOf('};', js.indexOf('const goBack = ')));
   assert.match(go, /backStep\(place\)/);
   assert.match(go, /openSite\(next\.site\)/);
-  assert.match(go, /toOverview\(\)/);
+  assert.match(go, /toOverview\(left\.pose\(\)\)/, 'to the pose the finger left (night 4 T4), else the fit');
   const wake = js.slice(js.indexOf('wake: () => {'), js.indexOf('},', js.indexOf('wake: () => {')));
   assert.match(wake, /toOverview\(\)/);
   const out = js.slice(js.indexOf('const toOverview = '), js.indexOf('};', js.indexOf('const toOverview = ')));
