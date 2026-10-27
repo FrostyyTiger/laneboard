@@ -191,7 +191,7 @@ the label and the count text before and after the tap.
 Given screen A in `wall` layout touring and screen B in `canvas` layout, one conversation,
 When the owner types "put a countdown to the nightly run on the canvas" on B and the fake agent
 places a countdown card,
-Then the card appears on B within 1 s of the agent's command; A shows the new conversation line if
+Then the card appears on B within 1 s of the agent's command (B6, `README.md` speed budget); A shows the new conversation line if
 its pane is open, keeps `data-wall-state="tour"` and gets no card.
 Test: Playwright, two browser contexts on one fake agent and one demo hub; assert the card on B,
 no card element on A, and A's `data-wall-state`.

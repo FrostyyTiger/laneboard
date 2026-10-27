@@ -4,7 +4,8 @@ The spec the spec night writes from the plan (`../README.md`) and the owner's in
 (`../spec-input.md`). Where this spec and `spec-input.md` disagree, `spec-input.md` wins. Sizes are
 CSS px at 1368x912 (the owner's tablet, landscape, 2x); times are in s or ms. Scenario ids are
 `S-<part>-<nn>`; decisions are `D<n>` in `DECISIONS.md`; questions for the owner are `Q-O<n>` in
-`QUESTIONS.md`, and spec text that rests on an unanswered one is marked `(pending Q-O<n>)`.
+`QUESTIONS.md`, and spec text that rests on an unanswered one is marked `(pending Q-O<n>)`. Speed
+budgets are `B<n>` in §"Speed budget" below.
 
 ## Files
 
@@ -12,9 +13,9 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 
 | File | What it settles | Scenario ids | Task | Status |
 | --- | --- | --- | --- | --- |
-| `README.md` | this index and the glossary | none | T1 | written |
+| `README.md` | this index, the speed budget (B1-B8) and the glossary | none | T1, T24 | written |
 | `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3 | part 1 written (T2), part 2 planned (T3) |
-| `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, new conversation, several screens, raw terminal | `S-C1-` | T4, T5 | part 1 written (T4: pane, rendering, tool lines, S-C1-01..12), part 2 planned (T5) |
+| `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, new conversation, several screens, raw terminal | `S-C1-` | T4, T5 | part 1 written (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 planned (T5) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the physical-button API, speech-to-text slow or down | `S-C2-` | T6, T7 | planned |
 | `c3-see.md` | C3: the MCP read tools, `focus`, "Ask about this" | `S-C3-` | T8, T9 | planned |
 | `c4-show-canvas.md` | C4: show commands, one camera with the tour, undo; the canvas, kit blocks, custom cards, promotion, how cards leave | `S-C4-` | T10, T11, T12 | planned |
@@ -28,6 +29,47 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `DECISIONS.md` | small reversible choices made during the night, each with how to overrule | none | all | written (running list) |
 | `QUESTIONS.md` | what only the owner can decide, with options and a recommendation | none | all | written (running list) |
 | `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2), `c1-pane.html` (T4) | none | T2-T4, T6, T9, T11, T14 | in progress |
+
+## Speed budget
+
+`spec-input.md` §4-§5: the cockpit must keep the terminal's speed ("In the terminal it works really
+well"; "a timer must not take 5 minutes"). These are the numbers every spec file cites as `B<n>`
+instead of writing its own. A scenario with a timing asserts against its row. Times run from the
+**start** event to the **end** event on the screen, at 1368x912, against the stand-ins
+(`stand-ins.md`, T18).
+
+| Id | Start | End (what the screen shows) | Budget, end to end | Stand-in setting in that budget | Screen and room's share (asserted) |
+| --- | --- | --- | --- | --- | --- |
+| B1 | `pointerdown` on the talk button | the button in its listening state (`data-talk="listening"`, T6) and audio frames leaving the screen | ≤ 0.2 s | none | ≤ 0.2 s |
+| B2 | `pointerdown` on the talk button (the speaker starts at once) | the first partial word drawn in the input | ≤ 1.0 s | fake speech sends its first partial 0.6 s after the first audio frame | ≤ 0.4 s |
+| B3 | `pointerup` (hold) or the second tap (tap-tap) | the prompt block drawn in the conversation (`YOU · SPOKEN · HH:MM`), the input empty | ≤ 0.3 s | fake speech sends its final 0.15 s after the stop | ≤ 0.15 s |
+| B4 | the fake agent sends its first text delta | that text drawn in the conversation | ≤ 0.5 s | none | ≤ 0.5 s |
+| B5 | the room receives a show command from the agent | the camera's first frame of movement on every screen it targets | ≤ 0.3 s | none | ≤ 0.3 s |
+| B6 | the room receives a kit-block tool call from the agent | the block drawn on the canvas with its live data | ≤ 1.0 s | none | ≤ 1.0 s |
+| B7 | a tap on the opener (or a press on the talk button) | the pane in place, its slide ended (`c1-talk.md` §2) | ≤ 0.2 s | none | ≤ 0.2 s |
+| B8 | `SEND` tapped (typed prompt, T5) | the prompt block drawn in the conversation, `data-turn="thinking"` | ≤ 0.1 s | none | ≤ 0.1 s |
+
+- **The agent's own time is not in the budget.** B4 starts when the agent's first delta leaves
+  the bridge; how long a real agent thinks before that is its own (with Claude Code, seconds).
+  What the screen shows while it thinks is the turn state `● THINKING` (`c1-talk.md` §2), drawn
+  within B8.
+- **Real hardware is measured, not promised.** The real speech service's first-partial time is
+  unknown (research Q4: no authoritative figure; measure with `wlk bench` on the real host). The
+  stand-in settings are chosen so the screen and room's share is what a test can hold them to; the
+  real end-to-end numbers are what the owner's setup should reach and are read from the marks
+  below, on the real screen.
+- **Marks** (D28). The screen sets `performance.mark('cockpit:B<n>:start')` and
+  `performance.mark('cockpit:B<n>:end')` for every row, B5 and B6 with the room's receive time
+  carried in the message (`protocols.md`, T15). A test reads them with
+  `performance.getEntriesByName`; on the real screen `?perf=1` lists the last 20 measures in the
+  pane's header menu (T5 places it). A measure over budget is not an error on the real screen,
+  only a number to look at.
+- **Tests allow no slack** beyond the table: a stand-in run that misses a budget fails. A build
+  night that cannot meet a row on the VM's headless Chromium writes why in `PROGRESS.md` instead
+  of widening the row; only the owner widens a budget.
+- The hold-versus-tap threshold (T6) does not delay B1: listening starts on `pointerdown` in both
+  gestures; the threshold only decides, at `pointerup`, whether that release sends (hold) or keeps
+  listening (tap) (D29, T6 details the gesture).
 
 ## Glossary
 

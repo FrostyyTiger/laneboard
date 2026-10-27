@@ -59,7 +59,7 @@ these rules apply to it unchanged.
 
 **Open.** A tap on the opener (or a press on the talk button, T6) opens the pane:
 - It slides in from the right: `transform: translateX(608px)` to `0`, 120 ms, `--ease`
-  (`docs/design.md` rule 5). The pane is in place ≤ 0.2 s after the tap.
+  (`docs/design.md` rule 5). The pane is in place ≤ 0.2 s after the tap (B7).
 - While open, the opener is hidden (`CLOSE` in the header takes its job).
 - The conversation is scrolled to its end: the latest turn is in sight.
 - The input gets the keyboard focus only when the page's pointer is fine (a mouse, a paired
@@ -118,7 +118,7 @@ blocks, tool lines (§5) and show-command lines (T10) interleaved as the agent p
 - When the bridge sends a text block complete, it **replaces** the text built from the deltas (a
   lost delta cannot leave wrong text, research Q2).
 - **Budget:** the first reply text is on screen ≤ 0.5 s after the fake agent sends its first delta
-  (the speed table of T24 holds this number once written).
+  (B4, the speed budget in `README.md`).
 
 ### What a reply may contain (D22, D23)
 
@@ -268,8 +268,8 @@ tap, assert the Map's selection changed and `data-pane="open"`.
 Given the pane open and the fake agent scripted to wait 300 ms after a prompt, then send
 `Two of three runs finished.` in 6 deltas 100 ms apart, then the complete block,
 When the owner sends `how did the night go?` at t = 0,
-Then `data-turn` is `thinking` and the header reads `● THINKING` within 0.1 s; the first word is
-on screen ≤ 0.5 s after the first delta and `data-turn="answering"`; the cursor `▍` follows the
+Then `data-turn` is `thinking` and the header reads `● THINKING` within 0.1 s (B8); the first word
+is on screen ≤ 0.5 s after the first delta (B4) and `data-turn="answering"`; the cursor `▍` follows the
 text; after the complete block the reply reads exactly `Two of three runs finished.`, the cursor
 is gone and the header reads `READY`.
 And a script that drops delta 4 still ends with the exact text, from the complete block.
@@ -345,3 +345,27 @@ Then the pane is in its final place in the first frame after each tap (computed
 `transition-duration` 0 s) and the `↓ NEW` jump and the tool-line opening have no transition.
 Test: Playwright `emulateMedia({ reducedMotion: 'reduce' })`; read the pane rect in the next
 `requestAnimationFrame` after the tap.
+
+### S-C1-13 Hold the button on the touring Wall: words in 1 s, release sends (pending Q-O11)
+Given a screen in `wall` layout touring, the pane closed, the conversation idle; the fake speech
+service scripted to send the partials `how` at 0.6 s, `how did the` at 1.2 s and `how did the
+night go` at 1.8 s after the first audio frame, and the final `How did the night go?` 0.15 s after
+the stop; the fake agent scripted to send its first delta 0.3 s after the prompt,
+When the owner presses the bottom-right 64x64 button (centre (1312, 856)) at t = 0 and holds it,
+then releases it at t = 2.5 s,
+Then by t = 0.2 s the button shows its listening state (`data-talk="listening"`, T6), the screen
+is sending audio frames, `data-wall-state="explore"` with the tour stopped, and the pane is opening
+with the live words in its input (B1, B7); `how` is drawn in the input by t = 1.0 s (B2) and is
+replaced in place by `how did the` and `how did the night go`, never appended twice; no prompt is
+sent while the button is held;
+And by t = 2.8 s the conversation shows `YOU · SPOKEN · HH:MM` over `How did the night go?`, the
+input is empty, `data-talk` is back to idle and `data-turn="thinking"` (B3); the first reply text
+is drawn ≤ 0.5 s after the fake agent's first delta (B4).
+With Q-O11 b) the press opens the pane only; this scenario then starts with a press on the talk
+button inside the open pane and the same timings hold from that press.
+Test: Playwright with `hasTouch: true`, Chromium started with `--use-fake-device-for-media-stream`
+and `--use-fake-ui-for-media-stream`; `touchscreen` down at t = 0 and up at 2.5 s (via CDP
+`Input.dispatchTouchEvent`); read the marks `cockpit:B1`…`cockpit:B4` and `cockpit:B7`
+(`performance.getEntriesByName`) and assert each against its row; sample the input's value every
+50 ms and assert the sequence `how` → `how did the` → `how did the night go`; count the frames the
+fake speech service received before t = 0.2 s (≥ 1).
