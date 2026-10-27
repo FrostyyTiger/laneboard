@@ -292,6 +292,9 @@ What the slice itself says waits; nothing else moved here.
   `Origin`, as HTTP 403 before any upgrade handler runs. So a page gets 1006, not 4403 (S-SCR-24's
   4403 cases); the room's own checks only see what the guard let through. A fix needs a patch to
   `common.mjs` (let `/api/cockpit/ws` past the Origin part of the guard, the room then closes 4403).
+  T14 left this as it is: its unit cases drive the room's own checks behind a plain upgrade
+  handler. The patch (`patches/T33-guard-cockpit-ws.diff`, security-relevant) belongs to T33,
+  whose S-SCR-24 asserts 4403 from a page.
 
 ## Measured on the real screen
 
