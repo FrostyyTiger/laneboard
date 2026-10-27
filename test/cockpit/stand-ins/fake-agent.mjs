@@ -676,6 +676,7 @@ function createAgent({ dialect, speak, log, readScript, maxTurns, initialScript,
       const w = speak.turn();
       const ids = new Map(); // tool step → its toolu_ id
       const calls = new Map(); // tool step → its MCP call
+      const sentAt = new Map(); // tool step → when its start went out
       w.start([p.uuid]);
       const ping = Number(turn.pingEveryMs) > 0 ? setInterval(() => w.ping(), Number(turn.pingEveryMs)) : null;
       let events = timeline(Array.isArray(turn.steps) ? turn.steps : []);
@@ -714,6 +715,7 @@ function createAgent({ dialect, speak, log, readScript, maxTurns, initialScript,
               const input = st.input ?? {};
               if (ev.kind === 'tool') {
                 ids.set(st, id);
+                sentAt.set(st, Date.now());
                 cur.tools.add(st);
                 if (toolName.startsWith(MCP_PREFIX)) calls.set(st, realCall(toolName, input, st));
               }
@@ -721,6 +723,13 @@ function createAgent({ dialect, speak, log, readScript, maxTurns, initialScript,
               break;
             }
             case 'tool-end': {
+              // A start that went out late still gets its whole scripted span, plus 10 ms for the
+              // room's own receipt of the two lines (build B150): the room's endedAt − startedAt
+              // is at least `endAt − at` (S-C1-25), and well under its 100 ms more.
+              const span = (Number(st.endAt ?? st.at) || 0) - (Number(st.at) || 0);
+              const late = sentAt.get(st) + span + SPAN_MARGIN_MS - Date.now();
+              if (late > 0) await Promise.race([sleep(late), aborted]);
+              if (cur.abort) break;
               // With a real call, `endAt` is the earliest end: the result waits for the call (§2.3).
               let r = { isError: st.isError === true, content: '(fake agent: no call)' };
               if (calls.has(st)) {
@@ -784,6 +793,9 @@ function createAgent({ dialect, speak, log, readScript, maxTurns, initialScript,
 
   return { line, sigint };
 }
+
+/** B150: what a tool's end waits beyond its scripted span after its start went out. */
+const SPAN_MARGIN_MS = 10;
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 

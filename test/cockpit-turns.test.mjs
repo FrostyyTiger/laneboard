@@ -117,3 +117,55 @@ test('newClientId: p- and 8 hex characters (protocols.md §3.1)', () => {
   assert.ok(seen.size > 45);
   assert.equal(newClientId({ getRandomValues: (a) => a.fill(0xab) }), 'p-abababab');
 });
+
+// Tool lines (c1-talk.md §5, §5.1, T20): placed by blockIndex, folded by the rule, drawn per frame.
+const toolLines = (v) => (replyOf(v)?.children ?? []).filter((c) => c.attrs?.['data-tool-line'] !== undefined);
+const wordsOfLine = (n) => n.children.find((c) => c.className === 'ck-tool-words').textContent;
+const start = (blockIndex, id, tool, input, startedAt = AT) => ({ turnId: 't-1', blockIndex, toolUseId: id, tool, input, startedAt });
+
+test('tool lines: a fold per tool, a new line for another tool, each at its first call\'s place', () => {
+  const v = createTurn(doc(), { turnId: 't-1', prompt: 'how is the fleet?', at: AT });
+  v.toolStart(start(0, 'tu-1', 'mcp__laneboard__fleet', { site: 'hv1' }));
+  const [line] = toolLines(v);
+  assert.equal(line.tagName, 'BUTTON');
+  assert.equal(line.attrs.type, 'button');
+  assert.equal(wordsOfLine(line), 'read the feed of hv1…', 'a new line comes with its words');
+  assert.equal(line.attrs['data-running'], '', '● while the call runs');
+  v.toolStart(start(1, 'tu-2', 'mcp__laneboard__fleet', { site: 'hv2' }));
+  v.toolStart(start(2, 'tu-3', 'mcp__laneboard__ci', { branch: 'main' }));
+  v.draw();
+  assert.deepEqual(toolLines(v).map(wordsOfLine), ['read 2 feeds…', 'looked at CI on main…']);
+  v.toolEnd({ toolUseId: 'tu-3', endedAt: AT, isError: false, denied: false });
+  v.toolEnd({ toolUseId: 'tu-2', endedAt: AT, isError: true, denied: false });
+  v.draw();
+  assert.deepEqual(toolLines(v).map(wordsOfLine), ['read 2 feeds · 1 failed…', 'looked at CI on main']);
+  assert.deepEqual(toolLines(v).map((n) => n.attrs['data-running'] !== undefined), [true, false]);
+  // Text at a lower index arriving later sits above the lines (§5.1 "Place"); after text, a
+  // fleet call starts a new line.
+  v.block({ blockIndex: 3, text: 'hv1 is fine.' });
+  v.toolStart(start(4, 'tu-4', 'mcp__laneboard__fleet', { site: 'hv3' }));
+  v.draw();
+  assert.equal(toolLines(v).length, 3, 'text between two calls of one tool: two lines');
+  assert.deepEqual(replyOf(v).children.map((c) => (c.attrs?.['data-tool-line'] !== undefined ? 'tool' : 'text')), ['tool', 'tool', 'text', 'tool']);
+  assert.equal(v.hasCall('tu-4'), true);
+  assert.equal(v.hasCall('tu-9'), false);
+  // The turn ends with tu-1 and tu-4 still running: their ● and … go (§5.1 turn.end).
+  v.end({ state: 'done' });
+  v.draw();
+  assert.deepEqual(toolLines(v).map(wordsOfLine), ['read 2 feeds · 1 failed', 'looked at CI on main', 'read the feed of hv3']);
+  assert.deepEqual(toolLines(v).map((n) => n.attrs['data-running']), [undefined, undefined, undefined]);
+});
+
+test('tool lines from a snapshot turn: its tool items folded and ended as they were', () => {
+  const item = (blockIndex, toolUseId, site, more = {}) => ({ kind: 'tool', blockIndex, toolUseId, tool: 'mcp__laneboard__fleet', input: { site }, startedAt: AT, ...more });
+  const v = createTurn(doc(), {
+    turnId: 't-2', prompt: 'check the sites', at: AT, state: 'done', end: { state: 'done', at: AT },
+    items: [
+      item(1, 'tu-2', 'hv2', { endedAt: AT, isError: true }),
+      item(0, 'tu-1', 'hv1', { endedAt: AT, isError: false }),
+      { kind: 'text', blockIndex: 2, text: 'hv2 did not answer.' },
+    ],
+  });
+  assert.deepEqual(toolLines(v).map(wordsOfLine), ['read 2 feeds · 1 failed']);
+  assert.equal(replyOf(v).children.length, 2, 'one line, then the text');
+});

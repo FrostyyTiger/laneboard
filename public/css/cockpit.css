@@ -307,6 +307,56 @@
   z-index: 1;
   background: var(--bg-elevated);
 }
+/* a tool line: one 48 px row across the text column, mono 18 px --text-2, a 24 px glyph
+   column holding a static `●` while a call runs, `+`/`−` 20 px at the right; the whole row a
+   button with no border and no fill; opened, one mono 16 px row per call, 8 px in
+   (c1-talk.md §5, D24, D226; README "Touch": no border, no fill) */
+.ck-tool {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  grid-template-rows: minmax(48px, auto);
+  grid-auto-rows: auto;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  font: 400 18px/1.4 var(--font-mono);
+  color: var(--text-2);
+  touch-action: manipulation;
+  cursor: pointer;
+}
+.ck-tool::before {
+  content: "";
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--text-2);
+}
+.ck-tool[data-running]::before { content: "●"; }
+.ck-tool::after {
+  content: "+";
+  grid-column: 3;
+  grid-row: 1;
+  padding-left: 16px;
+  font: 400 20px/1 var(--font-mono);
+  color: var(--text-2);
+}
+.ck-tool[aria-expanded="true"]::after { content: "−"; }
+.ck-tool-words { grid-column: 2; grid-row: 1; overflow-wrap: anywhere; }
+.ck-tool-row {
+  display: block;
+  grid-column: 2 / -1;
+  padding: 0 0 8px 8px;
+  font: 400 16px/1.4 var(--font-mono);
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* the delivery word ending a prompt's label row: 18 px caps --text-1 on the row's
    baseline, the row still 24 px (c1-talk.md §3, D270, D21, D167) */
 .ck-delivery {

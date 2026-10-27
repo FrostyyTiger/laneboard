@@ -839,3 +839,36 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   punctuation) because `test/frontend.test.mjs`'s source scanner does not know regex literals; its
   linear-time rule (D146) also covers inline scanning: a closer not found ahead is not looked for again —
   spec: D146 — overrule: none needed.
+- B150 (T20) The fake agent ends a tool call no sooner than its scripted span (`endAt − at`) plus
+  10 ms after its start actually went out (`SPAN_MARGIN_MS`), not only at `t0 + endAt` — because
+  a start fired 1 ms late, or the room receiving it 1-2 ms late, gave `endedAt − startedAt` of 798-799
+  for a scripted 800, below S-C1-25's "at least the scripted span"; 10 ms stays far inside its
+  "at most 100 ms more" — spec: `stand-ins.md` §2.3, `c1-talk.md` S-C1-25 — overrule: drop the margin
+  and let S-C1-25 allow the receipt's jitter.
+- B151 (T20) The `●` glyph and `+`/`−` are the stylesheet's (`::before`, `::after` of the
+  `<button data-tool-line>`), the words a span and the opened rows `<span data-tool-row>` children of
+  the button — because S-C1-35 reads a line's `textContent` as exactly its words, while S-C1-07 says
+  the rows are the line's children and the whole row is the tap target (a button holds phrasing
+  content only, hence spans) — spec: `c1-talk.md` §5 "Look", "Open"; S-C1-07, S-C1-35 — overrule:
+  glyphs as text spans and the tests read a `.ck-tool-words` span instead.
+- B152 (T20) Where §5 leaves it open: `…` ends the whole text, after ` · 1 failed`
+  (`read 3 feeds · 1 failed…`); a row whose call still runs ends `<tool>  <input>  …`, and one the
+  turn's end cut (no `tool.end`) ends after its input; a 120-character cut of the input adds `…`;
+  calls that all have no target keep the `one` (no-target) text, so two `lanes {}` calls read
+  `looked at the lanes`, while a tool with no target field (`Grep`, `alerts`) reads `many` from two
+  calls; `focus`'s "this screen" compares with `opts.screen`, which C1's pane does not pass yet (so
+  only a missing `screen` reads `this screen` until C3) — because these are the readings closest to
+  §5's examples — spec: `c1-talk.md` §5, §5.1 — overrule: in `public/js/core/tool-words.js`.
+- B153 (T20) A tool line whose words do not fit the text column wraps to a second line (the row
+  grows past 48 px) rather than cutting: at 18 px mono a 560 px column holds about 46 characters, and
+  `looked at CI on ` plus a 33-character target is 49 — because cut-off text is a bug and §5 already
+  cuts the target to 32 — spec: `c1-talk.md` §5 "Look" (one row, 48 px), "Shortening" — overrule: a
+  shorter target cut, or `text-overflow: ellipsis` on the words.
+- B154 (T20) S-C1-06 runs on the turn it shares with S-C1-07 (`check the sites`, `hv2` `isError`,
+  `stand-ins.md` §5), so its test compares each sample's words without the ` · 1 failed` that turn
+  adds (`read 3 feeds` with no `●` at the end); S-C1-07 asserts that suffix exactly — spec:
+  `stand-ins.md` §5 c1-render row, `c1-talk.md` S-C1-06/07 — overrule: a separate clean turn for S-C1-06.
+- B155 (T20) A `tool.start` or `tool.end` the pane cannot place (an unknown `turnId` or
+  `toolUseId`) is dropped, as `text.*` already is; D119's close-with-4000-and-snapshot is not built
+  for any message yet — spec: `c1-talk.md` §5.1 "A message the pane cannot place" — overrule: none;
+  the D119 gap is a later task's (named under `## Later`).

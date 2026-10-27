@@ -112,8 +112,8 @@ that runs with a later slice, as §3.1 says.
 | S-C1-03 | The pane over the Map leaves the Map usable | T15 ✓ (13eb0f7) | Playwright | |
 | S-C1-04 | A reply streams in, then settles | T18 ✓ (7f296a4) | Playwright | |
 | S-C1-05 | A table is readable at arm's length | T19 ✓ (d59a724) | Playwright | |
-| S-C1-06 | Tool calls fold into one line each, with live counts | T20 | Playwright | |
-| S-C1-07 | A tool line opens to show its calls; a failure stays grey | T20 | Playwright | |
+| S-C1-06 | Tool calls fold into one line each, with live counts | T20 ✓ (SHA) | Playwright | |
+| S-C1-07 | A tool line opens to show its calls; a failure stays grey | T20 ✓ (SHA) | Playwright | |
 | S-C1-08 | A long code block shows 12 lines and a button for the rest | T19 ✓ (d59a724) | Playwright | |
 | S-C1-09 | Markup from the agent is shown, never run or fetched | T19 ✓ (d59a724) | Playwright | |
 | S-C1-10 | Scrolled up during a reply: the view stays, `↓ NEW` brings it back | T22 | Playwright | |
@@ -129,7 +129,7 @@ that runs with a later slice, as §3.1 says.
 | S-C1-21 | A long reply: its age shows, and it is drawn whole | T22 | Playwright | |
 | S-C1-22 | A new conversation: asked, then started at once (pending Q-O2) | T29 | Playwright | step: the two cards (Canvas) |
 | S-C1-23 | Two pages, one conversation: a second prompt queues, it does not stop | T29 | Playwright | |
-| S-C1-25 | Parallel calls fold by tool, end in any order, and show their ms | T20 | Playwright | |
+| S-C1-25 | Parallel calls fold by tool, end in any order, and show their ms | T20 ✓ (SHA) | Playwright | |
 | S-C1-26 | A fresh screen says it is connecting, then never shows a blank pane | T15 ✓ (13eb0f7) | Playwright | |
 | S-C1-27 | STOP during a turn drops a queued prompt and says so (pending Q-O1) | T26 | Playwright | |
 | S-C1-28 | A queued prompt the agent never reads is sent once more, then shown as not sent (pending Q-O1) | T25 | Playwright | |
@@ -139,7 +139,7 @@ that runs with a later slice, as §3.1 says.
 | S-C1-32 | The on-screen keyboard: the input row sits on its edge, the conversation stays pinned | T24 | Playwright | |
 | S-C1-33 | Keyboard up with the status line and a long draft: the conversation keeps 200 px | T24 | Playwright | |
 | S-C1-34 | Chip, line slot and `↓ NEW` stack without overlapping | T22 | Playwright | |
-| S-C1-35 | Tool lines from odd input, and the words module's unit test | T20 | Playwright | |
+| S-C1-35 | Tool lines from odd input, and the words module's unit test | T20 ✓ (SHA) | Playwright | |
 | S-C1-36 | The static demo: the pane opens on a canned conversation and typing plays a turn | T40 | Playwright | |
 | S-C1-37 | A logged-out agent is named before any prompt, and the line goes after the login | T28 | Playwright | |
 | S-C1-38 | One status line: the highest that holds wins, news never waits | T28 | Playwright | |
@@ -208,6 +208,9 @@ What the slice itself says waits; nothing else moved here.
 - T18 (review 23-spec-keeper, finding 5): add S-C1-26's second half (the empty line gone after the first prompt, step 2) to the test once SEND sends; today `c1-pane.spec.mjs` stops at the empty line (B111).
 - T40 (review 23-spec-keeper, finding 9): re-run S-SCR-35 with `?demo=1` (its Given; `c1-handle.spec.mjs:15` opens `/#/map`, B129).
 - T15's S-C1-03 (review 23-spec-keeper, finding 8): `c1-pane.spec.mjs:127` guesses three inspector selectors (`#shell-insp, .shell-insp, [data-insp-panel]`); name the one the shell draws.
+- D119 (from T20, B155): a message the pane cannot place (`text.*`, `tool.*`, `turn.*` naming an unknown `turnId`, a `tool.end` with an unknown `toolUseId`) is dropped today; `c1-talk.md` §5.1 wants the link closed with 4000 `gap` and the snapshot taken. No task names it: the next planner round should give it one (T29's build or the link client's).
+- From T20's stills: the corner `CLOSE` opener (`[data-cockpit-open]`, 48x48 at the pane's bottom right) sits over the conversation's last 48 px, so an opened tool line's last row or its `−` can pass under it while scrolled to the end; T22's "never overlapping" stack should check it.
+- `test/cockpit-link.test.mjs` S-SEC-06 failed once in a full `npm test` in round 33 (`frames.at(-1).screen` undefined: another frame after `welcome`) and passed in the next run and alone; unrelated to T20's files, noted in case it repeats.
 
 ## Spec fixes
 

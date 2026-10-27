@@ -7,7 +7,7 @@
 //   one line, no input row
 //   pane.setLink(state)        the room link's state (link.js): data-cockpit, the status line
 //   pane.apply(msg)            one room message (welcome, snapshot, turn.prompt, turn.state,
-//                              text.delta, text.block, turn.end)
+//                              text.delta, text.block, tool.start, tool.end, turn.end)
 //   onPrompt(msg)              SEND: the `prompt` to the room (protocols.md §3.1); the block is
 //                              drawn at the tap with `· SENDING` until the room's echo (B8)
 //   pane.open() / .close() / .isOpen()
@@ -410,6 +410,20 @@ export function createPane(opts = {}) {
         const v = views.get(msg.turnId);
         if (!v) return;
         if (msg.type === 'text.delta') v.delta(msg); else v.block(msg);
+        changed(v);
+        return;
+      }
+      case 'tool.start': {
+        const v = views.get(msg.turnId);
+        if (!v) return;
+        v.toolStart(msg);
+        changed(v);
+        return;
+      }
+      case 'tool.end': {
+        const v = views.get(msg.turnId);
+        if (!v?.hasCall(msg.toolUseId)) return;
+        v.toolEnd(msg);
         changed(v);
         return;
       }
