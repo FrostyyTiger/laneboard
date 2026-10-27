@@ -699,3 +699,18 @@ Then the node is selected and the inspector shows it (as `onMapSelect` with `via
 does today), and no `[data-ask-menu]` exists at any point.
 Test: Playwright against a plain demo board; asserts the hash, the inspector, and that
 `[data-ask-menu]` never appears (a `MutationObserver` counts insertions).
+
+### S-C3-18 "How did the night go?" on the C1 night: answered from the Morning
+
+Added by T62 (`slices.md` §3.1): C1 brings `morning`, `alerts` and `runs`, so the owner's first
+question has an answer from the fleet.
+Given the room under test with the fake agent (dialect `claude`, through the real adapter, D110) on
+script `c1-voice`, the demo hub, the pane open on `#/map` at 1368x912,
+When the owner types `how did the night go?` and taps `SEND` at t = 0 s,
+Then by t = 0.1 s the prompt block shows (B8); the fake agent calls `morning` `{"window":"tonight"}`
+through the real MCP server and the pane shows one tool line `read the Morning for tonight`, which
+ends without `failed`; then the reply `■ One run is stuck: builder-a since 03:12.` streams in and the
+header reads `READY` within 1 s of the fake agent's `result`.
+Test: Playwright against the stand-ins; asserts the one `[data-tool-line]` text, the reply text,
+`data-turn="idle"` at the end; the fake agent's tool-result log (`fakeAgent.toolResults()`) holds
+one `morning` result with `window: "tonight"` and an `asOf` entry for `hub`.

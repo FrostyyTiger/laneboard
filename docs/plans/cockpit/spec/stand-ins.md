@@ -1,7 +1,7 @@
 # Cockpit spec: stand-ins
 
 The loop's VM has no screen, no microphone, no GPU and no fleet (plan §6.7). The acceptance tests
-(D88, `test/cockpit/*.spec.mjs`) and the public demo run against the stand-ins below. Each section
+(D88, D113, `e2e/cockpit/*.spec.mjs`) and the public demo run against the stand-ins below. Each section
 is small enough to build in one round. Message shapes are not repeated here: they are
 `protocols.md`'s, and a stand-in writes only shapes that appear there as fixtures (D98).
 
@@ -355,7 +355,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c1-errors` | agent | S-C1-19, S-C1-20 | an `exit` 1 mid-text; one turn per error row (`failed` `overloaded`, `step-limit`, `failed` `boom` plus a 300-character `detail`, `not-logged-in`, two `retry` steps then text) |
 | `c1-long` | agent | S-C1-21 | 15 s without steps, then 120 lines, 26 000 characters and a 30-row table over 20 s (real time: 35 s) |
 | `c1-session` | agent | S-C1-22, S-C1-23 | `repeat` turns that answer `how is builder-a` in 2 s |
-| `c1-voice` | agent | S-C1-13, §10 of `protocols.md` | the `morning` call and `■ One run is stuck…` turn of `protocols.md` §13.1, first delta 0.3 s after the prompt |
+| `c1-voice` | agent | S-C1-13, S-C3-18, §10 of `protocols.md` | the `morning` call and `■ One run is stuck…` turn of `protocols.md` §13.1, first delta 0.3 s after the prompt |
 | `c2-tap` | speech | S-C2-01..04, S-C2-07, S-C2-10..13, S-C2-20 | §3.2's example, plus `how did` / `how did the` / `how did the night go` (S-C2-03) and `restart the runner on builder-b` (S-C2-11) |
 | `c2-limits` | speech | S-C2-05, S-C2-06 | `noAudio`; a growing partial every 1 s from 0.6 s for 130 s |
 | `c2-faults` | speech | S-C2-15..17 | one utterance per row of §3.3 |

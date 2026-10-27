@@ -17,7 +17,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3 | part 1 written (T2), part 2 planned (T3) |
 | `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24; T50: header `READY`/`● WORKING`/`● STOPPING`, folds cut to code and `SHOW EARLIER`, E6 merged into E8, no raw view in C1, S-C1-24 retired) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the talk key, speech-to-text down or failed; §14 the physical-button API as the later slice C2b | `S-C2-`, `S-C2B-` | T6, T7 | written: part 1 (T6: gestures, 400 ms threshold, `data-talk` states, live words, microphone, S-C2-01..10), part 2 (T7, slimmed by T49: tap the words to stop and fix, DE/EN, `cockpit.stt.*`, the service down or failed (`stt-down`, `stt-failed`), the talk key, the kiosk microphone note, S-C2-11..17, 20, 21; C2b §14: the button API, S-C2B-01..02) |
-| `c3-see.md` | C3: the MCP server (`laneboard`, loopback HTTP, D58), the seven read tools with params, results and sources, result rules (`asOf`, size caps), board gaps; `focus`, "Ask about this" | `S-C3-` | T8, T9 | written: part 1 (T8: §1-§7, S-C3-01..08), part 2 (T9: §8 `focus`, §9 the hold menu and context chip, S-C3-09..17, sketch `c3-ask.html`) |
+| `c3-see.md` | C3: the MCP server (`laneboard`, loopback HTTP, D58), the seven read tools with params, results and sources, result rules (`asOf`, size caps), board gaps; `focus`, "Ask about this" | `S-C3-` | T8, T9 | written: part 1 (T8: §1-§7, S-C3-01..08), part 2 (T9: §8 `focus`, §9 the hold menu and context chip, S-C3-09..17, sketch `c3-ask.html`); S-C3-18 (T62: the night answered on the C1 night) |
 | `c4-show-canvas.md` | C4: show commands, one camera with the tour, undo; the canvas, kit blocks, custom cards, promotion, how cards leave | `S-C4-` | T10, T11, T12 | part 1 written (T10: §1-§6, show commands `fly_to`/`highlight`/`clear`/`pin`/`compare`/`scrub`, one camera with the tour, show lines, undo, S-C4-01..12, D67-D77); part 2 written (T11: §7-§10, the card area and grid, shelf, `place`, kit blocks `countdown`/`timer`/`status`/`log`/`chart`/`table`/`checklist`/`map`/`text`/`diff`, one-tap removal, S-C4-13..22, D78-D87, sketch `c4-canvas.html`); part 3 planned (T12) |
 | `coworker.md` | speaking up, quiet hours, scheduled jobs, the infra repo pull, drift, the agent's changes as PRs | `S-CW-` | T13 | planned |
 | `c5-c6.md` | C5 voice out; C6 act, rules and the confirm card only | `S-C5-`, `S-C6-` | T14 | planned |
@@ -25,10 +25,27 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `security.md` | tokens and what each can do, injection paths, audio and transcript handling, audit | `S-SEC-` | T17 | planned |
 | `stand-ins.md` | the room under test and its control API, the fake agent (a fake `claude`, script format), the fake speech service (script format, faults), the demo fleet additions, one script per scenario family, the public demo | none (formats) | T18, T32, T87 | written (T18: §1-§7, D109-D112) |
 | `single-machine.md` | everything on one box, no tailnet, no GPU, another agent | `S-ONE-` | T19 | planned |
-| `slices.md` | the build nights in order, each with its scenario ids, stand-ins and done-when | none (lists every id once) | T20 | planned |
+| `slices.md` | the build nights in order (C1 with the fleet's night, C2, C3, Speak, Canvas, Show, Jobs, then the rest), each with its scenario ids, stand-ins and done-when; the acceptance harness (`e2e/cockpit/`, D88, D113); the board changes the slices make; every id once | none (lists every id once) | T20, T30, T37, T62, T80, T81 | written (T20) |
 | `DECISIONS.md` | small reversible choices made during the night, each with how to overrule | none | all | written (running list) |
 | `QUESTIONS.md` | what only the owner can decide: the eight for the morning first, then the rest, each with options and a recommendation | none | all | written (running list, reordered by T55) |
 | `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2), `c1-pane.html` (T4), `c2-states.html` (T6), `screens-room-down.html` (T3/T22), `c3-ask.html` (T9), `c4-canvas.html` (T11) | none | T2-T4, T6, T9, T11, T14 | in progress |
+
+## The room process
+
+What the room is, in one place (D89, D92; T37). Q-O29 and T86 may still change the mode line.
+
+- **Process**: a laneboard server (`server/index.mjs`) whose config has a `cockpit` section; on one
+  box it is the same process as the board, as two users it is a second laneboard on `127.0.0.1`
+  (D91).
+- **Entry point**: `server/boot/cockpit.mjs`, called by the normal boot when the `cockpit` section
+  exists; the room's modules in `server/cockpit/` (`bridge.mjs`, `protocol.mjs`, `clock.mjs`,
+  `faults.mjs`), its config parser `server/config/cockpit.mjs`. Whether a room-only process is
+  `mode: builder` with a `cockpit` section or a new `mode: cockpit` is T86's (pending Q-O29).
+- **Origin**: the page's own; the room answers `/api/cockpit/*` (HTTP and the room link), the board
+  everything else; with two processes the front that serves the page forwards that prefix
+  (`protocols.md` §1).
+- **Ports**: the board `7777` (`port`), a room of its own e.g. `7778` on `127.0.0.1`, the MCP server
+  `127.0.0.1:7790` (`cockpit.mcp.port`, D58).
 
 ## Speed budget
 
