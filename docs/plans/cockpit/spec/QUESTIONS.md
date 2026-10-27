@@ -49,7 +49,7 @@ Answer: (open)
 ## Q-O23 What the agent may do before C6
 
 Security, blocks C1 (the launch line). From `reviews/40-security.md` (2), `44-operator.md` (6),
-`52-owner.md` (6). Spec: `c1-talk.md` §5, `slices.md` (T81).
+`52-owner.md` (6). Spec: `c1-talk.md` §5.2 (written for a, T57), `protocols.md` §11.2, `slices.md` (T81).
 
 - a) Read only: the fleet read tools plus `Read`/`Grep`/`Glob`; no `Bash`, `Edit`, `Write`, web. A
   refused call shows `tried {tool}, not allowed`; scheduled jobs on the room's own machine get their
@@ -242,7 +242,8 @@ Security (what a screen can read). Plan C1: "a raw terminal view … as a toggle
 §13 (written for d since T50).
 
 - a) Every event of the agent as written, tool output included.
-- b) Every event, tool output replaced by its size; `cockpit.raw.toolOutput: true` shows it.
+- b) Every event, tool output replaced by its size; a per-screen setting on the room shows it
+  (`laneboard cockpit screens set <screen> raw-output on`, off by default; `c1-talk.md` §13).
 - d) Not in C1: the opened tool lines (input, ms, `ok|failed`) are the raw view.
 
 Recommendation: d) — the laptop keeps full access (`spec-input.md` §3); b) if the owner wants the toggle later.

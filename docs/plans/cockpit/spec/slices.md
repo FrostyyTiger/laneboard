@@ -83,12 +83,13 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
    and `faults.mjs` (`README.md` "The room process").
 3. The message checks `server/cockpit/protocol.mjs` and the fixture test (D98, `protocols.md` §9).
 4. The bridge and Claude Code adapter (`server/cockpit/bridge.mjs`), the mapping and turn tests
-   (`protocols.md` §13).
+   (`protocols.md` §13), the redaction module `server/cockpit/redact.mjs` and its unit test
+   (`c1-talk.md` §5.3).
 5. Stop, restart and session (`protocols.md` §11.6-§11.7), their tests.
 6. The room link: hello, resume, snapshot, `seq` (`protocols.md` §2).
 7. The page: cockpit button and pane, open and close (`c1-talk.md` §1-§2, `screens.md` §4).
 8. The reply renderer (`c1-talk.md` §3).
-9. Tool lines (`c1-talk.md` §4-§5).
+9. Tool lines, `tried` lines, tools that change things (`c1-talk.md` §4-§5.2).
 10. Scrolling, `↓ NEW`, reduced motion, long replies (`c1-talk.md` §4, §9).
 11. Typing (`c1-talk.md` §7).
 12. Talk during an answer and `STOP` (`c1-talk.md` §8).
@@ -105,9 +106,9 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 `c1-render`, `c1-typing`, `c1-errors`, `c1-long`, `c1-session`, `c1-voice` (S-C3-18), `scr-room`,
 `c3-tools` (S-C3-03 only). No fake speech yet.
 
-**Scenarios** (43):
+**Scenarios** (45):
 S-C1-01 S-C1-02 S-C1-03 S-C1-04 S-C1-05 S-C1-06 S-C1-07 S-C1-08 S-C1-09 S-C1-10 S-C1-11 S-C1-12
-S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29
+S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31
 S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23
 S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
 
@@ -271,7 +272,7 @@ by the task that writes them.
 | S-SCR-05, 12 | Show |
 | S-SCR-13, 14, 15, 16 | Pair |
 | S-SCR-20 | C2 |
-| S-C1-01..12, 14..23, 25, 26 | C1 |
+| S-C1-01..12, 14..23, 25..31 | C1 |
 | S-C1-13 | C2 |
 | S-C2-01..17, 20, 21 | C2 |
 | S-C2B-01, 02 | C2b |

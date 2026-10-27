@@ -236,24 +236,27 @@ the laneboard MCP tools arrive as `mcp__laneboard__<tool>` and are matched witho
 | `focus` (C3) | `screen` | `looked at this screen`; another: `looked at screen {target}`; `all`: `looked at the screens` | `looked at {n} screens` |
 | `Read` | `file_path`, last path part | `read {target}` | `read {n} files` |
 | `Grep`, `Glob` | none | `searched the files` | `searched the files {n}×` |
-| `Bash` | `command`, first word | `ran {target}` | `ran {n} commands` |
-| `WebFetch` | `url`, host only | `fetched a page from {target}` | `fetched {n} pages` |
-| `WebSearch` | none | `searched the web` | `searched the web {n}×` |
-| `Edit`, `Write` | `file_path`, last path part | `changed {target}` | `changed {n} files` |
-| `Task` | none | `asked a helper agent` | `asked {n} helper agents` |
-| any other tool | none | `used {name}` (another MCP server's tool: `used <server>:<tool>`) | `used {name} {n}×` |
+| `Bash` (not allowed in v1) | `command`, whole, each run of white space as one space | `ran {target}` | — (never folds, §5.2) |
+| `WebFetch` (not allowed in v1) | `url`, host only | `fetched a page from {target}` | `fetched {n} pages` |
+| `WebSearch` (not allowed in v1) | none | `searched the web` | `searched the web {n}×` |
+| `Edit`, `Write`, `NotebookEdit` (not allowed in v1) | `file_path` (`notebook_path`), last path part | `changed {target}` | — (never folds, §5.2) |
+| `Task` (not allowed in v1) | none | `asked a helper agent` | `asked {n} helper agents` |
+| any other tool | none | `used {name}` (another MCP server's tool: `used <server>:<tool>`) | — (never folds, §5.2) |
 
 The C3 rows follow the tools' parameters in `c3-see.md` §4 (T8: `morning` takes `window`,
-`history` takes `node` or `run`). Show commands (`fly_to`, `pin`, …) are not tool lines: each leaves
+`history` takes `node` or `run`). Rows marked "not allowed in v1" are refused by the launch line
+(§5.2, pending Q-O23); their words stay for Q-O23 b) or c) and for a later C6. Show commands (`fly_to`, `pin`, …) are not tool lines: each leaves
 its own show line (`c4-show-canvas.md` §4).
 
-**Failures.** A line with failed calls appends ` · 1 failed` (or ` · 2 failed`) in the same grey: a
+**Failures.** A line with failed calls appends ` · 1 failed` (or ` · 2 failed`) in the same grey (a
+refused call is not a failure: §5.2): a
 tool error is news about the agent, not trouble in the fleet (`docs/design.md`, the colour rule).
 
 **Open.** A tap on the row opens it: under it, one row per call, mono 16 px `--text-2`, 8 px
-indent: `<tool>  <input as compact JSON, cut at 120 characters>  <ms> ms  ok|failed`. A second tap
-closes it. Tool output is never shown here. Text from tool input is drawn as text, never as
-markup (`security.md`, T17).
+indent: `<tool>  <input as compact JSON, cut at 120 characters>  <ms> ms  ok|failed`. A tool that
+changes things shows its whole input instead, wrapped (§5.2); a refused call ends in `refused` in
+place of `<ms> ms  ok|failed`. A second tap closes it. Tool output is never shown here. The input
+is the room's redacted copy (§5.3), drawn as text, never as markup.
 
 **The agent's writing.** The screen does not shorten replies. "Short blocks" is asked of the agent:
 the room's standing instructions for the agent (`protocols.md` §11.8, word for word there) say: lead with the answer in
@@ -277,7 +280,7 @@ pane. Every message is applied in `seq` order; a `seq` at or below the last appl
 | `text.delta` | `turnId`, `blockIndex`, `text` | appends to that text block, creating it at its `blockIndex` place if new; the `▍` cursor follows it (§3) |
 | `text.block` | `turnId`, `blockIndex`, `text` | replaces that block's text; the cursor leaves it |
 | `tool.start` | `turnId`, `blockIndex`, `toolUseId`, `tool`, `input`, `startedAt` | adds a call: to the tool line before it if the fold rule below says so, else a new line at its `blockIndex` place; `●` and `…` on |
-| `tool.end` | `toolUseId`, `endedAt`, `isError` | ends that call; its open row shows `endedAt − startedAt` in whole ms and `ok` (`isError:false`) or `failed`; `●` goes once no call of the line runs |
+| `tool.end` | `toolUseId`, `endedAt`, `isError`, `denied` | ends that call; its open row shows `endedAt − startedAt` in whole ms and `ok` (`isError:false`) or `failed`; with `denied:true` the call is refused and its line becomes §5.2's `tried` line; `●` goes once no call of the line runs |
 | `turn.retrying` | `attempt`, `of` | E5's grey row (§10) |
 | `turn.end` | `state`, `code`, `steps`, `detail`, `forced` | the cursor goes, running calls lose `●`; the end line of `protocols.md` §3.2's table; `data-turn="idle"`, `READY` |
 | `heartbeat` | — | nothing drawn; resets the 25 s loss timer (`screens.md` §7) |
@@ -288,11 +291,11 @@ call never share an index (`protocols.md` §3.2).
 
 **The fold rule, in these terms** (§5 "Folding", D24). A `tool.start` joins the tool line whose
 last call has `blockIndex` one less than its own, if that call is of the same tool (`mcp__laneboard__`
-stripped). Anything else starts a new line. So calls the agent makes in parallel (several
+stripped) and that tool is not one that changes things (§5.2). Anything else starts a new line. So calls the agent makes in parallel (several
 `tool.start` with consecutive indexes before any `tool.end`) fold like calls made one after the
 other; parallel calls of two tools are two lines, each with its own `●`. `{n}` in a `many` text
 counts the line's started calls; the `one` text stays while every call has the same `{target}`;
-` · {k} failed` counts ended calls with `isError:true`.
+` · {k} failed` counts ended calls with `isError:true` and `denied` not `true`.
 
 **A message the pane cannot place** (D119): a `text.*`, `tool.*`, `turn.state`, `turn.retrying` or
 `turn.end` naming a `turnId` the pane does not hold, a `tool.end` naming an unknown `toolUseId`, or a
@@ -311,6 +314,72 @@ in the conversation one line at its top, 18 px `--text-2`: `Connecting to the co
   first `turn.prompt`. The pane is never blank (`docs/plans/product.md`, never an empty screen);
 - no snapshot 5 s after the load: `data-cockpit="room-down"` and §10's status line, its "since"
   being the page's load time (`screens.md` §7); the `Connecting…` line goes.
+
+### 5.2 What the agent may use, refused calls, tools that change things (T57, pending Q-O23)
+
+Written for Q-O23's recommendation a): "look freely, change only with a yes" (`spec-input.md` §6).
+
+**The allowlist.** The room launches Claude Code with `--strict-mcp-config`,
+`--allowedTools mcp__laneboard__*,Read,Grep,Glob` and `--permission-prompts none` (the whole line
+is `protocols.md` §11.2, one place). So the agent may call the laneboard MCP tools (C3) and read,
+search and list files its own unix user can read. Every other call (`Bash`, `Edit`, `Write`,
+`NotebookEdit`, `WebFetch`, `WebSearch`, `Task`, any other MCP server's tool) is refused by Claude
+Code before it runs; nothing asks anyone, because nobody is there to answer. Claude Code writes
+`system/permission_denied` for it, the room sends `tool.end` with `denied:true` (`protocols.md`
+§11.4). The standing instructions tell the agent so (`protocols.md` §11.8, the line
+`You can only look…`). What the agent's uid may read is `security.md`'s (T17); an agent kind with
+no allowlist is T72's.
+
+**A refused call** (D125) leaves a **`tried` line**:
+- text `tried {tool}, not allowed`, `{tool}` the name the agent used (`Bash`, `WebFetch`); another
+  MCP server's `mcp__<server>__<tool>` reads `<server>:<tool>`;
+- the same row as any tool line (44 px, mono 18 px `--text-2`, `+`/`−` at the right), its glyph
+  column empty: no `●`, no `…`, no ` · failed`; `[data-tool-line][data-denied="true"]`;
+- it holds that one call and never folds (below). Between the call's `tool.start` and its
+  `tool.end` (the same few ms in practice) the line shows the table's running text, as any call;
+- opened, its row reads `<tool>  <whole input, wrapped>  refused`;
+- the turn goes on: the agent reads the refusal and answers. A refused call is not an error end
+  and adds no line of §10.
+
+**Tools that change things** (D126) are `Bash`, `Edit`, `Write`, `NotebookEdit` and every tool
+under "any other tool" in §5's table. Refused in v1, they get these rules now so Q-O23 b)/c) or C6
+can lift the refusal without touching the pane:
+- they **never fold**: each call is its own line, and no call joins a line of theirs;
+- the collapsed text starts with the table's verb (`ran`, `changed`, `used`), followed only by
+  `{target}` taken from the input, never by a word the agent chose for the line;
+- the `Bash` `{target}` is the whole command, each run of white space as one space, cut at 32
+  characters with `…`: `rm -rf /var/log/laneboard/old && echo done` reads
+  `ran rm -rf /var/log/laneboard/old…`, not `ran rm`;
+- opened, the row shows the whole input the room sent (D97: every string at most 200 characters,
+  the object at most 2 000), as compact JSON wrapped inside the text column
+  (`white-space: pre-wrap; overflow-wrap: anywhere`), never cut at 120 characters.
+
+### 5.3 Secrets in tool input (T57)
+
+The room redacts every tool input before it leaves the room's process for anything a screen can
+read: the `tool.start` frame, the `snapshot`, and whatever the room keeps of the conversation (D127). The screen
+never holds the raw value, so the opened row (§5), the `{target}` of a collapsed line and the
+`tried` line all show `[redacted]` where the secret was. This hides secrets from a desk screen; it
+is not what stops the agent sending one out (that is §5.2's allowlist).
+
+Rules, applied in this order to every string value of the input (JSON keys are never changed; the
+module is `server/cockpit/redact.mjs`, one table-driven unit test in `npm test` with one case per
+row):
+
+| # | Matches (case-insensitive unless said) | Becomes |
+| --- | --- | --- |
+| 1 | the exact value of any secret the room holds: `LANEBOARD_MCP_TOKEN`, the speech token (`cockpit.stt.tokenFile`), the values of `cockpit.agent.env`'s names | `[redacted]` |
+| 2 | a PEM block from `-----BEGIN` … `PRIVATE KEY-----` to its `-----END` line, or to the string's end | `[redacted]` |
+| 3 | `Bearer `, `Basic ` or `Token ` followed by non-space characters | the word kept, the rest `[redacted]`: `Bearer [redacted]` |
+| 4 | a name containing `pass`, `secret`, `token`, `key`, `auth`, `credential` or `sig` (`lb_sig`, `api_key`, `PGPASSWORD`), as a JSON key or inside a string as `name=value`, `name: value`, `--name value` or `--name=value` | the value up to the next white space, `&`, `"`, `'` or `,` becomes `[redacted]`, unless it is already `[redacted]` or is rule 3's word (`Authorization: Bearer [redacted]` stays); a JSON key's whole value (any type) becomes `"[redacted]"` |
+| 5 | known token prefixes, case-sensitive: `sk-` and 20 or more characters, `ghp_`, `gho_`, `ghs_`, `github_pat_`, `glpat-`, `xoxb-`, `xoxp-`, `AKIA` and 16 upper-case letters or digits | `[redacted]` |
+| 6 | a run of 32 or more characters of `A-Z a-z 0-9 + / = _ -` holding at least one upper-case letter, one lower-case letter and one digit | `[redacted]` |
+
+- Rule 6 leaves git hashes, hex digests and UUIDs alone (no upper-case letter) and catches most
+  API keys and JWTs. Over-redaction (a `keyboard=` value, a long mixed-case path part) is accepted.
+- Redaction runs before D97's cuts, so a cut never splits a secret into a visible half.
+- Reply text is not redacted in v1: the agent writes it, and `security.md` (T17) decides whether
+  it should be.
 
 ## 6. Scenarios
 
@@ -641,6 +710,9 @@ something." Written for Q-O17's recommendation d) (T50, `reviews/36-skeptic.md` 
   "The laptop keeps its own full access, as today.").
 - `server/terminals.mjs` is not used by the cockpit: it bridges a **writable** pty, and a device
   token must not get a shell (plan §4: a token cannot act).
+- No tool output reaches any screen in C1 (D97). If Q-O17 brings it back, showing tool output is
+  a per-screen setting on the room (`laneboard cockpit screens set <screen> raw-output on`), off
+  by default, never one room-wide flag (review 40 finding 15); output passes §5.3's redaction.
 - With Q-O17 a) or b) the raw view comes back as a later slice: a read-only list of the bridge's
   native events, as `QUESTIONS.md` Q-O17 describes; S-C1-24 is retired and that slice gets new ids.
 
@@ -837,3 +909,38 @@ Test: Playwright on the real room with the fake agent; read the `snapshot` frame
 the sent `clientId`; assert label texts and computed colour before and after the reload, at
 20.1 s the block's index among the turn's items; in the second case the item's `state`
 `cancelled` and `why` `stopped`, and `prompts()` count 2 after `RETRY`.
+
+### S-C1-30 A shell call is refused and shows as a grey `tried` line (pending Q-O23)
+Given the pane open, the real room with the fake agent (script `c1-render`), whose turn for
+`clean up the logs` has a `denied` step `Bash` at 100 ms with input
+`{"command":"rm -rf /var/log/laneboard/old && echo done"}`, a second `denied` step `Bash` at 200 ms
+with `{"command":"ls /var/log"}`, text `I cannot run commands here; I can only look.` at 400 ms and
+`end` `done` at 600 ms,
+When the owner sends `clean up the logs` at t = 0,
+Then by 700 ms the reply shows two tool lines, not one folded line, each reading exactly
+`tried Bash, not allowed`, in `--text-2`, with no `●`, no `…` and no ` · failed`, followed by the
+text block; the header reads `READY` and no line of §10 is drawn. Tapped open, the first line's row
+reads `Bash  {"command":"rm -rf /var/log/laneboard/old && echo done"}  refused`, wrapped inside the
+text column. The fake agent's `start` line has in its `argv` `--strict-mcp-config`, then
+`--allowedTools` followed by `mcp__laneboard__*,Read,Grep,Glob`, then `--permission-prompts`
+followed by `none`, and no `argv` element contains `Bash`.
+Test: Playwright on the real room with the fake agent; count `[data-tool-line][data-denied="true"]`
+(2) and read their texts and computed colour; tap the first, read its row and assert its
+`scrollWidth` is at most its `clientWidth`; read `starts()[0].argv` from the fake agent's log
+(`stand-ins.md` §2.6).
+
+### S-C1-31 A secret in a tool's input never reaches the screen
+Given the pane open and the fake agent (script `c1-render`) whose turn for `find the token` has a
+`Grep` step (`"call":false`) at 100 ms ending at 300 ms with input
+`{"pattern":"Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc123DEF456ghi789","path":"/etc/laneboard"}`,
+a `denied` step `WebFetch` at 400 ms with
+`{"url":"https://example.invalid/hook?token=Q7wErTy12&lb_sig=Zq9Xw4Vr"}` and `end` `done` at 600 ms,
+When the owner sends `find the token` at t = 0,
+Then by 700 ms the reply shows `searched the files` and `tried WebFetch, not allowed`; opened, the
+rows read `Grep  {"pattern":"Authorization: Bearer [redacted]","path":"/etc/laneboard"}  200 ms  ok`
+(the ms as in S-C1-25: at least 200, at most 300) and
+`WebFetch  {"url":"https://example.invalid/hook?token=[redacted]&lb_sig=[redacted]"}  refused`; no
+text frame the page received contains `eyJhbGci`, `abc123DEF`, `Q7wErTy12` or `Zq9Xw4Vr`.
+Test: Playwright; collect every `framereceived` payload from the page's link and assert none holds
+the four strings; open both lines and read their rows. The rules themselves are the unit test of
+`server/cockpit/redact.mjs` (§5.3), in `npm test`.
