@@ -252,7 +252,7 @@ Notes for every builder round (planner, round 1):
   moves here from `touch.js`); show commands are display-only and never outrank a finger — done when: tests on a fake
   clock cover a touch during a show (touch wins, the show waits or is dropped, the notes say which), a show during
   touch (queued until idle or refused, decided and written down), a show while the tour flies (the show takes the
-  camera with an eased hand-over), and the tour back 60 s after the last touch and after the last show. (commit SHA)
+  camera with an eased hand-over), and the tour back 60 s after the last touch and after the last show. (commit d28aeac)
   Builder r25: `galaxy/director.js` `directorStep(state, event, now, { held, still })` → `{ state, move, wake,
   resume, refused, dropped }`, `directorLeft` (for the MANUAL line), `SOURCES`, `HANDOVER` (fit 1500 ms, fly =
   `TIMING.flyMs`), `IDLE` (touch.js now imports and re-exports it). Events `touch` (with or without `to`),
