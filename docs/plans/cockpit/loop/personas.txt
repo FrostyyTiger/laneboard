@@ -1,0 +1,8 @@
+# The review panel, in rotation (README §6.5). One per review round; prompts in prompts/personas/<name>.md.
+owner
+implementer
+touch
+skeptic
+security
+operator
+stranger

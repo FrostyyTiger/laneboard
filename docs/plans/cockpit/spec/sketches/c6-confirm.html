@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>c6-confirm: the confirm card over a split screen (c5-c6.md §8.2, S-C6-01)</title>
+<style>
+/* Values copied from public/css/tokens.css (dark). Sketch only, not product code. */
+:root{--bg-canvas:oklch(12% 0.004 250);--bg-surface:oklch(16% 0.004 250);--bg-elevated:oklch(20% 0.004 250);--bg-sunken:oklch(9% 0.004 250);
+--line-weak:oklch(100% 0 0 / .09);--line:oklch(100% 0 0 / .17);--line-strong:oklch(100% 0 0 / .32);
+--text-1:oklch(96% .002 250);--text-2:oklch(78% .004 250);--text-3:oklch(62% .004 250);
+--accent:oklch(72% .17 300);--p1:oklch(62% .23 25);--p2:oklch(84% .16 95);--ok:oklch(66% 0.07 150);
+--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--label:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1368px;height:912px;overflow:hidden;background:var(--bg-canvas);color:var(--text-1);font-family:var(--mono)}
+.lab{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em}
+.abs{position:absolute}
+/* the wall half x 0-759: a few nodes */
+.node{position:absolute;width:150px;height:56px;border:1px solid var(--line);background:var(--bg-surface);font-size:16px;display:flex;align-items:center;padding-left:12px;color:var(--text-2)}
+/* card area x 760-1368, y 0-520 */
+.card{position:absolute;background:var(--bg-elevated);border:1px solid var(--line-strong)}
+.ch{height:48px;display:flex;align-items:center;padding-left:16px;font-size:16px;color:var(--text-3)}
+.x{margin-left:auto;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text-2)}
+/* column x 760-1368, y 520-912 */
+.col{position:absolute;left:760px;top:520px;width:608px;height:392px;background:var(--bg-elevated);border-top:1px solid var(--line);border-left:1px solid var(--line)}
+.ph{height:64px;display:flex;align-items:center;gap:8px;padding:0 16px 0 24px;border-bottom:1px solid var(--line)}
+.hb{height:48px;min-width:72px;padding:0 12px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px}
+.conv{height:224px;overflow:hidden;padding:12px 24px 0}
+.lr{height:24px;font-size:16px;color:var(--text-3)}
+.prompt{font-size:28px;line-height:1.4;background:var(--bg-surface);border:1px solid var(--line-weak);padding:6px 16px;margin:4px 0 12px}
+.tool{height:44px;display:flex;align-items:center;font-size:18px;color:var(--text-2)}
+.ir{position:absolute;left:0;top:288px;width:608px;height:104px;border-top:1px solid var(--line)}
+/* scrim and the confirm card */
+.scrim{position:absolute;inset:0;background:oklch(0% 0 0 / .55)}
+.cf{position:absolute;left:100px;top:180px;width:560px;height:552px;background:var(--bg-elevated);border:1px solid var(--line-strong)}
+.cfh{height:48px;display:flex;align-items:center;padding:0 16px;font-size:16px;color:var(--text-3);border-bottom:1px solid var(--line)}
+.cfh .t{margin-left:auto}
+.row{position:absolute;left:16px;right:16px}
+.rl{height:24px;font-size:16px;line-height:24px;color:var(--text-3)}
+.v24{font-size:24px;line-height:32px;color:var(--text-1)}
+.v20{font-size:20px;line-height:28px;color:var(--text-1)}
+.why{font-size:20px;line-height:28px;color:var(--text-2)}
+.bt{position:absolute;top:464px;width:244px;height:64px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:18px}
+.note{position:absolute;left:100px;top:760px;width:560px;font-size:16px;line-height:24px;color:var(--text-2)}
+</style></head><body>
+
+<!-- wall half -->
+<div class="node" style="left:80px;top:120px">hv1</div>
+<div class="node" style="left:300px;top:200px">builder-a</div>
+<div class="node" style="left:520px;top:120px">builder-b</div>
+<div class="node" style="left:180px;top:420px">vm-b</div>
+<div class="node" style="left:420px;top:500px;color:var(--text-1);border-color:var(--line-strong)">vm-c</div>
+<div class="node" style="left:120px;top:700px">hub</div>
+
+<!-- card area: one status card -->
+<div class="card" style="left:784px;top:24px;width:272px;height:232px">
+  <div class="ch lab">Agent · 07:05<span class="x">✕</span></div>
+  <div style="padding:0 16px;font-size:20px;line-height:28px">vm-c</div>
+  <div style="padding:8px 16px;font-size:28px;line-height:36px;color:var(--text-2)" class="lab">● OK</div>
+</div>
+
+<!-- conversation column -->
+<div class="col">
+  <div class="ph"><span class="lab" style="font-size:16px;color:var(--text-2)">Cockpit</span>
+    <span class="lab" style="font-size:18px;color:var(--text-2);margin-left:8px">● Working</span>
+    <span style="flex:1"></span><span class="hb lab">New</span><span class="hb lab" style="min-width:96px">Screen</span></div>
+  <div class="conv">
+    <div class="lr lab">You · spoken · 07:12</div>
+    <div class="prompt">shut vm-c off in 3 hours</div>
+    <div class="lr lab">Agent · 07:12</div>
+    <div class="tool"><span style="width:24px">●</span>waiting for your yes…</div>
+  </div>
+  <div class="ir">
+    <div class="abs" style="left:24px;top:16px;width:400px;height:64px;background:var(--bg-sunken);border:1px solid var(--line)"></div>
+    <div class="abs lab" style="left:440px;top:16px;width:64px;height:64px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-3)">Send</div>
+    <div class="abs lab" style="left:520px;top:16px;width:64px;height:64px;border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:16px">Talk</div>
+  </div>
+</div>
+
+<div class="scrim"></div>
+
+<!-- the confirm card, x 100-660, y 180-732 -->
+<div class="cf" role="alertdialog" data-confirm>
+  <div class="cfh lab">Confirm · asked by the agent · 07:12<span class="t">Closes in 1:54</span></div>
+  <div class="row" style="top:64px"><div class="rl lab">What</div><div class="v24">Run stop-vm-c (shut off vm-c)</div></div>
+  <div class="row" style="top:168px"><div class="rl lab">Where</div><div class="v20">on the cockpit's machine · target vm-c</div></div>
+  <div class="row" style="top:264px"><div class="rl lab">When</div><div class="v20">at 10:12 (in 3 h 00)</div></div>
+  <div class="row" style="top:332px"><div class="rl lab">Why · the agent's words</div><div class="why">The owner asked to shut vm-c off in 3 hours.</div></div>
+  <div class="bt lab" style="left:24px" data-confirm-no>No</div>
+  <div class="bt lab" style="left:292px" data-confirm-yes>Yes, schedule</div>
+</div>
+<div class="note">Sketch of c5-c6.md §8.2: the room writes WHAT, WHERE and WHEN; only WHY is the agent's. The scrim swallows taps; the verb button is inert for 1.0 s.</div>
+</body></html>

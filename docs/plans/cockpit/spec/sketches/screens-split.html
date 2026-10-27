@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>screens-split: split layout, wall half + card area + conversation column (screens.md §1, §3; c1-talk.md §1; c4-show-canvas.md §7.1, D78, D117)</title>
+<style>
+/* Values copied from public/css/tokens.css (dark). Sketch only, not product code. */
+:root{--bg-canvas:oklch(12% 0.004 250);--bg-surface:oklch(16% 0.004 250);--bg-elevated:oklch(20% 0.004 250);--bg-sunken:oklch(9% 0.004 250);
+--line-weak:oklch(100% 0 0 / .09);--line:oklch(100% 0 0 / .17);--line-strong:oklch(100% 0 0 / .32);
+--text-1:oklch(96% .002 250);--text-2:oklch(78% .004 250);--text-3:oklch(62% .004 250);
+--accent:oklch(72% .17 300);--p1:oklch(62% .23 25);--p2:oklch(84% .16 95);
+--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--label:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;}
+*{box-sizing:border-box;margin:0}
+html,body{width:1368px;height:912px;overflow:hidden;background:var(--bg-canvas);color:var(--text-1);font-family:var(--mono)}
+.root{position:relative;width:1368px;height:912px}
+.wall{position:absolute;left:0;top:0;width:759px;height:912px;background:radial-gradient(ellipse at center,transparent 55%,oklch(0% 0 0 / .55) 100%),var(--bg-canvas);border-right:1px solid var(--line)}
+.lab{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em}
+.cap{position:absolute;left:32px;top:32px;width:400px;padding:16px 20px;background:oklch(9% .004 250 / .8)}
+.cap .k{font-size:16px;color:var(--text-2)}
+.cap .n{font-family:var(--label);font-weight:600;font-size:48px;line-height:1.05;text-transform:uppercase;margin:4px 0 8px}
+.cap .n i{display:inline-block;width:22px;height:40px;background:var(--text-1);vertical-align:-4px;margin-left:4px}
+.cap p{font-size:18px;line-height:1.45;color:var(--text-2)}
+.cap p.t{color:var(--p2)}
+.clock{position:absolute;left:32px;bottom:28px;font-size:56px;font-weight:600;color:var(--text-1)}
+.clock small{display:block;font-size:16px;color:var(--text-3);font-weight:400}
+.st{position:absolute;right:24px;bottom:32px;text-align:right;font-size:18px;line-height:1.5;color:var(--text-2)}
+.st .w{color:var(--p2)}
+svg.map{position:absolute;left:0;top:0}
+.tag{position:absolute;right:24px;top:28px;font-size:16px;color:var(--text-3)}
+/* card area x 760-1368, y 0-520 (D78): cells 272 x 232, columns x 784 and 1072, rows y 24 and 272 */
+.area{position:absolute;left:760px;top:0;width:608px;height:520px;background:var(--bg-canvas)}
+.card{position:absolute;background:var(--bg-elevated);border:1px solid var(--line-strong);overflow:hidden}
+.cs{width:272px;height:232px}.cw{width:560px;height:232px}
+.ch{height:48px;display:flex;align-items:center;padding-left:16px}
+.who{font-size:16px;color:var(--text-3)}
+.cx{margin-left:auto;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text-2)}
+.tt{height:28px;padding:0 16px;font-size:20px;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex}
+.tt .v{margin-left:auto;padding-left:16px}
+.body{position:absolute;left:16px;right:16px;top:84px;bottom:16px}
+.dig{font-size:48px;line-height:56px}
+.sub{font-size:18px;line-height:24px;color:var(--text-2)}
+.cbtn{position:absolute;left:0;right:0;bottom:0;height:48px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1)}
+.stw{font-size:28px;line-height:36px;font-family:var(--label);text-transform:uppercase;letter-spacing:.04em;color:var(--p2)}
+.since{font-size:16px;color:var(--text-3);position:absolute;bottom:0}
+/* conversation column x 760-1368, y 520-912 (c1-talk.md §1, D117): no CHAT, no CLOSE */
+.col{position:absolute;left:760px;top:520px;width:608px;height:392px;background:var(--bg-elevated);border-top:1px solid var(--line);display:flex;flex-direction:column}
+.ph{height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px 0 24px;border-bottom:1px solid var(--line)}
+.ph .t{font-size:16px;color:var(--text-2)}
+.ph .sp{flex:1}
+.hb{height:48px;width:96px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1)}
+.conv{flex:1;min-height:0;overflow:hidden;padding:16px 24px 0;display:flex;flex-direction:column}
+.lr{height:24px;flex:none;font-size:16px;color:var(--text-3);margin-bottom:8px}
+.prompt{flex:none;font-size:28px;line-height:1.4;background:var(--bg-surface);border:1px solid var(--line-weak);padding:12px 16px;margin-bottom:32px}
+.sl{height:56px;flex:none;display:flex;align-items:center;font-size:18px;line-height:24px;color:var(--text-2);border-bottom:1px solid var(--line-weak)}
+.sl span:first-child{flex:1;white-space:nowrap}
+.sl .u{margin-left:8px;flex:none;width:96px;height:48px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1)}
+.reply{flex:none;font-size:28px;line-height:1.4;margin-top:16px}
+.ir{height:104px;flex:none;border-top:1px solid var(--line);position:relative}
+.inp{position:absolute;left:24px;top:16px;width:400px;height:64px;background:var(--bg-sunken);border:1px solid var(--line);font-size:28px;color:var(--text-3);padding:0 16px;display:flex;align-items:center;white-space:nowrap}
+.send{position:absolute;left:440px;top:16px;width:64px;height:64px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-3)}
+.talk{position:absolute;left:520px;top:16px;width:64px;height:64px;background:var(--bg-elevated);border:1px solid var(--accent);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:16px;color:var(--text-1)}
+</style></head><body>
+<div class="root" data-cockpit-layout="split" data-pane="column" data-wall-state="tour">
+  <!-- rects at 1368x912: wall half x 0-759; card area x 760-1368 y 0-520; column x 760-1368 y 520-912:
+       header y 520-584 (SCREEN 1256-1352, NEW 1176-1248, y 528-576), conversation y 584-808,
+       input 784-1184, SEND 1200-1264, talk 1280-1344, y 824-888. Type 28 px (TYPE_TALK, pending Q-O18). -->
+  <section class="wall" aria-label="Wall half, tour">
+    <svg class="map" width="759" height="912" viewBox="0 0 759 912">
+      <g fill="none" stroke="oklch(100% 0 0 / .17)">
+        <circle cx="400" cy="480" r="150"/><circle cx="400" cy="480" r="270" stroke="oklch(100% 0 0 / .09)"/>
+        <path d="M400 480 L520 390 M400 480 L300 380 M400 480 L470 610 M400 480 L250 560 M520 390 L600 300 M520 390 L640 430"/>
+      </g>
+      <g fill="oklch(78% .004 250)">
+        <circle cx="400" cy="480" r="6"/><circle cx="300" cy="380" r="7"/><circle cx="470" cy="610" r="7"/><circle cx="250" cy="560" r="7"/>
+        <circle cx="600" cy="300" r="5"/><circle cx="640" cy="430" r="5"/>
+      </g>
+      <rect x="512" y="382" width="16" height="16" fill="none"/>
+      <polygon points="520,378 530,396 510,396" fill="oklch(84% .16 95)"/>
+      <g stroke="oklch(72% .17 300)" stroke-width="2" fill="none">
+        <path d="M494 364 h12 M494 364 v12 M546 364 h-12 M546 364 v12 M494 416 h12 M494 416 v-12 M546 416 h-12 M546 416 v-12"/>
+      </g>
+      <text x="470" y="352" fill="oklch(96% .002 250)" font-family="Barlow Condensed, Arial Narrow, sans-serif" font-size="20">BUILDER-A</text>
+    </svg>
+    <div class="cap">
+      <div class="k">TARGET 02 / 05 · SITE</div>
+      <div class="n">HV1<i></i></div>
+      <p class="t">▲ builder-a · stuck 1 h 12</p>
+      <p>cpu 41 % · mem 63 %</p>
+      <p>3 builders · up 12 d</p>
+    </div>
+    <div class="tag">TOUR · DEMO</div>
+    <div class="clock">22:41<small>Mon 26 Oct</small></div>
+    <div class="st"><div class="w">▲ 1 run stuck</div><div>4 runs tonight</div></div>
+  </section>
+  <section class="area" aria-label="Card area">
+    <div class="card cs" style="left:24px;top:24px" data-card data-block="countdown" data-size="s">
+      <div class="ch"><span class="who lab">Agent · 22:41</span><span class="cx" data-card-remove aria-label="Remove card">✕</span></div>
+      <div class="tt">nightly-ci</div>
+      <div class="body"><div class="dig">00:18:42</div><div class="sub">at 23:00 · on hv1</div>
+        <!-- CANCEL JOB opens the confirm card (c5-c6.md); nothing is cancelled before its yes; removing the card never stops the job -->
+        <div class="cbtn lab" data-card-cancel>Cancel job</div></div>
+    </div>
+    <div class="card cs" style="left:312px;top:24px" data-card data-block="status" data-size="s">
+      <div class="ch"><span class="who lab">Agent · 22:39</span><span class="cx" data-card-remove aria-label="Remove card">✕</span></div>
+      <div class="tt">builder-a</div>
+      <div class="body"><div class="stw">▲ Stuck</div><div class="sub">no output for 72 min</div>
+        <div class="since">since 21:29 (was ok)</div></div>
+    </div>
+    <div class="card cw" style="left:24px;top:272px" data-card data-block="chart" data-size="w">
+      <div class="ch"><span class="who lab">Agent · 22:38</span><span class="cx" data-card-remove aria-label="Remove card">✕</span></div>
+      <div class="tt">hv1 cpu<span class="v">41 %</span></div>
+      <div class="body">
+        <svg width="528" height="108" viewBox="0 0 528 108" style="position:absolute;left:0;top:0">
+          <line x1="0" y1="104" x2="528" y2="104" stroke="oklch(100% 0 0 / .17)"/>
+          <path d="M0 90 L60 80 L120 86 L180 52 L240 58 L300 40 L360 48 L420 28 L480 36 L528 32" fill="none" stroke="oklch(78% .004 250)" stroke-width="2"/>
+        </svg>
+      </div>
+    </div>
+  </section>
+  <section class="col" data-cockpit-conversation>
+    <div class="ph lab"><span class="t">Cockpit</span><span class="sp"></span><span class="hb" data-cockpit-new style="width:72px">New</span><span class="hb" data-cockpit-screen>Screen</span></div>
+    <div class="conv">
+      <!-- the prompt "when does the nightly start?" is scrolled off above: the column holds 224 px -->
+      <div class="lr lab">Agent · 22:41</div>
+      <div class="sl" data-show-line><span>put a countdown "nightly-ci" on the canvas</span><span class="u lab" data-show-undo>Undo</span></div>
+      <p class="reply">At 23:00 on hv1.</p>
+    </div>
+    <div class="ir">
+      <div class="inp" data-cockpit-input>Type or talk</div>
+      <div class="send lab" data-cockpit-send data-send="send">Send</div>
+      <div class="talk lab" data-talk="idle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="oklch(96% .002 250)" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Talk</div>
+    </div>
+  </section>
+</div>
+</body></html>
