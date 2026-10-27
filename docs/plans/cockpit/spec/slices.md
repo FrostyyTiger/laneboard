@@ -108,9 +108,9 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 `c1-render`, `c1-typing`, `c1-errors`, `c1-long`, `c1-session`, `c1-voice` (S-C3-18), `scr-room`,
 `c3-tools` (S-C3-03 only). No fake speech yet.
 
-**Scenarios** (45):
+**Scenarios** (47):
 S-C1-01 S-C1-02 S-C1-03 S-C1-04 S-C1-05 S-C1-06 S-C1-07 S-C1-08 S-C1-09 S-C1-10 S-C1-11 S-C1-12
-S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31
+S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33
 S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23
 S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
 
@@ -151,9 +151,9 @@ troubleshooting the room-down line); the demo (`stand-ins.md` §6) answers `how 
 **Stand-ins and scripts**: as C1, plus the fake speech; scripts `c2-tap`, `c2-limits`, `c2-faults`,
 `c2-agent`, `c1-voice`.
 
-**Scenarios** (21):
+**Scenarios** (22):
 S-C2-01 S-C2-02 S-C2-03 S-C2-04 S-C2-05 S-C2-06 S-C2-07 S-C2-08 S-C2-09 S-C2-10 S-C2-11 S-C2-12
-S-C2-13 S-C2-14 S-C2-15 S-C2-16 S-C2-17 S-C2-20 S-C2-21
+S-C2-13 S-C2-14 S-C2-15 S-C2-16 S-C2-17 S-C2-20 S-C2-21 S-C2-22
 S-C1-13 S-SCR-20
 
 - **S-C1-13** (hold the button on the touring Wall) keeps its id and belongs to C2, not C1: it
@@ -172,8 +172,8 @@ written. About 9 steps.
 
 **Stand-ins and scripts**: as C1; script `c3-tools`; the demo feed writer for S-C3-02 and S-C3-06.
 
-**Scenarios** (12):
-S-C3-01 S-C3-02 S-C3-06 S-C3-09 S-C3-10 S-C3-11 S-C3-12 S-C3-13 S-C3-14 S-C3-15 S-C3-16 S-C3-17
+**Scenarios** (13):
+S-C3-01 S-C3-02 S-C3-06 S-C3-09 S-C3-10 S-C3-11 S-C3-12 S-C3-13 S-C3-14 S-C3-15 S-C3-16 S-C3-17 S-C3-19
 
 - S-C3-14 needs two screens on one conversation; under Q-O21 b) two pages behind the board's trust
   are enough (`c1-talk.md` §12).
@@ -274,18 +274,18 @@ by the task that writes them.
 | S-SCR-05, 12 | Show |
 | S-SCR-13, 14, 15, 16 | Pair |
 | S-SCR-20 | C2 |
-| S-C1-01..12, 14..23, 25..31 | C1 |
+| S-C1-01..12, 14..23, 25..33 | C1 |
 | S-C1-13 | C2 |
-| S-C2-01..17, 20, 21 | C2 |
+| S-C2-01..17, 20..22 | C2 |
 | S-C2B-01, 02 | C2b |
 | S-C3-03, 04, 05, 07, 08, 18 | C1 |
-| S-C3-01, 02, 06, 09..17 | C3 |
+| S-C3-01, 02, 06, 09..17, 19 | C3 |
 | S-C4-01..12 | Show |
 | S-C4-13, 24 | Jobs |
 | S-C4-14..23 | Canvas |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 111 live ids in all (round 69).
+D55). 120 live ids in all (round 83).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired
@@ -323,6 +323,5 @@ changing it needs C6 (`c1-talk.md` §5).
 ## 7. Open fixes before a C1 night
 
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
-says go without them): T29 (the events the pane consumes), T40
-and T94 (the on-screen keyboard), T26, T27, T41, T44, T96, T100 (the button and pane rects), T56
+says go without them): T29 (the events the pane consumes), T26, T27, T41, T44, T96, T100 (the button and pane rects), T56
 and T57 (pairing refusals and the agent's tools, pending Q-O21/Q-O23), T89 (close codes), T91 (a conversation across a restart, pending Q-O24). For C2 also: T42/T95, T69, T84.

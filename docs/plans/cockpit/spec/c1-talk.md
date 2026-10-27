@@ -3,7 +3,7 @@
 The cockpit pane and the conversation in it: where the pane sits, how it opens and closes, how a
 reply is drawn for reading at arm's length, and how tool activity folds into one line (§1-§5, part
 1, T4; §5.1 maps the room's messages onto them, T29). Typing and send, talking while the agent answers, long replies, errors, a new conversation,
-several screens are part 2 (§7-§14, T5); the raw view is not in C1 (§13, T50). Words as in the glossary (`README.md`). Sizes are CSS
+several screens are part 2 (§7-§14, T5; the on-screen keyboard §7.1, T40); the raw view is not in C1 (§13, T50). Words as in the glossary (`README.md`). Sizes are CSS
 px at 1368x912; times in s or ms.
 
 Plan C1: "It slides over the view, never replaces it, so the agent can point at the view behind
@@ -51,8 +51,8 @@ of the list below, top to bottom, with these rects at 1368x912:
 - The talk button and `SEND` keep their rects from `screens.md` §4 and the list below: the input
   row is in the same place in a pane and in a column.
 - The chip row, the hint line and `↓ NEW` stack up from the input row inside the conversation's
-  band (T96). In `split` they never leave the conversation less than 96 px (3 lines); the on-screen
-  keyboard is T40's.
+  band (T96). In `split` they never leave the conversation less than 96 px (3 lines); with the
+  on-screen keyboard up the column covers the card area (§7.1).
 - Other widths: the column is the right 608 px of the screen (`min(608px, 100vw)`), at the bottom
   in `split` with the card area's height above it; at 1200x800 in `switch` it is x 592-1200,
   y 0-800.
@@ -551,6 +551,82 @@ pinned to its end (§4), `data-turn="thinking"`. Keyboard focus stays where it w
 keyboard stays up). When the room confirms it has the prompt (the `turn.prompt` echo, `protocols.md` §3.1), `· SENDING` goes. No
 confirmation within 5 s while the room link is up: §10, E1 (D31).
 
+### 7.1 With the on-screen keyboard (T40, T94)
+
+Plan C1: "Typing works everywhere (on-screen keyboard, a paired keyboard)." On a 912 px tall
+landscape screen an on-screen keyboard takes about the bottom 380 px: exactly where the input row,
+the chip row and `SEND` sit (review 31-touch.md finding 1). This section says what moves. The
+numbers are for a 380 px keyboard, which leaves 1368x532 in sight.
+
+**How the page knows** (D130; which signal the owner's tablet gives is research Q11):
+- The viewport meta keeps the browser default `interactive-widget=resizes-visual`, written out: the
+  keyboard shrinks only the visual viewport, so the view behind the pane (Wall, Map) never re-lays
+  out or refits its camera when the keyboard comes and goes.
+- Where `navigator.virtualKeyboard` exists the page sets `overlaysContent = true` and listens to its
+  `geometrychange` event.
+- **Visible bottom** = `min(innerHeight, visualViewport.offsetTop + visualViewport.height)` minus
+  `navigator.virtualKeyboard.boundingRect.height` (0 where the API is absent). **Keyboard height**
+  = H minus the visible bottom, where H is the largest `innerHeight` seen at the current width since
+  the load (a width change resets it). Both are recomputed on `visualViewport` `resize` and
+  `scroll`, `geometrychange` and window `resize`, at most once per animation frame.
+- The root carries `data-keyboard="up"` while the keyboard height is ≥ 120 px and
+  `[data-cockpit-input]` has the focus, `data-keyboard="held"` during a talk press that started
+  while it was `up` (below), else `data-keyboard="down"`. A desktop window made shorter with the
+  input focused counts as `up`; the layout below fits it as well.
+
+**While `data-keyboard` is `up` or `held`** (D131), on every page and layout, pane or column:
+- `[data-cockpit-conversation]` covers x 760-1368 from the visible top (`visualViewport.offsetTop`)
+  to the visible bottom: y 0-532 at 1368x532. On the app it covers the 36 px header and the 24 px
+  tape too; in `split` it covers the card area above the column. Both come back when the keyboard
+  goes. The width is §1's (`min(608px, 100vw)`).
+- The **header** (64 px, y 0-64) keeps `CLOSE`, `SCREEN`, `NEW` (and in `switch` the switch button)
+  at §1's x.
+- The **input row** sits on the keyboard's top edge and is 88 px tall (16 + 64 + 8; the Wall's
+  24 px bottom margin is for the screen's edge, not the keyboard's): y 444-532. Input x 784-1184,
+  `SEND` x 1200-1264 and the talk button x 1280-1344, all y 460-524. The talk button stays in the
+  row; it never moves to the screen's corner.
+- The opener, reading `CLOSE` while the pane is open (§2), keeps x 1288-1336 with its bottom on the
+  row's top edge: y 396-444. The column has no opener (D117).
+- Above the row the stack is the same as without the keyboard (the line slot, the chip row,
+  `↓ NEW`: T96), measured from the row's top edge at y 444; a chip alone is the row y 380-444.
+- The **conversation** gets what is left: y 64-444 (380 px) with nothing stacked. With the 80 px
+  status line, a one-line hint or note (32 px) and a chip (64 px) it is 204 px. It is never under
+  200 px with a one-line input.
+- The **input grows** (§7) only while the conversation keeps 200 px: its height is at most
+  `clamp(64, 64 + left − 200, 157)` px, where `left` is the conversation's height with a one-line
+  input. Past that the text scrolls inside the input, the caret line in sight (the textarea's own
+  scrolling). At 1368x532: 157 px (4 lines) with nothing stacked; 68 px (one line) with the status
+  line, a note and a chip.
+- **Pinned.** A conversation that followed its end (§4) is at its end after every change of the
+  visible height, the latest line in sight. If the owner had scrolled up, the line at its top stays
+  at its top.
+- Each change applies in the first animation frame after the event, with no slide (the 120 ms slide
+  of §2 is for open and close only).
+
+**Taps keep the keyboard up** (D132). A tap on any control inside `[data-cockpit-conversation]`
+(`SEND`, the chip's `✕`, `NEW`, `SCREEN`, a tool line, `↓ NEW`, `RETRY`) leaves the focus in the
+input (the build calls `preventDefault()` on the control's `pointerdown` and `mousedown`), so the
+keyboard does not drop and the row does not move between `pointerdown` and `pointerup`. After a send
+the keyboard stays up (§7). `CLOSE` closes the pane and blurs the input.
+
+**Putting it away.**
+- A tap on the conversation outside a control (`pointerup` within 8 px, `TAP_SLOP_TOUCH` of
+  `public/js/views/map/interact.js`, of its `pointerdown`) blurs the input; the keyboard goes. A
+  drag that scrolls the conversation does not blur it. A tap on the header outside its buttons
+  blurs it too. A tap on the view behind the pane blurs it by the browser's own focus move, and the
+  view acts on the tap as well (D19).
+- The keyboard's own hide key: `data-keyboard` follows the height, the input may keep its focus.
+- When `data-keyboard` turns `down`, §1's rects return in the first frame; the draft stays; the
+  conversation follows the pin rule above.
+
+**A talk press with the keyboard up** (C2). The press replaces the textarea with the live words
+(`c2-voice.md` §4, D43), the textarea loses its focus and the keyboard goes. From the
+`pointerdown` the layout stays as it was (`data-keyboard="held"`) until the microphone closes, so
+the talk button does not move under the finger; the band below the row is plain `--bg-elevated`.
+When the microphone closes, `data-keyboard` follows the keyboard again. After a tap on the words
+(`c2-voice.md` §7, D47) the textarea has the focus, the keyboard comes back and the row sits on its
+edge with the caret line in sight (S-C2-22).
+
 ## 8. Talking while the agent answers (pending Q-O1)
 
 Written for Q-O1's recommendation d), **steer**: words sent during a turn go into that turn, as
@@ -944,3 +1020,40 @@ text frame the page received contains `eyJhbGci`, `abc123DEF`, `Q7wErTy12` or `Z
 Test: Playwright; collect every `framereceived` payload from the page's link and assert none holds
 the four strings; open both lines and read their rows. The rules themselves are the unit test of
 `server/cockpit/redact.mjs` (§5.3), in `npm test`.
+
+### S-C1-32 The on-screen keyboard: the input row sits on its edge, the conversation stays pinned
+Given a touch context (`hasTouch: true`) at 1368x912, the Wall page in `wall` (on the app's `#/map`
+first, T31), the pane open on a 12-turn conversation scrolled to its end, the input empty, no chip,
+no status line,
+When the owner taps the input at t = 0 and the test resizes the viewport to 1368x532 at t = 0.1 s
+(a 380 px keyboard),
+Then by t = 0.2 s `data-keyboard="up"`; `[data-cockpit-conversation]` is x 760-1368, y 0-532; the
+input is x 784-1184, y 460-524; `SEND` x 1200-1264 and the talk button x 1280-1344, both y 460-524;
+the opener reads `CLOSE` at x 1288-1336, y 396-444; the header's `CLOSE` is at y 8-56; the
+conversation is 380 px tall, scrolled to its end, the last turn's last line inside it.
+When the owner types `and builder-a?` and taps `SEND`,
+Then the input still has the focus, `data-keyboard` stays `up`, and the new prompt block's rect is
+inside the conversation's rect.
+When the owner flicks the conversation 60 px down and back,
+Then the input still has the focus.
+When the owner taps the conversation's text at (1000, 200), not on a tool line,
+Then the input has lost the focus and `data-keyboard="down"`; after the test resizes back to
+1368x912 the rects are §1's (input y 824-888, the opener `CLOSE` at y 760-808) and the
+conversation is at its end.
+Test: Playwright with `hasTouch`, `tap`, `touchscreen` drag for the flick and `setViewportSize`;
+`getBoundingClientRect()` of each part compared ± 1 px; `document.activeElement` after each step;
+pinned is `scrollTop + clientHeight ≥ scrollHeight − 1`. A second run stays at 1368x912 and
+stubs `navigator.virtualKeyboard` with an init script (`boundingRect.height` 380, one
+`geometrychange` dispatched after the tap) and asserts the same rects (D130).
+
+### S-C1-33 Keyboard up with the status line and a long draft: the conversation keeps 200 px
+Given S-C1-32's setup with the room down (the pane's 80 px status line, `screens.md` §7) and the
+viewport at 1368x532 after a tap in the input,
+When 8 214 characters are pasted into the input (the length note shows, §7),
+Then the status line is y 64-144, the note sits in the line slot above the input row, the input is
+132 px tall (`clamp(64, 64 + 268 − 200, 157)`), its bottom at y 524, scrolled to its end with the
+caret on its last visible line, and the conversation is 200 px tall.
+When the test resizes back to 1368x912 and blurs the input,
+Then `data-keyboard="down"` and the input is 157 px tall (4 lines, §7) with its bottom at y 888.
+Test: Playwright `fill`; rects and heights ± 1 px; the input's
+`scrollTop + clientHeight ≥ scrollHeight − 1`; the conversation's `clientHeight`.

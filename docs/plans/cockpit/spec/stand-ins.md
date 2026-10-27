@@ -364,17 +364,17 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | Script | Kind | Scenarios | Holds |
 | --- | --- | --- | --- |
 | `c1-render` | agent | S-C1-03..12, S-C1-30, S-C1-31 | §2.2's example; S-C1-05's 4-column and 9-column tables; S-C1-06/07's three `fleet` calls (400 ms each, `hv2` `isError`) then `ci` 300 ms; S-C1-08's 40-line `sh` block; S-C1-09's markup; S-C1-10's 30 lines over 6 s; S-C1-11's marks; S-C1-30's two `denied` `Bash` steps and S-C1-31's `Grep` and `denied` `WebFetch` |
-| `c1-typing` | agent | S-C1-14..18, S-C1-27..29 | a short `done` turn per prompt; S-C1-16's text, 3 s `runs` call and `next-tool-end` steer turn; S-C1-27's 19.5 s tool call with `endAfterMs` 300; S-C1-28's two turns (`ignore-once`, `ignore`); S-C1-29's 19.5 s tool call, then text, taking a queued prompt at the tool's end; S-C1-17's two turns (`endAfterMs` 300, and `ignore-sigint`) |
+| `c1-typing` | agent | S-C1-14..18, S-C1-27..29, S-C1-32, S-C1-33 | a short `done` turn per prompt; S-C1-16's text, 3 s `runs` call and `next-tool-end` steer turn; S-C1-27's 19.5 s tool call with `endAfterMs` 300; S-C1-28's two turns (`ignore-once`, `ignore`); S-C1-29's 19.5 s tool call, then text, taking a queued prompt at the tool's end; S-C1-17's two turns (`endAfterMs` 300, and `ignore-sigint`) |
 | `c1-errors` | agent | S-C1-19, S-C1-20 | an `exit` 1 mid-text; one turn per error row (`failed` `overloaded`, `step-limit`, `failed` `boom` plus a 300-character `detail`, `not-logged-in`, two `retry` steps then text) |
 | `c1-long` | agent | S-C1-21 | 15 s without steps, then 120 lines, 26 000 characters and a 30-row table over 20 s (real time: 35 s) |
 | `c1-session` | agent | S-C1-22, S-C1-23 | `repeat` turns that answer `how is builder-a` in 2 s |
 | `c1-voice` | agent | S-C1-13, S-C3-18, §10 of `protocols.md` | the `morning` call and `■ One run is stuck…` turn of `protocols.md` §13.1, first delta 0.3 s after the prompt |
-| `c2-tap` | speech | S-C2-01..04, S-C2-07, S-C2-10..13, S-C2-20 | §3.2's example, plus `how did` / `how did the` / `how did the night go` (S-C2-03) and `restart the runner on builder-b` (S-C2-11) |
+| `c2-tap` | speech | S-C2-01..04, S-C2-07, S-C2-10..13, S-C2-20, S-C2-22 | §3.2's example, plus `how did` / `how did the` / `how did the night go` (S-C2-03) and `restart the runner on builder-b` (S-C2-11) |
 | `c2-limits` | speech | S-C2-05, S-C2-06 | `noAudio`; a growing partial every 1 s from 0.6 s for 130 s |
 | `c2-faults` | speech | S-C2-15..17 | one utterance per row of §3.3 |
 | `c2-agent` | agent | S-C2-* that send | a short `done` turn for any prompt (`repeat`); S-C2-09's text, 3 s tool call and `next-tool-end` steer turn |
 | `scr-room` | agent | S-SCR-03..05, S-SCR-17..20 | one long turn (20 s of text) and a turn that calls `fly_to builder-a` (S-SCR-05) |
-| `c3-tools` | agent | S-C3-03, S-C3-10..14 | `morning` then `runs`; `focus` calls |
+| `c3-tools` | agent | S-C3-03, S-C3-10..14, S-C3-19 | `morning` then `runs`; `focus` calls |
 | `c4-show` | agent | S-C4-01..12 | one turn per show command, at the times the scenarios give |
 | `c4-cards` | agent | S-C4-13..24, S-SCR-07/08 | `place` calls, incl. the 17th card and the `job-0003` countdown |
 | `demo`, `demo-jobs` | both | §6 | the public demo |

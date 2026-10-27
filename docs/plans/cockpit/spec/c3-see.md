@@ -576,6 +576,7 @@ talk or taps the input (D64). The conversation is scrolled to its end.
 **The chip** `[data-cockpit-chip]`, `data-node="<id>"`:
 - A 64 px row between the conversation and the input row (y 744-808 on every page, since the
   input row's top is at y 808 everywhere, `c1-talk.md` §1); the conversation above is 64 px shorter while it is there.
+  With the on-screen keyboard up the row moves with the input row (`c1-talk.md` §7.1, S-C3-19).
 - The chip in it: 48 px tall, from x 784, as wide as its content up to 480 px (it ends at x ≤ 1264: x 1280-1344
   is `CLOSE`'s, `screens.md` §4); `--bg-sunken`, 1 px
   `--line-strong` border. Inside, 16 px in: `ABOUT` (16 px caps `--text-3`), 12 px gap, the label
@@ -715,3 +716,15 @@ header reads `READY` within 1 s of the fake agent's `result`.
 Test: Playwright against the stand-ins; asserts the one `[data-tool-line]` text, the reply text,
 `data-turn="idle"` at the end; the fake agent's tool-result log (`fakeAgent.toolResults()`) holds
 one `morning` result with `window: "tonight"` and an `asOf` entry for `hub`.
+
+### S-C3-19 The chip stays in sight with the on-screen keyboard up
+Given S-C3-10's chip for `vm-b` on `#/map` at 1368x912, `hasTouch: true`, the pane open, no status
+line,
+When the owner taps the input and the test resizes the viewport to 1368x532,
+Then `data-keyboard="up"`, the chip row is y 380-444 (directly above the input row, `c1-talk.md`
+§7.1), the chip and its `✕` (48x48) are inside it, the input, `SEND` and the talk button are at
+y 460-524, and the conversation is y 64-380 (316 px, ≥ 200 px).
+When the owner taps the chip's `✕`,
+Then the chip is gone, the input still has the focus (D132), the conversation is y 64-444.
+Test: Playwright `tap`, `setViewportSize`; rects ± 1 px; `document.activeElement` is
+`[data-cockpit-input]` after the `✕`.

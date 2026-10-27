@@ -291,7 +291,8 @@ Plan C2: "Before that [the send], a tap on the text lets the owner fix a word or
 - **The final goes into the textarea**, not the conversation, ≤ 0.3 s after the tap (the fake
   speech's 0.15 s included, as B3). `data-talk="idle"`, the textarea has the focus with the caret at
   the end of its text, so the on-screen keyboard comes up; the owner moves the caret to the word.
-  This focus is the owner's own tap, so D20 does not hold it back. Hint `MICROPHONE OFF · TEXT KEPT`
+  This focus is the owner's own tap, so D20 does not hold it back. Where the row goes while the
+  keyboard is up is `c1-talk.md` §7.1 (S-C2-22). Hint `MICROPHONE OFF · TEXT KEPT`
   (§4).
 - **Where the tap landed does not matter.** The shown words and the final differ often (case,
   punctuation, merged words), so the screen does not guess which word was meant.
@@ -533,6 +534,24 @@ Then within 0.2 s `data-talk="error"`, `[data-talk-error="mic-insecure"]` reads 
 needs a secure page (HTTPS). Typing works. docs/cockpit.md says how.`; typing works.
 Test: Playwright with `--host-resolver-rules` mapping the name to the stand-in; or, where that is
 not possible, an init script deleting `navigator.mediaDevices` (the build night logs which).
+
+### S-C2-22 Fixing a word with the on-screen keyboard up; a press keeps the row under the finger
+Given S-C2-11's script (script `c2-tap`), `hasTouch: true`,
+When the owner taps the talk button at t = 0 and taps the live words at t = 3.0 s (D47), and the
+test resizes the viewport to 1368x532 when the textarea gets the focus (a 380 px keyboard),
+Then by t = 3.4 s `data-keyboard="up"`, the textarea holds `Restart the runner on builder-b.` with
+the caret at its end, the textarea is x 784-1184, y 460-524 with its last line inside y 0-532,
+`SEND` and the talk button are at y 460-524, and the hint `MICROPHONE OFF · TEXT KEPT` is above the
+row, inside y 0-444 (`c1-talk.md` §7.1).
+When the owner then holds the talk button at (1312, 492) from t = 5.0 s, and the test resizes the
+viewport back to 1368x912 when the textarea loses the focus (the keyboard going),
+Then `data-keyboard="held"` and the talk button stays at y 460-524 while it reads `SEND` in
+`listening`/`partial`; the release at (1312, 492) at t = 7.0 s sends (no slide off, §2); after the
+microphone closes `data-keyboard="down"` and the row is at `c1-talk.md` §1's rects (talk button
+y 824-888).
+Test: Playwright with the fake speech; `page.exposeFunction` reports the textarea's `focus` and
+`blur` so the test resizes at those moments; rects ± 1 px; `selectionStart`; the received-turns
+log has one spoken turn.
 
 ## 14. C2b, the physical button (later; pending Q-O8, Q-O20)
 
