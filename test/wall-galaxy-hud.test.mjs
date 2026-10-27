@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { CRIT_HOLD, agoText, bannerModel, clearedOf, createHud, farNode, galaxyCaption, legNode, staleCaption } from '../public/js/wall/galaxy/hud.js';
+import { CRIT_HOLD, agoText, bannerModel, clearedOf, createHud, farNode, galaxyCaption, legNode, sheetCaption, staleCaption } from '../public/js/wall/galaxy/hud.js';
 import { captionLines } from '../public/js/wall/caption.js';
 import { clearedLine, worstLine } from '../public/js/wall/frame.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
@@ -541,4 +541,84 @@ test('night 3 T7: release() (a finger took the camera) hides the plate and lets 
   hud.release();
   assert.deepEqual(calls.at(-1), ['hide']);
   assert.deepEqual(lockCalls.at(-1), ['release']);
+});
+
+// Night 3 T11: a tapped thing's sheet (sheetCaption), every line, worst first.
+const sheetModel = () => ({
+  nodes: [
+    { id: '__core', kind: 'core', status: 'ok' },
+    { id: 'hv1', parent: '__core', kind: 'site', label: 'hv1', status: 'ok' },
+    { id: 'hv1-a', parent: 'hv1', kind: 'room', label: 'vm-a', status: 'warn', why: 'disk 91%' },
+    { id: 'hv1-b', parent: 'hv1', kind: 'room', label: 'vm-b', status: 'ok' },
+    { id: 'hv1-c', parent: 'hv1', kind: 'room', label: 'vm-c', status: 'crit', why: 'down',
+      metrics: { cpu: 0.42, mem: 0.8 }, detail: { where: 'rack 2', hardware: 'builder-a' } },
+    { id: 'hub', parent: '__core', kind: 'site', label: 'hub', status: 'ok' },
+    { id: 'hub-a', parent: 'hub', kind: 'room', label: 'vm-x', status: 'ok' },
+  ],
+});
+
+test('sheetCaption: a site in trouble, the worst first (the crit as the hero, the count, then the warn)', () => {
+  const m = sheetModel();
+  const cap = sheetCaption(m.nodes[1], m);
+  assert.equal(cap.sheet, true);
+  assert.equal(cap.lines[0].kind, 'trouble');
+  assert.equal(cap.lines[0].status, 'crit', 'the crit leads');
+  assert.equal(cap.lines[0].word, 'VM-C');
+  assert.equal(cap.lines[1].kind, 'status');
+  assert.match(cap.lines[1].text, /crit/);
+  const problems = cap.lines.filter((l) => l.kind === 'problem');
+  assert.deepEqual(problems.map((l) => l.status), ['warn']);
+  assert.match(problems[0].text, /^VM-A · disk 91%/);
+  assert.ok(cap.lines.indexOf(problems[0]) < cap.lines.findIndex((l) => l.kind === 'count'), 'trouble before the counts');
+  assert.match(cap.kicker, /^CRIT · /);
+  assert.ok(!/ · IN /.test(cap.kicker), 'a site is not in anything');
+});
+
+test('sheetCaption: a calm site keeps its lines (the tour\'s plate drops them, a sheet was asked for)', () => {
+  const m = sheetModel();
+  const hub = m.nodes.find((n) => n.id === 'hub');
+  assert.deepEqual(galaxyCaption(captionLines(hub, m), 'site').lines, []);
+  const cap = sheetCaption(hub, m);
+  assert.deepEqual(cap.lines.map((l) => l.kind), ['status', 'count']);
+  assert.match(cap.lines[0].text, /all 1 calm/);
+});
+
+test('sheetCaption: a planet shows its own status, why, cpu/mem and detail, and names the site it is in', () => {
+  const m = sheetModel();
+  const cap = sheetCaption(m.nodes.find((n) => n.id === 'hv1-c'), m);
+  assert.equal(cap.name, 'VM-C');
+  assert.match(cap.kicker, /ROOM · IN HV1$/);
+  assert.equal(cap.lines[0].kind, 'trouble');
+  assert.equal(cap.lines[0].word, 'DOWN', 'its own why as the word');
+  assert.equal(cap.lines[1].kind, 'status');
+  const bars = cap.lines.find((l) => l.kind === 'metrics').bars;
+  assert.deepEqual(bars.map((b) => [b.label, b.text]), [['cpu', '42%'], ['mem', '80%']]);
+  const facts = cap.lines.filter((l) => l.kind === 'fact');
+  assert.deepEqual(facts.map((f) => [f.label, f.text]), [['hardware', 'builder-a'], ['where', 'rack 2']]);
+  // A calm planet: its status, no hero.
+  const b = sheetCaption(m.nodes.find((n) => n.id === 'hv1-b'), m);
+  assert.equal(b.hero, false);
+  assert.equal(b.lines[0].kind, 'status');
+  assert.match(b.kicker, /IN HV1$/);
+});
+
+test('the hud opens a tapped planet\'s sheet where the camera is: its own lines, not the tour\'s cut', () => {
+  const shown = [];
+  const hud = createHud({
+    caption: { show: (leg, cap) => shown.push([leg, cap]), hide: () => {}, cover: () => null },
+    frame: { update: () => {}, live: () => {}, cover: () => null },
+  });
+  hud.update(sheetModel());
+  hud.open({ id: 'hv1-c', arriveMs: 0 });
+  const [leg, cap] = shown.at(-1);
+  assert.equal(leg.id, 'hv1-c');
+  assert.equal(leg.sheet, true);
+  assert.equal(cap.sheet, true);
+  assert.match(cap.kicker, /IN HV1/);
+  assert.ok(cap.lines.some((l) => l.kind === 'metrics'));
+  // A calm site opened by a tap keeps its rows; the tour's park of the same site does not.
+  hud.open({ id: 'hub', arriveMs: 0 });
+  assert.ok(shown.at(-1)[1].lines.length > 0);
+  hud.park({ id: 'hub' });
+  assert.deepEqual(shown.at(-1)[1].lines, []);
 });

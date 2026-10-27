@@ -196,12 +196,23 @@ Notes for every builder round (planner, round 1):
   overview → drag → tap HV2's point: brackets on it 400 ms later, the system open and its plate 4 s later, page
   scale 1, 0 errors) and film r28-galaxy (tour unchanged, 0 errors, 12.5 fps under SwiftShader as every film here;
   a tap costs nothing per frame: the hit test runs only on a pointerdown).
-- [ ] T11 (§7 Night 3 C3) [ui] [variant:galaxy] Touch, the detail sheet: a tapped site shows a sheet in big
+- [x] T11 (§7 Night 3 C3) [ui] [variant:galaxy] Touch, the detail sheet: a tapped site shows a sheet in big
   type (`wall.css`, the caption's type steps) with the site's worst things first (from the model, as
   `galaxy/hud.js galaxyCaption` ranks them); in an open system a tap on a planet (hit-tested as T10, worst then
   nearest) shows its own details (status, why, cpu/mem, `detail`); built with DOM APIs, never `innerHTML` —
   done when: tests show the sheet's rows for a site in trouble (worst first) and for a planet, and a still of
-  a tapped `hv2` shows the sheet readable at the 3 m check (shrunk still).
+  a tapped `hv2` shows the sheet readable at the 3 m check (shrunk still). (commit 9e2fa7b)
+  Builder r33 (code by r30, which ran out before tests): `hud.js sheetCaption` (every `captionLines` row, worst first:
+  the hero, the count by severity, the next problems, bars, facts, holds; a calm site keeps its rows, a planet's kicker
+  `ROOM · IN HV2`), `hud.open` sets `sheet: true`; `touch.js memberPoints` (members of a site at least half open, own
+  tone, shown name) asked before `tapPoints`, so a finger on a planet beside its star opens the planet and the camera
+  stays. Tests: `wall-galaxy-hud` (site in trouble worst first, calm site rows, planet status/why/cpu/mem/detail, hud
+  opens a planet sheet), `wall-galaxy-touch` (`memberPoints`, a page tap on a planet in an open system, main.js wiring).
+  Checked: CDP script `tools/r33-sheet.mjs` (tap hv2: hero STORAGE, POOL 97% FULL, HV2, status 1 crit, bars, facts; tap
+  gpu-box: `ROOM · IN HV2` sheet with its own rows, the camera still; 0 errors); shrunk 3 m still `shots/r33-3m-10-later.png`
+  (hero, why and site name read; the status row is marginal, hardware/where small as meant: T23 sizes trouble rows);
+  film r33-galaxy (tour unchanged, 0 errors, 12.4 fps as every SwiftShader film here). Still the tour's kicker
+  `TARGET 01 / 05`, typing on the sheet and the doubled banner: T25, T20, T22.
 - [ ] T12 (§7 Night 3 A1, D warp) [ui] [variant:galaxy] `fx=warp` (was night 2's T42, r59-dreamer unforgettable
   1): during a flight the near dust and far stars stretch into short streaks along the direction of travel,
   tinted toward the destination's status (grey for calm, a faint amber or red edge for trouble), and snap back

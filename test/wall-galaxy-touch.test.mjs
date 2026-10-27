@@ -10,7 +10,7 @@ import path from 'node:path';
 import { makeEl } from './helpers/fakedom.mjs';
 import {
   ORBIT, TAP, TOUCH, atRest, createGestures, createTaps, createTouch, hitTest, inertia, isPalm, orbitLimits, orbitOf,
-  orbitPose, orbitStep, planeAt, tapPoints, touchStep, zoomStep,
+  memberPoints, orbitPose, orbitStep, planeAt, tapPoints, touchStep, zoomStep,
 } from '../public/js/wall/galaxy/touch.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
 import { FLIGHT, createGalaxyCamera } from '../public/js/wall/galaxy/camera.js';
@@ -639,4 +639,59 @@ test('galaxy/main.js wires taps: sites hit-tested in the stage\'s px, a hit flie
   assert.match(open, /cam\.focus\(id, TIMING\.zoom\)/);
   assert.match(open, /hud\.open\(\{[^}]*arriveMs: FLIGHT\.ms \}\)/);
   assert.match(open, /tether\.hide\(\)/);
+});
+
+test('memberPoints (T11): the members of an open system only, at their drawn points, in their own tone', () => {
+  const sites = [
+    { id: 'hv1', open: 1, members: [{ id: 'hv1-a', node: { status: 'crit' } }, { id: 'hv1-b', node: { status: 'ok' } }, { id: 'hv1-z', node: { status: 'ok' } }] },
+    { id: 'hv2', open: 0.3, members: [{ id: 'hv2-a', node: { status: 'ok' } }] }, // still folding: not yet
+    { id: 'old', open: 1, gone: true, members: [{ id: 'old-a', node: { status: 'ok' } }] },
+  ];
+  const at = { 'hv1-a': { x: 10, y: 10, r: 4 }, 'hv1-b': { x: 40, y: 10, r: 2 }, 'hv2-a': { x: 0, y: 0, r: 1 }, 'old-a': { x: 0, y: 0, r: 1 } };
+  const pts = memberPoints(sites, (id) => at[id] ?? null, [{ id: 'hv1-b', box: { x: 50, y: 0, w: 40, h: 20 } }]);
+  assert.deepEqual(pts, [
+    { id: 'hv1-a', site: 'hv1', x: 10, y: 10, r: 4, tone: 'crit', box: null },
+    { id: 'hv1-b', site: 'hv1', x: 40, y: 10, r: 2, tone: 'calm', box: { x: 50, y: 0, w: 40, h: 20 } },
+  ]);
+  assert.equal(hitTest(pts, 25, 10).id, 'hv1-a', 'between two planets: the worst wins');
+  assert.equal(hitTest(pts, 80, 10).id, 'hv1-b', 'its shown name is a target');
+  assert.deepEqual(memberPoints(null, () => null), []);
+});
+
+test('pointer events on the page: in an open system a tap on a planet opens the planet, not its star', () => {
+  const p = touchPage();
+  const opened = [];
+  const pick = (x, y) => hitTest(memberPoints(p.galaxy.world.sites, p.cam.screenOf), x, y)
+    ?? hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), x, y);
+  createTaps(p.touch, {
+    clock: p.now,
+    pick,
+    // As main.js: a planet's sheet where the camera is; a site flies.
+    tap: (hit) => { if (hit?.site) opened.push(['planet', hit.id]); else if (hit) { p.cam.focus(hit.id, DEMO_TIMING.zoom); opened.push(['site', hit.id]); } },
+  });
+  p.run(200);
+  // At the overview no system is open: a finger on a member's point is the site's.
+  const tapAt = (id, sp) => {
+    p.stage.dispatch('pointerdown', { pointerId: id, clientX: sp.x, clientY: sp.y });
+    p.tick(60);
+    p.stage.dispatch('pointerup', { pointerId: id, clientX: sp.x, clientY: sp.y });
+  };
+  tapAt(31, p.cam.screenOf('cloud'));
+  assert.deepEqual(opened, [['site', 'cloud']]);
+  p.galaxy.setOpen('cloud', 1);
+  p.run(FLIGHT.ms + 500);
+  const planet = p.cam.screenOf('cloud-a');
+  assert.ok(planet && planet.x > 0 && planet.x < 1600 && planet.y > 0 && planet.y < 900, 'the planet is on screen');
+  const want = p.cam.want();
+  tapAt(32, planet);
+  assert.deepEqual(opened.at(-1), ['planet', 'cloud-a']);
+  assert.deepEqual(p.cam.want(), want, 'the camera stays where it is');
+});
+
+test('galaxy/main.js wires planet taps (T11): members asked before sites, a planet opens where the camera is', () => {
+  const js = read('js/wall/galaxy/main.js');
+  const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
+  assert.ok(pick.indexOf('memberPoints(') >= 0 && pick.indexOf('memberPoints(') < pick.indexOf('tapPoints('), 'members first');
+  assert.match(js, /const openPlanet = \(id\) => hud\.open\(\{ id, arriveMs: 0 \}\)/);
+  assert.match(js, /tap: \(hit\) => \{ if \(hit\?\.site\) openPlanet\(hit\.id\); else if \(hit\) openSite\(hit\.id\); \}/);
 });
