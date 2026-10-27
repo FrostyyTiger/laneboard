@@ -206,7 +206,7 @@ the laneboard MCP tools arrive as `mcp__laneboard__<tool>` and are matched witho
 | `alerts` (C3) | none | `read the alerts` | `read the alerts {n}×` |
 | `morning` (C3) | `window` | `read the Morning for {target}` | `read the Morning {n}×` |
 | `history` (C3) | `node`, else `run` | `read the history of {target}` | `read the history of {n} nodes` |
-| `focus` (C3) | none | `looked at this screen` | `looked at this screen {n}×` |
+| `focus` (C3) | `screen` | `looked at this screen`; another: `looked at screen {target}`; `all`: `looked at the screens` | `looked at {n} screens` |
 | `Read` | `file_path`, last path part | `read {target}` | `read {n} files` |
 | `Grep`, `Glob` | none | `searched the files` | `searched the files {n}×` |
 | `Bash` | `command`, first word | `ran {target}` | `ran {n} commands` |

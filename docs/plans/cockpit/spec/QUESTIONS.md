@@ -195,12 +195,13 @@ Answer: (open)
 
 ## Q-O16 Security-adjacent choices logged as decisions
 
-Review 26 notes that three lines say "security-adjacent" in their own text but sit in
+Review 26 notes that three lines (now four) say "security-adjacent" in their own text but sit in
 `DECISIONS.md`. For the owner to confirm in one letter each: **D13** (pairing code length,
 lifetime, attempt cap), **D14** (nothing in browser storage), **D22** (links in replies are not
-tappable).
+tappable). Added by T9: **D66** (the "Ask about this" chip reaches the agent as a fixed line with the
+node id only, never the node's label or other board text).
 
-- a) Confirm all three as written.
+- a) Confirm all of them as written.
 - b) Change one: say which and how.
 
 Recommendation: a) — each is the stricter choice and can be loosened later.
