@@ -30,7 +30,7 @@ C3 reads; it never changes the fleet or the screen. Show commands are C4 (`c4-sh
 - **Startup check.** If the agent's `system/init` lists `laneboard` with a status other than
   `connected`, or names it in `mcp_server_errors` (`research/Q5`), the room logs it and the pane shows
   the grey line `The agent cannot read the board: its laneboard tools did not start.` before the
-  first turn; turns still run (the agent answers without fleet data). `protocols.md` (T16) carries it.
+  first turn; turns still run (the agent answers without fleet data). `protocols.md` §11.4 carries it (`status` `tools-down`, §3.5).
 - **Every argument is checked** against the tool's schema below. A bad argument is a JSON-RPC error
   `-32602` naming the field (`run: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`). Anything the agent
   can recover from (an unknown id, the board down) is a normal result with `isError: true` and one
@@ -307,7 +307,7 @@ Tool line target: `node`, else `run`.
 
 ## 5. What the agent is told
 
-The bridge's standing instructions (`protocols.md`, T16) include these five sentences about the
+The bridge's standing instructions (`protocols.md` §11.8) include these five sentences about the
 tools, word for word:
 
 1. `The laneboard tools show the fleet as the board sees it; each result says how old its data is.`
@@ -587,7 +587,7 @@ talk or taps the input (D64). The conversation is scrolled to its end.
   `YOU · 07:12 · ABOUT vm-b` (`YOU · SPOKEN · 07:12 · ABOUT vm-b`), the `ABOUT` part in `--text-3`.
   The next prompt has no chip (D65).
 - **What the agent gets.** The room puts one line in front of the owner's text, word for word
-  (`protocols.md` T16 carries it):
+  (`protocols.md` §11.5 carries it):
   `(The owner is asking about node "room-b" on screen "desk". Call focus to see it.)`
   The id and the screen name are written as JSON strings (quotes and backslashes escaped), the id
   cut to 128 characters. The node's label, `why` or any other board text never goes into this

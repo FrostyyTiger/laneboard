@@ -127,6 +127,7 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 - [x] Q8 What does Claude Code do with a prompt sent while a turn runs (queue, inject at the next tool boundary, interrupt)? — for T5/T16 (Q-O1 option d) → research/Q8-prompt-while-turn-runs.md (default `priority:"next"` = read after the running tool calls finish; `later` = after the turn; `now` = interrupt; one 2.1.175 report of an ignored message)
 - [x] Q9 → research/Q9-serve-path-mount-and-websocket.md. Does `tailscale serve` with a path mount (`--set-path /api/cockpit`) forward the request path to the backend unchanged or strip the prefix, and does it pass WebSocket upgrades and the `Origin` header through? Same for a plain nginx/Caddy `location` block — for T15 (`protocols.md` §1, D92), T19
+- [ ] Q10 Three things research Q2 could not confirm and `protocols.md` §11 rests on: the raw stdin JSON of Claude Code's `interrupt` control request (with `cancel_queued`) and of its `control_response` (where `request_id` sits); whether `system/init` is written before the first stdin line in `--input-format stream-json` mode; and what a failed login looks like on stdout (an `api_retry` with `authentication_failed`, a `result` with which `errors`, or an exit before `init`) — for T16, T18
 
 ## Later
 

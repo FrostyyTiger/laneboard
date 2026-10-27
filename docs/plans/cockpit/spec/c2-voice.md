@@ -93,7 +93,7 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   height 1.4, 16 px padding; it grows to 4 lines and then scrolls, pinned to its end, as the
   textarea does (`c1-talk.md` §7, D30). When the microphone closes, the text goes back into the
   textarea (draft) or into the prompt (send).
-- **Firm and tail.** Each speech-to-text update (`protocols.md`, T16; research Q4: the whole list of
+- **Firm and tail.** Each speech-to-text update (`protocols.md` §12.2; research Q4: the whole list of
   committed lines plus the current buffer, resent each time) **replaces** both spans: firm = the
   committed text, tail = the buffer. Nothing is ever appended to what is drawn, so a word can never
   show twice. Firm text never changes once shown; tail text may change or vanish.
@@ -349,7 +349,7 @@ which process is the room: D89).
 
 ## 10. Speech-to-text down or failed (D50)
 
-The room talks to the speech service, the screen only to the room (`protocols.md`, T15/T16), so
+The room talks to the speech service, the screen only to the room (`protocols.md` §6, §12), so
 these are the room's findings, sent to the screen; the screen draws them. Each ends in the `error`
 state (§3) with its line in §5's place and look. **Typing always works**, and nothing spoken is
 sent unless a final came (D41). There are two cases, told apart by one fact: had a word been shown

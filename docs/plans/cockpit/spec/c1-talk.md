@@ -114,7 +114,7 @@ blocks, tool lines (§5) and show lines (`c4-show-canvas.md` §4) interleaved as
 
 ### Streaming
 
-- Reply text is appended as the bridge's text deltas arrive (`protocols.md`, T16), drawn at most
+- Reply text is appended as the bridge's text deltas arrive (`protocols.md` §3.2, §11.4), drawn at most
   once per animation frame. A line still being written is drawn as plain text until its newline
   arrives; then the line takes its markup (a table row, a list item). An open code fence is drawn
   as a code block until it closes.
@@ -229,7 +229,7 @@ closes it. Tool output is never shown here. Text from tool input is drawn as tex
 markup (`security.md`, T17).
 
 **The agent's writing.** The screen does not shorten replies. "Short blocks" is asked of the agent:
-the room's standing instructions for the agent (the bridge's, T16) say: lead with the answer in
+the room's standing instructions for the agent (`protocols.md` §11.8, word for word there) say: lead with the answer in
 one sentence; at most 3 sentences per paragraph; a table for 3 or more items that share fields;
 code only when asked; marks `■ ▲ ● ○` before trouble words. Long replies are §9.
 
@@ -412,7 +412,7 @@ always a correction, and waiting would lose the terminal's speed (`spec-input.md
   reads `SEND` (`data-send="send"`). While idle it is always `SEND`. 13 px caps `--text-2` above the
   input, left-aligned, only while a turn runs and the input holds text: `SENDING STOPS THE ANSWER`.
 - **`STOP`** (or `Ctrl+C` on a paired keyboard with the input empty): `data-turn="stopping"` within
-  0.1 s; the room asks the bridge to interrupt (T16). The turn ends when the bridge reports its end;
+  0.1 s; the room asks the bridge to interrupt (`protocols.md` §11.6). The turn ends when the bridge reports its end;
   if that has not happened 5 s after the tap, the room forces it (for Claude Code: `SIGINT`,
   research Q2) and the line reads `Stopped at 07:03 (forced).`. Either way `READY` by 5.5 s.
 - **What a stopped turn looks like** (D33): its text stays exactly as it was at the tap; nothing
@@ -421,7 +421,7 @@ always a correction, and waiting would lose the terminal's speed (`spec-input.md
   The `▍` cursor goes.
 - **`SEND` during a turn** does both at once: the running turn is stopped as above, and the new
   prompt is drawn at once (B8) below the stopped one as a new turn; the agent receives it as soon
-  as the old turn has ended (the bridge orders the two, T16). The header goes `● STOPPING`, then
+  as the old turn has ended (the bridge orders the two, `protocols.md` §11.6). The header goes `● STOPPING`, then
   `● WORKING` for the new turn (`data-turn` `stopping`, then `thinking`).
 - **Voice** (C2): pressing the talk button during a turn does not stop anything; listening starts
   (D29); the send at release stops the turn as `SEND` does (T6).
@@ -463,7 +463,7 @@ to 120 characters and drawn as text. After an error the header reads `READY` (D3
 
 - **Nothing is ever sent again on its own** (D34, as D12): `RETRY`, `EDIT` and `GO ON` act only on a
   tap. A `RETRY` is a new turn with the same text; the failed turn stays above it.
-- Which native event of the agent maps to which code is T16's mapping table; Claude Code's
+- Which native event of the agent maps to which code is `protocols.md` §11.4's mapping table; Claude Code's
   `api_retry` is E5 and a `result` with `is_error` is E7 or E8 (research Q2).
 - An error line is shown on every screen (§12); its buttons work from any of them.
 
@@ -480,7 +480,7 @@ session would."
   a tap hide the bar and nothing changes. A status line (room down) wins the slot; `NEW` is
   disabled then.
 - **`START`**: a running turn is stopped first (§8: `● STOPPING`, forced after 5 s). Then the room
-  starts a new agent session at once (T16 says how); the old session gets no further prompt and
+  starts a new agent session at once (`protocols.md` §11.7 says how); the old session gets no further prompt and
   nothing is written for the new one. Like a laptop session, the new session reads the written
   context (repos, plans, notes). There is no extra turn state: the header goes back to `READY`.
 - **The divider**, drawn on every screen ≤ 0.5 s after the new session has started: a full-width
@@ -491,7 +491,7 @@ session would."
 - **What carries over**: the written context (repos, plans, notes), the canvas cards, scheduled
   jobs, every screen's layout, pane state and draft. **What does not**: the conversation's text in
   the agent's context.
-- **Forced fresh start**: when the room cannot resume the session (T16 says when), it starts a new
+- **Forced fresh start**: when the room cannot resume the session (`protocols.md` §11.7: two failed resumes), it starts a new
   one the same way without the bar, and the divider reads `NEW CONVERSATION · 07:10 · THE OLD ONE
   COULD NOT GO ON`.
 - With Q-O2 a) `NEW` is not shown; with b) a daily start at a configured hour adds the divider
