@@ -320,6 +320,44 @@ The spec is written for a) (pending Q-O26).
 
 Answer: (open)
 
+## Q-O27 How a screen reaches the board when there is no tailnet
+
+Security-relevant, a one-way door, blocks C1 on any setup but the owner's. From round 48
+(`reviews/48-stranger.md` finding 1). Laneboard binds loopback and, with no `fleet` block, treats
+every caller as `local` (`docs/fleet/auth.md` rule 1). `screens.md` §6 says viewing the board "stays
+as today"; without a tailnet that means a tablet behind a reverse proxy is `local` and can act,
+launch, retire and type into terminals. `spec-input.md` §6: "Not tied to one VPN: a tailnet is the
+owner's way; auth in front, device tokens or LAN-only are others."
+
+- a) **A paired device token is also the screen's way into the board** as a new request kind
+  `screen`: every read plus `/api/cockpit/*`, no action, no terminal, no push change. Only that kind
+  is accepted on a LAN address; a screen without a token sees only the pairing card.
+- b) A reverse proxy with its own login; the tablet stays `local`. Documented as unsafe for anything
+  but a closed network.
+- c) The cockpit needs a tailnet in v1. Breaks `spec-input.md` §6.
+
+Recommendation: a) — it follows §6 ("device tokens") and keeps "a token cannot act" (plan §2). Cost: a
+new request kind and a section in `security.md`. The spec is written for a) (pending Q-O27).
+
+Answer: (open)
+
+## Q-O28 What the always-on agent may spend, and which standing jobs start on
+
+From round 48 (`reviews/48-stranger.md` finding 7). The cockpit agent, speak-ups and drift checks
+(`coworker.md`, T13) draw on the same subscription window as the owner's loops. Nothing limits or
+shows that.
+
+- a) **A cap and its own lane:** `cockpit.agent.maxTurnsPerHour` (default 20), the line `The cockpit
+  paused itself: 20 turns this hour. It answers again at 08:00.`, spend shown as lane `cockpit` on
+  Credit and Morning; standing jobs (speak-ups, drift) default off until the owner turns them on.
+- b) Same, but standing jobs default on for the owner's setup only.
+- c) No cap; report spend only.
+
+Recommendation: a) — safe by default (`product.md`); the owner turns things on once and sees the cost.
+Belongs to `coworker.md` (T13); not needed for C1 beyond the cap.
+
+Answer: (open)
+
 ## Can wait
 
 Not needed before the C1 and C2 build nights.
