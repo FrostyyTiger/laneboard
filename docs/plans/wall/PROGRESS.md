@@ -244,7 +244,7 @@ Notes for every builder round (planner, round 1):
   nothing while still, follows a 2 px move) and `wall-galaxy-budget` (triangles in `perfLine`). Probe
   `$RUN_DIR/tools/r24-tri.mjs`, stills `shots/r24-t12/`. Film `shots/r24-galaxy`: page unchanged, 12.7 fps under
   SwiftShader, worst gap 313 ms, no console errors.
-- [ ] T13 (§7 Night 4 A, D10) [ui] [variant:galaxy] One camera director, the state: a pure `galaxy/director.js`
+- [x] T13 (§7 Night 4 A, D10) [ui] [variant:galaxy] One camera director, the state: a pure `galaxy/director.js`
   (`directorStep(state, event, now)` on an injected clock, as `touch.js touchStep`) with three sources `tour`, `touch`
   and `show`, precedence a finger first, then a show command, then the tour; every hand-over between two sources is an
   eased move from the current pose (a `{ from, to, ms }` the camera plays, never a cut; a cut with a fade only in
@@ -252,7 +252,20 @@ Notes for every builder round (planner, round 1):
   moves here from `touch.js`); show commands are display-only and never outrank a finger — done when: tests on a fake
   clock cover a touch during a show (touch wins, the show waits or is dropped, the notes say which), a show during
   touch (queued until idle or refused, decided and written down), a show while the tour flies (the show takes the
-  camera with an eased hand-over), and the tour back 60 s after the last touch and after the last show.
+  camera with an eased hand-over), and the tour back 60 s after the last touch and after the last show. (commit SHA)
+  Builder r25: `galaxy/director.js` `directorStep(state, event, now, { held, still })` → `{ state, move, wake,
+  resume, refused, dropped }`, `directorLeft` (for the MANUAL line), `SOURCES`, `HANDOVER` (fit 1500 ms, fly =
+  `TIMING.flyMs`), `IDLE` (touch.js now imports and re-exports it). Events `touch` (with or without `to`),
+  `handback`, `show` (`id`, `to`, `holdMs`), `clear` (`id?`), `tour` (`to`, `ms`), `tick`; each carries the camera's
+  `pose` as the move's `from`. Decided: **a touch during a show drops the show** (`dropped: id`; never flies back to
+  it a minute later); **a show during touch is refused `busy`**, not queued (Q16's code; its default ttl 60 s equals
+  the minute, so a queue would almost always expire); a show under the tour takes the camera eased, the newest show
+  wins; a show holds `min(holdMs, IDLE.ms)`, `clear` ends it at once; the tour's own legs are refused `busy` while
+  another source drives. The director never picks the tour's target: it says `resume`, the tour asks for its next
+  leg, which eases from the pose. The minute after a wake counts from the end of the ease out (as T5). Reduced
+  motion: every move is `{ ms: 0, cut: true, fadeMs: CUT.fadeMs }`. Tests `test/wall-galaxy-director.test.mjs` (13).
+  Not wired yet (T14), so the page is unchanged: film `shots/r25-galaxy` 13.1 fps under SwiftShader, worst gap
+  307 ms, no console errors (it checks that touch.js's new import loads in the browser).
 - [ ] T14 (§7 Night 4 A, D10; after T13) [ui] [variant:galaxy] One camera director, wired: `galaxy/main.js` builds
   the director and hands `createTour` an adapter (its `map` interface: `focus`, `fit`) that asks the director, so
   `tour.js` is unchanged for `wall.html`; `touch.js` (wake, gestures, taps, back, `▶ TOUR`) asks the director instead

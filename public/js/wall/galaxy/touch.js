@@ -52,17 +52,13 @@
 // (wall.css), and the context menu (a long press) is refused here.
 
 import { toneOf, worseTone } from './palette.js';
+import { IDLE } from './director.js';
 
 /** How long the camera takes from wherever it is back to the overview on the first touch (ms). */
 export const TOUCH = Object.freeze({ fitMs: 1500 });
 
-/**
- * How long the page waits after the last touch before the tour takes it back
- * (T14): one minute (README §7 Night 3 C5; night 1's Q6 and Q13 give 30-60 s
- * for a kiosk's hand-back, the long end because a person reading a sheet
- * from a step away is not touching it).
- */
-export const IDLE = Object.freeze({ ms: 60000 });
+/** How long the page waits after the last touch before the tour takes it back: director.js IDLE (night 4 T13 moved it there). */
+export { IDLE };
 
 export const TOUCH_MODES = Object.freeze(['tour', 'easing', 'explore']);
 
