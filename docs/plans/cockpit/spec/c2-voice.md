@@ -108,7 +108,8 @@ so does the row's left end (`CANCEL`, below).
   `data-send="none"`. A tap on it does nothing; a hold released over it keeps the words as a draft
   (§2). The finger that sends by habit at x 1200-1264 therefore never lands on a drop. During a
   turn this means `STOP` is not there while the microphone is open: `CANCEL` or a send first
-  (`c1-talk.md` §8). When the microphone closes the slot shows `SEND` or `STOP` again in that frame.
+  (`c1-talk.md` §8). When the microphone closes the slot shows `SEND` again in that frame if the
+  input holds text; `STOP` waits 1.0 s, the slot blank and inert until then (D268).
 - **`CANCEL`** (D42, D167, pending Q-O19): `[data-talk-cancel]`, a 64x64 `<button>` at the row's
   left end, x 784-848, y 824-888 (the language button's rect: that button has no job while the
   microphone is open, §8, so it gives up its place; without a language button the live words box
@@ -341,8 +342,12 @@ Then by t = 4.3 s (B3) the prompt `Only the failed one.` is drawn last with
 `YOU · SPOKEN · HH:MM · QUEUED`; the header stays `● WORKING`, no `STOPPED AT` line is drawn and
 the fake agent's log has no interrupt; by t = 6.1 s `· QUEUED` is gone and
 `Only builder-a failed.` is drawn below it in the same turn.
-Test: Playwright; the reply text at 2.0 s and 3.9 s differs (still streaming); assert the label at
-4.3 s and 6.1 s, no element with the text `STOPPED AT`, and the fake-agent log (`stand-ins.md` §2.6: `order("interrupt")` is `[]`, one
+And the second tap (D268, `c1-talk.md` §8): the slot stays blank and inert (`data-send="none"`)
+from the release to t = 5.0 s; a tap on it (x 1232, y 856) at t = 4.3 s sends nothing; at t = 5.0 s
+it reads `■ STOP` (`data-send="stop"`).
+Test: Playwright with `hasTouch: true`, CDP touches, a fake clock; assert `data-send` at 4.05 s,
+4.95 s and 5.05 s, `prompts()` (`stand-ins.md` §2.6) the same at 4.4 s and 6.1 s; the reply text at
+2.0 s and 3.9 s differs (still streaming); assert the label at 4.3 s and 6.1 s, no element with the text `STOPPED AT`, and the fake-agent log (`stand-ins.md` §2.6: `order("interrupt")` is `[]`, one
 `prompt` with `"priority":"next"`, no `interrupt`).
 
 ### S-C2-10 CANCEL drops the spoken words, keeps a typed draft, and UNDO brings them back (pending Q-O19)

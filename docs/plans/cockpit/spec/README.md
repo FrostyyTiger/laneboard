@@ -224,7 +224,7 @@ included (it is a `<button type="button">`, §5 of `c1-talk.md`). A link in a re
   turns into a scroll is a `pointercancel` (the browser's), so a tool line under a flick drops
   the pressed state as the conversation starts to move.
 - **No pressed state**: a `disabled` or `aria-disabled="true"` button (the blank slot
-  `data-send="none"`, a `RETRY` still waiting); the talk button in every state but `off`, which has
+  `data-send="none"` or `"wait"`, a `RETRY` still waiting); the talk button in every state but `off`, which has
   its own (`c2-voice.md` §3: the press is `listening` within B1; `off` is this rule, D180); the Map
   and the Wall (pan surfaces); a card's body and frame outside its buttons (`c4-show-canvas.md` §8;
   the buttons in a card also wait for §8.10's tap rule).
@@ -289,7 +289,7 @@ when no value applies.
 | `[data-cockpit-line]` with `data-line` | `room-down`, `error`, `hint`, `length` | the one line slot above the input row | `c1-talk.md` §1.1 |
 | `[data-cockpit-input]` | none | the `<textarea>` | `c1-talk.md` §7 |
 | `[data-cockpit-demo-label]` | none (text `DEMO`) | the header's demo label | `c1-talk.md` §15 |
-| `[data-cockpit-send]` with `data-send` | `send`, `stop`, `none` (blank and inert while the microphone is open) | the slot left of the talk button | `c1-talk.md` §8, `c2-voice.md` §3 |
+| `[data-cockpit-send]` with `data-send` | `send`, `stop`, `wait` (`SEND` greyed and inert for 1.0 s after a send, D268), `none` (blank and inert while the microphone is open and 1.0 s after it closes) | the slot left of the talk button | `c1-talk.md` §8, `c2-voice.md` §3 |
 | `[data-cockpit-newbar]`, its buttons `data-newbar` | `keep`, `start` | the `NEW` bar | `c1-talk.md` §11 |
 | `[data-cockpit-chip]` with `data-node`, `[data-cockpit-chip-remove]` | a node id | the context chip and its `✕` | `c3-see.md` §9 |
 | `[data-turn-id]` | a `turnId` (`t-0131`) | one turn: its prompt block and everything under it to the next turn (T91) | `c1-talk.md` §3 |

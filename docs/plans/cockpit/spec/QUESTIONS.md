@@ -54,7 +54,7 @@ y 824-888) as D32 has it, inert for 1.0 s after any send or cancel from the slot
 `pointerup` only, with a `■` glyph; s2) a header `STOP`, away from the hand (D32's overrule).
 Recommendation: s1 with the guard, because "stop, do this instead" with a draft in the input is rare
 and the slot is where a terminal user's Ctrl+C habit goes; s2 removes the double-tap risk entirely
-if the owner mistrusts the guard.
+if the owner mistrusts the guard. Written for s1 (T121): `c1-talk.md` §8, D268, S-C1-16, S-C2-09.
 
 Answer: (open)
 

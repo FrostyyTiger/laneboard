@@ -912,6 +912,25 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
   reads `SEND` (`data-send="send"`). While idle it is always `SEND`. While the microphone is open the
   slot is blank and inert (`data-send="none"`, `c2-voice.md` §3, D42): `STOP` comes back when it closes. No hint line explains the
   send (D121): the `· QUEUED` label below says what happened, 0.5 s after the tap.
+- **`STOP` never appears under a sending finger** (D268, pending Q-O1 s1). The slot reads `STOP`
+  no earlier than 1.0 s after the latest send (a tap on `SEND`, `Enter`, the talk button's
+  tap-to-send or release, a `RETRY`, `GO ON`) and the latest close of the microphone (send,
+  `CANCEL`, slide off, a limit of `c2-voice.md` §4). Until then, where it would read `STOP`:
+  after a typed send it keeps `SEND` in `--text-3` with `inert` and `aria-disabled="true"`
+  (`data-send="wait"`); after the microphone closes it stays blank and inert (`data-send="none"`).
+  A tap on it in that time does nothing: no interrupt, no prompt, no pressed state. Text typed
+  into the input during the second makes it `SEND` at once (a send is never the harmful tap); the
+  input emptied again within the second brings back `wait` for what is left of it. The 1.0 s runs
+  on the page's clock from the send's `pointerup` or key event (or the microphone's close), the
+  same frame as B8's block.
+- **How `STOP` looks and acts** (D268). A `■` glyph, 24 px `--text-1`, 4 px gap, `STOP` 16 px caps
+  `--text-1`, centred in the 64x64 slot (the talk button's own layout, `c2-voice.md` §1); the
+  glyph is a control, not a reply mark, so it is never `--p1` (D25). Accessible name `Stop`. It
+  acts on `pointerup` only, and only when the same pointer's `pointerdown` also landed on the slot
+  while it read `STOP` and the `pointerup` is within 8 px of it (`TAP_SLOP_TOUCH`, §7.1); a press
+  that began in the 1.0 s (on `wait` or blank) and lifts after it stops nothing. A keyboard
+  activation of the focused button (`click` with `detail` 0) and `Ctrl+C` with the input empty
+  act at once: a key is not a bouncing finger.
 - **`SEND` during a turn** (D122). The prompt block is drawn at once at the end of the
   conversation (B8), label `YOU · 07:03 · SENDING`. The room sends it to the agent with
   `priority:"next"` and a UUID (`protocols.md` §11.3) and echoes `turn.prompt` with
@@ -937,7 +956,7 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
   `YOU · 07:03 · NOT SENT` and under the block, as E1's look (§10): `The agent did not read this.`
   with `RETRY` and `EDIT`. `RETRY` sends it with a new `clientId` (§10, D259).
 - **`STOP`** (or `Ctrl+C` on a paired keyboard with the input empty): `data-turn="stopping"` within
-  0.1 s; the room asks the bridge to interrupt with `cancelQueued` (`protocols.md` §11.6). The turn
+  0.1 s of the `pointerup`; the room asks the bridge to interrupt with `cancelQueued` (`protocols.md` §11.6). The turn
   ends when the bridge reports its end; if that has not happened 5 s after the tap, the room forces
   it (for Claude Code: `SIGINT`, research Q2) and the stopped line reads `STOPPED AT 07:03 (FORCED)`
   (D262).
@@ -1206,7 +1225,13 @@ and never `● STOPPING`; no `STOPPED AT` line is drawn; by t = 4.1 s `· QUEUED
 has no interrupt and one `prompt` with `"priority":"next"` read at about t = 2 s.
 At t = 2.5 s, with the pane open over the Map at 1368x912 and the conversation at its end, the
 queued block's bounding box ends at y ≤ 744 and does not intersect `[data-cockpit-open]` (D267).
-Test: Playwright; assert the label text at 2.1 s, 2.5 s and 4.1 s, the prompt's computed colour
+And the second tap (D268): from t = 2.0 s to 3.0 s the slot reads `SEND` in `--text-3` with
+`data-send="wait"`; a tap on it (x 1232, y 856) at t = 2.3 s sends nothing; a press there from
+t = 2.9 s lifted at t = 3.1 s stops nothing; at t = 3.0 s the slot reads `■ STOP`
+(`data-send="stop"`). Through t = 4.1 s the header never reads `● STOPPING`.
+Test: Playwright with `hasTouch: true`, CDP touches for the taps, a fake clock; assert `data-send`
+at 2.05 s, 2.95 s and 3.05 s; `prompts()` (`stand-ins.md` §2.6) is the same at 2.2 s and 4.1 s;
+assert the label text at 2.1 s, 2.5 s and 4.1 s, the prompt's computed colour
 against `--text-2`/`--text-1`, the queued block's `getBoundingClientRect().bottom` ≤ 744 and no overlap
 with the opener's rect, no element with the text `STOPPED AT`, the order of the turn's items, and
 `order("interrupt")` from the fake-agent log is `[]` (`stand-ins.md` §2.6).
