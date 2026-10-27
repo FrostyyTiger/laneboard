@@ -148,12 +148,24 @@ Notes for every builder round (planner, round 1):
   the large demo (lab crit, a cloud warn), no hued lobe in frame is drawn with its star out of frame or past 1.5
   reach, the overview unchanged. Film `shots/r15-galaxy-warp`: every red cloud has its `■` name beside it, no
   console errors, 11.7 fps under SwiftShader.
-- [ ] T8 (§7 Night 4 0a; was night 3's T33, r46-skeptic galaxy 1) [ui] [variant:galaxy] The banner does not change
+- [x] T8 (§7 Night 4 0a; was night 3's T33, r46-skeptic galaxy 1) [ui] [variant:galaxy] The banner does not change
   subject with the camera: with more than one crit standing the banner (`hud.js bannerModel`, `frame.js`) names them
   in a fixed order (oldest first, `■ 2 CRIT · HV2 · HV1`, the reason line for the oldest), never picking the subject
   by where the camera is — done when: a test on a model with two crits gets the same banner text for every held
   site/camera position and the oldest crit's reason, and a film of `galaxy.html?demo=1&quality=0` (`--size large`)
-  has no banner subject change while the fleet is the same.
+  has no banner subject change while the fleet is the same. (commit 3dbe1c7) Builder r18:
+  `frame.js worstLine(model, { since })` names two or more crit/down problems as one far line (`problemsOf`,
+  `critsLine`): `word` `2 crit · hv2 · hv1` (places, at most `FAR_NAMES` 3, a site once), `why` the oldest's name
+  and reason (`storage · pool 97% full`), `id` the oldest, `crits` the count, `more` the milder problems; `2 down`
+  only when all are down, a tie puts a down first, then model order. `hud.js firstSeen` keeps when each crit
+  problem (by root id) was first seen and feeds it as `since`; `bannerModel` no longer steps past a held crit
+  while two stand (it still steps at the line step, and T30's never-down rule stands); `farNode` finds the node by
+  `w.id`. `wall.html` (no `since`) gets the same line in model order. Holding the oldest is still an echo (the
+  line drops out under its plate, T20); T9 decides what shows then. Tests in `test/wall-frame.test.mjs` and
+  `test/wall-galaxy-hud.test.mjs` (the old two-crit stepping tests now use two warns). Film `shots/r18-galaxy-b`:
+  HV1 VM-C went down at 29 s, the banner reads `■ 2 CRIT · HV2 · HV1 / STORAGE · POOL 97% FULL` and stays so on
+  the VM-C visit; 13 fps under SwiftShader, no console errors. Still `shots/r18-t8-two/two.png`: the line fits the
+  band beside the clock at 1368.
 - [ ] T9 (§7 Night 4 0a; was night 3's T34, r46-skeptic galaxy 2; after T8) [ui] [variant:galaxy] One headline with
   a second crit standing: the echo test (`hud.js bannerEcho`) is "the banner's line names the held problem", whatever
   else stands (then the banner shows the next problem or drops out), and `hud.named()` hides the planet's own label on
