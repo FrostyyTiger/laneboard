@@ -207,6 +207,17 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 - The skeptic review (round 36) found the spec has grown about twice the size C1/C2 need (68 scenarios). Tasks T48-T55 cut it; Q-O21 and Q-O22 ask the two cuts that touch your own words (pairing, the empty canvas).
 
+## Measured on the real screen
+
+The last line of C1's and C2's done-when (`spec/slices.md` §3.1, §3.2, D256): one run on the real
+screen, real agent (C2: real speech), seconds with one decimal. A number for the owner, never a gate;
+budgets in `spec/README.md` (B2 ≤ 1.0 s, B3 ≤ 0.3 s, B9 ≤ 15 s).
+
+| slice | date | prompt | B2 | B3 | B9 | note |
+|---|---|---|---|---|---|---|
+| C1 | not measured yet | `How did the night go?` (typed) | — | — | not measured yet | |
+| C2 | not measured yet | `How did the night go?` (spoken, hold) | not measured yet | not measured yet | not measured yet | |
+
 ## Reviews
 
 - round 82 triage of `reviews/81-touch.md`: 11 findings plus a contradictions list. Tasks: 1 → T121, 2 → T122, 3 → T123, 8 → T124, 10 → T125 (T47, T120 stay), 4 → T125 note (T40, T94 stay). Questions: 1 and "where `STOP` lives" → sub-question in Q-O1 (s1 slot with guard, s2 header). Already tracked: 5 (T95), 6 and 7 (T45), 9 (T43, T97), 11 (T96, T102, T98, T99, T100), contradictions (D40 → T95, `NEW` bar → T100, Q-O18 → T97). 5 findings became tasks plus 1 question; 6 dropped as tracked. Scores complete 4, consistent 4, simple 5: steering made `STOP` the slot's default under the finger and none of round 63's touch fixes has landed.

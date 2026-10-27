@@ -159,6 +159,13 @@ S-SEC-01 S-SEC-02 S-SEC-03 S-SEC-06
 **Done-when**: §2's slice rule for the ids of the row above that the owner's answers select (40 for the recommendations); the board change of §5.1 merged with its tests;
 the first part of `docs/cockpit.md` (setup on one box and as two users, pairing pending Q-O21,
 troubleshooting the room-down line); the demo (`stand-ins.md` §6) answers `how did the night go`, and the static demo passes S-C1-36 (`c1-talk.md` §15).
+- **Last: one measured run** (T106, D256; a number for the owner, not a test gate): on the real
+  screen at 1368x912, the real room, the real agent, `stt.url: none`. A fresh conversation, the
+  typed prompt `How did the night go?`, `SEND`. Read in the remote devtools console
+  `performance.getEntriesByName('cockpit:B9', 'measure')[0].duration` and paste it, in seconds with
+  one decimal, into the C1 row of `PROGRESS.md` §"Measured on the real screen". A build night has
+  no real screen (it runs on a VM with no LAN): it writes the row as `not measured yet` and the
+  done-when is met; the owner's first run fills it. Over 15 s fails nothing (`README.md` B9).
 
 ### 3.2 C2 Voice in
 
@@ -190,6 +197,13 @@ C2 night can pass the 25 ids and still miss them (D255, review 73-owner.md findi
 - **The hint after a limit stays** (T84, D168): S-C2-06 asserts `MICROPHONE OFF` at 35 s and
   290 s and `MICROPHONE OFF · TEXT KEPT` at 126 s, and S-C2-05's 5 s close still goes; a C2 build
   that gives every close D45's 5 s fails S-C2-06, not only a review.
+- **Last: one measured run** (T106, D256; a number for the owner, not a test gate): as C1's (§3.1),
+  with the real speech service and the talk button: hold the button, say `How did the night go?`,
+  let go. Paste three numbers from the same turn into the C2 row of `PROGRESS.md` §"Measured on the
+  real screen": `cockpit:B2` (first word), `cockpit:B3` (prompt block) and `cockpit:B9` (first
+  reply sentence), each `performance.getEntriesByName('cockpit:B<n>', 'measure')[0].duration` in
+  seconds with one decimal. Over B2's 1.0 s or B3's 0.3 s fails nothing either: on real hardware
+  these rows are measured, not promised (`README.md`, "Real hardware").
 
 ### 3.3 C3 See, the rest
 
