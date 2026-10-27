@@ -405,16 +405,9 @@ changing it needs C6 (`c1-talk.md` §5).
 ## 7. Open fixes before a C1 night
 
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
-says go without them). Open at round 144 (T111), from `PROGRESS.md`'s task list:
-- Stand-ins and test config: T112 (the MCP port `0`), T113 (the fake agent's log lines), T118
-  (`stt.url: none` in C1, S-C1-26), T129 (the test config's `allowSameUser`, the start refusal).
-- Talk (`c1-talk.md`): T114 (the forced stop's string, S-C1-17), T116 (E9 `too-many`), T121 (the
-  slot after a send, S-C1-16, pending Q-O1 s1), T122 (two prompts at once, S-C1-23), T123 (the
-  `QUEUED` label size), T124 (`EDIT` brings the keyboard, S-C1-18).
-- Room link and screens: T115 (the retry delays, S-SCR-19), T126 a) (the `CLOSE` label in the
-  48 px opener).
-- Words and sketches: T119 ("stand-in room" wording), T120 (the queued block in `c1-pane.html`,
-  `mode: cockpit`), T125's second half (the queued block in T94's 1368x532 scenario).
+says go without them). The list opened at round 144 (T111) is empty since round 161: T112-T126
+and T129 are done (the stand-ins' test config, `allowSameUser` and the start refusal among them;
+the talk slot, `QUEUED`, `EDIT`; the retry delays and the `CLOSE` label; the sketches).
 
 Done and no longer blocking: T26, T27, T29, T41, T44 (the button, pane and corner-cluster rects),
 T56 (pairing refusals and cross-site checks, `screens.md` §6.1-§6.3), T57, T89, T108-T110. The

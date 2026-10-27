@@ -71,7 +71,7 @@ How older phrases in the spec map onto these:
 {"mode":"builder","port":0,
  "cockpit":{
    "agent":{"kind":"claude-code","command":["node","test/cockpit/stand-ins/fake-agent.mjs"],
-            "cwd":"<tmp>","env":["FAKE_AGENT_DIR"],
+            "cwd":"<tmp>","env":["FAKE_AGENT_DIR"],"allowSameUser":true,
             "loginCheck":["node","test/cockpit/stand-ins/fake-agent.mjs","auth","status"]},
    "stt":{"url":"none"},
    "board":{"url":"http://127.0.0.1:<demo hub port>"},
@@ -85,6 +85,10 @@ How older phrases in the spec map onto these:
   test that calls a tool itself uses `booted.mcp()`, which reads that file's `url` and
   `{stateDir}/cockpit/mcp.token` and returns `{url, token}`. After `booted.restart()` the port is a
   new one: call `booted.mcp()` again.
+
+  `"allowSameUser":true` (pending Q-O36): the test machine has no second user, so the fake agent runs
+  as the test's own user, and pairing tests go through §1.3's way. The key costs nothing before the
+  One slice adds `single-machine.md` §4's check; S-ONE-02 is the test that runs without it.
 
   `"mode":"builder"` is the one box of D128 on purpose: the same process serves the page, `/ws`
   with `hello.cockpit:true` and the room, so Playwright needs no front; its collectors read the

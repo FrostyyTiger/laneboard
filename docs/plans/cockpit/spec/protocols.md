@@ -51,6 +51,7 @@ with the D128 message on stderr.
 | `GET /api/cockpit/card/{id}/frame?rev={n}&theme={dark\|light}` | a paired screen's card frame (`c4-show-canvas.md` §11.3, SB4) | `200` the custom card's shell document with SB2/SB3's headers | `404 {"error":"not-found"}` for no cookie, a wrong `Sec-Fetch-Dest` or `Sec-Fetch-Site`, an unknown card or `rev`, or a card that is off (D172) |
 | `GET /api/cockpit/speech/{speakId}` | the link a `speak` went to (§6.3), with its cookie and `X-Laneboard: 1` (C5) | `200` the audio, `Content-Type` `audio/wav` (`audio/mpeg` for `mp3`, `audio/ogg` for `opus`, `c5-c6.md` §2.1), `Cache-Control: no-store`; the room then forgets it | `404 {"error":"not-found"}` for no cookie, an unknown id, one already fetched or older than 60 s, or another screen's id; no audit line (it changes nothing) |
 | `/api/cockpit/admin/*` (`pair`, `unpair`, `button`, `screens`) | the room's CLI only, on the main (loopback) port, peer uid checked | `screens.md` §6.1 | `403` `agent-uid`, `wrong-uid`, `agent-is-room`, `not-cli` (§6.1); a forwarded request is `not-cli` |
+| `GET /api/cockpit/admin/status` | `laneboard cockpit doctor` (check 7, `single-machine.md` §5, D216): an admin route, but also answered under `agent-is-room`, since it changes nothing and shows nothing secret | `200 {"agent":"ready","detail":null,"agentVersion":"claude-code 2.1.290","tools":"connected","loginCheck":"ok","since":"2026-10-27T06:58:00+01:00"}`; `agent` is `ready`, `starting`, `down` or `not-logged-in`, `detail` the E3 line's (`c1-talk.md` §10) or `null`, `tools` is `ready.mcp.laneboard` (§11.3) or `null` before a `ready`; spends no agent turn; no audit line (it changes nothing) | `403` `agent-uid`, `wrong-uid`, `not-cli` as the other admin routes (never `agent-is-room`) |
 
 Every request passes `server/security.mjs` first: `checkRequest` (Host; and for `POST`, Origin and
 the `X-Laneboard: 1` header of `docs/fleet/auth.md`), and `checkUpgrade` (Host, Origin) for the
@@ -1140,9 +1141,17 @@ fixture too, but of a different checker; §13 says which.
     such an agent must offer, and the read-only rule for it, is §11.11.
 - Everything above the adapter (turn ids, `seq`, stop timing, restarts, the screen messages) works
   on bridge events only, so it is the same code for both dialects.
-- The agent runs as the agent's own unix user when `cockpit.agent.user` is set (D91, T56, §11.12);
-  how the room starts a process as another user is `single-machine.md` §3.2 (D214). Signals below go to the child's process
-  group.
+- The agent runs as the agent's own unix user when `cockpit.agent.user` is set (D91, T56, §11.12).
+  The room then spawns, with no shell,
+  `sudo -n -u {user} -H --preserve-env=LANEBOARD_MCP_TOKEN,{the names of cockpit.agent.env} -- {command…} {§11.2's arguments}`,
+  and the login check (§11.10) the same way; `-n` makes a missing sudo rule a failed start, E3 with
+  `detail` `sudo refused: run laneboard cockpit agent-user (docs/cockpit.md)` (D214, pending
+  research Q18). The rule, its one command and what the agent's user must reach are
+  `single-machine.md` §3. Unset: the room starts only with `allowSameUser: true` and spawns
+  `command` as itself (§11.12, `single-machine.md` §4, pending Q-O36).
+- **Signals.** Without `user`, the signals of §11.6 and §11.9 go to the child's process group. With
+  `user`, the room's uid may not signal the agent's processes, so each goes to the `sudo` process,
+  which relays `SIGINT` and `SIGTERM` to the agent (D214, pending research Q18).
 
 ### 11.2 Launching Claude Code (D101)
 
@@ -1305,6 +1314,7 @@ The adapter writes it to Claude Code's stdin as:
 | 0.0-5.0 | an `interrupted` receipt is logged; its `cancelled` ids become `prompt.taken` `cancelled`; a `turn.end` from the agent ends the turn as `stopped` (`forced:false`) |
 | 5.0 | no `turn.end` yet: `SIGINT` to the child; `turn.end` `stopped`, `forced:true`, to every link at once (D32: `READY` by 5.5 s on the screen) |
 | 8.0 | still no `result` after the `SIGINT`: `SIGTERM`; the session is restarted with `--resume` (§11.7) and no status line is shown, because the owner asked for the stop |
+| 10.0 | the child still runs: `SIGKILL` (with `cockpit.agent.user`: to the `sudo` process), and the room closes the child's stdin, stdout and stderr pipes; Claude Code exits on a closed stdin (D214, pending research Q18). The `--resume` restart of the 8.0 s row waits for the exit or this step |
 
 Everything the agent sends for a stopped turn after the room's `turn.end` is logged and never
 reaches a screen (D33). Prompts the receipt lists in `stillQueued` (an agent without
@@ -1617,6 +1627,7 @@ from the value they quote:
 | `user` | uid 0 | `cockpit.agent.user: "root" would give the agent every file and process; give it its own user (laneboard cockpit agent-user)` |
 | `user` | the room's own uid | `cockpit.agent.user: "user" is the room's own user; give the agent its own (laneboard cockpit agent-user), or leave it unset and see cockpit.agent.allowSameUser` |
 | `allowSameUser`, `allowUnrestricted` | not a boolean (env: not `1` or `0`) | `cockpit.agent.allowSameUser: must be true or false` |
+| `user` | unset, and `allowSameUser` not `true` (pending Q-O36) | `single-machine.md` §4's line (`cockpit.agent.user is not set: the agent would run as you (uid 1000) …`), within 2 s of the start |
 | `allowUnrestricted` | the two cases of §11.11 | §11.11's lines |
 | `allowedTools` | empty, an entry not matching `^[A-Za-z0-9_.-]{1,128}\*?$` (a `*` only at the end) | `cockpit.agent.allowedTools: "Bash(*)" is not a tool name or a prefix ending in *` |
 | `env` | an entry not matching `^[A-Z_][A-Z0-9_]{0,63}$` | `cockpit.agent.env: "acme-model" is not an environment variable name` |

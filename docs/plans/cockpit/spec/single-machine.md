@@ -275,9 +275,9 @@ prompt. The room names that failure: the start is `agent-down` with `detail`
 carries the detail).
 
 - **Stopping** (`protocols.md` §11.6): the room's uid may not signal a process of another uid, so
-  it signals the `sudo` process, which relays `SIGINT` and `SIGTERM` to the agent. The 5.0 s and
-  8.0 s steps stay. If the child still runs at 10.0 s the room sends `SIGKILL` to `sudo` and closes
-  the child's stdin, stdout and stderr pipes; Claude Code exits on a closed stdin. Research Q18
+  it signals the `sudo` process, which relays `SIGINT` and `SIGTERM` to the agent. The 5.0 s,
+  8.0 s and 10.0 s (`SIGKILL` to `sudo`, the pipes closed) steps are §11.6's table, the last one
+  for both cases since T129 (D283). Research Q18
   checks the relay, `!use_pty` and what a `SIGKILL` to `sudo` leaves behind.
 - **The rule is one-way.** It lets the room's user (and any process of it, such as the owner's own
   loops on the box) become the agent's user, never the reverse; the agent's user holds nothing the
@@ -357,7 +357,7 @@ and prints one line per check, in this order, then a summary. It changes nothing
   other admin routes, D161, but answered also under `agent-is-room`, since it changes nothing and
   shows nothing secret; the agent's uid still gets `403 agent-uid`): `200 {"agent":"ready","detail":null,"agentVersion":"claude-code 2.1.290","tools":"connected","loginCheck":"ok","since":"2026-10-27T06:58:00+01:00"}`;
   `agent` is `ready`, `starting`, `down` or `not-logged-in`; `tools` is `ready.mcp.laneboard` or
-  `null` before a `ready`. It spends no agent turn. `protocols.md` §1.1 gains its row (T129).
+  `null` before a `ready`. It spends no agent turn. Its row is `protocols.md` §1.1's (T129).
 - **Tests** take an injected `getuid`, user lookup and `stat` (D111's way), so no second user is
   needed on the test machine.
 

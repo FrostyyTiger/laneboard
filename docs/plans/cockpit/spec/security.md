@@ -116,9 +116,11 @@ exit 1 and one line naming the key if one is not owned by the room's user or has
 other bit set: `cockpit.stt.tokenFile`, `cockpit.infra.key`, `{stateDir}/cockpit/` (and every file
 in it), the audit file and its directory. The line, for example:
 `cockpit.stt.tokenFile: /etc/laneboard/stt.token can be read by others; make it 0600 and owned by the room's user`
-(directories: `make it 0700`). With `cockpit.agent.user` unset the agent runs as the room's user and
-can read all of it anyway: the room starts, pairing is refused (`agent-is-room`, D161), and
-`single-machine.md` (T19, T74) says what one box costs.
+(directories: `make it 0700`). With `cockpit.agent.user` unset the agent would run as the room's
+user and could read all of it anyway, so the room does not start: exit 1 with `single-machine.md`
+§4's line, unless `cockpit.agent.allowSameUser: true`; with it the room starts, warns once on
+stderr, and pairing is refused (`agent-is-room`, D161) (pending Q-O36). `single-machine.md` says
+what one box costs.
 
 **Another agent** (`cockpit.agent.kind: bridge`): the room cannot hold another program to
 `--allowedTools`, so its uid is the only fence that holds whatever it does. The room still refuses

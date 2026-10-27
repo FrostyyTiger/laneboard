@@ -527,8 +527,10 @@ every process on a box `local`. So `local` alone cannot be the test: one injecte
     screens`; for `button`: `refused: the agent cannot add or remove buttons`) and exits 1.
   - Any other uid: `403 {"error":"wrong-uid"}`; the CLI prints `refused: only the room's own user
     can pair screens (you are uid 1002)` and exits 1.
-  - With `cockpit.agent.user` unset the agent runs as the room's own user, so the agent would pass:
-    every admin request gets `403 {"error":"agent-is-room"}` and the CLI prints `refused: the agent
+  - With `cockpit.agent.user` unset the room starts only with `cockpit.agent.allowSameUser: true`
+    (else it exits 1 at start, `single-machine.md` §4, pending Q-O36). Then the agent runs as the
+    room's own user, so the agent would pass: every admin request but `GET /admin/status`
+    (`protocols.md` §1.1, D216) gets `403 {"error":"agent-is-room"}` and the CLI prints `refused: the agent
     runs as you; give it its own user (docs/cockpit.md)` (T74's wording) and exits 1. Pairing needs
     the agent on its own user; `single-machine.md` (T19, T74) says what that costs on one box.
 - **The agent cannot reach around the CLI.** `{stateDir}/cockpit/` is 0700 for the room's user
@@ -668,8 +670,8 @@ log, so the owner can answer "who paired this" and "what did the cockpit do at 0
     (`sudo -u <room user> laneboard audit`).
 - **The agent cannot change it.** The file is 0600 and its directory 0700, owned by the room's uid;
   the agent runs as `cockpit.agent.user` (§6.1), so it can neither read nor write the log. With
-  `cockpit.agent.user` unset the agent runs as the room's user and could rewrite and re-chain the
-  file, as `auth.md`'s "Authority" paragraph says of any builder; pairing is refused then
+  `cockpit.agent.user` unset the room starts only with `allowSameUser: true` (pending Q-O36); then
+  the agent runs as the room's user and could rewrite and re-chain the file, as `auth.md`'s "Authority" paragraph says of any builder; pairing is refused then
   (`agent-is-room`, §6.1), and `single-machine.md` (T19, T74) says what one box costs.
 - **Never the words.** Arguments are stored only as `argsHash` (`argsHashOf`, SHA-256 of their
   canonical JSON); prompt text, codes and tokens never appear in a line. The hash is unsalted: a
