@@ -272,6 +272,18 @@ common case. Spec (pending Q-O19).
 
 Answer: (open)
 
+## Q-O29 How the screen reaches the room when board and room are two processes
+
+Review 59-implementer.md (findings 1, contradictions list). D92 sends `/api/cockpit/*` on the page's own origin to the room, so every two-process setup needs a reverse proxy or `tailscale serve --set-path` in front. That is a deployment one-way door and departs from plan C4's "room → hub → screens". D89 and D91 are also security-relevant.
+
+- a) **Same origin, a front forwards `/api/cockpit/`** (D92 as written; the hub carries nothing new).
+- b) **Through the hub**: the hub proxies the room's routes and relays show commands to screens (no front needed; the hub gains a cockpit relay and a new trust edge).
+- c) **One process only**: the room is always part of the process that serves the page (`mode: builder` plus a `cockpit` section, or a hub with one); no two-process setup in v1.
+
+Recommendation: a), with c) as the one-box default (no front needed there). It keeps the origin checks of `auth.md` simple and the hub unchanged.
+
+Answer: (open)
+
 ## Decided instead
 
 Asked earlier, but build or security engineering with a strict choice (`reviews/52-owner.md`
