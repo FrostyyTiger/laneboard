@@ -113,7 +113,7 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 `c1-render`, `c1-typing`, `c1-errors`, `c1-login`, `c1-long`, `c1-session`, `c1-voice` (S-C3-18), `scr-room`,
 `c3-tools` (S-C3-03, S-C3-22, S-C3-23). No fake speech yet.
 
-**Scenarios** (72):
+**Scenarios** (73):
 S-C1-01 S-C1-02 S-C1-03 S-C1-04 S-C1-05 S-C1-06 S-C1-07 S-C1-08 S-C1-09 S-C1-10 S-C1-11 S-C1-12
 S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33 S-C1-34 S-C1-35 S-C1-36 S-C1-37 S-C1-38 S-C1-39 S-C1-40 S-C1-41 S-C1-42 S-C1-43 S-C1-45 S-C1-46 S-C1-47
 S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23 S-SCR-24 S-SCR-25 S-SCR-30 S-SCR-31 S-SCR-35 S-SCR-36
@@ -140,23 +140,23 @@ S-SEC-01 S-SEC-02 S-SEC-03 S-SEC-06
   here?" (`focus` is C3) and reads no node's health beyond what `morning` and `alerts` carry; asked,
   the agent says what it lacks, as `c3-see.md` §5's standing instructions make it say of a missing
   source.
-- **Fits one night**: 21 build steps against the stand-ins' four (`stand-ins.md` §7), each step
-  closing on its own tests. If the night ends early, steps 18-21 move to the next night ahead of C2,
+- **Fits one night**: 23 build steps against the stand-ins' four (`stand-ins.md` §7), each step
+  closing on its own tests. If the night ends early, steps 18-23 move to the next night ahead of C2,
   and C1's done-when is met then; nothing of C2 starts before.
 - Wall not merged at the C1 night: the scenarios that need it (S-C1-01, S-SCR-02, S-SCR-03,
   S-SCR-04, S-SCR-21, S-SCR-22) stay in C1 and run once the Wall merges; everything else runs on the
   app (`#/map`), as the Wall contract's fallback asks (`screens.md` §9.3). The night's summary says which ids waited.
-- **C1's ids under each answer** (the 40 above are for Q-O21 b) and Q-O22 b), the recommendations):
+- **C1's ids under each answer** (the 73 above are for Q-O21 b) and Q-O22 b), the recommendations; 44 `S-C1-`, 16 `S-SCR-`, 9 `S-C3-`, 4 `S-SEC-`):
 
 | Q-O21 | Q-O22 | C1 also contains | Ids |
 | --- | --- | --- | --- |
-| b) | b) | nothing more; the page is `wall` only, no pairing (`screens.md` §1, §6) | 40 |
-| b) | a) | S-SCR-01 S-SCR-06 S-SCR-10 S-SCR-11: `split` by default, the `SCREEN` sheet, the empty canvas; S-SCR-10's `?demo=1` cards are asserted once Canvas is built. S-SCR-07 and S-SCR-08 stay in Canvas (they need `place`) | 44 |
-| a) | b) | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 S-SCR-27 S-SCR-28 S-SCR-29 S-SCR-33 S-SEC-04; the Pair slice goes | 48 |
-| a) | a) | both rows | 52 |
+| b) | b) | nothing more; the page is `wall` only, no pairing (`screens.md` §1, §6) | 73 |
+| b) | a) | S-SCR-01 S-SCR-06 S-SCR-10 S-SCR-11: `split` by default, the `SCREEN` sheet, the empty canvas; S-SCR-10's `?demo=1` cards are asserted once Canvas is built. S-SCR-07 and S-SCR-08 stay in Canvas (they need `place`) | 77 |
+| a) | b) | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 S-SCR-27 S-SCR-28 S-SCR-29 S-SCR-33 S-SCR-37 S-SEC-04 (§3.8's ten; S-SCR-37 only under Q-O27 a), else 82); the Pair slice goes | 83 |
+| a) | a) | both rows | 87 |
 
 
-**Done-when**: §2's slice rule for the ids of the row above that the owner's answers select (40 for the recommendations); the board change of §5.1 merged with its tests;
+**Done-when**: §2's slice rule for the ids of the row above that the owner's answers select (73 for the recommendations); the board change of §5.1 merged with its tests;
 the first part of `docs/cockpit.md` (setup on one box and as two users, pairing pending Q-O21,
 troubleshooting the room-down line); the demo (`stand-ins.md` §6) answers `how did the night go`, and the static demo passes S-C1-36 (`c1-talk.md` §15).
 - **Last: one measured run** (T106, D256; a number for the owner, not a test gate): on the real
@@ -348,11 +348,14 @@ by the task that writes them.
 | S-ONE-01..16 | One |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 218 live ids in all (round 136, S-C4-34/35 by T99).
+D55). 218 live ids in all (counted round 144, T111; the last new ids were S-C4-34/35 by T99). The
+slice headings add up to it: C1 73, C2 25, C3 14, Speak 15, Canvas 18, Show 14, Jobs 12, and §3.8's
+C2b 2, Pair 10, Canvas 2 10, C5 7, C6 2, One 16.
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired
-above or appears in exactly one `**Scenarios**` list or §3.8 row of this file.
+above or appears in exactly one `**Scenarios**` list or §3.8 row of this file. One more string
+matches and is no id: `S-C2-24`, named only in D255's overrule.
 
 ## 5. Board changes the slices make
 
@@ -386,5 +389,19 @@ changing it needs C6 (`c1-talk.md` §5).
 ## 7. Open fixes before a C1 night
 
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
-says go without them): none left. T26, T27, T29, T41, T44 (the button, pane and corner-cluster
-rects), T56 (pairing refusals and cross-site checks, `screens.md` §6.1-§6.3), T57 and T89 are done. The bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are written. For C2: none left (T42/T95, T84, T69, T58 and T78 are done).
+says go without them). Open at round 144 (T111), from `PROGRESS.md`'s task list:
+- Stand-ins and test config: T112 (the MCP port `0`), T113 (the fake agent's log lines), T118
+  (`stt.url: none` in C1, S-C1-26), T129 (the test config's `allowSameUser`, the start refusal).
+- Talk (`c1-talk.md`): T114 (the forced stop's string, S-C1-17), T116 (E9 `too-many`), T121 (the
+  slot after a send, S-C1-16, pending Q-O1 s1), T122 (two prompts at once, S-C1-23), T123 (the
+  `QUEUED` label size), T124 (`EDIT` brings the keyboard, S-C1-18).
+- Room link and screens: T115 (the retry delays, S-SCR-19), T126 a) (the `CLOSE` label in the
+  48 px opener).
+- Words and sketches: T119 ("stand-in room" wording), T120 (the queued block in `c1-pane.html`,
+  `mode: cockpit`), T125's second half (the queued block in T94's 1368x532 scenario).
+
+Done and no longer blocking: T26, T27, T29, T41, T44 (the button, pane and corner-cluster rects),
+T56 (pairing refusals and cross-site checks, `screens.md` §6.1-§6.3), T57, T89, T108-T110. The
+bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are
+written. For C2: T125 (the `c2-states.html` cells during a turn); T42/T95, T84, T69, T58 and T78
+are done.
