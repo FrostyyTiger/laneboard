@@ -754,7 +754,8 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
 
 - **One slot, two jobs** (D32). While `data-turn` is `thinking`, `working` or `answering`:
   with an empty input the `SEND` slot reads `STOP` (`data-send="stop"`); with text in the input it
-  reads `SEND` (`data-send="send"`). While idle it is always `SEND`. No hint line explains the
+  reads `SEND` (`data-send="send"`). While idle it is always `SEND`. While the microphone is open the
+  slot is blank and inert (`data-send="none"`, `c2-voice.md` §3, D42): `STOP` comes back when it closes. No hint line explains the
   send (D121): the `· QUEUED` label below says what happened, 0.5 s after the tap.
 - **`SEND` during a turn** (D122). The prompt block is drawn at once at the end of the
   conversation (B8), label `YOU · 07:03 · SENDING`. The room sends it to the agent with
@@ -1381,7 +1382,7 @@ above 0, has a parent whose computed `font-size` is ≥ 16 px (the fence label `
 the line slot reads `8 214 / 8 000 CHARACTERS`, y 776-808 (one line, 32 px); in (4) it reads
 `Sending and voice come back with the room.`, y 776-808.
 And the C2 slice runs the same walk in three voice states: a hold past 400 ms (`RELEASE TO SEND ·
-SLIDE OFF TO KEEP`, one line; `[data-send="cancel"]` holds only `✕` at a computed 28 px with the
+SLIDE OFF TO KEEP`, one line; `[data-talk-cancel]` holds only `✕` at a computed 28 px with the
 accessible name `Cancel`), a slide off (`MICROPHONE OFF · TEXT KEPT`), and `[data-talk-error="stt-down"]`
 with `data-talk-detail="token"`: 2 lines, the slot y 752-808 (56 px), the text not cut (no `…`,
 it ends with `Tap TALK to try again.`).

@@ -145,7 +145,7 @@ when no value applies.
 | `[data-cockpit-line]` with `data-line` | `room-down`, `error`, `hint`, `length` | the one line slot above the input row | `c1-talk.md` §1.1 |
 | `[data-cockpit-input]` | none | the `<textarea>` | `c1-talk.md` §7 |
 | `[data-cockpit-demo-label]` | none (text `DEMO`) | the header's demo label | `c1-talk.md` §15 |
-| `[data-cockpit-send]` with `data-send` | `send`, `stop`, `cancel` | the slot left of the talk button | `c1-talk.md` §8, `c2-voice.md` §3 |
+| `[data-cockpit-send]` with `data-send` | `send`, `stop`, `none` (blank and inert while the microphone is open) | the slot left of the talk button | `c1-talk.md` §8, `c2-voice.md` §3 |
 | `[data-cockpit-newbar]`, its buttons `data-newbar` | `keep`, `start` | the `NEW` bar | `c1-talk.md` §11 |
 | `[data-cockpit-chip]` with `data-node`, `[data-cockpit-chip-remove]` | a node id | the context chip and its `✕` | `c3-see.md` §9 |
 | `[data-turn-id]` | a `turnId` (`t-0131`) | one turn: its prompt block and everything under it to the next turn (T91) | `c1-talk.md` §3 |
@@ -164,6 +164,7 @@ when no value applies.
 | `data-talk-detail` on `[data-talk]` | `no-answer`, `busy`, `token`, `failed` | `c2-voice.md` §10 |
 | `[data-talk-text]` (the live words), its spans `[data-firm]`, `[data-tail]` | none | `c2-voice.md` §4 |
 | `[data-talk-lang]` (the language button) | none (text `DE` or `EN`) | `c2-voice.md` §8 |
+| `[data-talk-cancel]`, `[data-talk-undo]` (the row's left end while the microphone is open; 5 s after a cancel) | none (`✕` named `Cancel`; `UNDO`) | `c2-voice.md` §3 |
 
 **See and show** (C3, C4)
 

@@ -175,8 +175,9 @@ are there so nothing tappable is drawn over them. With a one-line input; a talle
 | | the stack above the row | `[data-cockpit-line]`, `[data-cockpit-chip-remove]`, `[data-cockpit-follow]` | chip `✕` and `↓ NEW` | `c1-talk.md` §1.1's table (row top y 808), all ending at x ≤ 1264 |
 | | `CLOSE` (the opener) | `[data-cockpit-open]` | yes | 1288-1336, 760-808 |
 | | language button (a language list only) | `[data-talk-lang]` | yes | 784-848, 824-888 |
-| | input | `[data-cockpit-input]` | yes | 784-1184 (864-1184 with the language button), 824-888 |
-| | `SEND` | `[data-cockpit-send]` | yes | 1200-1264, 824-888 |
+| | `CANCEL` (microphone open), then `UNDO` (5 s after a cancel), in place of the language button | `[data-talk-cancel]`, `[data-talk-undo]` | yes | 784-848, 824-888 |
+| | input | `[data-cockpit-input]` | yes | 784-1184 (864-1184 with the language button, and while `CANCEL` or `UNDO` shows), 824-888 |
+| | `SEND` | `[data-cockpit-send]` | yes, but blank and `inert` while the microphone is open (D42) | 1200-1264, 824-888 |
 | | talk button | `[data-talk]` | yes | 1280-1344, 824-888 |
 | | toast stack | `.toasts` | its toasts' buttons | right edge x 744 (`right: 624px`, 16 px left of the pane), bottom y 736 (D158) |
 | **C. Wall page, `wall`, pane closed** | talk button, `CHAT` | as A | yes | as A |
@@ -184,7 +185,7 @@ are there so nothing tappable is drawn over them. With a one-line input; a talle
 | **D. Wall page, `wall`, pane open** (pane x 760-1368, y 0-912) | `CLOSE` (header) | `[data-cockpit-close]` | yes | 1256-1352, 8-56 |
 | | `SCREEN` (header, from the Canvas slice) | `[data-cockpit-screen]` | yes | 1152-1248, 8-56 |
 | | `NEW` (header) | `[data-cockpit-new]` | yes | 1072-1144, 8-56 with `SCREEN`; 1176-1248, 8-56 before the Canvas slice |
-| | stack, opener, language button, input, `SEND`, talk button | as B | yes | as B |
+| | stack, opener, language button or `CANCEL`/`UNDO`, input, `SEND`, talk button | as B | yes | as B |
 | **E. Column, `canvas`** (and `switch` showing the canvas; column x 760-1368, y 0-912) | `SCREEN` | `[data-cockpit-screen]` | yes | 1256-1352, 8-56 |
 | | `NEW` | `[data-cockpit-new]` | yes | 1176-1248, 8-56 |
 | | `SHELF n` (with a shelf) | `[data-shelf]` | yes | 1072-1168, 8-56 |

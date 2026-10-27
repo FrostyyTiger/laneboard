@@ -264,7 +264,7 @@ Written by the final round (71), 2026-10-27 05:02.
 | sketch | newest shot | behind the spec |
 |---|---|---|
 | `spec/sketches/c1-pane.html` | `$RUN_DIR/shots/63-c1-pane/` | yes: T47, T70, T101 |
-| `spec/sketches/c2-states.html` | `$RUN_DIR/shots/63-c2-states/` | yes: T95 (Q-O19 d) |
+| `spec/sketches/c2-states.html` | `$RUN_DIR/shots/106-c2-states/` | no (T42/T95, round 106); T125 adds the turn cells |
 | `spec/sketches/c3-ask.html` | `$RUN_DIR/shots/99-c3-ask/` | no (T101, round 99); the opener's `CLOSE` overflows its 48 px box: T126 (a) |
 | `spec/sketches/c4-canvas.html` | `$RUN_DIR/shots/99-c4-canvas/` | no (T82, T101, round 99) |
 | `spec/sketches/screens-room-down.html` | `$RUN_DIR/shots/102-rd/`, `102-rdp/` (`#pane`) | no (T70, round 102); the `#pane` opener's `CLOSE` overflows its 48 px box: T126 (a) |

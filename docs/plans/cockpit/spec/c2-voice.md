@@ -41,10 +41,18 @@ Listening starts on `pointerdown` in both gestures (D29, B1). The gesture is dec
   understood.
 - **Second tap** (tap gesture only): its `pointerdown` does nothing; its `pointerup` sends, however
   long it was held (WCAG 2.5.2: act on release).
-- **Slide off** (hold only, D40): a release more than 48 px outside the button's box (x < 1232 or
-  y < 776 on the Wall), or a `pointercancel`, does **not** send: the microphone closes, the words
-  stay in the input as an editable draft, the hint reads `MICROPHONE OFF · TEXT KEPT` (§4, "One
-  hint").
+- **Slide off** (hold only, D40, pending Q-O19). A hold's release sends only inside the **send
+  zone**: x ≥ 1232 and y ≥ 776 (the button's box plus 48 px left and up, and everything right of
+  and below it to the screen's edges, so a thumb drifting off the glass at the bottom-right still
+  sends), and not over the `SEND` slot's rect padded by 8 px (x 1192-1272, y 816-896: the finger
+  lifted where the eye sees the slot, so the owner did not mean the talk button). Every other
+  release (slide off to the left or up, or onto the slot) and a `pointercancel` (a palm on the
+  glass, the browser taking the gesture) do **not** send: the microphone closes, the words stay in
+  the input as an editable draft, the hint reads `MICROPHONE OFF · TEXT KEPT` (§4, "One hint") and,
+  after a `pointercancel` or a release on the slot, stays until the next touch as after a limit
+  (D168), because the owner meant to send and must notice that nothing went. The rects are the
+  Wall's and the app's at 1368x912; at other sizes they keep their offsets from the right and
+  bottom edges (`screens.md` §4.1).
 - **What "send" means**: the microphone stops, the screen asks for the final text (§4), and the
   final text is sent as the prompt exactly as a typed one is (`c1-talk.md` §7), with the label
   `YOU · SPOKEN · 07:02` (B3). During a running turn it goes into that turn as a queued prompt
@@ -54,16 +62,17 @@ Listening starts on `pointerdown` in both gestures (D29, B1). The gesture is dec
 ## 3. States of the button and the input
 
 `data-talk` on the button carries the state. It is the "mic state attribute" `screens.md` S-SCR-20
-asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-talk.md` §8).
+asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-talk.md` §8), and
+so does the row's left end (`CANCEL`, below).
 
-| `data-talk` | When | Talk button | `SEND` slot | Input | Hint line (18 px caps `--text-1`, `c1-talk.md` §1.1, D167) |
-| --- | --- | --- | --- | --- | --- |
-| `idle` | microphone closed | `--bg-elevated`, 1 px `--accent` border, glyph and `TALK` in `--text-1` | `SEND` or `STOP` (`c1-talk.md` §7-§8) | the textarea, placeholder `Type or hold to talk` | none |
-| `listening` | microphone open, no word yet | **inverse**: fill `--text-1`, glyph and `SEND` in `--bg-canvas`, 1 px `--accent` border; the level bar (below) | `CANCEL` (`data-send="cancel"`) | `Listening…` in `--text-3` | `LISTENING`; after 400 ms held `RELEASE TO SEND · SLIDE OFF TO KEEP`; after a tap `TAP SEND WHEN DONE` |
-| `partial` | microphone open, words shown | as `listening` | `CANCEL` | the words: firm part `--text-1`, the tail still changing `--text-2` (§4) | as `listening` |
-| `final` | released or second tap; microphone closed; waiting for the final text (≤ 3 s, D41) | inverse, word `…`, no level bar | `CANCEL` | the last words, all `--text-2` | `FINISHING…` |
-| `error` | the microphone cannot be opened (§5) or the speech service fails (§10) | `--bg-elevated`, 1 px `--line-strong` border, glyph struck through, `TALK` in `--text-3`; still tappable (a tap tries again) | `SEND` | the textarea, typing works | none; §5's line above the input row, until the next try |
-| `off` | the room is down or the screen is unpaired (`screens.md` §7) | `disabled`, 1 px `--line` border, `TALK` in `--text-3` | `SEND`, disabled | the textarea | none (the pane's line `Sending and voice come back with the room.` says it, `screens.md` §7) |
+| `data-talk` | When | Talk button | `SEND` slot | Row's left end (x 784-848) | Input | Hint line (18 px caps `--text-1`, `c1-talk.md` §1.1, D167) |
+| --- | --- | --- | --- | --- | --- | --- |
+| `idle` | microphone closed | `--bg-elevated`, 1 px `--accent` border, glyph and `TALK` in `--text-1` | `SEND` or `STOP` (`c1-talk.md` §7-§8) | the language button (§8), or the input; `UNDO` for 5 s after a `CANCEL` | the textarea, placeholder `Type or hold to talk` | none |
+| `listening` | microphone open, no word yet | **inverse**: fill `--text-1`, glyph and `SEND` in `--bg-canvas`, 1 px `--accent` border; the level bar (below) | blank and inert (`data-send="none"`) | `CANCEL` (`✕`) | `Listening…` in `--text-3` | `LISTENING`; after 400 ms held `RELEASE TO SEND · SLIDE OFF TO KEEP`; after a tap `TAP SEND WHEN DONE` |
+| `partial` | microphone open, words shown | as `listening` | blank and inert | `CANCEL` | the words: firm part `--text-1`, the tail still changing `--text-2` (§4) | as `listening` |
+| `final` | released or second tap; microphone closed; waiting for the final text (≤ 3 s, D41) | inverse, word `…`, no level bar | blank and inert | `CANCEL` | the last words, all `--text-2` | `FINISHING…` |
+| `error` | the microphone cannot be opened (§5) or the speech service fails (§10) | `--bg-elevated`, 1 px `--line-strong` border, glyph struck through, `TALK` in `--text-3`; still tappable (a tap tries again) | `SEND` | as `idle` | the textarea, typing works | none; §5's line above the input row, until the next try |
+| `off` | the room is down or the screen is unpaired (`screens.md` §7) | `disabled`, 1 px `--line` border, `TALK` in `--text-3` | `SEND`, disabled | as `idle` | the textarea | none (the pane's line `Sending and voice come back with the room.` says it, `screens.md` §7) |
 
 - **After send** the talk button is back to `idle` and the input empty within B3 (≤ 0.3 s from the
   release). The "sending" state is the prompt's, not the button's: the prompt block reads
@@ -76,12 +85,30 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   set once per animation frame with no transition. It is data (the microphone hears something), so
   it stays under reduced motion (`docs/design.md` rule 5). A bar at 0 px for 2 s while the room
   receives frames says "silence", not a fault.
-- **`CANCEL`** (D42, D167): in the 64x64 `SEND` slot a `✕` alone, 28 px `--text-1`, centred, with
-  `aria-label="Cancel"` and `data-send="cancel"`; no word (16 px `CANCEL` does not fit 64 px, and
-  13 px is under D21's floor; sketch `c2-states.html`). This spec still calls it `CANCEL`, by its
-  accessible name; tests find it as `[data-send="cancel"]`. It closes the microphone within 0.1 s, removes the spoken words, keeps a draft
-  typed before the press, sends nothing, `data-talk="idle"`. Fixing one word by tapping the text is
-  §7.
+- **The `SEND` slot while the microphone is open** (D42, pending Q-O19): blank (no word, no
+  border, the pane's background), with the `inert` attribute and `aria-hidden="true"`,
+  `data-send="none"`. A tap on it does nothing; a hold released over it keeps the words as a draft
+  (§2). The finger that sends by habit at x 1200-1264 therefore never lands on a drop. During a
+  turn this means `STOP` is not there while the microphone is open: `CANCEL` or a send first
+  (`c1-talk.md` §8). When the microphone closes the slot shows `SEND` or `STOP` again in that frame.
+- **`CANCEL`** (D42, D167, pending Q-O19): `[data-talk-cancel]`, a 64x64 `<button>` at the row's
+  left end, x 784-848, y 824-888 (the language button's rect: that button has no job while the
+  microphone is open, §8, so it gives up its place; without a language button the live words box
+  starts at x 864 while the microphone is open, `screens.md` §4.1). Inside a `✕` alone, 28 px
+  `--text-1`, centred, 1 px `--line-strong` border, with `aria-label="Cancel"`; no word (16 px
+  `CANCEL` does not fit 64 px, and 13 px is under D21's floor; sketch `c2-states.html`). This spec
+  still calls it `CANCEL`, by its accessible name. It is 352 px left of the talk button, on the side
+  away from the hand. It closes the microphone within 0.1 s, takes the spoken words out of the
+  input, keeps a draft typed before the press, sends nothing, `data-talk="idle"`. Fixing one word
+  by tapping the text is §7.
+- **`UNDO`** (pending Q-O19 a): for 5.0 s after `CANCEL` the same rect holds `[data-talk-undo]`,
+  `UNDO` in 16 px `--font-label` caps `--text-1`, 1 px `--line-strong` border, and the hint line
+  reads `WORDS DROPPED` (`data-line="hint"`). A tap on `UNDO` puts the dropped words back after the
+  typed draft (one space between, D44) as an editable draft, not sent, without taking the focus
+  (D20); `UNDO` and the hint go in that frame. `UNDO` goes without restoring at 5.0 s, at the next
+  press of the talk button, at a send, or when the input changes; the dropped words are then
+  forgotten (they were never sent, D37). With a language list, the language button is back in
+  its rect when `UNDO` goes.
 - The **hint line** is the line slot above the input row (`c1-talk.md` §1.1, `data-line="hint"`):
   left-aligned at x 784, ending at x ≤ 1264. It wins the slot over the length note and gives it up
   to the room-down line and to an error (D133). Nothing else shares the line during a turn (D121).
@@ -90,7 +117,8 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
 ## 4. Live words
 
 - **Where.** While the microphone is open (`listening`, `partial`, `final`) the textarea is
-  replaced in the same rectangle by a read-only `[data-talk-text]` with two spans, `[data-firm]`
+  replaced in the same rectangle (without a language button: from x 864, `CANCEL` takes x 784-848,
+  §3) by a read-only `[data-talk-text]` with two spans, `[data-firm]`
   and `[data-tail]` (a textarea cannot colour part of its text) (D43). Same type: mono 28 px, line
   height 1.4, 16 px padding, 21 characters per line (`TYPE_TALK`, `c1-talk.md` §3, pending Q-O18); it grows to 4 lines and then scrolls, pinned to its end, as the
   textarea does (`c1-talk.md` §7, D30). When the microphone closes, the text goes back into the
@@ -127,7 +155,7 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   (the talk key F13 included, §11), a button press (C2b, §14) or an input change. It does not
   hold the pane open: when D5's 300 s close comes first the hint goes with the pane. While the
   room-down line or an error holds the slot it waits under them and comes back when they go, if
-  no touch came meanwhile (`c1-talk.md` §1.1). `CANCEL` shows no hint (the owner asked for it); a
+  no touch came meanwhile (`c1-talk.md` §1.1). `CANCEL` shows `WORDS DROPPED` with `UNDO` instead (§3); a
   failure shows §10's line instead.
 - **Per screen** (D37): partial words never reach another screen; only the sent prompt does.
 
@@ -177,7 +205,7 @@ Given the fake speech scripted: partials `what` at 0.6 s, `what failed` at 1.1 s
 tonight` at 1.6 s; final `What failed tonight?` 0.15 s after the end frame,
 When the owner taps the talk button (down t = 0, up t = 0.12 s),
 Then by t = 0.2 s `data-talk="listening"`, `data-talk-gesture="tap"` after the up, the button reads
-`SEND` on the inverse fill, the `SEND` slot shows the `✕` (`data-send="cancel"`, accessible name `Cancel`), the input shows `Listening…`, the hint
+`SEND` on the inverse fill, the `SEND` slot is blank and inert (`data-send="none"`), the `✕` (`[data-talk-cancel]`, accessible name `Cancel`) is at x 784-848, the input shows `Listening…`, the hint
 `TAP SEND WHEN DONE`; `what` is in `[data-talk-text]` by t = 1.0 s (B2), `what failed` by 1.5 s,
 `what failed tonight` by 2.0 s; nothing is sent while listening.
 When the owner taps again at t = 3.0 s (down 3.0 s, up 3.1 s),
@@ -216,7 +244,8 @@ denied, for `off` the room's link stopped (T32's verb),
 When the screen is brought into each of `idle`, `listening`, `partial`, `final`, `error`, `off`,
 Then for each: the button's word (`TALK`, `SEND`, `SEND`, `…`, `TALK`, `TALK`), its fill (inverse in
 `listening`, `partial`, `final`), its border token, `disabled` only in `off`, the `SEND` slot's
-`data-send` and label, the input element (textarea or `[data-talk-text]`) and the hint line match
+`data-send` and label (blank, `inert` and `aria-hidden` in `listening`, `partial`, `final`), what
+holds x 784-848 (the language button, `[data-talk-cancel]`), the input element (textarea or `[data-talk-text]`) and the hint line match
 §3's table; the level bar is visible only in `listening` and `partial`; the button is 64x64 px and
 its word ≥ 16 px.
 Test: Playwright, one table-driven case per state; `final` is held by a fake speech script that
@@ -250,15 +279,25 @@ Test: Playwright `page.clock` plus the stand-in's clock verb (T32); assert `data
 text at 35, 126 and 290 s, its absence after the `pointerdown` and after reopening, the textarea
 value, the received-turns count 0.
 
-### S-C2-07 Sliding off during a hold keeps the words as a draft
-Given the fake speech scripted as S-C2-01, the input empty,
-When the owner holds the button at (1312, 856) from t = 0, moves the finger to (1100, 700) at
-t = 2.0 s and lifts it at t = 2.2 s,
+### S-C2-07 A hold sends only in the send zone; slide off, the slot or a cancel keep the words as a draft (pending Q-O19)
+Given the fake speech scripted as S-C2-01, the input empty, one run per case, the finger down on
+the talk button at (1312, 856) from t = 0 and moved at t = 2.0 s,
+When (case 1) the finger moves to (1100, 700) and lifts at t = 2.2 s (slide off, up and left),
 Then no prompt is sent; by t = 2.4 s the microphone is closed, `data-talk="idle"`, the textarea
 holds `what failed tonight` (the last words shown), the hint reads `MICROPHONE OFF · TEXT KEPT`
 until t = 7.2 s; the textarea is editable and `SEND` is enabled.
-And lifting the finger at (1250, 830) (inside the 48 px margin) sends as a normal hold.
-Test: Playwright, CDP touch move; the received-turns count (0, then 1 in the second run).
+When (case 2) the finger drifts to (1330, 900) and lifts there, and in a further run to
+(1366, 910), the screen's bottom-right corner (both in the send zone, §2),
+Then each run sends `What failed tonight?` as a normal hold (B3 from the lift).
+When (case 3) the finger moves onto the blank slot, (1232, 856), and lifts there,
+Then nothing is sent, the textarea holds `what failed tonight`, the hint `MICROPHONE OFF · TEXT
+KEPT` still shows at t = 30 s and goes at the next `pointerdown` (D168).
+When (case 4) at t = 2.0 s a `pointercancel` arrives instead of a lift,
+Then as case 3: nothing sent, the draft kept, the hint at a computed 18 px in `--text-1`'s colour,
+still there at t = 30 s, gone at the next `pointerdown`.
+Test: Playwright, CDP touch move and lift (`Input.dispatchTouchEvent` `touchEnd`; for case 4
+`touchCancel`), `page.clock` for the 30 s; the received-turns count (0, 1, 1, 0, 0), the textarea
+value, the hint text and computed style.
 
 ### S-C2-08 A blocked microphone: the error state, typing still works
 Given the browser context with the microphone permission denied,
@@ -287,20 +326,27 @@ Test: Playwright; the reply text at 2.0 s and 3.9 s differs (still streaming); a
 4.3 s and 6.1 s, no element with the text `STOPPED AT`, and `order()` from the fake-agent log (one
 `prompt` with `"priority":"next"`, no `interrupt`).
 
-### S-C2-10 CANCEL drops the spoken words and keeps a typed draft
-Given the input holding the typed draft `on builder-a,`,
+### S-C2-10 CANCEL drops the spoken words, keeps a typed draft, and UNDO brings them back (pending Q-O19)
+Given the input holding the typed draft `on builder-a,`, `cockpit.stt.language: ["en", "de"]`,
 When the owner taps the talk button, the fake speech sends `restart the runner`, and the owner taps
-`CANCEL` at t = 2.0 s,
-Then during listening `[data-firm]`/`[data-tail]` follow `on builder-a,` plus one space; by
-t = 2.1 s `data-talk="idle"`, the textarea holds `on builder-a,` exactly, nothing is sent, and the
-fake speech service gets no audio frame after t = 2.2 s.
-Test: Playwright; assert the text before and after, the speech service's frame log, the
-received-turns count 0.
+`CANCEL` (`[data-talk-cancel]`, x 784-848, y 824-888) at t = 2.0 s,
+Then during listening `[data-firm]`/`[data-tail]` follow `on builder-a,` plus one space and
+`[data-talk-lang]` is not shown; by t = 2.1 s `data-talk="idle"`, the textarea holds
+`on builder-a,` exactly, `[data-talk-undo]` reads `UNDO` in the same rect, the hint reads
+`WORDS DROPPED`, nothing is sent, and the fake speech service gets no audio frame after t = 2.2 s.
+When the owner taps `UNDO` at t = 4.0 s,
+Then in that frame the textarea holds `on builder-a, restart the runner`, `UNDO` and the hint are
+gone, `[data-talk-lang]` is back at x 784-848, `document.activeElement` is not the textarea, and
+nothing is sent.
+And in a second run with no tap on `UNDO`, at t = 7.0 s `UNDO` and the hint are gone, the language
+button is back and the textarea still holds `on builder-a,`.
+Test: Playwright, `page.clock`; assert the text before and after, the rects, the speech service's
+frame log, the received-turns count 0 in both runs.
 
 ## 7. Stopping to fix the words (D47)
 
 Plan C2: "Before that [the send], a tap on the text lets the owner fix a word or cancel." Cancel is
-`CANCEL` in the `SEND` slot (§3, D42); this section is the fix.
+`CANCEL` at the row's left end (§3, D42); this section is the fix.
 
 - **A tap on the live words** (`[data-talk-text]`, `pointerup` within 10 px of its `pointerdown`)
   while `data-talk` is `listening` or `partial` in the **tap** gesture means "stop, let me fix it":

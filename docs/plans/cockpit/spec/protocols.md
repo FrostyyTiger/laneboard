@@ -678,7 +678,8 @@ send (the link opening) are held on the screen and sent first, in order (D46).
 
 `reason`: `send` (release or second tap), `fix` (tap on the words, D47), `limit` (120 s, D45). The
 room asks the service for the final (§12.3) and answers with `stt.final`. **`audio.cancel`**
-`{"type":"audio.cancel","seq":96,"utterance":"u-0012"}`: `CANCEL`, slide off, 30 s with no word,
+`{"type":"audio.cancel","seq":96,"utterance":"u-0012"}`: `CANCEL`, slide off (any hold release outside the send zone, or a
+`pointercancel`, `c2-voice.md` §2), 30 s with no word,
 link lost; the room ends the service session and sends nothing more for it.
 
 **Room → the speaking link only, no `seq`** (partial words never reach another screen, D37):

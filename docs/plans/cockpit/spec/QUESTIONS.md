@@ -202,7 +202,10 @@ Touch, C2. From `reviews/31-touch.md` (3), `63-touch.md` (2). Spec: `c2-voice.md
 - d) Move `CANCEL`: while listening the slot is blank, `CANCEL` is a 48x48 `✕` at the left end of
   the live-words box, far from where the finger sends.
 
-Recommendation: a), b) and d) together — nothing is lost for good and the sending finger never lands on drop.
+Recommendation: a) and d) together, with b)'s release-only `STOP` (Q-O1 s1, T121) but not its
+24 px gap (D178) — nothing is lost for good and the sending finger never lands on a drop. The
+spec is written for this (D40, D42, `c2-voice.md` §2-§3, S-C2-07, S-C2-10); `CANCEL` is 64x64 in
+the language button's place (x 784-848) rather than 48x48 inside the live words.
 
 Answer: (open)
 
