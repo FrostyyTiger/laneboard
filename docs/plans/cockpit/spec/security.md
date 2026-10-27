@@ -120,8 +120,11 @@ in it), the audit file and its directory. The line, for example:
 can read all of it anyway: the room starts, pairing is refused (`agent-is-room`, D161), and
 `single-machine.md` (T19, T74) says what one box costs.
 
-**One agent kind with no allowlist** (`cockpit.agent.kind: bridge`) is T72's: the room cannot hold
-another program to `--allowedTools`, so its uid is the only fence there.
+**Another agent** (`cockpit.agent.kind: bridge`): the room cannot hold another program to
+`--allowedTools`, so its uid is the only fence that holds whatever it does. The room still refuses
+one that declares no allowlist, or calls a tool outside `cockpit.agent.allowedTools`, unless
+`cockpit.agent.allowUnrestricted: true`, which needs `cockpit.agent.user` (`protocols.md` §11.11,
+D240, D241).
 
 ## 4. Where untrusted text gets in
 

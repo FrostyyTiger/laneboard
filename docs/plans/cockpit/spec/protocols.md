@@ -831,7 +831,7 @@ fixture too, but of a different checker; §13 says which.
     events with the table in §11.4. This is the first-class agent (plan §5).
   - `bridge`: the child speaks the bridge events of §11.3 itself, line for line, with no adapter.
     This is how any other agent joins (plan §5: "any agent that speaks the bridge protocol"); what
-    such an agent must offer, and the read-only rule for it, is T72's.
+    such an agent must offer, and the read-only rule for it, is §11.11.
 - Everything above the adapter (turn ids, `seq`, stop timing, restarts, the screen messages) works
   on bridge events only, so it is the same code for both dialects.
 - The agent runs as the agent's own unix user when `cockpit.agent.user` is set (D91, T56, T73);
@@ -889,16 +889,17 @@ Agent → room:
 ```json bridge
 {"type":"ready","session":"0b7e5c2a-4d1f-4c3e-9a8b-2f6d1e0c7a91","agent":"claude-code 2.1.290",
  "tools":["mcp__laneboard__morning","mcp__laneboard__fleet","Read","Grep","Glob"],
- "mcp":{"laneboard":"connected"},"canSteer":true,"canCancelQueued":true}
+ "mcp":{"laneboard":"connected"},"canSteer":true,"canCancelQueued":true,
+ "allowlist":["mcp__laneboard__*","Read","Grep","Glob"]}
 ```
 
 | `type` | Example | Meaning |
 | --- | --- | --- |
-| `ready` | above | the session is up; `mcp.laneboard` other than `connected` gives `status` `tools-down` (§3.5) |
+| `ready` | above | the session is up; `mcp.laneboard` other than `connected` gives `status` `tools-down` (§3.5); `allowlist` is the tool list the agent enforces (§11.11) |
 | `taken` | `{"type":"taken","id":"9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714"}` | the agent has read this prompt (a turn start, or a steer into the running turn) |
 | `text.delta` | `{"type":"text.delta","block":1,"text":"■ One run is"}` | more text for block `block` of the running turn |
 | `text.block` | `{"type":"text.block","block":1,"text":"■ One run is stuck: builder-a since 03:12."}` | the whole text of that block |
-| `tool.start` | `{"type":"tool.start","block":0,"toolUseId":"toolu_01A9","tool":"mcp__laneboard__morning","input":{"window":"tonight"}}` | a call with its complete input |
+| `tool.start` | `{"type":"tool.start","block":0,"toolUseId":"toolu_01A9","tool":"mcp__laneboard__morning","input":{"window":"tonight"}}` | a call with its complete input; with `denied:true` (a `bridge` agent's own refusal, §11.11) a refused call, and no `tool.end` follows |
 | `tool.end` | `{"type":"tool.end","toolUseId":"toolu_01A9","isError":false,"denied":false}` | the call returned; `denied:true` when the permission rules refused it (T57 draws it) |
 | `retrying` | `{"type":"retrying","attempt":2,"of":10}` | the agent retries its model service (E5) |
 | `turn.end` | `{"type":"turn.end","state":"done","steps":3,"costUsd":0.0412,"durationMs":7900}` | the turn is over; `state` and `code` as §3.2's table, plus `steps`, `costUsd`, `durationMs` for the room's log |
@@ -910,7 +911,9 @@ Agent → room:
   `tool.start` `block`, `toolUseId`, `tool`, `input`; `tool.end` `toolUseId`, `isError`;
   `retrying` `attempt`, `of`; `turn.end` `state`, with `error` also `code`, with `step-limit`
   `steps`, with `agent-down` and `failed` `detail`; `interrupted` `id`, `stillQueued`,
-  `cancelled`. Optional: `ready.agent`, `tool.end.denied` (absent means `false`), and
+  `cancelled`. Optional: `ready.agent`, `ready.allowlist` (required for `kind: bridge` unless
+  `cockpit.agent.allowUnrestricted`, §11.11), `tool.start.denied` and `tool.end.denied` (absent
+  means `false`), and
   `turn.end`'s `steps` in other cases, `costUsd`, `durationMs` (an agent that does not report
   cost leaves it out; the room logs `null`). The room adds `forced` itself (§11.6).
 - **Blocks.** `block` numbers the turn's text blocks and tool calls from 0 in the order they
@@ -1166,6 +1169,87 @@ anything (`c1-talk.md` §10.1).
 - **Log**: one room-log line per change of the result (`login check: not-logged-in (exit 1)`,
   `login check: unknown (timeout 10 s)`), never one per run; the command's output is not logged
   (it may name an account).
+
+### 11.11 Another agent: what the bridge needs (T72, D240-D242)
+
+`kind: bridge` lets any program be the agent (§11.1, `single-machine.md` §2.5). The table is the
+whole contract: a program that does each row's right column works, and nothing else of Claude Code
+is assumed. "Optional" rows may be left out; everything else is required.
+
+| The bridge needs | Claude Code (`kind: claude-code`, the adapter) | Any other agent (`kind: bridge`) |
+| --- | --- | --- |
+| one child per session, JSON lines | `claude -p` with stream-json in and out (§11.2) | started from `cockpit.agent.command` in `cockpit.agent.cwd`; one JSON object per line on stdin and on stdout, UTF-8, `\n` at the end; stderr is free text (§11.1); it stays up between turns |
+| a session that starts or resumes | `--session-id` / `--resume` (§11.7) | `LANEBOARD_SESSION` (the UUID) and, on a resume, `LANEBOARD_SESSION_RESUME=1` in its environment; an agent that cannot resume answers `ready` with another `session`, and the room starts a new conversation (§11.7's last row) |
+| the session is up | `system` `init` (§11.4) | `ready` within 30 s of the spawn (§11.7's failed start), with `session`, `tools`, `mcp`, `canSteer`, `canCancelQueued`, `allowlist` |
+| stdin text | a `user` line (§11.5) | read `prompt`; `text` is the whole prompt, the room's bracketed lines included (§11.5) |
+| turn start | `message_start` with the prompt's uuid | `taken` with the prompt's `id`, before any other line of that turn |
+| text delta | `content_block_delta` `text_delta`, then the `assistant` line | `text.delta` pieces (optional), then `text.block` with the whole block; an agent that sends no deltas has each block drawn whole when it ends |
+| tool start / end | `assistant` `tool_use`, then `user` `tool_result` or `system` `permission_denied` | `tool.start` with the complete `input`, then `tool.end` with `isError`; a call it refuses is one `tool.start` with `denied:true` and no `tool.end` (the `tried` line, `c1-talk.md` §5.2) |
+| turn end | `result` (§11.4's rows) | `turn.end` with `state` and the fields §11.3 requires for it |
+| interrupt | the `interrupt` control request, `SIGINT` at 5.0 s, `SIGTERM` at 8.0 s (§11.6) | read `interrupt`, answer `interrupted`, end the turn with `turn.end` `stopped` within 5.0 s; `SIGINT` ends the running turn, `SIGTERM` the process |
+| the board's tools: MCP over HTTP | `--mcp-config {stateDir}/cockpit-agent/mcp.json --strict-mcp-config` | connect to the room's MCP server (Streamable HTTP, `c3-see.md` §1) at the URL in that same `mcp.json`, bearer `LANEBOARD_MCP_TOKEN`; report it as `ready.mcp.laneboard` (`connected` or `failed`) |
+| a tool allowlist | `--allowedTools` from `cockpit.agent.allowedTools`; Claude Code refuses the rest itself | read `LANEBOARD_ALLOWED_TOOLS` (a JSON array of names), refuse every tool it does not match, and echo the list it enforces as `ready.allowlist` |
+| retries of its model service | `api_retry` | `retrying` (optional) |
+| cost | `result.total_cost_usd` | `turn.end.costUsd` (optional; none logs `null`) |
+| the login check | `["claude","auth","status"]` (§11.10) | `cockpit.agent.loginCheck` (optional, default `null`) |
+
+The three `LANEBOARD_*` names above are added to D108's list for `kind: bridge` only; Claude Code
+gets the same facts on its command line.
+
+**Tool names.** `cockpit.agent.allowedTools` is an array of names; an entry ending in `*` matches
+every name that starts with the part before it. Default for `claude-code`:
+`["mcp__laneboard__*","Read","Grep","Glob"]` (Q-O23 a), passed as §11.2's `--allowedTools`, joined
+with `,`); default for `bridge`: `["mcp__laneboard__*"]`. A bridge agent names the room's tools
+`mcp__laneboard__{tool}` as Claude Code does (the tool line words of `c1-talk.md` §5.2 key on
+them); any other name is drawn `used {name}`.
+
+#### The read-only rule, whatever the agent (D240, D241)
+
+Before C6 the agent only reads (Q-O23 a). For Claude Code that is a flag of Claude Code's; another
+program cannot be held to a flag. Three fences, the strongest first:
+
+1. **Its own user** (`cockpit.agent.user`, `single-machine.md` §3, `security.md` §3). The only fence
+   that holds whatever the program does or claims: it cannot write the board's state or read the
+   room's secrets. It applies to both kinds.
+2. **The allowlist it enforces**: Claude Code's `--allowedTools`; a bridge agent's own refusal of
+   every tool outside `LANEBOARD_ALLOWED_TOOLS`.
+3. **The room's check**, for `kind: bridge` only. It reads what the agent says, so a program that
+   lies passes it; it catches a program that never meant to limit itself, and one that slips.
+   - At `ready`: no `allowlist` field → a **refused start**, detail
+     `the agent declares no tool allowlist (see cockpit.agent.allowUnrestricted)`. An `allowlist`
+     entry that is not equal to, or covered by a `*` entry of, `cockpit.agent.allowedTools` → a
+     refused start, detail `the agent allows {entry}, outside cockpit.agent.allowedTools`.
+   - During a turn: a `tool.start` without `denied:true` whose `tool` no entry of
+     `cockpit.agent.allowedTools` matches → the room draws nothing for it, sends `interrupt`
+     with `cancelQueued:true`, ends the turn at once as E8 `failed` with detail
+     `the agent called {tool}, outside its allowlist` (`forced:false`), and stops the child as a
+     refused start. The call has already begun in the agent: this is a tripwire, not a fence.
+   - A **refused start**: stdin closed, `SIGTERM` after 5 s, **no restart** (§11.7's retry loop
+     does not run), one room-log line `agent refused: {detail}`, `status` `agent-down` with that
+     `detail` and `blocksSend:true` (§3.5; the E3 line of `c1-talk.md` §10 says `The agent cannot
+     start: {detail}.` and leaves out its second sentence, `The room tries again every 30 s.`).
+     The admin status route answers `"agent":"down"` with the detail, so `doctor` check 7 shows it
+     (`single-machine.md` §5). It ends only when the room starts again.
+   - Claude Code gets no room check: a refused call arrives as `tool.start` and then `tool.end`
+     `denied:true` (§11.4), which the tripwire would mistake for a call (S-C1-30). The adapter sets
+     `ready.allowlist` to the list it launched with.
+
+**`cockpit.agent.allowUnrestricted`** (boolean, default `false`,
+`LANEBOARD_COCKPIT_AGENT_ALLOW_UNRESTRICTED=1`; T73 adds it to its table): `true` runs a bridge
+agent that declares no allowlist, or a wider one. The room's check of fence 3 is off and every tool
+is drawn by `c1-talk.md` §5.2's table. Then, at start:
+
+- the room prints once on stderr: `cockpit.agent.allowUnrestricted is true: the agent's tools are
+  not limited; only its own user ({user}) keeps it off your files and the board's state.`, and
+  `doctor` check 7 is `warn ready: {agent}, tools not limited (allowUnrestricted)`;
+- fatal, exit 1, with `kind: claude-code`: `cockpit.agent.allowUnrestricted: only for kind bridge;
+  claude-code is limited by cockpit.agent.allowedTools`;
+- fatal, exit 1, with `cockpit.agent.user` unset, `allowSameUser` or not (D241):
+  `cockpit.agent.allowUnrestricted needs cockpit.agent.user: an agent with no tool limit must not run as you`.
+
+Scenarios: `single-machine.md` S-ONE-06 (a bridge agent answers), S-ONE-08 (an unknown tool reads
+`used search_wiki`), S-ONE-09 (no allowlist: refused, no restart), S-ONE-10 (the tripwire),
+S-ONE-11 (`allowUnrestricted`'s start lines).
 
 ## 12. Room ⇄ speech-to-text (D107)
 

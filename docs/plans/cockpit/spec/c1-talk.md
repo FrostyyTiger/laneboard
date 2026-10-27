@@ -519,8 +519,9 @@ search and list files its own unix user can read. Every other call (`Bash`, `Edi
 Code before it runs; nothing asks anyone, because nobody is there to answer. Claude Code writes
 `system/permission_denied` for it, the room sends `tool.end` with `denied:true` (`protocols.md`
 §11.4). The standing instructions tell the agent so (`protocols.md` §11.8, the line
-`You can only look…`). What the agent's uid may read is `security.md` §3; an agent kind with
-no allowlist is T72's.
+`You can only look…`). What the agent's uid may read is `security.md` §3; another agent
+(`kind: bridge`) is held to the same list by `protocols.md` §11.11 (D240): a call it refuses is a
+`tool.start` with `denied:true` and draws the same `tried` line.
 
 **A refused call** (D125) leaves a **`tried` line**:
 - text `tried {tool}, not allowed`, `{tool}` the name the agent used (`Bash`, `WebFetch`); another

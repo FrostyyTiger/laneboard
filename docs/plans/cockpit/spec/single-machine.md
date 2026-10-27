@@ -48,7 +48,8 @@ start with the agent on its own user unless told to). Text that changes with one
 All examples are the file `~/.config/laneboard/config.json` of the room's user (`docs/config.md`'s
 layers). Keys not shown keep their defaults. The `cockpit.agent` table (defaults, env vars, the
 fatal-at-start lines) is T73's; this file uses its keys as `stand-ins.md` §1.1 does: `kind`,
-`command`, `cwd`, `user`, `env`, `loginCheck`, plus `allowSameUser` (§4, pending Q-O36).
+`command`, `cwd`, `user`, `env`, `loginCheck`, plus `allowSameUser` (§4, pending Q-O36) and
+`allowedTools`, `allowUnrestricted` (`protocols.md` §11.11).
 
 ### 2.1 ONE-A: the box's own screen, typing only (the minimum)
 
@@ -155,7 +156,8 @@ but sends the token and the audio unencrypted; the room says so at start.
 
 `kind: "bridge"`: the room starts `command` and speaks the bridge events of `protocols.md` §11.3 on
 its stdin and stdout, with no adapter. What such an agent must offer, and how the read-only rule
-holds for it, is T72's (`protocols.md`, "what the bridge needs").
+holds for it, is `protocols.md` §11.11: it reads `LANEBOARD_ALLOWED_TOOLS` and echoes it as
+`ready.allowlist`, or the room refuses it (D240).
 
 ```json
 {
@@ -166,6 +168,7 @@ holds for it, is T72's (`protocols.md`, "what the bridge needs").
       "cwd": "/var/lib/lb-agent/work",
       "user": "lb-agent",
       "env": ["ACME_AGENT_MODEL"],
+      "allowedTools": ["mcp__laneboard__*", "acme_wiki_search"],
       "loginCheck": null
     },
     "drift": { "command": ["/opt/acme-agent/bin/acme-agent", "--once", "--prompt-file", "-"] }
@@ -199,6 +202,8 @@ without them). Each key's own table is linked.
       "cwd": "{stateDir}/cockpit-agent",          // T73
       "user": "lb-agent",                         // unset: §4 (pending Q-O36)
       "allowSameUser": false,                     // §4 (pending Q-O36)
+      "allowedTools": ["mcp__laneboard__*", "Read", "Grep", "Glob"],  // protocols.md §11.11; ["mcp__laneboard__*"] for "bridge"
+      "allowUnrestricted": false,                 // protocols.md §11.11; "bridge" only, needs "user"
       "env": [],                                  // names only (D108)
       "loginCheck": ["claude", "auth", "status"], // protocols.md §11.10; null for "bridge"
       "maxTurnsPerHour": 20                       // Q-O28, coworker.md
@@ -329,13 +334,16 @@ and prints one line per check, in this order, then a summary. It changes nothing
 | 4 | `mcp` | MCP `initialize` and `tools/list` on `127.0.0.1:{mcp.port}/mcp` with `{stateDir}/cockpit/mcp.token`, 5 s | `{n} tools on 127.0.0.1:{mcp.port}` | `FAIL no MCP server on 127.0.0.1:{mcp.port}`; `fix: the room starts it: check the room's log (bin/laneboardctl logs 100)` |
 | 5 | `agent-user` | `cockpit.agent.user` against the system's user list | `{user} (uid {uid}), not you` | unset: `FAIL the agent runs as you (uid {uid})`, `fix: give it its own user: laneboard cockpit agent-user (docs/cockpit.md)` (`warn` with `allowSameUser: true`); unknown: `FAIL user {user} does not exist`, `fix: laneboard cockpit agent-user {user}`; uid 0: `FAIL {user} is root`, `fix: use an unprivileged user` |
 | 6 | `agent-files` | §3.3's walk | `{user} reaches cockpit-agent/ and its cwd` | `FAIL {user} cannot enter {dir} (mode {mode})`, `fix: setfacl -m u:{user}:x {dir}` (one pair per directory); `skip` when check 5 is not `ok` |
-| 7 | `agent` | `GET /api/cockpit/admin/status` on the room (admin route, own uid, `screens.md` §6.1) | `ready: {agent} (laneboard tools connected)` | `FAIL agent down: {detail}` with `fix:` by detail (below); `FAIL not logged in`, `fix: log in as the agent's user: sudo -u {user} -H -s, then claude`; `warn laneboard tools did not start`, `fix:` check 6's; `skip` when check 2 failed |
+| 7 | `agent` | `GET /api/cockpit/admin/status` on the room (admin route, own uid, `screens.md` §6.1) | `ready: {agent} (laneboard tools connected)`; `warn ready: {agent}, tools not limited (allowUnrestricted)` with `allowUnrestricted: true` (`protocols.md` §11.11) | `FAIL agent down: {detail}` with `fix:` by detail (below); `FAIL not logged in`, `fix: log in as the agent's user: sudo -u {user} -H -s, then claude`; `warn laneboard tools did not start`, `fix:` check 6's; `skip` when check 2 failed |
 | 8 | `origin` | `publicUrl` | `{publicUrl} (https)` or `{publicUrl} (loopback)` | `FAIL {publicUrl} is plain http: a screen there cannot pair or link`, `fix: serve it over https (docs/cockpit.md), or use the box's own screen`; `warn` instead with `allowInsecure: true`, text `{publicUrl} is plain http: tokens and audio travel unencrypted` |
 | 9 | `speech` | `stt.url`: connect, wait for the first `config` message, 2 s | `{url} answers` | `skip cockpit.stt.url is none: typing only`; `FAIL {url}: {detail}` with `c2-voice.md` §10's detail words, `fix: check the speech service, or set cockpit.stt.url to none` |
 | 10 | `files` | `security.md` §3's start check, reported instead of stopping | `secrets and state are 0600/0700, owned by you` | `FAIL` the D210 line per path; `fix: chmod as the line says` |
 
 - `fix:` for check 7's `agent down` by its `detail`: `sudo refused…` → `fix: run laneboard cockpit
-  agent-user`; `spawn ENOENT` → `fix: cockpit.agent.command[0] does not exist: {path}`; anything
+  agent-user`; `spawn ENOENT` → `fix: cockpit.agent.command[0] does not exist: {path}`;
+  `the agent declares no tool allowlist…`, `the agent allows…` or `the agent called…`
+  (`protocols.md` §11.11) → `fix: make the agent enforce LANEBOARD_ALLOWED_TOOLS, or set
+  cockpit.agent.allowUnrestricted (docs/cockpit.md); then restart the room`; anything
   else → `fix: see the room's log (bin/laneboardctl logs 100)`.
 - **Line format**: the status padded to 6 characters (`ok`, `warn`, `FAIL`, `skip`), the check
   name padded to 12, the text; a `fix:` line under a non-`ok` line, indented 6 spaces. Then
@@ -456,7 +464,8 @@ Test: `node:test` with injected user lookup and `stat`; stdout compared with a f
 ### S-ONE-06 Another agent: a `bridge` agent answers, with no login check and no cost
 
 Given the room under test with `kind: "bridge"`, `command` the fake agent with `--dialect bridge`,
-`loginCheck` left out, and the script `c1-typing`'s first turn,
+`loginCheck` left out (the fake echoes `LANEBOARD_ALLOWED_TOOLS` as `ready.allowlist`,
+`protocols.md` §11.11), and the script `c1-typing`'s first turn,
 When the owner types `how is it going?` and taps `SEND`,
 Then the reply streams as with `claude-code` (same blocks, same `turn.end` `done`), no login check
 runs (`fakeAgent.loginChecks()` is empty, also after `advance(900000)` on the room's manual clock,
@@ -476,6 +485,80 @@ Then `origin` is `warn http://192.0.2.10:7777 is plain http: tokens and audio tr
 
 Test: `node:test` calling the doctor's module with only the `origin` check enabled (the module takes
 a list of check names), both configs.
+
+### S-ONE-08 Another agent's own tool reads `used search_wiki`
+
+Given the room under test with `kind: "bridge"`, `command` the fake agent with `--dialect bridge`,
+`allowedTools: ["mcp__laneboard__*", "search_wiki"]`, and the script `one-bridge`'s first turn
+(match `wiki`: tool `search_wiki`, input `{"q":"backups"}`, at 100 ms, `endAt` 400 ms; text
+`The wiki has no page on backups.` at 500 ms; `end` `done` at 700 ms); the fake echoes
+`LANEBOARD_ALLOWED_TOOLS` as `ready.allowlist` (its default, `stand-ins.md` §2.5),
+When the owner types `what does the wiki say about backups?` and taps `SEND`,
+Then within 1.0 s of `SEND` one tool line reads `used search_wiki` (no target, `c1-talk.md` §5.2's
+last row), with its `●` while it runs and no ` · failed` after its end; then the text block
+`The wiki has no page on backups.`; the header reads `READY`. The fake's `start` log line lists
+`LANEBOARD_ALLOWED_TOOLS`, `LANEBOARD_SESSION` and `LANEBOARD_MCP_TOKEN` in `env`, and the room's
+log has no `agent refused` line.
+
+Test: Playwright on the real room with the fake agent; `textContent` of the one `[data-tool-line]`
+is `used search_wiki`; `fakeAgent.starts()[0].env`; the room log read after the turn.
+
+### S-ONE-09 A bridge agent that declares no allowlist is refused, and not restarted
+
+Given the room under test as S-ONE-08, the script `one-bridge` with `start.allowlist: null` (the
+fake's `ready` has no `allowlist`), `initAfterMs` 200,
+When the page opens with the pane open, the owner has typed `hello` in the input, and the room's
+clock goes to `manual` 1.0 s after the spawn,
+Then by 1.0 s after the spawn the status line `[data-status="agent-down"]` reads
+`Agent not running since {HH:MM} …` (`c1-talk.md` §10.1 row 3), `SEND` is disabled and `hello`
+stays in the input; `GET /api/cockpit/admin/status` answers `"agent":"down"` with `detail`
+`the agent declares no tool allowlist (see cockpit.agent.allowUnrestricted)`; the room log has
+`agent refused: the agent declares no tool allowlist (see cockpit.agent.allowUnrestricted)`.
+After `advance(120000)`, `fakeAgent.starts()` still has one entry (§11.7 would have restarted it
+at 2, 4, 8, 16, 30 s and every 30 s after).
+Second case, `start.allowlist: ["mcp__laneboard__*","shell"]`: the same, with `detail`
+`the agent allows shell, outside cockpit.agent.allowedTools`.
+
+Test: Playwright for the status line, the disabled `SEND` and the kept draft; `fetch` of the admin
+status route from the test's own uid; `fakeAgent.starts()` after `advance(120000)`.
+
+### S-ONE-10 The tripwire: a call outside the allowlist ends the turn and the agent
+
+Given the room under test with `kind: "bridge"`, the fake agent with `--dialect bridge`,
+`allowedTools` left at its default `["mcp__laneboard__*"]`, and the script `one-bridge`'s second
+turn (match `files`: tool `shell`, input `{"cmd":"ls"}`, at 100 ms, `endAt` 400 ms; text
+`Three files.` at 500 ms; `end` `done` at 700 ms),
+When the owner types `which files are there?` and taps `SEND`,
+Then no tool line is drawn (`[data-tool-line]` count 0) and `Three files.` never appears; within
+1.0 s of `SEND` the turn ends with `[data-turn-error="failed"]` reading
+`The answer failed: the agent called shell, outside its allowlist.`; the fake's log has a `stdin`
+line `{"type":"interrupt",…,"cancelQueued":true}` and then its stdin closes (a `SIGTERM` follows
+within 5.0 s if it has not exited); the status line is `agent-down` with `SEND` disabled, as in
+S-ONE-09.
+Second case, the same turn with a `denied` step for `shell` instead of the `tool` step (the fake
+writes `tool.start` with `denied:true`): the tool line reads `tried shell, not allowed`
+(`[data-denied="true"]`), `Three files.` follows, the turn ends `done`, nothing is refused.
+
+Test: Playwright on the real room with the fake agent; `fakeAgent.order()` for the interrupt and
+the end of stdin; both cases in one file.
+
+### S-ONE-11 `allowUnrestricted`: only for `bridge`, only with the agent's own user
+
+Given the config parser and start checks with an injected user lookup (§5's way, `lb-agent`
+uid 998, the caller uid 1000),
+When the config is (a) `kind: "claude-code"`, `allowUnrestricted: true`; (b) `kind: "bridge"`,
+no `user`, `allowSameUser: true`, `allowUnrestricted: true`; (c) `kind: "bridge"`,
+`user: "lb-agent"`, `LANEBOARD_COCKPIT_AGENT_ALLOW_UNRESTRICTED=1` in the environment,
+Then (a) exits 1 with `cockpit.agent.allowUnrestricted: only for kind bridge; claude-code is
+limited by cockpit.agent.allowedTools`; (b) exits 1 with `cockpit.agent.allowUnrestricted needs
+cockpit.agent.user: an agent with no tool limit must not run as you`; (c) starts and prints once on
+stderr `cockpit.agent.allowUnrestricted is true: the agent's tools are not limited; only its own
+user (lb-agent) keeps it off your files and the board's state.`, and with an agent whose `ready`
+has no `allowlist`, the room accepts it and `doctor` check 7 prints
+`warn  agent       ready: acme-agent 1.0, tools not limited (allowUnrestricted)`.
+
+Test: `node:test` on the config module and the room's start (no Playwright); the doctor module with
+only the `agent` check enabled and a stubbed admin status answer.
 
 ## 8. Not in v1
 

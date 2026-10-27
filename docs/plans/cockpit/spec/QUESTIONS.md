@@ -69,6 +69,10 @@ Security, blocks C1 (the launch line). From `reviews/40-security.md` (2), `44-op
 
 Recommendation: a) — "look freely, change only with a yes" (`spec-input.md` §6) taken literally.
 
+Note (T72): under any answer the list is enforced only by a Claude Code flag (`--allowedTools`).
+Another agent (`kind: bridge`) is held to it by its own word plus a tripwire, and the agent's own
+user is the only fence that holds whatever the program does (`protocols.md` §11.11, D240, D241).
+
 Answer: (open)
 
 ## Q-O30 May a scheduled job touch another machine, before C6

@@ -241,7 +241,16 @@ One JSON object. `start` says how the process starts; `turns` are matched to pro
 Same script, same matching. It reads `prompt` and `interrupt` (§11.3) and writes `ready` at
 `initAfterMs`, `taken`, `text.delta`/`text.block`, `tool.start`/`tool.end`, `retrying`,
 `interrupted`, `turn.end`. A `tool` step with a name the room has no wording for (e.g.
-`"tool":"search_wiki"`) is how T72's scenario gets `used search_wiki`.
+`"tool":"search_wiki"`) is how S-ONE-08 gets `used search_wiki`.
+- **`start.allowlist`** (`protocols.md` §11.11): absent (default), `ready.allowlist` is the array
+  read from `LANEBOARD_ALLOWED_TOOLS`; `null` leaves the field out (S-ONE-09); an array is sent as
+  it is. The fake itself refuses nothing: a `tool` step outside the list is written as a call
+  (S-ONE-10's tripwire).
+- A `denied` step writes one `tool.start` with `denied:true` and no `tool.end`.
+- Its session id is `LANEBOARD_SESSION` (resumed when `LANEBOARD_SESSION_RESUME` is `1`), not the
+  `--session-id`/`--resume` arguments, which the room does not pass to a bridge agent.
+- On stdin's end it exits 0 at once (the room's refused start, S-ONE-10), logging a `stdin-end`
+  line.
 
 ### 2.6 Its log
 
@@ -390,6 +399,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c1-render` | agent | S-C1-03..12, S-C1-30, S-C1-31, S-C1-35, S-C1-42 | §2.2's example; S-C1-05's 4-column and 9-column tables; S-C1-06/07's three `fleet` calls (400 ms each, `hv2` `isError`) then `ci` 300 ms; S-C1-08's 40-line `sh` block; S-C1-09's markup; S-C1-10's 30 lines over 6 s; S-C1-11's marks; S-C1-30's two `denied` `Bash` steps and S-C1-31's `Grep` and `denied` `WebFetch`; S-C1-35's `Read`, `runs`, `lanes` and `ci` calls with odd input; S-C1-42's `look-alike` reply |
 | `c1-typing` | agent | S-C1-14..18, S-C1-27..29, S-C1-32, S-C1-33, S-C1-43 | a short `done` turn per prompt; S-C1-16's text, 3 s `runs` call and `next-tool-end` steer turn; S-C1-27's 19.5 s tool call with `endAfterMs` 300; S-C1-28's two turns (`ignore-once`, `ignore`); S-C1-29's 19.5 s tool call, then text, taking a queued prompt at the tool's end; S-C1-17's two turns (`endAfterMs` 300, and `ignore-sigint`) |
 | `c1-errors` | agent | S-C1-19, S-C1-20 | an `exit` 1 mid-text; one turn per error row (`failed` `overloaded`, `step-limit`, `failed` `boom` plus a 300-character `detail`, `not-logged-in`, two `retry` steps then text) |
+| `one-bridge` | agent (`--dialect bridge`) | S-ONE-08..10 | match `wiki`: `search_wiki` call 100-400 ms, text, `done`; match `files`: `shell` call 100-400 ms (S-ONE-10's second case swaps it for a `denied` step), text `Three files.`, `done`; S-ONE-09 sets `start.allowlist` (`null`, then `["mcp__laneboard__*","shell"]`) by rewriting `script.json` |
 | `c1-login` | agent | S-C1-37, S-C1-38 | `start.login` `ok` (tests rewrite it to `failed`, `hang`), one `done` turn for any prompt in 0.5 s; S-C1-38's second case adds `startFailures` 3 and `startStderr` `claude: command not found` |
 | `c1-long` | agent | S-C1-21 | 15 s without steps, then 120 lines, 26 000 characters and a 30-row table over 20 s (real time: 35 s); its first line is the sentence `Three runs ran last night.` (the B9 end mark, D235) |
 | `c1-session` | agent | S-C1-22, S-C1-23, S-C1-39 | `repeat` turns that answer `how is builder-a` in 2 s |
