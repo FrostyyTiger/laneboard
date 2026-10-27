@@ -445,7 +445,20 @@ Notes for every builder round (planner, round 1):
   large demo: `LIFECYCLE  OBJECT-STORE · +15:46` under `CLOUD`, 0 console errors). Seen, not this task's: T40's
   `LIFECYCLE +15 MIN` under the object-store planet is at the site name's size, so the open system shows the same
   late run twice at two sizes.
-- [ ] T41 (§7 Night 4 D1; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] Half a screen: `galaxy.html` at 50 % width keeps the 3 m check (names, trouble, caption) and its touch targets (the 48 px floor); a still at 684 px wide shrunk to 3 m. — done when: a still at 684 px wide shrunk to 3 m passes the 3 m check and the touch targets keep 48 px
+- [x] T41 (§7 Night 4 D1; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] Half a screen: `galaxy.html` at 50 % width keeps the 3 m check (names, trouble, caption) and its touch targets (the 48 px floor); a still at 684 px wide shrunk to 3 m. — done when: a still at 684 px wide shrunk to 3 m passes the 3 m check and the touch targets keep 48 px (commit e9fd647)
+  Builder r47: seen at 684 x 912 (`shots/r47-half*`, a CDP probe of every text box and target per state: overview, held
+  crit, held calm, explore, site sheet, show demo; each still also shrunk to 50 % for 3 m). Two breaks, fixed: the far
+  line's why (`2 CRIT · HV1 · HV2` / `VM-C · BUILDER-C NO CONTACT FOR 25S`) had no band and ran into the clock, now cut at
+  the far line's 64vw (`.wall-fleet[data-step="far"] .wall-fleet-sub`); the trouble plate's 56vw cut `FEAT-SEAR…` at
+  the 9vmin floor, now on a stage narrower than high the plate takes 64vw (caption.js `HERO_PLATE.narrowVw`,
+  `heroPlateVw`; shared with `wall.html`) and the tag and manual line rise into the 8vh band above it (`@media
+  (max-aspect-ratio: 1/1)` at the end of wall.css). Targets were already px (back 80, fan rows and show undo 48, the
+  tap disc 54) and the fan stays on a 684 px stage: `test/wall-galaxy-half.test.mjs` (6) pins them. 3 m: site names,
+  the far word (62 px), the hero and the caption read; planet names are small as at full width. Film
+  `shots/r47-galaxy` (`--width 684 --height 912`, demo=1, quality=0): 21.6 fps SwiftShader ×4 (full width r42: 10.4),
+  worst gap 185 ms, 0 console errors. Honest: the show column (`SHOWN BY COCKPIT` and its rows, right, at the plate's
+  height) still meets a wide plate if a show holds a site at half width (T51/T52's matter); an 13+ letter hero is
+  still cut at half width (at full width 16 fit).
 - [ ] T42 (§7 Night 4 D2; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `?role=tour|explore`: starts the page in that mode (explore: no tour until `▶ TOUR` or the director is asked); the canvas itself is cockpit work. — done when: tests for both roles, and `?role=explore` shows no tour until asked
 - [ ] T43 (§7 Night 4 E1; promoted from Later by the watcher on 2026-10-27, before the merge) (night 3's E; r43-stranger 1, 6) `docs/wall.md`: what it is, a tablet in kiosk mode, the URL switches `?demo`, `?pace`, `?fx` (each effect and what it means), `?perf`, `?at`, `?open`, `?quality`, `?role`, `?show`, the feed fields `glow`/`ring`/`countdown`, touch and how to stop the tour; `docs/map.md` says which page paints `glow`/`ring`; a Wall row in README's views table. — done when: `docs/wall.md` exists with every switch, and README's views table has the Wall row
 - [ ] T44 (§7 Night 4 E2; promoted from Later by the watcher on 2026-10-27, before the merge) `docs/wall.md` covers D10 (the director, who drives), the show messages and `countdown`; every feature has demo data (product §3.2): a test lists the switches in `docs/wall.md` against the page's parsers. — done when: a test lists the switches in `docs/wall.md` against the page's parsers and passes
