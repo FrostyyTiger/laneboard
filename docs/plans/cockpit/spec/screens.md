@@ -53,7 +53,7 @@ without touch: the tour resumes"). The cockpit adds three things that hold the t
 | a touch on the canvas half or the pane | unchanged | restarts at 60 s if explore |
 | the pane opens (cockpit button, "Ask about this") | tour → explore **where the camera is now**: the tour stops mid-flight and holds that frame | paused while the pane is open |
 | a turn is running (prompt sent, reply streaming) or the microphone is open | unchanged | paused until it ends, then restarts at 60 s |
-| a show command that moves the camera arrives (`fly_to`, `highlight`, `compare`, `scrub`; T10) | tour → explore at the target | restarts at 60 s when the command's movement ends (pending T10) |
+| a show command that moves the camera arrives (`fly_to`, `highlight`, `compare`, `scrub`; T10) | tour → explore at the target | restarts at 60 s when the command's movement ends (`c4-show-canvas.md` §2) |
 | the pane closes | unchanged | restarts at 60 s |
 | the timer reaches 0 | explore → tour; the tour starts with the overview (Wall plan §3, ~20 s) | stopped |
 
@@ -82,7 +82,8 @@ the idle rules above stay the same.
 Where things land:
 - A card the agent places on the canvas appears on **every** screen whose layout has a canvas
   (`canvas`, `split`, `switch`). Same cards, same order on each (T11 settles the grid).
-- A camera show command moves the wall half of the screens T10 names (pending T10). A screen in
+- A camera show command moves the wall half of every online screen with a camera, or the one it
+  names (`c4-show-canvas.md` §1, D67). A screen in
   `canvas` layout has no camera and ignores them; the conversation line still appears.
 - In `split` the pane opens over the canvas half, never over the wall half, so the camera the agent
   moves stays in sight (plan C1: "so the agent can point at the view behind it") (D8). Its width
@@ -158,10 +159,10 @@ And a draft typed into the input before the close is in the input again when the
 Test: Playwright with a fake clock and a fake-agent script with one long turn; assert the pane's
 `data-open` and `data-wall-state` at 699/700 s and 759/760 s; reopen and read the input value.
 
-### S-SCR-05 A show command takes the camera, then the tour comes back (pending T10)
+### S-SCR-05 A show command takes the camera, then the tour comes back
 Given a screen in `wall` layout touring, the pane closed,
 When the fake agent sends `fly_to` for node `builder-a` at t = 0 s,
-Then `data-wall-state="explore"`, the camera flies to `builder-a` (duration: T10), and the idle
+Then `data-wall-state="explore"`, the camera flies to `builder-a` (320-900 ms, `c4-show-canvas.md` §2, D68), and the idle
 timer restarts when the flight ends at t = f s; the tour resumes at t = f + 60 s.
 And a screen in `canvas` layout receiving the same command does not change.
 Test: Playwright, two pages on one fake agent; read `data-wall-state` and `screenOf('builder-a')`

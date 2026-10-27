@@ -26,7 +26,7 @@ main")."
 - Background `--bg-elevated` (a floating layer, `docs/design.md` "Surfaces"), a 1 px `--line`
   left border, no shadow.
 - While the pane is open, the view behind keeps working in the part that is in sight: the Wall
-  explores, the Map pans and selects. A show command (T10) centres its target in the part in sight
+  explores, the Map pans and selects. A show command (`c4-show-canvas.md` §2) centres its target in the part in sight
   (x 0-759), not in the whole screen.
 - The page root carries `data-pane="open|closed"`; the pane element is `[data-cockpit-pane]`.
 
@@ -97,7 +97,7 @@ The `●` is `--text-2`, static (nothing blinks for decoration). Speaking up wit
 ## 3. A turn in the conversation
 
 A turn is drawn top to bottom in the order things happened: the prompt, then the reply's text
-blocks, tool lines (§5) and show-command lines (T10) interleaved as the agent produced them.
+blocks, tool lines (§5) and show lines (`c4-show-canvas.md` §4) interleaved as the agent produced them.
 
 - **Label row** above the prompt and above the reply, 24 px tall, 16 px caps `--text-3`:
   `YOU · 07:02` (`YOU · SPOKEN · 07:02` for a voice prompt, C2) and `AGENT · 07:02`. Time is the
@@ -218,7 +218,7 @@ the laneboard MCP tools arrive as `mcp__laneboard__<tool>` and are matched witho
 
 The C3 rows follow the tools' parameters in `c3-see.md` §4 (T8: `morning` takes `window`,
 `history` takes `node` or `run`). Show commands (`fly_to`, `pin`, …) are not tool lines: each leaves
-its own conversation line (T10).
+its own show line (`c4-show-canvas.md` §4).
 
 **Failures.** A line with failed calls appends ` · 1 failed` (or ` · 2 failed`) in the same grey: a
 tool error is news about the agent, not trouble in the fleet (`docs/design.md`, the colour rule).
