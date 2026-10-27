@@ -335,13 +335,16 @@ Answer: (open)
 
 ## Q-O5 How loud the agent is when it speaks up, and quiet hours
 
-Coworker slice. `spec-input.md` §7.5. Spec: `coworker.md` (T13, not written).
+Speak slice. `spec-input.md` §7.5. Spec: `coworker.md` §2-§4 (written for b by T13), D185, D188.
 
 - a) Always a line only.
 - b) Tiered: info a line; needs-you a line and a card; urgent adds a sound; quiet hours on by default.
 - c) Everything at full volume.
 
 Recommendation: b) — follows the board's trouble ranking (alerts, Stuck).
+With b): P1 urgent, P2 needs-you, P3/P4 info (`server/fleet/alarms.mjs`); quiet hours default to
+`notify.quietHours`, else 22:00-07:00; in them urgent shows without the chime and the rest waits for
+one block at 07:00. A spoken sentence is C5's, never a speak-up's own.
 
 Answer: (open)
 
@@ -353,7 +356,24 @@ Coworker slice. From `reviews/48-stranger.md` (7).
 - b) Same, but standing jobs on by default for the owner's setup only.
 - c) No cap; report spend only.
 
-Recommendation: a) — safe by default; the owner turns things on once and sees the cost.
+Recommendation: a) — safe by default; the owner turns things on once and sees the cost. Written
+for a) in `coworker.md` §5 (D197): speak-ups, the infra pull and the repo drift check are off until
+turned on; confirmed jobs and reminders work regardless.
+
+Answer: (open)
+
+## Q-O33 How the agent hands over a change to the infra repo
+
+Security, after the Speak slice. From T13 (`coworker.md` §9). `spec-input.md` §6: "the agent's own
+changes arrive as a branch or a small PR the owner merges".
+
+- a) A `diff` card only: the agent shows the change, the owner applies it from the laptop.
+- b) A second clone the agent's user owns and a key that can push only `cockpit/*` branches (the
+  repo host's branch rule); the agent pushes a branch and opens a PR, never merges.
+- c) b), but the PR is opened by the room after a confirm card, not by the agent.
+
+Recommendation: a) while Q-O23 is a) (no `Bash`/`Write`, so no branch can be made); c) once the
+agent may write, because a push key on the agent's side is a one-way door.
 
 Answer: (open)
 
@@ -365,7 +385,8 @@ Security, jobs slice. From `reviews/44-operator.md` (contradictions). `spec-inpu
 - b) The job runs only if some screen can reach the room at its time; else skipped and logged.
 - c) A job needs a screen-room link in the last 10 min, else skipped and logged.
 
-Recommendation: b) — a timer the owner cannot stop is what §6 forbids.
+Recommendation: b) — a timer the owner cannot stop is what §6 forbids. Written for b) in
+`coworker.md` §6.5 (S-CW-13: no link open then or in the last 10 min → `skipped`, said, logged).
 
 Answer: (open)
 

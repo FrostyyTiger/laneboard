@@ -196,12 +196,14 @@ S-C3-01 S-C3-02 S-C3-06 S-C3-09 S-C3-10 S-C3-11 S-C3-12 S-C3-13 S-C3-14 S-C3-15 
 **Builds**: the room's watcher of alerts, Morning and Stuck; agent-started turns; the marker on the
 talk button (pending Q-O11); the `SINCE YOU LOOKED` divider (T66); quiet hours and per-kind mute.
 
-**Scenarios**: none written yet. Planned: T23's touring-Wall scenario (one `S-SCR-` id), T66's
-divider scenario (one `S-C1-` id), and `coworker.md`'s speak-up scenarios (T13, `S-CW-`). The slice
-cannot be built until T13 and T23 are written; that is the next spec night's first job after C1/C2
-are in use (plan §6.8).
+**Builds also** (`coworker.md` §7-§8): the infra repo pull and the `infra` tool, the Map drift
+trigger, the repo drift check; the `speakup` message (T127).
 
-**Done-when**: §2's slice rule for the ids T13, T23 and T66 write; Q-O5 answered.
+**Scenarios** (12): S-CW-01 S-CW-02 S-CW-03 S-CW-04 S-CW-05 S-CW-06 S-CW-07 S-CW-08 S-CW-09
+S-CW-15 S-CW-16 S-CW-17. Planned: T23's touring-Wall scenario (one `S-SCR-` id) and T66's divider
+scenario (one `S-C1-` id). The slice cannot be built until T23 and T127 are written.
+
+**Done-when**: §2's slice rule for these ids and those T23 and T66 write; Q-O5 answered.
 
 ### 3.5 Canvas: C4, first canvas night
 
@@ -256,7 +258,8 @@ line and a card) or run a script the room's config lists under `cockpit.jobs.scr
 own machine. A job that changes another machine (stop a VM, restart a service) waits for C6; the
 agent says `I can remind you at 15:10, but stopping builder-b needs the act step (C6).`
 
-**Scenarios**: S-C4-13 S-C4-24. Planned: `coworker.md`'s job scenarios (T13), the confirm card's (T14).
+**Scenarios** (7): S-C4-13 S-C4-24 S-CW-10 S-CW-11 S-CW-12 S-CW-13 S-CW-14. Planned: the confirm
+card's (T14). The job format, tools, firing and audit lines are `coworker.md` §6.
 
 **Done-when**: §2's slice rule; `job-0003` of the demo (D112) is created through the real path.
 
@@ -293,9 +296,11 @@ by the task that writes them.
 | S-C4-13, 24 | Jobs |
 | S-C4-14..23 | Canvas |
 | S-C4-25..33 | Canvas 2 |
+| S-CW-01..09, 15, 16, 17 | Speak |
+| S-CW-10..14 | Jobs |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 148 live ids in all (round 111, S-C3-20).
+D55). 165 live ids in all (round 112, S-CW-01..17).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired
