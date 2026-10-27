@@ -210,7 +210,8 @@ button in the talk button's rect and these rules apply to it unchanged.
   while this screen's pane was closed, it opens on the first of it instead (§2.1).
 - The input gets the keyboard focus only when the page's pointer is fine (a mouse, a paired
   keyboard: `matchMedia('(pointer: fine)')`); on a touch screen it does not, so the on-screen
-  keyboard does not cover half the pane on every open (D20). A tap in the input brings the keyboard.
+  keyboard does not cover half the pane on every open (D20). A tap in the input brings the keyboard,
+  and so does `EDIT` (§10, D271): it is a request to type.
 - The tour stops where it is and the idle timer pauses (`screens.md` §2, D4).
 
 **Close.** `CLOSE` in the header, `Esc` on a paired keyboard, or the auto-close (`screens.md` §2,
@@ -884,7 +885,7 @@ numbers are for a 380 px keyboard, which leaves 1368x532 in sight.
   of §2 is for open and close only).
 
 **Taps keep the keyboard up** (D132). A tap on any control inside `[data-cockpit-conversation]`
-(`SEND`, the chip's `✕`, `NEW`, `SCREEN`, a tool line, `↓ NEW`, `RETRY`) leaves the focus in the
+(`SEND`, the chip's `✕`, `NEW`, `SCREEN`, a tool line, `↓ NEW`, `RETRY`, `EDIT`) leaves the focus in the
 input (the build calls `preventDefault()` on the control's `pointerdown` and `mousedown`), so the
 keyboard does not drop and the row does not move between `pointerdown` and `pointerup`. After a send
 the keyboard stays up (§7). `CLOSE` closes the pane and blurs the input.
@@ -1037,7 +1038,7 @@ to 120 characters and drawn as text. After an error the header reads `READY` (D3
 
 | Code | When | Message (exact) | Buttons |
 | --- | --- | --- | --- |
-| E1 `not-sent` | the room has not confirmed a prompt 5 s after send, link up | label `YOU · 07:02 · NOT SENT`; `Not sent: the room did not confirm within 5 s.` | `RETRY` sends the same text again with the **same** `clientId` (the one exception, below); `EDIT` removes the block and puts the text back in the input (an existing draft is kept after it, on a new line) |
+| E1 `not-sent` | the room has not confirmed a prompt 5 s after send, link up | label `YOU · 07:02 · NOT SENT`; `Not sent: the room did not confirm within 5 s.` | `RETRY` sends the same text again with the **same** `clientId` (the one exception, below); `EDIT` removes the block, puts the text back in the input (an existing draft is kept after it, on a new line) and focuses the input with the caret after the restored text, on every pointer type (D271, below) |
 | E2 `agent-exited` | the agent's process ended during a turn | `The agent stopped unexpectedly at 07:04. The room is starting it again.`, then, once back: `The agent is back (07:04). Your last message was not answered.` | `RETRY` (only once the agent is back) sends that turn's prompt again, with a new `clientId` |
 | E3 `agent-down` | the agent cannot start | `The agent cannot start: {detail}. The room tries again every 30 s.` plus the status line (§1) `Agent not running since 07:04 (2 min).`; `SEND` and talk disabled, the draft kept | none |
 | E4 `not-logged-in` | the agent reports missing login or key | `The agent is not logged in on the room. Log it in there, then send again.` plus the status line (§10.1) | none |
@@ -1056,6 +1057,18 @@ to 120 characters and drawn as text. After an error the header reads `READY` (D3
   lines of §8 (`The agent did not read this.`, `Dropped by STOP.`). The room knows those
   `clientId`s, so reusing one would bring back only the old echo and the retry would silently do
   nothing.
+- **`EDIT` brings the keyboard** (D271, an exception to D20 as D47 and D181 are). Every `EDIT`
+  (E1, E9, and the two `NOT SENT` lines of §8) does this in its own `click` handler, in the same
+  task as the tap, so the browser counts it as the owner's gesture: the block goes, the input's
+  value becomes the restored text (plus `\n` and the draft, if there was one), then
+  `input.focus({preventScroll: true})` and `setSelectionRange(n, n)` with n the restored text's
+  length; the input grows to its lines (§7) and is scrolled so the caret line is in sight. On a
+  touch screen the on-screen keyboard comes up and §7.1's layout applies (`data-keyboard="up"`
+  once the keyboard is ≥ 120 px); with the keyboard already up the focus never leaves the input
+  (D132). The conversation stays pinned to its end (§7.1 "Pinned"). While the microphone is open
+  (`data-talk` not `idle`, `c2-voice.md` §3) every `EDIT` is inert (`aria-disabled="true"`, label
+  `--text-3`): the textarea is replaced by the live words then (D43); it acts again in the frame
+  the microphone closes.
 - Which native event of the agent maps to which code is `protocols.md` §11.4's mapping table; Claude Code's
   `api_retry` is E5 and a `result` with `is_error` is E7 or E8 (research Q2).
 - An error line is shown on every screen (§12); its buttons work from any of them.
@@ -1263,15 +1276,23 @@ page's clock and computed `text-transform` `none`; the fake agent's log (`stand-
 one `interrupt` line with `cancelled` `null`, one `signal` `SIGINT` line and no `SIGTERM` line.
 
 ### S-C1-18 A prompt the room never confirms is not sent again on its own
-Given the room under test armed (`POST /drop {"what":"next-prompt"}`) to accept the socket but drop the next prompt without a
+Given a touch context (`hasTouch: true`) at 1368x912, the pane open with the input not focused,
+the room under test armed (`POST /drop {"what":"next-prompt"}`) to accept the socket but drop the next prompt without a
 confirmation,
 When the owner sends `restart the tour` at t = 0,
 Then at t = 5 s the label reads `YOU · HH:MM · NOT SENT` with the message
 `Not sent: the room did not confirm within 5 s.` and `RETRY`, `EDIT`; at t = 60 s nothing more has
-been sent. A tap on `EDIT` removes the block and puts `restart the tour` in the input; a tap on
+been sent. The owner taps the conversation (the input loses the focus, D132). A tap on `EDIT`
+removes the block and puts `restart the tour` in the input; in the same frame
+`document.activeElement` is `[data-cockpit-input]` with `selectionStart` and `selectionEnd` 16 (the
+caret after `tour`, D271). The test then resizes the viewport to 1368x532 (a 380 px keyboard):
+by 0.1 s later `data-keyboard="up"` and the input is y 460-524 (§7.1). A tap on
 `RETRY` (second run) sends it once, as a new turn.
-Test: Playwright with a fake clock; the room's `POST /drop` (`stand-ins.md` §1.2); assert texts, the input
-value, and the room's received-turns count (0, then 1).
+A third run types `and hv1` into the input before the tap on `EDIT`: the input's value is
+`restart the tour\nand hv1`, the caret at 16, the input two lines (103 px, §7) tall.
+Test: Playwright with a fake clock and `hasTouch`, `tap`; the room's `POST /drop` (`stand-ins.md` §1.2);
+assert texts, the input value, `document.activeElement`, `selectionStart`/`selectionEnd`, the
+input's rect ± 1 px after `setViewportSize`, and the room's received-turns count (0, then 1).
 
 ### S-C1-19 The agent's process dies mid-turn
 Given a reply half drawn,
