@@ -33,6 +33,14 @@ its file names).
 - [ ] T19 (12) `spec/single-machine.md`: everything on one box, no tailnet, no GPU (typing only, `cockpit.stt.url: none`), another agent than Claude Code; what changes, the full config example — done when: a config example per setup and ≥ 3 `S-ONE-` scenarios
 - [ ] T20 (13) `spec/slices.md`: build nights in order (C1 first, then C2, …), each with its scenario ids, the stand-ins it needs and its done-when; cross-check every scenario id in the spec is in exactly one slice — done when: every `S-` id written so far appears in exactly one slice; C1 and C2 slices each fit one night
 
+- [ ] T21 (2) Fix `screens.md` per review 21-owner.md: drop "(the owner's case)" in §3/S-SCR-08 and the hub line (finding 5, one tablet in `split` is the main path); `CANCEL JOB` opens the confirm card (`c5-c6.md`) with what/where/when, one audit line per cancel, removing a card never stops a job; fix the sketch button (finding 6); mark D5/D7/D8/D9 `(pending Q-O11/12/13)` and add a Q-O10 line on the laptop agent running `pair` over SSH (finding 9) — done when: those edits exist and every pending mark names an open Q-O
+- [ ] T22 (2) [sketch] Finish T3 (review 21-owner.md finding 10): write `spec/sketches/screens-room-down.html`, shoot it, tick T3 or list what is missing
+- [ ] T23 (2) `screens.md`: one `S-SCR-` scenario for a scripted speak-up turn on a touring `wall` screen with the pane closed (button marker, tour holds or flies to the flagged item, pending Q-O11) — review 21-owner.md finding 7
+- [ ] T24 (3) Speed budget table in `spec/README.md` (or top of `c1-talk.md`) that every later file cites: tap→listening ≤ 0.2 s; speech→first partial ≤ 1 s; release→shown sent ≤ 0.3 s; send→first reply token (fake agent) ≤ 0.5 s; show command→camera moving ≤ 0.3 s; kit block placed ≤ 1 s after the tool call; add S-SCR/S-C1 scenario "hold the button on the touring Wall at t=0, first partial ≤ 1 s, release sends" (pending Q-O11) — review 21-owner.md findings 2, 4
+- [ ] T25 (3) Sketch `spec/sketches/screens-split-pane.html`: `split` with the conversation column, a reply and a fresh card both visible (pending Q-O12) — review 21-owner.md finding 3
+
+Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do T4-T7 before T8+ and before T21-T25 sketches if rounds are short; T24 comes right after T4.
+
 ## Research questions
 
 - [x] Q1 Touch target and type sizes for a slanted desk tablet at arm's length (~50-70 cm), 1368x912 CSS px at 2x: minimum targets (WCAG 2.5.5/2.5.8, Apple HIG, Material), body and label type sizes, hold-vs-tap thresholds in ms used by platforms — for T2, T4, T6 → research/Q1-touch-targets-and-type.md
@@ -50,10 +58,16 @@ its file names).
 
 ## Reviews
 
+- round 22 triage of `reviews/21-owner.md`: 10 findings. Tasks: finding 1 → priority note (T4-T7 first, plan already had them), 4 → T24, 5/6/9 → T21, 7 → T23, 10 → T22, 3 (sketch) → T25. Questions: 2 → Q-O11, 3 → Q-O12, 8 → Q-O13, 5 → added to Q-O9. 9 tasks/questions-bearing findings in all; none dropped.
+
 - round 5 triage: `docs/plans/cockpit/reviews/` has no review file yet, so nothing to triage; 0 findings, 0 tasks, 0 questions, no score row added.
 - round 11 triage: `docs/plans/cockpit/reviews/` is still empty (no review file), so nothing to triage; 0 findings, 0 tasks, 0 questions, no score row added.
 - round 16 triage: `docs/plans/cockpit/reviews/` is still empty (no review file), so nothing to triage; 0 findings, 0 tasks, 0 questions, no score row added.
 
 ## Scores
+
+| round | persona | concrete | complete | consistent | testable | ownerfit | simple | safe |
+|---|---|---|---|---|---|---|---|---|
+| 21 | owner | 8 | 2 | 6 | 8 | 5 | 6 | 7 |
 
 ## Morning

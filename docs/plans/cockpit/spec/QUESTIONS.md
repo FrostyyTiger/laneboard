@@ -63,6 +63,49 @@ Answer: (open)
 Recommendation: b) — split at ≥ 1280 px, switch below (`screens.md` §1, D9); also tell us the
 tablet's panel size and viewing distance (research Q1 assumed 12.3 in at about 60 cm).
 
+Also asked (review 21, finding 5): how many physical screens do you have today, and which layout
+on each (`split`, `wall`, `canvas`)? `spec-input.md` does not say; the spec must not assume two.
+
+Answer: (open)
+
+## Q-O11 How talking starts: the talk button on the screen or behind the pane
+
+Added by triage of review 21 (findings 2, 7). Blocks C1/C2; shapes `screens.md` §4 (D7). Spec: T4, T6.
+
+- a) **The bottom-right 64x64 button is the talk button**: hold or tap and it listens at once and
+  opens the pane with the live words; a smaller control opens the pane for typing and reading.
+- b) The button opens the pane; the talk button is inside it (today's D7).
+- c) a), and the button also carries a marker when the agent wants you (count or dot).
+
+Recommendation: c) — `spec-input.md`: in the terminal talking is one held key, so it must be one
+press here; the marker gives "speaks up on its own" a place on a closed-pane Wall.
+
+Answer: (open)
+
+## Q-O12 Where the conversation sits in `split` and `canvas`
+
+Added by triage of review 21 (finding 3). Shapes `screens.md` §3, D5, D8. Spec: T4, T11.
+
+- a) **A fixed conversation column/strip** inside the canvas, cards beside or above it, never under
+  it; the 300 s auto-close (D5) applies only to the pane over the Wall and app views.
+- b) The pane slides over the canvas half (today's D8), closing after 300 s.
+
+Recommendation: a) — the agent answers by placing cards; hiding them behind the words that announce
+them defeats the point.
+
+Answer: (open)
+
+## Q-O13 Canvas width: fixed or collapsing when idle
+
+Added by triage of review 21 (finding 8). Shapes D9, S-SCR-01.
+
+- a) **Fixed 608 px** canvas column (today's D9).
+- b) **Collapses to a ~96 px strip** with a card count after N minutes without cards or talk, grows
+  when a card arrives.
+
+Recommendation: b) — the Wall is "the one place to see" the whole fleet; half-empty black costs it
+44 % of the screen.
+
 Answer: (open)
 
 ## Q-O8 Which screen the physical button targets
