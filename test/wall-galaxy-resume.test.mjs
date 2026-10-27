@@ -11,8 +11,8 @@ import path from 'node:path';
 
 import { makeEl } from './helpers/fakedom.mjs';
 import {
-  AT_OVERVIEW, BACK_WORDS, IDLE, TOUCH, backControl, backStep, canGoBack, createBack, createGestures, createReturn, createTaps, createTouch, idleLeft, manualLine,
-  hitTest, memberPoints, orbitLimits, orbitOf, placeOf, tapPoints, touchStep,
+  AT_OVERVIEW, BACK_WORDS, IDLE, ROLES, TOUCH, backControl, backStep, canGoBack, createBack, createGestures, createReturn, createTaps, createTouch, idleLeft, manualLine,
+  hitTest, memberPoints, orbitLimits, orbitOf, placeOf, roleOf, tapPoints, touchStep,
 } from '../public/js/wall/galaxy/touch.js';
 import { DEMO_TIMING, TIMING, createTour, initialTour, nextLeg, resumeTour } from '../public/js/wall/tour.js';
 import { FLIGHT, createGalaxyCamera, zoomedSiteShot } from '../public/js/wall/galaxy/camera.js';
@@ -88,7 +88,7 @@ const gap = (a, b) => Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y, a.pos.z -
  * control and, in reduced motion, the cut's fade on the canvas and the names.
  * `sheets` records the hud: a site's or planet's id for a sheet, null when it goes.
  */
-function page({ still = false } = {}) {
+function page({ still = false, role = 'tour' } = {}) {
   let now = 100_000;
   const clock = () => now;
   const timers = clockTimers(clock);
@@ -108,6 +108,7 @@ function page({ still = false } = {}) {
   let touch = null, tour = null;
   const director = createDirector(cam, {
     clock, still, held: () => touch != null && touch.mode() !== 'tour', resume: (from) => { if (from === 'show') tour.resume(); },
+    driver: role === 'explore' ? 'touch' : 'tour',
   });
   const moves = [];
   director.onMove((m) => moves.push(m));
@@ -131,6 +132,7 @@ function page({ still = false } = {}) {
   };
   touch = createTouch(stage, {
     clock,
+    role,
     wake: () => { wakes++; tour.stop(); left.clear(); toOverview(); },
     resume: () => { cutAway(); sheets.push(null); left.clear(); place = AT_OVERVIEW; director.handBack(); tour.resume(); },
   });
@@ -769,4 +771,96 @@ test('galaxy/main.js wires the director (T14): no camera move but through it; th
   assert.match(js, /director\.tick\(\);/);
   // tour.js is unchanged for wall.html: it still takes a map with focus and fit.
   assert.match(read('js/wall/tour.js'), /map\.focus\(current\.id, current\.zoom\)/);
+});
+
+// ?role=tour|explore (night 4 T42, README §7 Night 4 D): explore is a person's screen, no tour until asked.
+
+test('roleOf: explore or tour, anything else the default tour', () => {
+  assert.deepEqual([...ROLES], ['tour', 'explore']);
+  assert.equal(roleOf('explore'), 'explore');
+  assert.equal(roleOf('tour'), 'tour');
+  for (const v of [null, undefined, '', 'canvas', 'EXPLORE', ' explore']) assert.equal(roleOf(v), 'tour', String(v));
+});
+
+test('touchStep and idleLeft with stay (the explore role): the minute never hands back; the line reads MANUAL alone', () => {
+  const t0 = 10_000;
+  const out = touchStep(touchStep(null, 'down', t0).state, 'tick', t0 + TOUCH.fitMs).state;
+  assert.equal(out.mode, 'explore');
+  assert.equal(touchStep(out, 'tick', t0 + 10 * IDLE.ms, { stay: true }).resume, false);
+  assert.equal(touchStep(out, 'tick', t0 + 10 * IDLE.ms).resume, true, 'without stay as before');
+  const back = touchStep(out, 'handback', t0 + 5000, { stay: true });
+  assert.deepEqual([back.state.mode, back.resume], ['tour', true], '▶ TOUR still hands back');
+  assert.equal(idleLeft(out, t0 + 5000, { stay: true }), Infinity);
+  assert.equal(idleLeft(back.state, t0 + 5000, { stay: true }), null, 'the tour: no line');
+  assert.equal(manualLine(Infinity), 'MANUAL');
+  assert.equal(manualLine(-Infinity), null);
+});
+
+test('?role=tour (the default): the page starts in the tour, the minute hands back', () => {
+  const p = page({ role: 'tour' });
+  assert.equal(p.touch.mode(), 'tour');
+  assert.equal(p.director.driver(), 'tour');
+  assert.equal(p.manual(), null);
+  p.tour.start();
+  p.run(500);
+  p.stage.dispatch('pointerdown', { pointerId: 1 });
+  p.stage.dispatch('pointerup', { pointerId: 1 });
+  assert.equal(p.wakes(), 1);
+  p.run(TOUCH.fitMs + IDLE.ms + 100);
+  assert.equal(p.touch.mode(), 'tour', 'handed back by the minute');
+});
+
+test('?role=explore on the page: no tour until ▶ TOUR; a first tap flies; shows refused; no minute after the tour was asked and a finger came back', () => {
+  const p = page({ role: 'explore' });
+  // galaxy/main.js starts the tour only while touch is in the tour: never here.
+  const maybeStart = () => { if (p.touch.mode() === 'tour' && p.director.driver() === 'tour') p.tour.start(); };
+  maybeStart();
+  p.run(3 * IDLE.ms);
+  maybeStart();
+  assert.equal(p.touch.mode(), 'explore', 'explore from the start, still after three minutes');
+  assert.equal(p.legs.length, 0, 'no tour leg');
+  assert.equal(p.timers.live.size, 0);
+  assert.equal(p.director.driver(), 'touch');
+  assert.equal(p.manual(), 'MANUAL', 'no countdown: no tour is coming');
+  p.tick(16);
+  assert.equal(p.button.hidden, false);
+  assert.equal(p.words(), '▶ Tour');
+  // A show cannot take a person's screen.
+  assert.equal(p.director.show({ id: 's1', to: { kind: 'site', id: 'cloud' } }).refused, 'busy');
+  // The first tap is not a wake: it opens the site at once, flown by the finger.
+  p.tapAt(1, p.cam.screenOf('cloud'));
+  assert.equal(p.wakes(), 0);
+  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call, p.moves.at(-1).args[0]], ['touch', 'focus', 'cloud']);
+  assert.equal(p.place().site, 'cloud');
+  p.run(2 * IDLE.ms);
+  assert.equal(p.touch.mode(), 'explore', 'no minute');
+  assert.equal(p.legs.length, 0);
+  p.press(); // ‹ Back to the overview
+  p.run(TOUCH.fitMs + 100);
+  assert.equal(p.words(), '▶ Tour');
+  // Asked: the tour runs, trouble first.
+  p.press();
+  p.tick(16);
+  assert.equal(p.touch.mode(), 'tour');
+  assert.equal(p.director.driver(), 'tour');
+  assert.deepEqual([p.legs.at(-1).kind, p.legs.at(-1).id], ['site', 'hv2']);
+  assert.equal(p.manual(), null);
+  // A finger again: it wakes as on a tour screen, but the page stays the person's after the minute.
+  p.stage.dispatch('pointerdown', { pointerId: 3 });
+  p.stage.dispatch('pointerup', { pointerId: 3 });
+  assert.equal(p.wakes(), 1);
+  const legs = p.legs.length;
+  p.run(TOUCH.fitMs + 2 * IDLE.ms);
+  assert.equal(p.touch.mode(), 'explore');
+  assert.equal(p.legs.length, legs, 'no tour by itself');
+  assert.equal(p.manual(), 'MANUAL');
+  assert.deepEqual(p.calls, p.moves.map((m) => m.call), 'every move the director\'s');
+});
+
+test('galaxy/main.js reads ?role= (T42): roleOf, data-role, the touch\'s role and a finger-driven director for explore', () => {
+  const js = read('js/wall/galaxy/main.js');
+  assert.match(js, /const role = roleOf\(q\.get\('role'\)\)/);
+  assert.match(js, /page\.dataset\.role = role/);
+  assert.match(js, /createTouch\(document\.getElementById\('galaxy-stage'\), \{\s*role,/);
+  assert.match(js, /driver: role === 'explore' && !park \? 'touch' : 'tour'/);
 });

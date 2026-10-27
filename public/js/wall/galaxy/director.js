@@ -63,7 +63,9 @@ export const OVERVIEW = Object.freeze({ kind: 'overview' });
 const rank = (source) => SOURCES.indexOf(source);
 
 /** A director that has just started: the tour drives, nobody touched, nothing shown. */
-export const initialDirector = () => ({ driver: 'tour', since: null, last: null, show: null });
+export const initialDirector = (driver = 'tour', now = null) => (driver === 'touch'
+  ? { driver, since: now, last: now, show: null }
+  : { driver: 'tour', since: null, last: null, show: null });
 
 function moveOf(source, from, to, ms, still) {
   if (!to) return null;
@@ -167,7 +169,8 @@ export function directorLeft(state, now, { idleMs = IDLE.ms, held = false } = {}
 
 /**
  * The page's director (T14): `createDirector(cam, { clock, still, held,
- * resume })`. `cam` is camera.js's; `held()` says a finger has the page (the
+ * resume, driver })`. `driver: 'touch'` (the `explore` role, T42) starts with
+ * a finger driving and nothing to wake: a first tap flies, a show is refused. `cam` is camera.js's; `held()` says a finger has the page (the
  * director's minute never runs out under it: touch.js's own minute, which
  * hears every pointer, hands the page back with `handBack()`); `resume(from)`
  * is told when the tour has the camera back from `from` (`touch`, `show`),
@@ -186,8 +189,8 @@ export function directorLeft(state, now, { idleMs = IDLE.ms, held = false } = {}
  * so its legs stay `focus`/`fit`; a finger's or a show's site is a `cut`.
  */
 export function createDirector(cam, opts = {}) {
-  const o = { clock: () => performance.now(), still: false, held: () => false, resume: () => {}, ...opts };
-  let state = initialDirector();
+  const o = { clock: () => performance.now(), still: false, held: () => false, resume: () => {}, driver: 'tour', ...opts };
+  let state = initialDirector(o.driver, o.clock());
   const cbs = new Set();
   const call = (source, name, ...args) => {
     for (const cb of cbs) cb({ source, call: name, args });

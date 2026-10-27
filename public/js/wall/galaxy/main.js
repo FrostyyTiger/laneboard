@@ -64,6 +64,11 @@
 // under the tag, `MANUAL · TOUR IN 0:40` counts down to the hand-back while a
 // finger explores; at the overview the back control is `▶ TOUR`, which hands
 // the page back at once (touch.js handBack, the same resume as the minute's).
+// `?role=explore` (night 4 T42, touch.js roleOf): a person's screen. The page
+// starts in explore at the overview, no tour until `▶ TOUR` (or
+// `__galaxyTouch.handBack()`) asks for it, and no minute hands it back after a
+// touch: the line reads `MANUAL`. A show is refused `busy` there, as under a
+// finger. `?role=tour` (the default) is the page as above.
 // One camera director (night 4 T14, director.js createDirector): nothing here
 // calls camera.js's moves. The tour flies through `director.as('tour')`, a
 // finger (wake, taps, back, gestures) through `finger`, a show command
@@ -105,7 +110,7 @@ import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
 import {
-  AT_OVERVIEW, COVERED, TOUCH, backControl, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createReturn, createTaps, createTouch, hitAll, hitTest,
+  AT_OVERVIEW, COVERED, TOUCH, backControl, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createReturn, createTaps, createTouch, hitAll, hitTest, roleOf,
   manualLine, memberPoints, orbitLimits, placeOf, tapPoints,
 } from './touch.js';
 
@@ -118,6 +123,8 @@ export function boot() {
   const page = document.documentElement;
   const q = new URLSearchParams(location.search);
   if (q.has('demo')) page.dataset.demo = '1';
+  const role = roleOf(q.get('role'));
+  if (role !== 'tour') page.dataset.role = role;
   const canvas = document.getElementById('galaxy');
 
   const style = getComputedStyle(page);
@@ -245,6 +252,7 @@ export function boot() {
   let tour = null;
   const director = createDirector(cam, {
     still: reduced,
+    driver: role === 'explore' && !park ? 'touch' : 'tour', // a person's screen: the finger drives from the start
     held: () => touch != null && touch.mode() !== 'tour', // touch.js's minute hands a finger's page back
     resume: (from) => { if (from === 'show') tour.resume(); },
   });
@@ -364,6 +372,7 @@ export function boot() {
   };
   // The first touch (T7): the tour stops where it is, the camera eases out to the overview.
   touch = park ? null : createTouch(document.getElementById('galaxy-stage'), {
+    role,
     wake: () => {
       shows?.drop(); // the finger has the page: everything shown goes with the director's show
       tour.stop();

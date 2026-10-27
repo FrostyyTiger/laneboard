@@ -63,19 +63,32 @@ export { IDLE };
 export const TOUCH_MODES = Object.freeze(['tour', 'easing', 'explore']);
 
 /**
+ * What the page is for (night 4 T42, README §7 Night 4 D): `tour` (the
+ * default) shows the fleet by itself and a finger borrows it for a minute;
+ * `explore` is a person's screen: it starts in `explore` at the overview and
+ * the tour comes only when asked (`▶ TOUR`, or `handBack()`), never after an
+ * idle minute, so the line by the tag reads `MANUAL` with no countdown.
+ */
+export const ROLES = Object.freeze(['tour', 'explore']);
+
+/** `?role=` as a role: `explore` or `tour`, anything else the default `tour`. Pure. */
+export const roleOf = (value) => (ROLES.includes(value) ? value : 'tour');
+
+/**
  * The next state after `event` at `now` (ms). `state` is `{ mode, since,
  * last }` (`last`: the last touch, ms, or the end of the first touch's
  * ease if later); `event` is `'down'` (a pointer went down), `'touch'` (a
  * pointer moved or lifted, the wheel turned, the back control was pressed),
  * `'handback'` (`▶ TOUR` was pressed: in `explore`, the tour at once) or
  * `'tick'` (time passed). `held` says a finger is
- * down now: the tour never takes the page from under it.
+ * down now: the tour never takes the page from under it. `stay` (the
+ * `explore` role, T42): the minute never hands the page back.
  * Returns `{ state, wake, swallow, resume }`: `wake` when this down is the
  * one that stops the tour (the page fits the camera), `swallow` when the
  * pointer must not reach anything under it, `resume` when `idleMs` passed
  * since the last touch in `explore` (T14: the tour takes the page back). Pure.
  */
-export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDLE.ms, held = false } = {}) {
+export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDLE.ms, held = false, stay = false } = {}) {
   const s = state && TOUCH_MODES.includes(state.mode) ? state : { mode: 'tour', since: null, last: null };
   // `easing` ends on its own: any event after fitMs finds the camera out. The
   // minute counts from then (night 4 T5, Q13: the flight out is not idle time).
@@ -92,7 +105,7 @@ export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDL
   }
   if (event === 'down' || event === 'touch') {
     if (cur.mode !== 'tour') cur = { ...cur, last: now };
-  } else if (cur.mode === 'explore' && !held && now - (cur.last ?? cur.since) >= idleMs) {
+  } else if (cur.mode === 'explore' && !held && !stay && now - (cur.last ?? cur.since) >= idleMs) {
     return { state: { mode: 'tour', since: now, last: cur.last }, wake: false, swallow: false, resume: true };
   }
   return { state: cur, wake: false, swallow: false, resume: false };
@@ -101,10 +114,12 @@ export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDL
 /**
  * How long until the tour takes the page back (night 4 T5), in ms: null
  * unless a finger explores (not in the tour, not while easing out); the whole
- * `idleMs` while a finger is `held` on the glass; never below 0. Pure.
+ * `idleMs` while a finger is `held` on the glass; never below 0; Infinity
+ * when the page `stay`s (the `explore` role: no tour comes by itself). Pure.
  */
-export function idleLeft(state, now, { idleMs = IDLE.ms, held = false } = {}) {
+export function idleLeft(state, now, { idleMs = IDLE.ms, held = false, stay = false } = {}) {
   if (state?.mode !== 'explore') return null;
+  if (stay) return Infinity;
   if (held) return idleMs;
   return Math.max(0, idleMs - (now - (state.last ?? state.since)));
 }
@@ -112,16 +127,18 @@ export function idleLeft(state, now, { idleMs = IDLE.ms, held = false } = {}) {
 /**
  * The line by the tag (night 4 T5): `MANUAL · TOUR IN 0:40` for `ms` left,
  * whole seconds rounded up (the line reads `1:00` for the whole first
- * second, `0:00` never before the hand-back); null for null. Pure.
+ * second, `0:00` never before the hand-back); `MANUAL` alone for Infinity
+ * (the `explore` role, T42: no tour is coming); null for null. Pure.
  */
 export function manualLine(ms) {
+  if (ms === Infinity) return 'MANUAL';
   if (ms == null || !Number.isFinite(ms)) return null;
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `MANUAL · TOUR IN ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
 /**
- * `createTouch(stage, { wake, resume, clock, fitMs, idleMs })` → `{ mode(),
+ * `createTouch(stage, { wake, resume, clock, fitMs, idleMs, role })` → `{ mode(),
  * left(), onPointer(cb), poke(), handBack(), stop() }`. `left()` is
  * `idleLeft` now; `handBack()` gives the page to the tour at once (`resume()`
  * is called, as when the minute is up). `stage` gets the listeners; `wake()` is
@@ -132,11 +149,15 @@ export function manualLine(ms) {
  * (`pointerdown`, `pointermove`, `pointerup`, `pointercancel`) of every
  * pointer but the waking one, with the mode at the time. `poke()` counts as a
  * touch (the back control's press, whose pointers never reach the stage).
+ * `role` (T42, `roleOf`): `explore` starts in `explore` with no wake and
+ * never hands back by the minute; `tour` (the default) as above.
  */
 export function createTouch(stage, opts = {}) {
   const o = { wake: () => {}, resume: () => {}, clock: () => performance.now(), fitMs: TOUCH.fitMs, idleMs: IDLE.ms, ...opts };
-  const timing = () => ({ fitMs: o.fitMs, idleMs: o.idleMs, held: fingers.size > 0 });
-  let state = { mode: 'tour', since: null, last: null };
+  const stay = roleOf(o.role) === 'explore';
+  const timing = () => ({ fitMs: o.fitMs, idleMs: o.idleMs, held: fingers.size > 0, stay });
+  const t0 = stay ? o.clock() : null;
+  let state = stay ? { mode: 'explore', since: t0, last: t0 } : { mode: 'tour', since: null, last: null };
   const waking = new Set(); // the pointers that woke the page: theirs never reach `onPointer`
   const fingers = new Set(); // every pointer down now, waking or not
   const cbs = new Set();
