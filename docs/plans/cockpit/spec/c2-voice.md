@@ -1,8 +1,8 @@
 # C2 Voice in
 
 Speaking instead of typing: the talk button, its two gestures, its states and the live words in the
-input (§1-§6, part 1, T6). Fixing a word by tapping the text (§7), the DE/EN choice (§8), the
-speech-to-text config (§9), the service slow or down (§10), the talk key (§11) and the kiosk
+input (§1-§6, part 1, T6). Stopping to fix the words by tapping them (§7), the DE/EN choice (§8), the
+speech-to-text config (§9), the service down or failed (§10), the talk key (§11) and the kiosk
 microphone note (§12) are part 2 (T7), with scenarios in §13. §14 is **C2b, the physical button**:
 a later slice, not part of C2's build night (D55). Words
 as in the glossary (`README.md`). Sizes are CSS px at 1368x912; times in s or ms; budgets `B<n>` are
@@ -43,7 +43,8 @@ Listening starts on `pointerdown` in both gestures (D29, B1). The gesture is dec
   long it was held (WCAG 2.5.2: act on release).
 - **Slide off** (hold only, D40): a release more than 48 px outside the button's box (x < 1232 or
   y < 776 on the Wall), or a `pointercancel`, does **not** send: the microphone closes, the words
-  stay in the input as an editable draft, the hint reads `KEPT AS DRAFT, NOT SENT` for 5 s.
+  stay in the input as an editable draft, the hint reads `MICROPHONE OFF · TEXT KEPT` (§4, "One
+  hint").
 - **What "send" means**: the microphone stops, the screen asks for the final text (§4), and the
   final text is sent as the prompt exactly as a typed one is (`c1-talk.md` §7), with the label
   `YOU · SPOKEN · 07:02` (B3). During a running turn this send stops the turn first (`c1-talk.md`
@@ -107,13 +108,18 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   and tail, and is sent (B3: ≤ 0.3 s from the release to the prompt block). The final is the
   speech service's text, not what the screen showed last: if the two differ, the final wins.
 - **Nothing heard.** A final with no words sends nothing: `data-talk="idle"`, the input as before the
-  press, the hint `NOTHING HEARD` for 3 s.
+  press, the hint `MICROPHONE OFF`.
 - **No final in 3 s** (D41): the screen keeps the last words shown as an editable draft, not sent;
-  the exact message is §10's `stt-no-final`.
+  the exact message is §10's `stt-failed`.
 - **Limits** (D45). Listening with no word for 30 s closes the microphone, nothing is sent, hint
-  `NOTHING HEARD IN 30 S · MICROPHONE OFF` for 5 s. Listening for 120 s in all closes it, the words
-  stay as a draft, not sent, hint `2 MIN LIMIT · MICROPHONE OFF · TEXT KEPT` until the input changes.
-  A brushed button (D29) therefore never listens longer than 30 s by itself.
+  `MICROPHONE OFF`. Listening for 120 s in all closes it, the words stay as a draft, not sent, hint
+  `MICROPHONE OFF · TEXT KEPT`. A brushed button (D29) therefore never listens longer than 30 s by
+  itself.
+- **One hint** for "the microphone closed and nothing was sent" (nothing heard, the 30 s and 120 s
+  limits, slide off, a tap on the words in §7): `MICROPHONE OFF`, and `MICROPHONE OFF · TEXT KEPT`
+  when the input holds spoken words. It shows for 5 s in the hint line's place (§3), or until the
+  input changes or the next press, whichever comes first. `CANCEL` shows no hint (the owner asked
+  for it); a failure shows §10's line instead.
 - **Per screen** (D37): partial words never reach another screen; only the sent prompt does.
 
 ## 5. The microphone
@@ -210,7 +216,7 @@ state compared by eye against `sketches/c2-states.html` in the build night's rev
 Given the fake speech scripted to send `no_audio_detected` and then an empty final,
 When the owner holds the button from t = 0 to 1.5 s,
 Then by t = 1.8 s `data-talk="idle"`, the input is as before the press, the hint reads
-`NOTHING HEARD` and is gone at t = 4.8 s; no prompt block is drawn; the microphone track is stopped.
+`MICROPHONE OFF` and is gone by t = 6.9 s (5 s); no prompt block is drawn; the microphone track is stopped.
 Test: Playwright; the received-turns count stays 0; the fake speech service's log shows the end
 frame and no audio frame after t = 1.7 s (the microphone is closed).
 
@@ -218,11 +224,11 @@ frame and no audio frame after t = 1.7 s (the microphone is closed).
 Given a fake clock and the fake speech scripted to send nothing,
 When the owner taps the talk button at t = 0,
 Then at t = 30 s `data-talk="idle"`, the fake speech service gets no more frames, the hint reads
-`NOTHING HEARD IN 30 S · MICROPHONE OFF` until t = 35 s; nothing sent.
+`MICROPHONE OFF` until t = 35 s; nothing sent.
 And given the fake speech sending a growing partial every 1 s from 0.6 s, when the owner taps at
 t = 0 and does nothing more, then at t = 120 s the microphone closes, the textarea holds the last
-words as a draft, the hint reads `2 MIN LIMIT · MICROPHONE OFF · TEXT KEPT`, nothing is sent; typing
-one character removes the hint.
+words as a draft, the hint reads `MICROPHONE OFF · TEXT KEPT`, nothing is sent; typing one
+character removes the hint.
 Test: Playwright `page.clock` plus the stand-in's clock verb (T32); assert `data-talk`, the hint,
 the textarea value, the received-turns count 0.
 
@@ -231,8 +237,8 @@ Given the fake speech scripted as S-C2-01, the input empty,
 When the owner holds the button at (1312, 856) from t = 0, moves the finger to (1100, 700) at
 t = 2.0 s and lifts it at t = 2.2 s,
 Then no prompt is sent; by t = 2.4 s the microphone is closed, `data-talk="idle"`, the textarea
-holds `what failed tonight` (the last words shown), the hint reads `KEPT AS DRAFT, NOT SENT` until
-t = 7.2 s; the textarea is editable and `SEND` is enabled.
+holds `what failed tonight` (the last words shown), the hint reads `MICROPHONE OFF · TEXT KEPT`
+until t = 7.2 s; the textarea is editable and `SEND` is enabled.
 And lifting the finger at (1250, 830) (inside the 48 px margin) sends as a normal hold.
 Test: Playwright, CDP touch move; the received-turns count (0, then 1 in the second run).
 
@@ -270,7 +276,7 @@ fake speech service gets no audio frame after t = 2.2 s.
 Test: Playwright; assert the text before and after, the speech service's frame log, the
 received-turns count 0.
 
-## 7. Fixing a word (D47)
+## 7. Stopping to fix the words (D47)
 
 Plan C2: "Before that [the send], a tap on the text lets the owner fix a word or cancel." Cancel is
 `CANCEL` in the `SEND` slot (§3, D42); this section is the fix.
@@ -280,29 +286,20 @@ Plan C2: "Before that [the send], a tap on the text lets the owner fix a word or
   the microphone closes within 0.1 s, the room asks for the final text as for a send (§4), and
   nothing is sent.
 - **The final goes into the textarea**, not the conversation, ≤ 0.3 s after the tap (the fake
-  speech's 0.15 s included, as B3). `data-talk="idle"`. The tapped word is **selected** in the
-  textarea (`setSelectionRange` over it) and the textarea gets the focus, so the on-screen keyboard
-  comes up and the next key replaces the word. This focus is the owner's own tap, so D20 does not
-  hold it back.
-- **Which word.** The screen counts the white-space-separated words of the shown text before the
-  tapped point (`document.caretPositionFromPoint`, `caretRangeFromPoint` where that is missing) and
-  selects the word with the same index in the final. A tap on a space selects the word after it;
-  a final with fewer words puts the caret at the end, nothing selected. A typed draft in front
-  (D44) counts as words like the rest.
-- **No final in 3 s** (D41): the last words shown go into the textarea instead, the tapped word
-  selected the same way, and §10's `stt-no-final` line shows.
-- **Hint**: `FIX, THEN SEND · NOT SENT YET` for 5 s, in the hint line's place (§3).
+  speech's 0.15 s included, as B3). `data-talk="idle"`, the textarea has the focus with the caret at
+  the end of its text, so the on-screen keyboard comes up; the owner moves the caret to the word.
+  This focus is the owner's own tap, so D20 does not hold it back. Hint `MICROPHONE OFF · TEXT KEPT`
+  (§4).
+- **Where the tap landed does not matter.** The shown words and the final differ often (case,
+  punctuation, merged words), so the screen does not guess which word was meant.
+- **No final in 3 s** (D41): the last words shown go into the textarea instead, caret at the end,
+  and §10's `stt-failed` line shows.
 - **Then** the textarea is an ordinary draft: `SEND` sends it as a typed prompt (label
   `YOU · 07:02`, not `SPOKEN`: the owner changed it); a press on the talk button adds spoken words
   after it (D44); clearing it by hand is the "cancel".
-- **During a hold** a tap on the text is ignored: the finger on the button decides, by release or
-  slide off (§2). A second finger is already ignored on the button (§1); the text follows the same
-  rule.
-- **In `final`** (the release came, the final is awaited, ≤ 3 s): a tap on the text turns the send
-  into a fix: when the final arrives it goes into the textarea as above and nothing is sent.
-- On a paired keyboard any printable key while listening in the tap gesture does the same as a tap
-  at the end of the text: microphone closed, the final into the textarea, the caret at its end, the
-  key typed there.
+- **During a hold, and in `final`**, a tap on the text is ignored: the finger on the button already
+  decided, by release or slide off (§2). A second finger is already ignored on the button (§1); the
+  text follows the same rule.
 
 ## 8. The speech language (D48)
 
@@ -350,34 +347,35 @@ which process is the room: pending Q-O15).
   opener is the cockpit button (`screens.md` §4, pending
   Q-O11). Typing is the whole C1, so the pane is complete without voice (`single-machine.md`, T19).
 
-## 10. Speech-to-text slow or down (D50)
+## 10. Speech-to-text down or failed (D50)
 
 The room talks to the speech service, the screen only to the room (`protocols.md`, T15/T16), so
-these are the room's findings, sent to the screen; the screen draws them. Each failure ends in
-the `error` state (§3) with its line in §5's place and look, `data-talk-error` naming the cause.
-**Typing always works**, and nothing spoken is sent unless a final came (D41).
+these are the room's findings, sent to the screen; the screen draws them. Each ends in the `error`
+state (§3) with its line in §5's place and look. **Typing always works**, and nothing spoken is
+sent unless a final came (D41). There are two cases, told apart by one fact: had a word been shown
+in `[data-talk-text]` when it went wrong?
 
 | `data-talk-error` | When (measured by the room) | Microphone | Line (exact) |
 | --- | --- | --- | --- |
-| `stt-down` | the connect fails, or the service's first message (`config`) has not come 2.0 s after the press | closed at 2.0 s; the held audio is dropped | `Speech-to-text is not answering, so nothing was heard. Typing works. Tap TALK to try again.` |
-| `stt-busy` | the upgrade is refused with 403 (session limit, research Q4) | closed at once | `Speech-to-text has no free session. Typing works. Tap TALK to try again.` |
-| `stt-refused` | the upgrade is refused with 401 (token missing or wrong) | closed at once | `Speech-to-text refused the room's token. Typing works. Fix cockpit.stt.tokenFile on the room.` |
-| `stt-failed` | while listening: a `status: "error"` update, or the connection closes with any code but 1000 | closed at once; the words shown so far go into the textarea as a draft | `Speech-to-text failed while listening. Your words so far are in the input, not sent.` |
-| `stt-no-final` | released or second tap, and no final 3.0 s later (D41) | already closed; the last words shown go into the textarea | `Speech-to-text did not finish in 3 s. Your words are in the input, not sent.` |
+| `stt-down` | **no word shown yet**, and: the connect fails or the service's first message (`config`) has not come 2.0 s after the press; or the upgrade is refused (401, 403); or a `status: "error"` update, a close other than 1000, or no final 3.0 s after the release | closed (at 2.0 s for no answer, at once otherwise); the held audio is dropped; the input as before the press | `Speech-to-text is down ({detail}), so nothing was heard. Typing works. Tap TALK to try again.` |
+| `stt-failed` | **a word was shown**, and: a `status: "error"` update, or a close other than 1000, or no final 3.0 s after the release, second tap or tap on the words (D41) | closed at once (no final: already closed); the last words shown go into the textarea as a draft | `Speech-to-text did not finish. Your words are in the input, not sent.` |
+
+`{detail}` is the cause in words, so setting up still gets its hint; the button carries it as
+`data-talk-detail`:
+
+| `data-talk-detail` | `{detail}` |
+| --- | --- |
+| `no-answer` | `no answer in 2 s` |
+| `busy` (403, research Q4: session limit) | `no free session` |
+| `token` (401) | `the room's token was refused: fix cockpit.stt.tokenFile` |
+| `failed` (error update, bad close, no final) | `it failed` |
 
 - A tap on the talk button in `error` is a new press: a new connect, a new session.
 - The line stays until the next press, as §5's; a draft it mentions stays until the owner sends
   or edits it (D12's rule: never sent on its own).
-- **Slow, not down.** While listening the room watches two signals: no message at all from the
-  service 4.0 s after the first audio frame went to it, or `remaining_time_transcription` (research
-  Q4: the service's lag) ≥ 2.0 s in an update. Either one sets `data-talk-slow` on the button and
-  the hint line `SPEECH-TO-TEXT IS SLOW · WORDS MAY LAG` (in place of `LISTENING`, §3). The
-  microphone stays open and nothing else changes; an update with a lag under 1.0 s clears it.
-  Listening's 30 s / 120 s limits (D45) still hold.
-- **Down for everyone.** After `stt-down`, `stt-busy` or `stt-refused` the room keeps the cause for
-  30 s; a press on any screen in that time still tries again (no screen is locked out by an old
-  failure), but every paired screen's talk button shows the struck glyph (as `error`) until a
-  connect succeeds.
+- **No slow hint.** Lagging words show themselves in the input; listening's 30 s / 120 s limits
+  (D45) still hold. Each screen learns of a down service on its own press; no other screen is
+  marked.
 - **`none` is not a failure**: §9.
 
 ## 11. The talk key
@@ -432,33 +430,32 @@ What the later `docs/cockpit.md` says, from research Q3. The microphone needs tw
 
 ## 13. Scenarios, part 2
 
-Setup as §6. The fake speech service (T18) can also be scripted to refuse a connect, answer
-slowly, fail mid-session and withhold the final; the stand-in room's config sets
+Setup as §6. The fake speech service (T18) can also be scripted to refuse a connect, not
+answer, fail mid-session and withhold the final; the stand-in room's config sets
 `cockpit.stt.language` per scenario.
 
-### S-C2-11 Tap the live words to fix one: the microphone closes, the word is selected, nothing sent
+### S-C2-11 Tap the live words to fix them: the microphone closes, the text is a draft, nothing sent
 Given the fake speech scripted: partial `restart the runner on builder-b` by 1.6 s, final `Restart
 the runner on builder-b.` 0.15 s after the end frame,
 When the owner taps the talk button at t = 0, then taps the word `builder-b` in `[data-talk-text]`
 at t = 3.0 s,
 Then by t = 3.1 s the fake speech service gets no more audio frames; by t = 3.3 s
-`data-talk="idle"`, the textarea holds `Restart the runner on builder-b.`, its selection covers
-`builder-b.` (word 5), the textarea has the focus, the hint reads `FIX, THEN SEND · NOT SENT YET`
-until t = 8.3 s; no prompt is drawn.
-When the owner types `builder-a.` and taps `SEND`,
+`data-talk="idle"`, the textarea holds `Restart the runner on builder-b.`, `selectionStart` and
+`selectionEnd` are both 32 (its length), the textarea has the focus, the hint reads
+`MICROPHONE OFF · TEXT KEPT` until t = 8.3 s; no prompt is drawn.
+When the owner presses Backspace 10 times, types `builder-a.` and taps `SEND`,
 Then the prompt reads `Restart the runner on builder-a.` with the label `YOU · HH:MM` (no `SPOKEN`).
 Test: Playwright; tap at the word's rect from `Range.getBoundingClientRect`; assert
 `selectionStart`/`selectionEnd`, `document.activeElement`, the received-turns log (one turn, the
 fixed text).
 
-### S-C2-12 A tap on the text during a hold is ignored; during `final` it turns the send into a fix
-Given the fake speech scripted as S-C2-01, and for the second run the final delayed by 1.0 s,
+### S-C2-12 A tap on the text during a hold is ignored
+Given the fake speech scripted as S-C2-01,
 When the owner holds the talk button from t = 0 and a second finger taps the live words at t = 1.8 s,
 then releases at t = 2.5 s,
 Then the microphone stays open until the release and the prompt `What failed tonight?` is sent (B3).
-And in the second run, when the owner holds from t = 0 to 2.5 s and taps the text at t = 2.7 s,
-Then nothing is sent; at t ≈ 3.5 s the final goes into the textarea with the tapped word selected.
-Test: Playwright, CDP two-point touch for the first run; received-turns count (1, then 0).
+Test: Playwright, CDP two-point touch; received-turns count 1; the fake speech service's frame log
+has frames up to t = 2.5 s.
 
 ### S-C2-13 DE/EN: one tap switches, the choice is the screen's, the service gets it
 Given `cockpit.stt.language: ["de", "en"]`, a fresh browser profile,
@@ -482,35 +479,38 @@ Test: Playwright; no `getUserMedia` call is made (a page-side spy).
 Given the fake speech service stopped (T32's verb),
 When the owner taps the talk button at t = 0,
 Then `data-talk="listening"` by t = 0.2 s (B1: the microphone is the screen's); at t = 2.0 s the
-microphone closes, `data-talk="error"`, `[data-talk-error="stt-down"]` reads `Speech-to-text is not
-answering, so nothing was heard. Typing works. Tap TALK to try again.`; a second paired screen's
-talk button shows the struck glyph.
+microphone closes, `data-talk="error"`, `[data-talk-error="stt-down"]` with
+`data-talk-detail="no-answer"` reads `Speech-to-text is down (no answer in 2 s), so nothing was
+heard. Typing works. Tap TALK to try again.`; typing `status` and `Enter` sends it.
 When the fake speech service is started and the owner taps the talk button again,
-Then the line goes, `data-talk="listening"`, and partials arrive as in S-C2-01; the second screen's
-glyph is back within 1 s.
-And with the service scripted to refuse with 403, the line reads `Speech-to-text has no free
-session. Typing works. Tap TALK to try again.` (`stt-busy`) at once.
-Test: Playwright, two pages; assert the times with ± 0.2 s on the 2.0 s; the line texts exactly.
+Then the line goes, `data-talk="listening"`, and partials arrive as in S-C2-01.
+And with the service scripted to refuse with 403 the line reads `Speech-to-text is down (no free
+session), so nothing was heard. Typing works. Tap TALK to try again.` at once; with 401, `Speech-to-text
+is down (the room's token was refused: fix cockpit.stt.tokenFile), so nothing was heard. Typing
+works. Tap TALK to try again.`
+Test: Playwright, one page; assert the time with ± 0.2 s on the 2.0 s; the line texts exactly; the
+received-turns log has `status` only.
 
 ### S-C2-16 The service fails mid-sentence: the words so far are a draft, nothing sent
 Given the fake speech scripted: partial `stop the nightly` at 0.6 s, then at 1.2 s an update with
 `status: "error"`,
 When the owner holds the talk button from t = 0 to t = 3.0 s,
 Then by t = 1.4 s the microphone is closed, `data-talk="error"`, the textarea holds `stop the
-nightly`, the line reads `Speech-to-text failed while listening. Your words so far are in the input,
-not sent.`; the release at 3.0 s sends nothing.
+nightly`, `[data-talk-error="stt-failed"]` reads `Speech-to-text did not finish. Your words are in
+the input, not sent.`; the release at 3.0 s sends nothing.
 And the same with the connection closed with code 1011 instead of the error update.
+And with the error update at 0.4 s (before any word), the line is `stt-down` with
+`data-talk-detail="failed"` and the textarea is as before the press.
 Test: Playwright; received-turns count 0; the textarea value; the line text exactly.
 
-### S-C2-17 Slow words show a hint; a missing final keeps the text
-Given the fake speech scripted: partial `how is` at 0.6 s with `remaining_time_transcription: 2.4`,
-`how is the hub` at 1.6 s with `0.6`; no final after the end frame,
+### S-C2-17 A missing final keeps the text
+Given the fake speech scripted: partials `how is` at 0.6 s and `how is the hub` at 1.6 s; no final
+after the end frame,
 When the owner holds the talk button from t = 0 to t = 2.5 s,
-Then from the first update until the second the hint reads `SPEECH-TO-TEXT IS SLOW · WORDS MAY LAG`
-and `data-talk-slow` is set; after the second they are gone; at t = 5.5 s (3.0 s after the release)
-the textarea holds `how is the hub`, `[data-talk-error="stt-no-final"]` reads `Speech-to-text did
-not finish in 3 s. Your words are in the input, not sent.`, and nothing has been sent.
-Test: Playwright; poll the hint and the attribute every 50 ms; the received-turns count 0.
+Then `data-talk="final"` from 2.5 s; at t = 5.5 s (3.0 s after the release) `data-talk="error"`, the
+textarea holds `how is the hub`, `[data-talk-error="stt-failed"]` reads `Speech-to-text did not
+finish. Your words are in the input, not sent.`, and nothing has been sent.
+Test: Playwright; poll `data-talk` every 50 ms; the received-turns count 0.
 
 ### S-C2-20 The talk key: F13 tap-tap and hold, from any focus
 Given the pane closed, the fake speech scripted as S-C2-01,
