@@ -194,3 +194,126 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 | 63 | touch | 8 | 4 | 4 | 7 | 6 | 5 | 5 |
 
 ## Morning
+
+Written by the final round (71), 2026-10-27 05:02.
+
+- **Written:** the C1-C4 parts (screens, talk, voice, see, show/canvas: 114 scenarios), both
+  protocols, the stand-ins, the build order (`slices.md`), 120 decisions, 10 reviews triaged.
+- **Not written:** `security.md` (T17), `coworker.md` (T13), `c5-c6.md` (T14), `single-machine.md`
+  (T19), canvas part 3 (T12); and 64 fix tasks from the reviews, several of which C1 needs (below).
+- **Why it stopped:** the round limit (71 rounds), not the 20:00 deadline and not a failure.
+
+### The spec at a glance
+
+| file | what | scenarios |
+|---|---|---|
+| `spec/README.md` | index, glossary, speed budget (T24), room process | 0 |
+| `spec/screens.md` | modes, layouts (pending Q-O22), cockpit button, pairing (pending Q-O21), room down | 23 `S-SCR-` |
+| `spec/c1-talk.md` | the pane, replies at arm's length, typing, events, stop, new conversation | 26 `S-C1-` |
+| `spec/c2-voice.md` | talk button, live words, fix, cancel, language, speech down; C2b the button | 21 `S-C2-`, 2 `S-C2B-` |
+| `spec/c3-see.md` | MCP read tools, focus, "Ask about this" | 18 `S-C3-` |
+| `spec/c4-show-canvas.md` | show commands, canvas, kit blocks, cards leaving (part 3 missing) | 24 `S-C4-` |
+| `spec/protocols.md` | screen ⇄ room message by message; room ⇄ agent bridge and ⇄ speech | 0 (message examples, fixtures) |
+| `spec/stand-ins.md` | fake speech, fake agent, real room with a fake agent, control API | 0 (used by the scenarios) |
+| `spec/slices.md` | build nights in order, ids per slice, acceptance harness (D88) | 0 (every id in one slice) |
+| `spec/DECISIONS.md` | D1-D120 | — |
+| `spec/QUESTIONS.md` | 14 for the morning, 11 that can wait, 4 closed as D-lines | — |
+
+### Sketches (newest shots, dark, 1368)
+
+| sketch | newest shot | behind the spec |
+|---|---|---|
+| `spec/sketches/c1-pane.html` | `$RUN_DIR/shots/63-c1-pane/` | yes: T47, T70, T101 |
+| `spec/sketches/c2-states.html` | `$RUN_DIR/shots/63-c2-states/` | yes: T95 (Q-O19 d) |
+| `spec/sketches/c3-ask.html` | `$RUN_DIR/shots/63-c3-ask/` | yes: T101 |
+| `spec/sketches/c4-canvas.html` | `$RUN_DIR/shots/63-c4-canvas/` | yes: T82 |
+| `spec/sketches/screens-room-down.html` | `$RUN_DIR/shots/63-screens-room-down/` | yes: T70 (since T52) |
+| `spec/sketches/screens-split.html` | `$RUN_DIR/shots/63-screens-split/` | yes: T25, T82 |
+
+`$RUN_DIR` is the run's folder outside the repo; each shot folder holds `custom-dark-1368.png`.
+
+### Scores (10 reviews, rounds 21-63)
+
+| | concrete | complete | consistent | testable | ownerfit | simple | safe |
+|---|---|---|---|---|---|---|---|
+| average | 7.7 | 3.2 | 4.6 | 6.4 | 5.3 | 4.9 | 5.8 |
+| lowest | 7 | 2 | 4 | 4 | 4 | 3 | 3 |
+
+The panel's three biggest worries:
+1. **C1 cannot be built as written yet** (complete 3.2). The C1 parts exist, but the fixes reviews
+   asked for are open: steer instead of interrupt (T85, T88), the read-only launch line (T57), the
+   on-screen keyboard (T40, T94), the room's process (T86), close codes (T89). Review 52 asked to
+   freeze new content for this; the night did, but ran out of rounds.
+2. **Files disagree with each other** (consistent 4.6). D89 vs D92 on who serves the page; the spec
+   recommends Q-O1 d) but is written for a); every sketch is behind its spec.
+3. **Setups other than the owner's, and the agent's power** (simple 4.9, safe 5.8). No tailnet, no
+   GPU, another agent: Q-O27 and `single-machine.md` (T19, T74) are open; what the agent may run
+   before C6 (Q-O23) and `security.md` (T17, T61) decide whether C1 is safe on any box.
+
+### Tasks
+
+Done, 38: T1 `bb2249b`, T2 `269e375`, T3 `ba70963`, T4 `ef19310`, T5 `e601b02`, T6 `f6d0043`, T7
+`5ef3c54`, T8 `7309f15`, T9 `fd7ed05`, T10 `00c4e56`, T11 `69d5114`, T15 `24d1e5d`, T16 `039c6e0`,
+T18 `11fd3d8`, T20 `0adeebd`, T22 `ba70963`, T24 `9419a10`, T26 `a67ee3e`, T27 `c6420dc`, T29
+`fb5080c`, T30 `0adeebd`, T32 `11fd3d8`, T37 `0adeebd`, T38 `cc2474c`, T39 `ba70963`, T41
+`a67ee3e`, T48 `b9e3e22`, T49 `cb582bb`, T50 `9f82145`, T51 `6815c45`, T52 `84a7cf0`, T54
+`ab1b92a`, T55 `cc2474c`, T62 `0adeebd`, T80 `0adeebd`, T81 `0adeebd`, T87 `11fd3d8`; final report
+(this commit).
+
+Open, 64, none blocked:
+- **before a C1 night** (owner answers change some of them): T85, T88 (steer), T57 (launch line),
+  T86 (room process), T89, T90, T92 (protocol rules), T40, T94 (keyboard), T96, T97, T100 (pane
+  layout and type), T56, T60, T71 (pairing, audit, `screen` kind — only if Q-O21 a/c or Q-O27 a),
+  T33, T34, T36, T76, T93 (selectors, renderer, demo), T68, T91 (login check, restart);
+- **before C2:** T42, T95, T64, T102, T69, T84, T58, T78;
+- **the rest:** T12, T13, T14, T17, T19, T21, T23, T25, T28, T31, T35, T43, T44, T45, T47, T53,
+  T59, T61, T63, T65, T66, T67, T70, T72, T73, T74, T75, T77, T79, T82, T83, T98, T99, T101.
+
+Tests after round 70: `npm test` 3454 pass, 0 fail. The night wrote no code; the one red run (round
+55) was a flake in `test/term-proxy.test.mjs` (see For the owner).
+
+**Needs you, worst first.**
+
+1. **Answer spec/QUESTIONS.md.** The first 14, a letter each, about 15 minutes; Q-O11, Q-O1, Q-O23,
+   Q-O21 and Q-O27 change what C1 builds. The rest can wait.
+2. **Give C1 one more spec night or a fix night first.** The C1/C2 tasks listed above are open;
+   a builder night started now would have to guess at steering, the launch line and the keyboard.
+   Suggested: one short spec night on that list after your answers.
+3. **Check the security decisions taken without you.** D89-D92 (the room is a laneboard server
+   with a `cockpit` section, on the page's origin, reading the hub's loopback as `local`, a front
+   forwarding `/api/cockpit/`; Q-O29 asks the routing), D90 (D13 pairing codes, D14 nothing in
+   browser storage, D22 links not tappable, D66 the chip sends only a node id), D108 (the agent's
+   environment is a short allowlist) and D103 (stop escalates to `SIGINT` at 5 s, `SIGTERM` at 8 s).
+   Strike a line to reopen it.
+4. **A browser on the `ci` VM.** D88 keeps the Playwright acceptance tests out of `npm test`
+   until `ci` has a browser; until then nobody runs them on a PR.
+5. **Confirm three Claude Code facts on a real run** (research Q10, open): the raw `interrupt`
+   control request and its response, whether `system/init` comes before the first stdin line, and
+   what a failed login prints. `protocols.md` §11 rests on them; research could not confirm them.
+6. **The `term-proxy` test flake.** Its wait helper (`test/term-proxy.test.mjs` line 92) times out
+   on a loaded box; a longer deadline is outside this night's allowed paths.
+
+### Research
+
+- Q1 Touch and type: 48 px targets minimum, 56+ for frequent or hard-to-undo, 8 px apart; hold
+  400-500 ms with 8-10 px slop; 26-30 px for text read while talking.
+- Q2 Claude Code headless: stream-json events for text deltas, tool use and results, `resume` by
+  session id; the raw stdin interrupt JSON is unconfirmed (Q10).
+- Q3 Kiosk microphone: needs a secure context and `AudioCaptureAllowedUrls` (Chrome/ChromeOS, not
+  Android); `OverrideSecurityRestrictionsOnInsecureOrigin` for plain HTTP.
+- Q4 WhisperLiveKit: `ws://…/asr?language=`, binary 16 kHz PCM with `--pcm-input`, full-mode
+  updates resend `lines` plus a `buffer_transcription` partial; no latency figures found.
+- Q5 MCP for Claude Code: stdio or Streamable HTTP via `--mcp-config` and `--strict-mcp-config`,
+  tools `mcp__<server>__<tool>`; no push to the model, so focus must be pulled.
+- Q6 HTML cards: `sandbox="allow-scripts"` only, never `allow-same-origin`, CSP as a header on a
+  card route, data only by `postMessage`; WebRTC is a known gap.
+- Q7 Android microphone: no no-prompt route found; Linux managed-policy path assumed.
+- Q8 Prompt while a turn runs: queued into the running turn after the current tool calls
+  (`priority:"next"`); interrupting is a separate request; steering is native.
+- Q9 Path mounts: `tailscale serve --set-path` strips the prefix (give a full target URL), passes
+  `Origin`; Caddy `reverse_proxy` keeps the path; nginx needs `Upgrade` headers and a long read timeout.
+- Open: Q10 (three Claude Code facts, item 5 above).
+
+### Owner notes
+
+The script left no owner-notes file for this run.

@@ -6,478 +6,343 @@ engineering with a strict default, go to `DECISIONS.md` instead, with an overrul
 strike. The spec is written for the recommendation and marks that text `(pending Q-O<n>)`; when
 the owner answers, the answer goes on the `Answer:` line and the marked text is fixed to match.
 
-Numbers are never reused or renumbered. Q-O1 to Q-O9 come from `../spec-input.md` §7; the rest came
-from writing and reviewing the spec. Plan §6.2 gives the morning Q&A about 15 minutes, so the list
-starts with eight questions, one line each: a letter per question is enough. The full text of each
-follows; everything after "The eight in full" can be read later.
+Numbers and option letters are never reused or renumbered (the spec cites them), so a list may skip
+a letter. Q-O1 to Q-O9 come from `../spec-input.md` §7; the rest came from writing and reviewing
+the spec. The final round (71) cut each question to its options and one line of recommendation;
+the longer reasoning is in git history (commit `cc2474c` and before) and in the reviews named.
 
-## The eight (about 15 minutes)
+## For the morning, worst first
 
-Ordered by what the C1 build night needs first, then C2.
+The first fourteen, about 15 minutes: a letter per question is enough. Ordered by what the C1 build
+night needs first, then C2. The first five change what C1 builds; the rest change a slice or a size.
 
-1. **Q-O11** How talking starts. Recommended c): the bottom-right button is the talk button (hold or
-   tap listens at once), a small `CHAT` opens the pane for typing, and the button carries a marker
-   when the agent wants you.
-2. **Q-O1** Talk pressed while the agent answers. Recommended d) steer: the new words go into the
-   running turn at its next step, `STOP` is the separate way to end it (research Q8: your terminal
-   does this).
-3. **Q-O2** How long a conversation lives. Recommended d): one conversation until you press `NEW`;
-   no handover note; the new session reads what a laptop session reads.
-4. **Q-O23** What the agent may do before C6. Recommended a) read only (fleet read tools, `Read`,
-   `Grep`, `Glob`), plus a slice of its own for scheduled jobs on the room's machine before the
-   rest of C6 (T81).
-5. **Q-O21** Pairing in C1, or C1 behind what the board already trusts. Recommended b) for a screen
-   only you can touch; pairing becomes its own later slice.
-6. **Q-O22** No canvas until C4. Recommended b): until C4 the page is the Wall or the app with the
-   pane over it; `split` and the canvas arrive with C4.
-7. **Q-O18** Size of the reply and the live words. Recommended b) 28 px (about 33 characters per
-   line).
-8. **Q-O9** Screen sizes. Recommended b): 1368x912 touch, plus 1024x768 and a 1920x1080 wall
-   without touch; and tell us how many screens you have today and which layout on each.
+## Q-O11 How talking starts
 
-## The eight in full
+Blocks C1/C2. From `reviews/21-owner.md` (2, 7). Spec: `screens.md` §4, `c1-talk.md` §2, D7.
 
-## Q-O11 How talking starts: the talk button on the screen or behind the pane
+- a) The bottom-right 64x64 button is the talk button: hold or tap and it listens at once, the pane
+  opens with the live words; a smaller `CHAT` opens the pane for typing.
+- b) The button opens the pane; the talk button is inside it.
+- c) a), and the button carries a marker when the agent wants you.
 
-Added by triage of review 21 (findings 2, 7). Blocks C1/C2; shapes `screens.md` §4 (D7). Spec: T4, T6.
-
-- a) **The bottom-right 64x64 button is the talk button**: hold or tap and it listens at once and
-  opens the pane with the live words; a smaller control opens the pane for typing and reading.
-- b) The button opens the pane; the talk button is inside it (today's D7).
-- c) a), and the button also carries a marker when the agent wants you (count or dot).
-
-Recommendation: c) — `spec-input.md`: in the terminal talking is one held key, so it must be one
-press here; the marker gives "speaks up on its own" a place on a closed-pane Wall.
+Recommendation: c) — in the terminal talking is one held key (`spec-input.md`), so here it is one press.
 
 Answer: (open)
 
 ## Q-O1 Talk pressed while the agent is still answering
 
-`spec-input.md` §7.1: "Interrupt, queue, or ignore?" Blocks C1/C2. Spec: T5, `c1-talk.md` §8, D32-D33 (written for a).
+Blocks C1/C2. `spec-input.md` §7.1 ("Interrupt, queue, or ignore?"). Spec: `c1-talk.md` §8,
+S-C1-16, S-C2-09, D32/D33 (still written for a until T85).
 
-- a) **Interrupt on send**: the running turn stops when the new prompt is sent, its text stays
-  marked "stopped"; a separate Stop button stops without a new prompt.
-- b) **Queue** the new prompt until the turn ends.
-- c) **Ignore**: talk is disabled until the turn ends.
+- a) Interrupt on send: the running turn stops, its text stays marked "stopped".
+- b) Queue the new prompt until the turn ends (or "ignore": talk off until then).
+- d) Steer: the new words go into the running turn at its next tool boundary (Claude Code's
+  default, research Q8); `STOP` is the separate way to end it; an agent that cannot steer queues.
 
-- d) **Steer**: deliver the new prompt into the running turn when the agent supports it (it is read
-  at the next tool boundary, nothing is thrown away), else queue it as b). The bridge needs a
-  stdin channel that accepts a user message mid-turn and an event telling when it was taken in;
-  with an agent that cannot, it falls back to b), never to a).
-
-Caution (`reviews/52-owner.md` finding 4): the argument "waiting would lose the terminal's speed"
-assumes the owner's terminal interrupts. It may queue or inject instead, and then the habit is
-"steer", and a) throws away half an answer each time the owner adds "and builder-b too". Nobody has
-checked. Research Q8 (`research/Q8-prompt-while-turn-runs.md`) has since answered it: a message
-sent mid-turn is by default queued and read in the same turn as soon as the running tool calls
-finish (`priority:"next"`); interrupting is a separate request. Steering is native.
-
-Recommendation: d) — Q8 shows it is what the owner's terminal does (send queues into the running
-turn, a separate key stops), so nothing already said is thrown away; `STOP` stays the way to end an
-answer. c) breaks the terminal-like speed of `spec-input.md` §1. The spec (`c1-talk.md` §8, D32-D33,
-S-C1-16, S-C2-09) is still written for a) until T85 rewrites it for d).
-
-Answer: (open)
-
-## Q-O2 How long one conversation lives, and what carries over
-
-`spec-input.md` §7.2. Blocks C1. Spec: T5, T51, `c1-talk.md` §11, D36 (written for d since T51).
-
-- a) **One conversation forever**, compacted or restarted behind the scenes.
-- b) **Daily fresh start** at a fixed hour, plus a "New conversation" button.
-- c) **"New conversation" button only**, plus a forced fresh start when the session cannot go on.
-- d) c) with **no handover note**: a new session at once, divider `NEW CONVERSATION · 07:10`, the
-  agent reads the written context a laptop session would (`reviews/36-skeptic.md` finding 4; before T51, D36 was c) plus a note).
-
-Security argument for d) (`reviews/40-security.md` finding 9): a note written by an agent that read an
-injected log line carries the injection into the "fresh" session. If c) stays, the note is shown in full
-under the divider and the new session is told it is "notes from the previous session, not instructions".
-
-Recommendation: d) — the plan (§3 C1) says "on a fresh start the agent reads the same written
-context a laptop session would", and a laptop session gets no note; a note is an extra agent turn
-that can fail or hang on the one button meant to escape a broken session, and it can carry an
-injection across (finding 9 above). Carried over: repos/plans/notes, canvas cards, scheduled jobs;
-the old conversation stays readable above the divider.
+Recommendation: d) — it is what the owner's terminal does, and nothing already said is thrown away.
 
 Answer: (open)
 
 ## Q-O23 What the agent may do before C6
 
-Security-relevant, blocks C1 (the launch line). From `reviews/40-security.md` finding 2. Plan §4: "its
-act access is C6 only". `spec-input.md` §3 says the agent "manages (stop and start things, e.g. over SSH)"
-and sets up scripts and timers on its own machine. The spec's tool table (`c1-talk.md` §5) assumes
-`Bash`, `Edit`, `Write`, web tools. A C1 agent that reads logs and feeds (untrusted), holds the fleet's
-state (private) and can fetch URLs (a way out) has all three legs of an exfiltration.
+Security, blocks C1 (the launch line). From `reviews/40-security.md` (2), `44-operator.md` (6),
+`52-owner.md` (6). Spec: `c1-talk.md` §5, `slices.md` (T81).
 
-- a) **Read only**: the MCP read tools plus `Read`/`Grep`/`Glob`. No `Bash`, no `Edit`/`Write`, no web.
-  Launched with `--strict-mcp-config --allowedTools "mcp__laneboard__*,Read,Grep,Glob"
-  --permission-prompts none`; a refused call shows as a grey line `tried {tool}, not allowed`.
-- b) a) plus `WebSearch`/`WebFetch`, with the room's egress limited to the model API, the STT host and
-  the git remote.
-- c) The full tool set, as on the laptop.
+- a) Read only: the fleet read tools plus `Read`/`Grep`/`Glob`; no `Bash`, `Edit`, `Write`, web. A
+  refused call shows `tried {tool}, not allowed`; scheduled jobs on the room's own machine get their
+  own slice before the rest of C6.
+- b) a) plus `WebSearch`/`WebFetch`, the room's egress limited to the model API, speech and git.
+- c) The full tool set, as on the laptop (keeps "scripts and timers on its own machine" from day one).
 
-Recommendation: a) — "look freely, change only with a yes" (`spec-input.md` §6) taken literally; changes
-arrive with C6 through the audited control plane. The spec is written for a) (pending Q-O23).
-
-What each option takes away from `spec-input.md` §3 (review 44-operator.md finding 6): with a) and b)
-the agent cannot set "scripts and timers on its own machine" ("shut this off in 3 hours") and cannot
-cancel a job, and cannot stop or start things over SSH, until C6; it answers "I cannot schedule jobs
-yet (C6)." instead of trying `Bash`. Only c) keeps them, with nothing between the agent and the room's
-shell. Until C3 (the fleet read tools) exists, the agent in C1 also sees nothing of the fleet (finding 1).
-
-Date, not just a wait (`reviews/52-owner.md` finding 6): C6 waits on a control-plane review with no
-date, so a) alone turns the coworker into a reader for weeks. Recommended addition: `slices.md` gives
-**scheduled jobs on the room's own machine** (create with a confirm, shown on the Map, cancel with a
-confirm, audited) a slice of their own before the rest of C6 (T81). The answer to a) should be given
-knowing that slice's place in the order; the bridge's refusal line names it.
+Recommendation: a) — "look freely, change only with a yes" (`spec-input.md` §6) taken literally.
 
 Answer: (open)
 
-## Q-O21 Is pairing part of C1, or does C1 run behind what the board already trusts
+## Q-O21 Pairing in C1, or C1 behind what the board already trusts
 
-Security-relevant, from `reviews/36-skeptic.md` finding 3. `spec-input.md` §6 names device tokens as
-one option beside "auth in front" and "LAN-only". Spec: `screens.md` §6 (written for a).
+Security, blocks C1. From `reviews/36-skeptic.md` (3), `40-security.md` (3). Spec: `screens.md` §6,
+`slices.md` §3.1 (C1's ids under each answer).
 
-- a) **Pairing is part of C1** (codes, CLI approve/unpair, as written; Q-O10 applies).
-- b) **C1 runs behind the existing trust** (`local`, `direct` through serve, the tailnet); pairing
-  becomes its own later slice for setups that need it. Note (`reviews/40-security.md` finding 3): on the
-  hub a `direct` user can act, kill and open terminals, so a kiosk that reaches the hub as the owner's
-  tailnet login holds more than "a window"; plan §2 says a screen holds no credentials.
-- c) b), but the screen's tailnet identity is a separate login or tagged device that is not in
-  `fleet.allowedUsers` for actions and terminals. Needs a `read`-only `direct` kind that does not exist
-  today.
+- a) Pairing is part of C1 (codes, CLI approve/unpair; Q-O10 applies).
+- b) C1 runs behind the existing trust (`local`, `direct` through serve, the tailnet); pairing is
+  its own later slice. Note: on the hub a `direct` user can act and open terminals.
+- c) b), but the screen's tailnet login is not in `fleet.allowedUsers` for actions (needs a new
+  `read`-only `direct` kind).
 
-Recommendation: b) for a screen only the owner can touch; c) or a) for a screen others can reach. b) — the first chat line should not wait for a pairing flow the owner did not ask
-for; the spec keeps §6 as the later slice. `screens.md` §6 writes the pairing flow and places it in the Pair slice (b); C1's ids under each answer: `slices.md` §3.1.
-
-Answer: (open)
-
-## Q-O22 No canvas and no layout until C4
-
-From `reviews/36-skeptic.md` finding 1. At 1368 the default `split` gives 608 px to
-`Nothing on the canvas yet.` until C4 shows anything. Spec: `screens.md` §1 (written for b) since T54, a) kept as the Canvas slice's layouts; C1's ids under each answer: `slices.md` §3.1).
-
-- a) **`split` is the default from C1**, canvas empty until C4.
-- b) **Until C4 there is no canvas**: the page is the Wall (or the app) and the pane slides over it;
-  `split`, `canvas`, `switch`, the `SCREEN` sheet and `cockpit.layout` arrive with C4.
-
-Recommendation: b) — an empty 44 % of the owner's one screen breaks "never an empty screen" in
-spirit. Q-O12 and Q-O13 then wait for C4.
-
-Answer: (open)
-
-## Q-O18 Size of the reply and the live words
-
-From review 31-touch.md. Research Q1 recommends 26-30 px for text read while speaking; D21 settled
-the 22 px floor. Spec: `c1-talk.md` §3, `c2-voice.md` §3.
-
-- a) **22 px** (the floor): about 42 characters per line in the 560 px column, more on screen.
-- b) **28 px**: about 33 characters per line, easier at 60 cm, replies run longer.
-- c) 22 px with a setting the owner can raise.
-
-Recommendation: b) — the owner reads at arm's length while talking; line length is the cheaper loss.
-The spec stays at 22 px (pending Q-O18) until answered.
-
-Answer: (open)
-
-## Q-O9 Screen sizes and orientation to design for
-
-`spec-input.md` §7.9, and §2 "split or switching". Shapes every screen. Spec: T2, `screens.md`.
-
-- a) **1368x912 landscape, touch only**, the one size checked.
-- b) a) plus 1024x768 tablet and 1920x1080 wall screen without touch.
-- c) b) plus portrait.
-
-Recommendation: b) — split at ≥ 1280 px, switch below (`screens.md` §1, D9); also tell us the
-tablet's panel size and viewing distance (research Q1 assumed 12.3 in at about 60 cm).
-
-Also asked (review 21, finding 5): how many physical screens do you have today, and which layout
-on each (`split`, `wall`, `canvas`)? `spec-input.md` does not say; the spec must not assume two.
-
-Answer: (open)
-
-## Also before C1: security and failure
-
-Each has a safe recommendation the spec is written for; answering differently changes a slice, not
-the order.
-
-## Q-O10 Who approves a screen's pairing, and how long its token lives
-
-Security-relevant, blocks C1 (the pane needs a paired screen). Spec: T3, `screens.md` §6 (written).
-
-- a) **Only the room's own CLI approves** (`laneboard cockpit pair K7M-4QX`, `local` on the room);
-  tokens live until `laneboard cockpit unpair`.
-- b) a), plus a token expires after 30 days without being seen.
-- c) Any already paired screen may approve a new one, from its pane.
-
-Caution (`reviews/40-security.md` finding 1): the agent runs on the room's box, and `local` there
-includes the agent. So a) alone lets an injected line run `pair` or `button add`. a) only holds if
-`pair`, `unpair` and `button add|remove` are refused for the agent's uid (the agent runs as its own unix
-user, no read on the cockpit state dir; the CLI checks the peer uid and fails closed), or if approval is
-`direct` only (the owner through serve). Also: the pairing code must not be enough to collect the token
-(finding 4: a `pairSecret` the screen keeps in memory, CLI shows the requester's address and asks y/N).
-
-Recommendation: a) with the uid refusal above — nobody off the room's box, and not the agent on it, can
-add a screen, and a desk kiosk that pairs again every month is a chore for no gain while `unpair` is one
-command. Finding 7 asks for b) (30-day expiry): decide with this.
+Recommendation: b) for a screen only the owner can touch; the first chat line should not wait on pairing.
 
 Answer: (open)
 
 ## Q-O27 How a screen reaches the board when there is no tailnet
 
-Security-relevant, a one-way door, blocks C1 on any setup but the owner's. From round 48
-(`reviews/48-stranger.md` finding 1). Laneboard binds loopback and, with no `fleet` block, treats
-every caller as `local` (`docs/fleet/auth.md` rule 1). `screens.md` §6 says viewing the board "stays
-as today"; without a tailnet that means a tablet behind a reverse proxy is `local` and can act,
-launch, retire and type into terminals. `spec-input.md` §6: "Not tied to one VPN: a tailnet is the
-owner's way; auth in front, device tokens or LAN-only are others."
+Security, a one-way door, blocks C1 on any setup but the owner's. From `reviews/48-stranger.md` (1).
+Without a `fleet` block every caller is `local`, so a tablet behind a reverse proxy can act.
 
-- a) **A paired device token is also the screen's way into the board** as a new request kind
-  `screen`: every read plus `/api/cockpit/*`, no action, no terminal, no push change. Only that kind
-  is accepted on a LAN address; a screen without a token sees only the pairing card.
-- b) A reverse proxy with its own login; the tablet stays `local`. Documented as unsafe for anything
-  but a closed network.
-- c) The cockpit needs a tailnet in v1. Breaks `spec-input.md` §6.
+- a) A paired device token is the screen's way in, as a new request kind `screen`: every read plus
+  `/api/cockpit/*`, no action, terminal or push change; only that kind is accepted on a LAN address.
+- b) A reverse proxy with its own login, the tablet stays `local`; documented as closed-network only.
+- c) The cockpit needs a tailnet in v1 (breaks `spec-input.md` §6, "not tied to one VPN").
 
-Recommendation: a) — it follows §6 ("device tokens") and keeps "a token cannot act" (plan §2). Cost: a
-new request kind and a section in `security.md`. The spec is written for a) (pending Q-O27).
-
-Answer: (open)
-
-## Q-O6 What each screen shows when the agent's machine is down
-
-`spec-input.md` §7.6. Spec: T3, `screens.md` §7 (written for a).
-
-- a) **The board keeps working, the cockpit says it is away** (since when, retry, draft kept, cards
-  marked `STALE`).
-- b) **An error screen** until the room is back.
-- c) **The cockpit disappears silently.**
-
-Recommendation: a) — "never an empty screen" (`docs/plans/product.md`) rules out b); c) hides a
-fault.
-
-Answer: (open)
-
-## Q-O19 Protecting dictation and answers from a missed tap
-
-From review 31-touch.md finding 3. `CANCEL` (drops spoken words) and `STOP` (ends an answer) sit
-16 px from the talk button; neither has an undo.
-
-- a) **Undo**: `CANCEL` keeps the words 5 s with an `UNDO` in the same slot.
-- b) **Gap**: 24 px between the slot and the talk button, `STOP` acts on release only.
-- c) **Confirm** tap before dropping.
-- d) **Move `CANCEL` away** (review 63-touch.md finding 2): while the microphone is open the slot is
-  blank and inert, and `CANCEL` is a 48x48 `✕` at the left end of the live-words box (Wall x
-  792-840), far from where the finger goes to send. A release over the slot cancels. It changes
-  where the owner's hand learns to go.
-
-Recommendation: a), b) and d) together — nothing is lost for good, the finger that sends never
-lands on the button that drops, and a confirm would slow the common case. Spec (pending Q-O19).
+Recommendation: a) — it follows §6 ("device tokens") and keeps "a token cannot act" (plan §2).
 
 Answer: (open)
 
 ## Q-O29 How the screen reaches the room when board and room are two processes
 
-Review 59-implementer.md (findings 1, contradictions list). D92 sends `/api/cockpit/*` on the page's own origin to the room, so every two-process setup needs a reverse proxy or `tailscale serve --set-path` in front. That is a deployment one-way door and departs from plan C4's "room → hub → screens". D89 and D91 are also security-relevant.
+Security-relevant deployment door. From `reviews/59-implementer.md` (1). Spec: D89, D92,
+`protocols.md` §1 (T86 open).
 
-- a) **Same origin, a front forwards `/api/cockpit/`** (D92 as written; the hub carries nothing new).
-- b) **Through the hub**: the hub proxies the room's routes and relays show commands to screens (no front needed; the hub gains a cockpit relay and a new trust edge).
-- c) **One process only**: the room is always part of the process that serves the page (`mode: builder` plus a `cockpit` section, or a hub with one); no two-process setup in v1.
+- a) Same origin: a front (reverse proxy or `tailscale serve`) forwards `/api/cockpit/` to the room.
+- b) Through the hub: the hub proxies the room's routes and relays show commands (a new trust edge).
+- c) One process only in v1: the room is always part of the process that serves the page.
 
-Recommendation: a), with c) as the one-box default (no front needed there). It keeps the origin checks of `auth.md` simple and the hub unchanged.
-
-Answer: (open)
-
-## Decided instead
-
-Asked earlier, but build or security engineering with a strict choice (`reviews/52-owner.md`
-finding 3): T55 turned them into D-lines. Strike the D-line to reopen one; its overrule part lists
-the other options.
-
-- **Q-O14** A browser test runner in the repo → **D88**: Playwright as a devDependency, outside `npm test`.
-- **Q-O15** Which process is "the room", and the origin the screen talks to → **D89**: a laneboard server with a `cockpit` section, same origin as the page.
-- **Q-O16** Security-adjacent choices logged as decisions → **D90**: D13, D14, D22 and D66 stand as written.
-- **Q-O26** How the room reads the hub → **D91**: the room runs on the hub's box as its own user, reads loopback as `local`.
-
-## Can wait
-
-Not needed before the C1 and C2 build nights.
-
-## Q-O12 Where the conversation sits in `split` and `canvas`
-
-Added by triage of review 21 (finding 3). Shapes `screens.md` §3, D5, D8. Spec: T4, T11 (`c4-show-canvas.md` §7.1, D78, written for a).
-
-- a) **A fixed conversation column/strip** inside the canvas, cards beside or above it, never under
-  it; the 300 s auto-close (D5) applies only to the pane over the Wall and app views.
-- b) The pane slides over the canvas half (today's D8), closing after 300 s.
-
-Recommendation: a) — the agent answers by placing cards; hiding them behind the words that announce
-them defeats the point.
+Recommendation: a), with c) as the one-box default — the hub stays unchanged and origin checks simple.
 
 Answer: (open)
 
-## Q-O13 Canvas width: fixed or collapsing when idle
+## Q-O10 Who approves a screen's pairing, and how long its token lives
 
-Added by triage of review 21 (finding 8). Shapes D9, S-SCR-01.
+Security. Needed in C1 only if Q-O21 is a) or c), or Q-O27 is a). From `reviews/40-security.md`
+(1, 4, 7). Spec: `screens.md` §6, D13, T56.
 
-- a) **Fixed 608 px** canvas column (today's D9).
-- b) **Collapses to a ~96 px strip** with a card count after N minutes without cards or talk, grows
-  when a card arrives.
+- a) Only the room's own CLI approves (`laneboard cockpit pair K7M-4QX`), refused for the agent's
+  unix user; the CLI shows the requester's address and asks y/N; tokens live until `unpair`.
+- b) a), plus a token expires after 30 days without being seen.
+- c) Any already paired screen may approve a new one.
 
-Recommendation: b) — the Wall is "the one place to see" the whole fleet; half-empty black costs it
-44 % of the screen.
+Recommendation: a) — nobody off the box, and not the agent on it, can add a screen; `unpair` is one command.
 
 Answer: (open)
 
-## Q-O17 What the raw view shows
+## Q-O2 How long one conversation lives
 
-Security-relevant (what a screen can read). Plan C1: "A raw terminal view of the same session as a
-toggle". Spec: T5 wrote b); T50 rewrote `c1-talk.md` §13 for d).
+Blocks C1. `spec-input.md` §7.2. Spec: `c1-talk.md` §11, S-C1-22, D36 (written for d).
 
-- a) **Every event of the agent as it wrote it**, tool output included.
-- b) **Every event, tool output replaced by its size** (`[tool output: 3 412 bytes]`); room config
-  `cockpit.raw.toolOutput: true` shows it.
-- c) **A live terminal** through `server/terminals.mjs` (a writable pty on the room).
-- d) **Not in C1**: the opened tool lines (input, ms, `ok|failed`) are the raw view (`reviews/36-skeptic.md` finding 7).
+- a) One conversation forever, compacted or restarted behind the scenes.
+- c) A `NEW` button, plus a forced fresh start when the session cannot go on, with a handover note.
+- d) c) without the handover note: the new session reads what a laptop session reads.
 
-Recommendation: d) — opened tool lines already show each call's input, ms and `ok|failed`; a second
-renderer of the same events as one-line JSON is not read on a desk tablet, and "The laptop keeps its own
-full access, as today." (`spec-input.md` §3). If the owner wants the toggle, b) as a later slice: the
-headless agent has no terminal to show, c) would hand a device token a shell (plan §4: a token
-cannot act), and tool output can carry what the agent read from files or logs, so it stays off a
-desk screen unless turned on (safe by default, `docs/plans/product.md`).
+Recommendation: d) — plan §3 C1 says so, and a note can fail on the escape button or carry an injection.
+
+Answer: (open)
+
+## Q-O22 No canvas and no layout until C4
+
+Blocks C1's screen. From `reviews/36-skeptic.md` (1). Spec: `screens.md` §1 (written for b),
+`slices.md` §3.1.
+
+- a) `split` is the default from C1, the canvas empty until C4.
+- b) Until C4 the page is the Wall or the app with the pane over it; `split` and the canvas come with C4.
+
+Recommendation: b) — an empty 44 % of the one screen breaks "never an empty screen" in spirit.
 
 Answer: (open)
 
 ## Q-O24 How long the room keeps what was said
 
-Security-relevant. From `reviews/40-security.md` finding 6. Every sent prompt and what the agent reads
-goes to the agent's model service (with Claude Code: Anthropic); the spec only says where audio goes.
+Security. From `reviews/40-security.md` (6). Every prompt and what the agent reads goes to its model
+service (with Claude Code: Anthropic). Spec: T91, `security.md` (T17).
 
-- a) Audio never written to disk, partials never stored, the conversation kept 30 days, then deleted.
-- b) As a), but the conversation kept until `new conversation` or unpair, no timer.
+- a) Audio never on disk, partials never stored, the conversation kept 30 days, then deleted.
+- b) As a), but kept until `NEW` or unpair, no timer.
 - c) Nothing kept: a reload shows an empty conversation.
 
-Recommendation: a) — resume across a reload and a night needs some memory, and a limit is cheap;
-`security.md` (T17) carries the table, one row per data kind.
+Recommendation: a) — resume across a reload needs some memory, and a limit is cheap.
 
 Answer: (open)
 
-## Q-O25 A scheduled job while the room cannot be reached from a screen
+## Q-O18 Size of the reply and the live words
 
-Security-relevant. From `reviews/44-operator.md`, contradictions list. `spec-input.md` §6: "Scheduled
-jobs are visible: on the board and on the canvas, cancellable. No hidden timers." `screens.md` §7
-disables `CANCEL JOB` when the room is down, yet the job may still run on the room.
+Taste, C1. From `reviews/31-touch.md`; research Q1 gives 26-30 px for text read while speaking.
+Spec: `c1-talk.md` §3, `c2-voice.md` §3 (still 22 px until T97).
 
-- a) The job runs as scheduled; the screen shows it as `CANNOT CANCEL FROM HERE`.
-- b) The job runs only if some screen can reach the room at the job's time; otherwise it is skipped and
-  logged.
-- c) A job needs a screen-room link in the last 10 min, else it is skipped and logged.
+- a) 22 px, about 42 characters per line in the 560 px column.
+- b) 28 px, about 33 characters per line, easier at 60 cm.
+- c) 22 px with a setting the owner can raise.
 
-Recommendation: b) — a timer the owner cannot stop is the thing §6 forbids; skipping is the safe side.
-Belongs to `coworker.md` (T13); not needed for C1/C2.
+Recommendation: b) — read at arm's length while talking; line length is the cheaper loss.
 
 Answer: (open)
 
-## Q-O28 What the always-on agent may spend, and which standing jobs start on
+## Q-O19 Protecting dictation and answers from a missed tap
 
-From round 48 (`reviews/48-stranger.md` finding 7). The cockpit agent, speak-ups and drift checks
-(`coworker.md`, T13) draw on the same subscription window as the owner's loops. Nothing limits or
-shows that.
+Touch, C2. From `reviews/31-touch.md` (3), `63-touch.md` (2). Spec: `c2-voice.md` §2-§3, D40/D42 (T42, T95).
 
-- a) **A cap and its own lane:** `cockpit.agent.maxTurnsPerHour` (default 20), the line `The cockpit
-  paused itself: 20 turns this hour. It answers again at 08:00.`, spend shown as lane `cockpit` on
-  Credit and Morning; standing jobs (speak-ups, drift) default off until the owner turns them on.
-- b) Same, but standing jobs default on for the owner's setup only.
-- c) No cap; report spend only.
+- a) Undo: `CANCEL` keeps the words 5 s with `UNDO` in the same slot.
+- b) Gap: 24 px between the slot and the talk button; `STOP` acts on release only.
+- d) Move `CANCEL`: while listening the slot is blank, `CANCEL` is a 48x48 `✕` at the left end of
+  the live-words box, far from where the finger sends.
 
-Recommendation: a) — safe by default (`product.md`); the owner turns things on once and sees the cost.
-Belongs to `coworker.md` (T13); not needed for C1 beyond the cap.
+Recommendation: a), b) and d) together — nothing is lost for good and the sending finger never lands on drop.
 
 Answer: (open)
 
-## Q-O8 Which screen the physical button targets
+## Q-O9 Screen sizes, and how many screens
 
-`spec-input.md` §7.8. Blocks only C2b, the button (later, `spec-input.md` §4), not C2. Spec: T7, `c2-voice.md` §14 (written for a: `--screen` per button token, else the screen touched last).
+Shapes every screen. `spec-input.md` §7.9 and §2. Spec: `screens.md` §1, D9.
 
-- a) **One screen named in config**; none named: the screen touched last.
-- b) **The screen touched last**, always.
-- c) **All screens** at once.
+- a) 1368x912 landscape touch only.
+- b) a) plus 1024x768 tablet and a 1920x1080 wall screen without touch.
+- c) b) plus portrait.
 
-Recommendation: a) — predictable, and c) would open microphones in other rooms (privacy).
-
-Answer: (open)
-
-## Q-O20 How a physical button proves it may press talk
-
-Security-relevant (a new kind of caller on the room). Blocks only C2b, the button (later), not C2.
-Spec: T7, `c2-voice.md` §14 (written for a), D52.
-
-- a) **Its own token**, made by the room's CLI (`laneboard cockpit button add hall --screen desk`),
-  shown once, stored hashed, able only to press and release talk on its target; revoked with
-  `button remove`.
-- b) **No token, loopback or LAN only**: any caller that reaches the room may press talk.
-- c) **A screen's device token**, copied into the button.
-- d) a), plus an API press is refused while the screen had no touch for 5 min (the owner is not
-  there), or an API press only opens listening and a send needs a touch (`reviews/40-security.md`
-  finding 11: a stolen button token otherwise opens an empty room's microphone into the model service).
-
-Recommendation: a) — b) lets anything on the network open a microphone on the desk, and c) puts a
-token that can read the conversation into a home automation box.
+Recommendation: b). Also tell us: how many screens today, which layout on each, the panel size and distance.
 
 Answer: (open)
 
-## Q-O5 How loud the agent is when it speaks up, and quiet hours
+## Q-O6 What a screen shows when the agent's machine is down
 
-`spec-input.md` §7.5. Spec: T13, `coworker.md`.
+`spec-input.md` §7.6. Spec: `screens.md` §7, S-SCR-17..19, D120 (written for a).
 
-- a) **Always a line only.**
-- b) **Tiered by kind**: info a line; needs-you a line plus a card; urgent adds a sound (and speech
-  once C5 exists); quiet hours on by default, lines and cards only.
-- c) **Everything at full volume.**
+- a) The board keeps working, the pane says the agent is away (since when, `RETRY NOW`, draft kept).
+- b) An error screen until the room is back.
+- c) The cockpit disappears silently.
 
-Recommendation: b) — follows the board's existing trouble ranking (alerts, Stuck).
+Recommendation: a) — "never an empty screen" rules out b), and c) hides a fault.
+
+Answer: (open)
+
+## Decided instead
+
+Asked earlier, closed as D-lines because the strict choice is safe by default (`reviews/52-owner.md`
+finding 3). Strike the D-line to reopen one; its overrule part lists the other options. These are
+also in PROGRESS.md's "Needs you" list, because D89, D90 and D91 are security-relevant.
+
+- **Q-O14** A browser test runner in the repo → **D88**: Playwright as a devDependency, outside `npm test`.
+- **Q-O15** Which process is "the room", and its origin → **D89**: a laneboard server with a `cockpit` section, same origin as the page (conflicts with D92 on who serves the page: T86, Q-O29).
+- **Q-O16** Security-adjacent choices → **D90**: D13, D14, D22 and D66 stand as written.
+- **Q-O26** How the room reads the hub → **D91**: the room runs on the hub's box as its own user and reads loopback as `local`.
+
+## Can wait
+
+Not needed before the C1 and C2 build nights. Same rules; listed in slice order.
+
+## Q-O17 What the raw view shows
+
+Security (what a screen can read). Plan C1: "a raw terminal view … as a toggle". Spec: `c1-talk.md`
+§13 (written for d since T50).
+
+- a) Every event of the agent as written, tool output included.
+- b) Every event, tool output replaced by its size; `cockpit.raw.toolOutput: true` shows it.
+- d) Not in C1: the opened tool lines (input, ms, `ok|failed`) are the raw view.
+
+Recommendation: d) — the laptop keeps full access (`spec-input.md` §3); b) if the owner wants the toggle later.
+
+Answer: (open)
+
+## Q-O12 Where the conversation sits in `split` and `canvas`
+
+C4. From `reviews/21-owner.md` (3). Spec: `c4-show-canvas.md` §7.1, D78 (written for a).
+
+- a) A fixed conversation column inside the canvas, cards beside or above it, never under it.
+- b) The pane slides over the canvas half and closes after 300 s.
+
+Recommendation: a) — hiding cards behind the words that announce them defeats the point.
+
+Answer: (open)
+
+## Q-O13 Canvas width: fixed or collapsing when idle
+
+C4. From `reviews/21-owner.md` (8). Spec: D9, S-SCR-01.
+
+- a) Fixed 608 px canvas column.
+- b) Collapses to a 96 px strip with a card count when idle, grows when a card arrives.
+
+Recommendation: b) — the Wall is "the one place to see" the fleet; half-empty black costs it 44 %.
 
 Answer: (open)
 
 ## Q-O3 Kit blocks in version 1
 
-`spec-input.md` §7.3 (proposed: timer, countdown, chart, table, live log, checklist, status tile,
-map focus). Spec: T11, `c4-show-canvas.md` §8 (written for a), built in the order of b), D83).
+C4. `spec-input.md` §7.3. Spec: `c4-show-canvas.md` §8, D83.
 
-- a) **All eight**, over two slices.
-- b) **Four first** (countdown, status tile, live log, chart), the rest next slice.
-- c) **Seven**: timer folded into countdown.
+- a) All eight (timer, countdown, chart, table, live log, checklist, status tile, map focus), over two slices.
+- b) Four first (countdown, status tile, live log, chart), the rest next slice.
+- c) Seven: timer folded into countdown.
 
-Recommendation: a), built in the order of b); c) is the owner's taste call.
+Recommendation: a), built in the order of b); c) is a taste call.
 
 Answer: (open)
 
 ## Q-O4 How canvas cards leave, and how many fit
 
-`spec-input.md` §7.4. Spec: T11, T12, `c4-show-canvas.md` §7.2 and §9 (written for c): one tap
-removes, 16 cards at most with job countdowns kept, a per-screen shelf for what does not fit, D79,
-D80, D84; expiry is T12's).
+C4. `spec-input.md` §7.4. Spec: `c4-show-canvas.md` §7.2, §9, D79/D80/D84 (written for c).
 
-- a) **Dismissed by hand only.**
-- b) **Expire only.**
-- c) **Both**: one tap removes any card; a card bound to something that ended leaves on its own
-  after a set time; unbound cards stay; a full grid moves older cards to a strip.
+- a) Dismissed by hand only.
+- b) Expire only.
+- c) Both: one tap removes (with undo), cards bound to something that ended leave on their own, 16 at most, older ones to a shelf.
 
-Recommendation: c) — nothing the owner may want vanishes, finished countdowns do not pile up.
+Recommendation: c) — nothing wanted vanishes, finished countdowns do not pile up.
+
+Answer: (open)
+
+## Q-O5 How loud the agent is when it speaks up, and quiet hours
+
+Coworker slice. `spec-input.md` §7.5. Spec: `coworker.md` (T13, not written).
+
+- a) Always a line only.
+- b) Tiered: info a line; needs-you a line and a card; urgent adds a sound; quiet hours on by default.
+- c) Everything at full volume.
+
+Recommendation: b) — follows the board's trouble ranking (alerts, Stuck).
+
+Answer: (open)
+
+## Q-O28 What the always-on agent may spend, and which standing jobs start on
+
+Coworker slice. From `reviews/48-stranger.md` (7).
+
+- a) A cap (`cockpit.agent.maxTurnsPerHour`, default 20, then `The cockpit paused itself …`), spend as lane `cockpit` on Credit and Morning, standing jobs off until turned on.
+- b) Same, but standing jobs on by default for the owner's setup only.
+- c) No cap; report spend only.
+
+Recommendation: a) — safe by default; the owner turns things on once and sees the cost.
+
+Answer: (open)
+
+## Q-O25 A scheduled job while no screen can reach the room
+
+Security, jobs slice. From `reviews/44-operator.md` (contradictions). `spec-input.md` §6: "No hidden timers."
+
+- a) The job runs; screens show `CANNOT CANCEL FROM HERE`.
+- b) The job runs only if some screen can reach the room at its time; else skipped and logged.
+- c) A job needs a screen-room link in the last 10 min, else skipped and logged.
+
+Recommendation: b) — a timer the owner cannot stop is what §6 forbids.
+
+Answer: (open)
+
+## Q-O8 Which screen the physical button targets
+
+C2b, the button (later). `spec-input.md` §7.8. Spec: `c2-voice.md` §14 (written for a).
+
+- a) One screen named in config; none named: the screen touched last.
+- b) The screen touched last, always.
+- c) All screens at once.
+
+Recommendation: a) — predictable; c) would open microphones in other rooms.
+
+Answer: (open)
+
+## Q-O20 How a physical button proves it may press talk
+
+Security, C2b. From `reviews/40-security.md` (11). Spec: `c2-voice.md` §14, D52 (written for a).
+
+- a) Its own token from the room's CLI (`laneboard cockpit button add hall --screen desk`), stored hashed, able only to press and release talk.
+- b) No token, loopback or LAN only.
+- d) a), and an API press only opens listening; a send needs a touch on the screen.
+
+Recommendation: a) — b) lets anything on the network open a microphone on the desk.
 
 Answer: (open)
 
 ## Q-O7 The first "act" list, and which actions always need a confirm
 
-`spec-input.md` §7.7, after the control-plane review. Spec: T14, `c5-c6.md` (rules and confirm
-card only).
+C6, after the control-plane review. `spec-input.md` §7.7. Spec: `c5-c6.md` (T14, not written).
 
-- a) **No act in version 1.**
-- b) **A short list of reversible actions** (stop a run, restart a service), each confirmed.
-- c) **Every control-plane action**, each confirmed.
+- a) No act in version 1.
+- b) A short list of reversible actions (stop a run, restart a service), each confirmed.
+- c) Every control-plane action, each confirmed.
 
-Recommendation: stays open until the control-plane review; the spec assumes a), and every entry
-ever added needs a confirm ("change only with a yes", `spec-input.md` §6).
+Recommendation: open until the control-plane review; the spec assumes a), and every act ever added needs a confirm.
 
 Answer: (open)
