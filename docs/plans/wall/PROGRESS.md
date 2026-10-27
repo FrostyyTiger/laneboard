@@ -301,11 +301,25 @@ Notes for every builder round (planner, round 1):
   over a flight, passing names grey, 12.5 fps (SwiftShader), 0 errors. Seen, not this task: at k 0.95 into HV2
   (`shots/r39-arrive/k095.jpg`) a dark square cuts the red nebula top left of the lock's brackets (a cover's
   ground?); the film's frames do not show it.
-- [ ] T16 (r4-film-ui galaxy 4) [ui] [variant:galaxy] No stray hard lines: no banner-to-node tether at the
+- [x] T16 (r4-film-ui galaxy 4) [ui] [variant:galaxy] No stray hard lines: no banner-to-node tether at the
   overview (the node carries its glyph); the caption's leader to its star is one style (2 px, 90° or 45° elbow,
   routed clear of other labels) — done when: a test shows no tether at the overview and a leader that crosses no
   shown label box on the large fixture, and a film shows no straight red line from banner to node or across empty
-  sky.
+  sky. (commit bf40199)
+  Builder r40: the tether is gone (`tether.js`, its test, layer, css and wiring in `main.js`). `galaxy/lock.js
+  leaderPath(from, at, d, arm, t, avoid, prefer)`: one elbow into the bracket corner nearest the anchor, of
+  `LEADER.routes` `run-45` (level out of the plate, then 45°), `45-run`, `run-90` (level, then down the bracket's
+  side; the only one when steeper than 45°) the first whose legs meet no shown name (+4 px), else the fewest; drawn
+  out leg by leg; two `.wall-lock-leader` spans, the first run on 1 px so the elbow has no notch; `.galaxy-stage
+  .wall-lock-leader` at `--lock-stroke` (2 px) and full opacity, as the brackets (wall.html's hairline unchanged).
+  Decision: three routes alone left 71 of 201 hypothetical leaders on the large fixture (every member of every open
+  system as a crit target, three plate anchors) crossing a name, so the route is kept once a lock (`cur.route`,
+  changed only when a name lands on it) and the names keep off it: `lock.covers()` (`leaderCovers`: a thin box per
+  level/upright leg, 24 px squares along a slant) joins the labels' covers. Cost: 0.5 names hidden on average, at
+  most 3, and 0 crossings. Tests `test/wall-galaxy-leader.test.mjs`. Stills r40-hv2 (STORAGE: a level run then down
+  into the corner) and r40-overview (no line from the banner); film r40-galaxy: elbows only, no tether, 0 errors,
+  11.4 fps (SwiftShader). Seen, not this task: at the overview a dark box sits behind the fleet banner (the far
+  cover's ground?), likely the dark square r39 saw.
 - [ ] T17 (r4-film-ui galaxy 7) [ui] [variant:galaxy] A site label stays on its star: `labels.js` anchors each
   site label to the star's projected point of the same frame, never a stale one — done when: a test moves the
   camera between two draws and finds the label's anchor equal to `screenOf(star)` plus the fixed offset each
@@ -560,6 +574,7 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 
 ## For the owner
 
+- (r40) The r38 Chromes are gone by 02:14 VM time (load 1.2); nothing for the owner to stop any more.
 - (r39) The two r38 Chromes below were still running at 03:01 (gpu processes 3299849, 3300253 at ~250 % CPU each);
   round 39 left them, as round 38's kill was refused.
 - (r38) Two headless Chromes from round 38's first two film-script runs (the script crashed before closing them;
