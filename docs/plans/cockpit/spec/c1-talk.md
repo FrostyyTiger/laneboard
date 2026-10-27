@@ -295,7 +295,8 @@ counts the line's started calls; the `one` text stays while every call has the s
 ` · {k} failed` counts ended calls with `isError:true`.
 
 **A message the pane cannot place** (D119): a `text.*`, `tool.*`, `turn.state`, `turn.retrying` or
-`turn.end` naming a `turnId` the pane does not hold, or a `tool.end` naming an unknown `toolUseId`.
+`turn.end` naming a `turnId` the pane does not hold, a `tool.end` naming an unknown `toolUseId`, or a
+`prompt.taken` naming a `clientId` the pane does not hold.
 The pane has missed something: it closes the link with 4000 `gap` and takes the snapshot
 (`protocols.md` §2.2). Nothing on screen changes until the snapshot has been drawn.
 
@@ -533,6 +534,13 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
   the same screen; the room holds the prompt until the turn ends and sends it then, so it is taken
   as the next turn.
 - A turn the agent started itself (speaking up, `coworker.md`) is steered and stopped the same way.
+- **Across a reload** (D124). The room keeps every prompt sent during a turn as a `prompt` item of
+  that turn (`protocols.md` §2.2), so a reloaded page, or a second screen that opens later, draws
+  it exactly as above: still `· QUEUED` and last, taken and in its place, or `NOT SENT` with its
+  line and `RETRY`/`EDIT`. Later `prompt.taken` messages apply to it as to a block the page drew
+  itself. A block still `· SENDING` at the reload (the room had not echoed it) is gone after the
+  reload: if the room got it, the snapshot holds it; if not, it was never sent, and the reloaded
+  input is empty (the draft went into the block at the tap).
 
 ## 9. Long replies and long turns
 
@@ -811,3 +819,21 @@ second send is not taken either, and at t = 23 s the block reads `YOU · HH:MM �
 Test: Playwright, room clock `manual` and `advance(ms)` (`stand-ins.md` §1.1); two fake-agent scripts; assert
 `prompts()` count 2 with two UUIDs, the room's log line `prompt.resend`, the label texts at 13.5 s
 and 23 s; in both cases exactly one resend.
+
+### S-C1-29 A queued prompt survives a reload (pending Q-O1)
+Given the fake agent on a turn calling a tool from t = 0.5 s to t = 20 s, then writing text, and the
+prompt `only the failed one` sent at t = 1 s and showing `YOU · HH:MM · QUEUED`,
+When the owner reloads the page at t = 3 s and opens the pane,
+Then by t = 5 s the snapshot is drawn: the turn's tool line with `●`, and as the conversation's
+last block `YOU · HH:MM · QUEUED` over `only the failed one` in `--text-2` (the same `HH:MM` as
+before the reload); at t = 20 s the fake agent takes it (`prompt.taken` `taken`), and by t = 20.1 s
+`· QUEUED` is gone, the text is `--text-1` and the block sits above the turn's text that follows.
+And a second case: the owner taps `STOP` at t = 3 s (the prompt reads `NOT SENT` with
+`Dropped by STOP.`), then reloads at t = 5 s: by t = 7 s the reloaded pane shows the same label,
+line, `RETRY` and `EDIT`, and `RETRY` sends `only the failed one` as a new turn with a new
+`clientId`.
+Test: Playwright on the real room with the fake agent; read the `snapshot` frame with
+`framereceived` and assert its running turn has one item `{"kind":"prompt","state":"queued"}` with
+the sent `clientId`; assert label texts and computed colour before and after the reload, at
+20.1 s the block's index among the turn's items; in the second case the item's `state`
+`cancelled` and `why` `stopped`, and `prompts()` count 2 after `RETRY`.

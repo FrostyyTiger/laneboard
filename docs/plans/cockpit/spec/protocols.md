@@ -120,7 +120,7 @@ frame with `part` equal to `parts` has arrived.
 ```json
 {"type":"snapshot","seq":1291,"part":1,"parts":1,"conversation":"c-0007",
  "startedAt":"2026-10-27T06:12:00+01:00","olderTurns":12,
- "turns":[{"turnId":"t-0131","source":"spoken","lang":"de","about":null,
+ "turns":[{"turnId":"t-0131","clientId":"p-0b9e44d1","source":"spoken","lang":"de","about":null,
    "prompt":"wie lief die Nacht?","at":"2026-10-27T07:00:04+01:00","state":"done",
    "items":[
      {"kind":"tool","blockIndex":0,"toolUseId":"tu-01","tool":"mcp__laneboard__morning","input":{"window":"tonight"},
@@ -135,6 +135,28 @@ frame with `part` equal to `parts` has arrived.
 - `items` hold the turn's parts in the order the agent produced them (`blockIndex`, §3.2): `text`,
   `tool` and `show` (§4); an error end is in `end` (§3.2's table). A running turn has `state` `thinking`, `working` or `answering` and
   no `end`; later events continue it (`c1-talk.md` §12: a screen "joins a running turn where it is").
+- **Prompts sent during a turn** (pending Q-O1, D124) are `prompt` items of the turn they were
+  queued in, so a reloaded or newly joined screen draws them as the screens that saw them sent
+  (an item, not a message: the fence carries no `json`, so §9's fixture test skips it):
+
+  ```
+  {"kind":"prompt","clientId":"p-77aa01c3","text":"only the failed one","source":"typed","lang":null,
+   "about":null,"at":"2026-10-27T07:00:06+01:00","state":"queued"}
+  ```
+
+  | `state` | Extra fields | Where in `items` | The screen draws (`c1-talk.md` §8) |
+  | --- | --- | --- | --- |
+  | `queued` | — | after every other item, in send order | `YOU · HH:MM · QUEUED`, text `--text-2`, last in the conversation |
+  | `taken` | `atBlock` | before the first item with `blockIndex` ≥ `atBlock` | the block in its place, text `--text-1` |
+  | `cancelled` | `why` (`stopped`, `not-taken`) | after every other item | `NOT SENT`, the line for `why`, `RETRY`/`EDIT` |
+
+  A `prompt` item takes no `blockIndex`. Later events change it in place: `prompt.taken` (§3.4)
+  sets `state` (and `atBlock` or `why`). A prompt still `queued` when its turn ends and then taken
+  as the next turn leaves the old turn's `items` and becomes the new turn's own `prompt`, `at`,
+  `source`, `lang`, `about` and `clientId` (a turn's `clientId` is `null` for a turn the agent
+  started itself, `coworker.md`). The room holds these items in the conversation it keeps for
+  snapshots and `history` (§3.7); nothing about them is new on the bridge side (§11).
+- Each turn carries `clientId`: the `clientId` of the prompt that started it, or `null`.
 - `pins` and `cards` are C4's (§4, §5); `[]` until then.
 
 **`heartbeat`** (room → screen), every 10 s on every link, no `seq` (D10):
@@ -312,6 +334,10 @@ bridge's `taken` or `interrupted` (§11.3):
   is written to the agent once more as a new `prompt` (a new UUID; a `taken` for either UUID takes
   it) and the room logs `prompt.resend` with both UUIDs. 10.0 s after the resend without a `taken`
   (and no turn from it running): `cancelled` `not-taken`. A prompt is resent at most once.
+- A `prompt.taken` naming a `clientId` the screen does not hold (it reloaded after the send and its
+  snapshot is older than the message, or it missed the `turn.prompt`) is handled as D119: the
+  screen closes the link with 4000 `gap` and redraws from the snapshot, which holds the item
+  (§2.2).
 - A prompt the agent has not taken is never resent while a turn runs: a long tool call can hold it
   for minutes and that is not a fault (research Q8).
 - An agent with `ready.canSteer:false`: the room keeps the prompt and writes it to the agent only
