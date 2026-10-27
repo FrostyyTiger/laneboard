@@ -68,3 +68,28 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   `toolResults(tool?)`, `turnEnds()`, `signals()`, `starts()`, `loginChecks()`, `order(...kinds)` and
   `lines()`; `readFakeAgentLog(dir)` gives the parsed lines — because §2.6 names the functions, not how
   a test gets them — spec: `stand-ins.md` §2.6 — overrule: export plain functions taking `dir`.
+- B12 (T2) The fake speech's `clock` is any object with `now()`, `setTimeout(fn, ms)` and
+  `clearTimeout(handle)` (real time by default, `realClock`); its log's `atMs` reads `clock.now()` —
+  because §3.1 names a shared `testClock` before T3 defines `server/cockpit/clock.mjs` — spec:
+  `stand-ins.md` §1.1, §3.1 — overrule: T3 shapes `clock.mjs`'s timers the same, or adapts here.
+- B13 (T2) `startFakeSpeech({script})` and `use(script, id)` take a script name
+  (`test/cockpit/scripts/<name>.json`, or `scriptsDir`) or the script object itself; the script is
+  checked (kebab-case unique ids, known `fault`, numeric `at`) at load — because the C2 scripts are not
+  written in C1 (T5 writes the C1 ones) and the fault test needs `c2-faults` now — spec:
+  `stand-ins.md` §3.1, §3.2, §5 — overrule: name-only, with `c2-faults.json` written by T5.
+- B14 (T2) The log adds kind `refused` (`conn`, `status`) for an upgrade answered 401/403/require-token,
+  and the `connect` line carries `utterance` (its id); `sent` lines name `config`, `update`,
+  `no-audio`, `error`, `final`, `ready_to_stop`; a close is `by` `fake` or `client` — because §3.4 shows
+  an example, not every kind — spec: `stand-ins.md` §3.4 — overrule: change `log()` calls in
+  `fake-speech.mjs`.
+- B15 (T2) A refused connection uses up its utterance (`token` then `busy` on two connects); `stop()`
+  closes the listener only, open connections play on; `close()` also ends them; any path but `/asr`
+  is answered 404; text frames from the room are ignored — because §3.1 says one connection is one
+  utterance and "closes the listener" — spec: `stand-ins.md` §3.1, §3.3 — overrule: `stop()` also
+  terminates open sockets.
+- B16 (T2) The end frame cancels everything still pending on that connection (updates, `errorAt`,
+  `closeAt`, the `no_audio_detected` ticks); a `noAudio` utterance's final is
+  `active_transcription` with no lines and an empty buffer; `finalAfterMs` defaults to 150; with no
+  audio frame before the end frame, the final still follows — because §3.2 says only that an update
+  after the end frame is not sent — spec: `stand-ins.md` §3.2, §5 — overrule: `endFrame()` in
+  `fake-speech.mjs`.
