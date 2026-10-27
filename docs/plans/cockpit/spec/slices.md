@@ -114,7 +114,7 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 
 **Stand-ins and scripts**: room under test, fake agent (dialect `claude`), demo hub; scripts
 `c1-render`, `c1-typing`, `c1-errors`, `c1-login`, `c1-long`, `c1-session`, `c1-voice` (S-C3-18), `scr-room`,
-`c3-tools` (S-C3-03, S-C3-22, S-C3-23). No fake speech yet: every C1 test boots the room with
+`c3-tools` (S-C3-03, S-C3-22, S-C3-23), `sec-reply`, `sec-inject` (S-SEC-02, S-SEC-03). No fake speech yet: every C1 test boots the room with
 `"stt":{"url":"none"}` (`stand-ins.md` §1.1, D265), so no talk button is drawn. Where a C1
 scenario names the talk button (its rect, `enabled`, `data-talk`), the C1 test asserts the `none`
 layout in its place (`screens.md` §4.1: no `[data-talk]`, `SEND` in the talk button's rect, the
@@ -183,7 +183,7 @@ troubleshooting the room-down line); the demo (`stand-ins.md` §6) answers `how 
 `stt-down`/`stt-failed`; the talk key; the insecure-page line. About 12 steps.
 
 **Stand-ins and scripts**: as C1, plus the fake speech; scripts `c2-tap`, `c2-limits`, `c2-faults`,
-`c2-agent`, `c1-voice`.
+`c2-agent`, `c1-voice`, `sec-spoken` (S-SEC-05).
 
 **Scenarios** (25):
 S-C2-01 S-C2-02 S-C2-03 S-C2-04 S-C2-05 S-C2-06 S-C2-07 S-C2-08 S-C2-09 S-C2-10 S-C2-11 S-C2-12

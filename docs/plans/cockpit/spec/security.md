@@ -264,6 +264,10 @@ Test: Playwright for the pane lines; the fake agent's log (`stand-ins.md` §2.6)
 answered `denied`; the admin route with the room's uid injected (`stand-ins.md` §1.3) for the screens
 list; the pairing `GET` for the code; `laneboard audit` output parsed. This tests the chain, not Claude Code's allowlist (that is
 `protocols.md` §11.2's launch line, asserted by the argv check of S-C1-30).
+In C1 without pairing (Q-O21 b, pending) the screen is a `local` page and there are no pairing
+routes yet: C1 asserts the pane lines, the `denied` `Bash` and that the audit log has no
+`cockpit.pair`; the open code and the `admin/screens` check run with the Pair slice. The same
+holds for S-SEC-02's "paired screen": in C1 it is a `local` page with a room link.
 
 ### S-SEC-04 A copied device token: the conversation yes, the board and pairing no, and gone at `unpair` (pending Q-O21)
 
