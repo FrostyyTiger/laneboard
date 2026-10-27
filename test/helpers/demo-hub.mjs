@@ -539,19 +539,30 @@ export function demoLargeCycle(n) {
   return { alerts, events };
 }
 
+/** A host's cpu on tick `n`, as a live feeder reports it: its own figure, a point or two up or down, never the same two ticks running (night 4 T18). */
+export const wobbleCpu = (cpu, n) => Math.round(Math.max(0.01, cpu + 0.01 * ((((n % 5) + 5) % 5) - 2)) * 100) / 100;
+
 /**
  * The large demo's feeds on tick `n` at `now`: the static feeds with the
  * cycle's alerts on their guests and the last few events (`keep` of them),
- * each stamped once when it happened so the hub reads it once.
+ * each stamped once when it happened so the hub reads it once. Each host's
+ * cpu moves a little every tick, as a real feeder's does (`fx=sweep` reads
+ * that as news, night 4 T18), except on the `silent` sources: their figures
+ * and events stay as they were on the first tick, a site whose data stopped.
  */
-export function createLargeLive({ keep = 8 } = {}) {
+export function createLargeLive({ keep = 8, silent = [] } = {}) {
   let recent = [];
+  const quiet = new Set(silent);
+  let first = null; // the first tick's alerts: what a silent source keeps saying
   return function feedsAt(n, now = Date.now()) {
     const { alerts, events } = demoLargeCycle(n);
-    recent = [...recent, ...events.map((e, i) => ({ ...e, at: now + i }))].slice(-keep);
+    first ??= alerts;
+    recent = [...recent, ...events.filter((e) => !quiet.has(e.source)).map((e, i) => ({ ...e, at: now + i }))].slice(-keep);
     return demoFeedsLarge(now).map((feed) => {
+      const still = quiet.has(feed.source);
+      if (!still && Number.isFinite(feed.host.cpu)) feed.host.cpu = wobbleCpu(feed.host.cpu, n);
       for (const g of feed.guests) {
-        const mine = alerts.filter((a) => a.source === feed.source && a.guest === g.name);
+        const mine = (still ? first : alerts).filter((a) => a.source === feed.source && a.guest === g.name);
         if (mine.length) g.alerts = mine.map(({ level, text }) => ({ level, text }));
       }
       const own = recent.filter((e) => e.source === feed.source);

@@ -69,8 +69,9 @@
 // finger (wake, taps, back, gestures) through `finger`, a show command
 // through `show`; the director plays the one that has the camera (touch >
 // show > tour) and refuses the rest, every hand-over eased from the pose.
-// Effects (§7.C, fx.js): `?fx=beacon,warp,afterglow,activity` (comma-separated, all off by default);
-// `<html data-fx>` lists those on.
+// Effects (§7.C, fx.js): `?fx=beacon,warp,afterglow,activity,sweep` (comma-separated, all off by default);
+// `<html data-fx>` lists those on. `sweep` (night 4 T18) turns once per tour cycle while the camera
+// rests at the overview in the tour's hands; a finger, a show or a flight stops it.
 
 import { createPerf } from '../perf.js';
 import { TIMING, createTour, timingFor, tourOrder } from '../tour.js';
@@ -89,7 +90,7 @@ import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from '
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
 import { createDirector } from './director.js';
-import { critAges, flowJobs, parseFx, workingPlanets } from './fx.js';
+import { createSweep, critAges, flowJobs, parseFx, planeAngle, siteNews, sweepStep, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
@@ -424,6 +425,30 @@ export function boot() {
     },
   }) : null;
 
+  // fx=sweep (night 4 T18, fx.js createSweep): once per tour cycle, while the tour holds the camera
+  // at rest on the overview, the line turns once in the time its leg has left (SWEEP.turnMs at most;
+  // too little time, none that cycle). A finger, a show, a flight or a held site stops it where it is.
+  // A parked overview (`?at=overview`, no tour) sweeps every SWEEP.parkedMs. None in still mode.
+  const sweep = fx.has('sweep') && !reduced ? createSweep() : null;
+  let sweepLeg = null; // the tour's overview leg: `{ cycle, end }` (page time), null on a site leg
+  let swept = null; // the cycle (parked: the time) the last sweep started
+  if (sweep && !park) tour.onLeg((leg) => { sweepLeg = leg.kind === 'overview' ? { cycle: leg.cycle, end: performance.now() + leg.ms } : null; });
+  const runSweep = (now, heldSite) => {
+    const step = sweepStep({
+      now, running: sweep.running(), swept, leg: sweepLeg, parked: Boolean(park), held: Boolean(heldSite),
+      driver: director.driver(), mode: touch?.mode() ?? 'tour', want: cam.want().kind, flight: cam.flight(),
+    });
+    swept = step.swept; // once per cycle, even when it had too little time
+    if (!step.rest) sweep.stop(now);
+    else if (step.start) {
+      // From the top of the frame (where the camera looks along the plane), turning clockwise.
+      const e = galaxy.camera.matrixWorld.elements;
+      const sites = galaxy.world.sites.filter((s) => !s.gone).map((s) => ({ id: s.id, angle: planeAngle(s.home) }));
+      sweep.start(now, step.start.ms, planeAngle({ x: -e[8], z: -e[10] }), sites);
+    }
+    galaxy.setSweep(sweep.frame(now));
+  };
+
   const tick = (now) => {
     requestAnimationFrame(tick);
     const w = galaxy.world;
@@ -454,6 +479,7 @@ export function boot() {
       freeBox();
       aim(parkedOverview(overviewShot(w.sites), w.sites, now));
     }
+    if (sweep) runSweep(now, at);
     galaxy.setSun(sunLook(lastFrameAt == null ? null : Date.now() - lastFrameAt, { still: reduced }));
     galaxy.frame(now);
     cam.drawn();
@@ -473,6 +499,7 @@ export function boot() {
       galaxy.setJobs(flowJobs(model, galaxy.drawn()));
     }
     if (fx.has('beacon')) galaxy.setCritAges(critAges(model, galaxy.world?.byId.keys() ?? []));
+    if (sweep) sweep.model(siteNews(model, galaxy.world?.sites.map((s) => s.id) ?? []));
     hud.update(model);
     tour.update(model);
     if (!park && touch?.mode() === 'tour' && director.driver() === 'tour') tour.start();

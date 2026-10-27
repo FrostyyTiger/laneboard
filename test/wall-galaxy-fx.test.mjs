@@ -81,7 +81,7 @@ function sceneAt(opts = {}) {
 // --- fx=activity ------------------------------------------------------------------
 
 test('activity replaces comets and twinkle (night 4 T17): neither is a name any more', () => {
-  assert.deepEqual([...FX_NAMES], ['beacon', 'warp', 'afterglow', 'activity']);
+  assert.deepEqual([...FX_NAMES], ['beacon', 'warp', 'afterglow', 'activity', 'sweep']);
   assert.deepEqual([...parseFx('?fx=comets,twinkle')], []);
   assert.deepEqual([...parseFx('?fx=twinkle,activity')], ['activity']);
 });

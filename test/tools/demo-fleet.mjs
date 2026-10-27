@@ -5,7 +5,7 @@
 // plus a small loopback forwarder that plays `tailscale serve`.
 //
 //   node test/tools/demo-fleet.mjs [--port 7795] [--builders 3] [--tick 4000] [--design <name>]
-//     [--no-runs-route] [--size small|large] [--quiet-after <s>]
+//     [--no-runs-route] [--size small|large] [--quiet-after <s>] [--silent-site <source>]
 //
 // Then open http://127.0.0.1:<port>/ (from another machine:
 // `ssh -L <port>:127.0.0.1:<port> <host>`). Ctrl-C stops everything.
@@ -22,6 +22,9 @@
 // third tick, every fifth of them a failed one.
 // `--quiet-after <s>` stops the /ws `map` messages <s> seconds after start
 // while the hub stays up (`demoQuiet`): the Wall's stale feed, to film (night 3 T5).
+// `--silent-site <source>` (large only, repeatable or comma-separated: hv1, hv2,
+// cloud, remote, home) keeps that site's feed as it was on the first tick
+// while the others move: the galaxy's `fx=sweep` leaves it dark (night 4 T18).
 //
 // What it shows:
 //   builder-a  lanes in working / waiting (permission + question) / review-ready
@@ -72,7 +75,7 @@ import { parseArgs } from 'node:util';
 import { WebSocket, WebSocketServer } from 'ws';
 import { boot } from '../helpers/boot.mjs';
 import { fakeBuilder } from '../helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoMapLarge, writeDemoFeeds, createLargeLive, demoRunsAnswer, demoMorningWithRuns, demoWsText, demoQuiet, demoAttention, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
+import { DEMO_SITES_LARGE, demoHubConfig, DEMO_HOSTNAME, writeDemoMap, writeDemoMapLarge, writeDemoFeeds, createLargeLive, demoRunsAnswer, demoMorningWithRuns, demoWsText, demoQuiet, demoAttention, FLEET_MORNING_PATH } from '../helpers/demo-hub.mjs';
 import { generateHubKey, publicKeyString } from '../../server/fleet/keys-ed25519.mjs';
 
 // `node --test` (npm test) runs every .mjs under test/, this file included.
@@ -93,11 +96,12 @@ const { values: args } = parseArgs({
     'no-runs-route': { type: 'boolean', default: false },
     size: { type: 'string', default: 'small' },
     'quiet-after': { type: 'string' },
+    'silent-site': { type: 'string', multiple: true, default: [] },
     help: { type: 'boolean', short: 'h', default: false },
   },
 });
 if (args.help) {
-  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms] [--design <name>] [--no-runs-route] [--size small|large] [--quiet-after <s>]\n');
+  process.stdout.write('usage: node test/tools/demo-fleet.mjs [--port 7795] [--builders 2|3] [--tick ms] [--design <name>] [--no-runs-route] [--size small|large] [--quiet-after <s>] [--silent-site <source>]\n');
   process.exit(0);
 }
 const PORT = Number(args.port);
@@ -113,6 +117,12 @@ const SIZE = args.size;
 const QUIET_AFTER_MS = args['quiet-after'] != null ? Number(args['quiet-after']) * 1000 : null;
 if (QUIET_AFTER_MS != null && !(QUIET_AFTER_MS >= 0)) {
   process.stderr.write('demo-fleet: --quiet-after must be a number of seconds\n');
+  process.exit(2);
+}
+const SILENT = args['silent-site'].flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean);
+const SOURCES = DEMO_SITES_LARGE.map((s) => s.source);
+if (SILENT.some((s) => !SOURCES.includes(s))) {
+  process.stderr.write(`demo-fleet: --silent-site must be one of ${SOURCES.join(', ')}\n`);
   process.exit(2);
 }
 const STARTED_AT = Date.now();
@@ -556,7 +566,7 @@ async function main() {
 
   let n = 0;
   // The large demo's trouble, door and flow events, one step per tick (T3).
-  const live = SIZE === 'large' ? createLargeLive() : null;
+  const live = SIZE === 'large' ? createLargeLive({ silent: SILENT }) : null;
   const tick = async () => {
     n++;
     const now = Date.now();

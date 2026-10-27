@@ -256,3 +256,25 @@ test('large demo: a hub booted with it serves five sites and 100-150 nodes on /a
   assert.ok(m.nodes.length >= 100 && m.nodes.length <= 150, `/api/map nodes: ${m.nodes.length}`);
   assert.equal(m.nodes.find((n) => n.id === 'builder:builder-a').parent, 'room-a');
 });
+
+test('large demo live (night 4 T18): every host\'s cpu moves a little each tick; a silent source\'s site says nothing new', async () => {
+  const { siteNews } = await import('../public/js/wall/galaxy/fx.js');
+  const { wobbleCpu } = await import('./helpers/demo-hub.mjs');
+  const live = createLargeLive({ silent: ['remote'] });
+  const news = [];
+  for (let n = 1; n <= 8; n++) {
+    const now = NOW + n * TICK;
+    const feeds = live(n, now);
+    news.push(siteNews(largeModel(now, feeds), SITES));
+    const hv2 = feeds.find((f) => f.source === 'hv2');
+    assert.equal(hv2.host.cpu, wobbleCpu(demoFeedHv2(now).host.cpu, n));
+  }
+  for (let i = 1; i < news.length; i++) {
+    assert.equal(news[i].get('remote'), news[0].get('remote'), `remote silent at tick ${i + 1}`);
+    for (const s of ['lab', 'hv2', 'cloud', 'home']) assert.notEqual(news[i].get(s), news[i - 1].get(s), `${s} has news at tick ${i + 1}`);
+  }
+  for (let n = 0; n < 40; n++) {
+    const c = wobbleCpu(0.3, n);
+    assert.ok(c >= 0.28 && c <= 0.32 && c !== wobbleCpu(0.3, n + 1), 'a point or two either way, never the same twice in a row');
+  }
+});

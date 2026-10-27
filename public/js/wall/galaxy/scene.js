@@ -26,7 +26,7 @@ import { createStageSize } from './stage.js';
 import { LOBES, armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
 import {
-  ACTIVITY, AFTERGLOW, BEACON, WARP, activityLook, afterglowAt, afterglows, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, jobAt, trackJobs, trackWork,
+  ACTIVITY, AFTERGLOW, BEACON, SWEEP, WARP, activityLook, afterglowAt, afterglows, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, jobAt, trackJobs, trackWork,
   warpAt, workAt,
 } from './fx.js';
 
@@ -416,6 +416,42 @@ const webgl = (canvas) => new THREE.WebGLRenderer({ canvas, antialias: true, pow
 const pageClock = () => globalThis.performance.now();
 
 /**
+ * The sweep's line (night 4 T18) as a flat sector on the plane, its bright
+ * edge along +x and its trail behind it (toward -z: the line turns from +x
+ * toward +z), from `inner` to `R` world units: `{ positions, shade, index }`,
+ * `shade` each vertex's light 0..1 (the edge 1, the trail from
+ * `trailShare` down to 0, both radial ends 0 so it has no hard end).
+ */
+export function sweepShape(R, timing = null, steps = 16) {
+  timing ??= SWEEP;
+  const angles = [0, timing.head];
+  for (let i = 1; i <= steps; i++) angles.push(timing.head + ((timing.trail - timing.head) * i) / steps);
+  const light = (a) => (a <= timing.head ? 1 : timing.trailShare * (1 - (a - timing.head) / (timing.trail - timing.head)) ** 2);
+  const inner = Math.min(timing.inner, R * 0.5);
+  const radii = [inner, inner + (R - inner) * 0.1, inner + (R - inner) * 0.8, R];
+  const weight = [0, 1, 1, 0];
+  const positions = new Float32Array(angles.length * radii.length * 3);
+  const shade = new Float32Array(angles.length * radii.length);
+  let v = 0;
+  for (const a of angles) {
+    for (let j = 0; j < radii.length; j++) {
+      positions[v * 3] = radii[j] * Math.cos(a);
+      positions[v * 3 + 2] = -radii[j] * Math.sin(a);
+      shade[v] = light(a) * weight[j];
+      v++;
+    }
+  }
+  const index = [];
+  for (let i = 0; i + 1 < angles.length; i++) {
+    for (let j = 0; j + 1 < radii.length; j++) {
+      const a = i * radii.length + j, b = a + radii.length;
+      index.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  return { positions, shade, index };
+}
+
+/**
  * The scene on `canvas`. `palette` is paletteFrom's; `doc` makes the
  * sprite textures; `clock` is the time the eases count in (the frames'
  * `now`), `makeRenderer` the WebGL renderer (both injectable for tests).
@@ -423,9 +459,10 @@ const pageClock = () => globalThis.performance.now();
  * `fx` (fx.js `parseFx`): the effects asked for; `activity` lights `setActivity`' planets and plays `setJobs`' jobs,
  * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them),
  * `warp` streaks the sky while `setWarp` says the camera flies,
- * `afterglow` rings a cluster whose trouble cleared (it remembers the tones from one `update` to the next).
- * Returns `{ update, setOpen, setSun, setActivity, setJobs, setCritAges, setWarp, drawn, planets, beams, frame, resize,
- * setQuality, size, camera, world, quality, pixelRatio, activity, jobs, beacons, afterglows, warp, renderer, dispose }`.
+ * `afterglow` rings a cluster whose trouble cleared (it remembers the tones from one `update` to the next),
+ * `sweep` turns a faint line round the plane and rings the clusters `setSweep` says pinged (none in still mode).
+ * Returns `{ update, setOpen, setSun, setActivity, setJobs, setCritAges, setWarp, setSweep, drawn, planets, beams, frame, resize,
+ * setQuality, size, camera, world, quality, pixelRatio, activity, jobs, beacons, afterglows, sweep, warp, renderer, dispose }`.
  * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
  * `stage` (stage.js, T29) keeps the canvas's css size so no frame reads layout; `size()` gives it to the
  * camera, the labels and the lock.
@@ -1311,6 +1348,89 @@ export function createGalaxyScene(canvas, {
     for (; i < rings.length; i++) { rings[i].ring.visible = false; rings[i].id = null; }
   };
 
+  // --- fx=sweep (night 4 T18; fx.js createSweep): one turn of fresh data per cycle --
+  // One flat sector from the sun (sweepShape: a bright edge, a trail behind
+  // it), grey and additive, made once and turned to `setSweep`'s angle; its
+  // reach follows the farthest cluster (made again only when the world
+  // changes). A pool of thin rings, flat round a cluster, for the pings (a
+  // ring's line AFTERGLOW-style: `pingLine` of the frame seen from the
+  // overview). Hidden at rest; in still mode none of it is made.
+  let sweepWant = null; // `{ line, pings }` from fx.js createSweep's frame, or null
+  let sweepLine = null;
+  const pingRings = [];
+  if (fx?.has('sweep') && !still) {
+    sweepLine = new THREE.Mesh(new THREE.BufferGeometry(), keep(new THREE.MeshBasicMaterial({
+      color: tone.calm.clone(), vertexColors: true, transparent: true, opacity: 0, depthWrite: false,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide, forceSinglePass: true,
+    })));
+    sweepLine.name = 'fx-sweep';
+    sweepLine.visible = false;
+    sweepLine.userData.key = null;
+    scene.add(sweepLine);
+    const pingHue = col(palette.bright ?? palette.calm);
+    for (let i = 0; i < SWEEP.max; i++) {
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.99, 1, 96), keep(new THREE.MeshBasicMaterial({
+        color: pingHue, side: THREE.DoubleSide, forceSinglePass: true, transparent: true, opacity: 0, depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      })));
+      ring.rotation.x = -Math.PI / 2;
+      ring.name = 'fx-sweep-ping';
+      ring.visible = false;
+      pingRings.push({ ring, key: null, id: null });
+      scene.add(ring);
+    }
+  }
+  /** The sweep's meshes: its line and the ping rings (null and none without `fx=sweep` or in still mode). */
+  const sweep = () => ({ line: sweepLine, pings: pingRings.map((r) => r.ring) });
+  /** The sweep now (`{ line, pings }`, fx.js createSweep's frame) or null; ignored unless `fx=sweep`. */
+  const setSweep = (f) => { if (sweepLine) sweepWant = f ?? null; };
+  const sweepReach = () => {
+    let far = 0;
+    for (const s of world?.sites ?? []) if (!s.gone) far = Math.max(far, Math.hypot(s.home.x, s.home.z) + (s.reach || 0) * 0.5);
+    return Math.max(SWEEP.inner * 4, far * SWEEP.reach);
+  };
+  const drawSweep = () => {
+    const line = world ? sweepWant?.line : null;
+    if (line) {
+      if (sweepLine.userData.key !== world.version) {
+        const { positions, shade, index } = sweepShape(sweepReach());
+        const colours = new Float32Array(shade.length * 3);
+        for (let i = 0; i < shade.length; i++) colours[i * 3] = colours[i * 3 + 1] = colours[i * 3 + 2] = shade[i];
+        sweepLine.geometry.dispose();
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+        g.setIndex(index);
+        sweepLine.geometry = g;
+        sweepLine.userData.key = world.version;
+      }
+      sweepLine.rotation.y = -line.angle;
+      sweepLine.material.opacity = SWEEP.opacity * Math.max(0, Math.min(1, line.k));
+    }
+    sweepLine.visible = Boolean(line) && sweepLine.material.opacity > 0.003;
+    let i = 0;
+    for (const p of (world ? sweepWant?.pings : null) ?? []) {
+      const s = world.byId.get(p.id);
+      const slot = pingRings[i];
+      const sc = s && !s.gone ? beamScaleOf(s) : null;
+      if (!sc || !slot) continue;
+      i += 1;
+      const { ring } = slot;
+      const key = `${p.id}:${world.version}`;
+      if (slot.key !== key) {
+        ring.geometry.dispose();
+        ring.geometry = new THREE.RingGeometry(Math.max(0.5, 1 - sc.across(SWEEP.pingLine) / SWEEP.pingRadius), 1, 96);
+        slot.key = key;
+      }
+      slot.id = p.id;
+      ring.position.set(s.home.x, s.home.y, s.home.z);
+      ring.scale.setScalar(SWEEP.pingRadius * p.r * s.alive);
+      ring.material.opacity = SWEEP.pingOpacity * p.k * s.alive * (1 - ease(s.unfold));
+      ring.visible = ring.material.opacity > 0.005;
+    }
+    for (; i < pingRings.length; i++) { pingRings[i].ring.visible = false; pingRings[i].id = null; }
+  };
+
   // --- fx=warp (night 3 T12, T28; fx.js warpAt, warpTail): a flight has a target and a tint --
   // A line from each of the first WARP_STARS far stars and WARP_DUST dust
   // grains to a tail pushed toward the destination's point on screen by
@@ -1513,6 +1633,7 @@ export function createGalaxyScene(canvas, {
     if (activity) { drawActivity(now); drawJobs(now); }
     if (pillars.length) drawBeacons(now);
     if (rings.length) drawAfterglows(now);
+    if (sweepLine) drawSweep();
     if (warpParts.length) drawWarp();
     renderer.render(scene, camera);
   };
@@ -1552,14 +1673,15 @@ export function createGalaxyScene(canvas, {
     world = null;
     ribbon.geometry.dispose();
     band.geometry.dispose();
-    for (const o of [...shared, ...Object.values(geo), ...rings.map((r) => r.ring.geometry)]) o.dispose();
+    for (const o of [...shared, ...Object.values(geo), ...rings.map((r) => r.ring.geometry), ...pingRings.map((r) => r.ring.geometry)]) o.dispose();
+    sweepLine?.geometry.dispose();
     renderer.dispose();
     sized.stop();
   };
 
   return {
     update, setOpen, setHeld: (id) => { held = id ?? null; },
-    setSun: (look) => { if (look) sunWant = look; }, setActivity, setJobs, setCritAges, setWarp, drawn, planets, beams, frame, resize, setQuality, camera,
+    setSun: (look) => { if (look) sunWant = look; }, setActivity, setJobs, setCritAges, setWarp, setSweep, drawn, planets, beams, frame, resize, setQuality, camera,
     size: sized.get,
     renderer, dispose,
     get world() { return world; },
@@ -1573,6 +1695,8 @@ export function createGalaxyScene(canvas, {
     get beacons() { return beacons; },
     /** The clears remembered now (fx=afterglow): site id → `{ id, tone, at }` (fx.js afterglows). */
     get afterglows() { return glowState?.clears ?? new Map(); },
+    /** The sweep as drawn now (fx=sweep): its line's mesh and the ping rings' (null and none without it or in still mode). */
+    get sweep() { return sweep(); },
     /** The warp as last drawn (`{ k, len, head, thin, tone, dir, aim }`, fx.js warpAt) and its two line sets (fx=warp). */
     get warp() { return warp(); },
     /** What the dust thins round now (`{ x, y, z, r, k }`, dustFade's uniforms). */

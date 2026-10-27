@@ -36,12 +36,19 @@
 // 5 s; a calm planet with nothing at work dims a step. A job that lands
 // flashes its target once; a failed one leaves, stops short and breaks up.
 // Light, size and one slow motion, never hue: trouble keeps the colour.
+//
+// `sweep` (night 4 T18, README Night 3 D): once per tour cycle, while the
+// camera rests at the overview, one faint grey line turns once round the
+// plane from the sun, and each cluster it crosses pings softly, but only if
+// its site sent new data since the line last crossed it (a site's data as
+// the page sees it, `siteNews`): a silent site stays dark and the gap shows.
+// None in still mode, never during a flight, never under a finger.
 
 import { hash } from './layout.js';
 import { toneOf, worseTone } from './palette.js';
 
 /** Every effect this page knows, in the order the README lists them. */
-export const FX_NAMES = Object.freeze(['beacon', 'warp', 'afterglow', 'activity']);
+export const FX_NAMES = Object.freeze(['beacon', 'warp', 'afterglow', 'activity', 'sweep']);
 
 /** The effects `?fx=` asks for (a `location.search` string or URLSearchParams): a Set of known names. */
 export function parseFx(search = '') {
@@ -578,4 +585,178 @@ export function afterglowAt(clear, now, timing = AFTERGLOW, still = false) {
   const alpha = timing.opacity * (1 - u) ** timing.fall;
   const k = still ? 1 : Math.min(1, age / timing.inMs);
   return { from: AFTERGLOW_STEPS[from], to: AFTERGLOW_STEPS[to], mix, alpha, k };
+}
+
+/**
+ * The sweep's look and time (night 4 T18). The line turns once in `turnMs`
+ * at an even speed (a radar's), or in the time the overview has left before
+ * the tour flies on (less `marginMs`), never under `minMs` (then no sweep
+ * that cycle); it fades in and out over `fadeShare` of its turn, and over
+ * `outMs` when it is stopped (a finger, a flight). It is a bright edge
+ * `head` radians wide and a trail `trail` radians long behind it at
+ * `trailShare` of the edge's light, fading to nothing; it reaches from the
+ * sun's own disc (`inner`, world units) to `reach` times the farthest
+ * cluster, faded at both ends; `opacity` its peak (additive, grey).
+ * A cluster the line crosses that sent new data pings: one thin ring on the
+ * plane opening from `ping[0]` to `ping[1]` of `pingRadius` over `pingMs`,
+ * at `pingOpacity`, its line `pingLine` of the frame's height seen from the
+ * overview; at most `max` at once. A parked overview (`?at=overview`, no
+ * tour) sweeps every `parkedMs`.
+ */
+export const SWEEP = Object.freeze({
+  turnMs: 6000, minMs: 1200, marginMs: 250, fadeShare: 0.06, outMs: 300,
+  head: 0.014, trail: 0.42, trailShare: 0.32, inner: 60, reach: 1.1, opacity: 0.2,
+  pingMs: 1800, ping: Object.freeze([0.45, 1]), pingRadius: 260, pingOpacity: 0.55, pingLine: 0.003, max: 12,
+  parkedMs: 15000,
+});
+
+const TURN = Math.PI * 2;
+
+/** A 32-bit FNV-1a of a string, mixed into `h`. */
+function fnv(str, h = 2166136261) {
+  for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+/**
+ * What each site's data is now, as one number per site (night 4 T18): every
+ * node in it (its status, metrics, words, extras: the node as the model has
+ * it) and every event on one of them, hashed in the model's order. The
+ * same data gives the same number, so a site whose number changed sent new
+ * data. `sites` (ids the galaxy draws) limits it; a Map site id → number.
+ */
+export function siteNews(model, sites = null) {
+  const nodes = Array.isArray(model?.nodes) ? model.nodes : [];
+  const events = Array.isArray(model?.events) ? model.events : [];
+  const byId = new Map(nodes.filter((n) => n && n.id != null).map((n) => [n.id, n]));
+  const shown = sites == null ? null : sites instanceof Set ? sites : new Set(sites);
+  const out = new Map();
+  const mix = (id, str) => {
+    const site = placeOf(id, byId);
+    if (site == null || (shown && !shown.has(site))) return;
+    out.set(site, fnv(str, out.get(site)));
+  };
+  for (const n of nodes) if (n && n.id != null) mix(n.id, JSON.stringify(n));
+  for (const e of events) if (e && e.node != null) mix(e.node, `${e.at}|${e.kind}|${e.text ?? ''}`);
+  return out;
+}
+
+/** The angle of a point on the plane round the sun (radians, from +x toward +z: clockwise seen from above). */
+export const planeAngle = (p) => Math.atan2(Number(p?.z) || 0, Number(p?.x) || 0);
+
+/** When (page time) the line of `sweep` (`{ t0, ms, from }`) reaches `angle`. */
+export function crossAt(sweep, angle) {
+  const d = (((angle - sweep.from) % TURN) + TURN) % TURN;
+  return sweep.t0 + (d / TURN) * sweep.ms;
+}
+
+/**
+ * The line at page time `now`: `{ angle, k }`, `angle` from `from` on by
+ * one turn over `ms` at an even speed (held where it was once stopped at
+ * `stopAt`), `k` its strength (in and out over `fadeShare` of the turn, out
+ * over `outMs` once stopped). `null` before it starts, `undefined` once it
+ * is over; always `undefined` when `still` (reduced motion: no sweep).
+ */
+export function sweepAt(sweep, now, timing = SWEEP, still = false) {
+  if (still || !sweep) return undefined;
+  const until = sweep.stopAt ?? Infinity;
+  const p = (Math.min(now, until) - sweep.t0) / sweep.ms;
+  if (p < 0) return null;
+  if (p >= 1) return undefined;
+  const f = timing.fadeShare;
+  let k = Math.min(1, p / f, (1 - p) / f);
+  if (until !== Infinity) {
+    const out = 1 - (now - until) / timing.outMs;
+    if (out <= 0) return undefined;
+    k *= Math.min(1, out);
+  }
+  return { angle: sweep.from + TURN * p, k: Math.max(0, k) };
+}
+
+/**
+ * Whether the sweep may turn now and whether one starts (night 4 T18).
+ * `s`: `{ now, running, swept, leg, driver, mode, want, flight, parked, held }`,
+ * `leg` the tour's overview leg (`{ cycle, end }`, page time) or null on a
+ * site leg, `driver` who has the camera (director.js), `mode` the touch's
+ * (`tour` unless a finger has it), `want` what the camera wants (`overview`,
+ * `site`, `free`), `flight` the flight under way or null, `swept` the cycle
+ * the last sweep started on. It rests (may turn) only on the tour's overview
+ * leg, the tour driving, no finger, the camera wanting the overview and not
+ * flying; parked on the overview (`parked`, no tour) unless parked on a site
+ * (`held`). A sweep is due once per cycle (parked: every `parkedMs`), turning
+ * in the time the leg has left less `marginMs`, at most `turnMs`; with less
+ * than `minMs` left, none that cycle. `{ rest, start, swept }`, `start` `{ ms }` or null.
+ */
+export function sweepStep(s, timing = SWEEP) {
+  const rest = s.parked
+    ? !s.held
+    : s.leg != null && s.driver === 'tour' && (s.mode ?? 'tour') === 'tour' && s.want === 'overview' && !s.flight;
+  const keep = { rest, start: null, swept: s.swept ?? null };
+  if (!rest || s.running) return keep;
+  const due = s.parked ? s.swept == null || s.now - s.swept >= timing.parkedMs : s.swept !== s.leg.cycle;
+  if (!due) return keep;
+  const ms = s.parked ? timing.turnMs : Math.min(timing.turnMs, s.leg.end - s.now - timing.marginMs);
+  return { rest, start: ms >= timing.minMs ? { ms } : null, swept: s.parked ? s.now : s.leg.cycle };
+}
+
+/** A ping that began at `t`, at `now`: `{ r, k }` (`r` its radius share, eased out; `k` its strength), `null` before, `undefined` after. */
+export function pingAt(t, now, timing = SWEEP) {
+  const p = (now - t) / timing.pingMs;
+  if (p < 0) return null;
+  if (p >= 1) return undefined;
+  const [a, b] = timing.ping;
+  return { r: a + (b - a) * (1 - (1 - p) ** 3), k: Math.min(1, p / 0.06) * (1 - p) ** 1.5 };
+}
+
+/**
+ * The sweep's memory and clock (night 4 T18), pure: `model(keys)` takes each
+ * new model's `siteNews`; `start(now, ms, from, sites)` turns the line once
+ * from angle `from` over `ms` past `sites` (`[{ id, angle }]`), unless one
+ * is running or `still`; `stop(now)` fades it out where it is (the sites it
+ * has not reached yet keep their news for the next sweep); `frame(now)` gives
+ * `{ line, pings }`, `line` sweepAt's (or null), `pings` `[{ id, r, k }]`.
+ * When the line reaches a site it pings if the site's key differs from the
+ * one it had when a line last reached it; the first sweep has no last one,
+ * so every site with data pings once (all of it is new to the page).
+ */
+export function createSweep({ timing = SWEEP, still = false } = {}) {
+  let keys = new Map();
+  const base = new Map(); // site id → its key when a line last reached it
+  let sweep = null, plan = [];
+  const pings = new Map(); // site id → when it pinged
+  return {
+    model: (next) => { keys = next instanceof Map ? next : new Map(next ?? []); },
+    start: (now, ms, from, sites) => {
+      if (still || sweep || !(ms > 0)) return false;
+      sweep = { t0: now, ms, from: Number(from) || 0, stopAt: null };
+      plan = (sites ?? []).map((s) => ({ id: s.id, at: crossAt(sweep, s.angle) })).sort((a, b) => a.at - b.at);
+      return true;
+    },
+    stop: (now) => { if (sweep && sweep.stopAt == null) sweep.stopAt = now; },
+    running: () => sweep != null,
+    frame: (now) => {
+      let line = null;
+      if (sweep) {
+        const until = Math.min(now, sweep.stopAt ?? Infinity, sweep.t0 + sweep.ms);
+        while (plan.length && plan[0].at <= until) {
+          const { id, at } = plan.shift();
+          if (!keys.has(id)) continue;
+          if (keys.get(id) !== base.get(id)) {
+            pings.set(id, at);
+            if (pings.size > timing.max) pings.delete(pings.keys().next().value);
+          }
+          base.set(id, keys.get(id));
+        }
+        const at = sweepAt(sweep, now, timing, still);
+        if (at === undefined) { sweep = null; plan = []; } else line = at;
+      }
+      const out = [];
+      for (const [id, t] of pings) {
+        const p = pingAt(t, now, timing);
+        if (p === undefined) pings.delete(id);
+        else if (p) out.push({ id, ...p });
+      }
+      return { line, pings: out };
+    },
+  };
 }
