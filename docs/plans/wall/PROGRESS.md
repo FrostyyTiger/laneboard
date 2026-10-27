@@ -431,11 +431,24 @@ Notes for every builder round (planner, round 1):
   `r53-at-hv1` (`▲ 2 ATTENTION`, `▲ ATTENTION FIX-LOGIN · ASKED A QUESTION · 3M` at the why's size); film
   r53-galaxy (pace=wall, large): 0 errors, 12.9 fps (SwiftShader, as earlier rounds). Left: a long problem row is
   cut with an ellipsis at the plate's 56 vw (`FEAT-SEARCH · WAITING ON A PERMIS…`); the why is the part cut.
-- [ ] T24 (r31-film-ui touch 1; = Later A4 T35 for the sheet) [ui] [variant:galaxy] The sheet follows the trouble
+- [x] T24 (r31-film-ui touch 1; = Later A4 T35 for the sheet) [ui] [variant:galaxy] The sheet follows the trouble
   that rises under it: with a site sheet up, a new model re-ranks its rows and the status line on the spot (no
   retyping), and a crit that appears in the site shows as the hero — done when: a test with a sheet for HV1 and a
   model where VM-C turns crit gets the crit row first and `STATUS` updated at once, and `sheetCaption` is covered by
-  the same rule as the tour caption.
+  the same rule as the tour caption. (commit SHA)
+  Builder r54: `hud.js` keeps the held leg and its shown caption; `update(model)` asks `plateFollows(was, now)`
+  (pure): a sheet follows every change (rise or fall: "worst first" may never be wrong about the worst), a tour
+  plate only a rise of its trouble word's status (A4's rule; a fall waits for the leg's end, so a flap does not
+  shake it). Following = the hero, rows, kicker via the new `caption.refresh(cap)` (rows set at once, no typing,
+  no stagger, height eased), the plate's tone (`data-plate`, also for a plate still waiting on its timer), and the
+  lock re-aimed (`cut`) when its target or status changed; a plate not up yet is shown again for the time left.
+  Tests: `wall-galaxy-hud.test.mjs` (T24: HV1 sheet, VM-C crit → crit hero, `1 crit` first in STATUS, lock on VM-C,
+  no new `show`; tour rise/fall; mid-flight) and `wall-caption.test.mjs` (refresh). Checked with a CDP script
+  (`shots/r54-sheetrise`, tap HV1 on the large demo `--tick 1000`): 10 s in the sheet turned `■ DOWN · VM-C`, `■ 1
+  DOWN ▲ 2 ATTENTION ▲ 1 WARN`, red brackets on VM-C, then back to `FEAT-SEARCH` when VM-C recovered; 0 errors. Film
+  r54-galaxy (pace=wall, large): unchanged tour, 0 errors, 8.5 fps (SwiftShader under the VM's load; the change
+  runs once per map message, not per frame). Seen: on a sheet the attention count flaps every few seconds on the
+  demo data, so the rows change that often (no typing, but it moves); the kicker still says `TARGET 01 / 05` (T25).
 - [ ] T25 (r31-film-ui touch 2, 5) [ui] [variant:galaxy] The sheet is yours, not the tour's: kicker `SITE · HV1`
   (or `ROOM · IN HV1`) instead of `ATTENTION · TARGET 01 / 05`, no typing cursor and no typing on a sheet (text at
   once), brackets first on the tapped site, then stepping to the worst member — done when: a test pins the sheet

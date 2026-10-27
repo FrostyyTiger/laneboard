@@ -435,7 +435,8 @@ function lineEl(line) {
 /**
  * The plate inside `root` (an empty element over the map). `show(leg,
  * caption)` builds and plays it for a tour leg, `hide()` fades it out and
- * cancels what had not played yet. `timers` is injectable.
+ * cancels what had not played yet, `refresh(caption)` sets new words on the
+ * plate up now at once (false when none is up). `timers` is injectable.
  */
 export function createCaption(root, { timing = CAPTION_TIMING, timers = globalThis } = {}) {
   const plate = el('section', 'wall-caption');
@@ -581,10 +582,30 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     }));
   };
 
+  // New words for the plate on screen (night 3 T24, A4): the rows re-ranked
+  // from a newer model, set at once, no typing and no stagger; the height
+  // eases to the new rows. False (nothing done) while the plate is not up:
+  // the caller shows it instead, so it plays as a leg's plate does.
+  const refresh = (cap) => {
+    if (!shown) return false;
+    cancel();
+    const rows = cap.lines.filter((l) => l.step !== 'hero');
+    const was = plate.style.height;
+    build(cap, rows);
+    typed.textContent = cap.name;
+    rest.textContent = '';
+    cursor.hidden = true;
+    cursor.classList.remove('is-blink');
+    for (const li of list.children) { li.hidden = false; li.style.opacity = '1'; }
+    plate.style.height = was;
+    grow(cap, rows.length, timing.lineFadeMs);
+    return true;
+  };
+
   /** The plate as a Map cover while it is on screen, else null (T24). */
   const cover = () => (covering ? box : null);
   /** Where a leader to the trouble node leaves the plate while it shows a trouble word, else null (T25). */
   const leaderFrom = () => (covering ? anchor : null);
 
-  return { show, hide, cover, leaderFrom, el: plate };
+  return { show, hide, refresh, cover, leaderFrom, el: plate };
 }

@@ -441,3 +441,49 @@ test('caption: the page sets the count\'s parts each with its shape and tone (T2
     globalThis.document = prevDoc;
   }
 });
+
+test('caption: refresh sets a newer model\'s words on the plate up at once, no typing (night 3 T24)', async () => {
+  const { makeDocument, makeEl } = await import('./helpers/fakedom.mjs');
+  const { createCaption } = await import('../public/js/wall/caption.js');
+  const prevDoc = globalThis.document;
+  const doc = makeDocument();
+  const make = doc.createElement.bind(doc);
+  doc.createElement = (tag) => {
+    const e = make(tag);
+    e.replaceChildren = (...kids) => { e.textContent = ''; e.append(...kids); };
+    return e;
+  };
+  globalThis.document = doc;
+  try {
+    const root = makeEl('div');
+    root.clientWidth = 1368;
+    root.clientHeight = 912;
+    let waits = [];
+    const timers = {
+      setTimeout: (fn, ms) => { waits.push({ fn, ms }); return waits.length; },
+      clearTimeout: () => {},
+    };
+    const cap = createCaption(root, { timers, timing: CAPTION_TIMING });
+    const m = model();
+    const before = captionLines(node(m, 'hv2'), m);
+    // Not up yet: nothing done, the caller shows it.
+    assert.equal(cap.refresh(before), false);
+    cap.show({ kind: 'site', id: 'hv2', arriveMs: 0 }, before);
+    // Play the build and the fade-in, nothing else (the name is still typing).
+    for (const w of waits.filter((x) => x.ms === 0)) w.fn();
+    waits = [];
+    m.nodes.push({ id: 'l9', parent: 'hv2', kind: 'lane', label: 'feat-x', status: 'attention', why: 'asked a question' });
+    const after = captionLines(node(m, 'hv2'), m);
+    assert.equal(cap.refresh(after), true);
+    assert.equal(waits.length, 0, 'no beat scheduled: no typing, no stagger');
+    const find = (e, pred, out = []) => { if (pred(e)) out.push(e); for (const c of e.children ?? []) find(c, pred, out); return out; };
+    assert.equal(find(root, (e) => e.className === 'wall-caption-typed')[0].textContent, after.name);
+    assert.equal(find(root, (e) => e.className === 'wall-caption-cursor')[0].hidden, true);
+    const rows = find(root, (e) => e.className === 'wall-caption-line');
+    assert.equal(rows.length, after.lines.filter((l) => l.step !== 'hero').length);
+    assert.ok(rows.every((r) => !r.hidden && r.style.opacity === '1'), 'every row in at once');
+    assert.ok(find(root, (e) => e.className === 'wall-caption-part').some((p) => p.dataset.tone === 'warn'), 'the new count');
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});

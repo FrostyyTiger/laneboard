@@ -14,7 +14,7 @@
 import { MAX_LINES, captionLines, coverOf } from '../caption.js';
 import { worstLine } from '../frame.js';
 import { lockTarget } from '../lock.js';
-import { TROUBLE } from '../../views/map/model.js';
+import { SEVERITY, TROUBLE } from '../../views/map/model.js';
 
 /** The node a site leg is about in `model`, or null (an overview leg, or a site the model no longer has). */
 export function legNode(leg, model) {
@@ -196,6 +196,22 @@ export function staleCaption(cap, fresh) {
 }
 
 /**
+ * Whether the plate on screen takes the words of a newer model at once
+ * (night 3 T24, reviews/r31-film-ui.md touch 1; A4): `was` the caption shown,
+ * `now` the same leg's caption from the newest model. A sheet (the person
+ * asked; it says "worst first", so it may never be wrong about the worst)
+ * follows every change; a tour plate only a rise of its trouble word's
+ * status (warn → crit), a fall waits for the leg's end so a flap does not
+ * shake the plate. Pure.
+ */
+export function plateFollows(was, now) {
+  if (!was || !now) return false;
+  if (now.sheet) return JSON.stringify(was) !== JSON.stringify(now);
+  const rank = (cap) => SEVERITY.indexOf(cap.lines?.find((l) => l.kind === 'trouble')?.status);
+  return rank(now) > rank(was);
+}
+
+/**
  * Wires `caption` (`show(leg, cap)`, `hide()`), `frame` (`update(model)`,
  * `live(on)`, `plate(on)` while a plate shows) and, when given, `lock` (`lockOn(leg)`, `release()`) to `tour`
  * (`onLeg(cb)`). `update(model)` gives both the newest
@@ -203,7 +219,7 @@ export function staleCaption(cap, fresh) {
  * line remembers it quietly, and through `bannerModel`, so it never repeats the held
  * caption), `live(on)` the socket's state, `fresh(f)` the feed's (fresh.js:
  * the tag's word, and the caption's grey line from the next leg on), `park(site)` shows a parked system's
- * caption (`?at=`, for stills) without a tour, `open(leg)` a tapped site's or planet's sheet (sheetCaption)
+ * caption (`?at=`, for stills) without a tour (a newer model re-feeds the plate up, `plateFollows`), `open(leg)` a tapped site's or planet's sheet (sheetCaption)
  * (its brackets at once, its plate at `leg.arriveMs`), and `covers()` the boxes the
  * words take over the canvas (for the labels, T6; the tag top right since T18,
  * so neither a name nor a held planet sits on it; the warn-step fleet line
@@ -243,32 +259,44 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
   let feedState = null;
   // `tone` is the plate's ('crit', 'warn', 'grey'; false for none): only a
   // crit plate steps the crit banner down (T30), a milder one leaves it loudest.
+  // The tone the waiting plate takes when its timer fires (a newer model may change it, T24).
+  let plateTone = false;
+  const setPlate = (t) => { plateOn = Boolean(t); frame.plate?.(t || false); };
   const plate = (tone, atMs = 0) => {
     if (plateTimer != null) { timers.clearTimeout(plateTimer); plateTimer = null; }
-    const set = (t) => { plateOn = Boolean(t); frame.plate?.(t || false); };
+    plateTone = tone;
     // The last plate fades as the next leg starts: the banner is the headline again until the camera arrives.
-    set(tone && !(atMs > 0) ? tone : false);
-    if (tone && atMs > 0) plateTimer = timers.setTimeout(() => { plateTimer = null; set(tone); }, atMs);
+    setPlate(tone && !(atMs > 0) ? tone : false);
+    if (tone && atMs > 0) plateTimer = timers.setTimeout(() => { plateTimer = null; setPlate(plateTone); }, atMs);
+  };
+  // The leg the plate speaks for, its caption as shown and when the camera gets there (T24).
+  let held = null;
+  const captionFor = (leg, node) => staleCaption(leg.sheet
+    ? sheetCaption(node, latest, leg.index ?? null, leg.count ?? null)
+    : galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node'), feedState);
+  // The held node, the hero's and the lock's target from `cap`; the line fed again.
+  const aim = (node, cap) => {
+    const target = lockTarget(node, latest);
+    heldId = target[0]?.id ?? null;
+    // A planet, not the site: a site in trouble itself has the hero say its status (`CRIT`), its name on the plate's name line.
+    heroId = heldId !== node.id && cap.lines.some((l) => l.step === 'hero' && l.id === heldId) ? heldId : null;
+    feed();
+    return { target, lead: cap.lines.find((l) => l.kind === 'trouble') };
   };
   const say = (leg) => {
     if (leg?.kind === 'overview' && hold && now() - hold.clearedAt >= CRIT_HOLD.minMs) hold = null;
     const node = legNode(leg, latest);
     if (node) {
-      const cap = staleCaption(leg.sheet
-        ? sheetCaption(node, latest, leg.index ?? null, leg.count ?? null)
-        : galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node'), feedState);
-      const target = lockTarget(node, latest);
-      heldId = target[0]?.id ?? null;
-      // A planet, not the site: a site in trouble itself has the hero say its status (`CRIT`), its name on the plate's name line.
-      heroId = heldId !== node.id && cap.lines.some((l) => l.step === 'hero' && l.id === heldId) ? heldId : null;
-      feed();
+      const cap = captionFor(leg, node);
+      const { target, lead } = aim(node, cap);
+      held = { leg, cap, arriveAt: now() + (Number.isFinite(leg.arriveMs) ? leg.arriveMs : 0), heldId, status: lead?.status };
       // The brackets and the plate's tone take the trouble word's hue (a parked leg has no status of its own).
-      const lead = cap.lines.find((l) => l.kind === 'trouble');
       plate(lead?.tone ?? 'grey', leg.arriveMs);
       caption.show(leg, cap);
       // A tapped site (T10) is locked at once (`lockMs` 0, `cut`), the plate still waiting for the camera.
       lock?.lockOn({ ...leg, arriveMs: leg.lockMs ?? leg.arriveMs, node, status: lead?.status ?? leg.status ?? node.status, target });
     } else {
+      held = null;
       heldId = null;
       heroId = null;
       feed();
@@ -276,6 +304,27 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
       caption.hide();
       lock?.release();
     }
+  };
+  // A newer model under the plate (T24, A4): a sheet re-ranks at once, a tour
+  // plate when its trouble rose; the rows, the hero, the plate's tone and the
+  // brackets follow, nothing is typed again. A plate not up yet (the camera
+  // still flying) is shown again for the time left.
+  const follow = () => {
+    if (!held) return;
+    const node = legNode(held.leg, latest);
+    if (!node) return;
+    const cap = captionFor(held.leg, node);
+    if (!plateFollows(held.cap, cap)) return;
+    const { target, lead } = aim(node, cap);
+    const left = Math.max(0, held.arriveAt - now());
+    const tone = lead?.tone ?? 'grey';
+    if (plateTimer != null) plateTone = tone;
+    else if (plateOn) setPlate(tone);
+    if (!caption.refresh?.(cap)) caption.show({ ...held.leg, arriveMs: left }, cap);
+    if (heldId !== held.heldId || lead?.status !== held.status) {
+      lock?.lockOn({ ...held.leg, arriveMs: left, cut: true, node, status: lead?.status ?? node.status, target });
+    }
+    held = { ...held, cap, heldId, status: lead?.status };
   };
   const off = tour ? tour.onLeg(say) : () => {};
   // Below the far step frame.js gives no cover, but the warn line's words
@@ -328,6 +377,7 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
         hold = null;
       }
       feed();
+      follow();
     },
     live: (on) => frame.live(Boolean(on)),
     fresh: (f) => {

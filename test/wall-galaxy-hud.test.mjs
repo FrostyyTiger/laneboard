@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { CRIT_HOLD, agoText, bannerEcho, bannerModel, clearedOf, createHud, farNode, galaxyCaption, legNode, sheetCaption, staleCaption } from '../public/js/wall/galaxy/hud.js';
+import { CRIT_HOLD, agoText, bannerEcho, bannerModel, clearedOf, createHud, farNode, galaxyCaption, legNode, plateFollows, sheetCaption, staleCaption } from '../public/js/wall/galaxy/hud.js';
 import { captionLines } from '../public/js/wall/caption.js';
 import { clearedLine, worstLine } from '../public/js/wall/frame.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
@@ -778,4 +778,108 @@ test('the hud opens a tapped planet\'s sheet where the camera is: its own lines,
   assert.ok(shown.at(-1)[1].lines.length > 0);
   hud.park({ id: 'hub' });
   assert.deepEqual(shown.at(-1)[1].lines, []);
+});
+
+// Night 3 T24 (reviews/r31-film-ui.md touch 1; A4): the plate follows the trouble that rises under it.
+const risingModel = (cStatus = 'ok') => ({
+  nodes: [
+    { id: '__core', kind: 'core', status: 'ok' },
+    { id: 'hv1', parent: '__core', kind: 'site', label: 'hv1', status: 'ok' },
+    { id: 'hv1-a', parent: 'hv1', kind: 'lane', label: 'feat-search', status: 'attention', why: 'asked a question' },
+    { id: 'hv1-b', parent: 'hv1', kind: 'lane', label: 'fix-login', status: 'attention', why: 'waiting' },
+    { id: 'hv1-d', parent: 'hv1', kind: 'room', label: 'vm-d', status: 'warn', why: 'disk 91%' },
+    { id: 'hv1-c', parent: 'hv1', kind: 'room', label: 'vm-c', status: cStatus, ...(cStatus === 'ok' ? {} : { why: 'no heartbeat' }) },
+  ],
+});
+
+function followFakes() {
+  const shown = [], refreshed = [], locks = [], plates = [];
+  let up = false;
+  const caption = {
+    show: (leg, cap) => { shown.push([leg, cap]); up = true; },
+    refresh: (cap) => { if (!up) return false; refreshed.push(cap); return true; },
+    hide: () => { up = false; },
+    cover: () => null,
+  };
+  const frame = { update: () => {}, live: () => {}, cover: () => null, plate: (t) => plates.push(t) };
+  const lock = { lockOn: (leg) => locks.push(leg), release: () => locks.push('release') };
+  return { shown, refreshed, locks, plates, caption, frame, lock };
+}
+
+test('T24: a sheet for HV1 re-ranks at once when VM-C turns crit: the crit as hero, STATUS counts it, the lock moves, no retyping', () => {
+  const f = followFakes();
+  const hud = createHud({ caption: f.caption, frame: f.frame, lock: f.lock });
+  hud.update(risingModel());
+  hud.open({ id: 'hv1', arriveMs: 0 });
+  const first = f.shown.at(-1)[1];
+  assert.equal(first.lines[0].status, 'attention');
+  assert.equal(f.plates.at(-1), 'warn');
+  const shows = f.shown.length;
+  hud.update(risingModel('crit'));
+  assert.equal(f.shown.length, shows, 'not shown again: nothing typed again');
+  const cap = f.refreshed.at(-1);
+  assert.ok(cap, 'the plate took the new words');
+  assert.equal(cap.sheet, true);
+  assert.equal(cap.lines[0].kind, 'trouble');
+  assert.equal(cap.lines[0].status, 'crit', 'the crit row first');
+  assert.equal(cap.lines[0].word, 'VM-C');
+  const status = cap.lines.find((l) => l.kind === 'status');
+  assert.equal(status.parts[0].text, '1 crit', 'STATUS counts the crit first');
+  assert.match(cap.kicker, /^CRIT · /);
+  assert.equal(f.plates.at(-1), 'crit', 'the plate\'s tone follows');
+  const lock = f.locks.at(-1);
+  assert.equal(lock.target[0].id, 'hv1-c', 'the brackets go to the crit');
+  assert.equal(lock.status, 'crit');
+  assert.equal(lock.cut, true);
+  assert.equal(hud.named(), 'hv1-c');
+  // The same model again changes nothing.
+  const n = f.refreshed.length;
+  hud.update(risingModel('crit'));
+  assert.equal(f.refreshed.length, n);
+  // A sheet follows a fall too: it says worst first, so it is never wrong about the worst.
+  hud.update(risingModel());
+  assert.equal(f.refreshed.at(-1).lines[0].status, 'attention');
+});
+
+test('T24: sheetCaption is the tour caption\'s rule (A4): a tour plate takes a rise at once, a fall waits for the leg\'s end', () => {
+  const f = followFakes();
+  const hud = createHud({ caption: f.caption, frame: f.frame, lock: f.lock });
+  hud.update(risingModel());
+  hud.park({ id: 'hv1' });
+  hud.update(risingModel('crit'));
+  const up = f.refreshed.at(-1);
+  assert.equal(up.lines[0].status, 'crit', 'a rise re-feeds the tour plate');
+  assert.equal(up.sheet, undefined, 'still the tour\'s plate');
+  const n = f.refreshed.length;
+  hud.update(risingModel());
+  assert.equal(f.refreshed.length, n, 'a fall waits');
+  // The plate's rule, pure.
+  const m = risingModel(), c = risingModel('crit');
+  const node = (x) => x.nodes[1];
+  const tourCap = (x) => galaxyCaption(captionLines(node(x), x), 'site');
+  assert.equal(plateFollows(tourCap(m), tourCap(c)), true);
+  assert.equal(plateFollows(tourCap(c), tourCap(m)), false);
+  assert.equal(plateFollows(sheetCaption(node(c), c), sheetCaption(node(m), m)), true);
+  assert.equal(plateFollows(sheetCaption(node(m), m), sheetCaption(node(m), m)), false);
+  assert.equal(plateFollows(null, tourCap(m)), false);
+});
+
+test('T24: a crit rising while the camera still flies shows the new plate for the time left, not at once', () => {
+  const f = followFakes();
+  let t = 1000;
+  const waits = [];
+  const timers = { setTimeout: (fn, ms) => { waits.push({ fn, ms }); return waits.length; }, clearTimeout: () => {} };
+  const hud = createHud({ caption: f.caption, frame: f.frame, lock: f.lock, now: () => t, timers });
+  hud.update(risingModel());
+  f.caption.hide();
+  hud.open({ id: 'hv1', arriveMs: 3000, lockMs: 0 });
+  f.caption.hide(); // the fake plate is not up until the camera arrives
+  t += 1000;
+  hud.update(risingModel('crit'));
+  const [leg, cap] = f.shown.at(-1);
+  assert.equal(leg.arriveMs, 2000, 'the time left');
+  assert.equal(cap.lines[0].status, 'crit');
+  // The waiting plate takes the new tone when it lands.
+  waits.at(-1).fn();
+  assert.equal(f.plates.at(-1), 'crit');
 });
