@@ -330,13 +330,15 @@ short clips (research finding)." The plan's config key is `cockpit.stt.language`
 
 - **`cockpit.stt.language`** takes a language code (`"de"`), `"auto"`, or a list of codes
   (`["de", "en"]`). Codes are ISO 639-1, two lower-case letters, as the speech service takes them
-  (research Q4: `?language=`). Default `"en"`. The room passes the chosen code to the speech service
-  when it opens the session for a press; `auto` passes `auto`.
+  (research Q4: `?language=`). Default `["en", "de"]`, so the language button below shows out of the
+  box (`spec-input.md` §4: "a DE/EN choice in the UI"); a one-language user sets one code (`"en"`)
+  and the button goes. The room passes the chosen code to the speech service when it opens the
+  session for a press; `auto` passes `auto`.
 - **A list shows the choice.** With two or more codes the input row gets a language button
   `[data-talk-lang]`, 64x64 px, at the row's left end (on the Wall x 784-848, the textarea then runs
   from x 864 to x 1184; `screens.md` §4.1 carries it). It shows the current code in 20 px
-  `--font-label` caps `--text-1` (`DE`), 1 px `--line-strong` border, `aria-label` `Speech language:
-  German. Tap for English.`. A tap moves to the next code in the list and back to the first after
+  `--font-label` caps `--text-1` (`EN`), 1 px `--line-strong` border, `aria-label` `Speech language:
+  English. Tap for German.`. A tap moves to the next code in the list and back to the first after
   the last. With one code or `auto` there is no button and the textarea keeps its full width.
 - **Default and memory.** A screen starts with the list's first code. The choice is the screen's
   (`localStorage` `cockpit.lang`, as D3's layout); a stored code no longer in the list falls back to
@@ -356,7 +358,7 @@ which process is the room: D89).
 | Key | Default | Env | What |
 | --- | --- | --- | --- |
 | `cockpit.stt.url` | `"none"` | `LANEBOARD_COCKPIT_STT_URL` | The streaming speech service, `ws://` or `wss://` (`wss://stt.example.invalid/asr`). `ws://` only on a loopback host, as `fleet.builders` takes `http` only on loopback (`server/config/hub.mjs`). `none`: no voice. |
-| `cockpit.stt.language` | `"en"` | `LANEBOARD_COCKPIT_STT_LANGUAGE` (comma list: `de,en`) | §8. |
+| `cockpit.stt.language` | `["en", "de"]` | `LANEBOARD_COCKPIT_STT_LANGUAGE` (comma list: `en,de`; one code: `en`) | §8. |
 | `cockpit.stt.tokenFile` | unset | `LANEBOARD_COCKPIT_STT_TOKEN_FILE` | A file holding the service's bearer token, sent as `Authorization: Bearer` on connect, never in the URL's query (research Q4: query strings end up in logs). Mode 0600, as the audit file (`docs/fleet/auth.md`). Unset: no token. |
 
 - A bad value (a URL with credentials, a query or another scheme; a code that is not two letters)
@@ -480,13 +482,15 @@ Test: Playwright, CDP two-point touch; received-turns count 1; the fake speech s
 has frames up to t = 2.5 s.
 
 ### S-C2-13 DE/EN: one tap switches, the choice is the screen's, the service gets it
-Given `cockpit.stt.language: ["de", "en"]`, a fresh browser profile,
-Then `[data-talk-lang]` shows `DE` at x 784-848 and the textarea starts at x 864.
+Given `cockpit.stt.language` unset (the default `["en", "de"]`; the test config drops
+`stand-ins.md` §1.1's `"language":"de"`), a fresh browser profile,
+Then `[data-talk-lang]` shows `EN` at x 784-848 and the textarea starts at x 864.
 When the owner taps it,
-Then it shows `EN` within 0.1 s; a press opens the fake speech session with `language=en` in its
+Then it shows `DE` within 0.1 s; a press opens the fake speech session with `language=de` in its
 query (the service's connect log); while listening the language button is `disabled`.
-When the page reloads, it still shows `EN`. With `cockpit.stt.language: "auto"` instead there is
-no `[data-talk-lang]`, the textarea starts at x 784, and the session opens with `language=auto`.
+When the page reloads, it still shows `DE`. With `cockpit.stt.language: "en"` (one code) or
+`"auto"` instead there is no `[data-talk-lang]`, the textarea starts at x 784, and the session
+opens with `language=en` or `language=auto`.
 Test: Playwright; element rects; the fake speech service's connect log; `localStorage`
 `cockpit.lang`.
 

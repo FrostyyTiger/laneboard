@@ -106,7 +106,7 @@ app shows travels in `focus.route` (§3.8), never in `hello`.
 ```json
 {"type":"welcome","re":1,"protocol":1,"screen":"desk","epoch":"r-5f2c9a","seq":1291,
  "conversation":"c-0007","resume":"replay",
- "config":{"stt":"on","languages":["de","en"],"maxPromptChars":8000},
+ "config":{"stt":"on","languages":["en","de"],"maxPromptChars":8000},
  "status":null,"now":"2026-10-27T07:02:11.480+01:00"}
 ```
 

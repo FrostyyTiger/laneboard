@@ -84,6 +84,8 @@ How older phrases in the spec map onto these:
   acceptance test. `FAKE_AGENT_DIR` (§2.1) reaches the child only because it is listed in
   `cockpit.agent.env` (D108). The test passes `--dialect bridge` in `command` for the few tests
   that need the `bridge` dialect.
+  `"language":"de"` is one code on purpose: the default list `["en", "de"]` (`c2-voice.md` §8)
+  would put the language button in every C2 rect; S-C2-13 removes the key to test the default.
 - **Clock modes.** `real` (the default) or `manual`. In `manual` the room's time stands still and
   timers fire only when the test advances it; due timers then fire in time order. A test that also
   fakes the page's clock advances both with one helper, `advance(ms)`: `page.clock.runFor(ms)`,
