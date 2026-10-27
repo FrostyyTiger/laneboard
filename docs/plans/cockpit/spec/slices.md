@@ -111,10 +111,9 @@ S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 
 S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23
 S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
 
-- S-SCR-17, S-SCR-19 and S-SCR-23 are C1's for the pane's status line and the wall half; their
-  canvas assertions (strip, `STALE` plates, the extra card) are the Canvas slice's once T52 moves
-  them to their own id. Until T52 is done a C1 test skips those assertions with a comment naming
-  T52, not the scenario.
+- S-SCR-17, S-SCR-19 and S-SCR-23 are C1's: the pane's status line and the wall half. The canvas
+  half of room down is S-C4-23 (Canvas) and S-C4-24 (Jobs) since T52 (D120); S-SCR-23's strip text
+  is asserted once the Canvas slice is built.
 - **Does C1 see the fleet?** Yes: `morning`, `alerts` and `runs`, enough for "how did the night
   go?", "what is stuck?", "what did last night's run cost?" (T62). It cannot answer "what's wrong
   here?" (`focus` is C3) and reads no node's health beyond what `morning` and `alerts` carry; asked,
@@ -190,18 +189,18 @@ are in use (plan §6.8).
 (`c4-show-canvas.md` §7); `place` and `replace` with their show lines and `UNDO` (§4, D82); the six
 blocks of D83: `countdown` (to a moment; bound to a job is Jobs'), `status`, `log`, `chart`,
 `text`, `diff`; removal and the 16-card cap (§9); `cards.json` (D85); the canvas half of room down
-(T52).
+(`c4-show-canvas.md` §7.6, D120).
 
 **Stand-ins and scripts**: as C1; script `c4-cards`.
 
-**Scenarios** (15):
+**Scenarios** (16):
 S-SCR-01 S-SCR-06 S-SCR-07 S-SCR-08 S-SCR-10 S-SCR-11
-S-C4-14 S-C4-15 S-C4-16 S-C4-17 S-C4-18 S-C4-19 S-C4-20 S-C4-21 S-C4-22
+S-C4-14 S-C4-15 S-C4-16 S-C4-17 S-C4-18 S-C4-19 S-C4-20 S-C4-21 S-C4-22 S-C4-23
 
 - An unbuilt block (`timer`, `table`, `checklist`, `map`) is an `isError` naming the six (D83).
 - B6 holds for `place`.
 
-**Done-when**: §2's slice rule for the 15 ids; the sketch `sketches/c4-canvas.html` is what the
+**Done-when**: §2's slice rule for the 16 ids; the sketch `sketches/c4-canvas.html` is what the
 owner sees at 1368x912 in `canvas`, apart from the job countdown.
 
 ### 3.6 Show: C4 show commands
@@ -236,7 +235,7 @@ line and a card) or run a script the room's config lists under `cockpit.jobs.scr
 own machine. A job that changes another machine (stop a VM, restart a service) waits for C6; the
 agent says `I can remind you at 15:10, but stopping builder-b needs the act step (C6).`
 
-**Scenarios**: S-C4-13. Planned: `coworker.md`'s job scenarios (T13), the confirm card's (T14).
+**Scenarios**: S-C4-13 S-C4-24. Planned: `coworker.md`'s job scenarios (T13), the confirm card's (T14).
 
 **Done-when**: §2's slice rule; `job-0003` of the demo (D112) is created through the real path.
 
@@ -270,11 +269,11 @@ by the task that writes them.
 | S-C3-03, 04, 05, 07, 08, 18 | C1 |
 | S-C3-01, 02, 06, 09..17 | C3 |
 | S-C4-01..12 | Show |
-| S-C4-13 | Jobs |
-| S-C4-14..22 | Canvas |
+| S-C4-13, 24 | Jobs |
+| S-C4-14..23 | Canvas |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 107 live ids in all (round 65).
+D55). 111 live ids in all (round 69).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired
@@ -313,7 +312,6 @@ changing it needs C6 (`c1-talk.md` §5).
 
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
 says go without them): T85 and T88 (steer, pending Q-O1), T29 (the events the pane consumes), T40
-and T94 (the on-screen keyboard), T26, T27, T41, T44, T96, T100 (the button and pane rects), T52
-(room down in C1), T56 and T57 (pairing refusals and the agent's tools, pending Q-O21/Q-O23), T86
-(the room's mode and ports, pending Q-O29), T89 (close codes), T91 (a conversation across a
-restart, pending Q-O24). For C2 also: T42/T95, T69, T84.
+and T94 (the on-screen keyboard), T26, T27, T41, T44, T96, T100 (the button and pane rects), T56
+and T57 (pairing refusals and the agent's tools, pending Q-O21/Q-O23), T86 (the room's mode and
+ports, pending Q-O29), T89 (close codes), T91 (a conversation across a restart, pending Q-O24). For C2 also: T42/T95, T69, T84.

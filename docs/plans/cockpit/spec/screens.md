@@ -343,10 +343,9 @@ The board keeps working; the cockpit says it is away and since when. Nothing is 
 lost.
 - **Wall half and app views:** unchanged. The tour, explore and every view read the board, not the
   room.
-- **Cockpit button:** label and place unchanged; a grey ring 12 px (`○`, `--text-3`) in its
-  top-right corner, 4 px in from the edges. Under the Q-O11 recommendation the ring sits on the
-  bottom-right talk button (`data-talk="off"`, `c2-voice.md` §3) and `CHAT` stays as it is (D53). Grey, not red: the room is offline, the fleet is not
-  in trouble (`docs/design.md`, the colour rule).
+- **Cockpit button:** label and place unchanged; no mark of its own. The talk button is `off`
+  (`data-talk="off"`, `c2-voice.md` §3: grey `TALK`, disabled), which already says it; `CHAT` stays
+  as it is and opens the pane on the status line below (D120, supersedes D53).
 - **Pane:** a status line under its header, 18 px `--text-2` on `--bg-sunken`, **80 px** tall (two
   lines of 18 px at line height 1.35 plus padding: the texts below wrap at the ~400 px left of the
   button) (D54): `Cockpit room unreachable since 06:41 (3 min). Retrying in 12 s.` with a `RETRY
@@ -356,14 +355,8 @@ lost.
   `Sending and voice come back with the room.` above the input row, 16 px `--text-3`,
   left-aligned at x 784, its baseline 8 px above the row's top border (as `c2-voice.md` §5's
   microphone line: on the Wall the row ends 24 px above the screen's edge, nothing fits under it).
-- **Canvas:** a strip across the top of the canvas, 80 px (two lines at 576 px, D54), 18 px `--text-2` on `--bg-sunken`, 1 px
-  `--line-strong` bottom border: `Cockpit room unreachable since 06:41. Cards show their last
-  values.` Every card stays where it was; each live card gets a grey `STALE` plate (13 px caps,
-  `--text-3`, 1 px `--line-strong` border) next to its title, its values frozen. A countdown keeps
-  counting (time is known on the screen) and adds `The room is down: this job may not run.`;
-  its `CANCEL` is disabled. One-tap remove still works and is applied on the screen only until the
-  room is back (then sent: `card.close`, `protocols.md` §5). An empty canvas reads `The cockpit room is unreachable, so the
-  agent cannot place cards now.` and `Unreachable since 06:41.` (24 px / 20 px, as S-SCR-10).
+- **Canvas:** the canvas half of room down (strip, `STALE` plates, frozen values, a job's countdown,
+  removing offline, the empty canvas) is `c4-show-canvas.md` §7.6, built with the canvas (D120).
 - **What the screen keeps:** the conversation and the cards are kept in memory only, never in
   browser storage (a screen holds nothing worth stealing, plan §2) (D14). A reload while the room is
   down shows the status line and `The conversation shows again when the room is back.` in the pane.
@@ -378,10 +371,10 @@ and gets the line `Cut off: the room went away at 06:41.`; on reconnect, a reply
 meanwhile replaces the cut-off text (`protocols.md` §2.2). An open microphone closes at once (no 5 s grace: audio
 has nowhere to go); the words so far stay in the input as an editable draft, not sent.
 
-Sketch: `sketches/screens-room-down.html` (S-SCR-17 at 06:44): as is, `split` with the pane
-closed (strip, two `STALE` cards, the countdown's note and disabled `CANCEL JOB`, the ring on the
-talk button); with `#pane`, `wall` with the pane open (status line and `RETRY NOW`, a cut-off reply,
-the line above the input row, the draft `how is the`, `SEND` and talk `off`).
+Sketch: `sketches/screens-room-down.html` (S-SCR-17 at 06:44): with `#pane`, `wall` with the pane
+open (status line and `RETRY NOW`, a cut-off reply, the line above the input row, the draft `how is
+the`, `SEND` and talk `off`). Its default view, `split` with the pane closed, still draws the ring
+D120 cut and the canvas half that is now `c4-show-canvas.md` §7.6; T70 redraws it.
 
 ### Board down (hub down)
 
@@ -401,7 +394,7 @@ the line above the input row, the draft `how is the`, `SEND` and talk `off`).
 
 `navigator.onLine` false: one message replaces the room and board texts: the wall caption and the
 pane status line both read `This screen is offline since 06:41. Check its network.`; the canvas
-strip reads the same. Retries keep running; when the network is back the rules of "Back" apply.
+strip reads the same (`c4-show-canvas.md` §7.6). Retries keep running; when the network is back the rules of "Back" apply.
 
 ## 8. Scenarios, part 2
 
@@ -448,35 +441,36 @@ Test: Playwright plus the CLI; assert texts and that no conversation line is in 
 a cockpit route with the old token from the test and expect 401.
 
 ### S-SCR-17 The room goes down: the cockpit says so after 5 s, the board keeps going
-Given a screen in `split`, live, 2 cards on the canvas (a countdown with 01:30:00 left and a status
-tile), the pane open with a draft `how is the`,
+Given a screen in `wall` layout, live, touring, the pane open with a draft `how is the`,
 When the stand-in room stops its link at t = 0 s (06:41),
-Then at t = 4.9 s nothing has changed; at t = 5 s `data-cockpit="room-down"`, the cockpit button
-has the grey ring, the canvas strip reads `Cockpit room unreachable since 06:41. Cards show their
-last values.`, both cards carry `STALE`, the countdown still counts and its `CANCEL` is disabled,
-the pane line reads `Cockpit room unreachable since 06:41 (0 min). Retrying in …`, `SEND` and the
-talk button are disabled, the draft is still `how is the` and editable; the wall half is
-`data-wall-state="tour"` and flying throughout.
-Test: Playwright with a fake clock; stop the stand-in's link; assert at 4.9 s and 5 s; type into
-the input; check `disabled` on `SEND`.
+Then at t = 4.9 s nothing has changed; at t = 5 s `data-cockpit="room-down"`, the status line under
+the pane's header is 80 px tall and reads `Cockpit room unreachable since 06:41 (0 min). Retrying
+in …` with `RETRY NOW` (48 px tall) at its right end, the line `Sending and voice come back with
+the room.` sits above the input row, `SEND` is disabled, the talk button has `data-talk="off"` and
+is disabled with no other mark on it, the draft is still `how is the` and editable (typing `
+night` makes it `how is the night`); the wall half is `data-wall-state="tour"` and flying
+throughout.
+The canvas half of this outage is S-C4-23.
+Test: Playwright with `page.clock`; `POST /link {"up":false}` on the stand-in room; assert at 4.9 s
+and 5 s; the status line's rect height 80 ± 1 px; type into the input; `disabled` on `SEND` and the
+talk button; the talk button has no child element beyond its label and glyph.
 
 ### S-SCR-18 A blip under 5 s shows nothing
 Given a live screen,
 When the stand-in room drops its link at t = 0 s and accepts the reconnect at t = 2 s,
-Then `data-cockpit` is `live` at every sample from 0 s to 10 s and no strip, ring or status line
-appears.
+Then `data-cockpit` is `live` at every sample from 0 s to 10 s and no status line (nor, on a
+canvas, strip) appears.
 Test: Playwright with a fake clock; sample the attribute and count `[data-cockpit-down]` elements
 every 0.5 s.
 
 ### S-SCR-19 The room comes back: the screen catches up, the draft is not sent
 Given S-SCR-17's screen in `room-down`, with retries at 0.5, 1.4, 2.9, 5.6, 10.6, 19.4, 34.4 s
 … after the loss (500 ms × 1.8, cap 15 s),
-When the room is started again at t = 60 s, having placed one more card and answered one turn
-meanwhile,
+When the room is started again at t = 60 s, having answered one turn meanwhile,
 Then by the next retry and 1 s after it `data-cockpit="live"`; the pane line reads `Back since
-06:42.` for 5 s, then goes; the new card is on the canvas; the missed turn is in the conversation
-in order; `STALE` is gone; the draft `how is the` is in the input and no prompt was sent (the
-stand-in's log shows no new user turn).
+06:42.` for 5 s, then goes; the missed turn is in the conversation in order; `SEND` and the talk
+button are enabled; the draft `how is the` is in the input and no prompt was sent (the stand-in's
+log shows no new user turn). (The canvas catching up is S-C4-23.)
 When the owner taps `RETRY NOW` during a later outage, a try starts at once.
 Test: Playwright with a fake clock and the stand-in's log of received turns; assert texts and the
 log; record retry times from the stand-in's connection log and compare with the series ± 50 ms.
@@ -512,6 +506,7 @@ button's rect; tap and assert `location.search` and the `DEMO` label.
 ### S-SCR-23 The screen loses its network
 Given a live screen in `split`,
 When the browser goes offline (`context.setOffline(true)`) at 06:41,
-Then within 1 s the wall caption, the canvas strip and the pane line read `This screen is offline
-since 06:41. Check its network.`; after `setOffline(false)` the rules of S-SCR-19 apply.
-Test: Playwright `context.setOffline`; assert the three texts; back online, assert `live`.
+Then within 1 s the wall caption and the pane line read `This screen is offline since 06:41. Check
+its network.` (on a canvas the strip too, `c4-show-canvas.md` §7.6, asserted only once the Canvas
+slice is built); after `setOffline(false)` the rules of S-SCR-19 apply.
+Test: Playwright `context.setOffline`; assert the two texts; back online, assert `live`.

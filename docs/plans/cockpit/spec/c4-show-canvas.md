@@ -482,7 +482,7 @@ Every canvas card is `[data-card]` with `data-card-id`, `data-block`, `data-size
   when it was placed (plan C4b: "every card says who made it and when"). A card replaced in place
   (§7.4) reads `AGENT · 07:12 · NEW 07:20`. Demo cards read `DEMO` (`screens.md` S-SCR-10). Then,
   when it applies, one plate (16 px caps `--text-3`, 1 px `--line-strong` border, 8 px left
-  margin): `STALE` while the room is down (`screens.md` §7), or `AS OF 02:10` when the bound source
+  margin): `STALE` while the room is down (§7.6), or `AS OF 02:10` when the bound source
   is older than 10 min (`c3-see.md` §3, `stale`).
 - **Remove** `[data-card-remove]`: 48 x 48, flush top right, `✕` 24 px `--text-2`,
   `aria-label="Remove card"`. No other target within 8 px of it (T46).
@@ -542,11 +542,37 @@ chart, table, checklist, map, text, diff). A card bound to fleet data stays live
 - **Refresh**: every 10 s per card while at least one canvas screen is online; one read per URL per
   5 s for all cards together. A change is drawn within 0.3 s of the room's read.
 - **Clocks**: countdowns and timers tick on the screen's clock each second, anchored to times the
-  room sends, so they keep counting while the room is down (`screens.md` §7).
-- **Room down**: `screens.md` §7 (frozen values, `STALE`, countdown counting, `CANCEL JOB` disabled).
+  room sends, so they keep counting while the room is down (§7.6).
+- **Room down**: §7.6.
 - **Kept** (D85, pending Q-O24): the room writes the list to `<stateDir>/cockpit/cards.json` (0600)
   on every change, so cards survive a room restart and `NEW` (`c1-talk.md` §11; pins do not, D73).
   A removed card is gone from the file at once. Chart samples (§8.5) are memory only.
+
+### 7.6 Room down
+
+The canvas half of `screens.md` §7 (moved here by T52, D120); same 5 s grace, same `data-cockpit`
+values, same `06:41` time format. The pane's half (status line, `RETRY NOW`, `SEND` and talk `off`)
+stays in `screens.md` §7.
+
+- **Strip** `[data-cockpit-down]` across the top of the card area, 80 px tall (two lines at 576 px,
+  D54), 18 px `--text-2` on `--bg-sunken`, 1 px `--line-strong` bottom border: `Cockpit room
+  unreachable since 06:41. Cards show their last values.` Cards move down by 80 px; none is shelved
+  because of it. With the screen offline it reads `This screen is offline since 06:41. Check its
+  network.` (`screens.md` §7).
+- **Cards** stay where they were. Every bound card (§7.5) gets the `STALE` plate (§7.3) and keeps
+  its last values; a card with no binding (`text`, `diff`) gets none.
+- **Clocks**: `countdown` and `timer` keep ticking on the screen's clock (§7.5). A countdown bound to
+  a job adds a line under its digits, 18 px `--text-2`: `The room is down: this job may not run.`,
+  and its `CANCEL JOB` is `disabled` (Jobs slice, `slices.md`; whether a cancel may wait for the
+  room is Q-O25).
+- **Remove** (§9) works: the card goes on this screen at once with the usual `CARD REMOVED · UNDO`
+  row, and the screen sends `card.close` (`protocols.md` §5) at the first frame after the room is
+  back. A card the room no longer holds by then is simply gone.
+- **Empty canvas**: instead of S-SCR-10's texts, `The cockpit room is unreachable, so the agent
+  cannot place cards now.` (24 px `--text-1`) and `Unreachable since 06:41.` (20 px `--text-2`).
+- **Back**: at the first frame from the room the strip goes, `STALE` plates go, values update from
+  the room's next `card.data`, cards placed or removed meanwhile appear or go (snapshot,
+  `protocols.md` §2.2), the job line goes and `CANCEL JOB` is enabled again.
 
 ## 8. The kit blocks
 
@@ -728,7 +754,7 @@ How cards also leave on their own, and the agent removing them, is part 3 (T12, 
   puts the card back at its old place in the list on every screen; after 10 s the row goes.
 - The next prompt's focus carries `"removed":["card-0004"]` (as `undone`, §5).
 - Removing a countdown never cancels its job (§8.1). Removing works while the room is down
-  (`screens.md` §7).
+  (§7.6).
 
 ## 10. Scenarios, part 2
 
@@ -826,3 +852,37 @@ canvas · no screen shows the canvas`.
 When the owner switches `desk` to `canvas` (`SCREEN` sheet, `screens.md` §1),
 Then the countdown is drawn there within 1 s, still counting from the placing time.
 Test: the result; switch layout; read the digits against the clock.
+
+### S-C4-23 The room goes down: the canvas says so, cards freeze, then catch up
+Given `side` in `canvas` at 06:41:00 with a `status` card on `vm-b` reading `▲ WARN`, a `countdown
+{"until":"+90m"}` and a `text` card,
+When the stand-in room stops its link at t = 0 s,
+Then at t = 4.9 s nothing has changed; at t = 5 s `[data-cockpit-down]` (80 px tall) reads
+`Cockpit room unreachable since 06:41. Cards show their last values.`, the status and countdown
+cards carry `STALE` and the `text` card does not, the countdown reads `01:29:55` and keeps
+counting each second.
+When the demo hub sets `vm-b` to `ok` at t = 10 s,
+Then the status card still reads `▲ WARN` at t = 30 s.
+When the owner taps `✕` on the `text` card at t = 20 s,
+Then it is gone on `side` at once with `CARD REMOVED · UNDO`, and the room's `cards.json` still
+lists it.
+When the fake agent places one more `status` card meanwhile and the link comes back at t = 60 s,
+Then within 1 s of the first frame the strip and every `STALE` are gone, the new card is drawn,
+the first status card reads `● OK` within 10.3 s (the room's next read, §7.5), and `cards.json` no
+longer lists the `text` card.
+And given a canvas with no card, at t = 5 s it reads `The cockpit room is unreachable, so the agent
+cannot place cards now.` and `Unreachable since 06:41.`
+Test: Playwright with `page.clock`; `POST /link {"up":false}` and `{"up":true}` on the stand-in room
+(`stand-ins.md`); strip rect and text; `STALE` plates per `[data-card]`; read
+`<stateDir>/cockpit/cards.json` (D85) before and after the link is back.
+
+### S-C4-24 A job's countdown with the room down: still counting, cancel waits
+Given `side` in `canvas` with the countdown on `job-0003` (S-C4-13) reading `03:00:00` at 07:12:00,
+When the stand-in room stops its link at 07:12:00,
+Then at 07:12:05 the card carries `STALE`, its digits read `02:59:55` and keep counting, the line
+`The room is down: this job may not run.` shows under them and `CANCEL JOB` is `disabled`; a tap on
+it opens nothing.
+When the link comes back,
+Then within 1 s the line goes and `CANCEL JOB` is enabled.
+Test: Playwright with `page.clock`; the stand-in room's link; texts and `disabled` on
+`[data-card-cancel]`.

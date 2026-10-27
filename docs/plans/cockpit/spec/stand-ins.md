@@ -363,7 +363,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `scr-room` | agent | S-SCR-03..05, S-SCR-17..20 | one long turn (20 s of text) and a turn that calls `fly_to builder-a` (S-SCR-05) |
 | `c3-tools` | agent | S-C3-03, S-C3-10..14 | `morning` then `runs`; `focus` calls |
 | `c4-show` | agent | S-C4-01..12 | one turn per show command, at the times the scenarios give |
-| `c4-cards` | agent | S-C4-13..22, S-SCR-07/08 | `place` calls, incl. the 17th card and the `job-0003` countdown |
+| `c4-cards` | agent | S-C4-13..24, S-SCR-07/08 | `place` calls, incl. the 17th card and the `job-0003` countdown |
 | `demo`, `demo-jobs` | both | §6 | the public demo |
 
 Each script file gets one `node:test` check in `npm test` (no browser): it parses, every step is a
