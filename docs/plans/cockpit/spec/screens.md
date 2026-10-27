@@ -982,12 +982,21 @@ Then at t = 4.9 s there is no `[data-cockpit-away]`; at t = 5 s `data-cockpit="r
 ± 1 px, computed `font-size` 18 px, colour `--text-2`; the talk button has `data-talk="off"`,
 `aria-disabled="true"` and no `disabled` attribute; the tour flies on.
 When the owner taps the talk button at t = 10 s (down and up after 100 ms),
-Then within 0.2 s of the `pointerup` the pane is open, its scroll top is 0, the status line
+Then in the first frame after the `pointerdown` the button's computed `background-color` is
+`--bg-sunken` and its `border-color` `--text-2` (the pressed state, `c2-voice.md` §3, D180), and
+in the frame after the `pointerup` they are `--bg-elevated` and `--line` again;
+within 0.2 s of the `pointerup` the pane is open, its scroll top is 0, the status line
 `Cockpit room unreachable since 06:41 (0 min). …` is in view under the header, the caption is gone
 (the pane covers the corner, §4.1 D), `data-talk` is still `off` and the counter reads 0.
 When the owner closes the pane and holds the talk button for 1.0 s at t = 20 s,
-Then the pane opens at the release as before, no hint line reads `LISTENING`, the counter still
-reads 0 and the fake speech's log has no session from this screen.
+Then the pressed state holds for the whole 1.0 s, the pane opens at the release as before, no
+hint line reads `LISTENING`, the counter still reads 0 and the fake speech's log has no session
+from this screen.
+When the owner taps the talk button again at t = 25 s with the pane still open,
+Then the button shows the pressed state between down and up; nothing else changes: the pane stays
+open at the same scroll top, the line slot `[data-cockpit-line][data-line="room-down"]` reads
+`Sending and voice come back with the room.` at computed `font-size` 18 px and colour
+`--text-1`, as before the tap, and the counter still reads 0.
 When the room's link is back at t = 30 s,
 Then by the first frame from the room plus 1 s the caption is gone, `data-talk="idle"` and a
 press opens the microphone again (the counter reads 1).
@@ -995,4 +1004,6 @@ Test: Playwright with `page.clock`, the real room with a fake agent and the fake
 /link {"up":false}` and `{"up":true}` on the control API (`stand-ins.md` §1.2); an init script
 wraps `navigator.mediaDevices.getUserMedia` to count calls; read the caption's `boundingBox()` and
 computed style; `page.touchscreen.tap` for the tap, `mouse.down`/`up` with a 1.0 s clock advance
-for the hold; the fake speech's log (`stand-ins.md` §3.4) for "no session".
+for the hold, the button's computed `background-color`/`border-color` read after `mouse.down`
+(one `requestAnimationFrame`) and after `mouse.up`, compared with the tokens resolved on a probe
+element; the fake speech's log (`stand-ins.md` §3.4) for "no session".

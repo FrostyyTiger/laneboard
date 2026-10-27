@@ -305,7 +305,7 @@ Open, 64, none blocked:
   T86 (room process), T89, T90, T92 (protocol rules), T40, T94 (keyboard), T96, T97, T100 (pane
   layout and type), T56, T60, T71 (pairing, audit, `screen` kind — only if Q-O21 a/c or Q-O27 a),
   T33, T34, T36, T76, T93 (selectors, renderer, demo), T68, T91 (login check, restart);
-- **before C2:** T42, T95, T64 (done), T102, T69, T84, T58, T78;
+- **before C2:** T42, T95, T64 (done), T102 (done), T69, T84, T58, T78;
 - **the rest:** T12, T13, T14, T17, T19, T21, T23, T25, T28, T31, T35, T43, T44, T45, T47, T53,
   T59, T61, T63, T65, T66, T67, T70, T72, T73, T74, T75, T77, T79, T82, T83, T98, T99, T101.
 

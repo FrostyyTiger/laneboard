@@ -81,7 +81,17 @@ so does the row's left end (`CANCEL`, below).
   (`c1-talk.md` §2), scrolled to its top, so the status line under the header is the first thing
   in it: room down `Cockpit room unreachable since …` (`screens.md` §7), unpaired the pairing card
   (§6). An open pane stays as it is. `data-talk` stays `off`; the talk key (§11) does the same.
-  What the press shows on the button itself is T102's.
+- **What the press shows on the button** (D180, T102): the pressed state, drawn in the first frame
+  after the `pointerdown` with no transition: fill `--bg-sunken` (from `--bg-elevated`), border
+  1 px `--text-2` (from `--line`); glyph and `TALK` stay `--text-3`, no level bar, no inverse. It
+  stays while the pointer is down inside the box, for any length (a 1.0 s hold looks the same as a
+  100 ms tap: no `LISTENING`, no 400 ms hint), and goes in the frame after the `pointerup`, the
+  `pointercancel` or the pointer leaving the box. This is the rule T45 writes for every tappable,
+  applied here first. The words that say why are the line slot's room-down line
+  `Sending and voice come back with the room.` (`c1-talk.md` §1.1), already 18 px `--text-1` at all
+  times (D167), so a press raises nothing for 5 s: with the pane closed the press opens it on that
+  line and the status line; with the pane open both are already in sight above the input row and
+  under the header, and the pressed state is the whole answer. Unpaired, the pairing card is.
 - **After send** the talk button is back to `idle` and the input empty within B3 (≤ 0.3 s from the
   release). The "sending" state is the prompt's, not the button's: the prompt block reads
   `YOU · SPOKEN · 07:02 · SENDING` until the room confirms (`c1-talk.md` §7, D31).
