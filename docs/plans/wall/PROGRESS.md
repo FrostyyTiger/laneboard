@@ -355,12 +355,24 @@ Notes for every builder round (planner, round 1):
   no red slab over a cleared crit (HV2's standing crit takes the line when VM-C clears), 0 console errors, 1.5 fps
   as every SwiftShader film here; still `shots/r20-cleared.png` (frame markup + wall.css): the grey calm line with
   one small red square. The large demo almost never shows the memory itself (some live trouble always stands).
-- [ ] T19 (r11-dreamer galaxy 2) [ui] [variant:galaxy] The overview reads as a spiral (follow-up to T3, whose
+- [x] T19 (r11-dreamer galaxy 2) [ui] [variant:galaxy] The overview reads as a spiral (follow-up to T3, whose
   ribbon the panel cannot see): narrow the ribbon (half 170) and lay a tighter band at 8-10 % along the spine
   near each site only, never above `--text-3`; soften the vignette's banding (stretched gradient or dither) so no
   concentric rings show — done when: a test pins the near-site band's opacity inside (0.08, 0.10) and the
   ribbon's width, and a still of `galaxy.html?at=overview&quality=0` shows two arms through the sites and no
-  ring bands in the vignette, crit nebulae still the brightest things.
+  ring bands in the vignette, crit nebulae still the brightest things. (commit 8e891c2)
+  Builder r44: read "half 170" as the ribbon's width cap (T3 had it start at 170 and grow 40 per step to ~350):
+  `layout.js ARM_RIBBON` half 90, grow 16, `maxHalf` 170; `armBand(n)` (`ARM_BAND`: half 55, ±0.55 step round each
+  site, peak on `armPoint`), shared strip builder `armStrip`; `scene.js` `BAND.opacity` 0.09 (`bandOpacity` fades
+  with the ribbon as a system opens), mesh `arm-band` in `palette.arm` (text-3), drawn before the dust, no depth
+  write, rebuilt only when the site count changes. `tokens.css --tex-vignette`: both ramps a smoothstep in short
+  stops (radial 50-100 % in 5 % steps, bottom 26vh in 8) instead of a straight ramp off a hard knee at 55 %.
+  Tests in `test/wall-galaxy-ribbon.test.mjs` (width ≤ 170, band opacity, band only near each site, band in the
+  scene and gone when open, vignette stops). Stills `shots/r44-before` / `r44-after` (`at=overview`): before a grey
+  disc of haze and an oval ring at the knee; after two grey arms through the five sites, no ring, the crit
+  nebulae still the brightest. Film r44-galaxy: the S of the arms in every overview frame, 0 errors, 12.8 fps
+  (SwiftShader, as r28-r43). Seen: mid-flight, close to the plane, the ribbon can show as a broad grey sweep
+  (first r44 film, 38.6 s); grey and quiet, but if a panel finds it loud, fade it by camera height as `nearFade`.
 - [ ] T20 (r11-dreamer galaxy 3) [ui] [variant:galaxy] Not three reds saying one thing: while a caption plate is
   up and the banner's subject is the plate's subject, the banner drops out (or shows the next problem, as T23
   does when the subjects differ), and the held planet's own label is hidden while the hero names it — done when:
