@@ -878,7 +878,7 @@ to 120 characters and drawn as text. After an error the header reads `READY` (D3
 | --- | --- | --- | --- |
 | E1 `not-sent` | the room has not confirmed a prompt 5 s after send, link up | label `YOU · 07:02 · NOT SENT`; `Not sent: the room did not confirm within 5 s.` | `RETRY` sends the same text again; `EDIT` removes the block and puts the text back in the input (an existing draft is kept after it, on a new line) |
 | E2 `agent-exited` | the agent's process ended during a turn | `The agent stopped unexpectedly at 07:04. The room is starting it again.`, then, once back: `The agent is back (07:04). Your last message was not answered.` | `RETRY` (only once the agent is back) sends that turn's prompt again |
-| E3 `agent-down` | the agent cannot start | `The agent cannot start: {detail}. The room tries again every 30 s.` plus the status line (§1) `Agent not running since 07:04.`; `SEND` and talk disabled, the draft kept | none |
+| E3 `agent-down` | the agent cannot start | `The agent cannot start: {detail}. The room tries again every 30 s.` plus the status line (§1) `Agent not running since 07:04 (2 min).`; `SEND` and talk disabled, the draft kept | none |
 | E4 `not-logged-in` | the agent reports missing login or key | `The agent is not logged in on the room. Log it in there, then send again.` plus the status line (§10.1) | none |
 | E5 `model-busy` | the model service is retried by the agent | not an error line: a tool-line-style row in `--text-3`, `the model service is busy, retrying (2 of 10)`, replaced on each retry, gone when text arrives | none |
 | E6 | retired (T50): a model-service error is E8, its `{detail}` the service's own message (D57) | | |
@@ -900,8 +900,8 @@ that loads or reconnects draws it from `welcome.status` (`protocols.md` §3.5) i
 
 **The agent's login.** The room checks it when it starts and every 15 min (900 s), and every 60 s
 while the agent is found logged out (`protocols.md` §11.10). A logged-out agent shows, with no
-prompt sent: `The agent is not logged in on the room since 03:15. Log it in there.` The time is
-when the room first found it (`HH:MM`; an earlier day `26 Oct 03:15`, D149; T65 may add the age).
+prompt sent: `The agent is not logged in on the room since 03:15 (4 h 15). Log it in there.` The time is
+when the room first found it; time and age as `README.md` §"Times on the screen" (`since yesterday 22:10 (9 h 20)`, D232).
 The line goes at the first check that finds the login back (at most 60 s after the owner logs in
 on the room), or when a turn ends `done`. `SEND` and talk stay enabled while it shows (D151): the
 check is a guess about the agent and the agent's own answer is the truth; a prompt that fails
@@ -912,10 +912,10 @@ is up, `status.blocksSend`) are `SEND` and talk disabled, as with E3, the draft 
 
 | # | `data-status` | Set by | Text (exact) | Lasts |
 | --- | --- | --- | --- | --- |
-| 1 | `offline` | the screen (`navigator.onLine` false) | `This screen is offline since 06:41. Check its network.` | while offline (`screens.md` §7) |
+| 1 | `offline` | the screen (`navigator.onLine` false) | `This screen is offline since 06:41 (3 min). Check its network.` | while offline (`screens.md` §7) |
 | 2 | `room-down` | the screen (its room link) | `Cockpit room unreachable since 06:41 (3 min). Retrying in 12 s.` + `RETRY NOW` | while down (`screens.md` §7) |
-| 3 | `agent-down` | the room | `Agent not running since 07:04.` | while the agent cannot start (E3) |
-| 4 | `not-logged-in` | the room | `The agent is not logged in on the room since 03:15. Log it in there.` | as above |
+| 3 | `agent-down` | the room | `Agent not running since 07:04 (2 min).` | while the agent cannot start (E3) |
+| 4 | `not-logged-in` | the room | `The agent is not logged in on the room since 03:15 (4 h 15). Log it in there.` | as above |
 | 5 | `tools-down` | the room | `The agent cannot read the board: its laneboard tools did not start.` | while `ready.mcp` says so (`c3-see.md` §1) |
 | 6 | `board-down` | the room | `Board unreachable since 06:41 (3 min): the agent cannot read the fleet.` | from the second failed board check to the first answer (`c3-see.md` §2, D229) |
 | 7 | `agent-back` | the room | `The agent is back (07:04). Your last message was not answered.` | 5 s (E2) |
@@ -929,6 +929,10 @@ is up, `status.blocksSend`) are `SEND` and talk disabled, as with E3, the draft 
   show, they are dropped, not shown later. So a reconnect whose `welcome.status` is not `null`
   shows that line at once and no `Back since`.
 - The `NEW` bar (§11) gives way to every row, as before.
+- Every time in this table and in §10's error lines follows `README.md` §"Times on the screen" (T65, D232): rows 1-6 hold a
+  condition and read `since {clock} ({age})`, redrawn every 1 s (`since yesterday 22:10 (9 h 20)`);
+  rows 7-8 and E2 are events and carry the clock only (`The agent stopped unexpectedly yesterday at
+  23:58.`, `The agent is back (yesterday 23:58).`). The examples above are the same-day forms.
 - On the room, the room's log holds one line per change of the slot's code (`status
   not-logged-in since 03:15`), and the check's own result once per change (`protocols.md` §11.10).
 
@@ -1343,7 +1347,8 @@ Given the room under test with the script `c1-login` (`start.login` `ok`), its c
 When the test writes `login` `failed` into the script and advances the room's clock 900 s,
 Then the fake agent's log holds a second `login-check` line, and a page loaded now (pane opened at
 once) shows in its first frame after `welcome`: `[data-cockpit-status]` with `data-status`
-`not-logged-in`, text exactly `The agent is not logged in on the room since 03:15. Log it in there.`,
+`not-logged-in`, text exactly `The agent is not logged in on the room since 03:15 (0 min). Log it in there.` (the
+page's clock fixed at 03:15:00),
 rect y 64-144 (80 px), computed font size 18 px; `SEND` and the talk button enabled;
 `fakeAgent.prompts()` is 0.
 When the test advances 60 s three times,
@@ -1356,7 +1361,8 @@ reads the new login, `protocols.md` §11.10).
 And a second case: the room started with `login` `failed` from the beginning; a page loaded 2 s
 after the room shows the same line with the room's start time, before anything is typed.
 Test: Playwright against the room under test, `POST /clock` for `set`, `manual` and `advanceMs`;
-`fakeAgent.loginChecks()`; text, `data-status`, rect and computed style of
+`fakeAgent.loginChecks()`; `page.clock.setFixedTime('2026-10-27T03:15:00+01:00')` before the load;
+text, `data-status`, rect and computed style of
 `[data-cockpit-status]`; `disabled` on `SEND` false; `starts` read before and after. The 10 s
 timeout row of `protocols.md` §11.10 is a `node:test` of the room's check with `login` `hang`.
 
@@ -1372,7 +1378,7 @@ Then the first frame after `welcome` shows `not-logged-in` with `since 03:15`, a
 from then to 6 s does `Back since` show.
 Second case: a fresh room with `login` `failed`, `startFailures` 3 and `startStderr`
 `claude: command not found` (`stand-ins.md` §2.4), clock `real`: after the second failed start
-`data-status` is `agent-down` (`Agent not running since HH:MM.`, the room's time of that start),
+`data-status` is `agent-down` (`Agent not running since HH:MM (0 min).`, the room's time of that start),
 `SEND` and talk disabled; at the fourth start's `ready` (about 6 s after the first) it becomes
 `not-logged-in` (the condition still holds) and `SEND` is enabled again; no `agent-back` line
 shows while `not-logged-in` holds.

@@ -13,8 +13,8 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 
 | File | What it settles | Scenario ids | Task | Status |
 | --- | --- | --- | --- | --- |
-| `README.md` | this index, the room process and ports, the speed budget (B1-B8, B10, B11; B9 is T67's; each test asserts the end-to-end column), the pressed state and `touch-action` of every tappable (T45, D224), the selectors tests use, and the glossary | none | T1, T24, T33, T45 | written |
-| `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3, T31 | part 1 written (T2), part 2 written (T3; T31: §9 the Wall contract, `window.__cockpitView`, the app-first rule, S-SCR-35; T52: room down is the pane's status line only, canvas half in `c4-show-canvas.md` §7.6, D120; T89: S-SCR-24 a refused room link; T44: §4.1 the corner cluster per state, the `SCREEN` sheet, S-SCR-25/26; T56: §6.1 who may pair (admin routes, peer uid, the agent refused), §6.2 cross-site checks and the `lb_cockpit` cookie, §6.3 the paired line, S-SCR-27..29; T60: §6.4 the room's audit lines, S-SCR-30/31; T64: the `off` talk button opens the pane, the away caption, S-SCR-32, D179; T102: its pressed state, D180; T58/T75: §6.2.1 a plain-HTTP page does not pair unless `cockpit.allowInsecure`, S-SCR-33, D182; T23: §2.1 a speak-up on a touring screen, S-SCR-34, D219; T28: §7.1 the room link's real retry series and `cockpit:retry` marks, S-SCR-19, D11, D220) |
+| `README.md` | this index, the room process and ports, times on the screen ("since", "at", the age; T65, D232), the speed budget (B1-B8, B10, B11; B9 is T67's; each test asserts the end-to-end column), the pressed state and `touch-action` of every tappable (T45, D224), the selectors tests use, and the glossary | none | T1, T24, T33, T45, T65 | written |
+| `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3, T31 | part 1 written (T2), part 2 written (T3; T31: §9 the Wall contract, `window.__cockpitView`, the app-first rule, S-SCR-35; T52: room down is the pane's status line only, canvas half in `c4-show-canvas.md` §7.6, D120; T89: S-SCR-24 a refused room link; T65: S-SCR-36 the room down since the day before; T44: §4.1 the corner cluster per state, the `SCREEN` sheet, S-SCR-25/26; T56: §6.1 who may pair (admin routes, peer uid, the agent refused), §6.2 cross-site checks and the `lb_cockpit` cookie, §6.3 the paired line, S-SCR-27..29; T60: §6.4 the room's audit lines, S-SCR-30/31; T64: the `off` talk button opens the pane, the away caption, S-SCR-32, D179; T102: its pressed state, D180; T58/T75: §6.2.1 a plain-HTTP page does not pair unless `cockpit.allowInsecure`, S-SCR-33, D182; T23: §2.1 a speak-up on a touring screen, S-SCR-34, D219; T28: §7.1 the room link's real retry series and `cockpit:retry` marks, S-SCR-19, D11, D220) |
 | `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24; T50: header `READY`/`● WORKING`/`● STOPPING`, folds cut to code and `SHOW EARLIER`, E6 merged into E8, no raw view in C1, S-C1-24 retired; T29: §5.1 the room messages the pane draws from, fresh-screen states, S-C1-25/26; T85: §8 rewritten for steer, S-C1-16 rewritten, S-C1-27/28; T88: queued prompts as snapshot items, S-C1-29; T57: §5.2 the allowlist, refused calls, tools that change things, §5.3 redaction, S-C1-30/31; T40: §7.1 the on-screen keyboard, S-C1-32/33; T96: §1.1 the stack above the input row, S-C1-34; T34: §3 the renderer module and the numeric-cell rule, §5 targets from odd input, S-C1-35; T36/T76/T93: §15 the demo link for `?demo=1`, S-C1-36; T68: §10.1 the status line's order and the agent's login check, S-C1-37/38; T43: the type floor, line-slot messages 18 px in the label face, turn state 18 px `--text-2`, S-C1-40; T45: links as `<span>` with no underline D225, tool lines 48 px D226, the pressed state S-C1-41; T59: the cockpit's own lines with a `--line-strong` rule D227, the prompt rate D228, S-C1-42/43) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the talk key, speech-to-text down or failed; §14 the physical-button API as the later slice C2b | `S-C2-`, `S-C2B-` | T6, T7 | written: part 1 (T6: gestures, 400 ms threshold, `data-talk` states, live words, microphone, S-C2-01..10), part 2 (T7, slimmed by T49: tap the words to stop and fix, DE/EN, `cockpit.stt.*`, the service down or failed (`stt-down`, `stt-failed`), the talk key, the kiosk microphone note, S-C2-11..17, 20, 21; T94: S-C2-22 keyboard up; T69: S-C2-23 speech down in a hold; T78: `cockpit.stt.protocol` and the four messages a shim sends; C2b §14: the button API, S-C2B-01..02) |
 | `c3-see.md` | C3: the MCP server (`laneboard`, loopback HTTP, D58), the seven read tools with params, results and sources, result rules (`asOf`, size caps), board gaps; `focus`, "Ask about this" | `S-C3-` | T8, T9 | written: part 1 (T8: §1-§7, S-C3-01..08), part 2 (T9: §8 `focus`, §9 the hold menu and context chip, S-C3-09..17, sketch `c3-ask.html`); S-C3-18 (T62: the night answered on the C1 night); S-C3-20 (T78: an empty board, `sources: []` and its `hint`); S-C3-21..23 (T63: a stale source's `say`, `board-down`, a run's cost) |
@@ -64,6 +64,77 @@ What the room is, in one place (D89, D92, D128, D129; T37, T86; pending Q-O29).
   | the board or hub, and the one box's room | `port` | `7777` | `bind`, default `127.0.0.1` |
   | a room alone (`mode: cockpit`) | `port` | `7778` (the mode's own default) | `127.0.0.1` only |
   | the MCP server (D58) | `cockpit.mcp.port` | `7790` | `127.0.0.1` only |
+
+## Times on the screen: "since", "at" and the age (T65, D232)
+
+One rule for every time of day and every age the cockpit writes (review 44 finding 4). It sits on
+D149 (`D Mon` dates in fixed English, `HH:MM` 24 h). One pure module holds it,
+`public/js/core/cockpit-time.js`, no imports; the room imports the same file (as D150's constants).
+
+**The clock**, `clockText(ms, nowMs, timeZone?)`, by calendar day in the time zone (the screen's own
+on the page; the board's `config.timezone` on the room):
+
+| When `ms` is | Text | Example |
+| --- | --- | --- |
+| the same day as `nowMs`, or later (clock skew) | `HH:MM` | `06:41` |
+| the day before | `yesterday HH:MM` | `yesterday 22:10` |
+| earlier | `D Mon HH:MM` (D149, no year) | `25 Oct 22:10` |
+
+Sentences use two forms of it: **since** `since {clock}` (`since yesterday 22:10`), and **at**
+`atText`: `at 07:04` the same day, `yesterday at 22:10`, `on 25 Oct at 22:10`.
+
+**The age**, `ageText(ms, nowMs)`, from the elapsed milliseconds (`nowMs - ms`, below 0 counts as
+0), whole units rounded down, always in brackets:
+
+| Elapsed | Text | Example |
+| --- | --- | --- |
+| under 60 min | `(N min)` | `(0 min)`, `(49 min)` |
+| 60 min to under 24 h | `(H h MM)`, minutes two digits | `(1 h 00)`, `(9 h 20)` |
+| 24 h and more | `(D d H h)` | `(1 d 9 h)` |
+
+`sinceText(ms, nowMs, timeZone?)` is the two joined: `since 06:41 (3 min)`.
+
+**Which text carries what.**
+- **A condition that still holds** carries the age: `since {clock} ({age})`. These are the status
+  line's rows 1-6 (`c1-talk.md` §10.1), the canvas strip and the empty-canvas line
+  (`c4-show-canvas.md` §7.6), and the Wall's board caption (`screens.md` §7). The age is redrawn
+  every 1 s from the screen's clock (`Date.now()`), with the line's other counters; the clock part
+  is redrawn with it, so `22:10` becomes `yesterday 22:10` at the screen's midnight.
+- **One exception**: the Wall's away caption `Agent away since {clock}` (`screens.md` §7) has no
+  age: it is one 32 px line next to `CHAT`, and the pane one tap away has the age.
+- **An event in the past** carries the clock only, never an age (an age in kept text would go
+  stale): `Back since 06:47.`, E2's `at 07:04` and `(07:04)` (`c1-talk.md` §10), the cut-off line
+  `at 06:41` (`screens.md` §7), the unpaired line (`screens.md` §6), a stale source's `say`
+  (`c3-see.md` §3, made on the room), the watcher's `since 06:12` (`coworker.md` §3).
+- **Not covered**: label times (`YOU · 07:02`, `NEW CONVERSATION · 07:10`, `STOPPED AT 07:03`,
+  `RAISED · 07:14`) stay `HH:MM` (D232); the turns they label are in time order.
+- **Where `ms` comes from.** A screen's own condition (offline, room down, `Back since`) uses the
+  screen's clock when it began. A room condition carries the room's `since` (ISO 8601 with offset) in
+  `status` (`protocols.md` §3.5); the screen parses it and formats it in its own time zone; a `since` ahead of
+  the screen's clock shows `(0 min)` and the screen's `HH:MM` of it.
+
+**The table the module's unit test runs** (`timeZone` `Europe/Zurich`, now 2026-10-27 07:30:00,
+after the 25 Oct change from summer time):
+
+| `ms` | `clockText` | `ageText` | `atText` |
+| --- | --- | --- | --- |
+| 2026-10-27 07:30:00 | `07:30` | `(0 min)` | `at 07:30` |
+| 2026-10-27 07:29:01 | `07:29` | `(0 min)` | `at 07:29` |
+| 2026-10-27 06:41:00 | `06:41` | `(49 min)` | `at 06:41` |
+| 2026-10-27 06:30:00 | `06:30` | `(1 h 00)` | `at 06:30` |
+| 2026-10-27 06:18:00 | `06:18` | `(1 h 12)` | `at 06:18` |
+| 2026-10-27 00:00:00 | `00:00` | `(7 h 30)` | `at 00:00` |
+| 2026-10-26 22:10:00 | `yesterday 22:10` | `(9 h 20)` | `yesterday at 22:10` |
+| 2026-10-26 07:31:00 | `yesterday 07:31` | `(23 h 59)` | `yesterday at 07:31` |
+| 2026-10-26 06:00:00 | `yesterday 06:00` | `(1 d 1 h)` | `yesterday at 06:00` |
+| 2026-10-25 22:10:00 | `25 Oct 22:10` | `(1 d 9 h)` | `on 25 Oct at 22:10` |
+| 2026-10-01 09:00:00 (summer time) | `1 Oct 09:00` | `(25 d 23 h)` | `on 1 Oct at 09:00` |
+| 2026-10-27 07:31:00 (ahead) | `07:31` | `(0 min)` | `at 07:31` |
+
+And one across midnight: now 2026-10-28 00:00:30, `ms` 2026-10-27 23:50:00 gives
+`yesterday 23:50` and `(10 min)`. Test: `node --test` on the module with these 13 rows; the same
+rows with `timeZone` unset under `TZ=Europe/Zurich` (the page's path). The screen's half is
+S-SCR-36.
 
 ## Speed budget
 

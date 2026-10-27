@@ -509,13 +509,14 @@ the screen then disables `SEND` and talk and keeps the draft.
 
 | `code` | Text on the screen |
 | --- | --- |
-| `agent-down` | `Agent not running since 07:04.` (E3) |
-| `not-logged-in` | `The agent is not logged in on the room since 03:15. Log it in there.` (§11.10; `blocksSend` only when the agent cannot start for it) |
+| `agent-down` | `Agent not running since 07:04 (2 min).` (E3) |
+| `not-logged-in` | `The agent is not logged in on the room since 03:15 (4 h 15). Log it in there.` (§11.10; `blocksSend` only when the agent cannot start for it) |
 | `agent-back` | E2's second line, then `null` after 5 s |
 | `tools-down` | `The agent cannot read the board: its laneboard tools did not start.` (`c3-see.md` §1; turns still run) |
 | `board-down` | `Board unreachable since 06:41 (3 min): the agent cannot read the fleet.` (`c3-see.md` §2, D229; the age from `since` on the screen's clock; turns still run) |
 
-`room-down` is not a message: the screen sets it itself from the link (`screens.md` §7).
+The screen formats `since` and the age by `README.md` §"Times on the screen" (D232), in its own time
+zone and on its own clock. `room-down` is not a message: the screen sets it itself from the link (`screens.md` §7).
 
 ### 3.6 A new conversation
 

@@ -89,8 +89,9 @@ action, control, terminal or push change.
   A hub's own entry is `"source":"hub"`, a single board's `"source":"board"`.
   A source older than 600 s carries `"stale": true` and `say`, the words the agent names it with
   (review 44 finding 2, D230): the source's name without its `feed:` prefix, then `(feed from …)` for
-  a feed and `(data from …)` for a builder, a board or the hub, the time `HH:MM` on the room's day,
-  else `26 Oct 22:10` (D149; T65 may add the age). §5 sentence 4 tells the agent to use it.
+  a feed and `(data from …)` for a builder, a board or the hub, the time by `clockText` in `config.timezone`
+  (`02:10`, `yesterday 22:10`, `25 Oct 22:10`; `README.md` §"Times on the screen", D232), no age (the
+  agent has `ageS`). §5 sentence 4 tells the agent to use it.
 
   ```json
   "asOf": [{"source":"hub","at":"2026-10-27T07:12:04+01:00","ageS":1},

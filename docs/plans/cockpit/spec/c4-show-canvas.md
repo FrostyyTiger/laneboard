@@ -552,13 +552,14 @@ chart, table, checklist, map, text, diff). A card bound to fleet data stays live
 ### 7.6 Room down
 
 The canvas half of `screens.md` §7 (moved here by T52, D120); same 5 s grace, same `data-cockpit`
-values, same `06:41` time format. The pane's half (status line, `RETRY NOW`, `SEND` and talk `off`)
+values, same time format (`README.md` §"Times on the screen", D232: these lines hold a condition, so
+`since {clock} ({age})`, redrawn every 1 s). The pane's half (status line, `RETRY NOW`, `SEND` and talk `off`)
 stays in `screens.md` §7.
 
 - **Strip** `[data-cockpit-down]` across the top of the card area, 80 px tall (two lines at 576 px,
   D54), 18 px `--text-2` on `--bg-sunken`, 1 px `--line-strong` bottom border: `Cockpit room
-  unreachable since 06:41. Cards show their last values.` Cards move down by 80 px; none is shelved
-  because of it. With the screen offline it reads `This screen is offline since 06:41. Check its
+  unreachable since 06:41 (3 min). Cards show their last values.` Cards move down by 80 px; none is shelved
+  because of it. With the screen offline it reads `This screen is offline since 06:41 (3 min). Check its
   network.` (`screens.md` §7).
 - **Cards** stay where they were. Every bound card (§7.5) gets the `STALE` plate (§7.3) and keeps
   its last values; a card with no binding (`text`, `diff`) gets none.
@@ -570,7 +571,7 @@ stays in `screens.md` §7.
   row, and the screen sends `card.close` (`protocols.md` §5) at the first frame after the room is
   back. A card the room no longer holds by then is simply gone.
 - **Empty canvas**: instead of S-SCR-10's texts, `The cockpit room is unreachable, so the agent
-  cannot place cards now.` (24 px `--text-1`) and `Unreachable since 06:41.` (20 px `--text-2`).
+  cannot place cards now.` (24 px `--text-1`) and `Unreachable since 06:41 (3 min).` (20 px `--text-2`).
 - **Back**: at the first frame from the room the strip goes, `STALE` plates go, values update from
   the room's next `card.data`, cards placed or removed meanwhile appear or go (snapshot,
   `protocols.md` §2.2), the job line goes and `CANCEL JOB` is enabled again.
@@ -859,7 +860,7 @@ Given `side` in `canvas` at 06:41:00 with a `status` card on `vm-b` reading `▲
 {"until":"+90m"}` and a `text` card,
 When the stand-in room stops its link at t = 0 s,
 Then at t = 4.9 s nothing has changed; at t = 5 s `[data-cockpit-down]` (80 px tall) reads
-`Cockpit room unreachable since 06:41. Cards show their last values.`, the status and countdown
+`Cockpit room unreachable since 06:41 (0 min). Cards show their last values.`, the status and countdown
 cards carry `STALE` and the `text` card does not, the countdown reads `01:29:55` and keeps
 counting each second.
 When the demo hub sets `vm-b` to `ok` at t = 10 s,
@@ -872,7 +873,7 @@ Then within 1 s of the first frame the strip and every `STALE` are gone, the new
 the first status card reads `● OK` within 10.3 s (the room's next read, §7.5), and `cards.json` no
 longer lists the `text` card.
 And given a canvas with no card, at t = 5 s it reads `The cockpit room is unreachable, so the agent
-cannot place cards now.` and `Unreachable since 06:41.`
+cannot place cards now.` and `Unreachable since 06:41 (0 min).`
 Test: Playwright with `page.clock`; `POST /link {"up":false}` and `{"up":true}` on the stand-in room
 (`stand-ins.md`); strip rect and text; `STALE` plates per `[data-card]`; read
 `<stateDir>/cockpit/cards.json` (D85) before and after the link is back.

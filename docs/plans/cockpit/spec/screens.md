@@ -474,7 +474,8 @@ their own (pending Q-O10).
 - 16 px `--text-3`: `Code valid for 4:12. A new one appears when it runs out.` (counts down each second)
 
 After `unpair` the title reads `PAIR THIS SCREEN AGAIN` and the first line `This screen was
-unpaired on 27 Oct at 06:58. The board works; talking to the agent needs a new pairing.` (date format D149)
+unpaired at 06:58. The board works; talking to the agent needs a new pairing.` (`at` form of
+`README.md` §"Times on the screen", D232: `unpaired yesterday at 22:10`, `unpaired on 25 Oct at 22:10`)
 
 ### 6.1 Who may pair, unpair and add buttons (pending Q-O10)
 
@@ -759,7 +760,8 @@ lost.
   y 720-752 (8 px above `CHAT`). Not tappable: a tap on it goes to the map below as if it were not
   there (`pointer-events: none`). It shows with the status line (after the 5 s grace) and goes
   with it at the first frame from the room; the time is the status line's `since` (one source,
-  no second clock). An unpaired screen has no caption (nothing is away; the pairing card is the
+  no second clock), clock form only, no age (`Agent away since yesterday 22:10`, `README.md`
+  §"Times on the screen", D232). An unpaired screen has no caption (nothing is away; the pairing card is the
   pane's), nor has an offline one (the Wall's top caption says it, "The screen offline"). In the app (§4.1 A) there is no caption: the toast stack
   owns that band, and the grey `TALK` is in the same corner (D179).
 - **Pane:** a status line under its header, 18 px `--text-2` on `--bg-sunken`, **80 px** tall (two
@@ -785,7 +787,7 @@ in order (replay or snapshot, `protocols.md` §2.2). `SEND` and talk are enabled
 own**: it stays in the input until the owner sends it (D12).
 
 **Down during a turn or while speaking.** A reply streaming when the link is lost stops where it is
-and gets the line `Cut off: the room went away at 06:41.`; on reconnect, a reply the room finished
+and gets the line `Cut off: the room went away at 06:41.` (`at` form, D232); on reconnect, a reply the room finished
 meanwhile replaces the cut-off text (`protocols.md` §2.2). An open microphone closes at once (no 5 s grace: audio
 has nowhere to go); the words so far stay in the input as an editable draft, not sent.
 
@@ -800,7 +802,8 @@ before the Canvas slice: `NEW`, `CLOSE`) and the whole cut-off reply (redrawn by
 - **App views:** today's `#offline` banner (`Disconnected — reconnecting…`) and the last snapshot.
 - **Wall half:** the last snapshot stays; every node and line is drawn grey, as an offline
   builder's cards are (`docs/design.md`: "grey through and through"); a caption top-centre, 20 px
-  `--text-1` on `--bg-sunken`, 48 px tall: `Board unreachable since 06:41 · showing 06:41`. The tour
+  `--text-1` on `--bg-sunken`, 48 px tall: `Board unreachable since 06:41 (3 min) · showing 06:41` (both times by `README.md`
+  §"Times on the screen", D232). The tour
   keeps flying over the grey snapshot, without "flies to trouble": a grey map has no trouble to
   rank (D15). Explore works.
 - **Never loaded** (the board was down when the page opened): the wall half shows, centred, 24 px
@@ -815,7 +818,7 @@ before the Canvas slice: `NEW`, `CLOSE`) and the whole cut-off reply (redrawn by
 ### The screen offline
 
 `navigator.onLine` false: one message replaces the room and board texts: the wall caption and the
-pane status line both read `This screen is offline since 06:41. Check its network.`; the canvas
+pane status line both read `This screen is offline since 06:41 (3 min). Check its network.`; the canvas
 strip reads the same (`c4-show-canvas.md` §7.6). Retries keep running; when the network is back the rules of "Back" apply.
 
 ## 8. Scenarios, part 2
@@ -862,7 +865,7 @@ assert the two codes differ, run the CLI with the first, check exit code and out
 Given screen `desk` paired and live, the pane open,
 When `laneboard cockpit unpair desk` runs on the room at 06:58,
 Then within 2 s `data-cockpit="unpaired"`, the pane shows `PAIR THIS SCREEN AGAIN`, `This screen
-was unpaired on 27 Oct at 06:58. …` and a new code; the conversation is no longer on the screen;
+was unpaired at 06:58. …` and a new code; the conversation is no longer on the screen;
 the wall half keeps touring; a request with the old token gets 401.
 Test: Playwright plus the CLI; `page.on('websocket')` sees `framereceived`
 `{"type":"revoked","at":"2026-10-27T06:58:00+01:00"}`, then the `cockpit:close` mark reads 4402
@@ -927,7 +930,7 @@ assert the cut-off line, then the replaced text; assert `data-talk` on the talk 
 Given a screen in `wall` layout touring the demo hub,
 When the demo hub stops at 06:41,
 Then within 2 s `data-board="down"`, every Map node is drawn in the grey of an offline builder, the
-caption reads `Board unreachable since 06:41 · showing 06:41`, the tour keeps moving; when the hub
+caption reads `Board unreachable since 06:41 (0 min) · showing 06:41`, the tour keeps moving; when the hub
 is back, the caption goes and colours return within 2 s of the first snapshot.
 Test: Playwright; stop and start the demo hub; assert the attribute, the caption, and that no node
 uses the `--p1`/`--p2` colours while down (computed styles).
@@ -944,7 +947,7 @@ button's rect; tap and assert `location.search` and the `DEMO` label.
 ### S-SCR-23 The screen loses its network
 Given a live screen in `split`,
 When the browser goes offline (`context.setOffline(true)`) at 06:41,
-Then within 1 s the wall caption and the pane line read `This screen is offline since 06:41. Check
+Then within 1 s the wall caption and the pane line read `This screen is offline since 06:41 (0 min). Check
 its network.` (on a canvas the strip too, `c4-show-canvas.md` §7.6, asserted only once the Canvas
 slice is built); after `setOffline(false)` the rules of S-SCR-19 apply.
 Test: Playwright `context.setOffline`; assert the two texts; back online, assert `live`.
@@ -1193,6 +1196,33 @@ Test: Playwright, two pages on the room under test; the room's clock with `POST 
 idle timer with `page.clock.fastForward()`; the flight's start and end from the camera sampled each
 frame (`onDraw`); root attributes and `screenOf('builder-b')` at each step; `hall`'s camera from
 `camera()` before and after.
+
+### S-SCR-36 The room down since the evening before: the day and the age say how long
+Given a screen at 1368x912 on the Wall page in `wall`, live, the pane open, the page's clock
+installed at 2026-10-26 23:50:00 (`timezoneId` `Europe/Zurich`, `slices.md` §2),
+When the room's link stops at 23:50:00 and the page's clock runs on to 23:59:59,
+Then the status line reads `Cockpit room unreachable since 23:50 (9 min). Retrying in …`.
+When the page's clock passes midnight, to 2026-10-27 00:00:01,
+Then within 1.1 s the same `[data-cockpit-status]` element (no reload, no new node) reads
+`Cockpit room unreachable since yesterday 23:50 (10 min). Retrying in …`, still two lines in its
+80 px.
+When the page's clock jumps to 07:30:00,
+Then it reads `Cockpit room unreachable since yesterday 23:50 (7 h 40). Retrying in …`; with the
+pane closed `[data-cockpit-away]` reads `Agent away since yesterday 23:50` on one line (rect
+height 32 ± 1 px, `scrollWidth` equal to `clientWidth`) and no age.
+When the link comes back at 07:30:00,
+Then the status line reads `Back since 07:30.` for 5 s, then goes.
+Second case: the link stops at 2026-10-25 22:10:00 (after that day's change from summer time) and
+the page's clock jumps to 2026-10-27 07:30:00: the line reads `Cockpit room unreachable since
+25 Oct 22:10 (1 d 9 h). Retrying in …`.
+The other texts of the rule (the canvas strip, the board caption, E2, the unpaired line) use the
+same module and are covered by its table (`README.md` §"Times on the screen"); the strip is
+asserted in this form with S-C4-23 once the Canvas slice is built.
+Test: Playwright with `page.clock.install({time})`, `runFor` to 23:59:59 and to 00:00:01,
+`fastForward` to 07:30:00 (retry timers fire once, `screens.md` §7.1); `POST /link {"up":false}`
+and `{"up":true}` on the room under test (`stand-ins.md` §1.2); assert the status line's text
+with the retry count cut at `Retrying in`, the element handle kept across midnight, the caption's
+text and `boundingBox()`; the second case from a fresh page.
 
 ## 9. The Wall contract (T31)
 
