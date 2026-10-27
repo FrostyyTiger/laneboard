@@ -120,9 +120,9 @@ that runs with a later slice, as §3.1 says.
 | S-C1-07 | A tool line opens to show its calls; a failure stays grey | T20 ✓ (5473d79) | Playwright | |
 | S-C1-08 | A long code block shows 12 lines and a button for the rest | T19 ✓ (d59a724) | Playwright | |
 | S-C1-09 | Markup from the agent is shown, never run or fetched | T19 ✓ (d59a724) | Playwright | |
-| S-C1-10 | Scrolled up during a reply: the view stays, `↓ NEW` brings it back | T22 | Playwright || `e2e/cockpit/c1-scroll.spec.mjs` ✓ |
+| S-C1-10 | Scrolled up during a reply: the view stays, `↓ NEW` brings it back | T22 ✓ (d290312) | Playwright | |
 | S-C1-11 | Only the marks are coloured | T19 ✓ (d59a724) | Playwright | |
-| S-C1-12 | Reduced motion: the pane appears with no slide | T22 (moved from T15, B115) | Playwright || `e2e/cockpit/c1-scroll.spec.mjs` ✓ |
+| S-C1-12 | Reduced motion: the pane appears with no slide | T22 ✓ (d290312) (moved from T15, B115) | Playwright | |
 | S-C1-14 | Typing: Enter sends, Shift+Enter breaks the line, the input grows to 4 lines | T23 | Playwright | |
 | S-C1-15 | Too long a prompt cannot be sent | T23 | Playwright | |
 | S-C1-16 | Sending during an answer steers it: queued, then taken into the same turn (pending Q-O1) | T25 | Playwright | |
@@ -130,7 +130,7 @@ that runs with a later slice, as §3.1 says.
 | S-C1-18 | A prompt the room never confirms is not sent again on its own | T23 | Playwright | |
 | S-C1-19 | The agent's process dies mid-turn | T27 | Playwright | |
 | S-C1-20 | Each error end of a turn has its exact message, in grey | T27 | Playwright | |
-| S-C1-21 | A long reply: its age shows, and it is drawn whole | T22 | Playwright || `e2e/cockpit/c1-scroll.spec.mjs` ✓ |
+| S-C1-21 | A long reply: its age shows, and it is drawn whole | T22 ✓ (d290312) | Playwright | |
 | S-C1-22 | A new conversation: asked, then started at once (pending Q-O2) | T29 | Playwright | step: the two cards (Canvas) |
 | S-C1-23 | Two pages, one conversation: a second prompt queues, it does not stop | T29 | Playwright | |
 | S-C1-25 | Parallel calls fold by tool, end in any order, and show their ms | T20 ✓ (5473d79) | Playwright | |
