@@ -14,6 +14,9 @@
 // once per cycle, except trouble at the normal speed: it holds longer, and
 // after every `revisitEvery` calm sites the camera goes back to it (in turn,
 // worst first), so a crit is never long out of sight (owner, 2026-10-26).
+// A site already visited this cycle whose status rose since (calm to warn,
+// warn to crit) jumps the queue at the next leg like new trouble does: the
+// camera does not wait for the next cycle to show a crit as crit (T21).
 
 import { SEVERITY, TROUBLE, byIdOf, kidsOf, rollup } from '../views/map/model.js';
 
@@ -91,12 +94,18 @@ export function nextLeg(state, nodes, timing = TIMING) {
     // A new cycle: back out to the overview, then take the order afresh.
     const cycle = state.phase === 'start' ? state.cycle : state.cycle + 1;
     return {
-      state: { cycle, phase: 'overview', visited: [], count: order.length },
+      state: { cycle, phase: 'overview', visited: [], count: order.length, shown: {} },
       leg: { kind: 'overview', cycle, ms: timing.overviewMs },
     };
   }
   const seen = new Set(state.visited);
-  let next = order.find((s) => !seen.has(s.id));
+  // `shown`: the status each visited site had when the camera was last there.
+  const shown = state.shown ?? {};
+  const rose = (s) => s.trouble && seen.has(s.id) && s.id in shown
+    && SEVERITY.indexOf(s.status) > SEVERITY.indexOf(shown[s.id]);
+  // Trouble comes first in the order, worst first, so a site that rose is
+  // taken before a milder unvisited one and before every calm one.
+  let next = order.find((s) => !seen.has(s.id) || rose(s));
   if (!next) {
     return nextLeg({ ...state, phase: 'done' }, nodes, timing);
   }
@@ -105,21 +114,22 @@ export function nextLeg(state, nodes, timing = TIMING) {
   const every = timing.revisitEvery > 0 ? timing.revisitEvery : 0;
   let calmRun = state.calmRun ?? 0;
   let revisits = state.revisits ?? 0;
-  let again = false;
   if (!next.trouble && every && calmRun >= every) {
     const seenTrouble = order.filter((s) => s.trouble && seen.has(s.id));
     if (seenTrouble.length) {
       next = seenTrouble[revisits % seenTrouble.length];
       revisits += 1;
-      again = true;
     }
   }
   calmRun = next.trouble ? 0 : calmRun + 1;
-  const visited = again ? state.visited : [...state.visited, next.id];
+  const visited = seen.has(next.id) ? state.visited : [...state.visited, next.id];
   // Sites that appear mid-cycle count from the next one; the index never passes the count.
   const count = Math.max(state.count, visited.length);
   return {
-    state: { cycle: state.cycle, phase: 'site', visited, count, calmRun, revisits },
+    state: {
+      cycle: state.cycle, phase: 'site', visited, count, calmRun, revisits,
+      shown: { ...shown, [next.id]: next.status },
+    },
     leg: {
       kind: 'site', id: next.id, label: next.label, status: next.status,
       index: visited.indexOf(next.id) + 1, count, cycle: state.cycle,
@@ -135,7 +145,9 @@ export function nextLeg(state, nodes, timing = TIMING) {
  * and not whatever calm site was due when it stopped. Pure.
  */
 export function resumeTour(state, nodes) {
-  return { cycle: (state?.cycle ?? 0) + 1, phase: 'overview', visited: [], count: tourOrder(nodes).length };
+  return {
+    cycle: (state?.cycle ?? 0) + 1, phase: 'overview', visited: [], count: tourOrder(nodes).length, shown: {},
+  };
 }
 
 /**

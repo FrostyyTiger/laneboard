@@ -390,10 +390,20 @@ Notes for every builder round (planner, round 1):
   banner on HV2, another subject, stays; `feat-search` unnamed beside its bracket). Film r45-galaxy: 3.9 s storage
   plate alone, 32.3 s storage plate with `HV1 · VM-C` as banner once a second crit stands; 0 errors, 12.7 fps
   (SwiftShader). T30's banner size under a warn plate is untouched (r45-at-hv1 still shows it level with the hero).
-- [ ] T21 (r17-operator galaxy 1) [ui] [variant:galaxy] A crit is visited first, visited site or not: in
+- [x] T21 (r17-operator galaxy 1) [ui] [variant:galaxy] A crit is visited first, visited site or not: in
   `tour.js nextLeg` a site whose worst status rose since its visit this cycle (or any crit not yet shown as crit)
   jumps the queue at the next leg — done when: a test on a model where a visited site turns crit mid-cycle gets
   it as the next leg, and a film of `galaxy.html?demo=1&pace=wall&quality=0` reaches a new crit within one leg.
+  (commit SHA)
+  Builder r48: `nextLeg` keeps `shown` (id → the status the camera showed at its last visit this cycle; reset with
+  every new cycle and by `resumeTour`); a visited trouble site whose status is now worse than shown is a candidate
+  like an unvisited one, so in the order (trouble worst first) it goes before milder trouble and every calm site,
+  even when every site was seen (before the cycle ends); a jump keeps its first visit's index and does not count as
+  a revisit. A status that fell does not jump. Tests in `test/wall-tour.test.mjs` (warn → crit back as the next
+  leg with `ONCE` timing, a rise after all were seen, crit before an unseen warn, a fall, clean next cycle). Film
+  r48-galaxy (`--size large --tick 1000`, pace=wall): HV1 shown as attention (target 02), then CLOUD, during which
+  `HV1 · VM-C` goes down; the next leg (59.2 s) is HV1 again, `DOWN · TARGET 02 / 05`, VM-C as hero. 0 errors,
+  11.3 fps (SwiftShader, as earlier rounds; the change is tour logic only).
 - [ ] T22 (r17-operator galaxy 7; widened by T30, do T30 first) [ui] [variant:galaxy] A calm plate does not shrink the banner: `data-plate`
   carries the plate's tone, and under a calm plate the crit banner keeps full size (or one step down, never level
   with the calm name); under a trouble plate T4's step stays — done when: a test sees the tone in `data-plate`

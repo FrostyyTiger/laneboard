@@ -76,6 +76,47 @@ test('tour: trouble that starts mid-cycle jumps ahead of the calm sites still to
   assert.equal(r.leg.id, 'hv2', 'and is not visited twice');
 });
 
+test('tour: a visited site that turns crit mid-cycle is the next leg (T21)', () => {
+  let r = nextLeg(initialTour(), fleet({ 'hv2-svc': 'warn' }), ONCE);
+  r = nextLeg(r.state, fleet({ 'hv2-svc': 'warn' }), ONCE);
+  assert.equal(r.leg.id, 'hv2', 'the warn first');
+  const firstIndex = r.leg.index;
+  r = nextLeg(r.state, fleet({ 'hv2-svc': 'warn' }), ONCE);
+  assert.equal(r.leg.id, 'hv1');
+  r = nextLeg(r.state, fleet({ 'hv2-svc': 'crit' }), ONCE);
+  assert.equal(r.leg.id, 'hv2', 'warn rose to crit: back before cloud, even without revisits');
+  assert.equal(r.leg.status, 'crit');
+  assert.equal(r.leg.index, firstIndex, 'a jump keeps the index of the first visit');
+  assert.ok(r.leg.index <= r.leg.count);
+  r = nextLeg(r.state, fleet({ 'hv2-svc': 'crit' }), ONCE);
+  assert.equal(r.leg.id, 'cloud', 'shown as crit now: not again');
+  // a calm site seen calm that turns crit, and a rise after every site was seen
+  const rest = [];
+  for (let i = 0; i < 2; i++) {
+    r = nextLeg(r.state, fleet({ 'hv2-svc': 'crit' }), ONCE);
+    rest.push(r.leg.id);
+  }
+  assert.deepEqual(rest, ['remote', 'home']);
+  r = nextLeg(r.state, fleet({ 'hv2-svc': 'crit', 'hv1-room': 'crit' }), ONCE);
+  assert.equal(r.leg.id, 'hv1', 'all seen, hv1 rose: shown before the cycle ends');
+  r = nextLeg(r.state, fleet({ 'hv2-svc': 'crit', 'hv1-room': 'crit' }), ONCE);
+  assert.equal(r.leg.kind, 'overview');
+});
+
+test('tour: a risen crit goes before milder trouble still to come; a status that falls does not jump', () => {
+  const bad = { 'cloud-svc': 'warn', 'home-svc': 'warn' };
+  let r = nextLeg(initialTour(), fleet(bad), ONCE);
+  r = nextLeg(r.state, fleet(bad), ONCE);
+  assert.equal(r.leg.id, 'cloud');
+  r = nextLeg(r.state, fleet({ ...bad, 'cloud-svc': 'crit' }), ONCE);
+  assert.equal(r.leg.id, 'cloud', 'the crit before the unseen warn');
+  r = nextLeg(r.state, fleet(bad), ONCE);
+  assert.equal(r.leg.id, 'home', 'back to warn is milder than shown: no jump');
+  // the next cycle starts clean
+  const c = cycle(initialTour(), fleet(bad), ONCE);
+  assert.deepEqual(nextLeg(c.state, fleet(bad), ONCE).state.shown, {});
+});
+
 test('tour: legs carry index and count for the caption, and the timing', () => {
   let r = nextLeg(initialTour(), fleet());
   assert.deepEqual(r.leg, { kind: 'overview', cycle: 0, ms: TIMING.overviewMs });
