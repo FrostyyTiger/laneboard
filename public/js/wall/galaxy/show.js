@@ -33,9 +33,10 @@
 //   replaces the oldest. Words are text (`textContent`), never markup.
 // - Undo (D71, c4 §5): `show.undo` restores what the screen saved just before
 //   the latest camera command (camera, marks, note, tour or explore): back to
-//   the tour at once if it was touring, else the camera by a normal flight.
-//   Only the latest camera command is undoable; the tour coming back drops
-//   the highlight, the note and the undo. A pin's undo removes that pin.
+//   the tour at once (with the overview, screens.md §2) if it was touring,
+//   else the camera by a normal flight. Only the latest camera command is
+//   undoable; the tour coming back drops the highlight, the note and the
+//   undo. A pin's undo removes that pin; a waiting command's drops it*.
 // - A node this galaxy does not draw: `fly_to` and `highlight` answer
 //   `skipped` why `not drawn`*; a bad shape `skipped` why `bad-args`*.
 // - Looks (D72): four 2 px `--accent` corner brackets per node, 12 px arms, 8
@@ -48,10 +49,17 @@
 // (test/wall-galaxy-show.test.mjs); `createShow` is the page's part and
 // `createFingerWatch` its finger rule's ears.
 
+/**
+ * How lit a node left out of a highlight is (D72's UNLIT, the spec's 0.16):
+ * the one place to tune it on the real panel. The emphasis and the veil both
+ * read it (`SHOW.unlit` is the same number).
+ */
+export const UNLIT = 0.16;
+
 /** The numbers (css px and ms; the spec's at 1368x912). */
 export const SHOW = Object.freeze({
   maxNodes: 12, maxNote: 120, maxTitle: 48, maxBody: 280, pins: 3, maxId: 64, seen: 64,
-  waitMs: 3000, giveUpMs: 10000, unlit: 0.16, fadeMs: 300, zoom: 1.9, padPx: 64,
+  waitMs: 3000, giveUpMs: 10000, unlit: UNLIT, fadeMs: 300, zoom: 1.9, padPx: 64,
   closeMs: 300, closeFromPx: 24, outPx: 8, armPx: 12,
   noteGapPx: 16, noteW: 360, pinW: 320, pinH: 240, pinGapPx: 48, edgePx: 16, stackPx: 8, xPx: 48,
   results: 20,
@@ -210,6 +218,9 @@ export function showStep(state, event, now, ctx = {}) {
   if (type === 'undo') {
     const pin = s.pins.find((p) => p.showId != null && p.showId === event.showId);
     if (pin) return none({ ...s, pins: s.pins.filter((p) => p !== pin) });
+    // A command still waiting for the owner's finger never runs: nothing to put back, no answer
+    // (the room sent the undo, so it already reads the line as undone)*.
+    if (s.waiting && s.waiting.cmd.showId === event.showId) return none({ ...s, waiting: null });
     if (!s.undo || s.undo.showId !== event.showId) return none(s);
     const { saved } = s.undo;
     // A camera command's undo puts the camera and the wall state back too; a clear's only the marks.
@@ -218,7 +229,10 @@ export function showStep(state, event, now, ctx = {}) {
   if (type === 'tour') return none({ ...s, highlight: null, undo: null });
   if (type === 'pin.put') {
     const pin = pinOf(event.pin);
-    return pin ? none({ ...s, pins: withPin(s.pins, pin, str(event.replaced) ? event.replaced : null) }) : none(s);
+    if (!pin) return none(s);
+    // A pin the room sent without a time is headed with the time it came, not the epoch's 00:00*.
+    if (pin.at == null) pin.at = c.time || null;
+    return none({ ...s, pins: withPin(s.pins, pin, str(event.replaced) ? event.replaced : null) });
   }
   if (type === 'pin.remove' || type === 'pin.close') {
     const id = event.pin;
@@ -233,7 +247,7 @@ export function emphasisOf(state, id, now, { still = false } = {}) {
   const h = state?.highlight;
   if (!h || h.nodes.includes(id)) return 1;
   const k = still ? 1 : Math.max(0, Math.min(1, (now - h.t) / SHOW.fadeMs));
-  return 1 - (1 - SHOW.unlit) * k;
+  return 1 - (1 - UNLIT) * k;
 }
 
 const easeOut = (k) => 1 - (1 - k) ** 3;
@@ -252,7 +266,8 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
  * half side): 16 px up and right of them, flipped left or down near an edge,
  * kept 16 px inside the `W`×`H` stage (c4 §3.2; the ask menu's rule). Of
  * the four corners it takes the first, in that order, that covers none of
- * the `avoid` boxes (the other marked nodes' brackets)*. Pure.
+ * the `avoid` boxes (the other marked nodes' brackets, the page's controls,
+ * the site names)*. Pure.
  */
 export function notePlace(at, R, w, h, { W, H, avoid = [] }) {
   const g = SHOW.noteGapPx, e = SHOW.edgePx;
@@ -323,7 +338,9 @@ export function createFingerWatch(stage, opts = {}) {
 
 /**
  * The page's show: `createShow({ marks, veil, doc, clock, time, still,
- * send, ops, blocked, screenOf, size, veilColor })`. `marks` holds the
+ * send, ops, blocked, screenOf, size, avoid, names, veilColor })`. `avoid()`
+ * and `names()` are boxes (`{ left, top, right, bottom }`, css px) the note
+ * keeps off (the page's controls; the site names), `avoid()` the pins too. `marks` holds the
  * brackets, the note and the pins (they follow their nodes by transform);
  * `veil` (a 2D canvas, or null) dims the rest; `send(msg, showId|pinId)`
  * carries an answer back (transport.js); `ops` is the page's camera and wall:
@@ -335,7 +352,7 @@ export function createFingerWatch(stage, opts = {}) {
 export function createShow(opts = {}) {
   const o = {
     clock: () => performance.now(), time: () => Date.now(), still: false, blocked: () => false,
-    screenOf: () => null, size: () => ({ W: 0, H: 0 }), avoid: () => [], doc: globalThis.document, veil: null,
+    screenOf: () => null, size: () => ({ W: 0, H: 0 }), avoid: () => [], names: () => [], doc: globalThis.document, veil: null,
     veilColor: 'rgb(13, 16, 20)', send: () => {}, ...opts,
   };
   const noop = () => undefined;
@@ -428,7 +445,7 @@ export function createShow(opts = {}) {
   const step = (event) => apply(showStep(state, event, o.clock(), ctx()));
   const close = (id) => step({ type: 'pin.close', pin: id });
 
-  // The veil (D72's UNLIT): the whole stage dimmed to 0.16 but a soft hole at each marked node.
+  // The veil (D72's UNLIT): the whole stage dimmed to UNLIT but a soft hole at each marked node.
   let veiled = false;
   const drawVeil = (holes, k) => {
     const v = o.veil;
@@ -446,7 +463,7 @@ export function createShow(opts = {}) {
     veiled = true;
     g.globalCompositeOperation = 'source-over';
     g.clearRect(0, 0, W, H);
-    g.globalAlpha = (1 - SHOW.unlit) * k;
+    g.globalAlpha = (1 - UNLIT) * k;
     g.fillStyle = o.veilColor;
     g.fillRect(0, 0, W, H);
     g.globalAlpha = 1;
@@ -494,7 +511,8 @@ export function createShow(opts = {}) {
     if (note) {
       note.hidden = !first;
       if (first) {
-        const p = notePlace(first.at, first.R, note.w, note.h, { W, H, avoid: [...marked.slice(1), ...keepOff] });
+        // Clear of the site names too, as of the marked nodes (night 4 review: the note covered `HV2`)*.
+        const p = notePlace(first.at, first.R, note.w, note.h, { W, H, avoid: [...marked.slice(1), ...keepOff, ...(o.names() ?? [])] });
         move(note, p.x, p.y);
         const box = { left: p.x, top: p.y, right: p.x + note.w, bottom: p.y + note.h };
         boxes.push(box);

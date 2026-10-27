@@ -535,13 +535,13 @@ test('galaxy/main.js wires the return (night 4 T4): leave on open, fly back on t
     const body = js.slice(js.indexOf(key), js.indexOf('},', js.indexOf(key)));
     assert.match(body, /left\.clear\(\)/, key);
   }
-  assert.match(js, /if \(pose\) finger\.fly\(pose, \{ ms: TOUCH\.fitMs \}\)/);
+  assert.match(js, /if \(pose && !reduced\) finger\.fly\(pose, \{ ms: TOUCH\.fitMs \}\)/, 'reduced motion: a cut to the fit, never a fly that does nothing');
 });
 
 test('galaxy/main.js wires the hand-back (T14): resume releases the sheet and resumes the tour; cuts and the fade in reduced motion', () => {
   const js = read('js/wall/galaxy/main.js');
   const resume = js.slice(js.indexOf('resume: () => {'), js.indexOf('},', js.indexOf('resume: () => {')));
-  for (const rx of [/cutAway\(\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/, /tour\.resume\(\)/]) assert.match(resume, rx);
+  for (const rx of [/cutAway\(\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/, /tour\.resume\(/]) assert.match(resume, rx);
   assert.match(js, /createCutFade\(\[canvas, document\.getElementById\('galaxy-labels'\)\]\)/);
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
   assert.match(open, /finger\.cut\(id, TIMING\.zoom\)/);
@@ -779,7 +779,7 @@ test('galaxy/main.js wires the director (T14): no camera move but through it; th
   assert.match(js, /const finger = director\.as\('touch'\)/);
   assert.match(js, /createGestures\(document\.getElementById\('galaxy-stage'\), touch, finger, \{/);
   const resume = js.slice(js.indexOf('resume: () => {'), js.indexOf('},', js.indexOf('resume: () => {')));
-  assert.match(resume, /director\.handBack\(\);\s*tour\.resume\(\)/, 'the director hears the hand-back before the tour asks for its leg');
+  assert.match(resume, /director\.handBack\(\);\s*tour\.resume\(/, 'the director hears the hand-back before the tour asks for its leg');
   assert.match(js, /director\.tick\(\);/);
   // tour.js is unchanged for wall.html: it still takes a map with focus and fit.
   assert.match(read('js/wall/tour.js'), /map\.focus\(current\.id, current\.zoom\)/);

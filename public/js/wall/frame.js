@@ -359,7 +359,9 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   let tagBox = null, tagSeen = null; // the tag's cover (tagCover), read again when its words change
   let clockBox = null, clockSeen = null; // the clock's (clockCover), read again when its words change
   // A new stage size moves both; their boxes are read again then, never per frame (a size read forces layout).
-  globalThis.addEventListener?.('resize', () => { tagBox = null; clockBox = null; });
+  // The far block's too (farDirty, below: declared before the listener can run).
+  const onResize = () => { tagBox = null; clockBox = null; farDirty = true; };
+  globalThis.addEventListener?.('resize', onResize);
 
   let timer = null;
   const tick = () => {
@@ -399,7 +401,7 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     else delete fleet.dataset.subject;
     if (far) {
       const size = `${fleetSize(w.word, root.clientWidth, root.clientHeight)}vmin`;
-      if (line.dataset.size !== size) { line.dataset.size = size; line.style.setProperty('--fleet-far', size); }
+      if (line.dataset.size !== size) { line.dataset.size = size; line.style.setProperty('--fleet-far', size); farDirty = true; }
     }
     const count = w.more ? `+${w.more} more` : '';
     // Far: the count rides with the why, and the ambient fact gives way (one
@@ -465,7 +467,11 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     return clockBox;
   };
 
-  const stop = () => { if (timer != null) timers.clearTimeout(timer); timer = null; };
+  const stop = () => {
+    if (timer != null) timers.clearTimeout(timer);
+    timer = null;
+    globalThis.removeEventListener?.('resize', onResize);
+  };
 
   /** Whether the line is dropped (an echo under a plate, T20): it covers nothing then. */
   const hushed = () => 'plate' in root.dataset && fleet.dataset.echo === '';

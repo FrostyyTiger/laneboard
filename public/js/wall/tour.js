@@ -142,11 +142,15 @@ export function nextLeg(state, nodes, timing = TIMING) {
  * The tour taken up again after a finger had the page (night 3 T14, README
  * §7 Night 3 C5): a fresh cycle whose next leg is the worst site of the
  * order as it is now (trouble first), not the overview the finger just saw
- * and not whatever calm site was due when it stopped. Pure.
+ * and not whatever calm site was due when it stopped. `overview: true` (a
+ * show's undo, cockpit c4-show-canvas.md §5 and screens.md §2) starts the
+ * fresh cycle with the overview instead. Pure.
  */
-export function resumeTour(state, nodes) {
+export function resumeTour(state, nodes, { overview = false } = {}) {
+  const cycle = (state?.cycle ?? 0) + 1;
+  if (overview) return { ...initialTour(), cycle };
   return {
-    cycle: (state?.cycle ?? 0) + 1, phase: 'overview', visited: [], count: tourOrder(nodes).length, shown: {},
+    cycle, phase: 'overview', visited: [], count: tourOrder(nodes).length, shown: {},
   };
 }
 
@@ -156,8 +160,8 @@ export function resumeTour(state, nodes) {
  * `onLeg(cb)` tells later layers (caption, lock) where the camera goes,
  * each site leg with the `zoom` it flies to: `zoomFor(leg)` when the page
  * gives one (a variant whose overview is not the scale its holds want),
- * else the timing's. `resume()` starts a stopped tour again at `resumeTour`'s
- * next leg (T14). `timers` is injectable for tests.
+ * else the timing's. `resume(opts)` starts a stopped tour again at `resumeTour`'s
+ * next leg (T14; `{ overview: true }` with the overview). `timers` is injectable for tests.
  */
 export function createTour(map, { timing = TIMING, timers = globalThis, zoomFor = null } = {}) {
   let nodes = [];
@@ -190,9 +194,9 @@ export function createTour(map, { timing = TIMING, timers = globalThis, zoomFor 
       running = true;
       step();
     },
-    resume: () => {
+    resume: (opts) => {
       if (running) return;
-      state = resumeTour(state, nodes);
+      state = resumeTour(state, nodes, opts);
       running = true;
       step();
     },

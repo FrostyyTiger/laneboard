@@ -149,6 +149,25 @@ test('a status change keeps every object and eases the nebula to its new hue', (
   assert.equal(galaxy.update(m), false);
 });
 
+test('an update that changes no tone or tree still hands the drawn things the new nodes (a countdown, a name)', () => {
+  const { galaxy, at } = sceneAt();
+  galaxy.update(fleet());
+  at(1000);
+  const w = galaxy.world;
+  const objects = w.byId.get('hv1').members.map((m) => m.mesh);
+  const next = fleet();
+  const room = next.nodes.find((n) => n.id === 'hv1-room');
+  room.countdown = { at: 1793000000000, label: 'dumps' };
+  next.nodes.find((n) => n.id === 'hv1').label = 'HV1 renamed';
+  assert.equal(galaxy.update(next), false, 'nothing to repaint');
+  assert.equal(galaxy.world, w);
+  assert.deepEqual(galaxy.world.byId.get('hv1').members.map((m) => m.mesh), objects, 'no object made again');
+  assert.equal(member(galaxy, 'hv1', 'hv1-room').node, room, 'the member holds the new node');
+  assert.equal(member(galaxy, 'hv1', 'hv1-room').node.countdown.at, 1793000000000);
+  assert.equal(galaxy.world.byId.get('hv1').node.label, 'HV1 renamed', 'the site too');
+  assert.equal(galaxy.world.core, next.nodes[0], 'and the core');
+});
+
 test('a tree change folds the system, swaps the new layout in while folded, then opens it again', () => {
   const { galaxy, at } = sceneAt();
   galaxy.update(fleet());

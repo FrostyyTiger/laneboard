@@ -325,8 +325,10 @@ export function plateFollows(was, now) {
  * `now()` is the clock the crit hold counts on, `timers` the plate's arrival
  * waits on (both injectable for tests).
  */
-export function createHud({ caption, frame, tour = null, lock = null, size = null, now = Date.now, timers = globalThis }) {
+export function createHud({ caption, frame, tour = null, touring = null, lock = null, size = null, now = Date.now, timers = globalThis }) {
   const stage = size ?? (() => ({ W: globalThis.innerWidth, H: globalThis.innerHeight }));
+  // Whether the tour drives now (its overview leg ends a cleared crit's hold); always, unless told.
+  const touringNow = typeof touring === 'function' ? touring : () => true;
   let latest = null;
   // The lock target's node (lockTarget's first), as the leg's caption and
   // brackets name it: the fleet line steps past its problem (bannerModel).
@@ -519,7 +521,8 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
       } else if (crit) {
         hold = { ...crit, clearedAt: now() };
         crit = null;
-      } else if (hold && !tour && now() - hold.clearedAt >= CRIT_HOLD.minMs) {
+      } else if (hold && (!tour || !touringNow()) && now() - hold.clearedAt >= CRIT_HOLD.minMs) {
+        // No overview leg will come to end the hold (no tour, or a person's screen it does not drive): time does.
         hold = null;
       }
       feed();

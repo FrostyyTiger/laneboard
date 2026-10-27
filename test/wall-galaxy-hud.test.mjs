@@ -603,6 +603,30 @@ test('a newer crit takes the line from a remembered one at once', () => {
   assert.equal(fed.at(-1).text, 'all calm');
 });
 
+test('a tour that does not drive (a person\'s screen, ?role=explore) ends a memory after minMs too', () => {
+  const fed = [];
+  const frame = { update: (m, opts) => fed.push(shown(m, opts)), live() {}, cover: () => null, el: { fleet: { dataset: {} } } };
+  let t = 0;
+  let driving = false;
+  const tour = { onLeg: () => () => {} };
+  const hud = createHud({ caption: { show() {}, hide() {} }, frame, tour, touring: () => driving, now: () => t });
+  hud.update(alone('crit', 'no contact'));
+  t = 1000;
+  hud.update(alone('ok'));
+  assert.equal(fed.at(-1).tone, 'cleared');
+  t = 1000 + CRIT_HOLD.minMs;
+  hud.update(alone('ok'));
+  assert.equal(fed.at(-1).text, 'all calm', 'no overview leg is coming: time ends it');
+  // While the tour drives, its overview leg ends the memory, not the time.
+  driving = true;
+  hud.update(alone('crit', 'no contact'));
+  t = 2000 + CRIT_HOLD.minMs;
+  hud.update(alone('ok'));
+  t = 3000 + 2 * CRIT_HOLD.minMs;
+  hud.update(alone('ok'));
+  assert.equal(fed.at(-1).tone, 'cleared');
+});
+
 test('wall.css sets a cleared crit at the calm step in --text-2 with only its glyph in the old hue (T18)', () => {
   const css = read('css/wall.css');
   const rule = css.match(/\.wall-fleet\[data-tone="cleared"\] \.wall-fleet-line \{([^}]*)\}/);

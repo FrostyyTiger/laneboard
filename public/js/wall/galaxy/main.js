@@ -56,7 +56,8 @@
 // opened a site, not the default fit; a wake and the tour's hand-back fit.
 // The tour resumes (T14, touch.js IDLE): a minute after the last touch the
 // tour takes the page back at its next leg, trouble first (tour.js
-// `resume`), the camera flying there from where the finger left it. In
+// `resume`), the camera flying there from where the finger left it; a
+// show's undo hands it back with the overview instead (c4 §5). In
 // reduced motion every step is a cut (camera.js `cut`) and the scene fades
 // in over CUT.fadeMs (still.js createCutFade): a tapped site, back out, the
 // hand-back.
@@ -104,7 +105,7 @@ import { createHud } from './hud.js';
 import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
 import { createFan } from './fan.js';
-import { fallbackHref, hasWebGL } from './fallback.js';
+import { demoAsked, fallbackHref, hasWebGL } from './fallback.js';
 import { paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
@@ -130,7 +131,7 @@ const BACKOFF_MAX_MS = 30000;
 export function boot() {
   const page = document.documentElement;
   const q = new URLSearchParams(location.search);
-  if (q.has('demo')) page.dataset.demo = '1';
+  if (demoAsked(q)) page.dataset.demo = '1';
   const role = roleOf(q.get('role'));
   if (role !== 'tour') page.dataset.role = role;
   const canvas = document.getElementById('galaxy');
@@ -258,6 +259,8 @@ export function boot() {
   // director moves `cam`, so no two of them ever fight for it.
   let touch = null;
   let tour = null;
+  // A show's undo hands the page back to the tour with the overview, not the next leg (c4 §5).
+  let resumeOverview = false;
   const director = createDirector(cam, {
     still: reduced,
     driver: role === 'explore' && !park ? 'touch' : 'tour', // a person's screen: the finger drives from the start
@@ -298,7 +301,8 @@ export function boot() {
     avoid: () => shownNames().map((n) => n.box),
     size: galaxy.size,
   });
-  const hud = createHud({ caption, frame, tour: park ? null : tour, size: galaxy.size, lock });
+  // `touring`: the tour runs its legs (and so ends a cleared crit's hold at its overview) only while it drives.
+  const hud = createHud({ caption, frame, tour: park ? null : tour, touring: () => director.driver() === 'tour', size: galaxy.size, lock });
   let parkedSaid = false;
 
   // The names, over the scene and under the words: placed after each frame
@@ -417,6 +421,9 @@ export function boot() {
     screenOf: cam.screenOf,
     size: galaxy.size,
     avoid: () => touchCovers(), // the back control and the manual line: a pin's ✕ never under ▶ TOUR
+    // The site names the note keeps off (a name over the plate would be hidden under it).
+    names: () => labels.shown().filter((n) => galaxy.world?.byId.has(n.id))
+      .map(({ box }) => ({ left: box.x, top: box.y, right: box.x + box.w, bottom: box.y + box.h })),
     ops: {
       camera: cameraNow,
       wall: () => (touch?.mode() === 'tour' ? 'tour' : 'explore'),
@@ -426,10 +433,13 @@ export function boot() {
       fly: (node, id) => { const to = targetOf(node); if (to) show(to, id); },
       fit: (nodes, id) => { const to = fitTarget(nodes); if (to) show(to, id); },
       stay: (id) => show(STAY, id),
-      // An undo (c4 §5): touring before → the tour at once; else the camera back by a normal flight.
+      // An undo (c4 §5): touring before → the tour at once, with the overview (screens.md §2);
+      // else the camera back by a normal flight.
       restore: (saved) => {
-        if (saved.wall === 'tour') touch?.handBack();
-        else if (saved.camera) setCamera(saved.camera);
+        if (saved.wall === 'tour') {
+          resumeOverview = true;
+          try { touch?.handBack(); } finally { resumeOverview = false; }
+        } else if (saved.camera) setCamera(saved.camera);
       },
     },
   });
@@ -460,7 +470,7 @@ export function boot() {
   const toOverview = (pose = null) => {
     cutAway();
     fan?.hide();
-    if (pose) finger.fly(pose, { ms: TOUCH.fitMs });
+    if (pose && !reduced) finger.fly(pose, { ms: TOUCH.fitMs }); // reduced motion has no free poses to fly to: a cut to the fit
     else finger.fit({ ms: TOUCH.fitMs });
     hud.release();
     place = AT_OVERVIEW;
@@ -482,7 +492,7 @@ export function boot() {
       place = AT_OVERVIEW;
       shows?.tourBack(); // the tour clears what the agent drew: the highlight, its note, the undo (c4 §2)
       director.handBack();
-      tour.resume();
+      tour.resume({ overview: resumeOverview });
     },
   });
   let touchSaid = 'tour';

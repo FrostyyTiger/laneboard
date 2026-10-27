@@ -9,7 +9,7 @@ import { withTiles, troublePlaces, focusLinks, siteOf, TILE } from '../public/js
 import * as islandsTiles from '../public/js/wall/variants/islands-tiles.js';
 import * as islands from '../public/js/wall/variants/islands.js';
 import { hexCorners } from '../public/js/wall/variants/mosaic.js';
-import { fallbackHref, hasWebGL, FALLBACK_VARIANT } from '../public/js/wall/galaxy/fallback.js';
+import { demoAsked, fallbackHref, hasWebGL, FALLBACK_VARIANT } from '../public/js/wall/galaxy/fallback.js';
 
 /** Two sites, rooms with services, a builder with a lane: all calm unless `status` says otherwise. */
 function fleet(status = {}) {
@@ -114,10 +114,23 @@ test('focusLinks: no links at the overview, only the held site\'s while it is he
 test('the galaxy sends a browser without WebGL to the 2D fallback, the demo speed along', () => {
   assert.equal(FALLBACK_VARIANT, 'islands-tiles');
   assert.equal(fallbackHref(''), 'wall.html?variant=islands-tiles');
-  assert.equal(fallbackHref('?demo=1&at=hv1&fx=lanes'), 'wall.html?variant=islands-tiles&demo=1');
+  assert.equal(fallbackHref('?demo=1&at=hv1&fx=beacon'), 'wall.html?variant=islands-tiles&demo=1');
+  assert.equal(fallbackHref('?demo'), 'wall.html?variant=islands-tiles&demo=1');
+  assert.equal(fallbackHref('?demo=0'), 'wall.html?variant=islands-tiles', '?demo=0 is off, as on wall.html');
   const main = readFileSync(new URL('../public/js/wall/galaxy/main.js', import.meta.url), 'utf8');
   assert.match(main, /location\.replace\(fallbackHref\(location\.search\)\)/);
   assert.match(main, /hasWebGL\(/);
+});
+
+test('demoAsked: ?demo, ?demo=1 or any value but 0/false/no/off, as wall.html reads it', () => {
+  const q = (s) => new URLSearchParams(s);
+  assert.equal(demoAsked(q('')), false);
+  assert.equal(demoAsked(q('demo')), true);
+  assert.equal(demoAsked(q('demo=1')), true);
+  assert.equal(demoAsked(q('demo=yes')), true);
+  for (const off of ['0', 'false', 'No', ' off ']) assert.equal(demoAsked(q(`demo=${off}`)), false, off);
+  const main = readFileSync(new URL('../public/js/wall/galaxy/main.js', import.meta.url), 'utf8');
+  assert.match(main, /if \(demoAsked\(q\)\) page\.dataset\.demo = '1';/);
 });
 
 test('hasWebGL: a context means yes (and is given back), none or a throw means no', () => {

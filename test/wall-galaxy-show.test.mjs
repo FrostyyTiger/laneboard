@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  CAMERA_CMDS, INBOUND, RESULT_STATES, SHOW, SHOW_CMDS, SHOW_LATER, WHY, bracketBox, clockText, createFingerWatch, createShow,
+  CAMERA_CMDS, INBOUND, RESULT_STATES, SHOW, SHOW_CMDS, SHOW_LATER, UNLIT, WHY, bracketBox, clockText, createFingerWatch, createShow,
   cutText, emphasisOf, initialShow, leaderOf, notePlace, pinOf, pinPlace, readShow, showStep,
 } from '../public/js/wall/galaxy/show.js';
 import { fitPose, showFlightMs } from '../public/js/wall/galaxy/camera.js';
@@ -51,7 +51,8 @@ test('show: the spec\'s commands, limits and answers (c4 §3, D72, D73, protocol
   assert.equal(SHOW.pins, 3);
   assert.equal(SHOW.waitMs, 3000);
   assert.equal(SHOW.giveUpMs, 10000);
-  assert.equal(SHOW.unlit, 0.16);
+  assert.equal(UNLIT, 0.16, 'the spec\'s UNLIT, one named constant to tune on the panel');
+  assert.equal(SHOW.unlit, UNLIT);
   assert.equal(SHOW.zoom, 1.9);
   assert.equal(SHOW.xPx, 48);
 });
@@ -218,6 +219,29 @@ test('showStep undo (D71, c4 §5): the latest camera command only; it restores c
   assert.equal(back.state.highlight, null);
   assert.equal(back.state.undo, null);
   assert.equal(back.state.pins.length, 1);
+});
+
+test('showStep undo of a command still waiting for the finger: it never runs and gets no second answer', () => {
+  const m = show('fly_to', { node: 'hv1' });
+  const [wait, undo, later] = run([
+    [t0, { type: 'msg', msg: m }, ctx({ blocked: true })],
+    [t0 + 500, { type: 'undo', showId: m.showId }, ctx({ blocked: true })],
+    [t0 + 5000, { type: 'tick' }, ctx({ blocked: false })],
+  ]);
+  assert.deepEqual(wait.out.map((o) => o.state), ['waiting']);
+  assert.equal(undo.state.waiting, null, 'dropped');
+  assert.deepEqual(undo.out, []);
+  assert.equal(undo.act, null);
+  assert.equal(later.act, null, 'never flies');
+  assert.deepEqual(later.out, []);
+});
+
+test('showStep pin.put without a time: headed with the time it came, not 00:00', () => {
+  const r = showStep(initialShow(), { type: 'pin.put', pin: { id: 'p1', node: 'db', title: 'x', fields: { body: 'y' } } }, t0, ctx());
+  assert.equal(r.state.pins[0].at, 1793080932210);
+  const at = '2026-10-27T07:02:09+01:00';
+  const r2 = showStep(initialShow(), { type: 'pin.put', pin: { id: 'p2', node: 'db', title: 'x', at } }, t0, ctx());
+  assert.equal(r2.state.pins[0].at, Date.parse(at), 'the room\'s own time when it sends one');
 });
 
 test('showStep: a repeated showId is neither shown nor answered twice; unsupported and bad shapes are answered skipped', () => {
@@ -430,6 +454,24 @@ test('createShow: a node out of sight hides its card and brackets; a pin keeps o
   assert.ok(y >= 218, `below the control (${y})`);
 });
 
+test('createShow: the note keeps off the site names (names()) as off the marked nodes', () => {
+  const el = (tag) => { const e = makeEl(tag); e.replaceChildren = (...k) => { e.children.length = 0; e.append(...k); }; return e; };
+  const marks = el('div');
+  const at = { hv1: { x: 600, y: 400, r: 8 } };
+  // A site name right where the note goes first (up and to the right of the brackets).
+  const name = { left: 620, top: 220, right: 760, bottom: 380 };
+  const shows = createShow({
+    marks, doc: { createElement: el }, clock: () => t0, screenOf: (id) => at[id] ?? null, size: () => ({ W: 1368, H: 912 }),
+    names: () => [name], ops: { known: (id) => id in at, inSight: () => true },
+  });
+  shows.receive(show('highlight', { nodes: ['hv1'], note: 'look here' }));
+  const [note] = marks.children.filter((c) => c.classList.contains('galaxy-show-note'));
+  const [x, y] = note.style.transform.match(/translate3d\(([\d.-]+)px, ([\d.-]+)px/).slice(1).map(Number);
+  const w = SHOW.noteW, h = 80;
+  const hits = x < name.right && x + w > name.left && y < name.bottom && y + h > name.top;
+  assert.equal(hits, false, `the note (${x}, ${y}) is off the name`);
+});
+
 test('createFingerWatch: blocked while a finger is down and 3 s after the last lift; a press on a pin does not count', () => {
   let now = 0;
   const stage = liveEl('div');
@@ -488,4 +530,11 @@ test('galaxy.html has the show layers; wall.css draws the D72 looks; main.js wir
   assert.doesNotMatch(js, /shows\?\.drop\(\)/, 'a touch no longer wipes what the agent drew');
   // Words are text only: show.js never writes markup.
   assert.doesNotMatch(read('js/wall/galaxy/show.js'), /innerHTML|insertAdjacentHTML|outerHTML/);
+});
+
+test('main.js: an undo of a command made while touring hands the page back with the overview (c4 §5, screens.md §2); the note keeps off site names', () => {
+  const js = read('js/wall/galaxy/main.js');
+  assert.match(js, /if \(saved\.wall === 'tour'\) \{\s*resumeOverview = true;\s*try \{ touch\?\.handBack\(\); \} finally \{ resumeOverview = false; \}/);
+  assert.match(js, /tour\.resume\(\{ overview: resumeOverview \}\)/);
+  assert.match(js, /names: \(\) => labels\.shown\(\)\.filter/);
 });

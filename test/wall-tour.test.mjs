@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  tourSites, tourOrder, nextLeg, initialTour, createTour, TIMING, DEMO_TIMING, timingFor, holdFor,
+  tourSites, tourOrder, nextLeg, initialTour, createTour, resumeTour, TIMING, DEMO_TIMING, timingFor, holdFor,
 } from '../public/js/wall/tour.js';
 
 /** TIMING without the trouble revisits: each site once per cycle. */
@@ -224,4 +224,32 @@ test('tour driver: a page\'s zoomFor sets the zoom of each site leg, the timing\
   queue.at(-1).fn();
   assert.deepEqual(calls.at(-1), ['focus', 'hv1', DEMO_TIMING.zoom]);
   assert.equal(legs[0].zoom, undefined, 'an overview leg has none');
+});
+
+test('resumeTour: after a finger, the worst site next; after a show\'s undo (overview: true), the overview first', () => {
+  const nodes = [
+    { id: '__core', kind: 'core' },
+    { id: 'a', parent: '__core', kind: 'site', status: 'ok' },
+    { id: 'b', parent: '__core', kind: 'site', status: 'crit' },
+  ];
+  const mid = { cycle: 3, phase: 'site', visited: ['b', 'a'], count: 2 };
+  const plain = nextLeg(resumeTour(mid, nodes), nodes);
+  assert.equal(plain.leg.kind, 'site');
+  assert.equal(plain.leg.id, 'b', 'the worst site, not the overview');
+  const undo = nextLeg(resumeTour(mid, nodes, { overview: true }), nodes);
+  assert.equal(undo.leg.kind, 'overview');
+  assert.equal(undo.leg.cycle, 4, 'a fresh cycle');
+  assert.equal(nextLeg(undo.state, nodes).leg.id, 'b', 'then trouble first');
+  // The driver passes the option through.
+  const calls = [];
+  const timers = { setTimeout: () => 1, clearTimeout() {} };
+  const tour = createTour({ fit: () => calls.push('fit'), focus: (id) => calls.push(id) }, { timers });
+  tour.update({ nodes });
+  tour.start();
+  tour.stop();
+  tour.resume({ overview: true });
+  assert.deepEqual(calls, ['fit', 'fit']);
+  tour.stop();
+  tour.resume();
+  assert.equal(calls.at(-1), 'b');
 });

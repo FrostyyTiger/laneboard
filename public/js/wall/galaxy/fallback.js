@@ -7,11 +7,23 @@
 /** The fallback's variant on wall.html. */
 export const FALLBACK_VARIANT = 'islands-tiles';
 
+const DEMO_OFF = new Set(['0', 'false', 'no', 'off']);
+
+/**
+ * Whether the query (URLSearchParams) asks for the demo speed: `?demo`,
+ * `?demo=1` or any value but 0/false/no/off, as wall.html reads it
+ * (variants.js `pickVariant`). Pure.
+ */
+export function demoAsked(q) {
+  const d = q?.get?.('demo');
+  return d != null && !DEMO_OFF.has(d.trim().toLowerCase());
+}
+
 /** The 2D page's address for the galaxy's query string `search`. */
 export function fallbackHref(search = '') {
   const q = new URLSearchParams(search);
   const out = new URLSearchParams({ variant: FALLBACK_VARIANT });
-  if (q.has('demo')) out.set('demo', q.get('demo') || '1');
+  if (demoAsked(q)) out.set('demo', '1');
   return `wall.html?${out}`;
 }
 

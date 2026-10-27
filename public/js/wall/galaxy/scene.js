@@ -1003,11 +1003,27 @@ export function createGalaxyScene(canvas, {
     if (world && dirty) place();
   };
 
+  /** Each site's, member's and the core's node swapped for the one of the same id in `nodes`. */
+  const repoint = (nodes) => {
+    if (!world) return;
+    const byId = new Map(nodes.filter((n) => n && n.id != null).map((n) => [n.id, n]));
+    for (const s of world.sites) {
+      s.node = byId.get(s.id) ?? s.node;
+      for (const m of s.members) m.node = byId.get(m.id) ?? m.node;
+    }
+    if (world.core) world.core = byId.get(world.core.id) ?? world.core;
+  };
+
   let lastKey = null, lastTree = null;
   const update = (model) => {
     const nodes = Array.isArray(model?.nodes) ? model.nodes : [];
     const k = sceneKey(nodes);
-    if (k === lastKey) return false;
+    if (k === lastKey) {
+      // Same tree, same tones: no repaint, but the drawn things hold this model's nodes, so
+      // what the names read from them (a countdown's `at`, a renamed label) is not a frame old.
+      repoint(nodes);
+      return false;
+    }
     lastKey = k;
     const shown = new Map(tourSites(nodes).map((s) => [s.id, s.status]));
     const tree = treeKey(nodes, shown.keys());
