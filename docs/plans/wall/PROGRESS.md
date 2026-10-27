@@ -192,7 +192,7 @@ Notes for every builder round (planner, round 1):
   a box; the corner brackets stay the only hard lines — done when: a `wall.css` test pins no hard-edged opaque ground
   on `.wall-fleet` and the plate (halo or `mask-image` instead), `wall.html`'s caption tests stay green, and a still of
   `galaxy.html?at=overview&quality=0` with a site under the banner shows no step in the ribbon at the banner's edge.
-  (commit SHA) Builder r20: both grounds are now gradient layers that are opaque under the words and fall off to
+  (commit c80e8a9) Builder r20: both grounds are now gradient layers that are opaque under the words and fall off to
   nothing across the padding on a smoothstep (2.4vmin, the plate's `--cap-pad`). There is no `mask`, because a mask
   would fade the corner brackets, which stay the only hard lines. The design guardrail allows gradients only in
   `tokens.css`, so they are tokens there beside `--tex-vignette`, used only by wall.css (**reaches outside the
