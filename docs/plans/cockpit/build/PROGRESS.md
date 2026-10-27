@@ -79,7 +79,7 @@ Notes for every builder round:
 - [ ] T32 [ui] (build 16, `screens.md` §7, §7.1, D11, D263) The room down and back: the line after 5 s with the board going on, a blip under 5 s shows nothing, the screen catches up and the draft is not sent; the time module `public/js/core/cockpit-time.js` (spec `README.md` "Times on the screen") — ids: S-SCR-17 S-SCR-18 S-SCR-19 — done when: `npm run test:cockpit -- -g 'S-SCR-17|S-SCR-18|S-SCR-19'` passes, none skipped (S-SCR-17, -19 assert the `none` layout); a `test/cockpit-time.test.mjs` for the module's table; npm test green; stills.
 - [ ] T33 [ui] (build 16, `screens.md` §7) The screen offline, a refused room link (4403, 4503) saying why instead of retrying, the room down since the evening before with the day and the age — ids: S-SCR-23 S-SCR-24 S-SCR-36 — done when: `npm run test:cockpit -- -g 'S-SCR-23|S-SCR-24|S-SCR-36'` passes with only S-SCR-23's canvas-strip step skipped (waits for Canvas); npm test green; stills.
 - [ ] T34 [ui] (build 17, `screens.md` §7) The board down: the Wall greys out and says since when; the board never reachable says what is missing and offers the demo — ids: S-SCR-21 S-SCR-22 — done when: `npm run test:cockpit -- -g 'S-SCR-21|S-SCR-22'` passes, none skipped; npm test green; stills.
-- [ ] T35 (build 18, `c3-see.md` §1, §3, D58, D260) The MCP server: `127.0.0.1` only, the token (`{stateDir}/cockpit/mcp.token`), Origin refused, the limits and the result rules of §3; `{stateDir}/cockpit-agent/mcp.json`; `booted.mcp()` works (review-required) — ids: S-C3-08 — done when: S-C3-08 passes in `test/cockpit-mcp.test.mjs` (node:test); npm test green; the module named under `## For the owner`.
+- [ ] T35 (build 18, `c3-see.md` §1, §3, D58, D260) The MCP server: `127.0.0.1` only, the token (`{stateDir}/cockpit/mcp.token`), Origin refused, the limits and the result rules of §3; `{stateDir}/cockpit-agent/mcp.json`; `booted.mcp()` works (review-required) — ids: S-C3-08, and S-SEC-01's last steps (T7 split, B53) — done when: S-C3-08 passes in `test/cockpit-mcp.test.mjs` (node:test); S-SEC-01 in `test/cockpit-security.test.mjs` gains its `mcp.json` steps (0644, `${LANEBOARD_MCP_TOKEN}`, not the token) and the fake agent's logged `--mcp-config` argv; npm test green; the module named under `## For the owner`.
 - [ ] T36 (build 19, `c3-see.md` §4.2, §4.5, §4.6, §5) The tools `morning`, `alerts`, `runs` (on a hub without the patch: `Runs are not available on this hub yet.`, B0), a bad argument never reaching the board, the board down as one sentence at once, an empty board's `sources` — ids: S-C3-05 S-C3-07 S-C3-20 S-C3-23 — done when: the four pass in `test/cockpit-mcp-tools.test.mjs` (node:test); npm test green.
 - [ ] T37 [ui] (build 19, `c3-see.md` §7, §10, `security.md` §4) The tools through the pane: one stuck run, one question, two tool lines; an unknown run as an answer; the board going down while the room stays up; an instruction in a fleet field staying data (`sec-inject`) — ids: S-C3-03 S-C3-04 S-C3-22 S-SEC-03 — done when: `npm run test:cockpit -- -g 'S-C3-03|S-C3-04|S-C3-22|S-SEC-03'` passes, none skipped (S-C3-03 against a single board, B0; S-C3-04's node:test part as a step, B2); npm test green; stills.
 - [ ] T38 (build 19, `slices.md` §5.1, `c3-see.md` §6) Board changes in fenced files, as patches only: `docs/plans/cockpit/build/patches/T38-hub-runs.diff` (`runs` and `runs/<id>` in `server/hub/read-proxy.mjs`'s `ALLOWLIST`, `GET /api/fleet/runs` fanning out and tagging each row with its builder, its hub test) and `patches/T38-hub-hello-cockpit.diff` (the hub's `/ws` hello `cockpit` field for `forwarded`, D129); each applies cleanly with `git apply --check`; no fenced file changed — ids: none — done when: both patches apply with `git apply --check` on the branch; both named under `## For the owner`; npm test green.
@@ -221,6 +221,25 @@ What the slice itself says waits; nothing else moved here.
 - T6: the room alone's "every other path is 404" is a wrap of the listener's request handler
   (B41), since `server/http.mjs` (fenced) always serves `public/` and the SPA fallback. A
   `static: false` option there would be the cleaner way; no patch written yet.
+
+- T7 (review-required): the start check `server/cockpit/start-check.mjs` (D209, D210, security.md
+  §3), its test `test/cockpit-security.test.mjs` (S-SEC-01, injected stat, then real starts), and
+  its call `prepareRoomFiles()` in `server/boot/cockpit.mjs` (also from `server/boot/builder.mjs`
+  before the one box listens). Each check names its decision; B47-B53.
+- T7, two places that disagree (the one box's default layout): security.md §3 / D210 "the audit
+  file and its directory … have any group or other bit set" stops the room, and single-machine.md
+  §3.3 "walks every directory from `/` to `{stateDir}/cockpit-agent/` … Run: setfacl -m
+  u:lb-agent:x". By default the audit file is `{stateDir}/audit.jsonl`, so the audit directory *is*
+  `{stateDir}`, the agent must pass through it, and the printed `setfacl` puts `--x` into the group
+  bits (the ACL mask), which the start check then refuses. Built strictly as written (D210 is the
+  newer decision of the two that word it; the walk is a warning, the check is fatal): with
+  `cockpit.agent.user` the default one box warns `cannot enter {stateDir} (mode 0700)`, and the fix
+  it prints makes the next start fatal. Ways out, for the owner: (a) the room keeps the audit log
+  out of `{stateDir}` when it is a room (`LANEBOARD_AUDIT_FILE` or a `{stateDir}/audit/`
+  directory: a change in `server/fleet/paths.mjs`, not fenced but audit-adjacent); (b) D210 allows
+  a directory whose only group/other bits are `x` (pass through, no listing; the 0600 files stay
+  closed); (c) move `cockpit-agent/` out of `{stateDir}` (D209's overrule). (b) is one line in
+  `fileProblems`; I did not take it because D210 says "any".
 
 ## Measured on the real screen
 

@@ -367,7 +367,8 @@ test('boot(): the room under test boots with its control port, seeded state file
     assert.throws(() => room.mcp(), /ENOENT/); // the MCP server comes with T35
     fs.mkdirSync(path.join(room.stateDir, 'cockpit-agent'), { recursive: true });
     fs.writeFileSync(path.join(room.stateDir, 'cockpit-agent', 'mcp.json'), JSON.stringify({ url: 'http://127.0.0.1:7791/mcp' }));
-    fs.writeFileSync(path.join(room.stateDir, 'cockpit', 'mcp.token'), 'tok\n');
+    // 0600 as the room writes it (D209): the restarts below run its start check (D210).
+    fs.writeFileSync(path.join(room.stateDir, 'cockpit', 'mcp.token'), 'tok\n', { mode: 0o600 });
     assert.deepEqual(room.mcp(), { url: 'http://127.0.0.1:7791/mcp', token: 'tok' });
   });
 

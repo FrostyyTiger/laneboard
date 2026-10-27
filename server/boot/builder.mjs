@@ -569,6 +569,8 @@ const ctx = createContext({
 });
 const modules = await registerModules(['routes', 'flags'], ctx);
 
+// The one box: the room's start check (D210) before any port listens.
+if (config.cockpit?.agent) (await import('./cockpit.mjs')).prepareRoomFiles();
 await listenAll({ onUpgrade });
 // Any "<name>-web-<id>" session still around is from a crashed run of ours.
 await terminals.sweepStale();

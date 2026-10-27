@@ -278,3 +278,45 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   `scripts/check-config-docs.mjs` `RUNTIME_KEYS`, so `docs/config.md` must document each — because
   D17 needs "no agent" to stay distinguishable after the defaults merge — spec: D17, §11.12 —
   overrule: none.
+- B47 The start check (`server/cockpit/start-check.mjs`) prints D248's owner line
+  `{key}: {path} is owned by uid {uid}, not you` for a path another uid owns (checked before the
+  mode), and D210's `can be read by others` line for any group or other bit; the room stops on the
+  first problem, in security.md §3's order (tokenFile, infra.key, `{stateDir}/cockpit/` depth first
+  with names sorted, the audit file, its directory) — because S-SEC-01 drives "owner 1001" with the
+  exact line per key, security.md §3 words only the mode line, and doctor's `files` check (D248) is
+  "the start check, reported instead of stopping" — spec: security.md §3, single-machine.md §5
+  check 10 — overrule: one line for both (the mode line names the owner too).
+- B48 A listed path that does not exist is no problem (the room makes `{stateDir}/cockpit/`; a
+  missing token file is the speech check's); a path the room cannot `stat` for any other reason
+  stops it with `{key}: {path} cannot be checked ({code})`; a link inside `{stateDir}/cockpit/` is
+  judged by its target and never entered — because D210 is the strict choice and an unreadable
+  path is not known to be closed — spec: D210 — overrule: skip what cannot be stat'ed.
+- B49 The start check runs whether or not `cockpit.agent.user` is set (with `allowSameUser` too) —
+  because security.md §3 says "before the room accepts a link it stats each of these" with no
+  condition, and the S-SEC-01 real start runs on the test's own user (allowSameUser: true) — spec:
+  security.md §3 — overrule: only with `user` set.
+- B50 The check and the room's directories run once per process before any port listens:
+  `prepareRoomFiles()` in `server/boot/cockpit.mjs`, called by `startRoom(ctx)` (the room alone,
+  ahead of `listenAll`) and by `server/boot/builder.mjs` just ahead of its `listenAll` (the one box,
+  after its audit log is opened). It makes the audit log's directory and the state dir 0700 when
+  missing (as `server/fleet/audit.mjs` does), `{stateDir}/cockpit/` 0700 and
+  `{stateDir}/cockpit-agent/` 0755 always (B43's "default cwd only" is replaced: D209's directory
+  is the room's in every setup), and never chmods a directory that was there except
+  `cockpit-agent/` — because S-SEC-01 says "no port is listening", and a 0755 state dir made by
+  `mkdir -p cockpit-agent` would trip the audit-directory check — spec: security.md §3, D209 —
+  overrule: none needed.
+- B51 The start check exits with `process.stderr.write(line)` and `process.exit(1)`, no
+  `laneboard: refusing to start —` prefix and no stack — because S-SEC-01's stderr is the line
+  itself, and the prefix is config.mjs's for config fragments (B37) — spec: S-SEC-01 — overrule:
+  the prefix too (one line in `prepareRoomFiles`).
+- B52 single-machine.md §3.3's walk lives in the same module (`agentWalk`): the agent's uid and
+  groups from `id -u`/`id -G` (argv, after USER_RX), the kernel's owner/group/other order, then the
+  directory's access ACL from `getfacl -n` when the bits say no, so the `setfacl -m u:{user}:x` the
+  line prints silences it; a directory not there yet is skipped; targets `{stateDir}/cockpit-agent/`
+  and `cockpit.agent.cwd`, each directory once — because a walk that ignores ACLs would repeat its
+  line after the owner ran the fix — spec: single-machine.md §3.3, B43 — overrule: bits only.
+- B53 S-SEC-01's last steps (`mcp.json` 0644 holding `${LANEBOARD_MCP_TOKEN}` and not the token,
+  the fake agent's `--mcp-config` argv) move to T35, which writes `mcp.json` after the MCP listen
+  (c3-see.md §1) and comes after the bridge (T9) that spawns the agent; T7's test asserts D209's
+  directory modes — because neither the MCP server nor the bridge exists at T7 — spec:
+  security.md §7 S-SEC-01, c3-see.md §1 — overrule: none; T35 closes the scenario.

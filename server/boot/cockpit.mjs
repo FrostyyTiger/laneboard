@@ -16,9 +16,12 @@
 // (`/ws`) is refused the same way (protocols.md §1). It never imports state,
 // ws, terminals, the collectors or the board's routes (test/cockpit-room.test.mjs).
 import fs from 'node:fs';
+import path from 'node:path';
 import { config } from '../config.mjs';
 import { log } from '../log.mjs';
 import { DEFAULT_CWD, fillPath, startLines } from '../config/cockpit.mjs';
+import { auditFile } from '../fleet/paths.mjs';
+import { agentWalk, fileProblems, lookupAgent, secretPaths } from '../cockpit/start-check.mjs';
 
 /** The room's path on the page's origin, on both sides (D93). Not a config key. */
 export const COCKPIT_PREFIX = '/api/cockpit';
@@ -40,16 +43,56 @@ export async function startRoom(ctx = null, opts = {}) {
   if (!ctx) return bootProcess();
   const agent = config.cockpit?.agent;
   if (!agent) return null;
+  prepareRoomFiles();
   for (const line of startLines(config, { env: opts.env ?? process.env })) process.stderr.write(`${line}\n`);
   const cwd = fillPath(agent.cwd, { stateDir: config.stateDir });
-  // D246, D209: the default cwd is the room's to make (0755, its own user);
-  // a cwd the owner set exists (config/cockpit.mjs) and is never written to.
-  if (agent.cwd === DEFAULT_CWD) {
-    fs.mkdirSync(cwd, { recursive: true, mode: 0o755 });
-    fs.chmodSync(cwd, 0o755);
-  }
   log.info(`cockpit: room up (agent ${agent.kind}, cwd ${cwd})`);
   return { cwd, stop: async () => {} };
+}
+
+let prepared = false;
+
+/**
+ * The room's directories and its start check, once per process, before any
+ * port listens: the room alone calls it from startRoom(ctx) ahead of
+ * listenAll, the one box from server/boot/builder.mjs ahead of its own.
+ *
+ * D209: `{stateDir}/cockpit/` 0700 and `{stateDir}/cockpit-agent/` 0755 (the
+ * default cwd), both the room's; the state dir and the audit log's directory
+ * 0700 when the room makes them (as server/fleet/audit.mjs does). A directory
+ * that is there already keeps its mode: the check below judges it.
+ * D210: a secret or state path another user could read stops the room, exit 1
+ * and the one line (security.md §3, S-SEC-01). single-machine.md §3.3: with
+ * `cockpit.agent.user`, one stderr line per directory on the agent's way to
+ * its files that it cannot enter; not fatal.
+ */
+export function prepareRoomFiles({ env = process.env, exit = (code) => process.exit(code) } = {}) {
+  const agent = config.cockpit?.agent;
+  if (prepared || !agent) return;
+  prepared = true;
+  const stateDir = config.stateDir;
+  const audit = auditFile({ env });
+  fs.mkdirSync(path.dirname(audit), { recursive: true, mode: 0o700 });
+  fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+  fs.mkdirSync(path.join(stateDir, 'cockpit'), { recursive: true, mode: 0o700 });
+  const agentDir = fillPath(DEFAULT_CWD, { stateDir });
+  fs.mkdirSync(agentDir, { recursive: true, mode: 0o755 });
+  // D246, D209: the agent's directory is the room's, 0755; a cwd the owner
+  // set exists (config/cockpit.mjs) and is never written to.
+  try { fs.chmodSync(agentDir, 0o755); } catch { /* not ours: the walk below names it */ }
+  if (typeof process.getuid === 'function') {
+    const problems = fileProblems(secretPaths({ config, auditFile: audit }), { uid: process.getuid() });
+    if (problems.length) {
+      process.stderr.write(`${problems[0].line}\n`);
+      exit(1);
+      return;
+    }
+  }
+  if (agent.user) {
+    const who = lookupAgent(agent.user);
+    const cwd = fillPath(agent.cwd, { stateDir });
+    if (who) for (const line of agentWalk([agentDir, cwd], { agent: who })) process.stderr.write(`${line}\n`);
+  }
 }
 
 /** startRoom() without a ctx: this process is the room alone, or the board that holds it. */
