@@ -337,7 +337,7 @@ revokes the token at once. Tokens do not expire on their own (pending Q-O10).
 - 16 px `--text-3`: `Code valid for 4:12. A new one appears when it runs out.` (counts down each second)
 
 After `unpair` the title reads `PAIR THIS SCREEN AGAIN` and the first line `This screen was
-unpaired on 27 Oct at 06:58. The board works; talking to the agent needs a new pairing.`
+unpaired on 27 Oct at 06:58. The board works; talking to the agent needs a new pairing.` (date format D149)
 
 ## 7. When something is down
 

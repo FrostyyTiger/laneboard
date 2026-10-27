@@ -3,7 +3,7 @@
 The cockpit pane and the conversation in it: where the pane sits, how it opens and closes, how a
 reply is drawn for reading at arm's length, and how tool activity folds into one line (§1-§5, part
 1, T4; §5.1 maps the room's messages onto them, T29). Typing and send, talking while the agent answers, long replies, errors, a new conversation,
-several screens are part 2 (§7-§14, T5; the on-screen keyboard §7.1, T40); the raw view is not in C1 (§13, T50). Words as in the glossary (`README.md`). Sizes are CSS
+several screens are part 2 (§7-§14, T5; the on-screen keyboard §7.1, T40); the raw view is not in C1 (§13, T50); the demo (`?demo=1`) is §15. Words as in the glossary (`README.md`). Sizes are CSS
 px at 1368x912; times in s or ms.
 
 Plan C1: "It slides over the view, never replaces it, so the agent can point at the view behind
@@ -178,7 +178,7 @@ blocks, tool lines (§5) and show lines (`c4-show-canvas.md` §4) interleaved as
 
 - **Label row** above the prompt and above the reply, 24 px tall, 16 px caps `--text-3`:
   `YOU · 07:02` (`YOU · SPOKEN · 07:02` for a voice prompt, C2) and `AGENT · 07:02`. Time is the
-  screen's local `HH:MM`, 24 h.
+  screen's local `HH:MM`, 24 h; a date is `D Mon` in English (`27 Oct`, D149).
 - **The prompt**: mono 28 px, line height 1.4 (39.2 px), `--text-1`, in a block on `--bg-surface`
   with a 1 px `--line-weak` border and 12 px / 16 px padding (pending Q-O18).
 - **The reply**: mono 28 px, line height 1.4 (39.2 px), `--text-1`, straight on the pane's
@@ -1235,3 +1235,113 @@ module holding §5's table): `Bash` `cd /srv/app && npm test` → `ran cd /srv/a
 `fetched a page from an invalid address`; two `WebFetch` calls on `https://example.invalid/a` and
 `/b` → `fetched a page from example.invalid`, on two hosts → `fetched 2 pages`; `Read` `/` →
 `read /`; a 40-character target of emoji is cut after 32 code points with no lone surrogate.
+
+## 15. The demo (`?demo=1`, T36/T76/T93)
+
+`docs/plans/product.md` rule 2: "A feature without demo data is not done, because the demo is how a
+stranger meets it." The hosted demo is a static page with no board and no room (product.md §4), so
+the cockpit brings its own: a **demo link**, a client-side stand-in for the room link that answers
+with canned messages of `protocols.md` §2-§3 (D148).
+
+**When the page uses it.** The URL's query has `demo=1` (`new URLSearchParams(location.search)
+.get('demo') === '1'`; the hash route does not count) **and** there is no cockpit: the first of
+- the board's first `/ws` frame says `"cockpit":false` (D93),
+- the board's `/ws` closes or errors before its first frame (the static demo: nothing answers `/ws`),
+- `DEMO_WAIT_MS` = 3 000 ms after load with no frame (D150).
+
+With `"cockpit":true` the page uses the real room link as without `demo=1`: `?demo=1` on the
+Wall is also its tour speed (Wall plan §3), and `c3-see.md` §10's harness runs `?demo=1` against a
+paired room. Once on the demo link, the page stays on it until a reload. D17's "no cockpit, no
+button" does not apply on the demo link (D17's exception).
+
+**What the demo link never does**: open a WebSocket, call `fetch` or `XMLHttpRequest`, send
+anything to `/api/cockpit/*` (`COCKPIT_PREFIX`), or show the pairing card. It lives in
+`public/js/core/cockpit-demo.js` (pure: no DOM, no network; `createDemoLink({now, setTimeout})`
+takes its clock and timers),
+loaded with `import()` only when the page takes the demo link, so a normal page carries none of it.
+Its link object has the same three calls as the real room link (`send(msg)`, `onMessage(cb)`,
+`close()`); everything above the link (pane, conversation, renderer, tool lines) is the same code.
+
+**What the screen shows** (differences from a live room only):
+
+| Where | Demo |
+| --- | --- |
+| root | `data-cockpit="live"` and `data-cockpit-demo` (no value); `data-cockpit-layout` as stored (`screens.md` §1) |
+| opener and talk button | `CHAT` in its rect (`screens.md` §4, pending Q-O11); no talk button: `welcome.config.stt` is `none` (`c2-voice.md` §9) |
+| header | `COCKPIT`, 16 px later `DEMO` (16 px caps `--text-1`, 1 px `--line-strong` border, 28 px tall, 8 px padding left and right, `[data-cockpit-demo-label]`), 16 px later the turn state. The left part ends by x 1030 with `● STOPPING`; on the Wall `NEW` starts at x 1072 (from the right: `CLOSE` 1256-1352, `SCREEN` 1152-1248, `NEW` 1072-1144) |
+| input placeholder | `Demo: type anything` (19 characters, one line at 21 per line, §7) |
+| status line, line slot | never `room-down`, `unpaired` or `offline`: the demo link is never down |
+
+**The link's messages.** On the page's `hello` it answers, 50 ms later:
+- `welcome` with `screen:"demo"`, `epoch:"demo"`, `conversation:"c-demo"`, `resume:"snapshot"`,
+  `config:{"stt":"none","languages":["en"],"maxPromptChars":8000}`, `status:null`, `now` from the
+  page's clock (no skew line, ever);
+- one `snapshot` (`parts:1`, `olderTurns:0`, `pins:[]`, `cards:[]`; the demo cards of `screens.md`
+  S-SCR-10 join `cards` with the Canvas slice) holding the three canned turns below.
+
+It numbers its own `seq` from 1. Each message it emits passes `protocols.md` §2.4's rules (S-C1-36's
+unit test), so the demo cannot drift from the protocol.
+
+**The canned conversation**, demo fleet facts as in `c3-see.md` §4 (all typed, `lang:null`,
+`about:null`; times are the load time less 6, 4 and 2 min, cut to the minute):
+
+| Turn | Prompt | Tool line | Reply |
+| --- | --- | --- | --- |
+| `t-demo-1` | `how did the night go?` | `read the Morning for tonight` | `■ One run is stuck: acme-billing on builder-b since 06:12, the same task failed twice.` / `■ docs on builder-a finished at 03:20, PR #39 green.` / `■ A question waits for you on builder-a: page size 20 or 50?` / `■ builder-c has sent nothing since 06:41.` (four paragraphs) |
+| `t-demo-2` | `what is stuck?` | `looked at the runs` | a table `Run \| Host \| Since \| Why` with one row `acme-billing \| builder-b \| 06:12 \| same task`, then `T3 failed in rounds 3 and 4. It also asks you: Drop the v1 export?` |
+| `t-demo-3` | `what did last night's run cost?` | `read the Morning for tonight` | `Last night cost 18.62 USD, 12.40 of it on acme-api. acme-billing alone: 4.40 USD in 4 rounds.` |
+
+**Typing plays a demo turn.** A `prompt` gets an answer timed like `protocols.md` §10 from its 2.96 s
+line on; `t` is seconds after the `prompt`:
+
+| t (s) | Message |
+| --- | --- |
+| 0.10 | `turn.prompt` (new `turnId` `t-demo-<n>`, the prompt's `clientId`, `delivery:"new"`), `turn.state` `thinking` |
+| 0.60 | `tool.start` (the matched row's tool; none for the no-match reply) |
+| 1.10 | `tool.end`, `isError:false` |
+| 1.30 | `turn.state` `answering`, then one `text.delta` per white-space-separated word (with the white space after it) every 60 ms |
+| last delta + 0.10 | `text.block` |
+| + 0.10 | `turn.end` `done` |
+
+- **Matching**, case-insensitive substring of the prompt, first hit wins: `night` → turn 1's tool
+  and reply, `stuck` → turn 2's, `cost` → turn 3's. Repeats are allowed. Anything else gets no tool
+  line and the reply `This is the demo: it answers three questions. Try “how did the night go?”,
+  “what is stuck?” or “what did last night's run cost?”. With a room of your own, the agent reads
+  your own fleet (docs/cockpit.md).` The longest canned reply (turn 1, 43 words) ends `done` 4.0 s
+  after the send.
+- **A send during a demo turn** is steered as §8 says: the prompt shows `· QUEUED`, the link sends
+  `prompt.taken` (`state:"taken"`, `atBlock` = the next block) at the next `text.block` (at once
+  if the turn is still before its tool's end), and the turn plays that prompt's reply as one more
+  text block before its `turn.end`.
+- **`stop`**: `turn.end` `stopped` 200 ms later (never forced); a queued prompt becomes
+  `cancelled` `why:"stopped"` (§8).
+- **`new`**: `conversation.new` `reason:"owner"` 100 ms later; the empty conversation of §11 follows.
+- `history`, `focus`, `hello` again: `history.turns` with `turns:[]`; `focus` is dropped; a second
+  `hello` gets the same `welcome` and a `snapshot` of the conversation as it now is.
+- No limits apply that need a room (E9 `too-many`, length beyond 8 000 characters is still the
+  screen's own §7 rule).
+
+### S-C1-36 The static demo: the pane opens on a canned conversation and typing plays a turn
+Given `public/` served by a plain static server (nothing answers `/ws` or `/api/*`), 1368x912,
+`page.clock` at 2026-10-27 07:00:00 local,
+When the page loads `index.html?demo=1#/map`,
+Then within 1 s of the `/ws` failure `data-cockpit="live"`, `data-cockpit-demo` is set and `CHAT` is
+in its rect, with no talk button; a tap on `CHAT` opens the pane on three turns labelled
+`YOU · 06:54`, `YOU · 06:56`, `YOU · 06:58`, the last reply in sight, the header reading
+`COCKPIT`, `DEMO`, `READY`, and the input's placeholder `Demo: type anything`.
+When the owner types `What is stuck?` and presses `Enter`,
+Then `YOU · 07:00 · SENDING` shows, `· SENDING` is gone at t = 0.1 s, the header reads `● WORKING`,
+a tool line `● looked at the runs…` shows by t = 0.6 s and ends at 1.1 s, the table streams in, and
+by t = 5.0 s the header reads `READY` and the turn holds the table of turn 2.
+When the owner sends `hello`, then 1.5 s later `STOP`,
+Then the first gets the no-match reply's first words and ends with `STOPPED AT 07:00`; no tool line.
+And: no request reached the server's log for `/api/cockpit/`, and the page made no WebSocket to
+`/api/cockpit/ws` and no `fetch` from `cockpit-demo.js`.
+Second case: the room under test with the fake agent, `hello.cockpit:true`, `?demo=1`: the pane
+opens on the room's conversation, no `DEMO` label, no `data-cockpit-demo` (the real room wins).
+Test: Playwright with `page.clock`; `page.on('websocket')` and `page.on('request')` collect every
+socket and request; the static server's access log; texts of the label rows, the header and the
+tool line; `placeholder`; `[data-cockpit-demo-label]` count 1, then 0 in the second case. And
+`test/cockpit-demo.test.mjs` in `npm test`: drives `createDemoLink({now, setTimeout})` with a fake
+clock through `hello`, the three matches, a no-match, a mid-turn send and a `stop`, and checks every
+emitted message with `protocols.md` §9's fixture checker and its `seq` running 1, 2, 3, ….

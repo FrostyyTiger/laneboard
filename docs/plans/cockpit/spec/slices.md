@@ -103,14 +103,15 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 18. The MCP server: loopback, token, limits (`c3-see.md` §1, §3).
 19. `morning`, `alerts`, `runs` (`c3-see.md` §4.2, §4.5, §4.6) and the hub's runs route (§5.1).
 20. The standing instructions (`protocols.md` §11.8), S-C3-18 end to end.
+21. The demo link (`c1-talk.md` §15, D148), S-C1-36.
 
 **Stand-ins and scripts**: room under test, fake agent (dialect `claude`), demo hub; scripts
 `c1-render`, `c1-typing`, `c1-errors`, `c1-long`, `c1-session`, `c1-voice` (S-C3-18), `scr-room`,
 `c3-tools` (S-C3-03 only). No fake speech yet.
 
-**Scenarios** (49):
+**Scenarios** (50):
 S-C1-01 S-C1-02 S-C1-03 S-C1-04 S-C1-05 S-C1-06 S-C1-07 S-C1-08 S-C1-09 S-C1-10 S-C1-11 S-C1-12
-S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33 S-C1-34 S-C1-35
+S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33 S-C1-34 S-C1-35 S-C1-36
 S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23 S-SCR-24
 S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
 
@@ -123,8 +124,8 @@ S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
   here?" (`focus` is C3) and reads no node's health beyond what `morning` and `alerts` carry; asked,
   the agent says what it lacks, as `c3-see.md` §5's standing instructions make it say of a missing
   source.
-- **Fits one night**: 20 build steps against the stand-ins' four (`stand-ins.md` §7), each step
-  closing on its own tests. If the night ends early, steps 18-20 move to the next night ahead of C2,
+- **Fits one night**: 21 build steps against the stand-ins' four (`stand-ins.md` §7), each step
+  closing on its own tests. If the night ends early, steps 18-21 move to the next night ahead of C2,
   and C1's done-when is met then; nothing of C2 starts before.
 - Wall not merged at the C1 night: the scenarios that need it (S-C1-01, S-SCR-02, S-SCR-03,
   S-SCR-04, S-SCR-21, S-SCR-22) stay in C1 and run once the Wall merges; everything else runs on the
@@ -141,7 +142,7 @@ S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
 
 **Done-when**: §2's slice rule for the ids of the row above that the owner's answers select (40 for the recommendations); the board change of §5.1 merged with its tests;
 the first part of `docs/cockpit.md` (setup on one box and as two users, pairing pending Q-O21,
-troubleshooting the room-down line); the demo (`stand-ins.md` §6) answers `how did the night go`.
+troubleshooting the room-down line); the demo (`stand-ins.md` §6) answers `how did the night go`, and the static demo passes S-C1-36 (`c1-talk.md` §15).
 
 ### 3.2 C2 Voice in
 
@@ -275,7 +276,7 @@ by the task that writes them.
 | S-SCR-05, 12 | Show |
 | S-SCR-13, 14, 15, 16 | Pair |
 | S-SCR-20 | C2 |
-| S-C1-01..12, 14..23, 25..35 | C1 |
+| S-C1-01..12, 14..23, 25..36 | C1 |
 | S-C1-13 | C2 |
 | S-C2-01..17, 20..22 | C2 |
 | S-C2B-01, 02 | C2b |
@@ -286,7 +287,7 @@ by the task that writes them.
 | S-C4-14..23 | Canvas |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 123 live ids in all (round 92).
+D55). 124 live ids in all (round 93, S-C1-36).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired
@@ -325,4 +326,4 @@ changing it needs C6 (`c1-talk.md` §5).
 
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
 says go without them): T29 (the events the pane consumes), T26, T27, T41, T44 (the button and pane rects), T56
-and T57 (pairing refusals and the agent's tools, pending Q-O21/Q-O23), T89 (close codes), T91 (a conversation across a restart, pending Q-O24). For C2 also: T42/T95, T69, T84.
+and T57 (pairing refusals and the agent's tools, pending Q-O21/Q-O23), T89 (close codes), T91 (a conversation across a restart, pending Q-O24). The bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are written. For C2 also: T42/T95, T69, T84.

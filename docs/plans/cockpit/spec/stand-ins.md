@@ -392,7 +392,7 @@ URL. Paired at start through `/pair` (the demo has nothing to protect and prints
 automatically`). The `demo` agent script answers, by `match`: `how did the night go`, `what is
 stuck`, `show me vm-b` (a `fly_to`), `put a countdown to the vm-c job on the canvas` (a `place`),
 and anything else with the no-match line of §2.2. The speech script has one utterance per line
-above, in that order. The static `?demo=1` page (no room at all) is T76/T93's, not this.
+above, in that order. The static `?demo=1` page (no room at all) is `c1-talk.md` §15's demo link (D148), not this; with this room behind the page, `?demo=1` uses the room (D148).
 
 ## 7. Build order
 

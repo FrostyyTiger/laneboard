@@ -15,7 +15,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | --- | --- | --- | --- | --- |
 | `README.md` | this index, the room process and ports, the speed budget (B1-B8), the selectors tests use, and the glossary | none | T1, T24, T33 | written |
 | `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3 | part 1 written (T2), part 2 written (T3; T52: room down is the pane's status line only, canvas half in `c4-show-canvas.md` §7.6, D120; T89: S-SCR-24 a refused room link) |
-| `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24; T50: header `READY`/`● WORKING`/`● STOPPING`, folds cut to code and `SHOW EARLIER`, E6 merged into E8, no raw view in C1, S-C1-24 retired; T29: §5.1 the room messages the pane draws from, fresh-screen states, S-C1-25/26; T85: §8 rewritten for steer, S-C1-16 rewritten, S-C1-27/28; T88: queued prompts as snapshot items, S-C1-29; T57: §5.2 the allowlist, refused calls, tools that change things, §5.3 redaction, S-C1-30/31; T40: §7.1 the on-screen keyboard, S-C1-32/33; T96: §1.1 the stack above the input row, S-C1-34; T34: §3 the renderer module and the numeric-cell rule, §5 targets from odd input, S-C1-35) |
+| `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24; T50: header `READY`/`● WORKING`/`● STOPPING`, folds cut to code and `SHOW EARLIER`, E6 merged into E8, no raw view in C1, S-C1-24 retired; T29: §5.1 the room messages the pane draws from, fresh-screen states, S-C1-25/26; T85: §8 rewritten for steer, S-C1-16 rewritten, S-C1-27/28; T88: queued prompts as snapshot items, S-C1-29; T57: §5.2 the allowlist, refused calls, tools that change things, §5.3 redaction, S-C1-30/31; T40: §7.1 the on-screen keyboard, S-C1-32/33; T96: §1.1 the stack above the input row, S-C1-34; T34: §3 the renderer module and the numeric-cell rule, §5 targets from odd input, S-C1-35; T36/T76/T93: §15 the demo link for `?demo=1`, S-C1-36) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the talk key, speech-to-text down or failed; §14 the physical-button API as the later slice C2b | `S-C2-`, `S-C2B-` | T6, T7 | written: part 1 (T6: gestures, 400 ms threshold, `data-talk` states, live words, microphone, S-C2-01..10), part 2 (T7, slimmed by T49: tap the words to stop and fix, DE/EN, `cockpit.stt.*`, the service down or failed (`stt-down`, `stt-failed`), the talk key, the kiosk microphone note, S-C2-11..17, 20, 21; T94: S-C2-22 keyboard up; C2b §14: the button API, S-C2B-01..02) |
 | `c3-see.md` | C3: the MCP server (`laneboard`, loopback HTTP, D58), the seven read tools with params, results and sources, result rules (`asOf`, size caps), board gaps; `focus`, "Ask about this" | `S-C3-` | T8, T9 | written: part 1 (T8: §1-§7, S-C3-01..08), part 2 (T9: §8 `focus`, §9 the hold menu and context chip, S-C3-09..17, sketch `c3-ask.html`); S-C3-18 (T62: the night answered on the C1 night) |
 | `c4-show-canvas.md` | C4: show commands, one camera with the tour, undo; the canvas, kit blocks, custom cards, promotion, how cards leave | `S-C4-` | T10, T11, T12 | part 1 written (T10: §1-§6, show commands `fly_to`/`highlight`/`clear`/`pin`/`compare`/`scrub`, one camera with the tour, show lines, undo, S-C4-01..12, D67-D77); part 2 written (T11: §7-§10, the card area and grid, shelf, `place`, kit blocks `countdown`/`timer`/`status`/`log`/`chart`/`table`/`checklist`/`map`/`text`/`diff`, one-tap removal, S-C4-13..22, D78-D87, sketch `c4-canvas.html`; T52: §7.6 room down on the canvas, S-C4-23/24, D120); part 3 planned (T12) |
@@ -128,6 +128,7 @@ when no value applies.
 | `data-pane` | `open`, `closed`, `column` | the pane | `c1-talk.md` §1-§2 |
 | `data-turn` | `idle`, `thinking`, `working`, `answering`, `stopping` | the room's `turn.state` | `c1-talk.md` §2 |
 | `data-keyboard` | `up`, `held`, `down` | `visualViewport` and the input's focus | `c1-talk.md` §7.1 |
+| `data-cockpit-demo` | none (present or absent) | the page took the demo link (D148) | `c1-talk.md` §15 |
 
 **The conversation and the input row**
 
@@ -137,6 +138,7 @@ when no value applies.
 | `[data-cockpit-open]` | none (text `CHAT` or `CLOSE`) | the opener above the talk button | `screens.md` §4 |
 | `[data-cockpit-line]` with `data-line` | `room-down`, `error`, `hint`, `length` | the one line slot above the input row | `c1-talk.md` §1.1 |
 | `[data-cockpit-input]` | none | the `<textarea>` | `c1-talk.md` §7 |
+| `[data-cockpit-demo-label]` | none (text `DEMO`) | the header's demo label | `c1-talk.md` §15 |
 | `[data-cockpit-send]` with `data-send` | `send`, `stop`, `cancel` | the slot left of the talk button | `c1-talk.md` §8, `c2-voice.md` §3 |
 | `[data-cockpit-newbar]`, its buttons `data-newbar` | `keep`, `start` | the `NEW` bar | `c1-talk.md` §11 |
 | `[data-cockpit-chip]` with `data-node`, `[data-cockpit-chip-remove]` | a node id | the context chip and its `✕` | `c3-see.md` §9 |
@@ -210,6 +212,7 @@ Each word is defined here once; the other files link here instead of redefining 
 - **steer / queued prompt**: a prompt sent while a turn runs goes into that turn; it is **queued**
   (`· QUEUED`, grey) until the agent reads it at its next tool boundary, then **taken**
   (`c1-talk.md` §8, `protocols.md` §3.4, pending Q-O1).
+- **demo link**: a client-side stand-in for the room link, used with `?demo=1` when there is no cockpit; canned turns, no network (`c1-talk.md` §15, D148).
 - **pane**: the cockpit pane: the panel that slides over the current view and shows the
   conversation and the input. It never replaces the view (plan C1). Where the screen has a canvas
   (`split`, `canvas`, `switch`) the same parts are a fixed **column** of the canvas instead, always
