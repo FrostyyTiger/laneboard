@@ -26,8 +26,8 @@ import { createStageSize } from './stage.js';
 import { LOBES, armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
 import {
-  AFTERGLOW, BEACON, COMETS, TWINKLE, WARP, afterglowAt, afterglows, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, cometAt, cometPath, trackComets, trackTwinkles,
-  twinkleAt, warpAt,
+  ACTIVITY, AFTERGLOW, BEACON, WARP, activityLook, afterglowAt, afterglows, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, jobAt, trackJobs, trackWork,
+  warpAt, workAt,
 } from './fx.js';
 
 /**
@@ -312,6 +312,22 @@ function glowTexture(doc) {
   return new THREE.CanvasTexture(c);
 }
 
+/** A thin soft ring (fx=activity): its line at 0.85 of the half-width, nothing inside or out. */
+function ringTexture(doc) {
+  const c = doc.createElement('canvas');
+  c.width = c.height = 128;
+  const x = c.getContext('2d');
+  const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
+  g.addColorStop(0, 'rgb(255 255 255 / 0)');
+  g.addColorStop(0.74, 'rgb(255 255 255 / 0)');
+  g.addColorStop(0.85, 'rgb(255 255 255 / 1)');
+  g.addColorStop(0.96, 'rgb(255 255 255 / 0)');
+  g.addColorStop(1, 'rgb(255 255 255 / 0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+}
+
 /** A dust grain: a smaller, softer disc. */
 function dotTexture(doc) {
   const c = doc.createElement('canvas');
@@ -404,12 +420,12 @@ const pageClock = () => globalThis.performance.now();
  * sprite textures; `clock` is the time the eases count in (the frames'
  * `now`), `makeRenderer` the WebGL renderer (both injectable for tests).
  * `still` (reduced motion, still.js): trouble glows without breathing, the dust stays put.
- * `fx` (fx.js `parseFx`): the effects asked for; `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets,
+ * `fx` (fx.js `parseFx`): the effects asked for; `activity` lights `setActivity`' planets and plays `setJobs`' jobs,
  * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them),
  * `warp` streaks the sky while `setWarp` says the camera flies,
  * `afterglow` rings a cluster whose trouble cleared (it remembers the tones from one `update` to the next).
- * Returns `{ update, setOpen, setSun, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, beams, frame, resize,
- * setQuality, size, camera, world, quality, pixelRatio, comets, twinkles, beacons, afterglows, warp, renderer, dispose }`.
+ * Returns `{ update, setOpen, setSun, setActivity, setJobs, setCritAges, setWarp, drawn, planets, beams, frame, resize,
+ * setQuality, size, camera, world, quality, pixelRatio, activity, jobs, beacons, afterglows, warp, renderer, dispose }`.
  * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
  * `stage` (stage.js, T29) keeps the canvas's css size so no frame reads layout; `size()` gives it to the
  * camera, the labels and the lock.
@@ -620,6 +636,7 @@ export function createGalaxyScene(canvas, {
     m.mesh.material = m.planet || troubled(t) ? planetMat[t] : flatMat[t];
     m.halo.material = haloMat[t];
     m.mark.material = markMat[t] ?? markMat.crit;
+    dress(s, m, ms);
     const from = m.haloSize, to = haloSize(m, t);
     if (!ms || (from === to && r0 === m.radius)) {
       m.haloSize = to; m.size = m.radius; m.mesh.geometry = sphereOf(m); dirty = true; return;
@@ -806,7 +823,7 @@ export function createGalaxyScene(canvas, {
         const o = foldAt(k, m.off);
         const x = s.home.x + o.x * a, y = s.home.y + o.y * a, z = s.home.z + o.z * a;
         m.mesh.position.set(x, y, z);
-        m.mesh.scale.setScalar((a * m.size) / m.mesh.geometry.parameters.radius);
+        m.mesh.scale.setScalar((a * m.size * (m.lift ?? 1)) / m.mesh.geometry.parameters.radius);
         m.halo.position.set(x, y, z);
         m.halo.visible = m.haloSize * a > 0.5;
         m.halo.scale.setScalar(Math.max(1e-3, m.haloSize * a));
@@ -981,26 +998,7 @@ export function createGalaxyScene(canvas, {
     camera.updateProjectionMatrix();
   };
 
-  // --- fx=comets (T13, fx.js): something just travelled a link ----------
-  // One pool again (a head and its tail per comet). Each frame the arc is
-  // read off where its two ends are drawn now (a planet unfolding, a star
-  // gliding), falling back to their sites' stars. Under reduced motion a
-  // comet is its whole arc, still and faint, for the time it would fly.
-  let comets = { flying: [], seen: new Set() };
-  const tails = [];
-  const perComet = 1 + COMETS.tail;
-  if (fx?.has('comets')) {
-    for (let i = 0; i < COMETS.max * perComet; i++) {
-      const sp = new THREE.Sprite(keep(new THREE.SpriteMaterial({
-        map: glowTex, color: tone.calm, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
-      })));
-      sp.name = 'fx-comet';
-      sp.visible = false;
-      tails.push(sp);
-      scene.add(sp);
-    }
-  }
-  /** Every id the galaxy draws (its sites and their members): flowComets' `drawn`. */
+  /** Every id the galaxy draws (its sites and their members): flowJobs' `drawn`. */
   const drawn = () => new Set((world?.sites ?? []).filter((s) => !s.gone).flatMap((s) => [s.id, ...s.members.map((m) => m.id)]));
   /** Every id the galaxy draws as a sphere (its stars and planets): workingPlanets' `planets`. */
   const planets = () => new Set((world?.sites ?? []).filter((s) => !s.gone).flatMap((s) => [s.id, ...s.members.filter((m) => m.planet).map((m) => m.id)]));
@@ -1019,80 +1017,128 @@ export function createGalaxyScene(canvas, {
     return where.get(id) ?? null;
   };
   const pointOf = (id, siteId) => (thingOf(id) ?? thingOf(siteId))?.pos ?? null;
-  /** The comets in the last model (fx.js `flowComets`); ignored unless `fx=comets`. */
-  const setComets = (list) => {
-    if (!tails.length) return;
-    comets = trackComets(comets, list, clock());
-  };
-  const drawComets = (now) => {
-    for (const sp of tails) sp.visible = false;
-    comets.flying = comets.flying.filter((c) => cometAt(c, now) !== undefined);
-    if (!world) return;
-    comets.flying.forEach((c, n) => {
-      const at = cometAt(c, now);
-      const a = pointOf(c.from, c.fromSite), b = pointOf(c.to, c.toSite);
-      if (!at || !a || !b) return;
-      const path = cometPath(a, b);
-      const head = Math.max(COMETS.headMin, Math.min(COMETS.headMax, path.length * COMETS.head));
-      for (let i = 0; i < perComet; i++) {
-        const sp = tails[n * perComet + i];
-        // Still: the whole arc, evenly lit and faint; flying: the head and a tail thinning behind it.
-        const u = still ? (i + 0.5) / perComet : at.u - i * COMETS.gap;
-        if (u < 0) continue;
-        const fall = still ? 0.4 : (1 - i / perComet) ** 1.5 * at.k;
-        const p = path.at(u);
-        sp.material.color.copy(tone[c.tone] ?? tone.calm);
-        sp.position.set(p.x, p.y, p.z);
-        sp.scale.setScalar(head * (still ? 0.5 : 1 - (0.75 * i) / perComet));
-        sp.material.opacity = COMETS.opacity * fall;
-        sp.visible = sp.material.opacity > 0.01;
-      }
-    });
-  };
-
-  // --- fx=twinkle (T14, fx.js): a planet with an agent at work on it ------
-  // One soft light per twinkling planet, from a pool made once, on the
-  // sphere it sits on (it follows the planet as its system opens). Low and
-  // slow; a planet whose own tone is trouble is skipped (it breathes
-  // already). Under reduced motion the light is steady, at half its swing.
-  let twinkles = new Map();
-  const glints = [];
-  if (fx?.has('twinkle')) {
+  // --- fx=activity (night 4 T17, fx.js): what is at work comes forward -----
+  // Pools made once: per lit planet a glow and a thin ring (facing the
+  // camera, on the sphere, following it as its system opens), per job a
+  // flash ring on its target or a grain that stops short of it. A lit calm
+  // planet takes the busy material and grows a step (`m.lift`, eased, read
+  // by place()); a calm planet with nothing at work takes the quiet one.
+  // Trouble is never touched: its own material, no glow, no ring (it
+  // breathes already). Under reduced motion the ring is steady and a job is
+  // its end state, held for as long as it would play.
+  const activity = Boolean(fx?.has('activity'));
+  let work = new Map();
+  let jobs = { playing: [], seen: new Set() };
+  const glows = [], loops = [], flashes = [], misses = [];
+  const actMat = {};
+  if (activity) {
+    const ringTex = keep(ringTexture(doc));
     const light = col(palette.sun);
-    for (let i = 0; i < TWINKLE.max; i++) {
-      const sp = new THREE.Sprite(keep(new THREE.SpriteMaterial({
-        map: glowTex, color: light, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
-      })));
-      sp.name = 'fx-twinkle';
-      sp.visible = false;
-      glints.push(sp);
-      scene.add(sp);
-    }
+    const pool = (list, n, name, map) => {
+      for (let i = 0; i < n; i++) {
+        const sp = new THREE.Sprite(keep(new THREE.SpriteMaterial({
+          map, color: light, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+        })));
+        sp.name = name;
+        sp.visible = false;
+        list.push(sp);
+        scene.add(sp);
+      }
+    };
+    pool(glows, ACTIVITY.max, 'fx-activity', glowTex);
+    pool(loops, ACTIVITY.max, 'fx-activity-ring', ringTex);
+    pool(flashes, ACTIVITY.jobs, 'fx-land', ringTex);
+    pool(misses, ACTIVITY.jobs, 'fx-miss', glowTex);
+    // Busy: its own grey lit a little from inside. Quiet: a step toward the ground.
+    actMat.busy = keep(planetMat.calm.clone());
+    actMat.busy.emissive = tone.calm.clone().lerp(bg, 0.55);
+    actMat.quiet = keep(planetMat.calm.clone());
+    actMat.quiet.color = tone.calm.clone().lerp(bg, 1 - ACTIVITY.quiet);
   }
-  /** The planets with a working session (fx.js `workingPlanets`); ignored unless `fx=twinkle`. */
-  const setTwinkles = (list) => {
-    if (!glints.length) return;
-    twinkles = trackTwinkles(twinkles, list, clock());
+  /** Whether a planet is at work now (lit, not fading out). */
+  const atWork = (id) => work.get(id)?.until === Infinity;
+  /** A calm planet's activity look: the busy or quiet material, and its size step eased over `ms` (0: at once). */
+  const dress = (s, m, ms) => {
+    if (!activity) return;
+    const on = m.planet && m.tone === 'calm';
+    if (on) m.mesh.material = atWork(m.id) ? actMat.busy : actMat.quiet;
+    const to = on && atWork(m.id) ? activityLook(work.get(m.id).count).grow : 1;
+    if (m.liftTo === to) return;
+    const from = m.lift ?? 1;
+    m.liftTo = to;
+    if (!ms || still) { m.lift = to; dirty = true; return; }
+    tween(`${s.id}:lift:${m.id}`, ms, (k) => { m.lift = glide(from, to, k); });
   };
-  const drawTwinkles = (now) => {
-    for (const sp of glints) sp.visible = false;
+  /** The planets at work (fx.js `workingPlanets`); ignored unless `fx=activity`. */
+  const setActivity = (list) => {
+    if (!activity) return;
+    work = trackWork(work, list, clock());
+    for (const s of world?.sites ?? []) for (const m of s.members) dress(s, m, LIVE.recolourMs);
+  };
+  /** The jobs in the last model (fx.js `flowJobs`); ignored unless `fx=activity`. */
+  const setJobs = (list) => {
+    if (!activity) return;
+    jobs = trackJobs(jobs, list, clock());
+  };
+  // The ring texture's line sits at RING_AT of its half-width: a sprite `d` wide shows a ring `d * RING_AT / 2` round.
+  const RING_AT = 0.85;
+  const drawActivity = (now) => {
+    for (const sp of glows) sp.visible = false;
+    for (const sp of loops) sp.visible = false;
     if (!world) return;
+    // One frame height in world units at a point's depth: the floor for what must read from far.
+    const tall = 2 * Math.tan((camera.fov * Math.PI) / 360);
     let i = 0;
-    for (const [id, tw] of twinkles) {
-      const lit = twinkleAt(tw, now, TWINKLE, still);
-      if (lit === undefined) { twinkles.delete(id); continue; }
+    for (const [id, w] of work) {
+      const lit = workAt(w, now, ACTIVITY, still);
+      if (lit === undefined) { work.delete(id); continue; }
       const at = thingOf(id);
-      const sp = glints[i];
-      if (!sp || !at || at.site.gone) continue;
-      const tone = at.member ? at.member.tone : toneOf(at.site.node);
-      if (tone !== 'calm') continue;
+      if (i >= glows.length || !at || at.site.gone) continue;
+      const t = at.member ? at.member.tone : toneOf(at.site.node);
+      if (t !== 'calm') continue;
+      const look = activityLook(w.count);
+      const r = (at.member ? at.member.size * (at.member.lift ?? 1) : SIZE.star) * at.site.alive;
+      const glow = glows[i], ring = loops[i];
       i += 1;
-      const r = at.member ? SIZE.planet : SIZE.star;
-      sp.position.copy(at.pos);
-      sp.scale.setScalar(Math.max(1e-3, r * TWINKLE.size * at.site.alive));
-      sp.material.opacity = TWINKLE.opacity * lit.k * (TWINKLE.floor + (1 - TWINKLE.floor) * lit.glimmer);
-      sp.visible = sp.material.opacity > 0.005;
+      const far = tall * camera.position.distanceTo(at.pos) * at.site.alive;
+      glow.position.copy(at.pos);
+      glow.scale.setScalar(Math.max(1e-3, r * ACTIVITY.glow, 2 * far * ACTIVITY.minGlow));
+      glow.material.opacity = look.glow * lit.k;
+      glow.visible = glow.material.opacity > 0.005;
+      ring.position.copy(at.pos);
+      ring.scale.setScalar(Math.max(1e-3, (2 * Math.max(r * ACTIVITY.ring, far * ACTIVITY.minRing)) / RING_AT));
+      ring.material.opacity = ACTIVITY.ringOpacity * look.ring * lit.k * (ACTIVITY.ringFloor + (1 - ACTIVITY.ringFloor) * lit.ring);
+      ring.visible = ring.material.opacity > 0.005;
     }
+  };
+  const drawJobs = (now) => {
+    for (const sp of flashes) sp.visible = false;
+    for (const sp of misses) sp.visible = false;
+    jobs.playing = jobs.playing.filter((j) => jobAt(j, now) !== undefined);
+    if (!world) return;
+    const tall = 2 * Math.tan((camera.fov * Math.PI) / 360);
+    jobs.playing.forEach((j, n) => {
+      const at = jobAt(j, now, ACTIVITY, still);
+      const a = pointOf(j.from, j.fromSite), b = pointOf(j.to, j.toSite);
+      if (!at || !a || !b) return;
+      if (at.flash) {
+        const sp = flashes[n];
+        const [f0, f1] = ACTIVITY.flash;
+        // Its world size, grown as a whole when that is under the floor from this far.
+        const up = Math.max(1, (tall * camera.position.distanceTo(b) * ACTIVITY.flashMin) / (SIZE.planet * f1));
+        sp.position.copy(b);
+        sp.scale.setScalar((2 * SIZE.planet * up * (f0 + (f1 - f0) * at.flash.r)) / RING_AT);
+        sp.material.opacity = ACTIVITY.flashOpacity * at.flash.k;
+        sp.visible = sp.material.opacity > 0.005;
+        return;
+      }
+      const sp = misses[n], u = at.miss.u;
+      sp.position.set(a.x + (b.x - a.x) * u, a.y + (b.y - a.y) * u, a.z + (b.z - a.z) * u);
+      const size = Math.max(SIZE.planet * ACTIVITY.missSize, 2 * tall * camera.position.distanceTo(sp.position) * ACTIVITY.missMin);
+      sp.scale.setScalar(size * (1 + 1.5 * at.miss.spread));
+      sp.material.opacity = ACTIVITY.missOpacity * at.miss.k;
+      sp.visible = sp.material.opacity > 0.005;
+    });
   };
 
   // --- fx=beacon (T21, night 3 T9; fx.js): how long a crit has lasted -----
@@ -1464,8 +1510,7 @@ export function createGalaxyScene(canvas, {
     // The dust turns once in about 26 minutes: alive under a held camera, never a motion you notice.
     dust.rotation.y = dustTurn(now, still);
     holdDust();
-    if (tails.length) drawComets(now);
-    if (glints.length) drawTwinkles(now);
+    if (activity) { drawActivity(now); drawJobs(now); }
     if (pillars.length) drawBeacons(now);
     if (rings.length) drawAfterglows(now);
     if (warpParts.length) drawWarp();
@@ -1514,15 +1559,17 @@ export function createGalaxyScene(canvas, {
 
   return {
     update, setOpen, setHeld: (id) => { held = id ?? null; },
-    setSun: (look) => { if (look) sunWant = look; }, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, beams, frame, resize, setQuality, camera,
+    setSun: (look) => { if (look) sunWant = look; }, setActivity, setJobs, setCritAges, setWarp, drawn, planets, beams, frame, resize, setQuality, camera,
     size: sized.get,
     renderer, dispose,
     get world() { return world; },
     get quality() { return quality; },
     /** The pixel ratio the canvas is drawn at now (the level's, capped by dpr, or the pin). */
     get pixelRatio() { return pixelRatio; },
-    get comets() { return comets.flying; },
-    get twinkles() { return twinkles; },
+    /** The planets lit now (fx=activity): id → `{ id, site, count, t0, until }` (fx.js trackWork). */
+    get activity() { return work; },
+    /** The jobs playing now (fx=activity): `{ key, from, to, failed, t0 }` (fx.js trackJobs). */
+    get jobs() { return jobs.playing; },
     get beacons() { return beacons; },
     /** The clears remembered now (fx=afterglow): site id → `{ id, tone, at }` (fx.js afterglows). */
     get afterglows() { return glowState?.clears ?? new Map(); },

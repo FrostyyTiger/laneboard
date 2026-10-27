@@ -153,6 +153,16 @@ test('large demo live: the cycle is pure and repeats every period; the door open
   for (const t of LARGE_TROUBLE) assert.ok(t.to > t.from && t.to <= LARGE_PERIOD_TICKS, t.guest);
 });
 
+test('large demo live: every fifth flow event is a failed job (fx=activity), the rest land', () => {
+  const flows = [];
+  for (let n = 0; n < LARGE_PERIOD_TICKS; n++) for (const e of demoLargeCycle(n).events) if (e.link) flows.push([n, e]);
+  const failed = flows.filter(([, e]) => e.kind === 'failed');
+  assert.deepEqual(failed.map(([n]) => n), [0, 15, 30, 45, 60, 75]);
+  for (const [, e] of failed) assert.match(e.text, / failed$/);
+  for (const [, e] of flows) assert.ok(e.kind === 'ok' || e.kind === 'failed');
+  assert.ok(flows.length - failed.length >= 4 * failed.length, 'most land');
+});
+
 test('large demo live: the hub reads each event once, flow events carry their link to a node', () => {
   const live = createLargeLive();
   const topo = parseTopology(structuredClone(DEMO_TOPOLOGY_LARGE));

@@ -501,7 +501,8 @@ export function demoFeedsLarge(now = Date.now()) {
 // so trouble overlaps, every one clears and returns, and ticks 85-89 are calm.
 // The front door opens three times a period (tick 5, 35, 65), and every third
 // tick something travels one of the topology's flow links, round robin: a feed
-// event with `link`, which the Map draws as a comet.
+// event with `link`, which the Map draws as a comet; every fifth of them (each
+// 15th tick) fails (kind `failed`: the galaxy's `fx=activity` lets it stop short).
 export const LARGE_PERIOD_TICKS = 90;
 
 /** Each trouble of the period: where (feed source, guest name), its alert, its window in ticks. */
@@ -529,7 +530,11 @@ export function demoLargeCycle(n) {
   if (DOOR_TICKS.includes(t)) events.push({ source: 'home', guest: 'front-door', kind: 'ok', text: 'front door opened' });
   if (n % 3 === 0) {
     const l = LARGE_FLOWS[(n / 3) % LARGE_FLOWS.length];
-    events.push({ ...roomSource.get(l.from), kind: 'ok', text: `${l.from} ${l.label} → ${l.to}`, link: `${l.from}>${l.to}` });
+    const failed = n % 15 === 0;
+    events.push({
+      ...roomSource.get(l.from), kind: failed ? 'failed' : 'ok',
+      text: `${l.from} ${l.label} → ${l.to}${failed ? ' failed' : ''}`, link: `${l.from}>${l.to}`,
+    });
   }
   return { alerts, events };
 }

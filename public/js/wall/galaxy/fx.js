@@ -2,16 +2,6 @@
 // `galaxy.html?fx=<name>` (comma-separated, unknown names ignored, all off
 // by default), so the owner can see each and keep or drop it.
 //
-// `comets` (T13): something that just travelled a link (an event with
-// `link`: a job's image pushed, a deploy, a dump; the Map's comet) is one
-// small comet with a tail, once, from the planet it left to the planet it
-// lands on, arcing over the plane. Grey unless the event itself is trouble.
-//
-// `twinkle` (T14): a planet with a working session on it (an agent at work:
-// a lane or session whose status is `working` and calm) glimmers softly,
-// slow and low, in the grey of a calm thing: "busy", never "look here". A
-// planet in trouble does not twinkle (it breathes already: one motion per thing).
-//
 // `beacon` (T21, r15-dreamer): above each cluster in crit a thin pillar of
 // light rises from the plane, its height how long the crit has lasted (log
 // scale, capped), so two crits are no longer twins: the tall one has been
@@ -38,12 +28,20 @@
 // Outline only, never filled, never pulsing, fainter than any live nebula
 // (§2.1). The page remembers the clears it has seen (no server route, D2);
 // a reload forgets them. A site back in trouble drops its ring.
+//
+// `activity` (night 4 T17, research Q18 and night 2's Q8 `fade`/`miss`;
+// replaces night 2's `comets` and `twinkle`): what is at work comes
+// forward, what is quiet recedes. A planet with an agent or a job at work is
+// a step brighter and larger and wears a thin ring breathing once in about
+// 5 s; a calm planet with nothing at work dims a step. A job that lands
+// flashes its target once; a failed one leaves, stops short and breaks up.
+// Light, size and one slow motion, never hue: trouble keeps the colour.
 
 import { hash } from './layout.js';
 import { toneOf, worseTone } from './palette.js';
 
 /** Every effect this page knows, in the order the README lists them. */
-export const FX_NAMES = Object.freeze(['comets', 'twinkle', 'beacon', 'warp', 'afterglow']);
+export const FX_NAMES = Object.freeze(['beacon', 'warp', 'afterglow', 'activity']);
 
 /** The effects `?fx=` asks for (a `location.search` string or URLSearchParams): a Set of known names. */
 export function parseFx(search = '') {
@@ -53,6 +51,7 @@ export function parseFx(search = '') {
 }
 
 const MAX_DEPTH = 50;
+const TROUBLE = new Set(['warn', 'crit']);
 
 /** The site a node is in (a `site` or `host` up its parents), else null. */
 function placeOf(id, byId) {
@@ -62,30 +61,139 @@ function placeOf(id, byId) {
 }
 
 /**
- * The comet's timing and look: one flight takes `travelMs` (eased), once
- * per event; an event older than `windowMs` (by the model's clock) when
- * the page first sees it flies no more; at most `max` in the sky at once.
- * `head` is the bright sprite's size as a share of the flight's length
- * (clamped to `headMin`..`headMax` world units), `tail` how many smaller
- * ones follow it, `gap` their spacing along the arc (0..1), `lift` how high
- * the arc rises over the straight line (a share of its length, `liftMin`).
+ * The activity's look (night 4 T17, research Q18; replaces night 2's
+ * `comets` and `twinkle`): what is at work comes forward, what is quiet
+ * recedes, by light, size and one slow motion, never by hue (hue is for
+ * trouble). A working planet is `grow` times its size (a step, never a
+ * jump: Q18's 10-15 %, `growMore` more at `full` sessions or jobs) and
+ * wears a glow `glow` times its sphere at `glowOpacity` (`glowMore` more at
+ * `full`), and a thin ring `ring` times its sphere that breathes once in
+ * `periodMs` (each planet at its own phase), its strength between `ringFloor`
+ * and 1 of `ringOpacity`; a calm planet with nothing at work recedes to
+ * `quiet` of its light. Seen from far (the overview) the glow and the ring
+ * never shrink under `minGlow` and `minRing` of the frame's height (radius),
+ * so a planet at work reads from 3 m. Work comes and goes over `fadeMs`; at most `max` lit.
+ * All under the trouble halos (HALO.warn 0.8): busy is never "look here".
+ *
+ * A job that travelled a link and landed (`flowJobs`) flashes its target
+ * once: one ring opening from `flash[0]` to `flash[1]` times a planet over
+ * `flashMs`, at `flashOpacity` (seen from far, wide open at least `flashMin`
+ * of the frame's height). A failed one does not land (Q8 `miss`): a
+ * grain leaves the planet it came from toward its target, stops at `reach`
+ * of the way and breaks up over `missMs` (at least `missMin` of the frame), grey (no red line without a name:
+ * the failure's own alert, if any, carries the hue). An event older than
+ * `windowMs` when the page first sees it plays no more; at most `jobs` at once.
  */
-export const COMETS = Object.freeze({
-  travelMs: 3200, windowMs: 10000, max: 6,
-  head: 0.07, headMin: 22, headMax: 90, tail: 10, gap: 0.016, opacity: 0.55,
-  lift: 0.3, liftMin: 60,
+export const ACTIVITY = Object.freeze({
+  grow: 1.12, growMore: 0.03, full: 4,
+  glow: 6, glowOpacity: 0.34, glowMore: 0.1,
+  ring: 2.6, ringOpacity: 0.5, ringFloor: 0.45, periodMs: 4800,
+  quiet: 0.6, fadeMs: 1200, max: 24, minGlow: 0.022, minRing: 0.011,
+  flashMs: 900, flash: Object.freeze([1.6, 9]), flashOpacity: 0.7, flashMin: 0.035,
+  missMs: 1800, reach: 0.42, missSize: 4, missOpacity: 0.55, missMin: 0.012,
+  windowMs: 10000, jobs: 6,
 });
 
 /**
- * The comets in `model`: one per event that travelled a link (`event.link`,
+ * How a planet with `count` things at work on it looks (count 0: quiet):
+ * `{ glow, grow, ring, light }`, `glow` the glow's strength (0 when quiet),
+ * `grow` its size factor, `ring` 1 when it wears the ring, `light` its own
+ * light (1 at work, `quiet` when not). More at work is a little brighter
+ * and larger, capped at `full`; one at work is already plainly lit.
+ */
+export function activityLook(count, timing = ACTIVITY) {
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  if (n === 0) return { glow: 0, grow: 1, ring: 0, light: timing.quiet };
+  const more = Math.min(1, (n - 1) / (timing.full - 1));
+  return { glow: timing.glowOpacity + timing.glowMore * more, grow: timing.grow + timing.growMore * more, ring: 1, light: 1 };
+}
+
+const AT_WORK = new Set(['lane', 'session', 'service', 'job']);
+
+/**
+ * The planets at work in `model`: one per planet with something working
+ * below it (a `lane` or `session` with an agent at work, a `service` or
+ * `job` running one: status `working` and tone calm; a stuck one is warn,
+ * trouble's to show). Each is the nearest thing up its parents in `planets`
+ * (ids the galaxy draws as planets or stars), so a session in a folded lane
+ * lights its builder and a job in a service lights its room. `{ id, site,
+ * count }`, `count` the things at work on it, `site` its site. In the model's order.
+ */
+export function workingPlanets(model, planets) {
+  const nodes = Array.isArray(model?.nodes) ? model.nodes : [];
+  const byId = new Map(nodes.filter((n) => n && n.id != null).map((n) => [n.id, n]));
+  const shown = planets instanceof Set ? planets : new Set(planets ?? []);
+  const out = new Map();
+  for (const n of nodes) {
+    if (!n || !AT_WORK.has(n.kind) || n.status !== 'working' || toneOf(n) !== 'calm') continue;
+    let p = shown.has(n.id) ? n : byId.get(n.parent);
+    for (let k = 0; p && !shown.has(p.id) && k < MAX_DEPTH; k++) p = byId.get(p.parent);
+    if (!p || !shown.has(p.id)) continue;
+    const had = out.get(p.id);
+    if (had) { had.count += 1; continue; }
+    out.set(p.id, { id: p.id, site: placeOf(p.id, byId), count: 1 });
+  }
+  return [...out.values()];
+}
+
+/**
+ * The planets the page lights at page time `now`: `prev` (a Map by id, or
+ * null) with `list` (workingPlanets'). One that stays keeps its start and
+ * takes the new count; one the model drops fades out from `now` (`until`);
+ * one that comes back while fading picks up from where its light is. At
+ * most `max`, the oldest first.
+ */
+export function trackWork(prev, list, now, timing = ACTIVITY) {
+  const old = prev instanceof Map ? prev : new Map();
+  const next = new Map();
+  for (const w of list ?? []) {
+    const had = old.get(w.id);
+    let t0 = now;
+    if (had) {
+      const lit = workAt(had, now, timing);
+      t0 = had.until === Infinity ? had.t0 : now - (lit ? lit.k : 0) * timing.fadeMs;
+    }
+    next.set(w.id, { id: w.id, site: w.site, count: Math.max(1, w.count ?? 1), t0, until: Infinity });
+  }
+  for (const [id, w] of old) {
+    if (next.has(id)) continue;
+    const gone = { ...w, until: Math.min(w.until, now) };
+    if (workAt(gone, now, timing) !== undefined) next.set(id, gone);
+  }
+  const keep = [...next.values()].sort((a, b) => a.t0 - b.t0).slice(0, timing.max);
+  return new Map(keep.map((w) => [w.id, w]));
+}
+
+/**
+ * How a lit planet shines at `now`: `{ k, ring }`, `k` 0..1 its fade in or
+ * out, `ring` 0..1 the ring's slow breath (one sine of `periodMs`, its own
+ * phase by its id; 1 and still when `still`); `undefined` once it has faded out.
+ */
+export function workAt(w, now, timing = ACTIVITY, still = false) {
+  const into = still ? 1 : Math.max(0, Math.min(1, (now - w.t0) / timing.fadeMs));
+  const out = w.until === Infinity ? 1 : 1 - (now - w.until) / timing.fadeMs;
+  if (out <= 0) return undefined;
+  const k = Math.min(into, Math.min(1, out));
+  if (still) return { k, ring: 1 };
+  const ph = hash(`${w.id}|activity`) * Math.PI * 2;
+  return { k, ring: 0.5 + 0.5 * Math.sin((now / timing.periodMs) * Math.PI * 2 + ph) };
+}
+
+const FAILED = new Set(['fail', 'failed', 'error']);
+
+/** Whether a link event says its job failed: a failed kind (`fail`, `failed`, `error`) or a crit one. */
+export const jobFailed = (e) => FAILED.has(String(e?.kind ?? '').toLowerCase()) || toneOf(e?.kind) === 'crit';
+
+/**
+ * The jobs in `model`: one per event that travelled a link (`event.link`,
  * by the link's id or `from>to`) in the last `windowMs`, by the model's own
  * clock. Each end is the nearest thing the galaxy draws (`drawn`: ids of
  * sites and their members) up the node's parents: `{ key, from, to,
- * fromSite, toSite, tone, ageMs }`, `key` the event's own (time and link),
- * so the same event in the next model is the same comet. A link whose two
+ * fromSite, toSite, failed, ageMs }`, `key` the event's own (time and link),
+ * so the same event in the next model is the same job. A link whose two
  * ends are drawn as one thing (a folded service in its own room) is none.
  */
-export function flowComets(model, drawn, { windowMs = COMETS.windowMs } = {}) {
+export function flowJobs(model, drawn, { windowMs = ACTIVITY.windowMs } = {}) {
   const nodes = Array.isArray(model?.nodes) ? model.nodes : [];
   const links = Array.isArray(model?.links) ? model.links : [];
   const events = Array.isArray(model?.events) ? model.events : [];
@@ -116,149 +224,54 @@ export function flowComets(model, drawn, { windowMs = COMETS.windowMs } = {}) {
     const key = `${Number(e.at) || 0}:${e.link}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ key, from, to, fromSite, toSite, tone: toneOf(e.kind), ageMs });
+    out.push({ key, from, to, fromSite, toSite, failed: jobFailed(e), ageMs });
   }
   return out.sort((a, b) => b.ageMs - a.ageMs);
 }
 
 /**
- * The comets the page flies at page time `now`: `prev` (`{ flying, seen }`
- * or null) with `list` (flowComets') added. A comet starts when the page
- * first sees its event and flies once; `seen` remembers the keys it has
- * flown (the last few hundred) so the next model's copy of the same event
- * never flies it again. A finished comet leaves `flying`; when `max` are in
- * the sky a new one waits for the next model (and is dropped once too old).
+ * The jobs the page plays at page time `now`: `prev` (`{ playing, seen }`
+ * or null) with `list` (flowJobs') added. A job plays once, from when the
+ * page first sees its event; `seen` remembers the keys it has played (the
+ * last few hundred) so the next model's copy never plays it again. A
+ * finished one leaves `playing`; when `jobs` play a new one waits for the
+ * next model (and is dropped once too old).
  */
-export function trackComets(prev, list, now, timing = COMETS) {
+export function trackJobs(prev, list, now, timing = ACTIVITY) {
   const seen = new Set(prev?.seen ?? []);
-  const flying = [...(prev?.flying ?? [])].filter((c) => cometAt(c, now, timing) !== undefined);
-  for (const c of list ?? []) {
-    if (seen.has(c.key) || flying.length >= timing.max) continue;
-    seen.add(c.key);
-    flying.push({ key: c.key, from: c.from, to: c.to, fromSite: c.fromSite, toSite: c.toSite, tone: c.tone, t0: now });
+  const playing = [...(prev?.playing ?? [])].filter((j) => jobAt(j, now, timing) !== undefined);
+  for (const j of list ?? []) {
+    if (seen.has(j.key) || playing.length >= timing.jobs) continue;
+    seen.add(j.key);
+    playing.push({ key: j.key, from: j.from, to: j.to, fromSite: j.fromSite, toSite: j.toSite, failed: Boolean(j.failed), t0: now });
   }
-  const keep = [...seen].slice(-400);
-  return { flying, seen: new Set(keep) };
+  return { playing, seen: new Set([...seen].slice(-400)) };
 }
 
 /**
- * Where a comet is at `now`: `{ u, k }`, `u` 0..1 along its arc (eased: it
- * leaves and lands gently), `k` 0..1 its strength (in at the start, out as
- * it lands); `null` before it starts; `undefined` once it has landed.
+ * Where a job is at `now`. A landed one: `{ flash: { r, k } }`, its ring
+ * `r` 0..1 of the way open (eased out: fast, then settling) and `k` its
+ * strength (in at once, out as it opens); still: half open, steady. A failed
+ * one: `{ miss: { u, k, spread } }`, `u` how far it got from its source
+ * (0..`reach`, eased out: it slows and stops short), `k` its strength
+ * (gone as it breaks up), `spread` 0..1 the break-up; still: stopped at
+ * `reach`, steady. Never both: a failed job never flashes. `null` before
+ * it starts; `undefined` once it is over.
  */
-export function cometAt(comet, now, timing = COMETS) {
-  const p = (now - comet.t0) / timing.travelMs;
+export function jobAt(job, now, timing = ACTIVITY, still = false) {
+  const ms = job.failed ? timing.missMs : timing.flashMs;
+  const p = (now - job.t0) / ms;
   if (p < 0) return null;
   if (p >= 1) return undefined;
-  const u = p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2;
-  const k = Math.min(1, p / 0.1, (1 - p) / 0.15);
-  return { u, k };
-}
-
-/**
- * A comet's arc from `a` to `b` (`{ x, y, z }`): a curve lifted over the
- * straight line by `lift` of its length (at least `liftMin`), so it flies
- * over the plane, not along it. Returns `{ at(u), length }`.
- */
-export function cometPath(a, b, timing = COMETS) {
-  const length = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
-  const h = Math.max(timing.liftMin, length * timing.lift);
-  const c = { x: (a.x + b.x) / 2, y: Math.max(a.y, b.y) + h, z: (a.z + b.z) / 2 };
-  const at = (u) => {
-    const t = Math.max(0, Math.min(1, u)), s = 1 - t;
-    return {
-      x: s * s * a.x + 2 * s * t * c.x + t * t * b.x,
-      y: s * s * a.y + 2 * s * t * c.y + t * t * b.y,
-      z: s * s * a.z + 2 * s * t * c.z + t * t * b.z,
-    };
-  };
-  return { at, length };
-}
-
-/**
- * The twinkle's timing and look: two slow waves (`periods`, ms, not
- * multiples of each other, so it never ticks like a clock) set how bright
- * the glimmer is, each planet at its own pace within `spread` of them; it comes and goes over `fadeMs`; at most `max` at once.
- * `size` is the light's size against the sphere it sits on, `opacity` its
- * peak and `floor` its low share of it (low contrast: never off, never loud).
- */
-export const TWINKLE = Object.freeze({
-  periods: [5600, 3700], spread: 0.3, fadeMs: 1200, max: 24, size: 5, opacity: 0.3, floor: 0.3,
-});
-
-const AT_WORK = new Set(['lane', 'session']);
-
-/**
- * The planets that twinkle in `model`: one per planet with a working
- * session below it (a `lane` or `session` node whose status is `working`
- * and whose tone is calm: a stuck one is warn, trouble's to show). Each is
- * the nearest thing up the session's parents in `planets` (ids the galaxy
- * draws as planets or stars), so a session in a folded lane twinkles its
- * builder. `{ id, site, count }`, `count` the working sessions on it, `site`
- * its site (the star to fall back on). In the model's order.
- */
-export function workingPlanets(model, planets) {
-  const nodes = Array.isArray(model?.nodes) ? model.nodes : [];
-  const byId = new Map(nodes.filter((n) => n && n.id != null).map((n) => [n.id, n]));
-  const shown = planets instanceof Set ? planets : new Set(planets ?? []);
-  const out = new Map();
-  for (const n of nodes) {
-    if (!n || !AT_WORK.has(n.kind) || n.status !== 'working' || toneOf(n) !== 'calm') continue;
-    let p = byId.get(n.parent);
-    for (let k = 0; p && !shown.has(p.id) && k < MAX_DEPTH; k++) p = byId.get(p.parent);
-    if (!p || !shown.has(p.id)) continue;
-    const had = out.get(p.id);
-    if (had) { had.count += 1; continue; }
-    out.set(p.id, { id: p.id, site: placeOf(p.id, byId), count: 1 });
+  const out = (x) => 1 - (1 - x) ** 3;
+  if (!job.failed) {
+    if (still) return { flash: { r: 0.5, k: 0.6 } };
+    return { flash: { r: out(p), k: Math.min(1, p / 0.08) * (1 - p) ** 1.5 } };
   }
-  return [...out.values()];
-}
-
-/**
- * The twinkles the page draws at page time `now`: `prev` (a Map by id, or
- * null) with `list` (workingPlanets'). One that stays keeps its start; one
- * the model drops fades out from `now` (`until`); one that comes back while
- * fading picks up from where its light is. At most `max`, the oldest first.
- */
-export function trackTwinkles(prev, list, now, timing = TWINKLE) {
-  const old = prev instanceof Map ? prev : new Map();
-  const next = new Map();
-  for (const w of list ?? []) {
-    const had = old.get(w.id);
-    let t0 = now;
-    if (had) {
-      const lit = twinkleAt(had, now, timing);
-      t0 = had.until === Infinity ? had.t0 : now - (lit ? lit.k : 0) * timing.fadeMs;
-    }
-    next.set(w.id, { id: w.id, site: w.site, t0, until: Infinity });
-  }
-  for (const [id, w] of old) {
-    if (next.has(id)) continue;
-    const gone = { ...w, until: Math.min(w.until, now) };
-    if (twinkleAt(gone, now, timing) !== undefined) next.set(id, gone);
-  }
-  const keep = [...next.values()].sort((a, b) => a.t0 - b.t0).slice(0, timing.max);
-  return new Map(keep.map((w) => [w.id, w]));
-}
-
-/**
- * How a twinkle shines at `now`: `{ k, glimmer }`, `k` 0..1 its fade in or
- * out, `glimmer` 0..1 the slow waves (each planet at its own phase, by
- * its id; 0.5 and still when `still`); `undefined` once it has faded out.
- */
-export function twinkleAt(tw, now, timing = TWINKLE, still = false) {
-  const into = Math.max(0, Math.min(1, (now - tw.t0) / timing.fadeMs));
-  const out = tw.until === Infinity ? 1 : 1 - (now - tw.until) / timing.fadeMs;
-  if (out <= 0) return undefined;
-  const k = Math.min(into, Math.min(1, out));
-  if (still) return { k, glimmer: 0.5 };
-  // Its own phase and pace by its id (salted after the id: `builder-a` and
-  // `builder-b` would otherwise hash a hair apart and glimmer in step).
-  const ph = hash(`${tw.id}|twinkle`) * Math.PI * 2;
-  const pace = 1 - timing.spread / 2 + timing.spread * hash(`${tw.id}|pace`);
-  const [p0, p1] = timing.periods.map((p) => p * pace);
-  const glimmer = 0.5 + 0.3 * Math.sin((now / p0) * Math.PI * 2 + ph) + 0.2 * Math.sin((now / p1) * Math.PI * 2 + ph * 2);
-  return { k, glimmer };
+  if (still) return { miss: { u: timing.reach, k: 0.6, spread: 0 } };
+  const go = Math.min(1, p / 0.55); // flies, slows, stops
+  const brk = Math.max(0, (p - 0.55) / 0.45); // then breaks up where it stopped
+  return { miss: { u: timing.reach * out(go), k: Math.min(1, p / 0.06) * (1 - brk) ** 1.5, spread: brk } };
 }
 
 /**
@@ -511,8 +524,6 @@ export const AFTERGLOW = Object.freeze({
 
 /** The hue steps a ring cools through, hottest first ('grey' is --text-3, the calm tone's). */
 export const AFTERGLOW_STEPS = Object.freeze(['crit', 'warn', 'grey']);
-
-const TROUBLE = new Set(['warn', 'crit']);
 
 /**
  * The clears the page remembers at page time `now`: `prev` (this function's

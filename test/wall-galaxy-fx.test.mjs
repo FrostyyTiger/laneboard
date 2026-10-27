@@ -1,14 +1,14 @@
 // The galaxy's effects (Wall plan night 2 T12, README §7.C, D9): `?fx=`
 // turns them on one by one, none by default (night 4 T15 removed `lanes`);
-// `comets` (T13) flies one comet per event that travelled a link, once,
-// from the planet it left to the one it lands on; `twinkle` (T14) lights a
-// planet softly while a session on it is at work.
+// `activity` (T17, replacing night 2's `comets` and `twinkle`) lights what
+// is at work and dims what is quiet, flashes a job's target once when it
+// lands and lets a failed one stop short.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   AFTERGLOW, AFTERGLOW_STEPS, afterglowAt, afterglows,
-  BEACON, COMETS, FX_NAMES, TWINKLE, WARP, beaconAt, beaconHeight, beaconNear, beaconScale, beaconWidth, beamProfile, coreProfile, cometAt, critAges, cometPath, flowComets, parseFx, trackComets,
-  trackTwinkles, twinkleAt, workingPlanets,
+  ACTIVITY, BEACON, FX_NAMES, WARP, activityLook, beaconAt, beaconHeight, beaconNear, beaconScale, beaconWidth, beamProfile, coreProfile, critAges, flowJobs,
+  jobAt, jobFailed, parseFx, trackJobs, trackWork, workAt, workingPlanets,
   warpAt, warpTail,
 } from '../public/js/wall/galaxy/fx.js';
 import * as THREE from '../public/vendor/three/three.module.js';
@@ -20,14 +20,13 @@ import { ndcOf } from '../public/js/wall/galaxy/framing.js';
 test('parseFx: nothing by default, known names only, comma-separated or repeated, any case', () => {
   assert.deepEqual([...parseFx('')], []);
   assert.deepEqual([...parseFx('?demo=1')], []);
-  assert.deepEqual([...parseFx('?fx=comets,bogus')], ['comets']);
+  assert.deepEqual([...parseFx('?fx=activity,bogus')], ['activity']);
   assert.deepEqual([...parseFx('?fx=bogus')], []);
-  assert.deepEqual([...parseFx('?fx= Comets ')], ['comets']);
-  assert.deepEqual([...parseFx('?fx=bogus&fx=comets')], ['comets']);
-  assert.deepEqual([...parseFx(new URLSearchParams('fx=comets'))], ['comets']);
-  assert.deepEqual([...parseFx('?fx=comets,beacon')].sort(), ['beacon', 'comets']);
-  assert.deepEqual([...parseFx('?fx=beacon')], ['beacon'], 'comets only when asked');
-  assert.deepEqual([...parseFx('?fx=twinkle,bogus')], ['twinkle']);
+  assert.deepEqual([...parseFx('?fx= Activity ')], ['activity']);
+  assert.deepEqual([...parseFx('?fx=bogus&fx=activity')], ['activity']);
+  assert.deepEqual([...parseFx(new URLSearchParams('fx=activity'))], ['activity']);
+  assert.deepEqual([...parseFx('?fx=activity,beacon')].sort(), ['activity', 'beacon']);
+  assert.deepEqual([...parseFx('?fx=beacon')], ['beacon'], 'activity only when asked');
   assert.deepEqual([...parseFx('?fx=beacon')], ['beacon']);
   assert.deepEqual([...parseFx('?fx=warp,beacon')].sort(), ['beacon', 'warp']);
   assert.deepEqual([...parseFx('?fx=beacon')].includes('warp'), false, 'warp only when asked');
@@ -79,141 +78,30 @@ function sceneAt(opts = {}) {
   return { galaxy, at };
 }
 
-// --- fx=comets ------------------------------------------------------------------
+// --- fx=activity ------------------------------------------------------------------
 
-test('flowComets: an event along a link is a comet from the drawn thing it left to the one it lands on', () => {
-  const links = [{ id: 'dump', from: 'db-svc', to: 'storage', kind: 'flow' }, { from: 'db', to: 'api', kind: 'flow' }];
-  const events = [
-    { at: 97_000, node: 'db', kind: 'ok', text: 'db dumps → storage', link: 'dump' },
-    { at: 99_000, node: 'db', kind: 'crit', text: 'deploy failed', link: 'db>api' },
-    { at: 99_500, node: 'db', kind: 'ok', text: 'no link' },
-  ];
-  // db-svc is drawn: it is its own end.
-  const drawn = ['hv1', 'hv2', 'remote', 'db', 'api', 'db-svc', 'storage', 'nas'];
-  assert.deepEqual(flowComets(model({ links, events }), drawn), [
-    { key: '97000:dump', from: 'db-svc', to: 'storage', fromSite: 'hv1', toSite: 'hv2', tone: 'calm', ageMs: 3000 },
-    { key: '99000:db>api', from: 'db', to: 'api', fromSite: 'hv1', toSite: 'hv1', tone: 'crit', ageMs: 1000 },
-  ], 'oldest first; a failed one in its hue');
-  // db-svc not drawn: the comet leaves its room.
-  assert.equal(flowComets(model({ links, events }), drawn.filter((d) => d !== 'db-svc'))[0].from, 'db');
+test('activity replaces comets and twinkle (night 4 T17): neither is a name any more', () => {
+  assert.deepEqual([...FX_NAMES], ['beacon', 'warp', 'afterglow', 'activity']);
+  assert.deepEqual([...parseFx('?fx=comets,twinkle')], []);
+  assert.deepEqual([...parseFx('?fx=twinkle,activity')], ['activity']);
 });
 
-test('flowComets: too old, unknown link, two ends drawn as one, or nothing drawn is no comet', () => {
-  const links = [{ from: 'db-svc', to: 'db', kind: 'flow' }, { from: 'db', to: 'storage', kind: 'flow' }];
-  const old = { at: 100_000 - COMETS.windowMs - 1, link: 'db>storage' };
-  const events = [old, { at: 99_000, link: 'nowhere>else' }, { at: 99_000, link: 'db-svc>db' }];
-  assert.deepEqual(flowComets(model({ links, events }), ['hv1', 'hv2', 'db', 'storage']), [], 'db-svc folds into db');
-  assert.deepEqual(flowComets(model({ links, events: [{ at: 99_000, link: 'db>storage' }] }), []), []);
-  assert.deepEqual(flowComets({}, ['hv1']), []);
-  assert.deepEqual(flowComets(null, null), []);
-  // The same event twice in one model is one comet.
-  const twice = [{ at: 99_000, link: 'db>storage' }, { at: 99_000, link: 'db>storage' }];
-  assert.equal(flowComets(model({ links, events: twice }), ['hv1', 'hv2', 'db', 'storage']).length, 1);
-});
-
-const CT = { ...COMETS, travelMs: 1000, max: 2 };
-const comet = (key) => ({ key, from: 'db', to: 'storage', fromSite: 'hv1', toSite: 'hv2', tone: 'calm', ageMs: 0 });
-
-test('trackComets: each event flies once, even when the next model repeats it; at most max at once', () => {
-  let t = trackComets(null, [comet('1:a')], 5000, CT);
-  assert.deepEqual(t.flying.map((c) => [c.key, c.t0]), [['1:a', 5000]]);
-  t = trackComets(t, [comet('1:a')], 5400, CT);
-  assert.deepEqual(t.flying.map((c) => [c.key, c.t0]), [['1:a', 5000]], 'the same event: no second start');
-  t = trackComets(t, [comet('1:a')], 6200, CT);
-  assert.equal(t.flying.length, 0, 'landed and never again');
-  t = trackComets(t, [comet('2:a'), comet('3:a'), comet('4:a')], 7000, CT);
-  assert.deepEqual(t.flying.map((c) => c.key), ['2:a', '3:a'], 'the sky is full');
-  t = trackComets(t, [comet('3:a'), comet('4:a')], 8100, CT);
-  assert.deepEqual(t.flying.map((c) => c.key), ['4:a'], 'the waiting one flies when there is room');
-});
-
-test('cometAt and cometPath: one eased flight over the plane, fading in and out, then over', () => {
-  const c = { t0: 1000 };
-  assert.equal(cometAt(c, 900, CT), null);
-  assert.deepEqual(cometAt(c, 1000, CT), { u: 0, k: 0 });
-  assert.equal(cometAt(c, 1500, CT).u, 0.5);
-  assert.equal(cometAt(c, 1500, CT).k, 1);
-  assert.ok(cometAt(c, 1100, CT).u < 0.05, 'eased out of the planet');
-  assert.ok(cometAt(c, 1990, CT).k < 0.1, 'fades as it lands');
-  assert.equal(cometAt(c, 2000, CT), undefined);
-  const a = { x: 0, y: 0, z: 0 }, b = { x: 1000, y: 0, z: 0 };
-  const p = cometPath(a, b);
-  assert.equal(p.length, 1000);
-  assert.deepEqual(p.at(0), a);
-  assert.deepEqual(p.at(1), b);
-  const mid = p.at(0.5);
-  assert.equal(mid.x, 500);
-  assert.ok(mid.y > 100, 'arcs over the plane');
-  assert.ok(cometPath(a, { x: 10, y: 0, z: 0 }).at(0.5).y >= COMETS.liftMin / 2, 'a short hop still lifts');
-});
-
-/** The scene's comet lights (named `fx-comet`). */
-function cometSprites(galaxy) {
-  let root = galaxy.world.sites[0].star;
-  while (root.parent) root = root.parent;
-  return root.children.filter((o) => o.isSprite && o.name === 'fx-comet');
-}
-
-const flowModel = () => model({
-  links: [{ from: 'db', to: 'storage', kind: 'flow' }],
-  events: [{ at: 99_000, node: 'db', kind: 'ok', text: 'db dumps → storage', link: 'db>storage' }],
-});
-
-test('without fx=comets the scene makes no comet and ignores flows', () => {
-  const { galaxy, at } = sceneAt({ fx: new Set(['warp']) });
-  const m = flowModel();
-  galaxy.update(m);
-  galaxy.setComets(flowComets(m, galaxy.drawn()));
-  at(1000 + COMETS.travelMs / 2);
-  assert.equal(cometSprites(galaxy).length, 0);
-  assert.equal(galaxy.comets.length, 0);
-});
-
-test('with fx=comets a flow event flies once from its planet to where it lands, grey and capped', () => {
-  const { galaxy, at } = sceneAt({ fx: new Set(['comets']) });
-  const m = flowModel();
-  galaxy.update(m);
-  const pool = cometSprites(galaxy);
-  assert.equal(pool.length, COMETS.max * (1 + COMETS.tail), 'one pool, made once');
-  assert.ok(galaxy.drawn().has('db') && galaxy.drawn().has('hv2'));
-  galaxy.setComets(flowComets(m, galaxy.drawn()));
-  assert.deepEqual(galaxy.comets.map((c) => [c.from, c.to]), [['db', 'storage']]);
-  const member = (site, id) => galaxy.world.byId.get(site).members.find((x) => x.id === id).mesh.position;
-  const db = member('hv1', 'db'), storage = member('hv2', 'storage');
-  const lit = () => pool.filter((s) => s.visible);
-  const head = () => lit().reduce((a, s) => (s.scale.x > a.scale.x ? s : a));
-  const near = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
-  at(1000 + COMETS.travelMs * 0.05);
-  assert.ok(near(head().position, db) < near(head().position, storage), 'leaves db');
-  at(1000 + COMETS.travelMs * 0.5);
-  assert.ok(head().position.y > Math.max(db.y, storage.y) + COMETS.liftMin / 2, 'high over the plane midway');
-  assert.ok(lit().length > 3, 'a tail behind it');
-  for (const s of lit()) {
-    assert.ok(s.material.opacity <= COMETS.opacity, 'never brighter than its cap');
-    assert.equal(s.material.color.getHexString(), cometSprites(galaxy)[0].material.color.getHexString());
-  }
-  at(1000 + COMETS.travelMs * 0.95);
-  assert.ok(near(head().position, storage) < near(head().position, db), 'lands at storage');
-  // The next model repeats the event: it does not fly again.
-  galaxy.setComets(flowComets(m, galaxy.drawn()));
-  at(1000 + COMETS.travelMs * 1.5);
-  assert.equal(lit().length, 0);
-  assert.equal(galaxy.comets.length, 0);
-});
-
-test('with fx=comets under reduced motion a comet is its arc, still, for as long as it would fly', () => {
-  const { galaxy, at } = sceneAt({ fx: new Set(['comets']), still: true });
-  const m = flowModel();
-  galaxy.update(m);
-  galaxy.setComets(flowComets(m, galaxy.drawn()));
-  const lit = () => cometSprites(galaxy).filter((s) => s.visible).map((s) => [s.position.x, s.position.y, s.position.z, s.material.opacity]);
-  at(1000 + COMETS.travelMs * 0.2);
-  const a = lit();
-  assert.equal(a.length, 1 + COMETS.tail);
-  at(1000 + COMETS.travelMs * 0.8);
-  assert.deepEqual(lit(), a, 'nothing moves');
-  at(1000 + COMETS.travelMs * 1.1);
-  assert.equal(lit().length, 0, 'gone after');
+test('activityLook: at work is a step brighter and larger with a ring, more a little more, capped; quiet recedes', () => {
+  const quiet = activityLook(0);
+  assert.deepEqual(quiet, { glow: 0, grow: 1, ring: 0, light: ACTIVITY.quiet });
+  assert.ok(ACTIVITY.quiet >= 0.5 && ACTIVITY.quiet < 0.8, 'one step down, still readable');
+  const one = activityLook(1), two = activityLook(2), full = activityLook(ACTIVITY.full), lots = activityLook(40);
+  assert.equal(one.ring, 1);
+  assert.equal(one.light, 1);
+  assert.ok(one.glow > 0 && one.grow > 1);
+  assert.ok(two.glow > one.glow && two.grow > one.grow, 'more at work, a little more');
+  assert.deepEqual(lots, full, 'capped');
+  assert.ok(one.grow >= 1.1 && full.grow <= 1.15 + 1e-9, 'a step, never a jump (Q18: 10-15 %)');
+  // Calm stays calm: quieter than any trouble halo, a slow breath.
+  assert.ok(full.glow < 0.5 && ACTIVITY.ringOpacity <= 0.5);
+  assert.ok(ACTIVITY.periodMs >= 3000 && ACTIVITY.periodMs <= 6000);
+  assert.deepEqual(activityLook(-3), quiet);
+  assert.deepEqual(activityLook('x'), quiet);
 });
 
 /** hv1 with a builder whose lanes are at work (or not), hv2 with a room in trouble and a working session in it. */
@@ -227,7 +115,7 @@ function workModel({ lanes = [], extra = [] } = {}) {
   return m;
 }
 
-test('workingPlanets: a planet with a working, calm session below it twinkles, once however many', () => {
+test('workingPlanets: a planet with a working, calm session or job below it is lit, counted', () => {
   const m = workModel({
     lanes: [
       { id: 'lane:a/x', status: 'working' },
@@ -237,81 +125,147 @@ test('workingPlanets: a planet with a working, calm session below it twinkles, o
     extra: [
       { id: 'sess:a/y1', parent: 'lane:a/y', kind: 'session', status: 'working' },
       { id: 'sess:a/y2', parent: 'lane:a/y', kind: 'session', status: 'idle' },
+      { id: 'runner', parent: 'storage', kind: 'service', status: 'working' },
+      { id: 'cron', parent: 'storage', kind: 'service', status: 'ok' },
     ],
   });
   const planets = new Set(['hv1', 'hv2', 'remote', 'db', 'api', 'storage', 'nas', 'builder:a']);
-  assert.deepEqual(workingPlanets(m, planets), [{ id: 'builder:a', site: 'hv1', count: 2 }]);
-  // The builder not drawn as a planet: its room's planet twinkles instead.
+  assert.deepEqual(workingPlanets(m, planets), [
+    { id: 'builder:a', site: 'hv1', count: 2 },
+    { id: 'storage', site: 'hv2', count: 1 },
+  ]);
+  // The builder not drawn as a planet: its room's planet is lit instead.
   planets.delete('builder:a');
-  assert.deepEqual(workingPlanets(m, planets).map((w) => w.id), ['api']);
+  assert.deepEqual(workingPlanets(m, planets).map((w) => w.id), ['api', 'storage']);
+  // A working thing drawn as a planet itself is its own.
+  assert.deepEqual(workingPlanets(m, new Set([...planets, 'runner'])).map((w) => w.id), ['api', 'runner']);
 });
 
-test('workingPlanets: idle, waiting, stuck, a working service, or nothing drawn twinkles nothing', () => {
+test('workingPlanets: idle, waiting, stuck, a room, or nothing drawn lights nothing', () => {
   const m = workModel({
     lanes: [
       { id: 'lane:a/idle', status: 'idle' },
       { id: 'lane:a/ask', status: 'attention' },
       { id: 'lane:a/stuck', status: 'working', flags: { stuck: { rule: 'tool-loop' } } },
     ],
-    extra: [{ id: 'runner', parent: 'storage', kind: 'service', status: 'working' }],
+    extra: [{ id: 'busy-room', parent: 'hv2', kind: 'room', status: 'working' }],
   });
-  assert.deepEqual(workingPlanets(m, ['hv1', 'hv2', 'api', 'storage', 'builder:a']), [], 'calm stays calm: only agents at work');
+  assert.deepEqual(workingPlanets(m, ['hv1', 'hv2', 'api', 'storage', 'builder:a', 'busy-room']), [], 'calm stays calm: only things at work');
   assert.deepEqual(workingPlanets(workModel({ lanes: [{ id: 'l', status: 'working' }] }), []), []);
   assert.deepEqual(workingPlanets({}, ['hv1']), []);
   assert.deepEqual(workingPlanets(null, null), []);
 });
 
-test('twinkleAt and trackTwinkles: fades in, glimmers slow and low, fades out when work stops', () => {
-  const list = [{ id: 'builder:a', site: 'hv1', count: 1 }];
-  let tw = trackTwinkles(null, list, 0);
-  const one = () => tw.get('builder:a');
-  assert.equal(twinkleAt(one(), 0).k, 0, 'comes in from nothing');
-  assert.equal(twinkleAt(one(), TWINKLE.fadeMs).k, 1);
-  // Slow: over any half second the glimmer moves little; over the long period it swings.
-  const g = [];
-  for (let t = 2000; t < 2000 + TWINKLE.periods[0]; t += 100) g.push(twinkleAt(one(), t).glimmer);
-  for (let i = 5; i < g.length; i++) assert.ok(Math.abs(g[i] - g[i - 5]) < 0.5, 'no blink');
-  assert.ok(Math.max(...g) - Math.min(...g) > 0.4, 'it does glimmer');
-  assert.ok(g.every((x) => x >= 0 && x <= 1));
-  // The same planet in the next model keeps its start.
-  tw = trackTwinkles(tw, list, 3000);
-  assert.equal(one().t0, 0);
-  // Work stops: it fades out over fadeMs, then is gone.
-  tw = trackTwinkles(tw, [], 4000);
-  assert.equal(one().until, 4000);
-  assert.ok(twinkleAt(one(), 4000 + TWINKLE.fadeMs / 2).k < 0.6);
-  assert.equal(twinkleAt(one(), 4000 + TWINKLE.fadeMs), undefined);
-  assert.equal(trackTwinkles(tw, [], 4000 + TWINKLE.fadeMs).size, 0);
-  // Two neighbours by name never glimmer in step.
-  const a = { id: 'builder:builder-a', t0: 0, until: Infinity }, b = { id: 'builder:builder-b', t0: 0, until: Infinity };
+test('trackWork and workAt: fades in, breathes slow, takes new counts, fades out when work stops', () => {
+  let t = trackWork(null, [{ id: 'p', site: 'hv1', count: 1 }], 0);
+  const p = () => t.get('p');
+  assert.equal(workAt(p(), 0).k, 0, 'comes in from nothing');
+  assert.equal(workAt(p(), ACTIVITY.fadeMs).k, 1);
+  const breath = [];
+  for (let ms = 2000; ms < 2000 + ACTIVITY.periodMs; ms += 100) breath.push(workAt(p(), ms).ring);
+  assert.ok(Math.max(...breath) > 0.95 && Math.min(...breath) < 0.05, 'one full breath a period');
+  for (let i = 1; i < breath.length; i++) assert.ok(Math.abs(breath[i] - breath[i - 1]) < 0.15, 'slow: no jumps');
+  t = trackWork(t, [{ id: 'p', site: 'hv1', count: 3 }], 3000);
+  assert.equal(p().count, 3);
+  assert.equal(p().t0, 0, 'keeps its start');
+  t = trackWork(t, [], 4000);
+  assert.equal(p().until, 4000);
+  assert.ok(workAt(p(), 4000 + ACTIVITY.fadeMs / 2).k < 0.6);
+  assert.equal(workAt(p(), 4000 + ACTIVITY.fadeMs), undefined);
+  // Two planets breathe out of step; still: steady, full.
+  const a = { id: 'builder-a', t0: 0, until: Infinity }, b = { id: 'builder-b', t0: 0, until: Infinity };
   let apart = 0;
-  for (let t = 0; t < 20000; t += 500) apart = Math.max(apart, Math.abs(twinkleAt(a, t).glimmer - twinkleAt(b, t).glimmer));
-  assert.ok(apart > 0.3, 'out of step');
-  // Still: steady, the same at any time.
-  assert.deepEqual(twinkleAt({ id: 'x', t0: 0, until: Infinity }, 5000, TWINKLE, true), twinkleAt({ id: 'x', t0: 0, until: Infinity }, 9000, TWINKLE, true));
+  for (let ms = 0; ms < 20000; ms += 500) apart = Math.max(apart, Math.abs(workAt(a, ms).ring - workAt(b, ms).ring));
+  assert.ok(apart > 0.3);
+  assert.deepEqual(workAt(a, 5000, ACTIVITY, true), { k: 1, ring: 1 });
+  assert.deepEqual(workAt(a, 9000, ACTIVITY, true), workAt(a, 5000, ACTIVITY, true));
+  // Capped, the oldest kept.
+  const many = Array.from({ length: ACTIVITY.max + 5 }, (_, i) => ({ id: `p${i}`, site: 'hv1', count: 1 }));
+  assert.equal(trackWork(null, many, 0).size, ACTIVITY.max);
 });
 
-test('trackTwinkles: at most max at once, the oldest kept; one back while fading picks up from its light', () => {
-  const many = Array.from({ length: TWINKLE.max + 5 }, (_, i) => ({ id: `p${i}`, site: 'hv1', count: 1 }));
-  let tw = trackTwinkles(null, many.slice(0, 3), 0);
-  tw = trackTwinkles(tw, many, 500);
-  assert.equal(tw.size, TWINKLE.max);
-  for (const id of ['p0', 'p1', 'p2']) assert.equal(tw.get(id).t0, 0);
-  let one = trackTwinkles(null, [many[0]], 0);
-  one = trackTwinkles(one, [], 5000);
-  const half = 5000 + TWINKLE.fadeMs / 2;
-  const before = twinkleAt(one.get('p0'), half).k;
-  one = trackTwinkles(one, [many[0]], half);
-  assert.ok(Math.abs(twinkleAt(one.get('p0'), half).k - before) < 1e-9, 'no jump');
-  assert.equal(one.get('p0').until, Infinity);
+test('flowJobs: a link event is a job from the drawn thing it left to the one it lands on, failed or not', () => {
+  const m = model({
+    links: [{ from: 'db', to: 'storage', kind: 'flow' }, { id: 'push', from: 'db-svc', to: 'nas', kind: 'flow' }],
+    events: [
+      { at: 99_000, node: 'db', kind: 'ok', text: 'db dumps → storage', link: 'db>storage' },
+      { at: 99_500, node: 'db-svc', kind: 'failed', text: 'push failed', link: 'push' },
+      { at: 99_600, node: 'db', kind: 'crit', text: 'dump broke', link: 'db>storage' },
+    ],
+  });
+  const drawn = new Set(['hv1', 'hv2', 'remote', 'db', 'api', 'storage', 'nas']);
+  assert.deepEqual(flowJobs(m, drawn), [
+    { key: '99000:db>storage', from: 'db', to: 'storage', fromSite: 'hv1', toSite: 'hv2', failed: false, ageMs: 1000 },
+    { key: '99500:push', from: 'db', to: 'nas', fromSite: 'hv1', toSite: 'remote', failed: true, ageMs: 500 },
+    { key: '99600:db>storage', from: 'db', to: 'storage', fromSite: 'hv1', toSite: 'hv2', failed: true, ageMs: 400 },
+  ]);
+  for (const kind of ['fail', 'failed', 'error', 'crit', 'Failed']) assert.equal(jobFailed({ kind }), true, kind);
+  for (const kind of ['ok', 'done', 'working', 'warn', undefined]) assert.equal(jobFailed({ kind }), false, String(kind));
 });
 
-/** The scene's twinkle lights (named `fx-twinkle`). */
-function twinkleSprites(galaxy) {
+test('flowJobs: too old, unknown link, two ends drawn as one, or nothing drawn is no job', () => {
+  const links = [{ from: 'db', to: 'storage' }, { from: 'db', to: 'db-svc' }];
+  const ev = (at, link) => ({ at, node: 'db', kind: 'ok', link });
+  const drawn = ['hv1', 'hv2', 'db', 'storage'];
+  assert.deepEqual(flowJobs(model({ links, events: [ev(100_000 - ACTIVITY.windowMs - 1, 'db>storage')] }), drawn), []);
+  assert.deepEqual(flowJobs(model({ links, events: [ev(99_000, 'nope')] }), drawn), []);
+  assert.deepEqual(flowJobs(model({ links, events: [ev(99_000, 'db>db-svc')] }), drawn), [], 'db-svc folds into db');
+  assert.deepEqual(flowJobs(model({ links, events: [ev(99_000, 'db>storage')] }), []), []);
+  assert.equal(flowJobs(model({ links, events: [ev(99_000, 'db>storage'), ev(99_000, 'db>storage')] }), drawn).length, 1);
+  assert.deepEqual(flowJobs(null, null), []);
+});
+
+test('jobAt: a landed job is one opening flash; a failed one flies, stops short and breaks up, never a flash', () => {
+  const landed = { key: 'a', failed: false, t0: 1000 }, failed = { key: 'b', failed: true, t0: 1000 };
+  assert.equal(jobAt(landed, 999), null);
+  assert.equal(jobAt(landed, 1000 + ACTIVITY.flashMs), undefined, 'once');
+  let r = -1, peak = 0;
+  for (let ms = 1000; ms < 1000 + ACTIVITY.flashMs; ms += 30) {
+    const at = jobAt(landed, ms);
+    assert.equal(at.miss, undefined);
+    assert.ok(at.flash.r >= r, 'it only opens');
+    r = at.flash.r;
+    peak = Math.max(peak, at.flash.k);
+  }
+  assert.ok(peak > 0.8, 'a plain flash');
+  assert.ok(jobAt(landed, 1000 + ACTIVITY.flashMs * 0.95).flash.k < 0.05, 'gone as it opens');
+  let u = -1;
+  for (let ms = 1000; ms < 1000 + ACTIVITY.missMs; ms += 30) {
+    const at = jobAt(failed, ms);
+    assert.equal(at.flash, undefined, 'a failed job never flashes');
+    assert.ok(at.miss.u >= u && at.miss.u <= ACTIVITY.reach + 1e-9, 'it stops short');
+    u = at.miss.u;
+  }
+  assert.ok(Math.abs(u - ACTIVITY.reach) < 1e-9 && ACTIVITY.reach < 0.5, 'it gets less than half way');
+  assert.ok(jobAt(failed, 1000 + ACTIVITY.missMs * 0.97).miss.k < 0.05, 'breaks up');
+  assert.ok(jobAt(failed, 1000 + ACTIVITY.missMs * 0.9).miss.spread > 0.5);
+  assert.equal(jobAt(failed, 1000 + ACTIVITY.missMs), undefined);
+  // Still: the end state, steady.
+  assert.deepEqual(jobAt(landed, 1100, ACTIVITY, true), jobAt(landed, 1800, ACTIVITY, true));
+  assert.deepEqual(jobAt(failed, 1100, ACTIVITY, true).miss.u, ACTIVITY.reach);
+});
+
+test('trackJobs: a job plays once from when the page sees it, capped', () => {
+  const job = (key, failed = false) => ({ key, from: 'db', to: 'storage', fromSite: 'hv1', toSite: 'hv2', failed, ageMs: 0 });
+  let t = trackJobs(null, [job('1:a')], 5000);
+  assert.deepEqual(t.playing.map((j) => [j.key, j.t0, j.failed]), [['1:a', 5000, false]]);
+  t = trackJobs(t, [job('1:a')], 5300);
+  assert.equal(t.playing.length, 1, 'the next model repeats it: not again');
+  t = trackJobs(t, [job('1:a')], 5000 + ACTIVITY.flashMs + 10);
+  assert.equal(t.playing.length, 0);
+  const many = Array.from({ length: ACTIVITY.jobs + 3 }, (_, i) => job(`${i}:x`, i % 2 === 1));
+  t = trackJobs(t, many, 8000);
+  assert.equal(t.playing.length, ACTIVITY.jobs);
+  assert.equal(t.playing[1].failed, true);
+});
+
+/** The scene's sprites named `name` (fx-activity, fx-activity-ring, fx-land, fx-miss). */
+function spritesNamed(galaxy, name) {
   let root = galaxy.world.sites[0].star;
   while (root.parent) root = root.parent;
-  return root.children.filter((o) => o.isSprite && o.name === 'fx-twinkle');
+  return root.children.filter((o) => o.isSprite && o.name === name);
 }
+const ACT_POOLS = ['fx-activity', 'fx-activity-ring', 'fx-land', 'fx-miss'];
 
 const busyModel = () => workModel({
   lanes: [{ id: 'lane:a/x', status: 'working' }],
@@ -320,57 +274,135 @@ const busyModel = () => workModel({
     { id: 'lane:jam/x', parent: 'jam', kind: 'lane', status: 'working' },
   ],
 });
+const memberOf = (galaxy, site, id) => galaxy.world.byId.get(site).members.find((x) => x.id === id);
 
-test('without fx=twinkle the scene makes no twinkle and ignores working sessions', () => {
-  const { galaxy, at } = sceneAt({ fx: new Set(['comets']) });
+test('without fx=activity the scene makes none of it, ignores work and jobs and changes no planet', () => {
+  const plain = sceneAt({ fx: new Set(['warp']) });
   const m = busyModel();
-  galaxy.update(m);
-  galaxy.setTwinkles(workingPlanets(m, galaxy.planets()));
-  at(1000 + TWINKLE.fadeMs * 2);
-  assert.equal(twinkleSprites(galaxy).length, 0);
-  assert.equal(galaxy.twinkles.size, 0);
+  plain.galaxy.update(m);
+  plain.galaxy.setActivity(workingPlanets(m, plain.galaxy.planets()));
+  plain.galaxy.setJobs([{ key: '1:a', from: 'db', to: 'storage', fromSite: 'hv1', toSite: 'hv2', failed: false }]);
+  plain.at(1000 + ACTIVITY.fadeMs * 2);
+  for (const name of ACT_POOLS) assert.equal(spritesNamed(plain.galaxy, name).length, 0, name);
+  assert.equal(plain.galaxy.activity.size, 0);
+  assert.equal(plain.galaxy.jobs.length, 0);
+  const builder = memberOf(plain.galaxy, 'hv1', 'builder:a'), db = memberOf(plain.galaxy, 'hv1', 'db');
+  assert.equal(builder.mesh.material, db.mesh.material, 'one calm material for all');
+  assert.equal(builder.lift, undefined);
 });
 
-test('with fx=twinkle a working planet glimmers on its sphere, low and grey; trouble does not', () => {
-  const { galaxy, at } = sceneAt({ fx: new Set(['twinkle']) });
+test('with fx=activity a working planet is brighter, a step larger and ringed; quiet ones recede; trouble untouched', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['activity']) });
   const m = busyModel();
   galaxy.update(m);
-  assert.equal(twinkleSprites(galaxy).length, TWINKLE.max, 'one pool, made once');
-  assert.ok(galaxy.planets().has('builder:a') && galaxy.planets().has('jam') && !galaxy.planets().has('db-svc'));
-  galaxy.setTwinkles(workingPlanets(m, galaxy.planets()));
-  assert.deepEqual([...galaxy.twinkles.keys()].sort(), ['builder:a', 'jam']);
-  const lit = () => twinkleSprites(galaxy).filter((s) => s.visible);
-  const builder = galaxy.world.byId.get('hv1').members.find((x) => x.id === 'builder:a');
-  const seen = [];
-  for (let t = 1000 + TWINKLE.fadeMs; t < 1000 + TWINKLE.fadeMs + TWINKLE.periods[0]; t += 250) {
+  for (const name of ['fx-activity', 'fx-activity-ring']) assert.equal(spritesNamed(galaxy, name).length, ACTIVITY.max, 'one pool, made once');
+  galaxy.setActivity(workingPlanets(m, galaxy.planets()));
+  assert.deepEqual([...galaxy.activity.keys()].sort(), ['builder:a', 'jam']);
+  const builder = memberOf(galaxy, 'hv1', 'builder:a'), db = memberOf(galaxy, 'hv1', 'db'), jam = memberOf(galaxy, 'hv2', 'jam');
+  at(1000 + ACTIVITY.fadeMs + 800);
+  assert.notEqual(builder.mesh.material, db.mesh.material, 'busy and quiet look apart');
+  assert.ok(builder.mesh.material.emissive.r > db.mesh.material.emissive.r, 'busy is lit from inside');
+  assert.ok(db.mesh.material.color.r < builder.mesh.material.color.r * 0.8, 'quiet recedes a step');
+  assert.ok(Math.abs(builder.lift - activityLook(1).grow) < 1e-9, 'a step larger');
+  const scaleOf = (x) => x.mesh.scale.x * x.mesh.geometry.parameters.radius;
+  assert.ok(scaleOf(builder) > scaleOf(db) * 1.08);
+  assert.equal(jam.lift ?? 1, 1, 'trouble keeps its size');
+  assert.ok(jam.mesh.material !== builder.mesh.material && jam.mesh.material !== db.mesh.material, 'and its material');
+  const lit = (name) => spritesNamed(galaxy, name).filter((s) => s.visible);
+  const ring = [];
+  for (let t = 1000 + ACTIVITY.fadeMs; t < 1000 + ACTIVITY.fadeMs + ACTIVITY.periodMs; t += 200) {
     at(t);
-    assert.equal(lit().length, 1, 'only the calm planet: the crit room breathes already');
-    const sp = lit()[0];
-    assert.deepEqual(sp.position.toArray(), builder.mesh.position.toArray());
-    assert.ok(sp.material.opacity <= TWINKLE.opacity + 1e-9);
-    assert.ok(sp.material.opacity >= TWINKLE.opacity * TWINKLE.floor - 1e-9, 'never off while at work');
-    seen.push(sp.material.opacity);
+    assert.equal(lit('fx-activity').length, 1, 'only the calm planet: the crit room breathes already');
+    assert.equal(lit('fx-activity-ring').length, 1);
+    const glow = lit('fx-activity')[0], r = lit('fx-activity-ring')[0];
+    assert.deepEqual(glow.position.toArray(), builder.mesh.position.toArray());
+    assert.deepEqual(r.position.toArray(), builder.mesh.position.toArray());
+    assert.ok(r.scale.x > builder.size * 2 * 2, 'the ring stands clear of its sphere');
+    assert.ok(glow.material.opacity <= activityLook(1).glow + 1e-9);
+    assert.ok(r.material.opacity >= ACTIVITY.ringOpacity * ACTIVITY.ringFloor - 1e-9, 'never off while at work');
+    ring.push(r.material.opacity);
+    // No hue: the light is the sun's grey.
+    assert.equal(glow.material.color.getHexString(), r.material.color.getHexString());
   }
-  assert.ok(Math.max(...seen) > Math.min(...seen) * 1.5, 'it twinkles');
-  // Quieter than any trouble halo.
-  assert.ok(TWINKLE.opacity < 0.5);
-  // Work stops: it fades out.
-  galaxy.setTwinkles(workingPlanets(workModel(), galaxy.planets()));
-  at(1000 + TWINKLE.fadeMs * 2 + TWINKLE.periods[0] + 10);
-  assert.equal(lit().length, 0);
+  assert.ok(Math.max(...ring) > Math.min(...ring) * 1.5, 'the ring breathes');
+  // Work stops: the light fades, the size steps back, it recedes with the rest.
+  galaxy.setActivity(workingPlanets(workModel(), galaxy.planets()));
+  at(1000 + ACTIVITY.fadeMs * 3 + ACTIVITY.periodMs);
+  assert.equal(lit('fx-activity').length, 0);
+  assert.equal(builder.lift, 1);
+  assert.equal(builder.mesh.material, db.mesh.material);
 });
 
-test('with fx=twinkle under reduced motion the light is steady', () => {
-  const { galaxy, at } = sceneAt({ fx: new Set(['twinkle']), still: true });
+test('with fx=activity seen from far the glow and ring keep a floor on screen, so they read from 3 m', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['activity']) });
   const m = busyModel();
   galaxy.update(m);
-  galaxy.setTwinkles(workingPlanets(m, galaxy.planets()));
-  const lit = () => twinkleSprites(galaxy).filter((s) => s.visible).map((s) => s.material.opacity);
-  at(1000 + TWINKLE.fadeMs);
+  galaxy.setActivity(workingPlanets(m, galaxy.planets()));
+  const builder = memberOf(galaxy, 'hv1', 'builder:a');
+  galaxy.camera.position.set(0, 30_000, 30_000);
+  galaxy.camera.lookAt(0, 0, 0);
+  at(1000 + ACTIVITY.fadeMs * 2);
+  const tall = 2 * Math.tan((galaxy.camera.fov * Math.PI) / 360) * galaxy.camera.position.distanceTo(builder.mesh.position);
+  const glow = spritesNamed(galaxy, 'fx-activity').find((s) => s.visible);
+  const ring = spritesNamed(galaxy, 'fx-activity-ring').find((s) => s.visible);
+  assert.ok(glow.scale.x / 2 / tall >= ACTIVITY.minGlow - 1e-9, 'the glow');
+  assert.ok((ring.scale.x * 0.85) / 2 / tall >= ACTIVITY.minRing - 1e-9, 'the ring');
+  assert.ok(ACTIVITY.minRing * 2 < ACTIVITY.minGlow * 1.5, 'the ring stays inside its glow');
+});
+
+
+test('with fx=activity a landed job flashes its target once; a failed one stops short, no flash', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['activity']) });
+  const links = [{ from: 'db', to: 'storage', kind: 'flow' }, { from: 'api', to: 'nas', kind: 'flow' }];
+  const m = model({
+    links,
+    events: [
+      { at: 99_000, node: 'db', kind: 'ok', text: 'db dumps → storage', link: 'db>storage' },
+      { at: 99_200, node: 'api', kind: 'failed', text: 'api push → nas failed', link: 'api>nas' },
+    ],
+  });
+  galaxy.update(m);
+  assert.equal(spritesNamed(galaxy, 'fx-land').length, ACTIVITY.jobs);
+  galaxy.setJobs(flowJobs(m, galaxy.drawn()));
+  const lit = (name) => spritesNamed(galaxy, name).filter((s) => s.visible);
+  const storage = memberOf(galaxy, 'hv2', 'storage').mesh.position, nas = memberOf(galaxy, 'remote', 'nas').mesh.position;
+  const api = memberOf(galaxy, 'hv1', 'api').mesh.position;
+  const flat = (p, q) => Math.hypot(p.x - q.x, p.z - q.z);
+  at(1000 + ACTIVITY.flashMs * 0.3);
+  assert.equal(lit('fx-land').length, 1, 'one flash: the landed job');
+  assert.deepEqual(lit('fx-land')[0].position.toArray(), storage.toArray());
+  assert.equal(lit('fx-miss').length, 1);
+  at(1000 + ACTIVITY.missMs * 0.6);
+  const grain = lit('fx-miss')[0].position;
+  const whole = flat(api, nas);
+  assert.ok(Math.abs(flat(api, grain) - ACTIVITY.reach * whole) < whole * 0.02, 'stopped short of nas');
+  assert.ok(flat(grain, nas) > whole / 2);
+  at(1000 + ACTIVITY.missMs + 10);
+  assert.equal(lit('fx-land').length + lit('fx-miss').length, 0);
+  // The next model repeats both events: neither plays again; nothing flashes nas, ever.
+  galaxy.setJobs(flowJobs(m, galaxy.drawn()));
+  for (let t = 1000 + ACTIVITY.missMs + 20; t < 1000 + ACTIVITY.missMs * 3; t += 100) {
+    at(t);
+    assert.equal(lit('fx-land').length, 0);
+  }
+  assert.equal(galaxy.jobs.length, 0);
+});
+
+test('with fx=activity under reduced motion the ring is steady and a job holds its end state', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['activity']), still: true });
+  const m = busyModel();
+  m.links.push({ from: 'db', to: 'storage', kind: 'flow' });
+  m.events.push({ at: 99_000, node: 'db', kind: 'ok', link: 'db>storage' });
+  galaxy.update(m);
+  galaxy.setActivity(workingPlanets(m, galaxy.planets()));
+  galaxy.setJobs(flowJobs(m, galaxy.drawn()));
+  const lit = () => ACT_POOLS.flatMap((n) => spritesNamed(galaxy, n)).filter((s) => s.visible).map((s) => [s.name, s.scale.x, s.material.opacity]);
+  at(1000 + 100);
   const a = lit();
-  assert.equal(a.length, 1);
-  at(1000 + TWINKLE.fadeMs + 2345);
+  assert.deepEqual(a.map(([n]) => n).sort(), ['fx-activity', 'fx-activity-ring', 'fx-land']);
+  at(1000 + 700);
   assert.deepEqual(lit(), a, 'nothing moves');
+  assert.equal(memberOf(galaxy, 'hv1', 'builder:a').lift, activityLook(1).grow, 'the size step at once');
 });
 
 // --- fx=beacon --------------------------------------------------------------------

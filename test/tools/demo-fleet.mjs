@@ -19,7 +19,7 @@
 // Its live part (`demoLargeCycle`) runs on the ticks: a crit, an attention and
 // a warn on three sites, each clearing and returning over 90 ticks, the front
 // door opening three times, and an event along a flow link (a comet) every
-// third tick.
+// third tick, every fifth of them a failed one.
 // `--quiet-after <s>` stops the /ws `map` messages <s> seconds after start
 // while the hub stays up (`demoQuiet`): the Wall's stale feed, to film (night 3 T5).
 //
