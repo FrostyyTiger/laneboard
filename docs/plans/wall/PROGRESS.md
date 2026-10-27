@@ -320,7 +320,7 @@ Notes for every builder round (planner, round 1):
   `shots/r30-galaxy-with` (frame 12: a thin red ring round HV2 and an amber one round REMOTE, 14 fps SwiftShader ×4,
   0 errors) and `shots/r30-galaxy-without` (no ring, 13.5 fps). The ring's near edge passes under the calm `HV2`
   label (the DOM label stays on top and whole); T24's label placement may want to know about it.
-- [ ] T17 (§7 Night 4 0b; README §7 Night 3 D `activity`; night 2's research Q8 `fade` and `miss`; Q18 when answered)
+- [x] T17 (§7 Night 4 0b; README §7 Night 3 D `activity`; night 2's research Q8 `fade` and `miss`; Q18 when answered)
   [ui] [variant:galaxy] `fx=activity`, replacing `comets` and `twinkle` (both removed: code, tests, `FX_NAMES`,
   docs): a planet with a working session or a running job (`fx.js workingPlanets` and the events `flowComets` reads)
   is brighter and slightly larger and carries a slow visible ring; a job that lands flashes its target once; a failed
@@ -328,7 +328,22 @@ Notes for every builder round (planner, round 1):
   done when: tests map working count to brightness/size/ring (calm stays calm: no hue, slow), a landed job to one
   flash and a failed one to none, nothing without `?fx=activity` and no `comets`/`twinkle` left in `FX_NAMES`; and
   filmstrips of `galaxy.html?demo=1&quality=0` with and without `&fx=activity` plus a 3 m shrunk overview still show
-  the working planets apart.
+  the working planets apart. (commit 202011b)
+  Builder r33: `fx.js`: `ACTIVITY`, `activityLook(count)` (glow, grow 1.12 → 1.15 capped at 4, ring, quiet 0.6),
+  `workingPlanets` now also counts a `service`/`job` at `working` (the large demo's runners, inference, worker, print
+  job), `trackWork`/`workAt` (fade 1.2 s, one ring breath of 4.8 s, own phase), `flowJobs` (was `flowComets`, adds
+  `failed`: kind `fail`/`failed`/`error` or crit; a warn is a landed job), `trackJobs`/`jobAt` (flash 0.9 s opening
+  1.6 → 9 planet radii; a miss flies 42 % of the way, slows, breaks up over 1.8 s). The miss is grey, not night 2's
+  red scar: no red line without a name (T26), the failure's own alert carries the hue. The scene swaps a calm planet's
+  material (busy: lit from inside; quiet: a step toward the ground) and eases `m.lift`, read by `place()`; trouble
+  is untouched. Glow, ring, flash and grain keep a floor in frame-height shares (`minGlow` 0.022, `minRing` 0.011,
+  `flashMin` 0.035, `missMin` 0.012): without it the overview's rings were 5 px. The large demo fails every 15th
+  tick's flow event (`kind: 'failed'`). Tests 4147 → 4148. Films: `shots/r33-galaxy-with` (10.2 fps SwiftShader ×4 on a
+  busy VM, 0 errors), `shots/r33-galaxy-without` (11 fps, same load: no cost seen), `shots/r33-galaxy-jobs`
+  (`--tick 1000&at=overview`, 0.5 s frames: frame 6 a grey flash ring on CLOUD, frame 11 a failed job's grain stopped
+  above HV2 on its way to REMOTE), `shots/r33-3m/with.png` vs `without.png` (456 px: HOME and CLOUD ringed, REMOTE a
+  plain dot). Honest: at 3 m the rings read but are quiet, the grain is faint; several working planets in one folded
+  cluster draw overlapping rings. The ring sits next to the `HV1` overview label (T24's placement).
 - [ ] T18 (§7 Night 4 0b; README §7 Night 3 D `sweep`) [ui] [variant:galaxy] `fx=sweep`: once per tour cycle, at the
   overview only, one faint sensor line from the sun turns once round the plane; each cluster it crosses pings softly
   only if its site sent new data since the last sweep (per-site freshness kept by the page from the map frames, e.g. a
