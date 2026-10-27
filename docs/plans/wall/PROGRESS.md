@@ -356,7 +356,7 @@ Notes for every builder round (planner, round 1):
   `tour.js nextLeg` a site whose worst status rose since its visit this cycle (or any crit not yet shown as crit)
   jumps the queue at the next leg — done when: a test on a model where a visited site turns crit mid-cycle gets
   it as the next leg, and a film of `galaxy.html?demo=1&pace=wall&quality=0` reaches a new crit within one leg.
-- [ ] T22 (r17-operator galaxy 7) [ui] [variant:galaxy] A calm plate does not shrink the banner: `data-plate`
+- [ ] T22 (r17-operator galaxy 7; widened by T30, do T30 first) [ui] [variant:galaxy] A calm plate does not shrink the banner: `data-plate`
   carries the plate's tone, and under a calm plate the crit banner keeps full size (or one step down, never level
   with the calm name); under a trouble plate T4's step stays — done when: a test sees the tone in `data-plate`
   and a `wall.css` test pins the banner larger than `--cap-name` under a calm plate, and `?at=home` with a crit
@@ -399,6 +399,24 @@ Notes for every builder round (planner, round 1):
   the default fit; only the first touch (wake) resets to the default — done when: a test with a fake clock drags to
   a yaw, taps a site, goes back twice and finds the camera's orbit equal to the dragged one, and a wake still lands
   on the default fit.
+- [ ] T30 (r41-operator galaxy 1; widens T22) [ui] [variant:galaxy] The worst thing is the loudest: `data-plate`
+  carries the plate's tone and T4's banner step applies only when the plate's tone is at least the banner's (a crit
+  plate under a crit banner); under a warn or calm plate the crit banner keeps full size (r41-pace-wall: a yellow
+  `▲ FEAT-SEARCH` hero outshouted `■ HV2 · STORAGE` for the whole HV1 hold) — done when: a test in
+  `test/wall-galaxy-hud.test.mjs` sees a warn plate under a crit banner leave the banner at full size and a crit
+  plate under a crit banner still step it down, a `wall.css` test pins both rules, and `?at=hv1` (warn) with a crit
+  elsewhere shows the red banner larger than the plate's name.
+- [ ] T31 (r41-operator galaxy 3) [ui] [variant:galaxy] A passing crit keeps its shape colour: under
+  `.galaxy-label[data-dim]` only the name text goes to `--text-3`; the status glyph (`■`/`▲`) keeps its tone hue
+  (T15 greyed the glyph in flights: `■ HV2` grey beside its red nebula) — done when: a test pins in `wall.css` that
+  a dimmed crit/warn label's glyph keeps the crit/warn colour while its name is `--text-3`, and a film of
+  `galaxy.html?demo=1&quality=0` shows a red `■` on HV2 during flights.
+- [ ] T32 (r41-operator galaxy 6) [ui] [variant:galaxy] No red without a name: in flights a nebula lobe that leaves
+  the frame faster than its star must not show as a nameless red smear at the frame edge — `scene.js nearFade`
+  (T2) also fades a crit/warn lobe whose projected centre is beyond ~1.5 reach of its star's anchor on screen —
+  done when: a test on the large fixture finds, over `flightPose` samples, no lobe drawn at more than that distance
+  from its label anchor, and a film of `galaxy.html?demo=1&quality=0&fx=warp` has no red blob at the edge without
+  a label near it.
 
 ## Research questions
 
@@ -469,6 +487,20 @@ Night 3's list, not yet a task (README §7 Night 3; replan takes from here in or
 - (was night 2's T32, r43-stranger 6; not named by Night 3, fits E) Screen Wake Lock in `galaxy/main.js`: request
   at start and again on visible, silent when denied or missing (Q15).
 - §7 Night 3 D unbuilt, staying unbuilt: `fx=storm`, `fx=lights`, `fx=rings`, `fx=arrive`.
+
+From r41-operator (not tasks yet):
+- (r41-operator touch 1; = r36-dreamer touch 1) In explore the overview looks like the tour's: `MANUAL · TOUR IN 0:40`
+  at the clock's size, `--text-2`, explore only. First to promote next triage.
+- (r41-operator galaxy 7) Crit label `■HV(` eaten by its nebula at the moment it turns crit: A4 T34 line above, trouble
+  labels after the nebula on a `--bg-canvas` halo.
+- (r41-operator galaxy 8) A dark box behind the banner at the overview (the far cover's ground): feather it or drop it
+  at the overview (with the feathered plates line).
+- (r41-operator fx-beacon 1, 2) Beacon is a 1 px hairline at the 3 m scale and leans: width floor in screen px (check the
+  sheath's alpha profile), billboard it screen-vertical (= r31-film-ui galaxy 6).
+- (r41-operator fx-beacon 3) Film a two-crit overview with `fx=beacon` and check the young one shows its floor.
+- (r41-operator touch 4) Tool note: `tools/r38-resume.mjs` `pick` reads `s.node?.status`, which is empty; use the nebula tone.
+- (r41-operator across) Trouble `?pace=wall` is the only film that shows tour order; operators film it. The tour plate
+  should take the sheet's hue rows (= T23).
 
 From r36-dreamer (not tasks yet):
 - (r36-dreamer touch 1) Explore mode says a person is driving: a small mono line by the tag, `MANUAL · TOUR IN 0:40`,
@@ -635,6 +667,11 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
   fx-beacon 2 and across went to Later; fx-beacon 1 dropped (= T16), fx-beacon 3 and touch 4 dropped (observation);
   the three `fx` ideas to the owner; the retired comets/twinkle/lanes scores repeat r11, not filmed, dropped.
 
+- r41-operator.md: 8 galaxy + 3 fx-beacon + 2 fx-warp + 4 touch + 3 across; 3 became tasks (T30 = galaxy 1, widening T22;
+  T31 = galaxy 3; T32 = galaxy 6); galaxy 2 (= T21), 4 (= T20, T23), 5 (= T26) dropped (covered); galaxy 7, 8,
+  fx-beacon 1-3, touch 1, 4 went to Later; fx-warp 1 dropped (= T28), fx-warp 2 dropped (observation); touch 2 (= T25)
+  dropped (covered), touch 3 dropped (works); across dropped (covered/observation). No dreamer proposals in this review.
+
 ## Scores
 
 | round | persona | overview | legibility | status | touch | wow | calm | performance |
@@ -665,5 +702,8 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 | r36 | dreamer, fx-comets | – | – | – | – | 2 | 8 | – |
 | r36 | dreamer, fx-twinkle | – | – | – | – | 2 | 9 | – |
 | r36 | dreamer, fx-lanes | – | – | – | – | 2 | 8 | – |
+| r41 | operator, galaxy | 7 | 6 | 6 | 6 | 6 | 6 | 6 |
+| r41 | operator, fx-beacon | – | – | – | – | 5 | 6 | – |
+| r41 | operator, fx-warp | – | – | – | – | 3 | 7 | – |
 
 ## Morning
