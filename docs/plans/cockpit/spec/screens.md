@@ -704,7 +704,7 @@ A screen depends on up to three things; each fails on its own and says so where 
 | --- | --- | --- |
 | the screen's network | the browser | `navigator.onLine` is `false` |
 | the **board** (hub, or the builder in builder mode) | the board socket (`public/js/core/net.js`) | the socket closes; it retries 500 ms × 1.8 up to 15 s, as today |
-| the **room** | the room link (`protocols.md` §2) | the link closes, or no frame for 25 s (the room sends a heartbeat every 10 s); it retries 500 ms × 1.8 up to 15 s, the same `nextBackoff` (D10, D11) |
+| the **room** | the room link (`protocols.md` §2) | the link closes, or no frame for 25 s (the room sends a heartbeat every 10 s); it retries as the board socket does (§7.1, D10, D11) |
 
 A lost room link shows only after a **5 s grace**: a link back within 5 s changes nothing on screen
 (D10). The grace starts at the link's close or 25 s after its last frame, whichever comes first
@@ -714,6 +714,34 @@ process and go down together.
 
 The page root carries `data-cockpit`: `unconfigured`, `unpaired`, `connecting`, `live`,
 `room-down`, `offline` (for tests and CSS). `data-board` is `live` or `down`.
+
+### 7.1 The room link's retries (D11)
+
+The room link reconnects exactly as `createSource` in `public/js/core/net.js` does today, with its
+`nextBackoff` and constants (`BACKOFF_START_MS` 500, `BACKOFF_FACTOR` 1.8, `BACKOFF_MAX_MS` 15000):
+the delay starts at 500 ms; at each loss or failed try it becomes `nextBackoff(delay)` and the next
+try is scheduled that long after; a link that opens resets it to 500 ms. So the **first** try comes
+0.9 s after the loss, not 0.5 s:
+
+| Try | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | n > 6 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| delay before it (ms) | 900 | 1620 | 2916 | 5248.8 | 9447.84 | 15000 | 15000 | 15000 | 15000 |
+| time after the loss (s) | 0.9 | 2.52 | 5.436 | 10.6848 | 20.1326 | 35.1326 | 50.1326 | 65.1326 | 35.1326 + 15 × (n − 6) |
+
+"The loss" is the moment of `protocols.md` §2.2 (the `close` event, or 25 s after the last frame);
+the time a failed try takes (a destroyed socket closes within a few ms) is added before the next
+delay and is left out of the table.
+
+**Each try is marked** when the page constructs the socket: `performance.mark('cockpit:retry',
+{detail:{attempt, delayMs}})`, `attempt` counting from 1 since the loss, `delayMs` the delay that
+was waited (D220). The first link of a page load is not a retry and has no mark.
+
+**`RETRY NOW`** cancels the pending timer and tries at once (mark with `delayMs: 0`, `attempt`
++1); `Retrying now…` shows while it runs. If it fails, the series goes on from where it was: the
+next delay is `nextBackoff` of the one it cancelled, as if that try had failed on time (D220).
+
+**The countdown** (`Retrying in 12 s.`) shows the whole seconds left until the scheduled try,
+rounded up.
 
 ### Room down (answers Q-O6, recommendation a)
 
@@ -864,16 +892,23 @@ Test: Playwright with a fake clock; sample the attribute and count `[data-cockpi
 every 0.5 s.
 
 ### S-SCR-19 The room comes back: the screen catches up, the draft is not sent
-Given S-SCR-17's screen in `room-down`, with retries at 0.5, 1.4, 2.9, 5.6, 10.6, 19.4, 34.4 s
-… after the loss (500 ms × 1.8, cap 15 s),
+Given S-SCR-17's screen in `room-down` since the loss at t = 0 s, retrying as §7.1 says (tries at
+0.9, 2.52, 5.436, 10.6848, 20.1326, 35.1326, 50.1326 s after the loss),
 When the room is started again at t = 60 s, having answered one turn meanwhile,
-Then by the next retry and 1 s after it `data-cockpit="live"`; the pane line reads `Back since
+Then the next try, the 8th at t = 65.1326 s, is accepted, and by t = 66.2 s `data-cockpit="live"`; the pane line reads `Back since
 06:42.` for 5 s, then goes; the missed turn is in the conversation in order; `SEND` and the talk
 button are enabled; the draft `how is the` is in the input and no prompt was sent (the stand-in's
 log shows no new user turn). (The canvas catching up is S-C4-23.)
-When the owner taps `RETRY NOW` during a later outage, a try starts at once.
-Test: Playwright with a fake clock and the stand-in's log of received turns; assert texts and the
-log; record retry times from the stand-in's connection log and compare with the series ± 50 ms.
+When the owner taps `RETRY NOW` during a later outage, 3 s after its 3rd try (at t = 8.436 s), a
+try starts at once (a `cockpit:retry` mark with `attempt` 4 and `delayMs` 0); it fails, and the
+next try comes 9447.84 ms later (`attempt` 5).
+Test: Playwright with `page.clock` (it fakes `Date`, timers and `performance.now` in the page) and
+the stand-in's log of received turns; assert texts and the log. The retry times are asserted on
+the page side only: read `performance.getEntriesByName('cockpit:retry')`, assert the `attempt`
+values 1..8 and each `detail.delayMs` exactly against §7.1's table, and each mark's `startTime`
+minus the loss's `cockpit:close` mark against the table's time ± 50 ms. The stand-in's connection
+log (`stand-ins.md` §1.2) runs on the real clock, so it is only checked for the first outage's 8
+attempts, the last one `accepted: true`.
 
 ### S-SCR-20 The room goes away mid-reply and mid-speech
 Given a live screen, the fake agent streaming a reply, half shown,

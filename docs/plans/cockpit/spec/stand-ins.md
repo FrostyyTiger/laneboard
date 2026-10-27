@@ -106,7 +106,7 @@ room under test. Test helper: `room.control(method, path, body)`.
 | start the room's link | `POST /link {"up":true}` | `200 {"up":true}` | upgrades are accepted again |
 | a blip | `POST /link {"up":false}`, then `{"up":true}` 2 s later (S-SCR-18) | as above | |
 | make the room's link silent | `POST /link {"up":"silent"}` | `200 {"up":"silent"}` | open links stay open but the room sends nothing on them (no heartbeat, no events, no pings answered) and drops what they send; the page sees no close, only silence (`protocols.md` §2.2, D139); `{"up":true}` ends it |
-| read the connection log | `GET /connections` | `200 {"items":[{"at":"…","atMs":1793080861123,"accepted":false,"closeCode":null}]}` | every upgrade attempt since start, oldest first (S-SCR-19's retry times) |
+| read the connection log | `GET /connections` | `200 {"items":[{"at":"…","atMs":1793080861123,"accepted":false,"closeCode":null}]}` | every upgrade attempt since start, oldest first, on the real clock (S-SCR-19 counts its attempts; the retry times come from the page's `cockpit:retry` marks, `screens.md` §7.1) |
 | drop the next prompt | `POST /drop {"what":"next-prompt"}` | `200 {"armed":true}` | the next inbound `prompt` message is read and thrown away: no `turn.prompt` echo, nothing to the agent (S-C1-18). Replaces T87's `POST /__test/drop` |
 | drop the next message to a screen | `POST /drop {"what":"next-out","type":"turn.end"}` | `200 {"armed":true}` | the next outbound message of that `type` is not sent to any link but still counts in `seq`, so a screen sees a gap (`protocols.md` §2.2) |
 | approve a pairing | `POST /pair {"code":"K7M4QX","name":"desk"}` | as the CLI: `200 {"name":"desk"}`, `404 {"error":"unknown"}` | §1.3 |

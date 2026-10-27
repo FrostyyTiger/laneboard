@@ -197,7 +197,7 @@ The screen counts the link as lost at its `close` event or 25 s after the last f
 comes first. **The 5 s grace starts at that moment** (`screens.md` §7, D10): a clean close shows
 `room-down` 5 s after the close, a silent link 30 s after its last frame, unless a new link has
 had its `welcome` in between (D139); the close codes of §2.3 that say "at once" skip the grace. The status line's "since" time is that same moment, not the
-last frame. The screen reconnects with `nextBackoff` (500 ms × 1.8, cap 15 s; D11). The room
+last frame. The screen reconnects with the board socket's `nextBackoff`, the first try 0.9 s after the loss (`screens.md` §7.1, D11). The room
 also sends a WebSocket ping every 30 s and drops a link that has not answered the previous one, as
 `server/ws.mjs` does.
 
