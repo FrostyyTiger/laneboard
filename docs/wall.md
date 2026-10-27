@@ -202,7 +202,7 @@ than live trouble.
 | `fx` | What it shows | What it means |
 | --- | --- | --- |
 | `beacon` | A thin pillar of light above each cluster in crit, with a white core at its foot; taller and wider the longer the crit has lasted. A tap on the pillar opens its site. | How long it has been burning: two crits are no longer twins. |
-| `warp` | During a flight to trouble, dust and far stars stretch into streaks towards the target, their ends in its status colour; gone before it lands. | Trouble ahead: you know the next target is red before the caption types it. Flights to a calm site or to the overview have none. |
+| `warp` | During a flight to trouble, dust and far stars in a narrow cone round the target stretch into white streaks towards it, only their leading tips in its status colour, never over a crit's red cloud; gone before it lands. | Trouble ahead: you know the next target is red before the caption types it. Flights to a calm site or to the overview have none. |
 | `afterglow` | A faint outline ring on the plane round a cluster whose trouble cleared, cooling red, amber, grey, gone after 30 minutes. | Something went wrong here recently, though it is calm now. Remembered by the page only; a reload forgets it. |
 | `activity` | A planet with an agent or a job at work is brighter, larger and wears a slowly breathing ring; a quiet one dims. A landing job flashes its target; a failed one stops short and breaks up. | What is at work, and what just ran. Never a change of colour. |
 | `sweep` | Once per tour round, at the overview, a faint grey line turns once round the plane; each cluster it crosses pings, but only if its site sent new data since the last sweep. | Freshness: a silent site stays dark and the gap shows. |

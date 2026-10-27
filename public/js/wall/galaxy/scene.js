@@ -219,8 +219,11 @@ export const bandOpacity = (open) => BAND.opacity * (1 - Math.max(0, Math.min(1,
 
 /** The far stars and dust grains at the best level. */
 const STARS = 2500, DUST = 9000;
-/** How many far stars and dust grains streak under fx=warp (night 3 T12): the first of each, an even thinning. */
-const WARP_STARS = 800, WARP_DUST = 1500;
+/**
+ * How many far stars and dust grains streak under fx=warp (night 3 T12): the first of each, an even thinning;
+ * night 4 T21 keeps WARP.share of night 3's 800 and 1500, and the cone takes most of those off the screen.
+ */
+export const WARP_STARS = 400, WARP_DUST = 750;
 /** The dust's own opacity (fx=warp thins it from there while the camera flies). */
 const DUST_OPACITY = 0.7;
 
@@ -1431,7 +1434,7 @@ export function createGalaxyScene(canvas, {
     for (; i < pingRings.length; i++) { pingRings[i].ring.visible = false; pingRings[i].id = null; }
   };
 
-  // --- fx=warp (night 3 T12, T28; fx.js warpAt, warpTail): a flight has a target and a tint --
+  // --- fx=warp (night 3 T12, T28, night 4 T21; fx.js warpAt, warpTail, warpCone, warpCovered): a flight has a target and a tint --
   // A line from each of the first WARP_STARS far stars and WARP_DUST dust
   // grains to a tail pushed toward the destination's point on screen by
   // WARP.len of its distance (in the vertex shader, view space: every streak
@@ -1439,11 +1442,20 @@ export function createGalaxyScene(canvas, {
   // streams out of a vanishing point on the target; the share of each streak
   // nearest it takes the destination's hue at full token value. With no site
   // to aim at (a flight to the overview, a target behind the camera) the tail
-  // goes along the camera's travel. Made once, hidden at rest (no draw, and a
+  // goes along the camera's travel. Only grains in a cone round that way
+  // streak (warpCone), white with the hue on the leading tip; none starts on
+  // a crit nebula's disc and no pixel lands on one (warpCovered, the discs in
+  // drawing-buffer px, so the fragment shader tests gl_FragCoord). Made once, hidden at rest (no draw, and a
   // frame does nothing but one check); the dust's streaks are its child, so
   // they turn with it.
   const warpDir = { value: new THREE.Vector3(0, 0, -1) };
   const warpAim = { value: new THREE.Vector3() }, warpAimOn = { value: 0 };
+  const coneCos = (d) => Math.cos((d * Math.PI) / 180);
+  const warpCone = { value: new THREE.Vector2(coneCos(WARP.cone), coneCos(WARP.cone - WARP.coneEdge)) };
+  const warpCrit = { value: Array.from({ length: WARP.crits }, () => new THREE.Vector3()) };
+  const warpView = { value: new THREE.Vector2(1, 1) };
+  const warpWhite = col(palette.sun); // the streaks' body (T21): white, the hue only on the tip
+  let warpDiscs = []; // the crit discs as last drawn, `{ id, x, y, r }` in drawing-buffer px (origin bottom left)
   const warpParts = [];
   let warpWant = null; // `{ k, to }` from the camera's flight, or null
   let warpShown = warpAt(null);
@@ -1461,17 +1473,26 @@ export function createGalaxyScene(canvas, {
       g.setAttribute('tail', new THREE.BufferAttribute(tail, 1));
       const m = new THREE.ShaderMaterial({
         uniforms: {
-          warpDir, warpAim, warpAimOn, warpLen: { value: 0 }, warpOpacity: { value: 0 },
-          warpBody: { value: col(palette.calm) }, warpHead: { value: col(palette.calm) }, warpHeadFrom: { value: 1 - WARP.head },
+          warpDir, warpAim, warpAimOn, warpCone, warpCrit, warpView, warpLen: { value: 0 }, warpOpacity: { value: 0 },
+          warpBody: { value: warpWhite.clone() }, warpHead: { value: col(palette.calm) }, warpHeadFrom: { value: 1 - WARP.head },
         },
         vertexShader: [
           'uniform vec3 warpDir;', 'uniform vec3 warpAim;', 'uniform float warpAimOn;', 'uniform float warpLen;',
-          'attribute float tail;', 'varying float vTail;',
+          'uniform vec2 warpCone;', `uniform vec3 warpCrit[${WARP.crits}];`, 'uniform vec2 warpView;',
+          'attribute float tail;', 'varying float vTail;', 'varying float vKeep;',
           'void main() {',
           '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
-          '  float reach = warpLen * length(mv.xyz) * tail;',
           '  vec3 aim = (viewMatrix * vec4(warpAim, 1.0)).xyz;',
-          '  if (warpAimOn > 0.5 && aim.z < -1e-3 && mv.z < -1e-3) {',
+          '  bool aimed = warpAimOn > 0.5 && aim.z < -1e-3;',
+          '  vec3 axis = aimed ? aim : (viewMatrix * vec4(warpDir, 0.0)).xyz;',
+          '  float keep = smoothstep(warpCone.x, warpCone.y, dot(normalize(mv.xyz), normalize(axis)));',
+          '  vec4 at = projectionMatrix * mv;',
+          '  if (at.w > 1e-3) {',
+          '    vec2 px = (at.xy / at.w * 0.5 + 0.5) * warpView;',
+          `    for (int i = 0; i < ${WARP.crits}; i++) if (warpCrit[i].z > 0.0 && distance(px, warpCrit[i].xy) < warpCrit[i].z) keep = 0.0;`,
+          '  }',
+          '  float reach = keep > 0.0 ? warpLen * length(mv.xyz) * tail : 0.0;',
+          '  if (aimed && mv.z < -1e-3) {',
           '    vec2 gap = aim.xy * (mv.z / aim.z) - mv.xy;',
           '    float g = length(gap);',
           '    if (g > 1e-6) mv.xy += gap * (min(reach, g) / g);',
@@ -1479,15 +1500,19 @@ export function createGalaxyScene(canvas, {
           '    mv.xyz += normalize((viewMatrix * vec4(warpDir, 0.0)).xyz) * reach;',
           '  }',
           '  vTail = tail;',
+          '  vKeep = keep;',
           '  gl_Position = projectionMatrix * mv;',
           '}',
         ].join('\n'),
         fragmentShader: [
           'uniform vec3 warpBody;', 'uniform vec3 warpHead;', 'uniform float warpHeadFrom;', 'uniform float warpOpacity;',
-          'varying float vTail;',
+          `uniform vec3 warpCrit[${WARP.crits}];`,
+          'varying float vTail;', 'varying float vKeep;',
           'void main() {',
+          '  if (vKeep <= 0.0) discard;',
+          `  for (int i = 0; i < ${WARP.crits}; i++) if (warpCrit[i].z > 0.0 && distance(gl_FragCoord.xy, warpCrit[i].xy) < warpCrit[i].z) discard;`,
           '  float h = smoothstep(warpHeadFrom - 0.04, warpHeadFrom + 0.04, vTail);',
-          '  gl_FragColor = vec4(mix(warpBody * (1.0 - 0.45 * vTail), warpHead, h) * warpOpacity, 1.0);',
+          '  gl_FragColor = vec4(mix(warpBody * (1.0 - 0.45 * vTail), warpHead, h) * warpOpacity * vKeep, 1.0);',
           '  #include <colorspace_fragment>',
           '}',
         ].join('\n'),
@@ -1509,7 +1534,34 @@ export function createGalaxyScene(canvas, {
   /** The warp as last drawn, its line sets, its direction and the point it aims at (null: along the travel). */
   const warp = () => ({
     ...warpShown, parts: warpParts.map((p) => p.lines), dir: warpDir.value.clone(), aim: warpAimOn.value ? warpAim.value.clone() : null,
+    discs: warpDiscs.map((d) => ({ ...d })),
   });
+  /**
+   * Each crit nebula's disc on screen while it is folded (T21): round its
+   * star's point, the nebula's reach there (as the leash measures it), in
+   * drawing-buffer px; at most WARP.crits, the nearest first. An open system
+   * is the one you are inside, so it holds no disc.
+   */
+  const warpBuf = new THREE.Vector2(), warpNdc = new THREE.Vector3();
+  const critDiscs = () => {
+    // The drawing buffer, as the renderer sizes it (setSize at the pixel ratio).
+    const k = pixelRatio;
+    warpBuf.set(Math.floor(cw * k), Math.floor(ch * k));
+    warpView.value.copy(warpBuf);
+    const out = [];
+    for (const s of world?.sites ?? []) {
+      if (s.gone || s.nebula?.tone !== 'crit' || ease(s.unfold) >= 0.5) continue;
+      toView(warpNdc, s.home);
+      const depth = -warpNdc.z;
+      if (depth <= camera.near) continue;
+      warpNdc.applyMatrix4(camera.projectionMatrix);
+      const size = s.neb.size * (s.breath ?? 1) * s.alive;
+      const r = ((LOBES.reach * size * ch) / (2 * Math.tan((camera.fov * Math.PI) / 360) * depth)) * k;
+      if (r > 0) out.push({ id: s.id, x: (warpNdc.x * 0.5 + 0.5) * warpBuf.x, y: (warpNdc.y * 0.5 + 0.5) * warpBuf.y, r, depth });
+    }
+    out.sort((a, b) => a.depth - b.depth);
+    return out.slice(0, WARP.crits).map(({ depth, ...d }) => d);
+  };
   const drawWarp = () => {
     // At rest it costs one check (and where the camera is, for the next flight's first step).
     if (!warpWant && !warpOn) { warpLast.copy(camera.position); warpHas = true; return; }
@@ -1527,13 +1579,15 @@ export function createGalaxyScene(canvas, {
     warpHas = true;
     const on = at.len > 0;
     warpOn = on;
+    warpDiscs = on ? critDiscs() : [];
+    warpCrit.value.forEach((v, i) => { const d = warpDiscs[i]; v.set(d?.x ?? 0, d?.y ?? 0, d?.r ?? 0); });
     for (const { lines, share } of warpParts) {
       lines.visible = on;
       if (!on) continue;
       const u = lines.material.uniforms;
       u.warpLen.value = at.len * share;
       u.warpOpacity.value = WARP.opacity * at.k;
-      u.warpBody.value.copy(tone.calm);
+      u.warpBody.value.copy(warpWhite);
       u.warpHead.value.copy(tone[at.head] ?? tone.calm);
     }
     dust.material.opacity = DUST_OPACITY * (1 - at.thin);

@@ -20,6 +20,9 @@
 // it flies. You know the next target is red before the caption types it.
 // Nothing at rest, nothing in still mode, and nothing on a flight to a calm
 // site or to the overview (night 4 T15): a streak means "trouble ahead".
+// Night 4 T21: it says where, not everything: only a 30 degree cone round
+// the way to the target streaks, half the grains it had, white with the hue
+// on the leading tips, and never over a crit nebula's disc on screen.
 //
 // `afterglow` (night 4 T16, README Night 3 D): when a site's trouble clears,
 // its cluster keeps a faint outline ring on the plane in the spell's worst
@@ -459,12 +462,21 @@ export function beaconAt(b, now, timing = BEACON, still = false) {
  * the target carries the destination's hue at full token value when its
  * tone is one of `hued` (calm stays grey). `thin` is how much of the dust's
  * light goes while it flies, `opacity` the streaks' peak (additive, so faint).
+ * Night 4 T21 (r4-film-ui fx-warp 1, "says where, not everything"): only
+ * grains inside a cone round the way the camera goes streak (`cone` degrees
+ * either side of the ray to the target, so a 30 degree cone, fading over its
+ * outer `coneEdge`); `share` of night 3's grains carry a streak at all, so
+ * with the cone about a quarter of what used to streak on screen; the body
+ * is white (text-1) and only the `head` share at the leading tip takes the
+ * hue; and no streak is drawn over a crit nebula's screen disc (at most
+ * `crits` discs, warpCovered).
  */
 export const WARP = Object.freeze({
   len: 0.055, dust: 1, stars: 0.6,
   snap: Object.freeze([0.8, 0.9]),
-  head: 0.3, hued: Object.freeze(['warn', 'crit']),
+  head: 0.15, hued: Object.freeze(['warn', 'crit']),
   thin: 0.55, opacity: 0.4,
+  cone: 15, coneEdge: 4, share: 0.5, crits: 4,
 });
 
 const smooth = (a, b, x) => {
@@ -510,6 +522,32 @@ export function warpTail(p, aim, len) {
   if (!(gap > 1e-6)) return { x: p.x, y: p.y, z: p.z };
   const step = Math.min(len * Math.hypot(p.x, p.y, p.z), gap) / gap;
   return { x: p.x + dx * step, y: p.y + dy * step, z: p.z };
+}
+
+/**
+ * How much of a streak whose grain is at `p` (view space, the camera looking
+ * down -z) is drawn when the camera goes along `axis` (view space, any
+ * length: the ray to the target, or the travel with no target in front):
+ * 1 within `cone - coneEdge` degrees of it, 0 from `cone`, smooth between
+ * (night 4 T21). The scene's vertex shader does the same sum.
+ */
+export function warpCone(p, axis, timing = WARP) {
+  const lp = Math.hypot(p.x, p.y, p.z), la = Math.hypot(axis.x, axis.y, axis.z);
+  if (!(lp > 1e-9) || !(la > 1e-9)) return 0;
+  const cos = (p.x * axis.x + p.y * axis.y + p.z * axis.z) / (lp * la);
+  const rad = (d) => (d * Math.PI) / 180;
+  return smooth(Math.cos(rad(timing.cone)), Math.cos(rad(timing.cone - timing.coneEdge)), cos);
+}
+
+/**
+ * Whether a point on screen (`x`, `y`, px) lies on a crit nebula's disc
+ * (`discs`: `{ x, y, r }` in the same px): a streak that starts there is not
+ * drawn, and no streak's pixel lands there (night 4 T21: the warp never
+ * buries the crit). The scene's shaders do the same test.
+ */
+export function warpCovered(x, y, discs = []) {
+  for (const d of discs) if (d.r > 0 && (x - d.x) ** 2 + (y - d.y) ** 2 < d.r * d.r) return true;
+  return false;
 }
 
 /**

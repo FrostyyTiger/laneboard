@@ -9,12 +9,12 @@ import {
   AFTERGLOW, AFTERGLOW_STEPS, afterglowAt, afterglows,
   ACTIVITY, BEACON, FX_NAMES, WARP, activityLook, beaconAt, beaconHeight, beaconNear, beaconScale, beaconWidth, beamProfile, coreProfile, critAges, flowJobs,
   jobAt, jobFailed, parseFx, trackJobs, trackWork, workAt, workingPlanets,
-  warpAt, warpTail,
+  warpAt, warpCone, warpCovered, warpTail,
 } from '../public/js/wall/galaxy/fx.js';
 import * as THREE from '../public/vendor/three/three.module.js';
 import { ease } from '../public/js/wall/galaxy/layout.js';
 import { NEBULA, paletteFrom } from '../public/js/wall/galaxy/palette.js';
-import { FOV, createGalaxyScene, overviewShot } from '../public/js/wall/galaxy/scene.js';
+import { FOV, WARP_DUST, WARP_STARS, createGalaxyScene, overviewShot } from '../public/js/wall/galaxy/scene.js';
 import { ndcOf } from '../public/js/wall/galaxy/framing.js';
 
 test('parseFx: nothing by default, known names only, comma-separated or repeated, any case', () => {
@@ -697,7 +697,7 @@ test('warpAt: zero outside a flight, in still mode and from 0.9 on; length follo
   const q = warpAt(0.15, 'crit');
   assert.ok(q.k > 0 && q.k < 1);
   assert.ok(Math.abs(q.len - WARP.len * q.k) < 1e-12 && Math.abs(q.thin - WARP.thin * q.k) < 1e-12);
-  assert.ok(WARP.head > 0.29 && WARP.head < 0.31, 'the 30 % nearest the target');
+  assert.ok(WARP.head > 0.1 && WARP.head <= 0.2, 'only the leading tip takes the hue (T21)');
 });
 
 test('warpTail: a streak runs from its grain toward the target\'s point on screen, never past it', () => {
@@ -786,8 +786,8 @@ test('with fx=warp a flight streaks the sky out of the destination, its head in 
   const want = (c) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace).toArray();
   const pal = paletteFrom();
   assert.ok(colourNear(u.warpHead.value.toArray(), want(pal.crit)), `head = crit: ${u.warpHead.value.toArray()}`);
-  assert.ok(colourNear(u.warpBody.value.toArray(), want(pal.calm)), 'body grey');
-  assert.ok(Math.abs(u.warpHeadFrom.value - (1 - WARP.head)) < 1e-12, 'the 30 % nearest the target');
+  assert.ok(colourNear(u.warpBody.value.toArray(), want(pal.sun)), 'body white (text-1, T21)');
+  assert.ok(Math.abs(u.warpHeadFrom.value - (1 - WARP.head)) < 1e-12, 'the tip nearest the target');
   const stars = lines.find((l) => l.name === 'fx-warp-stars').material.uniforms.warpLen.value;
   const grains = lines.find((l) => l.name === 'fx-warp-dust').material.uniforms.warpLen.value;
   assert.ok(stars < grains, 'the far stars streak shorter than the dust');
@@ -823,6 +823,131 @@ test('with fx=warp a flight streaks the sky out of the destination, its head in 
   assert.ok(lines.every((l) => !l.visible));
   assert.equal(galaxy.warp.len, 0);
   assert.equal(dust.material.opacity, 0.7);
+});
+
+// --- fx=warp says where, not everything (night 4 T21, r4-film-ui fx-warp 1) ----------------
+
+test('warpCone: whole inside the cone round the way, gone outside its 30 degrees, smooth at the rim', () => {
+  const axis = { x: 0, y: 0, z: -1 };
+  const at = (deg, d = 100) => ({ x: d * Math.sin((deg * Math.PI) / 180), y: 0, z: -d * Math.cos((deg * Math.PI) / 180) });
+  assert.equal(WARP.cone, 15, 'a 30 degree cone: 15 either side');
+  for (const deg of [0, 5, WARP.cone - WARP.coneEdge - 0.01]) assert.equal(warpCone(at(deg), axis), 1, `inside at ${deg}`);
+  for (const deg of [WARP.cone, 20, 45, 90, 170]) assert.ok(warpCone(at(deg), axis) < 1e-9, `outside at ${deg}`);
+  const rim = warpCone(at(WARP.cone - WARP.coneEdge / 2), axis);
+  assert.ok(rim > 0 && rim < 1, `the rim fades: ${rim}`);
+  let last = 1;
+  for (let deg = 0; deg <= 20; deg += 0.5) {
+    const k = warpCone(at(deg), axis);
+    assert.ok(k <= last + 1e-12, `never brighter further out: ${deg}`);
+    last = k;
+  }
+  // The axis can be any length and any way; distance does not matter.
+  assert.equal(warpCone(at(5, 9000), { x: 0, y: 0, z: -40 }), 1);
+  assert.equal(warpCone({ x: 0, y: 0, z: 50 }, axis), 0, 'behind the camera: nothing');
+  assert.equal(warpCone({ x: 0, y: 0, z: 0 }, axis), 0);
+  assert.equal(warpCone({ x: 1, y: 0, z: -1 }, { x: 0, y: 0, z: 0 }), 0, 'no way to go: nothing');
+});
+
+test('warpCovered: a point on a crit disc is covered, off it or on a zero disc is not', () => {
+  const discs = [{ x: 100, y: 100, r: 40 }, { x: 500, y: 300, r: 0 }];
+  assert.equal(warpCovered(100, 100, discs), true);
+  assert.equal(warpCovered(130, 120, discs), true);
+  assert.equal(warpCovered(141, 100, discs), false);
+  assert.equal(warpCovered(500, 300, discs), false, 'a zero disc covers nothing');
+  assert.equal(warpCovered(100, 100, []), false);
+  assert.equal(warpCovered(100, 100), false);
+});
+
+test('fx=warp streaks half the grains it did, and the cone leaves at most a quarter of what used to streak on screen', () => {
+  assert.equal(WARP.share, 0.5);
+  assert.equal(WARP_STARS, 800 * WARP.share, "half of night 3's 800 far stars");
+  assert.equal(WARP_DUST, 1500 * WARP.share, "half of its 1500 grains");
+  const { galaxy, at } = sceneAt({ fx: new Set(['warp']) });
+  galaxy.update(critModel());
+  const lines = warpLines(galaxy);
+  const n = (name) => lines.find((l) => l.name === name).geometry.attributes.position.count / 2;
+  assert.equal(n('fx-warp-stars'), WARP_STARS);
+  assert.equal(n('fx-warp-dust'), WARP_DUST);
+
+  // Half-way down a flight from the overview to hv2: where the camera is, looking at it.
+  const { pos } = overviewShot(galaxy.world.sites);
+  const hv2 = galaxy.world.byId.get('hv2').home;
+  const mid = new THREE.Vector3(pos.x, pos.y, pos.z).lerp(new THREE.Vector3(hv2.x, hv2.y, hv2.z), 0.5);
+  galaxy.camera.position.copy(mid);
+  galaxy.camera.lookAt(hv2.x, hv2.y, hv2.z);
+  galaxy.camera.updateMatrixWorld();
+  at(1016);
+  const view = (v, obj) => v.applyMatrix4(obj.matrixWorld).applyMatrix4(galaxy.camera.matrixWorldInverse);
+  const onScreen = (v) => {
+    if (!(v.z < -1)) return false;
+    const c = v.clone().applyMatrix4(galaxy.camera.projectionMatrix);
+    return Math.abs(c.x) <= 1 && Math.abs(c.y) <= 1;
+  };
+  const aim = view(new THREE.Vector3(hv2.x, hv2.y, hv2.z), { matrixWorld: new THREE.Matrix4() });
+  // Night 3's streaks: the first 800 far stars and 1500 grains, every one on screen streaked.
+  const dust = lines.find((l) => l.name === 'fx-warp-dust').parent;
+  let stars = null;
+  dust.parent.traverse((o) => { if (o.isPoints && o !== dust && !stars) stars = o; });
+  const count = (obj, first, keep) => {
+    const a = obj.geometry.attributes.position.array, step = obj.isLineSegments ? 6 : 3;
+    let k = 0;
+    for (let i = 0; i < first; i++) {
+      const v = view(new THREE.Vector3(a[i * step], a[i * step + 1], a[i * step + 2]), obj);
+      if (onScreen(v)) k += keep(v);
+    }
+    return k;
+  };
+  const before = count(stars, 800, () => 1) + count(dust, 1500, () => 1);
+  const now = count(lines.find((l) => l.name === 'fx-warp-stars'), WARP_STARS, (v) => warpCone(v, aim))
+    + count(lines.find((l) => l.name === 'fx-warp-dust'), WARP_DUST, (v) => warpCone(v, aim));
+  assert.ok(before > 200, `night 3 streaked a screenful: ${before}`);
+  assert.ok(now > 40, `enough to read a vanishing point: ${now}`);
+  assert.ok(now / before < 0.35, `a quarter or less: ${now} of ${before}`);
+});
+
+test('fx=warp: a crit nebula\'s disc on screen holds no streak, on a flight anywhere; an open system holds none', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['warp']) });
+  const warned = critModel();
+  warned.nodes.find((n) => n.id === 'db').status = 'warn';
+  galaxy.update(warned);
+  toOverview(galaxy);
+  galaxy.setWarp({ k: 0.5, to: 'hv1' });
+  flyStep(galaxy, at, 1016, 0);
+  flyStep(galaxy, at, 1032, 1);
+  assert.equal(galaxy.warp.tone, 'warn');
+  const discs = galaxy.warp.discs;
+  assert.deepEqual(discs.map((d) => d.id).sort(), ['hv2', 'remote'], 'both crits, not the warn destination');
+  const disc = discs.find((d) => d.id === 'hv2');
+  // Its centre on hv2's star on screen (drawing-buffer px, origin bottom left), its reach a nebula's.
+  const cam = galaxy.camera;
+  const hv2 = galaxy.world.byId.get('hv2').home;
+  const c = new THREE.Vector3(hv2.x, hv2.y, hv2.z).project(cam);
+  const [w, h] = [1600, 900].map((x) => Math.floor(x * galaxy.pixelRatio));
+  assert.ok(Math.abs(disc.x - (c.x * 0.5 + 0.5) * w) < 0.5 && Math.abs(disc.y - (c.y * 0.5 + 0.5) * h) < 0.5);
+  assert.ok(disc.r > 4 && disc.r < h / 2, `a nebula's size: ${disc.r}`);
+  // The shaders get it: a grain that starts there is skipped, and the view's size to place it.
+  const u = warpLines(galaxy)[0].material.uniforms;
+  assert.equal(u.warpCrit.value.length, WARP.crits);
+  discs.forEach((d, i) => assert.deepEqual(u.warpCrit.value[i].toArray(), [d.x, d.y, d.r]));
+  assert.ok(u.warpCrit.value.slice(discs.length).every((v) => v.z === 0), 'the other slots cover nothing');
+  assert.deepEqual(u.warpView.value.toArray(), [w, h]);
+  assert.equal(warpCovered(disc.x, disc.y, discs), true);
+  assert.ok(u.warpBody.value && u.warpCone.value.x < u.warpCone.value.y, 'the cone\'s rim, outer cos first');
+
+  // Flying to the crit itself: its disc still holds none while it is folded.
+  galaxy.setWarp({ k: 0.5, to: 'hv2' });
+  flyStep(galaxy, at, 1048, 1);
+  assert.ok(galaxy.warp.discs.some((d) => d.id === 'hv2'));
+  // Open, you are inside it: no disc.
+  galaxy.world.byId.get('hv2').unfold = 1;
+  galaxy.setWarp({ k: 0.5, to: 'hv1' });
+  flyStep(galaxy, at, 1064, 1);
+  assert.deepEqual(galaxy.warp.discs.map((d) => d.id), ['remote']);
+  // At rest, none.
+  galaxy.setWarp(null);
+  flyStep(galaxy, at, 1080, 1);
+  assert.deepEqual(galaxy.warp.discs, []);
+  assert.ok(u.warpCrit.value.every((v) => v.z === 0));
 });
 
 test('fx=warp in still mode: no streaks even if told of a flight', () => {

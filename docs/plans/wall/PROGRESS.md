@@ -579,11 +579,26 @@ Notes for every builder round (planner, round 1):
   0 errors, frames after a plate has gone (140 s, 148 s, 151 s) show no stub, and 165 s has the plate typing with no
   leader yet. fps under the x4 throttle is noise here: 2.1 and 4.8 for this build against 3.3 for the unchanged base
   back to back (`shots/r58-base`, `r58-galaxy2`), with worst gaps 120-143 ms in all three, so no fps claim.
-- [ ] T21 (§7 Night 4; r4-film-ui fx-warp 1; after T15) [ui] [variant:galaxy] `fx=warp` says where, not everything:
+- [x] T21 (§7 Night 4; r4-film-ui fx-warp 1; after T15) [ui] [variant:galaxy] `fx=warp` says where, not everything:
   streaks only inside a cone (~30°) round the direction of travel, about a quarter of today's count, white with the
   status hue only on the leading tips, and none drawn over a crit nebula's screen disc — done when: a test pins the cone
   and count (`fx.js`/`scene.js` pure helper) and a streak start inside a crit's disc is skipped, and a filmstrip of
-  `galaxy.html?demo=1&quality=0&fx=warp` on a flight to a warn site no longer streaks both arms or covers the crit.
+  `galaxy.html?demo=1&quality=0&fx=warp` on a flight to a warn site no longer streaks both arms or covers the crit. (commit SHA)
+  Builder r59: "~30°" read as the cone's full angle: `WARP.cone` 15° either side of the ray to the target (the travel
+  when no target is in front), fading over its outer 4° (`fx.js warpCone`, the vertex shader does the same sum). "A
+  quarter of the count" read as on screen: `WARP.share` 0.5 keeps 400 far stars and 750 grains of night 3's 800 and
+  1500, and the cone leaves about 11 % of what streaked on screen before (the test counts 80 of 693 half-way to HV2 and
+  pins at most a quarter, and at least 40 so the vanishing point still reads). The body is text-1 white, only the leading
+  `WARP.head` 0.15 takes the hue (was 0.3, grey body). Crit discs: `critDiscs()` each frame of a flight, every folded
+  crit nebula (the destination too, none once a system is half open) at its star's point with the leash's reach, at
+  most `WARP.crits` 4, nearest first, in drawing-buffer px. The vertex shader drops a streak whose grain starts on one
+  and the fragment shader discards any pixel on one (`fx.js warpCovered` is the same test), so a tail that crosses a crit
+  stops at its rim. Tests in `test/wall-galaxy-fx.test.mjs` (cone, covered, the counts and on-screen share, discs and
+  uniforms). Film `shots/r59-fx-warp` (`demo=1&quality=0&fx=warp`, 0.7 s apart): f4, the flight to crit HV2, has white
+  streaks round it with red tips and its cloud clear; f7, the flight to warn HV1, streaks one patch below the sun and
+  neither arm; 0 console errors, 12 fps under SwiftShader x4 (r55 had 14.6 on the same URL with `pace=wall`, so this is
+  noise, not a claim). Seen: the skipped disc is round on the star while the lobes lie along the arm, so on a tilted
+  flight a few streaks stop short of the cloud's far edge; nothing crosses it.
 - [ ] T22 (§7 Night 4; r11-dreamer galaxy 1, §2.1) [ui] [variant:galaxy] A new trouble is a moment: when a site's
   rollup rises (calm → warn, warn → crit) between two map frames, the banner types its new subject in letter by letter
   as the caption does, once; never for trouble already standing at load, never repeated, never under a finger, whole
