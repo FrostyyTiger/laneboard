@@ -56,7 +56,7 @@ cockpit ranks trouble the way the Map and the phone push already do (D185).
 | `urgent` | P1 alarms | as `info` | one per item | 8 px dot | the chime (§3.5) |
 
 A speak-up that gathers items of several tiers takes the highest. No tier speaks aloud: a spoken
-sentence is C5's (`c5-c6.md`, T14) and goes no further than C5's own rules.
+sentence is C5's (`c5-c6.md` §1, D201: speak-ups are never spoken) and goes no further than C5's own rules.
 
 ## 3. A speak-up, step by step
 
@@ -159,7 +159,7 @@ whose node already has a `status` card on the canvas gets no second card. The ca
 ### 3.5 The chime
 
 - `urgent` only, once per block, on each screen that has the cockpit loaded, unless that screen is
-  muted (C5's per-screen mute, `c5-c6.md`, T14; until C5, `cockpit.speakUp.sound`) or the block came
+  muted (C5's per-screen mute, `c5-c6.md` §4; until C5, `cockpit.speakUp.sound`) or the block came
   in quiet hours (§4).
 - Two tones made with Web Audio, no file: 880 Hz for 0.15 s, 0.1 s silence, 660 Hz for 0.15 s
   (0.4 s in all), gain 0.3 (D190).
@@ -305,10 +305,10 @@ A request to change another machine with no listed script for it is answered by 
 its standing instruction (`protocols.md` §11.8, rewritten by the Jobs slice):
 `I can remind you at 15:10, but stopping builder-b needs a script you list (cockpit.jobs.scripts) or the act step (C6).`
 
-### 6.4 Confirm (pending T14)
+### 6.4 Confirm
 
 Creating and cancelling a job, by the agent or by the owner's `CANCEL JOB`, goes through the confirm
-card of `c5-c6.md` (T14, unwritten; D115). This file fixes only what the card says:
+card of `c5-c6.md` §8 (D115, D204-D207). This file fixes only what the card says:
 
 | | Schedule | Cancel |
 | --- | --- | --- |
@@ -532,7 +532,7 @@ Test: `/tick`; block count and times.
 ### S-CW-10 `schedule` asks first; the yes makes the job, its countdown and its badge
 Given `canvas` on `desk`, script `cw-jobs`, which at 07:12:00 calls
 `schedule {"kind":"script","script":"ok","title":"shut off vm-c","at":"+3h","why":"The owner asked."}`,
-Then the confirm card (pending T14) shows `Run ok (shut off vm-c)`, `at 10:12 (in 3 h 00)` and
+Then the confirm card (`c5-c6.md` §8, S-C6-01) shows `Run ok (shut off vm-c)`, `at 10:12 (in 3 h 00)` and
 `The owner asked.`; `jobs.json` has no job;
 When the owner taps yes,
 Then within 1 s: a `cockpit.job.create` audit line; `job-0001` `scheduled` in `jobs.json`; a

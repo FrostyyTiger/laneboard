@@ -18,12 +18,12 @@ T81 (the jobs slice, §3.7) and T30 (S-C1-13 belongs to C2, §3.2).
 | 4 | **Speak** The agent speaks up | find a line from the agent that it started itself, a marker on the talk button, the tour holding on the flagged node | C3, `coworker.md` (T13) and T23 written |
 | 5 | **Canvas** C4, first canvas night | put the screen in `split` or `canvas` and ask for a countdown, a status tile, a log, a chart, a text or a diff card | Speak (order only; it builds on C3) |
 | 6 | **Show** C4 show commands | watch the agent fly the map to a node, highlight, pin, compare, and undo any of it with one tap | Canvas (the show line and `UNDO` exist) |
-| 7 | **Jobs** Scheduled jobs on the room's own machine | ask "remind me in 3 hours" and see the countdown on the canvas and the job on the Map; cancel it with one confirm | Canvas, `c5-c6.md` (T14, the confirm card) written |
+| 7 | **Jobs** Scheduled jobs on the room's own machine | ask "remind me in 3 hours" and see the countdown on the canvas and the job on the Map; cancel it with one confirm | Canvas; the confirm card (`c5-c6.md` §8, T14) is written |
 | 8 | **C2b** The physical button | press a desk button that talks on a named screen | C2, Q-O8 and Q-O20 answered |
 | 9 | **Pair** Pairing screens | pair a second screen others can reach with a code; unpair it | C1, Q-O21 answered b) (with a) this slice folds into C1) |
 | 10 | **Canvas 2** | `timer`, `table`, `checklist`, `map` blocks; custom cards in their sandbox; promotion | Canvas, T12 written |
 | 11 | **History** | `scrub` to a moment in the past; `compare` two time ranges | Show, the board change of §5.2 reviewed |
-| 12 | **C5** Voice out | hear the first sentence of a reply; mute per screen; stop talking | C1, T14 written |
+| 12 | **C5** Voice out | hear the first sentence of a reply; mute per screen; stop talking | C1; Q-O34 |
 | 13 | **C6** Act | approve a change on a confirm card | the control-plane review (plan C6, fenced), T14 |
 
 - The order follows plan §3 ("C1 → C2 → C3 → C4 → C5 → C6") with three moves the reviews asked for:
@@ -249,7 +249,7 @@ The coworker's own example, "shut this off in 3 hours" (`spec-input.md` §3), be
 waits on a review with no date (review 52 finding 6).
 
 **Builds**: the room's job list and runner (`<stateDir>/cockpit/jobs.json`); a job is created by an
-MCP tool only after a confirm card (`c5-c6.md`, T14) and cancelled the same way; each create, fire
+MCP tool only after a confirm card (`c5-c6.md` §8) and cancelled the same way; each create, fire
 and cancel writes an audit line; the job shows on the Map at its target and as a `countdown` bound
 to it (`CANCEL JOB`); the bridge's refusal line goes (§6).
 
@@ -258,8 +258,8 @@ line and a card) or run a script the room's config lists under `cockpit.jobs.scr
 own machine. A job that changes another machine (stop a VM, restart a service) waits for C6; the
 agent says `I can remind you at 15:10, but stopping builder-b needs the act step (C6).`
 
-**Scenarios** (7): S-C4-13 S-C4-24 S-CW-10 S-CW-11 S-CW-12 S-CW-13 S-CW-14. Planned: the confirm
-card's (T14). The job format, tools, firing and audit lines are `coworker.md` §6.
+**Scenarios** (12): S-C4-13 S-C4-24 S-CW-10 S-CW-11 S-CW-12 S-CW-13 S-CW-14 S-C6-01 S-C6-02
+S-C6-03 S-C6-04 S-C6-05. The confirm card is `c5-c6.md` §8. The job format, tools, firing and audit lines are `coworker.md` §6.
 
 **Done-when**: §2's slice rule; `job-0003` of the demo (D112) is created through the real path.
 
@@ -271,8 +271,8 @@ card's (T14). The job format, tools, firing and audit lines are `coworker.md` §
 | Pair | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 S-SCR-27 S-SCR-28 S-SCR-29 S-SCR-33 | Q-O21 b) (under a) these eight are C1's and C1 grows by about 5 steps) |
 | Canvas 2 | S-C4-25 S-C4-26 S-C4-27 S-C4-28 S-C4-29 S-C4-30 S-C4-31 S-C4-32 S-C4-33; planned: T99's checklist flick | T12 written; Q-O32 answered (with c) the custom-card part waits) |
 | History | none written; planned with §5.2 | the board change of §5.2 |
-| C5 | none written; planned: T14's `S-C5-` | T14 |
-| C6 | none written; planned: T14's `S-C6-` | the control-plane review, T14; fenced for unattended work |
+| C5 | S-C5-01 S-C5-02 S-C5-03 S-C5-04 S-C5-05 S-C5-06 S-C5-07 | Q-O34; T128 (messages, fake voice service) |
+| C6 | S-C6-06 S-C6-07 | the control-plane review, Q-O7, Q-O35; fenced for unattended work |
 
 `S-SEC-` (T17) and `S-ONE-` (T19) ids go to the slice whose code they test, written into this file
 by the task that writes them.
@@ -298,9 +298,12 @@ by the task that writes them.
 | S-C4-25..33 | Canvas 2 |
 | S-CW-01..09, 15, 16, 17 | Speak |
 | S-CW-10..14 | Jobs |
+| S-C5-01..07 | C5 |
+| S-C6-01..05 | Jobs |
+| S-C6-06, 07 | C6 |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 165 live ids in all (round 112, S-CW-01..17).
+D55). 179 live ids in all (round 113, S-C5-01..07 and S-C6-01..07).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

@@ -81,7 +81,7 @@ example is shutting something off in three hours.
   line per fire. The agent says `I can run stop-builder-b at 15:10. Confirm?`.
 
 Recommendation: b) — a listed script is already the owner's yes; a) leaves only an alarm clock and
-C6 has no date. Needs the confirm card of `c5-c6.md` (T14, unwritten), which blocks slice Jobs.
+C6 has no date. The confirm card is `c5-c6.md` §8 (T14).
 
 Answer: (open)
 
@@ -416,12 +416,43 @@ Answer: (open)
 
 ## Q-O7 The first "act" list, and which actions always need a confirm
 
-C6, after the control-plane review. `spec-input.md` §7.7. Spec: `c5-c6.md` (T14, not written).
+C6, after the control-plane review. `spec-input.md` §7.7. Spec: `c5-c6.md` §7 (T14: the rules, D208).
 
 - a) No act in version 1.
 - b) A short list of reversible actions (stop a run, restart a service), each confirmed.
 - c) Every control-plane action, each confirmed.
 
 Recommendation: open until the control-plane review; the spec assumes a), and every act ever added needs a confirm.
+Note for the review (T14): the room is `local` on the hub's box (D91) and the hub refuses every
+action from `local`, so C6 also needs a way for the room to carry the owner's yes to the control
+plane (a room key with an act scope, or the yes forwarded as the `direct` user who gave it).
+
+Answer: (open)
+
+## Q-O34 Which replies are spoken
+
+C5. Plan C5: "Optional text-to-speech of the agent's reply". Spec: `c5-c6.md` §1 (written for b), S-C5-02.
+
+- a) Every reply to a prompt from this screen, typed or spoken.
+- b) Only the reply to a spoken prompt; a typed prompt's reply stays silent.
+- c) Only when the owner asks (`say it`), never on its own.
+
+Recommendation: b) — talking gets an answer by voice as well as text; someone typing is often somewhere quiet.
+
+Answer: (open)
+
+## Q-O35 Does a high-tier act need the target typed on the screen
+
+Security, C6. From `reviews/40-security.md` (7). Spec: `c5-c6.md` §8.3 (written for b), S-C6-07.
+
+- a) A tap on the verb button is enough for every act.
+- b) Acts whose control-plane tier is `confirm`, or whose target is `*` or several, need the phrase
+  typed (`RESTART builder-b/acme-billing`), exactly as the board's own dialog (`public/js/ui/confirm.js`);
+  the rest are a tap.
+- c) b), and also a code from the room's CLI for `*` targets.
+
+Recommendation: b) — it is the board's existing rule, so a confirm on the screen is never weaker
+than one in the board. It guards against the wrong target, not a stolen screen: a stolen token is
+answered by `unpair` (Q-O10).
 
 Answer: (open)
