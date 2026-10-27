@@ -456,8 +456,11 @@ When `laneboard cockpit unpair desk` runs on the room at 06:58,
 Then within 2 s `data-cockpit="unpaired"`, the pane shows `PAIR THIS SCREEN AGAIN`, `This screen
 was unpaired on 27 Oct at 06:58. …` and a new code; the conversation is no longer on the screen;
 the wall half keeps touring; a request with the old token gets 401.
-Test: Playwright plus the CLI; assert texts and that no conversation line is in the DOM; `fetch`
-a cockpit route with the old token from the test and expect 401.
+Test: Playwright plus the CLI; `page.on('websocket')` sees `framereceived`
+`{"type":"revoked","at":"2026-10-27T06:58:00+01:00"}`, then the `cockpit:close` mark reads 4402
+`revoked` (`protocols.md` §2.3); assert texts, that no conversation line is in the DOM and that
+no new link opens in the next 20 s; `fetch` a cockpit route with the old token from the test and
+expect 401.
 
 ### S-SCR-17 The room goes down: the cockpit says so after 5 s, the board keeps going
 Given a screen in `wall` layout, live, touring, the pane open with a draft `how is the`,
@@ -529,3 +532,22 @@ Then within 1 s the wall caption and the pane line read `This screen is offline 
 its network.` (on a canvas the strip too, `c4-show-canvas.md` §7.6, asserted only once the Canvas
 slice is built); after `setOffline(false)` the rules of S-SCR-19 apply.
 Test: Playwright `context.setOffline`; assert the two texts; back online, assert `live`.
+
+### S-SCR-24 A refused room link says why instead of retrying as if the room were down
+Given a page on `#/map` whose room link the room refuses right after the upgrade (`protocols.md`
+§2.3, D135),
+When the link closes with 4403 `bad-origin`,
+Then within 1 s `data-cockpit="room-down"` (no 5 s grace) and the pane's line slot reads `This
+address is not allowed to talk to the cockpit room (bad-origin). Reload once the room allows it.`;
+no second upgrade in the next 40 s; the board and the Map go on as before.
+When instead the link closes with 4503 `too-many-links` at t = 0 s,
+Then within 1 s `data-cockpit="room-down"` and the line reads `The cockpit room has 32 screens
+connected, its limit. Trying again every 30 s.`; the next upgrades happen at t = 30 s and t = 60 s
+(± 1 s), none between; when the room accepts the one at 60 s, `data-cockpit="live"` and the line
+goes.
+Test: Playwright with a fake clock; `page.routeWebSocket('**/api/cockpit/ws', ws => ws.close({code:
+4403, reason: 'bad-origin'}))` for the first case, a route that closes the first two with 4503 and
+connects the third to the room under test (`ws.connectToServer()`) for the second; count upgrades in
+the route handler; read the `cockpit:close` marks for code and reason. The room's side (it really
+sends these codes, and an `Origin: https://evil.example.invalid` upgrade gets 4403) is the unit test
+in `protocols.md` §2.3.

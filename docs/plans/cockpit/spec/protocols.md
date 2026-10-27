@@ -208,13 +208,45 @@ case below says what the screen shows.
 | 4000 | `gap` | screen | reconnects at once, asks for a snapshot (§2.2) |
 | 4001 | `no hello` | room: no `hello` 5 s after open | reconnects with backoff |
 | 4002 | `protocol {n}` | room: `hello.protocol` it does not speak | no retry; `data-cockpit="room-down"`, status line `The cockpit room speaks another version ({n}). Reload this page.` |
-| 4401 | `unpaired` | room: no or unknown device token | no retry; `data-cockpit="unpaired"`, the pairing card (`screens.md` §6) |
-| 4401 | `revoked 2026-10-27T06:58:00+01:00` | room: the token was unpaired (also sent to open links at `unpair`) | no retry; the "pair again" card with that time (`screens.md` §6) |
-| (HTTP 403) | `bad-origin` or `bad-host` | room, before the upgrade: refused as HTTP 403 with that reason as the body, no WebSocket opens | no retry; the reason in the console; `data-cockpit="room-down"` |
+| 4401 | `unpaired` | room, right after the upgrade: no device token, or one it does not know | no retry; `data-cockpit="unpaired"`, the pairing card (`screens.md` §6) |
+| 4402 | `revoked` | room: the token was unpaired; sent to the open links at `unpair`, and right after the upgrade to a link that brings a token unpaired in the last 30 days (D135). The `revoked` frame below comes first | no retry; `data-cockpit="unpaired"`, the "pair again" card with the frame's `at` (`screens.md` §6) |
+| 4403 | `bad-origin` or `bad-host` | room, right after the upgrade: `checkUpgrade` refused the Host or Origin | no retry; `data-cockpit="room-down"`, status line `This address is not allowed to talk to the cockpit room ({reason}). Reload once the room allows it.` |
+| 4503 | `too-many-links` | room, right after the upgrade: the room already has 32 links (§8) | reconnects every 30 s, no backoff; `data-cockpit="room-down"` at once (no 5 s grace), status line `The cockpit room has 32 screens connected, its limit. Trying again every 30 s.` |
 | 4408 | `too slow` | room: the link's unsent data passed 4 MB (§8) | reconnects with backoff; gets a snapshot |
 | 4413 | `too big` | room: a text frame over 64 KB or a binary frame over 6 400 bytes | reconnects with backoff |
 | 4429 | `too many` | room: rate limits passed 3 times in 60 s (§8) | reconnects after 30 s |
 | 1011 | `internal` | room: an exception in its handler | reconnects with backoff |
+
+**Refusals come after the upgrade, as close codes** (D135). A browser cannot read the status or
+body of a refused upgrade: an HTTP 403 or 503 reaches the page as `error` then `close` 1006, the
+same as a room that is down. So the room accepts every upgrade on `/api/cockpit/ws` and then checks,
+in this order, before it reads any frame: Host and Origin (`checkUpgrade`, 4403), the link count
+(4503), the device token (4401, 4402). A refused link gets at most one frame (`revoked`, for 4402)
+and the close, in the same tick as the upgrade; it is never counted as one of the 32, never sees a
+`welcome`, and a `hello` already in flight is dropped. The room logs each refusal with its code and
+the request's `Origin`, at most once a minute per code (`warnRateLimited` in `server/security.mjs`).
+Every other path on the room still refuses an upgrade as HTTP 404 (§1). The page treats a close
+without a code of its own (1006, 1005) as the room down: backoff and the 5 s grace (`screens.md` §7).
+
+**`revoked`** (room → screen), no `seq`, the last frame before close 4402:
+
+```json
+{"type":"revoked","at":"2026-10-27T06:58:00+01:00"}
+```
+
+`at` is the time of the `unpair`. A 4402 close without this frame before it draws the "pair again"
+card without a date (`This screen was unpaired. The board works; talking to the agent needs a new
+pairing.`).
+
+**How the page records a close** (for tests and the log): every close of the room link sets
+`performance.mark('cockpit:close', {detail:{code, reason}})` and, for 4401-4503, one
+`console.warn('cockpit: link refused', code, reason)`.
+Test (unit, the room's handler with a real `ws` client in Node): an upgrade with
+`Origin: https://evil.example.invalid` opens, then closes 4403 `bad-origin` with no frame before it;
+the 33rd link closes 4503 `too-many-links` and the room still counts 32; no cookie closes 4401
+`unpaired`; after `revoke({name:'desk'})` the old token's open link receives exactly
+`{"type":"revoked",…}` then closes 4402 `revoked`, and a new link with that token gets the same
+pair. Playwright: S-SCR-24 (`screens.md`).
 
 ## 3. The conversation (C1)
 
@@ -534,7 +566,7 @@ the link that sent `touched` last gets it.
 | prompts | 10 per minute per device token (T59) | `prompt.refused` `too-many` |
 | frame, room → screen | 512 KB (as the hub's `frameBytes`); a bigger snapshot is split into parts | — |
 | unsent data per link | 4 MB (as the hub's `bufferedBytes`) | close 4408 |
-| links per room | 32 | the 33rd upgrade gets HTTP 503 `too-many-links` |
+| links per room | 32 | the 33rd link is accepted and closed at once with 4503 `too-many-links` (§2.3) |
 | replay buffer | the last 2 000 `seq`'d messages | snapshot instead (§2.2) |
 
 ## 9. How tests check this
