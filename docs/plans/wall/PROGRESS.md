@@ -536,6 +536,22 @@ Notes for every builder round (planner, round 1):
   never stands alone: it is the cap height of the line it sits on, at 60 % of the text's value, and is drawn only once the
   line has its first letter (`caption.js`, `wall.css`) — done when: a test finds no cursor on an empty line at any step of
   the typing and the cursor's height equal to the line's cap height, and `wall.html`'s caption tests stay green.
+- [ ] T50 (§7 Night 4, §2.1; r40-dreamer galaxy 1; build with T22) [ui] [variant:galaxy] Trouble leaving is a moment too: when
+  a site's rollup falls (crit → calm or warn) between two map frames, the banner types `HV2 · STORAGE · CLEARED` once in
+  `--text-2` and holds it about 4 s, then the next subject takes its place; never for trouble gone at load, never under a
+  finger, whole text at once in still mode — done when: a page test on a fake clock sees the CLEARED line type in after a
+  fall and hold ~4 s, none at load or in still mode, and a film of `galaxy.html?demo=1&quality=0` (large demo, `--tick 800`,
+  HV2 clearing) shows it in one frame.
+- [ ] T51 (§7 Night 4 B; r40-dreamer show 1) [ui] [variant:galaxy] The agent has a voice: a show takes the caption plate. The
+  kicker reads `SHOWN BY <src>`, a highlight's note types in letter by letter as the hero's second line and a pin's text types
+  in its card; the rows top right stay as undo controls, a step smaller (`galaxy/show.js`, `caption.js`, `wall.css`) — done
+  when: a page test on a fake clock sees the note type in on the plate after a highlight and the plate release on `clear`/✕,
+  a finger still drops it, and a still of `r39-wire`'s flow shows the note as plate type, not only a 14 px card.
+- [ ] T52 (§7 Night 4 B; r40-dreamer show 3 and 4) [ui] [variant:galaxy] Show cards and banner keep out of the way: cards sit
+  on the side away from the system's centre so they do not cover the marked nodes' names, and the banner line hides while a
+  show names its subject (T9's echo rule applied to `flyTo`/`highlight`) — done when: a test on the large fixture with a
+  highlight of `vault` and `audit-log` finds the card's box clear of both marked nodes' screen points, and a test with a
+  `flyTo` of HV2 STORAGE finds no banner line naming it.
 
 ## Research questions
 
@@ -793,8 +809,23 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 - Night 1's shared bugs that may apply (`worstGapMs` a lifetime max in `perf.js` (T39), clock and caption
   (T57/T58)): triage decides per review.
 
+- (r40-dreamer galaxy 3) Held system framed larger (~45 % width) and lower, centred on the hero member, with a visible yaw
+  drift (~15° over 14 s); builds on T25.
+- (r40-dreamer galaxy 5) The leaving has an order: words out, camera out, banner back only once the camera moves (after T20).
+- (r40-dreamer galaxy 6) The hero member grows 1.5x and lights from inside in its status hue while it is the hero; brackets size to it.
+- (r40-dreamer 1b.2) Highlight marks use the lock's four brackets in `--text-1` and a thin leader from the note to each marked node.
+- (r40-dreamer 1c.1) Beacon screen-vertical, 6-8 px soft core with a cap, tip below the tag (the owner's keep-or-cut (d) first).
+- (r40-dreamer 1f.1) `fx=activity` ring when held at most 2.5 planet radii, keeping the slow breath.
+- (r40-dreamer 1g.1) `fx=sweep`: a silent site's name dims one step until the next sweep reaches it with news.
+- (r40-dreamer 4) Warn and crit nebulae about equally loud at 3 m without the banner (T23); the tag is unreadable at 684 px, so `STALE` would not carry from 3 m (T41 may take it).
+
 ## For the owner
 
+- (r40-dreamer galaxy 4, direction) The overview is a photograph for ten seconds: a slow yaw (~1.5°/s, eased by the legs) like the
+  Map's `ambient`, which also serves as an "alive" signal that stops when the feed is stale. Not a task: changes the plan's overview.
+- (r40-dreamer, `fx` candidates, none asked for) `fx=streak` (a gold edge on a site's nebula after a quiet streak),
+  `fx=dispatch` (a thin line of light from the sun to a site when a command or job is sent there), `fx=handback`
+  (the camera rises to the overview with `TOUR` typed when the director gives the camera back).
 - (r21-skeptic, tooling) On this VM, from about 06:30 on 2026-10-27, Chrome's CPU throttle (`film.mjs --cpu` above 1)
   stalls every page, `wall.html` included and the T9 commit too (1 frame in about 70 s), so `film.mjs` times out with
   no frames. r21 filmed at `--cpu 1`. Rounds that film at 4x will hang until the VM or Chrome is looked at.
@@ -866,6 +897,11 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
   tasks (T47 afterglow ring read as live trouble, T48 kicker `n / n`, T49 lone cursor). Dropped as covered: galaxy 1 (T19,
   T28), 2 (T20), 8 (T37-T39), warp 1 (T21), warp 3 (T15). Rest in Later; no new fx proposals (the lock-tint idea already
   stands under For the owner).
+- r40 dreamer → reviews/r40-dreamer.md. 8 galaxy + 4 show + 1 beacon + 1 warp + 1 afterglow + 2 activity + 2 sweep findings
+  + 3 fx proposals; 3 became tasks (T50 CLEARED beat, T51 the show takes the caption plate, T52 show cards and banner echo).
+  Dropped as covered: galaxy 2 (T19), 5 in part (T20), 7 (T48), 8 (T27), warp 1 (T21), afterglow label (T24); beacon
+  (owner's keep-or-cut), warp 2 and activity 2 and afterglow praise (no change). Rest in Later; the overview's slow turn
+  and the 3 fx proposals under For the owner.
 
 ## Scores
 
@@ -897,5 +933,11 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 35 | film-ui (fx-warp) | - | - | - | - | 6 | 3 | - |
 | 35 | film-ui (fx-afterglow) | - | - | - | - | 5 | 7 | - |
 | 35 | film-ui (fx-activity) | - | - | - | - | 4 | 5 | - |
+| 40 | dreamer (galaxy) | 7 | 7 | 6 | 6 | 6 | 5 | 6 |
+| 40 | dreamer (fx-beacon) | - | - | - | - | 3 | 7 | - |
+| 40 | dreamer (fx-warp) | - | - | - | - | 7 | 3 | - |
+| 40 | dreamer (fx-afterglow) | - | - | - | - | 7 | 9 | - |
+| 40 | dreamer (fx-activity) | - | - | - | - | 5 | 7 | - |
+| 40 | dreamer (fx-sweep) | - | - | - | - | 6 | 8 | - |
 
 ## Morning
