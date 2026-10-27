@@ -126,13 +126,29 @@ Answer: (open)
 
 ## Q-O8 Which screen the physical button targets
 
-`spec-input.md` §7.8. Blocks the C2 button API. Spec: T7, `c2-voice.md`.
+`spec-input.md` §7.8. Blocks the C2 button API. Spec: T7, `c2-voice.md` §11 (written for a: `--screen` per button token, else the screen touched last).
 
 - a) **One screen named in config**; none named: the screen touched last.
 - b) **The screen touched last**, always.
 - c) **All screens** at once.
 
 Recommendation: a) — predictable, and c) would open microphones in other rooms (privacy).
+
+Answer: (open)
+
+## Q-O20 How a physical button proves it may press talk
+
+Security-relevant (a new kind of caller on the room). Blocks the C2 button API, not the rest of C2.
+Spec: T7, `c2-voice.md` §11 (written for a), D52.
+
+- a) **Its own token**, made by the room's CLI (`laneboard cockpit button add hall --screen desk`),
+  shown once, stored hashed, able only to press and release talk on its target; revoked with
+  `button remove`.
+- b) **No token, loopback or LAN only**: any caller that reaches the room may press talk.
+- c) **A screen's device token**, copied into the button.
+
+Recommendation: a) — b) lets anything on the network open a microphone on the desk, and c) puts a
+token that can read the conversation into a home automation box.
 
 Answer: (open)
 
