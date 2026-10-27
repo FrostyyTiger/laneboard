@@ -204,9 +204,10 @@ talk button (pending Q-O11); the `SINCE YOU LOOKED` divider (T66); quiet hours a
 **Builds also** (`coworker.md` §7-§8): the infra repo pull and the `infra` tool, the Map drift
 trigger, the repo drift check; the `speakup` message (T127).
 
-**Scenarios** (12): S-CW-01 S-CW-02 S-CW-03 S-CW-04 S-CW-05 S-CW-06 S-CW-07 S-CW-08 S-CW-09
-S-CW-15 S-CW-16 S-CW-17. Planned: T23's touring-Wall scenario (one `S-SCR-` id) and T66's divider
-scenario (one `S-C1-` id). The slice cannot be built until T23 and T127 are written.
+**Scenarios** (13): S-CW-01 S-CW-02 S-CW-03 S-CW-04 S-CW-05 S-CW-06 S-CW-07 S-CW-08 S-CW-09
+S-CW-15 S-CW-16 S-CW-17 S-SCR-34. Planned: T66's divider scenario (one `S-C1-` id). The slice
+cannot be built until T127 is written. The touring-screen hold (`screens.md` §2.1) needs `flyTo(id)`,
+a node lookup and the idle hook of the Wall contract (T31): this slice builds them, Show reuses them.
 
 **Done-when**: §2's slice rule for these ids and those T23 and T66 write; Q-O5 answered.
 
@@ -302,7 +303,7 @@ by the task that writes them.
 | S-C4-13, 24 | Jobs |
 | S-C4-14..23 | Canvas |
 | S-C4-25..33 | Canvas 2 |
-| S-CW-01..09, 15, 16, 17 | Speak |
+| S-CW-01..09, 15, 16, 17; S-SCR-34 | Speak |
 | S-CW-10..14 | Jobs |
 | S-C5-01..07 | C5 |
 | S-C6-01..05 | Jobs |
@@ -313,7 +314,7 @@ by the task that writes them.
 | S-ONE-01..07 | One |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 192 live ids in all (round 115, S-ONE-01..07 by T19).
+D55). 193 live ids in all (round 117, S-SCR-34 by T23).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

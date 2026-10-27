@@ -153,8 +153,8 @@ whose node already has a `status` card on the canvas gets no second card. The ca
   other screens keep theirs. A newer `urgent` block turns a `needs-you` dot `--p1`.
 - The pane opens scrolled to the first raised block since that screen last had it open (T66's
   `SINCE YOU LOOKED` divider sits above it).
-- On a touring `wall` screen the tour's behaviour is T23's (`screens.md`); the room sends no camera
-  move of its own.
+- On a touring screen the screen itself flies to the item's node and holds it for 300 s
+  (`screens.md` §2.1, D219, S-SCR-34); the room sends no camera move of its own.
 
 ### 3.5 The chime
 

@@ -84,6 +84,35 @@ leave by the rules of T11/T12 (pending Q-O4).
 slow caption rotation, no flights); explore and show commands jump to the target with no flight;
 the idle rules above stay the same.
 
+### 2.1 A speak-up on a touring screen (pending Q-O11, D219)
+
+A raised block (`coworker.md` §3.2) reaches every screen as the room's `speakup` message. The room
+sends no camera move for it (`coworker.md` §3.4); each screen decides on its own:
+
+- **When.** The block's tier is `needs-you` or `urgent` (an `urgent` block in quiet hours too: it
+  is raised, only its chime is dropped, `coworker.md` §4); that screen draws a camera now (`wall`,
+  `split`, `switch` while the wall shows); and its wall state is `tour`. A screen in `explore` (the
+  owner's finger, the pane open, a show command) keeps its camera: the dot on the talk button is
+  enough there.
+- **Where.** The block's items, P1 first, then in their order in `items`; the first whose `target`,
+  else whose `builder`, is a node on that screen's Map. None (a `reminder`, a `job`, a target the
+  Map does not draw): the tour goes on unchanged.
+- **The flight.** Within 0.3 s of the message (B5's bound, `README.md` speed budget) the tour stops
+  mid-flight, the root reads `data-wall-state="explore"` and `data-wall-hold="speakup"`, and the
+  camera flies with `flyTo(id)` (the Map's `flight()`, 320-900 ms by distance, zoom 1.9, centred in
+  the wall half, `c4-show-canvas.md` §2-§3.1). Reduced motion: it jumps in one frame.
+- **The hold.** When the flight ends the idle timer starts at **300 s** (`SPEAKUP_HOLD`, one of
+  D6's named constants) instead of 60 s. At 0 the tour resumes with the overview and
+  `data-wall-hold` goes. The talk button's dot stays until the pane opens (`coworker.md` §3.4).
+- **What ends it early.** A touch on the wall half: `data-wall-hold` goes and §2's 60 s rule
+  applies. The pane opening: `data-wall-hold` goes and the timer is paused as in §2. A newer
+  `needs-you` or `urgent` block during the hold: the camera flies to its node and the 300 s start again.
+- **What it leaves.** No conversation line, no `UNDO`, no marks: it is the screen's, not the
+  agent's (the agent's own show commands are `c4-show-canvas.md`'s). The node draws its trouble as
+  the Wall always does (status colour and shape). A reload drops the hold; the tour starts as usual.
+- **What it needs.** `flyTo(id)`, a node lookup and the idle hook of the Wall contract (T31). The
+  Speak slice builds them if the Show slice has not (`slices.md` §3.4).
+
 ## 3. One screen or two
 
 - **One screen** gets both: `split` side by side, or `switch` (`spec-input.md` §2: "A user with one
@@ -1102,3 +1131,27 @@ Test: Playwright with `--host-resolver-rules` mapping `hub.example.invalid` to t
 requests and to read the `Set-Cookie` header; the room's stderr as `protocols.md` §1's boot test
 reads it; the `https:` pairing is a raw `POST` and poll with `Origin: https://cockpit.example.invalid`
 (that host allowed in the test config), the cookie read from the header (no test certificate needed).
+
+### S-SCR-34 A speak-up on the touring Wall: fly to the node, hold 300 s, the dot stays (pending Q-O11)
+Given `coworker.md` §10's room (speak-ups on, quiet hours off, clock manual at 07:14:00, fake agent
+`cw-speak`) and the demo fleet; screen `desk` at 1368x912 in `wall` layout, touring, pane closed;
+screen `hall` in `wall` layout, pane closed, its wall half tapped at 07:14:10 (`explore`),
+When the stuck alarm `stuck:builder-b:acme-billing` (P2) is added with `POST /alarms` at 07:14:00
+and the room's clock reaches 07:14:20 (the end of the gather window),
+Then on `desk` within 0.3 s of the `speakup` message the root reads `data-wall-state="explore"`
+and `data-wall-hold="speakup"`; the flight ends within 0.9 s after it starts (t = f) with
+`screenOf('builder-b')` within 2 px of (684, 456), the centre of the full-screen wall; the talk
+button has `data-speakup="needs-you"` and its 8 px dot; `[data-show-line]` and `[data-show-mark]` count 0;
+And on `hall` the camera has not moved (< 1 px), there is no `data-wall-hold`, and the dot is there;
+And on `desk` at f + 299 s it is still `explore` with the hold; at f + 300 s `data-wall-state="tour"`,
+`data-wall-hold` is gone and the dot is still there.
+When, in a second run, the owner taps `desk`'s wall half at f + 10 s,
+Then `data-wall-hold` is gone at once and the tour resumes at f + 70 s.
+When, in a third run, the alarm is a P3 `ci-red` on `builder-b` (tier `info`),
+Then `[data-raised]` is in the conversation, `desk` keeps `data-wall-state="tour"`, no
+`data-wall-hold`, no dot; and in a fourth, a P2 alarm whose `target` and `builder` are no node of
+the demo Map (`vm-x`) gives the dot and no flight.
+Test: Playwright, two pages on the room under test; the room's clock with `POST /tick`, the page
+idle timer with `page.clock.fastForward()`; the flight's start and end from the camera sampled each
+frame (`onDraw`); root attributes and `screenOf('builder-b')` at each step; `hall`'s camera from
+`camera()` before and after.
