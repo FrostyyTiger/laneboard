@@ -251,12 +251,34 @@ Notes for every builder round (planner, round 1):
   overview. Checked: CDP script `tools/r35-back.mjs` (`shots/r35-back`: wake → tap hv2 → planet gpu-box → BACK → hv2's
   sheet, camera stays → BACK → overview, control gone → again via empty-sky taps → a third sky tap at the overview does
   nothing; 0 errors) and film r35-galaxy (tour unchanged, no control in it, 0 errors, 12.4 fps as every SwiftShader film).
-- [ ] T14 (§7 Night 3 C5) [ui] [variant:galaxy] Touch, the tour resumes: one minute after the last touch the
+- [x] T14 (§7 Night 3 C5) [ui] [variant:galaxy] Touch, the tour resumes: one minute after the last touch the
   camera eases from where it is back into the tour (no cut, `tour.js` restarted at its next leg, trouble first);
   reduced motion (D5): every touch step as a cut with a short fade, no flights — done when: a pointer-event test
   on the page with a fake clock drives touch → overview → drag → tap a site → detail → back → 60 s → tour
   resumed (and the same in still mode with fades), and a filmstrip of `galaxy.html?demo=1&quality=0` with
-  scripted touches (CDP `Input.dispatchTouchEvent`) shows that sequence.
+  scripted touches (CDP `Input.dispatchTouchEvent`) shows that sequence. (commit a7946aa)
+  Builder r38: `touch.js IDLE.ms` 60 000; `touchStep` keeps `last` (a down, move, lift, the wheel, `poke()`) and in
+  `explore` with no finger down hands back after the minute (`resume`, once; easing never); `createTouch({ resume })`
+  hears it from `mode()`, which the page asks each frame. `tour.js resumeTour`/`tour.resume()`: a fresh cycle whose
+  first leg is the worst site now (trouble first, not the overview nor the calm site that was due); the camera flies
+  there from the finger's pose (no cut). main.js `resume`: plate released, place reset, tour resumed; `goBack` pokes
+  (the control's pointers never reach the stage). Reduced motion: `camera.js cut(id, zoom)` (no flight, no drift,
+  system open at once; `fit()` back out folded at once; the free box taken at once in still mode) and `still.js
+  CUT`/`cutFade`/`createCutFade` (canvas and names fade in over 320 ms by script, wall.css has no animations); taps and
+  back now work in reduced motion, a tapped site is a cut with the fade, back out and a hand-back from a cut site too.
+  Decision: no drag, pinch or wheel in reduced motion (a turning galaxy is the motion D5 refuses; the camera test
+  `reduced motion: no steering` stays). Tests: `test/wall-galaxy-resume.test.mjs` (touchStep idle rules, resumeTour,
+  tour.resume, camera cut, the fade, the page sequence touch → overview → drag → tap → detail → back → 60 s → tour at
+  its crit with a flight from where it was, a touch/back press/wheel within the minute keeps it, the same sequence in
+  still mode with cuts and fades, main.js wiring). Checked: CDP script `tools/r38-resume.mjs` on `--size large`:
+  `shots/r38-resume` (tour → overview → drag → tap HV1, flight → sheet + BACK → back → idle 30 s, 57 s → resumed,
+  flying to HV2 STORAGE, TARGET 01 → the tour on; 0 errors) and `shots/r38-resume-still` (reduced motion: cut to HV1
+  with the fade at 0.22, cut out at 0.47, the still tour back on HV2 after the minute; 0 errors); film r38-galaxy (tour
+  unchanged, 0 errors, 5.9 fps: two orphaned SwiftShader Chromes from this round's first crashed script runs were
+  still rendering, see For the owner; earlier films here ran ~12 fps; per frame this task adds one `touchStep` call).
+  Film tooling note: under SwiftShader a CDP tap with a 60 ms sleep between start and end reached the page 500 ms
+  apart (over `TAP.ms`); send touchStart and touchEnd back to back. Not built: the `MANUAL · TOUR IN 0:40` countdown
+  (Later, r36-dreamer touch 1).
 - [ ] T15 (r4-film-ui galaxy 1) [ui] [variant:galaxy] The caption names only a target the camera is on: the
   plate's typing starts at flight progress ~0.9 (night 2's r54-film-ui 4), and during a flight passing sites'
   labels dim to `--text-3` while only the destination's name stays full — done when: a test shows no caption
@@ -520,6 +542,11 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
   (T57/T58)): triage decides per review.
 
 ## For the owner
+
+- (r38) Two headless Chromes from round 38's first two film-script runs (the script crashed before closing them;
+  user-data-dir `/tmp/touch-ms64N7`, `/tmp/touch-4ps9Rm`, main pids 3299827 and 3300230 on the build VM) were left
+  rendering at ~250 % CPU each; the round's kill was refused by its permission check. Stop them if still alive; they
+  slow every film this night.
 
 - (Q14 research, for T6; taste) A stale feed that keeps its crit nebula red and brightest looks like live trouble.
   The research suggests freezing all liveness motion (`freeze`, small), a slashed grey ring at the sun (`flag`),
