@@ -414,3 +414,39 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   asks every `LANEBOARD_*` name in `server/` to be there, and they are part of the agent contract —
   spec: `protocols.md` §11.8, §11.11 — overrule: move the row to `docs/cockpit.md` (T44) and exempt
   the names in the test.
+- B70 (T10) Rule 1 matches a secret's value only when it has 4 or more characters (`SECRET_MIN`,
+  after trimming); shorter or empty values are skipped — because `cockpit.agent.env` may name
+  non-secret variables (`TERM`, `TZ`) whose short values would blank ordinary text, and a value
+  under 4 characters is no key — spec: `c1-talk.md` §5.3 rule 1 — overrule: `SECRET_MIN = 1` in
+  `server/cockpit/redact.mjs` (security-relevant, named under For the owner).
+- B71 (T10) Rule 3 in reply text matches `Bearer`, `Basic`, `Token` capitalised or upper-case only;
+  in tool input it stays case-insensitive as §5.3's table says — because S-SEC-02 (D211) expects
+  `The token in /etc/acme/env is [redacted] …`, which a case-insensitive rule 3 would turn into
+  `The token [redacted] /etc/acme/env …`; D211 is newer than §5.3's table (D127) — spec:
+  `security.md` §5, S-SEC-02, `c1-talk.md` §5.3 — overrule: `SCHEME_TEXT` in `redact.mjs`.
+- B72 (T10) Rule 4 inside a string also takes a quote around the name or the value
+  (`"api_key": "v"`, `X-Api-Key: v`), and `--name value` needs the two dashes and a value not
+  starting with `-`; only a name holding one of the seven parts matches, so `https:` never swallows
+  a URL — because §5.3 lists the four forms, not quoting, and JSON held in a string is common in
+  tool input — spec: `c1-talk.md` §5.3 rule 4 — overrule: `NAME_SEP_VALUE`/`FLAG_VALUE`.
+- B73 (T10) The hold-back also keeps a rule 3 word (`Bearer `) that ends a delta, with the white
+  space after it, until the next word comes — because otherwise `Bearer ` leaves alone and its
+  credential arrives in a delta where rule 3 cannot see the word — spec: `security.md` §5 "While
+  streaming" — overrule: `holdFrom()` in `redact.mjs`.
+- B74 (T10) The streaming hold for a PEM block starts at `-----BEGIN` anywhere in the text, not only
+  at a line's start; on its `-----END … -----` the held part goes through the reply rules (rule 2
+  makes a private key one `[redacted]`, a certificate is left to rules 5-6) — because a key pasted
+  after `key: ` on the same line must not leave word by word — spec: `security.md` §5 — overrule:
+  `stream()` in `redact.mjs`.
+- B75 (T10) The bridge also redacts a `turn.end` `detail` from the agent with the reply rules —
+  because it is the agent's text that reaches a screen like any other — spec: `security.md` §5
+  (silent on `detail`) — overrule: drop `redactor.text` in `endTurn()`.
+- B76 (T10) One redaction stream per text block of the running turn: a delta's releasable text
+  leaves as one `text.delta` (none when nothing may leave yet); at `text.block`, or at `turn.end`
+  for a block that never got one, the held rest leaves as a last `text.delta` first, so the deltas
+  always add up to the block; the T9 bridge test now expects §13.1's six agent deltas as five
+  (`03:12` waits for `.`) — because "sends it with the next delta, once white space or the block's
+  end arrives" — spec: `security.md` §5, `protocols.md` §3.2 — overrule: `streamFor`/`endStream`
+  in `bridge.mjs`. The bridge builds its redactor from `roomSecrets({mcpToken, env, names:
+  cockpit.agent.env})` plus `opts.secrets`; the speech token file is read by `roomSecrets()` when the
+  room passes `sttTokenFile` (T13 wires the room's bridge, B61).

@@ -320,10 +320,14 @@ async function setup(t, { kind = 'claude-code', script: sc, agent: over = {}, mc
 
 const label = (m) => (m.type === 'turn.state' ? `turn.state ${m.state}` : m.type);
 
-/** §13.1's screen side, in order (protocols.md §10 from 2.97 s on). */
+/**
+ * §13.1's screen side, in order (protocols.md §10 from 2.97 s on). Six deltas
+ * from the agent leave as five: the redaction hold-back (security.md §5, T10)
+ * keeps `03:12` until `.` and sends `03:12.` at the block's end.
+ */
 const TURN_131 = ['turn.prompt', 'turn.state thinking', 'turn.state working', 'tool.start', 'tool.end',
   'turn.state thinking', 'turn.state answering', 'text.delta', 'text.delta', 'text.delta', 'text.delta',
-  'text.delta', 'text.delta', 'text.block', 'turn.end'];
+  'text.delta', 'text.block', 'turn.end'];
 
 function assertTurn131(messages) {
   assert.deepEqual(messages.map(label), TURN_131);
@@ -445,7 +449,7 @@ test('a bridge agent\'s own refusal is one denied tool.start: the screens get th
   await s.bridge.prompt({ clientId: 'p-00000002', screen: 'desk', text: 'ls', source: 'typed', lang: null, about: null });
   await s.until(() => s.messages.some((m) => m.type === 'turn.end'), 'turn.end');
   assert.deepEqual(s.messages.map(label), ['turn.prompt', 'turn.state thinking', 'tool.start', 'tool.end',
-    'turn.state answering', 'text.delta', 'text.block', 'turn.end']);
+    'turn.state answering', 'text.delta', 'text.delta', 'text.block', 'turn.end'], 'the held last word is a delta of its own (T10)');
   const end = s.messages[3];
   assert.deepEqual([end.isError, end.denied, end.toolUseId], [true, true, 'tu-01']);
   for (const m of s.messages) assert.deepEqual(checkMessage(m, 'out'), { ok: true }, JSON.stringify(m));
@@ -490,8 +494,9 @@ test('§11.9: 300 s without a line ends the turn E8 and resumes the session; a p
   setClock(clock);
   t.after(() => setClock(null));
   const s = await setup(t, { script: bridgeScript({}, [
-    { match: 'ping', pingEveryMs: 200, steps: [{ at: 20, text: 'thinking' }, { at: 600_000, end: 'done' }] },
-    { match: 'quiet', steps: [{ at: 20, text: 'thinking' }, { at: 600_000, end: 'done' }] }]) });
+    // 'thinking ' ends in white space, so the redaction hold-back (T10) sends it at once.
+    { match: 'ping', pingEveryMs: 200, steps: [{ at: 20, text: 'thinking ' }, { at: 600_000, end: 'done' }] },
+    { match: 'quiet', steps: [{ at: 20, text: 'thinking ' }, { at: 600_000, end: 'done' }] }]) });
   s.bridge.start({ session: '7c1d2e3f-4a5b-4c6d-8e7f-901a2b3c4d5e' });
   await s.until(() => s.bridge.state === 'up', 'ready');
 
@@ -545,4 +550,37 @@ test('§11.3, §11.1: lines the room does not understand are logged and skipped;
   assert.ok(tail.every((l) => l.length <= 120));
   assert.equal(tail[0].slice(0, 11), 'err line 5 ');
   assert.deepEqual(s.messages, []);
+});
+
+// ------------------------------------------------------------ redaction (T10)
+
+test('S-SEC-02 through the bridge: no frame holds the token or the key, the reply reads as the scenario says (D211)', async (t) => {
+  const s = await setup(t, { script: script('sec-reply') });
+  s.bridge.start();
+  await s.until(() => s.bridge.state === 'up', 'ready');
+  await s.bridge.prompt({ clientId: 'p-00000010', screen: 'desk', text: 'what is in /etc/acme/env?', source: 'typed', lang: null, about: null });
+  await s.until(() => s.messages.some((m) => m.type === 'turn.end'), 'turn.end');
+  const wire = s.messages.map((m) => JSON.stringify(m)).join('\n');
+  for (const bit of ['ghp_9xQ2', 'PRIVATE KEY', 'AAAAnot']) assert.ok(!wire.includes(bit), `a frame holds ${bit}`);
+  const blocks = s.messages.filter((m) => m.type === 'text.block');
+  assert.deepEqual(blocks.map((b) => b.text), ['The token in /etc/acme/env is [redacted] and the key is below.', '[redacted]']);
+  const first = s.messages.filter((m) => m.type === 'text.delta' && m.blockIndex === blocks[0].blockIndex);
+  assert.equal(first.map((d) => d.text).join(''), blocks[0].text, 'the deltas add up to the block');
+  for (const m of s.messages) assert.deepEqual(checkMessage(m, 'out'), { ok: true }, JSON.stringify(m));
+  assert.equal(s.messages.at(-1).state, 'done');
+});
+
+test('a tool\'s input is redacted before D97\'s cuts; the room\'s own MCP token is rule 1 (§5.3, D127)', async (t) => {
+  const s = await setup(t, { script: bridgeScript({}, [{ steps: [
+    { at: 50, tool: 'Grep', input: { pattern: `Authorization: Bearer ${'eyJ'.padEnd(190, 'x')}${'abc123DEF'.repeat(4)}`, path: '/etc/laneboard', api_key: 7 }, endAt: 100, call: false },
+    { at: 150, text: 'the token is test-token here.' }, { at: 200, end: 'done' }] }]) });
+  s.bridge.start();
+  await s.until(() => s.bridge.state === 'up', 'ready');
+  await s.bridge.prompt({ clientId: 'p-00000011', screen: 'desk', text: 'find the token', source: 'typed', lang: null, about: null });
+  await s.until(() => s.messages.some((m) => m.type === 'turn.end'), 'turn.end');
+  const ts = s.messages.find((m) => m.type === 'tool.start');
+  assert.deepEqual(ts.input, { pattern: 'Authorization: Bearer [redacted]', path: '/etc/laneboard', api_key: '[redacted]' });
+  const tb = s.messages.find((m) => m.type === 'text.block');
+  assert.equal(tb.text, 'the token is [redacted] here.');
+  assert.ok(!s.messages.some((m) => JSON.stringify(m).includes('test-token')));
 });

@@ -258,6 +258,20 @@ What the slice itself says waits; nothing else moved here.
   comes before the first stdin line, the `result` of a failed login) are built as the fake agent
   speaks them (B59); no round can pin them against a real logged-in `claude` on this machine. The
   Q2 recheck's `--system-prompt-snapshot off` question (above) is not in §11.2's list and not built.
+- T10 (review-required): `server/cockpit/redact.mjs` (§5.3's six rules on tool input; rules 1, 2,
+  3, 5, 6 on reply text with the hold-back across deltas, D127, D211) and its wiring in
+  `server/cockpit/bridge.mjs` (every `text.delta`, `text.block`, `tool.start` input and agent
+  `detail` passes the redactor before `emit`, so the snapshot and `conversation.jsonl`, built from
+  those messages, are redacted too). Tests: `test/cockpit-redact.test.mjs`, the two T10 cases of
+  `test/cockpit-bridge.test.mjs`. Choices B70-B76; two to look at: B70 (rule 1 skips values under 4
+  characters) and B71.
+- T10, two places that disagree: `c1-talk.md` §5.3's table makes rule 3 case-insensitive ("`Bearer `,
+  `Basic ` or `Token ` followed by non-space characters"), and `security.md` S-SEC-02 expects "the
+  reply reads `The token in /etc/acme/env is [redacted] and the key is below.`" under the same rule
+  3 (D211). Case-insensitive, the reply would read `The token [redacted] /etc/acme/env …`. Built: rule
+  3 case-insensitive on tool input, capitalised/upper-case only on reply text (B71, D211 the newer).
+  A sentence that starts `Token …` or `Basic …` still loses its next word in a reply (accepted
+  over-redaction).
 
 ## Measured on the real screen
 

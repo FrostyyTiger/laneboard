@@ -19,8 +19,10 @@
 //
 // opts: `agent` (config.cockpit.agent, finalized), `stateDir`, `emit(msg)`,
 // `log(line)`, `env` (the room's environment), `mcpToken`, `instructions`
-// (§11.8's text), `spawn` (child_process.spawn, injectable), `redactText`,
-// `redactInput` (T10's module, identity until then), `onReady(ev)`,
+// (§11.8's text), `spawn` (child_process.spawn, injectable), `secrets` (more
+// values for redaction rule 1, e.g. the speech token) or `redactor` (a
+// `createRedactor()` of redact.mjs; by default one over the room's secrets,
+// D127, D211), `onReady(ev)`,
 // `onExit({code, signal, beforeReady, why})`, `onCondition(code, fields)`
 // (a status condition the bridge sets: a refused start's `agent-down`).
 //
@@ -37,6 +39,7 @@ import { standingInstructions } from './agents/instructions.mjs';
 import { entryCovered, toolAllowed } from './allowlist.mjs';
 import * as clock from './clock.mjs';
 import { isoAt } from './iso.mjs';
+import { createRedactor, roomSecrets } from './redact.mjs';
 
 /** §11.9 (D105): a turn with no stdout line at all for this long is dead. */
 export const LIVENESS_MS = 300_000;
@@ -128,11 +131,13 @@ export function createBridge(opts) {
   const {
     agent, stateDir, emit = () => {}, log = () => {}, env = process.env, mcpToken = null,
     instructions = standingInstructions(), spawn = nodeSpawn,
-    redactText = (s) => s, redactInput = (o) => o,
+    secrets = [],
     onReady = () => {}, onExit = () => {},
   } = opts;
   if (!agent || (agent.kind !== 'claude-code' && agent.kind !== 'bridge')) throw new TypeError('createBridge: agent.kind must be claude-code or bridge');
   const onCondition = opts.onCondition ?? ((code, fields) => emit({ type: 'status', status: { code, since: isoAt(clock.now()), ...fields } }));
+  // D127, D211: everything of the agent's that a screen or a file gets passes here first.
+  const redactor = opts.redactor ?? createRedactor({ secrets: [...roomSecrets({ mcpToken, env, names: agent.env ?? [] }), ...secrets] });
   const cwd = fillPath(agent.cwd, { stateDir });
   // §11.11 fence 3 runs for a bridge agent unless the owner lifted it (D241).
   const checkTools = agent.kind === 'bridge' && agent.allowUnrestricted !== true;
@@ -382,12 +387,15 @@ export function createBridge(opts) {
       case 'text.delta': {
         seeBlock(ev.block);
         setState('answering');
-        send({ type: 'text.delta', turnId: turn.turnId, blockIndex: ev.block, text: redactText(ev.text), sentAt: clock.now() });
+        // security.md §5: a word not yet finished waits for the next delta.
+        const out = streamFor(ev.block).push(ev.text);
+        if (out) sendDelta(ev.block, out);
         break;
       }
       case 'text.block':
         seeBlock(ev.block);
-        send({ type: 'text.block', turnId: turn.turnId, blockIndex: ev.block, text: redactText(ev.text) });
+        endStream(ev.block);
+        send({ type: 'text.block', turnId: turn.turnId, blockIndex: ev.block, text: redactor.text(ev.text) });
         break;
       case 'tool.start': return onToolStart(ev);
       case 'tool.end': return onToolEnd(ev);
@@ -433,7 +441,8 @@ export function createBridge(opts) {
     }
     const tu = `tu-${pad(++turn.tools.counter, 2)}`;
     const startedAt = isoAt(clock.now());
-    const input = shapeInput(redactInput(ev.input));
+    // §5.3: redaction before D97's cuts, so a cut never leaves half a secret.
+    const input = shapeInput(redactor.input(ev.input));
     if (ev.denied === true) {
       // A bridge agent's own refusal: one tool.start with denied and no tool.end
       // (D242); the screens get the pair a refused call always has (B62).
@@ -499,10 +508,28 @@ export function createBridge(opts) {
   function newTurn(promptId) {
     turnCounter += 1;
     const t = { turnId: `t-${pad(turnCounter, 4)}`, prompt: promptId, started: false, state: null, nextBlock: 0,
-      tools: { counter: 0, running: 0, byId: new Map() } };
+      tools: { counter: 0, running: 0, byId: new Map() }, streams: new Map() };
     turn = t;
     armLiveness();
     return t;
+  }
+
+  /** A text block's hold-back (redact.mjs `stream()`), one per block of the running turn. */
+  function streamFor(block) {
+    let st = turn.streams.get(block);
+    if (!st) turn.streams.set(block, (st = redactor.stream()));
+    return st;
+  }
+  function sendDelta(block, text) {
+    send({ type: 'text.delta', turnId: turn.turnId, blockIndex: block, text, sentAt: clock.now() });
+  }
+  /** The block's end: what it still holds leaves as one last delta. */
+  function endStream(block) {
+    const st = turn.streams.get(block);
+    if (!st) return;
+    turn.streams.delete(block);
+    const rest = st.end();
+    if (rest) sendDelta(block, rest);
   }
 
   function seeBlock(block) {
@@ -517,6 +544,8 @@ export function createBridge(opts) {
 
   function endTurn(ev) {
     if (!turn) return;
+    // A turn that ends with a block still streaming: its held text goes first.
+    for (const block of [...turn.streams.keys()]) endStream(block);
     const t = turn;
     turn = null;
     disarmLiveness();
@@ -525,7 +554,8 @@ export function createBridge(opts) {
     if (ev.state === 'error') {
       msg.code = ev.code;
       if (ev.code === 'step-limit') msg.steps = Number.isInteger(ev.steps) ? ev.steps : 0;
-      if (ev.code === 'agent-down' || ev.code === 'failed') msg.detail = cut(ev.detail ?? ev.code);
+      // B75: an agent's own detail is its text too.
+      if (ev.code === 'agent-down' || ev.code === 'failed') msg.detail = cut(redactor.text(ev.detail ?? ev.code));
     }
     // §11.4: one log line per turn with what it cost (`null` when the agent says nothing).
     log(`cockpit turn ${t.turnId}: ${ev.state}${ev.code ? ` ${ev.code}` : ''} steps ${ev.steps ?? null} costUsd ${ev.costUsd ?? null} durationMs ${ev.durationMs ?? null}`);
