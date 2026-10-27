@@ -418,6 +418,27 @@ Notes for every builder round (planner, round 1):
   targets()` box is at least 48 px tall (pad each row's box, centred, never past half the gap to the next row; or
   `min-height` in `wall.css`) — done when: a test over the large fixture's site and planet sheets finds every
   `targets()` box ≥ 48 px tall and no two overlapping, and `wall.html`'s caption tests stay green.
+- [ ] T34 (§7 Night 4, §2.4; r31-performance galaxy 1) [ui] [variant:galaxy] The overview is the cheapest frame it can
+  be: it is the heaviest today (203-212 draw calls, 84-86k triangles, against 51 and 14k for an open HV2) because
+  `scene.js place()` keeps every folded member's full L0 planet sphere (about 1.3k triangles each) drawn at 2-6 px.
+  While a site's `unfold < 0.05` and it is not held, folded planets take the dot geometry (`sphereSegs('dot')`, a swap
+  between two shared geometries, never a new one; swapped back as the system opens) and a folded member's halo is hidden
+  when under 1 px on screen — done when: a test pins the swap (dot geometry folded, planet geometry open, no geometry
+  created by the swap), `?at=overview&perf=1` reports at most 25k triangles on the large fixture (before/after in the
+  notes), and a still of the overview is unchanged by eye.
+- [ ] T35 (§7 Night 4, §2.4; r31-performance galaxy 3) [ui] [variant:galaxy] An open fan writes only what changed:
+  `galaxy/fan.js draw` rewrites about 50 style properties every frame for up to 60 s. Once every row has `k >= 1`, stop
+  writing the spot and the rows; write a leader's transform only when its rounded key changes (0.1 px, opacity to
+  0.01, as `lock.js`); resolve each row's mesh once in `show()` and project it directly instead of `o.screenOf(id)` per
+  frame — done when: a counting style proxy (as `wall-galaxy-savings`) sees no row or spot write 1 s after `show()`
+  with the camera still, a leader write when its planet moves more than 0.1 px, and the fan tests stay green.
+- [ ] T36 (§7 Night 4, §2.2; r31-performance galaxy 5, touch 2) [ui] [variant:galaxy] The wake does not force layout:
+  the first frame after a wake is the longest gap (183 ms under x4) partly because `boxOf` (`main.js` near 389),
+  `hud.js tagCover` and `frame.js cover` read `offset*` boxes in the frame that has just written `hidden`,
+  `textContent` and dataset values (`back.show`, `sayManual`). Read those boxes on the next rAF (a cover one frame
+  late is harmless: names move on a tween) — done when: a test with a counting fake DOM finds no box read between a
+  write and the end of the same tick on the wake frame, the covers are right one frame later, and the touch and
+  resume page tests stay green.
 
 ## Research questions
 
@@ -439,6 +460,14 @@ Notes for every builder round (planner, round 1):
   a cost guess) — for T17
 
 ## Later
+
+From r31-performance (triage, night 4; not tasks yet):
+- (r31-performance galaxy 2) No frame cap yet: stays behind `?cap=30`, off by default (owner; see the cap line below). The overview and holds render at display rate.
+- (r31-performance galaxy 1, later) Folded members as one `InstancedMesh` per tone: draw calls from about 200 to about 50 (after T34).
+- (r31-performance galaxy 4) Per-frame garbage: `director.tick` returns early while the tour drives and no show is held (reads `cam.pose()` only for a move); `touch.mode()` once per frame, not three times; `covers()` rebuilds its array only when a part changes; `manualLine` only when `ceil(left/1000)` changes.
+- (r31-performance galaxy 6) `?perf=1` gets a style-and-layout line from a `long-animation-frame` observer (= r56 galaxy 4).
+- (r31-performance galaxy 7) Afterglow slots keyed on id and rounded width, so a new clear does not rebuild up to 8 `RingGeometry`s.
+- (r31-performance fx-warp 1) If the Surface dips in flights, halve `WARP_DUST` at level 1.
 
 From r26-touch (triage, night 4; not tasks yet):
 - (r26-touch galaxy 3) A fast sleeve swipe (160 px in ~70 ms near the edge) throws the held planet out of frame: a drag needs a still start or a speed cap, and a planet sheet's subject is kept in frame (ease back or close the sheet).
@@ -749,6 +778,10 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 - r26 touch → reviews/r26-touch.md. 11 galaxy + 2 beacon + 1 warp findings; 3 became tasks (T31 pinch loses the
   galaxy, T32 palm wakes, T33 sheet rows under 48 px). Dropped: galaxy 6, 9, 10 (praise/no change), galaxy 11 (T19),
   beacon and warp (T2, T15). Rest in Later; no fx proposals.
+- r31 performance → reviews/r31-performance.md. 7 galaxy + 2 touch + 4 fx findings; 3 became tasks (T34 folded planets as
+  dots at the overview, T35 fan writes only changes, T36 wake without forced layouts). Dropped: touch 1 (no fix),
+  fx-beacon/afterglow/comets/twinkle (no fix; T17 removes the last two). Galaxy 2 is the owner's `?cap=30` (Later). Rest in
+  Later; no fx proposals. Note: the review corrects T12's "13k at the overview, 205 with HV1 open": the overview is the heavy frame.
 
 ## Scores
 
@@ -769,5 +802,11 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 26 | touch (galaxy) | 7 | 7 | 7 | 6 | 7 | 5 | 6 |
 | 26 | touch (fx-beacon) | - | - | - | - | 5 | 6 | - |
 | 26 | touch (fx-warp) | - | - | - | - | 6 | 4 | - |
+| 31 | performance (galaxy) | 7 | 7 | 7 | 7 | 6 | 6 | 6 |
+| 31 | performance (fx-beacon) | - | - | - | - | 5 | 6 | - |
+| 31 | performance (fx-warp) | - | - | - | - | 6 | 5 | - |
+| 31 | performance (fx-afterglow) | - | - | - | - | 5 | 7 | - |
+| 31 | performance (fx-comets) | - | - | - | - | 3 | 6 | - |
+| 31 | performance (fx-twinkle) | - | - | - | - | 3 | 6 | - |
 
 ## Morning
