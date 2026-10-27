@@ -215,8 +215,10 @@ const byte = (v) => Number.isInteger(v) && v >= 0 && v <= 255;
  * The extras a feed may hang on a host, guest or service for a screen that
  * draws them (the Wall, docs/plans/wall/README.md D3): `glow: {rgb: [r, g, b],
  * level}` (a light's colour and brightness, level 0..1, 1 when left out) and
- * `ring: {progress}` (a job's progress 0..1). Each is kept whole or dropped;
- * the app's Map ignores both.
+ * `ring: {progress}` (a job's progress 0..1) and `countdown: {at, label}` (a
+ * scheduled job: `at` epoch ms or an ISO time, kept as epoch ms; `label` a
+ * short name, up to COUNTDOWN_LABEL_MAX characters, may be left out). Each is
+ * kept whole or dropped; the app's Map ignores them.
  */
 export function feedExtras(x) {
   const out = {};
@@ -226,8 +228,17 @@ export function feedExtras(x) {
   }
   const r = isObj(x?.ring) ? x.ring : null;
   if (r && unit(r.progress)) out.ring = { progress: r.progress };
+  const c = isObj(x?.countdown) ? x.countdown : null;
+  const at = typeof c?.at === 'string' ? Date.parse(c.at) : c?.at;
+  const label = typeof c?.label === 'string' ? c.label.trim() : c?.label;
+  if (c && Number.isFinite(at) && at > 0 && (label == null || (typeof label === 'string' && label.length <= COUNTDOWN_LABEL_MAX))) {
+    out.countdown = label ? { at, label } : { at };
+  }
   return out;
 }
+
+/** The longest `countdown.label` a feed may send (feedExtras): a name, not a sentence. */
+export const COUNTDOWN_LABEL_MAX = 32;
 
 /** One of a running guest's services, as the feed lists it. */
 function fromService(g, ref) {
@@ -1200,6 +1211,7 @@ export function buildFleet({
       // Feed extras for the Wall (feedExtras); the app's Map draws neither.
       glow: f?.glow,
       ring: f?.ring,
+      countdown: f?.countdown,
     });
   }
 

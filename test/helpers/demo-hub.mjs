@@ -327,7 +327,7 @@ export const DEMO_SITES_LARGE = Object.freeze([
       room('ci', 104, 'CI runners', [svc('runner-1', 'job · 4m', 'working'), svc('runner-2', 'waiting for a job', 'idle'), svc('runner-3', 'waiting for a job', 'idle')], { tags: ['tag:ci'], ci: { runner: true, for: '*' } }),
       room('backup', 105, 'nightly backups', [], { unlisted: true }),
       room('proxy', 110, 'reverse proxy', [svc('ingress', 'tls · 42 routes'), svc('certs', 'renews in 41d')]),
-      room('db', 111, 'databases', [svc('postgres', '14 dbs'), svc('redis', 'cache'), svc('db-dumps', 'hourly')]),
+      room('db', 111, 'databases', [svc('postgres', '14 dbs'), svc('redis', 'cache'), svc('db-dumps', 'hourly')], { schedule: { label: 'dumps', everyMs: 15 * 60_000 } }),
       room('monitor', 112, 'metrics and logs', [svc('metrics', '1.2k series'), svc('logs', '9 GB/day'), svc('alerting', '12 rules')]),
       room('dns', 113, 'resolver', [svc('resolver', 'cache 94%'), svc('dhcp', '61 leases')]),
       room('git-mirror', 114, 'git mirror', [svc('mirror', '38 repos')]),
@@ -359,7 +359,7 @@ export const DEMO_SITES_LARGE = Object.freeze([
       room('api-prod', 'api-prod', 'production', [svc('api', '420 req/s'), svc('worker', '3 jobs', 'working'), svc('scheduler', '14 cron')], { type: 'cloud' }),
       room('api-staging', 'api-staging', 'staging', [svc('api-stg', '4 req/s')], { type: 'cloud' }),
       room('db-prod', 'db-prod', 'database', [svc('primary', 'lag 0s'), svc('replica', 'lag 1s')], { type: 'cloud' }),
-      room('object-store', 'object-store', 'buckets', [svc('buckets', '7 buckets')], { type: 'cloud' }),
+      room('object-store', 'object-store', 'buckets', [svc('buckets', '7 buckets')], { type: 'cloud', schedule: { label: 'lifecycle', everyMs: 20 * 60_000, lateMs: 2 * 60_000 } }),
       room('mail', 'mail', 'mail', [svc('smtp', 'queue 0'), svc('imap', '12 users')], { type: 'cloud' }),
       room('status-page', 'status-page', 'status page', [], { type: 'cloud' }),
     ],
@@ -368,7 +368,7 @@ export const DEMO_SITES_LARGE = Object.freeze([
     id: 'remote', source: 'remote', label: 'remote', sub: 'office · tailnet', ip: '203.0.113.10',
     host: { cpu: 0.12, mem: 0.33, sub: 'office gateway', detail: { Where: 'office' } },
     rooms: [
-      room('office-nas', 'office-nas', 'office storage', [svc('restic', 'last 2h ago'), svc('verify', 'weekly', 'idle')], { type: 'tailnet' }),
+      room('office-nas', 'office-nas', 'office storage', [svc('restic', 'last 2h ago'), svc('verify', 'weekly', 'idle')], { type: 'tailnet', schedule: { label: 'offsite copy', everyMs: 3 * 3600_000 } }),
       room('office-printer', 'office-printer', 'printer', [], { type: 'tailnet' }),
       room('laptop-1', 'laptop-1', 'laptop', [], { type: 'tailnet' }),
       room('laptop-2', 'laptop-2', 'laptop', [], { type: 'tailnet', offline: true }),
@@ -437,6 +437,15 @@ const LARGE_DAY = 86_400;
 export const LARGE_PRINT_MS = 10 * 60_000;
 const printProgress = (now) => Math.round(((now % LARGE_PRINT_MS) / LARGE_PRINT_MS) * 1000) / 1000;
 
+// Scheduled jobs (Wall plan night 4 T40, research Q17): a room's `schedule`
+// becomes the feed's `countdown: {at, label}`, the next run on a fixed beat,
+// so the demo always shows each phase: `dumps` every 15 min (minutes, then the
+// last five), the `offsite copy` every 3 h (hours), and `lifecycle`, which runs
+// every 20 min but always 2 to 22 min late (overdue: `+N MIN`).
+export const countdownAt = (sched, now) => (sched.lateMs
+  ? Math.floor(now / sched.everyMs) * sched.everyMs - sched.lateMs
+  : Math.ceil((now + 1) / sched.everyMs) * sched.everyMs);
+
 /** One site's feed as its feeder would push it, stamped `now`. */
 function siteFeed(site, now) {
   const ip = site.ip.split('.');
@@ -462,6 +471,7 @@ function siteFeed(site, now) {
       g.ring = { progress };
       for (const s of g.services ?? []) s.sub = `printing · ${Math.round(progress * 100)}%`;
     }
+    if (r.schedule) g.countdown = { at: countdownAt(r.schedule, now), label: r.schedule.label };
     return g;
   });
   if (site.source === 'hv1') {

@@ -657,6 +657,26 @@ html.wall body {
 /* In a flight every name but the destination's steps back (T15): after the tones, so it wins over them.
    Only the word: the shape keeps its hue (night 4 T6), a passing crit is still a red ■. */
 .galaxy-label[data-dim] { color: var(--text-3); }
+/* A scheduled job under its thing's name (night 4 T40, labels.js labelCount): caps in the label face at
+   the site step, whole minutes in tabular figures so the line never jitters. Grey: far is quiet, the last
+   five minutes and overdue step up to a site name's grey and no further (a clock never outshouts the place
+   it runs in); a hue is for trouble, never for a clock. */
+.galaxy-label[data-count]::after {
+  content: attr(data-count);
+  display: block;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: var(--gl-site);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.galaxy-label[data-count-phase="soon"]::after,
+.galaxy-label[data-count-phase="now"]::after,
+.galaxy-label[data-count-phase="late"]::after { color: var(--text-2); }
+.galaxy-label[data-dim]::after { color: var(--text-3); }
+.galaxy-label[data-side="left"] { text-align: right; }
+.galaxy-label[data-side="centre"] { text-align: center; }
 
 /* The galaxy's leader (night 3 T16, js/wall/galaxy/lock.js leaderPath): two
    legs with one elbow, the brackets' stroke and colour, so plate, leader and
