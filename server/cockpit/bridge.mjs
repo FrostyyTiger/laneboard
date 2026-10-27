@@ -13,9 +13,16 @@
 //     .interrupt({cancelQueued})  writes an `interrupt`, returns its id (§11.6
 //                                 times it, T11)
 //     .signal(name)               SIGINT/SIGTERM/SIGKILL to the child (§11.1)
+//     .markStopping({cancelQueued})  the running turn is being stopped (§11.6
+//                                 0.0 s): `turn.state` `stopping`; its end is
+//                                 `stopped` whatever the agent says
+//     .forceStop()                §11.6 5.0 s: `turn.end` `stopped`, `forced:true`
+//     .closeStdin(why)            the child's stdin closed (§11.7 `new`)
+//     .kill(why)                  SIGKILL, its pipes closed, the child let go
+//                                 at once (§11.6 10.0 s, §11.7's 30 s)
 //     .close()                    stdin closed, the child ended; resolves at its exit
 //     .state                      'down' | 'starting' | 'up' | 'refused'
-//     .session, .ready, .turn, .stderrTail(), .pid
+//     .session, .ready, .turn, .stderrTail(), .pid, .turnCount, .agentEnds
 //
 // opts: `agent` (config.cockpit.agent, finalized), `stateDir`, `emit(msg)`,
 // `log(line)`, `env` (the room's environment), `mcpToken`, `instructions`
@@ -23,11 +30,12 @@
 // values for redaction rule 1, e.g. the speech token) or `redactor` (a
 // `createRedactor()` of redact.mjs; by default one over the room's secrets,
 // D127, D211), `onReady(ev)`,
-// `onExit({code, signal, beforeReady, why})`, `onCondition(code, fields)`
-// (a status condition the bridge sets: a refused start's `agent-down`).
-//
-// Restarts, the stop timing and new sessions are §11.6-§11.7's (T11): the
-// bridge restarts only the child it killed itself for §11.9 (B61).
+// `onExit({code, signal, beforeReady, why, turnId})` (`turnId`: the turn the
+// exit ended as E2), `onTurnEnd(msg)`, `onCondition(code, fields)` (a status
+// condition the bridge sets: a refused start's `agent-down`), `restartOnKill`
+// (default true: the bridge resumes a child it killed itself for §11.9, B61;
+// the session supervisor, server/cockpit/session.mjs, passes false and
+// restarts every child itself, T11).
 import { spawn as nodeSpawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -132,7 +140,7 @@ export function createBridge(opts) {
     agent, stateDir, emit = () => {}, log = () => {}, env = process.env, mcpToken = null,
     instructions = standingInstructions(), spawn = nodeSpawn,
     secrets = [],
-    onReady = () => {}, onExit = () => {},
+    onReady = () => {}, onExit = () => {}, onTurnEnd = () => {}, restartOnKill = true,
   } = opts;
   if (!agent || (agent.kind !== 'claude-code' && agent.kind !== 'bridge')) throw new TypeError('createBridge: agent.kind must be claude-code or bridge');
   const onCondition = opts.onCondition ?? ((code, fields) => emit({ type: 'status', status: { code, since: isoAt(clock.now()), ...fields } }));
@@ -151,6 +159,7 @@ export function createBridge(opts) {
   let adapter = null;
   const stderrLines = [];
   let interruptCounter = 0;
+  let agentEnds = 0; // every turn.end the agent sent, shown or dropped (§11.6 8.0 s)
   let turnCounter = 0;
   let turn = null;
   // Prompts written (or held for a session that cannot steer), by bridge id.
@@ -268,13 +277,45 @@ export function createBridge(opts) {
     const beforeReady = state === 'starting';
     const why = killedFor;
     if (state !== 'refused') state = 'down';
-    if (turn && why !== 'liveness') endTurn({ state: 'error', code: 'agent-exited' });
+    let cut = null;
+    if (turn && turn.stopping) {
+      // The owner asked for the stop: an exit inside it is its forced end, not E2 (B78).
+      endTurn({ state: 'stopped', forced: true });
+    } else if (turn && why !== 'liveness') {
+      cut = turn.turnId;
+      endTurn({ state: 'error', code: 'agent-exited' });
+    }
     for (const [id, p] of prompts) if (!p.taken) prompts.delete(id);
+    held.length = 0;
     log(`cockpit agent: exited (${signalName ?? `code ${code}`})${why ? ` after ${why}` : ''}`);
-    onExit({ code, signal: signalName, beforeReady, why });
+    onExit({ code, signal: signalName, beforeReady, why, turnId: cut });
     // §11.9: the child the bridge killed for silence or a stuck stdin goes on
-    // with its session at once; every other restart is §11.7's (T11).
-    if ((why === 'liveness' || why === 'stdin') && session) start({ session, resume: true });
+    // with its session at once; every other restart is §11.7's (session.mjs).
+    if (restartOnKill && (why === 'liveness' || why === 'stdin') && session) start({ session, resume: true });
+  }
+
+  /** §11.7 `new`: the child's stdin ends; Claude Code exits on it (D214). */
+  function closeStdin(why = 'new') {
+    const c = child;
+    if (!c) return false;
+    killedFor = why;
+    try { c.stdin.end(); } catch { /* gone */ }
+    return true;
+  }
+
+  /**
+   * §11.6 10.0 s and §11.7's 30 s `ready` limit: SIGKILL, the pipes closed,
+   * and the child counts as exited now (its own `close` later is ignored), so
+   * the next start does not wait on a process that may never end.
+   */
+  function kill(why = 'kill') {
+    const c = child;
+    if (!c) return false;
+    killedFor = why;
+    signal('SIGKILL');
+    for (const s of [c.stdin, c.stdout, c.stderr]) { try { s?.destroy(); } catch { /* gone */ } }
+    exited(c, null, 'SIGKILL');
+    return true;
   }
 
   function close() {
@@ -372,6 +413,7 @@ export function createBridge(opts) {
   // ------------------------------------------------------------------- events
 
   function handle(ev) {
+    if (ev.type === 'turn.end') agentEnds += 1;
     switch (ev.type) {
       case 'ready': return onReadyEvent(ev);
       case 'taken': return onTaken(ev.id);
@@ -403,7 +445,8 @@ export function createBridge(opts) {
         send({ type: 'turn.retrying', turnId: turn.turnId, attempt: ev.attempt, of: ev.of });
         break;
       case 'turn.end':
-        endTurn(ev);
+        // §11.6: during a stop, the agent's end of the turn is `stopped`, `forced:false`.
+        endTurn(turn.stopping ? { ...ev, state: 'stopped', forced: false } : ev);
         break;
       default:
         break;
@@ -538,6 +581,7 @@ export function createBridge(opts) {
 
   function setState(s) {
     if (!turn || turn.state === s) return;
+    if (turn.stopping && s !== 'stopping') return; // a turn being stopped stays `stopping` (§3.3)
     turn.state = s;
     send({ type: 'turn.state', turnId: turn.turnId, state: s });
   }
@@ -560,6 +604,7 @@ export function createBridge(opts) {
     // §11.4: one log line per turn with what it cost (`null` when the agent says nothing).
     log(`cockpit turn ${t.turnId}: ${ev.state}${ev.code ? ` ${ev.code}` : ''} steps ${ev.steps ?? null} costUsd ${ev.costUsd ?? null} durationMs ${ev.durationMs ?? null}`);
     send(msg);
+    onTurnEnd(msg);
     for (const [id, p] of prompts) if (p.taken || p.turnId === t.turnId && p.id === t.prompt) prompts.delete(id);
     // §3.4: a session that cannot steer gets its held prompts after the turn.
     for (const p of held.splice(0)) toAgent({ type: 'prompt', id: p.id, text: p.agentText, priority: 'next' });
@@ -622,6 +667,31 @@ export function createBridge(opts) {
     return id;
   }
 
+  /**
+   * §11.6 0.0 s: the running turn is being stopped. `turn.state` `stopping`
+   * goes out; with `cancelQueued`, prompts held for a session that cannot
+   * steer are dropped with the turn (§3.3), as the receipt drops written ones.
+   */
+  function markStopping({ cancelQueued = true } = {}) {
+    if (!turn) return null;
+    turn.stopping = true;
+    setState('stopping');
+    if (cancelQueued) {
+      for (const p of held.splice(0)) {
+        prompts.delete(p.id);
+        if (p.clientId) send({ type: 'prompt.taken', turnId: p.turnId, clientId: p.clientId, state: 'cancelled', why: 'stopped' });
+      }
+    }
+    return turn.turnId;
+  }
+
+  /** §11.6 5.0 s (D32): the turn ends on every screen as a forced stop. */
+  function forceStop() {
+    if (!turn) return false;
+    endTurn({ state: 'stopped', forced: true });
+    return true;
+  }
+
   /** §11.11's refused start: stdin closed, SIGTERM after 5 s, no restart, `agent-down`. */
   function refuse(detail) {
     refused = true;
@@ -636,12 +706,14 @@ export function createBridge(opts) {
   }
 
   return {
-    start, prompt, interrupt, signal, close,
+    start, prompt, interrupt, signal, close, markStopping, forceStop, closeStdin, kill,
     get state() { return state; },
     get session() { return session; },
     get ready() { return readyEv; },
     get turn() { return turn ? { turnId: turn.turnId, state: turn.state, started: turn.started } : null; },
     get pid() { return child?.pid ?? null; },
+    get turnCount() { return turnCounter; },
+    get agentEnds() { return agentEnds; },
     stderrTail: () => [...stderrLines],
   };
 }

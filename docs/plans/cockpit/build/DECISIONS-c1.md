@@ -450,3 +450,43 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   in `bridge.mjs`. The bridge builds its redactor from `roomSecrets({mcpToken, env, names:
   cockpit.agent.env})` plus `opts.secrets`; the speech token file is read by `roomSecrets()` when the
   room passes `sttTokenFile` (T13 wires the room's bridge, B61).
+- B77 (T11) `server/cockpit/session.mjs` `createSession()` owns the bridge (built with
+  `restartOnKill:false`) and does every restart, the stop's 5.0/8.0/10.0 s steps, the 30 s `ready`
+  limit, `new` and `session.json` (written whole by rename, 0600 in the 0700 `cockpit/`); the
+  bridge gains `markStopping`, `forceStop`, `closeStdin`, `kill`, `onTurnEnd`, `turnCount`,
+  `agentEnds`; `conversation.jsonl` is T12's; `startRoom()` does not start a session yet (T13
+  wires it with the link) — because T11's done-when is the session test, and the bridge keeps
+  T9's behaviour for its own test — spec: `protocols.md` §11.6-§11.7 — overrule: none; T12/T13 build on it.
+- B78 (T11) A turn being stopped stays `turn.state` `stopping` (no `answering`/`working` after it);
+  an exit of the child during a stop ends the turn `stopped`, `forced:true` (not E2) and resumes the
+  session at once with no status line; text the agent still sends before the turn's end is shown
+  — because the owner asked for the stop (§11.6's 8.0 s row) and D33 freezes only output after the
+  `turn.end` — spec: `protocols.md` §11.6, §3.3 — overrule: `exited()` and `setState()` in `bridge.mjs`.
+- B79 (T11) `RESTART_STEPS_S` are the waits between tries, each counted from the previous try's
+  exit (tries at 0, 2, 6, 14 … s), starting again at 0 after a `ready`; a failed start at room
+  start also restarts at once; a 0 s wait starts in the same tick — because the restart test
+  reads "0, 2, 4 s" and E3's "every 30 s" is a wait — spec: `protocols.md` §11.7, §13,
+  `c1-talk.md` time table, D289 — overrule: count from the crash in `scheduleRestart()`.
+- B80 (T11) `agent-down` is set at the second failed start with `since` the crash (or the first
+  failed start) and `detail` the last stderr line (else `the agent exited (code N)`), and cleared
+  (`status` `null`) at the next `ready`; `agent-back` is sent only when the outage cut a turn (E2),
+  and the room clears it 5 s later (`NEWS_MS`) — because its text says "Your last message was not
+  answered", and a cleared news must not come back in a later `welcome.status`; T28's arbiter of
+  §3.5 replaces the default `condition` — spec: `protocols.md` §3.5, §11.7, `c1-talk.md` §10.1 —
+  overrule: `onReady()` in `session.mjs`.
+- B81 (T11) `new` during a turn waits for the stop's `turn.end` (at most the 5.0 s forced end), then
+  closes stdin; `SIGTERM` 5 s later, `SIGKILL` 2 s after that (the 8.0 → 10.0 s gap of §11.6); `new`
+  while no session is up cancels the pending restart and starts the new session at once; `not-now`
+  while the new (or a forced) session is starting — because §11.7 gives no kill step after the
+  `SIGTERM` — spec: `protocols.md` §11.7, §3.6 — overrule: `closeForNew()` in `session.mjs`.
+- B82 (T11) A `ready.session` other than the one resumed: that child is killed at once and a
+  `--session-id` start follows (`conversation.new` `forced` at its ready); the two-resumes rule
+  counts only exits with a code other than 0 within 10 s of the spawn on the room clock (a 30 s
+  `ready` timeout, killed with `SIGKILL`, is a failed start but resets that count); every new-session
+  try has its own UUID; the conversation is `c-0001` with no `session.json`, else the next of the
+  last one — because §11.7 starts "the child with `--session-id {a new UUID v4}`" and "a session that
+  never started is never resumed" — spec: `protocols.md` §11.7 — overrule: `onReady()`/`onExit()` in `session.mjs`.
+- B83 (T11) `stop` of a turn id that is not the running one is `not-now` when its number is at most
+  the bridge's turn counter, else `unknown-id`; a second `stop` of the turn being stopped is
+  accepted and changes nothing — because §3.3 says the screen changes nothing on `not-now` — spec:
+  `protocols.md` §3.3 — overrule: `stop()` in `session.mjs`.
