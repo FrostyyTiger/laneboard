@@ -329,7 +329,7 @@ short clips (research finding)." The plan's config key is `cockpit.stt.language`
 Plan C2: "`cockpit.stt.url`, `cockpit.stt.language` (with `auto`)"; plan §5: "STT and TTS are
 endpoints in config, each with `none` as a default (then the pane is text only, and still useful)".
 The keys live in the config of the room (`docs/config.md`'s layers: defaults, file, `LANEBOARD_*`;
-which process is the room: pending Q-O15).
+which process is the room: D89).
 
 | Key | Default | Env | What |
 | --- | --- | --- | --- |

@@ -11,7 +11,7 @@ C3 reads; it never changes the fleet or the screen. Show commands are C4 (`c4-sh
 
 - **One MCP server, key `laneboard`** (D58). The agent sees its tools as `mcp__laneboard__<tool>`;
   `c1-talk.md` §5 matches tool lines on that prefix. The C4 show commands join the same server later.
-- **Served by the room process** (Q-O15 a) as Streamable HTTP at `POST /mcp` on `127.0.0.1` only,
+- **Served by the room process** (D89) as Streamable HTTP at `POST /mcp` on `127.0.0.1` only,
   port `cockpit.mcp.port` (default `7790`) (D58). It never listens on another address. Every request
   needs `Authorization: Bearer <token>`; the room writes a fresh 32-byte random token (hex) to
   `<stateDir>/cockpit/mcp.token` (mode `0600`) at each start. A request with an `Origin` header is
@@ -45,9 +45,8 @@ The MCP server reads one **board** over HTTP, the same JSON the browser gets: co
 laneboard (one machine, `single-machine.md`). The server asks the board's `/healthz` once at start
 and every 60 s; `"mode": "hub"` picks the hub column below.
 
-How the room is allowed to read a hub is not settled (pending Q-O26). The spec is written for the
-recommendation: the room runs on the hub's box as its own unix user and reads the hub's loopback
-port, where it is a `local` caller (`docs/fleet/auth.md`): on a hub `local` gets every read and no
+How the room reads a hub is D91: the room runs on the hub's box as its own unix user and reads
+the hub's loopback port, where it is a `local` caller (`docs/fleet/auth.md`): on a hub `local` gets every read and no
 action, control, terminal or push change.
 
 | Tool | On a hub | On a single board |

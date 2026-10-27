@@ -27,7 +27,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `single-machine.md` | everything on one box, no tailnet, no GPU, another agent | `S-ONE-` | T19 | planned |
 | `slices.md` | the build nights in order, each with its scenario ids, stand-ins and done-when | none (lists every id once) | T20 | planned |
 | `DECISIONS.md` | small reversible choices made during the night, each with how to overrule | none | all | written (running list) |
-| `QUESTIONS.md` | what only the owner can decide, with options and a recommendation | none | all | written (running list) |
+| `QUESTIONS.md` | what only the owner can decide: the eight for the morning first, then the rest, each with options and a recommendation | none | all | written (running list, reordered by T55) |
 | `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2), `c1-pane.html` (T4), `c2-states.html` (T6), `screens-room-down.html` (T3/T22), `c3-ask.html` (T9), `c4-canvas.html` (T11) | none | T2-T4, T6, T9, T11, T14 | in progress |
 
 ## Speed budget
