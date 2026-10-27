@@ -452,7 +452,7 @@ Notes for every builder round (planner, round 1):
 - [x] T25 (r31-film-ui touch 2, 5) [ui] [variant:galaxy] The sheet is yours, not the tour's: kicker `SITE · HV1`
   (or `ROOM · IN HV1`) instead of `ATTENTION · TARGET 01 / 05`, no typing cursor and no typing on a sheet (text at
   once), brackets first on the tapped site, then stepping to the worst member — done when: a test pins the sheet
-  kicker, no typing state on a sheet, and the lock target sequence site → worst member. (commit SHA)
+  kicker, no typing state on a sheet, and the lock target sequence site → worst member. (commit c8c91b9)
   Builder r55: `hud.js sheetCaption(node, model)` (no index/count any more) gives `SITE · HV1` / `ROOM · IN HV1`; the
   status word is the hero's, the mark's glyph keeps its hue (`▲ SITE · HV1`). `caption.js show` with a `sheet`
   caption: built at once, the plate fades in with the camera with name and every row in, plate at full height, no
