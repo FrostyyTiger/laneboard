@@ -574,11 +574,13 @@ The microphone does **not** open and the keyboard does not come up (D20): the ow
 talk or taps the input (D64). The conversation is scrolled to its end.
 
 **The chip** `[data-cockpit-chip]`, `data-node="<id>"`:
-- A 64 px row between the conversation and the input row (y 744-808 on every page, since the
-  input row's top is at y 808 everywhere, `c1-talk.md` §1); the conversation above is 64 px shorter while it is there.
+- A 64 px row between the conversation and the input row, on top of the line slot when a message
+  shows (`c1-talk.md` §1.1, D133): y 744-808 on every page with no message, since the input row's
+  top is at y 808 everywhere; y 712-776 with a one-line message. The conversation above is 64 px
+  shorter while it is there; `↓ NEW` moves right, to x 1168-1264, so it is never over the `✕`.
   With the on-screen keyboard up the row moves with the input row (`c1-talk.md` §7.1, S-C3-19).
-- The chip in it: 48 px tall, from x 784, as wide as its content up to 480 px (it ends at x ≤ 1264: x 1280-1344
-  is `CLOSE`'s, `screens.md` §4); `--bg-sunken`, 1 px
+- The chip in it: 48 px tall, from x 784, as wide as its content up to 480 px (it ends at x ≤ 1264: x 1288-1336,
+  y 760-808 is the opener's, reading `CLOSE` while the pane is open, `screens.md` §4); `--bg-sunken`, 1 px
   `--line-strong` border. Inside, 16 px in: `ABOUT` (16 px caps `--text-3`), 12 px gap, the label
   (mono 20 px `--text-1`, cut with `…`), 12 px gap, the kind (16 px `--text-2`), then the remove
   button `[data-cockpit-chip-remove]`: 48x48 px, `✕` 24 px `--text-2`, `aria-label="Remove context"`,

@@ -80,9 +80,9 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   `CANCEL` does not fit 64 px; sketch `c2-states.html`). It closes the microphone within 0.1 s, removes the spoken words, keeps a draft
   typed before the press, sends nothing, `data-talk="idle"`. Fixing one word by tapping the text is
   §7.
-- The **hint line** sits 8 px above the input row's top edge, right-aligned to the talk button's
-  right edge; it wins the place over the length note (`c1-talk.md` §7). Nothing else shares the
-  line during a turn (D121).
+- The **hint line** is the line slot above the input row (`c1-talk.md` §1.1, `data-line="hint"`):
+  left-aligned at x 784, ending at x ≤ 1264. It wins the slot over the length note and gives it up
+  to the room-down line and to an error (D133). Nothing else shares the line during a turn (D121).
 - Under `prefers-reduced-motion` nothing here changes: no state change animates (rule 5).
 
 ## 4. Live words
@@ -133,10 +133,11 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   audio channel is open is held on the screen and sent first, so the first word is not cut off. The
   frame format and channel are `protocols.md` §6 (D96).
 - **Cannot open** → `data-talk="error"`, the input stays the textarea and typing works. The
-  message (exact) is `[data-talk-error]`, 16 px mono `--text-2`, line height 1.25, left-aligned over
-  the text column (x 784-1344 on the Wall), its last line 8 px above the input row; it wraps (2 lines
-  at 560 px) and takes its height from the conversation, in the hint line's place. Not under the
-  input row: on the Wall the row ends 24 px above the screen's edge.
+  message (exact) is `[data-talk-error]`, 16 px mono `--text-2`, line height 1.25, in the line slot
+  above the input row (`c1-talk.md` §1.1, `data-line="error"`): x 784-1264, its last line 8 px above
+  the row; it wraps (2 lines at 480 px for the longest line below, a 52 px slot) and takes its
+  height from the conversation. Not under the input row: on the Wall the row ends 24 px above the
+  screen's edge.
 
 | Cause (`getUserMedia` error) | Line |
 | --- | --- |

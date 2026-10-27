@@ -51,7 +51,7 @@ of the list below, top to bottom, with these rects at 1368x912:
 - The talk button and `SEND` keep their rects from `screens.md` §4 and the list below: the input
   row is in the same place in a pane and in a column.
 - The chip row, the hint line and `↓ NEW` stack up from the input row inside the conversation's
-  band (T96). In `split` they never leave the conversation less than 96 px (3 lines); with the
+  band (§1.1). In `split` they never leave the conversation less than 96 px (3 lines); with the
   on-screen keyboard up the column covers the card area (§7.1).
 - Other widths: the column is the right 608 px of the screen (`min(608px, 100vw)`), at the bottom
   in `split` with the card area's height above it; at 1200x800 in `switch` it is x 592-1200,
@@ -74,6 +74,56 @@ of the list below, top to bottom, with these rects at 1368x912:
    from x 784 to x 1184). Typing, `SEND` and the input's growth are T5's; the talk button's states
    are T6's. The row is y 808-912 on the Wall (104 px: 16 + 64 + 24) and y 808-888 in the app (80 px: 16 +
    64; the pane ends on the bottom bar's top edge).
+
+### 1.1 The stack above the input row (T96, D133)
+
+Four things want the band just above the input row: a one-line message, the context chip
+(`c3-see.md` §9), `↓ NEW` (§4) and, in the corner, `CHAT`/`CLOSE` (`screens.md` §4). They stack
+from the input row's top edge upwards, in this order, each one only while it is shown:
+
+1. **The line slot** `[data-cockpit-line]`, `data-line="room-down|error|hint|length"`: exactly one
+   message, on the row's top edge. Text left-aligned at x 784, at most 480 px wide (it ends at
+   x ≤ 1264), its last line's bottom 8 px above the row's top edge, 4 px free above its first line.
+   One line of today's 16 px type (line height 20 px) makes the slot 32 px; each more line adds its
+   line height, at most 3 lines (72 px), then the text is cut with `…` (no message in this spec
+   needs 3: the longest, `NotAllowedError`'s, is 2 lines). The type of each message is its own
+   section's (T43 and T97 change sizes, not this rule). Which one, highest first (D133):
+   1. `room-down`: `Sending and voice come back with the room.` (`screens.md` §7);
+   2. `error`: the microphone or speech line `[data-talk-error]` (`c2-voice.md` §5, §10);
+   3. `hint`: the talk hints (`c2-voice.md` §3, §4);
+   4. `length`: `8 214 / 8 000 CHARACTERS` (§7).
+   A lower message waits while a higher one shows and appears when the higher one goes, if it
+   still holds (a hint whose 5 s ran out meanwhile does not come back).
+2. **The chip row**, 64 px, on top of the line slot (on the row's top edge when no line shows): the
+   chip 48 px tall, 8 px in from the row's top and bottom, from x 784, ending at x ≤ 1264.
+3. **`↓ NEW`** floats over the conversation, 16 px above the topmost of the two (above the row
+   when neither shows). With a chip it is right-aligned, ending at x 1264 (x 1168-1264 at 96 px
+   wide), so it never sits over the chip's `✕` and never over `CHAT` (x 1288-1336, y 760-808 is
+   `CHAT`'s, `screens.md` §4, D116). Without a chip it is centred over the text column (x 1016-1112).
+
+The conversation ends at the top of the line slot or the chip row, whichever is higher; `↓ NEW`
+takes no height. When an item comes or goes the conversation follows §7.1's pin rule (at its end it
+stays at its end; scrolled up, the line at its top stays at its top), in the next frame, no slide.
+
+Rects at 1368x912 with a one-line input (row top y 808, on the Wall, in the app and in a column):
+
+| Shown | Line slot | Chip row (chip) | `↓ NEW` | Conversation bottom |
+| --- | --- | --- | --- | --- |
+| nothing | none | none | x 1016-1112, y 744-792 | y 808 |
+| a one-line message | y 776-808 | none | x 1016-1112, y 712-760 | y 776 |
+| a chip | none | y 744-808 (y 752-800) | x 1168-1264, y 680-728 | y 744 |
+| a one-line message and a chip | y 776-808 | y 712-776 (y 720-768) | x 1168-1264, y 648-696 | y 712 |
+| a two-line message and a chip | y 756-808 | y 692-756 (y 700-748) | x 1168-1264, y 628-676 | y 692 |
+
+- A taller input (§7) or the keyboard (§7.1) moves the row's top edge; every rect moves with it by
+  the same amount (keyboard up: subtract 364 px, so a chip alone is y 380-444).
+- The x rule makes every item in the stack end 24 px left of `CHAT`/`CLOSE` and of the talk
+  button; between stacked items the gaps are 16 px or more (`↓ NEW` to what is under it) and 8 px
+  (the chip inside its row). T44's control table takes these rects with its ≥ 8 px test.
+- In a `split` column (§1) the conversation never drops under 96 px: when the status line, the
+  stack and the input's growth together would leave less, the column's top moves up over the card
+  area by what is missing (the most: 80 px status line, 136 px of stack and 93 px of input growth put the column at
+  y 339-912).
 
 ## 2. Opening and closing
 
@@ -200,8 +250,8 @@ room after a reload is the `snapshot` of `protocols.md` §2.2 (`history` for `SH
 - The conversation is **pinned** to its end while its last pixel is within 48 px of the bottom of
   the visible area: new text scrolls it along.
 - A drag up unpins it: new text no longer moves the view. A button `↓ NEW` appears, 48 px tall,
-  ≥ 96 px wide, 16 px caps `--text-1` on `--bg-elevated`, 1 px `--line-strong` border, centred 16
-  px above the input row. A tap jumps to the end (instantly, no smooth scroll: `docs/design.md`
+  96 px wide, 16 px caps `--text-1` on `--bg-elevated`, 1 px `--line-strong` border, 16 px above
+  the input row or the stack on it, centred, or right-aligned at x 1264 while a chip shows (§1.1). A tap jumps to the end (instantly, no smooth scroll: `docs/design.md`
   rule 5) and pins again; scrolling back down by hand does the same (D26).
 - Opening the pane always shows the end, unless the owner had scrolled up before closing it (§2).
 
@@ -541,8 +591,8 @@ Plan C1: "Typing works everywhere (on-screen keyboard, a paired keyboard)." `spe
 - **Keys** (D30): `Enter` sends, on a paired keyboard and on the on-screen keyboard alike (the
   terminal's habit); `Shift+Enter` makes a new line. `Esc` closes the pane (§2), the draft stays.
 - **Length.** A prompt is at most 8 000 characters. Above that, a 13 px caps note in `--text-2`
-  sits 8 px above the input's top edge, right-aligned: `8 214 / 8 000 CHARACTERS`, and `SEND` is
-  disabled. Pasting is never cut short by the screen (D30).
+  shows in the line slot (§1.1, `data-line="length"`, the lowest of its four): `8 214 / 8 000
+  CHARACTERS`, and `SEND` is disabled. Pasting is never cut short by the screen (D30).
 - **What is sent**: the text with white space trimmed at both ends; inside, unchanged.
 
 **On send** (B8, ≤ 0.1 s): the prompt block is drawn at the end of the conversation with the label
@@ -588,7 +638,7 @@ numbers are for a 380 px keyboard, which leaves 1368x532 in sight.
 - The opener, reading `CLOSE` while the pane is open (§2), keeps x 1288-1336 with its bottom on the
   row's top edge: y 396-444. The column has no opener (D117).
 - Above the row the stack is the same as without the keyboard (the line slot, the chip row,
-  `↓ NEW`: T96), measured from the row's top edge at y 444; a chip alone is the row y 380-444.
+  `↓ NEW`: §1.1), measured from the row's top edge at y 444; a chip alone is the row y 380-444.
 - The **conversation** gets what is left: y 64-444 (380 px) with nothing stacked. With the 80 px
   status line, a one-line hint or note (32 px) and a chip (64 px) it is 204 px. It is never under
   200 px with a one-line input.
@@ -1057,3 +1107,29 @@ When the test resizes back to 1368x912 and blurs the input,
 Then `data-keyboard="down"` and the input is 157 px tall (4 lines, §7) with its bottom at y 888.
 Test: Playwright `fill`; rects and heights ± 1 px; the input's
 `scrollTop + clientHeight ≥ scrollHeight − 1`; the conversation's `clientHeight`.
+
+### S-C1-34 Chip, line slot and `↓ NEW` stack without overlapping
+Given the Wall page in `wall` at 1368x912 (`hasTouch: true`), the pane open on 10 earlier turns, a
+chip for `vm-b` from `ASK ABOUT THIS` (S-C3-10), and the fake agent streaming a 30-line reply over
+6 s,
+When the owner drags the conversation down by 600 px at t = 1 s (scrolling up),
+Then `↓ NEW` is x 1168-1264, y 680-728, the chip row y 744-808 with the chip y 752-800 and its `✕`
+ending at x ≤ 1264; `↓ NEW`, the `✕` and the opener (`CLOSE`, x 1288-1336, y 760-808) do not
+intersect and are ≥ 8 px apart.
+When at t = 2 s the room's link stops, and 5 s later `data-cockpit="room-down"`,
+Then there is one `[data-cockpit-line]`, `data-line="room-down"`, y 776-808, reading `Sending and
+voice come back with the room.`; the chip row is y 712-776 (chip y 720-768), `↓ NEW` y 648-696,
+the conversation's bottom y 712, and the line that was at the conversation's top is still there.
+When the owner pastes 8 214 characters into the input,
+Then the input is 157 px tall, the slot still shows only `room-down` (the length note waits) at
+y 683-715, the chip row y 619-683, `↓ NEW` y 555-603.
+When the link starts again and `data-cockpit="live"`,
+Then the slot shows `data-line="length"` reading `8 214 / 8 000 CHARACTERS` at the same rect.
+When the owner taps `↓ NEW`,
+Then the chip is still there (one `[data-cockpit-chip]`, `data-node="vm-b"`), the last line is in
+sight and `↓ NEW` is gone.
+Test: Playwright with `page.clock`, a `touchscreen` drag, `POST /link {"up":false}` and
+`{"up":true}` on the room under test, `fill` for the paste; `getBoundingClientRect()` of the slot,
+the chip row, the chip, `[data-cockpit-chip-remove]`, `↓ NEW` and `[data-cockpit-open]` compared
+± 1 px after each step, and a pairwise check that no two of the tappables intersect or come closer
+than 8 px; `count()` of `[data-cockpit-line]` is 1 at each step.

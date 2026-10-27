@@ -119,9 +119,9 @@ page, layout and pane state** (D116), so the finger finds them without looking:
   While the pane is open it stays in its rect and reads `CLOSE` (`aria-label="Close the cockpit"`);
   `CLOSE` in the pane header (`c1-talk.md` §1) stays as the second way out. The way out is where
   the hand already is (review 31 finding 5).
-- Above the input row, the rect x 1280-1344, y 760-808 is `CHAT`'s. Anything else drawn
-  in the band above the input row (the context chip `c3-see.md` §9, the hint and error line,
-  `↓ NEW`) ends at x ≤ 1264, 16 px left of it (T96 stacks them).
+- Above the input row, the rect x 1288-1336, y 760-808 is `CHAT`'s. Anything else drawn
+  in the band above the input row (the line slot, the context chip `c3-see.md` §9, `↓ NEW`) ends at
+  x ≤ 1264, 24 px left of it; `c1-talk.md` §1.1 stacks them (D133).
 - Both sit above the page (`z-index` 35, between `--z-tape` 30 and `--z-sheet` 40).
 - With Q-O11 b) the talk button inside the pane is the only talk button; in its rect, with the pane
   closed, the page draws D7's `AGENT` (64x64, opens the pane) and there is no `CHAT`.
@@ -370,9 +370,10 @@ lost.
   NOW` button (48 px tall, 16 px caps, 16 px from the pane's right edge) at its right end. The minutes and the retry count down each second; the
   retry shows `Retrying now…` while a try runs. The conversation so far stays readable. The input
   stays editable (a draft can be written); `SEND` and the talk button are disabled, with the line
-  `Sending and voice come back with the room.` above the input row, 16 px `--text-3`,
-  left-aligned at x 784, its baseline 8 px above the row's top border (as `c2-voice.md` §5's
-  microphone line: on the Wall the row ends 24 px above the screen's edge, nothing fits under it).
+  `Sending and voice come back with the room.` above the input row, 16 px `--text-3`, in the
+  line slot (`c1-talk.md` §1.1, `data-line="room-down"`, the highest of its four): left-aligned at
+  x 784, its last line 8 px above the row's top border (on the Wall the row ends 24 px above the
+  screen's edge, nothing fits under it).
 - **Canvas:** the canvas half of room down (strip, `STALE` plates, frozen values, a job's countdown,
   removing offline, the empty canvas) is `c4-show-canvas.md` §7.6, built with the canvas (D120).
 - **What the screen keeps:** the conversation and the cards are kept in memory only, never in
