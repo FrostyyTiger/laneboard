@@ -15,8 +15,9 @@
 // The root (<html>) carries data-cockpit, data-pane and data-turn (README.md
 // "Selectors tests use"); the pane is [data-cockpit-conversation].
 import { sinceText } from '../core/cockpit-time.js';
-import { AGE_FROM_MS, PANE_SLIDE_MS, TICK_MS } from '../core/cockpit-constants.js';
+import { AGE_FROM_MS, CONFIRM_WAIT_MS, MAX_PROMPT_CHARS, PANE_SLIDE_MS, TICK_MS } from '../core/cockpit-constants.js';
 import { createTurn } from './turns.js';
+import { canSend, inputHeight, isSendKey, lengthNote, linesFromScroll, INPUT_ONE_LINE_PX, restoreDraft } from './draft.js';
 import { focusNow } from './focus.js';
 import { paneFit, TOO_OLD_TEXT } from './fit.js';
 
@@ -32,6 +33,8 @@ export const LINES = Object.freeze({
   emptyNone: 'Nothing said yet. Type a question below.',
   // screens.md §7: a reload while the room is down
   downFresh: 'The conversation shows again when the room is back.',
+  // c1-talk.md §10 E1
+  notSent: 'Not sent: the room did not confirm within 5 s.',
 });
 
 /** protocols.md §3.1: `p-` and 8 hex characters from crypto.getRandomValues. */
@@ -114,6 +117,12 @@ export function createPane(opts = {}) {
   follow.hidden = true;
   band.append(convo, follow);
 
+  // The line slot on the input row's top edge (c1-talk.md §1.1, D133): one message, the
+  // highest that holds. C1 builds `length` (§7); `room-down` comes with screens.md §7 (T32),
+  // `error` and `hint` with the talk button (C2).
+  const lineSlot = el(doc, 'p', 'ck-line', { 'data-cockpit-line': '' });
+  lineSlot.hidden = true;
+
   const row = el(doc, 'div', 'ck-row');
   const input = el(doc, 'textarea', 'ck-input', {
     'data-cockpit-input': '', rows: '1', placeholder: 'Type a message', enterkeyhint: 'send',
@@ -130,7 +139,7 @@ export function createPane(opts = {}) {
     turnWord.hidden = true; // no room behind this pane: no turn state to show (build B133)
     pane.append(head, old);
   } else {
-    pane.append(head, status, band, row);
+    pane.append(head, status, band, lineSlot, row);
   }
 
   // --- the opener above the talk button's place (screens.md §4, D116)
@@ -145,6 +154,9 @@ export function createPane(opts = {}) {
   let drawnTurns = null; // null until the first snapshot
   const views = new Map(); // turnId → createTurn() view
   const sending = new Map(); // clientId → the view drawn at the tap, until the room's echo
+  const waits = new Map(); // clientId → its E1 timer (c1-talk.md §10)
+  const notSent = new Map(); // clientId → the view showing E1, until EDIT or a late echo
+  const promptSeq = new Map(); // the link seq of a sent prompt → its clientId (an `error` names it in `re`)
   const dirty = new Set(); // views whose text changed since the last frame
   let frame = null;
   // `answering` waits for the frame that draws its text (c1-talk.md §3: "reply text is streaming"),
@@ -186,10 +198,53 @@ export function createPane(opts = {}) {
     turnWord.textContent = TURN_WORDS[s];
   };
 
+  let maxChars = MAX_PROMPT_CHARS; // welcome.config.maxPromptChars (protocols.md §2.1)
+
   function sendState() {
-    // c1-talk.md §7: disabled while the input holds only white space and while the room is down;
-    // D118: until `live`.
-    send.disabled = link.status !== 'live' || input.value.trim() === '';
+    // c1-talk.md §7: disabled while the input holds only white space, above the length
+    // limit, and while the room is down; D118: until `live`.
+    send.disabled = link.status !== 'live' || !canSend(input.value, maxChars);
+  }
+
+  /**
+   * The line slot (c1-talk.md §1.1): the highest message that holds, or none. Its height and
+   * the input's growth lift the conversation's bottom; the scroll area's bottom padding
+   * keeps the last item clear of the opener, `max(0, 64 − lift)` (D267).
+   */
+  function drawLine() {
+    const note = lengthNote(input.value.length, maxChars);
+    if (note === null) {
+      lineSlot.hidden = true;
+      delete lineSlot.dataset.line;
+      lineSlot.textContent = '';
+    } else {
+      lineSlot.hidden = false;
+      lineSlot.dataset.line = 'length';
+      if (lineSlot.textContent !== note) lineSlot.textContent = note;
+    }
+  }
+
+  /**
+   * c1-talk.md §7: the input grows with its text, 64 px for one line, +39.2 px a line up to
+   * 4 (181.6 px), then scrolls inside; it grows upwards, the row with it, `SEND` at the row's
+   * bottom (§7). Read at the one-line height, so the count is the text's own.
+   */
+  function grow() {
+    const wasAtEnd = pinned;
+    input.style.height = `${INPUT_ONE_LINE_PX}px`;
+    const border = input.offsetHeight - input.clientHeight;
+    const h = inputHeight(linesFromScroll(input.scrollHeight, border));
+    input.style.height = `${h}px`;
+    pane.style.setProperty('--ck-grow', `${h - INPUT_ONE_LINE_PX}px`);
+    pane.style.setProperty('--ck-lift', `${(lineSlot.hidden ? 0 : lineSlot.offsetHeight) + h - INPUT_ONE_LINE_PX}px`);
+    if (wasAtEnd) toEnd(); // the pin rule (§1.1): at its end it stays at its end
+  }
+
+  /** Everything the draft decides: SEND, the line slot, the input's height. */
+  function draftChanged() {
+    sendState();
+    drawLine();
+    grow();
   }
 
   function drawStatus() {
@@ -279,10 +334,15 @@ export function createPane(opts = {}) {
       if (t.clientId) sending.delete(t.clientId); // the room had it: the snapshot's block is the one
       frag.append(v.node);
     }
-    // A prompt drawn at the tap that the room has not echoed yet stays at the end (build B136).
+    // A prompt drawn at the tap that the room has not echoed yet stays at the end (build B136),
+    // after the blocks showing E1 (build B171).
+    for (const [id, v] of notSent) {
+      if (turns.some((t) => t?.clientId === id)) { notSent.delete(id); continue; }
+      frag.append(v.node);
+    }
     for (const v of sending.values()) frag.append(v.node);
     turnsBox.replaceChildren(frag);
-    drawnTurns = turns.length + sending.size;
+    drawnTurns = turns.length + sending.size + notSent.size;
     const running = turns.findLast?.((t) => t && !t.end && t.state && t.state !== 'done');
     setTurn(running ? running.state : 'idle');
     drawNote();
@@ -317,7 +377,16 @@ export function createPane(opts = {}) {
   function sendNow() {
     const text = input.value.trim();
     if (send.disabled || text === '') return;
-    const clientId = newClientId();
+    input.value = '';
+    draftChanged();
+    sendPrompt(text, newClientId());
+  }
+
+  /**
+   * One `prompt` with its block drawn at once (B8): SEND's, and E1's `RETRY` with the
+   * block's own `clientId` (D95, D259: the room may hold it; a resend starts nothing).
+   */
+  function sendPrompt(text, clientId) {
     const sentAt = now();
     // README B9: from the SEND tap to the reply's first sentence drawn; measured, never asserted (D235).
     win.performance?.mark?.('cockpit:B9:start');
@@ -332,21 +401,82 @@ export function createPane(opts = {}) {
     });
     sending.set(clientId, v);
     appendTurn(v);
-    input.value = '';
-    sendState();
     setTurn('thinking');
     pinned = true;
     follow.hidden = true;
     toEnd();
     ageTick();
-    onPrompt({ type: 'prompt', clientId, text, source: 'typed', lang: null, about: null, sentAt, focus: focus() });
+    const seq = onPrompt({ type: 'prompt', clientId, text, source: 'typed', lang: null, about: null, sentAt, focus: focus() });
+    if (typeof seq === 'number') promptSeq.set(seq, clientId);
+    waitForEcho(clientId);
+  }
+
+  /**
+   * E1 (c1-talk.md §10): no `turn.prompt` 5 s after the send while the link is up.
+   * The 5 s count while the link is live; a link that is not live at the mark waits, and the
+   * count starts again once it is (build B169; the room-down grace itself is screens.md §7).
+   */
+  function waitForEcho(clientId) {
+    win.clearTimeout(waits.get(clientId));
+    waits.set(clientId, win.setTimeout(() => {
+      waits.delete(clientId);
+      if (!sending.has(clientId)) return;
+      if (link.status !== 'live') { waits.set(clientId, null); return; }
+      showNotSent(clientId, LINES.notSent);
+    }, CONFIRM_WAIT_MS));
+  }
+
+  /**
+   * The block reads `YOU · 07:02 · NOT SENT`, under it the grey line with `RETRY` and `EDIT`;
+   * the header `READY`; nothing is sent again on its own (§10).
+   */
+  function showNotSent(clientId, message) {
+    const v = sending.get(clientId);
+    if (!v) return;
+    sending.delete(clientId);
+    waits.delete(clientId);
+    notSent.set(clientId, v);
+    v.fail('not-sent', message, [
+      { label: 'RETRY', onTap: () => retry(v) },
+      { label: 'EDIT', onTap: () => edit(v) },
+    ]);
+    if (!runningView()) setTurn('idle');
+    grew();
+  }
+
+  /** E1 `RETRY`: the same text with the same `clientId`, as a new block; the failed one stays (§10). */
+  function retry(v) {
+    if (link.status !== 'live' || sending.has(v.clientId)) return;
+    sendPrompt(v.prompt, v.clientId);
+  }
+
+  /**
+   * `EDIT` (§10, D271), all in the tap's own `click` task: the block goes, its text back in the
+   * input before a kept draft, the input focused with the caret after the restored text.
+   */
+  function edit(v) {
+    for (const [id, w] of notSent) if (w === v) notSent.delete(id);
+    v.node.remove();
+    drawnTurns = Math.max(0, (drawnTurns ?? 1) - 1);
+    drawNote();
+    const { value, caret } = restoreDraft(v.prompt, input.value);
+    input.value = value;
+    draftChanged();
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(caret, caret);
+    pinned = true;
+    toEnd();
   }
 
   /** The room's echo (protocols.md §3.1): the sender's block loses `· SENDING`; other screens draw it. */
   function promptEcho(msg) {
-    const mine = sending.get(msg.clientId);
+    win.clearTimeout(waits.get(msg.clientId));
+    waits.delete(msg.clientId);
+    // An echo after E1 (the room had it after all): the line goes, the block is confirmed (build B170).
+    const mine = sending.get(msg.clientId) ?? notSent.get(msg.clientId);
     if (mine) {
       sending.delete(msg.clientId);
+      notSent.delete(msg.clientId);
       mine.confirm(msg);
       if (mine.turnId && msg.delivery !== 'queued') views.set(mine.turnId, mine);
       ageTick();
@@ -382,6 +512,7 @@ export function createPane(opts = {}) {
       startSlideNow();
       opener.textContent = 'CLOSE';
       opener.setAttribute('aria-label', 'Close the cockpit');
+      grow(); // a draft kept since the last close: its height, now the pane lays out
       if (pinned) toEnd(); // the latest turn in sight (c1-talk.md §2)
       // Focus only with a fine pointer, so a touch screen's keyboard does not cover the pane (D20).
       if (win.matchMedia?.('(pointer: fine)').matches) input.focus({ preventScroll: true });
@@ -423,7 +554,14 @@ export function createPane(opts = {}) {
   closeBtn.addEventListener('click', () => setOpen(false));
   retryBtn.addEventListener('click', () => onRetryNow());
   send.addEventListener('click', sendNow);
-  input.addEventListener('input', sendState);
+  input.addEventListener('input', draftChanged);
+  // §7 "Keys": Enter sends, Shift+Enter breaks the line. An Enter that cannot send
+  // (white space, too long, the room down) does nothing: no line break either (build B172).
+  input.addEventListener('keydown', (e) => {
+    if (!isSendKey(e)) return;
+    e.preventDefault();
+    sendNow();
+  });
   // Esc closes the pane, the draft stays (c1-talk.md §2, §7); before the shell's own Esc.
   win.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || !open) return;
@@ -446,11 +584,13 @@ export function createPane(opts = {}) {
 
   render();
   applyFit();
-  win.addEventListener('resize', applyFit);
+  win.addEventListener('resize', () => { applyFit(); if (open) grow(); });
 
   function setLink(state) {
     link = state;
     render();
+    // E1's count starts again for every prompt whose 5 s ran out while the link was not live.
+    if (link.status === 'live') for (const [id, t] of waits) if (t === null) waitForEcho(id);
   }
 
   /** One room message (c1-talk.md §3, §5.1; protocols.md §3.1-§3.2). */
@@ -458,6 +598,8 @@ export function createPane(opts = {}) {
     switch (msg.type) {
       case 'welcome':
         stt = msg.config?.stt === 'on' ? 'on' : 'none';
+        if (Number.isInteger(msg.config?.maxPromptChars) && msg.config.maxPromptChars > 0) maxChars = msg.config.maxPromptChars;
+        draftChanged();
         {
           // §9 "Where the age counts from": the page's Date.now() at the welcome minus welcome.now.
           const roomNow = Date.parse(msg.now ?? '');
@@ -471,6 +613,12 @@ export function createPane(opts = {}) {
       case 'turn.prompt':
         promptEcho(msg);
         return;
+      case 'error': {
+        // protocols.md §3.1: `bad-message` on a prompt (empty, too long, a bad focus) is E1 at once.
+        const id = promptSeq.get(msg.re);
+        if (id && msg.code === 'bad-message') showNotSent(id, LINES.notSent);
+        return;
+      }
       case 'turn.state':
         if (msg.state !== 'answering') { setTurn(msg.state); return; }
         heldTurn = msg.state;
@@ -514,6 +662,6 @@ export function createPane(opts = {}) {
     open: () => setOpen(true),
     close: () => setOpen(false),
     isOpen: () => open,
-    elements: { pane, opener, input, send, status, convo, follow },
+    elements: { pane, opener, input, send, status, convo, follow, lineSlot },
   };
 }

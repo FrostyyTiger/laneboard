@@ -938,3 +938,63 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   turns of 8 s read `AGENT · 07:02 · 0:08`), the total from `end.at − at`; the `AGENT` row made at
   3 s before any item carries the turn's own start time — spec: `c1-talk.md` §9 "then the label
   keeps the total" — overrule: `tick()` in `public/js/cockpit/turns.js`.
+- B168 (T23) The input's padding is 11.4 px top and bottom and 15 px left and right inside its 1 px
+  border, so the spec's 12.4 px and 16 px count from the outer edge: one line is exactly 64 px, each
+  more 39.2 px, and the text 368 px wide; `grow()` reads the line count from `scrollHeight` at the
+  one-line height (`draft.js` `linesFromScroll`) and sets 64 / 103.2 / 142.4 / 181.6 px; the row is
+  `--ck-row-h + --ck-grow` with `SEND` at its bottom — because a 12.4 px padding plus the border made
+  one line 2 px too tall for its box (a scrollbar at 4 lines) — spec: `c1-talk.md` §7 "The input",
+  "It grows" — overrule: `.ck-input` in `public/css/cockpit.css`, `grow()` in `pane.js`.
+- B169 (T23) E1's 5 s count only while the link is live: a prompt whose 5 s run out while the link
+  is not `live` waits, and its 5 s start again when the link is live (then E1 if still no echo) —
+  because §10 E1 says "link up", and what a send in the room-down grace does is screens.md §7's (T32)
+  — spec: `c1-talk.md` §10 E1, `protocols.md` §3.1 "link down at the send" — overrule:
+  `waitForEcho()` in `public/js/cockpit/pane.js`.
+- B170 (T23) A `turn.prompt` echo that comes after E1 (the room had the prompt after all) removes
+  the not-sent line and confirms the block as any echo does — because the room's echo is the
+  confirmation (D95) and a turn that runs under a `NOT SENT` label would be wrong — spec: silent
+  (`protocols.md` §3.1) — overrule: `promptEcho()` in `pane.js`.
+- B171 (T23) Blocks showing E1 survive a snapshot redraw (as B136's `· SENDING` blocks do), drawn at
+  the end before the unconfirmed ones; a snapshot that holds their `clientId` drops them (the room's
+  turn is the one) — spec: silent — overrule: `drawSnapshot()` in `pane.js`.
+- B172 (T23) An `Enter` that cannot send (white space only, over the limit, the room not live) does
+  nothing: no prompt and no line break; an `Enter` that ends an IME composition (`isComposing`,
+  keyCode 229) is the composition's — because S-C1-15 says "`Enter` sends nothing", and a line break
+  there would grow a draft the owner meant to send — spec: `c1-talk.md` §7 "Keys", S-C1-15 —
+  overrule: the `keydown` listener in `pane.js`, `isSendKey` in `public/js/cockpit/draft.js`.
+- B173 (T23) The error line's buttons (`RETRY`, `EDIT`) are 96x48 with a 1 px `--line` border, not
+  the header buttons' `--line-strong`, and keep the focus where it was (`preventDefault()` on
+  `pointerdown` and `mousedown`, D132) — because S-C1-42 asserts that inside the conversation only
+  `[data-turn-label]`, `[data-turn-error]` and `[data-turn-stopped]` carry a `--line-strong` side, and
+  §10 names no border for them — spec: `c1-talk.md` §10 "Look", S-C1-42 — overrule: `.ck-err-btn`
+  in `cockpit.css` (and widen S-C1-42's set to the buttons).
+- B174 (T23) The `AGENT` row and its age that the 3 s tick made while a block waited for its echo
+  (B159) go when the block shows E1, and no age comes back on it: nothing ran — spec: `c1-talk.md`
+  §9, §10 E1 — overrule: `fail()` in `public/js/cockpit/turns.js`.
+- B175 (T23) Split: T23 builds typing, the input's growth, the length note in the line slot and E1
+  (the 5 s line, `RETRY` with the same `clientId`, `EDIT` with the focus and caret, `bad-message` as
+  E1 at once) with S-C1-14, S-C1-15 and S-C1-42's second case; S-C1-18 moves to T23b after T24, since
+  its steps assert `data-keyboard="up"` and the input at y 460-524 (§7.1, T24's) and the tap on the
+  conversation that blurs the input (§7.1 "Putting it away"); S-C1-43 moves to T23c after T30, since
+  it needs the room's rate limit (D228, `prompt.refused` `too-many`, none yet: `audit-lines.mjs`
+  says the `too-many` refusals are T30's) and its audit refusal line (D165), plus E9's 60 s `RETRY`
+  — because the task held three slices' worth of work — spec: `c1-talk.md` §7, §7.1, §10 —
+  overrule: the task lines in PROGRESS.md.
+- B176 (T23) The length counts the input's value as typed or pasted, untrimmed, in JavaScript string
+  length (UTF-16 units, as `server/cockpit/protocol.mjs` counts it); the limit is
+  `welcome.config.maxPromptChars`, else `MAX_PROMPT_CHARS` — spec: `c1-talk.md` §7 "Length" —
+  overrule: `lengthNote`/`canSend` in `draft.js`.
+- B177 (T23) The line slot `[data-cockpit-line]` is the pane's child between the conversation's band
+  and the input row (so `↓ NEW` floats 16 px above it and the conversation ends on its top edge);
+  `--ck-lift` (the slot's height plus the input's growth) makes the scroll area's bottom padding
+  `max(0, 64 px − lift)` (D267). C1 fills it with `length` only; `room-down` is T32's, `hint` and
+  `error` C2's — spec: `c1-talk.md` §1.1 — overrule: `drawLine()` in `pane.js`.
+- B178 (T23) Page code under `public/js/` cites decisions D30-D39 by their spec section, not by id:
+  `test/render.test.mjs`'s "no chart library" guard reads `/d3/i` over all page JS — spec: none
+  (a repo test) — overrule: make that guard match `\bd3\b` imports only.
+- B179 (T23, for T23c; review 35-security finding 5) C1 has no device token (pairing is Q-O21's,
+  C1 runs behind the board's trust), so the room's prompt rate (D228: 10 in any 60 s) is keyed by
+  the screen: every link counted together under the one `board` screen (`SCREEN_NAME` in
+  `server/cockpit/link.mjs`), so two tabs or pages do not double the rate; with pairing the key
+  becomes the device token as written — because that is the safe reading and S-C1-43's two pages
+  share one count — spec: `c1-talk.md` §7 "Rate", S-C1-43 — overrule: the key in T23c's limit.

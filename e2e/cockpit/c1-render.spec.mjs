@@ -318,6 +318,53 @@ test('S-C1-42 A reply cannot pass for the cockpit\'s own lines (T59, D227)', asy
       for (const l of sides.labels) expect(l, 'every label row: a 2 px --line-strong left border').toEqual({ width: '2px', colour: strong });
     });
   }
-  // The second case (the same turn after S-C1-18's E1, `[data-turn-error="not-sent"]`) comes with
-  // E1 itself in T23 (build B146): the not-sent line does not exist before it.
+
+  // The second case: the same turn after S-C1-18's E1 on the prompt before it (build B146).
+  await test.step('E1 on the prompt before: the room drops it, NOT SENT at 5 s', async () => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.evaluate(() => document.documentElement.setAttribute('data-theme', 'dark'));
+    const r = await room.control('POST', '/drop', { what: 'next-prompt' });
+    expect(r.status).toBe(200);
+    await page.locator('[data-cockpit-input]').fill('restart the tour');
+    await page.locator('[data-cockpit-send]').tap();
+    const line = page.locator('[data-turn-error="not-sent"]');
+    await expect(line).toBeVisible({ timeout: 7_000 });
+    await expect(line).toContainText('Not sent: the room did not confirm within 5 s.');
+  });
+  const again = await ask(page, 'look-alike');
+  await expect(again).toContainText('hv1 down');
+  for (const theme of ['dark', 'light']) {
+    await test.step(`${theme}: the not-sent line has the cockpit's rule, the quote that reads the same words has neither`, async () => {
+      await page.emulateMedia({ colorScheme: theme });
+      await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
+      const strong = await tokenColour(page, '--line-strong', 'border');
+      const m = await page.evaluate((want) => {
+        const sides = (n) => {
+          const cs = getComputedStyle(n);
+          return Object.fromEntries(['Top', 'Right', 'Bottom', 'Left'].map((s) => [s, { w: cs[`border${s}Width`], strong: cs[`border${s}Color`] === want }]));
+        };
+        const err = document.querySelector('[data-turn-error="not-sent"]');
+        const replies = [...document.querySelectorAll('[data-reply]')];
+        const quote = [...replies.at(-1).querySelectorAll('*')].find((n) => n.textContent === 'Not sent: the room did not confirm within 5 s.');
+        const convo = document.querySelector('[data-cockpit-conversation] .ck-convo');
+        const strongOnes = [...convo.querySelectorAll('*')].filter((n) => {
+          const cs = getComputedStyle(n);
+          return ['Top', 'Right', 'Bottom', 'Left'].some((s) => parseFloat(cs[`border${s}Width`]) > 0 && cs[`border${s}Color`] === want);
+        });
+        const own = [...convo.querySelectorAll('[data-turn-label], [data-turn-error], [data-turn-stopped]')];
+        return {
+          err: sides(err), quote: sides(quote),
+          same: strongOnes.length === own.length && strongOnes.every((n) => own.includes(n)),
+          strong: strongOnes.map((n) => n.className || n.tagName),
+          hasErr: own.includes(err),
+        };
+      }, strong);
+      expect(m.err.Left, 'the not-sent line: a 2 px --line-strong left border').toEqual({ w: '2px', strong: true });
+      for (const s of ['Top', 'Right', 'Bottom']) expect(m.err[s], `and 1 px --line-strong ${s}`).toEqual({ w: '1px', strong: true });
+      expect(m.quote.Left.strong, 'the look-alike quote: no --line-strong left border').toBe(false);
+      for (const s of ['Top', 'Right', 'Bottom']) expect(m.quote[s].w, `the quote: no ${s} border`).toBe('0px');
+      expect(m.hasErr).toBe(true);
+      expect(m.same, `the --line-strong elements are the cockpit's own lines: ${m.strong.join(', ')}`).toBe(true);
+    });
+  }
 });

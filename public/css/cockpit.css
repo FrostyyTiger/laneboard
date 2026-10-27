@@ -167,7 +167,8 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 16px 24px 64px var(--ck-in); /* a 560 px column */
+  /* the 64 px less what lifts the conversation's bottom: the line slot, the input's growth (D267) */
+  padding: 16px 24px max(0px, 64px - var(--ck-lift, 0px)) var(--ck-in); /* a 560 px column */
 }
 .ck-note {
   margin: 0;
@@ -395,17 +396,18 @@
   display: flex;
   align-items: flex-end;
   gap: 16px;
-  height: var(--ck-row-h);
+  height: calc(var(--ck-row-h) + var(--ck-grow, 0px)); /* grows upwards with the input (c1-talk.md §7) */
   padding: 15px 24px calc(var(--ck-row-h) - 80px) var(--ck-in); /* 1 px border + 15: the input 16 px under the row's top edge */
   border-top: 1px solid var(--line);
 }
 .ck-input {
   flex: 1;
   min-width: 0;
-  height: 64px;
+  height: 64px; /* pane.js grow(): +39.2 px a line up to 4 lines, then it scrolls inside */
   margin: 0;
-  padding: 12.4px 16px;
+  padding: 11.4px 15px; /* 12.4 and 16 px with the 1 px border: 39.2 px lines, 368 px of text (c1-talk.md §7) */
   resize: none;
+  overflow-y: auto;
   font: 400 var(--ck-type-talk)/var(--ck-line-talk) var(--font-mono);
   color: var(--text-1);
   background: var(--bg-sunken);
@@ -414,3 +416,55 @@
 }
 .ck-input::placeholder { color: var(--text-3); }
 .ck-send { flex: none; width: 64px; height: 64px; padding: 0; }
+
+/* the line slot on the input row's top edge: one message, 18 px --font-label 500, line
+   height 24 px, --text-1, 4 px free above and below, from x 784, at most 480 px wide, at most
+   3 lines; the hint and the length note in caps, 0.08 em (c1-talk.md §1.1, D133, D167) */
+.ck-line {
+  flex: none;
+  box-sizing: content-box;
+  max-width: 480px;
+  max-height: 72px;
+  margin: 0;
+  padding: 4px 24px 4px var(--ck-in);
+  overflow: hidden;
+  font: 500 18px/24px var(--font-label);
+  color: var(--text-1);
+  white-space: normal;
+  text-overflow: ellipsis;
+}
+.ck-line[hidden] { display: none; }
+.ck-line[data-line="length"],
+.ck-line[data-line="hint"] { text-transform: uppercase; letter-spacing: 0.08em; }
+.ck-line[data-line="room-down"],
+.ck-line[data-line="error"] { text-transform: none; letter-spacing: normal; }
+
+/* an error line in a turn: never a dialog, never red; 18 px mono --text-1 on --bg-sunken,
+   the cockpit's 1 px --line-strong border, its left side 2 px; 12 px / 16 px padding; the
+   buttons under the text, 48 px tall, >= 96 px wide, 8 px apart (c1-talk.md §10, D227) */
+.ck-err {
+  margin-top: 8px;
+  padding: 12px 16px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-strong);
+  border-left-width: 2px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.ck-err-text {
+  margin: 0;
+  font: 400 18px/1.4 var(--font-mono);
+  color: var(--text-1);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ck-err-btns { display: flex; gap: 8px; margin-top: 12px; }
+/* a --line box: inside the conversation only the cockpit's own lines carry --line-strong
+   (S-C1-42, D227; build B173) */
+.ck-err-btn {
+  min-width: 96px;
+  border-color: var(--line);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+}
+.ck-err-btn:disabled { color: var(--text-3); }

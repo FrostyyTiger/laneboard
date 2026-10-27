@@ -284,3 +284,34 @@ test('onFirstSentence fires once, when the drawn text holds the first sentence',
   v.draw();
   assert.equal(n, 1);
 });
+
+test('E1: the not-sent line under the prompt block, NOT SENT on the label, gone again with the echo', () => {
+  const v = createTurn(doc(), { clientId: 'p-3c1e0b2a', prompt: 'restart the tour', at: Date.now(), delivery: 'sending' });
+  assert.equal(v.prompt, 'restart the tour');
+  assert.equal(v.clientId, 'p-3c1e0b2a');
+  v.fail('not-sent', 'Not sent: the room did not confirm within 5 s.', [{ label: 'RETRY', onTap() {} }, { label: 'EDIT', onTap() {} }]);
+  assert.equal(v.hasError(), true);
+  const [you] = labels(v);
+  assert.match(you.textContent, /^YOU · \d\d:\d\d · NOT SENT$/);
+  const kidsNow = kids(v.node).map((c) => c.className);
+  assert.deepEqual(kidsNow, ['ck-label', 'ck-prompt', 'ck-err'], 'the line right under the prompt block');
+  const line = kids(v.node)[2];
+  assert.equal(line.attrs['data-turn-error'], 'not-sent');
+  assert.equal(line.children[0].textContent, 'Not sent: the room did not confirm within 5 s.');
+  assert.deepEqual(line.children[1].children.map((b) => [b.tagName, b.textContent]), [['BUTTON', 'RETRY'], ['BUTTON', 'EDIT']]);
+  v.confirm({ turnId: 't-0007', delivery: 'new' });
+  assert.equal(v.hasError(), false);
+  assert.deepEqual(kids(v.node).map((c) => c.className), ['ck-label', 'ck-prompt']);
+  assert.match(labels(v)[0].textContent, /^YOU · \d\d:\d\d$/);
+});
+
+test('E1: the AGENT row the 3 s age made while the block waited goes, and no age comes back', () => {
+  const sentAt = Date.now();
+  const v = createTurn(doc(), { clientId: 'p-3c1e0b2b', prompt: 'restart the tour', at: sentAt, delivery: 'sending' });
+  assert.equal(v.tick(sentAt + 3000), true, 'the AGENT row at 3 s');
+  assert.equal(labels(v).length, 2);
+  v.fail('not-sent', 'Not sent: the room did not confirm within 5 s.', []);
+  assert.deepEqual(kids(v.node).map((c) => c.className), ['ck-label', 'ck-prompt', 'ck-err']);
+  assert.equal(v.tick(sentAt + 9000), false);
+  assert.equal(labels(v).length, 1, 'only the prompt\'s label row');
+});

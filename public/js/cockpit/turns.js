@@ -17,6 +17,11 @@
 //   t.tick(nowMs)                     // the age in the `AGENT` label row, from 3 s (§9, D235);
 //                                     // true when it made the row (the turn grew)
 //   t.startMs                         // the turn's start on the page's clock (null before the room names it)
+//   t.fail(code, message, buttons)    // the grey error line under the prompt (§10), `NOT SENT` for E1;
+//                                     // buttons: [{label, onTap}], each a `<button>` in the line
+//   t.unfail()                        // the line goes, the label loses its word (a late echo)
+//   t.prompt / t.clientId             // the prompt's text and the screen's clientId
+//   t.hasError()                      // an error line shows
 //
 // The reply's text is md.js's blocks drawn by reply.js (T19); its tool lines are
 // tool-words.js's words in a `<button>` each (T20).
@@ -65,6 +70,33 @@ export function setDelivery(doc, row, delivery) {
   const word = el(doc, 'span', 'ck-delivery', { 'data-turn-delivery': delivery });
   word.textContent = DELIVERY_WORDS[delivery];
   row.append(sep, word);
+}
+
+/**
+ * An error line in a turn (c1-talk.md §10, D227): `[data-turn-error="<code>"]`, 18 px mono
+ * `--text-1` on `--bg-sunken` with the cockpit's `--line-strong` rule; its message as text,
+ * its buttons under it. The buttons keep the focus where it was (D132: `preventDefault()` on
+ * `pointerdown` and `mousedown`), so the on-screen keyboard stays up; `EDIT` moves it itself.
+ */
+export function errorLine(doc, code, message, buttons = []) {
+  const box = el(doc, 'div', 'ck-err', { 'data-turn-error': code });
+  const text = el(doc, 'p', 'ck-err-text');
+  text.textContent = message;
+  box.append(text);
+  if (buttons.length) {
+    const row = el(doc, 'div', 'ck-err-btns');
+    for (const b of buttons) {
+      const n = el(doc, 'button', 'ck-btn ck-err-btn', { type: 'button' });
+      n.textContent = b.label;
+      const keep = (e) => e.preventDefault();
+      n.addEventListener('pointerdown', keep);
+      n.addEventListener('mousedown', keep);
+      n.addEventListener('click', () => { if (!n.disabled) b.onTap(n); });
+      row.append(n);
+    }
+    box.append(row);
+  }
+  return box;
 }
 
 /** A room time (ISO, epoch ms) on the page's clock; a number given by the page itself stays as it is. */
@@ -170,13 +202,38 @@ export function createTurn(doc, turn, opts = {}) {
     box.setAttribute('data-turn-id', id);
   };
 
+  let promptBlock = null;
+  let errLine = null;
+
   setId(turn.turnId);
   if (typeof turn.prompt === 'string') {
     promptLabel = labelRow(doc, 'YOU', turn.at);
     if (turn.delivery) setDelivery(doc, promptLabel, turn.delivery);
-    const p = el(doc, 'div', 'ck-prompt');
-    p.textContent = turn.prompt;
-    box.append(promptLabel, p);
+    promptBlock = el(doc, 'div', 'ck-prompt');
+    promptBlock.textContent = turn.prompt;
+    box.append(promptLabel, promptBlock);
+  }
+
+  /** §10: the error line under the prompt block; `not-sent` (E1) also sets the label's `NOT SENT`. */
+  let unsent = false; // E1: the room never had the prompt, so no agent works on it
+  function fail(code, message, buttons) {
+    unfail();
+    errLine = errorLine(doc, code, message, buttons);
+    box.insertBefore(errLine, promptBlock ? promptBlock.nextSibling : null);
+    if (code !== 'not-sent') return;
+    if (promptLabel) setDelivery(doc, promptLabel, 'not-sent');
+    // The `AGENT` row the 3 s age made while the block waited goes with it: nothing ran (build B174).
+    unsent = true;
+    if (agentLabel && !reply) {
+      agentLabel.remove();
+      agentLabel = null;
+      ageNode = null;
+    }
+  }
+  function unfail() {
+    errLine?.remove();
+    errLine = null;
+    unsent = false;
   }
 
   /** The `AGENT` label row (c1-talk.md §3, §9): made once, with the first item or at 3 s. */
@@ -204,7 +261,7 @@ export function createTurn(doc, turn, opts = {}) {
    * ` · 0:03` at the end of the `AGENT` row, the row made then if no item came yet.
    */
   function tick(nowMs) {
-    if (startMs === null) return false;
+    if (startMs === null || unsent) return false;
     const ms = ended ? (endMs === null ? null : endMs - startMs) : nowMs - startMs;
     if (ms === null || ms < AGE_FROM_MS) return false;
     let made = false;
@@ -391,7 +448,11 @@ export function createTurn(doc, turn, opts = {}) {
     get turnId() { return turnId; },
     get ended() { return ended; },
     get startMs() { return startMs; },
-    confirm: confirmed, delta, block, toolStart, toolEnd, end, draw, tick,
+    prompt: turn.prompt ?? null,
+    clientId: turn.clientId ?? null,
+    hasError: () => errLine !== null,
+    confirm(msg) { unfail(); confirmed(msg); },
+    fail, unfail, delta, block, toolStart, toolEnd, end, draw, tick,
     /** Does this turn hold the call? (a tool.end naming another is not this turn's, §5.1). */
     hasCall: (id) => callsById.has(id),
   };
