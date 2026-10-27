@@ -420,7 +420,7 @@ Notes for every builder round (planner, round 1):
   trouble rows (status shape, word, age, in hue; the crit plate takes the warn plate's row format instead of a
   white `1 crit`) are set at the caption's second step; hardware/where/holds stay small — done when: a test pins
   the row size and the crit plate's row format in `test/wall-galaxy-hud.test.mjs`/`wall.css`, and `?at=hv2` shows
-  the trouble rows readable in a 3 m shrunk still. (commit SHA)
+  the trouble rows readable in a 3 m shrunk still. (commit 760d6ef)
   Builder r53: `caption.js` has a new step `trouble` (`PLATE.rows.trouble` = `STEPS.why` 4.3 vmin, the hero sub's
   step and face: label face 600, caps, 0.04 em): on a trouble site the count row and the named `problem` rows take
   it; the count carries `parts` (`[{ status, text: '1 crit', tone, shape, glyph }]`, worst first), set by the page
