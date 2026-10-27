@@ -24,7 +24,11 @@
 // the destination's (its site and what it holds) dims to `--text-3`
 // (`data-dim`): the star the camera passes is not the one it is going to.
 //
-// `placeLabels`, `candidates`, `dotNamed`, `labelRank`, `labelText` and
+// A name is anchored to its thing's point projected in the same frame, at
+// one of four fixed sides (a trouble planet or dot may also stack under it),
+// and only while that point is in the frame (night 3 T17).
+//
+// `placeLabels`, `candidates`, `stacks`, `dotNamed`, `labelRank`, `labelText` and
 // `labelSize` are pure (test/wall-galaxy-labels.test.mjs); `createLabels`
 // is the small part that moves the spans.
 
@@ -108,11 +112,14 @@ export const dotNamed = (tone, px) => tone !== 'calm' || px >= DOT_NAMED_PX;
 
 /**
  * Where a name of `w` x `h` may sit round a thing drawn at `x, y`, `r` css px
- * in radius, best first: to its right, its left, above, below. Trouble gets
- * two more steps down (a stack under the thing) so a crowd of trouble still
- * names every one. Boxes are `{ x, y, w, h }`, top left.
+ * in radius, best first: to its right, its left, above, below. `stack` (a
+ * planet or dot in trouble) gets two more steps down (a stack under the
+ * thing) so a crowd of trouble in an open system still names every one; a
+ * site's name never stacks (night 3 T17, r4-film-ui galaxy 7: `■ HV2` two
+ * lines under its star read as a second object). Boxes are `{ x, y, w, h }`,
+ * top left.
  */
-export function candidates(x, y, r, w, h, trouble = false) {
+export function candidates(x, y, r, w, h, stack = false) {
   const d = Math.max(0, r) + GAP;
   const out = [
     { x: x + d, y: y - h / 2, w, h },
@@ -120,9 +127,12 @@ export function candidates(x, y, r, w, h, trouble = false) {
     { x: x - w / 2, y: y - d - h, w, h },
     { x: x - w / 2, y: y + d, w, h },
   ];
-  if (trouble) for (let i = 1; i <= 2; i++) out.push({ x: x - w / 2, y: y + d + i * (h + GAP / 2), w, h });
+  if (stack) for (let i = 1; i <= 2; i++) out.push({ x: x - w / 2, y: y + d + i * (h + GAP / 2), w, h });
   return out;
 }
+
+/** True when a name of `kind` at `rank` may stack under its thing (candidates): trouble that is not a site or the sun. */
+export const stacks = (kind, rank) => rank === RANK.trouble && kind !== 'site' && kind !== 'core';
 
 /** True when two boxes overlap (touching is not overlapping). */
 export const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -252,7 +262,9 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
     const add = (id, node, pos, radius, alpha, kind = node?.kind, toneIn = null, site = null) => {
       const tone = toneIn ?? toneOf(node);
       const sp = project(pos, W, H);
-      if (!sp || sp.x < -W || sp.x > 2 * W || sp.y < -H || sp.y > 2 * H) return;
+      if (!sp) return;
+      // A name stands beside its thing or not at all: a star out of the frame is not named (T17).
+      if (sp.x < 0 || sp.x > W || sp.y < 0 || sp.y > H) { body(id, sp, radius * sp.unit); return; }
       const isHeld = id === lock?.id;
       const face = labelFace(kind, tone, isHeld);
       const text = labelText(node, tone, face);
@@ -260,7 +272,7 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
       const rank = labelRank(kind, tone);
       const r = isHeld ? Math.max(radius * sp.unit, lock.r) : radius * sp.unit;
       body(id, sp, r);
-      items.push({ id, rank, near: r, prefer: last.get(id)?.at, cands: candidates(sp.x, sp.y, r, bw, bh, rank === RANK.trouble) });
+      items.push({ id, rank, near: r, prefer: last.get(id)?.at, cands: candidates(sp.x, sp.y, r, bw, bh, stacks(kind, rank)) });
       meta.set(id, { text, tone, face, alpha, dim: dimOf(site) });
     };
 

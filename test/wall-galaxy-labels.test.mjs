@@ -10,7 +10,7 @@ import path from 'node:path';
 import * as THREE from '../public/vendor/three/three.module.js';
 import {
   placeLabels, candidates, overlaps, boxOf, dotNamed, labelRank, labelText, labelSize, labelFace,
-  createLabels, RANK, DOT_NAMED_PX, OPEN_FADE,
+  createLabels, stacks, GAP, RANK, DOT_NAMED_PX, OPEN_FADE,
 } from '../public/js/wall/galaxy/labels.js';
 import { galaxyLayout, rng } from '../public/js/wall/galaxy/layout.js';
 import { siteShot, FOV } from '../public/js/wall/galaxy/scene.js';
@@ -261,6 +261,79 @@ test('createLabels: at the overview only sites are named, a site in trouble in i
   assert.equal(named.tone, 'crit');
   assert.match(named.text, /^■ /);
   assert.ok(OPEN_FADE.from > 0, 'calm planets wait for their system to open');
+});
+
+// Where a star is drawn through `camera` now, and its radius in css px (labels.js: starRadius, else 24).
+function starAt(camera, s, W = 1368, H = 912) {
+  const v = new THREE.Vector3(s.home.x, s.home.y, s.home.z).applyMatrix4(camera.matrixWorldInverse);
+  const depth = -v.z;
+  v.applyMatrix4(camera.projectionMatrix);
+  const unit = H / (2 * Math.tan((camera.fov * Math.PI) / 360) * depth);
+  return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, r: (s.starRadius ?? 24) * unit };
+}
+const sameBox = (a, b) => ['x', 'y', 'w', 'h'].every((k) => Math.abs(a[k] - b[k]) < 1e-6);
+
+test('createLabels: a site name stays on its star: each draw anchors it to the star projected then, at a fixed side (T17)', () => {
+  const world = worldOf(null);
+  const galaxy = galaxyAt(world, { pos: { x: 0, y: 5200, z: 4200 }, look: { x: 0, y: 0, z: 0 } });
+  const { doc, root } = fakeDoc();
+  const labels = createLabels(root, galaxy, { steps: { site: 26, room: 15 }, doc });
+  // The camera moves between draws: it slides, closes in and swings round.
+  const poses = [
+    [{ x: 0, y: 5200, z: 4200 }, { x: 0, y: 0, z: 0 }],
+    [{ x: 900, y: 4800, z: 3900 }, { x: 300, y: 0, z: -200 }],
+    [{ x: -1500, y: 3600, z: 2600 }, { x: -400, y: 0, z: 300 }],
+    [{ x: 2400, y: 3000, z: -1800 }, { x: 0, y: 0, z: 0 }],
+  ];
+  let seen = 0;
+  for (const [pos, look] of poses) {
+    galaxy.camera.position.set(pos.x, pos.y, pos.z);
+    galaxy.camera.lookAt(look.x, look.y, look.z);
+    labels.draw();
+    galaxy.camera.updateMatrixWorld();
+    for (const name of labels.shown().filter((x) => world.byId.has(x.id))) {
+      const st = starAt(galaxy.camera, world.byId.get(name.id));
+      const sides = candidates(st.x, st.y, st.r, name.box.w, name.box.h);
+      assert.equal(sides.length, 4);
+      assert.ok(sides.some((b) => sameBox(b, name.box)), `${name.text} at a fixed side of its star ${JSON.stringify([st, name.box])}`);
+      seen += 1;
+    }
+  }
+  assert.ok(seen >= 12, `sites named over the moves (${seen})`);
+});
+
+test('createLabels: a site in trouble with no free side is not named two lines under its star, and no star out of frame is named (T17)', () => {
+  const world = worldOf(null);
+  const crit = world.sites.find((s) => toneOf(s.status) === 'crit');
+  const shot = { pos: { x: 0, y: 5200, z: 4200 }, look: { x: 0, y: 0, z: 0 } };
+  const galaxy = galaxyAt(world, shot);
+  const st = starAt(galaxy.camera, crit);
+  const d = st.r + GAP, h = labelSize(labelText(crit.node, 'crit', 'label'), 26, 'label').h;
+  // A plate over its star's four sides that leaves the old stack under it free.
+  const wall = { left: st.x - 400, top: st.y - 200, right: st.x + 400, bottom: st.y + d + h - 1 };
+  const a = fakeDoc();
+  const walled = createLabels(a.root, galaxy, { steps: { site: 26, room: 15 }, covers: () => [wall], doc: a.doc });
+  walled.draw();
+  assert.equal(walled.shown().find((x) => x.id === crit.id), undefined, 'hidden, not stacked away from its star');
+  assert.equal(stacks('site', RANK.trouble), false);
+  assert.equal(stacks('core', RANK.trouble), false);
+  assert.equal(stacks('service', RANK.trouble), true, 'a crowd of trouble dots still stacks');
+  assert.equal(stacks('service', RANK.rest), false);
+
+  // The same star 10 px above the frame: its name would fit below it, inside; it is not shown.
+  galaxy.camera.setViewOffset(1368, 912, 0, st.y + 10, 1368, 912);
+  galaxy.camera.updateMatrixWorld();
+  assert.ok(Math.abs(starAt(galaxy.camera, crit).y + 10) < 1e-6);
+  const b = fakeDoc();
+  const off = createLabels(b.root, galaxy, { steps: { site: 26, room: 15 }, doc: b.doc });
+  off.draw();
+  assert.equal(off.shown().find((x) => x.id === crit.id), undefined, 'a star out of frame has no name');
+  for (const name of off.shown()) {
+    const s = world.byId.get(name.id);
+    if (!s) continue;
+    const p = starAt(galaxy.camera, s);
+    assert.ok(p.x >= 0 && p.x <= 1368 && p.y >= 0 && p.y <= 912, `${name.text}: its star is in the frame`);
+  }
 });
 
 test('galaxy.html has the names layer between the canvas and the frame, and main.js draws it after each frame', () => {

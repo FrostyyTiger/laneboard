@@ -15,7 +15,7 @@
 
 import { panShot } from './framing.js';
 import { ease } from './layout.js';
-import { candidates, labelRank, labelSize, labelText, RANK } from './labels.js';
+import { candidates, labelSize, labelText } from './labels.js';
 import { toneOf, worseTone } from './palette.js';
 
 /**
@@ -84,10 +84,11 @@ const meets = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h &&
 const within = (b, W, H) => b.x >= 0 && b.y >= 0 && b.x + b.w <= W && b.y + b.h <= H;
 
 /**
- * True when `mark` (`{ p, r, w, h, trouble }`: a site's star in world units,
- * its name's box in css px) is clear seen through `at` (projector): the star
- * inside the frame and off every cover (`boxes`, already grown), and one
- * side its name may take (labels.js candidates) as well. Pure.
+ * True when `mark` (`{ p, r, w, h }`: a site's star in world units, its
+ * name's box in css px) is clear seen through `at` (projector): the star
+ * inside the frame and off every cover (`boxes`, already grown), and one of
+ * the four sides its name may take (labels.js candidates; a site's name
+ * never stacks, T17) as well. Pure.
  */
 export function siteClear(at, mark, boxes, W, H) {
   const s = at(mark.p);
@@ -95,7 +96,7 @@ export function siteClear(at, mark, boxes, W, H) {
   const rp = (mark.r ?? 0) * s.unit;
   const star = { x: s.x - rp, y: s.y - rp, w: 2 * rp, h: 2 * rp };
   if (!within(star, W, H) || boxes.some((b) => meets(star, b))) return false;
-  return candidates(s.x, s.y, rp, mark.w, mark.h, mark.trouble)
+  return candidates(s.x, s.y, rp, mark.w, mark.h)
     .some((c) => within(c, W, H) && !boxes.some((b) => meets(c, b)));
 }
 
@@ -194,7 +195,7 @@ export function siteMarks(sites, sitePx, starRadius = 24) {
     if ((s.alive ?? 1) < 0.5) continue;
     const tone = worseTone(toneOf(s.node), toneOf(s.status));
     const { w, h } = labelSize(labelText(s.node, tone), sitePx, 'label');
-    out.push({ p: s.home, r: s.starRadius ?? starRadius, w, h, trouble: labelRank('site', tone) === RANK.trouble });
+    out.push({ p: s.home, r: s.starRadius ?? starRadius, w, h });
   }
   return out;
 }

@@ -9,7 +9,7 @@ import * as THREE from '../public/vendor/three/three.module.js';
 import { galaxyLayout } from '../public/js/wall/galaxy/layout.js';
 import { overviewShot, FOV, SIZE } from '../public/js/wall/galaxy/scene.js';
 import { createGalaxyCamera } from '../public/js/wall/galaxy/camera.js';
-import { candidates, labelRank, labelSize, labelText, placeLabels, RANK } from '../public/js/wall/galaxy/labels.js';
+import { candidates, labelRank, labelSize, labelText, placeLabels, stacks } from '../public/js/wall/galaxy/labels.js';
 import { toneOf, worseTone } from '../public/js/wall/galaxy/palette.js';
 import {
   createOverviewFit, fitOverview, fitShot, siteMarks, widestFar, NO_FIT, OVERVIEW_FIT,
@@ -49,7 +49,7 @@ function shownFrom(shot, sites, covers) {
     const r = radius * (H / (2 * Math.tan((FOV * Math.PI) / 360) * depth));
     const { w, h } = labelSize(labelText(node, tone), STEPS.site, 'label');
     const rank = labelRank(kind, tone);
-    items.push({ id, rank, near: r, cands: candidates(x, y, r, w, h, rank === RANK.trouble) });
+    items.push({ id, rank, near: r, cands: candidates(x, y, r, w, h, stacks(kind, rank)) });
   };
   const core = FLEET.find((n) => n.kind === 'core');
   if (core) add(core.id, core, { x: 0, y: 0, z: 0 }, SIZE.sun, 'core', toneOf(core));
@@ -122,14 +122,14 @@ test('fitShot slides and stands back without turning; no covers, no change', () 
   assert.ok(none.k <= OVERVIEW_FIT.pulls.at(-1));
 });
 
-test('siteMarks: the folded name in its worst tone, trouble flagged, a going site left out', () => {
+test('siteMarks: the folded name in its worst tone, no stack flag (a site never stacks, T17), a going site left out', () => {
   const sites = world();
   const marks = siteMarks(sites, STEPS.site);
   assert.equal(marks.length, sites.length);
   for (const [i, s] of sites.entries()) {
     const tone = worseTone(toneOf(s.node), toneOf(s.status));
     assert.equal(marks[i].w, labelSize(labelText(s.node, tone), STEPS.site, 'label').w);
-    assert.equal(marks[i].trouble, tone === 'warn' || tone === 'crit');
+    assert.equal('trouble' in marks[i], false);
   }
   assert.equal(siteMarks([{ ...sites[0], alive: 0.2 }], STEPS.site).length, 0);
 });
