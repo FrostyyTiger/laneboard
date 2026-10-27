@@ -89,8 +89,8 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
 
 - **Where.** While the microphone is open (`listening`, `partial`, `final`) the textarea is
   replaced in the same rectangle by a read-only `[data-talk-text]` with two spans, `[data-firm]`
-  and `[data-tail]` (a textarea cannot colour part of its text) (D43). Same type: mono 22 px, line
-  height 1.4, 16 px padding; it grows to 4 lines and then scrolls, pinned to its end, as the
+  and `[data-tail]` (a textarea cannot colour part of its text) (D43). Same type: mono 28 px, line
+  height 1.4, 16 px padding, 21 characters per line (`TYPE_TALK`, `c1-talk.md` §3, pending Q-O18); it grows to 4 lines and then scrolls, pinned to its end, as the
   textarea does (`c1-talk.md` §7, D30). When the microphone closes, the text goes back into the
   textarea (draft) or into the prompt (send).
 - **Firm and tail.** Each speech-to-text update (`protocols.md` §12.2; research Q4: the whole list of

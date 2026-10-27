@@ -45,7 +45,7 @@ of the list below, top to bottom, with these rects at 1368x912:
 | Header (64 px) | y 0-64 | y 520-584 |
 | Header buttons, from the right, 16 px in, 8 px apart, each 48 px tall | `SCREEN` x 1256-1352, `NEW` x 1176-1248, `SHELF` x 1072-1168 (only with a shelf); y 8-56 | same x; y 528-576 |
 | Status line (80 px, only while shown) | y 64-144 | y 584-664 |
-| Conversation (scrolls) | y 64-808 (744 px), y 144-808 with the status line | y 584-808 (224 px, about 7 lines at 22 px), y 664-808 with the status line |
+| Conversation (scrolls) | y 64-808 (744 px), y 144-808 with the status line | y 584-808 (224 px, about 5 lines at 28 px), y 664-808 with the status line |
 | Input row | y 808-912: input x 784-1184, `SEND` x 1200-1264, talk button x 1280-1344, y 824-888 | same |
 
 - The talk button and `SEND` keep their rects from `screens.md` §4 and the list below: the input
@@ -70,7 +70,7 @@ of the list below, top to bottom, with these rects at 1368x912:
 3. **The conversation**, filling the rest; it scrolls on its own; 24 px padding left and right,
    16 px at the top. Text column: 560 px.
 4. **Input row**, 1 px `--line` top border. The **talk button** (64x64 px) keeps its one rect from
-   `screens.md` §4: x 1280-1344, y 824-888 on every page (pending Q-O11). Left of it, 16 px apart: `SEND` (64x64 px) and the text input (64 px tall, mono 22 px, `--bg-sunken`,
+   `screens.md` §4: x 1280-1344, y 824-888 on every page (pending Q-O11). Left of it, 16 px apart: `SEND` (64x64 px) and the text input (64 px tall, mono 28 px, `--bg-sunken`,
    from x 784 to x 1184). Typing, `SEND` and the input's growth are T5's; the talk button's states
    are T6's. The row is y 808-912 on the Wall (104 px: 16 + 64 + 24) and y 808-888 in the app (80 px: 16 +
    64; the pane ends on the bottom bar's top edge).
@@ -87,7 +87,7 @@ from the input row's top edge upwards, in this order, each one only while it is 
    One line of today's 16 px type (line height 20 px) makes the slot 32 px; each more line adds its
    line height, at most 3 lines (72 px), then the text is cut with `…` (no message in this spec
    needs 3: the longest, `NotAllowedError`'s, is 2 lines). The type of each message is its own
-   section's (T43 and T97 change sizes, not this rule). Which one, highest first (D133):
+   section's (T43 changes their sizes, not this rule; T97 left them alone). Which one, highest first (D133):
    1. `room-down`: `Sending and voice come back with the room.` (`screens.md` §7);
    2. `error`: the microphone or speech line `[data-talk-error]` (`c2-voice.md` §5, §10);
    3. `hint`: the talk hints (`c2-voice.md` §3, §4);
@@ -122,8 +122,8 @@ Rects at 1368x912 with a one-line input (row top y 808, on the Wall, in the app 
   (the chip inside its row). T44's control table takes these rects with its ≥ 8 px test.
 - In a `split` column (§1) the conversation never drops under 96 px: when the status line, the
   stack and the input's growth together would leave less, the column's top moves up over the card
-  area by what is missing (the most: 80 px status line, 136 px of stack and 93 px of input growth put the column at
-  y 339-912).
+  area by what is missing (the most: 80 px status line, 136 px of stack and 118 px of input growth put the column at
+  y 314-912).
 
 ## 2. Opening and closing
 
@@ -179,15 +179,19 @@ blocks, tool lines (§5) and show lines (`c4-show-canvas.md` §4) interleaved as
 - **Label row** above the prompt and above the reply, 24 px tall, 16 px caps `--text-3`:
   `YOU · 07:02` (`YOU · SPOKEN · 07:02` for a voice prompt, C2) and `AGENT · 07:02`. Time is the
   screen's local `HH:MM`, 24 h.
-- **The prompt**: mono 22 px, line height 1.4, `--text-1`, in a block on `--bg-surface` with a
-  1 px `--line-weak` border and 12 px / 16 px padding.
-- **The reply**: mono 22 px, line height 1.4, `--text-1`, straight on the pane's background.
-  At 22 px a 560 px column holds 42 characters per line.
+- **The prompt**: mono 28 px, line height 1.4 (39.2 px), `--text-1`, in a block on `--bg-surface`
+  with a 1 px `--line-weak` border and 12 px / 16 px padding (pending Q-O18).
+- **The reply**: mono 28 px, line height 1.4 (39.2 px), `--text-1`, straight on the pane's
+  background (pending Q-O18). The mono face (`--font-mono`, JetBrains Mono) advances 0.6 em per
+  character: 16.8 px at 28 px, so the 560 px column holds 33 characters per line (42 at 22 px).
 - Spacing: 32 px between turns, 16 px between blocks of one reply, 8 px between a label row and
   its block.
-- The type sizes are named constants in the module of D6 (D21, pending Q-O9: the tablet's panel
-  size decides whether 22 px reads well at the owner's distance; research Q1 puts the floor at
-  about 22 px at 60 cm on a 12.3 in panel).
+- The type sizes are named constants in the module of D6 (D21): `TYPE_TALK = 28` (prompt, reply,
+  input and live words, `c2-voice.md` §4) and `LINE_TALK = 1.4`. Q-O18 asks 22 or 28 px: research Q1
+  puts the floor near 22 px at 60 cm on a 12.3 in panel and 26-30 px for text read while speaking;
+  the spec is written for 28 px (Q-O18 b). If the owner picks 22 px, only the two constants and the
+  derived figures change: 42 characters per line, the input's 27 per line and 157 px at 4 lines
+  (§7), and the rects that follow from the input's growth (§1.1, §7.1, S-C1-14/33/34).
 
 ### Streaming
 
@@ -207,7 +211,7 @@ The reply is Markdown, drawn with this subset; anything else shows as its plain 
 
 | Markdown | Drawn as |
 | --- | --- |
-| paragraph | 22 px text; blocks separated by 16 px |
+| paragraph | 28 px text (§3, pending Q-O18); blocks separated by 16 px |
 | `#`, `##`, `###` heading | one style: 16 px caps `--font-label` 600, `--text-2`, 24 px above |
 | `**bold**` | weight 600 (the mono face has 400 and 600 only; `*italic*` draws as plain text) |
 | `` `code` `` inline | same size, `--bg-sunken`, 1 px `--line-weak` border, 4 px side padding |
@@ -578,12 +582,15 @@ fake speech service received before t = 0.2 s (≥ 1).
 Plan C1: "Typing works everywhere (on-screen keyboard, a paired keyboard)." `spec-input.md` §4:
 "Typing must always work too: many users will prefer it."
 
-- **The input** is a `<textarea>` `[data-cockpit-input]`, x 784-1184 (§1), mono 22 px, line height
-  1.4, 16 px padding left and right: about 27 characters per line. Placeholder `Type or hold to talk`
+- **The input** is a `<textarea>` `[data-cockpit-input]`, x 784-1184 (§1), mono 28 px, line height
+  1.4 (39.2 px), 16 px padding left and right, 12.4 px top and bottom: 368 px of text, 21 characters
+  per line at 16.8 px each (pending Q-O18; 27 at 22 px), so the 20-character placeholder fits one
+  line. Placeholder `Type or hold to talk`
   in `--text-3` (pending Q-O11). `enterkeyhint="send"`, `autocapitalize="sentences"`,
   `spellcheck` on.
-- **It grows** with its text: 64 px for one line, +31 px per line up to 4 lines (157 px); beyond 4
-  lines it scrolls inside. It grows upwards; the input row grows with it and the conversation
+- **It grows** with its text: 64 px for one line, +39.2 px per line up to 4 lines (182 px, 181.6
+  rounded; tests allow ± 1 px); beyond 4 lines it scrolls inside. At 21 characters a line, 4 lines
+  show about 84 characters: a spoken sentence of 12-15 words. It grows upwards; the input row grows with it and the conversation
   above gets shorter; `SEND` and the talk button stay at the row's bottom (D30).
 - **`SEND`** `[data-cockpit-send]`, 64x64 px, 16 px caps. Disabled (`disabled`, label `--text-3`)
   while the input holds only white space and while the room is down (`screens.md` §7). During a
@@ -643,9 +650,9 @@ numbers are for a 380 px keyboard, which leaves 1368x532 in sight.
   status line, a one-line hint or note (32 px) and a chip (64 px) it is 204 px. It is never under
   200 px with a one-line input.
 - The **input grows** (§7) only while the conversation keeps 200 px: its height is at most
-  `clamp(64, 64 + left − 200, 157)` px, where `left` is the conversation's height with a one-line
+  `clamp(64, 64 + left − 200, 182)` px, where `left` is the conversation's height with a one-line
   input. Past that the text scrolls inside the input, the caret line in sight (the textarea's own
-  scrolling). At 1368x532: 157 px (4 lines) with nothing stacked; 68 px (one line) with the status
+  scrolling). At 1368x532: 182 px (4 lines) with nothing stacked; 68 px (one line) with the status
   line, a note and a chip.
 - **Pinned.** A conversation that followed its end (§4) is at its end after every change of the
   visible height, the latest line in sight. If the owner had scrolled up, the line at its top stays
@@ -854,7 +861,7 @@ When the owner types `how is` then `Shift+Enter` then `builder-a` then `Enter` a
 Then by t = 0.1 s the conversation ends with `YOU · HH:MM · SENDING` over the two lines `how is` /
 `builder-a`, the input is empty and 64 px tall, `data-turn="thinking"` (B8); when the stand-in room
 confirms, `· SENDING` goes.
-And typing 6 lines (with `Shift+Enter`) makes the input 157 px tall with its own scrollbar, its
+And typing 6 lines (with `Shift+Enter`) makes the input 182 px tall with its own scrollbar, its
 bottom edge where it was, `SEND` still at the row's bottom.
 Test: Playwright `keyboard.type`/`press`; read the prompt text, the input's height and bottom, the
 `SEND` rect and `disabled`; the stand-in room's received-turns log has `how is\nbuilder-a`.
@@ -1101,10 +1108,10 @@ Given S-C1-32's setup with the room down (the pane's 80 px status line, `screens
 viewport at 1368x532 after a tap in the input,
 When 8 214 characters are pasted into the input (the length note shows, §7),
 Then the status line is y 64-144, the note sits in the line slot above the input row, the input is
-132 px tall (`clamp(64, 64 + 268 − 200, 157)`), its bottom at y 524, scrolled to its end with the
+132 px tall (`clamp(64, 64 + 268 − 200, 182)`), its bottom at y 524, scrolled to its end with the
 caret on its last visible line, and the conversation is 200 px tall.
 When the test resizes back to 1368x912 and blurs the input,
-Then `data-keyboard="down"` and the input is 157 px tall (4 lines, §7) with its bottom at y 888.
+Then `data-keyboard="down"` and the input is 182 px tall (4 lines, §7) with its bottom at y 888.
 Test: Playwright `fill`; rects and heights ± 1 px; the input's
 `scrollTop + clientHeight ≥ scrollHeight − 1`; the conversation's `clientHeight`.
 
@@ -1121,8 +1128,8 @@ Then there is one `[data-cockpit-line]`, `data-line="room-down"`, y 776-808, rea
 voice come back with the room.`; the chip row is y 712-776 (chip y 720-768), `↓ NEW` y 648-696,
 the conversation's bottom y 712, and the line that was at the conversation's top is still there.
 When the owner pastes 8 214 characters into the input,
-Then the input is 157 px tall, the slot still shows only `room-down` (the length note waits) at
-y 683-715, the chip row y 619-683, `↓ NEW` y 555-603.
+Then the input is 182 px tall, the slot still shows only `room-down` (the length note waits) at
+y 658-690, the chip row y 594-658, `↓ NEW` y 530-578.
 When the link starts again and `data-cockpit="live"`,
 Then the slot shows `data-line="length"` reading `8 214 / 8 000 CHARACTERS` at the same rect.
 When the owner taps `↓ NEW`,

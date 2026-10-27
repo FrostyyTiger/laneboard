@@ -181,10 +181,10 @@ Answer: (open)
 ## Q-O18 Size of the reply and the live words
 
 Taste, C1. From `reviews/31-touch.md`; research Q1 gives 26-30 px for text read while speaking.
-Spec: `c1-talk.md` §3, `c2-voice.md` §3 (still 22 px until T97).
+Spec: `c1-talk.md` §3 and §7, `c2-voice.md` §4, D21: written for b) since T97 (`TYPE_TALK = 28`; a) changes the constant and the input's 4-line height, 182 → 157 px).
 
 - a) 22 px, about 42 characters per line in the 560 px column.
-- b) 28 px, about 33 characters per line, easier at 60 cm.
+- b) 28 px, about 33 characters per line (21 in the input), easier at 60 cm.
 - c) 22 px with a setting the owner can raise.
 
 Recommendation: b) — read at arm's length while talking; line length is the cheaper loss.
