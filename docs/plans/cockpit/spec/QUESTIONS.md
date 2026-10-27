@@ -266,9 +266,13 @@ From review 31-touch.md finding 3. `CANCEL` (drops spoken words) and `STOP` (end
 - a) **Undo**: `CANCEL` keeps the words 5 s with an `UNDO` in the same slot.
 - b) **Gap**: 24 px between the slot and the talk button, `STOP` acts on release only.
 - c) **Confirm** tap before dropping.
+- d) **Move `CANCEL` away** (review 63-touch.md finding 2): while the microphone is open the slot is
+  blank and inert, and `CANCEL` is a 48x48 `✕` at the left end of the live-words box (Wall x
+  792-840), far from where the finger goes to send. A release over the slot cancels. It changes
+  where the owner's hand learns to go.
 
-Recommendation: a) and b) together — nothing is lost for good, and a confirm would slow the
-common case. Spec (pending Q-O19).
+Recommendation: a), b) and d) together — nothing is lost for good, the finger that sends never
+lands on the button that drops, and a confirm would slow the common case. Spec (pending Q-O19).
 
 Answer: (open)
 
