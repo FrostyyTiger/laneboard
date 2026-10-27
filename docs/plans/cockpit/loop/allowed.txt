@@ -1,0 +1,8 @@
+# A spec night writes no code. Every path a round changes must match one of these bash globs
+# (matched against repo-relative paths; `*` also matches `/`). Anything else reverts the whole round
+# and tells the owner. The loop's own files (loop/) and the plan (README.md, spec-input.md) are NOT
+# here on purpose: a round cannot change the rules or the owner's words.
+docs/plans/cockpit/PROGRESS.md
+docs/plans/cockpit/spec/*
+docs/plans/cockpit/reviews/*
+docs/plans/cockpit/research/*
