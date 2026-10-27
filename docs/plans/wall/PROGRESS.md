@@ -71,7 +71,7 @@ Notes for every builder round (planner, round 1):
   tap (option (a) of the review; the builder may take (b), the sheet's trouble members as rows of at least 48 px, if
   (a) proves worse; say which and why in the notes) — done when: a test on the large fixture finds every trouble
   member of HV1 and HV2 reachable by some tap sequence of at most two taps, and fan targets are at least 48 px apart.
-  (commit SHA_T3) Builder r8: option (a), `galaxy/fan.js`. Why not (b): the sheet names the worst and two more
+  (commit a5e46b6) Builder r8: option (a), `galaxy/fan.js`. Why not (b): the sheet names the worst and two more
   (caption.js MAX_LINES), so a fourth trouble planet would still need the scene, and (b) never reaches a calm planet;
   the sheet's member rows stay targets (T1). In an open system a tap whose disc holds two or more members
   (touch.js `hitAll`) opens none: they fan out as 48 px rows (60 px pitch) in two arcs round the finger, each row on
