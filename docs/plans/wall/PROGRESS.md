@@ -500,6 +500,23 @@ Notes for every builder round (planner, round 1):
   `▲ HV1` sliced at 13.7 s of r46-galaxy-beacon) — done when: a `wall.css` test pins no hard-edged opaque ground
   on `.wall-fleet` and the plate (halo or mask-image instead), and a still of `galaxy.html?at=overview&quality=0`
   with a site under the banner shows no step in the ribbon at the banner's edge.
+- [ ] T36 (r51-touch galaxy 2) [ui] [variant:galaxy] The sheet is not transparent to the finger: in `galaxy/main.js
+  pick`, a point inside the plate's box (`hud.covers()`), the fleet line's box or the clock is never a star nor empty
+  sky; a tap on a sheet row whose subject is a member opens that member (`openPlanet`), anywhere else on the plate
+  does nothing — done when: a test with a sheet up and a star under it finds a tap inside the plate's box opens
+  nothing (no flight, no back step), and a tap on a member row opens that member. (Priority for touch: do T24/T27
+  first, as the review asks; they are open above.)
+- [ ] T37 (r51-touch galaxy 3) [ui] [variant:galaxy] Every trouble planet can be picked: in an open system (41 members
+  in HV1 of the large fixture, all with a neighbour nearer than the 54 px disc) a tap whose disc holds two or more
+  members fans them out on a ring of 48 px targets round the finger for the next tap (option (a) of the review; the
+  builder may take (b), the sheet's trouble members as rows of at least 48 px, if (a) proves worse) — done when:
+  a test on the large fixture finds every trouble member of HV1 and HV2 reachable by some tap sequence of at most two
+  taps, and fan targets are at least 48 px apart.
+- [ ] T38 (r51-touch galaxy 4; fx-beacon 1) [ui] [variant:galaxy] The loudest thing is a target: a tap in the fleet
+  line's box at the overview (and under a sheet, where T36 keeps it from being empty sky) opens its subject (the
+  site, then the planet); `+N MORE` opens nothing yet; with `fx=beacon` on, the pillar's screen segment (foot to tip,
+  27 px wide) counts as its site's target in `tapPoints` — done when: a test taps inside the banner box and sees
+  the subject's site opened, and a test with `fx=beacon` finds a point on the pillar's top hits the site.
 
 ## Research questions
 
@@ -524,6 +541,13 @@ Notes for every builder round (planner, round 1):
   Chromium flags can, and how Screen Wake Lock behaves there — for T7, Later (wake lock)
 
 ## Later
+
+From r51-touch (not tasks yet):
+- (r51-touch galaxy 5) No way back to the tour by tap: at the overview in `explore` the 80 px control reads `▶ TOUR`
+  and resumes at once, plus the `MANUAL · TOUR IN 0:40` line (= r41-operator touch 1 below: first to promote).
+- (r51-touch galaxy 8) In a system opened by a tap, trouble members' names at the room step's 2x (>= 2.2vmin), calm unchanged.
+- (r51-touch galaxy 9) A two-finger tap anywhere is back; document in `docs/wall.md`.
+- (r51-touch across) The tapped flight takes a minimum of warp's tint toward its destination (with T28).
 
 Night 3's list, not yet a task (README §7 Night 3; replan takes from here in order):
 - §7 Night 3 A4 (was night 2's T31, r43-stranger galaxy 2) No words on words: the clock block in
@@ -783,6 +807,11 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
   2, 3, fx-warp 1-3, touch 3 went to Later; galaxy 6, 9, fx-beacon 1 and the warp's worth to the owner; touch 4 dropped
   (works / afterglow). No dreamer proposals in this review.
 
+- r51-touch.md: 9 galaxy + 2 fx-beacon + 1 fx-warp + across; 3 became tasks (T36 = galaxy 2, T37 = galaxy 3, T38 = galaxy 4
+  with fx-beacon 1); galaxy 1 (= T24, T27: covered, the review wants them first), 6 (= T29), 7 (= T25), fx-warp 1 (= T28)
+  dropped (covered); galaxy 5, 8, 9 and the warp-tint across note went to Later; fx-beacon 2 dropped (observation).
+  No dreamer proposals in this review.
+
 ## Scores
 
 | round | persona | overview | legibility | status | touch | wow | calm | performance |
@@ -819,5 +848,8 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 | r46 | skeptic, galaxy | 7 | 6 | 5 | 6 | 6 | 5 | 6 |
 | r46 | skeptic, fx-beacon | – | – | – | – | 5 | 5 | – |
 | r46 | skeptic, fx-warp | – | – | – | – | 4 | 4 | – |
+| r51 | touch, galaxy | 7 | 6 | 4 | 5 | 7 | 6 | 6 |
+| r51 | touch, fx-beacon | – | – | – | – | 6 | 5 | – |
+| r51 | touch, fx-warp | – | – | – | – | 6 | 5 | – |
 
 ## Morning
