@@ -583,6 +583,24 @@ Notes for every builder round (planner, round 1):
   show names its subject (T9's echo rule applied to `flyTo`/`highlight`) — done when: a test on the large fixture with a
   highlight of `vault` and `audit-log` finds the card's box clear of both marked nodes' screen points, and a test with a
   `flyTo` of HV2 STORAGE finds no banner line naming it.
+- [ ] T54 (§7 Night 4, §2.1; r45-operator galaxy 2; = r40-dreamer galaxy 5 in part) [ui] [variant:galaxy] The camera does not
+  leave a crit while its plate still names it: the held framing stays as long as the plate stands; the camera starts out only
+  after the plate has gone (plate out → camera out → banner back); if the hold must end early, plate and framing end together
+  (`tour.js`/`main.js`, `hud.js`) — done when: a page test on a fake clock with `VM-C` held finds, at every frame where the
+  plate names VM-C, the member's `screenOf` inside the held framing (no pull-out under a standing plate), and a `?pace=wall`
+  film frame near the hold's end shows no plate naming a machine the camera has left.
+- [ ] T55 (§7 Night 4, §2.1; r45-operator galaxy 3) [ui] [variant:galaxy] The banner corner is never empty while trouble
+  stands: during an echo (the held plate names the only crit) the fleet corner keeps one small count line at the reason line's
+  size (`■ 1 DOWN · 2 ATTENTION`, counts only, no subject), never louder than the plate and never a different subject's
+  headline (`hud.js bannerEcho`, `frame.js`, `wall.css`; with T19's held size) — done when: a test with a lone crit held finds
+  the corner's count line present with the right counts and its font size ≤ the plate's second line, and a film frame during a
+  VM-C hold shows the corner non-empty.
+- [ ] T56 (§7 Night 4, §2.1; r45-operator galaxy 10; = T53's "seen" note) [ui] [variant:galaxy] A countdown in the scene is
+  quiet: `countdown.js`'s scene label under a node is mono at about 0.6 of the member name's size in `--text-3`, drawn only once
+  its system is held (not during the flight, not at the overview); only the plate line (T53) gets readable size, and only when
+  it is soon or late — done when: a test pins the scene countdown's size ≤ 0.65 of the member name's and its colour
+  `--text-3` for a countdown two hours away, none drawn while the system is not held, and a still of `galaxy.html?at=cloud&open=1`
+  shows the countdown smaller than the member name.
 
 ## Research questions
 
@@ -604,6 +622,13 @@ Notes for every builder round (planner, round 1):
   a cost guess) — for T17
 
 ## Later
+
+From r45-operator (triage, night 4; not tasks yet):
+- (r45-operator touch 1) Explore reads from 3 m: the clock corner or banner count line carries `MANUAL` at the reason line's size and the corner brackets go `--text-2` (= r16 touch 1, r21 touch 2).
+- (r45-operator fx-beacon 1) Beacon screen-vertical with a width floor at the overview, hidden while its own site is held (= r16/r41 beacon lines).
+- (r45-operator fx-activity 1) Held ring at most 2.5 planet radii, none in a system whose hero is trouble (= r40 1f.1).
+- (r45-operator fx-sweep 1) After a sweep a silent site's name drops to `--text-3` with `SILENT 4M`, the tag reads `1 SILENT` beside `LIVE` (= r40 1g.1).
+- (r45-operator galaxy 9, fx-warp 1, fx-afterglow 1) covered by T25/T27, T21, T47. Across: warn holds copy the sheet's single headline (T19); the lock tinted to the destination's hue on trouble flights (already under For the owner).
 
 From r35-film-ui (triage, night 4; not tasks yet):
 - (r35-film-ui galaxy 1, 2, 5, 8; fx-warp 1; fx-beacon 2 in part) covered by T19, T28/T22, T20, T25, T37-T39, T21; the plate's ground sized to the type's own column (galaxy 5) is new, Later.
@@ -933,6 +958,10 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
   Dropped as covered: galaxy 2 (T19), 5 in part (T20), 7 (T48), 8 (T27), warp 1 (T21), afterglow label (T24); beacon
   (owner's keep-or-cut), warp 2 and activity 2 and afterglow praise (no change). Rest in Later; the overview's slow turn
   and the 3 fx proposals under For the owner.
+- r45 operator → reviews/r45-operator.md. 10 galaxy + 2 touch + 1 beacon + 1 warp + 1 afterglow + 1 activity + 1 sweep
+  findings; 3 became tasks (T54 camera leaves a crit under its plate, T55 banner corner never empty during an echo, T56 scene
+  countdown quiet). Dropped as covered: galaxy 1 (T30), 4 (T19), 5 (T28), 6 (T50), 7 (T48), 8 (T23), 9 (T25, T27), warp 1
+  (T21), afterglow 1 (T47); touch 2 (praise, no fix). Rest in Later; no fx proposals.
 
 ## Scores
 
@@ -970,5 +999,11 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 40 | dreamer (fx-afterglow) | - | - | - | - | 7 | 9 | - |
 | 40 | dreamer (fx-activity) | - | - | - | - | 5 | 7 | - |
 | 40 | dreamer (fx-sweep) | - | - | - | - | 6 | 8 | - |
+| 45 | operator (galaxy) | 7 | 7 | 6 | 7 | 6 | 6 | 6 |
+| 45 | operator (fx-beacon) | - | - | - | - | 4 | 5 | - |
+| 45 | operator (fx-warp) | - | - | - | - | 6 | 3 | - |
+| 45 | operator (fx-afterglow) | - | - | - | - | 6 | 8 | - |
+| 45 | operator (fx-activity) | - | - | - | - | 4 | 6 | - |
+| 45 | operator (fx-sweep) | - | - | - | - | 5 | 8 | - |
 
 ## Morning
