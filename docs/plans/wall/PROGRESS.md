@@ -435,7 +435,7 @@ Notes for every builder round (planner, round 1):
   that rises under it: with a site sheet up, a new model re-ranks its rows and the status line on the spot (no
   retyping), and a crit that appears in the site shows as the hero — done when: a test with a sheet for HV1 and a
   model where VM-C turns crit gets the crit row first and `STATUS` updated at once, and `sheetCaption` is covered by
-  the same rule as the tour caption. (commit SHA)
+  the same rule as the tour caption. (commit 9a76ceb)
   Builder r54: `hud.js` keeps the held leg and its shown caption; `update(model)` asks `plateFollows(was, now)`
   (pure): a sheet follows every change (rise or fall: "worst first" may never be wrong about the worst), a tour
   plate only a rise of its trouble word's status (A4's rule; a fall waits for the leg's end, so a flap does not
