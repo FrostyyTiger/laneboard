@@ -1196,7 +1196,7 @@ and never `● STOPPING`; no `STOPPED AT` line is drawn; by t = 4.1 s `· QUEUED
 has no interrupt and one `prompt` with `"priority":"next"` read at about t = 2 s.
 Test: Playwright; assert the label text at 2.1 s, 2.5 s and 4.1 s, the prompt's computed colour
 against `--text-2`/`--text-1`, no element with the text `STOPPED AT`, the order of the turn's items, and
-`order()` from the fake-agent log (no `interrupt`).
+`order("interrupt")` from the fake-agent log is `[]` (`stand-ins.md` §2.6).
 
 ### S-C1-17 STOP stops; a stuck stop is forced after 5 s
 Given a running turn and an empty input, the slot reads `STOP`,
@@ -1329,8 +1329,8 @@ Given the fake agent on a turn calling a tool from t = 0.5 s to t = 20 s, `onInt
 `endAfterMs` 300, capabilities with `interrupt_cancel_queued_v1`, and the prompt
 `only the failed one` sent at t = 1 s and showing `· QUEUED`,
 When the owner taps `STOP` at t = 3 s (the input is empty, the slot reads `STOP`),
-Then by t = 3.1 s the header reads `● STOPPING`; the fake agent's log has an interrupt with
-`cancel_queued` true; by t = 3.5 s the turn shows `STOPPED AT HH:MM`, the header `READY`, and the
+Then by t = 3.1 s the header reads `● STOPPING`; the fake agent's log has an `interrupt` line with
+`cancelQueued` true and the queued prompt's uuid in `cancelled` (`stand-ins.md` §2.6); by t = 3.5 s the turn shows `STOPPED AT HH:MM`, the header `READY`, and the
 queued block reads `YOU · HH:MM · NOT SENT` with `Dropped by STOP.`, `RETRY` and `EDIT`; nothing
 more is sent to the agent. A tap on `RETRY` at t = 5 s sends `only the failed one` with a new
 `clientId` as a new turn (`delivery:"new"`).
@@ -1348,7 +1348,8 @@ is gone and its reply starts under its own `AGENT · HH:MM` label row. With `que
 second send is not taken either, and at t = 23 s the block reads `YOU · HH:MM · NOT SENT` with
 `The agent did not read this.`, `RETRY` and `EDIT`.
 Test: Playwright, room clock `manual` and `advance(ms)` (`stand-ins.md` §1.1); two fake-agent scripts; assert
-`prompts()` count 2 with two UUIDs, the room's log line `prompt.resend`, the label texts at 13.5 s
+`prompts()` count 2 with two UUIDs, the second with `resendOf` the first's uuid, the room's log line
+`prompt.resend` naming the same two UUIDs (`stand-ins.md` §2.6), the label texts at 13.5 s
 and 23 s; in both cases exactly one resend. In the `ignore-once` case, from `page.on('websocket')`'s
 `framereceived`: a `turn.prompt` with the block's `clientId`, a new `turnId`, `delivery:"new"`
 and `"from":"queued"` arrives before the `prompt.taken` naming that `turnId` (D258); the

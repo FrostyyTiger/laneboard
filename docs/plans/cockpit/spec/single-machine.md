@@ -543,8 +543,8 @@ Second case, the same turn with a `denied` step for `shell` instead of the `tool
 writes `tool.start` with `denied:true`): the tool line reads `tried shell, not allowed`
 (`[data-denied="true"]`), `Three files.` follows, the turn ends `done`, nothing is refused.
 
-Test: Playwright on the real room with the fake agent; `fakeAgent.order()` for the interrupt and
-the end of stdin; both cases in one file.
+Test: Playwright on the real room with the fake agent; `fakeAgent.order("interrupt","stdin-end")` is
+`["interrupt","stdin-end"]` (`stand-ins.md` §2.6); both cases in one file.
 
 ### S-ONE-11 `allowUnrestricted`: only for `bridge`, only with the agent's own user
 

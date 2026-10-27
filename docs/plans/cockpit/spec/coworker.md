@@ -507,7 +507,7 @@ When a P2 alarm is added at 07:14:05,
 Then the block shows at 07:14:25 below the owner's turn, which goes on streaming in its own place;
 the owner's turn is not stopped and gets no queued prompt; the speak-up prompt reaches the fake
 agent at `turn.end` + 5 s (07:14:35), and its turn's label row reads `AGENT · 07:14`.
-Test: `fakeAgent.order()` (`prompt`, `turn-end`, `prompt`); the 5 s gap from the log's times; no
+Test: `fakeAgent.order("prompt","turn-end")` starts `["prompt","turn-end","prompt"]` (`stand-ins.md` §2.6); the 5 s gap from the log's times; no
 `STOPPED AT` in the DOM.
 
 ### S-CW-07 The marker clears where the pane opens, and stays elsewhere

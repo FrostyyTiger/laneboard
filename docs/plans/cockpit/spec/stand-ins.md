@@ -263,21 +263,59 @@ Same script, same matching. It reads `prompt` and `interrupt` (§11.3) and write
 
 ### 2.6 Its log
 
-`received.jsonl`, one JSON object per line, flushed per line:
+`received.jsonl`, one JSON object per line, flushed per line. Every stdin line is logged as it
+came (`stdin`), and right after it, with the same `atMs`, the line it decodes into (`prompt` or
+`interrupt`). The other kinds record what the fake did (D261).
 
 ```json
 {"atMs":1793080800000,"kind":"start","n":1,"argv":["-p","--input-format","stream-json"],"env":["FAKE_AGENT_DIR","HOME","LANEBOARD_MCP_TOKEN","LANG","PATH","USER"],"session":"0b7e5c2a-4d1f-4c3e-9a8b-2f6d1e0c7a91","resumed":false}
 {"atMs":1793080802960,"kind":"stdin","line":{"type":"user","uuid":"9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714","priority":"next"}}
 {"atMs":1793080802960,"kind":"prompt","uuid":"9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714","priority":"next","words":"wie lief die Nacht?","raw":"(Spoken in German; speech-to-text may have misheard a word.)\nwie lief die Nacht?","turn":"c1-voice#1"}
-{"atMs":1793080804600,"kind":"tool-result","tool":"mcp__laneboard__morning","isError":false,"result":{"window":"tonight"}}
+{"atMs":1793080804600,"kind":"tool-result","tool":"mcp__laneboard__morning","isError":false,"input":{"window":"tonight"},"result":{"asOf":[{"source":"board","at":"2026-10-27T07:12:04+01:00","ageS":1}],"window":"tonight","label":"last night","since":"2026-10-26T18:00:00+01:00","needsYou":[],"finished":[{"fkey":"builder-a:docs","outcome":"done","pr":{"number":39,"verdict":"green"},"at":"2026-10-27T03:20:00+01:00"}],"stuck":[],"review":{"waiting":0,"medianWaitMin":null},"approvals":{"answered":0,"approved":0,"denied":0},"costUsd":4.1,"costByPackage":[],"sources":[{"kind":"runs","count":3},{"kind":"lanes","count":5}]}}
+{"atMs":1793080805000,"kind":"stdin","line":{"type":"control_request","request_id":"i-0003","request":{"subtype":"interrupt","cancel_queued":true}}}
+{"atMs":1793080805000,"kind":"interrupt","requestId":"i-0003","cancelQueued":true,"stillQueued":[],"cancelled":["4b8e1d2a-6c3f-4a9e-8d7b-1f0e2c5a9b36"]}
 {"atMs":1793080805100,"kind":"signal","name":"SIGINT"}
+{"atMs":1793080805300,"kind":"turn-end","turn":"c1-voice#2","end":"stopped"}
+{"atMs":1793080822960,"kind":"stdin","line":{"type":"user","uuid":"e1c7a9d3-2b4f-4e6a-9c8d-7a3b5f1e0d24","priority":"next"}}
+{"atMs":1793080822960,"kind":"prompt","uuid":"e1c7a9d3-2b4f-4e6a-9c8d-7a3b5f1e0d24","priority":"next","words":"only the failed one","raw":"only the failed one","turn":"c1-queue#1","resendOf":"7f2a0c9e-5d1b-4e3a-b6c8-9e4d2a1f7c05"}
+{"atMs":1793080824000,"kind":"stdin-end"}
 {"atMs":1793081700000,"kind":"login-check","login":"failed","exit":1}
 ```
 
+| Kind | Logged when | Fields |
+| --- | --- | --- |
+| `start` | the process starts (before `init`) | `n` (the `starts` counter), `argv`, `env`, `session`, `resumed` |
+| `stdin` | any stdin line is read | `line`: the parsed line, `message.content` left out (the text is in the `prompt` line) |
+| `prompt` | a stdin line is a prompt (`user` line; bridge `prompt`) | `uuid` (bridge: `id`), `priority`, `words`, `raw`, `turn` (`<script name>#<turn index from 1>`, `null` when no turn matched), and `resendOf` when it is a resend |
+| `interrupt` | a stdin line is an interrupt (`control_request` with `request.subtype` `interrupt`; bridge `interrupt`) | `requestId` (`request_id`; bridge `id`), `cancelQueued` (`request.cancel_queued`, `false` when absent; bridge `cancelQueued`), and the receipt the fake answered: `stillQueued`, `cancelled` (both `null` when `onInterrupt` is `ignore` or `ignore-sigint`: no receipt) |
+| `tool-result` | a real MCP call (§2.3) returned | `tool`, `isError`, `input` (what the step sent), `result` (the tool's JSON result as the room's MCP server answered it; `null` with `"call":false`) |
+| `turn-end` | the fake writes a turn's `result` line (bridge `turn.end`) | `turn`, `end` (`done`, `step-limit`, `failed`, `not-logged-in`, `stopped`) |
+| `signal` | a signal arrives, before it acts | `name` |
+| `stdin-end` | stdin closes | none |
+| `login-check` | an `auth status` start (§2.4) | `login`, `exit` |
+
+- **`resendOf`.** The fake cannot see the room's `prompt.resend` (`protocols.md` §3.4). It marks a
+  prompt as a resend when its `raw` equals the `raw` of an earlier prompt that no turn has taken
+  yet and no receipt has cancelled; `resendOf` is that earlier prompt's `uuid`. The room's own log
+  (`prompt.resend`, both UUIDs) stays the authority; a test of the resend (S-C1-28) asserts both
+  agree. A prompt repeated after the first was taken is a new prompt, without `resendOf`.
+- The claude dialect's interrupt line follows research Q10 (`control_request`, `request_id`,
+  `request.subtype`); where `cancel_queued` sits is not confirmed there, so the fake reads
+  `request.cancel_queued`, the build night moves it if the installed CLI differs, and the log's
+  `cancelQueued` field stays the same either way.
 - `env` lists the names the child got, never values (D108's test reads it).
-- Test helper (`test/cockpit/stand-ins/fake-agent-log.mjs`): `prompts()` → the `prompt` lines (the
-  "received-turns log"); `toolResults(tool?)`; `signals()`; `starts()`; `loginChecks()` → the `login-check` lines; `order()` → `kind`s in order
-  (S-C1-16 and S-C2-09 assert no `interrupt` line at all; S-C1-27 an interrupt with `cancel_queued`).
+- Test helper (`test/cockpit/stand-ins/fake-agent-log.mjs`), each reading the file fresh:
+  - `prompts()` → the `prompt` lines (the "received-turns log"), resends included;
+  - `interrupts()` → the `interrupt` lines;
+  - `toolResults(tool?)` → the `tool-result` lines, of one tool when given;
+  - `turnEnds()`, `signals()`, `starts()`, `loginChecks()` → the lines of that kind;
+  - `order(...kinds)` → the `kind` strings of the lines in file order, filtered to `kinds` when any
+    are given; with no argument every kind except `stdin` (each `stdin` line is followed by its
+    decoded line, so it would only double the list). Tests assert on a filtered list, so a
+    line added later (a `start` after a restart) does not break them: S-C1-16 and S-C2-09 `order("interrupt")` is `[]`; S-C1-27
+    `interrupts()` has one line with `cancelQueued` `true` and the queued prompt's uuid in
+    `cancelled`; S-CW-06 `order("prompt","turn-end")` starts `["prompt","turn-end","prompt"]`;
+    S-ONE-10 `order("interrupt","stdin-end")` is `["interrupt","stdin-end"]`.
 
 ## 3. The fake speech service
 

@@ -342,7 +342,7 @@ Then by t = 4.3 s (B3) the prompt `Only the failed one.` is drawn last with
 the fake agent's log has no interrupt; by t = 6.1 s `· QUEUED` is gone and
 `Only builder-a failed.` is drawn below it in the same turn.
 Test: Playwright; the reply text at 2.0 s and 3.9 s differs (still streaming); assert the label at
-4.3 s and 6.1 s, no element with the text `STOPPED AT`, and `order()` from the fake-agent log (one
+4.3 s and 6.1 s, no element with the text `STOPPED AT`, and the fake-agent log (`stand-ins.md` §2.6: `order("interrupt")` is `[]`, one
 `prompt` with `"priority":"next"`, no `interrupt`).
 
 ### S-C2-10 CANCEL drops the spoken words, keeps a typed draft, and UNDO brings them back (pending Q-O19)
