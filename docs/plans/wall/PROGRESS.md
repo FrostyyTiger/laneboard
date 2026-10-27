@@ -372,7 +372,30 @@ Notes for every builder round (planner, round 1):
   at 3 m mostly as its trail; at `?demo=1` speed the overview's rest is about 1.75 s, so the turn there is a quick
   1.5 s flick (wall pace gets the full 6 s). A node's `why` that counts time (`last seen 3h ago` → `4h`) reads as news
   once an hour.
-- [ ] T37 (§7 Night 4 B1; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] The show commands, the state: a pure `galaxy/show.js` with `flyTo(nodeId)`, `highlight(nodeIds, note)`, `clear()`, `pin(nodeId, card)` (a plain text card next to a node), each display-only, each one line on screen ("shown by the agent", the tag's face), each undone by one tap (an `✕` target of 48 px, Q6); going through the director's `show` source (T13). Message shape from Q16. — done when: tests for `galaxy/show.js` (fake clock): each command, the one-tap undo, a show during touch and during a flight
+- [x] T37 (§7 Night 4 B1; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] The show commands, the state: a pure `galaxy/show.js` with `flyTo(nodeId)`, `highlight(nodeIds, note)`, `clear()`, `pin(nodeId, card)` (a plain text card next to a node), each display-only, each one line on screen ("shown by the agent", the tag's face), each undone by one tap (an `✕` target of 48 px, Q6); going through the director's `show` source (T13). Message shape from Q16. — done when: tests for `galaxy/show.js` (fake clock): each command, the one-tap undo, a show during touch and during a flight (commit f61e23d, 0eb72cb)
+  Builder r38: `galaxy/show.js`: `readShow` (Q16's envelope `{ v: 1, ch: 'laneboard.show', id, src, type, ttl?, data }`;
+  ttl default 60 s, at most 600, 0 = until undone; words one line, at most 140; a bad message answers `bad-shape`
+  with its id, another channel or version gets no answer), `showStep` (pure, fake clock: `msg`, `undo`, `drop`,
+  `tick` → `{ state, reply, fly, ended }`), `showLines`, `showMarks`, `cardPlace`, `createShow` (the page's part;
+  `__galaxyShow.send(msg)` returns the reply, for T38 to carry). Decided: **every command but `clear` is refused
+  `busy` under a finger** (not only `flyTo`: nothing appears under a person's hands), and **a first touch drops
+  everything shown** (as the director drops its show); one `flyTo` and one `highlight` at a time (the newer replaces),
+  one pin per node and at most 2 pins; a `flyTo` lasts as long as the director holds the camera (min of ttl and the
+  minute), so the row never names a place the camera has left; a newer `flyTo` takes over without handing the camera
+  to the tour in between; unknown nodes `unknown-node` (a highlight keeps the nodes it knows); repeated ids are
+  ignored (64 kept). On screen: `SHOWN BY <src>` (the tag's face, the name after `agent:`) top right where the
+  manual line stands (a show never runs under a finger, so they never meet), one row per command newest first
+  (`AT STORAGE`, `4 MARKED`, `NOTE ON STORAGE`, seconds only in the last 10) at the back control's step with its
+  own `✕` of 48 px (its press never reaches the stage, so it is not a wake); a ring (text-1, steady) round each
+  highlighted node and a card for a pin or a highlight's note beside its node, following it by transform (the
+  ring's size written only when it changes); cards on one node stack; the names keep off the cards. Tests:
+  `test/wall-galaxy-show.test.mjs` (15: each command, the undo, during touch, during a flight and a flyTo replacing
+  a flyTo mid-flight, the countdown, the page's wiring). Films: `shots/r38-show` (CDP: tour → flyTo storage + a
+  highlight of 4 with a note + a pin → ✕ on the highlight → a touch drops the rest → a pin under the finger answers
+  `busy`; 0 console errors), `shots/r38-galaxy` (no show: 10.3 fps SwiftShader ×4, worst gap 296 ms, 0 errors; r37
+  10.3). Honest: a highlight of a folded cluster's members stacks the rings on the cluster (seen only up close in the
+  film); the agent's rows are the brightest grey at the back control's size, quieter than the red banner but louder
+  than the tag. The `?show=demo` script and the transport are T38/T39.
 - [ ] T38 (§7 Night 4 B2; promoted from Later by the watcher on 2026-10-27, before the merge) The show commands, the transport: one small documented message shape through `BroadcastChannel` and `postMessage` (origin-checked) into `show.js`; the relay room → hub → screens is cockpit work (fenced hub files): not this night. — done when: a test posts each message shape through BroadcastChannel and postMessage and a wrong origin is ignored
 - [ ] T39 (§7 Night 4 B3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] The show demo: `?demo=1&show=demo` plays a recorded conversation's show commands over the large demo fleet (fly to the crit, highlight what it breaks, pin a note); the video's second half (cockpit §5). A filmstrip. — done when: a filmstrip of `?demo=1&show=demo` shows the fly-to, the highlight and the pinned note
 - [ ] T40 (§7 Night 4 C; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `countdown: { at, label }` as a feed field (D3, like `glow` and `ring`): the galaxy draws a small countdown at that node, readable at the site step and quiet at the overview; the caption names it when the camera holds there; display only; the large demo carries one (`test/helpers/demo-hub.mjs`). Format from Q17. Maybe two tasks: the field and the drawing, then the caption line and demo data. — done when: tests for the field and the caption line, and a still at the site step shows the countdown readable at 3 m
