@@ -490,3 +490,43 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   the bridge's turn counter, else `unknown-id`; a second `stop` of the turn being stopped is
   accepted and changes nothing — because §3.3 says the screen changes nothing on `not-now` — spec:
   `protocols.md` §3.3 — overrule: `stop()` in `session.mjs`.
+- B84 (T12) `server/cockpit/store.mjs` `createStore()` folds the room → screen messages the bridge
+  emits (`apply`) into the turns a snapshot carries and appends a `turn` line at §11.7.1's write
+  points; `load()` does steps 1-6 and returns `{conversation, startedAt, turns, lastTurn, clientIds,
+  cutTurn}`; `startRoom()` loads it before any listen, runs `retain()` and the 3 600 s timer. T13
+  wires the rest: `store.apply` on every emitted message, `store.begin({…, reason:'first'})` at the
+  session's first conversation (session.mjs emits no `conversation.new` for it), the bridge's turn
+  counter from `lastTurn`, `clientIds` into the once-only memory, `cutTurn` to the session's
+  `agent-back` — because T12's done-when is the store test and the link does not exist yet — spec:
+  `protocols.md` §11.7.1 — overrule: `startRoom()` in `server/boot/cockpit.mjs`.
+- B85 (T12) The last `conversation` line of a file wins, as the last line of a `turnId` does; a turn
+  keeps the place of its first line — because §11.7.1 names "last wins" for turns only and a
+  rewrite must keep the order the turns started — spec: `protocols.md` §11.7.1 step 1 — overrule:
+  `readConversationFile()`.
+- B86 (T12) A file moved to `old/` whose name is taken (no `session.json` restarts at `c-0001`)
+  goes to `old/{conversation}.{n}.jsonl`, the first free `n` from 2; nothing is overwritten —
+  because §11.7.1 names `old/{conversation}.jsonl` only and a lost session.json repeats ids —
+  spec: `protocols.md` §11.7.1 Files — overrule: `oldName()`.
+- B87 (T12) Step 2 with a `session.json` whose conversation differs from the file's: the file goes
+  to `old/` too (not dropped), and the new file's `conversation` line has `session.json`'s
+  `startedAt` and `reason:"first"` — because step 2 says what the room starts with but not what
+  becomes of the other conversation's turns, and `first` is "no conversation before" as far as the
+  file can tell — spec: `protocols.md` §11.7.1 step 2 — overrule: `load()` in `store.mjs`.
+- B88 (T12) A queued prompt taken as the next turn (`turn.prompt` `from:"queued"`): the old turn
+  without its `prompt` item is appended too, before the new turn's line — because the last line
+  of the old turn must not keep the moved item after a restart — spec: `protocols.md` §2.2, §3.4 —
+  overrule: `apply()`'s `turn.prompt` case.
+- B89 (T12) A tool item on disk carries `denied:true` only when the call was denied (absent
+  otherwise), `isError` always once ended — because §2.2's snapshot example has no `denied` and
+  the item rule makes it optional — spec: `protocols.md` §2.2, §2.4 items — overrule: `apply()`'s
+  `tool.end` case.
+- B90 (T12) A turn line written mid-block (a `prompt.taken`, a `tool.end` of a parallel call)
+  holds the deltas of the open block so far, as a snapshot would; the deltas themselves never
+  write — because §11.7.1's line is "the whole turn as a snapshot carries it" and the text is the
+  bridge's redacted text (D127) — spec: `protocols.md` §11.7.1 — overrule: write only closed
+  blocks in `apply()`.
+- B91 (T12) A line that parses but is no `conversation` line, no `turn` passing `checkTurn`, and
+  no `speakup` with an `id` is skipped with the same `line {n} unreadable` log line; `speakup`
+  lines are read, kept and trimmed by `at` (the Speak slice writes them) — because a half-valid
+  turn would reach every screen's snapshot — spec: `protocols.md` §11.7.1 step 1 — overrule:
+  `parseLine()`.

@@ -22,6 +22,9 @@ import { log } from '../log.mjs';
 import { DEFAULT_CWD, fillPath, startLines } from '../config/cockpit.mjs';
 import { auditFile } from '../fleet/paths.mjs';
 import { agentWalk, fileProblems, lookupAgent, secretPaths } from '../cockpit/start-check.mjs';
+import { readSessionFile } from '../cockpit/session.mjs';
+import { createStore } from '../cockpit/store.mjs';
+import * as roomClock from '../cockpit/clock.mjs';
 
 /** The room's path on the page's origin, on both sides (D93). Not a config key. */
 export const COCKPIT_PREFIX = '/api/cockpit';
@@ -46,8 +49,18 @@ export async function startRoom(ctx = null, opts = {}) {
   prepareRoomFiles();
   for (const line of startLines(config, { env: opts.env ?? process.env })) process.stderr.write(`${line}\n`);
   const cwd = fillPath(agent.cwd, { stateDir: config.stateDir });
+  // protocols.md §11.7.1 "At room start", before the link accepts an upgrade
+  // (the room alone listens only after this returns): the conversation read
+  // back, repaired and trimmed, then the retention timer (every 3 600 s).
+  const say = (line) => log.info(line);
+  const store = createStore({ stateDir: config.stateDir, log: say });
+  const started = roomClock.now();
+  const loaded = store.load({ now: started, session: readSessionFile(config.stateDir, say) });
+  store.retain(started);
+  store.every();
+  log.info(`cockpit: conversation ${loaded.conversation ?? '(new)'} with ${loaded.turns.length} turns`);
   log.info(`cockpit: room up (agent ${agent.kind}, cwd ${cwd})`);
-  return { cwd, stop: async () => {} };
+  return { cwd, store, loaded, stop: async () => { store.close(); } };
 }
 
 let prepared = false;
