@@ -449,10 +449,24 @@ Notes for every builder round (planner, round 1):
   r54-galaxy (pace=wall, large): unchanged tour, 0 errors, 8.5 fps (SwiftShader under the VM's load; the change
   runs once per map message, not per frame). Seen: on a sheet the attention count flaps every few seconds on the
   demo data, so the rows change that often (no typing, but it moves); the kicker still says `TARGET 01 / 05` (T25).
-- [ ] T25 (r31-film-ui touch 2, 5) [ui] [variant:galaxy] The sheet is yours, not the tour's: kicker `SITE · HV1`
+- [x] T25 (r31-film-ui touch 2, 5) [ui] [variant:galaxy] The sheet is yours, not the tour's: kicker `SITE · HV1`
   (or `ROOM · IN HV1`) instead of `ATTENTION · TARGET 01 / 05`, no typing cursor and no typing on a sheet (text at
   once), brackets first on the tapped site, then stepping to the worst member — done when: a test pins the sheet
-  kicker, no typing state on a sheet, and the lock target sequence site → worst member.
+  kicker, no typing state on a sheet, and the lock target sequence site → worst member. (commit SHA)
+  Builder r55: `hud.js sheetCaption(node, model)` (no index/count any more) gives `SITE · HV1` / `ROOM · IN HV1`; the
+  status word is the hero's, the mark's glyph keeps its hue (`▲ SITE · HV1`). `caption.js show` with a `sheet`
+  caption: built at once, the plate fades in with the camera with name and every row in, plate at full height, no
+  cursor (hidden from the build), no letter/row beats; the tour still types. `hud.js` `SHEET_LOCK.stepMs` 1400: a
+  sheet whose lock target is not the tapped thing locks the tapped thing at once (its trouble hue), then a timer at
+  arrival + 1.4 s steps (`cut`) to the worst member; a new leg, release or stop drops a waiting step; a rising
+  trouble (T24's `follow`) takes the brackets at once and drops the step. `main.js openSite` no longer passes the
+  tour's count. Tests: `wall-galaxy-hud` (T25 kicker, site → member sequence with a fake timer, step dropped by a
+  rise / release; T24's tests now pin `SITE · HV1`) and `wall-caption` (a sheet in whole: two beats only, no
+  cursor, rows in, full height). Checked: CDP script `tools/r55-sheet.mjs` (large demo, tap HV1 at the overview:
+  0.3-3 s brackets round HV1's star, plate up at 3 s with `▲ SITE · HV1` and 5 rows at once, from 4.5 s brackets on
+  `feat-search`; 0 errors; shots `r55-sheet`); film r55-galaxy (tour unchanged, typing and `TARGET 01 / 05` kept,
+  0 errors, 9.4 fps under SwiftShader as earlier films). Seen: `HV1` is said twice on a site sheet (kicker and name
+  line), as the task asked; a later round may drop the name from the kicker.
 - [ ] T26 (r31-film-ui galaxy 4; promotes Later A4 T31) [ui] [variant:galaxy] No words on words or off the frame:
   `hud.covers()` includes the clock block, tag and plate; every label keeps a safe margin from the frame edge
   (`HOME` was cut by the top edge) and out of the plate's box (`CLOUD` under `HOLDS`) and the lock bracket — done

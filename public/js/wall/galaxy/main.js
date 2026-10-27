@@ -282,11 +282,8 @@ export function boot() {
   // it, the brackets close on it at once, its plate comes as the camera does.
   // A tap on empty sky is a step back (T13).
   const stageEl = document.getElementById('galaxy-stage');
-  let latestModel = null;
   // A site's sheet; the camera flies there unless it already holds it (a step back from a planet).
   const openSite = (id) => {
-    const order = tourOrder(latestModel?.nodes ?? []);
-    const i = order.findIndex((s) => s.id === id);
     const w = cam.want();
     // In reduced motion the tour's site legs leave the camera on the overview: only a cut is there.
     const there = w.kind === 'site' && w.id === id && (!reduced || w.cut);
@@ -294,7 +291,8 @@ export function boot() {
       cam.cut(id, TIMING.zoom);
       fade?.cut();
     } else if (!there) cam.focus(id, TIMING.zoom);
-    hud.open({ id, index: i >= 0 ? i + 1 : null, count: order.length || null, arriveMs: there || reduced ? 0 : FLIGHT.ms });
+    // A sheet says what was touched, not the tour's count (T25).
+    hud.open({ id, arriveMs: there || reduced ? 0 : FLIGHT.ms });
     place = placeOf(id);
   };
   // A planet in an open system (T11) is asked first: the camera stays, its sheet comes at once.
@@ -375,7 +373,6 @@ export function boot() {
   const showModel = (model) => {
     if (!model || typeof model !== 'object') return;
     have = true;
-    latestModel = model;
     galaxy.update(model);
     if (fx.has('lanes')) galaxy.setRoutes(siteRoutes(model, galaxy.world?.byId.keys() ?? []));
     if (fx.has('comets')) galaxy.setComets(flowComets(model, galaxy.drawn()));

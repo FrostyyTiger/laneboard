@@ -487,3 +487,45 @@ test('caption: refresh sets a newer model\'s words on the plate up at once, no t
     globalThis.document = prevDoc;
   }
 });
+
+test('caption: a sheet comes in whole with the plate, nothing typed, no cursor, no stagger (night 3 T25)', async () => {
+  const { makeDocument, makeEl } = await import('./helpers/fakedom.mjs');
+  const { createCaption } = await import('../public/js/wall/caption.js');
+  const prevDoc = globalThis.document;
+  const doc = makeDocument();
+  const make = doc.createElement.bind(doc);
+  doc.createElement = (tag) => {
+    const e = make(tag);
+    e.replaceChildren = (...kids) => { e.textContent = ''; e.append(...kids); };
+    return e;
+  };
+  globalThis.document = doc;
+  try {
+    const root = makeEl('div');
+    root.clientWidth = 1368;
+    root.clientHeight = 912;
+    const waits = [];
+    const timers = { setTimeout: (fn, ms) => { waits.push({ fn, ms }); return waits.length; }, clearTimeout: () => {} };
+    const cap = createCaption(root, { timers, timing: CAPTION_TIMING });
+    const m = model();
+    const sheet = { ...captionLines(node(m, 'hv2'), m), kicker: 'SITE · HV2', sheet: true };
+    cap.show({ kind: 'site', id: 'hv2', arriveMs: 2500, sheet: true }, sheet);
+    assert.deepEqual(waits.map((w) => w.ms), [0, 2500], 'the build, then the plate with the camera: no letter, cursor or row beats');
+    for (const w of waits) w.fn();
+    const find = (e, pred, out = []) => { if (pred(e)) out.push(e); for (const c of e.children ?? []) find(c, pred, out); return out; };
+    assert.equal(find(root, (e) => e.className === 'wall-caption-typed')[0].textContent, sheet.name);
+    assert.equal(find(root, (e) => e.className === 'wall-caption-rest')[0].textContent, '');
+    assert.equal(find(root, (e) => e.className === 'wall-caption-cursor')[0].hidden, true, 'no typing cursor');
+    const rows = find(root, (e) => e.className === 'wall-caption-line');
+    assert.equal(rows.length, sheet.lines.filter((l) => l.step !== 'hero').length);
+    assert.ok(rows.every((r) => !r.hidden && r.style.opacity === '1'), 'every row in with the plate');
+    const plate = find(root, (e) => e.className === 'wall-caption')[0];
+    assert.equal(plate.style.height, `${plateHeight(sheet, Infinity, heroSize(sheet.lines[0].word, 1368, 912))}vmin`, 'at its full height');
+    // The tour's plate still types.
+    waits.length = 0;
+    cap.show({ kind: 'site', id: 'hv2', arriveMs: 0 }, captionLines(node(m, 'hv2'), m));
+    assert.ok(waits.length > 10, 'letters and rows each their beat');
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});

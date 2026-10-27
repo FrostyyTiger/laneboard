@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { CRIT_HOLD, agoText, bannerEcho, bannerModel, clearedOf, createHud, farNode, galaxyCaption, legNode, plateFollows, sheetCaption, staleCaption } from '../public/js/wall/galaxy/hud.js';
+import { CRIT_HOLD, SHEET_LOCK, agoText, bannerEcho, bannerModel, clearedOf, createHud, farNode, galaxyCaption, legNode, plateFollows, sheetCaption, staleCaption } from '../public/js/wall/galaxy/hud.js';
 import { captionLines } from '../public/js/wall/caption.js';
 import { clearedLine, worstLine } from '../public/js/wall/frame.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
@@ -727,8 +727,8 @@ test('sheetCaption: a site in trouble, the worst first (the crit as the hero, th
   assert.deepEqual(problems.map((l) => l.status), ['warn']);
   assert.match(problems[0].text, /^VM-A · disk 91%/);
   assert.ok(cap.lines.indexOf(problems[0]) < cap.lines.findIndex((l) => l.kind === 'count'), 'trouble before the counts');
-  assert.match(cap.kicker, /^CRIT · /);
-  assert.ok(!/ · IN /.test(cap.kicker), 'a site is not in anything');
+  assert.equal(cap.kicker, 'SITE · HV1', 'what was touched (T25), not the tour\'s count');
+  assert.equal(cap.mark.tone, 'crit', 'the mark\'s glyph keeps its hue');
 });
 
 test('sheetCaption: a calm site keeps its lines (the tour\'s plate drops them, a sheet was asked for)', () => {
@@ -825,7 +825,8 @@ test('T24: a sheet for HV1 re-ranks at once when VM-C turns crit: the crit as he
   assert.equal(cap.lines[0].word, 'VM-C');
   const status = cap.lines.find((l) => l.kind === 'status');
   assert.equal(status.parts[0].text, '1 crit', 'STATUS counts the crit first');
-  assert.match(cap.kicker, /^CRIT · /);
+  assert.equal(cap.kicker, 'SITE · HV1');
+  assert.equal(cap.mark.tone, 'crit');
   assert.equal(f.plates.at(-1), 'crit', 'the plate\'s tone follows');
   const lock = f.locks.at(-1);
   assert.equal(lock.target[0].id, 'hv1-c', 'the brackets go to the crit');
@@ -880,6 +881,84 @@ test('T24: a crit rising while the camera still flies shows the new plate for th
   assert.equal(leg.arriveMs, 2000, 'the time left');
   assert.equal(cap.lines[0].status, 'crit');
   // The waiting plate takes the new tone when it lands.
-  waits.at(-1).fn();
+  waits.find((w) => w.ms === 3000).fn();
   assert.equal(f.plates.at(-1), 'crit');
+});
+
+// Night 3 T25 (reviews/r31-film-ui.md touch 2, 5): the sheet is yours, not the tour's.
+test('T25: a sheet\'s kicker says what was touched, never the tour\'s count', () => {
+  const m = sheetModel();
+  assert.equal(sheetCaption(m.nodes[1], m).kicker, 'SITE · HV1');
+  assert.equal(sheetCaption(m.nodes.find((n) => n.id === 'hub'), m).kicker, 'SITE · HUB');
+  assert.equal(sheetCaption(m.nodes.find((n) => n.id === 'hv1-c'), m).kicker, 'ROOM · IN HV1');
+  assert.equal(sheetCaption(m.nodes.find((n) => n.id === 'hv1-b'), m).kicker, 'ROOM · IN HV1');
+  // Through the hud, with the tour's numbers on the leg: still no TARGET.
+  const shown = [];
+  const hud = createHud({
+    caption: { show: (leg, cap) => shown.push(cap), hide: () => {}, cover: () => null },
+    frame: { update: () => {}, live: () => {}, cover: () => null },
+  });
+  hud.update(m);
+  hud.open({ id: 'hv1', index: 1, count: 5, arriveMs: 0 });
+  assert.equal(shown.at(-1).kicker, 'SITE · HV1');
+  assert.ok(!/TARGET/.test(shown.at(-1).kicker));
+  hud.park({ id: 'hv1', index: 1, count: 5 });
+  assert.match(shown.at(-1).kicker, /TARGET 01 \/ 05/, 'the tour keeps its count');
+});
+
+test('T25: a sheet\'s brackets go round the tapped site first, then step to its worst member after the arrival', () => {
+  const f = followFakes();
+  const waits = [];
+  const timers = {
+    setTimeout: (fn, ms) => { waits.push({ fn, ms, live: true }); return waits.length; },
+    clearTimeout: (id) => { if (waits[id - 1]) waits[id - 1].live = false; },
+  };
+  const hud = createHud({ caption: f.caption, frame: f.frame, lock: f.lock, timers });
+  const m = sheetModel();
+  hud.update(m);
+  hud.open({ id: 'hv1', arriveMs: 2500, lockMs: 0 });
+  const first = f.locks.at(-1);
+  assert.deepEqual(first.target.map((t) => t.id), ['hv1'], 'the site first: this is what you touched');
+  assert.equal(first.arriveMs, 0, 'at once');
+  assert.equal(first.status, 'crit', 'in the trouble word\'s hue');
+  const step = waits.find((w) => w.live && w.ms === 2500 + SHEET_LOCK.stepMs);
+  assert.ok(step, 'the step waits for the camera and the shut brackets');
+  step.fn();
+  const second = f.locks.at(-1);
+  assert.equal(second.target[0].id, 'hv1-c', 'then the worst member, the hero\'s');
+  assert.equal(second.cut, true);
+  assert.equal(second.arriveMs, 0);
+  // A calm site, or a planet that is itself the worst: one lock, no step.
+  const n = f.locks.length;
+  hud.open({ id: 'hub', arriveMs: 0 });
+  assert.equal(f.locks.length, n + 1);
+  assert.equal(f.locks.at(-1).target[0].id, 'hub');
+  assert.ok(!waits.some((w) => w.live && w.ms === SHEET_LOCK.stepMs), 'no step waiting');
+  hud.open({ id: 'hv1-c', arriveMs: 0 });
+  assert.equal(f.locks.at(-1).target[0].id, 'hv1-c');
+  // The tour is unchanged: straight to the worst member.
+  hud.park({ id: 'hv1' });
+  assert.equal(f.locks.at(-1).target[0].id, 'hv1-c');
+});
+
+test('T25: a step still waiting is dropped by a new leg and taken over by a rising trouble', () => {
+  const f = followFakes();
+  const waits = [];
+  const timers = {
+    setTimeout: (fn, ms) => { waits.push({ fn, ms, live: true }); return waits.length; },
+    clearTimeout: (id) => { if (waits[id - 1]) waits[id - 1].live = false; },
+  };
+  const hud = createHud({ caption: f.caption, frame: f.frame, lock: f.lock, timers });
+  hud.update(risingModel());
+  hud.open({ id: 'hv1', arriveMs: 0 });
+  assert.equal(f.locks.at(-1).target[0].id, 'hv1');
+  const step = () => waits.filter((w) => w.live && w.ms === SHEET_LOCK.stepMs);
+  assert.equal(step().length, 1);
+  hud.update(risingModel('crit'));
+  assert.equal(f.locks.at(-1).target[0].id, 'hv1-c', 'a crit goes to the brackets at once');
+  assert.equal(step().length, 0, 'and the waiting step with it');
+  hud.open({ id: 'hv1', arriveMs: 0 });
+  assert.equal(step().length, 1);
+  hud.release();
+  assert.equal(step().length, 0, 'gone with the sheet');
 });

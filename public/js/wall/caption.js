@@ -434,7 +434,8 @@ function lineEl(line) {
 
 /**
  * The plate inside `root` (an empty element over the map). `show(leg,
- * caption)` builds and plays it for a tour leg, `hide()` fades it out and
+ * caption)` builds and plays it for a tour leg (a `sheet` caption comes in
+ * whole with the plate, untyped), `hide()` fades it out and
  * cancels what had not played yet, `refresh(caption)` sets new words on the
  * plate up now at once (false when none is up). `timers` is injectable.
  */
@@ -530,7 +531,8 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     if (lead) plate.dataset.hero = ''; else delete plate.dataset.hero;
     typed.textContent = '';
     rest.textContent = cap.name;
-    cursor.hidden = false;
+    // A sheet is never typed (T25): no cursor, even before its plate fades in.
+    cursor.hidden = Boolean(cap.sheet);
     cursor.classList.remove('is-blink');
     list.replaceChildren(...rows.map(lineEl));
     plate.dataset.status = cap.status;
@@ -546,6 +548,16 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     grow(cap, 0, 0);
   };
 
+  // Every word in at once, nothing typed (a sheet, T25): the plate opens at its full height.
+  const whole = (cap, rows) => {
+    typed.textContent = cap.name;
+    rest.textContent = '';
+    cursor.hidden = true;
+    cursor.classList.remove('is-blink');
+    for (const li of list.children) { li.hidden = false; li.style.opacity = '1'; }
+    grow(cap, rows.length, 0);
+  };
+
   const show = (leg, cap) => {
     const wasShown = shown;
     hide();
@@ -557,8 +569,12 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
       shown = true;
       if (uncover != null) { timers.clearTimeout(uncover); uncover = null; }
       covering = true;
+      if (cap.sheet) whole(cap, rows);
       fade(plate, 1, timing.inMs);
     });
+    // A sheet (night 3 T25, reviews/r31-film-ui.md touch 2): the person asked,
+    // so the words are there with the plate; the typing is the tour's.
+    if (cap.sheet) return;
     const letters = [...cap.name];
     letters.forEach((_, i) => later(Math.max(s.nameAt + (i + 1) * timing.letterMs, swapAt), () => {
       typed.textContent = letters.slice(0, i + 1).join('');
@@ -592,11 +608,7 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     const rows = cap.lines.filter((l) => l.step !== 'hero');
     const was = plate.style.height;
     build(cap, rows);
-    typed.textContent = cap.name;
-    rest.textContent = '';
-    cursor.hidden = true;
-    cursor.classList.remove('is-blink');
-    for (const li of list.children) { li.hidden = false; li.style.opacity = '1'; }
+    whole(cap, rows);
     plate.style.height = was;
     grow(cap, rows.length, timing.lineFadeMs);
     return true;

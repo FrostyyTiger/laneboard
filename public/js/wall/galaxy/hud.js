@@ -45,18 +45,21 @@ export function galaxyCaption(cap, kind = 'site') {
  * person asked, so every line `captionLines` has (a calm site's status,
  * bars, facts and counts too, which the tour's plate drops from 3 m), worst
  * first as it ranks them: the trouble word, the count by severity, the next
- * problems, then the rest. A site's kicker is `galaxyCaption`'s; a planet's
- * (anything below a site) names the site it is in (`ROOM · IN HV2`). The
- * plate's own type steps: the sheet is the plate, so nothing new competes
- * for the eye. `sheet: true` on the answer. Pure.
+ * problems, then the rest. The kicker says what was touched, not the tour's
+ * count (T25, reviews/r31-film-ui.md touch 2): a site's is `SITE · HV1`, a
+ * planet's (anything below a site) names the site it is in (`ROOM · IN
+ * HV2`); the status word is the hero's to say, the mark's glyph keeps its
+ * hue. `index`/`count` are not shown. The plate's own type steps: the sheet
+ * is the plate, so nothing new competes for the eye. `sheet: true` on the
+ * answer. Pure.
  */
-export function sheetCaption(node, model, index = null, count = null) {
+export function sheetCaption(node, model) {
   const nodes = nodeList(model).filter((n) => n && typeof n.id === 'string');
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const kind = node?.kind || 'node';
-  const cap = captionLines(node, model, index, count);
-  const sheet = { ...galaxyCaption(cap, kind), lines: cap.lines, sheet: true };
-  if (kind === 'site') return sheet;
+  const cap = captionLines(node, model);
+  const sheet = { ...cap, kicker: kind.toUpperCase(), sheet: true };
+  if (kind === 'site') return { ...sheet, kicker: `${sheet.kicker} · ${cap.name}` };
   // The nearest site above it, if any.
   const seen = new Set();
   let site = null;
@@ -66,6 +69,14 @@ export function sheetCaption(node, model, index = null, count = null) {
   }
   return site ? { ...sheet, kicker: `${sheet.kicker} · IN ${String(site.label ?? site.id).toUpperCase()}` } : sheet;
 }
+
+/**
+ * How a sheet's brackets say "this is what you touched" (T25, reviews/
+ * r31-film-ui.md touch 5): first round the tapped thing itself, then, once
+ * the camera is there and they have shut (LOCK_TIMING closeMs 700), a step to
+ * the worst thing in it, the one the hero names. `stepMs` after the arrival.
+ */
+export const SHEET_LOCK = Object.freeze({ stepMs: 1400 });
 
 /**
  * The problem `heldId` belongs to in `model` (bannerModel): a test that is
@@ -271,8 +282,11 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
   };
   // The leg the plate speaks for, its caption as shown and when the camera gets there (T24).
   let held = null;
+  // A sheet's step from the tapped thing to its worst member, while it waits (T25).
+  let stepTimer = null;
+  const unstep = () => { if (stepTimer != null) { timers.clearTimeout(stepTimer); stepTimer = null; } };
   const captionFor = (leg, node) => staleCaption(leg.sheet
-    ? sheetCaption(node, latest, leg.index ?? null, leg.count ?? null)
+    ? sheetCaption(node, latest)
     : galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node'), feedState);
   // The held node, the hero's and the lock's target from `cap`; the line fed again.
   const aim = (node, cap) => {
@@ -289,13 +303,26 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     if (node) {
       const cap = captionFor(leg, node);
       const { target, lead } = aim(node, cap);
-      held = { leg, cap, arriveAt: now() + (Number.isFinite(leg.arriveMs) ? leg.arriveMs : 0), heldId, status: lead?.status };
+      held = { leg, cap, arriveAt: now() + (Number.isFinite(leg.arriveMs) ? leg.arriveMs : 0), heldId, status: lead?.status, target };
       // The brackets and the plate's tone take the trouble word's hue (a parked leg has no status of its own).
       plate(lead?.tone ?? 'grey', leg.arriveMs);
       caption.show(leg, cap);
       // A tapped site (T10) is locked at once (`lockMs` 0, `cut`), the plate still waiting for the camera.
-      lock?.lockOn({ ...leg, arriveMs: leg.lockMs ?? leg.arriveMs, node, status: lead?.status ?? leg.status ?? node.status, target });
+      const status = lead?.status ?? leg.status ?? node.status;
+      unstep();
+      if (leg.sheet && lock && target[0] && target[0].id !== node.id) {
+        // A sheet's brackets go round what was touched first, then step to its worst member (T25).
+        lock.lockOn({ ...leg, arriveMs: leg.lockMs ?? leg.arriveMs, node, status, target: [{ id: node.id, kind: node.kind }] });
+        const atMs = Math.max(0, Number.isFinite(leg.arriveMs) ? leg.arriveMs : 0) + SHEET_LOCK.stepMs;
+        stepTimer = timers.setTimeout(() => {
+          stepTimer = null;
+          if (held) lock.lockOn({ ...held.leg, arriveMs: 0, cut: true, node, status: held.status ?? node.status, target: held.target });
+        }, atMs);
+      } else {
+        lock?.lockOn({ ...leg, arriveMs: leg.lockMs ?? leg.arriveMs, node, status, target });
+      }
     } else {
+      unstep();
       held = null;
       heldId = null;
       heroId = null;
@@ -322,9 +349,11 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     else if (plateOn) setPlate(tone);
     if (!caption.refresh?.(cap)) caption.show({ ...held.leg, arriveMs: left }, cap);
     if (heldId !== held.heldId || lead?.status !== held.status) {
+      // A change in the trouble goes to the brackets at once, a sheet's waiting step with it (T25).
+      unstep();
       lock?.lockOn({ ...held.leg, arriveMs: left, cut: true, node, status: lead?.status ?? node.status, target });
     }
-    held = { ...held, cap, heldId, status: lead?.status };
+    held = { ...held, cap, heldId, status: lead?.status, target };
   };
   const off = tour ? tour.onLeg(say) : () => {};
   // Below the far step frame.js gives no cover, but the warn line's words
@@ -397,6 +426,6 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     named: () => (plateOn ? heroId : null),
     fleetCover,
     tagCover,
-    stop: () => { off(); plate(false); },
+    stop: () => { off(); unstep(); plate(false); },
   };
 }
