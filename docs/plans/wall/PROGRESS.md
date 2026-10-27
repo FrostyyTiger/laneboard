@@ -41,12 +41,16 @@ Notes for every builder round (planner, round 1):
 
 ## Tasks
 
-- [ ] T1 (§7 Night 4 0a; was night 3's T36, r51-touch galaxy 2) [ui] [variant:galaxy] The sheet is not transparent
+- [x] T1 (§7 Night 4 0a; was night 3's T36, r51-touch galaxy 2) [ui] [variant:galaxy] The sheet is not transparent
   to the finger: in `galaxy/main.js pick`, a point inside the plate's box (`hud.covers()`), the fleet line's box or the
   clock is never a star nor empty sky; a tap on a sheet row whose subject is a member opens that member
   (`openPlanet`), anywhere else on the plate does nothing — done when: a page test with a sheet up and a star under it
   finds a tap inside the plate's box opens nothing (no flight, no back step), and a tap on a member row opens that
-  member.
+  member. (commit 54e7f96) Builder r3: `touch.js coverHit` over `hud.covers()` and `hud.targets()` (caption.js
+  `targets()`: the hero word and each problem row with its node id); anything on the words but a member row is
+  `COVERED` (no flight, no back). CDP check on the large demo (`shots/r3-t1-taps`): plate corner and clock taps
+  change nothing, a tap on the `STORAGE` hero opens `ROOM · IN HV2` with the camera kept. Seen while filming, for
+  T9: the map's own `■ STORAGE` label still shows beside a planet sheet whose hero names it.
 - [ ] T2 (§7 Night 4 0a; was night 3's T38, r51-touch galaxy 4, fx-beacon 1) [ui] [variant:galaxy] The loudest
   thing is a target: a tap in the fleet line's box at the overview (and under a sheet, where T1 keeps it from being
   empty sky) opens its subject (the site, then the planet); `+N MORE` opens nothing yet; with `fx=beacon` on, the
