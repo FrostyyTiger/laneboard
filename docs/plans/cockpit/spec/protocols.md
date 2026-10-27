@@ -345,7 +345,7 @@ and not listed. Field values and ranges are in the section named.
 | `prompt.taken` | `room` | `turnId`, `clientId`, `state`; `atBlock` with `taken`; `why` with `cancelled` | — | 3.4 |
 | `status` | `room` | `status\|null`; in the object `code`, `since` | `status.detail`, `status.blocksSend` | 3.5 |
 | `conversation.new` | `room` | `conversation`, `reason`, `at` | — | 3.6 |
-| `screen.paired`, `screen.unpaired` | `room` | `name`, `at` | — | `screens.md` §6.3 |
+| `screen.paired`, `screen.unpaired` | `room` | `name`, `at` | — | 3.8, `screens.md` §6.3 |
 | `history.turns` | no | `re`, `turns`, `olderTurns` | `speakups` (Speak slice): the raised blocks between the oldest returned turn's `at` and the `before` turn's `at` | 3.7, 3.9 |
 | `speakup` | `room` | `id`, `at`, `tier`, `items` (each `key`, `kind`, `priority\|null`, `target\|null`, `builder\|null`, `text`, `since`, `cleared\|null`, `card\|null`), `held`, `agent`; `cap` and `until` with `agent` `capped` | — | 3.9 |
 | `confirm.open` | no | `confirmId`, `kind`, `by`, `turnId\|null`, `what`, `where`, `when`, `why`, `verb`, `destructive`, `typed\|null`, `openedAt`, `expiresAt` | — | 3.10 |
@@ -613,6 +613,10 @@ shown (a snapshot came in between), is dropped; `SHOW EARLIER` asks again on the
 - **`touched`** (screen → room), at most once per 10 s while the screen is touched, clicked or
   keyed: `{"type":"touched","seq":40,"at":"2026-10-27T07:12:30.002+01:00"}`. The room keeps the
   latest per screen for the C2b "screen touched last" target (`c2-voice.md` §14). No answer.
+- **`screen.paired`, `screen.unpaired`** (room → all, `seq` `room`): a pairing approved or ended,
+  drawn as one conversation line (`screens.md` §6.3, D160). Fixtures (T137, D294):
+  `{"type":"screen.paired","seq":212,"name":"desk2","at":"2026-10-27T07:12:00+01:00"}` and
+  `{"type":"screen.unpaired","seq":388,"name":"desk2","at":"2026-10-27T07:30:00+01:00"}`.
 
 ### 3.9 Raised by the room: speak-ups and jobs (slices Speak and Jobs, T127)
 
