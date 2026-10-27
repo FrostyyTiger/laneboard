@@ -658,10 +658,11 @@ and gets the line `Cut off: the room went away at 06:41.`; on reconnect, a reply
 meanwhile replaces the cut-off text (`protocols.md` §2.2). An open microphone closes at once (no 5 s grace: audio
 has nowhere to go); the words so far stay in the input as an editable draft, not sent.
 
-Sketch: `sketches/screens-room-down.html` (S-SCR-17 at 06:44): with `#pane`, `wall` with the pane
-open (status line and `RETRY NOW`, a cut-off reply, the line above the input row, the draft `how is
-the`, `SEND` and talk `off`). Its default view, `split` with the pane closed, still draws the ring
-D120 cut and the canvas half that is now `c4-show-canvas.md` §7.6; T70 redraws it.
+Sketch: `sketches/screens-room-down.html` (S-SCR-17 at 06:44): as is, `split` (§4.1 F) with the
+column's status line, the cut-off line, the line slot, the draft `how is the`, `SEND` and talk `off`
+with no ring (D120), and the card area as the Canvas slice draws it (`c4-show-canvas.md` §7.6: strip,
+`STALE` on the bound card, none on the `text` card); with `#pane`, `wall` with the pane open (§4.1 D,
+before the Canvas slice: `NEW`, `CLOSE`) and the whole cut-off reply (redrawn by T70).
 
 ### Board down (hub down)
 

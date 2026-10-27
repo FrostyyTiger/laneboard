@@ -1,9 +1,10 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<title>S-SCR-17 room down: split with the canvas, wall with the pane open (screens.md §7)</title>
+<title>S-SCR-17 room down: split with card area and column, wall with the pane open (screens.md §7, §4.1 D/F; c4-show-canvas.md §7.6)</title>
 <style>
 /* Values copied from public/css/tokens.css (dark). Sketch only, not product code.
-   Two states: this file as is = `split`, pane closed (the canvas half); #pane = `wall`, pane open. */
+   Two states: this file as is = `split` (state F of screens.md §4.1); #pane = `wall`, pane open (state D).
+   No ring on the talk button (D120): grey disabled TALK says it. */
 :root{--bg-canvas:oklch(12% 0.004 250);--bg-surface:oklch(16% 0.004 250);--bg-elevated:oklch(20% 0.004 250);--bg-sunken:oklch(9% 0.004 250);
 --line-weak:oklch(100% 0 0 / .09);--line:oklch(100% 0 0 / .17);--line-strong:oklch(100% 0 0 / .32);
 --text-1:oklch(96% .002 250);--text-2:oklch(78% .004 250);--text-3:oklch(62% .004 250);
@@ -12,12 +13,12 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:1368px;height:912px;overflow:hidden;background:var(--bg-canvas);color:var(--text-1);font-family:var(--mono)}
 .lab{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em}
-.root{position:relative;display:flex;width:1368px;height:912px}
+.root{position:relative;width:1368px;height:912px}
 #pane{display:none}
-#pane:target{display:flex}
+#pane:target{display:block}
 #pane:target ~ #split{display:none}
 /* wall half: unchanged while the room is down */
-.wall{position:relative;width:759px;height:912px;flex:none;background:radial-gradient(ellipse at center,transparent 55%,oklch(0% 0 0 / .55) 100%),var(--bg-canvas);border-right:1px solid var(--line)}
+.wall{position:absolute;left:0;top:0;width:759px;height:912px;background:radial-gradient(ellipse at center,transparent 55%,oklch(0% 0 0 / .55) 100%),var(--bg-canvas);border-right:1px solid var(--line)}
 svg.map{position:absolute;left:0;top:0}
 .cap{position:absolute;left:32px;top:32px;width:400px;padding:16px 20px;background:oklch(9% .004 250 / .8)}
 .cap .k{font-size:16px;color:var(--text-2)}
@@ -29,59 +30,58 @@ svg.map{position:absolute;left:0;top:0}
 .clock small{display:block;font-size:16px;color:var(--text-3);font-weight:400}
 .st{position:absolute;right:24px;bottom:32px;text-align:right;font-size:18px;line-height:1.5;color:var(--text-2)}
 .st .w{color:var(--p2)}
-/* the 80 px "down" line, the same in the pane and on the canvas */
-.down{height:80px;flex:none;display:flex;align-items:center;gap:16px;background:var(--bg-sunken);font-size:18px;line-height:1.35;color:var(--text-2)}
+/* the 80 px "down" line (D54): pane status line and the card area's strip */
+.down{position:absolute;left:0;right:0;height:80px;display:flex;align-items:center;gap:16px;background:var(--bg-sunken);font-size:18px;line-height:1.35;color:var(--text-2)}
 .down p{flex:1}
 .btn{height:48px;padding:0 14px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1);flex:none;white-space:nowrap}
-/* canvas half */
-.canvas{position:relative;width:608px;height:912px;background:var(--bg-surface);display:flex;flex-direction:column}
-.canvas .down{padding:0 16px;border-bottom:1px solid var(--line-strong)}
-.cbody{padding:16px}
-.chead{display:flex;justify-content:space-between;align-items:center;height:40px;margin-bottom:8px}
-.chead .lab{font-size:20px;color:var(--text-2)}
-.chead span:last-child{font-size:16px;color:var(--text-3)}
-.card{position:relative;background:var(--bg-elevated);border:1px solid var(--line);padding:12px 14px;margin-bottom:8px}
-.card h3{display:flex;align-items:center;gap:12px;font-family:var(--label);font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:22px;padding-right:52px}
-.stale{font-family:var(--label);font-weight:400;font-size:16px;letter-spacing:.08em;color:var(--text-3);border:1px solid var(--line-strong);padding:2px 6px;line-height:1.2}
-.card .by{font-size:16px;color:var(--text-3);margin-top:2px}
-.x{position:absolute;right:0;top:0;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text-2)}
-.big{font-size:56px;font-weight:600;margin:10px 0 4px}
-.row{display:flex;justify-content:space-between;align-items:center;font-size:18px;color:var(--text-2)}
-.warn{font-size:18px;color:var(--text-2);margin-top:10px}
-.btn.dis{color:var(--text-3);border-color:var(--line)}
-.tile .s{font-size:28px;margin:10px 0 4px;color:var(--text-2)}
-.tile p{font-size:16px;color:var(--text-2);line-height:1.4}
-.note{position:absolute;left:16px;bottom:184px;width:560px;font-size:16px;line-height:1.4;color:var(--text-3)}
-/* bottom-right cluster (c1-talk.md §2, pending Q-O11): CHAT 48x48 above the talk button 64x64 */
-.chat{position:absolute;left:1288px;top:760px;width:48px;height:48px;background:var(--bg-elevated);border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1);letter-spacing:0;overflow:hidden}
-.talk{position:absolute;width:64px;height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:16px;background:var(--bg-elevated);border:1px solid var(--line);color:var(--text-3)}
-.talk .lab{line-height:1}
-.talk.at{left:1280px;top:824px}
-.ring{position:absolute;right:4px;top:4px;width:12px;height:12px;border:2px solid var(--text-3);border-radius:50%}
-/* the pane over the Wall: x 760-1368, y 0-912 */
-.pane{position:absolute;left:760px;top:0;width:608px;height:912px;background:var(--bg-elevated);border-left:1px solid var(--line);display:flex;flex-direction:column}
-.ph{height:64px;flex:none;display:flex;align-items:center;gap:8px;padding:0 16px 0 24px;border-bottom:1px solid var(--line)}
+/* card area x 760-1368, y 0-520 (D78); room-down strip on top, cards 80 px lower (c4 §7.6) */
+.area{position:absolute;left:760px;top:0;width:608px;height:520px;background:var(--bg-canvas)}
+.area .down{top:0;padding:0 16px;border-bottom:1px solid var(--line-strong)}
+.card{position:absolute;width:272px;height:232px;background:var(--bg-elevated);border:1px solid var(--line-strong);overflow:hidden}
+.ch{height:48px;display:flex;align-items:center;padding-left:16px}
+.who{font-size:16px;color:var(--text-3)}
+.plate{margin-left:8px;font-size:16px;color:var(--text-3);border:1px solid var(--line-strong);padding:0 6px;line-height:22px}
+.cx{margin-left:auto;width:48px;height:48px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--text-2)}
+.tt{height:28px;padding:0 16px;font-size:20px;line-height:28px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.body{position:absolute;left:16px;right:16px;top:84px;bottom:16px}
+.stw{font-size:28px;line-height:36px;font-family:var(--label);text-transform:uppercase;letter-spacing:.04em;color:var(--p2)}
+.sub{font-size:18px;line-height:24px;color:var(--text-2)}
+.since{font-size:16px;color:var(--text-3);position:absolute;bottom:0}
+.txt{font-size:18px;line-height:24px;color:var(--text-1)}
+/* conversation: shared parts of the pane (D) and the column (F) */
+.ph{position:absolute;left:0;right:0;top:0;height:64px;display:flex;align-items:center;border-bottom:1px solid var(--line);padding-left:24px}
 .ph .t{font-size:16px;color:var(--text-2)}
-.ph .sp{flex:1}
-.hb{height:48px;min-width:96px;padding:0 12px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1)}
-.hb.s{min-width:72px;width:72px}
-.pane .down{padding:0 16px 0 24px;border-bottom:1px solid var(--line)}
-.conv{flex:1;overflow:hidden;padding:16px 24px 0;position:relative}
-.lr{height:24px;font-size:16px;color:var(--text-3);margin-bottom:8px;display:flex;align-items:center}
-.prompt{font-size:22px;line-height:1.4;background:var(--bg-surface);border:1px solid var(--line-weak);padding:12px 16px;margin-bottom:32px}
+.hb{position:absolute;top:8px;height:48px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1)}
+.lr{height:24px;font-size:16px;color:var(--text-3);margin-bottom:8px}
+.prompt{font-size:28px;line-height:1.4;background:var(--bg-surface);border:1px solid var(--line-weak);padding:12px 16px;margin-bottom:32px}
 .tool{height:44px;display:flex;align-items:center;font-size:18px;color:var(--text-2);border-bottom:1px solid var(--line-weak)}
 .tool .g{width:24px;flex:none}
-.reply{font-size:22px;line-height:1.4;margin:16px 0 12px}
-.cut{font-size:18px;color:var(--text-2);border-left:2px solid var(--line-strong);padding-left:12px}
-.back{position:absolute;left:24px;bottom:8px;width:560px;font-size:16px;line-height:1.25;color:var(--text-3)}
-.ir{height:104px;flex:none;border-top:1px solid var(--line);position:relative}
-.inp{position:absolute;left:24px;top:16px;width:400px;height:64px;background:var(--bg-sunken);border:1px solid var(--line);font-size:22px;padding:0 16px;display:flex;align-items:center;color:var(--text-1)}
-.inp i{display:inline-block;width:2px;height:28px;background:var(--text-1);margin-left:2px}
+.reply{font-size:28px;line-height:1.4;margin:16px 0 12px}
+.cut{font-size:18px;line-height:24px;color:var(--text-2);border-left:2px solid var(--line-strong);padding-left:12px}
+/* the line slot (c1-talk.md §1.1, D133, D167): x 784-1264, 32 px, 18 px label face 500 --text-1 */
+.slot{position:absolute;left:24px;width:480px;height:32px;padding:4px 0;font-family:var(--label);font-weight:500;font-size:18px;line-height:24px;color:var(--text-1);white-space:nowrap}
+.ir{position:absolute;left:0;right:0;bottom:0;height:104px;border-top:1px solid var(--line)}
+.inp{position:absolute;left:24px;top:16px;width:400px;height:64px;background:var(--bg-sunken);border:1px solid var(--line);font-size:28px;padding:0 16px;display:flex;align-items:center;color:var(--text-1);white-space:nowrap}
+.inp i{display:inline-block;width:2px;height:32px;background:var(--text-1);margin-left:2px}
 .send{position:absolute;left:440px;top:16px;width:64px;height:64px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-3)}
-.ir .talk{left:520px;top:16px}
+.talk{position:absolute;left:520px;top:16px;width:64px;height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:16px;background:var(--bg-elevated);border:1px solid var(--line);color:var(--text-3)}
+.talk .lab{line-height:1}
+/* pane over the Wall: x 760-1368, y 0-912 (state D, before the Canvas slice: NEW, CLOSE) */
+.pane{position:absolute;left:760px;top:0;width:608px;height:912px;background:var(--bg-elevated);border-left:1px solid var(--line)}
+.pane .down{top:64px;padding:0 16px 0 24px;border-bottom:1px solid var(--line)}
+.pane .conv{position:absolute;left:0;right:0;top:144px;bottom:136px;overflow:hidden;padding:16px 24px 0}
+.pane .slot{top:776px}
+.opener{position:absolute;left:528px;top:760px;width:48px;height:48px;background:var(--bg-elevated);border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1);letter-spacing:0}
+/* column in split: x 760-1368, y 520-912 (state F: NEW, SCREEN; no opener, D117) */
+.col{position:absolute;left:760px;top:520px;width:608px;height:392px;background:var(--bg-elevated);border-top:1px solid var(--line)}
+.col .down{top:64px;padding:0 16px 0 24px;border-bottom:1px solid var(--line)}
+.col .conv{position:absolute;left:0;right:0;top:144px;bottom:136px;overflow:hidden;padding:12px 24px 0}
+.col .slot{top:256px}
 </style></head><body>
 
-<!-- State 2 (#pane): `wall` layout, pane open, the room down since 06:41, now 06:44 -->
+<!-- State 2 (#pane): `wall`, pane open (screens.md §4.1 D, before the Canvas slice), room down since 06:41, now 06:44.
+     Rects: header y 0-64 (NEW 1176-1248, CLOSE 1256-1352, y 8-56); status line y 64-144; conversation y 144-776;
+     line slot x 784-1264, y 776-808; opener CLOSE 1288-1336, y 760-808; input 784-1184, SEND 1200-1264, talk 1280-1344, y 824-888. -->
 <div class="root" id="pane" data-cockpit-layout="wall" data-wall-state="tour" data-cockpit="room-down" data-pane="open">
   <section class="wall" aria-label="Wall, tour">
     <svg class="map" width="759" height="912" viewBox="0 0 759 912">
@@ -97,27 +97,33 @@ svg.map{position:absolute;left:0;top:0}
     <div class="clock">06:44<small>Tue 27 Oct</small></div>
   </section>
   <aside class="pane" data-cockpit-pane>
-    <div class="ph"><span class="t lab">Cockpit</span><span class="sp"></span><span class="hb s lab">Raw</span><span class="hb s lab">New</span><span class="hb lab">Screen</span><span class="hb lab">Close</span></div>
-    <div class="down" data-cockpit-down><p>Cockpit room unreachable since 06:41 (3 min). Retrying in 12 s.</p><span class="btn lab">Retry now</span></div>
+    <div class="ph"><span class="t lab">Cockpit</span>
+      <span class="hb lab" data-cockpit-new style="left:416px;width:72px">New</span>
+      <span class="hb lab" data-cockpit-close style="left:496px;width:96px">Close</span></div>
+    <div class="down" data-cockpit-down data-status="room-down"><p>Cockpit room unreachable since 06:41 (3 min). Retrying in 12 s.</p><span class="btn lab" data-cockpit-retry>Retry now</span></div>
     <div class="conv">
-      <div class="lr">YOU · TYPED · 06:40</div>
+      <div class="lr lab">You · typed · 06:40</div>
       <div class="prompt">why is builder-a stuck?</div>
-      <div class="lr">AGENT · 06:40</div>
+      <div class="lr lab">Agent · 06:40</div>
       <div class="tool"><span class="g">▸</span>read 2 feeds</div>
       <div class="reply">Round 7 of the nightly run has printed nothing for 72 minutes. The last line was the test step on</div>
       <div class="cut">Cut off: the room went away at 06:41.</div>
-      <div class="back">Sending and voice come back with the room.</div>
     </div>
+    <div class="slot" data-cockpit-line data-line="room-down">Sending and voice come back with the room.</div>
+    <span class="opener lab" data-cockpit-open aria-label="Close the cockpit">Close</span>
     <div class="ir">
-      <div class="inp">how is the<i></i></div>
-      <div class="send lab" data-cockpit-send>Send</div>
-      <div class="talk" data-talk="off"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Talk</span></div>
+      <div class="inp" data-cockpit-input>how is the<i></i></div>
+      <div class="send lab" data-cockpit-send aria-disabled="true">Send</div>
+      <div class="talk" data-talk="off" aria-disabled="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Talk</span></div>
     </div>
   </aside>
 </div>
 
-<!-- State 1 (default): `split`, pane closed, the room down since 06:41, now 06:44 -->
-<div class="root" id="split" data-cockpit-layout="split" data-wall-state="tour" data-cockpit="room-down" data-pane="closed">
+<!-- State 1 (default): `split` (screens.md §4.1 F), room down since 06:41, now 06:44.
+     Rects: wall half x 0-759; card area x 760-1368, y 0-520 with the strip y 0-80 (c4-show-canvas.md §7.6, Canvas slice),
+     cards from y 104; column x 760-1368, y 520-912: header y 520-584 (NEW 1176-1248, SCREEN 1256-1352, y 528-576),
+     status line y 584-664, conversation y 664-776, line slot y 776-808, input row y 808-912 as in state D. -->
+<div class="root" id="split" data-cockpit-layout="split" data-wall-state="tour" data-cockpit="room-down" data-pane="column">
   <section class="wall" aria-label="Wall half, tour">
     <svg class="map" width="759" height="912" viewBox="0 0 759 912">
       <g fill="none" stroke="oklch(100% 0 0 / .17)">
@@ -133,26 +139,35 @@ svg.map{position:absolute;left:0;top:0}
     <div class="clock">06:44<small>Tue 27 Oct</small></div>
     <div class="st"><div class="w">▲ 1 run stuck</div><div>4 runs tonight</div></div>
   </section>
-  <section class="canvas" aria-label="Canvas">
+  <section class="area" aria-label="Card area">
     <div class="down" data-cockpit-down><p>Cockpit room unreachable since 06:41. Cards show their last values.</p></div>
-    <div class="cbody">
-      <div class="chead"><span class="lab">Canvas</span><span>2 cards</span></div>
-      <div class="card">
-        <h3>Nightly run starts in <span class="stale">Stale</span></h3><div class="by">agent · 05:12 · job nightly-ci on builder-a</div>
-        <div class="x">×</div>
-        <div class="big">01:27:00</div>
-        <div class="row"><span>at 08:11 · cancellable</span><span class="btn lab dis">Cancel job</span></div>
-        <div class="warn">The room is down: this job may not run.</div>
-      </div>
-      <div class="card tile">
-        <h3>builder-a <span class="stale">Stale</span></h3><div class="by">agent · 06:30 · values of 06:41</div><div class="x">×</div>
-        <div class="s">▲ stuck</div>
-        <p>round 7 of 12<br>no output for 72 min</p>
-      </div>
+    <div class="card" style="left:24px;top:104px" data-card data-block="status" data-size="s">
+      <div class="ch"><span class="who lab">Agent · 06:30</span><span class="plate lab">Stale</span><span class="cx" data-card-remove aria-label="Remove card">✕</span></div>
+      <div class="tt">builder-a</div>
+      <div class="body"><div class="stw">▲ Stuck</div><div class="sub">no output for 72 min</div>
+        <div class="since">since 05:29 (was ok)</div></div>
     </div>
-    <p class="note">Sketch for S-SCR-17 (screens.md §7), split, pane closed. #pane: the wall layout with the pane open. The wall half tours as usual; only the cockpit says it is away.</p>
+    <div class="card" style="left:312px;top:104px" data-card data-block="text" data-size="s">
+      <div class="ch"><span class="who lab">Agent · 06:31</span><span class="cx" data-card-remove aria-label="Remove card">✕</span></div>
+      <div class="tt">next step</div>
+      <div class="body"><div class="txt">Look at round 7's test log once the room is back.</div></div>
+    </div>
   </section>
-  <span class="chat lab" data-cockpit-open>Chat</span>
-  <div class="talk at" data-talk="off"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Talk</span><span class="ring" aria-label="cockpit room unreachable"></span></div>
+  <section class="col" data-cockpit-conversation>
+    <div class="ph"><span class="t lab">Cockpit</span>
+      <span class="hb lab" data-cockpit-new style="left:416px;width:72px">New</span>
+      <span class="hb lab" data-cockpit-screen style="left:496px;width:96px">Screen</span></div>
+    <div class="down" data-cockpit-down data-status="room-down"><p>Cockpit room unreachable since 06:41 (3 min). Retrying in 12 s.</p><span class="btn lab" data-cockpit-retry>Retry now</span></div>
+    <div class="conv">
+      <!-- the prompt and the start of the reply are scrolled off above: the conversation holds 112 px here -->
+      <div class="cut">Cut off: the room went away at 06:41.</div>
+    </div>
+    <div class="slot" data-cockpit-line data-line="room-down">Sending and voice come back with the room.</div>
+    <div class="ir">
+      <div class="inp" data-cockpit-input>how is the<i></i></div>
+      <div class="send lab" data-cockpit-send aria-disabled="true">Send</div>
+      <div class="talk" data-talk="off" aria-disabled="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Talk</span></div>
+    </div>
+  </section>
 </div>
 </body></html>
