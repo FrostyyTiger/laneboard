@@ -489,7 +489,18 @@ Notes for every builder round (planner, round 1):
   not the trouble tiles (`test/wall-tiles.test.mjs` checks only the href). The kiosk section names Edge's
   `--kiosk … --edge-kiosk-type=fullscreen`, Android screen pinning and iPad Guided Access from general knowledge,
   untested on a device here.
-- [ ] T44 (§7 Night 4 E2; promoted from Later by the watcher on 2026-10-27, before the merge) `docs/wall.md` covers D10 (the director, who drives), the show messages and `countdown`; every feature has demo data (product §3.2): a test lists the switches in `docs/wall.md` against the page's parsers. — done when: a test lists the switches in `docs/wall.md` against the page's parsers and passes
+- [x] T44 (§7 Night 4 E2; promoted from Later by the watcher on 2026-10-27, before the merge) `docs/wall.md` covers D10 (the director, who drives), the show messages and `countdown`; every feature has demo data (product §3.2): a test lists the switches in `docs/wall.md` against the page's parsers. — done when: a test lists the switches in `docs/wall.md` against the page's parsers and passes (commit 8c602ff)
+  Builder r52: `docs/wall.md` gains `## Who drives the camera` (D10: `touch` > `show` > `tour`, a show under a
+  finger refused `busy` not queued, a touch drops the show, every hand-over eased, explore starts with the finger
+  driving) and `## Show commands` (Q16's envelope with an example, a row per `flyTo`/`highlight`/`pin`/`clear`,
+  the limits, `BroadcastChannel('laneboard.show')` and `postMessage` with `?showOrigins=`, the answer and its codes
+  `bad-shape`/`unknown-node`/`busy`, `?show=demo`); `countdown` was already there (T43). The `?role` row now says
+  explore refuses shows *while a person drives it* (after `▶ TOUR` the director takes them, `busy` is
+  `driver === 'touch'`). `test/wall-docs.test.mjs` +4: walks each page's relative imports from its entry point,
+  collects every `q.get/getAll/has('x')`, and requires the switch table to match exactly, Page column included
+  (`both` = parsed by both); the director's order; the codes found in show.js/transport.js/director.js each have a
+  row; the large demo sets `glow`, `ring`, `countdown` and `SHOW_DEMO_SCRIPT` sends every show type. Checked that
+  dropping a row fails it. No UI change, so no film.
 - [ ] T45 (§7 Night 4 E3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] (night 3's E; r43-stranger 2, 6) A web manifest for the galaxy (`start_url: "/galaxy.html"`, fullscreen, landscape) if it fits the guardrails, and `wall.html?variant=galaxy` opens `galaxy.html` instead of falling back to radial (an "unknown variant" note on the tag for other names). — done when: `wall.html?variant=galaxy` opens the galaxy (test), the manifest validates
 - [ ] T46 (§7 Night 4 E4; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `wall.html` (radial, the default) gets one filmstrip, since night 3 changed the shared `caption.js`, `tour.js` and `frame.js`; fix what it shows broken. The morning report lists what a reviewer should read first and what reaches outside the galaxy (`public/css/tokens.css --tex-vignette`). — done when: a `wall.html` filmstrip, and what it showed broken is fixed with tests
 - [ ] T19 (§7 Night 4; r4-film-ui galaxy 1; after T9) [ui] [variant:galaxy] One top step of type while a site is held:
