@@ -8,9 +8,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../public/vendor/three/three.module.js';
 import { LOBES, PEAK, armTangent, nebulaLobes, nebulaPeaks } from '../public/js/wall/galaxy/nebula.js';
-import { MIN_SITE_GAP, armPoint, galaxyLayout } from '../public/js/wall/galaxy/layout.js';
+import { MIN_SITE_GAP, armPoint, ease, galaxyLayout } from '../public/js/wall/galaxy/layout.js';
 import { NEBULA, paletteFrom } from '../public/js/wall/galaxy/palette.js';
-import { NEAR_FADE, createGalaxyScene, nearFade, overviewShot } from '../public/js/wall/galaxy/scene.js';
+import { FOV, LOBE_LEASH, NEAR_FADE, createGalaxyScene, lobeLeash, nearFade, overviewShot } from '../public/js/wall/galaxy/scene.js';
+import { FLIGHT, FLIGHT_CLEAR, flightPose, zoomedSiteShot } from '../public/js/wall/galaxy/camera.js';
+import { DEMO_TIMING } from '../public/js/wall/tour.js';
 
 const LARGE = JSON.parse(fs.readFileSync(new URL('./fixtures/wall-large-map.json', import.meta.url), 'utf8')).nodes;
 
@@ -239,4 +241,120 @@ test('T2: a folded cluster the camera passes close to fades, the one it flies to
   assert.equal(lobe(), 0);
   at(6000);
   assert.ok(Math.abs(lobe() - far) < 1e-9, 'back at the overview it is whole again');
+});
+
+// Night 4 T7 (r41-operator galaxy 6): no red without a name. In a flight a
+// crit nebula whose star had left the frame (so its name too) was a red
+// smear at the edge with no label near it; now a crit or warn lobe is drawn
+// only while its star's point, where the name is anchored, is in the frame,
+// and within 1.5 of its nebula's reach (on screen, at the star's depth) of it.
+test('T7: lobeLeash is whole up to the nebula\'s reach on screen, gone by 1.5 of it, and as the star leaves the frame', () => {
+  assert.deepEqual({ ...LOBE_LEASH }, { from: 1, to: 1.5, edge: 0.25 });
+  assert.equal(lobeLeash(0, 200), 1);
+  assert.equal(lobeLeash(200, 200), 1);
+  assert.equal(lobeLeash(300, 200), 0);
+  assert.equal(lobeLeash(5000, 200), 0);
+  let prev = 1;
+  for (let d = 0; d <= 400; d += 5) {
+    const f = lobeLeash(d, 200);
+    assert.ok(f <= prev + 1e-12 && f >= 0 && f <= 1, `monotonic at ${d}`);
+    prev = f;
+  }
+  assert.equal(lobeLeash(10, 0), 0, 'a nebula of no size has nothing to draw');
+  // the star near the frame's edge: whole from a quarter reach in, gone at the edge and outside it
+  assert.equal(lobeLeash(0, 200, 50), 1);
+  assert.equal(lobeLeash(0, 200, 400), 1);
+  assert.equal(lobeLeash(0, 200, 0), 0);
+  assert.equal(lobeLeash(0, 200, -30), 0);
+  const half = lobeLeash(0, 200, 25);
+  assert.ok(half > 0.3 && half < 0.7, `half way in, half drawn: ${half}`);
+  assert.ok(lobeLeash(250, 200, 25) < half, 'both pulls together');
+  // a nebula many frames tall: the band is a quarter of the frame, not of its reach
+  assert.equal(lobeLeash(0, 4000, 300, 900), 1);
+  assert.ok(lobeLeash(0, 4000, 100, 900) < 1);
+});
+
+test('T7: over every flight of the large demo no crit or warn lobe is drawn away from its star\'s name', () => {
+  const W = 1368, H = 912;
+  const clock = { now: 1000 };
+  const galaxy = createGalaxyScene({ clientWidth: W, clientHeight: H }, {
+    palette: paletteFrom(), doc: fakeDoc, clock: () => clock.now,
+    makeRenderer: (canvas) => ({
+      domElement: canvas, setPixelRatio() {}, setClearColor() {}, setSize() {}, dispose() {}, render() {},
+    }),
+  });
+  // The live demo turns lab red as well, and a warn site for the yellow.
+  const lab = LARGE.find((n) => n.parent === 'lab');
+  const warnAt = LARGE.find((n) => n.parent === 'cloud');
+  galaxy.update({ nodes: LARGE.map((n) => (n === lab ? { ...n, status: 'crit' } : n === warnAt ? { ...n, status: 'warn' } : n)) });
+  const cam = galaxy.camera;
+  const pose = (p, ms) => {
+    clock.now = ms;
+    cam.position.set(p.pos.x, p.pos.y, p.pos.z);
+    cam.lookAt(p.look.x, p.look.y, p.look.z);
+    galaxy.frame(ms);
+  };
+  const sites = galaxy.world.sites;
+  const over = overviewShot(sites);
+  pose(over, 1000);
+  pose(over, 5000); // the trouble painted in
+  const hued = sites.filter((s) => ['crit', 'warn'].includes(s.nebula.tone));
+  assert.deepEqual(new Set(hued.map((s) => s.nebula.tone)), new Set(['crit', 'warn']), 'the fleet has both hues');
+
+  // Where a lobe is on screen against its star, in its nebula's reach there.
+  const v = new THREE.Vector3();
+  const screen = (p) => {
+    v.set(p.x, p.y, p.z).applyMatrix4(cam.matrixWorldInverse);
+    const depth = -v.z;
+    if (depth <= cam.near) return null;
+    v.applyMatrix4(cam.projectionMatrix);
+    return { x: ((v.x + 1) / 2) * W, y: ((1 - v.y) / 2) * H, depth };
+  };
+  const reachOf = (s, star) => (LOBES.reach * s.neb.size * (s.breath ?? 1) * s.alive * H) / (2 * Math.tan((cam.fov * Math.PI) / 360) * star.depth);
+  const inFrame = (q) => q && q.x >= 0 && q.x <= W && q.y >= 0 && q.y <= H;
+
+  // At the overview the leash never bites: every lobe is as before.
+  for (const s of hued) {
+    const star = screen(s.home);
+    const inset = Math.min(star.x, W - star.x, star.y, H - star.y);
+    assert.ok(inset >= LOBE_LEASH.edge * Math.min(reachOf(s, star), H), `${s.id}: its star clear of the frame's edge at the overview`);
+    for (const l of s.lobes) {
+      const q = screen(l.mesh.position);
+      assert.ok(Math.hypot(q.x - star.x, q.y - star.y) <= reachOf(s, star), `${s.id}: whole at the overview`);
+      assert.ok(l.mesh.material.opacity > 0.05, `${s.id}: drawn at the overview`);
+    }
+  }
+
+  const view = { fov: FOV, aspect: W / H, free: { x0: 0.3, y0: 0, x1: 1, y1: 0.8 } };
+  const shots = [
+    { id: null, star: { x: 0, y: 0, z: 0 }, shot: over },
+    ...sites.map((s) => ({ id: s.id, star: s.home, shot: zoomedSiteShot(s, 0, DEMO_TIMING.zoom, view) })),
+  ];
+  const N = 30;
+  let checked = 0, swungOut = 0;
+  for (const a of shots) for (const b of shots) {
+    if (a === b) continue;
+    const avoid = sites.filter((s) => s.id !== a.id && s.id !== b.id).map((s) => ({ ...s.home, r: s.reach * FLIGHT_CLEAR.reach }));
+    const frame = { fov: FOV, aspect: W / H, ends: [a.star, b.star], avoid };
+    galaxy.setHeld(b.id);
+    for (let i = 1; i < N; i++) {
+      pose(flightPose(a.shot, b.shot, ease(i / N), FLIGHT, frame), 5000 + i * 16);
+      for (const s of hued) {
+        const star = screen(s.home);
+        for (const l of s.lobes) {
+          const q = screen(l.mesh.position);
+          if (!inFrame(q)) continue;
+          // No name: the star is behind the camera or out of the frame (labels.js draws none then).
+          const far = !inFrame(star) || Math.hypot(q.x - star.x, q.y - star.y) > LOBE_LEASH.to * reachOf(s, star) + 1e-6;
+          if (far) swungOut += 1;
+          if (l.mesh.material.opacity <= 1e-6) continue;
+          checked += 1;
+          assert.ok(!far, `${a.id ?? 'overview'} → ${b.id ?? 'overview'} step ${i}: ${s.id}'s lobe drawn (${l.mesh.material.opacity.toFixed(3)}) away from its name`);
+        }
+      }
+    }
+  }
+  assert.ok(checked > 1000, `lobes drawn in flights: ${checked}`);
+  assert.ok(swungOut > 0, 'some lobes are in the frame without their star in a flight (the test can fail)');
+  galaxy.setHeld(null);
 });

@@ -23,7 +23,7 @@ import { LEVELS, pixelRatioFor } from './budget.js';
 import { breathWave, dustTurn } from './still.js';
 import { SUN, easeToward } from './fresh.js';
 import { createStageSize } from './stage.js';
-import { armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
+import { LOBES, armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
 import {
   BEACON, COMETS, LANES, TWINKLE, WARP, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles,
@@ -144,6 +144,38 @@ export function nearFade(size, dist, fov = FOV) {
   if (!(dist > 0)) return 0;
   const share = size / (2 * Math.tan((fov * Math.PI) / 360) * dist);
   return 1 - smoothstep(NEAR_FADE.from, NEAR_FADE.to, share);
+}
+
+/**
+ * No red without a name (night 4 T7, r41-operator galaxy 6): in a flight a
+ * crit or warn nebula whose star has left the frame (or swung out on screen
+ * faster than its star) was a red smear at the edge with no name near it,
+ * since a name stands beside its star or not at all (labels.js, night 3
+ * T17). So a lobe is held on a leash to its star's point, in the nebula's
+ * reach on screen there (nebula.js LOBES.reach of its size, at the star's
+ * depth): whole while its centre is within `from` reach of the star, gone
+ * at `to`; and the whole nebula fades as its star comes within `edge` reach
+ * (never more than `edge` of the frame's height) of the frame's edge, gone as
+ * the star, and so its name, leaves it.
+ */
+export const LOBE_LEASH = Object.freeze({ from: 1, to: 1.5, edge: 0.25 });
+
+/** The nebula tones held on the leash: the ones in a hue. */
+const LEASHED = new Set(['crit', 'warn']);
+
+/**
+ * How much of a lobe whose centre is `d` css px from its star's point on
+ * screen is drawn, the nebula reaching `reachPx` css px there and the star
+ * `inset` css px inside the frame's nearest edge (negative: outside) in a
+ * frame `height` css px tall: 1 up to LOBE_LEASH.from of that reach and
+ * LOBE_LEASH.edge of it (or of the height, the less) from the edge, 0 from
+ * LOBE_LEASH.to or at the edge, smooth between.
+ */
+export function lobeLeash(d, reachPx, inset = Infinity, height = Infinity) {
+  if (!(reachPx > 0)) return 0;
+  const near = 1 - smoothstep(LOBE_LEASH.from, LOBE_LEASH.to, d / reachPx);
+  const band = LOBE_LEASH.edge * Math.min(reachPx, height);
+  return inset >= band ? near : near * smoothstep(0, band, inset);
 }
 
 /**
@@ -1347,14 +1379,38 @@ export function createGalaxyScene(canvas, {
   let held = null;
   const at = new THREE.Vector3();
   const nearOf = (size, p) => nearFade(size, at.set(p.x, p.y, p.z).distanceTo(camera.position), camera.fov);
+  /**
+   * A crit or warn site's lobes stay on a leash to its star on screen (T7,
+   * lobeLeash), the system it flies to included: a folded nebula never
+   * shows apart from its name, nor once its star has left the frame. It lets go as the system opens, when you are
+   * inside the nebula and its lobes are round the frame on purpose.
+   */
+  const ndcStar = new THREE.Vector3(), ndcLobe = new THREE.Vector3();
+  const toView = (out, p) => out.set(p.x, p.y, p.z).applyMatrix4(camera.matrixWorldInverse);
+  const leashOf = (s, size) => {
+    toView(ndcStar, s.home);
+    const depth = -ndcStar.z;
+    if (depth <= camera.near) return () => 0; // the star is behind the camera: no name anywhere
+    ndcStar.applyMatrix4(camera.projectionMatrix);
+    const reachPx = (LOBES.reach * size * ch) / (2 * Math.tan((camera.fov * Math.PI) / 360) * depth);
+    const inset = Math.min((1 - Math.abs(ndcStar.x)) * cw, (1 - Math.abs(ndcStar.y)) * ch) / 2;
+    return (p) => {
+      toView(ndcLobe, p);
+      if (-ndcLobe.z <= camera.near) return 0;
+      ndcLobe.applyMatrix4(camera.projectionMatrix);
+      return lobeLeash(Math.hypot(((ndcLobe.x - ndcStar.x) / 2) * cw, ((ndcLobe.y - ndcStar.y) / 2) * ch), reachPx, inset, ch);
+    };
+  };
   const fadeNear = (s) => {
     const e = ease(s.unfold), a = s.alive;
     const w = s.id === held ? 0 : 1 - e;
     const near = (size, p) => 1 - (1 - nearOf(size, p)) * w;
     // You are inside the nebula now: it thins as the system opens.
     const size = s.neb.size * (s.breath ?? 1) * a;
+    const leashed = LEASHED.has(s.nebula?.tone) && e < 1 && size > 0 ? leashOf(s, size) : null;
+    const leash = (p) => (leashed ? 1 - (1 - leashed(p)) * (1 - e) : 1);
     for (const l of s.lobes) {
-      l.mesh.material.opacity = s.neb.opacity * l.shape.share * s.peak * (1 - 0.7 * e) * a * near(l.shape.len * size, l.mesh.position);
+      l.mesh.material.opacity = s.neb.opacity * l.shape.share * s.peak * (1 - 0.7 * e) * a * near(l.shape.len * size, l.mesh.position) * leash(l.mesh.position);
     }
     const star = near(s.starHaloSize * a, s.home);
     s.star.scale.setScalar(Math.max(1e-3, a * star));
@@ -1370,6 +1426,7 @@ export function createGalaxyScene(canvas, {
     haloMat.warn.opacity = HALO.warn.opacity * (1 - PULSE.warn / 2 + (PULSE.warn / 2) * wave);
     advance(now);
     if (world) {
+      camera.updateMatrixWorld(); // the leash projects with this frame's pose (T7)
       for (const s of world.sites) {
         s.breath = s.nebula.breathes ? 1 + PULSE.nebula * wave : 1;
         placeLobes(s);
