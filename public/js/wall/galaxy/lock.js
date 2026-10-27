@@ -20,6 +20,9 @@
 // `lockGeometry3d` and `leaderPath` are pure (test/wall-galaxy-lock.test.mjs);
 // `createGalaxyLock` is the DOM part, the same elements and classes as
 // wall.html's lock; its `held()` keeps the names (labels.js) off the brackets.
+// Like labels.js it writes a transform or the opacity only when its rounded
+// value (0.1 px, opacity to 0.01) changed (night 4 T12): a held lock that
+// does not move costs no style write a frame.
 
 import { LEADER_MIN_ARMS, LOCK_SIZE, LOCK_TIMING, lockProgress, lockTone } from '../lock.js';
 
@@ -191,6 +194,15 @@ export function createGalaxyLock(root, cam, {
     return e;
   });
   const legOn = [false, false];
+  // The last value written per element and property: a frame writes only what changed.
+  const wrote = new Map();
+  const put = (e, prop, v) => {
+    let w = wrote.get(e);
+    if (!w) wrote.set(e, (w = {}));
+    if (w[prop] === v) return;
+    w[prop] = v;
+    e.style[prop] = v;
+  };
   box.style.opacity = '0';
   root.append(box);
 
@@ -203,7 +215,7 @@ export function createGalaxyLock(root, cam, {
   let last = null; // what the last frame drew, for tests and the console
 
   const hideLeg = (i) => {
-    if (legOn[i]) legs[i].style.opacity = '0';
+    if (legOn[i]) put(legs[i], 'opacity', '0');
     legOn[i] = false;
   };
   const hideLeader = () => {
@@ -211,7 +223,7 @@ export function createGalaxyLock(root, cam, {
     led = false;
   };
   const hideBox = () => {
-    if (shown) box.style.opacity = '0';
+    if (shown) put(box, 'opacity', '0');
     shown = false;
     last = null;
     hideLeader();
@@ -251,11 +263,11 @@ export function createGalaxyLock(root, cam, {
     }
     const x0 = (sp.x - g.d).toFixed(1), x1 = (sp.x + g.d - arm).toFixed(1);
     const y0 = (sp.y - g.d).toFixed(1), y1 = (sp.y + g.d - arm).toFixed(1);
-    corners[0].style.transform = `translate3d(${x0}px, ${y0}px, 0)`;
-    corners[1].style.transform = `translate3d(${x1}px, ${y0}px, 0)`;
-    corners[2].style.transform = `translate3d(${x0}px, ${y1}px, 0)`;
-    corners[3].style.transform = `translate3d(${x1}px, ${y1}px, 0)`;
-    box.style.opacity = g.alpha.toFixed(3);
+    put(corners[0], 'transform', `translate3d(${x0}px, ${y0}px, 0)`);
+    put(corners[1], 'transform', `translate3d(${x1}px, ${y0}px, 0)`);
+    put(corners[2], 'transform', `translate3d(${x0}px, ${y1}px, 0)`);
+    put(corners[3], 'transform', `translate3d(${x1}px, ${y1}px, 0)`);
+    put(box, 'opacity', g.alpha.toFixed(2));
     shown = true;
     const from = cur.tone !== 'calm' && typeof leaderFrom === 'function' ? leaderFrom() : null;
     const l = from ? leaderPath(from, sp, g.d, arm, g.alpha, typeof avoid === 'function' ? avoid() : [], cur.route) : null;
@@ -271,8 +283,8 @@ export function createGalaxyLock(root, cam, {
       if (!sg || sg.len <= 0) { hideLeg(i); continue; }
       // A leg with the next one drawn runs on one px (half the stroke) so the elbow has no notch.
       const len = sg.len + (l.segs[i + 1]?.len > 0 ? 1 : 0);
-      legs[i].style.transform = `translate3d(${sg.x.toFixed(1)}px, ${sg.y.toFixed(1)}px, 0) rotate(${sg.angle.toFixed(4)}rad) scaleX(${len.toFixed(1)})`;
-      if (!legOn[i]) legs[i].style.opacity = '';
+      put(legs[i], 'transform', `translate3d(${sg.x.toFixed(1)}px, ${sg.y.toFixed(1)}px, 0) rotate(${sg.angle.toFixed(4)}rad) scaleX(${len.toFixed(1)})`);
+      if (!legOn[i]) put(legs[i], 'opacity', '');
       legOn[i] = true;
     }
     led = true;

@@ -109,6 +109,9 @@ test('perfLine prints script ms, frame ms, fps, level, renderer counts and heap 
     '48 MB heap',
   ]);
   assert.equal(perfLine({}).length, 1, 'no renderer, no heap: one line');
+  assert.equal(perfLine({ info: { render: { calls: 45, triangles: 13240 }, memory: { geometries: 9, textures: 3 } } })[1],
+    '45 calls · 13.2k tri · 9 geo · 3 tex', 'triangles when three counts them');
+  assert.equal(perfLine({ info: { render: { calls: 2, triangles: 640 }, memory: {} } })[1], '2 calls · 640 tri · – geo · – tex');
 });
 
 // --- the scene ---------------------------------------------------------------

@@ -10,7 +10,8 @@
 // `?perf=1` overlay prints `perfLine`).
 
 /**
- * The quality levels, best first: fractions of the full segments, dust and
+ * The quality levels, best first: fractions of the full segments (a member
+ * dot at most 8x6, scene.js `sphereSegs`), dust and
  * far stars, and the pixel `ratio` the canvas is drawn at (capped by the
  * screen's): the tablet's iGPU is bound by fill rate at 2736x1824, so a
  * lower level also shades fewer pixels (T28).
@@ -125,7 +126,8 @@ const fixed = (x, d = 1) => (Number.isFinite(x) ? x.toFixed(d) : '–');
 /**
  * The overlay's lines: `w` a closed window, `level`, `info` three's
  * `renderer.info`, `memory` `performance.memory` when the browser has it,
- * `ratio` the pixel ratio drawn at (printed after the level when given).
+ * `ratio` the pixel ratio drawn at (printed after the level when given);
+ * triangles print after the calls when `info.render.triangles` is there.
  */
 export function perfLine({ w, level = 0, info = null, memory = null, ratio = null } = {}) {
   const at = Number(ratio) > 0 ? ` ×${Number(ratio)}` : '';
@@ -133,7 +135,10 @@ export function perfLine({ w, level = 0, info = null, memory = null, ratio = nul
     `${fixed(w?.scriptMs, 2)} ms script · ${fixed(w?.frameMs)} ms/frame · ${fixed(w?.fps, 0)} fps · L${level}${at}`,
   ];
   if (info) {
-    lines.push(`${info.render?.calls ?? '–'} calls · ${info.memory?.geometries ?? '–'} geo · ${info.memory?.textures ?? '–'} tex`);
+    // Triangles (night 4 T12) when three counts them, in thousands past 1000.
+    const t = Number(info.render?.triangles);
+    const tri = Number.isFinite(t) ? ` · ${t >= 1000 ? `${(t / 1000).toFixed(1)}k` : t} tri` : '';
+    lines.push(`${info.render?.calls ?? '–'} calls${tri} · ${info.memory?.geometries ?? '–'} geo · ${info.memory?.textures ?? '–'} tex`);
   }
   if (memory && Number.isFinite(memory.usedJSHeapSize)) {
     lines.push(`${fixed(memory.usedJSHeapSize / 1048576, 0)} MB heap`);

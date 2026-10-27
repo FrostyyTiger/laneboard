@@ -120,6 +120,25 @@ export const PULSE = Object.freeze({ periodMs: 2600, crit: 0.4, warn: 0.15, nebu
 const SEGS = Object.freeze({ sun: [32, 20], star: [20, 14], planet: [32, 22], dot: [10, 8] });
 
 /**
+ * A member dot's segments never exceed 8x6 (night 4 T12, r56-performance 3a):
+ * a ball 2-6 px on screen looks the same at 8x6 as at 10x8. A cap, not a
+ * fixed count: the lower levels already draw fewer (7x5, 6x4), and a fixed
+ * 8x6 put 1.7k triangles back on the struggling device (lab open at L2:
+ * 12.2k before, 13.9k with it).
+ */
+const DOT_CAP = Object.freeze([8, 6]);
+
+/**
+ * The segments `[width, height]` of a `kind`'s sphere (`sun`, `star`,
+ * `planet`, `dot`) at a budget.js level's `seg` fraction. Pure.
+ */
+export function sphereSegs(kind, seg = 1) {
+  const [w, h] = SEGS[kind];
+  const out = [Math.max(6, Math.round(w * seg)), Math.max(4, Math.round(h * seg))];
+  return kind === 'dot' ? [Math.min(out[0], DOT_CAP[0]), Math.min(out[1], DOT_CAP[1])] : out;
+}
+
+/**
  * A dust grain on screen: its size in world units, attenuated by distance,
  * and never more than `maxPx` css px across (the soft disc shows about 2 px
  * of it), so close up, where the nodes are big, a grain stays a speck
@@ -426,8 +445,8 @@ export function createGalaxyScene(canvas, {
   const glowTex = glowTexture(doc);
   const dotTex = dotTexture(doc);
   const cloudTex = cloudTexture(doc);
-  const spheres = (seg) => Object.fromEntries(Object.entries(SEGS).map(([k, [w, h]]) => [
-    k, new THREE.SphereGeometry(SIZE[k], Math.max(6, Math.round(w * seg)), Math.max(4, Math.round(h * seg))),
+  const spheres = (seg) => Object.fromEntries(Object.keys(SEGS).map((k) => [
+    k, new THREE.SphereGeometry(SIZE[k], ...sphereSegs(k, seg)),
   ]));
   const geo = spheres(1);
   // A nebula lobe: a flat square in the galaxy's plane, stretched by its scale (nebula.js).
