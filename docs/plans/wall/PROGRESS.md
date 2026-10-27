@@ -1238,3 +1238,198 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 60 | performance (fx-sweep) | - | - | - | - | 5 | 8 | - |
 
 ## Morning
+
+Night 4, final report (round 62, 2026-10-27 14:10 Europe/Zurich). Shots live in `$RUN_DIR` = the run's own directory on the VM.
+
+- **Done:** 32 of 64 tasks. All of the plan's 0a (night 3's twelve leftovers and `MANUAL · TOUR IN 0:40`), A (the
+  director), 0b (`lanes` removed, `afterglow`, `activity` in place of comets and twinkle, `sweep`, calm flights quiet),
+  B (show commands, transport, `?show=demo`), C (`countdown`), D (half a screen, `?role`) and E (`docs/wall.md`,
+  manifest, `wall.html?variant=galaxy`, the `wall.html` film), then three panel fixes (T19-T21). Tests: 4260 pass, 0 fail.
+- **Not done:** 32 panel tasks are open (T22-T36, T47-T52, T54-T64, none blocked). Most are about status and calm:
+  moments for a new or cleared trouble, crit vs warn, the banner's ranking, the countdown's place, the show's manners
+  under a finger, and the overview's cost.
+- **Why it stopped:** the loop used its round budget (stop reason `rounds`) at 14:10, about 22 h before the 12:00
+  deadline. The script left no owner-notes file (`$RUN_DIR/owner-notes` does not exist).
+
+### The directions side by side
+
+The galaxy is still the only direction. The panel scored the galaxy (touch as its `touch` column) and the five effects
+behind `?fx=`, all off by default (D9). The show, countdowns, half screen and `?role` were reviewed inside the galaxy's
+findings and not scored on their own.
+
+**galaxy** (`galaxy.html`, also `wall.html?variant=galaxy` since T45): the spiral of sites round the hub, a tour that
+goes trouble first, a lock and a typed plate on each hold, one far line naming the worst thing. New tonight: one camera
+director (touch > show > tour, every hand-over eased), feathered grounds instead of dark boxes (T10), and one top
+step of type while a site is held (T19). *Loved:* the overview is the steadiest score of the night (7 in eleven of
+twelve reviews). The two-crit banner `■ 2 CRIT · HV1 · HV2` is "the one line that does not change subject with the
+camera" (r50). At 3 m the crit banner is the largest thing in the frame (r60). The half-screen plate (r47) is
+narrower and reads better than the full one. *Hated:* status is still the weakest axis. The camera can leave a
+crit while its plate still names it (T54). The banner corner goes empty during a crit hold (T55), and the banner names a
+different place on each glance (T28). A cleared crit just turns grey with no moment (T22, T50). Crit and warn nebulae
+are the same size at 3 m (T23). The kicker counts itself, `TARGET 02 / 02` (T48). Calm stays at 5-6 because
+of retypes, the `+N MORE` flicker and a seconds counter on a trouble plate (T57).
+
+**touch** (the galaxy's `touch` column): wake, drag, pinch, tap, sheet, back, and the tour comes back about a minute
+later. Explore now reads `MANUAL · TOUR IN 0:40` (T5), BACK keeps your pose (T4), the sheet no longer lets taps
+through (T1), and `?role=explore` makes a person's screen that never tours by itself (T42). *Loved:* "every step works
+with no cut" (r50, 7), and no gesture costs more than the tour (r60). *Hated:* a first touch wipes everything the agent
+showed, including the card you reached for (r55, T60). A palm still wakes the page (T32). A pinch can lose the galaxy
+(T31). Sheet rows are under 48 px (T33). The wake shows nothing for over a second (T62). `MANUAL` is too small to read
+at 3 m (Later).
+
+**show** (`?show=demo`, B, new): `flyTo`, `highlight`, `pin`, `clear` through `BroadcastChannel('laneboard.show')` or
+origin-checked `postMessage`. On screen they read `SHOWN BY COCKPIT` with an undo row per command. The demo flies to
+STORAGE, pins `POOL 97% FULL`, rises to the overview and highlights what the pool feeds. *Loved:* it works
+end to end, with 0 console errors, and it is the video's second half. *Hated:* one conversation makes four corner rows
+in tag-size mono that cannot be read at 3 m. r50 wants one `SHOWN BY COCKPIT ✕` row. A pinned card outlives its fact
+(T59), and the note sits on the site's name (T52). What the agent says is not on screen at all (r40: give the show the
+plate, T51).
+
+**fx-beacon:** a red pillar over each crit cluster. *Loved:* little by now; it is the one mark that finds a crit by
+shape. *Hated:* "two hairlines, leaning different ways, telling nothing the nebula does not" (r50, wow 3). It is the
+fourth mark for one crit and vanishes at 3 m. It was the lowest-wow effect in every review after r40.
+
+**fx-warp:** in flights to trouble, a 30° cone of streaks toward the target with hued tips (T21). Calm flights are
+quiet (T15). *Loved:* the highest wow of the effects (6-7 all night), and the feedback a tapped flight needs.
+After T21 it costs nothing at rest and only fill rate in flight (r60). *Hated:* the lowest calm (3-5). It repeats the
+banner's subject, so the skeptic calls it "taste, not information", earning its place only in explore.
+
+**fx-afterglow** (new): a cleared crit leaves a fading ring where it was. *Loved:* the best-liked effect, and
+"the only effect that adds information nothing else shows" (r50). It peaked at wow 7, calm 9 (r40). *Hated:* the ring
+can read as live trouble (T47: dashed, starting amber). Several films caught no clear at all (film with
+`at=overview` or `--every 6000`).
+
+**fx-activity** (new, replaces comets and twinkle): rings and brightness on working planets, no hue (Q18). *Loved:*
+it is quiet. *Hated:* at the overview it cannot be told from the plain galaxy (r50, wow 3), which fails its own brief.
+At the site step its rings look like locks next to a red lock (Later: at most 2.5 planet radii, none in a trouble system).
+
+**fx-sweep** (new): once per tour cycle a wedge of light from the sun pings each site. A site that went silent does
+not answer. *Loved:* the calmest effect (calm 8 in every review). *Hated:* its one job, "this site went silent", does
+not show at 3 m (r50). The fix is in Later (the silent name drops to `--text-3` with `SILENT 4M`). `siteNews` stringifies
+every node each model frame (T64).
+
+**wall.html** (radial, still the default page): filmed once tonight (T46). Three breaks were fixed: piled names (the
+shared Map's new `labelClear`, off by default), names over the tag and clock, and the far line repeating the plate's hero.
+
+Averages over every review this night (`## Scores`; galaxy, beacon and warp 12 reviews, afterglow 7, activity 6,
+sweep 5; comets and twinkle once, at r31, before T17 removed them):
+
+| variant | overview | legibility | status | touch | wow | calm | performance |
+|---|---|---|---|---|---|---|---|
+| galaxy | 6.9 | 6.8 | 6.2 | 6.3 | 6.2 | 5.2 | 6.0 |
+| fx-beacon | - | - | - | - | 4.1 | 6.2 | - |
+| fx-warp | - | - | - | - | 6.2 | 3.7 | - |
+| fx-afterglow | - | - | - | - | 5.4 | 7.7 | - |
+| fx-activity | - | - | - | - | 4.0 | 6.0 | - |
+| fx-sweep | - | - | - | - | 5.0 | 8.0 | - |
+| fx-comets (removed) | - | - | - | - | 3.0 | 6.0 | - |
+| fx-twinkle (removed) | - | - | - | - | 3.0 | 6.0 | - |
+
+Against night 3's averages, the galaxy rose on every axis (overview 6.4 → 6.9, status 5.7 → 6.2, touch 4.3 → 6.3).
+Calm stayed at 5.2. Performance is still a VM guess. The page's own JavaScript takes about 1-2.4 ms a frame
+unthrottled, and the 10-16 fps is SwiftShader's fill rate. In a 10-minute probe with every effect and the show
+on, the heap after GC stayed between 6.8 and 7.6 MB (r60).
+
+Newest filmstrips. To see one live, run `node test/tools/demo-fleet.mjs --port 7795 --size large` and open the URL on
+`http://127.0.0.1:7795/`. `wall.html?variant=galaxy&…` now forwards every switch to `galaxy.html`. Add `&quality=0`
+on a weak GPU and `&pace=wall` for the real tour speed:
+- galaxy (tour): `$RUN_DIR/shots/r60-galaxy/sheet.png`, live `wall.html?variant=galaxy&demo=1`.
+- fx-beacon, fx-warp, fx-afterglow, fx-activity, fx-sweep: `$RUN_DIR/shots/r60-fx-<name>/sheet.png`, live
+  `wall.html?variant=galaxy&demo=1&fx=<name>`. For afterglow, add `&at=overview` to catch a clear.
+- touch: stills `$RUN_DIR/shots/r55-touch/` (`00-tour.png` … `25-fan.png`, with the show runs 20-23) and the sheet
+  `$RUN_DIR/shots/r45-touch-sheet.png`; live `wall.html?variant=galaxy&demo=1` and touch it.
+- show: `$RUN_DIR/shots/r42-show-demo/sheet.png`, live `wall.html?variant=galaxy&demo=1&show=demo` (within the first
+  2.5 minutes of a fresh demo fleet, while STORAGE is crit).
+- half a screen: `$RUN_DIR/shots/r47-galaxy/sheet.png` (684 × 912) and stills `r47-half-e/`. Explore: `r48-galaxy/sheet.png`,
+  live `…&role=explore`.
+- wall.html (radial): `$RUN_DIR/shots/r54-radial/sheet.png`, live `wall.html?demo=1`.
+- 3 m check: `$RUN_DIR/shots/r60-3m.png` (the overview shrunk to 342 px).
+
+### Tasks
+
+Done (32): T1 54e7f96, T2 20ec4f8, T3 a5e46b6, T4 fa7611b, T5 7e9255e, T6 9ec5cff, T7 eaae256, T8 3dbe1c7,
+T9 2b7cca8, T10 c80e8a9, T11 2ca8017, T12 9eac184, T13 d28aeac, T14 915dc43, T15 ec72e04, T16 c691da6, T17 202011b,
+T18 7cb92f3, T37 f61e23d + 0eb72cb, T38 5dc9618, T39 ba6e478, T40 b91bb9f, T53 09ebee7, T41 e9fd647, T42 a34674e,
+T43 36735ee, T44 8c602ff, T45 655e1d9, T46 a7751f7, T19 f36f10f, T20 dac5cad, T21 169f692.
+Open (32, from the panel, none blocked):
+- Status and moments: T22 new trouble is a moment, T23 crit vs warn beyond hue, T24 label eaten by a cluster,
+  T25 held crit not at the edge, T28 one ranking for banner and tour, T29 a crit member stays red, T30 held crit
+  updates in place, T50 CLEARED beat, T54 the camera does not leave a crit under its plate, T55 banner corner never empty.
+- Look: T26 grey hyperlanes, T27 the tag covers labels, T47 the afterglow ring is not live trouble, T48 the kicker's
+  `n / n`, T49 lone cursor.
+- Countdown: T56 quiet in the scene, T57 one countdown and never on a trouble plate, T58 `LATE` in words.
+- Show: T51 the agent takes the plate, T52 cards and banner keep out of the way, T59 a pinned card outlives its fact,
+  T60 a touch must not wipe the show.
+- Touch: T31 pinch, T32 palm, T33 sheet rows 48 px, T61 the fan keeps off trouble, T62 the silent wake.
+- Performance: T34 the overview's triangles, T35 the fan writes only changes, T36 a wake without forced layout,
+  T63 the show works only when something is due, T64 `siteNews` without stringify.
+
+Tests now: 4260 pass, 0 fail (after round 61).
+
+**Needs you, worst first.**
+
+1. **Your pick for night 4: keep, drop or more for each `fx`, and does touch feel right?** The panel's case:
+   - *beacon: drop, or finish once* (wow 4.1, falling). For: the only mark that finds a crit by shape. Against: a
+     hairline that vanishes at 3 m and the fourth mark for one crit. The skeptic says remove it unless its width grows
+     with age (Later has the screen-vertical width floor).
+   - *warp: keep* (wow 6.2, the best; calm 3.7, the worst). For: the feedback a tapped flight needs, cheap since T21.
+     Against: it repeats the banner. It is taste, not information, outside explore.
+   - *afterglow: keep, more* (wow 5.4, calm 7.7). For: the only effect that shows something nothing else does. Against:
+     the ring can read as live trouble until T47 lands.
+   - *activity: more or drop* (wow 4.0). For: hue-free, quiet, cheap. Against: invisible at the overview, which was its
+     brief, and lock-like rings at the site step. The fix would be one brightness step on a working site's knot.
+   - *sweep: keep, more* (calm 8.0). For: the calmest effect, and liveness without fake motion. Against: a silent site
+     does not show yet (Later: `SILENT 4M` on the name and the tag).
+   - *touch: does it feel right?* For: every gesture works on the VM and costs nothing extra. Explore is marked and
+     `?role=explore` exists. Against: nobody has touched it on the Surface yet, a palm still wakes it, a pinch can lose
+     the galaxy, and a touch wipes the agent's show. Please try `wall.html?variant=galaxy&demo=1&show=demo` on the
+     tablet: wake, drag, pinch, tap HV2, BACK, then wait a minute; once more while a show card is up.
+   My pick: keep warp, afterglow and sweep. Give activity one more round (the overview brightness step), then drop it
+   if it still fails 3 m. Drop beacon. Then T60, T31-T33 before any more effects.
+2. **A show decision builders took, which the panel disputes** (T37, T42, r55-touch 1). Today any first touch drops
+   everything the agent showed, and every show command is refused `busy` while a finger, or the explore role, drives.
+   r55 asks that a touch keep pins and highlights and drop only the camera (T60, open). This sets how a person and the
+   agent share a screen in the cockpit, so it is yours to say.
+3. **Before merging, look at** (381 commits on `run/wall-n4` since `main`, about 95 tonight). What reaches outside the
+   galaxy:
+   - `server/map.mjs` `feedExtras` accepts a new feed field, `countdown: { at, label }`. Label is at most 32
+     characters, and an ISO `at` is kept as epoch ms. The app's Map ignores it. `docs/map.md` says so.
+   - The shared Map: `public/js/views/map/render.js` and `index.js` get `labelClear` (off by default; only radial turns
+     it on). The fenced Map tests pass unchanged.
+   - `public/css/tokens.css`: `--tex-plate` and `--tex-plate-corner` (T10, 76 lines). The comment says only `wall.css`
+     uses them. Night 3's `--tex-vignette` is still there too.
+   - `wall.html` behaviour: `?variant=galaxy` leaves for `galaxy.html` with `location.replace`. An unknown variant shows a
+     grey note under the tag. The no-WebGL fallback now lands on `islands-tiles`; before, it silently fell back to radial.
+     Radial's far line now steps down under a crit plate as the galaxy's does. The shared `caption.js` has a
+     narrow-stage plate width.
+   - `public/galaxy.webmanifest`, scoped to `/galaxy.html` alone, and README's views and docs rows.
+   - Read first: `docs/wall.md` (the whole Wall in one page), then `galaxy/director.js`, `show.js` and `transport.js`
+     (the only code that takes outside messages: same-origin channel, exact-origin `postMessage`, none on `file:`).
+4. **Frame cap: needs your OK** (r60-performance galaxy 2, unchanged from night 3). Every frame still renders at the
+   display rate all day. The proposal is `?cap=30`, off by default, as you said. r60 asks for T34, the overview's
+   triangles, first. That one needs no decision.
+5. **An hour on the Surface.** Leave `galaxy.html?demo=1&fx=beacon&perf=1` up for an hour and compare the overlay's
+   memory line at the start and the end, then try `&fx=warp` in flights. r60 also asks to watch `fx=beacon` with two
+   crits standing (its 337 ms gap). Every fps number from the loop is SwiftShader.
+6. **Taste decisions still open** (r46, r21's answers under For the owner): (a) the kicker `TARGET 02 / 05`. r21 says
+   remove it; T48 would fix its `n / n` self-count either way. (b) Calm plate: one fact line or none. (c) The sun's name
+   or the tag's hub name, not both. Also the r40 slow overview yaw and the fx candidates (`alert`, `lost`, `recent`,
+   `streak`, `dispatch`, `handback`), none asked for.
+7. **Unverified on a device:** the manifest's install prompt and the kiosk recipes in `docs/wall.md` (Edge kiosk,
+   Android pinning, iPad Guided Access) come from general knowledge. No tablet was reachable from here.
+8. **Fenced files:** none requested this night.
+9. **Housekeeping:** `$RUN_DIR` holds about 60 stale `*.pid` files from film and demo scripts. None pointed at a live
+   process at 14:10. Early on 2026-10-27, Chrome's CPU throttle stalled films (r21). Later rounds filmed at ×4 again,
+   but r54 saw the same build give 1.8-11.6 fps back to back, so read no fps trend into the films.
+
+### Research
+
+- Q16 the show message: one envelope `{ v: 1, ch: 'laneboard.show', id, src, type, ttl?, data }` over
+  `BroadcastChannel` and exact-origin `postMessage` (never `*`, none on `file:`). The screen says who drives it, and every
+  command is undone by `✕`, its `ttl` or `clear` (built in T37, T38).
+- Q17 a countdown at 3 m: minutes at a distance (`in 4 min`), `m:ss` only when held or in the last minutes, signed
+  `+m:ss` after zero, tabular figures. No published legibility numbers for countdowns were found (built in T40, T53).
+- Q18 busy vs idle without hue: brightness, form and slow local motion carry state. Idle is the quiet default, and a
+  failed job is an absence, not a flash. The game sources were thin; ISA-101 practice is the firmest (used in T17).
+- Open questions: none in `## Research questions`. Open measurements: real fps, GPU time and memory over an hour on
+  the Surface, and the install prompt and kiosk modes on a real tablet.
