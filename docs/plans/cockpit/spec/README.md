@@ -18,7 +18,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24; T50: header `READY`/`● WORKING`/`● STOPPING`, folds cut to code and `SHOW EARLIER`, E6 merged into E8, no raw view in C1, S-C1-24 retired) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the talk key, speech-to-text down or failed; §14 the physical-button API as the later slice C2b | `S-C2-`, `S-C2B-` | T6, T7 | written: part 1 (T6: gestures, 400 ms threshold, `data-talk` states, live words, microphone, S-C2-01..10), part 2 (T7, slimmed by T49: tap the words to stop and fix, DE/EN, `cockpit.stt.*`, the service down or failed (`stt-down`, `stt-failed`), the talk key, the kiosk microphone note, S-C2-11..17, 20, 21; C2b §14: the button API, S-C2B-01..02) |
 | `c3-see.md` | C3: the MCP server (`laneboard`, loopback HTTP, D58), the seven read tools with params, results and sources, result rules (`asOf`, size caps), board gaps; `focus`, "Ask about this" | `S-C3-` | T8, T9 | written: part 1 (T8: §1-§7, S-C3-01..08), part 2 (T9: §8 `focus`, §9 the hold menu and context chip, S-C3-09..17, sketch `c3-ask.html`) |
-| `c4-show-canvas.md` | C4: show commands, one camera with the tour, undo; the canvas, kit blocks, custom cards, promotion, how cards leave | `S-C4-` | T10, T11, T12 | part 1 written (T10: §1-§6, show commands `fly_to`/`highlight`/`clear`/`pin`/`compare`/`scrub`, one camera with the tour, show lines, undo, S-C4-01..12, D67-D77); parts 2-3 planned (T11, T12) |
+| `c4-show-canvas.md` | C4: show commands, one camera with the tour, undo; the canvas, kit blocks, custom cards, promotion, how cards leave | `S-C4-` | T10, T11, T12 | part 1 written (T10: §1-§6, show commands `fly_to`/`highlight`/`clear`/`pin`/`compare`/`scrub`, one camera with the tour, show lines, undo, S-C4-01..12, D67-D77); part 2 written (T11: §7-§10, the card area and grid, shelf, `place`, kit blocks `countdown`/`timer`/`status`/`log`/`chart`/`table`/`checklist`/`map`/`text`/`diff`, one-tap removal, S-C4-13..22, D78-D87, sketch `c4-canvas.html`); part 3 planned (T12) |
 | `coworker.md` | speaking up, quiet hours, scheduled jobs, the infra repo pull, drift, the agent's changes as PRs | `S-CW-` | T13 | planned |
 | `c5-c6.md` | C5 voice out; C6 act, rules and the confirm card only | `S-C5-`, `S-C6-` | T14 | planned |
 | `protocols.md` | screen ⇄ room, room ⇄ agent bridge, room ⇄ speech-to-text, message by message | none (sequences) | T15, T16 | planned |
@@ -28,7 +28,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `slices.md` | the build nights in order, each with its scenario ids, stand-ins and done-when | none (lists every id once) | T20 | planned |
 | `DECISIONS.md` | small reversible choices made during the night, each with how to overrule | none | all | written (running list) |
 | `QUESTIONS.md` | what only the owner can decide, with options and a recommendation | none | all | written (running list) |
-| `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2), `c1-pane.html` (T4), `c2-states.html` (T6), `screens-room-down.html` (T3/T22) | none | T2-T4, T6, T9, T11, T14 | in progress |
+| `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2), `c1-pane.html` (T4), `c2-states.html` (T6), `screens-room-down.html` (T3/T22), `c3-ask.html` (T9), `c4-canvas.html` (T11) | none | T2-T4, T6, T9, T11, T14 | in progress |
 
 ## Speed budget
 
@@ -139,6 +139,10 @@ Each word is defined here once; the other files link here instead of redefining 
   on the canvas. A card says who made it and when, and one tap removes it.
 - **block** (kit block): a ready-made card type the agent places in seconds by naming the block and
   its data (timer, countdown, chart, …). A block bound to real data stays live.
+- **card area**: the part of a canvas where cards sit, in a grid of 272 x 232 px cells; the
+  conversation column sits beside or under it (`c4-show-canvas.md` §7.1).
+- **shelf**: the cards a screen's grid has no room for, reached by `SHELF n` in the conversation
+  column's header; each screen has its own, from the room's one list (`c4-show-canvas.md` §7.2).
 - **custom card**: a card the agent writes as small HTML, shown in a sandboxed frame that can read
   board data and nothing else (no network, no credentials, no actions). One that proves useful is
   **promoted** to a block.

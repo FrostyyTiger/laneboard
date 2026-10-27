@@ -23,7 +23,7 @@ A screen runs one of two pages:
   plus the cockpit button (§4). The app has no canvas and no tour; its views are not modes.
 
 At 1368x912 `split` gives a wall half of 759 px and a canvas of 608 px (1368 = 759 + 1 + 608). At
-1920x1080: 1311 + 1 + 608. The canvas keeps 608 px so the card grid (T11) has one fixed size.
+1920x1080: 1311 + 1 + 608. The canvas keeps 608 px so the card grid (`c4-show-canvas.md` §7.1) has one fixed size.
 
 **Choosing the layout.** Three ways, the first that is set wins:
 1. The URL: `?layout=wall|canvas|split|switch` on the Wall page (a kiosk's start URL). Any other
@@ -81,7 +81,7 @@ the idle rules above stay the same.
 
 Where things land:
 - A card the agent places on the canvas appears on **every** screen whose layout has a canvas
-  (`canvas`, `split`, `switch`). Same cards, same order on each (T11 settles the grid).
+  (`canvas`, `split`, `switch`). Same cards, same order on each (the grid and the shelf: `c4-show-canvas.md` §7).
 - A camera show command moves the wall half of every online screen with a camera, or the one it
   names (`c4-show-canvas.md` §1, D67). A screen in
   `canvas` layout has no camera and ignores them; the conversation line still appears.

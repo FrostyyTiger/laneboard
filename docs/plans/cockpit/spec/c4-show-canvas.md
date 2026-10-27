@@ -1,8 +1,9 @@
 # C4 Show and the canvas
 
 Part 1 (T10, §1-§6): the show commands, the one camera they share with the Wall's tour, the line
-each leaves in the conversation and its one-tap undo. Part 2 (T11) is the canvas and the kit
-blocks; part 3 (T12) custom cards and how cards leave. Words (screen, room, show command, card,
+each leaves in the conversation and its one-tap undo. Part 2 (T11, §7-§10): the canvas, its grid
+and shelf, the tool `place`, the kit blocks and one-tap removal. Part 3 (T12) custom cards and how
+cards leave on their own. Words (screen, room, show command, card,
 block, focus, tool line) are defined in `README.md` §Glossary. Sizes are CSS px at 1368x912; times
 in ms or s.
 
@@ -141,7 +142,7 @@ canvas cards stay."
 
 No parameters but `screen`. The camera does not move. Removes highlight marks, the note, the
 compare card and its brackets, and ends a scrub (back to now). Pins and canvas cards stay: they
-have their own `×` (§3.4, T11). Line: `cleared the marks`. On a screen with nothing to clear the
+have their own `✕` (§3.4, §9). Line: `cleared the marks`. On a screen with nothing to clear the
 line is still written and `UNDO` is not drawn there.
 
 ### 3.4 `pin`
@@ -152,7 +153,7 @@ It stays until removed. Display only."
 | Param | Type | Rule |
 | --- | --- | --- |
 | **`node`** | string | a node id or label |
-| **`card`** | object | `{"block":"text","title":…,"body":…}`; `chart`, `log` and `diff` take the kit blocks' shapes (T11) |
+| **`card`** | object | `{"block":"text","title":…,"body":…}`; `chart`, `log` and `diff` take the kit blocks' fields (§8) |
 
 The `text` block: `title` at most 48 characters, `body` at most 280 characters.
 
@@ -172,8 +173,8 @@ The `text` block: `title` at most 48 characters, `body` at most 280 characters.
   with a camera draws them, a reconnecting or reloaded screen gets them again, and `NEW`
   (`c1-talk.md` §11) or a room restart drops them. They stay through the tour (pending Q-O4).
 - **They leave** by `✕` (on any screen, gone on all within 0.3 s), by their line's `UNDO`, by a 4th
-  pin, or by `NEW`. `clear` keeps them. Removal on screen: T46's `CARD REMOVED · UNDO` row is T11's
-  and applies to pins too.
+  pin, or by `NEW`. `clear` keeps them. Removal on screen: the `CARD REMOVED · UNDO` row of §9 applies to pins
+  too.
 - Line: `pinned a note to {label}` (`text`), `pinned a chart to {label}`, `pinned a log to {label}`,
   `pinned a diff to {label}`.
 
@@ -415,3 +416,413 @@ Then it returns `isError` `The board keeps no map history yet, so I cannot show 
 describe it from history.`, no `[data-scrub]` exists, the camera does not move, and the line reads
 `could not show the map at 02:10 · failed`.
 Test: the result in the fake agent's log; no `[data-scrub]`; `data-wall-state` unchanged.
+
+## 7. The canvas
+
+Part 2 (T11, §7-§10). Plan C4b: "an open surface where the agent puts things for the owner".
+`spec-input.md` §5: "it must be fast: a timer must not take 5 minutes", answered by "a kit of
+ready-made blocks (seconds)". Which layouts have a canvas, and the empty canvas, are
+`screens.md` §1 and S-SCR-10; a canvas arrives with C4 (pending Q-O22).
+
+### 7.1 The card area
+
+The canvas holds the conversation column and the **card area** (pending Q-O12: the conversation is
+a fixed column of the canvas, never a pane over the cards; D78). At 1368x912:
+
+| Layout | Card area | Conversation column | Grid |
+| --- | --- | --- | --- |
+| `canvas`, and `switch` while it shows the canvas | x 0-759, y 0-912 | x 760-1368, y 0-912, 1 px `--line` left border | 2 columns x 3 rows: columns x 100-372 and 388-660, rows y 24-256, 272-504, 520-752 |
+| `split` | x 760-1368, y 0-520 | x 760-1368, y 520-912 (392 px), 1 px `--line` top border | 2 columns x 2 rows: columns x 784-1056 and 1072-1344, rows y 24-256, 272-504 |
+
+- **One cell** is 272 x 232 px; cells are 16 px apart. The card area keeps 24 px free at its left,
+  right and top and 16 px at its bottom; the grid is centred across the area's width.
+- **Other screen sizes**: as many 272 px columns as fit in (area width − 48), as many 232 px rows as
+  fit in (area height − 40), at least 1 x 1. Cell size never changes, so a block looks the same on
+  every screen (`screens.md` §1, "one fixed size").
+- In `split` the conversation column is 392 px tall: its 64 px header, 224 px of conversation (about
+  7 lines at 22 px) and the 104 px input row (`c1-talk.md` §1). The rects of the column are T27's
+  to restate in `c1-talk.md` and `screens.md`; they must match this table.
+- Collapsing an idle canvas (pending Q-O13) is `screens.md`'s; this section describes the canvas
+  open.
+
+### 7.2 Sizes, order and the shelf
+
+Every card has one of four **sizes** (`data-size`): `s` 1x1 (272 x 232), `w` 2x1 (560 x 232),
+`t` 1x2 (272 x 480), `l` 2x2 (560 x 480). Each block (§8) has a default size and the sizes it allows.
+
+- **One list, in the room.** The room keeps the canvas cards as one ordered list, newest first, the
+  same for every screen (`screens.md` §3: "Same cards, same order on each").
+- **Packing** (D79). Each screen walks the list newest first and puts each card into the first slot,
+  in reading order (rows top to bottom, cells left to right), where all its cells are free. A card
+  that fits nowhere goes to **that screen's shelf**; older, smaller cards still fill gaps. So the
+  newest card is always top left, and a small screen shelves more than a big one.
+- **Moving.** When a card arrives or leaves, the others move to their new slots in 200 ms
+  (`transform`, `--ease`); the new card fades in over 120 ms. Reduced motion: no movement, one frame.
+- **The shelf.** While a screen's shelf holds cards, the conversation column's header shows
+  `SHELF 2` `[data-shelf]` (48 px tall, 96 px wide, 16 px caps `--text-1`, 1 px `--line-strong`),
+  8 px left of `NEW` (order from the right: `SCREEN`, `NEW`, `SHELF`; a fixed column has no `CLOSE`,
+  `c1-talk.md` §1). A tap opens the **shelf sheet** over the card area: header 64 px `SHELF · CARDS
+  THAT DO NOT FIT HERE` (16 px caps `--text-2`) and `CLOSE` (48 x 96); then one 64 px row per
+  shelved card: block word and title (20 px `--text-1`, cut with `…`), `AGENT · 07:12` (16 px caps
+  `--text-3`), `TO FRONT` (48 x 120) and `✕` (48 x 48), 16 px apart. `TO FRONT` moves the card to the
+  front of the room's list (every screen repacks within 0.3 s) and closes the sheet; a tap outside
+  the sheet closes it too.
+- **How many** (D80, pending Q-O4). At most 16 cards in the list. A 17th removes the oldest card that
+  is not bound to a scheduled job (a job's countdown stays: `spec-input.md` §6 "Scheduled jobs are
+  visible"); the result names it (`"removed":"card-0002"`) and its line reads ` · removed: canvas
+  full`. When all 16 are job countdowns, `place` returns `isError` `The canvas is full of job
+  countdowns; ask the owner to remove one.`
+
+### 7.3 The card frame
+
+Every canvas card is `[data-card]` with `data-card-id`, `data-block`, `data-size`:
+
+- `--bg-elevated`, 1 px `--line-strong` border, no shadow, no radius beyond the board's own.
+- **Header**, 48 px: `AGENT · 07:12` at 16 px from the left (16 px caps `--text-3`): who made it and
+  when it was placed (plan C4b: "every card says who made it and when"). A card replaced in place
+  (§7.4) reads `AGENT · 07:12 · NEW 07:20`. Demo cards read `DEMO` (`screens.md` S-SCR-10). Then,
+  when it applies, one plate (16 px caps `--text-3`, 1 px `--line-strong` border, 8 px left
+  margin): `STALE` while the room is down (`screens.md` §7), or `AS OF 02:10` when the bound source
+  is older than 10 min (`c3-see.md` §3, `stale`).
+- **Remove** `[data-card-remove]`: 48 x 48, flush top right, `✕` 24 px `--text-2`,
+  `aria-label="Remove card"`. No other target within 8 px of it (T46).
+- **Title**: 28 px row under the header, 16 px side padding, 20 px `--text-1`, one line, cut with `…`.
+  At most 48 characters; each block has a default title (§8).
+- **Body**: the block (§8), 16 px side padding, 8 px under the title, 16 px bottom padding. A body is
+  therefore 132 px tall in `s` and `w`, 380 px in `t` and `l`.
+- Every string the agent writes is drawn as text, never markup, and cut to its limit with `…`
+  (§3, `security.md`, T17).
+
+### 7.4 The tool `place`
+
+"Put a card on the owner's canvas: a ready-made block with its data (countdown, timer, status, log,
+chart, table, checklist, map, text, diff). A card bound to fleet data stays live. Display only."
+
+| Param | Type | Rule |
+| --- | --- | --- |
+| **`block`** | string | one of the blocks in §8 |
+| `title` | string | at most 48 characters; default per block |
+| `size` | string | `s`, `w`, `t` or `l`, one the block allows; default per block |
+| `replace` | string | a card id: that card's content and title change in place, its slot and age stay |
+| … | | the block's own fields (§8) |
+
+- No `screen`: a card goes to the room's one list and every screen with a canvas draws it.
+- The room checks the fields (a bad one is JSON-RPC `-32602` naming it, no line), resolves a bound
+  node, run or job (unknown: `isError` as §3, `No node "vm-x". Nodes like it: vm-b, vm-c.`), reads
+  the bound data (§7.5), then sends the card to the screens. It counts toward the 20 show commands
+  per turn (D76).
+- **Result**, after every canvas screen has answered or 1.0 s:
+
+  ```json
+  {"card":"card-0004","drawn":["side"],"shelved":["desk"],"waiting":[],"noCanvas":["hall"],"removed":null}
+  ```
+
+  When no screen has a canvas: `"hint":"No screen shows the canvas now; the card waits there. Say it
+  in words too."` (not an error).
+- **B6**: the card is drawn with its data ≤ 1.0 s after the room receives the call
+  (`README.md` speed budget). A bound read that has not answered after 0.8 s does not hold the card
+  back: it is drawn with `Reading…` (18 px `--text-2`) in its body, filled when the data comes.
+- **Line**: `put a countdown "shut off vm-c" on the canvas` (`a status tile`, `a log`, `a chart`,
+  `a timer`, `a table`, `a checklist`, `a map`, `a note`, `a diff`; the title cut to 32 characters,
+  as text). With `replace`: `updated the card "shut off vm-c"`. Suffixes as §4, plus
+  ` · no screen shows the canvas` and ` · removed: canvas full`.
+- **`UNDO`** on a `place` line removes the card while it exists; on a `replace` line it puts back the
+  version before (D82). Like a pin's (§5), it moves no camera and is not dropped by a newer camera
+  command.
+- A block the build has not made yet (pending Q-O3, §8) returns `isError` `The canvas has no "table"
+  block yet. Blocks now: countdown, status, log, chart, text, diff.`
+
+### 7.5 Live data
+
+- **The room binds** (D81). A bound card names its source (a node, run, alert, branch, job); the room
+  reads it with the same board reads as the MCP tools (`c3-see.md` §2, 5 s cache) and sends the
+  card's data to every canvas screen over the room connection (message: `protocols.md`, T15).
+  Screens never read the board for a card, so a card looks the same on every screen and a canvas
+  screen needs no board access of its own.
+- **Refresh**: every 10 s per card while at least one canvas screen is online; one read per URL per
+  5 s for all cards together. A change is drawn within 0.3 s of the room's read.
+- **Clocks**: countdowns and timers tick on the screen's clock each second, anchored to times the
+  room sends, so they keep counting while the room is down (`screens.md` §7).
+- **Room down**: `screens.md` §7 (frozen values, `STALE`, countdown counting, `CANCEL JOB` disabled).
+- **Kept** (D85, pending Q-O24): the room writes the list to `<stateDir>/cockpit/cards.json` (0600)
+  on every change, so cards survive a room restart and `NEW` (`c1-talk.md` §11; pins do not, D73).
+  A removed card is gone from the file at once. Chart samples (§8.5) are memory only.
+
+## 8. The kit blocks
+
+v1 has eight blocks plus `text` and `diff` (pending Q-O3: recommendation a), all eight, built in
+the order of b)). C4's first night builds `countdown`, `status`, `log`, `chart`, `text` and `diff`
+(`pin` needs the last four, §3.4); the next builds `timer`, `table`, `checklist`, `map` (D83). Status
+words and marks are the Map's (`docs/design.md`: hue only with its shape; grey is normal).
+
+### 8.1 `countdown`
+
+Down to a moment, or to a scheduled job (`spec-input.md` §5: "a live countdown bound to the real
+job, with cancel"). Sizes `s` (default), `w`.
+
+| Field | Rule |
+| --- | --- |
+| `until` | ISO time, or `+3h`, `+90m`; at most 7 d ahead |
+| `job` | a scheduled job id (`coworker.md`, T13); `until` and the default title come from the job |
+
+Exactly one of the two. Default title: the job's `what`, else `Countdown`.
+
+- **Look** (`s`): digits `02:59:41` (mono 48 px `--text-1`, 56 px line; ≥ 24 h `1 d 02:59`); under
+  them `at 10:12 · on vm-c` (18 px `--text-2`; without a job `at 10:12`). With a job, a
+  `CANCEL JOB` button `[data-card-cancel]` across the body's width, 48 px tall, 16 px caps
+  `--text-1`, 1 px `--line-strong`, at the body's bottom.
+- **Live**: ticks every second. With a job, the job's state replaces the digits: `RUNNING` (28 px
+  caps `--text-1`), `DONE 10:12`, `CANCELLED 08:03`, `SKIPPED 10:12` (`--text-2`), `■ FAILED 10:12`
+  (`--p1`, the one abnormal state); `CANCEL JOB` shows only while `scheduled`. Without a job, at 0
+  the digits read `DONE 10:12`.
+- **`CANCEL JOB`** opens the confirm card (`c5-c6.md`, T14) with what, where and when; nothing is
+  cancelled before its yes; each cancel is one audit line (T21). **Removing the card never cancels
+  the job**: the job stays on the Map (`coworker.md`).
+
+### 8.2 `timer`
+
+Up from a moment ("stuck for how long?"). Size `s`.
+
+| Field | Rule |
+| --- | --- |
+| `since` | ISO time, or `now` |
+| `alert` | an alert id (`c3-see.md` §4.5); `since` is the alert's |
+
+Exactly one. Default title: the alert's `text`, else `Timer`.
+
+- **Look**: digits `1:12:40` (mono 48 px), under them `since 06:00` (18 px `--text-2`).
+- **Live**: ticks every second. When a bound alert clears: `CLEARED 07:40 after 1 h 28` (28 px /
+  18 px, `--text-1`), and the digits stop.
+
+### 8.3 `status`
+
+One thing's state, big enough to read across the room. Size `s`.
+
+| Field | Rule |
+| --- | --- |
+| `node` / `run` / `builder` / `branch` (+ `repo`) | exactly one; a node id or label, a run id, a builder id, a branch |
+
+Default title: the label (node), the run id, the builder id, `{repo} {branch}`.
+
+- **Look**: the status mark and word, 28 px caps, in the Map's hue for that state (`■ DOWN` `--p1`,
+  `▲ STUCK` `--p2`, `● OK` `--ok`, `○ UNKNOWN` `--text-3`); under it the `why` (18 px `--text-2`, at
+  most 2 lines, cut with `…`); at the bottom `since 07:40 (was warn)` (16 px `--text-3`).
+- **Sources**: node `fleet` fields `status`, `why`; run `state`, `stuck.reason`; builder `state`; branch
+  `verdict`, `failed[0]` (`c3-see.md` §4).
+- **Live**: refresh 10 s; a change is drawn as the new word and a new `since` line; no flash, no
+  accent (colour means a state, `docs/design.md`).
+
+### 8.4 `log`
+
+Lines as they happen, or an excerpt. Sizes `w` (default), `l`.
+
+| Field | Rule |
+| --- | --- |
+| `node` / `run` | bound: that node's or run's events (`c3-see.md` §4.7 `history`) |
+| `lines` | static: 1-200 strings, each at most 160 characters |
+
+Exactly one. Default title: `Events: {label}` (bound), `Log` (static).
+
+- **Look**: mono 18 px, 24 px lines, `--text-1`; bound lines are `06:12 vm-b is degraded` (time in
+  `--text-3`); no wrap, each line cut with `…`. `w` shows 5 lines, `l` 15. The body scrolls; it
+  starts at the end (newest at the bottom).
+- **Live** (bound): new events are appended within 10 s of the board having them. If the owner
+  scrolled up, the view stays and `↓ 3 NEW` (48 px tall, 16 px caps, bottom right of the body)
+  appears; a tap goes to the end. When the board's events start later than the card asks, the first
+  line reads `(the board keeps events since 05:40)` in `--text-3` (`covers`, `c3-see.md` §4.7).
+- The board has events, not host logs: a host's real log is a static excerpt the agent read itself
+  (plan C3: the room's own read access, declared in config).
+
+### 8.5 `chart`
+
+A line over time. Sizes `w` (default), `l`.
+
+| Field | Rule |
+| --- | --- |
+| `node` + `metric` | bound: `cpu`, `mem` or `disk` of a node, sampled by the room |
+| `window` | `30m`, `2h` (default), `12h` |
+| `series` | static: 1-2 series `{"name":…,"points":[["2026-10-27T06:00:00+01:00",0.31],…]}`, at most 240 points each, name at most 24 characters |
+| `unit` | `%` (fractions drawn as percent), `$`, `s`, or none; at most 8 characters |
+
+Exactly one of `node` and `series`. Default title: `{label} {metric}`, else the first series' name.
+
+- **Look** (`w`): the last value 20 px `--text-1` at the right end of the title row (`27 %`). Plot
+  area 528 x 108 px; 16 px mono `--text-3` labels: y min and max at the left, first and last time at
+  the bottom. The line is 2 px `--text-1`; a second series 2 px `--text-3` dashed, named in the title
+  row. No fill, no colour (grey is normal, `docs/design.md`). `l`: plot 528 x 340.
+- **Bound** (D86): the board keeps no metric history (`c3-see.md` §6), so the room samples the node's
+  value every 30 s from the moment the card is placed, keeps `window` worth in memory, and sends
+  each new point. Before 2 points the plot reads `Collecting since 07:12, one point every 30 s.`
+  (18 px `--text-2`, centred). After a room restart the samples start again (same line).
+- **Static**: drawn once; `replace` updates it.
+
+### 8.6 `table`
+
+Rows and columns. Sizes `w` (default), `l`.
+
+| Field | Rule |
+| --- | --- |
+| `columns` + `rows` | static: at most 4 columns in `w`, 6 in `l`; 1-20 rows; cells at most 40 characters |
+| `source` | bound: `alerts`, `runs`, `ci` or `lanes`, with that tool's filters (`priority`, `state`, `verdict`, `builder`) |
+
+Exactly one. Bound columns: `alerts` mark and priority, target, text, since; `runs` run, state,
+round, stuck; `ci` branch, verdict, at; `lanes` id, state, since. Default title: the source's name
+(`Alerts`), else `Table`.
+
+- **Look**: a 40 px header row (16 px caps `--text-3`), 40 px rows (18 px `--text-1`), numbers right
+  aligned, cells cut with `…`. `w` shows 2 rows, `l` 8; more rows scroll inside the body, and the
+  last visible row's bottom carries `+ 12 more` (16 px `--text-3`) until scrolled.
+- **Live** (bound): refresh 10 s, order as the tool's (`c3-see.md` §4).
+
+### 8.7 `checklist`
+
+Steps, ticked by the owner or by the fleet. Sizes `t` (default), `s`, `l`.
+
+| Field | Rule |
+| --- | --- |
+| `items` | 1-12 `{"text":…, "done":false, "when":…}`; text at most 60 characters |
+| `when` | optional per item: `{"node":id,"status":"ok"}`, `{"branch":…,"verdict":"green"}`, `{"run":id,"state":"stopped"}`, `{"job":id,"state":"done"}` |
+
+Default title: `Checklist`.
+
+- **Look**: 48 px rows; a 32 x 32 box (1 px `--line-strong`; ticked: `✓` 24 px `--text-1`), 16 px
+  gap, the text 18 px (ticked: `--text-3`). A row with `when` shows `AUTO` (16 px caps `--text-3`) at
+  its right end. `s` shows 2 rows, `t` and `l` 7; more scroll.
+- **Live**: a `when` row is ticked by the room when its condition holds (refresh 10 s) and is not
+  tappable. A tap on any other row toggles it on every screen within 0.3 s (the room keeps it; a
+  display state, not an action). The agent learns ticks through the next prompt's focus,
+  `"ticked":[{"card":"card-0006","item":2,"done":true}]` (as `undone`, §5; D87).
+
+### 8.8 `map`
+
+"Zoom the map here" (plan C4b), on a screen that may have no Map. Size `l` only.
+
+| Field | Rule |
+| --- | --- |
+| **`node`** | a node id or label: that node and its children |
+
+Default title: `Map: {label}`.
+
+- **Look**: the Map's own renderer, read only, fitted to the node and its children (`fitNodes`, §2),
+  node labels 16 px, statuses as on the Map. No pan, zoom or taps in v1 (D62 keeps "Ask about this"
+  on the real Map).
+- **Live**: statuses follow the room's refresh (10 s).
+
+### 8.9 `text` and `diff`
+
+`text`: `title` and `body` (at most 280 characters, 18 px `--text-1`); sizes `s` (default), `w`.
+`diff`: static `lines`, 1-80, each starting with `+`, `-` or a space, at most 160 characters; mono
+18 px, `+` lines `--text-1`, `-` lines `--text-3`, the sign kept as the mark (no red or green:
+neither side is trouble); sizes `w` (default), `l`. Both are what `pin` takes (§3.4); pins draw the
+same bodies at 320 x ≤ 240 px (a chart plot 288 x 120, a log or diff 6 lines).
+
+## 9. Removing a card
+
+How cards also leave on their own, and the agent removing them, is part 3 (T12, pending Q-O4).
+
+- **One tap** on `✕` removes the card from the room's list: gone on every other screen within 0.3 s,
+  and they repack (§7.2).
+- **On the screen where it was tapped** (D84, T46) the card's place shows, for 10 s, a 48 px row
+  `[data-card-removed]` at the card's top: `CARD REMOVED` (16 px caps `--text-2`) and `UNDO` (48 x 96,
+  16 px caps `--text-1`, 1 px `--line-strong`). That screen repacks only when the row goes. `UNDO`
+  puts the card back at its old place in the list on every screen; after 10 s the row goes.
+- The next prompt's focus carries `"removed":["card-0004"]` (as `undone`, §5).
+- Removing a countdown never cancels its job (§8.1). Removing works while the room is down
+  (`screens.md` §7).
+
+## 10. Scenarios, part 2
+
+Harness as §6. Cards are read by `[data-card]` rects and texts; the demo hub has a scheduled job
+`job-0003` ("shut off vm-c", 10:12, target `vm-c`; `stand-ins.md`, T18). The clock starts at 07:12:00.
+
+### S-C4-13 A countdown bound to a job: drawn within 1 s, ticking, cancel asks first
+Given screen `desk` in `split` with an empty canvas,
+When the fake agent calls `place {"block":"countdown","job":"job-0003"}` at 07:12:00,
+Then within 1.0 s (B6) one `[data-card]` with `data-block="countdown"` is at x 784-1056,
+y 24-256; its header reads `AGENT · 07:12`, its title `shut off vm-c`, its digits `03:00:00`, then
+`02:59:59` 1 s later; `CANCEL JOB` is 48 px tall; the line reads `put a countdown "shut off vm-c" on
+the canvas` with `UNDO`.
+When the owner taps `CANCEL JOB`,
+Then the confirm card opens (`c5-c6.md`) and the job is still `scheduled` until its yes.
+When the owner instead taps `✕`,
+Then the card is gone and `job-0003` is still `scheduled` on the demo hub.
+Test: Playwright with `page.clock`; the B6 marks; card rect and texts; the demo hub's job state.
+
+### S-C4-14 A status tile follows its node
+Given `side` in `canvas` layout and a `status` card on `vm-b` reading `▲ WARN`,
+When the demo hub sets `vm-b` to `down` with why `host not reachable` at 07:40:00,
+Then by 07:40:10.3 the card reads `■ DOWN` in `--p1`, `host not reachable`, `since 07:40 (was
+warn)`; no other card moved.
+Test: change the demo node; advance the clock 10 s; read the texts and the computed colour.
+
+### S-C4-15 Newest top left, the small screen shelves, `TO FRONT` brings one back
+Given `desk` in `split` (4 cells) and `side` in `canvas` (6 cells), one conversation,
+When the fake agent places 5 `status` cards A, B, C, D, E in that order, 1 s apart,
+Then on both screens E is at the first cell and A last; `desk` shows E, D, C, B and `SHELF 1`;
+`side` shows all 5 and no `[data-shelf]`.
+When the owner taps `SHELF 1` on `desk` and `TO FRONT` on A,
+Then on both screens A is first within 0.3 s; `desk` shows A, E, D, C and its shelf holds B.
+Test: two contexts; order of `[data-card]` by rect; `[data-shelf]` text.
+
+### S-C4-16 A large card in `split` takes the whole area
+Given `desk` in `split` with two `s` cards, and `side` in `canvas`,
+When the fake agent places a `map` of `hv1` (`l`),
+Then on `desk` the map card is at x 784-1344, y 24-504 and both `s` cards are on the shelf
+(`SHELF 2`); on `side` the map is at x 100-660, y 24-504 and the two `s` cards are in row 3.
+Test: rects on both contexts; shelf count.
+
+### S-C4-17 Remove with one tap, undo within 10 s
+Given `desk` (`split`) and `side` (`canvas`) with the same 3 cards,
+When the owner taps `✕` on the second card on `side` at t = 0 s,
+Then within 0.3 s the card is gone on `desk` and `desk` has repacked; on `side`
+`[data-card-removed]` (48 px tall) reads `CARD REMOVED` with `UNDO` where the card was, the other
+cards do not move.
+When the owner taps `UNDO` at t = 4 s,
+Then the card is back in second place on both screens.
+When the owner removes it again and waits,
+Then at t = 10 s after that tap the row goes and `side` repacks; the next prompt's focus carries
+`"removed":[…]` with its id.
+Test: two contexts with `page.clock`; rects before and after; the fake agent's received focus.
+
+### S-C4-18 A bound chart starts empty but says so, then fills
+Given `side` in `canvas`,
+When the fake agent places `chart {"node":"vm-b","metric":"cpu"}` at 07:12:00,
+Then the plot reads `Collecting since 07:12, one point every 30 s.` and the title row `vm-b cpu`
+and the last value (`27 %`).
+When the clock reaches 07:12:30 and the demo node's cpu is 0.41,
+Then the plot holds a line with 2 points and the last value reads `41 %`; the message is gone.
+Test: `page.clock`; demo node cpu set; read the plot's `<path>` point count and the texts.
+
+### S-C4-19 A live log appends, and holds still when the owner scrolled up
+Given `side` with a `log` card bound to `vm-b` showing 5 lines,
+When the demo hub adds 3 events to `vm-b`,
+Then within 10.3 s the card's last line is the newest event.
+When the owner scrolls the body up by 48 px and 2 more events arrive,
+Then the view does not move and `↓ 2 NEW` shows; a tap on it shows the newest line.
+Test: add demo events; read the body's last visible line; `scrollTop` before and after.
+
+### S-C4-20 The 17th card removes the oldest that is not a job's
+Given 16 cards whose oldest is a `countdown` on `job-0003` and second oldest a `text` card,
+When the fake agent places a 17th card,
+Then the `text` card is gone on every screen, the countdown stays, the result has
+`"removed"` naming the `text` card, and that card's line reads ` · removed: canvas full`.
+Test: the fake agent's received results; count `[data-card]`; line text.
+
+### S-C4-21 Agent text stays text; unknown and missing blocks fail plainly
+Given `side` in `canvas`,
+When the fake agent places `text {"title":"<img src=x onerror=alert(1)>","body":"ok"}`, then
+`status {"node":"vm-x"}`, then `table {"source":"alerts"}` on the first C4 night's build,
+Then the first card's title shows the literal characters and has no child element; the second
+returns `No node "vm-x". Nodes like it: vm-b, vm-c.` with a `· failed` line; the third returns
+`The canvas has no "table" block yet. Blocks now: countdown, status, log, chart, text, diff.`
+Test: the title's `textContent` and `childElementCount`; results in the fake agent's log.
+
+### S-C4-22 No screen shows a canvas: the card waits
+Given only `desk` in `wall` layout,
+When the fake agent places a `countdown {"until":"+10m"}`,
+Then the result has `"drawn":[]`, `"noCanvas":["desk"]` and the hint `No screen shows the canvas
+now; the card waits there. Say it in words too.`; the line reads `put a countdown "Countdown" on the
+canvas · no screen shows the canvas`.
+When the owner switches `desk` to `canvas` (`SCREEN` sheet, `screens.md` §1),
+Then the countdown is drawn there within 1 s, still counting from the placing time.
+Test: the result; switch layout; read the digits against the clock.

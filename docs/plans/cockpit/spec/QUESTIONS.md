@@ -121,7 +121,7 @@ Answer: (open)
 
 ## Q-O12 Where the conversation sits in `split` and `canvas`
 
-Added by triage of review 21 (finding 3). Shapes `screens.md` §3, D5, D8. Spec: T4, T11.
+Added by triage of review 21 (finding 3). Shapes `screens.md` §3, D5, D8. Spec: T4, T11 (`c4-show-canvas.md` §7.1, D78, written for a).
 
 - a) **A fixed conversation column/strip** inside the canvas, cards beside or above it, never under
   it; the 300 s auto-close (D5) applies only to the pane over the Wall and app views.
@@ -409,7 +409,7 @@ Answer: (open)
 ## Q-O3 Kit blocks in version 1
 
 `spec-input.md` §7.3 (proposed: timer, countdown, chart, table, live log, checklist, status tile,
-map focus). Spec: T11, `c4-show-canvas.md`.
+map focus). Spec: T11, `c4-show-canvas.md` §8 (written for a), built in the order of b), D83).
 
 - a) **All eight**, over two slices.
 - b) **Four first** (countdown, status tile, live log, chart), the rest next slice.
@@ -421,7 +421,9 @@ Answer: (open)
 
 ## Q-O4 How canvas cards leave, and how many fit
 
-`spec-input.md` §7.4. Spec: T11, T12, `c4-show-canvas.md`.
+`spec-input.md` §7.4. Spec: T11, T12, `c4-show-canvas.md` §7.2 and §9 (written for c): one tap
+removes, 16 cards at most with job countdowns kept, a per-screen shelf for what does not fit, D79,
+D80, D84; expiry is T12's).
 
 - a) **Dismissed by hand only.**
 - b) **Expire only.**
