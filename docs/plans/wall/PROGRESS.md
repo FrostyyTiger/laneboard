@@ -583,7 +583,7 @@ Notes for every builder round (planner, round 1):
   streaks only inside a cone (~30°) round the direction of travel, about a quarter of today's count, white with the
   status hue only on the leading tips, and none drawn over a crit nebula's screen disc — done when: a test pins the cone
   and count (`fx.js`/`scene.js` pure helper) and a streak start inside a crit's disc is skipped, and a filmstrip of
-  `galaxy.html?demo=1&quality=0&fx=warp` on a flight to a warn site no longer streaks both arms or covers the crit. (commit SHA)
+  `galaxy.html?demo=1&quality=0&fx=warp` on a flight to a warn site no longer streaks both arms or covers the crit. (commit 169f692)
   Builder r59: "~30°" read as the cone's full angle: `WARP.cone` 15° either side of the ray to the target (the travel
   when no target is in front), fading over its outer 4° (`fx.js warpCone`, the vertex shader does the same sum). "A
   quarter of the count" read as on screen: `WARP.share` 0.5 keeps 400 far stars and 750 grains of night 3's 800 and
