@@ -276,6 +276,20 @@ Notes for every builder round (planner, round 1):
   white `1 crit`) are set at the caption's second step; hardware/where/holds stay small — done when: a test pins
   the row size and the crit plate's row format in `test/wall-galaxy-hud.test.mjs`/`wall.css`, and `?at=hv2` shows
   the trouble rows readable in a 3 m shrunk still.
+- [ ] T24 (r31-film-ui touch 1; = Later A4 T35 for the sheet) [ui] [variant:galaxy] The sheet follows the trouble
+  that rises under it: with a site sheet up, a new model re-ranks its rows and the status line on the spot (no
+  retyping), and a crit that appears in the site shows as the hero — done when: a test with a sheet for HV1 and a
+  model where VM-C turns crit gets the crit row first and `STATUS` updated at once, and `sheetCaption` is covered by
+  the same rule as the tour caption.
+- [ ] T25 (r31-film-ui touch 2, 5) [ui] [variant:galaxy] The sheet is yours, not the tour's: kicker `SITE · HV1`
+  (or `ROOM · IN HV1`) instead of `ATTENTION · TARGET 01 / 05`, no typing cursor and no typing on a sheet (text at
+  once), brackets first on the tapped site, then stepping to the worst member — done when: a test pins the sheet
+  kicker, no typing state on a sheet, and the lock target sequence site → worst member.
+- [ ] T26 (r31-film-ui galaxy 4; promotes Later A4 T31) [ui] [variant:galaxy] No words on words or off the frame:
+  `hud.covers()` includes the clock block, tag and plate; every label keeps a safe margin from the frame edge
+  (`HOME` was cut by the top edge) and out of the plate's box (`CLOUD` under `HOLDS`) and the lock bracket — done
+  when: a test on the large fixture (`?at=home`, overview, a held site) finds no shown label box meeting a cover or
+  crossing the frame edge.
 
 ## Research questions
 
@@ -346,6 +360,13 @@ Night 3's list, not yet a task (README §7 Night 3; replan takes from here in or
 - (was night 2's T32, r43-stranger 6; not named by Night 3, fits E) Screen Wake Lock in `galaxy/main.js`: request
   at start and again on visible, silent when denied or missing (Q15).
 - §7 Night 3 D unbuilt, staying unbuilt: `fx=storm`, `fx=lights`, `fx=rings`, `fx=arrive`.
+
+From r31-film-ui (not tasks yet):
+- (r31-film-ui galaxy 6, fx-beacon 1) Draw the beacon pillar screen-vertical (billboard on x), not leaning with perspective.
+- (r31-film-ui fx-beacon 3) Beacon white foot twice the core width over the bottom 10 %, so the foot reads as "here".
+- (r31-film-ui touch 4) A tap right after a coasting drag did nothing once: check it in the fake-clock page test (may be SwiftShader lag).
+- (r31-film-ui galaxy 5, 7; across) Calm holds leave two thirds empty, no arrival beat: covered by the r54-film-ui 8 and r15-dreamer 7 lines below.
+- (r31-film-ui fx-beacon 2) Nothing left after a crit clears: `afterglow`'s job (above).
 
 From r17-operator (not tasks yet):
 - (r17-operator galaxy 6) When stale, the tag moves to the clock's size next to the clock (`STALE 2M`, `--text-1`).
@@ -453,6 +474,9 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
   each planet drawn to cpu and mem, status hue on trouble members. `fx=trail`: a faint dotted arc between the
   systems the tour visited this cycle.
 
+- (r31-film-ui across, taste) The touch overview's lower, wider pitch is the best composition so far; the tour's
+  overview could take that pitch for its first beat. Not a task.
+
 ## Reviews
 
 - r11-dreamer.md: 9 galaxy + 3 beacon + 2 across + 3 unforgettable; 3 became tasks (T18, T19, T20); galaxy 4 (the
@@ -467,6 +491,10 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
   wants it ahead of the fx tasks: do T18 before T9/T12), 3 (= T15), 4 (= T16) and fx-beacon 1-3 (= T9) dropped
   (covered); galaxy 5, 6, 8, fx-beacon notes, touch 1-2 and the demo-pace note went to Later; lanes/comets/twinkle
   not filmed, dropped (retired). No dreamer proposals in this review.
+- r31-film-ui.md: 8 galaxy + 6 touch + 3 fx-beacon + 2 across; 3 became tasks (T24, T25, T26); galaxy 1, 2, 8 and touch 3
+  dropped (covered by T16, T20, T19, T13); galaxy 3, 5, 7 (Later already), galaxy 6, touch 4, fx-beacon 1-3 went to
+  Later; touch 6 dropped (observation); across 2 to the owner; across 1 dropped (already the plan); lanes/comets/twinkle
+  not filmed, dropped (retired).
 
 ## Scores
 
@@ -487,5 +515,10 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 | r17 | operator, fx-lanes | – | – | – | – | 2 | 7 | – |
 | r17 | operator, fx-comets | – | – | – | – | 2 | 7 | – |
 | r17 | operator, fx-twinkle | – | – | – | – | 2 | 8 | – |
+| r31 | film-ui, galaxy | 6 | 6 | 6 | 5 | 6 | 5 | 6 |
+| r31 | film-ui, fx-beacon | – | – | – | – | 6 | 6 | – |
+| r31 | film-ui, fx-lanes | – | – | – | – | 2 | 8 | – |
+| r31 | film-ui, fx-comets | – | – | – | – | 3 | 7 | – |
+| r31 | film-ui, fx-twinkle | – | – | – | – | 2 | 9 | – |
 
 ## Morning
