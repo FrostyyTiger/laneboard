@@ -415,9 +415,14 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 
 ## Reviews
 
+- r4 film-ui → reviews/r4-film-ui.md. Worst: the banner out-shouts the held caption (two headlines, two subjects);
+  hard dark boxes behind banner and plate (T10); orphaned leader line after the plate fades; warp streaks the whole
+  galaxy on a warn flight.
+
 ## Scores
 
 | round | persona | overview | legibility | status | touch | wow | calm | performance |
 |---|---|---|---|---|---|---|---|---|
+| 4 | film-ui | 7 | 6 | 7 | 6 | 6 | 5 | 6 |
 
 ## Morning
