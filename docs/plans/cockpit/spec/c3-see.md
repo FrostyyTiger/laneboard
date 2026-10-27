@@ -464,7 +464,7 @@ cockpit's:
 | --- | --- | --- |
 | `page` | `app` or `wall` | which page runs |
 | `route` | the route's non-null keys, as `formatHash` would write them | `routeNow()`; on the Wall `{"view":"wall","sel":…}` with the Wall's selected node |
-| `wallState` | `tour`, `explore` or `null` (app) | `data-wall-state` (Wall contract, T31) |
+| `wallState` | `tour`, `explore` or `null` (app) | `data-wall-state` (Wall contract W1, `screens.md` §9.1) |
 | `layout` | `wall`, `switch`, `split`, `canvas` or `null` (app) | `screens.md` §1 |
 | `pane` | `open`, `closed` or `column` (`c1-talk.md` §1) | `data-pane` |
 | `inSight` | up to 60 node ids, worst status first (the order of §4.1) | Map and Wall only: nodes whose drawn centre lies in the part of the view not covered by the pane or the inspector; `[]` on every other view |
@@ -542,8 +542,8 @@ attached as context."
 
 ### 9.1 Where it works
 
-On every node of the Map (`#/map`, app) and of the Wall (Wall contract, T31: the cockpit needs the
-Wall's node under a point, `nodeAt(x, y)`). Board cards, Runs rows and other views do not get it in
+On every node of the Map (`#/map`, app) and of the Wall (Wall contract, `screens.md` §9: the cockpit needs the
+node under a point, `nodeAt(x, y)`, M6). Board cards, Runs rows and other views do not get it in
 C3 (D62). The menu exists only when the page has a cockpit (a room is configured and the screen is
 paired); without one a hold does what it does today (D63).
 
@@ -623,7 +623,7 @@ talk or taps the input (D64). The conversation is scrolled to its end.
 ## 10. Scenarios, part 2
 
 Harness as §7, plus a Playwright page on the app's `#/map` at 1368x912 with `?demo=1` and a paired
-screen named `desk`. Tests that act on the Wall run once `origin/plan/wall` has merged (T31); each
+screen named `desk`. Tests that act on the Wall run once `origin/plan/wall` has merged (`screens.md` §9.3); each
 scenario below runs on the app first.
 
 ### S-C3-09 A 500 ms hold on a node opens the menu next to the finger

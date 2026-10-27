@@ -79,7 +79,7 @@ functions. A show command is treated like a touch that did not come from the own
   highlight, note, compare, scrub) in memory; a reload drops it and the tour or the Map starts as
   usual. Pins are the exception: the room keeps them (§3.4).
 
-**What C4 needs from the camera** (add to the Wall contract, T31; the app's Map gets the same as
+**What C4 needs from the camera** (the Wall contract, `screens.md` §9.2 M1-M8, which is the one list; the app's Map gets the same as
 new functions of `createMap` in `public/js/views/map/index.js`, default off, existing Map tests
 unchanged): `flyTo(id)` with the normal flight (today's `focus`), `fitNodes(ids)` (fly so every id
 is in sight with 64 px to spare), `camera()` and `setCamera(cam, {flight})` (save and restore, for

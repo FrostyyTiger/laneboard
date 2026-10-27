@@ -110,7 +110,7 @@ sends no camera move for it (`coworker.md` §3.4); each screen decides on its ow
 - **What it leaves.** No conversation line, no `UNDO`, no marks: it is the screen's, not the
   agent's (the agent's own show commands are `c4-show-canvas.md`'s). The node draws its trouble as
   the Wall always does (status colour and shape). A reload drops the hold; the tour starts as usual.
-- **What it needs.** `flyTo(id)`, a node lookup and the idle hook of the Wall contract (T31). The
+- **What it needs.** `flyTo(id)`, a node lookup and the idle hook of the Wall contract (§9: M1, M5, W5). The
   Speak slice builds them if the Show slice has not (`slices.md` §3.4).
 
 ## 3. One screen or two
@@ -1190,3 +1190,106 @@ Test: Playwright, two pages on the room under test; the room's clock with `POST 
 idle timer with `page.clock.fastForward()`; the flight's start and end from the camera sampled each
 frame (`onDraw`); root attributes and `screenOf('builder-b')` at each step; `hall`'s camera from
 `camera()` before and after.
+
+## 9. The Wall contract (T31)
+
+The Wall is a plan on its own branch (`origin/plan/wall`, Wall plan D1), not merged. The cockpit
+builds on it only through the list below: the Wall page provides each item, the cockpit calls
+nothing else of it and never names its files (D222). The app's Map (`createMap` in
+`public/js/views/map/index.js`) provides the camera half (§9.2) too, as new functions that default
+off; its existing tests stay unchanged (Wall plan D1, `c4-show-canvas.md` §2).
+
+**Which page.** This spec says "the Wall page". The Wall plan names it `public/wall.html`;
+`docs/plans/product.md` (the hosted demo row) calls it `galaxy.html`. The cockpit does not care: it
+recognises the Wall page by the Wall's handle (§9.1 W1), and the one place a path appears is the
+test helper's constant `WALL_PAGE` (§9.3). The two names are a line under `## For the owner`.
+
+**The handle** (D221). Every page with a cockpit sets `window.__cockpitView`:
+
+```js
+window.__cockpitView = {
+  page: 'wall',        // or 'app'
+  wall: { /* §9.1, W1-W6 */ },   // null on the app
+  map:  { /* §9.2, M1-M8 */ },   // null on an app view without a Map (#/board, #/runs, …)
+};
+```
+
+The cockpit's own client code goes through it too (so tests and code use one surface); on the app
+the router swaps `map` when the Map view mounts or unmounts. It is set before the cockpit's first
+`focus` message (`c3-see.md` §8.1). It offers nothing a script on the page cannot already do: it moves
+the camera and reads positions, it holds no token and sends nothing (`security.md` §2).
+
+**Coordinates** (D222). Every point in and out of the contract is in page CSS px, the frame of
+`clientX`/`clientY` (0, 0 top left of the viewport). The Map's own `screenOf` stays in canvas px for
+its current callers (the inspector); the handle adds the canvas's `getBoundingClientRect()` left
+and top. At 1368x912 in `wall` the two frames coincide; in `split` too (the wall half starts at
+x 0); on the app the Map's canvas starts below the header, and only the handle's numbers are
+asserted.
+
+### 9.1 From the Wall page (`wall`)
+
+| # | Item | Exactly what it does | Today | Used by |
+| --- | --- | --- | --- | --- |
+| W1 | `data-wall-state` on `<html>` | `tour` or `explore`; set in the same frame the state changes; absent in `canvas` layout (`README.md` §"Selectors tests use") | missing | §2, S-SCR-02..04, `c3-see.md` §8.1 `wallState` |
+| W2 | `wall.state()` | returns the same value as W1 | missing | the cockpit's `focus` |
+| W3 | `wall.tour.pause()` | stops the tour mid-flight; the camera holds the frame it had (no snap back); W1 becomes `explore` within one frame; a second call does nothing | missing | §2 pane open, `c4-show-canvas.md` §2, §2.1 |
+| W4 | `wall.tour.resume()` | W1 becomes `tour`; the tour starts with the overview (Wall plan §3, ~20 s); a call while touring does nothing | missing | the idle timer's end |
+| W5 | `wall.idle` | the Wall's one idle timer: `hold()` pauses it; `restart(ms = 60000)` (re)starts it at `ms` and lifts a hold; `remaining()` in ms, `null` while held or touring; at 0 it calls W4 itself. The Wall restarts it at 60 s on its own touches (Wall plan D4); the cockpit calls `hold()` while the pane is open, a turn runs or the microphone is open, `restart()` after those and after a show command's movement, `restart(300000)` for a speak-up (§2, §2.1) | missing | §2, §2.1, `c4-show-canvas.md` §2 |
+| W6 | `wall.onState(cb)` | calls `cb(state, {by})` after every change, `state` `'tour'` or `'explore'`, `by` `'touch'`, `'idle'` or `'call'`; returns an unsubscribe function | missing | `c4-show-canvas.md` §2 "the tour clears what the agent drew", §2.1 hold end |
+
+The cockpit sees the owner's touches on the wall half with its own capturing `pointerdown`
+listener on the wall half's element (D70's 3 s rule, §2.1 "a touch ends it"); that needs no Wall
+function.
+
+### 9.2 From the Map, on the Wall and on the app (`map`)
+
+| # | Item | Exactly what it does | Today | Used by |
+| --- | --- | --- | --- | --- |
+| M1 | `map.flyTo(id, z = 1.9)` | the Map's flight (`public/js/core/motion.js` `flight()`, 320-900 ms by distance) to the node, centred in the part in sight (insets); returns a Promise: `true` when the flight ends, `false` if a newer movement or a finger cut it, or `id` is not drawn (then nothing moves) | as `focus(x)` on main, `focus(x, z)` on `plan/wall`; returns nothing | §2.1, `c4-show-canvas.md` §3.1 |
+| M2 | `map.fitNodes(ids, {pad = 64})` | one flight so every drawn id is in sight with `pad` px to spare (zoom capped at 2.6, as `fitCircle`); unknown ids are left out; none left: resolves `false`, nothing moves | missing (`boundingCircle`, `fitCircle` in `map/interact.js` do the maths) | `c4-show-canvas.md` §3.2, §3.5 |
+| M3 | `map.camera()` | `{x, y, z, spin}` in world units, `spin` 0 unless ambient; a copy | missing (the `cam` object in `createMap`) | undo, S-SCR-34, S-C4-10 |
+| M4 | `map.setCamera(cam, {flight = true})` | flies (M1's flight and Promise) or, with `flight: false`, jumps in one frame to `cam` | missing | `c4-show-canvas.md` §5 undo |
+| M5 | `map.screenOf(id)` | `{x, y}` in page px (D222) where the node is drawn now, `null` if not drawn or leaving | exists (canvas px) | every camera test |
+| M6 | `map.nodeAt(x, y)` | the id of the nearest drawn node whose disc contains the page point, else `null`; a point off the canvas gives `null` | missing (`createHitGrid().hit` in `map/interact.js`, canvas px) | `c3-see.md` §9.1-§9.3 |
+| M7 | `map.onDraw(cb)` | `cb()` after every drawn frame; returns an unsubscribe function | `plan/wall` only | pins and marks (`c4-show-canvas.md` §3.4), frame sampling in tests |
+| M8 | `map.emphasis(id)` | 0..1, the node's focus and scope ghosting now | exists | `c4-show-canvas.md` §3.2 tests |
+
+Who builds what: the slice that first needs an item adds it with its own tests and the next slice
+reuses it. W1-W6 with C1 step 15 (`slices.md` §3.1) once the Wall has merged; M6 with C3; M1, M5,
+M7 with Speak (`slices.md` §3.4); M2-M4 and M8 with Show. A Wall that merges with some of these
+already built keeps its names if the behaviour matches this table; if not, the table changes here
+first (one D-line), then the code.
+
+### 9.3 Before the Wall merges: the app first
+
+Every scenario that does not assert W1-W6, the tour or a Wall layout (`split`, `canvas`, `switch`)
+runs on the app's `#/map` at 1368x912 with `?demo=1`, from the first night it is built. A scenario
+whose `Given` names the Wall page and that can run on the app says so (`on the app's #/map first`)
+and runs there; its Wall run is added when the Wall merges, with the same assertions on `wall`.
+
+Scenarios that need the Wall itself (W1-W6 or a layout) are in their slice's test file with
+`test.skip(!WALL, 'Wall not merged')`, where `WALL` is true when `GET WALL_PAGE` answers 200 on the
+server under test and `WALL_PAGE` is one constant in the test helper. The C1 list is `slices.md`
+§3.1 ("Wall not merged at the C1 night"); each night's summary names the skipped ids. A skipped id
+counts as not done: the slice's done-when is met only when it runs.
+
+### S-SCR-35 One handle on every page: what it holds where (Wall contract)
+Given the room under test with a paired screen `desk` at 1368x912, `?demo=1`,
+When the page opens `#/map` and the Map has drawn its first frame,
+Then `window.__cockpitView.page` is `'app'`, `.wall` is `null`, and `.map.screenOf('builder-a')`
+equals the Map's own `screenOf('builder-a')` plus the canvas's client left and top (± 0.5 px);
+`.map.nodeAt(p.x, p.y)` for that point `p` is `'builder-a'`, and `.map.nodeAt(2, 2)` is `null`.
+When the test calls `await .map.flyTo('builder-a')`,
+Then it resolves `true` within 0.9 s, and `screenOf('builder-a')` is the centre of the part in
+sight within 2 px; `.map.flyTo('vm-x')` (no such node) resolves `false` and `camera()` is unchanged.
+When the page goes to `#/board`,
+Then `.map` is `null` within one frame; back on `#/map` it is a new object with the same functions.
+When (Wall merged) the page opens the Wall page in `wall` layout, touring,
+Then `.page` is `'wall'`, `.wall.state()` is `'tour'` and equals `data-wall-state`; `.wall.tour.pause()`
+makes both `'explore'` within one frame, `.wall.idle.remaining()` is 60000 ± 100 ms, `.wall.idle.hold()`
+makes it `null`, `.wall.idle.restart(5000)` and 5 s of fake clock bring `'tour'`, with one `onState`
+call `('tour', {by: 'idle'})`.
+Test: Playwright with `page.clock.install()`; every value through `page.evaluate` on
+`window.__cockpitView`; the Map's own `screenOf` through the same evaluate; the Wall steps under
+`test.skip(!WALL, 'Wall not merged')` (§9.3). Each function's own behaviour is tested by the slice
+that adds it (§9.2).

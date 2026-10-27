@@ -111,10 +111,10 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 `c1-render`, `c1-typing`, `c1-errors`, `c1-login`, `c1-long`, `c1-session`, `c1-voice` (S-C3-18), `scr-room`,
 `c3-tools` (S-C3-03 only). No fake speech yet.
 
-**Scenarios** (62):
+**Scenarios** (63):
 S-C1-01 S-C1-02 S-C1-03 S-C1-04 S-C1-05 S-C1-06 S-C1-07 S-C1-08 S-C1-09 S-C1-10 S-C1-11 S-C1-12
 S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33 S-C1-34 S-C1-35 S-C1-36 S-C1-37 S-C1-38 S-C1-39 S-C1-40
-S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23 S-SCR-24 S-SCR-25 S-SCR-30 S-SCR-31
+S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23 S-SCR-24 S-SCR-25 S-SCR-30 S-SCR-31 S-SCR-35
 S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18 S-C3-20
 S-SEC-01 S-SEC-02 S-SEC-03 S-SEC-06
 
@@ -123,6 +123,8 @@ S-SEC-01 S-SEC-02 S-SEC-03 S-SEC-06
   without pairing, D212, pending Q-O21) are C1's (T17); step 2 gains the start check.
 - S-SCR-30 and S-SCR-31 (the audit lines, T60) are C1's: prompt, stop and new are; their
   `Under Q-O21 a)` steps run with the Pair slice.
+- S-SCR-35 (the handle, `screens.md` §9, T31) is C1's: its app steps run from the first night,
+  its Wall steps once the Wall merges (§9.3).
 - S-SCR-24 (a refused room link, T89) is C1's: 4403 and 4503 can happen without pairing.
 - S-SCR-25 (the corner cluster, T44) is C1's with `stt.url: none`; its run with the talk and
   language buttons is asserted once C2 is built.
@@ -139,7 +141,7 @@ S-SEC-01 S-SEC-02 S-SEC-03 S-SEC-06
   and C1's done-when is met then; nothing of C2 starts before.
 - Wall not merged at the C1 night: the scenarios that need it (S-C1-01, S-SCR-02, S-SCR-03,
   S-SCR-04, S-SCR-21, S-SCR-22) stay in C1 and run once the Wall merges; everything else runs on the
-  app (`#/map`), as T31's fallback asks. The night's summary says which ids waited.
+  app (`#/map`), as the Wall contract's fallback asks (`screens.md` §9.3). The night's summary says which ids waited.
 - **C1's ids under each answer** (the 40 above are for Q-O21 b) and Q-O22 b), the recommendations):
 
 | Q-O21 | Q-O22 | C1 also contains | Ids |
@@ -207,7 +209,7 @@ trigger, the repo drift check; the `speakup` message (T127).
 **Scenarios** (13): S-CW-01 S-CW-02 S-CW-03 S-CW-04 S-CW-05 S-CW-06 S-CW-07 S-CW-08 S-CW-09
 S-CW-15 S-CW-16 S-CW-17 S-SCR-34. Planned: T66's divider scenario (one `S-C1-` id). The slice
 cannot be built until T127 is written. The touring-screen hold (`screens.md` §2.1) needs `flyTo(id)`,
-a node lookup and the idle hook of the Wall contract (T31): this slice builds them, Show reuses them.
+a node lookup and the idle hook of the Wall contract (`screens.md` §9): this slice builds them, Show reuses them.
 
 **Done-when**: §2's slice rule for these ids and those T23 and T66 write; Q-O5 answered.
 
@@ -234,7 +236,7 @@ owner sees at 1368x912 in `canvas`, apart from the job countdown.
 
 ### 3.6 Show: C4 show commands
 
-**Builds**: one camera with the tour (`c4-show-canvas.md` §2, needs the Wall contract of T31);
+**Builds**: one camera with the tour (`c4-show-canvas.md` §2, needs the Wall contract, `screens.md` §9.2);
 `fly_to`, `highlight`, `clear`, `pin`, `compare`; `scrub` as the error of D75; the finger-wins rule
 (D70); undo across screens (D71).
 
@@ -289,7 +291,7 @@ by the task that writes them.
 | Ids | Slice |
 | --- | --- |
 | S-SCR-01, 06, 07, 08, 10, 11, 26 | Canvas |
-| S-SCR-02, 03, 04, 09, 17, 18, 19, 21, 22, 23, 24, 25, 30, 31 | C1 |
+| S-SCR-02, 03, 04, 09, 17, 18, 19, 21, 22, 23, 24, 25, 30, 31, 35 | C1 |
 | S-SCR-05, 12 | Show |
 | S-SCR-13, 14, 15, 16, 27, 28, 29, 33 | Pair |
 | S-SCR-20, 32 | C2 |
@@ -314,7 +316,7 @@ by the task that writes them.
 | S-ONE-01..07 | One |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 193 live ids in all (round 117, S-SCR-34 by T23).
+D55). 194 live ids in all (round 119, S-SCR-35 by T31).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

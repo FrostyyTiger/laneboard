@@ -186,6 +186,8 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 ## For the owner
 
+- T31 (round 119): the Wall page has two names: `public/wall.html` in the Wall plan (D1) and `galaxy.html?demo=1` in `docs/plans/product.md` (the hosted demo row). The cockpit spec names neither (`spec/screens.md` §9, D222); one of the two documents wants fixing outside this night's allowed paths.
+
 - Round 60: review 59 asks that D92's two-process routing (a front forwarding `/api/cockpit/`) be an owner question, not only a D-line: it is now Q-O29 (recommendation: keep D92, one box needs no front).
 
 - T15 (round 57) routes the screen to the room on the page's own origin: the front that serves the page (a reverse proxy or `tailscale serve` with a path) forwards `/api/cockpit/` to the room's port; nothing goes through the hub (D92). This departs from plan C4's "room → hub → screens" for show commands, to keep D89's single origin and the hub carrying nothing new. Strike D92 to send them through the hub instead.

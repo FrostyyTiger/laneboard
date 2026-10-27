@@ -1208,7 +1208,7 @@ the four strings; open both lines and read their rows. The rules themselves are 
 
 ### S-C1-32 The on-screen keyboard: the input row sits on its edge, the conversation stays pinned
 Given a touch context (`hasTouch: true`) at 1368x912, the Wall page in `wall` (on the app's `#/map`
-first, T31), the pane open on a 12-turn conversation scrolled to its end, the input empty, no chip,
+first, `screens.md` §9.3), the pane open on a 12-turn conversation scrolled to its end, the input empty, no chip,
 no status line,
 When the owner taps the input at t = 0 and the test resizes the viewport to 1368x532 at t = 0.1 s
 (a 380 px keyboard),
