@@ -305,6 +305,21 @@ html.wall body {
 .wall-caption-part[data-tone="low"] { color: var(--info); }
 .wall-caption-part .wall-caption-glyph { font-size: 0.62em; }
 
+/* The held place's soonest countdown (night 4 T53, galaxy hud.js countdownCaption): the plate's line step,
+   grey, the clock in tabular figures so `m:ss` never jitters as it ticks. Far it is the quieter grey; the
+   last five minutes and overdue step up to the plate's own value grey, never a hue (late is not trouble). */
+.wall-caption-line[data-kind="countdown"] .wall-caption-val { color: var(--text-3); }
+.wall-caption-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.wall-caption-line[data-kind="countdown"][data-phase="soon"] .wall-caption-val,
+.wall-caption-line[data-kind="countdown"][data-phase="now"] .wall-caption-val,
+.wall-caption-line[data-kind="countdown"][data-phase="late"] .wall-caption-val { color: var(--text-2); }
+.wall-caption-line[data-kind="countdown"][data-phase="soon"] .wall-caption-count,
+.wall-caption-line[data-kind="countdown"][data-phase="now"] .wall-caption-count,
+.wall-caption-line[data-kind="countdown"][data-phase="late"] .wall-caption-count { color: var(--text-1); }
+
 /* cpu and mem side by side across both columns, a thin bar each. */
 .wall-caption-line[data-kind="metrics"] {
   display: flex;

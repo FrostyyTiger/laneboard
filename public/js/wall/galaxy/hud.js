@@ -11,7 +11,8 @@
 // test/wall-galaxy-hud.test.mjs drives it with fakes); galaxy/main.js makes
 // the real ones.
 
-import { MAX_LINES, captionLines, coverOf } from '../caption.js';
+import { MAX_LINES, MAX_TEXT, captionLines, coverOf } from '../caption.js';
+import { soonestCountdown } from '../countdown.js';
 import { problemsOf, worstLine } from '../frame.js';
 import { lockTarget } from '../lock.js';
 import { SEVERITY, TROUBLE } from '../../views/map/model.js';
@@ -232,6 +233,59 @@ export function staleCaption(cap, fresh) {
   return { ...cap, lines: [...lines.slice(0, at), row, ...lines.slice(at)].slice(0, MAX_LINES) };
 }
 
+// The rows a countdown line comes after: the trouble word, the count, the named problems, the feed's grey line.
+const HEAD_KINDS = new Set(['trouble', 'status', 'problem', 'stale']);
+
+/**
+ * `cap` with one line for the held thing's soonest countdown (night 4 T53,
+ * countdown.js soonestCountdown over `node` and everything in it; overdue
+ * first): `{ kind: 'countdown', step: 'line', label, name, at, id }`, grey,
+ * after the trouble lines and before the rest (a calm tour plate, which has
+ * no lines, gets it alone). `name` is the member it runs on (caps), empty
+ * when that is `node` itself; `id` that member, so a finger on the row opens
+ * it. `at` and not the words: the plate ticks `m:ss` itself (caption.js
+ * `tick`), the only seconds on the Wall (Q17). `cap` itself when nothing
+ * here carries a countdown. Pure.
+ */
+export function countdownCaption(cap, node, model, now) {
+  const nodes = nodeList(model).filter((n) => n && typeof n.id === 'string');
+  const kids = new Map();
+  for (const n of nodes) {
+    if (typeof n.parent !== 'string') continue;
+    if (!kids.has(n.parent)) kids.set(n.parent, []);
+    kids.get(n.parent).push(n);
+  }
+  const all = [];
+  const seen = new Set();
+  const walk = (n) => {
+    if (!n || seen.has(n.id)) return;
+    seen.add(n.id);
+    all.push(n);
+    for (const c of kids.get(n.id) ?? []) walk(c);
+  };
+  walk(nodes.find((n) => n.id === node?.id) ?? node);
+  const c = soonestCountdown(all, now);
+  if (!c) return cap;
+  const own = c.node.id === node?.id;
+  const row = {
+    kind: 'countdown',
+    step: 'line',
+    label: clipLabel(c.label ?? 'next'),
+    name: own ? '' : String(c.node.label ?? c.node.id).toUpperCase(),
+    at: c.at,
+    ...(own ? {} : { id: c.node.id }),
+  };
+  const lines = cap.lines ?? [];
+  let at = 0;
+  lines.forEach((l, i) => { if (l.step === 'hero' || HEAD_KINDS.has(l.kind)) at = i + 1; });
+  return { ...cap, lines: [...lines.slice(0, at), row, ...lines.slice(at)].slice(0, MAX_LINES) };
+}
+
+const clipLabel = (s) => {
+  const t = String(s).replace(/\s+/g, ' ').trim();
+  return t.length > MAX_TEXT ? `${t.slice(0, MAX_TEXT - 1).trimEnd()}…` : t;
+};
+
 /**
  * Whether the plate on screen takes the words of a newer model at once
  * (night 3 T24, reviews/r31-film-ui.md touch 1; A4): `was` the caption shown,
@@ -244,6 +298,10 @@ export function staleCaption(cap, fresh) {
 export function plateFollows(was, now) {
   if (!was || !now) return false;
   if (now.sheet) return JSON.stringify(was) !== JSON.stringify(now);
+  // A countdown that moved on (the job ran, the next run is due) is taken at once too (T53), or the
+  // plate would count a run that has been.
+  const count = (cap) => JSON.stringify(cap.lines?.find((l) => l.kind === 'countdown') ?? null);
+  if (count(was) !== count(now)) return true;
   const rank = (cap) => SEVERITY.indexOf(cap.lines?.find((l) => l.kind === 'trouble')?.status);
   return rank(now) > rank(was);
 }
@@ -314,9 +372,10 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
   // A sheet's step from the tapped thing to its worst member, while it waits (T25).
   let stepTimer = null;
   const unstep = () => { if (stepTimer != null) { timers.clearTimeout(stepTimer); stepTimer = null; } };
-  const captionFor = (leg, node) => staleCaption(leg.sheet
+  // The held thing's soonest countdown after the trouble lines (T53), then the feed's grey line.
+  const captionFor = (leg, node) => staleCaption(countdownCaption(leg.sheet
     ? sheetCaption(node, latest)
-    : galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node'), feedState);
+    : galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node'), node, latest, now()), feedState);
   // The held node, the hero's and the lock's target from `cap`; the line fed again.
   const aim = (node, cap) => {
     const target = lockTarget(node, latest);

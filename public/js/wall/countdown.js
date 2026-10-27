@@ -68,3 +68,21 @@ export function countdownLine(node, now, opts) {
   if (!t) return null;
   return { text: c.label ? `${c.label} ${t.text}` : t.text, phase: t.phase };
 }
+
+/**
+ * The countdown a held place speaks for (night 4 T53): of `nodes` (the held
+ * thing and everything in it), an overdue one first, the longest overdue
+ * leading (late is news, README §7.C), else the soonest; a tie keeps the
+ * order given. `{ node, at, label }`, or null when none carries one. Pure.
+ */
+export function soonestCountdown(nodes, now) {
+  let best = null;
+  for (const node of nodes ?? []) {
+    const c = countdownOf(node);
+    if (!c) continue;
+    const late = Number.isFinite(now) && c.at <= now;
+    const bestLate = best && Number.isFinite(now) && best.at <= now;
+    if (!best || (late && !bestLate) || (late === bestLate && c.at < best.at)) best = { node, ...c };
+  }
+  return best;
+}

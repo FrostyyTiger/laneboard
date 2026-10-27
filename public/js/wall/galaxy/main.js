@@ -532,6 +532,7 @@ export function boot() {
       aim(parkedOverview(overviewShot(w.sites), w.sites, now));
     }
     if (sweep) runSweep(now, at);
+    caption.tick(Date.now()); // the plate's countdown, `m:ss` while held (T53): written only when its second turns
     galaxy.setSun(sunLook(lastFrameAt == null ? null : Date.now() - lastFrameAt, { still: reduced }));
     galaxy.frame(now);
     cam.drawn();

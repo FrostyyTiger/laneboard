@@ -24,6 +24,7 @@
 
 import { SEVERITY, TROUBLE, byIdOf, kidsOf, rollup } from '../views/map/model.js';
 import { statusStyle } from '../views/map/overlays.js';
+import { countdownText } from './countdown.js';
 
 /** Never more lines than this under the name (README §3: 3-6). */
 export const MAX_LINES = 6;
@@ -400,12 +401,28 @@ function el(tag, cls, text) {
   return e;
 }
 
-function lineEl(line) {
+// A countdown row's clock (night 4 T53): held, so `m:ss`, the only seconds on the Wall (Q17).
+const countWords = (at, now) => countdownText(at, now, { held: true }) ?? { text: '', phase: 'far' };
+
+function lineEl(line, now, counts = null) {
   const li = el('li', 'wall-caption-line');
   li.dataset.kind = line.kind;
   li.dataset.step = line.step ?? 'line';
   // The node a row names, so a finger on the row can open it (Wall night 4 T1).
   if (typeof line.id === 'string') li.dataset.subject = line.id;
+  if (line.kind === 'countdown') {
+    // The job's label as the key, the thing it runs on and its clock (the galaxy's hud.js countdownCaption).
+    li.append(el('span', 'wall-caption-key', line.label));
+    const val = el('span', 'wall-caption-val');
+    if (line.name) val.append(el('span', null, `${line.name} · `));
+    const t = countWords(line.at, now);
+    const clock = el('span', 'wall-caption-count', t.text);
+    li.dataset.phase = t.phase;
+    counts?.push({ at: line.at, li, clock, text: t.text });
+    val.append(clock);
+    li.append(val);
+    return li;
+  }
   if (line.kind === 'metrics') {
     for (const b of line.bars) {
       const cell = el('span', 'wall-caption-metric');
@@ -448,9 +465,11 @@ function lineEl(line) {
  * caption)` builds and plays it for a tour leg (a `sheet` caption comes in
  * whole with the plate, untyped), `hide()` fades it out and
  * cancels what had not played yet, `refresh(caption)` sets new words on the
- * plate up now at once (false when none is up). `timers` is injectable.
+ * plate up now at once (false when none is up), `tick(now)` moves a
+ * countdown row's `m:ss` on (night 4 T53; the galaxy calls it each frame,
+ * it writes only when a second turns). `timers` and `now` are injectable.
  */
-export function createCaption(root, { timing = CAPTION_TIMING, timers = globalThis } = {}) {
+export function createCaption(root, { timing = CAPTION_TIMING, timers = globalThis, now = () => Date.now() } = {}) {
   const plate = el('section', 'wall-caption');
   plate.setAttribute('aria-live', 'polite');
   const kicker = el('div', 'wall-caption-kicker');
@@ -485,6 +504,8 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
   // The node the trouble word names (night 4 T1: a finger on it opens it).
   let heroSubject = null;
   let uncover = null;
+  // The countdown rows on the plate (T53): `{ at, li, clock, text }` (lineEl), rewritten by `tick` when a second turns.
+  let counts = [];
   const later = (ms, fn) => {
     const t = timers.setTimeout(() => { pending.delete(t); fn(); }, Math.max(0, ms));
     pending.add(t);
@@ -548,7 +569,9 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     // A sheet is never typed (T25): no cursor, even before its plate fades in.
     cursor.hidden = Boolean(cap.sheet);
     cursor.classList.remove('is-blink');
-    list.replaceChildren(...rows.map(lineEl));
+    const t = now();
+    counts = [];
+    list.replaceChildren(...rows.map((l) => lineEl(l, t, counts)));
     plate.dataset.status = cap.status;
     plate.style.height = '';
     // Where the plate stands once every row is in, read once a leg: the map's
@@ -628,6 +651,22 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     return true;
   };
 
+  // The countdown's clock (T53), called each frame: the words are worked out and written only when
+  // the second turns, nothing at all while no countdown row is on the plate.
+  const tick = (t = now()) => {
+    if (!counts.length || !Number.isFinite(t)) return;
+    for (const c of counts) {
+      const sec = Math.floor((t - c.at) / 1000);
+      if (sec === c.sec) continue;
+      c.sec = sec;
+      const w = countWords(c.at, t);
+      if (w.text === c.text) continue;
+      c.text = w.text;
+      if (c.clock) c.clock.textContent = w.text;
+      if (c.li.dataset.phase !== w.phase) c.li.dataset.phase = w.phase;
+    }
+  };
+
   /** The plate as a Map cover while it is on screen, else null (T24). */
   const cover = () => (covering ? box : null);
   /** Where a leader to the trouble node leaves the plate while it shows a trouble word, else null (T25). */
@@ -653,5 +692,5 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     return out.filter((t) => t.box);
   };
 
-  return { show, hide, refresh, cover, leaderFrom, targets, el: plate };
+  return { show, hide, refresh, tick, cover, leaderFrom, targets, el: plate };
 }
