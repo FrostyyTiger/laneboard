@@ -476,7 +476,19 @@ Notes for every builder round (planner, round 1):
   (`role=explore`): the overview held for 36 s, no tour, the banner updating (HV1 crit at 36 s); 11.8 fps under
   SwiftShader ×4, worst gap 347 ms, 0 errors. Seen: the explore overview does not turn (only the tour's legs move
   the camera), so a person's screen stands still until a finger moves it.
-- [ ] T43 (§7 Night 4 E1; promoted from Later by the watcher on 2026-10-27, before the merge) (night 3's E; r43-stranger 1, 6) `docs/wall.md`: what it is, a tablet in kiosk mode, the URL switches `?demo`, `?pace`, `?fx` (each effect and what it means), `?perf`, `?at`, `?open`, `?quality`, `?role`, `?show`, the feed fields `glow`/`ring`/`countdown`, touch and how to stop the tour; `docs/map.md` says which page paints `glow`/`ring`; a Wall row in README's views table. — done when: `docs/wall.md` exists with every switch, and README's views table has the Wall row
+- [x] T43 (§7 Night 4 E1; promoted from Later by the watcher on 2026-10-27, before the merge) (night 3's E; r43-stranger 1, 6) `docs/wall.md`: what it is, a tablet in kiosk mode, the URL switches `?demo`, `?pace`, `?fx` (each effect and what it means), `?perf`, `?at`, `?open`, `?quality`, `?role`, `?show`, the feed fields `glow`/`ring`/`countdown`, touch and how to stop the tour; `docs/map.md` says which page paints `glow`/`ring`; a Wall row in README's views table. — done when: `docs/wall.md` exists with every switch, and README's views table has the Wall row (commit 36735ee)
+  Builder r49: `docs/wall.md` (what it is, the two pages, what you see, touch with how to stop and give back the
+  tour, a tablet in kiosk mode, a table of every switch `main.js`/`variants.js`/`type.js` parse incl. `?ratio`,
+  `?showOrigins`, `?mm`, `?variant`, the five effects with what each means, the feed fields and who paints each);
+  `docs/map.md`'s extras bullet adds `countdown` and says `glow`/`ring` are `wall.html`'s, `countdown` the galaxy's;
+  README: a **Wall** `/galaxy.html` row in the views table and `docs/wall.md` in the docs table.
+  `test/wall-docs.test.mjs` (5) checks the switch rows, `FX_NAMES`, `ROLES`, `VARIANTS`, kiosk/touch sections and
+  the README and map.md rows. Left for T44: D10 (the director), the show message shape, a parser-driven switch list.
+  Found, for T45: the WebGL fallback (`fallback.js`) sends `wall.html?variant=islands-tiles`, but `islands-tiles`
+  is not in `variants.js VARIANTS`, so `pickVariant` falls back to radial: a browser without WebGL gets radial,
+  not the trouble tiles (`test/wall-tiles.test.mjs` checks only the href). The kiosk section names Edge's
+  `--kiosk … --edge-kiosk-type=fullscreen`, Android screen pinning and iPad Guided Access from general knowledge,
+  untested on a device here.
 - [ ] T44 (§7 Night 4 E2; promoted from Later by the watcher on 2026-10-27, before the merge) `docs/wall.md` covers D10 (the director, who drives), the show messages and `countdown`; every feature has demo data (product §3.2): a test lists the switches in `docs/wall.md` against the page's parsers. — done when: a test lists the switches in `docs/wall.md` against the page's parsers and passes
 - [ ] T45 (§7 Night 4 E3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] (night 3's E; r43-stranger 2, 6) A web manifest for the galaxy (`start_url: "/galaxy.html"`, fullscreen, landscape) if it fits the guardrails, and `wall.html?variant=galaxy` opens `galaxy.html` instead of falling back to radial (an "unknown variant" note on the tag for other names). — done when: `wall.html?variant=galaxy` opens the galaxy (test), the manifest validates
 - [ ] T46 (§7 Night 4 E4; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `wall.html` (radial, the default) gets one filmstrip, since night 3 changed the shared `caption.js`, `tour.js` and `frame.js`; fix what it shows broken. The morning report lists what a reviewer should read first and what reaches outside the galaxy (`public/css/tokens.css --tex-vignette`). — done when: a `wall.html` filmstrip, and what it showed broken is fixed with tests
