@@ -643,6 +643,10 @@ await startModules(modules, ctx);
 
 // The one box (D128): with `cockpit.agent` this process is also the room, on
 // the board's ctx, after the board's own modules.
-if (config.cockpit?.agent) await (await import('./cockpit.mjs')).startRoom(ctx);
+if (config.cockpit?.agent) {
+  const room = await (await import('./cockpit.mjs')).startRoom(ctx);
+  // Ahead of the board's own hooks: the agent child and the links end first.
+  if (room) shutdownHooks.unshift(() => room.stop());
+}
 
 log.info(`laneboard up, pid ${process.pid}`);

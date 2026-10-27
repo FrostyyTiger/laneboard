@@ -122,7 +122,7 @@ test('clock: real mode runs timers in real time; switching to manual holds them,
 
 // --- the fault hooks --------------------------------------------------------
 
-test('faults: no-ops by default; setFaults installs the three points; null removes them', () => {
+test('faults: no-ops by default; setFaults installs the points; null removes them', () => {
   const sock = fakeSocket();
   assert.equal(faults.atUpgrade({}, sock), false);
   assert.equal(faults.atInbound({ type: 'prompt' }), false);
@@ -143,6 +143,7 @@ test('faults: no-ops by default; setFaults installs the three points; null remov
   } finally {
     faults.setFaults(null);
   }
+  faults.atConnection({ atMs: 1, accepted: true, closeCode: null }); // no hook: nothing happens
   assert.equal(faults.atInbound({ type: 'prompt' }), false);
   assert.throws(() => faults.setFaults({ upgrade: 1 }), /upgrade must be a function/);
 });
@@ -278,10 +279,25 @@ test('§1.2 a bad body is 400 bad-body with its detail', async () => {
   }
 });
 
+test('§1.2 GET /connections: every upgrade the link reported, oldest first, closeCode as the link last set it', async () => {
+  const { c } = setup();
+  assert.deepEqual(await c.handle('GET', '/connections'), { status: 200, body: { items: [] } });
+  const at = Date.parse('2026-10-27T07:01:01.123+01:00');
+  const first = { atMs: at, accepted: true, closeCode: null };
+  c.hooks.connection(first);
+  c.hooks.connection({ atMs: at + 500, accepted: false, closeCode: 4403 });
+  first.closeCode = 1000; // the link closed later
+  const r = await c.handle('GET', '/connections');
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body.items, [
+    { at: '2026-10-27T07:01:01+01:00', atMs: at, accepted: true, closeCode: 1000 },
+    { at: '2026-10-27T07:01:01+01:00', atMs: at + 500, accepted: false, closeCode: 4403 },
+  ]);
+});
+
 test('§1.2 the rows that wait for a later build answer 404 unknown-verb', async () => {
   const { c } = setup();
   const waiting = [
-    ['GET', '/connections', undefined], // T14: needs the link's upgrade checks and close codes
     ['GET', '/sent', undefined], // T14: needs the link's seq and outbound log
     ['POST', '/pair', { code: 'K7M4QX', name: 'desk' }], // pairing (`laneboard cockpit pair`, §1.3)
     ['POST', '/unpair', { name: 'desk' }], // pairing
@@ -307,7 +323,7 @@ test('control server: JSON over loopback, a bad JSON body is 400', async () => {
     r = await fetch(`http://${addr}/drop`, { method: 'POST', body: '{nope' });
     assert.equal(r.status, 400);
     assert.deepEqual(await r.json(), { error: 'bad-body', detail: 'not JSON' });
-    r = await fetch(`http://${addr}/connections`);
+    r = await fetch(`http://${addr}/sent`);
     assert.equal(r.status, 404);
   } finally {
     await c.close();

@@ -8,9 +8,10 @@
 //   const address = await control.listen();  // '127.0.0.1:<port>'
 //   await control.handle('POST', '/clock', { mode: 'manual' });  // {status, body}
 //
-// Verbs served now: /clock, /tick, /link, /drop. The rest wait for the build
-// that gives them something to act on and answer 404 unknown-verb until then
-// (B19): /connections and /sent (T14, the link's close codes and seq),
+// Verbs served now: /clock, /tick, /link, /drop, /connections (T13: the link
+// reports each upgrade through the `connection` hook). The rest wait for the
+// build that gives them something to act on and answer 404 unknown-verb until
+// then (B19): /sent (T14, the link's seq and outbound log),
 // /pair, /unpair (pairing), /button (C2b), /jobs (Jobs), /alarms (the watcher).
 import http from 'node:http';
 import { freePort } from '../../helpers/boot.mjs';
@@ -40,6 +41,7 @@ export function createRoomControl({ clock, timeZone = 'UTC' } = {}) {
   const links = new Set(); // sockets of upgrades let through, while open
   let dropPrompts = 0;
   const dropOut = new Map(); // type -> how many more to drop
+  const connections = []; // the link's records, oldest first: {atMs, accepted, closeCode}
 
   const hooks = {
     // /link {"up":false}: every new upgrade and every /api/cockpit/* request
@@ -62,6 +64,10 @@ export function createRoomControl({ clock, timeZone = 'UTC' } = {}) {
         return true;
       }
       return false;
+    },
+    // Each upgrade the link decided on; the link updates `closeCode` at its close.
+    connection(rec) {
+      connections.push(rec);
     },
     outbound(msg) {
       if (up === 'silent') return true;
@@ -114,6 +120,10 @@ export function createRoomControl({ clock, timeZone = 'UTC' } = {}) {
       links.clear();
       for (const s of open) s.destroy();
       return { status: 200, body: { up: false, closed: open.length } };
+    },
+    async 'GET /connections'() {
+      const items = connections.map((r) => ({ at: isoInZone(r.atMs, timeZone), atMs: r.atMs, accepted: r.accepted, closeCode: r.closeCode }));
+      return { status: 200, body: { items } };
     },
     async 'POST /drop'(body) {
       onlyKeys(body, ['what', 'type']);

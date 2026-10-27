@@ -22,8 +22,11 @@ import { log } from '../log.mjs';
 import { DEFAULT_CWD, fillPath, startLines } from '../config/cockpit.mjs';
 import { auditFile } from '../fleet/paths.mjs';
 import { agentWalk, fileProblems, lookupAgent, secretPaths } from '../cockpit/start-check.mjs';
-import { readSessionFile } from '../cockpit/session.mjs';
+import { createSession, readSessionFile } from '../cockpit/session.mjs';
 import { createStore } from '../cockpit/store.mjs';
+import { createLink } from '../cockpit/link.mjs';
+import { roomSecrets } from '../cockpit/redact.mjs';
+import { openAudit } from '../fleet/audit.mjs';
 import * as roomClock from '../cockpit/clock.mjs';
 
 /** The room's path on the page's origin, on both sides (D93). Not a config key. */
@@ -59,8 +62,50 @@ export async function startRoom(ctx = null, opts = {}) {
   store.retain(started);
   store.every();
   log.info(`cockpit: conversation ${loaded.conversation ?? '(new)'} with ${loaded.turns.length} turns`);
+  // screens.md §6.4 (D164): the board's audit log on one box (its one
+  // openAudit instance), the room's own file when it runs alone. A log that
+  // cannot be opened refuses every prompt (D166), it does not stop the room.
+  const ownAudit = ctx.audit ? null : openRoomAudit();
+  const audit = ctx.audit ?? ownAudit;
+  const env = opts.env ?? process.env;
+  // B84: the link is the session's `emit`; the store folds every message,
+  // begins the first conversation, and seeds the turn counter and the
+  // once-only memory from what it loaded.
+  let link = null;
+  const session = createSession({
+    stateDir: config.stateDir,
+    emit: (msg) => link.emit(msg),
+    log: say,
+    cutTurn: loaded.cutTurn,
+    onConversation: (rec, reason) => store.begin({ conversation: rec.conversation, startedAt: rec.startedAt, reason: reason ?? 'first' }),
+    bridge: {
+      agent, stateDir: config.stateDir, env, mcpToken: null, turnCounter: loaded.lastTurn,
+      secrets: roomSecrets({ sttTokenFile: config.cockpit.stt?.tokenFile ?? null }),
+    },
+  });
+  link = createLink({ session, store, audit, config, log: say, clientIds: loaded.clientIds });
+  ctx.upgrade((req, socket, head, url) => link.handleUpgrade(req, socket, head, url));
+  session.start();
   log.info(`cockpit: room up (agent ${agent.kind}, cwd ${cwd})`);
-  return { cwd, store, loaded, stop: async () => { store.close(); } };
+  return {
+    cwd, store, loaded, session, link,
+    stop: async () => {
+      link.close();
+      store.close();
+      await session.close();
+      try { ownAudit?.close(); } catch { /* already closed */ }
+    },
+  };
+}
+
+/** The room alone's audit log (screens.md §6.4: `$LANEBOARD_AUDIT_FILE`, else the state default). */
+function openRoomAudit() {
+  try {
+    return openAudit({ file: auditFile(), builder: config.fleet?.id ?? null });
+  } catch (err) {
+    log.error(`cockpit: cannot open the audit log (${err?.code ?? err?.message}); every prompt is refused until the room restarts`);
+    return null;
+  }
 }
 
 let prepared = false;

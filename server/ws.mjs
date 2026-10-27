@@ -4,6 +4,7 @@ import { config } from './config.mjs';
 import { log } from './log.mjs';
 import { VERSION } from './version.mjs';
 import { localKey } from './fleet/keys.mjs';
+import { cockpitConfigured } from './config/cockpit.mjs';
 import * as state from './state.mjs';
 
 const wss = new WebSocketServer({ noServer: true });
@@ -99,14 +100,19 @@ export function stamp(msg, s = seq) {
   return { ...msg, builder: config.fleet?.id ?? null, seq: s };
 }
 
-/** The first frame on every /ws connection (README §3.4). */
-export function helloMessage() {
+/**
+ * The first frame on every /ws connection (README §3.4). `cockpit` (D93, D17,
+ * D129): true when this process is a room (`cockpit.agent`) or its front
+ * forwards to one (`cockpit.forwarded`); the page draws the button from it.
+ */
+export function helloMessage(cfg = config) {
   return {
     type: 'hello',
-    builder: { id: config.fleet?.id ?? null, code: config.fleet?.code ?? null },
-    mode: config.mode ?? 'builder',
+    builder: { id: cfg.fleet?.id ?? null, code: cfg.fleet?.code ?? null },
+    mode: cfg.mode ?? 'builder',
     version: VERSION,
     apiVersion: 1,
+    cockpit: cockpitConfigured(cfg),
   };
 }
 

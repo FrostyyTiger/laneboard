@@ -530,3 +530,56 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   lines are read, kept and trimmed by `at` (the Speak slice writes them) — because a half-valid
   turn would reach every screen's snapshot — spec: `protocols.md` §11.7.1 step 1 — overrule:
   `parseLine()`.
+- B92 (T13) An upgrade the board classified as anything but `local` or `direct` (a `hub` kind, no
+  or an unissued classification) closes 4401 `unpaired` — because D212 makes the board's
+  classification the C1 credential and §2.3's code for "no credential the room takes" is 4401 —
+  spec: `security.md` §2.3, `protocols.md` §2.3 — overrule: `linkRefusal()` in
+  `server/cockpit/link-checks.mjs` (review-required).
+- B93 (T13) T13's link: upgrade checks, `hello`, `welcome` (always `resume: snapshot`), the
+  snapshot in parts (D140, greedy by turns, an oversize turn cut as §2.2 says), every session
+  message numbered and sent to links past their `welcome`, `prompt`/`stop`/`new`, close 4002 on
+  another protocol. T14 brings the replay after a gap, the heartbeat and ping, silence, 4001, 4408,
+  4413, 4429, `GET /sent`. `GET /connections` is built now (S-SEC-06 reads it) through a fourth
+  fault hook, `atConnection(rec)`; an upgrade the board's guard refuses (403 before the room sees
+  it) is no entry — because S-SEC-06 needs the log and T14's list is the rest of §2.2-§2.3 — spec:
+  `protocols.md` §2.2, `stand-ins.md` §1.2 — overrule: none; T14 builds on `server/cockpit/link.mjs`.
+- B94 (T13) The `cockpit.prompt` audit line is T13's (S-SEC-06 asserts it):
+  `server/cockpit/audit-lines.mjs` `promptLine()`, the accepted line, the `agent-down` refusal and
+  `audit-unavailable` (D166, nothing to the agent); `cockpit.stop`, `cockpit.new` and D165's bounded
+  `too-many` refusals stay T30's. The line names the turn before the prompt goes: the running
+  turn's id (`queued`), else the bridge's counter + 1 — because §6.4 writes the line "before the
+  `turn.prompt` echo" and D166 needs it before the agent; a stdin write that then fails (§11.9)
+  leaves the ok line and answers `prompt.refused` `agent-down` — spec: `screens.md` §6.4,
+  `protocols.md` §3.1 — overrule: `prompt()` in `link.mjs`. The room alone opens its own
+  `openAudit` (`LANEBOARD_AUDIT_FILE`, else the state default); one that cannot open refuses every
+  prompt and does not stop the room.
+- B95 (T13) Without pairing the screen's name is `board` in `welcome.screen` and `turn.prompt.screen`
+  (so in the agent's about line too) — because `welcome.screen` is required, `board` is the audit
+  `user` of the same links (§6.4) and C1 draws no names (D37) — spec: `protocols.md` §2.2,
+  `security.md` §2.3 — overrule: `SCREEN_NAME` in `link.mjs`.
+- B96 (T13) `welcome.lookedAt` is the room's `now` while the room has no `focus` of that screen
+  (no `looked.json` in C1): nothing counts as new on a screen the room never saw closed — because
+  the field is required and "since you looked" needs a look — spec: `protocols.md` §2.2,
+  `c1-talk.md` §2.1 — overrule: `hello()` in `link.mjs` (or the conversation's `startedAt`).
+- B97 (T13) Frames before the `hello` are dropped unread; a message without a link `seq` ≥ 1 (so no
+  `re` to name) is dropped unanswered; a second `hello` is `error` `not-now`; binary frames are
+  dropped until C2 — because `error.re` is required and §2.2 makes `hello` the first frame — spec:
+  `protocols.md` §2.1-§2.3 — overrule: `onFrame()` in `link.mjs`.
+- B98 (T13) Valid screen messages of later tasks and slices (`focus`, `history`, `touched`,
+  `show.*`, `pin.*`, `card.*`, `audio.*`, …) are accepted and change nothing yet — because they are
+  known types (no `unknown-type`) whose state the link does not hold — spec: `protocols.md` §2.4 —
+  overrule: none; each task adds its case to `onFrame()`.
+- B99 (T13) `startRoom()` now starts the session (B61, B77 end): every room start spawns the agent;
+  a room test without `FAKE_AGENT_DIR` sees the fake exit 2 and the §11.7 restart schedule (no
+  test asserts against it); the room's `stop()` runs ahead of the board's hooks on the one box;
+  `mcpToken` is `null` until T35; `cockpit.allowInsecure` is read as exactly `true` and is no
+  config key yet (the pairing task adds the key and its fatal line); text frames over 1 MiB are
+  closed by `ws` (1009) until T14's 4413 — because the link needs a session behind it and those
+  keys belong to their own tasks — spec: `protocols.md` §11.7, `screens.md` §6.2.1 — overrule:
+  `startRoom()` in `server/boot/cockpit.mjs`.
+- B100 (T13) Hooks added for the wiring: `createBridge({turnCounter})` (B84's counter from
+  `lastTurn`), `createSession({onConversation, cutTurn})` and `session.startedAt`; the store begins
+  the first conversation from `onConversation` (reason `first`); `welcome.conversation` before the
+  first `ready` is the store's, else the session's, else `c-0001` (what the session then makes) —
+  because B84 left these to T13 and session.mjs emits no `conversation.new` for the first —
+  spec: `protocols.md` §11.7, §11.7.1 — overrule: the options in `bridge.mjs`/`session.mjs`.

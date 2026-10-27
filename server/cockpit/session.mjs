@@ -17,7 +17,10 @@
 // opts: `bridge` (the createBridge() options; `emit`, `log` are shared),
 // `stateDir`, `emit(msg)`, `log(line)`, `condition(code, fields | null)` (a
 // status condition set or cleared; by default a `status` message, T28 brings
-// the arbiter of §3.5), `createBridge` (injectable).
+// the arbiter of §3.5), `createBridge` (injectable), `onConversation(rec,
+// reason)` (a conversation was written to session.json at a `ready`: `reason`
+// null for the first, `owner`, `forced`; the store begins it, B84), `cutTurn`
+// (the room went down mid-turn: `agent-back` at the first ready, §11.7.1 step 3).
 //
 // The conversation's turns on disk (`conversation.jsonl`, §11.7.1) are T12's;
 // this module keeps only session.json.
@@ -86,6 +89,7 @@ export function writeSessionFile(stateDir, rec) {
 export function createSession(opts) {
   const {
     stateDir, emit = () => {}, log = () => {}, createBridge = realCreateBridge,
+    onConversation = () => {},
   } = opts;
   const condition = opts.condition ?? ((code, fields) => emit({
     type: 'status', status: fields === null ? null : { code, since: isoAt(clock.now()), ...fields },
@@ -102,7 +106,7 @@ export function createSession(opts) {
   let resumeFails = 0;
   let downSince = null;
   let downShown = false;
-  let cutTurn = false; // an exit cut a turn (E2): `agent-back` at the next ready
+  let cutTurn = opts.cutTurn === true; // an exit cut a turn (E2): `agent-back` at the next ready
   let stopping = null; // {turnId, timers[]}
   let renewing = null; // {timers[], waitTurn}
   let restartTimer = null;
@@ -185,6 +189,7 @@ export function createSession(opts) {
       current = { conversation, session: asked?.session ?? ev.session, startedAt: isoAt(clock.now()) };
       try { writeSessionFile(stateDir, current); } catch (err) { log(`cockpit session: cannot write session.json: ${err.code ?? err.message}`); }
       log(`cockpit session: ${conversation} on session ${current.session}${reason ? ` (${reason})` : ''}`);
+      onConversation(current, reason);
       if (reason) emit({ type: 'conversation.new', conversation, reason, at: current.startedAt });
       want = { resume: true, reason: null };
     }
@@ -384,5 +389,6 @@ export function createSession(opts) {
     get phase() { return phase; },
     get conversation() { return current?.conversation ?? null; },
     get session() { return current?.session ?? null; },
+    get startedAt() { return current?.startedAt ?? null; },
   };
 }

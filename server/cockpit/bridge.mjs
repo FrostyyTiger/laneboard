@@ -35,7 +35,8 @@
 // condition the bridge sets: a refused start's `agent-down`), `restartOnKill`
 // (default true: the bridge resumes a child it killed itself for §11.9, B61;
 // the session supervisor, server/cockpit/session.mjs, passes false and
-// restarts every child itself, T11).
+// restarts every child itself, T11), `turnCounter` (the last turn number of
+// the conversation on disk, so the next turn goes on from it: §11.7.1 step 6).
 import { spawn as nodeSpawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
@@ -160,7 +161,7 @@ export function createBridge(opts) {
   const stderrLines = [];
   let interruptCounter = 0;
   let agentEnds = 0; // every turn.end the agent sent, shown or dropped (§11.6 8.0 s)
-  let turnCounter = 0;
+  let turnCounter = Number.isSafeInteger(opts.turnCounter) && opts.turnCounter > 0 ? opts.turnCounter : 0;
   let turn = null;
   // Prompts written (or held for a session that cannot steer), by bridge id.
   const prompts = new Map();

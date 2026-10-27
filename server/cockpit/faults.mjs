@@ -13,14 +13,18 @@
 //   atOutbound(msg, link)          each outbound message, after its `seq` was
 //                                  given; `link` null for one sent to every
 //                                  link; true = send it to no link (B18)
+//   atConnection(rec)              each upgrade the link saw, once decided:
+//                                  `rec` {atMs, accepted, closeCode}, the
+//                                  link sets `closeCode` again at its close
+//                                  (stand-ins.md §1.2 `GET /connections`)
 
 const NONE = Object.freeze({});
 let hooks = NONE;
 
-/** Install `{upgrade?, inbound?, outbound?}` (null: back to none). */
+/** Install `{upgrade?, inbound?, outbound?, connection?}` (null: back to none). */
 export function setFaults(h) {
   if (h !== null && (typeof h !== 'object' || Array.isArray(h))) throw new TypeError('setFaults: hooks must be an object or null');
-  for (const k of ['upgrade', 'inbound', 'outbound']) {
+  for (const k of ['upgrade', 'inbound', 'outbound', 'connection']) {
     if (h?.[k] !== undefined && typeof h[k] !== 'function') throw new TypeError(`setFaults: ${k} must be a function`);
   }
   hooks = h ?? NONE;
@@ -29,3 +33,4 @@ export function setFaults(h) {
 export const atUpgrade = (req, socket, kind = 'ws') => hooks.upgrade?.(req, socket, kind) === true;
 export const atInbound = (msg, link = null) => hooks.inbound?.(msg, link) === true;
 export const atOutbound = (msg, link = null) => hooks.outbound?.(msg, link) === true;
+export const atConnection = (rec) => { hooks.connection?.(rec); };
