@@ -287,13 +287,20 @@ Notes for every builder round (planner, round 1):
   tour; a show under the finger refused `busy`, under the tour it takes the camera and gives it back; largest
   frame-to-frame camera step ≤ 0.22 of its distance, as in plain tour legs: no cut; no console errors) and
   `shots/r28-galaxy` 12.5 fps under SwiftShader ×4 (r25 13.1), worst gap 321 ms, 0 errors.
-- [ ] T15 (§7 Night 4 0b; r46-skeptic fx-warp 1) [ui] [variant:galaxy] `lanes` removed and calm flights quiet: the
+- [x] T15 (§7 Night 4 0b; r46-skeptic fx-warp 1) [ui] [variant:galaxy] `lanes` removed and calm flights quiet: the
   `lanes` code in `galaxy/fx.js` (`siteRoutes` and the pulse), `scene.js`, `main.js`, its tests and the `?fx=` list
   and every mention in docs; under `fx=warp` a flight to a calm site or to the overview draws no streaks (`warpAt`
   returns 0 for `calm`) — done when: `FX_NAMES` has no `lanes`, `grep -rn "lanes" public/js/wall/galaxy` finds no
   effect code (the word may stay for the Map's lane nodes), `?fx=lanes` is ignored without an error, a test pins
   `warpAt(k, 'calm')` at 0, and filmstrips of `galaxy.html?demo=1&quality=0&fx=warp&pace=wall` show streaks only on
-  flights to warn/crit sites.
+  flights to warn/crit sites. (commit ec72e04)
+  Builder r29: `FX_NAMES` is now `comets, twinkle, beacon, warp` (T17 adds `activity` and drops the two); `warpAt`
+  returns zero unless the tone is in `WARP.hued`, so the overview (tone `calm`) is quiet as well; the scene's warp
+  code is otherwise unchanged. `fx.js placeOf` stays (comets, twinkle and beacon use it). The plan README's night 2
+  effect list still names `lanes` as history; left as written. Tests 4149 → 4141 (the lanes tests went, one
+  `lanes is gone` test and the calm/overview warp checks came). Films: `shots/r29-galaxy` (`fx=warp&pace=wall`:
+  red streaks only on the flight to crit HV2, 10.2 fps SwiftShader ×4) and `shots/r29-galaxy-calm`
+  (`fx=lanes,warp`: flights to calm CLOUD and REMOTE draw no streaks, 13 fps, 0 console errors).
 - [ ] T16 (§7 Night 4 0b; README §7 Night 3 D `afterglow`; r46-skeptic touch 4, r59-dreamer 7) [ui] [variant:galaxy]
   `fx=afterglow`: when trouble clears, its cluster keeps a faint outline ring in the old status hue on the plane,
   cooling red → amber → grey and gone after about 30 min; outline only, never filled, never pulsing, quieter than any
