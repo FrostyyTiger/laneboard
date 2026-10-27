@@ -244,9 +244,11 @@ function setLine(line, w) {
  * `clearedLine`), `live(on)` the tag's state (`fresh(f)` with
  * the galaxy's feed state instead, galaxy/fresh.js); the clock runs by
  * itself on `timers` and `now` (injectable). `stop()` ends the clock.
- * `plate(on)` says whether a caption plate is up over the frame (the galaxy's
- * hud.js, night 3 T4): `data-plate` on `root`, and wall.css sets the far line
- * at the plate's name step then, so a trouble frame has one headline.
+ * `plate(tone)` says whether a caption plate is up over the frame and in which
+ * tone (`'crit'`, `'warn'`, `'grey'`; false when none; the galaxy's hud.js,
+ * night 3 T4/T30): `data-plate` on `root`, and wall.css sets the far line at
+ * the plate's name step under a crit plate only, so a trouble frame has one
+ * headline and the worst thing stays the loudest.
  * `update(model, { echo: true })` says the line names the plate's own
  * subject (night 3 T20): `data-echo` on the line, and wall.css drops it
  * while the plate is up (`hushed()`, when it covers nothing).
@@ -357,10 +359,11 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     return farBox;
   };
 
-  // The far line changes size with the plate (wall.css), so its box is read again.
-  const plate = (on) => {
-    if (('plate' in root.dataset) === Boolean(on)) return;
-    if (on) root.dataset.plate = '1';
+  // The far line changes size with the plate's tone (wall.css), so its box is read again.
+  const plate = (tone) => {
+    const t = tone ? (typeof tone === 'string' ? tone : 'grey') : null;
+    if ((root.dataset.plate ?? null) === t) return;
+    if (t) root.dataset.plate = t;
     else delete root.dataset.plate;
     farDirty = true;
   };

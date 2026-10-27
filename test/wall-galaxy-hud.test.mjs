@@ -274,7 +274,7 @@ test('not three reds saying one thing (night 3 T20): under the plate the echoing
     assert.equal(frame.hushed(), false, 'and the line its place (no plate yet)');
     assert.ok(hud.fleetCover(), 'the names keep off it in the flight');
     waits.at(-1).fn();
-    assert.equal(root.dataset.plate, '1');
+    assert.equal(root.dataset.plate, 'crit');
     assert.equal(frame.hushed(), true, 'the plate is up: the line is dropped');
     assert.equal(frame.cover(), null, 'and covers nothing');
     assert.equal(hud.fleetCover(), null);
@@ -299,7 +299,7 @@ test('not three reds saying one thing (night 3 T20): under the plate the echoing
     assert.equal(hud.named(), null);
     // A calm system held: no hero, nothing hidden; the line names the crit elsewhere.
     legs[0]({ kind: 'site', id: 'hv1', index: 2, count: 2, arriveMs: 0 });
-    assert.equal(root.dataset.plate, '1');
+    assert.equal(root.dataset.plate, 'grey', 'a calm plate: the crit line elsewhere keeps its 3 m size (T30)');
     assert.equal(frame.hushed(), false);
     assert.equal(hud.named(), null);
   } finally {
@@ -487,7 +487,7 @@ test('one headline per trouble frame (night 3 T4): data-plate on the frame while
     assert.equal('plate' in root.dataset, false, 'in the flight the banner is still the headline');
     assert.equal(waits.at(-1).ms, DEMO_TIMING.flyMs, 'it steps down as the camera arrives with the plate');
     waits.at(-1).fn();
-    assert.equal(root.dataset.plate, '1', 'a system held, its plate up: the banner steps down');
+    assert.equal(root.dataset.plate, 'crit', 'a crit system held, its plate up: the banner steps down');
     pending.shift().fn();
     assert.equal('plate' in root.dataset, false, 'the next flight: the banner again');
     const next = waits.at(-1);
@@ -496,7 +496,7 @@ test('one headline per trouble frame (night 3 T4): data-plate on the frame while
     assert.equal('plate' in root.dataset, false, 'back at the overview');
     // A parked still shows its plate too.
     hud.park({ id: 'lab' });
-    assert.equal(root.dataset.plate, '1');
+    assert.equal(root.dataset.plate, 'crit');
   } finally {
     globalThis.document = prevDoc;
   }
@@ -521,10 +521,10 @@ test('frame.plate reads the far block again: its size changed with the attribute
     assert.equal(frame.cover().bottom, 800);
     h = 120;
     assert.equal(frame.cover().bottom, 800, 'cached while nothing changed');
-    frame.plate(true);
+    frame.plate('crit');
     assert.equal(frame.cover().bottom, 720, 'read again after the plate came');
     h = 200;
-    frame.plate(true);
+    frame.plate('crit');
     assert.equal(frame.cover().bottom, 720, 'the same state twice reads nothing');
     frame.plate(false);
     assert.equal(frame.cover().bottom, 800, 'and again when it goes');
@@ -540,13 +540,58 @@ test('wall.css: with a plate up the far line is set at the caption name step, at
     assert.ok(at >= 0, sel);
     return css.slice(at, css.indexOf('}', at));
   };
-  assert.match(rule('.wall-frame-layer[data-plate] .wall-fleet[data-step="far"] .wall-fleet-line'), /font-size: var\(--cap-name\)/);
+  assert.match(rule('.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-line'), /font-size: var\(--cap-name\)/);
   assert.match(rule('.wall-fleet[data-step="far"] .wall-fleet-line'), /font-size: var\(--fleet-far\)/, 'no plate: the 3 m size');
   // The glyph is in em, so it steps down with the line.
   assert.match(rule('.wall-fleet[data-step="far"] .wall-fleet-glyph'), /font-size: 0\.62em/);
   // The name step lives on the stage, where caption and frame both read it.
   assert.match(rule('.wall-stage'), /--cap-name: 6\.9vmin/);
   assert.match(rule('.wall-caption-name'), /font-size: var\(--cap-name\)/);
+});
+
+// The worst thing is the loudest (night 3 T30, r41-operator galaxy 1): data-plate carries the plate's tone, and
+// only a crit plate steps the crit banner down; under a warn or calm plate it keeps its 3 m size.
+test('T30: data-plate is the plate\'s tone; a warn or calm plate leaves the crit banner at full size', async () => {
+  const { makeDocument, makeEl } = await import('./helpers/fakedom.mjs');
+  const { createFrame } = await import('../public/js/wall/frame.js');
+  const prevDoc = globalThis.document;
+  globalThis.document = makeDocument();
+  try {
+    const root = makeEl('div');
+    const frame = createFrame(root, { timers: { setTimeout: () => 0, clearTimeout() {} } });
+    const { caption } = fakes();
+    const hud = createHud({ caption, frame, timers: { setTimeout: () => 0, clearTimeout() {} } });
+    const m = model();
+    m.nodes.push(
+      { id: 'hv2', parent: '__core', kind: 'site', label: 'hv2', status: 'warn' },
+      { id: 'hv2-b', parent: 'hv2', kind: 'builder', label: 'feat-search', status: 'warn', why: 'slow' },
+    );
+    hud.update(m);
+    assert.equal(frame.el.fleet.dataset.step, 'far', 'lab is crit: the banner is at its far step');
+    hud.park({ id: 'hv2' });
+    assert.equal(root.dataset.plate, 'warn', 'a warn plate under a crit banner');
+    hud.park({ id: 'hv1' });
+    assert.equal(root.dataset.plate, 'grey', 'a calm plate under a crit banner');
+    hud.park({ id: 'lab' });
+    assert.equal(root.dataset.plate, 'crit', 'a crit plate under a crit banner: T4 steps it down');
+    hud.park(null);
+    assert.equal('plate' in root.dataset, false, 'no plate');
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});
+
+test('wall.css (T30): the far line steps down under a crit plate only; the echo drops under any plate', () => {
+  const css = read('css/wall.css');
+  const steps = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*)\{[^}]*font-size: var\(--cap-name\)/g)].map((x) => x[1].trim())
+    .filter((sel) => sel.includes('wall-fleet'));
+  assert.deepEqual(steps, ['.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-line'],
+    'only a crit plate sets the far line at the name step');
+  assert.doesNotMatch(css, /\[data-plate(="warn"|="grey")?\] \.wall-fleet\[data-step="far"\]/, 'a milder plate leaves the 3 m size');
+  // The 3 m size is larger than the plate's name step under a milder plate: 14vmin (fitted, 9 at the least) > 6.9vmin.
+  assert.match(css, /--fleet-far: 14vmin;/);
+  assert.match(css, /--cap-name: 6\.9vmin;/);
+  assert.ok(css.includes('.wall-frame-layer[data-plate] .wall-fleet[data-echo] {'), 'T20 holds under any plate');
 });
 
 // A dead feed, the words (night 3 T5): the tag reads STALE <age>, the next plate says the data is old, in grey.

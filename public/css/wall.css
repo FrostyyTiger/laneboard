@@ -503,10 +503,12 @@ html.wall body {
 }
 /* The shape at the caps' height, as on the plate. */
 .wall-fleet[data-step="far"] .wall-fleet-glyph { font-size: 0.62em; }
-/* One headline per trouble frame (night 3 T4, r54-film-ui 1): while a caption
-   plate is up (galaxy hud.js sets data-plate) its hero is the headline and
-   the far line steps down to the plate's name step, its glyph with it (em). */
-.wall-frame-layer[data-plate] .wall-fleet[data-step="far"] .wall-fleet-line { font-size: var(--cap-name); }
+/* One headline per trouble frame (night 3 T4, r54-film-ui 1): while a crit
+   plate is up (galaxy hud.js sets data-plate to the plate's tone) its hero is
+   the headline and the far line steps down to the plate's name step, its glyph
+   with it (em). The worst thing is the loudest (T30, r41-operator galaxy 1):
+   the far line is crit, so under a warn or calm plate it keeps its 3 m size. */
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-line { font-size: var(--cap-name); }
 /* Not three reds saying one thing (night 3 T20, r11-dreamer galaxy 3): when
    the line would name the plate's own subject (hud.js bannerEcho: no other
    problem to step down to) it drops out while the plate is up, at any step,

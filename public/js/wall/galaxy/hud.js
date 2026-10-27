@@ -241,12 +241,14 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
   let plateOn = false, heroId = null;
   // The feed's state (fresh.js), the last one given.
   let feedState = null;
-  const plate = (on, atMs = 0) => {
+  // `tone` is the plate's ('crit', 'warn', 'grey'; false for none): only a
+  // crit plate steps the crit banner down (T30), a milder one leaves it loudest.
+  const plate = (tone, atMs = 0) => {
     if (plateTimer != null) { timers.clearTimeout(plateTimer); plateTimer = null; }
-    const set = (up) => { plateOn = up; frame.plate?.(up); };
+    const set = (t) => { plateOn = Boolean(t); frame.plate?.(t || false); };
     // The last plate fades as the next leg starts: the banner is the headline again until the camera arrives.
-    set(Boolean(on) && !(atMs > 0));
-    if (on && atMs > 0) plateTimer = timers.setTimeout(() => { plateTimer = null; set(true); }, atMs);
+    set(tone && !(atMs > 0) ? tone : false);
+    if (tone && atMs > 0) plateTimer = timers.setTimeout(() => { plateTimer = null; set(tone); }, atMs);
   };
   const say = (leg) => {
     if (leg?.kind === 'overview' && hold && now() - hold.clearedAt >= CRIT_HOLD.minMs) hold = null;
@@ -260,10 +262,10 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
       // A planet, not the site: a site in trouble itself has the hero say its status (`CRIT`), its name on the plate's name line.
       heroId = heldId !== node.id && cap.lines.some((l) => l.step === 'hero' && l.id === heldId) ? heldId : null;
       feed();
-      plate(true, leg.arriveMs);
-      caption.show(leg, cap);
-      // The brackets take the trouble word's hue (a parked leg has no status of its own).
+      // The brackets and the plate's tone take the trouble word's hue (a parked leg has no status of its own).
       const lead = cap.lines.find((l) => l.kind === 'trouble');
+      plate(lead?.tone ?? 'grey', leg.arriveMs);
+      caption.show(leg, cap);
       // A tapped site (T10) is locked at once (`lockMs` 0, `cut`), the plate still waiting for the camera.
       lock?.lockOn({ ...leg, arriveMs: leg.lockMs ?? leg.arriveMs, node, status: lead?.status ?? leg.status ?? node.status, target });
     } else {
