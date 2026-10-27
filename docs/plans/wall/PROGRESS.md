@@ -542,12 +542,26 @@ Notes for every builder round (planner, round 1):
   `NO CONTACT FOR 17S` lags the banner's `21S` (the plate's text is typed once per leg).
   For the morning report (E4), what reaches outside the galaxy this round: the shared Map's `render.js` and
   `index.js` (`labelClear`, off by default; the fenced Map tests pass unchanged).
-- [ ] T19 (§7 Night 4; r4-film-ui galaxy 1; after T9) [ui] [variant:galaxy] One top step of type while a site is held:
+- [x] T19 (§7 Night 4; r4-film-ui galaxy 1; after T9) [ui] [variant:galaxy] One top step of type while a site is held:
   the banner (`hud.js`, `frame.js`, `wall.css`) may own the top step only at the overview; while a caption holds a site it
   drops to the caption's second-line size (~0.45 of the hero) and becomes one line `■ HV2 · STORAGE · reason  +N`, so the
   caption hero is the only top-step type on screen — done when: a test pins the banner's font size at the overview
   against its size with a held site (held ≤ 0.5 of the hero's, overview unchanged) and a still with a different
-  trouble held shows the hero as the largest type; `wall.html`'s caption tests stay green.
+  trouble held shows the hero as the largest type; `wall.html`'s caption tests stay green. (commit f36f10f)
+  Builder r57: decided, under a **crit** plate only. Under a warn or calm plate the crit banner keeps its 3 m size
+  (night 3 T30, §2.1: the worst thing is the loudest; a calm plate has no hero to compete with). So the hero is the
+  only top-step type whenever its plate is crit. wall.css: `--cap-why: 4.3vmin` on the stage (= `STEPS.why`, the hero's
+  second line, ≤ 0.5 × `STEPS.heroMin` 9), and under `[data-plate="crit"]` the far block is one flex row on a shared
+  baseline: `■ HV2 · STORAGE · POOL 97% FULL  +3 MORE` (the why's `·` is a `::before`; the why is what gets cut; the
+  row keeps to 64vw + padding, so it stays clear of the clock in half a screen too). T9's why-echo now takes the why
+  out of the row (`display: none`), and the count keeps its own 2.4vmin. No JS change but a comment (`frame.js`
+  `plate`); `wall.html` shares the rule. Tests: `test/wall-galaxy-hud.test.mjs` (the T4/T30 CSS tests now pin
+  `--cap-why`; the overview stays `--fleet-far` 14vmin). Stills `shots/r57-t19/` (tool `tools/r57-held.mjs`, which
+  prints every visible text's computed size): `at-lab.png`, with VM-C held and STORAGE in the banner, has the hero at
+  128 px as the largest type and the banner at 39 px on the clock's baseline. `two-why.png` and `two-none.png` show
+  the two-crit row with and without the why. `half-at-lab.png` is 684 px wide. Film `shots/r57-galaxy`: 0 errors,
+  14.5 fps under SwiftShader x4, worst gap 283 ms. Its frames hold no crit (VM-C cleared early in this cycle), so the
+  stills are the evidence. Seen, for T28: the warn banner switches between `FIX-LOGIN` and `FEAT-SEARCH` across legs.
 - [ ] T20 (§7 Night 4; r4-film-ui galaxy 3) [ui] [variant:galaxy] No orphaned leader line: the leader belongs to the plate
   and fades on the plate's opacity curve, first out (drawn last on the way in: plate, leader, lock) — done when: a test
   with a fake clock finds the leader's opacity never above the plate's and 0 once the plate is gone, and a film frame
