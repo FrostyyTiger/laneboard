@@ -55,7 +55,7 @@ function fakeTimers() {
 test('touchStep: tour → easing on a down (wake, swallowed), easing → explore after fitMs', () => {
   const t0 = 10_000;
   const a = touchStep(null, 'down', t0);
-  assert.deepEqual(a, { state: { mode: 'easing', since: t0 }, wake: true, swallow: true });
+  assert.deepEqual(a, { state: { mode: 'easing', since: t0, last: t0 }, wake: true, swallow: true, resume: false });
   assert.equal(touchStep(a.state, 'tick', t0 + TOUCH.fitMs - 1).state.mode, 'easing');
   const b = touchStep(a.state, 'tick', t0 + TOUCH.fitMs);
   assert.equal(b.state.mode, 'explore');
@@ -457,6 +457,7 @@ test('during the tour and the first touch\'s flight, fingers and the wheel move 
   assert.equal(cam.want().kind, 'overview', 'the first touch\'s flight is not interrupted');
   assert.ok(!gestures.busy());
   gestures.stop();
+  touch.stop(); // the touch hears the wheel too, as a touch that keeps the tour away (T14)
   assert.equal(stage.listeners('wheel'), 0);
 });
 
@@ -641,7 +642,7 @@ test('galaxy/main.js wires taps: sites hit-tested in the stage\'s px, a hit flie
   assert.match(js, /hitTest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, labels\.shown\(\)\), x - o\.left, y - o\.top\)/);
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
   assert.match(open, /cam\.focus\(id, TIMING\.zoom\)/);
-  assert.match(open, /hud\.open\(\{[^}]*arriveMs: there \? 0 : FLIGHT\.ms \}\)/);
+  assert.match(open, /hud\.open\(\{[^}]*arriveMs: there \|\| reduced \? 0 : FLIGHT\.ms \}\)/, 'a cut (reduced motion, T14) has its plate at once');
   assert.match(open, /tether\.hide\(\)/);
 });
 

@@ -129,12 +129,23 @@ export function nextLeg(state, nodes, timing = TIMING) {
 }
 
 /**
+ * The tour taken up again after a finger had the page (night 3 T14, README
+ * §7 Night 3 C5): a fresh cycle whose next leg is the worst site of the
+ * order as it is now (trouble first), not the overview the finger just saw
+ * and not whatever calm site was due when it stopped. Pure.
+ */
+export function resumeTour(state, nodes) {
+  return { cycle: (state?.cycle ?? 0) + 1, phase: 'overview', visited: [], count: tourOrder(nodes).length };
+}
+
+/**
  * The driver: runs legs on a timer and moves the map. `map` needs
  * `focus(id, zoom)` and `fit()`; `update(model)` gives it the newest model;
  * `onLeg(cb)` tells later layers (caption, lock) where the camera goes,
  * each site leg with the `zoom` it flies to: `zoomFor(leg)` when the page
  * gives one (a variant whose overview is not the scale its holds want),
- * else the timing's. `timers` is injectable for tests.
+ * else the timing's. `resume()` starts a stopped tour again at `resumeTour`'s
+ * next leg (T14). `timers` is injectable for tests.
  */
 export function createTour(map, { timing = TIMING, timers = globalThis, zoomFor = null } = {}) {
   let nodes = [];
@@ -164,6 +175,12 @@ export function createTour(map, { timing = TIMING, timers = globalThis, zoomFor 
     update: (model) => { nodes = Array.isArray(model?.nodes) ? model.nodes : []; },
     start: () => {
       if (running) return;
+      running = true;
+      step();
+    },
+    resume: () => {
+      if (running) return;
+      state = resumeTour(state, nodes);
       running = true;
       step();
     },

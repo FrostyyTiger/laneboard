@@ -22,6 +22,9 @@
 // `still` (reduced motion, T11, still.js): the camera never leaves the
 // overview; `focus`/`fit` only say where the tour is (the
 // caption and lock follow it), and every system stays folded.
+// `cut(id, zoom)` (night 3 T14, a finger's tap in reduced motion): the camera
+// is on the site's shot from the next frame, no flight and no drift, the
+// system open at once; `fit()` cuts back to the overview, folded at once.
 //
 // `flightPose` and `openStep` are pure (test/wall-galaxy-camera.test.mjs);
 // `createGalaxyCamera` is the small part that moves the scene's camera.
@@ -205,13 +208,13 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     return home;
   };
   const target = (now) => {
-    if (still) return overview(now);
+    if (still && !want.cut) return overview(now);
     if (want.kind === 'free') return want.pose;
     if (want.kind === 'site') {
       const s = siteOf(want.id);
       if (s) {
         const view = freeNow ? { fov: galaxy.camera.fov, aspect: galaxy.camera.aspect, free: freeNow } : null;
-        return zoomedSiteShot(s, Math.max(0, now - want.t0 - flight.ms), want.zoom, view);
+        return zoomedSiteShot(s, want.cut ? 0 : Math.max(0, now - want.t0 - flight.ms), want.zoom, view);
       }
     }
     return overview(now);
@@ -240,7 +243,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   };
 
   const go = (next) => {
-    from = still ? null : pose;
+    from = still || next.cut ? null : pose;
     fromEnd = from ? endFor(from, [starOf(want), fromEnd]) : null;
     fromId = want.kind === 'site' ? want.id : null;
     want = { ...next, t0: null };
@@ -255,7 +258,8 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     const dt = last == null ? 0 : Math.min(MAX_STEP_MS, now - last);
     last = now;
     const box = typeof free === 'function' ? free() : null;
-    freeNow = box ? blendRect(freeNow, box, freeNow ? 1 - Math.exp(-dt / FREE_EASE_MS) : 1) : null;
+    // Still mode moves nothing on its own: a held cut takes a new box at once.
+    freeNow = box ? blendRect(freeNow, box, freeNow && !still ? 1 - Math.exp(-dt / FREE_EASE_MS) : 1) : null;
     const p = from ? (now - want.t0) / (want.ms > 0 ? want.ms : flight.ms) : 1;
     const k = from ? ease(p) : 1;
     flying = from && p < 1 ? { k: p, to: want.kind === 'site' ? want.id : null } : null;
@@ -264,14 +268,17 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     if (k >= 1) from = null;
 
     // The held system opens once the camera is most of the way there; the rest fold.
-    const opening = !still && want.kind === 'site' && now - want.t0 >= flight.ms * flight.openAt ? want.id : null;
+    // A cut (T14) and still mode open and fold at once.
+    const held = want.kind === 'site' && (want.cut || !still) ? want.id : null;
+    const opening = held != null && (want.cut || now - want.t0 >= flight.ms * flight.openAt) ? held : null;
+    const snap = still || want.cut;
     for (const s of sites()) {
-      const o = openStep(s.open, s.id === opening ? 1 : 0, dt);
+      const o = snap ? (s.id === opening ? 1 : 0) : openStep(s.open, s.id === opening ? 1 : 0, dt);
       if (o !== s.open) galaxy.setOpen(s.id, o);
     }
 
     // The system it flies to or holds is the subject: the scene never fades it for being near (T2).
-    galaxy.setHeld?.(want.kind === 'site' && !still ? want.id : null);
+    galaxy.setHeld?.(held);
     galaxy.camera.position.set(pose.pos.x, pose.pos.y, pose.pos.z);
     galaxy.camera.lookAt(pose.look.x, pose.look.y, pose.look.z);
     return pose;
@@ -314,6 +321,8 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
 
   return {
     focus: (id, zoom) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom }); },
+    // No flight, no drift: on the site's shot from the next frame, its system open (T14, reduced motion).
+    cut: (id, zoom) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom, cut: true }); },
     // `{ ms }` flies there in its own time (a first touch, night 3 T7, touch.js); the tour's is FLIGHT.ms.
     fit: (opts) => go({ kind: 'overview', ...(opts?.ms > 0 ? { ms: opts.ms } : {}) }),
     frame,

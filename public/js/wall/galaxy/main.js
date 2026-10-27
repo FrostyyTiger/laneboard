@@ -31,7 +31,8 @@
 // is activated. `<html data-touch>` says the mode (`easing`, `explore`).
 // Then (T8) one finger orbits the galaxy, a pinch or the wheel zooms between
 // the overview and a close system, and both coast to rest (touch.js
-// createGestures steering camera.js's free pose). Reduced motion: no steering yet (T14).
+// createGestures steering camera.js's free pose). Reduced motion: no steering
+// (a turning galaxy is the motion D5 refuses); taps and back work (T14).
 // A tap on a site (T10, touch.js createTaps, hitTest) flies there and opens
 // it: brackets at once, the plate as the camera arrives. The plate is then the
 // site's sheet (T11, hud.js sheetCaption: every line, worst first); in an
@@ -39,6 +40,12 @@
 // Back (T13, touch.js backStep): the big control top right (only while
 // exploring away from the overview) and a tap on empty sky each go one step
 // back, planet → system → overview, the sheet going with its step.
+// The tour resumes (T14, touch.js IDLE): a minute after the last touch the
+// tour takes the page back at its next leg, trouble first (tour.js
+// `resume`), the camera flying there from where the finger left it. In
+// reduced motion every step is a cut (camera.js `cut`) and the scene fades
+// in over CUT.fadeMs (still.js createCutFade): a tapped site, back out, the
+// hand-back.
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon,warp` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
@@ -56,7 +63,7 @@ import { fallbackHref, hasWebGL } from './fallback.js';
 import { paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
-import { prefersStill, stillTourTimingFor } from './still.js';
+import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
 import { critAges, flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
@@ -256,8 +263,15 @@ export function boot() {
 
   // Where a finger has taken the page (T13): the overview, a system, a planet in it.
   let place = AT_OVERVIEW;
+  // Reduced motion (T14): a finger's step is a cut, the scene (canvas and names) fading in.
+  const fade = reduced && !park ? createCutFade([canvas, document.getElementById('galaxy-labels')]) : null;
+  // The camera is on a cut-to site (reduced motion): leaving it is a cut too.
+  const cutAway = () => {
+    if (fade && cam.want().cut) fade.cut();
+  };
   // Out to the whole galaxy in TOUCH.fitMs: the plate and the lock go, the tether draws in as it lands.
   const toOverview = () => {
+    cutAway();
     cam.fit({ ms: TOUCH.fitMs });
     hud.release();
     tether.show(fromSite && !reduced ? TOUCH.fitMs : 0);
@@ -269,6 +283,14 @@ export function boot() {
     wake: () => {
       tour.stop();
       toOverview();
+    },
+    // A minute untouched (T14): the sheet goes, the tour flies on from here to its worst site.
+    resume: () => {
+      cutAway();
+      hud.release();
+      place = AT_OVERVIEW;
+      fromSite = true; // the tether waits for the flight, if the tour's first leg is the overview
+      tour.resume();
     },
   });
   let touchSaid = 'tour';
@@ -289,9 +311,13 @@ export function boot() {
     const order = tourOrder(latestModel?.nodes ?? []);
     const i = order.findIndex((s) => s.id === id);
     const w = cam.want();
-    const there = w.kind === 'site' && w.id === id;
-    if (!there) cam.focus(id, TIMING.zoom);
-    hud.open({ id, index: i >= 0 ? i + 1 : null, count: order.length || null, arriveMs: there ? 0 : FLIGHT.ms });
+    // In reduced motion the tour's site legs leave the camera on the overview: only a cut is there.
+    const there = w.kind === 'site' && w.id === id && (!reduced || w.cut);
+    if (!there && reduced) {
+      cam.cut(id, TIMING.zoom);
+      fade?.cut();
+    } else if (!there) cam.focus(id, TIMING.zoom);
+    hud.open({ id, index: i >= 0 ? i + 1 : null, count: order.length || null, arriveMs: there || reduced ? 0 : FLIGHT.ms });
     tether.hide();
     fromSite = true;
     place = placeOf(id);
@@ -303,13 +329,14 @@ export function boot() {
   };
   // One step back (T13): a planet's sheet gives way to its system's, a system to the overview.
   const goBack = () => {
+    touch?.poke(); // the control's press never reaches the stage: it counts as a touch here
     if (!canGoBack(place)) return;
     const next = backStep(place);
     if (next.level === 'site') openSite(next.site);
     else toOverview();
   };
   const backEl = document.getElementById('galaxy-back');
-  const back = touch && !reduced ? createBack(backEl, { back: goBack }) : null;
+  const back = touch ? createBack(backEl, { back: goBack }) : null;
   if (back) {
     let seen = null, box = null;
     backCover = () => {
@@ -322,7 +349,7 @@ export function boot() {
       return box;
     };
   }
-  const taps = touch && !reduced ? createTaps(touch, {
+  const taps = touch ? createTaps(touch, {
     pick: (x, y) => {
       const o = stageEl.getBoundingClientRect();
       const names = labels.shown();
@@ -354,6 +381,7 @@ export function boot() {
       gestures?.frame(now);
       cam.frame(now);
       if (fx.has('warp')) galaxy.setWarp(cam.flight());
+      fade?.frame(now);
     }
     else {
       freeBox();

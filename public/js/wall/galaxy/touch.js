@@ -32,6 +32,13 @@
 // system → the overview. The control shows only while exploring away from
 // the overview.
 //
+// The tour resumes (T14, README §7 Night 3 C5): IDLE.ms after the last
+// touch (any pointer on the stage, the wheel, a press on the back control:
+// `poke()`), with no finger down, `explore` goes back to `tour` and the page
+// hears `resume`: the tour starts again at its next leg, trouble first
+// (tour.js `resume`), the camera flying there from wherever the finger left
+// it. The next touch wakes the page again.
+//
 // The page itself never scrolls, zooms or shows a menu under a finger: the
 // viewport has no user scaling (galaxy.html), the stage `touch-action: none`
 // (wall.css), and the context menu (a long press) is refused here.
@@ -41,44 +48,72 @@ import { toneOf, worseTone } from './palette.js';
 /** How long the camera takes from wherever it is back to the overview on the first touch (ms). */
 export const TOUCH = Object.freeze({ fitMs: 1500 });
 
+/**
+ * How long the page waits after the last touch before the tour takes it back
+ * (T14): one minute (README §7 Night 3 C5; night 1's Q6 and Q13 give 30-60 s
+ * for a kiosk's hand-back, the long end because a person reading a sheet
+ * from a step away is not touching it).
+ */
+export const IDLE = Object.freeze({ ms: 60000 });
+
 export const TOUCH_MODES = Object.freeze(['tour', 'easing', 'explore']);
 
 /**
- * The next state after `event` at `now` (ms). `state` is `{ mode, since }`;
- * `event` is `'down'` (a pointer went down) or `'tick'` (time passed).
- * Returns `{ state, wake, swallow }`: `wake` when this down is the one that
- * stops the tour (the page fits the camera), `swallow` when the pointer must
- * not reach anything under it. Pure.
+ * The next state after `event` at `now` (ms). `state` is `{ mode, since,
+ * last }` (`last`: the last touch, ms); `event` is `'down'` (a pointer went
+ * down), `'touch'` (a pointer moved or lifted, the wheel turned, the back
+ * control was pressed) or `'tick'` (time passed). `held` says a finger is
+ * down now: the tour never takes the page from under it.
+ * Returns `{ state, wake, swallow, resume }`: `wake` when this down is the
+ * one that stops the tour (the page fits the camera), `swallow` when the
+ * pointer must not reach anything under it, `resume` when `idleMs` passed
+ * since the last touch in `explore` (T14: the tour takes the page back). Pure.
  */
-export function touchStep(state, event, now, { fitMs = TOUCH.fitMs } = {}) {
-  const s = state && TOUCH_MODES.includes(state.mode) ? state : { mode: 'tour', since: null };
+export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDLE.ms, held = false } = {}) {
+  const s = state && TOUCH_MODES.includes(state.mode) ? state : { mode: 'tour', since: null, last: null };
   // `easing` ends on its own: any event after fitMs finds the camera out.
-  const cur = s.mode === 'easing' && now - s.since >= fitMs ? { mode: 'explore', since: s.since + fitMs } : s;
+  let cur = s.mode === 'easing' && now - s.since >= fitMs ? { ...s, mode: 'explore', since: s.since + fitMs } : s;
   if (event === 'down' && cur.mode === 'tour') {
-    return { state: { mode: 'easing', since: now }, wake: true, swallow: true };
+    return { state: { mode: 'easing', since: now, last: now }, wake: true, swallow: true, resume: false };
   }
-  return { state: cur, wake: false, swallow: false };
+  if (event === 'down' || event === 'touch') {
+    if (cur.mode !== 'tour') cur = { ...cur, last: now };
+  } else if (cur.mode === 'explore' && !held && now - (cur.last ?? cur.since) >= idleMs) {
+    return { state: { mode: 'tour', since: now, last: cur.last }, wake: false, swallow: false, resume: true };
+  }
+  return { state: cur, wake: false, swallow: false, resume: false };
 }
 
 /**
- * `createTouch(stage, { wake, clock, fitMs })` → `{ mode(), onPointer(cb),
- * stop() }`. `stage` gets the listeners; `wake()` is called once per first
- * touch (the page stops the tour and fits the camera); `clock` is
+ * `createTouch(stage, { wake, resume, clock, fitMs, idleMs })` → `{ mode(),
+ * onPointer(cb), poke(), stop() }`. `stage` gets the listeners; `wake()` is
+ * called once per first touch (the page stops the tour and fits the camera);
+ * `resume()` once when the page has gone `idleMs` untouched in `explore`
+ * (T14; noticed by `mode()`, which the page asks every frame); `clock` is
  * `performance.now` by default. `onPointer(cb)` hears every pointer event
  * (`pointerdown`, `pointermove`, `pointerup`, `pointercancel`) of every
- * pointer but the waking one, with the mode at the time.
+ * pointer but the waking one, with the mode at the time. `poke()` counts as a
+ * touch (the back control's press, whose pointers never reach the stage).
  */
 export function createTouch(stage, opts = {}) {
-  const o = { wake: () => {}, clock: () => performance.now(), fitMs: TOUCH.fitMs, ...opts };
-  const fitMs = o.fitMs;
-  let state = { mode: 'tour', since: null };
+  const o = { wake: () => {}, resume: () => {}, clock: () => performance.now(), fitMs: TOUCH.fitMs, idleMs: IDLE.ms, ...opts };
+  const timing = () => ({ fitMs: o.fitMs, idleMs: o.idleMs, held: fingers.size > 0 });
+  let state = { mode: 'tour', since: null, last: null };
   const waking = new Set(); // the pointers that woke the page: theirs never reach `onPointer`
+  const fingers = new Set(); // every pointer down now, waking or not
   const cbs = new Set();
   const tell = (ev) => { for (const cb of cbs) cb(ev, state.mode); };
+  const step = (event) => {
+    const r = touchStep(state, event, o.clock(), timing());
+    state = r.state;
+    if (r.resume) o.resume();
+    return r;
+  };
 
   const down = (ev) => {
-    const r = touchStep(state, 'down', o.clock(), { fitMs });
-    state = r.state;
+    step('tick'); // a resume that came due is the tour's: this down then wakes it again
+    fingers.add(ev.pointerId);
+    const r = step('down');
     if (r.swallow) {
       waking.add(ev.pointerId);
       ev.preventDefault?.();
@@ -88,9 +123,11 @@ export function createTouch(stage, opts = {}) {
     if (!r.swallow) tell(ev);
   };
   const rest = (ev) => {
-    state = touchStep(state, 'tick', o.clock(), { fitMs }).state; // the mode it is now, not at the last down
+    const lift = ev.type === 'pointerup' || ev.type === 'pointercancel';
+    if (lift) fingers.delete(ev.pointerId);
+    step('touch'); // the mode it is now, not at the last down
     if (waking.has(ev.pointerId)) {
-      if (ev.type === 'pointerup' || ev.type === 'pointercancel') waking.delete(ev.pointerId);
+      if (lift) waking.delete(ev.pointerId);
       ev.preventDefault?.();
       ev.stopPropagation?.();
       return;
@@ -98,20 +135,19 @@ export function createTouch(stage, opts = {}) {
     tell(ev);
   };
   const menu = (ev) => ev.preventDefault?.();
+  const wheel = () => { step('touch'); };
 
-  const on = [['pointerdown', down], ['pointermove', rest], ['pointerup', rest], ['pointercancel', rest], ['contextmenu', menu]];
+  const on = [['pointerdown', down], ['pointermove', rest], ['pointerup', rest], ['pointercancel', rest], ['contextmenu', menu], ['wheel', wheel]];
   for (const [type, fn] of on) stage.addEventListener(type, fn);
 
   return {
-    mode: () => {
-      state = touchStep(state, 'tick', o.clock(), { fitMs }).state;
-      return state.mode;
-    },
+    mode: () => step('tick').state.mode,
     onPointer: (cb) => {
       if (typeof cb !== 'function') return () => {};
       cbs.add(cb);
       return () => cbs.delete(cb);
     },
+    poke: () => { step('touch'); },
     stop: () => { for (const [type, fn] of on) stage.removeEventListener(type, fn); },
   };
 }
