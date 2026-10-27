@@ -176,8 +176,8 @@ Check (round 1): 73 rows, 44 `S-C1-`, 16 `S-SCR-`, 9 `S-C3-`, 4 `S-SEC-`; no id 
 
 ## Research questions
 
-- [ ] Q1 What does `claude auth status` print and exit with today, logged in and logged out (is the command still there, and which of `protocols.md` §11.10's login words appear)? The spec marks the default command and the words pending research Q12 — for T28
-- [ ] Q2 As of Claude Code's current release, do `--output-format stream-json --input-format stream-json` (with partial messages) still emit the event types and fields `protocols.md` §11.4 maps (`system` init with `session_id`, `stream_event` text deltas, `assistant`/`user` blocks with `tool_use`/`tool_result` and `is_error`, `result` with `subtype`), and has any flag of §11.2 been renamed? — for T9
+- [x] Q1 → build/research/Q1-claude-auth-status.md. What does `claude auth status` print and exit with today, logged in and logged out (is the command still there, and which of `protocols.md` §11.10's login words appear)? The spec marks the default command and the words pending research Q12 — for T28
+- [x] Q2 → build/research/Q2-stream-json-recheck.md. As of Claude Code's current release, do `--output-format stream-json --input-format stream-json` (with partial messages) still emit the event types and fields `protocols.md` §11.4 maps (`system` init with `session_id`, `stream_event` text deltas, `assistant`/`user` blocks with `tool_use`/`tool_result` and `is_error`, `result` with `subtype`), and has any flag of §11.2 been renamed? — for T9
 
 ## Later
 
@@ -194,6 +194,16 @@ What the slice itself says waits; nothing else moved here.
 
 ## For the owner
 
+- Research Q1 (login check): `protocols.md` §11.10 gives `not-logged-in` only for "exit other than 0
+  AND output matching the login words". The CLI reference documents `claude auth status` as JSON with
+  `authMethod` (`none` when logged out) and "exits 0 if logged in, 1 if not"; a logged-out answer
+  probably holds none of the login words, so the check would stay `unknown`. Proposed: for the
+  default command, exit 1 alone is `not-logged-in`; the words stay for custom `loginCheck` commands.
+  Until decided, build §11.10 as written and pin the real output in a run (see the research file).
+- Research Q2 (stream-json recheck): the CLI reference has `--system-prompt-snapshot` (v2.1.257+): the
+  system prompt is recorded on a conversation's first request and reused on `--resume`, so a changed
+  standing instruction (§11.8) may not reach a resumed session unless `--system-prompt-snapshot off`
+  is added to §11.2's argument list. Not verified (section body unread). Owner/builder decision.
 - Every `Answer:` in `spec/QUESTIONS.md` is `(open)` at round 1: the night builds the
   recommendations (Q-O21 b, Q-O22 b, Q-O29, Q-O36 and the rest), so C1 is the 73 ids. An answer
   given later changes what §3.1's table says.
