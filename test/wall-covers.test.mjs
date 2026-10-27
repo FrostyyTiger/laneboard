@@ -177,9 +177,50 @@ test('frame: the far fleet block covers the map only at the far step, its box re
   }
 });
 
-test('wall.css: the plate is at least 95 % opaque', () => {
-  const css = readFileSync(new URL('../public/css/wall.css', import.meta.url), 'utf8');
-  const block = css.match(/\.wall-caption \{[^}]*\}/)[0];
-  const share = Number(block.match(/background: color-mix\(in oklch, var\(--bg-canvas\) (\d+(?:\.\d+)?)%, transparent\)/)[1]);
+// Night 4 T10 (r46-skeptic galaxy 3): no dark rectangle over the galaxy. The
+// plate's and the far fleet block's grounds are tokens.css gradients that fall
+// off to nothing across the padding (as --tex-vignette, only wall.css uses
+// them); neither has a flat fill whose edge cuts a star, a nebula or a label,
+// and neither is masked (the corner brackets stay the only hard lines).
+const sheet = (name) => readFileSync(new URL(`../public/css/${name}`, import.meta.url), 'utf8');
+const ruleOf = (css, sel) => {
+  const at = css.indexOf(`\n${sel} {`);
+  assert.ok(at >= 0, sel);
+  return css.slice(at, css.indexOf('\n}', at)).replace(/\/\*[\s\S]*?\*\//g, '');
+};
+const tokenLayers = (name) => {
+  const m = sheet('tokens.css').match(new RegExp(`\\n  ${name}:([\\s\\S]*?);\\n`));
+  assert.ok(m, name);
+  return m[1].split(/,\s*\n(?=\s*(?:linear|radial)-gradient)/).map((l) => l.trim());
+};
+
+test('wall.css: the plate is at least 95 % opaque under its words', () => {
+  const [band] = tokenLayers('--tex-plate');
+  const shares = [...band.matchAll(/var\(--bg-canvas\) (\d+(?:\.\d+)?)%/g)].map((m) => Number(m[1]));
+  const share = Math.max(...shares);
   assert.ok(share >= 95, `plate ground ${share} %`);
+  assert.match(band, new RegExp(`var\\(--bg-canvas\\) ${share}%, transparent\\) 2\\.4vmin,`), 'full from the feather in');
+});
+
+test('wall.css: the plate and the far fleet block have feathered grounds, no hard-edged fill (night 4 T10)', () => {
+  const css = sheet('wall.css');
+  const grounds = { '.wall-caption': '--tex-plate', '.wall-fleet[data-step="far"]': '--tex-plate-corner' };
+  for (const [sel, token] of Object.entries(grounds)) {
+    const block = ruleOf(css, sel);
+    assert.match(block, new RegExp(`\\n  background: var\\(${token}\\);`), `${sel} stands on ${token}`);
+    assert.doesNotMatch(block, /\bmask|box-shadow|border(-\w+)?:/, `${sel}: not masked, no edge line`);
+    const layers = tokenLayers(token);
+    assert.ok(layers.length >= 3, `${token}: layered (${layers.length})`);
+    for (const layer of layers) {
+      assert.match(layer, /^(linear|radial)-gradient\(/, `${token}: every layer a gradient`);
+      assert.match(layer, /transparent (0|100%)[,)]/, `${token}: every layer falls off to nothing`);
+      assert.match(layer, /no-repeat$/, `${token}: no tile repeats`);
+    }
+  }
+  assert.equal(tokenLayers('--tex-plate').length, 7, 'a band, two edge ramps, four corners');
+  assert.equal(tokenLayers('--tex-plate-corner').length, 3, 'a band, the top ramp, the top-left corner');
+  // The fleet's top and left padding is the feather, so the words stand on the full ground;
+  // the plate's padding (--cap-pad) is the same 2.4vmin.
+  assert.match(ruleOf(css, '.wall-fleet[data-step="far"]'), /padding: 2\.4vmin var\(--frame-x\) var\(--frame-y\) 2\.4vmin;/);
+  assert.match(ruleOf(css, '.wall-caption'), /--cap-pad: 2\.4vmin;/);
 });

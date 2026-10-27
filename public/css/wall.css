@@ -97,7 +97,11 @@ html.wall body {
   max-width: 44vw;
   padding: var(--cap-pad) calc(var(--cap-pad) * 1.25) calc(var(--cap-pad) * 1.1);
   overflow: hidden;
-  background: color-mix(in oklch, var(--bg-canvas) 96%, transparent);
+  /* A feathered ground (night 4 T10): opaque under the words, falling off to
+     nothing across the padding (tokens.css --tex-plate, 2.4vmin = --cap-pad),
+     so no star, nebula or label is cut flat by a box edge; the corner
+     brackets are the only hard lines. */
+  background: var(--tex-plate);
   opacity: 0;
 }
 
@@ -506,14 +510,18 @@ html.wall body {
    by frame.js `fleetSize` to 64vw, 9 at the least), one line, cut rather
    than wrapped; its why under it at the why step with the count beside it in
    the key step, baselines shared; the ambient fact gives way. */
-/* The word runs over the map's bottom ring, so it stands on the plate's
-   ground, out to the corner: no map label shows through or under it. */
+/* The word runs over the map's bottom ring, so it stands on a ground out to
+   the corner (no map label is shown in its box: hud.js covers). The ground
+   is feathered as the plate's (night 4 T10): it falls off across the top and
+   left padding, so the ribbon and the labels beside it fade in rather than
+   stop at a box edge; right and bottom are the screen's. */
 .wall-fleet[data-step="far"] {
   right: 0;
   bottom: 0;
   max-width: none;
-  padding: 1vmin var(--frame-x) var(--frame-y) 2.4vmin;
-  background: var(--bg-canvas);
+  /* The top and left padding is the ground's feather (--tex-plate-corner). */
+  padding: 2.4vmin var(--frame-x) var(--frame-y) 2.4vmin;
+  background: var(--tex-plate-corner);
 }
 .wall-fleet[data-step="far"] .wall-fleet-line {
   --fleet-far: 14vmin;

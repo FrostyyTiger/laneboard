@@ -186,12 +186,26 @@ Notes for every builder round (planner, round 1):
   97% FULL` once, no planet label, banner `■ 2 CRIT · HV2 · HV1` with no why. Film `shots/r19-galaxy` (12 frames
   over 74 s): no errors, 12.4 fps under SwiftShader as before; its frames miss the HV2 visit during the two crits,
   so the still is the evidence.
-- [ ] T10 (§7 Night 4 0a; was night 3's T35, r46-skeptic galaxy 3 = r41-operator galaxy 8 = night 3 A4 feathered
+- [x] T10 (§7 Night 4 0a; was night 3's T35, r46-skeptic galaxy 3 = r41-operator galaxy 8 = night 3 A4 feathered
   plates) [ui] [variant:galaxy] No dark rectangle over the galaxy: the banner's ground (the far cover) and the caption
   plate's ground are removed or become a feathered edge / text-shadow halo, so no star, nebula or label is cut flat by
   a box; the corner brackets stay the only hard lines — done when: a `wall.css` test pins no hard-edged opaque ground
   on `.wall-fleet` and the plate (halo or `mask-image` instead), `wall.html`'s caption tests stay green, and a still of
   `galaxy.html?at=overview&quality=0` with a site under the banner shows no step in the ribbon at the banner's edge.
+  (commit SHA) Builder r20: both grounds are now gradient layers that are opaque under the words and fall off to
+  nothing across the padding on a smoothstep (2.4vmin, the plate's `--cap-pad`). There is no `mask`, because a mask
+  would fade the corner brackets, which stay the only hard lines. The design guardrail allows gradients only in
+  `tokens.css`, so they are tokens there beside `--tex-vignette`, used only by wall.css (**reaches outside the
+  galaxy**, for the morning report's list): `--tex-plate` (a band with its side ramps, top and bottom ramps, four
+  round corners, at the plate's 96 %) and `--tex-plate-corner` (top and left only, opaque, for the far fleet block
+  that runs to the screen's corner; its top padding went from 1vmin to 2.4vmin so the words stand on the full
+  ground). Labels under either box stay hidden by `hud.covers()` as before. `wall.html` shares both rules.
+  Tests in `test/wall-covers.test.mjs`: the plate stays ≥ 95 % under its words; every layer of both tokens is a
+  gradient falling to `transparent`, no-repeat, no mask/shadow/border on the rules; the feather equals the padding.
+  Stills `shots/r20-t10/`: `overview-edge0.png` against `before-overview-edge0.png` at 3x (the old hard step across
+  the ribbon at the banner's top-left is gone; the ribbon fades into the ground), `hv2-edge1.png` (stars fade into
+  the plate, brackets crisp, no tile seams). Film `shots/r20-galaxy`: no console errors, 11.6 fps under
+  SwiftShader (12-13 in earlier rounds; the gradients are painted only when the plate repaints).
 - [ ] T11 (§7 Night 4 0a; was night 3's T39, r56-performance galaxy 1 = night 1's T39) [ui] [variant:galaxy] The
   stutter number moves: `budget.js createFrameWindow` keeps `worstMs` per window (reset each window, as `frameMs` is)
   and `perf.js` reports in `worstGapMs` the worst gap of the last ~10 s, with the boot gap apart as `bootGapMs` (gaps
