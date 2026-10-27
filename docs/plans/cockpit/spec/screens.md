@@ -312,15 +312,19 @@ lost.
 - **Wall half and app views:** unchanged. The tour, explore and every view read the board, not the
   room.
 - **Cockpit button:** label and place unchanged; a grey ring 12 px (`○`, `--text-3`) in its
-  top-right corner, 4 px in from the edges. Grey, not red: the room is offline, the fleet is not
+  top-right corner, 4 px in from the edges. Under the Q-O11 recommendation the ring sits on the
+  bottom-right talk button (`data-talk="off"`, `c2-voice.md` §3) and `CHAT` stays as it is (D53). Grey, not red: the room is offline, the fleet is not
   in trouble (`docs/design.md`, the colour rule).
-- **Pane:** a status line under its header, 18 px `--text-2` on `--bg-sunken`, 48 px tall:
-  `Cockpit room unreachable since 06:41 (3 min). Retrying in 12 s.` with a `RETRY NOW` button
-  (48 px tall, 16 px caps) at its right end. The minutes and the retry count down each second; the
+- **Pane:** a status line under its header, 18 px `--text-2` on `--bg-sunken`, **80 px** tall (two
+  lines of 18 px at line height 1.35 plus padding: the texts below wrap at the ~400 px left of the
+  button) (D54): `Cockpit room unreachable since 06:41 (3 min). Retrying in 12 s.` with a `RETRY
+  NOW` button (48 px tall, 16 px caps, 16 px from the pane's right edge) at its right end. The minutes and the retry count down each second; the
   retry shows `Retrying now…` while a try runs. The conversation so far stays readable. The input
   stays editable (a draft can be written); `SEND` and the talk button are disabled, with the line
-  `Sending and voice come back with the room.` under the input, 16 px `--text-3`.
-- **Canvas:** a strip across the top of the canvas, 48 px, 18 px `--text-2` on `--bg-sunken`, 1 px
+  `Sending and voice come back with the room.` above the input row, 16 px `--text-3`,
+  left-aligned at x 784, its baseline 8 px above the row's top border (as `c2-voice.md` §5's
+  microphone line: on the Wall the row ends 24 px above the screen's edge, nothing fits under it).
+- **Canvas:** a strip across the top of the canvas, 80 px (two lines at 576 px, D54), 18 px `--text-2` on `--bg-sunken`, 1 px
   `--line-strong` bottom border: `Cockpit room unreachable since 06:41. Cards show their last
   values.` Every card stays where it was; each live card gets a grey `STALE` plate (13 px caps,
   `--text-3`, 1 px `--line-strong` border) next to its title, its values frozen. A countdown keeps
@@ -341,6 +345,11 @@ own**: it stays in the input until the owner sends it (D12).
 and gets the line `Cut off: the room went away at 06:41.`; on reconnect, a reply the room finished
 meanwhile replaces the cut-off text (T15). An open microphone closes at once (no 5 s grace: audio
 has nowhere to go); the words so far stay in the input as an editable draft, not sent.
+
+Sketch: `sketches/screens-room-down.html` (S-SCR-17 at 06:44): as is, `split` with the pane
+closed (strip, two `STALE` cards, the countdown's note and disabled `CANCEL JOB`, the ring on the
+talk button); with `#pane`, `wall` with the pane open (status line and `RETRY NOW`, a cut-off reply,
+the line above the input row, the draft `how is the`, `SEND` and talk `off`).
 
 ### Board down (hub down)
 

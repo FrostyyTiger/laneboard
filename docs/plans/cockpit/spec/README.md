@@ -28,7 +28,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `slices.md` | the build nights in order, each with its scenario ids, stand-ins and done-when | none (lists every id once) | T20 | planned |
 | `DECISIONS.md` | small reversible choices made during the night, each with how to overrule | none | all | written (running list) |
 | `QUESTIONS.md` | what only the owner can decide, with options and a recommendation | none | all | written (running list) |
-| `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2), `c1-pane.html` (T4), `c2-states.html` (T6) | none | T2-T4, T6, T9, T11, T14 | in progress |
+| `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2), `c1-pane.html` (T4), `c2-states.html` (T6), `screens-room-down.html` (T3/T22) | none | T2-T4, T6, T9, T11, T14 | in progress |
 
 ## Speed budget
 

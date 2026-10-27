@@ -38,7 +38,7 @@ main")."
    header button is 48 px tall, ≥ 96 px wide, 16 px caps `--text-1`, 1 px `--line-strong` border.
    Left of those, 8 px apart: `NEW` (§11) and `RAW` (§13), each 48 px tall and 72 px wide (D38);
    order from the right: `CLOSE`, `SCREEN`, `NEW`, `RAW`.
-2. **Status line**, 48 px, only while there is something to say (room down, offline:
+2. **Status line**, 80 px (two lines, D54), only while there is something to say (room down, offline:
    `screens.md` §7).
 3. **The conversation**, filling the rest; it scrolls on its own; 24 px padding left and right,
    16 px at the top. Text column: 560 px.
