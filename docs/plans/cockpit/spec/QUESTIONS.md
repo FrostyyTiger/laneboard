@@ -44,6 +44,13 @@ With d), "stop, do this instead" is `STOP` then the new words; a send while a lo
 waits for that call (minutes, research Q8), shown as `· QUEUED`. Choosing a) instead: D32's overrule
 and the old §8 (git history before T85) come back.
 
+Sub-question (review 81-touch.md): where does `STOP` live under d)? s1) in the `SEND` slot (x 1200-1264,
+y 824-888) as D32 has it, inert for 1.0 s after any send or cancel from the slot, acting on
+`pointerup` only, with a `■` glyph; s2) a header `STOP`, away from the hand (D32's overrule).
+Recommendation: s1 with the guard, because "stop, do this instead" with a draft in the input is rare
+and the slot is where a terminal user's Ctrl+C habit goes; s2 removes the double-tap risk entirely
+if the owner mistrusts the guard.
+
 Answer: (open)
 
 ## Q-O23 What the agent may do before C6
