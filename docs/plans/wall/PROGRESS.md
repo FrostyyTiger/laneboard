@@ -554,6 +554,19 @@ Notes for every builder round (planner, round 1):
   site, then the planet); `+N MORE` opens nothing yet; with `fx=beacon` on, the pillar's screen segment (foot to tip,
   27 px wide) counts as its site's target in `tapPoints` — done when: a test taps inside the banner box and sees
   the subject's site opened, and a test with `fx=beacon` finds a point on the pillar's top hits the site.
+- [ ] T39 (r56-performance galaxy 1; = night 1's T39) [ui] [variant:galaxy] The stutter number moves: `budget.js
+  createFrameWindow` keeps `worstMs` per window (reset each window, as `frameMs` is) and `perf.js` reports the
+  worst gap of the last ~10 s, with the boot gap apart as `bootGapMs` (gaps before the first model is drawn plus 2 s
+  do not count) — done when: a test with a fake clock, a 400 ms first gap and 16 ms gaps after it reads under 20 ms
+  after 10 s and `bootGapMs` 400, and `film.mjs`'s `perf.json` carries both.
+- [ ] T40 (r56-performance galaxy 3a) [ui] [variant:galaxy] Fewer triangles in an open system: member dots use a
+  fixed 8x6 sphere segments at every quality level (`scene.js:397 spheres`; 87k triangles and 205 draw calls with HV1
+  open against 13k and 45 at the overview) — done when: a test pins the dot geometry's segment counts at levels 0-2,
+  the planets' geometry unchanged, and `?at=hv1&perf=1` reports fewer triangles than before (number in the notes).
+- [ ] T41 (r56-performance across) [ui] [variant:galaxy] The lock writes only what changed: `lock.js:241-245`
+  compares a rounded key (0.1 px, opacity to 0.01) for the four bracket transforms and the opacity, as `labels.js`
+  does, and skips the writes when equal — done when: a test with a counting fake DOM sees no style write in a frame
+  where the brackets moved under 0.1 px, and a write when they moved more.
 
 ## Research questions
 
@@ -578,6 +591,16 @@ Notes for every builder round (planner, round 1):
   Chromium flags can, and how Screen Wake Lock behaves there — for T7, Later (wake lock)
 
 ## Later
+
+From r56-performance (not tasks yet):
+- (galaxy 3b) One `InstancedMesh` per sphere geometry and tone for members (about 5 calls, not about 120).
+- (galaxy 4) `?perf=1` overlay shows style-and-layout time per window from `long-animation-frame` (overlay only).
+- (galaxy 5) `camera.js go()` computes flight `extra` and swell scale once; `avoid()` stops spreading per frame.
+- (galaxy 6) = r37-performance 4 (`setOpen` marks dirty, `advance` places once).
+- (galaxy 7) = r37-performance 7 (per-frame garbage in labels, beacons, heldDust).
+- (touch 2) When the frame cap lands, the coast until `atRest` counts as under a finger; a 20-step pinch ends close
+  and low with HV1 at the top edge (framing, for a touch round).
+- (fx-beacon 1) Additive pillars add fill rate on 5 MP; measure on the Surface. (fx-warp 1) If flights dip there, halve `WARP_DUST` at level 1.
 
 From r51-touch (not tasks yet):
 - (r51-touch galaxy 5) No way back to the tour by tap: at the overview in `explore` the 80 px control reads `▶ TOUR`
@@ -768,6 +791,13 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 
 ## For the owner
 
+- (r56-performance galaxy 2, decision) No frame cap: full renders at the display rate all day, MSAA on 5 MP, also
+  during 10 s holds where little moves (§2.4 asks 30 fps and no heat). Proposal: cap 30 at holds, the overview and in
+  reduced motion; 60 in flights and under a finger (coast included). You asked to keep the sketch's 60 on the Surface,
+  so the hold cap needs your OK before a task. (= Later r37-performance 6.)
+- (r56-performance) Leave `galaxy.html?demo=1&fx=beacon&perf=1` up for an hour on the Surface and compare the overlay's
+  memory line at start and end (10 minutes here showed no growth). Compare `?fx=beacon&perf=1` with no fx too.
+
 - (r46-skeptic, taste, decisions) Keep or cut: (a) `TARGET 02 / 05` in the kicker (the skeptic: nobody at 3 m needs it; it is
   in your brief, so yours to drop); (b) the calm plate that only types the site's name (galaxy 6: give it one real
   line, or no plate; = the calm-facts idea below); (c) the sun's name above the tag's hub name (galaxy 9: drop one);
@@ -848,6 +878,9 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
   with fx-beacon 1); galaxy 1 (= T24, T27: covered, the review wants them first), 6 (= T29), 7 (= T25), fx-warp 1 (= T28)
   dropped (covered); galaxy 5, 8, 9 and the warp-tint across note went to Later; fx-beacon 2 dropped (observation).
   No dreamer proposals in this review.
+- r56-performance.md: 7 galaxy + 2 touch + 1 fx-beacon + 1 fx-warp + across; 3 became tasks (T39 = galaxy 1, T40 = galaxy 3a,
+  T41 = across lock writes); galaxy 2 (frame cap) to the owner (needs their OK); galaxy 3b, 4, 5, 6, 7, touch 2, fx notes
+  went to Later; touch 1 and the measured-fine list dropped (observation). No dreamer proposals in this review.
 
 ## Scores
 
@@ -888,5 +921,8 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 | r51 | touch, galaxy | 7 | 6 | 4 | 5 | 7 | 6 | 6 |
 | r51 | touch, fx-beacon | – | – | – | – | 6 | 5 | – |
 | r51 | touch, fx-warp | – | – | – | – | 6 | 5 | – |
+| r56 | performance, galaxy | 7 | 6 | 6 | 7 | 6 | 6 | 7 |
+| r56 | performance, fx-beacon | – | – | – | – | 5 | 6 | – |
+| r56 | performance, fx-warp | – | – | – | – | 6 | 5 | – |
 
 ## Morning
