@@ -636,6 +636,51 @@ html.wall body {
 .galaxy-tether[data-tone="warn"] { --tether-colour: var(--warn); }
 .galaxy-tether[data-tone="low"] { --tether-colour: var(--info); }
 
+/* Back (night 3 T13, js/wall/galaxy/touch.js createBack): one step back while
+   a finger explores, top right under the tag, clear of the plate (top left)
+   and the fleet line (bottom right). Its smallest side is BACK.hitPx, 80 css
+   px: night 1's Q6 15 mm for a main control on the tablet. Grey: it is a way
+   out, nothing needs you. The label at the caption's line step, tracked as
+   the tag; the brackets as the plate's. */
+.galaxy-back {
+  position: absolute;
+  top: calc(8vh + 6.5vmin);
+  right: 6vw;
+  min-width: 80px;
+  min-height: 80px;
+  padding: 0 2.4vmin;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: max(2.7vmin, 20px);
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: color-mix(in oklch, var(--bg-canvas) 96%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  touch-action: none;
+  cursor: pointer;
+}
+.galaxy-back[hidden] { display: none; }
+.galaxy-back::before,
+.galaxy-back::after {
+  content: "";
+  position: absolute;
+  width: 2.6vmin;
+  height: 2.6vmin;
+  border: 0 solid var(--text-3);
+}
+.galaxy-back::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+.galaxy-back::after { right: -1px; bottom: -1px; border-right-width: 2px; border-bottom-width: 2px; }
+.galaxy-back:active { color: var(--text-1); }
+.galaxy-back:focus-visible { outline: 2px solid var(--text-2); outline-offset: 4px; }
+.galaxy-back-glyph { font-size: 1.3em; margin-top: -0.12em; }
+
 /* The galaxy's speed overlay (`galaxy.html?perf=1`, js/wall/galaxy/budget.js):
    a few mono lines in the top margin, above the tag, grey. For whoever tunes
    the page, never on by default. */

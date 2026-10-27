@@ -36,12 +36,15 @@
 // it: brackets at once, the plate as the camera arrives. The plate is then the
 // site's sheet (T11, hud.js sheetCaption: every line, worst first); in an
 // open system a tap on a planet shows the planet's sheet where the camera is.
+// Back (T13, touch.js backStep): the big control top right (only while
+// exploring away from the overview) and a tap on empty sky each go one step
+// back, planet → system → overview, the sheet going with its step.
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon,warp` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
 import { createPerf } from '../perf.js';
 import { TIMING, createTour, timingFor, tourOrder } from '../tour.js';
-import { createCaption, captionTimingFor, STILL_CAPTION_TIMING } from '../caption.js';
+import { createCaption, captionTimingFor, coverOf, STILL_CAPTION_TIMING } from '../caption.js';
 import { createFrame } from '../frame.js';
 import { LOCK_TIMING, STILL_LOCK_TIMING } from '../lock.js';
 import { pxPerMm, screenOf, stepsFor } from '../type.js';
@@ -59,7 +62,10 @@ import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { createTether } from './tether.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
-import { TOUCH, createGestures, createTaps, createTouch, hitTest, memberPoints, orbitLimits, tapPoints } from './touch.js';
+import {
+  AT_OVERVIEW, TOUCH, backShown, backStep, canGoBack, createBack, createGestures, createTaps, createTouch, hitTest, memberPoints,
+  orbitLimits, placeOf, tapPoints,
+} from './touch.js';
 
 const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
@@ -211,9 +217,14 @@ export function boot() {
   // The names, over the scene and under the words: placed after each frame
   // where the camera is now, clear of the caption plate, the fleet line and
   // the lock's brackets (drawn first: the lock's onDraw comes before theirs).
+  // The back control's box (T13) while it shows, read again only when it comes or the stage resizes.
+  let backCover = () => null;
   const labels = createLabels(document.getElementById('galaxy-labels'), galaxy, {
     steps,
-    covers: hud.covers,
+    covers: () => {
+      const c = hud.covers(), b = backCover();
+      return b ? [...c, b] : c;
+    },
     held: lock.held,
   });
   cam.onDraw(labels.draw);
@@ -243,15 +254,21 @@ export function boot() {
     });
   }
 
-  // The first touch (T7): the tour stops where it is, the camera eases out
-  // to the overview, the plate and the lock go, the tether draws in as it lands.
+  // Where a finger has taken the page (T13): the overview, a system, a planet in it.
+  let place = AT_OVERVIEW;
+  // Out to the whole galaxy in TOUCH.fitMs: the plate and the lock go, the tether draws in as it lands.
+  const toOverview = () => {
+    cam.fit({ ms: TOUCH.fitMs });
+    hud.release();
+    tether.show(fromSite && !reduced ? TOUCH.fitMs : 0);
+    fromSite = false;
+    place = AT_OVERVIEW;
+  };
+  // The first touch (T7): the tour stops where it is, the camera eases out to the overview.
   const touch = park ? null : createTouch(document.getElementById('galaxy-stage'), {
     wake: () => {
       tour.stop();
-      cam.fit({ ms: TOUCH.fitMs });
-      hud.release();
-      tether.show(fromSite && !reduced ? TOUCH.fitMs : 0);
-      fromSite = false;
+      toOverview();
     },
   });
   let touchSaid = 'tour';
@@ -264,19 +281,47 @@ export function boot() {
   }) : null;
   // A tap on a site (T10): the camera flies there at the tour's zoom and opens
   // it, the brackets close on it at once, its plate comes as the camera does.
-  // A tap on empty sky does nothing yet (T13 makes it a step back).
+  // A tap on empty sky is a step back (T13).
   const stageEl = document.getElementById('galaxy-stage');
   let latestModel = null;
+  // A site's sheet; the camera flies there unless it already holds it (a step back from a planet).
   const openSite = (id) => {
     const order = tourOrder(latestModel?.nodes ?? []);
     const i = order.findIndex((s) => s.id === id);
-    cam.focus(id, TIMING.zoom);
-    hud.open({ id, index: i >= 0 ? i + 1 : null, count: order.length || null, arriveMs: FLIGHT.ms });
+    const w = cam.want();
+    const there = w.kind === 'site' && w.id === id;
+    if (!there) cam.focus(id, TIMING.zoom);
+    hud.open({ id, index: i >= 0 ? i + 1 : null, count: order.length || null, arriveMs: there ? 0 : FLIGHT.ms });
     tether.hide();
     fromSite = true;
+    place = placeOf(id);
   };
   // A planet in an open system (T11) is asked first: the camera stays, its sheet comes at once.
-  const openPlanet = (id) => hud.open({ id, arriveMs: 0 });
+  const openPlanet = (id, site) => {
+    hud.open({ id, arriveMs: 0 });
+    place = placeOf(site, id);
+  };
+  // One step back (T13): a planet's sheet gives way to its system's, a system to the overview.
+  const goBack = () => {
+    if (!canGoBack(place)) return;
+    const next = backStep(place);
+    if (next.level === 'site') openSite(next.site);
+    else toOverview();
+  };
+  const backEl = document.getElementById('galaxy-back');
+  const back = touch && !reduced ? createBack(backEl, { back: goBack }) : null;
+  if (back) {
+    let seen = null, box = null;
+    backCover = () => {
+      if (!back.shown()) return null;
+      const { W, H } = galaxy.size();
+      if (seen !== `${W}x${H}`) {
+        seen = `${W}x${H}`;
+        box = coverOf({ left: backEl.offsetLeft, top: backEl.offsetTop, width: backEl.offsetWidth, height: backEl.offsetHeight });
+      }
+      return box;
+    };
+  }
   const taps = touch && !reduced ? createTaps(touch, {
     pick: (x, y) => {
       const o = stageEl.getBoundingClientRect();
@@ -284,7 +329,7 @@ export function boot() {
       return hitTest(memberPoints(galaxy.world?.sites, cam.screenOf, names), x - o.left, y - o.top)
         ?? hitTest(tapPoints(galaxy.world?.sites, cam.screenOf, labels.shown()), x - o.left, y - o.top);
     },
-    tap: (hit) => { if (hit?.site) openPlanet(hit.id); else if (hit) openSite(hit.id); },
+    tap: (hit) => { if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack(); },
   }) : null;
 
   const tick = (now) => {
@@ -299,6 +344,7 @@ export function boot() {
         if (m === 'tour') delete page.dataset.touch;
         else page.dataset.touch = m;
       }
+      back?.show(backShown(m, place));
     }
     const at = parked();
     if (at) {
@@ -397,6 +443,7 @@ export function boot() {
   globalThis.__galaxyTether = tether;
   globalThis.__galaxyTouch = touch;
   globalThis.__galaxyTaps = taps;
+  globalThis.__galaxyBack = back;
   globalThis.__galaxyCam = cam;
 }
 

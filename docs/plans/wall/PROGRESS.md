@@ -232,11 +232,25 @@ Notes for every builder round (planner, round 1):
   dust arm's density cut once after the first film crowded the plate; 0 errors; 11.3 fps) and `shots/r34-galaxy`
   (no streaks; 12.8 fps). The ~1.5 fps lower under SwiftShader is GPU fill during flights only; on the Surface,
   judge with `?fx=beacon,warp&perf=1`. Seen: a plate still types during a flight with streaks behind it (T15).
-- [ ] T13 (§7 Night 3 C4) [ui] [variant:galaxy] Touch, back: a big back control (at least Q6's 15 mm, about 80
+- [x] T13 (§7 Night 3 C4) [ui] [variant:galaxy] Touch, back: a big back control (at least Q6's 15 mm, about 80
   css px on the tablet, only while exploring) and a tap on empty sky each go one step back: planet → system →
   overview; the sheet closes with its step — done when: a test walks planet → system → overview through both
   the control and an empty-sky tap, a test pins the control's hit size in `wall.css`, and the control is absent
-  during the tour.
+  during the tour. (commit COMMIT)
+  Builder r35: `touch.js` pure `placeOf`/`backStep`/`canGoBack`/`backShown` (overview → site → planet; back from a
+  planet is its system, from a system the overview, the overview stays) and `createBack(button, { back })`: a `<button
+  id="galaxy-back" hidden>` on top of the stage in galaxy.html, whose pointers stop at it (a press is never also an
+  empty-sky tap, a second step, nor a drag). main.js: `place` set by `openSite`/`openPlanet`, reset by `toOverview`
+  (now shared by the first touch and back: fit in TOUCH.fitMs, plate and lock released, tether drawn in); planet →
+  system shows the site's sheet where the camera is, or flies back to it if a drag moved the camera away (a drag
+  folds the system); an empty-sky tap is `goBack()`; at the overview it does nothing. The control shows only in
+  `explore` with a step back, is a label cover (names keep off it). `wall.css .galaxy-back`: top right under the tag
+  (the plate is top left), min 80×80 css px (`BACK.hitPx`, Q6 15 mm), `‹ BACK` in the label face at the caption's line
+  step tracked as the tag, `--text-2` on the plate's ground with its brackets; a cut, as nothing in wall.css
+  transitions. Decision: Q6 says empty sky should do nothing; the plan wins (README §7 C4), but only away from the
+  overview. Checked: CDP script `tools/r35-back.mjs` (`shots/r35-back`: wake → tap hv2 → planet gpu-box → BACK → hv2's
+  sheet, camera stays → BACK → overview, control gone → again via empty-sky taps → a third sky tap at the overview does
+  nothing; 0 errors) and film r35-galaxy (tour unchanged, no control in it, 0 errors, 12.4 fps as every SwiftShader film).
 - [ ] T14 (§7 Night 3 C5) [ui] [variant:galaxy] Touch, the tour resumes: one minute after the last touch the
   camera eases from where it is back into the tour (no cut, `tour.js` restarted at its next leg, trouble first);
   reduced motion (D5): every touch step as a cut with a short fade, no flights — done when: a pointer-event test

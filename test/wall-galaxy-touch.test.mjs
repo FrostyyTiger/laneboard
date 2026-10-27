@@ -9,8 +9,9 @@ import path from 'node:path';
 
 import { makeEl } from './helpers/fakedom.mjs';
 import {
-  ORBIT, TAP, TOUCH, atRest, createGestures, createTaps, createTouch, hitTest, inertia, isPalm, orbitLimits, orbitOf,
-  memberPoints, orbitPose, orbitStep, planeAt, tapPoints, touchStep, zoomStep,
+  AT_OVERVIEW, BACK, ORBIT, TAP, TOUCH, atRest, backShown, backStep, canGoBack, createBack, createGestures, createTaps,
+  createTouch, hitTest, inertia, isPalm, orbitLimits, orbitOf, memberPoints, orbitPose, orbitStep, placeOf, planeAt,
+  tapPoints, touchStep, zoomStep,
 } from '../public/js/wall/galaxy/touch.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
 import { FLIGHT, createGalaxyCamera } from '../public/js/wall/galaxy/camera.js';
@@ -213,8 +214,11 @@ test('galaxy/main.js wires the first touch: tour stopped, the camera fit in TOUC
   assert.match(js, /createTouch\(document\.getElementById\('galaxy-stage'\)/);
   const wake = js.slice(js.indexOf('wake: () => {'), js.indexOf('},', js.indexOf('wake: () => {')));
   assert.match(wake, /tour\.stop\(\)/);
-  assert.match(wake, /cam\.fit\(\{ ms: TOUCH\.fitMs \}\)/);
-  assert.match(wake, /hud\.release\(\)/);
+  // T13: the way out to the overview is shared with the back control.
+  assert.match(wake, /toOverview\(\)/);
+  const out = js.slice(js.indexOf('const toOverview = '), js.indexOf('};', js.indexOf('const toOverview = ')));
+  assert.match(out, /cam\.fit\(\{ ms: TOUCH\.fitMs \}\)/);
+  assert.match(out, /hud\.release\(\)/);
   // A new model does not start a stopped tour again (T14 brings it back).
   assert.match(js, /if \(!park && touch\?\.mode\(\) === 'tour'\) tour\.start\(\);/);
 });
@@ -637,7 +641,7 @@ test('galaxy/main.js wires taps: sites hit-tested in the stage\'s px, a hit flie
   assert.match(js, /hitTest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, labels\.shown\(\)\), x - o\.left, y - o\.top\)/);
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
   assert.match(open, /cam\.focus\(id, TIMING\.zoom\)/);
-  assert.match(open, /hud\.open\(\{[^}]*arriveMs: FLIGHT\.ms \}\)/);
+  assert.match(open, /hud\.open\(\{[^}]*arriveMs: there \? 0 : FLIGHT\.ms \}\)/);
   assert.match(open, /tether\.hide\(\)/);
 });
 
@@ -692,6 +696,191 @@ test('galaxy/main.js wires planet taps (T11): members asked before sites, a plan
   const js = read('js/wall/galaxy/main.js');
   const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
   assert.ok(pick.indexOf('memberPoints(') >= 0 && pick.indexOf('memberPoints(') < pick.indexOf('tapPoints('), 'members first');
-  assert.match(js, /const openPlanet = \(id\) => hud\.open\(\{ id, arriveMs: 0 \}\)/);
-  assert.match(js, /tap: \(hit\) => \{ if \(hit\?\.site\) openPlanet\(hit\.id\); else if \(hit\) openSite\(hit\.id\); \}/);
+  assert.match(js, /const openPlanet = \(id, site\) => \{\s*hud\.open\(\{ id, arriveMs: 0 \}\);/);
+  assert.match(js, /tap: \(hit\) => \{ if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); else goBack\(\); \}/);
+});
+
+// ---- T13: back ----
+
+test('backStep: a planet → its system → the overview, which stays; only away from the overview is there a step', () => {
+  const planet = placeOf('hv2', 'gpu-box');
+  assert.deepEqual({ ...planet }, { level: 'planet', site: 'hv2', planet: 'gpu-box' });
+  const site = backStep(planet);
+  assert.deepEqual({ ...site }, { level: 'site', site: 'hv2', planet: null });
+  assert.equal(backStep(site), AT_OVERVIEW);
+  assert.equal(backStep(AT_OVERVIEW), AT_OVERVIEW);
+  assert.equal(backStep(null), AT_OVERVIEW);
+  assert.equal(placeOf(), AT_OVERVIEW);
+  assert.deepEqual([planet, site, AT_OVERVIEW, null].map(canGoBack), [true, true, false, false]);
+  // The control: only while exploring, never in the tour or the first touch's flight.
+  for (const mode of ['tour', 'easing']) assert.equal(backShown(mode, site), false, mode);
+  assert.equal(backShown('explore', site), true);
+  assert.equal(backShown('explore', AT_OVERVIEW), false, 'nothing to go back to');
+});
+
+test('createBack: hidden until shown, a press steps back only while shown, its pointers never reach the stage', () => {
+  const button = stageEl();
+  button.hidden = false; // as if galaxy.html forgot its `hidden`
+  let backs = 0;
+  const b = createBack(button, { back: () => { backs++; } });
+  assert.equal(button.hidden, true, 'absent at first: the tour');
+  assert.equal(button.dispatch('click').defaultPrevented, true);
+  assert.equal(backs, 0, 'a hidden control does nothing');
+  b.show(true);
+  assert.equal(button.hidden, false);
+  assert.equal(b.shown(), true);
+  for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
+    assert.equal(button.dispatch(type).stopped, true, `${type} stays on the control`);
+  }
+  button.dispatch('click');
+  assert.equal(backs, 1);
+  b.show(false);
+  assert.equal(button.hidden, true);
+  b.stop();
+  assert.equal(button.listeners('click') + button.listeners('pointerdown'), 0);
+});
+
+/** touchPage with taps and the back control wired as main.js wires them (openSite, openPlanet, goBack). */
+function backPage() {
+  const p = touchPage();
+  const button = stageEl();
+  const sheets = [];
+  let place = AT_OVERVIEW;
+  const openSite = (id) => {
+    const w = p.cam.want();
+    const there = w.kind === 'site' && w.id === id;
+    if (!there) p.cam.focus(id, DEMO_TIMING.zoom);
+    sheets.push(id);
+    place = placeOf(id);
+  };
+  const openPlanet = (id, site) => { sheets.push(id); place = placeOf(site, id); };
+  const goBack = () => {
+    if (!canGoBack(place)) return;
+    const next = backStep(place);
+    if (next.level === 'site') openSite(next.site);
+    else { p.cam.fit({ ms: TOUCH.fitMs }); sheets.push(null); place = AT_OVERVIEW; }
+  };
+  const back = createBack(button, { back: goBack });
+  // A press on the control's own element: its pointers stop there, the click steps back.
+  const press = () => {
+    for (const type of ['pointerdown', 'pointerup']) {
+      const ev = button.dispatch(type, { pointerId: 90 });
+      if (!ev.stopped) p.stage.dispatch(type, { pointerId: 90 }); // would bubble to the stage
+    }
+    button.dispatch('click');
+  };
+  createTaps(p.touch, {
+    clock: p.now,
+    pick: (x, y) => hitTest(memberPoints(p.galaxy.world.sites, p.cam.screenOf), x, y)
+      ?? hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), x, y),
+    tap: (hit) => { if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack(); },
+  });
+  const tick = (ms) => { const r = p.tick(ms); back.show(backShown(p.touch.mode(), place)); return r; };
+  const run = (ms) => { for (let t = 0; t < ms; t += 16) tick(16); };
+  const tapAt = (id, sp) => {
+    p.stage.dispatch('pointerdown', { pointerId: id, clientX: sp.x, clientY: sp.y });
+    tick(60);
+    p.stage.dispatch('pointerup', { pointerId: id, clientX: sp.x, clientY: sp.y });
+  };
+  // Into cloud's system and onto its planet.
+  const into = () => {
+    run(200);
+    tapAt(41, p.cam.screenOf('cloud'));
+    run(FLIGHT.ms + 1500);
+    assert.ok(p.galaxy.world.byId.get('cloud').open > 0.9, 'cloud is open');
+    tapAt(42, p.cam.screenOf('cloud-a'));
+    tick(16);
+    assert.deepEqual(sheets.slice(-2), ['cloud', 'cloud-a']);
+  };
+  return { ...p, button, back, sheets, press, tapAt, tick, run, into, place: () => place };
+}
+
+test('pointer events on the page: the back control walks planet → system → overview, and is absent at the overview', () => {
+  const p = backPage();
+  assert.equal(p.button.hidden, true, 'not at the overview');
+  p.into();
+  assert.equal(p.button.hidden, false, 'shown in an open system');
+  const want = p.cam.want();
+  p.press();
+  p.tick(16);
+  assert.deepEqual([p.place().level, p.sheets.at(-1)], ['site', 'cloud'], 'the planet\'s sheet gives way to its system\'s');
+  assert.deepEqual(p.cam.want(), want, 'the camera stays on the system');
+  assert.equal(p.button.hidden, false);
+  p.press();
+  p.tick(16);
+  assert.equal(p.place(), AT_OVERVIEW);
+  assert.equal(p.sheets.at(-1), null, 'the sheet closes with its step');
+  assert.deepEqual([p.cam.want().kind, p.cam.want().ms], ['overview', TOUCH.fitMs], 'the camera eases out');
+  assert.equal(p.button.hidden, true, 'gone at the overview');
+  p.run(TOUCH.fitMs + 1500);
+  assert.equal(p.galaxy.world.byId.get('cloud').open, 0, 'the system folded');
+  const n = p.sheets.length;
+  p.press();
+  assert.equal(p.sheets.length, n, 'a hidden control does nothing');
+  assert.ok(!p.gestures.busy(), 'pressing the control never turned the galaxy');
+});
+
+test('pointer events on the page: a tap on empty sky walks planet → system → overview, then does nothing', () => {
+  const p = backPage();
+  p.into();
+  const sky = { x: 5, y: 5 };
+  assert.equal(hitTest(memberPoints(p.galaxy.world.sites, p.cam.screenOf), sky.x, sky.y), null, 'the corner is empty sky');
+  assert.equal(hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), sky.x, sky.y), null);
+  p.tapAt(51, sky);
+  p.tick(16);
+  assert.deepEqual([p.place().level, p.sheets.at(-1)], ['site', 'cloud']);
+  assert.equal(p.cam.want().id, 'cloud');
+  p.tapAt(52, sky);
+  p.tick(16);
+  assert.equal(p.place(), AT_OVERVIEW);
+  assert.equal(p.cam.want().kind, 'overview');
+  p.run(TOUCH.fitMs + 200);
+  const n = p.sheets.length, want = p.cam.want();
+  p.tapAt(53, sky);
+  p.tick(16);
+  assert.equal(p.sheets.length, n, 'at the overview empty sky does nothing');
+  assert.deepEqual(p.cam.want(), want);
+});
+
+test('pointer events on the page: back from a system the finger turned away from flies back to it', () => {
+  const p = backPage();
+  p.into();
+  // Drag: the camera's pose is the finger's now, the system folds.
+  p.drag(61, [[800, 450], [830, 450], [900, 460], [960, 470]]);
+  p.run(2000);
+  assert.equal(p.cam.want().kind, 'free');
+  p.press();
+  p.tick(16);
+  assert.deepEqual([p.cam.want().kind, p.cam.want().id], ['site', 'cloud'], 'the system is flown to again');
+});
+
+test('the back control: in galaxy.html, hidden, its hit size at least BACK.hitPx (Q6: 15 mm) in wall.css', () => {
+  assert.ok(BACK.hitPx >= 79, 'Q6: 15 mm on the tablet is 79 css px');
+  const html = read('galaxy.html');
+  const tag = html.match(/<button[^>]*id="galaxy-back"[^>]*>/)?.[0] ?? '';
+  assert.match(tag, /\shidden[\s>]/, 'absent until a finger explores');
+  assert.match(tag, /type="button"/);
+  assert.ok(html.indexOf('id="galaxy-back"') > html.indexOf('id="wall-caption"'), 'over the words');
+  const css = read('css/wall.css');
+  const rule = css.match(/\n\.galaxy-back \{([^}]*)\}/)?.[1] ?? '';
+  for (const side of ['min-width', 'min-height']) {
+    const px = Number(rule.match(new RegExp(`${side}: (\\d+)px;`))?.[1]);
+    assert.ok(px >= BACK.hitPx, `${side} ${px}px`);
+  }
+  assert.match(rule, /color: var\(--text-2\);/, 'grey: nothing needs you');
+  assert.match(css, /\.galaxy-back\[hidden\] \{ display: none; \}/);
+});
+
+test('galaxy/main.js wires back (T13): the control and an empty-sky tap step back, shown only while exploring', () => {
+  const js = read('js/wall/galaxy/main.js');
+  assert.match(js, /createBack\(backEl, \{ back: goBack \}\)/);
+  assert.match(js, /back\?\.show\(backShown\(m, place\)\);/);
+  const go = js.slice(js.indexOf('const goBack = '), js.indexOf('};', js.indexOf('const goBack = ')));
+  assert.match(go, /backStep\(place\)/);
+  assert.match(go, /openSite\(next\.site\)/);
+  assert.match(go, /toOverview\(\)/);
+  const wake = js.slice(js.indexOf('wake: () => {'), js.indexOf('},', js.indexOf('wake: () => {')));
+  assert.match(wake, /toOverview\(\)/);
+  const out = js.slice(js.indexOf('const toOverview = '), js.indexOf('};', js.indexOf('const toOverview = ')));
+  for (const rx of [/cam\.fit\(\{ ms: TOUCH\.fitMs \}\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/]) assert.match(out, rx);
 });

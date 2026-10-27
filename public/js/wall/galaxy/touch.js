@@ -27,6 +27,11 @@
 // on a planet (T11, `memberPoints`, asked before the sites) opens its own
 // sheet (hud.js `sheetCaption`).
 //
+// Back (T13, README §7 Night 3 C4): a big control (`createBack`, BACK.hitPx)
+// and a tap on empty sky each go one step back (`backStep`): a planet → its
+// system → the overview. The control shows only while exploring away from
+// the overview.
+//
 // The page itself never scrolls, zooms or shows a menu under a finger: the
 // viewport has no user scaling (galaxy.html), the stage `touch-action: none`
 // (wall.css), and the context menu (a long press) is refused here.
@@ -510,4 +515,64 @@ export function createTaps(touch, opts = {}) {
   };
   const off = touch.onPointer(onPointer);
   return { stop: () => off() };
+}
+
+/**
+ * Back (T13, README §7 Night 3 C4): `hitPx` the control's smallest side, in
+ * css px (night 1's Q6: 15 mm, the size for a main control, is 79 css px on
+ * the tablet). wall.css `.galaxy-back` keeps to it.
+ */
+export const BACK = Object.freeze({ hitPx: 80 });
+
+/** Where a finger has taken the page: the whole galaxy, a site's system, or a planet in it. */
+export const AT_OVERVIEW = Object.freeze({ level: 'overview', site: null, planet: null });
+
+/** The place a tapped site (`placeOf(site)`) or planet (`placeOf(site, planet)`) is. Pure. */
+export const placeOf = (site = null, planet = null) => (site == null
+  ? AT_OVERVIEW
+  : Object.freeze({ level: planet == null ? 'site' : 'planet', site, planet: planet ?? null }));
+
+/** Whether there is a step back from `place` (anywhere but the overview). */
+export const canGoBack = (place) => place?.level === 'site' || place?.level === 'planet';
+
+/** Whether the back control shows: only while a finger explores (never in the tour) and there is a step back. */
+export const backShown = (mode, place) => mode === 'explore' && canGoBack(place);
+
+/**
+ * One step back (T13): a planet → its system, a system → the overview; the
+ * overview stays. Pure.
+ */
+export function backStep(place) {
+  if (place?.level === 'planet' && place.site != null) return placeOf(place.site);
+  return AT_OVERVIEW;
+}
+
+/**
+ * The back control (T13): `button` (a `<button>` on the stage) shows while
+ * `show(true)` and goes with `show(false)`; a press on it calls `back()`.
+ * Its pointers never reach the stage, so a press on the control is not also
+ * a tap on empty sky (a second step back) nor the start of a drag. Returns
+ * `{ show(on), shown(), stop() }`.
+ */
+export function createBack(button, opts = {}) {
+  const o = { back: () => {}, ...opts };
+  let on = false;
+  const set = (v) => {
+    on = Boolean(v);
+    button.hidden = !on;
+  };
+  set(false);
+  const keep = (ev) => ev.stopPropagation?.();
+  const press = (ev) => {
+    ev.preventDefault?.();
+    ev.stopPropagation?.();
+    if (on) o.back();
+  };
+  const listen = [['pointerdown', keep], ['pointermove', keep], ['pointerup', keep], ['pointercancel', keep], ['click', press]];
+  for (const [type, fn] of listen) button.addEventListener(type, fn);
+  return {
+    show: (v) => { if (Boolean(v) !== on) set(v); },
+    shown: () => on,
+    stop: () => { for (const [type, fn] of listen) button.removeEventListener(type, fn); },
+  };
 }
