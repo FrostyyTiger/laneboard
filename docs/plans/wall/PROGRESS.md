@@ -266,13 +266,27 @@ Notes for every builder round (planner, round 1):
   motion: every move is `{ ms: 0, cut: true, fadeMs: CUT.fadeMs }`. Tests `test/wall-galaxy-director.test.mjs` (13).
   Not wired yet (T14), so the page is unchanged: film `shots/r25-galaxy` 13.1 fps under SwiftShader, worst gap
   307 ms, no console errors (it checks that touch.js's new import loads in the browser).
-- [ ] T14 (§7 Night 4 A, D10; after T13) [ui] [variant:galaxy] One camera director, wired: `galaxy/main.js` builds
+- [x] T14 (§7 Night 4 A, D10; after T13) [ui] [variant:galaxy] One camera director, wired: `galaxy/main.js` builds
   the director and hands `createTour` an adapter (its `map` interface: `focus`, `fit`) that asks the director, so
   `tour.js` is unchanged for `wall.html`; `touch.js` (wake, gestures, taps, back, `▶ TOUR`) asks the director instead
   of calling `camera.js` directly; no other path moves the camera — done when: every touch and resume page test stays
   green (`wall-galaxy-touch`, `wall-galaxy-resume`), a page test with a counting fake camera sees every camera call
   come through the director with its source, and a CDP touch film (tour → wake → drag → tap a site → back → 60 s →
-  tour) matches night 3's `r56-touch` sequence with no cut.
+  tour) matches night 3's `r56-touch` sequence with no cut. (commit 915dc43)
+  Builder r28: `director.js createDirector(cam, { clock, still, held, resume })` → `{ as(source), show, clear,
+  handBack, tick, driver, left, onMove }`. `as('tour')` / `as('touch')` are camera.js look-alikes whose `focus`,
+  `fit`, `cut`, `fly`, `steer` are director requests (reads pass through). `main.js` calls no `cam.<move>` (a
+  test pins it); `touch.js` is unchanged (gestures get the finger's camera). Decided: **touch.js keeps the
+  minute** (it hears every pointer; the director's `held` is "touch mode is not tour", and touch.js's resume
+  calls `director.handBack()` before `tour.resume()`); `directorStep` touch events take an `ms` (back to the
+  overview in fitMs); the tour's legs are played as `focus`/`fit()` exactly as before, and in reduced motion only a
+  finger's or a show's site is a `cut`. `show(cmd)` (on `__galaxyDirector`, no sender until B) stops the tour and
+  releases its plate (the first film showed the tour's HV2 plate over a show of HV1); the hold's end resumes the tour.
+  Tests: 3 in `wall-galaxy-director`, 3 in `wall-galaxy-resume` (its `page()` now runs through the director, with a
+  counting camera). Films: `shots/r28-touch` (CDP: tour → wake → drag → tap → back to the dragged pose → 60 s →
+  tour; a show under the finger refused `busy`, under the tour it takes the camera and gives it back; largest
+  frame-to-frame camera step ≤ 0.22 of its distance, as in plain tour legs: no cut; no console errors) and
+  `shots/r28-galaxy` 12.5 fps under SwiftShader ×4 (r25 13.1), worst gap 321 ms, 0 errors.
 - [ ] T15 (§7 Night 4 0b; r46-skeptic fx-warp 1) [ui] [variant:galaxy] `lanes` removed and calm flights quiet: the
   `lanes` code in `galaxy/fx.js` (`siteRoutes` and the pulse), `scene.js`, `main.js`, its tests and the `?fx=` list
   and every mention in docs; under `fx=warp` a flight to a calm site or to the overview draws no streaks (`warpAt`
