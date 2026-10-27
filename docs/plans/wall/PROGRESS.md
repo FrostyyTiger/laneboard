@@ -168,7 +168,7 @@ Notes for every builder round (planner, round 1):
 
 ## Research questions
 
-- [ ] Q16 The show interface's message shape (for Later B, the first show task): how do kiosks, digital signage and
+- [x] Q16 → research/Q16-show-message-shape.md. The show interface's message shape (for Later B, the first show task): how do kiosks, digital signage and
   display walls take remote "show this" commands in the browser (`BroadcastChannel`, `window.postMessage`, a
   WebSocket topic; e.g. signage players, Grafana kiosk/playlist, presentation remotes like reveal.js multiplex, OBS
   browser sources): message envelope (type, id, source, ttl), how a command is undone or expires, how a screen says
