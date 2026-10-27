@@ -21,7 +21,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `c4-show-canvas.md` | C4: show commands, one camera with the tour, undo; the canvas, kit blocks, custom cards, promotion, how cards leave | `S-C4-` | T10, T11, T12 | part 1 written (T10: §1-§6, show commands `fly_to`/`highlight`/`clear`/`pin`/`compare`/`scrub`, one camera with the tour, show lines, undo, S-C4-01..12, D67-D77); part 2 written (T11: §7-§10, the card area and grid, shelf, `place`, kit blocks `countdown`/`timer`/`status`/`log`/`chart`/`table`/`checklist`/`map`/`text`/`diff`, one-tap removal, S-C4-13..22, D78-D87, sketch `c4-canvas.html`); part 3 planned (T12) |
 | `coworker.md` | speaking up, quiet hours, scheduled jobs, the infra repo pull, drift, the agent's changes as PRs | `S-CW-` | T13 | planned |
 | `c5-c6.md` | C5 voice out; C6 act, rules and the confirm card only | `S-C5-`, `S-C6-` | T14 | planned |
-| `protocols.md` | screen ⇄ room, room ⇄ agent bridge, room ⇄ speech-to-text, message by message | none (sequences) | T15, T16 | planned |
+| `protocols.md` | screen ⇄ room, room ⇄ agent bridge, room ⇄ speech-to-text, message by message | none (sequences) | T15, T16 | part 1 written (T15: same-origin transport, the room link, hello/resume/snapshot, conversation, show, cards, audio, button, limits, one spoken turn; D92-D99); part 2 planned (T16) |
 | `security.md` | tokens and what each can do, injection paths, audio and transcript handling, audit | `S-SEC-` | T17 | planned |
 | `stand-ins.md` | the fake speech service, the fake agent, the demo fleet additions | none (formats) | T18 | planned |
 | `single-machine.md` | everything on one box, no tailnet, no GPU, another agent | `S-ONE-` | T19 | planned |
@@ -60,7 +60,7 @@ instead of writing its own. A scenario with a timing asserts against its row. Ti
   below, on the real screen.
 - **Marks** (D28). The screen sets `performance.mark('cockpit:B<n>:start')` and
   `performance.mark('cockpit:B<n>:end')` for every row, B5 and B6 with the room's receive time
-  carried in the message (`protocols.md`, T15). A test reads them with
+  carried in the message (`receivedAt`, `protocols.md` §4-§5). A test reads them with
   `performance.getEntriesByName`; on the real screen `?perf=1` lists the last 20 measures in the
   pane's header menu (T5 places it). A measure over budget is not an error on the real screen,
   only a number to look at.
@@ -94,8 +94,8 @@ Each word is defined here once; the other files link here instead of redefining 
   laneboard MCP server. Not a screen, not the laptop, not the hub. A Map node of `kind: room`
   (`docs/map.md`) is called a **room node** here (D1).
 - **hub**: laneboard's existing aggregator that reads the builders' boards (`docs/fleet/hub.md`,
-  `server/hub/`). For the cockpit it relays view state and show commands to screens and gains no
-  authority over builders (plan C4).
+  `server/hub/`). Plan C4 has it relay show commands to screens; the spec sends them on the room link
+  instead and the hub gains nothing for the cockpit (D92, `protocols.md` §1).
 - **agent**: the one long-running agent session in the room. First-class: Claude Code in headless
   streaming mode; any agent that speaks the bridge protocol works (plan §5).
 - **bridge**: the small process in the room between the room's services and the agent: user text
@@ -154,6 +154,9 @@ Each word is defined here once; the other files link here instead of redefining 
   act (plan §4). New: today's auth (`docs/fleet/auth.md`) has the request kinds `local`, `direct`
   and `hub` and no device tokens; `security.md` says how the two fit.
 - **pairing**: how a screen gets its device token from the room (`screens.md`).
+- **room link**: the one WebSocket a page keeps to the room, `/api/cockpit/ws` on the page's own
+  origin, never through the hub; conversation, audio, show commands, cards and focus ride on it
+  (`protocols.md` §2).
 - **stand-in**: a fake for something the loop's VM does not have (speech service, agent, a real
   fleet) that replays recorded or scripted behaviour; tests run against stand-ins, and they double
   as the public demo (`stand-ins.md`).

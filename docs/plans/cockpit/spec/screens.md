@@ -113,7 +113,7 @@ sits in its top-right corner: `--fs-16` mono, `--text-1`, on `--bg-sunken`, e.g.
 a new card is news, not trouble (`docs/design.md`, the colour rule).
 
 The cockpit button exists only where the cockpit is configured (the room's address in config,
-T15/T3). Without it the button is not rendered, and nothing else changes: the board works as
+`protocols.md` §1, D93). Without it the button is not rendered, and nothing else changes: the board works as
 today. A tap on the cockpit button changes no route: the hash stays as it was (the router's rule
 that a route only selects, `router.js` header).
 
@@ -244,8 +244,8 @@ recommendation (pending Q-O10).
 **Where the cockpit is configured.** `cockpit.url` (the room's address) in the config of the
 laneboard server that serves the page (the hub in the owner's case; the one box in
 `single-machine.md`). Unset: the cockpit is **unconfigured**, no cockpit button, no canvas half,
-the board as today (§4) (D17). How the screen reaches the room (through the hub or direct) is
-T15's; the routes below are the first cut T15 adopts or renames.
+the board as today (§4) (D17). The screen reaches the room directly on the page's own origin, under
+`/api/cockpit/`, never through the hub (`protocols.md` §1, D92); the routes below are its §1.1.
 
 **The board does not need pairing.** Viewing the board stays as today (`docs/fleet/auth.md`: a
 `direct` user through serve, or `local`). An unpaired screen shows every view, the Wall and the
@@ -296,12 +296,12 @@ A screen depends on up to three things; each fails on its own and says so where 
 | --- | --- | --- |
 | the screen's network | the browser | `navigator.onLine` is `false` |
 | the **board** (hub, or the builder in builder mode) | the board socket (`public/js/core/net.js`) | the socket closes; it retries 500 ms × 1.8 up to 15 s, as today |
-| the **room** | the cockpit link (T15) | the link closes, or no frame for 25 s (the room sends a heartbeat every 10 s); it retries 500 ms × 1.8 up to 15 s, the same `nextBackoff` (D10, D11) |
+| the **room** | the room link (`protocols.md` §2) | the link closes, or no frame for 25 s (the room sends a heartbeat every 10 s); it retries 500 ms × 1.8 up to 15 s, the same `nextBackoff` (D10, D11) |
 
 A lost room link shows only after a **5 s grace**: a link back within 5 s changes nothing on screen
-(D10). The board link keeps today's behaviour (the `#offline` banner in the app). If T15 routes the
-cockpit through the hub, a hub down is also a room down, and the pane says `Hub unreachable` in
-place of `Cockpit room unreachable` in the texts below.
+(D10). The board link keeps today's behaviour (the `#offline` banner in the app). The room link does not
+go through the hub (D92), so a hub down is not a room down; on one box board and room are one
+process and go down together.
 
 The page root carries `data-cockpit`: `unconfigured`, `unpaired`, `connecting`, `live`,
 `room-down`, `offline` (for tests and CSS). `data-board` is `live` or `down`.
@@ -331,7 +331,7 @@ lost.
   `--text-3`, 1 px `--line-strong` border) next to its title, its values frozen. A countdown keeps
   counting (time is known on the screen) and adds `The room is down: this job may not run.`;
   its `CANCEL` is disabled. One-tap remove still works and is applied on the screen only until the
-  room is back (then sent, T15). An empty canvas reads `The cockpit room is unreachable, so the
+  room is back (then sent: `card.close`, `protocols.md` §5). An empty canvas reads `The cockpit room is unreachable, so the
   agent cannot place cards now.` and `Unreachable since 06:41.` (24 px / 20 px, as S-SCR-10).
 - **What the screen keeps:** the conversation and the cards are kept in memory only, never in
   browser storage (a screen holds nothing worth stealing, plan §2) (D14). A reload while the room is
@@ -339,12 +339,12 @@ lost.
 
 **Back.** At the first frame from the room: the status line reads `Back since 06:47.` for 5 s and
 goes; `STALE` plates go; cards placed or removed meanwhile update; missed conversation lines appear
-in order (the resume is T15's). `SEND` and talk are enabled again. **A draft is never sent on its
+in order (replay or snapshot, `protocols.md` §2.2). `SEND` and talk are enabled again. **A draft is never sent on its
 own**: it stays in the input until the owner sends it (D12).
 
 **Down during a turn or while speaking.** A reply streaming when the link is lost stops where it is
 and gets the line `Cut off: the room went away at 06:41.`; on reconnect, a reply the room finished
-meanwhile replaces the cut-off text (T15). An open microphone closes at once (no 5 s grace: audio
+meanwhile replaces the cut-off text (`protocols.md` §2.2). An open microphone closes at once (no 5 s grace: audio
 has nowhere to go); the words so far stay in the input as an editable draft, not sent.
 
 Sketch: `sketches/screens-room-down.html` (S-SCR-17 at 06:44): as is, `split` with the pane
@@ -364,7 +364,7 @@ the line above the input row, the draft `how is the`, `SEND` and talk `off`).
   `--text-2`: `Waiting for the board at hub.example.invalid…` (the page's origin), below it 20 px
   `--text-3`: `Retrying in 4 s.`, and a `SHOW DEMO` button (64 px tall, 20 px caps) that reloads
   with `?demo=1` (D16). Never an empty screen (`docs/plans/product.md` §3.6).
-- **Pane and canvas:** unchanged if the room is reachable (pending T15).
+- **Pane and canvas:** unchanged while the room link is up (`protocols.md` §1; on one box the room is down too).
 
 ### The screen offline
 
@@ -374,7 +374,7 @@ strip reads the same. Retries keep running; when the network is back the rules o
 
 ## 8. Scenarios, part 2
 
-The stand-in room (T18) can stop and start its cockpit link, approve and revoke pairings, and the
+The stand-in room (T18) can stop and start its room link, approve and revoke pairings, and the
 demo hub can be stopped, so each scenario runs without hardware.
 
 ### S-SCR-13 An unpaired screen: the board works, the pane shows a code

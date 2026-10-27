@@ -131,7 +131,7 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   when the track is live (B1, ≤ 0.2 s).
 - **Frames** leave the screen from the moment the track is live; audio captured before the room's
   audio channel is open is held on the screen and sent first, so the first word is not cut off. The
-  frame format and channel are T15's.
+  frame format and channel are `protocols.md` §6 (D96).
 - **Cannot open** → `data-talk="error"`, the input stays the textarea and typing works. The
   message (exact) is `[data-talk-error]`, 16 px mono `--text-2`, line height 1.25, left-aligned over
   the text column (x 784-1344 on the Wall), its last line 8 px above the input row; it wraps (2 lines
@@ -322,7 +322,7 @@ short clips (research finding)." The plan's config key is `cockpit.stt.language`
 - **Fixed per press.** The language is read at `pointerdown`; while the microphone is open the
   language button is `disabled`. Switching takes effect at the next press.
 - What reaches the conversation is the text; the language is a field of the spoken turn
-  (`protocols.md`, T15), not shown in the label.
+  (`protocols.md` §3.1 `lang`), not shown in the label.
 
 ## 9. Speech-to-text config (D49)
 
@@ -547,7 +547,7 @@ functions (§11), so the gesture logic is the talk key's.
 **A button's token.** On the room: `laneboard cockpit button add hall --screen desk` prints the
 token once (`hall: lbbtn_…`, 32 random bytes, base64url) and keeps only its hash. `--screen` names
 the target; without it the target is **the screen touched last** (the paired screen whose latest
-touch, click or key the room heard of; screens report one at most every 10 s, the message is T15's).
+touch, click or key the room heard of; screens report one at most every 10 s, the message is `touched`, `protocols.md` §3.8).
 `laneboard cockpit buttons` lists them, `laneboard cockpit button remove hall` revokes at once. The
 CLI is `local` on the room, as pairing approval is (`screens.md` §6). A button token can do one
 thing: press and release talk on its target. It cannot read the conversation, place cards or pick

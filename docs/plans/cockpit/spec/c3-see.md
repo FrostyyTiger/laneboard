@@ -427,7 +427,7 @@ selected node, the run open. 'What's wrong here?' needs no description."
 ### 8.1 What a screen reports
 
 Each screen tells the room what it shows in a `focus` message on its room connection (the envelope,
-`seq` and resume are `protocols.md`'s, T15). The fields are the router's own route
+`seq` and resume are `protocols.md` §2). The fields are the router's own route
 (`public/js/core/router.js` grammar: `view`, `b`, `s`, `q`, `sel`, `open`, `run`) plus four of the
 cockpit's:
 

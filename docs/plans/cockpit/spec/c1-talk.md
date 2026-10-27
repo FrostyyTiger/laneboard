@@ -166,7 +166,7 @@ however many (D23: 20 rows are 880 px, one flick).
 The pane draws the last 50 turns. Older turns, if the screen holds them, come back with
 `SHOW EARLIER` (full width, 48 px, 16 px caps) at the top of the conversation, 50 at a time (D27).
 The screen holds the conversation in memory only (`screens.md` D14); what a screen gets from the
-room after a reload is T15's.
+room after a reload is the `snapshot` of `protocols.md` §2.2 (`history` for `SHOW EARLIER`, §3.7).
 
 ## 4. Following a reply as it grows
 
@@ -399,7 +399,7 @@ Plan C1: "Typing works everywhere (on-screen keyboard, a paired keyboard)." `spe
 **On send** (B8, ≤ 0.1 s): the prompt block is drawn at the end of the conversation with the label
 `YOU · 07:02 · SENDING` (the `SENDING` in `--text-3`), the input is emptied, the conversation is
 pinned to its end (§4), `data-turn="thinking"`. Keyboard focus stays where it was (an on-screen
-keyboard stays up). When the room confirms it has the prompt (T15), `· SENDING` goes. No
+keyboard stays up). When the room confirms it has the prompt (the `turn.prompt` echo, `protocols.md` §3.1), `· SENDING` goes. No
 confirmation within 5 s while the room link is up: §10, E1 (D31).
 
 ## 8. Talking while the agent answers (pending Q-O1)
@@ -515,7 +515,7 @@ Plan §2: "All screens show the same cockpit conversation; speaking at one shows
 - **Two prompts at once.** The room takes them in the order they arrive; the second stops the
   first's turn as §8 says, on every screen alike.
 - A screen that opens or reloads gets the last 50 turns from the room and joins a running turn
-  where it is (T15).
+  where it is (`protocols.md` §2.2).
 
 ## 13. No raw view in C1 (pending Q-O17)
 

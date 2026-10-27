@@ -17,7 +17,7 @@ appears as a line in the conversation, and the owner can undo it with one tap."
   `clear`, `pin`, `compare`, `scrub`, seen by the agent as `mcp__laneboard__<name>`. The room checks
   every argument against the schemas in §3 (a bad one is JSON-RPC `-32602` naming the field, as
   `c3-see.md` §1), then sends one `show` message to each target screen over that screen's room
-  connection (message shape, ids and resume: `protocols.md`, T15).
+  connection (message shape, ids and resume: `protocols.md` §4).
 - **A camera** is the Map drawn on a screen: the wall half of the Wall page (layouts `wall`, `split`,
   and `switch`, `screens.md` §1), and the app while its route is `#/map`. A screen in `canvas`
   layout, or the app on any other view, has no camera.
@@ -536,7 +536,7 @@ chart, table, checklist, map, text, diff). A card bound to fleet data stays live
 
 - **The room binds** (D81). A bound card names its source (a node, run, alert, branch, job); the room
   reads it with the same board reads as the MCP tools (`c3-see.md` §2, 5 s cache) and sends the
-  card's data to every canvas screen over the room connection (message: `protocols.md`, T15).
+  card's data to every canvas screen over the room connection (`card.data`, `protocols.md` §5).
   Screens never read the board for a card, so a card looks the same on every screen and a canvas
   screen needs no board access of its own.
 - **Refresh**: every 10 s per card while at least one canvas screen is online; one read per URL per

@@ -118,12 +118,15 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 - [x] Q7 Android tablet microphone without a prompt: does Chrome on Android honour `AudioCaptureAllowed` / any managed policy or a kiosk app setting that grants the microphone to one origin; and the managed-policy directory for Chrome and Chromium on Linux — for `c2-voice.md` §12 (the later `docs/cockpit.md`) → research/Q7-android-mic-and-linux-policy-dir.md (no Android no-prompt route found; Chromium `managed/` path assumed)
 
 - [x] Q8 What does Claude Code do with a prompt sent while a turn runs (queue, inject at the next tool boundary, interrupt)? — for T5/T16 (Q-O1 option d) → research/Q8-prompt-while-turn-runs.md (default `priority:"next"` = read after the running tool calls finish; `later` = after the turn; `now` = interrupt; one 2.1.175 report of an ignored message)
+- [ ] Q9 Does `tailscale serve` with a path mount (`--set-path /api/cockpit`) forward the request path to the backend unchanged or strip the prefix, and does it pass WebSocket upgrades and the `Origin` header through? Same for a plain nginx/Caddy `location` block — for T15 (`protocols.md` §1, D92), T19
 
 ## Later
 
 - (14) Final pass on `spec/DECISIONS.md` and `spec/QUESTIONS.md`: dedupe, number check, every `(pending Q-O<n>)` in the spec matches an open question, the list ordered for the owner's ~15 min morning Q&A.
 
 ## For the owner
+
+- T15 (round 57) routes the screen to the room on the page's own origin: the front that serves the page (a reverse proxy or `tailscale serve` with a path) forwards `/api/cockpit/` to the room's port; nothing goes through the hub (D92). This departs from plan C4's "room → hub → screens" for show commands, to keep D89's single origin and the hub carrying nothing new. Strike D92 to send them through the hub instead.
 
 - Round 56 (fix): the one red test after round 55 was a flake, not the spec: the tail ended in `Error: timeout`, which only `test/term-proxy.test.mjs` (its wait helper, line 92) throws, and three reruns of `npm test` passed 3454/3454. Round 55 changed only spec files. Worth a longer deadline in that helper when the box is loaded; it is outside this night's allowed paths.
 
