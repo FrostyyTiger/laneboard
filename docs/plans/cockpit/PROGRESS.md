@@ -52,6 +52,14 @@ its file names).
 - [ ] T37 (4) `slices.md` (with T20): "The acceptance harness" section (runner, folder, command, relation to `npm test`) written for the Q-O14 recommendation (pending Q-O14); and the room-process decision in `spec/README.md` (process, entry point, config section, origin) for Q-O15 (pending Q-O15) — review 26-implementer.md findings 1, 2
 - [ ] T38 (2) Move D13 (pairing code), D14, D22 notes to point at Q-O16 and mark them `(pending Q-O16)` — review 26-implementer.md contradictions list
 - [ ] T39 (2) `screens.md` §7: the room-down line `Sending and voice come back with the room.` sits "under the input", but on the Wall the input row ends 24 px above the screen's edge; move it above the input row as `c2-voice.md` §5 does for the microphone error (sketch `c2-states.html` cell 8) — found by round 30
+- [ ] T40 (2) `c1-talk.md` new § "With the on-screen keyboard" (`interactive-widget=resizes-content`, pane sized to `visualViewport.height`, input row on the keyboard's edge, conversation ≥ 200 px pinned to its end, talk button stays in the input row, tap on conversation blurs) and a scenario that shrinks the viewport and asserts the input rect is visible — review 31-touch.md finding 1
+- [ ] T41 (2) Fold into T26/T27: one talk-button rect on every page and layout (x 1280-1344, y 824-888, drawn over the tape's right end in the app), written once in `screens.md` §4 and asserted by S-SCR-01/09, S-C1-01; `CHAT` stays visible reading `CLOSE` while the pane is open (same rect) and the header `CLOSE` stays; remove the `screens.md` §4 vs `c1-talk.md` §2 contradiction; S-C1-02 taps both — review 31-touch.md findings 2, 5
+- [ ] T42 (2) `c2-voice.md` §3 / `c1-talk.md` §8 per Q-O19: `CANCEL` undo for 5 s, 24 px gap (input x 784-1176), `STOP` on release only with a distinct glyph; hint line left-aligned at x 784, `SENDING STOPS THE ANSWER` on a second line; hold near the screen edge (release within 48 px of an edge or `pointercancel` after a hold sends; only up/left > 48 px out is "slide off"), add (1366, 910) case to S-C2-07; update D40 — review 31-touch.md findings 3, 10, 14
+- [ ] T43 (2) Type floor: hint lines and notes 18 px caps `--text-1`, `CANCEL` as 28 px `✕` with `aria-label`, `STALE` plate and length note raised; D21 floor "no text under 16 px, no instruction under 18 px" plus a test walking every visible text node; turn state `● ANSWERING` in `--text-2` 18 px — review 31-touch.md findings 4, 13
+- [ ] T44 (2) `screens.md` §4: one table of every control in the bottom-right cluster per layout and pane state (closed/open, keyboard up) with rects, a no-overlap/≥ 8 px test; switch button moves into the pane header while open; `↓ NEW` 40 px above the row; `SCREEN` sheet gets a `CANCEL` row and closes on outside tap (S-SCR-06); `NEW` bar puts `KEEP` at the right, `START` left with 16 px gap (S-C1-22) — review 31-touch.md findings 6, 11
+- [ ] T45 (2) `spec/README.md`: pressed-state rule for every tappable (fill `--bg-sunken`, border `--line-strong` → `--text-2`, first frame after `pointerdown`, no transition), `touch-action: manipulation`, one table-driven test; tool rows 48 px with 20 px `+`/`−` (S-C1-07); links are `<span>`, drawn without underline or showing the URL for 5 s, long-press step in S-C1-09 — review 31-touch.md findings 7, 8, 9
+- [ ] T46 (6) For T11/T12: card removal leaves a 48 px `CARD REMOVED · UNDO` row for 10 s; `×` ≥ 8 px from other targets — review 31-touch.md finding 12
+- [ ] T47 (3) Bring sketches in step with the spec: `c1-pane.html` placeholder `Type or hold to talk`, header with `NEW` and `RAW`; `screens-split.html` with talk button plus `CHAT` — review 31-touch.md finding 13 (do with T25)
 
 Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do T4-T7 before T8+ and before T21-T25 sketches if rounds are short; T24 comes right after T4.
 
@@ -72,6 +80,7 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 ## Reviews
 
+- round 32 triage of `reviews/31-touch.md`: 14 findings plus a contradictions list. Tasks: 1 → T40, 2/5 → T41, 3/10/14 → T42, 4 → T43, 6/11 → T44, 7/8/9 → T45, 12 → T46, 13 → T47. Questions: type size → Q-O18, undo vs gap vs confirm → Q-O19. Already tracked: S-SCR-01 `AGENT` vs talk button (T26). None dropped.
 - round 27 triage of `reviews/26-implementer.md`: 14 findings plus a contradictions list. Tasks: 3 → T26, 4 → T27, 5 → T28, 6 → T29, 7 → T30, 8 → T31, 9 → T32, 10 → T33, 11 → T34, 12 → T35, 13 → T36, 14 → spread over T26/T29/T33/T34/T36, 1 and 2 → T37. Questions: 1 → Q-O14, 2 → Q-O15, D13/D14/D22 → Q-O16 (+T38). Already covered: two-screens wording and `CANCEL JOB` confirm (T21). None dropped.
 - round 22 triage of `reviews/21-owner.md`: 10 findings. Tasks: finding 1 → priority note (T4-T7 first, plan already had them), 4 → T24, 5/6/9 → T21, 7 → T23, 10 → T22, 3 (sketch) → T25. Questions: 2 → Q-O11, 3 → Q-O12, 8 → Q-O13, 5 → added to Q-O9. 9 tasks/questions-bearing findings in all; none dropped.
 
@@ -85,5 +94,6 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 |---|---|---|---|---|---|---|---|---|
 | 21 | owner | 8 | 2 | 6 | 8 | 5 | 6 | 7 |
 | 26 | implementer | 7 | 3 | 4 | 4 | 6 | 6 | 6 |
+| 31 | touch | 8 | 4 | 5 | 7 | 6 | 6 | 6 |
 
 ## Morning

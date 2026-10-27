@@ -254,3 +254,31 @@ Recommendation: stays open until the control-plane review; the spec assumes a), 
 ever added needs a confirm ("change only with a yes", `spec-input.md` §6).
 
 Answer: (open)
+
+## Q-O18 Size of the reply and the live words
+
+From review 31-touch.md. Research Q1 recommends 26-30 px for text read while speaking; D21 settled
+the 22 px floor. Spec: `c1-talk.md` §3, `c2-voice.md` §3.
+
+- a) **22 px** (the floor): about 42 characters per line in the 560 px column, more on screen.
+- b) **28 px**: about 33 characters per line, easier at 60 cm, replies run longer.
+- c) 22 px with a setting the owner can raise.
+
+Recommendation: b) — the owner reads at arm's length while talking; line length is the cheaper loss.
+The spec stays at 22 px (pending Q-O18) until answered.
+
+Answer: (open)
+
+## Q-O19 Protecting dictation and answers from a missed tap
+
+From review 31-touch.md finding 3. `CANCEL` (drops spoken words) and `STOP` (ends an answer) sit
+16 px from the talk button; neither has an undo.
+
+- a) **Undo**: `CANCEL` keeps the words 5 s with an `UNDO` in the same slot.
+- b) **Gap**: 24 px between the slot and the talk button, `STOP` acts on release only.
+- c) **Confirm** tap before dropping.
+
+Recommendation: a) and b) together — nothing is lost for good, and a confirm would slow the
+common case. Spec (pending Q-O19).
+
+Answer: (open)
