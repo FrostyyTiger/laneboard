@@ -376,9 +376,10 @@ Each word is defined here once; the other files link here instead of redefining 
   including its tool lines and show commands. A turn the agent starts itself (speaking up,
   `coworker.md`) has no prompt.
 - **steer / queued prompt**: a prompt sent while a turn runs goes into that turn; it is **queued**
-  (`· QUEUED`, grey) until the agent reads it at its next tool boundary, then **taken**
+  (`· QUEUED`: the word 18 px `--text-1`, the prompt's text grey, D270) until the agent reads it at its next tool boundary, then **taken**
   (`c1-talk.md` §8, `protocols.md` §3.4, pending Q-O1).
 - **demo link**: a client-side stand-in for the room link, used with `?demo=1` when there is no cockpit; canned turns, no network (`c1-talk.md` §15, D148).
+- **delivery word**: `SENDING`, `QUEUED` or `NOT SENT` at the end of a prompt's label row, `[data-turn-delivery]`, 18 px `--text-1` (`c1-talk.md` §3, D270).
 - **pane**: the cockpit pane: the panel that slides over the current view and shows the
   conversation and the input. It never replaces the view (plan C1). Where the screen has a canvas
   (`split`, `canvas`, `switch`) the same parts are a fixed **column** of the canvas instead, always

@@ -40,9 +40,9 @@ td{font-size:18px;height:44px;padding:0 12px;border-bottom:1px solid var(--line-
 .r{text-align:right}
 .m1{color:var(--p1)}.m2{color:var(--p2)}.mg{color:var(--text-2)}
 .cur{color:var(--text-3)}
-/* a prompt sent during the turn (c1-talk.md §8, D122): last item, `· QUEUED` in --text-3, text in --text-2 until taken */
+/* a prompt sent during the turn (c1-talk.md §8, D122): last item, `QUEUED` 18 px --text-1 (D270), text in --text-2 until taken */
 .prompt.q{color:var(--text-2);margin-bottom:0}
-.lr .qd{color:var(--text-3)}
+.lr .qd{font-size:18px;font-weight:500;color:var(--text-1)}
 .ir{height:80px;flex:none;border-top:1px solid var(--line);position:relative}
 .inp{position:absolute;left:24px;top:16px;width:400px;height:64px;background:var(--bg-sunken);border:1px solid var(--line);font-size:28px;color:var(--text-3);display:flex;align-items:center;padding:0 16px;white-space:nowrap}
 .send{position:absolute;left:440px;top:16px;width:64px;height:64px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1)}
@@ -56,7 +56,7 @@ td{font-size:18px;height:44px;padding:0 12px;border-bottom:1px solid var(--line-
        opener CLOSE 1288-1336, 760-808; input 784-1184, SEND slot 1200-1264, talk 1280-1344, all y 824-888.
        Type: prompt, reply and input 28 px (TYPE_TALK, D21, pending Q-O18).
        Queued (c1-talk.md §8, D122, pending Q-O1): the owner typed `only the stuck one` at 07:03 and tapped SEND;
-       the block is the last item, `YOU · 07:03 · QUEUED` (QUEUED --text-3), text --text-2; the reply goes on
+       the block is the last item, `YOU · 07:03 · QUEUED` (QUEUED 18 px --text-1, D270), text --text-2; the reply goes on
        above it (cursor) until the agent takes it. The input is empty again, so the slot reads STOP (§8).
        The turn's question (`how did the night go?`, 07:02) has scrolled off the top.
        Labels: NEW in the header; the opener reads CLOSE while the pane is open and CHAT when it is closed
@@ -90,7 +90,7 @@ td{font-size:18px;height:44px;padding:0 12px;border-bottom:1px solid var(--line-
         <tr><td>bench</td><td>builder-c</td><td><span class="mg">○</span> done</td><td class="r">2 h 05</td></tr>
       </table>
       <p class="reply">nightly-ci waits on a lock since 05:50.<span class="cur">▍</span></p>
-      <div class="lr lab">You · 07:03<span class="qd">&nbsp;· Queued</span></div>
+      <div class="lr lab">You · 07:03&nbsp;·&nbsp;<span class="qd">Queued</span></div>
       <div class="prompt q" data-queued>only the stuck one</div>
     </div>
     <div class="ir">

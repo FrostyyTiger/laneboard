@@ -297,6 +297,12 @@ blocks, tool lines (§5) and show lines (`c4-show-canvas.md` §4) interleaved as
   left border and 8 px padding left: `YOU · 07:02` (`YOU · SPOKEN · 07:02` for a voice prompt, C2) and `AGENT · 07:02`. Time is the
   screen's local `HH:MM`, 24 h; a date is `D Mon` in English (`27 Oct`, D149). A reply's label row
   also carries the turn's age from 3 s on (§9, D235).
+- **The delivery word** (D270). A prompt's label row ends with ` · SENDING`, ` · QUEUED` or
+  ` · NOT SENT` while one holds (§7, §8, §10 E1). The word is its own span
+  `[data-turn-delivery="sending|queued|not-sent"]`, 18 px caps `--font-label` weight 500
+  `--text-1` (the instruction floor, D21, D167: it tells the owner whether to repeat the words);
+  the ` · ` before it and the rest of the row stay 16 px `--text-3`. The row stays 24 px tall, the
+  word on the row's baseline. A row with no delivery word has no such span.
 - **The prompt**: mono 28 px, line height 1.4 (39.2 px), `--text-1`, in a block on `--bg-surface`
   with a 1 px `--line-weak` border and 12 px / 16 px padding (pending Q-O18).
 - **The reply**: mono 28 px, line height 1.4 (39.2 px), `--text-1`, straight on the pane's
@@ -934,8 +940,8 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
 - **`SEND` during a turn** (D122). The prompt block is drawn at once at the end of the
   conversation (B8), label `YOU · 07:03 · SENDING`. The room sends it to the agent with
   `priority:"next"` and a UUID (`protocols.md` §11.3) and echoes `turn.prompt` with
-  `delivery:"queued"`; the label then reads `YOU · 07:03 · QUEUED` (`QUEUED` in `--text-3`) and the
-  prompt's text is drawn in `--text-2` instead of `--text-1`. The block stays the last item of the
+  `delivery:"queued"`; the label then reads `YOU · 07:03 · QUEUED` (`QUEUED` 18 px `--text-1`, §3
+  "The delivery word", D270) and the prompt's text is drawn in `--text-2` instead of `--text-1`. The block stays the last item of the
   conversation while queued: text the agent writes before taking it is drawn above it.
 - **Taken.** When the agent reads it (`prompt.taken` `taken`: after the tool calls it is running
   end, research Q8), within 0.1 s `· QUEUED` goes, the text turns `--text-1`, and the block takes
@@ -1220,7 +1226,8 @@ Given the fake agent on a turn that writes `Three runs ran last night.` from t =
 When at t = 2 s the owner types `only the failed one` (the slot reads `SEND`, no hint line shows)
 and taps `SEND`,
 Then by t = 2.1 s the prompt block is drawn last with `YOU · HH:MM · SENDING`; by t = 2.5 s it
-reads `YOU · HH:MM · QUEUED` with its text in `--text-2`; the header reads `● WORKING` throughout
+reads `YOU · HH:MM · QUEUED` with its text in `--text-2` and `[data-turn-delivery="queued"]` at a
+computed font size ≥ 18 px in `--text-1` (D270); the header reads `● WORKING` throughout
 and never `● STOPPING`; no `STOPPED AT` line is drawn; by t = 4.1 s `· QUEUED` is gone, the text is
 `--text-1`, and `Only builder-a failed.` is drawn below the prompt block in the same turn (one
 `AGENT · HH:MM` label row in the turn, above `Three runs ran last night.`); the fake agent's log
@@ -1234,7 +1241,8 @@ t = 2.9 s lifted at t = 3.1 s stops nothing; at t = 3.0 s the slot reads `■ ST
 Test: Playwright with `hasTouch: true`, CDP touches for the taps, a fake clock; assert `data-send`
 at 2.05 s, 2.95 s and 3.05 s; `prompts()` (`stand-ins.md` §2.6) is the same at 2.2 s and 4.1 s;
 assert the label text at 2.1 s, 2.5 s and 4.1 s, the prompt's computed colour
-against `--text-2`/`--text-1`, the queued block's `getBoundingClientRect().bottom` ≤ 744 and no overlap
+against `--text-2`/`--text-1`, `[data-turn-delivery]`'s computed `font-size` (≥ 18 px) and
+colour (`--text-1`) at 2.5 s and its absence at 4.1 s, the queued block's `getBoundingClientRect().bottom` ≤ 744 and no overlap
 with the opener's rect, no element with the text `STOPPED AT`, the order of the turn's items, and
 `order("interrupt")` from the fake-agent log is `[]` (`stand-ins.md` §2.6).
 
