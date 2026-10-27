@@ -1,8 +1,7 @@
 // C1, build 7: smaller screens and the browser floor (spec c1-talk.md §1.2, D249, D250).
 // C1 boots with `stt.url: none` (D265): no talk button, SEND in its rect and the input to
-// 16 px left of it (screens.md §4.1; at 800 wide SEND x 712-776). S-C1-45 runs with T18b
-// (build B130): its last step sends a prompt and reads the reply, which T18 draws.
-import { test, expect, rectOf, cockpitDecided, seedLane } from './fixtures.mjs';
+// 16 px left of it (screens.md §4.1; at 1024 wide SEND x 936-1000, at 800 x 712-776).
+import { test, expect, rectOf, cockpitDecided, seedLane, WALL_PAGE } from './fixtures.mjs';
 
 /** The next `type` event on `selector` (or the window) starts the clock (page ms). */
 async function arm(page, selector, type = 'pointerdown') {
@@ -35,6 +34,105 @@ const mapNode = (page, id) => page.evaluate(async (nid) => {
   const c = document.querySelector('#map-root canvas').getBoundingClientRect();
   return { x: at.x + c.left, y: at.y + c.top };
 }, id);
+
+/** Each edge within ± 1 px of the spec's rect (S-C1-45's tolerance). */
+const near = (got, want) => Boolean(got) && ['x1', 'x2', 'y1', 'y2'].every((k) => Math.abs(got[k] - want[k]) <= 1);
+
+test('S-C1-45 At 1024x768 the pane is 608 px and the input row is inside the viewport (T77, D249)', async ({ page, room }) => {
+  await room.start({ script: 'c1-session' });
+  await page.setViewportSize({ width: 1024, height: 768 });
+
+  /** Tap CHAT: by 200 ms the pane in place, then every rect of §1.2's table for `page`'s kind. */
+  async function openAndMeasure(kind) {
+    await expect(page.locator(':root')).toHaveAttribute('data-pane', 'closed');
+    await arm(page, '[data-cockpit-open]');
+    await page.locator('[data-cockpit-open]').tap();
+    expect(await msUntil(page, 416), `${kind}: in place ≤ 200 ms after the tap`).toBeLessThanOrEqual(200);
+    const pane = kind === 'wall' ? { x1: 416, x2: 1024, y1: 0, y2: 768 } : { x1: 416, x2: 1024, y1: 36, y2: 744 };
+    expect(await rectOf(page, '[data-cockpit-conversation]'), `${kind}: the pane`).toEqual(pane);
+    // The talk button's place: SEND in it with stt none, the input to 16 px left (D265).
+    await expect(page.locator('[data-talk]'), 'no talk button with stt none').toHaveCount(0);
+    const rects = {
+      input: [await rectOf(page, '[data-cockpit-input]'), { x1: 440, x2: 920, y1: 680, y2: 744 }],
+      SEND: [await rectOf(page, '[data-cockpit-send]'), { x1: 936, x2: 1000, y1: 680, y2: 744 }],
+      'corner CLOSE': [await rectOf(page, '[data-cockpit-open]'), { x1: 944, x2: 992, y1: 616, y2: 664 }],
+      'header CLOSE': [await rectOf(page, '[data-cockpit-close]'),
+        kind === 'wall' ? { x1: 912, x2: 1008, y1: 8, y2: 56 } : { x1: 912, x2: 1008, y1: 44, y2: 92 }],
+    };
+    for (const [name, [got, want]] of Object.entries(rects)) {
+      expect(near(got, want), `${kind}: ${name} ${JSON.stringify(got)} at ${JSON.stringify(want)} ± 1 px`).toBe(true);
+      expect(await inside(page, got), `${kind}: ${name} inside the viewport`).toBe(true);
+    }
+    await expect(page.locator('[data-cockpit-open]')).toHaveText('CLOSE');
+  }
+
+  /** Type and SEND; the prompt block's right edge and the reply's text column, once it settles. */
+  async function sendAndMeasure(kind) {
+    await page.locator('[data-cockpit-input]').fill('how is builder-a');
+    await expect(page.locator('[data-cockpit-send]')).toBeEnabled();
+    await page.locator('[data-cockpit-send]').tap();
+    const reply = page.locator('[data-turn-id]').last().locator('[data-reply]');
+    await expect(reply).toHaveText('builder-a is running acme-docs, round 4.', { timeout: 10_000 });
+    await expect(page.locator(':root')).toHaveAttribute('data-turn', 'idle', { timeout: 10_000 });
+    const m = await page.evaluate(() => {
+      const turn = [...document.querySelectorAll('[data-turn-id]')].at(-1);
+      // The prompt block: the element after the YOU label row.
+      const prompt = turn.querySelector('[data-turn-label]').nextElementSibling;
+      const r = turn.querySelector('[data-reply]');
+      const cs = getComputedStyle(r);
+      return {
+        promptText: prompt.textContent,
+        promptRight: prompt.getBoundingClientRect().right,
+        column: r.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+      };
+    });
+    expect(m.promptText, `${kind}: the prompt block`).toBe('how is builder-a');
+    expect(m.promptRight, `${kind}: the prompt block's right edge ≤ 1000 px`).toBeLessThanOrEqual(1000);
+    expect(m.column, `${kind}: the reply's text column`).toBe(560);
+  }
+
+  await test.step('the app on #/map at 1024x768: CHAT opens the pane at x 416-1024, y 36-744 by 200 ms, every rect of §1.2', async () => {
+    await page.goto(`${room.url}/#/map`);
+    await cockpitDecided(page);
+    await expect(page.locator(':root')).toHaveAttribute('data-layout', 'tablet');
+    await expect(page.locator(':root')).toHaveAttribute('data-cockpit', 'live');
+    await expect(page.locator(':root')).toHaveAttribute('data-turn', 'idle');
+    await expect.poll(() => mapNode(page, 'room-b'), { timeout: 10_000 }).not.toBeNull();
+    await openAndMeasure('app');
+  });
+
+  await test.step('the Map left of x 416 still pans on a drag at (200, 400)', async () => {
+    const before = await page.evaluate(() => window.__cockpitView.map.camera());
+    const node = await mapNode(page, 'room-b');
+    await page.mouse.move(200, 400);
+    await page.mouse.down();
+    await page.mouse.move(260, 440, { steps: 8 });
+    await page.mouse.up();
+    await expect.poll(async () => {
+      const after = await mapNode(page, 'room-b');
+      return Math.hypot(after.x - node.x, after.y - node.y);
+    }, { message: 'the drag panned the Map' }).toBeGreaterThan(20);
+    expect(await page.evaluate(() => window.__cockpitView.map.camera()), 'the camera moved').not.toEqual(before);
+    await expect(page.locator(':root')).toHaveAttribute('data-pane', 'open');
+  });
+
+  await test.step('in the app, how is builder-a and SEND: the prompt block ends ≤ 1000 px, the reply\'s column 560 px', async () => {
+    await sendAndMeasure('app');
+  });
+
+  await test.step('the Wall page in wall at 1024x768: CHAT opens the pane at x 416-1024, y 0-768 by 200 ms, every rect of §1.2', async () => {
+    await page.goto(`${room.url}${WALL_PAGE}?ratio=0.5`); // ratio: build B122
+    await cockpitDecided(page);
+    await page.waitForFunction(() => Boolean(window.__cockpitView?.wall));
+    await expect(page.locator(':root')).toHaveAttribute('data-cockpit-layout', 'wall');
+    await expect(page.locator(':root')).toHaveAttribute('data-cockpit', 'live');
+    await openAndMeasure('wall');
+  });
+
+  await test.step('on the Wall, how is builder-a and SEND: the prompt block ends ≤ 1000 px, the reply\'s column 560 px', async () => {
+    await sendAndMeasure('wall');
+  });
+});
 
 test('S-C1-46 At 800x1280 the pane is the whole screen and CLOSE is the way back (T77, D249)', async ({ page, room }) => {
   await room.start(); // c1-render, no turn played

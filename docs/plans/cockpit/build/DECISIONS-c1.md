@@ -789,3 +789,9 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   `data-turn="answering"` in the animation frame that draws that text — because §3's table says
   `answering` is "reply text is streaming" and S-C1-04 reads `thinking` until the first text is on
   screen — spec: c1-talk.md §3, protocols.md §5 (5.20) — overrule: set it on the agent's first delta.
+- B141 (T18b) S-C1-45's "the Wall page in `wall`" is the Wall page with `data-cockpit-layout="wall"`
+  (at `?ratio=0.5`, B122); the send step runs on both pages (app, then the Wall, one room, the
+  `c1-session` answer twice); the prompt block is read as the element after the turn's `YOU` label
+  row (the spec names no selector for it); the Map's pan is checked by `room-b` moving > 20 px and
+  `camera()` changing, as S-C1-03 reads it — spec: `c1-talk.md` S-C1-45 — overrule: the test in
+  `e2e/cockpit/c1-small.spec.mjs`.
