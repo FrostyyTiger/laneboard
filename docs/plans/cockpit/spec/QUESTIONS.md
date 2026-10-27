@@ -28,7 +28,7 @@ Blocks C1/C2. From `reviews/21-owner.md` (2, 7). Spec: `screens.md` §4, `c1-tal
 
 Recommendation: c) — in the terminal talking is one held key (`spec-input.md`), so here it is one press.
 
-Look: `sketches/c1-pane.html` (the pane open over the Map, `TALK` bottom right, `Type or hold to
+Look: `sketches/c1-pane.html` (the pane open over the Map, `TALK` bottom right, `Type or
 talk`), shot `$RUN_DIR/shots/152-c1-pane-b/custom-dark-1368.png`; the talk button inside the column of
 `split`: `sketches/screens-split.html`, shot `$RUN_DIR/shots/139-screens-split/custom-dark-1368.png`.
 

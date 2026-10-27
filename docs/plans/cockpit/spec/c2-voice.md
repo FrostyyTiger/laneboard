@@ -67,7 +67,7 @@ so does the row's left end (`CANCEL`, below).
 
 | `data-talk` | When | Talk button | `SEND` slot | Row's left end (x 784-848) | Input | Hint line (18 px caps `--text-1`, `c1-talk.md` §1.1, D167) |
 | --- | --- | --- | --- | --- | --- | --- |
-| `idle` | microphone closed | `--bg-elevated`, 1 px `--accent` border, glyph and `TALK` in `--text-1` | `SEND` or `STOP` (`c1-talk.md` §7-§8) | the language button (§8), or the input; `UNDO` for 5 s after a `CANCEL` | the textarea, placeholder `Type or hold to talk` | none |
+| `idle` | microphone closed | `--bg-elevated`, 1 px `--accent` border, glyph and `TALK` in `--text-1` | `SEND` or `STOP` (`c1-talk.md` §7-§8) | the language button (§8), or the input; `UNDO` for 5 s after a `CANCEL` | the textarea, placeholder `Type or talk` (D286) | none |
 | `listening` | microphone open, no word yet | **inverse**: fill `--text-1`, glyph and `SEND` in `--bg-canvas`, 1 px `--accent` border; the level bar (below) | blank and inert (`data-send="none"`) | `CANCEL` (`✕`) | `Listening…` in `--text-3` | `LISTENING`; after 400 ms held `RELEASE TO SEND · SLIDE OFF TO KEEP`; after a tap `TAP SEND WHEN DONE` |
 | `partial` | microphone open, words shown | as `listening` | blank and inert | `CANCEL` | the words: firm part `--text-1`, the tail still changing `--text-2` (§4) | as `listening` |
 | `final` | released or second tap; microphone closed; waiting for the final text (≤ 3 s, D41) | inverse, word `…`, no level bar | blank and inert | `CANCEL` | the last words, all `--text-2` | `FINISHING…` |
@@ -139,7 +139,7 @@ so does the row's left end (`CANCEL`, below).
   replaced in the same rectangle (without a language button: from x 864, `CANCEL` takes x 784-848,
   §3) by a read-only `[data-talk-text]` with two spans, `[data-firm]`
   and `[data-tail]` (a textarea cannot colour part of its text) (D43). Same type: mono 28 px, line
-  height 1.4, 16 px padding, 21 characters per line (`TYPE_TALK`, `c1-talk.md` §3, pending Q-O18); it grows to 4 lines and then scrolls, pinned to its end, as the
+  height 1.4, 16 px padding, 17 characters per line in the 320 px box from x 864 (`TYPE_TALK`, `c1-talk.md` §3, pending Q-O18); it grows to 4 lines and then scrolls, pinned to its end, as the
   textarea does (`c1-talk.md` §7, D30). When the microphone closes, the text goes back into the
   textarea (draft) or into the prompt (send).
 - **Firm and tail.** Each speech-to-text update (`protocols.md` §12.2; research Q4: the whole list of
@@ -268,7 +268,11 @@ Then for each: the button's word (`TALK`, `SEND`, `SEND`, `…`, `TALK`, `TALK`)
 holds x 784-848 (the language button, `[data-talk-cancel]`), the input element (textarea or `[data-talk-text]`) and the hint line match
 §3's table; the level bar is visible only in `listening` and `partial`; the button is 64x64 px and
 its word ≥ 16 px.
-Test: Playwright, one table-driven case per state; `final` is held by a fake speech script that
+And in `idle` with `cockpit.stt.language: ["en", "de"]` (input x 864-1184) the placeholder is
+`Type or talk`, the empty input is 64 px tall and its placeholder is one line, not cut (D286).
+Test: Playwright, one table-driven case per state; for the placeholder: the input's `placeholder`
+attribute, its rect (± 1 px), and a hidden probe `<span>` in the input's font holding the
+placeholder whose `getBoundingClientRect().width` ≤ the input's `clientWidth` minus 32 px; `final` is held by a fake speech script that
 delays the final by 2 s; compare computed colours with the tokens' computed values; screenshot per
 state compared by eye against `sketches/c2-states.html` in the build night's review, not in the test.
 

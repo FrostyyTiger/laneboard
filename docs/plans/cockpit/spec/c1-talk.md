@@ -807,13 +807,14 @@ Plan C1: "Typing works everywhere (on-screen keyboard, a paired keyboard)." `spe
 
 - **The input** is a `<textarea>` `[data-cockpit-input]`, x 784-1184 (§1), mono 28 px, line height
   1.4 (39.2 px), 16 px padding left and right, 12.4 px top and bottom: 368 px of text, 21 characters
-  per line at 16.8 px each (pending Q-O18; 27 at 22 px), so the 20-character placeholder fits one
-  line. Placeholder `Type or hold to talk`
-  in `--text-3` (pending Q-O11). `enterkeyhint="send"`, `autocapitalize="sentences"`,
+  per line at 16.8 px each (pending Q-O18; 27 at 22 px). Beside the language button (`c2-voice.md`
+  §8, shown by default) the input is x 864-1184: 288 px of text, 17 characters per line (21 at
+  22 px). Placeholder `Type or talk` (12 characters, D286), one line at either width,
+  in `--text-3` (pending Q-O11); without a speech service it is `Type a message` (D49). `enterkeyhint="send"`, `autocapitalize="sentences"`,
   `spellcheck` on.
 - **It grows** with its text: 64 px for one line, +39.2 px per line up to 4 lines (182 px, 181.6
   rounded; tests allow ± 1 px); beyond 4 lines it scrolls inside. At 21 characters a line, 4 lines
-  show about 84 characters: a spoken sentence of 12-15 words. It grows upwards; the input row grows with it and the conversation
+  show about 84 characters (68 at 17 beside the language button): a spoken sentence of 10-15 words. It grows upwards; the input row grows with it and the conversation
   above gets shorter; `SEND` and the talk button stay at the row's bottom (D30).
 - **`SEND`** `[data-cockpit-send]`, 64x64 px, 16 px caps. Disabled (`disabled`, label `--text-3`)
   while the input holds only white space and while the room is down (`screens.md` §7). During a

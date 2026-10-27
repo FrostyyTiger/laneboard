@@ -2,6 +2,8 @@
 <html lang="en"><head><meta charset="utf-8">
 <title>c2-states: every state of the talk button and the input (c2-voice.md §3, S-C2-04, D42; with the DE/EN button)</title>
 <style>
+/* Sheet 1: the input beside the language button is x 864-1184, 288 px of text = 17 characters at 28 px mono (16.8 px each);
+   placeholder `Type or talk` (12, D286) and every drawn text is at most 17 characters, so none is cut. */
 /* Values copied from public/css/tokens.css (dark). Sketch only, not product code. */
 :root{--bg-canvas:oklch(12% 0.004 250);--bg-surface:oklch(16% 0.004 250);--bg-elevated:oklch(20% 0.004 250);--bg-sunken:oklch(9% 0.004 250);
 --line-weak:oklch(100% 0 0 / .09);--line:oklch(100% 0 0 / .17);--line-strong:oklch(100% 0 0 / .32);
@@ -19,13 +21,13 @@ h1{position:absolute;left:24px;top:8px;font-size:16px;color:var(--text-2);font-w
 .conv{position:absolute;left:24px;top:22px;width:560px}
 .lr{font-size:16px;color:var(--text-3);height:20px;line-height:20px}
 .t3{color:var(--text-3)}
-.prompt{font-size:22px;line-height:1.4;background:var(--bg-surface);border:1px solid var(--line-weak);padding:4px 16px;margin-top:2px}
+.prompt{font-size:28px;line-height:1.4;background:var(--bg-surface);border:1px solid var(--line-weak);padding:4px 16px;margin-top:2px}
 /* the line slot (c1-talk.md §1.1, D167): 18 px label face, 24 px lines, --text-1, x 784 = 24 px into the pane, last line box 4 px above the row */
 .hint{position:absolute;left:24px;top:68px;width:480px;font-size:18px;line-height:24px;color:var(--text-1);font-weight:500;letter-spacing:.08em}
 .ir{position:absolute;left:0;top:96px;width:606px;height:96px;border-top:1px solid var(--line)}
-.inp{position:absolute;left:104px;top:16px;width:320px;height:64px;background:var(--bg-sunken);border:1px solid var(--line);font-size:22px;line-height:1.4;padding:0 16px;display:flex;align-items:center;white-space:nowrap;overflow:hidden;color:var(--text-1)}
+.inp{position:absolute;left:104px;top:16px;width:320px;height:64px;background:var(--bg-sunken);border:1px solid var(--line);font-size:28px;line-height:1.4;padding:0 16px;display:flex;align-items:center;white-space:nowrap;overflow:hidden;color:var(--text-1)}
 .inp.ph{color:var(--text-3)}
-.inp.tt .firm{color:var(--text-1)} .inp.tt .tail{color:var(--text-2);margin-left:.6em}
+.inp.tt .firm{color:var(--text-1)} .inp.tt .tail{color:var(--text-2)}
 .send{position:absolute;left:440px;top:16px;width:64px;height:64px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1)}
 .send.cx{font-family:var(--mono);font-size:28px;line-height:1;text-transform:none;letter-spacing:0}
 .send.dis{color:var(--text-3);border-color:var(--line)}
@@ -83,7 +85,7 @@ body:has(#turn:target) .s1{display:none}
 .tc .hn{position:absolute;left:24px;top:292px;width:480px;font-family:var(--label);text-transform:uppercase;letter-spacing:.08em;font-size:18px;line-height:24px;font-weight:500;color:var(--text-1)}
 .nav{position:absolute;right:24px;top:8px;font-size:16px;color:var(--text-2)}
 </style></head><body>
-<h1 class="lab s1">Talk button and input · every state · the bottom of the 608 px pane, real size</h1>
+<h1 class="lab s1">Talk button and input · every state · the bottom of the 608 px pane, real size, 28 px input (T97, T131)</h1>
 <div class="grid s1">
 <section class="cell" data-state="idle">
   <div class="cap lab">1 · idle · just after a send</div>
@@ -91,7 +93,7 @@ body:has(#turn:target) .s1{display:none}
   <div class="hint lab"></div>
   <div class="ir">
     <div class="left lab" data-talk-lang aria-label="Speech language: English. Tap for German.">En</div>
-    <div class="inp ph">Type or hold to talk</div>
+    <div class="inp ph">Type or talk</div>
     <div class="send lab dis" data-send="send">Send</div>
     <div class="talk idle" data-talk><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Talk</span></div>
   </div>
@@ -115,7 +117,7 @@ body:has(#turn:target) .s1{display:none}
   <div class="hint lab">Release to send · slide off to keep</div>
   <div class="ir">
     <div class="left cx" data-talk-cancel aria-label="Cancel">✕</div>
-    <div class="inp tt"><span class="firm">How did</span> <span class="tail">the night</span></div>
+    <div class="inp tt"><span class="firm">How did</span>&nbsp;<span class="tail">the night</span></div>
     <div class="send blank" data-send="none" inert aria-hidden="true"></div>
     <div class="talk inv" data-talk><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Send</span><span class="bar"></span></div>
   </div>
@@ -127,7 +129,7 @@ body:has(#turn:target) .s1{display:none}
   <div class="hint lab">Tap send when done</div>
   <div class="ir">
     <div class="left cx" data-talk-cancel aria-label="Cancel">✕</div>
-    <div class="inp tt"><span class="firm">on builder-a,</span> <span class="tail">restart</span></div>
+    <div class="inp tt"><span class="firm">on hv1,</span>&nbsp;<span class="tail">restart</span></div>
     <div class="send blank" data-send="none" inert aria-hidden="true"></div>
     <div class="talk inv" data-talk><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Send</span><span class="bar"></span></div>
   </div>
@@ -139,7 +141,7 @@ body:has(#turn:target) .s1{display:none}
   <div class="hint lab">Finishing…</div>
   <div class="ir">
     <div class="left cx" data-talk-cancel aria-label="Cancel">✕</div>
-    <div class="inp tt"><span class="tail" style="margin:0">How did the night</span></div>
+    <div class="inp tt"><span class="tail">How did the night</span></div>
     <div class="send blank" data-send="none" inert aria-hidden="true"></div>
     <div class="talk inv" data-talk><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">…</span></div>
   </div>
@@ -151,7 +153,7 @@ body:has(#turn:target) .s1{display:none}
   <div class="hint lab">Words dropped</div>
   <div class="ir">
     <div class="left lab u" data-talk-undo>Undo</div>
-    <div class="inp">on builder-a,</div>
+    <div class="inp">on hv1,</div>
     <div class="send lab" data-send="send">Send</div>
     <div class="talk idle" data-talk><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Talk</span></div>
   </div>
@@ -163,7 +165,7 @@ body:has(#turn:target) .s1{display:none}
   <div class="hint lab"></div>
   <div class="ir">
     <div class="left lab" data-talk-lang aria-label="Speech language: English. Tap for German.">En</div>
-    <div class="inp ph">Type or hold to talk</div>
+    <div class="inp ph">Type or talk</div>
     <div class="send lab dis" data-send="send">Send</div>
     <div class="talk err" data-talk><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M3 3l18 18"/></svg><span class="lab">Talk</span></div>
   </div>
@@ -197,7 +199,7 @@ body:has(#turn:target) .s1{display:none}
     <div class="op lab">Close</div>
     <div class="hn"></div>
     <div class="ir2">
-      <div class="i2 ph" data-cockpit-input>Type or hold to talk</div>
+      <div class="i2 ph" data-cockpit-input>Type or talk</div>
       <div class="sl wait lab" data-send="wait" inert aria-disabled="true">Send</div>
       <div class="tk" data-talk="idle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Talk</span></div>
     </div>
@@ -213,7 +215,7 @@ body:has(#turn:target) .s1{display:none}
     <div class="op lab">Close</div>
     <div class="hn"></div>
     <div class="ir2">
-      <div class="i2 ph" data-cockpit-input>Type or hold to talk</div>
+      <div class="i2 ph" data-cockpit-input>Type or talk</div>
       <div class="sl" data-send="stop" aria-label="Stop"><span class="sq">■</span><span class="lab">Stop</span></div>
       <div class="tk" data-talk="idle"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="lab">Talk</span></div>
     </div>
