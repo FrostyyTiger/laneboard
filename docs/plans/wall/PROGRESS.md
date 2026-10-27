@@ -121,11 +121,17 @@ Notes for every builder round (planner, round 1):
   back at once (camera to HV2, line and control gone), no console errors. Film `shots/r13-galaxy`: the tour as r10
   (11.9 fps under SwiftShader). Open for the director (T13/T14): `handBack` is the touch source giving up; and r11's
   "the tour's return as an event" (kicker types `TOUR`) is not built.
-- [ ] T6 (§7 Night 4 0a; was night 3's T31, r41-operator galaxy 3) [ui] [variant:galaxy] A passing crit keeps its
+- [x] T6 (§7 Night 4 0a; was night 3's T31, r41-operator galaxy 3) [ui] [variant:galaxy] A passing crit keeps its
   shape colour: under `.galaxy-label[data-dim]` only the name text goes to `--text-3`; the status glyph (`■`/`▲`) keeps
   its tone hue (night 3's T15 greyed the glyph in flights: `■ HV2` grey beside its red nebula) — done when: a test
   pins in `wall.css` that a dimmed crit/warn label's glyph keeps the crit/warn colour while its name is `--text-3`,
-  and a film of `galaxy.html?demo=1&quality=0` shows a red `■` on HV2 during flights.
+  and a film of `galaxy.html?demo=1&quality=0` shows a red `■` on HV2 during flights. (commit 9ec5cff) Builder r14:
+  the shape is the span's own mark, `data-glyph` drawn by `wall.css` `.galaxy-label[data-glyph]::before` with
+  per-tone `::before` colours; the span's text is the word only, so `[data-dim]` greys the word and never the shape
+  (`labels.js labelParts`; `shown()` still returns the whole `■ HV2`). Same rendered text and box as before. Tests in
+  `test/wall-galaxy-arrive.test.mjs`. CDP check on the large demo (`shots/r14-t6-glyph`): over 45 s, 42 dimmed crit
+  samples, every `::before` crit red while the word is grey, 0 grey marks, no console errors. Film `shots/r14-galaxy`:
+  red `■ HV2` and yellow `▲ HV1` beside grey words in the flights (22 s, 25 s); 15.1 fps under SwiftShader.
 - [ ] T7 (§7 Night 4 0a; was night 3's T32, r41-operator galaxy 6) [ui] [variant:galaxy] No red without a name: in
   flights a nebula lobe that leaves the frame faster than its star must not show as a nameless red smear at the frame
   edge — `scene.js nearFade` also fades a crit/warn lobe whose projected centre is beyond ~1.5 reach of its star's
