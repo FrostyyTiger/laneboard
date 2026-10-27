@@ -315,7 +315,7 @@ and not listed. Field values and ranges are in the section named.
 | `turn.retrying` | `room` | `turnId`, `attempt`, `of` | — | 3.2 |
 | `turn.end` | `room` | `turnId`, `state`, `at`; `forced` with `stopped`; `code` with `error`; `steps` with `step-limit`; `detail` with `agent-down` and `failed` | — | 3.2 |
 | `prompt.taken` | `room` | `turnId`, `clientId`, `state`; `atBlock` with `taken`; `why` with `cancelled` | — | 3.4 |
-| `status` | `room` | `status\|null`; in the object `code`, `since` | `status.detail` | 3.5 |
+| `status` | `room` | `status\|null`; in the object `code`, `since` | `status.detail`, `status.blocksSend` | 3.5 |
 | `conversation.new` | `room` | `conversation`, `reason`, `at` | — | 3.6 |
 | `history.turns` | no | `re`, `turns`, `olderTurns` | — | 3.7 |
 | `show` | no | `showId`, `turnId`, `cmd`, `args`, `receivedAt` | — | 4 |
@@ -485,18 +485,21 @@ bridge's `taken` or `interrupted` (§11.3):
 
 ### 3.5 Errors outside a turn and the status line
 
-**`status`** (room → screen, `seq`): the one status slot of the pane (`c1-talk.md` §1, T68's
-precedence), or `null` to clear it.
+**`status`** (room → screen, `seq`): the one status slot of the pane (`c1-talk.md` §1), or `null`
+to clear it. The room sends the highest of its conditions that holds, in `c1-talk.md` §10.1's order
+(`agent-down`, `not-logged-in`, `tools-down`, `agent-back`), and a new message whenever that
+changes (D152). `blocksSend` (optional, absent means `false`) is `true` while no session is up:
+the screen then disables `SEND` and talk and keeps the draft.
 
 ```json
 {"type":"status","seq":1320,"status":{"code":"agent-down","since":"2026-10-27T07:04:00+01:00",
- "detail":"claude: command not found"}}
+ "detail":"claude: command not found","blocksSend":true}}
 ```
 
 | `code` | Text on the screen |
 | --- | --- |
 | `agent-down` | `Agent not running since 07:04.` (E3) |
-| `not-logged-in` | T68's line |
+| `not-logged-in` | `The agent is not logged in on the room since 03:15. Log it in there.` (§11.10; `blocksSend` only when the agent cannot start for it) |
 | `agent-back` | E2's second line, then `null` after 5 s |
 | `tools-down` | `The agent cannot read the board: its laneboard tools did not start.` (`c3-see.md` §1; turns still run) |
 
@@ -920,7 +923,7 @@ Native lines carry `session_id` and `uuid` on almost every line; they are left o
 | `{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01A9","is_error":false,"content":"…"}]}}` | `tool.end` (`isError` from `is_error`, default `false`); the result content is dropped | `tool.end`; `turn.state` `thinking` once no call runs |
 | `{"type":"system","subtype":"permission_denied","tool_use_id":"toolu_01B2","tool_name":"Bash"}` | `tool.end` `isError:true`, `denied:true` (a denied call gets no `tool_result`) | `tool.end` `isError:true`, `denied:true` (`c1-talk.md` §5.2's `tried` line, pending Q-O23) |
 | `{"type":"system","subtype":"api_retry","attempt":2,"max_retries":10,"retry_delay_ms":4000,"error":"overloaded"}` | `retrying` `attempt`, `of` from `max_retries` | `turn.retrying` (E5) |
-| `{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"error":"authentication_failed"}` | the adapter sends `interrupt` at once and, at the `result`, `turn.end` `error` `not-logged-in` | `turn.end` E4, `status` `not-logged-in` (T68) |
+| `{"type":"system","subtype":"api_retry","attempt":1,"max_retries":10,"error":"authentication_failed"}` | the adapter sends `interrupt` at once and, at the `result`, `turn.end` `error` `not-logged-in` | `turn.end` E4, `status` `not-logged-in` (§11.10) |
 | `{"type":"result","subtype":"success","is_error":false,"num_turns":3,"duration_ms":7900,"total_cost_usd":0.0412}` | `turn.end` `done` | `turn.end` `done` |
 | `{"type":"result","subtype":"error_during_execution","is_error":true,"terminal_reason":"aborted_streaming"}` (after an `interrupt`) | `turn.end` `stopped` (any `terminal_reason` starting `aborted_`) | `turn.end` `stopped` |
 | `{"type":"result","subtype":"error_max_turns","is_error":true,"num_turns":40}` | `turn.end` `error`, `code` `step-limit`, `steps` from `num_turns` | E7 |
@@ -928,6 +931,7 @@ Native lines carry `session_id` and `uuid` on almost every line; they are left o
 | `{"type":"control_response","response":{"subtype":"success","request_id":"i-0003","response":{"still_queued":[],"cancelled":["9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714"]}}}` | `interrupted` (`request_id` read from `response.request_id`, else from the top level: research Q2 found both) | `prompt.taken` `cancelled` per id in `cancelled` (pending Q-O1) |
 | `stream_event` `ping`, `message_delta`, `message_stop`, `content_block_stop`; thinking blocks and their deltas; hook and plugin `system` lines; any line with `parent_tool_use_id` not `null` (a helper agent's) | none (a `ping` counts as a sign of life, §11.9) | none |
 | the process exits (any code) | none: the bridge sees the exit itself | during a turn: `turn.end` `error` `agent-exited` (E2); then §11.7 |
+| the process exits before `init`, its stdout or stderr matching §11.10's login words (research Q10, candidate 2) | none | a failed start (§11.7) that sets `not-logged-in` with `blocksSend:true` instead of `agent-down` |
 
 - Other `result` subtypes (`error_max_budget_usd` and any new one) are E8 with `detail` the subtype.
 - `total_cost_usd`, `num_turns` and `duration_ms` of every `result` go to the room's log as one line
@@ -1047,6 +1051,39 @@ marks follow `docs/design.md`'s colour rule. The line before the last is `c1-tal
 | prompt text | `maxPromptChars` (8 000) plus the two lines of §11.5 | far under Claude Code's 10 MB stdin cap (research Q2) |
 
 A turn that thinks or works for a long time with signs of life is not an error (`c1-talk.md` §9).
+
+### 11.10 The login check (T68, D151, pending research Q12)
+
+The agent's login is checked by the room, so a logged-out agent is named before the owner sends
+anything (`c1-talk.md` §10.1).
+
+- **Command**: `cockpit.agent.loginCheck`, an argument list (T73 adds it to its table). Default for
+  kind `claude-code`: `["claude","auth","status"]` (pending research Q12); for `bridge`: `null`.
+  `null`, or a command research Q12 finds missing, means no check: only the reactive rows below set
+  the condition.
+- **How it runs**: as the agent's child does (§11.1, §11.2): the agent's user, `cockpit.agent.cwd`,
+  the same environment (D108), no shell, stdin closed. It must end within **10 s** (else `SIGTERM`);
+  stdout and stderr are read up to 64 KB together. It never runs twice at once.
+- **When**: at the room's start (beside the first spawn), then every **900 s**; every **60 s** while
+  the condition holds. Times are the room's clock (`stand-ins.md` §1.1's `manual` mode fires them).
+- **Result**:
+
+| The check | Result | The room |
+| --- | --- | --- |
+| exit 0 | `ok` | clears a condition the check set; if the condition was set and no turn runs, restarts the child with `--resume` (§11.7) so it reads the new login, and sends no `agent-back` for it |
+| exit other than 0, and stdout or stderr matching the login words | `not-logged-in` | sets the condition with `since` now, if not already set (an earlier `since` stays) |
+| anything else: timeout, the command not found, another exit | `unknown` | changes nothing |
+
+- **Login words** (case-insensitive, also used by §11.4's exit row): `not logged in`, `log in`,
+  `login`, `401`, `invalid api key`, `authentication`. Research Q10 marks them a guess; the build
+  night pins them with one real run.
+- **Other ways in**: a turn ending E4 (§11.4) sets the condition; so does a start that fails with
+  the login words (§11.4's last row, `blocksSend:true` until a session is up). A condition set by a
+  turn clears only when a turn ends `done` (a local check can pass while the service still refuses
+  the key); one set by the check or a start clears on a check `ok` or a turn ending `done`.
+- **Log**: one room-log line per change of the result (`login check: not-logged-in (exit 1)`,
+  `login check: unknown (timeout 10 s)`), never one per run; the command's output is not logged
+  (it may name an account).
 
 ## 12. Room ⇄ speech-to-text (D107)
 

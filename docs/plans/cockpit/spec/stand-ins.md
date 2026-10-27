@@ -60,7 +60,8 @@ How older phrases in the spec map onto these:
 {"mode":"builder","port":0,
  "cockpit":{
    "agent":{"kind":"claude-code","command":["node","test/cockpit/stand-ins/fake-agent.mjs"],
-            "cwd":"<tmp>","env":["FAKE_AGENT_DIR"]},
+            "cwd":"<tmp>","env":["FAKE_AGENT_DIR"],
+            "loginCheck":["node","test/cockpit/stand-ins/fake-agent.mjs","auth","status"]},
    "stt":{"url":"ws://127.0.0.1:<fake speech port>/asr","language":"de"},
    "board":{"url":"http://127.0.0.1:<demo hub port>"}}}
 ```
@@ -211,8 +212,15 @@ One JSON object. `start` says how the process starts; `turns` are matched to pro
   `--session-id`, or the `--resume` id), `mcp_servers` from `mcp` (`connected` or `failed`) and
   `capabilities`; `startFailures: n` makes the first n starts (counted in `starts`) exit 1 before
   `init` (`protocols.md` §13's restart test); `login: "failed"` makes every prompt end as
-  `not-logged-in`. Whether `init` comes before the first stdin line is research Q10's; the fake
+  `not-logged-in`. `startStderr` (a string) is written to stderr by each start that `startFailures`
+  fails (S-C1-38). Whether `init` comes before the first stdin line is research Q10's; the fake
   follows the build night's finding, and until then writes it at `initAfterMs`.
+
+- **The login check** (`protocols.md` §11.10): started with the arguments `auth status`, the fake
+  reads `script.json` (each time), logs one `login-check` line (§2.6) and answers by `start.login`:
+  `ok` prints `Logged in.` and exits 0; `failed` prints `Not logged in. Run claude to log in.` and
+  exits 1; `hang` prints nothing and never exits (the 10 s timeout). It starts no session and does
+  not count in `starts`. A test flips the login by rewriting `script.json` (S-C1-37).
 
 ### 2.5 The bridge dialect
 
@@ -231,11 +239,12 @@ Same script, same matching. It reads `prompt` and `interrupt` (§11.3) and write
 {"atMs":1793080802960,"kind":"prompt","uuid":"9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714","priority":"next","words":"wie lief die Nacht?","raw":"(Spoken in German; speech-to-text may have misheard a word.)\nwie lief die Nacht?","turn":"c1-voice#1"}
 {"atMs":1793080804600,"kind":"tool-result","tool":"mcp__laneboard__morning","isError":false,"result":{"window":"tonight"}}
 {"atMs":1793080805100,"kind":"signal","name":"SIGINT"}
+{"atMs":1793081700000,"kind":"login-check","login":"failed","exit":1}
 ```
 
 - `env` lists the names the child got, never values (D108's test reads it).
 - Test helper (`test/cockpit/stand-ins/fake-agent-log.mjs`): `prompts()` → the `prompt` lines (the
-  "received-turns log"); `toolResults(tool?)`; `signals()`; `starts()`; `order()` → `kind`s in order
+  "received-turns log"); `toolResults(tool?)`; `signals()`; `starts()`; `loginChecks()` → the `login-check` lines; `order()` → `kind`s in order
   (S-C1-16 and S-C2-09 assert no `interrupt` line at all; S-C1-27 an interrupt with `cancel_queued`).
 
 ## 3. The fake speech service
@@ -367,6 +376,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c1-render` | agent | S-C1-03..12, S-C1-30, S-C1-31, S-C1-35 | §2.2's example; S-C1-05's 4-column and 9-column tables; S-C1-06/07's three `fleet` calls (400 ms each, `hv2` `isError`) then `ci` 300 ms; S-C1-08's 40-line `sh` block; S-C1-09's markup; S-C1-10's 30 lines over 6 s; S-C1-11's marks; S-C1-30's two `denied` `Bash` steps and S-C1-31's `Grep` and `denied` `WebFetch`; S-C1-35's `Read`, `runs`, `lanes` and `ci` calls with odd input |
 | `c1-typing` | agent | S-C1-14..18, S-C1-27..29, S-C1-32, S-C1-33 | a short `done` turn per prompt; S-C1-16's text, 3 s `runs` call and `next-tool-end` steer turn; S-C1-27's 19.5 s tool call with `endAfterMs` 300; S-C1-28's two turns (`ignore-once`, `ignore`); S-C1-29's 19.5 s tool call, then text, taking a queued prompt at the tool's end; S-C1-17's two turns (`endAfterMs` 300, and `ignore-sigint`) |
 | `c1-errors` | agent | S-C1-19, S-C1-20 | an `exit` 1 mid-text; one turn per error row (`failed` `overloaded`, `step-limit`, `failed` `boom` plus a 300-character `detail`, `not-logged-in`, two `retry` steps then text) |
+| `c1-login` | agent | S-C1-37, S-C1-38 | `start.login` `ok` (tests rewrite it to `failed`, `hang`), one `done` turn for any prompt in 0.5 s; S-C1-38's second case adds `startFailures` 3 and `startStderr` `claude: command not found` |
 | `c1-long` | agent | S-C1-21 | 15 s without steps, then 120 lines, 26 000 characters and a 30-row table over 20 s (real time: 35 s) |
 | `c1-session` | agent | S-C1-22, S-C1-23 | `repeat` turns that answer `how is builder-a` in 2 s |
 | `c1-voice` | agent | S-C1-13, S-C3-18, §10 of `protocols.md` | the `morning` call and `■ One run is stuck…` turn of `protocols.md` §13.1, first delta 0.3 s after the prompt |

@@ -384,7 +384,8 @@ lost.
   down shows the status line and `The conversation shows again when the room is back.` in the pane.
 
 **Back.** At the first frame from the room: the status line reads `Back since 06:47.` for 5 s and
-goes; `STALE` plates go; cards placed or removed meanwhile update; missed conversation lines appear
+goes (unless `welcome.status` names a line that outranks it: then that line, and no `Back since`,
+`c1-talk.md` §10.1); `STALE` plates go; cards placed or removed meanwhile update; missed conversation lines appear
 in order (replay or snapshot, `protocols.md` §2.2). `SEND` and talk are enabled again. **A draft is never sent on its
 own**: it stays in the input until the owner sends it (D12).
 
