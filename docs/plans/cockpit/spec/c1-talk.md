@@ -881,6 +881,12 @@ numbers are for a 380 px keyboard, which leaves 1368x532 in sight.
 - **Pinned.** A conversation that followed its end (§4) is at its end after every change of the
   visible height, the latest line in sight. If the owner had scrolled up, the line at its top stays
   at its top.
+- **During a turn, in sight** (T125, review 81-touch.md finding 4). The last item is then often a
+  `· QUEUED` block (§8). At the conversation's end its whole block, label row and
+  `[data-turn-delivery]` included, lies inside the conversation and ends at y ≤ 380 (§1.1's
+  y 744, D267, moved up 364 px), clear of the opener at y 396-444. The `SEND` slot stays in the
+  row at x 1200-1264, y 460-524 through `wait`, `STOP` and `SEND` (§8, D268), never under the
+  keyboard. Sketch: `sketches/c2-states.html#turn`.
 - Each change applies in the first animation frame after the event, with no slide (the 120 ms slide
   of §2 is for open and close only).
 
@@ -1531,6 +1537,14 @@ Test: Playwright with `hasTouch`, `tap`, `touchscreen` drag for the flick and `s
 pinned is `scrollTop + clientHeight ≥ scrollHeight − 1`. A second run stays at 1368x912 and
 stubs `navigator.virtualKeyboard` with an init script (`boundingRect.height` 380, one
 `geometrychange` dispatched after the tap) and asserts the same rects (D130).
+A third run (T125) is S-C1-16's fake-agent turn with the keyboard up: the owner taps the input at
+t = 1.5 s, the test resizes to 1368x532 at t = 1.6 s, the owner types `only the failed one` at
+t = 2.0 s and taps `SEND` at (1232, 492). Then at t = 2.5 s the input still has the focus,
+`data-keyboard="up"`, the block reads `YOU · HH:MM · QUEUED`, and its rect (label row and prompt
+block) is inside the conversation's rect with its bottom at y ≤ 380 and no overlap with the
+opener's rect (x 1288-1336, y 396-444); the slot at x 1200-1264, y 460-524 has `data-send="wait"`
+at t = 2.9 s and `data-send="stop"` at t = 3.1 s, both rects inside y 0-532; at t = 4.1 s
+`Only builder-a failed.` is drawn below the block and its last line ends at y ≤ 380 (pinned).
 
 ### S-C1-33 Keyboard up with the status line and a long draft: the conversation keeps 200 px
 Given S-C1-32's setup with the room down (the pane's 80 px status line, `screens.md` §7) and the

@@ -418,5 +418,5 @@ says go without them). Open at round 144 (T111), from `PROGRESS.md`'s task list:
 Done and no longer blocking: T26, T27, T29, T41, T44 (the button, pane and corner-cluster rects),
 T56 (pairing refusals and cross-site checks, `screens.md` §6.1-§6.3), T57, T89, T108-T110. The
 bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are
-written. For C2: T125 (the `c2-states.html` cells during a turn); T42/T95, T84, T69, T58 and T78
-are done.
+written. For C2: T125 (the turn cells, `c2-states.html#turn`, round 157), T42/T95, T84, T69, T58 and
+T78 are done.
