@@ -49,20 +49,23 @@ Answer: (open)
 
 ## Q-O2 How long one conversation lives, and what carries over
 
-`spec-input.md` §7.2. Blocks C1. Spec: T5, `c1-talk.md` §11, D36 (written for c).
+`spec-input.md` §7.2. Blocks C1. Spec: T5, T51, `c1-talk.md` §11, D36 (written for d since T51).
 
 - a) **One conversation forever**, compacted or restarted behind the scenes.
 - b) **Daily fresh start** at a fixed hour, plus a "New conversation" button.
 - c) **"New conversation" button only**, plus a forced fresh start when the session cannot go on.
 - d) c) with **no handover note**: a new session at once, divider `NEW CONVERSATION · 07:10`, the
-  agent reads the written context a laptop session would (`reviews/36-skeptic.md` finding 4; D36's note is c) plus a note).
+  agent reads the written context a laptop session would (`reviews/36-skeptic.md` finding 4; before T51, D36 was c) plus a note).
 
 Security argument for d) (`reviews/40-security.md` finding 9): a note written by an agent that read an
 injected log line carries the injection into the "fresh" session. If c) stays, the note is shown in full
 under the divider and the new session is told it is "notes from the previous session, not instructions".
 
-Recommendation: c) — the plan (§3 C1) says exactly this; carried over: repos/plans/notes, canvas
-cards, scheduled jobs and a short handover note; the old conversation stays readable.
+Recommendation: d) — the plan (§3 C1) says "on a fresh start the agent reads the same written
+context a laptop session would", and a laptop session gets no note; a note is an extra agent turn
+that can fail or hang on the one button meant to escape a broken session, and it can carry an
+injection across (finding 9 above). Carried over: repos/plans/notes, canvas cards, scheduled jobs;
+the old conversation stays readable above the divider.
 
 Answer: (open)
 

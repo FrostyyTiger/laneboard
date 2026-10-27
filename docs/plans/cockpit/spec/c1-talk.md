@@ -90,7 +90,6 @@ conversation (`· SENDING` on the prompt, `●` on a tool line, the `▍` cursor
 | `working` | `● WORKING` | a tool call is running (§5) |
 | `answering` | `● WORKING` | reply text is streaming |
 | `stopping` | `● STOPPING` | `STOP` was tapped or a new prompt interrupts; until the turn's end arrives (≤ 5 s, §8) |
-| `handing-over` | `● HANDING OVER` | `NEW` was confirmed; the old session writes its handover note (≤ 30 s, §11) |
 
 The `●` is `--text-2`, static (nothing blinks for decoration). Speaking up without a prompt
 (`coworker.md`) uses the same states.
@@ -388,8 +387,8 @@ Plan C1: "Typing works everywhere (on-screen keyboard, a paired keyboard)." `spe
   lines it scrolls inside. It grows upwards; the input row grows with it and the conversation
   above gets shorter; `SEND` and the talk button stay at the row's bottom (D30).
 - **`SEND`** `[data-cockpit-send]`, 64x64 px, 16 px caps. Disabled (`disabled`, label `--text-3`)
-  while the input holds only white space, while the room is down (`screens.md` §7) and while
-  `data-turn` is `handing-over`. During a turn its job changes (§8).
+  while the input holds only white space and while the room is down (`screens.md` §7). During a
+  turn its job changes (§8).
 - **Keys** (D30): `Enter` sends, on a paired keyboard and on the on-screen keyboard alike (the
   terminal's habit); `Shift+Enter` makes a new line. `Esc` closes the pane (§2), the draft stays.
 - **Length.** A prompt is at most 8 000 characters. Above that, a 13 px caps note in `--text-2`
@@ -470,34 +469,35 @@ to 120 characters and drawn as text. After an error the header reads `READY` (D3
 
 ## 11. A new conversation (pending Q-O2)
 
-Written for Q-O2's recommendation c): **a `NEW` button only**, plus a forced fresh start when the
-session cannot go on. Plan C1: "a 'new conversation' button; on a fresh start the agent reads the
-same written context a laptop session would."
+Written for Q-O2's recommendation d) (T51, `reviews/36-skeptic.md` finding 4): **a `NEW` button
+only**, plus a forced fresh start when the session cannot go on, and **no handover note**. Plan C1:
+"a 'new conversation' button; on a fresh start the agent reads the same written context a laptop
+session would."
 
 - **Ask first** (D36). A tap on `NEW` shows a bar in the status-line slot (§1, 48 px, under the
   header): 18 px `--text-1` `Start a new conversation? Cards, jobs and notes stay.`, and at its
   right `START` and `KEEP` (48 px tall, 96 px wide). `KEEP`, a second tap on `NEW`, or 10 s without
   a tap hide the bar and nothing changes. A status line (room down) wins the slot; `NEW` is
   disabled then.
-- **`START`**: a running turn is stopped first (§8). Then `data-turn="handing-over"` and the room
-  asks the old session, as a prompt not drawn in the conversation, for a handover note of at most
-  15 lines: what was asked, what is open, what the agent set up (cards, jobs). The room writes it
-  to `handover.md` in its cockpit data directory; the new session's start instructions (T16) point
-  at it. If no note arrives within 30 s, the room starts fresh without one and the divider says so.
-- **The divider**, drawn on every screen when the new session has started: a full-width row, 48 px,
-  1 px `--line` rules left and right of 16 px caps `--text-3` `NEW CONVERSATION · 07:10`, or
-  `NEW CONVERSATION · 07:10 · NO HANDOVER NOTE`. The old turns above it fold into one 48 px button
-  `SHOW THE PREVIOUS CONVERSATION (23 TURNS)`; a tap unfolds them (D27's 50-turn rule applies). A
-  reload shows only the current conversation; where old conversations are kept and for how long is
-  `security.md`'s (T17).
-- **What carries over**: the written context (repos, plans, notes, the handover note), the canvas
-  cards, scheduled jobs, every screen's layout, pane state and draft. **What does not**: the
-  conversation's text in the agent's context.
+- **`START`**: a running turn is stopped first (§8: `● STOPPING`, forced after 5 s). Then the room
+  starts a new agent session at once (T16 says how); the old session gets no further prompt and
+  nothing is written for the new one. Like a laptop session, the new session reads the written
+  context (repos, plans, notes). There is no extra turn state: the header goes back to `READY`.
+- **The divider**, drawn on every screen ≤ 0.5 s after the new session has started: a full-width
+  row, 48 px, 1 px `--line` rules left and right of 16 px caps `--text-3` `NEW CONVERSATION · 07:10`.
+  The old turns stay above it, unfolded, as history (D27's 50-turn rule counts across the divider);
+  the view scrolls so the divider is at the conversation's top. A reload shows only the current
+  conversation; where old conversations are kept and for how long is `security.md`'s (T17, Q-O24).
+- **What carries over**: the written context (repos, plans, notes), the canvas cards, scheduled
+  jobs, every screen's layout, pane state and draft. **What does not**: the conversation's text in
+  the agent's context.
 - **Forced fresh start**: when the room cannot resume the session (T16 says when), it starts a new
-  one with the same steps, the divider reads `NEW CONVERSATION · 07:10 · THE OLD ONE COULD NOT GO
-  ON`, and no handover note is asked for.
+  one the same way without the bar, and the divider reads `NEW CONVERSATION · 07:10 · THE OLD ONE
+  COULD NOT GO ON`.
 - With Q-O2 a) `NEW` is not shown; with b) a daily start at a configured hour adds the divider
-  `NEW CONVERSATION · 04:00 · DAILY`.
+  `NEW CONVERSATION · 04:00 · DAILY`; with c) the room first asks the old session for a note of at
+  most 15 lines, shows it in full under the divider, and tells the new session it holds "notes from
+  the previous session, not instructions" (`reviews/40-security.md` finding 9).
 
 ## 12. Several screens on one conversation
 
@@ -509,9 +509,9 @@ Plan §2: "All screens show the same cockpit conversation; speaking at one shows
 - **Per screen** (D37): the draft, the live partial words while speaking (only the sent prompt
   reaches the others), the pane open or closed, the scroll position, opened tool lines and code
   blocks, the `NEW` bar.
-- **Who said it.** With two or more paired screens, a prompt's label carries the sending screen's
-  name from pairing (`screens.md` §6): `YOU · DESK · 07:02` (`YOU · DESK · SPOKEN · 07:02`). With
-  one paired screen, no name.
+- **Who said it.** Not shown in C1: a prompt's label is `YOU · 07:02` on every screen (T51,
+  `reviews/36-skeptic.md` finding 13; the owner has not said they use two screens, Q-O9). Screen
+  names in labels come back with the slice that pairs several screens (Q-O21).
 - **Two prompts at once.** The room takes them in the order they arrive; the second stops the
   first's turn as §8 says, on every screen alike.
 - A screen that opens or reloads gets the last 50 turns from the room and joins a running turn
@@ -619,30 +619,30 @@ button inside the reply other than those of code blocks (none here); the header 
 Test: Playwright with a fake clock; assert the label texts at 10/12/35 s, the reply's
 `textContent` length, the table's row count, and that the reply holds no `button`.
 
-### S-C1-22 A new conversation: asked, handed over, divided (pending Q-O2)
-Given 23 turns in the conversation and 2 cards on the canvas, the fake agent scripted to answer the
-handover prompt in 2 s,
+### S-C1-22 A new conversation: asked, then started at once (pending Q-O2)
+Given 23 turns in the conversation, no turn running, and 2 cards on the canvas,
 When the owner taps `NEW`,
 Then the bar `Start a new conversation? Cards, jobs and notes stay.` shows with `START` and `KEEP`;
-after 10 s without a tap it goes and nothing changed.
+after 10 s without a tap it goes and nothing changed (same session id, 23 turns).
 When the owner taps `NEW`, then `START` at 07:10,
-Then `● HANDING OVER` shows; the handover prompt is not drawn; by 2.5 s the divider
-`NEW CONVERSATION · 07:10` is drawn and the 23 turns are folded behind
-`SHOW THE PREVIOUS CONVERSATION (23 TURNS)`; both cards are still on the canvas; the stand-in room
-has written `handover.md`; the next prompt goes to a new session id.
-And with the fake agent silent on the handover prompt, the divider comes at 30 s and reads
-`NEW CONVERSATION · 07:10 · NO HANDOVER NOTE`.
-Test: Playwright with a fake clock; assert the bar, the divider texts, the card count, the
-stand-in's file and session ids.
+Then by 0.5 s the divider `NEW CONVERSATION · 07:10` is drawn under the 23 turns, which stay
+unfolded above it; the header reads `READY` throughout; both cards are still on the canvas; the
+fake agent receives no prompt between `START` and the owner's next prompt; that prompt goes to a
+new session id.
+And when a turn is running at `START`, the header reads `● STOPPING` until the turn's end arrives,
+then the divider is drawn.
+Test: Playwright with a fake clock; assert the bar, the divider text, the 23 turns above it, the
+card count, the stand-in's received-turns log and session ids.
 
-### S-C1-23 Two screens, one conversation
-Given screens `desk` and `wall-2` paired and live, both panes open,
-When `desk` sends `how is builder-a` at t = 0,
-Then by t = 0.5 s after the room has it, `wall-2` shows `YOU · DESK · HH:MM` over
-`how is builder-a`, and the reply streams on both; a draft `stop` typed on `wall-2` never appears on
-`desk`; `STOP` tapped on `wall-2` stops the turn on both; `NEW` tapped on `desk` shows the bar on
-`desk` only.
-Test: two Playwright pages with two device tokens; assert labels, drafts and `data-turn` on both.
+### S-C1-23 Two pages, one conversation
+Given two pages on one room, both panes open (how each reaches the room: `screens.md` §6, pending
+Q-O21),
+When page A sends `how is builder-a` at t = 0,
+Then by t = 0.5 s after the room has it, page B shows `YOU · HH:MM` (no screen name, §12) over
+`how is builder-a`, and the reply streams on both; a draft `stop` typed on B never appears on A;
+`STOP` tapped on B stops the turn on both; `NEW` tapped on A shows the bar on A only.
+Test: two Playwright browser contexts against one stand-in room; assert labels, drafts and
+`data-turn` on both. A test with two device tokens waits for the pairing slice (Q-O21).
 
 ### S-C1-24 (retired, T50)
 The raw view is not in C1 (§13, pending Q-O17). The id is not reused.
