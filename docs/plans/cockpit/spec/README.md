@@ -389,8 +389,11 @@ Each word is defined here once; the other files link here instead of redefining 
   (`c1-talk.md` §13, pending Q-O17).
 - **tool line**: one collapsed line in the conversation for a piece of the agent's tool activity
   ("read 3 feeds", "looked at CI on main") (`c1-talk.md`).
-- **talk button**: the button in the pane that starts and sends voice input, by tap-tap or
-  hold-release; a physical button reaches it later through the room's API (C2b, `c2-voice.md` §14).
+- **talk button**: the 64x64 button bottom right (`[data-talk]`) that starts and sends voice input,
+  by tap-tap or hold-release; one element in one rect: with the pane closed it floats in the corner
+  and a press opens the pane with the live words, with the pane open it is the right end of the
+  input row (`screens.md` §4, `c2-voice.md` §1-§3, pending Q-O11). Absent with `cockpit.stt.url:
+  none`. A physical button reaches it later through the room's API (C2b, `c2-voice.md` §14).
 - **talk key**: a key on the screen's keyboard (`F13` by default) that acts as the talk button,
   for a USB macro key (`c2-voice.md` §11).
 - **button token**: the secret a physical button sends to the room's talk API; it can only press
