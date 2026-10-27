@@ -403,6 +403,24 @@ export function coverOf(box) {
 
 const EASE = 'cubic-bezier(.2, 0, 0, 1)';
 
+/**
+ * EASE as a function of time fraction `x` (0..1), so a script can know where
+ * the plate's fade is without asking the style engine (night 4 T20: the
+ * lock's leader fades on the plate's curve). Bisection on the curve's x. Pure.
+ */
+export function plateEase(x) {
+  if (!(x > 0)) return 0;
+  if (x >= 1) return 1;
+  // cubic-bezier(.2, 0, 0, 1): x(u) = 3(1-u)²u·0.2, y(u) = 3(1-u)u² + u³.
+  let lo = 0, hi = 1, u = x;
+  for (let i = 0; i < 24; i++) {
+    u = (lo + hi) / 2;
+    const xu = 0.6 * (1 - u) * (1 - u) * u + u * u * u;
+    if (xu < x) lo = u; else hi = u;
+  }
+  return 3 * (1 - u) * u * u + u * u * u;
+}
+
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -476,9 +494,13 @@ function lineEl(line, now, counts = null) {
  * cancels what had not played yet, `refresh(caption)` sets new words on the
  * plate up now at once (false when none is up), `tick(now)` moves a
  * countdown row's `m:ss` on (night 4 T53; the galaxy calls it each frame,
- * it writes only when a second turns). `timers` and `now` are injectable.
+ * it writes only when a second turns), `alpha(t)` is the plate's opacity on
+ * its fade curve at `clock` time `t` (night 4 T20). `timers`, `now` and
+ * `clock` are injectable.
  */
-export function createCaption(root, { timing = CAPTION_TIMING, timers = globalThis, now = () => Date.now() } = {}) {
+export function createCaption(root, {
+  timing = CAPTION_TIMING, timers = globalThis, now = () => Date.now(), clock = globalThis.performance,
+} = {}) {
   const plate = el('section', 'wall-caption');
   plate.setAttribute('aria-live', 'polite');
   const kicker = el('div', 'wall-caption-kicker');
@@ -523,11 +545,30 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     for (const t of pending) timers.clearTimeout(t);
     pending = new Set();
   };
+  // The plate's fade as it was last started (`clock` ms) and its animation, so `alpha` is known
+  // without a style read (T20). The animation's own clock wins where there is one: it starts on the
+  // frame after the call, which can be a long one while a leg's scene is built.
+  let plateFade = { from: 0, to: 0, at: 0, ms: 0, anim: null };
+  const plateAlpha = (t = clock.now()) => {
+    const { from, to, at, ms, anim } = plateFade;
+    if (!(ms > 0)) return to;
+    let x = (t - at) / ms;
+    if (anim && 'currentTime' in anim) x = anim.playState === 'finished' ? 1 : (Number(anim.currentTime) || 0) / ms;
+    return from + (to - from) * plateEase(x);
+  };
   const fade = (node, to, ms) => {
-    if (!ms || typeof node.animate !== 'function') { node.style.opacity = String(to); return; }
+    const own = node === plate;
+    const t = own ? clock.now() : 0;
+    if (!ms || typeof node.animate !== 'function') {
+      // No animation (still timing, or no WAAPI): the opacity is set at once, and so is the curve.
+      if (own) plateFade = { from: to, to, at: t, ms: 0, anim: null };
+      node.style.opacity = String(to);
+      return;
+    }
     const from = getComputedStyle(node).opacity;
     node.style.opacity = String(to);
-    node.animate([{ opacity: from }, { opacity: String(to) }], { duration: ms, easing: EASE });
+    const anim = node.animate([{ opacity: from }, { opacity: String(to) }], { duration: ms, easing: EASE });
+    if (own) plateFade = { from: Number.isFinite(Number(from)) ? Number(from) : plateAlpha(t), to, at: t, ms, anim: anim ?? null };
   };
 
   const hide = () => {
@@ -680,6 +721,8 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
   const cover = () => (covering ? box : null);
   /** Where a leader to the trouble node leaves the plate while it shows a trouble word, else null (T25). */
   const leaderFrom = () => (covering ? anchor : null);
+  /** The plate's opacity at `clock` time `t`, on the curve of its last fade (T20). */
+  const alpha = (t) => plateAlpha(Number.isFinite(t) ? t : clock.now());
 
   /**
    * What on the plate names a node, while it is on screen (Wall night 4 T1):
@@ -701,5 +744,5 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
     return out.filter((t) => t.box);
   };
 
-  return { show, hide, refresh, tick, cover, leaderFrom, targets, el: plate };
+  return { show, hide, refresh, tick, cover, leaderFrom, alpha, targets, el: plate };
 }

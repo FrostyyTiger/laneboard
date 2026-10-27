@@ -174,3 +174,129 @@ test('galaxy.html has the lock layer between the frame and the caption; main.js 
   assert.match(main, /createHud\(\{[^}]*lock \}\)/);
   assert.match(main, /held: lock\.held/);
 });
+
+test('galaxy lock: the leader belongs to the plate, never above its opacity and gone before it (night 4 T20)', async () => {
+  const { createCaption, plateEase, CAPTION_TIMING } = await import('../public/js/wall/caption.js');
+  const { leaderAlpha } = await import('../public/js/wall/lock.js');
+  // The curves: the plate's ease runs 0 → 1 without going back, and the leader is under it, out by half.
+  let prev = 0;
+  for (let i = 0; i <= 100; i++) {
+    const e = plateEase(i / 100);
+    assert.ok(e >= prev - 1e-9 && e >= 0 && e <= 1, `ease at ${i / 100}: ${e}`);
+    prev = e;
+    assert.ok(leaderAlpha(i / 100) <= i / 100 + 1e-12);
+  }
+  assert.equal(plateEase(0), 0);
+  assert.equal(plateEase(1), 1);
+  assert.equal(leaderAlpha(0.5), 0);
+  assert.equal(leaderAlpha(1), 1);
+
+  const prevDoc = globalThis.document;
+  const doc = makeDocument();
+  const make = doc.createElement.bind(doc);
+  doc.createElement = (tag) => {
+    const e = make(tag);
+    e.replaceChildren = (...kids) => { e.textContent = ''; e.append(...kids); };
+    return e;
+  };
+  globalThis.document = doc;
+  const prevStyle = globalThis.getComputedStyle;
+  globalThis.getComputedStyle = (e) => ({ opacity: e.style.opacity || '0' });
+  try {
+    let now = 0;
+    const clock = { now: () => now };
+    const waits = [];
+    const timers = {
+      setTimeout: (fn, ms) => { waits.push({ fn, at: now + ms, done: false }); return waits.length; },
+      clearTimeout: (id) => { if (waits[id - 1]) waits[id - 1].done = true; },
+    };
+    const run = () => {
+      for (const w of waits) if (!w.done && w.at <= now) { w.done = true; w.fn(); }
+    };
+    const caption = createCaption(makeEl('div'), { timers, timing: CAPTION_TIMING, clock });
+    caption.el.animate = () => {}; // the plate's fades are animated, as in a browser
+
+    const list = nodes();
+    const galaxy = fakeGalaxy(list);
+    const cam = createGalaxyCamera(galaxy);
+    aim(galaxy, zoomedSiteShot(galaxy.world.byId.get('hv2'), 0, 2.3));
+    // The words cover the map from the plate's fade-in to the end of its fade-out (caption.js `covering`).
+    let covering = false;
+    const lock = createGalaxyLock(makeEl('div'), cam, {
+      clock, size: () => ({ W, H }),
+      leaderFrom: () => (covering ? { x: 20, y: 40 } : null),
+      plateAlpha: (t) => caption.alpha(t),
+    });
+    const legs = lock.el.children.filter((e) => e.className === 'wall-lock-leader');
+    const seen = () => {
+      const box = Number(lock.el.style.opacity || 1);
+      return Math.max(...legs.map((e) => (e.style.opacity === '' ? 1 : Number(e.style.opacity)) * box));
+    };
+
+    lock.lockOn({ id: 'hv2-b', status: 'crit', arriveMs: 0 });
+    caption.show({ kind: 'site', id: 'hv2', arriveMs: 0 }, { kicker: 'SYSTEM', name: 'HV2', status: 'crit', lines: [] });
+    covering = true;
+    const samples = [];
+    const frame = () => {
+      run();
+      cam.drawn();
+      const p = caption.alpha(now);
+      samples.push({ now, p, l: seen() });
+    };
+    // In: the plate fades in, the brackets close.
+    for (now = 0; now <= LOCK_TIMING.closeMs + CAPTION_TIMING.inMs + 200; now += 16) frame();
+    assert.ok(Math.abs(caption.alpha(now) - 1) < 1e-9, 'the plate is in');
+    assert.ok(seen() > 0.99, 'with the plate whole, the leader is whole');
+    // Out: the plate fades and the lock opens together; the leader goes first.
+    caption.hide();
+    lock.release();
+    const t0 = now;
+    for (; now <= t0 + CAPTION_TIMING.outMs + 100; now += 16) {
+      if (now >= t0 + CAPTION_TIMING.outMs) covering = false;
+      frame();
+    }
+    for (const s of samples) assert.ok(s.l <= s.p + 0.01, `at ${s.now} ms the leader (${s.l}) is above the plate (${s.p})`);
+    const firstIn = samples.find((s) => s.l > 0);
+    assert.ok(firstIn && firstIn.p > 0.5, 'the leader comes in after the plate is half in');
+    const outs = samples.filter((s) => s.now >= t0);
+    const lastOn = outs.filter((s) => s.l > 0).at(-1);
+    assert.ok(!lastOn || lastOn.p > 0.5, 'the leader is gone by the time the plate is half out');
+    assert.ok(outs.filter((s) => s.p === 0).every((s) => s.l === 0), 'no leader once the plate is gone');
+  } finally {
+    globalThis.document = prevDoc;
+    globalThis.getComputedStyle = prevStyle;
+  }
+});
+
+test('caption alpha follows the plate animation\'s own clock: a fade still pending has not begun (night 4 T20)', async () => {
+  const { createCaption, plateEase, CAPTION_TIMING } = await import('../public/js/wall/caption.js');
+  const prevDoc = globalThis.document, prevStyle = globalThis.getComputedStyle;
+  const doc = makeDocument();
+  const make = doc.createElement.bind(doc);
+  doc.createElement = (tag) => {
+    const e = make(tag);
+    e.replaceChildren = (...kids) => { e.textContent = ''; e.append(...kids); };
+    return e;
+  };
+  globalThis.document = doc;
+  globalThis.getComputedStyle = (e) => ({ opacity: e.style.opacity || '0' });
+  try {
+    let now = 0;
+    const waits = [];
+    const timers = { setTimeout: (fn, ms) => { waits.push({ fn, ms }); return waits.length; }, clearTimeout: () => {} };
+    const caption = createCaption(makeEl('div'), { timers, timing: CAPTION_TIMING, clock: { now: () => now } });
+    const anim = { currentTime: null, playState: 'running' };
+    caption.el.animate = () => anim;
+    caption.show({ kind: 'site', id: 'hv2', arriveMs: 0 }, { kicker: 'SYSTEM', name: 'HV2', status: 'crit', lines: [] });
+    for (const w of waits.filter((x) => x.ms === 0)) w.fn();
+    now = 200; // a long frame: the clock has run, the animation not yet
+    assert.equal(caption.alpha(now), 0, 'pending: still at its start');
+    anim.currentTime = CAPTION_TIMING.inMs / 2;
+    assert.ok(Math.abs(caption.alpha(now) - plateEase(0.5)) < 1e-9, 'half way on the animation\'s clock');
+    anim.playState = 'finished';
+    assert.equal(caption.alpha(now), 1);
+  } finally {
+    globalThis.document = prevDoc;
+    globalThis.getComputedStyle = prevStyle;
+  }
+});

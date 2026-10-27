@@ -122,6 +122,16 @@ export function lockTarget(site, model) {
   return chain;
 }
 
+/**
+ * The lock's leader's opacity when the plate's is `p` (night 4 T20): it
+ * belongs to the plate, so never above it; it comes in on the plate's second
+ * half and is gone by the time the plate is half out (in after the plate,
+ * out before it), so it never hangs in empty sky. Pure.
+ */
+export function leaderAlpha(p) {
+  return p > 0.5 ? (p < 1 ? 2 * p - 1 : 1) : 0;
+}
+
 /** The leader's length never under this many arms (shorter reads as a tick, not a line). */
 export const LEADER_MIN_ARMS = 2;
 

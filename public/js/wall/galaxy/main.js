@@ -281,6 +281,7 @@ export function boot() {
   const lock = createGalaxyLock(document.getElementById('wall-lock'), cam, {
     timing: still ? STILL_LOCK_TIMING : LOCK_TIMING,
     leaderFrom: () => caption.leaderFrom(),
+    plateAlpha: (t) => caption.alpha(t), // the leader fades with the plate, first out (night 4 T20)
     avoid: () => shownNames().map((n) => n.box),
     size: galaxy.size,
   });

@@ -23,8 +23,13 @@
 // Like labels.js it writes a transform or the opacity only when its rounded
 // value (0.1 px, opacity to 0.01) changed (night 4 T12): a held lock that
 // does not move costs no style write a frame.
+//
+// The leader belongs to the plate (night 4 T20, r4-film-ui galaxy 3): its
+// legs take `leaderAlpha` of the plate's opacity (`plateAlpha`, caption.js
+// `alpha`), so it comes in after the plate, goes before it, and no stub is
+// left in empty sky while the brackets open after the words have gone.
 
-import { LEADER_MIN_ARMS, LOCK_SIZE, LOCK_TIMING, lockProgress, lockTone } from '../lock.js';
+import { LEADER_MIN_ARMS, LOCK_SIZE, LOCK_TIMING, leaderAlpha, lockProgress, lockTone } from '../lock.js';
 
 const clamp01 = (v) => (v > 0 ? (v < 1 ? v : 1) : 0);
 /** Ease out cubic, as lock.js: fast in, settling on the node. */
@@ -171,11 +176,13 @@ const CORNERS = ['tl', 'tr', 'bl', 'br'];
  * `release()` opens it; a leg with `cut` (a tap, night 3 T10) takes the box
  * at once instead of waiting for the last lock to open. `leaderFrom()` says where the leader leaves the
  * caption plate (null: none); a calm target never has one; `avoid()` gives
- * the boxes it routes round (the names shown, labels.js `shown`). `clock`
- * and `size` are injectable.
+ * the boxes it routes round (the names shown, labels.js `shown`);
+ * `plateAlpha(t)` the plate's opacity at `clock` time `t`, which the leader
+ * never outshines (null: the leader is whole). `clock` and `size` are
+ * injectable.
  */
 export function createGalaxyLock(root, cam, {
-  timing = LOCK_TIMING, clock = globalThis.performance, size = null, leaderFrom = null, avoid = null,
+  timing = LOCK_TIMING, clock = globalThis.performance, size = null, leaderFrom = null, avoid = null, plateAlpha = null,
 } = {}) {
   const box = document.createElement('div');
   box.className = 'wall-lock';
@@ -277,14 +284,18 @@ export function createGalaxyLock(root, cam, {
       id: hit.c.id, x: sp.x, y: sp.y, r: g.r, d: g.d, shut, alpha: g.alpha, leader: l,
       covers: [...cornerCovers(sp, shut, arm), ...(l ? leaderCovers(l) : [])],
     };
-    if (!l) { hideLeader(); return; }
+    // On the plate's curve (T20): nothing to draw while the plate is under half.
+    const k = l && typeof plateAlpha === 'function' ? leaderAlpha(plateAlpha(now)) : 1;
+    last.leaderAlpha = l ? k : 0;
+    if (!l || !(k > 0)) { hideLeader(); return; }
+    const op = k < 1 ? k.toFixed(2) : '';
     for (let i = 0; i < legs.length; i++) {
       const sg = l.segs[i];
       if (!sg || sg.len <= 0) { hideLeg(i); continue; }
       // A leg with the next one drawn runs on one px (half the stroke) so the elbow has no notch.
       const len = sg.len + (l.segs[i + 1]?.len > 0 ? 1 : 0);
       put(legs[i], 'transform', `translate3d(${sg.x.toFixed(1)}px, ${sg.y.toFixed(1)}px, 0) rotate(${sg.angle.toFixed(4)}rad) scaleX(${len.toFixed(1)})`);
-      if (!legOn[i]) put(legs[i], 'opacity', '');
+      put(legs[i], 'opacity', op);
       legOn[i] = true;
     }
     led = true;
