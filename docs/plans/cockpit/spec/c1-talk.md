@@ -929,7 +929,7 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
   UUID, room-internal: no message to the screens, one log line). If that is not taken within 10 s
   either, the room sends `prompt.taken` `cancelled` with `"why":"not-taken"`: the label reads
   `YOU · 07:03 · NOT SENT` and under the block, as E1's look (§10): `The agent did not read this.`
-  with `RETRY` and `EDIT`. `RETRY` sends it with a new `clientId` (D95 keeps the old one).
+  with `RETRY` and `EDIT`. `RETRY` sends it with a new `clientId` (§10, D259).
 - **`STOP`** (or `Ctrl+C` on a paired keyboard with the input empty): `data-turn="stopping"` within
   0.1 s; the room asks the bridge to interrupt with `cancelQueued` (`protocols.md` §11.6). The turn
   ends when the bridge reports its end; if that has not happened 5 s after the tap, the room forces
@@ -1003,8 +1003,8 @@ to 120 characters and drawn as text. After an error the header reads `READY` (D3
 
 | Code | When | Message (exact) | Buttons |
 | --- | --- | --- | --- |
-| E1 `not-sent` | the room has not confirmed a prompt 5 s after send, link up | label `YOU · 07:02 · NOT SENT`; `Not sent: the room did not confirm within 5 s.` | `RETRY` sends the same text again; `EDIT` removes the block and puts the text back in the input (an existing draft is kept after it, on a new line) |
-| E2 `agent-exited` | the agent's process ended during a turn | `The agent stopped unexpectedly at 07:04. The room is starting it again.`, then, once back: `The agent is back (07:04). Your last message was not answered.` | `RETRY` (only once the agent is back) sends that turn's prompt again |
+| E1 `not-sent` | the room has not confirmed a prompt 5 s after send, link up | label `YOU · 07:02 · NOT SENT`; `Not sent: the room did not confirm within 5 s.` | `RETRY` sends the same text again with the **same** `clientId` (the one exception, below); `EDIT` removes the block and puts the text back in the input (an existing draft is kept after it, on a new line) |
+| E2 `agent-exited` | the agent's process ended during a turn | `The agent stopped unexpectedly at 07:04. The room is starting it again.`, then, once back: `The agent is back (07:04). Your last message was not answered.` | `RETRY` (only once the agent is back) sends that turn's prompt again, with a new `clientId` |
 | E3 `agent-down` | the agent cannot start | `The agent cannot start: {detail}. The room tries again every 30 s.` plus the status line (§1) `Agent not running since 07:04 (2 min).`; `SEND` and talk disabled, the draft kept | none |
 | E4 `not-logged-in` | the agent reports missing login or key | `The agent is not logged in on the room. Log it in there, then send again.` plus the status line (§10.1) | none |
 | E5 `model-busy` | the model service is retried by the agent | not an error line: a tool-line-style row in `--text-3`, `the model service is busy, retrying (2 of 10)`, replaced on each retry, gone when text arrives | none |
@@ -1014,6 +1014,13 @@ to 120 characters and drawn as text. After an error the header reads `READY` (D3
 
 - **Nothing is ever sent again on its own** (D34, as D12): `RETRY`, `EDIT` and `GO ON` act only on a
   tap. A `RETRY` is a new turn with the same text; the failed turn stays above it.
+- **Which `clientId` a button sends** (D259, one rule for the pane). Only E1's `RETRY` reuses the
+  block's `clientId`: the room may hold that prompt already, and D95 makes the resend start nothing
+  but the echo. Every other button that sends makes a new `clientId` (`crypto.randomUUID()`): E2's
+  `RETRY`, E7's `GO ON`, E8's `RETRY`, E9's `RETRY` (T116) and the `RETRY` under both `NOT SENT`
+  lines of §8 (`The agent did not read this.`, `Dropped by STOP.`). The room knows those
+  `clientId`s, so reusing one would bring back only the old echo and the retry would silently do
+  nothing.
 - Which native event of the agent maps to which code is `protocols.md` §11.4's mapping table; Claude Code's
   `api_retry` is E5 and a `result` with `is_error` is E7 or E8 (research Q2).
 - An error line is shown on every screen (§12); its buttons work from any of them.
@@ -1231,7 +1238,11 @@ Then the turn shows, in order: `The answer failed: overloaded.` + `RETRY`;
 `the model service is busy, retrying (2 of 10)` gone once text arrives. No element uses `--p1` or
 `--p2`; each error is `[data-turn-error]` with its code; the header reads `READY` after each.
 A `detail` of 300 characters shows its first 120.
-Test: Playwright, one script per row (table-driven); compare the texts and computed colours.
+And after the `boom` row (E8), a tap on `RETRY` raises `fakeAgent.prompts()` by exactly 1 within
+1 s; the `prompt` frame it sends carries a `clientId` different from the failed turn's, and a new
+turn with the same text is drawn under the failed one, which stays (D259).
+Test: Playwright, one script per row (table-driven); compare the texts and computed colours; for
+the `RETRY` step, `prompts().length` before and after and the two `clientId`s from `framesent`.
 
 ### S-C1-21 A long reply: its age shows, and it is drawn whole
 Given the fake agent thinking 15 s, then streaming 120 lines and 26 000 characters over 20 s, with

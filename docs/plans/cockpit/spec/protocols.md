@@ -398,7 +398,8 @@ How a snapshot over 512 KB divides its lists between parts: §2.2 (D140).
 - **Once only** (D95). The room remembers each `clientId` for 10 min. A `prompt` with a known
   `clientId` starts nothing: the room answers with the same `turn.prompt` again, to that link only,
   without `seq`. So `RETRY` after E1 `not-sent` (`c1-talk.md` §10) sends the same `clientId`, and a
-  prompt that did arrive late never runs twice.
+  prompt that did arrive late never runs twice. Every other resend (E2, E7, E8, E9, the `NOT SENT`
+  lines of §8) carries a new `clientId` (D259).
 
 **Errors.**
 
