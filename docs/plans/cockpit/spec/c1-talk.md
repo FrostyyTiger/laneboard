@@ -2,7 +2,7 @@
 
 The cockpit pane and the conversation in it: where the pane sits, how it opens and closes, how a
 reply is drawn for reading at arm's length, and how tool activity folds into one line (§1-§5, part
-1, T4). Typing and send, talking while the agent answers, long replies, errors, a new conversation,
+1, T4; §5.1 maps the room's messages onto them, T29). Typing and send, talking while the agent answers, long replies, errors, a new conversation,
 several screens are part 2 (§7-§14, T5); the raw view is not in C1 (§13, T50). Words as in the glossary (`README.md`). Sizes are CSS
 px at 1368x912; times in s or ms.
 
@@ -259,6 +259,56 @@ markup (`security.md`, T17).
 the room's standing instructions for the agent (`protocols.md` §11.8, word for word there) say: lead with the answer in
 one sentence; at most 3 sentences per paragraph; a table for 3 or more items that share fields;
 code only when asked; marks `■ ▲ ● ○` before trouble words. Long replies are §9.
+
+### 5.1 The messages behind §2-§5 (T29)
+
+The pane draws only from the room's messages; their fields and examples are `protocols.md` §2.2 and
+§3.2 (one place), the bridge behind them §11.3-§11.4. This table says what each one changes in the
+pane. Every message is applied in `seq` order; a `seq` at or below the last applied is dropped
+(`protocols.md` §2.2).
+
+| Message | Fields the pane reads | What the pane does |
+| --- | --- | --- |
+| `welcome` | `config.stt`, `status` | sets the talk button (`c2-voice.md` §9) and the status line (§10); draws nothing in the conversation |
+| `snapshot` | `turns[].items[]` by `blockIndex`, `end`, `olderTurns` | replaces the whole conversation once its last part is in; a running turn continues from where it is (§12) |
+| `turn.prompt` | `turnId`, `clientId`, `text`, `source`, `at` | the sender's block loses `· SENDING`; other screens draw the prompt block (§7, §12). With `delivery:"new"` it is the turn's start; the `AGENT · HH:MM` label row comes with the turn's first item |
+| `turn.state` | `state` | sets `data-turn` and the header word (§2) |
+| `text.delta` | `turnId`, `blockIndex`, `text` | appends to that text block, creating it at its `blockIndex` place if new; the `▍` cursor follows it (§3) |
+| `text.block` | `turnId`, `blockIndex`, `text` | replaces that block's text; the cursor leaves it |
+| `tool.start` | `turnId`, `blockIndex`, `toolUseId`, `tool`, `input`, `startedAt` | adds a call: to the tool line before it if the fold rule below says so, else a new line at its `blockIndex` place; `●` and `…` on |
+| `tool.end` | `toolUseId`, `endedAt`, `isError` | ends that call; its open row shows `endedAt − startedAt` in whole ms and `ok` (`isError:false`) or `failed`; `●` goes once no call of the line runs |
+| `turn.retrying` | `attempt`, `of` | E5's grey row (§10) |
+| `turn.end` | `state`, `code`, `steps`, `detail`, `forced` | the cursor goes, running calls lose `●`; the end line of `protocols.md` §3.2's table; `data-turn="idle"`, `READY` |
+| `heartbeat` | — | nothing drawn; resets the 25 s loss timer (`screens.md` §7) |
+
+**Place.** Items of a turn sit in `blockIndex` order whatever order their messages came in: an item
+with a lower index that arrives later is inserted above the higher one. A text block and a tool
+call never share an index (`protocols.md` §3.2).
+
+**The fold rule, in these terms** (§5 "Folding", D24). A `tool.start` joins the tool line whose
+last call has `blockIndex` one less than its own, if that call is of the same tool (`mcp__laneboard__`
+stripped). Anything else starts a new line. So calls the agent makes in parallel (several
+`tool.start` with consecutive indexes before any `tool.end`) fold like calls made one after the
+other; parallel calls of two tools are two lines, each with its own `●`. `{n}` in a `many` text
+counts the line's started calls; the `one` text stays while every call has the same `{target}`;
+` · {k} failed` counts ended calls with `isError:true`.
+
+**A message the pane cannot place** (D119): a `text.*`, `tool.*`, `turn.state`, `turn.retrying` or
+`turn.end` naming a `turnId` the pane does not hold, or a `tool.end` naming an unknown `toolUseId`.
+The pane has missed something: it closes the link with 4000 `gap` and takes the snapshot
+(`protocols.md` §2.2). Nothing on screen changes until the snapshot has been drawn.
+
+**A fresh screen** (a load or a reload, D118). From the page's load until the last `snapshot` part
+is drawn, `data-cockpit="connecting"` (`screens.md` §7). The pane, if opened, shows its header
+(`READY` greyed, `NEW` disabled), the input (editable, a draft can be written, `SEND` disabled) and
+in the conversation one line at its top, 18 px `--text-2`: `Connecting to the cockpit room…`. Then:
+- the snapshot holds turns: they are drawn, scrolled to the end (§2), the line goes;
+- the snapshot holds no turn (a new room, or right after `NEW` with nothing said): the line
+  becomes `Nothing said yet. Type a question, or hold the talk button and speak.` (with
+  `config.stt` `none`: `Nothing said yet. Type a question below.`), 18 px `--text-2`, until the
+  first `turn.prompt`. The pane is never blank (`docs/plans/product.md`, never an empty screen);
+- no snapshot 5 s after the load: `data-cockpit="room-down"` and §10's status line, its "since"
+  being the page's load time (`screens.md` §7); the `Connecting…` line goes.
 
 ## 6. Scenarios
 
@@ -674,3 +724,32 @@ Test: two Playwright browser contexts against one stand-in room; assert labels, 
 
 ### S-C1-24 (retired, T50)
 The raw view is not in C1 (§13, pending Q-O17). The id is not reused.
+
+### S-C1-25 Parallel calls fold by tool, end in any order, and show their ms
+Given the pane open and the fake agent (script `c1-render`) scripted, after a prompt, to start
+`mcp__laneboard__fleet` with `site` `hv1` at 100 ms (ends at 900 ms), `fleet` with `site` `hv2` at
+110 ms (ends at 400 ms, `isError:true`) and `mcp__laneboard__ci` with `branch` `main` at 120 ms
+(ends at 600 ms), then text at 1 000 ms,
+When the owner sends `how is the fleet?` at t = 0,
+Then by 300 ms the reply shows two tool lines in this order, both with `●`: `read 2 feeds…` and
+`looked at CI on main…`; at 700 ms only the first has `●`; at 1 000 ms it reads `read 2 feeds · 1
+failed`, no `●`; tapped open, its rows read `fleet  {"site":"hv1"}  800 ms  ok` and
+`fleet  {"site":"hv2"}  290 ms  failed` (each `endedAt − startedAt`: at least the scripted span, at most 100 ms more).
+And a second case with `hv1` ending at 300 ms and `hv2` at 900 ms gives the same lines and texts.
+Test: Playwright; sample `[data-tool-line]` texts and their `●` every 100 ms; tap the first line,
+read its rows; the second case reorders the ends in the script.
+
+### S-C1-26 A fresh screen says it is connecting, then never shows a blank pane
+Given the stand-in room holding the conversation `c-0007` with 3 turns, and a page loaded at t = 0
+with the room's outbound `welcome` held back 2 s (the outbound fault hook, `stand-ins.md` §1.1),
+When the owner opens the pane at t = 0.5 s,
+Then `data-cockpit="connecting"`, the conversation shows exactly `Connecting to the cockpit room…`,
+`SEND` is disabled and the input takes typed text; by 2.5 s the 3 turns are drawn with the last
+one's end in sight and the line is gone.
+And with an empty conversation the line becomes `Nothing said yet. Type a question, or hold the
+talk button and speak.` and stays until a prompt is sent.
+And with the room not answering at all, at 5 s `data-cockpit="room-down"` and the status line says
+`Cockpit room unreachable since` the load's `HH:MM`.
+Test: Playwright against the room under test; hold back `welcome` with the fault hook; assert
+`data-cockpit`, the conversation's text and `SEND`'s `disabled` at 0.5 s and 2.5 s; restart with an
+empty conversation, then with the room stopped.
