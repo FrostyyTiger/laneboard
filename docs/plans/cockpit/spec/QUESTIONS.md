@@ -20,8 +20,16 @@ Security-relevant, blocks C1 (the pane needs a paired screen). Spec: T3, `screen
 - b) a), plus a token expires after 30 days without being seen.
 - c) Any already paired screen may approve a new one, from its pane.
 
-Recommendation: a) — nobody off the room's box can add a screen, and a desk kiosk that pairs again
-every month is a chore for no gain while `unpair` is one command.
+Caution (`reviews/40-security.md` finding 1): the agent runs on the room's box, and `local` there
+includes the agent. So a) alone lets an injected line run `pair` or `button add`. a) only holds if
+`pair`, `unpair` and `button add|remove` are refused for the agent's uid (the agent runs as its own unix
+user, no read on the cockpit state dir; the CLI checks the peer uid and fails closed), or if approval is
+`direct` only (the owner through serve). Also: the pairing code must not be enough to collect the token
+(finding 4: a `pairSecret` the screen keeps in memory, CLI shows the requester's address and asks y/N).
+
+Recommendation: a) with the uid refusal above — nobody off the room's box, and not the agent on it, can
+add a screen, and a desk kiosk that pairs again every month is a chore for no gain while `unpair` is one
+command. Finding 7 asks for b) (30-day expiry): decide with this.
 
 Answer: (open)
 
@@ -48,6 +56,10 @@ Answer: (open)
 - c) **"New conversation" button only**, plus a forced fresh start when the session cannot go on.
 - d) c) with **no handover note**: a new session at once, divider `NEW CONVERSATION · 07:10`, the
   agent reads the written context a laptop session would (`reviews/36-skeptic.md` finding 4; D36's note is c) plus a note).
+
+Security argument for d) (`reviews/40-security.md` finding 9): a note written by an agent that read an
+injected log line carries the injection into the "fresh" session. If c) stays, the note is shown in full
+under the divider and the new session is told it is "notes from the previous session, not instructions".
 
 Recommendation: c) — the plan (§3 C1) says exactly this; carried over: repos/plans/notes, canvas
 cards, scheduled jobs and a short handover note; the old conversation stays readable.
@@ -196,9 +208,14 @@ one option beside "auth in front" and "LAN-only". Spec: `screens.md` §6 (writte
 
 - a) **Pairing is part of C1** (codes, CLI approve/unpair, as written; Q-O10 applies).
 - b) **C1 runs behind the existing trust** (`local`, `direct` through serve, the tailnet); pairing
-  becomes its own later slice for setups that need it.
+  becomes its own later slice for setups that need it. Note (`reviews/40-security.md` finding 3): on the
+  hub a `direct` user can act, kill and open terminals, so a kiosk that reaches the hub as the owner's
+  tailnet login holds more than "a window"; plan §2 says a screen holds no credentials.
+- c) b), but the screen's tailnet identity is a separate login or tagged device that is not in
+  `fleet.allowedUsers` for actions and terminals. Needs a `read`-only `direct` kind that does not exist
+  today.
 
-Recommendation: b) — the first chat line should not wait for a pairing flow the owner did not ask
+Recommendation: b) for a screen only the owner can touch; c) or a) for a screen others can reach. b) — the first chat line should not wait for a pairing flow the owner did not ask
 for; the spec keeps §6 as the later slice. Until answered the spec stays written for a).
 
 Answer: (open)
@@ -214,6 +231,40 @@ From `reviews/36-skeptic.md` finding 1. At 1368 the default `split` gives 608 px
 
 Recommendation: b) — an empty 44 % of the owner's one screen breaks "never an empty screen" in
 spirit. Q-O12 and Q-O13 then wait for C4.
+
+Answer: (open)
+
+## Q-O23 What the agent may do before C6
+
+Security-relevant, blocks C1 (the launch line). From `reviews/40-security.md` finding 2. Plan §4: "its
+act access is C6 only". `spec-input.md` §3 says the agent "manages (stop and start things, e.g. over SSH)"
+and sets up scripts and timers on its own machine. The spec's tool table (`c1-talk.md` §5) assumes
+`Bash`, `Edit`, `Write`, web tools. A C1 agent that reads logs and feeds (untrusted), holds the fleet's
+state (private) and can fetch URLs (a way out) has all three legs of an exfiltration.
+
+- a) **Read only**: the MCP read tools plus `Read`/`Grep`/`Glob`. No `Bash`, no `Edit`/`Write`, no web.
+  Launched with `--strict-mcp-config --allowedTools "mcp__cockpit__*,Read,Grep,Glob"
+  --permission-prompts none`; a refused call shows as a grey line `tried {tool}, not allowed`.
+- b) a) plus `WebSearch`/`WebFetch`, with the room's egress limited to the model API, the STT host and
+  the git remote.
+- c) The full tool set, as on the laptop.
+
+Recommendation: a) — "look freely, change only with a yes" (`spec-input.md` §6) taken literally; changes
+arrive with C6 through the audited control plane. The spec is written for a) (pending Q-O23).
+
+Answer: (open)
+
+## Q-O24 How long the room keeps what was said
+
+Security-relevant. From `reviews/40-security.md` finding 6. Every sent prompt and what the agent reads
+goes to the agent's model service (with Claude Code: Anthropic); the spec only says where audio goes.
+
+- a) Audio never written to disk, partials never stored, the conversation kept 30 days, then deleted.
+- b) As a), but the conversation kept until `new conversation` or unpair, no timer.
+- c) Nothing kept: a reload shows an empty conversation.
+
+Recommendation: a) — resume across a reload and a night needs some memory, and a limit is cheap;
+`security.md` (T17) carries the table, one row per data kind.
 
 Answer: (open)
 
@@ -243,6 +294,9 @@ Spec: T7, `c2-voice.md` §14 (written for a), D52.
   `button remove`.
 - b) **No token, loopback or LAN only**: any caller that reaches the room may press talk.
 - c) **A screen's device token**, copied into the button.
+- d) a), plus an API press is refused while the screen had no touch for 5 min (the owner is not
+  there), or an API press only opens listening and a send needs a touch (`reviews/40-security.md`
+  finding 11: a stolen button token otherwise opens an empty room's microphone into the model service).
 
 Recommendation: a) — b) lets anything on the network open a microphone on the desk, and c) puts a
 token that can read the conversation into a home automation box.

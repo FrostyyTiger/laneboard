@@ -68,6 +68,12 @@ its file names).
 - [ ] T53 (2) `spec/README.md` speed budget and D28: drop `?perf=1` and the "share" column, keep end-to-end marks for tests; B5/B6 move to C4 (finding 11; merges with T35)
 - [ ] T54 (2) Layout and pairing carry marks per Q-O22 and Q-O21: tag `screens.md` §1/S-SCR-01/06/07/08/10/11, D2/D3/D8/D9 `(pending Q-O22)` and §6/S-SCR-13..16 `(pending Q-O21)`; say which scenarios C1's done-when contains in each case (findings 1, 3)
 - [ ] T55 (2) `QUESTIONS.md` housekeeping: order C1's first (Q-O11, Q-O1, Q-O2, Q-O15, then C2), move Q-O12/Q-O13 under "Can wait", turn Q-O16 into a D-line (strict defaults are safe by default; supersedes T38), Q-O14 into a D-line the owner can strike (finding 12)
+- [ ] T56 (2) `screens.md` §6 and S-SCR-13..16 (pending Q-O10/Q-O21): `pair`, `unpair`, `button add|remove` refused for the agent's uid (`refused: the agent cannot pair screens`, audit line, no token); `pairSecret` returned by `POST /api/cockpit/pair`, required by the `GET` (else 404), CLI shows address and `User-Agent` and asks y/N; every cockpit upgrade and mutating request gets `auth.md`'s Host/Origin/`Sec-Fetch-Site`/`X-Laneboard: 1` checks, cookie `HttpOnly; Secure; SameSite=Strict; Path=/api/cockpit`; `SCREEN desk2 PAIRED · 07:12` line on every paired screen; scenarios: agent runs `pair`, second client polls the code, upgrade from `Origin: https://evil.example.invalid` gets 403 `bad-origin` — review 40-security.md findings 1, 4, 5, 7
+- [ ] T57 (2) `c1-talk.md` §5/§13 per Q-O23 (pending Q-O23): the launch line (`--strict-mcp-config --allowedTools … --permission-prompts none`), `Bash`/`Edit`/`Write` rows marked "not allowed in v1", `system/permission_denied` → grey `tried {tool}, not allowed`, scenario with a scripted `Bash` call that is denied; tools that change things never fold and show the whole input wrapped, `Bash` target = command cut at 32 chars; values matching the redaction rules show `[redacted]` in open rows and the raw view; `toolOutput` per-screen, off by default — review 40-security.md findings 2, 10, 15
+- [ ] T58 (2) `c2-voice.md` §12: item 5 says sent text and what the agent reads goes to the agent's model service (with Claude Code: Anthropic); the insecure-origin fallback notes that token and audio travel unencrypted, and does not pair unless `cockpit.allowInsecure: true` (warned at boot) — review 40-security.md findings 6, 12
+- [ ] T59 (2) `c1-talk.md` §3 and §7/§12: replies draw headings in `--text-1`, not caps; label, error and status lines carry a 2 px `--line-strong` left rule no reply can draw; code blocks get a left rule only; at most 10 prompts per minute per token, the 11th is `NOT SENT` `Too many messages from this screen; wait a minute.` — review 40-security.md findings 13, 14 (coordinate with T43/T50 type edits)
+- [ ] T60 (2) Audit lines named in `screens.md` §6 and `c1-talk.md` §8/§11/§12, in `auth.md`'s format (`argsHash`, never the text): `cockpit.pair`, `cockpit.unpair`, `cockpit.prompt` (screen, spoken/typed), `cockpit.stop`, `cockpit.new`; room's log chained, not writable by the agent's uid; scenario: after pairing and a stop, `laneboard audit` on the room shows both — review 40-security.md finding 8
+- [ ] T61 (10) Add to T17 `security.md`: token-by-verb table (what a stolen device token can do, incl. that a C6 confirm needs more than a tap; owner question in `c5-c6.md` on typed target for high-tier confirms), data table (audio, partials, final, prompt, reply, tool input/output, handover, audit: where kept, how long, who reads; Q-O24), `S-SEC-` scenarios for findings 1/2/4/5 from T56/T57, explicit confirmation of D49 and D52, and D13 stays under Q-O10 (T55 must not close it) — review 40-security.md findings 6, 7, contradictions list
 
 Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do T4-T7 before T8+ and before T21-T25 sketches if rounds are short; T24 comes right after T4.
 
@@ -87,10 +93,13 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 ## For the owner
 
+- The security review (round 40) found that the agent lives on the room's box, so "only the room's own CLI approves" also lets the agent approve unless the agent runs as its own unix user. Q-O23 (what the agent may do before C6) and Q-O24 (retention) are new; Q-O10, Q-O21 and Q-O20 got security notes.
+
 - The skeptic review (round 36) found the spec has grown about twice the size C1/C2 need (68 scenarios). Tasks T48-T55 cut it; Q-O21 and Q-O22 ask the two cuts that touch your own words (pairing, the empty canvas).
 
 ## Reviews
 
+- round 41 triage of `reviews/40-security.md`: 15 findings plus a contradictions list. Tasks: 1/4/5/7 → T56, 2/10/15 → T57, 6/12 → T58, 13/14 → T59, 8 → T60, 6/7/contradictions → T61. Questions: 2 → Q-O23 (new), 6 retention → Q-O24 (new), 1 and 4 → Q-O10 text, 3 → option c in Q-O21, 9 → note in Q-O2, 11 → option d in Q-O20. 15 findings became tasks or questions; none dropped. The review scores safe 3 and complete 3: Q-O23 and the uid refusal (T56) are the two that block C1.
 - round 37 triage of `reviews/36-skeptic.md`: 13 findings plus a decided-elsewhere list. Tasks: 2 → T48, 5/6/13 → T49, 7/8/9/13 → T50, 4/13 → T51, 10 → T52, 11 → T53, 1/3 → T54, 12 → T55. Questions: 1 → Q-O22, 3 → Q-O21, 4 → option d in Q-O2, 7 → option d in Q-O17. 8 findings became tasks plus 4 questions/options; none dropped. Note: the review's scores are low on simple (3) and complete (4); the cuts are tasks, not done, and a cut that conflicts with an owner answer waits for it.
 
 - round 32 triage of `reviews/31-touch.md`: 14 findings plus a contradictions list. Tasks: 1 → T40, 2/5 → T41, 3/10/14 → T42, 4 → T43, 6/11 → T44, 7/8/9 → T45, 12 → T46, 13 → T47. Questions: type size → Q-O18, undo vs gap vs confirm → Q-O19. Already tracked: S-SCR-01 `AGENT` vs talk button (T26). None dropped.
@@ -109,5 +118,6 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 | 26 | implementer | 7 | 3 | 4 | 4 | 6 | 6 | 6 |
 | 31 | touch | 8 | 4 | 5 | 7 | 6 | 6 | 6 |
 | 36 | skeptic | 9 | 4 | 5 | 7 | 5 | 3 | 7 |
+| 40 | security | 7 | 3 | 4 | 6 | 6 | 6 | 3 |
 
 ## Morning
