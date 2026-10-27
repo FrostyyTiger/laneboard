@@ -447,13 +447,24 @@ Notes for every builder round (planner, round 1):
   the default fit; only the first touch (wake) resets to the default — done when: a test with a fake clock drags to
   a yaw, taps a site, goes back twice and finds the camera's orbit equal to the dragged one, and a wake still lands
   on the default fit.
-- [ ] T30 (r41-operator galaxy 1; widens T22) [ui] [variant:galaxy] The worst thing is the loudest: `data-plate`
+- [x] T30 (r41-operator galaxy 1; widens T22) [ui] [variant:galaxy] The worst thing is the loudest: `data-plate`
   carries the plate's tone and T4's banner step applies only when the plate's tone is at least the banner's (a crit
   plate under a crit banner); under a warn or calm plate the crit banner keeps full size (r41-pace-wall: a yellow
   `▲ FEAT-SEARCH` hero outshouted `■ HV2 · STORAGE` for the whole HV1 hold) — done when: a test in
   `test/wall-galaxy-hud.test.mjs` sees a warn plate under a crit banner leave the banner at full size and a crit
   plate under a crit banner still step it down, a `wall.css` test pins both rules, and `?at=hv1` (warn) with a crit
-  elsewhere shows the red banner larger than the plate's name.
+  elsewhere shows the red banner larger than the plate's name. (commit 1542f7c)
+  Builder r49: `frame.plate(tone)` sets `data-plate` to the plate's tone (`crit`/`warn`/`grey`, the caption's
+  lead trouble line's tone, `grey` with none; false clears); `hud.js` passes it at `arriveMs` as before. `wall.css`
+  steps the far line to `--cap-name` only under `[data-plate="crit"]` (the far step is crit/down only, so a crit
+  plate is "at least the banner's tone"); T20's echo rule keeps `[data-plate]` (any plate). Tests in
+  `wall-galaxy-hud.test.mjs` (warn/grey/crit plate tones under a crit banner, the css: only the crit rule steps it).
+  Stills `shots/r49-at-hv1` (yellow `ACME-BILLING` hero, red `■ HV2 · STORAGE` at full 3 m size below it, clearly
+  the larger), `r49-at-hv2` (unchanged, echo hidden). Film r49-galaxy (pace=wall, large): the HV1 attention hold
+  26.7-36.4 s keeps the red banner full size (HV2 · STORAGE, then HV1 · VM-C as it goes down); 0 errors, 11.1 fps
+  (SwiftShader, as earlier rounds; css/attribute only). T22 is now covered (a calm plate is `grey`, same rule);
+  left for T22's round: only its own `?at=home` still, or close it as done by T30. Seen, not in scope: at 33 s VM-C
+  goes down inside HV1 while the plate's hero stays the warn `FEAT-SEARCH` (T24/T27).
 - [ ] T31 (r41-operator galaxy 3) [ui] [variant:galaxy] A passing crit keeps its shape colour: under
   `.galaxy-label[data-dim]` only the name text goes to `--text-3`; the status glyph (`■`/`▲`) keeps its tone hue
   (T15 greyed the glyph in flights: `■ HV2` grey beside its red nebula) — done when: a test pins in `wall.css` that
