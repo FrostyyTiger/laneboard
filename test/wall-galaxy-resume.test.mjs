@@ -107,7 +107,7 @@ function page({ still = false, role = 'tour' } = {}) {
   // One camera director (night 4 T14): only it moves `cam`; `moves` records each call with its source.
   let touch = null, tour = null;
   const director = createDirector(cam, {
-    clock, still, held: () => touch != null && touch.mode() !== 'tour', resume: (from) => { if (from === 'show') tour.resume(); },
+    clock, still, held: () => touch != null && touch.mode() !== 'tour', resume: () => undefined, // as galaxy/main.js: touch.js's resume asks the tour
     driver: role === 'explore' ? 'touch' : 'tour',
   });
   const moves = [];
@@ -692,7 +692,8 @@ test('galaxy.html and wall.css: the manual line under the tag, the tag\'s face a
   assert.match(rule, /right: 6vw;/, 'right-aligned with the tag');
   assert.match(css, /\.galaxy-manual\[hidden\] \{ display: none; \}/);
   const js = read('js/wall/galaxy/main.js');
-  assert.match(js, /sayManual\(manualLine\(touch\.left\(\)\)\);/);
+  // Not while a show holds the camera: MANUAL says a person drives (cockpit alignment, 2026-10-27).
+  assert.match(js, /sayManual\(director\.driver\(\) === 'show' \? null : manualLine\(touch\.left\(\)\)\);/);
 });
 
 // ---- night 4 T14: one camera director, wired ----
@@ -712,8 +713,7 @@ test('the page through the director (T14): tour → wake → drag → tap → ba
   const n = p.moves.length;
   p.director.as('tour').focus('cloud', TIMING.zoom);
   assert.equal(p.moves.length, n, 'no tour move under a finger');
-  // A show command is refused too (busy), never queued.
-  assert.equal(p.director.show({ id: 'c1', to: { kind: 'site', id: 'cloud' } }).refused, 'busy');
+  // (A show command under a finger waits in show.js, the owner's finger rule; the director never refuses one.)
   p.drag(2, [[800, 450], [830, 450], [900, 460], [960, 470]]);
   p.run(1500);
   assert.ok(p.moves.slice(n).some((m) => m.source === 'touch' && m.call === 'steer'), 'the drag steers through the director');
@@ -736,26 +736,38 @@ test('the page through the director (T14): tour → wake → drag → tap → ba
   assert.ok(p.moves.every((m) => ['touch', 'tour'].includes(m.source)));
 });
 
-test('the page through the director (T14): a show takes the camera from the tour, the tour back when it ends; a touch drops it', () => {
+test('the page through the director (T14, cockpit c4 §2): a show takes the camera from the tour in its own time, the tour back a minute after its movement; a finger then takes it without a wake', () => {
   const p = page();
   p.tour.start();
   p.run(DEMO_TIMING.overviewMs + 500);
-  const r = p.director.show({ id: 'c1', to: { kind: 'site', id: 'cloud' }, holdMs: 5000 });
-  assert.equal(r.refused, null);
-  p.tour.stop(); // galaxy/main.js's show stops the tour under the command
-  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call, p.moves.at(-1).args[0]], ['show', 'focus', 'cloud']);
+  // galaxy/main.js's show: the director's move, the tour stopped, the page exploring until the movement's end.
+  const show = (id, site, ms) => {
+    const r = p.director.show({ id, to: { kind: 'site', id: site }, ms });
+    p.tour.stop();
+    p.touch.explore(p.now() + ms);
+    return r;
+  };
+  assert.equal(show('c1', 'cloud', 600).refused, null);
+  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call, p.moves.at(-1).args[0], p.moves.at(-1).args.at(-1)], ['show', 'focus', 'cloud', { ms: 600 }]);
   assert.equal(p.director.driver(), 'show');
-  p.run(5100);
-  assert.equal(p.director.driver(), 'tour', 'the hold ran out');
+  assert.equal(p.touch.mode(), 'explore', 'a touch that did not come from the owner');
+  assert.equal(p.wakes(), 0);
+  p.run(600 + IDLE.ms - 500);
+  assert.equal(p.director.driver(), 'show', 'held the minute after the movement');
+  p.run(1000);
+  assert.equal(p.director.driver(), 'tour', 'the minute ran out: the tour back');
+  assert.equal(p.touch.mode(), 'tour');
   assert.equal(p.moves.at(-1).source, 'tour', 'the tour flies on from the show');
-  // A show, then a finger: the show is dropped, the finger's wake eases out.
-  p.director.show({ id: 'c2', to: { kind: 'site', id: 'hv1' } });
-  p.tour.stop();
+  // A show, then a finger: no wake (the page already explores), the finger steers from there.
+  show('c2', 'hv1', 500);
   p.run(500);
-  p.stage.dispatch('pointerdown', { pointerId: 1 });
-  p.stage.dispatch('pointerup', { pointerId: 1 });
-  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call], ['touch', 'fit']);
+  const n = p.moves.length;
+  p.drag(1, [[800, 450], [830, 450], [900, 460], [960, 470]]);
+  p.run(300);
+  assert.equal(p.wakes(), 0, 'no wake, no ease out to the overview');
   assert.equal(p.director.driver(), 'touch');
+  assert.ok(p.moves.slice(n).some((m) => m.source === 'touch' && m.call === 'steer'));
+  assert.ok(!p.moves.slice(n).some((m) => m.call === 'fit'));
   assert.deepEqual(p.calls, p.moves.map((m) => m.call));
 });
 
@@ -825,8 +837,7 @@ test('?role=explore on the page: no tour until ▶ TOUR; a first tap flies; show
   p.tick(16);
   assert.equal(p.button.hidden, false);
   assert.equal(p.words(), '▶ Tour');
-  // A show cannot take a person's screen.
-  assert.equal(p.director.show({ id: 's1', to: { kind: 'site', id: 'cloud' } }).refused, 'busy');
+  // (A show may take a person's screen like any explore (cockpit c4 §2); no minute hands it back here.)
   // The first tap is not a wake: it opens the site at once, flown by the finger.
   p.tapAt(1, p.cam.screenOf('cloud'));
   assert.equal(p.wakes(), 0);

@@ -121,7 +121,7 @@ export function idleLeft(state, now, { idleMs = IDLE.ms, held = false, stay = fa
   if (state?.mode !== 'explore') return null;
   if (stay) return Infinity;
   if (held) return idleMs;
-  return Math.max(0, idleMs - (now - (state.last ?? state.since)));
+  return Math.min(idleMs, Math.max(0, idleMs - (now - (state.last ?? state.since))));
 }
 
 /**
@@ -139,7 +139,10 @@ export function manualLine(ms) {
 
 /**
  * `createTouch(stage, { wake, resume, clock, fitMs, idleMs, role })` → `{ mode(),
- * left(), onPointer(cb), poke(), handBack(), stop() }`. `left()` is
+ * left(), onPointer(cb), poke(), handBack(), explore(lastAt), stop() }`.
+ * `explore(lastAt)` (cockpit c4 §2: a show command is a touch that did not
+ * come from the owner): the page explores without a wake, and its minute
+ * counts from `lastAt` (the end of the show's movement) or later. `left()` is
  * `idleLeft` now; `handBack()` gives the page to the tour at once (`resume()`
  * is called, as when the minute is up). `stage` gets the listeners; `wake()` is
  * called once per first touch (the page stops the tour and fits the camera);
@@ -209,6 +212,12 @@ export function createTouch(stage, opts = {}) {
     left: () => idleLeft(step('tick').state, o.clock(), timing()),
     poke: () => { step('touch'); },
     handBack: () => { step('tick'); step('handback'); },
+    explore: (lastAt) => {
+      const now = o.clock();
+      step('tick');
+      const last = Math.max(state.last ?? now, Number.isFinite(lastAt) ? lastAt : now);
+      state = { mode: 'explore', since: state.mode === 'explore' ? state.since : now, last };
+    },
     stop: () => { for (const [type, fn] of on) stage.removeEventListener(type, fn); },
   };
 }

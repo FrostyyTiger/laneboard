@@ -1,270 +1,353 @@
-// The show commands, the state (Wall plan night 4 T37, README D10, §7 Night 4
-// B; research Q16): the cockpit agent's `flyTo(node)`, `highlight(nodes,
-// note)`, `pin(node, card)` and `clear()` as page commands. Each one is
-// display-only (it moves the camera or adds marks and words, never the
-// fleet), each says on screen who showed it, and each is undone by one tap on
-// its `✕` (a 48 px target, night 1's Q6 floor).
+// The show commands on the Wall (Wall plan night 4 T37; aligned with the
+// cockpit spec on 2026-10-27: docs/plans/cockpit/spec/c4-show-canvas.md §2-§4,
+// protocols.md §4, D68-D73). The cockpit's agent points at things on the
+// galaxy; every command is display-only (it moves the camera or draws marks
+// and words, never the fleet), and the page only ever answers.
 //
-// The message is Q16's envelope, one JSON-clonable object:
-//   { v: 1, ch: 'laneboard.show', id, src, type, ttl?, data }
-//   flyTo     data: { node }
-//   highlight data: { nodes: [...], note? }
-//   pin       data: { node, card: { title?, text } }
-//   clear     data: { id? }            one command, or everything shown
-// `ttl` is seconds (default 60, at most 600, 0 = until undone); words are plain
-// text (textContent, never HTML), at most SHOW.maxText characters. The reply,
-// for the sender (T38 carries it back): `{ v: 1, ch, re: id, ok, code? }`,
-// codes `bad-shape`, `unknown-node`, `busy`.
+// In (room → screen, protocols.md §4):
+//   { type: 'show', showId, turnId, cmd, args, receivedAt }
+//     fly_to     { node }                       the camera to the node
+//     highlight  { nodes: [1-12], note? }       brackets, the rest dimmed, a note plate
+//     pin        { node, card: { block: 'text', title?, body } }   a card beside the node
+//     clear      {}                             the marks and the note go; pins stay
+//     compare, scrub: not built on the Wall (skipped, why `unsupported`)
+//   { type: 'show.undo', showId }               undo that command (D71)
+//   { type: 'pin.put', pin, replaced? }, { type: 'pin.remove', pin }   the room's shared pins
+// Out (screen → room):
+//   { type: 'show.result', seq, showId, state, why? }   `shown`, `waiting`, `skipped`
+//   { type: 'pin.close', seq, pin }                     a pin's ✕
 //
-// Decided (T37's notes):
-// - A finger has the screen: every command but `clear` is refused `busy`, not
-//   only `flyTo` (the director's rule, T13): nothing appears under a person's
-//   hands out of nowhere. A first touch ends everything shown (`drop`), as it
-//   drops the director's show: the person starts from a clean galaxy.
-// - One of each at a time: a newer `flyTo` replaces the older (the director's
-//   "last wins"), a newer `highlight` the older, a `pin` on a node replaces the
-//   pin there; at most SHOW.pins pins, the oldest goes.
-// - A `flyTo` lasts as long as the director holds its camera (min(ttl, a
-//   minute), director.js IDLE), so the line never names a place the camera
-//   has left. Marks and cards last their own ttl.
-// - On screen: one head line `SHOWN BY <src>` (the tag's face; the source's
-//   name after its `agent:` prefix) and one row per command under it, each
-//   with its `✕`; the seconds left only in the last SHOW.lastS. A highlight's
-//   note and a pin's card are drawn next to their node (`cards`), where the
-//   eye already is, not in the row: a 140-character note does not fit a
-//   corner line and is not read there from 3 m.
+// The rules (the spec's; where it is silent, the simplest thing, marked *):
+// - The owner's finger wins (D70): `fly_to` and `highlight` (the camera
+//   commands) arriving while a finger is on the galaxy, or within 3 s after
+//   the last touch ended, answer `waiting`; the command runs 3 s after the
+//   lift (a second `show.result` `shown`) or, still blocked 10 s after it
+//   came, is dropped (`skipped`, why `in use`). `pin` and `clear` move no
+//   camera and run at once*. A newer camera command replaces a waiting one,
+//   which is answered `skipped` `in use`*. A touch on a pin is not a touch.
+// - A newer flight replaces one mid-flight, from where the camera is, and
+//   takes over its saved state (undo goes back to before both). One
+//   highlight at a time: a new one replaces marks and note.
+// - Limits (D72, D73): at most 12 nodes (more: the first 12*), a note of 120
+//   characters, a pin's title 48 and body 280, cut with `…`; 3 pins, a 4th
+//   replaces the oldest. Words are text (`textContent`), never markup.
+// - Undo (D71, c4 §5): `show.undo` restores what the screen saved just before
+//   the latest camera command (camera, marks, note, tour or explore): back to
+//   the tour at once if it was touring, else the camera by a normal flight.
+//   Only the latest camera command is undoable; the tour coming back drops
+//   the highlight, the note and the undo. A pin's undo removes that pin.
+// - A node this galaxy does not draw: `fly_to` and `highlight` answer
+//   `skipped` why `not drawn`*; a bad shape `skipped` why `bad-args`*.
+// - Looks (D72): four 2 px `--accent` corner brackets per node, 12 px arms, 8
+//   px outside its drawn radius, closing in from 24 px over 300 ms; every
+//   other node dimmed to `UNLIT` 0.16 (a veil over the scene and the names
+//   with a hole at each marked node*); the note on a plate `AGENT · HH:MM`;
+//   a pin 320 px wide with its `AGENT · HH:MM` header and a 48 px `✕`.
 //
-// `readShow`, `showStep`, `showLines`, `showMarks` are pure on an injected
-// clock (test/wall-galaxy-show.test.mjs); `createShow` is the page's part.
+// `readShow`, `showStep` and the placements are pure on an injected clock
+// (test/wall-galaxy-show.test.mjs); `createShow` is the page's part and
+// `createFingerWatch` its finger rule's ears.
 
-import { IDLE } from './director.js';
-
-/**
- * The limits (Q16): `ttlS` the default seconds, `maxTtlS` the most, `maxNodes`
- * a highlight's nodes, `maxText` a note's or a card's characters, `maxTitle` a
- * card's title, `maxId` an id's or a source's, `seen` ids kept to drop
- * repeats (BroadcastChannel reaches every tab), `pins` at once, `lastS` the
- * seconds a row counts down, `xPx` the `✕` target's side (css px).
- */
+/** The numbers (css px and ms; the spec's at 1368x912). */
 export const SHOW = Object.freeze({
-  v: 1, ch: 'laneboard.show', ttlS: 60, maxTtlS: 600, maxNodes: 16, maxText: 140, maxTitle: 40, maxId: 64,
-  seen: 64, pins: 2, lastS: 10, xPx: 48,
+  maxNodes: 12, maxNote: 120, maxTitle: 48, maxBody: 280, pins: 3, maxId: 64, seen: 64,
+  waitMs: 3000, giveUpMs: 10000, unlit: 0.16, fadeMs: 300, zoom: 1.9, padPx: 64,
+  closeMs: 300, closeFromPx: 24, outPx: 8, armPx: 12,
+  noteGapPx: 16, noteW: 360, pinW: 320, pinH: 240, pinGapPx: 48, edgePx: 16, stackPx: 8, xPx: 48,
+  results: 20,
 });
 
-export const SHOW_TYPES = Object.freeze(['flyTo', 'highlight', 'pin', 'clear']);
+/** The commands the Wall draws, and those it answers `unsupported` (c4 §3.5, §3.6: later). */
+export const SHOW_CMDS = Object.freeze(['fly_to', 'highlight', 'pin', 'clear']);
+export const SHOW_LATER = Object.freeze(['compare', 'scrub']);
+/** The commands that move the camera, so wait for the owner's finger (D70). */
+export const CAMERA_CMDS = Object.freeze(['fly_to', 'highlight']);
+/** `show.result`'s states (protocols.md §4; `noCamera` is a screen without a map: never the Wall). */
+export const RESULT_STATES = Object.freeze(['shown', 'waiting', 'skipped']);
+/** `skipped`'s whys: the spec's `in use`, and the Wall's own for what the room should never send. */
+export const WHY = Object.freeze({ inUse: 'in use', unsupported: 'unsupported', badArgs: 'bad-args', notDrawn: 'not drawn' });
+/** What the page takes in. */
+export const INBOUND = Object.freeze(['show', 'show.undo', 'pin.put', 'pin.remove']);
 
-/** An empty show: nothing on screen, no ids seen. */
-export const initialShow = () => ({ items: [], seen: [] });
-
-const str = (v, max) => typeof v === 'string' && v.trim() !== '' && v.length <= max;
-// One line of plain text: runs of white space (new lines too) are one space.
-const line = (v) => String(v).replace(/\s+/g, ' ').trim();
+const str = (v, max = SHOW.maxId) => typeof v === 'string' && v.trim() !== '' && v.length <= max;
+/** Text as one run of words, cut to `max` characters with `…`. Pure. */
+export function cutText(v, max) {
+  const s = String(v ?? '').replace(/\s+/g, ' ').trim();
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+/** `HH:MM` of an epoch time, local (the plates' `AGENT · 07:12`). Pure. */
+export function clockText(ms) {
+  const d = new Date(Number.isFinite(ms) ? ms : 0);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
 
 /**
- * A message checked against Q16's envelope: `{ ok: true, cmd }` with `cmd`
- * `{ id, src, type, ttlMs, data }` (`ttlMs` null = until undone; words on one
- * line), or `{ ok: false, code: 'bad-shape', id }` (`id` when it had one, for
- * the reply), or `{ ok: false, code: null }` for a message on another channel
- * or version (not ours: no reply). Unknown fields are ignored. Pure.
+ * A `show` message read: null when it is not one; `{ ok: false, showId, why }`
+ * when it cannot be shown (no `showId`: nothing to answer); else `{ ok: true,
+ * showId, turnId, cmd, args, receivedAt }` with the args cut to the limits.
+ * Unknown fields are ignored. Pure.
  */
 export function readShow(msg) {
-  if (!msg || typeof msg !== 'object' || msg.ch !== SHOW.ch || msg.v !== SHOW.v) return { ok: false, code: null, id: null };
-  const id = str(msg.id, SHOW.maxId) ? msg.id : null;
-  const bad = { ok: false, code: 'bad-shape', id };
-  if (!id || !SHOW_TYPES.includes(msg.type)) return bad;
-  if (msg.src != null && !str(msg.src, SHOW.maxId)) return bad;
-  if (msg.ttl != null && !(Number.isFinite(msg.ttl) && msg.ttl >= 0)) return bad;
-  const d = msg.data && typeof msg.data === 'object' ? msg.data : {};
-  const ttl = msg.ttl == null ? SHOW.ttlS : Math.min(SHOW.maxTtlS, msg.ttl);
-  const cmd = { id, src: line(msg.src ?? 'agent'), type: msg.type, ttlMs: ttl === 0 ? null : ttl * 1000 };
-  const text = (v, max) => v == null || (typeof v === 'string' && v.length <= max);
-  if (msg.type === 'flyTo') {
-    if (!str(d.node, SHOW.maxId)) return bad;
-    return { ok: true, cmd: { ...cmd, data: { node: d.node } } };
+  if (!msg || typeof msg !== 'object' || msg.type !== 'show') return null;
+  const showId = str(msg.showId) ? msg.showId : null;
+  const fail = (why) => ({ ok: false, showId, why });
+  if (!showId) return fail(WHY.badArgs);
+  if (!SHOW_CMDS.includes(msg.cmd)) return fail(WHY.unsupported);
+  const a = msg.args && typeof msg.args === 'object' ? msg.args : {};
+  const ok = (args) => ({
+    ok: true, showId, turnId: typeof msg.turnId === 'string' ? msg.turnId : null, cmd: msg.cmd, args,
+    receivedAt: Number.isFinite(msg.receivedAt) ? msg.receivedAt : null,
+  });
+  if (msg.cmd === 'fly_to') return str(a.node) ? ok({ node: a.node }) : fail(WHY.badArgs);
+  if (msg.cmd === 'highlight') {
+    const nodes = Array.isArray(a.nodes) ? a.nodes : [];
+    if (!nodes.length || !nodes.every((n) => str(n))) return fail(WHY.badArgs);
+    if (a.note != null && typeof a.note !== 'string') return fail(WHY.badArgs);
+    const note = a.note ? cutText(a.note, SHOW.maxNote) : '';
+    return ok({ nodes: [...new Set(nodes)].slice(0, SHOW.maxNodes), ...(note ? { note } : {}) });
   }
-  if (msg.type === 'highlight') {
-    const nodes = Array.isArray(d.nodes) ? d.nodes : null;
-    if (!nodes?.length || nodes.length > SHOW.maxNodes || !nodes.every((n) => str(n, SHOW.maxId))) return bad;
-    if (!text(d.note, SHOW.maxText)) return bad;
-    const note = d.note ? line(d.note) : '';
-    return { ok: true, cmd: { ...cmd, data: { nodes: [...new Set(nodes)], ...(note ? { note } : {}) } } };
+  if (msg.cmd === 'pin') {
+    const c = a.card && typeof a.card === 'object' ? a.card : null;
+    if (!str(a.node) || !c) return fail(WHY.badArgs);
+    // chart, log and diff are kit blocks (c4 §8), not built on the Wall.
+    if ((c.block ?? 'text') !== 'text') return fail(WHY.unsupported);
+    if ((c.title != null && typeof c.title !== 'string') || (c.body != null && typeof c.body !== 'string')) return fail(WHY.badArgs);
+    const title = cutText(c.title ?? '', SHOW.maxTitle), body = cutText(c.body ?? '', SHOW.maxBody);
+    if (!title && !body) return fail(WHY.badArgs);
+    return ok({ node: a.node, card: { block: 'text', title, body } });
   }
-  if (msg.type === 'pin') {
-    const c = d.card && typeof d.card === 'object' ? d.card : null;
-    if (!str(d.node, SHOW.maxId) || !c || !str(c.text, SHOW.maxText) || !text(c.title, SHOW.maxTitle)) return bad;
-    const title = c.title ? line(c.title) : '';
-    return { ok: true, cmd: { ...cmd, data: { node: d.node, card: { ...(title ? { title } : {}), text: line(c.text) } } } };
-  }
-  if (d.id != null && !str(d.id, SHOW.maxId)) return bad;
-  return { ok: true, cmd: { ...cmd, data: d.id != null ? { id: d.id } : {} } };
+  return ok({});
 }
 
-const reply = (id, ok, code) => (id == null ? null : { v: SHOW.v, ch: SHOW.ch, re: id, ok, ...(code ? { code } : {}) });
-const out = (state, extra = {}) => ({ state, reply: null, fly: null, ended: [], ...extra });
-const ending = (state, ids) => {
-  const gone = new Set(ids);
-  return { ...state, items: state.items.filter((it) => !gone.has(it.id)) };
+/** Nothing shown, nothing waiting. */
+export const initialShow = () => ({ highlight: null, pins: [], undo: null, waiting: null, seen: [] });
+
+const result = (showId, state, why) => ({ type: 'show.result', showId, state, ...(why ? { why } : {}) });
+const none = (state, extra = {}) => ({ state, out: [], act: null, ...extra });
+
+/** A pin from the room's `pin.put` (protocols.md §4) in the page's shape, or null. Pure. */
+export function pinOf(p) {
+  if (!p || typeof p !== 'object' || !str(p.id) || !str(p.node)) return null;
+  const at = typeof p.at === 'string' ? Date.parse(p.at) : Number(p.at);
+  return {
+    id: p.id, showId: null, node: p.node, title: cutText(p.title ?? '', SHOW.maxTitle),
+    body: cutText(p.fields?.body ?? '', SHOW.maxBody), at: Number.isFinite(at) ? at : null,
+  };
+}
+
+const withPin = (pins, pin, replaced = null) => {
+  const out = [...pins.filter((p) => p.id !== pin.id && p.id !== replaced), pin];
+  return out.slice(Math.max(0, out.length - SHOW.pins));
 };
 
+/** One command run now (the finger rule already passed). */
+function run(s, cmd, now, c) {
+  const time = cmd.receivedAt ?? c.time;
+  const shown = [result(cmd.showId, 'shown')];
+  if (cmd.cmd === 'pin') {
+    const pin = { id: `pin-${cmd.showId}`, showId: cmd.showId, node: cmd.args.node, title: cmd.args.card.title, body: cmd.args.card.body, at: time };
+    return none({ ...s, pins: withPin(s.pins, pin) }, { out: shown });
+  }
+  if (cmd.cmd === 'clear') {
+    // Nothing to clear here: no undo on this screen (c4 §3.3).
+    if (!s.highlight) return none({ ...s, undo: null }, { out: shown });
+    const saved = { camera: c.camera, wall: c.wall, highlight: s.highlight };
+    return none({ ...s, highlight: null, undo: { showId: cmd.showId, saved, camera: false } }, { out: shown });
+  }
+  // A camera command replacing a running show flight takes over that one's saved state (c4 §5).
+  const saved = s.undo?.camera && c.moving ? s.undo.saved : { camera: c.camera, wall: c.wall, highlight: s.highlight };
+  const undo = { showId: cmd.showId, saved, camera: true };
+  if (cmd.cmd === 'fly_to') {
+    if (!c.known(cmd.args.node)) return none(s, { out: [result(cmd.showId, 'skipped', WHY.notDrawn)] });
+    return none({ ...s, undo }, { out: shown, act: { kind: 'fly', node: cmd.args.node, showId: cmd.showId } });
+  }
+  const nodes = cmd.args.nodes.filter((n) => c.known(n));
+  if (!nodes.length) return none(s, { out: [result(cmd.showId, 'skipped', WHY.notDrawn)] });
+  const highlight = { showId: cmd.showId, nodes, note: cmd.args.note ?? '', at: time, t: now };
+  const act = c.inSight(nodes) ? { kind: 'stay', showId: cmd.showId } : { kind: 'fit', nodes, showId: cmd.showId };
+  return none({ ...s, highlight, undo }, { out: shown, act });
+}
+
 /**
- * The next show after `event` at `now` (ms). `state` is `{ items, seen }`,
- * each item `{ id, src, type, data, at, until }` (`until` null: until undone).
- * Events:
- * - `{ type: 'msg', msg }`: a message from a sender (readShow checks it).
- * - `{ type: 'undo', id }`: a tap on that command's `✕`.
- * - `{ type: 'drop' }`: a finger took the page: everything goes.
- * - `{ type: 'tick' }`: time passed; commands past their `until` go.
- * Options: `busy`, a finger has the page (every command but `clear` is
- * refused); `known(node)`, whether the galaxy draws that node (unknown:
- * `unknown-node`; a highlight keeps the nodes it knows); `holdMs`, the longest
- * a `flyTo` holds the camera (the director's minute).
- * Returns `{ state, reply, fly, ended }`: `reply` the answer to a message (null
- * for a repeat or another channel's), `fly` the new `flyTo` item the director
- * is to play, `ended` the ids that left the screen (a `flyTo` among them is the
- * director's to clear). Pure.
+ * The next show after `event` at `now` (page ms). `state` is initialShow's
+ * shape. Events: `{ type: 'msg', msg }` (a `show`), `{ type: 'undo', showId }`
+ * (`show.undo`), `{ type: 'tick' }`, `{ type: 'tour' }` (the tour came back),
+ * `{ type: 'pin.put', pin, replaced? }`, `{ type: 'pin.remove', pin }`,
+ * `{ type: 'pin.close', pin }` (its ✕ here). `ctx`: `blocked` (the finger
+ * rule holds now), `time` (epoch ms, the plates' clock), `camera` and `wall`
+ * (what an undo restores), `moving` (a show flight runs now), `known(node)`,
+ * `inSight(nodes)`. Returns `{ state, out, act }`: `out` the messages to send
+ * (without `seq`), `act` the camera's part: `{ kind: 'fly', node }`, `{ kind:
+ * 'fit', nodes }`, `{ kind: 'stay' }` (take the camera, do not move it) or
+ * `{ kind: 'restore', saved }`. Pure.
  */
-export function showStep(state, event, now, opts = {}) {
-  const o = { busy: false, known: () => true, holdMs: IDLE.ms, ...opts };
-  const s = state?.items ? state : initialShow();
+export function showStep(state, event, now, ctx = {}) {
+  const c = { blocked: false, time: 0, camera: null, wall: null, moving: false, known: () => true, inSight: () => false, ...ctx };
+  const s = state?.pins ? state : initialShow();
   const type = event?.type;
 
+  if (type === 'msg') {
+    const r = readShow(event.msg);
+    if (!r) return none(s);
+    // A repeat (another tab, a retry) is not shown twice and not answered twice.
+    if (r.showId && s.seen.includes(r.showId)) return none(s);
+    const said = { ...s, seen: r.showId ? [...s.seen, r.showId].slice(-SHOW.seen) : s.seen };
+    if (!r.ok) return none(said, { out: r.showId ? [result(r.showId, 'skipped', r.why)] : [] });
+    if (!CAMERA_CMDS.includes(r.cmd)) return run(said, r, now, c);
+    const out = said.waiting ? [result(said.waiting.cmd.showId, 'skipped', WHY.inUse)] : [];
+    if (c.blocked) return none({ ...said, waiting: { cmd: r, since: now } }, { out: [...out, result(r.showId, 'waiting')] });
+    const ran = run({ ...said, waiting: null }, r, now, c);
+    return { ...ran, out: [...out, ...ran.out] };
+  }
+  if (type === 'tick') {
+    if (!s.waiting) return none(s);
+    if (!c.blocked) return run({ ...s, waiting: null }, s.waiting.cmd, now, c);
+    if (now - s.waiting.since >= SHOW.giveUpMs) {
+      return none({ ...s, waiting: null }, { out: [result(s.waiting.cmd.showId, 'skipped', WHY.inUse)] });
+    }
+    return none(s);
+  }
   if (type === 'undo') {
-    const hit = s.items.some((it) => it.id === event.id);
-    return hit ? out(ending(s, [event.id]), { ended: [event.id] }) : out(s);
+    const pin = s.pins.find((p) => p.showId != null && p.showId === event.showId);
+    if (pin) return none({ ...s, pins: s.pins.filter((p) => p !== pin) });
+    if (!s.undo || s.undo.showId !== event.showId) return none(s);
+    const { saved } = s.undo;
+    // A camera command's undo puts the camera and the wall state back too; a clear's only the marks.
+    return none({ ...s, highlight: saved.highlight ? { ...saved.highlight, t: now } : null, undo: null }, { act: s.undo.camera ? { kind: 'restore', saved } : null });
   }
-  if (type === 'drop') return out({ ...s, items: [] }, { ended: s.items.map((it) => it.id) });
-  if (type !== 'msg') {
-    const due = s.items.filter((it) => it.until != null && now >= it.until).map((it) => it.id);
-    return due.length ? out(ending(s, due), { ended: due }) : out(s);
+  if (type === 'tour') return none({ ...s, highlight: null, undo: null });
+  if (type === 'pin.put') {
+    const pin = pinOf(event.pin);
+    return pin ? none({ ...s, pins: withPin(s.pins, pin, str(event.replaced) ? event.replaced : null) }) : none(s);
   }
-
-  const r = readShow(event.msg);
-  if (!r.ok) return out(s, { reply: reply(r.id, false, r.code) });
-  const { cmd } = r;
-  // A repeat (another tab, a retry) is not shown twice and not answered twice.
-  if (s.seen.includes(cmd.id)) return out(s);
-  const seen = [...s.seen, cmd.id].slice(-SHOW.seen);
-  const said = { ...s, seen };
-
-  if (cmd.type === 'clear') {
-    const ids = s.items.filter((it) => cmd.data.id == null || it.id === cmd.data.id).map((it) => it.id);
-    return out(ending(said, ids), { reply: reply(cmd.id, true), ended: ids });
+  if (type === 'pin.remove' || type === 'pin.close') {
+    const id = event.pin;
+    if (!s.pins.some((p) => p.id === id)) return none(s);
+    return none({ ...s, pins: s.pins.filter((p) => p.id !== id) }, { out: type === 'pin.close' ? [{ type: 'pin.close', pin: id }] : [] });
   }
-  if (o.busy) return out(said, { reply: reply(cmd.id, false, 'busy') });
-
-  let data = cmd.data;
-  if (cmd.type === 'highlight') {
-    const nodes = data.nodes.filter((n) => o.known(n));
-    if (!nodes.length) return out(said, { reply: reply(cmd.id, false, 'unknown-node') });
-    data = { ...data, nodes };
-  } else if (!o.known(data.node)) return out(said, { reply: reply(cmd.id, false, 'unknown-node') });
-
-  const life = cmd.type === 'flyTo' ? Math.min(cmd.ttlMs ?? Infinity, o.holdMs) : cmd.ttlMs;
-  const item = { id: cmd.id, src: cmd.src, type: cmd.type, data, at: now, until: life == null ? null : now + life };
-  // One of each: the newer flyTo or highlight replaces the older; a pin replaces the pin on its node.
-  const old = s.items.filter((it) => (cmd.type === 'pin' ? it.type === 'pin' && it.data.node === data.node : it.type === cmd.type));
-  let items = [...s.items.filter((it) => !old.includes(it)), item];
-  const pins = items.filter((it) => it.type === 'pin');
-  const over = pins.slice(0, Math.max(0, pins.length - SHOW.pins));
-  items = items.filter((it) => !over.includes(it));
-  const ended = [...old, ...over].map((it) => it.id);
-  return out({ ...said, items }, { reply: reply(cmd.id, true), fly: cmd.type === 'flyTo' ? item : null, ended });
+  return none(s);
 }
 
-/** `agent:builder-a` → `builder-a`: the name after the kind. */
-export const sourceName = (src) => String(src ?? '').replace(/^[a-z]+:/i, '') || 'agent';
+/** How lit a node is at `now` (`emphasis`, screens.md §9.2 M8): 1, or toward UNLIT under a highlight that leaves it out. Pure. */
+export function emphasisOf(state, id, now, { still = false } = {}) {
+  const h = state?.highlight;
+  if (!h || h.nodes.includes(id)) return 1;
+  const k = still ? 1 : Math.max(0, Math.min(1, (now - h.t) / SHOW.fadeMs));
+  return 1 - (1 - SHOW.unlit) * k;
+}
+
+const easeOut = (k) => 1 - (1 - k) ** 3;
+
+/** The brackets' box round a node drawn at `at` (`{ x, y, r }`), `ms` after the highlight came: closing in from 24 px over 300 ms. Pure. */
+export function bracketBox(at, ms, { still = false } = {}) {
+  const k = still ? 1 : easeOut(Math.max(0, Math.min(1, ms / SHOW.closeMs)));
+  const R = (at.r ?? 0) + SHOW.outPx + SHOW.closeFromPx * (1 - k);
+  return { left: at.x - R, top: at.y - R, size: 2 * R, R };
+}
+
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 /**
- * The words on screen at `now`: `{ head, rows }` or null when nothing is
- * shown. `head` is `shown by <name>` (`+n` when more than one source shows);
- * each row `{ id, text }`, newest first: `flyTo` names the place, a highlight
- * counts its marks, a pin names its node; the seconds left (`0:08`) only in
- * the last SHOW.lastS. `labelOf(node)` gives a node's name. Lower case: the
- * stylesheet sets the tag's caps. Pure.
+ * The note plate's top left beside the first node's brackets (`R` their
+ * half side): 16 px up and right of them, flipped left or down near an edge,
+ * kept 16 px inside the `W`×`H` stage (c4 §3.2; the ask menu's rule). Of
+ * the four corners it takes the first, in that order, that covers none of
+ * the `avoid` boxes (the other marked nodes' brackets)*. Pure.
  */
-export function showLines(state, now, labels) {
-  const labelOf = typeof labels === 'function' ? labels : (id) => id;
-  const items = state?.items ?? [];
-  if (!items.length) return null;
-  const names = [...new Set(items.map((it) => sourceName(it.src)))];
-  const head = `shown by ${names.at(-1)}${names.length > 1 ? ` +${names.length - 1}` : ''}`;
-  const name = (id) => String(labelOf(id) ?? id);
-  const rows = [...items].reverse().map((it) => {
-    let text;
-    if (it.type === 'flyTo') text = `at ${name(it.data.node)}`;
-    else if (it.type === 'highlight') text = `${it.data.nodes.length} marked`;
-    else text = `note on ${name(it.data.node)}`;
-    const left = it.until == null ? null : Math.max(0, Math.ceil((it.until - now) / 1000));
-    if (left != null && left <= SHOW.lastS) text += ` · 0:${String(left).padStart(2, '0')}`;
-    return { id: it.id, text };
-  });
-  return { head, rows };
+export function notePlace(at, R, w, h, { W, H, avoid = [] }) {
+  const g = SHOW.noteGapPx, e = SHOW.edgePx;
+  const right = at.x + R + g, left = at.x - R - g - w, up = at.y - R - g - h, down = at.y + R + g;
+  const fitsX = (x) => x >= e && x + w <= W - e;
+  const fitsY = (y) => y >= e && y + h <= H - e;
+  const xs = fitsX(right) || !fitsX(left) ? [right, left] : [left, right];
+  const ys = fitsY(up) || !fitsY(down) ? [up, down] : [down, up];
+  const place = (x, y) => ({ x: clamp(x, e, Math.max(e, W - e - w)), y: clamp(y, e, Math.max(e, H - e - h)) });
+  const clear = (p) => !avoid.some((b) => p.x < b.right && p.x + w > b.left && p.y < b.bottom && p.y + h > b.top);
+  const tries = [place(xs[0], ys[0]), place(xs[1], ys[0]), place(xs[0], ys[1]), place(xs[1], ys[1])];
+  return tries.find(clear) ?? tries[0];
 }
 
 /**
- * What is drawn on the galaxy: `rings`, the highlighted nodes (each once,
- * newest command's), and `cards`, `{ id, node, title, text }` next to a node:
- * a pin's card, and a highlight's note at its first node. Pure.
+ * A pin's top left (c4 §3.4): its left edge 48 px right of the node's
+ * centre, centred on it; flipped left when it would cross the stage's right
+ * edge; kept 16 px inside; moved down below each earlier pin (`above`, their
+ * boxes) it would overlap, by the overlap plus 8 px. Returns `{ x, y, side }`. Pure.
  */
-export function showMarks(state) {
-  const rings = [], cards = [];
-  for (const it of state?.items ?? []) {
-    if (it.type === 'highlight') {
-      for (const n of it.data.nodes) if (!rings.includes(n)) rings.push(n);
-      if (it.data.note) cards.push({ id: it.id, node: it.data.nodes[0], title: '', text: it.data.note });
-    } else if (it.type === 'pin') cards.push({ id: it.id, node: it.data.node, title: it.data.card.title ?? '', text: it.data.card.text });
-  }
-  return { rings, cards };
-}
-
-/**
- * Where a card stands for a node drawn at `at` (`{ x, y, r }`, css px) on a
- * `W`×`H` stage: right of the node by its radius and `gapPx`, or left of it
- * when it would leave the stage there; its middle on the node's height, kept
- * `marginPx` inside the stage. `w`, `h` the card's size. `above`, the boxes of
- * cards placed before it: it steps below each it would cover (a pin and a
- * note on one node read as a stack, not one card over the other). Returns
- * `{ x, y, side }` (its top left). Pure.
- */
-export function cardPlace(at, w, h, { W, H, gapPx = 20, marginPx = 16, stackPx = 8, above = [] } = {}) {
-  const off = (at.r ?? 0) + gapPx;
-  let side = 'right';
-  let x = at.x + off;
-  if (x + w > W - marginPx && at.x - off - w >= marginPx) { side = 'left'; x = at.x - off - w; }
-  x = Math.max(marginPx, Math.min(W - marginPx - w, x));
-  let y = Math.max(marginPx, Math.min(H - marginPx - h, at.y - h / 2));
-  const hits = (b) => x < b.right && x + w > b.left && y < b.bottom + stackPx && y + h + stackPx > b.top;
-  for (let i = 0; i < above.length; i++) {
+export function pinPlace(at, w, h, { W, H, above = [] }) {
+  const e = SHOW.edgePx;
+  let side = 'right', x = at.x + SHOW.pinGapPx;
+  if (x + w > W - e) { side = 'left'; x = at.x - SHOW.pinGapPx - w; }
+  x = clamp(x, e, Math.max(e, W - e - w));
+  let y = clamp(at.y - h / 2, e, Math.max(e, H - e - h));
+  const hits = (b) => x < b.right && x + w > b.left && y < b.bottom && y + h > b.top;
+  for (let i = 0; i <= above.length; i++) {
     const b = above.find(hits);
     if (!b) break;
-    y = b.bottom + stackPx;
+    y = b.bottom + SHOW.stackPx;
   }
   return { x, y, side };
 }
 
+/** The pin's leader: from the node's edge to the card's near edge, at the node's height inside the card. Pure. */
+export function leaderOf(at, p, w, h) {
+  const right = p.side === 'right';
+  const x1 = at.x + (right ? 1 : -1) * (at.r ?? 0);
+  const x2 = right ? p.x : p.x + w;
+  const y2 = clamp(at.y, p.y, p.y + h);
+  return { x1, y1: at.y, x2, y2 };
+}
+
 /**
- * The page's show (T37): `createShow({ block, marks, director, clock,
- * busy, labelOf, siteOf, screenOf, size, doc })`. `block` holds the head line
- * and the rows with their `✕`; `marks` the rings and cards over the galaxy;
- * `director` director.js's (a `flyTo` is its `show`, an undo its `clear`);
- * `busy()` a finger has the page; `labelOf(node)` a node's name or null when
- * the galaxy does not draw it; `siteOf(node)` the site to fly to (null: the
- * overview); `screenOf(node)` where it is drawn now; `size()` the stage.
- * Returns `{ send(msg) → reply, undo(id), drop(), tick(), draw(), state(),
- * covers() }`: `tick()` once a frame (the commands' time runs out; the rows'
- * words change once a second at most), `draw()` after each frame (camera.js
- * `onDraw`: the rings and cards follow their nodes).
+ * The finger rule's ears (D70): a capturing listener on the galaxy's stage.
+ * `blocked(now)` while a finger is down or for SHOW.waitMs after the last
+ * touch ended (a lift, a wheel turn). `ignore(ev)`: a touch that does not
+ * count (on a pin). Returns `{ blocked(now), stop() }`.
+ */
+export function createFingerWatch(stage, opts = {}) {
+  const clock = opts.clock ?? (() => performance.now());
+  const ignore = opts.ignore ?? (() => false);
+  const down = new Set();
+  let lastEnd = null;
+  const on = [
+    ['pointerdown', (ev) => { if (!ignore(ev)) down.add(ev.pointerId); }],
+    ['pointerup', (ev) => { if (down.delete(ev.pointerId)) lastEnd = clock(); }],
+    ['pointercancel', (ev) => { if (down.delete(ev.pointerId)) lastEnd = clock(); }],
+    ['wheel', (ev) => { if (!ignore(ev)) lastEnd = clock(); }],
+  ];
+  for (const [t, fn] of on) stage.addEventListener(t, fn, true);
+  return {
+    blocked: (now = clock()) => down.size > 0 || (lastEnd != null && now - lastEnd < SHOW.waitMs),
+    stop: () => { for (const [t, fn] of on) stage.removeEventListener(t, fn, true); },
+  };
+}
+
+/**
+ * The page's show: `createShow({ marks, veil, doc, clock, time, still,
+ * send, ops, blocked, screenOf, size, veilColor })`. `marks` holds the
+ * brackets, the note and the pins (they follow their nodes by transform);
+ * `veil` (a 2D canvas, or null) dims the rest; `send(msg, showId|pinId)`
+ * carries an answer back (transport.js); `ops` is the page's camera and wall:
+ * `camera()`, `wall()`, `moving()`, `known(node)`, `inSight(nodes)`,
+ * `fly(node)`, `fit(nodes)`, `stay()`, `restore(saved)`. Returns `{ receive(msg,
+ * reply), tick(), draw(), tourBack(), state(), view(), emphasis(id), covers() }`:
+ * `tick()` once a frame (the finger rule's wait), `draw()` after each frame.
  */
 export function createShow(opts = {}) {
   const o = {
-    clock: () => performance.now(), busy: () => false, labelOf: (id) => id, siteOf: () => null,
-    screenOf: () => null, size: () => ({ W: 0, H: 0 }), doc: globalThis.document, ...opts,
+    clock: () => performance.now(), time: () => Date.now(), still: false, blocked: () => false,
+    screenOf: () => null, size: () => ({ W: 0, H: 0 }), avoid: () => [], doc: globalThis.document, veil: null,
+    veilColor: 'rgb(13, 16, 20)', send: () => {}, ...opts,
   };
-  const { block, marks, director } = o;
+  const noop = () => undefined;
+  const ops = { camera: () => null, wall: () => null, moving: () => false, known: () => true, inSight: () => false, fly: noop, fit: noop, stay: noop, restore: noop, ...opts.ops };
+  const { marks } = o;
   let state = initialShow();
-  let said = null; // the words written last, as one key
-  let drawnKey = null; // the marks built last
-  let rings = new Map(), cards = new Map();
+  let seq = 0;
+  const replies = new Map(); // showId or pin id → the road it came by
+  const results = []; // the last answers, for the test handle
+  let built = null; // the key of what the marks hold now
+  let brackets = new Map(), note = null, pins = new Map();
+  let boxes = [];
 
   const el = (tag, cls, text) => {
     const e = o.doc.createElement(tag);
@@ -272,120 +355,199 @@ export function createShow(opts = {}) {
     if (text != null) e.textContent = text;
     return e;
   };
-  // The ✕ never reaches the stage: it is not a first touch (which would drop everything) nor a tap on the sky.
-  const keep = (ev) => ev.stopPropagation?.();
-  const press = (id) => (ev) => {
-    ev.preventDefault?.();
-    ev.stopPropagation?.();
-    undo(id);
-  };
-
-  const write = () => {
-    const now = o.clock();
-    const lines = showLines(state, now, o.labelOf);
-    const key = lines ? JSON.stringify(lines) : '';
-    if (key === said) return;
-    said = key;
-    block.hidden = !lines;
-    if (!lines) { block.replaceChildren(); return; }
-    const rows = lines.rows.map((r) => {
-      const row = el('div', 'galaxy-show-row');
-      row.dataset.id = r.id;
-      const x = el('button', 'galaxy-show-x', '✕');
-      x.type = 'button';
-      x.setAttribute('aria-label', `undo: ${r.text}`);
-      for (const t of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) x.addEventListener(t, keep);
-      x.addEventListener('click', press(r.id));
-      row.append(el('span', 'galaxy-show-what', r.text), x);
-      return row;
-    });
-    block.replaceChildren(el('div', 'galaxy-show-head', lines.head), ...rows);
+  const say = (msg, key) => {
+    const m = { ...msg, seq: ++seq };
+    results.push(m);
+    if (results.length > SHOW.results) results.shift();
+    o.send(m, replies.get(key) ?? null);
   };
 
   const build = () => {
-    const m = showMarks(state);
-    const key = JSON.stringify(m);
-    if (key === drawnKey) return;
-    drawnKey = key;
-    rings = new Map(m.rings.map((n) => [n, rings.get(n) ?? el('div', 'galaxy-show-ring')]));
-    const next = new Map();
-    for (const c of m.cards) {
-      const card = el('div', 'galaxy-show-card');
-      if (c.title) card.append(el('div', 'galaxy-show-card-title', c.title));
-      card.append(el('div', 'galaxy-show-card-text', c.text));
-      next.set(c.id, { ...c, el: card, w: 0, h: 0 });
+    const h = state.highlight;
+    const key = JSON.stringify([h?.showId, h?.nodes, state.pins.map((p) => p.id)]);
+    if (key === built) return;
+    built = key;
+    brackets = new Map((h?.nodes ?? []).map((n) => {
+      const b = el('div', 'galaxy-show-mark');
+      b.dataset.showMark = '';
+      b.dataset.node = n;
+      b.setAttribute('aria-hidden', 'true');
+      for (const k of ['tl', 'tr', 'bl', 'br']) b.append(el('i', k));
+      return [n, b];
+    }));
+    note = null;
+    if (h?.note) {
+      note = el('div', 'galaxy-show-note');
+      note.dataset.showNote = '';
+      note.append(el('div', 'galaxy-show-who', `AGENT · ${clockText(h.at)}`), el('div', 'galaxy-show-note-text', h.note));
     }
-    cards = next;
-    marks.replaceChildren(...rings.values(), ...[...cards.values()].map((c) => c.el));
-    marks.hidden = !rings.size && !cards.size;
-    for (const c of cards.values()) { c.w = c.el.offsetWidth ?? 0; c.h = c.el.offsetHeight ?? 0; }
+    pins = new Map(state.pins.map((p) => {
+      const card = el('div', 'galaxy-pin');
+      card.dataset.pin = '';
+      card.dataset.pinId = p.id;
+      card.dataset.node = p.node;
+      const x = el('button', 'galaxy-pin-remove', '✕');
+      x.type = 'button';
+      x.dataset.pinRemove = '';
+      x.setAttribute('aria-label', 'Remove pin');
+      const head = el('div', 'galaxy-pin-head');
+      head.append(el('span', 'galaxy-show-who', `AGENT · ${clockText(p.at)}`), x);
+      card.append(head);
+      if (p.title) card.append(el('div', 'galaxy-pin-title', p.title));
+      if (p.body) card.append(el('div', 'galaxy-pin-body', p.body));
+      // A press on the card never reaches the stage: not a touch on the galaxy, not a tap on the sky.
+      const keep = (ev) => ev.stopPropagation?.();
+      for (const t of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'click']) card.addEventListener(t, keep);
+      x.addEventListener('click', (ev) => { ev.preventDefault?.(); ev.stopPropagation?.(); close(p.id); });
+      const leader = el('div', 'galaxy-pin-leader');
+      leader.setAttribute('aria-hidden', 'true');
+      return [p.id, { card, leader, node: p.node, w: 0, h: 0 }];
+    }));
+    marks.replaceChildren(...brackets.values(), ...(note ? [note] : []), ...[...pins.values()].flatMap((p) => [p.leader, p.card]));
+    marks.hidden = !brackets.size && !note && !pins.size;
+    for (const p of pins.values()) { p.w = p.card.offsetWidth || SHOW.pinW; p.h = p.card.offsetHeight || 120; }
+    if (note) { note.w = note.offsetWidth || SHOW.noteW; note.h = note.offsetHeight || 80; }
     draw();
   };
 
   const apply = (r) => {
     state = r.state;
-    // The director plays a flyTo (it refuses it under a finger); an ended flyTo is its to clear,
-    // unless a newer one takes the camera now (a clear first would hand it to the tour between the two).
-    if (!r.fly) for (const id of r.ended) director?.clear(id);
-    if (r.fly) {
-      const site = o.siteOf(r.fly.data.node);
-      const d = director?.show({ id: r.fly.id, to: site ? { kind: 'site', id: site } : { kind: 'overview' }, holdMs: r.fly.until - r.fly.at });
-      if (d?.refused) {
-        state = showStep(state, { type: 'undo', id: r.fly.id }, o.clock()).state;
-        r = { ...r, reply: { ...r.reply, ok: false, code: d.refused } };
-      }
-    }
-    write();
+    for (const m of r.out) say(m, m.showId ?? m.pin);
+    const a = r.act;
+    if (a?.kind === 'fly') ops.fly(a.node, a.showId);
+    else if (a?.kind === 'fit') ops.fit(a.nodes, a.showId);
+    else if (a?.kind === 'stay') ops.stay(a.showId);
+    else if (a?.kind === 'restore') ops.restore(a.saved);
     build();
     return r;
   };
-  const step = (event) => apply(showStep(state, event, o.clock(), {
-    busy: o.busy(), known: (n) => o.labelOf(n) != null,
-  }));
+  const ctx = () => ({
+    blocked: o.blocked(), time: o.time(), camera: ops.camera(), wall: ops.wall(), moving: ops.moving(),
+    known: ops.known, inSight: ops.inSight,
+  });
+  const step = (event) => apply(showStep(state, event, o.clock(), ctx()));
+  const close = (id) => step({ type: 'pin.close', pin: id });
 
-  const undo = (id) => { step({ type: 'undo', id }); };
-  const draw = () => {
-    if (!rings.size && !cards.size) return;
-    for (const [n, ring] of rings) {
-      const at = o.screenOf(n);
-      ring.hidden = !at;
-      if (!at) continue;
-      // Round the node with room for its glow: never smaller than a fingertip's mark.
-      // Its size is written only when it changes by a pixel (a size is layout; the place is a transform).
-      const d = Math.round(Math.max(36, 2 * (at.r ?? 0) + 20));
-      if (ring.dataset.d !== String(d)) {
-        ring.dataset.d = String(d);
-        ring.style.width = ring.style.height = `${d}px`;
-      }
-      ring.style.transform = `translate3d(${(at.x - d / 2).toFixed(1)}px, ${(at.y - d / 2).toFixed(1)}px, 0)`;
+  // The veil (D72's UNLIT): the whole stage dimmed to 0.16 but a soft hole at each marked node.
+  let veiled = false;
+  const drawVeil = (holes, k) => {
+    const v = o.veil;
+    if (!v?.getContext) return;
+    if (!(k > 0)) {
+      if (veiled) { v.getContext('2d')?.clearRect(0, 0, v.width, v.height); v.hidden = true; veiled = false; }
+      return;
     }
     const { W, H } = o.size();
-    const placed = [];
-    for (const c of cards.values()) {
-      const at = o.screenOf(c.node);
-      c.el.hidden = !at;
-      if (!at) continue;
-      const p = cardPlace(at, c.w, c.h, { W, H, above: placed });
-      placed.push({ left: p.x, top: p.y, right: p.x + c.w, bottom: p.y + c.h });
-      c.el.dataset.side = p.side;
-      c.el.style.transform = `translate3d(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px, 0)`;
-      c.box = { left: p.x, top: p.y, right: p.x + c.w, bottom: p.y + c.h };
+    if (v.width !== W) v.width = W;
+    if (v.height !== H) v.height = H;
+    const g = v.getContext('2d');
+    if (!g) return;
+    v.hidden = false;
+    veiled = true;
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, W, H);
+    g.globalAlpha = (1 - SHOW.unlit) * k;
+    g.fillStyle = o.veilColor;
+    g.fillRect(0, 0, W, H);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'destination-out';
+    for (const { x, y, R } of holes) {
+      const grad = g.createRadialGradient(x, y, R * 0.55, x, y, R);
+      grad.addColorStop(0, 'rgba(0,0,0,1)');
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(x, y, R, 0, 2 * Math.PI);
+      g.fill();
     }
+    g.globalCompositeOperation = 'source-over';
   };
 
-  write(); // nothing shown yet: the line and the marks hidden
+  const move = (e, x, y) => { e.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`; };
+  function draw() {
+    const now = o.clock();
+    const h = state.highlight;
+    const { W, H } = o.size();
+    const holes = [];
+    boxes = [];
+    let first = null;
+    // A node out of sight (behind the camera or off the stage) hides its marks and its card (c4 §3.4).
+    const sight = (id) => {
+      const at = o.screenOf(id);
+      return at && at.x >= 0 && at.x <= W && at.y >= 0 && at.y <= H ? at : null;
+    };
+    const keepOff = o.avoid() ?? []; // the page's controls (the back control, the manual line)*
+    const marked = [];
+    for (const [n, b] of brackets) {
+      const at = sight(n);
+      b.hidden = !at;
+      if (!at) continue;
+      const box = bracketBox(at, now - h.t, { still: o.still });
+      const d = String(Math.round(box.size));
+      if (b.dataset.d !== d) { b.dataset.d = d; b.style.width = b.style.height = `${d}px`; }
+      move(b, box.left, box.top);
+      marked.push({ node: n, left: box.left, top: box.top, right: box.left + box.size, bottom: box.top + box.size });
+      holes.push({ x: at.x, y: at.y, R: Math.max(64, 2 * (at.r ?? 0) + 40) });
+      if (!first) first = { at, R: box.R };
+    }
+    const above = []; // the pins step below what is placed before them: the note, then each earlier pin*
+    if (note) {
+      note.hidden = !first;
+      if (first) {
+        const p = notePlace(first.at, first.R, note.w, note.h, { W, H, avoid: [...marked.slice(1), ...keepOff] });
+        move(note, p.x, p.y);
+        const box = { left: p.x, top: p.y, right: p.x + note.w, bottom: p.y + note.h };
+        boxes.push(box);
+        above.push(box);
+      }
+    }
+    for (const p of pins.values()) {
+      const at = sight(p.node);
+      p.card.hidden = p.leader.hidden = !at;
+      if (!at) continue;
+      // Clear of the note, the earlier pins and the other marked nodes' brackets*.
+      const pl = pinPlace(at, p.w, p.h, { W, H, above: [...above, ...keepOff, ...marked.filter((m) => m.node !== p.node)] });
+      move(p.card, pl.x, pl.y);
+      const box = { left: pl.x, top: pl.y, right: pl.x + p.w, bottom: pl.y + p.h };
+      above.push(box);
+      boxes.push(box);
+      const l = leaderOf(at, pl, p.w, p.h);
+      const len = Math.hypot(l.x2 - l.x1, l.y2 - l.y1);
+      p.leader.style.width = `${len.toFixed(1)}px`;
+      p.leader.style.transform = `translate3d(${l.x1.toFixed(1)}px, ${l.y1.toFixed(1)}px, 0) rotate(${Math.atan2(l.y2 - l.y1, l.x2 - l.x1).toFixed(4)}rad)`;
+    }
+    drawVeil(holes, h ? (o.still ? 1 : Math.min(1, (now - h.t) / SHOW.fadeMs)) : 0);
+  }
+
   build();
   return {
-    send: (msg) => step({ type: 'msg', msg }).reply,
-    undo,
-    drop: () => { if (state.items.length) step({ type: 'drop' }); },
-    tick: () => {
-      if (!state.items.length) return;
-      step({ type: 'tick' });
+    receive: (msg, reply = null) => {
+      if (!msg || !INBOUND.includes(msg.type)) return;
+      if (msg.type === 'show') {
+        if (reply && str(msg.showId)) replies.set(msg.showId, reply);
+        step({ type: 'msg', msg });
+      } else if (msg.type === 'show.undo') step({ type: 'undo', showId: msg.showId });
+      else if (msg.type === 'pin.put') {
+        if (reply && str(msg.pin?.id)) replies.set(msg.pin.id, reply);
+        step({ type: 'pin.put', pin: msg.pin, replaced: msg.replaced });
+      } else step({ type: 'pin.remove', pin: msg.pin });
+      // Keep the roads of what is still on screen or waiting, no more.
+      if (replies.size > SHOW.seen) for (const k of [...replies.keys()].slice(0, replies.size - SHOW.seen)) replies.delete(k);
     },
+    tick: () => { if (state.waiting) step({ type: 'tick' }); },
     draw,
+    tourBack: () => { if (state.highlight || state.undo) step({ type: 'tour' }); },
     state: () => state,
-    // The cards' boxes, for the names to keep off (labels.js covers).
-    covers: () => [...cards.values()].filter((c) => c.box && !c.el.hidden).map((c) => c.box),
+    // The test handle's show part (window.__cockpitView.show): plain data, a copy.
+    view: () => ({
+      highlight: state.highlight ? { showId: state.highlight.showId, nodes: [...state.highlight.nodes], note: state.highlight.note } : null,
+      pins: state.pins.map((p) => ({ id: p.id, node: p.node, title: p.title, body: p.body })),
+      undoable: state.undo?.showId ?? null,
+      waiting: state.waiting?.cmd.showId ?? null,
+      results: results.map((m) => ({ ...m })),
+    }),
+    emphasis: (id) => emphasisOf(state, id, o.clock(), { still: o.still }),
+    // The note's and the pins' boxes, for the names to keep off (labels.js covers).
+    covers: () => boxes,
   };
 }

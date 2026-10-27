@@ -875,72 +875,21 @@ html.wall body {
 .galaxy-fan-leader[data-tone="warn"] { background: var(--warn); }
 .galaxy-fan-leader[data-tone="low"] { background: var(--p3); }
 
-/* Show commands (night 4 T37, js/wall/galaxy/show.js): who shows what, top
-   right where the manual line stands (a show never runs under a finger, so
-   the two never meet): the head `SHOWN BY BUILDER-A` in the tag's face and
-   tracking, one row per command under it at the back control's step, each
-   with its `✕` of SHOW.xPx (48 css px, night 2's floor). Grey: an agent
-   pointing at something is not trouble; the trouble it points at keeps its hue. */
-.galaxy-show {
+/* Show commands (cockpit c4-show-canvas.md §3, D72, D73; js/wall/galaxy/show.js): what the
+   agent points at. A highlight is four 2 px accent corner brackets per node (12 px arms, 8 px
+   outside the node, closing in over 300 ms), the rest of the galaxy and its names dimmed under a
+   veil to UNLIT 0.16; its note sits on a plate beside the first node, `AGENT · 07:12` over the
+   words. A pin is a 320 px card beside its node with the same header and a 48 px `✕`, a 1 px
+   leader to the node. The accent is spent on "look here", never on a state (docs/design.md rule
+   3): the trouble the agent points at keeps its hue. Sizes in px, the spec's at 1368x912. */
+.galaxy-show-veil {
   position: absolute;
-  top: calc(8vh + 5.1vmin);
-  right: 6vw;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.8vmin;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
-.galaxy-show[hidden] { display: none; }
-.galaxy-show-head {
-  font-family: var(--font-mono);
-  font-size: 1.7vmin;
-  line-height: 1;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-2);
-  white-space: nowrap;
-}
-.galaxy-show-row {
-  display: flex;
-  align-items: center;
-  gap: 1.6vmin;
-  height: 48px;
-  font-family: var(--font-label);
-  font-weight: 600;
-  font-size: max(2.7vmin, 20px);
-  line-height: 1;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-1);
-  white-space: nowrap;
-}
-.galaxy-show-x {
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  font-family: var(--font-mono);
-  font-size: 20px;
-  line-height: 1;
-  color: var(--text-2);
-  background: color-mix(in oklch, var(--bg-canvas) 96%, transparent);
-  border: 1px solid var(--line);
-  border-radius: 0;
-  touch-action: none;
-  cursor: pointer;
-  pointer-events: auto;
-}
-.galaxy-show-x:active { color: var(--text-1); }
-.galaxy-show-x:focus-visible { outline: 2px solid var(--text-2); outline-offset: 4px; }
-
-/* What a show marks on the galaxy: a ring round each highlighted node and a
-   card (a pin's, or a highlight's note) beside its node, both following the
-   node every frame by transform. The brightest grey, steady (nothing pulses:
-   a pulse is trouble's); the card is plain text on the plate's ground. */
+.galaxy-show-veil[hidden] { display: none; }
 .galaxy-show-marks {
   position: absolute;
   inset: 0;
@@ -948,46 +897,134 @@ html.wall body {
   pointer-events: none;
 }
 .galaxy-show-marks[hidden] { display: none; }
-.galaxy-show-ring {
+.galaxy-show-mark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+/* Each corner an L of two 2 px strokes, 12 px arms (the lock's way: no gradient outside tokens.css). */
+.galaxy-show-mark > i {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 0 solid var(--accent);
+}
+.galaxy-show-mark > .tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+.galaxy-show-mark > .tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
+.galaxy-show-mark > .bl { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; }
+.galaxy-show-mark > .br { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; }
+/* The plates' ground is --bg-elevated at 99 %, not opaque: an opaque layer moved by transform over
+   the WebGL canvas left a stale rectangle of undrawn scene under and below it (seen in headless
+   Chromium, 759 px wide, 2026-10-27); a ground that lets 1 % through is never culled. */
+.galaxy-show-note,
+.galaxy-pin {
   position: absolute;
   top: 0;
   left: 0;
   box-sizing: border-box;
-  border: 2px solid var(--text-1);
-  border-radius: 50%;
+  background: color-mix(in oklch, var(--bg-elevated) 99%, transparent);
+  border: 1px solid var(--line-strong);
   will-change: transform;
 }
-.galaxy-show-card {
-  position: absolute;
-  top: 0;
-  left: 0;
-  box-sizing: border-box;
-  max-width: min(30vw, 22em);
-  padding: 1.2vmin 1.6vmin;
-  background: color-mix(in oklch, var(--bg-canvas) 92%, transparent);
-  border-left: 2px solid var(--text-1);
-  will-change: transform;
+.galaxy-show-note {
+  max-width: 360px;
+  padding: 16px;
 }
-.galaxy-show-card[data-side="left"] { border-left: 0; border-right: 2px solid var(--text-1); }
-.galaxy-show-card[hidden],
-.galaxy-show-ring[hidden] { display: none; }
-.galaxy-show-card-title {
-  margin-bottom: 0.8vmin;
+.galaxy-show-who {
   font-family: var(--font-mono);
-  font-size: 1.7vmin;
+  font-size: 16px;
   line-height: 1;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-2);
+  color: var(--text-3);
+  white-space: nowrap;
 }
-.galaxy-show-card-text {
+.galaxy-show-note-text {
+  margin-top: 8px;
   font-family: var(--font-label);
   font-weight: 600;
-  font-size: max(2.4vmin, 18px);
-  line-height: 1.15;
-  letter-spacing: 0.02em;
+  font-size: 20px;
+  line-height: 1.2;
   color: var(--text-1);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
 }
+.galaxy-pin {
+  width: 320px;
+  max-height: 240px;
+  padding-bottom: 16px;
+  overflow: hidden;
+  pointer-events: auto;
+}
+.galaxy-pin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding-left: 16px;
+}
+.galaxy-pin-remove {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  touch-action: none;
+  cursor: pointer;
+}
+.galaxy-pin-remove:active { color: var(--text-1); }
+.galaxy-pin-remove:focus-visible { outline: 2px solid var(--text-2); outline-offset: -4px; }
+.galaxy-pin-title {
+  padding: 0 16px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.galaxy-pin-body {
+  padding: 8px 16px 0;
+  font-family: var(--font-label);
+  font-size: 18px;
+  line-height: 1.25;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  overflow: hidden;
+}
+.galaxy-pin-leader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--line-strong);
+  transform-origin: 0 50%;
+  will-change: transform;
+}
+.galaxy-show-mark[hidden],
+.galaxy-show-note[hidden],
+.galaxy-pin[hidden],
+.galaxy-pin-leader[hidden] { display: none; }
 
 /* The galaxy's speed overlay (`galaxy.html?perf=1`, js/wall/galaxy/budget.js):
    a few mono lines in the top margin, above the tag, grey. For whoever tunes

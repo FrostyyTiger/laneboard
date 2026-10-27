@@ -1,12 +1,13 @@
-// One camera director, the state (Wall plan night 4 T13, README D10): touch
-// first, then a show command, then the tour; every hand-over an eased move
-// from where the camera is (a cut with a fade in reduced motion); the tour
-// back a minute after the last touch or show. All on a fake clock.
+// One camera director, the state (Wall plan night 4 T13, README D10; aligned
+// with the cockpit spec c4 §2 on 2026-10-27): touch first, then a show
+// command, then the tour; every hand-over an eased move from where the camera
+// is (a cut with a fade in reduced motion); a show in its own time, never
+// refused here; the tour back on a hand-back. All on a fake clock.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  HANDOVER, IDLE, OVERVIEW, SOURCES, createDirector, directorLeft, directorStep, initialDirector,
+  HANDOVER, IDLE, OVERVIEW, SOURCES, STAY, createDirector, directorLeft, directorStep, initialDirector,
 } from '../public/js/wall/galaxy/director.js';
 import { IDLE as TOUCH_IDLE } from '../public/js/wall/galaxy/touch.js';
 import { TIMING } from '../public/js/wall/tour.js';
@@ -60,58 +61,56 @@ test('director: a show while the tour flies takes the camera with an eased hand-
   assert.equal(leg.refused, 'busy');
 });
 
-test('director: a newer show replaces the older (last wins)', () => {
-  const [, b] = run([
-    [t0, { type: 'show', id: 'a', to: SITE('hv1') }],
-    [t0 + 3000, { type: 'show', id: 'b', to: SITE('hv2'), pose: POSE }],
+test('director: a newer show replaces the older mid-flight, from where the camera is, in its own time (c4 §2, D68)', () => {
+  const [a, b] = run([
+    [t0, { type: 'show', id: 'a', to: SITE('hv1'), ms: 700 }],
+    [t0 + 200, { type: 'show', id: 'b', to: SITE('hv2'), pose: POSE, ms: 450 }],
   ]);
+  assert.equal(a.move.ms, 700);
   assert.equal(b.state.show.id, 'b');
-  assert.deepEqual(b.move.to, SITE('hv2'));
-  assert.equal(b.state.show.until, t0 + 3000 + IDLE.ms);
+  assert.deepEqual(b.move, { source: 'show', from: POSE, to: SITE('hv2'), ms: 450, cut: false });
+  assert.equal(b.resume, false, 'no hand-back to the tour between the two');
 });
-
-test('director: a touch during a show wins; the show is dropped, not parked, and never comes back', () => {
-  const [show, touch, later] = run([
-    [t0, { type: 'show', id: 'c1', to: SITE('hv2') }],
+test('director: a touch during a show takes the camera without a wake: the page already explores', () => {
+  const [show, press, tap, later] = run([
+    [t0, { type: 'show', id: 'c1', to: SITE('hv2'), ms: 600 }],
     [t0 + 4000, { type: 'touch', pose: POSE }],
-    [t0 + 4000 + HANDOVER.fitMs + IDLE.ms, { type: 'tick' }],
+    [t0 + 5000, { type: 'touch', to: SITE('hv1'), pose: POSE }],
+    [t0 + 5000 + IDLE.ms, { type: 'tick' }],
   ]);
   assert.equal(show.state.driver, 'show');
-  assert.equal(touch.state.driver, 'touch');
-  assert.equal(touch.wake, true);
-  assert.equal(touch.dropped, 'c1');
-  assert.equal(touch.state.show, null);
-  assert.deepEqual(touch.move, { source: 'touch', from: POSE, to: OVERVIEW, ms: HANDOVER.fitMs, cut: false });
+  assert.equal(press.state.driver, 'touch');
+  assert.equal(press.wake, false);
+  assert.equal(press.move, null, 'no ease out to the overview');
+  assert.equal(press.state.show, null);
+  assert.deepEqual(tap.move, { source: 'touch', from: POSE, to: SITE('hv1'), ms: HANDOVER.flyMs, cut: false });
   assert.equal(later.state.driver, 'tour', 'after the minute the tour has it, not the old show');
   assert.equal(later.resume, true);
   assert.equal(later.move, null, 'the director only says resume; the tour asks for its leg');
 });
-
-test('director: a show during touch is refused busy (not queued); the finger keeps the camera', () => {
-  const [, show, tick] = run([
+test('director: a show during a finger\'s explore takes the camera (the owner\'s finger rule is show.js\'s)', () => {
+  const [, show] = run([
     [t0, { type: 'touch' }],
-    [t0 + 10_000, { type: 'show', id: 'c1', to: SITE('hv2') }],
-    [t0 + HANDOVER.fitMs + IDLE.ms, { type: 'tick' }],
+    [t0 + 10_000, { type: 'show', id: 'c1', to: SITE('hv2'), pose: POSE, ms: 500 }],
   ]);
-  assert.equal(show.refused, 'busy');
-  assert.equal(show.move, null);
-  assert.equal(show.state.driver, 'touch');
-  assert.equal(show.state.show, null);
-  assert.equal(tick.state.driver, 'tour', 'nothing queued: the tour, not the show, comes back');
-  assert.equal(tick.resume, true);
+  assert.equal(show.refused, null);
+  assert.deepEqual(show.move, { source: 'show', from: POSE, to: SITE('hv2'), ms: 500, cut: false });
+  assert.equal(show.state.driver, 'show');
 });
-
-test('director: a held finger refuses a show too, and the minute never runs out under it', () => {
-  const [, show, tick] = run([
+test('director: STAY takes the camera without moving it; a held finger keeps the minute from running out', () => {
+  const [, stay] = run([
+    [t0, { type: 'tour', to: SITE('hv1'), pose: POSE }],
+    [t0 + 1000, { type: 'show', id: 'c1', to: STAY, pose: POSE }],
+  ]);
+  assert.equal(stay.state.driver, 'show');
+  assert.equal(stay.move, null);
+  const [, tick] = run([
     [t0, { type: 'touch' }],
-    [t0 + 1000, { type: 'show', id: 'c1', to: SITE('hv2') }, { held: true }],
     [t0 + 10 * IDLE.ms, { type: 'tick' }, { held: true }],
   ]);
-  assert.equal(show.refused, 'busy');
   assert.equal(tick.state.driver, 'touch');
   assert.equal(tick.resume, false);
 });
-
 test('director: the tour takes the camera back 60 s after the last touch, counted from the end of the ease out', () => {
   const [wake, drag, tap, early, back, again] = run([
     [t0, { type: 'touch', pose: POSE }],
@@ -136,49 +135,31 @@ test('director: the tour takes the camera back 60 s after the last touch, counte
   assert.equal(directorStep(w.state, { type: 'tick' }, t0 + HANDOVER.fitMs + IDLE.ms).resume, true);
 });
 
-test('director: the tour takes the camera back 60 s after the last show, sooner on a shorter hold or a clear', () => {
-  const [, early, back] = run([
+test('director: a show has no hold of its own: only a hand-back (touch.js\'s minute, ▶ TOUR, an undo) gives the tour the camera', () => {
+  const [, tick, hb] = run([
     [t0, { type: 'show', id: 'c1', to: SITE('hv2') }],
-    [t0 + IDLE.ms - 1, { type: 'tick' }],
-    [t0 + IDLE.ms, { type: 'tick' }],
+    [t0 + 10 * IDLE.ms, { type: 'tick' }],
+    [t0 + 10 * IDLE.ms + 1, { type: 'handback' }],
   ]);
-  assert.equal(early.state.driver, 'show');
-  assert.equal(back.resume, true);
-  assert.equal(back.state.driver, 'tour');
-
-  const [, shortBack] = run([
-    [t0, { type: 'show', id: 'c1', to: SITE('hv2'), holdMs: 20_000 }],
-    [t0 + 20_000, { type: 'tick' }],
-  ]);
-  assert.equal(shortBack.resume, true);
-  const [long] = run([[t0, { type: 'show', id: 'c1', to: SITE('hv2'), holdMs: 10 * IDLE.ms }]]);
-  assert.equal(long.state.show.until, t0 + IDLE.ms, 'a hold never outlasts the minute');
-
-  const [, other, clear] = run([
-    [t0, { type: 'show', id: 'c1', to: SITE('hv2') }],
-    [t0 + 5000, { type: 'clear', id: 'c0' }],
-    [t0 + 6000, { type: 'clear' }],
-  ]);
-  assert.equal(other.state.driver, 'show', 'a clear for another command changes nothing');
-  assert.equal(clear.state.driver, 'tour');
-  assert.equal(clear.resume, true);
+  assert.equal(tick.state.driver, 'show');
+  assert.equal(tick.resume, false);
+  assert.equal(hb.state.driver, 'tour');
+  assert.equal(hb.resume, true);
 });
-
-test('director: ▶ TOUR hands the finger\'s camera back at once; a show is not the finger\'s to hand back', () => {
+test('director: ▶ TOUR hands the finger\'s camera back at once; under the tour a hand-back changes nothing', () => {
   const [, hb] = run([[t0, { type: 'touch' }], [t0 + 5000, { type: 'handback' }]]);
   assert.equal(hb.resume, true);
   assert.equal(hb.state.driver, 'tour');
-  const [, none] = run([[t0, { type: 'show', id: 'c', to: SITE('hv1') }], [t0 + 5000, { type: 'handback' }]]);
+  const [none] = run([[t0, { type: 'handback' }]]);
   assert.equal(none.resume, false);
-  assert.equal(none.state.driver, 'show');
+  assert.equal(none.state.driver, 'tour');
 });
-
 test('director: in reduced motion every hand-over is a cut with a short fade, never a flight', () => {
   const still = { still: true };
   const [leg, show, touch, tap] = run([
     [t0, { type: 'tour', to: SITE('hv1') }, still],
-    [t0 + 1000, { type: 'show', id: 'c', to: SITE('hv2') }, still],
-    [t0 + 2000, { type: 'touch' }, still],
+    [t0 + 1000, { type: 'show', id: 'c', to: SITE('hv2'), ms: 600 }, still],
+    [t0 + 2000, { type: 'touch', to: OVERVIEW }, still],
     [t0 + 3000, { type: 'touch', to: SITE('cloud') }, still],
   ]);
   for (const r of [leg, show, touch, tap]) {
@@ -187,13 +168,13 @@ test('director: in reduced motion every hand-over is a cut with a short fade, ne
     assert.equal(r.move.fadeMs, CUT.fadeMs);
   }
   assert.deepEqual(touch.move.to, OVERVIEW);
-  assert.equal(directorStep(touch.state, { type: 'tick' }, t0 + 2000 + IDLE.ms).resume, true, 'no ease out to wait for');
+  const [wake] = run([[t0, { type: 'touch' }, still]]);
+  assert.equal(directorStep(wake.state, { type: 'tick' }, t0 + IDLE.ms, still).resume, true, 'no ease out to wait for');
 });
-
-test('director: a show without a target is refused; a stray clear or handback under the tour changes nothing', () => {
+test('director: a show without a target is refused; a stray handback or tick under the tour changes nothing', () => {
   const s = initialDirector();
   assert.equal(directorStep(s, { type: 'show', id: 'x' }, t0).refused, 'bad-shape');
-  for (const type of ['clear', 'handback', 'tick']) {
+  for (const type of ['handback', 'tick', 'clear']) {
     const r = directorStep(s, { type }, t0);
     assert.equal(r.state.driver, 'tour', type);
     assert.equal(r.resume, false, type);
@@ -201,7 +182,6 @@ test('director: a show without a target is refused; a stray clear or handback un
   }
   assert.equal(directorStep(null, { type: 'tick' }, t0).state.driver, 'tour', 'no state: a fresh one');
 });
-
 test('directorLeft: the time until the tour takes the camera back, for the MANUAL line', () => {
   assert.equal(directorLeft(initialDirector(), t0), null);
   const [w] = run([[t0, { type: 'touch' }]]);
@@ -209,8 +189,8 @@ test('directorLeft: the time until the tour takes the camera back, for the MANUA
   assert.equal(directorLeft(w.state, t0 + HANDOVER.fitMs + 20_000), IDLE.ms - 20_000);
   assert.equal(directorLeft(w.state, t0 + HANDOVER.fitMs + 20_000, { held: true }), IDLE.ms);
   assert.equal(directorLeft(w.state, t0 + 10 * IDLE.ms), 0);
-  const [s] = run([[t0, { type: 'show', id: 'c', to: SITE('hv1'), holdMs: 30_000 }]]);
-  assert.equal(directorLeft(s.state, t0 + 10_000), 20_000);
+  const [s] = run([[t0, { type: 'show', id: 'c', to: SITE('hv1') }]]);
+  assert.equal(directorLeft(s.state, t0 + 10_000), null, 'a show\'s minute is touch.js\'s');
 });
 
 // ---- T14: createDirector, the page's director over a camera ----
@@ -219,7 +199,7 @@ test('directorLeft: the time until the tour takes the camera back, for the MANUA
 function countingCam() {
   const calls = [];
   const cam = { calls, pose: () => ({ pos: { x: 0, y: 900, z: 900 }, look: { x: 0, y: 0, z: 0 } }), screenOf: () => null };
-  for (const k of ['fit', 'focus', 'cut', 'fly', 'steer']) cam[k] = (...args) => { calls.push([k, ...args]); };
+  for (const k of ['fit', 'focus', 'cut', 'fly', 'place', 'steer']) cam[k] = (...args) => { calls.push([k, ...args]); };
   return cam;
 }
 
@@ -255,22 +235,32 @@ test('createDirector: every camera call is the director\'s, with its source; eac
   finger.fly({ pos: { x: 1, y: 2, z: 3 }, look: { x: 0, y: 0, z: 0 } }, { ms: 1500 });
   assert.deepEqual(cam.calls.slice(3).map((c) => c[0]), ['steer', 'focus', 'fly']);
   assert.deepEqual(cam.calls.at(-1)[2], { ms: 1500 }, 'back in its own time');
-  assert.equal(d.show({ id: 'c1', to: { kind: 'site', id: 'hv1' } }).refused, 'busy');
   d.handBack();
   assert.deepEqual(resumed, ['touch']);
   assert.equal(d.driver(), 'tour');
-  // A show takes the camera from the tour (the tour's zoom when it names none), its hold runs out on a tick.
+  // A show takes the camera from the tour in its own time (the tour's zoom when it names none); it stays
+  // until a hand-back, however long.
   at(5000);
-  d.show({ id: 'c2', to: { kind: 'site', id: 'cloud' }, holdMs: 2000 });
-  assert.deepEqual(cam.calls.at(-1), ['focus', 'cloud', TIMING.zoom]);
+  d.show({ id: 'c2', to: { kind: 'site', id: 'cloud' }, ms: 640 });
+  assert.deepEqual(cam.calls.at(-1), ['focus', 'cloud', TIMING.zoom, { ms: 640 }]);
   tour.focus('hv1', 2.3);
   assert.equal(cam.calls.at(-1)[1], 'cloud', 'the tour waits under a show');
-  at(7000);
+  // A free pose (fitNodes, setCamera, an undo) is camera.js's place; with `cut` a jump.
+  const pose = { pos: { x: 1, y: 2, z: 3 }, look: { x: 0, y: 0, z: 0 } };
+  d.show({ id: 'c3', to: { kind: 'free', pose }, ms: 500 });
+  assert.deepEqual(cam.calls.at(-1), ['place', pose, { ms: 500 }]);
+  d.show({ id: 'c4', to: { kind: 'free', pose, cut: true } });
+  assert.deepEqual(cam.calls.at(-1), ['place', pose, { cut: true }]);
+  d.show({ id: 'c5', to: { kind: 'site', id: 'hv2', cut: true } });
+  assert.deepEqual(cam.calls.at(-1), ['cut', 'hv2', TIMING.zoom]);
+  at(7000 + 10 * IDLE.ms);
   d.tick();
+  assert.equal(d.driver(), 'show');
+  d.handBack();
   assert.deepEqual(resumed, ['touch', 'show']);
   assert.equal(d.driver(), 'tour');
   assert.deepEqual(cam.calls.map((c) => c[0]), moves.map((m) => m.call), 'one camera call per move, nothing else');
-  assert.deepEqual(moves.map((m) => m.source), ['tour', 'tour', 'touch', 'touch', 'touch', 'touch', 'show']);
+  assert.deepEqual(moves.map((m) => m.source), ['tour', 'tour', 'touch', 'touch', 'touch', 'touch', 'show', 'show', 'show', 'show']);
 });
 
 test('createDirector: reduced motion cuts a finger\'s or a show\'s site; the tour\'s legs stay focus (camera.js keeps the overview)', () => {

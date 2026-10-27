@@ -1,8 +1,8 @@
-// The show commands, the state (Wall plan night 4 T37, README D10, research
-// Q16): flyTo, highlight, pin and clear in Q16's envelope, each display-only,
-// each one row under `SHOWN BY <src>`, each undone by one tap on its ✕; a
-// show during touch is refused, a show during a flight takes the camera
-// through the director. All on a fake clock.
+// The show commands on the Wall (Wall plan night 4 T37; aligned with the
+// cockpit spec on 2026-10-27: c4-show-canvas.md §2-§5, protocols.md §4,
+// D68-D73): the room's `show` / `show.undo` / `pin.put` / `pin.remove` in,
+// `show.result` / `pin.close` out; the owner's finger rule; one highlight,
+// three pins, the limits; the undo; the looks. All on a fake clock.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -10,9 +10,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  SHOW, SHOW_TYPES, cardPlace, createShow, initialShow, readShow, showLines, showMarks, showStep, sourceName,
+  CAMERA_CMDS, INBOUND, RESULT_STATES, SHOW, SHOW_CMDS, SHOW_LATER, WHY, bracketBox, clockText, createFingerWatch, createShow,
+  cutText, emphasisOf, initialShow, leaderOf, notePlace, pinOf, pinPlace, readShow, showStep,
 } from '../public/js/wall/galaxy/show.js';
-import { IDLE, createDirector } from '../public/js/wall/galaxy/director.js';
+import { fitPose, showFlightMs } from '../public/js/wall/galaxy/camera.js';
 import { makeEl } from './helpers/fakedom.mjs';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -20,212 +21,291 @@ const read = (f) => fs.readFileSync(path.join(PUBLIC, f), 'utf8');
 
 const t0 = 100_000;
 let n = 0;
-/** A message in Q16's envelope. */
-const msg = (type, data, extra = {}) => ({ v: 1, ch: 'laneboard.show', id: `c${++n}`, src: 'agent:builder-a', type, data, ...extra });
+/** A room's `show` message (protocols.md §4). */
+const show = (cmd, args, extra = {}) => ({ type: 'show', showId: `sh-${String(++n).padStart(4, '0')}`, turnId: 't-0132', cmd, args, receivedAt: 1793080932210, ...extra });
+const KNOWN = new Set(['hv1', 'hv2', 'hv1-a', 'hv2-a', 'storage', 'db']);
+const ctx = (extra = {}) => ({ time: 1793080932210, camera: { x: 1, y: 2, z: 3 }, wall: 'tour', known: (id) => KNOWN.has(id), inSight: () => false, ...extra });
 
-/** Runs `events` (`[at, event, opts?]`) from an empty show, returning each step's result. */
+/** Runs `events` (`[at, event, ctx?]`) from an empty show, returning each step's result. */
 function run(events, state = initialShow()) {
   const out = [];
-  for (const [at, ev, opts] of events) {
-    const r = showStep(state, ev, at, opts);
+  for (const [at, ev, c] of events) {
+    const r = showStep(state, ev, at, c ?? ctx());
     out.push(r);
     state = r.state;
   }
   return out;
 }
 
-test('show: Q16\'s envelope and limits', () => {
-  assert.deepEqual(SHOW_TYPES, ['flyTo', 'highlight', 'pin', 'clear']);
-  assert.equal(SHOW.ch, 'laneboard.show');
-  assert.equal(SHOW.xPx, 48, 'the ✕ is a 48 px target (night 1 Q6)');
-  assert.equal(SHOW.ttlS, 60);
-  assert.equal(SHOW.maxTtlS, 600);
+test('show: the spec\'s commands, limits and answers (c4 §3, D72, D73, protocols.md §4)', () => {
+  assert.deepEqual([...SHOW_CMDS], ['fly_to', 'highlight', 'pin', 'clear']);
+  assert.deepEqual([...SHOW_LATER], ['compare', 'scrub']);
+  assert.deepEqual([...CAMERA_CMDS], ['fly_to', 'highlight']);
+  assert.deepEqual([...RESULT_STATES], ['shown', 'waiting', 'skipped']);
+  assert.equal(WHY.inUse, 'in use');
+  assert.deepEqual([...INBOUND], ['show', 'show.undo', 'pin.put', 'pin.remove']);
+  assert.equal(SHOW.maxNodes, 12);
+  assert.equal(SHOW.maxNote, 120);
+  assert.equal(SHOW.maxTitle, 48);
+  assert.equal(SHOW.maxBody, 280);
+  assert.equal(SHOW.pins, 3);
+  assert.equal(SHOW.waitMs, 3000);
+  assert.equal(SHOW.giveUpMs, 10000);
+  assert.equal(SHOW.unlit, 0.16);
+  assert.equal(SHOW.zoom, 1.9);
+  assert.equal(SHOW.xPx, 48);
 });
 
-test('readShow: each command\'s shape, its words on one line, the ttl clamped; anything else is a bad shape', () => {
-  const fly = readShow(msg('flyTo', { node: 'hv1' }));
-  assert.equal(fly.ok, true);
-  assert.deepEqual(fly.cmd.data, { node: 'hv1' });
-  assert.equal(fly.cmd.ttlMs, 60000, 'ttl defaults to 60 s');
-  assert.equal(fly.cmd.src, 'agent:builder-a');
-
-  const hi = readShow(msg('highlight', { nodes: ['hv1-a', 'hv1-b', 'hv1-a'], note: '  storage   is\nfull ' }, { ttl: 9999 }));
-  assert.deepEqual(hi.cmd.data, { nodes: ['hv1-a', 'hv1-b'], note: 'storage is full' }, 'repeats go, white space is one space');
-  assert.equal(hi.cmd.ttlMs, 600000, 'at most 600 s');
-
-  const pin = readShow(msg('pin', { node: 'hv2-a', card: { title: 'Disk', text: 'Fills in 2 h' } }, { ttl: 0 }));
-  assert.deepEqual(pin.cmd.data, { node: 'hv2-a', card: { title: 'Disk', text: 'Fills in 2 h' } });
-  assert.equal(pin.cmd.ttlMs, null, 'ttl 0: until undone');
-
-  assert.deepEqual(readShow(msg('clear', {})).cmd.data, {});
-  assert.deepEqual(readShow(msg('clear', { id: 'c1' })).cmd.data, { id: 'c1' });
-  assert.equal(readShow(msg('flyTo', { node: 'hv1' }, { src: undefined })).cmd.src, 'agent');
-
-  const bad = [
-    msg('explode', { node: 'hv1' }),
-    msg('flyTo', {}),
-    msg('flyTo', { node: 'hv1' }, { ttl: -1 }),
-    msg('highlight', { nodes: [] }),
-    msg('highlight', { nodes: Array.from({ length: 17 }, (_, i) => `n${i}`) }),
-    msg('highlight', { nodes: ['hv1'], note: 'x'.repeat(141) }),
-    msg('highlight', { nodes: ['hv1'], note: { html: '<b>' } }),
-    msg('pin', { node: 'hv1' }),
-    msg('pin', { node: 'hv1', card: { text: '' } }),
-    msg('pin', { node: 'hv1', card: { text: 'ok', title: 't'.repeat(41) } }),
-  ];
-  for (const m of bad) {
-    const r = readShow(m);
-    assert.equal(r.ok, false, JSON.stringify(m));
-    assert.equal(r.code, 'bad-shape');
-    assert.equal(r.id, m.id, 'the id comes back for the reply');
+test('readShow: each command\'s args, cut to the limits as text; compare, scrub and other blocks unsupported; bad shapes', () => {
+  assert.equal(readShow({ type: 'show.line' }), null, 'not a show: no answer');
+  assert.equal(readShow(null), null);
+  assert.deepEqual(readShow({ type: 'show', cmd: 'fly_to', args: { node: 'x' } }), { ok: false, showId: null, why: 'bad-args' });
+  const fly = readShow(show('fly_to', { node: 'builder-a' }));
+  assert.deepEqual([fly.ok, fly.cmd, fly.args, fly.turnId, fly.receivedAt], [true, 'fly_to', { node: 'builder-a' }, 't-0132', 1793080932210]);
+  for (const cmd of ['compare', 'scrub', 'fly', 'flyTo']) assert.equal(readShow(show(cmd, { a: 'x', b: 'y' })).why, 'unsupported', cmd);
+  const nodes = Array.from({ length: 15 }, (_, i) => `n${i}`);
+  const hi = readShow(show('highlight', { nodes: [...nodes, 'n0'], note: `${'x'.repeat(130)}` }));
+  assert.equal(hi.args.nodes.length, 12, 'the first 12');
+  assert.equal(hi.args.note.length, 120);
+  assert.ok(hi.args.note.endsWith('…'));
+  assert.equal(readShow(show('highlight', { nodes: ['a'], note: 'same task\n failed  <b>here</b>' })).args.note, 'same task failed <b>here</b>', 'text kept as text');
+  for (const args of [{ nodes: [] }, { nodes: 'a' }, { nodes: [1] }, { nodes: ['a'], note: 3 }]) {
+    assert.equal(readShow(show('highlight', args)).why, 'bad-args', JSON.stringify(args));
   }
-  // Not ours: another channel or version gets no answer at all.
-  for (const m of [null, 'flyTo', { ...msg('flyTo', { node: 'hv1' }), ch: 'other' }, { ...msg('flyTo', { node: 'hv1' }), v: 2 }]) {
-    assert.deepEqual(readShow(m), { ok: false, code: null, id: null });
-  }
-  assert.equal(readShow({ ...msg('flyTo', { node: 'hv1' }), id: '' }).code, 'bad-shape');
+  const pin = readShow(show('pin', { node: 'db', card: { block: 'text', title: 't'.repeat(60), body: 'b'.repeat(300) } }));
+  assert.equal(pin.args.card.title.length, 48);
+  assert.equal(pin.args.card.body.length, 280);
+  assert.equal(readShow(show('pin', { node: 'db', card: { body: 'no block: text' } })).args.card.block, 'text');
+  assert.equal(readShow(show('pin', { node: 'db', card: { block: 'chart', series: [] } })).why, 'unsupported', 'kit blocks later');
+  for (const args of [{ node: 'db' }, { card: { body: 'x' } }, { node: 'db', card: {} }]) assert.equal(readShow(show('pin', args)).why, 'bad-args');
+  assert.deepEqual(readShow(show('clear', { screen: 'all' })).args, {});
+  assert.equal(cutText('  a\n b ', 10), 'a b');
+  assert.match(clockText(new Date(2026, 9, 27, 7, 2).getTime()), /^07:02$/);
 });
 
-test('showStep flyTo: the director\'s item, held as long as the director holds (min of ttl and the minute)', () => {
+test('showStep fly_to: shown at once, the camera to the node, undoable; a node not drawn is skipped', () => {
+  const [r, ghost] = run([
+    [t0, { type: 'msg', msg: show('fly_to', { node: 'hv2-a' }) }],
+    [t0 + 10, { type: 'msg', msg: show('fly_to', { node: 'vm-x' }) }],
+  ]);
+  assert.deepEqual(r.out, [{ type: 'show.result', showId: 'sh-0001', state: 'shown' }].map((m) => ({ ...m, showId: r.out[0].showId })));
+  assert.deepEqual(r.act, { kind: 'fly', node: 'hv2-a', showId: r.out[0].showId });
+  assert.equal(r.state.undo.showId, r.out[0].showId);
+  assert.deepEqual(r.state.undo.saved, { camera: { x: 1, y: 2, z: 3 }, wall: 'tour', highlight: null });
+  assert.deepEqual(ghost.out.map((m) => [m.state, m.why]), [['skipped', 'not drawn']]);
+  assert.equal(ghost.act, null);
+  assert.equal(ghost.state.undo.showId, r.out[0].showId, 'a skipped command takes no undo');
+});
+
+test('showStep highlight: brackets for the drawn nodes, the camera stays when all are in sight, else fits; a new one replaces it', () => {
   const [a, b] = run([
-    [t0, { type: 'msg', msg: msg('flyTo', { node: 'hv1' }, { ttl: 600 }) }],
-    [t0 + 1000, { type: 'msg', msg: msg('flyTo', { node: 'hv2' }, { ttl: 20 }) }],
+    [t0, { type: 'msg', msg: show('highlight', { nodes: ['hv1', 'ghost', 'hv2'], note: 'these break' }) }, ctx({ inSight: () => true })],
+    [t0 + 500, { type: 'msg', msg: show('highlight', { nodes: ['db'] }) }],
   ]);
-  assert.equal(a.reply.ok, true);
-  assert.equal(a.fly.data.node, 'hv1');
-  assert.equal(a.fly.until, t0 + IDLE.ms, 'never longer than the director holds its camera');
-  assert.equal(b.fly.until, t0 + 1000 + 20000);
-  assert.deepEqual(b.ended, [a.fly.id], 'a newer flyTo replaces the older: one flight at a time');
-  assert.deepEqual(b.state.items.map((it) => it.data.node), ['hv2']);
+  assert.deepEqual(a.state.highlight.nodes, ['hv1', 'hv2']);
+  assert.equal(a.state.highlight.note, 'these break');
+  assert.equal(a.state.highlight.at, 1793080932210, 'the time the command arrived (receivedAt)');
+  assert.equal(a.act.kind, 'stay');
+  assert.deepEqual(b.state.highlight.nodes, ['db']);
+  assert.equal(b.state.highlight.note, '');
+  assert.deepEqual(b.act, { kind: 'fit', nodes: ['db'], showId: b.out[0].showId });
+  assert.equal(b.state.undo.saved.highlight, a.state.highlight, 'its undo brings the old marks back');
+  const [none] = run([[t0, { type: 'msg', msg: show('highlight', { nodes: ['vm-x'] }) }]]);
+  assert.deepEqual(none.out.map((m) => m.why), ['not drawn']);
 });
 
-test('showStep highlight: the known nodes marked, a newer highlight replaces the older; none known is unknown-node', () => {
-  const known = (id) => id !== 'ghost';
-  const [a, b, c] = run([
-    [t0, { type: 'msg', msg: msg('highlight', { nodes: ['hv1-a', 'ghost'], note: 'breaks the build' }) }, { known }],
-    [t0 + 10, { type: 'msg', msg: msg('highlight', { nodes: ['hv2-a'] }) }, { known }],
-    [t0 + 20, { type: 'msg', msg: msg('highlight', { nodes: ['ghost'] }) }, { known }],
-  ]);
-  assert.equal(a.reply.ok, true);
-  assert.equal(a.fly, null, 'a highlight never moves the camera');
-  assert.deepEqual(a.state.items[0].data.nodes, ['hv1-a']);
-  assert.equal(a.state.items[0].until, t0 + 60000);
-  assert.deepEqual(b.ended, [a.state.items[0].id]);
-  assert.deepEqual(c.reply, { v: 1, ch: 'laneboard.show', re: c.reply.re, ok: false, code: 'unknown-node' });
-  assert.deepEqual(c.state.items, b.state.items, 'a refused command leaves the screen as it was');
+test('showStep pin: at most 3, a 4th replaces the oldest; its undo removes it; clear keeps it; the room\'s pin.put / pin.remove', () => {
+  const ids = [];
+  let s = initialShow();
+  for (const node of ['hv1', 'hv2', 'db', 'storage']) {
+    const m = show('pin', { node, card: { block: 'text', title: 'disk', body: 'full in 2 h' } });
+    ids.push(m.showId);
+    const r = showStep(s, { type: 'msg', msg: m }, t0, ctx({ blocked: true }));
+    assert.deepEqual(r.out.map((o) => o.state), ['shown'], 'a pin moves no camera: shown even under a finger');
+    s = r.state;
+  }
+  assert.deepEqual(s.pins.map((p) => p.node), ['hv2', 'db', 'storage'], 'the oldest went');
+  s = showStep(s, { type: 'msg', msg: show('clear', {}) }, t0).state;
+  assert.equal(s.pins.length, 3, 'clear keeps the pins');
+  s = showStep(s, { type: 'undo', showId: ids[2] }, t0).state;
+  assert.deepEqual(s.pins.map((p) => p.node), ['hv2', 'storage']);
+  s = showStep(s, { type: 'pin.put', pin: { id: 'pin-0008', node: 'builder-a', block: 'text', title: 'stuck since 03:12', by: 'agent', at: '2026-10-27T07:02:09+01:00', fields: { body: 'No log line for 3 h 50.' } }, replaced: s.pins[0].id }, t0).state;
+  assert.deepEqual(s.pins.map((p) => p.id), [`pin-${ids[3]}`, 'pin-0008']);
+  assert.deepEqual(pinOf({ id: 'p', node: 'n', title: 'x', fields: { body: 'y' }, at: '2026-10-27T07:02:09+01:00' }).body, 'y');
+  const closed = showStep(s, { type: 'pin.close', pin: 'pin-0008' }, t0);
+  assert.deepEqual(closed.out, [{ type: 'pin.close', pin: 'pin-0008' }]);
+  s = showStep(closed.state, { type: 'pin.remove', pin: `pin-${ids[3]}` }, t0).state;
+  assert.equal(s.pins.length, 0);
 });
 
-test('showStep pin: one card per node, at most SHOW.pins, the oldest goes; ttl 0 stays until undone', () => {
-  const [a, b, c, d] = run([
-    [t0, { type: 'msg', msg: msg('pin', { node: 'hv1', card: { text: 'one' } }, { ttl: 0 }) }],
-    [t0 + 1, { type: 'msg', msg: msg('pin', { node: 'hv1', card: { text: 'two' } }, { ttl: 0 }) }],
-    [t0 + 2, { type: 'msg', msg: msg('pin', { node: 'hv2', card: { text: 'three' } }) }],
-    [t0 + 3, { type: 'msg', msg: msg('pin', { node: 'cloud', card: { text: 'four' } }) }],
+test('showStep finger rule (D70, S-C4-08): waiting under a finger, shown 3 s after the lift, skipped "in use" at 10 s', () => {
+  const m = show('fly_to', { node: 'hv1' });
+  // The owner drags from t = 0; the command comes at 1 s; the finger lifts at 4 s.
+  const blockedUntil = (lift) => (at) => ctx({ blocked: at < lift + SHOW.waitMs });
+  const c = blockedUntil(t0 + 4000);
+  const [wait, still, go] = run([
+    [t0 + 1000, { type: 'msg', msg: m }, c(t0 + 1000)],
+    [t0 + 6999, { type: 'tick' }, c(t0 + 6999)],
+    [t0 + 7000, { type: 'tick' }, c(t0 + 7000)],
   ]);
-  assert.equal(a.state.items[0].until, null);
-  assert.deepEqual(b.ended, [a.state.items[0].id], 'a pin on the same node replaces it');
-  assert.equal(c.state.items.length, 2);
-  assert.deepEqual(d.ended, [b.state.items[0].id], 'a third pin: the oldest goes');
-  assert.deepEqual(d.state.items.map((it) => it.data.card.text), ['three', 'four']);
-  // Hours later the ttl-0 pin would still be there; the 60 s ones go on the tick.
-  const [late] = run([[t0 + 61000, { type: 'tick' }]], d.state);
-  assert.deepEqual(late.ended, d.state.items.map((it) => it.id));
+  assert.deepEqual(wait.out, [{ type: 'show.result', showId: m.showId, state: 'waiting' }]);
+  assert.equal(wait.act, null, 'never flies under the finger');
+  assert.equal(still.act, null);
+  assert.deepEqual(go.out, [{ type: 'show.result', showId: m.showId, state: 'shown' }]);
+  assert.equal(go.act.kind, 'fly');
+  // Second run: the finger stays down until 12 s: dropped at 11 s (10 s after it came), never flies.
+  const m2 = show('fly_to', { node: 'hv1' });
+  const c2 = blockedUntil(t0 + 12_000);
+  const [, before, drop, after] = run([
+    [t0 + 1000, { type: 'msg', msg: m2 }, c2(t0 + 1000)],
+    [t0 + 10_999, { type: 'tick' }, c2(t0 + 10_999)],
+    [t0 + 11_000, { type: 'tick' }, c2(t0 + 11_000)],
+    [t0 + 16_000, { type: 'tick' }, c2(t0 + 16_000)],
+  ]);
+  assert.deepEqual(before.out, []);
+  assert.deepEqual(drop.out, [{ type: 'show.result', showId: m2.showId, state: 'skipped', why: 'in use' }]);
+  assert.equal(drop.state.waiting, null);
+  assert.equal(after.act, null, 'and nothing later');
+  // A newer camera command replaces a waiting one, which is answered skipped.
+  const a = show('fly_to', { node: 'hv1' }), b = show('highlight', { nodes: ['hv2'] });
+  const [, second] = run([
+    [t0, { type: 'msg', msg: a }, ctx({ blocked: true })],
+    [t0 + 500, { type: 'msg', msg: b }, ctx({ blocked: true })],
+  ]);
+  assert.deepEqual(second.out.map((o) => [o.showId, o.state, o.why]), [[a.showId, 'skipped', 'in use'], [b.showId, 'waiting', undefined]]);
 });
 
-test('showStep clear: one command by its id or everything; a repeated id is neither shown nor answered twice', () => {
-  const fly = msg('flyTo', { node: 'hv1' });
-  const hi = msg('highlight', { nodes: ['hv1-a'] });
-  const [, b, c, d, e] = run([
-    [t0, { type: 'msg', msg: fly }],
-    [t0 + 1, { type: 'msg', msg: hi }],
-    [t0 + 2, { type: 'msg', msg: fly }],
-    [t0 + 3, { type: 'msg', msg: msg('clear', { id: fly.id }) }],
-    [t0 + 4, { type: 'msg', msg: msg('clear', {}) }],
+test('showStep undo (D71, c4 §5): the latest camera command only; it restores camera, marks and the wall state; a replacing flight takes over the saved state', () => {
+  const hi = show('highlight', { nodes: ['hv1', 'hv2'], note: 'n' });
+  const fly = show('fly_to', { node: 'db' });
+  const fly2 = show('fly_to', { node: 'storage' });
+  const [h, f, f2, old, undo, again] = run([
+    [t0, { type: 'msg', msg: hi }, ctx({ wall: 'tour', camera: 'C0' })],
+    [t0 + 5000, { type: 'msg', msg: fly }, ctx({ wall: 'explore', camera: 'C1' })],
+    // 200 ms later, mid-flight: the second takes over the first's saved state (S-C4-10).
+    [t0 + 5200, { type: 'msg', msg: fly2 }, ctx({ wall: 'explore', camera: 'C-mid', moving: true })],
+    [t0 + 6000, { type: 'undo', showId: fly.showId }],
+    [t0 + 6000, { type: 'undo', showId: fly2.showId }],
+    [t0 + 6100, { type: 'undo', showId: fly2.showId }],
   ]);
-  assert.equal(b.state.items.length, 2);
-  assert.equal(c.reply, null, 'a repeat (another tab, a retry) is ignored');
-  assert.equal(c.state.items.length, 2);
-  assert.deepEqual(d.ended, [fly.id]);
-  assert.equal(d.reply.ok, true);
-  assert.deepEqual(e.ended, [hi.id]);
-  assert.deepEqual(e.state.items, []);
+  assert.equal(h.state.undo.saved.wall, 'tour');
+  assert.equal(f.state.undo.saved.camera, 'C1');
+  assert.equal(f2.state.undo.saved.camera, 'C1', 'back to before both');
+  assert.equal(old.act, null, 'an older line has no undo');
+  assert.deepEqual(undo.act, { kind: 'restore', saved: f2.state.undo.saved });
+  assert.deepEqual(undo.state.highlight.nodes, ['hv1', 'hv2'], 'the marks as they were');
+  assert.equal(again.act, null, 'once');
+  // clear: its undo brings the marks back and moves nothing; with nothing to clear it has no undo.
+  const cl = show('clear', {});
+  const [, c, cu] = run([
+    [t0, { type: 'msg', msg: hi }],
+    [t0 + 100, { type: 'msg', msg: cl }],
+    [t0 + 200, { type: 'undo', showId: cl.showId }],
+  ]);
+  assert.equal(c.state.highlight, null);
+  assert.equal(c.act, null, 'the camera does not move');
+  assert.deepEqual(cu.state.highlight.nodes, ['hv1', 'hv2']);
+  assert.equal(cu.act, null);
+  const [empty] = run([[t0, { type: 'msg', msg: show('clear', {}) }]]);
+  assert.equal(empty.state.undo, null);
+  assert.deepEqual(empty.out.map((o) => o.state), ['shown']);
+  // The tour coming back drops the highlight, the note and the undo; pins stay.
+  const [, , back] = run([
+    [t0, { type: 'msg', msg: show('pin', { node: 'db', card: { body: 'x' } }) }],
+    [t0, { type: 'msg', msg: show('highlight', { nodes: ['hv1'] }) }],
+    [t0 + 60_000, { type: 'tour' }],
+  ]);
+  assert.equal(back.state.highlight, null);
+  assert.equal(back.state.undo, null);
+  assert.equal(back.state.pins.length, 1);
 });
 
-test('showStep: the one-tap undo ends that command only; a drop (a first touch) ends all', () => {
-  const [a, b, c] = run([
-    [t0, { type: 'msg', msg: msg('flyTo', { node: 'hv1' }) }],
-    [t0 + 1, { type: 'msg', msg: msg('pin', { node: 'hv1', card: { text: 'look' } }) }],
-    [t0 + 2, { type: 'undo', id: 'nope' }],
+test('showStep: a repeated showId is neither shown nor answered twice; unsupported and bad shapes are answered skipped', () => {
+  const m = show('fly_to', { node: 'hv1' });
+  const [, twice, cmp, bad] = run([
+    [t0, { type: 'msg', msg: m }],
+    [t0 + 10, { type: 'msg', msg: m }],
+    [t0 + 20, { type: 'msg', msg: show('compare', { a: 'hv1', b: 'hv2' }) }],
+    [t0 + 30, { type: 'msg', msg: show('fly_to', {}) }],
   ]);
-  assert.equal(c.state, b.state, 'an unknown id changes nothing');
-  const [undo] = run([[t0 + 3, { type: 'undo', id: a.fly.id }]], b.state);
-  assert.deepEqual(undo.ended, [a.fly.id]);
-  assert.deepEqual(undo.state.items.map((it) => it.type), ['pin']);
-  const [drop] = run([[t0 + 4, { type: 'drop' }]], b.state);
-  assert.equal(drop.ended.length, 2);
-  assert.deepEqual(drop.state.items, []);
+  assert.deepEqual(twice.out, []);
+  assert.deepEqual(cmp.out.map((o) => [o.state, o.why]), [['skipped', 'unsupported']]);
+  assert.deepEqual(bad.out.map((o) => [o.state, o.why]), [['skipped', 'bad-args']]);
 });
 
-test('showStep during touch: every command but clear is refused busy, nothing is shown', () => {
-  const [a, b, c] = run([
-    [t0, { type: 'msg', msg: msg('flyTo', { node: 'hv1' }) }, { busy: true }],
-    [t0, { type: 'msg', msg: msg('highlight', { nodes: ['hv1'] }) }, { busy: true }],
-    [t0, { type: 'msg', msg: msg('clear', {}) }, { busy: true }],
-  ]);
-  assert.equal(a.reply.code, 'busy');
-  assert.equal(a.fly, null);
-  assert.equal(b.reply.code, 'busy');
-  assert.deepEqual(b.state.items, []);
-  assert.equal(c.reply.ok, true, 'clearing is always allowed');
+test('emphasis and placements: UNLIT 0.16 for the rest over the fade; brackets close in from 24 px; note and pins on the stage', () => {
+  const [h] = run([[t0, { type: 'msg', msg: show('highlight', { nodes: ['hv1'] }) }]]);
+  assert.equal(emphasisOf(h.state, 'hv1', t0 + 1000), 1);
+  assert.equal(emphasisOf(h.state, 'hv2', t0), 1);
+  assert.ok(Math.abs(emphasisOf(h.state, 'hv2', t0 + 1000) - 0.16) < 1e-9);
+  assert.ok(Math.abs(emphasisOf(h.state, 'hv2', t0, { still: true }) - 0.16) < 1e-9);
+  assert.equal(emphasisOf(initialShow(), 'hv2', t0), 1);
+  const at = { x: 400, y: 300, r: 10 };
+  assert.equal(bracketBox(at, 0).R, 10 + 8 + 24);
+  assert.equal(bracketBox(at, 300).R, 18, '8 px outside the drawn radius after 300 ms');
+  assert.equal(bracketBox(at, 0, { still: true }).R, 18, 'reduced motion: at its final size');
+  // The note: up and right of the brackets, 16 px off; flipped near an edge; clear of the other marks.
+  assert.deepEqual(notePlace(at, 18, 360, 100, { W: 1368, H: 912 }), { x: 434, y: 166 });
+  assert.deepEqual(notePlace({ x: 1300, y: 60, r: 10 }, 18, 360, 100, { W: 1368, H: 912 }), { x: 906, y: 94 });
+  const avoid = [{ left: 500, top: 150, right: 540, bottom: 190 }];
+  const p = notePlace(at, 18, 360, 100, { W: 1368, H: 912, avoid });
+  assert.ok(!(p.x < 540 && p.x + 360 > 500 && p.y < 190 && p.y + 100 > 150), 'not over another marked node');
+  // A pin: 48 px right of the node, centred on it; flipped left at the right edge; below an earlier one.
+  assert.deepEqual(pinPlace(at, 320, 120, { W: 1368, H: 912 }), { x: 448, y: 240, side: 'right' });
+  assert.equal(pinPlace({ x: 1200, y: 300 }, 320, 120, { W: 1368, H: 912 }).x, 1200 - 48 - 320);
+  const first = { left: 448, top: 240, right: 768, bottom: 360 };
+  assert.equal(pinPlace({ x: 400, y: 320, r: 10 }, 320, 120, { W: 1368, H: 912, above: [first] }).y, 368);
+  for (const [W, H] of [[759, 912], [1271, 912], [1368, 912]]) {
+    for (const x of [0, W / 2, W]) {
+      const q = pinPlace({ x, y: 456 }, 320, 240, { W, H });
+      assert.ok(q.x >= 16 && q.x + 320 <= W - 16, `${W}: the pin 16 px inside at x ${x}`);
+      const nq = notePlace({ x, y: 456, r: 6 }, 14, 360, 120, { W, H });
+      assert.ok(nq.x >= 16 && nq.x + 360 <= W - 16, `${W}: the note 16 px inside at x ${x}`);
+    }
+  }
+  assert.deepEqual(leaderOf(at, { x: 448, y: 240, side: 'right' }, 320, 120), { x1: 410, y1: 300, x2: 448, y2: 300 });
 });
 
-test('showLines: SHOWN BY the source, one row per command newest first, seconds only in the last ten', () => {
-  assert.equal(showLines(initialShow(), t0), null);
-  assert.equal(sourceName('agent:builder-a'), 'builder-a');
-  assert.equal(sourceName('hub'), 'hub');
-  const label = (id) => ({ hv1: 'HV1', 'hv2-a': 'builder-a' }[id] ?? id);
-  const [, , c] = run([
-    [t0, { type: 'msg', msg: msg('flyTo', { node: 'hv1' }) }],
-    [t0, { type: 'msg', msg: msg('highlight', { nodes: ['hv1', 'hv2-a', 'cloud'] }, { src: 'agent:cockpit' }) }],
-    [t0, { type: 'msg', msg: msg('pin', { node: 'hv2-a', card: { text: 'x' } }, { ttl: 0, src: 'agent:cockpit' }) }],
-  ]);
-  const lines = showLines(c.state, t0 + 1000, label);
-  assert.equal(lines.head, 'shown by cockpit +1');
-  assert.deepEqual(lines.rows.map((r) => r.text), ['note on builder-a', '3 marked', 'at HV1']);
-  const late = showLines(c.state, t0 + 51_200, label);
-  assert.deepEqual(late.rows.map((r) => r.text), ['note on builder-a', '3 marked · 0:09', 'at HV1 · 0:09']);
+test('camera: a show flight takes the Map\'s 320-900 ms by distance (D68); fitPose keeps every point inside the box with the pad', () => {
+  const shot = (x, z, d) => ({ pos: { x, y: d * 0.8, z: z + d * 0.6 }, look: { x, y: 0, z } });
+  const near = showFlightMs(shot(0, 0, 500), shot(10, 0, 500));
+  const far = showFlightMs(shot(0, 0, 500), shot(6000, 4000, 300));
+  assert.ok(near >= 320 && near <= 900, `${near}`);
+  assert.ok(far >= 320 && far <= 900, `${far}`);
+  assert.ok(far > near);
+  assert.equal(showFlightMs(null, shot(0, 0, 1)), 900);
+  const pts = [{ x: -800, y: 0, z: 200 }, { x: 900, y: 0, z: -300 }, { x: 100, y: 0, z: 700 }];
+  const W = 1368, H = 912, fov = 50, pad = 64;
+  const box = { x0: 0, y0: 0, x1: 0.7, y1: 0.75 };
+  const pose = fitPose(pts, shot(0, 0, 3000), { fov, W, H, padPx: pad, box, minDist: 100, maxDist: 1e5 });
+  // Project each point with the same camera (lookAt, +y up) and check it lands inside the box less the pad.
+  const f = norm(sub(pose.look, pose.pos)), r = norm({ x: -f.z, y: 0, z: f.x }), u = cross(r, f);
+  const t = Math.tan((fov * Math.PI) / 360);
+  for (const p of pts) {
+    const v = sub(p, pose.pos), z = dot(v, f);
+    const sx = ((dot(v, r) / (z * t * (W / H))) + 1) / 2 * W, sy = (1 - dot(v, u) / (z * t)) / 2 * H;
+    assert.ok(sx >= pad - 0.5 && sx <= box.x1 * W - pad + 0.5, `x ${sx}`);
+    assert.ok(sy >= pad - 0.5 && sy <= box.y1 * H - pad + 0.5, `y ${sy}`);
+  }
+  assert.equal(fitPose([], null), null);
+  const close = fitPose([{ x: 0, y: 0, z: 0 }], null, { minDist: 250 });
+  assert.ok(Math.abs(Math.hypot(close.pos.x - close.look.x, close.pos.y - close.look.y, close.pos.z - close.look.z) - 250) < 1e-6, 'never nearer than minDist');
 });
+const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const norm = (a) => { const l = Math.hypot(a.x, a.y, a.z); return { x: a.x / l, y: a.y / l, z: a.z / l }; };
+const cross = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
 
-test('showMarks and cardPlace: rings once per node, cards for pins and notes, a card kept on the stage', () => {
-  const [, , c] = run([
-    [t0, { type: 'msg', msg: msg('highlight', { nodes: ['a', 'b'], note: 'these two' }) }],
-    [t0, { type: 'msg', msg: msg('pin', { node: 'b', card: { title: 'Why', text: 'disk' } }) }],
-    [t0, { type: 'msg', msg: msg('flyTo', { node: 'a' }) }],
-  ]);
-  const m = showMarks(c.state);
-  assert.deepEqual(m.rings, ['a', 'b']);
-  assert.deepEqual(m.cards.map((k) => [k.node, k.title, k.text]), [['a', '', 'these two'], ['b', 'Why', 'disk']]);
-
-  const W = 1600, H = 900;
-  assert.deepEqual(cardPlace({ x: 400, y: 300, r: 10 }, 200, 80, { W, H }), { x: 430, y: 260, side: 'right' });
-  assert.deepEqual(cardPlace({ x: 1500, y: 300, r: 10 }, 200, 80, { W, H }), { x: 1270, y: 260, side: 'left' });
-  const low = cardPlace({ x: 400, y: 890, r: 0 }, 200, 80, { W, H });
-  assert.equal(low.y, H - 16 - 80, 'kept inside the stage');
-  // A second card on the same node stacks under the first, never over it.
-  const first = cardPlace({ x: 400, y: 300, r: 10 }, 200, 80, { W, H });
-  const second = cardPlace({ x: 400, y: 300, r: 10 }, 240, 60, { W, H, above: [{ left: first.x, top: first.y, right: first.x + 200, bottom: first.y + 80 }] });
-  assert.deepEqual(second, { x: 430, y: first.y + 80 + 8, side: 'right' });
-});
-
-// ---- createShow: the page's part, over the director and a counting camera ----
+// ---- createShow: the page's part, over fake camera ops ----
 
 /** An element whose listeners run (fakedom's are no-ops). */
 function liveEl(tag) {
   const el = makeEl(tag);
   const on = new Map();
   el.addEventListener = (type, fn) => { if (!on.has(type)) on.set(type, new Set()); on.get(type).add(fn); };
-  el.dispatch = (type) => {
-    const ev = { type, stopped: false, prevented: false, stopPropagation() { this.stopped = true; }, preventDefault() { this.prevented = true; } };
+  el.removeEventListener = (type, fn) => on.get(type)?.delete(fn);
+  el.dispatch = (type, extra = {}) => {
+    const ev = { type, stopped: false, prevented: false, ...extra, stopPropagation() { this.stopped = true; }, preventDefault() { this.prevented = true; } };
     for (const fn of on.get(type) ?? []) fn(ev);
     return ev;
   };
@@ -233,150 +313,179 @@ function liveEl(tag) {
   return el;
 }
 
-function countingCam() {
+function page({ still = false } = {}) {
+  let now = t0, blocked = false, wall = 'tour';
   const calls = [];
-  const cam = { calls, pose: () => ({ pos: { x: 0, y: 900, z: 900 }, look: { x: 0, y: 0, z: 0 } }) };
-  for (const k of ['fit', 'focus', 'cut', 'fly', 'steer']) cam[k] = (...args) => { calls.push([k, ...args]); };
-  return cam;
-}
-
-const NODES = { hv1: 'hv1', hv2: 'hv2', 'hv1-a': 'hv1', 'hv2-a': 'hv2' };
-
-function page() {
-  let now = t0;
-  const clock = () => now;
-  const cam = countingCam();
-  const resumed = [];
-  const director = createDirector(cam, { clock, resume: (from) => resumed.push(from) });
-  const block = liveEl('div'), marks = liveEl('div');
-  const doc = { createElement: (tag) => liveEl(tag) };
+  const sent = [];
+  const marks = liveEl('div');
   const shows = createShow({
-    block, marks, director, clock, doc,
-    busy: () => director.driver() === 'touch',
-    labelOf: (id) => (id in NODES ? id.toUpperCase() : null),
-    siteOf: (id) => NODES[id] ?? null,
-    screenOf: (id) => (id in NODES ? { x: 400, y: 300, r: 8 } : null),
-    size: () => ({ W: 1600, H: 900 }),
+    marks, still, doc: { createElement: (tag) => liveEl(tag) }, clock: () => now, time: () => 1793080932210,
+    blocked: () => blocked,
+    send: (m, reply) => sent.push({ m, reply }),
+    screenOf: (id) => (KNOWN.has(id) ? { x: 400, y: 300, r: 8 } : null),
+    size: () => ({ W: 1368, H: 912 }),
+    ops: {
+      camera: () => `cam@${now}`, wall: () => wall, moving: () => false, known: (id) => KNOWN.has(id), inSight: () => false,
+      fly: (...a) => calls.push(['fly', ...a]), fit: (...a) => calls.push(['fit', ...a]), stay: (...a) => calls.push(['stay', ...a]),
+      restore: (saved) => calls.push(['restore', saved]),
+    },
   });
-  const rows = () => block.children.filter((c) => c.classList.contains('galaxy-show-row'));
-  const xOf = (id) => rows().find((r) => r.dataset.id === id).children[1];
-  return { shows, director, cam, block, marks, rows, xOf, resumed, at: (ms) => { now = t0 + ms; } };
+  const kids = (cls) => marks.children.filter((c) => c.classList.contains(cls));
+  return {
+    shows, marks, calls, sent, kids, at: (ms) => { now = t0 + ms; }, finger: (v) => { blocked = v; }, setWall: (w) => { wall = w; },
+  };
 }
 
-test('createShow: each command on screen, the flyTo through the director; one tap on ✕ undoes it and the tour has the camera back', () => {
+test('createShow: show messages in, show.result out with seq on the road they came by; marks, note and pins as text', () => {
   const p = page();
-  assert.equal(p.block.hidden, true, 'nothing shown: no line');
-  const fly = msg('flyTo', { node: 'hv2-a' });
-  assert.deepEqual(p.shows.send(fly), { v: 1, ch: 'laneboard.show', re: fly.id, ok: true });
-  assert.deepEqual(p.cam.calls.at(-1).slice(0, 2), ['focus', 'hv2'], 'a planet\'s flyTo flies to its site');
-  assert.equal(p.director.driver(), 'show');
-  p.shows.send(msg('highlight', { nodes: ['hv1-a', 'hv2-a'], note: 'these break' }));
-  p.shows.send(msg('pin', { node: 'hv2', card: { title: 'Disk', text: 'Full in 2 h' } }));
-
-  assert.equal(p.block.hidden, false);
-  assert.equal(p.block.children[0].textContent, 'shown by builder-a');
-  assert.deepEqual(p.rows().map((r) => r.children[0].textContent), ['note on HV2', '2 marked', 'at HV2-A']);
-  for (const r of p.rows()) {
-    const x = r.children[1];
-    assert.equal(x.tagName, 'BUTTON');
-    assert.equal(x.textContent, '✕');
-  }
+  assert.equal(p.marks.hidden, true, 'nothing shown');
+  const road = () => {};
+  const fly = show('fly_to', { node: 'hv2-a' });
+  p.shows.receive(fly, road);
+  assert.deepEqual(p.calls.at(-1), ['fly', 'hv2-a', fly.showId]);
+  assert.deepEqual(p.sent.at(-1), { m: { type: 'show.result', showId: fly.showId, state: 'shown', seq: 1 }, reply: road });
+  const hi = show('highlight', { nodes: ['hv1', 'hv2'], note: 'same task failed twice <b>here</b>' });
+  p.shows.receive(hi);
+  assert.equal(p.sent.at(-1).reply, null, 'no road: the transport broadcasts');
+  assert.equal(p.sent.at(-1).m.seq, 2);
+  const marks = p.kids('galaxy-show-mark');
+  assert.deepEqual(marks.map((m) => m.dataset.node), ['hv1', 'hv2']);
+  assert.ok(marks.every((m) => 'showMark' in m.dataset && m.children.length === 4), 'four corners each');
+  const [note] = p.kids('galaxy-show-note');
+  assert.ok('showNote' in note.dataset);
+  assert.equal(note.textContent, `AGENT · ${clockText(1793080932210)}same task failed twice <b>here</b>`);
+  assert.equal(note.children[1].children.length, 0, 'the note is text, no element in it');
+  p.shows.receive(show('pin', { node: 'db', card: { block: 'text', title: 'disk', body: 'full in 2 h' } }));
+  const [pin] = p.kids('galaxy-pin');
+  assert.ok('pin' in pin.dataset);
+  assert.equal(pin.dataset.node, 'db');
+  const x = pin.children[0].children[1];
+  assert.equal(x.tagName, 'BUTTON');
+  assert.equal(x.textContent, '✕');
+  assert.equal(x.getAttribute('aria-label'), 'Remove pin');
+  assert.ok('pinRemove' in x.dataset);
+  assert.match(pin.style.transform, /^translate3d\(/, 'drawn beside its node');
   assert.equal(p.marks.hidden, false);
-  assert.equal(p.marks.children.filter((c) => c.classList.contains('galaxy-show-ring')).length, 2);
-  const cards = p.marks.children.filter((c) => c.classList.contains('galaxy-show-card'));
-  assert.deepEqual(cards.map((c) => c.textContent), ['these break', 'DiskFull in 2 h']);
-  assert.match(cards[0].style.transform, /^translate3d\(/, 'drawn beside its node');
-
-  // The ✕'s press never reaches the stage (it is not a first touch), and its click undoes the flyTo alone.
-  const x = p.xOf(fly.id);
-  assert.equal(x.dispatch('pointerdown').stopped, true);
+  // The pin's ✕: gone here at once, pin.close to the room; a press on the card never reaches the stage.
+  assert.equal(pin.dispatch('pointerdown').stopped, true);
   x.dispatch('click');
-  assert.equal(p.director.driver(), 'tour', 'the director\'s show is cleared');
-  assert.deepEqual(p.resumed, ['show'], 'and the tour asked for its next leg');
-  assert.deepEqual(p.rows().map((r) => r.children[0].textContent), ['note on HV2', '2 marked']);
-
-  x.dispatch('click'); // a second tap on the gone row's ✕ changes nothing
-  assert.equal(p.rows().length, 2);
-  // The highlight's ✕: its rings and its note go; the pin stays.
-  const hi = p.rows()[1].dataset.id;
-  p.xOf(hi).dispatch('click');
-  assert.equal(p.marks.children.filter((c) => c.classList.contains('galaxy-show-ring')).length, 0);
-  assert.deepEqual(p.marks.children.map((c) => c.textContent), ['DiskFull in 2 h']);
-  p.xOf(p.rows()[0].dataset.id).dispatch('click');
-  assert.equal(p.block.hidden, true);
-  assert.equal(p.marks.hidden, true);
+  assert.equal(p.kids('galaxy-pin').length, 0);
+  assert.deepEqual(p.sent.at(-1).m, { type: 'pin.close', pin: pin.dataset.pinId, seq: 4 });
+  // The test handle's view.
+  const v = p.shows.view();
+  assert.deepEqual(v.highlight, { showId: hi.showId, nodes: ['hv1', 'hv2'], note: 'same task failed twice <b>here</b>' });
+  assert.equal(v.undoable, hi.showId);
+  assert.equal(v.results.length, 4);
+  assert.equal(p.shows.emphasis('hv1'), 1);
 });
 
-test('createShow during touch: refused busy, nothing drawn, the camera stays the finger\'s; a first touch drops what was shown', () => {
+test('createShow: the finger rule through tick(); show.undo restores; the tour back clears; compare is unsupported', () => {
   const p = page();
-  p.shows.send(msg('pin', { node: 'hv1', card: { text: 'look here' } }));
-  p.shows.send(msg('flyTo', { node: 'hv1' }));
-  // The finger wakes the page: the page drops the show with the director's.
-  p.director.as('touch').fit({ ms: 1500 });
-  p.shows.drop();
-  assert.equal(p.director.driver(), 'touch');
-  assert.equal(p.block.hidden, true);
-  assert.equal(p.marks.hidden, true);
-  const calls = p.cam.calls.length;
-  for (const m of [msg('flyTo', { node: 'hv2' }), msg('highlight', { nodes: ['hv2'] }), msg('pin', { node: 'hv2', card: { text: 'x' } })]) {
-    assert.equal(p.shows.send(m).code, 'busy', m.type);
-  }
-  assert.equal(p.cam.calls.length, calls, 'nothing moved under the finger');
-  assert.equal(p.block.hidden, true);
-  assert.deepEqual(p.shows.state().items, []);
+  p.finger(true);
+  const fly = show('fly_to', { node: 'hv1' });
+  p.shows.receive(fly);
+  assert.deepEqual(p.sent.map((s) => s.m.state), ['waiting']);
+  assert.equal(p.calls.length, 0);
+  p.at(2000);
+  p.shows.tick();
+  assert.equal(p.calls.length, 0);
+  p.finger(false);
+  p.shows.tick();
+  assert.deepEqual(p.sent.map((s) => s.m.state), ['waiting', 'shown']);
+  assert.deepEqual(p.calls.at(-1), ['fly', 'hv1', fly.showId]);
+  // Undo: the camera and the wall state saved before it, through ops.restore.
+  p.shows.receive({ type: 'show.undo', showId: fly.showId });
+  assert.deepEqual(p.calls.at(-1), ['restore', { camera: `cam@${t0 + 2000}`, wall: 'tour', highlight: null }]);
+  // A highlight, then the tour comes back: marks and undo go.
+  p.setWall('explore');
+  p.shows.receive(show('highlight', { nodes: ['hv1'] }));
+  assert.equal(p.kids('galaxy-show-mark').length, 1);
+  p.shows.tourBack();
+  assert.equal(p.kids('galaxy-show-mark').length, 0);
+  assert.equal(p.shows.view().undoable, null);
+  p.shows.receive(show('compare', { a: 'hv1', b: 'hv2' }));
+  assert.deepEqual([p.sent.at(-1).m.state, p.sent.at(-1).m.why], ['skipped', 'unsupported']);
+  // Not ours: nothing.
+  const n = p.sent.length;
+  p.shows.receive({ type: 'show.result', showId: 'x', state: 'shown' });
+  p.shows.receive({ type: 'turn.end' });
+  assert.equal(p.sent.length, n);
 });
 
-test('createShow during a flight: the flyTo takes the camera from the tour mid-flight; the row goes when the director\'s hold does', () => {
-  const p = page();
-  p.director.as('tour').focus('hv1', 2.3); // the tour flies to hv1
-  p.at(900);
-  const fly = msg('flyTo', { node: 'hv2' }, { ttl: 20 });
-  assert.equal(p.shows.send(fly).ok, true);
-  assert.deepEqual(p.cam.calls.map((c) => c.slice(0, 2)), [['focus', 'hv1'], ['focus', 'hv2']], 'the show\'s flight from where the tour\'s was');
-  p.director.as('tour').fit(); // the tour's next leg under the show is not played
-  assert.equal(p.cam.calls.length, 2);
-  // A second flyTo during the show's own flight replaces it, with no hand-back to the tour between.
-  p.at(1500);
-  const next = msg('flyTo', { node: 'hv1-a' }, { ttl: 20 });
-  p.shows.send(next);
-  assert.deepEqual(p.resumed, [], 'the tour never got the camera between the two');
-  assert.deepEqual(p.rows().map((r) => r.dataset.id), [next.id]);
-  p.at(1500 + 20000);
-  p.director.tick();
-  p.shows.tick();
-  assert.equal(p.director.driver(), 'tour');
-  assert.deepEqual(p.resumed, ['show']);
-  assert.equal(p.block.hidden, true, 'the line goes with the camera');
+test('createShow: a node out of sight hides its card and brackets; a pin keeps off the page\'s controls', () => {
+  const el = (tag) => { const e = makeEl(tag); e.replaceChildren = (...k) => { e.children.length = 0; e.append(...k); }; return e; };
+  const marks = el('div');
+  const at = { hv1: { x: 700, y: 120, r: 8 }, hv2: { x: 300, y: -40, r: 8 } };
+  const shows = createShow({
+    marks, doc: { createElement: el }, clock: () => t0, screenOf: (id) => at[id] ?? null, size: () => ({ W: 759, H: 912 }),
+    avoid: () => [{ left: 600, top: 130, right: 743, bottom: 218 }], // ▶ TOUR at 759 px
+    ops: { known: (id) => id in at },
+  });
+  shows.receive(show('pin', { node: 'hv1', card: { body: 'x' } }));
+  shows.receive(show('pin', { node: 'hv2', card: { body: 'y' } }));
+  const [p1, p2] = marks.children.filter((c) => c.classList.contains('galaxy-pin'));
+  assert.equal(p2.hidden, true, 'hv2 is above the stage: its card hides, not clamped on screen');
+  assert.equal(p1.hidden, false);
+  const y = Number(p1.style.transform.match(/translate3d\([\d.-]+px, ([\d.-]+)px/)[1]);
+  assert.ok(y >= 218, `below the control (${y})`);
 });
 
-test('createShow: a refused or bad message changes nothing on screen; the countdown row shows its seconds', () => {
-  const p = page();
-  assert.equal(p.shows.send(msg('flyTo', { node: 'ghost' })).code, 'unknown-node');
-  assert.equal(p.shows.send({ v: 1, ch: 'laneboard.show', id: 'z', type: 'flyTo', data: {} }).code, 'bad-shape');
-  assert.equal(p.shows.send({ ch: 'elsewhere' }), null, 'not ours: no answer');
-  assert.equal(p.block.hidden, true);
-  p.shows.send(msg('highlight', { nodes: ['hv1'] }, { ttl: 30 }));
-  p.at(25_000);
-  p.shows.tick();
-  assert.equal(p.rows()[0].children[0].textContent, '1 marked · 0:05');
-  p.at(30_000);
-  p.shows.tick();
-  assert.equal(p.block.hidden, true);
+test('createFingerWatch: blocked while a finger is down and 3 s after the last lift; a press on a pin does not count', () => {
+  let now = 0;
+  const stage = liveEl('div');
+  const w = createFingerWatch(stage, { clock: () => now, ignore: (ev) => ev.onPin === true });
+  assert.equal(w.blocked(), false);
+  stage.dispatch('pointerdown', { pointerId: 1 });
+  now = 5000;
+  assert.equal(w.blocked(), true, 'held');
+  stage.dispatch('pointerup', { pointerId: 1 });
+  now = 7999;
+  assert.equal(w.blocked(), true);
+  now = 8000;
+  assert.equal(w.blocked(), false);
+  stage.dispatch('pointerdown', { pointerId: 2, onPin: true });
+  assert.equal(w.blocked(), false, 'a pin is not the galaxy');
+  stage.dispatch('pointerup', { pointerId: 2 });
+  assert.equal(w.blocked(), false);
+  stage.dispatch('wheel', {});
+  assert.equal(w.blocked(), true, 'a wheel turn is a touch');
 });
 
-test('galaxy.html has the show layers; main.js builds the show over the director, drops it on a wake and ticks it', () => {
+test('galaxy.html has the show layers; wall.css draws the D72 looks; main.js wires show, finger rule, transport and the handle', () => {
   const html = read('galaxy.html');
-  assert.match(html, /<div class="galaxy-show-marks" id="galaxy-show-marks" aria-hidden="true" hidden><\/div>/);
-  assert.match(html, /<div class="galaxy-show" id="galaxy-show" role="status" hidden><\/div>/);
-  assert.ok(html.indexOf('id="wall-lock"') < html.indexOf('id="galaxy-show-marks"'));
-  assert.ok(html.indexOf('id="galaxy-show-marks"') < html.indexOf('id="wall-caption"'), 'the marks under the words');
-  const js = read('js/wall/galaxy/main.js');
-  assert.match(js, /createShow\(\{/);
-  assert.match(js, /director: \{ show: \(cmd\) => show\(cmd\), clear: \(id\) => director\.clear\(id\) \}/);
-  assert.match(js, /busy: \(\) => director\.driver\(\) === 'touch'/);
-  assert.match(js, /shows\?\.drop\(\)/);
-  assert.match(js, /shows\?\.tick\(\)/);
-  assert.match(js, /cam\.onDraw\(shows\.draw\)/);
+  assert.match(html, /<canvas class="galaxy-show-veil" id="galaxy-show-veil" aria-hidden="true" hidden><\/canvas>/);
+  assert.match(html, /<div class="galaxy-show-marks" id="galaxy-show-marks" hidden><\/div>/);
+  assert.doesNotMatch(html, /id="galaxy-show"/, 'no SHOWN BY rows');
+  assert.ok(html.indexOf('id="galaxy-labels"') < html.indexOf('id="galaxy-show-veil"'), 'the veil dims the names too');
+  assert.ok(html.indexOf('id="galaxy-show-veil"') < html.indexOf('id="wall-frame"'), 'not the Wall\'s words');
+  assert.ok(html.indexOf('id="galaxy-show-marks"') < html.indexOf('id="wall-caption"'), 'the marks under the caption');
   const css = read('css/wall.css');
-  assert.match(css, /\.galaxy-show-x \{[^}]*width: 48px;[^}]*height: 48px;/);
+  const rule = (sel) => css.match(new RegExp(`\\n${sel.replace(/[.>]/g, (c) => `\\${c}`)} \\{([^}]*)\\}`))?.[1] ?? '';
+  assert.match(rule('.galaxy-show-mark > i'), /width: 12px;[^]*height: 12px;[^]*border: 0 solid var\(--accent\);/);
+  assert.match(css, /\.galaxy-show-mark > \.tl \{ top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; \}/);
+  assert.match(rule('.galaxy-show-note'), /max-width: 360px;[^]*padding: 16px;/);
+  assert.match(rule('.galaxy-show-note,\n.galaxy-pin'), /background: color-mix\(in oklch, var\(--bg-elevated\) 99%, transparent\);[^]*border: 1px solid var\(--line-strong\);/);
+  assert.match(rule('.galaxy-show-who'), /font-size: 16px;[^]*text-transform: uppercase;[^]*color: var\(--text-3\);/);
+  assert.match(rule('.galaxy-show-note-text'), /font-size: 20px;[^]*color: var\(--text-1\);[^]*-webkit-line-clamp: 3;/);
+  assert.match(css, /\n\.galaxy-pin \{\n  width: 320px;\n  max-height: 240px;/);
+  assert.match(rule('.galaxy-pin-head'), /height: 48px;[^]*padding-left: 16px;/);
+  assert.match(rule('.galaxy-pin-remove'), /width: 48px;[^]*height: 48px;[^]*font-size: 24px;[^]*color: var\(--text-2\);/);
+  assert.match(rule('.galaxy-pin-title'), /font-size: 20px;/);
+  assert.match(rule('.galaxy-pin-body'), /font-size: 18px;/);
+  assert.match(rule('.galaxy-pin-leader'), /height: 1px;[^]*background: var\(--line-strong\);/);
+  assert.doesNotMatch(css, /\.galaxy-show-row|\.galaxy-show-x|\.galaxy-show-ring/);
+  const js = read('js/wall/galaxy/main.js');
+  assert.match(js, /const shows = park \? null : createShow\(\{/);
+  assert.match(js, /createFingerWatch\(stage, \{ ignore: \(ev\) => Boolean\(ev\.target\?\.closest\?\.\('\[data-pin\]'\)\) \}\)/);
+  assert.match(js, /shows\?\.tick\(\)/);
+  assert.match(js, /shows\?\.tourBack\(\)/);
+  assert.match(js, /cam\.onDraw\(shows\.draw\)/);
+  assert.match(js, /touch\?\.explore\(performance\.now\(\) \+ ms\)/, 'a show explores until its movement ends');
+  assert.match(js, /showFlightMs\(cam\.pose\(\), cam\.shotFor\(to\)\)/, 'the Map\'s flight time');
+  assert.match(js, /page\.dataset\.wallState = ws/, 'data-wall-state on the root (W1)');
+  assert.match(js, /globalThis\.__cockpitView = \{/);
+  for (const k of ['flyTo', 'fitNodes', 'camera: cameraNow', 'setCamera', 'screenOf', 'onDraw', 'emphasis']) assert.ok(js.includes(k), k);
+  assert.doesNotMatch(js, /shows\?\.drop\(\)/, 'a touch no longer wipes what the agent drew');
+  // Words are text only: show.js never writes markup.
+  assert.doesNotMatch(read('js/wall/galaxy/show.js'), /innerHTML|insertAdjacentHTML|outerHTML/);
 });

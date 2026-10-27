@@ -74,77 +74,104 @@ The page itself never scrolls or zooms: every gesture moves the camera.
 ## Who drives the camera
 
 Three things want the camera: the **tour**, a **finger**, and a **show**
-command from another page (below). One director decides which of them
+command from the cockpit's agent (below). One director decides which of them
 drives, so they never fight over it. The order is fixed: `touch` first,
-then `show`, then the `tour`.
+then `show`, then the `tour`. The page says which mode it is in on its root:
+`<html data-wall-state="tour">` or `"explore"`.
 
-- A finger always wins. The first touch takes the camera from whoever has
-  it and eases out to the overview; a show on screen ends with it (it is
-  dropped, never brought back later).
-- A show command while a finger drives is refused (`busy`), not queued:
-  nothing moves later out of nowhere.
-- A show command while the tour drives takes the camera from wherever the
-  tour has it. A newer one replaces the older.
+- A finger always wins. The first touch takes the camera from the tour and
+  eases out to the overview. A touch while a show holds the camera takes it
+  where it is (no ease out); what the agent marked stays.
+- A show command is a touch that did not come from the owner: it stops the
+  tour mid-flight, the page explores, and the camera flies to the target in
+  0.3-0.9 s by distance, never at the tour's slow pace. A newer one replaces
+  one still in flight, from where the camera is.
+- The owner's finger wins over a show too: a show that would move the camera
+  waits while a finger is on the galaxy and for 3 s after it lifts, then
+  runs; if it is still blocked 10 s after it came, it is dropped. Nothing
+  flies under a finger.
 - The tour takes the camera back a minute after the last touch (never from
-  under a finger that is still down), and when a show ends: its time runs
-  out, it is cleared, or a minute passes.
+  under a finger that is still down), or a minute after a show's flight
+  ended. Coming back, it clears the agent's marks and note (pins stay).
 
 Every hand-over is one eased flight from where the camera is, never a cut.
 In reduced motion it is a cut with a short fade instead. A
 `?role=explore` screen starts with the finger driving: the tour drives only
-after `▶ TOUR`, and until then shows are refused `busy`.
+after `▶ TOUR`; a show moves its camera like any explore, and no minute
+hands it to the tour afterwards.
 
 ## Show commands
 
-Another page (the cockpit's agent, a controller page, a script in a
-browser) can point at things on the Wall: fly the camera to a node, mark
-some nodes with a note, pin a card next to one, and clear what it showed.
-Show commands are display-only: they never change anything in the fleet.
-Each says on screen who showed it (`SHOWN BY <source>`, top right, one row
-per command) and each row has its own `✕`, so one tap undoes it.
-
-A command is one JSON object:
+The cockpit's agent can point at things on the Wall: fly the camera to a
+node, mark some nodes with a note, pin a small card next to one, and clear
+its marks. Show commands are display-only: they never change anything in
+the fleet. Their messages are the cockpit's (its protocol, section 4, and
+its show spec, `c4-show-canvas.md` sections 2-5, in `docs/plans/cockpit/spec/`): the
+room sends a screen one `show` per command and the screen answers with
+`show.result`.
 
 ```json
-{ "v": 1, "ch": "laneboard.show", "id": "c-41", "src": "agent:cockpit",
-  "type": "pin", "ttl": 30,
-  "data": { "node": "storage", "card": { "title": "pool 97% full", "text": "Full in about 2 h" } } }
+{ "type": "show", "showId": "sh-0041", "turnId": "t-0132", "cmd": "highlight",
+  "args": { "nodes": ["storage", "db"], "note": "Dumps stop when the pool fills" },
+  "receivedAt": 1793080932210 }
 ```
 
-| `type` | `data` | What it shows |
+| `cmd` | `args` | What the Wall does |
 | --- | --- | --- |
-| `flyTo` | `{ "node": <id> }` | Flies the camera there (the hub's `__core` is the overview) and holds it while the command lasts. |
-| `highlight` | `{ "nodes": [<id>, …], "note"?: <text> }` | Marks up to 16 nodes, with the note next to them. |
-| `pin` | `{ "node": <id>, "card": { "title"?: <text>, "text": <text> } }` | A plain text card next to the node; two at most, the oldest goes. |
-| `clear` | `{ "id"?: <id> }` | Ends one command, or everything shown. |
+| `fly_to` | `{ "node": <id> }` | Flies the camera to the node's system (the hub's `__core` is the overview). |
+| `highlight` | `{ "nodes": [<id>, …], "note"?: <text> }` | Four accent corner brackets round each node (up to 12), the rest of the galaxy dimmed to 0.16; the note on a plate beside the first, headed `AGENT · 07:12`. The camera stays if all are in sight, else it fits them. A new highlight replaces the old. |
+| `pin` | `{ "node": <id>, "card": { "block": "text", "title"?: <text>, "body": <text> } }` | A 320 px card beside the node, headed `AGENT · 07:12`, with a `✕`; it follows the node. Three at most: a fourth replaces the oldest. |
+| `clear` | `{}` | Removes the brackets and the note; the camera and the pins stay. |
+| `compare`, `scrub` | | Not on the Wall: answered `skipped`, `unsupported`. |
 
-`id` is the sender's (up to 64 characters; a repeated id is ignored),
-`src` names the sender (`agent` when left out). `ttl` is in seconds: 60
-when left out, 600 at most, `0` until undone; a `flyTo` holds the camera
-for a minute at most. Words are plain text, never HTML: a note or a card's
-text up to 140 characters, a title up to 40, all on one line. A message
-bigger than 4 KB is refused.
+Words are plain text, never HTML, cut with `…` at their limit: a note at
+120 characters (up to three lines), a pin's title at 48 and its body at
+280. The room keeps the pins (`pin.put`, `pin.remove`); a pin's `✕` removes
+it here at once and tells the room (`pin.close`).
 
-**How to send one.** From a page of the same origin, on the channel
-`BroadcastChannel('laneboard.show')`. From a page that embeds the Wall in a
-frame or opened it, by `postMessage`, if its origin is the Wall's own or
-one named in `?showOrigins=`. The answer goes back the way the command
-came, matched by `re`:
+The screen answers each `show` once, or twice when it had to wait:
 
 ```json
-{ "v": 1, "ch": "laneboard.show", "re": "c-41", "ok": false, "code": "busy" }
+{ "type": "show.result", "seq": 51, "showId": "sh-0041", "state": "shown" }
 ```
 
-| `code` | Why |
+| `state` | When |
 | --- | --- |
-| `bad-shape` | The message does not have the shape above, or is too big. |
-| `unknown-node` | No node with that id on this fleet. |
-| `busy` | A person has the screen (a `?role=explore` screen too, until `▶ TOUR`). |
+| `shown` | The Wall showed it (a camera move has started). |
+| `waiting` | A finger is on the galaxy, or lifted less than 3 s ago; a second answer follows. |
+| `skipped` | It was not shown; `why` says why. |
 
-A message on another channel or version, or from another origin, gets no
-answer. Every Wall that hears a command shows it: screens have no names
-yet. To see it without a sender, `?show=demo` plays a recorded
-conversation over the demo fleet.
+| `why` | Why |
+| --- | --- |
+| `in use` | The owner kept the galaxy busy for 10 s, or a newer command replaced this waiting one. |
+| `unsupported` | `compare`, `scrub`, an unknown command, or a pin block other than `text`. |
+| `not drawn` | No node with that id on this galaxy. |
+| `bad-args` | The message does not have the shape above. |
+
+**Undo.** The owner's one tap on `UNDO` in the conversation reaches every
+screen as `{ "type": "show.undo", "showId": "sh-0041" }`. The Wall puts back
+what it saved just before that command: if it was touring, the tour at
+once; else the camera by a normal flight, with the marks and the note as
+they were. Only the latest camera command can be undone; the tour coming
+back drops it. A pin's undo removes that pin.
+
+**For the cockpit's code and tests** the page sets `window.__cockpitView`:
+`page` (`"wall"`), `wall.state()` (the same as `data-wall-state`), `map`
+(`flyTo(id)`, `fitNodes(ids)`, `camera()`, `setCamera(camera)`, each
+answering a Promise that is true once the camera lands; `screenOf(id)` in
+page px, `onDraw(cb)`, `emphasis(id)`) and `show.state()` (the highlight,
+the pins, what can be undone, what waits, the last answers). It moves the
+camera and reads; it sends nothing.
+
+**Until the Wall is a paired screen** the same messages reach it from a
+page standing in for the room. From a page of the same origin, on the
+channel `BroadcastChannel('laneboard.show')`; from a page that embeds the
+Wall in a frame or opened it, by `postMessage`, if its origin is the Wall's
+own or one named in `?showOrigins=`. The answers go back the way the
+command came. A message of another type, from another origin, or bigger
+than 4 KB gets no answer. Every Wall that hears a command shows it. To see
+it without a sender, `?show=demo` plays a recorded conversation over the
+demo fleet.
 
 ## A tablet in kiosk mode
 
@@ -164,7 +191,8 @@ tablet is not on the same machine) and open
 
 Set the tablet's screen timeout to never and keep it on power: the page
 does not hold the screen awake itself. Landscape is the layout the Wall is
-judged on; portrait and half a screen (684 px wide) keep the names, the
+judged on; portrait and half a screen (684 px wide; 759 px, or 1271 px with
+the canvas folded, in the cockpit's split) keep the names, the
 trouble and the touch targets readable too. If the tablet is not the size
 the page guesses, tell it the screen's height in mm (`?mm=`).
 
@@ -187,8 +215,8 @@ default; an unknown value is ignored.
 | `?ratio=<n>` | galaxy | Pins the pixel ratio the canvas is drawn at (0.5 to 4, still capped by the screen's), for filming or comparing frames. |
 | `?at=<site>` | galaxy | Parks the camera on one site (its id or its name), no tour, no touch steering: for stills. |
 | `?open=0..1` | galaxy | With `?at`: how far the parked system is opened (1, the default, fully). |
-| `?role=tour\|explore` | galaxy | What the screen is for. `tour` (the default) tours by itself and lends itself to a finger for a minute. `explore` is a person's screen: it starts at the overview with no tour until `▶ TOUR` asks for one, never hands itself back after a touch (the line reads `MANUAL`), and refuses show commands while a person drives it. `?at` ignores it. |
-| `?show=demo` | galaxy | Plays a recorded conversation's show commands over the demo fleet, again and again, with the tour between: fly to the crit, pin a note, highlight what it breaks. |
+| `?role=tour\|explore` | galaxy | What the screen is for. `tour` (the default) tours by itself and lends itself to a finger for a minute. `explore` is a person's screen: it starts at the overview with no tour until `▶ TOUR` asks for one and never hands itself back after a touch or a show (the line reads `MANUAL`). `?at` ignores it. |
+| `?show=demo` | galaxy | Plays a recorded conversation's show commands over the demo fleet, every two minutes, with the tour between: fly to the crit, pin a note, highlight what it breaks, clear, and the owner's undo on the pin. |
 | `?showOrigins=<origins>` | galaxy | Other origins allowed to send show commands by `postMessage` (comma-separated, exact origins such as `https://hub.example.invalid`). The page's own origin always may, also by `BroadcastChannel('laneboard.show')`. |
 | `?mm=<n>` | both | The screen's height in mm, so the type is sized for reading at its distance on this screen rather than a guessed one. |
 | `?variant=<id>` | wall | The 2D layout: `radial` (the default), `orbits`, `islands`, `mosaic`, `islands-tiles` (the galaxy's fallback: trouble as filled tiles, only the held site's links). `galaxy` opens `galaxy.html` with the other switches. An unknown name is radial, and the tag says `UNKNOWN VARIANT "…" · RADIAL`. |

@@ -22,8 +22,9 @@ const rule = (sel) => {
   return css.slice(at, css.indexOf('}', at));
 };
 
-// Half the tablet, half a 1080p screen, and the whole tablet for comparison.
-const STAGES = [[684, 912], [960, 1080], [1368, 912]];
+// Half the tablet, half a 1080p screen, and the whole tablet for comparison; and the cockpit's split
+// (screens.md §1, D284): the wall half at 1368x912 is 759 px wide, 1271 px with the canvas folded.
+const STAGES = [[684, 912], [759, 912], [960, 1080], [1271, 912], [1368, 912]];
 const FLOOR = 48;
 
 test('half a screen: the far line and the why under it keep one band, clear of the clock', () => {
@@ -44,12 +45,14 @@ test('half a screen: the far line and the why under it keep one band, clear of t
   }
 });
 
-test('half a screen: the far word stays at a 3 m step at 684 px', () => {
-  // Half the tablet: the demo's word is smaller than on the whole tablet, still far above the name step.
-  const half = fleetSize('hv2 · storage', 684, 912);
-  assert.ok(half >= STEPS.heroMin && half > STEPS.name, `hv2 · storage at ${half}vmin`);
-  // 3 m check from the still: at half the width the word is 62 css px, the 3 m floor is about 40 (night 1's Q3).
-  assert.ok((half * 684) / 100 >= 40, `${Math.round((half * 684) / 100)} px`);
+test('half a screen: the far word stays at a 3 m step at 684 px and in the cockpit\'s split (759, 1271 px)', () => {
+  for (const w of [684, 759, 1271]) {
+    // Half the tablet: the demo's word is smaller than on the whole tablet, still far above the name step.
+    const half = fleetSize('hv2 · storage', w, 912);
+    assert.ok(half >= STEPS.heroMin && half > STEPS.name, `${w}: hv2 · storage at ${half}vmin`);
+    // 3 m check from the still: at half the width the word is 62 css px, the 3 m floor is about 40 (night 1's Q3).
+    assert.ok((half * Math.min(w, 912)) / 100 >= 40, `${w}: ${Math.round((half * Math.min(w, 912)) / 100)} px`);
+  }
 });
 
 test('half a screen: every touch target is sized in px, at night 2\'s 48 px floor or above', () => {
@@ -60,13 +63,14 @@ test('half a screen: every touch target is sized in px, at night 2\'s 48 px floo
   assert.match(back, new RegExp(`min-height: ${BACK.hitPx}px;`));
   assert.match(rule('.galaxy-fan-row'), /height: 48px;/);
   assert.ok(FAN.rowPx >= FLOOR);
-  assert.match(rule('.galaxy-show-row'), /height: 48px;/);
-  const x = rule('.galaxy-show-x');
+  // A pin's ✕ (cockpit c4 §3.4): 48x48 px, its header row 48 px.
+  const x = rule('.galaxy-pin-remove');
   assert.match(x, /width: 48px;/);
   assert.match(x, /height: 48px;/);
+  assert.match(rule('.galaxy-pin-head'), /height: 48px;/);
   // Their words have a px floor too, so a small vmin does not shrink them under what a finger reads.
   assert.match(back, /font-size: max\(2\.7vmin, 20px\);/);
-  assert.match(rule('.galaxy-show-row'), /font-size: max\(2\.7vmin, 20px\);/);
+  assert.match(x, /font-size: 24px;/);
 });
 
 test('half a screen: a full fan at 684 px stays on the stage, rows 48 px and apart', () => {

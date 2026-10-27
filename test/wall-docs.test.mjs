@@ -10,7 +10,8 @@ import { FX_NAMES } from '../public/js/wall/galaxy/fx.js';
 import { ROLES } from '../public/js/wall/galaxy/touch.js';
 import { VARIANTS } from '../public/js/wall/variants.js';
 import { SOURCES } from '../public/js/wall/galaxy/director.js';
-import { SHOW, SHOW_TYPES } from '../public/js/wall/galaxy/show.js';
+import { RESULT_STATES, SHOW, SHOW_CMDS, SHOW_LATER, WHY } from '../public/js/wall/galaxy/show.js';
+import { TRANSPORT } from '../public/js/wall/galaxy/transport.js';
 import { SHOW_DEMO_SCRIPT } from '../public/js/wall/galaxy/showdemo.js';
 
 const root = path.resolve(import.meta.dirname, '..');
@@ -108,26 +109,33 @@ test('T44: docs/wall.md says who drives the camera (D10), in the director\'s ord
   const at = SOURCES.map((s) => doc.indexOf(`\`${s}\``));
   for (const [i, s] of SOURCES.entries()) assert.ok(at[i] >= 0, `source ${s}`);
   assert.deepEqual([...at].sort((a, b) => a - b), at, 'touch, then show, then tour');
-  assert.match(doc, /refused \(`busy`\), not queued/);
+  assert.match(doc, /data-wall-state="tour"/);
+  assert.match(doc, /waits while a finger is on the galaxy and for 3 s after it lifts/, 'the owner\'s finger rule (D70)');
+  assert.match(doc, /10 s after it came, it is dropped/);
+  assert.match(doc, /0\.3-0\.9 s by distance/, 'D68');
   assert.match(doc, /never a cut/);
 });
 
-test('T44: docs/wall.md gives the show message: envelope, every command, every answer code, both roads', () => {
+test('T44: docs/wall.md gives the show messages (the cockpit\'s protocol §4): every command, state and why, the undo, the handle, both dev roads', () => {
   const doc = section('Show commands');
-  assert.ok(doc.includes(`"v": ${SHOW.v}, "ch": "${SHOW.ch}"`), 'the envelope');
-  for (const t of SHOW_TYPES) assert.ok(doc.includes(`| \`${t}\` |`), `a row for ${t}`);
-  const codes = new Set();
-  for (const f of ['show.js', 'transport.js', 'director.js']) {
-    for (const m of read(`public/js/wall/galaxy/${f}`).matchAll(/(?:reply\([^)]*|code: |refused: )'([a-z-]+)'/g)) codes.add(m[1]);
-  }
-  assert.deepEqual([...codes].sort(), ['bad-shape', 'busy', 'unknown-node']);
-  for (const c of codes) assert.ok(doc.includes(`| \`${c}\` |`), `a row for code ${c}`);
-  assert.ok(doc.includes(`BroadcastChannel('${SHOW.ch}')`), 'the channel');
+  assert.ok(doc.includes('"type": "show", "showId": "sh-0041", "turnId": "t-0132", "cmd":'), 'the message');
+  assert.ok(doc.includes('"type": "show.result"'), 'the answer');
+  for (const c of SHOW_CMDS) assert.ok(doc.includes(`| \`${c}\` |`), `a row for ${c}`);
+  for (const c of SHOW_LATER) assert.ok(doc.includes(`\`${c}\``), `${c} named`);
+  for (const st of RESULT_STATES) assert.ok(doc.includes(`| \`${st}\` |`), `a row for state ${st}`);
+  const whys = new Set();
+  for (const m of read('public/js/wall/galaxy/show.js').matchAll(/WHY\.(\w+)/g)) whys.add(WHY[m[1]]);
+  assert.deepEqual([...whys].sort(), Object.values(WHY).sort(), 'show.js uses every why');
+  for (const w of Object.values(WHY)) assert.ok(doc.includes(`| \`${w}\` |`), `a row for why ${w}`);
+  assert.ok(doc.includes('"type": "show.undo"'), 'the undo');
+  assert.match(doc, /window\.__cockpitView/);
+  for (const k of ['flyTo', 'fitNodes', 'camera()', 'setCamera', 'screenOf', 'onDraw', 'emphasis', 'show.state()']) assert.ok(doc.includes(k), k);
+  assert.ok(doc.includes(`BroadcastChannel('${TRANSPORT.ch}')`), 'the channel');
   assert.match(doc, /`postMessage`/);
   assert.match(doc, /`\?showOrigins=`/);
-  for (const n of [SHOW.ttlS, SHOW.maxTtlS, SHOW.maxNodes, SHOW.maxText, SHOW.maxTitle, SHOW.maxId]) {
-    assert.ok(doc.includes(String(n)), `the limit ${n}`);
-  }
+  for (const n of [SHOW.maxNodes, SHOW.maxNote, SHOW.maxTitle, SHOW.maxBody]) assert.ok(doc.includes(String(n)), `the limit ${n}`);
+  assert.match(doc, /Three at most/);
+  assert.ok(doc.includes(`${TRANSPORT.maxBytes / 1024} KB`));
   assert.match(doc, /`\?show=demo`/);
 });
 
@@ -136,7 +144,7 @@ test('T44: every feature has demo data: the large demo sets each feed field, the
   assert.match(hub, /glow: \{ rgb:/, 'a light with glow');
   assert.match(hub, /\.ring = \{ progress/, 'a print with ring');
   assert.match(hub, /\.countdown = \{ at:/, 'a scheduled job with countdown');
-  assert.deepEqual([...new Set(SHOW_DEMO_SCRIPT.map((c) => c.type))].sort(), [...SHOW_TYPES].sort());
+  assert.deepEqual([...new Set(SHOW_DEMO_SCRIPT.filter((c) => c.cmd).map((c) => c.cmd))].sort(), [...SHOW_CMDS].sort());
   const doc = section('Feed fields');
   assert.match(doc, /demo fleet \(`--size large`\) carries all three/);
 });

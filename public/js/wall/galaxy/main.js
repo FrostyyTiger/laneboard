@@ -67,23 +67,31 @@
 // `?role=explore` (night 4 T42, touch.js roleOf): a person's screen. The page
 // starts in explore at the overview, no tour until `▶ TOUR` (or
 // `__galaxyTouch.handBack()`) asks for it, and no minute hands it back after a
-// touch: the line reads `MANUAL`. A show is refused `busy` there, as under a
-// finger. `?role=tour` (the default) is the page as above.
+// touch: the line reads `MANUAL`. A show moves its camera as any explore's,
+// and no minute hands it to the tour after. `?role=tour` (the default) is the page as above.
 // One camera director (night 4 T14, director.js createDirector): nothing here
 // calls camera.js's moves. The tour flies through `director.as('tour')`, a
 // finger (wake, taps, back, gestures) through `finger`, a show command
 // through `show`; the director plays the one that has the camera (touch >
-// show > tour) and refuses the rest, every hand-over eased from the pose.
+// show > tour; a tour leg under the others is refused), every hand-over eased from the pose.
 // Effects (§7.C, fx.js): `?fx=beacon,warp,afterglow,activity,sweep` (comma-separated, all off by default);
 // `<html data-fx>` lists those on. `sweep` (night 4 T18) turns once per tour cycle while the camera
 // rests at the overview in the tour's hands; a finger, a show or a flight stops it.
-// Show commands (night 4 T37, show.js createShow): `flyTo`, `highlight`, `pin`, `clear` in Q16's
-// envelope; `SHOWN BY <src>` top right with a row and a `✕` per command, rings and cards on the
-// galaxy; a first touch ends them all. They arrive (night 4 T38, transport.js) by
+// Show commands (night 4 T37, show.js createShow; aligned with the cockpit spec 2026-10-27,
+// c4-show-canvas.md §2-§5, protocols.md §4): the room's `show` (`fly_to`, `highlight`, `pin`,
+// `clear`), `show.undo`, `pin.put`, `pin.remove`; the page answers `show.result` (and `pin.close`).
+// A show is a touch that did not come from the owner: the tour stops, `data-wall-state` reads
+// `explore`, the camera flies in 320-900 ms, and the tour comes back 60 s after the movement ended
+// (touch.js's minute), dropping the highlight and the undo. The owner's finger wins (D70, show.js).
+// Highlights are accent brackets with the rest dimmed; pins sit beside their nodes with a `✕`.
+// Until the Wall is a paired screen they arrive (night 4 T38, transport.js, a dev adapter) by
 // `BroadcastChannel('laneboard.show')` from the same origin, or by `postMessage` from this origin
 // and those in `?showOrigins=https://hub.example.invalid,…` (exact origins); each answered on its road.
-// `?show=demo` (night 4 T39, showdemo.js) plays a recorded conversation's commands over the large
+// `?show=demo` (night 4 T39, showdemo.js) plays a recorded conversation's messages over the large
 // demo fleet into the same show, with the tour between: fly to the crit, pin a note, highlight what it breaks.
+// The cockpit's handle (screens.md §9, D221): `window.__cockpitView` = `{ page: 'wall', wall: { state },
+// map: { flyTo, fitNodes, camera, setCamera, screenOf, onDraw, emphasis }, show: { state } }`;
+// display only, nothing in it sends or changes the fleet.
 
 import { createPerf } from '../perf.js';
 import { TIMING, createTour, timingFor, tourOrder } from '../tour.js';
@@ -91,7 +99,7 @@ import { arrivedTimingFor, createCaption, coverOf, STILL_CAPTION_TIMING } from '
 import { createFrame } from '../frame.js';
 import { LOCK_TIMING, STILL_LOCK_TIMING } from '../lock.js';
 import { pxPerMm, screenOf, stepsFor } from '../type.js';
-import { FLIGHT, createGalaxyCamera } from './camera.js';
+import { FIT, FLIGHT, createGalaxyCamera, fitPose, showFlightMs } from './camera.js';
 import { createHud } from './hud.js';
 import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
@@ -101,8 +109,8 @@ import { paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
-import { createDirector } from './director.js';
-import { createShow } from './show.js';
+import { OVERVIEW, STAY, createDirector } from './director.js';
+import { SHOW, createFingerWatch, createShow } from './show.js';
 import { createTransport, showOrigins } from './transport.js';
 import { createShowDemo, wantsShowDemo } from './showdemo.js';
 import { createSweep, critAges, flowJobs, parseFx, planeAngle, siteNews, sweepStep, workingPlanets } from './fx.js';
@@ -254,15 +262,20 @@ export function boot() {
     still: reduced,
     driver: role === 'explore' && !park ? 'touch' : 'tour', // a person's screen: the finger drives from the start
     held: () => touch != null && touch.mode() !== 'tour', // touch.js's minute hands a finger's page back
-    resume: (from) => { if (from === 'show') tour.resume(); },
+    resume: () => undefined, // every hand-back comes through touch.js's resume, which asks the tour itself
   });
   const finger = director.as('touch');
   tour = createTour(director.as('tour'), { timing: reduced ? stillTourTimingFor(demo) : timingFor(fast) });
-  // A show command (§7 Night 4 B wires the sender and its plate): the tour stops under it and
-  // resumes after it; the tour's plate goes, so no word names a site the camera has left.
-  const show = (cmd) => {
-    const r = director.show(cmd);
-    if (r.move) { tour.stop(); hud.release(); }
+  // A show's camera move (c4 §2): the tour stops under it (its plate goes, so no word names a site
+  // the camera has left), the page explores, and its idle minute counts from the movement's end.
+  // The flight takes the Map's 320-900 ms by distance (D68); reduced motion jumps.
+  const show = (to, id = null) => {
+    const ms = reduced || to.kind === 'stay' || to.cut ? 0 : showFlightMs(cam.pose(), cam.shotFor(to));
+    const r = director.show({ id, to, ms });
+    tour.stop();
+    hud.release();
+    fan?.hide();
+    touch?.explore(performance.now() + ms);
     return r;
   };
 
@@ -315,9 +328,9 @@ export function boot() {
   if (fan) cam.onDraw(fan.draw);
   shownNames = labels.shown;
 
-  // The show commands (night 4 T37, show.js): a flyTo through the director's `show`, the rest drawn
-  // here. A node is known when the galaxy draws it: a site (fly there), a member (fly to its site)
-  // or the sun (the overview).
+  // The show commands (show.js): the camera through the director's `show`, the rest drawn here.
+  // A node is known when the galaxy draws it: a site (fly there), a member (fly to its site) or the
+  // sun (the overview).
   const nodeAt = (id) => {
     const w = galaxy.world;
     if (!w || id == null) return null;
@@ -330,27 +343,108 @@ export function boot() {
     }
     return null;
   };
+  const SUN = { x: 0, y: 0, z: 0 };
+  // Where a show flies for a node: its site's shot at the Map's zoom, or the overview for the sun.
+  const targetOf = (id, z = SHOW.zoom) => {
+    const at = nodeAt(id);
+    if (!at) return null;
+    return at.site ? { kind: 'site', id: at.site, zoom: z } : OVERVIEW;
+  };
+  // fitNodes (screens.md §9.2 M2): the ids' stars in sight with `pad` to spare; one system's own
+  // nodes fly to that system (it opens), the rest fit their stars (a fitted pose folds the systems).
+  const fitTarget = (ids, pad = FIT.padPx) => {
+    const ats = ids.map((id) => nodeAt(id)).filter(Boolean);
+    if (!ats.length) return null;
+    const sites = new Set(ats.map((a) => a.site));
+    if (sites.size === 1) return targetOf(ids.find((id) => nodeAt(id)));
+    const w = galaxy.world;
+    const pts = ats.map((a) => (a.site ? w.byId.get(a.site)?.home : SUN)).filter(Boolean);
+    const anySite = w.sites.find((x) => !x.gone);
+    const near = anySite ? cam.shotFor({ kind: 'site', id: anySite.id, zoom: FIT.maxZoom }) : null;
+    const far = cam.home();
+    const dist = (p) => (p ? Math.hypot(p.pos.x - p.look.x, p.pos.y - p.look.y, p.pos.z - p.look.z) : 0);
+    const pose = fitPose(pts, cam.pose() ?? far, {
+      fov: galaxy.camera.fov, ...galaxy.size(), padPx: pad, minDist: dist(near), maxDist: 3 * dist(far), box: freeBox(),
+    });
+    return pose ? { kind: 'free', pose } : null;
+  };
+  // A Promise for a camera move (M1, M2, M4): true once it lands, false when a newer move cut it.
+  const landed = () => new Promise((resolve) => {
+    const v = cam.version();
+    const off = cam.onDraw(() => {
+      if (cam.version() !== v) { off(); resolve(false); } else if (!cam.flight()) { off(); resolve(true); }
+    });
+  });
+  const cameraNow = () => {
+    const p = cam.pose();
+    return p ? { x: p.pos.x, y: p.pos.y, z: p.pos.z, spin: 0, look: { ...p.look }, want: cam.want() } : null;
+  };
+  // setCamera (M4): back to a saved camera, its site or overview as it was held, else its free pose.
+  const cameraTarget = (c) => {
+    const w = c?.want;
+    if (w?.kind === 'site') return { kind: 'site', id: w.id, zoom: w.zoom };
+    if (w?.kind === 'overview') return OVERVIEW;
+    return c && [c.x, c.y, c.z].every(Number.isFinite) && c.look ? { kind: 'free', pose: { pos: { x: c.x, y: c.y, z: c.z }, look: { ...c.look } } } : null;
+  };
+  const setCamera = (c, { flight = true } = {}) => {
+    let to = cameraTarget(c);
+    if (!to) return Promise.resolve(false);
+    if (!flight) to = to.kind === 'site' ? { ...to, cut: true } : { kind: 'free', pose: cam.shotFor(to), cut: true };
+    show(to);
+    return landed();
+  };
+  const stage = document.getElementById('galaxy-stage');
+  const canvasBox = () => canvas.getBoundingClientRect();
+  // In sight: inside the part the words leave free (framing.js), `pad` to spare.
+  const inSight = (ids, pad = SHOW.padPx) => {
+    const { W, H } = galaxy.size();
+    const b = freeBox();
+    return ids.every((id) => {
+      const at = cam.screenOf(id);
+      return at != null && at.x >= b.x0 * W + pad && at.x <= b.x1 * W - pad && at.y >= b.y0 * H + pad && at.y <= b.y1 * H - pad;
+    });
+  };
+  // The owner's finger rule (D70): a capturing ear on the stage; a press on a pin does not count.
+  const fingers = park ? null : createFingerWatch(stage, { ignore: (ev) => Boolean(ev.target?.closest?.('[data-pin]')) });
+  let wire = null;
   const shows = park ? null : createShow({
-    block: document.getElementById('galaxy-show'),
     marks: document.getElementById('galaxy-show-marks'),
-    director: { show: (cmd) => show(cmd), clear: (id) => director.clear(id) },
-    busy: () => director.driver() === 'touch',
-    labelOf: (id) => { const at = nodeAt(id); return at ? String(at.node?.label ?? id) : null; },
-    siteOf: (id) => nodeAt(id)?.site ?? null,
+    veil: document.getElementById('galaxy-show-veil'),
+    veilColor: style.getPropertyValue('--bg-canvas').trim() || undefined,
+    still: reduced,
+    blocked: () => fingers.blocked(),
+    send: (msg, reply) => wire?.send(msg, reply),
     screenOf: cam.screenOf,
     size: galaxy.size,
+    avoid: () => touchCovers(), // the back control and the manual line: a pin's ✕ never under ▶ TOUR
+    ops: {
+      camera: cameraNow,
+      wall: () => (touch?.mode() === 'tour' ? 'tour' : 'explore'),
+      moving: () => director.driver() === 'show' && cam.flight() != null,
+      known: (id) => nodeAt(id) != null,
+      inSight,
+      fly: (node, id) => { const to = targetOf(node); if (to) show(to, id); },
+      fit: (nodes, id) => { const to = fitTarget(nodes); if (to) show(to, id); },
+      stay: (id) => show(STAY, id),
+      // An undo (c4 §5): touring before → the tour at once; else the camera back by a normal flight.
+      restore: (saved) => {
+        if (saved.wall === 'tour') touch?.handBack();
+        else if (saved.camera) setCamera(saved.camera);
+      },
+    },
   });
   if (shows) {
     cam.onDraw(shows.draw);
     showCovers = shows.covers;
   }
-  // The senders' roads (T38): a same-origin channel and origin-checked postMessage, both into `send`.
-  const wire = shows ? createTransport({
-    send: shows.send, win: window, Channel: globalThis.BroadcastChannel ?? null,
+  // The senders' roads (T38, a dev adapter until the room link): a same-origin channel and
+  // origin-checked postMessage, both into `receive`, each answered on its road.
+  wire = shows ? createTransport({
+    receive: shows.receive, win: window, Channel: globalThis.BroadcastChannel ?? null,
     origins: showOrigins(q.get('showOrigins'), location.origin),
   }) : null;
-  // `?show=demo` (T39, showdemo.js): a recorded conversation's commands into the same `send`, over and over.
-  const showDemo = shows && wantsShowDemo(q) ? createShowDemo({ send: shows.send }) : null;
+  // `?show=demo` (T39, showdemo.js): a recorded conversation's messages into the same `receive`, over and over.
+  const showDemo = shows && wantsShowDemo(q) ? createShowDemo({ receive: shows.receive }) : null;
 
   // Where a finger has taken the page (T13): the overview, a system, a planet in it.
   let place = AT_OVERVIEW;
@@ -375,7 +469,6 @@ export function boot() {
   touch = park ? null : createTouch(document.getElementById('galaxy-stage'), {
     role,
     wake: () => {
-      shows?.drop(); // the finger has the page: everything shown goes with the director's show
       tour.stop();
       left.clear();
       toOverview();
@@ -387,11 +480,13 @@ export function boot() {
       hud.release();
       left.clear();
       place = AT_OVERVIEW;
+      shows?.tourBack(); // the tour clears what the agent drew: the highlight, its note, the undo (c4 §2)
       director.handBack();
       tour.resume();
     },
   });
   let touchSaid = 'tour';
+  let wallSaid = null; // `data-wall-state` (screens.md §9.1 W1): `tour` or `explore`
   // Drag, pinch and the wheel in `explore` (T8): the orbit's far end is the overview, as fitted.
   const gestures = touch && !reduced ? createGestures(document.getElementById('galaxy-stage'), touch, finger, {
     limits: () => orbitLimits(cam.home(), galaxy.world?.sites ?? []),
@@ -401,7 +496,7 @@ export function boot() {
   // A tap on a site (T10): the camera flies there at the tour's zoom and opens
   // it, the brackets close on it at once, its plate comes as the camera does.
   // A tap on empty sky is a step back (T13).
-  const stageEl = document.getElementById('galaxy-stage');
+  const stageEl = stage;
   // A site's sheet; the camera flies there unless it already holds it (a step back from a planet).
   const openSite = (id) => {
     left.leave(place, cam); // off the overview: where the finger had it is where back returns
@@ -521,16 +616,19 @@ export function boot() {
         if (m === 'tour') delete page.dataset.touch;
         else page.dataset.touch = m;
       }
+      const ws = m === 'tour' ? 'tour' : 'explore';
+      if (ws !== wallSaid) { wallSaid = ws; page.dataset.wallState = ws; }
       back?.show(backControl(m, place));
-      sayManual(manualLine(touch.left()));
+      // MANUAL says a person drives: not while a show holds the camera.
+      sayManual(director.driver() === 'show' ? null : manualLine(touch.left()));
     }
     const at = parked();
     if (at) {
       if (at.open !== parkOpen) galaxy.setOpen(at.id, parkOpen);
       aim(siteShot(at, 0, view()));
     } else if (!park) {
-      director.tick(); // a show's hold runs out here
-      shows?.tick();
+      director.tick(); // a finger's minute (touch.js's, held) runs out here
+      shows?.tick(); // a command waiting for the owner's finger
       showDemo?.tick();
       gestures?.frame(now);
       cam.frame(now);
@@ -631,6 +729,38 @@ export function boot() {
   globalThis.__galaxyShow = shows;
   globalThis.__galaxyWire = wire;
   globalThis.__galaxyShowDemo = showDemo;
+  // The cockpit's handle (screens.md §9, D221, D222): the camera and the show state, page px.
+  const flyTo = (id, z = SHOW.zoom) => {
+    const to = targetOf(id, z);
+    if (!to || park) return Promise.resolve(false);
+    show(to);
+    return landed();
+  };
+  const fitNodes = (ids, { pad = FIT.padPx } = {}) => {
+    const to = park ? null : fitTarget(Array.isArray(ids) ? ids : [], pad);
+    if (!to) return Promise.resolve(false);
+    show(to);
+    return landed();
+  };
+  globalThis.__cockpitView = {
+    page: 'wall',
+    wall: park ? null : { state: () => page.dataset.wallState ?? null },
+    map: {
+      flyTo,
+      fitNodes,
+      camera: cameraNow,
+      setCamera: (c, o) => (park ? Promise.resolve(false) : setCamera(c, o)),
+      screenOf: (id) => {
+        const at = cam.screenOf(id);
+        if (!at) return null;
+        const b = canvasBox();
+        return { x: at.x + b.left, y: at.y + b.top };
+      },
+      onDraw: cam.onDraw,
+      emphasis: (id) => shows?.emphasis(id) ?? 1,
+    },
+    show: { state: () => shows?.view() ?? null },
+  };
 }
 
 boot();

@@ -34,6 +34,7 @@ import * as THREE from '../../../vendor/three/three.module.js';
 import { ease, OPEN_MS } from './layout.js';
 import { overviewShot, siteShot, SIZE, FOV } from './scene.js';
 import { TIMING } from '../tour.js';
+import { flight as mapFlight } from '../../core/motion.js';
 import { blendRect, ndcOf, standBack } from './framing.js';
 import { sizeOf } from './stage.js';
 
@@ -161,6 +162,82 @@ export function openStep(open, want, dtMs, openMs) {
 }
 
 /**
+ * How long a show's flight from `from` to `to` (`{ pos, look }`) takes (ms):
+ * the Map's own `flight()` (core/motion.js, 320-900 ms by distance; cockpit
+ * c4 §2, D68) over the two look-at points on the plane, the camera's
+ * distance standing for the Map's view width. No `from`: the longest. Pure.
+ */
+export function showFlightMs(from, to) {
+  if (!from || !to) return 900;
+  const w = (s) => Math.hypot(s.pos.x - s.look.x, s.pos.y - s.look.y, s.pos.z - s.look.z);
+  return mapFlight([from.look.x, from.look.z, w(from)], [to.look.x, to.look.z, w(to)]).ms;
+}
+
+/** How close `fitPose` may come: the site shot's distance at this zoom (the Map's fitCircle cap, M2). */
+export const FIT = Object.freeze({ padPx: 64, maxZoom: 2.6 });
+
+/**
+ * One pose that shows every world point of `points` (`[{ x, y, z }]`) with
+ * `padPx` css px to spare inside the part of a `W`×`H` stage in sight
+ * (`box`, framing.js freeRect's fractions; the whole stage by default;
+ * cockpit screens.md §9.2 M2, `fitNodes`): it looks along the direction
+ * `from` looks (`{ pos, look }`; the overview's when null), their middle at
+ * the box's centre, as near as it can but never nearer than `minDist`, nor
+ * farther than `maxDist`. Returns `{ pos, look }`, or null with no point. Pure.
+ */
+export function fitPose(points, from, { fov = 50, W = 1600, H = 900, padPx = FIT.padPx, minDist = 0, maxDist = 1e6, box = null } = {}) {
+  const pts = (points ?? []).filter((p) => p && [p.x, p.y, p.z].every(Number.isFinite));
+  if (!pts.length) return null;
+  const lo = (k) => Math.min(...pts.map((p) => p[k]));
+  const hi = (k) => Math.max(...pts.map((p) => p[k]));
+  const look = { x: (lo('x') + hi('x')) / 2, y: (lo('y') + hi('y')) / 2, z: (lo('z') + hi('z')) / 2 };
+  let dir = from ? { x: from.pos.x - from.look.x, y: from.pos.y - from.look.y, z: from.pos.z - from.look.z } : { x: 0, y: 0.78, z: 0.62 };
+  const l = Math.hypot(dir.x, dir.y, dir.z) || 1;
+  dir = { x: dir.x / l, y: dir.y / l, z: dir.z / l };
+  // The camera's frame: forward (toward `look`), right, up (three.js lookAt with +y up).
+  const f = { x: -dir.x, y: -dir.y, z: -dir.z };
+  let r = { x: -f.z, y: 0, z: f.x }; // f × (0, 1, 0)
+  const rl = Math.hypot(r.x, r.z) || 1;
+  r = { x: r.x / rl, y: 0, z: r.z / rl };
+  const u = { x: r.y * f.z - r.z * f.y, y: r.z * f.x - r.x * f.z, z: r.x * f.y - r.y * f.x };
+  const t = Math.tan((fov * Math.PI) / 360), aspect = W / H;
+  const bx = box ?? { x0: 0, y0: 0, x1: 1, y1: 1 };
+  // The box in NDC (y up), less the pad; its centre is where the middle of the points goes.
+  const px = (2 * padPx) / W, py = (2 * padPx) / H;
+  const nx0 = 2 * bx.x0 - 1 + px, nx1 = 2 * bx.x1 - 1 - px, ny0 = 1 - 2 * bx.y1 + py, ny1 = 1 - 2 * bx.y0 - py;
+  const cx = (nx0 + nx1) / 2, cy = (ny0 + ny1) / 2;
+  // At distance d the camera slides sideways (pos and look alike) so the middle lands on (cx, cy).
+  const shift = (d) => ({ s: cx * d * t * aspect, q: cy * d * t });
+  const at = (d) => {
+    const { s, q } = shift(d);
+    const o = { x: -r.x * s - u.x * q, y: -r.y * s - u.y * q, z: -r.z * s - u.z * q };
+    return { look: { x: look.x + o.x, y: look.y + o.y, z: look.z + o.z }, o };
+  };
+  const fits = (d) => {
+    const { look: lk } = at(d);
+    const c = { x: lk.x + dir.x * d, y: lk.y + dir.y * d, z: lk.z + dir.z * d };
+    return nx1 > nx0 && ny1 > ny0 && pts.every((p) => {
+      const v = { x: p.x - c.x, y: p.y - c.y, z: p.z - c.z };
+      const z = v.x * f.x + v.y * f.y + v.z * f.z;
+      if (z <= 1) return false;
+      const x = (v.x * r.x + v.y * r.y + v.z * r.z) / (z * t * aspect);
+      const y = (v.x * u.x + v.y * u.y + v.z * u.z) / (z * t);
+      return x >= nx0 && x <= nx1 && y >= ny0 && y <= ny1;
+    });
+  };
+  let a = Math.max(1, minDist), b = Math.max(a, maxDist);
+  if (!fits(a)) {
+    for (let i = 0; i < 40; i++) {
+      const m = (a + b) / 2;
+      if (fits(m)) b = m; else a = m;
+    }
+    a = b;
+  }
+  const { look: lk } = at(a);
+  return { pos: { x: lk.x + dir.x * a, y: lk.y + dir.y * a, z: lk.z + dir.z * a }, look: lk };
+}
+
+/**
  * The shot for a site at `zoom` (the tour's zoom is siteShot's distance), `heldMs` into its drift;
  * with a `view` (siteShot's, T18) the star sits in the free box at that zoom.
  */
@@ -215,7 +292,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
       const s = siteOf(want.id);
       if (s) {
         const view = freeNow ? { fov: galaxy.camera.fov, aspect: galaxy.camera.aspect, free: freeNow } : null;
-        return zoomedSiteShot(s, want.cut ? 0 : Math.max(0, now - want.t0 - flight.ms), want.zoom, view);
+        return zoomedSiteShot(s, want.cut ? 0 : Math.max(0, now - want.t0 - (want.ms > 0 ? want.ms : flight.ms)), want.zoom, view);
       }
     }
     return overview(now);
@@ -271,7 +348,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     // The held system opens once the camera is most of the way there; the rest fold.
     // A cut (T14) and still mode open and fold at once.
     const held = want.kind === 'site' && (want.cut || !still) ? want.id : null;
-    const opening = held != null && (want.cut || now - want.t0 >= flight.ms * flight.openAt) ? held : null;
+    const opening = held != null && (want.cut || now - want.t0 >= (want.ms > 0 ? want.ms : flight.ms) * flight.openAt) ? held : null;
     const snap = still || want.cut;
     for (const s of sites()) {
       const o = snap ? (s.id === opening ? 1 : 0) : openStep(s.open, s.id === opening ? 1 : 0, dt);
@@ -328,7 +405,8 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   };
 
   return {
-    focus: (id, zoom) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom }); },
+    // `{ ms }`: a show's flight in its own time (c4 §2, showFlightMs); the tour's and a tap's are FLIGHT.ms.
+    focus: (id, zoom, opts) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom, ...(opts?.ms > 0 ? { ms: opts.ms } : {}) }); },
     // No flight, no drift: on the site's shot from the next frame, its system open (T14, reduced motion).
     cut: (id, zoom) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom, cut: true }); },
     // `{ ms }` flies there in its own time (a first touch, night 3 T7, touch.js); the tour's is FLIGHT.ms.
@@ -363,6 +441,22 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
       want = { kind: 'free', pose: { pos: { ...p.pos }, look: { ...p.look } }, t0: null };
       version += 1;
     },
+    // A show's free pose (fitNodes, setCamera, an undo; cockpit screens.md §9.2 M2, M4): on any page,
+    // flown in `ms`, or on it from the next frame with `cut` or in still mode (reduced motion jumps).
+    place: (p, opts) => {
+      if (!p) return;
+      const cut = still || opts?.cut === true;
+      go({ kind: 'free', pose: { pos: { ...p.pos }, look: { ...p.look } }, ...(cut ? { cut: true } : opts?.ms > 0 ? { ms: opts.ms } : {}) });
+    },
+    // The pose a camera move to `to` would land on now (`{ kind: 'site', id, zoom } | { kind: 'overview' }
+    // | { kind: 'free', pose }`), for showFlightMs; null for an unknown site.
+    shotFor: (to) => {
+      if (to?.kind === 'free') return to.pose ?? null;
+      if (to?.kind === 'site') { const s = siteOf(to.id); return s ? zoomedSiteShot(s, 0, to.zoom) : null; }
+      return home ?? overviewShot(sites());
+    },
+    // Bumped by every move: a newer movement cut the one a promise waits for.
+    version: () => version,
     // A flight to a finger's pose (night 4 T4: back to the pose it left the overview in), held there.
     fly: (p, opts) => {
       if (!steer || still || !p) return;
