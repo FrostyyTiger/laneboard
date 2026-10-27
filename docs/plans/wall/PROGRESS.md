@@ -767,6 +767,18 @@ Notes for every builder round (planner, round 1):
   ease), and the fan's `galaxy-fan-spot` ring marks the finger's down point — done when: a page test on a fake clock
   finds the manual line and the control present within 200 ms of the waking down, and a CDP still 200 ms after a wake
   shows both.
+- [ ] T63 (§7 Night 4, §2.4; r60-performance galaxy 3 and 4, show part; T35 is the fan's half) [ui] [variant:galaxy] The
+  show does nothing while nothing is due: `galaxy/show.js tick` steps and re-applies only when the soonest `until` has
+  passed or the shown seconds line turns (a cheap `nextAt(state)`), and `build()`/`showMarks` run only when the items
+  changed; `draw()` keeps a rounded key per ring and card (0.1 px) and writes `transform`, `hidden` and `dataset.side`
+  only on change, and runs `cardPlace` only when a card or the camera moved — done when: a counting style proxy (as
+  `wall-galaxy-savings`) sees no ring or card write and no `JSON.stringify`-built key 1 s into a held pin with the camera
+  still, a write when the node moves more than 0.1 px, and `wall-galaxy-show` and `-showdemo` tests stay green.
+- [ ] T64 (§7 Night 4, §2.4; r60-performance fx-sweep 1) [ui] [variant:galaxy] The sweep's news costs nothing per frame:
+  `fx.js siteNews` (and `mix`) hashes the fields that make news (status, metrics, `at`, words) directly with `fnv`, with no
+  `JSON.stringify` per node, and runs at most once per model frame that changed (or once per sweep, its only reader) —
+  done when: a test finds the same numbers' change/no-change behaviour as before (the existing sweep tests stay green), a
+  spy on `JSON.stringify` sees no call in `siteNews` over the large fixture, and nothing runs without `?fx=sweep`.
 
 ## Research questions
 
@@ -788,6 +800,12 @@ Notes for every builder round (planner, round 1):
   a cost guess) — for T17
 
 ## Later
+
+From r60-performance (triage, night 4; not tasks yet):
+- (r60-performance galaxy 6) A recolour runs the full layout: in `scene.js update` compare `treeKey` first and call `recolour` without `galaxyLayout` on the same tree (about 1.2 ms/s unthrottled on the demo).
+- (r60-performance galaxy 7, fx-activity 1, fx-afterglow 1) Per-frame garbage: `director.tick` event/pose, `heldDust()` spread, `drawJobs` filter (filter in place, only when a job expired), the template keys in `drawAfterglows`/`drawSweep`, the afterglow slot shuffle on a new clear (key the slot on id and rounded width). Do it when a builder is in those files.
+- (r60-performance galaxy 5) A 555 ms wake-window gap not reproduced: whoever touches T36 profiles wake → tap → sky tap with `show=demo` in one window.
+- (r60-performance galaxy 2) Frame cap: the owner's `?cap=30` (see For the owner); T34 (the overview's 85k triangles, now 215-228 calls with effects) is the review's first ask and stays open.
 
 From r55-touch (triage, night 4; not tasks yet):
 - (r55-touch galaxy 4) A sleeve swipe (starts within 40 px of the edge at full speed) is not a drag; while a sheet is up, a drag that takes the subject out of frame eases back or closes the sheet (= r26 3).
@@ -1153,6 +1171,10 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
   tasks (T60 a touch must not wipe pins and highlights, T61 fan keeps off trouble, T62 the silent wake). Dropped as
   covered: galaxy 2 (T32), 3 (T31), 5 (T33), 10 (T27), 11 (T55); beacon, warp, afterglow, sweep (no touch finding).
   Rest in Later; no fx proposals.
+- r60 performance → reviews/r60-performance.md. 7 galaxy + 2 touch + 5 fx findings (beacon, warp, afterglow, activity,
+  sweep); 2 became tasks (T63 the show works only when something is due, T64 `siteNews` without stringify). Dropped as
+  covered: galaxy 1 (T34), galaxy 4 fan half (T35), galaxy 5 wake layouts (T36), touch (no fix), beacon and warp (no fix).
+  Rest in Later (recolour layout, garbage, the unexplained gap, the owner's frame cap); no fx proposals.
 
 ## Scores
 
@@ -1208,5 +1230,11 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 55 | touch (fx-afterglow) | - | - | - | - | 5 | 8 | - |
 | 55 | touch (fx-activity) | - | - | - | - | 4 | 6 | - |
 | 55 | touch (fx-sweep) | - | - | - | - | 5 | 8 | - |
+| 60 | performance (galaxy) | 7 | 7 | 7 | 7 | 6 | 6 | 6 |
+| 60 | performance (fx-beacon) | - | - | - | - | 4 | 6 | - |
+| 60 | performance (fx-warp) | - | - | - | - | 6 | 5 | - |
+| 60 | performance (fx-afterglow) | - | - | - | - | 5 | 7 | - |
+| 60 | performance (fx-activity) | - | - | - | - | 4 | 6 | - |
+| 60 | performance (fx-sweep) | - | - | - | - | 5 | 8 | - |
 
 ## Morning
