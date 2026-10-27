@@ -90,6 +90,18 @@ export function timeline(steps) {
   return ev.sort((a, b) => a.t - b.t || a.seq - b.seq);
 }
 
+/**
+ * Whether the call of `events[k - 1]` (a tool step) shares its message with the
+ * next one: the next event that is not its own end is a call starting before
+ * its `endAt` (parallel calls, B5).
+ */
+export function parallelCall(events, k) {
+  const ev = events[k - 1];
+  if (ev?.kind !== 'tool') return false;
+  const nextEv = events.slice(k).find((e) => e.kind !== 'tool-end' || e.step !== ev.step);
+  return nextEv?.kind === 'tool' && nextEv.t < Number(ev.step.endAt ?? ev.step.at);
+}
+
 // --- Native lines (`protocols.md` §11.4, left column; §11.5 for stdin) ---
 // One builder per row, so test/cockpit-fake-agent.test.mjs can hold each line
 // the fake writes against the row it stands for.
@@ -465,6 +477,50 @@ function bridgeSpeaker(out) {
   };
 }
 
+/**
+ * The native lines one turn of a script makes, without waiting and without the
+ * real MCP call (its `tool_result` text is a placeholder): the `claude` dialect's
+ * speaker walked over the turn's timeline as `play()` walks it. For the script
+ * check (`stand-ins.md` §5, D98), which holds every line against its §11.4 row.
+ */
+export function renderTurn(turn, { uuid = randomUUID(), session = randomUUID(), maxTurns = 40 } = {}) {
+  const lines = [];
+  // As main()'s `write`: every line carries `session_id` and a `uuid` (B6).
+  const w = claudeSpeaker((o) => lines.push({ ...o, session_id: session, uuid: o.uuid ?? randomUUID() })).turn();
+  w.start([uuid]);
+  const events = timeline(Array.isArray(turn?.steps) ? turn.steps : []);
+  const ids = new Map();
+  for (let k = 0; k < events.length;) {
+    const ev = events[k++];
+    const st = ev.step;
+    switch (ev.kind) {
+      case 'text': w.text(st); break;
+      case 'tool':
+      case 'denied': {
+        const id = `toolu_${String(++toolCounter).padStart(2, '0')}`;
+        if (ev.kind === 'tool') ids.set(st, id);
+        w.tool({ id, name: String(ev.kind === 'tool' ? st.tool : st.denied), input: st.input ?? {},
+          denied: ev.kind === 'denied', parallel: parallelCall(events, k) });
+        break;
+      }
+      case 'tool-end': w.toolEnd({ id: ids.get(st), isError: st.isError === true, content: '(dry run)' }); break;
+      case 'retry': {
+        const rt = st.retry ?? {};
+        w.retry({ attempt: rt.attempt ?? 1, of: rt.of ?? 10, error: rt.error ?? 'overloaded' });
+        break;
+      }
+      case 'exit': return lines;
+      case 'end':
+        w.end(END_KINDS.includes(st.end) ? st.end : 'done',
+          { durationMs: Number(st.at) || 0, costUsd: st.costUsd ?? 0, detail: String(st.detail ?? 'failed'), maxTurns });
+        return lines;
+      default: break;
+    }
+  }
+  w.end('done', { durationMs: 0, costUsd: 0, detail: 'failed', maxTurns });
+  return lines;
+}
+
 let msgCounter = 0;
 let toolCounter = 0;
 let rpcCounter = 0;
@@ -661,9 +717,7 @@ function createAgent({ dialect, speak, log, readScript, maxTurns, initialScript,
                 cur.tools.add(st);
                 if (toolName.startsWith(MCP_PREFIX)) calls.set(st, realCall(toolName, input, st));
               }
-              const nextEv = events.slice(k).find((e) => e.kind !== 'tool-end' || e.step !== st);
-              const parallel = ev.kind === 'tool' && nextEv?.kind === 'tool' && nextEv.t < Number(st.endAt ?? st.at);
-              w.tool({ id, name: toolName, input, denied: ev.kind === 'denied', parallel });
+              w.tool({ id, name: toolName, input, denied: ev.kind === 'denied', parallel: parallelCall(events, k) });
               break;
             }
             case 'tool-end': {

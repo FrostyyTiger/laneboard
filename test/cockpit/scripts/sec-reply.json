@@ -1,0 +1,12 @@
+{"name":"sec-reply",
+ "about":"stand-ins.md §5, security.md S-SEC-02: a secret split across deltas, then a private key block.",
+ "start":{"initAfterMs":200,"mcp":"connected","login":"ok","startFailures":0,"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1"]},
+ "turns":[
+  {"for":"S-SEC-02","repeat":true,"steps":[
+    {"at":0,"text":"The token in /etc/acme/env is ghp_"},
+    {"at":200,"text":"9xQ2abcdEFGH1234ijklMNOP5678qrstUV and"},
+    {"at":400,"text":" the key is below."},
+    {"at":600,"text":"-----BEGIN OPENSSH PRIVATE KEY-----\nAAAAnot-a-key-only-the-shape-of-one-for-the-redaction-test-1\nAAAAnot-a-key-only-the-shape-of-one-for-the-redaction-test-2\n-----END OPENSSH PRIVATE KEY-----","block":"new"},
+    {"at":800,"end":"done"}
+  ]}
+ ]}

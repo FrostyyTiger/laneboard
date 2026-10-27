@@ -11,6 +11,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import http from 'node:http';
 import { fakeAgentLog } from './cockpit/stand-ins/fake-agent-log.mjs';
+import { assertRowShapes } from './cockpit/stand-ins/native-rows.mjs';
 import { ownerWords, matchTurn, timeline, stepKind } from './cockpit/stand-ins/fake-agent.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -97,69 +98,6 @@ function label(o) {
   if (o.type === 'user') return o.isReplay ? 'user/replay' : `user/${o.message.content[0].type}`;
   if (o.type === 'assistant') return `assistant/${o.message.content[0].type}`;
   return `${o.type}/${o.subtype}`;
-}
-
-// --- §11.4's left column, read from the protocol (D136: the copy once the night made it) ---
-
-function protocolText() {
-  for (const rel of ['docs/cockpit/protocol.md', 'docs/plans/cockpit/spec/protocols.md']) {
-    const p = path.join(ROOT, rel);
-    if (fs.existsSync(p)) return fs.readFileSync(p, 'utf8');
-  }
-  throw new Error('no protocol file');
-}
-
-function nativeRows() {
-  const text = protocolText();
-  const from = text.indexOf('### 11.4 ');
-  const to = text.indexOf('### 11.5 ', from);
-  const rows = [];
-  for (const line of text.slice(from, to).split('\n')) {
-    // A cell may add a note after its line (`… (after an \`interrupt\`)`).
-    const m = /^\| `(\{.*?\})`[^|]*\|/.exec(line);
-    if (m) rows.push(JSON.parse(m[1]));
-  }
-  return rows;
-}
-
-/** The fields that pick a row: type, subtype, the event and block types. */
-function rowKey(o) {
-  const c = Array.isArray(o.message?.content) ? o.message.content[0]?.type : undefined;
-  return [o.type, o.subtype, o.isReplay === true, o.event?.type, o.event?.content_block?.type, o.event?.delta?.type, c].join('|');
-}
-
-/**
- * Every field of `row` is in `line` with the same kind of value (unknown extra
- * fields allowed). A tool's `input` is the tool's own: an object, nothing more.
- */
-function hasShape(line, row, key) {
-  if (row === null) return line === null;
-  if (Array.isArray(row)) return Array.isArray(line) && (row.length === 0 || line.length === 0 || hasShape(line[0], row[0]));
-  if (typeof row === 'object') {
-    if (!line || typeof line !== 'object' || Array.isArray(line)) return false;
-    if (key === 'input') return true;
-    return Object.keys(row).every((k) => k in line && hasShape(line[k], row[k], k));
-  }
-  return typeof line === typeof row;
-}
-
-// Lines §11.4 maps to nothing, listed in its prose row.
-const NO_EVENT = new Set(['ping', 'message_delta', 'message_stop', 'content_block_stop']);
-
-function assertRowShapes(objs) {
-  const rows = nativeRows();
-  assert.ok(rows.length >= 15, `read ${rows.length} rows of §11.4`);
-  for (const o of objs) {
-    if (o.type === 'stream_event' && NO_EVENT.has(o.event.type)) continue;
-    const candidates = rows.filter((r) => rowKey(r) === rowKey(o));
-    assert.ok(candidates.length, `no §11.4 row for ${JSON.stringify(o)}`);
-    const ok = candidates.some((r) => {
-      // `message_start` without `user_message_uuids` is the row's own "without either field" case.
-      if (r.event?.type === 'message_start' && !o.user_message_uuids) { const { user_message_uuids, ...rest } = r; return hasShape(o, rest); }
-      return hasShape(o, r);
-    });
-    assert.ok(ok, `line does not have its §11.4 row's shape: ${JSON.stringify(o)}\nrows: ${candidates.map((r) => JSON.stringify(r)).join('\n')}`);
-  }
 }
 
 // --- The tests ---

@@ -1,0 +1,44 @@
+{"name":"c3-tools",
+ "about":"stand-ins.md §5: the board tools through the real MCP server (c3-see.md); every call is real.",
+ "start":{"initAfterMs":200,"mcp":"connected","login":"ok","startFailures":0,"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1"]},
+ "turns":[
+  {"for":"S-C3-03","match":"what is stuck","repeat":true,"steps":[
+    {"at":100,"tool":"mcp__laneboard__morning","input":{"window":"tonight"},"endAt":300},
+    {"at":400,"tool":"mcp__laneboard__runs","input":{"run":"acme-billing"},"endAt":600},
+    {"at":700,"text":"acme-billing is stuck: T3 failed twice."},
+    {"at":900,"end":"done"}
+  ]},
+  {"for":"S-C3-04","match":"acme-x","repeat":true,"steps":[
+    {"at":100,"tool":"mcp__laneboard__runs","input":{"run":"acme-x"},"endAt":300},
+    {"at":400,"text":"There is no run acme-x; the runs are acme-search, acme-docs and acme-billing."},
+    {"at":600,"end":"done"}
+  ]},
+  {"for":"S-C3-11 S-C3-12","match":"what's wrong here","repeat":true,"steps":[
+    {"at":2000,"tool":"mcp__laneboard__focus","input":{},"endAt":2050},
+    {"at":2100,"tool":"mcp__laneboard__focus","input":{"when":"now"},"endAt":2150},
+    {"at":2300,"text":"vm-b is down: its disk is full."},
+    {"at":2500,"end":"done"}
+  ]},
+  {"for":"S-C3-14","match":"which screens","repeat":true,"steps":[
+    {"at":100,"tool":"mcp__laneboard__focus","input":{},"endAt":200},
+    {"at":300,"tool":"mcp__laneboard__focus","input":{"screen":"all"},"endAt":400},
+    {"at":500,"tool":"mcp__laneboard__focus","input":{"screen":"hall2"},"endAt":600},
+    {"at":700,"text":"desk is on the runs; hall has been offline since 23:02."},
+    {"at":900,"end":"done"}
+  ]},
+  {"for":"S-C3-21","match":"how is hv1","repeat":true,"steps":[
+    {"at":100,"tool":"mcp__laneboard__fleet","input":{"site":"hv1"},"endAt":300},
+    {"at":400,"text":"hv1 (feed from 02:10) is 5 h old: I cannot say how its guests are now."},
+    {"at":600,"end":"done"}
+  ]},
+  {"for":"S-C3-22","match":"any alerts","repeat":true,"steps":[
+    {"at":100,"tool":"mcp__laneboard__alerts","input":{},"endAt":300},
+    {"at":400,"text":"I cannot read the alerts: the board did not answer."},
+    {"at":600,"end":"done"}
+  ]},
+  {"for":"S-C3-23","match":"last night's run cost","repeat":true,"steps":[
+    {"at":100,"tool":"mcp__laneboard__runs","input":{"since":"tonight"},"endAt":300},
+    {"at":400,"text":"acme-search cost 9.98 USD over 7 rounds; it stopped on its budget."},
+    {"at":600,"end":"done"}
+  ]}
+ ]}

@@ -1,0 +1,9 @@
+{"name":"c1-login",
+ "about":"stand-ins.md §5: the login check. Tests rewrite start.login (failed, hang) and add startFailures 3 with startStderr.",
+ "start":{"initAfterMs":200,"mcp":"connected","login":"ok","startFailures":0,"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1"]},
+ "turns":[
+  {"for":"S-C1-37 S-C1-38","repeat":true,"steps":[
+    {"at":200,"text":"Logged in and listening."},
+    {"at":500,"end":"done"}
+  ]}
+ ]}

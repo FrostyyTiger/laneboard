@@ -173,3 +173,55 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   first prompt is no longer a candidate for `resendOf` — because §2.4 leaves those cases open —
   spec: `stand-ins.md` §2.4, §2.6 — overrule: `interrupt()`, `sigint()` and `prompt()` in
   `fake-agent.mjs`.
+- B29 (T5) The script check holds every native line against its `protocols.md` §11.4 row through
+  `renderTurn()` (the `claude` speaker walked over a turn's timeline without waiting or calling) and
+  `test/cockpit/stand-ins/native-rows.mjs` (the row reader moved out of the fake-agent test, both tests
+  use it), not through `server/cockpit/protocol.mjs`'s `json claude` fixtures, which T8 has not built;
+  `parallelCall()` is shared by `play()` and `renderTurn()` — because D98's checks do not exist yet and
+  the §11.4 rows are what the fixtures are made of — spec: `stand-ins.md` §5, D98 — overrule: T8 also
+  feeds `renderTurn()`'s lines to its message checks, or the check plays each script live.
+- B30 (T5) A script may carry `about` (what it is for) and each turn `for` (its scenario ids); the
+  fake ignores both, and the check refuses any other unknown field — because §2.2's format has no
+  comment and the next builder needs to know which turn is whose — spec: `stand-ins.md` §2.2, §5 —
+  overrule: drop the two fields and keep the ids in the check only.
+- B31 (T5) Where a scenario names no prompt, the turn's `match` is the prompt its test sends:
+  c1-render `show the runs as a table` / `show every number` (S-C1-05), `check the sites` (S-C1-06,
+  -07, -12), `show the cleanup script` (-08), `show the markup` (-09), `what ran tonight` (-10, -34),
+  `show the marks` (-11), `read the odd ones` (-35), `everything at once` (-40), `show me builder-a`
+  (-46); c1-typing `how did the night go` (-16), `count to fifty` / `count slowly` (-17), `check all
+  runs` (-27), `count the runs` / `count the lanes` (-28), `check all lanes` (-29), anything else the
+  0.2 s `done` turn; c1-errors `tell me about the night` (-19), `error overloaded`, `error step limit`,
+  `error boom`, `error long detail`, `error login`, `error retries` (-20); scr-room `tell me
+  everything`, `show me builder-a`, `stay a while`; c3-tools `what is stuck` (S-C3-03), `acme-x`
+  (-04), `which screens` (-14); the check asserts no earlier turn takes a turn's words — because a
+  match is a substring and a catch-all shadows what follows it — spec: `stand-ins.md` §2.2, §5 —
+  overrule: rename the `match` and the test's prompt together.
+- B32 (T5) c1-render: the first `how did the night go` plays all six deltas (S-C1-04), the second
+  §2.2's example as written (delta 4 dropped); the example's second turn is the script's last,
+  matching any other prompt once. The pane-only calls (`fleet`, `ci`, `runs`, `lanes` in c1-render
+  and c1-typing) carry `"call":false`, so their times and `isError` are the script's; `morning`,
+  c1-voice's, c3-tools', sec-inject's and the `fly_to` show calls are real — because C1's MCP server
+  has no `fleet`, `ci` or `lanes` and the pane scenarios time the calls to the ms — spec:
+  `stand-ins.md` §2.3, §5; `c1-talk.md` S-C1-06, S-C1-25 — overrule: drop `call:false` once C3's tools exist.
+- B33 (T5) c1-voice plays §13.1's turn earlier: `morning` 50-250 ms, the six deltas from 300 ms
+  530 ms apart (§13.1's spacing), `done` at 3.1 s with `costUsd` 0.0412, matched on `night go` and
+  `wie lief die nacht`, both `repeat` — because §5 asks for the first delta 0.3 s after the prompt
+  while §13.1's own times put it at 2.24 s — spec: `stand-ins.md` §5, `protocols.md` §13.1 —
+  overrule: §13.1's times, and S-C1-13's B4 read from the later delta.
+- B34 (T5) scr-room has a third turn, `stay a while` (a line every 20 s, `done` at 400 s, as
+  c4-cards' `long-turn`), for S-SCR-04's 400 s reply; §5's row names only the 20 s turn. Its times are
+  the fake agent's real ms (it has no room clock): T31 meets them with the page's clock and the
+  room's, or rewrites the turn shorter through `fakeAgent.use` — because S-SCR-04 needs a turn
+  running at 399 s — spec: `stand-ins.md` §5, `screens.md` S-SCR-04 — overrule: T31's choice.
+- B35 (T5) c1-errors: `boom`'s `detail` is `boom` and the 300-character `detail` is its own turn;
+  the error turns `repeat`, so one room serves the table; the `exit` turn plays again in the
+  restarted agent (a new process has played nothing), so S-C1-19's `RETRY` exits again unless T27
+  switches the script first — because §5 lists "`failed` `boom` plus a 300-character `detail`" and
+  E8's `RETRY` resends `boom`'s words — spec: `stand-ins.md` §5, `c1-talk.md` S-C1-19, S-C1-20 —
+  overrule: one `boom` turn whose detail starts `boom`.
+- B36 (T5) c1-long's 26 000 characters and 120 lines count every character of the joined text,
+  newlines and the two blank lines around the table included, streamed as 100 deltas of 260
+  characters 200 ms apart from 15.0 s, `done` at 35.0 s; sec-reply's key block is the PEM shape with
+  two `AAAAnot-a-key…` lines, no key — because S-C1-21 counts the reply's text and the repo is public
+  (no secret scanner should fire on it) — spec: `stand-ins.md` §5, `security.md` S-SEC-02 —
+  overrule: the generator's numbers (the check asserts them).
