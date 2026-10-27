@@ -4,19 +4,26 @@
 // the turn's messages as they come. Text only, never markup: every string the
 // room sends goes in as textContent (no innerHTML).
 //
-//   const t = createTurn(doc, turn)   // turn: a snapshot turn, or {clientId, prompt, at, delivery}
+//   const t = createTurn(doc, turn, { offset, onFirstSentence })
+//                                     // turn: a snapshot turn, or {clientId, prompt, at, delivery};
+//                                     // offset: the page's clock minus the room's (welcome.now, §9);
+//                                     // onFirstSentence(): once, when the reply's first sentence is drawn (B9)
 //   t.node                            // [data-turn-id] (set once the room names the turn)
 //   t.confirm(msg)                    // the turn.prompt echo: the turnId, `· SENDING` goes
 //   t.delta(msg) / t.block(msg)       // text.delta appends, text.block replaces (§3 "Streaming")
 //   t.toolStart(msg) / t.toolEnd(msg) // a call joins its tool line or starts one (§5, §5.1)
 //   t.end(msg)                        // turn.end: the cursor goes, running calls lose `●`
 //   t.draw()                          // the text changed since the last draw goes to the DOM
+//   t.tick(nowMs)                     // the age in the `AGENT` label row, from 3 s (§9, D235);
+//                                     // true when it made the row (the turn grew)
+//   t.startMs                         // the turn's start on the page's clock (null before the room names it)
 //
 // The reply's text is md.js's blocks drawn by reply.js (T19); its tool lines are
 // tool-words.js's words in a `<button>` each (T20).
 // `draw()` is the pane's once-per-frame flush (c1-talk.md §3: drawn at most once
 // per animation frame), so `delta()` only keeps the text.
-import { hhmm } from '../core/cockpit-time.js';
+import { hhmm, turnAgeText } from '../core/cockpit-time.js';
+import { AGE_FROM_MS } from '../core/cockpit-constants.js';
 import { parse } from '../core/md.js';
 import { drawText } from './reply.js';
 import { canFold, lineText, anyRunning, callRow, isDenied, wholeInput } from '../core/tool-words.js';
@@ -58,6 +65,27 @@ export function setDelivery(doc, row, delivery) {
   const word = el(doc, 'span', 'ck-delivery', { 'data-turn-delivery': delivery });
   word.textContent = DELIVERY_WORDS[delivery];
   row.append(sep, word);
+}
+
+/** A room time (ISO, epoch ms) on the page's clock; a number given by the page itself stays as it is. */
+const pageMs = (at, offset) => {
+  if (typeof at === 'number') return at;
+  const ms = Date.parse(at ?? '');
+  return Number.isFinite(ms) ? ms + offset : null;
+};
+
+/**
+ * Has the reply's first sentence been drawn whole? (README B9's end, D235): the first
+ * `.`, `?` or `!` followed by white space after at least 12 characters in the first
+ * paragraph (c5-c6.md §1 "A sentence ends"), or that paragraph ended (a blank line
+ * after it, or the block complete).
+ */
+export function firstSentenceDone(text, done = false) {
+  const para = /\n[ \t]*\n/.exec(text);
+  if (para && para.index > 0) return true;
+  if (done && text.trim() !== '') return true;
+  for (const m of text.matchAll(/[.?!](?=\s)/g)) if (m.index >= 12) return true;
+  return false;
 }
 
 /**
@@ -118,11 +146,17 @@ export function toolLine(doc, opts = {}) {
 }
 
 /** One turn: `[data-turn-id]` holding its prompt block and everything under it (T91). */
-export function createTurn(doc, turn) {
+export function createTurn(doc, turn, opts = {}) {
+  const offset = Number.isFinite(opts.offset) ? opts.offset : 0;
+  let onFirstSentence = typeof opts.onFirstSentence === 'function' ? opts.onFirstSentence : null;
   const box = el(doc, 'section', 'ck-turn');
   let turnId = null;
   let promptLabel = null;
+  let agentLabel = null; // the `AGENT` label row: with the first item, or at 3 s (§9)
+  let ageNode = null; // its ` · ` and `[data-turn-age]`, from 3 s
   let reply = null;
+  let startMs = pageMs(turn.at, offset);
+  let endMs = turn.end ? pageMs(turn.end.at, offset) : null;
   const blocks = new Map(); // blockIndex → {node, text, drawn}
   const placed = new Map(); // blockIndex → the node standing at it (a text block, a tool line)
   const lines = []; // the turn's tool lines, in the order they started
@@ -145,13 +179,50 @@ export function createTurn(doc, turn) {
     box.append(promptLabel, p);
   }
 
-  /** The reply, with its `AGENT` label row, made on the turn's first item (c1-talk.md §5.1). */
+  /** The `AGENT` label row (c1-talk.md §3, §9): made once, with the first item or at 3 s. */
+  function agentRow(at) {
+    if (!agentLabel) {
+      agentLabel = labelRow(doc, 'AGENT', at);
+      box.append(agentLabel);
+    }
+    return agentLabel;
+  }
+
+  /** The reply under its `AGENT` label row, made on the turn's first item (c1-talk.md §5.1). */
   function replyBox(at) {
     if (!reply) {
+      agentRow(at);
       reply = el(doc, 'div', 'ck-reply', { 'data-reply': '' });
-      box.append(labelRow(doc, 'AGENT', at), reply);
+      box.append(reply); // the AGENT row is the turn's last child until its reply comes
     }
     return reply;
+  }
+
+  /**
+   * The turn's age (c1-talk.md §9, D235): running, from its start to now; ended, the total
+   * from its start to its end, both room times moved onto the page's clock. From 3 s it is
+   * ` · 0:03` at the end of the `AGENT` row, the row made then if no item came yet.
+   */
+  function tick(nowMs) {
+    if (startMs === null) return false;
+    const ms = ended ? (endMs === null ? null : endMs - startMs) : nowMs - startMs;
+    if (ms === null || ms < AGE_FROM_MS) return false;
+    let made = false;
+    if (!agentLabel) {
+      if (ended) return false; // a turn that ended with nothing drawn has no row to carry it
+      agentRow(turn.at ?? startMs);
+      made = true;
+    }
+    if (!ageNode) {
+      const sep = el(doc, 'span', 'ck-age-sep');
+      sep.textContent = ' · ';
+      const age = el(doc, 'span', 'ck-age', { 'data-turn-age': '' });
+      ageNode = { sep, age };
+      agentLabel.append(sep, age);
+    }
+    const t = turnAgeText(ms);
+    if (ageNode.age.textContent !== t) ageNode.age.textContent = t;
+    return made;
   }
 
   /** `node` at its `blockIndex` place: above every item with a higher index (§5.1 "Place"). */
@@ -235,6 +306,15 @@ export function createTurn(doc, turn) {
       b.drawn = b.text;
       b.drawnDone = b.done;
     }
+    if (onFirstSentence) {
+      // B9's end mark: the first text block's drawn text holds its first sentence whole.
+      const first = [...blocks.entries()].sort((x, y) => x[0] - y[0])[0]?.[1];
+      if (first && first.drawn !== null && first.drawn.trim() !== '' && firstSentenceDone(first.drawn, first.drawnDone || ended)) {
+        const f = onFirstSentence;
+        onFirstSentence = null;
+        f();
+      }
+    }
     const want = streaming === null ? null : blocks.get(streaming)?.host ?? null;
     if (cursorAt !== want) {
       cursorAt?.classList.remove('ck-streaming');
@@ -243,11 +323,14 @@ export function createTurn(doc, turn) {
     }
   }
   draw();
+  tick(Date.now());
 
   /** The room has the prompt: its turnId, and the label's delivery word for `queued` or none. */
   function confirmed(msg) {
     setId(msg.turnId);
     if (promptLabel) setDelivery(doc, promptLabel, msg.delivery === 'queued' ? 'queued' : null);
+    // §9 "Where the age counts from": the echo's `at`, moved onto the page's clock.
+    if (msg.delivery !== 'queued') startMs = pageMs(msg.at, offset) ?? startMs;
   }
   function delta(msg) {
     if (ended) return;
@@ -293,19 +376,22 @@ export function createTurn(doc, turn) {
     rec.call.denied = msg.denied;
     if (msg.denied === true) splitDenied(rec);
   }
-  function end() {
+  function end(msg = {}) {
     ended = true;
+    endMs = pageMs(msg.at, offset) ?? Date.now();
     for (const b of blocks.values()) b.done = true;
     // §5.1 `turn.end`: running calls lose `●` (and their `…`).
     for (const l of lines) l.stopped = true;
     follow(null);
+    tick(endMs);
   }
 
   return {
     node: box,
     get turnId() { return turnId; },
     get ended() { return ended; },
-    confirm: confirmed, delta, block, toolStart, toolEnd, end, draw,
+    get startMs() { return startMs; },
+    confirm: confirmed, delta, block, toolStart, toolEnd, end, draw, tick,
     /** Does this turn hold the call? (a tool.end naming another is not this turn's, §5.1). */
     hasCall: (id) => callsById.has(id),
   };

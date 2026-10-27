@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
-import { clockText, ageText, sinceText, atText, hhmm } from '../public/js/core/cockpit-time.js';
+import { clockText, ageText, sinceText, atText, hhmm, turnAgeText } from '../public/js/core/cockpit-time.js';
 
 const TZ = 'Europe/Zurich';
 const NOW = Date.parse('2026-10-27T07:30:00+01:00');
@@ -50,4 +50,12 @@ test('cockpit-time: the same rows with timeZone unset under TZ=Europe/Zurich (th
   const got = JSON.parse(r.stdout);
   const want = [...ROWS.map(([, clock, , at]) => [clock, at]), [MIDNIGHT.clock, 'yesterday at 23:50']];
   assert.deepEqual(got, want);
+});
+
+test('cockpit-time: a turn\'s age is m:ss, from 1 h h:mm:ss, rounded down (c1-talk.md §9, D235)', () => {
+  const rows = [
+    [-50, '0:00'], [0, '0:00'], [2999, '0:02'], [3000, '0:03'], [12_400, '0:12'], [35_000, '0:35'],
+    [108_000, '1:48'], [3_599_999, '59:59'], [3_600_000, '1:00:00'], [3_723_000, '1:02:03'], [36_000_000, '10:00:00'],
+  ];
+  for (const [ms, want] of rows) assert.equal(turnAgeText(ms), want, `${ms} ms`);
 });

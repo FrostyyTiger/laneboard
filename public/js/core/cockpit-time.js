@@ -7,6 +7,7 @@
 //   sinceText(ms, nowMs, tz?)  `since 06:41 (3 min)`: a condition that still holds
 //   atText(ms, nowMs, tz?)     `at 07:04`, `yesterday at 22:10`, `on 25 Oct at 22:10`
 //   hhmm(ms, tz?)              `07:02`: label times, never a day (D232)
+//   turnAgeText(ms)            `0:03`, `1:48`, `1:02:03`: a turn's age (c1-talk.md §9, D235)
 //
 // `tz` is an IANA zone; unset, the runtime's own (the page's path).
 
@@ -71,4 +72,16 @@ export function atText(ms, nowMs, timeZone) {
   if (c.startsWith('yesterday ')) return `yesterday at ${c.slice(10)}`;
   const i = c.lastIndexOf(' ');
   return `on ${c.slice(0, i)} at ${c.slice(i + 1)}`;
+}
+
+/**
+ * A turn's age from its elapsed ms (c1-talk.md §9, D235): `m:ss`, from 1 h `h:mm:ss`,
+ * whole seconds rounded down, below 0 counts as 0. No brackets: it stands in the label row.
+ */
+export function turnAgeText(ms) {
+  const s = Math.floor(Math.max(0, ms) / 1000);
+  const ss = String(s % 60).padStart(2, '0');
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}:${ss}`;
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${ss}`;
 }

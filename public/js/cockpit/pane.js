@@ -1,5 +1,5 @@
 // The cockpit button and the pane (cockpit spec c1-talk.md §1-§2, §1.2, §5.1, §10.1;
-// screens.md §4, §7; D17, D116, D118, D158, D249, D250, D267). DOM only, no innerHTML:
+// screens.md §4, §7; D17, D26, D116, D118, D158, D235, D249, D250, D267). DOM only, no innerHTML:
 // every text goes in as textContent.
 //
 //   const pane = createPane({ doc, page: 'app' | 'wall', onRetryNow, unsupported });
@@ -15,7 +15,7 @@
 // The root (<html>) carries data-cockpit, data-pane and data-turn (README.md
 // "Selectors tests use"); the pane is [data-cockpit-conversation].
 import { sinceText } from '../core/cockpit-time.js';
-import { PANE_SLIDE_MS, TICK_MS } from '../core/cockpit-constants.js';
+import { AGE_FROM_MS, PANE_SLIDE_MS, TICK_MS } from '../core/cockpit-constants.js';
 import { createTurn } from './turns.js';
 import { focusNow } from './focus.js';
 import { paneFit, TOO_OLD_TEXT } from './fit.js';
@@ -106,6 +106,13 @@ export function createPane(opts = {}) {
   note.textContent = LINES.connecting;
   const turnsBox = el(doc, 'div', 'ck-turns');
   convo.append(note, turnsBox);
+  // `↓ NEW` floats over the conversation, 16 px above what is under it (c1-talk.md §1.1, §4):
+  // the band holds the scroller and the button, so the button follows the band's bottom edge.
+  const band = el(doc, 'div', 'ck-band');
+  const follow = button(doc, 'ck-btn ck-follow', 'data-cockpit-follow', '↓ NEW');
+  follow.setAttribute('aria-label', 'Jump to the newest');
+  follow.hidden = true;
+  band.append(convo, follow);
 
   const row = el(doc, 'div', 'ck-row');
   const input = el(doc, 'textarea', 'ck-input', {
@@ -123,7 +130,7 @@ export function createPane(opts = {}) {
     turnWord.hidden = true; // no room behind this pane: no turn state to show (build B133)
     pane.append(head, old);
   } else {
-    pane.append(head, status, convo, row);
+    pane.append(head, status, band, row);
   }
 
   // --- the opener above the talk button's place (screens.md §4, D116)
@@ -146,6 +153,8 @@ export function createPane(opts = {}) {
   let pinned = true;
   let hideTimer = null;
   let tick = null;
+  let ageTimer = null;
+  let clockOffset = 0; // the page's clock minus the room's, from welcome.now (c1-talk.md §9)
   let fit = null;
   const madeInert = new Set(); // what this pane made inert, given back as it was
 
@@ -216,14 +225,56 @@ export function createPane(opts = {}) {
 
   const atEnd = () => convo.scrollHeight - convo.scrollTop - convo.clientHeight <= PIN_PX;
   const toEnd = () => { convo.scrollTop = convo.scrollHeight; };
-  convo.addEventListener('scroll', () => { pinned = atEnd(); }, { passive: true });
+  /**
+   * c1-talk.md §4: pinned, new text scrolls the view along; scrolled up (a drag, D26), the
+   * view stays and `↓ NEW` shows once something new came. Back at the end by hand, pinned
+   * again and `↓ NEW` gone.
+   */
+  const grew = () => {
+    if (pinned) toEnd();
+    else follow.hidden = false;
+  };
+  convo.addEventListener('scroll', () => {
+    pinned = atEnd();
+    if (pinned) follow.hidden = true;
+  }, { passive: true });
+  // A tap jumps to the end at once (docs/design.md rule 5: no smooth scroll) and pins again.
+  follow.addEventListener('click', () => {
+    pinned = true;
+    follow.hidden = true;
+    toEnd();
+  });
+
+  /** The running turn, if any: the last view that has not ended. */
+  const runningView = () => {
+    let last = null;
+    for (const v of views.values()) last = v;
+    for (const v of sending.values()) last = v;
+    return last && !last.ended ? last : null;
+  };
+
+  /**
+   * c1-talk.md §9 (D235): every turn's age redrawn each second of the running turn's own
+   * count, so `0:03` shows at 3 s and not up to a second later (build B159).
+   */
+  function ageTick() {
+    if (ageTimer !== null) { win.clearTimeout(ageTimer); ageTimer = null; }
+    const v = runningView();
+    if (!v) return;
+    const t = now();
+    if (v.tick(t)) grew(); // the `AGENT` row came at 3 s: the conversation grew
+    if (v.startMs === null) { ageTimer = win.setTimeout(ageTick, TICK_MS); return; }
+    const ms = t - v.startMs;
+    const wait = ms < AGE_FROM_MS ? AGE_FROM_MS - ms : TICK_MS - (ms % TICK_MS);
+    ageTimer = win.setTimeout(ageTick, Math.max(1, wait));
+  }
 
   function drawSnapshot(snap) {
     const turns = Array.isArray(snap.turns) ? snap.turns : [];
     const frag = doc.createDocumentFragment();
     views.clear();
     for (const t of turns) {
-      const v = createTurn(doc, t);
+      const v = createTurn(doc, t, { offset: clockOffset });
       if (v.turnId) views.set(v.turnId, v);
       if (t.clientId) sending.delete(t.clientId); // the room had it: the snapshot's block is the one
       frag.append(v.node);
@@ -235,7 +286,8 @@ export function createPane(opts = {}) {
     const running = turns.findLast?.((t) => t && !t.end && t.state && t.state !== 'done');
     setTurn(running ? running.state : 'idle');
     drawNote();
-    if (pinned) toEnd();
+    grew();
+    ageTick();
   }
 
   /** c1-talk.md §3 "Streaming": the reply drawn at most once per animation frame. */
@@ -244,7 +296,7 @@ export function createPane(opts = {}) {
     for (const v of dirty) v.draw();
     dirty.clear();
     if (heldTurn !== null) setTurn(heldTurn);
-    if (pinned) toEnd();
+    grew();
   }
   function changed(v) {
     dirty.add(v);
@@ -267,14 +319,26 @@ export function createPane(opts = {}) {
     if (send.disabled || text === '') return;
     const clientId = newClientId();
     const sentAt = now();
-    const v = createTurn(doc, { clientId, prompt: text, at: sentAt, delivery: 'sending' });
+    // README B9: from the SEND tap to the reply's first sentence drawn; measured, never asserted (D235).
+    win.performance?.mark?.('cockpit:B9:start');
+    const v = createTurn(doc, { clientId, prompt: text, at: sentAt, delivery: 'sending' }, {
+      offset: clockOffset,
+      onFirstSentence: () => {
+        try {
+          win.performance.mark('cockpit:B9:end');
+          win.performance.measure('cockpit:B9', 'cockpit:B9:start', 'cockpit:B9:end');
+        } catch { /* no marks in this browser: nothing to measure */ }
+      },
+    });
     sending.set(clientId, v);
     appendTurn(v);
     input.value = '';
     sendState();
     setTurn('thinking');
     pinned = true;
+    follow.hidden = true;
     toEnd();
+    ageTick();
     onPrompt({ type: 'prompt', clientId, text, source: 'typed', lang: null, about: null, sentAt, focus: focus() });
   }
 
@@ -285,14 +349,16 @@ export function createPane(opts = {}) {
       sending.delete(msg.clientId);
       mine.confirm(msg);
       if (mine.turnId && msg.delivery !== 'queued') views.set(mine.turnId, mine);
+      ageTick();
       return;
     }
     // A queued prompt from another screen is T25's (c1-talk.md §8); a known turn is a resend's answer.
     if (msg.delivery === 'queued' || views.has(msg.turnId)) return;
-    const v = createTurn(doc, { turnId: msg.turnId, prompt: msg.text, at: msg.at });
+    const v = createTurn(doc, { turnId: msg.turnId, prompt: msg.text, at: msg.at }, { offset: clockOffset });
     views.set(msg.turnId, v);
     appendTurn(v);
-    if (pinned) toEnd();
+    grew();
+    ageTick();
   }
 
   /**
@@ -392,6 +458,11 @@ export function createPane(opts = {}) {
     switch (msg.type) {
       case 'welcome':
         stt = msg.config?.stt === 'on' ? 'on' : 'none';
+        {
+          // §9 "Where the age counts from": the page's Date.now() at the welcome minus welcome.now.
+          const roomNow = Date.parse(msg.now ?? '');
+          if (Number.isFinite(roomNow)) clockOffset = now() - roomNow;
+        }
         drawNote();
         return;
       case 'snapshot':
@@ -431,6 +502,7 @@ export function createPane(opts = {}) {
         const v = views.get(msg.turnId);
         if (v) { v.end(msg); changed(v); }
         setTurn('idle');
+        ageTick();
         return;
       }
       default:
@@ -442,6 +514,6 @@ export function createPane(opts = {}) {
     open: () => setOpen(true),
     close: () => setOpen(false),
     isOpen: () => open,
-    elements: { pane, opener, input, send, status, convo },
+    elements: { pane, opener, input, send, status, convo, follow },
   };
 }

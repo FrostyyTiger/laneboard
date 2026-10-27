@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeDocument } from './helpers/fakedom.mjs';
-import { createTurn, setDelivery, DELIVERY_WORDS, turnNode } from '../public/js/cockpit/turns.js';
+import { createTurn, setDelivery, DELIVERY_WORDS, turnNode, firstSentenceDone } from '../public/js/cockpit/turns.js';
 import { newClientId } from '../public/js/cockpit/pane.js';
 
 const AT = '2026-10-27T07:02:04.130+01:00';
@@ -52,9 +52,11 @@ test('setDelivery: each word of D270, and null leaves no span', () => {
 });
 
 test('deltas append once drawn, the cursor follows the streaming block, the complete block replaces', () => {
-  const v = createTurn(doc(), { turnId: 't-1', prompt: 'how did the night go?', at: AT });
+  // A turn that started now: under 3 s its AGENT row carries no age (c1-talk.md §9).
+  const at = new Date().toISOString();
+  const v = createTurn(doc(), { turnId: 't-1', prompt: 'how did the night go?', at });
   assert.equal(replyOf(v), undefined, 'no reply before its first text');
-  v.delta({ blockIndex: 0, text: 'Two ', sentAt: Date.parse(AT) + 300 });
+  v.delta({ blockIndex: 0, text: 'Two ', sentAt: Date.parse(at) + 300 });
   assert.equal(replyOf(v).textContent, '', 'kept until the frame draws it');
   v.draw();
   assert.equal(replyOf(v).textContent, 'Two ');
@@ -209,4 +211,76 @@ test('a snapshot turn keeps a refused call as its own tried line', () => {
     ],
   });
   assert.deepEqual(toolLines(v).map(wordsOfLine), ['tried WebFetch, not allowed', 'fetched a page from example.invalid']);
+});
+
+const ageOf = (v) => {
+  const row = labels(v)[1];
+  const age = row?.children.find((c) => c.attrs?.['data-turn-age'] !== undefined);
+  return age ? age.textContent : null;
+};
+
+test('the age: no AGENT row before 3 s, the row with 0:03 at 3 s, counting, then the total (c1-talk.md §9, D235)', () => {
+  const t0 = Date.now();
+  const v = createTurn(doc(), { clientId: 'p-00000002', prompt: 'how did the night go?', at: t0, delivery: 'sending' });
+  // The echo names the start on the room's clock; the page's clock runs 2 s ahead of the room's.
+  const offset = 2000;
+  const w = createTurn(doc(), { clientId: 'p-00000003', prompt: 'and now?', at: t0 }, { offset });
+  w.confirm({ turnId: 't-9', delivery: 'new', at: new Date(t0 - offset + 500).toISOString() });
+  assert.equal(w.startMs, t0 + 500, 'the echo\'s at moved onto the page\'s clock');
+  assert.equal(v.tick(t0 + 2999), false);
+  assert.equal(labels(v).length, 1, 'no AGENT row at 2.999 s');
+  assert.equal(v.tick(t0 + 3000), true, 'the row is made at 3 s');
+  assert.match(labels(v)[1].textContent, /^AGENT · \d\d:\d\d · 0:03$/);
+  assert.equal(ageOf(v), '0:03');
+  assert.equal(replyOf(v), undefined, 'nothing under the row yet');
+  assert.equal(v.tick(t0 + 12_000), false);
+  assert.equal(ageOf(v), '0:12');
+  v.delta({ blockIndex: 0, text: 'Three runs ran last night.' });
+  v.draw();
+  assert.equal(labels(v).length, 2, 'the first text goes under the same row');
+  assert.equal(replyOf(v).textContent, 'Three runs ran last night.');
+  v.end({ at: new Date(t0 + 35_400).toISOString() });
+  assert.equal(ageOf(v), '0:35', 'the total stays after the end');
+  v.tick(t0 + 99_000);
+  assert.equal(ageOf(v), '0:35');
+});
+
+test('the age: a turn under 3 s shows none; a snapshot turn shows its total', () => {
+  const t0 = Date.parse(AT);
+  const short = createTurn(doc(), {
+    turnId: 't-1', prompt: 'hi', at: AT, items: [{ kind: 'text', blockIndex: 0, text: 'Hello.' }],
+    end: { state: 'done', at: new Date(t0 + 900).toISOString() },
+  });
+  assert.equal(ageOf(short), null);
+  assert.match(labels(short)[1].textContent, /^AGENT · \d\d:\d\d$/);
+  const long = createTurn(doc(), {
+    turnId: 't-2', prompt: 'hi', at: AT, items: [{ kind: 'text', blockIndex: 0, text: 'Hello.' }],
+    end: { state: 'done', at: new Date(t0 + 108_000).toISOString() },
+  });
+  assert.equal(ageOf(long), '1:48');
+});
+
+test('firstSentenceDone: a sentence end after 12 characters, a paragraph end, or the block complete (README B9)', () => {
+  assert.equal(firstSentenceDone('Three runs ran last night.'), false, 'no white space after the dot yet');
+  assert.equal(firstSentenceDone('Three runs ran last night.\nRound 1'), true);
+  assert.equal(firstSentenceDone('Three runs ran last night. Round'), true);
+  assert.equal(firstSentenceDone('Hi. It went well'), false, 'the dot comes before 12 characters');
+  assert.equal(firstSentenceDone('It used 1.5 GB of the disk'), false, 'no space after the dot');
+  assert.equal(firstSentenceDone('A table follows\n\n| a |'), true, 'the first paragraph ended');
+  assert.equal(firstSentenceDone('Short', true), true, 'the block complete');
+  assert.equal(firstSentenceDone('', true), false);
+});
+
+test('onFirstSentence fires once, when the drawn text holds the first sentence', () => {
+  let n = 0;
+  const v = createTurn(doc(), { turnId: 't-1', prompt: 'p', at: new Date().toISOString() }, { onFirstSentence: () => { n += 1; } });
+  v.delta({ blockIndex: 0, text: 'Three runs ran last night.' });
+  v.draw();
+  assert.equal(n, 0);
+  v.delta({ blockIndex: 0, text: '\nRound 1: it went. More. ' });
+  assert.equal(n, 0, 'not before the frame draws it');
+  v.draw();
+  v.delta({ blockIndex: 0, text: 'Even more. ' });
+  v.draw();
+  assert.equal(n, 1);
 });

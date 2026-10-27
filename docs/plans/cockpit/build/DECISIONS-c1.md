@@ -892,3 +892,49 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   with the other tool lines. The room's side (redaction before the cuts, `denied` on `tool.end`, the
   launch line) was already built by T9-T12; T21 adds only the pane's side — spec: `c1-talk.md` S-C1-30,
   README "Selectors tests use" — overrule: a `toHaveCount(0)` once the status line is made on demand.
+- B159 (T22) The age is redrawn on a timer set to the running turn's own whole seconds (the first at
+  its 3 s, then every 1 s of its count), not on a free 1 s interval, so `0:03` shows at 3 s and not
+  up to a second later; every other counter keeps its own tick — because S-C1-21 reads the row at
+  2.9 s and 3 s exactly — spec: `c1-talk.md` §9 "redrawn every 1 s with the screen's other
+  counters" — overrule: `ageTick()` in `public/js/cockpit/pane.js` on the shared `TICK_MS` interval.
+- B160 (T22) `↓ NEW` shows once something new comes while the view is unpinned (text, a tool line,
+  a turn, the `AGENT` row made at 3 s, a snapshot), not on the drag itself; the age counting in a
+  row already there is not "new" — because a drag up through old turns with nothing arriving has
+  nothing new to jump to — spec: `c1-talk.md` §4 "A drag up unpins it … A button `↓ NEW` appears" —
+  overrule: `grew()` in `pane.js` shows it on every unpinning scroll.
+- B161 (T22) S-C1-21 reads "t = 3 s" 5 ms after the turn's start as the pane computes it (the
+  echo's `at` plus the page's clock at the `welcome` minus `welcome.now`, recorded by an init
+  script in the same task as the pane's own reading), and 12 s and 15 s likewise 5 ms after;
+  2.9 s exactly — because the fake clock flows until the echo and two `Date.now()`
+  in one task can differ by a millisecond — spec: `c1-talk.md` S-C1-21 — overrule: pause the
+  page's clock before the load (needs every boot timer run by hand).
+- B162 (T22) S-C1-21's "the reply's drawn text is all 26 000 characters" is asserted as: the
+  room sent 26 000 characters, and the reply's `textContent` equals md.js + reply.js drawing those
+  26 000 characters whole (a detached node in the page); the drawn `textContent` is shorter than
+  26 000 because a table's pipes and separator row are not drawn (D23) — the contradiction is
+  under For the owner — spec: `c1-talk.md` S-C1-21 `Test:`, §3 D23 — overrule: a script whose
+  drawn text is 26 000 characters, then `textContent.length` 26 000.
+- B163 (T22) Under `page.clock` Playwright's fake `performance` makes `mark`/`measure` no-ops and
+  every `getEntries*` empty, so S-C1-21's test gives the page's `performance` the real methods back
+  in an init script (its `now` stays the fake); the pane calls `performance.mark` as on the real
+  screen — because S-C1-21 asks for a fake clock and the B9 measure in one test — spec: README B9,
+  `c1-talk.md` S-C1-21 — overrule: none in the product; the test's two init scripts.
+- B164 (T22) S-C1-34 split off to T22b after T32: its chip is `ASK ABOUT THIS` (S-C3-10, the C3
+  slice: no chip is built in C1), its room-down line slot is build 16 (T32) and its length note and
+  182 px input are build 11 (T23) — because a test of a stack whose three parts do not exist yet
+  cannot pass, and §3.1 names no wait for it — spec: `slices.md` §3.1 (S-C1-34 in C1),
+  `c1-talk.md` S-C1-34 — overrule: the owner's answer under For the owner.
+- B165 (T22) `↓ NEW` sits in a band (`.ck-band`, position relative) holding the conversation's
+  scroller, 16 px above the band's bottom, centred over the text column by `calc()` on `--ck-in`
+  (x 1016-1112 at 1368, x 352-448 at 800); the stack items of §1.1 will go between the band and
+  the input row, so `↓ NEW` follows the topmost with no measuring — spec: `c1-talk.md` §1.1, §4 —
+  overrule: `.ck-follow` in `public/css/cockpit.css`.
+- B166 (T22) The B9 marks are set only for this screen's own typed prompt (`cockpit:B9:start` at the
+  SEND tap, the end and the measure once the first text block's drawn text holds its first
+  sentence: `firstSentenceDone()` in `turns.js`, c5-c6.md §1's rule, or a blank line after the
+  first paragraph, or the block complete) — because B9 starts at this screen's tap — spec: README
+  B9 — overrule: `onFirstSentence` in `pane.js` `sendNow()`.
+- B167 (T22) A done turn from the snapshot shows its total age when it ran 3 s or more (seeded
+  turns of 8 s read `AGENT · 07:02 · 0:08`), the total from `end.at − at`; the `AGENT` row made at
+  3 s before any item carries the turn's own start time — spec: `c1-talk.md` §9 "then the label
+  keeps the total" — overrule: `tick()` in `public/js/cockpit/turns.js`.
