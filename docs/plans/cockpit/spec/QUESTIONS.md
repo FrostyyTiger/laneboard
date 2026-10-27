@@ -116,6 +116,8 @@ Without a `fleet` block every caller is `local`, so a tablet behind a reverse pr
 - c) The cockpit needs a tailnet in v1 (breaks `spec-input.md` §6, "not tied to one VPN").
 
 Recommendation: a) — it follows §6 ("device tokens") and keeps "a token cannot act" (plan §2).
+Spec for a): `screens.md` §6.5 (a third listener, `cockpit.screen.port`, where only `screen` and
+unpaired callers exist), S-SCR-37, D236-D239 (T71).
 
 Answer: (open)
 

@@ -280,7 +280,7 @@ S-C6-03 S-C6-04 S-C6-05. The confirm card is `c5-c6.md` §8. The job format, too
 | Slice | Scenarios | Waits for |
 | --- | --- | --- |
 | C2b | S-C2B-01 S-C2B-02 | Q-O8, Q-O20 (D55) |
-| Pair | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 S-SCR-27 S-SCR-28 S-SCR-29 S-SCR-33 S-SEC-04 | Q-O21 b) (under a) these nine are C1's and C1 grows by about 5 steps) |
+| Pair | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 S-SCR-27 S-SCR-28 S-SCR-29 S-SCR-33 S-SCR-37 S-SEC-04 | Q-O21 b) (under a) these ten are C1's and C1 grows by about 5 steps); Q-O27 (under b) or c) S-SCR-37 and `screens.md` §6.5 go) |
 | Canvas 2 | S-C4-25 S-C4-26 S-C4-27 S-C4-28 S-C4-29 S-C4-30 S-C4-31 S-C4-32 S-C4-33; planned: T99's checklist flick | T12 written; Q-O32 answered (with c) the custom-card part waits) |
 | History | none written; planned with §5.2 | the board change of §5.2 |
 | C5 | S-C5-01 S-C5-02 S-C5-03 S-C5-04 S-C5-05 S-C5-06 S-C5-07 | Q-O34; T128 (messages, fake voice service) |
@@ -297,7 +297,7 @@ by the task that writes them.
 | S-SCR-01, 06, 07, 08, 10, 11, 26 | Canvas |
 | S-SCR-02, 03, 04, 09, 17, 18, 19, 21, 22, 23, 24, 25, 30, 31, 35, 36 | C1 |
 | S-SCR-05, 12 | Show |
-| S-SCR-13, 14, 15, 16, 27, 28, 29, 33 | Pair |
+| S-SCR-13, 14, 15, 16, 27, 28, 29, 33, 37 | Pair |
 | S-SCR-20, 32 | C2 |
 | S-C1-01..12, 14..23, 25..43 | C1 |
 | S-C1-13 | C2 |
@@ -320,7 +320,7 @@ by the task that writes them.
 | S-ONE-01..07 | One |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 202 live ids in all (round 126, S-C1-44 by T66).
+D55). 203 live ids in all (round 128, S-SCR-37 by T71).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

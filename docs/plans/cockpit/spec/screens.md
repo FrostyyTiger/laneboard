@@ -425,11 +425,12 @@ Q-O29; `single-machine.md` for the one box). Neither: the cockpit is **unconfigu
 button, no canvas half, the board as today (§4) (D17). The screen reaches the room directly on the page's own origin, under
 `/api/cockpit/`, never through the hub (`protocols.md` §1, D92); the routes below are its §1.1.
 
-**The board does not need pairing.** Viewing the board stays as today (`docs/fleet/auth.md`: a
-`direct` user through serve, or `local`). An unpaired screen shows every view, the Wall and the
-tour as a paired one does; only the pane and the canvas wait for the pairing. (A LAN-only setup
-where the device token also opens the board is Q-O27's and `single-machine.md`'s; what a token
-gives, verb by verb, is `security.md` §2.)
+**The board does not need pairing, except on a screen listener.** On the main port and through
+serve the board is shown as `docs/fleet/auth.md` decides: `local`, or a `direct` user. There an
+unpaired screen shows every view, the Wall and the tour as a paired one does; only the pane and the
+canvas wait for the pairing. On the screen listener of a LAN setup with no tailnet the device token
+is also the way into the board, read-only, and an unpaired screen sees only the pairing page
+(§6.5, pending Q-O27). What a token gives, verb by verb, is `security.md` §2.
 
 **The pairing code.** 6 characters from `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (no `0 O 1 I L`), shown
 as two groups of 3 (`K7M-4QX`), accepted with or without the dash, any case. Valid **300 s**; a
@@ -696,6 +697,104 @@ log, so the owner can answer "who paired this" and "what did the cockpit do at 0
   ```
 
   (UTC, as `laneboard audit` prints every line.)
+
+### 6.5 A screen with no tailnet: the `screen` kind (pending Q-O27, T71)
+
+For a tablet on a LAN with no tailnet (`single-machine.md` §2.3, ONE-C). Today such a tablet has two
+ways in and both are wrong: a reverse proxy to the main port makes it `local`, with every action
+and terminal (`docs/fleet/auth.md` rule 1: no `fleet` block, everything is `local`), and the
+ingress port wants `tailscale serve`'s headers. Under Q-O27 a) the device token is its way in, on
+a listener of its own. Built by the Pair slice (`slices.md` §3.8); C1 has no listener and no kind.
+
+**The listener.** With `cockpit.screen.port` set, the process opens a third listener (beside
+`port` and `fleet.ingressPort`) on `cockpit.screen.bind`. **The listener decides the kind**, as for
+the other two: every request on it is a `screen` request or refused, never `local` or `direct`.
+
+| Key | Default | Env | What |
+| --- | --- | --- | --- |
+| `cockpit.screen.port` | unset: no listener | `LANEBOARD_COCKPIT_SCREEN_PORT` | the port the tablet's HTTPS proxy forwards to; examples use `7779`. Fatal at start when it is not an integer 1-65535 or equals `port`, `fleet.ingressPort` or `cockpit.mcp.port`: `cockpit.screen.port must be a port number other than port, fleet.ingressPort and cockpit.mcp.port` |
+| `cockpit.screen.bind` | `127.0.0.1` | `LANEBOARD_COCKPIT_SCREEN_BIND` | the address; loopback when the proxy runs on the box, a LAN address when it runs elsewhere or with `cockpit.allowInsecure` (§6.2.1) and no proxy. Not an IP address: fatal, naming the key |
+
+More fatal errors at start, each naming the key: `cockpit.screen.port needs cockpit.agent in this
+process: the board checks the device tokens itself` (with `cockpit.forwarded`, on a hub, or in
+`mode: cockpit`, which serves no board: the token store is the room's, 0700, D128/D91); and
+`cockpit.screen.port needs publicUrl (the address the tablet opens)`.
+
+**Who a request is** (D236). On the screen listener, before any route:
+
+1. Every `Tailscale-*` header is deleted (as on the main port); `X-Forwarded-For` is kept for the
+   pairing block's `from` line only (§6.1) and decides nothing. A request carrying
+   `X-Laneboard-Sig` or `X-Laneboard-Envelope` gets `403 {"error":"hub-not-allowed"}`.
+2. `Host` must be `publicUrl`'s host with its port: else `403 {"error":"bad-host"}`. Every
+   upgrade and every mutating request needs an `Origin` exactly `publicUrl`'s origin, and passes
+   §6.2's `Sec-Fetch-Site` and `X-Laneboard: 1` rows (`guardOrigin`, `checkCsrf`, unchanged).
+3. The cookie `lb_cockpit` is looked up as the room looks it up for its link (its SHA-256 against
+   the paired screens). A paired screen's token gives `{kind:'screen', user:'screen:desk',
+   name:'desk', readOnly:true}`. No cookie, or a token the room does not know: **unpaired**, below.
+
+**What a `screen` request may do** is what `docs/fleet/auth.md` already gives a read-only `direct`
+user (`readOnly: true` in `guardRequest`/`guardUpgrade`), plus the room's routes:
+
+| Request | `screen` (token) | unpaired (no token) |
+| --- | --- | --- |
+| `GET`/`HEAD` of the page and its files, every board read (`/api/map`, `/api/state`, `/api/morning`, `/api/v1/*` reads, session previews) | as for any caller | a navigation (`Sec-Fetch-Mode: navigate`, or `Accept` with `text/html`): `200` the pairing page below, at every path; anything else `401 {"error":"not-paired"}` |
+| the board's `/ws` | opens; `hello` carries `"access":"screen"` (D237) | `401` status line, no body |
+| any `POST`, `PUT`, `DELETE`, `PATCH` outside `/api/cockpit/` (actions, `/api/sessions/*`, `/api/lanes`, `/api/push/*`, `/api/client-metrics`, `/api/hook`) | `403 {"error":"read-only"}`, nothing runs | `401 {"error":"not-paired"}` |
+| a terminal (`/ws/term/*`, `/api/v1/term/*`) | `403` status line (`read-only`) | `401` status line |
+| `POST /api/cockpit/pair`, `GET /api/cockpit/pair/{code}` | as §6 (a paired screen does not ask) | as §6 and §6.2-§6.2.1; this is how it pairs |
+| `GET /api/cockpit/ws` and the room's other screen routes (`protocols.md` §1.1) | as §6 and `protocols.md`, with the same token | the room's own answer (close 4401, `404`) |
+| `/api/cockpit/admin/*` | `404 {"error":"not-found"}`: admin routes answer on the main port only (§6.1) | `404 {"error":"not-found"}` |
+
+So a token here reads what a read-only tailnet user reads, terminal previews included, and talks
+to the room; it never acts, opens a terminal or changes push (`security.md` §2's row "use the
+board"). A board read with `screen` writes no audit line, as reads do today.
+
+**The cookie** on this listener (D238): the `200` of §6 step 4 sets `lb_cockpit` with `Path=/`, not
+`Path=/api/cockpit`, so the page's files, the board's routes and `/ws` see it; `HttpOnly`,
+`SameSite=Strict`, `Max-Age`, and `Secure` (none on an `allowInsecure` `http:` page) are §6.2's.
+On every other listener D163's `Path=/api/cockpit` stands. One cookie name, one token, one store.
+`SameSite=Strict` also means a link to the tablet's address from another site opens the pairing
+page, not the board; typing the address or a home-screen icon sends the cookie.
+
+**The pairing page** (`public/pair.html`, `[data-pair-page]`): one file with its CSS and script
+inline, so an unpaired caller fetches nothing else; `Cache-Control: no-store`. On `--bg`, one card
+560 px wide, centred, the texts and sizes of §6's pairing card except the first line, which reads
+`This screen is not paired yet. The board and the cockpit open here once it is.` (18 px
+`--text-2`). With a token unpaired in the last 30 days (D135) the title reads `PAIR THIS SCREEN
+AGAIN` and the line `This screen was unpaired at 06:58. The board and the cockpit open here once it
+is paired again.` (`at` form of D232). On a plain-HTTP page the room refuses as §6.2.1 and the card
+is `[data-pair-card="insecure"]` with its last line `Nothing else opens here without a pairing.`
+It never shows the board, the demo or any fleet data (D239). Within 2 s of the approval it shows
+`Paired as desk.` (24 px `--text-1`) for 2.0 s, then `location.reload()`: the board opens at the
+URL the tablet asked for.
+
+**Unpair** (`laneboard cockpit unpair desk`, §6) takes the board away too: the room closes that
+screen's room link with 4402 (`protocols.md` §2.3) and the board closes every `/ws` socket opened
+with that token, close code 1008 `unpaired`. A page with `access:"screen"` that sees 4402 on the
+room link, 1008 `unpaired` on `/ws` or `401 {"error":"not-paired"}` on any fetch calls
+`location.reload()` within 1 s, and gets the pairing page (the `AGAIN` variant).
+
+**What the page does with `access:"screen"`** (D237): it draws the board as for any caller; a
+control whose request comes back `403 {"error":"read-only"}` shows the toast (`public/js/ui/toast.js`)
+`This screen only looks. Act from a trusted device.` for 4 s instead of `Failed: HTTP 403`; it
+sends no `POST /api/client-metrics`; and it never offers web push (`GET /api/push/key` is not
+asked). Hiding each view's action buttons is left to a later board task.
+
+**The main port, once a cockpit is configured** (D236). The trap ONE-C must not fall into is a
+proxy pointed at `7777`. With a `cockpit` section:
+- a peer on the main port that is not a loopback address is refused `403 {"error":"not-local"}`,
+  with or without a `fleet` block (rule 2 of `docs/fleet/auth.md` without the `fleet` condition);
+  with `bind` not loopback the process says so once at start, on stderr: `cockpit: bind is
+  0.0.0.0: only this box is local on port 7777; a LAN screen uses cockpit.screen.port
+  (docs/cockpit.md)`;
+- with `cockpit.screen.port` set, a request on the main port that carries `X-Forwarded-For`,
+  `X-Forwarded-Host`, `X-Forwarded-Proto` or `Forwarded` is refused `403
+  {"error":"misrouted-proxy"}`, and once per process stderr says `cockpit: a request on port 7777
+  came through a proxy; point the proxy at the screen port 7779 (cockpit.screen.port)` (as the
+  board's `misroutedServe` does for serve's headers, `server/http.mjs`). A proxy that adds none of
+  these headers cannot be told apart from a local process: `docs/cockpit.md` keeps its warning box.
+
+The config for ONE-C is `single-machine.md` §2.3's. Scenario: S-SCR-37.
 
 ## 7. When something is down
 
@@ -1223,6 +1322,52 @@ Test: Playwright with `page.clock.install({time})`, `runFor` to 23:59:59 and to 
 and `{"up":true}` on the room under test (`stand-ins.md` §1.2); assert the status line's text
 with the retry count cut at `Retrying in`, the element handle kept across midnight, the caption's
 text and `boundingBox()`; the second case from a fresh page.
+
+### S-SCR-37 A LAN tablet with a token reads the board and cannot act; without one it sees only the pairing page (pending Q-O27)
+Given the real room with a fake agent in one process (`mode: builder`, `cockpit.agent`), no `fleet`
+block, `publicUrl: "http://127.0.0.1:{screenPort}"` and `cockpit.screen.port: {screenPort}`
+(`freePort()`), the board on its demo topology (`DEMO_TOPOLOGY`, `stand-ins.md` §4.1: site `hv1`,
+`vm-a`), and no screen paired,
+When a client with no cookie asks the screen listener for `GET /`, `GET /#/map`'s document,
+`GET /api/map`, `POST /api/v1/actions`, an upgrade of `/ws` and an upgrade of `/ws/term/x`,
+Then the two navigations (`Sec-Fetch-Mode: navigate`) get `200` with `[data-pair-page]` and
+`Cache-Control: no-store`, the same body at both paths; `GET /api/map` gets `401
+{"error":"not-paired"}`; the `POST` gets `401 {"error":"not-paired"}` and the audit log gains
+no line; both upgrades get a `401` status line; no answer names `hv1` or `vm-a`.
+When a Playwright page (1368x912, `hasTouch: true`) opens `http://127.0.0.1:{screenPort}/#/map`,
+Then within 2 s it shows `PAIR THIS SCREEN`, `This screen is not paired yet. The board and the
+cockpit open here once it is.` and a code matching `^[2-9A-HJKMNP-Z]{3}-[2-9A-HJKMNP-Z]{3}$`;
+the page made no request but the navigation, `POST /api/cockpit/pair` and its polls.
+When the test approves the code through the control API (`POST /pair {"code":…,"name":"desk"}`),
+Then within 2 s the page shows `Paired as desk.`; the poll's `Set-Cookie` for `lb_cockpit` has
+`Path=/`, `HttpOnly` and `SameSite=Strict`; 2.0 s later the page reloads, `[data-view="map"]`
+draws `hv1` and `vm-a` within 5 s, and the `/ws` `hello` frame has `"access":"screen"`.
+When, with that cookie, a client sends `GET /api/map`, `POST /api/v1/actions` (an `ack` on
+`vm-a`, `X-Laneboard: 1`, the page's `Origin`), `POST /api/push/subscribe`, an upgrade of
+`/ws/term/x` and `GET /api/cockpit/admin/screens`,
+Then `GET /api/map` gets `200` with both nodes; the two `POST`s get `403 {"error":"read-only"}`
+and nothing runs (no audit line, `{stateDir}`'s push subscriptions unchanged); the terminal upgrade
+gets a `403` status line; the admin route gets `404 {"error":"not-found"}`.
+And in the page, tapping an action that posts shows the toast `This screen only looks. Act from a
+trusted device.` for 4 s, never `Failed: HTTP 403`.
+And on the main port: `GET /api/map` with `X-Forwarded-For: 192.0.2.24` gets `403
+{"error":"misrouted-proxy"}` and stderr has `cockpit: a request on port 7777 came through a
+proxy; point the proxy at the screen port 7779 (cockpit.screen.port)` (with the test's ports)
+exactly once after two such requests; a request without the header is `local` as today.
+When the test unpairs `desk` (`POST /unpair {"name":"desk"}`),
+Then within 1 s the board's `/ws` closes 1008 `unpaired`, the room link 4402, and within 2 s the
+page shows `PAIR THIS SCREEN AGAIN` with `This screen was unpaired at HH:MM. The board and the
+cockpit open here once it is paired again.`; `GET /api/map` with the old cookie gets `401
+{"error":"not-paired"}`.
+Test: Playwright at `http://127.0.0.1:{screenPort}` for the page steps (the listener decides the
+kind, not the peer address, so a loopback client stands in for a LAN tablet; pending research Q14:
+if Chromium drops the `Secure` cookie on that origin, the Playwright steps run with
+`cockpit.allowInsecure: true` and the raw steps stay as written); raw `node:http` and `ws`
+clients for every request with or without the cookie, reading `Set-Cookie`, status, body and close
+codes; `laneboard audit --file` and the push subscriptions file read before and after for "nothing ran"; `page.on('request')`
+for "no other request"; the not-loopback peer of the main port as a `node:test` of `classify` with
+an injected `remoteAddress` `192.0.2.24` (`403 not-local`); stderr as `protocols.md` §1's boot
+test reads it.
 
 ## 9. The Wall contract (T31)
 

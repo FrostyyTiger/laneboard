@@ -27,6 +27,7 @@ start with the agent on its own user unless told to). Text that changes with one
   | `7777` | board, room, page | `port` |
   | `7790` | the MCP server the agent calls (D58) | `cockpit.mcp.port` |
   | `7778` | only with a `fleet` block: the ingress listener `tailscale serve` targets (`docs/fleet.md`) | `fleet.ingressPort` |
+  | `7779` | only for a LAN tablet with no tailnet: the screen listener its HTTPS proxy targets (§2.3, `screens.md` §6.5, pending Q-O27) | `cockpit.screen.port` |
 
   A room alone (`mode: cockpit`) also defaults to `7778`; it never runs on the one box, so the two
   never meet.
@@ -119,20 +120,22 @@ facts decide it today:
 
 Under Q-O27 a) the tablet's way in is its device token, as the request kind `screen` (every read
 plus `/api/cockpit/*`, no action, terminal or push change), on a listener that accepts only that
-kind; `screens.md` §6 writes it (T71). So ONE-C needs the Pair slice and T71, and does not exist in
-C1. The config it will take, for the recommendation:
+kind: `cockpit.screen.port` (`screens.md` §6.5, D236, S-SCR-37). So ONE-C needs the Pair slice, and
+does not exist in C1. The config it will take, for the recommendation:
 
 ```json
 {
   "publicUrl": "https://cockpit.example.invalid:8443",
   "cockpit": {
-    "agent": { "kind": "claude-code", "command": ["/var/lib/lb-agent/.local/bin/claude"], "user": "lb-agent" }
+    "agent": { "kind": "claude-code", "command": ["/var/lib/lb-agent/.local/bin/claude"], "user": "lb-agent" },
+    "screen": { "port": 7779 }
   }
 }
 ```
 
-plus a reverse proxy with a certificate from a local CA whose root is installed on the tablet,
-forwarding to the screen listener T71 names (not `7777`). Until then a LAN tablet uses ONE-B, or
+plus a reverse proxy on the box with a certificate from a local CA whose root is installed on the
+tablet, forwarding `https://cockpit.example.invalid:8443` to `http://127.0.0.1:7779` (never to
+`7777`: with a screen port the main port refuses proxy headers, `misrouted-proxy`). Until then a LAN tablet uses ONE-B, or
 the box's own screen (ONE-A). `cockpit.allowInsecure: true` (`screens.md` §6.2.1) works on a LAN
 but sends the token and the audio unencrypted; the room says so at start.
 

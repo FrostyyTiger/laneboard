@@ -55,7 +55,7 @@ Every row is a message of `protocols.md` §2-§8 on the room link, as that scree
 | change shared display | remove a card, `UNDO` a show command, tick a checklist row | remove a card or tick a row on every screen | display only; `CARD REMOVED · UNDO` on the screen where it was tapped (D84); no job is stopped by removing its card |
 | answer a confirm card | `confirm.answer` (`c5-c6.md` §8) | answer a card asked **of its own screen** only (D205, D206): so with the Jobs slice, prompt the agent to schedule or cancel a listed script and say yes to it (pending Q-O30) | every other screen shows `waiting for a yes on desk3…` while it is open (D205); one audit line per create and cancel (`coworker.md` §6.8); only scripts the owner listed in `cockpit.jobs.scripts`; a C6 act of the confirm tier also needs the target typed (pending Q-O35) |
 | pair, unpair, add a button | — | nothing | admin routes on the room's loopback, own uid only (D161) |
-| use the board | — | nothing: the cookie is not sent outside `/api/cockpit` | under Q-O27 a) (no tailnet) the token also opens the board's reads, never an action, terminal or push change |
+| use the board | — | nothing: the cookie is not sent outside `/api/cockpit`; on the screen listener of Q-O27 a) (no tailnet): every board read, terminal previews included | the screen listener refuses every action, terminal and push change (`403 read-only`, `screens.md` §6.5, D236); `unpair` also closes its board `/ws` (D239) |
 | reach the MCP server | — | nothing | loopback, bearer token, `Origin` refused (`c3-see.md` §1) |
 
 **So "a token cannot act" holds in this sense**: alone it starts nothing the agent could not be
