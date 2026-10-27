@@ -297,6 +297,7 @@ and not listed. Field values and ranges are in the section named.
 | `pin.close`, `pin.restore` | `seq`, `pin` | — | 4 |
 | `card.close`, `card.restore`, `card.front` | `seq`, `card` | — | 5 |
 | `card.tick` | `seq`, `card`, `row`, `ticked` | — | 5 |
+| `card.size` | `seq`, `card`, `size` | — | 5 |
 | `card.render` | `seq`, `card`, `rev`, `readyMs`, `minFontPx`, `overflow` | — | 5 |
 | `card.fault` | `seq`, `card`, `rev`, `why` | — | 5 |
 | `audio.start` | `seq`, `utterance`, `lang`, `format` | — | 6.1 |
@@ -332,7 +333,7 @@ and not listed. Field values and ranges are in the section named.
 | `show.undo` | no | `showId` | — | 4 |
 | `pin.put` | `room` | `pin` (`id`, `node`, `block`, `title`, `by`, `at`, `fields`) | `replaced` | 4 |
 | `pin.remove` | `room` | `pin`, `by` | — | 4 |
-| `card.put` | `room` | `card` (`id`, `block`, `title`, `size`, `by`, `at`, `fields`; `rev` with `block` `custom`; `leavesAt` when it has one), `receivedAt` | — | 5 |
+| `card.put` | `room` | `card` (`id`, `block`, `title`, `size`, `by`, `at`, `fields`; `rev` with `block` `custom`; `leavesAt` when it has one; `grownFrom` while the owner grew it), `receivedAt` | — | 5 |
 | `card.remove` | `room` | `card`, `by` | — | 5 |
 | `card.order` | `room` | `ids` | — | 5 |
 | `card.data` | no | `card`, `asOf`, `data` | — | 5 |
@@ -628,6 +629,7 @@ The room's one card list (D79) travels as shared state; card data as refreshes (
 | `card.restore` | screen → room | `{"type":"card.restore","seq":61,"card":"card-0004"}` | `UNDO` within 10 s (D84); after that `not-now` |
 | `card.front` | screen → room | `{"type":"card.front","seq":62,"card":"card-0003"}` | `TO FRONT` |
 | `card.tick` | screen → room | `{"type":"card.tick","seq":63,"card":"card-0005","row":2,"ticked":true}` | a checklist row (D87); a row with a `when` gets `not-now` |
+| `card.size` | screen → room | `{"type":"card.size","seq":68,"card":"card-0007","size":"l"}` | `+ 37 MORE` (`size` `l`) or `LESS` (the placed size), `c4-show-canvas.md` §8.10, D254; the room answers with a `card.put` of the same card (same `at`, no `NEW` time; `grownFrom` set or dropped) and, for `l`, a `card.order` with it first; another size gets `bad-message` |
 | `card.put`, a custom card | room → all, `seq` | `{"type":"card.put","seq":1350,"card":{"id":"card-0009","block":"custom","title":"Stuck runs by builder","size":"w","by":"agent","at":"2026-10-27T07:14:02+01:00","rev":1,"fields":{"reads":[{"tool":"runs","state":"stuck"}]}},"receivedAt":1793081642010}` | the HTML is not in the message: the screen loads the frame route (§1.1) for that `rev`; `card.data`'s `data` is `{"reads":[…],"data":…}` (`c4-show-canvas.md` §11.2) |
 | `card.render` | screen → room | `{"type":"card.render","seq":66,"card":"card-0009","rev":1,"readyMs":180,"minFontPx":18,"overflow":false}` | at the frame's `card:ready` (`c4-show-canvas.md` §11.4); a `rev` the room no longer holds is ignored |
 | `card.fault` | screen → room | `{"type":"card.fault","seq":67,"card":"card-0009","rev":1,"why":"no-answer"}` | `why`: `not-ready`, `no-answer`, `navigated`, `too-many-messages` (§11.5); the first one per `rev` wins |

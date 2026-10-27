@@ -223,19 +223,19 @@ a node lookup and the idle hook of the Wall contract (`screens.md` §9): this sl
 `SCREEN` sheet and `cockpit.layout` (`screens.md` §1, pending Q-O22); the card area, grid and shelf
 (`c4-show-canvas.md` §7); `place` and `replace` with their show lines and `UNDO` (§4, D82); the six
 blocks of D83: `countdown` (to a moment; bound to a job is Jobs'), `status`, `log`, `chart`,
-`text`, `diff`; removal and the 16-card cap (§9); `cards.json` (D85); the canvas half of room down
+`text`, `diff`; taps inside a card and the `+ 37 MORE` row (§8.10, D253/D254); removal and the 16-card cap (§9); `cards.json` (D85); the canvas half of room down
 (`c4-show-canvas.md` §7.6, D120).
 
 **Stand-ins and scripts**: as C1; script `c4-cards`.
 
-**Scenarios** (17):
+**Scenarios** (18):
 S-SCR-01 S-SCR-06 S-SCR-07 S-SCR-08 S-SCR-10 S-SCR-11 S-SCR-26
-S-C4-14 S-C4-15 S-C4-16 S-C4-17 S-C4-18 S-C4-19 S-C4-20 S-C4-21 S-C4-22 S-C4-23
+S-C4-14 S-C4-15 S-C4-16 S-C4-17 S-C4-18 S-C4-19 S-C4-20 S-C4-21 S-C4-22 S-C4-23 S-C4-35
 
 - An unbuilt block (`timer`, `table`, `checklist`, `map`) is an `isError` naming the six (D83).
 - B6 holds for `place`.
 
-**Done-when**: §2's slice rule for the 17 ids; the sketch `sketches/c4-canvas.html` is what the
+**Done-when**: §2's slice rule for the 18 ids; the sketch `sketches/c4-canvas.html` is what the
 owner sees at 1368x912 in `canvas`, apart from the job countdown.
 
 ### 3.6 Show: C4 show commands
@@ -281,7 +281,7 @@ S-C6-03 S-C6-04 S-C6-05. The confirm card is `c5-c6.md` §8. The job format, too
 | --- | --- | --- |
 | C2b | S-C2B-01 S-C2B-02 | Q-O8, Q-O20 (D55) |
 | Pair | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 S-SCR-27 S-SCR-28 S-SCR-29 S-SCR-33 S-SCR-37 S-SEC-04 | Q-O21 b) (under a) these ten are C1's and C1 grows by about 5 steps); Q-O27 (under b) or c) S-SCR-37 and `screens.md` §6.5 go) |
-| Canvas 2 | S-C4-25 S-C4-26 S-C4-27 S-C4-28 S-C4-29 S-C4-30 S-C4-31 S-C4-32 S-C4-33; planned: T99's checklist flick | T12 written; Q-O32 answered (with c) the custom-card part waits) |
+| Canvas 2 | S-C4-25 S-C4-26 S-C4-27 S-C4-28 S-C4-29 S-C4-30 S-C4-31 S-C4-32 S-C4-33 S-C4-34 | T12 written; Q-O32 answered (with c) the custom-card part waits) |
 | History | none written; planned with §5.2 | the board change of §5.2 |
 | C5 | S-C5-01 S-C5-02 S-C5-03 S-C5-04 S-C5-05 S-C5-06 S-C5-07 | Q-O34; T128 (messages, fake voice service) |
 | C6 | S-C6-06 S-C6-07 | the control-plane review, Q-O7, Q-O35; fenced for unattended work |
@@ -307,8 +307,8 @@ by the task that writes them.
 | S-C3-01, 02, 06, 09..17, 19, 21 | C3 |
 | S-C4-01..12 | Show |
 | S-C4-13, 24 | Jobs |
-| S-C4-14..23 | Canvas |
-| S-C4-25..33 | Canvas 2 |
+| S-C4-14..23, 35 | Canvas |
+| S-C4-25..34 | Canvas 2 |
 | S-CW-01..09, 15..18; S-SCR-34; S-C1-44 | Speak |
 | S-CW-10..14 | Jobs |
 | S-C5-01..07 | C5 |
@@ -320,7 +320,7 @@ by the task that writes them.
 | S-ONE-01..16 | One |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 216 live ids in all (round 132, S-C1-45..47 by T77).
+D55). 218 live ids in all (round 136, S-C4-34/35 by T99).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

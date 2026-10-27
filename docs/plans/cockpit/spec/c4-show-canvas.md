@@ -490,7 +490,8 @@ Every canvas card is `[data-card]` with `data-card-id`, `data-block`, `data-size
   margin): `STALE` while the room is down (§7.6), or `AS OF 02:10` when the bound source
   is older than 10 min (`c3-see.md` §3, `stale`).
 - **Remove** `[data-card-remove]`: 48 x 48, flush top right, `✕` 24 px `--text-2`,
-  `aria-label="Remove card"`. No other target within 8 px of it (T46).
+  `aria-label="Remove card"`. No other target within 8 px of it (T46); a grown card's `LESS` sits
+  16 px left of it (§8.10).
 - **Title**: 28 px row under the header, 16 px side padding, 20 px `--text-1`, one line, cut with `…`.
   At most 48 characters; each block has a default title (§8).
 - **Body**: the block (§8), 16 px side padding, 8 px under the title, 16 px bottom padding. A body is
@@ -587,7 +588,9 @@ stays in `screens.md` §7.
 v1 has eight blocks plus `text` and `diff` (pending Q-O3: recommendation a), all eight, built in
 the order of b)). C4's first night builds `countdown`, `status`, `log`, `chart`, `text` and `diff`
 (`pin` needs the last four, §3.4); the next builds `timer`, `table`, `checklist`, `map` (D83). Status
-words and marks are the Map's (`docs/design.md`: hue only with its shape; grey is normal).
+words and marks are the Map's (`docs/design.md`: hue only with its shape; grey is normal). How a
+tap inside a card is told from a scroll, and what an `s` or `w` body does with more than it can
+show, is §8.10 (D253, D254).
 
 ### 8.1 `countdown`
 
@@ -658,11 +661,13 @@ Lines as they happen, or an excerpt. Sizes `w` (default), `l`.
 Exactly one. Default title: `Events: {label}` (bound), `Log` (static).
 
 - **Look**: mono 18 px, 24 px lines, `--text-1`; bound lines are `06:12 vm-b is degraded` (time in
-  `--text-3`); no wrap, each line cut with `…`. `w` shows 5 lines, `l` 15. The body scrolls; it
-  starts at the end (newest at the bottom).
-- **Live** (bound): new events are appended within 10 s of the board having them. If the owner
-  scrolled up, the view stays and `↓ 3 NEW` (48 px tall, 16 px caps, bottom right of the body)
-  appears; a tap goes to the end. When the board's events start later than the card asks, the first
+  `--text-3`); no wrap, each line cut with `…`. `w` shows 5 lines; with more than 5 it shows the
+  newest 3 over the `+ 37 MORE` row (§8.10). `l` shows 15 lines; its body scrolls and starts at
+  the end (newest at the bottom).
+- **Live** (bound): new events are appended within 10 s of the board having them; in `w` the newest
+  3 move up and the row's count grows. In `l`, if the owner scrolled up, the view stays and
+  `↓ 3 NEW` `[data-card-new]` (48 px tall, 16 px caps, bottom right of the body) appears; a tap
+  goes to the end. When the board's events start later than the card asks, the first
   line reads `(the board keeps events since 05:40)` in `--text-3` (`covers`, `c3-see.md` §4.7).
 - The board has events, not host logs: a host's real log is a static excerpt the agent read itself
   (plan C3: the room's own read access, declared in config).
@@ -704,8 +709,8 @@ round, stuck; `ci` branch, verdict, at; `lanes` id, state, since. Default title:
 (`Alerts`), else `Table`.
 
 - **Look**: a 40 px header row (16 px caps `--text-3`), 40 px rows (18 px `--text-1`), numbers right
-  aligned, cells cut with `…`. `w` shows 2 rows, `l` 8; more rows scroll inside the body, and the
-  last visible row's bottom carries `+ 12 more` (16 px `--text-3`) until scrolled.
+  aligned, cells cut with `…`. `w` shows 2 rows; with more than 2 it shows the first row over the
+  `+ 19 MORE` row (§8.10). `l` shows 8 rows; more scroll inside the body.
 - **Live** (bound): refresh 10 s, order as the tool's (`c3-see.md` §4).
 
 ### 8.7 `checklist`
@@ -721,9 +726,13 @@ Default title: `Checklist`.
 
 - **Look**: 48 px rows; a 32 x 32 box (1 px `--line-strong`; ticked: `✓` 24 px `--text-1`), 16 px
   gap, the text 18 px (ticked: `--text-3`). A row with `when` shows `AUTO` (16 px caps `--text-3`) at
-  its right end. `s` shows 2 rows, `t` and `l` 7; more scroll.
+  its right end. Each row the owner may tick is a `<button>` `[data-check-row]` with `data-row`
+  (0-based) and `aria-pressed` (`true` when ticked), the whole 48 px row wide. `s` shows 2 rows;
+  with more than 2 it shows the first over the `+ 11 MORE` row (§8.10). `t` and `l` show 7; more
+  scroll.
 - **Live**: a `when` row is ticked by the room when its condition holds (refresh 10 s) and is not
-  tappable. A tap on any other row toggles it on every screen within 0.3 s (the room keeps it; a
+  tappable. A tap (§8.10: never a drag, never after the body scrolled) on any other row toggles it
+  on every screen within 0.3 s (the room keeps it; a
   display state, not an action). The agent learns ticks through the next prompt's focus,
   `"ticked":[{"card":"card-0006","item":2,"done":true}]` (as `undone`, §5; D87).
 
@@ -747,8 +756,60 @@ Default title: `Map: {label}`.
 `text`: `title` and `body` (at most 280 characters, 18 px `--text-1`); sizes `s` (default), `w`.
 `diff`: static `lines`, 1-80, each starting with `+`, `-` or a space, at most 160 characters; mono
 18 px, `+` lines `--text-1`, `-` lines `--text-3`, the sign kept as the mark (no red or green:
-neither side is trouble); sizes `w` (default), `l`. Both are what `pin` takes (§3.4); pins draw the
+neither side is trouble); sizes `w` (default), `l`. In `s`/`w` a `text` body over 5 lines shows 3
+over a `SHOW ALL` row and a `diff` over 5 lines its first 3 over `+ 77 MORE` (§8.10). Both are what `pin` takes (§3.4); pins draw the
 same bodies at 320 x ≤ 240 px (a chart plot 288 x 120, a log or diff 6 lines).
+
+### 8.10 Taps inside a card, and bodies that overflow
+
+Review 63-touch finding 8: a flick over a checklist must not tick a row on every screen, and a
+2-row scroll window on a slanted desk screen is too small to aim at.
+
+**Taps** (D253). Every tappable on a card (`✕`, `[data-card-removed]`'s `UNDO`, `CANCEL JOB`,
+`[data-check-row]`, `[data-card-more]`, `[data-card-less]`, `[data-card-new]`) acts on
+`pointerup`, never on `pointerdown` or `click`, and only when all of these hold:
+
+1. the `pointerup` has the `pointerId` of a `pointerdown` on the same tappable;
+2. it is within 8 px (`TAP_SLOP_TOUCH`) of that `pointerdown` for touch and pen, 3 px (`TAP_SLOP`)
+   for a mouse: the Map's constants, imported from `public/js/views/map/interact.js`, not copied;
+3. no `pointercancel` came between the two (a browser that takes a flick as a scroll sends one);
+4. the card body's `scrollTop` is the same as at the `pointerdown` (a browser that scrolled without
+   a `pointercancel` is caught here).
+
+No time limit: a slow press that stays within the slop counts. The pressed state is the common one
+(`README.md` "Touch", D224); it goes with the `pointercancel`. A scrolling body (`t`, `l`) has
+`overflow-y: auto`, `touch-action: pan-y` and `overscroll-behavior: contain`, so a flick at its end
+does not move the card area or the page.
+
+**Bodies that overflow** (D254). An `s` or `w` body (132 px) never scrolls: `overflow: hidden`. A
+`log`, `table`, `checklist`, `diff` or `text` that holds more than the size shows (§8.4, §8.6, §8.7,
+§8.9) draws what fits above a 48 px row at the body's bottom, `<button>` `[data-card-more]`, the
+body's full width (240 px in `s`, 528 px in `w`), 1 px `--line-strong`, label centred in 16 px caps
+`--text-1`: `+ 37 MORE` (lines, rows or items not drawn; `SHOW ALL` for `text`, whose hidden part
+has no count before layout).
+
+| Block, size | Over | Draws above the row |
+| --- | --- | --- |
+| `log`, `w` | 5 lines | the newest 3 lines (72 px) |
+| `table`, `w` | 2 rows | the 40 px header and the first row |
+| `checklist`, `s` | 2 items | the first item (48 px) |
+| `diff`, `w` | 5 lines | the first 3 lines |
+| `text`, `s` or `w` | 5 lines at 24 px | the first 3 lines, the third cut with `…` |
+
+- **A tap on `+ 37 MORE`** sends `card.size` with `size` `l` (`protocols.md` §5). The room grows the
+  card to `l` and moves it to the front of its list: within 0.3 s every screen draws it `l` in the
+  first slot (`split` x 784-1344, y 24-504; `canvas` x 100-660, y 24-504) and repacks the rest
+  (§7.2). Any block may be grown to `l` by the owner; §8's sizes are what the agent may ask for.
+- **`LESS`** `[data-card-less]`: a grown card's header shows it, 48 x 80, 16 px caps `--text-1`, 1 px
+  `--line-strong`, its right edge 16 px left of `✕`. A tap sends `card.size` with the card's placed
+  size; the card shrinks back on every screen within 0.3 s and stays first.
+- **Who sees it.** A grown card carries `grownFrom` (the placed size) in `card.put` and in `cards`
+  (§12.4); the agent is not told otherwise (display state, as D87's ticks are not sent mid-turn).
+  A `replace` from the agent puts its own size and drops `grownFrom`. A removed and restored card
+  keeps the size it had.
+- **A screen too small for `l`** (a grid under 2 x 2, §7.1): the row is drawn as a label, not a
+  button (`--text-3`, no border, `aria-disabled="true"`), and the card's full body is a `replace`
+  away or on a larger screen.
 
 ## 9. Removing a card
 
@@ -856,11 +917,12 @@ Then the plot holds a line with 2 points and the last value reads `41 %`; the me
 Test: `page.clock`; demo node cpu set; read the plot's `<path>` point count and the texts.
 
 ### S-C4-19 A live log appends, and holds still when the owner scrolled up
-Given `side` with a `log` card bound to `vm-b` showing 5 lines,
+Given `side` with a `log` card in `l` bound to `vm-b` showing 15 lines (`w` does not scroll:
+S-C4-35),
 When the demo hub adds 3 events to `vm-b`,
 Then within 10.3 s the card's last line is the newest event.
 When the owner scrolls the body up by 48 px and 2 more events arrive,
-Then the view does not move and `↓ 2 NEW` shows; a tap on it shows the newest line.
+Then the view does not move and `[data-card-new]` `↓ 2 NEW` shows; a tap on it shows the newest line.
 Test: add demo events; read the body's last visible line; `scrollTop` before and after.
 
 ### S-C4-20 The 17th card removes the oldest that is not a job's
@@ -922,6 +984,40 @@ When the link comes back,
 Then within 1 s the line goes and `CANCEL JOB` is enabled.
 Test: Playwright with `page.clock`; the stand-in room's link; texts and `disabled` on
 `[data-card-cancel]`.
+
+### S-C4-34 A flick over a checklist scrolls it and ticks nothing
+Given `desk` (`split`) and `side` (`canvas`), Playwright contexts with `hasTouch: true`, and a
+`checklist` card in `t` with 12 items, none ticked, none with `when`,
+When on `side` a finger goes down on row 3's text, moves 120 px up in 6 steps over 150 ms and lifts,
+Then the body's `scrollTop` is above 0, and 0.5 s later no `[data-check-row]` has
+`aria-pressed="true"` on either screen.
+When a finger goes down on the top visible row, moves 6 px and lifts,
+Then that row is ticked on both screens within 0.3 s.
+When a mouse goes down on the next row, moves 5 px and lifts,
+Then nothing is ticked (3 px for a mouse); a mouse click without movement ticks it.
+When the next prompt is sent,
+Then its focus carries `"ticked"` with exactly the two taps' rows, no row from the flick.
+Test: two contexts; touches through CDP `Input.dispatchTouchEvent` (`touchStart`, 6 `touchMove`
+20 px apart, `touchEnd`), the mouse through `page.mouse`; `scrollTop`; `aria-pressed` on both
+contexts; the fake agent's received focus.
+
+### S-C4-35 A long log in `w` does not scroll: `+ 37 MORE` grows it to `l` on every screen, `LESS` puts it back
+Given `desk` (`split`) and `side` (`canvas`) with one `status` card each,
+When the fake agent places `log {"lines":["line 01",…,"line 40"]}` (size `w`),
+Then on `side` the log's body has `scrollHeight` equal to `clientHeight`; it shows `line 38`,
+`line 39`, `line 40` and under them `[data-card-more]` `+ 37 MORE`, 48 px tall, flush with the
+body's bottom; a mouse wheel of 200 px over the body changes nothing.
+When the owner taps `+ 37 MORE` on `side`,
+Then within 0.3 s on both screens the card has `data-size="l"` and is the first `[data-card]`: on
+`side` at x 100-660, y 24-504, on `desk` at x 784-1344, y 24-504 with the `status` card on its shelf
+(`SHELF 1`); the body shows 15 lines and scrolls (`scrollHeight` above `clientHeight`); the header
+has `[data-card-less]`, 48 px tall, its right edge 16 px left of `[data-card-remove]`; `cards` lists
+it with `"size":"l","grownFrom":"w"`.
+When the owner taps `LESS` on `desk`,
+Then within 0.3 s on both screens the card has `data-size="w"`, is still first, and shows
+`+ 37 MORE` again; `desk`'s shelf is empty.
+Test: two contexts; `[data-card]` order and rects; `scrollHeight`/`clientHeight`; `page.mouse.wheel`
+then `scrollTop` still 0; the fake agent's `cards` call result.
 
 ## 11. Custom cards
 
@@ -1148,8 +1244,8 @@ which saved cards exist."
  "saved":[{"name":"stuck-runs","title":"Stuck runs by builder","size":"w","savedAt":"2026-10-27T07:16:40+01:00"}]}
 ```
 
-No params; newest first; at most 6 000 characters (`c3-see.md` §3). Tool line: `looked at the
-canvas`.
+No params; newest first; at most 6 000 characters (`c3-see.md` §3). `size` is the card's size now;
+a card the owner grew (§8.10) also has `"grownFrom":"w"`. Tool line: `looked at the canvas`.
 
 ## 13. Promotion: saving a custom card
 
