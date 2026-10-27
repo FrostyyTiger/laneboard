@@ -105,7 +105,7 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 19. `morning`, `alerts`, `runs` (`c3-see.md` §4.2, §4.5, §4.6) and the hub's runs route (§5.1).
 20. The standing instructions (`protocols.md` §11.8), S-C3-18 end to end.
 21. The demo link (`c1-talk.md` §15, D148), S-C1-36.
-22. The type floor (D21, D167): the text-node walk, S-C1-40 (its voice states run in C2).
+22. The type floor (D21, D167): the text-node walk, S-C1-40 (its voice states run in C2, §3.2, D255).
 23. The pressed state and `touch-action` of every tappable (`README.md` §"Touch", D224), S-C1-41's
     table-driven test; later slices append their rows.
 
@@ -182,7 +182,14 @@ S-C1-13 S-SCR-20 S-SCR-32 S-SEC-05
   pane, no microphone) is C2's: C1 runs with `stt.url: none`, so it has no talk button (D179).
 
 **Done-when**: §2's slice rule for the 25 ids; B1-B3 hold; `docs/cockpit.md` gains the speech
-service setup and the kiosk microphone note (`c2-voice.md` §12).
+service setup and the kiosk microphone note (`c2-voice.md` §12). Two checks are named because a
+C2 night can pass the 25 ids and still miss them (D255, review 73-owner.md findings 4, 8):
+- **The type floor in the voice states** (T43, D21, D167): S-C1-40's C1 test gains three
+  `test.step`s, the hold past 400 ms, the slide off and `stt-down` with `token` (S-C1-40's last
+  paragraph); the C2 run is `-g '<the 25 ids>|S-C1-40'` and none of the seven steps is skipped.
+- **The hint after a limit stays** (T84, D168): S-C2-06 asserts `MICROPHONE OFF` at 35 s and
+  290 s and `MICROPHONE OFF · TEXT KEPT` at 126 s, and S-C2-05's 5 s close still goes; a C2 build
+  that gives every close D45's 5 s fails S-C2-06, not only a review.
 
 ### 3.3 C3 See, the rest
 
