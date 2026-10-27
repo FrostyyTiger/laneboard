@@ -809,7 +809,7 @@ Plan C1: "Typing works everywhere (on-screen keyboard, a paired keyboard)." `spe
   not counted; nor is a refused prompt. The 11th is refused (`prompt.refused` `too-many`,
   `protocols.md` §3.1, §8): the block, already drawn at the tap, reads `YOU · 07:02 · NOT SENT` and
   under it, as E1's look: `Too many messages from this screen; wait a minute.` with `RETRY` and
-  `EDIT` (row E9 of §10, T116). Nothing reaches the agent; the room's audit log keeps the refusal
+  `EDIT` (row E9 of §10: `RETRY` waits 60 s, D264). Nothing reaches the agent; the room's audit log keeps the refusal
   (D165). The owner's own pace (a prompt every few seconds at most) never comes near it: it stops
   a screen in a loop or a stolen token.
 
@@ -1014,6 +1014,7 @@ to 120 characters and drawn as text. After an error the header reads `READY` (D3
 | E6 | retired (T50): a model-service error is E8, its `{detail}` the service's own message (D57) | | |
 | E7 `step-limit` | the turn ends because the agent's step limit is reached | `Stopped after {n} steps, the agent's limit.` | `GO ON` sends `Go on.` as a new prompt |
 | E8 `failed` | any other error end of a turn, the model service's included | `The answer failed: {detail}.` | `RETRY` |
+| E9 `too-many` | the room refused the prompt: the 11th from this device token in 60 s (`prompt.refused` `too-many`, §7 "Rate", D228) | label `YOU · 07:02 · NOT SENT`; `Too many messages from this screen; wait a minute.` | `RETRY` is disabled (`disabled`, `--text-3` on `--line`) for 60 s from the moment this screen drew the refusal, on the screen's clock, then enabled; a tap on it while disabled sends nothing; once enabled it sends the same text with a new `clientId`. `EDIT` as E1, enabled at once (D264) |
 
 - **Nothing is ever sent again on its own** (D34, as D12): `RETRY`, `EDIT` and `GO ON` act only on a
   tap. A `RETRY` is a new turn with the same text; the failed turn stays above it.
@@ -1684,9 +1685,16 @@ within 0.5 s, under it `Too many messages from this screen; wait a minute.` with
 one refusal line for the token (D165); the header reads `READY`.
 And when the clock moves to 07:01:00.5 (`ping 1` is more than 60 s old) and page A sends
 `ping 12`, it is answered: `prompts()` holds 11.
+And `ping 11`'s `RETRY` on page A is disabled from the refusal (page A's clock installed with
+`page.clock.install()` before the send): a tap on it sends no frame and `prompts()` stays at 11;
+after `page.clock.runFor(59000)` it is still disabled, after `runFor(1000)` more it is enabled (E9,
+D264). With the room's clock at 07:01:20.5, a tap on it sends `ping 11` with a `clientId`
+different from the refused one, it is answered and `prompts()` holds 12; the refused block stays
+above the new one.
 And `EDIT` on `ping 11` puts `ping 11` back into the input (as E1).
 Test: Playwright, one context, two pages; `advance(ms)` (`stand-ins.md` §1.2) between sends;
-assert the label, the line's exact text, `prompts().length` and the audit lines read with
+assert the label, the line's exact text, `prompts().length`, `RETRY`'s `disabled` property before
+and after `page.clock.runFor`, the two `clientId`s from `framesent`, and the audit lines read with
 `laneboard audit --file`. The case with two device tokens (each its own 10) runs in the Pair
 slice (Q-O21), as S-C1-23's.
 

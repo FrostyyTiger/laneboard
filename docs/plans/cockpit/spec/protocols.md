@@ -407,8 +407,8 @@ How a snapshot over 512 KB divides its lists between parts: §2.2 (D140).
 | --- | --- | --- |
 | no `turn.prompt` 5 s after the send, link up | nothing | E1 `not-sent` (D31) |
 | `text` empty or too long, a bad `focus` | `error` `bad-message` | E1 `not-sent` at once (a correct screen never sends these) |
-| the agent cannot take prompts (E3, E4; status §3.6) | **`prompt.refused`** `{"type":"prompt.refused","re":17,"clientId":"p-3c1e0b2a","code":"agent-down"}` | the block's label `YOU · 07:02 · NOT SENT` and the status line's text; `RETRY` and `EDIT` as E1 |
-| over 10 prompts per minute from one device token (T59) | `prompt.refused` with `"code":"too-many"` | `NOT SENT`, `Too many messages from this screen; wait a minute.`, `RETRY` and `EDIT` as E1 (`c1-talk.md` §7, D228) |
+| the agent cannot take prompts (E3, E4; status §3.5) | **`prompt.refused`** `{"type":"prompt.refused","re":17,"clientId":"p-3c1e0b2a","code":"agent-down"}` | the block's label `YOU · 07:02 · NOT SENT` and the status line's text; `RETRY` and `EDIT` as E1 |
+| over 10 prompts per minute from one device token (T59) | `prompt.refused` with `"code":"too-many"` | `NOT SENT`, `Too many messages from this screen; wait a minute.`, `EDIT` as E1, `RETRY` enabled 60 s after the refusal with a new `clientId` (`c1-talk.md` §10 E9, D228, D264) |
 | the room cannot write its audit log (`screens.md` §6.4, D166) | `prompt.refused` with `"code":"audit-unavailable"`; nothing goes to the agent | `NOT SENT`, `Not sent: the room cannot write its audit log.`, `RETRY` and `EDIT` as E1 |
 | link down at the send | — | `SEND` is disabled while `room-down` (`screens.md` §7); a send in the 5 s grace waits for the link and goes when it is back, else E1 |
 
