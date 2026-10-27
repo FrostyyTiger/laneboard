@@ -125,6 +125,9 @@ every time. Therefore (D111):
   `node:test` in `npm test`, calling its `main(argv, {uid, agentUid, room})` with injected uids and
   a room under test. S-SCR-14/15/16's CLI lines are checked there; their screen parts run in
   Playwright with `/pair` and `/unpair`.
+- The room's admin routes (`screens.md` §6.1) take the peer-uid lookup as an injected function
+  (`socketPeerUid` by default), so `node:test` drives the room's side of the refusal with 1001,
+  1002 and `null` (S-SCR-27).
 - Nothing in the CLI or the room reads a test flag; the refusal cannot be switched off.
 
 ## 2. The fake agent

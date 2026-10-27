@@ -572,7 +572,8 @@ token once (`hall: lbbtn_…`, 32 random bytes, base64url) and keeps only its ha
 the target; without it the target is **the screen touched last** (the paired screen whose latest
 touch, click or key the room heard of; screens report one at most every 10 s, the message is `touched`, `protocols.md` §3.8).
 `laneboard cockpit buttons` lists them, `laneboard cockpit button remove hall` revokes at once. The
-CLI is `local` on the room, as pairing approval is (`screens.md` §6). A button token can do one
+CLI goes through the room's admin routes and is refused for the agent's uid, as pairing approval is
+(`screens.md` §6.1): the agent cannot add a button and get a token. A button token can do one
 thing: press and release talk on its target. It cannot read the conversation, place cards or pick
 another screen.
 

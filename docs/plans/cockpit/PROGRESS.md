@@ -167,6 +167,8 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 - [ ] Q13 Claude Code's own session transcripts (what `--resume` reads): where are they kept for a `claude -p` session (the agent user's `~/.claude/projects/…`?), does `cleanupPeriodDays` delete them and what is its default, and does `--resume` of a deleted session fail with an exit before `init`? — for T91 (`protocols.md` §11.7.1 retention, D154) and T17
 
+- [ ] Q14 Does Chromium (and Safari on iPadOS) keep a `Secure` cookie set by a plain `http://127.0.0.1:<port>` or `http://localhost:<port>` origin, and send it on that origin's WebSocket upgrade? — for T56 (`screens.md` §6.2, D163), T19
+
 ## Later
 
 - (14) Final pass on `spec/DECISIONS.md` and `spec/QUESTIONS.md`: dedupe, number check, every `(pending Q-O<n>)` in the spec matches an open question, the list ordered for the owner's ~15 min morning Q&A.

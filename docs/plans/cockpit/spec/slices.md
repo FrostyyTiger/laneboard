@@ -138,8 +138,8 @@ S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
 | --- | --- | --- | --- |
 | b) | b) | nothing more; the page is `wall` only, no pairing (`screens.md` §1, §6) | 40 |
 | b) | a) | S-SCR-01 S-SCR-06 S-SCR-10 S-SCR-11: `split` by default, the `SCREEN` sheet, the empty canvas; S-SCR-10's `?demo=1` cards are asserted once Canvas is built. S-SCR-07 and S-SCR-08 stay in Canvas (they need `place`) | 44 |
-| a) | b) | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 and T56's three once written; the Pair slice goes | 44 (47) |
-| a) | a) | both rows | 48 (51) |
+| a) | b) | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 S-SCR-27 S-SCR-28 S-SCR-29; the Pair slice goes | 47 |
+| a) | a) | both rows | 51 |
 
 
 **Done-when**: §2's slice rule for the ids of the row above that the owner's answers select (40 for the recommendations); the board change of §5.1 merged with its tests;
@@ -260,7 +260,7 @@ agent says `I can remind you at 15:10, but stopping builder-b needs the act step
 | Slice | Scenarios | Waits for |
 | --- | --- | --- |
 | C2b | S-C2B-01 S-C2B-02 | Q-O8, Q-O20 (D55) |
-| Pair | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16; planned: T56's three | Q-O21 b) (under a) these four are C1's and C1 grows by about 3 steps) |
+| Pair | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 S-SCR-27 S-SCR-28 S-SCR-29 | Q-O21 b) (under a) these seven are C1's and C1 grows by about 4 steps) |
 | Canvas 2 | none written; planned: T12's custom-card scenarios, T99's checklist flick | T12 |
 | History | none written; planned with §5.2 | the board change of §5.2 |
 | C5 | none written; planned: T14's `S-C5-` | T14 |
@@ -276,7 +276,7 @@ by the task that writes them.
 | S-SCR-01, 06, 07, 08, 10, 11, 26 | Canvas |
 | S-SCR-02, 03, 04, 09, 17, 18, 19, 21, 22, 23, 24, 25 | C1 |
 | S-SCR-05, 12 | Show |
-| S-SCR-13, 14, 15, 16 | Pair |
+| S-SCR-13, 14, 15, 16, 27, 28, 29 | Pair |
 | S-SCR-20 | C2 |
 | S-C1-01..12, 14..23, 25..39 | C1 |
 | S-C1-13 | C2 |
@@ -289,7 +289,7 @@ by the task that writes them.
 | S-C4-14..23 | Canvas |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 129 live ids in all (round 96, S-SCR-25/26).
+D55). 132 live ids in all (round 97, S-SCR-27/28/29).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired
@@ -327,5 +327,5 @@ changing it needs C6 (`c1-talk.md` §5).
 ## 7. Open fixes before a C1 night
 
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
-says go without them): T56 (pairing refusals, pending Q-O21). T26, T27, T29, T41, T44 (the button,
-pane and corner-cluster rects), T57 and T89 are done. The bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are written. For C2 also: T42/T95, T69, T84.
+says go without them): none left. T26, T27, T29, T41, T44 (the button, pane and corner-cluster
+rects), T56 (pairing refusals and cross-site checks, `screens.md` §6.1-§6.3), T57 and T89 are done. The bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are written. For C2 also: T42/T95, T69, T84.

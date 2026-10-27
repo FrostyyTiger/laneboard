@@ -132,8 +132,10 @@ Answer: (open)
 Security. Needed in C1 only if Q-O21 is a) or c), or Q-O27 is a). From `reviews/40-security.md`
 (1, 4, 7). Spec: `screens.md` §6, D13, T56.
 
-- a) Only the room's own CLI approves (`laneboard cockpit pair K7M-4QX`), refused for the agent's
-  unix user; the CLI shows the requester's address and asks y/N; tokens live until `unpair`.
+- a) Only the room's own CLI approves (`laneboard cockpit pair K7M-4QX`). The agent runs on that
+  same box, so the room refuses the agent's unix user (and pairing at all while the agent shares
+  your user); the CLI shows the requester's address and asks y/N; tokens live until `unpair`
+  (`screens.md` §6.1, D161, D162).
 - b) a), plus a token expires after 30 days without being seen.
 - c) Any already paired screen may approve a new one.
 

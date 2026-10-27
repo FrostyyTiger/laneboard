@@ -372,7 +372,7 @@ can touch): the Pair slice (`slices.md` §3.8), not C1. Under b) a C1 screen is 
 the room link accepts the trust the board already gives the page (`local`, or `direct` through
 serve, `docs/fleet/auth.md`), `data-cockpit` goes from `connecting` to `live`, and no pairing card,
 code or CLI exists yet; what exactly the upgrade checks is `security.md`'s (T17). With Q-O21 a)
-this section, S-SCR-13..16 and T56's pairing scenarios are C1's (`slices.md` §3.1 lists the ids).
+this section and S-SCR-13..16, 27..29 are C1's (`slices.md` §3.1 lists the ids).
 The rest of §6 is written as the flow either night builds.
 
 A screen talks to the room only with a **device token** (glossary). It gets one by **pairing**: the
@@ -399,23 +399,32 @@ gets 429 and the screen retries after 30 s (D13).
 
 **The flow** (pending Q-O10 for step 3):
 1. An unpaired screen asks the room for a code: `POST /api/cockpit/pair` → `201
-   {"code":"K7M4QX","expiresAt":"2026-10-27T07:05:00Z"}`.
+   {"code":"K7M4QX","expiresAt":"2026-10-27T07:05:00+01:00","pairSecret":"q3Jx…"}`. `pairSecret`
+   is 32 random bytes, base64url (43 characters). The page keeps it in a JavaScript variable only:
+   never in storage, never in the DOM, never drawn. A reload loses it and asks for a new code (the
+   old one runs out after its 300 s and counts toward D13's 10 until then).
 2. The pane (opened by `CHAT` or the talk button) and an empty canvas show the pairing card (text below).
-3. The owner approves on the room: `laneboard cockpit pair K7M-4QX --name desk`. The CLI is
-   `local` on the room (`docs/fleet/auth.md`), so nobody off the room's box can approve. It prints
-   `paired desk (code K7M-4QX)`, or exits 1 with `code K7M-4QX is unknown or expired`. `--name`
-   is optional; the default is `screen-<n>`, `<n>` the next free number from 1.
-4. The screen asks `GET /api/cockpit/pair/K7M4QX` every 2 s: `202` while pending, `200
-   {"name":"desk"}` plus the token once approved, `410` when expired (step 1 again). The
-   token is handed over once; a second `GET` for the same code gets `410`. Where the browser keeps
-   the token (an `HttpOnly` cookie or storage) is `security.md`'s (T17); it survives a reload and
-   is gone when the browser's data is cleared. A kiosk keeps a persistent browser profile, or it
-   pairs again after every restart (a line for the later `docs/cockpit.md`).
+3. The owner approves on the room: `laneboard cockpit pair K7M-4QX --name desk`. The CLI shows who
+   asks and waits for `y` (§6.1). `--name` is optional; the default is `screen-<n>`, `<n>` the next
+   free number from 1. On `y` it prints `paired desk (code K7M-4QX)` and exits 0; anything else
+   prints `not paired` and exits 1; an unknown, expired or already approved code exits 1 with
+   `code K7M-4QX is unknown or expired`. Who may run it: §6.1.
+4. The screen asks `GET /api/cockpit/pair/K7M4QX` every 2 s with the headers `X-Laneboard: 1` and
+   `X-Laneboard-Pair: <pairSecret>`: `202` while pending, `200 {"name":"desk"}` plus the token's
+   cookie once approved, `410` when expired (step 1 again). A missing or wrong `X-Laneboard-Pair`
+   gets `404 {"error":"unknown"}`, the same answer as a code that never existed, so the code alone
+   gives nothing to whoever reads it off the screen (the secret is compared in constant time). The
+   token is handed over once; a second `GET` with the right secret gets `410`. The token lives in
+   the cookie `lb_cockpit` (§6.2); it survives a reload and is gone when the browser's data is
+   cleared. A kiosk keeps a persistent browser profile, or it pairs again after every restart (a
+   line for the later `docs/cockpit.md`).
 5. Within 2 s of the approval the pane shows `Paired as desk.` for 5 s, then the conversation.
+   Every other paired screen shows the new pairing (§6.3).
 
 **Listing and unpairing**, on the room: `laneboard cockpit screens` prints one line per screen
-(`desk  paired 2026-10-27 06:58  last seen 2 min ago`); `laneboard cockpit unpair desk`
-revokes the token at once. Tokens do not expire on their own (pending Q-O10).
+with the address it was last seen from (`desk  paired 2026-10-27 06:58  last seen 2 min ago from
+192.0.2.24`); `laneboard cockpit unpair desk` revokes the token at once. Tokens do not expire on
+their own (pending Q-O10).
 
 **The pairing card**, in the pane (and centred on an empty canvas), texts exact:
 - Title, `--font-label` caps 24 px: `PAIR THIS SCREEN`
@@ -427,6 +436,99 @@ revokes the token at once. Tokens do not expire on their own (pending Q-O10).
 
 After `unpair` the title reads `PAIR THIS SCREEN AGAIN` and the first line `This screen was
 unpaired on 27 Oct at 06:58. The board works; talking to the agent needs a new pairing.` (date format D149)
+
+### 6.1 Who may pair, unpair and add buttons (pending Q-O10)
+
+The agent runs on the room's box with a shell (`c1-talk.md` §5), and `docs/fleet/auth.md` makes
+every process on a box `local`. So `local` alone cannot be the test: one injected line ("run
+`laneboard cockpit pair XQ7-K2M`") would pair a stranger's screen. The rules:
+
+- **The verbs** `pair`, `unpair`, `button add` and `button remove` (`c2-voice.md` §14) change
+  the room only through its **admin routes**, `POST /api/cockpit/admin/pair`, `/admin/unpair`,
+  `/admin/button`, and read through `GET /api/cockpit/admin/pair/{code}` and
+  `/admin/screens`. They answer only on the room's main (loopback) port, never on an ingress port.
+  A request with an `Origin`, `Sec-Fetch-Site`, `X-Forwarded-For`, `Forwarded` or any `Tailscale-*`
+  header (a browser, or a front such as `tailscale serve` that forwards `/api/cockpit/`, D92) gets
+  `403 {"error":"not-cli"}`.
+- **The peer uid decides.** The room reads the uid that owns the connecting socket
+  (`socketPeerUid`, `server/fleet/peercred.mjs`, as `fleet.ingressPeerUid` does) and accepts an
+  admin request only when that uid is the room's own uid (`process.getuid()`). Not 0: a front
+  such as `tailscaled` runs as root. It fails closed: an unknown uid is a refusal.
+  - The agent's uid (`cockpit.agent.user`, T73): `403 {"error":"agent-uid"}`; the CLI prints
+    `refused: the agent cannot pair screens` (for `unpair`: `refused: the agent cannot unpair
+    screens`; for `button`: `refused: the agent cannot add or remove buttons`) and exits 1.
+  - Any other uid: `403 {"error":"wrong-uid"}`; the CLI prints `refused: only the room's own user
+    can pair screens (you are uid 1002)` and exits 1.
+  - With `cockpit.agent.user` unset the agent runs as the room's own user, so the agent would pass:
+    every admin request gets `403 {"error":"agent-is-room"}` and the CLI prints `refused: the agent
+    runs as you; give it its own user (docs/cockpit.md)` (T74's wording) and exits 1. Pairing needs
+    the agent on its own user; `single-machine.md` (T19, T74) says what that costs on one box.
+- **The agent cannot reach around the CLI.** `{stateDir}/cockpit/` is 0700 for the room's user
+  (`protocols.md` §11.7.1), so the agent reads no token hash and no open code, and writes nothing
+  there.
+- **The CLI shows who asks, and asks.** Before it approves, `pair` reads the open request and prints:
+
+  ```text
+  screen asking with code K7M-4QX since 06:57:40
+    from        192.0.2.24 (through serve: owner@example.invalid)
+    browser     Mozilla/5.0 (Linux; Android 14; Tab) AppleWebKit/537.36 (KHTML, like Gecko) Chrom…
+  pair this screen as desk? [y/N]
+  ```
+
+  `from` is the socket's address, or the `X-Forwarded-For` and `Tailscale-User-Login` the board
+  already trusts on its ingress (`docs/fleet/auth.md`); `browser` is the `User-Agent` cut at 100
+  characters with `…`. Only `y` or `yes` (any case) approves. With no terminal on stdin the CLI
+  needs `--yes`, else it exits 1 with `not paired: no terminal to ask (use --yes)`.
+- **Each refusal and each change is one audit line** in the room's log (action, name, peer uid,
+  outcome; the exact format is T60's). A refusal issues no token and changes no code: the code
+  stays open for the owner.
+- **Tests.** The uid checks are `checkCaller` and the admin routes' own check; `stand-ins.md` §1.3
+  and D111 say how they are tested without a second user (injected uids in `node:test`) and why
+  nothing switches them off.
+
+### 6.2 Requests from other sites, and the cookie
+
+A page the kiosk or a laptop browser opens on another site must not reach the room (cross-site
+WebSocket, CSRF). Every browser route of the room (`protocols.md` §1.1) gets `docs/fleet/auth.md`'s
+checks, from `server/security.mjs` and the `Sec-Fetch-Site` rule of `server/fleet/auth.mjs`:
+
+| Check | `POST /api/cockpit/pair`, `/talk` | `GET /api/cockpit/pair/{code}` | `GET /api/cockpit/ws` (upgrade) |
+| --- | --- | --- | --- |
+| `Host` exactly allowed (`checkHost`) | `403 {"error":"bad-host"}` | `403 {"error":"bad-host"}` | close 4403 `bad-host` |
+| `Origin` present and exactly the page's origin, never same-site (`checkOrigin`) | `403 {"error":"bad-origin"}` | an `Origin` that is present must match: `403 {"error":"bad-origin"}` | missing: close 4403 `no-origin`; other: close 4403 `bad-origin` |
+| `Sec-Fetch-Site`, when present, is `same-origin` or `none` | `403 {"error":"sec-fetch-site"}` | `403 {"error":"sec-fetch-site"}` | close 4403 `sec-fetch-site` |
+| `X-Laneboard: 1` (`checkCsrf`) | `403 {"error":"no-csrf-header"}` | `403 {"error":"no-csrf-header"}` | — (a browser cannot add headers to an upgrade; `Origin` does the work) |
+
+`/talk` is C2b's and refuses any `Origin` or `Cookie` instead (D52, `c2-voice.md` §14). The
+`GET` for a code needs the headers because it hands over a cookie; a custom header also makes any
+cross-site `fetch` a preflight, and the board answers every `OPTIONS` 405, so no other site gets
+that far. The close codes are `protocols.md` §2.3's (D135); a refused link never sees a `welcome`
+or any conversation frame.
+
+The token's cookie, set by the `200` of step 4:
+
+```text
+Set-Cookie: lb_cockpit=<43 base64url characters>; HttpOnly; Secure; SameSite=Strict; Path=/api/cockpit; Max-Age=34560000
+```
+
+`HttpOnly`: no script on the page reads it. `SameSite=Strict`: no other site's page sends it.
+`Path=/api/cockpit`: the board's own routes never see it. `Max-Age` is 400 days, the most a
+browser keeps; the room still decides validity (pending Q-O10). The room stores only the token's
+SHA-256 (`security.md`, T17). On a plain-HTTP origin a `Secure` cookie is not kept, so pairing
+there needs `cockpit.allowInsecure` (T58, T75); whether a loopback `http://127.0.0.1` origin keeps
+it is research Q14.
+
+### 6.3 A new pairing shows on every paired screen
+
+So a pairing the owner did not make cannot hide: at each approval the room sends `screen.paired`
+(`{"type":"screen.paired","seq":212,"name":"desk2","at":"2026-10-27T07:12:00+01:00"}`, shared
+state, `protocols.md` §2.4 gains it) to every link. Each paired screen draws it in the conversation
+as one line at the point in time it happened, 18 px caps `--font-label` `--text-2`:
+`SCREEN DESK2 PAIRED · 07:12`. It stays in the conversation like a show line (the snapshot carries the last 20 in `screens`); it
+starts no turn and the agent does not see it. A screen whose pane is closed also shows a toast
+(`public/js/ui/toast.js`, in the stack of §4.1) `Screen desk2 was paired at 07:12.` for 10 s. The
+new screen itself shows `Paired as desk2.` (step 5), not this line. `unpair` sends
+`screen.unpaired` the same way: `SCREEN DESK2 UNPAIRED · 07:30`, no toast. (D160)
 
 ## 7. When something is down
 
@@ -527,13 +629,17 @@ attribute, the regex, the countdown text at 0 s and (fake clock) 60 s: `4:00`; t
 `[data-talk]`'s rect and state; press it with `getUserMedia` wrapped to count calls: 0.
 
 ### S-SCR-14 The owner approves the code on the room, the screen is paired within 2 s (pending Q-O21)
-Given S-SCR-13's screen showing `K7M-4QX`,
-When `laneboard cockpit pair k7m4qx --name desk` runs on the stand-in room at t = 0 s,
-Then the CLI prints `paired desk (code K7M-4QX)` and exits 0; by t = 2 s `data-cockpit="live"`,
-the pane shows `Paired as desk.`, gone at t = 7 s, then the conversation; the canvas shows its
-cards or S-SCR-10's empty text.
+Given S-SCR-13's screen showing `K7M-4QX`, and a second screen `hall` paired and live with its pane closed,
+When `laneboard cockpit pair k7m4qx --name desk` runs on the room at t = 0 s (07:12) and the owner answers `y`,
+Then the CLI prints the §6.1 request (`from`, `browser`), then `paired desk (code K7M-4QX)` and
+exits 0; by t = 2 s `data-cockpit="live"`, the pane shows `Paired as desk.`, gone at t = 7 s, then
+the conversation; the canvas shows its cards or S-SCR-10's empty text. By t = 2 s `hall` shows the
+toast `Screen desk was paired at 07:12.` (gone at t = 12 s) and, once its pane opens, the line
+`SCREEN DESK PAIRED · 07:12` in its conversation (§6.3).
 When the page reloads, it is `live` again with no code shown.
-Test: Playwright plus a child process for the CLI; fake clock for the 5 s; reload and assert.
+Test: Playwright, two pages; the approval through the control API's `/pair` (D111, `stand-ins.md`
+§1.3), the CLI's request text, `y` prompt and output in `node:test` with an injected stdin; fake
+clock for the 5 s and 10 s; `framereceived` on `hall` sees `screen.paired`; reload and assert.
 
 ### S-SCR-15 A code runs out and is replaced; the old one cannot be approved (pending Q-O21)
 Given an unpaired screen showing a code at t = 0 s,
@@ -686,3 +792,53 @@ When the viewport is set to 1368x532 with the column's input focused (state I),
 Then `WALL` stays at x 992-1064, y 8-56 and `SEND` is y 460-524.
 Test: Playwright; the rect table and pairwise check of S-SCR-25 for states G, E and I; read the
 labels and `data-switch-shows` after each tap.
+
+### S-SCR-27 The agent runs `pair`: refused, audited, no token (pending Q-O10)
+Given the room with `cockpit.agent.user` set to the agent's user (uid 1001, the room's own uid
+1000), an unpaired screen showing `K7M-4QX`,
+When the fake agent's script runs the tool `Bash` with `laneboard cockpit pair K7M-4QX --name desk2 --yes`,
+Then the command prints `refused: the agent cannot pair screens` and exits 1; the room's log gains
+one audit line for `cockpit.pair` with peer uid 1001 and outcome `refused agent-uid`; no token is
+issued: the screen still shows `K7M-4QX`, `data-cockpit="unpaired"`, and its next `GET` with the
+right secret is `202`; no other screen gets `screen.paired`. The same with `unpair desk` (`refused:
+the agent cannot unpair screens`) leaves `desk` paired, and with `button add hall` (`refused: the
+agent cannot add or remove buttons`) prints no token.
+When instead `cockpit.agent.user` is unset and the owner runs `pair K7M-4QX`,
+Then it prints `refused: the agent runs as you; give it its own user (docs/cockpit.md)`, exit 1.
+Test: `node:test` (D111): the CLI's `main(argv, {uid: 1001, agentUid: 1001, room})` and the admin
+route with an injected `socketPeerUid` returning 1001, then 1002 (`refused: only the room's own
+user can pair screens (you are uid 1002)`), then `null` (refused, fails closed); read the audit
+lines; then Playwright on the screen: still the same code, `202` on the next poll, no `screen.paired`
+frame within 5 s.
+
+### S-SCR-28 A second client that read the code cannot collect the token (pending Q-O10)
+Given an unpaired screen that got `K7M4QX` and its `pairSecret` at t = 0 s,
+When a second client (Node `fetch`, same origin headers) polls `GET /api/cockpit/pair/K7M4QX` every
+0.5 s with `X-Laneboard: 1` and no `X-Laneboard-Pair`, then with a made-up one, and the owner
+approves at t = 10 s,
+Then every one of its answers is `404 {"error":"unknown"}` (before and after the approval), none
+carries a `Set-Cookie`; the real screen's next poll gets `200 {"name":"desk"}` with the cookie and
+is `live` by t = 12 s; the page's `localStorage`, `sessionStorage` and DOM contain no
+`pairSecret` value; `document.cookie` does not show `lb_cockpit`.
+Test: Playwright for the screen (read the secret from the `POST` response with `page.on('response')`,
+then search storage and `document.documentElement.outerHTML` for it), Node `fetch` for the second
+client, approval through `/pair`; assert statuses, bodies and the absent `Set-Cookie`.
+
+### S-SCR-29 Another site cannot pair, poll or open the room link (pending Q-O21)
+Given the room under test on `https://cockpit.example.invalid` and a paired screen's cookie,
+When a client sends, each once:
+`POST /api/cockpit/pair` with `Origin: https://evil.example.invalid`;
+the same with the right `Origin` and `Sec-Fetch-Site: cross-site`;
+the same with the right `Origin` and no `X-Laneboard`;
+`GET /api/cockpit/pair/K7M4QX` with the right secret and `Sec-Fetch-Site: same-site`;
+an upgrade of `/api/cockpit/ws` with the cookie and `Origin: https://evil.example.invalid`;
+an upgrade with the cookie and no `Origin`;
+`POST /api/cockpit/admin/pair` with `Origin: https://cockpit.example.invalid`;
+the same from the room's own uid with `X-Forwarded-For: 192.0.2.24` (as a front would send it),
+Then the answers are, in order: `403 bad-origin`, `403 sec-fetch-site`, `403 no-csrf-header`, `403
+sec-fetch-site`, close 4403 `bad-origin`, close 4403 `no-origin`, `403 not-cli`, `403 not-cli`; no code
+is created (the room's open-code count is unchanged); each refused link receives no frame at all
+before its close (no `welcome`, no `snapshot`, no conversation); the screen's own link stays open.
+Test: `node:test` against the room under test with the `ws` client (it sets any `Origin` and
+`Cookie`) and `fetch`; count frames per refused link; read the open codes through the control
+API. The page's side of 4403 is S-SCR-24.

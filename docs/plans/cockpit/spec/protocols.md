@@ -44,16 +44,18 @@ with the D128 message on stderr.
 
 | Method, path | Who | Body and answer | Errors |
 | --- | --- | --- | --- |
-| `POST /api/cockpit/pair` | an unpaired screen | `201 {"code":"K7M4QX","expiresAt":"2026-10-27T07:05:00+01:00"}` (T56 adds `pairSecret`, pending Q-O10) | `429 {"error":"too-many-codes"}` with `Retry-After: 30` (D13) |
-| `GET /api/cockpit/pair/{code}` | the same screen, every 2 s | `202 {"state":"pending"}`; `200 {"name":"desk"}` plus the `Set-Cookie` of the device token, once | `410 {"error":"expired"}` (or already collected); `404 {"error":"unknown"}` |
+| `POST /api/cockpit/pair` | an unpaired screen | `201 {"code":"K7M4QX","expiresAt":"2026-10-27T07:05:00+01:00","pairSecret":"…"}` (43 base64url characters, `screens.md` §6 step 1) | `429 {"error":"too-many-codes"}` with `Retry-After: 30` (D13) |
+| `GET /api/cockpit/pair/{code}` | the same screen, every 2 s, with `X-Laneboard: 1` and `X-Laneboard-Pair: <pairSecret>` | `202 {"state":"pending"}`; `200 {"name":"desk"}` plus the `Set-Cookie` of the device token (`screens.md` §6.2), once | `410 {"error":"expired"}` (or already collected); `404 {"error":"unknown"}` (also for a missing or wrong `X-Laneboard-Pair`) |
 | `POST /api/cockpit/talk` | a physical button (C2b) | `c2-voice.md` §14 | `c2-voice.md` §14 |
 | `GET /api/cockpit/ws` (upgrade) | a paired screen | §2 | §2.3 |
+| `/api/cockpit/admin/*` (`pair`, `unpair`, `button`, `screens`) | the room's CLI only, on the main (loopback) port, peer uid checked | `screens.md` §6.1 | `403` `agent-uid`, `wrong-uid`, `agent-is-room`, `not-cli` (§6.1); a forwarded request is `not-cli` |
 
 Every request passes `server/security.mjs` first: `checkRequest` (Host; and for `POST`, Origin and
 the `X-Laneboard: 1` header of `docs/fleet/auth.md`), and `checkUpgrade` (Host, Origin) for the
-WebSocket. Which credential the upgrade needs (the device token, or the trust the board already has)
+WebSocket; the browser routes add the `Sec-Fetch-Site` rule and refuse an upgrade without `Origin`
+(the full table is `screens.md` §6.2). Which credential the upgrade needs (the device token, or the trust the board already has)
 is `security.md`'s (T17, pending Q-O21); this file writes it for the device token in an `HttpOnly`
-cookie, as T56 specifies it.
+cookie, as `screens.md` §6.2 specifies it (D163).
 
 ## 2. The room link
 
@@ -228,7 +230,7 @@ case below says what the screen shows.
 | 4002 | `protocol {n}` | room: `hello.protocol` it does not speak | no retry; `data-cockpit="room-down"`, status line `The cockpit room speaks another version ({n}). Reload this page.` |
 | 4401 | `unpaired` | room, right after the upgrade: no device token, or one it does not know | no retry; `data-cockpit="unpaired"`, the pairing card (`screens.md` §6) |
 | 4402 | `revoked` | room: the token was unpaired; sent to the open links at `unpair`, and right after the upgrade to a link that brings a token unpaired in the last 30 days (D135). The `revoked` frame below comes first | no retry; `data-cockpit="unpaired"`, the "pair again" card with the frame's `at` (`screens.md` §6) |
-| 4403 | `bad-origin` or `bad-host` | room, right after the upgrade: `checkUpgrade` refused the Host or Origin | no retry; `data-cockpit="room-down"`, status line `This address is not allowed to talk to the cockpit room ({reason}). Reload once the room allows it.` |
+| 4403 | `bad-origin`, `bad-host`, `no-origin` or `sec-fetch-site` | room, right after the upgrade: `checkUpgrade` refused the Host or Origin, the upgrade had no `Origin`, or its `Sec-Fetch-Site` was not `same-origin`/`none` (`screens.md` §6.2) | no retry; `data-cockpit="room-down"`, status line `This address is not allowed to talk to the cockpit room ({reason}). Reload once the room allows it.` |
 | 4503 | `too-many-links` | room, right after the upgrade: the room already has 32 links (§8) | reconnects every 30 s, no backoff; `data-cockpit="room-down"` at once (no 5 s grace), status line `The cockpit room has 32 screens connected, its limit. Trying again every 30 s.` |
 | 4408 | `too slow` | room: the link's unsent data passed 4 MB (§8) | reconnects with backoff; gets a snapshot |
 | 4413 | `too big` | room: a text frame over 64 KB or a binary frame over 6 400 bytes | reconnects with backoff |
@@ -301,7 +303,7 @@ and not listed. Field values and ranges are in the section named.
 | `type` | `seq` | Required | Optional | § |
 | --- | --- | --- | --- | --- |
 | `welcome` | no (its `seq` field is the room's current count) | `re`, `protocol`, `screen`, `epoch`, `seq`, `conversation`, `resume`, `config` (`stt`, `languages`, `maxPromptChars`), `status\|null`, `now` | — | 2.2 |
-| `snapshot` | the `seq` it reflects, not counted | `seq`, `part`, `parts`, `conversation`, `startedAt`, `olderTurns`, `turns`, `pins`, `cards` | — | 2.2 |
+| `snapshot` | the `seq` it reflects, not counted | `seq`, `part`, `parts`, `conversation`, `startedAt`, `olderTurns`, `turns`, `pins`, `cards` | `screens`: the conversation's `screen.paired`/`screen.unpaired` events, `[{"event":"paired","name":"desk2","at":"…"}]`, last 20 (`screens.md` §6.3) | 2.2 |
 | `heartbeat` | no | `at` | — | 2.2 |
 | `error` | no | `re`, `code`, `message` | — | 2.3 |
 | `revoked` | no | `at` | — | 2.3 |
@@ -317,6 +319,7 @@ and not listed. Field values and ranges are in the section named.
 | `prompt.taken` | `room` | `turnId`, `clientId`, `state`; `atBlock` with `taken`; `why` with `cancelled` | — | 3.4 |
 | `status` | `room` | `status\|null`; in the object `code`, `since` | `status.detail`, `status.blocksSend` | 3.5 |
 | `conversation.new` | `room` | `conversation`, `reason`, `at` | — | 3.6 |
+| `screen.paired`, `screen.unpaired` | `room` | `name`, `at` | — | `screens.md` §6.3 |
 | `history.turns` | no | `re`, `turns`, `olderTurns` | — | 3.7 |
 | `show` | no | `showId`, `turnId`, `cmd`, `args`, `receivedAt` | — | 4 |
 | `show.line` | `room` | `turnId`, `blockIndex`, `showId`, `text`, `state`, `skippedOn`, `undoable` | — | 4 |
