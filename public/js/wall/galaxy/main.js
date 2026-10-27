@@ -77,6 +77,8 @@
 // galaxy; a first touch ends them all. They arrive (night 4 T38, transport.js) by
 // `BroadcastChannel('laneboard.show')` from the same origin, or by `postMessage` from this origin
 // and those in `?showOrigins=https://hub.example.invalid,…` (exact origins); each answered on its road.
+// `?show=demo` (night 4 T39, showdemo.js) plays a recorded conversation's commands over the large
+// demo fleet into the same show, with the tour between: fly to the crit, pin a note, highlight what it breaks.
 
 import { createPerf } from '../perf.js';
 import { TIMING, createTour, timingFor, tourOrder } from '../tour.js';
@@ -97,6 +99,7 @@ import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
 import { createDirector } from './director.js';
 import { createShow } from './show.js';
 import { createTransport, showOrigins } from './transport.js';
+import { createShowDemo, wantsShowDemo } from './showdemo.js';
 import { createSweep, critAges, flowJobs, parseFx, planeAngle, siteNews, sweepStep, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
@@ -337,6 +340,8 @@ export function boot() {
     send: shows.send, win: window, Channel: globalThis.BroadcastChannel ?? null,
     origins: showOrigins(q.get('showOrigins'), location.origin),
   }) : null;
+  // `?show=demo` (T39, showdemo.js): a recorded conversation's commands into the same `send`, over and over.
+  const showDemo = shows && wantsShowDemo(q) ? createShowDemo({ send: shows.send }) : null;
 
   // Where a finger has taken the page (T13): the overview, a system, a planet in it.
   let place = AT_OVERVIEW;
@@ -516,6 +521,7 @@ export function boot() {
     } else if (!park) {
       director.tick(); // a show's hold runs out here
       shows?.tick();
+      showDemo?.tick();
       gestures?.frame(now);
       cam.frame(now);
       if (fx.has('warp')) galaxy.setWarp(cam.flight());
@@ -613,6 +619,7 @@ export function boot() {
   globalThis.__galaxyDirector = { ...director, show };
   globalThis.__galaxyShow = shows;
   globalThis.__galaxyWire = wire;
+  globalThis.__galaxyShowDemo = showDemo;
 }
 
 boot();
