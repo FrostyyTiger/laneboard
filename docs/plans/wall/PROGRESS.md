@@ -708,6 +708,23 @@ Notes for every builder round (planner, round 1):
   node's status drops below the level it had at pin time, the card goes `--text-3` with `WAS` before the title (or is
   dropped when it has cleared for good) (`show.js`, `wall.css`) — done when: a test pins a card on a crit node, clears the
   node on the model, and finds the card dimmed with `WAS`, and the card unchanged while the status stays.
+- [ ] T60 (§7 Night 4 B, D10; r55-touch galaxy 1; amends T37's "a first touch drops everything shown") [ui]
+  [variant:galaxy] A finger beats a show for the camera only: the first touch ends a show's `flyTo` (the director's
+  show source) but pins and highlights stay until their ✕, their ttl or `clear`; in explore `pin`, `highlight` and
+  `clear` are accepted and only `flyTo` answers `busy`; a tap on a card or a highlight ring is a tap on its node
+  (`show.js`, `main.js wake`, `touch.js`) — done when: a page test with a pin and a highlight up and a first touch
+  finds both still drawn and only a flyTo gone, a pin sent in explore answers `ok`, a flyTo in explore answers `busy`,
+  and a tap on a card opens its node's site.
+- [ ] T61 (§7 Night 4, §2.1; r55-touch galaxy 6) [ui] [variant:galaxy] The fan keeps off trouble as well as words:
+  in `fan.js` placement each trouble member's 27 px disc and its label box count as blocked beside the words, and when
+  both arcs are blocked the arc covering fewer trouble discs wins — done when: a test on the large fixture taps
+  `monitor-logs` in HV1 and finds no fan row over a trouble member's disc that the other arc would have left free, rows
+  still ≥ 48 px and ≥ 48 px apart.
+- [ ] T62 (§7 Night 4, §2.2; r55-touch galaxy 7 = r26-touch 5 from Later) [ui] [variant:galaxy] The wake is not silent:
+  as the first touch lands, `MANUAL · TOUR IN 1:00` and the `‹ BACK`/`▶ TOUR` control show at once (not after the 1.5 s
+  ease), and the fan's `galaxy-fan-spot` ring marks the finger's down point — done when: a page test on a fake clock
+  finds the manual line and the control present within 200 ms of the waking down, and a CDP still 200 ms after a wake
+  shows both.
 
 ## Research questions
 
@@ -729,6 +746,13 @@ Notes for every builder round (planner, round 1):
   a cost guess) — for T17
 
 ## Later
+
+From r55-touch (triage, night 4; not tasks yet):
+- (r55-touch galaxy 4) A sleeve swipe (starts within 40 px of the edge at full speed) is not a drag; while a sheet is up, a drag that takes the subject out of frame eases back or closes the sheet (= r26 3).
+- (r55-touch galaxy 8) A still 500 ms press is a tap (`TAP.ms` 500) (= r26 8).
+- (r55-touch galaxy 9) After a wake the held site keeps dim lock brackets for 5 s, or a wake whose down landed on the held target opens that site after the ease.
+- (r55-touch 1e.1) A tap on the activity ring wider than the star's disc counts as the site's target (not measured).
+- (r55-touch across) Fan and sheet rows take the show ✕'s build (real 48 px box, events stop there); show cards keep off the system's trouble as the fan should (T52).
 
 From r45-operator (triage, night 4; not tasks yet):
 - (r45-operator touch 1) Explore reads from 3 m: the clock corner or banner count line carries `MANUAL` at the reason line's size and the corner brackets go `--text-2` (= r16 touch 1, r21 touch 2).
@@ -1083,6 +1107,10 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
   findings; 3 became tasks (T57 one countdown, not on a trouble plate nor twice, T58 `LATE` in words, T59 pinned card
   outlives its fact). Dropped as covered: galaxy 4 (T29), 6 (T55), 9 (T28), 12 (T27), show 3 (T51, T52), warp 1 (taste),
   afterglow 1 (T47), touch 4 (no fix). Rest in Later; no fx proposals.
+- r55 touch → reviews/r55-touch.md. 11 galaxy + 6 fx notes (beacon, warp, afterglow, activity, sweep) findings; 3 became
+  tasks (T60 a touch must not wipe pins and highlights, T61 fan keeps off trouble, T62 the silent wake). Dropped as
+  covered: galaxy 2 (T32), 3 (T31), 5 (T33), 10 (T27), 11 (T55); beacon, warp, afterglow, sweep (no touch finding).
+  Rest in Later; no fx proposals.
 
 ## Scores
 
@@ -1132,5 +1160,11 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 50 | skeptic (fx-afterglow) | - | - | - | - | 5 | 8 | - |
 | 50 | skeptic (fx-activity) | - | - | - | - | 3 | 6 | - |
 | 50 | skeptic (fx-sweep) | - | - | - | - | 4 | 8 | - |
+| 55 | touch (galaxy) | 7 | 7 | 6 | 6 | 7 | 5 | 6 |
+| 55 | touch (fx-beacon) | - | - | - | - | 4 | 6 | - |
+| 55 | touch (fx-warp) | - | - | - | - | 6 | 4 | - |
+| 55 | touch (fx-afterglow) | - | - | - | - | 5 | 8 | - |
+| 55 | touch (fx-activity) | - | - | - | - | 4 | 6 | - |
+| 55 | touch (fx-sweep) | - | - | - | - | 5 | 8 | - |
 
 ## Morning
