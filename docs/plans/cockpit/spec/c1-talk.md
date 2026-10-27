@@ -66,7 +66,7 @@ of the list below, top to bottom, with these rects at 1368x912:
    Left of those, 8 px apart: `NEW` (§11), 48 px tall and 72 px wide (D38); order from the right:
    `CLOSE`, `SCREEN`, `NEW`. There is no `RAW` button in C1 (§13).
 2. **Status line**, 80 px (two lines, D54), only while there is something to say (room down, offline:
-   `screens.md` §7).
+   `screens.md` §7). The `NEW` bar (§11) uses the same 80 px slot; the status line wins it.
 3. **The conversation**, filling the rest; it scrolls on its own; 24 px padding left and right,
    16 px at the top. Text column: 560 px.
 4. **Input row**, 1 px `--line` top border. The **talk button** (64x64 px) keeps its one rect from
@@ -789,11 +789,26 @@ only**, plus a forced fresh start when the session cannot go on, and **no handov
 "a 'new conversation' button; on a fresh start the agent reads the same written context a laptop
 session would."
 
-- **Ask first** (D36). A tap on `NEW` shows a bar in the status-line slot (§1, 48 px, under the
-  header): 18 px `--text-1` `Start a new conversation? Cards, jobs and notes stay.`, and at its
-  right `START` and `KEEP` (48 px tall, 96 px wide). `KEEP`, a second tap on `NEW`, or 10 s without
-  a tap hide the bar and nothing changes. A status line (room down) wins the slot; `NEW` is
-  disabled then.
+- **Ask first** (D36). A tap on `NEW` shows the bar `[data-cockpit-newbar]` in the status line's
+  slot (§1 item 2): **80 px** tall like the status line (D54, D134), right under the header,
+  `--bg-sunken`. Left, from x 784 and ending 16 px before `START`: 18 px `--text-1`
+  `Start a new conversation? Cards, jobs and notes stay.` (two lines, line height 1.35). Right, 16 px
+  from the pane's right edge and vertically centred (16 px above and below): **`KEEP`** at the right
+  end, **`START`** 16 px left of it, each 48 px tall and 96 px wide, 16 px caps `--text-1`, 1 px
+  `--line-strong` border (`data-newbar="keep"`, `data-newbar="start"`). `START`, the one-way action,
+  is the farther from the corner where the hand rests on `CLOSE` and the talk button.
+  `KEEP`, a second tap on `NEW`, or 10 s without a tap hide the bar and nothing changes. A status
+  line (room down) wins the slot: `NEW` is disabled then, and a bar that shows when the room goes
+  down is hidden as if `KEEP` was tapped.
+
+  | Where | Bar | Text | `START` | `KEEP` |
+  | --- | --- | --- | --- | --- |
+  | Wall page, pane (header y 0-64) | x 760-1368, y 64-144 | x 784-1128 | x 1144-1240, y 80-128 | x 1256-1352, y 80-128 |
+  | App, pane (header y 36-100) | x 760-1368, y 100-180 | x 784-1128 | x 1144-1240, y 116-164 | x 1256-1352, y 116-164 |
+  | Column (`split`, `canvas`, `switch`) | the 80 px under the column's header | same x | same x, 16 px below the bar's top | same x, 16 px below the bar's top |
+
+  The conversation starts under the bar while it shows (it pushes the conversation down by 80 px
+  like the status line; the pin rule of §7.1 applies).
 - **`START`**: a running turn is stopped first (§8: `● STOPPING`, forced after 5 s; queued prompts get `Dropped by STOP.`). Then the room
   starts a new agent session at once (`protocols.md` §11.7 says how); the old session gets no further prompt and
   nothing is written for the new one. Like a laptop session, the new session reads the written
@@ -944,7 +959,9 @@ Test: Playwright with a fake clock; assert the label texts at 10/12/35 s, the re
 ### S-C1-22 A new conversation: asked, then started at once (pending Q-O2)
 Given 23 turns in the conversation, no turn running, and 2 cards on the canvas,
 When the owner taps `NEW`,
-Then the bar `Start a new conversation? Cards, jobs and notes stay.` shows with `START` and `KEEP`;
+Then the bar `Start a new conversation? Cards, jobs and notes stay.` shows at x 760-1368, y 64-144
+(80 px) with `START` at x 1144-1240 and `KEEP` at x 1256-1352, both y 80-128: `KEEP` is the
+rightmost, `START` ends 16 px left of `KEEP`'s left edge;
 after 10 s without a tap it goes and nothing changed (same session id, 23 turns).
 When the owner taps `NEW`, then `START` at 07:10,
 Then by 0.5 s the divider `NEW CONVERSATION · 07:10` is drawn under the 23 turns, which stay
@@ -953,8 +970,11 @@ fake agent receives no prompt between `START` and the owner's next prompt; that 
 new session id.
 And when a turn is running at `START`, the header reads `● STOPPING` until the turn's end arrives,
 then the divider is drawn.
-Test: Playwright with a fake clock; assert the bar, the divider text, the 23 turns above it, the
-card count, the stand-in's received-turns log and session ids.
+Test: Playwright with a fake clock on the Wall page in `wall` at 1368x912; assert the bar's
+`getBoundingClientRect()` height 80 ± 1 px, `[data-newbar="keep"]`'s `left` minus
+`[data-newbar="start"]`'s `right` = 16 ± 1 px and `keep.right` = 1352 ± 1, both 48x96 ± 1 px; the
+divider text, the 23 turns above it, the card count, the fake agent's received-turns log and
+session ids.
 
 ### S-C1-23 Two pages, one conversation
 Given two pages on one room, both panes open (how each reaches the room: `screens.md` §6, pending

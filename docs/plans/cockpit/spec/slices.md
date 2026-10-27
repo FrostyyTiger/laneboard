@@ -323,5 +323,5 @@ changing it needs C6 (`c1-talk.md` §5).
 ## 7. Open fixes before a C1 night
 
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
-says go without them): T29 (the events the pane consumes), T26, T27, T41, T44, T96, T100 (the button and pane rects), T56
+says go without them): T29 (the events the pane consumes), T26, T27, T41, T44 (the button and pane rects), T56
 and T57 (pairing refusals and the agent's tools, pending Q-O21/Q-O23), T89 (close codes), T91 (a conversation across a restart, pending Q-O24). For C2 also: T42/T95, T69, T84.
