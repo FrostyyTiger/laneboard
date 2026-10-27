@@ -27,7 +27,7 @@ Answer: (open)
 
 ## Q-O1 Talk pressed while the agent is still answering
 
-`spec-input.md` §7.1: "Interrupt, queue, or ignore?" Blocks C1/C2. Spec: T5, `c1-talk.md`.
+`spec-input.md` §7.1: "Interrupt, queue, or ignore?" Blocks C1/C2. Spec: T5, `c1-talk.md` §8, D32-D33 (written for a).
 
 - a) **Interrupt on send**: the running turn stops when the new prompt is sent, its text stays
   marked "stopped"; a separate Stop button stops without a new prompt.
@@ -41,7 +41,7 @@ Answer: (open)
 
 ## Q-O2 How long one conversation lives, and what carries over
 
-`spec-input.md` §7.2. Blocks C1. Spec: T5, `c1-talk.md`.
+`spec-input.md` §7.2. Blocks C1. Spec: T5, `c1-talk.md` §11, D36 (written for c).
 
 - a) **One conversation forever**, compacted or restarted behind the scenes.
 - b) **Daily fresh start** at a fixed hour, plus a "New conversation" button.
@@ -49,6 +49,22 @@ Answer: (open)
 
 Recommendation: c) — the plan (§3 C1) says exactly this; carried over: repos/plans/notes, canvas
 cards, scheduled jobs and a short handover note; the old conversation stays readable.
+
+Answer: (open)
+
+## Q-O17 What the raw view shows
+
+Security-relevant (what a screen can read). Plan C1: "A raw terminal view of the same session as a
+toggle". Spec: T5, `c1-talk.md` §13 (written for b).
+
+- a) **Every event of the agent as it wrote it**, tool output included.
+- b) **Every event, tool output replaced by its size** (`[tool output: 3 412 bytes]`); room config
+  `cockpit.raw.toolOutput: true` shows it.
+- c) **A live terminal** through `server/terminals.mjs` (a writable pty on the room).
+
+Recommendation: b) — the headless agent has no terminal to show, c) would hand a device token a
+shell (plan §4: a token cannot act); tool output can carry what the agent read from files or logs,
+so it stays off a desk screen unless the owner turns it on (safe by default, `docs/plans/product.md`).
 
 Answer: (open)
 

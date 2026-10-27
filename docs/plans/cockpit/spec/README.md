@@ -15,7 +15,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | --- | --- | --- | --- | --- |
 | `README.md` | this index, the speed budget (B1-B8) and the glossary | none | T1, T24 | written |
 | `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3 | part 1 written (T2), part 2 planned (T3) |
-| `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, new conversation, several screens, raw terminal | `S-C1-` | T4, T5 | part 1 written (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 planned (T5) |
+| `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the physical-button API, speech-to-text slow or down | `S-C2-` | T6, T7 | planned |
 | `c3-see.md` | C3: the MCP read tools, `focus`, "Ask about this" | `S-C3-` | T8, T9 | planned |
 | `c4-show-canvas.md` | C4: show commands, one camera with the tour, undo; the canvas, kit blocks, custom cards, promotion, how cards leave | `S-C4-` | T10, T11, T12 | planned |
@@ -107,6 +107,8 @@ Each word is defined here once; the other files link here instead of redefining 
   `coworker.md`) has no prompt.
 - **pane**: the cockpit pane: the panel that slides over the current view and shows the
   conversation and the input. It never replaces the view (plan C1).
+- **raw view**: the pane's read-only list of the agent's native events, toggled with `RAW`; not a
+  terminal (`c1-talk.md` §13).
 - **tool line**: one collapsed line in the conversation for a piece of the agent's tool activity
   ("read 3 feeds", "looked at CI on main") (`c1-talk.md`).
 - **talk button**: the button in the pane that starts and sends voice input, by tap-tap or
