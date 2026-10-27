@@ -394,7 +394,7 @@ Notes for every builder round (planner, round 1):
   `tour.js nextLeg` a site whose worst status rose since its visit this cycle (or any crit not yet shown as crit)
   jumps the queue at the next leg — done when: a test on a model where a visited site turns crit mid-cycle gets
   it as the next leg, and a film of `galaxy.html?demo=1&pace=wall&quality=0` reaches a new crit within one leg.
-  (commit SHA)
+  (commit 2672a69)
   Builder r48: `nextLeg` keeps `shown` (id → the status the camera showed at its last visit this cycle; reset with
   every new cycle and by `resumeTour`); a visited trouble site whose status is now worse than shown is a candidate
   like an unvisited one, so in the order (trouble worst first) it goes before milder trouble and every calm site,
