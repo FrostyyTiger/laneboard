@@ -521,7 +521,7 @@ Notes for every builder round (planner, round 1):
   Seen, for T46: on radial at 1368 the labels at the ring's top pile up (`FEAT-SEARCH`, `BUILDER-A`, `CI-RETRY`,
   `ACME-BILLING` over each other). Unverified on a device: the manifest's install prompt (no tablet here).
   Round 52 left its demo fleet running (pid file stale); r53 stopped it by pid.
-- [x] T46 (§7 Night 4 E4; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `wall.html` (radial, the default) gets one filmstrip, since night 3 changed the shared `caption.js`, `tour.js` and `frame.js`; fix what it shows broken. The morning report lists what a reviewer should read first and what reaches outside the galaxy (`public/css/tokens.css --tex-vignette`). — done when: a `wall.html` filmstrip, and what it showed broken is fixed with tests (commit SHA)
+- [x] T46 (§7 Night 4 E4; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `wall.html` (radial, the default) gets one filmstrip, since night 3 changed the shared `caption.js`, `tour.js` and `frame.js`; fix what it shows broken. The morning report lists what a reviewer should read first and what reaches outside the galaxy (`public/css/tokens.css --tex-vignette`). — done when: a `wall.html` filmstrip, and what it showed broken is fixed with tests (commit a7751f7)
   Builder r54: filmed `wall.html?demo=1` (radial, large demo, SwiftShader ×4, `shots/r54-radial`, 0 console errors).
   Three things broken, all fixed: (1) names piled on each other (ring top: `BUILDER-A`, `FEAT-SEARCH`, `CI-RETRY`,
   `ACME-BILLING`; HOME's rooms; in holds `OBJECT-STORE` on `API-STAGING`): the collision pass stepped 14 px for
