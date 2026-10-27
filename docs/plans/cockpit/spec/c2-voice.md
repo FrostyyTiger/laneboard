@@ -113,15 +113,22 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   press, the hint `MICROPHONE OFF`.
 - **No final in 3 s** (D41): the screen keeps the last words shown as an editable draft, not sent;
   the exact message is §10's `stt-failed`.
-- **Limits** (D45). Listening with no word for 30 s closes the microphone, nothing is sent, hint
+- **Limits** (D45, D168). Listening with no word for 30 s closes the microphone, nothing is sent, hint
   `MICROPHONE OFF`. Listening for 120 s in all closes it, the words stay as a draft, not sent, hint
   `MICROPHONE OFF · TEXT KEPT`. A brushed button (D29) therefore never listens longer than 30 s by
-  itself.
+  itself. After either limit the hint stays until the next touch or press (below), not 5 s: the
+  owner who tapped and looked away to the main monitor finds it on looking back.
 - **One hint** for "the microphone closed and nothing was sent" (nothing heard, the 30 s and 120 s
   limits, slide off, a tap on the words in §7): `MICROPHONE OFF`, and `MICROPHONE OFF · TEXT KEPT`
-  when the input holds spoken words. It shows for 5 s in the hint line's place (§3), or until the
-  input changes or the next press, whichever comes first. `CANCEL` shows no hint (the owner asked
-  for it); a failure shows §10's line instead.
+  when the input holds spoken words. It shows in the hint line's place (§3) until the input
+  changes or the next press, and for at most 5 s, whichever comes first. **After a limit** (30 s,
+  120 s) the 5 s cap does not apply (D168): the hint stays until the first `pointerdown` anywhere
+  on the page (talk button, input, conversation, the Map or Wall behind), the first `keydown`
+  (the talk key F13 included, §11), a button press (C2b, §14) or an input change. It does not
+  hold the pane open: when D5's 300 s close comes first the hint goes with the pane. While the
+  room-down line or an error holds the slot it waits under them and comes back when they go, if
+  no touch came meanwhile (`c1-talk.md` §1.1). `CANCEL` shows no hint (the owner asked for it); a
+  failure shows §10's line instead.
 - **Per screen** (D37): partial words never reach another screen; only the sent prompt does.
 
 ## 5. The microphone
@@ -228,13 +235,20 @@ frame and no audio frame after t = 1.7 s (the microphone is closed).
 Given a fake clock and the fake speech scripted to send nothing,
 When the owner taps the talk button at t = 0,
 Then at t = 30 s `data-talk="idle"`, the fake speech service gets no more frames, the hint reads
-`MICROPHONE OFF` until t = 35 s; nothing sent.
+`MICROPHONE OFF`; it still reads so at t = 35 s and at t = 290 s (no touch, D168); nothing sent.
+When at t = 290 s the owner taps an empty spot of the conversation, the hint is gone in that
+frame and the pane stays open.
+And with no touch at all, at t = 330 s (300 s after the close, D5) the pane closes; on reopening
+it no hint shows.
 And given the fake speech sending a growing partial every 1 s from 0.6 s, when the owner taps at
 t = 0 and does nothing more, then at t = 120 s the microphone closes, the textarea holds the last
-words as a draft, the hint reads `MICROPHONE OFF · TEXT KEPT`, nothing is sent; typing one
-character removes the hint.
-Test: Playwright `page.clock` plus the stand-in's clock verb (T32); assert `data-talk`, the hint,
-the textarea value, the received-turns count 0.
+words as a draft, the hint reads `MICROPHONE OFF · TEXT KEPT` and still at t = 126 s, nothing is
+sent; typing one character removes the hint.
+And for contrast (S-C2-05): the `MICROPHONE OFF` after nothing heard on a release still goes after
+5 s.
+Test: Playwright `page.clock` plus the stand-in's clock verb (T32); assert `data-talk`, the hint
+text at 35, 126 and 290 s, its absence after the `pointerdown` and after reopening, the textarea
+value, the received-turns count 0.
 
 ### S-C2-07 Sliding off during a hold keeps the words as a draft
 Given the fake speech scripted as S-C2-01, the input empty,

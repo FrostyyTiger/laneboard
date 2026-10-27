@@ -97,7 +97,8 @@ from the input row's top edge upwards, in this order, each one only while it is 
    3. `hint`: the talk hints (`c2-voice.md` §3, §4);
    4. `length`: `8 214 / 8 000 CHARACTERS` (§7).
    A lower message waits while a higher one shows and appears when the higher one goes, if it
-   still holds (a hint whose 5 s ran out meanwhile does not come back).
+   still holds (a hint whose 5 s ran out meanwhile does not come back; a limit hint, `c2-voice.md`
+   §4 and D168, comes back unless a touch came meanwhile).
 2. **The chip row**, 64 px, on top of the line slot (on the row's top edge when no line shows): the
    chip 48 px tall, 8 px in from the row's top and bottom, from x 784, ending at x ≤ 1264.
 3. **`↓ NEW`** floats over the conversation, 16 px above the topmost of the two (above the row
