@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>c1-pane: the cockpit pane over the Map (c1-talk.md, S-C1-03..07)</title>
+<style>
+/* Values copied from public/css/tokens.css (dark). Sketch only, not product code. */
+:root{--bg-canvas:oklch(12% 0.004 250);--bg-surface:oklch(16% 0.004 250);--bg-elevated:oklch(20% 0.004 250);--bg-sunken:oklch(9% 0.004 250);
+--line-weak:oklch(100% 0 0 / .09);--line:oklch(100% 0 0 / .17);--line-strong:oklch(100% 0 0 / .32);
+--text-1:oklch(96% .002 250);--text-2:oklch(78% .004 250);--text-3:oklch(62% .004 250);
+--accent:oklch(72% .17 300);--p1:oklch(62% .23 25);--p2:oklch(84% .16 95);
+--mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--label:"Barlow Condensed","Arial Narrow","Roboto Condensed",sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1368px;height:912px;overflow:hidden;background:var(--bg-canvas);color:var(--text-1);font-family:var(--mono)}
+.lab{font-family:var(--label);text-transform:uppercase;letter-spacing:.06em}
+/* app shell: 36 px header, 24 px tape */
+.hdr{position:absolute;left:0;top:0;width:1368px;height:36px;background:var(--bg-surface);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:20px;padding:0 16px;font-size:16px;color:var(--text-2)}
+.hdr b{color:var(--text-1);font-weight:600}
+.hdr .on{color:var(--text-1);border-bottom:1px solid var(--accent)}
+.tape{position:absolute;left:0;bottom:0;width:1368px;height:24px;background:var(--bg-sunken);border-top:1px solid var(--line);font-size:13px;color:var(--text-3);padding:4px 16px}
+svg.map{position:absolute;left:0;top:36px}
+/* the pane: x 760-1368, y 36-888 */
+.pane{position:absolute;left:760px;top:36px;width:608px;height:852px;background:var(--bg-elevated);border-left:1px solid var(--line);display:flex;flex-direction:column}
+.ph{height:64px;flex:none;display:flex;align-items:center;padding:0 16px 0 24px;border-bottom:1px solid var(--line)}
+.ph .t{font-size:16px;color:var(--text-2)}
+.ph .s{font-size:16px;color:var(--text-3);margin-left:16px}
+.ph .sp{flex:1}
+.hb{height:48px;min-width:96px;padding:0 12px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1)}
+.conv{flex:1;overflow:hidden;padding:16px 24px 0}
+.lr{height:24px;font-size:16px;color:var(--text-3);margin-bottom:8px;display:flex;align-items:center}
+.prompt{font-size:22px;line-height:1.4;background:var(--bg-surface);border:1px solid var(--line-weak);padding:12px 16px;margin-bottom:32px}
+.tool{height:44px;display:flex;align-items:center;font-size:18px;color:var(--text-2);border-bottom:1px solid var(--line-weak)}
+.tool .g{width:24px;flex:none}
+.tool .x{margin-left:auto;font-size:16px;color:var(--text-3);width:24px;text-align:right}
+.reply{font-size:22px;line-height:1.4;margin:16px 0}
+table{border-collapse:collapse;width:100%;margin-bottom:16px}
+th{font-family:var(--label);font-weight:600;text-transform:uppercase;letter-spacing:.06em;font-size:16px;color:var(--text-3);text-align:left;height:44px;padding:0 12px;border-bottom:1px solid var(--line-weak)}
+td{font-size:18px;height:44px;padding:0 12px;border-bottom:1px solid var(--line-weak)}
+.r{text-align:right}
+.m1{color:var(--p1)}.m2{color:var(--p2)}.mg{color:var(--text-2)}
+.cur{color:var(--text-3)}
+.ir{height:96px;flex:none;border-top:1px solid var(--line);position:relative}
+.inp{position:absolute;left:24px;top:16px;width:400px;height:64px;background:var(--bg-sunken);border:1px solid var(--line);font-size:22px;color:var(--text-3);display:flex;align-items:center;padding:0 16px}
+.send{position:absolute;left:440px;top:16px;width:64px;height:64px;border:1px solid var(--line-strong);display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text-1)}
+.talk{position:absolute;left:520px;top:16px;width:64px;height:64px;border:1px solid var(--accent);background:var(--bg-elevated);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:16px;color:var(--text-1)}
+.talk svg{display:block}
+</style></head><body>
+<div data-pane="open" data-turn="answering">
+  <div class="hdr lab"><b>laneboard</b><span class="on">Map</span><span>Board</span><span>Inbox</span><span>Morning</span><span>Runs</span><span style="margin-left:auto"><span class="m2">▲ 1</span> · ■ 0</span></div>
+  <svg class="map" width="760" height="828" viewBox="0 0 760 828">
+    <g fill="none" stroke="oklch(100% 0 0 / .17)">
+      <circle cx="380" cy="420" r="150"/><circle cx="380" cy="420" r="280" stroke="oklch(100% 0 0 / .09)"/>
+      <path d="M380 420 L500 330 M380 420 L280 320 M380 420 L450 550 M380 420 L230 500 M500 330 L590 250 M500 330 L620 380"/>
+    </g>
+    <g fill="oklch(78% .004 250)">
+      <circle cx="380" cy="420" r="6"/><circle cx="280" cy="320" r="7"/><circle cx="450" cy="550" r="7"/><circle cx="230" cy="500" r="7"/>
+      <circle cx="590" cy="250" r="5"/><circle cx="620" cy="380" r="5"/>
+    </g>
+    <polygon points="500,318 510,336 490,336" fill="oklch(84% .16 95)"/>
+    <g font-family="JetBrains Mono, monospace" font-size="16" fill="oklch(78% .004 250)">
+      <text x="512" y="312">builder-a</text><text x="200" y="306">hv1</text><text x="462" y="574">builder-c</text><text x="150" y="530">hv2</text>
+    </g>
+  </svg>
+  <section class="pane" data-cockpit-pane>
+    <div class="ph lab"><span class="t">Cockpit</span><span class="s">● answering</span><span class="sp"></span><span class="hb">Close</span></div>
+    <div class="conv">
+      <div class="lr lab">You · spoken · 07:02</div>
+      <div class="prompt">how did the night go?</div>
+      <div class="lr lab">Agent · 07:02</div>
+      <div class="tool" data-tool-line><span class="g"></span>read 3 feeds<span class="x">+</span></div>
+      <div class="tool" data-tool-line><span class="g"></span>looked at CI on main<span class="x">+</span></div>
+      <p class="reply">Two of three runs finished. One is stuck:</p>
+      <table>
+        <tr><th>Run</th><th>Builder</th><th>State</th><th class="r">Time</th></tr>
+        <tr><td>nightly-ci</td><td>builder-a</td><td><span class="m2">▲</span> stuck</td><td class="r">1 h 12</td></tr>
+        <tr><td>docs-sweep</td><td>builder-b</td><td><span class="mg">○</span> done</td><td class="r">0 h 48</td></tr>
+        <tr><td>bench</td><td>builder-c</td><td><span class="mg">○</span> done</td><td class="r">2 h 05</td></tr>
+      </table>
+      <p class="reply">nightly-ci waits on a lock since 05:50. Say "show me" and I fly to it.<span class="cur">▍</span></p>
+    </div>
+    <div class="ir">
+      <div class="inp">Type, or hold TALK</div>
+      <div class="send lab">Send</div>
+      <div class="talk lab"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="oklch(96% .002 250)" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Talk</div>
+    </div>
+  </section>
+  <div class="tape">tape · 07:02:14 nightly-ci on builder-a: no progress for 1 h 12</div>
+</div>
+</body></html>

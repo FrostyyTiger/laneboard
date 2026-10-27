@@ -14,7 +14,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | --- | --- | --- | --- | --- |
 | `README.md` | this index and the glossary | none | T1 | written |
 | `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3 | part 1 written (T2), part 2 planned (T3) |
-| `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, new conversation, several screens, raw terminal | `S-C1-` | T4, T5 | planned |
+| `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, new conversation, several screens, raw terminal | `S-C1-` | T4, T5 | part 1 written (T4: pane, rendering, tool lines, S-C1-01..12), part 2 planned (T5) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the physical-button API, speech-to-text slow or down | `S-C2-` | T6, T7 | planned |
 | `c3-see.md` | C3: the MCP read tools, `focus`, "Ask about this" | `S-C3-` | T8, T9 | planned |
 | `c4-show-canvas.md` | C4: show commands, one camera with the tour, undo; the canvas, kit blocks, custom cards, promotion, how cards leave | `S-C4-` | T10, T11, T12 | planned |
@@ -27,7 +27,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `slices.md` | the build nights in order, each with its scenario ids, stand-ins and done-when | none (lists every id once) | T20 | planned |
 | `DECISIONS.md` | small reversible choices made during the night, each with how to overrule | none | all | written (running list) |
 | `QUESTIONS.md` | what only the owner can decide, with options and a recommendation | none | all | written (running list) |
-| `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2) | none | T2-T4, T6, T9, T11, T14 | in progress |
+| `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2), `c1-pane.html` (T4) | none | T2-T4, T6, T9, T11, T14 | in progress |
 
 ## Glossary
 
