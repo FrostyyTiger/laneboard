@@ -169,6 +169,21 @@ Notes for every builder round (planner, round 1):
   angle over the sweep, a ping only for sites changed since the last sweep, none while held or in still mode, nothing
   without `?fx=sweep`; and filmstrips of `galaxy.html?demo=1&quality=0` with and without `&fx=sweep` (one with
   `demo-fleet.mjs --quiet-after`) show pings on live sites and none on a silent one.
+- [ ] T19 (§7 Night 4; r4-film-ui galaxy 1; after T9) [ui] [variant:galaxy] One top step of type while a site is held:
+  the banner (`hud.js`, `frame.js`, `wall.css`) may own the top step only at the overview; while a caption holds a site it
+  drops to the caption's second-line size (~0.45 of the hero) and becomes one line `■ HV2 · STORAGE · reason  +N`, so the
+  caption hero is the only top-step type on screen — done when: a test pins the banner's font size at the overview
+  against its size with a held site (held ≤ 0.5 of the hero's, overview unchanged) and a still with a different
+  trouble held shows the hero as the largest type; `wall.html`'s caption tests stay green.
+- [ ] T20 (§7 Night 4; r4-film-ui galaxy 3) [ui] [variant:galaxy] No orphaned leader line: the leader belongs to the plate
+  and fades on the plate's opacity curve, first out (drawn last on the way in: plate, leader, lock) — done when: a test
+  with a fake clock finds the leader's opacity never above the plate's and 0 once the plate is gone, and a film frame
+  after the plate fades shows no stub or diagonal in empty sky.
+- [ ] T21 (§7 Night 4; r4-film-ui fx-warp 1; after T15) [ui] [variant:galaxy] `fx=warp` says where, not everything:
+  streaks only inside a cone (~30°) round the direction of travel, about a quarter of today's count, white with the
+  status hue only on the leading tips, and none drawn over a crit nebula's screen disc — done when: a test pins the cone
+  and count (`fx.js`/`scene.js` pure helper) and a streak start inside a crit's disc is skipped, and a filmstrip of
+  `galaxy.html?demo=1&quality=0&fx=warp` on a flight to a warn site no longer streaks both arms or covers the crit.
 
 ## Research questions
 
@@ -190,6 +205,15 @@ Notes for every builder round (planner, round 1):
   a cost guess) — for T17
 
 ## Later
+
+From r4-film-ui (triage, night 4; not tasks yet):
+- (r4-film-ui galaxy 4) Hold rhythm: arrive and lock 0.6 s, stillness 0.4 s, name types, rows fade in, hold at least
+  1.5 s still before leaving; under `demo=1` cut the overview, not the hold; calm plates two lines minimum.
+- (r4-film-ui galaxy 5) Typing cursor at cap height, 60 % value, only after the first letter.
+- (r4-film-ui galaxy 7) Label system of three steps: held site, sun and other sites, members; sun never bigger than the held site.
+- (r4-film-ui galaxy 8) Plate rows on one two-column grid (mono label, condensed-caps value); CPU/MEM on one row.
+- (r4-film-ui fx-beacon 2) Beacon fades on the flight out, not cut: film one departure at 0.5 s spacing.
+- (r4-film-ui touch) `‹ BACK` box uses the plate's 2 px bracket weight; the sheet's `■ SITE` kicker says `MANUAL` in explore (with T5).
 
 Night 4's list, not yet a task (README §7 Night 4; the replan takes from here first, in this order: B, C, D, E; with
 little room left, E before C and D):
@@ -390,6 +414,15 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 
 ## For the owner
 
+From r4-film-ui (ideas, taste; not tasks):
+- Tint the lock brackets with the destination's status during a flight, so "going to the red one" shows without warp.
+- The plate's leader could rise vertically from the target like the beacon, instead of stub-and-diagonal.
+- Tour held frames with the banner should be composed like the planet sheet (plate left, system right, no banner): the
+  review's best frame of the night.
+- `fx-beacon` with body: 6-8 px core, soft glow, a cap at the tip, width with age (already in Later as the hairline
+  finding; the look is taste).
+- At 3 m a warn ▲ and crit ■ differ only by hue; shape separates them only up close.
+
 Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morning` "Needs you"):
 - (r56-performance) Leave `galaxy.html?demo=1&fx=beacon&perf=1` up for an hour on the Surface and compare the overlay's
   memory line at start and end (10 minutes on the VM showed no growth); compare with no fx, and `&fx=warp` in flights.
@@ -415,14 +448,17 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 
 ## Reviews
 
-- r4 film-ui → reviews/r4-film-ui.md. Worst: the banner out-shouts the held caption (two headlines, two subjects);
-  hard dark boxes behind banner and plate (T10); orphaned leader line after the plate fades; warp streaks the whole
-  galaxy on a warn flight.
+- r4 film-ui → reviews/r4-film-ui.md. 8 galaxy + 2 beacon + 3 warp + touch findings; 3 became tasks (T19 banner size
+  while held, T20 orphaned leader, T21 warp cone). Dropped as covered: box over the galaxy (T10), grey crit glyph (T6),
+  calm warp streaks (T15). Rest in Later (hold rhythm, cursor, label steps, plate grid, beacon fade, BACK box) or
+  For the owner (ideas).
 
 ## Scores
 
 | round | persona | overview | legibility | status | touch | wow | calm | performance |
 |---|---|---|---|---|---|---|---|---|
-| 4 | film-ui | 7 | 6 | 7 | 6 | 6 | 5 | 6 |
+| 4 | film-ui (galaxy) | 7 | 6 | 7 | 6 | 6 | 5 | 6 |
+| 4 | film-ui (fx-beacon) | - | - | - | - | 5 | 7 | - |
+| 4 | film-ui (fx-warp) | - | - | - | - | 7 | 3 | - |
 
 ## Morning
