@@ -562,10 +562,23 @@ Notes for every builder round (planner, round 1):
   the two-crit row with and without the why. `half-at-lab.png` is 684 px wide. Film `shots/r57-galaxy`: 0 errors,
   14.5 fps under SwiftShader x4, worst gap 283 ms. Its frames hold no crit (VM-C cleared early in this cycle), so the
   stills are the evidence. Seen, for T28: the warn banner switches between `FIX-LOGIN` and `FEAT-SEARCH` across legs.
-- [ ] T20 (§7 Night 4; r4-film-ui galaxy 3) [ui] [variant:galaxy] No orphaned leader line: the leader belongs to the plate
+- [x] T20 (§7 Night 4; r4-film-ui galaxy 3) [ui] [variant:galaxy] No orphaned leader line: the leader belongs to the plate
   and fades on the plate's opacity curve, first out (drawn last on the way in: plate, leader, lock) — done when: a test
   with a fake clock finds the leader's opacity never above the plate's and 0 once the plate is gone, and a film frame
-  after the plate fades shows no stub or diagonal in empty sky.
+  after the plate fades shows no stub or diagonal in empty sky. (commit dac5cad) Builder r58: caption.js `alpha(t)` is
+  the plate's opacity on its fade curve with no style read (`plateEase` = the plate's `cubic-bezier(.2, 0, 0, 1)`,
+  read off the plate animation's own `currentTime`: it starts a frame late when that frame is long, and a clock-only
+  model put the leader at 0.58 over a plate at 0.17 on the live page). lock.js `leaderAlpha(p)` = 0 up to p 0.5, then
+  2p - 1: never above the plate, in on its second half, gone by the time the plate is half out. galaxy/lock.js takes
+  `plateAlpha` (main.js passes `caption.alpha`) and writes the legs' opacity only when it changes. Order on the way in
+  is plate, then leader. The lock's own timing is unchanged, so the brackets may still close before the plate. The
+  leader keeps its covers while it is faded, so no name moves in under it. wall.html's lock is untouched.
+  Tests: `test/wall-galaxy-lock.test.mjs` (a fake clock through the plate's fade-in and fade-out with the lock
+  opening; a pending animation keeps the plate at its start). Live probe `tools/r58-leader.mjs` (rAF, computed
+  opacities): 2765 frames, 590 with a leader, 0 above the plate, 0 with the plate at 0. Film `shots/r58-galaxy`:
+  0 errors, frames after a plate has gone (140 s, 148 s, 151 s) show no stub, and 165 s has the plate typing with no
+  leader yet. fps under the x4 throttle is noise here: 2.1 and 4.8 for this build against 3.3 for the unchanged base
+  back to back (`shots/r58-base`, `r58-galaxy2`), with worst gaps 120-143 ms in all three, so no fps claim.
 - [ ] T21 (§7 Night 4; r4-film-ui fx-warp 1; after T15) [ui] [variant:galaxy] `fx=warp` says where, not everything:
   streaks only inside a cone (~30°) round the direction of travel, about a quarter of today's count, white with the
   status hue only on the leading tips, and none drawn over a crit nebula's screen disc — done when: a test pins the cone
