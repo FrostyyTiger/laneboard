@@ -97,7 +97,7 @@ Each word is defined here once; the other files link here instead of redefining 
   Each screen is in one mode at a time, or two modes side by side on one screen (`screens.md`).
 - **mode**: what a screen shows: tour, explore or canvas.
 - **layout**: how the Wall page arranges modes on one screen: `wall`, `canvas`, `split` or `switch` (`screens.md` §1).
-- **cockpit button**: the `AGENT` button that opens the pane, on every view and on the Wall (`screens.md` §4).
+- **cockpit button**: the talk button (64x64) plus `CHAT` (48x48, reads `CLOSE` while the pane is open), bottom right, in the same two rects on every view and on the Wall (`screens.md` §4, D116, pending Q-O11).
 - **tour**: the Wall's idle mode: the camera flies the fleet on its own, trouble first (Wall plan
   D4, on `origin/plan/wall`).
 - **explore**: the mode after a touch on the tour: the camera goes where the finger says. One

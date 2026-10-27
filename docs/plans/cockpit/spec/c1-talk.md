@@ -42,26 +42,25 @@ main")."
    `screens.md` §7).
 3. **The conversation**, filling the rest; it scrolls on its own; 24 px padding left and right,
    16 px at the top. Text column: 560 px.
-4. **Input row**, 1 px `--line` top border. The **talk button** (64x64 px) sits exactly where the
-   cockpit button sits on that page (`screens.md` §4): bottom right, 24 px from the right edge; its
-   bottom edge 24 px above the screen's bottom on the Wall, 16 px above the tape in the app. Left
-   of it, 16 px apart: `SEND` (64x64 px) and the text input (64 px tall, mono 22 px, `--bg-sunken`,
+4. **Input row**, 1 px `--line` top border. The **talk button** (64x64 px) keeps its one rect from
+   `screens.md` §4: x 1280-1344, y 824-888 on every page (pending Q-O11). Left of it, 16 px apart: `SEND` (64x64 px) and the text input (64 px tall, mono 22 px, `--bg-sunken`,
    from x 784 to x 1184). Typing, `SEND` and the input's growth are T5's; the talk button's states
-   are T6's. The row is 104 px tall on the Wall (16 + 64 + 24), 96 px in the app (16 + 64 + 16).
+   are T6's. The row is y 808-912 on the Wall (104 px: 16 + 64 + 24) and y 808-888 in the app (80 px: 16 +
+   64; the pane ends on the bottom bar's top edge).
 
 ## 2. Opening and closing
 
 **The opener** (pending Q-O11). The recommendation makes the bottom-right 64x64 button the talk
 button (one press to talk, as a held key in the terminal) and adds a smaller opener for typing and
-reading: `CHAT`, 48x48 px, 16 px caps, `--text-1` on `--bg-elevated`, 1 px `--line-strong` border,
-centred above the talk button with 16 px between (on the Wall x 1288-1336, y 760-808). It is
-`[data-cockpit-open]`. If the owner picks Q-O11 b), the opener is today's `AGENT` button (D7) and
-these rules apply to it unchanged.
+reading: `CHAT`, `[data-cockpit-open]`, 48x48 px at x 1288-1336, y 760-808 on every page. Its look
+and rect are `screens.md` §4 (D116). If the owner picks Q-O11 b), the opener is D7's `AGENT`
+button in the talk button's rect and these rules apply to it unchanged.
 
 **Open.** A tap on the opener (or a press on the talk button, T6) opens the pane:
 - It slides in from the right: `transform: translateX(608px)` to `0`, 120 ms, `--ease`
   (`docs/design.md` rule 5). The pane is in place ≤ 0.2 s after the tap (B7).
-- While open, the opener is hidden (`CLOSE` in the header takes its job).
+- While open, the opener stays in its rect and reads `CLOSE`; a tap closes the pane. `CLOSE` in
+  the header does the same (D116).
 - The conversation is scrolled to its end: the latest turn is in sight.
 - The input gets the keyboard focus only when the page's pointer is fine (a mouse, a paired
   keyboard: `matchMedia('(pointer: fine)')`); on a touch screen it does not, so the on-screen
@@ -69,7 +68,8 @@ these rules apply to it unchanged.
 - The tour stops where it is and the idle timer pauses (`screens.md` §2, D4).
 
 **Close.** `CLOSE` in the header, `Esc` on a paired keyboard, or the auto-close (`screens.md` §2,
-D5, pending Q-O12) close it: it slides out in 120 ms, the opener shows again. A tap on the view
+D5, pending Q-O12) close it: it slides out in 120 ms, the opener reads `CHAT` again. The opener
+reading `CLOSE` closes it the same way. A tap on the view
 behind the pane does **not** close it: it acts on the view (explore, select), so the owner can
 point while the agent talks (D19). There is no swipe to close in v1 (D19).
 
@@ -243,21 +243,22 @@ paired screen.
 Given a screen in `wall` layout touring, the pane closed,
 When the owner taps `[data-cockpit-open]` at t = 0 ms,
 Then by t = 200 ms `data-pane="open"`, the pane's rect is x 760, y 0, 608 x 912, its transform is
-`none`; the slide's computed `transition-duration` is 120 ms; the opener is hidden; the talk
-button's bottom-right corner is at (1344, 888); `data-wall-state="explore"`; the latest turn's last
+`none`; the slide's computed `transition-duration` is 120 ms; the opener reads `CLOSE` at
+x 1288-1336, y 760-808; the talk button is at x 1280-1344, y 824-888 (`screens.md` §4); `data-wall-state="explore"`; the latest turn's last
 line is in sight; `document.activeElement` is not the input.
 Test: Playwright with `hasTouch: true`; tap; at 200 ms read the rects, the computed transition and
 `document.activeElement`; a second run with a mouse click asserts the input has focus.
 
-### S-C1-02 Closing: CLOSE and Esc close it, a tap on the wall does not
+### S-C1-02 Closing: both CLOSE controls and Esc close it, a tap on the wall does not
 Given S-C1-01's open pane with the draft `how is` in the input,
 When the owner taps the map at (400, 480),
 Then the pane stays open and `data-wall-state` is `explore` with the camera moved to the tap.
 When the owner taps `CLOSE` at t = 0 ms,
-Then by t = 200 ms `data-pane="closed"`, the pane is off screen, the opener shows.
-When the owner opens the pane again, the draft `how is` is in the input; `Esc` on a keyboard closes
-it again.
-Test: Playwright; tap coordinates on the wall; assert `data-pane` after each step; `keyboard.press('Escape')`.
+Then by t = 200 ms `data-pane="closed"`, the pane is off screen, the opener reads `CHAT`.
+When the owner opens the pane again, the draft `how is` is in the input; a tap on the opener, now
+reading `CLOSE` at (1312, 784), closes it by 200 ms; opened once more, `Esc` on a keyboard closes it.
+Test: Playwright; tap coordinates on the wall; tap the header `CLOSE`, then `[data-cockpit-open]`;
+assert `data-pane` and the opener's text after each step; `keyboard.press('Escape')`.
 
 ### S-C1-03 The pane over the Map leaves the Map usable
 Given the app on `#/map` at 1368x912 with a node selected and the inspector open,

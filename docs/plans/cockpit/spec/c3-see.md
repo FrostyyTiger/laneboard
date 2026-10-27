@@ -574,9 +574,10 @@ The microphone does **not** open and the keyboard does not come up (D20): the ow
 talk or taps the input (D64). The conversation is scrolled to its end.
 
 **The chip** `[data-cockpit-chip]`, `data-node="<id>"`:
-- A 64 px row between the conversation and the input row (in the app y 728-792, on the Wall y
-  744-808); the conversation above is 64 px shorter while it is there.
-- The chip in it: 48 px tall, from x 784, as wide as its content up to 560 px; `--bg-sunken`, 1 px
+- A 64 px row between the conversation and the input row (y 744-808 on every page, since the
+  input row's top is at y 808 everywhere, `c1-talk.md` §1); the conversation above is 64 px shorter while it is there.
+- The chip in it: 48 px tall, from x 784, as wide as its content up to 480 px (it ends at x ≤ 1264: x 1280-1344
+  is `CLOSE`'s, `screens.md` §4); `--bg-sunken`, 1 px
   `--line-strong` border. Inside, 16 px in: `ABOUT` (16 px caps `--text-3`), 12 px gap, the label
   (mono 20 px `--text-1`, cut with `…`), 12 px gap, the kind (16 px `--text-2`), then the remove
   button `[data-cockpit-chip-remove]`: 48x48 px, `✕` 24 px `--text-2`, `aria-label="Remove context"`,
@@ -617,8 +618,8 @@ moving and the right-click cases.
 Given S-C3-09's open menu,
 When the owner taps `ASK ABOUT THIS`,
 Then within 0.2 s the menu is gone, `data-pane="open"`, `[data-cockpit-chip]` has
-`data-node="room-b"`, its text outside the remove button reads `ABOUT vm-b room`, its rect at y 736-784 from x 784, the
-conversation's bottom edge is at y 728, no `getUserMedia` call was made, `document.activeElement` is
+`data-node="room-b"`, its text outside the remove button reads `ABOUT vm-b room`, its rect at y 752-800 from x 784, the
+conversation's bottom edge is at y 744, no `getUserMedia` call was made, `document.activeElement` is
 not the input, and the room has a `focus` message from `desk` with `route.sel = "node:room-b"`.
 Test: Playwright, `getUserMedia` wrapped by an init script that counts calls; asserts the chip's
 attributes, text and box, the count 0, the active element, and the stand-in room's received-message

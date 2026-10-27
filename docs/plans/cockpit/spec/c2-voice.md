@@ -15,8 +15,8 @@ the terminal's hold-to-talk, "In the terminal it works really well."
 
 ## 1. The talk button
 
-- `[data-talk]`, a `<button>` 64x64 px in the pane's input row, bottom right (`c1-talk.md` §1: on
-  the Wall x 1280-1344, y 824-888). With the pane closed the same button sits in the same place and
+- `[data-talk]`, a `<button>` 64x64 px in the pane's input row, bottom right (`screens.md` §4: x 1280-1344,
+  y 824-888 on every page and layout, D116). With the pane closed the same button sits in the same place and
   a press opens the pane (`c1-talk.md` §2, pending Q-O11).
 - Inside, centred: a 24 px microphone glyph, 4 px gap, one word in 16 px `--font-label` caps
   (§3 says which).
@@ -344,7 +344,7 @@ which process is the room: D89).
 - **`none`** (also what a stranger without a speech service gets): the talk button is not drawn;
   `SEND` takes its place (on the Wall x 1280-1344) and the textarea runs from x 784 to x 1264; the
   placeholder reads `Type a message`; the talk key (§11) does nothing. On the closed pane the
-  opener is the cockpit button (`screens.md` §4, pending
+  opener is `CHAT` (`screens.md` §4, pending
   Q-O11). Typing is the whole C1, so the pane is complete without voice (`single-machine.md`, T19).
 
 ## 10. Speech-to-text down or failed (D50)

@@ -92,20 +92,40 @@ Where things land:
 - In `switch`, a card that arrives while the wall is shown does **not** flip the screen. The switch
   button shows a count instead (S-SCR-07).
 
-## 4. The cockpit button
+## 4. The cockpit button (pending Q-O11)
 
-One button opens the pane. Label `AGENT` (D7), in `--font-label` caps 16 px, a 24 px chat icon
-above it, `--text-1` on `--bg-elevated`, 1 px `--accent` border (the primary call to action,
-`docs/design.md` rule 3). Size **64x64 px** (research Q1: primary actions ≥ 64 px). When the pane
-is open the button stays where it is and reads `CLOSE`.
+The **cockpit button** is two controls in the bottom-right corner, at the **same two rects on every
+page, layout and pane state** (D116), so the finger finds them without looking:
 
-| Where | Position |
+| Control | Selector | Rect at 1368x912 | Offsets from the viewport's bottom-right corner | What a press does |
+| --- | --- | --- | --- | --- |
+| **talk button** | `[data-talk]` | x 1280-1344, y 824-888 (64x64) | `right: 24px; bottom: 24px` | listens at once and opens the pane with the live words (`c2-voice.md` §1-§2) |
+| **`CHAT`** | `[data-cockpit-open]` | x 1288-1336, y 760-808 (48x48) | `right: 32px; bottom: 104px` (centred above the talk button, 16 px between) | pane closed: opens it for typing and reading; pane open: closes it (`c1-talk.md` §2) |
+
+- The talk button is one element: with the pane closed it floats in the corner; with the pane open
+  it is the right end of the input row (`c1-talk.md` §1), in the same rect. Its look and states
+  are `c2-voice.md` §1, §3.
+- `CHAT`: 16 px `--font-label` caps, `--text-1` on `--bg-elevated`, 1 px `--line-strong` border.
+  While the pane is open it stays in its rect and reads `CLOSE` (`aria-label="Close the cockpit"`);
+  `CLOSE` in the pane header (`c1-talk.md` §1) stays as the second way out. The way out is where
+  the hand already is (review 31 finding 5).
+- Above the input row, the rect x 1280-1344, y 760-808 is `CHAT`'s. Anything else drawn
+  in the band above the input row (the context chip `c3-see.md` §9, the hint and error line,
+  `↓ NEW`) ends at x ≤ 1264, 16 px left of it (T96 stacks them).
+- Both sit above the page (`z-index` 35, between `--z-tape` 30 and `--z-sheet` 40).
+- With Q-O11 b) the talk button inside the pane is the only talk button; in its rect, with the pane
+  closed, the page draws D7's `AGENT` (64x64, opens the pane) and there is no `CHAT`.
+- With `cockpit.stt.url: none` there is no talk button (`c2-voice.md` §9): `CHAT` keeps its rect,
+  and `SEND` takes the talk button's rect once the pane is open.
+
+Per page, what else changes:
+
+| Where | The rest of the page |
 | --- | --- |
-| Wall page, `wall` layout | bottom right, 24 px from the right and bottom edges. The Wall's bottom-right status lines end 24 px left of the button (their right edge at 1368 − 24 − 64 − 24 = 1256 px). |
-| Wall page, `split` | bottom right of the canvas half, 24 px from the screen's right and bottom edges. The wall half's status lines keep their place at the divider. |
-| Wall page, `canvas` | bottom right, 24 px from the edges. The card grid keeps its bottom 104 px free (24 + 64 + 16). |
-| Wall page, `switch` | bottom right, 24 px from the edges, on both halves. The switch button sits directly left of it with 16 px between. |
-| App, every view in `VIEWS` (`public/js/core/router.js`) | bottom right, 24 px from the right edge, its bottom edge 16 px above the shell's bottom bar (the tape, `--tape-h` 24 px, so 40 px from the screen's bottom). Above the inspector and the tape (`z-index` between `--z-tape` 30 and `--z-sheet` 40). |
+| Wall page, `wall` | The Wall's bottom-right status lines end at x 1256, 24 px left of the talk button. |
+| Wall page, `split` and `canvas` | Both controls sit at the bottom right of the conversation column (x 760-1368, `c4-show-canvas.md` §7.1, D78), never over the card area; the column's other rects are T27's (pending Q-O12). In `split` the wall half keeps its status lines at the divider. |
+| Wall page, `switch` | Both controls on both halves. The switch button sits left of the talk button, x 1200-1264, y 824-888, while the pane is closed; while it is open it moves into the pane header (T44 gives the whole cluster per state). |
+| App, every view in `VIEWS` (`public/js/core/router.js`) | The talk button's bottom edge sits on the top edge of the bottom bar (`footer.shell-bar`, `--tape-h` 24 px, y 888-912); nothing of the bar is covered. The toast stack (`.toasts`, `public/css/components.css`) moves up while the cockpit is configured: its bottom edge at y 736 (`bottom: 176px`), 24 px above `CHAT`. |
 
 The **switch button** (only in `switch`): 64x64 px, label `CANVAS` while the wall shows and `WALL`
 while the canvas shows, 16 px caps. A count of cards that arrived since the canvas was last shown
@@ -113,9 +133,9 @@ sits in its top-right corner: `--fs-16` mono, `--text-1`, on `--bg-sunken`, e.g.
 a new card is news, not trouble (`docs/design.md`, the colour rule).
 
 The cockpit button exists only where the cockpit is configured (the room's address in config,
-`protocols.md` §1, D93). Without it the button is not rendered, and nothing else changes: the board works as
-today. A tap on the cockpit button changes no route: the hash stays as it was (the router's rule
-that a route only selects, `router.js` header).
+`protocols.md` §1, D93). Without it neither control is rendered, and nothing else changes: the
+board works as today. A tap on either control changes no route: the hash stays as it was (the
+router's rule that a route only selects, `router.js` header).
 
 ## 5. Scenarios
 
@@ -124,10 +144,11 @@ Given a browser at 1368x912 with no `cockpit.layout` stored and no `?layout=` in
 When it opens the Wall page on the demo fleet,
 Then within 2 s the root has `data-layout="split"` and `data-wall-state="tour"`; the wall half is
 759 px wide, the canvas 608 px, with a 1 px divider at x = 759; the tour is flying on the left; the
-canvas shows its cards or its empty state (S-SCR-10); the `AGENT` button is 64x64 px with its
-bottom-right corner at (1344, 888).
+canvas shows its cards or its empty state (S-SCR-10); the talk button `[data-talk]` is at
+x 1280-1344, y 824-888 and `[data-cockpit-open]` reads `CHAT` at x 1288-1336, y 760-808 (§4,
+pending Q-O11).
 Test: Playwright at 1368x912 against the demo hub and the fake agent; read `data-layout`,
-`getBoundingClientRect()` of the two halves and of `[data-cockpit-button]`.
+`getBoundingClientRect()` of the two halves, of `[data-talk]` and of `[data-cockpit-open]`.
 
 ### S-SCR-02 A tap leaves the tour, a minute alone brings it back
 Given a screen in `wall` layout touring the demo fleet,
@@ -140,14 +161,14 @@ assert `data-wall-state` at each step; second run taps again at 40 s and checks 
 
 ### S-SCR-03 Opening the pane stops the tour where it is and holds it
 Given a screen in `wall` layout, the tour mid-flight to site `hv1`,
-When the owner taps `AGENT` at t = 0 s and leaves the pane open, touching nothing,
+When the owner taps `CHAT` at t = 0 s and leaves the pane open, touching nothing,
 Then the pane opens (its slide is T4's), `data-wall-state="explore"`, the camera holds the frame
 it had at the tap (the camera position changes by < 1 px between t = 0.2 s and t = 299 s), and at
 t = 120 s it is still `explore`, because the idle timer is paused while the pane is open.
-When the owner taps `CLOSE` at t = 130 s,
+When the owner taps `[data-cockpit-open]`, now reading `CLOSE`, at t = 130 s,
 Then the tour resumes at t = 190 s.
 Test: Playwright with a fake clock; read the camera through the Map's `screenOf(id)` for one node
-at 0.2 s and 120 s; tap `CLOSE`; fast-forward 59 s (`explore`) and 60 s (`tour`).
+at 0.2 s and 120 s; tap `[data-cockpit-open]`; fast-forward 59 s (`explore`) and 60 s (`tour`).
 
 ### S-SCR-04 The pane closes itself after five idle minutes, never during a turn
 Given a screen in `wall` layout with the pane open and the fake agent scripted to stream a reply
@@ -197,16 +218,20 @@ its pane is open, keeps `data-wall-state="tour"` and gets no card.
 Test: Playwright, two browser contexts on one fake agent and one demo hub; assert the card on B,
 no card element on A, and A's `data-wall-state`.
 
-### S-SCR-09 The cockpit button on every app view
-Given the app at 1368x912 with the cockpit configured,
+### S-SCR-09 The cockpit button on every app view, in the same place as on the Wall (pending Q-O11)
+Given the app at 1368x912 with the cockpit configured and a toast showing,
 When it shows each view in `VIEWS` (`map`, `board`, `inbox`, `packages`, `morning`, `credit`,
 `box`, `audit`, `runs`) in turn,
-Then each has one `[data-cockpit-button]`, 64x64 px, its right edge at x = 1344 and its bottom
-edge at y = 872 (912 − 24 tape − 16), overlapping neither the tape nor the header; a tap opens the
-pane over the view and `location.hash` is unchanged.
-And with the cockpit not configured, no view has the button.
-Test: Playwright loops over `VIEWS`, checks the rect, taps, compares `location.hash`; a second run
-without the cockpit config counts zero buttons.
+Then each has one `[data-talk]` at x 1280-1344, y 824-888 and one `[data-cockpit-open]` reading
+`CHAT` at x 1288-1336, y 760-808: the rects S-SCR-01 reads on the Wall page, to the pixel; neither
+intersects `footer.shell-bar` (y 888-912), the header or the toast stack (bottom edge ≤ 736); a tap
+on `CHAT` opens the pane over the view, `CHAT` then reads `CLOSE` in the same rect, and
+`location.hash` is unchanged.
+And with the cockpit not configured, no view has either control and the toast stack is where it is
+today.
+Test: Playwright loops over `VIEWS`, compares both rects with the Wall page's, asserts the bar's and
+the toasts' rects do not intersect them, taps, compares `location.hash`; a second run without the
+cockpit config counts zero of each.
 
 ### S-SCR-10 An empty canvas says what it is for
 Given a screen in `canvas` layout and no cards,
@@ -260,7 +285,7 @@ gets 429 and the screen retries after 30 s (D13).
 **The flow** (pending Q-O10 for step 3):
 1. An unpaired screen asks the room for a code: `POST /api/cockpit/pair` → `201
    {"code":"K7M4QX","expiresAt":"2026-10-27T07:05:00Z"}`.
-2. The pane (opened by `AGENT`) and an empty canvas show the pairing card (text below).
+2. The pane (opened by `CHAT` or the talk button) and an empty canvas show the pairing card (text below).
 3. The owner approves on the room: `laneboard cockpit pair K7M-4QX --name desk`. The CLI is
    `local` on the room (`docs/fleet/auth.md`), so nobody off the room's box can approve. It prints
    `paired desk (code K7M-4QX)`, or exits 1 with `code K7M-4QX is unknown or expired`. `--name`
@@ -383,9 +408,12 @@ When the page opens,
 Then within 2 s `data-cockpit="unpaired"`, the wall half tours the demo fleet, the canvas shows
 the pairing card centred with a code matching `^[2-9A-HJKMNP-Z]{3}-[2-9A-HJKMNP-Z]{3}$`, and
 `Code valid for 5:00.` counting down.
-When the owner taps `AGENT`, the pane shows the same card and the same code.
+When the owner taps `CHAT`, the pane shows the same card and the same code; `CHAT` reads `CLOSE`.
+The talk button is `data-talk="off"` (`c2-voice.md` §3) in its §4 rect; a press on it opens no
+microphone: an unpaired screen sends no audio (what else the press does is T64's).
 Test: Playwright against the demo hub and the stand-in room with an empty token store; assert the
-attribute, the regex, the countdown text at 0 s and (fake clock) 60 s: `4:00`.
+attribute, the regex, the countdown text at 0 s and (fake clock) 60 s: `4:00`; tap `CHAT`; read
+`[data-talk]`'s rect and state; press it with `getUserMedia` wrapped to count calls: 0.
 
 ### S-SCR-14 The owner approves the code on the room, the screen is paired within 2 s
 Given S-SCR-13's screen showing `K7M-4QX`,
