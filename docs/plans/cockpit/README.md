@@ -279,3 +279,58 @@ Loop: `docs/plans/cockpit/loop/` (forked from the Wall loop; writes only `docs/p
     and its done-when; C1 and C2 first.
 14. **Decisions and questions** (`spec/DECISIONS.md`, `spec/QUESTIONS.md`): kept throughout; seeded from
     `spec-input.md` §7.
+
+## 9. Build nights
+
+Loop: `docs/plans/cockpit/loop-build/` (forked from the Wall's build loop, with the spec loop's lessons:
+60-minute rounds, a builder round that dies on an API or network error does not count towards the
+no-progress stop, `PANEL_MAX`/`RESEARCH_MAX`/`ROUND_SECS` as environment overrides). It builds one slice of
+`spec/slices.md` §3 per night against the stand-ins, keeps its own files in `docs/plans/cockpit/build/`
+(`PROGRESS.md`, `reviews/`, `research/`, `DECISIONS-c1.md`, `patches/`), runs `npm test` after every round
+and `npm run test:cockpit` (Playwright, slices.md §2) after every builder and fix round, and reverts any
+round that touches `loop-build/fenced.txt` (the security core and control plane, anything of C6, `.github/`,
+the loops, the plan and spec-input, the hub, `test/hygiene.test.mjs`, package changes beyond
+`@playwright/test`; the spec itself only for typo-level fixes). Decisions the spec does not cover go to
+`build/DECISIONS-c1.md`, never into `spec/`.
+
+### C1 night
+
+**C1 needs the Wall merged first** (`spec/slices.md` §1, `spec-input.md` §8). The base branch
+`plan/cockpit-c1` is rebased onto `main` once the Wall stack (PRs #17 → #18 → #20 → #24) has merged; every
+file of this night's setup lives under `docs/plans/cockpit/`, so the rebase is trivial. Before the start,
+also check `spec/slices.md` §7 (open fixes before a C1 night: empty since round 161) and the owner's answers
+in `spec/QUESTIONS.md` (Q-O21, Q-O22, Q-O29, Q-O36 change what C1 builds; the night builds the
+recommendations where nothing is answered).
+
+**The list**: `spec/slices.md` §3.1, its 23 numbered builds in that order (not copied here), and its 73
+scenario ids for the recommendations (Q-O21 b, Q-O22 b). Done-when: §3.1's, with §2's slice rule
+(every id has exactly one test titled with it; `npm run test:cockpit -- -g '<ids>'` passes with none
+skipped except the waits §3.1 names; `npm test` green). The measured run on the real screen is the
+owner's (`C1: not measured yet`).
+
+**Probably two nights.** 23 builds are about 35 builder rounds once build 1 is split into its four
+stand-in steps; a Wall night managed 15-20 tasks next to its reviews. The split line is §3.1's own: if the
+night ends early, builds 18-23 (MCP server, `morning`/`alerts`/`runs`, standing instructions, demo link,
+type floor, pressed states) move to a second night before C2. Better still if the first night already
+ends before build 13: then **C1a** = builds 1-12 (stand-ins, room, protocol, bridge, session, link, pane,
+renderer, tool lines, scrolling, typing, stop) and **C1b** = builds 13-23 (errors, new conversation, the
+Wall, room/board down, MCP and the night's tools, demo, type floor, touch). For C1b: on the night's
+branch after merging C1a, move `build/PROGRESS.md`, `build/reviews/` and `build/research/` to
+`build/nights/c1a/`, and start with `--name cockpit-c1b --night "C1 night"` (a new run directory); the planner reads `nights/c1a/` and plans
+only what is left.
+
+**Start** (in the throwaway VM, from tmux; `~/code/laneboard-work` is the VM's checkout). The file
+`~/start-cockpit-c1.sh`:
+
+```bash
+#!/bin/bash
+exec </dev/null
+cd ~/code/laneboard-work || exit 1
+git fetch -q origin
+git checkout -q --detach origin/plan/cockpit-c1   # so loop-build/ exists in the checkout run.sh copies from
+exec bash docs/plans/cockpit/loop-build/run.sh --name cockpit-c1 --repo ~/code/laneboard-work \
+  --base plan/cockpit-c1 --pr-base main --night "C1 night" --deadline "<YYYY-MM-DD HH:MM>" --max-rounds 120
+```
+
+Stop it gently with `touch ~/runs/cockpit-c1/STOP`. The fence can be checked without a VM:
+`bash docs/plans/cockpit/loop-build/run.sh --fence-test <file with one path per line>`.

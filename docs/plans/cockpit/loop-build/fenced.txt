@@ -1,0 +1,105 @@
+# Paths no unattended round of a cockpit BUILD night may change. A round that touches one is reverted
+# whole and the owner is told (run.sh `fenced_hits`). Bash globs, one per line, matched against
+# repo-relative paths; `*` also matches `/`. Committed, uncommitted and untracked changes all count.
+#
+# Three kinds of line:
+#   <glob>    fenced: any change reverts the round.
+#   ~<glob>   small edits only: all `~` files of one round together may change at most SPEC_TYPO_LINES
+#             lines (default 6), and no new file; for typo-level spec fixes, each noted in PROGRESS.md.
+#   (built in) package.json / package-lock.json may change only to add `@playwright/test` (devDependency,
+#             with the lock entries it brings) and the `test:cockpit` script (run.sh `pkg_guard`).
+#
+# Something a build needs in a fenced file is written as a patch under
+# docs/plans/cockpit/build/patches/<task>-<topic>.diff and named under `## For the owner`; an attended
+# session reviews and applies it.
+
+# --- The security core (inherited from the Wall fence: the REVIEW-REQUIRED list of
+# docs/plans/fleet/README.md §4.5; plan README §4, spec security.md §1-§2) ---
+server/fleet/auth.mjs
+server/fleet/dispatch.mjs
+server/fleet/builtin-actions.mjs
+server/fleet/audit.mjs
+server/fleet/canonical.mjs
+server/fleet/keys-ed25519.mjs
+server/fleet/nonces.mjs
+server/fleet/peercred.mjs
+server/fleet/api-v1.mjs
+server/fleet/ratelimit.mjs
+server/config/fleet-auth.mjs
+server/security.mjs
+server/http.mjs
+server/boot/common.mjs
+server/boot/hub.mjs
+public/js/core/store.js
+public/js/core/net.js
+public/js/core/actions.js
+public/js/core/keys.js
+deploy/*
+
+# --- docs/fleet/control.md: the control plane, and every action or exec path ---
+server/control/*
+server/routes/v1.mjs
+server/routes/approvals.mjs
+server/routes/control.mjs
+server/routes/budget.mjs
+server/routes/killswitch.mjs
+server/routes/scripts.mjs
+server/routes/review.mjs
+server/routes/alarms.mjs
+server/routes/launch-caps.mjs
+server/review/actions.mjs
+server/review/scripts.mjs
+server/actions.mjs
+server/terminals.mjs
+server/lanes/launch.mjs
+server/lanes/retire.mjs
+public/js/ui/confirm.js
+public/js/ui/killswitch.js
+bin/laneboardctl
+# The hub stays narrow (plan §2). The C1 board change of slices.md §5.1 (runs on a hub: read-proxy
+# ALLOWLIST and GET /api/fleet/runs) and the hub's `cockpit` hello field are patches, not commits.
+server/hub/*
+
+# --- C6 Act: nothing of it is built before the control-plane review (plan C6, slices.md §3.8) ---
+server/cockpit/act.mjs
+server/cockpit/act/*
+server/cockpit/act-*
+server/cockpit/*/act.mjs
+server/cockpit/*/act-*
+server/cockpit/confirm*
+server/cockpit/*/confirm*
+server/cockpit/jobs*
+server/cockpit/*/jobs*
+public/js/cockpit/confirm*
+public/js/cockpit/act*
+e2e/cockpit/c6-*
+e2e/cockpit/jobs-*
+
+# --- The repo's guards ---
+.github/*
+test/hygiene.test.mjs
+# The app's Map tests keep passing unchanged (Wall D1); the cockpit may extend the Map only behind
+# options that default off.
+test/map-*.test.mjs
+test/map.test.mjs
+
+# --- The loops and the plans: a round cannot change the rules or the owner's words ---
+docs/plans/cockpit/loop/*
+docs/plans/cockpit/loop-build/*
+docs/plans/wall/loop/*
+docs/plans/runs/loop/*
+docs/plans/cockpit/README.md
+docs/plans/cockpit/spec-input.md
+docs/plans/cockpit/PROGRESS.md
+docs/plans/cockpit/reviews/*
+docs/plans/cockpit/research/*
+docs/plans/product.md
+docs/plans/wall/README.md
+# The spec: typo-level fixes only (decisions go to build/DECISIONS-c1.md, owner questions to PROGRESS.md).
+~docs/plans/cockpit/spec/*
+
+# NOT fenced, but REVIEW-REQUIRED before merge (the night builds them; the PR body lists them):
+# server/cockpit/redact.mjs (reply and tool-input redaction), the start check of security.md §3 (D210),
+# the agent launch flags and allowlist (protocols.md §11.2, §11.11, D240, D244), the MCP server's
+# loopback + token + Origin refusal (c3-see.md §1), the room link's upgrade checks (security.md §2.3,
+# D212), server/config/cockpit.mjs's fatal-at-start lines, and the audit lines (D164).
