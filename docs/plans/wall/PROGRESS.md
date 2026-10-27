@@ -825,3 +825,173 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 31 | performance (fx-twinkle) | - | - | - | - | 3 | 6 | - |
 
 ## Morning
+
+Night 4, final report (round 34, 2026-10-27 09:41 Europe/Zurich). Shots are in `$RUN_DIR` = the run's own directory on the VM.
+
+- **Done:** 17 of 36 tasks. All of 0a (night 3's twelve open tasks plus `MANUAL · TOUR IN 0:40`, T1-T12 and T5) and
+  all of A (one camera director, T13-T14). 0b got three of four: `lanes` was removed and calm flights are quiet
+  (T15), plus `afterglow` (T16) and `activity`, which replaces `comets` and `twinkle` (T17). Tests: 4148 pass, 0 fail.
+  Every round ended green.
+- **Not done:** `fx=sweep` (T18) and the 18 panel tasks T19-T36. Nothing is blocked. None of B (show interface),
+  C (countdowns), D (half a screen) or E (ready to merge) was started; they are still at the top of `## Later`.
+  **The branch is not ready to merge.** There is no `docs/wall.md`, no manifest, and `wall.html?variant=galaxy`
+  still falls back to radial.
+- **Why it stopped:** you stopped it (stop reason `human`) after round 34 at 09:41, more than a day before the
+  2026-10-28 12:00 deadline. The script left no owner-notes file (`$RUN_DIR/owner-notes` does not exist).
+
+### The directions side by side
+
+The galaxy has been the only direction since night 1. The panel scores the galaxy itself, touch (the galaxy's
+`touch` column) and the effects behind `?fx=`. All effects are off by default (D9).
+
+**galaxy** (`galaxy.html`): five sites as star clusters on a spiral around the hub, and a tour that goes trouble
+first. On arrival it opens the system, puts the lock on the worst member and types a plate. *Loved:* the overview
+(6.8, and 7 in five of six reviews). The 3 m check passed in every review: "`■ 2 CRIT · HV2 · HV1` reads in one look
+and says how many problems and where" (r21, which called it "the best line on the page"). The touch sheet
+(plate left, leader to the red planet, system right) is "the best composition on the page" (r11, r4). Status rose
+from 5 to 7 after T8-T10, which name two crits together, oldest first, and removed the dark boxes. *Hated:* calm is
+the weakest column (5.0). Calm holds type a name that is already on screen and say nothing (r11, r16, r21; the calm
+plate's line is your question (b)). A held crit sits at the frame's edge in a knot of yellow labels (r16, T25). The
+banner and the tour rank trouble differently (r21, T28). A number update retypes the held plate (r21, T30). And
+"a crit at the overview is smaller than a warn" (r16, T23).
+
+**touch** (the galaxy's `touch` column): wake, drag, pinch, tap, sheet, BACK, then the tour comes back a minute
+after the last touch. Since T14 the camera moves only through the director (`galaxy/director.js`: touch > show >
+tour, eased hand-overs). *Loved:* "every node is reachable within two taps, back is big and always there, and
+the tour comes back" (r26). No gesture costs more than the tour (r31). The sheet no longer passes taps through (T1).
+The beacon and the banner are targets (T2). Crowded planets fan out round the finger (T3). BACK keeps your pose (T4).
+*Hated:* a pinch can lose the whole galaxy with no way home (r26, T31). A palm and a fast sleeve swipe act (T32,
+Later). Sheet rows are 39 px, under the 48 px floor (T33). The wake is silent for 1.5 s. The `MANUAL · TOUR IN`
+line is tag-sized, so from 3 m nothing says "someone left this in explore" (r21).
+
+**fx-beacon** (`?fx=beacon`): a red pillar over each crit cluster, which you can tap since T2. *Loved:* the only
+vertical on the plane. It "gives the overview a focal axis" (r4) and points a walking person at the crit (r26). It
+costs three draw calls per crit (r31). *Hated:* it is still a 1-2 px hairline that leans with perspective. It is
+"the fourth mark for the same crit" (r21: "give it a job, or remove it"). Two crits get two equal beacons with no
+order. The width-with-age fix is still in Later. Its wow (4.5) is the lowest of the live effects.
+
+**fx-warp** (`?fx=warp`): in a flight, streaks toward the destination in its status hue. Since T15, calm flights
+and flights to the overview draw none. *Loved:* "the one frame where the direction reads before the caption" (r4).
+It is the feedback a tapped flight needs (r26). It costs only during flights (r31). *Hated:* calm is 3.7, the
+worst of any variant. Every review before T15 saw the whole galaxy scratched with streaks. Even on a trouble
+flight it "paints the screen yellow" instead of "going to the yellow one" (r4; the cone fix is T21, open). Only
+r31 has seen it since T15, and its 4 s frames missed the flights.
+
+**fx-afterglow** (`?fx=afterglow`, T16, new): when trouble clears, a thin outline ring in the old hue cools from
+red to amber to grey over 30 minutes. Seen once (r31): "thin amber lines that are quieter than any nebula". It
+costs one call each. Wow 5, calm 7. Nobody has said they hated it yet.
+
+**fx-activity** (`?fx=activity`, T17, new, replaces `comets` and `twinkle`): working planets are brighter and a
+little larger, with a slowly breathing ring. Quiet planets recede a step. A job that lands flashes its target once,
+in grey; a failed one stops short and breaks up. **No panel has seen it.** The builder's own note: at 3 m the rings
+read but are quiet, the miss grain is faint, and several working planets in one cluster draw overlapping rings.
+The old `comets`/`twinkle` scored wow 3 and calm 6 in r31.
+
+Averages over every review this night (`## Scores`: galaxy, beacon and warp 6 reviews each; afterglow, comets and
+twinkle 1 each; activity none):
+
+| variant | overview | legibility | status | touch | wow | calm | performance |
+|---|---|---|---|---|---|---|---|
+| galaxy | 6.8 | 6.7 | 6.2 | 6.2 | 6.2 | 5.0 | 6.0 |
+| fx-beacon | - | - | - | - | 4.5 | 6.5 | - |
+| fx-warp | - | - | - | - | 6.2 | 3.7 | - |
+| fx-afterglow | - | - | - | - | 5.0 | 7.0 | - |
+| fx-comets (removed by T17) | - | - | - | - | 3.0 | 6.0 | - |
+| fx-twinkle (removed by T17) | - | - | - | - | 3.0 | 6.0 | - |
+| fx-activity | - | - | - | - | - | - | - |
+
+Against night 3 (6.4 / 6.0 / 5.7 / 4.3 / 6.0 / 5.1 / 6.1), every galaxy column rose except calm and performance.
+Touch's 6.2 is a real score from start to end this night (6, 6, 6, 6, 6, 7). Performance is still a VM guess.
+The page's JavaScript is about 1-2.5 ms a frame unthrottled, and nothing grew over 10 minutes (r31). The 10-14 fps
+in the films is SwiftShader's fill rate.
+
+Newest filmstrips. To see one live, run `node test/tools/demo-fleet.mjs --port 7795 --size large` and open the URL
+(`&pace=wall` gives the real tour speed; `quality=0` because the budget drops a level on this VM):
+- galaxy (tour, after T17): `$RUN_DIR/shots/r33-galaxy-without/sheet.png`, live `galaxy.html?demo=1&quality=0`.
+- fx-activity: `$RUN_DIR/shots/r33-galaxy-with/sheet.png`, jobs landing and failing in
+  `$RUN_DIR/shots/r33-galaxy-jobs/sheet.png`, 3 m in `$RUN_DIR/shots/r33-3m/with.png` against `without.png`. Live
+  `galaxy.html?demo=1&quality=0&fx=activity`.
+- fx-afterglow: `$RUN_DIR/shots/r30-galaxy-with/sheet.png` (frame 12: rings round HV2 and REMOTE), all three older
+  effects together in `$RUN_DIR/shots/r31-fx-all/sheet.png`. Live `galaxy.html?demo=1&quality=0&fx=afterglow&pace=wall`
+  (the crit clears after a few minutes).
+- fx-warp (after T15): `$RUN_DIR/shots/r29-galaxy/sheet.png`, live `galaxy.html?demo=1&quality=0&fx=warp&pace=wall`.
+- fx-beacon: `$RUN_DIR/shots/r31-fx-beacon/sheet.png`, live `galaxy.html?demo=1&quality=0&fx=beacon`.
+- touch through the director (tour → wake → drag → tap → sheet → back → 62 s idle → tour → a show):
+  `$RUN_DIR/shots/r28-touch/` (stills `00-tour.png` … `13-after-show.png`). The pinch that loses the galaxy is
+  in `$RUN_DIR/shots/r26-touch/`. Live: `galaxy.html?demo=1&quality=0`, and touch it.
+The page is `galaxy.html`. `wall.html?variant=galaxy` still falls back to radial (E).
+
+### Tasks
+
+Done (17): T1 54e7f96, T2 20ec4f8, T3 a5e46b6, T4 fa7611b, T5 7e9255e, T6 9ec5cff, T7 eaae256, T8 3dbe1c7,
+T9 2b7cca8, T10 c80e8a9, T11 2ca8017, T12 9eac184, T13 d28aeac, T14 915dc43, T15 ec72e04, T16 c691da6, T17 202011b.
+Open (19, none blocked): T18 `fx=sweep`; from the panel: T19 one type step while held, T20 no orphaned leader, T21
+warp in a cone, T22 a new trouble is a moment, T23 crit and warn differ by more than hue, T24 a label eaten by its
+cluster, T25 the held crit away from the frame's edge, T26 grey hyperlanes, T27 the tag covers map labels, T28 one
+ranking for banner and tour, T29 a crit member keeps its red, T30 a held crit updates in place, T31 a pinch cannot
+lose the galaxy, T32 a palm does not wake, T33 sheet rows of 48 px, T34 the overview as the cheapest frame, T35 the
+fan writes only changes, T36 a wake without forced layouts. Not yet tasks: B, C, D, E (top of `## Later`).
+Tests now: 4148 pass, 0 fail (after round 33).
+
+**Needs you, worst first.**
+
+1. **Your pick for night 4: keep, drop or more for each `fx`, and does touch feel right?** The panel's case:
+   - *beacon, finish or drop* (wow 4.5, lowest). For: the only vertical and the only mark that points at a crit by
+     shape, and it is a tap target now. Against: still a hairline, the fourth mark for one crit, and equal for two
+     crits. r21 says remove it unless its width grows with age.
+   - *warp, keep, but T21 first* (wow 6.2, calm 3.7). For: the best "going to the red one" feedback after a tap. Calm
+     flights are silent since T15. Against: a trouble flight still floods the frame. The ~30° cone (T21) is open, and
+     no review has seen warp since T15.
+   - *afterglow, keep* (wow 5, calm 7, one review). For: the only trace that a trouble cleared, and quieter than any
+     live trouble. Against: one review only, and the ring passes under the calm `HV2` label (T24's placement).
+   - *activity, judge it yourself* (no review). For: research Q18's "light follows work, hue stays for trouble",
+     with no cost seen on the VM. Against: at 3 m it is quiet, the miss grain is faint, and rings overlap in a busy
+     cluster. Watch `r33-galaxy-with` and `r33-3m`.
+   - *sweep, still wanted?* It is not built (T18). With the merge waiting, this is the one effect to drop or postpone.
+   - *touch, does it feel right?* For: every gesture works, the director hands over without cuts, and `MANUAL ·
+     TOUR IN` shows explore (T5). Against: a pinch can lose the galaxy (T31), a palm wakes it (T32), sheet rows are
+     39 px (T33), and nobody has touched it on the Surface since the director. Please try `galaxy.html?demo=1` on
+     the tablet: wake, drag, pinch out hard, tap HV2, BACK, then wait a minute.
+   My pick: keep warp, afterglow and activity. Do T21 and T31-T33 next. Drop beacon unless width-with-age lands in
+   one round. Postpone sweep until after the merge.
+2. **The merge needs E, and nothing of E exists.** `docs/wall.md` (kiosk mode, every `?` switch, the feed fields,
+   touch, D10), the web manifest, `wall.html?variant=galaxy` opening the galaxy, the README views row and a
+   `wall.html` filmstrip are all still in `## Later`. Decide whether the next night takes E first (the plan says E
+   comes before C and D when room is short), or B → E as planned.
+3. **Frame cap: still needs your OK** (r31-performance galaxy 2, = night 3's r56). The page renders every frame at
+   display rate all day, and the overview is the heaviest frame: 4x the calls and 6x the triangles of an open HV2.
+   `?cap=30` (off by default) waits for you. T34 (folded planets as dots) is open and helps either way.
+4. **An hour on the Surface** (carried from night 3, and now with T17). Your rule is "nothing added may make
+   `galaxy.html?demo=1&fx=beacon&perf=1` slower there". `activity` and `afterglow` were not measured on the
+   Surface. Compare script ms per frame with and without `&fx=activity,afterglow`, and the memory line over an hour.
+5. **Taste decisions (r46, still open)**, with r21-skeptic's answers, which are not decisions: (a) remove the kicker
+   `TARGET n / N`? r21 says yes. (b) Calm plate: one real line, or none? r21, r11 and r16 say one line, never the name
+   alone. (c) Sun's name or the tag's hub name? r21 says keep the sun's name and a tag of `LIVE`/`STALE` only. (d) the
+   beacon, under 1.
+6. **Fenced files:** none were requested this night.
+7. **Before merging, look at:** 50 commits this night on `run/wall-n4`, 336 since `main`. What reaches outside
+   the galaxy:
+   - `public/css/tokens.css`, shared with the app: +76 lines, additions only, the feathered grounds `--tex-plate` and
+     `--tex-plate-corner` (T10). The comment says only `wall.css` uses them.
+   - The shared Wall modules that `wall.html` also loads: `caption.js` (T8/T9, two crits named together, oldest
+     first), `frame.js` (T1, T2, T10) and `perf.js` (T11, `worstGapMs` over the last ~10 s).
+   - Their tests are green, but `wall.html` has not been filmed for two nights now. Read T8's `caption.js` change
+     first.
+8. **Housekeeping:** around 06:30 Chrome's CPU throttle stalled every page (`For the owner`, r21). Rounds 29-33 filmed
+   at 4x again, so it seems to have passed. 28 `*.pid` files are still in `$RUN_DIR`, and none of those processes
+   was alive at 09:41.
+
+### Research
+
+- Q16 show messages: every system uses a small envelope (type, a sender-made id, data, a channel). None has a ttl,
+  so the Wall owns expiry and undo. The recommendation is `{ v:1, ch:'laneboard.show', id, src, type, ttl?, data }`
+  over `BroadcastChannel` and an origin-checked `postMessage` (for B; not built).
+- Q17 countdowns at 3 m: whole minutes (`in 4 min`) at the overview and site step, `m:ss` only near zero or when
+  held, a signed `+m:ss` "late" after zero, tabular figures. No published legibility numbers were found (for C;
+  not built).
+- Q18 busy vs idle: brightness, form and slow local motion carry state, and hue stays for trouble (ISA-101). Idle is
+  the quiet default, and "waiting" is not "working". Used in T17.
+- Open questions: none in `## Research questions`. Open measurements: real fps, script ms and memory over an hour
+  on the Surface, with and without the new effects.
+
+Owner notes: the script left none this night (`$RUN_DIR/owner-notes` does not exist).
