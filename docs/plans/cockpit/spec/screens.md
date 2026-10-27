@@ -1,9 +1,9 @@
 # Screens and modes
 
 What a screen shows and how it moves between tour, explore and canvas; one screen or two; where the
-cockpit button sits. Words as in the glossary (`README.md`). Sizes are CSS px at 1368x912; times in
-s. Part 2 (pairing, unpaired, offline, room down, hub down) is task T3 and appends `S-SCR-` ids
-from 13 on.
+cockpit button sits (§1-§5, part 1); how a screen pairs and what it shows when something it needs
+is unpaired, offline or down (§6-§8, part 2). Words as in the glossary (`README.md`). Sizes are CSS
+px at 1368x912; times in s.
 
 ## 1. Layouts
 
@@ -232,3 +232,242 @@ Then the wall is `explore` at once, the camera jumps to `builder-a` with no fram
 (Wall plan D5), and the tour (the slow caption rotation) returns 60 s after the last touch.
 Test: Playwright with `emulateMedia({ reducedMotion: 'reduce' })` and a fake clock; sample
 `screenOf('builder-a')` on two consecutive frames after the command: no intermediate position.
+
+## 6. Pairing
+
+A screen talks to the room only with a **device token** (glossary). It gets one by **pairing**: the
+screen shows a code, the owner approves the code from a trusted place, the room hands the screen
+its token. Who may approve, and how long a token lives, is security-relevant: written here for the
+recommendation (pending Q-O10).
+
+**Where the cockpit is configured.** `cockpit.url` (the room's address) in the config of the
+laneboard server that serves the page (the hub in the owner's case; the one box in
+`single-machine.md`). Unset: the cockpit is **unconfigured**, no cockpit button, no canvas half,
+the board as today (§4) (D17). How the screen reaches the room (through the hub or direct) is
+T15's; the routes below are the first cut T15 adopts or renames.
+
+**The board does not need pairing.** Viewing the board stays as today (`docs/fleet/auth.md`: a
+`direct` user through serve, or `local`). An unpaired screen shows every view, the Wall and the
+tour as a paired one does; only the pane and the canvas wait for the pairing. (A LAN-only setup
+where the device token also opens the board is `security.md`'s and `single-machine.md`'s.)
+
+**The pairing code.** 6 characters from `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (no `0 O 1 I L`), shown
+as two groups of 3 (`K7M-4QX`), accepted with or without the dash, any case. Valid **300 s**; a
+new one replaces it on its own when it runs out. At most 10 open codes per room; an 11th request
+gets 429 and the screen retries after 30 s (D13).
+
+**The flow** (pending Q-O10 for step 3):
+1. An unpaired screen asks the room for a code: `POST /api/cockpit/pair` → `201
+   {"code":"K7M4QX","expiresAt":"2026-10-27T07:05:00Z"}`.
+2. The pane (opened by `AGENT`) and an empty canvas show the pairing card (text below).
+3. The owner approves on the room: `laneboard cockpit pair K7M-4QX --name desk`. The CLI is
+   `local` on the room (`docs/fleet/auth.md`), so nobody off the room's box can approve. It prints
+   `paired desk (code K7M-4QX)`, or exits 1 with `code K7M-4QX is unknown or expired`. `--name`
+   is optional; the default is `screen-<n>`, `<n>` the next free number from 1.
+4. The screen asks `GET /api/cockpit/pair/K7M4QX` every 2 s: `202` while pending, `200
+   {"name":"desk"}` plus the token once approved, `410` when expired (step 1 again). The
+   token is handed over once; a second `GET` for the same code gets `410`. Where the browser keeps
+   the token (an `HttpOnly` cookie or storage) is `security.md`'s (T17); it survives a reload and
+   is gone when the browser's data is cleared. A kiosk keeps a persistent browser profile, or it
+   pairs again after every restart (a line for the later `docs/cockpit.md`).
+5. Within 2 s of the approval the pane shows `Paired as desk.` for 5 s, then the conversation.
+
+**Listing and unpairing**, on the room: `laneboard cockpit screens` prints one line per screen
+(`desk  paired 2026-10-27 06:58  last seen 2 min ago`); `laneboard cockpit unpair desk`
+revokes the token at once. Tokens do not expire on their own (pending Q-O10).
+
+**The pairing card**, in the pane (and centred on an empty canvas), texts exact:
+- Title, `--font-label` caps 24 px: `PAIR THIS SCREEN`
+- 18 px `--text-2`: `This screen is not paired with the cockpit yet. The board works; talking to the agent needs a pairing.`
+- The code, mono 48 px `--text-1`: `K7M-4QX`
+- 18 px `--text-2`: `On the cockpit room, run:`
+- mono 18 px `--text-1` on `--bg-sunken`: `laneboard cockpit pair K7M-4QX`
+- 16 px `--text-3`: `Code valid for 4:12. A new one appears when it runs out.` (counts down each second)
+
+After `unpair` the title reads `PAIR THIS SCREEN AGAIN` and the first line `This screen was
+unpaired on 27 Oct at 06:58. The board works; talking to the agent needs a new pairing.`
+
+## 7. When something is down
+
+A screen depends on up to three things; each fails on its own and says so where it matters:
+
+| What | Link | Lost when |
+| --- | --- | --- |
+| the screen's network | the browser | `navigator.onLine` is `false` |
+| the **board** (hub, or the builder in builder mode) | the board socket (`public/js/core/net.js`) | the socket closes; it retries 500 ms × 1.8 up to 15 s, as today |
+| the **room** | the cockpit link (T15) | the link closes, or no frame for 25 s (the room sends a heartbeat every 10 s); it retries 500 ms × 1.8 up to 15 s, the same `nextBackoff` (D10, D11) |
+
+A lost room link shows only after a **5 s grace**: a link back within 5 s changes nothing on screen
+(D10). The board link keeps today's behaviour (the `#offline` banner in the app). If T15 routes the
+cockpit through the hub, a hub down is also a room down, and the pane says `Hub unreachable` in
+place of `Cockpit room unreachable` in the texts below.
+
+The page root carries `data-cockpit`: `unconfigured`, `unpaired`, `connecting`, `live`,
+`room-down`, `offline` (for tests and CSS). `data-board` is `live` or `down`.
+
+### Room down (answers Q-O6, recommendation a)
+
+The board keeps working; the cockpit says it is away and since when. Nothing is hidden, nothing is
+lost.
+- **Wall half and app views:** unchanged. The tour, explore and every view read the board, not the
+  room.
+- **Cockpit button:** label and place unchanged; a grey ring 12 px (`○`, `--text-3`) in its
+  top-right corner, 4 px in from the edges. Grey, not red: the room is offline, the fleet is not
+  in trouble (`docs/design.md`, the colour rule).
+- **Pane:** a status line under its header, 18 px `--text-2` on `--bg-sunken`, 48 px tall:
+  `Cockpit room unreachable since 06:41 (3 min). Retrying in 12 s.` with a `RETRY NOW` button
+  (48 px tall, 16 px caps) at its right end. The minutes and the retry count down each second; the
+  retry shows `Retrying now…` while a try runs. The conversation so far stays readable. The input
+  stays editable (a draft can be written); `SEND` and the talk button are disabled, with the line
+  `Sending and voice come back with the room.` under the input, 16 px `--text-3`.
+- **Canvas:** a strip across the top of the canvas, 48 px, 18 px `--text-2` on `--bg-sunken`, 1 px
+  `--line-strong` bottom border: `Cockpit room unreachable since 06:41. Cards show their last
+  values.` Every card stays where it was; each live card gets a grey `STALE` plate (13 px caps,
+  `--text-3`, 1 px `--line-strong` border) next to its title, its values frozen. A countdown keeps
+  counting (time is known on the screen) and adds `The room is down: this job may not run.`;
+  its `CANCEL` is disabled. One-tap remove still works and is applied on the screen only until the
+  room is back (then sent, T15). An empty canvas reads `The cockpit room is unreachable, so the
+  agent cannot place cards now.` and `Unreachable since 06:41.` (24 px / 20 px, as S-SCR-10).
+- **What the screen keeps:** the conversation and the cards are kept in memory only, never in
+  browser storage (a screen holds nothing worth stealing, plan §2) (D14). A reload while the room is
+  down shows the status line and `The conversation shows again when the room is back.` in the pane.
+
+**Back.** At the first frame from the room: the status line reads `Back since 06:47.` for 5 s and
+goes; `STALE` plates go; cards placed or removed meanwhile update; missed conversation lines appear
+in order (the resume is T15's). `SEND` and talk are enabled again. **A draft is never sent on its
+own**: it stays in the input until the owner sends it (D12).
+
+**Down during a turn or while speaking.** A reply streaming when the link is lost stops where it is
+and gets the line `Cut off: the room went away at 06:41.`; on reconnect, a reply the room finished
+meanwhile replaces the cut-off text (T15). An open microphone closes at once (no 5 s grace: audio
+has nowhere to go); the words so far stay in the input as an editable draft, not sent.
+
+### Board down (hub down)
+
+- **App views:** today's `#offline` banner (`Disconnected — reconnecting…`) and the last snapshot.
+- **Wall half:** the last snapshot stays; every node and line is drawn grey, as an offline
+  builder's cards are (`docs/design.md`: "grey through and through"); a caption top-centre, 20 px
+  `--text-1` on `--bg-sunken`, 48 px tall: `Board unreachable since 06:41 · showing 06:41`. The tour
+  keeps flying over the grey snapshot, without "flies to trouble": a grey map has no trouble to
+  rank (D15). Explore works.
+- **Never loaded** (the board was down when the page opened): the wall half shows, centred, 24 px
+  `--text-2`: `Waiting for the board at hub.example.invalid…` (the page's origin), below it 20 px
+  `--text-3`: `Retrying in 4 s.`, and a `SHOW DEMO` button (64 px tall, 20 px caps) that reloads
+  with `?demo=1` (D16). Never an empty screen (`docs/plans/product.md` §3.6).
+- **Pane and canvas:** unchanged if the room is reachable (pending T15).
+
+### The screen offline
+
+`navigator.onLine` false: one message replaces the room and board texts: the wall caption and the
+pane status line both read `This screen is offline since 06:41. Check its network.`; the canvas
+strip reads the same. Retries keep running; when the network is back the rules of "Back" apply.
+
+## 8. Scenarios, part 2
+
+The stand-in room (T18) can stop and start its cockpit link, approve and revoke pairings, and the
+demo hub can be stopped, so each scenario runs without hardware.
+
+### S-SCR-13 An unpaired screen: the board works, the pane shows a code
+Given a screen at 1368x912 in `split`, the cockpit configured, no device token,
+When the page opens,
+Then within 2 s `data-cockpit="unpaired"`, the wall half tours the demo fleet, the canvas shows
+the pairing card centred with a code matching `^[2-9A-HJKMNP-Z]{3}-[2-9A-HJKMNP-Z]{3}$`, and
+`Code valid for 5:00.` counting down.
+When the owner taps `AGENT`, the pane shows the same card and the same code.
+Test: Playwright against the demo hub and the stand-in room with an empty token store; assert the
+attribute, the regex, the countdown text at 0 s and (fake clock) 60 s: `4:00`.
+
+### S-SCR-14 The owner approves the code on the room, the screen is paired within 2 s
+Given S-SCR-13's screen showing `K7M-4QX`,
+When `laneboard cockpit pair k7m4qx --name desk` runs on the stand-in room at t = 0 s,
+Then the CLI prints `paired desk (code K7M-4QX)` and exits 0; by t = 2 s `data-cockpit="live"`,
+the pane shows `Paired as desk.`, gone at t = 7 s, then the conversation; the canvas shows its
+cards or S-SCR-10's empty text.
+When the page reloads, it is `live` again with no code shown.
+Test: Playwright plus a child process for the CLI; fake clock for the 5 s; reload and assert.
+
+### S-SCR-15 A code runs out and is replaced; the old one cannot be approved
+Given an unpaired screen showing a code at t = 0 s,
+When nobody approves it,
+Then at t = 300 s a different code is shown and `Code valid for 5:00.` starts again; and
+`laneboard cockpit pair <old code>` exits 1 with `code <old code> is unknown or expired`.
+Test: Playwright with a fake clock on the screen and a stand-in room whose clock is moved 300 s;
+assert the two codes differ, run the CLI with the first, check exit code and output.
+
+### S-SCR-16 Unpairing a screen takes the cockpit away at once, the board stays
+Given screen `desk` paired and live, the pane open,
+When `laneboard cockpit unpair desk` runs on the room at 06:58,
+Then within 2 s `data-cockpit="unpaired"`, the pane shows `PAIR THIS SCREEN AGAIN`, `This screen
+was unpaired on 27 Oct at 06:58. …` and a new code; the conversation is no longer on the screen;
+the wall half keeps touring; a request with the old token gets 401.
+Test: Playwright plus the CLI; assert texts and that no conversation line is in the DOM; `fetch`
+a cockpit route with the old token from the test and expect 401.
+
+### S-SCR-17 The room goes down: the cockpit says so after 5 s, the board keeps going
+Given a screen in `split`, live, 2 cards on the canvas (a countdown with 01:30:00 left and a status
+tile), the pane open with a draft `how is the`,
+When the stand-in room stops its link at t = 0 s (06:41),
+Then at t = 4.9 s nothing has changed; at t = 5 s `data-cockpit="room-down"`, the cockpit button
+has the grey ring, the canvas strip reads `Cockpit room unreachable since 06:41. Cards show their
+last values.`, both cards carry `STALE`, the countdown still counts and its `CANCEL` is disabled,
+the pane line reads `Cockpit room unreachable since 06:41 (0 min). Retrying in …`, `SEND` and the
+talk button are disabled, the draft is still `how is the` and editable; the wall half is
+`data-wall-state="tour"` and flying throughout.
+Test: Playwright with a fake clock; stop the stand-in's link; assert at 4.9 s and 5 s; type into
+the input; check `disabled` on `SEND`.
+
+### S-SCR-18 A blip under 5 s shows nothing
+Given a live screen,
+When the stand-in room drops its link at t = 0 s and accepts the reconnect at t = 2 s,
+Then `data-cockpit` is `live` at every sample from 0 s to 10 s and no strip, ring or status line
+appears.
+Test: Playwright with a fake clock; sample the attribute and count `[data-cockpit-down]` elements
+every 0.5 s.
+
+### S-SCR-19 The room comes back: the screen catches up, the draft is not sent
+Given S-SCR-17's screen in `room-down`, with retries at 0.5, 1.4, 2.9, 5.6, 10.6, 19.4, 34.4 s
+… after the loss (500 ms × 1.8, cap 15 s),
+When the room is started again at t = 60 s, having placed one more card and answered one turn
+meanwhile,
+Then by the next retry and 1 s after it `data-cockpit="live"`; the pane line reads `Back since
+06:42.` for 5 s, then goes; the new card is on the canvas; the missed turn is in the conversation
+in order; `STALE` is gone; the draft `how is the` is in the input and no prompt was sent (the
+stand-in's log shows no new user turn).
+When the owner taps `RETRY NOW` during a later outage, a try starts at once.
+Test: Playwright with a fake clock and the stand-in's log of received turns; assert texts and the
+log; record retry times from the stand-in's connection log and compare with the series ± 50 ms.
+
+### S-SCR-20 The room goes away mid-reply and mid-speech
+Given a live screen, the fake agent streaming a reply, half shown,
+When the room's link is lost at 06:41,
+Then after 5 s the reply stops where it was and shows `Cut off: the room went away at 06:41.`;
+when the room is back and had finished the reply, the full reply replaces the cut-off text.
+And given the microphone open with the partial `restart the` shown, when the link is lost, the
+microphone closes within 0.2 s (no grace), and `restart the` stays in the input, not sent.
+Test: Playwright with the fake agent (one long scripted turn) and the fake speech service (T18);
+assert the cut-off line, then the replaced text; assert the mic state attribute and the input.
+
+### S-SCR-21 The hub goes down: the Wall greys out and says since when
+Given a screen in `wall` layout touring the demo hub,
+When the demo hub stops at 06:41,
+Then within 2 s `data-board="down"`, every Map node is drawn in the grey of an offline builder, the
+caption reads `Board unreachable since 06:41 · showing 06:41`, the tour keeps moving; when the hub
+is back, the caption goes and colours return within 2 s of the first snapshot.
+Test: Playwright; stop and start the demo hub; assert the attribute, the caption, and that no node
+uses the `--p1`/`--p2` colours while down (computed styles).
+
+### S-SCR-22 The board was never reachable: say what is missing, offer the demo
+Given the demo hub stopped,
+When a screen opens the Wall page from `hub.example.invalid`,
+Then within 2 s the wall half shows `Waiting for the board at hub.example.invalid…`, `Retrying
+in 1 s.` counting, and `SHOW DEMO` (64 px tall); a tap loads `?demo=1` and the demo tour runs,
+labelled `DEMO`.
+Test: Playwright with the page served but the board socket refused; assert the texts and the
+button's rect; tap and assert `location.search` and the `DEMO` label.
+
+### S-SCR-23 The screen loses its network
+Given a live screen in `split`,
+When the browser goes offline (`context.setOffline(true)`) at 06:41,
+Then within 1 s the wall caption, the canvas strip and the pane line read `This screen is offline
+since 06:41. Check its network.`; after `setOffline(false)` the rules of S-SCR-19 apply.
+Test: Playwright `context.setOffline`; assert the three texts; back online, assert `live`.
