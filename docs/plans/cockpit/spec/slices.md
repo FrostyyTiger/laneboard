@@ -18,7 +18,7 @@ T81 (the jobs slice, §3.7) and T30 (S-C1-13 belongs to C2, §3.2).
 | 4 | **Speak** The agent speaks up | find a line from the agent that it started itself, a marker on the talk button, the tour holding on the flagged node | C3, `coworker.md` (T13) and T23 written |
 | 5 | **Canvas** C4, first canvas night | put the screen in `split` or `canvas` and ask for a countdown, a status tile, a log, a chart, a text or a diff card | Speak (order only; it builds on C3) |
 | 6 | **Show** C4 show commands | watch the agent fly the map to a node, highlight, pin, compare, and undo any of it with one tap | Canvas (the show line and `UNDO` exist) |
-| 7 | **Jobs** Scheduled jobs on the room's own machine | ask "remind me in 3 hours" and see the countdown on the canvas and the job on the Map; cancel it with one confirm | Canvas; the confirm card (`c5-c6.md` §8, T14) is written |
+| 7 | **Jobs** Scheduled jobs on the room's own machine | ask "remind me in 3 hours" and see the countdown on the canvas and the job on the Map; cancel it with one confirm | Canvas; the confirm card (`c5-c6.md` §8, written by T14); Q-O30 answered (written for b) |
 | 8 | **C2b** The physical button | press a desk button that talks on a named screen | C2, Q-O8 and Q-O20 answered |
 | 9 | **Pair** Pairing screens | pair a second screen others can reach with a code; unpair it | C1, Q-O21 answered b) (with a) this slice folds into C1) |
 | 10 | **Canvas 2** | `timer`, `table`, `checklist`, `map` blocks; custom cards in their sandbox; promotion | Canvas, T12 written |
@@ -265,10 +265,17 @@ MCP tool only after a confirm card (`c5-c6.md` §8) and cancelled the same way; 
 and cancel writes an audit line; the job shows on the Map at its target and as a `countdown` bound
 to it (`CANCEL JOB`); the bridge's refusal line goes (§6).
 
-**What a job may do in this slice** (D115, pending Q-O23): remind (at the time, an agent-started
-line and a card) or run a script the room's config lists under `cockpit.jobs.scripts` on the room's
-own machine. A job that changes another machine (stop a VM, restart a service) waits for C6; the
-agent says `I can remind you at 15:10, but stopping builder-b needs the act step (C6).`
+**What a job may do in this slice** (D115, pending Q-O30): remind (at the time, an agent-started
+line and a card) or run a script the room's config lists under `cockpit.jobs.scripts`. The script
+runs on the room's own machine and may touch other machines (the demo's `stop-vm-c` stops `vm-c`):
+the owner wrote and listed it, so the list is the owner's standing yes for that command
+(`coworker.md` §6.2, D191). Each create and each cancel needs a yes on the confirm card; each
+create, fire and cancel writes one audit line (`coworker.md` §6.8). Asked to stop `builder-b` at
+15:10 with `stop-builder-b` listed, the agent says `I can run stop-builder-b at 15:10. Confirm?`
+and opens the card. With no listed script for it, the agent says
+`I can remind you at 15:10, but stopping builder-b needs a script you list (cockpit.jobs.scripts) or the act step (C6).`
+(`coworker.md` §6.3). Under Q-O30 a) a listed script may touch only the room's own machine, and the
+first line becomes that second one for every other machine.
 
 **Scenarios** (12): S-C4-13 S-C4-24 S-CW-10 S-CW-11 S-CW-12 S-CW-13 S-CW-14 S-C6-01 S-C6-02
 S-C6-03 S-C6-04 S-C6-05. The confirm card is `c5-c6.md` §8. The job format, tools, firing and audit lines are `coworker.md` §6.

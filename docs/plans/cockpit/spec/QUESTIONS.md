@@ -90,7 +90,8 @@ example is shutting something off in three hours.
   screen; every other screen shows the open card (`security.md` §2).
 
 Recommendation: b) — a listed script is already the owner's yes; a) leaves only an alarm clock and
-C6 has no date. The confirm card is `c5-c6.md` §8 (T14).
+C6 has no date. The confirm card is `c5-c6.md` §8 (T14). Spec written for b): `slices.md` §3.7,
+D115, `coworker.md` §6 (T103).
 
 Answer: (open)
 

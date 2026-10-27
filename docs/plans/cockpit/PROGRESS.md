@@ -254,6 +254,8 @@ Written by the final round (71), 2026-10-27 05:02.
   protocols, the stand-ins, the build order (`slices.md`), 120 decisions, 10 reviews triaged.
 - **Not written:** `security.md` (T17), `coworker.md` (T13), `c5-c6.md` (T14), `single-machine.md`
   (T19), canvas part 3 (T12); and 64 fix tasks from the reviews, several of which C1 needs (below).
+  Since written: `c5-c6.md` (T14), which slice Jobs needed for the confirm card; Jobs now waits only
+  on Canvas and Q-O30 (T103).
 - **Why it stopped:** the round limit (71 rounds), not the 20:00 deadline and not a failure.
 
 ### The spec at a glance
