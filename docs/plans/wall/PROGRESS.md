@@ -132,12 +132,22 @@ Notes for every builder round (planner, round 1):
   `test/wall-galaxy-arrive.test.mjs`. CDP check on the large demo (`shots/r14-t6-glyph`): over 45 s, 42 dimmed crit
   samples, every `::before` crit red while the word is grey, 0 grey marks, no console errors. Film `shots/r14-galaxy`:
   red `■ HV2` and yellow `▲ HV1` beside grey words in the flights (22 s, 25 s); 15.1 fps under SwiftShader.
-- [ ] T7 (§7 Night 4 0a; was night 3's T32, r41-operator galaxy 6) [ui] [variant:galaxy] No red without a name: in
+- [x] T7 (§7 Night 4 0a; was night 3's T32, r41-operator galaxy 6) [ui] [variant:galaxy] No red without a name: in
   flights a nebula lobe that leaves the frame faster than its star must not show as a nameless red smear at the frame
   edge — `scene.js nearFade` also fades a crit/warn lobe whose projected centre is beyond ~1.5 reach of its star's
   anchor on screen — done when: a test on the large fixture finds, over `flightPose` samples, no lobe drawn at more
   than that distance from its label anchor, and a film of `galaxy.html?demo=1&quality=0&fx=warp` has no red blob at
-  the edge without a label near it.
+  the edge without a label near it. (commit eaae256) Builder r15:
+  the leash alone never bites in the large demo's flights (a lobe's centre swings out at most 0.54 of its nebula's
+  reach), so r41's smear was a nebula whose star, and with it the name (labels.js names only stars in frame), had
+  left the frame. `scene.js lobeLeash` (`LOBE_LEASH { from: 1, to: 1.5, edge: 0.25 }`) does both: a crit/warn lobe
+  fades past 1-1.5 nebula reach (`LOBES.reach` of its size, on screen at the star's depth) from its star, and the
+  whole nebula fades as its star comes within a quarter reach (at most a quarter of the frame's height) of the edge,
+  gone as it leaves. The system flown to is leashed too (folded, it is still a red blob); the leash lets go as a
+  system opens. Calm/low nebulae are untouched. Tests in `test/wall-galaxy-nebula.test.mjs`: over every flight of
+  the large demo (lab crit, a cloud warn), no hued lobe in frame is drawn with its star out of frame or past 1.5
+  reach, the overview unchanged. Film `shots/r15-galaxy-warp`: every red cloud has its `■` name beside it, no
+  console errors, 11.7 fps under SwiftShader.
 - [ ] T8 (§7 Night 4 0a; was night 3's T33, r46-skeptic galaxy 1) [ui] [variant:galaxy] The banner does not change
   subject with the camera: with more than one crit standing the banner (`hud.js bannerModel`, `frame.js`) names them
   in a fixed order (oldest first, `■ 2 CRIT · HV2 · HV1`, the reason line for the oldest), never picking the subject
