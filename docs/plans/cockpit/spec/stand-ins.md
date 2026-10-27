@@ -89,7 +89,15 @@ How older phrases in the spec map onto these:
   with `hello.cockpit:true` and the room, so Playwright needs no front; its collectors read the
   test's empty temp `HOME` and find nothing. `board.url` points the read tools at the demo hub
   instead of the process's own loopback port. The `mode: cockpit` room alone has its one route
-  test in `protocols.md` §1, not a Playwright test.
+  test in `protocols.md` §1, not a Playwright test (pending Q-O29: written for its
+  recommendation, a room alone as the third `MODES` entry).
+- **What `test/helpers/boot.mjs` gains** (two things, nothing else): the `entry` option above, and
+  `mode: 'cockpit'` as a third accepted value next to `builder` and `hub`. For `cockpit` it writes
+  `"mode":"cockpit"` into the config as it does for `hub`, gives it no `fleet.ingressPort` and no
+  hub key, and waits for `/healthz` as for the other modes (the room alone answers it, `protocols.md`
+  §1); `booted.url` is the room's own port and `ingressFetch`/`ingressWs` throw as for a builder
+  without a fleet block. The default stays `builder` and the default `entry` `server/index.mjs`, so
+  every existing test boots exactly as today.
   `kind` stays `claude-code` (D110): the room runs its real adapter against the fake agent in every
   acceptance test. `FAKE_AGENT_DIR` (§2.1) reaches the child only because it is listed in
   `cockpit.agent.env` (D108). The test passes `--dialect bridge` in `command` for the few tests

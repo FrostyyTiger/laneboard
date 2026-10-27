@@ -122,6 +122,12 @@ Rects at 1368x912 with a one-line input (row top y 808, on the Wall, in the app 
 | a one-line message and a chip | y 776-808 | y 712-776 (y 720-768) | x 1168-1264, y 648-696 | y 712 |
 | a two-line message and a chip | y 752-808 | y 688-752 (y 696-744) | x 1168-1264, y 624-672 | y 688 |
 
+- **The last item clears the opener** (D267). In the sliding pane (not in a column: no `CHAT`
+  there, D117) the conversation's scroll area keeps a bottom padding of `max(0, bottom − 744)` px,
+  `bottom` being the table's "Conversation bottom": 64 px with nothing in the stack, 32 px with a
+  one-line message, 0 px with a chip. At its end the last item (a reply line, a `· QUEUED` block)
+  then ends at y ≤ 744, 16 px above `CLOSE` (y 760-808), and never under it; scrolled up, text
+  passes under the opener like under any floating button. Sketch: `sketches/c1-pane.html`.
 - A taller input (§7) or the keyboard (§7.1) moves the row's top edge; every rect moves with it by
   the same amount (keyboard up: subtract 364 px, so a chip alone is y 380-444).
 - The x rule makes every item in the stack end 24 px left of `CHAT`/`CLOSE` and of the talk
@@ -1198,8 +1204,11 @@ and never `● STOPPING`; no `STOPPED AT` line is drawn; by t = 4.1 s `· QUEUED
 `--text-1`, and `Only builder-a failed.` is drawn below the prompt block in the same turn (one
 `AGENT · HH:MM` label row in the turn, above `Three runs ran last night.`); the fake agent's log
 has no interrupt and one `prompt` with `"priority":"next"` read at about t = 2 s.
+At t = 2.5 s, with the pane open over the Map at 1368x912 and the conversation at its end, the
+queued block's bounding box ends at y ≤ 744 and does not intersect `[data-cockpit-open]` (D267).
 Test: Playwright; assert the label text at 2.1 s, 2.5 s and 4.1 s, the prompt's computed colour
-against `--text-2`/`--text-1`, no element with the text `STOPPED AT`, the order of the turn's items, and
+against `--text-2`/`--text-1`, the queued block's `getBoundingClientRect().bottom` ≤ 744 and no overlap
+with the opener's rect, no element with the text `STOPPED AT`, the order of the turn's items, and
 `order("interrupt")` from the fake-agent log is `[]` (`stand-ins.md` §2.6).
 
 ### S-C1-17 STOP stops; a stuck stop is forced after 5 s

@@ -84,7 +84,9 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 2. The room process: `server/boot/cockpit.mjs` (`startRoom()` and the `mode: cockpit` wiring),
    the third `MODES` entry, `cockpit.forwarded`, `server/config/cockpit.mjs`,
    `server/cockpit/clock.mjs` and `faults.mjs` (`README.md` "The room process", D128, D129); the
-   `mode: cockpit` route test of `protocols.md` §1.
+   `mode: cockpit` route test of `protocols.md` §1, with `boot()`'s `mode: 'cockpit'` path
+   (`stand-ins.md` §1.1). Written for Q-O29's recommendation (pending Q-O29): a room alone is
+   `mode: cockpit` (no collectors, no `/ws`); the one box is `mode: builder` with `cockpit.agent`.
 3. The message checks `server/cockpit/protocol.mjs` and the fixture test (D98, `protocols.md` §9).
 4. The bridge and Claude Code adapter (`server/cockpit/bridge.mjs`), the mapping and turn tests
    (`protocols.md` §13), the redaction module `server/cockpit/redact.mjs` and its unit test

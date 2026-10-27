@@ -289,7 +289,7 @@ Written by the final round (71), 2026-10-27 05:02.
 
 | sketch | newest shot | behind the spec |
 |---|---|---|
-| `spec/sketches/c1-pane.html` | `$RUN_DIR/shots/139-c1-pane/` | no (T47, T43, T45; shot round 139, linked from Q-O11/Q-O22); no `· QUEUED` block yet: T120; the opener's `CLOSE` overflows its 48 px box: T126 (a) |
+| `spec/sketches/c1-pane.html` | `$RUN_DIR/shots/152-c1-pane-b/` | no (T47, T43, T45, T120: the `· QUEUED` block, D267; shot round 152); the opener's `CLOSE` overflows its 48 px box: T126 (a) |
 | `spec/sketches/c2-states.html` | `$RUN_DIR/shots/106-c2-states/` | no (T42/T95, round 106); T125 adds the turn cells |
 | `spec/sketches/c3-ask.html` | `$RUN_DIR/shots/99-c3-ask/` | no (T101, round 99); the opener's `CLOSE` overflows its 48 px box: T126 (a) |
 | `spec/sketches/c4-canvas.html` | `$RUN_DIR/shots/99-c4-canvas/` | no (T82, T101, round 99) |
