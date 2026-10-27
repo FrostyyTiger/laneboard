@@ -965,3 +965,149 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 | r56 | performance, fx-warp | – | – | – | – | 6 | 5 | – |
 
 ## Morning
+
+Night 3, final report (round 61, 2026-10-27 05:20 Europe/Zurich). Shots live in `$RUN_DIR` = the run's own directory on the VM.
+
+- **Done:** 29 of 41 tasks. All of the planned A1-A3 (flights, the spiral overview, one headline), B (a dead feed
+  reads `STALE <age>` and the sun goes cold), all of C (touch: wake, drag, pinch, tap, sheet, back, the tour comes
+  back) and D's `beacon` and `warp`. Then 15 panel fixes (T15-T28, T30). Tests: 4072 pass, 0 fail. No test failed
+  in any round.
+- **Not done:** 12 panel tasks are open (T29, T31-T41, none blocked). The effects `afterglow`, `sweep` and
+  `activity` were not built, and `lanes` was not removed (its code is still in `galaxy/fx.js`, `scene.js` and
+  `main.js`). The A4 items that are left (trouble-name size, crit luminance, feathered plates = T35), A5
+  accessibility, A6 `islands-tiles` and E (`docs/wall.md`, manifest, `wall.html?variant=galaxy`) are still under Later.
+- **Why it stopped:** the loop used its 60-round budget (stop reason `rounds`, about $66.5) at 05:20, 4 h 40 min
+  before the 10:00 deadline. The script left no owner-notes file (`$RUN_DIR/owner-notes` does not exist).
+
+### The directions side by side
+
+The galaxy has been the only direction since night 1. The variants the panel scored are the galaxy itself, touch
+(scored as the galaxy's `touch` column) and the effects behind `?fx=`, all of them off by default (D9).
+
+**galaxy** (`galaxy.html`): five sites as star clusters on a spiral around the hub. The tour goes trouble first
+(overview 10 s, calm 6 s, trouble 14 s). On arrival it opens the system, puts the lock on its worst member and
+types a plate. The far fleet line names the worst thing in the fleet. *Loved:* the overview, now a spiral again
+(T3, T19), averages 6.4 and was 7 in the last five reviews. The skeptic (r46) called the idle overview "the
+cleanest frame of the night: every word on it carries a fact". The worst thing is now the loudest (T30), the hero
+is the site's worst member (T27), and the red goes when the trouble goes (T18). *Hated:* calm holds say nothing
+(r36: a name in the right third and two thirds black; the calm-facts idea is in For the owner). With two crits
+standing, the banner changes subject with the camera (r46, T33) and repeats the hero (T34). Dark boxes behind the
+banner and the plate cut the galaxy flat (T35). Status is the weakest column (5.7) and dropped to 4 at r51,
+because the tapped sheet hid the crit (since fixed by T24 and T27, not yet reviewed).
+
+**touch** (the galaxy's `touch` column, from r31 on): the first touch wakes the page and does nothing else, and
+the camera eases to the overview. Drag orbits, pinch zooms, a tap opens a site with a big-type sheet, BACK and a
+tap on empty sky step back, and after a minute the tour resumes on its worst site. *Loved:* every step works, and
+palm and long-press do nothing (r51). The page never scrolls or zooms. "A finger on a crit works... Keep it" (r41).
+No step costs more than the tour (r56). *Hated:* explore mode looks exactly like the tour, with no `MANUAL · TOUR IN
+0:40` (r36, r41, r46; first in Later to promote). Taps on the sheet go through it to the stars (T36). In an open
+system the planets sit too close to pick (T37). The loudest thing, the banner and the beacon, cannot be tapped
+(T38). BACK forgets where you turned the galaxy (T29).
+
+**fx-beacon** (`?fx=beacon`): a red pillar over each crit cluster, with a height floor and a white core. Its height
+and width grow with the crit's age (T9). *Loved:* the one mark that finds a crit by shape before the eye reaches
+the label. r36 gave it wow 7 ("short, upright, a flare at its foot"). It costs three draw calls per crit (r56).
+*Hated:* it is the fourth mark for the same crit (r46), a 1 px hairline at the 3 m scale (r41), it leans with
+perspective so it reads as a link, and it flares into a streak in close flights. It is flat at wow 5-6 all night.
+
+**fx-warp** (`?fx=warp`): in a flight, stars and dust stretch into streaks toward the destination and snap back
+before the plate types. Since T28 (round 60), the streaks run radially out of the target and their heads carry its
+status hue. *Loved:* after a tap, the flight reads as "going somewhere", and it is the feedback a finger needs
+(r51). It costs about 6 % fill rate, and only during flights (r56). *Hated, all before T28:* it read as rain, not
+travel. The tint was invisible from 3 m (r41: wow 3). Grey streaks on a flight to a calm site carry nothing (r46).
+Wow went from 3 to 6 over the night. **No panel has seen T28 yet.** In `r60-galaxy` the flight streams out of
+HV2 and nothing crosses the plate, but the red flecks are thin at sheet scale.
+
+**fx-comets, fx-twinkle, fx-lanes** (night 2's): scored from earlier films up to r36 (wow 2.0-2.4, calm 7.4-8.8)
+and not filmed after that. You asked to fold comets and twinkle into `activity` and to drop lanes. Neither was done.
+
+Averages over every review this night (`## Scores`; galaxy and beacon 9 reviews, warp 5, the three old effects 5):
+
+| variant | overview | legibility | status | touch | wow | calm | performance |
+|---|---|---|---|---|---|---|---|
+| galaxy | 6.4 | 6.0 | 5.7 | 4.3 | 6.0 | 5.1 | 6.1 |
+| fx-beacon | - | - | - | - | 5.7 | 5.7 | - |
+| fx-warp | - | - | - | - | 4.8 | 5.0 | - |
+| fx-comets | - | - | - | - | 2.4 | 7.4 | - |
+| fx-twinkle | - | - | - | - | 2.0 | 8.8 | - |
+| fx-lanes | - | - | - | - | 2.0 | 7.8 | - |
+
+The touch average includes three scores of 1-2 from before touch existed. Since it landed (r31-r56) it averages
+5.8 and ends at 7. Performance is still a VM guess: the profile shows the page's JavaScript at about 1-2.4 ms a
+frame unthrottled, the 9-12 fps is SwiftShader's fill rate, and 10 minutes showed no memory growth (r56).
+
+Newest filmstrips. To see one live, run `node test/tools/demo-fleet.mjs --port 7795 --size large` and open the URL:
+- galaxy (tour, after T27): `$RUN_DIR/shots/r59-galaxy/sheet.png`, live `galaxy.html?demo=1&quality=0`
+  (`&pace=wall` for the real tour speed).
+- fx-warp (after T28): `$RUN_DIR/shots/r60-galaxy/sheet.png`, live `galaxy.html?demo=1&quality=0&fx=warp&pace=wall`.
+- fx-beacon: `$RUN_DIR/shots/r56-galaxy/sheet.png`, live `galaxy.html?demo=1&quality=0&fx=beacon`.
+- touch (tour → wake → drag → pinch → tap → back → 65 s idle → tour): `$RUN_DIR/shots/r56-touch/sheet.png` (frames
+  `01-tour.jpg` … `08-resumed.jpg`); live: `galaxy.html?demo=1&quality=0` and touch it.
+- A dead feed: `$RUN_DIR/shots/r15-sun-stale/` against `r15-sun-live/`.
+The page is `galaxy.html`. `wall.html?variant=galaxy` still falls back to radial (E, Later). The sheets use
+`quality=0`, because without it the budget drops a level on this VM in about 10 s.
+
+### Tasks
+
+Done (29): T1 68d02f0, T2 9262e60, T3 6119ed0, T4 198d096, T5 cad582c, T6 8811158, T7 cbd8389, T8 3467b89,
+T9 72c122c, T10 b5d248e, T11 9e2fa7b, T12 75ae4cc, T13 c25ed45, T14 a7946aa, T15 6cb18d0, T16 bf40199, T17 df7d970,
+T18 348f646, T19 8e891c2, T20 c488fc9, T21 2672a69, T22 7c3483a, T23 760d6ef, T24 9a76ceb, T25 c8c91b9,
+T26 13eef79, T27 ec9cfd9, T28 d9b916a, T30 1542f7c.
+Open (12, from the panel, none blocked): T29 BACK keeps your pose, T31 a dimmed crit keeps its glyph hue, T32 no
+nameless red lobe in flights, T33 the banner does not follow the camera, T34 no echo with two crits, T35 no dark
+rectangles, T36 the sheet is not transparent to taps, T37 every trouble planet pickable, T38 the banner and beacon
+are targets, T39 the stutter number moves, T40 fewer triangles in an open system, T41 the lock writes only changes.
+Tests now: 4072 pass, 0 fail (after round 60). Every round ended green.
+
+**Needs you, worst first.**
+
+1. **Your pick for night 3: keep, drop or more for each `fx`, and does touch feel right?** The panel's case:
+   - *beacon, keep and finish* (wow 5.7). For: the only mark that finds a crit by shape at the overview. Against:
+     the fourth mark for one crit and a hairline at 3 m. It needs a screen-px width floor and to stand
+     screen-vertical (Later) to earn its place.
+   - *warp, keep, then judge T28 yourself* (wow 4.8, rising 3 → 6). For: it is the feedback a tapped flight needs,
+     and T28 now aims it at the target. Against: no panel has seen T28, the flecks are thin, and calm flights
+     still streak (r46 wants them silent).
+   - *comets, twinkle, lanes: still in the code* (wow 2.0-2.4). You asked for `activity` in place of the first two
+     and for lanes to go. Neither was built. Say whether that is still the plan for night 4.
+   - *afterglow, sweep: not built.* r46 saw a cleared crit go grey with no trace, which is afterglow's job.
+   - *touch, does it feel right?* For: every gesture works on the VM and costs nothing extra. Against: nobody has
+     touched it on the Surface yet, explore mode has no "manual" mark, and the sheet lets taps through (T36).
+     Please try `galaxy.html?demo=1` on the tablet: wake, drag, pinch, tap HV2, BACK, then wait a minute.
+   My pick: keep beacon and warp, finish T29-T38 first (the touch and banner bugs), then `MANUAL · TOUR IN 0:40`,
+   then afterglow, and drop lanes in one small round.
+2. **Frame cap: needs your OK** (r56-performance galaxy 2). Today the page renders full frames at the display rate
+   all day, with MSAA on 5 MP. The proposal is 30 fps in holds, at the overview and in reduced motion, and 60 in
+   flights and under a finger. You asked for the sketch's 60 on the Surface, so this waits for you.
+3. **An hour on the Surface.** Leave `galaxy.html?demo=1&fx=beacon&perf=1` up for an hour and compare the overlay's
+   memory line at the start and the end. Also compare `&fx=beacon` with no fx, and `&fx=warp` during flights.
+   Every fps number this night is SwiftShader.
+4. **Taste decisions from r46** (For the owner): (a) drop `TARGET 02 / 05` from the kicker? (b) should a calm plate
+   get one real line (`12 rooms · 3 working · last change 14m`) or no plate at all? (c) keep the sun's name or the
+   tag's hub name, not both?
+5. **Fenced files:** none requested this night (no Wall module was fenced).
+6. **Before merging, look at:** 83 commits this night on `run/wall-n3` (281 since `main`). Two changes reach
+   outside the galaxy. `public/css/tokens.css` (shared with the app): `--tex-vignette` became a smoothstep ramp
+   (T19); the comment says only `wall.css` uses it, worth one look at the app. And the shared Wall modules
+   `caption.js` (T27 ranks a site's own trouble with its members', which changes `wall.html`'s hero and lock target
+   too), `tour.js` (T21 queue jump), `frame.js` (T30 `data-plate` tone). Their tests are green, but `wall.html` was
+   not filmed this night.
+7. **Housekeeping:** orphaned headless SwiftShader Chromes from film scripts that crashed (rounds 38 and 56) ran at
+   250-374 % CPU until a reaper or the end of a round removed them. None was alive at the last check. If
+   `$RUN_DIR` shows `*.pid` files, those processes may already be gone.
+
+### Research
+
+- Q12 touch on a 3D map: one finger orbits and two pinch (zoom as the ratio of finger distances), the pitch is
+  clamped to a band, inertia is time-based from the last 60 ms of movement; Mapbox counts a tap as under 500 ms
+  and 30 px; a small target needs a larger screen-space hit area (used in T8, T10).
+- Q13 wake and hand back: the first touch only wakes; before the hand-back, warn with a countdown that any touch
+  cancels (kiosks use 10-15 s, WCAG 2.2.1 asks for at least 20 s to react); what an alarm mid-session should do is
+  the researcher's inference (used in T7, T14).
+- Q14 a stale feed: freeze all liveness motion (`freeze`), a slashed grey ring at the sun (`flag`), last-known trouble
+  hatched and one step dimmer (`lastknown`). The grey sun and `STALE` tag were built (T5, T6); the three ideas are
+  with the owner.
+- Q15 a kiosk that never breaks: `touch-action`, `overscroll-behavior` and the viewport meta stop page zoom and
+  pull-to-refresh, but edge swipes need the OS or kiosk mode; Screen Wake Lock is silent when denied (wake lock is in Later).
+- Open questions: none in `## Research questions`. Open measurements: real fps, GPU time and memory over an hour
+  on the Surface.
