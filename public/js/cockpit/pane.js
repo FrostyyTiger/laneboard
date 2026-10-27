@@ -1,8 +1,10 @@
-// The cockpit button and the pane (cockpit spec c1-talk.md §1-§2, §5.1, §10.1;
-// screens.md §4, §7; D17, D116, D118, D158, D267). DOM only, no innerHTML:
+// The cockpit button and the pane (cockpit spec c1-talk.md §1-§2, §1.2, §5.1, §10.1;
+// screens.md §4, §7; D17, D116, D118, D158, D249, D250, D267). DOM only, no innerHTML:
 // every text goes in as textContent.
 //
-//   const pane = createPane({ doc, page: 'app' | 'wall', onRetryNow });
+//   const pane = createPane({ doc, page: 'app' | 'wall', onRetryNow, unsupported });
+//   unsupported: true in a browser below the floor (fit.js tooOld, D250): the header and
+//   one line, no input row
 //   pane.setLink(state)        the room link's state (link.js): data-cockpit, the status line
 //   pane.apply(msg)            one room message (welcome, snapshot, turn.state)
 //   pane.open() / .close() / .isOpen()
@@ -12,6 +14,7 @@
 import { sinceText } from '../core/cockpit-time.js';
 import { PANE_SLIDE_MS, TICK_MS } from '../core/cockpit-constants.js';
 import { turnNode } from './turns.js';
+import { paneFit, TOO_OLD_TEXT } from './fit.js';
 
 /** c1-talk.md §2: the header's three words for the five turn states (D56). */
 export const TURN_WORDS = Object.freeze({
@@ -57,6 +60,7 @@ export function createPane(opts = {}) {
   const onRetryNow = opts.onRetryNow ?? (() => {});
   const onOpenChange = opts.onOpenChange ?? (() => {});
   const now = opts.now ?? (() => Date.now());
+  const unsupported = opts.unsupported === true;
   const root = doc.documentElement;
   const win = doc.defaultView;
 
@@ -100,13 +104,21 @@ export function createPane(opts = {}) {
   send.dataset.send = 'send';
   send.disabled = true;
   row.append(input, send);
-  pane.append(head, status, convo, row);
+  if (unsupported) {
+    // D250: the header and, in the conversation's place, the one line; no input row.
+    const old = el(doc, 'p', 'ck-unsupported', { 'data-cockpit-unsupported': '' });
+    old.textContent = TOO_OLD_TEXT;
+    turnWord.hidden = true; // no room behind this pane: no turn state to show (build B133)
+    pane.append(head, old);
+  } else {
+    pane.append(head, status, convo, row);
+  }
 
   // --- the opener above the talk button's place (screens.md §4, D116)
   const opener = button(doc, 'ck-btn ck-open', 'data-cockpit-open', 'CHAT');
   opener.setAttribute('aria-label', 'Open the cockpit');
 
-  doc.body.append(pane, opener);
+  doc.body.append(pane);
 
   let open = false;
   let link = { status: 'connecting', since: null, retryAt: null, trying: false, welcome: null };
@@ -115,8 +127,29 @@ export function createPane(opts = {}) {
   let pinned = true;
   let hideTimer = null;
   let tick = null;
+  let fit = null;
+  const madeInert = new Set(); // what this pane made inert, given back as it was
 
   root.dataset.pane = 'closed';
+
+  /**
+   * D249: under 900 px the open pane covers the view, which is `inert` until the pane
+   * closes. Everything on the page but the pane and its opener is the view (on the app
+   * `#shell`, the Map's container, on the Wall page the galaxy's stage). The attribute,
+   * not the property, so a browser without `inert` never gets here (D250).
+   */
+  function coverView(on) {
+    if (on) {
+      for (const n of doc.body.children) {
+        if (n === pane || n === opener || n.tagName === 'SCRIPT' || n.hasAttribute('inert')) continue;
+        n.setAttribute('inert', '');
+        madeInert.add(n);
+      }
+    } else {
+      for (const n of madeInert) n.removeAttribute('inert');
+      madeInert.clear();
+    }
+  }
 
   const setTurn = (state) => {
     const s = Object.hasOwn(TURN_WORDS, state) ? state : 'idle';
@@ -201,7 +234,27 @@ export function createPane(opts = {}) {
       const dur = parseFloat(win.getComputedStyle(pane).transitionDuration) || 0;
       hideTimer = win.setTimeout(() => { hideTimer = null; if (!open) pane.hidden = true; }, dur > 0 ? PANE_SLIDE_MS + 30 : 0);
     }
+    coverView(open && fit === 'full');
     onOpenChange(open);
+  }
+
+  /**
+   * c1-talk.md §1.2: the pane's width follows the viewport in the same frame, with no
+   * slide (the width is not animated); below the floor neither corner control is drawn
+   * and an open pane closes as with CLOSE, the draft and a running turn untouched (D250).
+   */
+  function applyFit() {
+    const was = fit;
+    fit = paneFit(win.innerWidth, win.innerHeight);
+    if (fit === was) return;
+    root.dataset.cockpitFit = fit;
+    if (fit === 'none') {
+      setOpen(false);
+      opener.remove();
+    } else {
+      if (!opener.isConnected) doc.body.append(opener);
+      coverView(open && fit === 'full');
+    }
   }
 
   opener.addEventListener('click', () => setOpen(!open));
@@ -229,6 +282,8 @@ export function createPane(opts = {}) {
   }
 
   render();
+  applyFit();
+  win.addEventListener('resize', applyFit);
 
   function setLink(state) {
     link = state;

@@ -14,6 +14,12 @@
   --ck-in: 23px;           /* "24 px in" from the pane's edge, its 1 px left border included */
 }
 :root.wall { --ck-row-h: 104px; } /* the Wall page: 16 + 64 + 24 */
+/* Under 900 px wide the pane is the whole width with no left border, so "24 px in" is
+   24 px; every part keeps its offset from the pane's left and the viewport's right and
+   bottom edges (c1-talk.md §1.2, D249). The width is not animated: crossing 900 px
+   changes the rect in the next frame, with no slide. */
+:root[data-cockpit-fit="full"] { --ck-pane-w: 100vw; --ck-in: 24px; }
+:root[data-cockpit-fit="full"] .ck-pane { border-left: 0; }
 
 /* --- the opener: CHAT / CLOSE, 48x48, right 32 px, bottom 104 px (screens.md §4) */
 .ck-open {
@@ -38,8 +44,8 @@
 
 /* The toast stack moves up while the cockpit is configured, its bottom 24 px above
    CHAT, and left of the open pane (screens.md §4, D158). */
-:root[data-cockpit]:not([data-cockpit="unconfigured"]) .toasts { bottom: 176px; }
-:root[data-pane="open"] .toasts { right: 624px; }
+:root[data-cockpit]:not([data-cockpit="unconfigured"]):not([data-cockpit-fit="none"]) .toasts { bottom: 176px; }
+:root[data-pane="open"]:not([data-cockpit-fit="full"]) .toasts { right: 624px; }
 
 /* --- the pane: x 760-1368 under the header and above the tape in the app,
    the whole height on the Wall page; slides 120 ms (c1-talk.md §2) */
@@ -84,7 +90,9 @@
 }
 /* READY greyed until the room is live (c1-talk.md §5.1, D118) */
 .ck-turnword.ck-grey { color: var(--text-3); }
-.ck-headbtns { margin-left: auto; display: flex; gap: 8px; }
+/* the buttons y 8-56 in the 64 px header (c1-talk.md §1.2's table, screens.md §4.1): from the
+   top, not centred in the 63 px above the bottom border */
+.ck-headbtns { align-self: flex-start; margin: 8px 0 0 auto; display: flex; gap: 8px; }
 
 .ck-btn {
   height: 48px;
@@ -122,6 +130,14 @@
   color: var(--text-2);
 }
 .ck-retry { flex: none; }
+
+/* a browser below the floor: the one line in the conversation's place (c1-talk.md §1.2, D250) */
+.ck-unsupported {
+  margin: 0;
+  padding: 16px 24px 0 var(--ck-in);
+  font: 500 18px/1.35 var(--font-label);
+  color: var(--text-1);
+}
 
 /* the conversation, scrolling on its own: 16 px top, 24 px sides, a 560 px column;
    at its end the last item clears the opener (bottom padding 64 px, D267) */

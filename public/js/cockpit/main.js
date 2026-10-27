@@ -13,6 +13,7 @@ import { store, subscribe } from '../core/store.js';
 import { COCKPIT_PREFIX } from '../core/cockpit-constants.js';
 import { createRoomLink } from './link.js';
 import { createPane } from './pane.js';
+import { tooOld } from './fit.js';
 import { paneOnWall } from './wall-hold.js';
 import { installAppView } from './app-view.js';
 
@@ -58,19 +59,23 @@ export function initCockpit({ page = 'app', configured = boardSaysCockpit } = {}
     // The Wall page has one layout until the Canvas slice (screens.md §1, Q-O22 b).
     if (page === 'wall') document.documentElement.dataset.cockpitLayout = 'wall';
     let link = null;
+    // D250: below the browser floor the pane only says so, and no room link is opened.
+    const old = tooOld(globalThis);
     const pane = createPane({
       page,
+      unsupported: old,
       onRetryNow: () => link?.retryNow(),
       // The pane holds the Wall's tour and idle timer while open (screens.md §2).
       onOpenChange: (open) => paneOnWall(globalThis.__cockpitView, open),
     });
+    started.pane = pane;
+    if (old) return;
     link = createRoomLink({
       url: roomLinkUrl(),
       page,
       onState: (s) => pane.setLink(s),
       onMessage: (m) => pane.apply(m),
     });
-    started.pane = pane;
     started.link = link;
     link.start();
   });

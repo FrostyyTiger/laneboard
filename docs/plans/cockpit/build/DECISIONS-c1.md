@@ -731,3 +731,33 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   swapped in `views/map.js` mount/unmount; S-SCR-35 runs without `?demo=1` (the room under test
   serves the demo topology; the `?demo=1` page is T40) — spec: `screens.md` §9.2, §9.3 —
   overrule: those three files.
+- B130 (T17) S-C1-45 moves to a new T18b right after T18: its last step types `how is builder-a`,
+  taps `SEND` and reads the prompt block's right edge and `[data-reply]`'s column, and sending and
+  the turn drawn as it comes are T18's; its layout (pane x 416-1024, input x 440-920, `SEND`
+  x 936-1000, corner `CLOSE` x 944-992, y 616-664 at 1024x768, app and Wall) is built now and
+  was measured in round 25's stills — because a test now would skip a step the night may not
+  skip — spec: `c1-talk.md` S-C1-45, `slices.md` §3.1 — overrule: PROGRESS.md's task lines.
+- B131 (T17) Under 900 px the open pane makes every child of `<body>` but the pane, its opener
+  and scripts `inert` (the attribute), and gives back only what it set; S-C1-46's "the Map's
+  container" is the app's `#shell` (header, Map, inspector and bar: the pane leaves nothing
+  else to tap, so `CLOSE` or `Esc` is the only way back), on the Wall page the galaxy's stage;
+  the test asserts `#shell[inert]` and that `#map-root`'s nearest `[inert]` is `#shell` —
+  because D249 makes the whole view behind unusable, not the Map alone, and one rule covers both
+  pages — spec: `c1-talk.md` §1.2, D249 — overrule: `coverView()` in `public/js/cockpit/pane.js`.
+- B132 (T17) The fit is one root attribute `data-cockpit-fit="side|full|none"` set by
+  `public/js/cockpit/fit.js` `paneFit(innerWidth, innerHeight)` on load and on every `resize`
+  (the CSS's 100 vw pane and no left border hang on `full`; below the floor the toast stack stays
+  where it is today and the opener is taken out of the DOM); with a full-width pane open the
+  toast stack keeps its right edge (there is no "left of the pane") — because JS and CSS then
+  read the same width rule and the floor's height has no clean media query twin — spec:
+  `c1-talk.md` §1.2, screens.md §4 (D158) — overrule: `fit.js`, `applyFit()` in `pane.js`, the
+  `data-cockpit-fit` rules in `public/css/cockpit.css`.
+- B133 (T17) In a browser below the floor (`fit.js` `tooOld`: `WebSocket`, CSS `min()`, `inert`)
+  the pane's header keeps `COCKPIT`, `NEW` (disabled) and `CLOSE` but hides the turn word: no
+  room is behind it, and a greyed `READY` would say there is; the root's `data-cockpit` stays
+  `connecting` (README's list has no value for it) — spec: `c1-talk.md` §1.2, D250 — overrule:
+  the `unsupported` branch of `createPane`.
+- B134 (T17) The header buttons sit at y 8-56 of the 64 px header (top-aligned, 8 px in), not
+  centred in the 63 px above its bottom border (that drew them at y 7.5-55.5) — spec:
+  `c1-talk.md` §1.2's table (header `CLOSE` y 8-56 / 44-92), `screens.md` §4.1 — overrule:
+  `.ck-headbtns` in `public/css/cockpit.css`.
