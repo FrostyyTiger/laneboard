@@ -33,3 +33,38 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   S-SCR-23's canvas strip) is written now as `test.step.skip('<step> — waits for <slice>', …)` — because
   the step's text stays in the test and its skip names what it waits for — spec: `slices.md` §3.1 —
   overrule: leave the step out until its slice.
+- B5 (T1) The fake agent closes a message that ends in tool calls with `content_block_stop`,
+  `message_delta`, `message_stop` right after the last call's `assistant` line (before its
+  `tool_result`); a call that starts while another runs (`at` before the running one's `endAt`) joins
+  the same message; the next block after a `tool_result` opens a new `message_start` without
+  `user_message_uuids` — because §13.1 lists those three lines only at 7.95 (abridged elsewhere) and
+  §11.4 maps them to nothing — spec: `protocols.md` §11.4, §13.1; `stand-ins.md` §2.3 — overrule:
+  emit them only at the turn's end.
+- B6 (T1) Every stdout line of the fake carries `session_id` and a fresh `uuid` (the replay keeps the
+  prompt's uuid); `init` reports `claude_code_version` `0.0.0-fake` and a fixed tool list — because
+  §11.4 says native lines carry both and leaves them out of the table — spec: `protocols.md` §11.4 —
+  overrule: change `FAKE_VERSION`/`FAKE_TOOLS` in `fake-agent.mjs`.
+- B7 (T1) The `user` `isReplay` echo is written as soon as a prompt's line is read, for every prompt —
+  because the room always passes `--replay-user-messages` (§11.2) and §13.1 has it at 2.97 —
+  spec: `protocols.md` §11.2, §13.1 — overrule: echo only when the flag is in `argv`.
+- B8 (T1) Until T4: a stdin line read before `init` is handled at `init`; a prompt read during a turn
+  waits for the turn's end (as `after-turn`); an interrupt is logged with `stillQueued`/`cancelled`
+  `null` and changes nothing; a closed stdin logs `stdin-end` and exits 0 at once (Claude Code exits on
+  a closed stdin) — because T1 builds §7 step 1 only — spec: `stand-ins.md` §2.4, §7;
+  `protocols.md` §11.6 10.0 s row — overrule: T4 replaces the first three.
+- B9 (T1) The `not-logged-in` end writes `api_retry` `authentication_failed`, then `result`
+  `error_during_execution` with `errors:["authentication_failed"]`; `done` writes `num_turns` = the
+  turn's assistant messages (§13.1: 2), `duration_ms` measured, `total_cost_usd` = `costUsd` or 0;
+  `step-limit` writes `num_turns` = `--max-turns`; a turn with no `end` step ends `done` after its last
+  step — because the spec leaves those values open (research Q10 pending for the login result) —
+  spec: `stand-ins.md` §2.3 — overrule: change `endTurn()` in `fake-agent.mjs`.
+- B10 (T1) "Built from those same rows" is one builder per §11.4 row (`native` in `fake-agent.mjs`),
+  and `test/cockpit-fake-agent.test.mjs` holds every line the fake writes against its row's shape,
+  read from `docs/cockpit/protocol.md` once the night made that copy (D136), else from the spec's
+  `protocols.md`; a tool's `input` is compared as an object only — because a stand-in that parses
+  markdown at run time is more to break than a test that fails on drift — spec: `stand-ins.md` §2.1 —
+  overrule: have the fake read its templates from the protocol file.
+- B11 (T1) The log helper is `fakeAgentLog(dir)` returning `prompts()`, `interrupts()`,
+  `toolResults(tool?)`, `turnEnds()`, `signals()`, `starts()`, `loginChecks()`, `order(...kinds)` and
+  `lines()`; `readFakeAgentLog(dir)` gives the parsed lines — because §2.6 names the functions, not how
+  a test gets them — spec: `stand-ins.md` §2.6 — overrule: export plain functions taking `dir`.
