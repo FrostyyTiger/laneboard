@@ -918,8 +918,12 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
   drawn below it. The turn goes on; the header keeps `● WORKING` (D56); no
   `STOPPED` line, no new `AGENT · HH:MM` label row (the reply goes on under the same turn).
 - **The turn ends first.** A prompt still queued when its turn ends stays `· QUEUED`; the agent
-  takes it as the next turn (research Q8), and `prompt.taken` names that new turn: the block moves
-  to the start of it, the `AGENT · HH:MM` label row comes as a new turn's (§9: its first item or 3 s).
+  takes it as the next turn (research Q8). The room first sends `turn.prompt` for that new turn
+  with the block's own `clientId`, `delivery:"new"` and `"from":"queued"`, then `prompt.taken`
+  (`protocols.md` §3.4 "Taken as the next turn", D258). The pane draws no second block: it moves
+  the existing one to the start of the new turn, keeps its label time (the send, `07:03`), and on
+  the `prompt.taken` ≤ 0.1 s later `· QUEUED` goes and the text turns `--text-1`. The `AGENT · HH:MM`
+  label row comes as a new turn's (§9: its first item or 3 s). No 4000 `gap` close (D119) happens.
 - **Not taken** (D123). If a prompt is still not taken 10 s after its turn's `turn.end`, and no
   interrupt receipt listed it, the room sends it to the agent once more as a new prompt (a new
   UUID, room-internal: no message to the screens, one log line). If that is not taken within 10 s
@@ -1334,7 +1338,12 @@ second send is not taken either, and at t = 23 s the block reads `YOU · HH:MM �
 `The agent did not read this.`, `RETRY` and `EDIT`.
 Test: Playwright, room clock `manual` and `advance(ms)` (`stand-ins.md` §1.1); two fake-agent scripts; assert
 `prompts()` count 2 with two UUIDs, the room's log line `prompt.resend`, the label texts at 13.5 s
-and 23 s; in both cases exactly one resend.
+and 23 s; in both cases exactly one resend. In the `ignore-once` case, from `page.on('websocket')`'s
+`framereceived`: a `turn.prompt` with the block's `clientId`, a new `turnId`, `delivery:"new"`
+and `"from":"queued"` arrives before the `prompt.taken` naming that `turnId` (D258); the
+conversation holds exactly one prompt block with the text `only the failed one`; and the page
+never closes the link with 4000 (the `WebSocket`'s `close` event does not fire, and `framesent`
+shows no second `hello`).
 
 ### S-C1-29 A queued prompt survives a reload (pending Q-O1)
 Given the fake agent on a turn calling a tool from t = 0.5 s to t = 20 s, then writing text, and the

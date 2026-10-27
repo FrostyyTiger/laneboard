@@ -314,7 +314,7 @@ and not listed. Field values and ranges are in the section named.
 | `heartbeat` | no | `at` | — | 2.2 |
 | `error` | no | `re`, `code`, `message` | — | 2.3 |
 | `revoked` | no | `at` | — | 2.3 |
-| `turn.prompt` | `room`; no on the once-only repeat (D95) | `turnId`, `clientId`, `screen`, `text`, `source`, `lang\|null`, `about\|null`, `at`, `receivedAt`, `delivery` | `seq` (absent only on the repeat) | 3.1 |
+| `turn.prompt` | `room`; no on the once-only repeat (D95) | `turnId`, `clientId`, `screen`, `text`, `source`, `lang\|null`, `about\|null`, `at`, `receivedAt`, `delivery` | `seq` (absent only on the repeat); `from`: `"queued"` on a queued prompt that starts the next turn (§3.4, D258) | 3.1 |
 | `prompt.refused` | no | `re`, `clientId`, `code` | — | 3.1 |
 | `turn.state` | `room` | `turnId`, `state` | — | 3.2 |
 | `text.delta` | `room` | `turnId`, `blockIndex`, `text`, `sentAt` | — | 3.2 |
@@ -392,7 +392,9 @@ How a snapshot over 512 KB divides its lists between parts: §2.2 (D140).
 - `screen` is for the room's log and later slices; C1 draws no screen name (D37).
 - `delivery` (pending Q-O1): `new` starts a turn. During a running turn it is `queued`: the prompt
   goes to the agent at once with `priority:"next"` (§11.3), `turnId` is the running turn's, and the
-  screen draws `· QUEUED` until `prompt.taken` (§3.4, `c1-talk.md` §8). Nothing is stopped.
+  screen draws `· QUEUED` until `prompt.taken` (§3.4, `c1-talk.md` §8). Nothing is stopped. A
+  queued prompt that ends up starting the next turn gets a second `turn.prompt`, `delivery:"new"`
+  with `"from":"queued"` (§3.4 "Taken as the next turn", D258).
 - **Once only** (D95). The room remembers each `clientId` for 10 min. A `prompt` with a known
   `clientId` starts nothing: the room answers with the same `turn.prompt` again, to that link only,
   without `seq`. So `RETRY` after E1 `not-sent` (`c1-talk.md` §10) sends the same `clientId`, and a
@@ -475,12 +477,32 @@ bridge's `taken` or `interrupted` (§11.3):
 
 | `state` | Fields | When | The screen (`c1-talk.md` §8) |
 | --- | --- | --- | --- |
-| `taken` | `turnId`, `atBlock` | the agent read it. `turnId` is the running turn's (a steer) or, when the turn ended first, the new turn it starts (`atBlock` 0) | `· QUEUED` goes; the block sits before the turn's item `atBlock` |
+| `taken` | `turnId`, `atBlock` | the agent read it. `turnId` is the running turn's (a steer) or, when the turn ended first, the new turn it starts (`atBlock` 0, after that turn's `turn.prompt`: "Taken as the next turn" below) | `· QUEUED` goes; the block sits before the turn's item `atBlock` |
 | `cancelled` | `why`: `stopped` | the interrupt receipt lists it in `cancelled` (`stop` §3.3, `new` §3.6) | `NOT SENT`, `Dropped by STOP.`, `RETRY`/`EDIT` |
 | `cancelled` | `why`: `not-taken` | the resend below was not taken either | `NOT SENT`, `The agent did not read this.`, `RETRY`/`EDIT` |
 
 - `atBlock` is the turn's next `blockIndex` at the take: every item the agent produces after it has
   `blockIndex` ≥ `atBlock`.
+- **Taken as the next turn** (D258). A queued prompt taken while no turn runs (its turn ended
+  first, the resend below, an agent with `canSteer:false` or without `cancelQueued` after a `STOP`)
+  starts a turn the screens have never seen. Within 0.1 s of the bridge's `taken` the room sends,
+  in this order, each with its own `seq`:
+  1. `turn.prompt` with the new `turnId`, the prompt's original `clientId`, `text`, `source`,
+     `lang`, `about` and `at` (the send time, not the take), `delivery:"new"` and `"from":"queued"`;
+  2. `prompt.taken` `taken` with that new `turnId` and `atBlock` 0;
+  3. `turn.state` `thinking` for the new turn.
+
+  ```json
+  {"type":"turn.prompt","seq":1314,"turnId":"t-0133","clientId":"p-77aa01c3","screen":"desk",
+   "text":"only the failed one","source":"typed","lang":null,"about":null,
+   "at":"2026-10-27T07:00:06+01:00","receivedAt":1793080806131,"delivery":"new","from":"queued"}
+  ```
+
+  A screen that holds a block with that `clientId` moves it: no second block is drawn, the block
+  leaves the old turn and becomes the new turn's prompt (`c1-talk.md` §8). A screen that does not
+  hold it draws it as any other screen's prompt. So no message of the new turn names a `turnId` the
+  pane does not hold, and D119's 4000 `gap` close does not happen. `from` appears only here; the
+  once-only rule (D95) does not apply, since the room makes this message itself.
 - **The resend** (D123, room-internal, no screen message). 10.0 s after the `turn.end` of the turn a
   prompt was queued in, a prompt neither taken nor named in a receipt's `stillQueued` or `cancelled`
   is written to the agent once more as a new `prompt` (a new UUID; a `taken` for either UUID takes
@@ -937,7 +959,7 @@ Native lines carry `session_id` and `uuid` on almost every line; they are left o
 | --- | --- | --- |
 | `{"type":"system","subtype":"init","session_id":"0b7e5c2a-4d1f-4c3e-9a8b-2f6d1e0c7a91","claude_code_version":"2.1.290","tools":["Read","mcp__laneboard__morning"],"mcp_servers":[{"name":"laneboard","status":"connected"}],"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1"]}` | `ready`; `canSteer` always `true`, `canCancelQueued` when `capabilities` holds `interrupt_cancel_queued_v1`; `mcp` from `mcp_servers`, and `mcp_server_errors[]` naming `laneboard` counts as `failed` | `status` `agent-back` after an outage, `tools-down` when `laneboard` is not `connected`, else nothing |
 | `{"type":"user","isReplay":true,"uuid":"9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714","message":{"role":"user","content":"how did the night go?"}}` | none: the room logs the receipt | none |
-| `{"type":"stream_event","user_message_uuids":["9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714"],"event":{"type":"message_start"}}` | one `taken` per id in `user_message_uuids` (or `user_message_uuid`) not taken yet; without either field: `taken` for the oldest prompt not yet taken, on the first `message_start` after its echo | `turn.state` `thinking` for a new turn; `prompt.taken` for a steer (§3.4, pending Q-O1) |
+| `{"type":"stream_event","user_message_uuids":["9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714"],"event":{"type":"message_start"}}` | one `taken` per id in `user_message_uuids` (or `user_message_uuid`) not taken yet; without either field: `taken` for the oldest prompt not yet taken, on the first `message_start` after its echo | `turn.state` `thinking` for a new turn; `prompt.taken` for a steer (§3.4, pending Q-O1); a queued prompt taken as a new turn: `turn.prompt` `"from":"queued"`, `prompt.taken`, then `turn.state` `thinking` (§3.4, D258) |
 | `{"type":"stream_event","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}` | none; the adapter gives the block the turn's next `block` | none |
 | `{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"■ One run is"}}}` | `text.delta` | `turn.state` `answering` (if not already), `text.delta` |
 | `{"type":"assistant","message":{"id":"msg_01","content":[{"type":"text","text":"■ One run is stuck: builder-a since 03:12."}]}}` | `text.block` | `text.block` |
