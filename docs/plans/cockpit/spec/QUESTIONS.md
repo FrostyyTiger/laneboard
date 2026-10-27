@@ -258,6 +258,12 @@ state (private) and can fetch URLs (a way out) has all three legs of an exfiltra
 Recommendation: a) — "look freely, change only with a yes" (`spec-input.md` §6) taken literally; changes
 arrive with C6 through the audited control plane. The spec is written for a) (pending Q-O23).
 
+What each option takes away from `spec-input.md` §3 (review 44-operator.md finding 6): with a) and b)
+the agent cannot set "scripts and timers on its own machine" ("shut this off in 3 hours") and cannot
+cancel a job, and cannot stop or start things over SSH, until C6; it answers "I cannot schedule jobs
+yet (C6)." instead of trying `Bash`. Only c) keeps them, with nothing between the agent and the room's
+shell. Until C3 (the fleet read tools) exists, the agent in C1 also sees nothing of the fleet (finding 1).
+
 Answer: (open)
 
 ## Q-O24 How long the room keeps what was said
@@ -271,6 +277,22 @@ goes to the agent's model service (with Claude Code: Anthropic); the spec only s
 
 Recommendation: a) — resume across a reload and a night needs some memory, and a limit is cheap;
 `security.md` (T17) carries the table, one row per data kind.
+
+Answer: (open)
+
+## Q-O25 A scheduled job while the room cannot be reached from a screen
+
+Security-relevant. From `reviews/44-operator.md`, contradictions list. `spec-input.md` §6: "Scheduled
+jobs are visible: on the board and on the canvas, cancellable. No hidden timers." `screens.md` §7
+disables `CANCEL JOB` when the room is down, yet the job may still run on the room.
+
+- a) The job runs as scheduled; the screen shows it as `CANNOT CANCEL FROM HERE`.
+- b) The job runs only if some screen can reach the room at the job's time; otherwise it is skipped and
+  logged.
+- c) A job needs a screen-room link in the last 10 min, else it is skipped and logged.
+
+Recommendation: b) — a timer the owner cannot stop is the thing §6 forbids; skipping is the safe side.
+Belongs to `coworker.md` (T13); not needed for C1/C2.
 
 Answer: (open)
 
