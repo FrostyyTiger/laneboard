@@ -467,11 +467,27 @@ Notes for every builder round (planner, round 1):
   `feat-search`; 0 errors; shots `r55-sheet`); film r55-galaxy (tour unchanged, typing and `TARGET 01 / 05` kept,
   0 errors, 9.4 fps under SwiftShader as earlier films). Seen: `HV1` is said twice on a site sheet (kicker and name
   line), as the task asked; a later round may drop the name from the kicker.
-- [ ] T26 (r31-film-ui galaxy 4; promotes Later A4 T31) [ui] [variant:galaxy] No words on words or off the frame:
+- [x] T26 (r31-film-ui galaxy 4; promotes Later A4 T31) [ui] [variant:galaxy] No words on words or off the frame:
   `hud.covers()` includes the clock block, tag and plate; every label keeps a safe margin from the frame edge
   (`HOME` was cut by the top edge) and out of the plate's box (`CLOUD` under `HOLDS`) and the lock bracket — done
   when: a test on the large fixture (`?at=home`, overview, a held site) finds no shown label box meeting a cover or
-  crossing the frame edge.
+  crossing the frame edge. (commit SHA_T26)
+  Builder r58: measured first with a CDP probe (`tools/r58-margins.mjs`: each shown label's DOM rect, every frame, against
+  the clock, tag, fleet line, plate, back and bracket corners and a 12 px edge; large demo, pace=wall, 90 s). Before:
+  names 0-8 px from the edge (`HOME` 1 px from the top, `kitchen-light`, `phone-1`, `edge-1` at the right), `HV2` on the
+  clock, ~500 frames of names on a bracket (trouble names at rest too: their second pass ignores bodies); the plate
+  (T24) was already clear. Now: `labels.js` `EDGE`/`edgeOf` (2 vmin of the short side, at least 12 px) kept inside by
+  `placeLabels({ edge })`; `hud.js clockCover()` joins `covers()` (read once per minute's words, as the tag); `lock.js
+  cornerCovers(sp, shut, arm)` puts the four corners where the brackets come to rest into `lock.covers()`: no name,
+  trouble included, sits on a resting bracket. They are the rest positions, not the closing ones, so no name hops away from
+  a bracket sweeping past; a name may still be crossed for the ~0.5 s the brackets close (alpha < 1), on purpose. After
+  (same probe, 90 s twice): 0 edge, 0 clock/tag/plate/fleet, 0 bracket overlaps at rest; what is left is all while the
+  brackets close. Tests: `wall-galaxy-margins.test.mjs` (edgeOf, the margin in placeLabels, cornerCovers, trouble vs
+  bracket, hud clock cover, large fixture `home` held and slid toward the edges (fails without the margin), the overview
+  twice, HV1 held with the corners as covers), `wall-galaxy-leader` (lock.covers starts with the corners). Film
+  r58-galaxy (pace=wall, large): 0 errors, 10.2 fps (SwiftShader, as earlier rounds; a few cached boxes per frame), no
+  name on a frame block. Seen, not in scope: on the flight to HV1 the sun's star passes under the tag with its name
+  dropped (it is covered, as asked); `HV1▌` cursor and `TARGET 02 / 05` as before.
 - [ ] T27 (r36-dreamer galaxy 4) [ui] [variant:galaxy] The hero is the held site's worst member: the caption's
   hero and the lock target at a held site are its worst member by status (crit before warn), never a lesser one
   while a crit sits in the same system (r34 warp film: yellow `▲ FEAT-SEARCH` hero beside a red `■ vm-c`, banner

@@ -389,6 +389,19 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     }
     return tagBox;
   };
+  // The clock's block (bottom left, T26): read again only when its words or the stage change, once a minute.
+  let clockSeen = null, clockBox = null;
+  const clockCover = () => {
+    const c = frame.el?.clock;
+    if (!c) return null;
+    const { W, H } = stage();
+    const k = `${c.textContent}|${W}x${H}`;
+    if (k !== clockSeen) {
+      clockSeen = k;
+      clockBox = coverOf({ left: c.offsetLeft, top: c.offsetTop, width: c.offsetWidth, height: c.offsetHeight });
+    }
+    return clockBox;
+  };
   return {
     update: (model) => {
       if (!model || typeof model !== 'object') return;
@@ -421,11 +434,12 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     // A finger tapped a site (night 3 T10) or a planet in an open system (T11): its sheet (every line,
     // sheetCaption) as the camera gets there, its brackets at once.
     open: (leg) => say({ arriveMs: 0, ...leg, kind: 'site', lockMs: 0, cut: true, sheet: true }),
-    covers: () => [caption.cover?.(), fleetCover(), tagCover()].filter(Boolean),
+    covers: () => [caption.cover?.(), fleetCover(), tagCover(), clockCover()].filter(Boolean),
     // The node the plate's hero names while the plate is up, or null: labels.js does not name it twice (T20).
     named: () => (plateOn ? heroId : null),
     fleetCover,
     tagCover,
+    clockCover,
     stop: () => { off(); unstep(); plate(false); },
   };
 }

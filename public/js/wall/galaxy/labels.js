@@ -144,7 +144,20 @@ export function boxOf(c) {
   return Number.isFinite(c.x) ? { x: c.x, y: c.y, w: c.w, h: c.h } : null;
 }
 
-const inside = (b, W, H) => b.x >= 0 && b.y >= 0 && b.x + b.w <= W && b.y + b.h <= H;
+/**
+ * Names keep this far inside the frame (night 3 T26, r31-film-ui galaxy 4:
+ * `HOME` was cut by the top edge): `vmin` of the stage's short side, never
+ * under `min` css px.
+ */
+export const EDGE = Object.freeze({ vmin: 2, min: 2 * GAP });
+
+/** The margin a name keeps from the frame's edge on a `W` x `H` stage (css px). Pure. */
+export function edgeOf(W, H) {
+  const side = Math.min(W, H);
+  return Number.isFinite(side) && side > 0 ? Math.max(EDGE.min, (EDGE.vmin / 100) * side) : 0;
+}
+
+const inside = (b, W, H, e = 0) => b.x >= e && b.y >= e && b.x + b.w <= W - e && b.y + b.h <= H - e;
 
 /**
  * The screen pass. `items` are `{ id, rank, near, cands, prefer }`: `near`
@@ -153,17 +166,17 @@ const inside = (b, W, H) => b.x >= 0 && b.y >= 0 && b.x + b.w <= W && b.y + b.h 
  * when still free, so names do not hop while the camera drifts). Items that
  * were shown last frame (`was`) go before the others of their rank. `covers`
  * are boxes (or covers, `boxOf`) nothing may overlap (the caption plate, the fleet line), `W`/`H`
- * the screen, `bodies` the discs drawn on it (`{ x, y, w, h, owner }`): a
+ * the screen and `edge` the margin a name keeps inside it (edgeOf), `bodies` the discs drawn on it (`{ x, y, w, h, owner }`): a
  * name covers no sphere but its own. Returns a Map id → `{ box, at }` of the shown ones. Pure.
  */
-export function placeLabels(items, { W = Infinity, H = Infinity, covers = [], was = null, bodies = [] } = {}) {
+export function placeLabels(items, { W = Infinity, H = Infinity, edge = 0, covers = [], was = null, bodies = [] } = {}) {
   const order = [...items].sort((a, b) => (a.rank - b.rank)
     || ((was?.has(b.id) ? 1 : 0) - (was?.has(a.id) ? 1 : 0))
     || ((b.near ?? 0) - (a.near ?? 0))
     || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const taken = covers.map(boxOf).filter(Boolean);
   const shown = new Map();
-  const free = (b, id, solid) => inside(b, W, H) && !taken.some((t) => overlaps(b, t))
+  const free = (b, id, solid) => inside(b, W, H, edge) && !taken.some((t) => overlaps(b, t))
     && !(solid && bodies.some((o) => o.owner !== id && overlaps(b, o)));
   for (const it of order) {
     const cs = it.cands ?? [];
@@ -309,7 +322,7 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
     }
 
     const was = new Set(last.keys());
-    const shown = placeLabels(items, { W, H, covers: covers(), was, bodies });
+    const shown = placeLabels(items, { W, H, edge: edgeOf(W, H), covers: covers(), was, bodies });
     for (const [id, { box }] of shown) {
       const m = meta.get(id);
       const p = spanFor(id, m.text, m.tone, m.face, m.dim);

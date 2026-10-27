@@ -10,7 +10,7 @@ import * as THREE from '../public/vendor/three/three.module.js';
 import { galaxyLayout } from '../public/js/wall/galaxy/layout.js';
 import { FOV } from '../public/js/wall/galaxy/scene.js';
 import { createGalaxyCamera, zoomedSiteShot } from '../public/js/wall/galaxy/camera.js';
-import { LEADER, createGalaxyLock, leaderCovers, leaderPath, segmentHitsBox } from '../public/js/wall/galaxy/lock.js';
+import { LEADER, cornerCovers, createGalaxyLock, leaderCovers, lockGeometry3d, leaderPath, segmentHitsBox } from '../public/js/wall/galaxy/lock.js';
 import { createLabels } from '../public/js/wall/galaxy/labels.js';
 import { toneOf } from '../public/js/wall/galaxy/palette.js';
 import { lockTarget } from '../public/js/wall/lock.js';
@@ -211,6 +211,10 @@ test('the lock draws the leader as two legs with no notch at the elbow, and keep
       'the run goes on half the stroke under the second leg');
     assert.equal(legs[1].style.transform, `translate3d(${b.x.toFixed(1)}px, ${b.y.toFixed(1)}px, 0) rotate(${b.angle.toFixed(4)}rad) scaleX(${b.len.toFixed(1)})`);
     assert.ok(lock.covers().length > 1, 'the names are told where it runs');
+    // The shut brackets' four corners come first (T26): no name sits on a bracket either.
+    const d = lock.state().drawn;
+    const arm = Math.round(lockGeometry3d({ r: 0, side: Math.min(W, H) }).arm);
+    assert.deepEqual(lock.covers().slice(0, 4), cornerCovers(d, d.shut, arm));
     // A name on the elbow: the next frame takes another route; the names gone, it keeps that one.
     names = [{ x: l.points[1].x - 5, y: l.points[1].y - 5, w: 10, h: 10 }];
     cam.drawn();

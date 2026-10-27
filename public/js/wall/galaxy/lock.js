@@ -42,6 +42,19 @@ export function lockGeometry3d({ r = 0, side = 0, t = 1 }) {
 }
 
 /**
+ * The four corners where the brackets come to rest round `sp` (`{ x, y }`),
+ * `shut` css px out with arms of `arm` px, as `{ x, y, w, h }` boxes (night 3
+ * T26): no other name sits on a bracket, a trouble name either (it may take
+ * a sphere's place, not a bracket's). Where they rest, not where they are
+ * while closing, so no name hops away from a bracket passing by. Pure.
+ */
+export function cornerCovers(sp, shut, arm) {
+  if (![sp?.x, sp?.y, shut, arm].every(Number.isFinite) || arm <= 0) return [];
+  const x0 = sp.x - shut, x1 = sp.x + shut - arm, y0 = sp.y - shut, y1 = sp.y + shut - arm;
+  return [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].map(([x, y]) => ({ x, y, w: arm, h: arm }));
+}
+
+/**
  * The leader's routes, in the order they are liked; `pad` css px kept clear
  * between it and a name; `tile` the css px of the squares that cover a
  * slanted leg for the names (leaderCovers).
@@ -247,9 +260,10 @@ export function createGalaxyLock(root, cam, {
     const from = cur.tone !== 'calm' && typeof leaderFrom === 'function' ? leaderFrom() : null;
     const l = from ? leaderPath(from, sp, g.d, arm, g.alpha, typeof avoid === 'function' ? avoid() : [], cur.route) : null;
     if (l) cur.route = l.route;
+    const shut = lockGeometry3d({ r: sp.r, side: Math.min(W, H), t: 1 }).d;
     last = {
-      id: hit.c.id, x: sp.x, y: sp.y, r: g.r, d: g.d, shut: lockGeometry3d({ r: sp.r, side: Math.min(W, H), t: 1 }).d, alpha: g.alpha, leader: l,
-      covers: l ? leaderCovers(l) : [],
+      id: hit.c.id, x: sp.x, y: sp.y, r: g.r, d: g.d, shut, alpha: g.alpha, leader: l,
+      covers: [...cornerCovers(sp, shut, arm), ...(l ? leaderCovers(l) : [])],
     };
     if (!l) { hideLeader(); return; }
     for (let i = 0; i < legs.length; i++) {
@@ -293,7 +307,7 @@ export function createGalaxyLock(root, cam, {
      * while they close.
      */
     held: () => (last ? { id: last.id, r: last.shut } : null),
-    /** The boxes the leader takes this frame, whole even while it draws out (leaderCovers): no name goes there. */
+    /** The boxes the shut brackets (cornerCovers) and the leader take this frame, the leader whole even while it draws out (leaderCovers): no name goes there. */
     covers: () => last?.covers ?? [],
     /** The lock on screen and the one waiting, and what the last frame drew. */
     state: () => ({ cur: cur ? { ...cur } : null, next: next ? { ...next } : null, drawn: last }),
