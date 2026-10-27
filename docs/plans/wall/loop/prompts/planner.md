@@ -19,6 +19,10 @@ answered one again, and number new questions after the highest one there.
   night-2 number (`was night 2's T39`); the rest of night 2's `## Later` stays under `## Later`. 3 to 4
   research questions: touch on a wall screen (gestures, hit radius, how long until the tour resumes), and
   one `IDEAS:` question about making a dead or stale feed unmistakable from 3 m.
+- Order for night 4: README §7 Night 4's own `Order:` line. Night 3's open tasks (T29, T31-T41 in
+  `nights/night-3/PROGRESS.md`) become tasks here, renumbered from T1, each naming its night-3 number;
+  the rest of night 3's `## Later` stays under `## Later`. This night may plan up to 18 tasks: it is the
+  Wall's last before the merge.
 - Each task line: `- [ ] T<n> (<plan part, e.g. §7.2>) <what> — done when: <a check a test, a
   screenshot or a filmstrip can show>`. Mark UI tasks with `[ui]`, direction tasks with `[variant:<name>]`.
 - Read the code first (`public/js/views/map/`, `test/tools/demo-fleet.mjs`, `test/helpers/demo-hub.mjs`,

@@ -277,11 +277,31 @@ Order: A1-A3 first (they make both the tour and touch better), then B, then C in
 with D and A4-A6 as triage adds panel findings; E last. The dreamer stays in the panel's rotation; triage
 keeps its cap of 3 tasks per review.
 
-### Night 4 (draft, written during night 3)
+### Night 4
 The Wall's last night before its PRs merge (`docs/plans/product.md` §4: Wall finishes → merge → demo mode
 → hygiene → hosted demo, video, README → cockpit C1/C2). Read `docs/plans/product.md` and
-`docs/plans/cockpit/README.md` (both on `main`) first: the Wall is the cockpit's first screen. Planned
-after night 3's morning report; what night 3 leaves open in its own list comes first.
+`docs/plans/cockpit/README.md` (both on `main`) first: the Wall is the cockpit's first screen.
+
+Owner notes after night 3 (2026-10-27, from his picks before and during night 3 and night 3's report in
+`nights/night-3/PROGRESS.md`):
+- Night 3 built the touch set, `beacon` and `warp` (29 of 41). His effect picks stand: keep `beacon` and
+  `warp`, build `afterglow` and `sweep`, fold `comets` + `twinkle` into one `activity`, remove `lanes`.
+  None of the last four was built in night 3, so they are this night's part 0b.
+- Not decided yet, so not built as a default: the frame cap (30 fps in holds) may land behind `?cap=30`
+  only, off by default; the r46 taste questions (kicker `TARGET 02 / 05`, the calm plate's line, sun or
+  hub name) stay under For the owner.
+- A night may run long: the round cap is the stop, not the clock.
+
+**0a. Night 3's open tasks first.** T29, T31-T41 of `nights/night-3/PROGRESS.md`, renumbered from T1, each
+naming its night-3 number (`was night 3's T36`), the touch ones first (T36 sheet not transparent to taps,
+T38 banner and beacon are targets, T37 trouble planets pickable, T29 BACK keeps the pose), then
+`MANUAL · TOUR IN 0:40` (night 3's Later, the first to promote: explore must look different from the
+tour), then the rest in night 3's order.
+
+**0b. The effects the owner picked that night 3 did not build**, one task each, each with a filmstrip:
+`lanes` removed (code in `galaxy/fx.js`, `scene.js`, `main.js`, its tests and the `?fx=` list), then
+`afterglow` (README Night 3 D), `activity` (replaces `comets` and `twinkle`, both removed with it), `sweep`.
+Calm flights do not streak under `warp` (r46).
 
 **A. One camera director (D10).** Night 3's `galaxy/touch.js` already hands the camera between tour and
 explore; make that the one controller: `galaxy/director.js` with three sources, `tour`, `touch` and
@@ -309,7 +329,17 @@ with a canvas): `galaxy.html` at 50 % width keeps the 3 m check (names, trouble,
 targets. `?role=tour|explore` starts it in that mode (explore: no tour until asked). The canvas itself
 is cockpit work.
 
-**E. Ready to merge.** `docs/wall.md` covers D10, the show messages, `countdown` and `?role`; every
-feature has demo data (product §3.2); README's views table row; the morning report lists what a
-reviewer should read first.
+**E. Ready to merge.** Night 3's E first (`docs/wall.md`: kiosk mode, the URL switches `?demo`, `?pace`,
+`?fx`, `?perf`, `?at`, `?role`, `?show`, the feed fields, touch; the web manifest; `wall.html?variant=galaxy`
+opens the galaxy). Then `docs/wall.md` covers D10, the show messages and `countdown`; every feature has demo
+data (product §3.2); README's views table row. `wall.html` (radial, still the default) gets one filmstrip,
+because night 3 changed the shared `caption.js`, `tour.js` and `frame.js`. The morning report lists what a
+reviewer should read first, and what reaches outside the galaxy (night 3: `public/css/tokens.css`
+`--tex-vignette`).
+
+Order: 0a (touch fixes, then MANUAL), then A (the director, since it rewires touch and tour), then 0b,
+interleaved with triage's panel fixes, then B, C, D, E last. 2 to 3 research questions: the show
+interface's message shape (what BroadcastChannel/postMessage kiosks and other display walls use), a
+countdown readable from 3 m, and one `IDEAS:` question for `activity`. The dreamer stays in the rotation;
+triage keeps its cap of 3.
 
