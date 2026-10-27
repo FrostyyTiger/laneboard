@@ -96,6 +96,9 @@ Notes for every builder round:
 - [ ] T46 (flaky test, review 18-owner finding 5, For the owner round 14) Widen the call's `endAt` in `test/cockpit-fake-agent.test.mjs` "queued next-tool-end" so the second prompt always lands inside the window on a loaded machine — ids: none — done when: the case passes 20 times in a row alone (`node --test --test-name-pattern 'next-tool-end'`) and npm test green.
 - [ ] T47 (review 23-spec-keeper findings 2, 3; D150, D287, B109) One file for the C1 constants: `server/cockpit/session.mjs` (`STOP_FORCE_MS`, `STOP_TERM_MS`, `STOP_KILL_MS`, `RESTART_STEPS_S`, `READY_WAIT_MS`, `NEWS_MS`), `server/cockpit/link.mjs` (`HEARTBEAT_MS`) and `server/boot/cockpit.mjs` (`COCKPIT_PREFIX`) import from `public/js/core/cockpit-constants.js` instead of defining their own; `public/js/cockpit/wall-hold.js` `PANE_CLOSED_IDLE_MS` becomes `EXPLORE_IDLE_S * 1000` — ids: none — done when: no duplicate definition of those names remains outside `cockpit-constants.js` (a `node:test` case greps for it, or asserts equality if an import is impossible, with the reason in B109); update B109; `npm run test:cockpit` and npm test green.
 - [ ] T48 [ui] (review 23-spec-keeper findings 1, 6; B7, B122) Make S-C1-01's and S-C1-26's timelines fail loudly: in `e2e/cockpit/c1-wall.spec.mjs` record (print, not assert) the pane's time-to-place at `?ratio=1` next to the asserted one at 0.5, so each run shows the gap; in `e2e/cockpit/c1-pane.spec.mjs` S-C1-26 step 1 add `expect(await pageMs(page)).toBeLessThan(700)` just after the tap — ids: S-C1-01 S-C1-26 — done when: `npm run test:cockpit -- -g 'S-C1-01|S-C1-26'` passes, none skipped, the ratio-1 time visible in the output; npm test green. Also note where `worstGapMs` 4882 of `r21-wall-open/perf.json` comes from (film.mjs start or a Wall frame) in B122.
+- [ ] T49 [ui] (review 30-touch findings 1, 6; `c1-talk.md` §7 "On send", §7.1, D132) The keyboard stays up after SEND: in `public/js/cockpit/pane.js` add `pointerdown` and `mousedown` listeners on `send` that call `preventDefault()` (fix the comment at `pane.js:263`), so a tap on `SEND` leaves `document.activeElement` on the input — ids: S-C1-04 — done when: S-C1-04 gains a step (tap the input, type, tap `SEND` with `locator.tap()`, the input still has the focus) and `npm run test:cockpit -- -g 'S-C1-04'` passes, none skipped; the whole `test:cockpit` and npm test green.
+- [ ] T50 [ui] (review 30-touch finding 3; B-line, spec silent) The board's `#offline.banner` no longer covers the pane's input row: while `data-pane="open"` and not `data-cockpit-fit="full"` give `.banner` `right: 624px` (as `cockpit.css:48` does for `.toasts`); at full width put it above the input row; record the choice in DECISIONS-c1.md — ids: none — done when: a step in `c1-pane.spec.mjs` (offline board, room live) shows `elementFromPoint` at SEND's bottom edge and at the input's bottom edge is that control; `npm run test:cockpit` and npm test green; stills with the banner.
+- [ ] T51 [ui] (review 30-touch finding 2, part; D224) `-webkit-tap-highlight-color: transparent` on the cockpit's buttons in `public/js/cockpit/cockpit.css` (as `wall.css:34` does), so the pressed state of T42 is the only tap feedback on every browser — ids: none — done when: the computed value is `rgba(0, 0, 0, 0)` on CHAT, SEND, both CLOSE and NEW (a step in `c1-pane.spec.mjs`); `npm run test:cockpit` and npm test green. T42 keeps its place.
 
 ## Scenario ids
 
@@ -198,6 +201,8 @@ What the slice itself says waits; nothing else moved here.
 - The measured run on the real screen (below): the owner's.
 - T32 (review 18-owner): the line `Sending and voice come back with the room.` above the input row while the room is down (`screens.md` §7, S-SCR-17), so the greyed `SEND` has a reason.
 - T17 (review 18-owner): at 800 wide the pane is the whole width with the Map `inert`, no sliver (S-C1-46).
+- Review 30-touch, finding 2 (rest): the pressed state itself is T42; tool lines, `SHOW ALL`, `RETRY`, `STOP`, `↓ NEW` ship before it, so each T19-T27 review should expect no feedback.
+- Review 30-touch, finding 6 (rest): a test step for a tap landing during the 120 ms slide (CHAT then SEND 40 ms later) and one that fails if a `transition` is added on `background-color` (T42's table).
 - T29 (review 18-owner, B81): `NEW` during a turn shows `● STOPPING` in the first frame, so it is not tapped twice.
 
 - T18 (review 23-spec-keeper, finding 5): add S-C1-26's second half (the empty line gone after the first prompt, step 2) to the test once SEND sends; today `c1-pane.spec.mjs` stops at the empty line (B111).
@@ -345,6 +350,9 @@ What the slice itself says waits; nothing else moved here.
 - Review 23-spec-keeper, screens.md §9.2 against slices.md §3.1: §9.2 says "M6 with C3; M1, M5, M7 with Speak; M2-M4 and M8 with Show", S-SCR-35 (C1) calls `flyTo`, `camera()`, `screenOf`, `nodeAt`. T16b built M1, M3, M5, M6 now (slices.md §3.1, the later and more specific); §9.2's table needs its D line.
 - Review 23-spec-keeper, B127: the handle maps `builder-a` to the Map's `builder:builder-a` for M5/M6; every later camera test (C3, C4) inherits this id form. Confirm or change the rule.
 
+- Review 30-touch, finding 4 (spec contradiction): `c1-talk.md` §7.1 "A desktop window made shorter with the input focused counts as `up`" (worked example 1368x532) against §1.2 "Below the floor (`innerWidth` < 700 px or `innerHeight` < 560 px …) an open pane closes". At 532 px the build follows §1.2/D250 (newer): the pane closes, so on a browser that resizes content for the keyboard the first tap in the input closes it. Owner: does the height floor ignore a focused input? `index.html` and `galaxy.html` also lack `interactive-widget=resizes-visual` (§7.1); T24 builds it.
+- Review 30-touch, finding 5 (taste): a disabled `NEW` and an empty-input `SEND` keep the full border and fill, only the text greys. Proposed: a `--line` border on a disabled `.ck-btn`, or not drawing `NEW` until T29 (S-SCR-25's rect table). The spec sets no disabled look.
+
 ## Measured on the real screen
 
 - C1: not measured yet
@@ -354,6 +362,7 @@ What the slice itself says waits; nothing else moved here.
 
 - reviews/18-owner.md: 6 findings; 2 became tasks (T45 bearer redaction, T46 flaky test); the lockfile cause went into T15's line (the fix is a step of T15, not a new task); 3 `## Later` lines, 3 `## For the owner` lines; dropped: reordering (finding 2, spec's order stands), B95 (fine), two-CLOSE buttons (spec D117).
 - reviews/23-spec-keeper.md: 11 findings; 2 became tasks (T47 constants, findings 2+3; T48 timelines, findings 1+6); 3 `## Later` lines (5, 8's selector guess, 9); 7 `## For the owner` lines (1's B122, 2's B109, 4, 7, 8's `.ck-convo`, 10, 11); the `worstGapMs` check went into T48.
+- reviews/30-touch.md: 6 findings; 3 became tasks (T49 focus after SEND with finding 6's focus step, T50 offline banner over the input row, T51 tap highlight); finding 2's reorder of T42 dropped (T42 keeps its place, as in review 18), its rest and finding 6's rest under `## Later`; 2 `## For the owner` lines (4, 5).
 
 ## Scores
 
@@ -363,5 +372,7 @@ What the slice itself says waits; nothing else moved here.
 | 18 | owner | room | 7 | 7 | 6 | 4 | 6 | 6 |
 | 23 | spec-keeper | pane | 6 | 6 | 7 | 6 | 4 | 7 |
 | 23 | spec-keeper | room | 6 | 7 | 6 | 5 | 6 | 7 |
+| 30 | touch | pane | 6 | 6 | 8 | 4 | 8 | 8 |
+| 30 | touch | room | 7 | 7 | 6 | 6 | 7 | 7 |
 
 ## Morning
