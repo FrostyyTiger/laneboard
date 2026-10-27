@@ -222,14 +222,28 @@ Notes for every builder round (planner, round 1):
   `shots/r23-galaxy` (SwiftShader, CPU x4): `worstGapMs` 270, the worst of the last 10 s, against 346-403 for the
   whole-run number in r19-r21; 13.7 fps, no console errors, page unchanged. `film.mjs` is fenced and does not copy
   `bootGapMs` into `perf.json`; it is on `__wallPerf`.
-- [ ] T12 (§7 Night 4 0a; was night 3's T40 and T41, r56-performance galaxy 3a and across) [ui] [variant:galaxy] Two
+- [x] T12 (§7 Night 4 0a; was night 3's T40 and T41, r56-performance galaxy 3a and across) [ui] [variant:galaxy] Two
   small savings: member dots use a fixed 8x6 sphere segments at every quality level (`scene.js` `spheres`; 87k
   triangles and 205 draw calls with HV1 open against 13k and 45 at the overview), planets unchanged; and
   `galaxy/lock.js` writes the four bracket transforms and the opacity only when a rounded key (0.1 px, opacity to
   0.01) changed, as `labels.js` does — done when: a test pins the dot geometry's segment counts at levels 0-2 and the
   planets' unchanged, `?at=hv1&perf=1` reports fewer triangles than before (both numbers in the notes), and a test
   with a counting fake DOM sees no style write in a frame where the brackets moved under 0.1 px and a write when
-  they moved more.
+  they moved more. (commit 9eac184) Builder r24: the dot is **capped** at 8x6, not fixed: `sphereSegs('dot')` gives 8x6 / 7x5 / 6x4 at
+  L0-L2 (decided, not asked): a fixed 8x6 measured *more* triangles at L1 and L2 (lab open: 24.7k → 26.0k, 12.2k →
+  13.9k), against the owner's "nothing added may make it slower". The large demo has no `hv1` id (its sites are
+  `lab`, `hv2`, `cloud`, `remote`, `home`; `lab` is labelled HV1), so measured with `?at=lab` and `?at=hv2`,
+  `renderer.info` after 12 s: lab L0 61.3k → 57.5k triangles, hv2 L0 15.0k → 14.1k; L1/L2 unchanged (hv2 6250 and
+  3186 both). The r56 review's "most of the 87k are dots" does not hold on this fleet: planets (32x22, about 1.3k
+  triangles each, 48 in the large demo) are most of it; dots are about 57 x 144 → 80. If triangles matter on the
+  Surface, the planets' L0 segments or night 3's (b) InstancedMesh are the next lever (Later). `?perf=1`'s second line
+  now prints triangles (`151 calls · 58.8k tri · 23 geo · 4 tex`). `galaxy/lock.js` writes each transform/opacity
+  only when its rounded string changed (corners 0.1 px, opacity now `toFixed(2)`, legs as before). Tests
+  `test/wall-galaxy-savings.test.mjs` (dot and planet segments at L0-L2; a calm lock with a counting style proxy:
+  no write when still or nudged 0.03 px on a 0.1 px step, writes after 0.3 px; a crit lock with its leader writes
+  nothing while still, follows a 2 px move) and `wall-galaxy-budget` (triangles in `perfLine`). Probe
+  `$RUN_DIR/tools/r24-tri.mjs`, stills `shots/r24-t12/`. Film `shots/r24-galaxy`: page unchanged, 12.7 fps under
+  SwiftShader, worst gap 313 ms, no console errors.
 - [ ] T13 (§7 Night 4 A, D10) [ui] [variant:galaxy] One camera director, the state: a pure `galaxy/director.js`
   (`directorStep(state, event, now)` on an injected clock, as `touch.js touchStep`) with three sources `tour`, `touch`
   and `show`, precedence a finger first, then a show command, then the tour; every hand-over between two sources is an
