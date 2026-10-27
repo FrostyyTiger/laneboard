@@ -654,8 +654,8 @@ test('memberPoints (T11): the members of an open system only, at their drawn poi
   const at = { 'hv1-a': { x: 10, y: 10, r: 4 }, 'hv1-b': { x: 40, y: 10, r: 2 }, 'hv2-a': { x: 0, y: 0, r: 1 }, 'old-a': { x: 0, y: 0, r: 1 } };
   const pts = memberPoints(sites, (id) => at[id] ?? null, [{ id: 'hv1-b', box: { x: 50, y: 0, w: 40, h: 20 } }]);
   assert.deepEqual(pts, [
-    { id: 'hv1-a', site: 'hv1', x: 10, y: 10, r: 4, tone: 'crit', box: null },
-    { id: 'hv1-b', site: 'hv1', x: 40, y: 10, r: 2, tone: 'calm', box: { x: 50, y: 0, w: 40, h: 20 } },
+    { id: 'hv1-a', site: 'hv1', x: 10, y: 10, r: 4, tone: 'crit', box: null, node: { status: 'crit' } },
+    { id: 'hv1-b', site: 'hv1', x: 40, y: 10, r: 2, tone: 'calm', box: { x: 50, y: 0, w: 40, h: 20 }, node: { status: 'ok' } },
   ]);
   assert.equal(hitTest(pts, 25, 10).id, 'hv1-a', 'between two planets: the worst wins');
   assert.equal(hitTest(pts, 80, 10).id, 'hv1-b', 'its shown name is a target');
@@ -697,7 +697,7 @@ test('galaxy/main.js wires planet taps (T11): members asked before sites, a plan
   const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
   assert.ok(pick.indexOf('memberPoints(') >= 0 && pick.indexOf('memberPoints(') < pick.indexOf('tapPoints('), 'members first');
   assert.match(js, /const openPlanet = \(id, site\) => \{\s*hud\.open\(\{ id, arriveMs: 0 \}\);/);
-  assert.match(js, /tap: \(hit\) => \{ if \(hit\?\.covered\) return; if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); else goBack\(\); \}/);
+  assert.match(js, /if \(hit\?\.covered\) return; if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); else goBack\(\);/);
 });
 
 // ---- T13: back ----
@@ -948,7 +948,7 @@ test('galaxy/main.js wires the words (night 4 T1): coverHit before the scene, a 
   const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
   assert.ok(pick.indexOf('coverHit(hud.covers(), rows,') >= 0 && pick.indexOf('coverHit(') < pick.indexOf('memberPoints('), 'the words first');
   assert.match(pick, /hud\.targets\(\)/);
-  assert.match(js, /tap: \(hit\) => \{ if \(hit\?\.covered\) return;/);
+  assert.match(js, /tap: \(hit\) => \{[^}]*\}\s*fan\?\.hide\(\);\s*if \(hit\?\.covered\) return;/);
 });
 
 // ---- night 4 T2: the loudest thing is a target ----

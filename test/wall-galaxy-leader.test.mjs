@@ -249,5 +249,5 @@ test('one style: the galaxy\'s leader has the brackets\' stroke; no tether anywh
   // The lock routes round the names; the names keep off the leader.
   assert.match(main, /avoid: \(\) => shownNames\(\)\.map\(\(n\) => n\.box\)/);
   assert.match(main, /shownNames = labels\.shown;/);
-  assert.match(main, /const c = \[\.\.\.hud\.covers\(\), \.\.\.lock\.covers\(\)\]/);
+  assert.match(main, /const c = \[\.\.\.hud\.covers\(\), \.\.\.lock\.covers\(\)[,\]]/);
 });

@@ -468,6 +468,24 @@ export function hitTest(points, x, y, radius = TAP.radiusPx) {
   return best;
 }
 
+/**
+ * Every point a tap at `x`, `y` hits (hitTest's rule: within `max(radius,
+ * r)` of its centre or on its name), worst tone first, then the nearest.
+ * Pure.
+ */
+export function hitAll(points, x, y, radius = TAP.radiusPx) {
+  const out = [];
+  for (const p of points ?? []) {
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+    const b = p.box;
+    const onName = b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+    const d = onName ? 0 : Math.min(Math.hypot(x - p.x, y - p.y), p.beam ? segDist(p.beam, x, y) : Infinity);
+    if (onName || d <= Math.max(radius, Number(p.r) || 0)) out.push({ p, d });
+  }
+  out.sort((a, b) => toneRank(a.p.tone) - toneRank(b.p.tone) || a.d - b.d);
+  return out.map((h) => h.p);
+}
+
 /** How far `x`, `y` is from the segment `{ x0, y0, x1, y1 }`, in its px. */
 function segDist(g, x, y) {
   const dx = g.x1 - g.x0, dy = g.y1 - g.y0;
@@ -539,7 +557,7 @@ export function memberPoints(sites, screenOf, names = [], minOpen = 0.5) {
     for (const m of s.members ?? []) {
       const sp = m?.id != null ? screenOf(m.id) : null;
       if (!sp) continue;
-      out.push({ id: m.id, site: s.id, x: sp.x, y: sp.y, r: sp.r, tone: toneOf(m.node), box: boxes.get(m.id) ?? null });
+      out.push({ id: m.id, site: s.id, x: sp.x, y: sp.y, r: sp.r, tone: toneOf(m.node), box: boxes.get(m.id) ?? null, node: m.node });
     }
   }
   return out;

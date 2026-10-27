@@ -47,6 +47,9 @@
 // The loudest thing is a target (night 4 T2): a tap on the fleet line opens
 // what it names, its site first, then the planet in it (its `+N more` opens
 // nothing yet); with `fx=beacon` a pillar, foot to tip, is its site's.
+// Every planet can be picked (night 4 T3, fan.js): a tap whose finger holds
+// two or more planets opens none; they fan out round it as rows, and the
+// next tap on a row opens that planet (anywhere else closes the fan).
 // The tour resumes (T14, touch.js IDLE): a minute after the last touch the
 // tour takes the page back at its next leg, trouble first (tour.js
 // `resume`), the camera flying there from where the finger left it. In
@@ -66,6 +69,7 @@ import { FLIGHT, createGalaxyCamera } from './camera.js';
 import { createHud } from './hud.js';
 import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
+import { createFan } from './fan.js';
 import { fallbackHref, hasWebGL } from './fallback.js';
 import { paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from './budget.js';
@@ -76,11 +80,13 @@ import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
 import {
-  AT_OVERVIEW, TOUCH, backShown, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createTaps, createTouch, hitTest, memberPoints,
-  orbitLimits, placeOf, tapPoints,
+  AT_OVERVIEW, COVERED, TOUCH, backShown, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createTaps, createTouch, hitAll, hitTest,
+  memberPoints, orbitLimits, placeOf, tapPoints,
 } from './touch.js';
 
 const BACKOFF_START_MS = 1000;
+/** The fan's rows are never set smaller than this (css px), whatever the room step. */
+const FAN_MIN_PX = 18;
 const BACKOFF_MAX_MS = 30000;
 
 export function boot() {
@@ -235,11 +241,15 @@ export function boot() {
   // the lock's brackets (drawn first: the lock's onDraw comes before theirs).
   // The back control's box (T13) while it shows, read again only when it comes or the stage resizes.
   let backCover = () => null;
+  // The fan (night 4 T3, fan.js): two or more planets under one finger fan out as rows for the next tap.
+  const fan = park ? null : createFan(document.getElementById('galaxy-fan'), {
+    screenOf: cam.screenOf, size: galaxy.size, fontPx: () => Math.max(FAN_MIN_PX, steps.room), still: reduced,
+  });
   const labels = createLabels(document.getElementById('galaxy-labels'), galaxy, {
     steps,
     // The lock's leader too (T16): the names keep off the line, as off the words.
     covers: () => {
-      const c = [...hud.covers(), ...lock.covers()], b = backCover();
+      const c = [...hud.covers(), ...lock.covers(), ...(fan?.covers() ?? [])], b = backCover();
       return b ? [...c, b] : c;
     },
     held: lock.held,
@@ -247,6 +257,7 @@ export function boot() {
     named: hud.named,
   });
   cam.onDraw(labels.draw);
+  if (fan) cam.onDraw(fan.draw);
   shownNames = labels.shown;
 
   // Where a finger has taken the page (T13): the overview, a system, a planet in it.
@@ -260,6 +271,7 @@ export function boot() {
   // Out to the whole galaxy in TOUCH.fitMs: the plate and the lock go.
   const toOverview = () => {
     cutAway();
+    fan?.hide();
     cam.fit({ ms: TOUCH.fitMs });
     hud.release();
     place = AT_OVERVIEW;
@@ -273,6 +285,7 @@ export function boot() {
     // A minute untouched (T14): the sheet goes, the tour flies on from here to its worst site.
     resume: () => {
       cutAway();
+      fan?.hide();
       hud.release();
       place = AT_OVERVIEW;
       tour.resume();
@@ -283,6 +296,7 @@ export function boot() {
   const gestures = touch && !reduced ? createGestures(document.getElementById('galaxy-stage'), touch, cam, {
     limits: () => orbitLimits(cam.home(), galaxy.world?.sites ?? []),
     view: () => ({ ...galaxy.size(), fov: galaxy.camera.fov }),
+    moved: () => fan?.hide(), // a turn or a zoom takes the rows' planets from under them
   }) : null;
   // A tap on a site (T10): the camera flies there at the tour's zoom and opens
   // it, the brackets close on it at once, its plate comes as the camera does.
@@ -309,6 +323,7 @@ export function boot() {
   // One step back (T13): a planet's sheet gives way to its system's, a system to the overview.
   const goBack = () => {
     touch?.poke(); // the control's press never reaches the stage: it counts as a touch here
+    fan?.hide();
     if (!canGoBack(place)) return;
     const next = backStep(place);
     if (next.level === 'site') openSite(next.site);
@@ -331,6 +346,8 @@ export function boot() {
   const taps = touch ? createTaps(touch, {
     pick: (x, y) => {
       const o = stageEl.getBoundingClientRect();
+      // A fan up (night 4 T3): its rows are the only targets; anywhere else only closes it.
+      if (fan?.shown()) return fan.hit(x - o.left, y - o.top) ?? COVERED;
       // The words first (night 4 T1): a finger on the plate, the fleet line, the tag or the clock is
       // never the star under them nor empty sky; a row naming a planet opens it.
       // The fleet line too (night 4 T2): its subject's site first, then the planet in it.
@@ -340,10 +357,16 @@ export function boot() {
       const names = labels.shown();
       // A beacon's pillar is its site's target (night 4 T2).
       const beams = fx.has('beacon') ? beamSegments(galaxy.beams?.(), cam.screenAt) : [];
-      return hitTest(memberPoints(galaxy.world?.sites, cam.screenOf, names), x - o.left, y - o.top)
-        ?? hitTest(tapPoints(galaxy.world?.sites, cam.screenOf, labels.shown(), beams), x - o.left, y - o.top);
+      // Two or more planets under the finger (night 4 T3): none is guessed, they fan out for the next tap.
+      const members = hitAll(memberPoints(galaxy.world?.sites, cam.screenOf, names), x - o.left, y - o.top);
+      if (members.length > 1) return { fan: members, x: x - o.left, y: y - o.top };
+      return members[0] ?? hitTest(tapPoints(galaxy.world?.sites, cam.screenOf, labels.shown(), beams), x - o.left, y - o.top);
     },
-    tap: (hit) => { if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack(); },
+    tap: (hit) => {
+      if (hit?.fan) { fan.show(hit.fan, hit.x, hit.y); return; }
+      fan?.hide();
+      if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack();
+    },
   }) : null;
 
   const tick = (now) => {
@@ -454,6 +477,7 @@ export function boot() {
   globalThis.__galaxyTouch = touch;
   globalThis.__galaxyTaps = taps;
   globalThis.__galaxyBack = back;
+  globalThis.__galaxyFan = fan;
   globalThis.__galaxyCam = cam;
 }
 

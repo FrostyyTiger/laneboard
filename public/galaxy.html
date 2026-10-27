@@ -19,13 +19,15 @@
 <!-- The Wall's galaxy (docs/plans/wall/README.md §5): the fleet as one
      spiral galaxy in WebGL, the hub its sun, the sites star clusters. The
      names over it, the Wall's frame (vignette, clock, fleet line, tag) over
-     them, the target lock, then the caption; on top, the back control a finger uses (T13). -->
+     them, the target lock, then the caption; on top, the planets a finger fans out (night 4 T3)
+     and the back control a finger uses (T13). -->
 <main class="wall-stage galaxy-stage" id="galaxy-stage">
   <canvas class="galaxy-canvas" id="galaxy" aria-hidden="true"></canvas>
   <div class="galaxy-labels" id="galaxy-labels" aria-hidden="true"></div>
   <div class="wall-frame-layer" id="wall-frame"></div>
   <div class="wall-lock-layer" id="wall-lock"></div>
   <div class="wall-caption-layer" id="wall-caption"></div>
+  <div class="galaxy-fan" id="galaxy-fan" hidden></div>
   <button type="button" class="galaxy-back" id="galaxy-back" hidden><span class="galaxy-back-glyph" aria-hidden="true">‹</span>Back</button>
 </main>
 <script type="module" src="/js/wall/galaxy/main.js"></script>

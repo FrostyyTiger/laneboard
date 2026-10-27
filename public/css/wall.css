@@ -694,6 +694,61 @@ html.wall body {
 .galaxy-back:focus-visible { outline: 2px solid var(--text-2); outline-offset: 4px; }
 .galaxy-back-glyph { font-size: 1.3em; margin-top: -0.12em; }
 
+/* The fan (night 4 T3, js/wall/galaxy/fan.js): the planets under one finger
+   as rows round it, for the next tap. Each row is a target of FAN.rowPx (48
+   css px, night 2's floor) in the names' mono at --fan-px (fan.js measures
+   the widths from it); the left arc set flush to the finger, as the right.
+   Its inner end and its leader to the planet carry the tone: grey unless
+   the planet needs you. Opaque enough that no name below reads through. */
+.galaxy-fan {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.galaxy-fan[hidden] { display: none; }
+.galaxy-fan-row {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  height: 48px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--fan-px, 18px);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+  background: color-mix(in oklch, var(--bg-canvas) 96%, transparent);
+  border: 1px solid var(--line);
+  --fan-edge: var(--text-3);
+  will-change: transform, opacity;
+}
+.galaxy-fan-row[data-side="left"] { justify-content: flex-end; border-right: 2px solid var(--fan-edge); }
+.galaxy-fan-row[data-side="right"] { border-left: 2px solid var(--fan-edge); }
+.galaxy-fan-row[data-tone="crit"] { color: var(--crit); --fan-edge: var(--crit); }
+.galaxy-fan-row[data-tone="warn"] { color: var(--warn); --fan-edge: var(--warn); }
+.galaxy-fan-row[data-tone="low"] { color: var(--p3); --fan-edge: var(--p3); }
+.galaxy-fan-leader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--text-3);
+  transform-origin: 0 50%;
+  will-change: transform, opacity;
+}
+.galaxy-fan-leader[data-tone="crit"] { background: var(--crit); }
+.galaxy-fan-leader[data-tone="warn"] { background: var(--warn); }
+.galaxy-fan-leader[data-tone="low"] { background: var(--p3); }
+
 /* The galaxy's speed overlay (`galaxy.html?perf=1`, js/wall/galaxy/budget.js):
    a few mono lines in the top margin, above the tag, grey. For whoever tunes
    the page, never on by default. */
