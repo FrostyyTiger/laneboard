@@ -208,6 +208,10 @@ What the slice itself says waits; nothing else moved here.
 
 ## For the owner
 
+- **Spec contradiction (round 26, T18, B138):** `c1-talk.md` §7 "On send" says "the label
+  `YOU · 07:02 · SENDING` (the `SENDING` in `--text-3`)", while §3 "The delivery word" (D270)
+  says the word is "18 px caps `--font-label` weight 500 `--text-1`". Built D270's (newer)
+  reading; §7's parenthesis is the one to strike if that stands.
 - **Patch to apply (T15, B107):** `docs/plans/cockpit/build/patches/T15-store-hello-cockpit.diff`
   (fenced `public/js/core/store.js`, plus its case in `test/store.test.mjs`): the store keeps the
   board's `hello.cockpit` (and the hub `fleet` frame's `cockpit`) as `store.source.cockpit`, only

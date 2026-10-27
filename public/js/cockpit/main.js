@@ -65,6 +65,7 @@ export function initCockpit({ page = 'app', configured = boardSaysCockpit } = {}
       page,
       unsupported: old,
       onRetryNow: () => link?.retryNow(),
+      onPrompt: (m) => link?.send(m) ?? false,
       // The pane holds the Wall's tour and idle timer while open (screens.md §2).
       onOpenChange: (open) => paneOnWall(globalThis.__cockpitView, open),
     });

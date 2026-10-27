@@ -1,11 +1,19 @@
-// A turn in the pane (cockpit spec c1-talk.md §3, §5.1; D227): the label rows,
-// the prompt block and the reply, built from a turn as the room's snapshot
-// carries it (protocols.md §2.2). Text only, never markup: every string the
+// A turn in the pane (cockpit spec c1-talk.md §3, §5.1; protocols.md §3.1-§3.2;
+// D227, D270): the label rows, the prompt block and the reply, built from a turn
+// as the room's snapshot carries it (protocols.md §2.2) and kept up to date by
+// the turn's messages as they come. Text only, never markup: every string the
 // room sends goes in as textContent (no innerHTML).
 //
-// What T15 draws: the prompt and the reply's text blocks as plain lines. The
-// renderer of md.js (tables, code, marks) comes with T19, tool lines with T20,
-// streaming (text.delta, the cursor) with T18; each replaces its part here.
+//   const t = createTurn(doc, turn)   // turn: a snapshot turn, or {clientId, prompt, at, delivery}
+//   t.node                            // [data-turn-id] (set once the room names the turn)
+//   t.confirm(msg)                    // the turn.prompt echo: the turnId, `· SENDING` goes
+//   t.delta(msg) / t.block(msg)       // text.delta appends, text.block replaces (§3 "Streaming")
+//   t.end(msg)                        // turn.end: the cursor goes
+//   t.draw()                          // the text changed since the last draw goes to the DOM
+//
+// The reply's text is plain lines until md.js (T19); tool lines come with T20.
+// `draw()` is the pane's once-per-frame flush (c1-talk.md §3: drawn at most once
+// per animation frame), so `delta()` only keeps the text.
 import { hhmm } from '../core/cockpit-time.js';
 
 const el = (doc, tag, cls, attrs = {}) => {
@@ -15,17 +23,36 @@ const el = (doc, tag, cls, attrs = {}) => {
   return n;
 };
 
-const timeOf = (iso) => {
-  const ms = Date.parse(iso ?? '');
+const timeOf = (at) => {
+  const ms = typeof at === 'number' ? at : Date.parse(at ?? '');
   return Number.isFinite(ms) ? hhmm(ms) : null;
 };
 
+/** The words of `[data-turn-delivery]` (D270). */
+export const DELIVERY_WORDS = Object.freeze({ sending: 'SENDING', queued: 'QUEUED', 'not-sent': 'NOT SENT' });
+
 /** The label row `YOU · 07:02` / `AGENT · 07:02` (c1-talk.md §3, D227). */
-export function labelRow(doc, who, iso) {
+export function labelRow(doc, who, at) {
   const row = el(doc, 'div', 'ck-label', { 'data-turn-label': '' });
-  const t = timeOf(iso);
+  const t = timeOf(at);
   row.textContent = t ? `${who} · ${t}` : who;
   return row;
+}
+
+/**
+ * The delivery word at the end of a prompt's label row (c1-talk.md §3, D270):
+ * ` · ` stays the row's 16 px `--text-3`, the word is its own 18 px span.
+ * `null` takes it away (a row with no word has no such span).
+ */
+export function setDelivery(doc, row, delivery) {
+  // The row's own words are its text node; its element children are only these two spans.
+  for (const c of [...row.children]) c.remove();
+  if (!Object.hasOwn(DELIVERY_WORDS, delivery ?? '')) return;
+  const sep = el(doc, 'span', 'ck-delivery-sep');
+  sep.textContent = ' · ';
+  const word = el(doc, 'span', 'ck-delivery', { 'data-turn-delivery': delivery });
+  word.textContent = DELIVERY_WORDS[delivery];
+  row.append(sep, word);
 }
 
 /**
@@ -38,26 +65,98 @@ function replyAt(turn) {
 }
 
 /** One turn: `[data-turn-id]` holding its prompt block and everything under it (T91). */
-export function turnNode(doc, turn) {
-  const box = el(doc, 'section', 'ck-turn', { 'data-turn-id': String(turn.turnId ?? '') });
+export function createTurn(doc, turn) {
+  const box = el(doc, 'section', 'ck-turn');
+  let turnId = null;
+  let promptLabel = null;
+  let reply = null;
+  const blocks = new Map(); // blockIndex → {node, text, drawn}
+  let streaming = null; // the blockIndex the cursor follows
+  let ended = Boolean(turn.end);
+
+  const setId = (id) => {
+    if (typeof id !== 'string' || !id) return;
+    turnId = id;
+    box.setAttribute('data-turn-id', id);
+  };
+
+  setId(turn.turnId);
   if (typeof turn.prompt === 'string') {
-    box.append(labelRow(doc, 'YOU', turn.at));
+    promptLabel = labelRow(doc, 'YOU', turn.at);
+    if (turn.delivery) setDelivery(doc, promptLabel, turn.delivery);
     const p = el(doc, 'div', 'ck-prompt');
     p.textContent = turn.prompt;
-    box.append(p);
+    box.append(promptLabel, p);
   }
+
+  /** The reply's block `i`, made and placed by `blockIndex` on its first use (protocols.md §3.2). */
+  function blockOf(i, at) {
+    let b = blocks.get(i);
+    if (b) return b;
+    if (!reply) {
+      reply = el(doc, 'div', 'ck-reply', { 'data-reply': '' });
+      box.append(labelRow(doc, 'AGENT', at), reply);
+    }
+    b = { node: el(doc, 'p', 'ck-block'), text: '', drawn: '' };
+    blocks.set(i, b);
+    const after = [...blocks.keys()].filter((k) => k > i).sort((x, y) => x - y)[0];
+    reply.insertBefore(b.node, after === undefined ? null : blocks.get(after).node);
+    return b;
+  }
+
+  function follow(i) {
+    if (streaming !== null && streaming !== i) blocks.get(streaming)?.node.classList.remove('ck-streaming');
+    streaming = i;
+    if (i !== null) blocks.get(i)?.node.classList.add('ck-streaming');
+  }
+
   const texts = (turn.items ?? [])
     .filter((it) => it?.kind === 'text' && typeof it.text === 'string')
     .sort((a, b) => (a.blockIndex ?? 0) - (b.blockIndex ?? 0));
-  if (texts.length) {
-    box.append(labelRow(doc, 'AGENT', replyAt(turn)));
-    const reply = el(doc, 'div', 'ck-reply', { 'data-reply': '' });
-    for (const it of texts) {
-      const b = el(doc, 'p', 'ck-block');
-      b.textContent = it.text;
-      reply.append(b);
+  for (const it of texts) blockOf(it.blockIndex ?? 0, replyAt(turn)).text = it.text;
+  // A snapshot taken while the reply streams: the cursor on its last block (c1-talk.md §3).
+  if (!ended && turn.state === 'answering' && texts.length) follow(texts.at(-1).blockIndex ?? 0);
+
+  function draw() {
+    for (const b of blocks.values()) {
+      if (b.drawn === b.text) continue;
+      b.node.textContent = b.text;
+      b.drawn = b.text;
     }
-    box.append(reply);
   }
-  return box;
+  draw();
+
+  /** The room has the prompt: its turnId, and the label's delivery word for `queued` or none. */
+  function confirmed(msg) {
+    setId(msg.turnId);
+    if (promptLabel) setDelivery(doc, promptLabel, msg.delivery === 'queued' ? 'queued' : null);
+  }
+  function delta(msg) {
+    if (ended) return;
+    const b = blockOf(msg.blockIndex, msg.sentAt);
+    b.text += msg.text;
+    follow(msg.blockIndex);
+  }
+  /** The complete block replaces what the deltas built (a lost delta cannot leave wrong text). */
+  function block(msg) {
+    const b = blockOf(msg.blockIndex, Date.now());
+    b.text = msg.text;
+    if (streaming === msg.blockIndex) follow(null);
+  }
+  function end() {
+    ended = true;
+    follow(null);
+  }
+
+  return {
+    node: box,
+    get turnId() { return turnId; },
+    get ended() { return ended; },
+    confirm: confirmed, delta, block, end, draw,
+  };
+}
+
+/** A whole turn from a snapshot (protocols.md §2.2). */
+export function turnNode(doc, turn) {
+  return createTurn(doc, turn).node;
 }

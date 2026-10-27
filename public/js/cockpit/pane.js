@@ -6,14 +6,18 @@
 //   unsupported: true in a browser below the floor (fit.js tooOld, D250): the header and
 //   one line, no input row
 //   pane.setLink(state)        the room link's state (link.js): data-cockpit, the status line
-//   pane.apply(msg)            one room message (welcome, snapshot, turn.state)
+//   pane.apply(msg)            one room message (welcome, snapshot, turn.prompt, turn.state,
+//                              text.delta, text.block, turn.end)
+//   onPrompt(msg)              SEND: the `prompt` to the room (protocols.md §3.1); the block is
+//                              drawn at the tap with `· SENDING` until the room's echo (B8)
 //   pane.open() / .close() / .isOpen()
 //
 // The root (<html>) carries data-cockpit, data-pane and data-turn (README.md
 // "Selectors tests use"); the pane is [data-cockpit-conversation].
 import { sinceText } from '../core/cockpit-time.js';
 import { PANE_SLIDE_MS, TICK_MS } from '../core/cockpit-constants.js';
-import { turnNode } from './turns.js';
+import { createTurn } from './turns.js';
+import { focusNow } from './focus.js';
 import { paneFit, TOO_OLD_TEXT } from './fit.js';
 
 /** c1-talk.md §2: the header's three words for the five turn states (D56). */
@@ -29,6 +33,12 @@ export const LINES = Object.freeze({
   // screens.md §7: a reload while the room is down
   downFresh: 'The conversation shows again when the room is back.',
 });
+
+/** protocols.md §3.1: `p-` and 8 hex characters from crypto.getRandomValues. */
+export function newClientId(cryptoImpl = globalThis.crypto) {
+  const b = cryptoImpl.getRandomValues(new Uint8Array(4));
+  return `p-${[...b].map((x) => x.toString(16).padStart(2, '0')).join('')}`;
+}
 
 /** c1-talk.md §1 "the conversation is pinned while its last pixel is within 48 px" (§4). */
 const PIN_PX = 48;
@@ -59,6 +69,8 @@ export function createPane(opts = {}) {
   const page = opts.page ?? 'app';
   const onRetryNow = opts.onRetryNow ?? (() => {});
   const onOpenChange = opts.onOpenChange ?? (() => {});
+  const onPrompt = opts.onPrompt ?? (() => false);
+  const focus = opts.focus ?? (() => focusNow({ page, doc }));
   const now = opts.now ?? (() => Date.now());
   const unsupported = opts.unsupported === true;
   const root = doc.documentElement;
@@ -124,6 +136,10 @@ export function createPane(opts = {}) {
   let link = { status: 'connecting', since: null, retryAt: null, trying: false, welcome: null };
   let stt = 'none';
   let drawnTurns = null; // null until the first snapshot
+  const views = new Map(); // turnId → createTurn() view
+  const sending = new Map(); // clientId → the view drawn at the tap, until the room's echo
+  const dirty = new Set(); // views whose text changed since the last frame
+  let frame = null;
   let pinned = true;
   let hideTimer = null;
   let tick = null;
@@ -201,12 +217,76 @@ export function createPane(opts = {}) {
   function drawSnapshot(snap) {
     const turns = Array.isArray(snap.turns) ? snap.turns : [];
     const frag = doc.createDocumentFragment();
-    for (const t of turns) frag.append(turnNode(doc, t));
+    views.clear();
+    for (const t of turns) {
+      const v = createTurn(doc, t);
+      if (v.turnId) views.set(v.turnId, v);
+      if (t.clientId) sending.delete(t.clientId); // the room had it: the snapshot's block is the one
+      frag.append(v.node);
+    }
+    // A prompt drawn at the tap that the room has not echoed yet stays at the end (build B136).
+    for (const v of sending.values()) frag.append(v.node);
     turnsBox.replaceChildren(frag);
-    drawnTurns = turns.length;
+    drawnTurns = turns.length + sending.size;
     const running = turns.findLast?.((t) => t && !t.end && t.state && t.state !== 'done');
     setTurn(running ? running.state : 'idle');
     drawNote();
+    if (pinned) toEnd();
+  }
+
+  /** c1-talk.md §3 "Streaming": the reply drawn at most once per animation frame. */
+  function drawFrame() {
+    frame = null;
+    for (const v of dirty) v.draw();
+    dirty.clear();
+    if (pinned) toEnd();
+  }
+  function changed(v) {
+    dirty.add(v);
+    if (frame === null) frame = win.requestAnimationFrame(drawFrame);
+  }
+
+  function appendTurn(v) {
+    turnsBox.append(v.node);
+    drawnTurns = (drawnTurns ?? 0) + 1;
+    drawNote();
+  }
+
+  /**
+   * SEND (c1-talk.md §7 "On send", B8 ≤ 0.1 s): the block at the end with
+   * `YOU · 07:02 · SENDING`, the input emptied, pinned to the end, `data-turn="thinking"`;
+   * then the `prompt` (protocols.md §3.1). Focus stays where it was.
+   */
+  function sendNow() {
+    const text = input.value.trim();
+    if (send.disabled || text === '') return;
+    const clientId = newClientId();
+    const sentAt = now();
+    const v = createTurn(doc, { clientId, prompt: text, at: sentAt, delivery: 'sending' });
+    sending.set(clientId, v);
+    appendTurn(v);
+    input.value = '';
+    sendState();
+    setTurn('thinking');
+    pinned = true;
+    toEnd();
+    onPrompt({ type: 'prompt', clientId, text, source: 'typed', lang: null, about: null, sentAt, focus: focus() });
+  }
+
+  /** The room's echo (protocols.md §3.1): the sender's block loses `· SENDING`; other screens draw it. */
+  function promptEcho(msg) {
+    const mine = sending.get(msg.clientId);
+    if (mine) {
+      sending.delete(msg.clientId);
+      mine.confirm(msg);
+      if (mine.turnId && msg.delivery !== 'queued') views.set(mine.turnId, mine);
+      return;
+    }
+    // A queued prompt from another screen is T25's (c1-talk.md §8); a known turn is a resend's answer.
+    if (msg.delivery === 'queued' || views.has(msg.turnId)) return;
+    const v = createTurn(doc, { turnId: msg.turnId, prompt: msg.text, at: msg.at });
+    views.set(msg.turnId, v);
+    appendTurn(v);
     if (pinned) toEnd();
   }
 
@@ -260,6 +340,7 @@ export function createPane(opts = {}) {
   opener.addEventListener('click', () => setOpen(!open));
   closeBtn.addEventListener('click', () => setOpen(false));
   retryBtn.addEventListener('click', () => onRetryNow());
+  send.addEventListener('click', sendNow);
   input.addEventListener('input', sendState);
   // Esc closes the pane, the draft stays (c1-talk.md §2, §7); before the shell's own Esc.
   win.addEventListener('keydown', (e) => {
@@ -290,15 +371,37 @@ export function createPane(opts = {}) {
     render();
   }
 
-  /** One room message: welcome (the empty line's variant), snapshot, turn.state (c1-talk.md §5.1). */
+  /** One room message (c1-talk.md §3, §5.1; protocols.md §3.1-§3.2). */
   function apply(msg) {
-    if (msg.type === 'welcome') {
-      stt = msg.config?.stt === 'on' ? 'on' : 'none';
-      drawNote();
-    } else if (msg.type === 'snapshot') {
-      drawSnapshot(msg);
-    } else if (msg.type === 'turn.state') {
-      setTurn(msg.state);
+    switch (msg.type) {
+      case 'welcome':
+        stt = msg.config?.stt === 'on' ? 'on' : 'none';
+        drawNote();
+        return;
+      case 'snapshot':
+        drawSnapshot(msg);
+        return;
+      case 'turn.prompt':
+        promptEcho(msg);
+        return;
+      case 'turn.state':
+        setTurn(msg.state);
+        return;
+      case 'text.delta':
+      case 'text.block': {
+        const v = views.get(msg.turnId);
+        if (!v) return;
+        if (msg.type === 'text.delta') v.delta(msg); else v.block(msg);
+        changed(v);
+        return;
+      }
+      case 'turn.end': {
+        const v = views.get(msg.turnId);
+        if (v) { v.end(msg); changed(v); }
+        setTurn('idle');
+        return;
+      }
+      default:
     }
   }
 

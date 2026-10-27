@@ -182,6 +182,16 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* the static cursor after the last character while the block streams (c1-talk.md §3
+   "Streaming"); a pseudo-element, so the reply's text stays exactly what the room sent */
+.ck-block.ck-streaming::after { content: '▍'; color: var(--text-3); }
+/* the delivery word ending a prompt's label row: 18 px caps --text-1 on the row's
+   baseline, the row still 24 px (c1-talk.md §3, D270, D21, D167) */
+.ck-delivery {
+  font: 500 18px/24px var(--font-label);
+  letter-spacing: var(--ls-label);
+  color: var(--text-1);
+}
 
 /* the input row: input from the pane's left + 24 to SEND − 16, SEND in the talk
    button's rect, 64x64 (screens.md §4.1, `stt.url: none`) */

@@ -761,3 +761,26 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   centred in the 63 px above its bottom border (that drew them at y 7.5-55.5) — spec:
   `c1-talk.md` §1.2's table (header `CLOSE` y 8-56 / 44-92), `screens.md` §4.1 — overrule:
   `.ck-headbtns` in `public/css/cockpit.css`.
+- B135 (T18) The prompt's `focus` is built by `public/js/cockpit/focus.js` `focusNow({page})`: the
+  app's route parsed from `location.hash` with the router's grammar (not by importing
+  `router.js`, which pulls the app's shell onto the Wall page), a route key over the room's limit
+  or with a control character left out (so a long search box never costs the prompt a
+  `bad-message`), on the Wall `{view:'wall'}` with `data-wall-state` and the layout, `inSight: []`
+  until C3 — spec: `c3-see.md` §8.1, `protocols.md` §3.1 — overrule: `focus.js` (C3's focus
+  messages replace it).
+- B136 (T18) A prompt drawn at the tap and not yet echoed survives a snapshot (it is appended
+  after the snapshot's turns, `· SENDING` kept) unless the snapshot holds a turn with its
+  `clientId`; SEND (click) sends now, Enter/Shift+Enter, the 5 s E1 and `data-send="wait"` stay
+  T23's and T25's; a queued echo from another screen draws nothing yet (T25) — spec:
+  `c1-talk.md` §7 "On send", §8 — overrule: `sendNow`/`promptEcho`/`drawSnapshot` in `pane.js`.
+- B137 (T18) The streaming cursor `▍` is a `::after` of the block being written (class
+  `ck-streaming`), not a character in the DOM, so `[data-reply]`'s `textContent` is exactly
+  the text the room sent; S-C1-04 reads it with `getComputedStyle(block, '::after').content`.
+  The cursor moves to the newest block a delta writes, and goes at that block's `text.block`
+  and at `turn.end` — spec: `c1-talk.md` §3 "Streaming" — overrule: `.ck-streaming` in
+  `cockpit.css`, `follow()` in `turns.js`.
+- B138 (T18) The delivery word's span takes the `--text-1` of D270 (newer) over §7's "the
+  `SENDING` in `--text-3`" — spec: `c1-talk.md` §3 (D270) vs §7 "On send" — overrule: `.ck-delivery`.
+- B139 (T18) The reply's `AGENT · HH:MM` row takes its time from the first delta's `sentAt`
+  (or the first call's `startedAt`, B110); a reply that only arrives as a complete block takes
+  the screen's time of its arrival — spec: `c1-talk.md` §3 — overrule: `blockOf()` in `turns.js`.
