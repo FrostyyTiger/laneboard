@@ -5,7 +5,8 @@ The spec the spec night writes from the plan (`../README.md`) and the owner's in
 CSS px at 1368x912 (the owner's tablet, landscape, 2x); times are in s or ms. Scenario ids are
 `S-<part>-<nn>`; decisions are `D<n>` in `DECISIONS.md`; questions for the owner are `Q-O<n>` in
 `QUESTIONS.md`, and spec text that rests on an unanswered one is marked `(pending Q-O<n>)`. Speed
-budgets are `B<n>` in §"Speed budget" below.
+budgets are `B<n>` in §"Speed budget" below. Wording names the general case first ("the laneboard
+the room reads: a hub, or a single board"), the owner's setup second or not at all (D251).
 
 ## Files
 
@@ -178,8 +179,9 @@ instead of writing its own. A scenario with a timing asserts against its row. Ti
   that has reply text (S-C1-21), never its value. A turn with no reply text (only tool lines, an
   error, `STOP`) sets no B9 end mark and no measure.
 - **Real hardware is measured, not promised.** The real speech service's first-partial time is
-  unknown (research Q4: no authoritative figure; measure with `wlk bench` on the real host). The
-  real end-to-end numbers are what the owner's setup should reach; they are read from the marks
+  unknown (research Q4: no authoritative figure; measure it on the machine that runs the speech
+  service, e.g. WhisperLiveKit's `wlk bench`). The real end-to-end numbers are what a real
+  setup should reach; they are read from the marks
   below on the real screen and are not a test gate.
 - **Marks** (D28). For every row the screen sets `performance.mark('cockpit:B<n>:start')` and
   `performance.mark('cockpit:B<n>:end')`, then `performance.measure('cockpit:B<n>',
@@ -354,7 +356,7 @@ Each word is defined here once; the other files link here instead of redefining 
   (M1-M8), reached through `window.__cockpitView` (`screens.md` §9, D221, D222).
 - **room**: in this spec, the **cockpit room**: the always-on machine (VM or container) that runs
   the agent session, the bridge, the speech-to-text client, optional text-to-speech and the
-  laneboard MCP server. Not a screen, not the laptop, not the hub. A Map node of `kind: room`
+  laneboard MCP server. Not a screen, not a laptop, not a hub. A Map node of `kind: room`
   (`docs/map.md`) is called a **room node** here (D1).
 - **hub**: laneboard's existing aggregator that reads the builders' boards (`docs/fleet/hub.md`,
   `server/hub/`). Plan C4 has it relay show commands to screens; the spec sends them on the room link

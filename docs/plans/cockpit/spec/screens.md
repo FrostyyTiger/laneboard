@@ -408,7 +408,7 @@ Test: Playwright with `emulateMedia({ reducedMotion: 'reduce' })` and a fake clo
 **Which night builds this section** (pending Q-O21, recommendation b) for a screen only the owner
 can touch): the Pair slice (`slices.md` §3.8), not C1. Under b) a C1 screen is never `unpaired`:
 the room link accepts the trust the board already gives the page (`local`, or `direct` through
-serve, `docs/fleet/auth.md`), `data-cockpit` goes from `connecting` to `live`, and no pairing card,
+the ingress listener's front, today `tailscale serve`, `docs/fleet/auth.md`), `data-cockpit` goes from `connecting` to `live`, and no pairing card,
 code or CLI exists yet; what exactly the upgrade checks is `security.md` §2.3 (D212). With Q-O21 a)
 this section and S-SCR-13..16, 27..29 are C1's (`slices.md` §3.1 lists the ids).
 The rest of §6 is written as the flow either night builds.
@@ -426,7 +426,7 @@ button, no canvas half, the board as today (§4) (D17). The screen reaches the r
 `/api/cockpit/`, never through the hub (`protocols.md` §1, D92); the routes below are its §1.1.
 
 **The board does not need pairing, except on a screen listener.** On the main port and through
-serve the board is shown as `docs/fleet/auth.md` decides: `local`, or a `direct` user. There an
+the ingress listener the board is shown as `docs/fleet/auth.md` decides: `local`, or a `direct` user. There an
 unpaired screen shows every view, the Wall and the tour as a paired one does; only the pane and the
 canvas wait for the pairing. On the screen listener of a LAN setup with no tailnet the device token
 is also the way into the board, read-only, and an unpaired screen sees only the pairing page

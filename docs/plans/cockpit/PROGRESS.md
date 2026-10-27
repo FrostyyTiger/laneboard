@@ -187,6 +187,8 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 ## For the owner
 
+- T79 (round 133) swept `spec/` for owner-only wording (D251). The plan itself is outside what a spec round may change; three of its lines still read as the owner's setup: `README.md` §C2 "a local GPU model is the owner's case" (say "a speech service on a GPU host, or none"), the room "next to the hub" (say "next to the laneboard that serves the page: a hub, or the one box") and C4's "room → hub → screens" (the spec sends show commands on the room link, D92). Change them when `docs/cockpit.md` is written.
+
 - T31 (round 119): the Wall page has two names: `public/wall.html` in the Wall plan (D1) and `galaxy.html?demo=1` in `docs/plans/product.md` (the hosted demo row). The cockpit spec names neither (`spec/screens.md` §9, D222); one of the two documents wants fixing outside this night's allowed paths.
 
 - Round 60: review 59 asks that D92's two-process routing (a front forwarding `/api/cockpit/`) be an owner question, not only a D-line: it is now Q-O29 (recommendation: keep D92, one box needs no front).

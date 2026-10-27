@@ -35,7 +35,7 @@ Each thing that proves who is asking, one row each. "Room" is the laneboard proc
 | **The room's own uid** | the system | — | the admin routes: pair, unpair, buttons (`screens.md` §6.1, D161); `local` on the board's loopback port | — (the agent's uid and root are refused, D161) | — |
 | **The board's trust of the page** (`local`, `direct`) | `docs/fleet/auth.md` | the board | without pairing: the room link (§2.3, pending Q-O21) | on a hub, a `direct` login also gives actions and terminals: that is why Q-O21 b) is "a screen only the owner can touch" | `fleet.allowedUsers` |
 
-**No hub key, no SSH key.** The room reads the hub's (or its board's) loopback port as `local`
+**No hub key, no SSH key.** The room reads the loopback port of the laneboard it reads (a hub, or a board) as `local`
 (D91); on a hub `local` gets every read and no action, terminal or push change. The room holds no
 key that signs to builders and no SSH or cloud credential (`c5-c6.md` §7 rule 1). The one way the
 cockpit will change the fleet is C6, through the control plane, after its review.
@@ -83,8 +83,8 @@ upgrade (`docs/fleet/auth.md`, "Who is asking") as the credential (D212):
 
 1. The checks of `screens.md` §6.2 and §6.2.1 run first, as with pairing (Host, exact `Origin`,
    `Sec-Fetch-Site`, the `Origin`'s scheme).
-2. The upgrade's kind must be `local` (the main port, a loopback peer) or `direct` (through serve,
-   with `fleet.allowedUsers` applied, so a login outside it is refused by the board before the room
+2. The upgrade's kind must be `local` (the main port, a loopback peer) or `direct` (through the ingress
+   listener's front, today `tailscale serve`, with `fleet.allowedUsers` applied, so a login outside it is refused by the board before the room
    sees it: `403 user-not-allowed`). A `hub` kind cannot get here (a signed request with an `Origin`
    is `origin-on-hub`).
 3. The audit `user` is `board` (`screens.md` §6.4); the conversation draws no screen names (D37).

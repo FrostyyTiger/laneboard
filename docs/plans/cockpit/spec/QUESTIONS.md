@@ -100,9 +100,10 @@ Security, blocks C1. From `reviews/36-skeptic.md` (3), `40-security.md` (3). Spe
 `slices.md` §3.1 (C1's ids under each answer).
 
 - a) Pairing is part of C1 (codes, CLI approve/unpair; Q-O10 applies).
-- b) C1 runs behind the existing trust (`local`, `direct` through serve, the tailnet); pairing is
-  its own later slice. Note: on the hub a `direct` user can act and open terminals.
-- c) b), but the screen's tailnet login is not in `fleet.allowedUsers` for actions (needs a new
+- b) C1 runs behind the existing trust (`local`, or `direct` through the front that authenticates
+  the page: a tailnet's HTTPS proxy is one such front); pairing is its own later slice. Note: on a
+  hub a `direct` user can act and open terminals.
+- c) b), but the screen's `direct` login is not in `fleet.allowedUsers` for actions (needs a new
   `read`-only `direct` kind).
 
 Recommendation: b) for a screen only the owner can touch; the first chat line should not wait on pairing.
@@ -262,7 +263,7 @@ also in PROGRESS.md's "Needs you" list, because D89, D90 and D91 are security-re
 - **Q-O14** A browser test runner in the repo → **D88**: Playwright as a devDependency, outside `npm test`.
 - **Q-O15** Which process is "the room", and its origin → **D89**: a laneboard server with a `cockpit` section, same origin as the page (rewritten by T86 to D92's split: the board serves the page, the room only `/api/cockpit/*`; modes D128, pending Q-O29).
 - **Q-O16** Security-adjacent choices → **D90**: D14, D22 and D66 stand as written. D13 (the pairing code) is not closed: it stays under Q-O10.
-- **Q-O26** How the room reads the hub → **D91**: the room runs on the hub's box as its own user and reads loopback as `local`.
+- **Q-O26** How the room reads the board → **D91**: the room runs as its own user on the box of the laneboard it reads (a hub, or a single board such as the one box's) and reads its loopback port as `local`.
 
 ## Can wait
 
@@ -446,8 +447,8 @@ C6, after the control-plane review. `spec-input.md` §7.7. Spec: `c5-c6.md` §7 
 - c) Every control-plane action, each confirmed.
 
 Recommendation: open until the control-plane review; the spec assumes a), and every act ever added needs a confirm.
-Note for the review (T14): the room is `local` on the hub's box (D91) and the hub refuses every
-action from `local`, so C6 also needs a way for the room to carry the owner's yes to the control
+Note for the review (T14): the room is `local` on the box of the laneboard it reads (D91); a hub
+refuses every action from `local` and a single board its remote-only ones, so C6 also needs a way for the room to carry the owner's yes to the control
 plane (a room key with an act scope, or the yes forwarded as the `direct` user who gave it).
 
 Answer: (open)
