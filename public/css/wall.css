@@ -278,6 +278,29 @@ html.wall body {
 .wall-caption-line[data-kind="trouble"] .wall-caption-val { font-weight: 600; }
 .wall-caption-glyph { font-size: var(--cap-line); line-height: 1; }
 
+/* The count and the named problems on a trouble plate (T23, r17-operator 9):
+   the values at the why's step and face, so the why carries from 3 m; the
+   keys stay at the key step. The count's parts each in their own hue. */
+.wall-caption-line[data-step="trouble"] { height: 4.3vmin; }
+.wall-caption-line[data-step="trouble"] .wall-caption-val {
+  font-weight: 600;
+  font-size: 4.3vmin;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.wall-caption-part {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  margin-right: 0.6em;
+  color: var(--crit);
+}
+.wall-caption-part:last-child { margin-right: 0; }
+.wall-caption-part[data-tone="warn"] { color: var(--warn); }
+.wall-caption-part[data-tone="low"] { color: var(--info); }
+.wall-caption-part .wall-caption-glyph { font-size: 0.62em; }
+
 /* cpu and mem side by side across both columns, a thin bar each. */
 .wall-caption-line[data-kind="metrics"] {
   display: flex;

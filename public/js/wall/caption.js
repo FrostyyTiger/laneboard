@@ -118,11 +118,23 @@ function problemsBelow(node, under, byId) {
     .map(({ worst }) => worst);
 }
 
-/** `1 crit · 5 attention`: how many problems at each status, worst first. */
-function severityCount(problems) {
+/**
+ * How many problems at each status, worst first, each with its tone and
+ * shape (T23: the count is set as trouble, every part in its own hue):
+ * `[{ status, text: '1 crit', tone, shape, glyph }, …]`.
+ */
+function severityParts(problems) {
   const by = new Map();
-  for (const p of problems) by.set(p.status, (by.get(p.status) ?? 0) + 1);
-  return [...by].sort((a, b) => SEVERITY.indexOf(b[0]) - SEVERITY.indexOf(a[0])).map(([s, c]) => `${c} ${s}`).join(' · ');
+  for (const p of problems) {
+    const had = by.get(p.status);
+    if (had) had.count += 1; else by.set(p.status, { count: 1, node: p });
+  }
+  return [...by]
+    .sort((a, b) => SEVERITY.indexOf(b[0]) - SEVERITY.indexOf(a[0]))
+    .map(([status, { count, node }]) => {
+      const st = statusStyle(node);
+      return { status, text: `${count} ${status}`, tone: st.tone, shape: st.shape, glyph: GLYPH[st.shape] ?? GLYPH.square };
+    });
 }
 
 /** How many problems the plate names (T22: the worst, the hero, then the next two). */
@@ -149,7 +161,10 @@ export const NAMED_PROBLEMS = 3;
  * (label the status, text `NAME · why`) name the next ones. Labels are short
  * words the page sets in caps; texts are as the model says them, clipped.
  * Every line carries its `step`: `hero` (the trouble line: `word` big, `sub`
- * under it), `line`, or `small` (facts and the count on a trouble site).
+ * under it), `trouble` (T23, r17-operator 9: the count and the named problems
+ * on a trouble site, at the why's step so the why carries from 3 m; the
+ * count's `parts` give each status its tone and shape, as the problem rows
+ * have), `line`, or `small` (facts and the count on a trouble site).
  */
 export function captionLines(node, model, index = null, count = null) {
   const nodes = Array.isArray(model) ? model : Array.isArray(model?.nodes) ? model.nodes : [];
@@ -200,10 +215,13 @@ export function captionLines(node, model, index = null, count = null) {
   if (mark) kicker = `${mark.status.toUpperCase()} · ${kicker}`;
 
   let statusText = status;
-  if (problems.length) statusText = severityCount(problems);
+  const parts = problems.length ? severityParts(problems) : null;
+  if (parts) statusText = parts.map((p) => p.text).join(' · ');
   else if (under.length) statusText += bad ? '' : ` · all ${under.length} calm`;
   else if (typeof n.sub === 'string' && n.sub) statusText += ` · ${n.sub}`;
-  lines.push({ kind: 'status', step: 'line', label: 'status', text: clip(statusText) });
+  lines.push(parts
+    ? { kind: 'status', step: 'trouble', label: 'status', text: clip(statusText), parts }
+    : { kind: 'status', step: 'line', label: 'status', text: clip(statusText) });
 
   // The next problems after the one the plate leads with, one per line.
   const named = problems.filter((p) => p !== bad).slice(0, NAMED_PROBLEMS - (bad ? 1 : 0));
@@ -212,7 +230,7 @@ export function captionLines(node, model, index = null, count = null) {
     const why = p.why ?? p.sub;
     lines.push({
       kind: 'problem',
-      step: 'line',
+      step: 'trouble',
       label: p.status,
       text: clip([String(p.label ?? p.id).toUpperCase(), why].filter(Boolean).join(' · ')),
       status: p.status,
@@ -265,7 +283,7 @@ export const PLATE = Object.freeze({
   padTop: 2.4, padBottom: 2.64, kicker: 1.7,
   heroAbove: 1.2, heroLead: 0.86, subGap: 0.9, sub: 4.3, heroBelow: 1.4,
   nameAbove: 0.9, nameLead: 0.92, nameBelow: 1.6,
-  rowGap: 0.9, smallGap: 1.6, rows: Object.freeze({ line: 3.2, small: 2.3 }),
+  rowGap: 0.9, smallGap: 1.6, rows: Object.freeze({ trouble: STEPS.why, line: 3.2, small: 2.3 }),
 });
 
 /**
@@ -288,7 +306,7 @@ export function plateHeight(cap, shown = Infinity, heroVmin = STEPS.hero) {
   }
   h += STEPS.name * PLATE.nameLead + PLATE.nameBelow;
   for (let i = 0; i < n; i++) {
-    const step = rows[i].step === 'small' ? 'small' : 'line';
+    const step = PLATE.rows[rows[i].step] ? rows[i].step : 'line';
     if (i) h += PLATE.rowGap + (step === 'small' && rows[i - 1].step !== 'small' ? PLATE.smallGap : 0);
     h += PLATE.rows[step];
   }
@@ -397,6 +415,18 @@ function lineEl(line) {
     li.append(key);
   } else {
     li.append(el('span', 'wall-caption-key', line.label));
+  }
+  if (Array.isArray(line.parts) && line.parts.length) {
+    // The count as trouble (T23): each status in its hue behind its shape.
+    const val = el('span', 'wall-caption-val');
+    for (const p of line.parts) {
+      const part = el('span', 'wall-caption-part');
+      part.dataset.tone = p.tone;
+      part.append(el('span', 'wall-caption-glyph', p.glyph), el('span', null, p.text));
+      val.append(part);
+    }
+    li.append(val);
+    return li;
   }
   li.append(el('span', 'wall-caption-val', line.text));
   return li;

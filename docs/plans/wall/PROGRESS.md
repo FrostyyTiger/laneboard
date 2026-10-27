@@ -416,11 +416,21 @@ Notes for every builder round (planner, round 1):
   `shots/r50-at-home` (`?at=home&quality=0`, large demo): white `HOME` on a calm plate, the red `■ HV2 · STORAGE`
   at full 3 m size far above it, 0 console errors. Seen, not in scope: `HOME` twice (the plate's name and the
   star's label right under it) and `printer-3d` crossed by a member's orbit ring (T26's ground).
-- [ ] T23 (r17-operator galaxy 9 + across) [ui] [variant:galaxy] Trouble rows at the second step: the plate's
+- [x] T23 (r17-operator galaxy 9 + across) [ui] [variant:galaxy] Trouble rows at the second step: the plate's
   trouble rows (status shape, word, age, in hue; the crit plate takes the warn plate's row format instead of a
   white `1 crit`) are set at the caption's second step; hardware/where/holds stay small — done when: a test pins
   the row size and the crit plate's row format in `test/wall-galaxy-hud.test.mjs`/`wall.css`, and `?at=hv2` shows
-  the trouble rows readable in a 3 m shrunk still.
+  the trouble rows readable in a 3 m shrunk still. (commit SHA)
+  Builder r53: `caption.js` has a new step `trouble` (`PLATE.rows.trouble` = `STEPS.why` 4.3 vmin, the hero sub's
+  step and face: label face 600, caps, 0.04 em): on a trouble site the count row and the named `problem` rows take
+  it; the count carries `parts` (`[{ status, text: '1 crit', tone, shape, glyph }]`, worst first), set by the page
+  as one `.wall-caption-part` per status, each in its hue behind its shape (`■ 1 DOWN ▲ 2 ATTENTION ▲ 1 WARN`), so
+  the crit plate no longer says a white `1 crit`. Keys stay at the key step; metrics at the line step; hardware,
+  where, holds stay small; a calm plate is unchanged. `wall.html` shares it. Tests in `test/wall-caption.test.mjs`
+  (steps, parts, plate height, css, the page's parts). Stills `shots/r53-at-hv2` (`■ 1 CRIT` red under the name),
+  `r53-at-hv1` (`▲ 2 ATTENTION`, `▲ ATTENTION FIX-LOGIN · ASKED A QUESTION · 3M` at the why's size); film
+  r53-galaxy (pace=wall, large): 0 errors, 12.9 fps (SwiftShader, as earlier rounds). Left: a long problem row is
+  cut with an ellipsis at the plate's 56 vw (`FEAT-SEARCH · WAITING ON A PERMIS…`); the why is the part cut.
 - [ ] T24 (r31-film-ui touch 1; = Later A4 T35 for the sheet) [ui] [variant:galaxy] The sheet follows the trouble
   that rises under it: with a site sheet up, a new model re-ranks its rows and the status line on the spot (no
   retyping), and a crit that appears in the site shows as the hero — done when: a test with a sheet for HV1 and a
