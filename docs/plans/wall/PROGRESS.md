@@ -373,11 +373,23 @@ Notes for every builder round (planner, round 1):
   nebulae still the brightest. Film r44-galaxy: the S of the arms in every overview frame, 0 errors, 12.8 fps
   (SwiftShader, as r28-r43). Seen: mid-flight, close to the plane, the ribbon can show as a broad grey sweep
   (first r44 film, 38.6 s); grey and quiet, but if a panel finds it loud, fade it by camera height as `nearFade`.
-- [ ] T20 (r11-dreamer galaxy 3) [ui] [variant:galaxy] Not three reds saying one thing: while a caption plate is
+- [x] T20 (r11-dreamer galaxy 3) [ui] [variant:galaxy] Not three reds saying one thing: while a caption plate is
   up and the banner's subject is the plate's subject, the banner drops out (or shows the next problem, as T23
   does when the subjects differ), and the held planet's own label is hidden while the hero names it — done when:
   a test shows the banner hidden or on another subject and the planet label hidden while the plate names the
-  same thing, and `?at=hv2` shows one headline plus the planet's bracket.
+  same thing, and `?at=hv2` shows one headline plus the planet's bracket. (commit c488fc9)
+  Builder r45: `hud.js bannerEcho(model, heldId)` (shares `heldProblem` with `bannerModel`): true when the line fed
+  through `bannerModel` still names the held problem (no other problem, or only milder ones: T30 never steps down).
+  `frame.update(model, { echo })` sets `data-echo`; `wall.css` `.wall-frame-layer[data-plate] .wall-fleet[data-echo]`
+  is `visibility: hidden` (any step, place kept, no transition as the rest of wall.css), `frame.hushed()` makes
+  `cover()`/`fleetCover()` null so names may use the space. `worstLine` now returns `id`. `hud.named()` = the hero's
+  node while the plate is up, only a planet (a site crit itself has the hero say `CRIT`, its name on the name
+  line); `labels.js` option `named` keeps its body (others stay off the brackets) but drops its name. Tests in
+  `wall-galaxy-hud.test.mjs` (bannerEcho cases, frame+hud wiring, css) and `wall-galaxy-labels.test.mjs`. Stills
+  `shots/r45-at-hv2` (one `■ STORAGE` headline, no banner, the planet bracketed and unnamed), `r45-at-hv1` (the
+  banner on HV2, another subject, stays; `feat-search` unnamed beside its bracket). Film r45-galaxy: 3.9 s storage
+  plate alone, 32.3 s storage plate with `HV1 · VM-C` as banner once a second crit stands; 0 errors, 12.7 fps
+  (SwiftShader). T30's banner size under a warn plate is untouched (r45-at-hv1 still shows it level with the hero).
 - [ ] T21 (r17-operator galaxy 1) [ui] [variant:galaxy] A crit is visited first, visited site or not: in
   `tour.js nextLeg` a site whose worst status rose since its visit this cycle (or any crit not yet shown as crit)
   jumps the queue at the next leg — done when: a test on a model where a visited site turns crit mid-cycle gets
