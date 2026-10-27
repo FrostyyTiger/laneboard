@@ -135,7 +135,9 @@ room under test. Test helper: `room.control(method, path, body)`.
 | approve a pairing | `POST /pair {"code":"K7M4QX","name":"desk"}` | as the CLI: `200 {"name":"desk"}`, `404 {"error":"unknown"}` | §1.3 |
 | revoke a pairing | `POST /unpair {"name":"desk"}` | `200 {"name":"desk"}` | §1.3 |
 | add / remove a button (C2b) | `POST /button {"add":"hall","screen":"desk"}`, `{"remove":"hall"}` | `200 {"name":"hall","token":"…"}` on add | §1.3 |
-| seed jobs | `POST /jobs {"items":[…]}` | `200 {"count":1}` | replaces the room's scheduled jobs with these (§4.2) |
+| seed jobs | `POST /jobs {"items":[…]}` | `200 {"count":1}` | replaces every job of `jobs.json` with these (§4.2); each item is checked against `coworker.md` §6.1 (a bad one: `400 {"error":"bad-body","detail":"items[0].at: not ISO"}`, nothing replaced); the fields §4.2 leaves out are `null`, `why` is `Seeded by the test.`; the room sends one `job.put` per job (Jobs slice) and places no card |
+| set the alarms the room sees | `POST /alarms {"items":[{"id":"stuck:builder-b:acme-billing","kind":"stuck","priority":"P2","builder":"builder-b","target":"acme-billing","text":"same task failed twice","since":"2026-10-27T06:12:00+01:00","acked":false}]}` | `200 {"count":1}` | from now on the watcher's alarm reader (`coworker.md` §1) gets these items, in `c3-see.md` §4.5's `Alarm` form, instead of `GET /api/alarms`, and reads them at once (not at its next 15 s); `{"items":[]}` clears them all, `{"items":null}` goes back to the board. The `alerts` tool reads the same items. Each item is checked as `server/fleet/alarms.mjs`'s `Alarm`, else `400 bad-body` |
+| step the room's clock | `POST /tick {"ms":20000}` | `200 {"now":"2026-10-27T07:14:20+01:00"}` | the same as `POST /clock {"advanceMs":20000}` (`manual` only, else `409 {"error":"not-manual"}`); both run, in time order, every timer of the room that falls due in the step (the watcher's reads, the gather window, the speak-up's 5 s, the job runner, the infra pull), then answer. A scenario with a page uses `advance(ms)` (§1.1), which moves the page too |
 | read what the room sent | `GET /sent?type=turn.end` | `200 {"items":[{"seq":41,"type":"turn.end",…}]}` | outbound messages since start, last 2 000 (the room keeps these anyway, D94) |
 
 Unknown paths answer `404 {"error":"unknown-verb"}`; a bad body `400 {"error":"bad-body","detail":"…"}`.
@@ -438,13 +440,18 @@ scenarios name; nothing is changed there for the cockpit:
    `POST /jobs` (§1.2) or, for the demo, from `test/cockpit/scripts/demo-jobs.json`:
 
 ```json
-{"items":[{"id":"job-0003","title":"shut off vm-c","at":"2026-10-27T10:12:00+01:00",
-           "target":"vm-c","state":"scheduled","createdBy":"agent","createdAt":"2026-10-27T07:02:00+01:00"}]}
+{"items":[{"id":"job-0003","kind":"remind","title":"shut off vm-c","at":"2026-10-27T10:12:00+01:00",
+           "target":"vm-c","state":"scheduled","createdBy":"agent","createdAt":"2026-10-27T07:02:00+01:00",
+           "confirmedBy":"screen:desk"}]}
 ```
 
-   The fields are the minimum `c4-show-canvas.md`'s countdown binding reads; `coworker.md` (T13)
-   owns the job format and may add fields. A seeded job never runs anything: the room under test
-   has no job runner until that slice, and at `at` it only turns `state` to `due`.
+   The format is `coworker.md` §6.1's; a seed gives at least `id`, `kind`, `title`, `at`, `target`,
+   `state`, `createdBy` and `createdAt`, and `script` with `kind` `script` (a key of the test
+   config's `cockpit.jobs.scripts`, `ok` or `fails`, `coworker.md` §10). The C4 seed is a `remind`
+   job (D278): it runs nothing whatever the slice. Before the Jobs slice the room under test has no
+   runner, and at `at` it only turns `state` to `due`; from the Jobs slice on, it fires as
+   `coworker.md` §6.5 says. `card` stays `null`: the countdown of `c4-show-canvas.md` §10 is placed
+   by the fake agent's `place` (script `c4-cards`), not by the seed.
 2. **The demo's time.** Scenario times (06:41, 07:00, 07:12) are set with `POST /clock {"set":…}`
    on the room and `page.clock.setFixedTime` on the page; the demo hub keeps real time, and
    `writeDemoFeed`/`demoRuns` take `now` so a test stamps them to match.
@@ -475,6 +482,8 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c4-show` | agent | S-C4-01..12 | one turn per show command, at the times the scenarios give |
 | `c4-cards` | agent | S-C4-13..24, S-SCR-07/08 | `place` calls, incl. the 17th card and the `job-0003` countdown |
 | `c4-custom` | agent | S-C4-25..33 | `place` calls of custom cards from the fixtures `test/cockpit/cards/*.html` (`stuck-by-builder`, `escape`, `never-ready`, `busy`, `hang`, `navigate`, `tiny-text`; `c4-show-canvas.md` §14), `save_card`, `remove_card`, `cards`, a 41 220-byte `html`; one `focus` call per scenario that reads `cardsOff` or `left` |
+| `cw-speak` | agent | S-CW-01..09, S-CW-15..18, S-C1-44, S-SCR-34 | one `repeat` turn whose `match` is a prompt starting `(From the cockpit, not the owner.`: 1.0 s after the prompt the text `▲ acme-billing on builder-b is stuck: the same task failed twice. Look at its last round.` (88 characters), then `done`; a short `done` turn for any other prompt (S-CW-18's `still there?`) |
+| `cw-jobs` | agent | S-CW-10..14, S-C6-01..04 | one turn per scenario, matched on its prompt, each calling `schedule` or `cancel_job` with the params the scenario gives (`kind` `script`, `script` `ok`, `fails` or `reboot-all`; a `remind` `call the bank`), then a sentence and `done` |
 | `demo`, `demo-jobs` | both | §6 | the public demo |
 
 Each script file gets one `node:test` check in `npm test` (no browser): it parses, every step is a

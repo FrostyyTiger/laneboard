@@ -485,7 +485,10 @@ Every canvas card is `[data-card]` with `data-card-id`, `data-block`, `data-size
 - `--bg-elevated`, 1 px `--line-strong` border, no shadow, no radius beyond the board's own.
 - **Header**, 48 px: `AGENT · 07:12` at 16 px from the left (16 px caps `--text-3`): who made it and
   when it was placed (plan C4b: "every card says who made it and when"). A card replaced in place
-  (§7.4) reads `AGENT · 07:12 · NEW 07:20`. Demo cards read `DEMO` (`screens.md` S-SCR-10). Then,
+  (§7.4) reads `AGENT · 07:12 · NEW 07:20`. A card the room places itself (`card.put` `by`
+  `cockpit`: a speak-up's card, a job's countdown, `coworker.md` §3.3, §6.6) reads `COCKPIT · 07:14`
+  in the same style (D198); the owner did not ask for it and the agent did not make it. Demo cards
+  read `DEMO` (`screens.md` S-SCR-10). Then,
   when it applies, one plate (16 px caps `--text-3`, 1 px `--line-strong` border, 8 px left
   margin): `STALE` while the room is down (§7.6), or `AS OF 02:10` when the bound source
   is older than 10 min (`c3-see.md` §3, `stale`).

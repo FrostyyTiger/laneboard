@@ -244,11 +244,11 @@ S-C3-01 S-C3-02 S-C3-06 S-C3-09 S-C3-10 S-C3-11 S-C3-12 S-C3-13 S-C3-14 S-C3-15 
 talk button (pending Q-O11); the `SINCE YOU LOOKED` divider (`c1-talk.md` §2.1, D233); quiet hours and per-kind mute.
 
 **Builds also** (`coworker.md` §7-§8): the infra repo pull and the `infra` tool, the Map drift
-trigger, the repo drift check; the `speakup` message (T127).
+trigger, the repo drift check; the `speakup` message and the speak-up's `turn.prompt` (`protocols.md` §3.9).
 
 **Scenarios** (15): S-CW-01 S-CW-02 S-CW-03 S-CW-04 S-CW-05 S-CW-06 S-CW-07 S-CW-08 S-CW-09
-S-CW-15 S-CW-16 S-CW-17 S-CW-18 S-SCR-34 S-C1-44. The slice
-cannot be built until T127 is written. The touring-screen hold (`screens.md` §2.1) needs `flyTo(id)`,
+S-CW-15 S-CW-16 S-CW-17 S-CW-18 S-SCR-34 S-C1-44. Control verbs `POST /alarms`, `POST /tick` and
+script `cw-speak` (`stand-ins.md` §1.2, §5). The touring-screen hold (`screens.md` §2.1) needs `flyTo(id)`,
 a node lookup and the idle hook of the Wall contract (`screens.md` §9): this slice builds them, Show reuses them.
 
 **Done-when**: §2's slice rule for these ids and S-C1-44; Q-O5 answered.
@@ -393,7 +393,8 @@ snapshot), its own review, then `scrub` and `compare` over time ranges (D74). Un
 
 ## 6. What the agent says before a slice brings it
 
-The standing instructions (`protocols.md` §11.8) carry one line until the Jobs slice removes it:
+The standing instructions (`protocols.md` §11.8) carry one line until the Jobs slice replaces it with
+§11.8's two Jobs lines:
 
 `You cannot schedule, run or cancel jobs yet. If asked, answer: I cannot schedule jobs yet (slice Jobs).`
 
