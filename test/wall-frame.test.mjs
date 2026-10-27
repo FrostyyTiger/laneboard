@@ -63,10 +63,50 @@ test('frame: crit beats attention beats warn, whatever the model order', () => {
   assert.equal(c.text, 'hv2 · storage · pool 97% full');
 
   // down is worse than crit
-  const d = worstLine(fleet({ ...crit, cloud: { status: 'down' } }));
+  const d = worstLine(fleet({ ...attention, cloud: { status: 'down' } }));
   assert.equal(d.status, 'down');
   assert.equal(d.tone, 'crit');
   assert.equal(d.text, 'cloud · down', 'a site down names itself once, and the status stands in for a missing why');
+});
+
+test('frame: two crits are named together, oldest first, whatever else is held (night 4 T8)', () => {
+  const warn = { 'api-prod': { status: 'warn', why: 'p95 latency 840 ms' } };
+  const two = { storage: { status: 'crit', why: 'pool 97% full' }, 'builder:builder-a': { status: 'crit', why: 'no contact' } };
+  const m = fleet({ ...warn, ...two });
+  // No `since`: model order (hv1's builder comes first in the model).
+  const w = worstLine(m);
+  assert.equal(w.step, 'far');
+  assert.equal(w.tone, 'crit');
+  assert.equal(w.glyph, '■');
+  assert.equal(w.crits, 2);
+  assert.equal(w.word, '2 crit · hv1 · hv2');
+  assert.equal(w.why, 'builder-a · no contact', "the oldest's name and reason");
+  assert.equal(w.id, 'builder:builder-a');
+  assert.equal(w.more, 1, 'the count is the milder problems past the named crits');
+  assert.equal(w.text, '2 crit · hv1 · hv2 · builder-a · no contact');
+  // `since` says storage was seen first: it leads, and its reason is the why.
+  const since = new Map([['storage', 1000], ['builder:builder-a', 5000]]);
+  const s = worstLine(m, { since });
+  assert.equal(s.word, '2 crit · hv2 · hv1');
+  assert.equal(s.why, 'storage · pool 97% full');
+  assert.equal(s.id, 'storage');
+  // One `since` does not know is the newest.
+  assert.equal(worstLine(m, { since: new Map([['storage', 1000]]) }).word, '2 crit · hv2 · hv1');
+  // A down and a crit seen together: the down leads; the word says crit unless all are down.
+  const d = worstLine(fleet({ storage: { status: 'crit', why: 'pool 97% full' }, cloud: { status: 'down' } }));
+  assert.equal(d.word, '2 crit · cloud · hv2');
+  assert.equal(d.why, 'down', 'a site down is its own place: only its status');
+  assert.equal(d.status, 'down');
+  const dd = worstLine(fleet({ cloud: { status: 'down' }, hv2: { status: 'down' } }));
+  assert.equal(dd.word, '2 down · hv2 · cloud');
+  // Two crits in one site name it once; past FAR_NAMES places the count says how many.
+  const same = worstLine(fleet({ storage: { status: 'crit' }, hv2: { status: 'ok' }, 'api-prod': { status: 'crit' }, cloud: { status: 'ok' } }));
+  assert.equal(same.word, '2 crit · hv2 · cloud');
+  const many = {
+    title: 'many',
+    nodes: Array.from({ length: 5 }, (_, i) => ({ id: `s${i}`, kind: 'site', label: `s${i}`, status: 'crit' })),
+  };
+  assert.equal(worstLine(many).word, '5 crit · s0 · s1 · s2');
 });
 
 test('frame: crit sets the line at the 3 m step with its count, attention and calm do not (T21)', () => {

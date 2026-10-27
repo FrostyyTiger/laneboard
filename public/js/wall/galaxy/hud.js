@@ -12,7 +12,7 @@
 // the real ones.
 
 import { MAX_LINES, captionLines, coverOf } from '../caption.js';
-import { worstLine } from '../frame.js';
+import { problemsOf, worstLine } from '../frame.js';
 import { lockTarget } from '../lock.js';
 import { SEVERITY, TROUBLE } from '../../views/map/model.js';
 
@@ -113,12 +113,12 @@ function heldProblem(model, heldId) {
  * problem it may step down to, so it would say what the plate's hero says.
  * Then the line drops out while the plate is up (frame.js `echo`, wall.css)
  * rather than make three reds of one thing; it is back as the plate goes.
- * Pure.
+ * `since` as `worstLine` takes it. Pure.
  */
-export function bannerEcho(model, heldId) {
+export function bannerEcho(model, heldId, since = null) {
   const inHeld = heldProblem(model, heldId);
   if (!inHeld) return false;
-  const w = worstLine(bannerModel(model, heldId));
+  const w = worstLine(bannerModel(model, heldId, since), { since });
   if (w.step === 'calm') return false;
   return inHeld(model.nodes.find((n) => n?.id === w.id));
 }
@@ -136,14 +136,18 @@ export function bannerEcho(model, heldId) {
  * (T30, reviews/r43-stranger.md galaxy 1): past a held crit only to another
  * crit, never to a warn, or the 3 m line went red, yellow, red with every
  * visit to the crit system; the line drops out under the plate instead
- * (`bannerEcho`, T20). Pure.
+ * (`bannerEcho`, T20). Nor while two or more crits stand (night 4 T8,
+ * night 3's reviews/r46-skeptic.md galaxy 1): the line names them all,
+ * oldest first (`since`, as `worstLine` takes it), whatever is held, or its
+ * subject flipped with every visit. Pure.
  */
-export function bannerModel(model, heldId) {
+export function bannerModel(model, heldId, since = null) {
   const inHeld = heldProblem(model, heldId);
   if (!inHeld) return model;
+  const before = worstLine(model, { since });
+  if (before.crits > 1) return model;
   const masked = { ...model, nodes: model.nodes.map((n) => (n && inHeld(n) ? { ...n, status: 'ok' } : n)) };
-  const before = worstLine(model);
-  const after = worstLine(masked);
+  const after = worstLine(masked, { since });
   // Masking another problem leaves the line as it was: then it was not the held one.
   if (after.step === 'calm' || after.text === before.text || after.step !== before.step) return model;
   return masked;
@@ -162,17 +166,32 @@ export function bannerModel(model, heldId) {
  */
 export const CRIT_HOLD = Object.freeze({ minMs: 30000 });
 
+/**
+ * When each crit or down problem in `model` (frame.js `problemsOf`) was first
+ * seen, by its root's id (night 4 T8): `was`'s time for one it already had,
+ * `at` for a new one; a problem that cleared is forgotten, so one that comes
+ * back is new. `was` itself when nothing changed. Pure.
+ */
+export function firstSeen(model, was, at) {
+  const ids = problemsOf(model)
+    .filter((p) => p.worst.status === 'crit' || p.worst.status === 'down')
+    .map((p) => p.root.id);
+  const prev = was instanceof Map ? was : new Map();
+  if (ids.length === prev.size && ids.every((id) => prev.has(id))) return prev;
+  return new Map(ids.map((id) => [id, prev.get(id) ?? at]));
+}
+
 const nodeList = (model) => (Array.isArray(model?.nodes) ? model.nodes : []);
 
 /**
  * The node the fleet line speaks for while it is at the far step (crit or
- * down), as `worstLine` picks it, or null below that. Pure.
+ * down), as `worstLine` picks it (`since` as it takes it: the oldest of two
+ * crits), or null below that. Pure.
  */
-export function farNode(model) {
-  const w = worstLine(model);
+export function farNode(model, since = null) {
+  const w = worstLine(model, { since });
   if (w.step !== 'far') return null;
-  return nodeList(model).find((n) => n && typeof n.id === 'string'
-    && String(n.label ?? n.id) === w.name && n.status === w.status) ?? null;
+  return nodeList(model).find((n) => n && n.id === w.id) ?? null;
 }
 
 /** `12s`, `3m`: how long ago, in the fleet line's words. */
@@ -251,12 +270,15 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
   let heldId = null, fedFor = null, fedHeld = null, fedHold = null;
   // The far line's node in the newest model, and a crit that cleared (CRIT_HOLD).
   let crit = null, hold = null;
+  // When each crit or down problem standing was first seen, by its root's id
+  // (`firstSeen`): two or more are named oldest first (T8).
+  let seen = new Map();
   const feed = () => {
     if (!latest || (fedFor === latest && fedHeld === heldId && fedHold === hold)) return;
     fedFor = latest;
     fedHeld = heldId;
     fedHold = hold;
-    frame.update(bannerModel(latest, heldId), { cleared: clearedOf(hold), echo: bannerEcho(latest, heldId) });
+    frame.update(bannerModel(latest, heldId, seen), { cleared: clearedOf(hold), echo: bannerEcho(latest, heldId, seen), since: seen });
   };
   // One headline per trouble frame (night 3 T4): the far line steps down
   // while the plate is up, from the leg's arrival (the plate comes with the
@@ -421,7 +443,8 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     update: (model) => {
       if (!model || typeof model !== 'object') return;
       latest = model;
-      const far = farNode(model);
+      seen = firstSeen(model, seen, now());
+      const far = farNode(model, seen);
       if (far) {
         // The same crit (or one flapping back within its hold) keeps its start: "was down 6m" counts from it.
         const same = crit?.id === far.id ? crit : hold?.id === far.id ? hold : null;

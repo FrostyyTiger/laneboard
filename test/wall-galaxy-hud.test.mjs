@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { CRIT_HOLD, SHEET_LOCK, agoText, bannerEcho, bannerModel, clearedOf, createHud, farNode, galaxyCaption, legNode, plateFollows, sheetCaption, staleCaption } from '../public/js/wall/galaxy/hud.js';
+import { CRIT_HOLD, SHEET_LOCK, agoText, bannerEcho, bannerModel, clearedOf, createHud, farNode, firstSeen, galaxyCaption, legNode, plateFollows, sheetCaption, staleCaption } from '../public/js/wall/galaxy/hud.js';
 import { captionLines } from '../public/js/wall/caption.js';
 import { clearedLine, worstLine } from '../public/js/wall/frame.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
@@ -180,22 +180,26 @@ test('the hud feeds the caption the short plate on a calm leg and the trouble li
 });
 
 // T23 (reviews/r21-operator.md 5): the banner does not repeat the caption.
-const twoProblems = () => {
+// Two crits by default; `level` 'warn' makes both problems warns (lab, its
+// builder and hv1's): since night 4 T8 the line steps past a held problem
+// only at the line step, two crits are named together.
+const twoProblems = (level = 'crit') => {
   const m = model();
   m.nodes.push(
-    { id: 'hv1-c', parent: 'hv1', kind: 'builder', label: 'builder-c', status: 'crit', why: 'no contact' },
+    { id: 'hv1-c', parent: 'hv1', kind: 'builder', label: 'builder-c', status: level, why: 'no contact' },
     { id: 'hv1-s', parent: 'hv1-c', kind: 'session', label: 's1', status: 'warn' },
   );
+  if (level !== 'crit') for (const n of m.nodes) if (n.id.startsWith('lab')) n.status = level;
   return m;
 };
 
 test('bannerModel: the held problem reads calm so the line names the next, else the model as it is', () => {
-  const m = twoProblems();
-  assert.match(worstLine(m).text, /^lab · crit/);
+  const m = twoProblems('warn');
+  assert.match(worstLine(m).text, /^lab · warn/);
   const held = bannerModel(m, 'lab-b');
   assert.notEqual(held, m);
   assert.match(worstLine(held).text, /hv1 · builder-c · no contact/);
-  assert.equal(m.nodes.find((n) => n.id === 'lab-b').status, 'crit', 'the model itself is untouched');
+  assert.equal(m.nodes.find((n) => n.id === 'lab-b').status, 'warn', 'the model itself is untouched');
   // The held site is in trouble too (its root is lab): all of it steps aside.
   assert.equal(held.nodes.find((n) => n.id === 'lab').status, 'ok');
   // Holding the second problem (or a node inside it): the line already names another.
@@ -219,11 +223,50 @@ test('bannerModel: the held problem reads calm so the line names the next, else 
   assert.equal(worstLine(m).more, 2);
 });
 
+test('bannerModel (night 4 T8): with two crits standing the line is the same whatever is held', () => {
+  const m = twoProblems();
+  const since = new Map([['hv1-c', 1000], ['lab', 2000]]);
+  const want = worstLine(m, { since });
+  assert.equal(want.text, '2 crit · hv1 · lab · builder-c · no contact', 'oldest first: hv1 was seen before lab');
+  for (const held of [null, 'lab', 'lab-b', 'hv1', 'hv1-b', 'hv1-c', 'hv1-s', 'nope']) {
+    assert.equal(bannerModel(m, held, since), m, `held ${held}: the model as it is`);
+    assert.equal(worstLine(bannerModel(m, held, since), { since }).text, want.text, `held ${held}`);
+  }
+  // Without `since`, model order: still one line for every held thing.
+  const plain = worstLine(m).text;
+  assert.equal(plain, '2 crit · lab · hv1 · crit', 'lab, a site in trouble itself, speaks for its problem');
+  for (const held of ['lab-b', 'hv1-c']) assert.equal(worstLine(bannerModel(m, held)).text, plain);
+  // The line speaks for the oldest: holding it is an echo (the line drops out under its plate), holding the other is not.
+  assert.equal(bannerEcho(m, 'hv1-c', since), true);
+  assert.equal(bannerEcho(m, 'lab-b', since), false);
+  assert.equal(bannerEcho(m, 'lab-b'), true);
+  assert.equal(farNode(m, since).id, 'hv1-c');
+  assert.equal(farNode(m).id, 'lab', 'model order: lab speaks for itself (the site is crit)');
+});
+
+test('firstSeen (night 4 T8): a crit keeps the time it was first seen, a new one gets now, a cleared one is forgotten', () => {
+  const one = model();
+  const a = firstSeen(one, null, 100);
+  assert.deepEqual([...a], [['lab', 100]]);
+  assert.equal(firstSeen(one, a, 200), a, 'nothing new: the same map');
+  const two = twoProblems();
+  const b = firstSeen(two, a, 300);
+  assert.deepEqual([...b], [['lab', 100], ['hv1-c', 300]]);
+  // A warn is not counted; lab clears and comes back: it is new then.
+  const hv1Only = twoProblems();
+  for (const n of hv1Only.nodes) if (n.id.startsWith('lab')) n.status = 'warn';
+  const c = firstSeen(hv1Only, b, 400);
+  assert.deepEqual([...c], [['hv1-c', 300]]);
+  assert.deepEqual([...firstSeen(two, c, 500)], [['lab', 500], ['hv1-c', 300]]);
+  assert.equal(worstLine(two, { since: firstSeen(two, c, 500) }).word, '2 crit · hv1 · lab');
+  assert.deepEqual([...firstSeen(null, c, 600)], []);
+});
+
 test('bannerEcho (night 3 T20): true only when the fed line would still name the held problem', () => {
   // One problem: the line can only say what the plate says.
   assert.equal(bannerEcho(model(), 'lab-b'), true);
   // Two crits: the line steps to the other one, no echo.
-  const two = twoProblems();
+  const two = twoProblems('warn');
   assert.equal(bannerEcho(two, 'lab-b'), false);
   // The next problem is only a warn (T30: never a step down): the line would repeat the held crit.
   const warnNext = twoProblems();
@@ -280,12 +323,19 @@ test('not three reds saying one thing (night 3 T20): under the plate the echoing
     assert.equal(frame.cover(), null, 'and covers nothing');
     assert.equal(hud.fleetCover(), null);
     assert.equal(hud.named(), 'lab-b', 'the hero names builder-b: its label gives way to the brackets');
-    // A second crit elsewhere: the line steps to it, back in sight (T23), the planet still unnamed.
-    const two = twoProblems();
-    hud.update(two);
-    assert.equal('echo' in fleet.dataset, false);
-    assert.equal(frame.hushed(), false);
-    assert.match(fleet.textContent ?? '', /hv1|builder-c/i);
+    // A second warn elsewhere: the line steps to it, back in sight (T23), the planet still unnamed.
+    const next = planet();
+    next.nodes.push({ id: 'hv1-c', parent: 'hv1', kind: 'builder', label: 'builder-c', status: 'warn', why: 'no contact' });
+    hud.update(next);
+    assert.equal('echo' in fleet.dataset, true, 'never a step down from the held crit to a warn (T30)');
+    // A second crit elsewhere (night 4 T8): the line names both, the held one first (seen first), so it still echoes.
+    next.nodes.at(-1).status = 'crit';
+    hud.update({ ...next });
+    assert.equal(fleet.dataset.step, 'far');
+    assert.match(fleet.textContent ?? '', /2 crit · lab · hv1/);
+    assert.match(fleet.textContent ?? '', /builder-b · disk full/);
+    assert.equal(frame.hushed(), true);
+    assert.equal(hud.named(), 'lab-b');
     hud.update(planet());
     assert.equal(frame.hushed(), true);
     // A site in trouble itself: its hero says `CRIT`, not a name; the site keeps its label.
@@ -323,20 +373,44 @@ test('the frame names the second problem while the first is held, the first othe
   const hud = createHud({ caption, frame, tour });
   const fed = () => worstLine(calls.filter((c) => c[0] === 'frame').at(-1)[1]).text;
   const frames = () => calls.filter((c) => c[0] === 'frame').length;
-  const m = twoProblems();
+  const m = twoProblems('warn');
   hud.update(m);
-  assert.match(fed(), /^lab · crit/, 'the overview: the worst');
+  assert.match(fed(), /^lab · warn/, 'the overview: the worst');
   legs[0]({ kind: 'site', id: 'lab', index: 1, count: 2 });
   assert.match(fed(), /^hv1 · builder-c/, 'lab held: the next problem');
   const n = frames();
   hud.update(m);
   assert.equal(frames(), n, 'the same model and held thing: not fed again');
-  hud.update(twoProblems());
+  hud.update(twoProblems('warn'));
   assert.match(fed(), /^hv1 · builder-c/, 'a new model while held: still the next');
   legs[0]({ kind: 'site', id: 'hv1', index: 2, count: 2 });
-  assert.match(fed(), /^lab · crit/, 'hv1 held: lab is the line again');
+  assert.match(fed(), /^lab · warn/, 'hv1 held: lab is the line again');
   legs[0]({ kind: 'overview' });
-  assert.match(fed(), /^lab · crit/);
+  assert.match(fed(), /^lab · warn/);
+});
+
+test('night 4 T8: with two crits the fed line is the same at every leg, oldest first', () => {
+  let t = 1000;
+  const fed = [];
+  const { caption } = fakes();
+  const frame = { update: (m, o) => fed.push(worstLine(m, { since: o?.since }).text), live() {}, cover: () => null };
+  const legs = [];
+  const tour = { onLeg: (cb) => { legs.push(cb); return () => {}; } };
+  const hud = createHud({ caption, frame, tour, now: () => t });
+  // hv1's builder goes crit first, lab a minute later.
+  const first = twoProblems();
+  for (const n of first.nodes) if (n.id.startsWith('lab')) n.status = 'ok';
+  hud.update(first);
+  t += 60000;
+  hud.update(twoProblems());
+  const line = '2 crit · hv1 · lab · builder-c · no contact';
+  assert.equal(fed.at(-1), line, 'the oldest first, though model order puts lab first');
+  for (const leg of [{ kind: 'site', id: 'lab' }, { kind: 'site', id: 'hv1' }, { kind: 'overview' }, { kind: 'site', id: 'lab' }]) {
+    legs[0]({ index: 1, count: 2, ...leg });
+    t += 5000;
+    hud.update(twoProblems());
+    assert.equal(fed.at(-1), line, `${leg.kind} ${leg.id ?? ''}`);
+  }
 });
 
 // T30 (reviews/r43-stranger.md galaxy 1): a crit that clears and returns within seconds must not flip the line.

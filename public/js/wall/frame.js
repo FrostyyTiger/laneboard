@@ -46,19 +46,12 @@ function siteOf(node, byId) {
 }
 
 /**
- * The worst problem in the fleet, for the line bottom right. A problem is a
- * node at warn or worse whose parent is not (a lane waiting on a prompt and
- * its session waiting with it are one problem); it is as bad as the worst
- * node in it, and that node speaks for it. Worst first: down, crit,
- * attention, warn; a tie keeps model order. Returns
- *   `{ status, tone, id, shape, glyph, site, name, why, text, more }`
- * (`id` the node that speaks for it) with `text` = `site · name · why` (the parts it has), `word` = `site ·
- * name` (where it is), `more` the number of other problems, and `step` the
- * size it is set at: `far` (the 3 m step) while the worst is crit or down,
- * else `line`; a calm fleet gives `{ status: 'ok', tone: 'grey', step:
- * 'calm', text: 'all calm', more: 0 }` and no glyph.
+ * The fleet's problems, in model order: a problem is a node at warn or worse
+ * whose parent is not (a lane waiting on a prompt and its session waiting
+ * with it are one problem), `{ root, worst }`: the topmost node in trouble
+ * and the worst node under it, which speaks for it. Pure.
  */
-export function worstLine(model) {
+export function problemsOf(model) {
   const list = nodesOf(model);
   const byId = byIdOf(list);
   const bad = (n) => n && TROUBLE.includes(n.status);
@@ -74,25 +67,59 @@ export function worstLine(model) {
       seen.add(root.id);
     }
     const p = problems.get(root.id);
-    if (!p) problems.set(root.id, { worst: n });
+    if (!p) problems.set(root.id, { root, worst: n });
     else if (rank(n.status) > rank(p.worst.status)) p.worst = n;
   }
-  if (!problems.size) return { status: 'ok', tone: 'grey', step: 'calm', text: 'all calm', more: 0 };
+  return [...problems.values()];
+}
+
+/** Whether a problem's worst node is at the 3 m step (crit or down). */
+const isFar = (p) => p.worst.status === 'crit' || p.worst.status === 'down';
+
+/** The far line names at most this many places; its count says how many there are. */
+export const FAR_NAMES = 3;
+
+/**
+ * The worst problem in the fleet, for the line bottom right (`problemsOf`).
+ * Worst first: down, crit, attention, warn; a tie keeps model order. Returns
+ *   `{ status, tone, id, shape, glyph, site, name, why, text, more }`
+ * (`id` the node that speaks for it) with `text` = `site · name · why` (the parts it has), `word` = `site ·
+ * name` (where it is), `more` the number of other problems, and `step` the
+ * size it is set at: `far` (the 3 m step) while the worst is crit or down,
+ * else `line`; a calm fleet gives `{ status: 'ok', tone: 'grey', step:
+ * 'calm', text: 'all calm', more: 0 }` and no glyph.
+ *
+ * With two or more crits (or downs) standing (night 4 T8, night 3's
+ * reviews/r46-skeptic.md galaxy 1) the line names them all in a fixed order,
+ * oldest first, never one picked by where the camera is: `word` =
+ * `2 crit · hv2 · hv1` (the places, at most FAR_NAMES), `why` the oldest's
+ * name and reason (`storage · pool 97% full`), `id` the oldest's node,
+ * `crits` how many, and `more` the milder problems past them. `since` (a Map
+ * of a problem's root id to when it was first seen, hud.js) says which is
+ * oldest; one it does not know is newest; a tie puts a down first, then
+ * keeps model order.
+ */
+export function worstLine(model, { since = null } = {}) {
+  const problems = problemsOf(model);
+  if (!problems.length) return { status: 'ok', tone: 'grey', step: 'calm', text: 'all calm', more: 0 };
+  const byId = byIdOf(nodesOf(model));
+  const far = problems.filter(isFar);
+  if (far.length > 1) return critsLine(far, problems.length - far.length, byId, since);
 
   let worst = null;
-  for (const p of problems.values()) {
+  for (const p of problems) {
     if (!worst || rank(p.worst.status) > rank(worst.status)) worst = p.worst;
   }
   const st = statusStyle(worst);
   const site = siteOf(worst, byId);
   const siteName = site && site !== worst ? String(site.label ?? site.id) : null;
   const name = String(worst.label ?? worst.id);
-  const why = typeof worst.why === 'string' && worst.why.trim() ? worst.why : worst.status;
+  const why = whyOf(worst);
   return {
     status: worst.status,
     tone: st.tone,
     id: worst.id,
-    step: worst.status === 'crit' || worst.status === 'down' ? 'far' : 'line',
+    step: isFar({ worst }) ? 'far' : 'line',
     shape: st.shape,
     glyph: GLYPH[st.shape] ?? GLYPH.square,
     site: siteName,
@@ -100,7 +127,49 @@ export function worstLine(model) {
     why,
     word: [siteName, name].filter(Boolean).join(' · '),
     text: clip([siteName, name, why].filter(Boolean).join(' · ')),
-    more: problems.size - 1,
+    more: problems.length - 1,
+  };
+}
+
+const whyOf = (n) => (typeof n.why === 'string' && n.why.trim() ? n.why : n.status);
+
+/** `worstLine` for two or more crits standing (T8): all of them, oldest first. */
+function critsLine(far, milder, byId, since) {
+  const at = (p) => {
+    const t = since instanceof Map ? since.get(p.root.id) : undefined;
+    return Number.isFinite(t) ? t : Infinity;
+  };
+  // Seen at the same time (or no `since`): a down first, then model order.
+  const order = far.map((p, i) => ({ p, i }))
+    .sort((a, b) => at(a.p) - at(b.p) || rank(b.p.worst.status) - rank(a.p.worst.status) || a.i - b.i)
+    .map((x) => x.p);
+  const places = [];
+  for (const p of order) {
+    const site = siteOf(p.worst, byId);
+    const place = String((site ?? p.worst).label ?? (site ?? p.worst).id);
+    if (!places.includes(place)) places.push(place);
+  }
+  const oldest = order[0].worst;
+  const st = statusStyle(oldest);
+  const name = String(oldest.label ?? oldest.id);
+  const site = siteOf(oldest, byId);
+  // The oldest's own name with its reason, unless the place already is it (a site that is down).
+  const why = [site && site !== oldest ? name : null, whyOf(oldest)].filter(Boolean).join(' · ');
+  const word = [`${order.length} ${order.every((p) => p.worst.status === 'down') ? 'down' : 'crit'}`, ...places.slice(0, FAR_NAMES)].join(' · ');
+  return {
+    status: oldest.status,
+    tone: st.tone,
+    id: oldest.id,
+    step: 'far',
+    shape: st.shape,
+    glyph: GLYPH[st.shape] ?? GLYPH.square,
+    site: site && site !== oldest ? String(site.label ?? site.id) : null,
+    name,
+    why,
+    word,
+    text: clip(`${word} · ${why}`),
+    crits: order.length,
+    more: milder,
   };
 }
 
@@ -253,6 +322,8 @@ function setLine(line, w) {
  * `update(model, { echo: true })` says the line names the plate's own
  * subject (night 3 T20): `data-echo` on the line, and wall.css drops it
  * while the plate is up (`hushed()`, when it covers nothing).
+ * `update(model, { since })` orders two or more crits oldest first (T8,
+ * `worstLine`); without it they keep model order.
  */
 export function createFrame(root, { timers = globalThis, now = () => Date.now() } = {}) {
   const vignette = el('div', 'wall-vignette');
@@ -295,7 +366,7 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   let farBox = null;
   let farDirty = false;
 
-  const update = (model, { cleared = null, echo = false } = {}) => {
+  const update = (model, { cleared = null, echo = false, since = null } = {}) => {
     if (!model || typeof model !== 'object') return;
     // The line names what the plate's hero names (night 3 T20): wall.css drops it while a plate is up.
     if (('echo' in fleet.dataset) !== Boolean(echo)) {
@@ -303,7 +374,7 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
       else delete fleet.dataset.echo;
       farDirty = true;
     }
-    let w = worstLine(model);
+    let w = worstLine(model, { since });
     // A crit that just cleared (T18): remembered in the calm voice, and only while nothing else is in trouble.
     if (w.step === 'calm') w = clearedLine(model, cleared) ?? w;
     const far = w.step === 'far';
