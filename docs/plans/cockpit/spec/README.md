@@ -13,9 +13,9 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 
 | File | What it settles | Scenario ids | Task | Status |
 | --- | --- | --- | --- | --- |
-| `README.md` | this index, the room process and ports, the speed budget (B1-B8, B10, B11; B9 is T67's; each test asserts the end-to-end column), the selectors tests use, and the glossary | none | T1, T24, T33 | written |
+| `README.md` | this index, the room process and ports, the speed budget (B1-B8, B10, B11; B9 is T67's; each test asserts the end-to-end column), the pressed state and `touch-action` of every tappable (T45, D224), the selectors tests use, and the glossary | none | T1, T24, T33, T45 | written |
 | `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3, T31 | part 1 written (T2), part 2 written (T3; T31: §9 the Wall contract, `window.__cockpitView`, the app-first rule, S-SCR-35; T52: room down is the pane's status line only, canvas half in `c4-show-canvas.md` §7.6, D120; T89: S-SCR-24 a refused room link; T44: §4.1 the corner cluster per state, the `SCREEN` sheet, S-SCR-25/26; T56: §6.1 who may pair (admin routes, peer uid, the agent refused), §6.2 cross-site checks and the `lb_cockpit` cookie, §6.3 the paired line, S-SCR-27..29; T60: §6.4 the room's audit lines, S-SCR-30/31; T64: the `off` talk button opens the pane, the away caption, S-SCR-32, D179; T102: its pressed state, D180; T58/T75: §6.2.1 a plain-HTTP page does not pair unless `cockpit.allowInsecure`, S-SCR-33, D182; T23: §2.1 a speak-up on a touring screen, S-SCR-34, D219; T28: §7.1 the room link's real retry series and `cockpit:retry` marks, S-SCR-19, D11, D220) |
-| `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24; T50: header `READY`/`● WORKING`/`● STOPPING`, folds cut to code and `SHOW EARLIER`, E6 merged into E8, no raw view in C1, S-C1-24 retired; T29: §5.1 the room messages the pane draws from, fresh-screen states, S-C1-25/26; T85: §8 rewritten for steer, S-C1-16 rewritten, S-C1-27/28; T88: queued prompts as snapshot items, S-C1-29; T57: §5.2 the allowlist, refused calls, tools that change things, §5.3 redaction, S-C1-30/31; T40: §7.1 the on-screen keyboard, S-C1-32/33; T96: §1.1 the stack above the input row, S-C1-34; T34: §3 the renderer module and the numeric-cell rule, §5 targets from odd input, S-C1-35; T36/T76/T93: §15 the demo link for `?demo=1`, S-C1-36; T68: §10.1 the status line's order and the agent's login check, S-C1-37/38; T43: the type floor, line-slot messages 18 px in the label face, turn state 18 px `--text-2`, S-C1-40) |
+| `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24; T50: header `READY`/`● WORKING`/`● STOPPING`, folds cut to code and `SHOW EARLIER`, E6 merged into E8, no raw view in C1, S-C1-24 retired; T29: §5.1 the room messages the pane draws from, fresh-screen states, S-C1-25/26; T85: §8 rewritten for steer, S-C1-16 rewritten, S-C1-27/28; T88: queued prompts as snapshot items, S-C1-29; T57: §5.2 the allowlist, refused calls, tools that change things, §5.3 redaction, S-C1-30/31; T40: §7.1 the on-screen keyboard, S-C1-32/33; T96: §1.1 the stack above the input row, S-C1-34; T34: §3 the renderer module and the numeric-cell rule, §5 targets from odd input, S-C1-35; T36/T76/T93: §15 the demo link for `?demo=1`, S-C1-36; T68: §10.1 the status line's order and the agent's login check, S-C1-37/38; T43: the type floor, line-slot messages 18 px in the label face, turn state 18 px `--text-2`, S-C1-40; T45: links as `<span>` with no underline D225, tool lines 48 px D226, the pressed state S-C1-41) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the talk key, speech-to-text down or failed; §14 the physical-button API as the later slice C2b | `S-C2-`, `S-C2B-` | T6, T7 | written: part 1 (T6: gestures, 400 ms threshold, `data-talk` states, live words, microphone, S-C2-01..10), part 2 (T7, slimmed by T49: tap the words to stop and fix, DE/EN, `cockpit.stt.*`, the service down or failed (`stt-down`, `stt-failed`), the talk key, the kiosk microphone note, S-C2-11..17, 20, 21; T94: S-C2-22 keyboard up; T69: S-C2-23 speech down in a hold; T78: `cockpit.stt.protocol` and the four messages a shim sends; C2b §14: the button API, S-C2B-01..02) |
 | `c3-see.md` | C3: the MCP server (`laneboard`, loopback HTTP, D58), the seven read tools with params, results and sources, result rules (`asOf`, size caps), board gaps; `focus`, "Ask about this" | `S-C3-` | T8, T9 | written: part 1 (T8: §1-§7, S-C3-01..08), part 2 (T9: §8 `focus`, §9 the hold menu and context chip, S-C3-09..17, sketch `c3-ask.html`); S-C3-18 (T62: the night answered on the C1 night); S-C3-20 (T78: an empty board, `sources: []` and its `hint`) |
 | `c4-show-canvas.md` | C4: show commands, one camera with the tour, undo; the canvas, kit blocks, custom cards, promotion, how cards leave | `S-C4-` | T10, T11, T12 | part 1 written (T10: §1-§6, show commands `fly_to`/`highlight`/`clear`/`pin`/`compare`/`scrub`, one camera with the tour, show lines, undo, S-C4-01..12, D67-D77); part 2 written (T11: §7-§10, the card area and grid, shelf, `place`, kit blocks `countdown`/`timer`/`status`/`log`/`chart`/`table`/`checklist`/`map`/`text`/`diff`, one-tap removal, S-C4-13..22, D78-D87, sketch `c4-canvas.html`; T52: §7.6 room down on the canvas, S-C4-23/24, D120); part 3 written (T12: §11-§14, custom cards in a sandboxed frame with the checklist SB1-SB12, time limits and turning a card off, how cards leave (ended, `expires`, `remove_card`), the `cards` tool, saving a custom card (`save_card`, `block: "saved"`), S-C4-25..33, D169-D177) |
@@ -120,6 +120,51 @@ instead of writing its own. A scenario with a timing asserts against its row. Ti
   gestures; the threshold only decides, at `pointerup`, whether that release sends (hold) or keeps
   listening (tap) (D29, T6 details the gesture).
 
+## Touch: the pressed state and `touch-action` (T45, D224)
+
+There is no hover on the owner's screen, so the instant a finger lands is the only cue that a tap
+was felt. One rule for every **tappable**: every `<button>` the cockpit draws, a tool line
+included (it is a `<button type="button">`, §5 of `c1-talk.md`). A link in a reply is not one
+(`c1-talk.md` §3, D225).
+
+- **The pressed state**: fill `--bg-sunken`; border colour `--text-2` on a tappable that has a
+  border (width unchanged; a borderless one, such as a tool line or a sheet row, gets none, so
+  nothing moves); text and glyph colours unchanged. It is drawn in the first frame after the
+  `pointerdown` and goes in the frame after the `pointerup`, the `pointercancel` or the pointer
+  leaving the box. No transition on `background-color` or `border-color`, at rest or pressed.
+  At rest no tappable is filled `--bg-sunken`, so the press always shows: on the `NEW` bar (itself
+  `--bg-sunken`) `KEEP` and `START` rest on `--bg-elevated`.
+- **How**: one delegated `pointerdown` listener (capture phase, on `document`) in one client
+  module sets `data-pressed` on `event.target.closest('button')` and calls
+  `releasePointerCapture(event.pointerId)` so leaving the box fires `pointerleave`; CSS draws
+  `[data-pressed]`. Not `:active`, whose timing on touch differs between browsers. A drag that
+  turns into a scroll is a `pointercancel` (the browser's), so a tool line under a flick drops
+  the pressed state as the conversation starts to move.
+- **No pressed state**: a `disabled` or `aria-disabled="true"` button (the blank slot
+  `data-send="none"`, a `RETRY` still waiting); the talk button in every state but `off`, which has
+  its own (`c2-voice.md` §3: the press is `listening` within B1; `off` is this rule, D180); the Map
+  and the Wall (pan surfaces); a card's body and frame (`c4-show-canvas.md` §8).
+- **`touch-action: manipulation`** on every tappable: no double-tap zoom, no wait for a second tap.
+  The talk button keeps `none` (`c2-voice.md` §2).
+
+**Tappables C1 draws** (the rows of S-C1-41's table; each later slice adds its own rows to the
+same table: C2 `[data-talk-cancel]`, `[data-talk-undo]`, `[data-talk-lang]`; C3
+`[data-ask]`, `[data-ask-cancel]`, `[data-cockpit-chip-remove]`; Show `[data-show-undo]`,
+`[data-pin-remove]`; Canvas `[data-card-remove]`, `[data-card-cancel]`, `[data-card-removed]`
+`UNDO`, `[data-cockpit-switch]`, `[data-screen-sheet]` rows; the talk button `off` is S-SCR-32's):
+
+| Tappable | Selector or accessible name | Rest look | Defined in |
+| --- | --- | --- | --- |
+| `CHAT` / `CLOSE` opener | `[data-cockpit-open]` | 1 px `--line-strong`, `--bg-elevated` | `screens.md` §4 |
+| header `CLOSE`, `NEW`, `SCREEN` | `[data-cockpit-close]`, `[data-cockpit-new]`, `[data-cockpit-screen]` | same | `c1-talk.md` §1 |
+| `SEND` / `STOP` slot | `[data-cockpit-send]` (`send`, `stop`) | same | `c1-talk.md` §8 |
+| `NEW` bar `KEEP` / `START` | `[data-cockpit-newbar] [data-newbar]` | same | `c1-talk.md` §11 |
+| `↓ NEW` | `[data-cockpit-follow]` | same | `c1-talk.md` §4 |
+| a tool line, a `tried` line | `[data-tool-line]` | no border, no fill | `c1-talk.md` §5 |
+| `SHOW ALL 40 LINES` / `SHOW LESS`, `SHOW EARLIER` | by name | 1 px `--line-strong`, `--bg-elevated` | `c1-talk.md` §3, §9 |
+| `RETRY`, `EDIT`, `GO ON` in an error line | by name inside `[data-turn-error]` | same | `c1-talk.md` §10 |
+| `RETRY NOW` | by name inside `[data-cockpit-status]` | same | `c1-talk.md` §10.1 |
+
 ## Selectors tests use
 
 The one list of the `data-*` attributes the cockpit adds and the tests read (D145, T33). Every spec
@@ -165,6 +210,8 @@ when no value applies.
 | `[data-cockpit-chip]` with `data-node`, `[data-cockpit-chip-remove]` | a node id | the context chip and its `✕` | `c3-see.md` §9 |
 | `[data-turn-id]` | a `turnId` (`t-0131`) | one turn: its prompt block and everything under it to the next turn (T91) | `c1-talk.md` §3 |
 | `[data-tool-line]`, `data-denied` | `true` on a refused call | one tool line | `c1-talk.md` §5, §5.2 |
+| `[data-pressed]` | none (present or absent) | a tappable under a finger: the pressed state (D224) | §"Touch" above |
+| `[data-link]` | none (a `<span>`, text `the run`; its host follows in a `--text-3` span) | a link in a reply, never an `<a>` (D225) | `c1-talk.md` §3 |
 | `[data-mark]` | none | one coloured mark `■ ▲ ● ○` in a reply | `c1-talk.md` §3 |
 | `[data-cockpit-status]` with `data-status` | `offline`, `room-down`, `agent-down`, `not-logged-in`, `tools-down`, `agent-back`, `back` | the pane's one 80 px status line | `c1-talk.md` §10.1 |
 | `[data-turn-error]` | `not-sent`, `agent-exited`, `agent-down`, `not-logged-in`, `step-limit`, `failed` | an error line in a turn | `c1-talk.md` §10 |

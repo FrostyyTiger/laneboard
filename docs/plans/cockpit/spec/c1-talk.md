@@ -228,7 +228,7 @@ The reply is Markdown, drawn with this subset; anything else shows as its plain 
 | `---` | a 1 px `--line` rule, 16 px above and below |
 | fenced code block | §3 "Code" below |
 | table (GFM pipes) | §3 "Tables" below |
-| `[text](url)`, a bare URL | the text, 1 px `--line-strong` underline, then ` (host)` in `--text-3`; **not tappable** (D22) |
+| `[text](url)`, a bare URL | the text in `--text-1` with no underline, then ` (host)` in `--text-3`; a `<span data-link>`, never an `<a>`, no `href` anywhere; **not tappable**, no pressed state (D22, D225) |
 | `![alt](url)` | `[image: alt]` in `--text-3`; nothing is fetched |
 | raw HTML (`<b>`, `<img …>`, `<script>`) | shown as its literal text, escaped; never parsed (D22) |
 
@@ -244,7 +244,7 @@ button under it, 48 px tall, 16 px caps: `SHOW ALL 40 LINES`; tapped, it shows e
 `SHOW LESS`.
 
 **Tables.** Header cells 16 px caps `--font-label` 600, `--text-3`; body cells mono 18 px
-`--text-1`; every row 44 px tall (`--row-touch`), 12 px cell padding left and right, a 1 px
+`--text-1`; every row 44 px tall (`--row-touch`: rows are not tappable, so the 48 px floor of tappables does not apply, D226), 12 px cell padding left and right, a 1 px
 `--line-weak` line under each row. A column whose body cells are all numbers, times or sizes
 (`12`, `3.4 GB`, `1 h 12`, `41 %`, `03:12`) is right-aligned. A table wider than 560 px scrolls
 sideways inside its block with the first column fixed (on `--bg-elevated`). Every row is drawn,
@@ -308,10 +308,11 @@ The agent's tool calls are shown as **tool lines**, never as raw input or output
 line. A call of another tool, or reply text, starts a new line. A tool line sits in the reply where
 its first call happened.
 
-**Look.** One row, 44 px tall, the full text column, mono 18 px `--text-2`. A 24 px glyph column at
+**Look.** One row, 48 px tall (D226), the full text column, mono 18 px `--text-2`. A 24 px glyph column at
 the left holds `●` (`--text-2`, static) while any call in the line runs, nothing once all have
-ended. While running the text ends in `…`. At the right end, `+` (closed) or `−` (open) in 16 px
-`--text-3`. The whole row is the tap target.
+ended. While running the text ends in `…`. At the right end, `+` (closed) or `−` (open) in 20 px
+`--text-2`. The whole row is the tap target: a `<button type="button">` with the pressed state
+and `touch-action: manipulation` (`README.md` §"Touch", D224).
 
 **Words** (D24). Each tool has a `one` text (one call, or every call on the same target) and a
 `many` text (`{n}` calls on different targets). `{target}` is one field of the call's input,
@@ -451,7 +452,7 @@ no allowlist is T72's.
 **A refused call** (D125) leaves a **`tried` line**:
 - text `tried {tool}, not allowed`, `{tool}` the name the agent used (`Bash`, `WebFetch`); another
   MCP server's `mcp__<server>__<tool>` reads `<server>:<tool>`;
-- the same row as any tool line (44 px, mono 18 px `--text-2`, `+`/`−` at the right), its glyph
+- the same row as any tool line (48 px, mono 18 px `--text-2`, `+`/`−` at the right), its glyph
   column empty: no `●`, no `…`, no ` · failed`; `[data-tool-line][data-denied="true"]`;
 - it holds that one call and never folds (below). Between the call's `tool.start` and its
   `tool.end` (the same few ms in practice) the line shows the table's running text, as any call;
@@ -574,8 +575,11 @@ Given S-C1-06's turn, with the `hv2` call ending failed,
 When it has ended,
 Then the first line reads `read 3 feeds · 1 failed` in `--text-2`, with no `--p1` or `--p2`
 colour; a tap on it shows 3 rows starting `fleet  {"site":"hv1"}`, `fleet  {"site":"hv2"}`, … with
-their ms and `ok` / `failed`; a second tap hides them; the row is ≥ 44 px tall.
-Test: Playwright; assert text and computed colour; tap; count child rows; tap again.
+their ms and `ok` / `failed`; a second tap hides them; the row is ≥ 48 px tall and its `+`/`−`
+is 20 px `--text-2`.
+Test: Playwright; assert text and computed colour; tap; count child rows; tap again; the row's
+`getBoundingClientRect().height` ≥ 48, the glyph's computed `font-size` `20px` and colour equal to
+a probe styled `color: var(--text-2)`.
 
 ### S-C1-08 A long code block shows 12 lines and a button for the rest
 Given a fake-agent reply with a fenced `sh` block of 40 lines, one of them 200 characters long,
@@ -588,10 +592,15 @@ Test: Playwright; count visible line boxes; compare the block's `scrollWidth` wi
 Given a fake-agent reply containing `<img src=x onerror=alert(1)>`, `<script>alert(2)</script>`,
 `![chart](https://example.invalid/c.png)` and `[the run](https://example.invalid/run/7)`,
 Then the first two show as their literal text; the image shows `[image: chart]`; the link shows
-`the run (example.invalid)` underlined, and a tap on it changes neither `location` nor opens a
-page; no dialog opens and the page makes no request to `example.invalid`.
-Test: Playwright with `page.on('dialog')` failing the test, `page.on('request')` recording
-hosts, and `context.on('page')` failing on a new page; assert the texts.
+`the run (example.invalid)` with no underline, and a tap on it changes neither `location` nor opens
+a page and draws no pressed state; a long press on it (touch down, 800 ms, up) opens no page and
+changes no `location` either; the conversation holds no `<a>` element and no `[href]`.
+Test: Playwright with `hasTouch: true`, `page.on('dialog')` failing the test, `page.on('request')`
+recording hosts, and `context.on('page')` failing on a new page; assert the texts, the link's
+computed `text-decoration-line` `none`; tap it, then via a CDP session `Input.dispatchTouchEvent`
+`touchStart` on its centre, wait 800 ms, `touchEnd`; assert `location.href` unchanged,
+`[data-link]` never got `data-pressed`, and
+`document.querySelectorAll('[data-cockpit-conversation] a, [data-cockpit-conversation] [href]').length === 0`.
 
 ### S-C1-10 Scrolled up during a reply: the view stays, `↓ NEW` brings it back
 Given a pane with 10 earlier turns and the fake agent streaming a 30-line reply over 6 s,
@@ -901,7 +910,8 @@ session would."
   `Start a new conversation? Cards, jobs and notes stay.` (two lines, line height 1.35). Right, 16 px
   from the pane's right edge and vertically centred (16 px above and below): **`KEEP`** at the right
   end, **`START`** 16 px left of it, each 48 px tall and 96 px wide, 16 px caps `--text-1`, 1 px
-  `--line-strong` border (`data-newbar="keep"`, `data-newbar="start"`). `START`, the one-way action,
+  `--line-strong` border, `--bg-elevated` fill (`data-newbar="keep"`, `data-newbar="start"`; pressed
+  state: `README.md` §"Touch", D224). `START`, the one-way action,
   is the farther from the corner where the hand rests on `CLOSE` and the talk button.
   `KEEP`, a second tap on `NEW`, or 10 s without a tap hide the bar and nothing changes. A status
   line (room down) wins the slot: `NEW` is disabled then, and a bar that shows when the room goes
@@ -1394,6 +1404,36 @@ rects of the three selectors; colours compared with `getComputedStyle(document.d
 values of `--text-1` and `--text-2`; for C2 the fake speech scripts `c2-tap` (hold, slide off) and
 `c2-faults` (its `"401"` utterance, `stand-ins.md` §3.3). The walk is a helper the later slices
 reuse on the canvas (`[data-card]`).
+
+### S-C1-41 Every tappable shows it was touched in the first frame (T45, D224)
+Given the Wall page at 1368x912 with `hasTouch: true`, the pane open, and for each row of the
+C1 table in `README.md` §"Touch" the state that shows it: idle (opener, `CLOSE`, `NEW`, `SCREEN`),
+a draft `how is` (`SEND`), S-C1-16's running turn (`STOP`), a tap on `NEW` (`KEEP`, `START`),
+S-C1-10's scrolled-up reply (`↓ NEW`), S-C1-07's ended turn (a tool line), S-C1-08's reply
+(`SHOW ALL 40 LINES`), 60 earlier turns (`SHOW EARLIER`; a conversation file of 60 turns written
+into the room's state directory before boot, the format of `protocols.md` §11.7.1), S-C1-18's E1 (`RETRY`,
+`EDIT`), S-C1-20's E7 (`GO ON`) and S-SCR-19's room-down (`RETRY NOW`),
+When a touch lands on the centre of the tappable and stays 300 ms, then lifts,
+Then in the first animation frame after the `touchStart` the tappable has `data-pressed`, its
+computed `background-color` is `--bg-sunken`'s and, if its computed `border-top-width` is above
+0, its `border-top-color` is `--text-2`'s; its size and position are unchanged (rect ± 0 px);
+in the first frame after the `touchEnd` `data-pressed` is gone and both colours are back to their
+rest values; its computed `touch-action` is `manipulation` and every value of
+`transition-duration` is `0s`.
+And a second case on the tool line: a touch lands on it and moves 40 px up within 100 ms (the
+conversation scrolls): `data-pressed` is gone by the first frame after the browser's
+`pointercancel` and the line has not opened. A third case on `SEND` with a draft: the touch lands,
+moves 80 px left (off the box) and lifts there: `data-pressed` goes in the frame after the
+`pointerleave`, and nothing is sent (`prompts()` unchanged).
+And a disabled tappable (the `data-send="none"` slot while the microphone is open is C2's; in C1 a
+`SEND` with an empty input, `disabled`) never gets `data-pressed`.
+Test: Playwright, one table-driven test (`e2e/cockpit/pressed.spec.mjs`): an array of
+`{name, locator, setup}` rows, the later slices append theirs. Each row: run `setup` (fake-agent
+scripts `c1-render`, `c1-errors`, `c1-long`, `scr-room`), then through a CDP session
+`Input.dispatchTouchEvent` `touchStart` at the rect's centre, then `page.evaluate` reading the
+styles inside one `requestAnimationFrame` callback; colours compared with probe elements styled
+`background: var(--bg-sunken)` and `color: var(--text-2)` (computed, so the theme decides);
+`touchEnd`, read again in the next frame. The second and third cases add `touchMove` events.
 
 ## 15. The demo (`?demo=1`, T36/T76/T93)
 
