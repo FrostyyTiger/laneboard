@@ -399,7 +399,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c2-faults` | speech | S-C2-15..17, S-C2-23 | one utterance per row of §3.3 |
 | `c2-agent` | agent | S-C2-* that send | a short `done` turn for any prompt (`repeat`); S-C2-09's text, 3 s tool call and `next-tool-end` steer turn |
 | `scr-room` | agent | S-SCR-03..05, S-SCR-17..20 | one long turn (20 s of text) and a turn that calls `fly_to builder-a` (S-SCR-05) |
-| `c3-tools` | agent | S-C3-03, S-C3-10..14, S-C3-19 | `morning` then `runs`; `focus` calls |
+| `c3-tools` | agent | S-C3-03, S-C3-10..14, S-C3-19, S-C3-21..23 | `morning` then `runs`; `focus` calls; S-C3-21's `fleet` `{"site":"hv1"}` and `hv1 (feed from 02:10)…` reply, S-C3-22's `alerts` call, S-C3-23's `runs` `{"since":"tonight"}` and `acme-search cost 9.98 USD…` reply |
 | `c4-show` | agent | S-C4-01..12 | one turn per show command, at the times the scenarios give |
 | `c4-cards` | agent | S-C4-13..24, S-SCR-07/08 | `place` calls, incl. the 17th card and the `job-0003` countdown |
 | `c4-custom` | agent | S-C4-25..33 | `place` calls of custom cards from the fixtures `test/cockpit/cards/*.html` (`stuck-by-builder`, `escape`, `never-ready`, `busy`, `hang`, `navigate`, `tiny-text`; `c4-show-canvas.md` §14), `save_card`, `remove_card`, `cards`, a 41 220-byte `html`; one `focus` call per scenario that reads `cardsOff` or `left` |

@@ -807,7 +807,10 @@ before the Canvas slice: `NEW`, `CLOSE`) and the whole cut-off reply (redrawn by
   `--text-2`: `Waiting for the board at hub.example.invalid…` (the page's origin), below it 20 px
   `--text-3`: `Retrying in 4 s.`, and a `SHOW DEMO` button (64 px tall, 20 px caps) that reloads
   with `?demo=1` (D16). Never an empty screen (`docs/plans/product.md` §3.6).
-- **Pane and canvas:** unchanged while the room link is up (`protocols.md` §1; on one box the room is down too).
+- **Pane and canvas:** unchanged while the room link is up (`protocols.md` §1; on one box the room is down too),
+  except the pane's status line: once the room's own board checks fail it reads `Board unreachable
+  since 06:41 (3 min): the agent cannot read the fleet.` (`c1-talk.md` §10.1 row 6, `c3-see.md` §2,
+  S-C3-22). The room checks on its own, so this line and the wall caption can start up to 80 s apart.
 
 ### The screen offline
 

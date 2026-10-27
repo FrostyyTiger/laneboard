@@ -917,14 +917,15 @@ is up, `status.blocksSend`) are `SEND` and talk disabled, as with E3, the draft 
 | 3 | `agent-down` | the room | `Agent not running since 07:04.` | while the agent cannot start (E3) |
 | 4 | `not-logged-in` | the room | `The agent is not logged in on the room since 03:15. Log it in there.` | as above |
 | 5 | `tools-down` | the room | `The agent cannot read the board: its laneboard tools did not start.` | while `ready.mcp` says so (`c3-see.md` §1) |
-| 6 | `agent-back` | the room | `The agent is back (07:04). Your last message was not answered.` | 5 s (E2) |
-| 7 | `back` | the screen | `Back since 06:47.` | 5 s (`screens.md` §7) |
+| 6 | `board-down` | the room | `Board unreachable since 06:41 (3 min): the agent cannot read the fleet.` | from the second failed board check to the first answer (`c3-see.md` §2, D229) |
+| 7 | `agent-back` | the room | `The agent is back (07:04). Your last message was not answered.` | 5 s (E2) |
+| 8 | `back` | the screen | `Back since 06:47.` | 5 s (`screens.md` §7) |
 
-- Rows 3-6 are the room's: it holds every condition that applies and sends only the highest as
+- Rows 3-7 are the room's: it holds every condition that applies and sends only the highest as
   `status` (`protocols.md` §3.5), and the next one still holding when that one clears. Rows 1, 2
-  and 7 are the screen's own; while row 1 or 2 shows, the room's last `status` is kept and shown
+  and 8 are the screen's own; while row 1 or 2 shows, the room's last `status` is kept and shown
   again the moment the link is back.
-- Rows 6 and 7 are news, not a state: they never wait. Outranked when they start or while they
+- Rows 7 and 8 are news, not a state: they never wait. Outranked when they start or while they
   show, they are dropped, not shown later. So a reconnect whose `welcome.status` is not `null`
   shows that line at once and no `Back since`.
 - The `NEW` bar (§11) gives way to every row, as before.

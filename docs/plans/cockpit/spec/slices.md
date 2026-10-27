@@ -111,13 +111,13 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 
 **Stand-ins and scripts**: room under test, fake agent (dialect `claude`), demo hub; scripts
 `c1-render`, `c1-typing`, `c1-errors`, `c1-login`, `c1-long`, `c1-session`, `c1-voice` (S-C3-18), `scr-room`,
-`c3-tools` (S-C3-03 only). No fake speech yet.
+`c3-tools` (S-C3-03, S-C3-22, S-C3-23). No fake speech yet.
 
-**Scenarios** (66):
+**Scenarios** (68):
 S-C1-01 S-C1-02 S-C1-03 S-C1-04 S-C1-05 S-C1-06 S-C1-07 S-C1-08 S-C1-09 S-C1-10 S-C1-11 S-C1-12
 S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33 S-C1-34 S-C1-35 S-C1-36 S-C1-37 S-C1-38 S-C1-39 S-C1-40 S-C1-41 S-C1-42 S-C1-43
 S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23 S-SCR-24 S-SCR-25 S-SCR-30 S-SCR-31 S-SCR-35
-S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18 S-C3-20
+S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18 S-C3-20 S-C3-22 S-C3-23
 S-SEC-01 S-SEC-02 S-SEC-03 S-SEC-06
 
 - S-SEC-01 (the start check and the agent's files, D209, D210), S-SEC-02 (reply redaction, D211,
@@ -190,8 +190,8 @@ written. About 9 steps.
 
 **Stand-ins and scripts**: as C1; script `c3-tools`; the demo feed writer for S-C3-02 and S-C3-06.
 
-**Scenarios** (13):
-S-C3-01 S-C3-02 S-C3-06 S-C3-09 S-C3-10 S-C3-11 S-C3-12 S-C3-13 S-C3-14 S-C3-15 S-C3-16 S-C3-17 S-C3-19
+**Scenarios** (14):
+S-C3-01 S-C3-02 S-C3-06 S-C3-09 S-C3-10 S-C3-11 S-C3-12 S-C3-13 S-C3-14 S-C3-15 S-C3-16 S-C3-17 S-C3-19 S-C3-21
 
 - S-C3-14 needs two screens on one conversation; under Q-O21 b) two pages behind the board's trust
   are enough (`c1-talk.md` §12).
@@ -301,8 +301,8 @@ by the task that writes them.
 | S-C1-13 | C2 |
 | S-C2-01..17, 20..23 | C2 |
 | S-C2B-01, 02 | C2b |
-| S-C3-03, 04, 05, 07, 08, 18, 20 | C1 |
-| S-C3-01, 02, 06, 09..17, 19 | C3 |
+| S-C3-03, 04, 05, 07, 08, 18, 20, 22, 23 | C1 |
+| S-C3-01, 02, 06, 09..17, 19, 21 | C3 |
 | S-C4-01..12 | Show |
 | S-C4-13, 24 | Jobs |
 | S-C4-14..23 | Canvas |
@@ -318,7 +318,7 @@ by the task that writes them.
 | S-ONE-01..07 | One |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 197 live ids in all (round 122, S-C1-42/43 by T59).
+D55). 200 live ids in all (round 124, S-C3-21..23 by T63).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

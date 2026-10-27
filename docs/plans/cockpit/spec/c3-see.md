@@ -46,6 +46,15 @@ The MCP server reads one **board** over HTTP, the same JSON the browser gets: co
 laneboard (one machine, `single-machine.md`). The server asks the board's `/healthz` once at start
 and every 60 s; `"mode": "hub"` picks the hub column below.
 
+**Board down** (T63, D229). A `/healthz` check or a tool's board read that fails (refused, 5 s
+without an answer, or a 5xx) makes the room check `/healthz` again 10 s later. A second failure
+in a row sets the room's status `board-down` (`c1-talk.md` §10.1 row 6), its `since` the time of
+the first failure; while it holds, the check runs every 10 s. The first board answer that is not a
+failure (a check or a read) clears it. The status is set at most 80 s after the board goes away
+(60 s between checks, 5 s timeout, 10 s, 5 s) and cleared at most 15 s after it is back. On the
+one box the board is the room's own process: it cannot be down while the room answers, so the row
+never shows there.
+
 How the room reads a hub is D91: the room runs on the hub's box as its own unix user and reads
 the hub's loopback port, where it is a `local` caller (`docs/fleet/auth.md`): on a hub `local` gets every read and no
 action, control, terminal or push change.
@@ -78,12 +87,15 @@ action, control, terminal or push change.
 - **`asOf`.** Every result starts with `asOf`: one entry per source it read, the time that source's
   data is from (a feed's `at`, a builder snapshot's `generatedAt`, the hub's `now`), and its `ageS`.
   A hub's own entry is `"source":"hub"`, a single board's `"source":"board"`.
-  A source older than 600 s carries `"stale": true` (review 44 finding 2; T63 adds what the agent says
-  about it).
+  A source older than 600 s carries `"stale": true` and `say`, the words the agent names it with
+  (review 44 finding 2, D230): the source's name without its `feed:` prefix, then `(feed from …)` for
+  a feed and `(data from …)` for a builder, a board or the hub, the time `HH:MM` on the room's day,
+  else `26 Oct 22:10` (D149; T65 may add the age). §5 sentence 4 tells the agent to use it.
 
   ```json
   "asOf": [{"source":"hub","at":"2026-10-27T07:12:04+01:00","ageS":1},
-           {"source":"feed:hv1","at":"2026-10-27T02:10:00+01:00","ageS":18124,"stale":true}]
+           {"source":"feed:hv1","at":"2026-10-27T02:10:00+01:00","ageS":18124,"stale":true,
+            "say":"hv1 (feed from 02:10)"}]
   ```
 
 - **`sources` and `hint`: an empty board says why** (D184, review 48 finding 10). `runs` and
@@ -334,7 +346,7 @@ tools, word for word:
 1. `The laneboard tools show the fleet as the board sees it; each result says how old its data is.`
 2. `For a broad question, call morning once first, then only what it does not answer.`
 3. `Name the node or run you are talking about by its label, as the board shows it.`
-4. `If a tool says a source is missing or stale, say so in your answer.`
+4. `If a source is stale, name it with its say words, for example builder-a (feed from 02:10), and do not call it fine; if one is missing, say so in your answer.` (T63, D230)
 5. `When the owner says here, this or that without naming it, call focus first.` (T9, §8)
 6. `If a result has an empty sources list and a hint, open your answer with: I see no runs: your loops write no run file (docs/runs.md). Never say nothing happened.` (§3, D184)
 
@@ -375,11 +387,11 @@ parses to the same object.
 
 Given the hv1 feed's `at` moved to 02:10 while the room's clock reads 07:12,
 When the agent calls `fleet` with no arguments,
-Then `asOf` has `{"source":"feed:hv1","at":"…T02:10:00+01:00","ageS":18124,"stale":true}`; the
+Then `asOf` has `{"source":"feed:hv1","at":"…T02:10:00+01:00","ageS":18124,"stale":true,"say":"hv1 (feed from 02:10)"}`; the
 nodes fed by hv1 still appear with the status the board gives them (`unknown`, "no data"), never
 `ok`.
 Test: node:test writes the demo feed with an old `at` (`writeDemoFeed(dir, now - 5h02m)`), calls
-`fleet`, asserts the `asOf` entry and that no hv1 guest node has `status: "ok"`.
+`fleet`, asserts the `asOf` entry (`say` compared exactly) and that no hv1 guest node has `status: "ok"`.
 
 ### S-C3-03 One stuck run, one question, two tool lines
 
@@ -769,3 +781,56 @@ Test: node:test calls the tools by JSON-RPC as in §7 and asserts the two result
 (the `hint` string compared exactly); a second case boots the board with its port closed after
 start and asserts `missing` holds `board` and `hint` is absent. The standing instruction (§5, line
 6) is asserted by `protocols.md` §11.8's test, not here: the fake agent does not read it.
+
+### S-C3-21 A stale feed is named with its age in the reply
+
+Added by T63 (review 44 finding 2, D230). Runs on the C3 night (`fleet` is C3's).
+Given the demo hub with the hv1 feed's `at` at 02:10 (`writeDemoFeed(dir, now - 5h02m)`, as S-C3-02),
+the room's clock set to 07:12, the fake agent on script `c3-tools` (dialect `claude`, through the
+real adapter), the pane open on `#/map` at 1368x912,
+When the owner types `how is hv1?` and taps `SEND` at t = 0 s, and the script calls `fleet`
+`{"site":"hv1"}` and answers `hv1 (feed from 02:10) is 5 h old: I cannot say how its guests are now.`,
+Then the pane shows the tool line `read the feed of hv1`, then the reply, whose text contains
+`02:10`; the `fleet` result in the fake agent's log has the `feed:hv1` entry with `"stale":true`
+and `"say":"hv1 (feed from 02:10)"`.
+Test: Playwright against the stand-ins; asserts the `[data-tool-line]` text, that `[data-reply]`
+contains `02:10`, and `fakeAgent.toolResults()[0].asOf` field by field. The reply's words are the
+script's: what this test gates is the `say` string the agent is handed and the sentence of §5 the
+room sends (asserted by `protocols.md` §11.8's test); whether a real agent uses them is seen in the
+measured run of the C1 done-when (T106), not here.
+
+### S-C3-22 The board goes down while the room stays up: the pane says so
+
+Added by T63 (review 44 finding 2 b, D229). Runs on the C1 night (`alerts` is C1's; slice item 17).
+Given the demo hub, the room under test with its clock in `manual` at 06:40:00, the fake agent on
+`c3-tools`, the pane open on `#/map` at 1368x912, no status line,
+When the test stops the demo hub at 06:40:30 and advances the room's clock (`advance(ms)`,
+`stand-ins.md` §1.1) to 06:41:00, the next `/healthz` check,
+Then no status line yet (one failure).
+When the clock reaches 06:41:10 (the check 10 s later fails too),
+Then within 1 s `[data-cockpit-status]` has `data-status="board-down"` and reads
+`Board unreachable since 06:41 (0 min): the agent cannot read the fleet.`; `SEND` and the talk
+button stay enabled; the wall half shows `screens.md` §7's grey snapshot and caption.
+When the owner sends `any alerts?` and the script calls `alerts`,
+Then the tool line reads `read the alerts · 1 failed` in `--text-2`, the result is
+`The board at http://127.0.0.1:<port> did not answer in 5 s; nothing to read.` (§3), and the status
+line is unchanged.
+When the test starts the demo hub again at 06:44:00 and the clock reaches 06:44:10,
+Then the status line is gone (`[data-cockpit-status]` has no `data-status`) and no `Back since` shows
+for it (`back` is the screen's own link, `c1-talk.md` §10.1).
+Test: Playwright against the stand-ins; asserts the absence at 06:41:00, the text at 06:41:10
+(exact), `SEND` not `disabled`, the tool line's text, and the absence at 06:44:10; the room's log
+holds `status board-down since 06:41` and one line when it clears.
+
+### S-C3-23 "What did last night's run cost?": one `runs` call, a number from the demo
+
+Added by T63 (review 44 finding 7, D231). Runs on the C1 night (`runs` is C1's).
+Given the demo hub (`acme-search` stopped 25 min ago on its budget, its seven `cost` events summing
+to 9.98 USD, `test/fixtures/runs/demo-run.jsonl`), the fake agent on `c3-tools`, the pane open,
+When the owner types `what did last night's run cost?` and taps `SEND`, and the script calls `runs`
+`{"since":"tonight"}` and answers `acme-search cost 9.98 USD over 7 rounds; it stopped on its budget.`,
+Then the pane shows one tool line `looked at the runs`, then the reply; the `runs` result's
+`acme-search` row has `"costUsd":9.98`, and every row has `costUsd` a number or `null`.
+Test: node:test calls `runs` `{"since":"tonight"}` by JSON-RPC as in §7 and asserts the
+`acme-search` row's `costUsd` equals the demo's `summarize` `cost.usd` (9.98); Playwright asserts the
+tool line text and the reply text.
