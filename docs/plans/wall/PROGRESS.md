@@ -408,7 +408,7 @@ Notes for every builder round (planner, round 1):
   carries the plate's tone, and under a calm plate the crit banner keeps full size (or one step down, never level
   with the calm name); under a trouble plate T4's step stays — done when: a test sees the tone in `data-plate`
   and a `wall.css` test pins the banner larger than `--cap-name` under a calm plate, and `?at=home` with a crit
-  elsewhere shows the red banner clearly above the white name. (commit T22MARK)
+  elsewhere shows the red banner clearly above the white name. (commit 7c3483a)
   Builder r50: built by T30 (1542f7c: a calm plate is `data-plate="grey"`, only `"crit"` steps the banner; its
   tests see the grey tone and pin the css). Added the missing guard: `fleetSize` (the banner's fitted far size) over
   long words and four screen shapes never drops under `STEPS.heroMin` 9 nor 1.25x the plate name step 6.9, so
