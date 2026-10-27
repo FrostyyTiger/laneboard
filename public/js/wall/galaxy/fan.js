@@ -18,6 +18,7 @@
 // frame (`cam.onDraw`), the names (labels.js) keeping off the rows.
 
 import { labelText } from './labels.js';
+import { TAP } from './touch.js';
 
 /**
  * The fan's measures: `rowPx` a row's height (night 2's 48 px floor),
@@ -25,10 +26,11 @@ import { labelText } from './labels.js';
  * nearer), `ringPx` the least distance from the finger to a row's inner
  * end, `max` rows at most (the worst first, so trouble is never cut),
  * `marginPx` from the stage's edge, `padPx` inside a row, `minW`/`maxW` a
- * row's width, `inMs` the rows' way out from under the finger.
+ * row's width, `inMs` the rows' way out from under the finger, `shiftPx` the
+ * farthest the ring moves off the words (farther, it is no longer the finger's).
  */
 export const FAN = Object.freeze({
-  rowPx: 48, pitchPx: 60, ringPx: 72, max: 12, marginPx: 16, padPx: 16, minW: 140, maxW: 340, inMs: 220,
+  rowPx: 48, pitchPx: 60, ringPx: 72, max: 12, marginPx: 16, padPx: 16, minW: 140, maxW: 340, inMs: 220, shiftPx: 120,
 });
 
 /**
@@ -37,7 +39,11 @@ export const FAN = Object.freeze({
  * row, its id by default). The rows stand in two arcs of a ring round the
  * finger, the members left of it on the left, the others on the right, each
  * side top to bottom as they are on screen, so a row is where its planet
- * is. The whole ring moves inward as one to keep clear of the stage's edges.
+ * is. The whole ring moves inward as one to keep clear of the stage's edges,
+ * and off `avoid` (`[{ left, top, right, bottom }]`, the words over the
+ * canvas): the fewest rows left on them, then the least move, never more
+ * than `FAN.shiftPx`; when both arcs cannot keep off, all the rows stand on
+ * one side, the one clear of the words.
  * Returns `{ x, y, items }` (the ring's centre) with each item `{ id, site,
  * tone, text, side, i, box: { left, top, right, bottom }, anchor: { x, y },
  * to: { x, y } }`: `anchor` the row's inner end, `to` its planet when
@@ -49,37 +55,89 @@ export function fanLayout(hits, x, y, opts = {}) {
   const f = FAN;
   const picked = (hits ?? []).slice(0, f.max);
   const byX = [...picked].sort((a, b) => a.x - b.x);
+  const width = (p) => Math.round(Math.min(f.maxW, Math.max(f.minW, 2 * f.padPx + text(p).length * MONO_EM * fontPx)));
+  const avoid = (opts.avoid ?? []).filter(Boolean);
+  const onWords = (fan) => fan.items.filter((it) => avoid.some((b) => overlaps(it.box, b))).length;
+
+  // Both arcs (the members left of the finger on the left), or all on one side when the words block the other.
   const half = Math.floor(byX.length / 2);
-  const sides = { left: byX.slice(0, half), right: byX.slice(half) };
-  for (const k of ['left', 'right']) sides[k].sort((a, b) => a.y - b.y);
+  const ways = [
+    { left: byX.slice(0, half), right: byX.slice(half) },
+    { left: [], right: byX },
+    { left: byX, right: [] },
+  ];
+  let best = null, score = null;
+  for (const [n, sides] of ways.entries()) {
+    if (n > 0 && (!avoid.length || !score[0])) break;
+    for (const k of ['left', 'right']) sides[k] = [...sides[k]].sort((a, b) => a.y - b.y);
+    const ring = ringOf(sides, { W, H, width, text });
+    const from = ring.place(x, y);
+    const tries = [[from, [onWords(from), 0]]];
+    if (avoid.length && onWords(from)) {
+      // On the words: the fewest rows left on them, then the least move (the leaders still find the planets).
+      const all = boxOf(from), g = f.marginPx;
+      const dxs = [0], dys = [0];
+      for (const b of avoid) {
+        dxs.push(b.right + g - all.left, b.left - g - all.right);
+        dys.push(b.bottom + g - all.top, b.top - g - all.bottom);
+      }
+      for (const dx of dxs) {
+        for (const dy of dys) {
+          const fan = ring.place(from.x + dx, from.y + dy);
+          const moved = Math.hypot(fan.x - from.x, fan.y - from.y);
+          if (moved <= f.shiftPx) tries.push([fan, [onWords(fan), moved]]);
+        }
+      }
+    }
+    for (const [fan, sc] of tries) {
+      if (!score || sc[0] < score[0] || (sc[0] === score[0] && sc[1] < score[1])) { best = fan; score = sc; }
+    }
+  }
+  return best;
+}
+
+/** The ring for `sides` (`{ left, right }`, each top to bottom): `place(x, y)` its rows round x, y, kept on the stage. */
+function ringOf(sides, { W, H, width, text }) {
+  const f = FAN;
   const rows = Math.max(sides.left.length, sides.right.length);
   const reach = ((rows - 1) / 2) * f.pitchPx;
   const ring = Math.max(f.ringPx, reach + f.pitchPx / 2);
-  const width = (p) => Math.round(Math.min(f.maxW, Math.max(f.minW, 2 * f.padPx + text(p).length * MONO_EM * fontPx)));
   const wide = { left: Math.max(0, ...sides.left.map(width)), right: Math.max(0, ...sides.right.map(width)) };
+  // A side with no rows needs no room: the ring may stand at that edge.
+  const room = { left: sides.left.length ? ring + wide.left : 0, right: sides.right.length ? ring + wide.right : 0 };
   const span = (lo, hi, v, whole) => (lo <= hi ? Math.min(hi, Math.max(lo, v)) : whole / 2);
-  const cx = span(f.marginPx + ring + wide.left, W - f.marginPx - ring - wide.right, x, W);
-  const cy = span(f.marginPx + reach + f.rowPx / 2, H - f.marginPx - reach - f.rowPx / 2, y, H);
-  const items = [];
-  for (const side of ['left', 'right']) {
-    const list = sides[side];
-    list.forEach((p, i) => {
-      const dy = (i - (list.length - 1) / 2) * f.pitchPx;
-      const off = Math.sqrt(ring * ring - dy * dy);
-      const w = width(p);
-      const inner = side === 'left' ? cx - off : cx + off;
-      const left = Math.round(side === 'left' ? inner - w : inner);
-      const top = Math.round(cy + dy - f.rowPx / 2);
-      items.push({
-        id: p.id, site: p.site, tone: p.tone, text: text(p), side, i,
-        box: { left, top, right: left + w, bottom: top + f.rowPx },
-        anchor: { x: Math.round(inner), y: Math.round(cy + dy) },
-        to: { x: p.x, y: p.y },
+  const inX = (v) => span(f.marginPx + room.left, W - f.marginPx - room.right, v, W);
+  const inY = (v) => span(f.marginPx + reach + f.rowPx / 2, H - f.marginPx - reach - f.rowPx / 2, v, H);
+  const place = (x, y) => {
+    const cx = inX(x), cy = inY(y);
+    const items = [];
+    for (const side of ['left', 'right']) {
+      const list = sides[side];
+      list.forEach((p, i) => {
+        const dy = (i - (list.length - 1) / 2) * f.pitchPx;
+        const off = Math.sqrt(ring * ring - dy * dy);
+        const w = width(p);
+        const inner = side === 'left' ? cx - off : cx + off;
+        const left = Math.round(side === 'left' ? inner - w : inner);
+        const top = Math.round(cy + dy - f.rowPx / 2);
+        items.push({
+          id: p.id, site: p.site, tone: p.tone, text: text(p), side, i,
+          box: { left, top, right: left + w, bottom: top + f.rowPx },
+          anchor: { x: Math.round(inner), y: Math.round(cy + dy) },
+          to: { x: p.x, y: p.y },
+        });
       });
-    });
-  }
-  return { x: cx, y: cy, items };
+    }
+    return { x: cx, y: cy, items };
+  };
+  return { place };
 }
+
+const boxOf = (fan) => ({
+  left: Math.min(...fan.items.map((it) => it.box.left)), right: Math.max(...fan.items.map((it) => it.box.right)),
+  top: Math.min(...fan.items.map((it) => it.box.top)), bottom: Math.max(...fan.items.map((it) => it.box.bottom)),
+});
+const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 
 /**
  * The row of `fan` (fanLayout's) under a finger at `x`, `y`: a row's box,
@@ -105,24 +163,26 @@ const easeOut = (t) => 1 - (1 - t) ** 3;
 export const fanText = (p) => labelText(p.node ?? { id: p.id }, p.tone, 'mono');
 
 /**
- * `createFan(root, { screenOf, size, fontPx, still, clock, doc })` → `{
+ * `createFan(root, { screenOf, size, avoid, fontPx, still, clock, doc })` → `{
  * show(hits, x, y), hide(), shown(), hit(x, y), covers(), draw() }`. `root`
  * the fan's layer (empty, hidden until shown); `screenOf(id)` where a planet
- * is drawn now (camera.js); `size()` the stage's `{ W, H }`; `fontPx()` the
+ * is drawn now (camera.js); `size()` the stage's `{ W, H }`; `avoid()` the
+ * boxes the rows keep off (the plate, the fleet line, back); `fontPx()` the
  * rows' type size; `still` (reduced motion) puts the rows in place at once.
  * `show` lays out hitAll's members under the finger (stage px); `hit` is
  * the row there as `{ id, site }`, or null; `covers()` the rows' boxes for
  * the names to keep off; `draw()` once a frame (camera.js `onDraw`).
  */
 export function createFan(root, opts = {}) {
-  const o = { screenOf: () => null, size: () => ({ W: 0, H: 0 }), fontPx: () => 18, still: false, clock: () => performance.now(), doc: globalThis.document, ...opts };
-  let fan = null, rows = [], since = 0;
+  const o = { screenOf: () => null, size: () => ({ W: 0, H: 0 }), avoid: () => [], fontPx: () => 18, still: false, clock: () => performance.now(), doc: globalThis.document, ...opts };
+  let fan = null, rows = [], since = 0, spot = null, at = null;
   root.hidden = true;
 
   const hide = () => {
     if (!fan) return;
     fan = null;
     rows = [];
+    spot = null;
     root.textContent = '';
     root.hidden = true;
   };
@@ -130,10 +190,16 @@ export function createFan(root, opts = {}) {
     hide();
     const { W, H } = o.size();
     const px = o.fontPx();
-    fan = fanLayout(hits, x, y, { W, H, fontPx: px, text: fanText });
+    fan = fanLayout(hits, x, y, { W, H, fontPx: px, text: fanText, avoid: o.avoid() });
     if (!fan.items.length) { fan = null; return; }
     root.style.setProperty('--fan-px', `${px}px`); // the size the widths were measured at
     since = o.clock();
+    at = { x, y };
+    // Where the finger was: its disc, which the leaders run into.
+    spot = o.doc.createElement('span');
+    spot.className = 'galaxy-fan-spot';
+    spot.style.width = spot.style.height = `${2 * TAP.radiusPx}px`;
+    spot.style.opacity = '0';
     for (const it of fan.items) {
       const leader = o.doc.createElement('span');
       leader.className = 'galaxy-fan-leader';
@@ -149,7 +215,7 @@ export function createFan(root, opts = {}) {
       rows.push({ it, row, leader });
     }
     root.textContent = '';
-    root.append(...rows.map((r) => r.leader), ...rows.map((r) => r.row));
+    root.append(spot, ...rows.map((r) => r.leader), ...rows.map((r) => r.row));
     root.hidden = false;
     draw();
   };
@@ -157,6 +223,9 @@ export function createFan(root, opts = {}) {
   const draw = () => {
     if (!fan) return;
     const t = o.clock() - since;
+    const k0 = o.still ? 1 : easeOut(clamp01(t / FAN.inMs));
+    spot.style.transform = `translate3d(${(at.x - TAP.radiusPx).toFixed(1)}px, ${(at.y - TAP.radiusPx).toFixed(1)}px, 0) scale(${(0.5 + 0.5 * k0).toFixed(3)})`;
+    spot.style.opacity = k0.toFixed(3);
     rows.forEach(({ it, row, leader }, n) => {
       const k = o.still ? 1 : easeOut(clamp01((t - n * 18) / FAN.inMs));
       const x = fan.x + (it.box.left - fan.x) * k, y = fan.y + (it.box.top - fan.y) * k;

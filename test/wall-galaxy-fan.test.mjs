@@ -290,10 +290,48 @@ test('galaxy/main.js wires the fan (night 4 T3): asked first while up, two membe
   assert.match(js, /if \(hit\?\.fan\) \{ fan\.show\(hit\.fan, hit\.x, hit\.y\); return; \}\s*fan\?\.hide\(\);/);
   assert.match(js, /moved: \(\) => fan\?\.hide\(\)/, 'a turn or a zoom closes it');
   assert.match(js, /cam\.onDraw\(fan\.draw\)/);
+  assert.match(js, /avoid: \(\) => \{ const b = backCover\(\); return b \? \[\.\.\.hud\.covers\(\), b\] : hud\.covers\(\); \}/, 'the rows keep off the words');
   assert.match(js, /\.\.\.\(fan\?\.covers\(\) \?\? \[\]\)/, 'the names keep off the rows');
   const html = read('galaxy.html');
   assert.match(html, /<div class="galaxy-fan" id="galaxy-fan" hidden><\/div>/);
   assert.ok(html.indexOf('galaxy-fan') > html.indexOf('wall-caption') && html.indexOf('galaxy-fan') < html.indexOf('galaxy-back'), 'over the words, under back');
   const css = read('css/wall.css');
   assert.match(css, /\.galaxy-fan-row \{[^}]*height: 48px;/);
+});
+
+test('fanLayout: rows that would stand on the words move off them by the least move; never farther than FAN.shiftPx', () => {
+  const hits = [pt('a', 590, 440), pt('b', 590, 460), pt('c', 610, 440, 'warn'), pt('d', 610, 460)];
+  const free = fanLayout(hits, 600, 450, { W, H });
+  const plate = { left: 80, top: 70, right: free.items.find((it) => it.side === 'left').box.left + 60, bottom: 600 };
+  const fan = fanLayout(hits, 600, 450, { W, H, avoid: [plate] });
+  for (const it of fan.items) assert.ok(!overlap(it.box, plate), `${it.id} off the plate`);
+  assert.equal(fan.y, free.y, 'moved along one axis');
+  assert.ok(fan.x > free.x && fan.x - free.x < 120, `to the right, a little: ${fan.x - free.x} px`);
+  assertApart(fan);
+  assertOnStage(fan);
+  // Nowhere clear (the words everywhere): the ring stays round the finger.
+  const all = fanLayout(hits, 600, 450, { W, H, avoid: [{ left: 0, top: 0, right: W, bottom: H }] });
+  assert.deepEqual([all.x, all.y], [free.x, free.y]);
+  // A plate too wide to clear and a line below: never more rows on the words, never far from the finger.
+  const wide = { left: 0, top: 0, right: 900, bottom: 500 }, line = { left: 0, top: 560, right: W, bottom: H };
+  const boxed = fanLayout(hits, 600, 450, { W, H, avoid: [wide, line] });
+  const on = (fan) => fan.items.filter((it) => overlap(it.box, wide) || overlap(it.box, line)).length;
+  assert.ok(on(boxed) <= on(free), `${on(boxed)} rows on the words, ${on(free)} where the finger was`);
+  assert.ok(Math.hypot(boxed.x - free.x, boxed.y - free.y) <= FAN.shiftPx, 'and the ring still the finger\'s');
+  assertApart(boxed);
+  assertOnStage(boxed);
+});
+
+test('fanLayout: with the plate where the left arc would stand, every row goes to the right arc, none on the words', () => {
+  const hits = Array.from({ length: 6 }, (_, i) => pt(`m${i}`, 960 + (i % 2 ? 6 : -6), 300 + i * 3, i < 3 ? 'warn' : 'calm'));
+  const plate = { left: 82, top: 73, right: 848, bottom: 590 };
+  const free = fanLayout(hits, 966, 300, { W, H });
+  assert.ok(free.items.some((it) => overlap(it.box, plate)), 'both arcs: the left one on the plate');
+  const fan = fanLayout(hits, 966, 300, { W, H, avoid: [plate] });
+  assert.equal(fan.items.length, 6);
+  assert.ok(fan.items.every((it) => it.side === 'right'), 'one arc, on the right');
+  for (const it of fan.items) assert.ok(!overlap(it.box, plate), `${it.id} off the plate`);
+  assert.ok(Math.hypot(fan.x - 966, fan.y - 300) <= FAN.shiftPx, 'round the finger still');
+  assertApart(fan);
+  assertOnStage(fan);
 });

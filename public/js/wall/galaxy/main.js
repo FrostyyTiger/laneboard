@@ -244,6 +244,7 @@ export function boot() {
   // The fan (night 4 T3, fan.js): two or more planets under one finger fan out as rows for the next tap.
   const fan = park ? null : createFan(document.getElementById('galaxy-fan'), {
     screenOf: cam.screenOf, size: galaxy.size, fontPx: () => Math.max(FAN_MIN_PX, steps.room), still: reduced,
+    avoid: () => { const b = backCover(); return b ? [...hud.covers(), b] : hud.covers(); }, // the rows keep off the words
   });
   const labels = createLabels(document.getElementById('galaxy-labels'), galaxy, {
     steps,

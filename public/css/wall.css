@@ -734,6 +734,16 @@ html.wall body {
 .galaxy-fan-row[data-tone="crit"] { color: var(--crit); --fan-edge: var(--crit); }
 .galaxy-fan-row[data-tone="warn"] { color: var(--warn); --fan-edge: var(--warn); }
 .galaxy-fan-row[data-tone="low"] { color: var(--p3); --fan-edge: var(--p3); }
+.galaxy-fan-spot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--text-3);
+  border-radius: 50%;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
 .galaxy-fan-leader {
   position: absolute;
   top: 0;
@@ -741,7 +751,7 @@ html.wall body {
   width: 1px;
   height: 1px;
   margin-top: -0.5px;
-  background: var(--text-3);
+  background: var(--text-2);
   transform-origin: 0 50%;
   will-change: transform, opacity;
 }
