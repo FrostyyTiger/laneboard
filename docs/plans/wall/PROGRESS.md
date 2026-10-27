@@ -488,12 +488,22 @@ Notes for every builder round (planner, round 1):
   r58-galaxy (pace=wall, large): 0 errors, 10.2 fps (SwiftShader, as earlier rounds; a few cached boxes per frame), no
   name on a frame block. Seen, not in scope: on the flight to HV1 the sun's star passes under the tag with its name
   dropped (it is covered, as asked); `HV1▌` cursor and `TARGET 02 / 05` as before.
-- [ ] T27 (r36-dreamer galaxy 4) [ui] [variant:galaxy] The hero is the held site's worst member: the caption's
+- [x] T27 (r36-dreamer galaxy 4) [ui] [variant:galaxy] The hero is the held site's worst member: the caption's
   hero and the lock target at a held site are its worst member by status (crit before warn), never a lesser one
   while a crit sits in the same system (r34 warp film: yellow `▲ FEAT-SEARCH` hero beside a red `■ vm-c`, banner
   `HV1 · VM-C`) — done when: a test on a model with a warn and a crit member in one site gets the crit as hero and
   lock target in `captionLines`/`sheetCaption`, and a film of `galaxy.html?demo=1&quality=0` has no plate whose
-  hero is milder than a member of the same site.
+  hero is milder than a member of the same site. (commit ec9cfd9)
+  Builder r59: on the live large demo (60 samples of `/api/map`) `captionLines` already named the worst member every
+  time; the r34 plate was a warn hero made before VM-C went down, which T24's follow-on-a-rise now re-ranks. The gap
+  left: a node's own trouble always led, so a site in its own warn would hero over a crit member. `caption.js` now
+  ranks the node's own trouble with the problems below it (its own wins a tie) and names a lesser own trouble as the
+  next problem row; `lockTarget` reads the hero, so the brackets follow (also on `wall.html`, same module). Test:
+  `wall-galaxy-hud.test.mjs` T27 (warn + crit members in both model orders, the site's own warn over a crit member,
+  own crit tie and own down lead; tour plate, sheet and lock target; fails without the fix). Checked: CDP probe
+  `tools/r59-hero.mjs` (pace=wall, large, 170 s, 505 plate samples against the newest model): no hero milder than a
+  member of its site; VM-C going down took HV1's hero at once; 0 errors. Film r59-galaxy: 0 errors, 12.6 fps
+  (SwiftShader, as earlier rounds; the change runs once per caption, not per frame).
 - [ ] T28 (r36-dreamer fx-warp 1-3) [ui] [variant:galaxy] `fx=warp` reads as travel and rests on arrival: streaks
   run radially along the screen vector from each grain to the destination's projected point (a vanishing point at
   the target), length tied to the camera's speed and 0 by flight progress 0.9 (before the plate types, with T15),
