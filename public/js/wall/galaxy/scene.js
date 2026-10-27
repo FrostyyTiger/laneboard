@@ -26,7 +26,7 @@ import { createStageSize } from './stage.js';
 import { LOBES, armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
 import {
-  BEACON, COMETS, TWINKLE, WARP, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, cometAt, cometPath, trackComets, trackTwinkles,
+  AFTERGLOW, BEACON, COMETS, TWINKLE, WARP, afterglowAt, afterglows, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, cometAt, cometPath, trackComets, trackTwinkles,
   twinkleAt, warpAt,
 } from './fx.js';
 
@@ -406,9 +406,10 @@ const pageClock = () => globalThis.performance.now();
  * `still` (reduced motion, still.js): trouble glows without breathing, the dust stays put.
  * `fx` (fx.js `parseFx`): the effects asked for; `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets,
  * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them),
- * `warp` streaks the sky while `setWarp` says the camera flies.
+ * `warp` streaks the sky while `setWarp` says the camera flies,
+ * `afterglow` rings a cluster whose trouble cleared (it remembers the tones from one `update` to the next).
  * Returns `{ update, setOpen, setSun, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, beams, frame, resize,
- * setQuality, size, camera, world, quality, pixelRatio, comets, twinkles, beacons, warp, renderer, dispose }`.
+ * setQuality, size, camera, world, quality, pixelRatio, comets, twinkles, beacons, afterglows, warp, renderer, dispose }`.
  * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
  * `stage` (stage.js, T29) keeps the canvas's css size so no frame reads layout; `size()` gives it to the
  * camera, the labels and the lock.
@@ -960,6 +961,7 @@ export function createGalaxyScene(canvas, {
     rankPeaks(tourOrder(nodes).map((s) => s.id), lastTree === null ? 0 : LIVE.recolourMs);
     lastTree = tree;
     place();
+    trackAfterglows();
     return true;
   };
 
@@ -1204,6 +1206,65 @@ export function createGalaxyScene(canvas, {
     .filter((p) => p.pillar.visible && p.id != null)
     .map((p) => ({ id: p.id, foot: { ...p.pillar.position }, tip: { ...p.tip.position } }));
 
+  // --- fx=afterglow (night 4 T16; fx.js afterglows, afterglowAt): where trouble was --
+  // One thin ring per recent clear, flat on the plane round its cluster,
+  // from a pool made once. The scene remembers each site's nebula tone from
+  // one model to the next (update); a fall out of warn or crit is a clear.
+  // The ring's line is AFTERGLOW.line of the frame thick seen from the
+  // overview (beaconScale's `across`, its geometry made again only when the
+  // slot's site or the world changes), cools by fx.js afterglowAt, dims
+  // while its system is open and fades once the camera is close, as the
+  // beacon does. Under reduced motion it is there at once and only ages.
+  let glowState = null; // fx.js afterglows' memory
+  const rings = [];
+  const ringHue = { crit: tone.crit, warn: tone.warn, grey: tone.calm };
+  if (fx?.has('afterglow')) {
+    for (let i = 0; i < AFTERGLOW.max; i++) {
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.99, 1, 128), keep(new THREE.MeshBasicMaterial({
+        color: tone.calm.clone(), side: THREE.DoubleSide, forceSinglePass: true, transparent: true, opacity: 0, depthWrite: false,
+      })));
+      ring.rotation.x = -Math.PI / 2;
+      ring.name = 'fx-afterglow';
+      ring.visible = false;
+      rings.push({ ring, key: null, id: null });
+      scene.add(ring);
+    }
+  }
+  /** After a model: what each drawn site's nebula says now, against what it said (fx.js afterglows). */
+  const trackAfterglows = () => {
+    if (!rings.length || !world) return;
+    const tones = world.sites.filter((s) => !s.gone).map((s) => [s.id, s.nebula?.tone ?? 'calm']);
+    glowState = afterglows(glowState, tones, clock());
+  };
+  const drawAfterglows = (now) => {
+    let i = 0;
+    for (const c of glowState?.clears.values() ?? []) {
+      const s = world?.byId.get(c.id);
+      const at = s && !s.gone ? afterglowAt(c, now, AFTERGLOW, still) : undefined;
+      const sc = at ? beamScaleOf(s) : null;
+      const slot = rings[i];
+      if (!sc || !slot) continue;
+      i += 1;
+      const { ring } = slot;
+      const width = sc.across(AFTERGLOW.line);
+      const key = `${c.id}:${world.version}`;
+      if (slot.key !== key) {
+        ring.geometry.dispose();
+        ring.geometry = new THREE.RingGeometry(Math.max(0.5, 1 - width / AFTERGLOW.radius), 1, 128);
+        slot.key = key;
+      }
+      slot.id = c.id;
+      ring.position.set(s.home.x, s.home.y, s.home.z);
+      ring.scale.setScalar(AFTERGLOW.radius * s.alive);
+      ring.material.color.lerpColors(ringHue[at.from], ringHue[at.to], at.mix);
+      const seen = Math.hypot(camera.position.x - s.home.x, camera.position.y - s.home.y, camera.position.z - s.home.z);
+      const ratio = width / Math.max(1, 2 * seen * Math.tan((camera.fov * Math.PI) / 360)) / AFTERGLOW.line;
+      ring.material.opacity = at.alpha * at.k * s.alive * (1 - (1 - BEACON.held) * ease(s.unfold)) * beaconNear(ratio);
+      ring.visible = ring.material.opacity > 0.005;
+    }
+    for (; i < rings.length; i++) { rings[i].ring.visible = false; rings[i].id = null; }
+  };
+
   // --- fx=warp (night 3 T12, T28; fx.js warpAt, warpTail): a flight has a target and a tint --
   // A line from each of the first WARP_STARS far stars and WARP_DUST dust
   // grains to a tail pushed toward the destination's point on screen by
@@ -1406,6 +1467,7 @@ export function createGalaxyScene(canvas, {
     if (tails.length) drawComets(now);
     if (glints.length) drawTwinkles(now);
     if (pillars.length) drawBeacons(now);
+    if (rings.length) drawAfterglows(now);
     if (warpParts.length) drawWarp();
     renderer.render(scene, camera);
   };
@@ -1445,7 +1507,7 @@ export function createGalaxyScene(canvas, {
     world = null;
     ribbon.geometry.dispose();
     band.geometry.dispose();
-    for (const o of [...shared, ...Object.values(geo)]) o.dispose();
+    for (const o of [...shared, ...Object.values(geo), ...rings.map((r) => r.ring.geometry)]) o.dispose();
     renderer.dispose();
     sized.stop();
   };
@@ -1462,6 +1524,8 @@ export function createGalaxyScene(canvas, {
     get comets() { return comets.flying; },
     get twinkles() { return twinkles; },
     get beacons() { return beacons; },
+    /** The clears remembered now (fx=afterglow): site id → `{ id, tone, at }` (fx.js afterglows). */
+    get afterglows() { return glowState?.clears ?? new Map(); },
     /** The warp as last drawn (`{ k, len, head, thin, tone, dir, aim }`, fx.js warpAt) and its two line sets (fx=warp). */
     get warp() { return warp(); },
     /** What the dust thins round now (`{ x, y, z, r, k }`, dustFade's uniforms). */

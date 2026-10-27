@@ -6,13 +6,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  AFTERGLOW, AFTERGLOW_STEPS, afterglowAt, afterglows,
   BEACON, COMETS, FX_NAMES, TWINKLE, WARP, beaconAt, beaconHeight, beaconNear, beaconScale, beaconWidth, beamProfile, coreProfile, cometAt, critAges, cometPath, flowComets, parseFx, trackComets,
   trackTwinkles, twinkleAt, workingPlanets,
   warpAt, warpTail,
 } from '../public/js/wall/galaxy/fx.js';
 import * as THREE from '../public/vendor/three/three.module.js';
 import { ease } from '../public/js/wall/galaxy/layout.js';
-import { paletteFrom } from '../public/js/wall/galaxy/palette.js';
+import { NEBULA, paletteFrom } from '../public/js/wall/galaxy/palette.js';
 import { FOV, createGalaxyScene, overviewShot } from '../public/js/wall/galaxy/scene.js';
 import { ndcOf } from '../public/js/wall/galaxy/framing.js';
 
@@ -818,4 +819,148 @@ test('main.js tells the scene of the camera\'s flight only under fx=warp', async
   const fs = await import('node:fs');
   const src = fs.readFileSync(new URL('../public/js/wall/galaxy/main.js', import.meta.url), 'utf8');
   assert.match(src, /if \(fx\.has\('warp'\)\) galaxy\.setWarp\(cam\.flight\(\)\);/);
+});
+
+// --- fx=afterglow (night 4 T16) -------------------------------------------------------
+
+test('afterglow is a name, off by default', () => {
+  assert.ok(FX_NAMES.includes('afterglow'));
+  assert.deepEqual([...parseFx('?fx=afterglow')], ['afterglow']);
+  assert.equal(parseFx('?fx=beacon,warp').has('afterglow'), false);
+});
+
+test('afterglows: a fall out of warn or crit is a clear in the spell\'s worst tone; a flap or a gone site drops it', () => {
+  const T = (o) => new Map(Object.entries(o));
+  let g = afterglows(null, T({ hv1: 'crit', hv2: 'warn', remote: 'calm' }), 0);
+  assert.equal(g.clears.size, 0, 'nothing clears on the first model');
+  g = afterglows(g, T({ hv1: 'warn', hv2: 'warn', remote: 'calm' }), 1000);
+  assert.equal(g.clears.size, 0, 'crit to warn is still trouble');
+  g = afterglows(g, T({ hv1: 'calm', hv2: 'low', remote: 'calm' }), 2000);
+  assert.deepEqual(g.clears.get('hv1'), { id: 'hv1', tone: 'crit', at: 2000 }, 'the spell\'s worst, not its last');
+  assert.deepEqual(g.clears.get('hv2'), { id: 'hv2', tone: 'warn', at: 2000 }, 'warn to low clears too');
+  assert.equal(g.clears.has('remote'), false, 'calm all along: no ring');
+  g = afterglows(g, T({ hv1: 'calm', hv2: 'low', remote: 'calm' }), 5000);
+  assert.equal(g.clears.get('hv1').at, 2000, 'a later model keeps when it cleared');
+  g = afterglows(g, T({ hv1: 'warn', hv2: 'low', remote: 'calm' }), 6000);
+  assert.equal(g.clears.has('hv1'), false, 'a flap back to trouble drops the ring');
+  g = afterglows(g, T({ hv1: 'warn', remote: 'calm' }), 7000);
+  assert.equal(g.clears.has('hv2'), false, 'a site gone from the map drops it');
+  g = afterglows(g, T({ hv1: 'calm', remote: 'calm' }), 8000);
+  assert.equal(g.clears.get('hv1').tone, 'warn', 'a new spell, its own worst');
+  g = afterglows(g, T({ hv1: 'calm', remote: 'calm' }), 8000 + AFTERGLOW.lifeMs);
+  assert.equal(g.clears.size, 0, 'gone after its life');
+  // At most max, the newest kept.
+  const many = Array.from({ length: AFTERGLOW.max + 3 }, (_, i) => `s${i}`);
+  let m = afterglows(null, many.map((id) => [id, 'crit']), 0);
+  many.forEach((id, i) => { m = afterglows(m, many.map((x, j) => [x, j <= i ? 'calm' : 'crit']), 100 * (i + 1)); });
+  assert.equal(m.clears.size, AFTERGLOW.max);
+  assert.equal(m.clears.has('s0'), false);
+  assert.ok(m.clears.has(many.at(-1)));
+});
+
+test('afterglowAt: a crit ring cools crit → warn → grey and goes at 30 min, its alpha falling under the warn nebula\'s', () => {
+  const MINS = 60_000;
+  assert.equal(AFTERGLOW.lifeMs, 30 * MINS);
+  assert.deepEqual([...AFTERGLOW_STEPS], ['crit', 'warn', 'grey']);
+  const c = { id: 'hv1', tone: 'crit', at: 0 };
+  const hue = (ms) => { const a = afterglowAt(c, ms); return a.mix < 0.5 ? a.from : a.to; };
+  assert.equal(hue(0), 'crit');
+  assert.equal(hue(5 * MINS), 'crit');
+  assert.equal(hue(15 * MINS), 'warn');
+  assert.equal(hue(28 * MINS), 'grey');
+  assert.equal(afterglowAt(c, 0).mix, 0, 'just cleared: the crit token itself');
+  assert.equal(afterglowAt(c, 25 * MINS).from, 'grey', 'grey before it goes');
+  // The hue never jumps: from one step to the next it blends.
+  let last = afterglowAt(c, 0);
+  for (let ms = 5000; ms < AFTERGLOW.lifeMs; ms += 5000) {
+    const a = afterglowAt(c, ms);
+    const pos = AFTERGLOW_STEPS.indexOf(a.from) + a.mix, was = AFTERGLOW_STEPS.indexOf(last.from) + last.mix;
+    assert.ok(pos >= was - 1e-9 && pos - was < 0.2, `cools gently at ${ms}`);
+    assert.ok(a.alpha < last.alpha || ms === 5000, `alpha falls at ${ms}`);
+    assert.ok(a.alpha < NEBULA.warn.opacity, 'under the warn nebula\'s');
+    last = a;
+  }
+  assert.ok(afterglowAt(c, AFTERGLOW.lifeMs - 1000).alpha < 0.01, 'almost nothing at the end');
+  assert.equal(afterglowAt(c, AFTERGLOW.lifeMs), undefined, 'gone at 30 min');
+  assert.ok(AFTERGLOW.opacity < NEBULA.warn.opacity);
+  // A warn clear starts amber.
+  const w = { id: 'hv2', tone: 'warn', at: 0 };
+  assert.equal(afterglowAt(w, 0).from, 'warn');
+  assert.equal(afterglowAt(w, 15 * MINS).from, 'grey');
+  // It fades in when it begins, at once when still.
+  assert.equal(afterglowAt(c, 0).k, 0);
+  assert.equal(afterglowAt(c, AFTERGLOW.inMs).k, 1);
+  assert.equal(afterglowAt(c, 0, AFTERGLOW, true).k, 1);
+});
+
+function afterglowRings(galaxy) {
+  let root = galaxy.world.sites[0].star;
+  while (root.parent) root = root.parent;
+  return root.children.filter((o) => o.isMesh && o.name === 'fx-afterglow');
+}
+
+test('without fx=afterglow the scene makes no ring and remembers no clear', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['beacon']) });
+  galaxy.update(critModel());
+  at(1000);
+  galaxy.update(model());
+  at(2000);
+  assert.equal(afterglowRings(galaxy).length, 0);
+  assert.equal(galaxy.afterglows.size, 0);
+});
+
+test('with fx=afterglow a cleared crit leaves a red outline on the plane round its cluster, quieter than trouble', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['afterglow']) });
+  galaxy.update(critModel());
+  toOverview(galaxy);
+  at(1000);
+  const rings = afterglowRings(galaxy);
+  assert.equal(rings.length, AFTERGLOW.max, 'one pool, made once');
+  assert.equal(rings.filter((r) => r.visible).length, 0, 'standing trouble has no ring');
+  // hv2 clears; remote stays crit.
+  const calm = critModel();
+  calm.nodes.find((n) => n.id === 'storage').status = 'ok';
+  galaxy.update(calm);
+  at(1016);
+  at(1016 + AFTERGLOW.inMs);
+  const shown = rings.filter((r) => r.visible);
+  assert.equal(shown.length, 1);
+  const [ring] = shown;
+  const h = galaxy.world.byId.get('hv2').home;
+  assert.deepEqual([ring.position.x, ring.position.y, ring.position.z], [h.x, h.y, h.z], 'round hv2');
+  assert.ok(Math.abs(ring.rotation.x + Math.PI / 2) < 1e-9, 'flat on the plane');
+  const p = ring.geometry.parameters;
+  assert.ok(p.innerRadius > 0.9 && p.outerRadius === 1, `an outline, not a disc: ${p.innerRadius}`);
+  const { r, g, b } = ring.material.color;
+  const crit = paletteFrom().crit;
+  assert.ok(Math.abs(r - new THREE.Color().setRGB(...crit, THREE.SRGBColorSpace).r) < 1e-6 && r > g * 2 && r > b, 'the crit hue');
+  assert.ok(ring.material.opacity > 0.2 && ring.material.opacity < NEBULA.warn.opacity, `faint: ${ring.material.opacity}`);
+  // It does not pulse: two frames a breath apart, the same strength.
+  const o1 = ring.material.opacity;
+  at(1016 + AFTERGLOW.inMs + 1300);
+  assert.ok(Math.abs(ring.material.opacity - o1) < 0.002, 'never pulsing');
+  // Twenty-two minutes on it is grey and fainter.
+  at(1016 + 22 * 60_000);
+  assert.ok(ring.visible && ring.material.opacity < o1 / 2);
+  const c = ring.material.color;
+  assert.ok(Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b) < 0.05, 'cooled to grey');
+  // hv2 flaps back to crit: the ring goes.
+  galaxy.update(critModel());
+  at(1016 + 22 * 60_000 + 16);
+  assert.equal(rings.filter((x) => x.visible).length, 0);
+  assert.equal(galaxy.afterglows.size, 0);
+});
+
+test('with fx=afterglow a clear that ages past 30 min draws nothing; still mode shows it at once', () => {
+  const { galaxy, at } = sceneAt({ fx: new Set(['afterglow']), still: true });
+  galaxy.update(critModel());
+  toOverview(galaxy);
+  at(1000);
+  const calm = critModel();
+  calm.nodes.find((n) => n.id === 'storage').status = 'ok';
+  galaxy.update(calm);
+  at(1000);
+  assert.equal(afterglowRings(galaxy).filter((r) => r.visible).length, 1, 'still: there at once');
+  at(1000 + AFTERGLOW.lifeMs);
+  assert.equal(afterglowRings(galaxy).filter((r) => r.visible).length, 0);
 });

@@ -69,7 +69,7 @@
 // finger (wake, taps, back, gestures) through `finger`, a show command
 // through `show`; the director plays the one that has the camera (touch >
 // show > tour) and refuses the rest, every hand-over eased from the pose.
-// Effects (§7.C, fx.js): `?fx=comets,twinkle,beacon,warp` (comma-separated, all off by default);
+// Effects (§7.C, fx.js): `?fx=comets,twinkle,beacon,warp,afterglow` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
 import { createPerf } from '../perf.js';

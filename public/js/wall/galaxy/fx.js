@@ -30,12 +30,20 @@
 // it flies. You know the next target is red before the caption types it.
 // Nothing at rest, nothing in still mode, and nothing on a flight to a calm
 // site or to the overview (night 4 T15): a streak means "trouble ahead".
+//
+// `afterglow` (night 4 T16, README Night 3 D): when a site's trouble clears,
+// its cluster keeps a faint outline ring on the plane in the spell's worst
+// hue, cooling red → amber → grey and gone after 30 minutes: in the morning
+// you see where something went wrong in the night though it is calm now.
+// Outline only, never filled, never pulsing, fainter than any live nebula
+// (§2.1). The page remembers the clears it has seen (no server route, D2);
+// a reload forgets them. A site back in trouble drops its ring.
 
 import { hash } from './layout.js';
-import { toneOf } from './palette.js';
+import { toneOf, worseTone } from './palette.js';
 
 /** Every effect this page knows, in the order the README lists them. */
-export const FX_NAMES = Object.freeze(['comets', 'twinkle', 'beacon', 'warp']);
+export const FX_NAMES = Object.freeze(['comets', 'twinkle', 'beacon', 'warp', 'afterglow']);
 
 /** The effects `?fx=` asks for (a `location.search` string or URLSearchParams): a Set of known names. */
 export function parseFx(search = '') {
@@ -482,4 +490,81 @@ export function warpTail(p, aim, len) {
   if (!(gap > 1e-6)) return { x: p.x, y: p.y, z: p.z };
   const step = Math.min(len * Math.hypot(p.x, p.y, p.z), gap) / gap;
   return { x: p.x + dx * step, y: p.y + dy * step, z: p.z };
+}
+
+/**
+ * The afterglow's look (night 4 T16): a clear lives `lifeMs`; its ring cools
+ * one hue step every `coolShare` of that (crit → warn → grey, a warn clear
+ * starts at warn), the step itself blended over the last `blend` of it; its
+ * strength falls from `opacity` (under every live nebula's: NEBULA.warn is
+ * 0.7, calm's haze 0.2) to 0 at `lifeMs`, by `(1 - age) ** fall`. It fades
+ * in over `inMs` when it begins (at once in still mode). The ring lies at
+ * `radius` (world units, round the calm haze a cleared cluster has), its
+ * line `line` of the frame's height thick seen from the overview; at most
+ * `max` rings, the newest kept. It fades as the camera comes close, as the
+ * beacon does (beaconNear).
+ */
+export const AFTERGLOW = Object.freeze({
+  lifeMs: 30 * 60_000, coolShare: 0.35, blend: 0.4, fall: 1.4,
+  opacity: 0.42, inMs: 1800, radius: 300, line: 0.0035, max: 8,
+});
+
+/** The hue steps a ring cools through, hottest first ('grey' is --text-3, the calm tone's). */
+export const AFTERGLOW_STEPS = Object.freeze(['crit', 'warn', 'grey']);
+
+const TROUBLE = new Set(['warn', 'crit']);
+
+/**
+ * The clears the page remembers at page time `now`: `prev` (this function's
+ * last answer, or null on the first model) with `tones`, each drawn site's
+ * worst tone now (a Map or `[id, tone]` pairs, the scene's nebula tones).
+ * `{ tones, worst, clears }`: `worst` the worst tone of each site's current
+ * spell of trouble, `clears` site id → `{ id, tone, at }`, `tone` that
+ * spell's worst (`warn` or `crit`), `at` when it cleared (page time). A site
+ * whose tone falls from warn or crit to low or calm clears; one in trouble
+ * again (a flap) drops its ring; one gone from the map drops it too. Trouble
+ * standing on the first model is a spell like any other; nothing clears on
+ * the first model. Old clears go at `lifeMs`; at most `max`, newest kept.
+ */
+export function afterglows(prev, tones, now, timing = AFTERGLOW) {
+  const nowTones = new Map(tones ?? []);
+  const worst = new Map();
+  const clears = new Map();
+  for (const [id, c] of prev?.clears ?? []) {
+    if (nowTones.has(id) && !TROUBLE.has(nowTones.get(id)) && now - c.at < timing.lifeMs) clears.set(id, c);
+  }
+  for (const [id, t] of nowTones) {
+    const was = prev?.worst.get(id);
+    if (TROUBLE.has(t)) {
+      worst.set(id, was ? worseTone(was, t) : t);
+      clears.delete(id);
+    } else if (was && prev?.tones.has(id)) {
+      clears.set(id, { id, tone: was, at: now });
+    }
+  }
+  const keep = [...clears.values()].sort((a, b) => b.at - a.at).slice(0, timing.max);
+  return { tones: nowTones, worst, clears: new Map(keep.map((c) => [c.id, c])) };
+}
+
+/**
+ * How a clear's ring looks at page time `now`: `{ from, to, mix, alpha, k }`,
+ * its hue `mix` (0..1) of the way from step `from` to step `to`
+ * (AFTERGLOW_STEPS), `alpha` its strength by age (falling, 0 at `lifeMs`),
+ * `k` its fade-in (1 when `still`); `undefined` once it is gone.
+ */
+export function afterglowAt(clear, now, timing = AFTERGLOW, still = false) {
+  const age = Math.max(0, now - clear.at);
+  if (!(age < timing.lifeMs)) return undefined;
+  const u = age / timing.lifeMs;
+  const start = Math.max(0, AFTERGLOW_STEPS.indexOf(clear.tone));
+  const last = AFTERGLOW_STEPS.length - 1;
+  const steps = u / timing.coolShare; // hue steps cooled so far
+  const whole = Math.floor(steps);
+  const from = Math.min(last, start + whole);
+  const to = Math.min(last, from + 1);
+  const part = steps - whole;
+  const mix = from === to ? 0 : smooth(1 - timing.blend, 1, part);
+  const alpha = timing.opacity * (1 - u) ** timing.fall;
+  const k = still ? 1 : Math.min(1, age / timing.inMs);
+  return { from: AFTERGLOW_STEPS[from], to: AFTERGLOW_STEPS[to], mix, alpha, k };
 }
