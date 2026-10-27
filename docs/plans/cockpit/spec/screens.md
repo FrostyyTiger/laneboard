@@ -348,7 +348,8 @@ A screen depends on up to three things; each fails on its own and says so where 
 | the **room** | the room link (`protocols.md` §2) | the link closes, or no frame for 25 s (the room sends a heartbeat every 10 s); it retries 500 ms × 1.8 up to 15 s, the same `nextBackoff` (D10, D11) |
 
 A lost room link shows only after a **5 s grace**: a link back within 5 s changes nothing on screen
-(D10). The board link keeps today's behaviour (the `#offline` banner in the app). The room link does not
+(D10). The grace starts at the link's close or 25 s after its last frame, whichever comes first
+(`protocols.md` §2.2, D139). The board link keeps today's behaviour (the `#offline` banner in the app). The room link does not
 go through the hub (D92), so a hub down is not a room down; on one box board and room are one
 process and go down together.
 

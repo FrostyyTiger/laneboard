@@ -95,7 +95,9 @@ screen                                  room
 ```
 
 `epoch` and `lastSeq` only on a reconnect: the `epoch` of the last `welcome` and the highest room
-`seq` the screen has applied. A fresh page (a load or a reload) sends neither.
+`seq` the screen has applied. A fresh page (a load or a reload) sends neither. `page` has two
+values: `wall` (the Wall page, any layout) and `app` (the laneboard app, any route); which view the
+app shows travels in `focus.route` (§3.8), never in `hello`.
 
 **`welcome`** (room → screen):
 
@@ -115,7 +117,7 @@ screen                                  room
 | `config.stt` | `on` or `none` (`c2-voice.md` §9: `none` draws no talk button) |
 | `config.languages` | `cockpit.stt.language` as a list (`["auto"]` for `auto`), for the language button (D48) |
 | `status` | the room's status line or `null` (§3.5) |
-| `now` | the room's clock; the screen logs a skew over 2 s once and changes nothing |
+| `now` | the room's clock; on a skew over 2 s the screen sets `performance.mark('cockpit:skew', {detail:{ms}})` and one `console.warn('cockpit: clock skew', ms)`, once per page load, and changes nothing else (D142) |
 
 **Replay or snapshot** (D94). The room keeps its last **2 000** `seq`'d messages in memory. It
 replays when the `epoch` matches and `lastSeq + 1` is still kept; otherwise (fresh page, room
@@ -125,7 +127,20 @@ sends a snapshot. Nothing is ever applied twice: a `seq` at or below the last ap
 
 **`snapshot`** (room → screen): the current conversation, the last 50 turns (D27), the running turn
 where it is, pins and cards. One or more frames of at most 512 KB each; the screen draws once the
-frame with `part` equal to `parts` has arrived.
+frame with `part` equal to `parts` has arrived. Parts (D140):
+
+- Every part carries every field of §2.4's row (`seq`, `conversation`, `startedAt`, `olderTurns`
+  the same in each), so each part validates alone.
+- `turns` are cut between turns, never inside one, oldest first: part 1 holds the oldest turns,
+  the last part the newest. `pins` and `cards` are complete in the last part and `[]` in the others.
+- A turn whose JSON alone passes 448 KB (512 KB less room for the envelope, pins and cards) goes in
+  a part of its own, cut until it fits: first every `tool` item's `input` becomes `{"…":"cut"}`,
+  then its longest `text` items keep their last 4 000 characters after `… `. Only the snapshot is
+  cut; the room keeps the whole turn. (A turn that size is over 400 000 characters of reply.)
+- The room sends all parts in one go on the link, before any later message with a `seq`. The screen
+  still holds every `seq`'d message that arrives before the last part, then applies, in order, those
+  above the snapshot's `seq` and drops the rest. Messages without `seq` (heartbeat, `stt.*`,
+  `show`) act at once.
 
 ```json
 {"type":"snapshot","seq":1291,"part":1,"parts":1,"conversation":"c-0007",
@@ -175,8 +190,11 @@ frame with `part` equal to `parts` has arrived.
 {"type":"heartbeat","at":"2026-10-27T07:02:21.480+01:00"}
 ```
 
-The screen counts the link as lost after **25 s** without any frame, shows it after the 5 s grace
-(`screens.md` §7, D10), and reconnects with `nextBackoff` (500 ms × 1.8, cap 15 s; D11). The room
+The screen counts the link as lost at its `close` event or 25 s after the last frame, whichever
+comes first. **The 5 s grace starts at that moment** (`screens.md` §7, D10): a clean close shows
+`room-down` 5 s after the close, a silent link 30 s after its last frame, unless a new link has
+had its `welcome` in between (D139); the close codes of §2.3 that say "at once" skip the grace. The status line's "since" time is that same moment, not the
+last frame. The screen reconnects with `nextBackoff` (500 ms × 1.8, cap 15 s; D11). The room
 also sends a WebSocket ping every 30 s and drops a link that has not answered the previous one, as
 `server/ws.mjs` does.
 
@@ -194,7 +212,7 @@ also sends a WebSocket ping every 30 s and drops a link that has not answered th
 | `unknown-type` | a `type` the room does not know |
 | `unknown-id` | a `turnId`, `showId`, `card` or `utterance` the room does not have |
 | `too-many` | over the rate limit (§8); the message is dropped |
-| `not-now` | valid but not possible in this state (`stop` with no running turn, a second `audio.start`) |
+| `not-now` | valid but not possible in this state (`stop` with no running turn, an `audio.start` while an utterance is open, §6.1) |
 
 `message` is for the log and tests; the screen never draws it, except where a message's own error
 case below says what the screen shows.
@@ -310,7 +328,7 @@ and not listed. Field values and ranges are in the section named.
 | `card.order` | `room` | `ids` | — | 5 |
 | `card.data` | no | `card`, `asOf`, `data` | — | 5 |
 | `stt.update` | no | `utterance`, `firm`, `tail`, `sentAt` | — | 6.1 |
-| `stt.final` | no | `utterance`, `text` | — | 6.1 |
+| `stt.final` | no | `utterance`, `text`, `lang\|null` | — | 6.1 |
 | `stt.error` | no | `utterance`, `error`, `detail` | — | 6.1 |
 | `talk` | no | `request`, `action` | — | 7 |
 
@@ -325,7 +343,7 @@ and not listed. Field values and ranges are in the section named.
 | item `show` | `kind`, `blockIndex`, and `show.line`'s required fields but `turnId` | — |
 | item `prompt` | `kind`, `clientId`, `text`, `source`, `lang\|null`, `about\|null`, `at`, `state`; `atBlock` with `taken`; `why` with `cancelled` | — |
 
-How a snapshot over 512 KB divides its lists between parts is T92's.
+How a snapshot over 512 KB divides its lists between parts: §2.2 (D140).
 
 ## 3. The conversation (C1)
 
@@ -344,7 +362,7 @@ How a snapshot over 512 KB divides its lists between parts is T92's.
 | `clientId` | made by the screen, `p-` and 8 hex characters from `crypto.getRandomValues`; kept by the screen with the drawn block |
 | `text` | trimmed, 1 to `config.maxPromptChars` (8 000, D30) characters |
 | `source` | `typed` or `spoken` (`YOU · SPOKEN`, `c1-talk.md` §3) |
-| `lang` | the language of a spoken prompt (`c2-voice.md` §8), else `null` |
+| `lang` | the language of a spoken prompt (`stt.final.lang`, §6.1; `null` when the service named none), else `null` |
 | `about` | the context chip's node id or `null` (`c3-see.md` §9, D65; the room writes D66's line) |
 | `focus` | the screen's focus at the send (`c3-see.md` §8.1, without `type`, `seq`, `at`) |
 | `sentAt` | epoch ms of the tap, for the marks |
@@ -505,6 +523,12 @@ dividers). Errors: `not-now` while one is starting (a second tap within the star
 current conversation only (`c1-talk.md` §11: a reload shows only the current one). Errors:
 `unknown-id`.
 
+`history.turns` has no `seq` and changes only the list of older turns: the screen puts its turns
+above the oldest turn it shows and sets its `SHOW EARLIER` count from `olderTurns`. It never
+touches a turn already shown, so it may arrive between replayed or live events in any order. An
+answer that arrives after a `conversation.new`, or whose `before` turn is no longer the oldest
+shown (a snapshot came in between), is dropped; `SHOW EARLIER` asks again on the next tap (D141).
+
 ### 3.8 Focus and presence
 
 - **`focus`** (screen → room): `c3-see.md` §8.1 has the message, its checks and D61's timing. A
@@ -524,7 +548,10 @@ current conversation only (`c1-talk.md` §11: a reload shows only the current on
 
 The agent's show tool reaches the room over MCP (`c4-show-canvas.md` §1); the room sends:
 
-**`show`** (room → each target link, no `seq`: a camera move is never replayed):
+**`show`** (room → every link of each target screen, no `seq`: a camera move is never replayed).
+Which screens are targets is `c4-show-canvas.md` §1 "Targets" (D67). Each link answers for itself;
+the room counts a screen with two links as its best answer, in the order `shown`, `waiting`,
+`skipped`, `noCamera` (D143):
 
 ```json
 {"type":"show","showId":"sh-0041","turnId":"t-0132","cmd":"fly_to",
@@ -561,7 +588,7 @@ state, which the next `show.line` brings).
 (§5) with `node` in place of `size`; `fields` holds the block's fields (`body` for `text`).
 `replaced` names the pin a 4th one pushed out (D73). The pin's `✕` and its `UNDO` within 10 s
 send `pin.close` and `pin.restore`, as a card's (D137); the room answers with `pin.remove` or
-`pin.put`, errors as §5's.
+`pin.put`, errors as §5's. A `pin.close` held while `room-down` follows the card rule (§5, D144).
 
 | `type` | Direction, `seq` | Example |
 | --- | --- | --- |
@@ -580,7 +607,7 @@ The room's one card list (D79) travels as shared state; card data as refreshes (
 | `card.remove` | room → all, `seq` | `{"type":"card.remove","seq":1341,"card":"card-0004","by":"desk"}` | `by` the screen whose `✕` it was, or `agent`, or `full` (D80) |
 | `card.order` | room → all, `seq` | `{"type":"card.order","seq":1342,"ids":["card-0004","card-0003"]}` | after `TO FRONT` (D79) |
 | `card.data` | room → all, no `seq` | `{"type":"card.data","card":"card-0003","asOf":"2026-10-27T07:12:10+01:00","data":{"state":"ok","label":"builder-a"}}` | every 10 s per card (D81); after a replay or snapshot the room sends one per card |
-| `card.close` | screen → room | `{"type":"card.close","seq":60,"card":"card-0004"}` | `✕` (`c4-show-canvas.md` §9); while `room-down` the screen keeps it and sends it when the link is back |
+| `card.close` | screen → room | `{"type":"card.close","seq":60,"card":"card-0004"}` | `✕` (`c4-show-canvas.md` §9); while `room-down` the screen keeps it, with the card's `at`, and sends it once the link is back and the replay or snapshot is applied, only if the card still has that `at`; a card replaced meanwhile stays, in its new version, and the held close is dropped (D144) |
 | `card.restore` | screen → room | `{"type":"card.restore","seq":61,"card":"card-0004"}` | `UNDO` within 10 s (D84); after that `not-now` |
 | `card.front` | screen → room | `{"type":"card.front","seq":62,"card":"card-0003"}` | `TO FRONT` |
 | `card.tick` | screen → room | `{"type":"card.tick","seq":63,"card":"card-0005","row":2,"ticked":true}` | a checklist row (D87); a row with a `when` gets `not-now` |
@@ -601,8 +628,25 @@ The screen streams the microphone to the room; the room alone talks to the speec
 ```
 
 `utterance`: `u-` and the screen's own counter for this page. `lang`: one of `config.languages`
-(D48). `format`: the only v1 value (D96). At most one open utterance per link: a second
-`audio.start` gets `not-now`.
+(D48), `auto` included when that list is `["auto"]`. `format`: the only v1 value (D96).
+
+**An utterance's life** (D138). It is **open** from `audio.start` to its `audio.stop` or
+`audio.cancel`, and **finishing** from `audio.stop` until its `stt.final` or `stt.error`. A link has
+at most one open utterance: an `audio.start` while one is open gets `not-now`. A finishing one does
+not count, so a press 0.5 s after a release opens the next utterance while the room still waits
+for the first one's final; the room then holds two speech sessions for that link for up to 3.0 s
+(§6.2). Every `stt.*` message names its `utterance` and the screen acts on it by that key:
+
+- `stt.update` for an utterance that is no longer open is dropped (the live words belong to the
+  open one).
+- `stt.final` of a finishing utterance does what its `reason` says (the table below), whatever is
+  open now: with `send` its prompt goes out at once, as its own block, and takes the typed draft
+  in front (D44); with `fix` its text is added to the end of the typed draft, which the input
+  shows again when the open utterance ends.
+- `stt.error` of a finishing utterance draws its line (D50) and leaves the open one alone.
+
+A speech service that allows one session at a time answers the second connect with 403, which is
+`stt-down` `busy` for the new utterance (§12.4).
 
 **Binary frames** follow: raw PCM, signed 16-bit little-endian, 16 000 Hz, mono, **100 ms each
 (3 200 bytes)**; the last one may be shorter, none longer than 6 400 bytes. The screen captures with
@@ -626,11 +670,16 @@ link lost; the room ends the service session and sends nothing more for it.
 | `type` | Example | The screen |
 | --- | --- | --- |
 | `stt.update` | `{"type":"stt.update","utterance":"u-0012","firm":"wie lief","tail":"die Na","sentAt":1793080921610}` | replaces `[data-firm]` and `[data-tail]` (`c2-voice.md` §4) |
-| `stt.final` | `{"type":"stt.final","utterance":"u-0012","text":"wie lief die Nacht?"}` | `text` replaces firm and tail; with `reason` `send` and words in it, the screen sends the `prompt` (§3.1, `source:"spoken"`, its typed draft in front, D44); with `fix` it goes into the textarea; empty: nothing sent, `MICROPHONE OFF` |
+| `stt.final` | `{"type":"stt.final","utterance":"u-0012","text":"wie lief die Nacht?","lang":"de"}` | `text` replaces firm and tail; with `reason` `send` and words in it, the screen sends the `prompt` (§3.1, `source:"spoken"`, its typed draft in front, D44); with `fix` it goes into the textarea; empty: nothing sent, `MICROPHONE OFF` |
 | `stt.error` | `{"type":"stt.error","utterance":"u-0012","error":"stt-down","detail":"no-answer"}` | `data-talk-error` and `data-talk-detail` (D50's tables) |
 
 The room sends `stt.update` with firm = the service's committed lines joined by one space and
 tail = its buffer (research Q4), so the screen never joins anything itself.
+
+**`stt.final.lang`** is the utterance's `audio.start.lang` when that is a language code. With
+`auto` it is the `detected_language` of the last `lines[]` entry that has one (research Q4), or
+`null` when no line has one. A spoken `prompt` carries this `lang` (§3.1), so `turn.prompt` and the
+block's language are the language heard, not `auto`.
 
 ### 6.2 Timeouts and errors
 
@@ -697,6 +746,17 @@ the link that sent `touched` last gets it.
   `framereceived` events, so a scenario can assert "the screen sent `stop` with this `turnId`" or
   "the room sent `turn.end` `stopped`".
 - Close codes and limits each get one unit test against the room's handler with a fake socket.
+- **The ordering rules** (T92) get unit tests on the page's link module in Node, fed message
+  lists: a 3-part snapshot with a `text.delta` (`seq` above the snapshot's) between parts 1 and 2
+  draws nothing until part 3, then applies the delta once, and drops one with a lower `seq`
+  (D140); a `history.turns` arriving after `conversation.new` changes nothing (D141); `audio.start`
+  `u-0013` sent after `audio.stop` `u-0012` is accepted by the room's handler, an `stt.update` for
+  `u-0012` after that is dropped by the page, and `u-0012`'s `stt.final` with `send` makes exactly
+  one `prompt` (D138); with `languages` `["auto"]` and fake speech lines carrying
+  `detected_language:"en"`, the `stt.final` and the `prompt` carry `lang:"en"`. The grace (D139)
+  is asserted in Playwright with `page.clock`: a clean close at t = 0 s shows `room-down` at 5.0 s,
+  a silent link (`POST /link {"up":"silent"}`, `stand-ins.md` §1.2) at 30.0 s after its last frame
+  and not at 29.9 s.
 
 ## 10. One spoken turn, message by message
 
@@ -1039,7 +1099,7 @@ white space made one space. `speaker`, `start`, `end` are not used.
 
 | Screen sends | The room does | Service answers | The room sends the screen |
 | --- | --- | --- | --- |
-| `audio.stop` (`send`, `fix`, `limit`) | sends one **empty binary frame** (research Q4: end of audio) | its last updates, then `{"type":"ready_to_stop"}` and close 1000 | `stt.final` with `text` = the last firm and tail joined by one space, trimmed, cut to `maxPromptChars`; then closes 1000 if the service has not |
+| `audio.stop` (`send`, `fix`, `limit`) | sends one **empty binary frame** (research Q4: end of audio) | its last updates, then `{"type":"ready_to_stop"}` and close 1000 | `stt.final` with `text` = the last firm and tail joined by one space, trimmed, cut to `maxPromptChars`, and `lang` (§6.1); then closes 1000 if the service has not |
 | `audio.cancel` | closes 1000 at once, no empty frame | — | nothing more for that utterance |
 | (the link drops) | as `audio.cancel` | — | — |
 
