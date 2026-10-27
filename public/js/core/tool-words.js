@@ -8,7 +8,10 @@
 //   shorten(text)                   §5 "Shortening": 32 code points, back to a space, `…`
 //   callTarget(tool, input, opts)     the call's {target}, null when it has none
 //   lineWords(calls, opts)          the collapsed text, without the glyph, ` · k failed` or `…`
-//   lineText(calls, opts)           the whole collapsed text: words, ` · {k} failed`, `…` while running
+//   lineText(calls, opts)           the whole collapsed text: words, ` · {k} failed`, `…` while running;
+//                                   a refused call's `tried {tool}, not allowed` (§5.2, D125)
+//   isDenied(calls)                 the line is §5.2's `tried` line (its one call refused)
+//   wholeInput(call)                the opened row shows the whole input, wrapped (§5.2)
 //   callRow(call)                   one opened row: `fleet  {"site":"hv1"}  800 ms  ok`
 //
 // A call is {tool, input, startedAt, endedAt?, isError?, denied?} as the room's
@@ -130,6 +133,8 @@ export function changesThings(tool) {
  */
 export function canFold(last, call) {
   if (!last || !call) return false;
+  // §5.2 (D125): a refused call holds its own line; none joins it, it joins none.
+  if (last.denied === true || call.denied === true) return false;
   if (last.blockIndex !== call.blockIndex - 1) return false;
   if (toolName(last.tool) !== toolName(call.tool)) return false;
   return !changesThings(call.tool);
@@ -171,11 +176,20 @@ export const failedCount = (calls) => calls.filter((c) => c.endedAt != null && c
 /** Any call of the line still running (started, not ended). */
 export const anyRunning = (calls) => calls.some((c) => c.endedAt == null);
 
+/** The name a `tried` line and an opened row show: `Bash`, `fleet`, `<server>:<tool>` (§5.2). */
+const shownName = (tool) => otherServer(tool) ?? toolName(tool);
+
+/** §5.2 (D125): the line holds a refused call (it holds that one call alone). */
+export const isDenied = (calls) => calls.some((c) => c.denied === true);
+
 /**
  * The whole collapsed text (no glyph, which is the line's own column): words, failures,
  * `…` while a call runs; `opts.stopped` (the turn ended under it, §5.1) drops the `…`.
+ * A refused call: `tried {tool}, not allowed`, no `…`, no ` · failed` (§5.2, D125);
+ * until its `tool.end` says so it reads as any running call.
  */
 export function lineText(calls, opts = {}) {
+  if (isDenied(calls)) return `tried ${shownName(calls.find((c) => c.denied === true).tool)}, not allowed`;
   const k = failedCount(calls);
   const dots = anyRunning(calls) && !opts.stopped ? '…' : '';
   return `${lineWords(calls, opts)}${k ? ` · ${k} failed` : ''}${dots}`;
@@ -188,12 +202,15 @@ export function callMs(call) {
   return Number.isFinite(d) ? Math.max(0, Math.round(d)) : null;
 }
 
-/** Compact JSON cut at 120 code points with `…` (§5 "Open"); a tool that changes things: whole. */
+/** §5.2: a tool that changes things and a refused call show their whole input, wrapped. */
+export const wholeInput = (call) => changesThings(call.tool) || call.denied === true;
+
+/** Compact JSON cut at 120 code points with `…` (§5 "Open"); whole for wholeInput() (§5.2). */
 function inputText(call) {
   let s;
   try { s = JSON.stringify(call.input ?? {}); } catch { s = '{}'; }
   if (s === undefined) s = '{}';
-  if (changesThings(call.tool)) return s;
+  if (wholeInput(call)) return s;
   const chars = [...s];
   return chars.length > MAX_INPUT ? `${chars.slice(0, MAX_INPUT).join('')}…` : s;
 }
@@ -204,7 +221,7 @@ function inputText(call) {
  * turn's end cut (`opts.stopped`, it never ended) `<tool>  <input>` alone.
  */
 export function callRow(call, opts = {}) {
-  const head = `${otherServer(call.tool) ?? toolName(call.tool)}  ${inputText(call)}`;
+  const head = `${shownName(call.tool)}  ${inputText(call)}`;
   if (call.denied === true) return `${head}  refused`;
   if (call.endedAt == null) return opts.stopped ? head : `${head}  …`;
   const ms = callMs(call);

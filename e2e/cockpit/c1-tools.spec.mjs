@@ -282,3 +282,122 @@ test('S-C1-35 Tool lines from odd input, and the words module\'s unit test', asy
     expect(m.glyph, 'no ●').not.toBe('"●"');
   }
 });
+
+/** The tool lines of a turn as they stand: words, `data-denied`, colour and the `●` glyph. */
+const linesOf = (page, turnId) => page.locator(`[data-turn-id="${turnId}"] [data-tool-line]`).evaluateAll((ns) => ns.map((n) => ({
+  text: n.textContent,
+  denied: n.getAttribute('data-denied'),
+  colour: getComputedStyle(n).color,
+  glyph: getComputedStyle(n, '::before').content,
+})));
+
+test('S-C1-30 A shell call is refused and shows as a grey `tried` line (pending Q-O23)', async ({ page, room, fakeAgent }) => {
+  await room.start({ script: 'c1-render' });
+  const frames = recordFrames(page);
+  await openPane(page, room);
+  await startSampler(page);
+  const { turnId, of } = await ask(page, frames, 'clean up the logs');
+  const rec = await stopSampler(page);
+  const grey = await tokenColour(page, '--text-2');
+  const turn = page.locator(`[data-turn-id="${turnId}"]`);
+  const denied = turn.locator('[data-tool-line][data-denied="true"]');
+
+  await test.step('by 700 ms: two `tried Bash, not allowed` lines, not folded, then the text', async () => {
+    expect(rec.tapAt, 'the SEND tap was seen').not.toBeNull();
+    const s700 = rec.samples.find((s) => s.t >= rec.tapAt + 700);
+    expect(s700, 'a sample at 700 ms').toBeTruthy();
+    expect(s700.lines.map((l) => [l.text, l.dot]), 'at 700 ms').toEqual([['tried Bash, not allowed', false], ['tried Bash, not allowed', false]]);
+    await expect(denied).toHaveCount(2);
+    await expect(turn.locator('[data-tool-line]')).toHaveCount(2);
+    const order = await turn.locator('[data-reply]').evaluate((r) => [...r.children].map((n) => (n.matches('[data-tool-line]') ? 'tool' : n.textContent)));
+    expect(order).toEqual(['tool', 'tool', 'I cannot run commands here; I can only look.']);
+    expect(of('tool.end').map((f) => f.msg.denied), 'the room marked both calls refused').toEqual([true, true]);
+  });
+
+  await test.step('in --text-2, no `●`, no `…`, no ` · failed`', async () => {
+    for (const l of await linesOf(page, turnId)) {
+      expect(l.text, 'exactly the tried words').toBe('tried Bash, not allowed');
+      expect(l.denied).toBe('true');
+      expect(l.colour, 'in --text-2').toBe(grey);
+      expect(l.glyph, 'no ●').not.toBe('"●"');
+    }
+  });
+
+  await test.step('`READY` and no line of §10', async () => {
+    await expect(page.locator('[data-cockpit-turn]')).toHaveText('READY');
+    // §10's lines: an error end line in the turn, the status line (kept in the pane, hidden), the line slot's error.
+    await expect(page.locator('[data-turn-error]')).toHaveCount(0);
+    await expect(page.locator('[data-cockpit-status]')).toBeHidden();
+    await expect(page.locator('[data-cockpit-line][data-line="error"]')).toHaveCount(0);
+  });
+
+  await test.step('opened: `Bash  <whole input>  refused`, wrapped inside the text column', async () => {
+    await denied.first().tap();
+    const row = denied.first().locator('[data-tool-row]');
+    await expect(row).toHaveCount(1);
+    await expect(row).toHaveText('Bash  {"command":"rm -rf /var/log/laneboard/old && echo done"}  refused', { useInnerText: false });
+    const fit = await row.evaluate((n) => ({ sw: n.scrollWidth, cw: n.clientWidth, ws: getComputedStyle(n).whiteSpace }));
+    expect(fit.sw, `scrollWidth ${fit.sw} ≤ clientWidth ${fit.cw}`).toBeLessThanOrEqual(fit.cw);
+    expect(fit.ws).toBe('pre-wrap');
+  });
+
+  await test.step('the launch line: --strict-mcp-config, --allowedTools, --permission-prompts none, no Bash', async () => {
+    const argv = fakeAgent.log().filter((l) => l.kind === 'start')[0]?.argv;
+    expect(Array.isArray(argv), 'the fake agent logged its start').toBe(true);
+    const strict = argv.indexOf('--strict-mcp-config');
+    const allowed = argv.indexOf('--allowedTools');
+    const prompts = argv.indexOf('--permission-prompts');
+    expect(strict, `--strict-mcp-config in ${JSON.stringify(argv)}`).toBeGreaterThanOrEqual(0);
+    expect(allowed, '--allowedTools after --strict-mcp-config').toBeGreaterThan(strict);
+    expect(argv[allowed + 1]).toBe('mcp__laneboard__*,Read,Grep,Glob');
+    expect(prompts, '--permission-prompts after --allowedTools').toBeGreaterThan(allowed);
+    expect(argv[prompts + 1]).toBe('none');
+    expect(argv.filter((a) => a.includes('Bash')), 'no argv element holds Bash').toEqual([]);
+  });
+});
+
+test('S-C1-31 A secret in a tool\'s input never reaches the screen', async ({ page, room }) => {
+  await room.start({ script: 'c1-render' });
+  const raw = [];
+  page.on('websocket', (ws) => {
+    if (!/\/api\/cockpit\/ws$/.test(ws.url())) return;
+    ws.on('framereceived', ({ payload }) => raw.push(String(payload)));
+  });
+  const frames = recordFrames(page);
+  await openPane(page, room);
+  await startSampler(page);
+  const { turnId, of } = await ask(page, frames, 'find the token');
+  const rec = await stopSampler(page);
+  const lines = page.locator(`[data-turn-id="${turnId}"] [data-tool-line]`);
+
+  await test.step('by 700 ms: `searched the files` and `tried WebFetch, not allowed`', async () => {
+    const s700 = rec.samples.find((s) => s.t >= rec.tapAt + 700);
+    expect(s700, 'a sample at 700 ms').toBeTruthy();
+    expect(s700.lines.map((l) => l.text)).toEqual(['searched the files', 'tried WebFetch, not allowed']);
+    await expect(lines).toHaveCount(2);
+    expect(await lines.evaluateAll((ns) => ns.map((n) => n.getAttribute('data-denied')))).toEqual([null, 'true']);
+  });
+
+  await test.step('opened, the rows show `[redacted]`, the Grep call its ms', async () => {
+    const grep = of('tool.start').find((f) => f.msg.tool === 'Grep');
+    const grepEnd = of('tool.end').find((f) => f.msg.toolUseId === grep.msg.toolUseId);
+    const ms = Date.parse(grepEnd.msg.endedAt) - Date.parse(grep.msg.startedAt);
+    expect(ms, 'at least the scripted 200 ms').toBeGreaterThanOrEqual(200);
+    expect(ms, 'at most 300 ms').toBeLessThanOrEqual(300);
+    await lines.nth(0).tap();
+    await lines.nth(1).tap();
+    await expect(lines.nth(0).locator('[data-tool-row]')).toHaveText(
+      `Grep  {"pattern":"Authorization: Bearer [redacted]","path":"/etc/laneboard"}  ${ms} ms  ok`, { useInnerText: false });
+    await expect(lines.nth(1).locator('[data-tool-row]')).toHaveText(
+      'WebFetch  {"url":"https://example.invalid/hook?token=[redacted]&lb_sig=[redacted]"}  refused', { useInnerText: false });
+  });
+
+  await test.step('no frame the page received holds a secret', async () => {
+    const tools = raw.filter((p) => /"type":"tool\.(start|end)"/.test(p));
+    expect(tools.length, 'tool.start and tool.end frames were seen').toBeGreaterThanOrEqual(4);
+    for (const secret of ['eyJhbGci', 'abc123DEF', 'Q7wErTy12', 'Zq9Xw4Vr']) {
+      expect(raw.filter((p) => p.includes(secret)), `no frame holds ${secret}`).toEqual([]);
+    }
+    expect(await page.locator('[data-cockpit-conversation]').evaluate((n) => n.textContent)).not.toMatch(/eyJhbGci|abc123DEF|Q7wErTy12|Zq9Xw4Vr/);
+  });
+});

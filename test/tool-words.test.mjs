@@ -5,7 +5,7 @@
 // test/cockpit-turns.test.mjs and e2e/cockpit/c1-tools.spec.mjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { toolName, changesThings, canFold, shorten, callTarget, lineWords, lineText, callRow, callMs, failedCount } from '../public/js/core/tool-words.js';
+import { toolName, changesThings, canFold, shorten, callTarget, lineWords, lineText, callRow, callMs, failedCount, isDenied, wholeInput } from '../public/js/core/tool-words.js';
 
 const L = 'mcp__laneboard__';
 const call = (tool, input, more = {}) => ({ tool, input, startedAt: '2026-10-27T07:02:05.100Z', ...more });
@@ -141,4 +141,22 @@ test('§5 "Open": one row per call, compact JSON cut at 120, its ms and ok|faile
   assert.equal(callRow(ended('Bash', cmd)), `Bash  ${JSON.stringify(cmd)}  800 ms  ok`, 'a tool that changes things: the whole input (§5.2)');
   assert.equal(callMs({ startedAt: '2026-10-27T07:02:05.100Z', endedAt: '2026-10-27T07:02:05.390Z' }), 290);
   assert.equal(callMs({ startedAt: 'x', endedAt: 'y' }), null);
+});
+
+test('§5.2 a refused call: the `tried` line, never folded, its whole input and `refused` (D125)', () => {
+  const refused = (tool, input) => ended(tool, input, { isError: true, denied: true });
+  assert.equal(lineText([refused('Bash', { command: 'ls /var/log' })]), 'tried Bash, not allowed');
+  assert.equal(lineText([refused('WebFetch', { url: 'https://example.invalid/' })]), 'tried WebFetch, not allowed', 'not the table\'s words');
+  assert.equal(lineText([refused('mcp__github__create_issue', {})]), 'tried github:create_issue, not allowed', 'another MCP server');
+  assert.equal(lineText([refused(`${L}fleet`, { site: 'hv1' })]), 'tried fleet, not allowed', 'laneboard\'s prefix stripped');
+  assert.equal(lineText([call('WebFetch', { url: 'https://example.invalid/' })]), 'fetched a page from example.invalid…', 'before its tool.end: the running text');
+  assert.equal(isDenied([refused('Bash', {})]), true);
+  assert.equal(isDenied([ended('Bash', {}, { isError: true })]), false, 'a failure is not a refusal');
+  const at = (tool, blockIndex, more = {}) => ({ tool, blockIndex, ...more });
+  assert.equal(canFold(at('WebFetch', 0, { denied: true }), at('WebFetch', 1)), false, 'no call joins a tried line');
+  assert.equal(canFold(at('WebFetch', 0), at('WebFetch', 1, { denied: true })), false, 'a refused call joins none');
+  assert.equal(canFold(at('WebFetch', 0), at('WebFetch', 1)), true);
+  const long = { url: `https://example.invalid/${'a'.repeat(200)}` };
+  assert.equal(wholeInput(refused('WebFetch', long)), true);
+  assert.equal(callRow(refused('WebFetch', long)), `WebFetch  ${JSON.stringify(long)}  refused`, 'whole, never cut at 120');
 });

@@ -872,3 +872,23 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   `toolUseId`) is dropped, as `text.*` already is; D119's close-with-4000-and-snapshot is not built
   for any message yet — spec: `c1-talk.md` §5.1 "A message the pane cannot place" — overrule: none;
   the D119 gap is a later task's (named under `## Later`).
+- B156 (T21) A call that folded at its `tool.start` and is refused at its `tool.end` (claude-code says
+  `permission_denied` only after the start, so two parallel `WebFetch` calls fold before either is
+  known refused) leaves its line for a `tried` line of its own: the line keeps its place; if the
+  refused call was the line's first, that line becomes the `tried` line and the calls after it move
+  to a new line at the first one's `blockIndex`. Calls known refused (a snapshot, a later start)
+  never fold either way — because §5.2 says a refused call "holds that one call and never folds" and
+  the fold rule cannot know at the start — spec: `c1-talk.md` §5.1 "The fold rule", §5.2 — overrule:
+  `splitDenied()` in `public/js/cockpit/turns.js`.
+- B157 (T21) The `{tool}` of a `tried` line and of an opened row is one name: `Bash`, `WebFetch`,
+  another MCP server's `<server>:<tool>`, and a laneboard MCP tool without its `mcp__laneboard__`
+  prefix (`tried fleet, not allowed`), as §5 matches those tools everywhere else; a refused call's
+  opened row shows its whole input wrapped (`.ck-tool-whole`), as a tool that changes things does —
+  because §5.2 names only the other-server case and says "whole input, wrapped" — spec: `c1-talk.md`
+  §5.2 "A refused call" — overrule: `shownName()` and `wholeInput()` in `public/js/core/tool-words.js`.
+- B158 (T21) S-C1-30's "no line of §10 is drawn" is asserted as no `[data-turn-error]`, no
+  `[data-cockpit-line][data-line="error"]` and `[data-cockpit-status]` hidden (the pane keeps that
+  element and hides it when no status holds); S-C1-30 and S-C1-31 live in `e2e/cockpit/c1-tools.spec.mjs`
+  with the other tool lines. The room's side (redaction before the cuts, `denied` on `tool.end`, the
+  launch line) was already built by T9-T12; T21 adds only the pane's side — spec: `c1-talk.md` S-C1-30,
+  README "Selectors tests use" — overrule: a `toHaveCount(0)` once the status line is made on demand.

@@ -19,7 +19,7 @@
 import { hhmm } from '../core/cockpit-time.js';
 import { parse } from '../core/md.js';
 import { drawText } from './reply.js';
-import { canFold, lineText, anyRunning, callRow, changesThings } from '../core/tool-words.js';
+import { canFold, lineText, anyRunning, callRow, isDenied, wholeInput } from '../core/tool-words.js';
 
 const el = (doc, tag, cls, attrs = {}) => {
   const n = doc.createElement(tag);
@@ -88,16 +88,20 @@ export function toolLine(doc, opts = {}) {
     const running = anyRunning(calls) && !line.stopped;
     const text = lineText(calls, { ...opts, ...stopped });
     const rows = open ? calls.map((c) => callRow(c, stopped)) : [];
-    const key = `${text}\n${running}\n${rows.join('\n')}`;
+    const denied = isDenied(calls);
+    const key = `${text}\n${running}\n${denied}\n${rows.join('\n')}`;
     if (key === drawn) return;
     drawn = key;
     words.textContent = text;
     node.toggleAttribute('data-running', running);
+    // §5.2's `tried` line (D125): `[data-tool-line][data-denied="true"]`.
+    if (denied) node.setAttribute('data-denied', 'true');
+    else node.removeAttribute('data-denied');
     node.setAttribute('aria-expanded', String(open));
     for (const r of [...node.querySelectorAll('.ck-tool-row')]) r.remove();
     for (const [i, t] of rows.entries()) {
       const r = el(doc, 'span', 'ck-tool-row', { 'data-tool-row': '' });
-      if (changesThings(calls[i].tool)) r.classList.add('ck-tool-whole');
+      if (wholeInput(calls[i])) r.classList.add('ck-tool-whole');
       r.textContent = t;
       node.append(r);
     }
@@ -262,6 +266,24 @@ export function createTurn(doc, turn) {
     if (ended) return;
     addCall(msg);
   }
+  /**
+   * A refused call learnt at its tool.end, in a line it had folded into (claude-code says
+   * so only after the start): it leaves for a line of its own (§5.2, D125; build B156).
+   * The line keeps its place; when the refused call was its first, the line becomes the
+   * `tried` line and the calls after it move to a new line at the first one's index.
+   */
+  function splitDenied(rec) {
+    const { line, call } = rec;
+    if (line.calls.length < 2) return;
+    const at = line.calls.indexOf(call);
+    const moved = at === 0 ? line.calls.splice(1) : line.calls.splice(at, 1);
+    const fresh = toolLine(doc);
+    for (const c of moved) fresh.add(c);
+    lines.push(fresh);
+    for (const r of callsById.values()) if (moved.includes(r.call)) r.line = fresh;
+    fresh.draw();
+    place(moved[0].blockIndex, fresh.node);
+  }
   /** The call ends: its ms and ok|failed; `●` goes once no call of its line runs (§5.1). */
   function toolEnd(msg) {
     const rec = callsById.get(msg.toolUseId);
@@ -269,6 +291,7 @@ export function createTurn(doc, turn) {
     rec.call.endedAt = msg.endedAt;
     rec.call.isError = msg.isError;
     rec.call.denied = msg.denied;
+    if (msg.denied === true) splitDenied(rec);
   }
   function end() {
     ended = true;

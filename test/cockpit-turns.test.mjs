@@ -169,3 +169,44 @@ test('tool lines from a snapshot turn: its tool items folded and ended as they w
   assert.deepEqual(toolLines(v).map(wordsOfLine), ['read 2 feeds · 1 failed']);
   assert.equal(replyOf(v).children.length, 2, 'one line, then the text');
 });
+
+test('a refused call is a `tried` line of its own, data-denied, even when its start had folded (§5.2, B156)', () => {
+  const v = createTurn(doc(), { turnId: 't-1', prompt: 'clean up the logs', at: AT });
+  v.toolStart(start(0, 'tu-1', 'Bash', { command: 'rm -rf /var/log/laneboard/old && echo done' }));
+  v.toolStart(start(1, 'tu-2', 'Bash', { command: 'ls /var/log' }));
+  v.draw();
+  assert.deepEqual(toolLines(v).map(wordsOfLine), ['ran rm -rf /var/log/laneboard/old……', 'ran ls /var/log…'], 'Bash never folds (the cut\'s …, then the running …, B152)');
+  v.toolEnd({ toolUseId: 'tu-1', endedAt: AT, isError: true, denied: true });
+  v.toolEnd({ toolUseId: 'tu-2', endedAt: AT, isError: true, denied: true });
+  v.draw();
+  assert.deepEqual(toolLines(v).map(wordsOfLine), ['tried Bash, not allowed', 'tried Bash, not allowed']);
+  assert.deepEqual(toolLines(v).map((n) => [n.attrs['data-denied'], n.attrs['data-running']]), [['true', undefined], ['true', undefined]]);
+
+  // Three WebFetch calls in parallel fold at their starts; the middle one refused leaves the line.
+  const w = createTurn(doc(), { turnId: 't-1', prompt: 'fetch them', at: AT });
+  for (const [i, h] of ['a', 'b', 'c'].entries()) w.toolStart(start(i, `tu-${i}`, 'WebFetch', { url: `https://${h}.example.invalid/` }));
+  w.draw();
+  assert.deepEqual(toolLines(w).map(wordsOfLine), ['fetched 3 pages…']);
+  w.toolEnd({ toolUseId: 'tu-1', endedAt: AT, isError: true, denied: true });
+  w.draw();
+  assert.deepEqual(toolLines(w).map(wordsOfLine), ['fetched 2 pages…', 'tried WebFetch, not allowed']);
+  // The first refused: the line it stands in becomes the tried line, the rest move below it.
+  const x = createTurn(doc(), { turnId: 't-1', prompt: 'fetch them', at: AT });
+  for (const [i, h] of ['a', 'b'].entries()) x.toolStart(start(i, `tu-${i}`, 'WebFetch', { url: `https://${h}.example.invalid/` }));
+  x.toolEnd({ toolUseId: 'tu-0', endedAt: AT, isError: true, denied: true });
+  x.toolEnd({ toolUseId: 'tu-1', endedAt: AT, isError: false, denied: false });
+  x.draw();
+  assert.deepEqual(toolLines(x).map(wordsOfLine), ['tried WebFetch, not allowed', 'fetched a page from b.example.invalid']);
+  assert.deepEqual(toolLines(x).map((n) => n.attrs['data-denied']), ['true', undefined]);
+});
+
+test('a snapshot turn keeps a refused call as its own tried line', () => {
+  const v = createTurn(doc(), {
+    turnId: 't-3', prompt: 'find the token', at: AT, state: 'done', end: { state: 'done', at: AT },
+    items: [
+      { kind: 'tool', blockIndex: 0, toolUseId: 'tu-1', tool: 'WebFetch', input: { url: 'https://example.invalid/' }, startedAt: AT, endedAt: AT, isError: true, denied: true },
+      { kind: 'tool', blockIndex: 1, toolUseId: 'tu-2', tool: 'WebFetch', input: { url: 'https://example.invalid/' }, startedAt: AT, endedAt: AT, isError: false },
+    ],
+  });
+  assert.deepEqual(toolLines(v).map(wordsOfLine), ['tried WebFetch, not allowed', 'fetched a page from example.invalid']);
+});
