@@ -116,7 +116,7 @@ conversation (`· SENDING` on the prompt, `●` on a tool line, the `▍` cursor
 | `thinking` | `● WORKING` | a prompt was sent; no reply text yet, no tool running |
 | `working` | `● WORKING` | a tool call is running (§5) |
 | `answering` | `● WORKING` | reply text is streaming |
-| `stopping` | `● STOPPING` | `STOP` was tapped or a new prompt interrupts; until the turn's end arrives (≤ 5 s, §8) |
+| `stopping` | `● STOPPING` | `STOP` or `START` (§11) was tapped; until the turn's end arrives (≤ 5 s, §8) |
 
 The `●` is `--text-2`, static (nothing blinks for decoration). Speaking up without a prompt
 (`coworker.md`) uses the same states.
@@ -271,7 +271,8 @@ pane. Every message is applied in `seq` order; a `seq` at or below the last appl
 | --- | --- | --- |
 | `welcome` | `config.stt`, `status` | sets the talk button (`c2-voice.md` §9) and the status line (§10); draws nothing in the conversation |
 | `snapshot` | `turns[].items[]` by `blockIndex`, `end`, `olderTurns` | replaces the whole conversation once its last part is in; a running turn continues from where it is (§12) |
-| `turn.prompt` | `turnId`, `clientId`, `text`, `source`, `at` | the sender's block loses `· SENDING`; other screens draw the prompt block (§7, §12). With `delivery:"new"` it is the turn's start; the `AGENT · HH:MM` label row comes with the turn's first item |
+| `turn.prompt` | `turnId`, `clientId`, `text`, `source`, `at`, `delivery` | the sender's block loses `· SENDING`; other screens draw the prompt block (§7, §12). With `delivery:"new"` it is the turn's start; with `queued` the block reads `· QUEUED` (§8); the `AGENT · HH:MM` label row comes with the turn's first item |
+| `prompt.taken` | `turnId`, `clientId`, `state`, `atBlock`, `why` | `taken`: `· QUEUED` goes, the block moves to `atBlock` of `turnId`; `cancelled`: `NOT SENT` and the line for `why` (§8) |
 | `turn.state` | `state` | sets `data-turn` and the header word (§2) |
 | `text.delta` | `turnId`, `blockIndex`, `text` | appends to that text block, creating it at its `blockIndex` place if new; the `▍` cursor follows it (§3) |
 | `text.block` | `turnId`, `blockIndex`, `text` | replaces that block's text; the cursor leaves it |
@@ -482,30 +483,56 @@ confirmation within 5 s while the room link is up: §10, E1 (D31).
 
 ## 8. Talking while the agent answers (pending Q-O1)
 
-Written for Q-O1's recommendation a), **interrupt on send**: speaking again mid-answer is almost
-always a correction, and waiting would lose the terminal's speed (`spec-input.md` §1, §7.1).
+Written for Q-O1's recommendation d), **steer**: words sent during a turn go into that turn, as
+they do in the owner's terminal (research Q8); nothing already said is thrown away. `STOP` is the
+one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), §3.4 and §11.6.
 
 - **One slot, two jobs** (D32). While `data-turn` is `thinking`, `working` or `answering`:
   with an empty input the `SEND` slot reads `STOP` (`data-send="stop"`); with text in the input it
-  reads `SEND` (`data-send="send"`). While idle it is always `SEND`. 13 px caps `--text-2` above the
-  input, left-aligned, only while a turn runs and the input holds text: `SENDING STOPS THE ANSWER`.
+  reads `SEND` (`data-send="send"`). While idle it is always `SEND`. No hint line explains the
+  send (D121): the `· QUEUED` label below says what happened, 0.5 s after the tap.
+- **`SEND` during a turn** (D122). The prompt block is drawn at once at the end of the
+  conversation (B8), label `YOU · 07:03 · SENDING`. The room sends it to the agent with
+  `priority:"next"` and a UUID (`protocols.md` §11.3) and echoes `turn.prompt` with
+  `delivery:"queued"`; the label then reads `YOU · 07:03 · QUEUED` (`QUEUED` in `--text-3`) and the
+  prompt's text is drawn in `--text-2` instead of `--text-1`. The block stays the last item of the
+  conversation while queued: text the agent writes before taking it is drawn above it.
+- **Taken.** When the agent reads it (`prompt.taken` `taken`: after the tool calls it is running
+  end, research Q8), within 0.1 s `· QUEUED` goes, the text turns `--text-1`, and the block takes
+  its place in the turn at `atBlock` (`protocols.md` §3.4): the turn's items from `atBlock` on are
+  drawn below it. The turn goes on; the header keeps `● WORKING` (D56); no
+  `STOPPED` line, no new `AGENT · HH:MM` label row (the reply goes on under the same turn).
+- **The turn ends first.** A prompt still queued when its turn ends stays `· QUEUED`; the agent
+  takes it as the next turn (research Q8), and `prompt.taken` names that new turn: the block moves
+  to the start of it, the `AGENT · HH:MM` label row comes with its first item, as a new turn's.
+- **Not taken** (D123). If a prompt is still not taken 10 s after its turn's `turn.end`, and no
+  interrupt receipt listed it, the room sends it to the agent once more as a new prompt (a new
+  UUID, room-internal: no message to the screens, one log line). If that is not taken within 10 s
+  either, the room sends `prompt.taken` `cancelled` with `"why":"not-taken"`: the label reads
+  `YOU · 07:03 · NOT SENT` and under the block, as E1's look (§10): `The agent did not read this.`
+  with `RETRY` and `EDIT`. `RETRY` sends it with a new `clientId` (D95 keeps the old one).
 - **`STOP`** (or `Ctrl+C` on a paired keyboard with the input empty): `data-turn="stopping"` within
-  0.1 s; the room asks the bridge to interrupt (`protocols.md` §11.6). The turn ends when the bridge reports its end;
-  if that has not happened 5 s after the tap, the room forces it (for Claude Code: `SIGINT`,
-  research Q2) and the line reads `Stopped at 07:03 (forced).`. Either way `READY` by 5.5 s.
+  0.1 s; the room asks the bridge to interrupt with `cancelQueued` (`protocols.md` §11.6). The turn
+  ends when the bridge reports its end; if that has not happened 5 s after the tap, the room forces
+  it (for Claude Code: `SIGINT`, research Q2) and the line reads `Stopped at 07:03 (forced).`.
+  Either way `READY` by 5.5 s.
+- **Queued prompts at a `STOP`.** Each prompt the receipt lists as cancelled gets
+  `prompt.taken` `cancelled` (`"why":"stopped"`): label `YOU · 07:03 · NOT SENT`, under it
+  `Dropped by STOP.` with `RETRY` and `EDIT`, as above. An agent without `cancelQueued`
+  (`ready.canCancelQueued:false`) keeps them: they stay `· QUEUED` and start the next turn.
+- **"Stop, do this instead"** is `STOP`, then the new words: with a draft in the input the slot
+  reads `SEND`, so the owner sends first and taps `STOP` after; the new prompt is then dropped with
+  the turn and `RETRY` sends it again (two taps more, D32's overrule names the other way).
 - **What a stopped turn looks like** (D33): its text stays exactly as it was at the tap; nothing
   that turn sends later is drawn (the room's log keeps it). Under it, 16 px caps
   `--text-3`: `STOPPED AT 07:03`. A tool line still running loses its `●` and ends in ` · stopped`.
   The `▍` cursor goes.
-- **`SEND` during a turn** does both at once: the running turn is stopped as above, and the new
-  prompt is drawn at once (B8) below the stopped one as a new turn; the agent receives it as soon
-  as the old turn has ended (the bridge orders the two, `protocols.md` §11.6). The header goes `● STOPPING`, then
-  `● WORKING` for the new turn (`data-turn` `stopping`, then `thinking`).
-- **Voice** (C2): pressing the talk button during a turn does not stop anything; listening starts
-  (D29); the send at release stops the turn as `SEND` does (T6).
-- A turn the agent started itself (speaking up, `coworker.md`) is stopped the same way.
-- With Q-O1 b) (queue) the slot stays `SEND`, a sent prompt shows `· QUEUED` until the turn ends;
-  with c) (ignore) `SEND` and talk are disabled during a turn and `STOP` stays.
+- **Voice** (C2): pressing the talk button during a turn stops nothing; listening starts (D29);
+  the send at release is a `SEND` during a turn as above (`c2-voice.md` §2).
+- **An agent that cannot steer** (`ready.canSteer:false`, a bridge agent, `protocols.md` §11.3):
+  the same screen; the room holds the prompt until the turn ends and sends it then, so it is taken
+  as the next turn.
+- A turn the agent started itself (speaking up, `coworker.md`) is steered and stopped the same way.
 
 ## 9. Long replies and long turns
 
@@ -557,7 +584,7 @@ session would."
   right `START` and `KEEP` (48 px tall, 96 px wide). `KEEP`, a second tap on `NEW`, or 10 s without
   a tap hide the bar and nothing changes. A status line (room down) wins the slot; `NEW` is
   disabled then.
-- **`START`**: a running turn is stopped first (§8: `● STOPPING`, forced after 5 s). Then the room
+- **`START`**: a running turn is stopped first (§8: `● STOPPING`, forced after 5 s; queued prompts get `Dropped by STOP.`). Then the room
   starts a new agent session at once (`protocols.md` §11.7 says how); the old session gets no further prompt and
   nothing is written for the new one. Like a laptop session, the new session reads the written
   context (repos, plans, notes). There is no extra turn state: the header goes back to `READY`.
@@ -634,17 +661,21 @@ Then the input holds all 8 214, the note reads `8 214 / 8 000 CHARACTERS`, `SEND
 Test: Playwright `fill`; assert the value length, the note's text, `disabled`, and that the room's
 log is unchanged after `Enter`.
 
-### S-C1-16 Sending during an answer stops it and starts the new turn (pending Q-O1)
-Given the fake agent streaming `Three runs ran last night. The first…` over 8 s, scripted to end
-its turn 0.4 s after an interrupt,
-When at t = 2 s the owner types `only the failed one` (the slot reads `SEND`, the note
-`SENDING STOPS THE ANSWER` shows) and taps `SEND`,
-Then by t = 2.1 s the new prompt block is drawn below and the header reads `● STOPPING`; the
-first reply's text does not change after t = 2 s and ends with `STOPPED AT HH:MM`; by t = 2.5 s the
-header reads `● WORKING` with `data-turn="thinking"`; the stand-in room's log shows the interrupt
-before the new prompt.
-Test: Playwright; snapshot the first reply's text at 2.0 s and 3.0 s (equal); assert the header
-texts at 2.1 s and 2.5 s; read the bridge log order from the stand-in.
+### S-C1-16 Sending during an answer steers it: queued, then taken into the same turn (pending Q-O1)
+Given the fake agent on a turn that writes `Three runs ran last night.` from t = 0.3 s, calls
+`mcp__laneboard__runs` from t = 1.0 s to t = 4.0 s, then writes more text; `queued` is
+`next-tool-end`; the matched steer turn writes `Only builder-a failed.` 0.3 s after it is taken,
+When at t = 2 s the owner types `only the failed one` (the slot reads `SEND`, no hint line shows)
+and taps `SEND`,
+Then by t = 2.1 s the prompt block is drawn last with `YOU · HH:MM · SENDING`; by t = 2.5 s it
+reads `YOU · HH:MM · QUEUED` with its text in `--text-2`; the header reads `● WORKING` throughout
+and never `● STOPPING`; no `STOPPED AT` line is drawn; by t = 4.1 s `· QUEUED` is gone, the text is
+`--text-1`, and `Only builder-a failed.` is drawn below the prompt block in the same turn (one
+`AGENT · HH:MM` label row in the turn, above `Three runs ran last night.`); the fake agent's log
+has no interrupt and one `prompt` with `"priority":"next"` read at about t = 2 s.
+Test: Playwright; assert the label text at 2.1 s, 2.5 s and 4.1 s, the prompt's computed colour
+against `--text-2`/`--text-1`, no element with the text `STOPPED AT`, the order of the turn's items, and
+`order()` from the fake-agent log (no `interrupt`).
 
 ### S-C1-17 STOP stops; a stuck stop is forced after 5 s
 Given a running turn and an empty input, the slot reads `STOP`,
@@ -753,3 +784,30 @@ And with the room not answering at all, at 5 s `data-cockpit="room-down"` and th
 Test: Playwright against the room under test; hold back `welcome` with the fault hook; assert
 `data-cockpit`, the conversation's text and `SEND`'s `disabled` at 0.5 s and 2.5 s; restart with an
 empty conversation, then with the room stopped.
+
+### S-C1-27 STOP during a turn drops a queued prompt and says so (pending Q-O1)
+Given the fake agent on a turn calling a tool from t = 0.5 s to t = 20 s, `onInterrupt`
+`endAfterMs` 300, capabilities with `interrupt_cancel_queued_v1`, and the prompt
+`only the failed one` sent at t = 1 s and showing `· QUEUED`,
+When the owner taps `STOP` at t = 3 s (the input is empty, the slot reads `STOP`),
+Then by t = 3.1 s the header reads `● STOPPING`; the fake agent's log has an interrupt with
+`cancel_queued` true; by t = 3.5 s the turn shows `STOPPED AT HH:MM`, the header `READY`, and the
+queued block reads `YOU · HH:MM · NOT SENT` with `Dropped by STOP.`, `RETRY` and `EDIT`; nothing
+more is sent to the agent. A tap on `RETRY` at t = 5 s sends `only the failed one` with a new
+`clientId` as a new turn (`delivery:"new"`).
+Test: Playwright on the real room with the fake agent; assert the texts at 3.1 s and 3.5 s, the
+log's interrupt line, `prompts()` count 1 before and 2 after `RETRY`, and two different `clientId`s
+in the screen's sent messages.
+
+### S-C1-28 A queued prompt the agent never reads is sent once more, then shown as not sent (pending Q-O1)
+Given the fake agent with `queued` `ignore-once` on a turn that ends `done` at t = 3 s, and the
+prompt `only the failed one` sent at t = 1 s,
+When nothing else is tapped,
+Then the block reads `· QUEUED` from t = 1.5 s; at t = 13 s (10 s after `turn.end`) the room sends
+it to the agent again with a new UUID; the fake takes it as a new turn and by t = 13.5 s `· QUEUED`
+is gone and its reply starts under its own `AGENT · HH:MM` label row. With `queued` `ignore` the
+second send is not taken either, and at t = 23 s the block reads `YOU · HH:MM · NOT SENT` with
+`The agent did not read this.`, `RETRY` and `EDIT`.
+Test: Playwright, room clock `manual` and `advance(ms)` (`stand-ins.md` §1.1); two fake-agent scripts; assert
+`prompts()` count 2 with two UUIDs, the room's log line `prompt.resend`, the label texts at 13.5 s
+and 23 s; in both cases exactly one resend.

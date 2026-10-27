@@ -47,8 +47,8 @@ Listening starts on `pointerdown` in both gestures (D29, B1). The gesture is dec
   hint").
 - **What "send" means**: the microphone stops, the screen asks for the final text (§4), and the
   final text is sent as the prompt exactly as a typed one is (`c1-talk.md` §7), with the label
-  `YOU · SPOKEN · 07:02` (B3). During a running turn this send stops the turn first (`c1-talk.md`
-  §8, pending Q-O1).
+  `YOU · SPOKEN · 07:02` (B3). During a running turn it goes into that turn as a queued prompt
+  (`· QUEUED`, `c1-talk.md` §8, pending Q-O1); it stops nothing.
 - **Pressing during a turn** stops nothing; listening starts as usual (`c1-talk.md` §8).
 
 ## 3. States of the button and the input
@@ -81,8 +81,8 @@ asserts. The `SEND` slot left of the talk button changes too (`data-send`, `c1-t
   typed before the press, sends nothing, `data-talk="idle"`. Fixing one word by tapping the text is
   §7.
 - The **hint line** sits 8 px above the input row's top edge, right-aligned to the talk button's
-  right edge; it wins the place over the length note (`c1-talk.md` §7). `SENDING STOPS THE ANSWER`
-  (`c1-talk.md` §8) stays left-aligned beside it.
+  right edge; it wins the place over the length note (`c1-talk.md` §7). Nothing else shares the
+  line during a turn (D121).
 - Under `prefers-reduced-motion` nothing here changes: no state change animates (rule 5).
 
 ## 4. Live words
@@ -253,18 +253,21 @@ When the permission is granted and the owner taps the button again, the line goe
 Test: Playwright `context.grantPermissions([])` then `grantPermissions(['microphone'])`; Chromium
 started without `--use-fake-ui-for-media-stream` for this case; assert the line text exactly.
 
-### S-C2-09 Talking during an answer: listening stops nothing, the release does (pending Q-O1)
-Given the fake agent streaming a reply over 8 s, scripted to end its turn 0.4 s after an interrupt;
-the fake speech scripted: partial `only` at 0.6 s, final `Only the failed one.`,
+### S-C2-09 Talking during an answer: the spoken words join the running turn (pending Q-O1)
+Given the fake agent on a turn that writes text from t = 0.3 s and calls a tool from t = 3.0 s to
+t = 6.0 s, `queued` `next-tool-end`, the steer turn writing `Only builder-a failed.` 0.3 s after it
+is taken; the fake speech scripted: partial `only` at 0.6 s, final `Only the failed one.`,
 When the owner holds the talk button from t = 2.0 s,
-Then the reply keeps streaming, `data-turn="answering"`, the hint line shows
-`RELEASE TO SEND · SLIDE OFF TO KEEP` with `SENDING STOPS THE ANSWER` beside it once `only` shows.
+Then the reply keeps streaming, `data-turn` stays `answering` or `working`, the hint line shows
+`RELEASE TO SEND · SLIDE OFF TO KEEP` and nothing else.
 When the owner releases at t = 4.0 s,
-Then the reply's text stops changing, `STOPPED AT HH:MM` is drawn under it, the prompt `Only the
-failed one.` is drawn below as a new turn by t = 4.3 s (B3), the header goes `● STOPPING` and then
-`● WORKING`; the stand-in room's log has the interrupt before the new prompt.
-Test: Playwright; the reply text at 2.0 s and 3.9 s differs (still streaming), at 4.05 s and 5.0 s
-it is equal; the bridge log order from the stand-in.
+Then by t = 4.3 s (B3) the prompt `Only the failed one.` is drawn last with
+`YOU · SPOKEN · HH:MM · QUEUED`; the header stays `● WORKING`, no `STOPPED AT` line is drawn and
+the fake agent's log has no interrupt; by t = 6.1 s `· QUEUED` is gone and
+`Only builder-a failed.` is drawn below it in the same turn.
+Test: Playwright; the reply text at 2.0 s and 3.9 s differs (still streaming); assert the label at
+4.3 s and 6.1 s, no element with the text `STOPPED AT`, and `order()` from the fake-agent log (one
+`prompt` with `"priority":"next"`, no `interrupt`).
 
 ### S-C2-10 CANCEL drops the spoken words and keeps a typed draft
 Given the input holding the typed draft `on builder-a,`,

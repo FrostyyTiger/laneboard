@@ -188,9 +188,17 @@ One JSON object. `start` says how the process starts; `turns` are matched to pro
   Q-O1): `next-tool-end` (default) takes it after the running tool calls end, with a
   `message_start` whose `user_message_uuids` holds its uuid, then plays its matched turn's steps as
   part of the running turn; with no tool running it is taken after the turn ends. `after-turn`
-  takes it as a new turn after this one. `ignore` never takes it (the one reported 2.1.175 case).
+  takes it as a new turn after this one. `ignore` never takes it nor any resend of it (the one
+  reported 2.1.175 case); `ignore-once` ignores it but takes the room's resend (a second `prompt`
+  with the same text, `protocols.md` §3.4) as a new turn (S-C1-28).
   An interrupt with `cancel_queued` lists every prompt not taken yet in `cancelled`, else in
   `still_queued`.
+- **`priority`** of each stdin prompt (research Q8): `next` (or none) follows the running turn's
+  `queued` field as above; `later` is taken as `after-turn` whatever that field says; `now`
+  interrupts the running turn as an interrupt without `cancel_queued` would (`onInterrupt`), then
+  takes the prompt as a new turn. The room sends only `next` in v1 (`protocols.md` §11.3); `later`
+  and `now` exist so a test can show the room never sends them and a later slice can use them.
+  Each prompt line in the log (§2.6) carries its `priority` and `uuid`.
 - **Signals**: `SIGINT` (unless ignored) ends the turn as an interrupt with `endAfterMs` 0;
   `SIGTERM` exits 143 at once. Each signal is logged before it acts.
 - **Start** (`start` object): `initAfterMs` after spawn it writes `system` `init` (session id from
@@ -214,7 +222,7 @@ Same script, same matching. It reads `prompt` and `interrupt` (§11.3) and write
 ```json
 {"atMs":1793080800000,"kind":"start","n":1,"argv":["-p","--input-format","stream-json"],"env":["FAKE_AGENT_DIR","HOME","LANEBOARD_MCP_TOKEN","LANG","PATH","USER"],"session":"0b7e5c2a-4d1f-4c3e-9a8b-2f6d1e0c7a91","resumed":false}
 {"atMs":1793080802960,"kind":"stdin","line":{"type":"user","uuid":"9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714","priority":"next"}}
-{"atMs":1793080802960,"kind":"prompt","uuid":"9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714","words":"wie lief die Nacht?","raw":"(Spoken in German; speech-to-text may have misheard a word.)\nwie lief die Nacht?","turn":"c1-voice#1"}
+{"atMs":1793080802960,"kind":"prompt","uuid":"9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714","priority":"next","words":"wie lief die Nacht?","raw":"(Spoken in German; speech-to-text may have misheard a word.)\nwie lief die Nacht?","turn":"c1-voice#1"}
 {"atMs":1793080804600,"kind":"tool-result","tool":"mcp__laneboard__morning","isError":false,"result":{"window":"tonight"}}
 {"atMs":1793080805100,"kind":"signal","name":"SIGINT"}
 ```
@@ -222,7 +230,7 @@ Same script, same matching. It reads `prompt` and `interrupt` (§11.3) and write
 - `env` lists the names the child got, never values (D108's test reads it).
 - Test helper (`test/cockpit/stand-ins/fake-agent-log.mjs`): `prompts()` → the `prompt` lines (the
   "received-turns log"); `toolResults(tool?)`; `signals()`; `starts()`; `order()` → `kind`s in order
-  (S-C1-16's "interrupt before the new prompt" is a `stdin` interrupt line before the next `prompt`).
+  (S-C1-16 and S-C2-09 assert no `interrupt` line at all; S-C1-27 an interrupt with `cancel_queued`).
 
 ## 3. The fake speech service
 
@@ -351,7 +359,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | Script | Kind | Scenarios | Holds |
 | --- | --- | --- | --- |
 | `c1-render` | agent | S-C1-03..12 | §2.2's example; S-C1-05's 4-column and 9-column tables; S-C1-06/07's three `fleet` calls (400 ms each, `hv2` `isError`) then `ci` 300 ms; S-C1-08's 40-line `sh` block; S-C1-09's markup; S-C1-10's 30 lines over 6 s; S-C1-11's marks |
-| `c1-typing` | agent | S-C1-14..18 | a short `done` turn per prompt; S-C1-16's 8 s stream with `onInterrupt` `endAfterMs` 400; S-C1-17's two turns (`endAfterMs` 300, and `ignore-sigint`) |
+| `c1-typing` | agent | S-C1-14..18, S-C1-27, S-C1-28 | a short `done` turn per prompt; S-C1-16's text, 3 s `runs` call and `next-tool-end` steer turn; S-C1-27's 19.5 s tool call with `endAfterMs` 300; S-C1-28's two turns (`ignore-once`, `ignore`); S-C1-17's two turns (`endAfterMs` 300, and `ignore-sigint`) |
 | `c1-errors` | agent | S-C1-19, S-C1-20 | an `exit` 1 mid-text; one turn per error row (`failed` `overloaded`, `step-limit`, `failed` `boom` plus a 300-character `detail`, `not-logged-in`, two `retry` steps then text) |
 | `c1-long` | agent | S-C1-21 | 15 s without steps, then 120 lines, 26 000 characters and a 30-row table over 20 s (real time: 35 s) |
 | `c1-session` | agent | S-C1-22, S-C1-23 | `repeat` turns that answer `how is builder-a` in 2 s |
@@ -359,7 +367,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c2-tap` | speech | S-C2-01..04, S-C2-07, S-C2-10..13, S-C2-20 | §3.2's example, plus `how did` / `how did the` / `how did the night go` (S-C2-03) and `restart the runner on builder-b` (S-C2-11) |
 | `c2-limits` | speech | S-C2-05, S-C2-06 | `noAudio`; a growing partial every 1 s from 0.6 s for 130 s |
 | `c2-faults` | speech | S-C2-15..17 | one utterance per row of §3.3 |
-| `c2-agent` | agent | S-C2-* that send | a short `done` turn for any prompt (`repeat`); S-C2-09's 8 s stream with `endAfterMs` 400 |
+| `c2-agent` | agent | S-C2-* that send | a short `done` turn for any prompt (`repeat`); S-C2-09's text, 3 s tool call and `next-tool-end` steer turn |
 | `scr-room` | agent | S-SCR-03..05, S-SCR-17..20 | one long turn (20 s of text) and a turn that calls `fly_to builder-a` (S-SCR-05) |
 | `c3-tools` | agent | S-C3-03, S-C3-10..14 | `morning` then `runs`; `focus` calls |
 | `c4-show` | agent | S-C4-01..12 | one turn per show command, at the times the scenarios give |

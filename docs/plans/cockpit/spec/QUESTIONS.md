@@ -32,7 +32,7 @@ Answer: (open)
 ## Q-O1 Talk pressed while the agent is still answering
 
 Blocks C1/C2. `spec-input.md` §7.1 ("Interrupt, queue, or ignore?"). Spec: `c1-talk.md` §8,
-S-C1-16, S-C2-09, D32/D33 (still written for a until T85).
+S-C1-16, S-C1-27, S-C1-28, S-C2-09, D32/D33, D121-D123 (written for d since T85).
 
 - a) Interrupt on send: the running turn stops, its text stays marked "stopped".
 - b) Queue the new prompt until the turn ends (or "ignore": talk off until then).
@@ -40,6 +40,9 @@ S-C1-16, S-C2-09, D32/D33 (still written for a until T85).
   default, research Q8); `STOP` is the separate way to end it; an agent that cannot steer queues.
 
 Recommendation: d) — it is what the owner's terminal does, and nothing already said is thrown away.
+With d), "stop, do this instead" is `STOP` then the new words; a send while a long tool call runs
+waits for that call (minutes, research Q8), shown as `· QUEUED`. Choosing a) instead: D32's overrule
+and the old §8 (git history before T85) come back.
 
 Answer: (open)
 

@@ -218,10 +218,9 @@ case below says what the screen shows.
 - The sender finds its block by `clientId`: `· SENDING` goes (`c1-talk.md` §7). The other screens
   draw a new prompt block ≤ 0.5 s after the room has it (`c1-talk.md` §12).
 - `screen` is for the room's log and later slices; C1 draws no screen name (D37).
-- `delivery` (pending Q-O1): `new` starts a turn. During a running turn, under Q-O1's recommendation
-  d), it is `queued`: the prompt goes into the running turn (`turnId` is that turn's) and the screen
-  draws `· QUEUED` until `prompt.taken` (§3.4). Under a), the room stops the running turn first and
-  sends `delivery:"new"` (`c1-talk.md` §8 as written today; T85 rewrites it for d)).
+- `delivery` (pending Q-O1): `new` starts a turn. During a running turn it is `queued`: the prompt
+  goes to the agent at once with `priority:"next"` (§11.3), `turnId` is the running turn's, and the
+  screen draws `· QUEUED` until `prompt.taken` (§3.4, `c1-talk.md` §8). Nothing is stopped.
 - **Once only** (D95). The room remembers each `clientId` for 10 min. A `prompt` with a known
   `clientId` starts nothing: the room answers with the same `turn.prompt` again, to that link only,
   without `seq`. So `RETRY` after E1 `not-sent` (`c1-talk.md` §10) sends the same `clientId`, and a
@@ -287,15 +286,37 @@ onto these are §11.4; this is what the screen consumes (T29's list).
 **`stop`** (screen → room): `{"type":"stop","seq":22,"turnId":"t-0132"}`. The room sends
 `turn.state` `stopping` to every link at once, asks the bridge to interrupt (§11.6), forces it after
 5 s (D32) and ends with `turn.end` `stopped`. Errors: `unknown-id`; `not-now` when the turn already
-ended (the screen changes nothing: its `turn.end` is on the way or applied). Under Q-O1 d) the room
-also drops prompts still `queued` in that turn and sends `prompt.taken` with `"state":"cancelled"`
-for each (pending Q-O1, T85).
+ended (the screen changes nothing: its `turn.end` is on the way or applied). Prompts still
+`queued` in that turn are dropped with it (`cancelQueued`, §11.6): `prompt.taken` `cancelled`,
+`"why":"stopped"` for each id the receipt lists in `cancelled` (pending Q-O1).
 
 ### 3.4 A prompt taken into a running turn (pending Q-O1)
 
-`{"type":"prompt.taken","seq":1305,"turnId":"t-0132","clientId":"p-77aa01c3","state":"taken"}`:
-the agent read it (`· QUEUED` goes); `"state":"cancelled"`: it was dropped by `stop`, its block
-gets `NOT SENT` with `RETRY`/`EDIT`. Only under Q-O1 d); T85 specifies the times.
+**`prompt.taken`** (room → all, with `seq`), one per queued prompt, sent within 0.1 s of the
+bridge's `taken` or `interrupted` (§11.3):
+
+```json
+{"type":"prompt.taken","seq":1305,"turnId":"t-0132","clientId":"p-77aa01c3","state":"taken","atBlock":4}
+```
+
+| `state` | Fields | When | The screen (`c1-talk.md` §8) |
+| --- | --- | --- | --- |
+| `taken` | `turnId`, `atBlock` | the agent read it. `turnId` is the running turn's (a steer) or, when the turn ended first, the new turn it starts (`atBlock` 0) | `· QUEUED` goes; the block sits before the turn's item `atBlock` |
+| `cancelled` | `why`: `stopped` | the interrupt receipt lists it in `cancelled` (`stop` §3.3, `new` §3.6) | `NOT SENT`, `Dropped by STOP.`, `RETRY`/`EDIT` |
+| `cancelled` | `why`: `not-taken` | the resend below was not taken either | `NOT SENT`, `The agent did not read this.`, `RETRY`/`EDIT` |
+
+- `atBlock` is the turn's next `blockIndex` at the take: every item the agent produces after it has
+  `blockIndex` ≥ `atBlock`.
+- **The resend** (D123, room-internal, no screen message). 10.0 s after the `turn.end` of the turn a
+  prompt was queued in, a prompt neither taken nor named in a receipt's `stillQueued` or `cancelled`
+  is written to the agent once more as a new `prompt` (a new UUID; a `taken` for either UUID takes
+  it) and the room logs `prompt.resend` with both UUIDs. 10.0 s after the resend without a `taken`
+  (and no turn from it running): `cancelled` `not-taken`. A prompt is resent at most once.
+- A prompt the agent has not taken is never resent while a turn runs: a long tool call can hold it
+  for minutes and that is not a fault (research Q8).
+- An agent with `ready.canSteer:false`: the room keeps the prompt and writes it to the agent only
+  after the running turn's `turn.end`; the screen sees the same `delivery:"queued"` and
+  `prompt.taken`.
 
 ### 3.5 Errors outside a turn and the status line
 
@@ -706,8 +727,8 @@ reaches a screen (D33). Prompts the receipt lists in `stillQueued` (an agent wit
 `interrupt_cancel_queued_v1`) stay queued and start the next turn; the room does not send them again
 (research Q8: resending delivers them twice).
 
-Under Q-O1 a) (`c1-talk.md` §8 as written today) a `SEND` during a turn is this stop, then the new
-`prompt` once the `turn.end` is out. Under d) (pending Q-O1, T85) the `prompt` goes straight in.
+A `SEND` during a turn is never a stop: its `prompt` goes straight in with `priority:"next"`
+(§3.4, pending Q-O1).
 
 ### 11.7 Sessions: start, restart, new (D104)
 
