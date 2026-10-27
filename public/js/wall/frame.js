@@ -321,7 +321,10 @@ function setLine(line, w) {
  * headline and the worst thing stays the loudest.
  * `update(model, { echo: true })` says the line names the plate's own
  * subject (night 3 T20): `data-echo` on the line, and wall.css drops it
- * while the plate is up (`hushed()`, when it covers nothing).
+ * while the plate is up (`hushed()`, when it covers nothing). `echo: 'why'`
+ * (night 4 T9, two crits named together, the held one the oldest) is
+ * `data-echo="why"`: only the why under the word drops out, the count and the
+ * places stay, so the line still covers its box.
  * `update(model, { since })` orders two or more crits oldest first (T8,
  * `worstLine`); without it they keep model order.
  */
@@ -369,8 +372,9 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   const update = (model, { cleared = null, echo = false, since = null } = {}) => {
     if (!model || typeof model !== 'object') return;
     // The line names what the plate's hero names (night 3 T20): wall.css drops it while a plate is up.
-    if (('echo' in fleet.dataset) !== Boolean(echo)) {
-      if (echo) fleet.dataset.echo = '';
+    const echoed = echo === 'why' ? 'why' : echo ? '' : null;
+    if ((fleet.dataset.echo ?? null) !== echoed) {
+      if (echoed != null) fleet.dataset.echo = echoed;
       else delete fleet.dataset.echo;
       farDirty = true;
     }
@@ -422,7 +426,7 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   const stop = () => { if (timer != null) timers.clearTimeout(timer); timer = null; };
 
   /** Whether the line is dropped (an echo under a plate, T20): it covers nothing then. */
-  const hushed = () => 'plate' in root.dataset && 'echo' in fleet.dataset;
+  const hushed = () => 'plate' in root.dataset && fleet.dataset.echo === '';
 
   /** The far block as a Map cover while the fleet line is at the far step, else null. */
   const cover = () => {

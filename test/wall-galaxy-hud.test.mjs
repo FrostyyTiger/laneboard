@@ -236,10 +236,11 @@ test('bannerModel (night 4 T8): with two crits standing the line is the same wha
   const plain = worstLine(m).text;
   assert.equal(plain, '2 crit · lab · hv1 · crit', 'lab, a site in trouble itself, speaks for its problem');
   for (const held of ['lab-b', 'hv1-c']) assert.equal(worstLine(bannerModel(m, held)).text, plain);
-  // The line speaks for the oldest: holding it is an echo (the line drops out under its plate), holding the other is not.
-  assert.equal(bannerEcho(m, 'hv1-c', since), true);
+  // The line's why speaks for the oldest: holding it echoes the why alone (T9: that row drops out under its
+  // plate, the count and the places stay), holding the other is no echo.
+  assert.equal(bannerEcho(m, 'hv1-c', since), 'why');
   assert.equal(bannerEcho(m, 'lab-b', since), false);
-  assert.equal(bannerEcho(m, 'lab-b'), true);
+  assert.equal(bannerEcho(m, 'lab-b'), 'why');
   assert.equal(farNode(m, since).id, 'hv1-c');
   assert.equal(farNode(m).id, 'lab', 'model order: lab speaks for itself (the site is crit)');
 });
@@ -328,13 +329,16 @@ test('not three reds saying one thing (night 3 T20): under the plate the echoing
     next.nodes.push({ id: 'hv1-c', parent: 'hv1', kind: 'builder', label: 'builder-c', status: 'warn', why: 'no contact' });
     hud.update(next);
     assert.equal('echo' in fleet.dataset, true, 'never a step down from the held crit to a warn (T30)');
-    // A second crit elsewhere (night 4 T8): the line names both, the held one first (seen first), so it still echoes.
+    // A second crit elsewhere (night 4 T8): the line names both, the held one first (seen first), so its
+    // why echoes the hero: only that row drops out (T9), the count stays in sight and covers its box.
     next.nodes.at(-1).status = 'crit';
     hud.update({ ...next });
     assert.equal(fleet.dataset.step, 'far');
     assert.match(fleet.textContent ?? '', /2 crit · lab · hv1/);
     assert.match(fleet.textContent ?? '', /builder-b · disk full/);
-    assert.equal(frame.hushed(), true);
+    assert.equal(fleet.dataset.echo, 'why');
+    assert.equal(frame.hushed(), false);
+    assert.ok(frame.cover(), 'the count still covers its box');
     assert.equal(hud.named(), 'lab-b');
     hud.update(planet());
     assert.equal(frame.hushed(), true);
@@ -358,12 +362,17 @@ test('not three reds saying one thing (night 3 T20): under the plate the echoing
   }
 });
 
-test('wall.css: an echoing line is hidden only under a plate, its place kept (T20)', () => {
+test('wall.css: an echoing line is hidden only under a plate, its place kept (T20); a why echo hides the why alone (T9)', () => {
   const css = read('css/wall.css');
-  const at = css.indexOf('.wall-frame-layer[data-plate] .wall-fleet[data-echo] {');
-  assert.ok(at >= 0);
-  assert.match(css.slice(at, css.indexOf('}', at)), /visibility: hidden/);
-  assert.equal(/\.wall-fleet\[data-echo\]\s*\{/.test(css.replace(/\.wall-frame-layer\[data-plate\] \.wall-fleet\[data-echo\]/g, '')), false, 'no rule hides it without a plate');
+  const rule = (sel) => {
+    const at = css.indexOf(`${sel} {`);
+    assert.ok(at >= 0, sel);
+    return css.slice(at, css.indexOf('}', at));
+  };
+  assert.match(rule('.wall-frame-layer[data-plate] .wall-fleet[data-echo=""]'), /visibility: hidden/);
+  assert.match(rule('.wall-frame-layer[data-plate] .wall-fleet[data-echo="why"] .wall-fleet-sub-why'), /visibility: hidden/);
+  const rest = css.replace(/\.wall-frame-layer\[data-plate\] \.wall-fleet\[data-echo[^\]]*\]/g, '');
+  assert.equal(/\.wall-fleet\[data-echo[^\]]*\]/.test(rest), false, 'no rule hides it without a plate');
 });
 
 test('the frame names the second problem while the first is held, the first otherwise', () => {
@@ -410,6 +419,79 @@ test('night 4 T8: with two crits the fed line is the same at every leg, oldest f
     t += 5000;
     hud.update(twoProblems());
     assert.equal(fed.at(-1), line, `${leg.kind} ${leg.id ?? ''}`);
+  }
+});
+
+// Night 4 T9 (night 3's reviews/r46-skeptic.md galaxy 2): one headline with a second crit standing.
+const twoCrits = () => ({
+  nodes: [
+    { id: '__core', kind: 'core', status: 'ok' },
+    { id: 'hv1', parent: '__core', kind: 'site', label: 'hv1', status: 'ok' },
+    { id: 'vm-c', parent: 'hv1', kind: 'room', label: 'vm-c', status: 'crit', why: 'no contact' },
+    { id: 'hv2', parent: '__core', kind: 'site', label: 'hv2', status: 'ok' },
+    { id: 'storage', parent: 'hv2', kind: 'room', label: 'storage', status: 'crit', why: 'pool 97% full' },
+  ],
+});
+
+test('night 4 T9: two crits, STORAGE held: no banner names it, its label gives way on every visit, the count stays', async () => {
+  const { makeDocument, makeEl, texts } = await import('./helpers/fakedom.mjs');
+  const { createFrame } = await import('../public/js/wall/frame.js');
+  const prevDoc = globalThis.document;
+  globalThis.document = makeDocument();
+  try {
+    let t = 1000;
+    const root = makeEl('div');
+    const frame = createFrame(root, { timers: { setTimeout: () => 0, clearTimeout() {} }, now: () => t });
+    const fleet = frame.el.fleet;
+    for (const [k, v] of [['offsetLeft', 900], ['offsetTop', 600], ['offsetWidth', 400], ['offsetHeight', 200]]) {
+      Object.defineProperty(fleet, k, { value: v, configurable: true });
+    }
+    // What the banner shows from 3 m: the rows wall.css does not hide under the plate.
+    const said = () => {
+      if (frame.hushed()) return '';
+      const whyHidden = 'plate' in root.dataset && fleet.dataset.echo === 'why';
+      const one = (c) => fleet.querySelectorAll(c)[0];
+      return [one('wall-fleet-line'), whyHidden ? null : one('wall-fleet-sub-why'), frame.el.subMore]
+        .map((e) => (e && !e.hidden ? texts(e).join('') : '')).join(' / ');
+    };
+    const { caption } = fakes();
+    const legs = [];
+    const tour = { onLeg: (cb) => { legs.push(cb); return () => {}; } };
+    const hud = createHud({ caption, frame, tour, now: () => t, timers: { setTimeout: (fn) => { fn(); return 1; }, clearTimeout() {} }, size: () => ({ W: 1368, H: 912 }) });
+    // STORAGE's pool filled first, VM-C lost contact a minute later.
+    const first = twoCrits();
+    first.nodes.find((n) => n.id === 'vm-c').status = 'ok';
+    hud.update(first);
+    t += 60000;
+    hud.update(twoCrits());
+    assert.equal(said(), '■2 crit · hv2 · hv1 / storage · pool 97% full / ', 'the overview: both, the oldest\'s reason');
+    const visits = [
+      { id: 'hv2', hero: 'storage', line: '■2 crit · hv2 · hv1 /  / ' },
+      { id: 'hv1', hero: 'vm-c', line: '■2 crit · hv2 · hv1 / storage · pool 97% full / ' },
+      { id: 'hv2', hero: 'storage', line: '■2 crit · hv2 · hv1 /  / ' },
+      { id: 'hv1', hero: 'vm-c', line: '■2 crit · hv2 · hv1 / storage · pool 97% full / ' },
+      { id: 'hv2', hero: 'storage', line: '■2 crit · hv2 · hv1 /  / ' },
+    ];
+    for (const [i, v] of visits.entries()) {
+      legs[0]({ kind: 'site', id: v.id, index: 1, count: 2, arriveMs: 3000 });
+      t += 5000;
+      hud.update(twoCrits());
+      assert.equal(root.dataset.plate, 'crit', `visit ${i}: a crit plate`);
+      assert.equal(hud.named(), v.hero, `visit ${i}: the hero's planet is not named a second time`);
+      assert.equal(said(), v.line, `visit ${i} (${v.id}): the count and the places, the why only when it is not the hero's`);
+      if (v.hero === 'storage') assert.doesNotMatch(said(), /storage/, `visit ${i}: no banner names STORAGE while its plate does`);
+      assert.ok(frame.cover(), `visit ${i}: the line is in sight, the names keep off it`);
+      legs[0]({ kind: 'overview' });
+      assert.equal(hud.named(), null);
+      assert.equal(said(), '■2 crit · hv2 · hv1 / storage · pool 97% full / ', `after visit ${i}: the line whole again`);
+    }
+    // VM-C clears: STORAGE alone, held, is a whole echo again (T20), and the line drops out.
+    legs[0]({ kind: 'site', id: 'hv2', index: 1, count: 2, arriveMs: 0 });
+    hud.update(first);
+    assert.equal(frame.hushed(), true);
+    assert.equal(hud.named(), 'storage');
+  } finally {
+    globalThis.document = prevDoc;
   }
 });
 
@@ -666,7 +748,7 @@ test('wall.css (T30): the far line steps down under a crit plate only; the echo 
   // The 3 m size is larger than the plate's name step under a milder plate: 14vmin (fitted, 9 at the least) > 6.9vmin.
   assert.match(css, /--fleet-far: 14vmin;/);
   assert.match(css, /--cap-name: 6\.9vmin;/);
-  assert.ok(css.includes('.wall-frame-layer[data-plate] .wall-fleet[data-echo] {'), 'T20 holds under any plate');
+  assert.ok(css.includes('.wall-frame-layer[data-plate] .wall-fleet[data-echo=""] {'), 'T20 holds under any plate');
 });
 
 // A calm plate does not shrink the banner (night 3 T22, r17-operator galaxy 7; built by T30): under a calm

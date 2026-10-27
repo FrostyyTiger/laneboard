@@ -166,12 +166,26 @@ Notes for every builder round (planner, round 1):
   HV1 VM-C went down at 29 s, the banner reads `■ 2 CRIT · HV2 · HV1 / STORAGE · POOL 97% FULL` and stays so on
   the VM-C visit; 13 fps under SwiftShader, no console errors. Still `shots/r18-t8-two/two.png`: the line fits the
   band beside the clock at 1368.
-- [ ] T9 (§7 Night 4 0a; was night 3's T34, r46-skeptic galaxy 2; after T8) [ui] [variant:galaxy] One headline with
+- [x] T9 (§7 Night 4 0a; was night 3's T34, r46-skeptic galaxy 2; after T8) [ui] [variant:galaxy] One headline with
   a second crit standing: the echo test (`hud.js bannerEcho`) is "the banner's line names the held problem", whatever
   else stands (then the banner shows the next problem or drops out), and `hud.named()` hides the planet's own label on
   every plate that names it, not only the first visit — done when: a test with two crits (HV2 STORAGE held, HV1 VM-C
   also crit) finds no banner naming STORAGE and no shown label for the planet while the hero names it, and a film
-  frame at the second crit's target shows the hero once.
+  frame at the second crit's target shows the hero once. (commit SHA) Builder r19:
+  a probe of the live page (`tools/r19-probe.mjs`, the names in sight every 0.5 s over 100 s) found `named()`
+  already right on every visit since T8/T20 (STORAGE's and VM-C's labels gone under each of their plates), and
+  the banner never naming STORAGE under its plate, but by dropping out whole: with two crits standing the other
+  one was then nowhere in sight. Decided: `hud.js bannerEcho` answers `'why'` when the line names two or more
+  crits and the held one is the oldest (the line's why is its reason, the words `2 crit · hv2 · hv1` no plate
+  says); `frame.js` sets `data-echo="why"` and wall.css hides only `.wall-fleet-sub-why` under a plate (its
+  place kept, nothing moves), so `■ 2 CRIT · HV2 · HV1 +4 MORE` stays in sight at the plate's name step and still
+  covers its box for the names; `hushed()` only for a whole echo (`data-echo=""`). Holding the newer crit (VM-C)
+  is no echo: the line keeps the oldest's reason. No subject change with the camera (T8 holds). Tests in
+  `test/wall-galaxy-hud.test.mjs` (night 4 T9: five visits alternating HV2/HV1, the shown rows, `named()`, the
+  cover; VM-C clearing makes it a whole echo again). Still `shots/r19-t9/hv2-two.png`: hero `■ STORAGE / POOL
+  97% FULL` once, no planet label, banner `■ 2 CRIT · HV2 · HV1` with no why. Film `shots/r19-galaxy` (12 frames
+  over 74 s): no errors, 12.4 fps under SwiftShader as before; its frames miss the HV2 visit during the two crits,
+  so the still is the evidence.
 - [ ] T10 (§7 Night 4 0a; was night 3's T35, r46-skeptic galaxy 3 = r41-operator galaxy 8 = night 3 A4 feathered
   plates) [ui] [variant:galaxy] No dark rectangle over the galaxy: the banner's ground (the far cover) and the caption
   plate's ground are removed or become a feathered edge / text-shadow halo, so no star, nebula or label is cut flat by

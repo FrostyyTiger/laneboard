@@ -113,14 +113,21 @@ function heldProblem(model, heldId) {
  * problem it may step down to, so it would say what the plate's hero says.
  * Then the line drops out while the plate is up (frame.js `echo`, wall.css)
  * rather than make three reds of one thing; it is back as the plate goes.
- * `since` as `worstLine` takes it. Pure.
+ * With two or more crits standing (night 4 T9, night 3's
+ * reviews/r46-skeptic.md galaxy 2) the line's words are the count and the
+ * places (`2 crit · hv2 · hv1`, T8), which no plate says, and its why is the
+ * oldest's: holding the oldest echoes only the why, so the answer is `'why'`
+ * and only that row drops out. The count stays the far step's headline, so
+ * the other crit is still in sight while the plate is up, and the line keeps
+ * its subject whatever is held. `since` as `worstLine` takes it. Pure.
  */
 export function bannerEcho(model, heldId, since = null) {
   const inHeld = heldProblem(model, heldId);
   if (!inHeld) return false;
   const w = worstLine(bannerModel(model, heldId, since), { since });
   if (w.step === 'calm') return false;
-  return inHeld(model.nodes.find((n) => n?.id === w.id));
+  if (!inHeld(model.nodes.find((n) => n?.id === w.id))) return false;
+  return w.crits > 1 ? 'why' : true;
 }
 
 /**
