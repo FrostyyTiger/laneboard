@@ -511,7 +511,7 @@ Notes for every builder round (planner, round 1):
   stays grey) — done when: a test pins the streak direction toward the projected target, length 0 at k ≥ 0.9, and
   the head tint equal to the tone's token for warn/crit and unchanged for calm, and a film of
   `galaxy.html?demo=1&quality=0&fx=warp` has no streak over a typing plate and shows a coloured head on a flight to
-  a trouble site. (commit SHA)
+  a trouble site. (commit d9b916a)
   Builder r60: `fx.js warpAt` sizes a streak by the camera's speed under the flight's cubic ease (square-rooted
   share of its peak: 2k up to half-way, 2(1 − k) after, so it reads over more of the flight than the raw slope),
   cut over `snap` [0.8, 0.9]: nothing from 0.9 on. `tint` is gone; `head` is the tone (`warn`/`crit`, else `calm`)
