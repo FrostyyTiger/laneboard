@@ -217,10 +217,10 @@ test('galaxy/main.js wires the first touch: tour stopped, the camera fit in TOUC
   // T13: the way out to the overview is shared with the back control.
   assert.match(wake, /toOverview\(\)/);
   const out = js.slice(js.indexOf('const toOverview = '), js.indexOf('};', js.indexOf('const toOverview = ')));
-  assert.match(out, /cam\.fit\(\{ ms: TOUCH\.fitMs \}\)/);
+  assert.match(out, /finger\.fit\(\{ ms: TOUCH\.fitMs \}\)/);
   assert.match(out, /hud\.release\(\)/);
   // A new model does not start a stopped tour again (T14 brings it back).
-  assert.match(js, /if \(!park && touch\?\.mode\(\) === 'tour'\) tour\.start\(\);/);
+  assert.match(js, /if \(!park && touch\?\.mode\(\) === 'tour' && director\.driver\(\) === 'tour'\) tour\.start\(\);/);
 });
 
 // ---- T8: drag, pinch, the wheel ----
@@ -464,7 +464,7 @@ test('during the tour and the first touch\'s flight, fingers and the wheel move 
 test('galaxy/main.js wires drag and pinch: gestures step before the camera, the steer option on, no tether (T16)', () => {
   const js = read('js/wall/galaxy/main.js');
   assert.match(js, /createGalaxyCamera\(galaxy, \{[^}]*steer: !park && !reduced,/);
-  assert.match(js, /createGestures\(document\.getElementById\('galaxy-stage'\), touch, cam, \{/);
+  assert.match(js, /createGestures\(document\.getElementById\('galaxy-stage'\), touch, finger, \{/);
   assert.doesNotMatch(js, /createTether|tether\.(show|hide)/, 'no banner-to-node tether at the overview (T16)');
   assert.match(js, /limits: \(\) => orbitLimits\(cam\.home\(\), /);
   assert.match(js, /gestures\?\.frame\(now\);\s*cam\.frame\(now\);/);
@@ -641,7 +641,7 @@ test('galaxy/main.js wires taps: sites hit-tested in the stage\'s px, a hit flie
   assert.match(js, /createTaps\(touch, \{/);
   assert.match(js, /hitTest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, labels\.shown\(\), beams\), x - o\.left, y - o\.top\)/);
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
-  assert.match(open, /cam\.focus\(id, TIMING\.zoom\)/);
+  assert.match(open, /finger\.focus\(id, TIMING\.zoom\)/);
   assert.match(open, /hud\.open\(\{[^}]*arriveMs: there \|\| reduced \? 0 : FLIGHT\.ms \}\)/, 'a cut (reduced motion, T14) has its plate at once');
 });
 
@@ -884,7 +884,7 @@ test('galaxy/main.js wires back (T13): the control and an empty-sky tap step bac
   const wake = js.slice(js.indexOf('wake: () => {'), js.indexOf('},', js.indexOf('wake: () => {')));
   assert.match(wake, /toOverview\(\)/);
   const out = js.slice(js.indexOf('const toOverview = '), js.indexOf('};', js.indexOf('const toOverview = ')));
-  for (const rx of [/cam\.fit\(\{ ms: TOUCH\.fitMs \}\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/]) assert.match(out, rx);
+  for (const rx of [/finger\.fit\(\{ ms: TOUCH\.fitMs \}\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/]) assert.match(out, rx);
 });
 
 // ---- night 4 T1: the words are not sky ----

@@ -64,6 +64,11 @@
 // under the tag, `MANUAL · TOUR IN 0:40` counts down to the hand-back while a
 // finger explores; at the overview the back control is `▶ TOUR`, which hands
 // the page back at once (touch.js handBack, the same resume as the minute's).
+// One camera director (night 4 T14, director.js createDirector): nothing here
+// calls camera.js's moves. The tour flies through `director.as('tour')`, a
+// finger (wake, taps, back, gestures) through `finger`, a show command
+// through `show`; the director plays the one that has the camera (touch >
+// show > tour) and refuses the rest, every hand-over eased from the pose.
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon,warp` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
@@ -83,6 +88,7 @@ import { paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
+import { createDirector } from './director.js';
 import { critAges, flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
@@ -221,7 +227,25 @@ export function boot() {
   // `?pace=wall`: the demo's data at the normal, readable speed (the demo's own
   // speed is for films).
   const fast = demo && q.get('pace') !== 'wall';
-  const tour = createTour(cam, { timing: reduced ? stillTourTimingFor(demo) : timingFor(fast) });
+  // One camera director (night 4 T14, director.js): the tour, a finger and a
+  // show each get a camera of their own whose moves are requests; only the
+  // director moves `cam`, so no two of them ever fight for it.
+  let touch = null;
+  let tour = null;
+  const director = createDirector(cam, {
+    still: reduced,
+    held: () => touch != null && touch.mode() !== 'tour', // touch.js's minute hands a finger's page back
+    resume: (from) => { if (from === 'show') tour.resume(); },
+  });
+  const finger = director.as('touch');
+  tour = createTour(director.as('tour'), { timing: reduced ? stillTourTimingFor(demo) : timingFor(fast) });
+  // A show command (§7 Night 4 B wires the sender and its plate): the tour stops under it and
+  // resumes after it; the tour's plate goes, so no word names a site the camera has left.
+  const show = (cmd) => {
+    const r = director.show(cmd);
+    if (r.move) { tour.stop(); hud.release(); }
+    return r;
+  };
 
   // The words over the canvas: the caption names each system as the camera
   // gets there; the frame (vignette, clock, fleet line, tag) stays put.
@@ -283,13 +307,13 @@ export function boot() {
   const toOverview = (pose = null) => {
     cutAway();
     fan?.hide();
-    if (pose) cam.fly(pose, { ms: TOUCH.fitMs });
-    else cam.fit({ ms: TOUCH.fitMs });
+    if (pose) finger.fly(pose, { ms: TOUCH.fitMs });
+    else finger.fit({ ms: TOUCH.fitMs });
     hud.release();
     place = AT_OVERVIEW;
   };
   // The first touch (T7): the tour stops where it is, the camera eases out to the overview.
-  const touch = park ? null : createTouch(document.getElementById('galaxy-stage'), {
+  touch = park ? null : createTouch(document.getElementById('galaxy-stage'), {
     wake: () => {
       tour.stop();
       left.clear();
@@ -302,12 +326,13 @@ export function boot() {
       hud.release();
       left.clear();
       place = AT_OVERVIEW;
+      director.handBack();
       tour.resume();
     },
   });
   let touchSaid = 'tour';
   // Drag, pinch and the wheel in `explore` (T8): the orbit's far end is the overview, as fitted.
-  const gestures = touch && !reduced ? createGestures(document.getElementById('galaxy-stage'), touch, cam, {
+  const gestures = touch && !reduced ? createGestures(document.getElementById('galaxy-stage'), touch, finger, {
     limits: () => orbitLimits(cam.home(), galaxy.world?.sites ?? []),
     view: () => ({ ...galaxy.size(), fov: galaxy.camera.fov }),
     moved: () => fan?.hide(), // a turn or a zoom takes the rows' planets from under them
@@ -323,9 +348,9 @@ export function boot() {
     // In reduced motion the tour's site legs leave the camera on the overview: only a cut is there.
     const there = w.kind === 'site' && w.id === id && (!reduced || w.cut);
     if (!there && reduced) {
-      cam.cut(id, TIMING.zoom);
+      finger.cut(id, TIMING.zoom);
       fade?.cut();
-    } else if (!there) cam.focus(id, TIMING.zoom);
+    } else if (!there) finger.focus(id, TIMING.zoom);
     // A sheet says what was touched, not the tour's count (T25).
     hud.open({ id, arriveMs: there || reduced ? 0 : FLIGHT.ms });
     place = placeOf(id);
@@ -419,6 +444,7 @@ export function boot() {
       if (at.open !== parkOpen) galaxy.setOpen(at.id, parkOpen);
       aim(siteShot(at, 0, view()));
     } else if (!park) {
+      director.tick(); // a show's hold runs out here
       gestures?.frame(now);
       cam.frame(now);
       if (fx.has('warp')) galaxy.setWarp(cam.flight());
@@ -448,7 +474,7 @@ export function boot() {
     if (fx.has('beacon')) galaxy.setCritAges(critAges(model, galaxy.world?.byId.keys() ?? []));
     hud.update(model);
     tour.update(model);
-    if (!park && touch?.mode() === 'tour') tour.start();
+    if (!park && touch?.mode() === 'tour' && director.driver() === 'tour') tour.start();
     const at = parked();
     if (at && !parkedSaid) {
       parkedSaid = true;
@@ -510,6 +536,7 @@ export function boot() {
   globalThis.__galaxyBack = back;
   globalThis.__galaxyFan = fan;
   globalThis.__galaxyCam = cam;
+  globalThis.__galaxyDirector = { ...director, show };
 }
 
 boot();

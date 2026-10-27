@@ -17,6 +17,7 @@ import {
 import { DEMO_TIMING, TIMING, createTour, initialTour, nextLeg, resumeTour } from '../public/js/wall/tour.js';
 import { FLIGHT, createGalaxyCamera, zoomedSiteShot } from '../public/js/wall/galaxy/camera.js';
 import { CUT, STILL_DEMO_TOUR_TIMING, createCutFade, cutFade } from '../public/js/wall/galaxy/still.js';
+import { createDirector } from '../public/js/wall/galaxy/director.js';
 import { galaxyLayout } from '../public/js/wall/galaxy/layout.js';
 import * as THREE from '../public/vendor/three/three.module.js';
 
@@ -97,7 +98,21 @@ function page({ still = false } = {}) {
   const names = makeEl('div');
   const galaxy = fakeGalaxy();
   const cam = createGalaxyCamera(galaxy, { still, steer: !still });
-  const tour = createTour(cam, { timing: still ? STILL_DEMO_TOUR_TIMING : DEMO_TIMING, timers });
+  // Every move made on the camera, whoever made it (T14: it must be the director, each with a source).
+  const calls = [];
+  for (const k of ['fit', 'focus', 'cut', 'fly', 'steer']) {
+    const f = cam[k];
+    cam[k] = (...args) => { calls.push(k); return f(...args); };
+  }
+  // One camera director (night 4 T14): only it moves `cam`; `moves` records each call with its source.
+  let touch = null, tour = null;
+  const director = createDirector(cam, {
+    clock, still, held: () => touch != null && touch.mode() !== 'tour', resume: (from) => { if (from === 'show') tour.resume(); },
+  });
+  const moves = [];
+  director.onMove((m) => moves.push(m));
+  const finger = director.as('touch');
+  tour = createTour(director.as('tour'), { timing: still ? STILL_DEMO_TOUR_TIMING : DEMO_TIMING, timers });
   tour.update({ nodes: NODES });
   const legs = [];
   tour.onLeg((leg) => legs.push(leg));
@@ -109,17 +124,17 @@ function page({ still = false } = {}) {
   const left = createReturn();
   const toOverview = (pose = null) => {
     cutAway();
-    if (pose) cam.fly(pose, { ms: TOUCH.fitMs });
-    else cam.fit({ ms: TOUCH.fitMs });
+    if (pose) finger.fly(pose, { ms: TOUCH.fitMs });
+    else finger.fit({ ms: TOUCH.fitMs });
     sheets.push(null);
     place = AT_OVERVIEW;
   };
-  const touch = createTouch(stage, {
+  touch = createTouch(stage, {
     clock,
     wake: () => { wakes++; tour.stop(); left.clear(); toOverview(); },
-    resume: () => { cutAway(); sheets.push(null); left.clear(); place = AT_OVERVIEW; tour.resume(); },
+    resume: () => { cutAway(); sheets.push(null); left.clear(); place = AT_OVERVIEW; director.handBack(); tour.resume(); },
   });
-  const gestures = still ? null : createGestures(stage, touch, cam, {
+  const gestures = still ? null : createGestures(stage, touch, finger, {
     clock,
     limits: () => orbitLimits(cam.home(), galaxy.world.sites),
     view: () => ({ ...galaxy.size(), fov: galaxy.camera.fov }),
@@ -128,7 +143,7 @@ function page({ still = false } = {}) {
     left.leave(place, cam);
     const w = cam.want();
     const there = w.kind === 'site' && w.id === id && (!still || w.cut);
-    if (!there && still) { cam.cut(id, TIMING.zoom); fade.cut(); } else if (!there) cam.focus(id, TIMING.zoom);
+    if (!there && still) { finger.cut(id, TIMING.zoom); fade.cut(); } else if (!there) finger.focus(id, TIMING.zoom);
     sheets.push(id);
     place = placeOf(id);
   };
@@ -151,6 +166,7 @@ function page({ still = false } = {}) {
   const tick = (ms = 16) => {
     now += ms;
     timers.run();
+    director.tick();
     const m = touch.mode();
     back.show(backControl(m, place));
     gestures?.frame(now);
@@ -174,7 +190,7 @@ function page({ still = false } = {}) {
     button.dispatch('click');
   };
   return {
-    stage, button, canvas, names, galaxy, cam, tour, touch, timers, legs, sheets, back,
+    stage, button, canvas, names, galaxy, cam, tour, touch, timers, legs, sheets, back, director, moves, calls,
     tick, run, tapAt, drag, press, now: clock, place: () => place, wakes: () => wakes,
     manual: () => manualLine(touch.left()), words: () => `${glyph.textContent} ${word.textContent}`,
   };
@@ -517,7 +533,7 @@ test('galaxy/main.js wires the return (night 4 T4): leave on open, fly back on t
     const body = js.slice(js.indexOf(key), js.indexOf('},', js.indexOf(key)));
     assert.match(body, /left\.clear\(\)/, key);
   }
-  assert.match(js, /if \(pose\) cam\.fly\(pose, \{ ms: TOUCH\.fitMs \}\)/);
+  assert.match(js, /if \(pose\) finger\.fly\(pose, \{ ms: TOUCH\.fitMs \}\)/);
 });
 
 test('galaxy/main.js wires the hand-back (T14): resume releases the sheet and resumes the tour; cuts and the fade in reduced motion', () => {
@@ -526,7 +542,7 @@ test('galaxy/main.js wires the hand-back (T14): resume releases the sheet and re
   for (const rx of [/cutAway\(\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/, /tour\.resume\(\)/]) assert.match(resume, rx);
   assert.match(js, /createCutFade\(\[canvas, document\.getElementById\('galaxy-labels'\)\]\)/);
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
-  assert.match(open, /cam\.cut\(id, TIMING\.zoom\)/);
+  assert.match(open, /finger\.cut\(id, TIMING\.zoom\)/);
   assert.match(open, /fade\?\.cut\(\)/);
   const go = js.slice(js.indexOf('const goBack = '), js.indexOf('};', js.indexOf('const goBack = ')));
   assert.match(go, /touch\?\.poke\(\)/, 'a press on the control counts as a touch');
@@ -675,4 +691,82 @@ test('galaxy.html and wall.css: the manual line under the tag, the tag\'s face a
   assert.match(css, /\.galaxy-manual\[hidden\] \{ display: none; \}/);
   const js = read('js/wall/galaxy/main.js');
   assert.match(js, /sayManual\(manualLine\(touch\.left\(\)\)\);/);
+});
+
+// ---- night 4 T14: one camera director, wired ----
+
+test('the page through the director (T14): tour → wake → drag → tap → back → 60 s → tour, every camera move the director\'s, with its source', () => {
+  const p = page();
+  p.tour.start();
+  p.run(DEMO_TIMING.overviewMs + 1000);
+  assert.deepEqual(p.moves.map((m) => `${m.source}:${m.call}`), ['tour:fit', 'tour:focus'], 'the overview, then the crit');
+  // Wake: the finger's, eased out over the wake's fitMs.
+  p.stage.dispatch('pointerdown', { pointerId: 1 });
+  p.stage.dispatch('pointerup', { pointerId: 1 });
+  assert.deepEqual(p.moves.at(-1), { source: 'touch', call: 'fit', args: [{ ms: TOUCH.fitMs }] });
+  assert.equal(p.director.driver(), 'touch');
+  p.run(TOUCH.fitMs + 100);
+  // A tour leg asked for now is refused: the finger has the camera.
+  const n = p.moves.length;
+  p.director.as('tour').focus('cloud', TIMING.zoom);
+  assert.equal(p.moves.length, n, 'no tour move under a finger');
+  // A show command is refused too (busy), never queued.
+  assert.equal(p.director.show({ id: 'c1', to: { kind: 'site', id: 'cloud' } }).refused, 'busy');
+  p.drag(2, [[800, 450], [830, 450], [900, 460], [960, 470]]);
+  p.run(1500);
+  assert.ok(p.moves.slice(n).some((m) => m.source === 'touch' && m.call === 'steer'), 'the drag steers through the director');
+  p.tapAt(3, p.cam.screenOf('hv1'));
+  p.tick(16);
+  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call, p.moves.at(-1).args[0]], ['touch', 'focus', 'hv1']);
+  p.run(FLIGHT.ms + 500);
+  p.press();
+  p.tick(16);
+  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call, p.moves.at(-1).args.at(-1)], ['touch', 'fly', { ms: TOUCH.fitMs }], 'back to the dragged pose');
+  p.run(TOUCH.fitMs + 500);
+  const before = p.cam.pose();
+  for (let t = 0; t < IDLE.ms && p.director.driver() === 'touch'; t += 16) p.tick(16);
+  assert.equal(p.director.driver(), 'tour');
+  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call, p.moves.at(-1).args[0]], ['tour', 'focus', 'hv2'], 'the tour back at its worst');
+  assert.ok(p.cam.flight(), 'eased: a flight, not a cut');
+  assert.ok(gap(p.cam.pose(), before) < 0.05 * gap(before, zoomedSiteShot(p.galaxy.world.byId.get('hv2'), 0, DEMO_TIMING.zoom)), 'from where the finger left it');
+  // Nothing moved the camera but the director: one call per move it played, the same call.
+  assert.deepEqual(p.calls, p.moves.map((m) => m.call));
+  assert.ok(p.moves.every((m) => ['touch', 'tour'].includes(m.source)));
+});
+
+test('the page through the director (T14): a show takes the camera from the tour, the tour back when it ends; a touch drops it', () => {
+  const p = page();
+  p.tour.start();
+  p.run(DEMO_TIMING.overviewMs + 500);
+  const r = p.director.show({ id: 'c1', to: { kind: 'site', id: 'cloud' }, holdMs: 5000 });
+  assert.equal(r.refused, null);
+  p.tour.stop(); // galaxy/main.js's show stops the tour under the command
+  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call, p.moves.at(-1).args[0]], ['show', 'focus', 'cloud']);
+  assert.equal(p.director.driver(), 'show');
+  p.run(5100);
+  assert.equal(p.director.driver(), 'tour', 'the hold ran out');
+  assert.equal(p.moves.at(-1).source, 'tour', 'the tour flies on from the show');
+  // A show, then a finger: the show is dropped, the finger's wake eases out.
+  p.director.show({ id: 'c2', to: { kind: 'site', id: 'hv1' } });
+  p.tour.stop();
+  p.run(500);
+  p.stage.dispatch('pointerdown', { pointerId: 1 });
+  p.stage.dispatch('pointerup', { pointerId: 1 });
+  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call], ['touch', 'fit']);
+  assert.equal(p.director.driver(), 'touch');
+  assert.deepEqual(p.calls, p.moves.map((m) => m.call));
+});
+
+test('galaxy/main.js wires the director (T14): no camera move but through it; the tour on its tour camera, the finger on its own', () => {
+  const js = read('js/wall/galaxy/main.js');
+  assert.doesNotMatch(js, /\bcam\.(fit|focus|cut|fly|steer)\(/, 'nothing calls camera.js\'s moves directly');
+  assert.match(js, /const director = createDirector\(cam, \{/);
+  assert.match(js, /createTour\(director\.as\('tour'\), /);
+  assert.match(js, /const finger = director\.as\('touch'\)/);
+  assert.match(js, /createGestures\(document\.getElementById\('galaxy-stage'\), touch, finger, \{/);
+  const resume = js.slice(js.indexOf('resume: () => {'), js.indexOf('},', js.indexOf('resume: () => {')));
+  assert.match(resume, /director\.handBack\(\);\s*tour\.resume\(\)/, 'the director hears the hand-back before the tour asks for its leg');
+  assert.match(js, /director\.tick\(\);/);
+  // tour.js is unchanged for wall.html: it still takes a map with focus and fit.
+  assert.match(read('js/wall/tour.js'), /map\.focus\(current\.id, current\.zoom\)/);
 });

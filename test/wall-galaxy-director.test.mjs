@@ -6,7 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  HANDOVER, IDLE, OVERVIEW, SOURCES, directorLeft, directorStep, initialDirector,
+  HANDOVER, IDLE, OVERVIEW, SOURCES, createDirector, directorLeft, directorStep, initialDirector,
 } from '../public/js/wall/galaxy/director.js';
 import { IDLE as TOUCH_IDLE } from '../public/js/wall/galaxy/touch.js';
 import { TIMING } from '../public/js/wall/tour.js';
@@ -211,4 +211,87 @@ test('directorLeft: the time until the tour takes the camera back, for the MANUA
   assert.equal(directorLeft(w.state, t0 + 10 * IDLE.ms), 0);
   const [s] = run([[t0, { type: 'show', id: 'c', to: SITE('hv1'), holdMs: 30_000 }]]);
   assert.equal(directorLeft(s.state, t0 + 10_000), 20_000);
+});
+
+// ---- T14: createDirector, the page's director over a camera ----
+
+/** A camera that only counts: each move with its arguments, a pose to read. */
+function countingCam() {
+  const calls = [];
+  const cam = { calls, pose: () => ({ pos: { x: 0, y: 900, z: 900 }, look: { x: 0, y: 0, z: 0 } }), screenOf: () => null };
+  for (const k of ['fit', 'focus', 'cut', 'fly', 'steer']) cam[k] = (...args) => { calls.push([k, ...args]); };
+  return cam;
+}
+
+function director({ still = false, held = false } = {}) {
+  let now = t0;
+  const cam = countingCam();
+  const resumed = [];
+  const moves = [];
+  const d = createDirector(cam, { clock: () => now, still, held: () => held, resume: (from) => resumed.push(from) });
+  d.onMove((m) => moves.push(m));
+  return { d, cam, moves, resumed, at: (ms) => { now = t0 + ms; } };
+}
+
+test('createDirector: every camera call is the director\'s, with its source; each source\'s camera is a request', () => {
+  const { d, cam, moves, resumed, at } = director();
+  const tour = d.as('tour'), finger = d.as('touch');
+  assert.equal(d.as('tour'), tour, 'one camera per source');
+  assert.equal(tour.screenOf, cam.screenOf, 'reads go to the camera as it is');
+  tour.fit();
+  tour.focus('hv1', 2.3);
+  assert.deepEqual(cam.calls, [['fit', undefined], ['focus', 'hv1', 2.3]], 'the tour\'s legs as tour.js always called them');
+  // A drag before any wake does nothing: only the wake's fit takes the camera.
+  finger.steer({ pos: { x: 1, y: 2, z: 3 }, look: { x: 0, y: 0, z: 0 } });
+  assert.equal(cam.calls.length, 2);
+  at(1000);
+  finger.fit({ ms: HANDOVER.fitMs });
+  assert.deepEqual(cam.calls.at(-1), ['fit', { ms: HANDOVER.fitMs }]);
+  assert.equal(d.driver(), 'touch');
+  tour.focus('hv2', 2.3);
+  assert.equal(cam.calls.length, 3, 'a tour leg under a finger moves nothing');
+  finger.steer({ pos: { x: 1, y: 2, z: 3 }, look: { x: 0, y: 0, z: 0 } });
+  finger.focus('hv2', 2.3);
+  finger.fly({ pos: { x: 1, y: 2, z: 3 }, look: { x: 0, y: 0, z: 0 } }, { ms: 1500 });
+  assert.deepEqual(cam.calls.slice(3).map((c) => c[0]), ['steer', 'focus', 'fly']);
+  assert.deepEqual(cam.calls.at(-1)[2], { ms: 1500 }, 'back in its own time');
+  assert.equal(d.show({ id: 'c1', to: { kind: 'site', id: 'hv1' } }).refused, 'busy');
+  d.handBack();
+  assert.deepEqual(resumed, ['touch']);
+  assert.equal(d.driver(), 'tour');
+  // A show takes the camera from the tour (the tour's zoom when it names none), its hold runs out on a tick.
+  at(5000);
+  d.show({ id: 'c2', to: { kind: 'site', id: 'cloud' }, holdMs: 2000 });
+  assert.deepEqual(cam.calls.at(-1), ['focus', 'cloud', TIMING.zoom]);
+  tour.focus('hv1', 2.3);
+  assert.equal(cam.calls.at(-1)[1], 'cloud', 'the tour waits under a show');
+  at(7000);
+  d.tick();
+  assert.deepEqual(resumed, ['touch', 'show']);
+  assert.equal(d.driver(), 'tour');
+  assert.deepEqual(cam.calls.map((c) => c[0]), moves.map((m) => m.call), 'one camera call per move, nothing else');
+  assert.deepEqual(moves.map((m) => m.source), ['tour', 'tour', 'touch', 'touch', 'touch', 'touch', 'show']);
+});
+
+test('createDirector: reduced motion cuts a finger\'s or a show\'s site; the tour\'s legs stay focus (camera.js keeps the overview)', () => {
+  const { d, cam, at } = director({ still: true });
+  d.as('tour').focus('hv1', 2.3);
+  assert.deepEqual(cam.calls.at(-1), ['focus', 'hv1', 2.3]);
+  d.show({ id: 'c1', to: { kind: 'site', id: 'cloud', zoom: 2 } });
+  assert.deepEqual(cam.calls.at(-1), ['cut', 'cloud', 2]);
+  at(100);
+  d.as('touch').fit({ ms: HANDOVER.fitMs });
+  assert.deepEqual(cam.calls.at(-1), ['fit', undefined], 'the wake is a cut: no ms');
+  d.as('touch').focus('hv2', 2.3);
+  assert.deepEqual(cam.calls.at(-1), ['cut', 'hv2', 2.3]);
+});
+
+test('createDirector: a finger held keeps the director\'s minute from running out (touch.js hands back)', () => {
+  const { d, resumed, at } = director({ held: true });
+  d.as('touch').fit({ ms: HANDOVER.fitMs });
+  at(HANDOVER.fitMs + IDLE.ms + 10_000);
+  d.tick();
+  assert.equal(d.driver(), 'touch');
+  assert.deepEqual(resumed, []);
+  assert.equal(d.left(), IDLE.ms);
 });

@@ -29,7 +29,12 @@
 //   eases from wherever the camera is.
 //
 // `directorStep` and `directorLeft` are pure on an injected clock
-// (test/wall-galaxy-director.test.mjs); T14 wires them into galaxy/main.js.
+// (test/wall-galaxy-director.test.mjs). `createDirector` (T14) is the small
+// part galaxy/main.js holds: the only thing that moves camera.js. Each source
+// gets a camera of its own (`as(source)`, camera.js's interface) whose moves
+// are requests to the director: the tour's is `createTour`'s map (tour.js
+// unchanged, so wall.html is too), the finger's is the one the page's taps,
+// back and gestures use.
 
 import { TIMING } from '../tour.js';
 import { CUT } from './still.js';
@@ -73,9 +78,10 @@ const result = (state, extra = {}) => ({ state, move: null, wake: false, resume:
  * The next state after `event` at `now` (ms). `state` is `{ driver, since,
  * last, show }` (`last`: the last touch or show command, ms; `show`: the
  * command that drives, `{ id, to, until }`). `event` is an object:
- * - `{ type: 'touch', to?, pose? }`: a finger did something. The first touch
+ * - `{ type: 'touch', to?, ms?, pose? }`: a finger did something. The first touch
  *   while another source drives takes the camera (`wake`) and eases it out
- *   to the overview; later touches with a `to` (a tap, back) move it there;
+ *   to the overview; later touches with a `to` (a tap, back) move it there
+ *   (in `ms`, else `flyMs`: back to the overview takes the wake's fitMs);
  *   without a `to` (a drag, the wheel: the gesture is its own motion) they
  *   only count as a touch.
  * - `{ type: 'handback' }`: `▶ TOUR` was pressed: the tour at once.
@@ -108,7 +114,8 @@ export function directorStep(state, event, now, opts = {}) {
         { wake: true, dropped, move: moveOf('touch', pose, OVERVIEW, o.fitMs, o.still) },
       );
     }
-    return result({ ...s, last: Math.max(s.last ?? now, now) }, { move: moveOf('touch', pose, event.to, o.flyMs, o.still) });
+    const ms = Number.isFinite(event.ms) ? event.ms : o.flyMs;
+    return result({ ...s, last: Math.max(s.last ?? now, now) }, { move: moveOf('touch', pose, event.to, ms, o.still) });
   }
 
   if (type === 'handback') {
@@ -156,4 +163,87 @@ export function directorLeft(state, now, { idleMs = IDLE.ms, held = false } = {}
   if (state?.driver === 'touch') return held ? idleMs : Math.min(idleMs, Math.max(0, idleMs - (now - (state.last ?? state.since))));
   if (state?.driver === 'show') return Math.max(0, (state.show?.until ?? now) - now);
   return null;
+}
+
+/**
+ * The page's director (T14): `createDirector(cam, { clock, still, held,
+ * resume })`. `cam` is camera.js's; `held()` says a finger has the page (the
+ * director's minute never runs out under it: touch.js's own minute, which
+ * hears every pointer, hands the page back with `handBack()`); `resume(from)`
+ * is told when the tour has the camera back from `from` (`touch`, `show`),
+ * so the page asks the tour for its next leg. Returns:
+ * - `as(source)`: a camera for `touch` or `tour` with camera.js's interface;
+ *   its `focus`, `fit`, `cut`, `fly` and `steer` are requests to the
+ *   director (a tour leg while a finger drives does not move the camera),
+ *   everything else reads `cam` as it is. A finger's `steer` (a drag, a
+ *   pinch) counts as a touch and holds the pose as given; it never wakes
+ *   the page (only the wake's fit does).
+ * - `show(cmd)` (`{ id, to, holdMs }`, `to` an `{ kind: 'site', id }` or
+ *   OVERVIEW), `clear(id?)`, `handBack()`, `tick()`: the other events.
+ * - `driver()`, `left()` (directorLeft now), `onMove(cb)`: `cb({ source,
+ *   call, args })` for every call made on `cam`.
+ * In reduced motion the tour never leaves the overview (camera.js `still`),
+ * so its legs stay `focus`/`fit`; a finger's or a show's site is a `cut`.
+ */
+export function createDirector(cam, opts = {}) {
+  const o = { clock: () => performance.now(), still: false, held: () => false, resume: () => {}, ...opts };
+  let state = initialDirector();
+  const cbs = new Set();
+  const call = (source, name, ...args) => {
+    for (const cb of cbs) cb({ source, call: name, args });
+    cam[name](...args);
+  };
+  const play = (move) => {
+    const { source, to, ms } = move;
+    // The tour's legs are camera.js's own (its fit and focus fly FLIGHT.ms), as tour.js always called them.
+    const timed = ms > 0 && source !== 'tour' ? { ms } : undefined;
+    if (to.kind === 'overview') call(source, 'fit', timed);
+    else if (to.kind === 'free') call(source, 'fly', to.pose, timed);
+    else if (to.kind === 'site') call(source, (move.cut || to.cut) && source !== 'tour' ? 'cut' : 'focus', to.id, to.zoom);
+  };
+  const step = (event) => {
+    const from = state.driver;
+    const r = directorStep(state, { ...event, pose: event.pose ?? cam.pose?.() ?? null }, o.clock(), { still: o.still, held: o.held() });
+    state = r.state;
+    if (r.move) play(r.move);
+    if (r.resume) o.resume(from);
+    return r;
+  };
+  const site = (id, zoom, cut = false) => ({ kind: 'site', id, zoom, ...(cut ? { cut: true } : {}) });
+  const views = new Map();
+  const as = (source) => {
+    if (views.has(source)) return views.get(source);
+    const ev = (to, ms) => ({ type: source, to, ...(Number.isFinite(ms) ? { ms } : {}) });
+    const view = {
+      ...cam,
+      focus: (id, zoom) => { step(ev(site(id, zoom))); },
+      cut: (id, zoom) => { step(ev(site(id, zoom, true))); },
+      fit: (fo) => { step(ev(OVERVIEW, fo?.ms)); },
+      fly: (pose, fo) => { if (pose) step(ev({ kind: 'free', pose }, fo?.ms)); },
+      steer: (pose) => {
+        if (source !== 'touch' || state.driver !== 'touch' || !pose) return;
+        step({ type: 'touch' });
+        call('touch', 'steer', pose);
+      },
+    };
+    views.set(source, view);
+    return view;
+  };
+  return {
+    as,
+    show: (cmd) => {
+      const to = cmd?.to?.kind === 'site' && !Number.isFinite(cmd.to.zoom) ? { ...cmd.to, zoom: TIMING.zoom } : cmd?.to;
+      return step({ type: 'show', id: cmd?.id, to, holdMs: cmd?.holdMs });
+    },
+    clear: (id) => step({ type: 'clear', id }),
+    handBack: () => step({ type: 'handback' }),
+    tick: () => step({ type: 'tick' }),
+    driver: () => state.driver,
+    left: () => directorLeft(state, o.clock(), { held: o.held() }),
+    onMove: (cb) => {
+      if (typeof cb !== 'function') return () => {};
+      cbs.add(cb);
+      return () => cbs.delete(cb);
+    },
+  };
 }
