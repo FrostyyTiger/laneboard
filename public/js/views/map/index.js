@@ -166,10 +166,10 @@ export function migrateFolds(list, localId) {
  *   labelSize(node, {s, trouble}) -> px for the node's name, 0 for none at this
  *                            zoom (s), undefined for today's 11/12px. Default: today's
  *   pinLabels             true: a name keeps its side and line while it stays on screen
- *   labelInset            {top, right, bottom, left}, shares of the canvas: the collision
-                             pass moves a name a line up or down only inside them (the Wall's
-                             safe area). Default: the canvas edges
  *                            (the Wall: the turn no longer flips names). Default off
+ *   labelInset            {top, right, bottom, left}, shares of the canvas: the collision
+ *                            pass moves a name a line up or down only inside them (the Wall's
+ *                            safe area). Default: the canvas edges
  *   labelClear            true: the collision pass moves a name by its own line, and a calm name
  *                            with no free place is not drawn rather than drawn over another
  *                            (the Wall; trouble and the selection keep their place). Default off

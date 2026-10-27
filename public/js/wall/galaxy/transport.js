@@ -7,8 +7,9 @@
 // - `BroadcastChannel('laneboard.show')`: pages of the same origin (another
 //   tab, a controller page on the same hub). The browser keeps other origins
 //   out. Answers go to the channel (match them by `showId`).
-// - `window.postMessage`: a page that embeds the Wall in a frame or opened it.
-//   Only from an allowed origin, compared as an exact string: the Wall's own
+// - `window.postMessage`: a page that opened the Wall (`window.open`). Not a
+//   frame: laneboard's CSP (`frame-ancestors 'none'`, server/security.mjs)
+//   keeps every page out of frames. Only from an allowed origin, compared as an exact string: the Wall's own
 //   and those named by `?showOrigins=` (comma-separated `https://host[:port]`;
 //   `*`, `null`, a path or another scheme are refused). The answer goes back
 //   to `event.source` with the sender's origin as its target, never `*`. A

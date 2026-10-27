@@ -151,9 +151,11 @@ The screen answers each `show` once, or twice when it had to wait:
 **Undo.** The owner's one tap on `UNDO` in the conversation reaches every
 screen as `{ "type": "show.undo", "showId": "sh-0041" }`. The Wall puts back
 what it saved just before that command: if it was touring, the tour at
-once; else the camera by a normal flight, with the marks and the note as
-they were. Only the latest camera command can be undone; the tour coming
-back drops it. A pin's undo removes that pin.
+once, starting with the overview; else the camera by a normal flight, with
+the marks and the note as they were. Only the latest camera command can be
+undone; the tour coming back drops it. A pin's undo removes that pin, and
+the undo of a command still waiting for a finger drops it (no answer
+follows).
 
 **For the cockpit's code and tests** the page sets `window.__cockpitView`:
 `page` (`"wall"`), `wall.state()` (the same as `data-wall-state`), `map`
@@ -165,9 +167,10 @@ camera and reads; it sends nothing.
 
 **Until the Wall is a paired screen** the same messages reach it from a
 page standing in for the room. From a page of the same origin, on the
-channel `BroadcastChannel('laneboard.show')`; from a page that embeds the
-Wall in a frame or opened it, by `postMessage`, if its origin is the Wall's
-own or one named in `?showOrigins=`. The answers go back the way the
+channel `BroadcastChannel('laneboard.show')`; from a page that opened the
+Wall (`window.open`), by `postMessage`, if its origin is the Wall's own or
+one named in `?showOrigins=`. (Not from a frame: laneboard's pages refuse to
+be framed, `frame-ancestors 'none'`.) The answers go back the way the
 command came. A message of another type, from another origin, or bigger
 than 4 KB gets no answer. Every Wall that hears a command shows it. To see
 it without a sender, `?show=demo` plays a recorded conversation over the
