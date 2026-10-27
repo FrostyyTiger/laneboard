@@ -64,7 +64,7 @@ What the room is, in one place (D89, D92, D128, D129; T37, T86; pending Q-O29).
   | --- | --- | --- | --- |
   | the board or hub, and the one box's room | `port` | `7777` | `bind`, default `127.0.0.1` |
   | a room alone (`mode: cockpit`) | `port` | `7778` (the mode's own default) | `127.0.0.1` only |
-  | the MCP server (D58) | `cockpit.mcp.port` | `7790` | `127.0.0.1` only |
+  | the MCP server (D58) | `cockpit.mcp.port` | `7790` (`0`: any free port, the tests' setting, D260) | `127.0.0.1` only |
 
 ## Times on the screen: "since", "at" and the age (T65, D232)
 

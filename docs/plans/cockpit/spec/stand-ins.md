@@ -72,8 +72,17 @@ How older phrases in the spec map onto these:
             "cwd":"<tmp>","env":["FAKE_AGENT_DIR"],
             "loginCheck":["node","test/cockpit/stand-ins/fake-agent.mjs","auth","status"]},
    "stt":{"url":"ws://127.0.0.1:<fake speech port>/asr","language":"de"},
-   "board":{"url":"http://127.0.0.1:<demo hub port>"}}}
+   "board":{"url":"http://127.0.0.1:<demo hub port>"},
+   "mcp":{"port":0}}}
 ```
+
+  `"mcp":{"port":0}` (D260): the room's MCP server takes any free port, so parallel test files and a
+  room already running on the same box never meet on `7790`, which is also the lowest port
+  `freePort()` hands out (7790-9790). The room writes `{stateDir}/cockpit-agent/mcp.json` after the
+  listen (`c3-see.md` §1); the fake agent reads the URL from `--mcp-config` as always (§2.3, "real MCP call"), and a
+  test that calls a tool itself uses `booted.mcp()`, which reads that file's `url` and
+  `{stateDir}/cockpit/mcp.token` and returns `{url, token}`. After `booted.restart()` the port is a
+  new one: call `booted.mcp()` again.
 
   `"mode":"builder"` is the one box of D128 on purpose: the same process serves the page, `/ws`
   with `hello.cockpit:true` and the room, so Playwright needs no front; its collectors read the

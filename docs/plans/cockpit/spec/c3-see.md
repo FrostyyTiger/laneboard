@@ -12,18 +12,20 @@ C3 reads; it never changes the fleet or the screen. Show commands are C4 (`c4-sh
 - **One MCP server, key `laneboard`** (D58). The agent sees its tools as `mcp__laneboard__<tool>`;
   `c1-talk.md` §5 matches tool lines on that prefix. The C4 show commands join the same server later.
 - **Served by the room process** (D89) as Streamable HTTP at `POST /mcp` on `127.0.0.1` only,
-  port `cockpit.mcp.port` (default `7790`) (D58). It never listens on another address. Every request
+  port `cockpit.mcp.port` (default `7790`; `0` means any free port, D260) (D58). It never listens
+  on another address. Every request
   needs `Authorization: Bearer <token>`; the room writes a fresh 32-byte random token (hex) to
   `<stateDir>/cockpit/mcp.token` (mode `0600`) at each start. A request with an `Origin` header is
   refused with 403 (`research/Q5`: a browser must never reach it). `focus` (T9) lives in the same
   process as the screens' connections, so it needs no second channel.
 - **The agent's launch** adds (with Claude Code; the full line is Q-O23's):
   `--mcp-config <stateDir>/cockpit-agent/mcp.json --strict-mcp-config --allowedTools "mcp__laneboard__*,…"`.
-  The room writes `mcp.json` at start (0644 in `<stateDir>/cockpit-agent/`, which the agent's user can
+  The room writes `mcp.json` at start, after the MCP listen succeeded and before it spawns the agent,
+  so `{port}` below is the port it really got (D260) (0644 in `<stateDir>/cockpit-agent/`, which the agent's user can
   read: it holds the variable's name, never the token; D209, `security.md` §3):
 
   ```json
-  {"mcpServers":{"laneboard":{"type":"http","url":"http://127.0.0.1:7790/mcp",
+  {"mcpServers":{"laneboard":{"type":"http","url":"http://127.0.0.1:{port}/mcp",
     "headers":{"Authorization":"Bearer ${LANEBOARD_MCP_TOKEN}"},"timeout":15000}}}
   ```
 
@@ -369,8 +371,9 @@ module; the night's done-when lists them):
 The harness for every `S-C3-` scenario: the demo hub with its fake builders, as
 `test/tools/demo-fleet.mjs` boots it (`test/helpers/demo-hub.mjs`); the room process with
 `cockpit.board.url` pointing at it; the fake agent (`stand-ins.md`, T18) running a script of tool
-calls. "Calls the tool" means a JSON-RPC `tools/call` on `http://127.0.0.1:<port>/mcp` with the
-token from `mcp.token`.
+calls. "Calls the tool" means a JSON-RPC `tools/call` on the `url` the room wrote into
+`{stateDir}/cockpit-agent/mcp.json` with the token from `{stateDir}/cockpit/mcp.token`; the test config
+sets `"mcp":{"port":0}` (`stand-ins.md` §1.1, D260), so the port differs on every boot.
 
 ### S-C3-01 `fleet` reports problems first, with their age
 
