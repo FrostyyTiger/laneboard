@@ -150,7 +150,8 @@ so does the row's left end (`CANCEL`, below).
   the spoken part.
 - **Drawn at once.** Each update is drawn in the next animation frame after it reaches the screen.
   The first word is in the input ≤ 1.0 s after `pointerdown` (B2); each later update is drawn
-  ≤ 0.4 s after the fake speech service sends it (B2's screen-and-room share, for every update).
+  ≤ 0.4 s after the room sends it as `stt.update` (from its `sentAt`, the room's clock, compared
+  with `performance.timeOrigin + performance.now()` at the draw; one host in tests, D223).
 - **The final.** On send (§2) the screen stops the microphone and the room asks the speech service
   for the final text (research Q4: an empty frame, then `ready_to_stop`). The final replaces firm
   and tail, and is sent (B3: ≤ 0.3 s from the release to the prompt block). The final is the

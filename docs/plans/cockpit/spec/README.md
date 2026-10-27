@@ -13,7 +13,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 
 | File | What it settles | Scenario ids | Task | Status |
 | --- | --- | --- | --- | --- |
-| `README.md` | this index, the room process and ports, the speed budget (B1-B8, B10, B11; B9 is T67's), the selectors tests use, and the glossary | none | T1, T24, T33 | written |
+| `README.md` | this index, the room process and ports, the speed budget (B1-B8, B10, B11; B9 is T67's; each test asserts the end-to-end column), the selectors tests use, and the glossary | none | T1, T24, T33 | written |
 | `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3, T31 | part 1 written (T2), part 2 written (T3; T31: §9 the Wall contract, `window.__cockpitView`, the app-first rule, S-SCR-35; T52: room down is the pane's status line only, canvas half in `c4-show-canvas.md` §7.6, D120; T89: S-SCR-24 a refused room link; T44: §4.1 the corner cluster per state, the `SCREEN` sheet, S-SCR-25/26; T56: §6.1 who may pair (admin routes, peer uid, the agent refused), §6.2 cross-site checks and the `lb_cockpit` cookie, §6.3 the paired line, S-SCR-27..29; T60: §6.4 the room's audit lines, S-SCR-30/31; T64: the `off` talk button opens the pane, the away caption, S-SCR-32, D179; T102: its pressed state, D180; T58/T75: §6.2.1 a plain-HTTP page does not pair unless `cockpit.allowInsecure`, S-SCR-33, D182; T23: §2.1 a speak-up on a touring screen, S-SCR-34, D219; T28: §7.1 the room link's real retry series and `cockpit:retry` marks, S-SCR-19, D11, D220) |
 | `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24; T50: header `READY`/`● WORKING`/`● STOPPING`, folds cut to code and `SHOW EARLIER`, E6 merged into E8, no raw view in C1, S-C1-24 retired; T29: §5.1 the room messages the pane draws from, fresh-screen states, S-C1-25/26; T85: §8 rewritten for steer, S-C1-16 rewritten, S-C1-27/28; T88: queued prompts as snapshot items, S-C1-29; T57: §5.2 the allowlist, refused calls, tools that change things, §5.3 redaction, S-C1-30/31; T40: §7.1 the on-screen keyboard, S-C1-32/33; T96: §1.1 the stack above the input row, S-C1-34; T34: §3 the renderer module and the numeric-cell rule, §5 targets from odd input, S-C1-35; T36/T76/T93: §15 the demo link for `?demo=1`, S-C1-36; T68: §10.1 the status line's order and the agent's login check, S-C1-37/38; T43: the type floor, line-slot messages 18 px in the label face, turn state 18 px `--text-2`, S-C1-40) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the talk key, speech-to-text down or failed; §14 the physical-button API as the later slice C2b | `S-C2-`, `S-C2B-` | T6, T7 | written: part 1 (T6: gestures, 400 ms threshold, `data-talk` states, live words, microphone, S-C2-01..10), part 2 (T7, slimmed by T49: tap the words to stop and fix, DE/EN, `cockpit.stt.*`, the service down or failed (`stt-down`, `stt-failed`), the talk key, the kiosk microphone note, S-C2-11..17, 20, 21; T94: S-C2-22 keyboard up; T69: S-C2-23 speech down in a hold; T78: `cockpit.stt.protocol` and the four messages a shim sends; C2b §14: the button API, S-C2B-01..02) |
@@ -73,35 +73,46 @@ instead of writing its own. A scenario with a timing asserts against its row. Ti
 **start** event to the **end** event on the screen, at 1368x912, against the stand-ins
 (`stand-ins.md`, T18).
 
-| Id | Start | End (what the screen shows) | Budget, end to end | Stand-in setting in that budget | Screen and room's share (asserted) |
+| Id | Start (clock) | End (what the screen shows) | Budget, end to end (asserted) | Stand-in setting inside that budget | Slice that asserts it |
 | --- | --- | --- | --- | --- | --- |
-| B1 | `pointerdown` on the talk button | the button in its listening state (`data-talk="listening"`, T6) and audio frames leaving the screen | ≤ 0.2 s | none | ≤ 0.2 s |
-| B2 | `pointerdown` on the talk button (the speaker starts at once) | the first partial word drawn in the input | ≤ 1.0 s | fake speech sends its first partial 0.6 s after the first audio frame | ≤ 0.4 s |
-| B3 | `pointerup` (hold) or the second tap (tap-tap) | the prompt block drawn in the conversation (`YOU · SPOKEN · HH:MM`), the input empty | ≤ 0.3 s | fake speech sends its final 0.15 s after the stop | ≤ 0.15 s |
-| B4 | the fake agent sends its first text delta | that text drawn in the conversation | ≤ 0.5 s | none | ≤ 0.5 s |
-| B5 | the room receives a show command from the agent | the camera's first frame of movement on every screen it targets | ≤ 0.3 s | none | ≤ 0.3 s |
-| B6 | the room receives a kit-block tool call from the agent | the block drawn on the canvas with its live data | ≤ 1.0 s | none | ≤ 1.0 s |
-| B7 | a tap on the opener (or a press on the talk button) | the pane in place, its slide ended (`c1-talk.md` §2) | ≤ 0.2 s | none | ≤ 0.2 s |
-| B8 | `SEND` tapped (typed prompt, T5) | the prompt block drawn in the conversation, `data-turn="thinking"` | ≤ 0.1 s | none | ≤ 0.1 s |
-| B10 | the room receives a custom-card `place` (or `block: "saved"`) from the agent | the card's frame has sent `card:ready` and shows its first data (`c4-show-canvas.md` §11.4) | ≤ 2.0 s | none | ≤ 2.0 s |
-| B11 | the room has the reply's spoken line (its sentence end in the deltas, `c5-c6.md` §1) | `cockpit:speak-start` on the screen that sent the prompt | ≤ 1.0 s | fake voice service answers 0.3 s after the request | ≤ 0.7 s |
+| B1 | `pointerdown` on the talk button (screen) | the button in its listening state (`data-talk="listening"`, T6) and audio frames leaving the screen | ≤ 0.2 s | none | C2 |
+| B2 | `pointerdown` on the talk button, the speaker starts at once (screen) | the first partial word drawn in the input | ≤ 1.0 s | fake speech sends its first partial 0.6 s after the first audio frame | C2 |
+| B3 | `pointerup` (hold) or the second tap (tap-tap) (screen) | the prompt block drawn in the conversation (`YOU · SPOKEN · HH:MM`), the input empty | ≤ 0.3 s | fake speech sends its final 0.15 s after the stop | C2 |
+| B4 | the room sends the turn's first `text.delta`, its `sentAt` (room) | that text drawn in the conversation | ≤ 0.5 s | none | C1 |
+| B5 | the room receives a show command from the agent, the `show`'s `receivedAt` (room) | the camera's first frame of movement on every screen it targets | ≤ 0.3 s | none | C4 |
+| B6 | the room receives a kit-block tool call from the agent, the `card.put`'s `receivedAt` (room) | the block drawn on the canvas with its live data | ≤ 1.0 s | none | C4 |
+| B7 | a tap on the opener, or a press on the talk button (screen) | the pane in place, its slide ended (`c1-talk.md` §2) | ≤ 0.2 s | none | C1 |
+| B8 | `SEND` tapped, typed prompt (T5) (screen) | the prompt block drawn in the conversation, `data-turn="thinking"` | ≤ 0.1 s | none | C1 |
+| B10 | the room receives a custom-card `place` (or `block: "saved"`) from the agent, the `card.put`'s `receivedAt` (room) | the card's frame has sent `card:ready` and shows its first data (`c4-show-canvas.md` §11.4) | ≤ 2.0 s | none | C4 |
+| B11 | the room has the reply's spoken line (its sentence end in the deltas, `c5-c6.md` §1), the `speak`'s `receivedAt` (room) | `cockpit:speak-start` on the screen that sent the prompt | ≤ 1.0 s | fake voice service answers 0.3 s after the request | C5 |
 
-- **The agent's own time is not in the budget.** B4 starts when the agent's first delta leaves
-  the bridge; how long a real agent thinks before that is its own (with Claude Code, seconds).
-  What the screen shows while it thinks is the turn state `● WORKING` (`c1-talk.md` §2), drawn
-  within B8.
+- **A test asserts the end-to-end column, nothing else** (D223). There is no "screen's share"
+  of a row: where a stand-in setting sits inside a budget (B2, B3, B11), the test holds the whole
+  row, stand-in time included, and the setting is fixed in `stand-ins.md` so that what is left
+  (0.4 s, 0.15 s, 0.7 s) is the screen's and the room's time without being measured on its own.
+  A row is asserted from the slice in the last column on; before it, its marks may exist and no
+  test reads them (B5, B6, B10 belong to C4, B11 to C5).
+- **The agent's own time is not in the budget.** B4 starts when the room sends the agent's first
+  delta on to the screens; how long a real agent thinks before that is its own (with Claude Code,
+  seconds). What the screen shows while it thinks is the turn state `● WORKING` (`c1-talk.md`
+  §2), drawn within B8.
 - **Real hardware is measured, not promised.** The real speech service's first-partial time is
   unknown (research Q4: no authoritative figure; measure with `wlk bench` on the real host). The
-  stand-in settings are chosen so the screen and room's share is what a test can hold them to; the
-  real end-to-end numbers are what the owner's setup should reach and are read from the marks
-  below, on the real screen.
-- **Marks** (D28). The screen sets `performance.mark('cockpit:B<n>:start')` and
-  `performance.mark('cockpit:B<n>:end')` for every row, B5, B6 and B10 with the room's receive time
-  carried in the message (`receivedAt`, `protocols.md` §4-§5). A test reads them with
-  `performance.getEntriesByName`; on the real screen `?perf=1` logs each measure as one
-  `console.info('cockpit:B<n>', ms)` line, read in the browser's remote devtools, and draws
-  nothing (D28; T53 decides whether `?perf=1` stays). A measure over budget is not an error on the
-  real screen, only a number to look at.
+  real end-to-end numbers are what the owner's setup should reach; they are read from the marks
+  below on the real screen and are not a test gate.
+- **Marks** (D28). For every row the screen sets `performance.mark('cockpit:B<n>:start')` and
+  `performance.mark('cockpit:B<n>:end')`, then `performance.measure('cockpit:B<n>',
+  'cockpit:B<n>:start', 'cockpit:B<n>:end')`. A row whose start is on the room's clock (B4,
+  B5, B6, B10, B11) sets its start mark back-dated from the message:
+  `performance.mark('cockpit:B<n>:start', {startTime: t - performance.timeOrigin})`, where `t`
+  is the message's `sentAt` or `receivedAt` (epoch ms, the room's `Date.now()`, `protocols.md`
+  §2.1). In tests the room and Chromium run on one host and read the same system clock, so the
+  measure is exact to about 1 ms; on the real screen it also holds the clock skew between the
+  two machines, which the page logs once as `cockpit:skew` (D142). A test reads
+  `performance.getEntriesByName('cockpit:B<n>', 'measure')`; on the real screen the owner reads
+  the same entries in the browser's remote devtools. Nothing is drawn and nothing is logged to the
+  console: there is no `?perf=1` (D28). A measure over budget is not an error on the real screen,
+  only a number to look at.
 - **Tests allow no slack** beyond the table: a stand-in run that misses a budget fails. A build
   night that cannot meet a row on the VM's headless Chromium writes why in `PROGRESS.md` instead
   of widening the row; only the owner widens a budget.
