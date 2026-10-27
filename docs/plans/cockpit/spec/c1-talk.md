@@ -278,6 +278,8 @@ The pane draws the last 50 turns. Older turns, if the screen holds them, come ba
 `SHOW EARLIER` (full width, 48 px, 16 px caps) at the top of the conversation, 50 at a time (D27).
 The screen holds the conversation in memory only (`screens.md` D14); what a screen gets from the
 room after a reload is the `snapshot` of `protocols.md` §2.2 (`history` for `SHOW EARLIER`, §3.7).
+The room keeps the conversation on disk for 30 days, so a room restart shows the same turns
+(`protocols.md` §11.7.1, pending Q-O24; S-C1-39).
 
 ## 4. Following a reply as it grows
 
@@ -911,7 +913,7 @@ session would."
   row, 48 px, 1 px `--line` rules left and right of 16 px caps `--text-3` `NEW CONVERSATION · 07:10`.
   The old turns stay above it, unfolded, as history (D27's 50-turn rule counts across the divider);
   the view scrolls so the divider is at the conversation's top. A reload shows only the current
-  conversation; where old conversations are kept and for how long is `security.md`'s (T17, Q-O24).
+  conversation; the old one is kept on the room for 30 days (`protocols.md` §11.7.1, pending Q-O24).
 - **What carries over**: the written context (repos, plans, notes), the canvas cards, scheduled
   jobs, every screen's layout, pane state and draft. **What does not**: the conversation's text in
   the agent's context.
@@ -1319,6 +1321,39 @@ Third case: `login` `ok`, no condition, the link blips 6 s: `Back since HH:MM.` 
 shows for 5 s ± 0.2 s, then nothing.
 Test: Playwright; sample `[data-cockpit-status]` count, `data-status` and text every 100 ms; room's
 `GET /sent?type=status` holds one message per change, in the order of the table's rows.
+
+### S-C1-39 A room restart mid-conversation: the same turns, the same session (pending Q-O24)
+Given the room under test with the script `c1-session` and its clock `real` (the restarted process
+keeps no clock the test set), started on seeded state (`stand-ins.md` §1.1 `stateFiles`):
+`session.json` for `c-0007` with session `0b7e5c2a-4d1f-4c3e-9a8b-2f6d1e0c7a91` and
+`conversation.jsonl` with 20 `done` turns `t-0101`..`t-0120`, dated 60 to 41 min before now (made
+by `test/cockpit/fixtures/conversation.mjs`, so none is past the 30 days); the page loaded, the pane open;
+the owner has sent `how is builder-a` twice and both are answered (22 turns); then sends `how is
+builder-a` a third time, and while its answer streams (1.0 s after the send)
+When the room process is killed (`booted.restart({signal:"SIGKILL"})`, same state dir),
+Then within 5 s of the kill `data-cockpit="room-down"` and its status line show (`screens.md` §7);
+the 23 turns stay on screen.
+When the restarted room prints its `control` line,
+Then within 10 s the page has reconnected (its `welcome` has another `epoch`, `resume`
+`"snapshot"`) and drawn the snapshot: 23 prompt blocks, the first `t-0101`'s, `conversation`
+`c-0007`, no `NEW CONVERSATION` divider; the 23rd turn shows its prompt and no reply text (its one text
+block would have been written at its end, 2 s after the send) and under it `[data-turn-error="agent-exited"]` with `The agent stopped unexpectedly
+at HH:MM. The room is starting it again.`, then, once the agent is back, `The agent is back (HH:MM).
+Your last message was not answered.` and `RETRY` (`HH:MM`: the restarted room's start, §11.7.1
+step 3 of `protocols.md`); the header reads `READY`; the view is scrolled to
+the end.
+When the owner taps `RETRY`,
+Then the fake agent's log has a second `start` line with `"resumed":true` and the same `session`
+`0b7e5c2a-…`, and its `prompts()` grows by 1 with `how is builder-a`; the new turn is `t-0124`
+and is answered in 2 s.
+And the state dir's `cockpit/conversation.jsonl` has mode 0600, holds exactly one `conversation`
+line and one `turn` line per turn (24 after the answer, rewritten at the start), and no line holds
+a `kind` other than `conversation` or `turn`.
+Test: Playwright against the room under test; `booted.restart` with `SIGKILL`; read `welcome` and
+the `snapshot` frames with `framereceived` (`turns.length` 23, `olderTurns` 0); count
+`[data-turn-id]` elements (the first `t-0101`); text of the error line; `fakeAgent.starts()` and its `start` lines;
+`fs.statSync(...).mode & 0o777` is `0o600` and the file's lines parsed. The start steps' edge
+cases (torn line, 31-day-old turn, missing `session.json`) are `protocols.md` §13's store test.
 
 ## 15. The demo (`?demo=1`, T36/T76/T93)
 

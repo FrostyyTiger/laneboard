@@ -988,7 +988,7 @@ A `SEND` during a turn is never a stop: its `prompt` goes straight in with `prio
 
 ### 11.7 Sessions: start, restart, new (D104)
 
-The room keeps `{stateDir}/cockpit/session.json` (mode 0600; how long is Q-O24's, T91; a file, not a message, so its fence is `json file`):
+The room keeps `{stateDir}/cockpit/session.json` (mode 0600; kept as long as its conversation, §11.7.1; a file, not a message, so its fence is `json file`):
 
 ```json file
 {"conversation":"c-0007","session":"0b7e5c2a-4d1f-4c3e-9a8b-2f6d1e0c7a91","startedAt":"2026-10-27T06:12:00+01:00"}
@@ -997,7 +997,7 @@ The room keeps `{stateDir}/cockpit/session.json` (mode 0600; how long is Q-O24's
 | When | The room starts the child with | Then |
 | --- | --- | --- |
 | the room starts, no `session.json` | `--session-id {a new UUID v4}`; writes `session.json` | `c-0001` |
-| the room starts, `session.json` exists | `--resume {session}` | the same conversation, a reload of a screen shows it (§2.2) |
+| the room starts, `session.json` exists | `--resume {session}` | the same conversation, read back from `conversation.jsonl` (§11.7.1); a screen's next `hello` gets a `snapshot` of it (§2.2) |
 | the child exits outside a stop | `--resume {session}` at once, then after 2, 4, 8, 16 and 30 s, then every 30 s (E3's "tries again every 30 s") | E2 if a turn ran; `status` `agent-down` with the last stderr line as `detail` from the second failed start on; `agent-back` at the next `ready` |
 | `new` (§3.6) | the running turn is stopped (§11.6); stdin is closed; after 5 s without exit `SIGTERM`; then `--session-id {a new UUID v4}` | `conversation.new` `reason:"owner"` once `ready` arrives |
 | two `--resume` starts in a row exit before `ready` with exit code other than 0 within 10 s, or `ready.session` differs from the one asked for | `--session-id {a new UUID v4}` | `conversation.new` `reason:"forced"` (`c1-talk.md` §11's second divider) |
@@ -1011,6 +1011,67 @@ The room keeps `{stateDir}/cockpit/session.json` (mode 0600; how long is Q-O24's
   started is never resumed.
 - `prompt` while no session is up (starting, restarting): `prompt.refused` `agent-down` (§3.1). The
   room never holds a prompt for a session that is not up (D31: never sent on its own later).
+
+### 11.7.1 The conversation on disk (T91, D154, D155, pending Q-O24)
+
+Written for Q-O24's recommendation a): audio never on disk, partials never stored, the conversation
+kept 30 days. The room keeps what the screens draw, so a room restart (a crash, an update, a reboot)
+gives the screens the same conversation and the next prompt goes to the same session.
+
+**Files**, in `{stateDir}/cockpit/` (directory 0700, files 0600, owned by the room's user; the
+agent's own user cannot read them, Q-O10):
+
+| File | Holds | Written |
+| --- | --- | --- |
+| `session.json` | conversation id and agent session (§11.7) | when a session's `ready` comes |
+| `conversation.jsonl` | the current conversation: one `conversation` line, then `turn` lines | see below |
+| `old/{conversation}.jsonl` | an earlier conversation, same format | renamed there at `conversation.new` (§3.6) |
+
+**Lines.** One JSON object per line, appended with one `write` per line:
+
+```json file
+{"kind":"conversation","conversation":"c-0007","startedAt":"2026-10-27T06:12:00+01:00","reason":"owner"}
+```
+
+```json file
+{"kind":"turn","turn":{"turnId":"t-0131","clientId":"p-0b9e44d1","source":"spoken","lang":"de","about":null,"prompt":"wie lief die Nacht?","at":"2026-10-27T07:00:04+01:00","state":"done","items":[{"kind":"text","blockIndex":0,"text":"■ One run is stuck: builder-a since 03:12."}],"end":{"state":"done","at":"2026-10-27T07:00:12+01:00"}}}
+```
+
+- A `turn` line holds the whole turn as a `snapshot` carries it (§2.2: items, `prompt` items,
+  `end`), after the redaction of D127 and before any snapshot cut (D140). The room appends one at
+  `turn.prompt`, at every `tool.end`, `text.block` and `prompt.taken`, and at `turn.end`. **The last
+  line of a `turnId` wins.** A turn that streams text for minutes is written at its blocks' ends,
+  not per delta.
+- `reason` is `owner`, `forced` (§3.6) or `first` (no conversation before).
+- **Never written**: audio, `stt.*` partials and finals that were not sent, drafts, focus beyond
+  a prompt's `about`, tool output (it never leaves the bridge in C1, §3.2), pins (D73), the
+  `seq`'d message buffer (D94). Cards are `cards.json`'s (D85).
+
+**At room start**, before the link accepts an upgrade:
+
+1. Read `conversation.jsonl`: per `turnId` the last line; a line that does not parse (a write torn
+   by a crash) is skipped with one log line `cockpit: conversation.jsonl line {n} unreadable`.
+2. If its `conversation` differs from `session.json`'s, or the file is missing: the room starts
+   with an empty conversation under `session.json`'s id (the agent still has its context; the
+   screens show `Nothing said yet.`, D118) and logs one line. No `session.json`: a new session as
+   §11.7 says, and an existing `conversation.jsonl` moves to `old/` first.
+3. **A turn with no `end`** (it was running when the room went) gets
+   `"end":{"state":"error","code":"agent-exited","at":<the room's start time>}`, and its `queued`
+   prompt items become `cancelled` with `why:"not-taken"` (D155). When the agent's first `ready`
+   comes, the room sends `status` `agent-back` as after any E2 (§3.5).
+4. Turns whose `end.at` (or `at`, for a turn without one) is older than 30 days are dropped.
+5. The file is rewritten with one line per kept turn (written to `conversation.jsonl.tmp`,
+   `fsync`, renamed over), so it never grows past one line per turn plus the writes of one run.
+6. The next `turnId` is one above the highest kept; `clientId`s of turns and `prompt` items from
+   the last 10 min go back into the once-only memory (§3.1, D95), so a `RETRY` after a restart
+   never runs a prompt twice.
+7. `epoch` is new and `seq` starts at 1 (§2.2): every screen's `hello` gets `resume:"snapshot"`.
+
+**Retention** (pending Q-O24): at room start and every 3 600 s, turns older than 30 days leave
+`conversation.jsonl` (step 4-5) and files in `old/` whose newest line is older than 30 days are
+deleted. `history` (§3.7) and `olderTurns` count only kept turns. Claude Code keeps its own
+transcript of the session in the agent user's home (what `--resume` reads, research Q13); its
+retention is Claude Code's, not this file's; `security.md` (T17) lists both.
 
 ### 11.8 The standing instructions
 
@@ -1176,6 +1237,7 @@ Q-O24 for transcripts).
 - **The stop test**: a child that ignores `interrupt` and `SIGINT`; the test asserts `stopping` at
   0.0 s, `turn.end` `forced:true` at 5.0 s (±0.1 s, fake clock), `SIGTERM` at 8.0 s and a `--resume`
   start after it.
+- **The store test** (`node:test`, no process, a temp dir): §11.7.1's start steps 1-7 one by one: a torn last line is skipped, a turn without `end` comes back as `agent-exited` with its queued item `cancelled`, a 31-day-old turn and `old/` file are gone, the rewritten file has one line per turn, its mode is 0600.
 - **The restart test**: a child that exits during a turn, then twice before `ready`; the test
   asserts E2, `agent-down`, the restart times 0, 2, 4 s and, after two failed resumes, a
   `conversation.new` `reason:"forced"`.

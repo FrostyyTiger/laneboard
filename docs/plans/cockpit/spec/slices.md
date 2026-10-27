@@ -87,7 +87,7 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 4. The bridge and Claude Code adapter (`server/cockpit/bridge.mjs`), the mapping and turn tests
    (`protocols.md` §13), the redaction module `server/cockpit/redact.mjs` and its unit test
    (`c1-talk.md` §5.3).
-5. Stop, restart and session (`protocols.md` §11.6-§11.7), their tests.
+5. Stop, restart and session, the conversation on disk (`protocols.md` §11.6-§11.7.1), their tests and the store test.
 6. The room link: hello, resume, snapshot, `seq` (`protocols.md` §2).
 7. The page: cockpit button and pane, open and close (`c1-talk.md` §1-§2, `screens.md` §4).
 8. The reply renderer `public/js/core/md.js` and `test/md.test.mjs` (`c1-talk.md` §3, D146).
@@ -109,9 +109,9 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 `c1-render`, `c1-typing`, `c1-errors`, `c1-login`, `c1-long`, `c1-session`, `c1-voice` (S-C3-18), `scr-room`,
 `c3-tools` (S-C3-03 only). No fake speech yet.
 
-**Scenarios** (52):
+**Scenarios** (53):
 S-C1-01 S-C1-02 S-C1-03 S-C1-04 S-C1-05 S-C1-06 S-C1-07 S-C1-08 S-C1-09 S-C1-10 S-C1-11 S-C1-12
-S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33 S-C1-34 S-C1-35 S-C1-36 S-C1-37 S-C1-38
+S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33 S-C1-34 S-C1-35 S-C1-36 S-C1-37 S-C1-38 S-C1-39
 S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23 S-SCR-24
 S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
 
@@ -276,7 +276,7 @@ by the task that writes them.
 | S-SCR-05, 12 | Show |
 | S-SCR-13, 14, 15, 16 | Pair |
 | S-SCR-20 | C2 |
-| S-C1-01..12, 14..23, 25..38 | C1 |
+| S-C1-01..12, 14..23, 25..39 | C1 |
 | S-C1-13 | C2 |
 | S-C2-01..17, 20..22 | C2 |
 | S-C2B-01, 02 | C2b |
@@ -287,7 +287,7 @@ by the task that writes them.
 | S-C4-14..23 | Canvas |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 126 live ids in all (round 94, S-C1-37/38).
+D55). 127 live ids in all (round 95, S-C1-39).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired
@@ -326,4 +326,4 @@ changing it needs C6 (`c1-talk.md` §5).
 
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
 says go without them): T29 (the events the pane consumes), T26, T27, T41, T44 (the button and pane rects), T56
-and T57 (pairing refusals and the agent's tools, pending Q-O21/Q-O23), T89 (close codes), T91 (a conversation across a restart, pending Q-O24). The bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are written. For C2 also: T42/T95, T69, T84.
+and T57 (pairing refusals and the agent's tools, pending Q-O21/Q-O23), T89 (close codes). The bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are written. For C2 also: T42/T95, T69, T84.

@@ -51,6 +51,12 @@ How older phrases in the spec map onto these:
      outbound message); by default both modules are no-ops;
   3. opens the **control port** on `127.0.0.1`, a free port from `freePort()`, and prints one line
      `control 127.0.0.1:<port>` on stdout, which `boot()` reads as `booted.control`.
+- **Restart and seeded state** (T91, S-C1-39). `boot({stateFiles})` writes each
+  `{"cockpit/session.json": "…"}` entry under `LANEBOARD_STATE_DIR` (mode 0600, directories 0700)
+  before the spawn. `booted.restart({signal})` sends `signal` (`SIGTERM` by default, `SIGKILL` for
+  a crash) to the process group, waits for the exit, and spawns the same entry with the same temp
+  dirs and config; it resolves with the new `control` port, and the room's port stays the same, so
+  the page reconnects on its own.
 - Production has no test route at all (D109): the control port exists only in this wrapper, never
   on the room's own port, and no environment variable turns anything on in `server/`.
 - **Config** the test writes (`cockpit` section; keys as `protocols.md` §11 and `c2-voice.md` §9;
@@ -378,7 +384,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c1-errors` | agent | S-C1-19, S-C1-20 | an `exit` 1 mid-text; one turn per error row (`failed` `overloaded`, `step-limit`, `failed` `boom` plus a 300-character `detail`, `not-logged-in`, two `retry` steps then text) |
 | `c1-login` | agent | S-C1-37, S-C1-38 | `start.login` `ok` (tests rewrite it to `failed`, `hang`), one `done` turn for any prompt in 0.5 s; S-C1-38's second case adds `startFailures` 3 and `startStderr` `claude: command not found` |
 | `c1-long` | agent | S-C1-21 | 15 s without steps, then 120 lines, 26 000 characters and a 30-row table over 20 s (real time: 35 s) |
-| `c1-session` | agent | S-C1-22, S-C1-23 | `repeat` turns that answer `how is builder-a` in 2 s |
+| `c1-session` | agent | S-C1-22, S-C1-23, S-C1-39 | `repeat` turns that answer `how is builder-a` in 2 s |
 | `c1-voice` | agent | S-C1-13, S-C3-18, §10 of `protocols.md` | the `morning` call and `■ One run is stuck…` turn of `protocols.md` §13.1, first delta 0.3 s after the prompt |
 | `c2-tap` | speech | S-C2-01..04, S-C2-07, S-C2-10..13, S-C2-20, S-C2-22 | §3.2's example, plus `how did` / `how did the` / `how did the night go` (S-C2-03) and `restart the runner on builder-b` (S-C2-11) |
 | `c2-limits` | speech | S-C2-05, S-C2-06 | `noAudio`; a growing partial every 1 s from 0.6 s for 130 s |

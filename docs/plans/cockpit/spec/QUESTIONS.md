@@ -168,7 +168,7 @@ Answer: (open)
 ## Q-O24 How long the room keeps what was said
 
 Security. From `reviews/40-security.md` (6). Every prompt and what the agent reads goes to its model
-service (with Claude Code: Anthropic). Spec: T91, `security.md` (T17).
+service (with Claude Code: Anthropic). Spec: written for a) since T91 (`protocols.md` §11.7.1, D154, S-C1-39); `security.md` (T17).
 
 - a) Audio never on disk, partials never stored, the conversation kept 30 days, then deleted.
 - b) As a), but kept until `NEW` or unpair, no timer.
