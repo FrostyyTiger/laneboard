@@ -128,6 +128,7 @@ export function clearedLine(model, cleared) {
   return {
     status: 'ok',
     tone: 'cleared',
+    id: node.id,
     was: st.tone,
     step: 'calm',
     shape: st.shape,
@@ -312,6 +313,9 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     if (w.was) fleet.dataset.was = w.was;
     else delete fleet.dataset.was;
     setLine(line, w);
+    // The node the line names (night 4 T2: a finger on it opens it); none at "all calm".
+    if (typeof w.id === 'string') fleet.dataset.subject = w.id;
+    else delete fleet.dataset.subject;
     if (far) {
       const size = `${fleetSize(w.word, root.clientWidth, root.clientHeight)}vmin`;
       if (line.dataset.size !== size) { line.dataset.size = size; line.style.setProperty('--fleet-far', size); }
@@ -368,5 +372,5 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     farDirty = true;
   };
 
-  return { update, live, fresh, stop, cover, plate, hushed, el: { vignette, tag, clock, fleet } };
+  return { update, live, fresh, stop, cover, plate, hushed, el: { vignette, tag, clock, fleet, more, subMore } };
 }

@@ -376,6 +376,21 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     }
     return lineBox;
   };
+  // The fleet line as a finger's target (night 4 T2, reviews/r51-touch galaxy 4): the loudest thing
+  // on screen opens what it names, `step` (its site first, then the planet); its `+N more` opens
+  // nothing yet, so those come first, with no subject. Client px, read when a finger asks.
+  const fleetTargets = () => {
+    const f = frame.el?.fleet;
+    const id = f?.dataset?.subject;
+    if (!id || !fleetCover()) return [];
+    const box = (e) => {
+      const r = !e || e.hidden ? null : e.getBoundingClientRect?.();
+      return r && r.right > r.left ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
+    };
+    const out = [frame.el.more, frame.el.subMore].map((e) => ({ id: null, box: box(e) }));
+    out.push({ id, step: true, box: box(f) });
+    return out.filter((t) => t.box);
+  };
   // The tag never moves: its box changes only with its words (title, live) or the stage.
   let tagSeen = null, tagBox = null;
   const tagCover = () => {
@@ -435,8 +450,9 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     // sheetCaption) as the camera gets there, its brackets at once.
     open: (leg) => say({ arriveMs: 0, ...leg, kind: 'site', lockMs: 0, cut: true, sheet: true }),
     covers: () => [caption.cover?.(), fleetCover(), tagCover(), clockCover()].filter(Boolean),
-    // What on the plate names a node, in client px (caption.js targets(), night 4 T1): a finger on it opens it.
-    targets: () => caption.targets?.() ?? [],
+    // What on the words names a node, in client px: the fleet line (night 4 T2) and the plate's rows
+    // (caption.js targets(), night 4 T1). A finger on one opens it.
+    targets: () => [...fleetTargets(), ...(caption.targets?.() ?? [])],
     // The node the plate's hero names while the plate is up, or null: labels.js does not name it twice (T20).
     named: () => (plateOn ? heroId : null),
     fleetCover,

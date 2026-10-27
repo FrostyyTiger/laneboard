@@ -236,7 +236,11 @@ test('frame: a crit that cleared reads calm, grey, with its old glyph and how lo
     const [line, sub, fact] = box.children;
     frame.update(fleet({ storage: { status: 'crit', why: 'pool 97% full' } }));
     assert.equal(box.dataset.step, 'far');
+    // The node the line names, for a finger (night 4 T2): the live one, then the cleared one, none at all calm.
+    assert.equal(box.dataset.subject, 'storage');
+    assert.ok(frame.el.more && frame.el.subMore, 'its +N more, for the hud');
     frame.update(fleet(), { cleared: { id: 'storage', status: 'crit', forMs: 6 * 60000 } });
+    assert.equal(box.dataset.subject, 'storage');
     assert.equal(box.dataset.step, 'calm', 'the red slab goes when the trouble goes');
     assert.equal(box.dataset.tone, 'cleared');
     assert.equal(box.dataset.was, 'crit');
@@ -252,6 +256,7 @@ test('frame: a crit that cleared reads calm, grey, with its old glyph and how lo
     assert.equal(line.textContent, '▲hv1 · fix-login · asked a question');
     frame.update(fleet());
     assert.equal(line.textContent, 'all calm');
+    assert.equal(box.dataset.subject, undefined);
   } finally {
     globalThis.document = prevDoc;
   }

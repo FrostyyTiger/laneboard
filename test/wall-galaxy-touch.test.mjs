@@ -9,7 +9,7 @@ import path from 'node:path';
 
 import { makeEl } from './helpers/fakedom.mjs';
 import {
-  AT_OVERVIEW, BACK, COVERED, ORBIT, TAP, TOUCH, atRest, backShown, backStep, canGoBack, coverHit, createBack, createGestures, createTaps,
+  AT_OVERVIEW, BACK, COVERED, ORBIT, TAP, TOUCH, atRest, backShown, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createTaps,
   createTouch, hitTest, inertia, isPalm, orbitLimits, orbitOf, memberPoints, orbitPose, orbitStep, placeOf, planeAt,
   tapPoints, touchStep, zoomStep,
 } from '../public/js/wall/galaxy/touch.js';
@@ -639,7 +639,7 @@ test('the hud opens a tapped site with its brackets at once and its plate when t
 test('galaxy/main.js wires taps: sites hit-tested in the stage\'s px, a hit flies there and opens it', () => {
   const js = read('js/wall/galaxy/main.js');
   assert.match(js, /createTaps\(touch, \{/);
-  assert.match(js, /hitTest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, labels\.shown\(\)\), x - o\.left, y - o\.top\)/);
+  assert.match(js, /hitTest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, labels\.shown\(\), beams\), x - o\.left, y - o\.top\)/);
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
   assert.match(open, /cam\.focus\(id, TIMING\.zoom\)/);
   assert.match(open, /hud\.open\(\{[^}]*arriveMs: there \|\| reduced \? 0 : FLIGHT\.ms \}\)/, 'a cut (reduced motion, T14) has its plate at once');
@@ -772,7 +772,7 @@ function backPage(words = null) {
   createTaps(p.touch, {
     clock: p.now,
     // As main.js (night 4 T1): the words over the canvas first, when the page has any.
-    pick: (x, y) => (words ? coverHit(words.covers, words.rows, p.galaxy.world.sites, x, y) : null)
+    pick: (x, y) => (words ? coverHit(words.covers, words.rows, p.galaxy.world.sites, x, y, place.site) : null)
       ?? hitTest(memberPoints(p.galaxy.world.sites, p.cam.screenOf), x, y)
       ?? hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), x, y),
     tap: (hit) => { if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack(); },
@@ -949,4 +949,116 @@ test('galaxy/main.js wires the words (night 4 T1): coverHit before the scene, a 
   assert.ok(pick.indexOf('coverHit(hud.covers(), rows,') >= 0 && pick.indexOf('coverHit(') < pick.indexOf('memberPoints('), 'the words first');
   assert.match(pick, /hud\.targets\(\)/);
   assert.match(js, /tap: \(hit\) => \{ if \(hit\?\.covered\) return;/);
+});
+
+// ---- night 4 T2: the loudest thing is a target ----
+
+test('coverHit: the fleet line (a step row) opens its site first, the planet once that site is open; +N more nothing', () => {
+  const sites = [
+    { id: 'hv1', members: [{ id: 'hv1-a' }, { id: 'hv1-b' }] },
+    { id: 'hv2', members: [{ id: 'hv2-a' }] },
+  ];
+  const line = { left: 900, top: 760, right: 1560, bottom: 860 };
+  const more = { left: 1400, top: 830, right: 1500, bottom: 860 };
+  const rows = [{ id: null, box: more }, { id: 'hv2-a', step: true, box: line }];
+  assert.deepEqual(coverHit([line], rows, sites, 1000, 800), { id: 'hv2' }, 'at the overview: its site');
+  assert.deepEqual(coverHit([line], rows, sites, 1000, 800, 'hv1'), { id: 'hv2' }, 'under another site\'s sheet: its site');
+  assert.deepEqual(coverHit([line], rows, sites, 1000, 800, 'hv2'), { id: 'hv2-a', site: 'hv2' }, 'its site open: the planet');
+  assert.equal(coverHit([line], rows, sites, 1450, 845), COVERED, '+N more opens nothing yet');
+  assert.equal(coverHit([line], rows, sites, 1450, 845, 'hv2'), COVERED);
+  const siteRow = [{ id: 'hv1', step: true, box: line }];
+  assert.deepEqual(coverHit([line], siteRow, sites, 1000, 800), { id: 'hv1' }, 'a site in trouble itself: that site');
+  assert.equal(coverHit([line], [{ id: 'gone-x', step: true, box: line }], sites, 1000, 800), COVERED, 'a subject on no site');
+  assert.equal(coverHit([line], rows, sites, 100, 100), null, 'off the words: the scene decides');
+});
+
+test('pointer events on the page: a tap on the fleet line opens its subject\'s site, a second tap its planet', () => {
+  const words = { covers: [], rows: [] };
+  const p = backPage(words);
+  p.run(200);
+  // The line stands in the frame's bottom right corner, over empty sky; its +N more at its right end.
+  const line = { left: 1000, top: 780, right: 1580, bottom: 880 };
+  const more = { left: 1480, top: 850, right: 1570, bottom: 878 };
+  assert.equal(hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), 1100, 820), null, 'no star under the line');
+  words.covers = [line];
+  words.rows = [{ id: null, box: more }, { id: 'cloud-a', step: true, box: line }];
+  const n = p.sheets.length;
+  p.tapAt(81, { x: 1520, y: 865 });
+  p.tick(16);
+  assert.equal(p.sheets.length, n, '+N more: no sheet');
+  assert.equal(p.place(), AT_OVERVIEW, 'and no step');
+  p.tapAt(82, { x: 1100, y: 820 });
+  p.tick(16);
+  assert.deepEqual([p.place().level, p.place().site, p.sheets.at(-1)], ['site', 'cloud', 'cloud'], 'its site\'s sheet');
+  assert.deepEqual([p.cam.want().kind, p.cam.want().id], ['site', 'cloud'], 'the camera flies there');
+  p.run(FLIGHT.ms + 1500);
+  const want = p.cam.want();
+  p.tapAt(83, { x: 1100, y: 820 });
+  p.tick(16);
+  assert.deepEqual([p.place().level, p.place().planet, p.sheets.at(-1)], ['planet', 'cloud-a', 'cloud-a'], 'then the planet');
+  assert.deepEqual(p.cam.want(), want, 'where the camera is');
+});
+
+test('the hud gives the fleet line as a target only while it is up: its subject, step, the +N more first with none', async () => {
+  const { createHud } = await import('../public/js/wall/galaxy/hud.js');
+  const rect = (left, top, right, bottom) => () => ({ left, top, right, bottom, width: right - left, height: bottom - top });
+  const fleet = makeEl('div');
+  fleet.dataset.step = 'far';
+  fleet.dataset.subject = 'hv2-a';
+  fleet.getBoundingClientRect = rect(1000, 780, 1580, 880);
+  const more = makeEl('span');
+  more.hidden = true;
+  more.getBoundingClientRect = rect(0, 0, 0, 0);
+  const subMore = makeEl('span');
+  subMore.getBoundingClientRect = rect(1480, 850, 1570, 878);
+  let far = { left: 1000, top: 780, right: 1580, bottom: 880 };
+  const hud = createHud({
+    caption: { show: () => {}, hide: () => {}, cover: () => null, targets: () => [{ id: 'hv1-a', box: { left: 40, top: 40, right: 300, bottom: 80 } }] },
+    frame: { update: () => {}, plate: () => {}, cover: () => far, hushed: () => false, el: { fleet, more, subMore } },
+    size: () => ({ W: 1600, H: 900 }),
+    timers: fakeTimers(),
+  });
+  assert.deepEqual(hud.targets(), [
+    { id: null, box: { left: 1480, top: 850, right: 1570, bottom: 878 } },
+    { id: 'hv2-a', step: true, box: { left: 1000, top: 780, right: 1580, bottom: 880 } },
+    { id: 'hv1-a', box: { left: 40, top: 40, right: 300, bottom: 80 } },
+  ]);
+  far = null; // the line dropped (calm, or an echo under the plate)
+  fleet.dataset.step = 'calm';
+  assert.deepEqual(hud.targets().map((t) => t.id), ['hv1-a'], 'no line, no target');
+});
+
+test('fx=beacon: a finger on the pillar\'s top hits its site, past the star\'s own disc', () => {
+  const p = touchPage();
+  p.run(200);
+  const site = p.galaxy.world.byId.get('hv2');
+  const foot = p.cam.screenOf('hv2');
+  // A pillar standing over hv2 as scene.js beams() gives it, tall enough to reach well past the finger's disc.
+  let h = 1;
+  while (p.cam.screenAt({ x: site.home.x, y: site.home.y + h, z: site.home.z }).y > foot.y - 4 * TAP.radiusPx) h *= 1.5;
+  const beams = [{ id: 'hv2', foot: { ...site.home }, tip: { x: site.home.x, y: site.home.y + h, z: site.home.z } }];
+  const segs = beamSegments(beams, p.cam.screenAt);
+  assert.equal(segs.length, 1);
+  assert.ok(Math.abs(segs[0].x0 - foot.x) < 1e-6 && Math.abs(segs[0].y0 - foot.y) < 1e-6, 'its foot is the star');
+  const top = { x: segs[0].x1, y: segs[0].y1 + 4 };
+  assert.ok(Math.hypot(top.x - foot.x, top.y - foot.y) > TAP.radiusPx * 3, 'the top is far off the star');
+  assert.notEqual(hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), top.x, top.y)?.id, 'hv2', 'without the beam: not hv2');
+  assert.equal(hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf, [], segs), top.x, top.y)?.id, 'hv2', 'with it: hv2');
+  const mid = { x: (segs[0].x0 + segs[0].x1) / 2 + TAP.radiusPx - 2, y: (segs[0].y0 + segs[0].y1) / 2 };
+  assert.equal(hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf, [], segs), mid.x, mid.y)?.id, 'hv2', 'beside it, within reach');
+  const off = { x: segs[0].x1 + TAP.radiusPx + 6, y: segs[0].y1 };
+  assert.notEqual(hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf, [], segs), off.x, off.y)?.id, 'hv2', 'past reach: a miss');
+  assert.deepEqual(beamSegments([{ id: 'x', foot: { x: 0, y: 0, z: 0 }, tip: { x: 0, y: 0, z: 1 } }], () => null), [], 'behind the camera');
+  assert.deepEqual(beamSegments(null, p.cam.screenAt), []);
+});
+
+test('galaxy/main.js wires the fleet line and the pillar (night 4 T2): rows keep their step, beams only with fx=beacon', () => {
+  const js = read('js/wall/galaxy/main.js');
+  const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
+  assert.match(pick, /\.\.\.r, box:/, 'a row keeps its step');
+  assert.match(pick, /coverHit\(hud\.covers\(\), rows, galaxy\.world\?\.sites, x - o\.left, y - o\.top, place\.site\)/);
+  assert.match(pick, /fx\.has\('beacon'\) \? beamSegments\(galaxy\.beams\?\.\(\), cam\.screenAt\) : \[\]/);
+  const scene = read('js/wall/galaxy/scene.js');
+  assert.match(scene, /const beams = \(\) => pillars/);
+  assert.match(scene, /drawn, planets, beams, frame,/, 'the scene hands it out');
 });

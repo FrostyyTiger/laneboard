@@ -307,7 +307,14 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
         }
       }
     }
-    if (!p) return null;
+    const at = p ? screenAt(p) : null;
+    return at ? { x: at.x, y: at.y, r: radius * at.unit } : null;
+  };
+  /**
+   * Where a world point (`{ x, y, z }`) is drawn now: canvas css px and
+   * `unit`, css px per world unit at its depth. Null behind the camera.
+   */
+  const screenAt = (p) => {
     const cam = galaxy.camera;
     cam.updateMatrixWorld();
     v.set(p.x, p.y, p.z).applyMatrix4(cam.matrixWorldInverse);
@@ -316,7 +323,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     v.applyMatrix4(cam.projectionMatrix);
     const { W, H } = sizeOf(galaxy);
     const unit = H / (2 * Math.tan((cam.fov * Math.PI) / 360) * depth);
-    return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, r: radius * unit };
+    return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, unit };
   };
 
   return {
@@ -333,6 +340,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
       return () => drawCbs.delete(cb);
     },
     screenOf,
+    screenAt: (p) => (p ? screenAt(p) : null),
     // The Map's snapshot, as much of it as a 3D camera has: a version that
     // changes with every move; no 2D points, no fit scale.
     snapshotScene: () => ({ version, pts: new Float32Array(0), count: 0, outer: 0, fitScale: null }),

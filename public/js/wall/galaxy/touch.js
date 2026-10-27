@@ -459,7 +459,8 @@ export function hitTest(points, x, y, radius = TAP.radiusPx) {
     if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
     const b = p.box;
     const onName = b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
-    const d = onName ? 0 : Math.hypot(x - p.x, y - p.y);
+    // A beacon's pillar (night 4 T2) is the finger's disc swept from its foot to its tip.
+    const d = onName ? 0 : Math.min(Math.hypot(x - p.x, y - p.y), p.beam ? segDist(p.beam, x, y) : Infinity);
     if (!onName && d > Math.max(radius, Number(p.r) || 0)) continue;
     const worse = best ? toneRank(p.tone) - toneRank(best.tone) : -1;
     if (worse < 0 || (worse === 0 && d < bestD)) { best = p; bestD = d; }
@@ -467,23 +468,57 @@ export function hitTest(points, x, y, radius = TAP.radiusPx) {
   return best;
 }
 
+/** How far `x`, `y` is from the segment `{ x0, y0, x1, y1 }`, in its px. */
+function segDist(g, x, y) {
+  const dx = g.x1 - g.x0, dy = g.y1 - g.y0;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 0 ? Math.min(1, Math.max(0, ((x - g.x0) * dx + (y - g.y0) * dy) / len2)) : 0;
+  return Math.hypot(x - (g.x0 + t * dx), y - (g.y0 + t * dy));
+}
+
 /**
  * The things a tap can hit now (T10), for hitTest: every site drawn at least
  * half grown (as labels.js names them), at `screenOf(id)` (camera.js: css px
  * and drawn radius; null behind the camera), in its nebula's tone (the worst
  * of the site and what it holds), with its shown name's box from `names`
- * (labels.js `shown()`: `[{ id, box }]`). Sites only, at the overview and in
- * a system alike: a planet is memberPoints'. Pure but for `screenOf`.
+ * (labels.js `shown()`: `[{ id, box }]`). With `fx=beacon` (night 4 T2,
+ * reviews/r51-touch fx-beacon 1) `beams` (beamSegments) gives a site its
+ * pillar on screen as `beam`: a finger within the tap's reach of it, foot to
+ * tip, is on the site, so the loudest mark at the overview is a target.
+ * Sites only, at the overview and in a system alike: a planet is
+ * memberPoints'. Pure but for `screenOf`.
  */
-export function tapPoints(sites, screenOf, names = []) {
+export function tapPoints(sites, screenOf, names = [], beams = []) {
   const boxes = new Map();
   for (const n of names ?? []) if (n?.id != null && n.box) boxes.set(n.id, n.box);
+  const pillars = new Map();
+  for (const g of beams ?? []) if (g?.id != null) pillars.set(g.id, g);
   const out = [];
   for (const s of sites ?? []) {
     if (!s || s.gone || (s.alive ?? 1) < 0.5) continue;
     const sp = screenOf(s.id);
     if (!sp) continue;
-    out.push({ id: s.id, x: sp.x, y: sp.y, r: sp.r, tone: worseTone(toneOf(s.node), toneOf(s.status)), box: boxes.get(s.id) ?? null });
+    const p = { id: s.id, x: sp.x, y: sp.y, r: sp.r, tone: worseTone(toneOf(s.node), toneOf(s.status)), box: boxes.get(s.id) ?? null };
+    const g = pillars.get(s.id);
+    if (g) p.beam = { x0: g.x0, y0: g.y0, x1: g.x1, y1: g.y1 };
+    out.push(p);
+  }
+  return out;
+}
+
+/**
+ * The beacons' pillars on screen (night 4 T2): `beams` the scene's
+ * (`[{ id, foot, tip }]` in world units, scene.js `beams()`: the pillars
+ * drawn now), each projected by `screenAt` (camera.js) to `{ id, x0, y0, x1,
+ * y1 }` in css px, foot then tip. A pillar with an end behind the camera is
+ * left out. Pure but for `screenAt`.
+ */
+export function beamSegments(beams, screenAt) {
+  const out = [];
+  for (const b of beams ?? []) {
+    const a = b?.foot ? screenAt(b.foot) : null;
+    const z = b?.tip ? screenAt(b.tip) : null;
+    if (a && z) out.push({ id: b.id, x0: a.x, y0: a.y, x1: z.x, y1: z.y });
   }
   return out;
 }
@@ -519,21 +554,31 @@ const inBox = (b, x, y) => Boolean(b) && x >= b.left && x <= b.right && y >= b.t
  * The words are not transparent to the finger (night 4 T1, reviews/r51-touch
  * galaxy 2): a tap at `x`, `y` (css px on the stage) inside one of `covers`
  * (hud.covers(): the plate, the fleet line, the tag, the clock; `{ left, top,
- * right, bottom }`) is never a star under it nor empty sky (a step back). On
- * one of the plate's `rows` (caption.js `targets()`, `[{ id, box }]`) whose
- * subject is a member of a site in `sites` it is that member, `{ id, site }`
- * as memberPoints says it; anywhere else on the words it is COVERED. Null
- * off every box: the scene's hit tests decide. Pure.
+ * right, bottom }`) is never a star under it nor empty sky (a step back). The
+ * first of `rows` (hud.targets(), `[{ id, box, step }]`) under the finger
+ * decides: one whose subject is a member of a site in `sites` is that member,
+ * `{ id, site }` as memberPoints says it; a `step` row (the fleet line, T2)
+ * opens its subject's site first, `{ id: site }`, and the member only while
+ * that site is `open` (the one a finger opened), and a `step` row naming a
+ * site opens it. Anywhere else on the words (a row with no subject, as the
+ * fleet line's `+N more`) it is COVERED. Null off every box: the scene's hit
+ * tests decide. Pure.
  */
-export function coverHit(covers, rows, sites, x, y) {
-  for (const r of rows ?? []) {
-    if (r?.id == null || !inBox(r.box, x, y)) continue;
-    for (const s of sites ?? []) {
-      if (s && !s.gone && (s.members ?? []).some((m) => m?.id === r.id)) return { id: r.id, site: s.id };
-    }
-  }
-  if ((rows ?? []).some((r) => inBox(r?.box, x, y))) return COVERED;
+export function coverHit(covers, rows, sites, x, y, open = null) {
+  const row = (rows ?? []).find((r) => inBox(r?.box, x, y));
+  if (row) return rowHit(row, sites, open) ?? COVERED;
   return (covers ?? []).some((b) => inBox(b, x, y)) ? COVERED : null;
+}
+
+function rowHit(row, sites, open) {
+  if (row.id == null) return null;
+  for (const s of sites ?? []) {
+    if (!s || s.gone) continue;
+    if (row.step && s.id === row.id) return { id: s.id };
+    if (!(s.members ?? []).some((m) => m?.id === row.id)) continue;
+    return row.step && open !== s.id ? { id: s.id } : { id: row.id, site: s.id };
+  }
+  return null;
 }
 
 /**

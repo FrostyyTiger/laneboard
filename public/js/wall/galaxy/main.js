@@ -44,6 +44,9 @@
 // The words are not sky (night 4 T1, touch.js coverHit): a tap on the plate,
 // the fleet line, the tag or the clock opens nothing and steps nothing back,
 // but a sheet row (or the trouble word) naming a planet opens that planet.
+// The loudest thing is a target (night 4 T2): a tap on the fleet line opens
+// what it names, its site first, then the planet in it (its `+N more` opens
+// nothing yet); with `fx=beacon` a pillar, foot to tip, is its site's.
 // The tour resumes (T14, touch.js IDLE): a minute after the last touch the
 // tour takes the page back at its next leg, trouble first (tour.js
 // `resume`), the camera flying there from where the finger left it. In
@@ -73,7 +76,7 @@ import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
 import {
-  AT_OVERVIEW, TOUCH, backShown, backStep, canGoBack, coverHit, createBack, createGestures, createTaps, createTouch, hitTest, memberPoints,
+  AT_OVERVIEW, TOUCH, backShown, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createTaps, createTouch, hitTest, memberPoints,
   orbitLimits, placeOf, tapPoints,
 } from './touch.js';
 
@@ -330,12 +333,15 @@ export function boot() {
       const o = stageEl.getBoundingClientRect();
       // The words first (night 4 T1): a finger on the plate, the fleet line, the tag or the clock is
       // never the star under them nor empty sky; a row naming a planet opens it.
-      const rows = hud.targets().map((r) => ({ id: r.id, box: { left: r.box.left - o.left, top: r.box.top - o.top, right: r.box.right - o.left, bottom: r.box.bottom - o.top } }));
-      const worded = coverHit(hud.covers(), rows, galaxy.world?.sites, x - o.left, y - o.top);
+      // The fleet line too (night 4 T2): its subject's site first, then the planet in it.
+      const rows = hud.targets().map((r) => ({ ...r, box: { left: r.box.left - o.left, top: r.box.top - o.top, right: r.box.right - o.left, bottom: r.box.bottom - o.top } }));
+      const worded = coverHit(hud.covers(), rows, galaxy.world?.sites, x - o.left, y - o.top, place.site);
       if (worded) return worded;
       const names = labels.shown();
+      // A beacon's pillar is its site's target (night 4 T2).
+      const beams = fx.has('beacon') ? beamSegments(galaxy.beams?.(), cam.screenAt) : [];
       return hitTest(memberPoints(galaxy.world?.sites, cam.screenOf, names), x - o.left, y - o.top)
-        ?? hitTest(tapPoints(galaxy.world?.sites, cam.screenOf, labels.shown()), x - o.left, y - o.top);
+        ?? hitTest(tapPoints(galaxy.world?.sites, cam.screenOf, labels.shown(), beams), x - o.left, y - o.top);
     },
     tap: (hit) => { if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack(); },
   }) : null;

@@ -357,7 +357,7 @@ const pageClock = () => globalThis.performance.now();
  * `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets,
  * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them),
  * `warp` streaks the sky while `setWarp` says the camera flies.
- * Returns `{ update, setOpen, setSun, setRoutes, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, frame, resize,
+ * Returns `{ update, setOpen, setSun, setRoutes, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, beams, frame, resize,
  * setQuality, size, camera, world, quality, pixelRatio, routes, comets, twinkles, beacons, warp, renderer, dispose }`.
  * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
  * `stage` (stage.js, T29) keeps the canvas's css size so no frame reads layout; `size()` gives it to the
@@ -1180,6 +1180,7 @@ export function createGalaxyScene(canvas, {
       const seen = Math.hypot(camera.position.x - s.home.x, camera.position.y - s.home.y - h / 2, camera.position.z - s.home.z);
       const ratio = w / Math.max(1, 2 * seen * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1e-6, at.width);
       const k = Math.min(1, at.rise * 2) * s.alive * (1 - (1 - BEACON.held) * ease(s.unfold)) * beaconNear(ratio);
+      slot.id = id;
       const { pillar, core, tip } = slot;
       const turn = Math.atan2(camera.position.x - s.home.x, camera.position.z - s.home.z);
       for (const m of [pillar, core]) {
@@ -1196,6 +1197,15 @@ export function createGalaxyScene(canvas, {
       pillar.visible = core.visible = tip.visible = pillar.material.opacity > 0.005;
     }
   };
+
+  /**
+   * The pillars drawn now, for a finger (night 4 T2, touch.js beamSegments):
+   * `[{ id, foot, tip }]`, the site and its pillar's ends in world units. Empty
+   * without `fx=beacon`. Read when a finger asks, never per frame.
+   */
+  const beams = () => pillars
+    .filter((p) => p.pillar.visible && p.id != null)
+    .map((p) => ({ id: p.id, foot: { ...p.pillar.position }, tip: { ...p.tip.position } }));
 
   // --- fx=warp (night 3 T12, T28; fx.js warpAt, warpTail): a flight has a target and a tint --
   // A line from each of the first WARP_STARS far stars and WARP_DUST dust
@@ -1421,7 +1431,7 @@ export function createGalaxyScene(canvas, {
 
   return {
     update, setOpen, setHeld: (id) => { held = id ?? null; },
-    setSun: (look) => { if (look) sunWant = look; }, setRoutes, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, frame, resize, setQuality, camera,
+    setSun: (look) => { if (look) sunWant = look; }, setRoutes, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, beams, frame, resize, setQuality, camera,
     size: sized.get,
     renderer, dispose,
     get world() { return world; },
