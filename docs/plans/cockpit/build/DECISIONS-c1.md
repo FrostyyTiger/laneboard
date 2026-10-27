@@ -93,3 +93,52 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   audio frame before the end frame, the final still follows — because §3.2 says only that an update
   after the end frame is not sent — spec: `stand-ins.md` §3.2, §5 — overrule: `endFrame()` in
   `fake-speech.mjs`.
+- B17 (T3) The test clock (`createTestClock()` in `server/cockpit/clock.mjs`, a factory nothing in
+  `server/` calls) runs timers on their own timeline: `set()` moves the wall time only and fires no
+  timer (as Playwright's `page.clock.setSystemTime`); `advance(ms)` fires due timers in time order,
+  awaits a callback's promise and lets one `setImmediate` pass before the next, so a timer set by a
+  timer in the step fires in it; switching `real`/`manual` keeps the time where it is — because §1.1
+  says "the room's time jumps there" without saying whether pending timers fire, and a 5 s stop timer
+  firing on a clock `set` would break a scenario that sets 06:41 mid-turn — spec: `stand-ins.md`
+  §1.1, §1.2 — overrule: have `set()` fire every timer whose wall due time it passes.
+- B18 (T3) The fault hooks are `atUpgrade(req, socket, kind)` (`kind` `ws` for the link's upgrade,
+  `http` for an `/api/cockpit/*` request), `atInbound(msg, link)` and `atOutbound(msg, link)`, each
+  returning `true` to take the socket / drop the message; `atOutbound` is called once per message
+  after its `seq` was given and before it goes to any link (`link` null when it goes to all) —
+  because §1.1 names three points, not their signatures, and "not sent to any link but still counts
+  in `seq`" needs one call per message — spec: `stand-ins.md` §1.1, §1.2 — overrule: change
+  `server/cockpit/faults.mjs` and `room-control.mjs`'s `hooks` together.
+- B19 (T3) T3's control API serves `/clock`, `/tick`, `/link` and `/drop` (all four live in the hooks
+  and the clock); `/connections` and `/sent` wait for T14 (they need the link's upgrade answer, close
+  codes and `seq`), `/pair`, `/unpair` for pairing, `/button` for C2b, `/jobs` for Jobs, `/alarms`
+  for the watcher, and answer `404 unknown-verb` until then (named in the test). The API lives in
+  `test/cockpit/stand-ins/room-control.mjs` so the hooks are tested in-process — because a verb
+  with nothing to act on would be a fake — spec: `stand-ins.md` §1.2 — overrule: stub them now.
+- B20 (T3) `POST /link {"up":"silent"}` still accepts new upgrades and answers `/api/cockpit/*`
+  HTTP; only link messages are dropped both ways; `{"up":false}` counts as `closed` the upgraded
+  sockets still open (a link the room itself closed is not counted) — because §1.2 speaks only of
+  open links for `silent` — spec: `stand-ins.md` §1.2 — overrule: `hooks.upgrade` in
+  `room-control.mjs`.
+- B21 (T3) `boot()`: `booted.auditFile` is the `LANEBOARD_AUDIT_FILE` boot already set
+  (`<tmp>/state/laneboard/audit.jsonl`, not `<tmp>/audit.jsonl`), so every existing test keeps its
+  path; `booted.control` is the address `127.0.0.1:<port>` as the wrapper prints it, and
+  `control(booted, method, path, body)` (exported next to `ingressFetch`) makes the call, resolving
+  `{status, body}`; `restart()` updates `control`, `pid`, `child` and `health` on the same object;
+  a `stateFiles` value that is not a string is written as JSON — because §1.1 asks for "defaults
+  unchanged" and names `booted.control` both as an address and as `room.control(…)` — spec:
+  `stand-ins.md` §1.1, §1.2 — overrule: move the audit file to `<tmp>/audit.jsonl` for every boot.
+- B22 (T3) `startRoom()` called without a `ctx` (the wrapper) boots the process as `server/index.mjs`
+  does for `mode: builder` (its two error handlers, `dataDir`, `import('./builder.mjs')`) and throws
+  for another mode until T6; with a `ctx` it does nothing yet — because B1 has T3 boot "the board
+  as builder.mjs boots it" and T6 rewrites the function — spec: `README.md` "The room process",
+  `stand-ins.md` §1.1 — overrule: T6.
+- B23 (T3) `room-under-test.mjs` started without `LANEBOARD_STATE_DIR` (which `boot()` always sets)
+  prints its usage and exits 0 — because `npm test`'s `node --test` runs every `.mjs` under `test/`
+  as a test file, and the wrapper would otherwise boot a room there that never exits (it hung the
+  suite once in round 5), or a room on the user's own state — spec: `slices.md` §2 (the stand-ins'
+  usage rule), `stand-ins.md` §1.1 — overrule: move the stand-ins out of `test/`, or pass an
+  argument from `boot()`.
+- B24 (T3, fixing T1) The fake agent writes its `turn-end` log line before the turn's `result` line,
+  not after — because `test/cockpit-fake-agent.test.mjs` reads the log as soon as it sees `result`
+  and failed once under the whole suite's load (round 5); §2.6 orders the log's kinds, not the log
+  against stdout — spec: `stand-ins.md` §2.6 — overrule: tests poll the log instead.

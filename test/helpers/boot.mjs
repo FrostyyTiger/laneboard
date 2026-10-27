@@ -1,8 +1,10 @@
 // Boot a real laneboard (`node server/index.mjs`) in a child process, fully
 // isolated from the live service and from the user's files (fleet plan §11 X2).
 //
-//   boot({mode, config, env, trace}) -> {url, port, ingressPort, publicHost,
-//        child, tmp, config, logs(), loadedUrls(), stop()}
+//   boot({mode, config, env, trace, entry, stateFiles}) -> {url, port,
+//        ingressPort, publicHost, child, tmp, config, auditFile, control,
+//        logs(), loadedUrls(), restart({signal}), mcp(), stop()}
+//   control(booted, method, path, body)           the room under test's control API
 //   ingressFetch(booted, path, {user, ...init})   a request "through tailscale serve"
 //   ingressWs(booted, path, {user, ...opts})       the same for a WebSocket
 //   freePort()                                     a free loopback port >= 7790
@@ -27,6 +29,8 @@ import { generateHubKey, writePrivateKey } from '../../server/fleet/keys-ed25519
 
 export const ROOT = path.resolve(import.meta.dirname, '..', '..');
 const ENTRY = path.join(ROOT, 'server', 'index.mjs');
+/** The cockpit room under test (spec stand-ins.md §1): `boot({entry: ROOM_UNDER_TEST})`. */
+export const ROOM_UNDER_TEST = path.join(ROOT, 'test', 'cockpit', 'stand-ins', 'room-under-test.mjs');
 const LIVE_PORT = 7777;
 const PORT_MIN = 7790;
 const PORT_MAX = 9790;
@@ -159,11 +163,30 @@ async function waitListening(port, child, timeoutMs, logs) {
   throw new Error(`laneboard did not listen on the ingress port ${port} within ${timeoutMs} ms\n${logs().slice(-4000)}`);
 }
 
-async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey }) {
+/**
+ * Write `{"cockpit/session.json": "…"}` entries under the state dir before the
+ * spawn: files 0600, directories 0700 (stand-ins.md §1.1). A value that is not
+ * a string is written as JSON. A path may not leave the state dir.
+ */
+function writeStateFiles(stateDir, files) {
+  for (const [rel, value] of Object.entries(files ?? {})) {
+    const file = path.resolve(stateDir, rel);
+    if (path.isAbsolute(rel) || !file.startsWith(stateDir + path.sep)) throw new Error(`boot: stateFiles key ${JSON.stringify(rel)} leaves the state dir`);
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    for (let d = path.dirname(file); d.length > stateDir.length; d = path.dirname(d)) fs.chmodSync(d, 0o700);
+    fs.writeFileSync(file, typeof value === 'string' ? value : JSON.stringify(value), { mode: 0o600 });
+    fs.chmodSync(file, 0o600);
+  }
+}
+
+async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey, entry, stateFiles }) {
   // Refuse before anything is created.
   if (Number(env.LANEBOARD_PORT) === LIVE_PORT) throw new Error('boot: refusing to start a test laneboard on the live port 7777');
   if (env.TMUX !== undefined || env.TMUX_PANE !== undefined) throw new Error('boot: TMUX must not reach the child (it would point tmux at the live server)');
   if (env.LANEBOARD_DB !== undefined && env.LANEBOARD_DB !== ':memory:') throw new Error('boot: LANEBOARD_DB must stay :memory:');
+  for (const rel of Object.keys(stateFiles ?? {})) {
+    if (path.isAbsolute(rel) || path.normalize(rel).startsWith('..')) throw new Error(`boot: stateFiles key ${JSON.stringify(rel)} leaves the state dir`);
+  }
   // A short base: the tmux socket path under it must stay below 108 bytes.
   const base = os.tmpdir().length <= 40 ? os.tmpdir() : '/tmp';
   const tmp = fs.mkdtempSync(path.join(base, 'lb-boot-'));
@@ -181,6 +204,7 @@ async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey }) {
   // file's laneboard that took that port, so a child that lost its port "booted".
   const port = env.LANEBOARD_PORT !== undefined ? Number(env.LANEBOARD_PORT) : await freePort();
   let cfg = config === null || config === undefined ? null : structuredClone(config);
+  // `hub` and `cockpit` (the room alone, stand-ins.md §1.1) go into the config.
   if (mode && mode !== 'builder') cfg = { ...(cfg ?? {}), mode };
   else if (mode === 'builder' && cfg && cfg.mode === undefined) cfg.mode = 'builder';
   // A fleet block or hub mode needs fleet.ingressPort (S6); give it a free one
@@ -225,20 +249,44 @@ async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey }) {
     ...env,
   });
 
-  const args = [...(traceFile ? ['--import', TRACE_HOOK] : []), ENTRY];
-  const child = spawn(process.execPath, args, {
-    cwd: ROOT,
-    env: e,
-    detached: true, // own process group, so stop() takes any grandchildren too
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const stateDir = e.LANEBOARD_STATE_DIR;
+  writeStateFiles(stateDir, stateFiles);
+
+  const args = [...(traceFile ? ['--import', TRACE_HOOK] : []), entry ?? ENTRY];
   let out = '';
   const cap = (buf) => { out += buf; if (out.length > 200_000) out = out.slice(-100_000); };
-  child.stdout.on('data', cap);
-  child.stderr.on('data', cap);
   const logs = () => out;
-
-  const exited = new Promise((resolve) => child.once('exit', resolve));
+  // The room under test prints `control 127.0.0.1:<port>` before the room
+  // boots (stand-ins.md §1.1); a restart prints a new one.
+  let controlAddr = null;
+  let lineBuf = '';
+  const readControl = (buf) => {
+    lineBuf += buf;
+    let i;
+    while ((i = lineBuf.indexOf('\n')) >= 0) {
+      const m = /^control (127\.0\.0\.1:\d+)$/.exec(lineBuf.slice(0, i).trim());
+      if (m) controlAddr = m[1];
+      lineBuf = lineBuf.slice(i + 1);
+    }
+    if (lineBuf.length > 10_000) lineBuf = '';
+  };
+  let child;
+  let exited;
+  const spawnChild = () => {
+    controlAddr = null;
+    lineBuf = '';
+    child = spawn(process.execPath, args, {
+      cwd: ROOT,
+      env: e,
+      detached: true, // own process group, so stop() takes any grandchildren too
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout.on('data', cap);
+    child.stdout.on('data', readControl);
+    child.stderr.on('data', cap);
+    exited = new Promise((resolve) => child.once('exit', resolve));
+  };
+  spawnChild();
   const killGroup = (sig) => {
     try { process.kill(-child.pid, sig); } catch { /* gone */ }
   };
@@ -275,16 +323,23 @@ async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey }) {
   };
 
   const url = `http://127.0.0.1:${port}`;
-  let health;
-  try {
-    health = await waitHealthy(url, child, timeoutMs, logs);
+  const ready = async () => {
+    const h = await waitHealthy(url, child, timeoutMs, logs);
     const ingressListen = e.LANEBOARD_INGRESS_PORT !== undefined ? Number(e.LANEBOARD_INGRESS_PORT) : ingressPort;
     if (isPort(ingressListen) && ingressListen !== Number(e.LANEBOARD_PORT)) await waitListening(ingressListen, child, timeoutMs, logs);
+    // The control line comes before the room boots; give its pipe a moment.
+    for (let i = 0; entry === ROOM_UNDER_TEST && !controlAddr && i < 50; i++) await new Promise((res) => setTimeout(res, 20));
+    if (entry === ROOM_UNDER_TEST && !controlAddr) throw new Error(`the room under test printed no control line\n${logs().slice(-4000)}`);
+    return h;
+  };
+  let health;
+  try {
+    health = await ready();
   } catch (err) {
     await stop();
     throw err;
   }
-  return {
+  const booted = {
     url,
     port,
     ingressPort,
@@ -293,6 +348,11 @@ async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey }) {
     child,
     pid: child.pid,
     tmp,
+    stateDir,
+    /** The audit log the child writes (LANEBOARD_AUDIT_FILE), for `laneboard audit --file`. */
+    auditFile: e.LANEBOARD_AUDIT_FILE,
+    /** `127.0.0.1:<port>` of the room under test's control API, else null. */
+    control: controlAddr,
     configFile: cfg ? configFile : null,
     config: cfg,
     env: e,
@@ -304,29 +364,83 @@ async function bootOnce({ mode, config, env, trace, timeoutMs, hubKey }) {
       if (!traceFile) throw new Error('boot({trace: true}) to record loaded modules');
       try { return [...new Set(fs.readFileSync(traceFile, 'utf8').split('\n').filter(Boolean))]; } catch { return []; }
     },
+    /**
+     * Stop the process group with `signal` (SIGKILL: a crash), wait for the
+     * exit, and start the same entry with the same temp dirs, config and port
+     * (stand-ins.md §1.1). Resolves with the new control address.
+     */
+    async restart({ signal = 'SIGTERM' } = {}) {
+      if (stopped) throw new Error('restart: already stopped');
+      if (child.exitCode === null && child.signalCode === null) {
+        killGroup(signal);
+        const t = setTimeout(() => killGroup('SIGKILL'), 3000);
+        await exited;
+        clearTimeout(t);
+      }
+      killGroup('SIGKILL'); // stragglers in the group (the agent child)
+      spawnChild();
+      try {
+        booted.health = await ready();
+      } catch (err) {
+        await stop();
+        throw err;
+      }
+      booted.child = child;
+      booted.pid = child.pid;
+      booted.control = controlAddr;
+      return controlAddr;
+    },
+    /** The room's MCP server for a test that calls a tool itself: `{url, token}` (stand-ins.md §1.1). */
+    mcp() {
+      const { url: mcpUrl } = JSON.parse(fs.readFileSync(path.join(stateDir, 'cockpit-agent', 'mcp.json'), 'utf8'));
+      const token = fs.readFileSync(path.join(stateDir, 'cockpit', 'mcp.token'), 'utf8').trim();
+      return { url: mcpUrl, token };
+    },
     stop,
   };
+  return booted;
 }
 
 /**
- * Start laneboard in `mode` ('builder' default, or 'hub') with `config` (an
+ * Start laneboard in `mode` ('builder' default, 'hub', or 'cockpit': the room
+ * alone) with `config` (an
  * object written as its config file; null/undefined = no file) and extra
  * `env`. Resolves once /healthz answers (10 s), else rejects with the log
  * tail. Retries twice when the child dies early (a lost port race). In hub
  * mode `hubKey` (an Ed25519 private KeyObject; default a fresh one) is
  * written as the hub key unless the config sets fleet.hubKeyFile.
+ * `entry` replaces server/index.mjs (ROOM_UNDER_TEST for the cockpit's room
+ * under test); `stateFiles` are written under the state dir before the spawn.
  */
-export async function boot({ mode = 'builder', config = null, env = {}, trace = false, timeoutMs = 10_000, hubKey = null } = {}) {
+export async function boot({ mode = 'builder', config = null, env = {}, trace = false, timeoutMs = 10_000, hubKey = null, entry = null, stateFiles = null } = {}) {
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      return await bootOnce({ mode, config, env, trace, timeoutMs, hubKey });
+      return await bootOnce({ mode, config, env, trace, timeoutMs, hubKey, entry, stateFiles });
     } catch (err) {
       lastErr = err;
       if (!err.exited || !/EADDRINUSE|port \d+ is taken/.test(err.message)) throw err;
     }
   }
   throw lastErr;
+}
+
+/**
+ * One call to the room under test's control API (stand-ins.md §1.2): JSON in
+ * and out. Resolves to `{status, body}`.
+ */
+export async function control(booted, method, p, body) {
+  if (!booted?.control) throw new Error('control: this laneboard has no control port (boot it with entry: ROOM_UNDER_TEST)');
+  const r = await fetch(`http://${booted.control}${p}`, {
+    method,
+    headers: body === undefined ? {} : { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)),
+    signal: AbortSignal.timeout(5000),
+  });
+  const text = await r.text();
+  let parsed = null;
+  try { parsed = JSON.parse(text); } catch { parsed = text; }
+  return { status: r.status, body: parsed };
 }
 
 /** The headers tailscale serve adds to a request it forwards (and the user it vouches for). */

@@ -400,6 +400,9 @@ function createAgent({ out, log, readScript, maxTurns, initialScript }) {
   }
 
   function endTurn(s, messages, durationMs, name) {
+    // Logged before the result goes out (sync), so a test that has read the
+    // result line always finds the turn's end in the log (B24).
+    log({ kind: 'turn-end', turn: name, end: END_KINDS.includes(s.end) ? s.end : 'done' });
     switch (s.end) {
       case 'step-limit':
         out(native.stepLimit({ numTurns: maxTurns }));
@@ -415,7 +418,6 @@ function createAgent({ out, log, readScript, maxTurns, initialScript }) {
       default:
         out(native.done({ numTurns: messages, durationMs, costUsd: s.costUsd ?? 0 }));
     }
-    log({ kind: 'turn-end', turn: name, end: END_KINDS.includes(s.end) ? s.end : 'done' });
   }
 
   return { line };
