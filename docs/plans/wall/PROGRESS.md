@@ -221,7 +221,7 @@ Notes for every builder round (planner, round 1):
   when seconds appear, tabular figures, a ring or bar vs digits, what happens at zero and after), and how to keep many
   small countdowns quiet at an overview while one is readable when held. Night 1's Q3 already has type size per
   metre: do not repeat it — for Later §7 Night 4 C
-- [ ] Q18 IDEAS: "at work" vs "idle" at a glance for `fx=activity`: how strategy and sim games (Factorio, Stellaris,
+- [x] Q18 → research/Q18-busy-vs-idle-at-a-glance.md (thin on game sources; ISA-101 grey-scale practice is the firmest). IDEAS: "at work" vs "idle" at a glance for `fx=activity`: how strategy and sim games (Factorio, Stellaris,
   Homeworld, RimWorld, city builders) and ops tools show that a unit or machine is busy, finishing, or failed at a
   zoomed-out map scale without hue (hue is for trouble here). Night 2's Q8 (alive without meaningless motion: `fade`,
   `miss`, `pulse`) is answered: do not repeat it. 2-3 concrete proposals for the galaxy (what it shows, what it means,
