@@ -240,6 +240,10 @@ fold, not even two in a row.
 - **Look** (D77). 56 px tall, the full text column; mono 18 px `--text-2`, no glyph. At the right end
   `UNDO` `[data-show-undo]`: 48 px tall, 96 px wide, 16 px caps `--text-1`, 1 px `--line-strong`
   border, 8 px from the text.
+- **Two in a row** (D252, T98). A show line directly after another show line has an 8 px
+  `margin-top`, so two `UNDO`s one above the other are 16 px apart (4 px of each row around its
+  48 px `UNDO`, plus the 8 px). `UNDO` stays 48 px tall; the row does not shrink. The margin stays
+  when a line loses its `UNDO`, so nothing moves under the finger.
 - **Words** (§3 per command). `{label}` is the node's label as the board shows it, cut to 32
   characters, drawn as text. Suffixes, in the same grey:
 
@@ -530,7 +534,8 @@ chart, table, checklist, map, text, diff). A card bound to fleet data stays live
   ` · no screen shows the canvas` and ` · removed: canvas full`.
 - **`UNDO`** on a `place` line removes the card while it exists; on a `replace` line it puts back the
   version before (D82). Like a pin's (§5), it moves no camera and is not dropped by a newer camera
-  command.
+  command. A card removed this way gets the same way back as one removed with `✕`, on the screen
+  where `UNDO` was tapped (§9, D252).
 - A block the build has not made yet (pending Q-O3, §8) returns `isError` `The canvas has no "table"
   block yet. Blocks now: countdown, status, log, chart, text, diff.`
 
@@ -755,6 +760,15 @@ How cards also leave on their own (ended, `expires`) and the agent removing them
   `[data-card-removed]` at the card's top: `CARD REMOVED` (16 px caps `--text-2`) and `UNDO` (48 x 96,
   16 px caps `--text-1`, 1 px `--line-strong`). That screen repacks only when the row goes. `UNDO`
   puts the card back at its old place in the list on every screen; after 10 s the row goes.
+- **Removed by a show line's `UNDO`** (§7.4, D252, T98): the same as `✕`, with the tapping screen
+  being the one whose show line was tapped. If that screen draws a canvas, the card's place shows
+  the `[data-card-removed]` row above for 10 s and the line reads ` · undone` without `UNDO`. If it
+  draws no canvas (the pane over a view, `screens.md` §1), the line itself is the way back for 10 s:
+  suffix ` · card removed`, and in `UNDO`'s place `PUT BACK` `[data-show-putback]` (48 px tall,
+  120 px wide, 16 px caps `--text-1`, 1 px `--line-strong`). `PUT BACK` does what the row's `UNDO`
+  does; after 10 s the button goes and the suffix becomes ` · undone`. Other screens show
+  ` · undone` at once. Putting the card back gives the line its `UNDO` again (it is the card of
+  that `place` again).
 - The next prompt's focus carries `"removed":["card-0004"]` (as `undone`, §5).
 - Removing a countdown never cancels its job (§8.1). Removing works while the room is down
   (§7.6).
@@ -812,6 +826,25 @@ When the owner removes it again and waits,
 Then at t = 10 s after that tap the row goes and `side` repacks; the next prompt's focus carries
 `"removed":[…]` with its id.
 Test: two contexts with `page.clock`; rects before and after; the fake agent's received focus.
+
+Second case, removed by a show line's `UNDO` (§7.4, §9, D252):
+Given the same two screens and one turn in which the fake agent placed cards A and B (two show
+lines in a row, both with `UNDO`), and `desk`'s pane open,
+Then on `desk` the two `[data-show-undo]` rects are 48 px tall and 16 px or more apart vertically.
+When the owner taps `UNDO` on A's line on `side` at t = 0 s,
+Then within 0.3 s A is gone on `desk`, which repacks; on `side` `[data-card-removed]` reads
+`CARD REMOVED` with `UNDO` where A was; A's line reads `… on the canvas · undone` on both screens,
+with no `[data-show-undo]`.
+When the owner taps the row's `UNDO` at t = 4 s,
+Then A is back in its place on both screens and its line has `UNDO` again.
+When `desk` switches to the app's Map (pane over a view, no canvas) and the owner taps `UNDO` on
+B's line there at t = 20 s,
+Then B is gone on `side`; on `desk` B's line reads `… on the canvas · card removed` with
+`[data-show-putback]` `PUT BACK` (48 px tall); a tap on it at t = 25 s puts B back on `side`.
+Removed again at t = 30 s and left alone, at t = 40 s `PUT BACK` is gone and the line reads
+`… · undone`.
+Test: two contexts with `page.clock`; `[data-show-undo]` rects (height, vertical gap); line texts;
+`[data-card]` ids on `side`; `[data-show-putback]` presence before and after 10 s.
 
 ### S-C4-18 A bound chart starts empty but says so, then fills
 Given `side` in `canvas`,
