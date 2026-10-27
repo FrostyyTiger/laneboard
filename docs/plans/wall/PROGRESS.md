@@ -213,13 +213,25 @@ Notes for every builder round (planner, round 1):
   (hero, why and site name read; the status row is marginal, hardware/where small as meant: T23 sizes trouble rows);
   film r33-galaxy (tour unchanged, 0 errors, 12.4 fps as every SwiftShader film here). Still the tour's kicker
   `TARGET 01 / 05`, typing on the sheet and the doubled banner: T25, T20, T22.
-- [ ] T12 (§7 Night 3 A1, D warp) [ui] [variant:galaxy] `fx=warp` (was night 2's T42, r59-dreamer unforgettable
+- [x] T12 (§7 Night 3 A1, D warp) [ui] [variant:galaxy] `fx=warp` (was night 2's T42, r59-dreamer unforgettable
   1): during a flight the near dust and far stars stretch into short streaks along the direction of travel,
   tinted toward the destination's status (grey for calm, a faint amber or red edge for trouble), and snap back
   on arrival; the near-plane dust thins during the flight; off by default, none in still mode; must not add
   script ms at rest — done when: a test maps flight progress and destination tone to streak length and tint
   (zero outside a flight, zero in still mode, none without `?fx=warp`), and filmstrips of
-  `galaxy.html?demo=1&quality=0` with and without `&fx=warp` show streaks only with it.
+  `galaxy.html?demo=1&quality=0` with and without `&fx=warp` show streaks only with it. (commit 75ae4cc)
+  Builder r34: `fx.js WARP`/`warpAt(k, tone, still)` (pure: 0 outside 0<k<1 or still; in over k 0.06-0.3, snapped
+  back over 0.84-0.95; len 0.055 of each point's distance, tail tint calm 0 / warn 0.5 / crit 0.65, dust thinned
+  by 0.55, opacity 0.4); `camera.js flight()` (`{ k, to }`, raw progress, null at rest, under a finger and in still
+  mode); `scene.js` two `LineSegments` (`fx-warp-stars`, the first 800 far stars; `fx-warp-dust`, the first 1500
+  grains, a child of the dust so it turns with it), tails pushed along the camera's step in the vertex shader (view
+  space, so every streak is the same angle), hidden at rest (one check per frame), thinned with the quality level;
+  `main.js` passes `cam.flight()` under `fx=warp` only. Tests: `warpAt` (outside, still, ramp, tones), the scene with
+  and without `fx=warp` (visible, tint, dust, direction, rest, still, quality), `camera.flight()`. Films
+  `shots/r34-galaxy-warp` (streaks in the three flight frames, amber-leaning toward warn sites, grey to calm, the
+  dust arm's density cut once after the first film crowded the plate; 0 errors; 11.3 fps) and `shots/r34-galaxy`
+  (no streaks; 12.8 fps). The ~1.5 fps lower under SwiftShader is GPU fill during flights only; on the Surface,
+  judge with `?fx=beacon,warp&perf=1`. Seen: a plate still types during a flight with streaks behind it (T15).
 - [ ] T13 (§7 Night 3 C4) [ui] [variant:galaxy] Touch, back: a big back control (at least Q6's 15 mm, about 80
   css px on the tablet, only while exploring) and a tap on empty sky each go one step back: planet → system →
   overview; the sheet closes with its step — done when: a test walks planet → system → overview through both
