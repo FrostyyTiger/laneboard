@@ -107,7 +107,7 @@ Notes for every builder round (planner, round 1):
   back control reads `▶ TOUR` and hands back to the tour at once (`tour.resume()`, as the minute does) — done when: a
   page test on a fake clock sees no line in the tour, `MANUAL · TOUR IN 1:00` after the wake, `0:40` 20 s later, `1:00`
   again after a drag, the line gone at the hand-back, and a tap on `▶ TOUR` at the overview resuming the tour; a CDP
-  still in explore shows the line, the tour's still does not. (commit SHA) Builder r13: touch.js
+  still in explore shows the line, the tour's still does not. (commit 7e9255e) Builder r13: touch.js
   `idleLeft` + `manualLine` (whole seconds rounded up), `createTouch` `left()` and `handBack()` (a `'handback'` event:
   in explore the tour at once, the same `resume` as the minute's), `backControl(mode, place)` → `'back' | 'tour' | null`
   and `createBack` `show(kind)` with `BACK_WORDS` (`‹ Back`, `▶ Tour`, `data-kind`). One behaviour change, so the line
