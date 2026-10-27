@@ -16,6 +16,7 @@ import { createCaption, captionLines, captionTimingFor, STILL_CAPTION_TIMING } f
 import { createLock, lockTarget, LOCK_TIMING, STILL_LOCK_TIMING } from './lock.js';
 import { createGlow } from './glow.js';
 import { createFrame } from './frame.js';
+import { bannerModel, bannerEcho } from './galaxy/hud.js';
 import { screenOf } from './type.js';
 
 const BACKOFF_START_MS = 1000;
@@ -70,7 +71,7 @@ export function boot() {
   const glow = createGlow(document.getElementById('wall-glow'), map, { halos: Boolean(pick.variant.halos) });
   // What stays put while the camera moves: vignette, clock, the fleet's worst line, the tag.
   const frame = createFrame(document.getElementById('wall-frame'));
-  covers = () => [caption.cover(), frame.cover(), frame.tagCover()].filter(Boolean);
+  covers = () => [caption.cover(), frame.cover(), frame.tagCover(), frame.clockCover()].filter(Boolean);
   // A mistyped `?variant=` says so on the screen, not only in the console (T45).
   frame.note(unknownNote(pick));
   let latest = null;
@@ -78,6 +79,20 @@ export function boot() {
   const focus = pick.variant.links === 'focus';
   let heldSite = null;
   const mapModel = (model) => (focus ? focusLinks(model, heldSite) : model);
+  // One headline per trouble frame (T46, as the galaxy since night 3 T4 and
+  // T20): while the plate holds a problem the fleet line steps down to the
+  // next one (hud.js bannerModel), or drops out when there is none
+  // (bannerEcho), and a crit plate's hero outranks the far line (frame.plate,
+  // wall.css). From the camera's arrival: in the flight the line is the headline.
+  let heldId = null, plateTimer = null;
+  const feedFrame = () => {
+    if (latest) frame.update(bannerModel(latest, heldId), { echo: bannerEcho(latest, heldId) });
+  };
+  const plate = (tone, atMs) => {
+    if (plateTimer != null) { clearTimeout(plateTimer); plateTimer = null; }
+    frame.plate(tone && !(atMs > 0) ? tone : false);
+    if (tone && atMs > 0) plateTimer = setTimeout(() => { plateTimer = null; frame.plate(tone); }, atMs);
+  };
   tour.onLeg((leg) => {
     const held = leg.kind === 'site' ? leg.id : null;
     if (focus && held !== heldSite) {
@@ -89,9 +104,17 @@ export function boot() {
     glow.zoomTo(leg.kind === 'site' ? zoom : 1, ms);
     const node = leg.kind === 'site' ? latest?.nodes?.find((n) => n?.id === leg.id) : null;
     if (node) {
-      caption.show(leg, captionLines(node, latest, leg.index, leg.count));
-      lock.lockOn({ ...leg, node, target: lockTarget(node, latest) }, zoom);
+      const cap = captionLines(node, latest, leg.index, leg.count);
+      const target = lockTarget(node, latest);
+      heldId = target[0]?.id ?? null;
+      feedFrame();
+      plate(cap.lines.find((l) => l.kind === 'trouble')?.tone ?? 'grey', ms);
+      caption.show(leg, cap);
+      lock.lockOn({ ...leg, node, target }, zoom);
     } else {
+      heldId = null;
+      feedFrame();
+      plate(false, 0);
       caption.hide();
       lock.release();
     }
@@ -104,7 +127,7 @@ export function boot() {
     latest = model;
     map.update(mapModel(model));
     glow.update(model);
-    frame.update(model);
+    feedFrame();
     tour.update(model);
     tour.start();
   };

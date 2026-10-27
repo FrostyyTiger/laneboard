@@ -69,7 +69,7 @@ function sceneAt({ lay, shown, folded }, W, H, spin) {
     rolled: () => null, folded, kids: lay.kids, alpha: () => 1,
     hover: null, selected: null, selT: 1, highlight: null, near: new Set(), matches: new Set(),
     pulses: [], comets: [], reduced: false, anchor: null, rings: true,
-    labelSize: labelSizeFor(STEPS), pinLabels: true, labelInset: mapOptions.labelInset,
+    labelSize: labelSizeFor(STEPS), pinLabels: true, labelInset: mapOptions.labelInset, labelClear: mapOptions.labelClear,
   };
 }
 
@@ -115,6 +115,43 @@ for (const [name, W, H] of [['3:2 tablet', 1368, 912], ['16:9 screen', 1366, 768
     }
     assert.ok(labels > 120 * 40, 'the overview names its places');
     assert.deepEqual([...out].slice(0, 12), [], `${out.size} outside`);
+  });
+}
+
+for (const [name, W, H] of [['3:2 tablet', 1368, 912], ['16:9 screen', 1366, 768]]) {
+  test(`radial names, ${name}: no name lies on another over a whole turn, trouble always named (T46)`, () => {
+    assert.equal(mapOptions.labelClear, true, 'wall.html asks the Map for clear names');
+    const ov = overview(FLEET, W / H, H);
+    const r = createRenderer(fakeCtx(), PAL);
+    const loud = new Set(ov.shown.filter((n) => ['warn', 'crit', 'down', 'attention', 'error'].includes(n.status))
+      .map((n) => String((n.kind === 'builder' ? n.builder : null) ?? n.label ?? n.id).toUpperCase()));
+    const over = new Map(), lost = new Set();
+    let named = 0;
+    for (let i = 0; i < 120; i++) {
+      const sc = sceneAt(ov, W, H, (i / 120) * Math.PI * 2);
+      const bs = r.labelBoxes(sc, r.drawNodes(sc));
+      named += bs.length;
+      for (let a = 0; a < bs.length; a++) {
+        for (let b = a + 1; b < bs.length; b++) {
+          if (hits(bs[a], bs[b])) { const k = `${bs[a].text}/${bs[b].text}`; over.set(k, (over.get(k) ?? 0) + 1); }
+        }
+      }
+      const shown = new Set(bs.map((b) => b.text));
+      for (const t of loud) if (!shown.has(t)) lost.add(`${t} at ${i * 3}°`);
+    }
+    assert.deepEqual([...over].slice(0, 8), [], 'the film\'s pile at the ring\'s top (BUILDER-A, FEAT-SEARCH, CI-RETRY, ACME-BILLING)');
+    assert.deepEqual([...lost].slice(0, 8), [], 'a name in trouble is never the one left out');
+    // Left out is the exception: a calm name with no free place, for a few bearings.
+    const withOut = (() => {
+      const r0 = createRenderer(fakeCtx(), PAL);
+      let n = 0;
+      for (let i = 0; i < 120; i++) {
+        const sc = { ...sceneAt(ov, W, H, (i / 120) * Math.PI * 2), labelClear: false };
+        n += r0.labelBoxes(sc, r0.drawNodes(sc)).length;
+      }
+      return n;
+    })();
+    assert.ok(named >= withOut * 0.97, `almost every name stays (${named} of ${withOut})`);
   });
 }
 

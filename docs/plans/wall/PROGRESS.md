@@ -521,7 +521,27 @@ Notes for every builder round (planner, round 1):
   Seen, for T46: on radial at 1368 the labels at the ring's top pile up (`FEAT-SEARCH`, `BUILDER-A`, `CI-RETRY`,
   `ACME-BILLING` over each other). Unverified on a device: the manifest's install prompt (no tablet here).
   Round 52 left its demo fleet running (pid file stale); r53 stopped it by pid.
-- [ ] T46 (§7 Night 4 E4; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `wall.html` (radial, the default) gets one filmstrip, since night 3 changed the shared `caption.js`, `tour.js` and `frame.js`; fix what it shows broken. The morning report lists what a reviewer should read first and what reaches outside the galaxy (`public/css/tokens.css --tex-vignette`). — done when: a `wall.html` filmstrip, and what it showed broken is fixed with tests
+- [x] T46 (§7 Night 4 E4; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `wall.html` (radial, the default) gets one filmstrip, since night 3 changed the shared `caption.js`, `tour.js` and `frame.js`; fix what it shows broken. The morning report lists what a reviewer should read first and what reaches outside the galaxy (`public/css/tokens.css --tex-vignette`). — done when: a `wall.html` filmstrip, and what it showed broken is fixed with tests (commit SHA)
+  Builder r54: filmed `wall.html?demo=1` (radial, large demo, SwiftShader ×4, `shots/r54-radial`, 0 console errors).
+  Three things broken, all fixed: (1) names piled on each other (ring top: `BUILDER-A`, `FEAT-SEARCH`, `CI-RETRY`,
+  `ACME-BILLING`; HOME's rooms; in holds `OBJECT-STORE` on `API-STAGING`): the collision pass stepped 14 px for
+  15-35 px type and, with no free place, drew the name where it was. New Map option `labelClear` (default off,
+  render.js `placeLabels`, documented in index.js): a name steps by its own line, and a calm one with no free place
+  is left out (trouble and the selection keep theirs, as on a phone); radial turns it on. Over a turn on the large
+  fixture 0 overlapping pairs (were 30 at 1368x912, 79 at 16:9), 0.3 of 59 names left out on average.
+  (2) In holds the Map's names ran over the tag and the clock: `frame.tagCover()` is now the tag always (the note
+  with it when there is one) and `frame.clockCover()` is new, both read again only when their words change or on
+  `resize` (a first try keyed on `root.clientWidth` forced a layout per frame: 2.2 fps). (3) Under a crit plate the
+  far line repeated the plate's hero (`STORAGE` twice, both hero size): wall.html now feeds the frame as the
+  galaxy does, `bannerModel`/`bannerEcho` from galaxy/hud.js and `frame.plate(tone)` from the camera's arrival, so
+  the line steps down to the next problem (`2 CRIT · HV1 · HV2` at the name step) or drops out. Tests:
+  `test/wall-radial-fit.test.mjs` (no overlap over a turn, trouble always named, both screens),
+  `test/wall-pages.test.mjs` (tag and clock covers, the banner wiring). Stills `shots/r54-t46`. Film fps on this VM
+  is noise: the same build gave 1.8-11.6 fps and the unchanged base 2.3-12.2 on back-to-back runs (the throttle stalls
+  screenshot capture; one film skipped from 19 s to 207 s), so no fps claim. Seen, not fixed: the plate's
+  `NO CONTACT FOR 17S` lags the banner's `21S` (the plate's text is typed once per leg).
+  For the morning report (E4), what reaches outside the galaxy this round: the shared Map's `render.js` and
+  `index.js` (`labelClear`, off by default; the fenced Map tests pass unchanged).
 - [ ] T19 (§7 Night 4; r4-film-ui galaxy 1; after T9) [ui] [variant:galaxy] One top step of type while a site is held:
   the banner (`hud.js`, `frame.js`, `wall.css`) may own the top step only at the overview; while a caption holds a site it
   drops to the caption's second-line size (~0.45 of the hero) and becomes one line `■ HV2 · STORAGE · reason  +N`, so the

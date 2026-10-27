@@ -356,7 +356,10 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   fleet.append(line, sub, fact);
 
   root.append(vignette, tag, clock, fleet);
-  let tagBox = null; // the tag's cover while it has a note (tagCover), read again when its text changes
+  let tagBox = null, tagSeen = null; // the tag's cover (tagCover), read again when its words change
+  let clockBox = null, clockSeen = null; // the clock's (clockCover), read again when its words change
+  // A new stage size moves both; their boxes are read again then, never per frame (a size read forces layout).
+  globalThis.addEventListener?.('resize', () => { tagBox = null; clockBox = null; });
 
   let timer = null;
   const tick = () => {
@@ -435,15 +438,31 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     put(tagNote, typeof text === 'string' ? text.toLowerCase() : '');
     tagBox = null;
   };
-  /** The tag and the note under it as a Map cover while there is a note, else null (read once per note). */
+  /**
+   * The tag, and the note under it while there is one, as a Map cover (T46:
+   * in a hold the Map's names ran over `LANEBOARD · DEMO-HOST LIVE`). Read
+   * again only when its words change.
+   */
   const tagCover = () => {
-    if (!tagNote.textContent) return null;
-    if (!tagBox) {
-      const left = tag.offsetLeft + Math.min(0, tagNote.offsetLeft);
-      const right = tag.offsetLeft + Math.max(tag.offsetWidth, tagNote.offsetLeft + tagNote.offsetWidth);
-      tagBox = coverOf({ left, top: tag.offsetTop, width: right - left, height: Math.max(tag.offsetHeight, tagNote.offsetTop + tagNote.offsetHeight) });
+    const seen = tag.textContent;
+    if (!tagBox || tagSeen !== seen) {
+      tagSeen = seen;
+      const noted = Boolean(tagNote.textContent);
+      const left = tag.offsetLeft + (noted ? Math.min(0, tagNote.offsetLeft) : 0);
+      const right = tag.offsetLeft + (noted ? Math.max(tag.offsetWidth, tagNote.offsetLeft + tagNote.offsetWidth) : tag.offsetWidth);
+      const height = noted ? Math.max(tag.offsetHeight, tagNote.offsetTop + tagNote.offsetHeight) : tag.offsetHeight;
+      tagBox = coverOf({ left, top: tag.offsetTop, width: right - left, height });
     }
     return tagBox;
+  };
+  /** The clock's block (bottom left) as a Map cover (T46), read again when its words change: once a minute. */
+  const clockCover = () => {
+    const seen = clock.textContent;
+    if (!clockBox || clockSeen !== seen) {
+      clockSeen = seen;
+      clockBox = coverOf({ left: clock.offsetLeft, top: clock.offsetTop, width: clock.offsetWidth, height: clock.offsetHeight });
+    }
+    return clockBox;
   };
 
   const stop = () => { if (timer != null) timers.clearTimeout(timer); timer = null; };
@@ -470,5 +489,5 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     farDirty = true;
   };
 
-  return { update, live, fresh, note, tagCover, stop, cover, plate, hushed, el: { vignette, tag, tagNote, clock, fleet, more, subMore } };
+  return { update, live, fresh, note, tagCover, clockCover, stop, cover, plate, hushed, el: { vignette, tag, tagNote, clock, fleet, more, subMore } };
 }

@@ -241,10 +241,14 @@ export function branch(child, parent, { s = 1 } = {}) {
  * dot and a site its ring, and the gauges mark "look here" (trouble, the site
  * the camera is in, a metric past the warn line). Branches are stubs at the
  * overview (`branch`).
+ * `labelClear` (T46, the night 4 film of wall.html): at the ring's top a
+ * builder's name and its lanes' lay on each other, and in a hold the rooms'
+ * names on their neighbours'; a name now steps by its own line, and a calm one
+ * with no free place is left out (trouble is always named).
  */
 export const mapOptions = Object.freeze({
   layout: layoutFor(), labelSize, pinLabels: true, labelInset: LABEL_INSET, legends: false, lamps: false,
-  gauges: 'trouble', branch,
+  gauges: 'trouble', branch, labelClear: true,
 });
 
 /**

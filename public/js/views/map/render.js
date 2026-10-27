@@ -36,6 +36,7 @@
 //     branch(child, parent, {s}) // share 0..1 of a tree branch drawn from the child's end (the Wall), undefined: all
 //     follow,                  // the node an ambient camera stays on (the Wall's tour), or null
 //     labelInset,              // {top, right, bottom, left} shares: where a name may move to (the Wall)
+//     labelClear,              // true: a name moves by its own line and, with no free place, is left out (the Wall)
 //     covers, pageCovers,      // [{left, top, right, bottom}]: what lies over the canvas; pageCovers only
 //                              // a page's own (the Wall's plate), which link labels keep clear of too
 //   }
@@ -1205,7 +1206,16 @@ export function createRenderer(ctx, palette) {
     const area = ins
       ? { x0: W * share(ins.left), y0: H * share(ins.top), x1: W * (1 - share(ins.right)), y1: H * (1 - share(ins.bottom)) }
       : { x0: 0, y0: 0, x1: W, y1: H };
-    const slot = (e, clear) => (e.steps ?? STEPS).find((d) => {
+    // `labelClear` (the Wall): a name moves by its own line, not 14 px, so a
+    // step past a big name clears it, and four lines up or down.
+    const clearing = scene.labelClear === true;
+    const stepsOf = (e) => {
+      if (e.steps) return e.steps;
+      if (!clearing || !(e.half > 7)) return STEPS;
+      const l = 2 * e.half + 2;
+      return [0, l, -l, 2 * l, -2 * l, 3 * l, -3 * l, 4 * l, -4 * l];
+    };
+    const slot = (e, clear) => stepsOf(e).find((d) => {
       const b = { x0: e.box.x0, x1: e.box.x1, y0: e.box.y0 + d, y1: e.box.y1 + d };
       return b.y0 >= area.y0 && b.y1 <= area.y1 && b.x0 >= area.x0 && b.x1 <= area.x1 && !taken.some((t) => hits(t, b)) && clear(b);
     });
@@ -1233,7 +1243,7 @@ export function createRenderer(ctx, palette) {
       const pin = pinned ? pins.get(e00.id) : null;
       const side = pin && pin.left !== e00.left ? mirror(e00) ?? e00 : e00;
       const e0 = pin && pin.left === side.left && pin.dy !== 0
-        ? { ...side, steps: [pin.dy, ...(side.steps ?? STEPS).filter((d) => d !== pin.dy)] } : side;
+        ? { ...side, steps: [pin.dy, ...stepsOf(side).filter((d) => d !== pin.dy)] } : side;
       const alt = mirror(e0);
       const up = stack(e0, -1), down = stack(e0, 1);
       // Off every node, its own included: a label moved a line up or down
@@ -1250,7 +1260,9 @@ export function createRenderer(ctx, palette) {
         if (dy != null) { e = cand; break; }
       }
       if (dy == null) {
-        if ((phone && e.rank > 2) || unseen(e.box)) continue;
+        // With no free place a name lies on another's, unread: on a phone, and
+        // with `labelClear`, it is left out (trouble and the selection keep theirs).
+        if (((phone || clearing) && e.rank > 2) || unseen(e.box)) continue;
         dy = 0;
       }
       const placed = { ...e, y: e.y + dy, dy, box: { ...e.box, y0: e.box.y0 + dy, y1: e.box.y1 + dy } };

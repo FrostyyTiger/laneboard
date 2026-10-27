@@ -11,6 +11,7 @@ import { FALLBACK_VARIANT, fallbackHref } from '../public/js/wall/galaxy/fallbac
 import * as islandsTiles from '../public/js/wall/variants/islands-tiles.js';
 import { makeDocument, makeEl } from './helpers/fakedom.mjs';
 import { createFrame } from '../public/js/wall/frame.js';
+import { bannerEcho } from '../public/js/wall/galaxy/hud.js';
 
 const PUBLIC = path.resolve(import.meta.dirname, '..', 'public');
 const read = (f) => fs.readFileSync(path.join(PUBLIC, f), 'utf8');
@@ -44,7 +45,7 @@ test('pages: an unknown variant is a grey note on the tag, a known one none', ()
   }
   assert.equal(unknownNote(null), null);
   assert.match(read('js/wall/main.js'), /frame\.note\(unknownNote\(pick\)\)/);
-  assert.match(read('js/wall/main.js'), /covers = \(\) => \[caption\.cover\(\), frame\.cover\(\), frame\.tagCover\(\)\]/);
+  assert.match(read('js/wall/main.js'), /covers = \(\) => \[caption\.cover\(\), frame\.cover\(\), frame\.tagCover\(\), frame\.clockCover\(\)\]/);
 
   const prevDoc = globalThis.document;
   globalThis.document = makeDocument();
@@ -61,13 +62,39 @@ test('pages: an unknown variant is a grey note on the tag, a known one none', ()
     assert.deepEqual(frame.tagCover(), { left: 700, top: 40, right: 1200, bottom: 90 });
     frame.note(null);
     assert.equal(tagNote.textContent, '');
-    assert.equal(frame.tagCover(), null, 'no note, no cover: the tag is as before');
+    // No note: the tag alone is still a cover (T46: in a hold the Map's names ran over it).
+    assert.deepEqual(frame.tagCover(), { left: 900, top: 40, right: 1200, bottom: 60 }, 'the tag alone');
+    // The clock too (bottom left): read again when its words change, not every frame.
+    const { clock } = frame.el;
+    Object.assign(clock, { offsetLeft: 80, offsetTop: 800, offsetWidth: 160, offsetHeight: 70 });
+    assert.deepEqual(frame.clockCover(), { left: 80, top: 800, right: 240, bottom: 870 });
+    Object.assign(clock, { offsetWidth: 999 });
+    assert.equal(frame.clockCover().right, 240, 'same words: the box it read');
   } finally {
     globalThis.document = prevDoc;
   }
   const css = read('css/wall.css');
   assert.match(css, /\.wall-tag-note \{[^}]*position: absolute;[^}]*color: var\(--text-2\); \}/, 'under the tag, grey one step up: not a trouble hue');
   assert.match(css, /\.wall-tag-note:empty \{ display: none; \}/);
+});
+
+test('pages: wall.html has one headline per trouble frame, as the galaxy (T46)', () => {
+  const main = read('js/wall/main.js');
+  assert.match(main, /import \{ bannerModel, bannerEcho \} from '\.\/galaxy\/hud\.js';/);
+  assert.match(main, /frame\.update\(bannerModel\(latest, heldId\), \{ echo: bannerEcho\(latest, heldId\) \}\)/,
+    'the line steps past the held problem, or drops out when it would only repeat it');
+  assert.match(main, /heldId = target\[0\]\?\.id \?\? null;/, 'held: the lock\'s target, as the galaxy');
+  assert.match(main, /plate\(cap\.lines\.find\(\(l\) => l\.kind === 'trouble'\)\?\.tone \?\? 'grey', ms\)/, 'the plate tone from the camera\'s arrival');
+  assert.match(main, /heldId = null;\s*feedFrame\(\);\s*plate\(false, 0\);/, 'the overview: the line is the headline again');
+  assert.doesNotMatch(main, /frame\.update\(model\)/, 'never the raw model');
+  // The rule itself (tested with the galaxy in test/wall-galaxy-hud.test.mjs): one crit held, nothing else: it drops out.
+  const model = { nodes: [
+    { id: '__core', kind: 'core', status: 'crit' },
+    { id: 'hv2', kind: 'site', parent: '__core', label: 'hv2', status: 'crit' },
+    { id: 'hv2/storage', kind: 'room', parent: 'hv2', label: 'storage', status: 'crit', why: 'pool 97% full' },
+  ] };
+  assert.equal(bannerEcho(model, 'hv2/storage'), true);
+  assert.equal(bannerEcho(model, null), false);
 });
 
 test('pages: the galaxy fallback lands on islands with tiles, not radial', () => {

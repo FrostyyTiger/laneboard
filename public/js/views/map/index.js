@@ -170,6 +170,9 @@ export function migrateFolds(list, localId) {
                              pass moves a name a line up or down only inside them (the Wall's
                              safe area). Default: the canvas edges
  *                            (the Wall: the turn no longer flips names). Default off
+ *   labelClear            true: the collision pass moves a name by its own line, and a calm name
+ *                            with no free place is not drawn rather than drawn over another
+ *                            (the Wall; trouble and the selection keep their place). Default off
  *   covers()              -> [{left, top, right, bottom}] in canvas px, asked every frame: what the
  *                            page lays over the canvas (the Wall's caption plate). Names keep clear
  *                            of it as of the inspector; one with no free place there is not drawn,
@@ -1207,6 +1210,7 @@ export function createMap(root, opts = {}) {
       labelSize: typeof opts.labelSize === 'function' ? opts.labelSize : undefined,
       pinLabels: opts.pinLabels === true,
       labelInset: opts.labelInset && typeof opts.labelInset === 'object' ? opts.labelInset : undefined,
+      labelClear: opts.labelClear === true,
     };
   }
 
