@@ -279,11 +279,28 @@ Notes for every builder round (planner, round 1):
   Film tooling note: under SwiftShader a CDP tap with a 60 ms sleep between start and end reached the page 500 ms
   apart (over `TAP.ms`); send touchStart and touchEnd back to back. Not built: the `MANUAL · TOUR IN 0:40` countdown
   (Later, r36-dreamer touch 1).
-- [ ] T15 (r4-film-ui galaxy 1) [ui] [variant:galaxy] The caption names only a target the camera is on: the
+- [x] T15 (r4-film-ui galaxy 1) [ui] [variant:galaxy] The caption names only a target the camera is on: the
   plate's typing starts at flight progress ~0.9 (night 2's r54-film-ui 4), and during a flight passing sites'
   labels dim to `--text-3` while only the destination's name stays full — done when: a test shows no caption
   characters typed before progress 0.9 of the leg and the non-destination labels at `--text-3` in a flight, and
   a film of `galaxy.html?demo=1&quality=0` has no frame with a typing plate whose site is out of shot.
+  (commit 6cb18d0) Builder r39: `caption.js CAPTION_FROM_K` 0.9 and a timing's `fromK`: `captionSchedule`'s plate
+  start is never before `fromK × arriveMs` (`leadMs` still pulls forward, not past it); `ARRIVED_CAPTION_TIMING` /
+  `ARRIVED_DEMO_CAPTION_TIMING` (`arrivedTimingFor`) are the galaxy's. The demo plate used to start at 0.64 of the
+  flight; with the plate at 0.9 a full plate rested only 335 ms of the 1.75 s demo hold, so the demo's name types
+  with the fade (`inMs` 160) at 25 ms a letter: 0.5 s still. Normal speed unchanged (it already waited for the
+  arrival); wall.html's other variants keep their timing (no `fromK`). `labels.js createLabels({ flight })`
+  (main.js passes `cam.flight`): in a flight to a site every name but the site's own and its members' gets
+  `data-dim` → `wall.css .galaxy-label[data-dim]` `--text-3`, after the tone rules so it wins; a flight out to the
+  overview dims none. Decision: a passing trouble name dims too (the spec; the banner still carries it and the
+  plate is about the destination; 2 s). Tests `test/wall-galaxy-arrive.test.mjs` (schedule at both speeds, the
+  caption on a fake clock: nothing typed and no plate before 0.9, labels dim/undim, the css order, main.js wiring).
+  Checked: per-frame probe `tools/r39-arrive.mjs` (`shots/r39-arrive`, 40 s, 1127 frames): the first typed letter
+  of every flight at k 0.93-0.97, no plate before; the only plate up early is the last leg's fading out over its
+  200 ms `outMs` (not typing); mid-flight to HV2 four names dimmed, `■ HV2` full. Film r39-galaxy: no typing plate
+  over a flight, passing names grey, 12.5 fps (SwiftShader), 0 errors. Seen, not this task: at k 0.95 into HV2
+  (`shots/r39-arrive/k095.jpg`) a dark square cuts the red nebula top left of the lock's brackets (a cover's
+  ground?); the film's frames do not show it.
 - [ ] T16 (r4-film-ui galaxy 4) [ui] [variant:galaxy] No stray hard lines: no banner-to-node tether at the
   overview (the node carries its glyph); the caption's leader to its star is one style (2 px, 90° or 45° elbow,
   routed clear of other labels) — done when: a test shows no tether at the overview and a leader that crosses no
@@ -543,6 +560,8 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 
 ## For the owner
 
+- (r39) The two r38 Chromes below were still running at 03:01 (gpu processes 3299849, 3300253 at ~250 % CPU each);
+  round 39 left them, as round 38's kill was refused.
 - (r38) Two headless Chromes from round 38's first two film-script runs (the script crashed before closing them;
   user-data-dir `/tmp/touch-ms64N7`, `/tmp/touch-4ps9Rm`, main pids 3299827 and 3300230 on the build VM) were left
   rendering at ~250 % CPU each; the round's kill was refused by its permission check. Stop them if still alive; they
