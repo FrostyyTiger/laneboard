@@ -10,6 +10,7 @@ import { CRIT_HOLD, SHEET_LOCK, agoText, bannerEcho, bannerModel, clearedOf, cre
 import { captionLines } from '../public/js/wall/caption.js';
 import { clearedLine, worstLine } from '../public/js/wall/frame.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
+import { lockTarget } from '../public/js/wall/lock.js';
 import { freshness } from '../public/js/wall/galaxy/fresh.js';
 
 const PUBLIC = path.resolve(import.meta.dirname, '..', 'public');
@@ -729,6 +730,45 @@ test('sheetCaption: a site in trouble, the worst first (the crit as the hero, th
   assert.ok(cap.lines.indexOf(problems[0]) < cap.lines.findIndex((l) => l.kind === 'count'), 'trouble before the counts');
   assert.equal(cap.kicker, 'SITE · HV1', 'what was touched (T25), not the tour\'s count');
   assert.equal(cap.mark.tone, 'crit', 'the mark\'s glyph keeps its hue');
+});
+
+// Night 3 T27 (reviews/r36-dreamer.md galaxy 4): the hero and the lock at a
+// held site are its worst member, never a lesser one while a crit sits in it.
+test('T27: the hero and the lock target are the site\'s worst member, in the tour and on a sheet', () => {
+  const heroOf = (cap) => cap.lines.find((l) => l.kind === 'trouble');
+  const check = (m, what) => {
+    const site = m.nodes.find((n) => n.id === 'hv1');
+    const tour = galaxyCaption(captionLines(site, m, 1, 5));
+    const sheet = sheetCaption(site, m);
+    for (const [name, cap] of [['tour', tour], ['sheet', sheet]]) {
+      assert.equal(heroOf(cap).id, 'hv1-c', `${what}: the ${name} plate's hero is the crit`);
+      assert.equal(heroOf(cap).status, 'crit');
+      assert.equal(cap.mark.tone, 'crit', `${what}: the ${name} kicker's mark is the crit's`);
+    }
+    assert.deepEqual(lockTarget(site, m)[0], { id: 'hv1-c', kind: 'room' }, `${what}: the lock closes on the crit`);
+  };
+  // a warn and a crit member, in either model order
+  const m = sheetModel();
+  check(m, 'warn before crit');
+  const swapped = sheetModel();
+  const [a, b] = [2, 4];
+  [swapped.nodes[a], swapped.nodes[b]] = [swapped.nodes[b], swapped.nodes[a]];
+  check(swapped, 'crit before warn');
+  // the site's own warn does not outrank a crit inside it; it is named next
+  const own = sheetModel();
+  Object.assign(own.nodes[1], { status: 'warn', why: 'uplink 80%' });
+  own.nodes[2].status = 'ok';
+  check(own, 'site in its own warn');
+  const next = galaxyCaption(captionLines(own.nodes[1], own)).lines.filter((l) => l.kind === 'problem');
+  assert.deepEqual(next.map((l) => [l.status, l.text]), [['warn', 'HV1 · uplink 80%']], 'the site\'s own warn is the next problem');
+  // a node's own trouble still leads a tie, and a worse own status leads anything milder below it
+  const tie = sheetModel();
+  Object.assign(tie.nodes[1], { status: 'crit', why: 'power' });
+  assert.equal(heroOf(captionLines(tie.nodes[1], tie)).id, 'hv1', 'own crit beside a crit member: its own');
+  const down = sheetModel();
+  Object.assign(down.nodes[1], { status: 'down', why: 'unreachable' });
+  assert.equal(heroOf(sheetCaption(down.nodes[1], down)).word, 'UNREACHABLE', 'own down above a crit member: its own');
+  assert.deepEqual(lockTarget(down.nodes[1], down), [{ id: 'hv1', kind: 'site' }]);
 });
 
 test('sheetCaption: a calm site keeps its lines (the tour\'s plate drops them, a sheet was asked for)', () => {

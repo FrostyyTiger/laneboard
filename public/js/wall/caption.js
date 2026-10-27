@@ -187,7 +187,15 @@ export function captionLines(node, model, index = null, count = null) {
   const lines = [];
 
   const problems = problemsBelow(n, under, byId);
-  const bad = TROUBLE.includes(n.status) ? n : (problems[0] ?? null);
+  // The hero is the worst thing here, never a lesser one beside it (night 3
+  // T27): a node's own trouble leads unless something below it is worse
+  // (its own wins a tie), and then it is named among the next problems.
+  const ranked = TROUBLE.includes(n.status)
+    ? [n, ...problems].map((p, i) => ({ p, i }))
+      .sort((a, b) => SEVERITY.indexOf(b.p.status) - SEVERITY.indexOf(a.p.status) || a.i - b.i)
+      .map(({ p }) => p)
+    : problems;
+  const bad = ranked[0] ?? null;
   if (bad) {
     const st = statusStyle(bad);
     const why = bad.why ?? bad.sub;
@@ -224,7 +232,7 @@ export function captionLines(node, model, index = null, count = null) {
     : { kind: 'status', step: 'line', label: 'status', text: clip(statusText) });
 
   // The next problems after the one the plate leads with, one per line.
-  const named = problems.filter((p) => p !== bad).slice(0, NAMED_PROBLEMS - (bad ? 1 : 0));
+  const named = ranked.filter((p) => p !== bad).slice(0, NAMED_PROBLEMS - (bad ? 1 : 0));
   for (const p of named) {
     const st = statusStyle(p);
     const why = p.why ?? p.sub;
