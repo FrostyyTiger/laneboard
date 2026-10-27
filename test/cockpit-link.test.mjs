@@ -712,7 +712,8 @@ test('S-SEC-06 Without pairing, only the board\'s own people get the room link (
     ws.on('message', (d) => {
       const f = JSON.parse(d.toString());
       frames.push(f);
-      if (f.type === 'welcome') { clearTimeout(timer); resolve(frames); }
+      // A copy: frames that share the welcome's TCP chunk (the snapshot parts) arrive in the same tick.
+      if (f.type === 'welcome') { clearTimeout(timer); resolve(frames.slice()); }
     });
   });
   // The session is up before the prompt goes (`ready` of the fake, 200 ms after its start).
