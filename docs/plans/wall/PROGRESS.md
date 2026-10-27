@@ -301,7 +301,7 @@ Notes for every builder round (planner, round 1):
   `lanes is gone` test and the calm/overview warp checks came). Films: `shots/r29-galaxy` (`fx=warp&pace=wall`:
   red streaks only on the flight to crit HV2, 10.2 fps SwiftShader ×4) and `shots/r29-galaxy-calm`
   (`fx=lanes,warp`: flights to calm CLOUD and REMOTE draw no streaks, 13 fps, 0 console errors).
-- [ ] T16 (§7 Night 4 0b; README §7 Night 3 D `afterglow`; r46-skeptic touch 4, r59-dreamer 7) [ui] [variant:galaxy]
+- [x] T16 (§7 Night 4 0b; README §7 Night 3 D `afterglow`; r46-skeptic touch 4, r59-dreamer 7) [ui] [variant:galaxy]
   `fx=afterglow`: when trouble clears, its cluster keeps a faint outline ring in the old status hue on the plane,
   cooling red → amber → grey and gone after about 30 min; outline only, never filled, never pulsing, quieter than any
   live trouble (§2.1); the page remembers the clears it has seen (pure `fx.js` `afterglows(prev, model, now)` and
@@ -309,7 +309,17 @@ Notes for every builder round (planner, round 1):
   by default — done when: tests map a clear's age to hue (crit token → warn token → `--text-3`) and alpha (monotonic
   down, 0 at 30 min, always under the warn nebula's), a flap back to trouble drops the ring, nothing without
   `?fx=afterglow`; and filmstrips of `galaxy.html?demo=1&quality=0&pace=wall` with and without `&fx=afterglow` on the
-  large demo (whose trouble clears and returns) show the ring only with it, after a clear.
+  large demo (whose trouble clears and returns) show the ring only with it, after a clear. (commit c691da6)
+  Builder r30: `fx.js afterglows(prev, tones, now)` takes each drawn site's nebula tone (the scene's, after every
+  `update`) rather than the raw model, so a ring follows exactly what the nebula showed; the hue is the spell's worst
+  (crit → warn → crit-again stays one red spell), `afterglowAt` cools one step per 0.35 of the 30 min (blended over the
+  last 40 % of each step), alpha 0.42 × (1 − age)^1.4 (under NEBULA.warn's 0.7), fade-in 1.8 s (at once when still).
+  The ring is flat on the plane at radius 300, its line 0.35 % of the frame's height from the overview, dims while
+  its system is open and fades close up as the beacon does (`beaconNear`). `FX_NAMES` gains `afterglow` (T17 still
+  drops `comets`/`twinkle`). Tests 4141 → 4147. Films (`--tick 800`, so HV2's crit clears at 32 s):
+  `shots/r30-galaxy-with` (frame 12: a thin red ring round HV2 and an amber one round REMOTE, 14 fps SwiftShader ×4,
+  0 errors) and `shots/r30-galaxy-without` (no ring, 13.5 fps). The ring's near edge passes under the calm `HV2`
+  label (the DOM label stays on top and whole); T24's label placement may want to know about it.
 - [ ] T17 (§7 Night 4 0b; README §7 Night 3 D `activity`; night 2's research Q8 `fade` and `miss`; Q18 when answered)
   [ui] [variant:galaxy] `fx=activity`, replacing `comets` and `twinkle` (both removed: code, tests, `FX_NAMES`,
   docs): a planet with a working session or a running job (`fx.js workingPlanets` and the events `flowComets` reads)
