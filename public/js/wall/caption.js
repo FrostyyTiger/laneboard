@@ -239,6 +239,7 @@ export function captionLines(node, model, index = null, count = null) {
     lines.push({
       kind: 'problem',
       step: 'trouble',
+      id: p.id,
       label: p.status,
       text: clip([String(p.label ?? p.id).toUpperCase(), why].filter(Boolean).join(' · ')),
       status: p.status,
@@ -403,6 +404,8 @@ function lineEl(line) {
   const li = el('li', 'wall-caption-line');
   li.dataset.kind = line.kind;
   li.dataset.step = line.step ?? 'line';
+  // The node a row names, so a finger on the row can open it (Wall night 4 T1).
+  if (typeof line.id === 'string') li.dataset.subject = line.id;
   if (line.kind === 'metrics') {
     for (const b of line.bars) {
       const cell = el('span', 'wall-caption-metric');
@@ -479,6 +482,8 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
   let covering = false;
   // Where the lock's leader leaves the plate: its right edge, level with the trouble word (T25).
   let anchor = null;
+  // The node the trouble word names (night 4 T1: a finger on it opens it).
+  let heroSubject = null;
   let uncover = null;
   const later = (ms, fn) => {
     const t = timers.setTimeout(() => { pending.delete(t); fn(); }, Math.max(0, ms));
@@ -537,6 +542,7 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
       hero.style.setProperty('--cap-hero', `${heroVmin}vmin`);
     }
     if (lead) plate.dataset.hero = ''; else delete plate.dataset.hero;
+    heroSubject = typeof lead?.id === 'string' ? lead.id : null;
     typed.textContent = '';
     rest.textContent = cap.name;
     // A sheet is never typed (T25): no cursor, even before its plate fades in.
@@ -627,5 +633,25 @@ export function createCaption(root, { timing = CAPTION_TIMING, timers = globalTh
   /** Where a leader to the trouble node leaves the plate while it shows a trouble word, else null (T25). */
   const leaderFrom = () => (covering ? anchor : null);
 
-  return { show, hide, refresh, cover, leaderFrom, el: plate };
+  /**
+   * What on the plate names a node, while it is on screen (Wall night 4 T1):
+   * the trouble word and each shown row with a subject, `[{ id, box }]` with
+   * `box` in client px (`{ left, top, right, bottom }`). Read when asked (a
+   * finger's down), never per frame.
+   */
+  const targets = () => {
+    if (!shown) return [];
+    const rect = (e) => {
+      const r = e.getBoundingClientRect?.();
+      return r ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom } : null;
+    };
+    const out = [];
+    if (heroSubject && !hero.hidden) out.push({ id: heroSubject, box: rect(hero) });
+    for (const li of list.children) {
+      if (!li.hidden && li.dataset.subject) out.push({ id: li.dataset.subject, box: rect(li) });
+    }
+    return out.filter((t) => t.box);
+  };
+
+  return { show, hide, refresh, cover, leaderFrom, targets, el: plate };
 }

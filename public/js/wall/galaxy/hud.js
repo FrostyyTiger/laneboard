@@ -435,6 +435,8 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     // sheetCaption) as the camera gets there, its brackets at once.
     open: (leg) => say({ arriveMs: 0, ...leg, kind: 'site', lockMs: 0, cut: true, sheet: true }),
     covers: () => [caption.cover?.(), fleetCover(), tagCover(), clockCover()].filter(Boolean),
+    // What on the plate names a node, in client px (caption.js targets(), night 4 T1): a finger on it opens it.
+    targets: () => caption.targets?.() ?? [],
     // The node the plate's hero names while the plate is up, or null: labels.js does not name it twice (T20).
     named: () => (plateOn ? heroId : null),
     fleetCover,

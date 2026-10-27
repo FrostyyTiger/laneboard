@@ -510,6 +510,32 @@ export function memberPoints(sites, screenOf, names = [], minOpen = 0.5) {
   return out;
 }
 
+/** What a tap on the words over the canvas hits when it opens nothing (T1): not a star, not empty sky. */
+export const COVERED = Object.freeze({ covered: true });
+
+const inBox = (b, x, y) => Boolean(b) && x >= b.left && x <= b.right && y >= b.top && y <= b.bottom;
+
+/**
+ * The words are not transparent to the finger (night 4 T1, reviews/r51-touch
+ * galaxy 2): a tap at `x`, `y` (css px on the stage) inside one of `covers`
+ * (hud.covers(): the plate, the fleet line, the tag, the clock; `{ left, top,
+ * right, bottom }`) is never a star under it nor empty sky (a step back). On
+ * one of the plate's `rows` (caption.js `targets()`, `[{ id, box }]`) whose
+ * subject is a member of a site in `sites` it is that member, `{ id, site }`
+ * as memberPoints says it; anywhere else on the words it is COVERED. Null
+ * off every box: the scene's hit tests decide. Pure.
+ */
+export function coverHit(covers, rows, sites, x, y) {
+  for (const r of rows ?? []) {
+    if (r?.id == null || !inBox(r.box, x, y)) continue;
+    for (const s of sites ?? []) {
+      if (s && !s.gone && (s.members ?? []).some((m) => m?.id === r.id)) return { id: r.id, site: s.id };
+    }
+  }
+  if ((rows ?? []).some((r) => inBox(r?.box, x, y))) return COVERED;
+  return (covers ?? []).some((b) => inBox(b, x, y)) ? COVERED : null;
+}
+
 /**
  * True when a pointer event's contact is palm-sized: `width` or `height`
  * over `palmPx`. A device that does not measure its contacts reports 1

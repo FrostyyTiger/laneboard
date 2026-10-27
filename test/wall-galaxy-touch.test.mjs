@@ -9,7 +9,7 @@ import path from 'node:path';
 
 import { makeEl } from './helpers/fakedom.mjs';
 import {
-  AT_OVERVIEW, BACK, ORBIT, TAP, TOUCH, atRest, backShown, backStep, canGoBack, createBack, createGestures, createTaps,
+  AT_OVERVIEW, BACK, COVERED, ORBIT, TAP, TOUCH, atRest, backShown, backStep, canGoBack, coverHit, createBack, createGestures, createTaps,
   createTouch, hitTest, inertia, isPalm, orbitLimits, orbitOf, memberPoints, orbitPose, orbitStep, placeOf, planeAt,
   tapPoints, touchStep, zoomStep,
 } from '../public/js/wall/galaxy/touch.js';
@@ -697,7 +697,7 @@ test('galaxy/main.js wires planet taps (T11): members asked before sites, a plan
   const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
   assert.ok(pick.indexOf('memberPoints(') >= 0 && pick.indexOf('memberPoints(') < pick.indexOf('tapPoints('), 'members first');
   assert.match(js, /const openPlanet = \(id, site\) => \{\s*hud\.open\(\{ id, arriveMs: 0 \}\);/);
-  assert.match(js, /tap: \(hit\) => \{ if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); else goBack\(\); \}/);
+  assert.match(js, /tap: \(hit\) => \{ if \(hit\?\.covered\) return; if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); else goBack\(\); \}/);
 });
 
 // ---- T13: back ----
@@ -741,7 +741,7 @@ test('createBack: hidden until shown, a press steps back only while shown, its p
 });
 
 /** touchPage with taps and the back control wired as main.js wires them (openSite, openPlanet, goBack). */
-function backPage() {
+function backPage(words = null) {
   const p = touchPage();
   const button = stageEl();
   const sheets = [];
@@ -771,9 +771,11 @@ function backPage() {
   };
   createTaps(p.touch, {
     clock: p.now,
-    pick: (x, y) => hitTest(memberPoints(p.galaxy.world.sites, p.cam.screenOf), x, y)
+    // As main.js (night 4 T1): the words over the canvas first, when the page has any.
+    pick: (x, y) => (words ? coverHit(words.covers, words.rows, p.galaxy.world.sites, x, y) : null)
+      ?? hitTest(memberPoints(p.galaxy.world.sites, p.cam.screenOf), x, y)
       ?? hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), x, y),
-    tap: (hit) => { if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack(); },
+    tap: (hit) => { if (hit?.covered) return; if (hit?.site) openPlanet(hit.id, hit.site); else if (hit) openSite(hit.id); else goBack(); },
   });
   const tick = (ms) => { const r = p.tick(ms); back.show(backShown(p.touch.mode(), place)); return r; };
   const run = (ms) => { for (let t = 0; t < ms; t += 16) tick(16); };
@@ -883,4 +885,68 @@ test('galaxy/main.js wires back (T13): the control and an empty-sky tap step bac
   assert.match(wake, /toOverview\(\)/);
   const out = js.slice(js.indexOf('const toOverview = '), js.indexOf('};', js.indexOf('const toOverview = ')));
   for (const rx of [/cam\.fit\(\{ ms: TOUCH\.fitMs \}\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/]) assert.match(out, rx);
+});
+
+// ---- night 4 T1: the words are not sky ----
+
+test('coverHit: inside a cover is COVERED, off every box null, a row naming a member is that member', () => {
+  const sites = [
+    { id: 'hv1', members: [{ id: 'hv1-a' }, { id: 'hv1-b' }] },
+    { id: 'old', gone: true, members: [{ id: 'old-a' }] },
+  ];
+  const plate = { left: 40, top: 40, right: 400, bottom: 300 };
+  const clock = { left: 40, top: 800, right: 300, bottom: 880 };
+  const rows = [
+    { id: 'hv1-b', box: { left: 60, top: 200, right: 380, bottom: 240 } },
+    { id: 'hv1', box: { left: 60, top: 100, right: 380, bottom: 160 } }, // the site itself: no member
+    { id: 'old-a', box: { left: 60, top: 250, right: 380, bottom: 290 } }, // a gone site's
+  ];
+  assert.deepEqual(coverHit([plate, clock], rows, sites, 100, 220), { id: 'hv1-b', site: 'hv1' });
+  assert.equal(coverHit([plate, clock], rows, sites, 100, 120), COVERED, 'a row on no member opens nothing');
+  assert.equal(coverHit([plate, clock], rows, sites, 100, 270), COVERED);
+  assert.equal(coverHit([plate, clock], rows, sites, 390, 60), COVERED, 'the plate\'s padding');
+  assert.equal(coverHit([plate, clock], rows, sites, 100, 850), COVERED, 'the clock');
+  assert.equal(coverHit([plate, clock], rows, sites, 800, 450), null, 'the sky: the scene decides');
+  assert.equal(coverHit(null, null, null, 1, 1), null);
+});
+
+test('pointer events on the page: with a sheet up a tap on the plate over a star opens nothing; a member row opens it', () => {
+  const words = { covers: [], rows: [] };
+  const p = backPage(words);
+  p.into();
+  p.press();
+  p.tick(16);
+  assert.deepEqual([p.place().level, p.sheets.at(-1)], ['site', 'cloud'], 'cloud\'s sheet is up');
+  // The plate stands over cloud's star and its planet, and over a corner of empty sky.
+  const star = p.cam.screenOf('cloud'), planet = p.cam.screenOf('cloud-a');
+  assert.ok(hitTest(tapPoints(p.galaxy.world.sites, p.cam.screenOf), star.x, star.y)?.id === 'cloud', 'a star under the plate');
+  const left = Math.min(star.x, planet.x, 5) - 40, top = Math.min(star.y, planet.y, 5) - 40;
+  words.covers = [{ left, top, right: Math.max(star.x, planet.x) + 40, bottom: Math.max(star.y, planet.y) + 40 }];
+  const n = p.sheets.length, want = p.cam.want(), place = p.place();
+  for (const [i, at] of [star, planet, { x: 5, y: 5 }].entries()) {
+    p.tapAt(70 + i, at);
+    p.tick(16);
+    assert.equal(p.sheets.length, n, `tap ${i}: no sheet`);
+    assert.deepEqual(p.cam.want(), want, `tap ${i}: no flight`);
+    assert.equal(p.place(), place, `tap ${i}: no back step`);
+  }
+  // A row naming the planet, laid on the plate over the star: the finger opens the planet.
+  words.rows = [{ id: 'cloud-a', box: { left: star.x - 30, top: star.y - 10, right: star.x + 30, bottom: star.y + 10 } }];
+  p.tapAt(75, star);
+  p.tick(16);
+  assert.deepEqual([p.place().level, p.place().planet, p.sheets.at(-1)], ['planet', 'cloud-a', 'cloud-a']);
+  assert.deepEqual(p.cam.want(), want, 'the camera stays: a planet opens where it is');
+  // A row naming another site's member opens that one.
+  words.rows = [{ id: 'hv1-a', box: { left: star.x - 30, top: star.y - 10, right: star.x + 30, bottom: star.y + 10 } }];
+  p.tapAt(76, star);
+  p.tick(16);
+  assert.deepEqual([p.place().site, p.place().planet], ['hv1', 'hv1-a']);
+});
+
+test('galaxy/main.js wires the words (night 4 T1): coverHit before the scene, a covered hit opens nothing', () => {
+  const js = read('js/wall/galaxy/main.js');
+  const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
+  assert.ok(pick.indexOf('coverHit(hud.covers(), rows,') >= 0 && pick.indexOf('coverHit(') < pick.indexOf('memberPoints('), 'the words first');
+  assert.match(pick, /hud\.targets\(\)/);
+  assert.match(js, /tap: \(hit\) => \{ if \(hit\?\.covered\) return;/);
 });

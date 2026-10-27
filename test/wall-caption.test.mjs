@@ -529,3 +529,45 @@ test('caption: a sheet comes in whole with the plate, nothing typed, no cursor, 
     globalThis.document = prevDoc;
   }
 });
+
+test('caption targets (Wall night 4 T1): the hero and each shown problem row with its subject, none while hidden', async () => {
+  const { makeDocument, makeEl } = await import('./helpers/fakedom.mjs');
+  const { createCaption } = await import('../public/js/wall/caption.js');
+  const { sheetCaption } = await import('../public/js/wall/galaxy/hud.js');
+  const prevDoc = globalThis.document;
+  const doc = makeDocument();
+  const make = doc.createElement.bind(doc);
+  doc.createElement = (tag) => {
+    const e = make(tag);
+    e.replaceChildren = (...kids) => { e.textContent = ''; e.append(...kids); };
+    return e;
+  };
+  globalThis.document = doc;
+  try {
+    const waits = [];
+    const timers = { setTimeout: (fn, ms) => { waits.push({ fn, ms }); return waits.length; }, clearTimeout: () => {} };
+    const root = makeEl('div');
+    root.clientWidth = 1368;
+    root.clientHeight = 912;
+    const caption = createCaption(root, { timers, timing: CAPTION_TIMING });
+    const m = { nodes: [
+      { id: '__core', kind: 'core', status: 'ok' },
+      { id: 'hv2', kind: 'site', status: 'ok', parent: '__core' },
+      { id: 'hv2-a', kind: 'room', status: 'crit', why: 'disk full', parent: 'hv2' },
+      { id: 'hv2-b', kind: 'room', status: 'warn', why: 'slow', parent: 'hv2' },
+    ] };
+    const site = m.nodes[1];
+    assert.deepEqual(captionLines(site, m).lines.filter((l) => l.id).map((l) => [l.kind, l.id]), [['trouble', 'hv2-a'], ['problem', 'hv2-b']]);
+    assert.deepEqual(caption.targets(), [], 'nothing before the plate shows');
+    caption.show({ kind: 'site', id: 'hv2', arriveMs: 0 }, sheetCaption(site, m));
+    for (const w of waits.splice(0)) w.fn();
+    const rows = caption.el.children[3].children;
+    assert.deepEqual([...rows].map((li) => li.dataset.subject ?? null), [null, 'hv2-b', null], 'the status and count rows name nothing');
+    assert.deepEqual(caption.targets().map((t) => t.id), ['hv2-a', 'hv2-b']);
+    for (const t of caption.targets()) assert.deepEqual(Object.keys(t.box), ['left', 'top', 'right', 'bottom']);
+    caption.hide();
+    assert.deepEqual(caption.targets(), [], 'a fading plate opens nothing (its box still covers)');
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});
