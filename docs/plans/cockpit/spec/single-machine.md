@@ -332,12 +332,12 @@ and prints one line per check, in this order, then a summary. It changes nothing
 | 2 | `room` | `GET http://127.0.0.1:{port}/healthz`, 2 s | `127.0.0.1:{port} answers` | `FAIL nothing answers on 127.0.0.1:{port}`; `fix: start it: bin/laneboardctl start` |
 | 3 | `board` | `GET {cockpit.board.url}/healthz`, 5 s | `{url} answers (mode {mode})` | `FAIL {url} did not answer in 5 s`; `fix: point cockpit.board.url at the laneboard the agent should read` |
 | 4 | `mcp` | MCP `initialize` and `tools/list` on `127.0.0.1:{mcp.port}/mcp` with `{stateDir}/cockpit/mcp.token`, 5 s | `{n} tools on 127.0.0.1:{mcp.port}` | `FAIL no MCP server on 127.0.0.1:{mcp.port}`; `fix: the room starts it: check the room's log (bin/laneboardctl logs 100)` |
-| 5 | `agent-user` | `cockpit.agent.user` against the system's user list | `{user} (uid {uid}), not you` | unset: `FAIL the agent runs as you (uid {uid})`, `fix: give it its own user: laneboard cockpit agent-user (docs/cockpit.md)` (`warn` with `allowSameUser: true`); unknown: `FAIL user {user} does not exist`, `fix: laneboard cockpit agent-user {user}`; uid 0: `FAIL {user} is root`, `fix: use an unprivileged user` |
+| 5 | `agent-user` | `cockpit.agent.user` against the system's user list | `{user} (uid {uid}), not you` | unset: `FAIL the agent runs as you (uid {uid})`, `fix: give it its own user: laneboard cockpit agent-user (docs/cockpit.md)` (`warn` with `allowSameUser: true`). A bad, unknown, root or own-uid `user` is check 1's `FAIL` (`protocols.md` §11.12's `user` lines, D248) |
 | 6 | `agent-files` | §3.3's walk | `{user} reaches cockpit-agent/ and its cwd` | `FAIL {user} cannot enter {dir} (mode {mode})`, `fix: setfacl -m u:{user}:x {dir}` (one pair per directory); `skip` when check 5 is not `ok` |
 | 7 | `agent` | `GET /api/cockpit/admin/status` on the room (admin route, own uid, `screens.md` §6.1) | `ready: {agent} (laneboard tools connected)`; `warn ready: {agent}, tools not limited (allowUnrestricted)` with `allowUnrestricted: true` (`protocols.md` §11.11) | `FAIL agent down: {detail}` with `fix:` by detail (below); `FAIL not logged in`, `fix: log in as the agent's user: sudo -u {user} -H -s, then claude`; `warn laneboard tools did not start`, `fix:` check 6's; `skip` when check 2 failed |
 | 8 | `origin` | `publicUrl` | `{publicUrl} (https)` or `{publicUrl} (loopback)` | `FAIL {publicUrl} is plain http: a screen there cannot pair or link`, `fix: serve it over https (docs/cockpit.md), or use the box's own screen`; `warn` instead with `allowInsecure: true`, text `{publicUrl} is plain http: tokens and audio travel unencrypted` |
 | 9 | `speech` | `stt.url`: connect, wait for the first `config` message, 2 s | `{url} answers` | `skip cockpit.stt.url is none: typing only`; `FAIL {url}: {detail}` with `c2-voice.md` §10's detail words, `fix: check the speech service, or set cockpit.stt.url to none` |
-| 10 | `files` | `security.md` §3's start check, reported instead of stopping | `secrets and state are 0600/0700, owned by you` | `FAIL` the D210 line per path; `fix: chmod as the line says` |
+| 10 | `files` | `security.md` §3's start check, reported instead of stopping | `secrets and state are 0600/0700, owned by you` | one `FAIL` per wrong path, in the start check's order: the D210 line (a path that is no key starts with the path, D248) with `fix: chmod 600 {path}` (directory: `chmod 700 {path}`); owned by another uid: `FAIL {key}: {path} is owned by uid {uid}, not you`, `fix: chown {you} {path}` |
 
 - `fix:` for check 7's `agent down` by its `detail`: `sudo refused…` → `fix: run laneboard cockpit
   agent-user`; `spawn ENOENT` → `fix: cockpit.agent.command[0] does not exist: {path}`;
@@ -345,6 +345,10 @@ and prints one line per check, in this order, then a summary. It changes nothing
   (`protocols.md` §11.11) → `fix: make the agent enforce LANEBOARD_ALLOWED_TOOLS, or set
   cockpit.agent.allowUnrestricted (docs/cockpit.md); then restart the room`; anything
   else → `fix: see the room's log (bin/laneboardctl logs 100)`.
+- **`config` failed** (D248): checks 2 to 10 all need the config, so each prints `skip` with the text
+  `the config did not load`, and no request leaves the box. Check 1 runs the server's own parser
+  with its start checks, the `user` lookup included, so an unknown, root or own-uid
+  `cockpit.agent.user` is a `config` `FAIL` with §11.12's line, never a check 5 line.
 - **Line format**: the status padded to 6 characters (`ok`, `warn`, `FAIL`, `skip`), the check
   name padded to 12, the text; a `fix:` line under a non-`ok` line, indented 6 spaces. Then
   `{a} ok, {b} warn, {c} FAIL, {d} skip`. **Exit** 1 when any line is `FAIL`, else 0. A check never
@@ -580,6 +584,84 @@ no `ACME_AGENT_MODEL` in `env`.
 
 Test: `node:test` on the config module and the room's start (no Playwright), one `boot({expectExit:true})`
 per case comparing stderr's first line and the exit code; the last step against the fake agent.
+
+### S-ONE-13 `doctor` names each secret or state file others can read
+
+Given the doctor's module with only the `files` check enabled (S-ONE-07's way), the caller uid 1000
+(`user`), an injected `stat` over a temp state dir where `{tmp}/state/cockpit/` is 0700,
+`{tmp}/state/cockpit/mcp.token` is 0644, `cockpit.stt.tokenFile` `{tmp}/stt.token` is 0600 owned by
+uid 1001, and every other path of `security.md` §3's list right,
+When `doctor` runs,
+Then it prints exactly, in this order:
+
+```text
+FAIL  files       cockpit.stt.tokenFile: {tmp}/stt.token is owned by uid 1001, not you
+      fix: chown user {tmp}/stt.token
+FAIL  files       {tmp}/state/cockpit/mcp.token can be read by others; make it 0600 and owned by the room's user
+      fix: chmod 600 {tmp}/state/cockpit/mcp.token
+0 ok, 0 warn, 2 FAIL, 0 skip
+```
+
+and exits 1. When both paths are put right, Then the one line is `ok    files       secrets and
+state are 0600/0700, owned by you` and the exit is 0. Nothing in the temp tree changes (its
+`stat` before and after the run is equal).
+
+Test: `node:test` calling the doctor's module with an injected `stat` and `getuid`; stdout compared
+exactly; the temp tree's modes read with `fs.stat` before and after.
+
+### S-ONE-14 `doctor` with a config that does not load skips the rest
+
+Given an injected user lookup (`root` uid 0, the caller `user` uid 1000, no `nobody-here`) and no
+room running,
+When `doctor` runs with, one case at a time: (a) `cockpit.agent.kind: "acme"`;
+(b) `cockpit.agent.user: "nobody-here"`; (c) `cockpit.agent.user: "root"`,
+Then the first line is `FAIL  config      ` followed by `protocols.md` §11.12's line for that key and
+value, with `fix: the key named above (docs/config.md)`; the nine lines after it are `skip` with
+`the config did not load`, in §5's order; the summary is `0 ok, 0 warn, 1 FAIL, 9 skip`; the exit is
+1 within 2 s; no connection is made (the test's listener on the config's port counts 0 accepts).
+
+Test: `node:test` spawning `bin/laneboard cockpit doctor` with each config file and the injected
+lookup (D111's way); stdout compared line by line.
+
+### S-ONE-15 `doctor` turns the agent's state into a fix line
+
+Given the doctor's module with only the `agent` check enabled and a stubbed admin status answer
+(S-ONE-11's way), `cockpit.agent.user: "lb-agent"`,
+When the answer is, one case at a time,
+(a) `"agent":"down"`, `detail` `sudo refused: run laneboard cockpit agent-user (docs/cockpit.md)`;
+(b) `"agent":"down"`, `detail` `spawn ENOENT`, `command` `["/var/lib/lb-agent/.local/bin/claude"]`;
+(c) `"agent":"down"`, `detail` `the agent declares no tool allowlist (see cockpit.agent.allowUnrestricted)`;
+(d) `"agent":"down"`, `detail` `exited with code 3`;
+(e) `"agent":"not-logged-in"`;
+(f) `"agent":"ready"`, `"tools":null`;
+(g) no answer (the room's port closed),
+Then the `agent` line and its `fix:` line are: (a) `FAIL agent down: sudo refused: …`, `fix: run
+laneboard cockpit agent-user`; (b) `FAIL agent down: spawn ENOENT`, `fix: cockpit.agent.command[0]
+does not exist: /var/lib/lb-agent/.local/bin/claude`; (c) `FAIL agent down: the agent declares no
+tool allowlist …`, `fix: make the agent enforce LANEBOARD_ALLOWED_TOOLS, or set
+cockpit.agent.allowUnrestricted (docs/cockpit.md); then restart the room`; (d) `FAIL agent down:
+exited with code 3`, `fix: see the room's log (bin/laneboardctl logs 100)`; (e) `FAIL not logged
+in`, `fix: log in as the agent's user: sudo -u lb-agent -H -s, then claude`; (f) `warn laneboard
+tools did not start` with check 6's `fix:`; (g) `skip` (check 2 failed). Exit 1 for (a)-(e), 0 for
+(f) and (g) with only this check enabled.
+
+Test: `node:test` on the doctor's module, one stubbed answer per case; the `agent` line and the
+`fix:` line compared exactly, the status column checked for each.
+
+### S-ONE-16 `doctor` reaches the speech service, or says why not
+
+Given the doctor's module with only the `speech` check enabled and the fake speech service
+(`stand-ins.md` §3) on `ws://127.0.0.1:{p}/asr` as `cockpit.stt.url`, the token file holding `t0k`,
+When the fake speech's first utterance has (a) fault `{"requireToken":"t0k"}`; (b) fault `"401"`;
+(c) fault `"no-config"`; (d) the fake is stopped (`stop()`, the port refuses),
+Then the `speech` line is (a) `ok    speech      ws://127.0.0.1:{p}/asr answers`; (b) `FAIL
+ws://127.0.0.1:{p}/asr: the room's token was refused: fix cockpit.stt.tokenFile`; (c) and (d)
+`FAIL ws://127.0.0.1:{p}/asr: no answer in 2 s`, each `FAIL` with `fix: check the speech service, or
+set cockpit.stt.url to none`; (c) ends 2.0 s ± 0.2 s after the connect; the fake speech logs no
+audio frame in any case.
+
+Test: `node:test` with the fake speech in the test process (its faults, §3.3); the line compared
+exactly, (c)'s time from `performance.now()` around the call.
 
 ## 8. Not in v1
 

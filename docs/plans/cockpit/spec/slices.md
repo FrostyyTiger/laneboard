@@ -285,7 +285,7 @@ S-C6-03 S-C6-04 S-C6-05. The confirm card is `c5-c6.md` §8. The job format, too
 | History | none written; planned with §5.2 | the board change of §5.2 |
 | C5 | S-C5-01 S-C5-02 S-C5-03 S-C5-04 S-C5-05 S-C5-06 S-C5-07 | Q-O34; T128 (messages, fake voice service) |
 | C6 | S-C6-06 S-C6-07 | the control-plane review, Q-O7, Q-O35; fenced for unattended work |
-| One | S-ONE-01 S-ONE-02 S-ONE-03 S-ONE-04 S-ONE-05 S-ONE-06 S-ONE-07 S-ONE-08 S-ONE-09 S-ONE-10 S-ONE-11 S-ONE-12 | C1; Q-O36 (under a) S-ONE-02's first step changes to a warning; under c) `allowSameUser` goes); research Q18 (`sudo` relaying signals, D214); the admin status route of `single-machine.md` §5; the bridge's allowlist check (`protocols.md` §11.11, D240) |
+| One | S-ONE-01 S-ONE-02 S-ONE-03 S-ONE-04 S-ONE-05 S-ONE-06 S-ONE-07 S-ONE-08 S-ONE-09 S-ONE-10 S-ONE-11 S-ONE-12 S-ONE-13 S-ONE-14 S-ONE-15 S-ONE-16 | C1; Q-O36 (under a) S-ONE-02's first step changes to a warning; under c) `allowSameUser` goes); research Q18 (`sudo` relaying signals, D214); the admin status route of `single-machine.md` §5; the bridge's allowlist check (`protocols.md` §11.11, D240) |
 
 `S-SEC-` (T17) and `S-ONE-` (T19) ids go to the slice whose code they test, written into this file
 by the task that writes them.
@@ -317,10 +317,10 @@ by the task that writes them.
 | S-SEC-01, 02, 03, 06 | C1 |
 | S-SEC-04 | Pair |
 | S-SEC-05 | C2 |
-| S-ONE-01..12 | One |
+| S-ONE-01..16 | One |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 209 live ids in all (round 130, S-CW-18 and S-ONE-12 by T73).
+D55). 213 live ids in all (round 131, S-ONE-13..16 by T74).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired
