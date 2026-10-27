@@ -343,3 +343,125 @@ interface's message shape (what BroadcastChannel/postMessage kiosks and other di
 countdown readable from 3 m, and one `IDEAS:` question for `activity`. The dreamer stays in the rotation;
 triage keeps its cap of 3.
 
+
+### Night 5
+Make the galaxy feel right in the hand: the look the owner picked in a live sketch, nested moons, a
+roomier system, touch that lets him turn a system in 3D, and a node card. Night 4 is archived in
+`nights/night-4/` (its PROGRESS, reviews r1-r61, research Q16-Q18); read its morning report first.
+
+**The owner, 2026-10-27 evening** (after the Wall merged, PR #25, and three rounds of a live sketch on the
+large demo fleet). The sketch is `sketch/night5/sketch5.diff` (against `main` 0c6b951; branch `sketch5`
+on the run VM, never merged): every change sits behind a `?sk_*` switch, its panel compared them, and the
+owner chose. **His picks become the defaults, with no switch**; the switches, `sketch-panel.js`,
+`sketch.js`, `sketch5.css` and the "v1/v2 pick" presets do not land. The sketch is a reference for
+what it should look and feel like, not code to paste: it broke 11 guardrail tests (a new sheet in
+`public/css/`, modules reading `SK` or the DOM at load time, tap wiring checked as source, a person's name
+in a label). Rebuild each part inside the guardrails, with tests.
+- His words on the overall direction: "excellent. I like the movement, I like how it opens, I really
+  like how it spins slowly." Keep the glow and the nebula haze ("looks really good"); keep right-click
+  back and double-click zoom-out ("that's great, keep that").
+- "Version 3 looks really good": the defaults are the sketch's `sk_tight=2 sk_size=1 sk_tint=2 sk_sun=1
+  sk_soft=1 sk_haze=1 sk_arr=2 sk_sys=1 sk_moons=1 sk_pal=1 sk_card=1`.
+
+**The cockpit shares these files** (cockpit night C1b runs in parallel; agreed with the cockpit session
+2026-10-27). `loop/fenced.txt` lists what this night must not change. Not fenced but shared:
+- This night owns `galaxy/touch.js` (and fixes its `createReturn` leftover: Back can fly to a pose a show
+  left; it must return to the explore pose), the zoom/flight timings and hand-over eases in
+  `galaxy/director.js`, the selection levels (site → planet → moon) and the node card.
+- `galaxy/main.js` is shared: change only selection, card and look parts. The tour hold and the pane
+  hooks stay as they are. C1b changes the board-down/stale caption and tag parts there.
+- `public/css/wall.css`: add rules for the card and new tappables; do not change existing rules.
+- The page contract is additive only: `window.__cockpitView` and `data-wall-state` keep every name and
+  value. Moons join it (`screenOf`, `emphasis`, a show `fly_to` accept a moon id; `fly_to` on a moon frames
+  it as planet → system does now). Stale/offline/board-down looks are C1b's (cockpit screens.md §7):
+  do not build them.
+- Every tappable this night adds or resizes: at least 48 px, a visible pressed state, `touch-action:
+  manipulation` (cockpit spec D224; C1b's table test S-C1-41 will include the Wall's).
+- Any change a round needs in a fenced file is written as a patch under `docs/plans/wall/patches/` with
+  one paragraph of why; the cockpit folds it in.
+
+**A. The look (his picks, as defaults; sketch params in brackets):**
+1. Spacing half (`sk_tight=2`): arms, gaps, site lift, dust and ribbon at 0.5x, nebulae and sun halo
+   0.64x, system spread 0.75x; the overview frames the whole galaxy snugly.
+2. The rosette (`sk_arr=2`): a wider-wound two-arm spiral, a site every 72°, all sites level, only shown
+   sites take slots; the first site far enough from the sun that an open system never crowds the sun.
+3. Size is what it carries (`sk_size=1`): a planet by 0.8 + 0.35·log2(1+n) of what is below it, a star
+   by 0.8 + 0.2·log2(1+planets), clamped 0.8x-2.2x, never by trouble. Big spheres must not look faceted.
+4. Colour (`sk_tint=2`, `sk_pal=1`, `sk_sun=1`): each site a quiet warm-set tint (teal, indigo, plum,
+   sage) in its calm nebula and dust; "lift": calm bodies and names a step lighter (stone), on a deep
+   blue-black ground instead of pure black; a warmer, softer sun. "Some stuff is drowned out by the
+   black. No neon, it feels cheap." Status hues stay the loudest thing on screen; tints from tokens
+   through `palette.js`.
+5. Depth haze (`sk_haze=1`): distance fog from 0.6x to 2.6x of the look-at distance; status-hued
+   materials and trouble nebulae never fogged.
+6. Gentler motion (`sk_soft=1`): open/fold 2800 ms on smootherstep, the target opening from 0.32 of a
+   flight, held drift 0.6x, dust turn 0.6x.
+
+**B. A roomier system and nested moons:**
+1. System room (`sk_sys=1`): planets spread 1.4x with a minimum gap (13 % of the system's reach); what
+   hangs below moves with its planet; labels never collide (HV1's builders cluster is the test case).
+2. Moons (`sk_moons=1`): services under a room, lanes under a builder, sessions under a lane. Folded, they
+   sit tight to their planet at half size, unnamed and not tappable. Tapping a planet (or one of its
+   moons) opens them onto a ring round it, with the same open time and easing as a site, tilted toward
+   the camera, a faint orbit line and thin tethers. About 110 px apart on screen, at least 72 px from the
+   planet, named and tappable while open. "It's so tiny I need to select which one I meant": no picker.
+3. Picking a planet or moon flies the camera closer (about 45 %), the planet left of centre, so the
+   ring and the card use the empty screen.
+
+**C. Touch and mouse** (the owner: "the target is a bit too small… when I'm clicked in I need to turn it
+in 3D, which I can't because it collapses if I click again… moving out is way too quick… the turning at
+the overview is a bit finicky"):
+1. Hit targets in screen space: 48 px for a finger, 28 px for a mouse, the nearest centre wins.
+2. Inside an open system a drag orbits it round its own star (both axes, pitch clamped) and it stays open.
+   The first drag must not shift the system on screen (the sketch carried an aim offset). A tap on empty
+   space does nothing.
+3. Back is right-click, double-click/double-tap on empty space, or the Back control, one step at a time
+   (moon → planet → system → overview); Back from a planet folds its moons and keeps the camera where he
+   turned it. Zoom-out flights 3000 ms on a soft ease, double-click to the overview too.
+4. The overview turn: 0.0032 rad per px, the camera follows with a short lag, a longer gentler coast,
+   capped fling speed.
+5. The `createReturn` leftover (above).
+Done when page tests (pointer events, fake clock) drive: tap site → tap planet (moons open) → drag-turn
+(system stays open, star stays put) → empty tap (nothing) → tap moon → Back ×3 → overview, with the
+flight durations asserted; and a filmstrip shows it on the large demo.
+
+**D. The node card** (display and navigation only; the design brief is `research/stellaris-ui-brief.md`,
+from a research agent on Stellaris's interface, 2026-10-27):
+1. An anchored card beside the selected node with a visible leader line; it docks to the right edge
+   when it does not fit beside the node **or would cover the open system's planets** (the sketch never
+   did the second). It keeps out of the fleet line and the tag.
+2. Header: status dot, name, type chip, parent path (`hv1 › vm-a`), a 48 px ×. 3-4 key stats from the
+   model (only the value that is off takes a status hue). A "Below" strip of child chips (tap: select
+   and fly there; `+N`). An action row of at most 4 buttons and `…`.
+3. Actions per type: site (Open, What's below, Board, Pin; `…` Proxmox link), room (Logs, Board, What's
+   below, Pin; `…` Fly to, Terminal link, Proxmox link), builder (Run log, What's below, Board, Pin),
+   service moon (Logs, Board, Pin, Fly to), lane moon (Log, PR, Pin, Fly to). Navigation actions work;
+   links open the existing app views where one exists, otherwise they are absent (never a dead button).
+4. **Fleet actions are cockpit C6, not this night**: restart a service, pause a builder or lane, snooze or
+   ack an alert are drawn as disabled outline buttons tagged `later`, in their real slots; a tap says so.
+   No button on the Wall does anything to the fleet. Nothing heavier (restarting a room or a host) ever
+   appears.
+5. Calm: grey glass from tokens, the site tint only as a 2 px top edge, a 150 ms fade, the galaxy dimmed
+   slightly behind it. Closes on ×, Esc, an empty tap, a second tap on its node, a sideways swipe, or 60 s
+   idle (then the tour may resume as now). The old left-hand sheet for a tapped node gives way to the card;
+   the caption and the fleet line stay.
+6. Accessible: the card is a labelled region, its buttons are real buttons with names, focus moves into
+   it on open and back on close, Esc works.
+
+**E. Docs and handover**: `docs/wall.md` (the look, moons, the card, the gestures; not the "Show
+commands" or handle sections, which are fenced), demo data for everything, and a morning report that
+lists what changed in shared files (`main.js`, `wall.css`, `director.js`) for the cockpit's rebase.
+Night 4's open tasks stay under `## Later` (night 4's PROGRESS); only the ones that this night's parts
+make moot are closed, with the reason.
+
+**Night 6 (planned, not this night):** the rest of the Stellaris brief: an alert tray (empty when all is
+well, a "clear for N days" streak), an outliner with an "all green" seal per site, a situation log (agent
+nights as finished projects), a slim top bar of fleet totals, map modes (status, backups, load, agents).
+Not built tonight.
+
+Order: A (one task per item, A1-A2 together), then B1, B2-B3, then C (C1-C3 and C5 before C4), then D,
+interleaved with triage's panel fixes; E last. Plan every part as tasks (up to 22): nothing of A-E waits
+in `## Later` (night 4 lesson: parts parked there starve while panels add tasks). 2 research questions:
+moons and nested selection in 3D strategy maps (how they stay tappable), and how a node card stays out
+of the way on a 3D view. The dreamer stays in the rotation; triage keeps its cap of 3. Keep the speed on
+the Surface (script ms per frame, `?perf=1`).
