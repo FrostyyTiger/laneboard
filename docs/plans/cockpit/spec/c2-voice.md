@@ -2,8 +2,9 @@
 
 Speaking instead of typing: the talk button, its two gestures, its states and the live words in the
 input (§1-§6, part 1, T6). Fixing a word by tapping the text (§7), the DE/EN choice (§8), the
-speech-to-text config (§9), the service slow or down (§10), the physical button and the talk key
-(§11) and the kiosk microphone note (§12) are part 2 (T7), with scenarios in §13. Words
+speech-to-text config (§9), the service slow or down (§10), the talk key (§11) and the kiosk
+microphone note (§12) are part 2 (T7), with scenarios in §13. §14 is **C2b, the physical button**:
+a later slice, not part of C2's build night (D55). Words
 as in the glossary (`README.md`). Sizes are CSS px at 1368x912; times in s or ms; budgets `B<n>` are
 the speed budget in `README.md`.
 
@@ -345,8 +346,8 @@ which process is the room: pending Q-O15).
   the session (close 4400).
 - **`none`** (also what a stranger without a speech service gets): the talk button is not drawn;
   `SEND` takes its place (on the Wall x 1280-1344) and the textarea runs from x 784 to x 1264; the
-  placeholder reads `Type a message`; the talk key (§11) does nothing; the button API answers
-  `409 voice-off`. On the closed pane the opener is the cockpit button (`screens.md` §4, pending
+  placeholder reads `Type a message`; the talk key (§11) does nothing. On the closed pane the
+  opener is the cockpit button (`screens.md` §4, pending
   Q-O11). Typing is the whole C1, so the pane is complete without voice (`single-machine.md`, T19).
 
 ## 10. Speech-to-text slow or down (D50)
@@ -379,12 +380,15 @@ the `error` state (§3) with its line in §5's place and look, `data-talk-error`
   connect succeeds.
 - **`none` is not a failure**: §9.
 
-## 11. The physical button and the talk key (pending Q-O8, Q-O20)
+## 11. The talk key
 
 Plan C2: "anything that can send a key or an HTTP call (a USB macro key, a home automation button)
-maps to 'talk' on a chosen screen. The talk button is an API, not just a widget." Two ways in, both
-driving the same gesture logic as the on-screen button (§2): a press is a `pointerdown`, a release
-a `pointerup`, the 400 ms rule decides tap or hold.
+maps to 'talk' on a chosen screen. The talk button is an API, not just a widget." `spec-input.md`
+§4: "**Later**, a physical button on the desk does the same." So C2 builds one way in, the talk
+key: a USB macro key types it into the screen. The talk button's "API" is the page's own press and
+release functions, which the key calls; they drive the same gesture logic as the on-screen button
+(§2): a press is a `pointerdown`, a release a `pointerup`, the 400 ms rule decides tap or hold. The
+HTTP call for a button that cannot type into the screen is C2b (§14).
 
 ### The talk key, on the screen (D51)
 
@@ -395,10 +399,150 @@ a `pointerup`, the 400 ms rule decides tap or hold.
   the keyboard focus. With the pane closed it opens it, as a press on the talk button does
   (`c1-talk.md` §2).
 
+## 12. The kiosk microphone (note for `docs/cockpit.md`)
+
+What the later `docs/cockpit.md` says, from research Q3. The microphone needs two things: a
+**secure page** and a **granted permission**; without either, §5's lines say so and typing works.
+
+1. **A secure page.** `getUserMedia` exists only in a secure context. Serve the cockpit page over
+   HTTPS (a tailnet's HTTPS proxy, or a reverse proxy with a certificate). Where that cannot be
+   done, the managed policy `OverrideSecurityRestrictionsOnInsecureOrigin` lists the one exact
+   origin (`http://hub.example.invalid:7777`); it is the same as the flag
+   `--unsafely-treat-insecure-origin-as-secure`. `localhost` counts as secure.
+2. **No prompt.** On Chrome or Chromium on Linux and ChromeOS, a managed policy file:
+
+   ```json
+   {
+     "AudioCaptureAllowed": false,
+     "AudioCaptureAllowedUrls": ["https://cockpit.example.invalid/"]
+   }
+   ```
+
+   `AudioCaptureAllowed: false` turns every prompt off, so only the listed origin can use the
+   microphone. List the exact origin; never a pattern for everything.
+3. **Or with a prompt.** Without the policy the browser asks once; a persistent browser profile
+   keeps the answer (as the device token, `screens.md` §6).
+4. **Android tablets**: the no-prompt policy is not listed for Android; whether a no-prompt route
+   exists there is research Q7. The prompt path (3) works.
+5. **What the screen shows**: the indicator of the browser is on only while the talk button shows
+   an open microphone (D46). Audio goes to the room and from there only to `cockpit.stt.url`
+   (plan §4).
+6. Tests use `--use-fake-device-for-media-stream` and the browser context's microphone permission,
+   never a policy (§6).
+
+## 13. Scenarios, part 2
+
+Setup as §6. The fake speech service (T18) can also be scripted to refuse a connect, answer
+slowly, fail mid-session and withhold the final; the stand-in room's config sets
+`cockpit.stt.language` per scenario.
+
+### S-C2-11 Tap the live words to fix one: the microphone closes, the word is selected, nothing sent
+Given the fake speech scripted: partial `restart the runner on builder-b` by 1.6 s, final `Restart
+the runner on builder-b.` 0.15 s after the end frame,
+When the owner taps the talk button at t = 0, then taps the word `builder-b` in `[data-talk-text]`
+at t = 3.0 s,
+Then by t = 3.1 s the fake speech service gets no more audio frames; by t = 3.3 s
+`data-talk="idle"`, the textarea holds `Restart the runner on builder-b.`, its selection covers
+`builder-b.` (word 5), the textarea has the focus, the hint reads `FIX, THEN SEND · NOT SENT YET`
+until t = 8.3 s; no prompt is drawn.
+When the owner types `builder-a.` and taps `SEND`,
+Then the prompt reads `Restart the runner on builder-a.` with the label `YOU · HH:MM` (no `SPOKEN`).
+Test: Playwright; tap at the word's rect from `Range.getBoundingClientRect`; assert
+`selectionStart`/`selectionEnd`, `document.activeElement`, the received-turns log (one turn, the
+fixed text).
+
+### S-C2-12 A tap on the text during a hold is ignored; during `final` it turns the send into a fix
+Given the fake speech scripted as S-C2-01, and for the second run the final delayed by 1.0 s,
+When the owner holds the talk button from t = 0 and a second finger taps the live words at t = 1.8 s,
+then releases at t = 2.5 s,
+Then the microphone stays open until the release and the prompt `What failed tonight?` is sent (B3).
+And in the second run, when the owner holds from t = 0 to 2.5 s and taps the text at t = 2.7 s,
+Then nothing is sent; at t ≈ 3.5 s the final goes into the textarea with the tapped word selected.
+Test: Playwright, CDP two-point touch for the first run; received-turns count (1, then 0).
+
+### S-C2-13 DE/EN: one tap switches, the choice is the screen's, the service gets it
+Given `cockpit.stt.language: ["de", "en"]`, a fresh browser profile,
+Then `[data-talk-lang]` shows `DE` at x 784-848 and the textarea starts at x 864.
+When the owner taps it,
+Then it shows `EN` within 0.1 s; a press opens the fake speech session with `language=en` in its
+query (the service's connect log); while listening the language button is `disabled`.
+When the page reloads, it still shows `EN`. With `cockpit.stt.language: "auto"` instead there is
+no `[data-talk-lang]`, the textarea starts at x 784, and the session opens with `language=auto`.
+Test: Playwright; element rects; the fake speech service's connect log; `localStorage`
+`cockpit.lang`.
+
+### S-C2-14 No speech service configured: the pane is text only, and complete
+Given `cockpit.stt.url: "none"`,
+Then the open pane has no `[data-talk]`; `SEND` is at x 1280-1344; the textarea runs from x 784 to
+x 1264 with the placeholder `Type a message`; typing `status` and `Enter` sends it (B8). `F13`
+changes nothing.
+Test: Playwright; no `getUserMedia` call is made (a page-side spy).
+
+### S-C2-15 The speech service does not answer: an exact line after 2 s, typing works, a tap retries
+Given the fake speech service stopped (T32's verb),
+When the owner taps the talk button at t = 0,
+Then `data-talk="listening"` by t = 0.2 s (B1: the microphone is the screen's); at t = 2.0 s the
+microphone closes, `data-talk="error"`, `[data-talk-error="stt-down"]` reads `Speech-to-text is not
+answering, so nothing was heard. Typing works. Tap TALK to try again.`; a second paired screen's
+talk button shows the struck glyph.
+When the fake speech service is started and the owner taps the talk button again,
+Then the line goes, `data-talk="listening"`, and partials arrive as in S-C2-01; the second screen's
+glyph is back within 1 s.
+And with the service scripted to refuse with 403, the line reads `Speech-to-text has no free
+session. Typing works. Tap TALK to try again.` (`stt-busy`) at once.
+Test: Playwright, two pages; assert the times with ± 0.2 s on the 2.0 s; the line texts exactly.
+
+### S-C2-16 The service fails mid-sentence: the words so far are a draft, nothing sent
+Given the fake speech scripted: partial `stop the nightly` at 0.6 s, then at 1.2 s an update with
+`status: "error"`,
+When the owner holds the talk button from t = 0 to t = 3.0 s,
+Then by t = 1.4 s the microphone is closed, `data-talk="error"`, the textarea holds `stop the
+nightly`, the line reads `Speech-to-text failed while listening. Your words so far are in the input,
+not sent.`; the release at 3.0 s sends nothing.
+And the same with the connection closed with code 1011 instead of the error update.
+Test: Playwright; received-turns count 0; the textarea value; the line text exactly.
+
+### S-C2-17 Slow words show a hint; a missing final keeps the text
+Given the fake speech scripted: partial `how is` at 0.6 s with `remaining_time_transcription: 2.4`,
+`how is the hub` at 1.6 s with `0.6`; no final after the end frame,
+When the owner holds the talk button from t = 0 to t = 2.5 s,
+Then from the first update until the second the hint reads `SPEECH-TO-TEXT IS SLOW · WORDS MAY LAG`
+and `data-talk-slow` is set; after the second they are gone; at t = 5.5 s (3.0 s after the release)
+the textarea holds `how is the hub`, `[data-talk-error="stt-no-final"]` reads `Speech-to-text did
+not finish in 3 s. Your words are in the input, not sent.`, and nothing has been sent.
+Test: Playwright; poll the hint and the attribute every 50 ms; the received-turns count 0.
+
+### S-C2-20 The talk key: F13 tap-tap and hold, from any focus
+Given the pane closed, the fake speech scripted as S-C2-01,
+When the test presses `F13` (down t = 0, up t = 0.1 s) and again at t = 3.0 s,
+Then the pane opens and listens after the first, the prompt is sent after the second (B3 from the
+second `keyup`).
+And with the textarea focused holding `on hub,`, `F13` held from t = 0 to 2.5 s (with `repeat`
+`keydown`s every 33 ms) sends `on hub, What failed tonight?` once; the textarea stays free of any
+character from the key.
+Test: Playwright `keyboard.down('F13')`/`up`; CDP for the repeated `keydown`s; received-turns log.
+
+### S-C2-21 A page that is not secure: the microphone line says why
+Given the page served on a non-secure origin (`http://hub.example.invalid:7777` through a test
+host mapping, no policy), so `navigator.mediaDevices` is undefined,
+When the owner taps the talk button,
+Then within 0.2 s `data-talk="error"`, `[data-talk-error="mic-insecure"]` reads `The microphone
+needs a secure page (HTTPS). Typing works. docs/cockpit.md says how.`; typing works.
+Test: Playwright with `--host-resolver-rules` mapping the name to the stand-in; or, where that is
+not possible, an init script deleting `navigator.mediaDevices` (the build night logs which).
+
+## 14. C2b, the physical button (later; pending Q-O8, Q-O20)
+
+`spec-input.md` §4: "**Later**, a physical button on the desk does the same." Not part of C2's build
+night: C2 ships the talk key (§11), which already serves a USB macro key. C2b is its own slice
+(`slices.md`, T20), built after the owner has used voice and answered Q-O8 and Q-O20; until then the
+room has no `/api/cockpit/talk` route and no button token (D55). Its scenario ids are `S-C2B-`.
+
 ### The button API, on the room
 
 For a button that cannot type into the screen (a home automation button). Written for Q-O8's
-recommendation a) and Q-O20's recommendation a).
+recommendation a) and Q-O20's recommendation a). It drives the screen's press and release
+functions (§11), so the gesture logic is the talk key's.
 
 **A button's token.** On the room: `laneboard cockpit button add hall --screen desk` prints the
 token once (`hall: lbbtn_…`, 32 random bytes, base64url) and keeps only its hash. `--screen` names
@@ -452,124 +596,13 @@ reported its new state, at most 1.0 s later. Bodies are JSON.
   word, 120 s in all): nothing is sent on its own.
 - Every call is one line in the room's audit log (`button hall → desk toggle 200`); the format is
   `security.md`'s (T17).
+- With `cockpit.stt.url: "none"` (§9) every valid call answers `409 voice-off`.
 
-## 12. The kiosk microphone (note for `docs/cockpit.md`)
+### Scenarios
 
-What the later `docs/cockpit.md` says, from research Q3. The microphone needs two things: a
-**secure page** and a **granted permission**; without either, §5's lines say so and typing works.
+Setup as §13. API calls go from the test process with `fetch`, which sends no `Origin`.
 
-1. **A secure page.** `getUserMedia` exists only in a secure context. Serve the cockpit page over
-   HTTPS (a tailnet's HTTPS proxy, or a reverse proxy with a certificate). Where that cannot be
-   done, the managed policy `OverrideSecurityRestrictionsOnInsecureOrigin` lists the one exact
-   origin (`http://hub.example.invalid:7777`); it is the same as the flag
-   `--unsafely-treat-insecure-origin-as-secure`. `localhost` counts as secure.
-2. **No prompt.** On Chrome or Chromium on Linux and ChromeOS, a managed policy file:
-
-   ```json
-   {
-     "AudioCaptureAllowed": false,
-     "AudioCaptureAllowedUrls": ["https://cockpit.example.invalid/"]
-   }
-   ```
-
-   `AudioCaptureAllowed: false` turns every prompt off, so only the listed origin can use the
-   microphone. List the exact origin; never a pattern for everything.
-3. **Or with a prompt.** Without the policy the browser asks once; a persistent browser profile
-   keeps the answer (as the device token, `screens.md` §6).
-4. **Android tablets**: the no-prompt policy is not listed for Android; whether a no-prompt route
-   exists there is research Q7. The prompt path (3) works.
-5. **What the screen shows**: the indicator of the browser is on only while the talk button shows
-   an open microphone (D46). Audio goes to the room and from there only to `cockpit.stt.url`
-   (plan §4).
-6. Tests use `--use-fake-device-for-media-stream` and the browser context's microphone permission,
-   never a policy (§6).
-
-## 13. Scenarios, part 2
-
-Setup as §6. The fake speech service (T18) can also be scripted to refuse a connect, answer
-slowly, fail mid-session and withhold the final; the stand-in room's config sets
-`cockpit.stt.language` per scenario. API calls go from the test process with `fetch`, which sends
-no `Origin`.
-
-### S-C2-11 Tap the live words to fix one: the microphone closes, the word is selected, nothing sent
-Given the fake speech scripted: partial `restart the runner on builder-b` by 1.6 s, final `Restart
-the runner on builder-b.` 0.15 s after the end frame,
-When the owner taps the talk button at t = 0, then taps the word `builder-b` in `[data-talk-text]`
-at t = 3.0 s,
-Then by t = 3.1 s the fake speech service gets no more audio frames; by t = 3.3 s
-`data-talk="idle"`, the textarea holds `Restart the runner on builder-b.`, its selection covers
-`builder-b.` (word 5), the textarea has the focus, the hint reads `FIX, THEN SEND · NOT SENT YET`
-until t = 8.3 s; no prompt is drawn.
-When the owner types `builder-a.` and taps `SEND`,
-Then the prompt reads `Restart the runner on builder-a.` with the label `YOU · HH:MM` (no `SPOKEN`).
-Test: Playwright; tap at the word's rect from `Range.getBoundingClientRect`; assert
-`selectionStart`/`selectionEnd`, `document.activeElement`, the received-turns log (one turn, the
-fixed text).
-
-### S-C2-12 A tap on the text during a hold is ignored; during `final` it turns the send into a fix
-Given the fake speech scripted as S-C2-01, and for the second run the final delayed by 1.0 s,
-When the owner holds the talk button from t = 0 and a second finger taps the live words at t = 1.8 s,
-then releases at t = 2.5 s,
-Then the microphone stays open until the release and the prompt `What failed tonight?` is sent (B3).
-And in the second run, when the owner holds from t = 0 to 2.5 s and taps the text at t = 2.7 s,
-Then nothing is sent; at t ≈ 3.5 s the final goes into the textarea with the tapped word selected.
-Test: Playwright, CDP two-point touch for the first run; received-turns count (1, then 0).
-
-### S-C2-13 DE/EN: one tap switches, the choice is the screen's, the service gets it
-Given `cockpit.stt.language: ["de", "en"]`, a fresh browser profile,
-Then `[data-talk-lang]` shows `DE` at x 784-848 and the textarea starts at x 864.
-When the owner taps it,
-Then it shows `EN` within 0.1 s; a press opens the fake speech session with `language=en` in its
-query (the service's connect log); while listening the language button is `disabled`.
-When the page reloads, it still shows `EN`. With `cockpit.stt.language: "auto"` instead there is
-no `[data-talk-lang]`, the textarea starts at x 784, and the session opens with `language=auto`.
-Test: Playwright; element rects; the fake speech service's connect log; `localStorage`
-`cockpit.lang`.
-
-### S-C2-14 No speech service configured: the pane is text only, and complete
-Given `cockpit.stt.url: "none"`,
-Then the open pane has no `[data-talk]`; `SEND` is at x 1280-1344; the textarea runs from x 784 to
-x 1264 with the placeholder `Type a message`; typing `status` and `Enter` sends it (B8). `F13`
-changes nothing. `POST /api/cockpit/talk` with a valid button token answers `409
-{"error":"voice-off"}`.
-Test: Playwright for the page; `fetch` for the API; no `getUserMedia` call is made (a page-side
-spy).
-
-### S-C2-15 The speech service does not answer: an exact line after 2 s, typing works, a tap retries
-Given the fake speech service stopped (T32's verb),
-When the owner taps the talk button at t = 0,
-Then `data-talk="listening"` by t = 0.2 s (B1: the microphone is the screen's); at t = 2.0 s the
-microphone closes, `data-talk="error"`, `[data-talk-error="stt-down"]` reads `Speech-to-text is not
-answering, so nothing was heard. Typing works. Tap TALK to try again.`; a second paired screen's
-talk button shows the struck glyph.
-When the fake speech service is started and the owner taps the talk button again,
-Then the line goes, `data-talk="listening"`, and partials arrive as in S-C2-01; the second screen's
-glyph is back within 1 s.
-And with the service scripted to refuse with 403, the line reads `Speech-to-text has no free
-session. Typing works. Tap TALK to try again.` (`stt-busy`) at once.
-Test: Playwright, two pages; assert the times with ± 0.2 s on the 2.0 s; the line texts exactly.
-
-### S-C2-16 The service fails mid-sentence: the words so far are a draft, nothing sent
-Given the fake speech scripted: partial `stop the nightly` at 0.6 s, then at 1.2 s an update with
-`status: "error"`,
-When the owner holds the talk button from t = 0 to t = 3.0 s,
-Then by t = 1.4 s the microphone is closed, `data-talk="error"`, the textarea holds `stop the
-nightly`, the line reads `Speech-to-text failed while listening. Your words so far are in the input,
-not sent.`; the release at 3.0 s sends nothing.
-And the same with the connection closed with code 1011 instead of the error update.
-Test: Playwright; received-turns count 0; the textarea value; the line text exactly.
-
-### S-C2-17 Slow words show a hint; a missing final keeps the text
-Given the fake speech scripted: partial `how is` at 0.6 s with `remaining_time_transcription: 2.4`,
-`how is the hub` at 1.6 s with `0.6`; no final after the end frame,
-When the owner holds the talk button from t = 0 to t = 2.5 s,
-Then from the first update until the second the hint reads `SPEECH-TO-TEXT IS SLOW · WORDS MAY LAG`
-and `data-talk-slow` is set; after the second they are gone; at t = 5.5 s (3.0 s after the release)
-the textarea holds `how is the hub`, `[data-talk-error="stt-no-final"]` reads `Speech-to-text did
-not finish in 3 s. Your words are in the input, not sent.`, and nothing has been sent.
-Test: Playwright; poll the hint and the attribute every 50 ms; the received-turns count 0.
-
-### S-C2-18 The physical button: two calls listen and send on the named screen
+### S-C2B-01 (was S-C2-18) The physical button: two calls listen and send on the named screen
 Given the button `hall` added with `--screen desk` (T32's room CLI verb), the screen `desk` paired
 with the pane closed on the touring Wall, a second screen `side`, the fake speech scripted as S-C2-01,
 When the test sends `POST /api/cockpit/talk {"action":"toggle"}` with `hall`'s token at t = 0,
@@ -582,34 +615,16 @@ And with `press` at t = 0 and `release` at t = 2.5 s the prompt is sent as a hol
 Test: Playwright, two pages, `fetch` from the test; the room's audit log has two `button hall →
 desk` lines.
 
-### S-C2-19 The button API refuses what is not a button, and says why
+### S-C2B-02 (was S-C2-19) The button API refuses what is not a button, and says why
 Given the button `hall` (target `desk`) and a button `porch` added without `--screen`,
-Then, each with the exact status and body of §11's table:
+Then, each with the exact status and body of the table above:
 no `Authorization` → `401 no-token`; a made-up token → `403 bad-token`; `hall`'s token with
 `Origin: https://cockpit.example.invalid` → `403 origin-refused`; without `X-Laneboard` →
 `403 no-x-laneboard`; `{"action":"shout"}` → `400 bad-request`; `porch` on a fresh room before any
 touch → `409 no-target`; `hall` with `desk`'s link stopped → `409 screen-offline`; `release` on an
 idle `desk` → `409 not-listening`; six calls within 1 s → the sixth `429 too-many` with
-`Retry-After: 1`; after `laneboard cockpit button remove hall` → `403 bad-token`.
+`Retry-After: 1`; after `laneboard cockpit button remove hall` → `403 bad-token`; `porch` on a room with
+`cockpit.stt.url: "none"` → `409 voice-off`.
 And no refused call changes any screen's `data-talk`.
 Test: `node:test` against the stand-in room (no browser except for the last check); one case per
 row.
-
-### S-C2-20 The talk key: F13 tap-tap and hold, from any focus
-Given the pane closed, the fake speech scripted as S-C2-01,
-When the test presses `F13` (down t = 0, up t = 0.1 s) and again at t = 3.0 s,
-Then the pane opens and listens after the first, the prompt is sent after the second (B3 from the
-second `keyup`).
-And with the textarea focused holding `on hub,`, `F13` held from t = 0 to 2.5 s (with `repeat`
-`keydown`s every 33 ms) sends `on hub, What failed tonight?` once; the textarea stays free of any
-character from the key.
-Test: Playwright `keyboard.down('F13')`/`up`; CDP for the repeated `keydown`s; received-turns log.
-
-### S-C2-21 A page that is not secure: the microphone line says why
-Given the page served on a non-secure origin (`http://hub.example.invalid:7777` through a test
-host mapping, no policy), so `navigator.mediaDevices` is undefined,
-When the owner taps the talk button,
-Then within 0.2 s `data-talk="error"`, `[data-talk-error="mic-insecure"]` reads `The microphone
-needs a secure page (HTTPS). Typing works. docs/cockpit.md says how.`; typing works.
-Test: Playwright with `--host-resolver-rules` mapping the name to the stand-in; or, where that is
-not possible, an init script deleting `navigator.mediaDevices` (the build night logs which).

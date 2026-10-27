@@ -16,7 +16,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `README.md` | this index, the speed budget (B1-B8) and the glossary | none | T1, T24 | written |
 | `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3 | part 1 written (T2), part 2 planned (T3) |
 | `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24) |
-| `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the physical-button API, speech-to-text slow or down | `S-C2-` | T6, T7 | written: part 1 (T6: gestures, 400 ms threshold, `data-talk` states, live words, microphone, S-C2-01..10), part 2 (T7: fixing a word, DE/EN, `cockpit.stt.*`, the service slow or down, the talk key and the button API, the kiosk microphone note, S-C2-11..21) |
+| `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the talk key, speech-to-text slow or down; §14 the physical-button API as the later slice C2b | `S-C2-`, `S-C2B-` | T6, T7 | written: part 1 (T6: gestures, 400 ms threshold, `data-talk` states, live words, microphone, S-C2-01..10), part 2 (T7: fixing a word, DE/EN, `cockpit.stt.*`, the service slow or down, the talk key, the kiosk microphone note, S-C2-11..17, 20, 21; C2b §14: the button API, S-C2B-01..02) |
 | `c3-see.md` | C3: the MCP read tools, `focus`, "Ask about this" | `S-C3-` | T8, T9 | planned |
 | `c4-show-canvas.md` | C4: show commands, one camera with the tour, undo; the canvas, kit blocks, custom cards, promotion, how cards leave | `S-C4-` | T10, T11, T12 | planned |
 | `coworker.md` | speaking up, quiet hours, scheduled jobs, the infra repo pull, drift, the agent's changes as PRs | `S-CW-` | T13 | planned |
@@ -112,11 +112,11 @@ Each word is defined here once; the other files link here instead of redefining 
 - **tool line**: one collapsed line in the conversation for a piece of the agent's tool activity
   ("read 3 feeds", "looked at CI on main") (`c1-talk.md`).
 - **talk button**: the button in the pane that starts and sends voice input, by tap-tap or
-  hold-release; also reachable as an API for a physical button (`c2-voice.md`).
+  hold-release; a physical button reaches it later through the room's API (C2b, `c2-voice.md` §14).
 - **talk key**: a key on the screen's keyboard (`F13` by default) that acts as the talk button,
   for a USB macro key (`c2-voice.md` §11).
 - **button token**: the secret a physical button sends to the room's talk API; it can only press
-  and release talk on one screen (`c2-voice.md` §11, pending Q-O20).
+  and release talk on one screen (C2b, `c2-voice.md` §14, pending Q-O20).
 - **partial / final**: speech-to-text results: a partial is a guess that may still change, a final
   is fixed. The input shows partials and replaces them as they firm up.
 - **MCP server**: the laneboard MCP server in the room: the read tools (C3) and the show

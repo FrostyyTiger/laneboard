@@ -2,7 +2,7 @@
 
 Spec night (README §8). Every spec file lives in `docs/plans/cockpit/spec/`. Screen sizes are CSS px
 at 1368x912 (the owner's tablet, landscape, 2x). Scenario ids: `S-<part>-<nn>` (`S-SCR-`, `S-C1-`,
-`S-C2-`, `S-C3-`, `S-C4-`, `S-CW-`, `S-C5-`, `S-C6-`, `S-SEC-`, `S-ONE-`). Real names to build on:
+`S-C2-`, `S-C2B-`, `S-C3-`, `S-C4-`, `S-CW-`, `S-C5-`, `S-C6-`, `S-SEC-`, `S-ONE-`). Real names to build on:
 views in `public/js/views/` (Map `map/`, `board.js`, `runs.js`, `morning.js`, `inbox.js`), the
 router `public/js/core/router.js`, the snapshot/delta socket `server/ws.mjs`, terminals
 `server/terminals.mjs`, the hub `server/hub/` (`relay.mjs`, `client-ws.mjs`, `read-proxy.mjs`),
