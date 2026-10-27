@@ -211,6 +211,10 @@ test('showMarks and cardPlace: rings once per node, cards for pins and notes, a 
   assert.deepEqual(cardPlace({ x: 1500, y: 300, r: 10 }, 200, 80, { W, H }), { x: 1270, y: 260, side: 'left' });
   const low = cardPlace({ x: 400, y: 890, r: 0 }, 200, 80, { W, H });
   assert.equal(low.y, H - 16 - 80, 'kept inside the stage');
+  // A second card on the same node stacks under the first, never over it.
+  const first = cardPlace({ x: 400, y: 300, r: 10 }, 200, 80, { W, H });
+  const second = cardPlace({ x: 400, y: 300, r: 10 }, 240, 60, { W, H, above: [{ left: first.x, top: first.y, right: first.x + 200, bottom: first.y + 80 }] });
+  assert.deepEqual(second, { x: 430, y: first.y + 80 + 8, side: 'right' });
 });
 
 // ---- createShow: the page's part, over the director and a counting camera ----

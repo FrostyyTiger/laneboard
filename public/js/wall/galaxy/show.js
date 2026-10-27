@@ -221,16 +221,24 @@ export function showMarks(state) {
  * Where a card stands for a node drawn at `at` (`{ x, y, r }`, css px) on a
  * `W`×`H` stage: right of the node by its radius and `gapPx`, or left of it
  * when it would leave the stage there; its middle on the node's height, kept
- * `marginPx` inside the stage. `w`, `h` the card's size. Returns `{ x, y,
- * side }` (its top left). Pure.
+ * `marginPx` inside the stage. `w`, `h` the card's size. `above`, the boxes of
+ * cards placed before it: it steps below each it would cover (a pin and a
+ * note on one node read as a stack, not one card over the other). Returns
+ * `{ x, y, side }` (its top left). Pure.
  */
-export function cardPlace(at, w, h, { W, H, gapPx = 20, marginPx = 16 } = {}) {
+export function cardPlace(at, w, h, { W, H, gapPx = 20, marginPx = 16, stackPx = 8, above = [] } = {}) {
   const off = (at.r ?? 0) + gapPx;
   let side = 'right';
   let x = at.x + off;
   if (x + w > W - marginPx && at.x - off - w >= marginPx) { side = 'left'; x = at.x - off - w; }
   x = Math.max(marginPx, Math.min(W - marginPx - w, x));
-  const y = Math.max(marginPx, Math.min(H - marginPx - h, at.y - h / 2));
+  let y = Math.max(marginPx, Math.min(H - marginPx - h, at.y - h / 2));
+  const hits = (b) => x < b.right && x + w > b.left && y < b.bottom + stackPx && y + h + stackPx > b.top;
+  for (let i = 0; i < above.length; i++) {
+    const b = above.find(hits);
+    if (!b) break;
+    y = b.bottom + stackPx;
+  }
   return { x, y, side };
 }
 
@@ -352,11 +360,13 @@ export function createShow(opts = {}) {
       ring.style.transform = `translate3d(${(at.x - d / 2).toFixed(1)}px, ${(at.y - d / 2).toFixed(1)}px, 0)`;
     }
     const { W, H } = o.size();
+    const placed = [];
     for (const c of cards.values()) {
       const at = o.screenOf(c.node);
       c.el.hidden = !at;
       if (!at) continue;
-      const p = cardPlace(at, c.w, c.h, { W, H });
+      const p = cardPlace(at, c.w, c.h, { W, H, above: placed });
+      placed.push({ left: p.x, top: p.y, right: p.x + c.w, bottom: p.y + c.h });
       c.el.dataset.side = p.side;
       c.el.style.transform = `translate3d(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px, 0)`;
       c.box = { left: p.x, top: p.y, right: p.x + c.w, bottom: p.y + c.h };
