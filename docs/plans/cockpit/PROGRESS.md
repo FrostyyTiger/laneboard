@@ -61,7 +61,7 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 - [x] Q3 Chromium kiosk microphone without a prompt: which flags or managed policies (`AudioCaptureAllowed`, `AudioCaptureAllowedUrls`, …) work on Linux/ChromeOS/Android tablets, and does `getUserMedia` need a secure context on a LAN or tailnet address? — for T3, T7 → research/Q3-kiosk-microphone.md (Android no-prompt route and `--use-fake-ui-for-media-stream` unconfirmed)
 - [x] Q4 WhisperLiveKit's WebSocket protocol: audio format the client sends, message shapes for partial and final text, language selection, typical latency to first partial and to final, behaviour on silence and disconnect — for T6, T16 → research/Q4-whisperlivekit-websocket.md (latency figures not confirmed)
 - [x] Q5 How an MCP server exposes tools to Claude Code (stdio vs. streamable HTTP, tool input schema, result content types and size limits, how a headless session is configured with it, `--allowedTools`), and how a long-lived server can push state (for `focus`) — for T8, T10 → research/Q5-mcp-tools-for-claude-code.md (channels and exact `--mcp-config` JSON unconfirmed; no push to the model, state must be pulled)
-- [ ] Q6 Sandboxing agent-written HTML cards in a browser: `iframe sandbox` attributes, `srcdoc` vs. blob URLs, CSP that blocks all network (`connect-src 'none'` etc.), a `postMessage` data bridge, known escapes — for T12, T17
+- [x] Q6 Sandboxing agent-written HTML cards in a browser: `iframe sandbox` attributes, `srcdoc` vs. blob URLs, CSP that blocks all network (`connect-src 'none'` etc.), a `postMessage` data bridge, known escapes — for T12, T17 → research/Q6-sandboxing-html-cards.md (WebRTC exfiltration gap and Chromium `webrtc` directive support unconfirmed)
 
 ## Later
 
