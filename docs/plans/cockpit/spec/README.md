@@ -13,7 +13,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 
 | File | What it settles | Scenario ids | Task | Status |
 | --- | --- | --- | --- | --- |
-| `README.md` | this index, the room process and ports, times on the screen ("since", "at", the age; T65, D232), the speed budget (B1-B8, B10, B11; B9 is T67's; each test asserts the end-to-end column), the pressed state and `touch-action` of every tappable (T45, D224), the selectors tests use, and the glossary | none | T1, T24, T33, T45, T65 | written |
+| `README.md` | this index, the room process and ports, times on the screen ("since", "at", the age; T65, D232), the speed budget (B1-B11; each test asserts the end-to-end column, B9 is measured on the real screen only, T67), the pressed state and `touch-action` of every tappable (T45, D224), the selectors tests use, and the glossary | none | T1, T24, T33, T45, T65, T67 | written |
 | `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3, T31 | part 1 written (T2), part 2 written (T3; T31: §9 the Wall contract, `window.__cockpitView`, the app-first rule, S-SCR-35; T52: room down is the pane's status line only, canvas half in `c4-show-canvas.md` §7.6, D120; T89: S-SCR-24 a refused room link; T65: S-SCR-36 the room down since the day before; T44: §4.1 the corner cluster per state, the `SCREEN` sheet, S-SCR-25/26; T56: §6.1 who may pair (admin routes, peer uid, the agent refused), §6.2 cross-site checks and the `lb_cockpit` cookie, §6.3 the paired line, S-SCR-27..29; T60: §6.4 the room's audit lines, S-SCR-30/31; T64: the `off` talk button opens the pane, the away caption, S-SCR-32, D179; T102: its pressed state, D180; T58/T75: §6.2.1 a plain-HTTP page does not pair unless `cockpit.allowInsecure`, S-SCR-33, D182; T23: §2.1 a speak-up on a touring screen, S-SCR-34, D219; T28: §7.1 the room link's real retry series and `cockpit:retry` marks, S-SCR-19, D11, D220) |
 | `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24; T50: header `READY`/`● WORKING`/`● STOPPING`, folds cut to code and `SHOW EARLIER`, E6 merged into E8, no raw view in C1, S-C1-24 retired; T29: §5.1 the room messages the pane draws from, fresh-screen states, S-C1-25/26; T85: §8 rewritten for steer, S-C1-16 rewritten, S-C1-27/28; T88: queued prompts as snapshot items, S-C1-29; T57: §5.2 the allowlist, refused calls, tools that change things, §5.3 redaction, S-C1-30/31; T40: §7.1 the on-screen keyboard, S-C1-32/33; T96: §1.1 the stack above the input row, S-C1-34; T34: §3 the renderer module and the numeric-cell rule, §5 targets from odd input, S-C1-35; T36/T76/T93: §15 the demo link for `?demo=1`, S-C1-36; T68: §10.1 the status line's order and the agent's login check, S-C1-37/38; T43: the type floor, line-slot messages 18 px in the label face, turn state 18 px `--text-2`, S-C1-40; T45: links as `<span>` with no underline D225, tool lines 48 px D226, the pressed state S-C1-41; T59: the cockpit's own lines with a `--line-strong` rule D227, the prompt rate D228, S-C1-42/43; T66: §2.1 the `SINCE YOU LOOKED` divider D233/D234, S-C1-44) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the talk key, speech-to-text down or failed; §14 the physical-button API as the later slice C2b | `S-C2-`, `S-C2B-` | T6, T7 | written: part 1 (T6: gestures, 400 ms threshold, `data-talk` states, live words, microphone, S-C2-01..10), part 2 (T7, slimmed by T49: tap the words to stop and fix, DE/EN, `cockpit.stt.*`, the service down or failed (`stt-down`, `stt-failed`), the talk key, the kiosk microphone note, S-C2-11..17, 20, 21; T94: S-C2-22 keyboard up; T69: S-C2-23 speech down in a hold; T78: `cockpit.stt.protocol` and the four messages a shim sends; C2b §14: the button API, S-C2B-01..02) |
@@ -156,6 +156,7 @@ instead of writing its own. A scenario with a timing asserts against its row. Ti
 | B7 | a tap on the opener, or a press on the talk button (screen) | the pane in place, its slide ended (`c1-talk.md` §2) | ≤ 0.2 s | none | C1 |
 | B8 | `SEND` tapped, typed prompt (T5) (screen) | the prompt block drawn in the conversation, `data-turn="thinking"` | ≤ 0.1 s | none | C1 |
 | B10 | the room receives a custom-card `place` (or `block: "saved"`) from the agent, the `card.put`'s `receivedAt` (room) | the card's frame has sent `card:ready` and shows its first data (`c4-show-canvas.md` §11.4) | ≤ 2.0 s | none | C4 |
+| B9 | `SEND` tapped (typed), or `pointerup` / the second tap that ended a spoken prompt (B3's start) (screen) | the reply's first sentence drawn whole in the conversation: the first sentence end of `c5-c6.md` §1 ("A sentence ends") in the drawn text of the reply's first paragraph, or that paragraph or the turn ended | ≤ 15 s, **measured, never asserted** (D235) | none: the real agent, the morning question `How did the night go?` (S-C3-18), the standing instructions' line 2 (`c3-see.md` §5, `morning` once first) | none; C1 sets the marks, T106 pastes the real number |
 | B11 | the room has the reply's spoken line (its sentence end in the deltas, `c5-c6.md` §1), the `speak`'s `receivedAt` (room) | `cockpit:speak-start` on the screen that sent the prompt | ≤ 1.0 s | fake voice service answers 0.3 s after the request | C5 |
 
 - **A test asserts the end-to-end column, nothing else** (D223). There is no "screen's share"
@@ -164,10 +165,18 @@ instead of writing its own. A scenario with a timing asserts against its row. Ti
   (0.4 s, 0.15 s, 0.7 s) is the screen's and the room's time without being measured on its own.
   A row is asserted from the slice in the last column on; before it, its marks may exist and no
   test reads them (B5, B6, B10 belong to C4, B11 to C5).
-- **The agent's own time is not in the budget.** B4 starts when the room sends the agent's first
-  delta on to the screens; how long a real agent thinks before that is its own (with Claude Code,
-  seconds). What the screen shows while it thinks is the turn state `● WORKING` (`c1-talk.md`
-  §2), drawn within B8.
+- **The agent's own time is not in a test's budget.** B4 starts when the room sends the agent's
+  first delta on to the screens; how long a real agent thinks before that is its own (with Claude
+  Code, seconds; a morning question with eight tool calls, 20-40 s, `reviews/44-operator.md`
+  finding 8). What the screen shows while it thinks is the turn state `● WORKING` (`c1-talk.md`
+  §2), drawn within B8, and from 3 s the turn's age in its `AGENT` label row (`c1-talk.md` §9).
+- **B9 is the owner's number, not a test's** (D235). It holds the agent's time, so it is only read
+  on the real screen with the real agent: the first answer to `How did the night go?` in a fresh
+  conversation, its `cockpit:B9` measure read in remote devtools and pasted into `PROGRESS.md`
+  (T106). Over 15 s is not a failure of any night; it says the standing instructions or the
+  tools need work. `npm test` checks only that the page sets one `cockpit:B9` measure per turn
+  that has reply text (S-C1-21), never its value. A turn with no reply text (only tool lines, an
+  error, `STOP`) sets no B9 end mark and no measure.
 - **Real hardware is measured, not promised.** The real speech service's first-partial time is
   unknown (research Q4: no authoritative figure; measure with `wlk bench` on the real host). The
   real end-to-end numbers are what the owner's setup should reach; they are read from the marks
@@ -287,6 +296,7 @@ when no value applies.
 | `[data-mark]` | none | one coloured mark `■ ▲ ● ○` in a reply | `c1-talk.md` §3 |
 | `[data-cockpit-status]` with `data-status` | `offline`, `room-down`, `agent-down`, `not-logged-in`, `tools-down`, `board-down`, `agent-back`, `back` | the pane's one 80 px status line | `c1-talk.md` §10.1 |
 | `[data-turn-label]` | none (text `YOU · 07:02`, `AGENT · 07:02`) | a label row, ruled 2 px `--line-strong` (D227) | `c1-talk.md` §3 |
+| `[data-turn-age]` | none (text `0:03`, `1:48`, `1:02:03`) | a turn's age in its `AGENT` label row, from 3 s (D235) | `c1-talk.md` §9 |
 | `[data-reply]` | none | one reply's blocks built from `md.js`; nothing inside uses `--line-strong` (D227) | `c1-talk.md` §3 |
 | `[data-turn-stopped]` | none (text `STOPPED AT 07:03`) | the stopped line under a stopped turn | `c1-talk.md` §8 |
 | `[data-turn-error]` | `not-sent`, `agent-exited`, `agent-down`, `not-logged-in`, `step-limit`, `failed` | an error line in a turn | `c1-talk.md` §10 |

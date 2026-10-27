@@ -235,7 +235,8 @@ blocks, tool lines (§5) and show lines (`c4-show-canvas.md` §4) interleaved as
 - **Label row** `[data-turn-label]` above the prompt and above the reply, 24 px tall, 16 px caps
   `--text-3`, with the cockpit's rule (§3 "The cockpit's own lines", D227): a 2 px `--line-strong`
   left border and 8 px padding left: `YOU · 07:02` (`YOU · SPOKEN · 07:02` for a voice prompt, C2) and `AGENT · 07:02`. Time is the
-  screen's local `HH:MM`, 24 h; a date is `D Mon` in English (`27 Oct`, D149).
+  screen's local `HH:MM`, 24 h; a date is `D Mon` in English (`27 Oct`, D149). A reply's label row
+  also carries the turn's age from 3 s on (§9, D235).
 - **The prompt**: mono 28 px, line height 1.4 (39.2 px), `--text-1`, in a block on `--bg-surface`
   with a 1 px `--line-weak` border and 12 px / 16 px padding (pending Q-O18).
 - **The reply**: mono 28 px, line height 1.4 (39.2 px), `--text-1`, straight on the pane's
@@ -465,7 +466,7 @@ pane. Every message is applied in `seq` order; a `seq` at or below the last appl
 | --- | --- | --- |
 | `welcome` | `config.stt`, `status` | sets the talk button (`c2-voice.md` §9) and the status line (§10); draws nothing in the conversation |
 | `snapshot` | `turns[].items[]` by `blockIndex`, `end`, `olderTurns` | replaces the whole conversation once its last part is in; a running turn continues from where it is (§12) |
-| `turn.prompt` | `turnId`, `clientId`, `text`, `source`, `at`, `delivery` | the sender's block loses `· SENDING`; other screens draw the prompt block (§7, §12). With `delivery:"new"` it is the turn's start; with `queued` the block reads `· QUEUED` (§8); the `AGENT · HH:MM` label row comes with the turn's first item |
+| `turn.prompt` | `turnId`, `clientId`, `text`, `source`, `at`, `delivery` | the sender's block loses `· SENDING`; other screens draw the prompt block (§7, §12). With `delivery:"new"` it is the turn's start; with `queued` the block reads `· QUEUED` (§8); the `AGENT · HH:MM` label row comes with the turn's first item, or 3 s after the turn's start if nothing came by then (§9) |
 | `prompt.taken` | `turnId`, `clientId`, `state`, `atBlock`, `why` | `taken`: `· QUEUED` goes, the block moves to `atBlock` of `turnId`; `cancelled`: `NOT SENT` and the line for `why` (§8) |
 | `turn.state` | `state` | sets `data-turn` and the header word (§2) |
 | `text.delta` | `turnId`, `blockIndex`, `text` | appends to that text block, creating it at its `blockIndex` place if new; the `▍` cursor follows it (§3) |
@@ -863,7 +864,7 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
   `STOPPED` line, no new `AGENT · HH:MM` label row (the reply goes on under the same turn).
 - **The turn ends first.** A prompt still queued when its turn ends stays `· QUEUED`; the agent
   takes it as the next turn (research Q8), and `prompt.taken` names that new turn: the block moves
-  to the start of it, the `AGENT · HH:MM` label row comes with its first item, as a new turn's.
+  to the start of it, the `AGENT · HH:MM` label row comes as a new turn's (§9: its first item or 3 s).
 - **Not taken** (D123). If a prompt is still not taken 10 s after its turn's `turn.end`, and no
   interrupt receipt listed it, the room sends it to the agent once more as a new prompt (a new
   UUID, room-internal: no message to the screens, one log line). If that is not taken within 10 s
@@ -906,9 +907,27 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
 The screen never shortens what the agent wrote (§5) and draws a long reply whole; the owner flicks
 through it (D35). Only code blocks fold (§3) and only old turns (`SHOW EARLIER`, §3).
 
-- **Elapsed time** (D35). Once a turn has run 10 s, the reply's label row shows its age:
-  `AGENT · 07:02 · 0:12`, counting each second (`m:ss`, from 1 h `h:mm:ss`), until the turn ends;
-  then the label keeps the total: `AGENT · 07:02 · 1:48`. Turns under 10 s show no age.
+- **Elapsed time** (D35, D235). Once a turn has run 3 s, the reply's label row shows its age:
+  `AGENT · 07:02 · 0:03`, counting each second (`m:ss`, from 1 h `h:mm:ss`), until the turn ends;
+  then the label keeps the total: `AGENT · 07:02 · 1:48`. Turns under 3 s show no age. The age is
+  its own element `[data-turn-age]` (text `0:03`, without the ` · ` before it) in `--text-2`, the
+  rest of the row stays `--text-3`: it is the one moving thing that says the agent is alive
+  (`reviews/44-operator.md` finding 8).
+  - **Before the first item.** The label row comes with the turn's first item (§5.1), or at 3 s
+    if nothing came by then: a turn that thinks 20 s shows `AGENT · 07:02 · 0:03` under the
+    prompt from 3 s on, with nothing under the row, and the first item is drawn under that row
+    when it comes. So a slow answer moves within 3 s of the send, on every screen.
+  - **Not in the header.** The header keeps `● WORKING` with no age (D56): at 18 px caps in the
+    fallback face (DejaVu Sans; the condensed face is not on the test machine, T126)
+    `● WORKING · 59:59` is 198 px and the header has 188 px between the turn state's start
+    (x 876) and `NEW` (x 1072) less 8 px on the Wall page (`screens.md` §4.1 D), and less in a
+    column with `SHELF n` and `WALL` (E).
+  - **Where the age counts from.** The turn's start is the `turn.prompt` `at` (`delivery:"new"`,
+    room clock) moved onto the screen's clock by the offset `welcome.now` gave (the page's
+    `Date.now()` at the `welcome` minus `welcome.now`, `protocols.md` §2.2), so a page reloaded
+    mid-turn shows the same age as the others, within 1 s. A speak-up's turn (`coworker.md` §3.2)
+    counts from its own `turn.prompt` the same way. It is redrawn every 1 s with the screen's
+    other counters (`README.md` "Times on the screen").
 - **A long silence is not an error.** As long as the room's heartbeat (every 10 s, D10) says the
   agent is alive, a turn may think or work for any time; the label's age shows it. The owner ends
   it with `STOP`. A lost room link is `screens.md` §7.
@@ -1158,11 +1177,20 @@ Test: Playwright, one script per row (table-driven); compare the texts and compu
 ### S-C1-21 A long reply: its age shows, and it is drawn whole
 Given the fake agent thinking 15 s, then streaming 120 lines and 26 000 characters over 20 s, with
 a 30-row table in it,
-Then at t = 10 s the label reads `AGENT · HH:MM · 0:10` and at t = 12 s `0:12`; after the turn it
-keeps `0:35`; the reply's drawn text is all 26 000 characters and the table has 30 body rows; no
-button inside the reply other than those of code blocks (none here); the header reads `READY`.
-Test: Playwright with a fake clock; assert the label texts at 10/12/35 s, the reply's
-`textContent` length, the table's row count, and that the reply holds no `button`.
+Then at t = 2.9 s there is no `AGENT` label row; at t = 3 s the label row reads
+`AGENT · HH:MM · 0:03` with nothing under it, `[data-turn-age]` reads `0:03` in `--text-2`, and
+the header reads `● WORKING` (no age, D235); at t = 12 s the age reads `0:12`; at t = 15 s the
+first reply text is drawn under that same row (still one `AGENT` label row in the turn); after the
+turn it keeps `0:35`; the reply's drawn text is all 26 000 characters and the table has 30 body
+rows; no button inside the reply other than those of code blocks (none here); the header reads
+`READY`. The page has one `cockpit:B9` measure, set when the reply's first sentence (`Three runs
+ran last night.`, the fake agent's first line here) was drawn; its value is not asserted (B9 is
+measured on the real screen only, D235).
+Test: Playwright with a fake clock; assert the count of `[data-turn-label]` reading `AGENT` at 2.9
+s (0), 3 s (1) and 15 s (1), the label and `[data-turn-age]` texts at 3/12/35 s, the age's computed
+colour equal to `--text-2`'s, `[data-cockpit-turn]`'s text `● WORKING` at 12 s, the reply's
+`textContent` length, the table's row count, that the reply holds no `button`, and
+`performance.getEntriesByName('cockpit:B9', 'measure').length` 0 before t = 15 s and 1 after.
 
 ### S-C1-22 A new conversation: asked, then started at once (pending Q-O2)
 Given 23 turns in the conversation, no turn running, and 2 cards on the canvas,
