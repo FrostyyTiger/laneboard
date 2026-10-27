@@ -843,7 +843,7 @@ next delay is `nextBackoff` of the one it cancelled, as if that try had failed o
 **The countdown** (`Retrying in 12 s.`) shows the whole seconds left until the scheduled try,
 rounded up.
 
-### Room down (answers Q-O6, recommendation a)
+### Room down (Q-O6 closed as D257)
 
 The board keeps working; the cockpit says it is away and since when. Nothing is hidden, nothing is
 lost.

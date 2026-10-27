@@ -13,7 +13,7 @@ the longer reasoning is in git history (commit `cc2474c` and before) and in the 
 
 ## For the morning, worst first
 
-The first fourteen, about 15 minutes: a letter per question is enough. Ordered by what the C1 build
+The first fourteen (thirteen plus Q-O30), about 15 minutes: a letter per question is enough. Ordered by what the C1 build
 night needs first, then C2. The first five change what C1 builds; the rest change a slice or a size.
 
 ## Q-O11 How talking starts
@@ -23,7 +23,8 @@ Blocks C1/C2. From `reviews/21-owner.md` (2, 7). Spec: `screens.md` §4, `c1-tal
 - a) The bottom-right 64x64 button is the talk button: hold or tap and it listens at once, the pane
   opens with the live words; a smaller `CHAT` opens the pane for typing.
 - b) The button opens the pane; the talk button is inside it.
-- c) a), and the button carries a marker when the agent wants you.
+- c) a), and the button carries a marker when the agent wants you. The marker is a static 8 px dot
+  on the talk button, no sound; loudness beyond that is Q-O5.
 
 Recommendation: c) — in the terminal talking is one held key (`spec-input.md`), so here it is one press.
 
@@ -251,18 +252,6 @@ layout would be a new task.
 
 Answer: (open)
 
-## Q-O6 What a screen shows when the agent's machine is down
-
-`spec-input.md` §7.6. Spec: `screens.md` §7, S-SCR-17..19, D120 (written for a).
-
-- a) The board keeps working, the pane says the agent is away (since when, `RETRY NOW`, draft kept).
-- b) An error screen until the room is back.
-- c) The cockpit disappears silently.
-
-Recommendation: a) — "never an empty screen" rules out b), and c) hides a fault.
-
-Answer: (open)
-
 ## Decided instead
 
 Asked earlier, closed as D-lines because the strict choice is safe by default (`reviews/52-owner.md`
@@ -272,6 +261,7 @@ also in PROGRESS.md's "Needs you" list, because D89, D90 and D91 are security-re
 - **Q-O14** A browser test runner in the repo → **D88**: Playwright as a devDependency, outside `npm test`.
 - **Q-O15** Which process is "the room", and its origin → **D89**: a laneboard server with a `cockpit` section, same origin as the page (rewritten by T86 to D92's split: the board serves the page, the room only `/api/cockpit/*`; modes D128, pending Q-O29).
 - **Q-O16** Security-adjacent choices → **D90**: D14, D22 and D66 stand as written. D13 (the pairing code) is not closed: it stays under Q-O10.
+- **Q-O6** What a screen shows when the agent's machine is down → **D257**: the board keeps working, the pane says the agent is away (`product.md` "never an empty screen" decides it; `reviews/73-owner.md` finding 9).
 - **Q-O26** How the room reads the board → **D91**: the room runs as its own user on the box of the laneboard it reads (a hub, or a single board such as the one box's) and reads its loopback port as `local`.
 
 ## Can wait
