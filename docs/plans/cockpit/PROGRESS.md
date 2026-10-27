@@ -125,6 +125,8 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 ## For the owner
 
+- Round 56 (fix): the one red test after round 55 was a flake, not the spec: the tail ended in `Error: timeout`, which only `test/term-proxy.test.mjs` (its wait helper, line 92) throws, and three reruns of `npm test` passed 3454/3454. Round 55 changed only spec files. Worth a longer deadline in that helper when the box is loaded; it is outside this night's allowed paths.
+
 - T55 (round 55) cut the morning list to eight questions at the top of `spec/QUESTIONS.md`. Q-O14, Q-O15, Q-O16 and Q-O26 are now D88-D91 (strike one to reopen it). Q-O1's recommendation moved to d) steer, because research Q8 found Claude Code queues a mid-turn message into the running turn; T85 rewrites the spec for it.
 
 - The stranger review (round 48) found that without a tailnet a paired tablet is either unable to load the board or is `local` with full control. Q-O27 (a `screen` request kind) is new and blocks C1 on any setup but yours; Q-O28 (agent spend and standing jobs) is new. Its other findings are tasks T71-T79.
