@@ -26,7 +26,8 @@ BRANCH="run/$NAME"
 RUN_DIR="$HOME/runs/$NAME"; export RUN_DIR   # rounds put screenshots in $RUN_DIR/shots
 MODEL_BUILD=${MODEL_BUILD:-claude-opus-5-5}     # planner, builder, fix, designer, final
 MODEL_REVIEW=${MODEL_REVIEW:-claude-sonnet-5-5} # stranger, triage, operator
-ROUND_SECS=${ROUND_SECS:-2700}                  # 45 min per round, then it is stopped
+ROUND_SECS=${ROUND_SECS:-3600}                  # 60 min per round, then it is stopped (night 3: touch tasks with
+                                                # film + CDP checks did not fit 45)
 PANEL_EVERY=${PANEL_EVERY:-2}                    # builder rounds between persona reviews (with new filmstrips)
 PANEL_MAX=${PANEL_MAX:-10}                       # persona reviews per run
 RESEARCH_MAX=${RESEARCH_MAX:-6}                  # research rounds per run
@@ -109,6 +110,14 @@ task_title() { grep -m1 -E "^- \[ \] $1\b" "$PLAN_DIR/PROGRESS.md" 2>/dev/null |
 run_total() { python3 -c "import json,sys; print(round(sum(json.loads(l).get('usd',0) for l in open(sys.argv[1]) if '\"t\": \"cost\"' in l),2))" "$EV"; }
 
 SPENT=0 U5=0 R5=0 U7=0 OVERAGE=0 HARD=0
+# Headless Chrome a round leaves behind (film.mjs, CDP scripts) is reparented to init and keeps rendering
+# the galaxy in SwiftShader; night 3 had eight of them holding the 6-core VM at load 46. After each round
+# no browser of ours should be left, so every Playwright Chrome whose parent is init goes.
+reap_browsers() {
+  local p; for p in $(ps -eo pid=,ppid=,args= | awk '$2==1 && $3 ~ /ms-playwright\/chromium-[0-9]+\/chrome-linux\/chrome$/ {print $1}'); do
+    kill "$p" 2>/dev/null && log "reaped a leftover browser ($p)"
+  done
+}
 # round <n> <role> <model>: one fresh session; returns 0 done, 2 rate-limited, 1 failed
 round() {
   local n=$1 role=$2 model=$3 out="$RUN_DIR/rounds/$(printf %02d "$1")-$2.jsonl"
@@ -140,6 +149,7 @@ $( [ -n "${REPLAN:-}" ] && echo "REPLAN: every task in PROGRESS.md is done; plan
     --permission-mode auto "${tools[@]}" \
     --output-format stream-json --verbose <<<"$prompt" > "$out" 2>&1
   local rc=$?
+  reap_browsers
   read -r cost err u5 r5 u7 over limited text < <(python3 - "$out" <<'PY'
 import json, sys, re
 cost, err, text = 0.0, 1, ""
@@ -170,7 +180,11 @@ PY
   ev usage n="$n" fiveHourPct="$U5" sevenDayPct="$U7" fiveHourResetsAt="$R5" overage="$OVERAGE"
   # No result message at all = Claude did not run (PATH, login, crash): a hard error, not a bad round.
   # Such a round writes no cost event: its cost is unknown, not $0.
-  grep -q '"type":"result"' "$out" || { [ "$limited" = 1 ] && return 2; log "round $n: no session ($(head -c 200 "$out" | tr '\n' ' '))"; return 3; }
+  # A round killed by the timeout also has no result, but Claude did run: a slow round, not a hard error
+  # (night 3: two slow rounds in a row ended the night twice).
+  grep -q '"type":"result"' "$out" || { [ "$limited" = 1 ] && return 2
+    [ $rc -eq 124 ] && { log "round $n timed out (no result)"; return 1; }
+    log "round $n: no session ($(head -c 200 "$out" | tr '\n' ' '))"; return 3; }
   SPENT=$(python3 -c "print(round($SPENT+${cost:-0},2))")
   ev cost n="$n" usd="${cost:-0}" total="$SPENT"
   [ "$limited" = 1 ] && return 2
