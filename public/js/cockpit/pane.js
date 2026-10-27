@@ -12,7 +12,7 @@
 //                              drawn at the tap with `· SENDING` until the room's echo (B8)
 //   pane.open() / .close() / .isOpen()
 //
-// The root (<html>) carries data-cockpit, data-pane and data-turn (README.md
+// The root (<html>) carries data-cockpit, data-pane, data-turn and data-keyboard (README.md
 // "Selectors tests use"); the pane is [data-cockpit-conversation].
 import { sinceText } from '../core/cockpit-time.js';
 import { AGE_FROM_MS, CONFIRM_WAIT_MS, MAX_PROMPT_CHARS, PANE_SLIDE_MS, TICK_MS } from '../core/cockpit-constants.js';
@@ -20,6 +20,8 @@ import { createTurn } from './turns.js';
 import { canSend, inputHeight, isSendKey, lengthNote, linesFromScroll, INPUT_ONE_LINE_PX, restoreDraft } from './draft.js';
 import { focusNow } from './focus.js';
 import { paneFit, TOO_OLD_TEXT } from './fit.js';
+import { inputCap, KEYBOARD_ROW_PX, watchKeyboard } from './keyboard.js';
+import { TAP_SLOP_TOUCH } from '../views/map/interact.js';
 
 /** c1-talk.md §2: the header's three words for the five turn states (D56). */
 export const TURN_WORDS = Object.freeze({
@@ -233,11 +235,26 @@ export function createPane(opts = {}) {
     const wasAtEnd = pinned;
     input.style.height = `${INPUT_ONE_LINE_PX}px`;
     const border = input.offsetHeight - input.clientHeight;
-    const h = inputHeight(linesFromScroll(input.scrollHeight, border));
+    let h = inputHeight(linesFromScroll(input.scrollHeight, border));
+    if (keyboardUp()) h = Math.min(h, inputCap(oneLineLeft()));
     input.style.height = `${h}px`;
+    // Past its cap the text scrolls inside, the caret line in sight (§7.1).
+    if (doc.activeElement === input && input.selectionEnd === input.value.length) input.scrollTop = input.scrollHeight;
     pane.style.setProperty('--ck-grow', `${h - INPUT_ONE_LINE_PX}px`);
     pane.style.setProperty('--ck-lift', `${(lineSlot.hidden ? 0 : lineSlot.offsetHeight) + h - INPUT_ONE_LINE_PX}px`);
     if (wasAtEnd) toEnd(); // the pin rule (§1.1): at its end it stays at its end
+  }
+
+  /** §7.1: the keyboard layout holds while `data-keyboard` is `up` or `held` (D131). */
+  const keyboardUp = () => root.dataset.keyboard === 'up' || root.dataset.keyboard === 'held';
+
+  /**
+   * §7.1's `left`: the conversation's height with a one-line input, the keyboard up: the
+   * pane less its header, the status line, the line slot and the 88 px row.
+   */
+  function oneLineLeft() {
+    const shown = (n) => (n.hidden ? 0 : n.offsetHeight);
+    return pane.getBoundingClientRect().height - head.offsetHeight - shown(status) - shown(lineSlot) - KEYBOARD_ROW_PX;
   }
 
   /** Everything the draft decides: SEND, the line slot, the input's height. */
@@ -538,7 +555,7 @@ export function createPane(opts = {}) {
    */
   function applyFit() {
     const was = fit;
-    fit = paneFit(win.innerWidth, win.innerHeight);
+    fit = paneFit(win.innerWidth, floorHeight());
     if (fit === was) return;
     root.dataset.cockpitFit = fit;
     if (fit === 'none') {
@@ -549,6 +566,52 @@ export function createPane(opts = {}) {
       coverView(open && fit === 'full');
     }
   }
+
+  /**
+   * §1.2's floor is on the layout viewport "so the on-screen keyboard never trips it"; a
+   * browser that shrinks the layout for the keyboard (and a window made shorter with the
+   * input focused, §7.1) is measured by H, the tallest it was at this width (build B181).
+   */
+  function floorHeight() {
+    if (keyboard && doc.activeElement === input) return keyboard.tallest();
+    return win.innerHeight;
+  }
+
+  // §7.1 (D130, D131): the keyboard layout in the first frame after the event, the input's
+  // cap with it, the conversation pinned to its end if it was (grow() keeps the pin).
+  const keyboard = unsupported ? null : watchKeyboard({ win, input, onChange: () => { if (open) grow(); } });
+
+  /**
+   * D132: a tap on a control in the pane leaves the focus in the input, so the keyboard
+   * does not drop and the row does not move between `pointerdown` and `pointerup`.
+   */
+  const keepFocus = (e) => {
+    if (e.target.closest?.('button') && doc.activeElement === input) e.preventDefault();
+  };
+  pane.addEventListener('pointerdown', keepFocus);
+  pane.addEventListener('mousedown', keepFocus);
+
+  /**
+   * §7.1 "Putting it away": a tap on the conversation outside a control, or on the header
+   * outside its buttons, blurs the input (`pointerup` within TAP_SLOP_TOUCH of its
+   * `pointerdown`); a drag that scrolls the conversation does not (it ends in `pointercancel`
+   * or farther away).
+   */
+  let tapAt = null;
+  pane.addEventListener('pointerdown', (e) => {
+    tapAt = null;
+    if (e.target.closest?.('button, textarea, input, a')) return;
+    if (!convo.contains(e.target) && !head.contains(e.target)) return;
+    tapAt = { x: e.clientX, y: e.clientY, id: e.pointerId };
+  });
+  pane.addEventListener('pointerup', (e) => {
+    const t = tapAt;
+    tapAt = null;
+    if (!t || t.id !== e.pointerId) return;
+    if (Math.hypot(e.clientX - t.x, e.clientY - t.y) > TAP_SLOP_TOUCH) return;
+    if (doc.activeElement === input) input.blur();
+  });
+  pane.addEventListener('pointercancel', () => { tapAt = null; });
 
   opener.addEventListener('click', () => setOpen(!open));
   closeBtn.addEventListener('click', () => setOpen(false));
@@ -580,6 +643,7 @@ export function createPane(opts = {}) {
     const counting = link.status === 'room-down' && !link.refused;
     if (counting && tick === null) tick = win.setInterval(drawStatus, TICK_MS);
     if (!counting && tick !== null) { win.clearInterval(tick); tick = null; }
+    if (open) grow(); // the status line came or went: the input's cap with the keyboard up (§7.1)
   }
 
   render();

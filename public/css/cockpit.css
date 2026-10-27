@@ -468,3 +468,18 @@
   text-transform: uppercase;
 }
 .ck-err-btn:disabled { color: var(--text-3); }
+
+/* The on-screen keyboard up (c1-talk.md §7.1, D131): the pane covers the visible height,
+   over the app's header and tape, from the visible top (--ck-vv-top) to the keyboard's edge
+   (--ck-kb-gap above the layout bottom; keyboard.js sets both); the input row 88 px
+   (16 + 64 + 8) on that edge; the opener with its bottom on the row's top edge. Applied in
+   the frame after the event, with no slide (only transform is animated). Last in the
+   file: it overrides the Wall's and the app's own rects at the same specificity. */
+:root:is([data-keyboard="up"], [data-keyboard="held"]) { --ck-row-h: 88px; }
+:root:is([data-keyboard="up"], [data-keyboard="held"]) .ck-pane {
+  top: var(--ck-vv-top, 0px);
+  bottom: var(--ck-kb-gap, 0px);
+}
+:root:is([data-keyboard="up"], [data-keyboard="held"]) .ck-open {
+  bottom: calc(var(--ck-kb-gap, 0px) + 88px);
+}

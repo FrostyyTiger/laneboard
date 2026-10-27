@@ -998,3 +998,41 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   `server/cockpit/link.mjs`), so two tabs or pages do not double the rate; with pairing the key
   becomes the device token as written — because that is the safe reading and S-C1-43's two pages
   share one count — spec: `c1-talk.md` §7 "Rate", S-C1-43 — overrule: the key in T23c's limit.
+- B180 (T24) The keyboard is its own module, `public/js/cockpit/keyboard.js`: the pure numbers
+  (`visibleBottom`, `keyboardWord`, `inputCap`, `createTallest`, `KEYBOARD_MIN_PX` 120,
+  `KEYBOARD_ROW_PX` 88, `CONVO_KEEP_PX` 200) and `watchKeyboard()`, which sets `data-keyboard`
+  and two root properties, `--ck-vv-top` (the visible top) and `--ck-kb-gap` (layout bottom minus
+  visible bottom); `cockpit.css` places the pane between them and lifts the opener to
+  `gap + 88 px`, last in the file so it wins over the Wall's and the app's own rects. The
+  constants stay in the module, not `cockpit-constants.js`: they are layout px, not tunables
+  of §16 — because one reading drives both the shrunk layout viewport and the
+  `navigator.virtualKeyboard` rect with no per-page code — spec: `c1-talk.md` §7.1, D130, D131 —
+  overrule: move the three constants to `cockpit-constants.js`.
+- B181 (T24) §1.2's height floor (560 px) is measured on H, the tallest `innerHeight` seen at
+  this width (§7.1), while the input has the focus, and on `innerHeight` otherwise; the fit is
+  read on window `resize` only, so the blur that puts the keyboard away at 532 px does not close
+  the pane before the window grows back (S-C1-32 step 4) — because §1.2 says the floor is on
+  the layout viewport "so the on-screen keyboard never trips it", and S-C1-32/33 shrink the
+  layout viewport to 532 with the pane open (review 30-touch finding 4, For the owner) — spec:
+  `c1-talk.md` §1.2, §7.1, D250, D130 — overrule: `floorHeight()` in `pane.js`.
+- B182 (T24) D132 for every `<button>` in the pane, not only `SEND` (T49 named `SEND` alone):
+  `preventDefault()` on `pointerdown` and `mousedown` while the input has the focus, so a
+  control tapped with no keyboard up still takes the mouse's focus as before. T49 keeps its
+  S-C1-04 step; its product change is in — spec: `c1-talk.md` §7.1 "Taps keep the keyboard up"
+  — overrule: `keepFocus` in `pane.js`.
+- B183 (T24) The blur tap (§7.1 "Putting it away") starts on the conversation's scroll area or
+  the header, outside any button, textarea, input or link, and ends in a `pointerup` within
+  `TAP_SLOP_TOUCH` (8 px, imported from `views/map/interact.js`) by distance; a scroll ends in
+  `pointercancel` — spec: `c1-talk.md` §7.1 — overrule: the two listeners in `pane.js`.
+- B184 (T24) S-C1-32's third run (a `· QUEUED` block with the keyboard up, T125) needs the queue
+  of §8, which is T25's: moved to T25 as a step of S-C1-32 in `c1-keyboard.spec.mjs` — because
+  a step written now would be a skip the night may not take — spec: S-C1-32, slices.md §3.1 —
+  overrule: none (T25 adds it).
+- B185 (T24) S-C1-32's first run runs on the app's `#/map` and then on the Wall page in one
+  test (screens.md §9.3: the app first, the Wall run with the same assertions); each run's
+  prompt adds a turn, so the runs open on 12, 13 and 14 turns. The `virtualKeyboard` run uses a
+  second page of the same context with the stub as an init script, `boundingRect` a `DOMRect`
+  at the window's bottom — spec: S-C1-32 "Test:" — overrule: the test file.
+- B186 (T24) The pane re-reads the input's height (`grow()`) whenever the link's state is drawn,
+  so the room-down status line coming or going changes the cap with the keyboard up at once,
+  not at the next keystroke — spec: `c1-talk.md` §7.1 "The input grows" — overrule: `render()`.
