@@ -142,3 +142,34 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   not after — because `test/cockpit-fake-agent.test.mjs` reads the log as soon as it sees `result`
   and failed once under the whole suite's load (round 5); §2.6 orders the log's kinds, not the log
   against stdout — spec: `stand-ins.md` §2.6 — overrule: tests poll the log instead.
+- B25 (T4) The `bridge` dialect reads `mcp.json` from `--mcp-config` when given, else from its working
+  directory (`cockpit.agent.cwd`, default `{stateDir}/cockpit-agent`); `ready.agent` is
+  `fake-agent 0.0.0-fake`; `ready.allowlist` is left out when `LANEBOARD_ALLOWED_TOOLS` is unset or not
+  JSON; a `done` `turn.end` carries `costUsd` and `durationMs` but no `steps`; a `ping` turn field
+  writes nothing (§11.3 has no ping); its `stdin` log lines leave `text` out as the claude ones leave
+  `message.content` out — because §2.5 and §11.11 say "the URL in that same `mcp.json`" without saying
+  how a bridge agent finds it, and §11.3 makes those fields optional — spec: `stand-ins.md` §2.5,
+  `protocols.md` §11.3, §11.11 — overrule: `bridgeSpeaker()` and `main()` in `fake-agent.mjs`.
+- B26 (T4) A `next-tool-end` steer drops the running turn's remaining steps and plays the steered
+  prompt's matched turn from the take (its `at` from then; its `end` ends the turn); one steer is
+  taken per moment no call runs (a second waits for the next, or for the turn's end); `queued` and
+  `onInterrupt` are the first turn's throughout; the `turn-end` line names the first turn — because
+  §2.4's "plays its matched turn's steps as part of the running turn" does not say whether the rest
+  of the running turn still plays, and S-C1-16 wants the steer's reply right after the prompt block —
+  spec: `stand-ins.md` §2.4, `c1-talk.md` S-C1-16 — overrule: merge both timelines in `play()`.
+- B27 (T4) The real MCP call is one `tools/call` POST (no `initialize` first, no `Mcp-Session-Id`),
+  `Accept: application/json, text/event-stream`, a JSON or an SSE answer, the `mcp.json` `timeout`
+  (default 15 s); `tool-result.result` is `structuredContent`, else the text parsed as JSON, else the
+  text; a JSON-RPC error or a failed request is `isError` true, `result` `null` and an added `error`
+  field; a tool outside `mcp__laneboard__*` makes no call and logs no `tool-result`; a step after a
+  call's `endAt` waits for the call too — because §2.3 names only the `tools/call` request, and T35's
+  server is not built yet — spec: `stand-ins.md` §2.3, §2.6, `c3-see.md` §1 — overrule: `mcpCall()`
+  in `fake-agent.mjs` (T35 may need `initialize` first if its server keeps sessions).
+- B28 (T4, replacing B8 except its first point) A receipt lists every prompt not taken yet, ignored
+  (`ignore`, `ignore-once`) ones included; an interrupt with no turn running answers the receipt and
+  ends nothing; `SIGINT` with no turn running, and a `priority:"now"` prompt, end the turn with no
+  receipt (there is no request); an interrupted turn writes only its `result` (`aborted_streaming`),
+  not the open message's `assistant`/`message_stop` lines; once an `ignore-once` resend is taken, the
+  first prompt is no longer a candidate for `resendOf` — because §2.4 leaves those cases open —
+  spec: `stand-ins.md` §2.4, §2.6 — overrule: `interrupt()`, `sigint()` and `prompt()` in
+  `fake-agent.mjs`.

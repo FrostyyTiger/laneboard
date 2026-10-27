@@ -11,11 +11,9 @@
 // (re-read at every prompt and every start), `received.jsonl` (its log, §2.6,
 // read with ./fake-agent-log.mjs) and `starts` (how many times it started).
 //
-// Built so far (C1 night T1): dialect `claude`; steps text, tool (no real MCP
-// call yet), denied, retry, end, exit, ping; `start`; the login check. A prompt
-// that arrives during a turn waits for the turn's end (as `after-turn`); an
-// interrupt is logged with no receipt. T4 adds the real MCP calls, `queued`,
-// `onInterrupt`, `priority`, signals and the `bridge` dialect.
+// Dialects `claude` (default) and `bridge` (§2.5); every step of §2.3, the real
+// MCP call of an `mcp__laneboard__*` tool (to the URL of `--mcp-config`), `start`,
+// the login check; `queued`, `onInterrupt`, `priority` and signals (§2.4).
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -120,7 +118,92 @@ export const native = {
     num_turns: numTurns, duration_ms: durationMs, total_cost_usd: costUsd }),
   stepLimit: ({ numTurns }) => ({ type: 'result', subtype: 'error_max_turns', is_error: true, num_turns: numTurns }),
   failed: ({ detail }) => ({ type: 'result', subtype: 'error_during_execution', is_error: true, errors: [detail] }),
+  aborted: () => ({ type: 'result', subtype: 'error_during_execution', is_error: true, terminal_reason: 'aborted_streaming' }),
+  receipt: ({ requestId, stillQueued, cancelled }) => ({ type: 'control_response',
+    response: { subtype: 'success', request_id: requestId, response: { still_queued: stillQueued, cancelled } } }),
 };
+
+// --- The bridge events (`protocols.md` §11.3), the `bridge` dialect (§2.5) ---
+export const bridge = {
+  ready: ({ session, mcp, capabilities, allowlist }) => ({ type: 'ready', session, agent: `fake-agent ${FAKE_VERSION}`,
+    tools: FAKE_TOOLS, mcp: { laneboard: mcp }, canSteer: true,
+    canCancelQueued: capabilities.includes('interrupt_cancel_queued_v1'),
+    ...(Array.isArray(allowlist) ? { allowlist } : {}) }),
+  taken: ({ id }) => ({ type: 'taken', id }),
+  textDelta: ({ block, text }) => ({ type: 'text.delta', block, text }),
+  textBlock: ({ block, text }) => ({ type: 'text.block', block, text }),
+  toolStart: ({ block, id, name, input, denied }) => ({ type: 'tool.start', block, toolUseId: id, tool: name, input,
+    ...(denied ? { denied: true } : {}) }),
+  toolEnd: ({ id, isError }) => ({ type: 'tool.end', toolUseId: id, isError, denied: false }),
+  retrying: ({ attempt, of }) => ({ type: 'retrying', attempt, of }),
+  turnEnd: (fields) => ({ type: 'turn.end', ...fields }),
+  interrupted: ({ id, stillQueued, cancelled }) => ({ type: 'interrupted', id, stillQueued, cancelled }),
+};
+
+// --- The real MCP call (§2.3) ---
+
+const MCP_PREFIX = 'mcp__laneboard__';
+
+/** `${NAME}` in an `mcp.json` header, filled from the environment as Claude Code does. */
+function expandEnv(value, env) {
+  return String(value).replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, k) => env[k] ?? '');
+}
+
+/** The JSON-RPC answer of a Streamable HTTP reply: a JSON body, or the `data:` of an SSE event. */
+function rpcAnswer(text, contentType) {
+  if (!/text\/event-stream/.test(contentType ?? '')) return JSON.parse(text);
+  const data = text.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trim());
+  for (const d of data) {
+    try {
+      const msg = JSON.parse(d);
+      if ('result' in msg || 'error' in msg) return msg;
+    } catch { /* not this event */ }
+  }
+  throw new Error('no JSON-RPC answer in the event stream');
+}
+
+/**
+ * Calls `tool` (`mcp__laneboard__<name>`) on the room's MCP server: one `tools/call`
+ * JSON-RPC request over HTTP to the `laneboard` URL of `configPath` (`c3-see.md` §1's
+ * `mcp.json`), its headers' `${…}` filled from `env` (`LANEBOARD_MCP_TOKEN`).
+ * Never throws: resolves `{isError, result, content, error?}` where `result` is the
+ * tool's JSON result (`structuredContent`, else its text parsed) and `content` the
+ * text the `tool_result` carries.
+ */
+export async function mcpCall({ configPath, env = process.env, tool, input, id = 1 }) {
+  const fail = (error) => ({ isError: true, result: null, content: `(fake agent: ${error})`, error });
+  let server;
+  try {
+    server = JSON.parse(fs.readFileSync(configPath, 'utf8')).mcpServers?.laneboard;
+  } catch (e) {
+    return fail(`cannot read the MCP config ${configPath}: ${e.message}`);
+  }
+  if (!server?.url) return fail(`no laneboard server in ${configPath}`);
+  const headers = { 'content-type': 'application/json', accept: 'application/json, text/event-stream' };
+  for (const [k, v] of Object.entries(server.headers ?? {})) headers[k] = expandEnv(v, env);
+  const body = { jsonrpc: '2.0', id, method: 'tools/call',
+    params: { name: String(tool).slice(MCP_PREFIX.length), arguments: input ?? {} } };
+  let rpc;
+  try {
+    const res = await fetch(server.url, { method: 'POST', headers, body: JSON.stringify(body),
+      signal: AbortSignal.timeout(Number(server.timeout) || 15000) });
+    const text = await res.text();
+    if (!res.ok) return fail(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+    rpc = rpcAnswer(text, res.headers.get('content-type'));
+  } catch (e) {
+    return fail(e.message);
+  }
+  if (rpc.error) {
+    return { isError: true, result: null, content: String(rpc.error.message ?? 'error'), error: rpc.error };
+  }
+  const r = rpc.result ?? {};
+  const text = (Array.isArray(r.content) ? r.content : []).filter((c) => c?.type === 'text').map((c) => c.text).join('');
+  let result = r.structuredContent;
+  if (result === undefined) {
+    try { result = JSON.parse(text); } catch { result = text; }
+  }
+  return { isError: r.isError === true, result, content: text };
+}
 
 // --- The program ---
 
@@ -148,14 +231,16 @@ function main() {
 
   const opt = (name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
   const dialect = opt('--dialect') ?? 'claude';
-  if (dialect !== 'claude') {
-    // The bridge dialect (§2.5) is C1 night T4's.
-    process.stderr.write(`fake-agent: dialect ${dialect} not built yet\n`);
+  if (dialect !== 'claude' && dialect !== 'bridge') {
+    process.stderr.write(`fake-agent: unknown dialect ${dialect}\n`);
     process.exit(2);
   }
-  const resumeId = opt('--resume');
-  const session = resumeId ?? opt('--session-id') ?? randomUUID();
+  // A bridge agent's session comes from its environment, not the arguments (§2.5).
+  const resumed = dialect === 'bridge' ? process.env.LANEBOARD_SESSION_RESUME === '1' : opt('--resume') != null;
+  const session = (dialect === 'bridge' ? process.env.LANEBOARD_SESSION : opt('--resume') ?? opt('--session-id')) ?? randomUUID();
   const maxTurns = Number(opt('--max-turns') ?? 40);
+  // A bridge agent finds `mcp.json` in its working directory, `cockpit.agent.cwd` (B25).
+  const mcpConfig = opt('--mcp-config') ?? (dialect === 'bridge' ? path.resolve('mcp.json') : null);
 
   let script;
   try { script = readScript(); } catch (e) {
@@ -166,7 +251,7 @@ function main() {
   try { n = Number(fs.readFileSync(files.starts, 'utf8')) || 0; } catch { /* first start */ }
   n += 1;
   fs.writeFileSync(files.starts, String(n));
-  log({ kind: 'start', n, argv, env: Object.keys(process.env).sort(), session, resumed: Boolean(resumeId) });
+  log({ kind: 'start', n, argv, env: Object.keys(process.env).sort(), session, resumed });
 
   const start = script.start ?? {};
   if (n <= (Number(start.startFailures) || 0)) {
@@ -174,13 +259,28 @@ function main() {
     process.exit(1);
   }
 
-  const out = (obj) => process.stdout.write(JSON.stringify({ ...obj, session_id: session, uuid: obj.uuid ?? randomUUID() }) + '\n');
-  const agent = createAgent({ out, log, readScript, maxTurns, initialScript: script });
+  const write = dialect === 'bridge'
+    ? (obj) => process.stdout.write(JSON.stringify(obj) + '\n')
+    : (obj) => process.stdout.write(JSON.stringify({ ...obj, session_id: session, uuid: obj.uuid ?? randomUUID() }) + '\n');
+  const speak = dialect === 'bridge' ? bridgeSpeaker(write) : claudeSpeaker(write);
+  const agent = createAgent({ dialect, speak, log, readScript, maxTurns, initialScript: script, mcpConfig });
+
+  // Signals (§2.4): each is logged before it acts.
+  process.on('SIGINT', () => { log({ kind: 'signal', name: 'SIGINT' }); agent.sigint(); });
+  process.on('SIGTERM', () => { log({ kind: 'signal', name: 'SIGTERM' }); process.exit(143); });
 
   let ready = false;
   const early = [];
   setTimeout(() => {
-    out(native.init({ session, mcp: start.mcp ?? 'connected', capabilities: start.capabilities ?? [] }));
+    const capabilities = start.capabilities ?? [];
+    let allowlist;
+    if (dialect === 'bridge') {
+      // §2.5: absent → the list read from LANEBOARD_ALLOWED_TOOLS; null → left out; an array as it is.
+      if (start.allowlist === undefined) {
+        try { allowlist = JSON.parse(process.env.LANEBOARD_ALLOWED_TOOLS ?? 'null'); } catch { allowlist = null; }
+      } else allowlist = start.allowlist;
+    }
+    speak.ready({ session, mcp: start.mcp ?? 'connected', capabilities, allowlist });
     ready = true;
     for (const l of early.splice(0)) agent.line(l);
   }, Number(start.initAfterMs) || 0);
@@ -201,7 +301,7 @@ function main() {
   });
   process.stdin.on('end', () => {
     log({ kind: 'stdin-end' });
-    // Claude Code exits on a closed stdin (`protocols.md` §11.6, 10.0 s row).
+    // Claude Code exits on a closed stdin (`protocols.md` §11.6, 10.0 s row); so does a bridge agent (§2.5).
     process.exit(0);
   });
 }
@@ -228,13 +328,154 @@ function promptText(content) {
   return '';
 }
 
-function createAgent({ out, log, readScript, maxTurns, initialScript }) {
+/**
+ * Dialect `claude`: what the fake does, as Claude Code's native lines. `turn()`
+ * keeps one turn's message and block state (Claude Code numbers blocks per message).
+ */
+function claudeSpeaker(out) {
+  return {
+    ready: ({ session, mcp, capabilities }) => out(native.init({ session, mcp, capabilities })),
+    // --replay-user-messages: the echo, as soon as the line is read (§13.1, 2.97).
+    replay: ({ uuid, content }) => out(native.replay({ uuid, content })),
+    receipt: ({ requestId, stillQueued, cancelled }) => out(native.receipt({ requestId, stillQueued, cancelled })),
+    turn() {
+      const st = { msgId: null, index: 0, text: null, messages: 0 };
+      const open = (uuids) => {
+        st.msgId = `msg_${String(++msgCounter).padStart(2, '0')}`;
+        st.index = 0;
+        st.messages += 1;
+        out(native.messageStart({ uuids, msgId: st.msgId }));
+      };
+      const closeText = () => {
+        if (!st.text) return;
+        out(native.textBlock({ msgId: st.msgId, text: st.text.full }));
+        out(native.blockStop({ index: st.text.index }));
+        st.text = null;
+      };
+      const closeMessage = (stopReason) => {
+        if (!st.msgId) return;
+        closeText();
+        out(native.messageDelta({ stopReason }));
+        out(native.messageStop());
+        st.msgId = null;
+      };
+      const ensure = () => { if (!st.msgId) open(); };
+      return {
+        get messages() { return st.messages; },
+        // Taken: the turn's first message names the prompt (§11.4 `message_start` row).
+        start: (uuids) => open(uuids),
+        // A steer: a new message whose `user_message_uuids` holds the prompt (§2.4).
+        steer: (uuids) => { closeMessage('tool_use'); open(uuids); },
+        text(s) {
+          ensure();
+          if (st.text && s.block === 'new') closeText();
+          if (!st.text) {
+            st.text = { index: st.index++, full: '' };
+            out(native.textStart({ index: st.text.index }));
+          }
+          st.text.full += String(s.text);
+          if (!s.skipDelta) out(native.textDelta({ index: st.text.index, text: String(s.text) }));
+        },
+        tool({ id, name, input, denied, parallel }) {
+          closeText();
+          ensure();
+          const index = st.index++;
+          out(native.toolStart({ index, id, name }));
+          out(native.toolDelta({ index, input }));
+          out(native.toolBlock({ msgId: st.msgId, id, name, input }));
+          out(native.blockStop({ index }));
+          if (denied) out(native.denied({ id, name }));
+          // The message ends with its tool calls unless another call starts
+          // while this one runs (parallel calls share one message, B5).
+          if (!parallel) closeMessage('tool_use');
+        },
+        toolEnd({ id, isError, content }) {
+          closeMessage('tool_use');
+          out(native.toolResult({ id, isError, content }));
+        },
+        retry: (r) => out(native.retry(r)),
+        ping: () => out(native.ping()),
+        end(kind, { durationMs, costUsd, detail, maxTurns }) {
+          closeMessage('end_turn');
+          switch (kind) {
+            case 'step-limit': return out(native.stepLimit({ numTurns: maxTurns }));
+            case 'failed': return out(native.failed({ detail }));
+            case 'not-logged-in':
+              // pending research Q10: an `api_retry` with `authentication_failed`, then the result.
+              out(native.retry({ attempt: 1, of: 10, error: 'authentication_failed' }));
+              return out(native.failed({ detail: 'authentication_failed' }));
+            default: return out(native.done({ numTurns: st.messages, durationMs, costUsd }));
+          }
+        },
+        // An interrupted turn: the open message is left as it is, only the result comes (§2.4).
+        stopped: () => out(native.aborted()),
+      };
+    },
+  };
+}
+
+/**
+ * Dialect `bridge`: the same, as the bridge events of `protocols.md` §11.3; `block`
+ * numbers the turn's text blocks and calls from 0 across the whole turn.
+ */
+function bridgeSpeaker(out) {
+  return {
+    ready: (r) => out(bridge.ready(r)),
+    replay: () => {},
+    receipt: ({ requestId, stillQueued, cancelled }) => out(bridge.interrupted({ id: requestId, stillQueued, cancelled })),
+    turn() {
+      let next = 0;
+      let text = null;
+      let messages = 0;
+      const closeText = () => {
+        if (!text) return;
+        out(bridge.textBlock({ block: text.block, text: text.full }));
+        text = null;
+      };
+      return {
+        get messages() { return messages; },
+        start: (ids) => { messages += 1; for (const id of ids) out(bridge.taken({ id })); },
+        steer: (ids) => { closeText(); messages += 1; for (const id of ids) out(bridge.taken({ id })); },
+        text(s) {
+          if (text && s.block === 'new') closeText();
+          if (!text) text = { block: next++, full: '' };
+          text.full += String(s.text);
+          if (!s.skipDelta) out(bridge.textDelta({ block: text.block, text: String(s.text) }));
+        },
+        tool({ id, name, input, denied }) {
+          closeText();
+          // A refused call is one `tool.start` with `denied:true` and no `tool.end` (§2.5).
+          out(bridge.toolStart({ block: next++, id, name, input, denied }));
+        },
+        toolEnd: ({ id, isError }) => out(bridge.toolEnd({ id, isError })),
+        retry: ({ attempt, of }) => out(bridge.retrying({ attempt, of })),
+        ping: () => {}, // the bridge has no ping event (§11.3)
+        end(kind, { durationMs, costUsd, detail, maxTurns }) {
+          closeText();
+          switch (kind) {
+            case 'step-limit': return out(bridge.turnEnd({ state: 'error', code: 'step-limit', steps: maxTurns }));
+            case 'failed': return out(bridge.turnEnd({ state: 'error', code: 'failed', detail }));
+            case 'not-logged-in': return out(bridge.turnEnd({ state: 'error', code: 'not-logged-in' }));
+            default: return out(bridge.turnEnd({ state: 'done', costUsd, durationMs }));
+          }
+        },
+        stopped: () => out(bridge.turnEnd({ state: 'stopped' })),
+      };
+    },
+  };
+}
+
+let msgCounter = 0;
+let toolCounter = 0;
+let rpcCounter = 0;
+
+function createAgent({ dialect, speak, log, readScript, maxTurns, initialScript, mcpConfig }) {
   let script = initialScript;
   const played = new Set();
-  const pending = []; // prompts read, not taken yet: { uuid, raw, words, content, priority }
+  // Prompts read and not taken yet, in order: { uuid, raw, words, content, priority, turnIndex,
+  // steer (take at the running calls' end), ignored ('ignore' | 'ignore-once') }.
+  const pending = [];
   let running = null;
-  let msgCounter = 0;
-  let toolCounter = 0;
 
   function line(raw) {
     const at = Date.now();
@@ -244,183 +485,250 @@ function createAgent({ out, log, readScript, maxTurns, initialScript }) {
       return;
     }
     const logged = structuredClone(msg);
-    if (logged?.message && typeof logged.message === 'object') delete logged.message.content;
+    // The text is in the `prompt` line only (§2.6).
+    if (dialect === 'bridge') delete logged?.text;
+    else if (logged?.message && typeof logged.message === 'object') delete logged.message.content;
     log({ kind: 'stdin', line: logged }, at);
-    if (msg?.type === 'user') return prompt(msg, at);
+    if (dialect === 'bridge') {
+      if (msg?.type === 'prompt') return prompt({ uuid: msg.id, priority: msg.priority, raw: String(msg.text ?? '') }, at);
+      if (msg?.type === 'interrupt') return interrupt({ requestId: msg.id, cancelQueued: msg.cancelQueued === true }, at);
+      return;
+    }
+    if (msg?.type === 'user') {
+      const content = msg.message?.content;
+      return prompt({ uuid: msg.uuid, priority: msg.priority, raw: promptText(content), content }, at);
+    }
     if (msg?.type === 'control_request' && msg.request?.subtype === 'interrupt') {
-      // The receipt and the stop are T4's (§2.4 `onInterrupt`): logged, no receipt yet.
-      log({ kind: 'interrupt', requestId: msg.request_id, cancelQueued: msg.request.cancel_queued === true,
-        stillQueued: null, cancelled: null }, at);
+      // `cancel_queued` read from `request` (research Q10, unconfirmed; §2.6).
+      return interrupt({ requestId: msg.request_id, cancelQueued: msg.request.cancel_queued === true }, at);
     }
   }
 
-  function prompt(msg, at) {
-    const content = msg.message?.content;
-    const raw = promptText(content);
+  function prompt({ uuid = randomUUID(), priority = 'next', raw, content = raw }, at) {
     const words = ownerWords(raw);
-    const uuid = msg.uuid ?? randomUUID();
-    const priority = msg.priority ?? 'next';
-    const earlier = pending.find((p) => p.raw === raw);
+    // A resend: the same text as a prompt no turn has taken and no receipt cancelled (§2.6).
+    const earlier = pending.find((q) => q.raw === raw);
     try { script = readScript(); } catch (e) {
       process.stderr.write(`fake-agent: cannot read script.json: ${e.message}\n`);
     }
-    const p = { uuid, raw, words, content, priority };
     // `turn` is the turn this prompt would match now; it is taken by index at take time.
     const i = matchTurn(script, words, played);
-    p.turnIndex = i;
+    const p = { uuid, raw, words, content, priority, turnIndex: i, steer: false, ignored: null };
     log({ kind: 'prompt', uuid, priority, words, raw, turn: i >= 0 ? `${script.name}#${i + 1}` : null,
       ...(earlier ? { resendOf: earlier.uuid } : {}) }, at);
-    // --replay-user-messages: the echo, as soon as the line is read (§13.1, 2.97).
-    out(native.replay({ uuid, content }));
-    pending.push(p);
-    if (!running) next();
+    speak.replay({ uuid, content });
+
+    if (earlier?.ignored === 'ignore') {
+      // `ignore` never takes it nor any resend of it (§2.4).
+      p.ignored = 'ignore';
+      pending.push(p);
+      return;
+    }
+    if (earlier?.ignored === 'ignore-once') {
+      // `ignore-once` takes the room's resend as a new turn; the first stays untaken for good.
+      pending.splice(pending.indexOf(earlier), 1);
+      pending.push(p);
+      if (!running) next();
+      return;
+    }
+    if (!running) {
+      pending.push(p);
+      next();
+      return;
+    }
+    if (priority === 'later') {
+      pending.push(p); // after the running turn, whatever its `queued` says
+    } else if (priority === 'now') {
+      // As an interrupt without `cancel_queued` (no receipt: no request), then a new turn.
+      pending.unshift(p);
+      abort(running, interruptMode(running.turn));
+    } else {
+      const queued = running.turn.queued ?? 'next-tool-end';
+      if (queued === 'ignore' || queued === 'ignore-once') p.ignored = queued;
+      // next-tool-end: taken once the running calls end; with none running, after the turn.
+      else if (queued === 'next-tool-end' && running.tools.size > 0) p.steer = true;
+      pending.push(p);
+    }
+  }
+
+  /** A turn's `onInterrupt` (§2.4): 'ignore', 'ignore-sigint' or { endAfterMs }. */
+  function interruptMode(turn) {
+    const m = turn?.onInterrupt ?? { endAfterMs: 300 };
+    if (m === 'ignore' || m === 'ignore-sigint') return m;
+    return { endAfterMs: Number(m.endAfterMs ?? 300) };
+  }
+
+  function interrupt({ requestId, cancelQueued }, at) {
+    const mode = running ? interruptMode(running.turn) : { endAfterMs: 0 };
+    if (typeof mode === 'string') {
+      // `ignore`, `ignore-sigint`: no receipt, the turn plays on.
+      log({ kind: 'interrupt', requestId, cancelQueued, stillQueued: null, cancelled: null }, at);
+      return;
+    }
+    const ids = pending.map((q) => q.uuid);
+    const receipt = cancelQueued ? { stillQueued: [], cancelled: ids } : { stillQueued: ids, cancelled: [] };
+    if (cancelQueued) pending.length = 0;
+    log({ kind: 'interrupt', requestId, cancelQueued, ...receipt }, at);
+    speak.receipt({ requestId, ...receipt });
+    if (running) abort(running, mode.endAfterMs);
+  }
+
+  function sigint() {
+    // SIGINT (unless ignored) ends the turn as an interrupt with `endAfterMs` 0 (§2.4).
+    if (!running || interruptMode(running.turn) === 'ignore-sigint') return;
+    abort(running, 0);
+  }
+
+  /** Ends the running turn as an interrupt (`mode`: an `interruptMode()` or the ms before its result). */
+  function abort(cur, mode) {
+    if (typeof mode === 'string' || cur.abort) return;
+    cur.abort = { endAfterMs: typeof mode === 'number' ? mode : mode.endAfterMs };
+    cur.wake();
   }
 
   function next() {
-    const p = pending.shift();
-    if (!p) return;
-    let turn;
+    const k = pending.findIndex((q) => !q.ignored);
+    if (k < 0) return;
+    const [p] = pending.splice(k, 1);
+    const { turn, name } = takeTurn(p);
+    running = play(turn, name, p);
+    running.done.finally(() => { running = null; next(); });
+  }
+
+  /** The turn a prompt plays: the one it matched if still free, else a fresh match, else the no-match answer. */
+  function takeTurn(p) {
+    let turn = null;
     let name = null;
-    if (p.turnIndex >= 0 && (!played.has(p.turnIndex) || script.turns?.[p.turnIndex]?.repeat)) {
-      turn = script.turns[p.turnIndex];
-      played.add(p.turnIndex);
-      name = `${script.name}#${p.turnIndex + 1}`;
-    } else {
-      const i = matchTurn(script, p.words, played);
-      if (i >= 0) { turn = script.turns[i]; played.add(i); name = `${script.name}#${i + 1}`; }
-    }
+    const free = (i) => i >= 0 && (!played.has(i) || script.turns?.[i]?.repeat);
+    const i = free(p.turnIndex) ? p.turnIndex : matchTurn(script, p.words, played);
+    if (i >= 0 && script.turns?.[i]) { turn = script.turns[i]; played.add(i); name = `${script.name}#${i + 1}`; }
     if (script.start?.login === 'failed') turn = { steps: [{ at: 0, end: 'not-logged-in' }] };
     if (!turn) turn = noMatchTurn(p.words);
-    running = play(turn, name, p).finally(() => { running = null; next(); });
+    return { turn, name };
   }
 
-  async function play(turn, name, p) {
-    const t0 = Date.now();
-    const st = { msgId: null, index: 0, text: null, messages: 0 };
-    const ids = new Map(); // tool step → its toolu_ id
-    const openMessage = (uuids) => {
-      st.msgId = `msg_${String(++msgCounter).padStart(2, '0')}`;
-      st.index = 0;
-      st.messages += 1;
-      out(native.messageStart({ uuids, msgId: st.msgId }));
-    };
-    const closeText = () => {
-      if (!st.text) return;
-      out(native.textBlock({ msgId: st.msgId, text: st.text.full }));
-      out(native.blockStop({ index: st.text.index }));
-      st.text = null;
-    };
-    const closeMessage = (stopReason) => {
-      if (!st.msgId) return;
-      closeText();
-      out(native.messageDelta({ stopReason }));
-      out(native.messageStop());
-      st.msgId = null;
-    };
-    const ensureMessage = () => { if (!st.msgId) openMessage(); };
+  function play(turn, name, p) {
+    const cur = { turn, tools: new Set(), abort: null, wake: () => {} };
+    let abortNow;
+    const aborted = new Promise((r) => { abortNow = r; });
+    cur.wake = () => abortNow();
+    cur.done = run();
+    return cur;
 
-    // Taken: the turn's first message names the prompt (§11.4 `message_start` row).
-    openMessage([p.uuid]);
-    const ping = Number(turn.pingEveryMs) > 0 ? setInterval(() => out(native.ping()), Number(turn.pingEveryMs)) : null;
-    const events = timeline(Array.isArray(turn.steps) ? turn.steps : []);
-    let ended = false;
-    try {
-      for (let k = 0; k < events.length && !ended; k++) {
-        const ev = events[k];
-        const wait = t0 + ev.t - Date.now();
-        if (wait > 0) await sleep(wait);
-        const s = ev.step;
-        switch (ev.kind) {
-          case 'text': {
-            ensureMessage();
-            if (st.text && s.block === 'new') closeText();
-            if (!st.text) {
-              st.text = { index: st.index++, full: '' };
-              out(native.textStart({ index: st.text.index }));
+    async function run() {
+      const t0Turn = Date.now();
+      const w = speak.turn();
+      const ids = new Map(); // tool step → its toolu_ id
+      const calls = new Map(); // tool step → its MCP call
+      w.start([p.uuid]);
+      const ping = Number(turn.pingEveryMs) > 0 ? setInterval(() => w.ping(), Number(turn.pingEveryMs)) : null;
+      let events = timeline(Array.isArray(turn.steps) ? turn.steps : []);
+      let t0 = t0Turn;
+      let k = 0;
+      let ended = false;
+      try {
+        while (!ended && !cur.abort) {
+          // A steer (`queued` next-tool-end): taken once no call runs; its turn's steps
+          // play as the rest of this turn, `at` from the take (B26).
+          const s = cur.tools.size === 0 ? pending.find((q) => q.steer && !q.ignored) : null;
+          if (s) {
+            pending.splice(pending.indexOf(s), 1);
+            const taken = takeTurn(s);
+            w.steer([s.uuid]);
+            events = timeline(Array.isArray(taken.turn.steps) ? taken.turn.steps : []);
+            t0 = Date.now();
+            k = 0;
+            continue;
+          }
+          if (k >= events.length) break;
+          const ev = events[k];
+          const wait = t0 + ev.t - Date.now();
+          if (wait > 0) await Promise.race([sleep(wait), aborted]);
+          if (cur.abort) break;
+          k += 1;
+          const st = ev.step;
+          switch (ev.kind) {
+            case 'text':
+              w.text(st);
+              break;
+            case 'tool':
+            case 'denied': {
+              const id = `toolu_${String(++toolCounter).padStart(2, '0')}`;
+              const toolName = ev.kind === 'tool' ? String(st.tool) : String(st.denied);
+              const input = st.input ?? {};
+              if (ev.kind === 'tool') {
+                ids.set(st, id);
+                cur.tools.add(st);
+                if (toolName.startsWith(MCP_PREFIX)) calls.set(st, realCall(toolName, input, st));
+              }
+              const nextEv = events.slice(k).find((e) => e.kind !== 'tool-end' || e.step !== st);
+              const parallel = ev.kind === 'tool' && nextEv?.kind === 'tool' && nextEv.t < Number(st.endAt ?? st.at);
+              w.tool({ id, name: toolName, input, denied: ev.kind === 'denied', parallel });
+              break;
             }
-            st.text.full += String(s.text);
-            if (!s.skipDelta) out(native.textDelta({ index: st.text.index, text: String(s.text) }));
-            break;
-          }
-          case 'tool':
-          case 'denied': {
-            closeText();
-            ensureMessage();
-            const id = `toolu_${String(++toolCounter).padStart(2, '0')}`;
-            const toolName = ev.kind === 'tool' ? String(s.tool) : String(s.denied);
-            const input = s.input ?? {};
-            const index = st.index++;
-            out(native.toolStart({ index, id, name: toolName }));
-            out(native.toolDelta({ index, input }));
-            out(native.toolBlock({ msgId: st.msgId, id, name: toolName, input }));
-            out(native.blockStop({ index }));
-            if (ev.kind === 'denied') {
-              out(native.denied({ id, name: toolName }));
-            } else {
-              ids.set(s, id);
+            case 'tool-end': {
+              // With a real call, `endAt` is the earliest end: the result waits for the call (§2.3).
+              let r = { isError: st.isError === true, content: '(fake agent: no call)' };
+              if (calls.has(st)) {
+                r = await Promise.race([calls.get(st), aborted]);
+                if (cur.abort) break;
+              }
+              cur.tools.delete(st);
+              w.toolEnd({ id: ids.get(st), isError: r.isError, content: r.content });
+              break;
             }
-            // The message ends with its tool calls unless another call starts
-            // while this one runs (parallel calls share one message).
-            const nextEv = events.slice(k + 1).find((e) => e.kind !== 'tool-end' || e.step !== s);
-            const parallel = ev.kind === 'tool' && nextEv?.kind === 'tool' && nextEv.t < Number(s.endAt ?? s.at);
-            if (!parallel) closeMessage('tool_use');
-            break;
+            case 'retry': {
+              const rt = st.retry ?? {};
+              w.retry({ attempt: rt.attempt ?? 1, of: rt.of ?? 10, error: rt.error ?? 'overloaded' });
+              break;
+            }
+            case 'exit':
+              process.exit(Number(st.exit) || 0);
+              break;
+            case 'end':
+              ended = true;
+              endTurn(w, st, Date.now() - t0Turn, name);
+              break;
+            default:
+              break; // an unknown step: the script check (T5) refuses it
           }
-          case 'tool-end': {
-            closeMessage('tool_use');
-            // No real MCP call yet (T4): the result is a placeholder, `is_error` from the step.
-            out(native.toolResult({ id: ids.get(s), isError: s.isError === true, content: '(fake agent: no call)' }));
-            break;
-          }
-          case 'retry': {
-            const r = s.retry ?? {};
-            out(native.retry({ attempt: r.attempt ?? 1, of: r.of ?? 10, error: r.error ?? 'overloaded' }));
-            break;
-          }
-          case 'exit':
-            process.exit(Number(s.exit) || 0);
-            break;
-          case 'end':
-            ended = true;
-            closeMessage('end_turn');
-            endTurn(s, st.messages, Date.now() - t0, name);
-            break;
-          default:
-            break; // an unknown step: the script check (T5) refuses it
         }
+        if (cur.abort) {
+          // Interrupted (§2.4): the remaining steps are dropped; `endAfterMs` later the result.
+          if (cur.abort.endAfterMs > 0) await sleep(cur.abort.endAfterMs);
+          log({ kind: 'turn-end', turn: name, end: 'stopped' });
+          w.stopped();
+        } else if (!ended) {
+          // A script without `end`: the turn ends `done` after its last step.
+          endTurn(w, { end: 'done' }, Date.now() - t0Turn, name);
+        }
+      } finally {
+        if (ping) clearInterval(ping);
       }
-      if (!ended) {
-        // A script without `end`: the turn ends `done` after its last step.
-        closeMessage('end_turn');
-        endTurn({ end: 'done' }, st.messages, Date.now() - t0, name);
-      }
-    } finally {
-      if (ping) clearInterval(ping);
     }
   }
 
-  function endTurn(s, messages, durationMs, name) {
+  /** The real MCP call of a tool step, logged as `tool-result` when it returns (§2.3, §2.6). */
+  async function realCall(tool, input, step) {
+    if (step.call === false) {
+      log({ kind: 'tool-result', tool, isError: step.isError === true, input, result: null });
+      return { isError: step.isError === true, content: '(fake agent: no call)' };
+    }
+    const res = await mcpCall({ configPath: mcpConfig ?? '(no --mcp-config)', tool, input, id: ++rpcCounter });
+    const isError = typeof step.isError === 'boolean' ? step.isError : res.isError;
+    log({ kind: 'tool-result', tool, isError, input, result: res.result, ...(res.error ? { error: res.error } : {}) });
+    return { isError, content: res.content };
+  }
+
+  function endTurn(w, s, durationMs, name) {
+    const kind = END_KINDS.includes(s.end) ? s.end : 'done';
     // Logged before the result goes out (sync), so a test that has read the
     // result line always finds the turn's end in the log (B24).
-    log({ kind: 'turn-end', turn: name, end: END_KINDS.includes(s.end) ? s.end : 'done' });
-    switch (s.end) {
-      case 'step-limit':
-        out(native.stepLimit({ numTurns: maxTurns }));
-        break;
-      case 'failed':
-        out(native.failed({ detail: String(s.detail ?? 'failed') }));
-        break;
-      case 'not-logged-in':
-        // pending research Q10: an `api_retry` with `authentication_failed`, then the result.
-        out(native.retry({ attempt: 1, of: 10, error: 'authentication_failed' }));
-        out(native.failed({ detail: 'authentication_failed' }));
-        break;
-      default:
-        out(native.done({ numTurns: messages, durationMs, costUsd: s.costUsd ?? 0 }));
-    }
+    log({ kind: 'turn-end', turn: name, end: kind });
+    w.end(kind, { durationMs, costUsd: s.costUsd ?? 0, detail: String(s.detail ?? 'failed'), maxTurns });
   }
 
-  return { line };
+  return { line, sigint };
 }
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }

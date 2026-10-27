@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import http from 'node:http';
 import { fakeAgentLog } from './cockpit/stand-ins/fake-agent-log.mjs';
 import { ownerWords, matchTurn, timeline, stepKind } from './cockpit/stand-ins/fake-agent.mjs';
 
@@ -38,9 +39,9 @@ function tempDir(t) {
 }
 
 /** Starts the fake in `dir` with `script`; collects its stdout lines with their arrival time. */
-function startFake(t, dir, script, args = CLAUDE_ARGS) {
+function startFake(t, dir, script, args = CLAUDE_ARGS, { env = {}, cwd } = {}) {
   if (script) fs.writeFileSync(path.join(dir, 'script.json'), JSON.stringify(script));
-  const child = spawn(process.execPath, [FAKE, ...args], { env: childEnv(dir), stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [FAKE, ...args], { env: { ...childEnv(dir), ...env }, cwd, stdio: ['pipe', 'pipe', 'pipe'] });
   const lines = [];
   let stderr = '';
   let buf = '';
@@ -114,7 +115,8 @@ function nativeRows() {
   const to = text.indexOf('### 11.5 ', from);
   const rows = [];
   for (const line of text.slice(from, to).split('\n')) {
-    const m = /^\| `(\{.*?\})` \|/.exec(line);
+    // A cell may add a note after its line (`… (after an \`interrupt\`)`).
+    const m = /^\| `(\{.*?\})`[^|]*\|/.exec(line);
     if (m) rows.push(JSON.parse(m[1]));
   }
   return rows;
@@ -200,7 +202,8 @@ test('replays protocols.md §13.1 line by line', async (t) => {
     start: { initAfterMs: 50, mcp: 'connected', login: 'ok', startFailures: 0,
       capabilities: ['interrupt_receipt_v1', 'interrupt_cancel_queued_v1'] },
     turns: [{ match: 'wie lief die nacht', steps: [
-      { at: 1090, tool: 'mcp__laneboard__morning', input: { window: 'tonight' }, endAt: 1640 },
+      // No MCP server here: the call is the next test's (`call:false`, §2.3).
+      { at: 1090, tool: 'mcp__laneboard__morning', input: { window: 'tonight' }, endAt: 1640, call: false },
       ...reply.map((text, i) => ({ at: textAt[i], text })),
       { at: 5040, end: 'done', costUsd: 0.0412 },
     ] }],
@@ -265,8 +268,9 @@ test('replays protocols.md §13.1 line by line', async (t) => {
 
   // The log (§2.6).
   const log = fakeAgentLog(dir);
-  assert.deepEqual(log.order(), ['start', 'prompt', 'turn-end']);
+  assert.deepEqual(log.order(), ['start', 'prompt', 'tool-result', 'turn-end']);
   assert.deepEqual(log.order('stdin', 'prompt'), ['stdin', 'prompt']);
+  assert.deepEqual(log.toolResults().map((l) => [l.tool, l.isError, l.result]), [['mcp__laneboard__morning', false, null]]);
   const [start] = log.starts();
   assert.equal(start.n, 1);
   assert.equal(start.session, SESSION);
@@ -343,8 +347,8 @@ test('text steps: skipDelta leaves the delta out, block:new starts a second bloc
 test('tool steps: parallel calls share a message and end in their own order; denied, retry', async (t) => {
   const dir = tempDir(t);
   const fake = startFake(t, dir, { name: 'p', turns: [{ steps: [
-    { at: 0, tool: 'mcp__laneboard__fleet', input: { site: 'hv1' }, endAt: 300 },
-    { at: 50, tool: 'mcp__laneboard__fleet', input: { site: 'hv2' }, endAt: 150, isError: true },
+    { at: 0, tool: 'mcp__laneboard__fleet', input: { site: 'hv1' }, endAt: 300, call: false },
+    { at: 50, tool: 'mcp__laneboard__fleet', input: { site: 'hv2' }, endAt: 150, isError: true, call: false },
     { at: 400, retry: { attempt: 2, of: 10, error: 'overloaded' } },
     { at: 450, denied: 'Bash', input: { command: 'ls' } },
     { at: 500, text: 'Done.' }, { at: 550, end: 'done' }] }] });
@@ -451,4 +455,404 @@ test('the login check: ok, failed, hang; not counted as a start', async (t) => {
   assert.deepEqual(log.loginChecks().map((l) => [l.login, l.exit]), [['ok', 0], ['failed', 1], ['hang', null]]);
   assert.equal(log.starts().length, 0);
   assert.equal(fs.existsSync(path.join(dir, 'starts')), false);
+});
+
+// --- T4: real MCP calls, `queued`, `onInterrupt`, `priority`, signals, the bridge dialect ---
+
+/**
+ * A small loopback JSON-RPC stub standing in for the room's MCP server (`c3-see.md` §1):
+ * `answer(name, args)` gives `{delayMs, sse, rpc}` per call; every request is kept.
+ */
+async function mcpStub(t, answer) {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', (c) => { body += c; });
+    req.on('end', () => {
+      const msg = JSON.parse(body);
+      requests.push({ headers: req.headers, url: req.url, msg, at: Date.now() });
+      const a = answer(msg.params?.name, msg.params?.arguments);
+      setTimeout(() => {
+        const rpc = { jsonrpc: '2.0', id: msg.id, ...a.rpc };
+        if (a.sse) {
+          res.writeHead(200, { 'content-type': 'text/event-stream' });
+          res.end(`event: message\ndata: ${JSON.stringify(rpc)}\n\n`);
+        } else {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify(rpc));
+        }
+      }, a.delayMs ?? 0);
+    });
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => server.close());
+  return { url: `http://127.0.0.1:${server.address().port}/mcp`, requests };
+}
+
+/** `c3-see.md` §1's `mcp.json`, written to `file`, pointing at `url`. */
+function writeMcpJson(file, url) {
+  fs.writeFileSync(file, JSON.stringify({ mcpServers: { laneboard: { type: 'http', url,
+    headers: { Authorization: 'Bearer ${LANEBOARD_MCP_TOKEN}' }, timeout: 15000 } } }));
+}
+
+const withMcpConfig = (file) => CLAUDE_ARGS.map((a, i) => (CLAUDE_ARGS[i - 1] === '--mcp-config' ? file : a));
+const toolResults = (objs) => objs.filter((o) => o.type === 'user' && !o.isReplay).map((o) => o.message.content[0]);
+const tokenOf = (o) => o.user_message_uuids?.[0];
+
+test('a real MCP call: tools/call to the --mcp-config URL with the token; endAt is the earliest end', async (t) => {
+  const dir = tempDir(t);
+  const morning = { asOf: [{ source: 'board', at: '2026-10-27T07:12:04+01:00', ageS: 1 }], window: 'tonight', stuck: [] };
+  const stub = await mcpStub(t, (name, args) => {
+    if (name === 'morning') return { delayMs: 400, rpc: { result: { content: [{ type: 'text', text: JSON.stringify(morning) }], structuredContent: morning } } };
+    if (name === 'runs' && args.run === 'acme-x') return { sse: true, rpc: { result: { isError: true, content: [{ type: 'text', text: 'No run "acme-x". Known runs: acme-search.' }] } } };
+    if (name === 'runs') return { rpc: { error: { code: -32602, message: 'run: must match ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' } } };
+    return { rpc: { result: { isError: true, content: [{ type: 'text', text: '{"alerts":[]}' }] } } };
+  });
+  const config = path.join(dir, 'mcp.json');
+  writeMcpJson(config, stub.url);
+  const fake = startFake(t, dir, { name: 'mcp', turns: [{ steps: [
+    { at: 0, tool: 'mcp__laneboard__morning', input: { window: 'tonight' }, endAt: 100 },
+    { at: 500, tool: 'mcp__laneboard__runs', input: { run: 'acme-x' }, endAt: 550 },
+    { at: 600, tool: 'mcp__laneboard__runs', input: { run: '../x' }, endAt: 650 },
+    { at: 700, tool: 'mcp__laneboard__alerts', input: {}, endAt: 750, isError: false },
+    { at: 800, tool: 'Read', input: { file_path: 'README.md' }, endAt: 850 },
+    { at: 900, end: 'done' }] }] }, withMcpConfig(config));
+  const sentAt = Date.now();
+  fake.send(userLine('00000000-0000-4000-8000-000000000001', 'go'));
+  await fake.until(results(1));
+  const objs = fake.lines.map((l) => l.obj);
+
+  // The requests: one tools/call per mcp__laneboard__ step, the token from the environment.
+  assert.deepEqual(stub.requests.map((r) => [r.msg.method, r.msg.params.name, r.msg.params.arguments]),
+    [['tools/call', 'morning', { window: 'tonight' }], ['tools/call', 'runs', { run: 'acme-x' }],
+      ['tools/call', 'runs', { run: '../x' }], ['tools/call', 'alerts', {}]]);
+  for (const r of stub.requests) {
+    assert.equal(r.headers.authorization, 'Bearer test-token');
+    assert.equal(r.url, '/mcp');
+    assert.equal(r.msg.jsonrpc, '2.0');
+  }
+  // The morning result waits for the call (400 ms), not endAt (100 ms).
+  const firstResult = fake.lines.find((l) => l.obj.type === 'user' && !l.obj.isReplay);
+  assert.ok(firstResult.at - sentAt >= 400, `tool_result at ${firstResult.at - sentAt} ms`);
+  const tr = toolResults(objs);
+  assert.deepEqual(tr.map((r) => r.is_error), [false, true, true, false, false]);
+  assert.equal(tr[0].content, JSON.stringify(morning));
+  assert.equal(tr[4].content, '(fake agent: no call)', 'Read is not an MCP tool: no call');
+  assertRowShapes(objs);
+
+  // The log: one tool-result per call, the step's isError winning over the result's.
+  const logged = fakeAgentLog(dir).toolResults();
+  assert.deepEqual(logged.map((l) => [l.tool, l.isError]), [['mcp__laneboard__morning', false],
+    ['mcp__laneboard__runs', true], ['mcp__laneboard__runs', true], ['mcp__laneboard__alerts', false]]);
+  assert.deepEqual(logged[0].result, morning);
+  assert.deepEqual(logged[0].input, { window: 'tonight' });
+  assert.equal(logged[1].result, 'No run "acme-x". Known runs: acme-search.');
+  assert.equal(logged[2].result, null);
+  assert.equal(logged[2].error.code, -32602);
+  assert.deepEqual(logged[3].result, { alerts: [] }, 'no structuredContent: the text parsed');
+  assert.equal(fakeAgentLog(dir).toolResults('mcp__laneboard__runs').length, 2);
+});
+
+test('queued next-tool-end: a prompt sent during a call is taken at its end, into the same turn', async (t) => {
+  const dir = tempDir(t);
+  // S-C1-16's shape: text, a call 100-600 ms, more text; the steer turn writes 0.3 s after the take.
+  const script = { name: 'c1-typing', turns: [
+    { match: 'how did', queued: 'next-tool-end', steps: [
+      { at: 0, text: 'Three runs ran last night.' },
+      { at: 100, tool: 'mcp__laneboard__runs', input: {}, endAt: 600, call: false },
+      { at: 700, text: 'The rest.', block: 'new' }, { at: 800, end: 'done' }] },
+    { match: 'only the failed one', steps: [{ at: 300, text: 'Only builder-a failed.' }, { at: 400, end: 'done' }] },
+  ] };
+  const fake = startFake(t, dir, script);
+  const a = '00000000-0000-4000-8000-00000000000a';
+  const b = '00000000-0000-4000-8000-00000000000b';
+  fake.send(userLine(a, 'how did the night go'));
+  await fake.until((objs) => objs.some((o) => o.event?.content_block?.type === 'tool_use'));
+  fake.send(userLine(b, 'only the failed one'));
+  await fake.until(results(1));
+  const lines = fake.lines;
+  const objs = lines.map((l) => l.obj);
+  const resultAt = objs.findIndex((o) => o.type === 'tool_result' || (o.type === 'user' && !o.isReplay));
+  const steer = objs.findIndex((o) => tokenOf(o) === b);
+  assert.ok(steer > resultAt, 'taken after the call ended');
+  const takenAt = lines[steer].at;
+  const reply = lines.find((l) => l.obj.event?.delta?.text === 'Only builder-a failed.');
+  assert.ok(reply.at - takenAt >= 300, `steer text ${reply.at - takenAt} ms after the take`);
+  assert.equal(objs.filter((o) => o.type === 'result').length, 1, 'one turn');
+  assert.equal(objs.some((o) => o.event?.delta?.text === 'The rest.'), false, 'the running turn\'s rest is dropped (B26)');
+  assert.deepEqual(objs.filter((o) => o.type === 'assistant' && o.message.content[0].type === 'text').map((o) => o.message.content[0].text),
+    ['Three runs ran last night.', 'Only builder-a failed.']);
+  const log = fakeAgentLog(dir);
+  assert.deepEqual(log.order('interrupt'), []);
+  assert.deepEqual(log.prompts().map((p) => [p.priority, p.turn]), [['next', 'c1-typing#1'], ['next', 'c1-typing#2']]);
+  assert.deepEqual(log.turnEnds().map((l) => [l.turn, l.end]), [['c1-typing#1', 'done']]);
+  assertRowShapes(objs);
+});
+
+test('queued: no call running, after-turn, and priority later/now', async (t) => {
+  const dir = tempDir(t);
+  const script = { name: 'q', turns: [
+    { match: 'long', queued: 'next-tool-end', steps: [
+      { at: 0, tool: 'mcp__laneboard__fleet', input: {}, endAt: 300, call: false },
+      { at: 400, text: 'x' }, { at: 600, end: 'done' }] },
+    { match: 'after', queued: 'after-turn', steps: [
+      { at: 0, tool: 'mcp__laneboard__fleet', input: {}, endAt: 300, call: false }, { at: 400, end: 'done' }] },
+    { match: 'stay', repeat: true, onInterrupt: { endAfterMs: 0 }, steps: [{ at: 0, text: 'y' }, { at: 2000, end: 'done' }] },
+    { match: 'short', repeat: true, steps: [{ at: 0, text: 'z' }, { at: 50, end: 'done' }] },
+  ] };
+  const fake = startFake(t, dir, script);
+  const id = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+  const firstMessageOf = (objs, uuid) => objs.findIndex((o) => tokenOf(o) === uuid);
+  const resultsBefore = (objs, i) => objs.slice(0, i).filter((o) => o.type === 'result').length;
+
+  // next-tool-end with no call running at arrival: taken after the turn.
+  fake.send(userLine(id(1), 'long'));
+  await fake.until((objs) => objs.some((o) => o.type === 'user' && !o.isReplay));
+  fake.send(userLine(id(2), 'short one'));
+  await fake.until(results(2));
+  let objs = fake.lines.map((l) => l.obj);
+  assert.equal(resultsBefore(objs, firstMessageOf(objs, id(2))), 1, 'a new turn after the first');
+
+  // after-turn: a prompt during the call waits for the turn's end.
+  fake.send(userLine(id(3), 'after'));
+  await fake.until((objs2) => objs2.some((o) => tokenOf(o) === id(3)));
+  fake.send(userLine(id(4), 'short two'));
+  await fake.until(results(4));
+  objs = fake.lines.map((l) => l.obj);
+  assert.equal(resultsBefore(objs, firstMessageOf(objs, id(4))), 3);
+
+  // priority later: after the turn even though `queued` is next-tool-end.
+  fake.send(userLine(id(5), 'long'));
+  await fake.until((objs2) => objs2.some((o) => tokenOf(o) === id(5)));
+  fake.send({ ...userLine(id(6), 'short three'), priority: 'later' });
+  await fake.until(results(6));
+  objs = fake.lines.map((l) => l.obj);
+  assert.equal(resultsBefore(objs, firstMessageOf(objs, id(6))), 5);
+
+  // priority now: ends the running turn as an interrupt would, then a new turn.
+  fake.send(userLine(id(7), 'stay'));
+  await fake.until((objs2) => objs2.some((o) => tokenOf(o) === id(7)));
+  fake.send({ ...userLine(id(8), 'short four'), priority: 'now' });
+  await fake.until(results(8));
+  objs = fake.lines.map((l) => l.obj);
+  const res = objs.filter((o) => o.type === 'result');
+  assert.equal(res[6].terminal_reason, 'aborted_streaming');
+  assert.equal(objs.some((o) => o.type === 'control_response'), false, 'no request, no receipt');
+  const log = fakeAgentLog(dir);
+  assert.deepEqual(log.turnEnds().map((l) => l.end).slice(-2), ['stopped', 'done']);
+  assert.deepEqual(log.prompts().map((p) => p.priority), ['next', 'next', 'next', 'next', 'next', 'later', 'next', 'now']);
+  assert.deepEqual(log.order('interrupt'), []);
+  assertRowShapes(objs);
+});
+
+test('queued ignore-once takes the resend as a new turn; ignore takes neither', async (t) => {
+  const dir = tempDir(t);
+  const turn = (queued) => ({ match: 'first', queued, steps: [{ at: 0, tool: 'mcp__laneboard__runs', input: {}, endAt: 200, call: false }, { at: 300, end: 'done' }] });
+  const script = (queued) => ({ name: 'c1-typing', turns: [turn(queued),
+    { match: 'only the failed one', repeat: true, steps: [{ at: 0, text: 'Only builder-a failed.' }, { at: 50, end: 'done' }] }] });
+  for (const queued of ['ignore-once', 'ignore']) {
+    const d = path.join(dir, queued);
+    fs.mkdirSync(d);
+    const fake = startFake(t, d, script(queued));
+    const first = '00000000-0000-4000-8000-000000000001';
+    const queuedId = '00000000-0000-4000-8000-000000000002';
+    const resend = '00000000-0000-4000-8000-000000000003';
+    fake.send(userLine(first, 'first'));
+    await fake.until((objs) => objs.some((o) => tokenOf(o) === first));
+    fake.send(userLine(queuedId, 'only the failed one'));
+    await fake.until(results(1));
+    await new Promise((r) => setTimeout(r, 200));
+    let objs = fake.lines.map((l) => l.obj);
+    assert.equal(objs.some((o) => tokenOf(o) === queuedId), false, `${queued}: never taken`);
+    assert.equal(objs.filter((o) => o.type === 'result').length, 1);
+    // The room's resend (§3.4): the same text, a new uuid.
+    fake.send(userLine(resend, 'only the failed one'));
+    if (queued === 'ignore-once') {
+      await fake.until(results(2));
+      objs = fake.lines.map((l) => l.obj);
+      assert.equal(objs.some((o) => tokenOf(o) === resend), true, 'the resend is taken as a new turn');
+    } else {
+      await new Promise((r) => setTimeout(r, 300));
+      objs = fake.lines.map((l) => l.obj);
+      assert.equal(objs.filter((o) => o.type === 'result').length, 1, 'the resend is not taken either');
+    }
+    const p = fakeAgentLog(d).prompts();
+    assert.equal(p.length, 3);
+    assert.equal(p[2].resendOf, queuedId);
+    fake.child.stdin.end();
+    await fake.exited;
+  }
+});
+
+test('onInterrupt endAfterMs: the receipt, cancel_queued, the aborted result; still_queued runs next', async (t) => {
+  const dir = tempDir(t);
+  const script = { name: 'c1-typing', start: { capabilities: ['interrupt_receipt_v1', 'interrupt_cancel_queued_v1'] }, turns: [
+    { match: 'long call', repeat: true, onInterrupt: { endAfterMs: 300 }, queued: 'after-turn', steps: [
+      { at: 0, tool: 'mcp__laneboard__runs', input: {}, endAt: 19500, call: false }, { at: 19600, end: 'done' }] },
+    { match: 'only the failed one', repeat: true, steps: [{ at: 0, text: 'ok' }, { at: 10, end: 'done' }] },
+  ] };
+  const fake = startFake(t, dir, script);
+  const id = (n) => `00000000-0000-4000-8000-00000000000${n}`;
+
+  // With cancel_queued: the queued prompt is cancelled, the turn ends `stopped` 300 ms later.
+  fake.send(userLine(id(1), 'long call'));
+  await fake.until((objs) => objs.some((o) => tokenOf(o) === id(1)));
+  fake.send(userLine(id(2), 'only the failed one'));
+  await fake.until((objs) => objs.filter((o) => o.isReplay).length === 2);
+  const sentAt = Date.now();
+  fake.send({ type: 'control_request', request_id: 'i-0001', request: { subtype: 'interrupt', cancel_queued: true } });
+  await fake.until(results(1));
+  let objs = fake.lines.map((l) => l.obj);
+  const receipt = objs.find((o) => o.type === 'control_response');
+  assert.deepEqual(receipt.response, { subtype: 'success', request_id: 'i-0001', response: { still_queued: [], cancelled: [id(2)] } });
+  const resultLine = fake.lines.find((l) => l.obj.type === 'result');
+  assert.ok(resultLine.at - sentAt >= 300 && resultLine.at - sentAt < 1500, `result ${resultLine.at - sentAt} ms after the interrupt`);
+  assert.equal(objs.indexOf(receipt) < objs.indexOf(resultLine.obj), true, 'the receipt before the result');
+  assert.deepEqual([resultLine.obj.subtype, resultLine.obj.terminal_reason], ['error_during_execution', 'aborted_streaming']);
+  assert.equal(toolResults(objs).length, 0, 'the remaining steps are dropped');
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(fake.lines.some((l) => tokenOf(l.obj) === id(2)), false, 'a cancelled prompt is not taken');
+
+  // Without cancel_queued: still_queued, and the prompt runs after the stop.
+  fake.send(userLine(id(3), 'long call'));
+  await fake.until((o2) => o2.some((o) => tokenOf(o) === id(3)));
+  fake.send(userLine(id(4), 'only the failed one'));
+  await fake.until((o2) => o2.filter((o) => o.isReplay).length === 4);
+  fake.send({ type: 'control_request', request_id: 'i-0002', request: { subtype: 'interrupt' } });
+  await fake.until(results(3));
+  objs = fake.lines.map((l) => l.obj);
+  const receipts = objs.filter((o) => o.type === 'control_response');
+  assert.deepEqual(receipts[1].response.response, { still_queued: [id(4)], cancelled: [] });
+  assert.ok(objs.some((o) => tokenOf(o) === id(4)), 'still_queued is taken next');
+
+  const log = fakeAgentLog(dir);
+  assert.deepEqual(log.interrupts().map((l) => [l.requestId, l.cancelQueued, l.stillQueued, l.cancelled]),
+    [['i-0001', true, [], [id(2)]], ['i-0002', false, [id(4)], []]]);
+  assert.deepEqual(log.turnEnds().map((l) => l.end), ['stopped', 'stopped', 'done']);
+  assert.deepEqual(log.order('interrupt', 'turn-end'), ['interrupt', 'turn-end', 'interrupt', 'turn-end', 'turn-end']);
+  assertRowShapes(objs);
+});
+
+test('onInterrupt ignore and ignore-sigint; signals logged before they act; SIGTERM exits 143', async (t) => {
+  const dir = tempDir(t);
+  const turn = (onInterrupt) => ({ match: onInterrupt, onInterrupt, steps: [{ at: 0, text: 'a' }, { at: 300, text: 'b' }, { at: 30000, end: 'done' }] });
+  const fake = startFake(t, dir, { name: 'c1-typing', turns: [turn('ignore'), turn('ignore-sigint')] });
+
+  // ignore: no receipt, the turn plays on; SIGINT ends it as an interrupt with endAfterMs 0.
+  fake.send(userLine('00000000-0000-4000-8000-000000000001', 'ignore'));
+  await fake.until((objs) => objs.some((o) => o.event?.delta?.text === 'a'));
+  fake.send({ type: 'control_request', request_id: 'i-0001', request: { subtype: 'interrupt', cancel_queued: true } });
+  await fake.until((objs) => objs.some((o) => o.event?.delta?.text === 'b'));
+  assert.equal(fake.lines.some((l) => l.obj.type === 'control_response'), false);
+  const sigAt = Date.now();
+  fake.child.kill('SIGINT');
+  await fake.until(results(1));
+  const res = fake.lines.find((l) => l.obj.type === 'result');
+  assert.equal(res.obj.terminal_reason, 'aborted_streaming');
+  assert.ok(res.at - sigAt < 250, 'ended at once');
+
+  // ignore-sigint: SIGINT does nothing; SIGTERM exits 143.
+  fake.send(userLine('00000000-0000-4000-8000-000000000002', 'ignore-sigint'));
+  await fake.until((objs) => objs.filter((o) => o.event?.delta?.text === 'b').length === 2);
+  fake.child.kill('SIGINT');
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(fake.lines.filter((l) => l.obj.type === 'result').length, 1, 'SIGINT ignored');
+  fake.child.kill('SIGTERM');
+  assert.deepEqual(await fake.exited, { code: 143, signal: null });
+
+  const log = fakeAgentLog(dir);
+  assert.deepEqual(log.interrupts().map((l) => [l.cancelQueued, l.stillQueued, l.cancelled]), [[true, null, null]]);
+  assert.deepEqual(log.signals().map((l) => l.name), ['SIGINT', 'SIGINT', 'SIGTERM']);
+  assert.deepEqual(log.order('interrupt', 'signal', 'turn-end', 'prompt'),
+    ['prompt', 'interrupt', 'signal', 'turn-end', 'prompt', 'signal', 'signal']);
+});
+
+test('the bridge dialect: ready, taken, blocks across the turn, tools, denied, retrying, turn.end, interrupted', async (t) => {
+  const dir = tempDir(t);
+  const stub = await mcpStub(t, () => ({ rpc: { result: { content: [{ type: 'text', text: '{"ok":true}' }], structuredContent: { ok: true } } } }));
+  // A bridge agent finds mcp.json in its working directory (B25).
+  const cwd = path.join(dir, 'cockpit-agent');
+  fs.mkdirSync(cwd);
+  writeMcpJson(path.join(cwd, 'mcp.json'), stub.url);
+  const session = '5a1e0c77-2b9d-4f3a-8e61-0c4d7b2a9e10';
+  const script = { name: 'one-bridge', start: { initAfterMs: 50, capabilities: ['interrupt_cancel_queued_v1'] }, turns: [
+    { match: 'wiki', steps: [
+      { at: 0, text: 'Looking ' }, { at: 20, text: 'it up.' },
+      { at: 100, tool: 'search_wiki', input: { q: 'x' }, endAt: 400 },
+      { at: 150, tool: 'mcp__laneboard__morning', input: { window: 'tonight' }, endAt: 200 },
+      { at: 450, denied: 'shell', input: { command: 'ls' } },
+      { at: 500, retry: { attempt: 2, of: 10, error: 'overloaded' } },
+      { at: 550, text: 'Three files.' }, { at: 600, end: 'done', costUsd: 0.01 }] },
+    { match: 'limit', steps: [{ at: 0, end: 'step-limit' }] },
+    { match: 'boom', steps: [{ at: 0, end: 'failed', detail: 'boom' }] },
+    { match: 'login', steps: [{ at: 0, end: 'not-logged-in' }] },
+    { match: 'stay', onInterrupt: { endAfterMs: 100 }, steps: [{ at: 0, text: 'y' }, { at: 30000, end: 'done' }] },
+  ] };
+  const env = { LANEBOARD_SESSION: session, LANEBOARD_SESSION_RESUME: '1', LANEBOARD_ALLOWED_TOOLS: '["mcp__laneboard__*"]' };
+  const fake = startFake(t, dir, script, ['--dialect', 'bridge'], { env, cwd });
+  await fake.until((objs) => objs.length > 0);
+  const ready = fake.lines[0].obj;
+  assert.deepEqual(ready, { type: 'ready', session, agent: 'fake-agent 0.0.0-fake',
+    tools: ready.tools, mcp: { laneboard: 'connected' }, canSteer: true, canCancelQueued: true,
+    allowlist: ['mcp__laneboard__*'] });
+
+  fake.send({ type: 'prompt', id: 'p-1', text: '(Spoken; x.)\nsearch the wiki', priority: 'next' });
+  await fake.until((objs) => objs.some((o) => o.type === 'turn.end'));
+  const turn = fake.lines.slice(1).map((l) => l.obj);
+  assert.deepEqual(turn.map((o) => o.type), ['taken', 'text.delta', 'text.delta', 'text.block',
+    'tool.start', 'tool.start', 'tool.end', 'tool.end', 'tool.start', 'retrying', 'text.delta', 'text.block', 'turn.end']);
+  assert.deepEqual(turn[0], { type: 'taken', id: 'p-1' });
+  assert.deepEqual(turn[3], { type: 'text.block', block: 0, text: 'Looking it up.' });
+  const starts = turn.filter((o) => o.type === 'tool.start');
+  assert.deepEqual(starts.map((o) => [o.block, o.tool, o.denied]), [[1, 'search_wiki', undefined], [2, 'mcp__laneboard__morning', undefined], [3, 'shell', true]]);
+  assert.deepEqual(turn.filter((o) => o.type === 'tool.end').map((o) => o.toolUseId), [starts[1].toolUseId, starts[0].toolUseId]);
+  assert.deepEqual(turn[7], { type: 'tool.end', toolUseId: starts[0].toolUseId, isError: false, denied: false });
+  assert.deepEqual(turn[9], { type: 'retrying', attempt: 2, of: 10 });
+  assert.deepEqual(turn[11], { type: 'text.block', block: 4, text: 'Three files.' });
+  assert.equal(turn[12].state, 'done');
+  assert.equal(turn[12].costUsd, 0.01);
+  assert.equal(typeof turn[12].durationMs, 'number');
+  assert.deepEqual(stub.requests.map((r) => [r.msg.params.name, r.headers.authorization]), [['morning', 'Bearer test-token']]);
+
+  for (const [i, w] of ['limit', 'boom', 'login'].entries()) fake.send({ type: 'prompt', id: `p-${i + 2}`, text: w, priority: 'next' });
+  await fake.until((objs) => objs.filter((o) => o.type === 'turn.end').length === 4);
+  assert.deepEqual(fake.lines.map((l) => l.obj).filter((o) => o.type === 'turn.end').slice(1),
+    [{ type: 'turn.end', state: 'error', code: 'step-limit', steps: 40 },
+      { type: 'turn.end', state: 'error', code: 'failed', detail: 'boom' },
+      { type: 'turn.end', state: 'error', code: 'not-logged-in' }]);
+
+  fake.send({ type: 'prompt', id: 'p-5', text: 'stay', priority: 'next' });
+  fake.send({ type: 'prompt', id: 'p-6', text: 'later one', priority: 'next' });
+  await fake.until((objs) => objs.some((o) => o.type === 'taken' && o.id === 'p-5'));
+  fake.send({ type: 'interrupt', id: 'i-0001', cancelQueued: true });
+  await fake.until((objs) => objs.filter((o) => o.type === 'turn.end').length === 5);
+  const tail = fake.lines.map((l) => l.obj).slice(-2);
+  assert.deepEqual(tail, [{ type: 'interrupted', id: 'i-0001', stillQueued: [], cancelled: ['p-6'] }, { type: 'turn.end', state: 'stopped' }]);
+
+  fake.child.stdin.end();
+  assert.deepEqual(await fake.exited, { code: 0, signal: null });
+  const log = fakeAgentLog(dir);
+  const [start] = log.starts();
+  assert.deepEqual([start.session, start.resumed], [session, true]);
+  const p1 = log.prompts()[0];
+  assert.deepEqual([p1.uuid, p1.words, p1.turn], ['p-1', 'search the wiki', 'one-bridge#1']);
+  assert.equal('text' in log.lines().find((l) => l.kind === 'stdin').line, false, 'the text is in the prompt line only');
+  assert.deepEqual(log.interrupts().map((l) => [l.requestId, l.cancelQueued, l.cancelled]), [['i-0001', true, ['p-6']]]);
+  assert.deepEqual(log.order('interrupt', 'stdin-end'), ['interrupt', 'stdin-end']);
+  assert.deepEqual(log.toolResults().map((l) => l.result), [{ ok: true }]);
+});
+
+test('the bridge dialect: start.allowlist null leaves it out, an array is sent as it is', async (t) => {
+  for (const [allowlist, want] of [[null, undefined], [['mcp__laneboard__*', 'shell'], ['mcp__laneboard__*', 'shell']]]) {
+    const dir = tempDir(t);
+    const fake = startFake(t, dir, { name: 'one-bridge', start: { allowlist }, turns: [] }, ['--dialect', 'bridge'],
+      { env: { LANEBOARD_ALLOWED_TOOLS: '["mcp__laneboard__*"]' } });
+    await fake.until((objs) => objs.length > 0);
+    assert.deepEqual(fake.lines[0].obj.allowlist, want);
+    assert.equal('allowlist' in fake.lines[0].obj, want !== undefined);
+    assert.equal(fake.lines[0].obj.canCancelQueued, false);
+    fake.child.stdin.end();
+    await fake.exited;
+  }
 });
