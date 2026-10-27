@@ -1018,7 +1018,7 @@ through it (D35). Only code blocks fold (§3) and only old turns (`SHOW EARLIER`
     prompt from 3 s on, with nothing under the row, and the first item is drawn under that row
     when it comes. So a slow answer moves within 3 s of the send, on every screen.
   - **Not in the header.** The header keeps `● WORKING` with no age (D56): at 18 px caps in the
-    fallback face (DejaVu Sans; the condensed face is not on the test machine, T126)
+    fallback face (DejaVu Sans, the worst case: it shows until the vendored condensed face has loaded, `screens.md` §4, D273)
     `● WORKING · 59:59` is 198 px and the header has 188 px between the turn state's start
     (x 876) and `NEW` (x 1072) less 8 px on the Wall page (`screens.md` §4.1 D), and less in a
     column with `SHELF n` and `WALL` (E).

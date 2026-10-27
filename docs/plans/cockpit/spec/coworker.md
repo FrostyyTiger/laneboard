@@ -334,7 +334,7 @@ Nothing changes before the yes. The owner's `no` leaves the job as it was.
 ### 6.6 Where a job shows
 
 - **Canvas**: the room places a `countdown` bound to the job when it is created
-  (`c4-show-canvas.md` §8.1: digits, `at 10:12 · on vm-c`, `CANCEL JOB`), header `COCKPIT · 07:12`
+  (`c4-show-canvas.md` §8.1: digits, `at 10:12 · vm-c`, `CANCEL JOB`), header `COCKPIT · 07:12`
   (D193). It is never removed to make room (D80) and leaves 10 min after `done`, `cancelled` or
   `skipped`; `■ FAILED` stays (D174). Removing it never cancels the job.
 - **Map**: on the target node a badge `[data-job-badge="job-0003"]`, 24 px tall, 8 px under the
@@ -343,7 +343,7 @@ Nothing changes before the yes. The owner's `no` leaves the job as it was.
   failure. Two jobs on one node: `⏱ 10:12 +1`. Not a touch target: a tap on it is a tap on the node
   (D194). Only screens with the cockpit loaded draw badges (the jobs come over the room link).
 - **The pane**: no line of its own. The `schedule` tool line names the job.
-- **Room down**: as `c4-show-canvas.md` §7.6 (`The room is down: this job may not run.`, `CANCEL
+- **Room down**: as `c4-show-canvas.md` §7.6 (`Room down: may not run.` in the `at` line's row, `CANCEL
   JOB` disabled); the badge keeps its last text.
 
 **On the wire**: the snapshot (`protocols.md` §2.2) carries `jobs` (the `items` of `jobs.json`

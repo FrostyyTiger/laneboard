@@ -159,6 +159,17 @@ page, layout and pane state** (D116), so the finger finds them without looking:
   While the pane is open it stays in its rect and reads `CLOSE` (`aria-label="Close the cockpit"`);
   `CLOSE` in the pane header (`c1-talk.md` §1) stays as the second way out. The way out is where
   the hand already is (review 31 finding 5).
+- **The label fits in the condensed face; the fallback may spill** (D273, T126). The label is one
+  line (`white-space: nowrap`), centred, `overflow: visible`, letter spacing `--ls-label`. In the
+  vendored `Barlow Condensed` 500 at 16 px `CHAT` is 30.4 px and `CLOSE` 38.1 px wide (measured in
+  Chromium), inside the 46 px between the borders. That face is served by laneboard itself
+  (`/vendor/fonts/barlow-condensed/`, `public/css/tokens.css`), so every page the test machine
+  loads from the board has it once loaded; it is not installed on the machine and need not be. The
+  fallback (DejaVu Sans on a Linux test machine) shows only during `font-display: swap`'s first
+  paint or if the file fails: there `CHAT` is 46.5 px and `CLOSE` 57.2 px, so `CLOSE` spills about
+  5 px past each side of the border. The hit rect stays 48x48, and nothing is drawn within 19 px
+  of the spill (the stack above the row ends at x 1264, the talk button is 16 px below), so the
+  spill overlaps nothing.
 - Above the input row, the rect x 1288-1336, y 760-808 is `CHAT`'s. Anything else drawn
   in the band above the input row (the line slot, the context chip `c3-see.md` §9, `↓ NEW`) ends at
   x ≤ 1264, 24 px left of it; `c1-talk.md` §1.1 stacks them (D133).
@@ -1100,6 +1111,9 @@ y 776-808, `↓ NEW` x 1016-1112, y 712-760, and the toast's right edge is ≤ x
 When the viewport is set to 1368x532 with the input focused (state H),
 Then `data-keyboard="up"`, the header is y 8-56 at B's x, the opener y 396-444, `SEND` y 460-524,
 the line slot y 412-444.
+And in A and B, once `document.fonts.ready` resolved and `document.fonts.check('500 16px "Barlow
+Condensed"')` is true, the opener's label (`CHAT`, then `CLOSE`) is one line, its text box (a
+`Range` over the label's text) ≤ 40 px wide and centred within ± 1 px of x 1312 (D273).
 When the same walk runs on the Wall page in `wall` (states C, D, H) and, from the C2 slice, with
 the fake speech service and `cockpit.stt.language: ["en", "de"]` (the talk button x 1280-1344,
 `SEND` x 1200-1264, `[data-talk-lang]` x 784-848, the input x 864-1184),

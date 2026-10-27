@@ -570,10 +570,13 @@ stays in `screens.md` §7.
   network.` (`screens.md` §7).
 - **Cards** stay where they were. Every bound card (§7.5) gets the `STALE` plate (§7.3) and keeps
   its last values; a card with no binding (`text`, `diff`) gets none.
-- **Clocks**: `countdown` and `timer` keep ticking on the screen's clock (§7.5). A countdown bound to
-  a job adds a line under its digits, 18 px `--text-2`: `The room is down: this job may not run.`,
-  and its `CANCEL JOB` is `disabled` (Jobs slice, `slices.md`; whether a cancel may wait for the
-  room is Q-O25).
+- **Clocks**: `countdown` and `timer` keep ticking on the screen's clock (§7.5). In a countdown
+  bound to a job, the `at` line (§8.1) gives its row to `Room down: may not run.`
+  `[data-card-job-down]` (18 px `--font-label` weight 500, `--text-1`, one line, 24 px; 155 px in
+  the condensed face, 233 px in the fallback, both inside the 240 px body), and its `CANCEL JOB`
+  is `disabled` (Jobs slice, `slices.md`; whether a cancel may wait for the room is Q-O25). So
+  the `s` body stays digits 56 + line 24 + `CANCEL JOB` 48 = 128 px of 132 px and the card keeps
+  its size (D275); the `at` line comes back with the room.
 - **Remove** (§9) works: the card goes on this screen at once with the usual `CARD REMOVED · UNDO`
   row, and the screen sends `card.close` (`protocols.md` §5) at the first frame after the room is
   back. A card the room no longer holds by then is simply gone.
@@ -581,7 +584,8 @@ stays in `screens.md` §7.
   cannot place cards now.` (24 px `--text-1`) and `Unreachable since 06:41 (3 min).` (20 px `--text-2`).
 - **Back**: at the first frame from the room the strip goes, `STALE` plates go, values update from
   the room's next `card.data`, cards placed or removed meanwhile appear or go (snapshot,
-  `protocols.md` §2.2), the job line goes and `CANCEL JOB` is enabled again.
+  `protocols.md` §2.2), `Room down: may not run.` gives the row back to the `at` line and
+  `CANCEL JOB` is enabled again.
 
 ## 8. The kit blocks
 
@@ -605,7 +609,11 @@ job, with cancel"). Sizes `s` (default), `w`.
 Exactly one of the two. Default title: the job's `what`, else `Countdown`.
 
 - **Look** (`s`): digits `02:59:41` (mono 48 px `--text-1`, 56 px line; ≥ 24 h `1 d 02:59`); under
-  them `at 10:12 · on vm-c` (18 px `--text-2`; without a job `at 10:12`). With a job, a
+  them `at 10:12 · vm-c` (mono 18 px `--text-2`, 24 px line; without a job `at 10:12`), always one
+  line: `white-space: nowrap`, `overflow: hidden`, `text-overflow: ellipsis`, the DOM text whole
+  (D274). Mono 18 px is 10.8 px a character, so 22 characters fit the `s` body's 240 px:
+  `at 23:00 · builder-a` is 216 px; a longer target is cut on the screen, e.g.
+  `at 23:00 · builder-a-…` for `builder-a-nightly-07`. With a job, a
   `CANCEL JOB` button `[data-card-cancel]` across the body's width, 48 px tall, 16 px caps
   `--text-1`, 1 px `--line-strong`, at the body's bottom.
 - **Live**: ticks every second. With a job, the job's state replaces the digits: `RUNNING` (28 px
@@ -850,7 +858,15 @@ When the owner taps `CANCEL JOB`,
 Then the confirm card opens (`c5-c6.md`) and the job is still `scheduled` until its yes.
 When the owner instead taps `✕`,
 Then the card is gone and `job-0003` is still `scheduled` on the demo hub.
-Test: Playwright with `page.clock`; the B6 marks; card rect and texts; the demo hub's job state.
+When the room is seeded (`POST /jobs`) with `job-0009`, `title` `nightly cleanup`, `at` 23:00,
+`target` `builder-a-nightly-07`, and the fake agent places a countdown bound to it,
+Then its `at` line's text is `at 23:00 · builder-a-nightly-07`, its rect is one line (24 px tall),
+inside the body (x 800-1040), its computed `text-overflow` is `ellipsis` and `scrollWidth` >
+`clientWidth` (drawn `at 23:00 · builder-a-…`), and `CANCEL JOB` keeps its rect at the body's
+bottom (D274).
+Test: Playwright with `page.clock`; the B6 marks; card rect and texts; the demo hub's job state;
+for `job-0009` the `at` line's rect, computed style and `scrollWidth`/`clientWidth`, and
+`[data-card-cancel]`'s rect against the one recorded for `job-0003`'s card.
 
 ### S-C4-14 A status tile follows its node
 Given `side` in `canvas` layout and a `status` card on `vm-b` reading `▲ WARN`,
@@ -977,13 +993,16 @@ Test: Playwright with `page.clock`; `POST /link {"up":false}` and `{"up":true}` 
 ### S-C4-24 A job's countdown with the room down: still counting, cancel waits
 Given `side` in `canvas` with the countdown on `job-0003` (S-C4-13) reading `03:00:00` at 07:12:00,
 When the room under test stops its link at 07:12:00,
-Then at 07:12:05 the card carries `STALE`, its digits read `02:59:55` and keep counting, the line
-`The room is down: this job may not run.` shows under them and `CANCEL JOB` is `disabled`; a tap on
-it opens nothing.
+Then at 07:12:05 the card carries `STALE`, its digits read `02:59:55` and keep counting,
+`Room down: may not run.` `[data-card-job-down]` is in the `at` line's row (y as that line's, one
+line, 24 px), the `at` line is not rendered, the card is still `s` (272 x 232), and `CANCEL JOB` is
+`disabled`; a tap on it opens nothing. Nothing in the card clips: every child of the body lies inside
+the body's rect (D275).
 When the link comes back,
-Then within 1 s the line goes and `CANCEL JOB` is enabled.
+Then within 1 s `at 10:12 · vm-c` is back in that row and `CANCEL JOB` is enabled.
 Test: Playwright with `page.clock`; `POST /link` on the room under test; texts and `disabled` on
-`[data-card-cancel]`.
+`[data-card-cancel]`; rects of the card, the body and its children; the S-C1-40 floor walk over
+`[data-card]` in the down state.
 
 ### S-C4-34 A flick over a checklist scrolls it and ticks nothing
 Given `desk` (`split`) and `side` (`canvas`), Playwright contexts with `hasTouch: true`, and a
