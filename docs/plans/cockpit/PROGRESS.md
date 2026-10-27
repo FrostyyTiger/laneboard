@@ -331,8 +331,8 @@ Tests after round 70: `npm test` 3454 pass, 0 fail. The night wrote no code; the
    Suggested: one short spec night on that list after your answers.
 3. **Check the security decisions taken without you.** D89-D92 (the room is a laneboard server
    with a `cockpit` section, on the page's origin, reading the hub's loopback as `local`, a front
-   forwarding `/api/cockpit/`; Q-O29 asks the routing), D90 (D13 pairing codes, D14 nothing in
-   browser storage, D22 links not tappable, D66 the chip sends only a node id), D108 (the agent's
+   forwarding `/api/cockpit/`; Q-O29 asks the routing), D90 (D14 nothing in
+   browser storage, D22 links not tappable, D66 the chip sends only a node id; D13 pairing codes moved to Q-O10 by T61), D108 (the agent's
    environment is a short allowlist) and D103 (stop escalates to `SIGINT` at 5 s, `SIGTERM` at 8 s).
    Strike a line to reopen it.
 4. **A browser on the `ci` VM.** D88 keeps the Playwright acceptance tests out of `npm test`

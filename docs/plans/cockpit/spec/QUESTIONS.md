@@ -136,6 +136,8 @@ Answer: (open)
 
 Security. Needed in C1 only if Q-O21 is a) or c), or Q-O27 is a). From `reviews/40-security.md`
 (1, 4, 7). Spec: `screens.md` §6, D13, T56.
+The pairing code goes with this answer too: D13 (6 characters, 300 s, 10 open codes) is written
+`(pending Q-O10)`, not closed by D90. D162's `pairSecret` stays under every option.
 
 - a) Only the room's own CLI approves (`laneboard cockpit pair K7M-4QX`). The agent runs on that
   same box, so the room refuses the agent's unix user (and pairing at all while the agent shares
@@ -250,7 +252,7 @@ also in PROGRESS.md's "Needs you" list, because D89, D90 and D91 are security-re
 
 - **Q-O14** A browser test runner in the repo → **D88**: Playwright as a devDependency, outside `npm test`.
 - **Q-O15** Which process is "the room", and its origin → **D89**: a laneboard server with a `cockpit` section, same origin as the page (rewritten by T86 to D92's split: the board serves the page, the room only `/api/cockpit/*`; modes D128, pending Q-O29).
-- **Q-O16** Security-adjacent choices → **D90**: D13, D14, D22 and D66 stand as written.
+- **Q-O16** Security-adjacent choices → **D90**: D14, D22 and D66 stand as written. D13 (the pairing code) is not closed: it stays under Q-O10.
 - **Q-O26** How the room reads the hub → **D91**: the room runs on the hub's box as its own user and reads loopback as `local`.
 
 ## Can wait

@@ -202,7 +202,7 @@ also takes ended jobs (D213).
 **Earlier decisions this file confirms** (the reviews asked for an explicit yes): D49 (the speech
 token from a file, in the header, never in a URL; no context word list) and D52 (the button API
 refuses `Origin` and `Cookie`, 5 calls per second, every call audited) stand as written; they are
-rows of §1 and I6. D13, D14, D22, D66 and D108 are listed as defences above.
+rows of §1 and I6. D13 (pending Q-O10), D14, D22, D66 and D108 are listed as defences above.
 
 ## 7. Scenarios
 
