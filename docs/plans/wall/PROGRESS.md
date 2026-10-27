@@ -464,6 +464,20 @@ Notes for every builder round (planner, round 1):
   late is harmless: names move on a tween) — done when: a test with a counting fake DOM finds no box read between a
   write and the end of the same tick on the wake frame, the covers are right one frame later, and the touch and
   resume page tests stay green.
+- [ ] T47 (§7 Night 4, §2.1; r35-film-ui fx-afterglow 1) [ui] [variant:galaxy] The afterglow ring is never read as live
+  trouble: it is drawn dashed (or tick-marked) and starts amber at its first frame, never in the live crit red or the lock's
+  weight, then cools to grey (`fx.js afterglowAt`, `scene.js`) — done when: a test pins that no afterglow alpha/hue at any
+  age equals the crit token and that the ring is dashed, and a still of `galaxy.html?demo=1&quality=0&fx=afterglow` after
+  a clear (`--tick 800`, `at=overview`) shows an amber dashed ring where the live crit lock is solid red.
+- [ ] T48 (§7 Night 4, §4; r35-film-ui galaxy 4, = r21-skeptic galaxy 5 owner answer (a) in part) [ui] [variant:galaxy] The
+  kicker never counts itself: at `pace=wall` it reads `TARGET 01 / 01`, `02 / 02`, `03 / 03`. N is the fixed number of stops
+  in the tour's cycle (`tourOrder` length), or the count is dropped and the kicker says `TARGET`; never `n / n` with N grown
+  to n (the owner's keep-or-cut of the count stays open) — done when: a test over three consecutive legs of the large demo
+  at `pace=wall` finds N equal on all three and never below the index of a stop that stays in the cycle.
+- [ ] T49 (§7 Night 4; r35-film-ui galaxy 3, = r4-film-ui galaxy 5 from Later) [ui] [variant:galaxy] The typing cursor
+  never stands alone: it is the cap height of the line it sits on, at 60 % of the text's value, and is drawn only once the
+  line has its first letter (`caption.js`, `wall.css`) — done when: a test finds no cursor on an empty line at any step of
+  the typing and the cursor's height equal to the line's cap height, and `wall.html`'s caption tests stay green.
 
 ## Research questions
 
@@ -485,6 +499,19 @@ Notes for every builder round (planner, round 1):
   a cost guess) — for T17
 
 ## Later
+
+From r35-film-ui (triage, night 4; not tasks yet):
+- (r35-film-ui galaxy 1, 2, 5, 8; fx-warp 1; fx-beacon 2 in part) covered by T19, T28/T22, T20, T25, T37-T39, T21; the plate's ground sized to the type's own column (galaxy 5) is new, Later.
+- (r35-film-ui galaxy 6) Plate rows on one two-column grid, values in one face at two sizes (= r4-film-ui galaxy 8).
+- (r35-film-ui galaxy 7) One label anchor at the overview (right of the star, baseline on its centre); move only for a collision, always to the left (with T24).
+- (r35-film-ui fx-beacon 1) Beacon 6-8 px core with a soft glow and a tick cap, width grows with age (= r4/r16 beacon lines). Beacon 2: check whether the pillar waits for an age floor (a young crit should show at once).
+- (r35-film-ui fx-warp 2) 0.3 s stillness before the streaks with the lock brackets tinted to the destination's hue.
+- (r35-film-ui fx-afterglow 2) Film note: a clear needs `--every 6000` or `at=overview` to be caught.
+- (r35-film-ui fx-activity 1) In an open system cap the ring at about 1.6 planet radii, under labels; the frame-height floor only at the overview.
+- (r35-film-ui fx-activity 2) One ring per folded cluster, thickness by the number of working planets.
+- (r35-film-ui touch 2) On a sheet, hide the scene's names for members the sheet names and for the trouble cluster while the fan is closed.
+- (r35-film-ui touch 3) `‹ BACK` / `▶ TOUR`: brackets only, at the plate's weight (= r4-film-ui touch).
+- (r35-film-ui across) Every leader an L, never a diagonal (with T20); afterglow gets activity's overview floor in its dashed language.
 
 From r31-performance (triage, night 4; not tasks yet):
 - (r31-performance galaxy 2) No frame cap yet: stays behind `?cap=30`, off by default (owner; see the cap line below). The overview and holds render at display rate.
@@ -777,6 +804,10 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
   dots at the overview, T35 fan writes only changes, T36 wake without forced layouts). Dropped: touch 1 (no fix),
   fx-beacon/afterglow/comets/twinkle (no fix; T17 removes the last two). Galaxy 2 is the owner's `?cap=30` (Later). Rest in
   Later; no fx proposals. Note: the review corrects T12's "13k at the overview, 205 with HV1 open": the overview is the heavy frame.
+- r35 film-ui → reviews/r35-film-ui.md. 8 galaxy + 2 beacon + 2 warp + 2 afterglow + 2 activity + 3 touch findings; 3 became
+  tasks (T47 afterglow ring read as live trouble, T48 kicker `n / n`, T49 lone cursor). Dropped as covered: galaxy 1 (T19,
+  T28), 2 (T20), 8 (T37-T39), warp 1 (T21), warp 3 (T15). Rest in Later; no new fx proposals (the lock-tint idea already
+  stands under For the owner).
 
 ## Scores
 
@@ -803,5 +834,10 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 31 | performance (fx-afterglow) | - | - | - | - | 5 | 7 | - |
 | 31 | performance (fx-comets) | - | - | - | - | 3 | 6 | - |
 | 31 | performance (fx-twinkle) | - | - | - | - | 3 | 6 | - |
+| 35 | film-ui (galaxy) | 7 | 7 | 7 | 6 | 7 | 6 | 6 |
+| 35 | film-ui (fx-beacon) | - | - | - | - | 4 | 6 | - |
+| 35 | film-ui (fx-warp) | - | - | - | - | 6 | 3 | - |
+| 35 | film-ui (fx-afterglow) | - | - | - | - | 5 | 7 | - |
+| 35 | film-ui (fx-activity) | - | - | - | - | 4 | 5 | - |
 
 ## Morning
