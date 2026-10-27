@@ -23,7 +23,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `c5-c6.md` | C5 voice out; C6 act, rules and the confirm card only | `S-C5-`, `S-C6-` | T14 | planned |
 | `protocols.md` | screen ⇄ room, room ⇄ agent bridge, room ⇄ speech-to-text, message by message | none (sequences) | T15, T16 | part 1 written (T15: same-origin transport, the room link, hello/resume/snapshot, conversation, show, cards, audio, button, limits, one spoken turn; D92-D99); part 2 written (T16: §11 the bridge, Claude Code's launch and event mapping, stop, sessions, standing instructions; §12 the speech service; §13 test classes; D100-D108) |
 | `security.md` | tokens and what each can do, injection paths, audio and transcript handling, audit | `S-SEC-` | T17 | planned |
-| `stand-ins.md` | the fake speech service, the fake agent, the demo fleet additions | none (formats) | T18 | planned |
+| `stand-ins.md` | the room under test and its control API, the fake agent (a fake `claude`, script format), the fake speech service (script format, faults), the demo fleet additions, one script per scenario family, the public demo | none (formats) | T18, T32, T87 | written (T18: §1-§7, D109-D112) |
 | `single-machine.md` | everything on one box, no tailnet, no GPU, another agent | `S-ONE-` | T19 | planned |
 | `slices.md` | the build nights in order, each with its scenario ids, stand-ins and done-when | none (lists every id once) | T20 | planned |
 | `DECISIONS.md` | small reversible choices made during the night, each with how to overrule | none | all | written (running list) |
@@ -160,6 +160,8 @@ Each word is defined here once; the other files link here instead of redefining 
   (`protocols.md` §2).
 - **stand-in**: a fake for something the loop's VM does not have (speech service, agent, a real
   fleet) that replays recorded or scripted behaviour; tests run against stand-ins, and they double
-  as the public demo (`stand-ins.md`).
+  as the public demo (`stand-ins.md`). The three are the **room under test** (the real room behind
+  a test wrapper with a control port), the **fake agent** and the **fake speech**; "stand-in room"
+  in older text means the room under test (`stand-ins.md`, the tables at its top).
 - **slice**: one build night's part of the cockpit, usable on its own the next morning
   (`slices.md`).
