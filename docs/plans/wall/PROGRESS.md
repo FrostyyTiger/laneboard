@@ -216,6 +216,22 @@ Notes for every builder round (planner, round 1):
   status hue only on the leading tips, and none drawn over a crit nebula's screen disc — done when: a test pins the cone
   and count (`fx.js`/`scene.js` pure helper) and a streak start inside a crit's disc is skipped, and a filmstrip of
   `galaxy.html?demo=1&quality=0&fx=warp` on a flight to a warn site no longer streaks both arms or covers the crit.
+- [ ] T22 (§7 Night 4; r11-dreamer galaxy 1, §2.1) [ui] [variant:galaxy] A new trouble is a moment: when a site's
+  rollup rises (calm → warn, warn → crit) between two map frames, the banner types its new subject in letter by letter
+  as the caption does, once; never for trouble already standing at load, never repeated, never under a finger, whole
+  text at once in still mode — done when: a page test on a fake clock sees the banner type in after a rise and show
+  whole text with no typing at load, after a drop, or in still mode, and a film of `galaxy.html?demo=1&quality=0`
+  (large demo, `VM-C` going crit) shows the banner mid-typing in one frame.
+- [ ] T23 (§7 Night 4; r11-dreamer galaxy 6) [ui] [variant:galaxy] Crit and warn differ at 3 m by more than hue: the
+  crit nebula is one step bigger than the warn one (at least 1.5x, as Later's r21-operator line) and the warn nebula
+  does not breathe; the crit's breathing swing is visible within a frame pair 2 s apart — done when: a test pins crit
+  nebula radius ≥ 1.5x warn's at the overview and the warn's breathing amplitude 0, and a 684 px still of the crit
+  overview shows the red cluster plainly larger than the yellow one.
+- [ ] T24 (§7 Night 4; r11-dreamer galaxy 7 = r41-operator galaxy 7, r17-operator galaxy 5) [ui] [variant:galaxy] A
+  site name is never eaten by its own cluster: the overview label sits on the side away from the cluster's disc by the
+  disc's screen radius, and no nebula sprite is drawn over a trouble label's box — done when: a test on the large
+  fixture finds, at the overview and with HV1 in crit, the label's box clear of the cluster's screen disc, and a still
+  shows `■ HV1` whole.
 
 ## Research questions
 
@@ -237,6 +253,15 @@ Notes for every builder round (planner, round 1):
   a cost guess) — for T17
 
 ## Later
+
+From r11-dreamer (triage, night 4; not tasks yet):
+- (r11-dreamer galaxy 2) Calm holds are empty: one real-facts line on the calm plate (owner question (b)), system framed centre-right (= r54-film-ui 8 below).
+- (r11-dreamer galaxy 5) The sun is a planet: larger, warmer-white grey body, no hue, static.
+- (r11-dreamer galaxy 8) The clock a step smaller (= r26-skeptic 9 below).
+- (r11-dreamer touch 2) Fan rows carry trouble status as a hue edge, trouble rows first, leaders as non-crossing elbows.
+- (r11-dreamer across) A 300 ms settle on arrival at trouble, then the type; the tour's return types `TOUR` in the kicker (with T5).
+- (r11-dreamer fx-warp 2) Reverse streak on leaving a crit (taste).
+- (r11-dreamer galaxy 3, 4, fx-beacon, fx-warp 1) covered by T17, T9/T20, the beacon lines below, T15.
 
 From r4-film-ui (triage, night 4; not tasks yet):
 - (r4-film-ui galaxy 4) Hold rhythm: arrive and lock 0.6 s, stillness 0.4 s, name types, rows fade in, hold at least
@@ -446,6 +471,12 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 
 ## For the owner
 
+From r11-dreamer (`fx` candidates, none asked for; not tasks):
+- `fx=alert`: when a site's rollup rises, one thin ring in its hue goes out from the site across the plane, once
+  (the banner type-in is T22, not an effect).
+- `fx=lost`: a member that lost contact fades to an outline with a gap that grows with time since contact (capped).
+- `fx=recent`: on a calm hold, planet names type in by recency of last change; untouched for a day keeps no label.
+
 From r4-film-ui (ideas, taste; not tasks):
 - Tint the lock brackets with the destination's status during a flight, so "going to the red one" shows without warp.
 - The plate's leader could rise vertically from the target like the beacon, instead of stub-and-diagonal.
@@ -480,6 +511,9 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 
 ## Reviews
 
+- r11 dreamer → reviews/r11-dreamer.md. 8 galaxy + 2 beacon + 2 warp + 3 touch findings + 3 fx proposals; 3 became
+  tasks (T22 banner type-in on a rise, T23 crit vs warn nebula, T24 label eaten by cluster). Dropped as covered:
+  galaxy 3 (T17), galaxy 4 (T9, T20), beacon 1-2 (Later), warp 1 (T15). Rest in Later; the 3 fx proposals under For the owner.
 - r4 film-ui → reviews/r4-film-ui.md. 8 galaxy + 2 beacon + 3 warp + touch findings; 3 became tasks (T19 banner size
   while held, T20 orphaned leader, T21 warp cone). Dropped as covered: box over the galaxy (T10), grey crit glyph (T6),
   calm warp streaks (T15). Rest in Later (hold rhythm, cursor, label steps, plate grid, beacon fade, BACK box) or
@@ -492,5 +526,8 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 4 | film-ui (galaxy) | 7 | 6 | 7 | 6 | 6 | 5 | 6 |
 | 4 | film-ui (fx-beacon) | - | - | - | - | 5 | 7 | - |
 | 4 | film-ui (fx-warp) | - | - | - | - | 7 | 3 | - |
+| 11 | dreamer (galaxy) | 7 | 6 | 6 | 6 | 6 | 5 | 6 |
+| 11 | dreamer (fx-beacon) | - | - | - | - | 4 | 7 | - |
+| 11 | dreamer (fx-warp) | - | - | - | - | 6 | 4 | - |
 
 ## Morning
