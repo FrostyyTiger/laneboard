@@ -412,7 +412,23 @@ Notes for every builder round (planner, round 1):
   page's wiring). Seen: `shots/r39-wire` (CDP, large demo: a flyTo and a highlight by a channel, a pin by
   `postMessage`; three `ok` answers on their roads, `SHOWN BY COCKPIT` with three rows, 0 console errors). Honest:
   in that still the held system sits at the frame's right edge under the rows (T25's matter, not the wire's).
-- [ ] T39 (§7 Night 4 B3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] The show demo: `?demo=1&show=demo` plays a recorded conversation's show commands over the large demo fleet (fly to the crit, highlight what it breaks, pin a note); the video's second half (cockpit §5). A filmstrip. — done when: a filmstrip of `?demo=1&show=demo` shows the fly-to, the highlight and the pinned note
+- [x] T39 (§7 Night 4 B3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] The show demo: `?demo=1&show=demo` plays a recorded conversation's show commands over the large demo fleet (fly to the crit, highlight what it breaks, pin a note); the video's second half (cockpit §5). A filmstrip. — done when: a filmstrip of `?demo=1&show=demo` shows the fly-to, the highlight and the pinned note (commit ba6e478)
+  Builder r42: `galaxy/showdemo.js`: `SHOW_DEMO_SCRIPT`, a recorded conversation as five commands from `agent:cockpit`
+  (`flyTo storage` at 0 s, a `pin` on it `POOL 97% FULL / Full in about 2 h at tonight's rate` at 3.5 s, `flyTo __core`
+  (the overview; server/map.mjs's core id) at 10 s, a `highlight` of storage, db and office-nas (its two links, dumps
+  and the offsite copy) with the note `Dumps from db and the offsite copy stop when the pool fills` at 11.5 s, `clear`
+  at 24 s); `showDemoStep` (pure: the first cycle 3 s after the first frame, so the tour is seen first; each command
+  once at its time, ids `demo-<cycle>-<i>`; the next cycle 36 s after the clear), `showDemoReply` (a `busy` answer
+  ends the cycle, the next waits a whole gap), `createShowDemo` (into `createShow`'s `send`, ticked each frame after
+  `shows.tick()`; `__galaxyShowDemo`). `?show=demo` alone plays it; on a fleet without those nodes each command
+  answers `unknown-node` and nothing shows. Tests: `test/wall-galaxy-showdemo.test.mjs` (8: the switch, the script
+  against the large topology and LARGE_TROUBLE, the timing and the cycles, busy, a whole cycle through a real show and
+  director, a finger mid-cycle, main.js's wiring). Film: `shots/r42-show-demo` (fresh large demo, quality=0: the
+  fly-to and pin at 3.9-10.8 s, the overview with three rings and both cards at 14-24 s, the clear and the tour back
+  at 27 s; 10.4 fps SwiftShader ×4, worst gap 293 ms, 0 console errors; r38 10.3). Honest: the conversation is fixed,
+  so it flies to storage even in the demo's ticks 40-89 when storage is calm (film within the first 2.5 min of a
+  fresh demo-fleet); at the overview the storage ring sits on the HV2 cluster's name and both cards stack beside it
+  (T52's matter); what the person says is not on screen (T51 gives the agent the plate).
 - [ ] T40 (§7 Night 4 C; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `countdown: { at, label }` as a feed field (D3, like `glow` and `ring`): the galaxy draws a small countdown at that node, readable at the site step and quiet at the overview; the caption names it when the camera holds there; display only; the large demo carries one (`test/helpers/demo-hub.mjs`). Format from Q17. Maybe two tasks: the field and the drawing, then the caption line and demo data. — done when: tests for the field and the caption line, and a still at the site step shows the countdown readable at 3 m
 - [ ] T41 (§7 Night 4 D1; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] Half a screen: `galaxy.html` at 50 % width keeps the 3 m check (names, trouble, caption) and its touch targets (the 48 px floor); a still at 684 px wide shrunk to 3 m. — done when: a still at 684 px wide shrunk to 3 m passes the 3 m check and the touch targets keep 48 px
 - [ ] T42 (§7 Night 4 D2; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `?role=tour|explore`: starts the page in that mode (explore: no tour until `▶ TOUR` or the director is asked); the canvas itself is cockpit work. — done when: tests for both roles, and `?role=explore` shows no tour until asked
