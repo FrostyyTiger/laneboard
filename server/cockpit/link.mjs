@@ -13,14 +13,18 @@
 //
 // opts: `session` (session.mjs), `store` (store.mjs, loaded), `audit`
 // (openAudit's instance or null), `config` (the room's), `log(line)`,
-// `clientIds` (store.load()'s once-only ids, §11.7.1 step 6).
+// `clientIds` (store.load()'s once-only ids, §11.7.1 step 6), `pingMs`
+// (PING_MS; tests shorten it).
 //
 // An upgrade is taken, then checked (link-checks.mjs, D135: a refusal is a
 // close code, never an HTTP status); a refused link gets the close and no
 // frame. An accepted link waits for `hello` (§2.2), answers `welcome` and one
 // `snapshot` (in parts of at most 512 KB, D140), then gets every `seq`'d
-// message. T14 adds the replay after a gap, the heartbeat, silence, the
-// no-hello and size close codes and `GET /sent`.
+// message. A reconnect with its `epoch` and `lastSeq` gets the missed
+// messages from the replay buffer instead (D94). Every welcomed link gets a
+// `heartbeat` every 10 s on the room clock (D10) and a WebSocket ping every
+// 30 s (as server/ws.mjs); §2.3's close codes: 4001 no hello, 4002, 4408 too
+// slow, 4413 too big, 4429 too many, 1011 internal, 1001 at shutdown.
 import { randomBytes } from 'node:crypto';
 import { WebSocketServer } from 'ws';
 import { warnRateLimited } from '../security.mjs';
@@ -43,8 +47,23 @@ export const PART_MAX_BYTES = 512 * 1024;
 export const TURN_MAX_BYTES = 448 * 1024;
 /** §2.2: a cut turn's longest text items keep this many characters. */
 export const CUT_TEXT_KEEP = 4_000;
-/** A text frame the link reads at all (T14 closes 4413 above 64 KB). */
-export const MAX_FRAME_BYTES = 1024 * 1024;
+/** §8 (D99): a text frame from the screen, and a binary one; over either: 4413. */
+export const MAX_TEXT_BYTES = 64 * 1024;
+export const MAX_BINARY_BYTES = 6_400;
+/** §8: unsent data per link; over it: 4408. */
+export const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
+/** §8: text messages per second per link; three passes in 60 s: 4429. */
+export const INBOUND_PER_SEC = 50;
+export const PASSES_TO_CLOSE = 3;
+export const PASS_WINDOW_MS = 60_000;
+/** §2.2 (D94): the `seq`'d messages kept for a replay. */
+export const REPLAY_MAX = 2_000;
+/** §2.2 (D10): the heartbeat, on the room clock. */
+export const HEARTBEAT_MS = 10_000;
+/** §2.2: a WebSocket ping, on the real clock (B102). */
+export const PING_MS = 30_000;
+/** §2.3: no `hello` this long after the open: 4001. */
+export const HELLO_MS = 5_000;
 /** Without pairing every screen is the board's (D212, D37: no names drawn). */
 export const SCREEN_NAME = BOARD_USER;
 
@@ -97,14 +116,32 @@ export function snapshotParts({ seq, conversation, startedAt, turns }) {
   return groups.map((g, i) => ({ ...base, part: i + 1, parts: groups.length, turns: g, pins: [], cards: [] }));
 }
 
-export function createLink({ session, store, audit = null, config, log = () => {}, clientIds = [] }) {
-  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_FRAME_BYTES });
-  const links = new Set(); // accepted links: {ws, auth, welcomed, rec}
+/**
+ * §2.3 4413 for a text frame over 64 KB: `ws` refuses it at its header
+ * (maxPayload, nothing buffered) and would close 1009; a listener put ahead
+ * of its own on the receiver closes 4413 `too big` first, and `ws`'s close
+ * then finds the link closing and does nothing (B101).
+ */
+function closeTooBigFirst(ws) {
+  const receiver = ws._receiver;
+  if (!receiver?.prependListener) return;
+  receiver.prependListener('error', (err) => {
+    if (err?.code === 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH') {
+      try { ws.close(4413, 'too big'); } catch { /* gone */ }
+    }
+  });
+}
+
+export function createLink({ session, store, audit = null, config, log = () => {}, clientIds = [], pingMs = PING_MS }) {
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_TEXT_BYTES, autoPong: false });
+  const links = new Set(); // accepted links: {ws, auth, welcomed, rec, alive, helloTimer, rate}
   const epoch = `r-${randomBytes(3).toString('hex')}`;
   const allowInsecure = config.cockpit?.allowInsecure === true;
   const stt = config.cockpit?.stt ?? {};
   let seq = 0;
   let status = null;
+  // D94: the last REPLAY_MAX `seq`'d messages, oldest first, as sent (B103).
+  const kept = [];
   // D95: each prompt's clientId for 10 min → the turn.prompt that answered it.
   const once = new Map();
   const pending = new Set(); // clientIds accepted whose turn.prompt has not gone yet
@@ -151,10 +188,20 @@ export function createLink({ session, store, audit = null, config, log = () => {
 
   // ---------------------------------------------------------------- out
 
+  /** One frame to one link; §8: past 4 MB unsent, the link closes 4408. */
+  function deliver(link, text) {
+    if (link.ws.readyState !== link.ws.OPEN) return;
+    try { link.ws.send(text); } catch { return; /* closing */ }
+    if (link.ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+      log(`cockpit: link too slow (${link.ws.bufferedAmount} bytes unsent), closed 4408`);
+      try { link.ws.close(4408, 'too slow'); } catch { /* gone */ }
+    }
+  }
+
   function sendTo(link, msg) {
     if (link.ws.readyState !== link.ws.OPEN) return;
     if (atOutbound(msg, link)) return;
-    try { link.ws.send(JSON.stringify(msg)); } catch { /* closing */ }
+    deliver(link, JSON.stringify(msg));
   }
 
   /** A session message: into the store, numbered, to every link past its welcome. */
@@ -169,13 +216,35 @@ export function createLink({ session, store, audit = null, config, log = () => {
       remember(out);
       pending.delete(out.clientId);
     }
-    if (atOutbound(out, null)) return; // B18: counted in seq, sent to no link
     const text = JSON.stringify(out);
-    for (const link of links) {
-      if (!link.welcomed || link.ws.readyState !== link.ws.OPEN) continue;
-      try { link.ws.send(text); } catch { /* closing */ }
-    }
+    kept.push({ seq, text, msg: out });
+    if (kept.length > REPLAY_MAX) kept.shift();
+    if (atOutbound(out, null)) return; // B18: counted in seq, kept, sent to no link
+    for (const link of links) if (link.welcomed) deliver(link, text);
   }
+
+  // ---------------------------------------------------------------- timers
+
+  // D10: every welcomed link hears from the room at least every 10 s.
+  const heartbeat = clock.setInterval(() => {
+    const at = isoAt(clock.now());
+    for (const link of links) if (link.welcomed) sendTo(link, { type: 'heartbeat', at });
+  }, HEARTBEAT_MS);
+  heartbeat?.inner?.unref?.();
+  // §2.2: a ping every 30 s; a link that has not answered the previous one is dropped.
+  const pinger = setInterval(() => {
+    for (const link of links) {
+      if (atOutbound({ type: 'ping' }, link)) { link.alive = true; continue; } // a silent link (stand-ins.md §1.2)
+      if (!link.alive) {
+        log('cockpit: link did not answer its ping, dropped');
+        link.ws.terminate();
+        continue;
+      }
+      link.alive = false;
+      try { link.ws.ping(); } catch { /* closing */ }
+    }
+  }, pingMs);
+  pinger.unref();
 
   // ---------------------------------------------------------------- upgrade
 
@@ -201,25 +270,82 @@ export function createLink({ session, store, audit = null, config, log = () => {
     }
     rec.accepted = true;
     atConnection(rec);
-    const link = { ws, auth: req.auth, welcomed: false, rec };
+    const link = { ws, auth: req.auth, welcomed: false, rec, alive: true, helloTimer: null, rate: { start: 0, n: 0, passed: false, passes: [] } };
     links.add(link);
-    ws.on('message', (raw, isBinary) => onFrame(link, raw, isBinary));
-    ws.on('close', (code) => {
+    closeTooBigFirst(ws);
+    // §2.3: 4001 when no `hello` came 5 s after the open.
+    link.helloTimer = clock.setTimeout(() => {
+      link.helloTimer = null;
+      if (!link.welcomed) ws.close(4001, 'no hello');
+    }, HELLO_MS);
+    ws.on('message', (raw, isBinary) => {
+      try {
+        onFrame(link, raw, isBinary);
+      } catch (err) {
+        // §2.3: an exception in the handler closes 1011.
+        log(`cockpit: link handler failed: ${err?.message ?? err}`);
+        try { ws.close(1011, 'internal'); } catch { /* gone */ }
+      }
+    });
+    ws.on('pong', () => { link.alive = true; });
+    // autoPong is off so a silent link (stand-ins.md §1.2) answers no ping either.
+    ws.on('ping', (data) => {
+      if (!atOutbound({ type: 'pong' }, link)) {
+        try { ws.pong(data); } catch { /* closing */ }
+      }
+    });
+    const gone = () => {
       links.delete(link);
+      if (link.helloTimer) clock.clearTimeout(link.helloTimer);
+      link.helloTimer = null;
+    };
+    ws.on('close', (code) => {
+      gone();
       rec.closeCode = code;
     });
-    ws.on('error', () => { links.delete(link); });
+    ws.on('error', gone);
     log(`cockpit: link open (${req.auth?.kind ?? '?'}, ${links.size} open)`);
   }
 
   // ---------------------------------------------------------------- in
 
+  /**
+   * §8: 50 text messages per second per link; each one over is `error`
+   * `too-many` and dropped. A second in which the limit was passed is one
+   * pass (B104); the third pass in 60 s closes 4429. Real time, as the ping.
+   */
+  function overRate(link, msg) {
+    const r = link.rate;
+    const t = Date.now();
+    if (t - r.start >= 1000) { r.start = t; r.n = 0; r.passed = false; }
+    if (++r.n <= INBOUND_PER_SEC) return false;
+    if (!r.passed) {
+      r.passed = true;
+      r.passes = r.passes.filter((at) => t - at < PASS_WINDOW_MS);
+      r.passes.push(t);
+      if (r.passes.length >= PASSES_TO_CLOSE) {
+        log('cockpit: link over its rate limit 3 times in 60 s, closed 4429');
+        link.ws.close(4429, 'too many');
+        return true;
+      }
+    }
+    const re = Number.isInteger(msg?.seq) && msg.seq >= 1 ? msg.seq : null;
+    if (re !== null) sendTo(link, { type: 'error', re, code: 'too-many', message: `over ${INBOUND_PER_SEC} messages a second` });
+    return true;
+  }
+
   function onFrame(link, raw, isBinary) {
-    if (isBinary) return; // audio is C2's (§6); T14 closes a binary frame without an utterance
+    if (isBinary) {
+      // §8: a binary frame over 6 400 bytes closes 4413; audio itself is C2's (§6), dropped until then.
+      if (raw.length > MAX_BINARY_BYTES) link.ws.close(4413, 'too big');
+      return;
+    }
+    if (link.ws.readyState !== link.ws.OPEN) return;
     let msg;
     try { msg = JSON.parse(raw.toString('utf8')); } catch { return; }
     if (atInbound(msg, link)) return;
-    // §2.2: the hello is the first frame; nothing else is read before it (T14: 4001 after 5 s).
+    if (overRate(link, msg)) return;
+    // §2.2: the hello is the first frame; nothing else is read before it (4001 after 5 s).
     if (!link.welcomed && msg?.type !== 'hello') return;
     const reSeq = Number.isInteger(msg?.seq) && msg.seq >= 1 ? msg.seq : null;
     const checked = checkMessage(msg, 'in', { maxPromptChars: MAX_PROMPT_CHARS, languages: languageList(stt.language) });
@@ -256,18 +382,39 @@ export function createLink({ session, store, audit = null, config, log = () => {
       link.ws.close(4002, `protocol ${msg.protocol}`);
       return;
     }
+    if (link.helloTimer) clock.clearTimeout(link.helloTimer);
+    link.helloTimer = null;
     const now = clock.now();
     const conversation = store.conversation ?? session.conversation ?? nextConversation(null);
     const startedAt = store.startedAt ?? session.startedAt ?? isoAt(now);
+    const missed = replayFrom(msg);
     sendTo(link, {
       type: 'welcome', re: msg.seq, protocol: PROTOCOL, screen: SCREEN_NAME, epoch, seq,
-      conversation, resume: 'snapshot',
+      conversation, resume: missed ? 'replay' : 'snapshot',
       config: { stt: stt.url && stt.url !== 'none' ? 'on' : 'none', languages: languageList(stt.language), maxPromptChars: MAX_PROMPT_CHARS },
       // B96: no `focus` was ever seen for this screen: nothing counts as "since you looked".
       status, lookedAt: isoAt(now), now: isoAt(now),
     });
-    for (const part of snapshotParts({ seq, conversation, startedAt, turns: store.turns() })) sendTo(link, part);
+    if (missed) {
+      for (const k of missed) if (!atOutbound(k.msg, link)) deliver(link, k.text);
+    } else {
+      for (const part of snapshotParts({ seq, conversation, startedAt, turns: store.turns() })) sendTo(link, part);
+    }
     link.welcomed = true;
+  }
+
+  /**
+   * §2.2 (D94): the kept messages `lastSeq + 1 … seq` when the `epoch` is
+   * this room's and `lastSeq + 1` is still kept (none missed: `[]`); else
+   * null, and the link gets a snapshot (a fresh page, a room restart, too far
+   * behind, or a `lastSeq` this room never sent).
+   */
+  function replayFrom(hello) {
+    if (hello.epoch !== epoch || !Number.isInteger(hello.lastSeq)) return null;
+    if (hello.lastSeq > seq) return null;
+    const oldest = seq - kept.length + 1;
+    if (hello.lastSeq + 1 < oldest) return null;
+    return kept.slice(hello.lastSeq + 1 - oldest);
   }
 
   /** §3.1: the echo is the confirmation; the audit line before it (screens.md §6.4). */
@@ -311,7 +458,10 @@ export function createLink({ session, store, audit = null, config, log = () => {
   }
 
   function close() {
+    clock.clearInterval(heartbeat);
+    clearInterval(pinger);
     for (const link of links) {
+      if (link.helloTimer) clock.clearTimeout(link.helloTimer);
       try { link.ws.close(1001, 'room stopping'); } catch { /* gone */ }
     }
     links.clear();

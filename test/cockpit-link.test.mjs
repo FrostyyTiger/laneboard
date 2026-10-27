@@ -17,7 +17,12 @@ import { boot, control, ingressWs, ROOM_UNDER_TEST, ROOT } from './helpers/boot.
 import { classify } from '../server/fleet/auth.mjs';
 import { linkRefusal, MAX_LINKS, secureOrigin } from '../server/cockpit/link-checks.mjs';
 import { promptLine } from '../server/cockpit/audit-lines.mjs';
-import { createLink, cutForSnapshot, snapshotParts, languageList, PART_MAX_BYTES, TURN_MAX_BYTES } from '../server/cockpit/link.mjs';
+import {
+  createLink, cutForSnapshot, snapshotParts, languageList, PART_MAX_BYTES, TURN_MAX_BYTES,
+  HEARTBEAT_MS, HELLO_MS, INBOUND_PER_SEC, MAX_BINARY_BYTES, MAX_TEXT_BYTES, REPLAY_MAX,
+} from '../server/cockpit/link.mjs';
+import * as clockMod from '../server/cockpit/clock.mjs';
+import { setFaults } from '../server/cockpit/faults.mjs';
 import { checkMessage } from '../server/cockpit/protocol.mjs';
 import { openAudit } from '../server/fleet/audit.mjs';
 
@@ -189,22 +194,22 @@ function standInStore(turns = []) {
   return { applied, apply: (m) => applied.push(m), turns: () => turns, conversation: 'c-0003', startedAt: '2026-10-27T06:12:00+01:00' };
 }
 
-async function inProcess(t, { session = standInSession(), store = standInStore(), audit, clientIds } = {}) {
+async function inProcess(t, { session = standInSession(), store = standInStore(), audit, clientIds, pingMs } = {}) {
   const lines = [];
   const auditLog = audit === undefined ? { entries: [], append(e) { this.entries.push(e); return e; } } : audit;
   const server = http.createServer();
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const port = server.address().port;
   const config = { port, cockpit: { stt: { url: 'none', language: ['en', 'de'] } } };
-  const link = createLink({ session, store, audit: auditLog, config, log: (l) => lines.push(l), clientIds });
+  const link = createLink({ session, store, audit: auditLog, config, log: (l) => lines.push(l), clientIds, pingMs });
   session.emit = link.emit;
   server.on('upgrade', (r, socket, head) => {
-    r.auth = classify(r, config, {});
+    r.auth = r.headers['x-test-no-auth'] ? null : classify(r, config, {});
     if (!link.handleUpgrade(r, socket, head, new URL(r.url, 'http://x'))) socket.destroy();
   });
   t.after(() => { link.close(); server.close(); });
-  const open = (origin = `http://127.0.0.1:${port}`) => {
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/api/cockpit/ws`, { origin });
+  const open = (origin = `http://127.0.0.1:${port}`, opts = {}) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/api/cockpit/ws`, { origin, ...opts });
     const frames = [];
     ws.on('message', (d) => frames.push(JSON.parse(d.toString())));
     t.after(() => ws.terminate());
@@ -395,6 +400,294 @@ test('link: another protocol closes 4002 `protocol 2`; a refused upgrade gets it
   assert.deepEqual(evil.frames, [], 'no welcome, nothing of the conversation');
   assert.equal(room.link.count, 0, 'never counted');
 });
+
+// --- T14: seq, resume, heartbeat and silence, close codes (§2.2-§2.3, §8) ----
+
+/** The room's clock as a manual test clock for this test; the real one after. */
+function manualClock(t) {
+  const clock = clockMod.createTestClock({ start: Date.parse('2026-10-27T07:00:00+01:00') });
+  clock.setMode('manual');
+  clockMod.setClock(clock);
+  t.after(() => clockMod.setClock(null));
+  return clock;
+}
+
+/** Opened and welcomed with this hello; resolves when the welcome is in. */
+async function welcomed(room, hello = HELLO) {
+  const c = room.open();
+  await once(c.ws, 'open');
+  c.ws.send(JSON.stringify(hello));
+  await until(() => c.frames.some((f) => f.type === 'welcome'), 'welcome');
+  return c;
+}
+
+const closed = async (ws) => {
+  const [code, reason] = await once(ws, 'close');
+  return [code, reason.toString()];
+};
+const settle = (ms = 50) => new Promise((r) => setTimeout(r, ms));
+
+test('seq: one counter for every link, +1 per session message; answers to one link carry none (§2.1)', async (t) => {
+  const room = await inProcess(t);
+  const a = await welcomed(room);
+  const b = await welcomed(room);
+  for (const state of ['thinking', 'working', 'answering']) room.link.emit({ type: 'turn.state', turnId: 't-0042', state });
+  await until(() => a.frames.length >= 5 && b.frames.length >= 5, 'three states each');
+  for (const c of [a, b]) assert.deepEqual(c.frames.filter((f) => f.type === 'turn.state').map((f) => f.seq), [1, 2, 3]);
+  a.ws.send(JSON.stringify({ type: 'stop', seq: 2, turnId: 't-0999' }));
+  await until(() => a.frames.some((f) => f.type === 'error'), 'the error');
+  assert.equal(a.frames.find((f) => f.type === 'error').seq, undefined);
+  assert.equal(room.link.seq, 3);
+});
+
+test('resume without a gap: the same epoch and a kept lastSeq get welcome `replay` and exactly the missed messages', async (t) => {
+  const room = await inProcess(t);
+  const a = await welcomed(room);
+  const epoch = a.frames[0].epoch;
+  room.link.emit({ type: 'turn.state', turnId: 't-0042', state: 'thinking' }); // seq 1
+  await until(() => a.frames.some((f) => f.seq === 1 && f.type === 'turn.state'), 'seq 1');
+  a.ws.close(1000, 'bye');
+  await once(a.ws, 'close');
+  room.link.emit({ type: 'turn.state', turnId: 't-0042', state: 'working' }); // seq 2, while away
+  room.link.emit({ type: 'status', status: null }); // seq 3
+  const back = await welcomed(room, { ...HELLO, epoch, lastSeq: 1 });
+  await until(() => back.frames.length >= 3, 'the replay');
+  await settle();
+  const [welcome, ...rest] = back.frames;
+  assert.deepEqual(checkMessage(welcome, 'out'), { ok: true });
+  assert.equal(welcome.resume, 'replay');
+  assert.equal(welcome.seq, 3);
+  assert.deepEqual(rest.map((f) => [f.seq, f.type]), [[2, 'turn.state'], [3, 'status']], 'no snapshot, nothing applied twice');
+  // Up to date: replay of nothing.
+  const same = await welcomed(room, { ...HELLO, epoch, lastSeq: 3 });
+  await settle();
+  assert.equal(same.frames[0].resume, 'replay');
+  assert.deepEqual(same.frames.slice(1), []);
+  // Later messages reach the resumed links as usual.
+  room.link.emit({ type: 'status', status: null });
+  await until(() => back.frames.some((f) => f.seq === 4) && same.frames.some((f) => f.seq === 4), 'seq 4 on both');
+});
+
+test('resume with a gap: a message dropped to every link still counts and replays; too far behind, another epoch or a fresh page get a snapshot', async (t) => {
+  const room = await inProcess(t);
+  t.after(() => setFaults(null));
+  const a = await welcomed(room);
+  const epoch = a.frames[0].epoch;
+  room.link.emit({ type: 'turn.state', turnId: 't-0042', state: 'thinking' }); // seq 1
+  setFaults({ outbound: (m, l) => l === null && m.type === 'turn.end' });
+  room.link.emit({ type: 'turn.end', turnId: 't-0042', state: 'done', at: '2026-10-27T07:00:12+01:00' }); // seq 2, to no link
+  setFaults(null);
+  room.link.emit({ type: 'status', status: null }); // seq 3
+  await until(() => a.frames.some((f) => f.seq === 3), 'seq 3');
+  assert.deepEqual(a.frames.filter((f) => f.seq).map((f) => f.seq), [1, 3], 'the screen sees a gap');
+  // §2.2: the screen closes 4000 `gap`; the room takes the close as any other.
+  a.ws.close(4000, 'gap');
+  await once(a.ws, 'close');
+  await until(() => room.link.count === 0, 'the link gone');
+  // Reconnecting with the last applied seq before the gap replays from it.
+  const r = await welcomed(room, { ...HELLO, epoch, lastSeq: 1 });
+  await until(() => r.frames.length >= 3, 'the replay');
+  assert.deepEqual(r.frames.slice(1).map((f) => [f.seq, f.type]), [[2, 'turn.end'], [3, 'status']]);
+  // A fresh page (no epoch), another epoch, a lastSeq the room never sent: one snapshot.
+  for (const hello of [HELLO, { ...HELLO, epoch: 'r-000000', lastSeq: 1 }, { ...HELLO, epoch, lastSeq: 99 }]) {
+    const c = await welcomed(room, hello);
+    await until(() => c.frames.length >= 2, 'the snapshot');
+    assert.equal(c.frames[0].resume, 'snapshot', JSON.stringify(hello));
+    assert.equal(c.frames[1].type, 'snapshot');
+    assert.equal(c.frames[1].seq, 3);
+  }
+  // Too far behind: past the last 2 000 kept.
+  for (let i = 0; i < REPLAY_MAX; i++) room.link.emit({ type: 'status', status: null });
+  const far = await welcomed(room, { ...HELLO, epoch, lastSeq: 2 });
+  await until(() => far.frames.length >= 2, 'the snapshot');
+  assert.equal(far.frames[0].resume, 'snapshot');
+  const near = await welcomed(room, { ...HELLO, epoch, lastSeq: 3 });
+  await until(() => near.frames.length >= 1 + REPLAY_MAX, 'the whole replay');
+  assert.equal(near.frames[0].resume, 'replay');
+  assert.equal(near.frames[1].seq, 4);
+  assert.equal(near.frames.at(-1).seq, 3 + REPLAY_MAX);
+});
+
+test('heartbeat every 10 s on the room clock, no seq; a silent link gets nothing and stays open (§2.2, D10, D139)', async (t) => {
+  const clock = manualClock(t);
+  const room = await inProcess(t);
+  t.after(() => setFaults(null));
+  const a = await welcomed(room);
+  const before = a.frames.length;
+  await clock.advance(HEARTBEAT_MS - 1);
+  await settle();
+  assert.equal(a.frames.length, before, 'nothing before 10 s');
+  await clock.advance(1);
+  await until(() => a.frames.length === before + 1, 'the heartbeat');
+  const hb = a.frames.at(-1);
+  assert.deepEqual(Object.keys(hb), ['type', 'at']);
+  assert.equal(Date.parse(hb.at), Date.parse('2026-10-27T07:00:10+01:00'), 'the room clock\'s time');
+  assert.deepEqual(checkMessage(hb, 'out'), { ok: true });
+  await clock.advance(HEARTBEAT_MS * 2);
+  await until(() => a.frames.filter((f) => f.type === 'heartbeat').length === 3, 'two more');
+  // Silent (stand-ins.md §1.2 `POST /link {"up":"silent"}`): no heartbeat, no event, inbound dropped.
+  setFaults({ inbound: () => true, outbound: () => true });
+  const quiet = a.frames.length;
+  await clock.advance(HEARTBEAT_MS * 3);
+  room.link.emit({ type: 'status', status: null });
+  a.ws.send(JSON.stringify({ type: 'stop', seq: 2, turnId: 't-0999' }));
+  await settle(100);
+  assert.equal(a.frames.length, quiet, 'the page sees only silence');
+  assert.equal(a.ws.readyState, WebSocket.OPEN, 'and no close');
+  setFaults(null);
+  await clock.advance(HEARTBEAT_MS);
+  await until(() => a.frames.length === quiet + 1 && a.frames.at(-1).type === 'heartbeat', 'heartbeats again');
+});
+
+test('close 4001 `no hello`: 5 s after the open without a hello, on the room clock (§2.3)', async (t) => {
+  const clock = manualClock(t);
+  const room = await inProcess(t);
+  const a = room.open();
+  await once(a.ws, 'open');
+  await clock.advance(HELLO_MS - 1);
+  await settle();
+  assert.equal(a.ws.readyState, WebSocket.OPEN);
+  const done = closed(a.ws);
+  await clock.advance(1);
+  assert.deepEqual(await done, [4001, 'no hello']);
+  // A hello in time keeps the link past 5 s.
+  const b = await welcomed(room);
+  await clock.advance(HELLO_MS * 2);
+  await settle();
+  assert.equal(b.ws.readyState, WebSocket.OPEN);
+});
+
+test('close 1001 `room stopping` on every link at shutdown (§2.3)', async (t) => {
+  const room = await inProcess(t);
+  const a = await welcomed(room);
+  const b = room.open();
+  await once(b.ws, 'open');
+  const both = Promise.all([closed(a.ws), closed(b.ws)]);
+  room.link.close();
+  assert.deepEqual(await both, [[1001, 'room stopping'], [1001, 'room stopping']]);
+});
+
+test('close 4401 `unpaired`: no credential the room takes, right after the upgrade, no frame (§2.3, D212)', async (t) => {
+  const room = await inProcess(t);
+  const a = room.open(undefined, { headers: { 'x-test-no-auth': '1' } });
+  a.ws.on('open', () => a.ws.send(JSON.stringify(HELLO)));
+  assert.deepEqual(await closed(a.ws), [4401, 'unpaired']);
+  assert.deepEqual(a.frames, []);
+  assert.equal(room.link.count, 0);
+});
+
+test('close 4503 `too-many-links`: the 33rd link, never counted (§2.3, §8)', async (t) => {
+  const room = await inProcess(t);
+  const open = [];
+  for (let i = 0; i < 32; i++) {
+    const c = room.open();
+    await once(c.ws, 'open');
+    open.push(c);
+  }
+  assert.equal(room.link.count, 32);
+  const extra = room.open();
+  extra.ws.on('open', () => extra.ws.send(JSON.stringify(HELLO)));
+  assert.deepEqual(await closed(extra.ws), [4503, 'too-many-links']);
+  assert.deepEqual(extra.frames, []);
+  assert.equal(room.link.count, 32);
+  assert.ok(open.every((c) => c.ws.readyState === WebSocket.OPEN));
+});
+
+test('close 4413 `too big`: a text frame over 64 KB or a binary frame over 6 400 bytes; at the limit the link stays (§8)', async (t) => {
+  const room = await inProcess(t);
+  const a = await welcomed(room);
+  // Exactly 64 KB is read (and answered, it is no message the room knows).
+  const atLimit = JSON.stringify({ type: 'nonsense', seq: 2, pad: '' });
+  a.ws.send(JSON.stringify({ type: 'nonsense', seq: 2, pad: 'x'.repeat(MAX_TEXT_BYTES - Buffer.byteLength(atLimit)) }));
+  a.ws.send(Buffer.alloc(MAX_BINARY_BYTES));
+  await until(() => a.frames.some((f) => f.type === 'error'), 'the 64 KB frame answered');
+  assert.equal(a.frames.find((f) => f.type === 'error').code, 'unknown-type');
+  const text = await welcomed(room);
+  const t1 = closed(text.ws);
+  text.ws.send('x'.repeat(MAX_TEXT_BYTES + 1));
+  assert.deepEqual(await t1, [4413, 'too big']);
+  const bin = await welcomed(room);
+  const t2 = closed(bin.ws);
+  bin.ws.send(Buffer.alloc(MAX_BINARY_BYTES + 1));
+  assert.deepEqual(await t2, [4413, 'too big']);
+  assert.equal(a.ws.readyState, WebSocket.OPEN);
+});
+
+test('close 4408 `too slow`: a link whose unsent data passes 4 MB (§8)', { timeout: 30_000 }, async (t) => {
+  const room = await inProcess(t);
+  const a = await welcomed(room);
+  const b = await welcomed(room);
+  a.ws._socket.pause(); // a screen that stops reading
+  const done = closed(a.ws);
+  const big = 'x'.repeat(500_000);
+  for (let i = 0; i < 40 && room.link.count === 2 && !room.lines.some((l) => l.includes('4408')); i++) {
+    room.link.emit({ type: 'text.delta', turnId: 't-0042', blockIndex: 0, text: big, sentAt: 1 });
+    await settle(5);
+  }
+  assert.ok(room.lines.some((l) => /cockpit: link too slow \(\d+ bytes unsent\), closed 4408/.test(l)), room.lines.join('\n'));
+  a.ws._socket.resume();
+  assert.deepEqual(await done, [4408, 'too slow']);
+  assert.equal(b.ws.readyState, WebSocket.OPEN, 'the reading link stays');
+});
+
+test('rate: over 50 messages a second is `error` `too-many`, dropped; the third pass in 60 s closes 4429 `too many` (§8)', { timeout: 15_000 }, async (t) => {
+  const room = await inProcess(t);
+  const a = await welcomed(room);
+  const done = closed(a.ws);
+  const burst = (from) => {
+    for (let i = 0; i <= INBOUND_PER_SEC; i++) a.ws.send(JSON.stringify({ type: 'stop', seq: from + i, turnId: 't-0999' }));
+  };
+  burst(2);
+  await until(() => a.frames.some((f) => f.code === 'too-many'), 'the first too-many');
+  const tooMany = a.frames.filter((f) => f.code === 'too-many');
+  assert.ok(tooMany.length >= 1);
+  assert.deepEqual(checkMessage(tooMany[0], 'out'), { ok: true });
+  assert.equal(room.session.prompts.length, 0);
+  assert.equal(a.ws.readyState, WebSocket.OPEN, 'one pass: the link stays');
+  await settle(1050);
+  burst(200);
+  await settle(1050);
+  assert.equal(a.ws.readyState, WebSocket.OPEN, 'two passes: the link stays');
+  burst(400);
+  assert.deepEqual(await done, [4429, 'too many']);
+});
+
+test('close 1011 `internal`: an exception in the handler (§2.3)', async (t) => {
+  const session = standInSession();
+  session.stop = () => { throw new Error('boom'); };
+  const room = await inProcess(t, { session });
+  const a = await welcomed(room);
+  const done = closed(a.ws);
+  a.ws.send(JSON.stringify({ type: 'stop', seq: 2, turnId: 't-0042' }));
+  assert.deepEqual(await done, [1011, 'internal']);
+  assert.ok(room.lines.includes('cockpit: link handler failed: boom'));
+});
+
+test('ping: a link that does not answer the previous ping is dropped; one that answers stays (§2.2)', async (t) => {
+  const room = await inProcess(t, { pingMs: 100 });
+  const answers = await welcomed(room);
+  const mute = room.open(undefined, { autoPong: false });
+  await once(mute.ws, 'open');
+  mute.ws.send(JSON.stringify(HELLO));
+  const done = once(mute.ws, 'close');
+  const [code] = await done;
+  assert.equal(code, 1006, 'terminated, no close frame');
+  assert.ok(room.lines.includes('cockpit: link did not answer its ping, dropped'));
+  assert.equal(answers.ws.readyState, WebSocket.OPEN);
+  // The room answers the screen's ping, except on a silent link.
+  t.after(() => setFaults(null));
+  const pong = once(answers.ws, 'pong');
+  answers.ws.ping('a');
+  assert.equal(String((await pong)[0]), 'a');
+  setFaults({ outbound: () => true });
+  let pongs = 0;
+  answers.ws.on('pong', () => { pongs += 1; });
+  answers.ws.ping('b');
+  await settle(80);
+  assert.equal(pongs, 0, 'a silent link answers no ping (stand-ins.md §1.2)');
+});
+
+// The close codes the room sends that C1 does not: 4402 `revoked` comes with pairing (Q-O21, `screens.md` §6).
 
 // --- S-SEC-06 through a real board and room in one process -------------------
 

@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as clockMod from '../server/cockpit/clock.mjs';
 import * as faults from '../server/cockpit/faults.mjs';
-import { createRoomControl, isoInZone } from './cockpit/stand-ins/room-control.mjs';
+import { createRoomControl, isoInZone, SENT_MAX } from './cockpit/stand-ins/room-control.mjs';
 import { boot, control, ROOM_UNDER_TEST } from './helpers/boot.mjs';
 
 const T0 = Date.parse('2026-10-27T07:00:00+01:00');
@@ -261,6 +261,24 @@ test('§1.2 drop the next message to a screen: the next outbound of that type, o
   assert.equal(c.hooks.outbound({ type: 'turn.end', seq: 42 }, null), false);
 });
 
+test('§1.2 GET /sent: the seq\'d messages for every link, oldest first, by type, the last 2 000 (D94)', async () => {
+  const { c } = setup();
+  assert.deepEqual(await c.handle('GET', '/sent'), { status: 200, body: { items: [] } });
+  c.hooks.outbound({ type: 'turn.prompt', seq: 1 }, null);
+  c.hooks.outbound({ type: 'error', re: 2, code: 'not-now' }, {}); // one link's answer: not a sent message
+  c.hooks.outbound({ type: 'heartbeat', at: 'x' }, null); // no seq: nothing replays it
+  await c.handle('POST', '/drop', { what: 'next-out', type: 'turn.end' });
+  assert.equal(c.hooks.outbound({ type: 'turn.end', seq: 2 }, null), true, 'dropped to every link, still in seq and in the log');
+  c.hooks.outbound({ type: 'turn.end', seq: 3 }, null);
+  assert.deepEqual((await c.handle('GET', '/sent')).body.items.map((m) => m.seq), [1, 2, 3]);
+  assert.deepEqual(await c.handle('GET', '/sent?type=turn.end'), { status: 200, body: { items: [{ type: 'turn.end', seq: 2 }, { type: 'turn.end', seq: 3 }] } });
+  assert.deepEqual(await c.handle('GET', '/sent?kind=x'), { status: 400, body: { error: 'bad-body', detail: 'kind: unknown query key' } });
+  for (let i = 4; i <= SENT_MAX + 10; i++) c.hooks.outbound({ type: 'status', seq: i }, null);
+  const all = (await c.handle('GET', '/sent')).body.items;
+  assert.equal(all.length, SENT_MAX);
+  assert.equal(all[0].seq, 11);
+});
+
 test('§1.2 a bad body is 400 bad-body with its detail', async () => {
   const { c } = setup();
   const cases = [
@@ -298,7 +316,6 @@ test('§1.2 GET /connections: every upgrade the link reported, oldest first, clo
 test('§1.2 the rows that wait for a later build answer 404 unknown-verb', async () => {
   const { c } = setup();
   const waiting = [
-    ['GET', '/sent', undefined], // T14: needs the link's seq and outbound log
     ['POST', '/pair', { code: 'K7M4QX', name: 'desk' }], // pairing (`laneboard cockpit pair`, §1.3)
     ['POST', '/unpair', { name: 'desk' }], // pairing
     ['POST', '/button', { add: 'hall', screen: 'desk' }], // C2b
@@ -323,8 +340,11 @@ test('control server: JSON over loopback, a bad JSON body is 400', async () => {
     r = await fetch(`http://${addr}/drop`, { method: 'POST', body: '{nope' });
     assert.equal(r.status, 400);
     assert.deepEqual(await r.json(), { error: 'bad-body', detail: 'not JSON' });
-    r = await fetch(`http://${addr}/sent`);
+    r = await fetch(`http://${addr}/pair`, { method: 'POST', body: '{}' });
     assert.equal(r.status, 404);
+    r = await fetch(`http://${addr}/sent?type=turn.end`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), { items: [] });
   } finally {
     await c.close();
   }
@@ -362,8 +382,9 @@ test('boot(): the room under test boots with its control port, seeded state file
     assert.deepEqual(r, { status: 200, body: { now: '2026-10-27T07:00:00+01:00' } });
     r = await control(room, 'POST', '/tick', { ms: 300_000 });
     assert.deepEqual(r, { status: 200, body: { now: '2026-10-27T07:05:00+01:00' } });
-    r = await control(room, 'GET', '/sent');
-    assert.deepEqual(r, { status: 404, body: { error: 'unknown-verb' } });
+    r = await control(room, 'GET', '/sent?type=turn.end');
+    assert.equal(r.status, 200);
+    assert.ok(Array.isArray(r.body.items));
     // The room's own port has no control verb (D109).
     const own = await fetch(`${room.url}/clock`, { method: 'POST', body: '{"mode":"real"}' });
     assert.notEqual(own.status, 200);

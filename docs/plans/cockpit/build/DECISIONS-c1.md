@@ -583,3 +583,36 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   first `ready` is the store's, else the session's, else `c-0001` (what the session then makes) —
   because B84 left these to T13 and session.mjs emits no `conversation.new` for the first —
   spec: `protocols.md` §11.7, §11.7.1 — overrule: the options in `bridge.mjs`/`session.mjs`.
+- B101 (T14) A text frame over 64 KB closes 4413 `too big` through `ws`'s own `maxPayload` (64 KB,
+  refused at the frame header, nothing buffered) with a listener put ahead of `ws`'s on the link's
+  receiver (`ws._receiver`, an internal of ws 8) that closes 4413 before `ws` would close 1009; a
+  binary frame over 6 400 bytes is checked in the handler — because §8 names 4413 and reading a
+  frame whole only to measure it would let a screen make the room buffer it — spec: `protocols.md`
+  §2.3, §8 — overrule: `closeTooBigFirst()` in `link.mjs` (an upgrade of `ws` that renames the
+  internal falls back to 1009, and the 4413 test fails loudly).
+- B102 (T14) The heartbeat (10 s) and the no-hello limit (5 s) run on the room clock; the WebSocket
+  ping (30 s) and the 50-a-second rate count run on the real clock — because a manual clock stepped
+  60 s in one `advance` would send two pings before the browser's pong could arrive and drop every
+  link, and a flood limit measured on a stopped clock would refuse a test's ordinary messages; the
+  heartbeat is what the page's 25 s silence reads, so it moves with `advance()` — spec:
+  `protocols.md` §2.2, §8, `stand-ins.md` §1.1 — overrule: the timers in `createLink()`.
+- B103 (T14) The replay buffer keeps every `seq`'d message, a message the fault hook dropped to every
+  link included (B18), and a reconnect with a `lastSeq` before that message gets it replayed; a
+  `lastSeq` above the room's `seq` gets a snapshot; heartbeats go to welcomed links only — because
+  the dropped message is part of the shared state and §2.2 lets the screen choose a snapshot by
+  sending no `epoch` after a 4000 `gap` — spec: `protocols.md` §2.2, `stand-ins.md` §1.2 —
+  overrule: `replayFrom()` in `link.mjs`.
+- B104 (T14) "Rate limits passed 3 times in 60 s": a second in which a link passed 50 messages is one
+  pass, however many messages it dropped; each dropped message with a `seq` gets `error` `too-many`;
+  the third pass inside 60 s closes 4429 `too many` (the prompt limit of T23 is not counted yet) —
+  because counting each dropped message would close a single burst of 53 — spec: `protocols.md` §8
+  — overrule: `overRate()` in `link.mjs`.
+- B105 (T14) `GET /sent` is kept by the control port's `outbound` hook: every message for every link
+  that carries a `seq` (fault-dropped ones too, as the room's replay buffer), the last 2 000,
+  `?type=` the only query key (another is `400 bad-body`) — because the control is made before the
+  room and reads nothing of it but the hooks (D109) — spec: `stand-ins.md` §1.2 — overrule:
+  `room-control.mjs`.
+- B106 (T14) `createLink({pingMs})` shortens the ping for the unit test; a silent link (stand-ins.md
+  §1.2) sends no ping and answers none (`autoPong: false`, the pong goes through the outbound hook as
+  `{type:'pong'}`); 4402 `revoked` waits for pairing — because "the room sends nothing on them, no
+  pings answered" — spec: `stand-ins.md` §1.2, `protocols.md` §2.3 — overrule: `createLink()`.

@@ -9,12 +9,16 @@
 //   await control.handle('POST', '/clock', { mode: 'manual' });  // {status, body}
 //
 // Verbs served now: /clock, /tick, /link, /drop, /connections (T13: the link
-// reports each upgrade through the `connection` hook). The rest wait for the
-// build that gives them something to act on and answer 404 unknown-verb until
-// then (B19): /sent (T14, the link's seq and outbound log),
-// /pair, /unpair (pairing), /button (C2b), /jobs (Jobs), /alarms (the watcher).
+// reports each upgrade through the `connection` hook), /sent (T14: every
+// `seq`'d message the link numbered, through the `outbound` hook). The rest
+// wait for the build that gives them something to act on and answer 404
+// unknown-verb until then (B19): /pair, /unpair (pairing), /button (C2b),
+// /jobs (Jobs), /alarms (the watcher).
 import http from 'node:http';
 import { freePort } from '../../helpers/boot.mjs';
+
+/** stand-ins.md §1.2 `GET /sent`: the last 2 000, as the room keeps them (D94). */
+export const SENT_MAX = 2_000;
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -42,6 +46,7 @@ export function createRoomControl({ clock, timeZone = 'UTC' } = {}) {
   let dropPrompts = 0;
   const dropOut = new Map(); // type -> how many more to drop
   const connections = []; // the link's records, oldest first: {atMs, accepted, closeCode}
+  const sent = []; // the link's `seq`'d messages, oldest first, the last SENT_MAX (B105)
 
   const hooks = {
     // /link {"up":false}: every new upgrade and every /api/cockpit/* request
@@ -69,7 +74,12 @@ export function createRoomControl({ clock, timeZone = 'UTC' } = {}) {
     connection(rec) {
       connections.push(rec);
     },
-    outbound(msg) {
+    outbound(msg, link) {
+      // A message for every link (`link` null) has its `seq`: what the room sent (D94).
+      if (link === null && Number.isInteger(msg?.seq)) {
+        sent.push(msg);
+        if (sent.length > SENT_MAX) sent.shift();
+      }
       if (up === 'silent') return true;
       const n = dropOut.get(msg?.type) ?? 0;
       if (n > 0) {
@@ -121,6 +131,11 @@ export function createRoomControl({ clock, timeZone = 'UTC' } = {}) {
       for (const s of open) s.destroy();
       return { status: 200, body: { up: false, closed: open.length } };
     },
+    async 'GET /sent'(_body, query) {
+      for (const k of query.keys()) if (k !== 'type') bad(`${k}: unknown query key`);
+      const type = query.get('type');
+      return { status: 200, body: { items: type === null ? sent.slice() : sent.filter((m) => m.type === type) } };
+    },
     async 'GET /connections'() {
       const items = connections.map((r) => ({ at: isoInZone(r.atMs, timeZone), atMs: r.atMs, accepted: r.accepted, closeCode: r.closeCode }));
       return { status: 200, body: { items } };
@@ -140,10 +155,11 @@ export function createRoomControl({ clock, timeZone = 'UTC' } = {}) {
 
   /** One call: `{status, body}`; never throws for a bad request. */
   async function handle(method, path, body) {
-    const verb = verbs[`${method} ${path}`];
+    const url = new URL(path, 'http://x');
+    const verb = verbs[`${method} ${url.pathname}`];
     if (!verb) return { status: 404, body: { error: 'unknown-verb' } };
     try {
-      return await verb(body ?? {});
+      return await verb(body ?? {}, url.searchParams);
     } catch (err) {
       if (err instanceof BadBody || err instanceof RangeError) return { status: 400, body: { error: 'bad-body', detail: err.message } };
       return { status: 500, body: { error: 'failed', detail: String(err?.message ?? err) } };
@@ -158,11 +174,11 @@ export function createRoomControl({ clock, timeZone = 'UTC' } = {}) {
     req.on('end', async () => {
       const text = Buffer.concat(chunks).toString('utf8');
       let out;
-      if (text.trim() === '') out = await handle(req.method, new URL(req.url, 'http://x').pathname, undefined);
+      if (text.trim() === '') out = await handle(req.method, req.url, undefined);
       else {
         let body;
         try { body = JSON.parse(text); } catch { out = { status: 400, body: { error: 'bad-body', detail: 'not JSON' } }; }
-        out ??= await handle(req.method, new URL(req.url, 'http://x').pathname, body);
+        out ??= await handle(req.method, req.url, body);
       }
       res.writeHead(out.status, { 'content-type': 'application/json' });
       res.end(JSON.stringify(out.body));
