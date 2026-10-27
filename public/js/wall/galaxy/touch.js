@@ -39,6 +39,14 @@
 // (tour.js `resume`), the camera flying there from wherever the finger left
 // it. The next touch wakes the page again.
 //
+// Explore looks like a person is driving (night 4 T5, r41-operator touch 1,
+// night 3's Q13): while a finger has the page, a mono line by the tag counts
+// down to the hand-back (`manualLine`, `MANUAL · TOUR IN 0:40`, from
+// `idleLeft`); the minute starts when the first touch's ease is over (Q13: a
+// running flight is not idle), so the line's first word is `1:00`. At the
+// overview the back control reads `▶ TOUR` (`backControl`) and hands the page
+// back at once (`handBack`, as the minute does).
+//
 // The page itself never scrolls, zooms or shows a menu under a finger: the
 // viewport has no user scaling (galaxy.html), the stage `touch-action: none`
 // (wall.css), and the context menu (a long press) is refused here.
@@ -60,9 +68,11 @@ export const TOUCH_MODES = Object.freeze(['tour', 'easing', 'explore']);
 
 /**
  * The next state after `event` at `now` (ms). `state` is `{ mode, since,
- * last }` (`last`: the last touch, ms); `event` is `'down'` (a pointer went
- * down), `'touch'` (a pointer moved or lifted, the wheel turned, the back
- * control was pressed) or `'tick'` (time passed). `held` says a finger is
+ * last }` (`last`: the last touch, ms, or the end of the first touch's
+ * ease if later); `event` is `'down'` (a pointer went down), `'touch'` (a
+ * pointer moved or lifted, the wheel turned, the back control was pressed),
+ * `'handback'` (`▶ TOUR` was pressed: in `explore`, the tour at once) or
+ * `'tick'` (time passed). `held` says a finger is
  * down now: the tour never takes the page from under it.
  * Returns `{ state, wake, swallow, resume }`: `wake` when this down is the
  * one that stops the tour (the page fits the camera), `swallow` when the
@@ -71,10 +81,18 @@ export const TOUCH_MODES = Object.freeze(['tour', 'easing', 'explore']);
  */
 export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDLE.ms, held = false } = {}) {
   const s = state && TOUCH_MODES.includes(state.mode) ? state : { mode: 'tour', since: null, last: null };
-  // `easing` ends on its own: any event after fitMs finds the camera out.
-  let cur = s.mode === 'easing' && now - s.since >= fitMs ? { ...s, mode: 'explore', since: s.since + fitMs } : s;
+  // `easing` ends on its own: any event after fitMs finds the camera out. The
+  // minute counts from then (night 4 T5, Q13: the flight out is not idle time).
+  let cur = s.mode === 'easing' && now - s.since >= fitMs
+    ? { ...s, mode: 'explore', since: s.since + fitMs, last: Math.max(s.last ?? 0, s.since + fitMs) }
+    : s;
   if (event === 'down' && cur.mode === 'tour') {
     return { state: { mode: 'easing', since: now, last: now }, wake: true, swallow: true, resume: false };
+  }
+  // `▶ TOUR` (night 4 T5): the person hands the page back now, as the minute would.
+  if (event === 'handback') {
+    if (cur.mode !== 'explore') return { state: cur, wake: false, swallow: false, resume: false };
+    return { state: { mode: 'tour', since: now, last: now }, wake: false, swallow: false, resume: true };
   }
   if (event === 'down' || event === 'touch') {
     if (cur.mode !== 'tour') cur = { ...cur, last: now };
@@ -85,8 +103,32 @@ export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDL
 }
 
 /**
+ * How long until the tour takes the page back (night 4 T5), in ms: null
+ * unless a finger explores (not in the tour, not while easing out); the whole
+ * `idleMs` while a finger is `held` on the glass; never below 0. Pure.
+ */
+export function idleLeft(state, now, { idleMs = IDLE.ms, held = false } = {}) {
+  if (state?.mode !== 'explore') return null;
+  if (held) return idleMs;
+  return Math.max(0, idleMs - (now - (state.last ?? state.since)));
+}
+
+/**
+ * The line by the tag (night 4 T5): `MANUAL · TOUR IN 0:40` for `ms` left,
+ * whole seconds rounded up (the line reads `1:00` for the whole first
+ * second, `0:00` never before the hand-back); null for null. Pure.
+ */
+export function manualLine(ms) {
+  if (ms == null || !Number.isFinite(ms)) return null;
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `MANUAL · TOUR IN ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/**
  * `createTouch(stage, { wake, resume, clock, fitMs, idleMs })` → `{ mode(),
- * onPointer(cb), poke(), stop() }`. `stage` gets the listeners; `wake()` is
+ * left(), onPointer(cb), poke(), handBack(), stop() }`. `left()` is
+ * `idleLeft` now; `handBack()` gives the page to the tour at once (`resume()`
+ * is called, as when the minute is up). `stage` gets the listeners; `wake()` is
  * called once per first touch (the page stops the tour and fits the camera);
  * `resume()` once when the page has gone `idleMs` untouched in `explore`
  * (T14; noticed by `mode()`, which the page asks every frame); `clock` is
@@ -147,7 +189,9 @@ export function createTouch(stage, opts = {}) {
       cbs.add(cb);
       return () => cbs.delete(cb);
     },
+    left: () => idleLeft(step('tick').state, o.clock(), timing()),
     poke: () => { step('touch'); },
+    handBack: () => { step('tick'); step('handback'); },
     stop: () => { for (const [type, fn] of on) stage.removeEventListener(type, fn); },
   };
 }
@@ -664,6 +708,19 @@ export const canGoBack = (place) => place?.level === 'site' || place?.level === 
 export const backShown = (mode, place) => mode === 'explore' && canGoBack(place);
 
 /**
+ * What the back control is (night 4 T5): `'back'` while a finger explores
+ * away from the overview, `'tour'` (`▶ TOUR`, the hand-back) while it
+ * explores the overview, null in the tour and while easing out. Pure.
+ */
+export const backControl = (mode, place) => (mode !== 'explore' ? null : canGoBack(place) ? 'back' : 'tour');
+
+/** The control's words for each kind: its glyph and its word (wall.css uppercases it). */
+export const BACK_WORDS = Object.freeze({
+  back: Object.freeze({ glyph: '‹', word: 'Back' }),
+  tour: Object.freeze({ glyph: '▶', word: 'Tour' }),
+});
+
+/**
  * One step back (T13): a planet → its system, a system → the overview; the
  * overview stays. Pure.
  */
@@ -695,30 +752,40 @@ export function createReturn() {
 
 /**
  * The back control (T13): `button` (a `<button>` on the stage) shows while
- * `show(true)` and goes with `show(false)`; a press on it calls `back()`.
- * Its pointers never reach the stage, so a press on the control is not also
- * a tap on empty sky (a second step back) nor the start of a drag. Returns
- * `{ show(on), shown(), stop() }`.
+ * `show(true)` or `show('back')` and goes with `show(false)`/`show(null)`; a
+ * press on it calls `back()`. `show('tour')` (night 4 T5) makes it `▶ TOUR`,
+ * whose press calls `tour()`; `glyph` and `word` (its two spans) take the
+ * kind's BACK_WORDS. Its pointers never reach the stage, so a press on the
+ * control is not also a tap on empty sky (a second step back) nor the start
+ * of a drag. Returns `{ show(kind), shown(), kind(), stop() }`.
  */
 export function createBack(button, opts = {}) {
-  const o = { back: () => {}, ...opts };
-  let on = false;
-  const set = (v) => {
-    on = Boolean(v);
+  const o = { back: () => {}, tour: () => {}, glyph: null, word: null, ...opts };
+  const kindOf = (v) => (v === true ? 'back' : Object.hasOwn(BACK_WORDS, v) ? v : null);
+  let on = null;
+  const set = (k) => {
+    on = k;
     button.hidden = !on;
+    if (!on) return;
+    const w = BACK_WORDS[on];
+    if (o.glyph && o.glyph.textContent !== w.glyph) o.glyph.textContent = w.glyph;
+    if (o.word && o.word.textContent !== w.word) o.word.textContent = w.word;
+    if (button.dataset) button.dataset.kind = on;
   };
-  set(false);
+  set(null);
   const keep = (ev) => ev.stopPropagation?.();
   const press = (ev) => {
     ev.preventDefault?.();
     ev.stopPropagation?.();
-    if (on) o.back();
+    if (on === 'tour') o.tour();
+    else if (on) o.back();
   };
   const listen = [['pointerdown', keep], ['pointermove', keep], ['pointerup', keep], ['pointercancel', keep], ['click', press]];
   for (const [type, fn] of listen) button.addEventListener(type, fn);
   return {
-    show: (v) => { if (Boolean(v) !== on) set(v); },
-    shown: () => on,
+    show: (v) => { const k = kindOf(v); if (k !== on) set(k); },
+    shown: () => on != null,
+    kind: () => on,
     stop: () => { for (const [type, fn] of listen) button.removeEventListener(type, fn); },
   };
 }

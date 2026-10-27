@@ -59,6 +59,10 @@
 // reduced motion every step is a cut (camera.js `cut`) and the scene fades
 // in over CUT.fadeMs (still.js createCutFade): a tapped site, back out, the
 // hand-back.
+// Explore looks like a person is driving (night 4 T5, touch.js manualLine):
+// under the tag, `MANUAL · TOUR IN 0:40` counts down to the hand-back while a
+// finger explores; at the overview the back control is `▶ TOUR`, which hands
+// the page back at once (touch.js handBack, the same resume as the minute's).
 // Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon,warp` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
@@ -83,8 +87,8 @@ import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
 import {
-  AT_OVERVIEW, COVERED, TOUCH, backShown, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createReturn, createTaps, createTouch, hitAll, hitTest,
-  memberPoints, orbitLimits, placeOf, tapPoints,
+  AT_OVERVIEW, COVERED, TOUCH, backControl, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createReturn, createTaps, createTouch, hitAll, hitTest,
+  manualLine, memberPoints, orbitLimits, placeOf, tapPoints,
 } from './touch.js';
 
 const BACKOFF_START_MS = 1000;
@@ -242,19 +246,19 @@ export function boot() {
   // The names, over the scene and under the words: placed after each frame
   // where the camera is now, clear of the caption plate, the fleet line and
   // the lock's brackets (drawn first: the lock's onDraw comes before theirs).
-  // The back control's box (T13) while it shows, read again only when it comes or the stage resizes.
-  let backCover = () => null;
+  // The back control's box (T13) and the manual line's (night 4 T5) while they show, read again
+  // only when they come, change words or the stage resizes.
+  let touchCovers = () => [];
   // The fan (night 4 T3, fan.js): two or more planets under one finger fan out as rows for the next tap.
   const fan = park ? null : createFan(document.getElementById('galaxy-fan'), {
     screenOf: cam.screenOf, size: galaxy.size, fontPx: () => Math.max(FAN_MIN_PX, steps.room), still: reduced,
-    avoid: () => { const b = backCover(); return b ? [...hud.covers(), b] : hud.covers(); }, // the rows keep off the words
+    avoid: () => [...hud.covers(), ...touchCovers()], // the rows keep off the words
   });
   const labels = createLabels(document.getElementById('galaxy-labels'), galaxy, {
     steps,
     // The lock's leader too (T16): the names keep off the line, as off the words.
     covers: () => {
-      const c = [...hud.covers(), ...lock.covers(), ...(fan?.covers() ?? [])], b = backCover();
-      return b ? [...c, b] : c;
+      return [...hud.covers(), ...lock.covers(), ...(fan?.covers() ?? []), ...touchCovers()];
     },
     held: lock.held,
     flight: cam.flight,
@@ -339,18 +343,33 @@ export function boot() {
     if (next.level === 'site') openSite(next.site);
     else toOverview(left.pose());
   };
+  // `▶ TOUR` at the overview (night 4 T5): the tour has the page at once, as after the minute.
+  const handBack = () => touch?.handBack();
   const backEl = document.getElementById('galaxy-back');
-  const back = touch ? createBack(backEl, { back: goBack }) : null;
+  const back = touch ? createBack(backEl, {
+    back: goBack, tour: handBack, glyph: backEl.querySelector('.galaxy-back-glyph'), word: backEl.querySelector('.galaxy-back-word'),
+  }) : null;
+  // The manual line under the tag (night 4 T5): written only when its words change, once a second.
+  const manualEl = document.getElementById('galaxy-manual');
+  let manualSaid = null;
+  const sayManual = (text) => {
+    if (text === manualSaid) return;
+    manualSaid = text;
+    manualEl.hidden = text == null;
+    if (text != null) manualEl.textContent = text;
+  };
   if (back) {
-    let seen = null, box = null;
-    backCover = () => {
-      if (!back.shown()) return null;
+    // The manual line's width changes only with its digits' count, so its box is read on those and the stage.
+    const boxOf = (el) => coverOf({ left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight });
+    let seen = null, boxes = [];
+    touchCovers = () => {
       const { W, H } = galaxy.size();
-      if (seen !== `${W}x${H}`) {
-        seen = `${W}x${H}`;
-        box = coverOf({ left: backEl.offsetLeft, top: backEl.offsetTop, width: backEl.offsetWidth, height: backEl.offsetHeight });
+      const k = `${back.kind()}|${manualSaid?.length ?? 0}|${W}x${H}`;
+      if (seen !== k) {
+        seen = k;
+        boxes = [back.shown() ? boxOf(backEl) : null, manualSaid != null ? boxOf(manualEl) : null].filter(Boolean);
       }
-      return box;
+      return boxes;
     };
   }
   const taps = touch ? createTaps(touch, {
@@ -362,7 +381,7 @@ export function boot() {
       // never the star under them nor empty sky; a row naming a planet opens it.
       // The fleet line too (night 4 T2): its subject's site first, then the planet in it.
       const rows = hud.targets().map((r) => ({ ...r, box: { left: r.box.left - o.left, top: r.box.top - o.top, right: r.box.right - o.left, bottom: r.box.bottom - o.top } }));
-      const worded = coverHit(hud.covers(), rows, galaxy.world?.sites, x - o.left, y - o.top, place.site);
+      const worded = coverHit([...hud.covers(), ...touchCovers()], rows, galaxy.world?.sites, x - o.left, y - o.top, place.site);
       if (worded) return worded;
       const names = labels.shown();
       // A beacon's pillar is its site's target (night 4 T2).
@@ -391,7 +410,8 @@ export function boot() {
         if (m === 'tour') delete page.dataset.touch;
         else page.dataset.touch = m;
       }
-      back?.show(backShown(m, place));
+      back?.show(backControl(m, place));
+      sayManual(manualLine(touch.left()));
     }
     const at = parked();
     if (at) {

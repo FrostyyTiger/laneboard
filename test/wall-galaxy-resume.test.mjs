@@ -11,7 +11,7 @@ import path from 'node:path';
 
 import { makeEl } from './helpers/fakedom.mjs';
 import {
-  AT_OVERVIEW, IDLE, TOUCH, backShown, backStep, canGoBack, createBack, createGestures, createReturn, createTaps, createTouch,
+  AT_OVERVIEW, BACK_WORDS, IDLE, TOUCH, backControl, backStep, canGoBack, createBack, createGestures, createReturn, createTaps, createTouch, idleLeft, manualLine,
   hitTest, memberPoints, orbitLimits, orbitOf, placeOf, tapPoints, touchStep,
 } from '../public/js/wall/galaxy/touch.js';
 import { DEMO_TIMING, TIMING, createTour, initialTour, nextLeg, resumeTour } from '../public/js/wall/tour.js';
@@ -140,7 +140,8 @@ function page({ still = false } = {}) {
     if (next.level === 'site') openSite(next.site);
     else toOverview(left.pose());
   };
-  const back = createBack(button, { back: goBack });
+  const glyph = makeEl('span'), word = makeEl('span');
+  const back = createBack(button, { back: goBack, tour: () => touch.handBack(), glyph, word });
   createTaps(touch, {
     clock,
     pick: (x, y) => hitTest(memberPoints(galaxy.world.sites, cam.screenOf), x, y)
@@ -151,7 +152,7 @@ function page({ still = false } = {}) {
     now += ms;
     timers.run();
     const m = touch.mode();
-    back.show(backShown(m, place));
+    back.show(backControl(m, place));
     gestures?.frame(now);
     const pose = cam.frame(now);
     fade?.frame(now);
@@ -175,6 +176,7 @@ function page({ still = false } = {}) {
   return {
     stage, button, canvas, names, galaxy, cam, tour, touch, timers, legs, sheets, back,
     tick, run, tapAt, drag, press, now: clock, place: () => place, wakes: () => wakes,
+    manual: () => manualLine(touch.left()), words: () => `${glyph.textContent} ${word.textContent}`,
   };
 }
 
@@ -189,9 +191,10 @@ test('touchStep: explore → tour after IDLE.ms untouched (resume, once); a touc
   assert.equal(touchStep(woke, 'tick', t0 + TOUCH.fitMs - 1, { idleMs: 1 }).resume, false);
   const out = touchStep(woke, 'tick', t0 + TOUCH.fitMs).state;
   assert.equal(out.mode, 'explore');
-  // The minute counts from the waking touch.
-  assert.equal(touchStep(out, 'tick', t0 + IDLE.ms - 1).resume, false);
-  const back = touchStep(out, 'tick', t0 + IDLE.ms);
+  // The minute counts from the end of the waking touch's ease (night 4 T5, Q13: the flight out is not idle).
+  assert.equal(out.last, t0 + TOUCH.fitMs);
+  assert.equal(touchStep(out, 'tick', t0 + TOUCH.fitMs + IDLE.ms - 1).resume, false);
+  const back = touchStep(out, 'tick', t0 + TOUCH.fitMs + IDLE.ms);
   assert.deepEqual([back.state.mode, back.resume, back.wake, back.swallow], ['tour', true, false, false]);
   assert.equal(touchStep(back.state, 'tick', t0 + 2 * IDLE.ms).resume, false, 'once: the tour has it');
   // A touch 50 s in starts the minute again; so does a down, a move, a lift or the wheel ('touch').
@@ -203,7 +206,7 @@ test('touchStep: explore → tour after IDLE.ms untouched (resume, once); a touc
   // A finger resting on the glass is a touch going on.
   assert.equal(touchStep(out, 'tick', t0 + 5 * IDLE.ms, { held: true }).resume, false);
   // The next down after the hand-back wakes the page again.
-  assert.equal(touchStep(back.state, 'down', t0 + IDLE.ms + 10).wake, true);
+  assert.equal(touchStep(back.state, 'down', t0 + TOUCH.fitMs + IDLE.ms + 10).wake, true);
 });
 
 test('resumeTour: the tour comes back at its worst site (trouble first), not the overview nor the calm site that was due', () => {
@@ -531,4 +534,145 @@ test('galaxy/main.js wires the hand-back (T14): resume releases the sheet and re
   assert.match(js, /const taps = touch \? createTaps\(/, 'taps in reduced motion too');
   assert.match(js, /const gestures = touch && !reduced \? createGestures\(/, 'no drag in reduced motion');
   assert.match(js, /fade\?\.frame\(now\);/);
+});
+
+// ---- night 4 T5: explore looks like a person is driving ----
+
+test('manualLine: MANUAL · TOUR IN m:ss, whole seconds rounded up; null for null', () => {
+  assert.equal(manualLine(null), null);
+  assert.equal(manualLine(undefined), null);
+  assert.equal(manualLine(IDLE.ms), 'MANUAL · TOUR IN 1:00');
+  assert.equal(manualLine(59_001), 'MANUAL · TOUR IN 1:00', 'the whole first second reads 1:00');
+  assert.equal(manualLine(59_000), 'MANUAL · TOUR IN 0:59');
+  assert.equal(manualLine(40_000), 'MANUAL · TOUR IN 0:40');
+  assert.equal(manualLine(9_500), 'MANUAL · TOUR IN 0:10');
+  assert.equal(manualLine(1), 'MANUAL · TOUR IN 0:01', '0:00 never before the hand-back');
+  assert.equal(manualLine(0), 'MANUAL · TOUR IN 0:00');
+  assert.equal(manualLine(-5), 'MANUAL · TOUR IN 0:00');
+  assert.equal(manualLine(125_000), 'MANUAL · TOUR IN 2:05');
+});
+
+test('idleLeft: only in explore; the minute from the ease\'s end, reset by a touch, full while a finger is held', () => {
+  const t0 = 10_000;
+  const woke = touchStep(null, 'down', t0).state;
+  assert.equal(idleLeft(null, t0), null, 'the tour');
+  assert.equal(idleLeft(woke, t0 + 100), null, 'easing out');
+  const out = touchStep(woke, 'tick', t0 + TOUCH.fitMs).state;
+  assert.equal(idleLeft(out, t0 + TOUCH.fitMs), IDLE.ms);
+  assert.equal(idleLeft(out, t0 + TOUCH.fitMs + 20_000), IDLE.ms - 20_000);
+  assert.equal(idleLeft(out, t0 + TOUCH.fitMs + 20_000, { held: true }), IDLE.ms);
+  assert.equal(idleLeft(out, t0 + 10 * IDLE.ms), 0);
+  const later = touchStep(out, 'touch', t0 + 30_000).state;
+  assert.equal(idleLeft(later, t0 + 30_000), IDLE.ms);
+});
+
+test('touchStep handback: in explore the tour at once (resume); nothing in the tour or while easing', () => {
+  const t0 = 10_000;
+  const woke = touchStep(null, 'down', t0).state;
+  const easing = touchStep(woke, 'handback', t0 + 100);
+  assert.deepEqual([easing.state.mode, easing.resume], ['easing', false]);
+  const out = touchStep(woke, 'tick', t0 + TOUCH.fitMs).state;
+  const r = touchStep(out, 'handback', t0 + TOUCH.fitMs + 5000);
+  assert.deepEqual([r.state.mode, r.resume, r.wake, r.swallow], ['tour', true, false, false]);
+  assert.equal(touchStep(r.state, 'handback', t0 + TOUCH.fitMs + 6000).resume, false, 'once');
+  assert.equal(touchStep(r.state, 'down', t0 + TOUCH.fitMs + 7000).wake, true, 'the next touch wakes again');
+});
+
+test('backControl and createBack: back away from the overview, ▶ TOUR at it, nothing in the tour; the press does the kind\'s', () => {
+  for (const mode of ['tour', 'easing']) {
+    assert.equal(backControl(mode, AT_OVERVIEW), null, mode);
+    assert.equal(backControl(mode, placeOf('hv1')), null, mode);
+  }
+  assert.equal(backControl('explore', AT_OVERVIEW), 'tour');
+  assert.equal(backControl('explore', placeOf('hv1')), 'back');
+  assert.equal(backControl('explore', placeOf('hv1', 'hv1-a')), 'back');
+  const button = makeEl('button');
+  const on = new Map();
+  button.addEventListener = (type, fn) => on.set(type, fn);
+  button.removeEventListener = (type) => on.delete(type);
+  const click = () => on.get('click')({ preventDefault() {}, stopPropagation() {} });
+  const glyph = makeEl('span'), word = makeEl('span');
+  const said = [];
+  const b = createBack(button, { back: () => said.push('back'), tour: () => said.push('tour'), glyph, word });
+  assert.equal(button.hidden, true);
+  b.show('tour');
+  assert.deepEqual([button.hidden, b.kind(), glyph.textContent, word.textContent, button.dataset.kind], [false, 'tour', '▶', 'Tour', 'tour']);
+  click();
+  b.show('back');
+  assert.deepEqual([glyph.textContent, word.textContent], [BACK_WORDS.back.glyph, BACK_WORDS.back.word]);
+  click();
+  b.show(true);
+  assert.equal(b.kind(), 'back', 'true is back, as before T5');
+  b.show(null);
+  assert.equal(button.hidden, true);
+  click();
+  assert.deepEqual(said, ['tour', 'back'], 'hidden does nothing');
+});
+
+test('pointer events on the page (night 4 T5): no line in the tour; 1:00 after the wake, 0:40 20 s on, 1:00 after a drag, gone at the hand-back', () => {
+  const p = page();
+  p.tour.start();
+  p.run(DEMO_TIMING.overviewMs + 1000);
+  assert.equal(p.manual(), null, 'the tour: no line');
+  p.stage.dispatch('pointerdown', { pointerId: 1 });
+  p.stage.dispatch('pointerup', { pointerId: 1 });
+  p.run(TOUCH.fitMs / 2);
+  assert.equal(p.manual(), null, 'easing out: no line yet');
+  p.run(TOUCH.fitMs / 2 + 16);
+  assert.equal(p.touch.mode(), 'explore');
+  assert.equal(p.manual(), 'MANUAL · TOUR IN 1:00', 'after the wake');
+  p.run(20_000);
+  assert.equal(p.manual(), 'MANUAL · TOUR IN 0:40', '20 s later');
+  p.drag(2, [[800, 450], [830, 450], [900, 460], [960, 470]]);
+  assert.equal(p.manual(), 'MANUAL · TOUR IN 1:00', 'a drag starts the minute again');
+  p.run(IDLE.ms + 100);
+  assert.equal(p.touch.mode(), 'tour');
+  assert.equal(p.manual(), null, 'gone at the hand-back');
+});
+
+test('pointer events on the page (night 4 T5): at the overview in explore the control is ▶ TOUR and resumes the tour at once', () => {
+  const p = page();
+  p.tour.start();
+  p.run(500);
+  p.stage.dispatch('pointerdown', { pointerId: 1 });
+  p.stage.dispatch('pointerup', { pointerId: 1 });
+  p.run(TOUCH.fitMs / 2);
+  assert.equal(p.button.hidden, true, 'not while easing out');
+  p.run(TOUCH.fitMs);
+  assert.equal(p.button.hidden, false);
+  assert.equal(p.words(), '▶ Tour');
+  p.tapAt(2, p.cam.screenOf('cloud'));
+  p.tick(16);
+  assert.equal(p.words(), '‹ Back', 'away from the overview it steps back');
+  p.press();
+  p.run(TOUCH.fitMs + 100);
+  assert.equal(p.place(), AT_OVERVIEW);
+  assert.equal(p.words(), '▶ Tour');
+  const legs = p.legs.length;
+  assert.equal(p.timers.live.size, 0, 'the tour is stopped');
+  p.press();
+  p.tick(16);
+  assert.equal(p.touch.mode(), 'tour', 'handed back at once, not after the minute');
+  assert.equal(p.legs.length, legs + 1);
+  assert.deepEqual([p.legs.at(-1).kind, p.legs.at(-1).id], ['site', 'hv2'], 'trouble first, as the minute\'s hand-back');
+  assert.equal(p.timers.live.size, 1, 'the tour runs on');
+  assert.equal(p.button.hidden, true);
+  assert.equal(p.manual(), null);
+});
+
+test('galaxy.html and wall.css: the manual line under the tag, the tag\'s face at --text-2; main.js says it from touch.left()', () => {
+  const html = read('galaxy.html');
+  assert.match(html, /<div class="galaxy-manual" id="galaxy-manual" hidden><\/div>/);
+  assert.match(html, /<span class="galaxy-back-word">Back<\/span>/);
+  const css = read('css/wall.css');
+  const rule = css.match(/\n\.galaxy-manual \{([^}]*)\}/)?.[1] ?? '';
+  const tag = css.match(/\n\.wall-tag \{([^}]*)\}/)?.[1] ?? '';
+  for (const decl of ['font-family: var(--font-mono);', 'font-size: 1.7vmin;', 'letter-spacing: 0.12em;', 'text-transform: uppercase;']) {
+    assert.ok(rule.includes(decl) && tag.includes(decl), `the tag's face: ${decl}`);
+  }
+  assert.match(rule, /color: var\(--text-2\);/, 'grey: nothing needs you');
+  assert.match(rule, /right: 6vw;/, 'right-aligned with the tag');
+  assert.match(css, /\.galaxy-manual\[hidden\] \{ display: none; \}/);
+  const js = read('js/wall/galaxy/main.js');
+  assert.match(js, /sayManual\(manualLine\(touch\.left\(\)\)\);/);
 });

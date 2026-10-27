@@ -100,14 +100,27 @@ Notes for every builder round (planner, round 1):
   (`shots/r10-t4-back`): drag, tap HV2, the back control: home pose equal to the dragged one (gap 0), the flight
   back mid-way reads, no console errors. Film `shots/r10-galaxy`: the tour as r8 (11.7 fps under SwiftShader vs
   13.1, VM load: nothing per frame added, the return is read only on a tap and a back). For T13/T14: the director takes `createReturn` over (its back step).
-- [ ] T5 (§7 Night 4 0a; night 3's Later r41-operator touch 1 = r36-dreamer touch 1 = r51-touch galaxy 5; research
+- [x] T5 (§7 Night 4 0a; night 3's Later r41-operator touch 1 = r36-dreamer touch 1 = r51-touch galaxy 5; research
   Q13) [ui] [variant:galaxy] Explore looks like a person is driving: while `touch.js` is in `explore`, a mono line by
   the tag reads `MANUAL · TOUR IN 0:40` (`--text-2`, the tag's face, counting down the time left of `IDLE.ms` from the
   last touch, whole seconds, reset by any touch; gone in the tour and while easing); at the overview in explore the
   back control reads `▶ TOUR` and hands back to the tour at once (`tour.resume()`, as the minute does) — done when: a
   page test on a fake clock sees no line in the tour, `MANUAL · TOUR IN 1:00` after the wake, `0:40` 20 s later, `1:00`
   again after a drag, the line gone at the hand-back, and a tap on `▶ TOUR` at the overview resuming the tour; a CDP
-  still in explore shows the line, the tour's still does not.
+  still in explore shows the line, the tour's still does not. (commit SHA) Builder r13: touch.js
+  `idleLeft` + `manualLine` (whole seconds rounded up), `createTouch` `left()` and `handBack()` (a `'handback'` event:
+  in explore the tour at once, the same `resume` as the minute's), `backControl(mode, place)` → `'back' | 'tour' | null`
+  and `createBack` `show(kind)` with `BACK_WORDS` (`‹ Back`, `▶ Tour`, `data-kind`). One behaviour change, so the line
+  can honestly read `1:00` after the wake: the minute now counts from the end of the first touch's 1.5 s ease, not the
+  waking touch (Q13: a running flight is not idle); `test/wall-galaxy-resume.test.mjs` pins it. The line is its own
+  `#galaxy-manual` under the tag (not inside it: the tag's box feeds the held-system framing's widest-seen covers),
+  right-aligned at 6vw, the tag's mono face and tracking, `--text-2`, tabular digits; the back control moved down
+  2.1vmin to `8vh + 8.6vmin` to make room. Both boxes are words for taps, names and the fan (`main.js touchCovers`).
+  CDP check on the large demo (`shots/r13-t5-manual`): tour and easing no line, explore `MANUAL · TOUR IN 0:59`
+  (SwiftShader's first frame lands a second late) with `▶ TOUR`, a site `‹ BACK`, back out `▶ TOUR`, its press hands
+  back at once (camera to HV2, line and control gone), no console errors. Film `shots/r13-galaxy`: the tour as r10
+  (11.9 fps under SwiftShader). Open for the director (T13/T14): `handBack` is the touch source giving up; and r11's
+  "the tour's return as an event" (kicker types `TOUR`) is not built.
 - [ ] T6 (§7 Night 4 0a; was night 3's T31, r41-operator galaxy 3) [ui] [variant:galaxy] A passing crit keeps its
   shape colour: under `.galaxy-label[data-dim]` only the name text goes to `--text-3`; the status glyph (`■`/`▲`) keeps
   its tone hue (night 3's T15 greyed the glyph in flights: `■ HV2` grey beside its red nebula) — done when: a test

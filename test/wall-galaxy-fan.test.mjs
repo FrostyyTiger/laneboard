@@ -290,7 +290,7 @@ test('galaxy/main.js wires the fan (night 4 T3): asked first while up, two membe
   assert.match(js, /if \(hit\?\.fan\) \{ fan\.show\(hit\.fan, hit\.x, hit\.y\); return; \}\s*fan\?\.hide\(\);/);
   assert.match(js, /moved: \(\) => fan\?\.hide\(\)/, 'a turn or a zoom closes it');
   assert.match(js, /cam\.onDraw\(fan\.draw\)/);
-  assert.match(js, /avoid: \(\) => \{ const b = backCover\(\); return b \? \[\.\.\.hud\.covers\(\), b\] : hud\.covers\(\); \}/, 'the rows keep off the words');
+  assert.match(js, /avoid: \(\) => \[\.\.\.hud\.covers\(\), \.\.\.touchCovers\(\)\]/, 'the rows keep off the words, the back control and the manual line (night 4 T5)');
   assert.match(js, /\.\.\.\(fan\?\.covers\(\) \?\? \[\]\)/, 'the names keep off the rows');
   const html = read('galaxy.html');
   assert.match(html, /<div class="galaxy-fan" id="galaxy-fan" hidden><\/div>/);

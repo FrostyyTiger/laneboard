@@ -875,8 +875,8 @@ test('the back control: in galaxy.html, hidden, its hit size at least BACK.hitPx
 
 test('galaxy/main.js wires back (T13): the control and an empty-sky tap step back, shown only while exploring', () => {
   const js = read('js/wall/galaxy/main.js');
-  assert.match(js, /createBack\(backEl, \{ back: goBack \}\)/);
-  assert.match(js, /back\?\.show\(backShown\(m, place\)\);/);
+  assert.match(js, /createBack\(backEl, \{\s*back: goBack, tour: handBack,/);
+  assert.match(js, /back\?\.show\(backControl\(m, place\)\);/, 'back away from the overview, ▶ TOUR at it (night 4 T5)');
   const go = js.slice(js.indexOf('const goBack = '), js.indexOf('};', js.indexOf('const goBack = ')));
   assert.match(go, /backStep\(place\)/);
   assert.match(go, /openSite\(next\.site\)/);
@@ -946,7 +946,7 @@ test('pointer events on the page: with a sheet up a tap on the plate over a star
 test('galaxy/main.js wires the words (night 4 T1): coverHit before the scene, a covered hit opens nothing', () => {
   const js = read('js/wall/galaxy/main.js');
   const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
-  assert.ok(pick.indexOf('coverHit(hud.covers(), rows,') >= 0 && pick.indexOf('coverHit(') < pick.indexOf('memberPoints('), 'the words first');
+  assert.ok(pick.indexOf('coverHit([...hud.covers(), ...touchCovers()], rows,') >= 0 && pick.indexOf('coverHit(') < pick.indexOf('memberPoints('), 'the words first');
   assert.match(pick, /hud\.targets\(\)/);
   assert.match(js, /tap: \(hit\) => \{[^}]*\}\s*fan\?\.hide\(\);\s*if \(hit\?\.covered\) return;/);
 });
@@ -1056,7 +1056,7 @@ test('galaxy/main.js wires the fleet line and the pillar (night 4 T2): rows keep
   const js = read('js/wall/galaxy/main.js');
   const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
   assert.match(pick, /\.\.\.r, box:/, 'a row keeps its step');
-  assert.match(pick, /coverHit\(hud\.covers\(\), rows, galaxy\.world\?\.sites, x - o\.left, y - o\.top, place\.site\)/);
+  assert.match(pick, /coverHit\(\[\.\.\.hud\.covers\(\), \.\.\.touchCovers\(\)\], rows, galaxy\.world\?\.sites, x - o\.left, y - o\.top, place\.site\)/);
   assert.match(pick, /fx\.has\('beacon'\) \? beamSegments\(galaxy\.beams\?\.\(\), cam\.screenAt\) : \[\]/);
   const scene = read('js/wall/galaxy/scene.js');
   assert.match(scene, /const beams = \(\) => pillars/);

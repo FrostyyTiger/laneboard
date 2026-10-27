@@ -649,15 +649,36 @@ html.wall body {
   opacity: 1;
 }
 
+/* A finger has the page (night 4 T5, js/wall/galaxy/touch.js manualLine):
+   `MANUAL · TOUR IN 0:40` one line under the tag, right-aligned with it, in
+   the tag's face and tracking; a step brighter (--text-2) because it is the
+   page's state, not its name. Never a trouble hue: nothing needs you. */
+.galaxy-manual {
+  position: absolute;
+  top: calc(8vh + 5.1vmin);
+  right: 6vw;
+  font-family: var(--font-mono);
+  font-size: 1.7vmin;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.galaxy-manual[hidden] { display: none; }
+
 /* Back (night 3 T13, js/wall/galaxy/touch.js createBack): one step back while
-   a finger explores, top right under the tag, clear of the plate (top left)
+   a finger explores, top right under the tag and its manual line (night 4 T5;
+   at the overview it reads `▶ TOUR`, the hand-back), clear of the plate (top left)
    and the fleet line (bottom right). Its smallest side is BACK.hitPx, 80 css
    px: night 1's Q6 15 mm for a main control on the tablet. Grey: it is a way
    out, nothing needs you. The label at the caption's line step, tracked as
    the tag; the brackets as the plate's. */
 .galaxy-back {
   position: absolute;
-  top: calc(8vh + 6.5vmin);
+  top: calc(8vh + 8.6vmin);
   right: 6vw;
   min-width: 80px;
   min-height: 80px;
@@ -693,6 +714,8 @@ html.wall body {
 .galaxy-back:active { color: var(--text-1); }
 .galaxy-back:focus-visible { outline: 2px solid var(--text-2); outline-offset: 4px; }
 .galaxy-back-glyph { font-size: 1.3em; margin-top: -0.12em; }
+/* ▶ is drawn smaller than ‹ at the same size: it takes the word's cap height. */
+.galaxy-back[data-kind="tour"] .galaxy-back-glyph { font-size: 0.8em; margin-top: 0; }
 
 /* The fan (night 4 T3, js/wall/galaxy/fan.js): the planets under one finger
    as rows round it, for the next tap. Each row is a target of FAN.rowPx (48
