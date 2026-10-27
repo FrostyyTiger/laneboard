@@ -637,7 +637,13 @@ html.wall body {
 .galaxy-label[data-tone="crit"] { color: var(--crit); }
 .galaxy-label[data-tone="warn"] { color: var(--warn); }
 .galaxy-label[data-tone="low"] { color: var(--p3); }
-/* In a flight every name but the destination's steps back (T15): after the tones, so it wins over them. */
+/* The status shape leads the word as its own mark (labels.js labelParts, data-glyph), in the tone's hue. */
+.galaxy-label[data-glyph]::before { content: attr(data-glyph) " "; }
+.galaxy-label[data-tone="crit"]::before { color: var(--crit); }
+.galaxy-label[data-tone="warn"]::before { color: var(--warn); }
+.galaxy-label[data-tone="low"]::before { color: var(--p3); }
+/* In a flight every name but the destination's steps back (T15): after the tones, so it wins over them.
+   Only the word: the shape keeps its hue (night 4 T6), a passing crit is still a red ■. */
 .galaxy-label[data-dim] { color: var(--text-3); }
 
 /* The galaxy's leader (night 3 T16, js/wall/galaxy/lock.js leaderPath): two

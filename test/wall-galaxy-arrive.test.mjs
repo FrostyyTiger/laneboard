@@ -13,7 +13,7 @@ import {
   CAPTION_FROM_K, CAPTION_TIMING, DEMO_CAPTION_TIMING, MAX_LINES,
 } from '../public/js/wall/caption.js';
 import { TIMING, DEMO_TIMING } from '../public/js/wall/tour.js';
-import { createLabels } from '../public/js/wall/galaxy/labels.js';
+import { createLabels, labelParts, labelText } from '../public/js/wall/galaxy/labels.js';
 import { galaxyLayout } from '../public/js/wall/galaxy/layout.js';
 import { overviewShot, FOV } from '../public/js/wall/galaxy/scene.js';
 import { toneOf } from '../public/js/wall/galaxy/palette.js';
@@ -171,6 +171,58 @@ test('wall.css: a dimmed name is --text-3, after the tone rules so it wins over 
     assert.ok(at > 0 && at < dim, `after the ${tone} rule`);
   }
   assert.ok(css.indexOf('.galaxy-label[data-face="label"]') < dim, 'after the label face\'s --text-2');
+});
+
+test('labelParts: the shape and the word of a name, as labelText joins them (night 4 T6)', () => {
+  assert.deepEqual(labelParts('■ HV2'), { glyph: '■', word: 'HV2' });
+  assert.deepEqual(labelParts('▲ feat-search'), { glyph: '▲', word: 'feat-search' });
+  assert.deepEqual(labelParts('◆ LAB'), { glyph: '◆', word: 'LAB' });
+  assert.deepEqual(labelParts('HUB'), { glyph: null, word: 'HUB' });
+  assert.deepEqual(labelParts('■x'), { glyph: null, word: '■x' }, 'a shape is a shape and a space');
+  for (const tone of ['crit', 'warn', 'low', 'calm']) {
+    const text = labelText({ id: 'hv2', kind: 'site', label: 'hv2' }, tone, 'label');
+    const { glyph, word } = labelParts(text);
+    assert.equal(glyph ? `${glyph} ${word}` : word, text, `${tone} round trips`);
+  }
+});
+
+test('createLabels: a dimmed crit keeps its shape as its own mark (data-glyph), the span holds only the word (night 4 T6)', () => {
+  const world = worldOf(null);
+  // Folded, a site is named in its worst member's tone (the scene's status): hv2 holds the crit storage.
+  for (const site of world.sites) if (site.members.some((mb) => mb.tone === 'crit')) site.status = { status: 'crit' };
+  const galaxy = galaxyAt(world, overviewShot(world.sites));
+  // A flight to each site in turn until a crit name is passed by (dimmed).
+  let made, labels, s;
+  for (const site of world.sites) {
+    made = [];
+    const doc = { createElement: () => { const e = { style: { setProperty() {} }, dataset: {}, textContent: '', remove() {}, append() {} }; made.push(e); return e; } };
+    labels = createLabels(doc.createElement(), galaxy, { steps: { site: 26, room: 15 }, flight: () => ({ k: 0.5, to: site.id }), doc });
+    labels.draw();
+    s = labels.shown().find((x) => x.tone === 'crit' && x.dim);
+    if (s) break;
+  }
+  assert.ok(s, 'a crit name dims in some flight of the large fleet');
+  assert.match(s.text, /^■ /, 'shown() keeps the whole name');
+  const span = made.slice(1).find((e) => e.textContent === s.text.slice(2));
+  assert.ok(span, 'the span holds the word without its shape');
+  assert.equal(span.dataset.glyph, '■');
+  assert.equal(span.dataset.tone, 'crit');
+  assert.ok('dim' in span.dataset);
+  // A calm name has no shape mark.
+  const calm = labels.shown().find((x) => x.tone === 'calm');
+  const calmSpan = made.slice(1).find((e) => e.textContent === calm.text);
+  assert.ok(calmSpan && !('glyph' in calmSpan.dataset), `${calm.text}: no shape`);
+});
+
+test('wall.css: a dimmed crit/warn name is --text-3, its shape keeps the crit/warn hue (night 4 T6)', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'public/css/wall.css'), 'utf8');
+  assert.match(css, /\.galaxy-label\[data-glyph\]::before \{ content: attr\(data-glyph\) " "; \}/);
+  for (const [tone, token] of [['crit', '--crit'], ['warn', '--warn'], ['low', '--p3']]) {
+    assert.ok(css.includes(`.galaxy-label[data-tone="${tone}"]::before { color: var(${token}); }`), `${tone} shape in ${token}`);
+  }
+  // Nothing greys the shape: no dim rule reaches the ::before.
+  assert.doesNotMatch(css, /\[data-dim\][^{]*::before/);
+  assert.ok(css.includes('.galaxy-label[data-dim] { color: var(--text-3); }'), 'the word dims');
 });
 
 test('galaxy main.js: the caption waits for 0.9 of the flight and the names hear the flight', () => {

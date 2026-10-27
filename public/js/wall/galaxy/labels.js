@@ -23,13 +23,15 @@
 // In a flight to a site (night 3 T15, r4-film-ui galaxy 1) every name but
 // the destination's (its site and what it holds) dims to `--text-3`
 // (`data-dim`): the star the camera passes is not the one it is going to.
+// Only the word dims: the shape (`data-glyph`) keeps its trouble hue (night 4
+// T6), so a passing crit is still a red `■` beside a grey name.
 //
 // A name is anchored to its thing's point projected in the same frame, at
 // one of four fixed sides (a trouble planet or dot may also stack under it),
 // and only while that point is in the frame (night 3 T17).
 //
-// `placeLabels`, `candidates`, `stacks`, `dotNamed`, `labelRank`, `labelText` and
-// `labelSize` are pure (test/wall-galaxy-labels.test.mjs); `createLabels`
+// `placeLabels`, `candidates`, `stacks`, `dotNamed`, `labelRank`, `labelText`,
+// `labelParts` and `labelSize` are pure (test/wall-galaxy-labels.test.mjs); `createLabels`
 // is the small part that moves the spans.
 
 import * as THREE from '../../../vendor/three/three.module.js';
@@ -95,6 +97,13 @@ export function labelText(node, toneIn, faceIn) {
   const word = face === 'label' ? raw.toUpperCase() : raw.toLowerCase();
   const glyph = shapeOf(tone);
   return glyph ? `${glyph} ${word}` : word;
+}
+
+/** A name's text split into its status shape (or null) and its word, as labelText joins them. */
+export function labelParts(text) {
+  const t = String(text ?? '');
+  const glyph = Object.values(GLYPH).find((g) => t.startsWith(`${g} `)) ?? null;
+  return { glyph, word: glyph ? t.slice(glyph.length + 1) : t };
 }
 
 /**
@@ -240,7 +249,14 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
       p = { el, text: null, tone: null, face: null, dim: false, key: '', alpha: 0 };
       pool.set(id, p);
     }
-    if (p.text !== text) { p.el.textContent = text; p.text = text; }
+    if (p.text !== text) {
+      // The shape is the span's own mark (data-glyph, drawn by wall.css ::before), so a
+      // dimmed name greys its word but never its shape (night 4 T6): `■` stays red.
+      const { glyph, word } = labelParts(text);
+      if (glyph) p.el.dataset.glyph = glyph; else delete p.el.dataset.glyph;
+      p.el.textContent = word;
+      p.text = text;
+    }
     if (p.tone !== tone) { p.el.dataset.tone = tone; p.tone = tone; }
     if (p.face !== face) { p.el.dataset.face = face; p.face = face; }
     if (p.dim !== dim) {
