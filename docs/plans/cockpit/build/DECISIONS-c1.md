@@ -348,3 +348,69 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   (every §11.3 type has a fixture) and that `json claude`/`json stt` blocks parse — because the
   bridge module is T9's and `stt` belongs to C2 — spec: `protocols.md` §9, §13 — overrule: T9 adds
   its class to `test/cockpit-protocol.test.mjs`.
+- B58 (T9) The adapter passes `mcp_servers[].status` on as `ready.mcp.laneboard` unchanged (`connected`,
+  `failed`, and `pending` as `pending`); no `laneboard` entry, or `mcp_server_errors[]` naming it, is
+  `failed` — because research Q2 (recheck) says `pending` means "not yet", and §11.3 already makes
+  anything but `connected` `tools-down`, which is the room's (T28) to judge — spec: `protocols.md`
+  §11.3, §11.4 — overrule: map `pending` to `connected` (or wait for a second `init`) in `ready()` of
+  `server/cockpit/agents/claude-code.mjs`.
+- B59 (T9) The `interrupt` goes to Claude Code as
+  `{"type":"control_request","request_id":"i-0003","request":{"subtype":"interrupt","cancel_queued":true}}`,
+  the shape the fake agent reads (T4) — because research Q10 has not confirmed the raw request
+  (§11.4's closing note) and the fake and the adapter must agree — spec: `protocols.md` §11.4, §11.6
+  — overrule: `interruptLine()` in the adapter and the fake's `line()` together, once Q10 pins it.
+- B60 (T9) §11.4's "without either field" rule (`taken` for the oldest echoed prompt at the next
+  `message_start`) applies only while the session has never sent `user_message_uuids` or
+  `user_message_uuid`; once it has, a `message_start` without them takes nothing — because an agent that
+  names its prompts sends a bare `message_start` for every later message of a turn (§13.1 at 5.20, the
+  fake's B5), and the rule would then take a queued prompt the agent has not read — spec:
+  `protocols.md` §11.4 — overrule: apply it to every bare `message_start` (`namesPrompts` in the adapter).
+- B61 (T9) The bridge's edge: `createBridge()` hands the screen messages of §3.2 to `emit` without
+  `seq` (the link numbers and sends them, T13/T14); it restarts only a child it killed itself for
+  §11.9 (silence, a stuck stdin), at once with `--resume`; the §11.7 restart schedule, the 30 s
+  `ready` limit, the stop timing of §11.6 and `session.json` are T11's (`onExit`, `interrupt()`,
+  `signal()` are their hooks); `startRoom()` does not start an agent yet (T11 and T13 wire it) —
+  because T9's done-when is the bridge with a child, and spawning `claude` at every room start would
+  run in every existing boot test — spec: `protocols.md` §11.1, §11.7, §11.9 — overrule: none; T11 builds on it.
+- B62 (T9) A `kind: bridge` agent's `tool.start` with `denied:true` becomes, for the screens, a
+  `tool.start` and at once its `tool.end` (`isError:true`, `denied:true`, `endedAt` = `startedAt`) —
+  because the screen's `tried` line is drawn from `tool.end.denied` (§3.2) and a Claude Code refusal
+  arrives as that same pair (§11.11's last point) — spec: `protocols.md` §3.2, §11.3, D242 — overrule:
+  a `denied` field on the screen's `tool.start` (a protocol change).
+- B63 (T9) The adapter's own interrupt for `api_retry` `authentication_failed` (§11.4) has the id
+  `i-login` and its receipt is swallowed; only `authentication_failed` maps to E4, not
+  `oauth_org_not_allowed` or `account_on_hold` that research Q2 lists — because §11.4 names one value
+  and those two mean other things for the owner (E8 with the result's text says so) — spec:
+  `protocols.md` §11.4 — overrule: add them to the `api_retry` case of `system()` in the adapter.
+- B64 (T9) The standing instructions live in `server/cockpit/agents/instructions.mjs` (C1's lines of
+  §11.8, word for word; the bridge test compares the launch argument with it), and for `kind: bridge`
+  the bridge writes `{stateDir}/cockpit-agent/instructions.txt` (0644) at every start — because §11.8
+  keeps "one text next to the adapter" and T39 adds the instructions' own test and the slice lines —
+  spec: `protocols.md` §11.8, D209 — overrule: none; T39 extends the module.
+- B65 (T9) `bridge.prompt()` writes the agent's line first and sends `turn.prompt` once the write has
+  gone (§13.1: 2.96 room → agent, 2.97 `turn.prompt`); a write not done in 5 s is `agent-down`, the
+  child gets `SIGKILL` and resumes at once — because §11.9 says "a `prompt` that cannot be written in
+  5 s: `prompt.refused` `agent-down`", which the room can only answer before it has echoed the prompt
+  — spec: `protocols.md` §3.1, §11.9, §13.1 — overrule: echo first, then a `turn.end` E3 on a failed write.
+- B66 (T9) Ids the bridge makes: `turnId` `t-` and four digits from the bridge's own counter (T12
+  seeds it from `conversation.jsonl`, §11.7.1 step 6), `tu-` and two digits per turn for every call
+  the screens see (a refused one too), interrupts `i-` and four digits; prompt ids `randomUUID()`
+  — because §11.3 and D102 give the forms, not the counters' start — spec: `protocols.md` §11.3,
+  §11.7.1 — overrule: the counters in `createBridge()`.
+- B67 (T9) A refused start (§11.11) reaches the screens through `opts.onCondition('agent-down',
+  {detail, blocksSend:true})`, which by default sends `status` itself — because the status line's
+  "highest that holds wins" (§3.5, D152) is T28's, and until then the condition must still be seen —
+  spec: `protocols.md` §3.5, §11.11 — overrule: none; T28 passes its own `onCondition`.
+- B68 (T9) `server/cockpit/bridge-events.mjs`'s value rules: ids up to 200 characters (a prompt's id
+  a UUID v4), text up to 16 MB (the line limit), name lists up to 1 000 entries of 1-256
+  characters, `turn.end` `detail` up to 2 000 (the room cuts it to 120); a line of a bridge agent
+  that fails its check is logged with its first 200 characters and skipped, as an unknown line is;
+  the class's fixture test is in `test/cockpit-protocol.test.mjs` (B57's overrule taken) — because
+  §11.3 names the fields, not their bounds, and a correct agent never meets these — spec:
+  `protocols.md` §11.3, §13 — overrule: the rule constants in `bridge-events.mjs`.
+- B69 (T9) `docs/config.md` "Environment variables" gains one row for the names the room sets in its
+  agent's environment (`LANEBOARD_MCP_TOKEN`, `LANEBOARD_SESSION`, `LANEBOARD_SESSION_RESUME`,
+  `LANEBOARD_ALLOWED_TOOLS`, `LANEBOARD_COCKPIT_INSTRUCTIONS`) — because `test/config-names.test.mjs`
+  asks every `LANEBOARD_*` name in `server/` to be there, and they are part of the agent contract —
+  spec: `protocols.md` §11.8, §11.11 — overrule: move the row to `docs/cockpit.md` (T44) and exempt
+  the names in the test.

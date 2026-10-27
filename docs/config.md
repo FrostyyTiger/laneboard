@@ -455,4 +455,5 @@ never kills its own pane) and `LC_ALL` (passed to tmux, `C.UTF-8` if unset).
 | `LANEBOARD_PVE_SECRET` | `laneboard feed proxmox` | The API token's secret when there is no `--secret-file` ([map.md](map.md)). |
 | `LANEBOARD_NODE` | `bin/laneboardctl` | The `node` binary the service script runs. |
 | `LANEBOARD_FORCE_TMUX` | `bin/laneboardctl` | Set: never start the board under systemd, always in tmux. |
+| `LANEBOARD_MCP_TOKEN`, `LANEBOARD_SESSION`, `LANEBOARD_SESSION_RESUME`, `LANEBOARD_ALLOWED_TOOLS`, `LANEBOARD_COCKPIT_INSTRUCTIONS` | the cockpit's agent | Set by the room in its agent's environment, never read from the room's own: the MCP token (every agent), and for `cockpit.agent.kind: bridge` the session UUID, `1` on a resume, the tool allowlist as a JSON array and the standing instructions' file ([protocol.md](cockpit/protocol.md) §11.11). |
 | `DATABASE_URL`, `DATABASE_ADMIN_URL`, `DATABASE_APP_URL`, `DATABASE_READONLY_URL` | the guard and launch checks | Read from a session's or a slot's environment, never from the board's own: which database a lane's tests would reach. |

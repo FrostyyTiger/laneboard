@@ -500,3 +500,57 @@ test('every bridge type of §11.3 has a fixture, and no fixture is of another ty
   for (const t of types) assert.ok(seen.has(t), `no json bridge fixture for ${t}`);
   for (const f of bridge) assert.ok(types.has(f.value.type), `${f.where}: ${f.value.type} is not a §11.3 type`);
 });
+
+// The `json bridge` class against its checks (§13, B57's overrule, T9): every
+// fixture validates in its direction, and a copy without a field §11.3's
+// "Required" list names for that case fails naming it.
+import { checkBridgeEvent, ROOM_EVENTS, AGENT_EVENTS } from '../server/cockpit/bridge-events.mjs';
+
+const BRIDGE_REQUIRED = {
+  prompt: ['id', 'text', 'priority'],
+  interrupt: ['id', 'cancelQueued'],
+  ready: ['session', 'tools', 'mcp', 'canSteer', 'canCancelQueued'],
+  taken: ['id'],
+  'text.delta': ['block', 'text'],
+  'text.block': ['block', 'text'],
+  'tool.start': ['block', 'toolUseId', 'tool', 'input'],
+  'tool.end': ['toolUseId', 'isError'],
+  retrying: ['attempt', 'of'],
+  'turn.end': ['state'],
+  interrupted: ['id', 'stillQueued', 'cancelled'],
+};
+
+test('every json bridge fixture passes bridge-events.mjs; each required field is required', () => {
+  const bullet = TEXT.slice(TEXT.indexOf('- **Required and optional fields** (D136, as §2.4 for the room link)'));
+  const req = bullet.slice(0, bullet.indexOf('Optional:'));
+  for (const [type, fields] of Object.entries(BRIDGE_REQUIRED)) {
+    for (const f of fields) assert.ok(req.includes(`\`${f}\``), `§11.3's Required list names ${type}.${f}`);
+  }
+  assert.deepEqual(new Set(Object.keys(BRIDGE_REQUIRED)), new Set([...ROOM_EVENTS, ...AGENT_EVENTS]));
+  const bridge = FIXTURES.filter((f) => f.cls === 'json bridge');
+  assert.ok(bridge.length >= 12, `read ${bridge.length} json bridge fixtures`);
+  for (const fx of bridge) {
+    const dir = ROOM_EVENTS.includes(fx.value.type) ? 'to-agent' : 'from-agent';
+    assert.deepEqual(checkBridgeEvent(fx.value, dir), { ok: true }, `${fx.where}: ${JSON.stringify(fx.value)}`);
+    assert.deepEqual(checkBridgeEvent({ ...fx.value, later: 1 }, dir), { ok: true }, `${fx.where}: an unknown field is ignored`);
+    for (const f of BRIDGE_REQUIRED[fx.value.type]) {
+      const { [f]: _, ...rest } = fx.value;
+      const r = checkBridgeEvent(rest, dir);
+      assert.equal(r.ok, false, `${fx.where}: without ${f}`);
+      assert.equal(r.field, f, `${fx.where}: without ${f} names it`);
+    }
+  }
+  // The "with" cases of turn.end (§11.3).
+  const end = (o) => checkBridgeEvent({ type: 'turn.end', ...o }, 'from-agent');
+  assert.equal(end({ state: 'error' }).field, 'code');
+  assert.equal(end({ state: 'error', code: 'step-limit' }).field, 'steps');
+  assert.equal(end({ state: 'error', code: 'failed' }).field, 'detail');
+  assert.equal(end({ state: 'error', code: 'agent-down' }).field, 'detail');
+  assert.equal(end({ state: 'done', code: 'failed' }).field, 'code');
+  assert.deepEqual(end({ state: 'done', steps: 3 }), { ok: true });
+  assert.deepEqual(end({ state: 'error', code: 'not-logged-in' }), { ok: true });
+  assert.equal(checkBridgeEvent({ type: 'shout' }, 'from-agent').code, 'unknown-type');
+  assert.equal(checkBridgeEvent({ type: 'prompt' }, 'from-agent').code, 'unknown-type');
+  assert.equal(checkBridgeEvent({ type: 'tool.start', block: -1, toolUseId: 'x', tool: 'Read', input: {} }, 'from-agent').field, 'block');
+  assert.equal(checkBridgeEvent({ type: 'tool.start', block: 0, toolUseId: 'x', tool: 'Read', input: [] }, 'from-agent').field, 'input');
+});
