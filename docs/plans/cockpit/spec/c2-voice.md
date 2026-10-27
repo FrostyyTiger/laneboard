@@ -72,8 +72,16 @@ so does the row's left end (`CANCEL`, below).
 | `partial` | microphone open, words shown | as `listening` | blank and inert | `CANCEL` | the words: firm part `--text-1`, the tail still changing `--text-2` (§4) | as `listening` |
 | `final` | released or second tap; microphone closed; waiting for the final text (≤ 3 s, D41) | inverse, word `…`, no level bar | blank and inert | `CANCEL` | the last words, all `--text-2` | `FINISHING…` |
 | `error` | the microphone cannot be opened (§5) or the speech service fails (§10) | `--bg-elevated`, 1 px `--line-strong` border, glyph struck through, `TALK` in `--text-3`; still tappable (a tap tries again) | `SEND` | as `idle` | the textarea, typing works | none; §5's line above the input row, until the next try |
-| `off` | the room is down or the screen is unpaired (`screens.md` §7) | `disabled`, 1 px `--line` border, `TALK` in `--text-3` | `SEND`, disabled | as `idle` | the textarea | none (the pane's line `Sending and voice come back with the room.` says it, `screens.md` §7) |
+| `off` | the room is down or the screen is unpaired (`screens.md` §7) | `aria-disabled="true"` (never the `disabled` attribute: it stays tappable, below), 1 px `--line` border, `TALK` in `--text-3` | `SEND`, disabled | as `idle` | the textarea | none (the pane's line `Sending and voice come back with the room.` says it, `screens.md` §7) |
 
+- **A press in `off`** (D179): the button stays a live target, so a press is never swallowed
+  (review 44 finding 3). It never opens the microphone: no `getUserMedia` call, no audio frame,
+  no listening state, at any press length. On `pointerup` inside the button's 64x64 box (a
+  `pointercancel` or a release outside does nothing) a closed pane opens as `CHAT` opens it
+  (`c1-talk.md` §2), scrolled to its top, so the status line under the header is the first thing
+  in it: room down `Cockpit room unreachable since …` (`screens.md` §7), unpaired the pairing card
+  (§6). An open pane stays as it is. `data-talk` stays `off`; the talk key (§11) does the same.
+  What the press shows on the button itself is T102's.
 - **After send** the talk button is back to `idle` and the input empty within B3 (≤ 0.3 s from the
   release). The "sending" state is the prompt's, not the button's: the prompt block reads
   `YOU · SPOKEN · 07:02 · SENDING` until the room confirms (`c1-talk.md` §7, D31).

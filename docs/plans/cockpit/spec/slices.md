@@ -158,17 +158,19 @@ troubleshooting the room-down line); the demo (`stand-ins.md` §6) answers `how 
 **Stand-ins and scripts**: as C1, plus the fake speech; scripts `c2-tap`, `c2-limits`, `c2-faults`,
 `c2-agent`, `c1-voice`.
 
-**Scenarios** (22):
+**Scenarios** (23):
 S-C2-01 S-C2-02 S-C2-03 S-C2-04 S-C2-05 S-C2-06 S-C2-07 S-C2-08 S-C2-09 S-C2-10 S-C2-11 S-C2-12
 S-C2-13 S-C2-14 S-C2-15 S-C2-16 S-C2-17 S-C2-20 S-C2-21 S-C2-22
-S-C1-13 S-SCR-20
+S-C1-13 S-SCR-20 S-SCR-32
 
 - **S-C1-13** (hold the button on the touring Wall) keeps its id and belongs to C2, not C1: it
   needs the microphone and the fake speech (T30). C1's done-when does not contain it.
 - **S-SCR-20** (the room goes away mid-reply and mid-speech) is C2's because its second half needs
   an open microphone.
+- **S-SCR-32** (room down on the Wall: the away caption, a press on the `off` talk button opens the
+  pane, no microphone) is C2's: C1 runs with `stt.url: none`, so it has no talk button (D179).
 
-**Done-when**: §2's slice rule for the 21 ids; B1-B3 hold; `docs/cockpit.md` gains the speech
+**Done-when**: §2's slice rule for the 23 ids; B1-B3 hold; `docs/cockpit.md` gains the speech
 service setup and the kiosk microphone note (`c2-voice.md` §12).
 
 ### 3.3 C3 See, the rest
@@ -280,7 +282,7 @@ by the task that writes them.
 | S-SCR-02, 03, 04, 09, 17, 18, 19, 21, 22, 23, 24, 25, 30, 31 | C1 |
 | S-SCR-05, 12 | Show |
 | S-SCR-13, 14, 15, 16, 27, 28, 29 | Pair |
-| S-SCR-20 | C2 |
+| S-SCR-20, 32 | C2 |
 | S-C1-01..12, 14..23, 25..40 | C1 |
 | S-C1-13 | C2 |
 | S-C2-01..17, 20..22 | C2 |
@@ -293,7 +295,7 @@ by the task that writes them.
 | S-C4-25..33 | Canvas 2 |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 135 live ids in all (round 101, S-C1-40).
+D55). 145 live ids in all (round 107, S-SCR-32).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

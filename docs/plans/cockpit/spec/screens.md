@@ -182,6 +182,7 @@ are there so nothing tappable is drawn over them. With a one-line input; a talle
 | | toast stack | `.toasts` | its toasts' buttons | right edge x 744 (`right: 624px`, 16 px left of the pane), bottom y 736 (D158) |
 | **C. Wall page, `wall`, pane closed** | talk button, `CHAT` | as A | yes | as A |
 | | the Wall's status lines | the Wall's | no | end at x ≤ 1256 |
+| | away caption (room down only, §7) | `[data-cockpit-away]` | no | right edge 1336, y 720-752 |
 | **D. Wall page, `wall`, pane open** (pane x 760-1368, y 0-912) | `CLOSE` (header) | `[data-cockpit-close]` | yes | 1256-1352, 8-56 |
 | | `SCREEN` (header, from the Canvas slice) | `[data-cockpit-screen]` | yes | 1152-1248, 8-56 |
 | | `NEW` (header) | `[data-cockpit-new]` | yes | 1072-1144, 8-56 with `SCREEN`; 1176-1248, 8-56 before the Canvas slice |
@@ -196,6 +197,7 @@ are there so nothing tappable is drawn over them. With a one-line input; a talle
 | **G. `switch`, wall shown** | talk button, `CHAT` | as A | yes | as A |
 | | `CANVAS` (switch button) with its count | `[data-cockpit-switch]`, `[data-switch-count]` | the button | 1200-1264, 824-888 |
 | | the Wall's status lines | the Wall's | no | end at x ≤ 1176 |
+| | away caption (room down only, §7) | `[data-cockpit-away]` | no | as C |
 | **H. Keyboard up, pane** (D or B; 1368x532, conversation y 0-532, `c1-talk.md` §7.1) | header buttons | as D (B in the app: `CLOSE`, `NEW` at B's x) | yes | D's x, 8-56 |
 | | the stack | as B | chip `✕` and `↓ NEW` | §1.1's table with the row top at y 444 |
 | | `CLOSE` (the opener) | `[data-cockpit-open]` | yes | 1288-1336, 396-444 |
@@ -630,8 +632,18 @@ lost.
 - **Wall half and app views:** unchanged. The tour, explore and every view read the board, not the
   room.
 - **Cockpit button:** label and place unchanged; no mark of its own. The talk button is `off`
-  (`data-talk="off"`, `c2-voice.md` §3: grey `TALK`, disabled), which already says it; `CHAT` stays
-  as it is and opens the pane on the status line below (D120, supersedes D53).
+  (`data-talk="off"`, `c2-voice.md` §3: grey `TALK`, `aria-disabled`), which already says it; `CHAT`
+  stays as it is and opens the pane on the status line below (D120, supersedes D53). A press on the
+  `off` talk button opens the pane the same way and never the microphone (`c2-voice.md` §3, D179).
+- **Away caption** (Wall page, `wall` and `switch` with the wall shown, pane closed; §4.1 C and G):
+  `[data-cockpit-away]`, one line `Agent away since 06:41`, 18 px `--font-label` (not caps)
+  `--text-2` on `--bg-sunken`, 8 px padding left and right, 32 px tall, right edge at x 1336 (`CHAT`'s),
+  y 720-752 (8 px above `CHAT`). Not tappable: a tap on it goes to the map below as if it were not
+  there (`pointer-events: none`). It shows with the status line (after the 5 s grace) and goes
+  with it at the first frame from the room; the time is the status line's `since` (one source,
+  no second clock). An unpaired screen has no caption (nothing is away; the pairing card is the
+  pane's), nor has an offline one (the Wall's top caption says it, "The screen offline"). In the app (§4.1 A) there is no caption: the toast stack
+  owns that band, and the grey `TALK` is in the same corner (D179).
 - **Pane:** a status line under its header, 18 px `--text-2` on `--bg-sunken`, **80 px** tall (two
   lines of 18 px at line height 1.35 plus padding: the texts below wrap at the ~400 px left of the
   button) (D54): `Cockpit room unreachable since 06:41 (3 min). Retrying in 12 s.` with a `RETRY
@@ -698,7 +710,8 @@ the Canvas slice is built; pending Q-O22) shows the pairing card centred with a 
 `Code valid for 5:00.` counting down.
 When the owner taps `CHAT`, the pane shows the same card and the same code; `CHAT` reads `CLOSE`.
 The talk button is `data-talk="off"` (`c2-voice.md` §3) in its §4 rect; a press on it opens no
-microphone: an unpaired screen sends no audio (what else the press does is T64's).
+microphone: an unpaired screen sends no audio; with the pane closed it opens the pane on the
+pairing card (`c2-voice.md` §3, D179; S-SCR-32 is the room-down case).
 Test: Playwright against the demo hub and the stand-in room with an empty token store; assert the
 attribute, the regex, the countdown text at 0 s and (fake clock) 60 s: `4:00`; tap `CHAT`; read
 `[data-talk]`'s rect and state; press it with `getUserMedia` wrapped to count calls: 0.
@@ -743,13 +756,14 @@ Then at t = 4.9 s nothing has changed; at t = 5 s `data-cockpit="room-down"`, th
 the pane's header is 80 px tall and reads `Cockpit room unreachable since 06:41 (0 min). Retrying
 in …` with `RETRY NOW` (48 px tall) at its right end, the line `Sending and voice come back with
 the room.` sits above the input row, `SEND` is disabled, the talk button has `data-talk="off"` and
-is disabled with no other mark on it, the draft is still `how is the` and editable (typing `
+`aria-disabled="true"` (not `disabled`, D179) with no other mark on it, the draft is still `how is the` and editable (typing `
 night` makes it `how is the night`); the wall half is `data-wall-state="tour"` and flying
 throughout.
 The canvas half of this outage is S-C4-23.
 Test: Playwright with `page.clock`; `POST /link {"up":false}` on the stand-in room; assert at 4.9 s
-and 5 s; the status line's rect height 80 ± 1 px; type into the input; `disabled` on `SEND` and the
-talk button; the talk button has no child element beyond its label and glyph.
+and 5 s; the status line's rect height 80 ± 1 px; type into the input; `disabled` on `SEND`,
+`aria-disabled="true"` and no `disabled` on the talk button; the talk button has no child element
+beyond its label and glyph.
 
 ### S-SCR-18 A blip under 5 s shows nothing
 Given a live screen,
@@ -958,3 +972,27 @@ And under Q-O21 a): the control API's `/pair` for a second code answers `503
 Test: Playwright for the screen; `fs.renameSync` from the test; the fake agent's log
 (`stand-ins.md` §2.6) for stdin; the room's stderr captured by the boot wrapper; control API for
 `/pair` and `/unpair`.
+
+### S-SCR-32 Room down, pane closed on the Wall: a caption says since when, TALK opens the pane, no microphone
+Given a screen at 1368x912 (`hasTouch: true`) on the Wall page in `wall`, live, touring, the pane
+closed, the fake speech configured (`c2-voice.md` §9), `getUserMedia` wrapped to count calls,
+When the room's link stops at t = 0 s (06:41),
+Then at t = 4.9 s there is no `[data-cockpit-away]`; at t = 5 s `data-cockpit="room-down"` and
+`[data-cockpit-away]` reads `Agent away since 06:41`, its rect right edge 1336 ± 1 px, y 720-752
+± 1 px, computed `font-size` 18 px, colour `--text-2`; the talk button has `data-talk="off"`,
+`aria-disabled="true"` and no `disabled` attribute; the tour flies on.
+When the owner taps the talk button at t = 10 s (down and up after 100 ms),
+Then within 0.2 s of the `pointerup` the pane is open, its scroll top is 0, the status line
+`Cockpit room unreachable since 06:41 (0 min). …` is in view under the header, the caption is gone
+(the pane covers the corner, §4.1 D), `data-talk` is still `off` and the counter reads 0.
+When the owner closes the pane and holds the talk button for 1.0 s at t = 20 s,
+Then the pane opens at the release as before, no hint line reads `LISTENING`, the counter still
+reads 0 and the fake speech's log has no session from this screen.
+When the room's link is back at t = 30 s,
+Then by the first frame from the room plus 1 s the caption is gone, `data-talk="idle"` and a
+press opens the microphone again (the counter reads 1).
+Test: Playwright with `page.clock`, the real room with a fake agent and the fake speech; `POST
+/link {"up":false}` and `{"up":true}` on the control API (`stand-ins.md` §1.2); an init script
+wraps `navigator.mediaDevices.getUserMedia` to count calls; read the caption's `boundingBox()` and
+computed style; `page.touchscreen.tap` for the tap, `mouse.down`/`up` with a 1.0 s clock advance
+for the hold; the fake speech's log (`stand-ins.md` §3.4) for "no session".
