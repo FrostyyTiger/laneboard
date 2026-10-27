@@ -14,6 +14,7 @@ import { COCKPIT_PREFIX } from '../core/cockpit-constants.js';
 import { createRoomLink } from './link.js';
 import { createPane } from './pane.js';
 import { paneOnWall } from './wall-hold.js';
+import { installAppView } from './app-view.js';
 
 /** cb(true|false) once: the board's word on whether it has a cockpit (D93). */
 export function boardSaysCockpit(cb) {
@@ -47,6 +48,8 @@ let started = null;
 export function initCockpit({ page = 'app', configured = boardSaysCockpit } = {}) {
   if (started) return started;
   started = {};
+  // The app's handle (screens.md §9, D221); the Wall page sets its own.
+  if (page === 'app') installAppView();
   configured((yes) => {
     if (!yes) {
       document.documentElement.dataset.cockpit = 'unconfigured';

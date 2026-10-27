@@ -710,3 +710,24 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   to T24b after T24 (its state B needs `↓ NEW`, T22, and its state H the keyboard layout,
   `data-keyboard`, T24) — because a test of either now would skip steps the night may not skip —
   spec: `slices.md` §3.1 — overrule: PROGRESS.md's task lines.
+- B127 (T16b) The app's handle names a builder by its builder id: `map.screenOf('builder-a')`,
+  `flyTo('builder-a')` reach the Map's `builder:builder-a` node (the Map's own id still works),
+  and `nodeAt` answers a builder node as `builder-a`; S-SCR-35's "the Map's own
+  `screenOf('builder-a')`" is the Map's own `screenOf('builder:builder-a')`, the same node —
+  because the server's Map ids builders `builder:<id>` (server/map.mjs) while the scenario and
+  the fleet use the bare id, and the Map's own `idForSel` stays unchanged (its callers, the
+  route's `sel=`) — spec: `screens.md` S-SCR-35, §9.2 M5, M6 — overrule: `nodeOf()` and
+  `nodeAt` in `public/js/cockpit/app-view.js`.
+- B128 (T16b) S-SCR-35's app steps read after the Map's arrival has come to rest (builder-a still
+  over 30 frames and out of the core), not at the literal first frame — because new nodes grow
+  out of their parent in beats: at the first frame builder-a is drawn on the core, where `nodeAt`
+  rightly answers `__core` (and a node under 0.3 alpha is not hit, the Map's tap rule) — spec:
+  `screens.md` S-SCR-35 — overrule: the rest poll in `e2e/cockpit/c1-handle.spec.mjs`.
+- B129 (T16b) M1 on the app: `createMap(...).flyTo(id, z)` is `focus()` with a Promise, `false`
+  at once for an id that is unknown, folded away or leaving (then nothing moves, where `focus`
+  would unfold it), and a flight is cut (false) by a newer flight, `fit()`, a finger (`grab`) or
+  the wheel; M3 `camera()` and M6 `nodeAt(x, y)` in canvas px are added beside it; the page-px
+  handle (`public/js/cockpit/app-view.js`) is set by `initCockpit({page: 'app'})` and its `map`
+  swapped in `views/map.js` mount/unmount; S-SCR-35 runs without `?demo=1` (the room under test
+  serves the demo topology; the `?demo=1` page is T40) — spec: `screens.md` §9.2, §9.3 —
+  overrule: those three files.

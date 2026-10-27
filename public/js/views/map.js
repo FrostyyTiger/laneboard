@@ -17,6 +17,7 @@
 //                plus the map's own fold/peek buttons registered on it); results
 //                pulse the node, status never changes optimistically
 //   events       hook events from the store pulse `lane:<builder>/<lane>`
+//   cockpit      window.__cockpitView.map follows the mount (cockpit/app-view.js setAppMap)
 //
 // Pure at import time. The pure parts (laneActions, mapEventFor, actionPulse,
 // routePlan, splitState) are tested in test/map-view.test.mjs.
@@ -32,6 +33,7 @@ import { confirmAction } from '../ui/confirm.js';
 import { toast } from '../ui/toast.js';
 import { idForSel } from './map/model.js';
 import { createSplitTable, splitOn, canSplit, SPLIT_KEY } from './map/split.js';
+import { setAppMap } from '../cockpit/app-view.js';
 
 // ---------------------------------------------------------------- pure
 
@@ -408,12 +410,15 @@ function mountMap(el) {
       applyMapRoute(routeNow());
       syncSplit();
       api.resize();
+      // The cockpit's handle gets a new `map` each time the Map shows (cockpit screens.md §9).
+      setAppMap(api, $('map-root')?.querySelector('canvas.map-canvas') ?? null);
     });
   }, 0);
 }
 
 function unmountMap() {
   page.mounted = false;
+  setAppMap(null);
   // The map stays loaded, idle off screen: switching back is instant.
   teardownSplit();
   page.api?.setMode('pip');

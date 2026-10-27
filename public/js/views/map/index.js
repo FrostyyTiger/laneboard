@@ -275,6 +275,7 @@ export function createMap(root, opts = {}) {
 
   const cam = { x: 0, y: 0, z: 1 };
   let fl = null;                  // a camera flight: {path, t0, ms, to}
+  let landing = null;             // flyTo's Promise resolve for the flight in the air (landed)
   let glide = null;               // a released drag: {vx, vy} in world units per ms
   let zoomGoal = null;            // wheel zoom: {goal, v, sx, sy, wx, wy} (goal = log z)
   const sel = { id: null, t: 0, v: 0 }; // the selection mark, drawing in
@@ -380,6 +381,7 @@ export function createMap(root, opts = {}) {
 
   /** Move the camera to a view: a flight when there is room to show one. */
   function flyCam(to, instant = false) {
+    landed(false);
     glide = null;
     zoomGoal = null;
     if (instant || reducedMotion() || !W) {
@@ -391,6 +393,13 @@ export function createMap(root, opts = {}) {
     const path = flight([cam.x, cam.y, viewW(cam.z)], [to.x, to.y, viewW(to.z)]);
     fl = { path, t0: clock(), ms: path.ms * (amb?.flight ?? 1), to };
     kick();
+  }
+
+  /** Settle flyTo's Promise for the flight in the air, once: true it landed, false a newer movement cut it. */
+  function landed(ok) {
+    const r = landing;
+    landing = null;
+    r?.(ok);
   }
 
   /** Where the camera is headed: the end of a flight, or where it is. */
@@ -670,6 +679,20 @@ export function createMap(root, opts = {}) {
     flyCam({ x: p.x + right / (2 * fitScale * tz), y: p.y + (narrow ? 60 / (fitScale * tz) : 0), z: tz });
   }
 
+  /**
+   * focus() with an answer (cockpit screens.md §9.2 M1): a Promise of `true` when the flight
+   * lands, `false` when a newer movement or a finger cuts it, or at once when `x` is not drawn
+   * (unknown, folded away or leaving), and then nothing moves.
+   */
+  function flyToLanding(x, z = 1.9) {
+    const id = byId.has(x) ? x : idForSel(String(x), byId);
+    const c = id ? cur.get(id) : null;
+    if (!c || c.leaving || hidden.has(id) || !lay.pos.has(id)) return Promise.resolve(false);
+    flyTo(id, z);
+    if (!fl) return Promise.resolve(true);
+    return new Promise((resolve) => { landing = resolve; });
+  }
+
   /** Next/previous lane in attention order (`j`/`k`, §4 2.6). */
   function selectNext(dir = 1) {
     const order = laneOrder(model.nodes, { scope });
@@ -935,7 +958,7 @@ export function createMap(root, opts = {}) {
     cam,
     view,
     now: clock,
-    grab: () => { fl = null; glide = null; zoomGoal = null; },
+    grab: () => { landed(false); fl = null; glide = null; zoomGoal = null; },
     moved: () => { userMoved = true; },
     kick: () => kick(),
     hit,
@@ -952,6 +975,7 @@ export function createMap(root, opts = {}) {
     leave: () => { setHover(null, 0, 0); },
     glide: (v) => { glide = v; kick(); },
     wheel: (x, y, k) => {
+      landed(false);
       fl = null; glide = null;
       const w = toWorld(x, y);
       const lz = Math.log(cam.z);
@@ -1089,7 +1113,7 @@ export function createMap(root, opts = {}) {
       const t = jump ? 1 : Math.min(1, (now - fl.t0) / fl.ms);
       const [x, y, w] = fl.path.at(easeInOut(t));
       cam.x = x; cam.y = y; cam.z = W / ((fitScale || 1) * w);
-      if (t >= 1) { Object.assign(cam, fl.to); fl = null; } else moving = true;
+      if (t >= 1) { Object.assign(cam, fl.to); fl = null; landed(true); } else moving = true;
     }
     if (zoomGoal) {
       let lz = Math.log(cam.z);
@@ -1307,6 +1331,11 @@ export function createMap(root, opts = {}) {
     event,
     select: (x, o = {}) => pick(x, { fly: Boolean(o.fly) }),
     focus: (x, z) => flyTo(x, z),
+    // The cockpit's handle (screens.md §9.2): M1 focus() as a Promise, M3 the camera (a copy),
+    // M6 the node under a canvas point (null off the canvas). Nothing else changes for callers.
+    flyTo: flyToLanding,
+    camera: () => ({ x: cam.x, y: cam.y, z: cam.z, spin }),
+    nodeAt: (x, y) => (Number.isFinite(x) && Number.isFinite(y) && x >= 0 && y >= 0 && x <= W && y <= H ? hit(x, y) : null),
     fit: () => fit(false),
     resize,
     setScope,
@@ -1335,6 +1364,7 @@ export function createMap(root, opts = {}) {
     emphasis: (x) => focusAlpha.get(byId.has(x) ? x : idForSel(String(x), byId)) ?? 1,
     selected: () => (selected ? selForId(selected) : null),
     destroy: () => {
+      landed(false);
       if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf);
       clearTimeout(settleTimer);
       clearTimeout(panelOutTimer);
