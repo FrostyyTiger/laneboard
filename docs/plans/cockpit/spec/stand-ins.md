@@ -5,7 +5,7 @@ The loop's VM has no screen, no microphone, no GPU and no fleet (plan §6.7). Th
 is small enough to build in one round. Message shapes are not repeated here: they are
 `protocols.md`'s, and a stand-in writes only shapes that appear there as fixtures (D98).
 
-There are three things, and the spec uses three names for them (T87, D109). The words "stand-in
+There are three things, and the spec uses three names for them (T87, D109); C5 adds a fourth, the fake voice (T128). The words "stand-in
 room" meant the first one; T119 replaced them in every spec file, and the phrase table below stays
 for reviews and PROGRESS.md, which still use the old words:
 
@@ -14,6 +14,7 @@ for reviews and PROGRESS.md, which still use the old words:
 | **room under test** | the real room (a laneboard with a `cockpit` section, D89), started by the test through a small wrapper that adds a test clock, fault hooks and a control port | child process, one per test file | §1 |
 | **fake agent** | a program the room starts as its agent child instead of `claude`; it replays a script and speaks Claude Code's native lines (or the bridge dialect) | grandchild, started by the room | §2 |
 | **fake speech** | a WebSocket server that speaks WhisperLiveKit's protocol (`protocols.md` §12) and replays scripted partials and finals | in the test process | §3 |
+| **fake voice** (C5, T128) | an HTTP server that answers the text-to-speech request (`c5-c6.md` §2) with a fixed tone | in the test process | §3.6 |
 
 Plus the **demo fleet** the boards already have (`test/tools/demo-fleet.mjs`,
 `test/helpers/demo-hub.mjs`) and the few additions of §4. §5 lists one script per scenario family;
@@ -417,6 +418,39 @@ line's `atMs`; "the service's connect log" (S-C2-13) the `connect` line's `query
 `node test/cockpit/stand-ins/fake-speech.mjs --port 7792 --script demo` runs the same server on its
 own for the demo (§6); Ctrl-C stops it.
 
+### 3.6 The fake voice service (C5, T128)
+
+`test/cockpit/stand-ins/fake-voice.mjs`, plain `node:http`, in the test process like §3.1:
+
+```js
+const voice = await startFakeVoice({ delayMs: 300, clock: testClock });
+// voice.url → 'http://127.0.0.1:<port>/v1/audio/speech'   (goes into cockpit.tts.url)
+voice.requests();            // the request log below; also GET /requests
+voice.fault('slow');         // 'down', 'slow', '500', 'big' or null; also POST /fault {"kind":"slow"}
+await voice.close();
+```
+
+- **`POST /v1/audio/speech`**: checks the body has the string fields `model`, `input`, `voice` and
+  `response_format` `wav` (else `400 {"error":"bad-request"}`), waits `delayMs` (default 300 ms),
+  then answers `200`, `Content-Type: audio/wav`, a 1.0 s 16 kHz mono 16-bit WAV of a 440 Hz tone
+  (32 044 bytes), the same bytes every time. `Authorization` is recorded, never checked.
+- **`GET /requests`**: `200 {"items":[{"atMs":1793081520020,"body":{"model":"tts-1","input":"builder-c is down since 06:41.","voice":"en-test","response_format":"wav"},"auth":false}]}`,
+  oldest first, every request since start, faulted ones included. "The fake service gets no
+  request" is `items` empty; "one request, no retry" is its length.
+- **Faults** (`POST /fault {"kind":…}`, one at a time, `null` ends it): `down` closes the listener
+  (connects are refused; `null` listens again on the same port); `slow` waits 6 s instead of
+  `delayMs` (over `cockpit.tts.timeoutS` 5); `500` answers `500 {"error":"boom"}`; `big` answers a
+  1.5 MB body (over 1 MB, `too-big`). The listener of `down` is closed, so `/requests` and `/fault`
+  are then only the JS methods.
+- `clock` as §3.1: with the shared `testClock` the 300 ms and 6 s run on the test's time.
+- **The C5 test config** adds to §1.1's:
+  `"tts":{"url":voice.url,"voices":{"en":"en-test","de":"de-test"}}` and `"quietHours":null`
+  (S-C5-06 sets `{"from":"22:00","to":"07:00"}`). C5 scenarios with a spoken prompt also start the
+  fake speech (§3.1). The room's stderr lines (`cockpit: tts failed: timeout`) are in
+  `booted.logs()`, stdout and stderr together, as `test/helpers/boot.mjs` keeps them.
+- One `node:test` file: each fault against a plain `fetch`, and the WAV's header (RIFF, 16 kHz,
+  mono) and length.
+
 ## 4. The demo fleet
 
 ### 4.1 What it already has
@@ -484,7 +518,11 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c4-custom` | agent | S-C4-25..33 | `place` calls of custom cards from the fixtures `test/cockpit/cards/*.html` (`stuck-by-builder`, `escape`, `never-ready`, `busy`, `hang`, `navigate`, `tiny-text`; `c4-show-canvas.md` §14), `save_card`, `remove_card`, `cards`, a 41 220-byte `html`; one `focus` call per scenario that reads `cardsOff` or `left` |
 | `cw-speak` | agent | S-CW-01..09, S-CW-15..18, S-C1-44, S-SCR-34 | one `repeat` turn whose `match` is a prompt starting `(From the cockpit, not the owner.`: 1.0 s after the prompt the text `▲ acme-billing on builder-b is stuck: the same task failed twice. Look at its last round.` (88 characters), then `done`; a short `done` turn for any other prompt (S-CW-18's `still there?`) |
 | `cw-jobs` | agent | S-CW-10..14, S-C6-01..04 | one turn per scenario, matched on its prompt, each calling `schedule` or `cancel_job` with the params the scenario gives (`kind` `script`, `script` `ok`, `fails` or `reboot-all`; a `remind` `call the bank`), then a sentence and `done` |
+| `c5-say` | agent | S-C5-01, S-C5-02, S-C5-04..07 | a `repeat` turn for any prompt: the text `■ builder-c is down since 06:41. Its disk is full.` as text deltas 0.1 s apart from 0.3 s after the prompt, then a 3-row table (`host`, `state`: `builder-c down`, `builder-a up`, `hv1 up`), its header and each row 1.0 s apart, then `done`: the turn streams about 5 s, so S-C5-04's `STOP VOICE` lands while it runs. S-C5-03 needs no script (`spokenLine` alone) |
 | `demo`, `demo-jobs` | both | §6 | the public demo |
+
+The stand-in control plane with a request log, for the fenced S-C6-06 and S-C6-07, is written with
+the C6 night, after the control-plane review (`c5-c6.md` §7).
 
 Each script file gets one `node:test` check in `npm test` (no browser): it parses, every step is a
 known kind, `at` values rise within a turn, and every native line the fake would write for it

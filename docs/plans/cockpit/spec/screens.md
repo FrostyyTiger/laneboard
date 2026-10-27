@@ -171,7 +171,8 @@ page, layout and pane state** (D116), so the finger finds them without looking:
   of the spill (the stack above the row ends at x 1264, the talk button is 16 px below), so the
   spill overlaps nothing.
 - Above the input row, the rect x 1288-1336, y 760-808 is `CHAT`'s. Anything else drawn
-  in the band above the input row (the line slot, the context chip `c3-see.md` §9, `↓ NEW`) ends at
+  in the band above the input row (the line slot, the context chip `c3-see.md` §9, the voice row
+`c5-c6.md` §3, `↓ NEW`) ends at
   x ≤ 1264, 24 px left of it; `c1-talk.md` §1.1 stacks them (D133).
 - Both sit above the page (`z-index` 35, between `--z-tape` 30 and `--z-sheet` 40).
 - With Q-O11 b) the talk button inside the pane is the only talk button; in its rect, with the pane
@@ -218,7 +219,8 @@ are there so nothing tappable is drawn over them. With a one-line input; a talle
 | | bottom bar | `footer.shell-bar` | as today | y 888-912, not covered |
 | **B. App, pane open** (pane x 760-1368, y 36-888) | `CLOSE` (header) | `[data-cockpit-close]` | yes | 1256-1352, 44-92 |
 | | `NEW` (header) | `[data-cockpit-new]` | yes | 1176-1248, 44-92 |
-| | the stack above the row | `[data-cockpit-line]`, `[data-cockpit-chip-remove]`, `[data-cockpit-follow]` | chip `✕` and `↓ NEW` | `c1-talk.md` §1.1's table (row top y 808), all ending at x ≤ 1264 |
+| | `VOICE` (header, C5, only with `config.tts`; labels `VOICE ON`, `VOICE OFF`, `NIGHT OFF`) | `[data-voice-toggle]` | yes | 1072-1168, 44-92 |
+| | the stack above the row | `[data-cockpit-line]`, `[data-cockpit-chip-remove]`, `[data-voice-stop]`, `[data-cockpit-follow]` | chip `✕`, `STOP VOICE` and `↓ NEW` | `c1-talk.md` §1.1's table (row top y 808), all ending at x ≤ 1264 |
 | | `CLOSE` (the opener) | `[data-cockpit-open]` | yes | 1288-1336, 760-808 |
 | | language button (a language list only) | `[data-talk-lang]` | yes | 784-848, 824-888 |
 | | `CANCEL` (microphone open), then `UNDO` (5 s after a cancel), in place of the language button | `[data-talk-cancel]`, `[data-talk-undo]` | yes | 784-848, 824-888 |
@@ -244,12 +246,16 @@ are there so nothing tappable is drawn over them. With a one-line input; a talle
 | | `CANVAS` (switch button) with its count | `[data-cockpit-switch]`, `[data-switch-count]` | the button | 1200-1264, 824-888 |
 | | the Wall's status lines | the Wall's | no | end at x ≤ 1176 |
 | | away caption (room down only, §7) | `[data-cockpit-away]` | no | as C |
-| **H. Keyboard up, pane** (D or B; 1368x532, conversation y 0-532, `c1-talk.md` §7.1) | header buttons | as D (B in the app: `CLOSE`, `NEW` at B's x) | yes | D's x, 8-56 |
-| | the stack | as B | chip `✕` and `↓ NEW` | §1.1's table with the row top at y 444 |
+| **H. Keyboard up, pane** (D or B; 1368x532, conversation y 0-532, `c1-talk.md` §7.1) | header buttons | as D (B in the app: `CLOSE`, `NEW` and `VOICE` at B's x) | yes | D's x, 8-56 |
+| | the stack | as B | chip `✕`, `STOP VOICE` and `↓ NEW` | §1.1's table with the row top at y 444 |
 | | `CLOSE` (the opener) | `[data-cockpit-open]` | yes | 1288-1336, 396-444 |
 | | language button, input, `SEND`, talk button | as B | yes | B's x, 460-524 |
 | **I. Keyboard up, column** (E or F; conversation y 0-532) | header buttons | as E | yes | E's x, 8-56 |
 | | stack, language button, input, `SEND`, talk button | as H | yes | as H; no opener |
+| **J. Confirm open** (over any of A-I; Jobs slice, `c5-c6.md` §8) | the confirm card | `[data-confirm]` | its buttons | x 100-660, y 180-732 (y 180-796 with the note row; y 140-772 with C6's typed row) |
+| | `NO` | `[data-confirm-no]` | yes | 124-368, 644-708 |
+| | the verb button | `[data-confirm-yes]` | yes, after 1.0 s | 392-636, 644-708 |
+| | everything of A-I | as there | **no**: under the scrim and `inert` | as there |
 
 - **With `cockpit.stt.url: none`** (no voice, `c2-voice.md` §9, S-C2-14): no talk button and no
   language button in any state; `SEND` takes x 1280-1344 at the talk button's y, the input runs
@@ -260,21 +266,31 @@ are there so nothing tappable is drawn over them. With a one-line input; a talle
   between the stack and the opener or the talk button (x). No two tappables in one state intersect
   and none are closer than 8 px.
 - The chip itself (`[data-cockpit-chip]`) is not tappable apart from its `✕`; the line slot is text.
+- **J is modal** (T128). While a confirm card is open on this screen, the page's scrim
+  (`oklch(0% 0 0 / .55)`, `--z-dialog` 70, under the card) covers every other control of the state
+  it opened over, the talk button and `CHAT` included, and the rest of the page is `inert`: a tap
+  there answers nothing and changes nothing (`c5-c6.md` §8.2). Only `NO`, the verb button and, for
+  C6, the typed input take a touch. The other screens are not in J: they show the tool line or
+  `ASKED ON DESK` (`c5-c6.md` §8.1) and stay in their state. The no-overlap test (S-SCR-25) checks J
+  with its three tappables only.
 
 **The `SCREEN` sheet** `[data-screen-sheet]` (D157), drawn in the first frame after the tap, no
 animation; the rows copy `c3-see.md` §9.3's menu:
 
 | Part | Size | Look |
 | --- | --- | --- |
-| box | 288 px wide, 322 px tall (five 64 px rows and a 1 px border), right edge on `SCREEN`'s right edge | `--bg-elevated`, 1 px `--line-strong` border, `z-index` 40 (`--z-sheet`) |
+| box | 288 px wide, 322 px tall (five 64 px rows and a 1 px border; 386 px with the voice row), right edge on `SCREEN`'s right edge | `--bg-elevated`, 1 px `--line-strong` border, `z-index` 40 (`--z-sheet`) |
 | `WALL`, `CANVAS`, `SPLIT`, `SWITCH` | 64 px tall, full width, 1 px `--line` between rows | `[data-layout-choice]`, 18 px caps `--text-1`; the current one 1 px accent border |
+| `VOICE ON`, `VOICE OFF` or `NIGHT OFF` (C5, only with `config.tts`) | 64 px tall, full width, 1 px `--line` top, after `SWITCH` | `[data-voice-toggle]`, `aria-pressed`, 18 px caps `--text-1`; a tap sends `voice.set` and closes the sheet; the label rule is `protocols.md` §6.3 |
 | `CANCEL` | 64 px tall, full width, 1 px `--line` top | `[data-screen-cancel]`, 18 px caps `--text-2` |
 
 - **Position.** Its top 8 px under the header's bottom edge when that leaves its bottom ≥ 16 px
   above the visible bottom; else its bottom 8 px above the header's top edge. At 1368x912:
   `canvas` x 1064-1352, y 72-394; `wall` pane x 960-1248, y 72-394; `split` x 1064-1352,
   y 190-512 (above the column, over the card area); keyboard up (1368x532) y 72-394 in every layout.
-- **It closes** on a layout row (after applying it), `CANCEL`, a second tap on `SCREEN`, a tap
+  With the voice row (386 px): `canvas` and `wall` y 72-458, `split` y 126-512, keyboard up y 72-458
+  (its bottom 74 px above 532).
+- **It closes** on a layout row (after applying it), the voice row (after sending `voice.set`), `CANCEL`, a second tap on `SCREEN`, a tap
   anywhere outside it (that tap does nothing else: no card, node, tool line or blur acts on it),
   `Esc`, or 10 s without a touch. Nothing changes but the sheet going.
 - It is inside `[data-cockpit-conversation]`, so with the keyboard up a tap on it keeps the input's

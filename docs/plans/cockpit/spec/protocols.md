@@ -49,6 +49,7 @@ with the D128 message on stderr.
 | `POST /api/cockpit/talk` | a physical button (C2b) | `c2-voice.md` §14 | `c2-voice.md` §14 |
 | `GET /api/cockpit/ws` (upgrade) | a paired screen | §2 | §2.3 |
 | `GET /api/cockpit/card/{id}/frame?rev={n}&theme={dark\|light}` | a paired screen's card frame (`c4-show-canvas.md` §11.3, SB4) | `200` the custom card's shell document with SB2/SB3's headers | `404 {"error":"not-found"}` for no cookie, a wrong `Sec-Fetch-Dest` or `Sec-Fetch-Site`, an unknown card or `rev`, or a card that is off (D172) |
+| `GET /api/cockpit/speech/{speakId}` | the link a `speak` went to (§6.3), with its cookie and `X-Laneboard: 1` (C5) | `200` the audio, `Content-Type` `audio/wav` (`audio/mpeg` for `mp3`, `audio/ogg` for `opus`, `c5-c6.md` §2.1), `Cache-Control: no-store`; the room then forgets it | `404 {"error":"not-found"}` for no cookie, an unknown id, one already fetched or older than 60 s, or another screen's id; no audit line (it changes nothing) |
 | `/api/cockpit/admin/*` (`pair`, `unpair`, `button`, `screens`) | the room's CLI only, on the main (loopback) port, peer uid checked | `screens.md` §6.1 | `403` `agent-uid`, `wrong-uid`, `agent-is-room`, `not-cli` (§6.1); a forwarded request is `not-cli` |
 
 Every request passes `server/security.mjs` first: `checkRequest` (Host; and for `POST`, Origin and
@@ -119,6 +120,7 @@ app shows travels in `focus.route` (§3.8), never in `hello`.
 | `resume` | `replay`: the events `lastSeq + 1 … seq` follow, in order; `snapshot`: one `snapshot` follows |
 | `config.stt` | `on` or `none` (`c2-voice.md` §9: `none` draws no talk button) |
 | `config.languages` | `cockpit.stt.language` as a list (`["auto"]` for `auto`), for the language button (D48) |
+| `config.tts` | from the C5 slice on: `true` when `cockpit.tts.url` is set, `false` for `none` (no voice row, no `VOICE` toggle anywhere, `c5-c6.md` §4); absent before C5 means `false` |
 | `status` | the room's status line or `null` (§3.5) |
 | `lookedAt` | when this screen's pane last closed, as the room saw it in `focus` (`c1-talk.md` §2.1, D233); a fresh page draws `SINCE YOU LOOKED` from it, a reconnecting page keeps its own |
 | `now` | the room's clock; on a skew over 2 s the screen sets `performance.mark('cockpit:skew', {detail:{ms}})` and one `console.warn('cockpit: clock skew', ms)`, once per page load, and changes nothing else (D142) |
@@ -192,6 +194,10 @@ frame with `part` equal to `parts` has arrived. Parts (D140):
   first; the screen places each block by its `at` among the turns (D276). `jobs` (Jobs slice on):
   every job of `jobs.json` in `job.put`'s form (§3.9). Both are complete in the last part and `[]`
   in the others, like `pins`; absent before their slice.
+- `confirm` (Jobs slice on): the open confirm in `confirm.state`'s form without `type` and `seq`
+  (§3.10), or `null`; in the last part, `null` in the others. Every screen gets it, so `hall`
+  draws `waiting for a yes on desk…` after a reload. The card itself reaches only the asked link,
+  as a `confirm.open` after the snapshot (D279).
 
 **`heartbeat`** (room → screen), every 10 s on every link, no `seq` (D10):
 
@@ -219,9 +225,12 @@ also sends a WebSocket ping every 30 s and drops a link that has not answered th
 | --- | --- |
 | `bad-message` | a field is missing, of the wrong type or out of range (each message's checks below); the message is dropped whole |
 | `unknown-type` | a `type` the room does not know |
-| `unknown-id` | a `turnId`, `showId`, `card` or `utterance` the room does not have |
+| `unknown-id` | a `turnId`, `showId`, `card`, `utterance`, `speakId` or `confirmId` the room does not have |
 | `too-many` | over the rate limit (§8); the message is dropped |
-| `not-now` | valid but not possible in this state (`stop` with no running turn, an `audio.start` while an utterance is open, §6.1) |
+| `not-now` | valid but not possible in this state (`stop` with no running turn, an `audio.start` while an utterance is open, §6.1; `voice.set` with `config.tts` `false`, §6.3) |
+| `not-yours` | a `confirm.answer` from a link that is not the asked link (§3.10) |
+| `not-a-person` | a `confirm.answer` from a `local` link without a device token (§3.10, `c5-c6.md` §8.4) |
+| `too-late` | a `confirm.answer` for a confirm that already ended (answered, timed out, gone, or a room restart since) |
 
 `message` is for the log and tests; the screen never draws it, except where a message's own error
 case below says what the screen shows.
@@ -309,13 +318,17 @@ and not listed. Field values and ranges are in the section named.
 | `audio.stop` | `seq`, `utterance`, `reason` | — | 6.1 |
 | `audio.cancel` | `seq`, `utterance` | — | 6.1 |
 | `talk.state` | `seq`, `request`, `talk` | — | 7 |
+| `confirm.ask` | `seq`, `kind` (`job.cancel`), `job` | — | 3.10 |
+| `confirm.answer` | `seq`, `confirmId`, `answer` (`yes`, `no`), `typed\|null` | — | 3.10 |
+| `speak.result` | `seq`, `speakId`, `state`; `why` with `state` `failed` | — | 6.3 |
+| `voice.set` | `seq`, `on` | — | 6.3 |
 
 **Room → screen:**
 
 | `type` | `seq` | Required | Optional | § |
 | --- | --- | --- | --- | --- |
-| `welcome` | no (its `seq` field is the room's current count) | `re`, `protocol`, `screen`, `epoch`, `seq`, `conversation`, `resume`, `config` (`stt`, `languages`, `maxPromptChars`), `status\|null`, `lookedAt`, `now` | — | 2.2 |
-| `snapshot` | the `seq` it reflects, not counted | `seq`, `part`, `parts`, `conversation`, `startedAt`, `olderTurns`, `turns`, `pins`, `cards` | `screens`: the conversation's `screen.paired`/`screen.unpaired` events, `[{"event":"paired","name":"desk2","at":"…"}]`, last 20 (`screens.md` §6.3); `speakups` (Speak slice), `jobs` (Jobs slice) | 2.2 |
+| `welcome` | no (its `seq` field is the room's current count) | `re`, `protocol`, `screen`, `epoch`, `seq`, `conversation`, `resume`, `config` (`stt`, `languages`, `maxPromptChars`), `status\|null`, `lookedAt`, `now` | `config.tts` (C5 slice) | 2.2 |
+| `snapshot` | the `seq` it reflects, not counted | `seq`, `part`, `parts`, `conversation`, `startedAt`, `olderTurns`, `turns`, `pins`, `cards` | `screens`: the conversation's `screen.paired`/`screen.unpaired` events, `[{"event":"paired","name":"desk2","at":"…"}]`, last 20 (`screens.md` §6.3); `speakups` (Speak slice), `jobs` and `confirm` (Jobs slice) | 2.2 |
 | `heartbeat` | no | `at` | — | 2.2 |
 | `error` | no | `re`, `code`, `message` | — | 2.3 |
 | `revoked` | no | `at` | — | 2.3 |
@@ -334,6 +347,8 @@ and not listed. Field values and ranges are in the section named.
 | `screen.paired`, `screen.unpaired` | `room` | `name`, `at` | — | `screens.md` §6.3 |
 | `history.turns` | no | `re`, `turns`, `olderTurns` | `speakups` (Speak slice): the raised blocks between the oldest returned turn's `at` and the `before` turn's `at` | 3.7, 3.9 |
 | `speakup` | `room` | `id`, `at`, `tier`, `items` (each `key`, `kind`, `priority\|null`, `target\|null`, `builder\|null`, `text`, `since`, `cleared\|null`, `card\|null`), `held`, `agent`; `cap` and `until` with `agent` `capped` | — | 3.9 |
+| `confirm.open` | no | `confirmId`, `kind`, `by`, `turnId\|null`, `what`, `where`, `when`, `why`, `verb`, `destructive`, `typed\|null`, `openedAt`, `expiresAt` | — | 3.10 |
+| `confirm.state` | `room` | `confirmId`, `state`, `screen`, `kind`, `job\|null` | — | 3.10 |
 | `job.put` | `room` | `job` (`id`, `kind`, `title`, `target\|null`, `at`, `state`, `createdBy`, `createdAt`, `confirmedBy\|null`, `turnId\|null`, `card\|null`, `firedAt\|null`, `endedAt\|null`, `exit\|null`; `script` with `kind` `script`) | — | 3.9 |
 | `show` | no | `showId`, `turnId`, `cmd`, `args`, `receivedAt` | — | 4 |
 | `show.line` | `room` | `turnId`, `blockIndex`, `showId`, `text`, `state`, `skippedOn`, `undoable` | — | 4 |
@@ -349,6 +364,9 @@ and not listed. Field values and ranges are in the section named.
 | `stt.final` | no | `utterance`, `text`, `lang\|null` | — | 6.1 |
 | `stt.error` | no | `utterance`, `error`, `detail` | — | 6.1 |
 | `talk` | no | `request`, `action` | — | 7 |
+| `speak` | no | `speakId`, `turnId`, `text`, `lang`, `bytes`, `receivedAt` | — | 6.3 |
+| `speak.failed` | no | `turnId`, `why`; `status` with `why` `status` | — | 6.3 |
+| `voice` | no | `on`, `night`, `nightOn` | — | 6.3 |
 
 **Turns and items** (in `snapshot.turns`, `history.turns`; fence `json item` for a lone item):
 
@@ -686,8 +704,98 @@ output, `coworker.md` §6.2):
   longer lists it, and no screen draws an ended job longer than `coworker.md` §6.6 says.
 - The screens draw the Map badge and the countdown's state from `job.put`; the countdown card
   itself is a `card.put` (§5) with `"by":"cockpit"`.
-- There is no screen → room job message: `CANCEL JOB` opens the confirm card (`coworker.md` §6.4,
-  `c5-c6.md` §8), whose messages are C5's.
+- The one screen → room job message is `confirm.ask` (§3.10): `CANCEL JOB` asks the room to open
+  the confirm card (`coworker.md` §6.4, `c5-c6.md` §8); nothing changes before its yes.
+
+### 3.10 The confirm card (Jobs slice, C6 later; T128, D279, D282)
+
+The card's look, who is asked and how it ends are `c5-c6.md` §8; this is the wire. One confirm
+is open in the room at a time. It is asked on **one link**, the **asked link**: for an agent's
+call the link that sent the running turn's prompt; for a speak-up turn, or when that link is gone,
+the link that sent `touched` (§3.8) last; for `CANCEL JOB` the link it was tapped on (D279).
+
+**`confirm.ask`** (screen → room), on a `CANCEL JOB` tap:
+
+```json
+{"type":"confirm.ask","seq":81,"kind":"job.cancel","job":"job-0003"}
+```
+
+`kind` is `job.cancel` (the only screen-asked kind). The room opens the card on this link
+(`confirm.open`, then `confirm.state` `open` to all). Refused with `error`: `unknown-id` for a job
+it does not have, `not-now` for a job not `scheduled` or while another confirm is open; on that
+`not-now` the screen shows `Answer the open question on desk first.` in the button's place for 5 s,
+`desk` taken from the open `confirm.state`'s `screen`.
+
+**`confirm.open`** (room → the asked link only, no `seq`), when the card opens, and again right
+after the `welcome` (and its replay or snapshot) of a link that takes the ask over (below):
+
+```json
+{"type":"confirm.open","confirmId":"cf-0007","kind":"job.create","by":"agent","turnId":"t-0140",
+ "what":"Run stop-vm-c (shut off vm-c)","where":"on the cockpit's machine · target vm-c",
+ "when":"at 10:12 (in 3 h 00)","why":"The owner asked to shut vm-c off in 3 hours.",
+ "verb":"SCHEDULE","destructive":false,"typed":null,
+ "openedAt":"2026-10-27T07:12:00+01:00","expiresAt":"2026-10-27T07:14:00+01:00"}
+```
+
+```json
+{"type":"confirm.open","confirmId":"cf-0008","kind":"job.cancel","by":"owner","turnId":null,
+ "what":"Cancel: shut off vm-c","where":"on the cockpit's machine · target vm-c",
+ "when":"was due at 10:12 (in 2 h 51)","why":"You tapped CANCEL JOB.",
+ "verb":"CANCEL JOB","destructive":false,"typed":null,
+ "openedAt":"2026-10-27T07:21:00+01:00","expiresAt":"2026-10-27T07:23:00+01:00"}
+```
+
+| Field | Rule |
+| --- | --- |
+| `confirmId` | `cf-` and 4 digits, counted up per room |
+| `kind` | `job.create`, `job.cancel`, `act` (C6) |
+| `by` | `agent` (header `ASKED BY THE AGENT`) or `owner` (`ASKED BY YOU`, a `CANCEL JOB`) |
+| `turnId` | the turn whose tool call asked, or `null` for `by` `owner` |
+| `what`, `where`, `when` | written by the room from what it will really run (D204); for `act`, `when` is `now` |
+| `why` | the agent's words as it sent them (at most 3 lines on the card, cut with `…`), or `You tapped CANCEL JOB.` |
+| `verb` | the verb button reads `YES, ` and this: `SCHEDULE`, `CANCEL JOB`, for C6 the action (`RESTART`) |
+| `destructive` | `true` draws the verb button with the 1 px `--p1` border (`c5-c6.md` §8.2) |
+| `typed` | `null`, or the phrase to type (`RESTART builder-b/acme-billing`, C6, pending Q-O35) |
+| `openedAt`, `expiresAt` | 120 s apart; the screen counts `CLOSES IN m:ss` down to `expiresAt` on its own clock |
+
+**`confirm.state`** (room → all links, `seq` `room`), at the open and at the end:
+
+```json
+{"type":"confirm.state","seq":1420,"confirmId":"cf-0007","state":"open","screen":"desk","kind":"job.create","job":null}
+```
+
+```json
+{"type":"confirm.state","seq":1421,"confirmId":"cf-0007","state":"yes","screen":"desk","kind":"job.create","job":"job-0003"}
+```
+
+`state`: `open`, then one of `yes`, `no`, `timeout`, `gone`. `screen`: the asked link's screen
+name. `job`: the job asked about for `job.cancel`; for `job.create` `null` while open and the new
+job's id on `yes`; `null` for `act`. On every end the asked link removes the card in the next frame,
+and the other screens' tool line and `ASKED ON DESK` go back (`c5-c6.md` §8.1). A room restart sends
+no end: the new epoch's snapshot has `confirm` `null`, and the card goes with it.
+
+**`confirm.answer`** (screen → room, `seq` `link`):
+
+```json
+{"type":"confirm.answer","seq":80,"confirmId":"cf-0007","answer":"yes","typed":null}
+```
+
+`answer` `yes` or `no` (`Esc` is `no`); `typed` the text typed for a `typed` card, else `null`.
+The room accepts it only from the asked link and only from a person (`c5-c6.md` §8.4); else `error`
+`not-yours`, `not-a-person`, `too-late` or `unknown-id` (§2.3), and nothing changes. A `yes` on a
+`typed` card whose `typed` is not the phrase exactly is `bad-message` (the screen never sends it:
+its button stays disabled).
+
+**When the ask moves or ends** (D279; `c5-c6.md` §8.5's "gone"):
+
+- The asked link closes **with a close frame from the page** (1000 `bye`, or 1001 as browsers
+  send at unload), or the same screen sends a **fresh `hello`** (no `epoch`: a reload whose close
+  never arrived), or the screen is unpaired: the confirm ends `gone` at once.
+- The asked link is **lost without a close frame** (the room unreachable, `screens.md` §7, or
+  `POST /link {"up":false}` in a test): the confirm stays open until `expiresAt`. The first link of
+  the same screen whose `hello` carries this room's `epoch` takes the ask over and gets
+  `confirm.open` again after its `welcome`; its buttons come back (S-C6-04).
+- `expiresAt` passes: `timeout`.
 
 ## 4. Show commands (C4)
 
@@ -842,6 +950,75 @@ block's language are the language heard, not `auto`.
 | the link drops with the microphone open | screen | the microphone closes at once, the words stay as a draft (`screens.md` §7) |
 | `config.stt` is `none` and a screen sends `audio.start` | room | `error` `not-now` (a correct screen draws no talk button) |
 | audio frames faster than 20 per second | room | §8 |
+
+### 6.3 Voice out (C5, T128, D280, D281)
+
+What is spoken, the speech service and the screen's side are `c5-c6.md` §1-§4; this is the wire.
+The room synthesises a line only for the **prompt's link** (the link that sent the spoken prompt),
+only if that link is live and its screen's voice is on (D280); other links of the same screen stay
+silent.
+
+**`speak`** (room → the prompt's link, no `seq`), once the audio is in the room:
+
+```json
+{"type":"speak","speakId":"sp-0031","turnId":"t-0140","text":"builder-c is down since 06:41.","lang":"en","bytes":31244,"receivedAt":1793081520010}
+```
+
+`speakId` `sp-` and 4 digits; `text` the spoken line (`c5-c6.md` §1), for the log and tests (the
+screen draws nothing from it); `bytes` the audio's size; `receivedAt` when the room had the
+sentence (B11). The screen fetches `GET /api/cockpit/speech/{speakId}` (§1.1) and plays it.
+
+**`speak.failed`** (room → the prompt's link, no `seq`), instead of `speak`, when the service did
+not give a line the room would have sent (D281):
+
+```json
+{"type":"speak.failed","turnId":"t-0140","why":"timeout"}
+```
+
+```json
+{"type":"speak.failed","turnId":"t-0140","why":"status","status":503}
+```
+
+`why`: `timeout`, `refused`, `too-big`, `status` (with `status`, the HTTP status) or `no-voice` (a
+language without a voice). The screen's label row reads `AGENT · 07:02 · VOICE FAILED`. The room's
+stderr line is `c5-c6.md` §2's.
+
+**`speak.result`** (screen → room, `seq` `link`), when the line ends or does not play:
+
+```json
+{"type":"speak.result","seq":71,"speakId":"sp-0031","state":"played"}
+```
+
+```json
+{"type":"speak.result","seq":74,"speakId":"sp-0032","state":"failed","why":"decode"}
+```
+
+`state`: `played`, `stopped`, `muted`, `busy`, `blocked`, `failed` (`c5-c6.md` §3); `why` with
+`failed`: `fetch` or `decode`. The room writes it to its log and changes nothing else.
+
+**`voice.set`** (screen → room, `seq` `link`), a tap on the toggle:
+
+```json
+{"type":"voice.set","seq":72,"on":false}
+```
+
+**`voice`** (room → every link of that screen, no `seq`), right after each `welcome` (after its
+replay or snapshot), after every `voice.set` of that screen, and at the start and end of the quiet
+hours:
+
+```json
+{"type":"voice","on":false,"night":true,"nightOn":false}
+```
+
+| Field | Rule |
+| --- | --- |
+| `on` | the screen's day setting, kept with its pairing (`c5-c6.md` §4, D203); a new screen `true` |
+| `night` | `true` while the quiet hours run (`coworker.md` §4); always `false` with `cockpit.quietHours: null` |
+| `nightOn` | `true` once the owner lifted the night on this screen; `false` again at the quiet hours' end |
+
+The voice plays when `night ? nightOn : on`. The toggle reads `NIGHT OFF` when `night` and not
+`nightOn`, else `VOICE ON` or `VOICE OFF` by that same value. A `voice.set` during the night sets
+`nightOn` to its `on` and leaves the day setting alone; by day it sets `on` (D280).
 
 ## 7. The physical button (C2b)
 

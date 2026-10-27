@@ -78,8 +78,8 @@ of the list below, top to bottom, with these rects at 1368x912:
 
 ### 1.1 The stack above the input row (T96, D133)
 
-Four things want the band just above the input row: a one-line message, the context chip
-(`c3-see.md` §9), `↓ NEW` (§4) and, in the corner, `CHAT`/`CLOSE` (`screens.md` §4). They stack
+Five things want the band just above the input row: a one-line message, the context chip
+(`c3-see.md` §9), the voice row (C5, `c5-c6.md` §3), `↓ NEW` (§4) and, in the corner, `CHAT`/`CLOSE` (`screens.md` §4). They stack
 from the input row's top edge upwards, in this order, each one only while it is shown:
 
 1. **The line slot** `[data-cockpit-line]`, `data-line="room-down|error|hint|length"`: exactly one
@@ -103,29 +103,37 @@ from the input row's top edge upwards, in this order, each one only while it is 
    §4 and D168, comes back unless a touch came meanwhile).
 2. **The chip row**, 64 px, on top of the line slot (on the row's top edge when no line shows): the
    chip 48 px tall, 8 px in from the row's top and bottom, from x 784, ending at x ≤ 1264.
-3. **`↓ NEW`** floats over the conversation, 16 px above the topmost of the two (above the row
-   when neither shows). With a chip it is right-aligned, ending at x 1264 (x 1168-1264 at 96 px
+3. **The voice row** `[data-voice]` (C5, T128), 64 px, on top of the chip row (or of the line
+   slot, or of the row), only while a spoken line plays on this screen: `SPEAKING` at x 784, 16 px
+   caps `--text-2`, centred in the row's height; **`STOP VOICE`** `[data-voice-stop]`, 144 x 48 px,
+   x 1120-1264, 8 px in from the row's top and bottom, 16 px caps `--text-1`, 1 px
+   `--line-strong`. What it does: `c5-c6.md` §3.
+4. **`↓ NEW`** floats over the conversation, 16 px above the topmost of the three (above the row
+   when none shows). With a chip it is right-aligned, ending at x 1264 (x 1168-1264 at 96 px
    wide), so it never sits over the chip's `✕` and never over `CHAT` (x 1288-1336, y 760-808 is
    `CHAT`'s, `screens.md` §4, D116). Without a chip it is centred over the text column (x 1016-1112).
 
-The conversation ends at the top of the line slot or the chip row, whichever is higher; `↓ NEW`
+The conversation ends at the top of the line slot, the chip row or the voice row, whichever is
+highest; `↓ NEW`
 takes no height. When an item comes or goes the conversation follows §7.1's pin rule (at its end it
 stays at its end; scrolled up, the line at its top stays at its top), in the next frame, no slide.
 
 Rects at 1368x912 with a one-line input (row top y 808, on the Wall, in the app and in a column):
 
-| Shown | Line slot | Chip row (chip) | `↓ NEW` | Conversation bottom |
-| --- | --- | --- | --- | --- |
-| nothing | none | none | x 1016-1112, y 744-792 | y 808 |
-| a one-line message | y 776-808 | none | x 1016-1112, y 712-760 | y 776 |
-| a chip | none | y 744-808 (y 752-800) | x 1168-1264, y 680-728 | y 744 |
-| a one-line message and a chip | y 776-808 | y 712-776 (y 720-768) | x 1168-1264, y 648-696 | y 712 |
-| a two-line message and a chip | y 752-808 | y 688-752 (y 696-744) | x 1168-1264, y 624-672 | y 688 |
+| Shown | Line slot | Chip row (chip) | Voice row (`STOP VOICE`) | `↓ NEW` | Conversation bottom |
+| --- | --- | --- | --- | --- | --- |
+| nothing | none | none | none | x 1016-1112, y 744-792 | y 808 |
+| a one-line message | y 776-808 | none | none | x 1016-1112, y 712-760 | y 776 |
+| a chip | none | y 744-808 (y 752-800) | none | x 1168-1264, y 680-728 | y 744 |
+| a one-line message and a chip | y 776-808 | y 712-776 (y 720-768) | none | x 1168-1264, y 648-696 | y 712 |
+| a two-line message and a chip | y 752-808 | y 688-752 (y 696-744) | none | x 1168-1264, y 624-672 | y 688 |
+| the voice row (C5) | none | none | y 744-808 (x 1120-1264, y 752-800) | x 1016-1112, y 680-728 | y 744 |
+| a chip and the voice row (C5) | none | y 744-808 (y 752-800) | y 680-744 (x 1120-1264, y 688-736) | x 1168-1264, y 616-664 | y 680 |
 
 - **The last item clears the opener** (D267). In the sliding pane (not in a column: no `CHAT`
   there, D117) the conversation's scroll area keeps a bottom padding of `max(0, bottom − 744)` px,
   `bottom` being the table's "Conversation bottom": 64 px with nothing in the stack, 32 px with a
-  one-line message, 0 px with a chip. At its end the last item (a reply line, a `· QUEUED` block)
+  one-line message, 0 px with a chip or the voice row. At its end the last item (a reply line, a `· QUEUED` block)
   then ends at y ≤ 744, 16 px above `CLOSE` (y 760-808), and never under it; scrolled up, text
   passes under the opener like under any floating button. Sketch: `sketches/c1-pane.html`.
 - A taller input (§7) or the keyboard (§7.1) moves the row's top edge; every rect moves with it by
@@ -136,8 +144,9 @@ Rects at 1368x912 with a one-line input (row top y 808, on the Wall, in the app 
   test (S-SCR-25).
 - In a `split` column (§1) the conversation never drops under 96 px: when the status line, the
   stack and the input's growth together would leave less, the column's top moves up over the card
-  area by what is missing (the most: 80 px status line, 144 px of stack (an 80 px three-line slot
-  and the 64 px chip row) and 118 px of input growth put the column at y 306-912).
+  area by what is missing (the most: 80 px status line, 208 px of stack (an 80 px three-line slot,
+  the 64 px chip row and the 64 px voice row) and 118 px of input growth put the column at
+  y 242-912).
 
 ### 1.2 Smaller screens and the browser floor (T77, D18, D249, D250, pending Q-O9)
 

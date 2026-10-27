@@ -326,7 +326,7 @@ S-C6-03 S-C6-04 S-C6-05. The confirm card is `c5-c6.md` §8. The job format, too
 | Pair | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 S-SCR-27 S-SCR-28 S-SCR-29 S-SCR-33 S-SCR-37 S-SEC-04 | Q-O21 b) (under a) these ten are C1's and C1 grows by about 5 steps); Q-O27 (under b) or c) S-SCR-37 and `screens.md` §6.5 go) |
 | Canvas 2 | S-C4-25 S-C4-26 S-C4-27 S-C4-28 S-C4-29 S-C4-30 S-C4-31 S-C4-32 S-C4-33 S-C4-34 | T12 written; Q-O32 answered (with c) the custom-card part waits) |
 | History | none written; planned with §5.2 | the board change of §5.2 |
-| C5 | S-C5-01 S-C5-02 S-C5-03 S-C5-04 S-C5-05 S-C5-06 S-C5-07 | Q-O34; T128 (messages, fake voice service) |
+| C5 | S-C5-01 S-C5-02 S-C5-03 S-C5-04 S-C5-05 S-C5-06 S-C5-07 | Q-O34 (the wire is `protocols.md` §6.3, the fake voice `stand-ins.md` §3.6) |
 | C6 | S-C6-06 S-C6-07 | the control-plane review, Q-O7, Q-O35; fenced for unattended work |
 | One | S-ONE-01 S-ONE-02 S-ONE-03 S-ONE-04 S-ONE-05 S-ONE-06 S-ONE-07 S-ONE-08 S-ONE-09 S-ONE-10 S-ONE-11 S-ONE-12 S-ONE-13 S-ONE-14 S-ONE-15 S-ONE-16 | C1; Q-O36 (under a) S-ONE-02's first step changes to a warning; under c) `allowSameUser` goes); research Q18 (`sudo` relaying signals, D214); the admin status route of `single-machine.md` §5; the bridge's allowlist check (`protocols.md` §11.11, D240) |
 
