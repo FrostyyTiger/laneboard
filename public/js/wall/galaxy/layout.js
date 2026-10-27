@@ -92,10 +92,20 @@ export function armSpine(arm, t) {
  * site; `half` its half width at the start and `grow` per step out; `fadeIn`
  * and `fadeOut` the steps it takes to come and go along the arm; `steps` and
  * `across` its grid. Its strength and colour are the scene's (scene.js RIBBON).
+ * T19 (r11-dreamer galaxy 2): narrowed so no point of it is wider than
+ * `maxHalf` (it was 170 growing to ~350, a haze rather than an arm).
  */
 export const ARM_RIBBON = Object.freeze({
-  from: -0.9, tail: 1.1, minTo: 2.4, half: 170, grow: 40, fadeIn: 1.1, fadeOut: 1.3, steps: 72, across: 9,
+  from: -0.9, tail: 1.1, minTo: 2.4, half: 90, grow: 16, maxHalf: 170, fadeIn: 1.1, fadeOut: 1.3, steps: 72, across: 9,
 });
+
+/**
+ * The near-site band (T19, r11-dreamer galaxy 2): a second, tighter strip on
+ * the spine round each site only, so the arm reads where it carries data.
+ * `reach` steps either side of the site, fading in and out over all of it;
+ * `half` its half width. Brighter than the ribbon (scene.js BAND).
+ */
+export const ARM_BAND = Object.freeze({ reach: 0.55, half: 55, steps: 16, across: 7 });
 
 /** How far out the ribbon runs on arm `arm` with `n` sites: past the arm's last site. */
 export function ribbonEnd(arm, n) {
@@ -109,42 +119,68 @@ const smooth01 = (x) => {
 };
 
 /**
+ * One strip along arm `arm` from `from` to `to` steps out, written into
+ * `positions`/`shade`/`index` from vertex `base`: `width(t)` its half width,
+ * `along(t)` its strength along the arm, the profile across `(1 - u²)²`.
+ */
+function armStrip(out, base, arm, from, to, steps, across, width, along) {
+  const { positions, shade, index } = out;
+  for (let i = 0; i <= steps; i++) {
+    const t = from + ((to - from) * i) / steps;
+    const p = armSpine(arm, t);
+    // The tangent of the spiral (as nebula.js armTangent), its normal on the plane.
+    const r = ARM.r0 + ARM.step * t, a = arm * Math.PI + t * ARM.turn;
+    const tx = ARM.step * Math.cos(a) - r * ARM.turn * Math.sin(a);
+    const tz = ARM.step * Math.sin(a) + r * ARM.turn * Math.cos(a);
+    const l = Math.hypot(tx, tz) || 1;
+    const nx = -tz / l, nz = tx / l;
+    const w = width(t), s = along(t);
+    for (let j = 0; j < across; j++) {
+      const u = (2 * j) / (across - 1) - 1;
+      const k = base + i * across + j;
+      positions[k * 3] = p.x + nx * w * u;
+      positions[k * 3 + 1] = 0;
+      positions[k * 3 + 2] = p.z + nz * w * u;
+      shade[k] = s * (1 - u * u) ** 2;
+      if (i < steps && j < across - 1) index.push(k, k + across, k + 1, k + 1, k + across, k + across + 1);
+    }
+  }
+}
+
+/**
  * The ribbon's mesh for `n` sites: `{ positions, shade, index }`, two strips
  * (one per arm) on the plane, `shade` 0..1 per vertex (0 at the edges and
  * both ends, 1 on the spine), triangles in `index`. One still shape: the
  * same `n` gives the same ribbon.
  */
 export function armRibbon(n) {
-  const { from, half, grow, fadeIn, fadeOut, steps, across } = ARM_RIBBON;
-  const rows = steps + 1, perArm = rows * across;
-  const positions = new Float32Array(2 * perArm * 3);
-  const shade = new Float32Array(2 * perArm);
-  const index = [];
+  const { from, half, grow, maxHalf, fadeIn, fadeOut, steps, across } = ARM_RIBBON;
+  const perArm = (steps + 1) * across;
+  const out = { positions: new Float32Array(2 * perArm * 3), shade: new Float32Array(2 * perArm), index: [] };
   for (let arm = 0; arm < 2; arm++) {
     const to = ribbonEnd(arm, n);
-    for (let i = 0; i < rows; i++) {
-      const t = from + ((to - from) * i) / steps;
-      const p = armSpine(arm, t);
-      // The tangent of the spiral (as nebula.js armTangent), its normal on the plane.
-      const r = ARM.r0 + ARM.step * t, a = arm * Math.PI + t * ARM.turn;
-      const tx = ARM.step * Math.cos(a) - r * ARM.turn * Math.sin(a);
-      const tz = ARM.step * Math.sin(a) + r * ARM.turn * Math.cos(a);
-      const l = Math.hypot(tx, tz) || 1;
-      const nx = -tz / l, nz = tx / l;
-      const w = half + grow * Math.max(0, t - from);
-      const along = smooth01((t - from) / fadeIn) * smooth01((to - t) / fadeOut);
-      for (let j = 0; j < across; j++) {
-        const u = (2 * j) / (across - 1) - 1;
-        const k = arm * perArm + i * across + j;
-        positions[k * 3] = p.x + nx * w * u;
-        positions[k * 3 + 1] = 0;
-        positions[k * 3 + 2] = p.z + nz * w * u;
-        shade[k] = along * (1 - u * u) ** 2;
-        if (i < steps && j < across - 1) index.push(k, k + across, k + 1, k + 1, k + across, k + across + 1);
-      }
-    }
+    armStrip(out, arm * perArm, arm, from, to, steps, across,
+      (t) => Math.min(maxHalf, half + grow * Math.max(0, t - from)),
+      (t) => smooth01((t - from) / fadeIn) * smooth01((to - t) / fadeOut));
   }
-  return { positions, shade, index };
+  return out;
+}
+
+/**
+ * The near-site bands' mesh for `n` sites, as armRibbon: one short strip per
+ * site on its arm's spine, centred on the site (armPoint), 1 there and 0 at
+ * both ends and both edges.
+ */
+export function armBand(n) {
+  const { reach, half, steps, across } = ARM_BAND;
+  const count = Math.max(0, Math.floor(n) || 0), per = (steps + 1) * across;
+  const out = { positions: new Float32Array(count * per * 3), shade: new Float32Array(count * per), index: [] };
+  for (let i = 0; i < count; i++) {
+    const at = Math.floor(i / 2) + 0.6;
+    armStrip(out, i * per, i % 2, at - reach, at + reach, steps, across, () => half,
+      (t) => smooth01(1 - Math.abs(t - at) / reach));
+  }
+  return out;
 }
 
 /**

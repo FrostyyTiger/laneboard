@@ -6,9 +6,9 @@
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ARM_RIBBON, armPoint, armRibbon, armSpine, ribbonEnd } from '../public/js/wall/galaxy/layout.js';
+import { ARM_BAND, ARM_RIBBON, armBand, armPoint, armRibbon, armSpine, ribbonEnd } from '../public/js/wall/galaxy/layout.js';
 import { paletteFrom } from '../public/js/wall/galaxy/palette.js';
-import { createGalaxyScene, overviewShot, RIBBON, ribbonOpacity } from '../public/js/wall/galaxy/scene.js';
+import { BAND, bandOpacity, createGalaxyScene, overviewShot, RIBBON, ribbonOpacity } from '../public/js/wall/galaxy/scene.js';
 
 const FLEET = JSON.parse(fs.readFileSync(new URL('./fixtures/wall-large-map.json', import.meta.url), 'utf8')).nodes;
 
@@ -111,4 +111,81 @@ test('the ribbon takes its colour from the palette, never above text-3, under th
   galaxy.frame(now.t + 60_000);
   assert.deepEqual(galaxy.ribbon.geometry.attributes.position.array, before);
   assert.equal(galaxy.ribbon.rotation.y, 0);
+});
+
+// T19 (r11-dreamer galaxy 2): the ribbon could not be seen, a haze 340-700
+// wide. Narrower, plus a tighter band at 8-10 % round each site only, and a
+// vignette without the knee that drew rings.
+test('T19: the ribbon is narrow: no point of it is more than 170 from its spine', () => {
+  const { positions } = armRibbon(12);
+  const { steps, across } = ARM_RIBBON;
+  for (let arm = 0; arm < 2; arm++) {
+    for (let i = 0; i <= steps; i++) {
+      const row = (arm * (steps + 1) + i) * across;
+      const mid = row + (across - 1) / 2;
+      for (const k of [row, row + across - 1]) {
+        const d = Math.hypot(positions[k * 3] - positions[mid * 3], positions[k * 3 + 2] - positions[mid * 3 + 2]);
+        assert.ok(d <= 170 + 1e-3, `arm ${arm} row ${i}: half width ${d}`);
+      }
+    }
+  }
+  assert.ok(ARM_RIBBON.half < 170 && ARM_RIBBON.maxHalf <= 170);
+});
+
+test('T19: a band at 8-10 % lies on the spine round each site, and only there', () => {
+  assert.ok(BAND.opacity > 0.08 && BAND.opacity < 0.10);
+  assert.ok(BAND.opacity > RIBBON.opacity, 'brighter than the ribbon');
+  assert.equal(bandOpacity(0), BAND.opacity);
+  assert.equal(bandOpacity(1), 0);
+  const n = 6, { positions, shade } = armBand(n);
+  const per = (ARM_BAND.steps + 1) * ARM_BAND.across;
+  assert.equal(shade.length, n * per);
+  assert.ok(ARM_BAND.half < ARM_RIBBON.half, 'tighter than the ribbon');
+  for (let i = 0; i < n; i++) {
+    const p = armPoint(i, n);
+    let peak = 0, far = 0;
+    for (let k = i * per; k < (i + 1) * per; k++) {
+      const d = Math.hypot(positions[k * 3] - p.x, positions[k * 3 + 2] - p.z);
+      if (d < 40) peak = Math.max(peak, shade[k]);
+      far = Math.max(far, d);
+      assert.equal(positions[k * 3 + 1], 0);
+    }
+    assert.ok(peak > 0.9, `site ${i}: bright at the site (${peak})`);
+    // Only near the site: it stops well short of the next site on its arm.
+    const next = armPoint(i + 2, n + 2);
+    assert.ok(far < 0.6 * Math.hypot(next.x - p.x, next.z - p.z), `site ${i}: reaches ${far}`);
+  }
+  assert.equal(armBand(0).shade.length, 0);
+});
+
+test('T19: the bands are in the scene, fade with the ribbon, in the ribbon\'s grey, under the dust', () => {
+  const { galaxy, now, drawn } = sceneAt();
+  galaxy.frame(now.t);
+  const b = galaxy.band;
+  assert.ok(b.visible);
+  assert.ok(b.material.opacity > 0.08 && b.material.opacity < 0.10, `at the fit ${b.material.opacity}`);
+  assert.ok(galaxy.band.material.color.equals(galaxy.ribbon.material.color), 'text-3 grey, as the ribbon');
+  assert.ok(b.renderOrder < drawn().getObjectByName('dust').renderOrder);
+  assert.equal(b.material.depthWrite, false);
+  const sites = galaxy.world.sites.filter((s) => !s.gone).length;
+  assert.equal(b.geometry.attributes.color.count, sites * (ARM_BAND.steps + 1) * ARM_BAND.across);
+  galaxy.setOpen('hv2', 1);
+  now.t += 5000;
+  galaxy.frame(now.t);
+  assert.equal(galaxy.band.material.opacity, 0, 'gone with a system open');
+  assert.equal(galaxy.band.visible, false);
+});
+
+test('T19: the vignette ramps have no hard knee (smoothstep in short stops)', () => {
+  const css = fs.readFileSync(new URL('../public/css/tokens.css', import.meta.url), 'utf8');
+  const v = /--tex-vignette:([^;]+);/.exec(css)[1];
+  for (const ramp of v.split(/(?=radial-gradient|linear-gradient)/).filter((r) => /gradient/.test(r))) {
+    const alphas = [...ramp.matchAll(/var\(--bg-canvas\) ([\d.]+)%/g)].map((m) => +m[1]);
+    assert.ok(alphas.length >= 8, `${alphas.length} stops`);
+    // No jump between two stops bigger than a fifth of the whole ramp.
+    const span = Math.max(...alphas);
+    for (let i = 1; i < alphas.length; i++) assert.ok(Math.abs(alphas[i] - alphas[i - 1]) <= span / 5, `${alphas}`);
+    // Eased at the soft end: the first step off zero is small.
+    assert.ok(Math.min(...alphas) <= 0.05 * span);
+  }
 });

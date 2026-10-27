@@ -15,7 +15,7 @@
 // `update(model)`, `setOpen(id, k)`, `frame(now)`.
 
 import * as THREE from '../../../vendor/three/three.module.js';
-import { armRibbon, galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, CLOSED } from './layout.js';
+import { armBand, armRibbon, galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, CLOSED } from './layout.js';
 import { tourOrder, tourSites } from '../tour.js';
 import { TONES, nebulaFor, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
@@ -155,6 +155,16 @@ export const RIBBON = Object.freeze({ opacity: 0.05 });
 
 /** The ribbon's opacity with the most open system at `open` (0..1, eased). */
 export const ribbonOpacity = (open) => RIBBON.opacity * (1 - Math.max(0, Math.min(1, Number(open) || 0)));
+
+/**
+ * The near-site bands' strength at the fit (T19, r11-dreamer galaxy 2): the
+ * same text-3 grey, a few per cent brighter than the ribbon, only on the
+ * spine round each site. Fades out with the ribbon as a system opens.
+ */
+export const BAND = Object.freeze({ opacity: 0.09 });
+
+/** The bands' opacity with the most open system at `open` (0..1, eased). */
+export const bandOpacity = (open) => BAND.opacity * (1 - Math.max(0, Math.min(1, Number(open) || 0)));
 
 /** The far stars and dust grains at the best level. */
 const STARS = 2500, DUST = 9000;
@@ -464,34 +474,36 @@ export function createGalaxyScene(canvas, {
     return pts;
   })();
 
-  // The arm ribbon (T3): one still shape along the arms' spines, under the
-  // dust (drawn first, no depth write), rebuilt only when the site count changes.
-  const ribbon = (() => {
-    const g = new THREE.BufferGeometry();
+  // The arm ribbon (T3) and the near-site bands (T19): still shapes along the
+  // arms' spines, under the dust (drawn first, no depth write), rebuilt only
+  // when the site count changes.
+  const armMesh = (name, opacity) => {
     const m = new THREE.MeshBasicMaterial({
-      color: col(palette.arm), vertexColors: true, transparent: true, opacity: RIBBON.opacity,
+      color: col(palette.arm), vertexColors: true, transparent: true, opacity,
       depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, forceSinglePass: true,
     });
-    const mesh = new THREE.Mesh(g, m);
-    mesh.name = 'arm-ribbon';
+    const mesh = new THREE.Mesh(new THREE.BufferGeometry(), m);
+    mesh.name = name;
     mesh.renderOrder = -1;
     mesh.userData.sites = -1;
     scene.add(mesh);
     shared.push(m);
     return mesh;
-  })();
-  const shapeRibbon = (n) => {
-    if (ribbon.userData.sites === n) return;
-    ribbon.userData.sites = n;
-    const { positions, shade, index } = armRibbon(n);
+  };
+  const ribbon = armMesh('arm-ribbon', RIBBON.opacity);
+  const band = armMesh('arm-band', BAND.opacity);
+  const shapeArm = (mesh, n, build) => {
+    if (mesh.userData.sites === n) return;
+    mesh.userData.sites = n;
+    const { positions, shade, index } = build(n);
     const colours = new Float32Array(shade.length * 3);
     for (let i = 0; i < shade.length; i++) colours[i * 3] = colours[i * 3 + 1] = colours[i * 3 + 2] = shade[i];
-    ribbon.geometry.dispose();
+    mesh.geometry.dispose();
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
     g.setIndex(index);
-    ribbon.geometry = g;
+    mesh.geometry = g;
   };
 
   // The sun: the hub, at the origin. Its halo is a soft grey, quieter
@@ -1283,12 +1295,15 @@ export function createGalaxyScene(canvas, {
     const h = heldDust();
     dustHold.value.set(h.x, h.y, h.z, h.r);
     dustOpen.value = h.k;
-    // The ribbon is the overview's: it fades as a system opens.
+    // The ribbon and the bands are the overview's: they fade as a system opens.
     let n = 0;
     for (const s of world?.sites ?? []) if (!s.gone) n++;
-    shapeRibbon(n);
+    shapeArm(ribbon, n, armRibbon);
+    shapeArm(band, n, armBand);
     ribbon.material.opacity = ribbonOpacity(h.k);
     ribbon.visible = ribbon.material.opacity > 0.001;
+    band.material.opacity = bandOpacity(h.k);
+    band.visible = band.material.opacity > 0.001;
   };
 
   /**
@@ -1377,6 +1392,7 @@ export function createGalaxyScene(canvas, {
     tweens.clear();
     world = null;
     ribbon.geometry.dispose();
+    band.geometry.dispose();
     for (const o of [...shared, ...Object.values(geo)]) o.dispose();
     renderer.dispose();
     sized.stop();
@@ -1403,5 +1419,7 @@ export function createGalaxyScene(canvas, {
     get sun() { return { ...sunShown, core: sun, halo: sunHalo }; },
     /** The arm ribbon's mesh (T3): its opacity and colour, for tests. */
     get ribbon() { return ribbon; },
+    /** The near-site bands' mesh (T19), for tests. */
+    get band() { return band; },
   };
 }

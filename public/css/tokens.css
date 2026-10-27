@@ -256,10 +256,32 @@
   /* The Wall's vignette (docs/plans/wall/README.md §2.5: Wall may be bolder),
      the one soft gradient: edges and the bottom band darkened toward the
      canvas so its clock and fleet line sit on quiet ground. Only wall.css uses
-     it; the app keeps hard-stop textures. */
+     it; the app keeps hard-stop textures. Both ramps follow a smoothstep in
+     short stops (Wall T19, r11-dreamer galaxy 2): a straight ramp that starts
+     at a hard knee drew rings at the knee on the dark canvas. */
   --tex-vignette:
-    linear-gradient(to top, color-mix(in oklch, var(--bg-canvas) 88%, transparent) 0, transparent 26vh),
-    radial-gradient(ellipse 75% 70% at 50% 46%, transparent 55%, color-mix(in oklch, var(--bg-canvas) 82%, transparent) 100%);
+    linear-gradient(to top,
+      color-mix(in oklch, var(--bg-canvas) 88%, transparent) 0,
+      color-mix(in oklch, var(--bg-canvas) 84.2%, transparent) 3.3vh,
+      color-mix(in oklch, var(--bg-canvas) 74.3%, transparent) 6.5vh,
+      color-mix(in oklch, var(--bg-canvas) 60.2%, transparent) 9.8vh,
+      color-mix(in oklch, var(--bg-canvas) 44%, transparent) 13vh,
+      color-mix(in oklch, var(--bg-canvas) 27.8%, transparent) 16.3vh,
+      color-mix(in oklch, var(--bg-canvas) 13.8%, transparent) 19.5vh,
+      color-mix(in oklch, var(--bg-canvas) 3.8%, transparent) 22.8vh,
+      transparent 26vh),
+    radial-gradient(ellipse 75% 70% at 50% 46%,
+      transparent 50%,
+      color-mix(in oklch, var(--bg-canvas) 2.3%, transparent) 55%,
+      color-mix(in oklch, var(--bg-canvas) 8.5%, transparent) 60%,
+      color-mix(in oklch, var(--bg-canvas) 17.7%, transparent) 65%,
+      color-mix(in oklch, var(--bg-canvas) 28.9%, transparent) 70%,
+      color-mix(in oklch, var(--bg-canvas) 41%, transparent) 75%,
+      color-mix(in oklch, var(--bg-canvas) 53.1%, transparent) 80%,
+      color-mix(in oklch, var(--bg-canvas) 64.3%, transparent) 85%,
+      color-mix(in oklch, var(--bg-canvas) 73.5%, transparent) 90%,
+      color-mix(in oklch, var(--bg-canvas) 79.7%, transparent) 95%,
+      color-mix(in oklch, var(--bg-canvas) 82%, transparent) 100%);
   /* Four 8x2px L-corners in the accent, for `.sel::after { inset: -3px }`. */
   --bracket-img:
     linear-gradient(var(--accent) 0 0) left top / 8px 2px no-repeat,
