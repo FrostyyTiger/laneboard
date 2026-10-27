@@ -28,7 +28,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `slices.md` | the build nights in order (C1 with the fleet's night, C2, C3, Speak, Canvas, Show, Jobs, then the rest), each with its scenario ids, stand-ins and done-when; the acceptance harness (`e2e/cockpit/`, D88, D113); the board changes the slices make; every id once | none (lists every id once) | T20, T30, T37, T62, T80, T81 | written (T20) |
 | `DECISIONS.md` | small reversible choices made during the night, each with how to overrule | none | all | written (running list) |
 | `QUESTIONS.md` | what only the owner can decide: the eight for the morning first, then the rest, each with options and a recommendation | none | all | written (running list, reordered by T55) |
-| `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2), `c1-pane.html` (T4), `c2-states.html` (T6), `screens-room-down.html` (T3/T22), `c3-ask.html` (T9), `c4-canvas.html` (T11) | none | T2-T4, T6, T9, T11, T14 | in progress |
+| `sketches/` | static HTML sketches at 1368x912, one per `[sketch]` task; written: `screens-split.html` (T2; redrawn to D78/D117 by T25/T47), `c1-pane.html` (T4; redrawn to §1/§8 at 28 px by T47), `c2-states.html` (T6), `screens-room-down.html` (T3/T22), `c3-ask.html` (T9), `c4-canvas.html` (T11) | none | T2-T4, T6, T9, T11, T14 | in progress |
 
 ## The room process
 
