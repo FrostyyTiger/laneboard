@@ -1162,8 +1162,10 @@ Plan §2: "All screens show the same cockpit conversation; speaking at one shows
   `screen:desk`, `screens.md` §6.4); the pane does not. Not shown in C1: a prompt's label is `YOU · 07:02` on every screen (T51,
   `reviews/36-skeptic.md` finding 13; the owner has not said they use two screens, Q-O9). Screen
   names in labels come back with the slice that pairs several screens (Q-O21).
-- **Two prompts at once.** The room takes them in the order they arrive; the second stops the
-  first's turn as §8 says, on every screen alike.
+- **Two prompts at once** (D269). The room takes them in the order they arrive. A prompt that
+  arrives while a turn runs, from any screen, joins that turn as a queued prompt (§8 "`SEND` during
+  a turn"): nothing stops, no `STOPPED AT` line is drawn, and every screen draws the block last
+  with `· QUEUED` until it is taken. Only `STOP` ends a turn, from whichever screen taps it.
 - **The rate is per screen** (§7, D228): two screens have 10 prompts a minute each; two tabs on
   one screen share its 10.
 - A screen that opens or reloads gets the last 50 turns from the room and joins a running turn
@@ -1326,15 +1328,35 @@ Test: Playwright with a fake clock on the Wall page in `wall` at 1368x912; asser
 divider text, the 23 turns above it, the card count, the fake agent's received-turns log and
 session ids.
 
-### S-C1-23 Two pages, one conversation
-Given two pages on one room, both panes open (how each reaches the room: `screens.md` §6, pending
-Q-O21),
+### S-C1-23 Two pages, one conversation: a second prompt queues, it does not stop
+Given two pages on one room, both panes open at the conversation's end (how each reaches the
+room: `screens.md` §6, pending Q-O21), the fake agent on script `c1-session` (`stand-ins.md` §5:
+`how is builder-a` and `and builder-b` each answer over 2.0 s, `queued` the default
+`next-tool-end`, so with no tool running a queued prompt is taken as the next turn),
 When page A sends `how is builder-a` at t = 0,
 Then by t = 0.5 s after the room has it, page B shows `YOU · HH:MM` (no screen name, §12) over
-`how is builder-a`, and the reply streams on both; a draft `stop` typed on B never appears on A;
-`STOP` tapped on B stops the turn on both; `NEW` tapped on A shows the bar on A only.
-Test: two Playwright browser contexts against one room under test; assert labels, drafts and
-`data-turn` on both. A test with two device tokens waits for the pairing slice (Q-O21).
+`how is builder-a`, and the reply streams on both.
+When page B sends `and builder-b` at t = 1.0 s (A's turn still running, D269),
+Then by t = 1.5 s both pages draw it as the last item with the label `YOU · HH:MM · QUEUED` and
+its text in `--text-2`; through t = 2.0 s both headers read `● WORKING` and never `● STOPPING`,
+and neither page has an element with the text `STOPPED AT`; A's reply ends with its own text whole
+(the fake's last step of `how is builder-a`).
+When A's turn ends (t ≈ 2.0 s),
+Then within 0.1 s of `prompt.taken` both pages show the same single block (no second copy) at the
+start of the new turn, `· QUEUED` gone, text in `--text-1`, label time unchanged (§8 "The turn
+ends first"), and `builder-b is idle.` streams below it on both.
+When at t = 2.5 s a draft `stop` is typed on page A, and at t = 3.0 s `STOP` is tapped on page B
+(B's input is empty and its last send was 2.0 s ago, so its slot reads `■ STOP`, D268),
+Then the draft `stop` never appears on B; both pages reach `data-turn="stopping"` within 0.5 s of
+the tap and draw `STOPPED AT HH:MM` under the second turn; A's slot reads `SEND` (it has a draft).
+When `NEW` is tapped on A, the bar shows on A only.
+Test: two Playwright browser contexts against one room under test, `hasTouch: true` on B; assert
+labels, the queued label and the prompt's computed colour on both at 1.5 s, `data-turn` and the
+header on both at 1.5 s and 2.0 s, the count of elements in `[data-cockpit-conversation]`
+whose own text is `and builder-b` (1 on each page) after the take, drafts and `data-turn` on both after the stop; from the fake-agent
+log (`stand-ins.md` §2.6) `order("interrupt")` is `[]` until 3.0 s and has one entry after it, and
+`order("prompt","turn-end")` starts `["prompt","prompt","turn-end"]`. A test with two device
+tokens waits for the pairing slice (Q-O21).
 
 ### S-C1-24 (retired, T50)
 The raw view is not in C1 (§13, pending Q-O17). The id is not reused.

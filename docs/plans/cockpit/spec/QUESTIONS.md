@@ -37,7 +37,7 @@ Answer: (open)
 ## Q-O1 Talk pressed while the agent is still answering
 
 Blocks C1/C2. `spec-input.md` §7.1 ("Interrupt, queue, or ignore?"). Spec: `c1-talk.md` §8,
-S-C1-16, S-C1-27, S-C1-28, S-C1-29, S-C2-09, D32/D33, D121-D124 (written for d since T85).
+S-C1-16, S-C1-23, S-C1-27, S-C1-28, S-C1-29, S-C2-09, D32/D33, D121-D124 (written for d since T85).
 
 - a) Interrupt on send: the running turn stops, its text stays marked "stopped".
 - b) Queue the new prompt until the turn ends (or "ignore": talk off until then).

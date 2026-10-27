@@ -464,7 +464,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `one-bridge` | agent (`--dialect bridge`) | S-ONE-08..10 | match `wiki`: `search_wiki` call 100-400 ms, text, `done`; match `files`: `shell` call 100-400 ms (S-ONE-10's second case swaps it for a `denied` step), text `Three files.`, `done`; S-ONE-09 sets `start.allowlist` (`null`, then `["mcp__laneboard__*","shell"]`) by rewriting `script.json` |
 | `c1-login` | agent | S-C1-37, S-C1-38 | `start.login` `ok` (tests rewrite it to `failed`, `hang`), one `done` turn for any prompt in 0.5 s; S-C1-38's second case adds `startFailures` 3 and `startStderr` `claude: command not found` |
 | `c1-long` | agent | S-C1-21 | 15 s without steps, then 120 lines, 26 000 characters and a 30-row table over 20 s (real time: 35 s); its first line is the sentence `Three runs ran last night.` (the B9 end mark, D235) |
-| `c1-session` | agent | S-C1-22, S-C1-23, S-C1-39 | `repeat` turns that answer `how is builder-a` in 2 s |
+| `c1-session` | agent | S-C1-22, S-C1-23, S-C1-39 | `repeat` turns that answer `how is builder-a` in 2 s; a `repeat` turn for `and builder-b` that writes `builder-b is idle.` from 0.3 s and ends at 2.0 s (S-C1-23) |
 | `c1-voice` | agent | S-C1-13, S-C3-18, §10 of `protocols.md` | the `morning` call and `■ One run is stuck…` turn of `protocols.md` §13.1, first delta 0.3 s after the prompt |
 | `c2-tap` | speech | S-C2-01..04, S-C2-07, S-C2-10..13, S-C2-20, S-C2-22 | §3.2's example, plus `how did` / `how did the` / `how did the night go` (S-C2-03) and `restart the runner on builder-b` (S-C2-11) |
 | `c2-limits` | speech | S-C2-05, S-C2-06 | `noAudio`; a growing partial every 1 s from 0.6 s for 130 s |
