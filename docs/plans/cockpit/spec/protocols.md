@@ -147,9 +147,9 @@ frame with `part` equal to `parts` has arrived.
   no `end`; later events continue it (`c1-talk.md` §12: a screen "joins a running turn where it is").
 - **Prompts sent during a turn** (pending Q-O1, D124) are `prompt` items of the turn they were
   queued in, so a reloaded or newly joined screen draws them as the screens that saw them sent
-  (an item, not a message: the fence carries no `json`, so §9's fixture test skips it):
+  (an item, not a message: its fence is `json item`, checked by the item rules of §2.4):
 
-  ```
+  ```json item
   {"kind":"prompt","clientId":"p-77aa01c3","text":"only the failed one","source":"typed","lang":null,
    "about":null,"at":"2026-10-27T07:00:06+01:00","state":"queued"}
   ```
@@ -247,6 +247,85 @@ the 33rd link closes 4503 `too-many-links` and the room still counts 32; no cook
 `unpaired`; after `revoke({name:'desk'})` the old token's open link receives exactly
 `{"type":"revoked",…}` then closes 4402 `revoked`, and a new link with that token gets the same
 pair. Playwright: S-SCR-24 (`screens.md`).
+
+### 2.4 Every message (D136)
+
+The room's message checks (`server/cockpit/protocol.mjs`) know exactly the types below; the
+fixture test (§9) reads this table's first column as that list. **`seq`**: `room` = the room's
+shared counter, replayed (§2.1); `link` = the screen's link counter; `no` = none. **Required**
+fields must be present (`|null`: present, may be `null`); a field "with X" is required only in
+that case and absent otherwise. **Optional** fields may be missing. `type` is required everywhere
+and not listed. Field values and ranges are in the section named.
+
+**Screen → room** (every one carries `seq` `link`):
+
+| `type` | Required | Optional | § |
+| --- | --- | --- | --- |
+| `hello` | `seq`, `page` (`app`, `wall`), `protocol` | `epoch` and `lastSeq`, both or neither | 2.2 |
+| `prompt` | `seq`, `clientId`, `text`, `source`, `lang\|null`, `about\|null`, `sentAt`, `focus` | — | 3.1 |
+| `stop` | `seq`, `turnId` | — | 3.3 |
+| `new` | `seq` | — | 3.6 |
+| `history` | `seq`, `before`, `count` | — | 3.7 |
+| `focus` | `seq`, `at`, `page`, `route`, `wallState\|null`, `layout\|null`, `pane`, `inSight` | — | 3.8 |
+| `touched` | `seq`, `at` | — | 3.8 |
+| `show.result` | `seq`, `showId`, `state`; `why` with `state` `skipped` | — | 4 |
+| `undo` | `seq`, `showId` | — | 4 |
+| `pin.close`, `pin.restore` | `seq`, `pin` | — | 4 |
+| `card.close`, `card.restore`, `card.front` | `seq`, `card` | — | 5 |
+| `card.tick` | `seq`, `card`, `row`, `ticked` | — | 5 |
+| `audio.start` | `seq`, `utterance`, `lang`, `format` | — | 6.1 |
+| `audio.stop` | `seq`, `utterance`, `reason` | — | 6.1 |
+| `audio.cancel` | `seq`, `utterance` | — | 6.1 |
+| `talk.state` | `seq`, `request`, `talk` | — | 7 |
+
+**Room → screen:**
+
+| `type` | `seq` | Required | Optional | § |
+| --- | --- | --- | --- | --- |
+| `welcome` | no (its `seq` field is the room's current count) | `re`, `protocol`, `screen`, `epoch`, `seq`, `conversation`, `resume`, `config` (`stt`, `languages`, `maxPromptChars`), `status\|null`, `now` | — | 2.2 |
+| `snapshot` | the `seq` it reflects, not counted | `seq`, `part`, `parts`, `conversation`, `startedAt`, `olderTurns`, `turns`, `pins`, `cards` | — | 2.2 |
+| `heartbeat` | no | `at` | — | 2.2 |
+| `error` | no | `re`, `code`, `message` | — | 2.3 |
+| `revoked` | no | `at` | — | 2.3 |
+| `turn.prompt` | `room`; no on the once-only repeat (D95) | `turnId`, `clientId`, `screen`, `text`, `source`, `lang\|null`, `about\|null`, `at`, `receivedAt`, `delivery` | `seq` (absent only on the repeat) | 3.1 |
+| `prompt.refused` | no | `re`, `clientId`, `code` | — | 3.1 |
+| `turn.state` | `room` | `turnId`, `state` | — | 3.2 |
+| `text.delta` | `room` | `turnId`, `blockIndex`, `text`, `sentAt` | — | 3.2 |
+| `text.block` | `room` | `turnId`, `blockIndex`, `text` | — | 3.2 |
+| `tool.start` | `room` | `turnId`, `blockIndex`, `toolUseId`, `tool`, `input`, `startedAt` | — | 3.2 |
+| `tool.end` | `room` | `turnId`, `toolUseId`, `endedAt`, `isError`, `denied` | — | 3.2 |
+| `turn.retrying` | `room` | `turnId`, `attempt`, `of` | — | 3.2 |
+| `turn.end` | `room` | `turnId`, `state`, `at`; `forced` with `stopped`; `code` with `error`; `steps` with `step-limit`; `detail` with `agent-down` and `failed` | — | 3.2 |
+| `prompt.taken` | `room` | `turnId`, `clientId`, `state`; `atBlock` with `taken`; `why` with `cancelled` | — | 3.4 |
+| `status` | `room` | `status\|null`; in the object `code`, `since` | `status.detail` | 3.5 |
+| `conversation.new` | `room` | `conversation`, `reason`, `at` | — | 3.6 |
+| `history.turns` | no | `re`, `turns`, `olderTurns` | — | 3.7 |
+| `show` | no | `showId`, `turnId`, `cmd`, `args`, `receivedAt` | — | 4 |
+| `show.line` | `room` | `turnId`, `blockIndex`, `showId`, `text`, `state`, `skippedOn`, `undoable` | — | 4 |
+| `show.undo` | no | `showId` | — | 4 |
+| `pin.put` | `room` | `pin` (`id`, `node`, `block`, `title`, `by`, `at`, `fields`) | `replaced` | 4 |
+| `pin.remove` | `room` | `pin`, `by` | — | 4 |
+| `card.put` | `room` | `card` (`id`, `block`, `title`, `size`, `by`, `at`, `fields`), `receivedAt` | — | 5 |
+| `card.remove` | `room` | `card`, `by` | — | 5 |
+| `card.order` | `room` | `ids` | — | 5 |
+| `card.data` | no | `card`, `asOf`, `data` | — | 5 |
+| `stt.update` | no | `utterance`, `firm`, `tail`, `sentAt` | — | 6.1 |
+| `stt.final` | no | `utterance`, `text` | — | 6.1 |
+| `stt.error` | no | `utterance`, `error`, `detail` | — | 6.1 |
+| `talk` | no | `request`, `action` | — | 7 |
+
+**Turns and items** (in `snapshot.turns`, `history.turns`; fence `json item` for a lone item):
+
+| Shape | Required | Optional |
+| --- | --- | --- |
+| turn | `turnId`, `clientId\|null`, `source`, `lang\|null`, `about\|null`, `prompt`, `at`, `state`, `items`; `end` with `state` `done`, `stopped` or `error` | — |
+| `end` | `state`, `at`, and `turn.end`'s fields "with X" for its state | — |
+| item `text` | `kind`, `blockIndex`, `text` | — |
+| item `tool` | `kind`, `blockIndex`, `toolUseId`, `tool`, `input`, `startedAt`; `endedAt`, `isError` once the call ended | `denied` (absent means `false`) |
+| item `show` | `kind`, `blockIndex`, and `show.line`'s required fields but `turnId` | — |
+| item `prompt` | `kind`, `clientId`, `text`, `source`, `lang\|null`, `about\|null`, `at`, `state`; `atBlock` with `taken`; `why` with `cancelled` | — |
+
+How a snapshot over 512 KB divides its lists between parts is T92's.
 
 ## 3. The conversation (C1)
 
@@ -430,6 +509,13 @@ current conversation only (`c1-talk.md` §11: a reload shows only the current on
 
 - **`focus`** (screen → room): `c3-see.md` §8.1 has the message, its checks and D61's timing. A
   failing one gets `error` `bad-message` and changes nothing (S-C3-16). No answer when it is good.
+  Its fixture here (§9 reads only this file), the same as §8.1's:
+
+  ```json
+  {"type":"focus","seq":41,"at":"2026-10-27T07:12:28.120+01:00","page":"app",
+   "route":{"view":"map","sel":"node:room-b"},"wallState":null,"layout":null,"pane":"open",
+   "inSight":["room-b","backup","room-c","lab","room-a","ci","feed:hv1/scratch"]}
+  ```
 - **`touched`** (screen → room), at most once per 10 s while the screen is touched, clicked or
   keyed: `{"type":"touched","seq":40,"at":"2026-10-27T07:12:30.002+01:00"}`. The room keeps the
   latest per screen for the C2b "screen touched last" target (`c2-voice.md` §14). No answer.
@@ -471,7 +557,18 @@ saved state (`c4-show-canvas.md` §5), then a `show.line` with `"state":"undone"
 state, which the next `show.line` brings).
 
 **Pins** are shared state: `pin.put` and `pin.remove` (`seq`, every link) carry
-`c4-show-canvas.md` §3.4's pin, and a `snapshot` lists them in `pins`.
+`c4-show-canvas.md` §3.4's pin, and a `snapshot` lists them in `pins`. A pin has a card's shape
+(§5) with `node` in place of `size`; `fields` holds the block's fields (`body` for `text`).
+`replaced` names the pin a 4th one pushed out (D73). The pin's `✕` and its `UNDO` within 10 s
+send `pin.close` and `pin.restore`, as a card's (D137); the room answers with `pin.remove` or
+`pin.put`, errors as §5's.
+
+| `type` | Direction, `seq` | Example |
+| --- | --- | --- |
+| `pin.put` | room → all, `seq` | `{"type":"pin.put","seq":1303,"pin":{"id":"pin-0008","node":"builder-a","block":"text","title":"stuck since 03:12","by":"agent","at":"2026-10-27T07:02:09+01:00","fields":{"body":"No log line for 3 h 50."}},"replaced":"pin-0005"}` |
+| `pin.remove` | room → all, `seq` | `{"type":"pin.remove","seq":1304,"pin":"pin-0008","by":"desk"}` (`by`: the screen whose `✕` or `UNDO` it was; a 4th pin is not a `pin.remove`, its `pin.put` names the pushed-out one in `replaced`; `conversation.new` drops every pin with no `pin.remove`) |
+| `pin.close` | screen → room | `{"type":"pin.close","seq":64,"pin":"pin-0008"}` |
+| `pin.restore` | screen → room | `{"type":"pin.restore","seq":65,"pin":"pin-0008"}` (after 10 s: `not-now`) |
 
 ## 5. Cards (C4)
 
@@ -571,12 +668,30 @@ the link that sent `touched` last gets it.
 
 ## 9. How tests check this
 
-- **Every JSON example here is a fixture** (D98). One module of message checks in the room
-  (`server/cockpit/protocol.mjs`, D89's folder) validates each message both ways; a unit test in
-  `npm test` pulls every fenced `json` block and every example cell from this file and asserts it
-  validates, and that a copy with one required field removed fails with `bad-message` naming that
-  field. A message added to the code but not here fails the reverse check (every `type` the module
-  knows has an example here).
+- **Every JSON example here is a fixture** (D98, D136). One module of message checks in the room
+  (`server/cockpit/protocol.mjs`, D89's folder) validates each message both ways. The unit test
+  `test/cockpit-protocol.test.mjs` (`npm test`) takes its fixtures from this file by these rules:
+  1. **Fenced blocks** with the info string `json` (the room link), `json item` (one turn item,
+     §2.4), `json bridge`, `json claude` or `json stt` (part 2, §13) are one JSON object each,
+     and must parse. A block with any other info string (`text`, `json file` for a file the room writes, none) is never
+     a fixture.
+  2. **Code spans**, in prose, lists and table cells: a span whose whole content parses as a JSON
+     object is a fixture when it has a string `type`, or, inside §12, a string `status`. Its class
+     is its section's: §1-§10 `json`, §11 `json bridge` except the first column of §11.4's table
+     (`json claude`), §12 `json stt`.
+  3. A span that opens with a brace and the key `"type"` but does not parse fails the test, unless it holds `…`
+     (an abridged example, as in §13.1). Every other span (`{target}`, `{"…":"cut"}`) is prose.
+- **What the test asserts.** Each fixture validates against its class's checks. For each field
+  §2.4 (or §11.3 for the bridge) lists as required in that fixture's case, a copy without it fails
+  with `bad-message` naming the field; a copy with one unknown field added still validates (§2.1).
+  Reverse checks: the set of first-column types in §2.4's two tables equals the set the module
+  knows for the room link, and every one of them, every item `kind` and every bridge type of
+  §11.3 has at least one fixture. So a message added to the code but not here fails, and so does
+  one added here but not to the code.
+- **Where the test reads it** (D136). The C1 build night copies this file whole, `(pending Q-O…)`
+  marks included, to `docs/cockpit/protocol.md` in its first commit, and the test reads only that
+  copy, so archiving `docs/plans/` breaks nothing. From that commit the copy is the protocol:
+  changes go there, and this file's first line points to it.
 - **The stand-in room** (`stand-ins.md`, T18) speaks this protocol; the acceptance tests (D88) read
   the link from the page side with Playwright's `page.on('websocket')` and its `framesent` and
   `framereceived` events, so a scenario can assert "the screen sent `stop` with this `turnId`" or
@@ -707,6 +822,15 @@ Agent → room:
 | `turn.end` | `{"type":"turn.end","state":"done","steps":3,"costUsd":0.0412,"durationMs":7900}` | the turn is over; `state` and `code` as §3.2's table, plus `steps`, `costUsd`, `durationMs` for the room's log |
 | `interrupted` | `{"type":"interrupted","id":"i-0003","stillQueued":[],"cancelled":["9d2f4c1e-7a3b-4e8d-b1c6-52a0e9f3d714"]}` | the receipt of an `interrupt`; prompt ids still waiting, and those dropped |
 
+- **Required and optional fields** (D136, as §2.4 for the room link). Required: `prompt` `id`,
+  `text`, `priority`; `interrupt` `id`, `cancelQueued`; `ready` `session`, `tools`, `mcp`,
+  `canSteer`, `canCancelQueued`; `taken` `id`; `text.delta` and `text.block` `block`, `text`;
+  `tool.start` `block`, `toolUseId`, `tool`, `input`; `tool.end` `toolUseId`, `isError`;
+  `retrying` `attempt`, `of`; `turn.end` `state`, with `error` also `code`, with `step-limit`
+  `steps`, with `agent-down` and `failed` `detail`; `interrupted` `id`, `stillQueued`,
+  `cancelled`. Optional: `ready.agent`, `tool.end.denied` (absent means `false`), and
+  `turn.end`'s `steps` in other cases, `costUsd`, `durationMs` (an agent that does not report
+  cost leaves it out; the room logs `null`). The room adds `forced` itself (§11.6).
 - **Blocks.** `block` numbers the turn's text blocks and tool calls from 0 in the order they
   started, across all of the agent's messages in that turn (Claude Code numbers per message and
   starts again at 0; the adapter keeps the turn's counter). The room passes it on as `blockIndex`
@@ -800,9 +924,9 @@ A `SEND` during a turn is never a stop: its `prompt` goes straight in with `prio
 
 ### 11.7 Sessions: start, restart, new (D104)
 
-The room keeps `{stateDir}/cockpit/session.json` (mode 0600; how long is Q-O24's, T91):
+The room keeps `{stateDir}/cockpit/session.json` (mode 0600; how long is Q-O24's, T91; a file, not a message, so its fence is `json file`):
 
-```json bridge
+```json file
 {"conversation":"c-0007","session":"0b7e5c2a-4d1f-4c3e-9a8b-2f6d1e0c7a91","startedAt":"2026-10-27T06:12:00+01:00"}
 ```
 
@@ -939,12 +1063,13 @@ Q-O24 for transcripts).
 
 ## 13. How tests check part 2
 
-- **Fixture classes** (extends D98; T90 writes the extraction rule). The fence's info string says
-  which checker a block belongs to: `json` the room link (part 1), `json bridge` the bridge events
-  (`server/cockpit/bridge-events.mjs`), `json claude` Claude Code's stdin lines, `json stt` the
-  speech service's messages; `text` is never a fixture. In §11.3 the example cells are bridge
-  events; in §11.4 the left column is a Claude Code stdout line and the middle names the bridge
-  event; in §12.2 the left column is a speech service message.
+- **Fixture classes** (extends D98; the extraction rule is §9's). The fence's info string says
+  which checker a block belongs to: `json` the room link (part 1), `json item` one turn item
+  (§2.4), `json bridge` the bridge events (`server/cockpit/bridge-events.mjs`), `json claude`
+  Claude Code's stream-json lines both ways (stdin in §11.5, stdout in §11.4's first column),
+  `json stt` the speech service's messages; `text` is never a fixture. In §11.3 the example cells
+  are bridge events; in §11.4 the middle column names the bridge event; in §12.2 the left column
+  is a speech service message.
 - **The mapping test** (`npm test`, no process): each left-column line of §11.4 is fed to the
   adapter in the table's order inside one scripted turn, and the test asserts the bridge event of
   the middle column (type and the fields the cell names). A native line not in the table yields
