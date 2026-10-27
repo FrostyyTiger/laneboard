@@ -800,6 +800,120 @@ html.wall body {
 .galaxy-fan-leader[data-tone="warn"] { background: var(--warn); }
 .galaxy-fan-leader[data-tone="low"] { background: var(--p3); }
 
+/* Show commands (night 4 T37, js/wall/galaxy/show.js): who shows what, top
+   right where the manual line stands (a show never runs under a finger, so
+   the two never meet): the head `SHOWN BY BUILDER-A` in the tag's face and
+   tracking, one row per command under it at the back control's step, each
+   with its `✕` of SHOW.xPx (48 css px, night 2's floor). Grey: an agent
+   pointing at something is not trouble; the trouble it points at keeps its hue. */
+.galaxy-show {
+  position: absolute;
+  top: calc(8vh + 5.1vmin);
+  right: 6vw;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.8vmin;
+  pointer-events: none;
+}
+.galaxy-show[hidden] { display: none; }
+.galaxy-show-head {
+  font-family: var(--font-mono);
+  font-size: 1.7vmin;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.galaxy-show-row {
+  display: flex;
+  align-items: center;
+  gap: 1.6vmin;
+  height: 48px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: max(2.7vmin, 20px);
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.galaxy-show-x {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 20px;
+  line-height: 1;
+  color: var(--text-2);
+  background: color-mix(in oklch, var(--bg-canvas) 96%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  touch-action: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.galaxy-show-x:active { color: var(--text-1); }
+.galaxy-show-x:focus-visible { outline: 2px solid var(--text-2); outline-offset: 4px; }
+
+/* What a show marks on the galaxy: a ring round each highlighted node and a
+   card (a pin's, or a highlight's note) beside its node, both following the
+   node every frame by transform. The brightest grey, steady (nothing pulses:
+   a pulse is trouble's); the card is plain text on the plate's ground. */
+.galaxy-show-marks {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.galaxy-show-marks[hidden] { display: none; }
+.galaxy-show-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border: 2px solid var(--text-1);
+  border-radius: 50%;
+  will-change: transform;
+}
+.galaxy-show-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  max-width: min(30vw, 22em);
+  padding: 1.2vmin 1.6vmin;
+  background: color-mix(in oklch, var(--bg-canvas) 92%, transparent);
+  border-left: 2px solid var(--text-1);
+  will-change: transform;
+}
+.galaxy-show-card[data-side="left"] { border-left: 0; border-right: 2px solid var(--text-1); }
+.galaxy-show-card[hidden],
+.galaxy-show-ring[hidden] { display: none; }
+.galaxy-show-card-title {
+  margin-bottom: 0.8vmin;
+  font-family: var(--font-mono);
+  font-size: 1.7vmin;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+.galaxy-show-card-text {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: max(2.4vmin, 18px);
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: var(--text-1);
+}
+
 /* The galaxy's speed overlay (`galaxy.html?perf=1`, js/wall/galaxy/budget.js):
    a few mono lines in the top margin, above the tag, grey. For whoever tunes
    the page, never on by default. */

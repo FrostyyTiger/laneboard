@@ -72,6 +72,9 @@
 // Effects (§7.C, fx.js): `?fx=beacon,warp,afterglow,activity,sweep` (comma-separated, all off by default);
 // `<html data-fx>` lists those on. `sweep` (night 4 T18) turns once per tour cycle while the camera
 // rests at the overview in the tour's hands; a finger, a show or a flight stops it.
+// Show commands (night 4 T37, show.js createShow): `flyTo`, `highlight`, `pin`, `clear` in Q16's
+// envelope (`__galaxyShow.send(msg)` until T38 brings a sender); `SHOWN BY <src>` top right with a
+// row and a `✕` per command, rings and cards on the galaxy; a first touch ends them all.
 
 import { createPerf } from '../perf.js';
 import { TIMING, createTour, timingFor, tourOrder } from '../tour.js';
@@ -90,6 +93,7 @@ import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from '
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
 import { createDirector } from './director.js';
+import { createShow } from './show.js';
 import { createSweep, critAges, flowJobs, parseFx, planeAngle, siteNews, sweepStep, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
@@ -280,11 +284,13 @@ export function boot() {
     screenOf: cam.screenOf, size: galaxy.size, fontPx: () => Math.max(FAN_MIN_PX, steps.room), still: reduced,
     avoid: () => [...hud.covers(), ...touchCovers()], // the rows keep off the words
   });
+  // The show's cards (T37): the names keep off them too; set once the show exists.
+  let showCovers = () => [];
   const labels = createLabels(document.getElementById('galaxy-labels'), galaxy, {
     steps,
     // The lock's leader too (T16): the names keep off the line, as off the words.
     covers: () => {
-      return [...hud.covers(), ...lock.covers(), ...(fan?.covers() ?? []), ...touchCovers()];
+      return [...hud.covers(), ...lock.covers(), ...(fan?.covers() ?? []), ...touchCovers(), ...showCovers()];
     },
     held: lock.held,
     flight: cam.flight,
@@ -293,6 +299,36 @@ export function boot() {
   cam.onDraw(labels.draw);
   if (fan) cam.onDraw(fan.draw);
   shownNames = labels.shown;
+
+  // The show commands (night 4 T37, show.js): a flyTo through the director's `show`, the rest drawn
+  // here. A node is known when the galaxy draws it: a site (fly there), a member (fly to its site)
+  // or the sun (the overview).
+  const nodeAt = (id) => {
+    const w = galaxy.world;
+    if (!w || id == null) return null;
+    if (w.core?.id === id) return { node: w.core, site: null };
+    const s = w.byId.get(id);
+    if (s) return { node: s.node, site: s.id };
+    for (const site of w.sites) {
+      const m = site.members.find((x) => x.id === id);
+      if (m) return { node: m.node, site: site.id };
+    }
+    return null;
+  };
+  const shows = park ? null : createShow({
+    block: document.getElementById('galaxy-show'),
+    marks: document.getElementById('galaxy-show-marks'),
+    director: { show: (cmd) => show(cmd), clear: (id) => director.clear(id) },
+    busy: () => director.driver() === 'touch',
+    labelOf: (id) => { const at = nodeAt(id); return at ? String(at.node?.label ?? id) : null; },
+    siteOf: (id) => nodeAt(id)?.site ?? null,
+    screenOf: cam.screenOf,
+    size: galaxy.size,
+  });
+  if (shows) {
+    cam.onDraw(shows.draw);
+    showCovers = shows.covers;
+  }
 
   // Where a finger has taken the page (T13): the overview, a system, a planet in it.
   let place = AT_OVERVIEW;
@@ -316,6 +352,7 @@ export function boot() {
   // The first touch (T7): the tour stops where it is, the camera eases out to the overview.
   touch = park ? null : createTouch(document.getElementById('galaxy-stage'), {
     wake: () => {
+      shows?.drop(); // the finger has the page: everything shown goes with the director's show
       tour.stop();
       left.clear();
       toOverview();
@@ -470,6 +507,7 @@ export function boot() {
       aim(siteShot(at, 0, view()));
     } else if (!park) {
       director.tick(); // a show's hold runs out here
+      shows?.tick();
       gestures?.frame(now);
       cam.frame(now);
       if (fx.has('warp')) galaxy.setWarp(cam.flight());
@@ -565,6 +603,7 @@ export function boot() {
   globalThis.__galaxyFan = fan;
   globalThis.__galaxyCam = cam;
   globalThis.__galaxyDirector = { ...director, show };
+  globalThis.__galaxyShow = shows;
 }
 
 boot();
