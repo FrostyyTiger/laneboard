@@ -396,7 +396,22 @@ Notes for every builder round (planner, round 1):
   10.3). Honest: a highlight of a folded cluster's members stacks the rings on the cluster (seen only up close in the
   film); the agent's rows are the brightest grey at the back control's size, quieter than the red banner but louder
   than the tag. The `?show=demo` script and the transport are T38/T39.
-- [ ] T38 (§7 Night 4 B2; promoted from Later by the watcher on 2026-10-27, before the merge) The show commands, the transport: one small documented message shape through `BroadcastChannel` and `postMessage` (origin-checked) into `show.js`; the relay room → hub → screens is cockpit work (fenced hub files): not this night. — done when: a test posts each message shape through BroadcastChannel and postMessage and a wrong origin is ignored
+- [x] T38 (§7 Night 4 B2; promoted from Later by the watcher on 2026-10-27, before the merge) The show commands, the transport: one small documented message shape through `BroadcastChannel` and `postMessage` (origin-checked) into `show.js`; the relay room → hub → screens is cockpit work (fenced hub files): not this night. — done when: a test posts each message shape through BroadcastChannel and postMessage and a wrong origin is ignored (commit SHA)
+  Builder r39: `galaxy/transport.js`: `createTransport({ send, win, Channel, origins })` listens on
+  `BroadcastChannel('laneboard.show')` (same origin; the answer goes to the channel, match it by `re`) and on
+  `window` `message` (only from an origin in the list, exact string compare; the answer goes to `event.source` with
+  the sender's origin as target, never `*`); both hand the envelope unchanged to `createShow`'s `send`. `showOrigins(
+  ?showOrigins=, location.origin)`: the own origin plus exact `http(s)://host[:port]` strings (`*`, `null`, a path, a
+  user, a query, another scheme or a host not in lower case are left out); a `file:` page (opaque origin) gets no
+  postMessage listener at all. `readWire`: another channel or version and any answer (has `re`) are ignored without a
+  reply (no loop between screens); over 4096 bytes as JSON (or a cycle) answers `bad-shape` when it has an id. Q16's
+  `dst` is not read (screens have no name until the cockpit's relay): every screen that hears a command shows it.
+  `__galaxyWire` for the console. Tests: `test/wall-galaxy-transport.test.mjs` (8: each shape through a real Node
+  `BroadcastChannel` and through postMessage from the own and an allowed origin, a wrong origin (other host, scheme,
+  port, subdomain, `null`, none) shows nothing and gets no answer, no listener without an origin, the parsers, the
+  page's wiring). Seen: `shots/r39-wire` (CDP, large demo: a flyTo and a highlight by a channel, a pin by
+  `postMessage`; three `ok` answers on their roads, `SHOWN BY COCKPIT` with three rows, 0 console errors). Honest:
+  in that still the held system sits at the frame's right edge under the rows (T25's matter, not the wire's).
 - [ ] T39 (§7 Night 4 B3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] The show demo: `?demo=1&show=demo` plays a recorded conversation's show commands over the large demo fleet (fly to the crit, highlight what it breaks, pin a note); the video's second half (cockpit §5). A filmstrip. — done when: a filmstrip of `?demo=1&show=demo` shows the fly-to, the highlight and the pinned note
 - [ ] T40 (§7 Night 4 C; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `countdown: { at, label }` as a feed field (D3, like `glow` and `ring`): the galaxy draws a small countdown at that node, readable at the site step and quiet at the overview; the caption names it when the camera holds there; display only; the large demo carries one (`test/helpers/demo-hub.mjs`). Format from Q17. Maybe two tasks: the field and the drawing, then the caption line and demo data. — done when: tests for the field and the caption line, and a still at the site step shows the countdown readable at 3 m
 - [ ] T41 (§7 Night 4 D1; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] Half a screen: `galaxy.html` at 50 % width keeps the 3 m check (names, trouble, caption) and its touch targets (the 48 px floor); a still at 684 px wide shrunk to 3 m. — done when: a still at 684 px wide shrunk to 3 m passes the 3 m check and the touch targets keep 48 px

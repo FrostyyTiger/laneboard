@@ -73,8 +73,10 @@
 // `<html data-fx>` lists those on. `sweep` (night 4 T18) turns once per tour cycle while the camera
 // rests at the overview in the tour's hands; a finger, a show or a flight stops it.
 // Show commands (night 4 T37, show.js createShow): `flyTo`, `highlight`, `pin`, `clear` in Q16's
-// envelope (`__galaxyShow.send(msg)` until T38 brings a sender); `SHOWN BY <src>` top right with a
-// row and a `✕` per command, rings and cards on the galaxy; a first touch ends them all.
+// envelope; `SHOWN BY <src>` top right with a row and a `✕` per command, rings and cards on the
+// galaxy; a first touch ends them all. They arrive (night 4 T38, transport.js) by
+// `BroadcastChannel('laneboard.show')` from the same origin, or by `postMessage` from this origin
+// and those in `?showOrigins=https://hub.example.invalid,…` (exact origins); each answered on its road.
 
 import { createPerf } from '../perf.js';
 import { TIMING, createTour, timingFor, tourOrder } from '../tour.js';
@@ -94,6 +96,7 @@ import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
 import { createDirector } from './director.js';
 import { createShow } from './show.js';
+import { createTransport, showOrigins } from './transport.js';
 import { createSweep, critAges, flowJobs, parseFx, planeAngle, siteNews, sweepStep, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
@@ -329,6 +332,11 @@ export function boot() {
     cam.onDraw(shows.draw);
     showCovers = shows.covers;
   }
+  // The senders' roads (T38): a same-origin channel and origin-checked postMessage, both into `send`.
+  const wire = shows ? createTransport({
+    send: shows.send, win: window, Channel: globalThis.BroadcastChannel ?? null,
+    origins: showOrigins(q.get('showOrigins'), location.origin),
+  }) : null;
 
   // Where a finger has taken the page (T13): the overview, a system, a planet in it.
   let place = AT_OVERVIEW;
@@ -604,6 +612,7 @@ export function boot() {
   globalThis.__galaxyCam = cam;
   globalThis.__galaxyDirector = { ...director, show };
   globalThis.__galaxyShow = shows;
+  globalThis.__galaxyWire = wire;
 }
 
 boot();
