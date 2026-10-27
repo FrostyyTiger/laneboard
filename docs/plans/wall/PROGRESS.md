@@ -320,10 +320,24 @@ Notes for every builder round (planner, round 1):
   into the corner) and r40-overview (no line from the banner); film r40-galaxy: elbows only, no tether, 0 errors,
   11.4 fps (SwiftShader). Seen, not this task: at the overview a dark box sits behind the fleet banner (the far
   cover's ground?), likely the dark square r39 saw.
-- [ ] T17 (r4-film-ui galaxy 7) [ui] [variant:galaxy] A site label stays on its star: `labels.js` anchors each
+- [x] T17 (r4-film-ui galaxy 7) [ui] [variant:galaxy] A site label stays on its star: `labels.js` anchors each
   site label to the star's projected point of the same frame, never a stale one — done when: a test moves the
   camera between two draws and finds the label's anchor equal to `screenOf(star)` plus the fixed offset each
-  time, and a still at the overview shows `HV2`'s glyph beside its nebula.
+  time, and a still at the overview shows `HV2`'s glyph beside its nebula. (commit df7d970)
+  Builder r43: the anchor was never stale: a probe (`$RUN_DIR/tools/r43-anchor.mjs`, 2528 frames of `fx=beacon`,
+  large demo) found every label's DOM box equal to its computed box, and the star mesh equal to `screenOf`, every
+  frame. The detached `■ HV2` was the trouble stack: a crit site whose four sides were blocked (by the plate, or
+  the frame edge) took `candidates`' stack slots 63-113 px under its star, and a star just off the frame named
+  itself inside it (121 of 4529 shown names). Now `labels.js stacks(kind, rank)`: only a trouble planet or dot
+  stacks (a crowd in an open system); a site or the sun keeps to its four sides or hides (the banner and plate
+  still name it); a thing whose projected point is out of the frame is not named. `overview.js siteClear` uses
+  the same four sides (siteMarks lost `trouble`). Tests in `test/wall-galaxy-labels.test.mjs`: four camera moves,
+  each site name equal to one of `candidates(star now)`; a crit walled on four sides is hidden, not stacked; a star
+  10 px over the top edge is not named. Probe after: 0 names for a star out of frame, every site name at a fixed
+  side (the held one outside its brackets, as T9); `HV2` in frame but unnamed 23 of 1139 frames, all mid-flight
+  with the star under the plate or the fleet line. Still `shots/r43-anchor2/overview-2.jpg`: `■ HV2` right under
+  its red nebula. Film r43-galaxy: every name on its body, 0 errors, 14.8 fps (SwiftShader). Seen, not this task:
+  `■ HV1` left of its star has its last letter under the star's glow (= Later r41-operator galaxy 7).
 - [x] T18 (r11-dreamer galaxy 1; = Later r59-dreamer 7) [ui] [variant:galaxy] The red goes when the trouble goes:
   a cleared crit's banner drops at once to the fleet line's calm size in `--text-2` with only a small red glyph,
   and reads like `HV1 · VM-C OK · WAS DOWN 6 MIN` — done when: a test shows the banner of a cleared trouble
