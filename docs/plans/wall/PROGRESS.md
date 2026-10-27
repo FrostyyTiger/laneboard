@@ -261,6 +261,22 @@ Notes for every builder round (planner, round 1):
   disc's screen radius, and no nebula sprite is drawn over a trouble label's box — done when: a test on the large
   fixture finds, at the overview and with HV1 in crit, the label's box clear of the cluster's screen disc, and a still
   shows `■ HV1` whole.
+- [ ] T25 (§7 Night 4; r16-operator galaxy 4) [ui] [variant:galaxy] The held crit is not at the frame's edge: while a
+  member is the hero, the held framing centres on that member (left of centre, clear of the plate), not on the star,
+  and no other label sits inside the lock's brackets (warn labels step aside from the lock's box) — done when: a test
+  on the large fixture with `VM-C` held finds `screenOf(lockTarget)` inside the middle 70 % of the frame, outside
+  every cover, and no shown label box overlapping the lock's box; a `?pace=wall` film frame at the VM-C hold shows the
+  red lock clear of `acme-billing`.
+- [ ] T26 (§7 Night 4; r16-operator galaxy 8, = night 3's Later r46-skeptic galaxy 8, r26-skeptic 11)
+  [ui] [variant:galaxy] No red line without a name: hyperlanes are grey at the dimmest weight at every zoom and carry
+  no status tint (a lane running off the frame looked like a second, unnamed alarm) — done when: a test pins the lane
+  colour as the grey token for crit/warn/calm sites at the overview and with a site held, and a still of
+  `galaxy.html?demo=1&quality=0&at=hv2` shows no red line leaving the frame.
+- [ ] T27 (§7 Night 4; r16-operator galaxy 9) [ui] [variant:galaxy] The tag is a cover for map labels: the sun's name
+  (`DEMO-HOST`) and its sun are never drawn over `LANEBOARD · … LIVE`/`STALE` (the tag's box joins `hud.covers()` for
+  labels as the plate does) and the overview/flight framing keeps the sun out of the tag's corner — done when: a test
+  finds no shown label box overlapping the tag's box at the overview and over `flightPose` samples on the large
+  fixture, and a film frame shows the tag text whole.
 
 ## Research questions
 
@@ -300,6 +316,14 @@ From r4-film-ui (triage, night 4; not tasks yet):
 - (r4-film-ui galaxy 8) Plate rows on one two-column grid (mono label, condensed-caps value); CPU/MEM on one row.
 - (r4-film-ui fx-beacon 2) Beacon fades on the flight out, not cut: film one departure at 0.5 s spacing.
 - (r4-film-ui touch) `‹ BACK` box uses the plate's 2 px bracket weight; the sheet's `■ SITE` kicker says `MANUAL` in explore (with T5).
+
+From r16-operator (triage, night 4; not tasks yet):
+- (r16-operator galaxy 2) With two crits the banner says one: count leads at the banner's size (`■ 2 CRIT`), `+N MORE` dropped or the reason line's size (with T8).
+- (r16-operator galaxy 10) The calm plate says `ALL CLEAR` or one fact under the name.
+- (r16-operator fx-beacon 1, 2) Beacon width floor in screen px (≥ 6 px at 2x), screen-vertical; age as width.
+- (r16-operator touch 1) In explore the plate's kicker says `MANUAL` and the corner brackets go `--text-2` (= r4-film-ui touch).
+- (r16-operator across) Plain galaxy steals warp's tint toward a trouble destination, without the streaks (= r51-touch across).
+- (r16-operator galaxy 3, 5, 7; warp 1) covered by T23, T22, T24, T21; galaxy 1 by T8; galaxy 6, touch 2 need no fix.
 
 Night 4's list, not yet a task (README §7 Night 4; the replan takes from here first, in this order: B, C, D, E; with
 little room left, E before C and D):
@@ -547,6 +571,9 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
   while held, T20 orphaned leader, T21 warp cone). Dropped as covered: box over the galaxy (T10), grey crit glyph (T6),
   calm warp streaks (T15). Rest in Later (hold rhythm, cursor, label steps, plate grid, beacon fade, BACK box) or
   For the owner (ideas).
+- r16 operator → reviews/r16-operator.md. 10 galaxy + 2 beacon + 2 warp + 2 touch findings; 3 became tasks (T25 held
+  crit framing, T26 grey hyperlanes, T27 tag as label cover). Dropped as covered: galaxy 1 (T8), 3 (T23), 5 (T22),
+  7 (T24), warp 1 (T21); galaxy 6 and touch 2 (no fix). Rest in Later; no fx proposals.
 
 ## Scores
 
@@ -558,5 +585,8 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 11 | dreamer (galaxy) | 7 | 6 | 6 | 6 | 6 | 5 | 6 |
 | 11 | dreamer (fx-beacon) | - | - | - | - | 4 | 7 | - |
 | 11 | dreamer (fx-warp) | - | - | - | - | 6 | 4 | - |
+| 16 | operator (galaxy) | 6 | 7 | 5 | 6 | 6 | 5 | 6 |
+| 16 | operator (fx-beacon) | - | - | - | - | 4 | 7 | - |
+| 16 | operator (fx-warp) | - | - | - | - | 6 | 3 | - |
 
 ## Morning
