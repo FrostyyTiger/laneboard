@@ -332,4 +332,4 @@ changing it needs C6 (`c1-talk.md` §5).
 
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
 says go without them): none left. T26, T27, T29, T41, T44 (the button, pane and corner-cluster
-rects), T56 (pairing refusals and cross-site checks, `screens.md` §6.1-§6.3), T57 and T89 are done. The bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are written. For C2 also: T42/T95, T69, T84.
+rects), T56 (pairing refusals and cross-site checks, `screens.md` §6.1-§6.3), T57 and T89 are done. The bridge (`protocols.md` part 2, T16) and the stand-ins (`stand-ins.md`, T18) it builds on are written. For C2 also: T69 (T42/T95 and T84 are done).
