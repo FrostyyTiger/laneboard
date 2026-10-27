@@ -333,7 +333,9 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   const tag = el('div', 'wall-tag');
   const tagName = el('span', 'wall-tag-name', 'laneboard');
   const tagLive = el('span', 'wall-tag-live');
-  tag.append(tagName, tagLive);
+  // What the address asked for and did not get (`note(text)`, night 4 T45); empty: hidden.
+  const tagNote = el('span', 'wall-tag-note');
+  tag.append(tagName, tagNote, tagLive);
 
   const clock = el('div', 'wall-clock');
   const time = el('div', 'wall-clock-time');
@@ -354,6 +356,7 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   fleet.append(line, sub, fact);
 
   root.append(vignette, tag, clock, fleet);
+  let tagBox = null; // the tag's cover while it has a note (tagCover), read again when its text changes
 
   let timer = null;
   const tick = () => {
@@ -407,7 +410,11 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     put(ambient, far ? '' : ambientLine(model));
     fact.hidden = far;
     if (`${fleet.dataset.step}|${line.dataset.key ?? ''}|${subWhy.textContent}|${subMore.textContent}` !== was) farDirty = true;
-    if (typeof model.title === 'string' && model.title.trim()) put(tagName, `laneboard · ${clip(model.title, 24)}`);
+    if (typeof model.title === 'string' && model.title.trim()) {
+      const named = tagName.textContent;
+      put(tagName, `laneboard · ${clip(model.title, 24)}`);
+      if (tagName.textContent !== named) tagBox = null;
+    }
   };
 
   const live = (on) => {
@@ -421,6 +428,22 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     if (!f || typeof f.text !== 'string') return;
     tag.dataset.live = f.state === 'live' ? '1' : f.state === 'stale' ? 'stale' : '0';
     put(tagLive, f.text.toLowerCase());
+  };
+
+  /** The tag's note (an unknown `?variant=`, T45), grey, on a line of its own; null or '' clears it. */
+  const note = (text) => {
+    put(tagNote, typeof text === 'string' ? text.toLowerCase() : '');
+    tagBox = null;
+  };
+  /** The tag and the note under it as a Map cover while there is a note, else null (read once per note). */
+  const tagCover = () => {
+    if (!tagNote.textContent) return null;
+    if (!tagBox) {
+      const left = tag.offsetLeft + Math.min(0, tagNote.offsetLeft);
+      const right = tag.offsetLeft + Math.max(tag.offsetWidth, tagNote.offsetLeft + tagNote.offsetWidth);
+      tagBox = coverOf({ left, top: tag.offsetTop, width: right - left, height: Math.max(tag.offsetHeight, tagNote.offsetTop + tagNote.offsetHeight) });
+    }
+    return tagBox;
   };
 
   const stop = () => { if (timer != null) timers.clearTimeout(timer); timer = null; };
@@ -447,5 +470,5 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     farDirty = true;
   };
 
-  return { update, live, fresh, stop, cover, plate, hushed, el: { vignette, tag, clock, fleet, more, subMore } };
+  return { update, live, fresh, note, tagCover, stop, cover, plate, hushed, el: { vignette, tag, tagNote, clock, fleet, more, subMore } };
 }

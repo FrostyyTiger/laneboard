@@ -501,7 +501,26 @@ Notes for every builder round (planner, round 1):
   (`both` = parsed by both); the director's order; the codes found in show.js/transport.js/director.js each have a
   row; the large demo sets `glow`, `ring`, `countdown` and `SHOW_DEMO_SCRIPT` sends every show type. Checked that
   dropping a row fails it. No UI change, so no film.
-- [ ] T45 (§7 Night 4 E3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] (night 3's E; r43-stranger 2, 6) A web manifest for the galaxy (`start_url: "/galaxy.html"`, fullscreen, landscape) if it fits the guardrails, and `wall.html?variant=galaxy` opens `galaxy.html` instead of falling back to radial (an "unknown variant" note on the tag for other names). — done when: `wall.html?variant=galaxy` opens the galaxy (test), the manifest validates
+- [x] T45 (§7 Night 4 E3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] (night 3's E; r43-stranger 2, 6) A web manifest for the galaxy (`start_url: "/galaxy.html"`, fullscreen, landscape) if it fits the guardrails, and `wall.html?variant=galaxy` opens `galaxy.html` instead of falling back to radial (an "unknown variant" note on the tag for other names). — done when: `wall.html?variant=galaxy` opens the galaxy (test), the manifest validates (commit COMMIT)
+  Builder r53: `variants.js PAGES` (`galaxy` → `galaxy.html`) and `pageHref(search)`: `wall.html` leaves with
+  `location.replace` before it builds anything, every other switch along (`?variant=galaxy&demo=1&fx=beacon` →
+  `galaxy.html?demo=1&fx=beacon`). An unknown name: `unknownNote(pick)` → frame.js `note(text)`, a grey (`text-2`)
+  line hung under the tag (`.wall-tag-note`, absolute, so the tag keeps its width) reading `UNKNOWN VARIANT "NOPE" ·
+  RADIAL`, and `frame.tagCover()` keeps the Map's names off it while it is up (none without a note: wall.html's default
+  is unchanged). T43's find fixed too: `islands-tiles` is registered (`links: 'focus'`) and `main.js` passes every model
+  through tiles.js `focusLinks` with the held site from `tour.onLeg`, so the no-WebGL fallback lands on islands with
+  trouble tiles, not radial (night 2's For-the-owner diff, no longer fenced). Manifest: `public/galaxy.webmanifest`
+  (`id` and `start_url` `/galaxy.html`, `scope` `/galaxy.html`, fullscreen, landscape, the board's icons and theme
+  colour), linked from `galaxy.html` only; served as `application/manifest+json` (http.mjs already knew the type),
+  CSP `manifest-src 'self'` covers it. Decided: scope is the galaxy page alone, so it never claims the board's URLs;
+  the price is a browser bar on the out-of-scope fallback (a machine without WebGL, rare). `docs/wall.md`: the
+  `?variant` row (`islands-tiles`, `galaxy`, the note), the manifest under Android. Tests:
+  `test/wall-pages.test.mjs` (5). Stills `shots/r53-t45/` (`islands-tiles`: tiles on hv1/hv2, no links at the
+  overview; `nope2`: the note under the tag, clear of the names), 0 console errors. Film `shots/r53-galaxy` through
+  `wall.html?variant=galaxy&demo=1&quality=0`: the galaxy tour, 14.1 fps SwiftShader ×4, worst gap 327 ms, 0 errors.
+  Seen, for T46: on radial at 1368 the labels at the ring's top pile up (`FEAT-SEARCH`, `BUILDER-A`, `CI-RETRY`,
+  `ACME-BILLING` over each other). Unverified on a device: the manifest's install prompt (no tablet here).
+  Round 52 left its demo fleet running (pid file stale); r53 stopped it by pid.
 - [ ] T46 (§7 Night 4 E4; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `wall.html` (radial, the default) gets one filmstrip, since night 3 changed the shared `caption.js`, `tour.js` and `frame.js`; fix what it shows broken. The morning report lists what a reviewer should read first and what reaches outside the galaxy (`public/css/tokens.css --tex-vignette`). — done when: a `wall.html` filmstrip, and what it showed broken is fixed with tests
 - [ ] T19 (§7 Night 4; r4-film-ui galaxy 1; after T9) [ui] [variant:galaxy] One top step of type while a site is held:
   the banner (`hud.js`, `frame.js`, `wall.css`) may own the top step only at the overview; while a caption holds a site it

@@ -8,7 +8,8 @@
 // reconnect with backoff.
 
 import { createMap } from '../views/map/index.js';
-import { pickVariant, mapOptionsFor } from './variants.js';
+import { pickVariant, mapOptionsFor, pageHref, unknownNote } from './variants.js';
+import { focusLinks } from './variants/tiles.js';
 import { createPerf } from './perf.js';
 import { createTour, timingFor } from './tour.js';
 import { createCaption, captionLines, captionTimingFor, STILL_CAPTION_TIMING } from './caption.js';
@@ -21,6 +22,9 @@ const BACKOFF_START_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
 
 export function boot() {
+  // `?variant=galaxy` is a page of its own (T45): go there, the other switches along.
+  const away = pageHref(location.search);
+  if (away) { location.replace(away); return; }
   const pick = pickVariant(location.search);
   const page = document.documentElement;
   page.dataset.variant = pick.id;
@@ -66,9 +70,20 @@ export function boot() {
   const glow = createGlow(document.getElementById('wall-glow'), map, { halos: Boolean(pick.variant.halos) });
   // What stays put while the camera moves: vignette, clock, the fleet's worst line, the tag.
   const frame = createFrame(document.getElementById('wall-frame'));
-  covers = () => [caption.cover(), frame.cover()].filter(Boolean);
+  covers = () => [caption.cover(), frame.cover(), frame.tagCover()].filter(Boolean);
+  // A mistyped `?variant=` says so on the screen, not only in the console (T45).
+  frame.note(unknownNote(pick));
   let latest = null;
+  // The fallback's links (`links: 'focus'`, tiles.js): only the held site's.
+  const focus = pick.variant.links === 'focus';
+  let heldSite = null;
+  const mapModel = (model) => (focus ? focusLinks(model, heldSite) : model);
   tour.onLeg((leg) => {
+    const held = leg.kind === 'site' ? leg.id : null;
+    if (focus && held !== heldSite) {
+      heldSite = held;
+      if (latest) map.update(mapModel(latest));
+    }
     const ms = still ? 0 : (leg.arriveMs ?? timingFor(pick.demo).flyMs);
     const zoom = leg.zoom ?? timingFor(pick.demo).zoom;
     glow.zoomTo(leg.kind === 'site' ? zoom : 1, ms);
@@ -87,7 +102,7 @@ export function boot() {
     if (!model || typeof model !== 'object') return;
     have = true;
     latest = model;
-    map.update(model);
+    map.update(mapModel(model));
     glow.update(model);
     frame.update(model);
     tour.update(model);

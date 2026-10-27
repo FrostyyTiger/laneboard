@@ -446,6 +446,10 @@ html.wall body {
   white-space: nowrap;
 }
 .wall-tag-live:empty { display: none; }
+/* An address that asked for an unknown layout (night 4 T45): said on a line of its own under the tag (so the
+   tag keeps its width), one grey step up, never a trouble hue. */
+.wall-tag-note { position: absolute; top: calc(100% + 1.2vmin); right: 0; color: var(--text-2); }
+.wall-tag-note:empty { display: none; }
 .wall-tag[data-live="0"] .wall-tag-live { color: var(--warn); }
 /* No map frame for 30 s (galaxy/fresh.js, night 3 T5): old data reads grey, at the brightest grey, never in a trouble hue. */
 .wall-tag[data-live="stale"] .wall-tag-live { color: var(--text-1); }

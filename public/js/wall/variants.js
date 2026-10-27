@@ -16,6 +16,7 @@ import * as radial from './variants/radial.js';
 import * as orbits from './variants/orbits.js';
 import * as islands from './variants/islands.js';
 import * as mosaic from './variants/mosaic.js';
+import * as islandsTiles from './variants/islands-tiles.js';
 
 /** The directions, in the order a morning report lists them. */
 export const VARIANTS = Object.freeze([
@@ -35,7 +36,47 @@ export const VARIANTS = Object.freeze([
     id: 'mosaic', label: 'Mosaic', mapOptions: mosaic.mapOptions,
     optionsFor: mosaic.optionsFor, ambient: mosaic.ambient,
   }),
+  // The galaxy's 2D fallback (README §5): where a browser without WebGL is
+  // sent (galaxy/fallback.js). `links: 'focus'`: only the held site's links.
+  Object.freeze({
+    id: 'islands-tiles', label: 'Islands + tiles', mapOptions: islandsTiles.mapOptions,
+    optionsFor: islandsTiles.optionsFor, ambient: islandsTiles.ambient, links: islandsTiles.links,
+  }),
 ]);
+
+/**
+ * Names that are pages of their own, not a 2D layout: `wall.html?variant=galaxy`
+ * opens `galaxy.html` (night 4 T45) instead of falling back to radial.
+ */
+export const PAGES = Object.freeze({ galaxy: 'galaxy.html' });
+
+/**
+ * Where `wall.html` with query `search` should go instead, or null to stay:
+ * `?variant=<a page>` gives that page with every other switch kept (the
+ * shared `?demo`, `?pace`, `?mm`; the galaxy's `?at`, `?fx`, `?role`, …).
+ */
+export function pageHref(search) {
+  const q = new URLSearchParams(search instanceof URLSearchParams ? search : (typeof search === 'string' ? search : ''));
+  const asked = q.get('variant');
+  const key = typeof asked === 'string' ? asked.trim().toLowerCase() : '';
+  if (!Object.hasOwn(PAGES, key)) return null;
+  q.delete('variant');
+  const rest = q.toString();
+  return rest ? `${PAGES[key]}?${rest}` : PAGES[key];
+}
+
+/**
+ * The tag's note when `?variant=` named nothing known (null otherwise):
+ * `UNKNOWN VARIANT "X" · RADIAL`, so a mistyped address says so on the screen
+ * instead of only in the console.
+ */
+export function unknownNote(pick) {
+  if (pick?.asked == null || pick.asked === pick.id) return null;
+  const asked = String(pick.asked).trim();
+  if (!asked || asked.toLowerCase() === pick.id) return null;
+  const shown = asked.length > 16 ? `${asked.slice(0, 15)}…` : asked;
+  return `unknown variant "${shown}" · ${pick.id}`;
+}
 
 /**
  * The Map options a page creates its Map with for `variant` on a screen of

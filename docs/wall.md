@@ -15,7 +15,7 @@ There are two pages:
 | Page | What it is |
 | --- | --- |
 | `galaxy.html` | The Wall. The fleet as one spiral galaxy in WebGL: the hub is the sun, each site a star cluster, the machines and services in it its planets. Trouble is the only colour. |
-| `wall.html` | The 2D Wall: the Map's own drawing in four layouts (`?variant=`), with the same caption, frame and tour. The galaxy sends a browser without WebGL here. |
+| `wall.html` | The 2D Wall: the Map's own drawing in four layouts (`?variant=`), with the same caption, frame and tour. The galaxy sends a browser without WebGL here (`islands-tiles`). |
 
 The colour rules are the app's (`docs/design.md`): grey unless something
 needs you, red for crit and down, amber for warn. A light's own colour
@@ -155,8 +155,10 @@ tablet is not on the same machine) and open
 - **Windows** (a Surface, say): an assigned-access kiosk account with
   Microsoft Edge in full-screen kiosk mode on that address, or Edge started
   with `--kiosk https://<your laneboard>/galaxy.html --edge-kiosk-type=fullscreen`.
-- **Android**: Chrome's *Add to Home screen*, then the system's screen
-  pinning, or a kiosk launcher.
+- **Android**: Chrome's *Add to Home screen* (or *Install app*), then the
+  system's screen pinning, or a kiosk launcher. The galaxy has a web
+  manifest of its own (`/galaxy.webmanifest`: full screen, landscape), so
+  the installed Wall opens without the browser's bars.
 - **iPad**: Safari's *Add to Home Screen*, then *Guided Access*
   (Settings › Accessibility).
 
@@ -189,7 +191,7 @@ default; an unknown value is ignored.
 | `?show=demo` | galaxy | Plays a recorded conversation's show commands over the demo fleet, again and again, with the tour between: fly to the crit, pin a note, highlight what it breaks. |
 | `?showOrigins=<origins>` | galaxy | Other origins allowed to send show commands by `postMessage` (comma-separated, exact origins such as `https://hub.example.invalid`). The page's own origin always may, also by `BroadcastChannel('laneboard.show')`. |
 | `?mm=<n>` | both | The screen's height in mm, so the type is sized for reading at its distance on this screen rather than a guessed one. |
-| `?variant=<id>` | wall | The 2D layout: `radial` (the default), `orbits`, `islands`, `mosaic`. An unknown name is radial. |
+| `?variant=<id>` | wall | The 2D layout: `radial` (the default), `orbits`, `islands`, `mosaic`, `islands-tiles` (the galaxy's fallback: trouble as filled tiles, only the held site's links). `galaxy` opens `galaxy.html` with the other switches. An unknown name is radial, and the tag says `UNKNOWN VARIANT "…" · RADIAL`. |
 
 ### Effects (`?fx=`)
 
