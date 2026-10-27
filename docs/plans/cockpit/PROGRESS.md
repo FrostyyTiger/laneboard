@@ -118,7 +118,7 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 - [x] Q7 Android tablet microphone without a prompt: does Chrome on Android honour `AudioCaptureAllowed` / any managed policy or a kiosk app setting that grants the microphone to one origin; and the managed-policy directory for Chrome and Chromium on Linux — for `c2-voice.md` §12 (the later `docs/cockpit.md`) → research/Q7-android-mic-and-linux-policy-dir.md (no Android no-prompt route found; Chromium `managed/` path assumed)
 
 - [x] Q8 What does Claude Code do with a prompt sent while a turn runs (queue, inject at the next tool boundary, interrupt)? — for T5/T16 (Q-O1 option d) → research/Q8-prompt-while-turn-runs.md (default `priority:"next"` = read after the running tool calls finish; `later` = after the turn; `now` = interrupt; one 2.1.175 report of an ignored message)
-- [ ] Q9 Does `tailscale serve` with a path mount (`--set-path /api/cockpit`) forward the request path to the backend unchanged or strip the prefix, and does it pass WebSocket upgrades and the `Origin` header through? Same for a plain nginx/Caddy `location` block — for T15 (`protocols.md` §1, D92), T19
+- [x] Q9 → research/Q9-serve-path-mount-and-websocket.md. Does `tailscale serve` with a path mount (`--set-path /api/cockpit`) forward the request path to the backend unchanged or strip the prefix, and does it pass WebSocket upgrades and the `Origin` header through? Same for a plain nginx/Caddy `location` block — for T15 (`protocols.md` §1, D92), T19
 
 ## Later
 
