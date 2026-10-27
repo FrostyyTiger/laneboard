@@ -17,3 +17,19 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   `not drawn` (the node is not on this galaxy) and `bad-args`; the room's message checks accept all four
   — because the Wall merge built them (`docs/wall.md` "Show commands") — spec: `protocols.md` §4
   — overrule: map them onto `in use` in the room and keep the spec's single value.
+- B1 (planner, round 1) T3 writes a first `server/boot/cockpit.mjs` whose `startRoom()` does only what the
+  room under test needs to boot (the board as `builder.mjs` boots it, no cockpit routes); T6 completes it
+  — because `stand-ins.md` §7 puts the room under test (step 3) before the room process (slices.md §3.1
+  build 2), and the wrapper imports `startRoom()` unchanged — spec: `stand-ins.md` §1.1, §7 — overrule:
+  swap T3 and T6.
+- B2 (planner, round 1) A scenario whose `Test:` line names both node:test and Playwright (S-C3-04) is
+  one Playwright test titled with its id; the node part is a `test.step` that calls the room (MCP by
+  JSON-RPC) from the test process — because §2's rule is one test per id — spec: `slices.md` §2,
+  `c3-see.md` S-C3-04 — overrule: a second test in `test/cockpit-<topic>.test.mjs` with the same id.
+- B3 (planner, round 1) `demo-fleet.mjs --cockpit` and the `demo` script are built in T43, not with
+  `stand-ins.md` §7 step 4 (T4/T5) — because the demo needs the room, the link and the pane of builds
+  2-19 to answer `how did the night go` — spec: `stand-ins.md` §6, §7 — overrule: move them to T5.
+- B4 (planner, round 1) A step §3.1 says runs with a later slice (S-C1-22's cards, S-C1-46's `show`,
+  S-SCR-23's canvas strip) is written now as `test.step.skip('<step> — waits for <slice>', …)` — because
+  the step's text stays in the test and its skip names what it waits for — spec: `slices.md` §3.1 —
+  overrule: leave the step out until its slice.
