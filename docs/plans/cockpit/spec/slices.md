@@ -32,8 +32,8 @@ T81 (the jobs slice, §3.7) and T30 (S-C1-13 belongs to C2, §3.2).
   little else (review 52 finding 11; D114).
 - Jobs comes before the rest of C6 (review 52 finding 6, T81; D115). C2b, Pair, Canvas 2, History,
   C5 wait for owner answers or for files not yet written; their place among themselves is free.
-- Under Q-O22 a) (split from C1) the layout scenarios of the Canvas slice move into C1 and the C1
-  night grows by about 3 steps (§3.1). Spec written for b) (pending Q-O22).
+- Under Q-O22 a) (split from C1) four layout scenarios of the Canvas slice move into C1 and the C1
+  night grows by about 3 steps; §3.1 lists the ids per answer. Spec written for b) (pending Q-O22).
 
 ## 2. The acceptance harness
 
@@ -125,8 +125,17 @@ S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
 - Wall not merged at the C1 night: the scenarios that need it (S-C1-01, S-SCR-02, S-SCR-03,
   S-SCR-04, S-SCR-21, S-SCR-22) stay in C1 and run once the Wall merges; everything else runs on the
   app (`#/map`), as T31's fallback asks. The night's summary says which ids waited.
+- **C1's ids under each answer** (the 40 above are for Q-O21 b) and Q-O22 b), the recommendations):
 
-**Done-when**: §2's slice rule for the 38 ids; the board change of §5.1 merged with its tests;
+| Q-O21 | Q-O22 | C1 also contains | Ids |
+| --- | --- | --- | --- |
+| b) | b) | nothing more; the page is `wall` only, no pairing (`screens.md` §1, §6) | 40 |
+| b) | a) | S-SCR-01 S-SCR-06 S-SCR-10 S-SCR-11: `split` by default, the `SCREEN` sheet, the empty canvas; S-SCR-10's `?demo=1` cards are asserted once Canvas is built. S-SCR-07 and S-SCR-08 stay in Canvas (they need `place`) | 44 |
+| a) | b) | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 and T56's three once written; the Pair slice goes | 44 (47) |
+| a) | a) | both rows | 48 (51) |
+
+
+**Done-when**: §2's slice rule for the ids of the row above that the owner's answers select (40 for the recommendations); the board change of §5.1 merged with its tests;
 the first part of `docs/cockpit.md` (setup on one box and as two users, pairing pending Q-O21,
 troubleshooting the room-down line); the demo (`stand-ins.md` §6) answers `how did the night go`.
 

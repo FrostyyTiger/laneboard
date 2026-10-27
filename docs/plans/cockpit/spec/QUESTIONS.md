@@ -148,14 +148,14 @@ one option beside "auth in front" and "LAN-only". Spec: `screens.md` §6 (writte
   today.
 
 Recommendation: b) for a screen only the owner can touch; c) or a) for a screen others can reach. b) — the first chat line should not wait for a pairing flow the owner did not ask
-for; the spec keeps §6 as the later slice. Until answered the spec stays written for a).
+for; the spec keeps §6 as the later slice. `screens.md` §6 writes the pairing flow and places it in the Pair slice (b); C1's ids under each answer: `slices.md` §3.1.
 
 Answer: (open)
 
 ## Q-O22 No canvas and no layout until C4
 
 From `reviews/36-skeptic.md` finding 1. At 1368 the default `split` gives 608 px to
-`Nothing on the canvas yet.` until C4 shows anything. Spec: `screens.md` §1 (written for a).
+`Nothing on the canvas yet.` until C4 shows anything. Spec: `screens.md` §1 (written for b) since T54, a) kept as the Canvas slice's layouts; C1's ids under each answer: `slices.md` §3.1).
 
 - a) **`split` is the default from C1**, canvas empty until C4.
 - b) **Until C4 there is no canvas**: the page is the Wall (or the app) and the pane slides over it;

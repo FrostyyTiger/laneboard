@@ -5,7 +5,16 @@ cockpit button sits (§1-§5, part 1); how a screen pairs and what it shows when
 is unpaired, offline or down (§6-§8, part 2). Words as in the glossary (`README.md`). Sizes are CSS
 px at 1368x912; times in s.
 
-## 1. Layouts
+## 1. Layouts (pending Q-O22)
+
+**Until the Canvas slice** (pending Q-O22, recommendation b); `slices.md` §3.5): the Wall page has
+one layout, `wall`. No canvas, no `split`, `canvas` or `switch`, no `SCREEN` sheet, no
+`cockpit.layout`, no switch button; the root reads `data-layout="wall"` whatever the width, `?layout=`
+is ignored, and the pane slides over the Wall as on the app (`c1-talk.md` §1, first table row).
+C1-C3 build this. The rest of this section, S-SCR-01, -06, -07, -08, -10, -11 and D2, D3, D8, D9
+arrive with the Canvas slice. With Q-O22 a) they are C1's from the first night: `split` is the
+default at ≥ 1280 px and the canvas shows S-SCR-10's empty text until C4 places cards; which ids C1
+then contains is `slices.md` §3.1.
 
 A screen runs one of two pages:
 
@@ -140,7 +149,7 @@ router's rule that a route only selects, `router.js` header).
 
 ## 5. Scenarios
 
-### S-SCR-01 A fresh screen at the owner's size opens in split
+### S-SCR-01 A fresh screen at the owner's size opens in split (pending Q-O22)
 Given a browser at 1368x912 with no `cockpit.layout` stored and no `?layout=` in the URL,
 When it opens the Wall page on the demo fleet,
 Then within 2 s the root has `data-layout="split"` and `data-wall-state="tour"`; the wall half is
@@ -190,7 +199,7 @@ And a screen in `canvas` layout receiving the same command does not change.
 Test: Playwright, two pages on one fake agent; read `data-wall-state` and `screenOf('builder-a')`
 near the screen centre on the `wall` page; the `canvas` page's DOM is unchanged.
 
-### S-SCR-06 The owner picks a layout, it survives a reload, the URL wins over it
+### S-SCR-06 The owner picks a layout, it survives a reload, the URL wins over it (pending Q-O22)
 Given a screen at 1368x912 in `split`, `[data-cockpit-conversation]` at x 760-1368, y 520-912,
 When the owner taps `SCREEN` in the column's header (x 1256-1352, y 528-576), then `CANVAS`,
 Then within 0.2 s `data-layout="canvas"`, the wall half is gone, the canvas fills 1368x912,
@@ -202,7 +211,7 @@ reads `CHAT`, and `cockpit.layout` is still `canvas`.
 Test: Playwright; tap through the sheet (each row ≥ 64 px tall); read `data-layout`, `data-pane`,
 the column's `getBoundingClientRect()` and `localStorage`; reload; navigate with the query.
 
-### S-SCR-07 Switch on a small screen: one half at a time, a count for new cards
+### S-SCR-07 Switch on a small screen: one half at a time, a count for new cards (pending Q-O22)
 Given a screen at 1024x768 with no layout stored (the default is `switch`), the wall shown,
 When the fake agent places 2 cards on the canvas,
 Then the screen keeps showing the wall (`data-switch-shows="wall"`); the switch button reads
@@ -212,7 +221,7 @@ Then the canvas shows the 2 cards, the button reads `WALL`, the count is gone.
 Test: Playwright at 1024x768 with a fake-agent script that places two cards; assert the attribute,
 the label and the count text before and after the tap.
 
-### S-SCR-08 Two screens: the canvas gets the card, the tour keeps touring
+### S-SCR-08 Two screens: the canvas gets the card, the tour keeps touring (pending Q-O22)
 Given screen A in `wall` layout touring and screen B in `canvas` layout, one conversation,
 When the owner types "put a countdown to the nightly run on the canvas" on B and the fake agent
 places a countdown card,
@@ -236,7 +245,7 @@ Test: Playwright loops over `VIEWS`, compares both rects with the Wall page's, a
 the toasts' rects do not intersect them, taps, compares `location.hash`; a second run without the
 cockpit config counts zero of each.
 
-### S-SCR-10 An empty canvas says what it is for
+### S-SCR-10 An empty canvas says what it is for (pending Q-O22)
 Given a screen in `canvas` layout and no cards,
 Then the canvas shows, centred, in `--text-2` at 24 px: "Nothing on the canvas yet." and below it
 at 20 px: "Ask the agent to put something here, for example: “a countdown to the nightly run”."
@@ -245,7 +254,7 @@ the demo cards instead, labelled `DEMO` top left of the canvas in 16 px caps.
 Test: Playwright with a fake agent that places nothing; assert both texts and their computed font
 sizes; a second run with `?demo=1` asserts the `DEMO` label and ≥ 1 card.
 
-### S-SCR-11 Crossing 1280 px flips split and switch without a reload
+### S-SCR-11 Crossing 1280 px flips split and switch without a reload (pending Q-O22)
 Given a screen at 1368x912 in `split` (stored), the wall in `explore` on `builder-a`, a draft in
 the column's input,
 When the window is resized to 1200x800,
@@ -265,7 +274,15 @@ Then the wall is `explore` at once, the camera jumps to `builder-a` with no fram
 Test: Playwright with `emulateMedia({ reducedMotion: 'reduce' })` and a fake clock; sample
 `screenOf('builder-a')` on two consecutive frames after the command: no intermediate position.
 
-## 6. Pairing
+## 6. Pairing (pending Q-O21)
+
+**Which night builds this section** (pending Q-O21, recommendation b) for a screen only the owner
+can touch): the Pair slice (`slices.md` §3.8), not C1. Under b) a C1 screen is never `unpaired`:
+the room link accepts the trust the board already gives the page (`local`, or `direct` through
+serve, `docs/fleet/auth.md`), `data-cockpit` goes from `connecting` to `live`, and no pairing card,
+code or CLI exists yet; what exactly the upgrade checks is `security.md`'s (T17). With Q-O21 a)
+this section, S-SCR-13..16 and T56's pairing scenarios are C1's (`slices.md` §3.1 lists the ids).
+The rest of §6 is written as the flow either night builds.
 
 A screen talks to the room only with a **device token** (glossary). It gets one by **pairing**: the
 screen shows a code, the owner approves the code from a trusted place, the room hands the screen
@@ -401,11 +418,11 @@ strip reads the same (`c4-show-canvas.md` §7.6). Retries keep running; when the
 The stand-in room (T18) can stop and start its room link, approve and revoke pairings, and the
 demo hub can be stopped, so each scenario runs without hardware.
 
-### S-SCR-13 An unpaired screen: the board works, the pane shows a code
+### S-SCR-13 An unpaired screen: the board works, the pane shows a code (pending Q-O21)
 Given a screen at 1368x912 in `split`, the cockpit configured, no device token,
 When the page opens,
-Then within 2 s `data-cockpit="unpaired"`, the wall half tours the demo fleet, the canvas shows
-the pairing card centred with a code matching `^[2-9A-HJKMNP-Z]{3}-[2-9A-HJKMNP-Z]{3}$`, and
+Then within 2 s `data-cockpit="unpaired"`, the wall half tours the demo fleet, the canvas (once
+the Canvas slice is built; pending Q-O22) shows the pairing card centred with a code matching `^[2-9A-HJKMNP-Z]{3}-[2-9A-HJKMNP-Z]{3}$`, and
 `Code valid for 5:00.` counting down.
 When the owner taps `CHAT`, the pane shows the same card and the same code; `CHAT` reads `CLOSE`.
 The talk button is `data-talk="off"` (`c2-voice.md` §3) in its §4 rect; a press on it opens no
@@ -414,7 +431,7 @@ Test: Playwright against the demo hub and the stand-in room with an empty token 
 attribute, the regex, the countdown text at 0 s and (fake clock) 60 s: `4:00`; tap `CHAT`; read
 `[data-talk]`'s rect and state; press it with `getUserMedia` wrapped to count calls: 0.
 
-### S-SCR-14 The owner approves the code on the room, the screen is paired within 2 s
+### S-SCR-14 The owner approves the code on the room, the screen is paired within 2 s (pending Q-O21)
 Given S-SCR-13's screen showing `K7M-4QX`,
 When `laneboard cockpit pair k7m4qx --name desk` runs on the stand-in room at t = 0 s,
 Then the CLI prints `paired desk (code K7M-4QX)` and exits 0; by t = 2 s `data-cockpit="live"`,
@@ -423,7 +440,7 @@ cards or S-SCR-10's empty text.
 When the page reloads, it is `live` again with no code shown.
 Test: Playwright plus a child process for the CLI; fake clock for the 5 s; reload and assert.
 
-### S-SCR-15 A code runs out and is replaced; the old one cannot be approved
+### S-SCR-15 A code runs out and is replaced; the old one cannot be approved (pending Q-O21)
 Given an unpaired screen showing a code at t = 0 s,
 When nobody approves it,
 Then at t = 300 s a different code is shown and `Code valid for 5:00.` starts again; and
@@ -431,7 +448,7 @@ Then at t = 300 s a different code is shown and `Code valid for 5:00.` starts ag
 Test: Playwright with a fake clock on the screen and a stand-in room whose clock is moved 300 s;
 assert the two codes differ, run the CLI with the first, check exit code and output.
 
-### S-SCR-16 Unpairing a screen takes the cockpit away at once, the board stays
+### S-SCR-16 Unpairing a screen takes the cockpit away at once, the board stays (pending Q-O21)
 Given screen `desk` paired and live, the pane open,
 When `laneboard cockpit unpair desk` runs on the room at 06:58,
 Then within 2 s `data-cockpit="unpaired"`, the pane shows `PAIR THIS SCREEN AGAIN`, `This screen
