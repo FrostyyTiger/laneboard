@@ -193,7 +193,7 @@ Notes for every builder round (planner, round 1):
   browser sources): message envelope (type, id, source, ttl), how a command is undone or expires, how a screen says
   who is driving it, and origin checks for `postMessage`. One recommended shape for `flyTo`, `highlight`, `clear`,
   `pin` — for Later §7 Night 4 B
-- [ ] Q17 A countdown readable from 3 m (for Later C, `countdown: { at, label }`): how departure boards, broadcast
+- [x] Q17 → research/Q17-countdown-at-distance.md. A countdown readable from 3 m (for Later C, `countdown: { at, label }`): how departure boards, broadcast
   clocks, launch countdowns and control-room timers show time-to-event at distance (format `T-4:12` vs `in 4 min`,
   when seconds appear, tabular figures, a ring or bar vs digits, what happens at zero and after), and how to keep many
   small countdowns quiet at an overview while one is readable when held. Night 1's Q3 already has type size per
