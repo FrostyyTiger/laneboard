@@ -262,7 +262,7 @@ Then the reply keeps streaming, `data-turn="answering"`, the hint line shows
 When the owner releases at t = 4.0 s,
 Then the reply's text stops changing, `STOPPED AT HH:MM` is drawn under it, the prompt `Only the
 failed one.` is drawn below as a new turn by t = 4.3 s (B3), the header goes `● STOPPING` and then
-`● THINKING`; the stand-in room's log has the interrupt before the new prompt.
+`● WORKING`; the stand-in room's log has the interrupt before the new prompt.
 Test: Playwright; the reply text at 2.0 s and 3.9 s differs (still streaming), at 4.05 s and 5.0 s
 it is equal; the bridge log order from the stand-in.
 

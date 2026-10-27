@@ -3,7 +3,7 @@
 The cockpit pane and the conversation in it: where the pane sits, how it opens and closes, how a
 reply is drawn for reading at arm's length, and how tool activity folds into one line (§1-§5, part
 1, T4). Typing and send, talking while the agent answers, long replies, errors, a new conversation,
-several screens and the raw view are part 2 (§7-§14, T5). Words as in the glossary (`README.md`). Sizes are CSS
+several screens are part 2 (§7-§14, T5); the raw view is not in C1 (§13, T50). Words as in the glossary (`README.md`). Sizes are CSS
 px at 1368x912; times in s or ms.
 
 Plan C1: "It slides over the view, never replaces it, so the agent can point at the view behind
@@ -36,8 +36,8 @@ main")."
    16 px, `--text-2`), then 16 px later the turn state (§2) in 16 px caps `--text-3`. Right, 16 px
    in: `CLOSE`, and on the Wall page `SCREEN` to its left (`screens.md` §1), 8 px apart. Each
    header button is 48 px tall, ≥ 96 px wide, 16 px caps `--text-1`, 1 px `--line-strong` border.
-   Left of those, 8 px apart: `NEW` (§11) and `RAW` (§13), each 48 px tall and 72 px wide (D38);
-   order from the right: `CLOSE`, `SCREEN`, `NEW`, `RAW`.
+   Left of those, 8 px apart: `NEW` (§11), 48 px tall and 72 px wide (D38); order from the right:
+   `CLOSE`, `SCREEN`, `NEW`. There is no `RAW` button in C1 (§13).
 2. **Status line**, 80 px (two lines, D54), only while there is something to say (room down, offline:
    `screens.md` §7).
 3. **The conversation**, filling the rest; it scrolls on its own; 24 px padding left and right,
@@ -79,14 +79,16 @@ point while the agent talks (D19). There is no swipe to close in v1 (D19).
 **Reduced motion** (`prefers-reduced-motion: reduce`): the pane appears and goes with no slide
 (`--dur` is 0 ms in `tokens.css`).
 
-**Turn state**, in the header and on the root as `data-turn`:
+**Turn state**, in the header and on the root as `data-turn`. The header draws three words; the
+root keeps the finer values for tests (D56): what the agent is doing is already in sight in the
+conversation (`· SENDING` on the prompt, `●` on a tool line, the `▍` cursor).
 
 | `data-turn` | Header text | When |
 | --- | --- | --- |
 | `idle` | `READY` | no turn running |
-| `thinking` | `● THINKING` | a prompt was sent; no reply text yet, no tool running |
+| `thinking` | `● WORKING` | a prompt was sent; no reply text yet, no tool running |
 | `working` | `● WORKING` | a tool call is running (§5) |
-| `answering` | `● ANSWERING` | reply text is streaming |
+| `answering` | `● WORKING` | reply text is streaming |
 | `stopping` | `● STOPPING` | `STOP` was tapped or a new prompt interrupts; until the turn's end arrives (≤ 5 s, §8) |
 | `handing-over` | `● HANDING OVER` | `NEW` was confirmed; the old session writes its handover note (≤ 30 s, §11) |
 
@@ -157,8 +159,8 @@ button under it, 48 px tall, 16 px caps: `SHOW ALL 40 LINES`; tapped, it shows e
 `--text-1`; every row 44 px tall (`--row-touch`), 12 px cell padding left and right, a 1 px
 `--line-weak` line under each row. A column whose body cells are all numbers, times or sizes
 (`12`, `3.4 GB`, `1 h 12`, `41 %`, `03:12`) is right-aligned. A table wider than 560 px scrolls
-sideways inside its block with the first column fixed (on `--bg-elevated`). More than 20 body rows:
-the first 20 and `SHOW ALL 48 ROWS` (as for code).
+sideways inside its block with the first column fixed (on `--bg-elevated`). Every row is drawn,
+however many (D23: 20 rows are 880 px, one flick).
 
 ### History in the pane
 
@@ -179,8 +181,8 @@ room after a reload is T15's.
 
 ## 5. Tool lines
 
-The agent's tool calls are shown as **tool lines**, never as raw input or output (the raw terminal
-is §13).
+The agent's tool calls are shown as **tool lines**, never as raw input or output. An opened tool line
+(below) is the closest look C1 gives at a call (§13).
 
 **Folding.** In one turn, calls of the same tool with no reply text between them fold into one tool
 line. A call of another tool, or reply text, starts a new line. A tool line sits in the reply where
@@ -271,7 +273,7 @@ tap, assert the Map's selection changed and `data-pane="open"`.
 Given the pane open and the fake agent scripted to wait 300 ms after a prompt, then send
 `Two of three runs finished.` in 6 deltas 100 ms apart, then the complete block,
 When the owner sends `how did the night go?` at t = 0,
-Then `data-turn` is `thinking` and the header reads `● THINKING` within 0.1 s (B8); the first word
+Then `data-turn` is `thinking` and the header reads `● WORKING` within 0.1 s (B8); the first word
 is on screen ≤ 0.5 s after the first delta (B4) and `data-turn="answering"`; the cursor `▍` follows the
 text; after the complete block the reply reads exactly `Two of three runs finished.`, the cursor
 is gone and the header reads `READY`.
@@ -415,13 +417,13 @@ always a correction, and waiting would lose the terminal's speed (`spec-input.md
   if that has not happened 5 s after the tap, the room forces it (for Claude Code: `SIGINT`,
   research Q2) and the line reads `Stopped at 07:03 (forced).`. Either way `READY` by 5.5 s.
 - **What a stopped turn looks like** (D33): its text stays exactly as it was at the tap; nothing
-  that turn sends later is drawn (the raw view, §13, still has it). Under it, 16 px caps
+  that turn sends later is drawn (the room's log keeps it). Under it, 16 px caps
   `--text-3`: `STOPPED AT 07:03`. A tool line still running loses its `●` and ends in ` · stopped`.
   The `▍` cursor goes.
 - **`SEND` during a turn** does both at once: the running turn is stopped as above, and the new
   prompt is drawn at once (B8) below the stopped one as a new turn; the agent receives it as soon
   as the old turn has ended (the bridge orders the two, T16). The header goes `● STOPPING`, then
-  `● THINKING` for the new turn.
+  `● WORKING` for the new turn (`data-turn` `stopping`, then `thinking`).
 - **Voice** (C2): pressing the talk button during a turn does not stop anything; listening starts
   (D29); the send at release stops the turn as `SEND` does (T6).
 - A turn the agent started itself (speaking up, `coworker.md`) is stopped the same way.
@@ -430,19 +432,12 @@ always a correction, and waiting would lose the terminal's speed (`spec-input.md
 
 ## 9. Long replies and long turns
 
-The screen never shortens what the agent wrote (§5); these rules keep a long reply findable.
+The screen never shortens what the agent wrote (§5) and draws a long reply whole; the owner flicks
+through it (D35). Only code blocks fold (§3) and only old turns (`SHOW EARLIER`, §3).
 
 - **Elapsed time** (D35). Once a turn has run 10 s, the reply's label row shows its age:
   `AGENT · 07:02 · 0:12`, counting each second (`m:ss`, from 1 h `h:mm:ss`), until the turn ends;
   then the label keeps the total: `AGENT · 07:02 · 1:48`. Turns under 10 s show no age.
-- **Back to the start** (D35). When a turn ends and its reply is taller than the conversation's
-  visible area, `↑ TOP OF ANSWER` (same look and place as `↓ NEW`, §4) appears; a tap scrolls (no
-  animation) so the reply's label row is 16 px below the conversation's top. It goes when that label
-  row is in sight, when the owner scrolls, or when the next turn starts. `↓ NEW` wins the place
-  while both would show.
-- **Very long replies** (D35). Of a reply's text above 20 000 characters, the screen draws the
-  first 20 000 (cut at the last line end before it) and a full-width 48 px button
-  `SHOW THE REST (34 120 CHARACTERS)`; a tap draws it all. Tool lines are never folded.
 - **A long silence is not an error.** As long as the room's heartbeat (every 10 s, D10) says the
   agent is alive, a turn may think or work for any time; the label's age shows it. The owner ends
   it with `STOP`. A lost room link is `screens.md` §7.
@@ -463,14 +458,14 @@ to 120 characters and drawn as text. After an error the header reads `READY` (D3
 | E3 `agent-down` | the agent cannot start | `The agent cannot start: {detail}. The room tries again every 30 s.` plus the status line (§1) `Agent not running since 07:04.`; `SEND` and talk disabled, the draft kept | none |
 | E4 `not-logged-in` | the agent reports missing login or key | `The agent is not logged in on the room. Log it in there, then send again.` | none |
 | E5 `model-busy` | the model service is retried by the agent | not an error line: a tool-line-style row in `--text-3`, `the model service is busy, retrying (2 of 10)`, replaced on each retry, gone when text arrives | none |
-| E6 `model-failed` | the turn ends with an error from the model service | `The answer failed: the model service said {detail}.` | `RETRY` |
+| E6 | retired (T50): a model-service error is E8, its `{detail}` the service's own message (D57) | | |
 | E7 `step-limit` | the turn ends because the agent's step limit is reached | `Stopped after {n} steps, the agent's limit.` | `GO ON` sends `Go on.` as a new prompt |
-| E8 `failed` | any other error end of a turn | `The answer failed: {detail}.` | `RETRY` |
+| E8 `failed` | any other error end of a turn, the model service's included | `The answer failed: {detail}.` | `RETRY` |
 
 - **Nothing is ever sent again on its own** (D34, as D12): `RETRY`, `EDIT` and `GO ON` act only on a
   tap. A `RETRY` is a new turn with the same text; the failed turn stays above it.
 - Which native event of the agent maps to which code is T16's mapping table; Claude Code's
-  `api_retry` is E5 and a `result` with `is_error` is E6, E7 or E8 (research Q2).
+  `api_retry` is E5 and a `result` with `is_error` is E7 or E8 (research Q2).
 - An error line is shown on every screen (§12); its buttons work from any of them.
 
 ## 11. A new conversation (pending Q-O2)
@@ -513,7 +508,7 @@ Plan §2: "All screens show the same cockpit conversation; speaking at one shows
   room has it; reply text reaches every screen within B4.
 - **Per screen** (D37): the draft, the live partial words while speaking (only the sent prompt
   reaches the others), the pane open or closed, the scroll position, opened tool lines and code
-  blocks, the `NEW` bar, the raw view (§13).
+  blocks, the `NEW` bar.
 - **Who said it.** With two or more paired screens, a prompt's label carries the sending screen's
   name from pairing (`screens.md` §6): `YOU · DESK · 07:02` (`YOU · DESK · SPOKEN · 07:02`). With
   one paired screen, no name.
@@ -522,27 +517,19 @@ Plan §2: "All screens show the same cockpit conversation; speaking at one shows
 - A screen that opens or reloads gets the last 50 turns from the room and joins a running turn
   where it is (T15).
 
-## 13. The raw view (pending Q-O17)
+## 13. No raw view in C1 (pending Q-O17)
 
 Plan C1: "A raw terminal view of the same session as a toggle, for when the rendered view hides
-something."
+something." Written for Q-O17's recommendation d) (T50, `reviews/36-skeptic.md` finding 7):
 
-- **Not a terminal.** The room runs the agent headless (`claude -p … --output-format stream-json`,
-  research Q2): there is no terminal screen to attach to. `server/terminals.mjs` bridges a
-  **writable** pty into a tmux session; a device token must not get a shell (plan §4: a token
-  cannot act). So the raw view is a **read-only list of the bridge's native events** for the
-  current conversation, and `server/terminals.mjs` is not used (pending Q-O17, option b).
-- **Toggle.** `RAW` in the header swaps the conversation area for the raw list; the button then
-  reads `TEXT` and a tap swaps back. The input row stays and works. Per screen, not kept across a
-  reload. `data-raw="on|off"` on the pane.
-- **Look.** Mono 16 px `--text-2`, one row per event, newest at the bottom, lines wrap, pinned to the
-  end as §4. A row: `07:02:14.312  assistant  {"type":"assistant",…}` (time `--text-3`, the event's
-  type, its JSON in one line). Consecutive text deltas of one block are merged into one row. A row
-  over 2 000 characters ends in `… (+4 120)`. The last 500 events are drawn; `SHOW EARLIER` adds 500.
-- **Tool output** (pending Q-O17): the content of a tool's result is replaced by
-  `[tool output: 3 412 bytes]`; the call's input is shown. The room config
-  `cockpit.raw.toolOutput: true` shows the output too (default `false`).
-- Raw text is never parsed as markup (as §3).
+- C1 has **no raw view**: no `RAW` button, no `data-raw`, no second renderer of the agent's events.
+- An **opened tool line** (§5) is C1's closest look: each call's tool, input, ms and `ok|failed`.
+- When the rendered view hides something, the owner looks from the laptop (`spec-input.md` §3:
+  "The laptop keeps its own full access, as today.").
+- `server/terminals.mjs` is not used by the cockpit: it bridges a **writable** pty, and a device
+  token must not get a shell (plan §4: a token cannot act).
+- With Q-O17 a) or b) the raw view comes back as a later slice: a read-only list of the bridge's
+  native events, as `QUESTIONS.md` Q-O17 describes; S-C1-24 is retired and that slice gets new ids.
 
 ## 14. Scenarios, part 2
 
@@ -576,7 +563,8 @@ When at t = 2 s the owner types `only the failed one` (the slot reads `SEND`, th
 `SENDING STOPS THE ANSWER` shows) and taps `SEND`,
 Then by t = 2.1 s the new prompt block is drawn below and the header reads `● STOPPING`; the
 first reply's text does not change after t = 2 s and ends with `STOPPED AT HH:MM`; by t = 2.5 s the
-header reads `● THINKING`; the stand-in room's log shows the interrupt before the new prompt.
+header reads `● WORKING` with `data-turn="thinking"`; the stand-in room's log shows the interrupt
+before the new prompt.
 Test: Playwright; snapshot the first reply's text at 2.0 s and 3.0 s (equal); assert the header
 texts at 2.1 s and 2.5 s; read the bridge log order from the stand-in.
 
@@ -614,7 +602,7 @@ Test: Playwright; the fake agent's `exit` step; assert the two texts and the rec
 Given fake-agent scripts ending a turn with each of: a model-service error `overloaded`, the step
 limit at 40 steps, an unknown error `boom`, a missing login, and two retries before text,
 When each plays,
-Then the turn shows, in order: `The answer failed: the model service said overloaded.` + `RETRY`;
+Then the turn shows, in order: `The answer failed: overloaded.` + `RETRY`;
 `Stopped after 40 steps, the agent's limit.` + `GO ON`; `The answer failed: boom.` + `RETRY`;
 `The agent is not logged in on the room. Log it in there, then send again.`; the row
 `the model service is busy, retrying (2 of 10)` gone once text arrives. No element uses `--p1` or
@@ -622,14 +610,14 @@ Then the turn shows, in order: `The answer failed: the model service said overlo
 A `detail` of 300 characters shows its first 120.
 Test: Playwright, one script per row (table-driven); compare the texts and computed colours.
 
-### S-C1-21 A long reply: its age, the way back to its top, the rest folded
-Given the fake agent thinking 15 s, then streaming 120 lines and 26 000 characters over 20 s,
+### S-C1-21 A long reply: its age shows, and it is drawn whole
+Given the fake agent thinking 15 s, then streaming 120 lines and 26 000 characters over 20 s, with
+a 30-row table in it,
 Then at t = 10 s the label reads `AGENT · HH:MM · 0:10` and at t = 12 s `0:12`; after the turn it
-keeps `0:35`; `↑ TOP OF ANSWER` shows and a tap puts the reply's label row 16 px below the
-conversation's top; the reply shows text up to the last line end before 20 000 characters and
-`SHOW THE REST (… CHARACTERS)`; a tap draws the rest.
-Test: Playwright with a fake clock; assert the label texts at 10/12/35 s, the button, the label
-row's rect after the tap, the drawn text length before and after `SHOW THE REST`.
+keeps `0:35`; the reply's drawn text is all 26 000 characters and the table has 30 body rows; no
+button inside the reply other than those of code blocks (none here); the header reads `READY`.
+Test: Playwright with a fake clock; assert the label texts at 10/12/35 s, the reply's
+`textContent` length, the table's row count, and that the reply holds no `button`.
 
 ### S-C1-22 A new conversation: asked, handed over, divided (pending Q-O2)
 Given 23 turns in the conversation and 2 cards on the canvas, the fake agent scripted to answer the
@@ -656,13 +644,5 @@ Then by t = 0.5 s after the room has it, `wall-2` shows `YOU · DESK · HH:MM` o
 `desk` only.
 Test: two Playwright pages with two device tokens; assert labels, drafts and `data-turn` on both.
 
-### S-C1-24 The raw view shows the events, not the tool output and not a shell (pending Q-O17)
-Given a finished turn with one `fleet` call whose result is 3 412 bytes,
-When the owner taps `RAW`,
-Then `data-raw="on"`, the button reads `TEXT`, the conversation area lists rows with times, event
-types and one-line JSON, the tool's result reads `[tool output: 3 412 bytes]`, the input row still
-works; no WebSocket to the terminals route is opened; a tap on `TEXT` brings the conversation back
-at the same scroll position.
-And with `cockpit.raw.toolOutput: true` on the stand-in room, the same row holds the output's JSON.
-Test: Playwright; `page.on('websocket')` records URLs (none for terminals); assert row texts and
-`data-raw`; restart the stand-in room with the config flag and assert again.
+### S-C1-24 (retired, T50)
+The raw view is not in C1 (§13, pending Q-O17). The id is not reused.

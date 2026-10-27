@@ -69,7 +69,7 @@ Answer: (open)
 ## Q-O17 What the raw view shows
 
 Security-relevant (what a screen can read). Plan C1: "A raw terminal view of the same session as a
-toggle". Spec: T5, `c1-talk.md` §13 (written for b).
+toggle". Spec: T5 wrote b); T50 rewrote `c1-talk.md` §13 for d).
 
 - a) **Every event of the agent as it wrote it**, tool output included.
 - b) **Every event, tool output replaced by its size** (`[tool output: 3 412 bytes]`); room config
@@ -77,9 +77,12 @@ toggle". Spec: T5, `c1-talk.md` §13 (written for b).
 - c) **A live terminal** through `server/terminals.mjs` (a writable pty on the room).
 - d) **Not in C1**: the opened tool lines (input, ms, `ok|failed`) are the raw view (`reviews/36-skeptic.md` finding 7).
 
-Recommendation: b) — the headless agent has no terminal to show, c) would hand a device token a
-shell (plan §4: a token cannot act); tool output can carry what the agent read from files or logs,
-so it stays off a desk screen unless the owner turns it on (safe by default, `docs/plans/product.md`).
+Recommendation: d) — opened tool lines already show each call's input, ms and `ok|failed`; a second
+renderer of the same events as one-line JSON is not read on a desk tablet, and "The laptop keeps its own
+full access, as today." (`spec-input.md` §3). If the owner wants the toggle, b) as a later slice: the
+headless agent has no terminal to show, c) would hand a device token a shell (plan §4: a token
+cannot act), and tool output can carry what the agent read from files or logs, so it stays off a
+desk screen unless turned on (safe by default, `docs/plans/product.md`).
 
 Answer: (open)
 
