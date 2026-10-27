@@ -249,7 +249,7 @@ and sets up scripts and timers on its own machine. The spec's tool table (`c1-ta
 state (private) and can fetch URLs (a way out) has all three legs of an exfiltration.
 
 - a) **Read only**: the MCP read tools plus `Read`/`Grep`/`Glob`. No `Bash`, no `Edit`/`Write`, no web.
-  Launched with `--strict-mcp-config --allowedTools "mcp__cockpit__*,Read,Grep,Glob"
+  Launched with `--strict-mcp-config --allowedTools "mcp__laneboard__*,Read,Grep,Glob"
   --permission-prompts none`; a refused call shows as a grey line `tried {tool}, not allowed`.
 - b) a) plus `WebSearch`/`WebFetch`, with the room's egress limited to the model API, the STT host and
   the git remote.
@@ -293,6 +293,29 @@ disables `CANCEL JOB` when the room is down, yet the job may still run on the ro
 
 Recommendation: b) — a timer the owner cannot stop is the thing §6 forbids; skipping is the safe side.
 Belongs to `coworker.md` (T13); not needed for C1/C2.
+
+Answer: (open)
+
+## Q-O26 How the room reads the hub
+
+Security-relevant, blocks C3 (not C1). From T8 (`c3-see.md` §2). The MCP tools read the board over
+HTTP. A hub today admits only `local` (its own loopback port) and `direct` (a person through
+`tailscale serve`) and refuses signed requests (`docs/fleet/auth.md`); a room on another machine
+would classify as `unidentified` and be refused.
+
+- a) **The room runs on the hub's box**, as its own unix user, and reads the hub's loopback port as a
+  `local` caller: on a hub `local` gets every read and no action, control, terminal or push change.
+  No new door; "next to the hub" (plan §2) becomes "on the hub's box, outside the hub process".
+- b) A new `reader` kind on the hub: the room signs its GETs with a key the hub pins with scope
+  `read` (reusing the builders' signature code). The room can live anywhere; the hub gains a door
+  and its security review a new section.
+- c) The room reads every builder directly as a second hub. Duplicates the hub's merge and gives
+  every builder a second pinned key.
+
+Recommendation: a) — it adds no authentication path and keeps the room read-only towards the fleet by
+the hub's own rules; b) can come later when the owner wants the room elsewhere. Note: with a) any
+process of the agent's uid can read what the hub shows, which is what the read tools give it anyway.
+The spec is written for a) (pending Q-O26).
 
 Answer: (open)
 

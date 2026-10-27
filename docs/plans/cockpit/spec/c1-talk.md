@@ -204,8 +204,8 @@ the laneboard MCP tools arrive as `mcp__laneboard__<tool>` and are matched witho
 | `lanes` (C3) | `builder` | `looked at the lanes on {target}` | `looked at lanes on {n} builders` |
 | `ci` (C3) | `branch` | `looked at CI on {target}` | `looked at CI on {n} branches` |
 | `alerts` (C3) | none | `read the alerts` | `read the alerts {n}×` |
-| `morning` (C3) | `since` | `read the Morning since {target}` | `read the Morning {n}×` |
-| `history` (C3) | `node` | `read the history of {target}` | `read the history of {n} nodes` |
+| `morning` (C3) | `window` | `read the Morning for {target}` | `read the Morning {n}×` |
+| `history` (C3) | `node`, else `run` | `read the history of {target}` | `read the history of {n} nodes` |
 | `focus` (C3) | none | `looked at this screen` | `looked at this screen {n}×` |
 | `Read` | `file_path`, last path part | `read {target}` | `read {n} files` |
 | `Grep`, `Glob` | none | `searched the files` | `searched the files {n}×` |
@@ -216,8 +216,8 @@ the laneboard MCP tools arrive as `mcp__laneboard__<tool>` and are matched witho
 | `Task` | none | `asked a helper agent` | `asked {n} helper agents` |
 | any other tool | none | `used {name}` (another MCP server's tool: `used <server>:<tool>`) | `used {name} {n}×` |
 
-The C3 rows follow the plan's tool names; T8 fixes their parameters and changes the `{target}`
-column if a field is renamed. Show commands (`fly_to`, `pin`, …) are not tool lines: each leaves
+The C3 rows follow the tools' parameters in `c3-see.md` §4 (T8: `morning` takes `window`,
+`history` takes `node` or `run`). Show commands (`fly_to`, `pin`, …) are not tool lines: each leaves
 its own conversation line (T10).
 
 **Failures.** A line with failed calls appends ` · 1 failed` (or ` · 2 failed`) in the same grey: a
