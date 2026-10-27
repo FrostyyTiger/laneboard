@@ -29,12 +29,19 @@
 // the overview's screen (a young crit already stands a quarter of the
 // frame), a white-hot core at its foot, wider as well as taller with age,
 // its sheath fading to nothing at the top.
+//
+// `warp` (night 3 T12, r59-dreamer 1): during a flight the dust and the far
+// stars stretch into short streaks along the way the camera travels, their
+// tails tinted toward the status of where it is going (grey for calm, a faint
+// amber or red edge for trouble), and snap back as it lands; the dust thins
+// while it flies. You know the next target is red before the caption types
+// it. Nothing at rest, nothing in still mode.
 
 import { hash } from './layout.js';
 import { toneOf } from './palette.js';
 
 /** Every effect this page knows, in the order the README lists them. */
-export const FX_NAMES = Object.freeze(['lanes', 'comets', 'twinkle', 'beacon']);
+export const FX_NAMES = Object.freeze(['lanes', 'comets', 'twinkle', 'beacon', 'warp']);
 
 /** The effects `?fx=` asks for (a `location.search` string or URLSearchParams): a Set of known names. */
 export function parseFx(search = '') {
@@ -544,4 +551,42 @@ export function beaconAt(b, now, timing = BEACON, still = false) {
   const e = p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2;
   const rise = (b.k0 ?? 0) + (to - (b.k0 ?? 0)) * e;
   return { rise, height: beaconHeight(now - b.from, 'crit', timing), width: beaconWidth(now - b.from, 'crit', timing) };
+}
+
+/**
+ * The warp's look over a flight (night 3 T12): a streak's length is `len`
+ * times its point's distance from the camera (so every streak is the same
+ * angle, about 3 degrees at full stretch, near grain or far star; the dust
+ * takes `dust` of it, the far stars `stars`), grown in over `grow` of the
+ * flight's progress and snapped back over `snap` (short: it lands at once).
+ * `tint` is how far a streak's tail leans to the destination's hue by its
+ * tone (calm none: grey), `thin` how much of the dust's light goes while
+ * it flies, `opacity` the streaks' peak (additive, so faint).
+ */
+export const WARP = Object.freeze({
+  len: 0.055, dust: 1, stars: 0.6,
+  grow: Object.freeze([0.06, 0.3]), snap: Object.freeze([0.84, 0.95]),
+  tint: Object.freeze({ calm: 0, low: 0, warn: 0.5, crit: 0.65 }),
+  thin: 0.55, opacity: 0.4,
+});
+
+const smooth = (a, b, x) => {
+  const k = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
+
+/**
+ * The warp at flight progress `k` (0..1, the flight's own time, not eased)
+ * toward a destination whose worst tone is `tone`: `{ k, len, tint, thin }`,
+ * `k` the stretch 0..1 (in over `grow`, out over `snap`), `len` the streak
+ * length (WARP.len's share), `tint` the tail's lean to the hue, `thin` the
+ * dust's loss. All 0 outside a flight (k not strictly inside 0..1, or not
+ * a number) and in still mode (no flights there).
+ */
+export function warpAt(k, tone = 'calm', still = false, timing = WARP) {
+  const none = { k: 0, len: 0, tint: 0, thin: 0 };
+  if (still || !Number.isFinite(k) || !(k > 0 && k < 1)) return none;
+  const e = smooth(timing.grow[0], timing.grow[1], k) * (1 - smooth(timing.snap[0], timing.snap[1], k));
+  if (!(e > 0)) return none;
+  return { k: e, len: timing.len * e, tint: (timing.tint[tone] ?? 0) * e, thin: timing.thin * e };
 }

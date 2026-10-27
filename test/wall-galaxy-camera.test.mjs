@@ -362,3 +362,28 @@ test('T2: the camera tells the scene which system it flies to, and keeps the oth
   t += 16; cam.frame(t);
   assert.equal(held.at(-1), null);
 });
+
+test('T12: the camera reports its flight (progress, destination) and nothing at rest', () => {
+  const nodes = fleet({ 'cloud-b': 'crit' });
+  const galaxy = fakeGalaxy(nodes);
+  const cam = createGalaxyCamera(galaxy);
+  cam.fit();
+  cam.frame(1000);
+  assert.equal(cam.flight(), null, 'the first shot is no flight');
+  cam.focus('cloud');
+  cam.frame(2000);
+  assert.deepEqual(cam.flight(), { k: 0, to: 'cloud' });
+  cam.frame(2000 + FLIGHT.ms / 2);
+  assert.deepEqual(cam.flight(), { k: 0.5, to: 'cloud' }, 'its own time, not eased');
+  cam.frame(2000 + FLIGHT.ms);
+  assert.equal(cam.flight(), null, 'landed');
+  cam.fit();
+  cam.frame(6000);
+  cam.frame(6000 + FLIGHT.ms / 4);
+  assert.deepEqual(cam.flight(), { k: 0.25, to: null }, 'back to the overview');
+  const still = createGalaxyCamera(fakeGalaxy(nodes), { still: true });
+  still.frame(1000);
+  still.focus('cloud');
+  still.frame(1500);
+  assert.equal(still.flight(), null, 'still mode never flies');
+});

@@ -193,6 +193,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   let version = 0;
   const drawCbs = new Set();
   let freeNow = null; // the free box the shot uses, eased toward `free()`
+  let flying = null; // the flight under way: `{ k, to }` (T12, fx=warp), null at rest
 
   const sites = () => galaxy.world?.sites ?? [];
   const siteOf = (id) => galaxy.world?.byId.get(id) ?? null;
@@ -255,7 +256,9 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     last = now;
     const box = typeof free === 'function' ? free() : null;
     freeNow = box ? blendRect(freeNow, box, freeNow ? 1 - Math.exp(-dt / FREE_EASE_MS) : 1) : null;
-    const k = from ? ease((now - want.t0) / (want.ms > 0 ? want.ms : flight.ms)) : 1;
+    const p = from ? (now - want.t0) / (want.ms > 0 ? want.ms : flight.ms) : 1;
+    const k = from ? ease(p) : 1;
+    flying = from && p < 1 ? { k: p, to: want.kind === 'site' ? want.id : null } : null;
     const to = target(now);
     pose = from && k < 1 ? flightPose(from, to, k, flight, { ...view(), ends: [fromEnd, endFor(to, [starOf(want)])], avoid: avoid() }) : to;
     if (k >= 1) from = null;
@@ -327,6 +330,9 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     want: () => ({ ...want }),
     // The overview as last aimed at (fitted clear of the words), else the plain one.
     home: () => home ?? overviewShot(sites()),
+    // The flight under way (T12): `{ k, to }`, its progress 0..1 (not eased) and the site it flies to
+    // (null for the overview); null at rest, in still mode, or under a finger.
+    flight: () => (flying ? { ...flying } : null),
     // Where the camera is now (`{ pos, look }`), null before its first frame.
     pose: () => (pose ? { pos: { ...pose.pos }, look: { ...pose.look } } : null),
     // A finger's pose (T8): held from the next frame on, the flight under way dropped.
@@ -334,6 +340,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
       if (!steer || still || !p) return;
       from = null;
       fromEnd = null;
+      flying = null;
       fromId = want.kind === 'site' ? want.id : fromId;
       want = { kind: 'free', pose: { pos: { ...p.pos }, look: { ...p.look } }, t0: null };
       version += 1;

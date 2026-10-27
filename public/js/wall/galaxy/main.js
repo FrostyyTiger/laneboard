@@ -36,7 +36,7 @@
 // it: brackets at once, the plate as the camera arrives. The plate is then the
 // site's sheet (T11, hud.js sheetCaption: every line, worst first); in an
 // open system a tap on a planet shows the planet's sheet where the camera is.
-// Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon` (comma-separated, all off by default);
+// Effects (§7.C, fx.js): `?fx=lanes,comets,twinkle,beacon,warp` (comma-separated, all off by default);
 // `<html data-fx>` lists those on.
 
 import { createPerf } from '../perf.js';
@@ -307,6 +307,7 @@ export function boot() {
     } else if (!park) {
       gestures?.frame(now);
       cam.frame(now);
+      if (fx.has('warp')) galaxy.setWarp(cam.flight());
     }
     else {
       freeBox();

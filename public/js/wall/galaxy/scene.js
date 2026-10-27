@@ -26,8 +26,8 @@ import { createStageSize } from './stage.js';
 import { armTangent, nebulaLobes, nebulaPeaks } from './nebula.js';
 import { FRAMING, fitDistance, freeCentre, panShot } from './framing.js';
 import {
-  BEACON, COMETS, LANES, TWINKLE, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles,
-  twinkleAt,
+  BEACON, COMETS, LANES, TWINKLE, WARP, beaconAt, beaconNear, beaconScale, beamProfile, coreProfile, cometAt, cometPath, pulseAt, routePath, trackComets, trackRoutes, trackTwinkles,
+  twinkleAt, warpAt,
 } from './fx.js';
 
 /**
@@ -158,6 +158,10 @@ export const ribbonOpacity = (open) => RIBBON.opacity * (1 - Math.max(0, Math.mi
 
 /** The far stars and dust grains at the best level. */
 const STARS = 2500, DUST = 9000;
+/** How many far stars and dust grains streak under fx=warp (night 3 T12): the first of each, an even thinning. */
+const WARP_STARS = 800, WARP_DUST = 1500;
+/** The dust's own opacity (fx=warp thins it from there while the camera flies). */
+const DUST_OPACITY = 0.7;
 
 /** Segments of a landing ring (a small circle under a planet, on the plane). */
 const RING_SEGS = 16;
@@ -341,9 +345,10 @@ const pageClock = () => globalThis.performance.now();
  * `still` (reduced motion, still.js): trouble glows without breathing, the dust stays put.
  * `fx` (fx.js `parseFx`): the effects asked for; `lanes` draws `setRoutes`' pulses,
  * `comets` flies `setComets`' comets, `twinkle` lights `setTwinkles`' planets,
- * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them).
- * Returns `{ update, setOpen, setSun, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize,
- * setQuality, size, camera, world, quality, pixelRatio, routes, comets, twinkles, beacons, renderer, dispose }`.
+ * `beacon` stands a pillar over each crit cluster (`setCritAges` dates them),
+ * `warp` streaks the sky while `setWarp` says the camera flies.
+ * Returns `{ update, setOpen, setSun, setRoutes, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, frame, resize,
+ * setQuality, size, camera, world, quality, pixelRatio, routes, comets, twinkles, beacons, warp, renderer, dispose }`.
  * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
  * `stage` (stage.js, T29) keeps the canvas's css size so no frame reads layout; `size()` gives it to the
  * camera, the labels and the lock.
@@ -432,7 +437,7 @@ export function createGalaxyScene(canvas, {
     g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
     const m = new THREE.PointsMaterial({
-      size: DUST_LOOK.size, map: dotTex, vertexColors: true, transparent: true, opacity: 0.7,
+      size: DUST_LOOK.size, map: dotTex, vertexColors: true, transparent: true, opacity: DUST_OPACITY,
       depthWrite: false, blending: THREE.AdditiveBlending,
     });
     // dustFade on the GPU: the grains round the held system thin to the floor.
@@ -1180,6 +1185,93 @@ export function createGalaxyScene(canvas, {
     }
   };
 
+  // --- fx=warp (night 3 T12; fx.js warpAt): a flight has a direction and a tint --
+  // A line from each of the first WARP_STARS far stars and WARP_DUST dust
+  // grains to a tail pushed along the camera's travel by WARP.len of its
+  // distance (in the vertex shader, view space: every streak the same angle),
+  // so the sky streams past; the tail leans to the destination's hue. Made
+  // once, hidden at rest (no draw, and a frame does nothing but one check);
+  // the dust's streaks are its child, so they turn with it.
+  const warpDir = { value: new THREE.Vector3(0, 0, -1) };
+  const warpParts = [];
+  let warpWant = null; // `{ k, to }` from the camera's flight, or null
+  let warpShown = warpAt(null);
+  const warpLast = new THREE.Vector3(), warpStep = new THREE.Vector3();
+  let warpHas = false, warpOn = false;
+  if (fx?.has('warp')) {
+    const streaks = (src, n, share, parent, name) => {
+      const pos = new Float32Array(n * 6), tail = new Float32Array(n * 2);
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < 3; j++) pos[i * 6 + j] = pos[i * 6 + 3 + j] = src[i * 3 + j];
+        tail[i * 2 + 1] = 1;
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      g.setAttribute('tail', new THREE.BufferAttribute(tail, 1));
+      const m = new THREE.ShaderMaterial({
+        uniforms: {
+          warpDir, warpLen: { value: 0 }, warpOpacity: { value: 0 },
+          warpHead: { value: col(palette.calm) }, warpTail: { value: col(palette.calm) },
+        },
+        vertexShader: [
+          'uniform vec3 warpDir;', 'uniform float warpLen;', 'attribute float tail;', 'varying float vTail;',
+          'void main() {',
+          '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+          '  mv.xyz += normalize((viewMatrix * vec4(warpDir, 0.0)).xyz) * warpLen * length(mv.xyz) * tail;',
+          '  vTail = tail;',
+          '  gl_Position = projectionMatrix * mv;',
+          '}',
+        ].join('\n'),
+        fragmentShader: [
+          'uniform vec3 warpHead;', 'uniform vec3 warpTail;', 'uniform float warpOpacity;', 'varying float vTail;',
+          'void main() {',
+          '  gl_FragColor = vec4(mix(warpHead, warpTail, vTail) * warpOpacity * (1.0 - 0.45 * vTail), 1.0);',
+          '  #include <colorspace_fragment>',
+          '}',
+        ].join('\n'),
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+      });
+      const lines = new THREE.LineSegments(g, m);
+      lines.name = name;
+      lines.visible = false;
+      lines.frustumCulled = false; // the shader moves its tails
+      parent.add(lines);
+      shared.push(g, m);
+      warpParts.push({ lines, share, n });
+    };
+    streaks(stars.geometry.attributes.position.array, WARP_STARS, WARP.stars, scene, 'fx-warp-stars');
+    streaks(dust.geometry.attributes.position.array, WARP_DUST, WARP.dust, dust, 'fx-warp-dust');
+  }
+  /** The camera's flight now (`{ k, to }`, camera.js `flight()`), or null at rest; ignored unless `fx=warp`. */
+  const setWarp = (w) => { if (warpParts.length) warpWant = w && Number.isFinite(w.k) ? { k: w.k, to: w.to ?? null } : null; };
+  /** The warp as last drawn, its line sets and its direction (the scene's `warp`). */
+  const warp = () => ({ ...warpShown, parts: warpParts.map((p) => p.lines), dir: warpDir.value.clone() });
+  const drawWarp = () => {
+    // At rest it costs one check (and where the camera is, for the next flight's first step).
+    if (!warpWant && !warpOn) { warpLast.copy(camera.position); warpHas = true; return; }
+    const s = warpWant?.to != null ? world?.byId.get(warpWant.to) : null;
+    const t = s && !s.gone ? s.nebula?.tone ?? 'calm' : 'calm';
+    const at = warpAt(warpWant?.k, t, still);
+    warpShown = { ...at, tone: t };
+    // Which way the camera goes: its step since the last frame (kept when it pauses).
+    warpStep.subVectors(camera.position, warpLast);
+    if (warpHas && warpStep.lengthSq() > 1e-6) warpDir.value.copy(warpStep).normalize();
+    warpLast.copy(camera.position);
+    warpHas = true;
+    const on = at.len > 0;
+    warpOn = on;
+    for (const { lines, share } of warpParts) {
+      lines.visible = on;
+      if (!on) continue;
+      const u = lines.material.uniforms;
+      u.warpLen.value = at.len * share;
+      u.warpOpacity.value = WARP.opacity * at.k;
+      u.warpHead.value.copy(tone.calm);
+      u.warpTail.value.copy(tone.calm).lerp(tone[t] ?? tone.calm, at.tint);
+    }
+    dust.material.opacity = DUST_OPACITY * (1 - at.thin);
+  };
+
   /** The most open system's star, fade radius and opening (eased), or none: what the dust thins round. */
   const heldDust = () => {
     let best = null;
@@ -1247,6 +1339,7 @@ export function createGalaxyScene(canvas, {
     if (tails.length) drawComets(now);
     if (glints.length) drawTwinkles(now);
     if (pillars.length) drawBeacons(now);
+    if (warpParts.length) drawWarp();
     renderer.render(scene, camera);
   };
 
@@ -1272,6 +1365,7 @@ export function createGalaxyScene(canvas, {
     for (const k of Object.keys(geo)) { geo[k].dispose(); geo[k] = next[k]; }
     dust.geometry.setDrawRange(0, Math.round(DUST * L.dust));
     stars.geometry.setDrawRange(0, Math.round(STARS * L.stars));
+    for (const { lines, n } of warpParts) lines.geometry.setDrawRange(0, 2 * Math.round(n * (lines.parent === dust ? L.dust : L.stars)));
     pixelRatio = pixelRatioFor(q, dpr, ratio);
     renderer.setPixelRatio(pixelRatio);
     dustCap.value = DUST_LOOK.maxPx * pixelRatio;
@@ -1290,7 +1384,7 @@ export function createGalaxyScene(canvas, {
 
   return {
     update, setOpen, setHeld: (id) => { held = id ?? null; },
-    setSun: (look) => { if (look) sunWant = look; }, setRoutes, setComets, setTwinkles, setCritAges, drawn, planets, frame, resize, setQuality, camera,
+    setSun: (look) => { if (look) sunWant = look; }, setRoutes, setComets, setTwinkles, setCritAges, setWarp, drawn, planets, frame, resize, setQuality, camera,
     size: sized.get,
     renderer, dispose,
     get world() { return world; },
@@ -1301,6 +1395,8 @@ export function createGalaxyScene(canvas, {
     get comets() { return comets.flying; },
     get twinkles() { return twinkles; },
     get beacons() { return beacons; },
+    /** The warp as last drawn (`{ k, len, tint, thin, tone }`, fx.js warpAt) and its two line sets (fx=warp). */
+    get warp() { return warp(); },
     /** What the dust thins round now (`{ x, y, z, r, k }`, dustFade's uniforms). */
     get dustHold() { return heldDust(); },
     /** The sun as drawn now (`{ scale, glow, cold }`, T6) and its core and halo. */
