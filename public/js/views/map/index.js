@@ -38,13 +38,19 @@
 //   map.update({ nodes, links, events });
 //   map.event({ node: 'x', kind: 'ok', text: '…' });
 //   map.onSelect((sel, node) => navigate({ sel }));
+//
+// Ambient (a wall or desk screen, see AMBIENT): no HUD, no input, a slow turn.
+//
+//   const map = createMap(el, { ambient: true });          // or { drift, fps, centerY }
+//   map.onDraw(() => paintUnder(map.screenOf('lamp')));     // after every frame
+//   map.focus('hv1', 2.4); … map.fit();                      // a camera tour
 
 import { damp, settled, wrapAngle, flight, inertia, stage, easeInOut } from '../../core/motion.js';
 import {
   normalize, foldState, autoFold, visibleLinks, neighbours as neighboursOf, rollup, scopeAlpha,
   idForSel, selForId, SEVERITY, FOLD_KEY, AUTO_UNFOLD_ZOOM,
 } from './model.js';
-import { layout, RINGS, SIZE, polar, runRingR } from './layout.js';
+import { layout, polarLayout, RINGS, SIZE, polar, runRingR } from './layout.js';
 import { OVERLAY_KEY, validOverlay, availableOverlays, reachScope, nodeStyle, rollsUp, SHAPE_CODE, TONE_CODE, driftText, driftCounts, runFacts } from './overlays.js';
 import { createRenderer, readPalette } from './render.js';
 import {
@@ -68,6 +74,19 @@ const AMBIENT_COMETS = 16;
 const SEEN_MAX = 400;
 
 const MODES = ['full', 'split', 'pip'];
+
+/**
+ * Ambient: the Map as something to look at from across a room (a wall or desk
+ * screen). No HUD and no input; the constellation turns slowly inside a still
+ * dial, and frames are capped so a small machine stays cool. Drift is radians
+ * per second (one turn in ten minutes by default); the turn is around the
+ * centre of the view, so a node the camera flew to turns in place. Flights
+ * take `flight` times as long: a tour, not a jump. `centerY` is where on the
+ * screen the view's centre (and the turn's) sits, as a share of the height
+ * from the top: a page with a band of its own at the bottom (the Wall's
+ * clock and fleet line) lifts it. Default the middle.
+ */
+const AMBIENT = { drift: TAU / 600, fps: 30, flight: 2.5, centerY: 0.5 };
 
 const reducedMotion = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 const pageHidden = () => globalThis.document?.visibilityState === 'hidden';
@@ -130,12 +149,46 @@ export function migrateFolds(list, localId) {
  *   onSelect(node)        legacy callback on every selection change
  *   budgetUsd(node)       the builder's budget cap for the cost overlay
  *   perf                  print p95 draw time in the readout (default: ?mapperf=1)
+ *   layout(nodes)         -> {pos, center, kids} with the shape of layout.js `layout`;
+ *                            pos gives world x/y (r and angle follow from them, polarLayout),
+ *                            and may carry `labelAngle`, `labelAt` and `branch` (render.js branchCurve);
+ *                            the result may carry `guides` (orbit lines) and `bounds` (the fit).
+ *                            Default: the radial rings
+ *   rings                 false: no ring hairlines, ring legends or bearing dial (default on)
+ *   legends               false: no ring legends; the hairlines and the dial stay (default on)
+ *   lamps                 false: no lamp strip under a builder's name (default on)
+ *   edgeLabels            false: no link labels (`deploys`, `clones`), the links themselves
+ *                            stay; the Wall, where they collide with names (default on)
+ *   gauges                'trouble': cpu/mem rings only on a node in trouble, in focus or with a
+ *                            metric past the warn line (default: on every gauged node)
+ *   branch(child, parent, {s}) -> the share 0..1 of a tree branch drawn from the child's
+ *                            end at map scale s (0 none), undefined for all. Default: all
+ *   labelSize(node, {s, trouble}) -> px for the node's name, 0 for none at this
+ *                            zoom (s), undefined for today's 11/12px. Default: today's
+ *   pinLabels             true: a name keeps its side and line while it stays on screen
+ *                            (the Wall: the turn no longer flips names). Default off
+ *   labelInset            {top, right, bottom, left}, shares of the canvas: the collision
+ *                            pass moves a name a line up or down only inside them (the Wall's
+ *                            safe area). Default: the canvas edges
+ *   labelClear            true: the collision pass moves a name by its own line, and a calm name
+ *                            with no free place is not drawn rather than drawn over another
+ *                            (the Wall; trouble and the selection keep their place). Default off
+ *   covers()              -> [{left, top, right, bottom}] in canvas px, asked every frame: what the
+ *                            page lays over the canvas (the Wall's caption plate). Names keep clear
+ *                            of it as of the inspector; one with no free place there is not drawn,
+ *                            nor is a link label it touches.
+ *                            Default: none
  *
  * Returns the API of plan §5 2.2 plus the shell hooks (§4 D8).
  */
 export function createMap(root, opts = {}) {
   root.classList.add('map');
   root.replaceChildren();
+  const layOut = typeof opts.layout === 'function' ? (nodes) => polarLayout(opts.layout(nodes)) : layout;
+  const amb = opts.ambient ? { ...AMBIENT, ...(opts.ambient === true ? {} : opts.ambient) } : null;
+  if (amb) root.classList.add('map-ambient');
+  // Where the camera's point sits on screen, a share of the height (ambient `centerY`).
+  const midY = amb && Number.isFinite(amb.centerY) ? Math.min(0.8, Math.max(0.2, amb.centerY)) : 0.5;
 
   const canvas = h('canvas', 'map-canvas');
   canvas.setAttribute('role', 'img');
@@ -173,6 +226,10 @@ export function createMap(root, opts = {}) {
 
   hud.append(head, readoutEl, find, ...(legacyPanel ? [panel] : []), tip);
   root.append(canvas, hud);
+  if (amb) {
+    hud.hidden = true;
+    canvas.style.pointerEvents = 'none';
+  }
 
   const ctx = canvas.getContext('2d');
   const renderer = createRenderer(ctx, readPalette(root));
@@ -232,13 +289,27 @@ export function createMap(root, opts = {}) {
   let readoutText = '';
   const selectCbs = new Set();
   const hoverCbs = new Set();
+  const drawCbs = new Set();
+  let spin = 0;                   // ambient turn of the view around its centre, radians
+  let follow = null;              // ambient: the node the camera flew to and stays on until fit()
+  const followV = { x: 0, y: 0 };
   const perfOn = opts.perf ?? /[?&#]mapperf=1\b/.test(`${globalThis.location?.search ?? ''}${globalThis.location?.hash ?? ''}`);
   const drawMs = [];
 
   const view = () => ({ W, H, fitScale });
   const scale = () => fitScale * cam.z;
-  const toScreen = (p) => ({ x: W / 2 + (p.x - cam.x) * scale(), y: H / 2 + (p.y - cam.y) * scale() });
-  const toWorld = (x, y) => ({ x: (x - W / 2) / scale() + cam.x, y: (y - H / 2) / scale() + cam.y });
+  // The spin turns the view around its centre (the camera), so a flight still
+  // lands its node in the middle and the overview turns around the core.
+  const toScreen = (p) => {
+    const cs = Math.cos(spin), sn = Math.sin(spin);
+    const dx = p.x - cam.x, dy = p.y - cam.y;
+    return { x: W / 2 + (dx * cs - dy * sn) * scale(), y: H * midY + (dx * sn + dy * cs) * scale() };
+  };
+  const toWorld = (sx, sy) => {
+    const dx = (sx - W / 2) / scale(), dy = (sy - H * midY) / scale();
+    const cs = Math.cos(spin), sn = Math.sin(spin);
+    return { x: cam.x + dx * cs + dy * sn, y: cam.y - dx * sn + dy * cs };
+  };
 
   // --- sizing
   const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => resize()) : null;
@@ -246,11 +317,20 @@ export function createMap(root, opts = {}) {
 
   /** The HUD row and a phone's bottom bar, from the HUD's padding (views/map.css). */
   function vInsets() {
+    if (amb) return { top: 0, bottom: 0 };
     const cs = typeof getComputedStyle === 'function' ? getComputedStyle(hud) : null;
     return { top: parseFloat(cs?.paddingTop) || 0, bottom: parseFloat(cs?.paddingBottom) || 0 };
   }
 
   function computeFit() {
+    // A layout with its own extents (the Wall's orbits) fits them to the
+    // width and the height apart: a wide layout uses the wide screen.
+    const b = lay.bounds;
+    if (b) {
+      fitY = b.cy ?? 0;
+      const k = Math.min(W / (2 * b.x), H / (2 * b.y));
+      return Number.isFinite(k) && k > 0 ? k : 1;
+    }
     const f = fitFrame(W, H, maxRadius() + 64, vInsets());
     fitY = f.y;
     return f.s;
@@ -288,6 +368,7 @@ export function createMap(root, opts = {}) {
 
   function fit(instant) {
     userMoved = false;
+    follow = null;
     const right = rightInset();
     const outer = maxRadius() + 64;
     const z = right ? clampZoom(Math.min(1, (W - right) / (2 * outer * (fitScale || 1)))) : 1;
@@ -308,7 +389,7 @@ export function createMap(root, opts = {}) {
       return;
     }
     const path = flight([cam.x, cam.y, viewW(cam.z)], [to.x, to.y, viewW(to.z)]);
-    fl = { path, t0: clock(), ms: path.ms, to };
+    fl = { path, t0: clock(), ms: path.ms * (amb?.flight ?? 1), to };
     kick();
   }
 
@@ -369,7 +450,7 @@ export function createMap(root, opts = {}) {
     if (selected && hidden.has(selected)) selected = shownOf(selected);
 
     const prev = new Map([...cur].filter(([, c]) => !c.leaving).map(([id, c]) => [id, c.goal]));
-    lay = layout(model.nodes.filter((n) => !hidden.has(n.id)));
+    lay = layOut(model.nodes.filter((n) => !hidden.has(n.id)));
     if (lay.center.virtual) byId.set(lay.center.id, lay.center);
     kidsRoll = new Map(kidsAll);
     kidsRoll.set(lay.center.id, lay.kids.get(lay.center.id) ?? []);
@@ -581,6 +662,7 @@ export function createMap(root, opts = {}) {
     const p = lay.pos.get(id);
     if (!p) return;
     userMoved = true;
+    if (amb) follow = id;
     const tz = Math.max(camGoal().z, z);
     const right = rightInset();
     // Keep the node clear of the inspector on the right; on a narrow screen, of the sheet below.
@@ -923,6 +1005,11 @@ export function createMap(root, opts = {}) {
 
   function frame(now) {
     raf = 0;
+    // Ambient frames are capped: skip this one if the last came too recently.
+    if (amb?.fps && lastFrame && now - lastFrame < 1000 / amb.fps - 2) {
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     // Easing is by elapsed time, not per frame: a browser throttles frames in
     // a hidden or occluded window, and a map caught half-way out after one
     // late frame looks broken rather than slow.
@@ -1017,6 +1104,16 @@ export function createMap(root, opts = {}) {
       glide.vx = inertia(glide.vx, dt); glide.vy = inertia(glide.vy, dt);
       if (jump || Math.hypot(glide.vx, glide.vy) * scale() < 0.01) glide = null; else moving = true;
     }
+    // Ambient: the camera stays on the node it flew to while the layout around
+    // it settles (an unfold re-balances the circle and moves it).
+    if (amb && follow && !fl) {
+      const c = cur.get(follow);
+      if (c && !c.leaving) {
+        [cam.x, followV.x] = damp(cam.x, followV.x, c.x, hl('move') * 3, dt);
+        [cam.y, followV.y] = damp(cam.y, followV.y, c.y, hl('move') * 3, dt);
+        if (!settled(cam.x, followV.x, c.x, 0.05) || !settled(cam.y, followV.y, c.y, 0.05)) moving = true;
+      } else follow = null;
+    }
     // Zooming past the threshold grows (or folds) the lanes' sessions in beats.
     if ((cam.z >= AUTO_UNFOLD_ZOOM) !== zoomedIn) { relayout(); moving = true; }
 
@@ -1043,6 +1140,10 @@ export function createMap(root, opts = {}) {
     pulses = pulses.filter((p) => now - p.t0 < 1500);
     comets = comets.filter((c) => now - c.t0 < c.dur);
     if (pulses.length || comets.length) moving = true;
+    if (amb && !still && amb.drift) {
+      spin = (spin + amb.drift * dt / 1000) % TAU;
+      if (!pageHidden()) moving = true;
+    }
     if (!still) {
       // The ambient layer: pings on nodes that wait for someone, spinners on
       // working lanes, and a slow drift of comets along live flows.
@@ -1066,11 +1167,23 @@ export function createMap(root, opts = {}) {
     return { left: pr.left - rr.left, top: pr.top - rr.top, bottom: pr.bottom - rr.top, right: pr.right - rr.left };
   }
 
+  /**
+   * What a page lays over the canvas (`createMap(el, { covers })`, the Wall's
+   * caption plate): a function returning `{left, top, right, bottom}` boxes in
+   * canvas px, asked every frame. Off by default: no box.
+   */
+  function pageCovers() {
+    if (typeof opts.covers !== 'function') return [];
+    const got = opts.covers();
+    return Array.isArray(got) ? got : [];
+  }
+
   function scene(now) {
     const memo = new Map();
+    const own = pageCovers();
     const near = (hover ?? highlighted ?? selected) ? neighbours.get(hover ?? highlighted ?? selected) ?? new Set() : new Set();
     return {
-      W, H, now, s: scale(), zoom: cam.z, toScreen,
+      W, H, now, s: scale(), zoom: cam.z, toScreen, spin,
       pos: lay.pos, nodes: cur, byId, links: vlinks, overlay: shownOverlay(), reach: vreach,
       rolled: (id) => rollup(id, byId, kidsRoll, memo),
       folded, kids: kidsAll,
@@ -1082,8 +1195,22 @@ export function createMap(root, opts = {}) {
       anchor: W > 760 && mode !== 'pip' ? anchorRect() : null,
       // What covers the canvas (the inspector on the right, the sheet on a
       // phone): labels keep clear of it, as of the canvas edges.
-      covers: mode !== 'pip' ? [anchorRect()].filter(Boolean) : [],
+      // A page's own covers (`covers`, the Wall's caption plate) count too.
+      covers: mode !== 'pip' ? [anchorRect(), ...own].filter(Boolean) : [],
+      pageCovers: own.length ? own : undefined,
       budgetUsd: typeof opts.budgetUsd === 'function' ? opts.budgetUsd : undefined,
+      rings: opts.rings !== false,
+      legends: opts.legends !== false,
+      lamps: opts.lamps !== false,
+      edgeLabels: opts.edgeLabels !== false,
+      gauges: opts.gauges === 'trouble' ? 'trouble' : undefined,
+      branch: typeof opts.branch === 'function' ? opts.branch : undefined,
+      follow: amb ? follow : null,
+      guides: lay.guides,
+      labelSize: typeof opts.labelSize === 'function' ? opts.labelSize : undefined,
+      pinLabels: opts.pinLabels === true,
+      labelInset: opts.labelInset && typeof opts.labelInset === 'object' ? opts.labelInset : undefined,
+      labelClear: opts.labelClear === true,
     };
   }
 
@@ -1104,7 +1231,8 @@ export function createMap(root, opts = {}) {
       if (sp.x >= -40 && sp.y >= -40 && sp.x <= W + 40 && sp.y <= H + 40) n++;
     }
     drawnCount = n;
-    renderReadout();
+    if (!amb) renderReadout();
+    for (const cb of drawCbs) cb(now);
   }
 
   /** p95 of the recent draw times (ms), or null. */
@@ -1140,6 +1268,8 @@ export function createMap(root, opts = {}) {
    * The scene for the minimap (2.7): the goals of every drawn node, packed as
    * `[x, y, shapeCode, toneCode]` per node, and a version that changes with
    * the model, the layout and the overlay. No springs are computed for it.
+   * `outer` is the layout's outer radius, `fitScale` the overview's world to
+   * screen scale (a page drawing in step with the Map: its node size).
    */
   function snapshotScene() {
     const list = [];
@@ -1160,7 +1290,7 @@ export function createMap(root, opts = {}) {
       pts[i * 4 + 2] = SHAPE_CODE[st.shape] ?? 0;
       pts[i * 4 + 3] = TONE_CODE[st.tone] ?? 0;
     });
-    return { version, pts, count: list.length, overlay: ov, scope, selected, outer: maxRadius() };
+    return { version, pts, count: list.length, overlay: ov, scope, selected, outer: maxRadius(), fitScale };
   }
 
   function on(set, cb) {
@@ -1176,7 +1306,7 @@ export function createMap(root, opts = {}) {
     update,
     event,
     select: (x, o = {}) => pick(x, { fly: Boolean(o.fly) }),
-    focus: (x) => flyTo(x),
+    focus: (x, z) => flyTo(x, z),
     fit: () => fit(false),
     resize,
     setScope,
@@ -1189,6 +1319,8 @@ export function createMap(root, opts = {}) {
     highlight,
     onSelect: (cb) => on(selectCbs, cb),
     onHover: (cb) => on(hoverCbs, cb),
+    // Called after every drawn frame (ambient: to paint in step with the spin).
+    onDraw: (cb) => on(drawCbs, cb),
     snapshotScene,
     overlay: shownOverlay,
     // The overlays this model can show, in `o` order (reach only with reach links).
@@ -1214,6 +1346,7 @@ export function createMap(root, opts = {}) {
       document.removeEventListener('visibilitychange', onVisible);
       selectCbs.clear();
       hoverCbs.clear();
+      drawCbs.clear();
       root.replaceChildren();
     },
   };

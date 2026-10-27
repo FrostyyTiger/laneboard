@@ -1,0 +1,1059 @@
+/* ===========================================================================
+   The Wall (docs/plans/wall/README.md, D1): the Map full screen, looked at
+   from a metre or three. Only public/wall.html loads this sheet.
+
+   Brighter tokens for distance, dark only (the Wall has no light theme):
+   text-2 at 88 % lightness, text-3 at 74 %, lines at 0.16 / 0.30 / 0.48
+   alpha, against the app's 78 % / 62 % and 0.09 / 0.17 / 0.32. Every colour
+   literal lives in tokens.css (design guardrail 4), so the steps are mixed
+   from its tokens: text-1 (96 %) toward the canvas (12 %) for the text,
+   text-1 over transparent for the lines. The Map reads these through
+   readPalette on its root, so its labels and edges brighten too.
+   =========================================================================== */
+
+html.wall {
+  --text-2: color-mix(in oklch, var(--text-1) 90.5%, var(--bg-canvas));
+  --text-3: color-mix(in oklch, var(--text-1) 74%, var(--bg-canvas));
+  --line-weak: color-mix(in oklch, var(--text-1) 16%, transparent);
+  --line: color-mix(in oklch, var(--text-1) 30%, transparent);
+  --line-strong: color-mix(in oklch, var(--text-1) 48%, transparent);
+}
+
+html.wall,
+html.wall body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--bg-canvas);
+}
+
+/* A screen nobody reads with a cursor: no selection, no tap flash. */
+.wall body {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.wall-stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  /* Plain ground, no --tex-dots (T28, r20-skeptic #3): a fixed texture slides
+     against a camera that flies and turns. The vignette is the quiet ground. */
+  background: var(--bg-canvas);
+  /* The caption's name step, on the stage so the frame can share it (T4). */
+  --cap-name: 6.9vmin;
+  /* Its why step, the hero's second line: the banner's size under a crit plate (night 4 T19). */
+  --cap-why: 4.3vmin;
+}
+
+/* The ground moves to the stage so the glow canvas (js/wall/glow.js) can sit
+   between it and the Map's transparent canvas. */
+.wall-map {
+  position: absolute;
+  inset: 0;
+}
+.wall .wall-map.map { background: transparent; }
+
+.wall-glow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* Ambient takes no input (README §3); the hand cursor would promise some. */
+.wall .map-canvas,
+.wall .map-canvas:active { cursor: default; }
+
+/* ---------------------------------------------------------------------------
+   Caption (js/wall/caption.js): the plate top left that names a site as the
+   camera arrives. One type scale in vmin so it holds from a 12" tablet to a
+   wall screen, ratio about 1.6: kicker and keys 1.7, lines 2.7, name 6.9.
+   Mono for the kicker, keys and numbers; the condensed label face for the
+   name and the values. Grey throughout, but the trouble line in its status
+   colour with its shape. The plate's fades and the typing run in script
+   (the plan's motion, README §3); nothing here transitions.
+   On a site in trouble (T20) the trouble word leads at the 3 m step (14vmin,
+   fitted to the plate by caption.js `heroSize`, 9 at the least), its why
+   under it at 4.3, the name at 6.9 under that; facts drop to the key step
+   below a gap. The numbers are caption.js `STEPS`.
+   --------------------------------------------------------------------------- */
+
+.wall-caption-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.wall-caption {
+  --cap-key: 1.7vmin;
+  --cap-line: 2.7vmin;
+  --cap-pad: 2.4vmin;
+  --cap-bracket: 2.6vmin;
+  position: absolute;
+  top: 8vh;
+  left: 6vw;
+  max-width: 44vw;
+  padding: var(--cap-pad) calc(var(--cap-pad) * 1.25) calc(var(--cap-pad) * 1.1);
+  overflow: hidden;
+  /* A feathered ground (night 4 T10): opaque under the words, falling off to
+     nothing across the padding (tokens.css --tex-plate, 2.4vmin = --cap-pad),
+     so no star, nebula or label is cut flat by a box edge; the corner
+     brackets are the only hard lines. */
+  background: var(--tex-plate);
+  opacity: 0;
+}
+
+/* Two corner brackets, top left and bottom right. */
+.wall-caption::before,
+.wall-caption::after {
+  content: "";
+  position: absolute;
+  width: var(--cap-bracket);
+  height: var(--cap-bracket);
+  border: 0 solid var(--line-strong);
+}
+.wall-caption::before { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+.wall-caption::after { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; }
+.wall-caption[data-status="crit"]::before,
+.wall-caption[data-status="crit"]::after,
+.wall-caption[data-status="down"]::before,
+.wall-caption[data-status="down"]::after { border-color: var(--crit); }
+.wall-caption[data-status="warn"]::before,
+.wall-caption[data-status="warn"]::after,
+.wall-caption[data-status="attention"]::before,
+.wall-caption[data-status="attention"]::after { border-color: var(--warn); }
+
+/* A trouble plate may run wider: the word is the point (caption.js HERO_PLATE). */
+.wall-caption[data-hero] { max-width: 56vw; }
+
+.wall-caption-hero {
+  --cap-hero: 14vmin;
+  margin: 1.2vmin 0 1.4vmin;
+  color: var(--crit);
+}
+.wall-caption-hero[hidden] { display: none; }
+.wall-caption-hero[data-tone="warn"] { color: var(--warn); }
+.wall-caption-hero[data-tone="low"] { color: var(--info); }
+
+.wall-caption-hero-word {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25em;
+  font-family: var(--font-label);
+  font-weight: 600;
+  height: calc(var(--cap-hero) * 0.86);
+  font-size: var(--cap-hero);
+  line-height: 0.86;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+/* The shape at the caps' height, not the line's. */
+.wall-caption-hero-word .wall-caption-glyph { font-size: 0.62em; }
+.wall-caption-hero-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wall-caption-hero-sub {
+  height: 4.3vmin;
+  margin-top: 0.9vmin;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 4.3vmin;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wall-caption-hero-sub[hidden] { display: none; }
+
+.wall-caption-kicker {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8vmin;
+  font-family: var(--font-mono);
+  height: var(--cap-key);
+  font-size: var(--cap-key);
+  line-height: 1;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* On trouble (T26) the kicker takes the worst status's colour, its shape
+   ahead at the kicker's own size so the line keeps its height. */
+.wall-caption-kicker[data-tone="crit"] { color: var(--crit); }
+.wall-caption-kicker[data-tone="warn"] { color: var(--warn); }
+.wall-caption-kicker[data-tone="low"] { color: var(--info); }
+.wall-caption-kicker .wall-caption-glyph { font-size: 1em; }
+.wall-caption-kicker .wall-caption-glyph[hidden] { display: none; }
+
+.wall-caption-name {
+  height: calc(var(--cap-name) * 0.92);
+  margin: 0.9vmin 0 1.6vmin;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: var(--cap-name);
+  line-height: 0.92;
+  letter-spacing: 0.04em;
+  color: var(--text-1);
+  white-space: nowrap;
+}
+
+/* The letters still to type hold their place, so the plate never widens
+   (it grows down with its rows, caption.js plateHeight). */
+.wall-caption-rest { visibility: hidden; }
+
+/* A block the height of the caps; it takes no room of its own. */
+.wall-caption-cursor {
+  display: inline-block;
+  width: 0.42em;
+  height: 0.7em;
+  margin-right: -0.42em;
+  vertical-align: baseline;
+  background: var(--text-1);
+}
+.wall-caption-cursor[hidden] { display: none; }
+.wall-caption-cursor.is-blink { animation: lb-flash 1s linear infinite; }
+
+.wall-caption-lines {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 1.8vmin;
+  row-gap: 0.9vmin;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each line spans both columns on the list's grid, so keys and values align. */
+.wall-caption-line {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  height: 3.2vmin;
+}
+.wall-caption-lines > .wall-caption-line[hidden] { display: none; }
+
+.wall-caption-key {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.8vmin;
+  font-family: var(--font-mono);
+  font-size: var(--cap-key);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.wall-caption-val {
+  font-family: var(--font-label);
+  font-weight: 500;
+  font-size: var(--cap-line);
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Facts on a trouble plate: the key step for key and value, a gap above. */
+.wall-caption-line[data-step="line"] + .wall-caption-line[data-step="small"] { margin-top: 1.6vmin; }
+.wall-caption-line[data-step="small"] { height: 2.3vmin; }
+.wall-caption-line[data-step="small"] .wall-caption-val {
+  font-size: var(--cap-key);
+  line-height: 1.3;
+  color: var(--text-3);
+}
+
+.wall-caption-line[data-kind="trouble"] > *,
+.wall-caption-line[data-kind="problem"] > * { color: var(--crit); }
+.wall-caption-line[data-kind="trouble"][data-tone="warn"] > *,
+.wall-caption-line[data-kind="problem"][data-tone="warn"] > * { color: var(--warn); }
+.wall-caption-line[data-kind="trouble"][data-tone="low"] > *,
+.wall-caption-line[data-kind="problem"][data-tone="low"] > * { color: var(--info); }
+.wall-caption-line[data-kind="trouble"] .wall-caption-val { font-weight: 600; }
+.wall-caption-glyph { font-size: var(--cap-line); line-height: 1; }
+
+/* The count and the named problems on a trouble plate (T23, r17-operator 9):
+   the values at the why's step and face, so the why carries from 3 m; the
+   keys stay at the key step. The count's parts each in their own hue. */
+.wall-caption-line[data-step="trouble"] { height: 4.3vmin; }
+.wall-caption-line[data-step="trouble"] .wall-caption-val {
+  font-weight: 600;
+  font-size: 4.3vmin;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.wall-caption-part {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  margin-right: 0.6em;
+  color: var(--crit);
+}
+.wall-caption-part:last-child { margin-right: 0; }
+.wall-caption-part[data-tone="warn"] { color: var(--warn); }
+.wall-caption-part[data-tone="low"] { color: var(--info); }
+.wall-caption-part .wall-caption-glyph { font-size: 0.62em; }
+
+/* The held place's soonest countdown (night 4 T53, galaxy hud.js countdownCaption): the plate's line step,
+   grey, the clock in tabular figures so `m:ss` never jitters as it ticks. Far it is the quieter grey; the
+   last five minutes and overdue step up to the plate's own value grey, never a hue (late is not trouble). */
+.wall-caption-line[data-kind="countdown"] .wall-caption-val { color: var(--text-3); }
+.wall-caption-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.wall-caption-line[data-kind="countdown"][data-phase="soon"] .wall-caption-val,
+.wall-caption-line[data-kind="countdown"][data-phase="now"] .wall-caption-val,
+.wall-caption-line[data-kind="countdown"][data-phase="late"] .wall-caption-val { color: var(--text-2); }
+.wall-caption-line[data-kind="countdown"][data-phase="soon"] .wall-caption-count,
+.wall-caption-line[data-kind="countdown"][data-phase="now"] .wall-caption-count,
+.wall-caption-line[data-kind="countdown"][data-phase="late"] .wall-caption-count { color: var(--text-1); }
+
+/* cpu and mem side by side across both columns, a thin bar each. */
+.wall-caption-line[data-kind="metrics"] {
+  display: flex;
+  height: 3.2vmin;
+  grid-column: 1 / -1;
+  gap: 3vmin;
+  align-items: baseline;
+}
+.wall-caption-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 1vmin;
+}
+.wall-caption-bar {
+  position: relative;
+  width: 9vmin;
+  height: 0.4vmin;
+  background: var(--line-weak);
+}
+.wall-caption-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--text-2);
+}
+.wall-caption-num {
+  font-family: var(--font-mono);
+  font-size: var(--cap-key);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+   Target lock (js/wall/lock.js): four corner brackets that close in on the
+   node the camera flies to. Each corner is an L of two 2px strokes, placed by
+   transform only (script, every Map frame), so a frame lays nothing out.
+   Grey on a calm target; the status colour only on trouble.
+   --------------------------------------------------------------------------- */
+
+.wall-lock-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.wall-lock {
+  --lock-arm: 16px;
+  --lock-stroke: 2px;
+  --lock-colour: var(--text-2);
+  position: absolute;
+  inset: 0;
+}
+.wall-lock[data-tone="crit"] { --lock-colour: var(--crit); }
+.wall-lock[data-tone="warn"] { --lock-colour: var(--warn); }
+
+.wall-lock-c {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--lock-arm);
+  height: var(--lock-arm);
+  border: 0 solid var(--lock-colour);
+  will-change: transform;
+}
+.wall-lock-tl { border-top-width: var(--lock-stroke); border-left-width: var(--lock-stroke); }
+.wall-lock-tr { border-top-width: var(--lock-stroke); border-right-width: var(--lock-stroke); }
+.wall-lock-bl { border-bottom-width: var(--lock-stroke); border-left-width: var(--lock-stroke); }
+.wall-lock-br { border-bottom-width: var(--lock-stroke); border-right-width: var(--lock-stroke); }
+
+/* The leader (T25): a hairline from the plate's trouble word to the bracket
+   nearest it, in the lock's status colour, quieter than the brackets. One px
+   wide, stretched by scaleX from its left end. */
+.wall-lock-leader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--lock-colour);
+  opacity: 0.7;
+  transform-origin: 0 50%;
+  will-change: transform;
+}
+
+/* ---------------------------------------------------------------------------
+   Frame (js/wall/frame.js): what stays put while the camera moves. The
+   vignette darkens the edges, most at the bottom where the clock and the
+   fleet line sit, so text never stands on a busy part of the map. The text
+   keeps the caption's margins (8vh, 6vw) and its scale (1.7 / 2.7 / 4.3 /
+   6.9 vmin). Grey, the clock the quietest big thing on screen (text-3, light
+   weight), so the fleet line in its status colour is louder at a smaller
+   size. Nothing here transitions.
+   --------------------------------------------------------------------------- */
+
+.wall-frame-layer {
+  --frame-y: 8vh;
+  --frame-x: 6vw;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.wall-vignette {
+  position: absolute;
+  inset: 0;
+  background: var(--tex-vignette);
+}
+
+/* Top right, on the caption kicker's line. */
+.wall-tag {
+  position: absolute;
+  top: calc(var(--frame-y) + 2.4vmin);
+  right: var(--frame-x);
+  display: flex;
+  gap: 1.6vmin;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 1.7vmin;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.wall-tag-live:empty { display: none; }
+/* An address that asked for an unknown layout (night 4 T45): said on a line of its own under the tag (so the
+   tag keeps its width), one grey step up, never a trouble hue. */
+.wall-tag-note { position: absolute; top: calc(100% + 1.2vmin); right: 0; color: var(--text-2); }
+.wall-tag-note:empty { display: none; }
+.wall-tag[data-live="0"] .wall-tag-live { color: var(--warn); }
+/* No map frame for 30 s (galaxy/fresh.js, night 3 T5): old data reads grey, at the brightest grey, never in a trouble hue. */
+.wall-tag[data-live="stale"] .wall-tag-live { color: var(--text-1); }
+
+/* Bottom left and bottom right share one baseline: the last line of each. */
+.wall-clock,
+.wall-fleet {
+  position: absolute;
+  bottom: var(--frame-y);
+  white-space: nowrap;
+}
+
+.wall-clock { left: var(--frame-x); }
+.wall-clock-time {
+  font-family: var(--font-label);
+  font-weight: 500;
+  font-size: 6.9vmin;
+  line-height: 0.86;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.wall-clock-date,
+.wall-fleet-fact {
+  margin-top: 1.2vmin;
+  font-family: var(--font-mono);
+  font-size: 1.7vmin;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.wall-fleet {
+  right: var(--frame-x);
+  max-width: 50vw;
+  text-align: right;
+}
+.wall-fleet-line {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 4.3vmin;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  /* A long problem wraps onto a second line (balanced) rather than lose its end. */
+  white-space: normal;
+  text-wrap: balance;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.wall-fleet-name { white-space: nowrap; }
+.wall-fleet-glyph {
+  margin-right: 0.3em;
+  font-size: 0.8em;
+}
+.wall-fleet[data-tone="crit"] .wall-fleet-line { color: var(--crit); }
+.wall-fleet[data-tone="warn"] .wall-fleet-line { color: var(--warn); }
+.wall-fleet[data-tone="low"] .wall-fleet-line { color: var(--info); }
+/* A calm fleet says so quietly, at the fact's size: nothing needs you. */
+.wall-fleet[data-tone="grey"] .wall-fleet-line {
+  font-weight: 500;
+  font-size: 2.7vmin;
+  color: var(--text-3);
+}
+
+.wall-fleet-fact { display: flex; justify-content: flex-end; gap: 4vmin; }
+.wall-fleet-more { color: var(--text-2); }
+.wall-fleet-more[hidden] { display: none; }
+.wall-fleet-fact[hidden] { display: none; }
+
+/* While anything is crit or down (T21) the line is read from across the
+   room: where the trouble is at the caption hero's 3 m step (14vmin, fitted
+   by frame.js `fleetSize` to 64vw, 9 at the least), one line, cut rather
+   than wrapped; its why under it at the why step with the count beside it in
+   the key step, baselines shared; the ambient fact gives way. */
+/* The word runs over the map's bottom ring, so it stands on a ground out to
+   the corner (no map label is shown in its box: hud.js covers). The ground
+   is feathered as the plate's (night 4 T10): it falls off across the top and
+   left padding, so the ribbon and the labels beside it fade in rather than
+   stop at a box edge; right and bottom are the screen's. */
+.wall-fleet[data-step="far"] {
+  right: 0;
+  bottom: 0;
+  max-width: none;
+  /* The top and left padding is the ground's feather (--tex-plate-corner). */
+  padding: 2.4vmin var(--frame-x) var(--frame-y) 2.4vmin;
+  background: var(--tex-plate-corner);
+}
+.wall-fleet[data-step="far"] .wall-fleet-line {
+  --fleet-far: 14vmin;
+  display: block;
+  max-width: 64vw;
+  font-size: var(--fleet-far);
+  line-height: 0.86;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* The why under it keeps to the same band and is cut, never wider: in half a
+   screen (night 4 T41, 684 px) a long why ran left into the clock. */
+.wall-fleet[data-step="far"] .wall-fleet-sub {
+  max-width: 64vw;
+  margin-left: auto;
+}
+/* The shape at the caps' height, as on the plate. */
+.wall-fleet[data-step="far"] .wall-fleet-glyph { font-size: 0.62em; }
+/* One headline per trouble frame (night 3 T4, r54-film-ui 1): while a crit
+   plate is up (galaxy hud.js sets data-plate to the plate's tone) its hero is
+   the only type at the top step. The far line steps down to the hero's second
+   line (night 4 T19, r4-film-ui galaxy 1: the why step, at most half the
+   hero's least size) and folds into one line, `■ HV2 · STORAGE · POOL 97% FULL
+   +3 MORE`, on the why's baseline; the glyph steps with it (em) and the why is
+   what gets cut. The worst thing is the loudest (T30, r41-operator galaxy 1):
+   the far line is crit, so under a warn or calm plate it keeps its 3 m size. */
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  max-width: calc(64vw + 2.4vmin + var(--frame-x));
+}
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-line {
+  flex: none;
+  font-size: var(--cap-why);
+  line-height: 1;
+}
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub {
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  gap: 0;
+}
+/* The count keeps its space when the why is gone (T9's echo, below). */
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub .wall-fleet-more { margin-left: 2.4vmin; }
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub-why::before {
+  content: "·";
+  margin: 0 0.25em;
+}
+/* Holding the oldest of two crits (T9) the why is the plate's: on one line it
+   goes with its place, so the count does not stand off past a gap. */
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-echo="why"] .wall-fleet-sub-why { display: none; }
+/* Not three reds saying one thing (night 3 T20, r11-dreamer galaxy 3): when
+   the line would name the plate's own subject (hud.js bannerEcho: no other
+   problem to step down to) it drops out while the plate is up, at any step,
+   and is back as the plate goes. Its place is kept, so nothing moves.
+   Two crits named together (night 4 T9, r46-skeptic galaxy 2): holding the
+   oldest echoes only the why under the count (hud.js gives "why"), so only
+   that drops out; `2 CRIT · HV2 · HV1` stays the line, the other crit in sight. */
+.wall-frame-layer[data-plate] .wall-fleet[data-echo=""] { visibility: hidden; }
+.wall-frame-layer[data-plate] .wall-fleet[data-echo="why"] .wall-fleet-sub-why { visibility: hidden; }
+.wall-fleet-sub {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 2.4vmin;
+  margin-top: 1.2vmin;
+  white-space: nowrap;
+}
+.wall-fleet-sub[hidden] { display: none; }
+.wall-fleet-sub-why {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 4.3vmin;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--crit);
+}
+.wall-fleet-sub .wall-fleet-more {
+  font-family: var(--font-mono);
+  font-size: 1.7vmin;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+/* A crit that cleared a moment ago (galaxy hud.js CRIT_HOLD, frame.js
+   clearedLine, night 3 T18): the red goes when the trouble goes. The line
+   remembers it in the calm voice, "hv1 · vm-c ok · was down 6m", at the calm
+   line's size one grey brighter (it names something), and only its glyph
+   keeps the old hue, small. */
+.wall-fleet[data-tone="cleared"] .wall-fleet-line {
+  font-weight: 500;
+  font-size: 2.7vmin;
+  color: var(--text-2);
+}
+.wall-fleet[data-was="crit"] .wall-fleet-glyph { color: var(--crit); }
+
+/* ---------------------------------------------------------------------------
+   The galaxy (public/galaxy.html, Wall plan night 2): one WebGL canvas over
+   the whole stage. Its colours are read from the tokens by
+   js/wall/galaxy/palette.js; nothing here paints it.
+   --------------------------------------------------------------------------- */
+/* A finger on the galaxy (night 3 T7, js/wall/galaxy/touch.js): the page never
+   pans, pinch-zooms or bounces under it, over the canvas or the words alike;
+   the camera takes every gesture. */
+.galaxy-stage {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+.galaxy-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* The galaxy's names (js/wall/galaxy/labels.js): a layer between the canvas
+   and the frame, one span per name moved by transform. Sites and the sun in
+   the label face, caps, at the site step (--gl-site, type.js stepsFor);
+   planets and dots in mono lowercase at the room step (--gl-room). Grey;
+   trouble in its hue (its shape leads the word). A halo of the canvas colour
+   keeps a name readable over the dust. labels.js measures the boxes from
+   the same numbers (textW, mono 0.62 em, line 1.25), so keep them in step. */
+.galaxy-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.galaxy-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  line-height: 1.25;
+  color: var(--text-3);
+  text-shadow: 0 0 4px var(--bg-canvas), 0 0 2px var(--bg-canvas);
+  will-change: transform, opacity;
+}
+.galaxy-label[data-face="label"] {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: var(--gl-site);
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+.galaxy-label[data-face="mono"] {
+  font-family: var(--font-mono);
+  font-size: var(--gl-room);
+  letter-spacing: 0.02em;
+}
+.galaxy-label[data-tone="crit"] { color: var(--crit); }
+.galaxy-label[data-tone="warn"] { color: var(--warn); }
+.galaxy-label[data-tone="low"] { color: var(--p3); }
+/* The status shape leads the word as its own mark (labels.js labelParts, data-glyph), in the tone's hue. */
+.galaxy-label[data-glyph]::before { content: attr(data-glyph) " "; }
+.galaxy-label[data-tone="crit"]::before { color: var(--crit); }
+.galaxy-label[data-tone="warn"]::before { color: var(--warn); }
+.galaxy-label[data-tone="low"]::before { color: var(--p3); }
+/* In a flight every name but the destination's steps back (T15): after the tones, so it wins over them.
+   Only the word: the shape keeps its hue (night 4 T6), a passing crit is still a red ■. */
+.galaxy-label[data-dim] { color: var(--text-3); }
+/* A scheduled job under its thing's name (night 4 T40, labels.js labelCount): caps in the label face at
+   the site step, whole minutes in tabular figures so the line never jitters. Grey: far is quiet, the last
+   five minutes and overdue step up to a site name's grey and no further (a clock never outshouts the place
+   it runs in); a hue is for trouble, never for a clock. */
+.galaxy-label[data-count]::after {
+  content: attr(data-count);
+  display: block;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: var(--gl-site);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.galaxy-label[data-count-phase="soon"]::after,
+.galaxy-label[data-count-phase="now"]::after,
+.galaxy-label[data-count-phase="late"]::after { color: var(--text-2); }
+.galaxy-label[data-dim]::after { color: var(--text-3); }
+.galaxy-label[data-side="left"] { text-align: right; }
+.galaxy-label[data-side="centre"] { text-align: center; }
+
+/* The galaxy's leader (night 3 T16, js/wall/galaxy/lock.js leaderPath): two
+   legs with one elbow, the brackets' stroke and colour, so plate, leader and
+   brackets read as one drawn line. */
+.galaxy-stage .wall-lock-leader {
+  height: var(--lock-stroke);
+  margin-top: calc(var(--lock-stroke) / -2);
+  opacity: 1;
+}
+
+/* A finger has the page (night 4 T5, js/wall/galaxy/touch.js manualLine):
+   `MANUAL · TOUR IN 0:40` one line under the tag, right-aligned with it, in
+   the tag's face and tracking; a step brighter (--text-2) because it is the
+   page's state, not its name. Never a trouble hue: nothing needs you. */
+.galaxy-manual {
+  position: absolute;
+  top: calc(8vh + 5.1vmin);
+  right: 6vw;
+  font-family: var(--font-mono);
+  font-size: 1.7vmin;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.galaxy-manual[hidden] { display: none; }
+
+/* Back (night 3 T13, js/wall/galaxy/touch.js createBack): one step back while
+   a finger explores, top right under the tag and its manual line (night 4 T5;
+   at the overview it reads `▶ TOUR`, the hand-back), clear of the plate (top left)
+   and the fleet line (bottom right). Its smallest side is BACK.hitPx, 80 css
+   px: night 1's Q6 15 mm for a main control on the tablet. Grey: it is a way
+   out, nothing needs you. The label at the caption's line step, tracked as
+   the tag; the brackets as the plate's. */
+.galaxy-back {
+  position: absolute;
+  top: calc(8vh + 8.6vmin);
+  right: 6vw;
+  min-width: 80px;
+  min-height: 80px;
+  padding: 0 2.4vmin;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: max(2.7vmin, 20px);
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: color-mix(in oklch, var(--bg-canvas) 96%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  touch-action: none;
+  cursor: pointer;
+}
+.galaxy-back[hidden] { display: none; }
+.galaxy-back::before,
+.galaxy-back::after {
+  content: "";
+  position: absolute;
+  width: 2.6vmin;
+  height: 2.6vmin;
+  border: 0 solid var(--text-3);
+}
+.galaxy-back::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+.galaxy-back::after { right: -1px; bottom: -1px; border-right-width: 2px; border-bottom-width: 2px; }
+.galaxy-back:active { color: var(--text-1); }
+.galaxy-back:focus-visible { outline: 2px solid var(--text-2); outline-offset: 4px; }
+.galaxy-back-glyph { font-size: 1.3em; margin-top: -0.12em; }
+/* ▶ is drawn smaller than ‹ at the same size: it takes the word's cap height. */
+.galaxy-back[data-kind="tour"] .galaxy-back-glyph { font-size: 0.8em; margin-top: 0; }
+
+/* The fan (night 4 T3, js/wall/galaxy/fan.js): the planets under one finger
+   as rows round it, for the next tap. Each row is a target of FAN.rowPx (48
+   css px, night 2's floor) in the names' mono at --fan-px (fan.js measures
+   the widths from it); the left arc set flush to the finger, as the right.
+   Its inner end and its leader to the planet carry the tone: grey unless
+   the planet needs you. Opaque enough that no name below reads through. */
+.galaxy-fan {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.galaxy-fan[hidden] { display: none; }
+.galaxy-fan-row {
+  position: absolute;
+  left: 0;
+  top: 0;
+  box-sizing: border-box;
+  height: 48px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--fan-px, 18px);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+  background: color-mix(in oklch, var(--bg-canvas) 96%, transparent);
+  border: 1px solid var(--line);
+  --fan-edge: var(--text-3);
+  will-change: transform, opacity;
+}
+.galaxy-fan-row[data-side="left"] { justify-content: flex-end; border-right: 2px solid var(--fan-edge); }
+.galaxy-fan-row[data-side="right"] { border-left: 2px solid var(--fan-edge); }
+.galaxy-fan-row[data-tone="crit"] { color: var(--crit); --fan-edge: var(--crit); }
+.galaxy-fan-row[data-tone="warn"] { color: var(--warn); --fan-edge: var(--warn); }
+.galaxy-fan-row[data-tone="low"] { color: var(--p3); --fan-edge: var(--p3); }
+.galaxy-fan-spot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--text-3);
+  border-radius: 50%;
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+.galaxy-fan-leader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--text-2);
+  transform-origin: 0 50%;
+  will-change: transform, opacity;
+}
+.galaxy-fan-leader[data-tone="crit"] { background: var(--crit); }
+.galaxy-fan-leader[data-tone="warn"] { background: var(--warn); }
+.galaxy-fan-leader[data-tone="low"] { background: var(--p3); }
+
+/* Show commands (cockpit c4-show-canvas.md §3, D72, D73; js/wall/galaxy/show.js): what the
+   agent points at. A highlight is four 2 px accent corner brackets per node (12 px arms, 8 px
+   outside the node, closing in over 300 ms), the rest of the galaxy and its names dimmed under a
+   veil to UNLIT 0.16; its note sits on a plate beside the first node, `AGENT · 07:12` over the
+   words. A pin is a 320 px card beside its node with the same header and a 48 px `✕`, a 1 px
+   leader to the node. The accent is spent on "look here", never on a state (docs/design.md rule
+   3): the trouble the agent points at keeps its hue. Sizes in px, the spec's at 1368x912. */
+.galaxy-show-veil {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.galaxy-show-veil[hidden] { display: none; }
+.galaxy-show-marks {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.galaxy-show-marks[hidden] { display: none; }
+.galaxy-show-mark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+/* Each corner an L of two 2 px strokes, 12 px arms (the lock's way: no gradient outside tokens.css). */
+.galaxy-show-mark > i {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 0 solid var(--accent);
+}
+.galaxy-show-mark > .tl { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+.galaxy-show-mark > .tr { top: 0; right: 0; border-top-width: 2px; border-right-width: 2px; }
+.galaxy-show-mark > .bl { bottom: 0; left: 0; border-bottom-width: 2px; border-left-width: 2px; }
+.galaxy-show-mark > .br { bottom: 0; right: 0; border-bottom-width: 2px; border-right-width: 2px; }
+/* The plates' ground is --bg-elevated at 99 %, not opaque: an opaque layer moved by transform over
+   the WebGL canvas left a stale rectangle of undrawn scene under and below it (seen in headless
+   Chromium, 759 px wide, 2026-10-27); a ground that lets 1 % through is never culled. */
+.galaxy-show-note,
+.galaxy-pin {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  background: color-mix(in oklch, var(--bg-elevated) 99%, transparent);
+  border: 1px solid var(--line-strong);
+  will-change: transform;
+}
+.galaxy-show-note {
+  max-width: 360px;
+  padding: 16px;
+}
+.galaxy-show-who {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.galaxy-show-note-text {
+  margin-top: 8px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.galaxy-pin {
+  width: 320px;
+  max-height: 240px;
+  padding-bottom: 16px;
+  overflow: hidden;
+  pointer-events: auto;
+}
+.galaxy-pin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding-left: 16px;
+}
+.galaxy-pin-remove {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 24px;
+  line-height: 1;
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  touch-action: none;
+  cursor: pointer;
+}
+.galaxy-pin-remove:active { color: var(--text-1); }
+.galaxy-pin-remove:focus-visible { outline: 2px solid var(--text-2); outline-offset: -4px; }
+.galaxy-pin-title {
+  padding: 0 16px;
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 1.2;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.galaxy-pin-body {
+  padding: 8px 16px 0;
+  font-family: var(--font-label);
+  font-size: 18px;
+  line-height: 1.25;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  overflow: hidden;
+}
+.galaxy-pin-leader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 1px;
+  margin-top: -0.5px;
+  background: var(--line-strong);
+  transform-origin: 0 50%;
+  will-change: transform;
+}
+.galaxy-show-mark[hidden],
+.galaxy-show-note[hidden],
+.galaxy-pin[hidden],
+.galaxy-pin-leader[hidden] { display: none; }
+
+/* The galaxy's speed overlay (`galaxy.html?perf=1`, js/wall/galaxy/budget.js):
+   a few mono lines in the top margin, above the tag, grey. For whoever tunes
+   the page, never on by default. */
+.galaxy-perf {
+  position: absolute;
+  top: 2.4vh;
+  right: 6vw;
+  font-family: var(--font-mono);
+  font-size: 1.5vmin;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+   Half a screen (night 4 T41): a stage narrower than it is high, a split
+   with the cockpit's canvas. The trouble plate takes the far fleet line's
+   band (caption.js HERO_PLATE.narrowVw) so an 11-letter name is not cut;
+   at that width it reaches under the tag and the manual line, so those two
+   rise into the band above the plate (the 8vh margin), the same 2.7vmin
+   apart as below it. The back control is clear of the plate as it is.
+   --------------------------------------------------------------------------- */
+@media (max-aspect-ratio: 1/1) {
+  .wall-caption[data-hero] { max-width: 64vw; }
+  .wall-tag { top: calc(8vh - 4.6vmin); }
+  .galaxy-manual { top: calc(8vh - 1.9vmin); }
+}

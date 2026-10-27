@@ -253,6 +253,111 @@
   /* Textures: the only gradient functions allowed, hard stops only. */
   --tex-dots: radial-gradient(circle, var(--grid-dot) 0.75px, transparent 1px) 0 0 / 16px 16px;
   --tex-hatch: repeating-linear-gradient(45deg, var(--line) 0 1px, transparent 1px 6px);
+  /* The Wall's vignette (docs/plans/wall/README.md §2.5: Wall may be bolder),
+     the one soft gradient: edges and the bottom band darkened toward the
+     canvas so its clock and fleet line sit on quiet ground. Only wall.css uses
+     it; the app keeps hard-stop textures. Both ramps follow a smoothstep in
+     short stops (Wall T19, r11-dreamer galaxy 2): a straight ramp that starts
+     at a hard knee drew rings at the knee on the dark canvas. */
+  --tex-vignette:
+    linear-gradient(to top,
+      color-mix(in oklch, var(--bg-canvas) 88%, transparent) 0,
+      color-mix(in oklch, var(--bg-canvas) 84.2%, transparent) 3.3vh,
+      color-mix(in oklch, var(--bg-canvas) 74.3%, transparent) 6.5vh,
+      color-mix(in oklch, var(--bg-canvas) 60.2%, transparent) 9.8vh,
+      color-mix(in oklch, var(--bg-canvas) 44%, transparent) 13vh,
+      color-mix(in oklch, var(--bg-canvas) 27.8%, transparent) 16.3vh,
+      color-mix(in oklch, var(--bg-canvas) 13.8%, transparent) 19.5vh,
+      color-mix(in oklch, var(--bg-canvas) 3.8%, transparent) 22.8vh,
+      transparent 26vh),
+    radial-gradient(ellipse 75% 70% at 50% 46%,
+      transparent 50%,
+      color-mix(in oklch, var(--bg-canvas) 2.3%, transparent) 55%,
+      color-mix(in oklch, var(--bg-canvas) 8.5%, transparent) 60%,
+      color-mix(in oklch, var(--bg-canvas) 17.7%, transparent) 65%,
+      color-mix(in oklch, var(--bg-canvas) 28.9%, transparent) 70%,
+      color-mix(in oklch, var(--bg-canvas) 41%, transparent) 75%,
+      color-mix(in oklch, var(--bg-canvas) 53.1%, transparent) 80%,
+      color-mix(in oklch, var(--bg-canvas) 64.3%, transparent) 85%,
+      color-mix(in oklch, var(--bg-canvas) 73.5%, transparent) 90%,
+      color-mix(in oklch, var(--bg-canvas) 79.7%, transparent) 95%,
+      color-mix(in oklch, var(--bg-canvas) 82%, transparent) 100%);
+  /* The Wall's feathered grounds (night 4 T10, r46-skeptic galaxy 3): opaque
+     under the words, falling off to nothing over 2.4vmin (the plate's
+     padding) on a smoothstep, so no star, nebula or label is cut flat by a
+     box edge. Layers rather than a mask (a mask would fade the plate's
+     corner brackets, its only hard lines): a band across the middle with its
+     ramps, the edge ramps, the corners round. `--tex-plate` feathers all four
+     sides at the plate's 96 %; `--tex-plate-corner` the top and left only,
+     opaque, for the far fleet block that runs out to the screen's corner.
+     Only wall.css uses them. */
+  --tex-plate:
+    linear-gradient(to right,
+      transparent 0,
+      color-mix(in oklch, var(--bg-canvas) 15%, transparent) calc(2.4vmin * 0.25),
+      color-mix(in oklch, var(--bg-canvas) 48%, transparent) calc(2.4vmin * 0.5),
+      color-mix(in oklch, var(--bg-canvas) 81%, transparent) calc(2.4vmin * 0.75),
+      color-mix(in oklch, var(--bg-canvas) 96%, transparent) 2.4vmin,
+      color-mix(in oklch, var(--bg-canvas) 96%, transparent) calc(100% - 2.4vmin),
+      color-mix(in oklch, var(--bg-canvas) 81%, transparent) calc(100% - 2.4vmin * 0.75),
+      color-mix(in oklch, var(--bg-canvas) 48%, transparent) calc(100% - 2.4vmin * 0.5),
+      color-mix(in oklch, var(--bg-canvas) 15%, transparent) calc(100% - 2.4vmin * 0.25),
+      transparent 100%) 0 50% / 100% calc(100% - 4.8vmin) no-repeat,
+    linear-gradient(to bottom,
+      transparent 0,
+      color-mix(in oklch, var(--bg-canvas) 15%, transparent) 25%,
+      color-mix(in oklch, var(--bg-canvas) 48%, transparent) 50%,
+      color-mix(in oklch, var(--bg-canvas) 81%, transparent) 75%,
+      color-mix(in oklch, var(--bg-canvas) 96%, transparent) 100%) 50% 0 / calc(100% - 4.8vmin) 2.4vmin no-repeat,
+    linear-gradient(to top,
+      transparent 0,
+      color-mix(in oklch, var(--bg-canvas) 15%, transparent) 25%,
+      color-mix(in oklch, var(--bg-canvas) 48%, transparent) 50%,
+      color-mix(in oklch, var(--bg-canvas) 81%, transparent) 75%,
+      color-mix(in oklch, var(--bg-canvas) 96%, transparent) 100%) 50% 100% / calc(100% - 4.8vmin) 2.4vmin no-repeat,
+    radial-gradient(circle farthest-side at 100% 100%,
+      color-mix(in oklch, var(--bg-canvas) 96%, transparent) 0%,
+      color-mix(in oklch, var(--bg-canvas) 81%, transparent) 25%,
+      color-mix(in oklch, var(--bg-canvas) 48%, transparent) 50%,
+      color-mix(in oklch, var(--bg-canvas) 15%, transparent) 75%,
+      transparent 100%) 0 0 / 2.4vmin 2.4vmin no-repeat,
+    radial-gradient(circle farthest-side at 0 100%,
+      color-mix(in oklch, var(--bg-canvas) 96%, transparent) 0%,
+      color-mix(in oklch, var(--bg-canvas) 81%, transparent) 25%,
+      color-mix(in oklch, var(--bg-canvas) 48%, transparent) 50%,
+      color-mix(in oklch, var(--bg-canvas) 15%, transparent) 75%,
+      transparent 100%) 100% 0 / 2.4vmin 2.4vmin no-repeat,
+    radial-gradient(circle farthest-side at 100% 0,
+      color-mix(in oklch, var(--bg-canvas) 96%, transparent) 0%,
+      color-mix(in oklch, var(--bg-canvas) 81%, transparent) 25%,
+      color-mix(in oklch, var(--bg-canvas) 48%, transparent) 50%,
+      color-mix(in oklch, var(--bg-canvas) 15%, transparent) 75%,
+      transparent 100%) 0 100% / 2.4vmin 2.4vmin no-repeat,
+    radial-gradient(circle farthest-side at 0 0,
+      color-mix(in oklch, var(--bg-canvas) 96%, transparent) 0%,
+      color-mix(in oklch, var(--bg-canvas) 81%, transparent) 25%,
+      color-mix(in oklch, var(--bg-canvas) 48%, transparent) 50%,
+      color-mix(in oklch, var(--bg-canvas) 15%, transparent) 75%,
+      transparent 100%) 100% 100% / 2.4vmin 2.4vmin no-repeat;
+  --tex-plate-corner:
+    linear-gradient(to right,
+      transparent 0,
+      color-mix(in oklch, var(--bg-canvas) 15.6%, transparent) calc(2.4vmin * 0.25),
+      color-mix(in oklch, var(--bg-canvas) 50%, transparent) calc(2.4vmin * 0.5),
+      color-mix(in oklch, var(--bg-canvas) 84.4%, transparent) calc(2.4vmin * 0.75),
+      var(--bg-canvas) 2.4vmin) 0 100% / 100% calc(100% - 2.4vmin) no-repeat,
+    linear-gradient(to bottom,
+      transparent 0,
+      color-mix(in oklch, var(--bg-canvas) 15.6%, transparent) 25%,
+      color-mix(in oklch, var(--bg-canvas) 50%, transparent) 50%,
+      color-mix(in oklch, var(--bg-canvas) 84.4%, transparent) 75%,
+      var(--bg-canvas) 100%) 100% 0 / calc(100% - 2.4vmin) 2.4vmin no-repeat,
+    radial-gradient(circle farthest-side at 100% 100%,
+      var(--bg-canvas) 0%,
+      color-mix(in oklch, var(--bg-canvas) 84.4%, transparent) 25%,
+      color-mix(in oklch, var(--bg-canvas) 50%, transparent) 50%,
+      color-mix(in oklch, var(--bg-canvas) 15.6%, transparent) 75%,
+      transparent 100%) 0 0 / 2.4vmin 2.4vmin no-repeat;
   /* Four 8x2px L-corners in the accent, for `.sel::after { inset: -3px }`. */
   --bracket-img:
     linear-gradient(var(--accent) 0 0) left top / 8px 2px no-repeat,

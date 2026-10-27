@@ -204,6 +204,42 @@ export function feedRef(ref) {
 // (a runner on a job), `idle` is up with nothing to do.
 const SERVICE_STATUS = ['ok', 'working', 'idle', 'warn', 'crit', 'down'];
 
+// An alert's level as a status: `crit`, `attention` (a person has to act:
+// a paper jam, a print waiting to be taken off), anything else `warn`.
+const alertStatus = (a) => (a?.level === 'crit' || a?.level === 'attention' ? a.level : 'warn');
+
+const unit = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
+const byte = (v) => Number.isInteger(v) && v >= 0 && v <= 255;
+
+/**
+ * The extras a feed may hang on a host, guest or service for a screen that
+ * draws them (the Wall, docs/plans/wall/README.md D3): `glow: {rgb: [r, g, b],
+ * level}` (a light's colour and brightness, level 0..1, 1 when left out) and
+ * `ring: {progress}` (a job's progress 0..1) and `countdown: {at, label}` (a
+ * scheduled job: `at` epoch ms or an ISO time, kept as epoch ms; `label` a
+ * short name, up to COUNTDOWN_LABEL_MAX characters, may be left out). Each is
+ * kept whole or dropped; the app's Map ignores them.
+ */
+export function feedExtras(x) {
+  const out = {};
+  const g = isObj(x?.glow) ? x.glow : null;
+  if (g && Array.isArray(g.rgb) && g.rgb.length === 3 && g.rgb.every(byte) && (g.level == null || unit(g.level))) {
+    out.glow = { rgb: [...g.rgb], level: g.level ?? 1 };
+  }
+  const r = isObj(x?.ring) ? x.ring : null;
+  if (r && unit(r.progress)) out.ring = { progress: r.progress };
+  const c = isObj(x?.countdown) ? x.countdown : null;
+  const at = typeof c?.at === 'string' ? Date.parse(c.at) : c?.at;
+  const label = typeof c?.label === 'string' ? c.label.trim() : c?.label;
+  if (c && Number.isFinite(at) && at > 0 && (label == null || (typeof label === 'string' && label.length <= COUNTDOWN_LABEL_MAX))) {
+    out.countdown = label ? { at, label } : { at };
+  }
+  return out;
+}
+
+/** The longest `countdown.label` a feed may send (feedExtras): a name, not a sentence. */
+export const COUNTDOWN_LABEL_MAX = 32;
+
 /** One of a running guest's services, as the feed lists it. */
 function fromService(g, ref) {
   const s = (Array.isArray(g.services) ? g.services : []).find((x) => x && String(x.name) === ref.service);
@@ -214,6 +250,7 @@ function fromService(g, ref) {
     why: s.why ?? (status === 'down' ? 'not running' : undefined),
     sub: s.sub,
     detail: s.detail && typeof s.detail === 'object' ? { ...s.detail } : undefined,
+    ...feedExtras(s),
   };
 }
 
@@ -264,13 +301,14 @@ export function fromFeed(node, feeds, now) {
     const h = feed.host ?? {};
     const alerts = Array.isArray(h.alerts) ? h.alerts : [];
     let status = h.status ?? 'ok';
-    for (const a of alerts) status = worse(status, a.level === 'crit' ? 'crit' : 'warn');
+    for (const a of alerts) status = worse(status, alertStatus(a));
     return {
       status,
       why: alerts[0]?.text ?? h.why,
       sub: h.sub,
       metrics: { cpu: clamp01(h.cpu), mem: clamp01(h.mem), disk: clamp01(h.disk), gpu: clamp01(h.gpu) },
       detail: h.detail,
+      ...feedExtras(h),
     };
   }
   const g = (feed.guests ?? []).find((x) => String(x.vmid) === ref.guest || x.name === ref.guest);
@@ -285,7 +323,7 @@ export function fromFeed(node, feeds, now) {
   if (g.type === 'tailnet' && g.status !== 'running') {
     const seen = Number(g.lastSeen);
     const why = Number.isFinite(seen) && seen > 0 ? `offline, last seen ${agoWords(Math.max(0, now - seen))} ago` : 'offline';
-    return { status: 'idle', why: g.why ?? why, sub: g.sub, detail: { ...(g.detail ?? {}) } };
+    return { status: 'idle', why: g.why ?? why, sub: g.sub, detail: { ...(g.detail ?? {}) }, ...feedExtras(g) };
   }
   // A template never runs: stopped is its normal state, like `expect: "stopped"`.
   const expectStopped = node.expect === 'stopped' || g.template === true;
@@ -298,7 +336,7 @@ export function fromFeed(node, feeds, now) {
   // Alerts from inside a running guest (its disk is full, say), as for a host.
   const alerts = g.status === 'running' && Array.isArray(g.alerts) ? g.alerts : [];
   for (const a of alerts) {
-    const next = worse(status, a.level === 'crit' ? 'crit' : 'warn');
+    const next = worse(status, alertStatus(a));
     if (next !== status) { status = next; why = a.text; }
   }
   const mem = g.maxmem ? g.mem / g.maxmem : g.memFrac;
@@ -314,6 +352,7 @@ export function fromFeed(node, feeds, now) {
     // shown, but never as a warning.
     memCache: Boolean(g.memCache),
     detail,
+    ...feedExtras(g),
   };
 }
 
@@ -1169,6 +1208,10 @@ export function buildFleet({
       // No topology node names it: a feed found it (docs/map.md "Discovered nodes").
       discovered: n.discovered || undefined,
       drift: driftOf(n, feeds, now, { declared: topology != null }),
+      // Feed extras for the Wall (feedExtras); the app's Map draws neither.
+      glow: f?.glow,
+      ring: f?.ring,
+      countdown: f?.countdown,
     });
   }
 
@@ -1323,7 +1366,9 @@ export function feedEvents(feeds, topology, seen) {
       if (!at || at <= (last ?? 0)) continue;
       newest = Math.max(newest, at);
       const node = nodesByRef.get(`${source}/${e.guest ?? ''}`) ?? nodesByRef.get(`${source}/`);
-      mine.push({ at, node, kind: e.kind ?? 'ok', text: String(e.text ?? '').slice(0, 200) });
+      // `link` names a topology link the event travelled (`from>to`): a comet.
+      const link = typeof e.link === 'string' && e.link ? { link: e.link.slice(0, 200) } : {};
+      mine.push({ at, node, kind: e.kind ?? 'ok', text: String(e.text ?? '').slice(0, 200), ...link });
     }
     seen.set(source, newest);
     // The first read of a feed sets the mark without replaying its history.

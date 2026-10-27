@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { boot } from './helpers/boot.mjs';
 import { fakeBuilder } from './helpers/fake-builder.mjs';
-import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, demoAttention } from './helpers/demo-hub.mjs';
+import { demoHubConfig, DEMO_HOSTNAME, writeDemoMap, demoAttention, demoQuiet } from './helpers/demo-hub.mjs';
 import { attentionList } from '../server/state.mjs';
 import { fkey } from '../server/fleet/keys.mjs';
 import { generateHubKey, publicKeyString } from '../server/fleet/keys-ed25519.mjs';
@@ -143,4 +143,19 @@ test('attentionList: the snapshot rule, a score already on the session wins', ()
   ], key, 10);
   assert.deepEqual(list.map((x) => [x.name, x.score]), [['d', 150], ['b', 90], ['a', 90]]);
   assert.equal(list[0].key, 'k:d');
+});
+
+test('demoQuiet (--quiet-after, Wall night 3 T5): no map frame after the quiet time, every other message passes', () => {
+  const map = JSON.stringify({ type: 'map', map: { nodes: [] } });
+  const other = JSON.stringify({ type: 'fleet', builders: [{ id: 'map' }] });
+  assert.equal(demoQuiet(map, 4_999, 5_000), false, 'before the quiet time');
+  assert.equal(demoQuiet(map, 5_000, 5_000), true);
+  assert.equal(demoQuiet(map, 600_000, 5_000), true);
+  assert.equal(demoQuiet(other, 600_000, 5_000), false, 'a message naming "map" that is not one');
+  assert.equal(demoQuiet('{not json "map"', 600_000, 5_000), false);
+  assert.equal(demoQuiet(map, 600_000, null), false, 'no --quiet-after: never');
+  // The relay drops what demoQuiet says, before it rewrites the map.
+  const tool = fs.readFileSync(path.join(import.meta.dirname, 'tools', 'demo-fleet.mjs'), 'utf8');
+  assert.match(tool, /'quiet-after': \{ type: 'string' \}/);
+  assert.match(tool, /if \(text != null && demoQuiet\(text, Date\.now\(\) - STARTED_AT, QUIET_AFTER_MS\)\) return;/);
 });

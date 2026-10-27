@@ -177,6 +177,24 @@ runners, say), each with its own status: `working` while busy, `idle` while
 waiting. A topology node points at one with `feed: "hv1/104/runner-1"`. A
 guest's own `alerts`, such as a full disk, now colour its room too.
 
+**The Wall.** The Map for a screen nobody sits at (a tablet on a shelf, a wall
+screen): `/galaxy.html` draws the fleet as one spiral galaxy in WebGL (three.js
+r170, vendored under `public/vendor/three/`, MIT), the hub its sun, the sites
+star clusters. It tours itself, trouble first, and says what it shows in big
+type; a finger takes it over (turn, zoom, tap a site or a planet for its
+sheet, back), and a minute later the tour takes it back. It marks a stale or
+offline feed, honours reduced motion, installs as a full-screen app
+(`/galaxy.webmanifest`), and takes the cockpit's show commands (`fly_to`,
+`highlight`, `pin`, `clear`, undo) by `BroadcastChannel` or origin-checked
+`postMessage` until it is a paired screen. Effects are opt-in (`?fx=`); a
+browser without WebGL goes to `/wall.html`, the 2D Wall over the Map module.
+It only reads: no new route, config or dependency. Feeds may carry `glow`,
+`ring` and `countdown` for it, and an alert level `attention` (a person has
+to act); a feed event's `link` now reaches the Map as a comet. The Map module
+gained options for it, all off by default (`ambient`, `layout`, `covers`,
+label sizing). `node test/tools/demo-fleet.mjs --size large` is a five-site
+demo fleet. See docs/wall.md.
+
 ## 0.1.0 — 2026-09-23
 
 First public release. Extracted from a private cockpit built for one host,

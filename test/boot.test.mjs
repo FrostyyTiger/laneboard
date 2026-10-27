@@ -141,7 +141,8 @@ test('boot refuses the live port and a non-memory database', async () => {
 
 test('a busy port: one line naming the port and LANEBOARD_PORT, no stack, non-zero exit', async () => {
   const port = await freePort();
-  const holder = net.createServer();
+  // Holds the port; drops the helper's /healthz probes so close() does not wait on them.
+  const holder = net.createServer((socket) => socket.destroy());
   await new Promise((resolve) => holder.listen(port, '127.0.0.1', resolve));
   try {
     const err = await boot({ env: { LANEBOARD_PORT: String(port) } }).then(() => null, (e) => e);

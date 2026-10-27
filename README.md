@@ -26,6 +26,7 @@ signed, audited requests. Without one, nothing changes. See
 | **Audit** `#/audit` | What was done, by whom? The hash-chained action log, and on a hub each relayed action's reconciliation with the builder's own log. |
 | **Diff** `#/diff` | A lane's changes, with line comments batched into one review sent to the lane. Opened from a lane. |
 | **Archive** `#/board?s=archive` | Retired lanes, searchable; restore one through a confirmed launch. |
+| **Wall** `/galaxy.html` | Is anything wrong, and where, seen from three metres? The Map for a tablet or a wall screen nobody sits at: the fleet as a galaxy that tours itself, trouble first, captioned in big type; a finger takes it over, a minute later the tour takes it back. Switches for a kiosk, a person's screen (`?role=explore`) and effects (`?fx=`); `/wall.html` is the 2D page. See [docs/wall.md](docs/wall.md). |
 
 `g m` map · `g b` board · `g i` inbox · `g p` packages · `g o` morning ·
 `g r` runs · `g c` credit · `g x` box · `g a` audit. `⌘K` opens the command palette, `[`
@@ -208,6 +209,7 @@ human starts. The guard flags and pushes; it never acts.
 | [docs/config.md](docs/config.md) | every config key, its default and its environment variable |
 | [docs/providers.md](docs/providers.md) | the three interfaces everything site-specific sits behind, and how to add one |
 | [docs/map.md](docs/map.md) | the Map: the topology file, the feed format, pushing a feed from a hypervisor, builders on the Map |
+| [docs/wall.md](docs/wall.md) | the Wall: a tablet in kiosk mode, touch, the URL switches, the effects, the feed fields it paints |
 | [docs/runs.md](docs/runs.md) | the run protocol: how an unattended agent loop tells laneboard its goal, rounds, scores, cost and needs |
 | [SECURITY.md](SECURITY.md) | why there is no login, and what that means for where you put it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | `npm test`, the hygiene gate, what is deliberate |

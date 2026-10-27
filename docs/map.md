@@ -237,6 +237,8 @@ half-written file.
   its hypervisor). The gauge is then drawn neutral and never as a warning.
 - A guest's `alerts` work like the host's: while the guest runs, the worst one
   sets its status and its text says why (`{ "level": "crit", "text": "disk 99% full" }`).
+  An alert's `level` is `crit`, `attention` (a person has to act: a paper jam,
+  a print to take off the bed) or `warn`; anything else counts as `warn`.
 - A guest's `services` are what runs inside it, for a topology node whose
   `feed` names one (`"hv1/104/runner-1"`).
   - `status` is `ok`, `working` (busy, like a runner on a job), `idle` (up,
@@ -257,9 +259,21 @@ half-written file.
   down: a peer that sleeps is not broken. A stopped `qemu`/`lxc` guest stays
   down. `note` on the feed says why it
   is empty (the `none` feeder).
+- Optional extras for a screen that paints them (the Wall,
+  `docs/plans/wall/README.md` D3), on the host, a guest or a service:
+  `glow: { "rgb": [255, 200, 120], "level": 0.8 }` (a light's colour, three
+  integers 0-255, and its brightness 0-1, 1 when left out) and
+  `ring: { "progress": 0.42 }` (a job's progress, 0-1) and
+  `countdown: { "at": <epoch ms or ISO time>, "label": "backup" }` (when a
+  scheduled job runs next; `label` up to 32 characters, may be left out).
+  Each is kept whole or dropped when invalid, and gone while the feed is
+  stale. The app's Map draws none of them: `glow` and `ring` are painted by
+  `wall.html`, `countdown` by `galaxy.html` (`docs/wall.md`, "Feed fields").
 - `events` appear once each, in the event tape and as a pulse on the node.
   - Events already in the file when laneboard first reads it are not replayed.
   - `guest` targets one of the host's guests.
+  - `link` names a topology link the event travelled (its `id`, or
+    `"from>to"`): the Map sends a comet along it.
 
 ### Discovered nodes
 
@@ -517,6 +531,28 @@ into the hub's `~/.cache/laneboard/feeds/`. Nothing else changes in the format.
 A builder without a hub key keeps reading feeds as before.
 
 Probes run on the hub too, from the hub's own topology file.
+
+## Ambient: the Map on a wall or desk screen
+
+The Map module can run on its own as something to look at from across a room:
+no HUD and no input, the constellation turning slowly inside a still dial (one
+turn in ten minutes), frames capped at 30 per second so a small machine stays
+cool. The movement on it still means what the table above says.
+
+```js
+import { createMap } from './js/views/map/index.js';
+const map = createMap(el, { ambient: true });   // or { ambient: { drift: radiansPerSecond, fps } }
+map.update(await (await fetch('/api/map')).json());
+map.onDraw(() => { /* after every frame: map.screenOf(id) is where a node is drawn now */ });
+map.focus('hv1', 2.4);  /* … */  map.fit();   // a camera tour: fly in, hold, fly out
+```
+
+The turn is around the centre of the view, so a node the camera flew to turns
+in place; flights in this mode take 2.5 times as long (`flight`).
+
+`prefers-reduced-motion` stops the turn like every other animation. A page
+that wakes on touch puts its own layer over the Map; the Map never takes input
+in this mode.
 
 ## API
 

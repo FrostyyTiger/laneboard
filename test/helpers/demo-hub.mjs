@@ -276,6 +276,19 @@ export function demoWsText(text, now = Date.now()) {
 }
 
 /**
+ * `--quiet-after <s>` (Wall plan night 3 T5): from `quietAfterMs` after the
+ * demo started the relay drops every `map` message, so the page sees a hub
+ * that is up (the socket stays open, /api/map answers) whose map frames have
+ * stopped: a stale feed, to film. True when `text` is to be dropped `elapsedMs`
+ * after the start; never without a quiet time. Other messages always pass.
+ */
+export function demoQuiet(text, elapsedMs, quietAfterMs) {
+  if (quietAfterMs == null || !Number.isFinite(quietAfterMs) || elapsedMs < quietAfterMs) return false;
+  if (typeof text !== 'string' || !text.includes('"map"')) return false;
+  try { return JSON.parse(text)?.type === 'map'; } catch { return false; }
+}
+
+/**
  * The attention queue builder `id` would send for `sessions` (danger, waiting,
  * stuck first). Like a real builder's snapshot (`decorateSessions`) it first
  * rescores every session in place: the fake's sessions inherit the fixture
@@ -284,4 +297,312 @@ export function demoWsText(text, now = Date.now()) {
 export function demoAttention(id, sessions, now = Date.now()) {
   for (const s of sessions) s.attentionScore = attentionScore(s, now);
   return attentionList(sessions, (name) => fkey(id, name), now).map((a) => ({ ...a, builder: id }));
+}
+
+// ------------------------------------------------------------ the large fleet
+//
+// `--size large` (Wall plan T1, docs/plans/wall/README.md §7.1): the Wall is
+// judged on a fleet the size of a real one, 100-150 nodes over five sites.
+// One table per site drives both the topology and that site's feed, so the
+// two always agree: `hv1` (the small demo's rooms, the builders and CI, plus
+// the house services), `hv2` (storage, media, a GPU box, a small cluster),
+// `cloud` (edges, the production API, its database), `remote` (tailnet peers
+// at an office, one laptop asleep) and `home` (lights and a 3D printer, the
+// nodes that carry Wall's `glow` and `ring` extras, T2). Guest names are unique
+// across sources: the Map merges same-named machines of different feeds.
+// Calm on its own; the trouble that comes and goes is the live part (T3).
+
+const room = (id, vmid, sub, services = [], over = {}) => ({ id, vmid, sub, services, ...over });
+const svc = (name, sub, status = 'ok') => ({ name, sub, status });
+
+/** Every site of the large demo: its host as the feed says it, its rooms with their services. */
+export const DEMO_SITES_LARGE = Object.freeze([
+  {
+    id: 'lab', source: 'hv1', label: 'hv1', sub: 'hypervisor', ip: '192.0.2.10',
+    host: { cpu: 0.34, mem: 0.62, disk: 0.48, sub: 'demo hypervisor · 128 GB', detail: { Hardware: '2× 16-core · 128 GB', Where: 'rack 1' } },
+    rooms: [
+      room('room-a', 101, undefined, [], { label: 'vm-a', builder: 'builder-a', tags: ['tag:builder'] }),
+      room('room-b', 102, undefined, [], { label: 'vm-b', builder: 'builder-b', tags: ['tag:builder'] }),
+      room('room-c', 103, undefined, [], { label: 'vm-c', builder: 'builder-c', tags: ['tag:builder'] }),
+      room('ci', 104, 'CI runners', [svc('runner-1', 'job · 4m', 'working'), svc('runner-2', 'waiting for a job', 'idle'), svc('runner-3', 'waiting for a job', 'idle')], { tags: ['tag:ci'], ci: { runner: true, for: '*' } }),
+      room('backup', 105, 'nightly backups', [], { unlisted: true }),
+      room('proxy', 110, 'reverse proxy', [svc('ingress', 'tls · 42 routes'), svc('certs', 'renews in 41d')]),
+      room('db', 111, 'databases', [svc('postgres', '14 dbs'), svc('redis', 'cache'), svc('db-dumps', 'hourly')], { schedule: { label: 'dumps', everyMs: 15 * 60_000 } }),
+      room('monitor', 112, 'metrics and logs', [svc('metrics', '1.2k series'), svc('logs', '9 GB/day'), svc('alerting', '12 rules')]),
+      room('dns', 113, 'resolver', [svc('resolver', 'cache 94%'), svc('dhcp', '61 leases')]),
+      room('git-mirror', 114, 'git mirror', [svc('mirror', '38 repos')]),
+      room('registry', 115, 'images', [svc('images', '212 tags')]),
+      room('template', 199, 'base image', [], { expect: 'stopped', stopped: true }),
+    ],
+  },
+  {
+    id: 'hv2', source: 'hv2', label: 'hv2', sub: 'hypervisor', ip: '192.0.2.20',
+    host: { cpu: 0.41, mem: 0.71, disk: 0.66, gpu: 0.38, sub: 'demo hypervisor · GPU', detail: { Hardware: '24-core · 192 GB · 1 GPU', Where: 'rack 2' } },
+    rooms: [
+      room('storage', 201, 'file server', [svc('nfs', '18 TB'), svc('smb', '4 shares'), svc('scrub', 'weekly', 'idle')]),
+      room('media', 202, 'media', [svc('library', '3.1k items'), svc('transcode', 'idle', 'idle')]),
+      room('gpu-box', 203, 'inference', [svc('inference', '2 models', 'working'), svc('queue', '0 waiting', 'idle'), svc('trainer', 'idle', 'idle')]),
+      room('k8s-1', 204, 'cluster node', [svc('ingress-1', 'nginx'), svc('apps-1', '23 pods')]),
+      room('k8s-2', 205, 'cluster node', [svc('apps-2', '19 pods')]),
+      room('k8s-3', 206, 'cluster node', [svc('apps-3', '21 pods')]),
+      room('secrets', 207, 'secrets', [svc('vault', 'unsealed'), svc('audit-log', 'shipping')]),
+      room('build-cache', 208, 'build cache', [svc('cache', '61% hit')]),
+      room('sandbox', 209, 'scratch VM', [], { expect: 'stopped', stopped: true }),
+    ],
+  },
+  {
+    id: 'cloud', source: 'cloud', label: 'cloud', sub: 'provider · eu-1', ip: '198.51.100.10',
+    host: { cpu: 0.22, mem: 0.47, sub: 'provider · eu-1', detail: { Where: 'eu-1' } },
+    rooms: [
+      room('edge-1', 'edge-1', 'edge', [svc('cdn-1', '98% cached'), svc('waf-1', '3 rules hit')], { type: 'cloud' }),
+      room('edge-2', 'edge-2', 'edge', [svc('cdn-2', '97% cached')], { type: 'cloud' }),
+      room('api-prod', 'api-prod', 'production', [svc('api', '420 req/s'), svc('worker', '3 jobs', 'working'), svc('scheduler', '14 cron')], { type: 'cloud' }),
+      room('api-staging', 'api-staging', 'staging', [svc('api-stg', '4 req/s')], { type: 'cloud' }),
+      room('db-prod', 'db-prod', 'database', [svc('primary', 'lag 0s'), svc('replica', 'lag 1s')], { type: 'cloud' }),
+      room('object-store', 'object-store', 'buckets', [svc('buckets', '7 buckets')], { type: 'cloud', schedule: { label: 'lifecycle', everyMs: 20 * 60_000, lateMs: 2 * 60_000 } }),
+      room('mail', 'mail', 'mail', [svc('smtp', 'queue 0'), svc('imap', '12 users')], { type: 'cloud' }),
+      room('status-page', 'status-page', 'status page', [], { type: 'cloud' }),
+    ],
+  },
+  {
+    id: 'remote', source: 'remote', label: 'remote', sub: 'office · tailnet', ip: '203.0.113.10',
+    host: { cpu: 0.12, mem: 0.33, sub: 'office gateway', detail: { Where: 'office' } },
+    rooms: [
+      room('office-nas', 'office-nas', 'office storage', [svc('restic', 'last 2h ago'), svc('verify', 'weekly', 'idle')], { type: 'tailnet', schedule: { label: 'offsite copy', everyMs: 3 * 3600_000 } }),
+      room('office-printer', 'office-printer', 'printer', [], { type: 'tailnet' }),
+      room('laptop-1', 'laptop-1', 'laptop', [], { type: 'tailnet' }),
+      room('laptop-2', 'laptop-2', 'laptop', [], { type: 'tailnet', offline: true }),
+      room('phone-1', 'phone-1', 'phone', [], { type: 'tailnet' }),
+      room('vpn-gw', 'vpn-gw', 'exit node', [], { type: 'tailnet' }),
+    ],
+  },
+  {
+    id: 'home', source: 'home', label: 'home', sub: 'house', ip: '203.0.113.20',
+    host: { cpu: 0.09, mem: 0.41, sub: 'home hub', detail: { Where: 'hallway closet' } },
+    rooms: [
+      room('automation', 'automation', 'home automation', [svc('zigbee', '23 devices'), svc('rules', '31 rules')], { type: 'device' }),
+      room('hall-light', 'hall-light', 'light', [], { type: 'device', glow: { rgb: [255, 196, 137], level: 0.35 } }),
+      room('desk-light', 'desk-light', 'light', [], { type: 'device', glow: { rgb: [255, 214, 170], level: 0.9 } }),
+      room('living-light', 'living-light', 'light', [], { type: 'device', glow: { rgb: [140, 120, 255], level: 0.6 } }),
+      room('kitchen-light', 'kitchen-light', 'light', [], { type: 'device', glow: { rgb: [235, 242, 255], level: 1 } }),
+      room('porch-light', 'porch-light', 'light', [], { type: 'device' }),
+      room('printer-3d', 'printer-3d', '3D printer', [svc('print-job', 'printing', 'working')], { type: 'device', printing: true }),
+      room('thermostat', 'thermostat', 'heating', [], { type: 'device' }),
+      room('front-door', 'front-door', 'door sensor', [], { type: 'device' }),
+    ],
+  },
+]);
+
+// Links that say how the sites depend on each other: a few long ones between
+// sites, so a layout has something to bundle.
+const LARGE_LINKS = [
+  { from: 'ci', to: 'registry', kind: 'flow', label: 'pushes images' },
+  { from: 'ci', to: 'git-mirror', kind: 'dep', label: 'clones' },
+  { from: 'registry', to: 'k8s-1', kind: 'flow', label: 'deploys' },
+  { from: 'ci', to: 'api-staging', kind: 'flow', label: 'deploys' },
+  { from: 'api-staging', to: 'api-prod', kind: 'flow', label: 'promotes' },
+  { from: 'api-prod', to: 'db-prod', kind: 'dep', label: 'reads and writes' },
+  { from: 'edge-1', to: 'api-prod', kind: 'dep' },
+  { from: 'edge-2', to: 'api-prod', kind: 'dep' },
+  { from: 'db', to: 'storage', kind: 'flow', label: 'dumps' },
+  { from: 'storage', to: 'office-nas', kind: 'flow', label: 'offsite copy' },
+  { from: 'monitor', to: 'status-page', kind: 'flow', label: 'publishes' },
+  { from: 'gpu-box', to: 'build-cache', kind: 'share', label: 'same NVMe' },
+  { from: 'automation', to: 'monitor', kind: 'flow', label: 'sensor data' },
+  { from: 'proxy', to: 'k8s-1', kind: 'dep' },
+];
+
+const svcId = (r, s) => `${r.id}-${s.name}`;
+const refOf = (site, r) => `${site.source}/${r.vmid}`;
+
+/** The large demo's topology: five sites, their rooms and services, and links. */
+export const DEMO_TOPOLOGY_LARGE = Object.freeze({
+  nodes: DEMO_SITES_LARGE.flatMap((site) => [
+    { id: site.id, kind: 'site', label: site.label, feed: site.source, sub: site.sub },
+    ...site.rooms.flatMap((r) => [
+      {
+        id: r.id, parent: site.id, kind: 'room', label: r.label ?? r.id, feed: refOf(site, r),
+        ...(r.sub ? { sub: r.sub } : {}), ...(r.builder ? { builder: r.builder } : {}), ...(r.ci ? { ci: r.ci } : {}),
+        ...(r.expect ? { expect: r.expect } : {}),
+      },
+      ...r.services.map((s) => ({ id: svcId(r, s), parent: r.id, kind: 'service', label: s.name, feed: `${refOf(site, r)}/${s.name}` })),
+    ]),
+  ]),
+  links: LARGE_LINKS,
+});
+
+const LARGE_DAY = 86_400;
+// The printer's job runs ten minutes and starts over, so its ring (T2) moves
+// on every tick of the demo, whatever the tick.
+export const LARGE_PRINT_MS = 10 * 60_000;
+const printProgress = (now) => Math.round(((now % LARGE_PRINT_MS) / LARGE_PRINT_MS) * 1000) / 1000;
+
+// Scheduled jobs (Wall plan night 4 T40, research Q17): a room's `schedule`
+// becomes the feed's `countdown: {at, label}`, the next run on a fixed beat,
+// so the demo always shows each phase: `dumps` every 15 min (minutes, then the
+// last five), the `offsite copy` every 3 h (hours), and `lifecycle`, which runs
+// every 20 min but always 2 to 22 min late (overdue: `+N MIN`).
+export const countdownAt = (sched, now) => (sched.lateMs
+  ? Math.floor(now / sched.everyMs) * sched.everyMs - sched.lateMs
+  : Math.ceil((now + 1) / sched.everyMs) * sched.everyMs);
+
+/** One site's feed as its feeder would push it, stamped `now`. */
+function siteFeed(site, now) {
+  const ip = site.ip.split('.');
+  const guests = site.rooms.filter((r) => !r.unlisted).map((r, i) => {
+    const n = typeof r.vmid === 'number' ? r.vmid : 7 * (i + 1);
+    const g = {
+      vmid: typeof r.vmid === 'number' ? r.vmid : undefined,
+      name: r.label ?? r.id,
+      type: r.type ?? 'qemu',
+      status: r.stopped ? 'stopped' : r.offline ? 'offline' : 'running',
+      cpu: Math.round((0.04 + (n % 7) * 0.07) * 100) / 100,
+      memFrac: Math.round((0.22 + (n % 5) * 0.11) * 100) / 100,
+      uptime: LARGE_DAY * (1 + (n % 23)),
+      tags: r.tags ?? [],
+      ips: [`${ip.slice(0, 3).join('.')}.${Number(ip[3]) + i + 1}`],
+    };
+    if (r.offline) { g.lastSeen = now - 3 * 3600_000; delete g.cpu; delete g.memFrac; }
+    if (r.services.length) g.services = r.services.map((s) => ({ ...s }));
+    // Feed extras the Wall paints (T2): a light's colour, a print's progress.
+    if (r.glow) g.glow = { rgb: [...r.glow.rgb], level: r.glow.level };
+    if (r.printing) {
+      const progress = printProgress(now);
+      g.ring = { progress };
+      for (const s of g.services ?? []) s.sub = `printing · ${Math.round(progress * 100)}%`;
+    }
+    if (r.schedule) g.countdown = { at: countdownAt(r.schedule, now), label: r.schedule.label };
+    return g;
+  });
+  if (site.source === 'hv1') {
+    guests.push({ vmid: 106, name: 'scratch', type: 'qemu', status: 'running', cpu: 0.18, memFrac: 0.3, uptime: 3600, tags: ['tag:builder'], ips: ['192.0.2.16'], sub: 'not in the topology' });
+  }
+  return {
+    source: site.source,
+    at: now,
+    every: 30,
+    host: { name: site.label, tags: site.source === 'hv1' ? ['tag:infra'] : [], ips: [site.ip], ...site.host },
+    guests,
+  };
+}
+
+/** The `hv1` feed of the large demo (the small demo's rooms and more), stamped `now`. */
+export const demoFeedHv1 = (now = Date.now()) => siteFeed(DEMO_SITES_LARGE[0], now);
+/** The `hv2` feed: storage, media, a GPU box, a three-node cluster. */
+export const demoFeedHv2 = (now = Date.now()) => siteFeed(DEMO_SITES_LARGE[1], now);
+/** The `cloud` feed: edges, the production API and its database. */
+export const demoFeedCloud = (now = Date.now()) => siteFeed(DEMO_SITES_LARGE[2], now);
+/** The `remote` feed: tailnet peers at an office, one laptop asleep. */
+export const demoFeedRemote = (now = Date.now()) => siteFeed(DEMO_SITES_LARGE[3], now);
+/** The `home` feed: the automation hub, lights, a 3D printer, a door sensor. */
+export const demoFeedHome = (now = Date.now()) => siteFeed(DEMO_SITES_LARGE[4], now);
+
+/** Every feed of the large demo, one per source. */
+export function demoFeedsLarge(now = Date.now()) {
+  return [demoFeedHv1(now), demoFeedHv2(now), demoFeedCloud(now), demoFeedRemote(now), demoFeedHome(now)];
+}
+
+// The live part of the large demo (Wall plan T3): trouble that comes and goes
+// and things that happen, counted in demo ticks (4 s by default) so a slower
+// `--tick` slows all of it. Over one period of 90 ticks (six minutes):
+//   crit       hv2 `storage`, ticks 0-39     its pool fills up
+//   attention  remote `office-printer`, 27-66   a paper jam a person must clear
+//   warn       cloud `api-prod`, 54-84       slow answers
+// so trouble overlaps, every one clears and returns, and ticks 85-89 are calm.
+// The front door opens three times a period (tick 5, 35, 65), and every third
+// tick something travels one of the topology's flow links, round robin: a feed
+// event with `link`, which the Map draws as a comet; every fifth of them (each
+// 15th tick) fails (kind `failed`: the galaxy's `fx=activity` lets it stop short).
+export const LARGE_PERIOD_TICKS = 90;
+
+/** Each trouble of the period: where (feed source, guest name), its alert, its window in ticks. */
+export const LARGE_TROUBLE = Object.freeze([
+  { source: 'hv2', guest: 'storage', level: 'crit', text: 'pool 97% full', from: 0, to: 40 },
+  { source: 'remote', guest: 'office-printer', level: 'attention', text: 'paper jam, needs a person', from: 27, to: 67 },
+  { source: 'cloud', guest: 'api-prod', level: 'warn', text: 'p95 latency 1.8 s', from: 54, to: 85 },
+]);
+
+const DOOR_TICKS = [5, 35, 65];
+const LARGE_FLOWS = LARGE_LINKS.filter((l) => l.kind === 'flow');
+// Which feed and guest a flow event belongs to: its link's `from` room, named
+// as its topology ref names it (the hub finds the node by `source/guest`).
+const roomSource = new Map(DEMO_SITES_LARGE.flatMap((site) => site.rooms.map((r) => [r.id, { source: site.source, guest: String(r.vmid) }])));
+
+/**
+ * What the large demo does on tick `n`: the alerts standing now and the
+ * events that happen on this tick (`{source, guest, kind, text, link?}`).
+ */
+export function demoLargeCycle(n) {
+  const t = ((n % LARGE_PERIOD_TICKS) + LARGE_PERIOD_TICKS) % LARGE_PERIOD_TICKS;
+  const alerts = LARGE_TROUBLE.filter((x) => t >= x.from && t < x.to)
+    .map(({ source, guest, level, text }) => ({ source, guest, level, text }));
+  const events = [];
+  if (DOOR_TICKS.includes(t)) events.push({ source: 'home', guest: 'front-door', kind: 'ok', text: 'front door opened' });
+  if (n % 3 === 0) {
+    const l = LARGE_FLOWS[(n / 3) % LARGE_FLOWS.length];
+    const failed = n % 15 === 0;
+    events.push({
+      ...roomSource.get(l.from), kind: failed ? 'failed' : 'ok',
+      text: `${l.from} ${l.label} → ${l.to}${failed ? ' failed' : ''}`, link: `${l.from}>${l.to}`,
+    });
+  }
+  return { alerts, events };
+}
+
+/** A host's cpu on tick `n`, as a live feeder reports it: its own figure, a point or two up or down, never the same two ticks running (night 4 T18). */
+export const wobbleCpu = (cpu, n) => Math.round(Math.max(0.01, cpu + 0.01 * ((((n % 5) + 5) % 5) - 2)) * 100) / 100;
+
+/**
+ * The large demo's feeds on tick `n` at `now`: the static feeds with the
+ * cycle's alerts on their guests and the last few events (`keep` of them),
+ * each stamped once when it happened so the hub reads it once. Each host's
+ * cpu moves a little every tick, as a real feeder's does (`fx=sweep` reads
+ * that as news, night 4 T18), except on the `silent` sources: their figures
+ * and events stay as they were on the first tick, a site whose data stopped.
+ */
+export function createLargeLive({ keep = 8, silent = [] } = {}) {
+  let recent = [];
+  const quiet = new Set(silent);
+  let first = null; // the first tick's alerts: what a silent source keeps saying
+  return function feedsAt(n, now = Date.now()) {
+    const { alerts, events } = demoLargeCycle(n);
+    first ??= alerts;
+    recent = [...recent, ...events.filter((e) => !quiet.has(e.source)).map((e, i) => ({ ...e, at: now + i }))].slice(-keep);
+    return demoFeedsLarge(now).map((feed) => {
+      const still = quiet.has(feed.source);
+      if (!still && Number.isFinite(feed.host.cpu)) feed.host.cpu = wobbleCpu(feed.host.cpu, n);
+      for (const g of feed.guests) {
+        const mine = (still ? first : alerts).filter((a) => a.source === feed.source && a.guest === g.name);
+        if (mine.length) g.alerts = mine.map(({ level, text }) => ({ level, text }));
+      }
+      const own = recent.filter((e) => e.source === feed.source);
+      if (own.length) feed.events = own.map(({ at, kind, text, guest, link }) => ({ at, kind, text, guest, ...(link ? { link } : {}) }));
+      return feed;
+    });
+  };
+}
+
+/**
+ * Write the feeds of a demo size into `feedsDir`, each to a temp name then
+ * renamed. `feeds` replaces the large demo's static ones (`createLargeLive`).
+ */
+export function writeDemoFeeds(feedsDir, now = Date.now(), size = 'small', feeds = null) {
+  if (size !== 'large') { writeDemoFeed(feedsDir, now); return; }
+  for (const feed of feeds ?? demoFeedsLarge(now)) {
+    const file = path.join(feedsDir, `${feed.source}.json`);
+    fs.writeFileSync(`${file}.tmp`, JSON.stringify(feed, null, 2));
+    fs.renameSync(`${file}.tmp`, file);
+  }
+}
+
+/** `writeDemoMap` for the large demo: its topology, its five feeds, the same policy. */
+export function writeDemoMapLarge(dir, now = Date.now()) {
+  const file = path.join(dir, 'map.json');
+  const feedsDir = path.join(dir, 'feeds');
+  const policyFile = path.join(dir, 'policy.hujson');
+  fs.mkdirSync(feedsDir, { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(DEMO_TOPOLOGY_LARGE, null, 2));
+  fs.writeFileSync(policyFile, DEMO_POLICY);
+  writeDemoFeeds(feedsDir, now, 'large');
+  return { file, feedsDir, policyFile };
 }

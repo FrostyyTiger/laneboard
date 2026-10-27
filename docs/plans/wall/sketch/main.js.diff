@@ -1,0 +1,86 @@
+diff --git a/public/js/wall/main.js b/public/js/wall/main.js
+index a586683..83c3806 100644
+--- a/public/js/wall/main.js
++++ b/public/js/wall/main.js
+@@ -37,6 +37,18 @@ export function boot() {
+   // keeps its names clear of it, none cut or ghosted under it (T24). Asked
+   // every frame, filled in once the plate and the frame exist.
+   let covers = () => [];
++  // Sketch: `?tilt=1` lays the Map and its glow back like a galaxy plane
++  // (Stellaris), the frame and caption stay flat; the lock is off (it would
++  // sit on the untilted positions).
++  if (new URLSearchParams(location.search).has('tilt')) {
++    const t = 'perspective(1400px) rotateX(42deg) scale(1.18) translateY(-4%)';
++    for (const id of ['wall-map', 'wall-glow']) {
++      const el = document.getElementById(id);
++      if (el) { el.style.transform = t; el.style.transformOrigin = '50% 60%'; }
++    }
++    const lockEl = document.getElementById('wall-lock');
++    if (lockEl) lockEl.style.display = 'none';
++  }
+   const map = createMap(stage, { ...mapOptionsFor(pick.variant, aspect, screen), covers: () => covers() });
+ 
+   const perf = createPerf();
+@@ -68,7 +80,25 @@ export function boot() {
+   const frame = createFrame(document.getElementById('wall-frame'));
+   covers = () => [caption.cover(), frame.cover()].filter(Boolean);
+   let latest = null;
++  // Sketch: a variant with `links: 'focus'` draws no links at the overview and,
++  // while the camera holds on a site, only the links into or out of that site.
++  let heldSite = null;
++  const focusLinks = pick.variant.links === 'focus';
++  const siteOf = (id, byId) => {
++    let n = byId.get(id), k = 0;
++    while (n && n.kind !== 'site' && n.kind !== 'host' && k++ < 50) n = byId.get(n.parent);
++    return n?.id ?? null;
++  };
++  const shown = (model) => {
++    if (!focusLinks || !model) return model;
++    if (heldSite == null) return { ...model, links: [] };
++    const byId = new Map((model.nodes ?? []).map((n) => [n.id, n]));
++    const links = (model.links ?? []).filter((l) => siteOf(l.from, byId) === heldSite || siteOf(l.to, byId) === heldSite);
++    return { ...model, links };
++  };
+   tour.onLeg((leg) => {
++    const held = leg.kind === 'site' ? leg.id : null;
++    if (focusLinks && held !== heldSite) { heldSite = held; if (latest) map.update(shown(latest)); }
+     const ms = still ? 0 : (leg.arriveMs ?? timingFor(pick.demo).flyMs);
+     const zoom = leg.zoom ?? timingFor(pick.demo).zoom;
+     glow.zoomTo(leg.kind === 'site' ? zoom : 1, ms);
+@@ -87,7 +117,7 @@ export function boot() {
+     if (!model || typeof model !== 'object') return;
+     have = true;
+     latest = model;
+-    map.update(model);
++    map.update(shown(model));
+     glow.update(model);
+     frame.update(model);
+     tour.update(model);
+diff --git a/public/js/wall/variants.js b/public/js/wall/variants.js
+index faac6d4..2101b35 100644
+--- a/public/js/wall/variants.js
++++ b/public/js/wall/variants.js
+@@ -16,6 +16,8 @@ import * as radial from './variants/radial.js';
+ import * as orbits from './variants/orbits.js';
+ import * as islands from './variants/islands.js';
+ import * as mosaic from './variants/mosaic.js';
++import * as islandsTiles from './variants/islands-tiles.js';
++import * as orbitsTiles from './variants/orbits-tiles.js';
+ 
+ /** The directions, in the order a morning report lists them. */
+ export const VARIANTS = Object.freeze([
+@@ -35,6 +37,14 @@ export const VARIANTS = Object.freeze([
+     id: 'mosaic', label: 'Mosaic', mapOptions: mosaic.mapOptions,
+     optionsFor: mosaic.optionsFor, ambient: mosaic.ambient,
+   }),
++  Object.freeze({
++    id: 'islands-tiles', label: 'Islands + tiles (sketch)', mapOptions: islandsTiles.mapOptions,
++    optionsFor: islandsTiles.optionsFor, ambient: islandsTiles.ambient, links: 'focus',
++  }),
++  Object.freeze({
++    id: 'orbits-tiles', label: 'Orbits + tiles (sketch)', mapOptions: orbitsTiles.mapOptions,
++    optionsFor: orbitsTiles.optionsFor, ambient: orbitsTiles.ambient, links: 'focus',
++  }),
+ ]);
+ 
+ /**

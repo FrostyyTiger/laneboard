@@ -34,7 +34,8 @@ const readJs = (f) => read(`js/${f}`);
  * whole (terminal, motion, the map canvas) and keys.js were never part of it.
  */
 const NOT_FROM_APP_JS = new Set(['ui/terminal.js', 'core/motion.js', 'views/map-canvas.js', 'core/keys.js']);
-const APP_FILES = JS_FILES.filter((f) => !NOT_FROM_APP_JS.has(f));
+// public/js/wall/ is another page (public/wall.html, Wall plan D1), never part of app.js.
+const APP_FILES = JS_FILES.filter((f) => !NOT_FROM_APP_JS.has(f) && !f.startsWith('wall/'));
 const readApp = () => APP_FILES.map(readJs).join('\n');
 
 /**
@@ -840,10 +841,16 @@ const CSS_ORDER = [
   'misc.css', 'lanes.css', 'views/data.css', 'views/box.css', 'views/map.css',
 ];
 
+/** Sheets of pages other than index.html. */
+const OTHER_PAGE_CSS = new Set(['wall.css']);
+
 test('index.html links every public/css sheet once, in cascade order, before xterm', () => {
   const onDisk = fs.readdirSync(path.join(PUBLIC, 'css'), { recursive: true })
-    .map((f) => f.split(path.sep).join('/')).filter((f) => f.endsWith('.css')).sort();
+    .map((f) => f.split(path.sep).join('/')).filter((f) => f.endsWith('.css'))
+    // The Wall's sheet belongs to its own page, public/wall.html (Wall plan D1).
+    .filter((f) => !OTHER_PAGE_CSS.has(f)).sort();
   assert.deepEqual([...CSS_LINKS].sort(), onDisk, 'every sheet under public/css is linked, and only those');
+  assert.ok(!CSS_LINKS.some((f) => OTHER_PAGE_CSS.has(f)), 'the app does not link another page\'s sheet');
   assert.equal(new Set(CSS_LINKS).size, CSS_LINKS.length, 'no sheet is linked twice');
   // Later tasks may add sheets; the split's own sheets keep their relative order.
   assert.deepEqual(CSS_LINKS.filter((f) => CSS_ORDER.includes(f)), CSS_ORDER);

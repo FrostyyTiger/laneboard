@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en" data-theme="dark" class="wall">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>laneboard · galaxy (sketch)</title>
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/barlow-condensed/BarlowCondensed-SemiBold.woff2">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/wall3d.css">
+</head>
+<body>
+<!-- Sketch (not a loop task): the fleet as a Stellaris-style 3D galaxy.
+     WebGL canvas, the hub a sun, sites star systems on its plane, rooms their
+     planets; a camera that sweeps from system to system, trouble first. -->
+<main class="w3-stage">
+  <canvas id="w3"></canvas>
+  <div class="w3-caption" id="w3-caption"></div>
+  <div class="w3-clock" id="w3-clock"></div>
+</main>
+<script type="module" src="/js/wall/galaxy.js"></script>
+</body>
+</html>

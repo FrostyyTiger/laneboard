@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-theme="dark" class="wall">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1014">
+<title>laneboard · wall</title>
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2">
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/barlow-condensed/BarlowCondensed-SemiBold.woff2">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/views/map.css">
+<link rel="stylesheet" href="/css/wall.css">
+<link rel="icon" href="/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+<!-- The Wall (docs/plans/wall/README.md): the Map in ambient mode, full screen.
+     The glow canvas sits under it (the Map's canvas is transparent);
+     the frame (vignette, clock, fleet line, tag) over it, then the lock and
+     the caption. -->
+<main class="wall-stage" id="wall-stage">
+  <canvas class="wall-glow" id="wall-glow" aria-hidden="true"></canvas>
+  <div class="wall-map" id="wall-map"></div>
+  <div class="wall-frame-layer" id="wall-frame"></div>
+  <div class="wall-lock-layer" id="wall-lock"></div>
+  <div class="wall-caption-layer" id="wall-caption"></div>
+</main>
+<script type="module" src="/js/wall/main.js"></script>
+</body>
+</html>

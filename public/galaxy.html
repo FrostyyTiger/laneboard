@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en" data-theme="dark" class="wall">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d1014">
+<title>laneboard · galaxy</title>
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2">
+<link rel="preload" as="font" type="font/woff2" crossorigin href="/vendor/fonts/barlow-condensed/BarlowCondensed-SemiBold.woff2">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/wall.css">
+<link rel="icon" href="/icons/icon-192.png">
+<link rel="manifest" href="/galaxy.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+<body>
+<!-- The Wall's galaxy (docs/plans/wall/README.md §5): the fleet as one
+     spiral galaxy in WebGL, the hub its sun, the sites star clusters. The
+     names over it, the veil a show's highlight dims the rest with (cockpit D72), the Wall's frame
+     (vignette, clock, fleet line, tag) over them, the target lock, what a show command marks
+     (brackets, the note, pins; c4-show-canvas.md §3), then the caption; on top, the line that says
+     a finger has the page (night 4 T5), the planets a finger fans out (night 4 T3) and the back
+     control a finger uses (T13). -->
+<main class="wall-stage galaxy-stage" id="galaxy-stage">
+  <canvas class="galaxy-canvas" id="galaxy" aria-hidden="true"></canvas>
+  <div class="galaxy-labels" id="galaxy-labels" aria-hidden="true"></div>
+  <canvas class="galaxy-show-veil" id="galaxy-show-veil" aria-hidden="true" hidden></canvas>
+  <div class="wall-frame-layer" id="wall-frame"></div>
+  <div class="wall-lock-layer" id="wall-lock"></div>
+  <div class="galaxy-show-marks" id="galaxy-show-marks" hidden></div>
+  <div class="wall-caption-layer" id="wall-caption"></div>
+  <div class="galaxy-manual" id="galaxy-manual" hidden></div>
+  <div class="galaxy-fan" id="galaxy-fan" hidden></div>
+  <button type="button" class="galaxy-back" id="galaxy-back" hidden><span class="galaxy-back-glyph" aria-hidden="true">‹</span><span class="galaxy-back-word">Back</span></button>
+</main>
+<script type="module" src="/js/wall/galaxy/main.js"></script>
+</body>
+</html>

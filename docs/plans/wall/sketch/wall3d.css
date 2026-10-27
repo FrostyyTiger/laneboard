@@ -1,0 +1,23 @@
+@font-face {
+  font-family: 'W3 Barlow';
+  src: url('/vendor/fonts/barlow-condensed/BarlowCondensed-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+}
+html, body { margin: 0; height: 100%; background: #030406; overflow: hidden; }
+.w3-stage { position: fixed; inset: 0; }
+#w3 { display: block; width: 100%; height: 100%; }
+.w3-caption {
+  position: absolute; right: 6vw; bottom: 9vh; text-align: right;
+  font-family: 'W3 Barlow', sans-serif; font-weight: 600; letter-spacing: 0.04em;
+  color: #e9edf2; text-transform: uppercase; pointer-events: none;
+  transition: opacity 0.6s ease; text-shadow: 0 0 18px rgba(0, 0, 0, 0.9);
+}
+.w3-caption .site { font-size: 9vh; line-height: 1; }
+.w3-caption .line { font-size: 3.4vh; margin-top: 0.6vh; }
+.w3-caption .crit { color: #ff3b47; }
+.w3-caption .warn { color: #f0c63a; }
+.w3-caption .calm { color: #8a96a3; }
+.w3-clock {
+  position: absolute; left: 6vw; bottom: 9vh; font-family: 'W3 Barlow', sans-serif;
+  font-size: 7vh; color: #9aa3ad; pointer-events: none;
+}

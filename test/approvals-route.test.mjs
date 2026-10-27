@@ -554,9 +554,11 @@ test('booted builder: token 0600 in the state dir, 403 empty without it or with 
   try {
     const stateDir = path.join(b.tmp, 'state', 'laneboard');
     const tokenFile = path.join(stateDir, 'hook.token');
-    await until(() => fs.existsSync(tokenFile), 5000);
+    const headerFile = path.join(stateDir, 'hook.header');
+    // ensureToken writes hook.token, then hook.header: wait for both.
+    await until(() => fs.existsSync(tokenFile) && fs.existsSync(headerFile), 5000);
     assert.equal(mode(tokenFile), 0o600);
-    assert.equal(mode(path.join(stateDir, 'hook.header')), 0o600);
+    assert.equal(mode(headerFile), 0o600);
     const token = tokens.readToken(stateDir);
     assert.match(token, tokens.TOKEN_RE);
 
