@@ -48,6 +48,7 @@ with the D128 message on stderr.
 | `GET /api/cockpit/pair/{code}` | the same screen, every 2 s, with `X-Laneboard: 1` and `X-Laneboard-Pair: <pairSecret>` | `202 {"state":"pending"}`; `200 {"name":"desk"}` plus the `Set-Cookie` of the device token (`screens.md` §6.2), once | `410 {"error":"expired"}` (or already collected); `404 {"error":"unknown"}` (also for a missing or wrong `X-Laneboard-Pair`) |
 | `POST /api/cockpit/talk` | a physical button (C2b) | `c2-voice.md` §14 | `c2-voice.md` §14 |
 | `GET /api/cockpit/ws` (upgrade) | a paired screen | §2 | §2.3 |
+| `GET /api/cockpit/card/{id}/frame?rev={n}&theme={dark\|light}` | a paired screen's card frame (`c4-show-canvas.md` §11.3, SB4) | `200` the custom card's shell document with SB2/SB3's headers | `404 {"error":"not-found"}` for no cookie, a wrong `Sec-Fetch-Dest` or `Sec-Fetch-Site`, an unknown card or `rev`, or a card that is off (D172) |
 | `/api/cockpit/admin/*` (`pair`, `unpair`, `button`, `screens`) | the room's CLI only, on the main (loopback) port, peer uid checked | `screens.md` §6.1 | `403` `agent-uid`, `wrong-uid`, `agent-is-room`, `not-cli` (§6.1); a forwarded request is `not-cli` |
 
 Every request passes `server/security.mjs` first: `checkRequest` (Host; and for `POST`, Origin and
@@ -293,6 +294,8 @@ and not listed. Field values and ranges are in the section named.
 | `pin.close`, `pin.restore` | `seq`, `pin` | — | 4 |
 | `card.close`, `card.restore`, `card.front` | `seq`, `card` | — | 5 |
 | `card.tick` | `seq`, `card`, `row`, `ticked` | — | 5 |
+| `card.render` | `seq`, `card`, `rev`, `readyMs`, `minFontPx`, `overflow` | — | 5 |
+| `card.fault` | `seq`, `card`, `rev`, `why` | — | 5 |
 | `audio.start` | `seq`, `utterance`, `lang`, `format` | — | 6.1 |
 | `audio.stop` | `seq`, `utterance`, `reason` | — | 6.1 |
 | `audio.cancel` | `seq`, `utterance` | — | 6.1 |
@@ -326,10 +329,11 @@ and not listed. Field values and ranges are in the section named.
 | `show.undo` | no | `showId` | — | 4 |
 | `pin.put` | `room` | `pin` (`id`, `node`, `block`, `title`, `by`, `at`, `fields`) | `replaced` | 4 |
 | `pin.remove` | `room` | `pin`, `by` | — | 4 |
-| `card.put` | `room` | `card` (`id`, `block`, `title`, `size`, `by`, `at`, `fields`), `receivedAt` | — | 5 |
+| `card.put` | `room` | `card` (`id`, `block`, `title`, `size`, `by`, `at`, `fields`; `rev` with `block` `custom`; `leavesAt` when it has one), `receivedAt` | — | 5 |
 | `card.remove` | `room` | `card`, `by` | — | 5 |
 | `card.order` | `room` | `ids` | — | 5 |
 | `card.data` | no | `card`, `asOf`, `data` | — | 5 |
+| `card.state` | `room` | `card`, `rev`, `off`, `why` | — | 5 |
 | `stt.update` | no | `utterance`, `firm`, `tail`, `sentAt` | — | 6.1 |
 | `stt.final` | no | `utterance`, `text`, `lang\|null` | — | 6.1 |
 | `stt.error` | no | `utterance`, `error`, `detail` | — | 6.1 |
@@ -612,15 +616,19 @@ The room's one card list (D79) travels as shared state; card data as refreshes (
 | `type` | Direction, `seq` | Example | Notes |
 | --- | --- | --- | --- |
 | `card.put` | room → all, `seq` | `{"type":"card.put","seq":1340,"card":{"id":"card-0004","block":"countdown","title":"shut off vm-c","size":"s","by":"agent","at":"2026-10-27T07:12:00+01:00","fields":{"job":"job-0002","until":"2026-10-27T10:12:00+01:00"}},"receivedAt":1793081520010}` | new or replaced (`replace`, same `id`); B6 from `receivedAt` |
-| `card.remove` | room → all, `seq` | `{"type":"card.remove","seq":1341,"card":"card-0004","by":"desk"}` | `by` the screen whose `✕` it was, or `agent`, or `full` (D80) |
+| `card.remove` | room → all, `seq` | `{"type":"card.remove","seq":1341,"card":"card-0004","by":"desk"}` | `by` the screen whose `✕` it was, or `agent` (`remove_card`), `full` (D80), `ended` or `expires` (`c4-show-canvas.md` §12) |
 | `card.order` | room → all, `seq` | `{"type":"card.order","seq":1342,"ids":["card-0004","card-0003"]}` | after `TO FRONT` (D79) |
 | `card.data` | room → all, no `seq` | `{"type":"card.data","card":"card-0003","asOf":"2026-10-27T07:12:10+01:00","data":{"state":"ok","label":"builder-a"}}` | every 10 s per card (D81); after a replay or snapshot the room sends one per card |
 | `card.close` | screen → room | `{"type":"card.close","seq":60,"card":"card-0004"}` | `✕` (`c4-show-canvas.md` §9); while `room-down` the screen keeps it, with the card's `at`, and sends it once the link is back and the replay or snapshot is applied, only if the card still has that `at`; a card replaced meanwhile stays, in its new version, and the held close is dropped (D144) |
 | `card.restore` | screen → room | `{"type":"card.restore","seq":61,"card":"card-0004"}` | `UNDO` within 10 s (D84); after that `not-now` |
 | `card.front` | screen → room | `{"type":"card.front","seq":62,"card":"card-0003"}` | `TO FRONT` |
 | `card.tick` | screen → room | `{"type":"card.tick","seq":63,"card":"card-0005","row":2,"ticked":true}` | a checklist row (D87); a row with a `when` gets `not-now` |
+| `card.put`, a custom card | room → all, `seq` | `{"type":"card.put","seq":1350,"card":{"id":"card-0009","block":"custom","title":"Stuck runs by builder","size":"w","by":"agent","at":"2026-10-27T07:14:02+01:00","rev":1,"fields":{"reads":[{"tool":"runs","state":"stuck"}]}},"receivedAt":1793081642010}` | the HTML is not in the message: the screen loads the frame route (§1.1) for that `rev`; `card.data`'s `data` is `{"reads":[…],"data":…}` (`c4-show-canvas.md` §11.2) |
+| `card.render` | screen → room | `{"type":"card.render","seq":66,"card":"card-0009","rev":1,"readyMs":180,"minFontPx":18,"overflow":false}` | at the frame's `card:ready` (`c4-show-canvas.md` §11.4); a `rev` the room no longer holds is ignored |
+| `card.fault` | screen → room | `{"type":"card.fault","seq":67,"card":"card-0009","rev":1,"why":"no-answer"}` | `why`: `not-ready`, `no-answer`, `navigated`, `too-many-messages` (§11.5); the first one per `rev` wins |
+| `card.state` | room → all, `seq` | `{"type":"card.state","seq":1351,"card":"card-0009","rev":1,"off":true,"why":"no-answer"}` | the card is off on every screen (D173); `why` as `card.fault` plus `screen-lost` |
 
-Errors for all four screen messages: `unknown-id` (the card is gone; the screen removes it too).
+Errors for every screen message of this table: `unknown-id` (the card is gone; the screen removes it too).
 
 ## 6. Audio (C2)
 

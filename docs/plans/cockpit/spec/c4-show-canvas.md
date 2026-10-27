@@ -2,8 +2,8 @@
 
 Part 1 (T10, §1-§6): the show commands, the one camera they share with the Wall's tour, the line
 each leaves in the conversation and its one-tap undo. Part 2 (T11, §7-§10): the canvas, its grid
-and shelf, the tool `place`, the kit blocks and one-tap removal. Part 3 (T12) custom cards and how
-cards leave on their own. Words (screen, room, show command, card,
+and shelf, the tool `place`, the kit blocks and one-tap removal. Part 3 (T12, §11-§14): custom cards
+in their sandbox, how cards leave, promotion. Words (screen, room, show command, card,
 block, focus, tool line) are defined in `README.md` §Glossary. Sizes are CSS px at 1368x912; times
 in ms or s.
 
@@ -500,10 +500,11 @@ chart, table, checklist, map, text, diff). A card bound to fleet data stays live
 
 | Param | Type | Rule |
 | --- | --- | --- |
-| **`block`** | string | one of the blocks in §8 |
+| **`block`** | string | one of the blocks in §8, `custom` (§11) or `saved` (§13) |
 | `title` | string | at most 48 characters; default per block |
 | `size` | string | `s`, `w`, `t` or `l`, one the block allows; default per block |
 | `replace` | string | a card id: that card's content and title change in place, its slot and age stay |
+| `expires` | string | an ISO time or `+15m` … `+7d`: the card leaves then (§12.2); default none |
 | … | | the block's own fields (§8) |
 
 - No `screen`: a card goes to the room's one list and every screen with a canvas draws it.
@@ -744,7 +745,7 @@ same bodies at 320 x ≤ 240 px (a chart plot 288 x 120, a log or diff 6 lines).
 
 ## 9. Removing a card
 
-How cards also leave on their own, and the agent removing them, is part 3 (T12, pending Q-O4).
+How cards also leave on their own (ended, `expires`) and the agent removing them (`remove_card`) are §12 (pending Q-O4).
 
 - **One tap** on `✕` removes the card from the room's list: gone on every other screen within 0.3 s,
   and they repack (§7.2).
@@ -886,3 +887,386 @@ When the link comes back,
 Then within 1 s the line goes and `CANCEL JOB` is enabled.
 Test: Playwright with `page.clock`; the stand-in room's link; texts and `disabled` on
 `[data-card-cancel]`.
+
+## 11. Custom cards
+
+Part 3 (T12, §11-§14). Plan C4b: "Anything the kit lacks, the agent writes as a small HTML card
+rendered in a sandboxed frame that can read board data and nothing else (no network, no
+credentials, no actions)." `spec-input.md` §5: "custom sandboxed cards for the rest (about a
+minute)". The minute is the agent's writing time; the screen's own share is B10 (`README.md`
+speed budget). The sandbox's facts are `research/Q6-sandboxing-html-cards.md`'s. Whether custom cards
+are on by default is Q-O32; this section is written for its recommendation (on).
+
+### 11.1 Placing one
+
+`place` (§7.4) with `block: "custom"`:
+
+| Field | Rule |
+| --- | --- |
+| **`html`** | the card's body: an HTML fragment (what goes inside `<body>`), inline `<style>` and `<script>` allowed; at most 32 768 bytes UTF-8 (D169) |
+| `reads` | 0-3 board reads, each `{"tool":…, …params}` with `tool` one of `fleet`, `runs`, `lanes`, `ci`, `alerts`, `morning`, `history` and that tool's params (`c3-see.md` §4) |
+| `data` | static JSON the agent passes in, at most 16 384 bytes serialised |
+| `size` | `s`, `w` (default), `t`, `l` |
+| `title` | as §7.4; default `Custom card` |
+| `replace`, `expires` | as §7.4 and §12.2 |
+
+- **Checked before anything is drawn** (each a `-32602` naming the field, no line, nothing placed):
+  `html` missing, empty or over 32 768 bytes (`html is 41 220 bytes; at most 32 768.`); a `reads`
+  entry with an unknown tool or bad params (the tool's own check, `c3-see.md` §3); more than 3
+  reads; `data` over 16 384 bytes. The room does not parse or clean the HTML: the frame is the
+  defence (§11.3), not a filter.
+- **At most 4 custom cards** at once in the room's list (each frame is a document of its own on
+  every canvas screen; D170). A fifth without `replace` returns `isError` `The canvas has 4 custom
+  cards (card-0009, card-0011, card-0012, card-0014); replace or remove one.` Custom cards count
+  toward the 16 of §7.2 like any card.
+- **Result**: §7.4's, after every canvas screen has reported its render (§11.4) or 3.0 s, plus one
+  `render` entry per screen that drew it:
+
+  ```json
+  {"card":"card-0009","drawn":["side"],"shelved":[],"waiting":[],"noCanvas":[],"removed":null,
+   "render":{"side":{"ok":true,"readyMs":180,"minFontPx":18,"overflow":false}}}
+  ```
+
+  `minFontPx` is the smallest computed `font-size` of any visible text in the card; `overflow` is
+  `true` when the card's content is taller or wider than its body. Below 16 px the result adds
+  `"hint":"Text at 12 px is too small at arm's length; use 16 px or more."`; with `overflow`,
+  `"hint":"The card's content does not fit its body (528 x 132 px); it scrolls."` So the agent can
+  fix its own card with `replace` in the same turn.
+- **Line**: `put a custom card "Stuck runs by builder" on the canvas` (the title cut as §7.4), with
+  `UNDO`; a render that failed (§11.5) adds ` · card turned off`.
+- **Standing instruction** (the Canvas 2 slice adds it to `protocols.md` §11.8 after the last
+  `focus` line): `For a canvas card, use a block first; write a custom card only when no block
+  fits. Its text is 16 px or more; it reads data only through card.onData.`
+
+### 11.2 What the card is given
+
+The room wraps the agent's `html` in a fixed **shell** and serves it from its own route (§11.3).
+The shell is the room's code, the same for every card:
+
+- `<!doctype html>`, `<meta charset="utf-8">`, a `<style>` with the screen theme's tokens as CSS
+  variables (the values of `public/css/tokens.css` for `--bg-elevated`, `--bg-sunken`, `--line`,
+  `--line-strong`, `--text-1`, `--text-2`, `--text-3`, `--ok`, `--p1`, `--p2`, `--font-mono`) and
+  `html, body { margin: 0; background: var(--bg-elevated); color: var(--text-1); font: 18px/24px
+  system-ui, sans-serif; }`. The board's own font files are not loaded into a card (`font-src
+  data:`, D171).
+- A `<script>` (the **card API**, before the agent's body) that defines one global:
+
+  | Name | What |
+  | --- | --- |
+  | `card.onData(fn)` | `fn({asOf, reads, data})` is called with the first data and on every refresh: `reads` is one result per `reads` entry, exactly the object the MCP tool returns (`c3-see.md` §3, `asOf` and `missing` included), in the order asked; `data` is the static `data`; `asOf` the oldest of the reads' |
+  | `card.size` | `{"w":528,"h":132}`, the body's size in CSS px (§7.3) |
+
+- The agent's `html` as the `<body>`'s content, unchanged.
+
+**What a card can read is exactly that list.** It is never given: the conversation, `focus`, other
+cards, the device token or any cookie, the page's URL, the screen's name, the room's own declared
+reads beyond the board (plan C3), or any way to ask for more data while it runs: the reads are
+fixed when the card is placed (and changed only by `replace`). Data refreshes as §7.5: the room
+runs the reads every 10 s while a canvas screen is online (one read per tool and params per 5 s,
+shared with every other card and the agent's own calls), and sends them as `card.data`
+(`protocols.md` §5); the screen posts them into the frame (§11.4). A card with no `reads` gets one
+`onData` call with its `data` and none after.
+
+### 11.3 The sandbox, as a checklist
+
+Each line is one fact a test checks (§14, `security.md` T17 links here instead of repeating it).
+
+| # | Rule | How it is checked |
+| --- | --- | --- |
+| SB1 | The frame is `<iframe sandbox="allow-scripts" src="/api/cockpit/card/{id}/frame?rev={n}&theme={dark\|light}" referrerpolicy="no-referrer" title="Card: {title}">`; no other `sandbox` token, never `allow-same-origin` (with it a card can lift its own sandbox, research Q6) | the attribute's value is exactly `allow-scripts` |
+| SB2 | The route answers with `Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'; sandbox allow-scripts; webrtc 'block'` as an HTTP header, never only a `<meta>` (a `srcdoc` card would inherit the page's policy instead, research Q6) | header read from the response |
+| SB3 | The route also sends `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Content-Type: text/html; charset=utf-8` and `Permissions-Policy: camera=(), microphone=(), geolocation=(), usb=(), serial=(), hid=(), bluetooth=(), clipboard-read=(), clipboard-write=(), display-capture=()` | headers |
+| SB4 | The route needs the screen's device token (the `lb_cockpit` cookie, `screens.md` §6.2), `Sec-Fetch-Dest: iframe` and `Sec-Fetch-Site: same-origin`, and a `rev` the room holds for that card; else `404 {"error":"not-found"}`, the same for every case (D172). It is the only browser route of the room that does without `X-Laneboard: 1`, because a frame load cannot send a header; it is a `GET` that changes nothing | requests without the cookie, with `Sec-Fetch-Dest: document`, with `Sec-Fetch-Site: cross-site`, with an old `rev`: all 404 |
+| SB5 | No network: `fetch`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `navigator.sendBeacon`, `<img src="https://…">`, CSS `url(https://…)`, `<link rel="prefetch">` and a form submit all fail inside the card; nothing leaves the browser | S-C4-26: no request but the frame's own is seen |
+| SB6 | No credentials: `document.cookie` is `""` or throws, `localStorage`, `sessionStorage` and `indexedDB` throw (opaque origin), `parent.document` and `top.document` throw | S-C4-26 |
+| SB7 | No way out of its box: no `alert`, `confirm`, `prompt` (no `allow-modals`), no `window.open` (no `allow-popups`), no `top.location` change (no `allow-top-navigation`), no download, no pointer lock, no fullscreen | S-C4-26 |
+| SB8 | No action: the page accepts from a frame only the shell's three messages (§11.4), checks `event.source === frame.contentWindow` (a sandboxed frame's `origin` is `"null"` and proves nothing), and does nothing with them but count a touch and report a render; nothing a card sends reaches the agent, the room's tools or the board | a card posting `{"type":"prompt",…}` and `{"type":"card.close",…}`: no message on the room link |
+| SB9 | Its own navigation turns it off: the page counts the frame's `load` events per `rev`; a second one (the card followed a link, set `location`, or submitted something the CSP let through) removes the frame at once and turns the card off (§11.5, `why` `navigated`). A navigation may still have sent a request before it was stopped; the card held only board data the agent already read (§11.6) | S-C4-28 |
+| SB10 | The page's `✕`, header and title are the page's own elements, drawn outside the frame; the frame is clipped to the body's rect and cannot cover them | `elementFromPoint` at the `✕`'s centre is the `✕` |
+| SB11 | Agent strings outside the frame (title) are text, as §7.3 | as S-C4-21 |
+| SB12 | Room side: the room never interprets the HTML, never serves it from any other path, and serves only a `rev` it holds; `replace` makes a new `rev` and the old one 404s | an old `rev` 404s after a `replace` |
+
+### 11.4 The page and the frame
+
+- **Messages.** The page posts to the frame (`frame.contentWindow.postMessage(msg, "*")`, the only
+  target an opaque origin allows) only `{"type":"card:data","v":1,"asOf":…,"reads":[…],"data":…}`
+  and `{"type":"card:ping","v":1,"n":12}`. The shell posts back only
+  `{"type":"card:ready","v":1,"rev":1,"minFontPx":18,"overflow":false}` (once, after the agent's
+  scripts ran and the first `onData` returned), `{"type":"card:pong","v":1,"n":12}` and
+  `{"type":"card:touch","v":1}` (on a `pointerdown` inside the frame, at most 1 per second, so the
+  page counts it as a touch for its idle timers and `touched`, `screens.md` §2). Messages over 256
+  bytes, of another type or from another source are dropped. More than 20 messages in one second
+  from a frame turn the card off (`why` `too-many-messages`).
+- **Render report.** At `card:ready` the screen sends `card.render`
+  (`protocols.md` §5) with `readyMs` (from the frame's creation), `minFontPx` and `overflow`; the
+  room puts it into `place`'s result (§11.1).
+- **Taps inside** a card belong to the card's own script (tabs, a toggle, scrolling its body):
+  display only, nothing reaches the room. A hold inside a card is not "Ask about this" (§9 of
+  `c3-see.md` works on Map nodes only).
+- **Look.** The frame fills the body of §7.3 (`s`/`w` 132 px tall, `t`/`l` 380 px; 240 or 528 px
+  wide), `border: 0`, the body's padding outside it. While it loads, the body shows `Drawing…`
+  (18 px `--text-2`) behind it. `data-block="custom"` on the `[data-card]`; the frame is
+  `[data-card-frame]`.
+- **Shelved** custom cards have no frame; one is created when the card comes out of the shelf.
+- **Room down** (§7.6): the frame stays with its last data and the `STALE` plate; pings go on (they
+  are the page's, not the room's).
+
+### 11.5 Time limits and turning a card off
+
+| Case | Limit | `why` |
+| --- | --- | --- |
+| no `card:ready` | 3.0 s after the frame is created | `not-ready` |
+| no `card:pong` | the page pings every 5 s; 2 pings without an answer (10 s) | `no-answer` |
+| a second `load` of the frame | at once | `navigated` |
+| more than 20 messages in 1 s | at once | `too-many-messages` |
+| a screen's link dropped within 10 s of creating the frame, with no `card.render` sent | when the room notices the link is gone | `screen-lost` |
+
+- **Off is for every screen** (D173). The screen that saw it sends `card.fault`; the room marks
+  that `rev` off and sends `card.state` to every screen, which remove the frame and draw in the
+  body: `This card stopped and was turned off.` (18 px `--text-1`) and `Why: no answer for 10 s.`
+  (`not ready in 3 s`, `it tried to leave its frame`, `it sent too many messages`, `a screen
+  closed while drawing it`; 16 px `--text-2`). Header, title and `✕` stay. The agent's next prompt's
+  focus carries `"cardsOff":[{"card":"card-0009","why":"no-answer"}]`, and a `place` still waiting
+  for its result returns `isError` `The custom card was turned off on side: not ready in 3 s.`
+- **`screen-lost`** is the crash guard: a card that hangs a screen's whole page (if the frame shares
+  the page's thread, research Q15) stops the page's own pings to the room too; when the kiosk or
+  the owner reloads the page, the card is already off and is not run again.
+- A card that is off comes back only by `replace` (a new `rev`) or by placing it again.
+
+### 11.6 What the sandbox does not promise
+
+Said plainly here and in the later `docs/cockpit.md`: the sandbox limits what a card can reach; it
+is not a proof that no data can ever leave. Known gaps (research Q6): WebRTC (closed by `webrtc
+'block'` only where the browser supports it, research Q15), the frame navigating itself (stopped
+by SB9 after the first request), and timing or CPU tricks. What is inside a card is board data the
+agent already read through the C3 tools, never a credential. Whether that is good enough to have
+custom cards on by default is Q-O32.
+
+## 12. How cards leave
+
+Q-O4 recommends c) (both); this section is written for it (pending Q-O4). Every way a card leaves:
+
+| Way | Who | Undo |
+| --- | --- | --- |
+| `✕` | the owner | the `CARD REMOVED · UNDO` row, 10 s (§9) |
+| `remove_card` | the agent | `UNDO` on its line, 10 min (§12.3) |
+| ended | the room, 10 min after what it shows ended (§12.1) | none; ask the agent |
+| `expires` | the room, at the time the agent set (§12.2) | none; ask the agent |
+| the 17th card | the room (§7.2) | none |
+
+`NEW` removes no card (cards persist across it, §7.5; only pins go, D73).
+
+### 12.1 Ended
+
+A card bound to something with an end leaves 10 min after that end (D174):
+
+| Block | Ends when | Shows meanwhile |
+| --- | --- | --- |
+| `countdown` without `job` | it reaches 0 | `DONE 10:12` |
+| `countdown` with `job` | the job is `done`, `cancelled` or `skipped` | its state (§8.1) |
+| `timer` with `alert` | the alert clears | `CLEARED 07:40 after 1 h 28` |
+| `checklist` | every row is ticked | the ticked rows; an untick within the 10 min stops the leave |
+
+- **Never ends on its own**: a job's countdown that reads `■ FAILED` (trouble stays until the owner
+  removes it), and every other block (`status`, `log`, `chart`, `table`, `map`, `text`, `diff`,
+  `custom`): what they show goes on. A bound node or run that left the board keeps its card, with
+  `vm-x is no longer on the board.` (18 px `--text-2`) as its body.
+- **The plate**: from the end, the header's plate reads `LEAVES 10:22` (16 px caps `--text-3`, as
+  §7.3). A header has one plate; `STALE` comes first, then `AS OF 02:10`, then `LEAVES 10:22`.
+- **Leaving**: the room sends `card.remove` with `by` `ended`; the card fades out over 120 ms and
+  the rest repack in 200 ms (§7.2); no undo row, no conversation line. The next prompt's focus
+  carries `"left":[{"card":"card-0004","by":"ended"}]`.
+- An ended job's countdown no longer counts as a job's for the 17th card (§7.2).
+- **Room down**: leaving is the room's; a screen never removes a card on its own. The plate's time
+  passes and the card stays until the room is back and its snapshot no longer lists it.
+
+### 12.2 `expires`
+
+Any `place` may carry `expires`: an ISO time, or `+30m` … `+7d` (`+15m` at least; D175). The header
+shows `LEAVES 10:22` from the start. At that time the room removes it as §12.1 (`by` `expires`). A
+`replace` keeps the old `expires` unless it names a new one; `"expires":null` drops it. Default:
+none, the card stays until removed (plan C4b: "Cards persist until dismissed").
+
+### 12.3 `remove_card`
+
+"Take cards off the owner's canvas. Display only: removing a countdown never cancels its job."
+
+| Param | Type | Rule |
+| --- | --- | --- |
+| **`cards`** | array of strings | 1-16 card ids, or `["all"]`: every card but job countdowns that are `scheduled` |
+
+- Unknown id: `isError` `No card "card-0042". Cards now: card-0004, card-0009.`; nothing removed.
+- **Line**: `removed the card "shut off vm-c" from the canvas` (more: `removed 3 cards from the
+  canvas`), with `UNDO` for 10 min: it puts them back at their old places in the list (D176). The
+  room keeps a removed card's content for those 10 min (memory only).
+- `card.remove` with `by` `agent`; the screens fade and repack as §12.1.
+
+### 12.4 `cards`
+
+A read tool, so the agent knows ids without the owner's help: "What is on the canvas now, and
+which saved cards exist."
+
+```json
+{"asOf":[{"source":"room","at":"2026-10-27T07:20:00+01:00","ageS":0}],
+ "cards":[{"id":"card-0009","block":"custom","title":"Stuck runs by builder","size":"w","at":"2026-10-27T07:14:02+01:00","off":null},
+          {"id":"card-0004","block":"countdown","title":"shut off vm-c","size":"s","at":"2026-10-27T07:12:00+01:00","job":"job-0003","leavesAt":null}],
+ "saved":[{"name":"stuck-runs","title":"Stuck runs by builder","size":"w","savedAt":"2026-10-27T07:16:40+01:00"}]}
+```
+
+No params; newest first; at most 6 000 characters (`c3-see.md` §3). Tool line: `looked at the
+canvas`.
+
+## 13. Promotion: saving a custom card
+
+Plan C4b: "A custom card that proves useful becomes a kit block, so the canvas gets faster with
+use." Who decides is Q-O31; this is written for its recommendation (the owner asks, the agent
+saves; pending Q-O31).
+
+- **`save_card`** `{"card":"card-0009","name":"stuck-runs"}`: `name` is 1-32 of `a-z`, `0-9`, `-`.
+  Only a custom card that is not off. The room stores its `html`, `reads`, `data`, `size` and
+  `title` in `<stateDir>/cockpit/saved-cards.json` (0600, the room's user; D177). At most 50; the
+  51st returns `isError` `50 cards are saved; ask the owner which to drop.` A name in use is
+  replaced (the result says `"replaced":true`).
+- **Line**: `saved the card "Stuck runs by builder" as stuck-runs`, with `UNDO` (unsaves; the card
+  on the canvas stays) until `NEW`.
+- **Placing a saved card**: `place {"block":"saved","name":"stuck-runs"}`, optionally with `size`,
+  `title`, `expires`. It becomes a custom card with the saved fields, a new id and `rev` 1, in the
+  sandbox of §11.3; no HTML is written, so it is on the screen within B10. Unknown name:
+  `isError` `No saved card "stuck". Saved: stuck-runs, ci-wall.` Line: `put the saved card
+  "stuck-runs" on the canvas`.
+- **`delete_saved`** `{"name":"stuck-runs"}`: line `deleted the saved card stuck-runs`, no undo.
+- **Into the kit for real**: a saved card that the owner wants as a built-in block is a change to
+  laneboard's code, made by a build night or a PR like any other (`spec-input.md` §6: the agent's
+  own changes arrive as a branch or a small PR). `laneboard cockpit cards export stuck-runs` prints
+  the saved JSON for that work. The room never turns a saved card into trusted page code.
+
+## 14. Scenarios, part 3
+
+Harness as §10 (clock from 07:12:00). The fake agent's `c4-custom` script (`stand-ins.md` §5) holds
+the cards below as fixtures under `test/cockpit/cards/`. Frames are read with Playwright's
+`page.frameLocator('[data-card-frame]')`; requests with `context.on('request')`, which also sees a
+frame's requests. A stand-in HTTP listener on `127.0.0.1:7799` named `example.invalid` (the
+browser's `--host-resolver-rules`) counts every connection it gets, TLS or not.
+
+### S-C4-25 A custom card draws its reads, reports its render, and follows the board
+Given `side` in `canvas` with an empty canvas and the demo fleet (one stuck run on `builder-a`),
+When the fake agent calls `place {"block":"custom","title":"Stuck runs by builder","html":<fixture
+stuck-by-builder.html>,"reads":[{"tool":"runs","state":"stuck"}]}` at 07:12:00,
+Then within 2.0 s (B10) a `[data-card]` with `data-block="custom"` and `data-size="w"` is at
+x 100-660, y 24-256 (the first `w` slot, §7.1), its frame `[data-card-frame]` has `sandbox`
+`allow-scripts` and fills the body (528 x 132), and inside it reads `builder-a 1`; the result has
+`"render":{"side":{"ok":true,"minFontPx":18,"overflow":false}}`; the line reads `put a custom card
+"Stuck runs by builder" on the canvas` with `UNDO`.
+When the demo hub marks a second run on `builder-b` stuck,
+Then within 10.3 s the frame reads `builder-a 1` and `builder-b 1`, and the frame was not reloaded
+(one `load` event).
+Test: Playwright with `page.clock`; the B10 marks; the frame's text through `frameLocator`; the
+frame's `load` count; the fake agent's received result.
+
+### S-C4-26 A card that tries the network, the cookie and the page is refused everywhere
+Given `side` in `canvas`,
+When the fake agent places the fixture `escape.html`, whose script tries, each in its own
+`try`, and writes one line `name: blocked` or `name: OPEN` into its own body: `fetch`, `xhr`,
+`websocket`, `eventsource`, `beacon` and `image` to `https://example.invalid/x`, `cookie`
+(`document.cookie` non-empty counts as OPEN), `storage` (`localStorage`), `parent`
+(`parent.document.title`), `top` (`top.location = …`), `alert`, `open` (`window.open`), `form`
+(a submit to `https://example.invalid/f`), and `rtc` (`new RTCPeerConnection` with an ICE server
+`stun:example.invalid:7799`),
+Then the frame reads `blocked` on every line from `fetch` to `form`; the listener on
+`127.0.0.1:7799` received 0 requests; `context.on('request')` saw no request but the frame's own
+`/api/cockpit/card/…/frame` load; the cockpit page still holds its device token and its URL; no
+dialog opened (`page.on('dialog')` never fired); the card is not off.
+And the `rtc` line's value is recorded in the test's output as the browser's WebRTC result,
+asserted `blocked` only once research Q15 says `webrtc 'block'` is enforced (SB2; until then a
+known gap, §11.6, not a pass by assumption).
+Test: Playwright; the fixture's lines through `frameLocator`; the listener's count; request log;
+`page.on('dialog')`.
+
+### S-C4-27 A card that hangs or never gets ready is turned off on every screen; `✕` still works
+Given `desk` in `split` and `side` in `canvas`,
+When the fake agent places the fixture `never-ready.html` (its script throws before `onData`
+returns),
+Then at 3.0 s after the frame's creation both screens show, in that card's body, `This card stopped
+and was turned off.` and `Why: not ready in 3 s.`, no `[data-card-frame]` remains, and `place`
+returns `isError` `The custom card was turned off on side: not ready in 3 s.` (or `desk`, whichever
+reported first).
+When the fake agent places `busy.html` (ready, then from its first `onData` on a loop that never
+yields after 2 s),
+Then 10 s after the loop starts (two missed pongs) it is turned off with `Why: no answer for 10 s.`,
+and the next prompt's focus carries `"cardsOff":[{"card":…,"why":"no-answer"}]`.
+When the owner taps `✕` on that card,
+Then it is removed as §9.
+Test: two contexts; `page.clock` for the 3 s; real time for the loop (the frame's thread, research
+Q15: if it shares the page's, assert instead that a reload of the page shows the card off,
+`screen-lost`); texts; the fake agent's received focus.
+
+### S-C4-28 A card that leaves its frame is turned off at its first step
+Given `side` in `canvas`,
+When the fake agent places `navigate.html`, which sets `location.href =
+"https://example.invalid/leak?x=1"` 500 ms after it is ready,
+Then within 0.3 s of the frame's second `load` event the frame is gone and the body reads `Why: it
+tried to leave its frame.`; the page's own URL is unchanged; the card is off on every screen.
+Test: Playwright; count `load` events of `[data-card-frame]`; the listener's log is recorded (the
+first request may have arrived, §11.6; the test asserts there is no second).
+
+### S-C4-29 Bad custom cards fail before anything is drawn
+Given `side` in `canvas` with 4 custom cards,
+When the fake agent places a 5th custom card, then (after removing one) one with `html` of 41 220
+bytes, then one with `reads` `[{"tool":"shell"}]`, then one with `reads` of 4 entries,
+Then the first returns `isError` naming the 4 cards (§11.1); the next three return `-32602` with
+`html is 41 220 bytes; at most 32 768.`, the read tool's message and `at most 3 reads`; no card,
+no line and no frame request appear for any of them.
+And when the fake agent places `tiny-text.html` (text at 12 px),
+Then it is drawn and the result carries `"minFontPx":12` and the hint `Text at 12 px is too small
+at arm's length; use 16 px or more.`
+Test: results in the fake agent's log; count `[data-card]` and the room's request log for
+`/api/cockpit/card/`.
+
+### S-C4-30 Kept and placed again: a saved card is up in seconds
+Given the card of S-C4-25 on `side`, and the owner says `keep that card`,
+When the fake agent calls `save_card {"card":"card-0001","name":"stuck-runs"}`,
+Then the line reads `saved the card "Stuck runs by builder" as stuck-runs` with `UNDO`, and
+`<stateDir>/cockpit/saved-cards.json` (mode 0600) holds one entry `stuck-runs`.
+When the test boots the room again on the same `stateDir` (`stand-ins.md` §1.1), the owner removes the card and the fake agent calls `place
+{"block":"saved","name":"stuck-runs"}`,
+Then within 2.0 s (B10) the card is drawn with a new id, the same title and the same frame text;
+`cards` lists `stuck-runs` under `saved`.
+When the fake agent calls `place {"block":"saved","name":"stuck"}`,
+Then it returns `isError` `No saved card "stuck". Saved: stuck-runs.`
+Test: fake agent script; file mode and content; a second `boot` on the same `stateDir`; B10 marks.
+
+### S-C4-31 Finished things leave after 10 minutes; a failed job stays
+Given `side` in `canvas` with a `countdown {"until":"+10m"}` placed at 07:12:00, a countdown on
+`job-0003` and a `text` card with `expires` `+30m`,
+Then the `text` card's header reads `LEAVES 07:42` from the start.
+When the clock reaches 07:22:00,
+Then the first countdown reads `DONE 07:22` and its header `LEAVES 07:32`; at 07:31:59 it is still
+there; at 07:32:00 it fades out (120 ms) with no undo row and no conversation line.
+When the demo hub sets `job-0003` to `failed` at 07:35:00,
+Then its countdown reads `■ FAILED 07:35` and has no `LEAVES` plate at 07:50:00.
+When the clock reaches 07:42:00,
+Then the `text` card leaves; the next prompt's focus carries `"left"` with both ids, `by` `ended`
+and `expires`.
+Test: `page.clock`; demo job state; `[data-card]` count and plate texts; the fake agent's focus.
+
+### S-C4-32 The agent removes cards; `UNDO` brings them back, the job stays
+Given `side` with 3 cards: the countdown on `job-0003` (scheduled), a `status` and a custom card,
+When the fake agent calls `remove_card {"cards":["all"]}`,
+Then the `status` and custom cards fade out on every screen within 0.3 s, the countdown stays, the
+line reads `removed 2 cards from the canvas` with `UNDO`, and `job-0003` is still `scheduled`.
+When the owner taps `UNDO` 4 min later,
+Then both cards are back in their old places, the custom card in a new frame with its last data.
+When the fake agent calls `remove_card {"cards":["card-0042"]}`,
+Then it returns `isError` `No card "card-0042". Cards now: …` and nothing changes.
+Test: `page.clock`; card order by rect; the demo hub's job state; the frame's text.
+
+### S-C4-33 A card that freezes a screen is not run again after the reload
+Given `desk` in `canvas`, the only screen,
+When the fake agent places `hang.html` (a loop from its first line, never ready) and the test calls
+the stand-in room's `POST /link {"up":false}` (`stand-ins.md` §1.2) as soon as `context.on('request')`
+sees the card's frame request,
+Then the room marks the card off with `screen-lost` (no `card.render` came within 10 s of the
+frame); after `POST /link {"up":true}` and a reload of `desk`, the card's body reads `Why: a screen
+closed while drawing it.` and no second request for its frame is made.
+Test: stand-in room control; request log on `/api/cockpit/card/`; the card's body text; `cards`
+lists it with `"off":"screen-lost"`.

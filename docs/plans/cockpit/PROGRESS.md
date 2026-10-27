@@ -170,6 +170,8 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 - [ ] Q14 Does Chromium (and Safari on iPadOS) keep a `Secure` cookie set by a plain `http://127.0.0.1:<port>` or `http://localhost:<port>` origin, and send it on that origin's WebSocket upgrade? — for T56 (`screens.md` §6.2, D163), T19
 
+- [ ] Q15 In Chromium (and Safari on iPadOS): does a `sandbox="allow-scripts"` iframe without `allow-same-origin` run in its own process/thread (so a loop in it leaves the page responsive), is the CSP directive `webrtc 'block'` enforced and since which version, and which enterprise policy turns WebRTC off on a kiosk? — for T12 (`c4-show-canvas.md` §11.5, §11.6, S-C4-26, S-C4-27, Q-O32)
+
 ## Later
 
 - (14) Final pass on `spec/DECISIONS.md` and `spec/QUESTIONS.md`: dedupe, number check, every `(pending Q-O<n>)` in the spec matches an open question, the list ordered for the owner's ~15 min morning Q&A.

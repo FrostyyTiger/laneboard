@@ -264,7 +264,7 @@ agent says `I can remind you at 15:10, but stopping builder-b needs the act step
 | --- | --- | --- |
 | C2b | S-C2B-01 S-C2B-02 | Q-O8, Q-O20 (D55) |
 | Pair | S-SCR-13 S-SCR-14 S-SCR-15 S-SCR-16 S-SCR-27 S-SCR-28 S-SCR-29 | Q-O21 b) (under a) these seven are C1's and C1 grows by about 4 steps) |
-| Canvas 2 | none written; planned: T12's custom-card scenarios, T99's checklist flick | T12 |
+| Canvas 2 | S-C4-25 S-C4-26 S-C4-27 S-C4-28 S-C4-29 S-C4-30 S-C4-31 S-C4-32 S-C4-33; planned: T99's checklist flick | T12 written; Q-O32 answered (with c) the custom-card part waits) |
 | History | none written; planned with §5.2 | the board change of §5.2 |
 | C5 | none written; planned: T14's `S-C5-` | T14 |
 | C6 | none written; planned: T14's `S-C6-` | the control-plane review, T14; fenced for unattended work |
@@ -290,6 +290,7 @@ by the task that writes them.
 | S-C4-01..12 | Show |
 | S-C4-13, 24 | Jobs |
 | S-C4-14..23 | Canvas |
+| S-C4-25..33 | Canvas 2 |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
 D55). 135 live ids in all (round 101, S-C1-40).

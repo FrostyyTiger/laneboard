@@ -295,13 +295,38 @@ Answer: (open)
 
 ## Q-O4 How canvas cards leave, and how many fit
 
-C4. `spec-input.md` §7.4. Spec: `c4-show-canvas.md` §7.2, §9, D79/D80/D84 (written for c).
+C4. `spec-input.md` §7.4. Spec: `c4-show-canvas.md` §7.2, §9, §12, D79/D80/D84/D174-D176 (written for c).
 
 - a) Dismissed by hand only.
 - b) Expire only.
 - c) Both: one tap removes (with undo), cards bound to something that ended leave on their own, 16 at most, older ones to a shelf.
 
 Recommendation: c) — nothing wanted vanishes, finished countdowns do not pile up.
+
+Answer: (open)
+
+## Q-O31 Who turns a custom card into a saved one
+
+C4, Canvas 2 slice. Plan C4b "Promotion". Spec: `c4-show-canvas.md` §13 (written for a).
+
+- a) The agent saves only when the owner asks in words ("keep this card"); a line with `UNDO`.
+- b) A `KEEP` button in every custom card's header; one tap saves it.
+- c) The agent saves on its own a card it placed 3 times.
+
+Recommendation: a) — no new tappable in a 48 px header, and nothing grows behind the owner's back.
+
+Answer: (open)
+
+## Q-O32 Custom cards on by default
+
+Security, Canvas 2 slice. Plan C4b; `research/Q6-sandboxing-html-cards.md` (WebRTC and a frame's
+own navigation are not fully closed). Spec: `c4-show-canvas.md` §11 (written for a).
+
+- a) On, in the sandbox of §11.3; if research Q15 finds Chromium does not enforce `webrtc 'block'`, the default flips to b).
+- b) Off until `cockpit.canvas.customCards: true`; `place` with `custom` then says `Custom cards are off (cockpit.canvas.customCards).`
+- c) No custom cards in v1; the kit and saved cards only.
+
+Recommendation: a) — a card holds only board data the agent already read, and `spec-input.md` §5 counts custom cards in the answer.
 
 Answer: (open)
 

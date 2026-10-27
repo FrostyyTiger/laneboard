@@ -402,6 +402,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c3-tools` | agent | S-C3-03, S-C3-10..14, S-C3-19 | `morning` then `runs`; `focus` calls |
 | `c4-show` | agent | S-C4-01..12 | one turn per show command, at the times the scenarios give |
 | `c4-cards` | agent | S-C4-13..24, S-SCR-07/08 | `place` calls, incl. the 17th card and the `job-0003` countdown |
+| `c4-custom` | agent | S-C4-25..33 | `place` calls of custom cards from the fixtures `test/cockpit/cards/*.html` (`stuck-by-builder`, `escape`, `never-ready`, `busy`, `hang`, `navigate`, `tiny-text`; `c4-show-canvas.md` §14), `save_card`, `remove_card`, `cards`, a 41 220-byte `html`; one `focus` call per scenario that reads `cardsOff` or `left` |
 | `demo`, `demo-jobs` | both | §6 | the public demo |
 
 Each script file gets one `node:test` check in `npm test` (no browser): it parses, every step is a
