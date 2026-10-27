@@ -60,6 +60,14 @@ its file names).
 - [ ] T45 (2) `spec/README.md`: pressed-state rule for every tappable (fill `--bg-sunken`, border `--line-strong` → `--text-2`, first frame after `pointerdown`, no transition), `touch-action: manipulation`, one table-driven test; tool rows 48 px with 20 px `+`/`−` (S-C1-07); links are `<span>`, drawn without underline or showing the URL for 5 s, long-press step in S-C1-09 — review 31-touch.md findings 7, 8, 9
 - [ ] T46 (6) For T11/T12: card removal leaves a 48 px `CARD REMOVED · UNDO` row for 10 s; `×` ≥ 8 px from other targets — review 31-touch.md finding 12
 - [ ] T47 (3) Bring sketches in step with the spec: `c1-pane.html` placeholder `Type or hold to talk`, header with `NEW` and `RAW`; `screens-split.html` with talk button plus `CHAT` — review 31-touch.md finding 13 (do with T25)
+- [ ] T48 (2) Slim C1/C2 per review 36-skeptic.md: `c2-voice.md` §11 button HTTP API, S-C2-18/19, D52, Q-O8, Q-O20 move to a "C2b, the button" section (`spec-input.md` §4 says "Later"); C2 keeps the talk key (finding 2)
+- [ ] T49 (2) `c2-voice.md` §7/§10 and S-C2-11/12/15/17: a tap on live words stops listening, puts the final in the textarea, caret at the end, keyboard up (no word-index mapping); STT failures reduce to `stt-down` and `stt-failed`; cut `data-talk-slow` and the 30 s broadcast; one hint `MICROPHONE OFF` plus `TEXT KEPT` (findings 5, 6, 13)
+- [ ] T50 (2) `c1-talk.md` §2/§3/§10/§13: header states `READY`, `● WORKING`, `● STOPPING` (`data-turn` keeps fine values); drop the table fold, `SHOW THE REST` and `↑ TOP OF ANSWER`; merge E6/E8 into `The answer failed: {detail}.`; raw view (S-C1-24) out of C1 pending Q-O17 d) (findings 7, 8, 9, 13)
+- [ ] T51 (2) `c1-talk.md` §11, S-C1-22, D36 per Q-O2 d): `NEW` → `START`/`KEEP` bar → new session, no handover note, no `handing-over` state; defer screen names in labels and S-C1-23's two-token test (findings 4, 13)
+- [ ] T52 (2) `screens.md` §7, S-SCR-17, D53/D54: for C1/C2 room-down is the 80 px status line, `RETRY NOW`, `SEND` and talk `off`, draft kept, cut-off line; canvas half (STALE plates, job countdown, empty-canvas variant, offline remove) moves to C4/coworker; cut the talk-button ring (finding 10)
+- [ ] T53 (2) `spec/README.md` speed budget and D28: drop `?perf=1` and the "share" column, keep end-to-end marks for tests; B5/B6 move to C4 (finding 11; merges with T35)
+- [ ] T54 (2) Layout and pairing carry marks per Q-O22 and Q-O21: tag `screens.md` §1/S-SCR-01/06/07/08/10/11, D2/D3/D8/D9 `(pending Q-O22)` and §6/S-SCR-13..16 `(pending Q-O21)`; say which scenarios C1's done-when contains in each case (findings 1, 3)
+- [ ] T55 (2) `QUESTIONS.md` housekeeping: order C1's first (Q-O11, Q-O1, Q-O2, Q-O15, then C2), move Q-O12/Q-O13 under "Can wait", turn Q-O16 into a D-line (strict defaults are safe by default; supersedes T38), Q-O14 into a D-line the owner can strike (finding 12)
 
 Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do T4-T7 before T8+ and before T21-T25 sketches if rounds are short; T24 comes right after T4.
 
@@ -79,7 +87,11 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 ## For the owner
 
+- The skeptic review (round 36) found the spec has grown about twice the size C1/C2 need (68 scenarios). Tasks T48-T55 cut it; Q-O21 and Q-O22 ask the two cuts that touch your own words (pairing, the empty canvas).
+
 ## Reviews
+
+- round 37 triage of `reviews/36-skeptic.md`: 13 findings plus a decided-elsewhere list. Tasks: 2 → T48, 5/6/13 → T49, 7/8/9/13 → T50, 4/13 → T51, 10 → T52, 11 → T53, 1/3 → T54, 12 → T55. Questions: 1 → Q-O22, 3 → Q-O21, 4 → option d in Q-O2, 7 → option d in Q-O17. 8 findings became tasks plus 4 questions/options; none dropped. Note: the review's scores are low on simple (3) and complete (4); the cuts are tasks, not done, and a cut that conflicts with an owner answer waits for it.
 
 - round 32 triage of `reviews/31-touch.md`: 14 findings plus a contradictions list. Tasks: 1 → T40, 2/5 → T41, 3/10/14 → T42, 4 → T43, 6/11 → T44, 7/8/9 → T45, 12 → T46, 13 → T47. Questions: type size → Q-O18, undo vs gap vs confirm → Q-O19. Already tracked: S-SCR-01 `AGENT` vs talk button (T26). None dropped.
 - round 27 triage of `reviews/26-implementer.md`: 14 findings plus a contradictions list. Tasks: 3 → T26, 4 → T27, 5 → T28, 6 → T29, 7 → T30, 8 → T31, 9 → T32, 10 → T33, 11 → T34, 12 → T35, 13 → T36, 14 → spread over T26/T29/T33/T34/T36, 1 and 2 → T37. Questions: 1 → Q-O14, 2 → Q-O15, D13/D14/D22 → Q-O16 (+T38). Already covered: two-screens wording and `CANCEL JOB` confirm (T21). None dropped.
@@ -96,5 +108,6 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 | 21 | owner | 8 | 2 | 6 | 8 | 5 | 6 | 7 |
 | 26 | implementer | 7 | 3 | 4 | 4 | 6 | 6 | 6 |
 | 31 | touch | 8 | 4 | 5 | 7 | 6 | 6 | 6 |
+| 36 | skeptic | 9 | 4 | 5 | 7 | 5 | 3 | 7 |
 
 ## Morning

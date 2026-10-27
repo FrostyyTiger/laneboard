@@ -46,6 +46,8 @@ Answer: (open)
 - a) **One conversation forever**, compacted or restarted behind the scenes.
 - b) **Daily fresh start** at a fixed hour, plus a "New conversation" button.
 - c) **"New conversation" button only**, plus a forced fresh start when the session cannot go on.
+- d) c) with **no handover note**: a new session at once, divider `NEW CONVERSATION · 07:10`, the
+  agent reads the written context a laptop session would (`reviews/36-skeptic.md` finding 4; D36's note is c) plus a note).
 
 Recommendation: c) — the plan (§3 C1) says exactly this; carried over: repos/plans/notes, canvas
 cards, scheduled jobs and a short handover note; the old conversation stays readable.
@@ -61,6 +63,7 @@ toggle". Spec: T5, `c1-talk.md` §13 (written for b).
 - b) **Every event, tool output replaced by its size** (`[tool output: 3 412 bytes]`); room config
   `cockpit.raw.toolOutput: true` shows it.
 - c) **A live terminal** through `server/terminals.mjs` (a writable pty on the room).
+- d) **Not in C1**: the opened tool lines (input, ms, `ok|failed`) are the raw view (`reviews/36-skeptic.md` finding 7).
 
 Recommendation: b) — the headless agent has no terminal to show, c) would hand a device token a
 shell (plan §4: a token cannot act); tool output can carry what the agent read from files or logs,
@@ -211,6 +214,34 @@ tappable).
 - b) Change one: say which and how.
 
 Recommendation: a) — each is the stricter choice and can be loosened later.
+
+Answer: (open)
+
+## Q-O21 Is pairing part of C1, or does C1 run behind what the board already trusts
+
+Security-relevant, from `reviews/36-skeptic.md` finding 3. `spec-input.md` §6 names device tokens as
+one option beside "auth in front" and "LAN-only". Spec: `screens.md` §6 (written for a).
+
+- a) **Pairing is part of C1** (codes, CLI approve/unpair, as written; Q-O10 applies).
+- b) **C1 runs behind the existing trust** (`local`, `direct` through serve, the tailnet); pairing
+  becomes its own later slice for setups that need it.
+
+Recommendation: b) — the first chat line should not wait for a pairing flow the owner did not ask
+for; the spec keeps §6 as the later slice. Until answered the spec stays written for a).
+
+Answer: (open)
+
+## Q-O22 No canvas and no layout until C4
+
+From `reviews/36-skeptic.md` finding 1. At 1368 the default `split` gives 608 px to
+`Nothing on the canvas yet.` until C4 shows anything. Spec: `screens.md` §1 (written for a).
+
+- a) **`split` is the default from C1**, canvas empty until C4.
+- b) **Until C4 there is no canvas**: the page is the Wall (or the app) and the pane slides over it;
+  `split`, `canvas`, `switch`, the `SCREEN` sheet and `cockpit.layout` arrive with C4.
+
+Recommendation: b) — an empty 44 % of the owner's one screen breaks "never an empty screen" in
+spirit. Q-O12 and Q-O13 then wait for C4.
 
 Answer: (open)
 
