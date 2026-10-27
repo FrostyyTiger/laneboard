@@ -440,8 +440,8 @@ a fixed column of the canvas, never a pane over the cards; D78). At 1368x912:
   fit in (area height − 40), at least 1 x 1. Cell size never changes, so a block looks the same on
   every screen (`screens.md` §1, "one fixed size").
 - In `split` the conversation column is 392 px tall: its 64 px header, 224 px of conversation (about
-  7 lines at 22 px) and the 104 px input row (`c1-talk.md` §1). The rects of the column are T27's
-  to restate in `c1-talk.md` and `screens.md`; they must match this table.
+  7 lines at 22 px) and the 104 px input row (`c1-talk.md` §1). The column's parts and their rects
+  are in `c1-talk.md` §1 (D117).
 - Collapsing an idle canvas (pending Q-O13) is `screens.md`'s; this section describes the canvas
   open.
 

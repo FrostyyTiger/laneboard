@@ -444,7 +444,7 @@ cockpit's:
 | `route` | the route's non-null keys, as `formatHash` would write them | `routeNow()`; on the Wall `{"view":"wall","sel":…}` with the Wall's selected node |
 | `wallState` | `tour`, `explore` or `null` (app) | `data-wall-state` (Wall contract, T31) |
 | `layout` | `wall`, `switch`, `split`, `canvas` or `null` (app) | `screens.md` §1 |
-| `pane` | `open` or `closed` | `data-pane` |
+| `pane` | `open`, `closed` or `column` (`c1-talk.md` §1) | `data-pane` |
 | `inSight` | up to 60 node ids, worst status first (the order of §4.1) | Map and Wall only: nodes whose drawn centre lies in the part of the view not covered by the pane or the inspector; `[]` on every other view |
 
 **When it is sent** (D61):

@@ -124,7 +124,9 @@ Each word is defined here once; the other files link here instead of redefining 
   including its tool lines and show commands. A turn the agent starts itself (speaking up,
   `coworker.md`) has no prompt.
 - **pane**: the cockpit pane: the panel that slides over the current view and shows the
-  conversation and the input. It never replaces the view (plan C1).
+  conversation and the input. It never replaces the view (plan C1). Where the screen has a canvas
+  (`split`, `canvas`, `switch`) the same parts are a fixed **column** of the canvas instead, always
+  there (`c1-talk.md` §1, D117, pending Q-O12); both are `[data-cockpit-conversation]`.
 - **raw view**: a read-only list of the agent's native events, never a terminal; not in C1
   (`c1-talk.md` §13, pending Q-O17).
 - **tool line**: one collapsed line in the conversation for a piece of the agent's tool activity

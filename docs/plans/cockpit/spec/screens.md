@@ -85,9 +85,10 @@ Where things land:
 - A camera show command moves the wall half of every online screen with a camera, or the one it
   names (`c4-show-canvas.md` §1, D67). A screen in
   `canvas` layout has no camera and ignores them; the conversation line still appears.
-- In `split` the pane opens over the canvas half, never over the wall half, so the camera the agent
-  moves stays in sight (plan C1: "so the agent can point at the view behind it") (D8). Its width
-  and slide are T4's. In `switch` the pane opens on the canvas half; opening it from the wall half
+- In `split`, `canvas` and `switch` the conversation is a fixed column of the canvas, never a pane
+  over the wall half or over the cards, so the camera the agent moves and the cards it places both
+  stay in sight (plan C1: "so the agent can point at the view behind it"; D117, pending Q-O12; rects
+  in `c1-talk.md` §1). In `switch` a tap on `CHAT` or a press on the talk button on the wall half
   flips the screen to the canvas.
 - In `switch`, a card that arrives while the wall is shown does **not** flip the screen. The switch
   button shows a count instead (S-SCR-07).
@@ -123,8 +124,8 @@ Per page, what else changes:
 | Where | The rest of the page |
 | --- | --- |
 | Wall page, `wall` | The Wall's bottom-right status lines end at x 1256, 24 px left of the talk button. |
-| Wall page, `split` and `canvas` | Both controls sit at the bottom right of the conversation column (x 760-1368, `c4-show-canvas.md` §7.1, D78), never over the card area; the column's other rects are T27's (pending Q-O12). In `split` the wall half keeps its status lines at the divider. |
-| Wall page, `switch` | Both controls on both halves. The switch button sits left of the talk button, x 1200-1264, y 824-888, while the pane is closed; while it is open it moves into the pane header (T44 gives the whole cluster per state). |
+| Wall page, `split` and `canvas` | The talk button sits in the conversation column's input row (x 760-1368, `c1-talk.md` §1, D78), never over the card area. There is no `CHAT`: the column is always there (D117, pending Q-O12); its rect belongs to the conversation. In `split` the wall half keeps its status lines at the divider. |
+| Wall page, `switch` | The talk button on both halves; `CHAT` only while the wall shows (it flips to the canvas). The switch button sits left of the talk button, x 1200-1264, y 824-888, while the pane is closed; while it is open it moves into the pane header (T44 gives the whole cluster per state). |
 | App, every view in `VIEWS` (`public/js/core/router.js`) | The talk button's bottom edge sits on the top edge of the bottom bar (`footer.shell-bar`, `--tape-h` 24 px, y 888-912); nothing of the bar is covered. The toast stack (`.toasts`, `public/css/components.css`) moves up while the cockpit is configured: its bottom edge at y 736 (`bottom: 176px`), 24 px above `CHAT`. |
 
 The **switch button** (only in `switch`): 64x64 px, label `CANVAS` while the wall shows and `WALL`
@@ -190,14 +191,16 @@ Test: Playwright, two pages on one fake agent; read `data-wall-state` and `scree
 near the screen centre on the `wall` page; the `canvas` page's DOM is unchanged.
 
 ### S-SCR-06 The owner picks a layout, it survives a reload, the URL wins over it
-Given a screen at 1368x912 in `split`,
-When the owner opens the pane, taps `SCREEN`, taps `CANVAS`,
-Then within 0.2 s `data-layout="canvas"`, the wall half is gone, the canvas fills 1368x912, the
-pane stays open, and `localStorage['cockpit.layout']` is `canvas`.
+Given a screen at 1368x912 in `split`, `[data-cockpit-conversation]` at x 760-1368, y 520-912,
+When the owner taps `SCREEN` in the column's header (x 1256-1352, y 528-576), then `CANVAS`,
+Then within 0.2 s `data-layout="canvas"`, the wall half is gone, the canvas fills 1368x912,
+`data-pane="column"`, `[data-cockpit-conversation]` is at x 760-1368, y 0-912 with its scroll
+position and draft unchanged, and `localStorage['cockpit.layout']` is `canvas`.
 When the page reloads, it is still `canvas`.
-When it is opened with `?layout=wall`, it is `wall`, and `cockpit.layout` is still `canvas`.
-Test: Playwright; tap through the sheet (each row ≥ 64 px tall); read `data-layout` and
-`localStorage`; reload; navigate with the query.
+When it is opened with `?layout=wall`, it is `wall`, `data-pane="closed"`, `[data-cockpit-open]`
+reads `CHAT`, and `cockpit.layout` is still `canvas`.
+Test: Playwright; tap through the sheet (each row ≥ 64 px tall); read `data-layout`, `data-pane`,
+the column's `getBoundingClientRect()` and `localStorage`; reload; navigate with the query.
 
 ### S-SCR-07 Switch on a small screen: one half at a time, a count for new cards
 Given a screen at 1024x768 with no layout stored (the default is `switch`), the wall shown,
@@ -243,13 +246,16 @@ Test: Playwright with a fake agent that places nothing; assert both texts and th
 sizes; a second run with `?demo=1` asserts the `DEMO` label and ≥ 1 card.
 
 ### S-SCR-11 Crossing 1280 px flips split and switch without a reload
-Given a screen at 1368x912 in `split` (stored), the wall in `explore` on `builder-a`, the pane open
-with a draft,
+Given a screen at 1368x912 in `split` (stored), the wall in `explore` on `builder-a`, a draft in
+the column's input,
 When the window is resized to 1200x800,
-Then within 0.5 s `data-layout="switch"` showing the half that held the pane (the canvas), the
-draft and the conversation are unchanged, and `cockpit.layout` is still `split`.
-When it is resized back to 1368x912, it is `split` again, the wall still on `builder-a`.
-Test: Playwright `setViewportSize` both ways; assert attributes, the input value and storage.
+Then within 0.5 s `data-layout="switch"` with `data-switch-shows="canvas"` (the half that holds the
+conversation), `[data-cockpit-conversation]` is at x 592-1200, y 0-800, the draft and the
+conversation are unchanged, and `cockpit.layout` is still `split`.
+When it is resized back to 1368x912, it is `split` again, the column at x 760-1368, y 520-912, the
+wall still on `builder-a`.
+Test: Playwright `setViewportSize` both ways; assert the attributes, the column's rect, the input
+value and storage.
 
 ### S-SCR-12 Reduced motion: no flights, same rules
 Given `prefers-reduced-motion: reduce` and a screen in `split`,

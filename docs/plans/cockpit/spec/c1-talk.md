@@ -16,8 +16,7 @@ main")."
 | Page / layout | Pane rectangle at 1368x912 | Notes |
 | --- | --- | --- |
 | Wall page, `wall` | x 760-1368, y 0-912 (608 x 912) | slides over the right 608 px of the Wall; the left 759 px stay in sight |
-| Wall page, `switch` | as `wall`, on the canvas half | `screens.md` §3: opening it from the wall half flips to the canvas |
-| Wall page, `split` and `canvas` | no sliding pane: the conversation is a fixed column of the canvas (pending Q-O12; sketch T25) | §3-§5 of this file apply to that column unchanged |
+| Wall page, `split`, `canvas`, and `switch` | no sliding pane: the conversation is a fixed **column** of the canvas, rects below (pending Q-O12, D117) | `screens.md` §3: in `switch` a tap on `CHAT` or a press on the talk button on the wall half flips to the canvas |
 | App, every view in `VIEWS` | x 760-1368, y 36-888 (608 x 852): under the 36 px header, above the 24 px tape | covers the inspector (360 px) while open; `z-index` 35, between `--z-tape` 30 and `--z-sheet` 40 |
 
 - The width is **608 px** everywhere, the same constant as the canvas column (`screens.md` §1, D6),
@@ -28,7 +27,35 @@ main")."
 - While the pane is open, the view behind keeps working in the part that is in sight: the Wall
   explores, the Map pans and selects. A show command (`c4-show-canvas.md` §2) centres its target in the part in sight
   (x 0-759), not in the whole screen.
-- The page root carries `data-pane="open|closed"`; the pane element is `[data-cockpit-pane]`.
+- The page root carries `data-pane="open|closed|column"` (`column` in `split`, `canvas` and
+  `switch`); the element holding header, status line, conversation and input row is
+  `[data-cockpit-conversation]` on every page and layout, pane or column.
+
+### The conversation column (pending Q-O12)
+
+In `split`, `canvas` and `switch` the conversation does not slide: it is the column of the canvas
+beside or under the card area (`c4-show-canvas.md` §7.1, D78). It is always there, so it has no
+opener and no `CLOSE` (D117): `[data-cockpit-open]` is not rendered while the canvas shows, `Esc`
+does nothing, and the 300 s auto-close (`screens.md` §2, D5) does not apply. Inside it is the pane
+of the list below, top to bottom, with these rects at 1368x912:
+
+| Part | `canvas` (and `switch` showing the canvas) | `split` |
+| --- | --- | --- |
+| Column `[data-cockpit-conversation]` | x 760-1368, y 0-912, 1 px `--line` left border | x 760-1368, y 520-912, 1 px `--line` top border |
+| Header (64 px) | y 0-64 | y 520-584 |
+| Header buttons, from the right, 16 px in, 8 px apart, each 48 px tall | `SCREEN` x 1256-1352, `NEW` x 1176-1248, `SHELF` x 1072-1168 (only with a shelf); y 8-56 | same x; y 528-576 |
+| Status line (80 px, only while shown) | y 64-144 | y 584-664 |
+| Conversation (scrolls) | y 64-808 (744 px), y 144-808 with the status line | y 584-808 (224 px, about 7 lines at 22 px), y 664-808 with the status line |
+| Input row | y 808-912: input x 784-1184, `SEND` x 1200-1264, talk button x 1280-1344, y 824-888 | same |
+
+- The talk button and `SEND` keep their rects from `screens.md` §4 and the list below: the input
+  row is in the same place in a pane and in a column.
+- The chip row, the hint line and `↓ NEW` stack up from the input row inside the conversation's
+  band (T96). In `split` they never leave the conversation less than 96 px (3 lines); the on-screen
+  keyboard is T40's.
+- Other widths: the column is the right 608 px of the screen (`min(608px, 100vw)`), at the bottom
+  in `split` with the card area's height above it; at 1200x800 in `switch` it is x 592-1200,
+  y 0-800.
 
 ### Inside the pane, top to bottom
 
