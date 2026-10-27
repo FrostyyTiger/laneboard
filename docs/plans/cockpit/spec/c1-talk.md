@@ -2107,7 +2107,7 @@ the screen's (`page.clock` in tests) or the room's (`server/cockpit/clock.mjs`, 
 | 30 days | — | the old conversation kept on the room | room | §11, `protocols.md` §11.7.1 | pending Q-O24 | `protocols.md` §13 store test (a 31-day-old turn gone) |
 | ≤ 0.5 s | — | a prompt sent at screen A drawn on screen B after the room has it; reply text within B4 | room → screen | §12 | D269 | S-C1-23 |
 | 3 s | `DEMO_WAIT_MS = 3000` | `?demo=1` with no board frame for 3 s draws the demo cockpit | screen | §15 | D148, D150 | no scenario for the 3 s: S-C1-36 loads with `"cockpit":false`; gap (T141) |
-| 5 s | — | a talk hint's longest show (§1.1's line slot) | screen | `c2-voice.md` §3 | D168 | C2's table (T135) |
+| 5 s | `HINT_MS = 5000` | a talk hint's longest show (§1.1's line slot) | screen | `c2-voice.md` §4 | D45, D291 | `c2-voice.md` §15 (S-C2-05, S-C2-07, S-C2-11) |
 
 Not times, and so not here: the 8 px tap slop (`TAP_SLOP_TOUCH`, §8), the 120 px keyboard
 threshold (§7.1), the 50 turns drawn and 3 `history` asks (§2.1, D27).

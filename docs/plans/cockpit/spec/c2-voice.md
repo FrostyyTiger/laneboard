@@ -3,7 +3,7 @@
 Speaking instead of typing: the talk button, its two gestures, its states and the live words in the
 input (§1-§6, part 1, T6). Stopping to fix the words by tapping them (§7), the DE/EN choice (§8), the
 speech-to-text config (§9), the service down or failed (§10), the talk key (§11) and the kiosk
-microphone note (§12) are part 2 (T7), with scenarios in §13. §14 is **C2b, the physical button**:
+microphone note (§12) are part 2 (T7), with scenarios in §13. Every time C2 uses is listed in §15. §14 is **C2b, the physical button**:
 a later slice, not part of C2's build night (D55). Words
 as in the glossary (`README.md`). Sizes are CSS px at 1368x912; times in s or ms; budgets `B<n>` are
 the speed budget in `README.md`.
@@ -447,7 +447,7 @@ which process is the room: D89).
 
   | # | Message | When | Without it |
   | --- | --- | --- | --- |
-  | 1 | `{"type":"config","useAudioWorklet":true,"mode":"full"}` | first, within 2.0 s of the upgrade | `stt-down` `no-answer` after 2.0 s |
+  | 1 | `{"type":"config","useAudioWorklet":true,"mode":"full"}` | first, at once: the room counts its 2.0 s from the screen's `audio.start`, before it connects (D292) | `stt-down` `no-answer` after 2.0 s |
   | 2 | `{"status":"active_transcription","lines":[{"text":"wie lief"}],"buffer_transcription":"die Na"}` | each time the words change; `lines` is every firm segment so far, the buffer the unfirm tail | no live words; the final is empty, so nothing is sent |
   | 3 | `{"status":"error","error":"…"}` | the service failed | a close other than 1000 does the same |
   | 4 | `{"type":"ready_to_stop"}`, then close 1000 | after the last update, within 3.0 s of the empty frame | `stt-failed` (or `stt-down` `failed`) at 3.0 s |
@@ -474,7 +474,7 @@ in `[data-talk-text]` when it went wrong?
 
 | `data-talk-error` | When (measured by the room) | Microphone | Line (exact) |
 | --- | --- | --- | --- |
-| `stt-down` | **no word shown yet**, and: the connect fails or the service's first message (`config`) has not come 2.0 s after the press; or the upgrade is refused (401, 403); or a `status: "error"` update, a close other than 1000, or no final 3.0 s after the release | closed (at 2.0 s for no answer, at once otherwise); the held audio is dropped; the input as before the press | `Speech-to-text is down ({detail}), so nothing was heard. Typing works. Tap TALK to try again.` |
+| `stt-down` | **no word shown yet**, and: the connect fails or the service's first message (`config`) has not come 2.0 s after `audio.start` (the press, once the track is live, B1; D292); or the upgrade is refused (401, 403); or a `status: "error"` update, a close other than 1000, or no final 3.0 s after `audio.stop` (the release) | closed (at 2.0 s for no answer, at once otherwise); the held audio is dropped; the input as before the press | `Speech-to-text is down ({detail}), so nothing was heard. Typing works. Tap TALK to try again.` |
 | `stt-failed` | **a word was shown**, and: a `status: "error"` update, or a close other than 1000, or no final 3.0 s after the release, second tap or tap on the words (D41) | closed at once (no final: already closed); the last words shown go into the textarea as a draft | `Speech-to-text did not finish. Your words are in the input, not sent.` |
 
 `{detail}` is the cause in words, so setting up still gets its hint; the button carries it as
@@ -817,3 +817,55 @@ idle `desk` → `409 not-listening`; six calls within 1 s → the sixth `429 too
 And no refused call changes any screen's `data-talk`.
 Test: `node:test` against the room under test (no browser except for the last check); one case per
 row.
+
+## 15. Times at a glance (T135, D291)
+
+Every time C2 and C2b use, in one table, as `c1-talk.md` §16 is for C1: the section in the
+**Where** column owns the value, this table only points at it, and when the two differ the section
+wins and this table is a bug. Names in the **Constant** column are exported by
+`public/js/core/cockpit-constants.js` (D150, D291); `B<n>` is a speed budget (`README.md` "Speed
+budget"), measured, not a constant. **Clock**: the screen's (`page.clock` in tests), the room's
+(the fake clock, `stand-ins.md` §1.1) or the fake speech's (ms from the first audio frame of its
+connection, `stand-ins.md` §3.2). Times C1 owns and C2 only uses (`STOP_GUARD_MS` after a
+microphone close, `PANE_IDLE_S` ending a hint, the link's 5 s grace) stay in `c1-talk.md` §16.
+
+| Value | Constant | What | Clock | Where | D | Asserted by |
+| --- | --- | --- | --- | --- | --- | --- |
+| ≤ 0.2 s | B1 | `pointerdown` on the talk button → `data-talk="listening"`, frames leaving | screen | §2, §5 | D29 | S-C2-01, S-C2-15, S-C2-23 |
+| 400 ms | `HOLD_MS = 400` | the first `pointerup` before it is a tap, at or after it a hold; at 400 ms held the hint becomes `RELEASE TO SEND · SLIDE OFF TO KEEP` | screen | §2 | D39, D150 | S-C2-02 (250 ms and 2.5 s; the hint at 0.45 s) |
+| 50 ms | `LEVEL_RMS_MS = 50` | the level bar's width is the RMS of the last 50 ms, set once per frame, no transition | screen | §3 | — | no scenario: the fake microphone's tone gives a steady bar, so a test can assert only "visible" (S-C2-04); the window needs a unit test of the level function; gap (T142) |
+| 2 s | — | a level bar at 0 px for 2 s while frames flow reads as silence, not a fault: nothing happens | screen | §3 | — | no scenario: no timer, a sentence about reading the screen |
+| 100 ms | — | one audio frame (3 200 bytes); the room drops frames past 20 per second per link | screen, room | `protocols.md` §6.1, §8 | D96, D99 | `protocols.md` §9 limit unit test |
+| ≤ 1.0 s | B2 | `pointerdown`, speaking at once → the first partial drawn | screen | §4 | — | S-C2-01 (`what` by 1.0 s) |
+| ≤ 0.4 s | — | each later `stt.update` drawn after the room's `sentAt` | room → screen | §4 | D223 | S-C2-01 (`what failed` by 1.5 s, `what failed tonight` by 2.0 s) |
+| 2.0 s | `STT_ANSWER_MS = 2000` | no `config` from the service 2.0 s after `audio.start` → `stt-down` `no-answer`, the microphone closes, the held audio dropped; during a hold `NOT LISTENING` | room | §10, `protocols.md` §6.2, §12 | D50, D181, D292 | S-C2-15 (± 0.2 s), S-C2-23 |
+| at once | — | a refused upgrade (401, 403) → `stt-down` `token` / `busy`; during a hold `NOT LISTENING` within 0.2 s | room | §10 | D50, D181 | S-C2-15, S-C2-23 (403) |
+| ≤ 0.3 s | B3 | the release or second tap → the prompt block drawn, the input empty, `data-talk="idle"` | screen | §2, §3, §4 | — | S-C2-01, S-C2-02, S-C2-07 case 2, S-C2-09, S-C2-20 (from the `keyup`) |
+| 3.0 s | `STT_FINAL_MS = 3000` | no final 3.0 s after `audio.stop` → `stt-failed` (words shown: they stay as a draft) or `stt-down` `failed`; also the shim's `ready_to_stop` deadline | room | §4, §7, §9, §10, `protocols.md` §6.2 | D41, D50, D292 | S-C2-17 (`error` at 5.5 s for a 2.5 s release) |
+| 3.0 s | `STT_FINAL_MS` | a finishing utterance and the next open one: two service sessions on one link for up to 3.0 s | room | `protocols.md` §6.1 | D138 | `protocols.md` §9 unit test (`u-0013` after `u-0012`'s `audio.stop`) |
+| 3.5 s | `STT_FINAL_SCREEN_MS = 3500` | no `stt.final` or `stt.error` 3.5 s after the screen's `audio.stop` → the screen decides `stt-failed` itself (a room gone quiet) | screen | `protocols.md` §6.2 | D41 | no scenario: every C2 test has a live room that answers by 3.0 s; gap (T142) |
+| ≤ 0.1 s | — | `CANCEL` closes the microphone, takes the spoken words out | screen | §3 | D42 | S-C2-10 (`idle` by 2.1 s for a 2.0 s tap) |
+| 5.0 s | `UNDO_MS = 5000` | `UNDO` and `WORDS DROPPED` after a `CANCEL`; earlier gone at a press, a send, an input change | screen | §3 | D42 (pending Q-O19 a) | S-C2-10 (gone at 7.0 s) |
+| ≤ 5 s | `HINT_MS = 5000` | `MICROPHONE OFF` (`· TEXT KEPT`) after nothing heard, a slide off, a tap on the words: until the input changes or the next press, at most 5 s | screen | §4 "One hint" | D45 | S-C2-05 (gone by 6.9 s), S-C2-07 case 1 (until 7.2 s), S-C2-11 (until 8.3 s) |
+| ≤ 5 s | `HINT_MS` | a talk hint's longest show in the line slot (`c1-talk.md` §16's last row points here) | screen | `c1-talk.md` §1.1, §3 | D168 | as the row above |
+| until a touch | — | after the 30 s or 120 s limit, a `pointercancel` or a release on the slot: the hint stays until the first `pointerdown`, `keydown`, button press or input change (no 5 s cap); goes with the pane at its 300 s close | screen | §2, §4 | D168 | S-C2-06 (still at 290 s; pane closes at 330 s), S-C2-07 cases 3 and 4 (still at 30 s) |
+| 30 s | `SILENCE_MS = 30000` | listening with no word → the microphone closes (`audio.cancel`), nothing sent, `MICROPHONE OFF`; caps a brushed button and a dead C2b button | screen | §4, §14, `protocols.md` §6.1, §12 | D45 | S-C2-06 (`idle` at 30 s) |
+| 120 s | `LISTEN_MAX_MS = 120000` | listening in all → the microphone closes (`audio.stop` `limit`), the words stay as a draft, `MICROPHONE OFF · TEXT KEPT` | screen | §4, §14, `protocols.md` §6.1 | D45 | S-C2-06 (at 120 s; hint still at 126 s) |
+| ≤ 0.1 s | — | a tap on the live words → the microphone closes | screen | §7 | D47 | S-C2-11 (no frame after 3.1 s) |
+| ≤ 0.3 s | — | that tap → the final in the focused textarea, caret at the end (the fake's 0.15 s included) | screen | §7 | D47 | S-C2-11 (by 3.3 s), S-C2-22 (by 3.4 s with the keyboard) |
+| ≤ 0.1 s | — | a tap on the language button → the next code shown | screen | §8 | D48 | S-C2-13 |
+| the first frame | — | the pressed state on a press of the `off` talk button; goes in the frame after the release | screen | §3 | D180 | S-SCR-32 |
+| ≤ 0.5 s, ≤ 0.2 s | — | a refused microphone → `data-talk="error"` and its line; a page that is not secure: 0.2 s | screen | §5 | D46 | S-C2-08 (0.5 s), S-C2-21 (0.2 s) |
+| 300 s | `STT_DOWN_WINDOW_S = 300` | a press within 300 s of the screen's last `stt-down` that ends in `stt-down` again also focuses the input (the keyboard comes up) | screen | §10 | D181 | S-C2-23 (at 30 s it focuses; after 301 s it does not) |
+| none | — | no "speech is slow" threshold: lagging words show themselves; only the 2.0 s, 3.0 s and the 30 s / 120 s limits act | — | §10 "No slow hint" | D50 | no scenario: nothing happens to assert |
+| none | — | the talk key: `keydown` is the press, `keyup` the release, `HOLD_MS` decides; repeated `keydown`s ignored at any rate | screen | §11 | D51 | S-C2-20 (repeats every 33 ms) |
+| 0.6, 1.1, 1.6 s; final 0.15 s | — | the fake speech's `c2-tap` partials after the first audio frame; its final after the end frame (B2's and B3's reference) | fake speech | `stand-ins.md` §3.2, §5 | — | S-C2-01, S-C2-02, S-C2-07 and the other `c2-tap` runs |
+| 0.6, 1.2, 1.8 s | — | `c2-tap`'s second utterance (S-C1-13's `how` …) | fake speech | `stand-ins.md` §5 | — | S-C1-13 |
+| every 1 s; every 1 s from 0.6 s for 130 s | — | `c2-limits`: `no_audio_detected` updates (`noAudio`); a growing partial | fake speech | `stand-ins.md` §3.2, §5 | — | S-C2-05, S-C2-06 |
+| 1.2 s, 0.4 s | — | `c2-faults`: the `errorAt` / `closeAt` faults (an error before any word at 0.4 s) | fake speech | `stand-ins.md` §3.3 | — | S-C2-16 |
+| 10 s | `TOUCHED_EVERY_MS = 10000` | C2b: a screen sends `touched` at most once per 10 s while touched | screen | §14, `protocols.md` §3.8 | D55 | no scenario: C2b is later (pending Q-O8, Q-O20); S-C2B-02's `no-target` uses a fresh room; gap (T142) |
+| ≤ 1.0 s | `BUTTON_ANSWER_MS = 1000` | C2b: the room answers `/api/cockpit/talk` once the screen reported, else `504 screen-timeout` | room | §14 | D55 | S-C2B-01 (the `200` within 1.0 s); the `504`: no scenario, gap (T142) |
+| 5 per 1 s, 1 s | `BUTTON_RATE_MAX = 5`, `BUTTON_RATE_WINDOW_MS = 1000` | C2b: the sixth call within 1 s from one token → `429 too-many`, `Retry-After: 1` | room | §14 | D55 | S-C2B-02 |
+
+Not times, and so not here: the 8 px button gap (§1), the 10 px tap on the words (§7), the send
+zone's 48 px (§2), 17 characters a line (§4).
