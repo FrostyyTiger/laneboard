@@ -57,7 +57,8 @@ failure (a check or a read) clears it. The status is set at most 80 s after the 
 one box the board is the room's own process: it cannot be down while the room answers, so the row
 never shows there.
 
-How the room reads a hub is D91: the room runs on the hub's box as its own unix user and reads
+How the room reads a hub is D91 (pending Q-O26, which recommends a read-only `reader` key so the
+room can live on its own machine): the room runs on the hub's box as its own unix user and reads
 the hub's loopback port, where it is a `local` caller (`docs/fleet/auth.md`): on a hub `local` gets every read and no
 action, control, terminal or push change.
 

@@ -18,7 +18,7 @@ T81 (the jobs slice, §3.7) and T30 (S-C1-13 belongs to C2, §3.2).
 | 4 | **Speak** The agent speaks up | find a line from the agent that it started itself, a marker on the talk button, the tour holding on the flagged node | C3, `coworker.md` (T13) and T23 written |
 | 5 | **Canvas** C4, first canvas night | put the screen in `split` or `canvas` and ask for a countdown, a status tile, a log, a chart, a text or a diff card | Speak (order only; it builds on C3) |
 | 6 | **Show** C4 show commands | watch the agent fly the map to a node, highlight, pin, compare, and undo any of it with one tap | Canvas (the show line and `UNDO` exist) |
-| 7 | **Jobs** Scheduled jobs on the room's own machine | ask "remind me in 3 hours" and see the countdown on the canvas and the job on the Map; cancel it with one confirm | Canvas; the confirm card (`c5-c6.md` §8, written by T14); Q-O30 answered (written for b) |
+| 7 | **Jobs** Scheduled jobs on the room's own machine | ask "remind me in 3 hours" and see the countdown on the canvas and the job on the Map; cancel it with one confirm | Canvas; the confirm card (`c5-c6.md` §8, written by T14); Q-O30 answered (text written for b), recommendation a) |
 | 8 | **C2b** The physical button | press a desk button that talks on a named screen | C2, Q-O8 and Q-O20 answered |
 | 9 | **Pair** Pairing screens | pair a second screen others can reach with a code; unpair it | C1, Q-O21 answered b) (with a) this slice folds into C1) |
 | 10 | **Canvas 2** | `timer`, `table`, `checklist`, `map` blocks; custom cards in their sandbox; promotion | Canvas, T12 written |

@@ -1051,7 +1051,10 @@ rendered in a sandboxed frame that can read board data and nothing else (no netw
 credentials, no actions)." `spec-input.md` §5: "custom sandboxed cards for the rest (about a
 minute)". The minute is the agent's writing time; the screen's own share is B10 (`README.md`
 speed budget). The sandbox's facts are `research/Q6-sandboxing-html-cards.md`'s. Whether custom cards
-are on by default is Q-O32; this section is written for its recommendation (on).
+are on by default is Q-O32; this section is written for on (its option a), while its recommendation
+is b): `cockpit.canvas.customCards` defaults to `false`, `place` with `custom` then returns `isError`
+`Custom cards are off (cockpit.canvas.customCards).`, and the demo and the Canvas 2 tests set it
+`true` (pending Q-O32).
 
 ### 11.1 Placing one
 

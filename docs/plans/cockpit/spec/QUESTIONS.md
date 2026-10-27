@@ -15,9 +15,9 @@ question below (none names a closed one).
 
 ## For the morning, worst first
 
-Fourteen, about 15 minutes: a letter per question is enough. Ordered by what the C1 build night
-needs first (Q-O11 to Q-O18), then C2 (Q-O19), the screen sizes every slice uses (Q-O9), and last
-Q-O30, the owner's own example (`spec-input.md` §3) that the Jobs slice waits on. The first five
+Fifteen, about 15 minutes: a letter per question is enough. Ordered by what the C1 build night
+needs first (Q-O11 to Q-O18; Q-O26, reopened by the review of PR #23, sits by Q-O29), then C2
+(Q-O19), the screen sizes every slice uses (Q-O9), and last Q-O30, the owner's own example (`spec-input.md` §3) that the Jobs slice waits on. The first five
 change what C1 builds; the rest change a slice or a size.
 
 ## Q-O11 How talking starts
@@ -91,7 +91,11 @@ Security, blocks C1. From `reviews/36-skeptic.md` (3), `40-security.md` (3). Spe
 - c) b), but the screen's `direct` login is not in `fleet.allowedUsers` for actions (needs a new
   `read`-only `direct` kind).
 
-Recommendation: b) for a screen only the owner can touch; the first chat line should not wait on pairing.
+Recommendation: b) for a screen only the owner can touch, and on a hub only while every builder
+keeps `fleet.hubControl` off (its default), so the screen's `direct` login reads but cannot act or
+open a terminal; with `hubControl` on anywhere, or a screen reaching a single board (where `local`
+and `direct` act), a) or c). Note that b) meets plan §4 ("a token cannot
+act") only through that condition, not through a token. The first chat line should not wait on pairing.
 
 Answer: (open)
 
@@ -121,6 +125,29 @@ Security-relevant deployment door. From `reviews/59-implementer.md` (1). Spec: D
 - c) One process only in v1: the room is always part of the process that serves the page.
 
 Recommendation: a), with c) as the one-box default — the hub stays unchanged and origin checks simple.
+
+Answer: (open)
+
+## Q-O26 Where the room runs, and how it reads a hub
+
+Security, a one-way door for the owner's setup (C1 reads `morning`, `alerts`, `runs`). Was closed as
+D91 by T55; reopened by the review of PR #23 because D91 puts the agent on the hub's box, and
+plan §2 and `spec-input.md` §3 say the agent lives on its own always-on machine, "not inside the
+hub". Spec: D91, `c3-see.md` §2, `security.md` §1, `single-machine.md` §8 (D91's overrule).
+
+- a) D91 as written: the room (and the agent, as its own unix user) runs on the hub's box and reads
+  the hub's loopback port as `local` (every read, no action). No new door on the hub, but an agent
+  that reads untrusted fleet text shares a box with the hub and its key to the builders; only file
+  modes keep that key from the agent's `Read`.
+- b) The room runs on its own machine and reads the hub with a new read-only `reader` key (pinned
+  on the hub, scope `read`, refused for actions, terminals and push changes): a new door on the hub,
+  so a short added section in the hub's security review before the room is wired to the real fleet.
+- c) a) until C3, b) before C6.
+
+Recommendation: b) — it is what the owner asked for, and the hub stays as narrow as its review
+says. On one box nothing changes (the board is the room's own process). The C1 build night is not
+affected: it reads `cockpit.board.url` on loopback against the demo hub; the spec text is written
+for a) (pending Q-O26) and under b) gains the key's header and one hub route check.
 
 Answer: (open)
 
@@ -240,11 +267,17 @@ example is shutting something off in three hours.
   may touch other machines; a job is created and cancelled only through the confirm card, one audit
   line per fire. The agent says `I can run stop-builder-b at 15:10. Confirm?`.
   The cost: a stolen device token can then run a listed script by asking and saying yes on its own
-  screen; every other screen shows the open card (`security.md` §2).
+  screen; every other screen shows the open card (`security.md` §2). And a script that reaches
+  another machine needs a credential on the room's box (an SSH or hypervisor key), which
+  `security.md` §1 rules out ("no SSH key") and plan C6 forbids ("never through credentials of its
+  own that bypass" the audited control plane): b) is C6 by another door, before its review.
 
-Recommendation: b) — a listed script is already the owner's yes; a) leaves only an alarm clock and
-C6 has no date. The confirm card is `c5-c6.md` §8 (T14). Spec written for b): `slices.md` §3.7,
-D115, `coworker.md` §6 (T103).
+Recommendation: a) — plan §4 gives the room "act access C6 only", and C6 waits for the
+control-plane review; a reminder at 15:10 plus one tap on the board keeps the owner's example
+usable meanwhile. (Changed from b) by the review of PR #23.) The confirm card is `c5-c6.md` §8
+(T14). The spec text is still written for b) (`slices.md` §3.7, D115, `coworker.md` §6 (T103), the
+demo's `stop-vm-c`); the Jobs slice waits for this answer, and under a) those lines change as
+`slices.md` §3.7's last sentence says.
 
 Answer: (open)
 
@@ -252,13 +285,13 @@ Answer: (open)
 
 Asked earlier, closed as D-lines because the strict choice is safe by default (`reviews/52-owner.md`
 finding 3). Strike the D-line to reopen one; its overrule part lists the other options. These are
-also in PROGRESS.md's "Needs you" list, because D89, D90 and D91 are security-relevant.
+also in PROGRESS.md's "Needs you" list, because D89, D90 and D91 are security-relevant. Q-O26
+(D91) was reopened by the review of PR #23 and is in the morning list again.
 
 - **Q-O14** A browser test runner in the repo → **D88**: Playwright as a devDependency, outside `npm test`.
 - **Q-O15** Which process is "the room", and its origin → **D89**: a laneboard server with a `cockpit` section, same origin as the page (rewritten by T86 to D92's split: the board serves the page, the room only `/api/cockpit/*`; modes D128, pending Q-O29).
 - **Q-O16** Security-adjacent choices → **D90**: D14, D22 and D66 stand as written. D13 (the pairing code) is not closed: it stays under Q-O10.
 - **Q-O6** What a screen shows when the agent's machine is down → **D257**: the board keeps working, the pane says the agent is away (`product.md` "never an empty screen" decides it; `reviews/73-owner.md` finding 9).
-- **Q-O26** How the room reads the board → **D91**: the room runs as its own user on the box of the laneboard it reads (a hub, or a single board such as the one box's) and reads its loopback port as `local`.
 
 ## Can wait
 
@@ -432,7 +465,11 @@ own navigation are not fully closed). Spec: `c4-show-canvas.md` §11 (written fo
 - b) Off until `cockpit.canvas.customCards: true`; `place` with `custom` then says `Custom cards are off (cockpit.canvas.customCards).`
 - c) No custom cards in v1; the kit and saved cards only.
 
-Recommendation: a) — a card holds only board data the agent already read, and `spec-input.md` §5 counts custom cards in the answer.
+Recommendation: b) — plan C4b promises "no network", and §11.6 says a card can still send one
+request by navigating itself (and WebRTC is open until Q15); the research (Q6, item 4) advises
+"only after the owner enabled them". The owner turns it on with one key; the demo and the Canvas 2
+tests set it. (Changed from a) by the review of PR #23; the spec text of §11 is written for on, and
+under b) only the default and the off line change.)
 
 Answer: (open)
 
@@ -457,7 +494,7 @@ C6, after the control-plane review. `spec-input.md` §7.7. Spec: `c5-c6.md` §7 
 - c) Every control-plane action, each confirmed.
 
 Recommendation: open until the control-plane review; the spec assumes a), and every act ever added needs a confirm.
-Note for the review (T14): the room is `local` on the box of the laneboard it reads (D91); a hub
+Note for the review (T14): the room is `local` on the box of the laneboard it reads (D91, pending Q-O26); a hub
 refuses every action from `local` and a single board its remote-only ones, so C6 also needs a way for the room to carry the owner's yes to the control
 plane (a room key with an act scope, or the yes forwarded as the `direct` user who gave it).
 

@@ -15,7 +15,9 @@ retention (D213) and the `S-SEC-` scenarios (§7).
 
 Written for the open recommendations: Q-O21 b) (no pairing in C1), Q-O23 a) (the agent only reads),
 Q-O10 a) (only the room's own user pairs), Q-O24 a) (30 days), Q-O27 a), Q-O30 b), Q-O35 b). Text that
-changes with one of them carries `(pending Q-O<n>)`.
+changes with one of them carries `(pending Q-O<n>)`. Q-O30 b) is not the recommendation any more
+(Q-O30 now recommends a): a job's script touches only the room's own machine); the Q-O30 rows below
+show what b) would cost.
 
 ## 1. Credentials
 
@@ -36,7 +38,7 @@ Each thing that proves who is asking, one row each. "Room" is the laneboard proc
 | **The board's trust of the page** (`local`, `direct`) | `docs/fleet/auth.md` | the board | without pairing: the room link (§2.3, pending Q-O21) | on a hub, a `direct` login also gives actions and terminals: that is why Q-O21 b) is "a screen only the owner can touch" | `fleet.allowedUsers` |
 
 **No hub key, no SSH key.** The room reads the loopback port of the laneboard it reads (a hub, or a board) as `local`
-(D91); on a hub `local` gets every read and no action, terminal or push change. The room holds no
+(D91, pending Q-O26: its recommendation b) adds one read-only `reader` key on the hub instead); on a hub `local` gets every read and no action, terminal or push change. The room holds no
 key that signs to builders and no SSH or cloud credential (`c5-c6.md` §7 rule 1). The one way the
 cockpit will change the fleet is C6, through the control plane, after its review.
 
@@ -61,7 +63,8 @@ Every row is a message of `protocols.md` §2-§8 on the room link, as that scree
 **So "a token cannot act" holds in this sense**: alone it starts nothing the agent could not be
 asked to do anyway, and the agent only reads (Q-O23 a). From the Jobs slice on, a stolen token can
 run a script the owner listed, by asking and answering on its own screen, in plain sight of every
-other screen and the audit log. That is the cost of Q-O30 b), written into Q-O30's option text.
+other screen and the audit log. That is the cost of Q-O30 b), written into Q-O30's option text;
+under Q-O30 a), the recommendation, the script runs on the room's own machine only.
 With Q-O23 c) a stolen token can do what the agent's shell can: Q-O23 says so.
 
 ### 2.1 A copied token on plain HTTP
