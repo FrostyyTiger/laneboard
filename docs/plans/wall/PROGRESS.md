@@ -501,7 +501,7 @@ Notes for every builder round (planner, round 1):
   (`both` = parsed by both); the director's order; the codes found in show.js/transport.js/director.js each have a
   row; the large demo sets `glow`, `ring`, `countdown` and `SHOW_DEMO_SCRIPT` sends every show type. Checked that
   dropping a row fails it. No UI change, so no film.
-- [x] T45 (§7 Night 4 E3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] (night 3's E; r43-stranger 2, 6) A web manifest for the galaxy (`start_url: "/galaxy.html"`, fullscreen, landscape) if it fits the guardrails, and `wall.html?variant=galaxy` opens `galaxy.html` instead of falling back to radial (an "unknown variant" note on the tag for other names). — done when: `wall.html?variant=galaxy` opens the galaxy (test), the manifest validates (commit COMMIT)
+- [x] T45 (§7 Night 4 E3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] (night 3's E; r43-stranger 2, 6) A web manifest for the galaxy (`start_url: "/galaxy.html"`, fullscreen, landscape) if it fits the guardrails, and `wall.html?variant=galaxy` opens `galaxy.html` instead of falling back to radial (an "unknown variant" note on the tag for other names). — done when: `wall.html?variant=galaxy` opens the galaxy (test), the manifest validates (commit 655e1d9)
   Builder r53: `variants.js PAGES` (`galaxy` → `galaxy.html`) and `pageHref(search)`: `wall.html` leaves with
   `location.replace` before it builds anything, every other switch along (`?variant=galaxy&demo=1&fx=beacon` →
   `galaxy.html?demo=1&fx=beacon`). An unknown name: `unknownNote(pick)` → frame.js `note(text)`, a grey (`text-2`)
