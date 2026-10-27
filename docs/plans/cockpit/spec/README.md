@@ -297,8 +297,13 @@ when no value applies.
 | `[data-cockpit-demo-label]` | none (text `DEMO`) | the header's demo label | `c1-talk.md` §15 |
 | `[data-cockpit-send]` with `data-send` | `send`, `stop`, `wait` (`SEND` greyed and inert for 1.0 s after a send, D268), `none` (blank and inert while the microphone is open and 1.0 s after it closes) | the slot left of the talk button | `c1-talk.md` §8, `c2-voice.md` §3 |
 | `[data-cockpit-newbar]`, its buttons `data-newbar` | `keep`, `start` | the `NEW` bar | `c1-talk.md` §11 |
+| `[data-voice]`, `[data-voice-stop]` | none (texts `SPEAKING`, `STOP VOICE`) | the voice row above the input row while a spoken line plays on this screen (C5) | `c1-talk.md` §1.1, `c5-c6.md` §3 |
+| `[data-voice-toggle]` with `aria-pressed` | none (text `VOICE ON`, `VOICE OFF` or `NIGHT OFF`) | the header's `VOICE` button and its row in the `SCREEN` sheet, only with `config.tts` (C5) | `c5-c6.md` §4, `screens.md` §4.1 |
 | `[data-cockpit-chip]` with `data-node`, `[data-cockpit-chip-remove]` | a node id | the context chip and its `✕` | `c3-see.md` §9 |
 | `[data-turn-id]` | a `turnId` (`t-0131`) | one turn: its prompt block and everything under it to the next turn (T91) | `c1-talk.md` §3 |
+| `[data-turn-delivery]` | `sending`, `queued`, `not-sent` (text `SENDING`, `QUEUED`, `NOT SENT`) | the delivery word at the end of a prompt's label row, 18 px caps `--text-1` (D270) | `c1-talk.md` §3 |
+| `[data-cockpit-since]` | none (text `SINCE YOU LOOKED · 22:40`) | the divider above the first item this screen has not shown (D233) | `c1-talk.md` §2.1 |
+| `[data-raised]` with `data-tier` | a speak-up id (`su-0012`); `data-tier`: `info`, `needs-you`, `urgent` | one raised block in the conversation | `coworker.md` §2, §3.2 |
 | `[data-tool-line]`, `data-denied` | `true` on a refused call | one tool line | `c1-talk.md` §5, §5.2 |
 | `[data-pressed]` | none (present or absent) | a tappable under a finger: the pressed state (D224) | §"Touch" above |
 | `[data-link]` | none (a `<span>`, text `the run`; its host follows in a `--text-3` span) | a link in a reply, never an `<a>` (D225) | `c1-talk.md` §3 |
@@ -317,6 +322,7 @@ when no value applies.
 | --- | --- | --- |
 | `[data-talk]`, `data-talk` | `idle`, `listening`, `partial`, `final`, `error`, `off` | `c2-voice.md` §3 |
 | `data-talk-gesture` on `[data-talk]` | `tap`, `hold` | `c2-voice.md` §2 |
+| `data-speakup` on `[data-talk]` | `needs-you`, `urgent` (absent with no marker) | `coworker.md` §3.4 (pending Q-O11 c) |
 | `[data-talk-error]` (the line) | `mic-blocked`, `no-mic`, `mic-failed`, `mic-insecure`, `stt-down`, `stt-failed` | `c2-voice.md` §5, §10 |
 | `data-talk-detail` on `[data-talk]` | `no-answer`, `busy`, `token`, `failed` | `c2-voice.md` §10 |
 | `[data-talk-text]` (the live words), its spans `[data-firm]`, `[data-tail]` | none | `c2-voice.md` §4 |
@@ -335,6 +341,21 @@ when no value applies.
 | `[data-card]` with `data-card-id`, `data-block`, `data-size`; `[data-card-remove]`, `[data-card-cancel]`, `[data-card-removed]`; `[data-card-more]`, `[data-card-less]`, `[data-card-new]` (§8.4, §8.10); `[data-check-row]` with `data-row`, `aria-pressed` (§8.7) | `data-block`: `countdown`, `timer`, `status`, `log`, `chart`, `table`, `checklist`, `map`, `text`, `diff`, `custom` (its frame `[data-card-frame]`, §11.4); `data-size`: `s`, `w`, `t`, `l` | `c4-show-canvas.md` §7.2-§7.3, §8, §9 |
 | `[data-shelf]` | none (text `SHELF n`) | `c4-show-canvas.md` §7.2 |
 | `[data-cockpit-down]` (the room-down strip on the canvas) | none | `c4-show-canvas.md` §7.6 |
+| `[data-card-job-down]` | none (text `Room down: may not run.`) | `c4-show-canvas.md` §7.6 |
+| `[data-job-badge]` | a job id (`job-0003`); text `⏱ 10:12`, `RUNNING`, `■ FAILED 10:12` | `coworker.md` §6.6 |
+
+**Confirm and pairing** (C6, Jobs slice; the pairing page)
+
+| Selector | Values | What it is | Defined in |
+| --- | --- | --- | --- |
+| `[data-confirm]` with `data-confirm-id` | a `confirmId` (`cf-0007`) | the confirm sheet, `role="alertdialog"` | `c5-c6.md` §8.2, `screens.md` §4.1 state J |
+| `[data-confirm-no]`, `[data-confirm-yes]` | none (text `NO`; the verb, e.g. `CANCEL JOB`) | the sheet's two buttons; yes is live 1.0 s after the sheet opens | `c5-c6.md` §8.2 |
+| `[data-pair-page]` | none | the root of `public/pair.html`, the page an unpaired caller gets | `screens.md` §6.5 |
+
+**The app's own, read but not added**: `[data-view]` (`map`, `board`, `inbox`, `packages`,
+`morning`, …) on the nav tabs of `public/index.html`; a test reads it to see which view is open
+(`screens.md` S-SCR-37). **Not used**: `data-raw` (C1 has no raw view, `c1-talk.md` §13);
+`data-open` and `data-mic` (old names review 26 found, D145).
 
 Not attributes: the camera and the Map are read through page functions (`screenOf(id)`,
 `emphasis(id)`, `nodeAt(x, y)`), on `window.__cockpitView` (the Wall contract, `screens.md` §9, D221), and
