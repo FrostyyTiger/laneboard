@@ -93,6 +93,8 @@ Notes for every builder round:
 - [ ] T44 (done-when, `security.md` §8, `single-machine.md`, `screens.md` §7) `docs/cockpit.md`, its first part: setup on one box and as two users, pairing pending Q-O21 (C1 runs behind the board's trust), troubleshooting the room-down line, the config keys linking `docs/config.md`; README.md links it — ids: none — done when: the file exists with those parts; `test/config-docs.test.mjs` and the hygiene test green; npm test green; the whole `npm run test:cockpit -- -g '<the 73 ids>'` summary line pasted here.
 - [ ] T45 (security, review 18-owner finding 3, `c1-talk.md` §5.3 rule 3, D211, B71) Lower-case `bearer`/`basic` in reply text is redacted: in `server/cockpit/redact.mjs` `SCHEME_TEXT` matches `bearer|basic` case-insensitively and keeps `Token`/`TOKEN` capitalised-only, so S-SEC-02's `The token in /etc/acme/env …` reads as written — ids: none — done when: `test/cockpit-redact.test.mjs` gains `authorization: bearer hunter2pass` → `bearer [redacted]` (and the S-SEC-02 sentence unchanged); update B71 in DECISIONS-c1.md; npm test green; the module stays named under `## For the owner`.
 - [ ] T46 (flaky test, review 18-owner finding 5, For the owner round 14) Widen the call's `endAt` in `test/cockpit-fake-agent.test.mjs` "queued next-tool-end" so the second prompt always lands inside the window on a loaded machine — ids: none — done when: the case passes 20 times in a row alone (`node --test --test-name-pattern 'next-tool-end'`) and npm test green.
+- [ ] T47 (review 23-spec-keeper findings 2, 3; D150, D287, B109) One file for the C1 constants: `server/cockpit/session.mjs` (`STOP_FORCE_MS`, `STOP_TERM_MS`, `STOP_KILL_MS`, `RESTART_STEPS_S`, `READY_WAIT_MS`, `NEWS_MS`), `server/cockpit/link.mjs` (`HEARTBEAT_MS`) and `server/boot/cockpit.mjs` (`COCKPIT_PREFIX`) import from `public/js/core/cockpit-constants.js` instead of defining their own; `public/js/cockpit/wall-hold.js` `PANE_CLOSED_IDLE_MS` becomes `EXPLORE_IDLE_S * 1000` — ids: none — done when: no duplicate definition of those names remains outside `cockpit-constants.js` (a `node:test` case greps for it, or asserts equality if an import is impossible, with the reason in B109); update B109; `npm run test:cockpit` and npm test green.
+- [ ] T48 [ui] (review 23-spec-keeper findings 1, 6; B7, B122) Make S-C1-01's and S-C1-26's timelines fail loudly: in `e2e/cockpit/c1-wall.spec.mjs` record (print, not assert) the pane's time-to-place at `?ratio=1` next to the asserted one at 0.5, so each run shows the gap; in `e2e/cockpit/c1-pane.spec.mjs` S-C1-26 step 1 add `expect(await pageMs(page)).toBeLessThan(700)` just after the tap — ids: S-C1-01 S-C1-26 — done when: `npm run test:cockpit -- -g 'S-C1-01|S-C1-26'` passes, none skipped, the ratio-1 time visible in the output; npm test green. Also note where `worstGapMs` 4882 of `r21-wall-open/perf.json` comes from (film.mjs start or a Wall frame) in B122.
 
 ## Scenario ids
 
@@ -196,6 +198,10 @@ What the slice itself says waits; nothing else moved here.
 - T32 (review 18-owner): the line `Sending and voice come back with the room.` above the input row while the room is down (`screens.md` §7, S-SCR-17), so the greyed `SEND` has a reason.
 - T17 (review 18-owner): at 800 wide the pane is the whole width with the Map `inert`, no sliver (S-C1-46).
 - T29 (review 18-owner, B81): `NEW` during a turn shows `● STOPPING` in the first frame, so it is not tapped twice.
+
+- T18 (review 23-spec-keeper, finding 5): add S-C1-26's second half (the empty line gone after the first prompt, step 2) to the test once SEND sends; today `c1-pane.spec.mjs` stops at the empty line (B111).
+- T40 (review 23-spec-keeper, finding 9): re-run S-SCR-35 with `?demo=1` (its Given; `c1-handle.spec.mjs:15` opens `/#/map`, B129).
+- T15's S-C1-03 (review 23-spec-keeper, finding 8): `c1-pane.spec.mjs:127` guesses three inspector selectors (`#shell-insp, .shell-insp, [data-insp-panel]`); name the one the shell draws.
 
 ## Spec fixes
 
@@ -326,13 +332,23 @@ What the slice itself says waits; nothing else moved here.
   fallback) does not, and it sets no `__cockpitView`. The galaxy is dark only (`data-theme="dark"`
   on its root), so the pane on the Wall has no light still.
 
+- Review 23-spec-keeper, B122 (a budget under a changed Given): S-C1-01's 200 ms on the Wall page is asserted with the galaxy at `?ratio=0.5`; at the real ratio B122 measured 215-238 ms. Yours to decide whether a software-GL VM at 0.5 is a valid stand-in, or the real screen's measurement (below) is the proof.
+- Review 23-spec-keeper, B109 against D150/D287: the room keeps its own copies of the C1 constants (T47 removes them); until then it departs from D287 ("imported by the room for its own times").
+- Review 23-spec-keeper, B121 and S-C1-02: the scenario says "taps the map at (400, 480) … camera moved to the tap", the Wall's tap rule only flies to a site (the galaxy's empty sky has no fly-to-tap). Built: the literal tap checks `open`/`explore`, the camera step taps the held site. Rewrite the step or ask the Wall for it.
+- Review 23-spec-keeper, B113 and S-C1-26: the scenario names the room's outbound fault hook (stand-ins.md §1.1) but §1.2 has no delay verb, only `/drop`; built with a page-side `routeWebSocket` hold. Add `POST /hold {type, ms}` to §1.2 or rewrite the Given.
+- Review 23-spec-keeper, selectors: tests read the conversation's text through `.ck-convo`, which the spec's "Selectors tests use" table does not name (`[data-cockpit-conversation]` also holds the header and input row). Name an element for it, or define "the conversation" as one under it.
+- Review 23-spec-keeper, screens.md §9.2 against slices.md §3.1: §9.2 says "M6 with C3; M1, M5, M7 with Speak; M2-M4 and M8 with Show", S-SCR-35 (C1) calls `flyTo`, `camera()`, `screenOf`, `nodeAt`. T16b built M1, M3, M5, M6 now (slices.md §3.1, the later and more specific); §9.2's table needs its D line.
+- Review 23-spec-keeper, B127: the handle maps `builder-a` to the Map's `builder:builder-a` for M5/M6; every later camera test (C3, C4) inherits this id form. Confirm or change the rule.
+
 ## Measured on the real screen
 
 - C1: not measured yet
+- B7 on the Wall page at full ratio (`?ratio=1`, review 23-spec-keeper): the pane in place within 200 ms of the tap — the owner's.
 
 ## Reviews
 
 - reviews/18-owner.md: 6 findings; 2 became tasks (T45 bearer redaction, T46 flaky test); the lockfile cause went into T15's line (the fix is a step of T15, not a new task); 3 `## Later` lines, 3 `## For the owner` lines; dropped: reordering (finding 2, spec's order stands), B95 (fine), two-CLOSE buttons (spec D117).
+- reviews/23-spec-keeper.md: 11 findings; 2 became tasks (T47 constants, findings 2+3; T48 timelines, findings 1+6); 3 `## Later` lines (5, 8's selector guess, 9); 7 `## For the owner` lines (1's B122, 2's B109, 4, 7, 8's `.ck-convo`, 10, 11); the `worstGapMs` check went into T48.
 
 ## Scores
 
@@ -340,5 +356,7 @@ What the slice itself says waits; nothing else moved here.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 18 | owner | pane | 2 | 1 | 4 | 2 | 2 | 5 |
 | 18 | owner | room | 7 | 7 | 6 | 4 | 6 | 6 |
+| 23 | spec-keeper | pane | 6 | 6 | 7 | 6 | 4 | 7 |
+| 23 | spec-keeper | room | 6 | 7 | 6 | 5 | 6 | 7 |
 
 ## Morning
