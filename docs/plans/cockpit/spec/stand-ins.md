@@ -100,7 +100,7 @@ How older phrases in the spec map onto these:
   fakes the page's clock advances both with one helper, `advance(ms)`: `page.clock.runFor(ms)`,
   then `POST /clock {"advanceMs":ms}`, then the fake speech's clock (§3.1). The fake agent always
   runs in real time (§2.3), so a scenario switches to `manual` only after the agent steps it waits
-  for have happened, or uses a script with no timed steps (S-C1-17's "ignore the interrupt").
+  for have happened, or uses a script with no timed steps (S-C1-17's `ignore` turn).
 
 ### 1.2 Control API (T32)
 
@@ -211,9 +211,10 @@ One JSON object. `start` says how the process starts; `turns` are matched to pro
 - **`onInterrupt`** (turn field): `{"endAfterMs":300}` (default): on the interrupt request the fake
   writes its `control_response` with `request_id` (`still_queued` and `cancelled` as below), drops
   the turn's remaining steps, and `endAfterMs` later writes the `result` `error_during_execution`
-  with `terminal_reason` `aborted_streaming`. `"ignore"`: it answers nothing and plays on.
-  `"ignore-sigint"`: as `ignore`, and `SIGINT` is ignored too, so only `SIGTERM` ends it (S-C1-17's
-  forced stop, `protocols.md` §11.6's 8.0 s row).
+  with `terminal_reason` `aborted_streaming`. `"ignore"`: it answers nothing and plays on
+  until the room's 5.0 s `SIGINT` ends the turn (S-C1-17's forced stop).
+  `"ignore-sigint"`: as `ignore`, and `SIGINT` is ignored too, so only the 8.0 s `SIGTERM` ends it
+  (`protocols.md` §11.6's 8.0 s row and §13's stop test).
 - **`queued`** (turn field, for a prompt that arrives while this turn runs; research Q8, pending
   Q-O1): `next-tool-end` (default) takes it after the running tool calls end, with a
   `message_start` whose `user_message_uuids` holds its uuid, then plays its matched turn's steps as
@@ -444,7 +445,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | Script | Kind | Scenarios | Holds |
 | --- | --- | --- | --- |
 | `c1-render` | agent | S-C1-03..12, S-C1-30, S-C1-31, S-C1-35, S-C1-42 | §2.2's example; S-C1-05's 4-column and 9-column tables; S-C1-06/07's three `fleet` calls (400 ms each, `hv2` `isError`) then `ci` 300 ms; S-C1-08's 40-line `sh` block; S-C1-09's markup; S-C1-10's 30 lines over 6 s; S-C1-11's marks; S-C1-30's two `denied` `Bash` steps and S-C1-31's `Grep` and `denied` `WebFetch`; S-C1-35's `Read`, `runs`, `lanes` and `ci` calls with odd input; S-C1-42's `look-alike` reply |
-| `c1-typing` | agent | S-C1-14..18, S-C1-27..29, S-C1-32, S-C1-33, S-C1-43 | a short `done` turn per prompt; S-C1-16's text, 3 s `runs` call and `next-tool-end` steer turn; S-C1-27's 19.5 s tool call with `endAfterMs` 300; S-C1-28's two turns (`ignore-once`, `ignore`); S-C1-29's 19.5 s tool call, then text, taking a queued prompt at the tool's end; S-C1-17's two turns (`endAfterMs` 300, and `ignore-sigint`) |
+| `c1-typing` | agent | S-C1-14..18, S-C1-27..29, S-C1-32, S-C1-33, S-C1-43 | a short `done` turn per prompt; S-C1-16's text, 3 s `runs` call and `next-tool-end` steer turn; S-C1-27's 19.5 s tool call with `endAfterMs` 300; S-C1-28's two turns (`ignore-once`, `ignore`); S-C1-29's 19.5 s tool call, then text, taking a queued prompt at the tool's end; S-C1-17's two turns (`endAfterMs` 300, and `ignore`) |
 | `c1-errors` | agent | S-C1-19, S-C1-20 | an `exit` 1 mid-text; one turn per error row (`failed` `overloaded`, `step-limit`, `failed` `boom` plus a 300-character `detail`, `not-logged-in`, two `retry` steps then text) |
 | `one-bridge` | agent (`--dialect bridge`) | S-ONE-08..10 | match `wiki`: `search_wiki` call 100-400 ms, text, `done`; match `files`: `shell` call 100-400 ms (S-ONE-10's second case swaps it for a `denied` step), text `Three files.`, `done`; S-ONE-09 sets `start.allowlist` (`null`, then `["mcp__laneboard__*","shell"]`) by rewriting `script.json` |
 | `c1-login` | agent | S-C1-37, S-C1-38 | `start.login` `ok` (tests rewrite it to `failed`, `hang`), one `done` turn for any prompt in 0.5 s; S-C1-38's second case adds `startFailures` 3 and `startStderr` `claude: command not found` |

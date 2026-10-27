@@ -301,7 +301,7 @@ when no value applies.
 | `[data-turn-label]` | none (text `YOU · 07:02`, `AGENT · 07:02`) | a label row, ruled 2 px `--line-strong` (D227) | `c1-talk.md` §3 |
 | `[data-turn-age]` | none (text `0:03`, `1:48`, `1:02:03`) | a turn's age in its `AGENT` label row, from 3 s (D235) | `c1-talk.md` §9 |
 | `[data-reply]` | none | one reply's blocks built from `md.js`; nothing inside uses `--line-strong` (D227) | `c1-talk.md` §3 |
-| `[data-turn-stopped]` | none (text `STOPPED AT 07:03`) | the stopped line under a stopped turn | `c1-talk.md` §8 |
+| `[data-turn-stopped]` | none (text `STOPPED AT 07:03` or `STOPPED AT 07:03 (FORCED)`, D262) | the stopped line under a stopped turn | `c1-talk.md` §8 |
 | `[data-cockpit-unsupported]` | none (text `This browser is too old for the cockpit. …`) | the pane's text in a browser below the floor (D250) | `c1-talk.md` §1.2 |
 | `[data-turn-error]` | `not-sent`, `agent-exited`, `agent-down`, `not-logged-in`, `step-limit`, `failed` | an error line in a turn | `c1-talk.md` §10 |
 

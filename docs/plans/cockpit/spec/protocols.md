@@ -448,7 +448,7 @@ onto these are §11.4; this is what the screen consumes (T29's list).
 | `state` | `code` | Extra fields | Line |
 | --- | --- | --- | --- |
 | `done` | — | — | none |
-| `stopped` | — | `forced` (bool) | `STOPPED AT 07:03`, `(forced)` (D33) |
+| `stopped` | — | `forced` (bool) | `STOPPED AT 07:03`; with `forced:true` `STOPPED AT 07:03 (FORCED)` (D33, D262) |
 | `error` | `agent-exited` | — | E2; the room later sends `status` with `agent-back` |
 | `error` | `agent-down` | `detail` | E3 |
 | `error` | `not-logged-in` | — | E4 |
@@ -1444,7 +1444,8 @@ Q-O24 for transcripts).
   nothing and a log line.
 - **The turn test**: the bridge with a child that replays §13.1's native lines on a schedule; the
   test asserts the room-link messages and their `seq` order of §10 from 2.97 s on.
-- **The stop test**: a child that ignores `interrupt` and `SIGINT`; the test asserts `stopping` at
+- **The stop test**: a child that ignores `interrupt` and `SIGINT` (the fake agent with
+  `"onInterrupt":"ignore-sigint"`, `stand-ins.md` §2.4); the test asserts `stopping` at
   0.0 s, `turn.end` `forced:true` at 5.0 s (±0.1 s, fake clock), `SIGTERM` at 8.0 s and a `--resume`
   start after it.
 - **The store test** (`node:test`, no process, a temp dir): §11.7.1's start steps 1-7 one by one: a torn last line is skipped, a turn without `end` comes back as `agent-exited` with its queued item `cancelled`, a 31-day-old turn and `old/` file are gone, the rewritten file has one line per turn, its mode is 0600.

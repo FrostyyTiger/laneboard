@@ -933,7 +933,8 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
 - **`STOP`** (or `Ctrl+C` on a paired keyboard with the input empty): `data-turn="stopping"` within
   0.1 s; the room asks the bridge to interrupt with `cancelQueued` (`protocols.md` §11.6). The turn
   ends when the bridge reports its end; if that has not happened 5 s after the tap, the room forces
-  it (for Claude Code: `SIGINT`, research Q2) and the line reads `Stopped at 07:03 (forced).`.
+  it (for Claude Code: `SIGINT`, research Q2) and the stopped line reads `STOPPED AT 07:03 (FORCED)`
+  (D262).
   Either way `READY` by 5.5 s. Every sent prompt and every `STOP` is one line in the room's
   audit log, without the words (`cockpit.prompt`, `cockpit.stop`, `screens.md` §6.4).
 - **Queued prompts at a `STOP`.** Each prompt the receipt lists as cancelled gets
@@ -945,7 +946,9 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
   the turn and `RETRY` sends it again (two taps more, D32's overrule names the other way).
 - **What a stopped turn looks like** (D33): its text stays exactly as it was at the tap; nothing
   that turn sends later is drawn (the room's log keeps it). Under it, 16 px caps
-  `--text-3` with the cockpit's rule (§3, D227), `[data-turn-stopped]`: `STOPPED AT 07:03`. A tool line still running loses its `●` and ends in ` · stopped`.
+  `--text-3` with the cockpit's rule (§3, D227), `[data-turn-stopped]`: `STOPPED AT 07:03`, or
+  `STOPPED AT 07:03 (FORCED)` when `turn.end` has `forced:true`. The DOM holds exactly that string,
+  in capitals as written; computed `text-transform` is `none` (D262). A tool line still running loses its `●` and ends in ` · stopped`.
   The `▍` cursor goes.
 - **Voice** (C2): pressing the talk button during a turn stops nothing; listening starts (D29);
   the send at release is a `SEND` during a turn as above (`c2-voice.md` §2).
@@ -1203,10 +1206,16 @@ Given a running turn and an empty input, the slot reads `STOP`,
 When the owner taps `STOP` at t = 0,
 Then by t = 0.1 s `data-turn="stopping"`; with the fake agent ending the turn at 0.3 s the reply
 shows `STOPPED AT HH:MM` and `READY` by 0.4 s, the slot reads `SEND`.
-And with the fake agent scripted to ignore the interrupt, at t = 5 s the room forces it, the line
-reads `Stopped at HH:MM (forced).` and the header `READY` by t = 5.5 s.
-Test: Playwright with a fake clock; two fake-agent scripts; the stand-in records the forced stop
-(signal) in its log.
+And with the fake agent's turn set to `"onInterrupt":"ignore"` (second run), nothing ends the turn
+before t = 5.0 s; at t = 5.0 s the room sends `SIGINT`, which ends the fake's turn, and the
+stopped line reads `STOPPED AT HH:MM (FORCED)` and the header `READY` by t = 5.5 s. No `SIGTERM`
+follows (the 8.0 s row of `protocols.md` §11.6 is the stop test of §13 there, with
+`ignore-sigint`).
+Test: Playwright with a fake clock; script `c1-typing` (`stand-ins.md` §5), its two S-C1-17
+turns (`endAfterMs` 300, then `ignore`); assert `[data-turn-stopped]`'s `textContent` equals
+`STOPPED AT HH:MM` (first run) and `STOPPED AT HH:MM (FORCED)` (second run), with `HH:MM` from the
+page's clock and computed `text-transform` `none`; the fake agent's log (`stand-ins.md` §2.6) has
+one `interrupt` line with `cancelled` `null`, one `signal` `SIGINT` line and no `SIGTERM` line.
 
 ### S-C1-18 A prompt the room never confirms is not sent again on its own
 Given the stand-in room scripted to accept the socket but drop the next prompt without a
