@@ -116,6 +116,14 @@ its file names).
 - [ ] T100 (2) `c1-talk.md` §11 / S-C1-22: say once whether the `NEW` bar sits in the 80 px status line (D54) or 48 px; `KEEP` at the right end, `START` 16 px left of it, both 48x96; S-C1-22 asserts order and gap (merges with T44) — review 63-touch.md finding 13
 - [ ] T101 (3) Sketches (with T47, T70, T82): `c3-ask.html` draws the finger point and the menu with its bottom-left 24 px right of and above it (§9.3) and one name (`vm-b`) in head and chip; `c4-canvas.html` as T82; `c1-pane.html`, `screens-split.html` as T47 — review 63-touch.md finding 14
 - [ ] T102 (2) Extend T64 (review 63-touch.md finding 4): a press on the `off` talk button shows the pressed state and `Sending and voice come back with the room.` at 18 px `--text-1` for 5 s; extend T41/T44 for finding 9 (the `SCREEN` sheet copies `c3-see.md` §9.3's `CANCEL` row and outside-tap rule)
+- [ ] T103 (2) `slices.md` §1 "Needs first" and the morning report's "Not written": Jobs needs `c5-c6.md` (T14, the confirm card), so T14 blocks slice Jobs; once Q-O30 is answered write §3.7 and D115 for it (b: listed scripts may touch other machines, confirm card to create and cancel, one audit line per fire; a: as written) — review 73-owner.md finding 3
+- [ ] T104 (2) The C2 slice's done-when (`slices.md`) names the text-floor test (no instruction under 18 px, T43) and T84; do T43 and T84 before C2 — review 73-owner.md findings 4, 8
+- [ ] T105 (2) The morning list (`QUESTIONS.md` top) points at the shots of `c1-pane.html` and `screens-split.html` next to Q-O11 and Q-O22 once T47/T25/T82/T101 have redrawn them — review 73-owner.md finding 5
+- [ ] T106 (2) `slices.md` C1 and C2 done-whens each end with one measured run on the real screen, real speech, real agent: B2/B3/B9 pasted into PROGRESS.md (a number for the owner, not a test gate); links to T67 — review 73-owner.md finding 6
+- [ ] T107 (2) `c2-voice.md` §8, S-C2-13 Given and D48: default `cockpit.stt.language` is `["en", "de"]` so the language button shows out of the box (`spec-input.md`: "a DE/EN choice in the UI"); a one-language user sets one code — review 73-owner.md finding 7
+- [ ] T108 (2) `QUESTIONS.md`/`DECISIONS.md`: close Q-O6 as a D-line (a, strike to reopen; `product.md` "never an empty screen" decides it) so the morning list is thirteen plus Q-O30; add to Q-O11 c) the sentence "the marker is a static 8 px dot on the talk button, no sound; loudness beyond that is Q-O5" — review 73-owner.md findings 9, 10
+
+Priority note (round 74, review 73-owner.md findings 1, 2): NO NEW REVIEW AND NO NEW CHAPTER until the "before a C1 night" list in `slices.md` §7 is empty. Order: T85 and T88 first (also: the hint becomes `SENDING ADDS TO THE ANSWER` or goes, S-C1-16 gets the `· QUEUED` label and a fake-agent `next` priority; `c1-talk.md` §8's first line names d)), T57, T86, T40/T94, T96/T97/T100, T89/T90/T92, T33/T34/T36/T76/T93, T68, T91; then the sketch round (T47, T25, T82, T101, T70); then C2's list (T43, T84, T107, T42, T95, T64, T102, T69, T58, T78).
 
 Priority note (round 53, review 52-owner.md finding 1): FREEZE NEW CONTENT. T12, T13, T14, T17 (beyond
 what C1 needs), T19 wait. Order for the remaining rounds: T55 (question list, now including finding 3
@@ -162,6 +170,7 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 ## Reviews
 
+- round 74 triage of `reviews/73-owner.md`: 10 findings plus a decided-where-it-should-not list. Tasks: 3 → T103, 4/8 → T104 (T43, T84 stay), 5 → T105 (T47, T25, T82, T101 stay), 6 → T106, 7 → T107, 9/10 → T108, 1/2 → priority note (T85, T88 first; freeze). Questions: 3 → Q-O30 (new). Covered: 1's rewrite is T85/T88 (hint wording added to the note), 4 and 8 are T43 and T84 (ordering only). 8 findings became tasks or questions; 0 dropped, 2 only reorder existing tasks (1, 2). Scores complete 4, consistent 4, simple 4: the open C1 list is the gap, not new content.
 - round 64 triage of `reviews/63-touch.md`: 14 findings plus a decided-where-it-should-not list. Tasks: 1 → T94 (T40), 2/12 → T95, 3 → T96, 4/9 → T102 (T64, T41, T44), 5 → T97, 6 → T98, 8 → T99, 13 → T100, 14 → T101. Questions: finding 2 → option d in Q-O19 (recommendation now a+b+d). Already covered: 7, 10, 11 (T45). 10 findings became tasks or questions; 3 dropped as tracked (7, 10, 11). Scores complete 4 and consistent 4: the touch fixes T40-T45 are still open and the newer files (C3 §9, C4) have the same gaps.
 - round 60 triage of `reviews/59-implementer.md`: 14 findings plus a contradictions list. Tasks: 1/8 → T86, 2 → T87, 3 → T88 (T85 stays), 4/5 → T89, 6 → T90, 7 → T91, 9/10/14 → T92, 11/13 → T93. Questions: 1 and the D92/D89/D91 contradictions → Q-O29 (new). Already tracked: 12 (T26, T27, T28, T31, T32, T33, T34), Q-O24 retention (exists, T91 writes for it), spec-input §7.1 split (T85). 11 findings became tasks or questions; 12 dropped as tracked. Scores complete 4, consistent 4: protocols.md is the first buildable part; the remaining gaps are the room's process, stand-ins and close codes.
 - round 53 triage of `reviews/52-owner.md`: 11 findings plus a decided-where-it-should-not list. Tasks: 1 → priority note (freeze new content), 3 → extended T55, 5/11 → T80, 6 → T81, 7 → T82 (T25, T47, T70 cover the rest), 8 → T83, 10 → T84. Questions: 4 → option d and a caution in Q-O1 plus research question Q8, 6 → date note in Q-O23. Already covered: 2 (T62 recommends exactly this), 9 (T43; Q-O18 goes to the top via T55). 9 findings became tasks or questions; 2 dropped as covered. Scores complete 3 and simple 3: the spec is wide, not yet buildable.
@@ -192,6 +201,7 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 | 52 | owner | 8 | 3 | 4 | 7 | 5 | 3 | 7 |
 | 59 | implementer | 8 | 4 | 4 | 5 | 6 | 5 | 6 |
 | 63 | touch | 8 | 4 | 4 | 7 | 6 | 5 | 5 |
+| 73 | owner | 8 | 4 | 4 | 7 | 6 | 4 | 7 |
 
 ## Morning
 

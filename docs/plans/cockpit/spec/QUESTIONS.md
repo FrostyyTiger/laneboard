@@ -58,6 +58,23 @@ Recommendation: a) — "look freely, change only with a yes" (`spec-input.md` §
 
 Answer: (open)
 
+## Q-O30 May a scheduled job touch another machine, before C6
+
+From `reviews/73-owner.md` (3). Spec: `slices.md` §3.7 (slice Jobs), D115. `spec-input.md` §3's
+example is shutting something off in three hours.
+
+- a) As written: a job only reminds, or runs a script from `cockpit.jobs.scripts` on the room's own
+  machine; a job that changes another machine waits for C6. The agent says
+  `I can remind you at 15:10, but stopping builder-b needs the act step (C6).`
+- b) A script listed in `cockpit.jobs.scripts` (the owner's own config, reviewed in the infra repo)
+  may touch other machines; a job is created and cancelled only through the confirm card, one audit
+  line per fire. The agent says `I can run stop-builder-b at 15:10. Confirm?`.
+
+Recommendation: b) — a listed script is already the owner's yes; a) leaves only an alarm clock and
+C6 has no date. Needs the confirm card of `c5-c6.md` (T14, unwritten), which blocks slice Jobs.
+
+Answer: (open)
+
 ## Q-O21 Pairing in C1, or C1 behind what the board already trusts
 
 Security, blocks C1. From `reviews/36-skeptic.md` (3), `40-security.md` (3). Spec: `screens.md` §6,
