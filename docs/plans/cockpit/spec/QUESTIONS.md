@@ -147,6 +147,8 @@ Security. Needed in C1 only if Q-O21 is a) or c), or Q-O27 is a). From `reviews/
 Recommendation: a) — nobody off the box, and not the agent on it, can add a screen; `unpair` is one command.
 One-box cost: a) needs the agent on a second unix user and one sudo rule (`single-machine.md` §3,
 D214, D215); on a one-user box pairing is refused, and whether the room starts at all is Q-O36.
+With a): from another machine the owner, or the owner's laptop agent, runs `pair` over SSH as the
+room's user and reads back the request block before the yes (`screens.md` §6.1).
 
 Answer: (open)
 
@@ -288,6 +290,7 @@ C4. From `reviews/21-owner.md` (8). Spec: D9, S-SCR-01.
 - b) Collapses to a 96 px strip with a card count when idle, grows when a card arrives.
 
 Recommendation: b) — the Wall is "the one place to see" the fleet; half-empty black costs it 44 %.
+The spec is still written for a) (D9, `c4-show-canvas.md` §7.1); T130 writes b).
 
 Answer: (open)
 

@@ -86,11 +86,13 @@ the idle rules above stay the same.
 
 ## 3. One screen or two
 
-- **Two screens** (the owner's case, `spec-input.md` §2): screen 1 runs `wall` ("Idles on the
-  Wall: it tours the fleet, flies to trouble"), screen 2 runs `canvas` ("Where the owner talks to
-  the agent and the agent shows things"). Both show the same conversation (plan §2).
 - **One screen** gets both: `split` side by side, or `switch` (`spec-input.md` §2: "A user with one
-  screen gets both, split or switching").
+  screen gets both, split or switching"). One 1368x912 tablet in `split` is the main path: every
+  scenario that does not name another size or layout runs there.
+- **Two screens**: screen 1 runs `wall` ("Idles on the Wall: it tours the fleet, flies to
+  trouble"), screen 2 runs `canvas` ("Where the owner talks to the agent and the agent shows
+  things"); `spec-input.md` §2 names these roles, not a count. Both show the same conversation
+  (plan §2). How many screens the owner has today is asked in Q-O9.
 - **More screens**: each picks its layout; any screen can be tour, explore or canvas.
 
 Where things land:
@@ -104,6 +106,10 @@ Where things land:
   stay in sight (plan C1: "so the agent can point at the view behind it"; D117, pending Q-O12; rects
   in `c1-talk.md` §1). In `switch` a tap on `CHAT` or a press on the talk button on the wall half
   flips the screen to the canvas.
+- A job's countdown card has `CANCEL JOB`; the tap opens the confirm card (`c5-c6.md`) with what,
+  where and when, and nothing is cancelled before its yes; each cancel is one audit line. Removing
+  a card (`✕`) never stops a job (`c4-show-canvas.md` §8.1; `spec-input.md` §6: "Anything that
+  changes state shows a confirm on the screen; every action is logged").
 - In `switch`, a card that arrives while the wall is shown does **not** flip the screen. The switch
   button shows a count instead (S-SCR-07).
 
@@ -483,6 +489,12 @@ every process on a box `local`. So `local` alone cannot be the test: one injecte
   already trusts on its ingress (`docs/fleet/auth.md`); `browser` is the `User-Agent` cut at 100
   characters with `…`. Only `y` or `yes` (any case) approves. With no terminal on stdin the CLI
   needs `--yes`, else it exits 1 with `not paired: no terminal to ask (use --yes)`.
+- **From another machine** the owner, or the owner's own coding agent on a laptop, runs the same
+  command over SSH as the room's user: `ssh -t cockpit laneboard cockpit pair K7M-4QX` asks y/N as
+  above; without `-t` there is no terminal and it needs `--yes`. Either way the CLI first prints
+  the request block above, which is what that agent reads back to the owner before approving
+  (S-SCR-14). The peer uid is the room's user, so the check passes; the audit line is the same
+  (pending Q-O10).
 - **Each refusal and each change is one audit line** in the room's log (action, name, peer uid,
   outcome; the format is §6.4's). A refusal issues no token and changes no code: the code
   stays open for the owner.
