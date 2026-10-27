@@ -51,12 +51,20 @@ Notes for every builder round (planner, round 1):
   `COVERED` (no flight, no back). CDP check on the large demo (`shots/r3-t1-taps`): plate corner and clock taps
   change nothing, a tap on the `STORAGE` hero opens `ROOM · IN HV2` with the camera kept. Seen while filming, for
   T9: the map's own `■ STORAGE` label still shows beside a planet sheet whose hero names it.
-- [ ] T2 (§7 Night 4 0a; was night 3's T38, r51-touch galaxy 4, fx-beacon 1) [ui] [variant:galaxy] The loudest
+- [x] T2 (§7 Night 4 0a; was night 3's T38, r51-touch galaxy 4, fx-beacon 1) [ui] [variant:galaxy] The loudest
   thing is a target: a tap in the fleet line's box at the overview (and under a sheet, where T1 keeps it from being
   empty sky) opens its subject (the site, then the planet); `+N MORE` opens nothing yet; with `fx=beacon` on, the
   pillar's screen segment (foot to tip, 27 px wide) counts as its site's target in `touch.js tapPoints` — done when: a
   page test taps inside the banner box and sees the subject's site opened, and a test with `fx=beacon` finds a point
-  on the pillar's top hits the site.
+  on the pillar's top hits the site. (commit 20ec4f8) Builder r7: frame.js `data-subject`, hud.js `targets()` gives
+  the line as a `step` row (its `+N more` first, no subject), touch.js `coverHit(…, open)` opens a step row's site
+  first and its planet only while that site is `place.site`. The pillar: scene.js `beams()`, camera.js `screenAt`,
+  touch.js `beamSegments`; "27 px wide" read as the finger's reach (`TAP.radiusPx` 27) either side of the segment,
+  the same disc as everywhere else, swept foot to tip. CDP check on the large demo with `fx=beacon`
+  (`shots/r7-t2-taps`): `+3 more` changes nothing, a tap on `HV2 · STORAGE` flies to HV2 with its sheet, a tap 6 px
+  under the pillar's tip (278 px above the star) opens HV2. Seen: under HV2's own sheet the line echoes the plate and
+  drops out (T20), so there the planet is reached by the plate's hero (T1), not the line. Film `shots/r7-galaxy`
+  unchanged from r3/r4 (13 fps under SwiftShader as before; no per-frame work added, picks run on a finger's down).
 - [ ] T3 (§7 Night 4 0a; was night 3's T37, r51-touch galaxy 3) [ui] [variant:galaxy] Every trouble planet can be
   picked: in an open system (41 members in HV1 of the large fixture, all with a neighbour nearer than the 54 px disc)
   a tap whose disc holds two or more members fans them out on a ring of 48 px targets round the finger for the next
