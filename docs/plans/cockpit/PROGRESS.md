@@ -263,8 +263,8 @@ Written by the final round (71), 2026-10-27 05:02.
 |---|---|---|
 | `spec/sketches/c1-pane.html` | `$RUN_DIR/shots/63-c1-pane/` | yes: T47, T70, T101 |
 | `spec/sketches/c2-states.html` | `$RUN_DIR/shots/63-c2-states/` | yes: T95 (Q-O19 d) |
-| `spec/sketches/c3-ask.html` | `$RUN_DIR/shots/63-c3-ask/` | yes: T101 |
-| `spec/sketches/c4-canvas.html` | `$RUN_DIR/shots/63-c4-canvas/` | yes: T82 |
+| `spec/sketches/c3-ask.html` | `$RUN_DIR/shots/99-c3-ask/` | no (T101, round 99); the opener's `CLOSE` overflows its 48 px box: T126 (a) |
+| `spec/sketches/c4-canvas.html` | `$RUN_DIR/shots/99-c4-canvas/` | no (T82, T101, round 99) |
 | `spec/sketches/screens-room-down.html` | `$RUN_DIR/shots/63-screens-room-down/` | yes: T70 (since T52) |
 | `spec/sketches/screens-split.html` | `$RUN_DIR/shots/63-screens-split/` | yes: T25, T82 |
 
