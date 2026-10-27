@@ -803,3 +803,39 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   an idle VM and over 200 ms under the other agents' load (S-C1-01 failed at 231.8 ms); now it is
   in place about 120-150 ms after the tap — spec: `c1-talk.md` §2, README B7 — overrule: drop
   `startSlideNow`; B7 then needs a faster machine or a wider row (the owner's).
+- B143 (T19) md.js keeps a paragraph's source lines as lines (`\n` runs, drawn `pre-wrap`), not
+  CommonMark's soft breaks joined by a space; a `tail` that continues the paragraph above
+  (`joins: true`) is drawn inside that paragraph on its own line, so the line being written does
+  not jump 16 px when its newline arrives; `parse(text, {done})` reads the last line whole once the
+  block is complete (its `text.block`, the turn's end, a settled snapshot turn) — because an agent's
+  line breaks carry its layout (S-C1-10's 30 lines), and §3 "Streaming" names `tail` only for a line
+  "with no newline yet" — spec: `c1-talk.md` §3 "Streaming", "The renderer" — overrule: join soft
+  breaks in `parse`; draw a `tail` as its own block.
+- B144 (T19) The streaming cursor `▍` (B137) moves from the text block's box to the element holding
+  its last character (the paragraph, the list item, the code line, the last table cell; while a long
+  code block is folded, its 12th line); S-C1-04's recorder reads the one element with a `▍` `::after`
+  and checks it holds the reply's last text node — spec: `c1-talk.md` §3 "Streaming" — overrule:
+  `drawText()`'s returned host in `public/js/cockpit/reply.js`.
+- B145 (T19) The renderer's DOM half is `public/js/cockpit/reply.js` (`drawText`), md.js stays pure;
+  a heading is a `div role="heading"` (`aria-level` 3-5), a list `role="list"` of `div`s with the
+  marker in a 32 px min-width box and 8 px to its text (a `10.` marker is wider than the 32 px hanging
+  indent), `○` grey as `●` (`--text-2`), a link whose URL has no http(s) host draws its text with no
+  ` (host)`; a table's first column is fixed on `--bg-elevated` only while the table is wider than its
+  block (`ck-md-wide`) — spec: `c1-talk.md` §3 "What a reply may contain" — overrule: `reply.js`,
+  `.ck-md-*` in `cockpit.css`.
+- B146 (T19) S-C1-42's second case (the same turn after S-C1-18's E1, the `[data-turn-error="not-sent"]`
+  line) moves to T23, which builds E1; T19's test has the first case in both themes — because the
+  not-sent line does not exist before T23 and a skipped step there is not a wait §3.1 names —
+  spec: `c1-talk.md` S-C1-42, `slices.md` §3.1 — overrule: build E1 earlier.
+- B147 (T19) A code block is as wide as its longest line, the folded lines included (the lines'
+  `min-width` from `--ck-code-ch` set through CSSOM), so a folded block scrolls sideways the same as
+  an open one; S-C1-08's 200-character line is line 17 of 40, folded at first — spec: `c1-talk.md`
+  §3 "Code", S-C1-08 — overrule: drop the min-width; S-C1-08 then checks the sideways scroll after the tap only.
+- B148 (T19) S-C1-42's "every element under `[data-cockpit-conversation]`" is read as the conversation
+  that scrolls (`.ck-convo`): the header's and input row's buttons carry their 1 px `--line-strong` as
+  tappables (README "Touch") and are not lines in the conversation — spec: `c1-talk.md` S-C1-42, §3
+  "The cockpit's own lines" — overrule: the test in `e2e/cockpit/c1-render.spec.mjs`.
+- B149 (T19) md.js's regexes avoid quote and backtick characters (`\x60`, a Set for a URL's trailing
+  punctuation) because `test/frontend.test.mjs`'s source scanner does not know regex literals; its
+  linear-time rule (D146) also covers inline scanning: a closer not found ahead is not looked for again —
+  spec: D146 — overrule: none needed.

@@ -12,7 +12,9 @@ const doc = () => makeDocument();
 const kids = (n) => n.children;
 const replyOf = (v) => kids(v.node).find((c) => c.attrs?.['data-reply'] !== undefined || c.className === 'ck-reply');
 const labels = (v) => kids(v.node).filter((c) => c.className === 'ck-label');
-const cursorOn = (v) => (replyOf(v)?.children ?? []).map((b) => b.classList.contains('ck-streaming'));
+// The cursor sits on the element of the block's last character (md.js's blocks, reply.js).
+const hasCursor = (n) => n.classList.contains('ck-streaming') || n.children.some(hasCursor);
+const cursorOn = (v) => (replyOf(v)?.children ?? []).map(hasCursor);
 
 test('a prompt drawn at the tap reads YOU · HH:MM · SENDING until the echo, then the turn has its id', () => {
   const v = createTurn(doc(), { clientId: 'p-3c1e0b2a', prompt: 'how did the night go?', at: Date.parse(AT), delivery: 'sending' });
@@ -77,6 +79,7 @@ test('blocks sit by blockIndex whatever the order they come in, the cursor on th
   assert.deepEqual(replyOf(v).children.map((b) => b.textContent), ['first', 'third']);
   assert.deepEqual(cursorOn(v), [true, false]);
   v.end({ state: 'done' });
+  v.draw(); // the pane's next frame
   assert.deepEqual(cursorOn(v), [false, false], 'turn.end takes the cursor away');
   v.delta({ blockIndex: 1, text: ' late' });
   v.draw();

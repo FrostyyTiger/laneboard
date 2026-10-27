@@ -11,10 +11,12 @@
 //   t.end(msg)                        // turn.end: the cursor goes
 //   t.draw()                          // the text changed since the last draw goes to the DOM
 //
-// The reply's text is plain lines until md.js (T19); tool lines come with T20.
+// The reply's text is md.js's blocks drawn by reply.js (T19); tool lines come with T20.
 // `draw()` is the pane's once-per-frame flush (c1-talk.md §3: drawn at most once
 // per animation frame), so `delta()` only keeps the text.
 import { hhmm } from '../core/cockpit-time.js';
+import { parse } from '../core/md.js';
+import { drawText } from './reply.js';
 
 const el = (doc, tag, cls, attrs = {}) => {
   const n = doc.createElement(tag);
@@ -97,31 +99,48 @@ export function createTurn(doc, turn) {
       reply = el(doc, 'div', 'ck-reply', { 'data-reply': '' });
       box.append(labelRow(doc, 'AGENT', at), reply);
     }
-    b = { node: el(doc, 'p', 'ck-block'), text: '', drawn: '' };
+    // `done`: the block is complete (its text.block, the turn's end), so its last line is a
+    // whole line; `ui`: the block's own state across redraws (reply.js).
+    b = { node: el(doc, 'div', 'ck-block'), text: '', drawn: null, done: false, drawnDone: false, host: null, ui: { expanded: new Set() } };
     blocks.set(i, b);
     const after = [...blocks.keys()].filter((k) => k > i).sort((x, y) => x - y)[0];
     reply.insertBefore(b.node, after === undefined ? null : blocks.get(after).node);
     return b;
   }
 
+  /** The cursor follows block `i` (null: no cursor); placed on its last character's element by draw(). */
   function follow(i) {
-    if (streaming !== null && streaming !== i) blocks.get(streaming)?.node.classList.remove('ck-streaming');
     streaming = i;
-    if (i !== null) blocks.get(i)?.node.classList.add('ck-streaming');
   }
 
   const texts = (turn.items ?? [])
     .filter((it) => it?.kind === 'text' && typeof it.text === 'string')
     .sort((a, b) => (a.blockIndex ?? 0) - (b.blockIndex ?? 0));
-  for (const it of texts) blockOf(it.blockIndex ?? 0, replyAt(turn)).text = it.text;
+  for (const it of texts) {
+    const b = blockOf(it.blockIndex ?? 0, replyAt(turn));
+    b.text = it.text;
+    b.done = true;
+  }
   // A snapshot taken while the reply streams: the cursor on its last block (c1-talk.md §3).
-  if (!ended && turn.state === 'answering' && texts.length) follow(texts.at(-1).blockIndex ?? 0);
+  if (!ended && turn.state === 'answering' && texts.length) {
+    follow(texts.at(-1).blockIndex ?? 0);
+    blocks.get(streaming).done = false;
+  }
 
+  let cursorAt = null; // the element holding `ck-streaming`
   function draw() {
     for (const b of blocks.values()) {
-      if (b.drawn === b.text) continue;
-      b.node.textContent = b.text;
+      if (b.drawn === b.text && b.drawnDone === b.done) continue;
+      // md.js on the block's whole text, at most once per frame (c1-talk.md §3, D146).
+      b.host = drawText(doc, b.node, parse(b.text, { done: b.done }), b.ui);
       b.drawn = b.text;
+      b.drawnDone = b.done;
+    }
+    const want = streaming === null ? null : blocks.get(streaming)?.host ?? null;
+    if (cursorAt !== want) {
+      cursorAt?.classList.remove('ck-streaming');
+      want?.classList.add('ck-streaming');
+      cursorAt = want;
     }
   }
   draw();
@@ -141,10 +160,12 @@ export function createTurn(doc, turn) {
   function block(msg) {
     const b = blockOf(msg.blockIndex, Date.now());
     b.text = msg.text;
+    b.done = true;
     if (streaming === msg.blockIndex) follow(null);
   }
   function end() {
     ended = true;
+    for (const b of blocks.values()) b.done = true;
     follow(null);
   }
 

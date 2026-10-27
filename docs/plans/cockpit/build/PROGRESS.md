@@ -213,6 +213,12 @@ What the slice itself says waits; nothing else moved here.
 
 ## For the owner
 
+- T19 (round 32), a contradiction: README "Touch" gives `SHOW ALL 40 LINES` / `SHOW LESS` "1 px
+  `--line-strong`, `--bg-elevated`", while `c1-talk.md` §3 "The cockpit's own lines" (D227) says "No
+  element of a reply's blocks … has a `--line-strong` border on any side". Built the newer D227's reading:
+  the button under a long code block has a 1 px `--line` box on `--bg-elevated` (`.ck-md-more`). Overrule:
+  give it `--line-strong` and widen S-C1-42's set to the button.
+
 - **Spec contradiction (round 26, T18, B138):** `c1-talk.md` §7 "On send" says "the label
   `YOU · 07:02 · SENDING` (the `SENDING` in `--text-3`)", while §3 "The delivery word" (D270)
   says the word is "18 px caps `--font-label` weight 500 `--text-1`". Built D270's (newer)

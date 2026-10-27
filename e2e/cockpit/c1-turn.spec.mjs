@@ -47,8 +47,16 @@ async function startRecorder(page) {
       const turn = lastTurn();
       const reply = turn?.querySelector('[data-reply]') ?? null;
       const blocks = reply ? [...reply.children] : [];
-      const last = blocks.at(-1) ?? null;
-      const cursor = last ? getComputedStyle(last, '::after').content : 'none';
+      // The cursor: a `▍` ::after on the element that holds the reply's last character (md.js's
+      // blocks drawn by reply.js put it on the paragraph, the code line or the cell being written).
+      const withCursor = reply ? [...reply.querySelectorAll('*')].filter((n) => getComputedStyle(n, '::after').content === '"▍"') : [];
+      const walker = reply ? document.createTreeWalker(reply, NodeFilter.SHOW_TEXT) : null;
+      let lastText = null;
+      while (walker?.nextNode()) if (walker.currentNode.data !== '') lastText = walker.currentNode;
+      const last = withCursor[0] ?? blocks.at(-1) ?? null;
+      let cursor = last ? getComputedStyle(last, '::after').content : 'none';
+      if (withCursor.length > 1) cursor = `${withCursor.length} cursors`;
+      else if (withCursor.length === 1 && !(lastText && last.contains(lastText))) cursor = 'not after the last character';
       return {
         t: Date.now(),
         turn: root.dataset.turn ?? null,
@@ -158,7 +166,7 @@ test('S-C1-04 A reply streams in, then settles', async ({ page, room }) => {
     const reply = page.locator(`[data-turn-id="${turnId}"] [data-reply]`);
     await expect(reply).toHaveText(WANT, { useInnerText: false });
     expect(await reply.evaluate((n) => n.textContent)).toBe(WANT);
-    expect(await reply.evaluate((n) => getComputedStyle(n.lastElementChild, '::after').content), 'the cursor is gone').toBe('none');
+    expect(await reply.evaluate((n) => [n, ...n.querySelectorAll('*')].filter((e) => getComputedStyle(e, '::after').content !== 'none').length), 'the cursor is gone').toBe(0);
     await expect(page.locator('[data-cockpit-turn]')).toHaveText('READY');
     // The label rows: YOU over the prompt with no delivery word left, AGENT over the reply.
     const labels = page.locator(`[data-turn-id="${turnId}"] [data-turn-label]`);
@@ -181,7 +189,7 @@ test('S-C1-04 A reply streams in, then settles', async ({ page, room }) => {
     expect(ofTurn(mine, turnId, 'text.block')[0]?.msg.text).toBe(WANT);
     const reply = page.locator(`[data-turn-id="${turnId}"] [data-reply]`);
     expect(await reply.evaluate((n) => n.textContent), 'the exact text, from the complete block').toBe(WANT);
-    expect(await reply.evaluate((n) => getComputedStyle(n.lastElementChild, '::after').content), 'no cursor').toBe('none');
+    expect(await reply.evaluate((n) => [n, ...n.querySelectorAll('*')].filter((e) => getComputedStyle(e, '::after').content !== 'none').length), 'no cursor').toBe(0);
     await expect(page.locator('[data-cockpit-turn]')).toHaveText('READY');
   });
 });

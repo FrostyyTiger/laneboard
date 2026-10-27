@@ -175,16 +175,138 @@
   overflow-wrap: anywhere;
 }
 .ck-prompt + .ck-label { margin-top: 16px; }
-.ck-reply { display: flex; flex-direction: column; gap: 16px; }
+.ck-reply { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+/* one text block of the reply: md.js's blocks, 16 px apart (c1-talk.md §3) */
 .ck-block {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
   font: 400 var(--ck-type-talk)/var(--ck-line-talk) var(--font-mono);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+  color: var(--text-1);
 }
 /* the static cursor after the last character while the block streams (c1-talk.md §3
    "Streaming"); a pseudo-element, so the reply's text stays exactly what the room sent */
-.ck-block.ck-streaming::after { content: '▍'; color: var(--text-3); }
+.ck-streaming::after { content: '▍'; color: var(--text-3); }
+
+/* What a reply may contain (c1-talk.md §3, D22, D23, D25, D146). D227: nothing here has a
+   --line-strong side; that left rule is the cockpit's own lines' (.ck-label, errors, STOPPED). */
+.ck-md-p,
+.ck-md-quote,
+.ck-md-item {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ck-md-h {
+  margin: 0;
+  font: 600 var(--ck-type-talk)/var(--ck-line-talk) var(--font-mono);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+.ck-md-h:not(:first-child) { margin-top: 8px; } /* 24 px above with the block's 16 px gap */
+.ck-md-b { font-weight: 600; }
+.ck-md-ic {
+  padding: 0 4px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-weak);
+}
+/* a link: its text, then (host); a span, not tappable, no underline (D22, D225) */
+.ck-md-link { color: var(--text-1); text-decoration: none; }
+.ck-md-host,
+.ck-md-img { color: var(--text-3); }
+/* the marks take their colour wherever they stand, nothing else does (D25) */
+.ck-md-mark[data-mark="1"] { color: var(--p1); }
+.ck-md-mark[data-mark="2"] { color: var(--p2); }
+.ck-md-mark[data-mark="run"],
+.ck-md-mark[data-mark="off"] { color: var(--text-2); }
+.ck-md-list { display: flex; flex-direction: column; }
+/* a 32 px hanging indent; a numbered marker wider than that keeps 8 px to its text */
+.ck-md-li { display: flex; }
+.ck-md-li[data-level="2"] { padding-left: 32px; }
+.ck-md-marker {
+  flex: none;
+  min-width: 32px;
+  padding-right: 8px;
+  box-sizing: border-box;
+  color: var(--text-3);
+}
+.ck-md-item { flex: 1; min-width: 0; }
+.ck-md-quote {
+  padding-left: 16px;
+  border-left: 2px solid var(--line);
+  color: var(--text-2);
+}
+.ck-md-rule { height: 0; border-top: 1px solid var(--line); }
+/* code: mono 18 px, never wrapping, sideways on its own; 12 lines, then SHOW ALL (D23) */
+.ck-md-codebox { position: relative; min-width: 0; display: flex; flex-direction: column; }
+.ck-md-code {
+  margin: 0;
+  padding: 12px 16px;
+  overflow-x: auto;
+  background: var(--bg-sunken);
+  border: 0;
+  border-left: 2px solid var(--line);
+  font: 400 18px/1.4 var(--font-mono);
+  white-space: pre;
+  color: var(--text-1);
+}
+.ck-md-line { display: block; min-height: 1.4em; min-width: calc(var(--ck-code-ch, 0) * 1ch); }
+.ck-md-line[hidden] { display: none; }
+.ck-md-lang {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 4px 8px;
+  background: var(--bg-sunken);
+  font: 500 16px/1.25 var(--font-label);
+  letter-spacing: var(--ls-label);
+  color: var(--text-3);
+  pointer-events: none;
+}
+/* the cockpit's own button under a long block: a --line box, not --line-strong, inside a reply (D227) */
+.ck-md-more {
+  height: 48px;
+  width: 100%;
+  margin: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  border-top: 0;
+  font: 500 16px/1 var(--font-label);
+  letter-spacing: var(--ls-label);
+  color: var(--text-1);
+  touch-action: manipulation;
+  cursor: pointer;
+}
+/* tables: header 16 px caps, body mono 18 px, 44 px rows, every row drawn; wider than the
+   column it scrolls sideways inside its block, the first column fixed (D23, D146, D226) */
+.ck-md-tablebox { min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.ck-md-table { border-collapse: separate; border-spacing: 0; }
+.ck-md-table tr { height: 44px; }
+.ck-md-table th,
+.ck-md-table td {
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line-weak);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.ck-md-table th {
+  font: 600 16px/1.25 var(--font-label);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ck-md-table td { font: 400 18px/1.4 var(--font-mono); color: var(--text-1); }
+.ck-md-table .ck-md-right { text-align: right; }
+.ck-md-wide .ck-md-table :is(th, td):first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg-elevated);
+}
 /* the delivery word ending a prompt's label row: 18 px caps --text-1 on the row's
    baseline, the row still 24 px (c1-talk.md §3, D270, D21, D167) */
 .ck-delivery {
