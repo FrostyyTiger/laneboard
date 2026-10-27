@@ -86,11 +86,20 @@ Notes for every builder round (planner, round 1):
   off the rows closed it, no console errors. Film `shots/r8-galaxy` as r7 (13.1 fps under SwiftShader; the fan
   draws nothing while closed). Open: in half a screen (D) long names may leave too little width for two arcs;
   the scene's own names of fanned planets stay visible beside their rows.
-- [ ] T4 (§7 Night 4 0a; was night 3's T29, r36-dreamer touch 3) [ui] [variant:galaxy] BACK returns to the pose you
+- [x] T4 (§7 Night 4 0a; was night 3's T29, r36-dreamer touch 3) [ui] [variant:galaxy] BACK returns to the pose you
   left: `goBack()` to the overview flies to the last explore pose (`touch.js` orbit yaw, pitch, dist, look) the person
   held before opening a site, not the default fit; only the first touch (wake) resets to the default — done when: a
   page test with a fake clock drags to a yaw, taps a site, goes back twice and finds the camera's orbit equal to the
-  dragged one, and a wake still lands on the default fit.
+  dragged one, and a wake still lands on the default fit. (commit fa7611b) Builder r10: `touch.js createReturn`
+  (`leave(place, cam)` as a site opens, only off the overview and only a steered pose, `cam.want().kind === 'free'`;
+  a fitted overview keeps nothing, so back without a drag is the fit as before), `camera.js fly(pose, { ms })` (a
+  flight to a free pose, held there; nothing without `steer` or in still mode), `main.js toOverview(left.pose())` on
+  the last step back (the back control and empty sky alike); `wake` and `resume` clear it. Tests
+  (`test/wall-galaxy-resume.test.mjs`): drag → site → planet → back twice lands on the dragged orbit, flown not cut;
+  no drag → the fit; a hand-back then a wake → the fit, and the pose forgotten. CDP check on the large demo
+  (`shots/r10-t4-back`): drag, tap HV2, the back control: home pose equal to the dragged one (gap 0), the flight
+  back mid-way reads, no console errors. Film `shots/r10-galaxy`: the tour as r8 (11.7 fps under SwiftShader vs
+  13.1, VM load: nothing per frame added, the return is read only on a tap and a back). For T13/T14: the director takes `createReturn` over (its back step).
 - [ ] T5 (§7 Night 4 0a; night 3's Later r41-operator touch 1 = r36-dreamer touch 1 = r51-touch galaxy 5; research
   Q13) [ui] [variant:galaxy] Explore looks like a person is driving: while `touch.js` is in `explore`, a mono line by
   the tag reads `MANUAL · TOUR IN 0:40` (`--text-2`, the tag's face, counting down the time left of `IDLE.ms` from the
