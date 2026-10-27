@@ -344,14 +344,34 @@ Notes for every builder round (planner, round 1):
   above HV2 on its way to REMOTE), `shots/r33-3m/with.png` vs `without.png` (456 px: HOME and CLOUD ringed, REMOTE a
   plain dot). Honest: at 3 m the rings read but are quiet, the grain is faint; several working planets in one folded
   cluster draw overlapping rings. The ring sits next to the `HV1` overview label (T24's placement).
-- [ ] T18 (§7 Night 4 0b; README §7 Night 3 D `sweep`) [ui] [variant:galaxy] `fx=sweep`: once per tour cycle, at the
+- [x] T18 (§7 Night 4 0b; README §7 Night 3 D `sweep`) [ui] [variant:galaxy] `fx=sweep`: once per tour cycle, at the
   overview only, one faint sensor line from the sun turns once round the plane; each cluster it crosses pings softly
   only if its site sent new data since the last sweep (per-site freshness kept by the page from the map frames, e.g. a
   per-site key of its nodes' status and stamps, next to `fresh.js`), so a silent site stays dark and the gap shows;
   none in still mode, never during a flight, never under a finger; off by default — done when: tests show the line's
   angle over the sweep, a ping only for sites changed since the last sweep, none while held or in still mode, nothing
   without `?fx=sweep`; and filmstrips of `galaxy.html?demo=1&quality=0` with and without `&fx=sweep` (one with
-  `demo-fleet.mjs --quiet-after`) show pings on live sites and none on a silent one.
+  `demo-fleet.mjs --quiet-after`) show pings on live sites and none on a silent one. (commit 7cb92f3)
+  Builder r37: `fx.js`: `siteNews` (one FNV hash per drawn site over its nodes as the model has them and the events
+  on them: a site's number changes only when its data does), `sweepAt`/`crossAt` (one turn at an even speed from
+  the top of the frame, clockwise; fades in/out over 6 % of the turn, out over 0.3 s when stopped), `pingAt`,
+  `sweepStep` (rests only on the tour's overview leg with the tour driving, no finger, no show, the camera wanting
+  the overview and not flying; once per cycle, turning in the leg's time left less 0.25 s, at most 6 s, none under
+  1.2 s; `?at=overview`, which has no tour, sweeps every 15 s), `createSweep` (a site pings when the line reaches it
+  only if its number differs from when a line last reached it; a stopped sweep leaves the unreached sites their
+  news; the first sweep pings every site with data, all of it new to the page). `scene.js`: `sweepShape` (a grey
+  additive sector, bright 0.8° edge, 24° trail at 32 %, no hard end), a pool of thin grey (text-2) rings flat round
+  a cluster; nothing made in still mode. Demo: each host's cpu moves a point every tick (a live feeder's does; the
+  large demo was otherwise static, so every site would have read silent), `demo-fleet.mjs --silent-site <source>`
+  keeps one source as it was on the first tick. I used `--silent-site remote` instead of `--quiet-after`, which stops
+  every frame and so silences all sites at once, not one. Tests 4148 → 4163 (`test/wall-galaxy-sweep.test.mjs`, one in
+  `wall-demo-large`). Films: `shots/r37-sweep-first` (`pace=wall`, the first sweep: line from 12 o'clock clockwise,
+  rings on HV1, CLOUD, HOME, REMOTE, HV2 as it passes; 10.3 fps SwiftShader ×4, 0 errors), `shots/r37-sweep-second`
+  (`at=overview`, the second sweep: HV1, CLOUD, HOME, HV2 ring, silent REMOTE stays dark), `shots/r37-sweep-without`
+  (10.5 fps: no cost seen; nothing runs per frame without the switch). Honest: the line is faint by design and reads
+  at 3 m mostly as its trail; at `?demo=1` speed the overview's rest is about 1.75 s, so the turn there is a quick
+  1.5 s flick (wall pace gets the full 6 s). A node's `why` that counts time (`last seen 3h ago` → `4h`) reads as news
+  once an hour.
 - [ ] T37 (§7 Night 4 B1; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] The show commands, the state: a pure `galaxy/show.js` with `flyTo(nodeId)`, `highlight(nodeIds, note)`, `clear()`, `pin(nodeId, card)` (a plain text card next to a node), each display-only, each one line on screen ("shown by the agent", the tag's face), each undone by one tap (an `✕` target of 48 px, Q6); going through the director's `show` source (T13). Message shape from Q16. — done when: tests for `galaxy/show.js` (fake clock): each command, the one-tap undo, a show during touch and during a flight
 - [ ] T38 (§7 Night 4 B2; promoted from Later by the watcher on 2026-10-27, before the merge) The show commands, the transport: one small documented message shape through `BroadcastChannel` and `postMessage` (origin-checked) into `show.js`; the relay room → hub → screens is cockpit work (fenced hub files): not this night. — done when: a test posts each message shape through BroadcastChannel and postMessage and a wrong origin is ignored
 - [ ] T39 (§7 Night 4 B3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] The show demo: `?demo=1&show=demo` plays a recorded conversation's show commands over the large demo fleet (fly to the crit, highlight what it breaks, pin a note); the video's second half (cockpit §5). A filmstrip. — done when: a filmstrip of `?demo=1&show=demo` shows the fly-to, the highlight and the pinned note
