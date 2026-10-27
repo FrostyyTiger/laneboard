@@ -37,6 +37,11 @@ export const RUNTIME_KEYS = Object.freeze([
   'approvals.maxInFlight', // server/routes/approvals.mjs maxInFlightOf
   'fleet.placement.any', // server/hub/placement.mjs settings
   'push.allowedEndpointHosts', // server/hub/routes/core.mjs pushHostList
+  // server/config/cockpit.mjs: `cockpit.agent` defaults to null; its keys are
+  // filled in per kind by finalize when the file has the block.
+  'cockpit.agent.kind', 'cockpit.agent.command', 'cockpit.agent.cwd', 'cockpit.agent.user',
+  'cockpit.agent.allowSameUser', 'cockpit.agent.allowedTools', 'cockpit.agent.allowUnrestricted',
+  'cockpit.agent.env', 'cockpit.agent.loginCheck', 'cockpit.agent.maxTurnsPerHour',
 ]);
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);

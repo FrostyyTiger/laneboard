@@ -169,7 +169,7 @@ key is missing from this page.
 
 | Key | Default | Env | What |
 | --- | --- | --- | --- |
-| `mode` | `builder` | `LANEBOARD_MODE` | `builder` (today's board, next to the agents) or `hub` (the fleet view over many builders: no tmux, no sessions, no collectors). `both` is refused: run two processes. |
+| `mode` | `builder` | `LANEBOARD_MODE` | `builder` (today's board, next to the agents), `hub` (the fleet view over many builders: no tmux, no sessions, no collectors) or `cockpit` (the cockpit's room alone, beside a hub or a board: only `/healthz` and `/api/cockpit/*`, on `127.0.0.1`, port `7778` unless `port` is set; needs `cockpit.agent`). `both` is refused: run two processes. |
 
 ### `fleet` — identity
 
@@ -380,6 +380,36 @@ own `.laneboard/run.jsonl`, and a machine without any shows no runs.
 | `runs.stuck.shorterRounds` | `3` | The last this many rounds were each shorter than the one before: a hint at a usage limit (0..100). |
 | `runs.stuck.deadlineMin` | `30` | Kept for one version, no longer a threshold: `0` turns the deadline rule off, any other value (0..10080) is accepted and ignored. The rule fires once the deadline has passed and the run has no `run.stop`. |
 
+### `cockpit` — the cockpit's room
+
+The cockpit (a pane where the owner types and an agent answers from the board)
+runs in a **room**: the process whose config file has a `cockpit.agent` block.
+On one box that is the board itself (`mode: builder`); beside a hub it is its
+own process, `mode: cockpit`. With no `cockpit` section nothing changes. A bad
+value stops the start with one line naming the key. Setup and the agent's own
+user: `docs/cockpit.md` (to come).
+
+| Key | Default | Env | What |
+| --- | --- | --- | --- |
+| `cockpit.agent` | `null` | (the file only) | The agent block; set, this process is a room. Not allowed on a `hub`, required for `mode: cockpit`. A `LANEBOARD_COCKPIT_AGENT_*` variable without it in the file is refused. |
+| `cockpit.agent.kind` | `"claude-code"` | `LANEBOARD_COCKPIT_AGENT_KIND` | `claude-code` or `bridge` (any other agent, speaking the bridge protocol). |
+| `cockpit.agent.command` | `["claude"]` (`claude-code`); none, required (`bridge`) | `LANEBOARD_COCKPIT_AGENT_COMMAND` (a JSON array) | The program and its first arguments, one entry each, no shell. For `claude-code` no entry after the first may be a flag: the room sets them. An absolute first entry when `user` is set. |
+| `cockpit.agent.cwd` | `"{stateDir}/cockpit-agent"` | `LANEBOARD_COCKPIT_AGENT_CWD` | The agent's working directory (`{stateDir}` and `~` filled in). The default is made at start (0755); one you set must exist, and the room writes nothing in it. |
+| `cockpit.agent.user` | unset | `LANEBOARD_COCKPIT_AGENT_USER` | The agent's own unix user. Never `root`, never the room's own. |
+| `cockpit.agent.allowSameUser` | `false` | `LANEBOARD_COCKPIT_AGENT_ALLOW_SAME_USER` (`1`/`0`) | With `user` unset the room refuses to start unless this is `true`: the agent then reads every file you can. |
+| `cockpit.agent.allowedTools` | `["mcp__laneboard__*","Read","Grep","Glob"]` (`claude-code`); `["mcp__laneboard__*"]` (`bridge`) | `LANEBOARD_COCKPIT_AGENT_ALLOWED_TOOLS` (comma list) | The tools the agent may use: names, or a prefix ending in `*`. |
+| `cockpit.agent.allowUnrestricted` | `false` | `LANEBOARD_COCKPIT_AGENT_ALLOW_UNRESTRICTED` (`1`/`0`) | `bridge` with `user` only: no tool limit. |
+| `cockpit.agent.env` | `[]` | `LANEBOARD_COCKPIT_AGENT_ENV` (comma list) | Names of the room's environment variables the agent also gets (values never in the file). Not `PATH`, `HOME`, `LANG`, `USER` or `LANEBOARD_*`. |
+| `cockpit.agent.loginCheck` | `["claude","auth","status"]` (`claude-code`); `null` (`bridge`) | `LANEBOARD_COCKPIT_AGENT_LOGIN_CHECK` (a JSON array, or `null`) | The command that tells whether the agent is logged in; `null`: none. |
+| `cockpit.agent.maxTurnsPerHour` | `20` | `LANEBOARD_COCKPIT_AGENT_MAX_TURNS_PER_HOUR` | Turns the room starts on its own per rolling hour (0..600; `0`: no cap). Your own prompts are never counted. |
+| `cockpit.forwarded` | `false` | `LANEBOARD_COCKPIT_FORWARDED` (`1`/`0`) | On the board or hub that serves the page: its front forwards `/api/cockpit/` to a room. The only `cockpit` key a hub may hold; never together with `cockpit.agent`. |
+| `cockpit.board.url` | the own `http://127.0.0.1:{port}` on one box; `http://127.0.0.1:7777` for `mode: cockpit` | | The board the agent's read tools read. |
+| `cockpit.mcp.port` | `7790` | | The room's MCP server for its agent, on `127.0.0.1` (`0`: any free port). |
+| `cockpit.stt.url` | `"none"` | `LANEBOARD_COCKPIT_STT_URL` | The streaming speech service, `wss://` (`ws://` only on loopback), no credentials or query. `none`: typing only. |
+| `cockpit.stt.language` | `["en","de"]` | `LANEBOARD_COCKPIT_STT_LANGUAGE` (comma list) | A two-letter code, `"auto"`, or a list (a list shows a language button). |
+| `cockpit.stt.tokenFile` | unset | `LANEBOARD_COCKPIT_STT_TOKEN_FILE` | A file (0600) with the service's bearer token. |
+| `cockpit.stt.protocol` | `"whisperlivekit"` | `LANEBOARD_COCKPIT_STT_PROTOCOL` | The only one in v1; another service needs a shim. |
+
 ## Environment variables
 
 Every variable laneboard reads, in one place. The `LANEBOARD_*` ones that set a
@@ -401,7 +431,15 @@ The server (`laneboard`'s process): `LANEBOARD_CONFIG`, `LANEBOARD_DB`,
 `LANEBOARD_CI_REPO`, `LANEBOARD_MAP_FILE`, `LANEBOARD_MAP_FEEDS`,
 `LANEBOARD_MAP_POLICY`, `LANEBOARD_MODE`, `LANEBOARD_FLEET_ID`,
 `LANEBOARD_FLEET_CODE`, `LANEBOARD_FLEET_BUILDERS`, `LANEBOARD_ALLOWED_ORIGINS`,
-`LANEBOARD_INGRESS_PORT`, `LANEBOARD_STATE_DIR`, `LANEBOARD_AUDIT_FILE`; and from
+`LANEBOARD_INGRESS_PORT`, `LANEBOARD_STATE_DIR`, `LANEBOARD_AUDIT_FILE`,
+`LANEBOARD_COCKPIT_AGENT_KIND`, `LANEBOARD_COCKPIT_AGENT_COMMAND`,
+`LANEBOARD_COCKPIT_AGENT_CWD`, `LANEBOARD_COCKPIT_AGENT_USER`,
+`LANEBOARD_COCKPIT_AGENT_ALLOW_SAME_USER`, `LANEBOARD_COCKPIT_AGENT_ALLOWED_TOOLS`,
+`LANEBOARD_COCKPIT_AGENT_ALLOW_UNRESTRICTED`, `LANEBOARD_COCKPIT_AGENT_ENV`,
+`LANEBOARD_COCKPIT_AGENT_LOGIN_CHECK`, `LANEBOARD_COCKPIT_AGENT_MAX_TURNS_PER_HOUR`,
+`LANEBOARD_COCKPIT_FORWARDED`, `LANEBOARD_COCKPIT_STT_URL`,
+`LANEBOARD_COCKPIT_STT_LANGUAGE`, `LANEBOARD_COCKPIT_STT_TOKEN_FILE`,
+`LANEBOARD_COCKPIT_STT_PROTOCOL`; and from
 outside laneboard, `HOME`, `XDG_STATE_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`
 (where state, the hub key and the git cache live), `TMUX_PANE` (the kill switch
 never kills its own pane) and `LC_ALL` (passed to tmux, `C.UTF-8` if unset).

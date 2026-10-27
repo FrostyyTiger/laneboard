@@ -209,6 +209,18 @@ What the slice itself says waits; nothing else moved here.
   given later changes what §3.1's table says.
 - C1's done-when includes "the board change of §5.1 merged with its tests". The hub is fenced for
   this night, so that part can only be met by applying T38's patch in an attended session.
+- T6 (review-required): `server/config/cockpit.mjs`'s fatal-at-start lines (D128, D129, D217,
+  D241, D245, Q-O36 b), each check commented with its decision; its own tests are
+  `test/config-cockpit.test.mjs` (injected users) and `test/cockpit-room.test.mjs` (a real start per
+  line). The agent's user is looked up with `getent passwd` (B44).
+- T6, two places that disagree: `protocols.md` §11.12 says the fatal line "starts with the key, as
+  every config fragment does", and S-ONE-12 says "stderr is exactly the line"; every fragment's
+  refusal today is printed as `laneboard: refusing to start — <file>: <line>`. Built as today, the
+  exact line after the prefix (B37). Changing it is one line in `server/config.mjs`, for every
+  fragment at once.
+- T6: the room alone's "every other path is 404" is a wrap of the listener's request handler
+  (B41), since `server/http.mjs` (fenced) always serves `public/` and the SPA fallback. A
+  `static: false` option there would be the cleaner way; no patch written yet.
 
 ## Measured on the real screen
 

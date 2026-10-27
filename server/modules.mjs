@@ -3,7 +3,7 @@
 //
 // A module is a file `server/<dir>/<name>.mjs` whose default export is
 //
-//   { name, modes: ['builder'|'hub', ...], register(ctx), start?(ctx), stop?() }
+//   { name, modes: ['builder'|'hub'|'cockpit', ...], register(ctx), start?(ctx), stop?() }
 //
 // (a module namespace exporting the same names works too). Builder mode loads
 // `routes` and `flags`; hub mode loads `hub/routes` (from H11 on).
@@ -29,7 +29,7 @@ import { route as httpRoute, json, readBody, readJson } from './http.mjs';
 import { upgradeHandlers, shutdownHooks } from './boot/common.mjs';
 
 export const SERVER_DIR = import.meta.dirname;
-export const MODES = ['builder', 'hub'];
+export const MODES = ['builder', 'hub', 'cockpit'];
 
 export class ModuleError extends Error {}
 

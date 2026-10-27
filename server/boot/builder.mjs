@@ -639,4 +639,8 @@ flushTimer.unref();
 
 await startModules(modules, ctx);
 
+// The one box (D128): with `cockpit.agent` this process is also the room, on
+// the board's ctx, after the board's own modules.
+if (config.cockpit?.agent) await (await import('./cockpit.mjs')).startRoom(ctx);
+
 log.info(`laneboard up, pid ${process.pid}`);

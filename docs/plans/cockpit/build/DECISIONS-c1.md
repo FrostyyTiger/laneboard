@@ -225,3 +225,56 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   two `AAAAnot-a-key…` lines, no key — because S-C1-21 counts the reply's text and the repo is public
   (no secret scanner should fire on it) — spec: `stand-ins.md` §5, `security.md` S-SEC-02 —
   overrule: the generator's numbers (the check asserts them).
+- B37 The fatal-at-start lines of `server/config/cockpit.mjs` are printed by `server/config.mjs`'s
+  one handler, so stderr's first line is `laneboard: refusing to start — <config file>: <the exact
+  line>`; tests compare the part after `<file>: ` — because every fragment's refusal goes through
+  that handler today and `config.mjs` is frozen after wave 0 — spec: `protocols.md` §11.12 ("one
+  stderr line that starts with the key, as every config fragment does"), `single-machine.md`
+  S-ONE-12 ("stderr is exactly the line") — overrule: `config.mjs` prints a fragment's line bare
+  (one line there, every fragment's refusal changes).
+- B38 On a `hub`, a `cockpit` key in the file other than `forwarded` is fatal:
+  `cockpit.<key> on a hub: a hub's cockpit section holds only cockpit.forwarded (D129)`
+  (`cockpit.agent` keeps D128's own line, checked first) — because D129 says forwarded "is the only
+  key a cockpit section may hold on a hub" but gives no line — spec: D129 — overrule: ignore the
+  other keys on a hub.
+- B39 `mode: cockpit` refuses a `bind` other than `["127.0.0.1"]` (`bind: a room alone (mode
+  cockpit) listens on 127.0.0.1 only, got […]`) and a `fleet.ingressPort` (no ingress listener)
+  — because README "Ports" says `127.0.0.1` only for a room alone, and B41 relies on one listener —
+  spec: README "The room process", D128 — overrule: accept other loopback binds (B41's wrap then
+  needs another way in).
+- B40 Lines the spec leaves unworded, each naming the key: `cockpit.mcp.port: must be a port
+  number, or 0 for any free port, got …`; `cockpit.board.url: must be an http(s) URL with no
+  credentials or query, got …`; `cockpit.stt.url` (scheme, credentials, query, `ws://` off
+  loopback), `cockpit.stt.language`, `cockpit.stt.tokenFile`; `cockpit.agent.allowUnrestricted:
+  must be true or false` (as allowSameUser's); `cockpit.agent.allowedTools: [] is not …` for an
+  empty list; `cockpit.forwarded: must be true or false`. `cockpit.mcp.port` and
+  `cockpit.board.url` get no env variable (the spec names none) — spec: `c2-voice.md` §9 ("fatal
+  at start, naming the key"), `c3-see.md` §1-§2, D129 — overrule: the words.
+- B41 The room alone (`mode: cockpit`) answers 404 `{"error":"not-found"}` off `/healthz` and
+  `/api/cockpit/*` by wrapping each listener's `request` handler after `listenAll()` returns (one
+  listener, so no request comes in before the wrap); an upgrade off the prefix gets the same 404
+  from `listenAll`'s `onUpgrade` — because `server/http.mjs` (fenced) serves `public/` and the SPA
+  page to any GET its routes miss, and has no option to turn that off — spec: `protocols.md` §1,
+  D128 — overrule: a `static: false` option in `http.mjs` (a patch for the owner) and the wrap goes.
+- B42 Until the room registers its routes (T13 on), a path under `/api/cockpit/` reaches the board's
+  router and gets its 404 (`{"error":"not found","path":…}`); the room-alone test asserts that body
+  to prove the prefix passes the B41 filter — because the room's routes are later tasks — spec:
+  `protocols.md` §1.1 — overrule: none needed; T13 replaces the assertion with the link.
+- B43 T6's `startRoom(ctx)` prints the start lines (`cockpit.agent.env` not set here, the agent on
+  the room's user, `allowUnrestricted`), makes the default cwd 0755 and returns `{cwd, stop}`; the
+  bridge (T9), the link (T13) and the MCP server (T35) hang on it later. `single-machine.md` §3.3's
+  "a directory on the way to cwd the agent's user cannot enter" line needs the agent user's access
+  and comes with T7's start check — spec: `protocols.md` §11.12 "Not fatal" — overrule: none.
+- B44 `cockpit.agent.user` is looked up with `getent passwd <name>` (argv, no shell, after the name
+  regex), else `/etc/passwd` when `getent` is missing; tests inject the lookup (S-ONE-12's users) —
+  because Node has no getpwnam and directory users exist only through NSS — spec: §11.12 `user` rows
+  — overrule: `/etc/passwd` only.
+- B45 `server/index.mjs`'s one line: `mode: cockpit` imports `server/boot/cockpit.mjs` and calls
+  `startRoom()`; the module has no side effect on import, so the room under test's wrapper can import
+  it and call `startRoom()` itself (stand-ins.md §1.1) — spec: README "Entry point" — overrule: the
+  module boots on import and the wrapper changes.
+- B46 `cockpit.agent` defaults to `null` (a leaf the docs check sees); its keys are filled in per
+  kind by the fragment's `finalize` when the block is there and listed in
+  `scripts/check-config-docs.mjs` `RUNTIME_KEYS`, so `docs/config.md` must document each — because
+  D17 needs "no agent" to stay distinguishable after the defaults merge — spec: D17, §11.12 —
+  overrule: none.

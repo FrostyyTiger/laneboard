@@ -1,22 +1,112 @@
 // The room's entry point (spec README "The room process", D128).
-// startRoom(ctx) is what server/boot/builder.mjs calls when `cockpit.agent`
-// is set, and what the room under test's wrapper imports unchanged
-// (test/cockpit/stand-ins/room-under-test.mjs, stand-ins.md §1.1).
 //
-// First version (B1): called without a ctx, as the wrapper does, it boots the
-// process the way server/index.mjs does (the board, `mode: builder`); the
-// room's own wiring (routes, link, bridge, the `mode: cockpit` process) comes
-// with the room process task (T6).
+//   startRoom(ctx)  the room inside a process that already listens: the one
+//                   box, called by server/boot/builder.mjs after its own
+//                   modules when `cockpit.agent` is set. Registers the room's
+//                   routes and upgrades through `ctx` (later tasks: the room
+//                   link, the bridge, the MCP server) and returns the room.
+//   startRoom()     the process itself, as server/index.mjs and the room under
+//                   test's wrapper (test/cockpit/stand-ins/room-under-test.mjs)
+//                   call it: `mode: cockpit` is the room alone (listenAll,
+//                   registerHealthz, startRoom, installSignalHandlers); `mode:
+//                   builder` boots the board, which calls startRoom(ctx) (B1).
+//
+// The room alone answers /healthz and /api/cockpit/* and nothing else: every
+// other path is 404 {"error":"not-found"} and an upgrade on any other path
+// (`/ws`) is refused the same way (protocols.md §1). It never imports state,
+// ws, terminals, the collectors or the board's routes (test/cockpit-room.test.mjs).
 import fs from 'node:fs';
 import { config } from '../config.mjs';
 import { log } from '../log.mjs';
+import { DEFAULT_CWD, fillPath, startLines } from '../config/cockpit.mjs';
 
-export async function startRoom(ctx = null) {
-  if (ctx) return null; // the room's routes on the board's ctx: T6
-  if (config.mode !== 'builder') throw new Error(`startRoom: mode ${JSON.stringify(config.mode)} is not served yet`);
-  process.on('unhandledRejection', (err) => log.error('unhandledRejection', err?.stack || String(err)));
-  process.on('uncaughtException', (err) => log.error('uncaughtException', err?.stack || String(err)));
+/** The room's path on the page's origin, on both sides (D93). Not a config key. */
+export const COCKPIT_PREFIX = '/api/cockpit';
+
+const NOT_FOUND = JSON.stringify({ error: 'not-found' });
+
+/** True for the paths a room alone serves: /healthz and the prefix (raw target, never decoded). */
+export function isRoomPath(target) {
+  const p = String(target ?? '').split('?')[0];
+  return p === '/healthz' || p === COCKPIT_PREFIX || p.startsWith(`${COCKPIT_PREFIX}/`);
+}
+
+/**
+ * The room inside a listening process. `ctx` is server/modules.mjs's
+ * (route, upgrade, provide/use); `opts.env` the environment the start lines
+ * look at. Returns the room: `{ cwd, stop() }`.
+ */
+export async function startRoom(ctx = null, opts = {}) {
+  if (!ctx) return bootProcess();
+  const agent = config.cockpit?.agent;
+  if (!agent) return null;
+  for (const line of startLines(config, { env: opts.env ?? process.env })) process.stderr.write(`${line}\n`);
+  const cwd = fillPath(agent.cwd, { stateDir: config.stateDir });
+  // D246, D209: the default cwd is the room's to make (0755, its own user);
+  // a cwd the owner set exists (config/cockpit.mjs) and is never written to.
+  if (agent.cwd === DEFAULT_CWD) {
+    fs.mkdirSync(cwd, { recursive: true, mode: 0o755 });
+    fs.chmodSync(cwd, 0o755);
+  }
+  log.info(`cockpit: room up (agent ${agent.kind}, cwd ${cwd})`);
+  return { cwd, stop: async () => {} };
+}
+
+/** startRoom() without a ctx: this process is the room alone, or the board that holds it. */
+async function bootProcess() {
+  // server/index.mjs installs these first; the room under test's wrapper does not.
+  if (!process.listenerCount('unhandledRejection')) {
+    process.on('unhandledRejection', (err) => log.error('unhandledRejection', err?.stack || String(err)));
+  }
+  if (!process.listenerCount('uncaughtException')) {
+    process.on('uncaughtException', (err) => log.error('uncaughtException', err?.stack || String(err)));
+  }
   fs.mkdirSync(config.dataDir, { recursive: true });
-  await import('./builder.mjs');
-  return null;
+  if (config.mode === 'builder') {
+    await import('./builder.mjs');
+    return null;
+  }
+  if (config.mode !== 'cockpit') throw new Error(`startRoom: mode ${JSON.stringify(config.mode)} has no room`);
+  return bootRoomAlone();
+}
+
+async function bootRoomAlone() {
+  const { listenAll, registerHealthz, installSignalHandlers, servers, shutdownHooks } = await import('./common.mjs');
+  const { json } = await import('../http.mjs');
+  const { createContext } = await import('../modules.mjs');
+  registerHealthz(() => ({ mode: 'cockpit' }));
+  const ctx = createContext({ config, log, mode: 'cockpit' });
+  const room = await startRoom(ctx);
+  shutdownHooks.push(() => room.stop());
+  await listenAll({ onUpgrade: refuseOtherUpgrades });
+  // http.mjs (fenced) serves public/ and the SPA fallback to any GET its
+  // routes do not take; the room alone serves no page, so every listener's
+  // request handler is wrapped to answer 404 off the room's paths. bind is
+  // 127.0.0.1 alone and there is no ingress listener (config/cockpit.mjs), so
+  // listenAll returns in the same tick as the one listen: no request comes in
+  // before the wrap (B41).
+  for (const server of servers) {
+    const inner = server.listeners('request');
+    server.removeAllListeners('request');
+    server.on('request', (req, res) => {
+      if (!isRoomPath(req.url)) return json(res, { error: 'not-found' }, 404);
+      for (const fn of inner) fn.call(server, req, res);
+    });
+  }
+  installSignalHandlers();
+  log.info(`laneboard room up, pid ${process.pid}`);
+  return room;
+}
+
+/** The room alone's own upgrade routing: off the prefix, a 404 like any other path. */
+function refuseOtherUpgrades(req, socket) {
+  if (isRoomPath(req.url) && String(req.url).split('?')[0] !== '/healthz') return false;
+  try {
+    socket.once('finish', () => socket.destroy());
+    setTimeout(() => socket.destroy(), 1000).unref();
+    socket.end(`HTTP/1.1 404 Not Found\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: ${Buffer.byteLength(NOT_FOUND)}\r\nConnection: close\r\n\r\n${NOT_FOUND}`);
+  } catch {
+    socket.destroy();
+  }
+  return true;
 }
