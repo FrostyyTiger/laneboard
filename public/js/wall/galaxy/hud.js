@@ -68,6 +68,51 @@ export function sheetCaption(node, model, index = null, count = null) {
 }
 
 /**
+ * The problem `heldId` belongs to in `model` (bannerModel): a test that is
+ * true for the held node, the topmost node in trouble above it, and
+ * everything in trouble under that. Null when nothing is held or the held
+ * thing is calm. Pure.
+ */
+function heldProblem(model, heldId) {
+  const nodes = Array.isArray(model?.nodes) ? model.nodes : null;
+  if (!nodes || typeof heldId !== 'string') return null;
+  const byId = new Map(nodes.filter((n) => n && typeof n.id === 'string').map((n) => [n.id, n]));
+  const bad = (n) => Boolean(n) && TROUBLE.includes(n.status);
+  let root = byId.get(heldId);
+  if (!bad(root)) return null;
+  const seen = new Set([root.id]);
+  while (bad(byId.get(root.parent)) && !seen.has(root.parent)) {
+    root = byId.get(root.parent);
+    seen.add(root.id);
+  }
+  // A node is in the held problem when the walk up through trouble reaches its root.
+  return (n) => {
+    const walked = new Set();
+    for (let m = n; bad(m) && !walked.has(m.id); m = byId.get(m.parent)) {
+      if (m.id === root.id) return true;
+      walked.add(m.id);
+    }
+    return false;
+  };
+}
+
+/**
+ * Whether the fleet line, fed `bannerModel(model, heldId)`, still names the
+ * held problem (night 3 T20, reviews/r11-dreamer.md galaxy 3): no other
+ * problem it may step down to, so it would say what the plate's hero says.
+ * Then the line drops out while the plate is up (frame.js `echo`, wall.css)
+ * rather than make three reds of one thing; it is back as the plate goes.
+ * Pure.
+ */
+export function bannerEcho(model, heldId) {
+  const inHeld = heldProblem(model, heldId);
+  if (!inHeld) return false;
+  const w = worstLine(bannerModel(model, heldId));
+  if (w.step === 'calm') return false;
+  return inHeld(model.nodes.find((n) => n?.id === w.id));
+}
+
+/**
  * The model the fleet line is fed while `heldId` is the lock's target (T23,
  * reviews/r21-operator.md 5): when the line would name the problem the
  * caption already holds, the banner steps down to the next one. The held
@@ -79,30 +124,13 @@ export function sheetCaption(node, model, index = null, count = null) {
  * "all calm" while the caption says trouble). Nor does it step down a size
  * (T30, reviews/r43-stranger.md galaxy 1): past a held crit only to another
  * crit, never to a warn, or the 3 m line went red, yellow, red with every
- * visit to the crit system; repeating the caption is the lesser harm. Pure.
+ * visit to the crit system; the line drops out under the plate instead
+ * (`bannerEcho`, T20). Pure.
  */
 export function bannerModel(model, heldId) {
-  const nodes = Array.isArray(model?.nodes) ? model.nodes : null;
-  if (!nodes || typeof heldId !== 'string') return model;
-  const byId = new Map(nodes.filter((n) => n && typeof n.id === 'string').map((n) => [n.id, n]));
-  const bad = (n) => Boolean(n) && TROUBLE.includes(n.status);
-  let root = byId.get(heldId);
-  if (!bad(root)) return model;
-  const seen = new Set([root.id]);
-  while (bad(byId.get(root.parent)) && !seen.has(root.parent)) {
-    root = byId.get(root.parent);
-    seen.add(root.id);
-  }
-  // A node is in the held problem when the walk up through trouble reaches its root.
-  const inHeld = (n) => {
-    const walked = new Set();
-    for (let m = n; bad(m) && !walked.has(m.id); m = byId.get(m.parent)) {
-      if (m.id === root.id) return true;
-      walked.add(m.id);
-    }
-    return false;
-  };
-  const masked = { ...model, nodes: nodes.map((n) => (n && inHeld(n) ? { ...n, status: 'ok' } : n)) };
+  const inHeld = heldProblem(model, heldId);
+  if (!inHeld) return model;
+  const masked = { ...model, nodes: model.nodes.map((n) => (n && inHeld(n) ? { ...n, status: 'ok' } : n)) };
   const before = worstLine(model);
   const after = worstLine(masked);
   // Masking another problem leaves the line as it was: then it was not the held one.
@@ -201,21 +229,24 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     fedFor = latest;
     fedHeld = heldId;
     fedHold = hold;
-    frame.update(bannerModel(latest, heldId), { cleared: clearedOf(hold) });
+    frame.update(bannerModel(latest, heldId), { cleared: clearedOf(hold), echo: bannerEcho(latest, heldId) });
   };
   // One headline per trouble frame (night 3 T4): the far line steps down
   // while the plate is up, from the leg's arrival (the plate comes with the
   // camera; in the flight the banner is still the only headline) until the
   // next leg.
   let plateTimer = null;
+  // Whether the plate is up, and the node its hero names (the lock's target
+  // while the plate says trouble): that node's own name gives way (T20).
+  let plateOn = false, heroId = null;
   // The feed's state (fresh.js), the last one given.
   let feedState = null;
   const plate = (on, atMs = 0) => {
     if (plateTimer != null) { timers.clearTimeout(plateTimer); plateTimer = null; }
-    if (!frame.plate) return;
+    const set = (up) => { plateOn = up; frame.plate?.(up); };
     // The last plate fades as the next leg starts: the banner is the headline again until the camera arrives.
-    frame.plate(Boolean(on) && !(atMs > 0));
-    if (on && atMs > 0) plateTimer = timers.setTimeout(() => { plateTimer = null; frame.plate(true); }, atMs);
+    set(Boolean(on) && !(atMs > 0));
+    if (on && atMs > 0) plateTimer = timers.setTimeout(() => { plateTimer = null; set(true); }, atMs);
   };
   const say = (leg) => {
     if (leg?.kind === 'overview' && hold && now() - hold.clearedAt >= CRIT_HOLD.minMs) hold = null;
@@ -226,6 +257,8 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
         : galaxyCaption(captionLines(node, latest, leg.index ?? null, leg.count ?? null), node.kind || 'node'), feedState);
       const target = lockTarget(node, latest);
       heldId = target[0]?.id ?? null;
+      // A planet, not the site: a site in trouble itself has the hero say its status (`CRIT`), its name on the plate's name line.
+      heroId = heldId !== node.id && cap.lines.some((l) => l.step === 'hero' && l.id === heldId) ? heldId : null;
       feed();
       plate(true, leg.arriveMs);
       caption.show(leg, cap);
@@ -235,6 +268,7 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
       lock?.lockOn({ ...leg, arriveMs: leg.lockMs ?? leg.arriveMs, node, status: lead?.status ?? leg.status ?? node.status, target });
     } else {
       heldId = null;
+      heroId = null;
       feed();
       plate(false);
       caption.hide();
@@ -248,6 +282,7 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
   // the line's words or the window change, never per frame.
   let lineSeen = null, lineBox = null;
   const fleetCover = () => {
+    if (frame.hushed?.()) return null;
     const far = frame.cover?.() ?? null;
     if (far) return far;
     const f = frame.el?.fleet;
@@ -306,6 +341,8 @@ export function createHud({ caption, frame, tour = null, lock = null, size = nul
     // sheetCaption) as the camera gets there, its brackets at once.
     open: (leg) => say({ arriveMs: 0, ...leg, kind: 'site', lockMs: 0, cut: true, sheet: true }),
     covers: () => [caption.cover?.(), fleetCover(), tagCover()].filter(Boolean),
+    // The node the plate's hero names while the plate is up, or null: labels.js does not name it twice (T20).
+    named: () => (plateOn ? heroId : null),
     fleetCover,
     tagCover,
     stop: () => { off(); plate(false); },

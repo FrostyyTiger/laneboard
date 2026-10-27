@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { CRIT_HOLD, agoText, bannerModel, clearedOf, createHud, farNode, galaxyCaption, legNode, sheetCaption, staleCaption } from '../public/js/wall/galaxy/hud.js';
+import { CRIT_HOLD, agoText, bannerEcho, bannerModel, clearedOf, createHud, farNode, galaxyCaption, legNode, sheetCaption, staleCaption } from '../public/js/wall/galaxy/hud.js';
 import { captionLines } from '../public/js/wall/caption.js';
 import { clearedLine, worstLine } from '../public/js/wall/frame.js';
 import { createTour, DEMO_TIMING } from '../public/js/wall/tour.js';
@@ -216,6 +216,103 @@ test('bannerModel: the held problem reads calm so the line names the next, else 
   m.nodes.push({ id: 'hv1-d', parent: 'hv1', kind: 'builder', label: 'builder-d', status: 'warn' });
   assert.equal(worstLine(bannerModel(m, 'lab-b')).more, 1);
   assert.equal(worstLine(m).more, 2);
+});
+
+test('bannerEcho (night 3 T20): true only when the fed line would still name the held problem', () => {
+  // One problem: the line can only say what the plate says.
+  assert.equal(bannerEcho(model(), 'lab-b'), true);
+  // Two crits: the line steps to the other one, no echo.
+  const two = twoProblems();
+  assert.equal(bannerEcho(two, 'lab-b'), false);
+  // The next problem is only a warn (T30: never a step down): the line would repeat the held crit.
+  const warnNext = twoProblems();
+  warnNext.nodes.find((n) => n.id === 'hv1-c').status = 'warn';
+  assert.equal(bannerEcho(warnNext, 'lab-b'), true);
+  // Holding the milder problem: the line names the other one anyway.
+  assert.equal(bannerEcho(warnNext, 'hv1-c'), false);
+  // A warn held alone in the fleet: an echo at the line step too.
+  const warnOnly = model();
+  for (const n of warnOnly.nodes) if (n.status === 'crit') n.status = 'ok';
+  warnOnly.nodes.find((n) => n.id === 'hv1-b').status = 'warn';
+  assert.equal(bannerEcho(warnOnly, 'hv1-b'), true);
+  // Nothing held, a calm thing held, an unknown id, no model: no echo.
+  assert.equal(bannerEcho(model(), null), false);
+  assert.equal(bannerEcho(model(), 'hv1-b'), false);
+  assert.equal(bannerEcho(model(), 'nope'), false);
+  assert.equal(bannerEcho(null, 'lab-b'), false);
+});
+
+test('not three reds saying one thing (night 3 T20): under the plate the echoing line drops out and the hero\'s node is not named', async () => {
+  const { makeDocument, makeEl } = await import('./helpers/fakedom.mjs');
+  const { createFrame } = await import('../public/js/wall/frame.js');
+  const prevDoc = globalThis.document;
+  globalThis.document = makeDocument();
+  try {
+    const root = makeEl('div');
+    const frame = createFrame(root, { timers: { setTimeout: () => 0, clearTimeout() {} } });
+    const fleet = frame.el.fleet;
+    for (const [k, v] of [['offsetLeft', 900], ['offsetTop', 600], ['offsetWidth', 400], ['offsetHeight', 200]]) {
+      Object.defineProperty(fleet, k, { value: v, configurable: true });
+    }
+    const { caption } = fakes();
+    const legs = [];
+    const tour = { onLeg: (cb) => { legs.push(cb); return () => {}; } };
+    const waits = [];
+    const timers = { setTimeout: (fn, ms) => { waits.push({ fn, ms }); return waits.length; }, clearTimeout: () => {} };
+    const hud = createHud({ caption, frame, tour, timers, size: () => ({ W: 1368, H: 912 }) });
+    // Lab's builder is the trouble, the site itself calm: the hero names the planet.
+    const planet = () => {
+      const m = model();
+      m.nodes.find((n) => n.id === 'lab').status = 'ok';
+      return m;
+    };
+    hud.update(planet());
+    assert.equal('echo' in fleet.dataset, false, 'the overview: the line is the headline');
+    legs[0]({ kind: 'site', id: 'lab', index: 1, count: 2, arriveMs: 3000 });
+    assert.equal('echo' in fleet.dataset, true, 'lab held, nothing else wrong: the line would echo the plate');
+    assert.equal(hud.named(), null, 'in the flight the planet keeps its name');
+    assert.equal(frame.hushed(), false, 'and the line its place (no plate yet)');
+    assert.ok(hud.fleetCover(), 'the names keep off it in the flight');
+    waits.at(-1).fn();
+    assert.equal(root.dataset.plate, '1');
+    assert.equal(frame.hushed(), true, 'the plate is up: the line is dropped');
+    assert.equal(frame.cover(), null, 'and covers nothing');
+    assert.equal(hud.fleetCover(), null);
+    assert.equal(hud.named(), 'lab-b', 'the hero names builder-b: its label gives way to the brackets');
+    // A second crit elsewhere: the line steps to it, back in sight (T23), the planet still unnamed.
+    const two = twoProblems();
+    hud.update(two);
+    assert.equal('echo' in fleet.dataset, false);
+    assert.equal(frame.hushed(), false);
+    assert.match(fleet.textContent ?? '', /hv1|builder-c/i);
+    hud.update(planet());
+    assert.equal(frame.hushed(), true);
+    // A site in trouble itself: its hero says `CRIT`, not a name; the site keeps its label.
+    hud.update(model());
+    legs[0]({ kind: 'site', id: 'lab', index: 1, count: 2, arriveMs: 0 });
+    assert.equal(frame.hushed(), true);
+    assert.equal(hud.named(), null);
+    // The overview: the plate goes, the line is back, every name too.
+    legs[0]({ kind: 'overview' });
+    assert.equal(frame.hushed(), false);
+    assert.equal('echo' in fleet.dataset, false);
+    assert.equal(hud.named(), null);
+    // A calm system held: no hero, nothing hidden; the line names the crit elsewhere.
+    legs[0]({ kind: 'site', id: 'hv1', index: 2, count: 2, arriveMs: 0 });
+    assert.equal(root.dataset.plate, '1');
+    assert.equal(frame.hushed(), false);
+    assert.equal(hud.named(), null);
+  } finally {
+    globalThis.document = prevDoc;
+  }
+});
+
+test('wall.css: an echoing line is hidden only under a plate, its place kept (T20)', () => {
+  const css = read('css/wall.css');
+  const at = css.indexOf('.wall-frame-layer[data-plate] .wall-fleet[data-echo] {');
+  assert.ok(at >= 0);
+  assert.match(css.slice(at, css.indexOf('}', at)), /visibility: hidden/);
+  assert.equal(/\.wall-fleet\[data-echo\]\s*\{/.test(css.replace(/\.wall-frame-layer\[data-plate\] \.wall-fleet\[data-echo\]/g, '')), false, 'no rule hides it without a plate');
 });
 
 test('the frame names the second problem while the first is held, the first otherwise', () => {

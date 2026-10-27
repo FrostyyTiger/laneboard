@@ -190,14 +190,17 @@ export function placeLabels(items, { W = Infinity, H = Infinity, covers = [], wa
  * take (hud.js); `held()` the thing the target lock holds, `{ id, r }` (css
  * px to its shut brackets, galaxy/lock.js), whose name goes outside the
  * brackets and which the other names keep clear of; `flight()` the flight
- * under way, `{ k, to }` or null (camera.js), whose passing names dim. Call
+ * under way, `{ k, to }` or null (camera.js), whose passing names dim;
+ * `named()` the id the caption plate's hero names now (hud.js, night 3
+ * T20), which is not named a second time beside its brackets. Call
  * `draw()` after the scene renders (camera.js `onDraw`).
  */
-export function createLabels(root, galaxy, { steps, covers = () => [], held = null, flight = null, doc = globalThis.document } = {}) {
+export function createLabels(root, galaxy, { steps, covers = () => [], held = null, flight = null, named = null, doc = globalThis.document } = {}) {
   root.style.setProperty('--gl-site', `${steps.site}px`);
   root.style.setProperty('--gl-room', `${steps.room}px`);
   const heldNow = typeof held === 'function' ? held : () => null;
   const flightNow = typeof flight === 'function' ? flight : () => null;
+  const namedNow = typeof named === 'function' ? named : () => null;
   const pool = new Map(); // id → { el, text, tone, size, x, y, alpha }
   let last = new Map();
   const v = new THREE.Vector3();
@@ -254,6 +257,7 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
     const items = [];
     const meta = new Map();
     const lock = heldNow();
+    const said = namedNow();
     // The site a flight goes to: every other name dims until it lands (a flight out to the overview dims none).
     const to = flightNow()?.to;
     const dimOf = (site) => typeof to === 'string' && site !== to;
@@ -272,6 +276,8 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
       const rank = labelRank(kind, tone);
       const r = isHeld ? Math.max(radius * sp.unit, lock.r) : radius * sp.unit;
       body(id, sp, r);
+      // The plate's hero says its name already (T20): its brackets and the leader point at it.
+      if (id === said) return;
       items.push({ id, rank, near: r, prefer: last.get(id)?.at, cands: candidates(sp.x, sp.y, r, bw, bh, stacks(kind, rank)) });
       meta.set(id, { text, tone, face, alpha, dim: dimOf(site) });
     };

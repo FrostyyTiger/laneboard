@@ -51,8 +51,8 @@ function siteOf(node, byId) {
  * its session waiting with it are one problem); it is as bad as the worst
  * node in it, and that node speaks for it. Worst first: down, crit,
  * attention, warn; a tie keeps model order. Returns
- *   `{ status, tone, shape, glyph, site, name, why, text, more }`
- * with `text` = `site · name · why` (the parts it has), `word` = `site ·
+ *   `{ status, tone, id, shape, glyph, site, name, why, text, more }`
+ * (`id` the node that speaks for it) with `text` = `site · name · why` (the parts it has), `word` = `site ·
  * name` (where it is), `more` the number of other problems, and `step` the
  * size it is set at: `far` (the 3 m step) while the worst is crit or down,
  * else `line`; a calm fleet gives `{ status: 'ok', tone: 'grey', step:
@@ -91,6 +91,7 @@ export function worstLine(model) {
   return {
     status: worst.status,
     tone: st.tone,
+    id: worst.id,
     step: worst.status === 'crit' || worst.status === 'down' ? 'far' : 'line',
     shape: st.shape,
     glyph: GLYPH[st.shape] ?? GLYPH.square,
@@ -246,6 +247,9 @@ function setLine(line, w) {
  * `plate(on)` says whether a caption plate is up over the frame (the galaxy's
  * hud.js, night 3 T4): `data-plate` on `root`, and wall.css sets the far line
  * at the plate's name step then, so a trouble frame has one headline.
+ * `update(model, { echo: true })` says the line names the plate's own
+ * subject (night 3 T20): `data-echo` on the line, and wall.css drops it
+ * while the plate is up (`hushed()`, when it covers nothing).
  */
 export function createFrame(root, { timers = globalThis, now = () => Date.now() } = {}) {
   const vignette = el('div', 'wall-vignette');
@@ -288,8 +292,14 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
   let farBox = null;
   let farDirty = false;
 
-  const update = (model, { cleared = null } = {}) => {
+  const update = (model, { cleared = null, echo = false } = {}) => {
     if (!model || typeof model !== 'object') return;
+    // The line names what the plate's hero names (night 3 T20): wall.css drops it while a plate is up.
+    if (('echo' in fleet.dataset) !== Boolean(echo)) {
+      if (echo) fleet.dataset.echo = '';
+      else delete fleet.dataset.echo;
+      farDirty = true;
+    }
     let w = worstLine(model);
     // A crit that just cleared (T18): remembered in the calm voice, and only while nothing else is in trouble.
     if (w.step === 'calm') w = clearedLine(model, cleared) ?? w;
@@ -334,9 +344,12 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
 
   const stop = () => { if (timer != null) timers.clearTimeout(timer); timer = null; };
 
+  /** Whether the line is dropped (an echo under a plate, T20): it covers nothing then. */
+  const hushed = () => 'plate' in root.dataset && 'echo' in fleet.dataset;
+
   /** The far block as a Map cover while the fleet line is at the far step, else null. */
   const cover = () => {
-    if (fleet.dataset.step !== 'far') return null;
+    if (fleet.dataset.step !== 'far' || hushed()) return null;
     if (farDirty || !farBox) {
       farDirty = false;
       farBox = coverOf({ left: fleet.offsetLeft, top: fleet.offsetTop, width: fleet.offsetWidth, height: fleet.offsetHeight });
@@ -352,5 +365,5 @@ export function createFrame(root, { timers = globalThis, now = () => Date.now() 
     farDirty = true;
   };
 
-  return { update, live, fresh, stop, cover, plate, el: { vignette, tag, clock, fleet } };
+  return { update, live, fresh, stop, cover, plate, hushed, el: { vignette, tag, clock, fleet } };
 }

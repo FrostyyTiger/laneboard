@@ -191,6 +191,31 @@ test('createLabels: the name of what the lock holds goes outside its shut bracke
   }
 });
 
+test('createLabels: the thing the plate\'s hero names is not named twice; others keep off its brackets (T20)', () => {
+  const world = worldOf('lab');
+  const lab = world.byId.get('lab');
+  const id = 'lane:builder-a/feat-search';
+  const galaxy = galaxyAt(world, siteShot(lab, 0));
+  let said = null;
+  const fd = fakeDoc();
+  const labels = createLabels(fd.root, galaxy, { steps: { site: 26, room: 15 }, held: () => ({ id, r: 40 }), named: () => said, doc: fd.doc });
+  labels.draw();
+  assert.ok(labels.shown().some((s) => s.id === id), 'named while no plate says it (the flight)');
+  said = id;
+  labels.draw();
+  const shown = labels.shown();
+  assert.ok(!shown.some((s) => s.id === id), 'the hero names it: no second name beside the brackets');
+  assert.ok(shown.some((s) => s.id === 'lab'), 'its site keeps its name');
+  const m = lab.members.find((x) => x.id === id);
+  const v = m.mesh.position.clone().project(galaxy.camera);
+  const at = { x: (v.x + 1) / 2 * 1368, y: (1 - v.y) / 2 * 912 };
+  const ring = { x: at.x - 40, y: at.y - 40, w: 80, h: 80 };
+  for (const s of shown.filter((x) => x.tone === 'calm')) assert.ok(!overlaps(s.box, ring), `${s.text} still clear of the brackets`);
+  said = null;
+  labels.draw();
+  assert.ok(labels.shown().some((s) => s.id === id), 'back once the plate goes');
+});
+
 test('labelFace: the held thing in trouble is named like a site, caps at the site step (T22, r21-operator 8)', () => {
   assert.equal(labelFace('site', 'calm'), 'label');
   assert.equal(labelFace('core', 'calm'), 'label');

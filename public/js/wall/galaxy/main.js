@@ -238,6 +238,7 @@ export function boot() {
     },
     held: lock.held,
     flight: cam.flight,
+    named: hud.named,
   });
   cam.onDraw(labels.draw);
   shownNames = labels.shown;
