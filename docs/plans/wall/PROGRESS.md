@@ -327,6 +327,25 @@ Notes for every builder round (planner, round 1):
   (`HOME` was cut by the top edge) and out of the plate's box (`CLOUD` under `HOLDS`) and the lock bracket — done
   when: a test on the large fixture (`?at=home`, overview, a held site) finds no shown label box meeting a cover or
   crossing the frame edge.
+- [ ] T27 (r36-dreamer galaxy 4) [ui] [variant:galaxy] The hero is the held site's worst member: the caption's
+  hero and the lock target at a held site are its worst member by status (crit before warn), never a lesser one
+  while a crit sits in the same system (r34 warp film: yellow `▲ FEAT-SEARCH` hero beside a red `■ vm-c`, banner
+  `HV1 · VM-C`) — done when: a test on a model with a warn and a crit member in one site gets the crit as hero and
+  lock target in `captionLines`/`sheetCaption`, and a film of `galaxy.html?demo=1&quality=0` has no plate whose
+  hero is milder than a member of the same site.
+- [ ] T28 (r36-dreamer fx-warp 1-3) [ui] [variant:galaxy] `fx=warp` reads as travel and rests on arrival: streaks
+  run radially along the screen vector from each grain to the destination's projected point (a vanishing point at
+  the target), length tied to the camera's speed and 0 by flight progress 0.9 (before the plate types, with T15),
+  and the 30 % of each streak nearest the target carries the destination's status hue at full token value (calm
+  stays grey) — done when: a test pins the streak direction toward the projected target, length 0 at k ≥ 0.9, and
+  the head tint equal to the tone's token for warn/crit and unchanged for calm, and a film of
+  `galaxy.html?demo=1&quality=0&fx=warp` has no streak over a typing plate and shows a coloured head on a flight to
+  a trouble site.
+- [ ] T29 (r36-dreamer touch 3) [ui] [variant:galaxy] BACK returns to the pose you left: `goBack()` to the
+  overview flies to the last explore pose (orbit yaw, pitch, dist, look) the person held before opening a site, not
+  the default fit; only the first touch (wake) resets to the default — done when: a test with a fake clock drags to
+  a yaw, taps a site, goes back twice and finds the camera's orbit equal to the dragged one, and a wake still lands
+  on the default fit.
 
 ## Research questions
 
@@ -397,6 +416,16 @@ Night 3's list, not yet a task (README §7 Night 3; replan takes from here in or
 - (was night 2's T32, r43-stranger 6; not named by Night 3, fits E) Screen Wake Lock in `galaxy/main.js`: request
   at start and again on visible, silent when denied or missing (Q15).
 - §7 Night 3 D unbuilt, staying unbuilt: `fx=storm`, `fx=lights`, `fx=rings`, `fx=arrive`.
+
+From r36-dreamer (not tasks yet):
+- (r36-dreamer touch 1) Explore mode says a person is driving: a small mono line by the tag, `MANUAL · TOUR IN 0:40`,
+  counting down in `--text-3`, a closing ring in the last 5 s (with T14; = r17-operator touch 1 below).
+- (r36-dreamer galaxy 1) A calm plate carries one real-facts line in `--text-2` and the held system is framed in the
+  space the plate leaves free (the facts idea is also under For the owner; the framing = r54-film-ui 8 below).
+- (r36-dreamer galaxy 6) Banner plate feathered: the Later A4 T38 line above.
+- (r36-dreamer fx-beacon 2) Beacon billboarded screen-vertical: the r31-film-ui galaxy 6 line above.
+- (r36-dreamer across) The tour's overview takes the touch explore pose (lower pitch, wide tilted disc) and calm plates
+  the planet sheet's restraint: taste, with r31-film-ui across under For the owner.
 
 From r31-film-ui (not tasks yet):
 - (r31-film-ui galaxy 6, fx-beacon 1) Draw the beacon pillar screen-vertical (billboard on x), not leaning with perspective.
@@ -514,6 +543,14 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 - (r31-film-ui across, taste) The touch overview's lower, wider pitch is the best composition so far; the tour's
   overview could take that pitch for its first beat. Not a task.
 
+- (r36-dreamer, `fx` candidates, none asked for; the review's three proposals) `fx=heartbeat`: a faint 1 px grey bead
+  runs sun → site along its hyperlane whenever that site's data arrives, a quiet site's lane stays dark (`lanes` and
+  `sweep` overlap; needs per-site freshness). `fx=telemetry`: on arrival at a held system a thin arc draws once round
+  each planet to its cpu, an inner arc to mem, grey for calm, hue and a slow tick only on warn/crit (the calm hold
+  gets real data; overlaps r11's `telemetry`). `fx=ledger`: a thin 24 h ring round the clock, a short tick per trouble
+  seen since page load in its old hue cooling to grey once cleared, never pulsing (page memory only, like `afterglow`).
+  None became a task: this review's three slots went to bugs.
+
 ## Reviews
 
 - r11-dreamer.md: 9 galaxy + 3 beacon + 2 across + 3 unforgettable; 3 became tasks (T18, T19, T20); galaxy 4 (the
@@ -532,6 +569,10 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
   dropped (covered by T16, T20, T19, T13); galaxy 3, 5, 7 (Later already), galaxy 6, touch 4, fx-beacon 1-3 went to
   Later; touch 6 dropped (observation); across 2 to the owner; across 1 dropped (already the plan); lanes/comets/twinkle
   not filmed, dropped (retired).
+- r36-dreamer.md: 7 galaxy + 4 touch + 3 fx-beacon + 3 fx-warp + 3 across + 3 unforgettable; 3 became tasks (T27, T28,
+  T29); galaxy 2 (= T16), 3 (= T20), 5 (= T17, T26), 7 (= T15), touch 2 (= T25) dropped (covered); galaxy 1, 6, touch 1,
+  fx-beacon 2 and across went to Later; fx-beacon 1 dropped (= T16), fx-beacon 3 and touch 4 dropped (observation);
+  the three `fx` ideas to the owner; the retired comets/twinkle/lanes scores repeat r11, not filmed, dropped.
 
 ## Scores
 
@@ -557,5 +598,11 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 | r31 | film-ui, fx-lanes | – | – | – | – | 2 | 8 | – |
 | r31 | film-ui, fx-comets | – | – | – | – | 3 | 7 | – |
 | r31 | film-ui, fx-twinkle | – | – | – | – | 2 | 9 | – |
+| r36 | dreamer, galaxy | 6 | 6 | 6 | 6 | 6 | 4 | 6 |
+| r36 | dreamer, fx-beacon | – | – | – | – | 7 | 6 | – |
+| r36 | dreamer, fx-warp | – | – | – | – | 5 | 4 | – |
+| r36 | dreamer, fx-comets | – | – | – | – | 2 | 8 | – |
+| r36 | dreamer, fx-twinkle | – | – | – | – | 2 | 9 | – |
+| r36 | dreamer, fx-lanes | – | – | – | – | 2 | 8 | – |
 
 ## Morning
