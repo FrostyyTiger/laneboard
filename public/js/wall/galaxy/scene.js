@@ -1197,14 +1197,19 @@ export function createGalaxyScene(canvas, {
     }
   };
 
-  // --- fx=warp (night 3 T12; fx.js warpAt): a flight has a direction and a tint --
+  // --- fx=warp (night 3 T12, T28; fx.js warpAt, warpTail): a flight has a target and a tint --
   // A line from each of the first WARP_STARS far stars and WARP_DUST dust
-  // grains to a tail pushed along the camera's travel by WARP.len of its
-  // distance (in the vertex shader, view space: every streak the same angle),
-  // so the sky streams past; the tail leans to the destination's hue. Made
-  // once, hidden at rest (no draw, and a frame does nothing but one check);
-  // the dust's streaks are its child, so they turn with it.
+  // grains to a tail pushed toward the destination's point on screen by
+  // WARP.len of its distance (in the vertex shader, view space: every streak
+  // the same angle, never past the target's ray: fx.js warpTail), so the sky
+  // streams out of a vanishing point on the target; the share of each streak
+  // nearest it takes the destination's hue at full token value. With no site
+  // to aim at (a flight to the overview, a target behind the camera) the tail
+  // goes along the camera's travel. Made once, hidden at rest (no draw, and a
+  // frame does nothing but one check); the dust's streaks are its child, so
+  // they turn with it.
   const warpDir = { value: new THREE.Vector3(0, 0, -1) };
+  const warpAim = { value: new THREE.Vector3() }, warpAimOn = { value: 0 };
   const warpParts = [];
   let warpWant = null; // `{ k, to }` from the camera's flight, or null
   let warpShown = warpAt(null);
@@ -1222,22 +1227,33 @@ export function createGalaxyScene(canvas, {
       g.setAttribute('tail', new THREE.BufferAttribute(tail, 1));
       const m = new THREE.ShaderMaterial({
         uniforms: {
-          warpDir, warpLen: { value: 0 }, warpOpacity: { value: 0 },
-          warpHead: { value: col(palette.calm) }, warpTail: { value: col(palette.calm) },
+          warpDir, warpAim, warpAimOn, warpLen: { value: 0 }, warpOpacity: { value: 0 },
+          warpBody: { value: col(palette.calm) }, warpHead: { value: col(palette.calm) }, warpHeadFrom: { value: 1 - WARP.head },
         },
         vertexShader: [
-          'uniform vec3 warpDir;', 'uniform float warpLen;', 'attribute float tail;', 'varying float vTail;',
+          'uniform vec3 warpDir;', 'uniform vec3 warpAim;', 'uniform float warpAimOn;', 'uniform float warpLen;',
+          'attribute float tail;', 'varying float vTail;',
           'void main() {',
           '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
-          '  mv.xyz += normalize((viewMatrix * vec4(warpDir, 0.0)).xyz) * warpLen * length(mv.xyz) * tail;',
+          '  float reach = warpLen * length(mv.xyz) * tail;',
+          '  vec3 aim = (viewMatrix * vec4(warpAim, 1.0)).xyz;',
+          '  if (warpAimOn > 0.5 && aim.z < -1e-3 && mv.z < -1e-3) {',
+          '    vec2 gap = aim.xy * (mv.z / aim.z) - mv.xy;',
+          '    float g = length(gap);',
+          '    if (g > 1e-6) mv.xy += gap * (min(reach, g) / g);',
+          '  } else {',
+          '    mv.xyz += normalize((viewMatrix * vec4(warpDir, 0.0)).xyz) * reach;',
+          '  }',
           '  vTail = tail;',
           '  gl_Position = projectionMatrix * mv;',
           '}',
         ].join('\n'),
         fragmentShader: [
-          'uniform vec3 warpHead;', 'uniform vec3 warpTail;', 'uniform float warpOpacity;', 'varying float vTail;',
+          'uniform vec3 warpBody;', 'uniform vec3 warpHead;', 'uniform float warpHeadFrom;', 'uniform float warpOpacity;',
+          'varying float vTail;',
           'void main() {',
-          '  gl_FragColor = vec4(mix(warpHead, warpTail, vTail) * warpOpacity * (1.0 - 0.45 * vTail), 1.0);',
+          '  float h = smoothstep(warpHeadFrom - 0.04, warpHeadFrom + 0.04, vTail);',
+          '  gl_FragColor = vec4(mix(warpBody * (1.0 - 0.45 * vTail), warpHead, h) * warpOpacity, 1.0);',
           '  #include <colorspace_fragment>',
           '}',
         ].join('\n'),
@@ -1256,8 +1272,10 @@ export function createGalaxyScene(canvas, {
   }
   /** The camera's flight now (`{ k, to }`, camera.js `flight()`), or null at rest; ignored unless `fx=warp`. */
   const setWarp = (w) => { if (warpParts.length) warpWant = w && Number.isFinite(w.k) ? { k: w.k, to: w.to ?? null } : null; };
-  /** The warp as last drawn, its line sets and its direction (the scene's `warp`). */
-  const warp = () => ({ ...warpShown, parts: warpParts.map((p) => p.lines), dir: warpDir.value.clone() });
+  /** The warp as last drawn, its line sets, its direction and the point it aims at (null: along the travel). */
+  const warp = () => ({
+    ...warpShown, parts: warpParts.map((p) => p.lines), dir: warpDir.value.clone(), aim: warpAimOn.value ? warpAim.value.clone() : null,
+  });
   const drawWarp = () => {
     // At rest it costs one check (and where the camera is, for the next flight's first step).
     if (!warpWant && !warpOn) { warpLast.copy(camera.position); warpHas = true; return; }
@@ -1265,6 +1283,9 @@ export function createGalaxyScene(canvas, {
     const t = s && !s.gone ? s.nebula?.tone ?? 'calm' : 'calm';
     const at = warpAt(warpWant?.k, t, still);
     warpShown = { ...at, tone: t };
+    // Where it streams from: the destination's star (its system's centre), when there is one.
+    warpAimOn.value = s?.home ? 1 : 0;
+    if (s?.home) warpAim.value.set(s.home.x, s.home.y, s.home.z);
     // Which way the camera goes: its step since the last frame (kept when it pauses).
     warpStep.subVectors(camera.position, warpLast);
     if (warpHas && warpStep.lengthSq() > 1e-6) warpDir.value.copy(warpStep).normalize();
@@ -1278,8 +1299,8 @@ export function createGalaxyScene(canvas, {
       const u = lines.material.uniforms;
       u.warpLen.value = at.len * share;
       u.warpOpacity.value = WARP.opacity * at.k;
-      u.warpHead.value.copy(tone.calm);
-      u.warpTail.value.copy(tone.calm).lerp(tone[t] ?? tone.calm, at.tint);
+      u.warpBody.value.copy(tone.calm);
+      u.warpHead.value.copy(tone[at.head] ?? tone.calm);
     }
     dust.material.opacity = DUST_OPACITY * (1 - at.thin);
   };
@@ -1411,7 +1432,7 @@ export function createGalaxyScene(canvas, {
     get comets() { return comets.flying; },
     get twinkles() { return twinkles; },
     get beacons() { return beacons; },
-    /** The warp as last drawn (`{ k, len, tint, thin, tone }`, fx.js warpAt) and its two line sets (fx=warp). */
+    /** The warp as last drawn (`{ k, len, head, thin, tone, dir, aim }`, fx.js warpAt) and its two line sets (fx=warp). */
     get warp() { return warp(); },
     /** What the dust thins round now (`{ x, y, z, r, k }`, dustFade's uniforms). */
     get dustHold() { return heldDust(); },

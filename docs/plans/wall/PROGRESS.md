@@ -504,14 +504,27 @@ Notes for every builder round (planner, round 1):
   `tools/r59-hero.mjs` (pace=wall, large, 170 s, 505 plate samples against the newest model): no hero milder than a
   member of its site; VM-C going down took HV1's hero at once; 0 errors. Film r59-galaxy: 0 errors, 12.6 fps
   (SwiftShader, as earlier rounds; the change runs once per caption, not per frame).
-- [ ] T28 (r36-dreamer fx-warp 1-3) [ui] [variant:galaxy] `fx=warp` reads as travel and rests on arrival: streaks
+- [x] T28 (r36-dreamer fx-warp 1-3) [ui] [variant:galaxy] `fx=warp` reads as travel and rests on arrival: streaks
   run radially along the screen vector from each grain to the destination's projected point (a vanishing point at
   the target), length tied to the camera's speed and 0 by flight progress 0.9 (before the plate types, with T15),
   and the 30 % of each streak nearest the target carries the destination's status hue at full token value (calm
   stays grey) — done when: a test pins the streak direction toward the projected target, length 0 at k ≥ 0.9, and
   the head tint equal to the tone's token for warn/crit and unchanged for calm, and a film of
   `galaxy.html?demo=1&quality=0&fx=warp` has no streak over a typing plate and shows a coloured head on a flight to
-  a trouble site.
+  a trouble site. (commit SHA)
+  Builder r60: `fx.js warpAt` sizes a streak by the camera's speed under the flight's cubic ease (square-rooted
+  share of its peak: 2k up to half-way, 2(1 − k) after, so it reads over more of the flight than the raw slope),
+  cut over `snap` [0.8, 0.9]: nothing from 0.9 on. `tint` is gone; `head` is the tone (`warn`/`crit`, else `calm`)
+  whose token colours the `WARP.head` = 30 % of each streak nearest the target, unmixed (smoothstep ±0.04). The vertex
+  shader pushes each tail toward the destination star's ray at the grain's depth (same angle as before, never past
+  the ray, so grains by the vanishing point barely streak); a flight to the overview, or a target behind the
+  camera, keeps the old travel direction. `fx.js warpTail` is the shader's math in JS for the test. Tests in
+  `wall-galaxy-fx.test.mjs`: zero at k ≥ 0.9, length ordered by the ease's slope, the tail on the screen line to the
+  vanishing point and never past it, the scene's aim = the target star, head = crit/warn token, calm head = body,
+  no aim to the overview. Film r60-galaxy (`fx=warp&pace=wall`, large): the flight to HV2 streams out of HV2 with
+  red flecks at the inner ends, nothing over the typing plates, 0 errors, 11.5 fps (SwiftShader, as earlier rounds;
+  shader-only, no new per-frame JS). The flecks are thin at this film's scale: if a panel wants the hue louder, try
+  head 0.4 or a brighter head opacity, not a wider tint.
 - [ ] T29 (r36-dreamer touch 3) [ui] [variant:galaxy] BACK returns to the pose you left: `goBack()` to the
   overview flies to the last explore pose (orbit yaw, pitch, dist, look) the person held before opening a site, not
   the default fit; only the first touch (wake) resets to the default — done when: a test with a fake clock drags to

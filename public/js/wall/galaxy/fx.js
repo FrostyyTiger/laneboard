@@ -30,12 +30,13 @@
 // frame), a white-hot core at its foot, wider as well as taller with age,
 // its sheath fading to nothing at the top.
 //
-// `warp` (night 3 T12, r59-dreamer 1): during a flight the dust and the far
-// stars stretch into short streaks along the way the camera travels, their
-// tails tinted toward the status of where it is going (grey for calm, a faint
-// amber or red edge for trouble), and snap back as it lands; the dust thins
-// while it flies. You know the next target is red before the caption types
-// it. Nothing at rest, nothing in still mode.
+// `warp` (night 3 T12, r59-dreamer 1; T28 r36-dreamer): during a flight the
+// dust and the far stars stretch into short streaks that point at where the
+// camera is going (a vanishing point on the target), longest at the flight's
+// top speed, their ends nearest the target in its status hue (grey for calm,
+// amber or red for trouble), and gone before it lands; the dust thins while
+// it flies. You know the next target is red before the caption types it.
+// Nothing at rest, nothing in still mode.
 
 import { hash } from './layout.js';
 import { toneOf } from './palette.js';
@@ -554,19 +555,23 @@ export function beaconAt(b, now, timing = BEACON, still = false) {
 }
 
 /**
- * The warp's look over a flight (night 3 T12): a streak's length is `len`
- * times its point's distance from the camera (so every streak is the same
- * angle, about 3 degrees at full stretch, near grain or far star; the dust
- * takes `dust` of it, the far stars `stars`), grown in over `grow` of the
- * flight's progress and snapped back over `snap` (short: it lands at once).
- * `tint` is how far a streak's tail leans to the destination's hue by its
- * tone (calm none: grey), `thin` how much of the dust's light goes while
- * it flies, `opacity` the streaks' peak (additive, so faint).
+ * The warp's look over a flight (night 3 T12, T28): a streak's length is
+ * `len` times its point's distance from the camera (so every streak is the
+ * same angle, about 3 degrees at full stretch, near grain or far star; the
+ * dust takes `dust` of it, the far stars `stars`), scaled by the camera's
+ * speed (the flight's ease, `ease` in layout.js, so it is longest mid-way
+ * and short as the camera leaves and slows) and gone over `snap` of the
+ * flight's progress, by 0.9: the sky is at rest before the plate types
+ * (T15). Each streak runs from its grain toward the destination's point on
+ * screen (a vanishing point at the target); the `head` share of it nearest
+ * the target carries the destination's hue at full token value when its
+ * tone is one of `hued` (calm stays grey). `thin` is how much of the dust's
+ * light goes while it flies, `opacity` the streaks' peak (additive, so faint).
  */
 export const WARP = Object.freeze({
   len: 0.055, dust: 1, stars: 0.6,
-  grow: Object.freeze([0.06, 0.3]), snap: Object.freeze([0.84, 0.95]),
-  tint: Object.freeze({ calm: 0, low: 0, warn: 0.5, crit: 0.65 }),
+  snap: Object.freeze([0.8, 0.9]),
+  head: 0.3, hued: Object.freeze(['warn', 'crit']),
   thin: 0.55, opacity: 0.4,
 });
 
@@ -577,16 +582,39 @@ const smooth = (a, b, x) => {
 
 /**
  * The warp at flight progress `k` (0..1, the flight's own time, not eased)
- * toward a destination whose worst tone is `tone`: `{ k, len, tint, thin }`,
- * `k` the stretch 0..1 (in over `grow`, out over `snap`), `len` the streak
- * length (WARP.len's share), `tint` the tail's lean to the hue, `thin` the
- * dust's loss. All 0 outside a flight (k not strictly inside 0..1, or not
- * a number) and in still mode (no flights there).
+ * toward a destination whose worst tone is `tone`: `{ k, len, head, thin }`,
+ * `k` the stretch 0..1 (the camera's speed under the flight's cubic ease,
+ * as a share of its peak, square-rooted so it reads over more of the
+ * flight: 2k up to half-way, 2(1 - k) after; then cut over `snap`), `len`
+ * the streak length (WARP.len's share), `head` the tone whose hue the
+ * streak's target end takes (`calm` unless the tone is hued), `thin` the
+ * dust's loss. All 0 (head calm) outside a flight (k not strictly inside
+ * 0..1, or not a number), from `snap[1]` on, and in still mode.
  */
 export function warpAt(k, tone = 'calm', still = false, timing = WARP) {
-  const none = { k: 0, len: 0, tint: 0, thin: 0 };
+  const none = { k: 0, len: 0, head: 'calm', thin: 0 };
   if (still || !Number.isFinite(k) || !(k > 0 && k < 1)) return none;
-  const e = smooth(timing.grow[0], timing.grow[1], k) * (1 - smooth(timing.snap[0], timing.snap[1], k));
+  const speed = 2 * Math.min(k, 1 - k); // sqrt(ease'(k) / max ease') of the cubic ease
+  const e = speed * (1 - smooth(timing.snap[0], timing.snap[1], k));
   if (!(e > 0)) return none;
-  return { k: e, len: timing.len * e, tint: (timing.tint[tone] ?? 0) * e, thin: timing.thin * e };
+  const head = timing.hued.includes(tone) ? tone : 'calm';
+  return { k: e, len: timing.len * e, head, thin: timing.thin * e };
+}
+
+/**
+ * Where a streak's target end sits (view space, the camera looking down -z),
+ * the scene's vertex shader in plain JS so a test can pin it (T28): from the
+ * grain at `p` toward the target's ray (`aim`, the target in view space) at
+ * the grain's depth, by `len` of the grain's distance, never past that ray
+ * (a grain by the vanishing point barely streaks). Null when the grain or the
+ * target is behind the camera: the shader then streaks along the travel.
+ */
+export function warpTail(p, aim, len) {
+  if (!(p.z < -1e-3) || !(aim.z < -1e-3)) return null;
+  const s = p.z / aim.z;
+  const dx = aim.x * s - p.x, dy = aim.y * s - p.y;
+  const gap = Math.hypot(dx, dy);
+  if (!(gap > 1e-6)) return { x: p.x, y: p.y, z: p.z };
+  const step = Math.min(len * Math.hypot(p.x, p.y, p.z), gap) / gap;
+  return { x: p.x + dx * step, y: p.y + dy * step, z: p.z };
 }

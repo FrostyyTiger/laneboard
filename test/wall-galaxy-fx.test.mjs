@@ -10,8 +10,10 @@ import assert from 'node:assert/strict';
 import {
   BEACON, COMETS, FX_NAMES, LANES, TWINKLE, WARP, beaconAt, beaconHeight, beaconNear, beaconScale, beaconWidth, beamProfile, coreProfile, cometAt, critAges, cometPath, flowComets, parseFx, pulseAt, routePath, siteRoutes, trackComets,
   trackRoutes, trackTwinkles, twinkleAt, workingPlanets,
-  warpAt,
+  warpAt, warpTail,
 } from '../public/js/wall/galaxy/fx.js';
+import * as THREE from '../public/vendor/three/three.module.js';
+import { ease } from '../public/js/wall/galaxy/layout.js';
 import { paletteFrom } from '../public/js/wall/galaxy/palette.js';
 import { FOV, createGalaxyScene, overviewShot } from '../public/js/wall/galaxy/scene.js';
 import { ndcOf } from '../public/js/wall/galaxy/framing.js';
@@ -788,33 +790,67 @@ test('with fx=beacon a crit with no event is dated from when the page first saw 
   assert.ok(hv2().scale.x > w0, 'and wider');
 });
 
-// --- fx=warp (night 3 T12) -------------------------------------------------------
+// --- fx=warp (night 3 T12, T28) -------------------------------------------------------
 
-test('warpAt: zero outside a flight and in still mode; grows in, holds, snaps back; the tint is the tone\'s', () => {
-  const zero = { k: 0, len: 0, tint: 0, thin: 0 };
+test('warpAt: zero outside a flight, in still mode and from 0.9 on; length follows the camera\'s speed; the head is the tone\'s', () => {
+  const zero = { k: 0, len: 0, head: 'calm', thin: 0 };
   for (const k of [null, undefined, NaN, -0.2, 0, 1, 1.4]) assert.deepEqual(warpAt(k, 'crit'), zero, `not a flight: ${k}`);
-  for (const k of [0.1, 0.5, 0.9]) assert.deepEqual(warpAt(k, 'crit', true), zero, 'still: no warp');
-  assert.deepEqual(warpAt(0.03, 'crit'), zero, 'not yet: the camera has barely left');
-  assert.deepEqual(warpAt(0.97, 'crit'), zero, 'snapped back before it lands');
+  for (const k of [0.1, 0.5, 0.85]) assert.deepEqual(warpAt(k, 'crit', true), zero, 'still: no warp');
+  // T28: at rest before the plate types (T15 types it at arrival, after 0.9 of the flight).
+  for (let k = 0.9; k < 1; k += 0.005) assert.deepEqual(warpAt(k, 'crit'), zero, `at rest by 0.9: ${k}`);
   const mid = warpAt(0.5, 'calm');
   assert.equal(mid.k, 1);
   assert.equal(mid.len, WARP.len);
-  assert.equal(mid.tint, 0, 'calm: grey streaks');
+  assert.equal(mid.head, 'calm', 'calm: grey streaks');
   assert.equal(mid.thin, WARP.thin);
-  assert.equal(warpAt(0.5, 'crit').tint, WARP.tint.crit);
-  assert.equal(warpAt(0.5, 'warn').tint, WARP.tint.warn);
-  assert.ok(WARP.tint.crit > WARP.tint.warn && WARP.tint.warn > 0, 'red leans more than amber');
-  assert.equal(warpAt(0.5, 'bogus').tint, 0);
-  // Monotone in, monotone out; the snap is shorter than the growth (it lands at once).
-  let prev = 0;
-  for (let k = 0.01; k <= 0.5; k += 0.01) { const l = warpAt(k).len; assert.ok(l >= prev - 1e-12); prev = l; }
-  for (let k = 0.5; k < 1; k += 0.01) { const l = warpAt(k).len; assert.ok(l <= prev + 1e-12); prev = l; }
-  assert.ok(WARP.snap[1] - WARP.snap[0] < WARP.grow[1] - WARP.grow[0]);
+  assert.equal(warpAt(0.5, 'crit').head, 'crit');
+  assert.equal(warpAt(0.5, 'warn').head, 'warn');
+  assert.equal(warpAt(0.5, 'low').head, 'calm');
+  assert.equal(warpAt(0.5, 'bogus').head, 'calm');
+  // Tied to the camera's speed (the cubic ease's slope): longer where it flies faster, before the cut.
+  const slope = (k) => (ease(k + 1e-4) - ease(k - 1e-4)) / 2e-4;
+  for (const [x, y] of [[0.1, 0.3], [0.2, 0.45], [0.75, 0.6], [0.7, 0.55]]) {
+    assert.ok(slope(x) < slope(y) && warpAt(x).len < warpAt(y).len, `${x} slower and shorter than ${y}`);
+  }
+  for (const k of [0.1, 0.25, 0.4, 0.6, 0.75]) {
+    assert.ok(Math.abs(warpAt(k).k - Math.sqrt(slope(k) / slope(0.5))) < 1e-3, `speed share at ${k}`);
+  }
+  assert.ok(warpAt(0.02).len < 0.05 * WARP.len, 'barely there as it leaves');
   // Every number scales with the stretch.
   const q = warpAt(0.15, 'crit');
   assert.ok(q.k > 0 && q.k < 1);
-  assert.ok(Math.abs(q.len - WARP.len * q.k) < 1e-12 && Math.abs(q.tint - WARP.tint.crit * q.k) < 1e-12);
+  assert.ok(Math.abs(q.len - WARP.len * q.k) < 1e-12 && Math.abs(q.thin - WARP.thin * q.k) < 1e-12);
+  assert.ok(WARP.head > 0.29 && WARP.head < 0.31, 'the 30 % nearest the target');
 });
+
+test('warpTail: a streak runs from its grain toward the target\'s point on screen, never past it', () => {
+  // Project view space to the screen (the camera looks down -z).
+  const scr = (p) => ({ x: p.x / -p.z, y: p.y / -p.z });
+  const aim = { x: 30, y: -12, z: -900 };
+  const vp = scr(aim);
+  const grains = [{ x: -200, y: 140, z: -600 }, { x: 500, y: 20, z: -2400 }, { x: 10, y: -300, z: -120 }, { x: -40, y: -40, z: -5000 }];
+  for (const p of grains) {
+    const t = warpTail(p, aim, WARP.len);
+    const a = scr(p), b = scr(t);
+    const toVp = { x: vp.x - a.x, y: vp.y - a.y }, along = { x: b.x - a.x, y: b.y - a.y };
+    const cross = toVp.x * along.y - toVp.y * along.x;
+    const dot = toVp.x * along.x + toVp.y * along.y;
+    assert.ok(Math.abs(cross) < 1e-9 * Math.hypot(toVp.x, toVp.y) + 1e-12, `on the line to the vanishing point: ${JSON.stringify(p)}`);
+    assert.ok(dot > 0, 'toward it, not away');
+    assert.ok(Math.hypot(along.x, along.y) <= Math.hypot(toVp.x, toVp.y) + 1e-12, 'never past it');
+    assert.equal(t.z, p.z, 'same depth');
+    const angle = Math.hypot(t.x - p.x, t.y - p.y) / Math.hypot(p.x, p.y, p.z);
+    assert.ok(Math.abs(angle - WARP.len) < 1e-9 || angle < WARP.len, 'the same angle for near and far, or shorter by the target');
+  }
+  // A grain by the vanishing point barely streaks; one behind, or a target behind, has no aim.
+  const near = { x: aim.x * (500 / 900) + 0.5, y: aim.y * (500 / 900), z: -500 };
+  assert.ok(Math.hypot(warpTail(near, aim, WARP.len).x - near.x, warpTail(near, aim, WARP.len).y - near.y) <= 0.5 + 1e-9);
+  assert.equal(warpTail({ x: 0, y: 0, z: 100 }, aim, WARP.len), null);
+  assert.equal(warpTail(grains[0], { x: 0, y: 0, z: 50 }, WARP.len), null);
+});
+
+/** Two linear colours within a rounding step. */
+const colourNear = (a, b) => a.every((v, i) => Math.abs(v - b[i]) < 1e-6);
 
 /** The scene's warp streaks (both line sets, wherever they hang). */
 function warpLines(galaxy) {
@@ -843,7 +879,7 @@ test('without fx=warp the scene makes no streaks and ignores a flight', () => {
   assert.deepEqual(galaxy.warp.parts, []);
 });
 
-test('with fx=warp a flight streaks the sky along the travel, tinted by where it goes; at rest nothing', () => {
+test('with fx=warp a flight streaks the sky out of the destination, its head in the destination\'s hue; at rest nothing', () => {
   const { galaxy, at } = sceneAt({ fx: new Set(['warp']) });
   galaxy.update(critModel());
   toOverview(galaxy);
@@ -862,13 +898,19 @@ test('with fx=warp a flight streaks the sky along the travel, tinted by where it
   assert.ok(lines.every((l) => l.visible));
   assert.equal(galaxy.warp.tone, 'crit');
   assert.equal(galaxy.warp.len, WARP.len);
-  assert.equal(galaxy.warp.tint, WARP.tint.crit);
+  assert.equal(galaxy.warp.head, 'crit');
   assert.ok(Math.abs(dust.material.opacity - 0.7 * (1 - WARP.thin)) < 1e-9, 'the dust thins');
-  assert.ok(galaxy.warp.dir.x > 0.999, `along the travel: ${JSON.stringify(galaxy.warp.dir)}`);
+  assert.ok(galaxy.warp.dir.x > 0.999, `the travel, kept for a flight with no aim: ${JSON.stringify(galaxy.warp.dir)}`);
+  const hv2 = galaxy.world.byId.get('hv2').home;
+  assert.deepEqual(galaxy.warp.aim.toArray(), [hv2.x, hv2.y, hv2.z], 'streams from the destination\'s star');
   const u = lines[0].material.uniforms;
-  const red = paletteFrom().crit;
-  assert.ok(u.warpTail.value.r > u.warpHead.value.r, 'the tail leans red');
-  assert.ok(red[0] > red[2]);
+  assert.equal(u.warpAimOn.value, 1);
+  // The head at the crit token's full value (the scene's colour from the palette), the body grey.
+  const want = (c) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace).toArray();
+  const pal = paletteFrom();
+  assert.ok(colourNear(u.warpHead.value.toArray(), want(pal.crit)), `head = crit: ${u.warpHead.value.toArray()}`);
+  assert.ok(colourNear(u.warpBody.value.toArray(), want(pal.calm)), 'body grey');
+  assert.ok(Math.abs(u.warpHeadFrom.value - (1 - WARP.head)) < 1e-12, 'the 30 % nearest the target');
   const stars = lines.find((l) => l.name === 'fx-warp-stars').material.uniforms.warpLen.value;
   const grains = lines.find((l) => l.name === 'fx-warp-dust').material.uniforms.warpLen.value;
   assert.ok(stars < grains, 'the far stars streak shorter than the dust');
@@ -877,8 +919,23 @@ test('with fx=warp a flight streaks the sky along the travel, tinted by where it
   galaxy.setWarp({ k: 0.5, to: 'hv1' });
   flyStep(galaxy, at, 1048);
   assert.equal(galaxy.warp.tone, 'calm');
-  assert.equal(galaxy.warp.tint, 0);
-  assert.deepEqual(u.warpTail.value.toArray(), u.warpHead.value.toArray());
+  assert.equal(galaxy.warp.head, 'calm');
+  assert.deepEqual(u.warpHead.value.toArray(), u.warpBody.value.toArray(), 'calm: the head stays grey');
+
+  // A warn destination: the head at the warn token.
+  const warned = critModel();
+  warned.nodes.find((n) => n.id === 'db').status = 'warn';
+  galaxy.update(warned);
+  galaxy.setWarp({ k: 0.5, to: 'hv1' });
+  flyStep(galaxy, at, 1056);
+  assert.equal(galaxy.warp.tone, 'warn');
+  assert.ok(colourNear(u.warpHead.value.toArray(), want(pal.warn)), 'head = warn');
+
+  // To the overview: no aim, along the travel.
+  galaxy.setWarp({ k: 0.5, to: null });
+  flyStep(galaxy, at, 1060);
+  assert.equal(galaxy.warp.aim, null);
+  assert.equal(u.warpAimOn.value, 0);
 
   // Landed: snapped back, the dust as it was.
   galaxy.setWarp(null);
