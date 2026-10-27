@@ -242,6 +242,36 @@ button under it, 48 px tall, 16 px caps: `SHOW ALL 40 LINES`; tapped, it shows e
 sideways inside its block with the first column fixed (on `--bg-elevated`). Every row is drawn,
 however many (D23: 20 rows are 880 px, one flick).
 
+**Which columns are right-aligned** (D146). A cell is *numeric* when its text, with inline markup
+taken off (`**12**` is `12`) and trimmed, is at most 40 characters and matches
+
+```
+^(?:[-+−]?\$?\d+(?:[.,]\d+)?(?: ?(?:%|(?:[KMGT]i?)?B|ms|s|min|h|d))?|\d+ h \d{2}|\d{1,2}:\d{2}(?::\d{2})?)$
+```
+
+A cell that is empty, `-` or `—` is *neutral*. A column is right-aligned when it has at least one
+numeric body cell and every other body cell is numeric or neutral; its header cell is right-aligned
+with it. GFM's alignment row wins where it says something: `---:` right, `:---` left; `:---:` and
+`---` leave it to the rule (the design has no centred table text).
+
+| numeric | not numeric |
+| --- | --- |
+| `12`, `-3`, `+2`, `3.4 GB`, `3,4 GB`, `12 MiB`, `41 %`, `41%`, `250 ms`, `45 s`, `12 min`, `3 d`, `$0.42`, `1 h 12`, `03:12`, `3:12:05` | `hv1`, `v2`, `1.2.3`, `12 GB free`, `~3 min`, `03:12 UTC`, `1e5`, `1 234`, `12/40` |
+
+**The renderer** (D146) is laneboard's own module, `public/js/core/md.js`, with no dependency, in
+the style of `public/js/core/hl.js`: a pure ES module, no imports, no DOM. `parse(text)` returns
+an array of plain block objects (`p`, `h`, `list`, `quote`, `rule`, `code`, `table`, and `tail`
+for a last line with no newline yet), each holding inline runs (`text`, `bold`, `code`, `link`
+with `text` and `host`, `image` with `alt`, `mark`). The pane builds the DOM from them with
+`textContent` only, never `innerHTML`, so nothing in a reply is parsed as markup. `parse` walks
+the text once: a line longer than 2 000 characters is one plain `p` run, and its regexes, the
+numeric-cell one included, have no nested quantifiers. The pane calls it on a text block's whole
+text once per animation frame while the block streams (§3 "Streaming"); a code fence still open
+comes back as a `code` block with `open: true`. Its unit test, `test/md.test.mjs` in `npm test`,
+is table-driven: one case per row of the subset table above, the numeric/not-numeric cells
+above, a fence open at the end, three-level lists drawn at level 2, a table row still being
+written (a `tail`), and S-C1-09's four hostile strings.
+
 ### History in the pane
 
 The pane draws the last 50 turns. Older turns, if the screen holds them, come back with
@@ -301,6 +331,30 @@ The C3 rows follow the tools' parameters in `c3-see.md` §4 (T8: `morning` takes
 `history` takes `node` or `run`). Rows marked "not allowed in v1" are refused by the launch line
 (§5.2, pending Q-O23); their words stay for Q-O23 b) or c) and for a later C6. Show commands (`fly_to`, `pin`, …) are not tool lines: each leaves
 its own show line (`c4-show-canvas.md` §4).
+
+**Targets from odd input** (D147). `{target}` is always taken from the room's redacted copy of the
+input (§5.3), so a secret in it reads `[redacted]` on the line too.
+- **Missing.** A target field that is absent, empty, or not a string (a number is turned into its
+  text: `run` `7` reads `7`) gives the row's no-target text: `fleet`, `runs` and `focus` have
+  theirs in the table; the others read `looked at the lanes`, `looked at CI`, `read the Morning`,
+  `read the history`, `read a file`, `ran a command`, `fetched a page`, `changed a file`. A line
+  folds calls with and without a target as `many` calls.
+- **Shortening.** Every `{target}` is trimmed, each run of white space (newlines too) becomes one
+  space, and it is cut by counting characters (code points, never half of an emoji): at most 32
+  are kept; if more follow, the cut goes back to the last space among those 32 when that space is
+  at character 16 or later, and `…` is added. So
+  `rm -rf /var/log/laneboard/old && echo done` reads `ran rm -rf /var/log/laneboard/old…` (§5.2).
+- **`Bash` prefixes are kept.** `cd /srv/app && npm test` reads `ran cd /srv/app && npm test`, and
+  `PGPASSWORD=hunter2 psql -h db` reads `ran PGPASSWORD=[redacted] psql -h db` (rule 4 of §5.3).
+  The line never skips a `cd …&&`, an env assignment or `sudo` to reach "the real command": what
+  it would run is the whole string, and the line of a tool that changes things shows only what
+  the input says (§5.2). The full command is one tap away.
+- **`WebFetch` addresses.** The host is `new URL(url).hostname` (lower case, punycode as the URL
+  API gives it, no port, no `www.` dropped). A `url` that does not parse, or whose scheme is not
+  `http:` or `https:` (`javascript:`, `file:`, `data:`), reads `fetched a page from an invalid
+  address`; it is never drawn as a link (D22). Two calls on one host count as one target.
+- **`Read` paths.** The last part of `file_path` after the last `/`, a trailing `/` ignored:
+  `/etc/laneboard/` reads `read laneboard`; `/` alone reads `read /`.
 
 **Failures.** A line with failed calls appends ` · 1 failed` (or ` · 2 failed`) in the same grey (a
 refused call is not a failure: §5.2): a
@@ -1160,3 +1214,24 @@ Test: Playwright with `page.clock`, a `touchscreen` drag, `POST /link {"up":fals
 the chip row, the chip, `[data-cockpit-chip-remove]`, `↓ NEW` and `[data-cockpit-open]` compared
 ± 1 px after each step, and a pairwise check that no two of the tappables intersect or come closer
 than 8 px; `count()` of `[data-cockpit-line]` is 1 at each step.
+
+### S-C1-35 Tool lines from odd input, and the words module's unit test
+Given the fake agent on script `c1-render`, a turn whose steps call, 100 ms each with reply text
+between them, `Read` `{"file_path":"/etc/laneboard/"}`, `mcp__laneboard__runs` `{"run":7}`,
+`mcp__laneboard__lanes` `{}` and `mcp__laneboard__ci`
+`{"branch":"ci-fix/very-long-branch-name-for-the-night-run"}`,
+When it has ended,
+Then the four tool lines read exactly `read laneboard`, `looked at run 7`, `looked at the lanes`
+and `looked at CI on ci-fix/very-long-branch-name-for…` (32 characters kept, no space to go back
+to), each in `--text-2` with no `●`.
+Test: Playwright; `textContent` of the four `[data-tool-line]` elements. And
+`test/tool-words.test.mjs` in `npm test` for `public/js/core/tool-words.js` (D147, the pure
+module holding §5's table): `Bash` `cd /srv/app && npm test` → `ran cd /srv/app && npm test`;
+`Bash` `PGPASSWORD=[redacted] psql -h db` (input as redacted by the room) →
+`ran PGPASSWORD=[redacted] psql -h db`; `Bash` `rm -rf /var/log/laneboard/old && echo done` →
+`ran rm -rf /var/log/laneboard/old…`; `Bash` `"echo a\n\n  echo b"` → `ran echo a echo b`; `Bash`
+`{}` → `ran a command`; `WebFetch` `https://Example.Invalid:8443/a?x=1` →
+`fetched a page from example.invalid`; `WebFetch` `javascript:alert(1)`, `not a url` and `42` →
+`fetched a page from an invalid address`; two `WebFetch` calls on `https://example.invalid/a` and
+`/b` → `fetched a page from example.invalid`, on two hosts → `fetched 2 pages`; `Read` `/` →
+`read /`; a 40-character target of emoji is cut after 32 code points with no lone surrogate.

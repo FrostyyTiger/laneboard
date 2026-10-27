@@ -90,8 +90,8 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 5. Stop, restart and session (`protocols.md` §11.6-§11.7), their tests.
 6. The room link: hello, resume, snapshot, `seq` (`protocols.md` §2).
 7. The page: cockpit button and pane, open and close (`c1-talk.md` §1-§2, `screens.md` §4).
-8. The reply renderer (`c1-talk.md` §3).
-9. Tool lines, `tried` lines, tools that change things (`c1-talk.md` §4-§5.2).
+8. The reply renderer `public/js/core/md.js` and `test/md.test.mjs` (`c1-talk.md` §3, D146).
+9. Tool lines, `tried` lines, tools that change things (`c1-talk.md` §4-§5.2); the words module `public/js/core/tool-words.js` and `test/tool-words.test.mjs` (D147).
 10. Scrolling, `↓ NEW`, reduced motion, long replies (`c1-talk.md` §4, §9).
 11. Typing (`c1-talk.md` §7).
 12. Talk during an answer and `STOP` (`c1-talk.md` §8).
@@ -110,7 +110,7 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 
 **Scenarios** (49):
 S-C1-01 S-C1-02 S-C1-03 S-C1-04 S-C1-05 S-C1-06 S-C1-07 S-C1-08 S-C1-09 S-C1-10 S-C1-11 S-C1-12
-S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33 S-C1-34
+S-C1-14 S-C1-15 S-C1-16 S-C1-17 S-C1-18 S-C1-19 S-C1-20 S-C1-21 S-C1-22 S-C1-23 S-C1-25 S-C1-26 S-C1-27 S-C1-28 S-C1-29 S-C1-30 S-C1-31 S-C1-32 S-C1-33 S-C1-34 S-C1-35
 S-SCR-02 S-SCR-03 S-SCR-04 S-SCR-09 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-21 S-SCR-22 S-SCR-23 S-SCR-24
 S-C3-03 S-C3-04 S-C3-05 S-C3-07 S-C3-08 S-C3-18
 
@@ -275,7 +275,7 @@ by the task that writes them.
 | S-SCR-05, 12 | Show |
 | S-SCR-13, 14, 15, 16 | Pair |
 | S-SCR-20 | C2 |
-| S-C1-01..12, 14..23, 25..33 | C1 |
+| S-C1-01..12, 14..23, 25..35 | C1 |
 | S-C1-13 | C2 |
 | S-C2-01..17, 20..22 | C2 |
 | S-C2B-01, 02 | C2b |
@@ -286,7 +286,7 @@ by the task that writes them.
 | S-C4-14..23 | Canvas |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 120 live ids in all (round 83).
+D55). 123 live ids in all (round 92).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

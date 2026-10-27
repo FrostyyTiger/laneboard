@@ -364,7 +364,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 
 | Script | Kind | Scenarios | Holds |
 | --- | --- | --- | --- |
-| `c1-render` | agent | S-C1-03..12, S-C1-30, S-C1-31 | §2.2's example; S-C1-05's 4-column and 9-column tables; S-C1-06/07's three `fleet` calls (400 ms each, `hv2` `isError`) then `ci` 300 ms; S-C1-08's 40-line `sh` block; S-C1-09's markup; S-C1-10's 30 lines over 6 s; S-C1-11's marks; S-C1-30's two `denied` `Bash` steps and S-C1-31's `Grep` and `denied` `WebFetch` |
+| `c1-render` | agent | S-C1-03..12, S-C1-30, S-C1-31, S-C1-35 | §2.2's example; S-C1-05's 4-column and 9-column tables; S-C1-06/07's three `fleet` calls (400 ms each, `hv2` `isError`) then `ci` 300 ms; S-C1-08's 40-line `sh` block; S-C1-09's markup; S-C1-10's 30 lines over 6 s; S-C1-11's marks; S-C1-30's two `denied` `Bash` steps and S-C1-31's `Grep` and `denied` `WebFetch`; S-C1-35's `Read`, `runs`, `lanes` and `ci` calls with odd input |
 | `c1-typing` | agent | S-C1-14..18, S-C1-27..29, S-C1-32, S-C1-33 | a short `done` turn per prompt; S-C1-16's text, 3 s `runs` call and `next-tool-end` steer turn; S-C1-27's 19.5 s tool call with `endAfterMs` 300; S-C1-28's two turns (`ignore-once`, `ignore`); S-C1-29's 19.5 s tool call, then text, taking a queued prompt at the tool's end; S-C1-17's two turns (`endAfterMs` 300, and `ignore-sigint`) |
 | `c1-errors` | agent | S-C1-19, S-C1-20 | an `exit` 1 mid-text; one turn per error row (`failed` `overloaded`, `step-limit`, `failed` `boom` plus a 300-character `detail`, `not-logged-in`, two `retry` steps then text) |
 | `c1-long` | agent | S-C1-21 | 15 s without steps, then 120 lines, 26 000 characters and a 30-row table over 20 s (real time: 35 s) |
