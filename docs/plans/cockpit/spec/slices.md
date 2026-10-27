@@ -25,13 +25,14 @@ T81 (the jobs slice, §3.7) and T30 (S-C1-13 belongs to C2, §3.2).
 | 11 | **History** | `scrub` to a moment in the past; `compare` two time ranges | Show, the board change of §5.2 reviewed |
 | 12 | **C5** Voice out | hear the first sentence of a reply; mute per screen; stop talking | C1; Q-O34 |
 | 13 | **C6** Act | approve a change on a confirm card | the control-plane review (plan C6, fenced), T14 |
+| 14 | **One** The one box | set up the cockpit on one machine with the agent on its own user (`laneboard cockpit agent-user`), check it with `laneboard cockpit doctor`, run another agent with `kind: bridge` | C1; Q-O36 answered; research Q18 |
 
 - The order follows plan §3 ("C1 → C2 → C3 → C4 → C5 → C6") with three moves the reviews asked for:
   the fleet's night into C1 (review 44 finding 1, T62), the speak-up right after C3 (review 52
   finding 5), and the canvas before the show commands so the first C4 night is the six blocks and
   little else (review 52 finding 11; D114).
 - Jobs comes before the rest of C6 (review 52 finding 6, T81; D115). C2b, Pair, Canvas 2, History,
-  C5 wait for owner answers or for files not yet written; their place among themselves is free.
+  C5, One wait for owner answers or for files not yet written; their place among themselves is free.
 - Under Q-O22 a) (split from C1) four layout scenarios of the Canvas slice move into C1 and the C1
   night grows by about 3 steps; §3.1 lists the ids per answer. Spec written for b) (pending Q-O22).
 
@@ -277,6 +278,7 @@ S-C6-03 S-C6-04 S-C6-05. The confirm card is `c5-c6.md` §8. The job format, too
 | History | none written; planned with §5.2 | the board change of §5.2 |
 | C5 | S-C5-01 S-C5-02 S-C5-03 S-C5-04 S-C5-05 S-C5-06 S-C5-07 | Q-O34; T128 (messages, fake voice service) |
 | C6 | S-C6-06 S-C6-07 | the control-plane review, Q-O7, Q-O35; fenced for unattended work |
+| One | S-ONE-01 S-ONE-02 S-ONE-03 S-ONE-04 S-ONE-05 S-ONE-06 S-ONE-07 | C1; Q-O36 (under a) S-ONE-02's first step changes to a warning; under c) `allowSameUser` goes); research Q18 (`sudo` relaying signals, D214); the admin status route of `single-machine.md` §5 |
 
 `S-SEC-` (T17) and `S-ONE-` (T19) ids go to the slice whose code they test, written into this file
 by the task that writes them.
@@ -308,9 +310,10 @@ by the task that writes them.
 | S-SEC-01, 02, 03, 06 | C1 |
 | S-SEC-04 | Pair |
 | S-SEC-05 | C2 |
+| S-ONE-01..07 | One |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 185 live ids in all (round 114, S-SEC-01..06 by T17).
+D55). 192 live ids in all (round 115, S-ONE-01..07 by T19).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

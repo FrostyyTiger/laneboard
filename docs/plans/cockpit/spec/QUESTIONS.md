@@ -145,6 +145,8 @@ Security. Needed in C1 only if Q-O21 is a) or c), or Q-O27 is a). From `reviews/
 - c) Any already paired screen may approve a new one.
 
 Recommendation: a) — nobody off the box, and not the agent on it, can add a screen; `unpair` is one command.
+One-box cost: a) needs the agent on a second unix user and one sudo rule (`single-machine.md` §3,
+D214, D215); on a one-user box pairing is refused, and whether the room starts at all is Q-O36.
 
 Answer: (open)
 
@@ -459,5 +461,23 @@ Security, C6. From `reviews/40-security.md` (7). Spec: `c5-c6.md` §8.3 (written
 Recommendation: b) — it is the board's existing rule, so a confirm on the screen is never weaker
 than one in the board. It guards against the wrong target, not a stolen screen: a stolen token is
 answered by `unpair` (Q-O10).
+
+Answer: (open)
+
+## Q-O36 Does the room start with the agent on the owner's own unix user
+
+Security, slice One. From `reviews/48-stranger.md` (4, and its note on Q-O10). Spec:
+`single-machine.md` §4, S-ONE-02. On one box the safe setup needs a second unix user and a sudo rule
+(D214, D215); the obvious first try is one user, and then the agent reads every file the owner can
+(`~/.ssh` included) and cannot be kept from pairing (`agent-is-room`).
+
+- a) Start anyway, warn once on stderr, refuse pairing (what `screens.md` §6.1 and `security.md` §3
+  say today).
+- b) Refuse to start unless `cockpit.agent.allowSameUser: true` is set; with it, as a). `?demo=1`
+  stays the way to look without a room.
+- c) Refuse always: no cockpit without a second user.
+
+Recommendation: b) — safe by default (`docs/plans/product.md` rule 5), and the key's name makes the
+cost a choice the owner or a stranger takes on purpose.
 
 Answer: (open)

@@ -42,7 +42,7 @@ C3 reads; it never changes the fleet or the screen. Show commands are C4 (`c4-sh
 ## 2. Where the data comes from
 
 The MCP server reads one **board** over HTTP, the same JSON the browser gets: config
-`cockpit.board.url` (default `http://127.0.0.1:7777`). The board is a hub (fleet mode) or a single
+`cockpit.board.url` (default `http://127.0.0.1:7777`; on the one box the process's own `http://127.0.0.1:{port}`, D218). The board is a hub (fleet mode) or a single
 laneboard (one machine, `single-machine.md`). The server asks the board's `/healthz` once at start
 and every 60 s; `"mode": "hub"` picks the hub column below.
 
