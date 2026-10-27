@@ -396,7 +396,7 @@ Notes for every builder round (planner, round 1):
   10.3). Honest: a highlight of a folded cluster's members stacks the rings on the cluster (seen only up close in the
   film); the agent's rows are the brightest grey at the back control's size, quieter than the red banner but louder
   than the tag. The `?show=demo` script and the transport are T38/T39.
-- [x] T38 (§7 Night 4 B2; promoted from Later by the watcher on 2026-10-27, before the merge) The show commands, the transport: one small documented message shape through `BroadcastChannel` and `postMessage` (origin-checked) into `show.js`; the relay room → hub → screens is cockpit work (fenced hub files): not this night. — done when: a test posts each message shape through BroadcastChannel and postMessage and a wrong origin is ignored (commit SHA)
+- [x] T38 (§7 Night 4 B2; promoted from Later by the watcher on 2026-10-27, before the merge) The show commands, the transport: one small documented message shape through `BroadcastChannel` and `postMessage` (origin-checked) into `show.js`; the relay room → hub → screens is cockpit work (fenced hub files): not this night. — done when: a test posts each message shape through BroadcastChannel and postMessage and a wrong origin is ignored (commit 5dc9618)
   Builder r39: `galaxy/transport.js`: `createTransport({ send, win, Channel, origins })` listens on
   `BroadcastChannel('laneboard.show')` (same origin; the answer goes to the channel, match it by `re`) and on
   `window` `message` (only from an origin in the list, exact string compare; the answer goes to `event.source` with
