@@ -350,6 +350,7 @@ came (`stdin`), and right after it, with the same `atMs`, the line it decodes in
 const speech = await startFakeSpeech({ script: 'c2-tap', clock: testClock });
 // speech.url  → 'ws://127.0.0.1:<port>/asr'   (goes into cockpit.stt.url)
 speech.use('c2-faults');     // load test/cockpit/scripts/<name>.json
+speech.use('c2-faults', 'busy');  // the next connection gets utterance `busy`, then on in order
 await speech.stop();         // closes the listener: connects are refused (S-C2-15)
 await speech.start();        // listens again on the same port
 speech.log();                // §3.4
@@ -369,7 +370,8 @@ await speech.close();
 ```json
 {"name":"c2-tap",
  "utterances":[
-  {"updates":[
+  {"id":"what-failed",
+   "updates":[
      {"at":600,"lines":[],"buffer":"what"},
      {"at":1100,"lines":[],"buffer":"what failed"},
      {"at":1600,"lines":["what failed"],"buffer":"tonight"}],
@@ -378,7 +380,9 @@ await speech.close();
 ```
 
 - Utterances are used in order, one per connection; after the last, the fake starts again at the
-  first.
+  first. Each has an `id` (kebab-case, unique in its script); `use(name, id)` makes the next
+  connection get that utterance and the ones after it follow in order (D293). A scenario's
+  `Test:` line names the utterance it replays (`c2-voice.md` §6); §5 lists every id.
 - `at` is ms from the **first audio frame** of that connection (`c2-voice.md` §6). Each update is
   sent as `active_transcription` with `lines` as `[{"speaker":0,"text":…}]` and
   `buffer_transcription` = `buffer`. An update whose `at` falls after the end frame is not sent.
@@ -511,10 +515,10 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c1-long` | agent | S-C1-21, S-C1-41 | 15 s without steps, then 120 lines, 26 000 characters and a 30-row table over 20 s (real time: 35 s); its first line is the sentence `Three runs ran last night.` (the B9 end mark, D235) |
 | `c1-session` | agent | S-C1-22, S-C1-23, S-C1-39, S-C1-45 | `repeat` turns that answer `how is builder-a` in 2 s; a `repeat` turn for `and builder-b` that writes `builder-b is idle.` from 0.3 s and ends at 2.0 s (S-C1-23) |
 | `c1-voice` | agent | S-C1-13, S-C3-18, §10 of `protocols.md` | the `morning` call and `■ One run is stuck…` turn of `protocols.md` §13.1, first delta 0.3 s after the prompt |
-| `c2-tap` | speech | S-C1-13, S-C1-40, S-C2-01..04, S-C2-07, S-C2-10..13, S-C2-20, S-C2-22 | §3.2's example, plus `how did` / `how did the` / `how did the night go` (S-C2-03), S-C1-13's `how` / `how did the` / `how did the night go` at 0.6, 1.2 and 1.8 s, final `How did the night go?` 0.15 s after the stop and `restart the runner on builder-b` (S-C2-11) |
-| `c2-limits` | speech | S-C2-05, S-C2-06 | `noAudio`; a growing partial every 1 s from 0.6 s for 130 s |
-| `c2-faults` | speech | S-C2-15..17, S-C2-23 | one utterance per row of §3.3 |
-| `c2-agent` | agent | S-C2-* that send | a short `done` turn for any prompt (`repeat`); S-C2-09's text, 3 s tool call and `next-tool-end` steer turn |
+| `c2-tap` | speech | S-C1-13, S-C1-40, S-C2-01..04, S-C2-07, S-C2-09..13, S-C2-20, S-C2-22, S-C2-23 (its started press), S-C2B-01 | utterances, `at` in ms from the first audio frame, finals `finalAfterMs` 150 unless said: `what-failed` (§3.2's example: `what` 600, `what failed` 1100, lines `["what failed"]` buffer `tonight` 1600; final `What failed tonight?`); `how-did` (S-C2-03: buffer `how did` 600, buffer `how do the` 900, lines `["How did the"]` buffer `night go` 1200, lines `["How did the","night go?"]` buffer `` 1500; final the same two lines); `how-night` (S-C1-13: `how` 600, `how did the` 1200, `how did the night go` 1800; final `How did the night go?`); `restart-b` (S-C2-11, S-C2-22: `restart` 600, `restart the runner` 1100, `restart the runner on builder-b` 1600; final `Restart the runner on builder-b.`); `restart` (S-C2-10: `restart` 600, `restart the runner` 1100; final `Restart the runner.`); `only-failed` (S-C2-09: `only` 600; final `Only the failed one.`); `slow-final` (S-C2-04's `final`: `what-failed`'s updates, `finalAfterMs` 2000) |
+| `c2-limits` | speech | S-C2-05, S-C2-06 | `nothing-heard` (`noAudio`, S-C2-05); `silent` (no update at all, an empty final, S-C2-06's forgotten tap); `growing` (S-C2-06's long speech: at 600 + 1000·(n−1) ms, n = 1…130, buffer `w1 w2 … wn`; `finalAfterMs` 150 after the end frame with the last update's buffer as its one line; S-C2-06's 120 s close (D45) ends it after `w120`) |
+| `c2-faults` | speech | S-C2-15..17, S-C2-23 | one utterance per row of §3.3: `no-config`, `token` (`"401"`), `busy` (`"403"`), `pcm-off`, `error-mid` (buffer `stop the nightly` 600, `errorAt` 1200), `close-mid` (the same partial, `closeAt` 1200 code 1011), `error-early` (`errorAt` 400, no word), `no-final` (`how is` 600, `how is the hub` 1600, `withhold-final`), `token-required` (`requireToken`, `what-failed`'s updates); "stopped" is `speech.stop()`, no utterance |
+| `c2-agent` | agent | S-C2-* and S-C2B-01 that send | a short `done` turn for any prompt (`repeat`); S-C2-09's turn (text from 0.3 s, a tool call 3.0-6.0 s, `queued` `next-tool-end`, the steer turn writing `Only builder-a failed.` 0.3 s after it is taken) |
 | `scr-room` | agent | S-SCR-03..05, S-SCR-17..20, S-C1-41 | one long turn (20 s of text) and a turn that calls `fly_to builder-a` (S-SCR-05) |
 | `c3-tools` | agent | S-C3-03, S-C3-10..14, S-C3-19, S-C3-21..23 | `morning` then `runs`; `focus` calls; S-C3-21's `fleet` `{"site":"hv1"}` and `hv1 (feed from 02:10)…` reply, S-C3-22's `alerts` call, S-C3-23's `runs` `{"since":"tonight"}` and `acme-search cost 9.98 USD…` reply |
 | `c4-show` | agent | S-C4-01..12 | one turn per show command, at the times the scenarios give |

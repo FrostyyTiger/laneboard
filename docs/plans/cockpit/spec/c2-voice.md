@@ -220,6 +220,16 @@ unless said otherwise. Chromium runs with `--use-fake-device-for-media-stream` a
 receives. `S-C1-13` (hold from the closed pane on the touring Wall) is the C2 path from the Wall
 and is not repeated here (T30 moves it).
 
+Every `S-C2-` and `S-C2B-` `Test:` line names what it reads (a selector of `README.md`
+§"Selectors tests use" or a message of `protocols.md` §2.4) and ends with two parts (T136, D293):
+- **`Replays:`** the fake speech's script and utterance id (`stand-ins.md` §3.2, §5) and the
+  partials' times it expects, in ms from the connection's first audio frame (`f` below; `f` is
+  the press, or the tap's down, plus the time the microphone takes to start, ≤ 0.2 s by B1), or
+  `none` with what shows that no session opened.
+- **`Runs on:`** the stand-ins, the fake agent's script and one clock, `real`, `page` or
+  `advance`, as `c1-talk.md` §6 defines them (D290). With `advance` the fake speech is started
+  with the shared `testClock` (`stand-ins.md` §3.1), so its `at` times move with the page's.
+
 ### S-C2-01 Tap, speak, tap: the words appear live and the second tap sends
 Given the fake speech scripted: partials `what` at 0.6 s, `what failed` at 1.1 s, `what failed
 tonight` at 1.6 s; final `What failed tonight?` 0.15 s after the end frame,
@@ -234,6 +244,7 @@ Then by t = 3.4 s (B3 from the up) the conversation ends with `YOU · SPOKEN · 
 Test: Playwright, CDP touches; poll `data-talk`, `data-send`, the input text every 50 ms; read the
 marks `cockpit:B1`…`B3`; the fake agent's log (`fakeAgent.prompts()`) has exactly one turn
 `What failed tonight?`.
+Reads `data-talk`, `data-talk-gesture`, `data-send`, `[data-talk-cancel]`'s rect, `[data-talk-text]` and the prompt's `turn.prompt` (`source` `spoken`). Replays: `c2-tap` `what-failed`, partials at f + 600, 1100, 1600 ms, final 150 ms after the end frame (the up at 3.1 s). Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-02 Hold and release sends; a short press is a tap, not a send
 Given the fake speech scripted as S-C2-01,
@@ -245,6 +256,7 @@ Then `data-talk-gesture="tap"`, `data-talk` is `partial` at t = 3.0 s, nothing h
 hint reads `TAP SEND WHEN DONE`.
 Test: Playwright, CDP touches with the two timings (250 ms and 2.5 s stay clear of the 400 ms
 threshold); assert the hint text at 0.45 s; the received-turns count (1, then 0).
+Reads `data-talk-gesture`, `data-talk` and the hint `[data-cockpit-line]` (`data-line="hint"`). Replays: `c2-tap` `what-failed` in both runs (the second run's partials at f + 600-1600 ms put it in `partial` by 3.0 s). Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-03 Partial words are replaced, never appended
 Given the fake speech scripted: update 1 lines `[]` buffer `how did`; update 2 lines `[]` buffer
@@ -257,6 +269,7 @@ Then `[data-talk-text]` reads in turn `how did`, `how do the`, `How did the nigh
 after it was drawn.
 Test: Playwright; record every distinct `textContent` of `[data-talk-text]` (MutationObserver) and
 compare with the 4 expected strings exactly; computed colours of the two spans against the tokens.
+Reads `[data-talk-text]`, `[data-firm]`, `[data-tail]`. Replays: `c2-tap` `how-did`, updates at f + 600, 900, 1200, 1500 ms. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-04 Every state looks as the table says
 Given the room under test and fake speech, and for `error` a context whose microphone permission is
@@ -275,6 +288,7 @@ attribute, its rect (± 1 px), and a hidden probe `<span>` in the input's font h
 placeholder whose `getBoundingClientRect().width` ≤ the input's `clientWidth` minus 32 px; `final` is held by a fake speech script that
 delays the final by 2 s; compare computed colours with the tokens' computed values; screenshot per
 state compared by eye against `sketches/c2-states.html` in the build night's review, not in the test.
+Reads `data-talk`, `data-send`, `[data-talk-lang]`, `[data-talk-cancel]`, `[data-talk-text]`, `[data-cockpit-input]` and the level bar (§3, no selector of its own). Replays: `c2-tap` `what-failed` for `listening` (before f + 600 ms) and `partial` (after), `slow-final` for `final` (held 2000 ms after the end frame); `none` for `idle`, `error` (permission denied: no connect line) and `off`. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; the `off` case stops the room's link (`POST /link {"up":false}`); clock `real`.
 
 ### S-C2-05 Releasing with nothing said sends nothing
 Given the fake speech scripted to send `no_audio_detected` and then an empty final,
@@ -283,6 +297,7 @@ Then by t = 1.8 s `data-talk="idle"`, the input is as before the press, the hint
 `MICROPHONE OFF` and is gone by t = 6.9 s (5 s); no prompt block is drawn; the microphone track is stopped.
 Test: Playwright; the received-turns count stays 0; the fake speech service's log shows the end
 frame and no audio frame after t = 1.7 s (the microphone is closed).
+Reads `data-talk` and the hint `[data-cockpit-line]`. Replays: `c2-limits` `nothing-heard` (`no_audio_detected` every 1000 ms, an empty final 150 ms after the end frame). Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-06 A forgotten tap listens 30 s at most; a long speech stops at 2 minutes and keeps the text
 Given a fake clock and the fake speech scripted to send nothing,
@@ -302,6 +317,7 @@ And for contrast (S-C2-05): the `MICROPHONE OFF` after nothing heard on a releas
 Test: Playwright `page.clock` plus the room's `POST /clock` (`stand-ins.md` §1.2); assert `data-talk`, the hint
 text at 35, 126 and 290 s, its absence after the `pointerdown` and after reopening, the textarea
 value, the received-turns count 0.
+Reads `data-talk`, the hint `[data-cockpit-line]`, `[data-cockpit-input]`, `data-pane`. Replays: `c2-limits` `silent` (no update) for the forgotten tap, `growing` (one more word at f + 600 + 1000·(n−1) ms) for the long speech. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech on `testClock`; clock `advance` (no agent turn is played).
 
 ### S-C2-07 A hold sends only in the send zone; slide off, the slot or a cancel keep the words as a draft (pending Q-O19)
 Given the fake speech scripted as S-C2-01, the input empty, one run per case, the finger down on
@@ -322,6 +338,7 @@ still there at t = 30 s, gone at the next `pointerdown`.
 Test: Playwright, CDP touch move and lift (`Input.dispatchTouchEvent` `touchEnd`; for case 4
 `touchCancel`), `page.clock` for the 30 s; the received-turns count (0, 1, 1, 0, 0), the textarea
 value, the hint text and computed style.
+Reads `data-talk`, `data-send`, `[data-cockpit-input]`'s value, the hint `[data-cockpit-line]`. Replays: `c2-tap` `what-failed` in every run, partials at f + 600, 1100, 1600 ms (all shown before the move at 2.0 s). Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `page`, `page.clock.runFor` to 30 s after the lift in cases 3 and 4.
 
 ### S-C2-08 A blocked microphone: the error state, typing still works
 Given the browser context with the microphone permission denied,
@@ -333,6 +350,7 @@ When the permission is granted and the owner taps the button again, the line goe
 `data-talk="listening"`.
 Test: Playwright `context.grantPermissions([])` then `grantPermissions(['microphone'])`; Chromium
 started without `--use-fake-ui-for-media-stream` for this case; assert the line text exactly.
+Reads `data-talk`, the line `[data-cockpit-line]`, and the typed `turn.prompt`. Replays: none (the permission is denied, the speech service's log has no `connect` line until the grant; after it `c2-tap` `what-failed`). Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-09 Talking during an answer: the spoken words join the running turn (pending Q-O1)
 Given the fake agent on a turn that writes text from t = 0.3 s and calls a tool from t = 3.0 s to
@@ -353,6 +371,7 @@ Test: Playwright with `hasTouch: true`, CDP touches, a fake clock; assert `data-
 4.95 s and 5.05 s, `prompts()` (`stand-ins.md` §2.6) the same at 4.4 s and 6.1 s; the reply text at
 2.0 s and 3.9 s differs (still streaming); assert the label at 4.3 s and 6.1 s, no element with the text `STOPPED AT`, and the fake-agent log (`stand-ins.md` §2.6: `order("interrupt")` is `[]`, one
 `prompt` with `"priority":"next"`, no `interrupt`).
+Reads `data-turn`, `data-send`, `[data-reply]`, the hint `[data-cockpit-line]`, the prompt's label. Replays: `c2-tap` `only-failed`, partial at f + 600 ms (f ≈ 2.0 s), final 150 ms after the end frame at 4.0 s. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `page` (the fake agent's timed steps run in real time).
 
 ### S-C2-10 CANCEL drops the spoken words, keeps a typed draft, and UNDO brings them back (pending Q-O19)
 Given the input holding the typed draft `on builder-a,`, `cockpit.stt.language: ["en", "de"]`,
@@ -370,6 +389,7 @@ And in a second run with no tap on `UNDO`, at t = 7.0 s `UNDO` and the hint are 
 button is back and the textarea still holds `on builder-a,`.
 Test: Playwright, `page.clock`; assert the text before and after, the rects, the speech service's
 frame log, the received-turns count 0 in both runs.
+Reads `[data-talk-cancel]`, `[data-talk-undo]`, `[data-talk-lang]`, `[data-firm]`, `[data-tail]`, `[data-cockpit-input]`'s value, `data-talk`. Replays: `c2-tap` `restart`, partials at f + 600 and 1100 ms; the `CANCEL` at 2.0 s comes before any end frame, so no final. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `page` (the 5 s of `WORDS DROPPED` run on it).
 
 ## 7. Stopping to fix the words (D47)
 
@@ -591,6 +611,7 @@ Then the prompt reads `Restart the runner on builder-a.` with the label `YOU · 
 Test: Playwright; tap at the word's rect from `Range.getBoundingClientRect`; assert
 `selectionStart`/`selectionEnd`, `document.activeElement`, the received-turns log (one turn, the
 fixed text).
+Reads `[data-talk-text]`, `data-talk`, `[data-cockpit-input]` (value, selection, focus), the hint `[data-cockpit-line]`. Replays: `c2-tap` `restart-b`, partials at f + 600, 1100, 1600 ms, final 150 ms after the end frame the tap sends. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-12 A tap on the text during a hold is ignored
 Given the fake speech scripted as S-C2-01,
@@ -599,6 +620,7 @@ then releases at t = 2.5 s,
 Then the microphone stays open until the release and the prompt `What failed tonight?` is sent (B3).
 Test: Playwright, CDP two-point touch; received-turns count 1; the fake speech service's frame log
 has frames up to t = 2.5 s.
+Reads `data-talk` and the sent `turn.prompt`. Replays: `c2-tap` `what-failed`, partials at f + 600-1600 ms, final 150 ms after the end frame at 2.5 s. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-13 DE/EN: one tap switches, the choice is the screen's, the service gets it
 Given `cockpit.stt.language` unset (the default `["en", "de"]`; the test config drops
@@ -612,6 +634,7 @@ When the page reloads, it still shows `DE`. With `cockpit.stt.language: "en"` (o
 opens with `language=en` or `language=auto`.
 Test: Playwright; element rects; the fake speech service's connect log; `localStorage`
 `cockpit.lang`.
+Reads `[data-talk-lang]` (text, rect, `disabled`) and `[data-cockpit-input]`'s rect. Replays: `c2-tap` `what-failed` for each press; the assertion is the `connect` line's `query.language`, not the words. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-14 No speech service configured: the pane is text only, and complete
 Given `cockpit.stt.url: "none"`,
@@ -619,6 +642,7 @@ Then the open pane has no `[data-talk]`; `SEND` is at x 1280-1344; the textarea 
 x 1264 with the placeholder `Type a message`; typing `status` and `Enter` sends it (B8). `F13`
 changes nothing.
 Test: Playwright; no `getUserMedia` call is made (a page-side spy).
+Reads the absence of `[data-talk]`, `[data-send]`'s rect, `[data-cockpit-input]` and the typed `turn.prompt`. Replays: none (no fake speech is started; `cockpit.stt.url` is `none`). Runs on: the room under test and the fake agent (script `c2-agent`); clock `real`.
 
 ### S-C2-15 The speech service does not answer: an exact line after 2 s, typing works, a tap retries
 Given the fake speech service stopped (T32's verb),
@@ -635,6 +659,7 @@ is down (the room's token was refused: fix cockpit.stt.tokenFile), so nothing wa
 works. Tap TALK to try again.`
 Test: Playwright, one page; assert the time with ± 0.2 s on the 2.0 s; the line texts exactly; the
 received-turns log has `status` only.
+Reads `data-talk`, `[data-talk-error]`, `data-talk-detail`, the typed `turn.prompt`. Replays: none for the first press (`speech.stop()`), then `c2-tap` `what-failed` after `speech.start()`; `c2-faults` `busy` and `token` for the 403 and 401 lines. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-16 The service fails mid-sentence: the words so far are a draft, nothing sent
 Given the fake speech scripted: partial `stop the nightly` at 0.6 s, then at 1.2 s an update with
@@ -647,6 +672,7 @@ And the same with the connection closed with code 1011 instead of the error upda
 And with the error update at 0.4 s (before any word), the line is `stt-down` with
 `data-talk-detail="failed"` and the textarea is as before the press.
 Test: Playwright; received-turns count 0; the textarea value; the line text exactly.
+Reads `data-talk`, `[data-talk-error]`, `data-talk-detail`, `[data-cockpit-input]`'s value. Replays: `c2-faults` `error-mid` (buffer at f + 600 ms, error at f + 1200 ms), `close-mid` (close 1011 at f + 1200 ms), `error-early` (error at f + 400 ms). Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-17 A missing final keeps the text
 Given the fake speech scripted: partials `how is` at 0.6 s and `how is the hub` at 1.6 s; no final
@@ -656,6 +682,7 @@ Then `data-talk="final"` from 2.5 s; at t = 5.5 s (3.0 s after the release) `dat
 textarea holds `how is the hub`, `[data-talk-error="stt-failed"]` reads `Speech-to-text did not
 finish. Your words are in the input, not sent.`, and nothing has been sent.
 Test: Playwright; poll `data-talk` every 50 ms; the received-turns count 0.
+Reads `data-talk`, `[data-talk-error]`, `[data-cockpit-input]`'s value. Replays: `c2-faults` `no-final`, partials at f + 600 and 1600 ms, nothing after the end frame at 2.5 s. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-20 The talk key: F13 tap-tap and hold, from any focus
 Given the pane closed, the fake speech scripted as S-C2-01,
@@ -666,6 +693,7 @@ And with the textarea focused holding `on hub,`, `F13` held from t = 0 to 2.5 s 
 `keydown`s every 33 ms) sends `on hub, What failed tonight?` once; the textarea stays free of any
 character from the key.
 Test: Playwright `keyboard.down('F13')`/`up`; CDP for the repeated `keydown`s; received-turns log.
+Reads `data-pane`, `data-talk`, `[data-cockpit-input]`'s value and the sent `turn.prompt`. Replays: `c2-tap` `what-failed` in both runs, partials at f + 600-1600 ms. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-21 A page that is not secure: the microphone line says why
 Given the page served on a non-secure origin (`http://hub.example.invalid:7777` through a test
@@ -675,6 +703,7 @@ Then within 0.2 s `data-talk="error"`, `[data-talk-error="mic-insecure"]` reads 
 needs a secure page (HTTPS). Typing works. docs/cockpit.md says how.`; typing works.
 Test: Playwright with `--host-resolver-rules` mapping the name to the stand-in; or, where that is
 not possible, an init script deleting `navigator.mediaDevices` (the build night logs which).
+Reads `data-talk`, `[data-talk-error]`, the typed `turn.prompt`. Replays: none (no `navigator.mediaDevices`, so no session; the speech service's log has no `connect` line). Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-22 Fixing a word with the on-screen keyboard up; a press keeps the row under the finger
 Given S-C2-11's script (script `c2-tap`), `hasTouch: true`,
@@ -693,6 +722,7 @@ y 824-888).
 Test: Playwright with the fake speech; `page.exposeFunction` reports the textarea's `focus` and
 `blur` so the test resizes at those moments; rects ± 1 px; `selectionStart`; the received-turns
 log has one spoken turn.
+Reads `data-keyboard`, `[data-cockpit-input]` (rect, value, selection), `[data-talk]`'s rect, the hint `[data-cockpit-line]`. Replays: `c2-tap` `restart-b` for the first press (partials at f + 600-1600 ms), then `what-failed` for the hold at 5.0 s. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2-23 Speech down in a hold: NOT LISTENING at once; the second failure within 5 min opens the keyboard
 Given the fake speech service stopped (T32's verb), `hasTouch: true`, the pane open, the textarea
@@ -717,6 +747,7 @@ does not focus the input.
 Test: Playwright with the fake speech (script `c2-faults`), `page.clock` for the 301 s; poll the line
 slot's `data-line` and text every 50 ms during the hold; `document.activeElement`; the speech
 service's connect count; the received-turns log stays empty.
+Reads `data-talk`, `[data-cockpit-line]` and `data-line`, `[data-talk-error]`, `data-talk-detail`, `document.activeElement` against `[data-cockpit-input]`. Replays: none while stopped (`speech.stop()`); `c2-faults` `busy` for the 403 case; `c2-tap` `what-failed` for the started press. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `page`, `page.clock.runFor(301000)` for the window.
 
 ## 14. C2b, the physical button (later; pending Q-O8, Q-O20)
 
@@ -803,6 +834,7 @@ sent by t = 3.3 s; `side` shows the prompt as part of the one conversation (`c1-
 And with `press` at t = 0 and `release` at t = 2.5 s the prompt is sent as a hold.
 Test: Playwright, two pages, `fetch` from the test; the room's audit log has two `cockpit.button.press`
 lines with `user` `button:hall` and `target` `desk`.
+Reads `data-pane`, `data-wall-state`, `data-talk` and the hint `[data-cockpit-line]` on `desk` and `side`, and the sent `turn.prompt`. Replays: `c2-tap` `what-failed` in both runs, partials at f + 600-1600 ms (f ≈ the first call), final 150 ms after the end frame. Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech; clock `real`.
 
 ### S-C2B-02 (was S-C2-19) The button API refuses what is not a button, and says why
 Given the button `hall` (target `desk`) and a button `porch` added without `--screen`,
@@ -817,6 +849,7 @@ idle `desk` → `409 not-listening`; six calls within 1 s → the sixth `429 too
 And no refused call changes any screen's `data-talk`.
 Test: `node:test` against the room under test (no browser except for the last check); one case per
 row.
+Reads each answer's status, body and `Retry-After`; the last check reads `data-talk` on every page. Replays: none (no refused call opens a session; the speech service's log has no `connect` line). Runs on: the room under test, the fake agent (script `c2-agent`) and the fake speech (`c2-tap`, never used); clock `real` (the six calls within 1 s are real time).
 
 ## 15. Times at a glance (T135, D291)
 
