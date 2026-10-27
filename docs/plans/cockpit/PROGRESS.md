@@ -151,7 +151,7 @@ its file names).
 - [x] T135 (4) `c2-voice.md` new section "Times at a glance", as T133 for C2: the hold threshold and slop, silence and length closes, the final's grace, `WORDS DROPPED · UNDO` 5 s, `MICROPHONE OFF` (D45), speech slow/down thresholds, the language button, the fake speech service's partial timing (`stand-ins.md`) — done when: the table exists, every value matches its cited section, each row names a scenario id or `no scenario` with why [done: `c2-voice.md` §15, 35 rows, constant names D291 (`c1-talk.md` §16's hint row now `HINT_MS`); fixed in place: §10 and §9's shim table count 2.0 s from `audio.start` and 3.0 s from `audio.stop` (D292); 4 gaps (the screen's 3.5 s, level window, `touched` 10 s, `504`) become T142] (commit cb4b3e2)
 - [x] T136 (4) Audit the live `S-C2-` and `S-C2B-` scenarios (25) as T134, plus: each names the recorded utterance or fake-speech script (`stand-ins.md`) it replays and the partials' timing it expects — done when: an awk pass finds no live `S-C2-`/`S-C2B-` heading without `Test:`, every `Test:` line names a selector or message and an utterance, the commit lists the ids changed [done: 23 live (S-C2-18/19 are S-C2B-01/02); `Test:` lines end with `Replays:` and `Runs on:` (`c2-voice.md` §6, D293); utterance ids in `stand-ins.md` §3.2/§5, three utterances added] (commit e16e5cc)
 - [x] T137 (9) `protocols.md` fixtures for C1 and C2: every message type `c1-talk.md` and `c2-voice.md` name exists in `protocols.md` §2/§6 with a fixture in §10, every fixture block parses as JSON (checked with `node` on copies in `$RUN_DIR`), missing or broken ones added or fixed — done when: a grep of message types in the two files has no type without a §10 fixture, and the parse check passes (command in the commit message) [done: 115 fixtures parse (78 `json`, 1 `json item`, 30 `json bridge`, 1 `json claude`, 5 `json stt`), none broken; the 27 types `c1-talk.md` and the 13 `c2-voice.md` name are all in §2.4 with a fixture; the only §2.4 types without one, `screen.paired`/`screen.unpaired`, got theirs in §3.8; "a fixture in §10" read as anywhere under §9's rules (D294); `config`/`ready_to_stop` in `c2-voice.md` §9 are speech-service (§12, `json stt`) types, covered] (commit 2130c43)
-- [ ] T138 (13) `slices.md` §4 recount after T121-T131: every live scenario id in `spec/` is in exactly one slice, retired ids marked as retired, the per-slice counts in §1 and §3 match, §7 still empty — done when: the ids from the spec's scenario headings and the ids listed in §4 diff to nothing (command in the commit message)
+- [x] T138 (13) `slices.md` §4 recount after T121-T131: every live scenario id in `spec/` is in exactly one slice, retired ids marked as retired, the per-slice counts in §1 and §3 match, §7 still empty — done when: the ids from the spec's scenario headings and the ids listed in §4 diff to nothing (command in the commit message) [done by the PR #23 review: a script reading every `#{2,4} S-…` heading outside code fences against §3's lists and §3.8's rows: 219 live ids, each in exactly one slice, per-slice counts C1 73, C2 25, C3 14, Speak 15, Canvas 19, Show 14, Jobs 12, C2b 2, Pair 10, Canvas 2 10, C5 7, C6 2, One 16 match §4; the one heading in no slice is retired S-C1-24; §7 empty]
 - [ ] T139 (14) Final pass on `spec/DECISIONS.md` (from `## Later`, part 1): D1-D286 each once in order, every superseded or rewritten line says by which, every `D<n>` cited in `spec/` exists (round 164: none missing), no two live lines set the same label, size or time differently — done when: the number check and the citation check return nothing, and a line at the top states the count and the date of the pass
 - [ ] T140 (14) Final pass on `spec/QUESTIONS.md` (from `## Later`, part 2): every `(pending Q-O<n>)` in `spec/` names an open question (none closed into a D-line), every open question's `Spec:` line lists each file carrying its marker, the morning list's count line is right and ordered C1 first, then C2, Q-O36 placed — done when: a grep of pending markers against open headings returns nothing and each open question's `Spec:` files match the grep
 - [ ] T141 (3) Found doing T133: add a scenario step for each `c1-talk.md` §16 row that says `no scenario, gap (T141)`: the 25 s silence (no heartbeat, link open → `room-down` at 30 s), the status line's age ticking each second, a reload's age within 1 s, the `SIGKILL` at 10.0 s (`ignore-sigterm` child), the restart steps 8-30 s, the 30 s `ready` wait, `agent-back` going after 5 s, `new`'s `SIGTERM` after 5 s, `DEMO_WAIT_MS`; each step names the stand-in mode and the clock; the §16 row then names the scenario — done when: no §16 row says `gap (T141)`
@@ -269,6 +269,20 @@ budgets in `spec/README.md` (B2 ≤ 1.0 s, B3 ≤ 0.3 s, B9 ≤ 15 s).
 | 77 | implementer | 8 | 5 | 4 | 6 | 6 | 5 | 6 |
 | 81 | touch | 8 | 4 | 4 | 7 | 6 | 5 | 5 |
 
+## Review of PR #23 (2026-10-27, before merge)
+
+A review session read the spec against plan §4 and `spec-input.md` and changed, in small edits:
+- Q-O30 now recommends a): a job's script that reaches another machine is an act outside the
+  audited control plane, needs a credential `security.md` §1 rules out, and is C6 before its review.
+  The spec text stays written for b) until the owner answers; the Jobs slice waits for it.
+- Q-O32 now recommends b): custom cards off by default (`cockpit.canvas.customCards`), as research
+  Q6 advised, because §11.6 admits one request can leave by navigation.
+- Q-O26 (D91) reopened into the morning list: D91 put the agent on the hub's box, which plan §2 and
+  `spec-input.md` §3 rule out. Recommendation b), a read-only `reader` key on the hub.
+- Q-O21's recommendation b) now carries its condition (on a hub, `hubControl` off everywhere).
+- `stand-ins.md` §5 gains `sec-reply`, `sec-inject`, `sec-spoken`; S-SEC-03 says what C1 asserts
+  without pairing. T138 done.
+
 ## Morning
 
 Written by the final round (171), 2026-10-27 11:50. Replaces round 71's report (git history).
@@ -299,7 +313,7 @@ Written by the final round (171), 2026-10-27 11:50. Replaces round 71's report (
 | `spec/stand-ins.md` | room under test, fake agent, fake speech, demo fleet, scripts per scenario family | 0 (used by all) |
 | `spec/slices.md` | 14 build nights in order, ids per slice, the Playwright harness (D88, D113) | 0 (219 ids, each in one slice) |
 | `spec/DECISIONS.md` | D1-D294 | — |
-| `spec/QUESTIONS.md` | 14 for the morning, 17 that can wait, 5 closed as D-lines | — |
+| `spec/QUESTIONS.md` | 15 for the morning (Q-O26 reopened by the PR #23 review), 17 that can wait, 4 closed as D-lines | — |
 
 ### Sketches (newest shots, dark, 1368)
 
@@ -350,7 +364,7 @@ Tests: `npm test` 3454 pass, 0 fail after round 170. The night wrote no code. Th
 
 **Needs you, worst first.**
 
-1. **Answer spec/QUESTIONS.md.** The 14 at the top, a letter each, about 15 minutes. Q-O11, Q-O1
+1. **Answer spec/QUESTIONS.md.** The 15 at the top, a letter each, about 15 minutes. Q-O11, Q-O1
    (and where `STOP` lives), Q-O23, Q-O21 and Q-O27 change what C1 builds. The 17 under "Can wait"
    wait for their slice.
 2. **Check the security decisions taken without you.** D89-D92 (the room is a laneboard server on
