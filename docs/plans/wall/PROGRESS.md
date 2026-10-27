@@ -564,6 +564,9 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 
 ## For the owner
 
+- (r21-skeptic, tooling) On this VM, from about 06:30 on 2026-10-27, Chrome's CPU throttle (`film.mjs --cpu` above 1)
+  stalls every page, `wall.html` included and the T9 commit too (1 frame in about 70 s), so `film.mjs` times out with
+  no frames. r21 filmed at `--cpu 1`. Rounds that film at 4x will hang until the VM or Chrome is looked at.
 From r11-dreamer (`fx` candidates, none asked for; not tasks):
 - `fx=alert`: when a site's rollup rises, one thin ring in its hue goes out from the site across the plane, once
   (the banner type-in is T22, not an effect).
