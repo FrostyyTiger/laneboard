@@ -140,6 +140,9 @@ export function createPane(opts = {}) {
   const sending = new Map(); // clientId → the view drawn at the tap, until the room's echo
   const dirty = new Set(); // views whose text changed since the last frame
   let frame = null;
+  // `answering` waits for the frame that draws its text (c1-talk.md §3: "reply text is streaming"),
+  // so `data-turn` never says answering over an empty reply (build B140).
+  let heldTurn = null;
   let pinned = true;
   let hideTimer = null;
   let tick = null;
@@ -168,6 +171,7 @@ export function createPane(opts = {}) {
   }
 
   const setTurn = (state) => {
+    heldTurn = null;
     const s = Object.hasOwn(TURN_WORDS, state) ? state : 'idle';
     root.dataset.turn = s;
     turnWord.textContent = TURN_WORDS[s];
@@ -239,6 +243,7 @@ export function createPane(opts = {}) {
     frame = null;
     for (const v of dirty) v.draw();
     dirty.clear();
+    if (heldTurn !== null) setTurn(heldTurn);
     if (pinned) toEnd();
   }
   function changed(v) {
@@ -385,7 +390,9 @@ export function createPane(opts = {}) {
         promptEcho(msg);
         return;
       case 'turn.state':
-        setTurn(msg.state);
+        if (msg.state !== 'answering') { setTurn(msg.state); return; }
+        heldTurn = msg.state;
+        if (frame === null) frame = win.requestAnimationFrame(drawFrame);
         return;
       case 'text.delta':
       case 'text.block': {

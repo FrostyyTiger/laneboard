@@ -429,7 +429,6 @@ export function createBridge(opts) {
     switch (ev.type) {
       case 'text.delta': {
         seeBlock(ev.block);
-        setState('answering');
         // security.md §5: a word not yet finished waits for the next delta.
         const out = streamFor(ev.block).push(ev.text);
         if (out) sendDelta(ev.block, out);
@@ -565,6 +564,9 @@ export function createBridge(opts) {
     return st;
   }
   function sendDelta(block, text) {
+    // c1-talk.md §3: `answering` is "reply text is streaming", so it goes with the first
+    // text that leaves, not with a word the room still holds.
+    setState('answering');
     send({ type: 'text.delta', turnId: turn.turnId, blockIndex: block, text, sentAt: clock.now() });
   }
   /** The block's end: what it still holds leaves as one last delta. */

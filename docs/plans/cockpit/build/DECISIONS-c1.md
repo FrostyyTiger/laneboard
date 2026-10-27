@@ -784,3 +784,8 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
 - B139 (T18) The reply's `AGENT · HH:MM` row takes its time from the first delta's `sentAt`
   (or the first call's `startedAt`, B110); a reply that only arrives as a complete block takes
   the screen's time of its arrival — spec: `c1-talk.md` §3 — overrule: `blockOf()` in `turns.js`.
+- B140 (fix, round 27) `turn.state` `answering` reaches the screen with the text: the room sends it with
+  the first `text.delta` it lets out (not on an agent delta it still holds, D211), and the pane sets
+  `data-turn="answering"` in the animation frame that draws that text — because §3's table says
+  `answering` is "reply text is streaming" and S-C1-04 reads `thinking` until the first text is on
+  screen — spec: c1-talk.md §3, protocols.md §5 (5.20) — overrule: set it on the agent's first delta.
