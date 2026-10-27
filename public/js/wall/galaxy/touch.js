@@ -287,8 +287,8 @@ export function orbitLimits(overview, sites = [], { near = ORBIT.near } = {}) {
  * frame before the camera's: a coast steps there, and the gesture's newest
  * orbit is handed to the camera then (one steer a frame, however many
  * pointer events came). `moved()` (optional) is told each time a gesture
- * starts to move the camera from rest (the page fades what belongs to the
- * overview's pose: the tether). Returns `{ frame, busy(), stop() }`.
+ * starts to move the camera from rest (for what belongs to the overview's
+ * pose). Returns `{ frame, busy(), stop() }`.
  */
 export function createGestures(stage, touch, cam, opts = {}) {
   const o = { clock: () => performance.now(), ...opts };

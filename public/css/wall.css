@@ -610,33 +610,14 @@ html.wall body {
 /* In a flight every name but the destination's steps back (T15): after the tones, so it wins over them. */
 .galaxy-label[data-dim] { color: var(--text-3); }
 
-/* The tether (js/wall/galaxy/tether.js, T20): at the overview a hairline in
-   the status hue from the far fleet line to the cluster it names, over the
-   frame so it leaves the words themselves. Quieter than the words: one px,
-   as the lock's leader. Drawn in by script (scaleX from its left end); when
-   the camera leaves the script fades it over TETHER.outMs (--tether-k). */
-.galaxy-tether-layer {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
+/* The galaxy's leader (night 3 T16, js/wall/galaxy/lock.js leaderPath): two
+   legs with one elbow, the brackets' stroke and colour, so plate, leader and
+   brackets read as one drawn line. */
+.galaxy-stage .wall-lock-leader {
+  height: var(--lock-stroke);
+  margin-top: calc(var(--lock-stroke) / -2);
+  opacity: 1;
 }
-.galaxy-tether {
-  --tether-colour: var(--text-2);
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1px;
-  height: 1px;
-  margin-top: -0.5px;
-  background: var(--tether-colour);
-  opacity: calc(0.7 * var(--tether-k, 1));
-  transform-origin: 0 50%;
-  will-change: transform, opacity;
-}
-.galaxy-tether[data-tone="crit"] { --tether-colour: var(--crit); }
-.galaxy-tether[data-tone="warn"] { --tether-colour: var(--warn); }
-.galaxy-tether[data-tone="low"] { --tether-colour: var(--info); }
 
 /* Back (night 3 T13, js/wall/galaxy/touch.js createBack): one step back while
    a finger explores, top right under the tag, clear of the plate (top left)

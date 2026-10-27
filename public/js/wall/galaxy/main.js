@@ -18,8 +18,9 @@
 // Reduced motion (T11, D5, still.js): no flights, no turn, no drift; the
 // overview with every cluster folded and the caption rotating through the
 // sites, trouble first.
-// At the overview a hairline ties the far fleet line to the cluster it names
-// (T20, tether.js), drawn in once the camera is back out.
+// No line ties the fleet line to its cluster at the overview (night 3 T16:
+// night 2's tether read as a stray hard line, a second beacon); the
+// cluster's own glyph and hue carry it.
 // A dead feed (night 3 T5, fresh.js): every map frame (and the first
 // /api/map answer) stamps the time; 30 s without one, the tag reads
 // `STALE <age>` and the next plate says the data is old; a closed socket
@@ -67,7 +68,6 @@ import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
 import { critAges, flowComets, parseFx, siteRoutes, workingPlanets } from './fx.js';
 import { freeRect, unionBox } from './framing.js';
 import { createOverviewFit, siteMarks, widestFar } from './overview.js';
-import { createTether } from './tether.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
 import {
   AT_OVERVIEW, TOUCH, backShown, backStep, canGoBack, createBack, createGestures, createTaps, createTouch, hitTest, memberPoints,
@@ -213,9 +213,12 @@ export function boot() {
   const frame = createFrame(document.getElementById('wall-frame'));
   // The lock closes on the node the caption's trouble word names (the system
   // when calm) as the camera gets there, a leader joining the two (T9).
+  // The names on screen (set once the labels exist): the lock's leader routes round them (T16).
+  let shownNames = () => [];
   const lock = createGalaxyLock(document.getElementById('wall-lock'), cam, {
     timing: still ? STILL_LOCK_TIMING : LOCK_TIMING,
     leaderFrom: () => caption.leaderFrom(),
+    avoid: () => shownNames().map((n) => n.box),
     size: galaxy.size,
   });
   const hud = createHud({ caption, frame, tour: park ? null : tour, size: galaxy.size, lock });
@@ -228,39 +231,16 @@ export function boot() {
   let backCover = () => null;
   const labels = createLabels(document.getElementById('galaxy-labels'), galaxy, {
     steps,
+    // The lock's leader too (T16): the names keep off the line, as off the words.
     covers: () => {
-      const c = hud.covers(), b = backCover();
+      const c = [...hud.covers(), ...lock.covers()], b = backCover();
       return b ? [...c, b] : c;
     },
     held: lock.held,
     flight: cam.flight,
   });
   cam.onDraw(labels.draw);
-
-  // The fleet line's words, in the stage's px, for the tether (T20): read
-  // when a model came or the stage resized, never per frame.
-  const tetherRoot = document.getElementById('galaxy-tether');
-  const fleetAnchor = () => {
-    const el = frame.el.fleet;
-    const line = el?.querySelector('.wall-fleet-line');
-    const glyph = el?.querySelector('.wall-fleet-glyph');
-    if (!line || !glyph) return null;
-    const o = tetherRoot.getBoundingClientRect();
-    const l = line.getBoundingClientRect(), g = glyph.getBoundingClientRect();
-    return { left: g.left - o.left, top: l.top - o.top, right: l.right - o.left, bottom: l.bottom - o.top, glyph: (g.left + g.right) / 2 - o.left };
-  };
-  const tether = createTether(tetherRoot, cam, { anchor: fleetAnchor });
-  addEventListener('resize', tether.remeasure);
-  // Drawn in on each overview leg once the flight back out is over (the
-  // first one has no flight: at once); gone on a site leg.
-  let fromSite = false;
-  if (!park) {
-    tour.onLeg((leg) => {
-      if (leg.kind === 'overview') tether.show(fromSite && !reduced ? FLIGHT.ms : 0);
-      else tether.hide();
-      fromSite = leg.kind === 'site';
-    });
-  }
+  shownNames = labels.shown;
 
   // Where a finger has taken the page (T13): the overview, a system, a planet in it.
   let place = AT_OVERVIEW;
@@ -270,13 +250,11 @@ export function boot() {
   const cutAway = () => {
     if (fade && cam.want().cut) fade.cut();
   };
-  // Out to the whole galaxy in TOUCH.fitMs: the plate and the lock go, the tether draws in as it lands.
+  // Out to the whole galaxy in TOUCH.fitMs: the plate and the lock go.
   const toOverview = () => {
     cutAway();
     cam.fit({ ms: TOUCH.fitMs });
     hud.release();
-    tether.show(fromSite && !reduced ? TOUCH.fitMs : 0);
-    fromSite = false;
     place = AT_OVERVIEW;
   };
   // The first touch (T7): the tour stops where it is, the camera eases out to the overview.
@@ -290,7 +268,6 @@ export function boot() {
       cutAway();
       hud.release();
       place = AT_OVERVIEW;
-      fromSite = true; // the tether waits for the flight, if the tour's first leg is the overview
       tour.resume();
     },
   });
@@ -299,8 +276,6 @@ export function boot() {
   const gestures = touch && !reduced ? createGestures(document.getElementById('galaxy-stage'), touch, cam, {
     limits: () => orbitLimits(cam.home(), galaxy.world?.sites ?? []),
     view: () => ({ ...galaxy.size(), fov: galaxy.camera.fov }),
-    // The tether is the overview pose's: a turned or closer galaxy would leave it across empty sky.
-    moved: () => tether.hide(),
   }) : null;
   // A tap on a site (T10): the camera flies there at the tour's zoom and opens
   // it, the brackets close on it at once, its plate comes as the camera does.
@@ -319,8 +294,6 @@ export function boot() {
       fade?.cut();
     } else if (!there) cam.focus(id, TIMING.zoom);
     hud.open({ id, index: i >= 0 ? i + 1 : null, count: order.length || null, arriveMs: there || reduced ? 0 : FLIGHT.ms });
-    tether.hide();
-    fromSite = true;
     place = placeOf(id);
   };
   // A planet in an open system (T11) is asked first: the camera stays, its sheet comes at once.
@@ -408,12 +381,9 @@ export function boot() {
     if (fx.has('twinkle')) galaxy.setTwinkles(workingPlanets(model, galaxy.planets()));
     if (fx.has('beacon')) galaxy.setCritAges(critAges(model, galaxy.world?.byId.keys() ?? []));
     hud.update(model);
-    tether.update(model, galaxy.world?.byId.keys() ?? null);
     tour.update(model);
     if (!park && touch?.mode() === 'tour') tour.start();
     const at = parked();
-    // A parked overview (`?at=overview`, for stills) has its tether at once.
-    if (park && !at && galaxy.world) tether.show(0);
     if (at && !parkedSaid) {
       parkedSaid = true;
       const order = tourOrder(model.nodes ?? []);
@@ -469,7 +439,6 @@ export function boot() {
   globalThis.__galaxyTour = tour;
   globalThis.__galaxyHud = { caption, frame, lock, covers: hud.covers };
   globalThis.__galaxyLabels = labels;
-  globalThis.__galaxyTether = tether;
   globalThis.__galaxyTouch = touch;
   globalThis.__galaxyTaps = taps;
   globalThis.__galaxyBack = back;

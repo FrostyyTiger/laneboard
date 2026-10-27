@@ -10,11 +10,18 @@
 // approach, so the brackets here are sized each frame from `screenOf(id).r`
 // (camera.js). Everything else (progress, leader, tone, target) is lock.js's.
 //
-// `lockGeometry3d` is pure (test/wall-galaxy-lock.test.mjs); `createGalaxyLock`
-// is the DOM part, the same elements and classes as wall.html's lock; its
-// `held()` keeps the names (labels.js) off the brackets.
+// The leader (night 3 T16, r4-film-ui galaxy 4): not wall.html's straight
+// hairline at any angle but one elbow, a level run out of the plate then a
+// 45° (or 90°) leg into the bracket's corner, 2 px as the brackets. The
+// route is chosen once a lock, round the names then on screen
+// (`leaderPath`); from then on the names keep off it (`leaderCovers`, the
+// lock's `covers()`, labels.js), so no word ever sits on the line.
+//
+// `lockGeometry3d` and `leaderPath` are pure (test/wall-galaxy-lock.test.mjs);
+// `createGalaxyLock` is the DOM part, the same elements and classes as
+// wall.html's lock; its `held()` keeps the names (labels.js) off the brackets.
 
-import { LOCK_SIZE, LOCK_TIMING, leaderGeometry, lockProgress, lockTone } from '../lock.js';
+import { LEADER_MIN_ARMS, LOCK_SIZE, LOCK_TIMING, lockProgress, lockTone } from '../lock.js';
 
 const clamp01 = (v) => (v > 0 ? (v < 1 ? v : 1) : 0);
 /** Ease out cubic, as lock.js: fast in, settling on the node. */
@@ -34,6 +41,111 @@ export function lockGeometry3d({ r = 0, side = 0, t = 1 }) {
   return { r: rr, d: open + (shut - open) * e, arm: Math.max(LOCK_SIZE.minArm, s * LOCK_SIZE.arm), alpha: e };
 }
 
+/**
+ * The leader's routes, in the order they are liked; `pad` css px kept clear
+ * between it and a name; `tile` the css px of the squares that cover a
+ * slanted leg for the names (leaderCovers).
+ */
+export const LEADER = Object.freeze({ routes: Object.freeze(['run-45', '45-run', 'run-90']), pad: 4, tile: 24 });
+
+/** Does the segment a → b meet the box `{ x, y, w, h }` grown by `pad`? (Liang-Barsky.) Pure. */
+export function segmentHitsBox(a, b, box, pad = 0) {
+  const x0 = box.x - pad, x1 = box.x + box.w + pad, y0 = box.y - pad, y1 = box.y + box.h + pad;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  let lo = 0, hi = 1;
+  for (const [p, q] of [[-dx, a.x - x0], [dx, x1 - a.x], [-dy, a.y - y0], [dy, y1 - a.y]]) {
+    if (p === 0) {
+      if (q < 0) return false;
+    } else {
+      const r = q / p;
+      if (p < 0) { if (r > hi) return false; if (r > lo) lo = r; } else { if (r < lo) return false; if (r < hi) hi = r; }
+    }
+  }
+  return lo <= hi;
+}
+
+/** The corners of one route from `a` to `b` (b right of a), or null where it cannot be drawn. */
+function routePoints(route, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, ady = Math.abs(dy);
+  if (ady < 0.5) return [a, b];
+  if (route === 'run-45') return dx >= ady ? [a, { x: b.x - ady, y: a.y }, b] : null;
+  if (route === '45-run') return dx >= ady ? [a, { x: a.x + ady, y: b.y }, b] : null;
+  if (route === 'run-90') return [a, { x: b.x, y: a.y }, b];
+  return null;
+}
+
+/**
+ * The leader from the plate's anchor `from` ({x, y}) to the corner of the
+ * brackets `d` from the node's centre `at` nearest it (its left side, top
+ * or bottom as the anchor is above or below), drawn out to fraction `t`.
+ * One elbow: of `LEADER.routes` (`prefer` first, the route the lock
+ * already drew) the first liked one whose legs meet none of the `avoid`
+ * boxes (`{ x, y, w, h }`, the names on screen, grown by `LEADER.pad`),
+ * else the one meeting fewest. Returns `{ route, points,
+ * len, segs }`, `segs` the drawn legs `{ x, y, len, angle }` (the second
+ * starts once the first is out), or null when the node is not right of the
+ * anchor (the line would run back under the plate) or nearer than
+ * LEADER_MIN_ARMS arms (as lock.js `leaderGeometry`). Pure.
+ */
+export function leaderPath(from, at, d, arm, t = 1, avoid = [], prefer = null) {
+  if (![from?.x, from?.y, at?.x, at?.y, d].every(Number.isFinite)) return null;
+  const b = { x: at.x - d, y: from.y < at.y ? at.y - d : at.y + d };
+  const a = { x: from.x, y: from.y };
+  if (b.x - a.x <= 0 || Math.hypot(b.x - a.x, b.y - a.y) < LEADER_MIN_ARMS * (Number.isFinite(arm) ? arm : 0)) return null;
+  const boxes = Array.isArray(avoid) ? avoid.filter((x) => x && [x.x, x.y, x.w, x.h].every(Number.isFinite)) : [];
+  let best = null;
+  const routes = LEADER.routes.includes(prefer) ? [prefer, ...LEADER.routes.filter((r) => r !== prefer)] : LEADER.routes;
+  for (const route of routes) {
+    const points = routePoints(route, a, b);
+    if (!points) continue;
+    let hits = 0;
+    for (const box of boxes) {
+      for (let i = 1; i < points.length; i++) {
+        if (segmentHitsBox(points[i - 1], points[i], box, LEADER.pad)) { hits++; break; }
+      }
+    }
+    if (!best || hits < best.hits) best = { route, points, hits };
+    if (hits === 0) break;
+  }
+  const { route, points } = best;
+  const legs = [];
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i - 1], q = points[i];
+    legs.push({ x: p.x, y: p.y, full: Math.hypot(q.x - p.x, q.y - p.y), angle: Math.atan2(q.y - p.y, q.x - p.x) });
+  }
+  const len = legs.reduce((sum, l) => sum + l.full, 0);
+  let left = len * clamp01(t);
+  const segs = legs.map(({ x, y, full, angle }) => {
+    const drawn = Math.min(full, left);
+    left -= drawn;
+    return { x, y, len: drawn, angle };
+  });
+  return { route, points, len, segs };
+}
+
+/**
+ * The boxes `{ x, y, w, h }` the whole of a leader `path` (leaderPath; drawn
+ * or not yet) takes, for the names to keep off: a level or upright leg one
+ * thin box, a slanted one a row of `tile` px squares along it, each grown
+ * by `pad`. Pure.
+ */
+export function leaderCovers(path, { pad = LEADER.pad, tile = LEADER.tile } = {}) {
+  const pts = path?.points;
+  if (!Array.isArray(pts) || pts.length < 2) return [];
+  const out = [];
+  const square = (x0, y0, x1, y1) => {
+    const x = Math.min(x0, x1) - pad, y = Math.min(y0, y1) - pad;
+    out.push({ x, y, w: Math.abs(x1 - x0) + 2 * pad, h: Math.abs(y1 - y0) + 2 * pad });
+  };
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const n = Math.abs(dx) < 0.5 || Math.abs(dy) < 0.5 ? 1 : Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / tile));
+    for (let k = 0; k < n; k++) square(a.x + dx * k / n, a.y + dy * k / n, a.x + dx * (k + 1) / n, a.y + dy * (k + 1) / n);
+  }
+  return out;
+}
+
 const CORNERS = ['tl', 'tr', 'bl', 'br'];
 
 /**
@@ -42,11 +154,12 @@ const CORNERS = ['tl', 'tr', 'bl', 'br'];
  * (lockTarget; the first id the camera can place wins), else the site;
  * `release()` opens it; a leg with `cut` (a tap, night 3 T10) takes the box
  * at once instead of waiting for the last lock to open. `leaderFrom()` says where the leader leaves the
- * caption plate (null: none); a calm target never has one. `clock` and
- * `size` are injectable.
+ * caption plate (null: none); a calm target never has one; `avoid()` gives
+ * the boxes it routes round (the names shown, labels.js `shown`). `clock`
+ * and `size` are injectable.
  */
 export function createGalaxyLock(root, cam, {
-  timing = LOCK_TIMING, clock = globalThis.performance, size = null, leaderFrom = null,
+  timing = LOCK_TIMING, clock = globalThis.performance, size = null, leaderFrom = null, avoid = null,
 } = {}) {
   const box = document.createElement('div');
   box.className = 'wall-lock';
@@ -56,10 +169,15 @@ export function createGalaxyLock(root, cam, {
     box.append(e);
     return e;
   });
-  const leader = document.createElement('span');
-  leader.className = 'wall-lock-leader';
-  leader.style.opacity = '0';
-  box.append(leader);
+  // The leader's two legs, one span each, drawn as wall.html's (scaleX of a 1 px span from its left end).
+  const legs = [0, 1].map(() => {
+    const e = document.createElement('span');
+    e.className = 'wall-lock-leader';
+    e.style.opacity = '0';
+    box.append(e);
+    return e;
+  });
+  const legOn = [false, false];
   box.style.opacity = '0';
   root.append(box);
 
@@ -71,8 +189,12 @@ export function createGalaxyLock(root, cam, {
   let led = false;
   let last = null; // what the last frame drew, for tests and the console
 
+  const hideLeg = (i) => {
+    if (legOn[i]) legs[i].style.opacity = '0';
+    legOn[i] = false;
+  };
   const hideLeader = () => {
-    if (led) leader.style.opacity = '0';
+    if (led) { hideLeg(0); hideLeg(1); }
     led = false;
   };
   const hideBox = () => {
@@ -123,11 +245,22 @@ export function createGalaxyLock(root, cam, {
     box.style.opacity = g.alpha.toFixed(3);
     shown = true;
     const from = cur.tone !== 'calm' && typeof leaderFrom === 'function' ? leaderFrom() : null;
-    const l = from ? leaderGeometry(from, sp, g.d, arm, g.alpha) : null;
-    last = { id: hit.c.id, x: sp.x, y: sp.y, r: g.r, d: g.d, shut: lockGeometry3d({ r: sp.r, side: Math.min(W, H), t: 1 }).d, alpha: g.alpha, leader: l };
+    const l = from ? leaderPath(from, sp, g.d, arm, g.alpha, typeof avoid === 'function' ? avoid() : [], cur.route) : null;
+    if (l) cur.route = l.route;
+    last = {
+      id: hit.c.id, x: sp.x, y: sp.y, r: g.r, d: g.d, shut: lockGeometry3d({ r: sp.r, side: Math.min(W, H), t: 1 }).d, alpha: g.alpha, leader: l,
+      covers: l ? leaderCovers(l) : [],
+    };
     if (!l) { hideLeader(); return; }
-    leader.style.transform = `translate3d(${l.x.toFixed(1)}px, ${l.y.toFixed(1)}px, 0) rotate(${l.angle.toFixed(4)}rad) scaleX(${l.len.toFixed(1)})`;
-    if (!led) leader.style.opacity = '';
+    for (let i = 0; i < legs.length; i++) {
+      const sg = l.segs[i];
+      if (!sg || sg.len <= 0) { hideLeg(i); continue; }
+      // A leg with the next one drawn runs on one px (half the stroke) so the elbow has no notch.
+      const len = sg.len + (l.segs[i + 1]?.len > 0 ? 1 : 0);
+      legs[i].style.transform = `translate3d(${sg.x.toFixed(1)}px, ${sg.y.toFixed(1)}px, 0) rotate(${sg.angle.toFixed(4)}rad) scaleX(${len.toFixed(1)})`;
+      if (!legOn[i]) legs[i].style.opacity = '';
+      legOn[i] = true;
+    }
     led = true;
   };
   const off = cam.onDraw(paint);
@@ -160,6 +293,8 @@ export function createGalaxyLock(root, cam, {
      * while they close.
      */
     held: () => (last ? { id: last.id, r: last.shut } : null),
+    /** The boxes the leader takes this frame, whole even while it draws out (leaderCovers): no name goes there. */
+    covers: () => last?.covers ?? [],
     /** The lock on screen and the one waiting, and what the last frame drew. */
     state: () => ({ cur: cur ? { ...cur } : null, next: next ? { ...next } : null, drawn: last }),
     el: box,

@@ -373,7 +373,7 @@ test('pointer events on the page: a one-finger drag turns the camera round the g
   assert.ok(near(lifted.pitch, start.pitch, 1e-9), 'a level drag keeps the pitch');
   assert.ok(near(lifted.dist, start.dist, 1e-6), 'and the distance');
   assert.equal(p.cam.want().kind, 'free');
-  assert.equal(p.moves(), 1, 'the page is told once when the drag starts moving the camera (it fades the tether)');
+  assert.equal(p.moves(), 1, 'the page is told once when the drag starts moving the camera (for what belongs to the overview pose)');
   assert.ok(p.gestures.busy(), 'coasting');
   p.tick();
   const coasted = orbitOf(p.cam.pose()).yaw;
@@ -461,11 +461,11 @@ test('during the tour and the first touch\'s flight, fingers and the wheel move 
   assert.equal(stage.listeners('wheel'), 0);
 });
 
-test('galaxy/main.js wires drag and pinch: gestures step before the camera, the steer option on, the tether faded on a move', () => {
+test('galaxy/main.js wires drag and pinch: gestures step before the camera, the steer option on, no tether (T16)', () => {
   const js = read('js/wall/galaxy/main.js');
   assert.match(js, /createGalaxyCamera\(galaxy, \{[^}]*steer: !park && !reduced,/);
   assert.match(js, /createGestures\(document\.getElementById\('galaxy-stage'\), touch, cam, \{/);
-  assert.match(js, /moved: \(\) => tether\.hide\(\)/);
+  assert.doesNotMatch(js, /createTether|tether\.(show|hide)/, 'no banner-to-node tether at the overview (T16)');
   assert.match(js, /limits: \(\) => orbitLimits\(cam\.home\(\), /);
   assert.match(js, /gestures\?\.frame\(now\);\s*cam\.frame\(now\);/);
 });
@@ -643,7 +643,6 @@ test('galaxy/main.js wires taps: sites hit-tested in the stage\'s px, a hit flie
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
   assert.match(open, /cam\.focus\(id, TIMING\.zoom\)/);
   assert.match(open, /hud\.open\(\{[^}]*arriveMs: there \|\| reduced \? 0 : FLIGHT\.ms \}\)/, 'a cut (reduced motion, T14) has its plate at once');
-  assert.match(open, /tether\.hide\(\)/);
 });
 
 test('memberPoints (T11): the members of an open system only, at their drawn points, in their own tone', () => {
