@@ -396,7 +396,7 @@ script in its test; one script serves a family, with one `match` per scenario wh
 | `c1-voice` | agent | S-C1-13, S-C3-18, §10 of `protocols.md` | the `morning` call and `■ One run is stuck…` turn of `protocols.md` §13.1, first delta 0.3 s after the prompt |
 | `c2-tap` | speech | S-C2-01..04, S-C2-07, S-C2-10..13, S-C2-20, S-C2-22 | §3.2's example, plus `how did` / `how did the` / `how did the night go` (S-C2-03) and `restart the runner on builder-b` (S-C2-11) |
 | `c2-limits` | speech | S-C2-05, S-C2-06 | `noAudio`; a growing partial every 1 s from 0.6 s for 130 s |
-| `c2-faults` | speech | S-C2-15..17 | one utterance per row of §3.3 |
+| `c2-faults` | speech | S-C2-15..17, S-C2-23 | one utterance per row of §3.3 |
 | `c2-agent` | agent | S-C2-* that send | a short `done` turn for any prompt (`repeat`); S-C2-09's text, 3 s tool call and `next-tool-end` steer turn |
 | `scr-room` | agent | S-SCR-03..05, S-SCR-17..20 | one long turn (20 s of text) and a turn that calls `fly_to builder-a` (S-SCR-05) |
 | `c3-tools` | agent | S-C3-03, S-C3-10..14, S-C3-19 | `morning` then `runs`; `focus` calls |

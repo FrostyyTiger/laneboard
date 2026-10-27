@@ -71,7 +71,7 @@ so does the row's left end (`CANCEL`, below).
 | `listening` | microphone open, no word yet | **inverse**: fill `--text-1`, glyph and `SEND` in `--bg-canvas`, 1 px `--accent` border; the level bar (below) | blank and inert (`data-send="none"`) | `CANCEL` (`✕`) | `Listening…` in `--text-3` | `LISTENING`; after 400 ms held `RELEASE TO SEND · SLIDE OFF TO KEEP`; after a tap `TAP SEND WHEN DONE` |
 | `partial` | microphone open, words shown | as `listening` | blank and inert | `CANCEL` | the words: firm part `--text-1`, the tail still changing `--text-2` (§4) | as `listening` |
 | `final` | released or second tap; microphone closed; waiting for the final text (≤ 3 s, D41) | inverse, word `…`, no level bar | blank and inert | `CANCEL` | the last words, all `--text-2` | `FINISHING…` |
-| `error` | the microphone cannot be opened (§5) or the speech service fails (§10) | `--bg-elevated`, 1 px `--line-strong` border, glyph struck through, `TALK` in `--text-3`; still tappable (a tap tries again) | `SEND` | as `idle` | the textarea, typing works | none; §5's line above the input row, until the next try |
+| `error` | the microphone cannot be opened (§5) or the speech service fails (§10) | `--bg-elevated`, 1 px `--line-strong` border, glyph struck through, `TALK` in `--text-3`; still tappable (a tap tries again) | `SEND` | as `idle` | the textarea, typing works | none; §5's line above the input row, until the next try; during a hold that `stt-down` ended, `NOT LISTENING` until the release (§10, D181) |
 | `off` | the room is down or the screen is unpaired (`screens.md` §7) | `aria-disabled="true"` (never the `disabled` attribute: it stays tappable, below), 1 px `--line` border, `TALK` in `--text-3` | `SEND`, disabled | as `idle` | the textarea | none (the pane's line `Sending and voice come back with the room.` says it, `screens.md` §7) |
 
 - **A press in `off`** (D179): the button stays a live target, so a press is never swallowed
@@ -461,6 +461,27 @@ in `[data-talk-text]` when it went wrong?
 - A tap on the talk button in `error` is a new press: a new connect, a new session.
 - The line stays until the next press, as §5's; a draft it mentions stays until the owner sends
   or edits it (D12's rule: never sent on its own).
+- **Down during a hold** (D181, review 44 finding 10). When `stt-down` comes while the finger
+  (or the talk key, §11) is still down, the owner is mid-sentence with their eyes elsewhere, so the
+  screen says it in two words first: in that frame `data-talk="error"` (the struck-through button,
+  §3) and the line slot shows the hint `NOT LISTENING` (`data-line="hint"`, 18 px caps, one line,
+  `c1-talk.md` §1.1); `[data-talk-error]` is not yet in the DOM. In the frame after the release
+  (`pointerup` anywhere, `pointercancel`, or the key's `keyup`) the hint goes and the `stt-down`
+  line above takes the slot. That release is the end of the old press: it sends nothing and does
+  not try again (a retry is a new press). This is the one case where a hint holds the slot before
+  an error (D133's order otherwise); the room-down line still wins over both. A tap-started
+  listen shows the line at once, as before (no finger is down).
+- **The second failure opens the keyboard** (D181). The screen keeps the time of its last
+  `stt-down` in memory (the page, not the room; a reload forgets it). A press within 300 s of it
+  tries the service once, exactly as any press (the same 2.0 s, the same line). If that try ends in
+  `stt-down` too, the screen also focuses `[data-cockpit-input]` with the caret at the end, on
+  every pointer type (an exception to D20), so the on-screen keyboard comes up and `c1-talk.md`
+  §7.1's layout applies: after a hold in the frame after the release, after a tap in the frame
+  the line appears. The time is renewed by every `stt-down`; a press whose service sends `config`
+  clears it; `stt-failed` and the microphone's own errors (§5) neither set nor clear it. Whether
+  a focus 2.0 s after a tap (outside the touch's own handler) raises the keyboard on the owner's
+  tablet is research Q16; where it does not, the input still has the focus and a tap in it brings
+  the keyboard.
 - **No slow hint.** Lagging words show themselves in the input; listening's 30 s / 120 s limits
   (D45) still hold. Each screen learns of a down service on its own press; no other screen is
   marked.
@@ -638,6 +659,30 @@ y 824-888).
 Test: Playwright with the fake speech; `page.exposeFunction` reports the textarea's `focus` and
 `blur` so the test resizes at those moments; rects ± 1 px; `selectionStart`; the received-turns
 log has one spoken turn.
+
+### S-C2-23 Speech down in a hold: NOT LISTENING at once; the second failure within 5 min opens the keyboard
+Given the fake speech service stopped (T32's verb), `hasTouch: true`, the pane open, the textarea
+empty and not focused,
+When the owner holds the talk button from t = 0 to t = 6.0 s,
+Then `data-talk="listening"` by t = 0.2 s; at t = 2.0 s (± 0.2 s) `data-talk="error"` and
+`[data-cockpit-line]` has `data-line="hint"` and reads `NOT LISTENING` (computed font size 18 px),
+with no `[data-talk-error]` in the DOM, until the release; in the frame after the release at
+6.0 s the line is `[data-talk-error="stt-down"]` with `data-talk-detail="no-answer"` (§10's exact
+text); nothing is sent and the speech service saw one connect, not two;
+`document.activeElement` is not the textarea.
+When the owner taps the talk button at t = 30 s (the service still stopped),
+Then at t = 32.0 s (± 0.2 s) the same `stt-down` line shows and `document.activeElement` is
+`[data-cockpit-input]` with `selectionStart` equal to its length.
+When the owner taps the conversation outside a control (the input blurs, `c1-talk.md` §7.1), the
+page clock moves on 301 s, and the owner taps the talk button again,
+Then at its `stt-down` the line shows and the textarea does not get the focus (the window ran out).
+And with the service refusing with 403 during a hold the hint `NOT LISTENING` shows within 0.2 s
+of the press and the `busy` line after the release; and with the service started for a press
+inside the 300 s, the press listens as in S-C2-01 and a later `stt-down` (service stopped again)
+does not focus the input.
+Test: Playwright with the fake speech (script `c2-faults`), `page.clock` for the 301 s; poll the line
+slot's `data-line` and text every 50 ms during the hold; `document.activeElement`; the speech
+service's connect count; the received-turns log stays empty.
 
 ## 14. C2b, the physical button (later; pending Q-O8, Q-O20)
 

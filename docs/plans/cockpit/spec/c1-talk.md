@@ -96,6 +96,8 @@ from the input row's top edge upwards, in this order, each one only while it is 
    2. `error`: the microphone or speech line `[data-talk-error]` (`c2-voice.md` §5, §10);
    3. `hint`: the talk hints (`c2-voice.md` §3, §4);
    4. `length`: `8 214 / 8 000 CHARACTERS` (§7).
+   One exception: while a hold that `stt-down` ended is still down, the hint `NOT LISTENING` holds
+   the slot before the error, which follows at the release (`c2-voice.md` §10, D181).
    A lower message waits while a higher one shows and appears when the higher one goes, if it
    still holds (a hint whose 5 s ran out meanwhile does not come back; a limit hint, `c2-voice.md`
    §4 and D168, comes back unless a touch came meanwhile).
