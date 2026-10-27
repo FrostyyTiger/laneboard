@@ -43,7 +43,7 @@ of the list below, top to bottom, with these rects at 1368x912:
 | --- | --- | --- |
 | Column `[data-cockpit-conversation]` | x 760-1368, y 0-912, 1 px `--line` left border | x 760-1368, y 520-912, 1 px `--line` top border |
 | Header (64 px) | y 0-64 | y 520-584 |
-| Header buttons, from the right, 16 px in, 8 px apart, each 48 px tall | `SCREEN` x 1256-1352, `NEW` x 1176-1248, `SHELF` x 1072-1168 (only with a shelf); y 8-56 | same x; y 528-576 |
+| Header buttons, from the right, 16 px in, 8 px apart, each 48 px tall | `SCREEN` x 1256-1352, `NEW` x 1176-1248, `SHELF` x 1072-1168 (only with a shelf), in `switch` the switch button `WALL` x 992-1064 (D156); y 8-56 | same x; y 528-576 |
 | Status line (80 px, only while shown) | y 64-144 | y 584-664 |
 | Conversation (scrolls) | y 64-808 (744 px), y 144-808 with the status line | y 584-808 (224 px, about 5 lines at 28 px), y 664-808 with the status line |
 | Input row | y 808-912: input x 784-1184, `SEND` x 1200-1264, talk button x 1280-1344, y 824-888 | same |
@@ -61,10 +61,11 @@ of the list below, top to bottom, with these rects at 1368x912:
 
 1. **Header**, 64 px, 1 px `--line` bottom border. Left, 24 px in: `COCKPIT` (`--font-label` caps
    16 px, `--text-2`), then 16 px later the turn state (§2) in 16 px caps `--text-3`. Right, 16 px
-   in: `CLOSE`, and on the Wall page `SCREEN` to its left (`screens.md` §1), 8 px apart. Each
+   in: `CLOSE` `[data-cockpit-close]`, and on the Wall page `SCREEN` `[data-cockpit-screen]` to its
+   left (`screens.md` §1), 8 px apart. Each
    header button is 48 px tall, ≥ 96 px wide, 16 px caps `--text-1`, 1 px `--line-strong` border.
-   Left of those, 8 px apart: `NEW` (§11), 48 px tall and 72 px wide (D38); order from the right:
-   `CLOSE`, `SCREEN`, `NEW`. There is no `RAW` button in C1 (§13).
+   Left of those, 8 px apart: `NEW` `[data-cockpit-new]` (§11), 48 px tall and 72 px wide (D38);
+   order from the right: `CLOSE`, `SCREEN`, `NEW`. Every rect per page and state: `screens.md` §4.1. There is no `RAW` button in C1 (§13).
 2. **Status line**, 80 px (two lines, D54), only while there is something to say (offline, room
    down, the agent down or logged out: §10.1 says which one wins). The `NEW` bar (§11) uses the same 80 px slot; the status line wins it.
 3. **The conversation**, filling the rest; it scrolls on its own; 24 px padding left and right,
@@ -119,7 +120,8 @@ Rects at 1368x912 with a one-line input (row top y 808, on the Wall, in the app 
   the same amount (keyboard up: subtract 364 px, so a chip alone is y 380-444).
 - The x rule makes every item in the stack end 24 px left of `CHAT`/`CLOSE` and of the talk
   button; between stacked items the gaps are 16 px or more (`↓ NEW` to what is under it) and 8 px
-  (the chip inside its row). T44's control table takes these rects with its ≥ 8 px test.
+  (the chip inside its row). `screens.md` §4.1's control table takes these rects with its ≥ 8 px
+  test (S-SCR-25).
 - In a `split` column (§1) the conversation never drops under 96 px: when the status line, the
   stack and the input's growth together would leave less, the column's top moves up over the card
   area by what is missing (the most: 80 px status line, 136 px of stack and 118 px of input growth put the column at
@@ -285,7 +287,7 @@ The room keeps the conversation on disk for 30 days, so a room restart shows the
 
 - The conversation is **pinned** to its end while its last pixel is within 48 px of the bottom of
   the visible area: new text scrolls it along.
-- A drag up unpins it: new text no longer moves the view. A button `↓ NEW` appears, 48 px tall,
+- A drag up unpins it: new text no longer moves the view. A button `↓ NEW` `[data-cockpit-follow]` appears, 48 px tall,
   96 px wide, 16 px caps `--text-1` on `--bg-elevated`, 1 px `--line-strong` border, 16 px above
   the input row or the stack on it, centred, or right-aligned at x 1264 while a chip shows (§1.1). A tap jumps to the end (instantly, no smooth scroll: `docs/design.md`
   rule 5) and pins again; scrolling back down by hand does the same (D26).
@@ -692,8 +694,8 @@ numbers are for a 380 px keyboard, which leaves 1368x532 in sight.
   to the visible bottom: y 0-532 at 1368x532. On the app it covers the 36 px header and the 24 px
   tape too; in `split` it covers the card area above the column. Both come back when the keyboard
   goes. The width is §1's (`min(608px, 100vw)`).
-- The **header** (64 px, y 0-64) keeps `CLOSE`, `SCREEN`, `NEW` (and in `switch` the switch button)
-  at §1's x.
+- The **header** (64 px, y 0-64) keeps `CLOSE`, `SCREEN`, `NEW` (and in `switch` the switch button
+  `WALL`) at §1's x, y 8-56 (`screens.md` §4.1 states H and I).
 - The **input row** sits on the keyboard's top edge and is 88 px tall (16 + 64 + 8; the Wall's
   24 px bottom margin is for the screen's edge, not the keyboard's): y 444-532. Input x 784-1184,
   `SEND` x 1200-1264 and the talk button x 1280-1344, all y 460-524. The talk button stays in the

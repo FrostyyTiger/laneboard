@@ -37,10 +37,13 @@ At 1368x912 `split` gives a wall half of 759 px and a canvas of 608 px (1368 = 7
 **Choosing the layout.** Three ways, the first that is set wins:
 1. The URL: `?layout=wall|canvas|split|switch` on the Wall page (a kiosk's start URL). Any other
    value is ignored.
-2. The screen's own choice: the **SCREEN** button in the pane header (T4 places it) opens a sheet
-   with four rows, 64 px tall each: `WALL`, `CANVAS`, `SPLIT`, `SWITCH`, the current one with the
-   1 px accent border (`docs/design.md` rule 3). A tap applies it at once (no reload) and stores it
-   on the screen in `localStorage` key `cockpit.layout` (D3).
+2. The screen's own choice: the **SCREEN** button `[data-cockpit-screen]` in the pane or column
+   header (`c1-talk.md` §1) opens the **`SCREEN` sheet** `[data-screen-sheet]` with four layout
+   rows `[data-layout-choice="wall|canvas|split|switch"]` (`WALL`, `CANVAS`, `SPLIT`, `SWITCH`) and
+   a fifth, `CANCEL` `[data-screen-cancel]`; the current layout's row has the 1 px accent border
+   (`docs/design.md` rule 3) and `aria-current="true"`. A tap on a layout row applies it at once
+   (no reload), closes the sheet and stores it on the screen in `localStorage` key `cockpit.layout`
+   (D3). The sheet's rect and how it closes: §4.1 (D157).
 3. The default by width, in the table above.
 
 `split` on a screen < 1280 px wide shows as `switch` until the screen is wide again; the stored
@@ -136,18 +139,97 @@ Per page, what else changes:
 | --- | --- |
 | Wall page, `wall` | The Wall's bottom-right status lines end at x 1256, 24 px left of the talk button. |
 | Wall page, `split` and `canvas` | The talk button sits in the conversation column's input row (x 760-1368, `c1-talk.md` §1, D78), never over the card area. There is no `CHAT`: the column is always there (D117, pending Q-O12); its rect belongs to the conversation. In `split` the wall half keeps its status lines at the divider. |
-| Wall page, `switch` | The talk button on both halves; `CHAT` only while the wall shows (it flips to the canvas). The switch button sits left of the talk button, x 1200-1264, y 824-888, while the pane is closed; while it is open it moves into the pane header (T44 gives the whole cluster per state). |
-| App, every view in `VIEWS` (`public/js/core/router.js`) | The talk button's bottom edge sits on the top edge of the bottom bar (`footer.shell-bar`, `--tape-h` 24 px, y 888-912); nothing of the bar is covered. The toast stack (`.toasts`, `public/css/components.css`) moves up while the cockpit is configured: its bottom edge at y 736 (`bottom: 176px`), 24 px above `CHAT`. |
+| Wall page, `switch` | The talk button on both halves; `CHAT` only while the wall shows (it flips to the canvas). The switch button sits left of the talk button, x 1200-1264, y 824-888, while the wall shows; while the canvas shows it is a header button of the column, x 992-1064, y 8-56 (D156), and `SEND` has the rect it left. The Wall's bottom-right status lines end at x 1176, 24 px left of it. §4.1 has the whole cluster per state. |
+| App, every view in `VIEWS` (`public/js/core/router.js`) | The talk button's bottom edge sits on the top edge of the bottom bar (`footer.shell-bar`, `--tape-h` 24 px, y 888-912); nothing of the bar is covered. The toast stack (`.toasts`, `public/css/components.css`) moves up while the cockpit is configured: its bottom edge at y 736 (`bottom: 176px`), 24 px above `CHAT`; while the pane is open it moves left of the pane (`right: 624px`, D158). |
 
-The **switch button** (only in `switch`): 64x64 px, label `CANVAS` while the wall shows and `WALL`
-while the canvas shows, 16 px caps. A count of cards that arrived since the canvas was last shown
-sits in its top-right corner: `--fs-16` mono, `--text-1`, on `--bg-sunken`, e.g. `2`. It is grey:
-a new card is news, not trouble (`docs/design.md`, the colour rule).
+The **switch button** `[data-cockpit-switch]` (only in `switch`): while the wall shows, 64x64 px
+in the corner cluster, label `CANVAS`, 16 px caps; a count of cards that arrived since the canvas
+was last shown sits in its top-right corner, inside its rect and not tappable on its own:
+`[data-switch-count]`, `--fs-16` mono, `--text-1`, on `--bg-sunken`, e.g. `2`. It is grey: a new
+card is news, not trouble (`docs/design.md`, the colour rule). While the canvas shows it is a
+header button of the column, 72x48 px like `NEW`, label `WALL`, with no count (the canvas is in
+sight, so the count is 0) (D156).
 
 The cockpit button exists only where the cockpit is configured (`hello.cockpit:true`,
 `protocols.md` §1, D17, D93). Without it neither control is rendered, and nothing else changes: the
 board works as today. A tap on either control changes no route: the hash stays as it was (the
 router's rule that a route only selects, `router.js` header).
+
+### 4.1 The bottom-right cluster, per state (T44)
+
+Every control near the bottom-right corner, and the header buttons that share the pane's right
+edge, in each state, at 1368x912 (keyboard rows at 1368x532). Rects are `x left-right, y top-bottom`
+in CSS px; at other sizes each keeps its offsets from the viewport's right and bottom edges (the
+header's from the right and top). "Tappable" rows are what the no-overlap test checks; text rows
+are there so nothing tappable is drawn over them. With a one-line input; a taller input (`c1-talk.md`
+§7) moves the line slot, chip row and `↓ NEW` up with the row's top edge, nothing else.
+
+| State | Control | Selector | Tappable | Rect |
+| --- | --- | --- | --- | --- |
+| **A. App, pane closed** (every view) | talk button | `[data-talk]` | yes | 1280-1344, 824-888 |
+| | `CHAT` | `[data-cockpit-open]` | yes | 1288-1336, 760-808 |
+| | toast stack | `.toasts` | its toasts' buttons | right edge x 1356, bottom y 736 |
+| | bottom bar | `footer.shell-bar` | as today | y 888-912, not covered |
+| **B. App, pane open** (pane x 760-1368, y 36-888) | `CLOSE` (header) | `[data-cockpit-close]` | yes | 1256-1352, 44-92 |
+| | `NEW` (header) | `[data-cockpit-new]` | yes | 1176-1248, 44-92 |
+| | the stack above the row | `[data-cockpit-line]`, `[data-cockpit-chip-remove]`, `[data-cockpit-follow]` | chip `✕` and `↓ NEW` | `c1-talk.md` §1.1's table (row top y 808), all ending at x ≤ 1264 |
+| | `CLOSE` (the opener) | `[data-cockpit-open]` | yes | 1288-1336, 760-808 |
+| | language button (a language list only) | `[data-talk-lang]` | yes | 784-848, 824-888 |
+| | input | `[data-cockpit-input]` | yes | 784-1184 (864-1184 with the language button), 824-888 |
+| | `SEND` | `[data-cockpit-send]` | yes | 1200-1264, 824-888 |
+| | talk button | `[data-talk]` | yes | 1280-1344, 824-888 |
+| | toast stack | `.toasts` | its toasts' buttons | right edge x 744 (`right: 624px`, 16 px left of the pane), bottom y 736 (D158) |
+| **C. Wall page, `wall`, pane closed** | talk button, `CHAT` | as A | yes | as A |
+| | the Wall's status lines | the Wall's | no | end at x ≤ 1256 |
+| **D. Wall page, `wall`, pane open** (pane x 760-1368, y 0-912) | `CLOSE` (header) | `[data-cockpit-close]` | yes | 1256-1352, 8-56 |
+| | `SCREEN` (header, from the Canvas slice) | `[data-cockpit-screen]` | yes | 1152-1248, 8-56 |
+| | `NEW` (header) | `[data-cockpit-new]` | yes | 1072-1144, 8-56 with `SCREEN`; 1176-1248, 8-56 before the Canvas slice |
+| | stack, opener, language button, input, `SEND`, talk button | as B | yes | as B |
+| **E. Column, `canvas`** (and `switch` showing the canvas; column x 760-1368, y 0-912) | `SCREEN` | `[data-cockpit-screen]` | yes | 1256-1352, 8-56 |
+| | `NEW` | `[data-cockpit-new]` | yes | 1176-1248, 8-56 |
+| | `SHELF n` (with a shelf) | `[data-shelf]` | yes | 1072-1168, 8-56 |
+| | `WALL` (switch button, `switch` only) | `[data-cockpit-switch]` | yes | 992-1064, 8-56 (D156) |
+| | stack, language button, input, `SEND`, talk button | as B | yes | as B; no opener: x 1288-1336, y 760-808 is the conversation's (D117) |
+| **F. Column, `split`** (column x 760-1368, y 520-912) | `SCREEN`, `NEW`, `SHELF n` | as E | yes | E's x, y 528-576 |
+| | stack, language button, input, `SEND`, talk button | as B | yes | as B |
+| **G. `switch`, wall shown** | talk button, `CHAT` | as A | yes | as A |
+| | `CANVAS` (switch button) with its count | `[data-cockpit-switch]`, `[data-switch-count]` | the button | 1200-1264, 824-888 |
+| | the Wall's status lines | the Wall's | no | end at x ≤ 1176 |
+| **H. Keyboard up, pane** (D or B; 1368x532, conversation y 0-532, `c1-talk.md` §7.1) | header buttons | as D (B in the app: `CLOSE`, `NEW` at B's x) | yes | D's x, 8-56 |
+| | the stack | as B | chip `✕` and `↓ NEW` | §1.1's table with the row top at y 444 |
+| | `CLOSE` (the opener) | `[data-cockpit-open]` | yes | 1288-1336, 396-444 |
+| | language button, input, `SEND`, talk button | as B | yes | B's x, 460-524 |
+| **I. Keyboard up, column** (E or F; conversation y 0-532) | header buttons | as E | yes | E's x, 8-56 |
+| | stack, language button, input, `SEND`, talk button | as H | yes | as H; no opener |
+
+- **With `cockpit.stt.url: none`** (no voice, `c2-voice.md` §9, S-C2-14): no talk button and no
+  language button in any state; `SEND` takes x 1280-1344 at the talk button's y, the input runs
+  from x 784 to x 1264. In A, C and G `CHAT` (and in G the switch button) keep their rects.
+- **The gaps this gives**, smallest first: 8 px between header buttons; 16 px between the opener
+  and the talk button (y) and between the opener and `SEND` (y, with 24 px in x); 16 px between
+  input, `SEND` and the talk button, and between the switch button and the talk button; 24 px
+  between the stack and the opener or the talk button (x). No two tappables in one state intersect
+  and none are closer than 8 px.
+- The chip itself (`[data-cockpit-chip]`) is not tappable apart from its `✕`; the line slot is text.
+
+**The `SCREEN` sheet** `[data-screen-sheet]` (D157), drawn in the first frame after the tap, no
+animation; the rows copy `c3-see.md` §9.3's menu:
+
+| Part | Size | Look |
+| --- | --- | --- |
+| box | 288 px wide, 322 px tall (five 64 px rows and a 1 px border), right edge on `SCREEN`'s right edge | `--bg-elevated`, 1 px `--line-strong` border, `z-index` 40 (`--z-sheet`) |
+| `WALL`, `CANVAS`, `SPLIT`, `SWITCH` | 64 px tall, full width, 1 px `--line` between rows | `[data-layout-choice]`, 18 px caps `--text-1`; the current one 1 px accent border |
+| `CANCEL` | 64 px tall, full width, 1 px `--line` top | `[data-screen-cancel]`, 18 px caps `--text-2` |
+
+- **Position.** Its top 8 px under the header's bottom edge when that leaves its bottom ≥ 16 px
+  above the visible bottom; else its bottom 8 px above the header's top edge. At 1368x912:
+  `canvas` x 1064-1352, y 72-394; `wall` pane x 960-1248, y 72-394; `split` x 1064-1352,
+  y 190-512 (above the column, over the card area); keyboard up (1368x532) y 72-394 in every layout.
+- **It closes** on a layout row (after applying it), `CANCEL`, a second tap on `SCREEN`, a tap
+  anywhere outside it (that tap does nothing else: no card, node, tool line or blur acts on it),
+  `Esc`, or 10 s without a touch. Nothing changes but the sheet going.
+- It is inside `[data-cockpit-conversation]`, so with the keyboard up a tap on it keeps the input's
+  focus (`c1-talk.md` §7.1, D132); applying a layout keeps the draft and the focus.
 
 ## 5. Scenarios
 
@@ -207,11 +289,18 @@ When the owner taps `SCREEN` in the column's header (x 1256-1352, y 528-576), th
 Then within 0.2 s `data-cockpit-layout="canvas"`, the wall half is gone, the canvas fills 1368x912,
 `data-pane="column"`, `[data-cockpit-conversation]` is at x 760-1368, y 0-912 with its scroll
 position and draft unchanged, and `localStorage['cockpit.layout']` is `canvas`.
+When the owner taps `SCREEN` again, the sheet `[data-screen-sheet]` shows at x 1064-1352, y 72-394
+with five rows, `CANVAS` marked current; then taps `CANCEL`,
+Then the sheet is gone within 0.1 s and the layout is still `canvas`.
+When the owner opens the sheet again and taps the card area at (400, 300), outside it,
+Then the sheet is gone and nothing else happened (`data-cockpit-layout` still `canvas`).
 When the page reloads, it is still `canvas`.
 When it is opened with `?layout=wall`, it is `wall`, `data-pane="closed"`, `[data-cockpit-open]`
 reads `CHAT`, and `cockpit.layout` is still `canvas`.
-Test: Playwright; tap through the sheet (each row ≥ 64 px tall); read `data-cockpit-layout`, `data-pane`,
-the column's `getBoundingClientRect()` and `localStorage`; reload; navigate with the query.
+Test: Playwright with `hasTouch: true`; tap through the sheet (each row ≥ 64 px tall); read
+`data-cockpit-layout`, `data-pane`, the column's and the sheet's `getBoundingClientRect()` (± 1 px)
+and `localStorage`; `count()` of `[data-screen-sheet]` after `CANCEL` and after the outside tap is 0;
+reload; navigate with the query.
 
 ### S-SCR-07 Switch on a small screen: one half at a time, a count for new cards (pending Q-O22)
 Given a screen at 1024x768 with no layout stored (the default is `switch`), the wall shown,
@@ -555,3 +644,45 @@ connects the third to the room under test (`ws.connectToServer()`) for the secon
 the route handler; read the `cockpit:close` marks for code and reason. The room's side (it really
 sends these codes, and an `Origin: https://evil.example.invalid` upgrade gets 4403) is the unit test
 in `protocols.md` §2.3.
+
+### S-SCR-25 The corner cluster in the app and on the Wall: every control at its rect, none closer than 8 px
+Given the app at 1368x912 on `#/map` (`hasTouch: true`), the cockpit configured, the fake agent,
+`cockpit.stt.url: "none"`,
+When the page has loaded (state A of §4.1) and a toast with an action is shown,
+Then `CHAT` is x 1288-1336, y 760-808, there is no `[data-talk]`, the toast stack's bottom is
+y 736 and its right edge x 1356.
+When the owner taps `CHAT` (state B), the room's link stops so the line slot shows `room-down`, the
+owner drags the conversation up so `↓ NEW` shows, and a toast is shown,
+Then the header holds `CLOSE` x 1256-1352 and `NEW` x 1176-1248 (y 44-92), the opener `CLOSE`
+x 1288-1336, y 760-808, `SEND` x 1280-1344, y 824-888, the input x 784-1264, the line slot
+y 776-808, `↓ NEW` x 1016-1112, y 712-760, and the toast's right edge is ≤ x 744.
+When the viewport is set to 1368x532 with the input focused (state H),
+Then `data-keyboard="up"`, the header is y 8-56 at B's x, the opener y 396-444, `SEND` y 460-524,
+the line slot y 412-444.
+When the same walk runs on the Wall page in `wall` (states C, D, H) and, from the C2 slice, with
+the fake speech service and `cockpit.stt.language: ["en", "de"]` (the talk button x 1280-1344,
+`SEND` x 1200-1264, `[data-talk-lang]` x 784-848, the input x 864-1184),
+Then every rect is §4.1's.
+Test: Playwright; at each state collect `getBoundingClientRect()` of every visible element matching
+§4.1's selectors (header buttons, `[data-cockpit-open]`, `[data-cockpit-send]`, `[data-talk]`,
+`[data-talk-lang]`, `[data-cockpit-input]`, `[data-cockpit-follow]`, `[data-cockpit-chip-remove]`,
+the toasts' buttons), compare with a table in the test (± 1 px), and check every pair: no
+intersection, distance ≥ 8 px; the toast through `import('/js/ui/toast.js')` `toast('x', {action})`
+in `page.evaluate`; `POST /link {"up":false}` on the room under test for the line.
+
+### S-SCR-26 The switch button moves into the column header when the canvas shows (pending Q-O22)
+Given a screen at 1368x912 opened with `?layout=switch` (`hasTouch: true`), the wall shown, the fake
+speech service,
+Then (state G) the switch button `[data-cockpit-switch]` reads `CANVAS` at x 1200-1264, y 824-888,
+the talk button x 1280-1344, y 824-888, `CHAT` x 1288-1336, y 760-808, and the Wall's status lines
+end at x ≤ 1176.
+When the owner taps `CHAT`,
+Then within 0.2 s `data-switch-shows="canvas"`, `data-pane="column"`, the switch button reads `WALL`
+at x 992-1064, y 8-56 in the column's header (no `[data-switch-count]`), `SEND` is x 1200-1264,
+y 824-888 and nothing else intersects it; there is no `[data-cockpit-open]`.
+When the owner taps `WALL`,
+Then the wall shows and the switch button is back at x 1200-1264, y 824-888, reading `CANVAS`.
+When the viewport is set to 1368x532 with the column's input focused (state I),
+Then `WALL` stays at x 992-1064, y 8-56 and `SEND` is y 460-524.
+Test: Playwright; the rect table and pairwise check of S-SCR-25 for states G, E and I; read the
+labels and `data-switch-shows` after each tap.

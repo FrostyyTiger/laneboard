@@ -317,7 +317,7 @@ short clips (research finding)." The plan's config key is `cockpit.stt.language`
   when it opens the session for a press; `auto` passes `auto`.
 - **A list shows the choice.** With two or more codes the input row gets a language button
   `[data-talk-lang]`, 64x64 px, at the row's left end (on the Wall x 784-848, the textarea then runs
-  from x 864 to x 1184; T44's rect table carries it). It shows the current code in 20 px
+  from x 864 to x 1184; `screens.md` §4.1 carries it). It shows the current code in 20 px
   `--font-label` caps `--text-1` (`DE`), 1 px `--line-strong` border, `aria-label` `Speech language:
   German. Tap for English.`. A tap moves to the next code in the list and back to the first after
   the last. With one code or `auto` there is no button and the textarea keeps its full width.
