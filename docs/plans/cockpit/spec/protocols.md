@@ -232,6 +232,7 @@ case below says what the screen shows.
 | 4401 | `unpaired` | room, right after the upgrade: no device token, or one it does not know | no retry; `data-cockpit="unpaired"`, the pairing card (`screens.md` §6) |
 | 4402 | `revoked` | room: the token was unpaired; sent to the open links at `unpair`, and right after the upgrade to a link that brings a token unpaired in the last 30 days (D135). The `revoked` frame below comes first | no retry; `data-cockpit="unpaired"`, the "pair again" card with the frame's `at` (`screens.md` §6) |
 | 4403 | `bad-origin`, `bad-host`, `no-origin` or `sec-fetch-site` | room, right after the upgrade: `checkUpgrade` refused the Host or Origin, the upgrade had no `Origin`, or its `Sec-Fetch-Site` was not `same-origin`/`none` (`screens.md` §6.2) | no retry; `data-cockpit="room-down"`, status line `This address is not allowed to talk to the cockpit room ({reason}). Reload once the room allows it.` |
+| 4403 | `insecure-origin` | room, right after the upgrade, after the Host and Origin checks: the `Origin` is `http:` on a host that is not loopback and `cockpit.allowInsecure` is off (`screens.md` §6.2.1, D182) | no retry; `data-cockpit="unpaired"`, the `CANNOT PAIR HERE` card (`screens.md` §6.2.1) |
 | 4503 | `too-many-links` | room, right after the upgrade: the room already has 32 links (§8) | reconnects every 30 s, no backoff; `data-cockpit="room-down"` at once (no 5 s grace), status line `The cockpit room has 32 screens connected, its limit. Trying again every 30 s.` |
 | 4408 | `too slow` | room: the link's unsent data passed 4 MB (§8) | reconnects with backoff; gets a snapshot |
 | 4413 | `too big` | room: a text frame over 64 KB or a binary frame over 6 400 bytes | reconnects with backoff |
@@ -241,7 +242,8 @@ case below says what the screen shows.
 **Refusals come after the upgrade, as close codes** (D135). A browser cannot read the status or
 body of a refused upgrade: an HTTP 403 or 503 reaches the page as `error` then `close` 1006, the
 same as a room that is down. So the room accepts every upgrade on `/api/cockpit/ws` and then checks,
-in this order, before it reads any frame: Host and Origin (`checkUpgrade`, 4403), the link count
+in this order, before it reads any frame: Host and Origin (`checkUpgrade`, 4403), the `Origin`'s
+scheme (4403 `insecure-origin`, D182), the link count
 (4503), the device token (4401, 4402). A refused link gets at most one frame (`revoked`, for 4402)
 and the close, in the same tick as the upgrade; it is never counted as one of the 32, never sees a
 `welcome`, and a `hello` already in flight is dropped. The room logs each refusal with its code and

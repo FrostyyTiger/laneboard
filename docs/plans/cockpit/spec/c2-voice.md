@@ -515,7 +515,10 @@ What the later `docs/cockpit.md` says, from research Q3. The microphone needs tw
    HTTPS (a tailnet's HTTPS proxy, or a reverse proxy with a certificate). Where that cannot be
    done, the managed policy `OverrideSecurityRestrictionsOnInsecureOrigin` lists the one exact
    origin (`http://hub.example.invalid:7777`); it is the same as the flag
-   `--unsafely-treat-insecure-origin-as-secure`. `localhost` counts as secure.
+   `--unsafely-treat-insecure-origin-as-secure`. `localhost` counts as secure. Then the device
+   token and the audio travel unencrypted on that network: use it only on a network you would hand
+   the token to. Such a page does not pair at all unless the room sets `cockpit.allowInsecure:
+   true` (warned at start; `screens.md` §6.2.1, D182).
 2. **No prompt.** On Chrome or Chromium on Linux and ChromeOS, a managed policy file:
 
    ```json
@@ -533,7 +536,9 @@ What the later `docs/cockpit.md` says, from research Q3. The microphone needs tw
    exists there is research Q7. The prompt path (3) works.
 5. **What the screen shows**: the indicator of the browser is on only while the talk button shows
    an open microphone (D46). Audio goes to the room and from there only to `cockpit.stt.url`
-   (plan §4).
+   (plan §4). The sent text, and what the agent reads to answer it (fleet state, logs, files),
+   goes to the agent's model service (with Claude Code: Anthropic). What the room keeps, and for
+   how long, is `protocols.md` §11.7.1 (pending Q-O24) and `security.md` (T17, T61).
 6. Tests use `--use-fake-device-for-media-stream` and the browser context's microphone permission,
    never a policy (§6).
 

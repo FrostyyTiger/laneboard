@@ -517,9 +517,57 @@ Set-Cookie: lb_cockpit=<43 base64url characters>; HttpOnly; Secure; SameSite=Str
 `HttpOnly`: no script on the page reads it. `SameSite=Strict`: no other site's page sends it.
 `Path=/api/cockpit`: the board's own routes never see it. `Max-Age` is 400 days, the most a
 browser keeps; the room still decides validity (pending Q-O10). The room stores only the token's
-SHA-256 (`security.md`, T17). On a plain-HTTP origin a `Secure` cookie is not kept, so pairing
-there needs `cockpit.allowInsecure` (T58, T75); whether a loopback `http://127.0.0.1` origin keeps
-it is research Q14.
+SHA-256 (`security.md`, T17). A plain-HTTP page does not pair: §6.2.1.
+
+### 6.2.1 A page that is not HTTPS (T58, T75, D182)
+
+On a plain-HTTP page the device token (the cookie on every upgrade) and every audio frame cross the
+network unencrypted: anyone on that network can copy the token and be that screen. So the room
+pairs and links only pages whose `Origin` is `https:`, or `http:` on a loopback host
+(`127.0.0.1`, `[::1]`, `localhost`; the browser treats those as secure; whether it keeps a `Secure`
+cookie there is research Q14). One more row of §6.2's checks, after the `Origin` row:
+
+| Check | `POST /api/cockpit/pair` | `GET /api/cockpit/pair/{code}` | `GET /api/cockpit/ws` (upgrade) |
+| --- | --- | --- | --- |
+| `Origin` is `https:` or loopback `http:`, unless `cockpit.allowInsecure` | `403 {"error":"insecure-origin"}`, no code made, not one of D13's 10 | checked when `Origin` is present (a code exists only after a `POST` that passed) | close 4403 `insecure-origin` (`protocols.md` §2.3) |
+
+`/talk` sends no `Origin` (D52) and is not affected. The room reads the scheme from the `Origin`
+header the browser sends, never from its own listener: behind a front (D92) the room's port is
+plain HTTP while the page is HTTPS.
+
+**The key**, in the room's config (`c2-voice.md` §9's layers):
+
+| Key | Default | Env | What |
+| --- | --- | --- | --- |
+| `cockpit.allowInsecure` | `false` | `LANEBOARD_COCKPIT_ALLOW_INSECURE=1` | `true`: a plain-HTTP page pairs and links as an HTTPS one does; the token's cookie for it has no `Secure` (the browser drops a `Secure` cookie from an `http:` page). An HTTPS page still gets `Secure`. Not a boolean: fatal at start, naming the key. |
+
+With `true`, the room prints once at start, on stderr: `cockpit: allowInsecure is on: a screen on a
+plain-HTTP page sends its device token and its audio unencrypted; anyone on that network can copy
+the token and talk to the agent as that screen.` What a copied token gives, exactly: the room link
+as that screen, so sending prompts to the agent (which reads the fleet with its tools, `c3-see.md`),
+reading the conversation and stopping turns; and every audio frame and reply on the wire. It does
+not give the board's own routes (the cookie's `Path` is `/api/cockpit`), pairing or unpairing
+(the CLI on the room, §6.1), or anything the agent itself may not do. `unpair` revokes it as any
+token. The CLI's request block (§6.1) gains one line for such a page, after `browser`:
+`page        http://hub.example.invalid:7777 (not HTTPS: its token travels unencrypted)`.
+
+**The card on a plain-HTTP page**, with `allowInsecure` off. On `403 {"error":"insecure-origin"}`
+from step 1, or a close 4403 `insecure-origin` on a screen paired before the key went off, the
+page sets `data-cockpit="unpaired"` and shows, where the pairing card goes (pane and empty canvas),
+`[data-pair-card="insecure"]`, texts exact, with no code, no command and no countdown:
+- Title, `--font-label` caps 24 px: `CANNOT PAIR HERE`
+- 18 px `--text-1`: `This page is not HTTPS, so it cannot be paired. docs/cockpit.md says how to get HTTPS on a LAN, or how to allow it anyway.`
+- 18 px `--text-2`: `The board works without a pairing.`
+
+It asks nothing again (no second `POST`, no upgrade) until a reload. The board, the Map and the tour
+are as for any unpaired screen.
+
+**For the later `docs/cockpit.md`**: HTTPS on a LAN is a reverse proxy in front of the board with
+a certificate from a local CA (for example Caddy with `tls internal`), the CA's root certificate
+installed once on the tablet; or a tailnet's HTTPS proxy. Allowing it anyway is
+`cockpit.allowInsecure: true`, with the paragraph above on what it exposes, and only on a network
+the owner would hand the token to. The microphone on such a page also needs the browser policy of
+`c2-voice.md` §12 item 1.
 
 ### 6.3 A new pairing shows on every paired screen
 
@@ -1007,3 +1055,37 @@ computed style; `page.touchscreen.tap` for the tap, `mouse.down`/`up` with a 1.0
 for the hold, the button's computed `background-color`/`border-color` read after `mouse.down`
 (one `requestAnimationFrame`) and after `mouse.up`, compared with the tokens resolved on a probe
 element; the fake speech's log (`stand-ins.md` §3.4) for "no session".
+
+### S-SCR-33 A plain-HTTP page cannot pair unless the room allows it, and then says what that costs (pending Q-O21)
+Given the real room with a fake agent, `cockpit.allowInsecure` unset, and a screen at 1368x912
+(`hasTouch: true`) opening the app at `http://hub.example.invalid:7777/#/map` (the name mapped to
+the room under test),
+When the owner opens the pane with `CHAT`,
+Then the page's `POST /api/cockpit/pair` gets `403 {"error":"insecure-origin"}`; within 1 s
+`data-cockpit="unpaired"` and `[data-pair-card="insecure"]` reads `CANNOT PAIR HERE`, `This page
+is not HTTPS, so it cannot be paired. docs/cockpit.md says how to get HTTPS on a LAN, or how to
+allow it anyway.` and `The board works without a pairing.`, the middle line at computed
+`font-size` 18 px; the card has no text matching `^[2-9A-HJKMNP-Z]{3}-[2-9A-HJKMNP-Z]{3}$`; in the
+next 60 s the page sends no second `POST` and no upgrade of `/api/cockpit/ws`; the Map draws as
+before.
+And an upgrade of `/api/cockpit/ws` with `Origin: http://hub.example.invalid:7777` closes 4403
+`insecure-origin` with no frame before it; the same `POST` with `Origin: http://127.0.0.1:{port}`
+gets `201` (loopback counts as secure, pending research Q14).
+When the room restarts with `cockpit.allowInsecure: true`,
+Then its stderr has the line `cockpit: allowInsecure is on: a screen on a plain-HTTP page sends its
+device token and its audio unencrypted; anyone on that network can copy the token and talk to the
+agent as that screen.` exactly once; after a reload the pane shows the normal pairing card with a
+code; `pair --yes` prints the request block with the line `page        http://hub.example.invalid:7777
+(not HTTPS: its token travels unencrypted)`; the approved poll's `Set-Cookie` for `lb_cockpit` has
+`HttpOnly`, `SameSite=Strict`, `Path=/api/cockpit` and no `Secure`, and `data-cockpit="live"`
+within 2 s; a pairing from an `https://cockpit.example.invalid` page on the same room still gets
+`Secure`.
+When the room restarts with the key unset again,
+Then the paired `http:` screen's next upgrade closes 4403 `insecure-origin`, and within 1 s it shows
+`[data-pair-card="insecure"]` and no further upgrade for 60 s.
+Test: Playwright with `--host-resolver-rules` mapping `hub.example.invalid` to the room under test
+(as S-C2-21), `page.clock` for the 60 s; count `/api/cockpit/pair` requests and upgrades with
+`page.on('request')`/`page.on('websocket')`; raw `node:http` and `ws` clients for the forged-`Origin`
+requests and to read the `Set-Cookie` header; the room's stderr as `protocols.md` §1's boot test
+reads it; the `https:` pairing is a raw `POST` and poll with `Origin: https://cockpit.example.invalid`
+(that host allowed in the test config), the cookie read from the header (no test certificate needed).
