@@ -3,7 +3,7 @@
 The cockpit pane and the conversation in it: where the pane sits, how it opens and closes, how a
 reply is drawn for reading at arm's length, and how tool activity folds into one line (§1-§5, part
 1, T4; §5.1 maps the room's messages onto them, T29). Typing and send, talking while the agent answers, long replies, errors, a new conversation,
-several screens are part 2 (§7-§14, T5; the on-screen keyboard §7.1, T40); the raw view is not in C1 (§13, T50); the demo (`?demo=1`) is §15. Words as in the glossary (`README.md`). Sizes are CSS
+several screens are part 2 (§7-§14, T5; the on-screen keyboard §7.1, T40); the raw view is not in C1 (§13, T50); the demo (`?demo=1`) is §15; every time C1 uses is in one table, §16. Words as in the glossary (`README.md`). Sizes are CSS
 px at 1368x912; times in s or ms.
 
 Plan C1: "It slides over the view, never replaces it, so the agent can point at the view behind
@@ -336,8 +336,8 @@ blocks, tool lines (§5) and show lines (`c4-show-canvas.md` §4) interleaved as
 - While text streams, a static block cursor `▍` in `--text-3` follows the last character.
 - When the bridge sends a text block complete, it **replaces** the text built from the deltas (a
   lost delta cannot leave wrong text, research Q2).
-- **Budget:** the first reply text is on screen ≤ 0.5 s after the fake agent sends its first delta
-  (B4, the speed budget in `README.md`).
+- **Budget:** the first reply text is on screen ≤ 0.5 s after the room sends the turn's first
+  `text.delta` (its `sentAt`; B4, the speed budget in `README.md`, D288).
 
 ### What a reply may contain (D22, D23)
 
@@ -1056,7 +1056,7 @@ to 120 characters and drawn as text. After an error the header reads `READY` (D3
 | --- | --- | --- | --- |
 | E1 `not-sent` | the room has not confirmed a prompt 5 s after send, link up | label `YOU · 07:02 · NOT SENT`; `Not sent: the room did not confirm within 5 s.` | `RETRY` sends the same text again with the **same** `clientId` (the one exception, below); `EDIT` removes the block, puts the text back in the input (an existing draft is kept after it, on a new line) and focuses the input with the caret after the restored text, on every pointer type (D271, below) |
 | E2 `agent-exited` | the agent's process ended during a turn | `The agent stopped unexpectedly at 07:04. The room is starting it again.`, then, once back: `The agent is back (07:04). Your last message was not answered.` | `RETRY` (only once the agent is back) sends that turn's prompt again, with a new `clientId` |
-| E3 `agent-down` | the agent cannot start | `The agent cannot start: {detail}. The room tries again every 30 s.` plus the status line (§1) `Agent not running since 07:04 (2 min).`; `SEND` and talk disabled, the draft kept | none |
+| E3 `agent-down` | the agent cannot start | `The agent cannot start: {detail}. The room tries again every 30 s.` plus the status line (§1) `Agent not running since 07:04 (2 min).`; `SEND` and talk disabled, the draft kept. The 30 s is the restart series' last step (0, 2, 4, 8, 16, 30 s, then every 30 s, `protocols.md` §11.7); a refused start (`protocols.md` §11.11, no restart) shows `The agent cannot start: {detail}.` alone (D289) | none |
 | E4 `not-logged-in` | the agent reports missing login or key | `The agent is not logged in on the room. Log it in there, then send again.` plus the status line (§10.1) | none |
 | E5 `model-busy` | the model service is retried by the agent | not an error line: a tool-line-style row in `--text-3`, `the model service is busy, retrying (2 of 10)`, replaced on each retry, gone when text arrives | none |
 | E6 | retired (T50): a model-service error is E8, its `{detail}` the service's own message (D57) | | |
@@ -1992,3 +1992,58 @@ tool line; `placeholder`; `[data-cockpit-demo-label]` count 1, then 0 in the sec
 `test/cockpit-demo.test.mjs` in `npm test`: drives `createDemoLink({now, setTimeout})` with a fake
 clock through `hello`, the three matches, a no-match, a mid-turn send and a `stop`, and checks every
 emitted message with `protocols.md` §9's fixture checker and its `seq` running 1, 2, 3, ….
+
+## 16. Times at a glance (T133, D287)
+
+Every time C1 uses, in one table: a reader looking up "how long until …" starts here. The section
+in the **Where** column owns the value; this table only points at it, and when the two differ the
+section wins and this table is a bug. Names in the **Constant** column are the names in
+`public/js/core/cockpit-constants.js` (D150), which the room imports too (D287); `B<n>` is a speed
+budget (`README.md` "Speed budget"), measured, not a constant. "Clock" says whose clock counts:
+the screen's (`page.clock` in tests) or the room's (`server/cockpit/clock.mjs`, the fake clock).
+
+| Value | Constant | What | Clock | Where | D | Asserted by |
+| --- | --- | --- | --- | --- | --- | --- |
+| 120 ms | `PANE_SLIDE_MS = 120` | the pane slides in and out (`--ease`); 0 ms with reduced motion | screen | §2, `docs/design.md` rule 5 | — | S-C1-01 (`transition-duration`), S-C1-12 (0 ms) |
+| ≤ 0.2 s | B7 | tap on the opener or press on the talk button → pane in place | screen | §2 | — | S-C1-01 |
+| 300 s | `PANE_IDLE_S = 300` | the pane closes itself with no touch; not in a column, never during a turn | screen | §1, §2, `screens.md` §2 | D5 | S-SCR-04, S-C2-06 |
+| ≤ 0.1 s | B8 | `SEND` → prompt block drawn, `data-turn="thinking"` | screen | §7 | — | S-C1-14 |
+| 5 s | `CONFIRM_WAIT_MS = 5000` | no `turn.prompt` echo since the send, link up → E1 `NOT SENT` | screen | §7, §10 E1 | D31 | S-C1-18 |
+| ≤ 0.5 s | B4 | the room sends the turn's first `text.delta` (`sentAt`) → that text drawn | room → screen | §3 | D288 | S-C1-04 |
+| 3 s | `AGE_FROM_MS = 3000` | a turn's age shows in its label row; the `AGENT · HH:MM` row comes by then even with no item | screen (offset by `welcome.now`) | §3, §5.1, §9 | D35, D235 | S-C1-21 (none at 2.9 s, `0:03` at 3 s) |
+| 1 s | `TICK_MS = 1000` | every counter on the screen is redrawn: the turn's age, `since … (age)` in status lines | screen | §9, §10.1, `README.md` "Times on the screen" | D232 | S-C1-21 (`0:12` at 12 s); the status line's age: no scenario, gap (T141) |
+| within 1 s | — | a page loaded mid-turn shows the same age as the others | screen | §9 | D235 | no scenario, gap (T141) |
+| 0.5 s | — | after a `SEND` during a turn the label reads `· QUEUED` (the echo with `delivery:"queued"`) | screen | §8 | D121, D122 | S-C1-16 (by 2.5 s for a 2.0 s tap), S-C1-28 |
+| 1.0 s | `STOP_GUARD_MS = 1000` | after a send or a microphone close the slot shows `wait` or blank, not `STOP` | screen | §8 | D268 | S-C1-16 (`wait` 2.0-3.0 s, `■ STOP` at 3.0 s), S-C2-09 |
+| ≤ 0.1 s | — | `prompt.taken` `taken` → `· QUEUED` gone, the block at `atBlock` | screen | §8 | D122, D258 | S-C1-16 (tool ends 4.0 s, gone by 4.1 s) |
+| 10 s | `QUEUED_RESEND_MS = 10000` | a queued prompt not taken 10 s after its turn's `turn.end` is written once more (new UUID) | room | §8, `protocols.md` §3.4 | D123 | S-C1-28 (resend at 13 s) |
+| 10 s | `QUEUED_RESEND_MS` | the resend not taken within 10 s → `prompt.taken` `cancelled` `not-taken`, `The agent did not read this.` | room | §8 | D123 | S-C1-28 (`NOT SENT` at 23 s) |
+| ≤ 0.1 s | — | `STOP` `pointerup` → `data-turn="stopping"`, `● STOPPING` | screen | §8 | — | S-C1-17 |
+| 5.0 s | `STOP_FORCE_MS = 5000` | no `turn.end` since the `STOP` → `SIGINT`, `turn.end` `forced:true`, `STOPPED AT HH:MM (FORCED)` | room | §8, `protocols.md` §11.6 | D32, D262 | S-C1-17, `protocols.md` §13 stop test |
+| 5.5 s | — | `READY` after a `STOP`, forced or not | screen | §8 | D32 | S-C1-17 |
+| 8.0 s | `STOP_TERM_MS = 8000` | still no `result` after the `SIGINT` → `SIGTERM`, then `--resume`; no status line | room | `protocols.md` §11.6 | D103 | `protocols.md` §13 stop test (S-C1-17 asserts none follows when the `SIGINT` ends the turn) |
+| 10.0 s | `STOP_KILL_MS = 10000` | the child still runs → `SIGKILL`, the room closes its pipes | room | `protocols.md` §11.6 | D283 | no scenario: the stop test's child exits at the `SIGTERM`; gap (T141) |
+| 10 s | `HEARTBEAT_MS = 10000` | the room's heartbeat on every link | room | §5.1, §9, `screens.md` §7 | D10 | no scenario of its own; it matters through the 25 s silence below (T141) |
+| 25 s | `LINK_SILENCE_MS = 25000` | no frame for 25 s → the link counts as lost (then the 5 s grace) | screen | §5.1, `screens.md` §7, `protocols.md` §2.2 | D10, D139 | no scenario: every outage test closes the link (`POST /link`); gap (T141) |
+| 5 s | `LINK_GRACE_MS = 5000` | a lost link shows on screen only after 5 s; back within 5 s shows nothing | screen | `screens.md` §7 | D10 | S-SCR-17 (nothing at 4.9 s), S-SCR-18, S-C1-38 |
+| 500 ms × 1.8, ≤ 15 s | `BACKOFF_START_MS`, `BACKOFF_FACTOR`, `BACKOFF_MAX_MS` (`net.js`) | the room link's tries: 0.9, 1.62, 2.916, 5.2488, 9.44784 s apart, then every 15 s; `Retrying in {n} s.` rounds up | screen | `screens.md` §7.1 | D11, D263 | S-SCR-19 |
+| 5 s | `SNAPSHOT_WAIT_MS = 5000` | no snapshot 5 s after the load → `room-down` and its status line | screen | §5.1 | D118 | S-C1-26 |
+| 10 per 60 s | `RATE_MAX = 10`, `RATE_WINDOW_MS = 60000` | prompts per device token; the 11th is refused (E9) | room | §7 "Rate", §12 | D228 | S-C1-43 |
+| 60 s | `RETRY_WAIT_MS = 60000` | E9's `RETRY` stays disabled from the refusal's drawing | screen | §10 E9 | D264 | S-C1-43 (disabled after 59 s, enabled after 60 s) |
+| 0, 2, 4, 8, 16, 30 s, then every 30 s | `RESTART_STEPS_S = [0, 2, 4, 8, 16, 30]` | the room restarts an agent that exited outside a stop (E2, E3's `every 30 s` is the last step) | room | §10 E2, E3, `protocols.md` §11.7 | D289 | `protocols.md` §13 restart test (0, 2, 4 s), S-C1-38 second case; the 8-30 s steps: no scenario, gap (T141) |
+| 30 s | `READY_WAIT_MS = 30000` | no `ready` 30 s after a spawn → a failed start | room | `protocols.md` §11.7 | — | no scenario, gap (T141) |
+| 10 s | — | two `--resume` starts that exit before `ready` within 10 s → forced fresh start (§11's second divider) | room | §11, `protocols.md` §11.7 | — | `protocols.md` §13 restart test |
+| 900 s, 60 s | `LOGIN_CHECK_S = 900`, `LOGIN_RECHECK_S = 60` | the agent's login check; every 60 s while logged out; the line goes ≤ 60 s after a login | room | §10.1, `protocols.md` §11.10 | D151, D153 | S-C1-37 |
+| 5 s | `NEWS_MS = 5000` | `The agent is back (HH:MM). …` (row 7) shows, then goes | screen | §10.1 | D152 | no scenario for the 5 s: S-C1-39 asserts the line, not its end; gap (T141) |
+| 5 s | `NEWS_MS` | `Back since HH:MM.` (row 8) shows, then goes | screen | §10.1, `screens.md` §7 | D152 | S-C1-38 third case (5 s ± 0.2 s), S-SCR-19 |
+| 10 s | `NEWBAR_MS = 10000` | the `NEW` bar with no tap hides, nothing changes | screen | §11 | D36 | S-C1-22 |
+| 5 s | `STOP_FORCE_MS` | `START` with a turn running: the stop first, forced after 5 s | room | §11, §8 | D36 | S-C1-22 (turn idle there); forced case: S-C1-17 |
+| 5 s | — | `new`: stdin closed, `SIGTERM` after 5 s without exit, then the new session | room | `protocols.md` §11.7 | — | no scenario: the fake agent exits on a closed stdin; gap (T141) |
+| ≤ 0.5 s | — | the `NEW CONVERSATION` divider on every screen after the new session started | screen | §11 | — | S-C1-22 |
+| 30 days | — | the old conversation kept on the room | room | §11, `protocols.md` §11.7.1 | pending Q-O24 | `protocols.md` §13 store test (a 31-day-old turn gone) |
+| ≤ 0.5 s | — | a prompt sent at screen A drawn on screen B after the room has it; reply text within B4 | room → screen | §12 | D269 | S-C1-23 |
+| 3 s | `DEMO_WAIT_MS = 3000` | `?demo=1` with no board frame for 3 s draws the demo cockpit | screen | §15 | D148, D150 | no scenario for the 3 s: S-C1-36 loads with `"cockpit":false`; gap (T141) |
+| 5 s | — | a talk hint's longest show (§1.1's line slot) | screen | `c2-voice.md` §3 | D168 | C2's table (T135) |
+
+Not times, and so not here: the 8 px tap slop (`TAP_SLOP_TOUCH`, §8), the 120 px keyboard
+threshold (§7.1), the 50 turns drawn and 3 `history` asks (§2.1, D27).
