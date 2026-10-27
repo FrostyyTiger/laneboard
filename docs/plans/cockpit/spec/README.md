@@ -32,20 +32,38 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 
 ## The room process
 
-What the room is, in one place (D89, D92; T37). Q-O29 and T86 may still change the mode line.
+What the room is, in one place (D89, D92, D128, D129; T37, T86; pending Q-O29).
 
-- **Process**: a laneboard server (`server/index.mjs`) whose config has a `cockpit` section; on one
-  box it is the same process as the board, as two users it is a second laneboard on `127.0.0.1`
-  (D91).
-- **Entry point**: `server/boot/cockpit.mjs`, called by the normal boot when the `cockpit` section
-  exists; the room's modules in `server/cockpit/` (`bridge.mjs`, `protocol.mjs`, `clock.mjs`,
-  `faults.mjs`), its config parser `server/config/cockpit.mjs`. Whether a room-only process is
-  `mode: builder` with a `cockpit` section or a new `mode: cockpit` is T86's (pending Q-O29).
+- **Process**: the laneboard server (`server/index.mjs`) whose config has `cockpit.agent`. On one
+  box it is the board's own process (`mode: builder`); beside a hub, or as a second user beside a
+  board, it is its own process with `mode: cockpit` on `127.0.0.1` (D91, D128).
+- **Modes** (`server/config/mode.mjs` `MODES`, D128):
+
+  | `mode` | `cockpit` section | Runs | Serves |
+  | --- | --- | --- | --- |
+  | `builder` | none | the board as today | page, `/ws`, `/api/*` |
+  | `builder` | `agent` (one box) | the board and the room | page, `/ws`, `/api/*`, `/api/cockpit/*`, MCP |
+  | `builder` or `hub` | `forwarded: true` only (D129) | the board or the hub; its front forwards to a room | page, `/ws`, `/api/*` |
+  | `cockpit` | `agent` (required) | the room alone: no collectors, sessions, terminals or `/ws` | `/healthz`, `/api/cockpit/*`, MCP |
+
+  Fatal at start: `cockpit.agent` on a `hub`; `mode: cockpit` without `cockpit.agent`;
+  `forwarded` together with `agent` (messages in D128, D129).
+- **Entry point**: `server/boot/cockpit.mjs`. It exports `startRoom(ctx)`, which
+  `server/boot/builder.mjs` calls when `cockpit.agent` is set, and as a module imported by
+  `server/index.mjs` for `mode: cockpit` it is the whole wiring (`listenAll`, `registerHealthz`,
+  `startRoom`, `installSignalHandlers` from `server/boot/common.mjs`). The room's modules live in
+  `server/cockpit/` (`bridge.mjs`, `protocol.mjs`, `clock.mjs`, `faults.mjs`), its config parser in
+  `server/config/cockpit.mjs`. `server/index.mjs` changes in one line (the third mode's import).
 - **Origin**: the page's own; the room answers `/api/cockpit/*` (HTTP and the room link), the board
   everything else; with two processes the front that serves the page forwards that prefix
-  (`protocols.md` §1).
-- **Ports**: the board `7777` (`port`), a room of its own e.g. `7778` on `127.0.0.1`, the MCP server
-  `127.0.0.1:7790` (`cockpit.mcp.port`, D58).
+  (`protocols.md` §1). The prefix is the constant `COCKPIT_PREFIX = '/api/cockpit'` (D93).
+- **Ports** (the one list; other files link here):
+
+  | What | Key | Default | Bind |
+  | --- | --- | --- | --- |
+  | the board or hub, and the one box's room | `port` | `7777` | `bind`, default `127.0.0.1` |
+  | a room alone (`mode: cockpit`) | `port` | `7778` (the mode's own default) | `127.0.0.1` only |
+  | the MCP server (D58) | `cockpit.mcp.port` | `7790` | `127.0.0.1` only |
 
 ## Speed budget
 

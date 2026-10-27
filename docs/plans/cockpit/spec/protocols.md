@@ -11,10 +11,19 @@ The screen talks to the room **directly, never through the hub**, on the page's 
 D92). The page (app or Wall) is served by the laneboard that serves the board; everything under
 `/api/cockpit/` is answered by the room:
 
-| Setup | Who answers `/api/cockpit/*` | How it gets there |
-| --- | --- | --- |
-| one box (`single-machine.md`, T19) | the one laneboard process, which has a `cockpit` section | the same port as the board (`port`, default `7777`) |
-| a board and a room on one box as two users (D91; the owner's case) | the room process (a laneboard with a `cockpit` section, its own `port`, e.g. `7778`, on `127.0.0.1`) | the front that serves the page (a reverse proxy, or `tailscale serve` with a path mount) forwards the prefix `/api/cockpit/` to the room's port, the path unchanged (research Q9 checks `tailscale serve`) |
+| Setup | The page's laneboard | The room | How `/api/cockpit/*` gets there |
+| --- | --- | --- | --- |
+| one box (`single-machine.md`, T19) | `mode: builder` with `cockpit.agent`: board and room in one process | the same process | the same port as the board (`port`, default `7777`) |
+| a hub or board and a room on one box as two users (D91; pending Q-O29) | `mode: hub` or `builder` with `cockpit.forwarded: true` (D129) | `mode: cockpit` with `cockpit.agent`, its own `port` `7778` on `127.0.0.1` (D128) | the front that serves the page (a reverse proxy, or `tailscale serve` with a path mount) forwards the prefix `/api/cockpit/` to the room's port, the path unchanged (research Q9 checks `tailscale serve`) |
+
+The modes and their routes are D128; every port is listed once in `README.md` "The room process".
+A room alone answers `/healthz`, `/api/cockpit/*` and, on `127.0.0.1:7790`, the MCP server
+(`c3-see.md` §1); every other path is `404 {"error":"not-found"}`, and an upgrade on `/ws` is
+refused the same way.
+Test: `boot({mode:'cockpit', config:{cockpit:{agent:…}}})` (the fake agent, `stand-ins.md` §2);
+`GET /healthz` → 200, `GET /api/map` → 404, `GET /` → 404, a WebSocket to `/ws` → 404, a paired
+link to `/api/cockpit/ws` opens; `boot({mode:'hub', config:{cockpit:{agent:…}}})` exits non-zero
+with the D128 message on stderr.
 
 - **Why not through the hub**: D89's overrule names it: a hop on every audio frame and a second
   place that sees the device token. The hub stays as it is (plan §2: "the hub stays narrow").
@@ -23,10 +32,11 @@ D92). The page (app or Wall) is served by the laneboard that serves the board; e
   process and go down together.
 - **How the page learns there is a cockpit** (D93): the board's first frame on `/ws`
   (`helloMessage()` in `server/ws.mjs`; on a hub, the `fleet` frame of `server/hub/client-ws.mjs`)
-  gains `"cockpit":"/api/cockpit"` when the board's config has `cockpit.url`, else
-  `"cockpit":null`. `cockpit.url` must be a path starting with `/` (another origin is fatal at
-  start, naming the key: D89 forbids cross-origin). `null`: `data-cockpit="unconfigured"`, no
-  button (D17).
+  gains `"cockpit":true` when its process has `cockpit.agent` or `cockpit.forwarded: true` (D17,
+  D129), else `"cockpit":false`. The path is the constant `/api/cockpit` on both sides
+  (`COCKPIT_PREFIX`), not a config key. `false`: `data-cockpit="unconfigured"`, no button (D17).
+  `true` with no room behind the front: the room link fails and the page shows room down
+  (`screens.md` §7), never "unconfigured".
 - **Two channels**: plain HTTP for pairing (`screens.md` §6) and the C2b button API
   (`c2-voice.md` §14); one WebSocket, the **room link**, for everything else.
 

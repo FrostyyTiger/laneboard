@@ -42,7 +42,7 @@ How older phrases in the spec map onto these:
   same isolation (its own temp `HOME`, `LANEBOARD_STATE_DIR`, `LANEBOARD_CONFIG`, no inherited
   `LANEBOARD_*`).
 - The wrapper does three things, then imports the room's normal boot (`server/boot/cockpit.mjs`,
-  T86) unchanged:
+  `startRoom()`, D128) unchanged:
   1. replaces the room's clock: `setClock(testClock)` on `server/cockpit/clock.mjs`, the one module
      every room timer and every `now()` goes through (pairing codes, stop at 5.0/8.0 s, restarts,
      heartbeat, liveness);
@@ -65,6 +65,11 @@ How older phrases in the spec map onto these:
    "board":{"url":"http://127.0.0.1:<demo hub port>"}}}
 ```
 
+  `"mode":"builder"` is the one box of D128 on purpose: the same process serves the page, `/ws`
+  with `hello.cockpit:true` and the room, so Playwright needs no front; its collectors read the
+  test's empty temp `HOME` and find nothing. `board.url` points the read tools at the demo hub
+  instead of the process's own loopback port. The `mode: cockpit` room alone has its one route
+  test in `protocols.md` §1, not a Playwright test.
   `kind` stays `claude-code` (D110): the room runs its real adapter against the fake agent in every
   acceptance test. `FAKE_AGENT_DIR` (§2.1) reaches the child only because it is listed in
   `cockpit.agent.env` (D108). The test passes `--dialect bridge` in `command` for the few tests

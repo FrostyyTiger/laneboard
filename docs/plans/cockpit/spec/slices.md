@@ -79,8 +79,10 @@ D88 (Playwright, `npm run test:cockpit`, not in `npm test`) and D113 (where the 
 
 1. `stand-ins.md` §7 steps 1-3 (fake agent, fake speech, room under test) and step 4 for the C1
    scripts.
-2. The room process: `server/boot/cockpit.mjs`, `server/config/cockpit.mjs`, `server/cockpit/clock.mjs`
-   and `faults.mjs` (`README.md` "The room process").
+2. The room process: `server/boot/cockpit.mjs` (`startRoom()` and the `mode: cockpit` wiring),
+   the third `MODES` entry, `cockpit.forwarded`, `server/config/cockpit.mjs`,
+   `server/cockpit/clock.mjs` and `faults.mjs` (`README.md` "The room process", D128, D129); the
+   `mode: cockpit` route test of `protocols.md` §1.
 3. The message checks `server/cockpit/protocol.mjs` and the fixture test (D98, `protocols.md` §9).
 4. The bridge and Claude Code adapter (`server/cockpit/bridge.mjs`), the mapping and turn tests
    (`protocols.md` §13), the redaction module `server/cockpit/redact.mjs` and its unit test
@@ -323,5 +325,4 @@ changing it needs C6 (`c1-talk.md` §5).
 These tasks change what C1 builds; a C1 build night starts only when they are done (or the owner
 says go without them): T29 (the events the pane consumes), T40
 and T94 (the on-screen keyboard), T26, T27, T41, T44, T96, T100 (the button and pane rects), T56
-and T57 (pairing refusals and the agent's tools, pending Q-O21/Q-O23), T86 (the room's mode and
-ports, pending Q-O29), T89 (close codes), T91 (a conversation across a restart, pending Q-O24). For C2 also: T42/T95, T69, T84.
+and T57 (pairing refusals and the agent's tools, pending Q-O21/Q-O23), T89 (close codes), T91 (a conversation across a restart, pending Q-O24). For C2 also: T42/T95, T69, T84.

@@ -142,8 +142,8 @@ while the canvas shows, 16 px caps. A count of cards that arrived since the canv
 sits in its top-right corner: `--fs-16` mono, `--text-1`, on `--bg-sunken`, e.g. `2`. It is grey:
 a new card is news, not trouble (`docs/design.md`, the colour rule).
 
-The cockpit button exists only where the cockpit is configured (the room's address in config,
-`protocols.md` §1, D93). Without it neither control is rendered, and nothing else changes: the
+The cockpit button exists only where the cockpit is configured (`hello.cockpit:true`,
+`protocols.md` §1, D17, D93). Without it neither control is rendered, and nothing else changes: the
 board works as today. A tap on either control changes no route: the hash stays as it was (the
 router's rule that a route only selects, `router.js` header).
 
@@ -289,10 +289,11 @@ screen shows a code, the owner approves the code from a trusted place, the room 
 its token. Who may approve, and how long a token lives, is security-relevant: written here for the
 recommendation (pending Q-O10).
 
-**Where the cockpit is configured.** `cockpit.url` (the room's address) in the config of the
-laneboard server that serves the page (the hub in the owner's case; the one box in
-`single-machine.md`). Unset: the cockpit is **unconfigured**, no cockpit button, no canvas half,
-the board as today (§4) (D17). The screen reaches the room directly on the page's own origin, under
+**Where the cockpit is configured.** In the config of the laneboard that serves the page: on the
+one box its `cockpit` section with `cockpit.agent` (it is the room); on a hub or board whose front
+forwards `/api/cockpit/` to a room of its own, `cockpit.forwarded: true` (D128, D129, pending
+Q-O29; `single-machine.md` for the one box). Neither: the cockpit is **unconfigured**, no cockpit
+button, no canvas half, the board as today (§4) (D17). The screen reaches the room directly on the page's own origin, under
 `/api/cockpit/`, never through the hub (`protocols.md` §1, D92); the routes below are its §1.1.
 
 **The board does not need pairing.** Viewing the board stays as today (`docs/fleet/auth.md`: a

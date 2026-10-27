@@ -110,7 +110,7 @@ Answer: (open)
 ## Q-O29 How the screen reaches the room when board and room are two processes
 
 Security-relevant deployment door. From `reviews/59-implementer.md` (1). Spec: D89, D92,
-`protocols.md` §1 (T86 open).
+`protocols.md` §1, D128, D129 (written for the recommendation by T86).
 
 - a) Same origin: a front (reverse proxy or `tailscale serve`) forwards `/api/cockpit/` to the room.
 - b) Through the hub: the hub proxies the room's routes and relays show commands (a new trust edge).
@@ -228,7 +228,7 @@ finding 3). Strike the D-line to reopen one; its overrule part lists the other o
 also in PROGRESS.md's "Needs you" list, because D89, D90 and D91 are security-relevant.
 
 - **Q-O14** A browser test runner in the repo → **D88**: Playwright as a devDependency, outside `npm test`.
-- **Q-O15** Which process is "the room", and its origin → **D89**: a laneboard server with a `cockpit` section, same origin as the page (conflicts with D92 on who serves the page: T86, Q-O29).
+- **Q-O15** Which process is "the room", and its origin → **D89**: a laneboard server with a `cockpit` section, same origin as the page (rewritten by T86 to D92's split: the board serves the page, the room only `/api/cockpit/*`; modes D128, pending Q-O29).
 - **Q-O16** Security-adjacent choices → **D90**: D13, D14, D22 and D66 stand as written.
 - **Q-O26** How the room reads the hub → **D91**: the room runs on the hub's box as its own user and reads loopback as `local`.
 
