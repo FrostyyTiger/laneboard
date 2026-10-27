@@ -78,10 +78,22 @@ test('frames close into windows of mean gap, script time and fps; a hidden page 
   assert.equal(Math.round(out.frameMs), 20);
   assert.equal(out.scriptMs, 3);
   assert.equal(Math.round(out.fps), 50);
+  assert.equal(out.worstMs, 20);
   assert.equal(w.frame(1020, 3), null, 'a new window has begun');
   w.pause();
   assert.equal(w.frame(9000, 3), null, 'the hidden gap is not a frame');
   assert.equal(w.frame(9016, 3), null);
+});
+
+test('each window keeps its own worst gap, reset with the window (night 4 T11)', () => {
+  const w = createFrameWindow(1000);
+  const closed = [];
+  w.frame(0);
+  w.frame(300);
+  for (let t = 316; t <= 3000; t += 16) { const out = w.frame(t); if (out) closed.push(out); }
+  assert.ok(closed.length >= 2);
+  assert.equal(closed[0].worstMs, 300);
+  for (const out of closed.slice(1)) assert.equal(out.worstMs, 16, 'the next window forgets the hitch');
 });
 
 test('perfLine prints script ms, frame ms, fps, level, renderer counts and heap when there', () => {

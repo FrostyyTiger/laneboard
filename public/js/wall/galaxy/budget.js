@@ -93,15 +93,16 @@ export function budgetStep(state, sample, budget = BUDGET, levels = LEVELS.lengt
 
 /**
  * Times frames into windows: `frame(now, scriptMs)` after each drawn frame
- * returns the closed window `{ frameMs, scriptMs, fps, frames }` once
- * `windowMs` has passed, else null. `pause()` after the page was hidden:
+ * returns the closed window `{ frameMs, scriptMs, fps, frames, worstMs }`
+ * once `windowMs` has passed, else null; `worstMs` is the window's longest
+ * gap (night 4 T11), reset with the window as the mean is. `pause()` after the page was hidden:
  * that gap is not a slow frame.
  */
 export function createFrameWindow(windowMs = BUDGET.windowMs) {
-  let last = null, t0 = null, frames = 0, gaps = 0, script = 0;
+  let last = null, t0 = null, frames = 0, gaps = 0, script = 0, worst = 0;
   return {
     frame: (now, scriptMs = 0) => {
-      if (last != null) { gaps += now - last; frames += 1; script += scriptMs; }
+      if (last != null) { gaps += now - last; frames += 1; script += scriptMs; worst = Math.max(worst, now - last); }
       if (t0 == null) t0 = now;
       last = now;
       if (now - t0 < windowMs || frames === 0) return null;
@@ -110,11 +111,12 @@ export function createFrameWindow(windowMs = BUDGET.windowMs) {
         scriptMs: script / frames,
         fps: (frames * 1000) / gaps,
         frames,
+        worstMs: worst,
       };
-      t0 = now; frames = 0; gaps = 0; script = 0;
+      t0 = now; frames = 0; gaps = 0; script = 0; worst = 0;
       return out;
     },
-    pause: () => { last = null; t0 = null; frames = 0; gaps = 0; script = 0; },
+    pause: () => { last = null; t0 = null; frames = 0; gaps = 0; script = 0; worst = 0; },
   };
 }
 

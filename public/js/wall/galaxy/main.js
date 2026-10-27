@@ -11,7 +11,8 @@
 // `?at=<site>&open=0..1` parks the camera on one system, for stills.
 // Speed (T10, budget.js): every frame's script time is timed; windows that
 // miss the frame budget step the scene's quality down, roomy ones back up.
-// `__wallPerf` also carries `scriptMs`, `frameMs` and `level`; `?perf=1`
+// `__wallPerf` also carries `scriptMs`, `frameMs` and `level` (and, from
+// perf.js, `worstGapMs` over the last ~10 s and `bootGapMs` apart); `?perf=1`
 // shows them with three's renderer counts; `?quality=<0..2>` pins a level.
 // Each level draws at its own pixel ratio (T28, capped by the screen's);
 // `?ratio=<n>` pins it (still capped by the screen's), for filming or comparing frames.

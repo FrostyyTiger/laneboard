@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pickVariant, VARIANTS, DEFAULT_VARIANT } from '../public/js/wall/variants.js';
-import { createPerf } from '../public/js/wall/perf.js';
+import { PERF, createPerf } from '../public/js/wall/perf.js';
 import { violations } from './helpers/css-guardrails.mjs';
 
 const PUBLIC = path.resolve(import.meta.dirname, '..', 'public');
@@ -50,15 +50,36 @@ test('variants: the demo flag', () => {
 });
 
 test('perf: counts frames and the worst gap, a pause drops the gap across it', () => {
-  const p = createPerf();
-  assert.deepEqual(p.stats, { frames: 0, worstGapMs: 0 });
+  const p = createPerf({ bootMs: 0 });
+  assert.deepEqual(p.stats, { frames: 0, worstGapMs: 0, bootGapMs: 0 });
   p.frame(1000); p.frame(1033); p.frame(1100);
-  assert.deepEqual(p.stats, { frames: 3, worstGapMs: 67 });
+  assert.deepEqual(p.stats, { frames: 3, worstGapMs: 67, bootGapMs: 0 });
   p.pause();
-  p.frame(9000);
-  assert.deepEqual(p.stats, { frames: 4, worstGapMs: 67 }, 'a hidden page is not jank');
-  p.frame(9040.4);
+  p.frame(5000);
+  assert.deepEqual(p.stats, { frames: 4, worstGapMs: 67, bootGapMs: 0 }, 'a hidden page is not jank');
+  p.frame(5040.4);
   assert.equal(p.stats.worstGapMs, 67);
+});
+
+test('perf: the worst gap is the last ~10 s, the boot gap stands apart (night 4 T11)', () => {
+  const p = createPerf();
+  assert.deepEqual(PERF, { spanMs: 10000, bucketMs: 1000, bootMs: 2000 });
+  // The first model drawn at 0, a 400 ms first gap (shaders compiling), then 16 ms frames.
+  p.frame(0);
+  let t = 400;
+  p.frame(t);
+  assert.equal(p.stats.bootGapMs, 400);
+  assert.equal(p.stats.worstGapMs, 0, 'the boot is not stutter');
+  for (; t < 10000; t += 16) p.frame(t);
+  assert.ok(p.stats.worstGapMs < 20, `windowed worst ${p.stats.worstGapMs}`);
+  assert.equal(p.stats.bootGapMs, 400);
+  // A 120 ms hitch at ~10 s reads until it is ~10 s old, then goes.
+  t += 120 - 16; p.frame(t); t += 16; // the loop left t one frame past its last
+  for (let end = t + 8000; t < end; t += 16) p.frame(t);
+  assert.equal(p.stats.worstGapMs, 120, 'a hitch 8 s ago still counts');
+  for (let end = t + 3000; t < end; t += 16) p.frame(t);
+  assert.ok(p.stats.worstGapMs < 20, 'a hitch 11 s ago is over');
+  assert.equal(p.stats.bootGapMs, 400, 'the boot number is kept');
 });
 
 test('wall.html: module script from self only, every local file exists, dark only', () => {
