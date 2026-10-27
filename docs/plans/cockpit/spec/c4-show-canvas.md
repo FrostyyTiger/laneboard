@@ -94,7 +94,7 @@ Each command lists its `description` (word for word, what the agent reads), its 
 full; an unknown one returns `isError` `No node "vm-x". Nodes like it: vm-b, vm-c.` (at most 5,
 nearest by edit distance), an ambiguous label `"backup" is 2 nodes: room-backup, svc-backup. Give the id.`
 Every string the agent writes (`note`, card text) is drawn as text, never markup, and cut to its
-limit with `…` (`security.md`, T17).
+limit with `…` (`security.md` §4, I8).
 
 ### 3.1 `fly_to`
 
@@ -491,7 +491,7 @@ Every canvas card is `[data-card]` with `data-card-id`, `data-block`, `data-size
 - **Body**: the block (§8), 16 px side padding, 8 px under the title, 16 px bottom padding. A body is
   therefore 132 px tall in `s` and `w`, 380 px in `t` and `l`.
 - Every string the agent writes is drawn as text, never markup, and cut to its limit with `…`
-  (§3, `security.md`, T17).
+  (§3, `security.md` §4, I8).
 
 ### 7.4 The tool `place`
 
@@ -969,7 +969,7 @@ shared with every other card and the agent's own calls), and sends them as `card
 
 ### 11.3 The sandbox, as a checklist
 
-Each line is one fact a test checks (§14, `security.md` T17 links here instead of repeating it).
+Each line is one fact a test checks (§14; `security.md` §4, I9, links here instead of repeating it).
 
 | # | Rule | How it is checked |
 | --- | --- | --- |

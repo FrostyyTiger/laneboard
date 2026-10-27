@@ -22,7 +22,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 | `coworker.md` | the watcher and speak-ups (tiers, raised block, cards, marker, chime), quiet hours, config; scheduled jobs (format, scripts, `jobs`/`schedule`/`cancel_job`, firing, Map badge, audit); the infra repo pull and `infra` tool; drift (Map, repo check); the agent's changes (Q-O33) | `S-CW-` | T13 | written (T13: §1-§11, S-CW-01..17, D185-D198, Q-O33; T127 folds its messages into `protocols.md` and its test verbs into `stand-ins.md`) |
 | `c5-c6.md` | C5 voice out (the spoken line, `cockpit.tts.*`, playing, `STOP VOICE`, mute per screen, the night); C6 act, rules only (fenced, `cockpit.act.allow`), and the confirm card the Jobs slice builds (where, look, who may answer, how it ends, messages) | `S-C5-`, `S-C6-` | T14 | written (T14: §1-§10, S-C5-01..07, S-C6-01..07, D199-D208, Q-O34, Q-O35, sketch `c6-confirm.html`; T128 folds its messages and the fake voice service into `protocols.md` and `stand-ins.md`) |
 | `protocols.md` | screen ⇄ room, room ⇄ agent bridge, room ⇄ speech-to-text, message by message | none (sequences) | T15, T16 | part 1 written (T15: same-origin transport, the room link, hello/resume/snapshot, conversation, show, cards, audio, button, limits, one spoken turn; D92-D99); part 2 written (T16: §11 the bridge, Claude Code's launch and event mapping, stop, sessions, the conversation on disk §11.7.1 (T91), standing instructions; §12 the speech service; §13 test classes; D100-D108); T89: refusals after the upgrade as close codes 4401/4402/4403/4503 and the `revoked` frame (D135); T90/T117: §2.4 every room-link message with `seq`, required and optional fields, §9 the fixture extraction rule and the copy to `docs/cockpit/protocol.md` (D136), pin messages (D137); T92: utterance lifetime and `stt.final.lang`, when the grace starts, snapshot parts, `history.turns` ordering, show to every link, held closes, skew mark (D138-D144) |
-| `security.md` | tokens and what each can do, injection paths, audio and transcript handling, audit | `S-SEC-` | T17 | planned |
+| `security.md` | every credential and what it gives (§1), a device token verb by verb (§2), the link without pairing (§2.3, D212), what the agent's user can read and the start check (§3, D209, D210), the injection paths I1-I16 with their defence and test (§4), reply redaction (§5, D211), what is kept where and how long (§6, D213); links to the defences written elsewhere | `S-SEC-` | T17 | written (T17: S-SEC-01..06) |
 | `stand-ins.md` | the room under test and its control API, the fake agent (a fake `claude`, script format), the fake speech service (script format, faults), the demo fleet additions, one script per scenario family, the public demo | none (formats) | T18, T32, T87 | written (T18: §1-§7, D109-D112) |
 | `single-machine.md` | everything on one box, no tailnet, no GPU, another agent | `S-ONE-` | T19 | planned |
 | `slices.md` | the build nights in order (C1 with the fleet's night, C2, C3, Speak, Canvas, Show, Jobs, then the rest), each with its scenario ids, stand-ins and done-when; the acceptance harness (`e2e/cockpit/`, D88, D113); the board changes the slices make; every id once | none (lists every id once) | T20, T30, T37, T62, T80, T81 | written (T20) |
@@ -283,8 +283,11 @@ Each word is defined here once; the other files link here instead of redefining 
   change, a button, a prompt, a stop, a new conversation, a job or a speak-up; it names who and what, never the words
   (`screens.md` §6.4, `docs/fleet/auth.md`).
 - **device token**: the one revocable secret a screen holds, scoped to "view + cockpit"; it cannot
-  act (plan §4). New: today's auth (`docs/fleet/auth.md`) has the request kinds `local`, `direct`
-  and `hub` and no device tokens; `security.md` says how the two fit.
+  start an act on its own (plan §4; what a copy of one can do, verb by verb, is `security.md` §2).
+  New: today's auth (`docs/fleet/auth.md`) has the request kinds `local`, `direct` and `hub` and no
+  device tokens; without pairing the room takes the board's `local`/`direct` (`security.md` §2.3).
+- **injection path**: a way text the owner did not write reaches the agent or a screen (a fleet
+  field, a log, a file, spoken words, a reply); `security.md` §4 lists I1-I16 with their defences.
 - **pairing**: how a screen gets its device token from the room (`screens.md`).
 - **room link**: the one WebSocket a page keeps to the room, `/api/cockpit/ws` on the page's own
   origin, never through the hub; conversation, audio, show commands, cards and focus ride on it

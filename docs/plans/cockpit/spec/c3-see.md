@@ -18,8 +18,9 @@ C3 reads; it never changes the fleet or the screen. Show commands are C4 (`c4-sh
   refused with 403 (`research/Q5`: a browser must never reach it). `focus` (T9) lives in the same
   process as the screens' connections, so it needs no second channel.
 - **The agent's launch** adds (with Claude Code; the full line is Q-O23's):
-  `--mcp-config <stateDir>/cockpit/mcp.json --strict-mcp-config --allowedTools "mcp__laneboard__*,…"`.
-  The room writes `mcp.json` at start:
+  `--mcp-config <stateDir>/cockpit-agent/mcp.json --strict-mcp-config --allowedTools "mcp__laneboard__*,…"`.
+  The room writes `mcp.json` at start (0644 in `<stateDir>/cockpit-agent/`, which the agent's user can
+  read: it holds the variable's name, never the token; D209, `security.md` §3):
 
   ```json
   {"mcpServers":{"laneboard":{"type":"http","url":"http://127.0.0.1:7790/mcp",

@@ -354,6 +354,8 @@ whole job in that form (folded in by T127).
 `jobs.json` survives a room restart and `NEW` (`c1-talk.md` §11's bar: `Cards, jobs and notes
 stay.`). A job that was `running` when the room stopped is `failed` with `exit` `null` and
 `outputTail` `room stopped while running` at the next start (its process died with the room).
+An ended job (`done`, `failed`, `skipped`, `cancelled`) leaves `jobs.json` 30 days after its
+`endedAt`, at the retention run of `protocols.md` §11.7.1 (D213, `security.md` §6).
 
 ### 6.8 Audit lines
 
@@ -371,7 +373,7 @@ A create or cancel whose audit line cannot be written does not happen: the tool 
 
 ## 7. The infra repo pull
 
-- The room keeps a clone of `cockpit.infra.repo` in `<stateDir>/cockpit/infra`, owned by the room's
+- The room keeps a clone of `cockpit.infra.repo` in `<stateDir>/cockpit-agent/infra` (D209), owned by the room's
   user, directories 0755 and files 0644, so the agent's user can read it and nothing else can write
   it (D195). The room has no code path that commits or pushes from this clone.
 - Every `cockpit.infra.pullEveryS` (900 s) and at start: `git fetch --depth 50 origin <branch>`,
@@ -391,7 +393,7 @@ A create or cancel whose audit line cannot be written does not happen: the tool 
 
 ```json
 {"asOf":[{"source":"infra","at":"2026-10-27T07:00:12+01:00","ageS":120}],
- "dir":"/var/lib/laneboard/cockpit/infra","branch":"main","head":"4f2a91c","subject":"vm-c: retire",
+ "dir":"/var/lib/laneboard/cockpit-agent/infra","branch":"main","head":"4f2a91c","subject":"vm-c: retire",
  "pulledAt":"2026-10-27T07:00:12+01:00","stale":false,"failures":0,"lastError":null}
 ```
 
@@ -575,7 +577,7 @@ Test: `fakeAgent.toolResults('schedule')`; no confirm card in the DOM.
 ### S-CW-15 The infra pull: read-only clone, failures raise once
 Given `cockpit.infra.repo` a local bare repo (`file://`) with head `4f2a91c`,
 When the room starts at 07:00:00,
-Then `<stateDir>/cockpit/infra` has that head, its files are 0644 and its directories 0755, and
+Then `<stateDir>/cockpit-agent/infra` has that head, its files are 0644 and its directories 0755, and
 `infra` answers `"head":"4f2a91c","stale":false`;
 And when the bare repo is moved away and three pulls fail (`/tick` 2 700 s),
 Then one `info` block `▲ infra · infra repo not pulled since 07:00 · …` and no card, no dot;

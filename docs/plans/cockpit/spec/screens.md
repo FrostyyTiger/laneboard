@@ -374,7 +374,7 @@ Test: Playwright with `emulateMedia({ reducedMotion: 'reduce' })` and a fake clo
 can touch): the Pair slice (`slices.md` §3.8), not C1. Under b) a C1 screen is never `unpaired`:
 the room link accepts the trust the board already gives the page (`local`, or `direct` through
 serve, `docs/fleet/auth.md`), `data-cockpit` goes from `connecting` to `live`, and no pairing card,
-code or CLI exists yet; what exactly the upgrade checks is `security.md`'s (T17). With Q-O21 a)
+code or CLI exists yet; what exactly the upgrade checks is `security.md` §2.3 (D212). With Q-O21 a)
 this section and S-SCR-13..16, 27..29 are C1's (`slices.md` §3.1 lists the ids).
 The rest of §6 is written as the flow either night builds.
 
@@ -393,7 +393,8 @@ button, no canvas half, the board as today (§4) (D17). The screen reaches the r
 **The board does not need pairing.** Viewing the board stays as today (`docs/fleet/auth.md`: a
 `direct` user through serve, or `local`). An unpaired screen shows every view, the Wall and the
 tour as a paired one does; only the pane and the canvas wait for the pairing. (A LAN-only setup
-where the device token also opens the board is `security.md`'s and `single-machine.md`'s.)
+where the device token also opens the board is Q-O27's and `single-machine.md`'s; what a token
+gives, verb by verb, is `security.md` §2.)
 
 **The pairing code.** 6 characters from `23456789ABCDEFGHJKMNPQRSTUVWXYZ` (no `0 O 1 I L`), shown
 as two groups of 3 (`K7M-4QX`), accepted with or without the dash, any case. Valid **300 s**; a
@@ -517,7 +518,7 @@ Set-Cookie: lb_cockpit=<43 base64url characters>; HttpOnly; Secure; SameSite=Str
 `HttpOnly`: no script on the page reads it. `SameSite=Strict`: no other site's page sends it.
 `Path=/api/cockpit`: the board's own routes never see it. `Max-Age` is 400 days, the most a
 browser keeps; the room still decides validity (pending Q-O10). The room stores only the token's
-SHA-256 (`security.md`, T17). A plain-HTTP page does not pair: §6.2.1.
+SHA-256 (`security.md` §1). A plain-HTTP page does not pair: §6.2.1.
 
 ### 6.2.1 A page that is not HTTPS (T58, T75, D182)
 

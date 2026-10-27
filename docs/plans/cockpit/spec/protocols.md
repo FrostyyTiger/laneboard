@@ -55,7 +55,7 @@ Every request passes `server/security.mjs` first: `checkRequest` (Host; and for 
 the `X-Laneboard: 1` header of `docs/fleet/auth.md`), and `checkUpgrade` (Host, Origin) for the
 WebSocket; the browser routes add the `Sec-Fetch-Site` rule and refuse an upgrade without `Origin`
 (the full table is `screens.md` §6.2). Which credential the upgrade needs (the device token, or the trust the board already has)
-is `security.md`'s (T17, pending Q-O21); this file writes it for the device token in an `HttpOnly`
+is `security.md` §2.3's (D212, pending Q-O21); this file writes it for the device token in an `HttpOnly`
 cookie, as `screens.md` §6.2 specifies it (D163).
 
 ## 2. The room link
@@ -844,7 +844,7 @@ room; one argument per line here, no shell in between):
 claude -p
   --input-format stream-json --output-format stream-json --verbose
   --include-partial-messages --replay-user-messages
-  --mcp-config {stateDir}/cockpit/mcp.json --strict-mcp-config
+  --mcp-config {stateDir}/cockpit-agent/mcp.json --strict-mcp-config
   --allowedTools mcp__laneboard__*,Read,Grep,Glob
   --permission-prompts none
   --max-turns 40
@@ -1087,12 +1087,12 @@ agent's own user cannot read them, Q-O10):
 `conversation.jsonl` (step 4-5) and files in `old/` whose newest line is older than 30 days are
 deleted. `history` (§3.7) and `olderTurns` count only kept turns. Claude Code keeps its own
 transcript of the session in the agent user's home (what `--resume` reads, research Q13); its
-retention is Claude Code's, not this file's; `security.md` (T17) lists both.
+retention is Claude Code's, not this file's; `security.md` §6 lists both.
 
 ### 11.8 The standing instructions
 
 The room passes these lines, in this order, as `--append-system-prompt` (dialect `bridge`: in the
-file named by the child's `LANEBOARD_COCKPIT_INSTRUCTIONS` environment variable). One text, kept in
+file named by the child's `LANEBOARD_COCKPIT_INSTRUCTIONS` environment variable, `{stateDir}/cockpit-agent/instructions.txt`, D209). One text, kept in
 the room's code next to the adapter; a test asserts it holds every line below:
 
 ```text

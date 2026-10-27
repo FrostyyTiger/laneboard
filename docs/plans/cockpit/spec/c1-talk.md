@@ -445,7 +445,7 @@ search and list files its own unix user can read. Every other call (`Bash`, `Edi
 Code before it runs; nothing asks anyone, because nobody is there to answer. Claude Code writes
 `system/permission_denied` for it, the room sends `tool.end` with `denied:true` (`protocols.md`
 §11.4). The standing instructions tell the agent so (`protocols.md` §11.8, the line
-`You can only look…`). What the agent's uid may read is `security.md`'s (T17); an agent kind with
+`You can only look…`). What the agent's uid may read is `security.md` §3; an agent kind with
 no allowlist is T72's.
 
 **A refused call** (D125) leaves a **`tried` line**:
@@ -496,8 +496,8 @@ row):
 - Rule 6 leaves git hashes, hex digests and UUIDs alone (no upper-case letter) and catches most
   API keys and JWTs. Over-redaction (a `keyboard=` value, a long mixed-case path part) is accepted.
 - Redaction runs before D97's cuts, so a cut never splits a secret into a visible half.
-- Reply text is not redacted in v1: the agent writes it, and `security.md` (T17) decides whether
-  it should be.
+- Reply text is redacted too, with rules 1, 2, 3, 5 and 6 and a hold-back for a word split across
+  deltas: `security.md` §5 (D211).
 
 ## 6. Scenarios
 

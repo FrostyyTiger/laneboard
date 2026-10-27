@@ -63,6 +63,9 @@ Security, blocks C1 (the launch line). From `reviews/40-security.md` (2), `44-op
   own slice before the rest of C6.
 - b) a) plus `WebSearch`/`WebFetch`, the room's egress limited to the model API, speech and git.
 - c) The full tool set, as on the laptop (keeps "scripts and timers on its own machine" from day one).
+  With c) the agent can also call the board's loopback API as `local` (every action that is not
+  remote-only, with no confirm card), and c) gives a stolen device token the agent's shell
+  (`security.md` §2, §3).
 
 Recommendation: a) — "look freely, change only with a yes" (`spec-input.md` §6) taken literally.
 
@@ -79,6 +82,8 @@ example is shutting something off in three hours.
 - b) A script listed in `cockpit.jobs.scripts` (the owner's own config, reviewed in the infra repo)
   may touch other machines; a job is created and cancelled only through the confirm card, one audit
   line per fire. The agent says `I can run stop-builder-b at 15:10. Confirm?`.
+  The cost: a stolen device token can then run a listed script by asking and saying yes on its own
+  screen; every other screen shows the open card (`security.md` §2).
 
 Recommendation: b) — a listed script is already the owner's yes; a) leaves only an alarm clock and
 C6 has no date. The confirm card is `c5-c6.md` §8 (T14).

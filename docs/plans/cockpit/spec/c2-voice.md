@@ -557,7 +557,7 @@ What the later `docs/cockpit.md` says, from research Q3. The microphone needs tw
    an open microphone (D46). Audio goes to the room and from there only to `cockpit.stt.url`
    (plan §4). The sent text, and what the agent reads to answer it (fleet state, logs, files),
    goes to the agent's model service (with Claude Code: Anthropic). What the room keeps, and for
-   how long, is `protocols.md` §11.7.1 (pending Q-O24) and `security.md` (T17, T61).
+   how long, is `protocols.md` §11.7.1 (pending Q-O24) and `security.md` §6.
 6. Tests use `--use-fake-device-for-media-stream` and the browser context's microphone permission,
    never a policy (§6).
 
