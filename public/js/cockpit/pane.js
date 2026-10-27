@@ -295,6 +295,15 @@ export function createPane(opts = {}) {
     if (pinned) toEnd();
   }
 
+  /**
+   * B142: the slide starts in the frame of the tap. A new CSS transition waits pending for the
+   * compositor (about two frames on the Wall page); its start time set to the timeline's now
+   * keeps the 120 ms slide and leaves B7's 200 ms for the tap itself (c1-talk.md §2).
+   */
+  function startSlideNow() {
+    for (const a of pane.getAnimations?.() ?? []) if (a.pending) a.startTime = doc.timeline.currentTime;
+  }
+
   function setOpen(want) {
     if (want === open) return;
     open = want;
@@ -304,6 +313,7 @@ export function createPane(opts = {}) {
       pane.inert = false;
       void pane.getBoundingClientRect(); // the closed transform is in place before the slide starts
       root.dataset.pane = 'open';
+      startSlideNow();
       opener.textContent = 'CLOSE';
       opener.setAttribute('aria-label', 'Close the cockpit');
       if (pinned) toEnd(); // the latest turn in sight (c1-talk.md §2)
@@ -312,6 +322,7 @@ export function createPane(opts = {}) {
     } else {
       if (pane.contains(doc.activeElement)) doc.activeElement.blur();
       root.dataset.pane = 'closed';
+      startSlideNow();
       opener.textContent = 'CHAT';
       opener.setAttribute('aria-label', 'Open the cockpit');
       pane.inert = true;

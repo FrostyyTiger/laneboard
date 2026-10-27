@@ -795,3 +795,11 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   row (the spec names no selector for it); the Map's pan is checked by `room-b` moving > 20 px and
   `camera()` changing, as S-C1-03 reads it — spec: `c1-talk.md` S-C1-45 — overrule: the test in
   `e2e/cockpit/c1-small.spec.mjs`.
+- B142 (fix, round 29) The pane's slide, in and out, starts in the frame of the tap: right after
+  `data-pane` changes, `setOpen` sets each pending animation's `startTime` to
+  `document.timeline.currentTime` (`startSlideNow` in `public/js/cockpit/pane.js`); the transition
+  is still the CSS one, 120 ms, `--ease` — because a fresh transform transition waits about two
+  frames for the compositor before it starts, so the pane was in place 150-170 ms after the tap on
+  an idle VM and over 200 ms under the other agents' load (S-C1-01 failed at 231.8 ms); now it is
+  in place about 120-150 ms after the tap — spec: `c1-talk.md` §2, README B7 — overrule: drop
+  `startSlideNow`; B7 then needs a faster machine or a wider row (the owner's).
