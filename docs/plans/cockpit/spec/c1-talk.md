@@ -656,6 +656,24 @@ The fake agent (T18) replays scripted turns: text deltas with times, tool calls 
 Every scenario runs at 1368x912 against the demo hub, the room under test and the fake agent, on a
 paired screen.
 
+Every `Test:` line names what it reads (a selector of `README.md` §"Selectors tests use" or a
+message of `protocols.md` §2.4) and ends with `Runs on:`: the stand-ins (`stand-ins.md`), the
+script (§5 there) and one of three clocks (T134, D290):
+- **`clock real`**: nothing is faked. `t` runs from the test's action, read with
+  `performance.now()` in the page; `by t = x s` passes when a sample at or before x s shows it
+  (samples every 50 ms unless the line says otherwise).
+- **`clock page`**: `page.clock.install({time})` before the load, at the scenario's `HH:MM`; the
+  page's time then flows with the real time, so the fake agent's real-time steps (`stand-ins.md`
+  §2.3) and the page's own timers (`CONFIRM_WAIT_MS`, `STOP_GUARD_MS`, the age's tick, §16) stay in
+  step; `page.clock.runFor` or `pauseAt` only where the line says.
+- **`clock advance`**: the room's clock `manual` and the page's installed, both moved by
+  `advance(ms)` (`stand-ins.md` §1.1), and only once the fake agent's timed steps the scenario
+  needs have been read, or on a turn without timed steps.
+
+"N seeded turns" are `done` turns written before boot by `test/cockpit/fixtures/conversation.mjs`
+through `boot({stateFiles})` (`stand-ins.md` §1.1), dated in the last hour; "no turn played" means
+the script is loaded and no prompt is sent.
+
 ### S-C1-01 The pane opens from the Wall in 0.2 s and leaves the wall in sight (pending Q-O11)
 Given a screen in `wall` layout touring, the pane closed,
 When the owner taps `[data-cockpit-open]` at t = 0 ms,
@@ -665,6 +683,7 @@ x 1288-1336, y 760-808; the talk button is at x 1280-1344, y 824-888 (`screens.m
 line is in sight; `document.activeElement` is not the input.
 Test: Playwright with `hasTouch: true`; tap; at 200 ms read the rects, the computed transition and
 `document.activeElement`; a second run with a mouse click asserts the input has focus.
+Reads `data-pane` and `data-wall-state` on the root, the rects of `[data-cockpit-conversation]`, `[data-cockpit-open]` (and its text) and `[data-talk]`, and whether `document.activeElement` is `[data-cockpit-input]`. Runs on: the room under test and the fake agent, script `c1-render` (no turn played), 3 seeded turns; clock `real`.
 
 ### S-C1-02 Closing: both CLOSE controls and Esc close it, a tap on the wall does not
 Given S-C1-01's open pane with the draft `how is` in the input,
@@ -676,6 +695,7 @@ When the owner opens the pane again, the draft `how is` is in the input; a tap o
 reading `CLOSE` at (1312, 784), closes it by 200 ms; opened once more, `Esc` on a keyboard closes it.
 Test: Playwright; tap coordinates on the wall; tap the header `CLOSE`, then `[data-cockpit-open]`;
 assert `data-pane` and the opener's text after each step; `keyboard.press('Escape')`.
+The header `CLOSE` is `[data-cockpit-close]`; the draft is `[data-cockpit-input]`'s value. Runs on: the room under test and the fake agent, script `c1-render` (no turn played); clock `real`.
 
 ### S-C1-03 The pane over the Map leaves the Map usable
 Given the app on `#/map` at 1368x912 with a node selected and the inspector open,
@@ -685,6 +705,7 @@ inspector is under the pane; `location.hash` is unchanged; a drag on the Map at 
 and a tap on another node at x < 760 selects it, with the pane still open.
 Test: Playwright; read the pane rect and its computed `z-index` (35); compare the hash; drag and
 tap, assert the Map's selection changed and `data-pane="open"`.
+The pane is `[data-cockpit-conversation]`. Runs on: the room under test and the fake agent, script `c1-render` (no turn played), the demo hub's nodes on the Map; clock `real`.
 
 ### S-C1-04 A reply streams in, then settles
 Given the pane open and the fake agent scripted to wait 300 ms after a prompt, then send
@@ -697,6 +718,7 @@ is gone and the header reads `READY`.
 And a script that drops delta 4 still ends with the exact text, from the complete block.
 Test: Playwright with the fake agent's timed script; poll the reply text and `data-turn` every
 50 ms; compare the times against the script's send times.
+The reply is `[data-reply]`, the header `[data-cockpit-turn]`; the delta times are the `text.delta` frames' `sentAt` (`framereceived`). Runs on: the room under test and the fake agent, script `c1-render` (§2.2's example of `stand-ins.md`; its `skipDelta` step is the dropped delta 4); clock `real`.
 
 ### S-C1-05 A table is readable at arm's length
 Given a fake-agent reply holding a 4-column table (`run`, `builder`, `state`, `time`) with 3 rows,
@@ -708,6 +730,7 @@ sideways inside its block, its first column stays put while the others move, and
 does not scroll sideways.
 Test: Playwright; `getComputedStyle` font sizes and `text-align`; row rects; scroll the table
 element by 200 px and compare the first and second columns' x.
+The tables are under `[data-reply]`. Runs on: the room under test and the fake agent, script `c1-render` (its 4-column and 9-column tables); clock `real`.
 
 ### S-C1-06 Tool calls fold into one line each, with live counts
 Given a fake-agent turn that calls `mcp__laneboard__fleet` with `site` `hv1`, `hv2`, `hv3` (each
@@ -719,6 +742,7 @@ becomes `● read 2 feeds…` and `● read 3 feeds…` as the calls start, and 
 when the third ends; then `looked at CI on main`; `data-turn` is `working` while a call runs.
 Test: Playwright; sample the tool lines' text and `data-turn` every 100 ms against the script;
 count `[data-tool-line]` elements: 2.
+The call times are the `tool.start` and `tool.end` frames (`framereceived`). Runs on: the room under test and the fake agent, script `c1-render` (three `fleet` calls of 400 ms, then `ci` 300 ms); clock `real`.
 
 ### S-C1-07 A tool line opens to show its calls; a failure stays grey
 Given S-C1-06's turn, with the `hv2` call ending failed,
@@ -730,6 +754,7 @@ is 20 px `--text-2`.
 Test: Playwright; assert text and computed colour; tap; count child rows; tap again; the row's
 `getBoundingClientRect().height` ≥ 48, the glyph's computed `font-size` `20px` and colour equal to
 a probe styled `color: var(--text-2)`.
+The line is `[data-tool-line]` and its rows are its children. Runs on: the room under test and the fake agent, script `c1-render` (S-C1-06's turn, `hv2` `isError`); clock `real`.
 
 ### S-C1-08 A long code block shows 12 lines and a button for the rest
 Given a fake-agent reply with a fenced `sh` block of 40 lines, one of them 200 characters long,
@@ -737,6 +762,7 @@ Then the block shows 12 lines, `SH` top right, and `SHOW ALL 40 LINES` (48 px ta
 line wraps and the block scrolls sideways; a tap shows 40 lines and `SHOW LESS`.
 Test: Playwright; count visible line boxes; compare the block's `scrollWidth` with its
 `clientWidth`; tap; count again.
+The block is the `pre` under `[data-reply]`. Runs on: the room under test and the fake agent, script `c1-render` (its 40-line `sh` block); clock `real`.
 
 ### S-C1-09 Markup from the agent is shown, never run or fetched
 Given a fake-agent reply containing `<img src=x onerror=alert(1)>`, `<script>alert(2)</script>`,
@@ -751,6 +777,7 @@ computed `text-decoration-line` `none`; tap it, then via a CDP session `Input.di
 `touchStart` on its centre, wait 800 ms, `touchEnd`; assert `location.href` unchanged,
 `[data-link]` never got `data-pressed`, and
 `document.querySelectorAll('[data-cockpit-conversation] a, [data-cockpit-conversation] [href]').length === 0`.
+Runs on: the room under test and the fake agent, script `c1-render` (its markup reply); clock `real`.
 
 ### S-C1-10 Scrolled up during a reply: the view stays, `↓ NEW` brings it back
 Given a pane with 10 earlier turns and the fake agent streaming a 30-line reply over 6 s,
@@ -760,6 +787,7 @@ shows 16 px above the input row; a tap on it at t = 4 s puts the last line in si
 following text keeps it there; `↓ NEW` is gone.
 Test: Playwright touch drag; sample `scrollTop` every 100 ms; tap `↓ NEW`; assert the last line's
 rect is inside the conversation's rect until the turn ends.
+The scroller is `[data-cockpit-conversation]`'s conversation, `↓ NEW` is `[data-cockpit-follow]`. Runs on: the room under test and the fake agent, script `c1-render` (its 30 lines over 6 s), 10 seeded turns; clock `real`.
 
 ### S-C1-11 Only the marks are coloured
 Given a fake-agent reply `■ builder-b is down. ▲ nightly-ci is stuck. ● 2 runs working.`,
@@ -767,6 +795,7 @@ Then `■` is drawn in `--p1`, `▲` in `--p2`, `●` in `--text-2`, and every o
 `--text-1`; the word `down` is not red.
 Test: Playwright; each mark is its own element (`[data-mark]`); read the computed `color` of the
 three marks and of the paragraph, compare with the tokens' computed values.
+Runs on: the room under test and the fake agent, script `c1-render` (its marks); clock `real`.
 
 ### S-C1-12 Reduced motion: the pane appears with no slide
 Given `prefers-reduced-motion: reduce`,
@@ -775,6 +804,7 @@ Then the pane is in its final place in the first frame after each tap (computed
 `transition-duration` 0 s) and the `↓ NEW` jump and the tool-line opening have no transition.
 Test: Playwright `emulateMedia({ reducedMotion: 'reduce' })`; read the pane rect in the next
 `requestAnimationFrame` after the tap.
+Reads the computed `transition-duration` of `[data-cockpit-conversation]`, `[data-cockpit-follow]` and `[data-tool-line]`'s rows. Runs on: the room under test and the fake agent, script `c1-render` (S-C1-06's turn for the tool line); clock `real`.
 
 ### S-C1-13 Hold the button on the touring Wall: words in 1 s, release sends (pending Q-O11)
 Given a screen in `wall` layout touring, the pane closed, the conversation idle; the fake speech
@@ -799,6 +829,7 @@ and `--use-fake-ui-for-media-stream`; `touchscreen` down at t = 0 and up at 2.5 
 (`performance.getEntriesByName`) and assert each against its row; sample the input's value every
 50 ms and assert the sequence `how` → `how did the` → `how did the night go`; count the frames the
 fake speech service received before t = 0.2 s (≥ 1).
+Reads `[data-talk]`'s `data-talk`, `[data-cockpit-input]`'s value, `data-wall-state` and `data-turn` on the root; the messages `audio.start`, `stt.update`, `stt.final` and `turn.prompt` (`framereceived`/`framesent`). Runs on: the room under test, the fake agent on script `c1-voice` and the fake speech on script `c2-tap` (its utterance `how` / `how did the` / `how did the night go`, final `How did the night go?`); clock `real`.
 
 ## 7. Typing and sending
 
@@ -1239,6 +1270,7 @@ And typing 6 lines (with `Shift+Enter`) makes the input 182 px tall with its own
 bottom edge where it was, `SEND` still at the row's bottom.
 Test: Playwright `keyboard.type`/`press`; read the prompt text, the input's height and bottom, the
 `SEND` rect and `disabled`; the fake agent's log (`fakeAgent.prompts()`) has `how is\nbuilder-a`.
+The input is `[data-cockpit-input]`, the slot `[data-cockpit-send]`, the word `[data-turn-delivery="sending"]`; one `prompt` frame (`framesent`). Runs on: the room under test and the fake agent, script `c1-typing`; clock `real`.
 
 ### S-C1-15 Too long a prompt cannot be sent
 Given the pane open,
@@ -1247,6 +1279,7 @@ Then the input holds all 8 214, the note reads `8 214 / 8 000 CHARACTERS`, `SEND
 `Enter` sends nothing; deleting 214 characters enables `SEND` and the note goes.
 Test: Playwright `fill`; assert the value length, the note's text, `disabled`, and that the room's
 log is unchanged after `Enter`.
+The input is `[data-cockpit-input]`, the note `[data-cockpit-line][data-line="length"]`, the slot `[data-cockpit-send]`; "the room's log unchanged" is: `framesent` holds no `prompt` and `fakeAgent.prompts()` is 0. Runs on: the room under test and the fake agent, script `c1-typing`; clock `real`.
 
 ### S-C1-16 Sending during an answer steers it: queued, then taken into the same turn (pending Q-O1)
 Given the fake agent on a turn that writes `Three runs ran last night.` from t = 0.3 s, calls
@@ -1274,6 +1307,7 @@ against `--text-2`/`--text-1`, `[data-turn-delivery]`'s computed `font-size` (�
 colour (`--text-1`) at 2.5 s and its absence at 4.1 s, the queued block's `getBoundingClientRect().bottom` ≤ 744 and no overlap
 with the opener's rect, no element with the text `STOPPED AT`, the order of the turn's items, and
 `order("interrupt")` from the fake-agent log is `[]` (`stand-ins.md` §2.6).
+Runs on: the room under test and the fake agent, script `c1-typing` (S-C1-16's turn and its `next-tool-end` steer turn); clock `page`.
 
 ### S-C1-17 STOP stops; a stuck stop is forced after 5 s
 Given a running turn and an empty input, the slot reads `STOP`,
@@ -1290,6 +1324,7 @@ turns (`endAfterMs` 300, then `ignore`); assert `[data-turn-stopped]`'s `textCon
 `STOPPED AT HH:MM` (first run) and `STOPPED AT HH:MM (FORCED)` (second run), with `HH:MM` from the
 page's clock and computed `text-transform` `none`; the fake agent's log (`stand-ins.md` §2.6) has
 one `interrupt` line with `cancelled` `null`, one `signal` `SIGINT` line and no `SIGTERM` line.
+Runs on: the room under test and the fake agent; first run clock `page`, second run clock `advance` from the tap (the `ignore` turn has no timed steps, `stand-ins.md` §1.1), `advance(5000)` to the forced stop.
 
 ### S-C1-18 A prompt the room never confirms is not sent again on its own
 Given a touch context (`hasTouch: true`) at 1368x912, the pane open with the input not focused,
@@ -1309,6 +1344,7 @@ A third run types `and hv1` into the input before the tap on `EDIT`: the input's
 Test: Playwright with a fake clock and `hasTouch`, `tap`; the room's `POST /drop` (`stand-ins.md` §1.2);
 assert texts, the input value, `document.activeElement`, `selectionStart`/`selectionEnd`, the
 input's rect ± 1 px after `setViewportSize`, and the room's received-turns count (0, then 1).
+The block's word is `[data-turn-delivery="not-sent"]`, its line `[data-turn-error="not-sent"]`, the root's `data-keyboard`; one `prompt` frame in `framesent`, no `turn.prompt` back. Runs on: the room under test and the fake agent, script `c1-typing`; clock `page`, the 5 s and the 60 s moved with `page.clock.runFor`.
 
 ### S-C1-19 The agent's process dies mid-turn
 Given a reply half drawn,
@@ -1318,6 +1354,7 @@ again.`, `data-turn="idle"`; when the room under test has restarted the agent it
 back (07:04). Your last message was not answered.` with `RETRY`; nothing is sent until `RETRY` is
 tapped.
 Test: Playwright; the fake agent's `exit` step; assert the two texts and the received-turns log.
+The line is `[data-turn-error="agent-exited"]`, then its `RETRY`; `data-turn` on the root. Runs on: the room under test and the fake agent, script `c1-errors` (its `exit` 1 mid-text), the room's clock set to 07:04:00 with `POST /clock {"set":…}` before the prompt; clock `real`.
 
 ### S-C1-20 Each error end of a turn has its exact message, in grey
 Given fake-agent scripts ending a turn with each of: a model-service error `overloaded`, the step
@@ -1334,6 +1371,7 @@ And after the `boom` row (E8), a tap on `RETRY` raises `fakeAgent.prompts()` by 
 turn with the same text is drawn under the failed one, which stays (D259).
 Test: Playwright, one script per row (table-driven); compare the texts and computed colours; for
 the `RETRY` step, `prompts().length` before and after and the two `clientId`s from `framesent`.
+Each line is `[data-turn-error]` with its code (`failed`, `step-limit`, `not-logged-in`); the retry row is the `turn.retrying` frame's text. Runs on: the room under test and the fake agent, script `c1-errors` (one turn per row); clock `real`.
 
 ### S-C1-21 A long reply: its age shows, and it is drawn whole
 Given the fake agent thinking 15 s, then streaming 120 lines and 26 000 characters over 20 s, with
@@ -1352,6 +1390,7 @@ s (0), 3 s (1) and 15 s (1), the label and `[data-turn-age]` texts at 3/12/35 s,
 colour equal to `--text-2`'s, `[data-cockpit-turn]`'s text `● WORKING` at 12 s, the reply's
 `textContent` length, the table's row count, that the reply holds no `button`, and
 `performance.getEntriesByName('cockpit:B9', 'measure').length` 0 before t = 15 s and 1 after.
+Runs on: the room under test and the fake agent, script `c1-long`; clock `page`.
 
 ### S-C1-22 A new conversation: asked, then started at once (pending Q-O2)
 Given 23 turns in the conversation, no turn running, and 2 cards on the canvas,
@@ -1372,6 +1411,7 @@ Test: Playwright with a fake clock on the Wall page in `wall` at 1368x912; asser
 `[data-newbar="start"]`'s `right` = 16 ± 1 px and `keep.right` = 1352 ± 1, both 48x96 ± 1 px; the
 divider text, the 23 turns above it, the card count, the fake agent's received-turns log and
 session ids.
+`NEW` is `[data-cockpit-new]`, the bar `[data-cockpit-newbar]`; the `conversation.new` frame in `framesent`. Runs on: the room under test and the fake agent, script `c1-session`, 23 seeded turns; clock `real`. The two cards' step runs in the Canvas slice with `c4-cards`' `one-card` and `second-card` turns, as S-C1-46's show step runs in Show; C1 asserts the rest.
 
 ### S-C1-23 Two pages, one conversation: a second prompt queues, it does not stop
 Given two pages on one room, both panes open at the conversation's end (how each reaches the
@@ -1402,6 +1442,7 @@ whose own text is `and builder-b` (1 on each page) after the take, drafts and `d
 log (`stand-ins.md` §2.6) `order("interrupt")` is `[]` until 3.0 s and has one entry after it, and
 `order("prompt","turn-end")` starts `["prompt","prompt","turn-end"]`. A test with two device
 tokens waits for the pairing slice (Q-O21).
+Runs on: the room under test and the fake agent, script `c1-session`; clock `real`.
 
 ### S-C1-24 (retired, T50)
 The raw view is not in C1 (§13, pending Q-O17). The id is not reused.
@@ -1419,6 +1460,7 @@ failed`, no `●`; tapped open, its rows read `fleet  {"site":"hv1"}  800 ms  ok
 And a second case with `hv1` ending at 300 ms and `hv2` at 900 ms gives the same lines and texts.
 Test: Playwright; sample `[data-tool-line]` texts and their `●` every 100 ms; tap the first line,
 read its rows; the second case reorders the ends in the script.
+The ms are the `tool.end` frames' times against their `tool.start` (`framereceived`). Runs on: the room under test and the fake agent, script `c1-render` (its parallel `fleet`/`ci` turn, matched on `how is the fleet`, and its reordered twin); clock `real`.
 
 ### S-C1-26 A fresh screen says it is connecting, then never shows a blank pane
 Given the room under test holding the conversation `c-0007` with 3 turns, and a page loaded at t = 0
@@ -1436,6 +1478,7 @@ Test: Playwright against the room under test; hold back `welcome` with the fault
 `data-cockpit`, the conversation's text and `SEND`'s `disabled` at 0.5 s and 2.5 s; restart with an
 empty conversation and assert the line's text exactly (the variant `…or hold the talk button and
 speak.` is asserted in the C2 step `with voice`, `slices.md` §3.2), then with the room stopped.
+Runs on: the room under test and the fake agent, script `c1-render` (no turn played), 3 seeded turns in `c-0007`, then none; clock `real`.
 
 ### S-C1-27 STOP during a turn drops a queued prompt and says so (pending Q-O1)
 Given the fake agent on a turn calling a tool from t = 0.5 s to t = 20 s, `onInterrupt`
@@ -1450,6 +1493,7 @@ more is sent to the agent. A tap on `RETRY` at t = 5 s sends `only the failed on
 Test: Playwright on the real room with the fake agent; assert the texts at 3.1 s and 3.5 s, the
 log's interrupt line, `prompts()` count 1 before and 2 after `RETRY`, and two different `clientId`s
 in the screen's sent messages.
+The word is `[data-turn-delivery="not-sent"]`, the stopped line `[data-turn-stopped]`, the header `[data-cockpit-turn]`; the sent messages are `stop` and the two `prompt` frames (`framesent`). Runs on: the room under test and the fake agent, script `c1-typing` (S-C1-27's 19.5 s tool call, `endAfterMs` 300); clock `real`.
 
 ### S-C1-28 A queued prompt the agent never reads is sent once more, then shown as not sent (pending Q-O1)
 Given the fake agent with `queued` `ignore-once` on a turn that ends `done` at t = 3 s, and the
@@ -1469,6 +1513,7 @@ and `"from":"queued"` arrives before the `prompt.taken` naming that `turnId` (D2
 conversation holds exactly one prompt block with the text `only the failed one`; and the page
 never closes the link with 4000 (the `WebSocket`'s `close` event does not fire, and `framesent`
 shows no second `hello`).
+The word is `[data-turn-delivery="queued"]`, the line `[data-turn-error="not-sent"]`. Runs on: the room under test and the fake agent, script `c1-typing` (S-C1-28's two turns); clock `advance` once the first turn's `done` is read.
 
 ### S-C1-29 A queued prompt survives a reload (pending Q-O1)
 Given the fake agent on a turn calling a tool from t = 0.5 s to t = 20 s, then writing text, and the
@@ -1487,6 +1532,7 @@ Test: Playwright on the real room with the fake agent; read the `snapshot` frame
 the sent `clientId`; assert label texts and computed colour before and after the reload, at
 20.1 s the block's index among the turn's items; in the second case the item's `state`
 `cancelled` and `why` `stopped`, and `prompts()` count 2 after `RETRY`.
+The block is the item under `[data-turn-id]` whose word is `[data-turn-delivery="queued"]`. Runs on: the room under test and the fake agent, script `c1-typing` (S-C1-29's turn); clock `real`.
 
 ### S-C1-30 A shell call is refused and shows as a grey `tried` line (pending Q-O23)
 Given the pane open, the real room with the fake agent (script `c1-render`), whose turn for
@@ -1506,6 +1552,7 @@ Test: Playwright on the real room with the fake agent; count `[data-tool-line][d
 (2) and read their texts and computed colour; tap the first, read its row and assert its
 `scrollWidth` is at most its `clientWidth`; read `starts()[0].argv` from the fake agent's log
 (`stand-ins.md` §2.6).
+Runs on: the room under test and the fake agent, script `c1-render` (its two `denied` `Bash` steps); clock `real`.
 
 ### S-C1-31 A secret in a tool's input never reaches the screen
 Given the pane open and the fake agent (script `c1-render`) whose turn for `find the token` has a
@@ -1522,6 +1569,7 @@ text frame the page received contains `eyJhbGci`, `abc123DEF`, `Q7wErTy12` or `Z
 Test: Playwright; collect every `framereceived` payload from the page's link and assert none holds
 the four strings; open both lines and read their rows. The rules themselves are the unit test of
 `server/cockpit/redact.mjs` (§5.3), in `npm test`.
+The lines are `[data-tool-line]`; the payloads are every `tool.start` and `tool.end` frame among them. Runs on: the room under test and the fake agent, script `c1-render` (its `Grep` and `denied` `WebFetch` steps); clock `real`.
 
 ### S-C1-32 The on-screen keyboard: the input row sits on its edge, the conversation stays pinned
 Given a touch context (`hasTouch: true`) at 1368x912, the Wall page in `wall` (on the app's `#/map`
@@ -1555,6 +1603,7 @@ block) is inside the conversation's rect with its bottom at y ≤ 380 and no ove
 opener's rect (x 1288-1336, y 396-444); the slot at x 1200-1264, y 460-524 has `data-send="wait"`
 at t = 2.9 s and `data-send="stop"` at t = 3.1 s, both rects inside y 0-532; at t = 4.1 s
 `Only builder-a failed.` is drawn below the block and its last line ends at y ≤ 380 (pinned).
+Runs on: the room under test and the fake agent, 12 seeded turns, script `c1-typing` (a short `done` turn for `and builder-a?`; the third run S-C1-16's turn); clock `real`, the third run clock `page`.
 
 ### S-C1-33 Keyboard up with the status line and a long draft: the conversation keeps 200 px
 Given S-C1-32's setup with the room down (the pane's 80 px status line, `screens.md` §7) and the
@@ -1567,6 +1616,7 @@ When the test resizes back to 1368x912 and blurs the input,
 Then `data-keyboard="down"` and the input is 182 px tall (4 lines, §7) with its bottom at y 888.
 Test: Playwright `fill`; rects and heights ± 1 px; the input's
 `scrollTop + clientHeight ≥ scrollHeight − 1`; the conversation's `clientHeight`.
+Reads `[data-cockpit-status]`, `[data-cockpit-line][data-line="length"]`, `[data-cockpit-input]` and `[data-cockpit-conversation]`; the room down is `POST /link {"up":false}` (`stand-ins.md` §1.2). Runs on: the room under test and the fake agent, script `c1-typing` (no turn played); clock `page`, the 5 s to `room-down` moved with `page.clock.runFor`.
 
 ### S-C1-34 Chip, line slot and `↓ NEW` stack without overlapping
 Given the Wall page in `wall` at 1368x912 (`hasTouch: true`), the pane open on 10 earlier turns, a
@@ -1593,6 +1643,7 @@ Test: Playwright with `page.clock`, a `touchscreen` drag, `POST /link {"up":fals
 the chip row, the chip, `[data-cockpit-chip-remove]`, `↓ NEW` and `[data-cockpit-open]` compared
 ± 1 px after each step, and a pairwise check that no two of the tappables intersect or come closer
 than 8 px; `count()` of `[data-cockpit-line]` is 1 at each step.
+Runs on: the room under test and the fake agent, script `c1-render` (its 30 lines over 6 s), 10 seeded turns, the chip set by S-C3-10's tap; clock `page`.
 
 ### S-C1-35 Tool lines from odd input, and the words module's unit test
 Given the fake agent on script `c1-render`, a turn whose steps call, 100 ms each with reply text
@@ -1614,6 +1665,7 @@ module holding §5's table): `Bash` `cd /srv/app && npm test` → `ran cd /srv/a
 `fetched a page from an invalid address`; two `WebFetch` calls on `https://example.invalid/a` and
 `/b` → `fetched a page from example.invalid`, on two hosts → `fetched 2 pages`; `Read` `/` →
 `read /`; a 40-character target of emoji is cut after 32 code points with no lone surrogate.
+Runs on: the room under test and the fake agent, script `c1-render` (S-C1-35's odd-input turn); clock `real`.
 
 ### S-C1-37 A logged-out agent is named before any prompt, and the line goes after the login
 Given the room under test with the script `c1-login` (`start.login` `ok`), its clock set to
@@ -1639,6 +1691,7 @@ Test: Playwright against the room under test, `POST /clock` for `set`, `manual` 
 text, `data-status`, rect and computed style of
 `[data-cockpit-status]`; `disabled` on `SEND` false; `starts` read before and after. The 10 s
 timeout row of `protocols.md` §11.10 is a `node:test` of the room's check with `login` `hang`.
+Runs on: the room under test and the fake agent, script `c1-login`; clock `advance` on the room, the page's clock fixed.
 
 ### S-C1-38 One status line: the highest that holds wins, news never waits
 Given S-C1-37's page with `not-logged-in` showing,
@@ -1660,6 +1713,7 @@ Third case: `login` `ok`, no condition, the link blips 6 s: `Back since HH:MM.` 
 shows for 5 s ± 0.2 s, then nothing.
 Test: Playwright; sample `[data-cockpit-status]` count, `data-status` and text every 100 ms; room's
 `GET /sent?type=status` holds one message per change, in the order of the table's rows.
+The messages are `status` frames. Runs on: the room under test and the fake agent, script `c1-login` (its second case with `startFailures` 3); clock `real`.
 
 ### S-C1-39 A room restart mid-conversation: the same turns, the same session (pending Q-O24)
 Given the room under test with the script `c1-session` and its clock `real` (the restarted process
@@ -1693,6 +1747,7 @@ the `snapshot` frames with `framereceived` (`turns.length` 23, `olderTurns` 0); 
 `[data-turn-id]` elements (the first `t-0101`); text of the error line; `fakeAgent.starts()` and its `start` lines;
 `fs.statSync(...).mode & 0o777` is `0o600` and the file's lines parsed. The start steps' edge
 cases (torn line, 31-day-old turn, missing `session.json`) are `protocols.md` §13's store test.
+Runs on: the room under test and the fake agent, script `c1-session`, 20 seeded turns; clock `real`.
 
 ### S-C1-40 The type floor: no text under 16 px, no instruction under 18 px (T43, D21, D167)
 Given the Wall page in `wall` at 1368x912 (`hasTouch: true`), `document.fonts.ready` resolved and
@@ -1721,6 +1776,7 @@ rects of the three selectors; colours compared with `getComputedStyle(document.d
 values of `--text-1` and `--text-2`; for C2 the fake speech scripts `c2-tap` (hold, slide off) and
 `c2-faults` (its `"401"` utterance, `stand-ins.md` §3.3). The walk is a helper the later slices
 reuse on the canvas (`[data-card]`).
+Runs on: the room under test and the fake agent, script `c1-render`; clock `real`.
 
 ### S-C1-41 Every tappable shows it was touched in the first frame (T45, D224)
 Given the Wall page at 1368x912 with `hasTouch: true`, the pane open, and for each row of the
@@ -1751,6 +1807,7 @@ scripts `c1-render`, `c1-errors`, `c1-long`, `scr-room`), then through a CDP ses
 styles inside one `requestAnimationFrame` callback; colours compared with probe elements styled
 `background: var(--bg-sunken)` and `color: var(--text-2)` (computed, so the theme decides);
 `touchEnd`, read again in the next frame. The second and third cases add `touchMove` events.
+Each row's `locator` is the table's selector (`[data-cockpit-open]`, `[data-cockpit-close]`, `[data-cockpit-new]`, `[data-cockpit-screen]`, `[data-cockpit-send]`, `[data-newbar]`, `[data-cockpit-follow]`, `[data-tool-line]`, the code block's button, `SHOW EARLIER`, the `RETRY`/`EDIT`/`GO ON` under `[data-turn-error]`); the pressed state is `[data-pressed]`. Runs on: the room under test and the fake agent, the scripts above plus `c1-typing` for S-C1-16's turn and S-C1-18's E1 (with `POST /drop`); clock `real`.
 
 ### S-C1-42 A reply cannot pass for the cockpit's own lines (T59, D227)
 Given the fake agent's reply (script `c1-render`, match `look-alike`):
@@ -1782,6 +1839,7 @@ Test: Playwright; for every element under `[data-cockpit-conversation]`, read
 element styled `border-color: var(--line-strong)` (computed, so the theme decides); assert the
 set of elements with a `--line-strong` side equals the `[data-turn-label]`,
 `[data-turn-error]` and `[data-turn-stopped]` elements. Runs in both themes.
+Runs on: the room under test and the fake agent, script `c1-render` (match `look-alike`), the second case adds `POST /drop {"what":"next-prompt"}` before the prompt before it; clock `real`.
 
 ### S-C1-43 The 11th prompt in a minute is not sent (T59, D228)
 Given the room under test with its clock in `manual` at 07:00:00 (`stand-ins.md` §1.2), the
@@ -1808,6 +1866,7 @@ assert the label, the line's exact text, `prompts().length`, `RETRY`'s `disabled
 and after `page.clock.runFor`, the two `clientId`s from `framesent`, and the audit lines read with
 `laneboard audit --file`. The case with two device tokens (each its own 10) runs in the Pair
 slice (Q-O21), as S-C1-23's.
+The word is `[data-turn-delivery="not-sent"]`, the line `[data-turn-error]`; the refusal is the `prompt.refused` frame with `too-many` (`framereceived`). Runs on: the room under test and the fake agent, script `c1-typing`; clock `advance`.
 
 ### S-C1-44 Three speak-ups in the night: the pane opens on them, under `SINCE YOU LOOKED` (T66, D233)
 Given the room under test with quiet hours `22:00`-`07:00` (`coworker.md` §4), the fake agent on
@@ -1834,6 +1893,7 @@ Test: Playwright, two contexts, `page.clock` and the room's clock moved together
 `[data-cockpit-conversation]`'s; `[data-cockpit-follow]` visible; `data-speakup` absent; the
 `welcome` frame's `lookedAt` read with `page.on('websocket')` after the reload. Runs in the Speak
 slice (`slices.md` §3.4).
+Runs on: the room under test and the fake agent, script `cw-speak`; clock `advance`.
 
 ### S-C1-45 At 1024x768 the pane is 608 px and the input row is inside the viewport (T77, D249)
 Given the app on `#/map` at 1024x768 (the tablet shell) and the Wall page in `wall` at 1024x768,
@@ -1844,10 +1904,11 @@ x 440-840, `SEND` x 856-920, the talk button x 936-1000, all y 680-744; the corn
 x 944-992, y 616-664 (§1.2's table); the Map left of x 416 still pans on a drag at (200, 400).
 When the owner types `how is builder-a` and taps `SEND`,
 Then the prompt block's right edge is ≤ 1000 px and the reply's text column is 560 px wide.
-Test: Playwright `viewport: {width: 1024, height: 768}`, `hasTouch: true`, script `c1-render`; for
+Test: Playwright `viewport: {width: 1024, height: 768}`, `hasTouch: true`, script `c1-session`; for
 the input, `SEND`, `[data-talk]` and the corner `[data-cockpit-open]` assert the rect (± 1 px) and
 that it lies inside `0..innerWidth` x `0..innerHeight`; drag on the Map and read its camera; after
 the send read `[data-reply]`'s `clientWidth` minus its padding.
+Runs on: the room under test and the fake agent, script `c1-session` (its 2 s answer to `how is builder-a`); clock `real`.
 
 ### S-C1-46 At 800x1280 the pane is the whole screen and CLOSE is the way back (T77, D249)
 Given the app on `#/map` at 800x1280 portrait with a node selected, the pane closed,
@@ -1867,6 +1928,7 @@ Test: Playwright `viewport: {width: 800, height: 1280}`, `hasTouch: true`, scrip
 plus one `show` call (the show steps run in the Show slice, `slices.md` §3.6; the rest in C1);
 assert the rects inside the viewport, `hasAttribute('inert')`, `elementFromPoint`, `screenOf('builder-a')`
 after `CLOSE`; `setViewportSize({width: 1280, height: 800})` and read the rect and the input value.
+The pane is `[data-cockpit-conversation]`, the input `[data-cockpit-input]`, the show line `[data-show-line]`. Runs on: the room under test and the fake agent, script `c1-render`; clock `real`.
 
 ### S-C1-47 Below the floor and in an old browser the board stays and says why (T77, D250)
 Given the app on `#/map` at 640x900 with the cockpit configured,
@@ -1882,6 +1944,7 @@ items).
 Test: Playwright `setViewportSize` 640x900 then 1024x768, assert presence; a second context with
 `addInitScript(() => { delete HTMLElement.prototype.inert })`, tap, read the text, count inputs,
 `room.control('GET', '/connections')`.
+Reads `data-pane` on the root, `[data-talk]`, `[data-cockpit-open]`, `[data-cockpit-unsupported]` and `[data-cockpit-input]`'s count. Runs on: the room under test and the fake agent, script `c1-render` (no turn played); clock `real`.
 
 ## 15. The demo (`?demo=1`, T36/T76/T93)
 
@@ -1992,6 +2055,7 @@ tool line; `placeholder`; `[data-cockpit-demo-label]` count 1, then 0 in the sec
 `test/cockpit-demo.test.mjs` in `npm test`: drives `createDemoLink({now, setTimeout})` with a fake
 clock through `hello`, the three matches, a no-match, a mid-turn send and a `stop`, and checks every
 emitted message with `protocols.md` §9's fixture checker and its `seq` running 1, 2, 3, ….
+Runs on: first case no stand-in, `public/` on a plain static server; second case the room under test and the fake agent, script `c1-render` (no turn played); clock `page`.
 
 ## 16. Times at a glance (T133, D287)
 
