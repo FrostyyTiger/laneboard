@@ -171,7 +171,7 @@ Notes for every builder round (planner, round 1):
   else stands (then the banner shows the next problem or drops out), and `hud.named()` hides the planet's own label on
   every plate that names it, not only the first visit — done when: a test with two crits (HV2 STORAGE held, HV1 VM-C
   also crit) finds no banner naming STORAGE and no shown label for the planet while the hero names it, and a film
-  frame at the second crit's target shows the hero once. (commit SHA) Builder r19:
+  frame at the second crit's target shows the hero once. (commit 2b7cca8) Builder r19:
   a probe of the live page (`tools/r19-probe.mjs`, the names in sight every 0.5 s over 100 s) found `named()`
   already right on every visit since T8/T20 (STORAGE's and VM-C's labels gone under each of their plates), and
   the banner never naming STORAGE under its plate, but by dropping out whole: with two crits standing the other
