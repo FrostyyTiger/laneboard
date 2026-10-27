@@ -40,7 +40,10 @@ How older phrases in the spec map onto these:
 - **Entry**: `test/cockpit/stand-ins/room-under-test.mjs`. `test/helpers/boot.mjs` gains an `entry`
   option (default `server/index.mjs`, which stays frozen) and spawns this file instead, with the
   same isolation (its own temp `HOME`, `LANEBOARD_STATE_DIR`, `LANEBOARD_CONFIG`, no inherited
-  `LANEBOARD_*`).
+  `LANEBOARD_*`). It also sets `LANEBOARD_AUDIT_FILE` to `<tmp>/audit.jsonl` and returns that path
+  as `booted.auditFile`, so a test reads the room's audit lines (`screens.md` §6.4, S-SCR-30) with
+  `laneboard audit --file`. The control API's `/pair`, `/unpair` and `/button` write their lines
+  with `user` `uid:<the test's uid>` and `via` `cockpit-cli`, as the CLI would.
 - The wrapper does three things, then imports the room's normal boot (`server/boot/cockpit.mjs`,
   `startRoom()`, D128) unchanged:
   1. replaces the room's clock: `setClock(testClock)` on `server/cockpit/clock.mjs`, the one module

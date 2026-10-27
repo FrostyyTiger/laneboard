@@ -776,7 +776,8 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
   0.1 s; the room asks the bridge to interrupt with `cancelQueued` (`protocols.md` §11.6). The turn
   ends when the bridge reports its end; if that has not happened 5 s after the tap, the room forces
   it (for Claude Code: `SIGINT`, research Q2) and the line reads `Stopped at 07:03 (forced).`.
-  Either way `READY` by 5.5 s.
+  Either way `READY` by 5.5 s. Every sent prompt and every `STOP` is one line in the room's
+  audit log, without the words (`cockpit.prompt`, `cockpit.stop`, `screens.md` §6.4).
 - **Queued prompts at a `STOP`.** Each prompt the receipt lists as cancelled gets
   `prompt.taken` `cancelled` (`"why":"stopped"`): label `YOU · 07:03 · NOT SENT`, under it
   `Dropped by STOP.` with `RETRY` and `EDIT`, as above. An agent without `cancelQueued`
@@ -910,7 +911,8 @@ session would."
 - **`START`**: a running turn is stopped first (§8: `● STOPPING`, forced after 5 s; queued prompts get `Dropped by STOP.`). Then the room
   starts a new agent session at once (`protocols.md` §11.7 says how); the old session gets no further prompt and
   nothing is written for the new one. Like a laptop session, the new session reads the written
-  context (repos, plans, notes). There is no extra turn state: the header goes back to `READY`.
+  context (repos, plans, notes). There is no extra turn state: the header goes back to `READY`. `START`
+  and a forced fresh start each write one `cockpit.new` audit line (`screens.md` §6.4).
 - **The divider**, drawn on every screen ≤ 0.5 s after the new session has started: a full-width
   row, 48 px, 1 px `--line` rules left and right of 16 px caps `--text-3` `NEW CONVERSATION · 07:10`.
   The old turns stay above it, unfolded, as history (D27's 50-turn rule counts across the divider);
@@ -937,7 +939,8 @@ Plan §2: "All screens show the same cockpit conversation; speaking at one shows
 - **Per screen** (D37): the draft, the live partial words while speaking (only the sent prompt
   reaches the others), the pane open or closed, the scroll position, opened tool lines and code
   blocks, the `NEW` bar.
-- **Who said it.** Not shown in C1: a prompt's label is `YOU · 07:02` on every screen (T51,
+- **Who said it.** The room's audit log names the screen of each prompt and stop (`user`
+  `screen:desk`, `screens.md` §6.4); the pane does not. Not shown in C1: a prompt's label is `YOU · 07:02` on every screen (T51,
   `reviews/36-skeptic.md` finding 13; the owner has not said they use two screens, Q-O9). Screen
   names in labels come back with the slice that pairs several screens (Q-O21).
 - **Two prompts at once.** The room takes them in the order they arrive; the second stops the

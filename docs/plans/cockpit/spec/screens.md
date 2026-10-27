@@ -480,7 +480,7 @@ every process on a box `local`. So `local` alone cannot be the test: one injecte
   characters with `…`. Only `y` or `yes` (any case) approves. With no terminal on stdin the CLI
   needs `--yes`, else it exits 1 with `not paired: no terminal to ask (use --yes)`.
 - **Each refusal and each change is one audit line** in the room's log (action, name, peer uid,
-  outcome; the exact format is T60's). A refusal issues no token and changes no code: the code
+  outcome; the format is §6.4's). A refusal issues no token and changes no code: the code
   stays open for the owner.
 - **Tests.** The uid checks are `checkCaller` and the admin routes' own check; `stand-ins.md` §1.3
   and D111 say how they are tested without a second user (injected uids in `node:test`) and why
@@ -529,6 +529,79 @@ starts no turn and the agent does not see it. A screen whose pane is closed also
 (`public/js/ui/toast.js`, in the stack of §4.1) `Screen desk2 was paired at 07:12.` for 10 s. The
 new screen itself shows `Paired as desk2.` (step 5), not this line. `unpair` sends
 `screen.unpaired` the same way: `SCREEN DESK2 UNPAIRED · 07:30`, no toast. (D160)
+
+### 6.4 The room's audit lines (T60, D164-D166)
+
+Every pairing change and every word a screen sends to the agent leaves one line in the room's audit
+log, so the owner can answer "who paired this" and "what did the cockpit do at 03:00" afterwards.
+
+- **The log is the board's own** (`docs/fleet/auth.md`, "The audit log"; `server/fleet/audit.mjs`
+  `openAudit`): same file rules, same JSON line, same hash chain, same `laneboard audit` and
+  `laneboard audit verify`. The room writes no second format and no second file.
+  - On one box the room is the board's process (D92), so it appends through the board's one
+    `openAudit` instance (one writer lock) to the board's file.
+  - Run as its own process and unix user (D91), the room has its own file:
+    `$LANEBOARD_AUDIT_FILE`, else that user's `$XDG_STATE_HOME/laneboard/audit.jsonl`, else
+    `~/.local/state/laneboard/audit.jsonl`. The owner reads it as that user
+    (`sudo -u <room user> laneboard audit`).
+- **The agent cannot change it.** The file is 0600 and its directory 0700, owned by the room's uid;
+  the agent runs as `cockpit.agent.user` (§6.1), so it can neither read nor write the log. With
+  `cockpit.agent.user` unset the agent runs as the room's user and could rewrite and re-chain the
+  file, as `auth.md`'s "Authority" paragraph says of any builder; pairing is refused then
+  (`agent-is-room`, §6.1), and `single-machine.md` (T19, T74) says what one box costs.
+- **Never the words.** Arguments are stored only as `argsHash` (`argsHashOf`, SHA-256 of their
+  canonical JSON); prompt text, codes and tokens never appear in a line. The hash is unsalted: a
+  short prompt such as `stop` can be guessed from it (`auth.md`); the log is 0600 for that reason
+  too.
+- **What is not chained** (as `auth.md`'s unauthenticated failures): a request without a valid
+  device token (an unpaired screen asking for a code, `POST /api/cockpit/pair`; a link closed with
+  4401, 4402 or 4403, `protocols.md` §2.3). Anyone can send those; they go to the room's log as a
+  counted warning, at most one line per 10 s (`createUnauthWarner`).
+
+| `action` | Written when | `user` | `via` | `target` | `args` (hashed) | `result` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `cockpit.pair` | an admin `pair` is approved or refused (§6.1), before the token is issued | `uid:1000` (the peer uid; `uid:?` when unknown) | `cockpit-cli` | the screen name, `desk2` | `{"code":"K7M4QX","name":"desk2"}` | `{"ok":true}`; refused `{"ok":false,"status":"agent-uid","peerUid":1001}` (also `wrong-uid`, `agent-is-room`, `not-cli`, `unknown`) |
+| `cockpit.unpair` | an admin `unpair` is done or refused | as `pair` | `cockpit-cli` | the screen name | `{"name":"desk2"}` | `{"ok":true,"links":1}` (links closed with 4402); refused as `pair` |
+| `cockpit.button` | an admin `button add` or `button remove` (`c2-voice.md` §14) | as `pair` | `cockpit-cli` | the button name, `hall` | `{"op":"add","name":"hall","screen":"desk"}` | `{"ok":true,"op":"add"}`; refused as `pair` |
+| `cockpit.button.press` | each valid call of `POST /api/cockpit/talk` | `button:hall` | `cockpit-button` | the target screen, `desk` | `{"action":"toggle"}` | `{"ok":true,"status":200,"talk":"listening"}`; `{"ok":false,"status":409}` for `voice-off`, `504` for `screen-timeout` |
+| `cockpit.prompt` | the room accepts a `prompt` (before the `turn.prompt` echo) or refuses it with `prompt.refused` (`protocols.md` §3.1) | `screen:desk`; without pairing (Q-O21 b) `board` | `cockpit` | the turn, `t-0132` (refused: `-`) | `{"text":"how did the night go?"}` | `{"ok":true,"source":"spoken","delivery":"new","chars":21}`; refused `{"ok":false,"status":"agent-down"}` |
+| `cockpit.stop` | the room receives `stop` (`protocols.md` §3.3), before it asks the bridge | `screen:desk` | `cockpit` | the running turn, `t-0132` | `{}` | `{"ok":true,"cancelQueued":true}` |
+| `cockpit.new` | `START` on the `NEW` bar (`c1-talk.md` §11), or a forced fresh start (`reason` `forced`) | `screen:desk`; forced: `room` | `cockpit` | the new conversation, `c-0008` (`protocols.md` §3.6), written once it has started | `{}` | `{"ok":true,"from":"c-0007","stoppedTurn":"t-0139"}` (`null` when idle); forced: `{"ok":true,"from":"c-0007","reason":"forced"}` |
+
+- `user` for a screen is `screen:<name>` when it is paired; with no pairing in C1 (Q-O21 b), `board`
+  for every screen (the board already decided who may load the page; C1 draws no names, D37).
+- `builder` is the board's builder name as for every other line (`openAudit`'s `builder`). `ts` and
+  `id` are `openAudit`'s.
+- **Once per prompt.** A `prompt` whose `clientId` the room already knows (D95, a `RETRY` after
+  E1) writes no second line. A prompt the room resends itself (D123, `not-taken`) writes none.
+- **Refusals are bounded** (D165): `too-many` (T59) writes the first refusal of each minute per
+  device token (per link without pairing) as a line; the rest of that minute only count, and the next `cockpit.prompt` line
+  of that token carries `"refusedSince":14`. So a stolen token cannot flood the chain faster than
+  the rate limit lets it prompt.
+- **When the log cannot be written** (D166; `auth.md`: "Fails closed"): what gives access or sends
+  words is refused; what takes away always runs.
+  - `pair`, `button add`: `503 {"error":"audit-unavailable"}`, no token; the CLI prints `not paired:
+    the room cannot write its audit log` (for `button add`: `no button added: the room cannot write
+    its audit log`) and exits 1. The code stays open.
+  - `prompt`: `prompt.refused` with `"code":"audit-unavailable"`; the block reads `YOU · 07:02 ·
+    NOT SENT` with `Not sent: the room cannot write its audit log.` and `RETRY`/`EDIT` as E1
+    (`c1-talk.md` §10).
+  - `unpair`, `button remove`, `stop`, `new`, a button press: done as usual; the room logs
+    `cockpit: audit append failed for cockpit.stop: <reason>` (stderr, at most one line per 10 s)
+    and shows nothing on the screens. Taking a token away or stopping the agent never waits for a
+    broken log.
+- Read them with `laneboard audit` (the board's table, `TS USER VIA ACTION TARGET OK`; `OK` shows
+  `result.status` for a refusal):
+
+  ```text
+  TS                   USER         VIA          ACTION          TARGET   OK
+  2026-10-27 06:12:00  uid:1000     cockpit-cli  cockpit.pair    desk2    ok
+  2026-10-27 06:13:30  uid:1001     cockpit-cli  cockpit.pair    desk3    agent-uid
+  2026-10-27 06:15:04  screen:desk  cockpit      cockpit.prompt  t-0132   ok
+  2026-10-27 06:15:09  screen:desk  cockpit      cockpit.stop    t-0132   ok
+  ```
+
+  (UTC, as `laneboard audit` prints every line.)
 
 ## 7. When something is down
 
@@ -798,7 +871,7 @@ Given the room with `cockpit.agent.user` set to the agent's user (uid 1001, the 
 1000), an unpaired screen showing `K7M-4QX`,
 When the fake agent's script runs the tool `Bash` with `laneboard cockpit pair K7M-4QX --name desk2 --yes`,
 Then the command prints `refused: the agent cannot pair screens` and exits 1; the room's log gains
-one audit line for `cockpit.pair` with peer uid 1001 and outcome `refused agent-uid`; no token is
+one audit line `cockpit.pair`, `user` `uid:1001`, `result` `{"ok":false,"status":"agent-uid","peerUid":1001}` (§6.4); no token is
 issued: the screen still shows `K7M-4QX`, `data-cockpit="unpaired"`, and its next `GET` with the
 right secret is `202`; no other screen gets `screen.paired`. The same with `unpair desk` (`refused:
 the agent cannot unpair screens`) leaves `desk` paired, and with `button add hall` (`refused: the
@@ -842,3 +915,44 @@ before its close (no `welcome`, no `snapshot`, no conversation); the screen's ow
 Test: `node:test` against the room under test with the `ws` client (it sets any `Origin` and
 `Cookie`) and `fetch`; count frames per refused link; read the open codes through the control
 API. The page's side of 4403 is S-SCR-24.
+
+### S-SCR-30 After a prompt and a stop, `laneboard audit` shows each once, without the words
+Given the room under test with its audit file at `<tmp>/audit.jsonl` (`stand-ins.md` §1.1), a
+live screen `desk` (C1 under Q-O21 b): the page's board identity, `user` `board`), the fake agent
+on a script whose turn runs 20 s,
+When the screen sends the typed prompt `how did the night go?` at t = 0 s, then taps `STOP` with
+the input empty at t = 2 s,
+Then `laneboard audit --json --file <tmp>/audit.jsonl` prints exactly two new lines, in order:
+`cockpit.prompt` (`via` `cockpit`, `target` the turn id of the `turn.prompt` echo, `result`
+`{"ok":true,"source":"typed","delivery":"new","chars":21}`) and `cockpit.stop` (same `target`,
+`result.ok` true); the prompt line's `argsHash` equals `argsHashOf({"text":"how did the night
+go?"})`; the raw file does not contain the string `night`; `laneboard audit verify --file …` exits
+0 with `ok N entries`.
+When the screen sends the same prompt again with the same `clientId` (D95),
+Then no third line is written.
+When the owner taps `NEW`, then `START`,
+Then one `cockpit.new` line follows with `target` the `conversation` of `conversation.new` and
+`result.from` the old one.
+And under Q-O21 a) the screen was paired first as `desk` (control API `/pair`): the first line is
+`cockpit.pair` (`target` `desk`), the next lines carry `user` `screen:desk`, and the raw file
+contains neither the code nor the device token.
+Test: Playwright for the screen, then in the same test run `bin/laneboard audit --json --file` and
+`audit verify --file` as child processes, parse the lines, recompute `argsHashOf` from
+`server/fleet/audit.mjs`, search the raw file for the strings; the resend goes through
+`page.evaluate` on the page's link helper.
+
+### S-SCR-31 With the audit log gone, a prompt is not sent but `STOP` still works
+Given S-SCR-30's room with a turn running (sent before the break), room clock set to 07:02:00,
+When the test renames `<tmp>/audit.jsonl` away at t = 0 s (the room's next append fails with
+`AUDIT_DETACHED`), the screen taps `STOP` with the input empty at t = 1 s, and sends the typed
+prompt `and the builds?` at t = 8 s,
+Then `STOP` works as `c1-talk.md` §8 says (`STOPPED AT 07:02` by t = 6.5 s) and the room's stderr
+has one line `cockpit: audit append failed for cockpit.stop: …`; the prompt block reads
+`YOU · 07:02 · NOT SENT` with `Not sent: the room cannot write its audit log.`, `RETRY` and
+`EDIT`; the fake agent's stdin log has no line with `and the builds?`.
+And under Q-O21 a): the control API's `/pair` for a second code answers `503
+{"error":"audit-unavailable"}` and no screen gets `screen.paired`; `/unpair desk` answers `200
+{"name":"desk"}` and `desk`'s link closes with 4402 (S-SCR-16).
+Test: Playwright for the screen; `fs.renameSync` from the test; the fake agent's log
+(`stand-ins.md` §2.6) for stdin; the room's stderr captured by the boot wrapper; control API for
+`/pair` and `/unpair`.

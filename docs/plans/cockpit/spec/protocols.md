@@ -398,6 +398,7 @@ How a snapshot over 512 KB divides its lists between parts: §2.2 (D140).
 | `text` empty or too long, a bad `focus` | `error` `bad-message` | E1 `not-sent` at once (a correct screen never sends these) |
 | the agent cannot take prompts (E3, E4; status §3.6) | **`prompt.refused`** `{"type":"prompt.refused","re":17,"clientId":"p-3c1e0b2a","code":"agent-down"}` | the block's label `YOU · 07:02 · NOT SENT` and the status line's text; `RETRY` and `EDIT` as E1 |
 | over 10 prompts per minute from one device token (T59) | `prompt.refused` with `"code":"too-many"` | `NOT SENT` with T59's line |
+| the room cannot write its audit log (`screens.md` §6.4, D166) | `prompt.refused` with `"code":"audit-unavailable"`; nothing goes to the agent | `NOT SENT`, `Not sent: the room cannot write its audit log.`, `RETRY` and `EDIT` as E1 |
 | link down at the send | — | `SEND` is disabled while `room-down` (`screens.md` §7); a send in the 5 s grace waits for the link and goes when it is back, else E1 |
 
 ### 3.2 The turn as it runs
@@ -450,7 +451,8 @@ onto these are §11.4; this is what the screen consumes (T29's list).
 **`stop`** (screen → room): `{"type":"stop","seq":22,"turnId":"t-0132"}`. The room sends
 `turn.state` `stopping` to every link at once, asks the bridge to interrupt (§11.6), forces it after
 5 s (D32) and ends with `turn.end` `stopped`. Errors: `unknown-id`; `not-now` when the turn already
-ended (the screen changes nothing: its `turn.end` is on the way or applied). Prompts still
+ended (the screen changes nothing: its `turn.end` is on the way or applied). Each accepted `stop` is one
+`cockpit.stop` audit line, and a log that cannot be written never blocks it (`screens.md` §6.4). Prompts still
 `queued` in that turn are dropped with it (`cancelQueued`, §11.6): `prompt.taken` `cancelled`,
 `"why":"stopped"` for each id the receipt lists in `cancelled` (pending Q-O1).
 

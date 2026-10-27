@@ -618,8 +618,9 @@ reported its new state, at most 1.0 s later. Bodies are JSON.
   the tap gesture is the second tap and sends.
 - A button that dies between `press` and `release` leaves listening to D45's limits (30 s with no
   word, 120 s in all): nothing is sent on its own.
-- Every call is one line in the room's audit log (`button hall → desk toggle 200`); the format is
-  `security.md`'s (T17).
+- Every valid call is one `cockpit.button.press` line in the room's audit log (`user`
+  `button:hall`, `target` `desk`, `result` `{"ok":true,"status":200,"talk":"listening"}`;
+  `screens.md` §6.4). `button add` and `button remove` are `cockpit.button` lines.
 - With `cockpit.stt.url: "none"` (§9) every valid call answers `409 voice-off`.
 
 ### Scenarios
@@ -636,8 +637,8 @@ When the test sends the second toggle at t = 3.0 s,
 Then the answer is `200 {"screen":"desk","talk":"final"}` (the state right after the action), and `What failed tonight?` is
 sent by t = 3.3 s; `side` shows the prompt as part of the one conversation (`c1-talk.md` §12).
 And with `press` at t = 0 and `release` at t = 2.5 s the prompt is sent as a hold.
-Test: Playwright, two pages, `fetch` from the test; the room's audit log has two `button hall →
-desk` lines.
+Test: Playwright, two pages, `fetch` from the test; the room's audit log has two `cockpit.button.press`
+lines with `user` `button:hall` and `target` `desk`.
 
 ### S-C2B-02 (was S-C2-19) The button API refuses what is not a button, and says why
 Given the button `hall` (target `desk`) and a button `porch` added without `--screen`,
