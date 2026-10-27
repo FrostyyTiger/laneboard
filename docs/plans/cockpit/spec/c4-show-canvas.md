@@ -438,6 +438,7 @@ a fixed column of the canvas, never a pane over the cards; D78). At 1368x912:
 | --- | --- | --- | --- |
 | `canvas`, and `switch` while it shows the canvas | x 0-759, y 0-912 | x 760-1368, y 0-912, 1 px `--line` left border | 2 columns x 3 rows: columns x 100-372 and 388-660, rows y 24-256, 272-504, 520-752 |
 | `split` | x 760-1368, y 0-520 | x 760-1368, y 520-912 (392 px), 1 px `--line` top border | 2 columns x 2 rows: columns x 784-1056 and 1072-1344, rows y 24-256, 272-504 |
+| `split`, folded (`data-canvas="strip"`, pending Q-O13) | none drawn: the 96 px strip x 1272-1368 shows the count | none drawn (the talk button stays at x 1280-1344, y 824-888) | none; packing and the shelf keep their state and come back as they were on opening |
 
 - **One cell** is 272 x 232 px; cells are 16 px apart. The card area keeps 24 px free at its left,
   right and top and 16 px at its bottom; the grid is centred across the area's width.
@@ -447,8 +448,10 @@ a fixed column of the canvas, never a pane over the cards; D78). At 1368x912:
 - In `split` the conversation column is 392 px tall: its 64 px header, 224 px of conversation (about
   5 lines at 28 px, pending Q-O18) and the 104 px input row (`c1-talk.md` §1). The column's parts and their rects
   are in `c1-talk.md` §1 (D117).
-- Collapsing an idle canvas (pending Q-O13) is `screens.md`'s; this section describes the canvas
-  open.
+- **Folding** (pending Q-O13): in `split` an idle canvas folds to a 96 px strip after 300 s and
+  opens again on a turn, a card, a tap or the talk button; the rules, the strip's rects and
+  S-SCR-38 are `screens.md` §1.1 (D284, D285). A card bound to a scheduled job keeps it open. The
+  rest of this section describes the canvas open.
 
 ### 7.2 Sizes, order and the shelf
 

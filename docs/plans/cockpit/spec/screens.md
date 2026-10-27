@@ -11,7 +11,7 @@ px at 1368x912; times in s.
 one layout, `wall`. No canvas, no `split`, `canvas` or `switch`, no `SCREEN` sheet, no
 `cockpit.layout`, no switch button; the root reads `data-cockpit-layout="wall"` whatever the width, `?layout=`
 is ignored, and the pane slides over the Wall as on the app (`c1-talk.md` §1, first table row).
-C1-C3 build this. The rest of this section, S-SCR-01, -06, -07, -08, -10, -11 and D2, D3, D8, D9
+C1-C3 build this. The rest of this section, S-SCR-01, -06, -07, -08, -10, -11, -38 and D2, D3, D8, D9, D284, D285
 arrive with the Canvas slice. With Q-O22 a) they are C1's from the first night: `split` is the
 default at ≥ 1280 px and the canvas shows S-SCR-10's empty text until C4 places cards; which ids C1
 then contains is `slices.md` §3.1.
@@ -25,14 +25,14 @@ A screen runs one of two pages:
 | --- | --- | --- |
 | `wall` | tour ⇄ explore, full screen | never by default; the owner picks it for a screen 1 |
 | `canvas` | the canvas, full screen | never by default; the owner picks it for a screen 2 |
-| `split` | wall half left (all width minus 608 px), canvas right (608 px), a 1 px `--line` between | the screen is ≥ 1280 px wide (pending Q-O9) |
+| `split` | wall half left (all width minus 608 px), canvas right (608 px), a 1 px `--line` between; after 300 s idle the canvas folds to a 96 px strip (§1.1, pending Q-O13) | the screen is ≥ 1280 px wide (pending Q-O9) |
 | `switch` | one half at a time, full screen, a switch button flips them | the screen is < 1280 px wide (pending Q-O9) |
 
 - **The app** (`public/index.html`, the views Map, Board, Inbox, Morning, Runs, …): unchanged,
   plus the cockpit button (§4). The app has no canvas and no tour; its views are not modes.
 
 At 1368x912 `split` gives a wall half of 759 px and a canvas of 608 px (1368 = 759 + 1 + 608). At
-1920x1080: 1311 + 1 + 608. The canvas keeps 608 px so the card grid (`c4-show-canvas.md` §7.1) has one fixed size.
+1920x1080: 1311 + 1 + 608. The canvas keeps 608 px so the card grid (`c4-show-canvas.md` §7.1) has one fixed size. Folded (§1.1): 1271 + 1 + 96 at 1368x912, 1823 + 1 + 96 at 1920x1080.
 
 **Choosing the layout.** Three ways, the first that is set wins:
 1. The URL: `?layout=wall|canvas|split|switch` on the Wall page (a kiosk's start URL). Any other
@@ -54,6 +54,61 @@ one in effect), `data-wall-state` (`tour|explore`, absent in `canvas`), and in `
 `data-switch-shows` (`wall|canvas`). The page root is `<html>`; the name is not `data-layout`,
 which `public/js/ui/shell.js` `applyLayout()` already sets there to `phone|tablet|desktop` (D145).
 Every attribute and its values: `README.md` §"Selectors tests use".
+
+### 1.1 The canvas folds when idle, in `split` only (pending Q-O13)
+
+Q-O13's recommendation b): in `split` an idle canvas gives its width back to the Wall, "the one
+place to see" the fleet. The canvas has two states, on the root as `data-canvas` (`open`, `strip`;
+only in `split`, absent in the other layouts): **open** is §1's 608 px column with the card area and
+the conversation column (`c4-show-canvas.md` §7.1); **strip** is a 96 px strip at the right edge.
+`canvas` and `switch` never fold: there the canvas is the screen's purpose or one tap away (D9).
+
+**When it folds** (D284). The canvas folds when the **idle clock** reaches 300 s
+(`CANVAS_IDLE_MS`, D6's module), counted on the screen's clock. The idle clock goes back to 0 at
+each of these: a tap or key anywhere in the column (x 760-1368 at 1368x912), a turn's end
+(`turn.end`, any screen's), a card placed, replaced or removed (`place`, `card.close`, a snapshot
+that changes the room's list; a live value `card.data` is not one), and the canvas opening. It does
+not run, and the canvas never folds, while any of these holds:
+- a turn runs (`data-turn` is not `idle`), or the microphone is open;
+- the input holds a draft or has the focus (a draft is never hidden from the owner);
+- a sheet is open (the `SCREEN` sheet, the shelf sheet) or a confirm card (§4.1 J);
+- a card bound to a scheduled job is on the canvas (`spec-input.md` §6: "Scheduled jobs are
+  visible ... on the canvas"; `c4-show-canvas.md` §8.1).
+Cards that are only old do not hold it open: the strip counts them. A room down neither folds nor
+opens it (an outage must not change the desk's shape); the clock simply keeps counting.
+
+**When it opens** (D285), at once: a tap on the strip button, a press on the talk button (the
+microphone opens on that press as always, `c2-voice.md` §2; the live words are in the column once
+it is there), a turn's start on any screen (a prompt, a speak-up, §2.1), a card placed or replaced,
+a confirm asked on this screen. A card removed elsewhere only changes the count.
+
+**Motion.** Folding and opening take 300 ms (`transform: translateX` on the column, `--ease`). The
+Wall gets one resize per change, never one per frame: on folding at the start (the column then
+slides off to reveal the wider map), on opening at the end (the column slides in over the map,
+then the wall half narrows). The camera keeps the point at the wall half's centre at the new
+centre. Reduced motion: one frame, no slide. A reload starts open with the idle clock at 0; the
+fold is never stored (`cockpit.layout` stays `split`).
+
+**The strip** at 1368x912 (wall half x 0-1271, 1 px `--line` divider at x 1271, strip x 1272-1368,
+y 0-912, `--bg-canvas`):
+
+| Part | Selector | Rect | Look |
+| --- | --- | --- | --- |
+| strip button (one target) | `[data-canvas-strip]` | x 1272-1368, y 0-808 | a `<button>`, `aria-label="Open the canvas, 3 cards"`; no border of its own |
+| `CANVAS` | inside it | y 24-48, centred on x 1320 | 16 px `--font-label` caps `--text-2` |
+| the count | `[data-strip-count]` | y 64-104, centred | 28 px mono `--text-1`, the room's list length (shelved cards included), `0`-`16` |
+| `CARD` / `CARDS` | inside it | y 104-128, centred | 16 px caps `--text-2`; `CARD` for 1 |
+| `AWAY` (room down only) | inside it | y 152-176, centred | 16 px caps `--text-2`, with the same 5 s grace as `screens.md` §7 |
+| `OPEN` | inside it | x 1288-1336, y 760-808 (`CHAT`'s rect, §4) | 16 px caps `--text-1` on `--bg-elevated`, 1 px `--line-strong`: where the finger finds `CHAT` elsewhere, it finds the way to the conversation here |
+| talk button | `[data-talk]` | x 1280-1344, y 824-888 (D116) | as everywhere; 16 px under the strip button |
+
+- No card is drawn in the strip, no title, no colour: the count is news, not trouble (`docs/design.md`,
+  the colour rule), as the switch count (§4).
+- The wall half's bottom-right status lines end at x ≤ 1247, 24 px left of the divider.
+- At other sizes the strip keeps 96 px and its rows keep their offsets from the top; `OPEN` and the
+  talk button keep §4's offsets from the bottom-right corner.
+
+Scenario: S-SCR-38.
 
 ## 2. Modes on the wall half
 
@@ -185,7 +240,7 @@ Per page, what else changes:
 | Where | The rest of the page |
 | --- | --- |
 | Wall page, `wall` | The Wall's bottom-right status lines end at x 1256, 24 px left of the talk button. |
-| Wall page, `split` and `canvas` | The talk button sits in the conversation column's input row (x 760-1368, `c1-talk.md` §1, D78), never over the card area. There is no `CHAT`: the column is always there (D117, pending Q-O12); its rect belongs to the conversation. In `split` the wall half keeps its status lines at the divider. |
+| Wall page, `split` and `canvas` | The talk button sits in the conversation column's input row (x 760-1368, `c1-talk.md` §1, D78), never over the card area. There is no `CHAT`: the column is always there (D117, pending Q-O12); its rect belongs to the conversation. In `split` the wall half keeps its status lines at the divider. Folded to the strip (§1.1, pending Q-O13): the talk button keeps its rect inside the strip and `OPEN` takes `CHAT`'s. |
 | Wall page, `switch` | The talk button on both halves; `CHAT` only while the wall shows (it flips to the canvas). The switch button sits left of the talk button, x 1200-1264, y 824-888, while the wall shows; while the canvas shows it is a header button of the column, x 992-1064, y 8-56 (D156), and `SEND` has the rect it left. The Wall's bottom-right status lines end at x 1176, 24 px left of it. §4.1 has the whole cluster per state. |
 | App, every view in `VIEWS` (`public/js/core/router.js`) | The talk button's bottom edge sits on the top edge of the bottom bar (`footer.shell-bar`, `--tape-h` 24 px, y 888-912); nothing of the bar is covered. The toast stack (`.toasts`, `public/css/components.css`) moves up while the cockpit is configured: its bottom edge at y 736 (`bottom: 176px`), 24 px above `CHAT`; while the pane is open it moves left of the pane (`right: 624px`, D158). |
 
@@ -242,6 +297,9 @@ are there so nothing tappable is drawn over them. With a one-line input; a talle
 | | stack, language button, input, `SEND`, talk button | as B | yes | as B; no opener: x 1288-1336, y 760-808 is the conversation's (D117) |
 | **F. Column, `split`** (column x 760-1368, y 520-912) | `SCREEN`, `NEW`, `SHELF n` | as E | yes | E's x, y 528-576 |
 | | stack, language button, input, `SEND`, talk button | as B | yes | as B |
+| **F2. Strip, `split` folded** (§1.1, pending Q-O13; strip x 1272-1368) | strip button, its `OPEN` inside | `[data-canvas-strip]` | yes (one target) | 1272-1368, 0-808 |
+| | talk button | `[data-talk]` | yes | 1280-1344, 824-888 |
+| | the Wall's status lines | the Wall's | no | end at x ≤ 1247 |
 | **G. `switch`, wall shown** | talk button, `CHAT` | as A | yes | as A |
 | | `CANVAS` (switch button) with its count | `[data-cockpit-switch]`, `[data-switch-count]` | the button | 1200-1264, 824-888 |
 | | the Wall's status lines | the Wall's | no | end at x ≤ 1176 |
@@ -1416,6 +1474,44 @@ codes; `laneboard audit --file` and the push subscriptions file read before and 
 for "no other request"; the not-loopback peer of the main port as a `node:test` of `classify` with
 an injected `remoteAddress` `192.0.2.24` (`403 not-local`); stderr as `protocols.md` §1's boot
 test reads it.
+
+### S-SCR-38 An idle canvas folds to a strip after 300 s and opens on a card, a tap or the talk button (pending Q-O13)
+Given a screen at 1368x912 in `split` (no `?layout=`, nothing stored), `hasTouch: true`, the page's
+clock installed, the fake agent with script `c4-cards`, one `text` card `notes` on the canvas
+from a turn that ended at t = 0 s (prompt `put a note`), and no turn running,
+When nothing touches the screen,
+Then at t = 299.9 s `data-canvas="open"` and the column is at x 760-1368; at t = 300.0 s
+`data-canvas="strip"`, and 0.3 s later the column is off screen, the wall half is 1271 px wide,
+the divider at x 1271, `[data-canvas-strip]` at x 1272-1368, y 0-808, `[data-strip-count]`
+reads `1` with `CARD` under it, `OPEN` at x 1288-1336, y 760-808, `[data-talk]` at
+x 1280-1344, y 824-888, and `data-wall-state` is unchanged (`tour`).
+When at t = 320 s a second screen B (another context, `canvas` layout) sends `put a second note`
+and the fake agent places a `text` card `later`,
+Then screen A shows `data-canvas="open"` in the frame its `turn.start` arrives, the column is back
+at x 760-1368 within 0.3 s of it, and `later` is drawn top left of the card area
+(`c4-show-canvas.md` §7.2).
+When nothing touches screen A for 300 s after that turn's `turn.end` (time T),
+Then at T + 300 s it is a strip again with the count `2` and `CARDS`.
+When the owner taps the strip at y 400 at T + 301 s,
+Then it opens within 0.3 s, and the tap does nothing else (no card, no node acts).
+When it is a strip again (T + 601 s) and the owner presses the talk button at T + 610 s,
+Then `data-talk="listening"` on that press and `data-canvas="open"` in the same frame.
+Second case, it stays open, each from a fresh page with the last touch at t = 0 s: a draft
+`check the` in the input (blurred); a turn running from t = 0 s to 400 s (`c4-cards`'s `long-turn`), which
+folds at 700 s and not before; a countdown bound to `job-0003` (this run waits for the Jobs
+slice). At t = 600 s `data-canvas` is still `open` in each. In `canvas` and `switch` layouts the
+root has no `data-canvas` at t = 600 s.
+Third case, room down: the room's link stops at t = 100 s; at t = 300 s it is a strip, and from
+then `AWAY` shows under the count; the room coming back does not open it.
+Reduced motion (`reducedMotion: 'reduce'`): the column is gone in the first frame at t = 300 s,
+no `transform` transition runs.
+Test: Playwright with `page.clock.install()` and `runFor`, the room under test with the fake agent
+(`stand-ins.md` §1.2, script `c4-cards`'s `one-card` and `second-card` steps), T from `GET
+/sent?type=turn.end`; assert
+`data-canvas`, `boundingBox()` of the column, `[data-canvas-strip]`, `[data-strip-count]`, the
+`OPEN` label and `[data-talk]` at the times above; sample the wall half's width every
+frame (`requestAnimationFrame`) through a fold and an open: it takes only the values 759 and 1271
+(one resize each, never one per frame); the room-down case with `POST /link {"up":false}`.
 
 ## 9. The Wall contract (T31)
 

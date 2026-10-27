@@ -301,7 +301,9 @@ C4. From `reviews/21-owner.md` (8). Spec: D9, S-SCR-01.
 - b) Collapses to a 96 px strip with a card count when idle, grows when a card arrives.
 
 Recommendation: b) — the Wall is "the one place to see" the fleet; half-empty black costs it 44 %.
-The spec is still written for a) (D9, `c4-show-canvas.md` §7.1); T130 writes b).
+The spec is written for b) (T130): `screens.md` §1.1, the strip after 300 s idle, D9, D284, D285,
+S-SCR-38. With a) §1.1, the strip rows of `screens.md` §4.1 (F2) and `c4-show-canvas.md` §7.1,
+D284, D285 and S-SCR-38 go.
 
 Answer: (open)
 
