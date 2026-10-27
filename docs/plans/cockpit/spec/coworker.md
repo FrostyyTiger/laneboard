@@ -151,8 +151,8 @@ whose node already has a `status` card on the canvas gets no second card. The ca
   sees the block and gets no marker.
 - Cleared on that screen when its pane opens (the cockpit button, `CHAT`, or a talk press); the
   other screens keep theirs. A newer `urgent` block turns a `needs-you` dot `--p1`.
-- The pane opens scrolled to the first raised block since that screen last had it open (T66's
-  `SINCE YOU LOOKED` divider sits above it).
+- The pane opens on the first item that came in since that screen last had it open, under the
+  `SINCE YOU LOOKED` divider (`c1-talk.md` §2.1, S-C1-44).
 - On a touring screen the screen itself flies to the item's node and holds it for 300 s
   (`screens.md` §2.1, D219, S-SCR-34); the room sends no camera move of its own.
 

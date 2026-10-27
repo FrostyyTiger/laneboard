@@ -205,17 +205,17 @@ S-C3-01 S-C3-02 S-C3-06 S-C3-09 S-C3-10 S-C3-11 S-C3-12 S-C3-13 S-C3-14 S-C3-15 
 ### 3.4 Speak: the agent speaks up
 
 **Builds**: the room's watcher of alerts, Morning and Stuck; agent-started turns; the marker on the
-talk button (pending Q-O11); the `SINCE YOU LOOKED` divider (T66); quiet hours and per-kind mute.
+talk button (pending Q-O11); the `SINCE YOU LOOKED` divider (`c1-talk.md` §2.1, D233); quiet hours and per-kind mute.
 
 **Builds also** (`coworker.md` §7-§8): the infra repo pull and the `infra` tool, the Map drift
 trigger, the repo drift check; the `speakup` message (T127).
 
-**Scenarios** (13): S-CW-01 S-CW-02 S-CW-03 S-CW-04 S-CW-05 S-CW-06 S-CW-07 S-CW-08 S-CW-09
-S-CW-15 S-CW-16 S-CW-17 S-SCR-34. Planned: T66's divider scenario (one `S-C1-` id). The slice
+**Scenarios** (14): S-CW-01 S-CW-02 S-CW-03 S-CW-04 S-CW-05 S-CW-06 S-CW-07 S-CW-08 S-CW-09
+S-CW-15 S-CW-16 S-CW-17 S-SCR-34 S-C1-44. The slice
 cannot be built until T127 is written. The touring-screen hold (`screens.md` §2.1) needs `flyTo(id)`,
 a node lookup and the idle hook of the Wall contract (`screens.md` §9): this slice builds them, Show reuses them.
 
-**Done-when**: §2's slice rule for these ids and those T23 and T66 write; Q-O5 answered.
+**Done-when**: §2's slice rule for these ids and S-C1-44; Q-O5 answered.
 
 ### 3.5 Canvas: C4, first canvas night
 
@@ -309,7 +309,7 @@ by the task that writes them.
 | S-C4-13, 24 | Jobs |
 | S-C4-14..23 | Canvas |
 | S-C4-25..33 | Canvas 2 |
-| S-CW-01..09, 15, 16, 17; S-SCR-34 | Speak |
+| S-CW-01..09, 15, 16, 17; S-SCR-34; S-C1-44 | Speak |
 | S-CW-10..14 | Jobs |
 | S-C5-01..07 | C5 |
 | S-C6-01..05 | Jobs |
@@ -320,7 +320,7 @@ by the task that writes them.
 | S-ONE-01..07 | One |
 
 Retired ids, in no slice and never reused: S-C1-24 (T50), S-C2-18 and S-C2-19 (now S-C2B-01/02,
-D55). 201 live ids in all (round 125, S-SCR-36 by T65).
+D55). 202 live ids in all (round 126, S-C1-44 by T66).
 
 The check a round runs after changing any scenario: every id that `grep -ohE
 'S-(SCR|C1|C2|C2B|C3|C4|CW|C5|C6|SEC|ONE)-[0-9]+' spec/*.md | sort -u` prints is either retired

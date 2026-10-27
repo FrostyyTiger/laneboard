@@ -146,7 +146,8 @@ button in the talk button's rect and these rules apply to it unchanged.
   (`docs/design.md` rule 5). The pane is in place ≤ 0.2 s after the tap (B7).
 - While open, the opener stays in its rect and reads `CLOSE`; a tap closes the pane. `CLOSE` in
   the header does the same (D116).
-- The conversation is scrolled to its end: the latest turn is in sight.
+- The conversation is scrolled to its end: the latest turn is in sight. When something came in
+  while this screen's pane was closed, it opens on the first of it instead (§2.1).
 - The input gets the keyboard focus only when the page's pointer is fine (a mouse, a paired
   keyboard: `matchMedia('(pointer: fine)')`); on a touch screen it does not, so the on-screen
   keyboard does not cover half the pane on every open (D20). A tap in the input brings the keyboard.
@@ -178,6 +179,53 @@ conversation (`· SENDING` on the prompt, `●` on a tool line, the `▍` cursor
 
 The `●` is `--text-2`, static (nothing blinks for decoration). Speaking up without a prompt
 (`coworker.md`) uses the same states.
+
+### 2.1 Since you looked (T66, D233, D234)
+
+`reviews/44-operator.md` finding 5: at 07:30 the morning question is "what needs me", and the
+answer must not be "scroll and read". When things came into the conversation while **this
+screen's** pane was closed, the pane opens on the first of them, under a divider.
+
+- **Looked at.** Each screen has one time, `lookedAt`: the moment its pane last closed (`CLOSE`,
+  `Esc`, the opener, the auto-close of D5). While the pane is open, or is a column (`split`,
+  `canvas`, `switch`, pending Q-O12), there is none: that screen is looking. A screen whose pane
+  never opened since it was paired has its pairing time.
+- **What counts as new**: every item of the conversation whose time is after `lookedAt`: a turn
+  (its `at`, the owner's from any screen and the agent's own), a raised block (`coworker.md` §3.2,
+  its `at`) and a `NEW CONVERSATION` divider (§11, its `at`). A turn that was already running when
+  the pane closed is not new, even if its text ends later. Turns typed or spoken at another screen
+  count: the divider says what this screen has not shown, not what the owner has not seen (D233).
+- **The divider** `[data-cockpit-since]`, drawn when the pane opens and at least one item is new,
+  right above the first new item: the look of §11's divider (a full-width row, 48 px tall, 1 px
+  `--line` rules left and right of 16 px caps `--text-3`). Text, written as one upper-case DOM
+  string (no CSS `text-transform`): `SINCE YOU LOOKED · ` and `lookedAt` by `clockText` of
+  `README.md` "Times on the screen" (D232), upper-cased: `SINCE YOU LOOKED · 22:40`,
+  `SINCE YOU LOOKED · YESTERDAY 22:40`, `SINCE YOU LOOKED · 25 OCT 22:10` (D234). The longest,
+  34 characters, is about 330 px of the 560 px column. It is a label, not a tappable: no pressed
+  state, no handler.
+- **The opening scroll.** The pane opens scrolled so the divider's top is the conversation's
+  visible top, in the same frame as the slide's start. If what sits below the divider is shorter
+  than the visible conversation, the view is at its end instead (pinned, §4) and the divider stands
+  where it falls. Otherwise the view is unpinned and `↓ NEW` shows (§4): one tap to the end. This
+  wins over "opens at its end" (§2) and over a scroll position kept from before the close.
+- **While the pane stays open** the divider stays where it is; new turns go below it as usual,
+  `SEND` pins to the end (§7). **At the close** it is removed, in the same frame; the next open
+  draws it again only above items newer than this close. With nothing new the pane opens as §2
+  says, with no divider.
+- **Older than the drawn turns.** If the first new item is not among the 50 turns drawn (D27), the
+  screen asks `history` (`protocols.md` §3.7) until it holds it, at most 3 times (200 turns); past
+  that the divider sits above the oldest drawn turn, under `SHOW EARLIER`.
+- **The marker** (`coworker.md` §3.4, pending Q-O11 c) goes in the first frame of the open, as
+  there; the divider is what the dot pointed at.
+- **Where `lookedAt` lives.** The screen keeps its own while its page runs. The room keeps one per
+  screen from the `focus` messages (`protocols.md` §3.8: `pane` going from `open` or `column` to
+  `closed` sets it to that message's `at`; a link lost with the pane open sets it to the loss's
+  time) and sends it in `welcome` as `lookedAt` (`protocols.md` §2.2). A fresh page (a reload, the
+  tablet rebooted) takes the room's; a reconnecting page keeps its own. So the 07:30 view after a
+  night in which the screen restarted is the same, as long as the room still holds the turns:
+  under Q-O24 a) or b) it does (`protocols.md` §11.7.1); under Q-O24 c) a reload shows an empty
+  conversation and no divider.
+- Not in the demo's static mode (§15): its canned conversation has no "before".
 
 ## 3. A turn in the conversation
 
@@ -320,7 +368,8 @@ The room keeps the conversation on disk for 30 days, so a room restart shows the
   96 px wide, 16 px caps `--text-1` on `--bg-elevated`, 1 px `--line-strong` border, 16 px above
   the input row or the stack on it, centred, or right-aligned at x 1264 while a chip shows (§1.1). A tap jumps to the end (instantly, no smooth scroll: `docs/design.md`
   rule 5) and pins again; scrolling back down by hand does the same (D26).
-- Opening the pane always shows the end, unless the owner had scrolled up before closing it (§2).
+- Opening the pane shows the end, unless something came in while it was closed (the
+  `SINCE YOU LOOKED` divider at the top, §2.1) or the owner had scrolled up before closing it (§2).
 
 ## 5. Tool lines
 
@@ -1527,6 +1576,32 @@ Test: Playwright, one context, two pages; `advance(ms)` (`stand-ins.md` §1.2) b
 assert the label, the line's exact text, `prompts().length` and the audit lines read with
 `laneboard audit --file`. The case with two device tokens (each its own 10) runs in the Pair
 slice (Q-O21), as S-C1-23's.
+
+### S-C1-44 Three speak-ups in the night: the pane opens on them, under `SINCE YOU LOOKED` (T66, D233)
+Given the room under test with quiet hours `22:00`-`07:00` (`coworker.md` §4), the fake agent on
+script `cw-speak` (every speak-up answered with two sentences, about 120 characters), two paired
+screens: `desk` on the Wall page in `wall` layout and `hall` in `split` (the conversation a
+column); on 26 Oct at 22:35 the owner asked `anything left for tonight?` on `desk`, got the answer,
+and tapped `CLOSE` at 22:40:00,
+When P1 alarms are added at 03:00:00, 04:00:00 and 05:00:00 (each its own block, `RAISED · 03:00 ·
+QUIET` and so on, each answered by an agent turn), and at 07:30:00 the owner taps `CHAT` on `desk`,
+Then on `desk`, in the first frame of the open, the dot on the talk button is gone; by 0.2 s
+`[data-cockpit-since]` reads exactly `SINCE YOU LOOKED · YESTERDAY 22:40`, its next item is the
+`RAISED · 03:00 · QUIET` block, its top is the conversation's visible top (± 1 px), the 22:35
+turn is above it out of sight, and `↓ NEW` shows (the three blocks and three turns are taller
+than the visible conversation);
+And on `hall` there is no `[data-cockpit-since]` and the conversation is at its end;
+And when the owner taps `↓ NEW`, the view is at the end and the divider stays; when `desk`'s pane
+is closed at 07:31:00 and opened at 07:32:00, there is no divider and the view is at the end;
+And when a fourth P1 alarm is added at 07:40:00 with `desk` closed and `desk` is reloaded at
+07:41:00 and its pane opened at 07:42:00, the divider reads `SINCE YOU LOOKED · 07:31` above
+`RAISED · 07:40` (the room's `lookedAt` from `welcome`).
+Test: Playwright, two contexts, `page.clock` and the room's clock moved together with `advance(ms)`
+(`stand-ins.md` §1.2), alarms by `POST /alarms`; the divider's `textContent`; its
+`nextElementSibling` matches `[data-raised]`; its `getBoundingClientRect().top` against
+`[data-cockpit-conversation]`'s; `[data-cockpit-follow]` visible; `data-speakup` absent; the
+`welcome` frame's `lookedAt` read with `page.on('websocket')` after the reload. Runs in the Speak
+slice (`slices.md` §3.4).
 
 ## 15. The demo (`?demo=1`, T36/T76/T93)
 

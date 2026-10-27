@@ -108,7 +108,7 @@ app shows travels in `focus.route` (§3.8), never in `hello`.
 {"type":"welcome","re":1,"protocol":1,"screen":"desk","epoch":"r-5f2c9a","seq":1291,
  "conversation":"c-0007","resume":"replay",
  "config":{"stt":"on","languages":["en","de"],"maxPromptChars":8000},
- "status":null,"now":"2026-10-27T07:02:11.480+01:00"}
+ "status":null,"lookedAt":"2026-10-26T22:40:00+01:00","now":"2026-10-27T07:02:11.480+01:00"}
 ```
 
 | Field | What |
@@ -120,6 +120,7 @@ app shows travels in `focus.route` (§3.8), never in `hello`.
 | `config.stt` | `on` or `none` (`c2-voice.md` §9: `none` draws no talk button) |
 | `config.languages` | `cockpit.stt.language` as a list (`["auto"]` for `auto`), for the language button (D48) |
 | `status` | the room's status line or `null` (§3.5) |
+| `lookedAt` | when this screen's pane last closed, as the room saw it in `focus` (`c1-talk.md` §2.1, D233); a fresh page draws `SINCE YOU LOOKED` from it, a reconnecting page keeps its own |
 | `now` | the room's clock; on a skew over 2 s the screen sets `performance.mark('cockpit:skew', {detail:{ms}})` and one `console.warn('cockpit: clock skew', ms)`, once per page load, and changes nothing else (D142) |
 
 **Replay or snapshot** (D94). The room keeps its last **2 000** `seq`'d messages in memory. It
@@ -307,7 +308,7 @@ and not listed. Field values and ranges are in the section named.
 
 | `type` | `seq` | Required | Optional | § |
 | --- | --- | --- | --- | --- |
-| `welcome` | no (its `seq` field is the room's current count) | `re`, `protocol`, `screen`, `epoch`, `seq`, `conversation`, `resume`, `config` (`stt`, `languages`, `maxPromptChars`), `status\|null`, `now` | — | 2.2 |
+| `welcome` | no (its `seq` field is the room's current count) | `re`, `protocol`, `screen`, `epoch`, `seq`, `conversation`, `resume`, `config` (`stt`, `languages`, `maxPromptChars`), `status\|null`, `lookedAt`, `now` | — | 2.2 |
 | `snapshot` | the `seq` it reflects, not counted | `seq`, `part`, `parts`, `conversation`, `startedAt`, `olderTurns`, `turns`, `pins`, `cards` | `screens`: the conversation's `screen.paired`/`screen.unpaired` events, `[{"event":"paired","name":"desk2","at":"…"}]`, last 20 (`screens.md` §6.3) | 2.2 |
 | `heartbeat` | no | `at` | — | 2.2 |
 | `error` | no | `re`, `code`, `message` | — | 2.3 |
@@ -1044,6 +1045,7 @@ agent's own user cannot read them, Q-O10):
 | `session.json` | conversation id and agent session (§11.7) | when a session's `ready` comes |
 | `conversation.jsonl` | the current conversation: one `conversation` line, then `turn` lines | see below |
 | `old/{conversation}.jsonl` | an earlier conversation, same format | renamed there at `conversation.new` (§3.6) |
+| `looked.json` | `{"desk":"2026-10-26T22:40:00+01:00",…}`: each paired screen's `lookedAt` (`c1-talk.md` §2.1) | when one changes; a screen's entry goes at its unpair |
 
 **Lines.** One JSON object per line, appended with one `write` per line:
 
