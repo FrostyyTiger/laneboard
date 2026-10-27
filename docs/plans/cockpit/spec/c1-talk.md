@@ -631,7 +631,7 @@ row):
 ## 6. Scenarios
 
 The fake agent (T18) replays scripted turns: text deltas with times, tool calls and their ends.
-Every scenario runs at 1368x912 against the demo hub, the stand-in room and the fake agent, on a
+Every scenario runs at 1368x912 against the demo hub, the room under test and the fake agent, on a
 paired screen.
 
 ### S-C1-01 The pane opens from the Wall in 0.2 s and leaves the wall in sight (pending Q-O11)
@@ -1163,7 +1163,7 @@ something." Written for Q-O17's recommendation d) (T50, `reviews/36-skeptic.md` 
 
 ## 14. Scenarios, part 2
 
-Same setup as §6: 1368x912, the demo hub, the stand-in room and the fake agent, a paired screen
+Same setup as §6: 1368x912, the demo hub, the room under test and the fake agent, a paired screen
 named `desk`, the pane open in `wall` layout unless said otherwise.
 
 ### S-C1-14 Typing: Enter sends, Shift+Enter breaks the line, the input grows to 4 lines
@@ -1171,12 +1171,12 @@ Given the pane open, the conversation idle, the input empty,
 Then `SEND` is disabled; typing three spaces leaves it disabled.
 When the owner types `how is` then `Shift+Enter` then `builder-a` then `Enter` at t = 0,
 Then by t = 0.1 s the conversation ends with `YOU · HH:MM · SENDING` over the two lines `how is` /
-`builder-a`, the input is empty and 64 px tall, `data-turn="thinking"` (B8); when the stand-in room
+`builder-a`, the input is empty and 64 px tall, `data-turn="thinking"` (B8); when the room under test
 confirms, `· SENDING` goes.
 And typing 6 lines (with `Shift+Enter`) makes the input 182 px tall with its own scrollbar, its
 bottom edge where it was, `SEND` still at the row's bottom.
 Test: Playwright `keyboard.type`/`press`; read the prompt text, the input's height and bottom, the
-`SEND` rect and `disabled`; the stand-in room's received-turns log has `how is\nbuilder-a`.
+`SEND` rect and `disabled`; the fake agent's log (`fakeAgent.prompts()`) has `how is\nbuilder-a`.
 
 ### S-C1-15 Too long a prompt cannot be sent
 Given the pane open,
@@ -1219,21 +1219,21 @@ page's clock and computed `text-transform` `none`; the fake agent's log (`stand-
 one `interrupt` line with `cancelled` `null`, one `signal` `SIGINT` line and no `SIGTERM` line.
 
 ### S-C1-18 A prompt the room never confirms is not sent again on its own
-Given the stand-in room scripted to accept the socket but drop the next prompt without a
+Given the room under test armed (`POST /drop {"what":"next-prompt"}`) to accept the socket but drop the next prompt without a
 confirmation,
 When the owner sends `restart the tour` at t = 0,
 Then at t = 5 s the label reads `YOU · HH:MM · NOT SENT` with the message
 `Not sent: the room did not confirm within 5 s.` and `RETRY`, `EDIT`; at t = 60 s nothing more has
 been sent. A tap on `EDIT` removes the block and puts `restart the tour` in the input; a tap on
 `RETRY` (second run) sends it once, as a new turn.
-Test: Playwright with a fake clock; the stand-in's drop-next verb (T32); assert texts, the input
+Test: Playwright with a fake clock; the room's `POST /drop` (`stand-ins.md` §1.2); assert texts, the input
 value, and the room's received-turns count (0, then 1).
 
 ### S-C1-19 The agent's process dies mid-turn
 Given a reply half drawn,
 When the fake agent exits with code 1 at 07:04,
 Then within 1 s the turn shows `The agent stopped unexpectedly at 07:04. The room is starting it
-again.`, `data-turn="idle"`; when the stand-in has restarted the agent it changes to `The agent is
+again.`, `data-turn="idle"`; when the room under test has restarted the agent it changes to `The agent is
 back (07:04). Your last message was not answered.` with `RETRY`; nothing is sent until `RETRY` is
 tapped.
 Test: Playwright; the fake agent's `exit` step; assert the two texts and the received-turns log.
@@ -1299,7 +1299,7 @@ When page A sends `how is builder-a` at t = 0,
 Then by t = 0.5 s after the room has it, page B shows `YOU · HH:MM` (no screen name, §12) over
 `how is builder-a`, and the reply streams on both; a draft `stop` typed on B never appears on A;
 `STOP` tapped on B stops the turn on both; `NEW` tapped on A shows the bar on A only.
-Test: two Playwright browser contexts against one stand-in room; assert labels, drafts and
+Test: two Playwright browser contexts against one room under test; assert labels, drafts and
 `data-turn` on both. A test with two device tokens waits for the pairing slice (Q-O21).
 
 ### S-C1-24 (retired, T50)
@@ -1320,7 +1320,7 @@ Test: Playwright; sample `[data-tool-line]` texts and their `●` every 100 ms; 
 read its rows; the second case reorders the ends in the script.
 
 ### S-C1-26 A fresh screen says it is connecting, then never shows a blank pane
-Given the stand-in room holding the conversation `c-0007` with 3 turns, and a page loaded at t = 0
+Given the room under test holding the conversation `c-0007` with 3 turns, and a page loaded at t = 0
 with the room's outbound `welcome` held back 2 s (the outbound fault hook, `stand-ins.md` §1.1),
 When the owner opens the pane at t = 0.5 s,
 Then `data-cockpit="connecting"`, the conversation shows exactly `Connecting to the cockpit room…`,

@@ -285,7 +285,7 @@ One tap on `UNDO` puts back what the command changed, on every screen it changed
 
 ## 6. Scenarios
 
-Harness as `c3-see.md` §7: the demo hub with its fake builders, the stand-in room, and the fake agent
+Harness as `c3-see.md` §7: the demo hub with its fake builders, the room under test, and the fake agent
 (T18) whose scripts call the show commands at set times; Playwright at 1368x912 on paired screens.
 B5 is read from the marks `cockpit:B5:start` (the room's receive time, carried in the `show`
 message) and `cockpit:B5:end` (`README.md` speed budget). Camera positions are read with
@@ -954,7 +954,7 @@ Test: the result; switch layout; read the digits against the clock.
 ### S-C4-23 The room goes down: the canvas says so, cards freeze, then catch up
 Given `side` in `canvas` at 06:41:00 with a `status` card on `vm-b` reading `▲ WARN`, a `countdown
 {"until":"+90m"}` and a `text` card,
-When the stand-in room stops its link at t = 0 s,
+When the room under test stops its link (`POST /link {"up":false}`) at t = 0 s,
 Then at t = 4.9 s nothing has changed; at t = 5 s `[data-cockpit-down]` (80 px tall) reads
 `Cockpit room unreachable since 06:41 (0 min). Cards show their last values.`, the status and countdown
 cards carry `STALE` and the `text` card does not, the countdown reads `01:29:55` and keeps
@@ -970,19 +970,19 @@ the first status card reads `● OK` within 10.3 s (the room's next read, §7.5)
 longer lists the `text` card.
 And given a canvas with no card, at t = 5 s it reads `The cockpit room is unreachable, so the agent
 cannot place cards now.` and `Unreachable since 06:41 (0 min).`
-Test: Playwright with `page.clock`; `POST /link {"up":false}` and `{"up":true}` on the stand-in room
-(`stand-ins.md`); strip rect and text; `STALE` plates per `[data-card]`; read
+Test: Playwright with `page.clock`; `POST /link {"up":false}` and `{"up":true}` on the room under test
+(`stand-ins.md` §1.2); strip rect and text; `STALE` plates per `[data-card]`; read
 `<stateDir>/cockpit/cards.json` (D85) before and after the link is back.
 
 ### S-C4-24 A job's countdown with the room down: still counting, cancel waits
 Given `side` in `canvas` with the countdown on `job-0003` (S-C4-13) reading `03:00:00` at 07:12:00,
-When the stand-in room stops its link at 07:12:00,
+When the room under test stops its link at 07:12:00,
 Then at 07:12:05 the card carries `STALE`, its digits read `02:59:55` and keep counting, the line
 `The room is down: this job may not run.` shows under them and `CANCEL JOB` is `disabled`; a tap on
 it opens nothing.
 When the link comes back,
 Then within 1 s the line goes and `CANCEL JOB` is enabled.
-Test: Playwright with `page.clock`; the stand-in room's link; texts and `disabled` on
+Test: Playwright with `page.clock`; `POST /link` on the room under test; texts and `disabled` on
 `[data-card-cancel]`.
 
 ### S-C4-34 A flick over a checklist scrolls it and ticks nothing
@@ -1394,10 +1394,10 @@ Test: `page.clock`; card order by rect; the demo hub's job state; the frame's te
 ### S-C4-33 A card that freezes a screen is not run again after the reload
 Given `desk` in `canvas`, the only screen,
 When the fake agent places `hang.html` (a loop from its first line, never ready) and the test calls
-the stand-in room's `POST /link {"up":false}` (`stand-ins.md` §1.2) as soon as `context.on('request')`
+the room under test's `POST /link {"up":false}` (`stand-ins.md` §1.2) as soon as `context.on('request')`
 sees the card's frame request,
 Then the room marks the card off with `screen-lost` (no `card.render` came within 10 s of the
 frame); after `POST /link {"up":true}` and a reload of `desk`, the card's body reads `Why: a screen
 closed while drawing it.` and no second request for its frame is made.
-Test: stand-in room control; request log on `/api/cockpit/card/`; the card's body text; `cards`
+Test: the room under test's control API; request log on `/api/cockpit/card/`; the card's body text; `cards`
 lists it with `"off":"screen-lost"`.

@@ -788,7 +788,7 @@ the link that sent `touched` last gets it.
   marks included, to `docs/cockpit/protocol.md` in its first commit, and the test reads only that
   copy, so archiving `docs/plans/` breaks nothing. From that commit the copy is the protocol:
   changes go there, and this file's first line points to it.
-- **The stand-in room** (`stand-ins.md`, T18) speaks this protocol; the acceptance tests (D88) read
+- **The room under test** (the real room with a fake agent, `stand-ins.md` §1) speaks this protocol; the acceptance tests (D88) read
   the link from the page side with Playwright's `page.on('websocket')` and its `framesent` and
   `framereceived` events, so a scenario can assert "the screen sent `stop` with this `turnId`" or
   "the room sent `turn.end` `stopped`".

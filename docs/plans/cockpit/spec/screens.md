@@ -926,7 +926,7 @@ strip reads the same (`c4-show-canvas.md` §7.6). Retries keep running; when the
 
 ## 8. Scenarios, part 2
 
-The stand-in room (T18) can stop and start its room link, approve and revoke pairings, and the
+The room under test (`stand-ins.md` §1) can stop and start its room link, approve and revoke pairings, and the
 demo hub can be stopped, so each scenario runs without hardware.
 
 ### S-SCR-13 An unpaired screen: the board works, the pane shows a code (pending Q-O21)
@@ -939,7 +939,7 @@ When the owner taps `CHAT`, the pane shows the same card and the same code; `CHA
 The talk button is `data-talk="off"` (`c2-voice.md` §3) in its §4 rect; a press on it opens no
 microphone: an unpaired screen sends no audio; with the pane closed it opens the pane on the
 pairing card (`c2-voice.md` §3, D179; S-SCR-32 is the room-down case).
-Test: Playwright against the demo hub and the stand-in room with an empty token store; assert the
+Test: Playwright against the demo hub and the room under test with an empty token store; assert the
 attribute, the regex, the countdown text at 0 s and (fake clock) 60 s: `4:00`; tap `CHAT`; read
 `[data-talk]`'s rect and state; press it with `getUserMedia` wrapped to count calls: 0.
 
@@ -961,7 +961,7 @@ Given an unpaired screen showing a code at t = 0 s,
 When nobody approves it,
 Then at t = 300 s a different code is shown and `Code valid for 5:00.` starts again; and
 `laneboard cockpit pair <old code>` exits 1 with `code <old code> is unknown or expired`.
-Test: Playwright with a fake clock on the screen and a stand-in room whose clock is moved 300 s;
+Test: Playwright with a fake clock on the screen and the room under test's clock moved 300 s (`POST /clock`);
 assert the two codes differ, run the CLI with the first, check exit code and output.
 
 ### S-SCR-16 Unpairing a screen takes the cockpit away at once, the board stays (pending Q-O21)
@@ -978,7 +978,7 @@ expect 401.
 
 ### S-SCR-17 The room goes down: the cockpit says so after 5 s, the board keeps going
 Given a screen in `wall` layout, live, touring, the pane open with a draft `how is the`,
-When the stand-in room stops its link at t = 0 s (06:41),
+When the room under test stops its link at t = 0 s (06:41),
 Then at t = 4.9 s nothing has changed; at t = 5 s `data-cockpit="room-down"`, the status line under
 the pane's header is 80 px tall and reads `Cockpit room unreachable since 06:41 (0 min). Retrying
 in …` with `RETRY NOW` (48 px tall) at its right end, the line `Sending and voice come back with
@@ -987,14 +987,14 @@ the room.` sits above the input row, `SEND` is disabled, the talk button has `da
 night` makes it `how is the night`); the wall half is `data-wall-state="tour"` and flying
 throughout.
 The canvas half of this outage is S-C4-23.
-Test: Playwright with `page.clock`; `POST /link {"up":false}` on the stand-in room; assert at 4.9 s
+Test: Playwright with `page.clock`; `POST /link {"up":false}` on the room under test; assert at 4.9 s
 and 5 s; the status line's rect height 80 ± 1 px; type into the input; `disabled` on `SEND`,
 `aria-disabled="true"` and no `disabled` on the talk button; the talk button has no child element
 beyond its label and glyph.
 
 ### S-SCR-18 A blip under 5 s shows nothing
 Given a live screen,
-When the stand-in room drops its link at t = 0 s and accepts the reconnect at t = 2 s,
+When the room under test drops its link at t = 0 s and accepts the reconnect at t = 2 s,
 Then `data-cockpit` is `live` at every sample from 0 s to 10 s and no status line (nor, on a
 canvas, strip) appears.
 Test: Playwright with a fake clock; sample the attribute and count `[data-cockpit-down]` elements
@@ -1006,8 +1006,8 @@ Given S-SCR-17's screen in `room-down` since the loss at t = 0 s, retrying as §
 When the room is started again at t = 60 s, having answered one turn meanwhile,
 Then the next try, the 8th at t = 65.1326 s, is accepted, and by t = 66.2 s `data-cockpit="live"`; the pane line reads `Back since
 06:42.` for 5 s, then goes; the missed turn is in the conversation in order; `SEND` and the talk
-button are enabled; the draft `how is the` is in the input and no prompt was sent (the stand-in's
-log shows no new user turn). (The canvas catching up is S-C4-23.)
+button are enabled; the draft `how is the` is in the input and no prompt was sent (the fake
+agent's log shows no new user turn). (The canvas catching up is S-C4-23.)
 When the owner taps `RETRY NOW` during a later outage, 3 s after its 3rd try (at t = 8.436 s), a
 try starts at once (a `cockpit:retry` mark with `attempt` 4 and `delayMs` 0); it fails, and the
 next try comes 9447.84 ms later (`attempt` 5).
@@ -1029,7 +1029,7 @@ Test: two Playwright tests (D263).
 - **What the screen shows, on `page.clock`** (it fakes `Date`, timers and `performance.now` in the
   page). From S-SCR-17's 06:41, `fastForward` past each retry; assert the texts, `Back since 06:42.`
   for 5 s, the missed turn in order, `SEND` and the talk button enabled, the draft in the input and
-  the stand-in's log of received turns with no new user turn. This test asserts no retry time.
+  the fake agent's log (`fakeAgent.prompts()`) with no new user turn. This test asserts no retry time.
 
 ### S-SCR-20 The room goes away mid-reply and mid-speech
 Given a live screen, the fake agent streaming a reply, half shown,

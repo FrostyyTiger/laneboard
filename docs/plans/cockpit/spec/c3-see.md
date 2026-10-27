@@ -663,8 +663,8 @@ Then within 0.2 s the menu is gone, `data-pane="open"`, `[data-cockpit-chip]` ha
 conversation's bottom edge is at y 744, no `getUserMedia` call was made, `document.activeElement` is
 not the input, and the room has a `focus` message from `desk` with `route.sel = "node:room-b"`.
 Test: Playwright, `getUserMedia` wrapped by an init script that counts calls; asserts the chip's
-attributes, text and box, the count 0, the active element, and the stand-in room's received-message
-log (T32).
+attributes, text and box, the count 0, the active element, and the `focus` frames the page sent on the room
+link (Playwright `framesent`, `protocols.md` §9).
 
 ### S-C3-11 Sending with a chip: one label, one context line, no board text in the prompt
 
@@ -721,8 +721,8 @@ Given `#/map` on `desk`,
 When a script selects 20 different nodes within 1.0 s (one per 50 ms),
 Then the room receives at most 3 `focus` messages from `desk` in that second plus one within 0.5 s
 after it, and the last one carries the 20th node's `sel`.
-Test: Playwright calls the Map's `select()` 20 times on a timer; asserts the stand-in room's
-received-message log (count and last `route.sel`).
+Test: Playwright calls the Map's `select()` 20 times on a timer; asserts the `focus` frames
+the page sent on the room link (Playwright `framesent`, `protocols.md` §9: count and last `route.sel`).
 
 ### S-C3-16 A bad focus message changes nothing
 

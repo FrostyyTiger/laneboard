@@ -457,7 +457,7 @@ Each word is defined here once; the other files link here instead of redefining 
   fleet) that replays recorded or scripted behaviour; tests run against stand-ins, and they double
   as the public demo (`stand-ins.md`). The three are the **room under test** (the real room behind
   a test wrapper with a control port), the **fake agent** and the **fake speech**; "stand-in room"
-  in older text means the room under test (`stand-ins.md`, the tables at its top).
+  in reviews and older notes means the room under test (`stand-ins.md`, the tables at its top).
 - **shim**: a small WebSocket server in front of a speech service that does not speak
   WhisperLiveKit's protocol; it sends the room the four messages of `c2-voice.md` §9 (D183).
 - **slice**: one build night's part of the cockpit, usable on its own the next morning

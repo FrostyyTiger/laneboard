@@ -6,7 +6,8 @@ is small enough to build in one round. Message shapes are not repeated here: the
 `protocols.md`'s, and a stand-in writes only shapes that appear there as fixtures (D98).
 
 There are three things, and the spec uses three names for them (T87, D109). The words "stand-in
-room" in earlier files mean the first one:
+room" meant the first one; T119 replaced them in every spec file, and the phrase table below stays
+for reviews and PROGRESS.md, which still use the old words:
 
 | Name | What it is | Process | Section |
 | --- | --- | --- | --- |

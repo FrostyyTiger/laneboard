@@ -211,7 +211,7 @@ so does the row's left end (`CANCEL`, below).
 
 ## 6. Scenarios
 
-Same setup as `c1-talk.md` §6: 1368x912, the demo hub, the stand-in room, the fake agent and the
+Same setup as `c1-talk.md` §6: 1368x912, the demo hub, the room under test, the fake agent and the
 fake speech service (T18), a paired screen, `wall` layout, the pane open, the conversation idle,
 unless said otherwise. Chromium runs with `--use-fake-device-for-media-stream` and
 `--use-fake-ui-for-media-stream`; touches go through CDP `Input.dispatchTouchEvent` with
@@ -231,7 +231,7 @@ When the owner taps again at t = 3.0 s (down 3.0 s, up 3.1 s),
 Then by t = 3.4 s (B3 from the up) the conversation ends with `YOU · SPOKEN · HH:MM · SENDING` over
 `What failed tonight?`, the input is the empty textarea, `data-talk="idle"`, `data-turn="thinking"`.
 Test: Playwright, CDP touches; poll `data-talk`, `data-send`, the input text every 50 ms; read the
-marks `cockpit:B1`…`B3`; the stand-in room's received-turns log has exactly one turn
+marks `cockpit:B1`…`B3`; the fake agent's log (`fakeAgent.prompts()`) has exactly one turn
 `What failed tonight?`.
 
 ### S-C2-02 Hold and release sends; a short press is a tap, not a send
@@ -258,7 +258,7 @@ Test: Playwright; record every distinct `textContent` of `[data-talk-text]` (Mut
 compare with the 4 expected strings exactly; computed colours of the two spans against the tokens.
 
 ### S-C2-04 Every state looks as the table says
-Given the stand-in room and fake speech, and for `error` a context whose microphone permission is
+Given the room under test and fake speech, and for `error` a context whose microphone permission is
 denied, for `off` the room's link stopped (T32's verb),
 When the screen is brought into each of `idle`, `listening`, `partial`, `final`, `error`, `off`,
 Then for each: the button's word (`TALK`, `SEND`, `SEND`, `…`, `TALK`, `TALK`), its fill (inverse in
@@ -294,7 +294,7 @@ words as a draft, the hint reads `MICROPHONE OFF · TEXT KEPT` and still at t = 
 sent; typing one character removes the hint.
 And for contrast (S-C2-05): the `MICROPHONE OFF` after nothing heard on a release still goes after
 5 s.
-Test: Playwright `page.clock` plus the stand-in's clock verb (T32); assert `data-talk`, the hint
+Test: Playwright `page.clock` plus the room's `POST /clock` (`stand-ins.md` §1.2); assert `data-talk`, the hint
 text at 35, 126 and 290 s, its absence after the `pointerdown` and after reopening, the textarea
 value, the received-turns count 0.
 
@@ -565,7 +565,7 @@ What the later `docs/cockpit.md` says, from research Q3. The microphone needs tw
 ## 13. Scenarios, part 2
 
 Setup as §6. The fake speech service (T18) can also be scripted to refuse a connect, not
-answer, fail mid-session and withhold the final; the stand-in room's config sets
+answer, fail mid-session and withhold the final; the room under test's config sets
 `cockpit.stt.language` per scenario.
 
 ### S-C2-11 Tap the live words to fix them: the microphone closes, the text is a draft, nothing sent
@@ -806,5 +806,5 @@ idle `desk` → `409 not-listening`; six calls within 1 s → the sixth `429 too
 `Retry-After: 1`; after `laneboard cockpit button remove hall` → `403 bad-token`; `porch` on a room with
 `cockpit.stt.url: "none"` → `409 voice-off`.
 And no refused call changes any screen's `data-talk`.
-Test: `node:test` against the stand-in room (no browser except for the last check); one case per
+Test: `node:test` against the room under test (no browser except for the last check); one case per
 row.
