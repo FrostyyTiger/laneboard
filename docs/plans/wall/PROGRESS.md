@@ -317,6 +317,26 @@ Notes for every builder round (planner, round 1):
   labels as the plate does) and the overview/flight framing keeps the sun out of the tag's corner — done when: a test
   finds no shown label box overlapping the tag's box at the overview and over `flightPose` samples on the large
   fixture, and a film frame shows the tag text whole.
+- [ ] T28 (§7 Night 4; r21-skeptic galaxy 1 and 2, §2.1) [ui] [variant:galaxy] One ranking for the banner and the
+  tour: T8's rule for every level, not only crit: the banner's subject is ranked by worst level, then oldest
+  (`firstSeen`), never by where the camera is (today a warn banner swaps `HV1` / `REMOTE` during one flight); the echo
+  rule (T9) may hide the line under its own plate but never picks another subject; the tour's first target comes from
+  the same ranking function, so the headline and the camera name the same place first — done when: a test with two
+  warns (and one with warn + calm) gets the same banner subject for every held site and camera position, a test finds
+  `tourOrder`'s first target equal to the banner's subject, and a `?pace=wall` film on the large demo shows no subject
+  change while the fleet is the same.
+- [ ] T29 (§7 Night 4; r21-skeptic galaxy 3, §2.1) [ui] [variant:galaxy] A down or crit member keeps its red at every
+  step and age: no grey fill after a while (a `no contact` member is a red outline at least, never grey); while a crit
+  is held the yellow attention halos drop one step so trouble stays the loudest thing — done when: a test on the large
+  fixture with VM-C down for 15 s and for 60 s finds its member colour/ring the crit token at the site step, and a
+  warn halo's intensity lower while a crit is held than at the overview; a film frame at the VM-C hold shows red on the
+  member inside the brackets.
+- [ ] T30 (§7 Night 4; r21-skeptic galaxy 4, §2.1) [ui] [variant:galaxy] A held crit does not blank to update a number:
+  a value change of the same problem (same subject, same level) updates the plate in place, no fade, no retype; retype
+  only on a change of subject or level; the `NO CONTACT FOR 15S` counter ticks every second on the client or is
+  replaced by a time that cannot go stale (`NO CONTACT SINCE 06:58`) — done when: a page test on a fake clock finds the
+  plate's opacity unchanged and no typing restart when only the age changes, and the text never lags the clock by more
+  than 1 s over 30 s.
 
 ## Research questions
 
@@ -338,6 +358,19 @@ Notes for every builder round (planner, round 1):
   a cost guess) — for T17
 
 ## Later
+
+From r21-skeptic (triage, night 4; not tasks yet):
+- (r21-skeptic galaxy 5) A second red `■ VM-C` (the site lobe's leashed name) far from the member: `named()` also hides the lobe/site label carrying the plate's subject.
+- (r21-skeptic galaxy 6) Trouble plate says it three times: drop kicker `TARGET n / N`, the `STATUS` row, `CPU/MEM` and `HOLDS n rooms` on trouble plates; attention lines one step smaller (owner question (a)).
+- (r21-skeptic galaxy 7, touch 1) Explore sheet echoes the banner: run `bannerEcho` for the sheet as for the tour plate.
+- (r21-skeptic galaxy 8) Remove `+N MORE` and the flickering fleet facts line from the overview banner; milder count only as a stable number.
+- (r21-skeptic galaxy 9) Tag is `LIVE` / `STALE 2M` only (with T27).
+- (r21-skeptic galaxy 10) A system that opens fades its nebula; the trouble member's glow carries the colour.
+- (r21-skeptic galaxy 11) Calm hold: one fact line or no plate, never the star's name alone (= r11-dreamer galaxy 2).
+- (r21-skeptic galaxy 12) Date under the clock removed (= r26-skeptic 9).
+- (r21-skeptic fx-beacon 1) Beacon: age as width, or remove; (fx-warp 1, 2) covered by T15, T21.
+- (r21-skeptic touch 2) `MANUAL · TOUR IN 0:54` is tag-sized: kicker says `MANUAL`, or the `▶ TOUR` box carries the countdown.
+- (r21-skeptic across) The single-warn banner takes the two-crit form (`▲ 2 ATTENTION · HV1 · REMOTE`) (with T28).
 
 From r11-dreamer (triage, night 4; not tasks yet):
 - (r11-dreamer galaxy 2) Calm holds are empty: one real-facts line on the calm plate (owner question (b)), system framed centre-right (= r54-film-ui 8 below).
@@ -567,6 +600,9 @@ Carried from night 2's `## Later` (reviews named there, `nights/night-2/reviews/
 - (r21-skeptic, tooling) On this VM, from about 06:30 on 2026-10-27, Chrome's CPU throttle (`film.mjs --cpu` above 1)
   stalls every page, `wall.html` included and the T9 commit too (1 frame in about 70 s), so `film.mjs` times out with
   no frames. r21 filmed at `--cpu 1`. Rounds that film at 4x will hang until the VM or Chrome is looked at.
+From r21-skeptic (taste; the skeptic's answers to the open questions, not decisions): (a) remove the kicker `TARGET n / N`;
+(b) calm plate: one fact line or none; (c) keep the sun's name, tag says only `LIVE`/`STALE`; (d) remove the beacon
+unless its width grows with age. No new `fx` proposals.
 From r11-dreamer (`fx` candidates, none asked for; not tasks):
 - `fx=alert`: when a site's rollup rises, one thin ring in its hue goes out from the site across the plane, once
   (the banner type-in is T22, not an effect).
@@ -618,6 +654,10 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
   crit framing, T26 grey hyperlanes, T27 tag as label cover). Dropped as covered: galaxy 1 (T8), 3 (T23), 5 (T22),
   7 (T24), warp 1 (T21); galaxy 6 and touch 2 (no fix). Rest in Later; no fx proposals.
 
+- r21 skeptic → reviews/r21-skeptic.md. 13 galaxy + 1 beacon + 2 warp + 3 touch findings; 3 became tasks (T28 one
+  ranking for banner and tour, T29 crit member stays red, T30 held crit updates in place). Dropped as covered: galaxy 13
+  (T24), tag overlap in 9 (T27), warp 1-2 (T15, T21), touch 3 (no fix). Rest in Later; questions (a)-(d) answers under For the owner.
+
 ## Scores
 
 | round | persona | overview | legibility | status | touch | wow | calm | performance |
@@ -631,5 +671,8 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 16 | operator (galaxy) | 6 | 7 | 5 | 6 | 6 | 5 | 6 |
 | 16 | operator (fx-beacon) | - | - | - | - | 4 | 7 | - |
 | 16 | operator (fx-warp) | - | - | - | - | 6 | 3 | - |
+| 21 | skeptic (galaxy) | 7 | 7 | 5 | 6 | 6 | 4 | 6 |
+| 21 | skeptic (fx-beacon) | - | - | - | - | 4 | 6 | - |
+| 21 | skeptic (fx-warp) | - | - | - | - | 6 | 3 | - |
 
 ## Morning
