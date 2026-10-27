@@ -184,8 +184,9 @@ The `●` is `--text-2`, static (nothing blinks for decoration). Speaking up wit
 A turn is drawn top to bottom in the order things happened: the prompt, then the reply's text
 blocks, tool lines (§5) and show lines (`c4-show-canvas.md` §4) interleaved as the agent produced them.
 
-- **Label row** above the prompt and above the reply, 24 px tall, 16 px caps `--text-3`:
-  `YOU · 07:02` (`YOU · SPOKEN · 07:02` for a voice prompt, C2) and `AGENT · 07:02`. Time is the
+- **Label row** `[data-turn-label]` above the prompt and above the reply, 24 px tall, 16 px caps
+  `--text-3`, with the cockpit's rule (§3 "The cockpit's own lines", D227): a 2 px `--line-strong`
+  left border and 8 px padding left: `YOU · 07:02` (`YOU · SPOKEN · 07:02` for a voice prompt, C2) and `AGENT · 07:02`. Time is the
   screen's local `HH:MM`, 24 h; a date is `D Mon` in English (`27 Oct`, D149).
 - **The prompt**: mono 28 px, line height 1.4 (39.2 px), `--text-1`, in a block on `--bg-surface`
   with a 1 px `--line-weak` border and 12 px / 16 px padding (pending Q-O18).
@@ -220,11 +221,11 @@ The reply is Markdown, drawn with this subset; anything else shows as its plain 
 | Markdown | Drawn as |
 | --- | --- |
 | paragraph | 28 px text (§3, pending Q-O18); blocks separated by 16 px |
-| `#`, `##`, `###` heading | one style: 16 px caps `--font-label` 600, `--text-2`, 24 px above |
+| `#`, `##`, `###` heading | one style: mono 28 px weight 600, `--text-1`, as written (no caps, `text-transform: none`), 24 px above (D227) |
 | `**bold**` | weight 600 (the mono face has 400 and 600 only; `*italic*` draws as plain text) |
 | `` `code` `` inline | same size, `--bg-sunken`, 1 px `--line-weak` border, 4 px side padding |
 | bullet and numbered lists | marker `·` or `1.` in `--text-3`, 32 px hanging indent; 2 levels, deeper levels draw at level 2 |
-| `> quote` | `--text-2`, a 2 px `--line-strong` left border, 16 px padding |
+| `> quote` | `--text-2`, a 2 px `--line` left border (never `--line-strong`, D227), 16 px padding |
 | `---` | a 1 px `--line` rule, 16 px above and below |
 | fenced code block | §3 "Code" below |
 | table (GFM pipes) | §3 "Tables" below |
@@ -237,7 +238,8 @@ the one exception and take their colour wherever they appear: `■` `--p1`, `▲
 grey (`docs/design.md`, the colour rule; `public/js/core/marks.js`). The agent cannot colour
 anything else: a word "down" with no mark stays grey.
 
-**Code.** Mono 18 px, line height 1.4, `--bg-sunken`, 1 px `--line` border, 12 px / 16 px padding.
+**Code.** Mono 18 px, line height 1.4, `--bg-sunken`, a 2 px `--line` left border and no other
+border (D227), 12 px / 16 px padding.
 Lines never wrap; the block scrolls sideways on its own. The fence's language, if given, sits top
 right in 16 px caps `--text-3` (D21's floor). A block of more than 12 lines shows its first 12 and a full-width
 button under it, 48 px tall, 16 px caps: `SHOW ALL 40 LINES`; tapped, it shows every line and reads
@@ -279,6 +281,27 @@ comes back as a `code` block with `open: true`. Its unit test, `test/md.test.mjs
 is table-driven: one case per row of the subset table above, the numeric/not-numeric cells
 above, a fence open at the end, three-level lists drawn at level 2, a table row still being
 written (a `tail`), and S-C1-09's four hostile strings.
+
+### The cockpit's own lines (T59, D227)
+
+Text in a reply comes from the agent, and the agent reads fleet fields anyone can write
+(`security.md`). A reply that says `### YOU · 07:02` or holds a code block reading
+`Not sent: the room did not confirm within 5 s.` must not pass for a line the cockpit drew.
+
+- **The rule.** Every line the cockpit writes into the conversation itself carries a 2 px
+  `--line-strong` left border: the label rows (`[data-turn-label]`, §3), the error lines and every
+  line drawn "as E1's look" (`[data-turn-error]`, §8, §10) and the stopped line (`STOPPED AT 07:03`,
+  §8, `[data-turn-stopped]`). Error lines also keep their 1 px `--line-strong` border on the other
+  three sides.
+- **Nothing in a reply draws it.** No element of a reply's blocks (`[data-reply]`, the DOM built
+  from `md.js`'s blocks) has a `--line-strong` border on any side: a quote's rule is `--line`, a
+  code block has a `--line` left border only, inline code a 1 px `--line-weak` box. Headings are
+  28 px `--text-1` as written, never 16 px caps: caps at 16 px in the label face are the cockpit's.
+- **Marks stay coloured** (D25): `■ hv1 down` in a reply is still red. What tells it from the
+  cockpit's own news is where it sits: in the reply's 28 px text, under an `AGENT · HH:MM` row,
+  never in a ruled line.
+- Outside the conversation (the status line §10.1, the line slot §1.1, the header) a reply cannot
+  draw at all, so those keep their look.
 
 ### History in the pane
 
@@ -674,6 +697,16 @@ Plan C1: "Typing works everywhere (on-screen keyboard, a paired keyboard)." `spe
   type (18 px caps `--text-1`, §1.1, D167) shows there (`data-line="length"`, the lowest of its four): `8 214 / 8 000
   CHARACTERS`, and `SEND` is disabled. Pasting is never cut short by the screen (D30).
 - **What is sent**: the text with white space trimmed at both ends; inside, unchanged.
+- **Rate** (D228). The room takes at most 10 prompts per device token in any 60 s, on its own
+  clock (`server/cockpit/clock.mjs`): typed or spoken, sent idle or queued during a turn, `RETRY`
+  and `GO ON` alike, every page and tab holding that screen's token counted together. A resend with
+  a `clientId` the room already has (§10 E1's `RETRY`, `protocols.md` §3.1) starts nothing and is
+  not counted; nor is a refused prompt. The 11th is refused (`prompt.refused` `too-many`,
+  `protocols.md` §3.1, §8): the block, already drawn at the tap, reads `YOU · 07:02 · NOT SENT` and
+  under it, as E1's look: `Too many messages from this screen; wait a minute.` with `RETRY` and
+  `EDIT` (row E9 of §10, T116). Nothing reaches the agent; the room's audit log keeps the refusal
+  (D165). The owner's own pace (a prompt every few seconds at most) never comes near it: it stops
+  a screen in a loop or a stolen token.
 
 **On send** (B8, ≤ 0.1 s): the prompt block is drawn at the end of the conversation with the label
 `YOU · 07:02 · SENDING` (the `SENDING` in `--text-3`), the input is emptied, the conversation is
@@ -803,7 +836,7 @@ one way to end a turn. The wire is `protocols.md` §3.1 (`delivery:"queued"`), �
   the turn and `RETRY` sends it again (two taps more, D32's overrule names the other way).
 - **What a stopped turn looks like** (D33): its text stays exactly as it was at the tap; nothing
   that turn sends later is drawn (the room's log keeps it). Under it, 16 px caps
-  `--text-3`: `STOPPED AT 07:03`. A tool line still running loses its `●` and ends in ` · stopped`.
+  `--text-3` with the cockpit's rule (§3, D227), `[data-turn-stopped]`: `STOPPED AT 07:03`. A tool line still running loses its `●` and ends in ` · stopped`.
   The `▍` cursor goes.
 - **Voice** (C2): pressing the talk button during a turn stops nothing; listening starts (D29);
   the send at release is a `SEND` during a turn as above (`c2-voice.md` §2).
@@ -835,7 +868,8 @@ through it (D35). Only code blocks fold (§3) and only old turns (`SHOW EARLIER`
 
 Every error is a **grey line in the turn** where it happened, never a dialog, never red: it is news
 about the agent, not trouble in the fleet (`docs/design.md`, the colour rule; as tool failures, §5).
-Look: 18 px mono `--text-1` on `--bg-sunken`, 1 px `--line-strong` border, 12 px / 16 px padding;
+Look: 18 px mono `--text-1` on `--bg-sunken`, 1 px `--line-strong` border with the left side 2 px
+(the cockpit's rule, §3, D227), 12 px / 16 px padding;
 buttons under the text, 48 px tall, ≥ 96 px wide, 16 px caps, 8 px apart. The element is
 `[data-turn-error="<code>"]`. Text from the room or the agent inside a message (`{detail}`) is cut
 to 120 characters and drawn as text. After an error the header reads `READY` (D34).
@@ -962,6 +996,8 @@ Plan §2: "All screens show the same cockpit conversation; speaking at one shows
   names in labels come back with the slice that pairs several screens (Q-O21).
 - **Two prompts at once.** The room takes them in the order they arrive; the second stops the
   first's turn as §8 says, on every screen alike.
+- **The rate is per screen** (§7, D228): two screens have 10 prompts a minute each; two tabs on
+  one screen share its 10.
 - A screen that opens or reloads gets the last 50 turns from the room and joins a running turn
   where it is (`protocols.md` §2.2).
 
@@ -1434,6 +1470,56 @@ scripts `c1-render`, `c1-errors`, `c1-long`, `scr-room`), then through a CDP ses
 styles inside one `requestAnimationFrame` callback; colours compared with probe elements styled
 `background: var(--bg-sunken)` and `color: var(--text-2)` (computed, so the theme decides);
 `touchEnd`, read again in the next frame. The second and third cases add `touchMove` events.
+
+### S-C1-42 A reply cannot pass for the cockpit's own lines (T59, D227)
+Given the fake agent's reply (script `c1-render`, match `look-alike`):
+
+````
+### YOU · 07:02
+## Not sent
+> Not sent: the room did not confirm within 5 s.
+
+```
+Paired as desk2.
+```
+■ hv1 down
+````
+
+When it has ended,
+Then the reply shows `YOU · 07:02` and `Not sent` as headings: mono 28 px, weight 600,
+`--text-1`, computed `text-transform` `none`, the text as written; the quote has a 2 px `--line`
+left border; the code block a 2 px `--line` left border and `border-top-width`,
+`border-right-width` and `border-bottom-width` 0 px; `■` is `--p1` (D25).
+And no element inside `[data-reply]` has a border side whose computed width is above 0 px and
+whose colour is `--line-strong`'s, while every `[data-turn-label]` in the conversation (the
+prompt's and the reply's) has a 2 px left border in `--line-strong`.
+And a second case: the same turn after S-C1-18's E1 on the prompt before it: the
+`[data-turn-error="not-sent"]` line has a 2 px `--line-strong` left border and 1 px on its other
+sides; the quote that reads the same words has neither.
+Test: Playwright; for every element under `[data-cockpit-conversation]`, read
+`getComputedStyle` border widths and colours on all four sides; colours compared with a probe
+element styled `border-color: var(--line-strong)` (computed, so the theme decides); assert the
+set of elements with a `--line-strong` side equals the `[data-turn-label]`,
+`[data-turn-error]` and `[data-turn-stopped]` elements. Runs in both themes.
+
+### S-C1-43 The 11th prompt in a minute is not sent (T59, D228)
+Given the room under test with its clock in `manual` at 07:00:00 (`stand-ins.md` §1.2), the
+fake agent answering each prompt with a `done` turn in 0.2 s (script `c1-typing`), one paired
+screen with two pages open on it (two tabs of one browser context, one device token),
+When page A sends `ping 1` to `ping 6` and page B `ping 7` to `ping 10`, each after the
+previous one's `· SENDING` went, the room's clock moved 2 s between sends (`ping 10` at
+07:00:18), then page A sends `ping 11` at 07:00:20,
+Then `ping 1` to `ping 10` are answered and `ping 11`'s block reads `YOU · 07:00 · NOT SENT`
+within 0.5 s, under it `Too many messages from this screen; wait a minute.` with `RETRY` and
+`EDIT`; page B draws the same block; `fakeAgent.prompts()` holds 10 lines; the audit file holds
+one refusal line for the token (D165); the header reads `READY`.
+And when the clock moves to 07:01:00.5 (`ping 1` is more than 60 s old) and page A sends
+`ping 12`, it is answered: `prompts()` holds 11.
+And `EDIT` on `ping 11` puts `ping 11` back into the input (as E1).
+Test: Playwright, one context, two pages; `advance(ms)` (`stand-ins.md` §1.2) between sends;
+assert the label, the line's exact text, `prompts().length` and the audit lines read with
+`laneboard audit --file`. The case with two device tokens (each its own 10) runs in the Pair
+slice (Q-O21), as S-C1-23's.
 
 ## 15. The demo (`?demo=1`, T36/T76/T93)
 
