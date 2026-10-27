@@ -459,7 +459,23 @@ Notes for every builder round (planner, round 1):
   worst gap 185 ms, 0 console errors. Honest: the show column (`SHOWN BY COCKPIT` and its rows, right, at the plate's
   height) still meets a wide plate if a show holds a site at half width (T51/T52's matter); an 13+ letter hero is
   still cut at half width (at full width 16 fit).
-- [ ] T42 (§7 Night 4 D2; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `?role=tour|explore`: starts the page in that mode (explore: no tour until `▶ TOUR` or the director is asked); the canvas itself is cockpit work. — done when: tests for both roles, and `?role=explore` shows no tour until asked
+- [x] T42 (§7 Night 4 D2; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] `?role=tour|explore`: starts the page in that mode (explore: no tour until `▶ TOUR` or the director is asked); the canvas itself is cockpit work. — done when: tests for both roles, and `?role=explore` shows no tour until asked (commit a34674e)
+  Builder r48: touch.js `ROLES`, `roleOf` (`explore`, else the default `tour`) and a `stay` option on `touchStep`
+  and `idleLeft`: in the explore role the minute never hands the page back, `idleLeft` is Infinity and
+  `manualLine(Infinity)` reads `MANUAL` alone (no countdown: no tour is coming). `createTouch({ role })` starts in
+  `explore` with no wake; `createDirector({ driver: 'touch' })` starts with the finger driving, so the first tap
+  flies (not a wake's fit) and a show is refused `busy`. Decided: **"the director is asked" is the hand-back**
+  (`▶ TOUR` or `__galaxyTouch.handBack()`); a show under the explore role is refused `busy` as under a finger,
+  since a show's end resumes the tour, and a person's screen must not get a tour by itself. After `▶ TOUR` the tour
+  runs and shows work as on a tour screen; the next finger wakes it as usual, but the minute never hands it back.
+  `<html data-role="explore">`; `?at=` (parked) ignores the role. Tests in `test/wall-galaxy-resume.test.mjs` (5:
+  roleOf, stay, the tour role unchanged, the explore page on a fake clock (3 min with no leg, `MANUAL`, `▶ Tour`,
+  a show `busy`, a tap flies to cloud, back, `▶ TOUR` gives hv2 first, a wake then 2 min still explore), main.js's
+  wiring). CDP check `shots/r48-t42-role` (large demo): explore, `MANUAL`, `▶ TOUR` for 20 s, a show `busy`, a tap
+  on HV2 opens its sheet, `‹ BACK`, then `▶ TOUR` gives the tour (hv2), 0 console errors. Film `shots/r48-galaxy`
+  (`role=explore`): the overview held for 36 s, no tour, the banner updating (HV1 crit at 36 s); 11.8 fps under
+  SwiftShader ×4, worst gap 347 ms, 0 errors. Seen: the explore overview does not turn (only the tour's legs move
+  the camera), so a person's screen stands still until a finger moves it.
 - [ ] T43 (§7 Night 4 E1; promoted from Later by the watcher on 2026-10-27, before the merge) (night 3's E; r43-stranger 1, 6) `docs/wall.md`: what it is, a tablet in kiosk mode, the URL switches `?demo`, `?pace`, `?fx` (each effect and what it means), `?perf`, `?at`, `?open`, `?quality`, `?role`, `?show`, the feed fields `glow`/`ring`/`countdown`, touch and how to stop the tour; `docs/map.md` says which page paints `glow`/`ring`; a Wall row in README's views table. — done when: `docs/wall.md` exists with every switch, and README's views table has the Wall row
 - [ ] T44 (§7 Night 4 E2; promoted from Later by the watcher on 2026-10-27, before the merge) `docs/wall.md` covers D10 (the director, who drives), the show messages and `countdown`; every feature has demo data (product §3.2): a test lists the switches in `docs/wall.md` against the page's parsers. — done when: a test lists the switches in `docs/wall.md` against the page's parsers and passes
 - [ ] T45 (§7 Night 4 E3; promoted from Later by the watcher on 2026-10-27, before the merge) [ui] [variant:galaxy] (night 3's E; r43-stranger 2, 6) A web manifest for the galaxy (`start_url: "/galaxy.html"`, fullscreen, landscape) if it fits the guardrails, and `wall.html?variant=galaxy` opens `galaxy.html` instead of falling back to radial (an "unknown variant" note on the tag for other names). — done when: `wall.html?variant=galaxy` opens the galaxy (test), the manifest validates
