@@ -9,7 +9,7 @@ px at 1368x912; times in s.
 
 **Until the Canvas slice** (pending Q-O22, recommendation b); `slices.md` §3.5): the Wall page has
 one layout, `wall`. No canvas, no `split`, `canvas` or `switch`, no `SCREEN` sheet, no
-`cockpit.layout`, no switch button; the root reads `data-layout="wall"` whatever the width, `?layout=`
+`cockpit.layout`, no switch button; the root reads `data-cockpit-layout="wall"` whatever the width, `?layout=`
 is ignored, and the pane slides over the Wall as on the app (`c1-talk.md` §1, first table row).
 C1-C3 build this. The rest of this section, S-SCR-01, -06, -07, -08, -10, -11 and D2, D3, D8, D9
 arrive with the Canvas slice. With Q-O22 a) they are C1's from the first night: `split` is the
@@ -46,9 +46,11 @@ At 1368x912 `split` gives a wall half of 759 px and a canvas of 608 px (1368 = 7
 `split` on a screen < 1280 px wide shows as `switch` until the screen is wide again; the stored
 choice stays `split`.
 
-The page root carries the state for tests and CSS: `data-layout` (`wall|canvas|split|switch`, the
+The page root carries the state for tests and CSS: `data-cockpit-layout` (`wall|canvas|split|switch`, the
 one in effect), `data-wall-state` (`tour|explore`, absent in `canvas`), and in `switch`
-`data-switch-shows` (`wall|canvas`).
+`data-switch-shows` (`wall|canvas`). The page root is `<html>`; the name is not `data-layout`,
+which `public/js/ui/shell.js` `applyLayout()` already sets there to `phone|tablet|desktop` (D145).
+Every attribute and its values: `README.md` §"Selectors tests use".
 
 ## 2. Modes on the wall half
 
@@ -152,12 +154,12 @@ router's rule that a route only selects, `router.js` header).
 ### S-SCR-01 A fresh screen at the owner's size opens in split (pending Q-O22)
 Given a browser at 1368x912 with no `cockpit.layout` stored and no `?layout=` in the URL,
 When it opens the Wall page on the demo fleet,
-Then within 2 s the root has `data-layout="split"` and `data-wall-state="tour"`; the wall half is
+Then within 2 s the root has `data-cockpit-layout="split"` and `data-wall-state="tour"`; the wall half is
 759 px wide, the canvas 608 px, with a 1 px divider at x = 759; the tour is flying on the left; the
 canvas shows its cards or its empty state (S-SCR-10); the talk button `[data-talk]` is at
 x 1280-1344, y 824-888 and `[data-cockpit-open]` reads `CHAT` at x 1288-1336, y 760-808 (§4,
 pending Q-O11).
-Test: Playwright at 1368x912 against the demo hub and the fake agent; read `data-layout`,
+Test: Playwright at 1368x912 against the demo hub and the fake agent; read `data-cockpit-layout`,
 `getBoundingClientRect()` of the two halves, of `[data-talk]` and of `[data-cockpit-open]`.
 
 ### S-SCR-02 A tap leaves the tour, a minute alone brings it back
@@ -188,7 +190,7 @@ Then the pane is still open at t = 400 s (a turn is running); the turn ends at t
 closes at t = 700 s (300 s later); the tour resumes at t = 760 s (60 s after the close).
 And a draft typed into the input before the close is in the input again when the pane reopens.
 Test: Playwright with a fake clock and a fake-agent script with one long turn; assert the pane's
-`data-open` and `data-wall-state` at 699/700 s and 759/760 s; reopen and read the input value.
+`data-pane` (`open`, then `closed`) and `data-wall-state` at 699/700 s and 759/760 s; reopen and read the input value.
 
 ### S-SCR-05 A show command takes the camera, then the tour comes back
 Given a screen in `wall` layout touring, the pane closed,
@@ -202,13 +204,13 @@ near the screen centre on the `wall` page; the `canvas` page's DOM is unchanged.
 ### S-SCR-06 The owner picks a layout, it survives a reload, the URL wins over it (pending Q-O22)
 Given a screen at 1368x912 in `split`, `[data-cockpit-conversation]` at x 760-1368, y 520-912,
 When the owner taps `SCREEN` in the column's header (x 1256-1352, y 528-576), then `CANVAS`,
-Then within 0.2 s `data-layout="canvas"`, the wall half is gone, the canvas fills 1368x912,
+Then within 0.2 s `data-cockpit-layout="canvas"`, the wall half is gone, the canvas fills 1368x912,
 `data-pane="column"`, `[data-cockpit-conversation]` is at x 760-1368, y 0-912 with its scroll
 position and draft unchanged, and `localStorage['cockpit.layout']` is `canvas`.
 When the page reloads, it is still `canvas`.
 When it is opened with `?layout=wall`, it is `wall`, `data-pane="closed"`, `[data-cockpit-open]`
 reads `CHAT`, and `cockpit.layout` is still `canvas`.
-Test: Playwright; tap through the sheet (each row ≥ 64 px tall); read `data-layout`, `data-pane`,
+Test: Playwright; tap through the sheet (each row ≥ 64 px tall); read `data-cockpit-layout`, `data-pane`,
 the column's `getBoundingClientRect()` and `localStorage`; reload; navigate with the query.
 
 ### S-SCR-07 Switch on a small screen: one half at a time, a count for new cards (pending Q-O22)
@@ -258,7 +260,7 @@ sizes; a second run with `?demo=1` asserts the `DEMO` label and ≥ 1 card.
 Given a screen at 1368x912 in `split` (stored), the wall in `explore` on `builder-a`, a draft in
 the column's input,
 When the window is resized to 1200x800,
-Then within 0.5 s `data-layout="switch"` with `data-switch-shows="canvas"` (the half that holds the
+Then within 0.5 s `data-cockpit-layout="switch"` with `data-switch-shows="canvas"` (the half that holds the
 conversation), `[data-cockpit-conversation]` is at x 592-1200, y 0-800, the draft and the
 conversation are unchanged, and `cockpit.layout` is still `split`.
 When it is resized back to 1368x912, it is `split` again, the column at x 760-1368, y 520-912, the
@@ -506,7 +508,7 @@ when the room is back and had finished the reply, the full reply replaces the cu
 And given the microphone open with the partial `restart the` shown, when the link is lost, the
 microphone closes within 0.2 s (no grace), and `restart the` stays in the input, not sent.
 Test: Playwright with the fake agent (one long scripted turn) and the fake speech service (T18);
-assert the cut-off line, then the replaced text; assert the mic state attribute and the input.
+assert the cut-off line, then the replaced text; assert `data-talk` on the talk button and the input.
 
 ### S-SCR-21 The hub goes down: the Wall greys out and says since when
 Given a screen in `wall` layout touring the demo hub,

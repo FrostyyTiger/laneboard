@@ -13,7 +13,7 @@ Status: `planned` (task open in `../PROGRESS.md`) or `written`.
 
 | File | What it settles | Scenario ids | Task | Status |
 | --- | --- | --- | --- | --- |
-| `README.md` | this index, the speed budget (B1-B8) and the glossary | none | T1, T24 | written |
+| `README.md` | this index, the room process and ports, the speed budget (B1-B8), the selectors tests use, and the glossary | none | T1, T24, T33 | written |
 | `screens.md` | layouts (wall, canvas, split, switch), tour ⇄ explore idle rules, one screen vs. two, the cockpit button; pairing; unpaired, offline, room down | `S-SCR-` | T2, T3 | part 1 written (T2), part 2 written (T3; T52: room down is the pane's status line only, canvas half in `c4-show-canvas.md` §7.6, D120; T89: S-SCR-24 a refused room link) |
 | `c1-talk.md` | C1: the pane, the conversation, reply rendering, tool lines, typing, talk during an answer, errors, new conversation, several screens, raw view | `S-C1-` | T4, T5 | written: part 1 (T4: pane, rendering, tool lines, S-C1-01..12; T24: S-C1-13 hold to talk from the Wall), part 2 (T5: typing, talk during an answer, long replies, errors E1-E8, new conversation, several screens, raw view, S-C1-14..24; T50: header `READY`/`● WORKING`/`● STOPPING`, folds cut to code and `SHOW EARLIER`, E6 merged into E8, no raw view in C1, S-C1-24 retired; T29: §5.1 the room messages the pane draws from, fresh-screen states, S-C1-25/26; T85: §8 rewritten for steer, S-C1-16 rewritten, S-C1-27/28; T88: queued prompts as snapshot items, S-C1-29; T57: §5.2 the allowlist, refused calls, tools that change things, §5.3 redaction, S-C1-30/31; T40: §7.1 the on-screen keyboard, S-C1-32/33; T96: §1.1 the stack above the input row, S-C1-34) |
 | `c2-voice.md` | C2: the talk button (tap and hold), live words, fix, cancel, send, DE/EN, the talk key, speech-to-text down or failed; §14 the physical-button API as the later slice C2b | `S-C2-`, `S-C2B-` | T6, T7 | written: part 1 (T6: gestures, 400 ms threshold, `data-talk` states, live words, microphone, S-C2-01..10), part 2 (T7, slimmed by T49: tap the words to stop and fix, DE/EN, `cockpit.stt.*`, the service down or failed (`stt-down`, `stt-failed`), the talk key, the kiosk microphone note, S-C2-11..17, 20, 21; T94: S-C2-22 keyboard up; C2b §14: the button API, S-C2B-01..02) |
@@ -96,15 +96,81 @@ instead of writing its own. A scenario with a timing asserts against its row. Ti
 - **Marks** (D28). The screen sets `performance.mark('cockpit:B<n>:start')` and
   `performance.mark('cockpit:B<n>:end')` for every row, B5 and B6 with the room's receive time
   carried in the message (`receivedAt`, `protocols.md` §4-§5). A test reads them with
-  `performance.getEntriesByName`; on the real screen `?perf=1` lists the last 20 measures in the
-  pane's header menu (T5 places it). A measure over budget is not an error on the real screen,
-  only a number to look at.
+  `performance.getEntriesByName`; on the real screen `?perf=1` logs each measure as one
+  `console.info('cockpit:B<n>', ms)` line, read in the browser's remote devtools, and draws
+  nothing (D28; T53 decides whether `?perf=1` stays). A measure over budget is not an error on the
+  real screen, only a number to look at.
 - **Tests allow no slack** beyond the table: a stand-in run that misses a budget fails. A build
   night that cannot meet a row on the VM's headless Chromium writes why in `PROGRESS.md` instead
   of widening the row; only the owner widens a budget.
 - The hold-versus-tap threshold (T6) does not delay B1: listening starts on `pointerdown` in both
   gestures; the threshold only decides, at `pointerup`, whether that release sends (hold) or keeps
   listening (tap) (D29, T6 details the gesture).
+
+## Selectors tests use
+
+The one list of the `data-*` attributes the cockpit adds and the tests read (D145, T33). Every spec
+file links here for the values; a name used in a spec or a test that is not in this table is a bug
+in the spec. "Root" is `<html>` (`document.documentElement`), where the app's shell already sets
+`data-layout` (`phone|tablet|desktop`), `data-density` and `data-theme`
+(`public/js/ui/shell.js`); the cockpit leaves those three alone. An attribute is absent, not empty,
+when no value applies.
+
+**State on the root**
+
+| Attribute | Values | Set by | Defined in |
+| --- | --- | --- | --- |
+| `data-cockpit` | `unconfigured`, `unpaired`, `connecting`, `live`, `room-down`, `offline` | the room link | `screens.md` §7, `protocols.md` §2 |
+| `data-board` | `live`, `down` | the board's `/ws` | `screens.md` §7 |
+| `data-cockpit-layout` | `wall`, `canvas`, `split`, `switch` (Wall page only) | the layout | `screens.md` §1 |
+| `data-switch-shows` | `wall`, `canvas` (only in `switch`) | the switch button | `screens.md` §1 |
+| `data-wall-state` | `tour`, `explore` (Wall page, absent in `canvas`) | the Wall (T31's Wall contract) | `screens.md` §2 |
+| `data-pane` | `open`, `closed`, `column` | the pane | `c1-talk.md` §1-§2 |
+| `data-turn` | `idle`, `thinking`, `working`, `answering`, `stopping` | the room's `turn.state` | `c1-talk.md` §2 |
+| `data-keyboard` | `up`, `held`, `down` | `visualViewport` and the input's focus | `c1-talk.md` §7.1 |
+
+**The conversation and the input row**
+
+| Selector | Values | What it is | Defined in |
+| --- | --- | --- | --- |
+| `[data-cockpit-conversation]` | none | header, line slot, conversation and input row, pane or column | `c1-talk.md` §1 |
+| `[data-cockpit-open]` | none (text `CHAT` or `CLOSE`) | the opener above the talk button | `screens.md` §4 |
+| `[data-cockpit-line]` with `data-line` | `room-down`, `error`, `hint`, `length` | the one line slot above the input row | `c1-talk.md` §1.1 |
+| `[data-cockpit-input]` | none | the `<textarea>` | `c1-talk.md` §7 |
+| `[data-cockpit-send]` with `data-send` | `send`, `stop`, `cancel` | the slot left of the talk button | `c1-talk.md` §8, `c2-voice.md` §3 |
+| `[data-cockpit-newbar]`, its buttons `data-newbar` | `keep`, `start` | the `NEW` bar | `c1-talk.md` §11 |
+| `[data-cockpit-chip]` with `data-node`, `[data-cockpit-chip-remove]` | a node id | the context chip and its `✕` | `c3-see.md` §9 |
+| `[data-tool-line]`, `data-denied` | `true` on a refused call | one tool line | `c1-talk.md` §5, §5.2 |
+| `[data-mark]` | none | one coloured mark `■ ▲ ● ○` in a reply | `c1-talk.md` §3 |
+| `[data-turn-error]` | `not-sent`, `agent-exited`, `agent-down`, `not-logged-in`, `step-limit`, `failed` | an error line in a turn | `c1-talk.md` §10 |
+
+**The talk button and speech** (`[data-talk]` is the talk button; the "mic state attribute" is its `data-talk`)
+
+| Selector | Values | Defined in |
+| --- | --- | --- |
+| `[data-talk]`, `data-talk` | `idle`, `listening`, `partial`, `final`, `error`, `off` | `c2-voice.md` §3 |
+| `data-talk-gesture` on `[data-talk]` | `tap`, `hold` | `c2-voice.md` §2 |
+| `[data-talk-error]` (the line) | `mic-blocked`, `no-mic`, `mic-failed`, `mic-insecure`, `stt-down`, `stt-failed` | `c2-voice.md` §5, §10 |
+| `data-talk-detail` on `[data-talk]` | `no-answer`, `busy`, `token`, `failed` | `c2-voice.md` §10 |
+| `[data-talk-text]` (the live words), its spans `[data-firm]`, `[data-tail]` | none | `c2-voice.md` §4 |
+| `[data-talk-lang]` (the language button) | none (text `DE` or `EN`) | `c2-voice.md` §8 |
+
+**See and show** (C3, C4)
+
+| Selector | Values | Defined in |
+| --- | --- | --- |
+| `[data-ask-menu]` with `data-node`; rows `[data-ask]`, `[data-ask-cancel]` | a node id | `c3-see.md` §9 |
+| `[data-show-line]` with `data-show-id`, `data-show-state`; `[data-show-undo]` | `shown`, `waiting`, `skipped`, `noCamera`, `undone`, `replaced` | `c4-show-canvas.md` §4 |
+| `[data-show-mark]` with `data-node`, `[data-show-note]` | a node id | `c4-show-canvas.md` §3 |
+| `[data-pin]` with `data-pin-id`, `data-node`; `[data-pin-remove]` | ids | `c4-show-canvas.md` §3 |
+| `[data-compare]`, `[data-scrub]` | none | `c4-show-canvas.md` §3 |
+| `[data-card]` with `data-card-id`, `data-block`, `data-size`; `[data-card-remove]`, `[data-card-cancel]`, `[data-card-removed]` | `data-block`: `countdown`, `timer`, `status`, `log`, `chart`, `table`, `checklist`, `map`, `text`, `diff`; `data-size`: `s`, `w`, `t`, `l` | `c4-show-canvas.md` §7.2-§7.3, §8, §9 |
+| `[data-shelf]` | none (text `SHELF n`) | `c4-show-canvas.md` §7.2 |
+| `[data-cockpit-down]` (the room-down strip on the canvas) | none | `c4-show-canvas.md` §7.6 |
+
+Not attributes: the camera and the Map are read through page functions (`screenOf(id)`,
+`emphasis(id)`, `nodeAt(x, y)`), listed with the Wall contract (T31, `c4-show-canvas.md` §2), and
+the speed marks through `performance.getEntriesByName` (§"Speed budget").
 
 ## Glossary
 

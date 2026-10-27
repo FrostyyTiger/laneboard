@@ -247,7 +247,7 @@ fold, not even two in a row.
   | `shown` | none | while undoable (§5) |
   | `waiting` (the finger rule, §2) | ` · waiting for you` | no |
   | `skipped` on this screen, shown on another | ` · not on this screen: in use` | no on this screen |
-  | no screen shown it | ` · no screen shows the map` | no |
+  | `noCamera`: no screen shown it | ` · no screen shows the map` | no |
   | `undone` | ` · undone` | gone |
   | `replaced` (pins) | ` · replaced` | gone |
   | `failed` (an `isError` result) | ` · failed`, and for an unknown node the line is `could not show "vm-x" · failed` | no |
