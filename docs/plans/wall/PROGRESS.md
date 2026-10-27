@@ -373,6 +373,20 @@ Notes for every builder round (planner, round 1):
   replaced by a time that cannot go stale (`NO CONTACT SINCE 06:58`) — done when: a page test on a fake clock finds the
   plate's opacity unchanged and no typing restart when only the age changes, and the text never lags the clock by more
   than 1 s over 30 s.
+- [ ] T31 (§7 Night 4; r26-touch galaxy 1) [ui] [variant:galaxy] A pinch cannot lose the galaxy: the zoom stops closing
+  in (or eases back) once no site's anchor is within the frame; in explore with a steered overview pose the back control
+  reads `⌂ ALL` (flies to the fit) and only a fitted overview reads `▶ TOUR`; a tap on empty sky with a steered overview
+  eases back to the fit — done when: a page test pinches in 4x from the overview on the large fixture and finds at
+  least one site anchor in frame, the control reading `⌂ ALL` and a tap on it restoring the fit (then `▶ TOUR`), and a
+  CDP pinch film (as `r26-touch`) keeps a named site in frame.
+- [ ] T32 (§7 Night 4; r26-touch galaxy 2) [ui] [variant:galaxy] A palm does not wake: in `touch.js createTouch` `down`,
+  a palm-sized contact (`isPalm(ev)`, the test taps already use) neither wakes the tour nor moves the camera nor
+  resets the idle clock — done when: a page test on a fake clock sends a 160x120 contact down/up during the tour
+  and finds the mode still `tour`, no handover, and in explore finds the countdown not reset.
+- [ ] T33 (§7 Night 4; r26-touch galaxy 4) [ui] [variant:galaxy] Sheet rows are real targets: every `caption.js
+  targets()` box is at least 48 px tall (pad each row's box, centred, never past half the gap to the next row; or
+  `min-height` in `wall.css`) — done when: a test over the large fixture's site and planet sheets finds every
+  `targets()` box ≥ 48 px tall and no two overlapping, and `wall.html`'s caption tests stay green.
 
 ## Research questions
 
@@ -394,6 +408,14 @@ Notes for every builder round (planner, round 1):
   a cost guess) — for T17
 
 ## Later
+
+From r26-touch (triage, night 4; not tasks yet):
+- (r26-touch galaxy 3) A fast sleeve swipe (160 px in ~70 ms near the edge) throws the held planet out of frame: a drag needs a still start or a speed cap, and a planet sheet's subject is kept in frame (ease back or close the sheet).
+- (r26-touch galaxy 5) Wake feedback in 200 ms: `MANUAL · TOUR IN 1:00` and the control at once, plus a 72 px ring at the finger (as the site tap and the fan do).
+- (r26-touch galaxy 7) Fan rows: trouble first then distance; names under 3 letters (`ba`) fall back to kind + parent (= r11-dreamer touch 2).
+- (r26-touch galaxy 8) `TAP.ms` 300 → 500, a long non-drag press acts as a tap.
+- (r26-touch across) The crit nebula (about 60x120 px) counts as its site's tap target; any drag result keeps the held subject on screen.
+- (r26-touch galaxy 11) Banner under a planet sheet = T19.
 
 From r21-skeptic (triage, night 4; not tasks yet):
 - (r21-skeptic galaxy 5) A second red `■ VM-C` (the site lobe's leashed name) far from the member: `named()` also hides the lobe/site label carrying the plate's subject.
@@ -693,6 +715,9 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 - r21 skeptic → reviews/r21-skeptic.md. 13 galaxy + 1 beacon + 2 warp + 3 touch findings; 3 became tasks (T28 one
   ranking for banner and tour, T29 crit member stays red, T30 held crit updates in place). Dropped as covered: galaxy 13
   (T24), tag overlap in 9 (T27), warp 1-2 (T15, T21), touch 3 (no fix). Rest in Later; questions (a)-(d) answers under For the owner.
+- r26 touch → reviews/r26-touch.md. 11 galaxy + 2 beacon + 1 warp findings; 3 became tasks (T31 pinch loses the
+  galaxy, T32 palm wakes, T33 sheet rows under 48 px). Dropped: galaxy 6, 9, 10 (praise/no change), galaxy 11 (T19),
+  beacon and warp (T2, T15). Rest in Later; no fx proposals.
 
 ## Scores
 
@@ -710,5 +735,8 @@ Carried from night 3 (its morning report, `nights/night-3/PROGRESS.md` `## Morni
 | 21 | skeptic (galaxy) | 7 | 7 | 5 | 6 | 6 | 4 | 6 |
 | 21 | skeptic (fx-beacon) | - | - | - | - | 4 | 6 | - |
 | 21 | skeptic (fx-warp) | - | - | - | - | 6 | 3 | - |
+| 26 | touch (galaxy) | 7 | 7 | 7 | 6 | 7 | 5 | 6 |
+| 26 | touch (fx-beacon) | - | - | - | - | 5 | 6 | - |
+| 26 | touch (fx-warp) | - | - | - | - | 6 | 4 | - |
 
 ## Morning
