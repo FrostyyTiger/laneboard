@@ -134,6 +134,54 @@ fault.
 
 Answer: (open)
 
+## Q-O14 A browser test runner in the repo
+
+One-way-ish (a dependency in a public repo). Blocks every build night: all `Test:` lines assume a
+browser driver, and `npm test` has none. From review 26 finding 1. Spec: a section "The acceptance
+harness" in `slices.md`.
+
+- a) **Playwright as a devDependency**, tests in `test/cockpit/*.spec.mjs`, run by
+  `npm run test:cockpit`, not part of `npm test` until the `ci` VM has a browser.
+- b) No dependency: drive Chromium over CDP with the launcher already in `loop/shoot.mjs`'s style
+  (`node:child_process`, `node:test`); fewer features (no `page.clock`), more code to own.
+- c) Playwright, and part of `npm test` from the first night.
+
+Recommendation: a) — the scenarios need touch, fake clocks and fake microphones, which Playwright
+gives; keeping it out of `npm test` leaves the existing 3454 tests and the hygiene run unchanged.
+
+Answer: (open)
+
+## Q-O15 Which process is "the room", and the origin the screen talks to
+
+Security-relevant (a cross-origin device token). Blocks C1. From review 26 finding 2. Spec:
+`README.md` (to decide), `screens.md` §6, T15, T17.
+
+- a) **The room is a laneboard server started with a cockpit section** (`server/cockpit/`, config
+  `server/config/cockpit.mjs`), and it also serves the cockpit page and `/api/cockpit/*`: the screen
+  talks to its own origin, the cookie is same-site, no CORS.
+- b) A separate Node program on the room; the hub-served page talks to it cross-origin with a
+  bearer device token kept in memory plus `localStorage` (breaks D14).
+- c) The hub proxies `/api/cockpit/*` to the room, so the screen only knows the hub's origin.
+
+Recommendation: a) — one origin means an `HttpOnly` cookie works and nothing is stored in script-
+readable storage; the hub (c) adds a hop to every audio frame and a second place for the token.
+
+Answer: (open)
+
+## Q-O16 Security-adjacent choices logged as decisions
+
+Review 26 notes that three lines say "security-adjacent" in their own text but sit in
+`DECISIONS.md`. For the owner to confirm in one letter each: **D13** (pairing code length,
+lifetime, attempt cap), **D14** (nothing in browser storage), **D22** (links in replies are not
+tappable).
+
+- a) Confirm all three as written.
+- b) Change one: say which and how.
+
+Recommendation: a) — each is the stricter choice and can be loosened later.
+
+Answer: (open)
+
 ## Can wait
 
 Not needed before the C1 and C2 build nights.

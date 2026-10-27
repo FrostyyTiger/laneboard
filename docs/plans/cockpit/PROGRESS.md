@@ -38,6 +38,19 @@ its file names).
 - [ ] T23 (2) `screens.md`: one `S-SCR-` scenario for a scripted speak-up turn on a touring `wall` screen with the pane closed (button marker, tour holds or flies to the flagged item, pending Q-O11) — review 21-owner.md finding 7
 - [x] T24 (3) Speed budget table in `spec/README.md` (or top of `c1-talk.md`) that every later file cites: tap→listening ≤ 0.2 s; speech→first partial ≤ 1 s; release→shown sent ≤ 0.3 s; send→first reply token (fake agent) ≤ 0.5 s; show command→camera moving ≤ 0.3 s; kit block placed ≤ 1 s after the tool call; add S-SCR/S-C1 scenario "hold the button on the touring Wall at t=0, first partial ≤ 1 s, release sends" (pending Q-O11) — review 21-owner.md findings 2, 4 (commit 9419a10)
 - [ ] T25 (3) Sketch `spec/sketches/screens-split-pane.html`: `split` with the conversation column, a reply and a fresh card both visible (pending Q-O12) — review 21-owner.md finding 3
+- [ ] T26 (2) `screens.md` §4 and S-SCR-01/03/09/13: one cockpit-button spec; use `c1-talk.md` §2 (`[data-cockpit-open]` 48x48 `CHAT`, `[data-talk]` 64x64, `CLOSE` in the pane header), both pending Q-O11; give `CHAT`'s rect in the app (y 744-792) — review 26-implementer.md finding 3, 14
+- [ ] T27 (2) `c1-talk.md` §1 / `screens.md` S-SCR-06/11 / D8: rects of the conversation column in `split` and `canvas` (e.g. x 760-1368, y 456-912, input row, cards above), mark D8 superseded, restate S-SCR-06/11 with `[data-cockpit-conversation]` (pending Q-O12) — review 26-implementer.md finding 4
+- [ ] T28 (2) `screens.md` S-SCR-19 and D11: correct the retry series to the real `nextBackoff` (500 ms × 1.8, cap 15 s: retries at 0.5, 1.4, 3.02, 5.94, 11.18, 20.63, 35.63 s after loss); assert on the page side (a `cockpit:retry` mark per try) or on the real clock — review 26-implementer.md finding 5
+- [ ] T29 (3) `c1-talk.md` new §: the events §3/§5 consume (text delta, text block complete and its block id, tool start/end with `ok|failed` and ms, parallel tool calls and how they fold into one line, turn start/end, heartbeat 10 s) with fields (`turnId`, `blockIndex`, `toolUseId`, `startedAt`, `endedAt`, `isError`); do T15/T16 before any C1 build night; say what the pane shows on a fresh screen before resume exists (S-C1-01) — review 26-implementer.md findings 6, 14
+- [ ] T30 (3) Move S-C1-13 (hold to talk from the Wall) to `S-C2-` (alias kept in `slices.md`) or state that C1's done-when excludes it — review 26-implementer.md finding 7
+- [ ] T31 (2) `screens.md`: a "Wall contract" list of exactly what the cockpit needs from the Wall (`data-wall-state`, `tour.pause()/resume()`, `screenOf(id)`, idle hook), and the fallback that every C1 scenario that can run on the app (`#/map`) does so first; note `product.md` calls the page `galaxy.html` — review 26-implementer.md finding 8
+- [ ] T32 (11) Add to T18: a control API (method, path, body) for each stand-in verb the scenarios use (play script X, stop/start the room's link, approve/revoke a pairing, move the room's clock, read the received-turns log, drop delta N) — review 26-implementer.md finding 9
+- [ ] T33 (2) `spec/README.md`: one table of every `data-*` attribute and selector the tests use with values (`data-pane`, `data-talk`, `data-cockpit-down`, the mic state); rename `data-open` in S-SCR-04 to match; remove "header menu" from `?perf=1` (place it) — review 26-implementer.md findings 10, 14
+- [ ] T34 (3) `c1-talk.md` §3 / DECISIONS: D-line for the Markdown renderer (own module, no dependency, path, unit tests) with the exact numeric-cell regex, and the tool-line edge cases (`cd x &&` prefixes, env assignments, bad `WebFetch` URL) — review 26-implementer.md findings 11, 14
+- [ ] T35 (3) `spec/README.md` B2-B6: say each test asserts the end-to-end column; drop or define the "share" (marks around a stand-in event carrying its send time, one host, `Date.now()`) — review 26-implementer.md finding 12
+- [ ] T36 (3) `c1-talk.md`: one scenario for `?demo=1` (pane opens on a canned 3-turn conversation labelled `DEMO`, typing plays a demo turn); also fix the `27 Oct` locale (fixed English `D Mon`?) and name D21's constants module and `cockpit.url` config/section and how the page learns it — review 26-implementer.md findings 13, 14
+- [ ] T37 (4) `slices.md` (with T20): "The acceptance harness" section (runner, folder, command, relation to `npm test`) written for the Q-O14 recommendation (pending Q-O14); and the room-process decision in `spec/README.md` (process, entry point, config section, origin) for Q-O15 (pending Q-O15) — review 26-implementer.md findings 1, 2
+- [ ] T38 (2) Move D13 (pairing code), D14, D22 notes to point at Q-O16 and mark them `(pending Q-O16)` — review 26-implementer.md contradictions list
 
 Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do T4-T7 before T8+ and before T21-T25 sketches if rounds are short; T24 comes right after T4.
 
@@ -58,6 +71,7 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 
 ## Reviews
 
+- round 27 triage of `reviews/26-implementer.md`: 14 findings plus a contradictions list. Tasks: 3 → T26, 4 → T27, 5 → T28, 6 → T29, 7 → T30, 8 → T31, 9 → T32, 10 → T33, 11 → T34, 12 → T35, 13 → T36, 14 → spread over T26/T29/T33/T34/T36, 1 and 2 → T37. Questions: 1 → Q-O14, 2 → Q-O15, D13/D14/D22 → Q-O16 (+T38). Already covered: two-screens wording and `CANCEL JOB` confirm (T21). None dropped.
 - round 22 triage of `reviews/21-owner.md`: 10 findings. Tasks: finding 1 → priority note (T4-T7 first, plan already had them), 4 → T24, 5/6/9 → T21, 7 → T23, 10 → T22, 3 (sketch) → T25. Questions: 2 → Q-O11, 3 → Q-O12, 8 → Q-O13, 5 → added to Q-O9. 9 tasks/questions-bearing findings in all; none dropped.
 
 - round 5 triage: `docs/plans/cockpit/reviews/` has no review file yet, so nothing to triage; 0 findings, 0 tasks, 0 questions, no score row added.
@@ -69,5 +83,6 @@ Priority note (review 21-owner.md finding 1): the owner's daily use is C1/C2. Do
 | round | persona | concrete | complete | consistent | testable | ownerfit | simple | safe |
 |---|---|---|---|---|---|---|---|---|
 | 21 | owner | 8 | 2 | 6 | 8 | 5 | 6 | 7 |
+| 26 | implementer | 7 | 3 | 4 | 4 | 6 | 6 | 6 |
 
 ## Morning
