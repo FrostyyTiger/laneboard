@@ -371,7 +371,7 @@ test('wall.css: an echoing line is hidden only under a plate, its place kept (T2
   };
   assert.match(rule('.wall-frame-layer[data-plate] .wall-fleet[data-echo=""]'), /visibility: hidden/);
   assert.match(rule('.wall-frame-layer[data-plate] .wall-fleet[data-echo="why"] .wall-fleet-sub-why'), /visibility: hidden/);
-  const rest = css.replace(/\.wall-frame-layer\[data-plate\] \.wall-fleet\[data-echo[^\]]*\]/g, '');
+  const rest = css.replace(/\.wall-frame-layer\[data-plate[^\]]*\] \.wall-fleet\[data-echo[^\]]*\]/g, '');
   assert.equal(/\.wall-fleet\[data-echo[^\]]*\]/.test(rest), false, 'no rule hides it without a plate');
 });
 
@@ -690,15 +690,40 @@ test('frame.plate reads the far block again: its size changed with the attribute
   }
 });
 
-test('wall.css: with a plate up the far line is set at the caption name step, at the overview at its own', () => {
+// One top step of type while a site is held (night 4 T19, r4-film-ui galaxy 1): under a crit plate the far line
+// drops to the hero's second line, at most half the hero's least size, and folds into one line.
+test('wall.css (T19): with a crit plate up the far line is one line at the hero\'s second-line step, at the overview at its own', async () => {
+  const { STEPS } = await import('../public/js/wall/caption.js');
   const css = read('css/wall.css');
   const rule = (sel) => {
     const at = css.indexOf(`${sel} {`);
     assert.ok(at >= 0, sel);
     return css.slice(at, css.indexOf('}', at));
   };
-  assert.match(rule('.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-line'), /font-size: var\(--cap-name\)/);
+  const vmin = (re, text) => Number(text.match(re)?.[1]);
+  const held = '.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"]';
+  assert.match(rule(`${held} .wall-fleet-line`), /font-size: var\(--cap-why\)/);
   assert.match(rule('.wall-fleet[data-step="far"] .wall-fleet-line'), /font-size: var\(--fleet-far\)/, 'no plate: the 3 m size');
+  // The overview is unchanged: the hero's 3 m step, fitted (frame.js fleetSize) but never under STEPS.heroMin.
+  assert.equal(vmin(/--fleet-far: ([\d.]+)vmin/, css), STEPS.hero);
+  // Held: the hero's second line (its why, caption.js STEPS.why), the same size the plate sets it at ...
+  const why = vmin(/--cap-why: ([\d.]+)vmin/, rule('.wall-stage'));
+  assert.equal(why, STEPS.why);
+  assert.equal(vmin(/font-size: ([\d.]+)vmin/, rule('.wall-caption-hero-sub')), why);
+  // ... at most half the hero at its least, so the hero is the only top-step type on screen.
+  assert.ok(why <= 0.5 * STEPS.heroMin, `${why} ≤ half of ${STEPS.heroMin}`);
+  // One line: word, why and count side by side on a shared baseline; the why is what gets cut.
+  assert.match(rule(held), /display: flex/);
+  assert.match(rule(held), /align-items: baseline/);
+  assert.match(rule(`${held} .wall-fleet-line`), /flex: none/);
+  assert.match(rule(`${held} .wall-fleet-sub`), /min-width: 0/);
+  assert.match(rule(`${held} .wall-fleet-sub`), /margin: 0/);
+  // The count's space is its own, so it holds when T9's echo takes the why out of the line.
+  assert.match(rule(`${held} .wall-fleet-sub`), /gap: 0/);
+  assert.match(rule(`${held} .wall-fleet-sub .wall-fleet-more`), /margin-left: 2\.4vmin/);
+  assert.match(rule('.wall-frame-layer[data-plate="crit"] .wall-fleet[data-echo="why"] .wall-fleet-sub-why'), /display: none/);
+  assert.match(rule(`${held} .wall-fleet-sub-why::before`), /content: "·"/);
+  assert.match(rule('\n.wall-fleet-sub-why'), new RegExp(`font-size: ${STEPS.why}vmin`), 'why and word share a size');
   // The glyph is in em, so it steps down with the line.
   assert.match(rule('.wall-fleet[data-step="far"] .wall-fleet-glyph'), /font-size: 0\.62em/);
   // The name step lives on the stage, where caption and frame both read it.
@@ -740,10 +765,10 @@ test('T30: data-plate is the plate\'s tone; a warn or calm plate leaves the crit
 
 test('wall.css (T30): the far line steps down under a crit plate only; the echo drops under any plate', () => {
   const css = read('css/wall.css');
-  const steps = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*)\{[^}]*font-size: var\(--cap-name\)/g)].map((x) => x[1].trim())
+  const steps = [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]*)\{[^}]*font-size: var\(--cap-(?:name|why)\)/g)].map((x) => x[1].trim())
     .filter((sel) => sel.includes('wall-fleet'));
   assert.deepEqual(steps, ['.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-line'],
-    'only a crit plate sets the far line at the name step');
+    'only a crit plate steps the far line down (T19: to the why step)');
   assert.doesNotMatch(css, /\[data-plate(="warn"|="grey")?\] \.wall-fleet\[data-step="far"\]/, 'a milder plate leaves the 3 m size');
   // The 3 m size is larger than the plate's name step under a milder plate: 14vmin (fitted, 9 at the least) > 6.9vmin.
   assert.match(css, /--fleet-far: 14vmin;/);

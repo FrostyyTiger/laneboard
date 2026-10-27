@@ -316,9 +316,9 @@ function setLine(line, w) {
  * itself on `timers` and `now` (injectable). `stop()` ends the clock.
  * `plate(tone)` says whether a caption plate is up over the frame and in which
  * tone (`'crit'`, `'warn'`, `'grey'`; false when none; the galaxy's hud.js,
- * night 3 T4/T30): `data-plate` on `root`, and wall.css sets the far line at
- * the plate's name step under a crit plate only, so a trouble frame has one
- * headline and the worst thing stays the loudest.
+ * night 3 T4/T30): `data-plate` on `root`, and wall.css sets the far line on
+ * one line at the hero's second-line step (night 4 T19) under a crit plate
+ * only, so a trouble frame has one headline and the worst thing stays the loudest.
  * `update(model, { echo: true })` says the line names the plate's own
  * subject (night 3 T20): `data-echo` on the line, and wall.css drops it
  * while the plate is up (`hushed()`, when it covers nothing). `echo: 'why'`

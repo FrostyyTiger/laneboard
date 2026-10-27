@@ -43,6 +43,8 @@ html.wall body {
   background: var(--bg-canvas);
   /* The caption's name step, on the stage so the frame can share it (T4). */
   --cap-name: 6.9vmin;
+  /* Its why step, the hero's second line: the banner's size under a crit plate (night 4 T19). */
+  --cap-why: 4.3vmin;
 }
 
 /* The ground moves to the stage so the glow canvas (js/wall/glow.js) can sit
@@ -561,10 +563,38 @@ html.wall body {
 .wall-fleet[data-step="far"] .wall-fleet-glyph { font-size: 0.62em; }
 /* One headline per trouble frame (night 3 T4, r54-film-ui 1): while a crit
    plate is up (galaxy hud.js sets data-plate to the plate's tone) its hero is
-   the headline and the far line steps down to the plate's name step, its glyph
-   with it (em). The worst thing is the loudest (T30, r41-operator galaxy 1):
+   the only type at the top step. The far line steps down to the hero's second
+   line (night 4 T19, r4-film-ui galaxy 1: the why step, at most half the
+   hero's least size) and folds into one line, `■ HV2 · STORAGE · POOL 97% FULL
+   +3 MORE`, on the why's baseline; the glyph steps with it (em) and the why is
+   what gets cut. The worst thing is the loudest (T30, r41-operator galaxy 1):
    the far line is crit, so under a warn or calm plate it keeps its 3 m size. */
-.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-line { font-size: var(--cap-name); }
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  max-width: calc(64vw + 2.4vmin + var(--frame-x));
+}
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-line {
+  flex: none;
+  font-size: var(--cap-why);
+  line-height: 1;
+}
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub {
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  gap: 0;
+}
+/* The count keeps its space when the why is gone (T9's echo, below). */
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub .wall-fleet-more { margin-left: 2.4vmin; }
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-step="far"] .wall-fleet-sub-why::before {
+  content: "·";
+  margin: 0 0.25em;
+}
+/* Holding the oldest of two crits (T9) the why is the plate's: on one line it
+   goes with its place, so the count does not stand off past a gap. */
+.wall-frame-layer[data-plate="crit"] .wall-fleet[data-echo="why"] .wall-fleet-sub-why { display: none; }
 /* Not three reds saying one thing (night 3 T20, r11-dreamer galaxy 3): when
    the line would name the plate's own subject (hud.js bannerEcho: no other
    problem to step down to) it drops out while the plate is up, at any step,
