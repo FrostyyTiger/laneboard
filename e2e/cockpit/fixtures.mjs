@@ -78,9 +78,10 @@ function makeRoom(fakeAgent) {
      * `empty`: a conversation with no turn; `cockpit: false`: the same board with no
      * cockpit configured (S-SCR-09's second run); `script` the fake agent's script;
      * `clock` `{set, mode}` the room's clock from its first timer on (build B217); `edit(script)`
-     * changes the copied script before the boot (S-C1-37's second case).
+     * changes the copied script before the boot (S-C1-37's second case); `seeded` the turns
+     * themselves in place of `turns` (S-C1-39's t-0101…, seededTurns' options).
      */
-    async start({ turns = 0, script = 'c1-render', cockpit = true, board = null, config = {}, clock = null, edit = null } = {}) {
+    async start({ turns = 0, seeded = null, script = 'c1-render', cockpit = true, board = null, config = {}, clock = null, edit = null } = {}) {
       fakeAgent.use(script);
       if (edit) fakeAgent.edit(edit); // the script changed before the room's first start
       const dir = tmp('lb-room-');
@@ -95,7 +96,7 @@ function makeRoom(fakeAgent) {
       const booted = await boot({
         mode: 'builder', entry: ROOM_UNDER_TEST, config: cfg,
         env: { FAKE_AGENT_DIR: fakeAgent.dir, ...(clock ? { ROOM_TEST_CLOCK: JSON.stringify(clock) } : {}) },
-        stateFiles: cockpit ? conversationFiles({ turns: seededTurns(turns) }) : null,
+        stateFiles: cockpit ? conversationFiles({ turns: seeded ?? seededTurns(turns) }) : null,
         timeoutMs: 20_000,
       });
       rooms.push(booted);

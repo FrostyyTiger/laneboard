@@ -18,14 +18,18 @@ const WORDS = [
 export const SEEDED_CONVERSATION = 'c-0007';
 export const SEEDED_SESSION = '0b7e5c2a-4d1f-4c3e-9a8b-2f6d1e0c7a91';
 
-/** `n` done turns, t-0001…, ten minutes apart, the last 5 minutes before `now`, each 8 s long. */
-export function seededTurns(n, { now = Date.now() } = {}) {
+/**
+ * `n` done turns, t-0001…, ten minutes apart, the last 5 minutes before `now`, each 8 s long.
+ * `first` numbers them from another id, `spacingMs` and `lastAgoMs` date them otherwise
+ * (S-C1-39: t-0101…t-0120, 60 to 41 min before now).
+ */
+export function seededTurns(n, { now = Date.now(), first = 1, spacingMs = 10 * 60_000, lastAgoMs = 5 * 60_000 } = {}) {
   const out = [];
   for (let i = 0; i < n; i++) {
     const [prompt, reply] = WORDS[i % WORDS.length];
     const k = Math.floor(i / WORDS.length);
-    const at = now - 5 * 60_000 - (n - 1 - i) * 10 * 60_000;
-    const turnId = `t-${String(i + 1).padStart(4, '0')}`;
+    const at = now - lastAgoMs - (n - 1 - i) * spacingMs;
+    const turnId = `t-${String(first + i).padStart(4, '0')}`;
     out.push({
       turnId, clientId: `p-${String(i + 1).padStart(8, '0')}`, source: 'typed', lang: null, about: null,
       prompt: k ? `${prompt} (${k + 1})` : prompt, at: isoAt(at), state: 'done',

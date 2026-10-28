@@ -1212,3 +1212,35 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   S-C1-38 failed on a busy machine; S-C1-38 says clock `real`, and the later cases' pages get the
   page's own clock, as their comments said — spec: S-C1-37 ("its clock fixed"), S-C1-38
   ("clock `real`") — overrule: back to `page.clock` with `runFor` to drive the 5 s.
+- B222 (T29) `NEW` is enabled while the link is `live` and no status line holds the slot (any row
+  of §10.1, not only room-down: the line wins the slot, so the bar has nowhere to show), and stays
+  disabled from `START` until the room's `conversation.new` or the next `welcome` (protocols.md
+  §3.6's `not-now` never needed); a `conversation.new` hides a bar shown on another screen (the
+  question is answered); `START` with a turn running reads `● STOPPING` at the tap as `STOP` does
+  — spec: c1-talk.md §11 "Ask first", §8, protocols.md §3.6 — overrule: `newState()` and
+  `startNew()` in `pane.js`.
+- B223 (T29) S-C1-39's readings: (a) "within 5 s of the kill `room-down`" is the 5 s grace from the
+  loss, which is the kill (the link closed 3-6 ms after it): asserted 4.9-5.1 s after the close,
+  timed on the page (see `## For the owner`); (b) the restarted fake agent's start is slowed to
+  12 s (`start.initAfterMs`, `fakeAgent.edit`, as S-C1-37's second case edits its script) so the
+  page's snapshot comes before the agent's `ready` and both E2 lines show in the scenario's order;
+  with the script's 200 ms the agent is back long before the page's backoff reconnects and the
+  page draws only the second line; (c) "one `turn` line per turn (24 after the answer, rewritten
+  at the start)": t-0101…t-0123 have one line each after the rewrite, t-0124 has its appends of
+  §11.7.1 (the last line of a `turnId` wins), 24 distinct turns, its last line `done` — spec:
+  S-C1-39, screens.md §7, protocols.md §11.7.1 — overrule: the steps in `c1-session.spec.mjs`.
+- B224 (T29) The divider and the new conversation's turns go in one box (`.ck-current`) whose
+  min-height is the conversation's own height less its padding, so the view at its end shows the
+  divider at the top and the pin rule (§4, §7.1) needs nothing new; the box of an earlier new
+  conversation loses its min-height at the next one; a snapshot draws the current conversation
+  only, with no divider (§11: "A reload shows only the current conversation") — spec: c1-talk.md
+  §11 "The divider" — overrule: `sizeCurrent()`/`newConversation()` in `pane.js`.
+- B225 (T29) Names the spec does not give: the divider is `[data-cockpit-divider]` (`owner` or
+  `forced`), the bar's question `.ck-newbar-text`; the forced divider may wrap to a second line
+  (its 16 px caps are wider than the 560 px column less two 16 px rules); `seededTurns()` takes
+  `first`, `spacingMs`, `lastAgoMs` and `room.start({seeded})` the turns themselves, for S-C1-39's
+  t-0101…t-0120 dated 60 to 41 min ago — spec: c1-talk.md §11, S-C1-39 — overrule: rename in
+  `newconv.js` and the spec file.
+- B226 (T29) Decision numbers D30-D39 are not written in `public/js/` comments (cite the spec
+  section instead): `test/render.test.mjs` guards against a chart library with `/d3/i` over every
+  page script — spec: none — overrule: loosen that guard (not a cockpit file).

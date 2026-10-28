@@ -527,3 +527,45 @@
 :root:is([data-keyboard="up"], [data-keyboard="held"]) .ck-open {
   bottom: calc(var(--ck-kb-gap, 0px) + 88px);
 }
+
+/* the NEW bar, in the status line's slot: 80 px, --bg-sunken; the question from x 784, START
+   and KEEP 96x48, 16 px apart, KEEP 16 px from the pane's right edge (c1-talk.md §11, D36) */
+.ck-newbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 80px;
+  padding: 0 16px 0 var(--ck-in);
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--line);
+}
+.ck-newbar[hidden] { display: none; }
+.ck-newbar-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font: 500 18px/1.35 var(--font-label);
+  color: var(--text-1);
+}
+.ck-newbar-btn { flex: none; width: 96px; }
+
+/* the new conversation: the divider on top, its turns under it; at least the conversation's
+   height (pane.js sizeCurrent), so its end shows the divider at the top (c1-talk.md §11) */
+.ck-current { display: flex; flex-direction: column; gap: 32px; }
+.ck-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 48px; /* 48 px; the forced divider's longer words may take a second line */
+  flex: none;
+}
+.ck-divider::before,
+.ck-divider::after { content: ""; flex: 1; min-width: 16px; border-top: 1px solid var(--line); }
+.ck-divider-text {
+  font: 500 16px/1 var(--font-label);
+  letter-spacing: var(--ls-label);
+  line-height: 1.35;
+  text-align: center;
+  color: var(--text-3);
+}

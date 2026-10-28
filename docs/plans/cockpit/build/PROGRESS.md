@@ -422,6 +422,17 @@ What the slice itself says waits; nothing else moved here.
 - Review 95-spec-keeper, B221: S-C1-37's `Test:` line names `page.clock.setFixedTime`, the build fixes the page's `Date` only (real timers, S-C1-38 needs the 5 s grace in real time). Reviewer sides with the build; amend the `Test:` line?
 - Review 95-spec-keeper, B220: S-C1-37/38 run on the Wall page (rect y 64-144); the app's row (y 100-180, `c1-talk.md:1191`) is asserted by no test. Name the page in the scenario, or add the app rect as a step?
 - Review 95-spec-keeper, B204: S-C1-27's "1 before and 2 after" is wrong as a count (2 and 3 with the first prompt); typo-level fix "the `prompts()` with its words". Build counts the steer's words only.
+- T29 (round 97), S-C1-39's timing wording: "Then within 5 s of the kill `data-cockpit="room-down"`
+  and its status line show" against screens.md §7 "A lost room link shows only after a **5 s
+  grace** … The grace starts at the link's close" (and S-SCR-17's "at t = 4.9 s nothing has
+  changed; at t = 5 s `data-cockpit="room-down"`"). The kill closes the link a few ms later, so
+  room-down comes 5.0 s after the close, a few ms past 5 s after the kill. Built (B223): asserted
+  4.9-5.1 s after the close. A one-word spec fix ("5 s after the kill") would settle it.
+- T29 (round 97), S-C1-39's "one `turn` line per turn (24 after the answer, rewritten at the
+  start)" against protocols.md §11.7.1's appends ("The room appends one at `turn.prompt`, at every
+  `tool.end`, `text.block` … and at `turn.end`"): after the answer t-0124 has several lines until
+  the next room start rewrites the file. Built (B223): one line per turn of the rewrite, 24
+  distinct turns, t-0124's last line `done`.
 
 ## Measured on the real screen
 

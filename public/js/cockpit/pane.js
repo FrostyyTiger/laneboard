@@ -12,6 +12,7 @@
 //   onPrompt(msg)              SEND: the `prompt` to the room (protocols.md §3.1); the block is
 //                              drawn at the tap with `· SENDING` until the room's echo (B8)
 //   onStop(msg)                STOP: the `stop` to the room (protocols.md §3.3)
+//   onNew(msg)                 START on the `NEW` bar: the `new` to the room (protocols.md §3.6)
 //   onGap()                    a message the pane cannot place: the link closes 4000 `gap` and
 //                              the snapshot redraws (D119; protocols.md §3.4's unknown `clientId`)
 //   pane.open() / .close() / .isOpen()
@@ -21,6 +22,7 @@
 import { hasAge, pickStatus, statusText as statusLine } from './status.js';
 import { AGE_FROM_MS, CONFIRM_WAIT_MS, MAX_PROMPT_CHARS, PANE_SLIDE_MS, STOP_GUARD_MS, TICK_MS } from '../core/cockpit-constants.js';
 import { createTurn } from './turns.js';
+import { createDivider, createNewBar } from './newconv.js';
 import { endButtons, endText, GO_ON_TEXT } from './errors.js';
 import { canSend, inputHeight, isSendKey, lengthNote, linesFromScroll, INPUT_ONE_LINE_PX, restoreDraft } from './draft.js';
 import { focusNow } from './focus.js';
@@ -91,6 +93,7 @@ export function createPane(opts = {}) {
   const onOpenChange = opts.onOpenChange ?? (() => {});
   const onPrompt = opts.onPrompt ?? (() => false);
   const onStop = opts.onStop ?? (() => false);
+  const onNew = opts.onNew ?? (() => false);
   const onGap = opts.onGap ?? (() => {});
   const focus = opts.focus ?? (() => focusNow({ page, doc }));
   const now = opts.now ?? (() => Date.now());
@@ -109,7 +112,7 @@ export function createPane(opts = {}) {
   const turnWord = el(doc, 'span', 'ck-turnword', { 'data-cockpit-turn': '' });
   turnWord.textContent = TURN_WORDS.idle;
   const headBtns = el(doc, 'span', 'ck-headbtns');
-  // NEW waits for T29 (c1-talk.md §11): drawn in its rect, disabled until then (build B111).
+  // NEW asks first (c1-talk.md §11 "Ask first"): the bar below, in the status line's slot.
   const newBtn = button(doc, 'ck-btn ck-new', 'data-cockpit-new', 'NEW');
   newBtn.disabled = true;
   const closeBtn = button(doc, 'ck-btn ck-close', 'data-cockpit-close', 'CLOSE');
@@ -122,6 +125,17 @@ export function createPane(opts = {}) {
   const retryBtn = button(doc, 'ck-btn ck-retry', null, 'RETRY NOW');
   retryBtn.hidden = true;
   status.append(statusText, retryBtn);
+
+  // c1-talk.md §11: the `NEW` bar, 80 px under the header like the status line; it pushes the
+  // conversation down and the pin rule holds (§7.1).
+  let newPending = false; // START sent, no `conversation.new` yet: NEW waits (protocols.md §3.6 `not-now`)
+  const newBar = createNewBar({
+    doc,
+    setTimer: (fn, ms) => doc.defaultView.setTimeout(fn, ms),
+    clearTimer: (h) => doc.defaultView.clearTimeout(h),
+    onHide: () => { if (open) grow(); },
+    onStart: () => startNew(),
+  });
 
   const convo = el(doc, 'div', 'ck-convo');
   const note = el(doc, 'p', 'ck-note');
@@ -163,7 +177,7 @@ export function createPane(opts = {}) {
     turnWord.hidden = true; // no room behind this pane: no turn state to show (build B133)
     pane.append(head, old);
   } else {
-    pane.append(head, status, band, lineSlot, row);
+    pane.append(head, status, newBar.node, band, lineSlot, row);
   }
 
   // --- the opener above the talk button's place (screens.md §4, D116)
@@ -308,6 +322,7 @@ export function createPane(opts = {}) {
     let h = inputHeight(linesFromScroll(input.scrollHeight, border));
     if (keyboardUp()) h = Math.min(h, inputCap(oneLineLeft()));
     input.style.height = `${h}px`;
+    sizeCurrent();
     // Past its cap the text scrolls inside, the caret line in sight (§7.1).
     if (doc.activeElement === input && input.selectionEnd === input.value.length) input.scrollTop = input.scrollHeight;
     pane.style.setProperty('--ck-grow', `${h - INPUT_ONE_LINE_PX}px`);
@@ -324,7 +339,7 @@ export function createPane(opts = {}) {
    */
   function oneLineLeft() {
     const shown = (n) => (n.hidden ? 0 : n.offsetHeight);
-    return pane.getBoundingClientRect().height - head.offsetHeight - shown(status) - shown(lineSlot) - KEYBOARD_ROW_PX;
+    return pane.getBoundingClientRect().height - head.offsetHeight - shown(status) - shown(newBar.node) - shown(lineSlot) - KEYBOARD_ROW_PX;
   }
 
   /** Everything the draft decides: SEND, the line slot, the input's height. */
@@ -364,6 +379,8 @@ export function createPane(opts = {}) {
     const was = status.hidden;
     const row = currentRow();
     if (row) {
+      // §11: a status line wins the slot; a bar showing goes as if KEEP was tapped.
+      newBar.hide();
       status.hidden = false;
       status.dataset.status = row.code;
       const text = statusLine(row, now());
@@ -384,7 +401,17 @@ export function createPane(opts = {}) {
     const counting = hasAge(row);
     if (counting && tick === null) tick = win.setInterval(drawStatus, TICK_MS);
     if (!counting && tick !== null) { win.clearInterval(tick); tick = null; }
+    newState();
     if (was !== status.hidden && open) grow(); // the input's cap with the keyboard up (§7.1)
+  }
+
+  /**
+   * §11: `NEW` while the link is live and no status line holds the slot (build B222); not
+   * again until the room's `conversation.new` for the last `START` (protocols.md §3.6).
+   */
+  function newState() {
+    newBtn.disabled = unsupported || link.status !== 'live' || !status.hidden || newPending;
+    if (newBtn.disabled) newBar.hide();
   }
 
   // c1-talk.md §10.1 row 1: `navigator.onLine` (screens.md §7 "The screen offline").
@@ -453,6 +480,7 @@ export function createPane(opts = {}) {
 
   function drawSnapshot(snap) {
     const turns = Array.isArray(snap.turns) ? snap.turns : [];
+    tail = turnsBox; // a snapshot is the current conversation only (§11: no divider after a reload)
     const frag = doc.createDocumentFragment();
     views.clear();
     exited.clear();
@@ -496,7 +524,7 @@ export function createPane(opts = {}) {
   }
 
   function appendTurn(v) {
-    turnsBox.append(v.node);
+    tail.append(v.node);
     drawnTurns = (drawnTurns ?? 0) + 1;
     drawNote();
   }
@@ -706,7 +734,7 @@ export function createPane(opts = {}) {
       offset: clockOffset, startMs: now(), promptButtons,
     });
     views.set(msg.turnId, v);
-    turnsBox.append(v.node);
+    tail.append(v.node);
     grew();
     ageTick();
     return true;
@@ -719,6 +747,60 @@ export function createPane(opts = {}) {
     if (!ok) { onGap(); return; }
     changed(v);
     grew(); // the pin rule (§4) in the same task: the block moved or its line came
+  }
+
+  /**
+   * Where new turns go: the turns box, or after a `NEW CONVERSATION` divider the box that
+   * holds it and the turns of the new conversation.
+   */
+  let tail = turnsBox;
+
+  /**
+   * §11 "The divider": the view scrolls so the divider is at the conversation's top. The new
+   * conversation's box is at least the conversation's own height, so its end (where the pin
+   * rule keeps the view) has the divider at the top until the turns fill it.
+   */
+  function sizeCurrent() {
+    if (tail === turnsBox) return;
+    const cs = win.getComputedStyle(convo);
+    const h = convo.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+    tail.style.minHeight = `${Math.max(0, Math.floor(h))}px`;
+  }
+
+  /**
+   * `START` (§11): a running turn is stopped first, `● STOPPING` at once as for `STOP` (§8);
+   * the room stops it, starts the new session and sends `conversation.new` (protocols.md §3.6).
+   */
+  function startNew() {
+    if (link.status !== 'live' || newPending) return;
+    const v = runningView();
+    if (v?.turnId && root.dataset.turn !== 'stopping') {
+      setTurn('stopping');
+      v.freeze();
+      changed(v);
+    }
+    const seq = onNew({ type: 'new' });
+    newPending = typeof seq === 'number';
+    newState();
+  }
+
+  /** `conversation.new` (protocols.md §3.6): the divider on every screen, the old turns above it. */
+  function newConversation(msg) {
+    newPending = false;
+    newBar.hide(); // the question is answered, from whichever screen (build B222)
+    if (tail !== turnsBox) tail.style.minHeight = ''; // an earlier new conversation is history now
+    const box = el(doc, 'div', 'ck-current');
+    box.append(createDivider(doc, msg, clockOffset));
+    turnsBox.append(box);
+    tail = box;
+    drawnTurns = Math.max(1, drawnTurns ?? 0);
+    drawNote();
+    if (!runningView()) setTurn('idle');
+    newState();
+    pinned = true;
+    follow.hidden = true;
+    sizeCurrent();
+    toEnd();
   }
 
   /**
@@ -854,6 +936,7 @@ export function createPane(opts = {}) {
 
   opener.addEventListener('click', () => setOpen(!open));
   closeBtn.addEventListener('click', () => setOpen(false));
+  newBtn.addEventListener('click', () => { if (!newBtn.disabled) newBar.toggle(); });
   retryBtn.addEventListener('click', () => onRetryNow());
   send.addEventListener('click', (e) => {
     if (send.dataset.send === 'stop') { if (e.detail === 0) stopNow(); return; }
@@ -887,7 +970,7 @@ export function createPane(opts = {}) {
     drawNote();
     sendState();
     drawLine();
-    newBtn.disabled = true;
+    newState();
     turnWord.classList.toggle('ck-grey', link.status !== 'live');
     if (open) grow(); // the status line came or went: the input's cap with the keyboard up (§7.1)
   }
@@ -910,6 +993,7 @@ export function createPane(opts = {}) {
     switch (msg.type) {
       case 'welcome':
         agentBack = false;
+        newPending = false; // a new link: a START before it is the room's to finish or not
         {
           // §10.1: a page that loads or reconnects draws the line from welcome.status; after a
           // room-down that showed, `Back since` unless that line outranks it (screens.md §7).
@@ -932,6 +1016,9 @@ export function createPane(opts = {}) {
         return;
       case 'snapshot':
         drawSnapshot(msg);
+        return;
+      case 'conversation.new':
+        newConversation(msg);
         return;
       case 'turn.prompt':
         // A new turn runs on a session that is up: a cut turn's agent is back (§10 E2).
@@ -1017,6 +1104,6 @@ export function createPane(opts = {}) {
     open: () => setOpen(true),
     close: () => setOpen(false),
     isOpen: () => open,
-    elements: { pane, opener, input, send, status, convo, follow, lineSlot },
+    elements: { pane, opener, input, send, status, convo, follow, lineSlot, newBtn, newBar: newBar.node },
   };
 }
