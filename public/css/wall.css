@@ -813,7 +813,11 @@ html.wall body {
 /* ▶ is drawn smaller than ‹ at the same size: it takes the word's cap height. */
 .galaxy-back[data-kind="tour"] .galaxy-back-glyph { font-size: 0.8em; margin-top: 0; }
 
-/* The fan (night 4 T3, js/wall/galaxy/fan.js): the planets under one finger
+/* Unused since night 5 T11 (no picker: touch.js hitNearest; fan.js is gone,
+   galaxy.html's #galaxy-fan stays hidden until the cockpit drops it). Kept
+   unchanged, as night 5 asks of wall.css's existing rules; --fan-px, which
+   fan.js set, is given its old floor by an added rule below the block.
+   The fan (night 4 T3, js/wall/galaxy/fan.js): the planets under one finger
    as rows round it, for the next tap. Each row is a target of FAN.rowPx (48
    css px, night 2's floor) in the names' mono at --fan-px (fan.js measures
    the widths from it); the left arc set flush to the finger, as the right.
@@ -877,6 +881,8 @@ html.wall body {
 .galaxy-fan-leader[data-tone="crit"] { background: var(--crit); }
 .galaxy-fan-leader[data-tone="warn"] { background: var(--warn); }
 .galaxy-fan-leader[data-tone="low"] { background: var(--p3); }
+/* Night 5 T11: fan.js no longer sets the rows' size; the unused block keeps its old 18 px floor. */
+.galaxy-fan { --fan-px: 18px; }
 
 /* Show commands (cockpit c4-show-canvas.md §3, D72, D73; js/wall/galaxy/show.js): what the
    agent points at. A highlight is four 2 px accent corner brackets per node (12 px arms, 8 px

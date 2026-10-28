@@ -639,7 +639,7 @@ test('the hud opens a tapped site with its brackets at once and its plate when t
 test('galaxy/main.js wires taps: sites hit-tested in the stage\'s px, a hit flies there and opens it', () => {
   const js = read('js/wall/galaxy/main.js');
   assert.match(js, /createTaps\(touch, \{/);
-  assert.match(js, /hitTest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, labels\.shown\(\), beams\), x - o\.left, y - o\.top\)/);
+  assert.match(js, /hitNearest\(tapPoints\(galaxy\.world\?\.sites, cam\.screenOf, names, beams\), x - o\.left, y - o\.top, reach\)/);
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
   assert.match(open, /finger\.focus\(id, TIMING\.zoom\)/);
   assert.match(open, /hud\.open\(\{[^}]*arriveMs: there \|\| reduced \? 0 : FLIGHT\.ms \}\)/, 'a cut (reduced motion, T14) has its plate at once');
@@ -692,7 +692,7 @@ test('pointer events on the page: in an open system a tap on a planet opens the 
 
 test('galaxy/main.js wires planet taps (T11): members asked before sites, a planet\'s sheet at once (its camera: night 5 T9, wall-galaxy-pick)', () => {
   const js = read('js/wall/galaxy/main.js');
-  const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
+  const pick = js.slice(js.indexOf('pick: (x, y, ev) =>'), js.indexOf('tap: (hit)'));
   assert.ok(pick.indexOf('memberPoints(') >= 0 && pick.indexOf('memberPoints(') < pick.indexOf('tapPoints('), 'members first');
   assert.match(js, /const openPlanet = \(id, site\) => \{\s*left\.leave\(place, cam\);\s*hud\.open\(\{ id, arriveMs: 0 \}\);/);
   assert.match(js, /if \(hit\?\.covered\) return; if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); else goBack\(\);/);
@@ -943,10 +943,10 @@ test('pointer events on the page: with a sheet up a tap on the plate over a star
 
 test('galaxy/main.js wires the words (night 4 T1): coverHit before the scene, a covered hit opens nothing', () => {
   const js = read('js/wall/galaxy/main.js');
-  const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
+  const pick = js.slice(js.indexOf('pick: (x, y, ev) =>'), js.indexOf('tap: (hit)'));
   assert.ok(pick.indexOf('coverHit([...hud.covers(), ...touchCovers()], rows,') >= 0 && pick.indexOf('coverHit(') < pick.indexOf('memberPoints('), 'the words first');
   assert.match(pick, /hud\.targets\(\)/);
-  assert.match(js, /tap: \(hit\) => \{[^}]*\}\s*fan\?\.hide\(\);\s*if \(hit\?\.covered\) return;/);
+  assert.match(js, /tap: \(hit\) => \{\s*if \(hit\?\.covered\) return;/);
 });
 
 // ---- night 4 T2: the loudest thing is a target ----
@@ -1052,7 +1052,7 @@ test('fx=beacon: a finger on the pillar\'s top hits its site, past the star\'s o
 
 test('galaxy/main.js wires the fleet line and the pillar (night 4 T2): rows keep their step, beams only with fx=beacon', () => {
   const js = read('js/wall/galaxy/main.js');
-  const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
+  const pick = js.slice(js.indexOf('pick: (x, y, ev) =>'), js.indexOf('tap: (hit)'));
   assert.match(pick, /\.\.\.r, box:/, 'a row keeps its step');
   assert.match(pick, /coverHit\(\[\.\.\.hud\.covers\(\), \.\.\.touchCovers\(\)\], rows, galaxy\.world\?\.sites, x - o\.left, y - o\.top, place\.site\)/);
   assert.match(pick, /fx\.has\('beacon'\) \? beamSegments\(galaxy\.beams\?\.\(\), cam\.screenAt\) : \[\]/);

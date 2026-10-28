@@ -20,9 +20,10 @@
 // (camera.js `steer`, which only this sets).
 //
 // A tap (T10, README §7 Night 3 C3): a finger down and up within TAP.ms and
-// the drag's slop, alone and not a palm. `hitTest` finds the site under it in
-// screen space (a finger-sized disc round each star, or its shown name;
-// `tapPoints` lists them), worst tone first, then the nearest; `createTaps`
+// the drag's slop, alone and not a palm. `hitNearest` finds the site under it
+// in screen space (night 5 T11: the nearest drawn centre within 48 css px for
+// a finger, 28 for a mouse, or its shown name; `tapPoints` lists them; no
+// picker), and `createTaps`
 // tells the page, which flies there and opens it. In an open system a tap
 // on a planet (T11, `memberPoints`, asked before the sites) opens its own
 // sheet (hud.js `sheetCaption`).
@@ -530,7 +531,15 @@ export function createGestures(stage, touch, cam, opts = {}) {
  * is 53 css px on the tablet; above night 2's 48 px floor); `palmPx` a contact
  * wider or taller than this is a palm, not a finger.
  */
-export const TAP = Object.freeze({ ms: 300, slopPx: ORBIT.slopPx, radiusPx: 27, palmPx: 120 });
+export const TAP = Object.freeze({ ms: 300, slopPx: ORBIT.slopPx, radiusPx: 27, palmPx: 120, fingerPx: 48, mousePx: 28 });
+
+/**
+ * The reach of a tap in screen space (night 5 T11, README §7 Night 5 C1):
+ * `TAP.fingerPx` (48 css px, the cockpit's D224 touch floor) round a drawn
+ * centre for a finger or a pen, `TAP.mousePx` (28) for a mouse, by the
+ * pointer event's `pointerType`. Pure.
+ */
+export const hitRadius = (type) => (type === 'mouse' ? TAP.mousePx : TAP.fingerPx);
 
 /** Louder first: the order a tie is broken in. */
 const TAP_TONES = ['crit', 'warn', 'low', 'calm'];
@@ -562,22 +571,30 @@ export function hitTest(points, x, y, radius = TAP.radiusPx) {
   return best;
 }
 
+/** hitNearest's tie: two centres this close in distance from the finger (css px) are one distance. */
+const TIE_PX = 2;
+
 /**
- * Every point a tap at `x`, `y` hits (hitTest's rule: within `max(radius,
- * r)` of its centre or on its name), worst tone first, then the nearest.
+ * What a tap at `x`, `y` hits with no picker (night 5 T11; the owner: "it's
+ * so tiny I need to select which one I meant"): of `points` (hitTest's
+ * shape) the one whose drawn centre is nearest, within `max(radius, r)`
+ * (hitRadius: a finger's or a mouse's reach), a name under the finger
+ * counting as 0 away and a beacon's pillar as its nearest point. Two within
+ * `TIE_PX` of each other go to the louder tone. Returns the point or null.
  * Pure.
  */
-export function hitAll(points, x, y, radius = TAP.radiusPx) {
-  const out = [];
+export function hitNearest(points, x, y, radius = TAP.fingerPx) {
+  let best = null, bestD = Infinity;
   for (const p of points ?? []) {
     if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
     const b = p.box;
     const onName = b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
     const d = onName ? 0 : Math.min(Math.hypot(x - p.x, y - p.y), p.beam ? segDist(p.beam, x, y) : Infinity);
-    if (onName || d <= Math.max(radius, Number(p.r) || 0)) out.push({ p, d });
+    if (!onName && d > Math.max(radius, Number(p.r) || 0)) continue;
+    const tie = best && Math.abs(d - bestD) <= TIE_PX;
+    if (!best || (tie ? toneRank(p.tone) < toneRank(best.tone) : d < bestD)) { best = p; bestD = d; }
   }
-  out.sort((a, b) => toneRank(a.p.tone) - toneRank(b.p.tone) || a.d - b.d);
-  return out.map((h) => h.p);
+  return best;
 }
 
 /** How far `x`, `y` is from the segment `{ x0, y0, x1, y1 }`, in its px. */
@@ -654,7 +671,7 @@ export function memberPoints(sites, screenOf, names = [], minOpen = 0.5) {
       const sp = m?.id != null ? screenOf(m.id) : null;
       if (!sp) continue;
       const p = { id: m.id, site: s.id, x: sp.x, y: sp.y, r: sp.r, tone: toneOf(m.node), box: boxes.get(m.id) ?? null, node: m.node };
-      // A moon says whose it is and whether it stands on its planet's open ring (T8, ringHit).
+      // A moon says whose it is and whether it stands on its planet's open ring (T8, memberHit).
       if (m.moon) { p.host = m.moon.host?.id ?? m.moon.host ?? null; p.onRing = Boolean(m.ringOpen); }
       out.push(p);
     }
@@ -663,23 +680,17 @@ export function memberPoints(sites, screenOf, names = [], minOpen = 0.5) {
 }
 
 /**
- * One planet's worth of hits (night 5 T8; the owner: "it's so tiny I need to
- * select which one I meant", no picker): `hits` from hitAll over
- * memberPoints. A moon on an open ring was put there for the finger, so the
- * first such hit wins; a planet and its own folded moons are one target, the
- * planet (its ring opens, then each moon has its own place); one hit is
- * itself. Null when the hits belong to two planets or more (the fan's, until
- * T11) or there are none. Pure.
+ * The planet or moon a tap hits in an open system (night 5 T8, T11):
+ * hitNearest over memberPoints, and a folded moon nearest the finger is its
+ * planet when that planet is within reach too (a planet and its own folded
+ * moons are one target: its ring opens, then each moon has its own place).
+ * A moon on an open ring is its own target, as the nearest centre already
+ * makes it. Pure.
  */
-export function ringHit(hits) {
-  const list = (hits ?? []).filter(Boolean);
-  if (list.length < 2) return list[0] ?? null;
-  const onRing = list.find((h) => h.onRing);
-  if (onRing) return onRing;
-  const planetOf = (h) => (h.host != null ? h.host : h.id);
-  const p = planetOf(list[0]);
-  if (!list.every((h) => planetOf(h) === p)) return null;
-  return list.find((h) => h.id === p) ?? { id: p, site: list[0].site };
+export function memberHit(points, x, y, radius = TAP.fingerPx) {
+  const hit = hitNearest(points, x, y, radius);
+  if (!hit || hit.host == null || hit.onRing) return hit;
+  return hitNearest((points ?? []).filter((p) => p?.id === hit.host), x, y, radius) ?? hit;
 }
 
 /** What a tap on the words over the canvas hits when it opens nothing (T1): not a star, not empty sky. */
@@ -727,8 +738,8 @@ export const isPalm = (ev, palmPx = TAP.palmPx) => (Number(ev?.width) || 0) > pa
 
 /**
  * Taps (T10). `createTaps(touch, { pick, tap, clock })`: `touch` is
- * createTouch's; `pick(x, y)` says what is under a finger (hitTest over the
- * page's points), asked at the `pointerdown` so a thing that drifts under
+ * createTouch's; `pick(x, y, ev)` says what is under a finger (hitNearest over
+ * the page's points, its reach by `ev.pointerType`), asked at the `pointerdown` so a thing that drifts under
  * the finger is not lost by the lift; `tap(hit, { x, y })` hears a tap that
  * landed, with `hit` null on empty sky. Only in `explore`; a finger that
  * moves past the slop, stays down past `TAP.ms`, is a palm or has company (a
@@ -743,7 +754,7 @@ export function createTaps(touch, opts = {}) {
       const crowd = downs.size > 0;
       for (const d of downs.values()) d.ok = false; // a second finger: a pinch, nobody's tap
       const ok = !crowd && !isPalm(ev);
-      downs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, t: o.clock(), ok, hit: ok ? o.pick(ev.clientX, ev.clientY) : null });
+      downs.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, t: o.clock(), ok, hit: ok ? o.pick(ev.clientX, ev.clientY, ev) : null });
       return;
     }
     const d = downs.get(ev.pointerId);
