@@ -196,7 +196,7 @@ export function createBridge(opts) {
     const envNames = ['LANEBOARD_MCP_TOKEN', ...names, ...Object.keys(extra)];
     const argv = spawnArgv({ agent, stateDir, instructions, session: id, resume, envNames });
     adapter = agent.kind === 'claude-code'
-      ? createClaudeCodeAdapter({ allowedTools: agent.allowedTools, write: (o) => writeLine(o), log })
+      ? createClaudeCodeAdapter({ allowedTools: agent.allowedTools, write: (o) => writeLine(o), log: (l) => log(redactor.text(l)) })
       : null;
     state = 'starting';
     let c;
@@ -389,7 +389,7 @@ export function createBridge(opts) {
     let o;
     try { o = JSON.parse(raw); } catch { o = null; }
     if (!o || typeof o !== 'object' || Array.isArray(o) || typeof o.type !== 'string') {
-      log(`cockpit agent: not understood: ${raw.slice(0, 200)}`);
+      log(`cockpit agent: not understood: ${redactor.text(raw.slice(0, 200))}`); // D211, as stderr
       return;
     }
     if (adapter) {
@@ -398,7 +398,7 @@ export function createBridge(opts) {
     }
     const chk = checkBridgeEvent(o, 'from-agent');
     if (!chk.ok) {
-      log(`cockpit agent: ${chk.code === 'unknown-type' ? 'unknown type' : chk.message}: ${raw.slice(0, 200)}`);
+      log(`cockpit agent: ${chk.code === 'unknown-type' ? 'unknown type' : chk.message}: ${redactor.text(raw.slice(0, 200))}`);
       return;
     }
     handle(o);
