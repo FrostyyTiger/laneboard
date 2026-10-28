@@ -369,6 +369,24 @@ Notes for every builder round (planner, round 7):
   still over three frames (11-22 s) while the banner's age counts up. Tick the age text in place every second without
   retyping the line (night 4's T30) — done when: a fake-clock test finds the plate's age text advancing each second while
   the typed text node and its typing state are untouched.
+- [ ] T32 (triage, r25-skeptic #1+#9) [ui] [variant:galaxy] The banner says only what the plate does not, and its count is the
+  fleet's: in a trouble hold `▲ HV1 · FIX-LOGIN · ASKED A QUESTION · 80M` repeats the plate's fourth line word for word, and
+  `+4 MORE` / `+3 MORE` flips with the camera with no change in the fleet. In a hold the banner shows a trouble not on the
+  plate (`▲ CLOUD · API-PROD · P95 1.8 S`), or nothing if every trouble is on it; the `+N` is always the fleet's total trouble,
+  never a function of what the plate shows. Goes with T23/T30 (read both first; T30's "never empty" yields to this when
+  nothing is off the plate) — done when: a test finds, for a plate holding trouble X, no banner line equal to X's text, the
+  `+N` equal across every camera state for a fixed fleet, and changing only when the fleet's trouble count does.
+- [ ] T33 (triage, r25-skeptic #12; night 4's T26 raised) [ui] [variant:galaxy] Hyperlanes stay grey at every zoom: in
+  `r24-galaxy` frame 1 the sun-to-site lanes repeat their nebula's yellow, and in `r24-t8-ring/04-ba-open` a red lane cuts
+  through HV1's open system and leaves the frame. A lane is grey; optionally it goes dark when its site's feed is silent
+  (freshness, a line already drawn) — done when: a scene test finds every lane's material the neutral grey for warn, crit and
+  down sites (trouble nebulae keep their hue), and a still of `?at=hv1&open=1` with HV1 in crit shows no red line through the
+  system.
+- [ ] T34 (triage, r25-skeptic #6; night 4's T49 raised) [ui] [variant:galaxy] The typing cursor never stands alone: a white
+  block blinks on an empty line under a full headline or under nothing (`r24-galaxy` frame 10, 26.9 s; `r20-fx-warp` frame 11).
+  The cursor shows only while letters arrive; the name line's space stays reserved but empty until the first letter; the typing
+  itself stays — done when: a fake-clock test finds no cursor element visible when the line is empty or fully typed and more
+  than the settle time has passed, and the line's box height equal before and after the first letter.
 
 - [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
   Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
@@ -441,6 +459,20 @@ From `r20-operator.md` (past the 3-task limit):
 - r20 #10 Wake says nothing for 300 ms (night 4's T62, r10 #12).
 - r20 fx: beacon pillar straight up about a cluster's diameter with a tick and the crit's age; activity rings at `--text-3` alpha, never in a lock; sweep pings only trouble as short fading dash arcs; afterglow needs a demo clear hook (same as r10/r15).
 
+From `r25-skeptic.md` (past the 3-task limit):
+- r25 #2 Drop the `STATUS ▲ N ATTENTION` count line when the list below shows every trouble it counts (`+N MORE` only when cut).
+- r25 #3 In explore the tapped node is the headline (`▲ BA` in its worst hue), its troubles the lines below; T18's card must not copy the plate's trouble-first order (also r10 #10).
+- r25 #4 Remove `VERSION` and `HOLDS 3 lanes` rows from the plate/sheet (the version, if anywhere, in the card's `…`).
+- r25 #5 The lock closes only on a member in trouble or one a finger picked; a calm hold has no lock (also `fx=activity` rings).
+- r25 #7 The tag is one word, `LIVE` or `STALE 2M`, readable at 3 m (C1b owns the stale part; note for it).
+- r25 #8 The tour's kicker is kind and parent (`BUILDER · IN HV1`), no `TARGET 02 / 05` counter (owner has it open as a taste question; skeptic votes yes; `tour.js` fenced).
+- r25 #10 `OFFSITE COPY OFFICE-NAS · 45:43` has no unit; one format (`LAST COPY 46 MIN AGO`) or remove.
+- r25 #11 Remove star-to-planet spokes (keep stems and a faint ellipse).
+- r25 #13 Dim the galaxy's outer arm ribbon below the hyperlanes.
+- r25 #14 Halve the clock and drop its date line at the overview.
+- r25 #15 Covered by T9; add to T9's test: every open moon and its lock inside the frame and off the controls (`‹ BACK`).
+- r25 fx: beacon straight up, short, crit age at its tip (same as r10/r15/r20); sweep: no wedge, a silent site gets one small outline mark; afterglow: demo clear hook or remove; warp, activity: skeptic says remove (see `## For the owner`).
+
 Closed by this night's plan (moot):
 - night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
   buttons and chips are 48 px by the night's tappable rule.
@@ -476,12 +508,14 @@ slim top bar of fleet totals, map modes.
   `dial`: a thin 24-hour ring round each star showing the last day's status as outline arcs in the old hue (afterglow with a clock).
   None became a task (decision for the owner; `eclipse` and `dial` change what "down" and history look like).
 - (triage r20, `fx` candidates, taste) `warp`: drop it, or keep it only on a flight to a crit with the target's name in the streak's colour (scored wow 3, streaks not visible); the overview banner's second line as `1 DOWN · 3 ATTENTION · 1 WARN` in big condensed caps instead of `+4 MORE`; a beacon-style vertical mark above every crit visible from any camera, gone when it clears. No new `fx` task this review.
+- (triage r25, taste/direction, not tasks) The skeptic asks for removal: `fx=warp` (streaks not visible, wow 2), `fx=activity` (repeats `7 WORKING`, calm 3) and `fx=afterglow` unless a demo hook can show it; `fx=sweep` reduced to one outline mark on a silent site. Decision for the owner, nothing removed. Also: the galaxy's brightest lines should be the ones that carry data (outer ribbon dimmed, spokes removed, #11/#13).
 
 ## Reviews
 
 - r10-film-ui.md: 12 galaxy findings + 5 fx + 3 m check; 3 became tasks (T23, T24, T25); #9 dropped (covered by T9), #1/#2 covered by T1b, the rest under `## Later` or `## For the owner`.
 - r15-dreamer.md: 9 galaxy findings + 5 fx + 3 unforgettable + 3 m check; 3 became tasks (T26, T27, T28); #1 is night 4's T23 raised, #6 is night 4's T29 raised, #2/#3 and the three proposals to the owner, #5/#7/#8/#9 and fx notes under `## Later`.
 - r20-operator.md: 10 galaxy findings + 5 fx + 3 m check; 3 became tasks (T29 = #1+#2, T30 = #4, T31 = #3); #8 crit size covered by T26, #5/#6/#7 need fenced `tour.js` (patch notes under `## Later`), #9/#10 and fx notes under `## Later`, proposals under `## For the owner`.
+- r25-skeptic.md: 15 galaxy findings + 5 fx + 3 m check; 3 became tasks (T32 = #1+#9, T33 = #12, T34 = #6); #15 covered by T9 (test note under `## Later`), #3 covered by the card (T18) and r10 #10, the rest and the fx notes under `## Later`, removals under `## For the owner`.
 
 ## Scores
 
@@ -505,5 +539,11 @@ slim top bar of fleet totals, map modes.
 | 20 | operator | fx-afterglow | | | | | 2 | 7 | |
 | 20 | operator | fx-activity | | | | | 3 | 3 | |
 | 20 | operator | fx-sweep | | | | | 4 | 5 | |
+| 25 | skeptic | galaxy | 7 | 6 | 6 | 5 | 6 | 5 | 7 |
+| 25 | skeptic | fx-beacon | | | | | 5 | 6 | |
+| 25 | skeptic | fx-warp | | | | | 2 | 7 | |
+| 25 | skeptic | fx-afterglow | | | | | 2 | 7 | |
+| 25 | skeptic | fx-activity | | | | | 3 | 3 | |
+| 25 | skeptic | fx-sweep | | | | | 4 | 5 | |
 
 ## Morning
