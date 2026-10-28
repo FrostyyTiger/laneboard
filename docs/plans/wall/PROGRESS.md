@@ -173,13 +173,26 @@ Notes for every builder round (planner, round 7):
   `?demo=1` film 34.7 fps at cpu 4x, 0 errors, no sun in any hold. **Not met:** `?at=lab&open=1` with the trouble
   plate up does not name `ba` and `bb`. Their own trouble lanes' names (feat-search, fix-login, ci-retry, a few px off
   them) take every side, and the plate squeezes HV1 into the right third. That part is split to T6b, after T7.
-- [ ] T6b (split from T6) [ui] [variant:galaxy] HV1's builders named in the tour's hold: with the trouble plate up
+- [x] T6b (split from T6) [ui] [variant:galaxy] HV1's builders named in the tour's hold: with the trouble plate up
   (`?at=lab&open=1`, free box ~550 px wide) `ba`/`bb` lose every side to their trouble lanes' names, which sit a few px
   off them; `feed:hv1/106` (scratch) also falls behind git-mirror in projection. Once T7 folds lanes into moons (tight,
   unnamed), check again and, if a builder is still unnamed, let a planet's name win over a child's of its own in
   `labels.js` while it stays in trouble's colour on the planet's glyph — done when: a labels test with
   `zoomedSiteShot(lab, t, DEMO_TIMING.zoom, view)` and the plate's covers names `ba`, `bb`, `bc` at four times, and a still
-  of `?at=lab&open=1` shows them whole.
+  of `?at=lab&open=1` shows them whole. (commit 5cf9de0)
+  Notes (builder, round 23): after T7 `ba`/`bb` were still unnamed at 3 of 4 times (their trouble moons' spheres and
+  names took every near side). `labels.js`: `placeLabels` puts a planet's item just before the first of its own moons'
+  (items carry `host`); `candidates(…, ring)` adds the four sides again just outside the planet's shown moons (`ringsOf`:
+  trouble or tappable moons, css px reach); and, since leading costs a trouble moon its name at some times (16 of 20
+  trouble names at the four times vs 18 before), a planet whose own trouble moon goes unnamed **says it**: its name
+  takes that moon's shape and hue (`▲ ba` in warn), its box reserved that wide so nothing hops. The plate's hero is not
+  counted as lost. Every trouble moon is named or carried by its planet (pinned). Test:
+  `test/wall-galaxy-hostnames.test.mjs` (3: the held shot `zoomedSiteShot(lab, t, DEMO_TIMING.zoom, view)` with the
+  trouble plate's covers names ba/bb/bc at 5/30/60/90 s with no overlaps and carried trouble; host ordering; ring sides);
+  the moons test now asks for `ba` too. Perf: one more projection per shown trouble moon of an open site, no draw change.
+  Looked at (`$RUN_DIR/shots/r23-t6b`, `r23-galaxy`): `?at=lab&open=1` names `▲ ba`, `▲ bb`, `■ bc` whole beside the
+  VM-C plate, VM-C still the loudest; `?demo=1` film 35.4 fps at cpu 4x, 0 errors. `feed:hv1/106` and some rooms
+  (vm-a/vm-b) still go unnamed in the plate's hold at times: not in this task's done-when, left as is.
 - [x] T7 (§7 Night 5 B2, folded) [ui] [variant:galaxy] Moons in the model and the scene: services under a room, lanes under a
   builder, sessions under a lane become moons (pure: which nodes are moons of which planet, from the map model); folded, they
   sit tight to their planet at half size, unnamed, not tappable (`scene.js` `MOON`, `moonOrbit`); the large demo carries
