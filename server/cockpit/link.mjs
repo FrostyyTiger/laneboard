@@ -35,6 +35,7 @@ import { warnRateLimited } from '../security.mjs';
 import { atConnection, atInbound, atOutbound, atUpgrade } from './faults.mjs';
 import { linkRefusal } from './link-checks.mjs';
 import { BOARD_USER, createFailWarner, newLine, promptLine, stopLine } from './audit-lines.mjs';
+import { createPromptRate } from './prompt-rate.mjs';
 import { checkMessage, MAX_PROMPT_CHARS } from './protocol.mjs';
 import { nextConversation } from './session.mjs';
 import { ONCE_MS } from './store.mjs';
@@ -151,6 +152,8 @@ export function createLink({ session, store, audit = null, config, log = () => {
   const once = new Map();
   const pending = new Set(); // clientIds accepted whose turn.prompt has not gone yet
   let askedNew = null; // the owner's `new`, until its conversation is up: {from, stoppedTurn}
+  // D228: 10 prompts a minute per device token; without pairing every link is the one screen (B179).
+  const rate = createPromptRate({ now: () => clock.now() });
   seedOnce(clientIds);
 
   function seedOnce(ids) {
@@ -443,9 +446,29 @@ export function createLink({ session, store, audit = null, config, log = () => {
     if (pending.has(msg.clientId)) return; // its echo is on the way to every link
     const text = msg.text.trim();
     const refuse = (code) => sendTo(link, { type: 'prompt.refused', re: msg.seq, clientId: msg.clientId, code });
+    // D165: the refusals a minute held back ride on the token's next `cockpit.prompt` line.
+    const writeLine = (fields) => {
+      const held = rate.takeHeld(SCREEN_NAME);
+      const result = held ? { ...fields.result, refusedSince: held } : fields.result;
+      const line = promptLine(audit, { ...fields, result });
+      if (!line.ok) rate.putBack(SCREEN_NAME, held);
+      return line;
+    };
+    // D228: the 11th prompt in 60 s on the room clock is refused, counted nowhere, and nothing
+    // reaches the agent; a known clientId (above) never gets here.
+    const slot = rate.take(SCREEN_NAME);
+    if (!slot) {
+      if (rate.refusal(SCREEN_NAME).line) {
+        const line = writeLine({ text, result: { ok: false, status: 'too-many' } });
+        if (!line.ok) auditFailed('cockpit.prompt', line.reason);
+      }
+      refuse('too-many');
+      return;
+    }
     if (session.phase !== 'up') {
-      // §3.1, §11.7 (D31): no session up, nothing held for later.
-      const line = promptLine(audit, { text, result: { ok: false, status: 'agent-down' } });
+      // §3.1, §11.7 (D31): no session up, nothing held for later; a refused prompt is not counted (D228).
+      rate.giveBack(slot);
+      const line = writeLine({ text, result: { ok: false, status: 'agent-down' } });
       if (!line.ok) auditFailed('cockpit.prompt', line.reason);
       refuse('agent-down');
       return;
@@ -455,8 +478,9 @@ export function createLink({ session, store, audit = null, config, log = () => {
     const delivery = running ? 'queued' : 'new';
     const turnId = running ? running.turnId : `t-${pad(bridge.turnCount + 1, 4)}`;
     // D166: the line first; a prompt the log cannot hold never reaches the agent.
-    const line = promptLine(audit, { turnId, text, result: { ok: true, source: msg.source, delivery, chars: text.length } });
+    const line = writeLine({ turnId, text, result: { ok: true, source: msg.source, delivery, chars: text.length } });
     if (!line.ok) {
+      rate.giveBack(slot);
       auditFailed('cockpit.prompt', line.reason);
       refuse('audit-unavailable');
       return;
@@ -467,6 +491,7 @@ export function createLink({ session, store, audit = null, config, log = () => {
     });
     if (!r.ok) {
       pending.delete(msg.clientId);
+      rate.giveBack(slot);
       refuse(r.code ?? 'agent-down');
     }
   }

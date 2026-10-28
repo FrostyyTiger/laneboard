@@ -6,8 +6,9 @@
 //   newLine(audit, {conversation, from, stoppedTurn, reason}) → the same
 //   createFailWarner({write, now, intervalMs})     → warn(action, reason)
 //
-// T13 wrote `cockpit.prompt`, T30 `cockpit.stop` and `cockpit.new`; the
-// bounded `too-many` refusals are T23c's.
+// T13 wrote `cockpit.prompt`, T30 `cockpit.stop` and `cockpit.new`; T23c the
+// bounded `too-many` refusals (D165: which refusal is a line, and the
+// `refusedSince` count in `result`, are prompt-rate.mjs's, called by link.mjs).
 //
 // Rules each line keeps:
 //   - D164: the log is the board's own (`openAudit` of server/fleet/audit.mjs,

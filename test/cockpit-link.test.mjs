@@ -859,3 +859,85 @@ test('S-SEC-06 Without pairing, only the board\'s own people get the room link (
   assert.match(box.logs(), /cockpit: link open \(direct, 1 open\)/);
   assert.match(box.logs(), /cockpit: link open \(local, 2 open\)/);
 });
+
+// --- T23c: the prompt rate (c1-talk.md §7 "Rate", screens.md §6.4; D228, D165) ---
+
+test('rate: the 11th prompt in 60 s from the one screen is prompt.refused too-many, one refusal line, the held ones counted into the next line (D228, D165)', async (t) => {
+  const clock = manualClock(t);
+  const room = await inProcess(t);
+  const a = await welcomed(room);
+  const b = await welcomed(room);
+  const id = (n) => `p-${n.toString(16).padStart(8, '0')}`;
+  let seq = 2;
+  const send = (c, n) => c.ws.send(JSON.stringify({ ...PROMPT, seq: seq++, clientId: id(n), text: `ping ${n}` }));
+  const answered = (c, n) => c.frames.find((f) => (f.type === 'turn.prompt' || f.type === 'prompt.refused') && f.clientId === id(n));
+  // ping 1-6 from link a, 7-10 from link b, 2 s apart on the room clock (ping 10 at 07:00:18).
+  for (let n = 1; n <= 10; n++) {
+    if (n > 1) await clock.advance(2_000);
+    const c = n <= 6 ? a : b;
+    send(c, n);
+    await until(() => answered(c, n), `ping ${n} answered`);
+    assert.equal(answered(c, n).type, 'turn.prompt', `ping ${n} taken`);
+  }
+  await clock.advance(2_000); // 07:00:20
+  send(a, 11);
+  await until(() => answered(a, 11), 'ping 11 answered');
+  const refused = answered(a, 11);
+  assert.deepEqual(refused, { type: 'prompt.refused', re: seq - 1, clientId: id(11), code: 'too-many' });
+  assert.deepEqual(checkMessage(refused, 'out'), { ok: true });
+  assert.equal(room.session.prompts.length, 10, 'nothing reached the agent');
+  const line = room.audit.entries.at(-1);
+  assert.equal(room.audit.entries.length, 11);
+  assert.deepEqual(line, { user: 'board', via: 'cockpit', action: 'cockpit.prompt', target: '-', args: { text: 'ping 11' }, result: { ok: false, status: 'too-many' } });
+
+  // A resend with a known clientId (E1's RETRY, D95) is not counted and not refused.
+  a.ws.send(JSON.stringify({ ...PROMPT, seq: seq++, clientId: id(1), text: 'ping 1' }));
+  await until(() => a.frames.filter((f) => f.type === 'turn.prompt' && f.clientId === id(1)).length === 2, 'the same echo');
+  // Two more refusals in that minute, from either link: no line, held.
+  await clock.advance(1_000);
+  send(a, 12);
+  send(b, 13);
+  await until(() => answered(a, 12) && answered(b, 13), 'both refused');
+  assert.equal(answered(a, 12).code, 'too-many');
+  assert.equal(answered(b, 13).code, 'too-many', 'the pages of one screen share its 10');
+  assert.equal(room.audit.entries.length, 11, 'one refusal line a minute (D165)');
+
+  // 07:01:00.5: ping 1 is more than 60 s old, one prompt may go; its line carries the two held.
+  await clock.advance(39_500);
+  send(a, 14);
+  await until(() => answered(a, 14), 'ping 14 answered');
+  assert.equal(answered(a, 14).type, 'turn.prompt');
+  assert.equal(room.session.prompts.length, 11);
+  assert.deepEqual(room.audit.entries.at(-1).result, { ok: true, source: 'typed', delivery: 'queued', chars: 7, refusedSince: 2 });
+  send(b, 15);
+  await until(() => answered(b, 15), 'ping 15 answered');
+  assert.equal(answered(b, 15).code, 'too-many', 'the window is full again');
+  assert.equal(room.audit.entries.length, 12, 'still the minute of the 07:00:20 line: held');
+  // 07:01:20: ping 2-10 out of the window too; the next line carries the one held since.
+  await clock.advance(19_500);
+  send(b, 16);
+  await until(() => answered(b, 16), 'ping 16 answered');
+  assert.equal(answered(b, 16).type, 'turn.prompt');
+  assert.deepEqual(room.audit.entries.at(-1).result, { ok: true, source: 'typed', delivery: 'queued', chars: 7, refusedSince: 1 });
+});
+
+test('rate: a prompt refused agent-down or audit-unavailable is not counted (D228)', async (t) => {
+  manualClock(t);
+  const session = standInSession();
+  const room = await inProcess(t, { session });
+  const a = await welcomed(room);
+  let seq = 2;
+  const send = (n) => a.ws.send(JSON.stringify({ ...PROMPT, seq: seq++, clientId: `p-${n.toString(16).padStart(8, '0')}`, text: `ping ${n}` }));
+  const codes = () => a.frames.filter((f) => f.type === 'prompt.refused').map((f) => f.code);
+  session.phase = 'down';
+  for (let n = 1; n <= 12; n++) send(n);
+  await until(() => codes().length === 12, 'twelve refusals');
+  assert.deepEqual(codes(), Array(12).fill('agent-down'));
+  session.phase = 'up';
+  for (let n = 13; n <= 22; n++) send(n);
+  await until(() => a.frames.filter((f) => f.type === 'turn.prompt').length === 10, 'ten taken');
+  send(23);
+  await until(() => codes().length === 13, 'the 11th');
+  assert.equal(codes().at(-1), 'too-many');
+  assert.equal(session.prompts.length, 10);
+});

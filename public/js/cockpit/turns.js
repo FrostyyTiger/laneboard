@@ -21,7 +21,8 @@
 //                                     // true when it made the row (the turn grew)
 //   t.startMs                         // the turn's start on the page's clock (null before the room names it)
 //   t.fail(code, message, buttons)    // the grey error line under the prompt (§10), `NOT SENT` for E1;
-//                                     // buttons: [{label, onTap}], each a `<button>` in the line
+//                                     // buttons: [{label, onTap, disabled, made}], each a `<button>` in
+//                                     // the line (`made(button)` once it exists: E9's 60 s wait)
 //   t.unfail()                        // the line goes, the label loses its word (a late echo)
 //   t.endError(code, message, buttons) // the error end's line (§10 E2-E8) at the turn's end, under the
 //                                     // reply and before its queued prompts; again: replaced in place
@@ -116,10 +117,12 @@ export function errorLine(doc, code, message, buttons = []) {
     for (const b of buttons) {
       const n = el(doc, 'button', 'ck-btn ck-err-btn', { type: 'button' });
       n.textContent = b.label;
+      if (b.disabled) n.disabled = true;
       const keep = (e) => e.preventDefault();
       n.addEventListener('pointerdown', keep);
       n.addEventListener('mousedown', keep);
       n.addEventListener('click', () => { if (!n.disabled) b.onTap(n); });
+      b.made?.(n);
       row.append(n);
     }
     box.append(row);

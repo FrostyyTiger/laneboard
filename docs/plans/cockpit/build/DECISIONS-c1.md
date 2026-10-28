@@ -1273,3 +1273,29 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   link the page opens with `createRoomLink` (`public/js/cockpit/link.js`) sending the recorded
   `prompt` frame without its `seq`: the pane exposes no link hook, and D95's memory is the room's,
   not the link's — spec: screens.md S-SCR-30 Test — overrule: a test hook on the pane's own link.
+- B233 (T23c) The rate is its own module, `server/cockpit/prompt-rate.mjs` (`createPromptRate`:
+  `take`/`giveBack`, `refusal`/`takeHeld`/`putBack`), keyed by `SCREEN_NAME` as B179 says (the
+  refusal lines too, although screens.md §6.4 writes "per link without pairing": one key is the
+  stricter bound and matches "one refusal line for the token"); a prompt is counted when the room
+  takes it and given back when it is refused after that (agent-down, audit-unavailable, the
+  session's refusal); the window is (now − 60 000 ms, now], so a prompt exactly 60 s old is out;
+  the rate is checked before agent-down (a looping screen gets `too-many` whatever the agent's
+  state); `refusedSince` sits in the line's `result`, on the key's next `cockpit.prompt` line of
+  either kind, and a line that fails to be written keeps the count — because D228 counts accepted
+  prompts only and D165 names the field but not its place — spec: c1-talk.md §7 "Rate",
+  screens.md §6.4 — overrule: `prompt-rate.mjs`, and `writeLine` in `link.mjs`'s `prompt`.
+- B234 (T23c) "page B draws the same block" (S-C1-43) is built page-side: the room's
+  `prompt.refused` goes to the sender only and carries no text (protocols.md §3.1), so the page
+  that drew E9 tells its sister pages over a same-origin `BroadcastChannel`
+  (`public/js/cockpit/screen-tabs.js`, each note checked by `refusedNote`), and they draw the same
+  block (label time the sender's, `RETRY` waiting 60 s on their own clock, `EDIT`). A page that
+  reloads loses that block (the room never held it) — because the protocol's fields stay as
+  written and the two pages are one screen (one token, §12 "The rate is per screen") — spec:
+  c1-talk.md S-C1-43 against protocols.md §3.1 (under For the owner) — overrule: the room sends
+  `prompt.refused` with `text` and `at` to every link of the token and the pane draws it.
+- B235 (T23c) S-C1-43's "after `page.clock.runFor(59000)` still disabled, after `runFor(1000)`
+  more enabled" counts from the moment page A drew the refusal (a MutationObserver records the
+  page's `Date.now()`), and page A's clock moves with the room's in 10 s steps up to `ping 12`
+  so the link hears its heartbeats (as B187): with `install()` the page's clock also runs in real
+  time, so a bare 59 000 after `ping 12` would be past 60 s and the link would go silent — spec:
+  c1-talk.md S-C1-43, D264 — overrule: `e2e/cockpit/c1-rate.spec.mjs`.

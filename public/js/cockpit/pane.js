@@ -15,13 +15,16 @@
 //   onNew(msg)                 START on the `NEW` bar: the `new` to the room (protocols.md §3.6)
 //   onGap()                    a message the pane cannot place: the link closes 4000 `gap` and
 //                              the snapshot redraws (D119; protocols.md §3.4's unknown `clientId`)
+//   tabs                       the screen's other pages (screen-tabs.js; default a BroadcastChannel):
+//                              an E9 refusal is drawn on every page of the screen (S-C1-43, B234)
 //   pane.open() / .close() / .isOpen()
 //
 // The root (<html>) carries data-cockpit, data-pane, data-turn and data-keyboard (README.md
 // "Selectors tests use"); the pane is [data-cockpit-conversation].
 import { hasAge, pickStatus, statusText as statusLine } from './status.js';
-import { AGE_FROM_MS, CONFIRM_WAIT_MS, MAX_PROMPT_CHARS, PANE_SLIDE_MS, STOP_GUARD_MS, TICK_MS } from '../core/cockpit-constants.js';
+import { AGE_FROM_MS, CONFIRM_WAIT_MS, MAX_PROMPT_CHARS, PANE_SLIDE_MS, RETRY_WAIT_MS, STOP_GUARD_MS, TICK_MS } from '../core/cockpit-constants.js';
 import { createTurn } from './turns.js';
+import { createScreenTabs, NO_TABS } from './screen-tabs.js';
 import { createDivider, createNewBar } from './newconv.js';
 import { endButtons, endText, GO_ON_TEXT } from './errors.js';
 import { canSend, inputHeight, isSendKey, lengthNote, linesFromScroll, INPUT_ONE_LINE_PX, restoreDraft } from './draft.js';
@@ -46,6 +49,8 @@ export const LINES = Object.freeze({
   notSent: 'Not sent: the room did not confirm within 5 s.',
   // protocols.md §3.1, screens.md §6.4 (D166): `prompt.refused` `audit-unavailable`
   auditDown: 'Not sent: the room cannot write its audit log.',
+  // c1-talk.md §7 "Rate", §10 E9 (D228): `prompt.refused` `too-many`
+  tooMany: 'Too many messages from this screen; wait a minute.',
   // screens.md §7: the line slot's `room-down` message while SEND is disabled for it
   roomDown: 'Sending and voice come back with the room.',
 });
@@ -203,6 +208,8 @@ export function createPane(opts = {}) {
   const sending = new Map(); // clientId → the view drawn at the tap, until the room's echo
   const waits = new Map(); // clientId → its E1 timer (c1-talk.md §10)
   const notSent = new Map(); // clientId → the view showing E1, until EDIT or a late echo
+  // B234: the screen's other pages (one token, one rate) draw its E9 blocks too.
+  const tabs = opts.tabs ?? (unsupported ? NO_TABS : createScreenTabs({ win, onRefused: (note) => otherTabRefused(note) }));
   const steering = new WeakSet(); // views drawn at a SEND during a turn: no turn of their own (§8)
   const promptSeq = new Map(); // the link seq of a sent prompt → its clientId (an `error` names it in `re`)
   const dirty = new Set(); // views whose text changed since the last frame
@@ -611,6 +618,50 @@ export function createPane(opts = {}) {
     ]);
     if (!runningView()) setTurn('idle');
     grew();
+  }
+
+  /**
+   * E9 (§10, D228, D264): the room refused the prompt as the screen's 11th in a minute. The block
+   * reads `NOT SENT` with E9's line; `RETRY` is disabled for RETRY_WAIT_MS from this drawing, on the
+   * page's clock, then sends the text with a new `clientId` (D259); `EDIT` as E1's, at once. The
+   * screen's other pages draw the same block (B234).
+   */
+  function showTooMany(clientId) {
+    const v = sending.get(clientId);
+    if (!v) return;
+    sending.delete(clientId);
+    win.clearTimeout(waits.get(clientId));
+    waits.delete(clientId);
+    tooMany(v);
+    tabs.refused({ clientId, text: v.prompt, at: v.at, code: 'too-many' });
+  }
+  function tooMany(v) {
+    notSent.set(v.clientId, v);
+    v.fail('not-sent', LINES.tooMany, [
+      {
+        label: 'RETRY',
+        disabled: true,
+        made: (n) => win.setTimeout(() => { n.disabled = false; }, RETRY_WAIT_MS),
+        onTap: () => {
+          if (link.status !== 'live') return;
+          lastSendAt = now(); // D268: a RETRY is a send
+          sendState();
+          sendPrompt(v.prompt, newClientId());
+        },
+      },
+      { label: 'EDIT', onTap: () => edit(v) },
+    ]);
+    if (!runningView()) setTurn('idle');
+    grew();
+  }
+  /** Another page of this screen drew E9 (B234): the same block here, at the end. */
+  function otherTabRefused(note) {
+    if (drawnTurns === null || sending.has(note.clientId) || notSent.has(note.clientId)) return;
+    const v = createTurn(doc, { clientId: note.clientId, prompt: note.text, at: note.at, delivery: 'sending' }, {
+      offset: clockOffset, promptButtons, startMs: Number.NaN,
+    });
+    appendTurn(v);
+    tooMany(v);
   }
 
   /**
@@ -1032,8 +1083,9 @@ export function createPane(opts = {}) {
         return;
       case 'prompt.refused':
         // protocols.md §3.1: the room cannot write its audit log (D166): E1's block, RETRY and EDIT.
-        // `too-many` (E9) is T23c's; `agent-down` comes with the status line (§10.1).
+        // `too-many` is E9 (§10, D228, D264); `agent-down` comes with the status line (§10.1).
         if (msg.code === 'audit-unavailable') showNotSent(msg.clientId, LINES.auditDown);
+        else if (msg.code === 'too-many') showTooMany(msg.clientId);
         return;
       case 'error': {
         // protocols.md §3.1: `bad-message` on a prompt (empty, too long, a bad focus) is E1 at once.
