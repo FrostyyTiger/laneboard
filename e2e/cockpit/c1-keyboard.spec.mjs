@@ -237,6 +237,70 @@ test('S-C1-32 The on-screen keyboard: the input row sits on its edge, the conver
       await vk.close();
     }
   });
+
+  await test.step('third run (T125): S-C1-16\'s turn with the keyboard up: at 2.5 s QUEUED inside the conversation above y 380, clear of the opener; the slot `wait` at 2.9 s, `stop` at 3.1 s; at 4.1 s the reply pinned', async () => {
+    // On the app's #/map (S-C1-16's page), the page clock (`clock page`): flowing until the
+    // steer's tap at t = 2.0 s, then moved by hand. With `stt.url: none` SEND is in the talk
+    // button's rect: the scenario's tap at (1232, 492) is SEND's centre (1312, 492) here (B192).
+    const p = await context.newPage();
+    try {
+      await p.setViewportSize({ width: 1368, height: 912 });
+      await p.clock.install();
+      await openApp(p, room);
+      await openPane(p, 14);
+      await p.locator(INPUT).tap();
+      await p.keyboard.type('how did the night go');
+      const t0 = Date.now();
+      await p.locator(SEND).tap();
+      await expect(p.locator('[data-turn-delivery="sending"]')).toHaveCount(0, { timeout: 2_000 });
+      await p.touchscreen.tap(1000, 200); // the keyboard away until the owner taps the input
+      await expect.poll(() => focused(p)).toBe(false);
+      const wait = async (ms) => { const left = t0 + ms - Date.now(); if (left > 0) await p.waitForTimeout(left); };
+      await wait(1_500);
+      await p.locator(INPUT).tap();
+      await wait(1_600);
+      await p.setViewportSize({ width: 1368, height: 532 });
+      await expect(p.locator(':root')).toHaveAttribute('data-keyboard', 'up');
+      await wait(2_000);
+      await p.keyboard.type('only the failed one');
+      await p.clock.pauseAt(await p.evaluate(() => Date.now() + 50));
+      await p.touchscreen.tap(1312, 492);
+      await p.clock.runFor(500);
+      expect(await focused(p), '2.5 s: the input keeps the focus').toBe(true);
+      expect(await keyboardWord(p)).toBe('up');
+      const queued = p.locator('[data-turn-id] .ck-pitem:has([data-turn-delivery="queued"])');
+      await expect(queued.locator('[data-turn-label]')).toHaveText(/^YOU · \d\d:\d\d · QUEUED$/);
+      const block = await queued.evaluate((n) => { const r = n.getBoundingClientRect(); return { x1: r.left, x2: r.right, y1: r.top, y2: r.bottom }; });
+      const c = await convoRead(p);
+      expect(inside(block, c.rect), `the queued block ${JSON.stringify(block)} inside the conversation ${JSON.stringify(c.rect)}`).toBe(true);
+      expect(block.y2, 'its bottom at y ≤ 380').toBeLessThanOrEqual(380);
+      const op = await rectOf(p, OPENER);
+      near(op, UP.opener, 'the opener');
+      expect(block.y2 <= op.y1 || block.y1 >= op.y2 || block.x2 <= op.x1 || block.x1 >= op.x2, 'no overlap with the opener').toBe(true);
+      await p.clock.runFor(400);
+      await expect(p.locator(SEND)).toHaveAttribute('data-send', 'wait');
+      near(await rectOf(p, SEND), UP.send, '2.9 s: the slot');
+      await p.clock.runFor(200);
+      await expect(p.locator(SEND)).toHaveAttribute('data-send', 'stop');
+      near(await rectOf(p, SEND), UP.send, '3.1 s: the slot');
+      await p.clock.resume();
+      const reply = p.locator('[data-turn-id] .ck-block', { hasText: 'Only builder-a failed.' });
+      await expect(reply).toHaveCount(1, { timeout: 5_000 });
+      await expect(p.locator('[data-turn-delivery="queued"]')).toHaveCount(0);
+      const order = await reply.evaluate((n) => {
+        const prompt = [...n.closest('[data-turn-id]').querySelectorAll('.ck-prompt')].find((x) => x.textContent === 'only the failed one');
+        return Boolean(prompt.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+      expect(order, 'the reply drawn below the block').toBe(true);
+      await expect.poll(async () => (await convoRead(p)).pinned, 'pinned').toBe(true);
+      const bottom = await reply.evaluate((n) => n.getBoundingClientRect().bottom);
+      expect(bottom, 'its last line ends at y ≤ 380').toBeLessThanOrEqual(380);
+      expect(await keyboardWord(p)).toBe('up');
+      await expect(p.locator(':root')).toHaveAttribute('data-turn', 'idle', { timeout: 5_000 });
+    } finally {
+      await p.close();
+    }
+  });
 });
 
 test('S-C1-33 Keyboard up with the status line and a long draft: the conversation keeps 200 px', async ({ page, room }) => {

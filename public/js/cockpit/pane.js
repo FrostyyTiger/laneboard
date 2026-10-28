@@ -479,6 +479,7 @@ export function createPane(opts = {}) {
     const during = runningView() !== null;
     const v = createTurn(doc, { clientId, prompt: text, at: sentAt, delivery: 'sending' }, {
       offset: clockOffset,
+      promptButtons,
       startMs: during ? Number.NaN : undefined,
       onFirstSentence: () => {
         try {
@@ -609,7 +610,7 @@ export function createPane(opts = {}) {
     }
     // A known turn is a resend's answer.
     if (views.has(msg.turnId)) return;
-    const v = createTurn(doc, { turnId: msg.turnId, prompt: msg.text, at: msg.at }, { offset: clockOffset });
+    const v = createTurn(doc, { turnId: msg.turnId, prompt: msg.text, at: msg.at }, { offset: clockOffset, promptButtons });
     views.set(msg.turnId, v);
     appendTurn(v);
     grew();
@@ -626,7 +627,7 @@ export function createPane(opts = {}) {
     for (const v of views.values()) if ((item = v.removePrompt(msg.clientId))) break;
     if (!item) return false;
     const v = createTurn(doc, { turnId: msg.turnId, clientId: msg.clientId, prompt: item.prompt, at: item.at, delivery: 'queued' }, {
-      offset: clockOffset, startMs: now(),
+      offset: clockOffset, startMs: now(), promptButtons,
     });
     views.set(msg.turnId, v);
     turnsBox.append(v.node);
