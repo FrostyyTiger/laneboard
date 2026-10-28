@@ -163,12 +163,12 @@ Notes for every builder round (planner, round 7):
 
 ## Research questions
 
-- [ ] Q19 Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
+- [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
   Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
   picker (spacing on screen, a ring or fan-out on selection, hit radius vs drawn size, labels on and off), how a selection
   steps down and back up (site → planet → moon) and how the camera frames each step. Touch guidelines already answered in
   night 1's Q6 and night 3's Q12: do not repeat them. 2-3 concrete proposals with a cost guess — for T8, T11
-- [ ] Q20 How a node card stays out of the way on a 3D view: anchored callouts with leader lines vs docked panels in games
+- [x] Q20 → research/Q20-node-card-placement.md (Apple HIG page not loaded; summary only). How a node card stays out of the way on a 3D view: anchored callouts with leader lines vs docked panels in games
   and 3D tools (Stellaris's outliner and selection panel, Homeworld, Google Earth, CAD/BIM viewers, map apps' place cards):
   when to dock, how a card avoids covering what it describes while the camera moves, how it follows a moving anchor without
   jitter, and how it closes. `research/stellaris-ui-brief.md` already covers Stellaris's panels: read it, do not repeat it —
