@@ -151,11 +151,35 @@ Notes for every builder round (planner, round 7):
   `r18-galaxy-open`, 350 ms frames over HV1's opening, its 20 fps is the screenshot cadence): the cluster leaves folded at
   2.3 s, is most of the way open at 3.3 s and settles by 4.1 s with no pop at either end. The plate's `WAITING ON A
   PERMIS…` truncation is T24's, untouched here.
-- [ ] T6 (§7 Night 5 B1) [ui] [variant:galaxy] System room: planets spread 1.4x with a minimum gap of 13 % of the system's
+- [x] T6 (§7 Night 5 B1) [ui] [variant:galaxy] System room: planets spread 1.4x with a minimum gap of 13 % of the system's
   reach (the sketch's `spaceOut` in `layout.js`); what hangs below a planet moves with it; open-system labels never collide
   (`labels.js`), HV1's builders cluster the test case — done when: a layout test on the large fixture finds every planet pair
   in an open HV1 at least 0.13 of its reach apart and each child at its planet's offset, a labels test finds no two shown
-  name boxes overlapping with HV1 open at 1368 px, and a still of `?at=hv1&open=1` shows every builder name whole.
+  name boxes overlapping with HV1 open at 1368 px, and a still of `?at=hv1&open=1` shows every builder name whole. (commit 1cca98f)
+  Notes (builder, round 19): `layout.js ROOM` {spread 1.4, gap 0.13, arms 1.24}; `SPREAD` x1.4, `CLOSED` 0.16/1.4 (a folded
+  cluster keeps its size); `spaceOut` (exported, the sketch's: planets pushed apart to the gap and 0.8 gap off the star,
+  children moved with their planet, dots step off 0.55 gap). Deviations, on purpose: the sketch's arm push (`ARM.r0`/`step`
+  x1.24) lands too, which T1 left to this task. Without it the 1.4x reach makes the held shot stand back so far that the
+  sun came into HV1's frame (calm plate) and onto HV2's words (HV2's reach/sun ratio 0.315, just under the side shot's
+  0.33). No bearing (-30° to -85°) or `inward` value fixed both. `scene.js OVERVIEW_MARGIN` x1.24 with it, so the overview
+  is the same picture from farther back and the T19 fit tests pass unchanged. `camera.js FLIGHT_SAMPLES` 24 → 32: HV2 →
+  REMOTE jolted (5.9x the mean step) where the step-back need peaked between two samples. The A1 test pins the arms,
+  margin and dust bound with `ROOM.arms`. Found: the large fixture's planets already stood ≥ 0.24 of reach apart, so on it
+  B1 is the spread; `spaceOut`'s parting is pinned on a synthetic pair. Test: `test/wall-galaxy-room.test.mjs` (5:
+  constants, pair gap on every large-demo system, children at their orbits offset ± the step-off, spaceOut parting,
+  HV1 open at 1368 px naming every room and builder with no overlap in the plain hold). Perf: constants and a layout-time
+  pass; flights sample 32 points instead of 24 per frame (cheap pure math), no draw change. Looked at
+  (`$RUN_DIR/shots/r19-t6-*`, `r19-galaxy`): overview names all five sites; `?at=hv2&open=1` roomy, every name whole;
+  `?demo=1` film 34.7 fps at cpu 4x, 0 errors, no sun in any hold. **Not met:** `?at=lab&open=1` with the trouble
+  plate up does not name `ba` and `bb`. Their own trouble lanes' names (feat-search, fix-login, ci-retry, a few px off
+  them) take every side, and the plate squeezes HV1 into the right third. That part is split to T6b, after T7.
+- [ ] T6b (split from T6) [ui] [variant:galaxy] HV1's builders named in the tour's hold: with the trouble plate up
+  (`?at=lab&open=1`, free box ~550 px wide) `ba`/`bb` lose every side to their trouble lanes' names, which sit a few px
+  off them; `feed:hv1/106` (scratch) also falls behind git-mirror in projection. Once T7 folds lanes into moons (tight,
+  unnamed), check again and, if a builder is still unnamed, let a planet's name win over a child's of its own in
+  `labels.js` while it stays in trouble's colour on the planet's glyph — done when: a labels test with
+  `zoomedSiteShot(lab, t, DEMO_TIMING.zoom, view)` and the plate's covers names `ba`, `bb`, `bc` at four times, and a still
+  of `?at=lab&open=1` shows them whole.
 - [ ] T7 (§7 Night 5 B2, folded) [ui] [variant:galaxy] Moons in the model and the scene: services under a room, lanes under a
   builder, sessions under a lane become moons (pure: which nodes are moons of which planet, from the map model); folded, they
   sit tight to their planet at half size, unnamed, not tappable (`scene.js` `MOON`, `moonOrbit`); the large demo carries
