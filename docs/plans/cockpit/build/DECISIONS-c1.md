@@ -1299,3 +1299,10 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   so the link hears its heartbeats (as B187): with `install()` the page's clock also runs in real
   time, so a bare 59 000 after `ping 12` would be past 60 s and the link would go silent — spec:
   c1-talk.md S-C1-43, D264 — overrule: `e2e/cockpit/c1-rate.spec.mjs`.
+- B236 (round 100 fix) The conversation's bottom padding is D267's `max(0, 64 − lift)` px plus
+  0.5 px — because Chromium ends a scroll at the rounded scroll height while the turns are
+  fractional (39.2 px lines, 65.19 px prompts), so "at its end" left the last item up to 0.5 px
+  past the line (seen: 380.1875 for the 380 of S-C1-32's third run, and the same for the queued
+  block under load); with the half pixel the end lands in [line − 1, line) at any fraction —
+  spec: D267 ("the last item ends at y ≤ 744"), c1-talk.md §7.1 — overrule: `.ck-convo`'s
+  padding in `public/css/cockpit.css`.

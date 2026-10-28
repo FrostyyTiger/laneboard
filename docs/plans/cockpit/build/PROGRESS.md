@@ -236,6 +236,14 @@ What the slice itself says waits; nothing else moved here.
 ## Spec fixes
 
 ## For the owner
+- Round 100 (fix): S-C1-17's first run once took 774 ms from the tap to `STOPPED AT` (budget 400,
+  run of 13:05), then 3 of 3 plain and 6 of 6 with the CPUs busy at 306-311 ms. Nothing in the
+  page path waits (the stop line is drawn in the same task as `turn.end`). Two synchronous disk
+  writes sit on the room's path and would stall under disk pressure from other rooms: the
+  `cockpit.stop` audit line (write + fsync in `server/fleet/audit.mjs`, before the bridge, as
+  screens.md's audit table says) and `store.apply`'s `appendFileSync` before each message goes to
+  the links (`server/cockpit/link.mjs` `emit`). Not changed: the order is durability, not latency.
+  If it recurs, sending to the links before the store write is the reversible change to weigh.
 - T23c (review-required, D228, D165): `server/cockpit/prompt-rate.mjs` (the 10-a-minute limit and
   the bounded refusal lines) and its use in `server/cockpit/link.mjs` `prompt` (the rate before
   agent-down; `refusedSince` in the next line's `result`, B233). Tests: `test/cockpit-prompt-rate.test.mjs`,

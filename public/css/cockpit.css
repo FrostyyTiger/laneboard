@@ -169,8 +169,10 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* the 64 px less what lifts the conversation's bottom: the line slot, the input's growth (D267) */
-  padding: 16px 24px max(0px, 64px - var(--ck-lift, 0px)) var(--ck-in); /* a 560 px column */
+  /* the 64 px less what lifts the conversation's bottom: the line slot, the input's growth (D267);
+     + 0.5 px because the end of the scroll is whole pixels (the scroll height rounded) and the
+     turns are not (39.2 px lines): without it the last item can end up to 0.5 px past y 744 (B236) */
+  padding: 16px 24px calc(max(0px, 64px - var(--ck-lift, 0px)) + 0.5px) var(--ck-in); /* a 560 px column */
 }
 .ck-note {
   margin: 0;
