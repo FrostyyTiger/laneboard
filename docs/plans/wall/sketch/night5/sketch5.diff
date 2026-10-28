@@ -1663,7 +1663,7 @@ index 0000000..71ccb2e
 +const ZERO = Object.fromEntries(ROWS.map(([p]) => [p, 0]));
 +const PRESETS = [
 +  ['Current', ZERO],
-+  ['Marcel v1', { ...ZERO, sk_tight: 2, sk_size: 1, sk_tint: 2, sk_sun: 1, sk_soft: 1, sk_haze: 1, sk_card: 1 }],
++  ['owner v1', { ...ZERO, sk_tight: 2, sk_size: 1, sk_tint: 2, sk_sun: 1, sk_soft: 1, sk_haze: 1, sk_card: 1 }],
 +  ['v2 pick', { ...ZERO, sk_tight: 2, sk_size: 1, sk_tint: 2, sk_sun: 1, sk_soft: 1, sk_haze: 1, sk_arr: 2, sk_sys: 1, sk_moons: 1, sk_pal: 1, sk_card: 1 }],
 +];
 +

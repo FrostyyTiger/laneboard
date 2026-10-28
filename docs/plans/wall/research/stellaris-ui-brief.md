@@ -37,13 +37,13 @@ but marked **later (C6)**. Touch targets are **at least 48 px**.
 - All tappable elements are at least 48x48 px with 8 px gaps. The action row is a single row of icon-and-label buttons, at most 4
   visible, and the rest go under a "..." button.
 
-**Layout, the same for every type.** The header holds a status pip, name, type chip and its parent ("m87 › room"). Below it are 3 or 4 key
+**Layout, the same for every type.** The header holds a status pip, name, type chip and its parent ("hv1 › room"). Below it are 3 or 4 key
 stats with a sparkline where useful. Then a "Below" strip shows the children as small chips, and tapping one drills down. The action row
 comes last.
 
 | Node | Key stats | Actions (ranked) | Confirm? |
 |---|---|---|---|
-| **Site / star** (m87, HV1/HV2, cloud, home, remote) | rooms up/total, CPU/RAM, pool health, last backup | 1 Open site (fly in) · 2 What's below (rooms list) · 3 Open in board · 4 Pin to screen | none |
+| **Site / star** (main host, HV1/HV2, cloud, home, remote) | rooms up/total, CPU/RAM, pool health, last backup | 1 Open site (fly in) · 2 What's below (rooms list) · 3 Open in board · 4 Pin to screen | none |
 | **Room / planet** (VM/CT) | state, CPU/RAM/disk, uptime, backup age, open alerts | 1 View logs · 2 Open in board · 3 What's below (services) · 4 Pin · 5 Open terminal (deep link) · *later (C6):* Restart a service (on its moon) · *"Restart room": not on the Wall* | Terminal: none (it only opens a link) |
 | **Builder** (agent runner) | active lanes, current run, last commit, round/cap | 1 View run log · 2 What's below (lanes) · 3 Open in board · 4 Pin · *later (C6):* Pause all lanes | Pause all: **confirm** |
 | **Service / moon** | active/failed, restarts 24h, last log line | 1 View logs · 2 Open in board · 3 Pin · *later (C6):* Restart service | Restart: **confirm** (hold to confirm) |
@@ -87,10 +87,10 @@ no modal dialogs on an ambient wall.
 
 ## 4. Mockup (anchored card, room selected, 48 px buttons)
 ```
-            ●  <- node (planet "navigo")
+            ●  <- node (planet "web")
              \
   ┌───────────\──────────────────────────────── × ┐
-  │ ● navigo        ROOM · VM 104     m87 › rooms │
+  │ ● web        ROOM · VM 104     hv1 › rooms │
   ├─────────────────────────────────────────────── ┤
   │ CPU 12% ▁▂▁▃▂   RAM 6.1/8 G   up 9 d          │
   │ backup 6 h ago  ·  alerts 1 warn (disk 82%)   │  <- only "82%" amber
@@ -117,7 +117,7 @@ no modal dialogs on an ambient wall.
 - Steam thread, log "go to" / "track on map": https://steamcommunity.com/app/281990/discussions/0/3423311880030940666
 - Homeworld 3 sensors manager: https://www.cogconnected.com/review/homeworld-3-review/ and https://store.epicgames.com/news/homeworld-3-guide-15-tips-to-help-you-succeed-in-the-campaign
 - EVE overview: https://wiki.eveuniversity.org/User:Paul_knuth/New_Overview and https://massivelyop.com/?p=415174
-- Endless Space 2 UI: https://www.hudsandguis.com/home/2017/7/6/endless-space-2 and https://gamingtrend.com/feature/reviews/should-have-sent-a-poet-endless-space-2-review/
+- Endless Space 2 UI: hudsandguis.com (Endless Space 2 article) and https://gamingtrend.com/feature/reviews/should-have-sent-a-poet-endless-space-2-review/
 
 Caveats: the Paradox forum pages were behind a browser check and could not be fetched. Those points come from search
 summaries and general familiarity with the game. The descriptions of the galaxy-map right-click verbs, map modes and zoom LOD
