@@ -119,7 +119,7 @@ Notes for every builder round (planner, round 7):
 - [x] T4 (§7 Night 5 A5) [ui] [variant:galaxy] Depth haze: distance fog from 0.6x to 2.6x of the look-at distance on calm
   materials only; status-hued materials and trouble nebulae never fogged (`scene.js`) — done when: a scene test finds `fog`
   off on every status-hued material and trouble nebula and on for calm bodies and dust, the fog range following the look-at
-  distance; a still of `?at=hv2&open=1` shows the far side fade and the crit member at full strength. (commit SHA)
+  distance; a still of `?at=hv2&open=1` shows the far side fade and the crit member at full strength. (commit 6255bf1)
   Notes (builder, round 17): `scene.js HAZE` {near 0.6, far 2.6, min 200}, `hazed(tone)` (calm only) and a pure
   `hazeRange(pos, dir)`: the look-at distance is where the sight line meets the galaxy's plane (all sites level: the held
   star or the overview's middle), else the distance to the sun; the old `FogExp2(bg, 0.00008)` is now a linear `Fog` in the
