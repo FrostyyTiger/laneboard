@@ -370,6 +370,12 @@ in a label). Rebuild each part inside the guardrails, with tests.
   `galaxy/director.js`, the selection levels (site → planet → moon) and the node card.
 - `galaxy/main.js` is shared: change only selection, card and look parts. The tour hold and the pane
   hooks stay as they are. C1b changes the board-down/stale caption and tag parts there.
+- Cockpit C1a (main a5cc510) already changed `touch.js` and `main.js`, and its tests rely on two of those
+  behaviours: B237 (the idle minute before the tour returns counts from the tap) and B239 (the hand-back
+  to the tour starts with the overview). Keep both. The cockpit tests `e2e/cockpit`, S-C1-01 and
+  S-SCR-0x must stay green after every round. If the touch work truly needs one of them to behave
+  differently, write a patch under `docs/plans/wall/patches/` for the B-line in
+  `docs/plans/cockpit/build/DECISIONS-c1.md` (fenced) and keep the old behaviour until it is folded in.
 - `public/css/wall.css`: add rules for the card and new tappables; do not change existing rules.
 - The page contract is additive only: `window.__cockpitView` and `data-wall-state` keep every name and
   value. Moons join it (`screenOf`, `emphasis`, a show `fly_to` accept a moon id; `fly_to` on a moon frames
