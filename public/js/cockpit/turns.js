@@ -451,6 +451,8 @@ export function createTurn(doc, turn, opts = {}) {
     prompt: turn.prompt ?? null,
     clientId: turn.clientId ?? null,
     hasError: () => errLine !== null,
+    /** Is any reply text on screen? (`answering` waits for it, pane.js B140). */
+    hasText: () => [...blocks.values()].some((b) => b.drawn !== null && b.drawn !== ''),
     confirm(msg) { unfail(); confirmed(msg); },
     fail, unfail, delta, block, toolStart, toolEnd, end, draw, tick,
     /** Does this turn hold the call? (a tool.end naming another is not this turn's, §5.1). */

@@ -166,6 +166,7 @@ export function createPane(opts = {}) {
   // `answering` waits for the frame that draws its text (c1-talk.md §3: "reply text is streaming"),
   // so `data-turn` never says answering over an empty reply (build B140).
   let heldTurn = null;
+  let heldTurnId = null; // the turn whose drawn text releases `heldTurn`
   let pinned = true;
   let hideTimer = null;
   let tick = null;
@@ -378,7 +379,9 @@ export function createPane(opts = {}) {
     frame = null;
     for (const v of dirty) v.draw();
     dirty.clear();
-    if (heldTurn !== null) setTurn(heldTurn);
+    // The room sends `turn.state` and the first delta as two frames; an animation frame
+    // between them must not release `answering` over a reply still empty (S-C1-04).
+    if (heldTurn !== null && views.get(heldTurnId)?.hasText()) setTurn(heldTurn);
     grew();
   }
   function changed(v) {
@@ -693,6 +696,7 @@ export function createPane(opts = {}) {
       case 'turn.state':
         if (msg.state !== 'answering') { setTurn(msg.state); return; }
         heldTurn = msg.state;
+        heldTurnId = msg.turnId;
         if (frame === null) frame = win.requestAnimationFrame(drawFrame);
         return;
       case 'text.delta':

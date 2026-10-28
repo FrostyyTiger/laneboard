@@ -1062,3 +1062,9 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   `cockpit.css`, won over `.ck-open { padding: 0 }`, so `CLOSE` (38.1 px) overflowed a 30 px
   content box to the right and sat 3.9 px off x 1312 (D273 allows ± 1 px) — a bug fix found by
   S-SCR-25's label box — spec: `screens.md` §4 (D273) — overrule: none (the spec's numbers).
+- B191 (fix, round 87) The held `answering` is released only by a frame in which its turn has reply
+  text on screen (`view.hasText()`), not by the next animation frame: the room sends `turn.state` and
+  the first `text.delta` as two WebSocket frames, and a frame between them set `answering` over an
+  empty reply (S-C1-04 flaked on it) — because §3's table: `answering` is "reply text is streaming" —
+  spec: `c1-talk.md` §3 — overrule: a turn that already shows text (a block before a tool line) still
+  releases at once; hold per block if a later scenario reads `thinking`/`working` there.
