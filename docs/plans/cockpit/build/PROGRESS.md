@@ -106,6 +106,9 @@ Notes for every builder round:
 - [ ] T53 (security, review 35-security finding 2; D127, D211) Redact the agent's stderr at the source: in `server/cockpit/bridge.mjs` (lines ~210-218) push `cut(redactor.text(line))` into `stderrLines` and use the same redacted text in the `cockpit agent stderr:` log line, so `status.detail` of `agent-down`, the replay buffer and `welcome.status` never hold a raw line — ids: none — done when: `test/cockpit-session.test.mjs` gains a case: a stderr line `Bearer sk-ant-…` gives a `status.detail` with `[redacted]` and the raw token nowhere in the sent messages; npm test green.
 - [ ] T54 (security, review 35-security finding 1 option (a); `protocols.md` §11.11, owner's call pending under `## For the owner`) The tool tripwire for a `claude-code` agent too: in `server/cockpit/bridge.mjs:153` set `checkTools` for both kinds, so a non-denied `tool.start` outside `cockpit.agent.allowedTools` ends the turn E8 and stops the child, as for a bridge agent — ids: none — done when: `test/cockpit-bridge.test.mjs` gains a claude-code case (a `Bash` `tool.start` the fake agent sends outside the allowlist ends the turn E8 and the child stops; an allowed MCP tool still runs); `npm run test:cockpit` and npm test green; the change named under `## For the owner`.
 - [ ] T55 [ui] (review 89-owner finding 5; B-line, spec silent) A disabled button reads as off in the light theme too: `.ck-btn:disabled` (`NEW` until T29, `SEND` in `data-send="wait"`) takes `--line` for its border instead of `--line-strong`, besides `--text-3`; record in DECISIONS-c1.md — ids: none — done when: a step in `c1-pane.spec.mjs` checks the computed border colour of the disabled `NEW` differs from `CLOSE`'s in dark and light; `npm run test:cockpit` and npm test green; stills dark and light.
+- [ ] T56 (test weaker than its scenario, review 95-spec-keeper findings 1, 2, 6; S-C1-38) Tighten `e2e/cockpit/c1-status.spec.mjs` S-C1-38: second case records when `agent-down` first shows and asserts `log.starts().length >= 2` then, no earlier sample showing it, and `Date.parse(since)` within 1 s of `starts[1].atMs`; `expect(codes).toEqual([...])` with the exact sequence (a B line if it starts with the login check's `not-logged-in`); third case times the `back` element with a `MutationObserver` and asserts 4800-5200 ms with no margin — ids: S-C1-38 — done when: `npm run test:cockpit -- -g 'S-C1-38' --repeat-each 4` passes; npm test green.
+- [ ] T57 (test weaker than its scenario, review 95-spec-keeper findings 3, 8; S-C1-37) In `c1-status.spec.mjs` S-C1-37's second case take `t0` from the room's start (`log.starts()[0].atMs` or the first login-check line), load the page at `t0 + 2000`, assert `since` within 1 s of that start; assert `toHaveText(LOGGED_OUT_0315)` on `[data-cockpit-status]` itself where no `RETRY NOW` shows, `.ck-status-text` only for `room-down` (log the class in a B line) — ids: S-C1-37 — done when: `npm run test:cockpit -- -g 'S-C1-37' --repeat-each 4` passes; npm test green.
+- [ ] T58 (test weaker than its scenario, review 95-spec-keeper findings 4, 5, 7; S-C1-17, S-C1-27, S-C1-20) In `c1-stop.spec.mjs`: record when `HEADER` first reads `● STOPPING` (≤ 100 ms), when `[data-turn-delivery="not-sent"]` first shows (≤ 500 ms from the tap), use `pageHhmm(page)` for `STOPPED AT`, assert the first run's interrupt `cancelled` (B line for the reading); in `c1-errors.spec.mjs:185` also assert the line's `backgroundColor` is `--bg-sunken` and `borderLeftWidth` `2px` — ids: S-C1-17 S-C1-27 S-C1-20 — done when: `npm run test:cockpit -- -g 'S-C1-17|S-C1-27|S-C1-20'` passes; npm test green.
 
 ## Scenario ids
 
@@ -225,6 +228,9 @@ What the slice itself says waits; nothing else moved here.
 - S-C1-25's `by 300 ms: two lines, both ●` step failed once in round 40's full `test:cockpit` (no tool line drawn yet at 300 ms after the tap), then passed 8 of 8 alone and 18 of 18 in the c1-tools file 3 times; it never failed before T24, which adds no work on that path that I could find. Watch it; if it fails again, log the tool frames' arrival times against the tap.
 - S-C1-18's step `the viewport at 1368x532: by 0.1 s data-keyboard="up"` failed twice in round 85 (in the full `test:cockpit` and once alone, both with and without T24b's changes), then passed 3 of 3 alone. It reads `data-keyboard` with a 1 ms timeout right after `setViewportSize` and `clock.runFor(100)`: the resize event can land after the fake clock's run. T23b's test; a fix waits for the `resize` (or one rAF) before the 0.1 s is counted.
 - From T24b's stills (800 wide, the pane full width, D249): the toast stack keeps `right: 24px` over the open pane (D158's `right: 624px` is for a 608 px pane) and two toasts cover the conversation's last reply above the opener. No spec rect at 800; noted for T42 or the owner.
+- Review 95-spec-keeper, finding 7 (rest): §10's button sizes (48 px tall, ≥ 96 px wide, 8 px apart) have no C1 scenario; give S-C1-41's table a row.
+- Review 95-spec-keeper, finding 9: the stills of T26 and T27 have no `console.txt`; later `shoot.mjs` runs keep it, even empty.
+- Review 95-spec-keeper, B218: the backoff-driven reconnect drawing `not-logged-in` in its first frame gets one check in T32's S-SCR tests.
 - T32: the line slot's `room-down` message is built (T24b, B188); T32 keeps its scenarios (S-SCR-17's line step reads it).
 
 ## Spec fixes
@@ -413,6 +419,9 @@ What the slice itself says waits; nothing else moved here.
   `["claude","auth","status","--text"]` (`protocols.md` §11.10/§11.12, `server/config/cockpit.mjs`,
   `docs/config.md`); or Q1's proposal (for the default command exit 1 alone is `not-logged-in`).
 - Review 89-owner, finding 7: a failed tool call is grey with ` · 1 failed` only (`c1-talk.md` §4-§5.1, D25). The owner finds it enough for now; spec stands.
+- Review 95-spec-keeper, B221: S-C1-37's `Test:` line names `page.clock.setFixedTime`, the build fixes the page's `Date` only (real timers, S-C1-38 needs the 5 s grace in real time). Reviewer sides with the build; amend the `Test:` line?
+- Review 95-spec-keeper, B220: S-C1-37/38 run on the Wall page (rect y 64-144); the app's row (y 100-180, `c1-talk.md:1191`) is asserted by no test. Name the page in the scenario, or add the app rect as a step?
+- Review 95-spec-keeper, B204: S-C1-27's "1 before and 2 after" is wrong as a count (2 and 3 with the first prompt); typo-level fix "the `prompts()` with its words". Build counts the steer's words only.
 
 ## Measured on the real screen
 
@@ -426,6 +435,7 @@ What the slice itself says waits; nothing else moved here.
 - reviews/30-touch.md: 6 findings; 3 became tasks (T49 focus after SEND with finding 6's focus step, T50 offline banner over the input row, T51 tap highlight); finding 2's reorder of T42 dropped (T42 keeps its place, as in review 18), its rest and finding 6's rest under `## Later`; 2 `## For the owner` lines (4, 5).
 - reviews/35-security.md: 9 findings; 3 became tasks (T52 loopback for `local`, finding 3; T53 stderr redaction, finding 2; T54 claude-code tripwire, finding 1 option (a), the owner's call also under `## For the owner`); finding 5 covered by T23/T30 (the rate-key note added under `## Later`), finding 7 covered by T45 (note under `## Later`); findings 4, 6, 8, 9 under `## For the owner`; the docs line of finding 3 under `## Later`.
 - reviews/89-owner.md: 9 findings; 1 became a task (T55 disabled look, finding 5); finding 3 went into T26's line (STOPPED AT, a step in S-C1-17); findings 1 (order, loop backoff) and 2 (Map re-fit) and 7 (failed-call look) under `## For the owner`; dropped: 4 (T45, T53, T52 already open), 6, 8, 9 (no finding).
+- reviews/95-spec-keeper.md: 9 findings; 3 became tasks (T56 S-C1-38, findings 1, 2, 6; T57 S-C1-37, findings 3, 8; T58 S-C1-17/27/20, findings 4, 5, 7); 3 `## Later` lines (7's button sizes, 9, B218); 3 `## For the owner` lines (B221, B220, B204); B200/B206 dropped (consistent, no change).
 
 ## Scores
 
@@ -441,5 +451,7 @@ What the slice itself says waits; nothing else moved here.
 | 35 | security | room | 6 | 7 | 7 | 5 | 6 | 5 |
 | 89 | owner | pane | 7 | 7 | 7 | 6 | 9 | 7 |
 | 89 | owner | room | 7 | 7 | 6 | 6 | 8 | 5 |
+| 95 | spec-keeper | pane | 8 | 6 | 7 | 6 | 7 | 7 |
+| 95 | spec-keeper | room | 8 | 6 | 7 | 6 | 7 | 7 |
 
 ## Morning
