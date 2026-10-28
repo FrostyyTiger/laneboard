@@ -22,7 +22,7 @@
 :root[data-cockpit-fit="full"] .ck-pane { border-left: 0; }
 
 /* --- the opener: CHAT / CLOSE, 48x48, right 32 px, bottom 104 px (screens.md §4) */
-.ck-open {
+.ck-btn.ck-open { /* over .ck-btn below: no padding, so the label centres in 46 px (D273) */
   position: fixed;
   right: 32px;
   bottom: 104px;

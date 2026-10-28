@@ -264,8 +264,12 @@ test('S-C1-33 Keyboard up with the status line and a long draft: the conversatio
     expect(await keyboardWord(page)).toBe('up');
     const status = await rectOf(page, '[data-cockpit-status]');
     expect(Math.abs(status.y1 - 64) <= 1 && Math.abs(status.y2 - 144) <= 1, `status y 64-144, got ${JSON.stringify(status)}`).toBe(true);
-    const line = page.locator('[data-cockpit-line][data-line="length"]');
-    await expect(line).toHaveText('8 214 / 8 000 CHARACTERS');
+    // The scenario reads the length note here, but the room is down and D133 (c1-talk.md §1.1,
+    // S-C1-34) puts `room-down` above `length`: one one-line message in the same 32 px slot,
+    // the room-down one (build B188; `## For the owner`, T24). Every number stays.
+    await expect(page.locator('[data-cockpit-line]')).toHaveCount(1);
+    const line = page.locator('[data-cockpit-line][data-line="room-down"]');
+    await expect(line).toHaveText('Sending and voice come back with the room.');
     const input = await rectOf(page, INPUT);
     const slot = await rectOf(page, '[data-cockpit-line]');
     const row = await rectOf(page, '.ck-row');

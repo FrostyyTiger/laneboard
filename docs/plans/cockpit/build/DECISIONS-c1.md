@@ -1043,3 +1043,22 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   same frame" is read in a document `click` listener after `EDIT`'s own — because the scenario
   names the page clock only and a 60 s jump with a real-time room drops the link (protocols.md §2.2)
   — spec: `c1-talk.md` S-C1-18, `stand-ins.md` §1.1 advance(ms) — overrule: `c1-typing.spec.mjs`.
+- B188 (T24b) The line slot's `room-down` message (`Sending and voice come back with the room.`,
+  `data-line="room-down"`) is built here, ahead of T32: S-SCR-25's state B reads it at y 776-808.
+  It shows while `data-cockpit="room-down"` after the grace and the link was not refused (a refused
+  link's own lines are T33's, S-SCR-24) and outranks the length note (D133), which waits under it.
+  S-C1-33's test therefore reads `[data-cockpit-line][data-line="room-down"]` and its text in the
+  same 32 px slot, every number kept (the T24 note under `## For the owner`) — because the newer D133
+  and S-C1-34 put `room-down` above `length`, and S-SCR-25 cannot pass without the line — spec:
+  `c1-talk.md` §1.1, `screens.md` §7, S-C1-33, S-SCR-25 — overrule: `drawLine()` in
+  `public/js/cockpit/pane.js` and S-C1-33's step in `c1-keyboard.spec.mjs`.
+- B189 (T24b) S-SCR-25's walk collects only the Test: line's selectors (`RETRY NOW` in the status
+  line is not in it), reads the toasts' buttons for the pairwise check and the stack's own rect for
+  the toast rule, and measures the line slot by its text (a `Range`: from x 784, ending ≤ x 1264),
+  since the slot's padding reaches the pane's edges (x 761-1288) — because §1.1 places the text,
+  not the padded box, and the box is not tappable — spec: `screens.md` §4.1, `c1-talk.md` §1.1 —
+  overrule: `e2e/cockpit/c1-corner.spec.mjs`.
+- B190 (T24b) The opener's rule is `.ck-btn.ck-open`: `.ck-btn`'s `padding: 0 8px`, later in
+  `cockpit.css`, won over `.ck-open { padding: 0 }`, so `CLOSE` (38.1 px) overflowed a 30 px
+  content box to the right and sat 3.9 px off x 1312 (D273 allows ± 1 px) — a bug fix found by
+  S-SCR-25's label box — spec: `screens.md` §4 (D273) — overrule: none (the spec's numbers).

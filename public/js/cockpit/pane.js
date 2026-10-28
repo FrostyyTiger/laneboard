@@ -37,6 +37,8 @@ export const LINES = Object.freeze({
   downFresh: 'The conversation shows again when the room is back.',
   // c1-talk.md §10 E1
   notSent: 'Not sent: the room did not confirm within 5 s.',
+  // screens.md §7: the line slot's `room-down` message while SEND is disabled for it
+  roomDown: 'Sending and voice come back with the room.',
 });
 
 /** protocols.md §3.1: `p-` and 8 hex characters from crypto.getRandomValues. */
@@ -120,8 +122,8 @@ export function createPane(opts = {}) {
   band.append(convo, follow);
 
   // The line slot on the input row's top edge (c1-talk.md §1.1, D133): one message, the
-  // highest that holds. C1 builds `length` (§7); `room-down` comes with screens.md §7 (T32),
-  // `error` and `hint` with the talk button (C2).
+  // highest that holds. C1 builds `room-down` (screens.md §7) and `length` (§7); `error` and
+  // `hint` come with the talk button (C2).
   const lineSlot = el(doc, 'p', 'ck-line', { 'data-cockpit-line': '' });
   lineSlot.hidden = true;
 
@@ -214,15 +216,19 @@ export function createPane(opts = {}) {
    * keeps the last item clear of the opener, `max(0, 64 − lift)` (D267).
    */
   function drawLine() {
+    // D133: `room-down` outranks `length`; the length note waits under it and shows again
+    // when the room is back, if the draft is still over the limit.
+    const down = link.status === 'room-down' && link.since != null && !link.refused;
     const note = lengthNote(input.value.length, maxChars);
-    if (note === null) {
+    const [kind, text] = down ? ['room-down', LINES.roomDown] : note !== null ? ['length', note] : [null, ''];
+    if (kind === null) {
       lineSlot.hidden = true;
       delete lineSlot.dataset.line;
       lineSlot.textContent = '';
     } else {
       lineSlot.hidden = false;
-      lineSlot.dataset.line = 'length';
-      if (lineSlot.textContent !== note) lineSlot.textContent = note;
+      lineSlot.dataset.line = kind;
+      if (lineSlot.textContent !== text) lineSlot.textContent = text;
     }
   }
 
@@ -638,6 +644,7 @@ export function createPane(opts = {}) {
     drawStatus();
     drawNote();
     sendState();
+    drawLine();
     newBtn.disabled = true;
     turnWord.classList.toggle('ck-grey', link.status !== 'live');
     const counting = link.status === 'room-down' && !link.refused;
