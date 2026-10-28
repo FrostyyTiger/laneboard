@@ -114,7 +114,7 @@ import { applyLift, paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
-import { IDLE, OVERVIEW, STAY, createDirector } from './director.js';
+import { IDLE, OVERVIEW, STAY, createDirector, showNode, showTarget } from './director.js';
 import { SHOW, createFingerWatch, createShow } from './show.js';
 import { createTransport, showOrigins } from './transport.js';
 import { createShowDemo, wantsShowDemo } from './showdemo.js';
@@ -124,7 +124,7 @@ import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
 import {
   AT_OVERVIEW, COVERED, TOUCH, backControl, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createReturn, createTaps, createTouch, hitAll, hitTest, roleOf,
-  manualLine, memberPoints, moonsAt, orbitLimits, placeOf, ringHit, tapPoints,
+  manualLine, memberPoints, moonsAt, orbitLimits, placeOf, ringHit, showPlace, tapPoints,
 } from './touch.js';
 
 const BACKOFF_START_MS = 1000;
@@ -293,6 +293,8 @@ export function boot() {
     hud.release();
     fan?.hide();
     touch?.explore(performance.now() + ms);
+    // A moon's flight opens its planet's ring (T10): the place is its planet's, as after a tap.
+    if (touch && to.kind !== 'stay') { place = showPlace(to, place, shownPlace); shownPlace = to.member != null ? place : null; }
     return r;
   };
 
@@ -349,25 +351,12 @@ export function boot() {
   // The show commands (show.js): the camera through the director's `show`, the rest drawn here.
   // A node is known when the galaxy draws it: a site (fly there), a member (fly to its site) or the
   // sun (the overview).
-  const nodeAt = (id) => {
-    const w = galaxy.world;
-    if (!w || id == null) return null;
-    if (w.core?.id === id) return { node: w.core, site: null };
-    const s = w.byId.get(id);
-    if (s) return { node: s.node, site: s.id };
-    for (const site of w.sites) {
-      const m = site.members.find((x) => x.id === id);
-      if (m) return { node: m.node, site: site.id };
-    }
-    return null;
-  };
+  // A moon too (night 5 T10): it is drawn in its system.
+  const nodeAt = (id) => showNode(galaxy.world, id);
   const SUN = { x: 0, y: 0, z: 0 };
-  // Where a show flies for a node: its site's shot at the Map's zoom, or the overview for the sun.
-  const targetOf = (id, z = SHOW.zoom) => {
-    const at = nodeAt(id);
-    if (!at) return null;
-    return at.site ? { kind: 'site', id: at.site, zoom: z } : OVERVIEW;
-  };
+  // Where a show flies for a node: its site's shot at the Map's zoom, or the overview for the sun;
+  // a moon's frames its planet with the ring open (director.js showTarget, show() below).
+  const targetOf = (id, z = SHOW.zoom) => showTarget(galaxy.world, id, z);
   // fitNodes (screens.md §9.2 M2): the ids' stars in sight with `pad` to spare; one system's own
   // nodes fly to that system (it opens), the rest fit their stars (a fitted pose folds the systems).
   const fitTarget = (ids, pad = FIT.padPx) => {
@@ -472,6 +461,7 @@ export function boot() {
 
   // Where a finger has taken the page (T13): the overview, a system, a planet in it.
   let place = AT_OVERVIEW;
+  let shownPlace = null; // the place a show's moon flight set (T10): a later show move takes it back
   let moonsAsked = null; // the planet (or moon) whose ring the scene was last asked to open (T8)
   // Reduced motion (T14): a finger's step is a cut, the scene (canvas and names) fading in.
   const fade = reduced && !park ? createCutFade([canvas, document.getElementById('galaxy-labels')]) : null;

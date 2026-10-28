@@ -60,6 +60,37 @@ export const OVERVIEW = Object.freeze({ kind: 'overview' });
 /** A show's target that keeps the camera where it is (a highlight whose nodes are all in sight). */
 export const STAY = Object.freeze({ kind: 'stay' });
 
+/**
+ * What the galaxy draws for a show's node id (main.js, the show's `known`):
+ * `{ node, site, moon }`, `site` its system's id (null for the sun), `moon`
+ * true for a moon (night 5 T7). Null when it is not drawn. Pure.
+ */
+export function showNode(world, id) {
+  if (!world || id == null) return null;
+  if (world.core?.id === id) return { node: world.core, site: null, moon: false };
+  const s = world.byId.get(id);
+  if (s) return { node: s.node, site: s.id, moon: false };
+  for (const site of world.sites) {
+    const m = site.members.find((x) => x.id === id);
+    if (m) return { node: m.node, site: site.id, moon: Boolean(m.moon) };
+  }
+  return null;
+}
+
+/**
+ * Where a show flies for a node (`fly_to`, the handle's `flyTo`; night 5 T10):
+ * a site or a planet, its system's shot at `zoom` (as before moons); a moon,
+ * that shot with `{ member }`, so the camera frames its planet as a finger's
+ * pick does (camera.js PICK) and its planet's ring opens (`showPlace`); the
+ * sun, the overview. Null when it is not drawn. Pure.
+ */
+export function showTarget(world, id, zoom) {
+  const at = showNode(world, id);
+  if (!at) return null;
+  if (!at.site) return OVERVIEW;
+  return at.moon ? { kind: 'site', id: at.site, zoom, member: id } : { kind: 'site', id: at.site, zoom };
+}
+
 /** A director that has just started: the tour drives, nobody touched, nothing shown. */
 export const initialDirector = (driver = 'tour', now = null) => (driver === 'touch'
   ? { driver, since: now, last: now, show: null }

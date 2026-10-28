@@ -783,6 +783,18 @@ export const placeOf = (site = null, planet = null) => (site == null
  */
 export const moonsAt = (place) => (place?.level === 'planet' ? place.planet ?? null : null);
 
+/**
+ * The place after a show's camera move `to` (night 5 T10): a moon's (`{ kind:
+ * 'site', member }`, director.js showTarget) is its planet's, as a finger's tap
+ * on that moon, so its ring opens and Back steps out from it; any other move
+ * leaves the finger's place as it was, except one the last show set
+ * (`byShow`), which goes with its camera to the overview. Pure.
+ */
+export function showPlace(to, place, byShow = null) {
+  if (to?.kind === 'site' && to.member != null) return placeOf(to.id, to.member);
+  return byShow != null && place === byShow ? AT_OVERVIEW : place;
+}
+
 /** Whether there is a step back from `place` (anywhere but the overview). */
 export const canGoBack = (place) => place?.level === 'site' || place?.level === 'planet';
 
