@@ -75,6 +75,14 @@ async function lose(page, room) {
   // when a trip took longer than 50 ms.) The 1 s jump fires only timers due in it, once.
   await page.clock.setSystemTime(LOSS.getTime() - 1_000);
   await page.clock.pauseAt(LOSS);
+  // Playwright 1.56's page clock (T61): while it runs, a real-time tick runs the timers due as an
+  // async loop that ends by setting the clock to the tick it started at. A tick in flight when
+  // pauseAt lands ends after pauseAt's own run and sets the paused clock back by the jump (seen:
+  // `LOSS - 997` here, or `since 06:40` on the line when it ended after this check). Paused, no
+  // new tick starts: give the one in flight time to end, then pause at the loss again, which moves
+  // only what it set back (and fires only timers due in that gap, once).
+  await new Promise((r) => setTimeout(r, 250));
+  await page.clock.pauseAt(LOSS);
   expect(await page.evaluate(() => Date.now()), 'the page paused at the loss').toBe(LOSS.getTime());
   // The loss under test is the link's first: a close before it would leave its own "since" in
   // place (link.js keeps `lossAt` until a welcome), and the line would not read 06:41.
