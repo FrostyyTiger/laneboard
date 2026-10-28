@@ -278,10 +278,14 @@ export const SITE_SHOT = Object.freeze({ jitter: 0.7, sway: 0.5, speed: 0.00002 
 export function siteShot(site, now = 0, view = null) {
   const { jitter, sway, speed } = SITE_SHOT;
   // Framed, a big system close to the hub needs the camera farther back than
-  // the hub is: from the sun's side it would hang over the sun, so it looks
-  // in from outside, the hub far beyond the system and small (framing.js FRAMING.inward).
-  const inward = view?.free && site.reach > FRAMING.inward * Math.hypot(site.home.x, site.home.z) ? Math.PI : 0;
-  const out = Math.atan2(-site.home.x, -site.home.z) + inward + (hash(site.id) - 0.5) * jitter + sway * Math.sin((now * speed) / sway);
+  // the hub is: from the sun's side it would hang over the sun, and looking in
+  // from outside (nights 2-4) puts the sun at the frame's top, on the tag, once
+  // the galaxy is snug (night 5 T1b). So it looks across from the side, the
+  // sun off the frame's right edge past the free box (framing.js FRAMING.aside),
+  // with no per-site jitter, which would bring the sun back in.
+  const aside = view?.free && site.reach > FRAMING.inward * Math.hypot(site.home.x, site.home.z);
+  const turn = aside ? FRAMING.aside : (hash(site.id) - 0.5) * jitter;
+  const out = Math.atan2(-site.home.x, -site.home.z) + turn + sway * Math.sin((now * speed) / sway);
   // `d` is the camera's offset along the plane; it stands 0.75 d up, so 1.25 d from the star.
   let d = Math.max(560, site.reach * 1.9);
   if (view?.free) d = Math.max(560, fitDistance(site.reach, view.free, view.fov ?? FOV, view.aspect) / 1.25);
@@ -290,12 +294,6 @@ export function siteShot(site, now = 0, view = null) {
     pos: { x: site.home.x + Math.sin(out) * d, y: site.home.y + d * 0.75, z: site.home.z + Math.cos(out) * d },
     look: { ...site.home },
   };
-  // Looking in, the camera stands steeper at the same distance, so the hub
-  // beyond the system rises to the frame's top edge.
-  if (inward) {
-    const back = (d * 1.25) / Math.hypot(1, FRAMING.inwardRise);
-    shot.pos = { x: site.home.x + Math.sin(out) * back, y: site.home.y + back * FRAMING.inwardRise, z: site.home.z + Math.cos(out) * back };
-  }
   return view?.free ? panShot(shot, site.home, freeCentre(view.free), view.fov ?? FOV, view.aspect) : shot;
 }
 

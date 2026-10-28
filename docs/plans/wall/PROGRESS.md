@@ -64,12 +64,23 @@ Notes for every builder round (planner, round 7):
   pinned to `TIGHT` by the layout test. Perf: no mesh or vertex count changes (same geometry, smaller numbers), so draw
   calls/triangles stand as night 4's. Looked at (`$RUN_DIR/shots/r9-t1-*`, `r9-galaxy`): overview shows all five sites named,
   none off screen, HV2's red the loudest; `?demo=1` film 34.5 fps at cpu 4x, 0 console errors. Found: T1b below.
-- [ ] T1b [ui] [variant:galaxy] The sun is out of a held system's frame again: with the tighter galaxy HV1's star is only
+- [x] T1b [ui] [variant:galaxy] The sun is out of a held system's frame again: with the tighter galaxy HV1's star is only
   733 from the sun, so the inward look (`scene.js siteShot`, `framing.js FRAMING.inward`/`inwardRise`) puts the sun's disc in
   the top right of the frame, on the tag (`?at=lab&open=1`, film frames 9.3 s and 32.5 s of r9; labels keep the sun's name off
   the tag, the bright disc is not). `inwardRise` 1.0-2.2 does not clear it (tried, round 9). Keep the sun out of the frame
   or out of `hud.covers()` for every site of the large demo at its hold — done when: a test projects the sun for each held
-  site's `siteShot` with the tablet view and finds it off the frame or clear of the tag box; a still of `?at=lab&open=1`.
+  site's `siteShot` with the tablet view and finds it off the frame or clear of the tag box; a still of `?at=lab&open=1`. (commit SHA)
+  Notes (builder, round 12): no rise and no small turn of the look-in shot clears it: the camera stands 1000-1600 back
+  from a star 733 from the sun, so its frustum takes the sun in from most bearings (probed every 10° on four frames,
+  with and without a plate). The near-hub system is now shot **from the side**: `FRAMING.aside` -65° from the sunward
+  bearing, the sun off the frame's right edge past the free box, no per-site jitter (it alone brought the sun back);
+  the sway stays. `inwardRise` is gone (unused). It holds for any caption plate over about 500 px wide; with no plate at
+  all (before the first one, when `kept` is empty) the sun can show in the frame, but `kept` remembers the widest plate,
+  so the steady hold is clear. Tests (`wall-galaxy-framing`): the sun's disc and halo middle off the tablet frame for
+  `lab` over 6 min of sway at zoom 2.3 and 3.5 with the trouble plate and a calm one, every other site clear of the
+  words; the side bearing pinned. Both fail on the old shot. Looked at (`$RUN_DIR/shots/r12-t1b-hv1`, `r12-t1b-overview`,
+  `r12-galaxy`): `?at=lab&open=1` has no sun and the tag is clear; overview unchanged; `?demo=1` film 38.1 fps at cpu 4x,
+  0 console errors, HV1's holds (9.3 s, 15.1 s) without the sun. No geometry change, so perf is as before.
 - [ ] T2 (§7 Night 5 A3) [ui] [variant:galaxy] Size is what it carries: a planet's radius factor 0.8 + 0.35·log2(1+n) of
   what is below it, a star's 0.8 + 0.2·log2(1+planets), clamped 0.8x-2.2x, never by status (a pure `carryScale` in
   `layout.js` or `scene.js`); a big sphere takes more segments so it never looks faceted, within the triangle budget — done
