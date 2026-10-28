@@ -69,7 +69,7 @@ Notes for every builder round (planner, round 7):
   the top right of the frame, on the tag (`?at=lab&open=1`, film frames 9.3 s and 32.5 s of r9; labels keep the sun's name off
   the tag, the bright disc is not). `inwardRise` 1.0-2.2 does not clear it (tried, round 9). Keep the sun out of the frame
   or out of `hud.covers()` for every site of the large demo at its hold — done when: a test projects the sun for each held
-  site's `siteShot` with the tablet view and finds it off the frame or clear of the tag box; a still of `?at=lab&open=1`. (commit SHA)
+  site's `siteShot` with the tablet view and finds it off the frame or clear of the tag box; a still of `?at=lab&open=1`. (commit deecadd)
   Notes (builder, round 12): no rise and no small turn of the look-in shot clears it: the camera stands 1000-1600 back
   from a star 733 from the sun, so its frustum takes the sun in from most bearings (probed every 10° on four frames,
   with and without a plate). The near-hub system is now shot **from the side**: `FRAMING.aside` -65° from the sunward
