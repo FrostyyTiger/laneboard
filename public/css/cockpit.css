@@ -487,6 +487,18 @@
   text-transform: uppercase;
 }
 .ck-err-btn:disabled { color: var(--text-3); }
+/* E5: the model service retried, not an error line: a tool-line-style row, 48 px, mono
+   18 px --text-3 in the text column after the glyph column (c1-talk.md §10, §5) */
+.ck-retrying {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  margin: 0;
+  padding-left: 24px;
+  font: 400 18px/1.4 var(--font-mono);
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
 /* the stopped line under a stopped turn (c1-talk.md §8, D33, D262): 16 px caps --text-3 with the
    cockpit's rule (§3, D227); its words are capitals in the DOM, so no text-transform */
 .ck-stopped {

@@ -1137,3 +1137,31 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   ("nothing more is sent to the agent"). The D33 freeze is pinned by `test/cockpit-turns.test.mjs`:
   in S-C1-17 the fake's 300 ms stop rarely sends a delta after the tap, so the Playwright run only
   sees it now and then — spec: `c1-talk.md` S-C1-27, S-C1-17 — overrule: none.
+- B205 (T27) When E2's line changes to `The agent is back (…)` with `RETRY`: at the room's `status`
+  `agent-back` (live, or in `welcome.status`), at a `turn.prompt` with `delivery:"new"` (a session
+  is up), and, for a turn drawn from a snapshot, when a later turn follows it. A reloaded page whose
+  last turn ended `agent-exited` and whose `welcome.status` is `null` keeps the first line (no
+  `RETRY`) until one of those comes — because the room sends no field saying the agent is up, and
+  a `RETRY` shown while it is not would draw `prompt.refused` — spec: `c1-talk.md` §10 E2,
+  `protocols.md` §3.5, §11.7.1 step 3 — overrule: a field in `welcome` (or the snapshot's turn
+  end) saying the agent is back, and the pane reads it.
+- B206 (T27) E2's two times are the turn's `end.at` moved onto the page's clock (as `STOPPED AT`,
+  B200): `at 07:04` by `atText`, `(07:04)` by `clockText` (D232's event form) — because S-C1-39
+  names the back line's `HH:MM` as the restarted room's start, which is the turn's `end.at`, and
+  S-C1-19's exit and restart fall in the same minute — spec: `c1-talk.md` §10, S-C1-19, S-C1-39 —
+  overrule: the back line takes `status.since` of `agent-back` instead.
+- B207 (T27) The error end's line (`[data-turn-error]` for E2, E3, E4, E7, E8) stands at the turn's
+  end, under the reply and before the prompts queued in the turn (as the stopped line); E1's stays
+  under the prompt block. A second line for the same turn (E2's change) replaces the first in
+  place, so a turn has one — because S-C1-39 puts E2 "under" the turn's prompt with no reply, and
+  the error ends the reply — spec: `c1-talk.md` §10, S-C1-39 — overrule: none.
+- B208 (T27) E5's row is `p.ck-retrying[data-turn-retrying]` at the reply's end (an item placed
+  later goes above it), 48 px, mono 18 px `--text-3`, 24 px in (the tool line's glyph column);
+  gone with the first `text.delta`/`text.block` and at `turn.end` — because §10 names its look but
+  no selector, and a turn that ends after retries says why in its own end line — spec: `c1-talk.md`
+  §10 E5, README "Selectors tests use" (no row) — overrule: name the selector in the README table.
+- B209 (T27) A `turn.end` `agent-down` always reads `… The room tries again every 30 s.`: D289's
+  refused start leaves no turn running, so it never ends one; the pane has no field to tell the two
+  apart — spec: `c1-talk.md` §10 E3, D289 — overrule: a `refused` flag on that `turn.end`.
+- B210 (T27) The `status` message is read only for `agent-back` (E2) in T27; the status line itself
+  is T28's — spec: `protocols.md` §3.5 — overrule: none.

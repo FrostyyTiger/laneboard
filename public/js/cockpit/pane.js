@@ -7,7 +7,8 @@
 //   one line, no input row
 //   pane.setLink(state)        the room link's state (link.js): data-cockpit, the status line
 //   pane.apply(msg)            one room message (welcome, snapshot, turn.prompt, turn.state,
-//                              text.delta, text.block, tool.start, tool.end, turn.end)
+//                              text.delta, text.block, tool.start, tool.end, turn.retrying,
+//                              turn.end, status: only its `agent-back` for E2, c1-talk.md §10)
 //   onPrompt(msg)              SEND: the `prompt` to the room (protocols.md §3.1); the block is
 //                              drawn at the tap with `· SENDING` until the room's echo (B8)
 //   onStop(msg)                STOP: the `stop` to the room (protocols.md §3.3)
@@ -20,6 +21,7 @@
 import { sinceText } from '../core/cockpit-time.js';
 import { AGE_FROM_MS, CONFIRM_WAIT_MS, MAX_PROMPT_CHARS, PANE_SLIDE_MS, STOP_GUARD_MS, TICK_MS } from '../core/cockpit-constants.js';
 import { createTurn } from './turns.js';
+import { endButtons, endText, GO_ON_TEXT } from './errors.js';
 import { canSend, inputHeight, isSendKey, lengthNote, linesFromScroll, INPUT_ONE_LINE_PX, restoreDraft } from './draft.js';
 import { focusNow } from './focus.js';
 import { paneFit, TOO_OLD_TEXT } from './fit.js';
@@ -196,6 +198,7 @@ export function createPane(opts = {}) {
   let tick = null;
   let ageTimer = null;
   let clockOffset = 0; // the page's clock minus the room's, from welcome.now (c1-talk.md §9)
+  const exited = new Set(); // views whose E2 line still says the agent is being started again (§10)
   let fit = null;
   const madeInert = new Set(); // what this pane made inert, given back as it was
 
@@ -409,9 +412,12 @@ export function createPane(opts = {}) {
     const turns = Array.isArray(snap.turns) ? snap.turns : [];
     const frag = doc.createDocumentFragment();
     views.clear();
-    for (const t of turns) {
+    exited.clear();
+    for (const [i, t] of turns.entries()) {
       const v = createTurn(doc, t, { offset: clockOffset, promptButtons });
       if (v.turnId) views.set(v.turnId, v);
+      // E2 after a load: back once a later turn ran, or the room said so (build B205).
+      drawEnd(v, i < turns.length - 1 || agentBack);
       if (t.clientId) sending.delete(t.clientId); // the room had it: the snapshot's block is the one
       frag.append(v.node);
     }
@@ -543,6 +549,33 @@ export function createPane(opts = {}) {
       { label: 'RETRY', onTap: () => { if (link.status === 'live') { lastSendAt = now(); sendState(); sendPrompt(item.prompt, newClientId()); } } },
       { label: 'EDIT', onTap: () => editText(item.prompt, () => item.remove()) },
     ];
+  }
+
+  /**
+   * The error end of a turn (§10 E2-E8): its exact line and buttons, under the reply. Every
+   * button that sends makes a new `clientId` (D259) and acts only on a tap (§10 "Nothing is ever sent again on its own").
+   */
+  function drawEnd(v, back = false) {
+    const end = v.endState;
+    if (end?.state !== 'error') return;
+    if (end.code === 'agent-exited' && !back) exited.add(v);
+    else exited.delete(v);
+    const tap = (text) => () => {
+      if (link.status !== 'live') return;
+      lastSendAt = now(); // D268: a RETRY is a send
+      sendState();
+      sendPrompt(text, newClientId());
+    };
+    const buttons = endButtons(end.code, back).map((label) => ({ label, onTap: tap(label === 'GO ON' ? GO_ON_TEXT : v.prompt) }));
+    v.endError(end.code, endText(end, { back, nowMs: now(), offset: clockOffset }), buttons);
+  }
+
+  /** E2's second line (§10, protocols.md §3.5 `agent-back`): every cut turn says the agent is back, with `RETRY`. */
+  let agentBack = false; // the room said `agent-back` since this page's last welcome
+  function backNow() {
+    agentBack = true;
+    for (const v of [...exited]) drawEnd(v, true);
+    grew();
   }
 
   /** E1 `RETRY`: the same text with the same `clientId`, as a new block; the failed one stays (§10). */
@@ -834,6 +867,8 @@ export function createPane(opts = {}) {
   function apply(msg) {
     switch (msg.type) {
       case 'welcome':
+        agentBack = false;
+        if (msg.status?.code === 'agent-back') backNow();
         stt = msg.config?.stt === 'on' ? 'on' : 'none';
         if (Number.isInteger(msg.config?.maxPromptChars) && msg.config.maxPromptChars > 0) maxChars = msg.config.maxPromptChars;
         draftChanged();
@@ -848,6 +883,8 @@ export function createPane(opts = {}) {
         drawSnapshot(msg);
         return;
       case 'turn.prompt':
+        // A new turn runs on a session that is up: a cut turn's agent is back (§10 E2).
+        if (msg.delivery === 'new' && exited.size) backNow();
         promptEcho(msg);
         return;
       case 'prompt.taken':
@@ -895,9 +932,25 @@ export function createPane(opts = {}) {
         changed(v);
         return;
       }
+      case 'status':
+        // The status line itself is T28's (§10.1); here only E2's `agent-back`.
+        if (msg.status?.code === 'agent-back') backNow();
+        return;
+      case 'turn.retrying': {
+        const v = views.get(msg.turnId);
+        if (!v) return;
+        v.retrying(msg);
+        grew();
+        return;
+      }
       case 'turn.end': {
         const v = views.get(msg.turnId);
-        if (v) { v.end(msg); changed(v); }
+        if (v) {
+          v.end(msg);
+          if (msg.code === 'agent-exited') agentBack = false;
+          drawEnd(v);
+          changed(v);
+        }
         setTurn('idle');
         ageTick();
         return;

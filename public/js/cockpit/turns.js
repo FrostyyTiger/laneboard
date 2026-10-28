@@ -23,6 +23,11 @@
 //   t.fail(code, message, buttons)    // the grey error line under the prompt (§10), `NOT SENT` for E1;
 //                                     // buttons: [{label, onTap}], each a `<button>` in the line
 //   t.unfail()                        // the line goes, the label loses its word (a late echo)
+//   t.endError(code, message, buttons) // the error end's line (§10 E2-E8) at the turn's end, under the
+//                                     // reply and before its queued prompts; again: replaced in place
+//   t.endState                        // the turn's `turn.end` (snapshot or message), null while it runs
+//   t.retrying(msg)                   // E5's grey row at the reply's end, replaced on each retry,
+//                                     // gone with the first text and at the turn's end
 //   t.prompt / t.clientId             // the prompt's text and the screen's clientId
 //   t.hasError()                      // an error line shows
 //   t.queuePrompt(p)                  // a prompt sent during the turn (c1-talk.md §8): its block at the
@@ -41,6 +46,7 @@ import { hhmm, turnAgeText } from '../core/cockpit-time.js';
 import { AGE_FROM_MS } from '../core/cockpit-constants.js';
 import { parse } from '../core/md.js';
 import { drawText } from './reply.js';
+import { retryingText } from './errors.js';
 import { canFold, lineText, anyRunning, callRow, isDenied, wholeInput } from '../core/tool-words.js';
 
 const el = (doc, tag, cls, attrs = {}) => {
@@ -225,6 +231,9 @@ export function createTurn(doc, turn, opts = {}) {
   let ended = Boolean(turn.end);
   let frozen = turn.state === 'stopping'; // STOP tapped (§8): nothing the turn sends from here is drawn
   let stoppedNode = null;
+  let endState = turn.end ?? null;
+  let endLine = null; // §10: the error end's line
+  let retryRow = null; // §10 E5
 
   const setId = (id) => {
     if (typeof id !== 'string' || !id) return;
@@ -325,7 +334,7 @@ export function createTurn(doc, turn, opts = {}) {
   function place(i, node) {
     placed.set(i, node);
     const after = [...placed.keys()].filter((k) => k > i).sort((x, y) => x - y)[0];
-    reply.insertBefore(node, after === undefined ? null : placed.get(after));
+    reply.insertBefore(node, after === undefined ? (retryRow?.parentNode === reply ? retryRow : null) : placed.get(after));
   }
 
   /** The reply's block `i`, made and placed by `blockIndex` on its first use (protocols.md §3.2). */
@@ -428,6 +437,27 @@ export function createTurn(doc, turn, opts = {}) {
   draw();
   tick(Date.now());
 
+  /** §10: the error end's line at the turn's end, before the prompts queued in it (they are not the reply). */
+  function endError(code, message, buttons) {
+    const n = errorLine(doc, code, message, buttons);
+    if (endLine) endLine.replaceWith(n);
+    else box.insertBefore(n, queueBox);
+    endLine = n;
+  }
+
+  /** §10 E5: not an error line, a tool-line-style row in `--text-3` at the reply's end. */
+  function retrying(msg) {
+    if (ended || frozen) return;
+    replyBox(Date.now());
+    if (!retryRow) retryRow = el(doc, 'p', 'ck-retrying', { 'data-turn-retrying': '' });
+    retryRow.textContent = retryingText(msg);
+    reply.append(retryRow); // after every item so far; a later item is placed above it
+  }
+  function unretry() {
+    retryRow?.remove();
+    retryRow = null;
+  }
+
   /**
    * §8 "What a stopped turn looks like": `STOPPED AT 07:03` (or `(FORCED)`) under the cut
    * text, before the prompts queued in the turn (they are not the reply); running tool
@@ -525,6 +555,7 @@ export function createTurn(doc, turn, opts = {}) {
   }
   function delta(msg) {
     if (ended || frozen) return;
+    unretry(); // E5's row goes when text arrives
     const b = blockOf(msg.blockIndex, msg.sentAt);
     b.text += msg.text;
     follow(msg.blockIndex);
@@ -532,6 +563,7 @@ export function createTurn(doc, turn, opts = {}) {
   /** The complete block replaces what the deltas built (a lost delta cannot leave wrong text). */
   function block(msg) {
     if (frozen) return;
+    unretry();
     const b = blockOf(msg.blockIndex, Date.now());
     b.text = msg.text;
     b.done = true;
@@ -570,6 +602,8 @@ export function createTurn(doc, turn, opts = {}) {
   }
   function end(msg = {}) {
     ended = true;
+    endState = msg;
+    unretry();
     endMs = pageMs(msg.at, offset) ?? Date.now();
     for (const b of blocks.values()) b.done = true;
     // §5.1 `turn.end`: running calls lose `●` (and their `…`).
@@ -589,6 +623,7 @@ export function createTurn(doc, turn, opts = {}) {
     get turnId() { return turnId; },
     get ended() { return ended; },
     get startMs() { return startMs; },
+    get endState() { return endState; },
     prompt: turn.prompt ?? null,
     clientId: turn.clientId ?? null,
     at: turn.at ?? null,
@@ -598,7 +633,7 @@ export function createTurn(doc, turn, opts = {}) {
     /** Is any reply text on screen? (`answering` waits for it, pane.js B140). */
     hasText: () => [...blocks.values()].some((b) => b.drawn !== null && b.drawn !== ''),
     confirm(msg) { unfail(); confirmed(msg); },
-    fail, unfail, delta, block, toolStart, toolEnd, end, freeze, draw, tick,
+    fail, unfail, endError, retrying, delta, block, toolStart, toolEnd, end, freeze, draw, tick,
     /** Does this turn hold the call? (a tool.end naming another is not this turn's, §5.1). */
     hasCall: (id) => callsById.has(id),
   };
