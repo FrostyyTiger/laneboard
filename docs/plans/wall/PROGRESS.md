@@ -81,11 +81,23 @@ Notes for every builder round (planner, round 7):
   words; the side bearing pinned. Both fail on the old shot. Looked at (`$RUN_DIR/shots/r12-t1b-hv1`, `r12-t1b-overview`,
   `r12-galaxy`): `?at=lab&open=1` has no sun and the tag is clear; overview unchanged; `?demo=1` film 38.1 fps at cpu 4x,
   0 console errors, HV1's holds (9.3 s, 15.1 s) without the sun. No geometry change, so perf is as before.
-- [ ] T2 (§7 Night 5 A3) [ui] [variant:galaxy] Size is what it carries: a planet's radius factor 0.8 + 0.35·log2(1+n) of
+- [x] T2 (§7 Night 5 A3) [ui] [variant:galaxy] Size is what it carries: a planet's radius factor 0.8 + 0.35·log2(1+n) of
   what is below it, a star's 0.8 + 0.2·log2(1+planets), clamped 0.8x-2.2x, never by status (a pure `carryScale` in
   `layout.js` or `scene.js`); a big sphere takes more segments so it never looks faceted, within the triangle budget — done
   when: tests pin the formula, both clamps and that a status change leaves the size alone; `?perf=1` triangles at the
-  overview before/after in the notes (no rise past night 4's numbers); a still of `?at=hv1&open=1` shows smooth large bodies.
+  overview before/after in the notes (no rise past night 4's numbers); a still of `?at=hv1&open=1` shows smooth large bodies. (commit ac22fb0)
+  Notes (builder, round 13): `layout.js CARRY`/`carryScale` and a `carry` on every layout member (planets: every member
+  below, any depth; the rest 1) and site (its planets); `scene.js bodyRadius` multiplies the planet size by it (sphere,
+  halo, mark, labels via `m.radius`), the star's scale, halo, `starRadius` (labels.js stands the name beside it; without
+  it `HV1` sat on the bigger star) and `camera.js screenOf` follow `s.carry`; a relayout eases the star to its new carry.
+  The tone still picks planet size or dot (a dot in trouble grows to `SIZE.planet`, uncarried, r8-film-ui 3): only that
+  test's planet reference moved (`wall-galaxy-trouble`, the builder is now 1.5x). Segments: stars are flat-shaded, so only
+  the edge can look faceted; above `BIG_STAR` 1.2x a star takes `bigStar` 26x18 (as round an edge up to 1.65x as a 1x star
+  at 20x14, pinned in `wall-galaxy-carry`); planets keep 32x22 (rounder at 2.2x than a 1x star). Triangles (`renderer.info`,
+  large demo, pinned levels, `$RUN_DIR/r13-tri-*.txt`): overview L0 83.9k → 85.7k (night 4's 84-86k), L2 20.6k → 21.2k,
+  `lab` open L0 30.7k → 32.3k; draw calls unchanged (203); no per-frame work added. Looked at
+  (`$RUN_DIR/shots/r13-t2-hv1b`, `r13-t2-overview`, `r13-t2-hv2`, `r13-galaxy`): HV1's star 1.6x and round, builders and
+  rooms by load, names clear; `?demo=1` film 30.2 fps at cpu 4x, 0 console errors.
 - [ ] T3 (§7 Night 5 A4) [ui] [variant:galaxy] Colour: each site a quiet warm-set tint (teal, indigo, plum, sage; the
   sketch's `TINT_SETS.warm`) in its calm nebula and dust; "lift": calm bodies and names a step lighter (stone) on a deep
   blue-black ground; a warmer, softer sun. One frozen table in `galaxy/palette.js` (see the colour note above); status hues
