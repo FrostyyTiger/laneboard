@@ -655,6 +655,8 @@ export function createPane(opts = {}) {
     const v = runningView();
     if (!v?.turnId) return;
     setTurn('stopping');
+    v.freeze(); // §8: the text stays as it was at the tap
+    changed(v);
     onStop({ type: 'stop', turnId: v.turnId });
   }
   send.addEventListener('pointerdown', (e) => {
@@ -858,6 +860,14 @@ export function createPane(opts = {}) {
         return;
       }
       case 'turn.state':
+        if (msg.state === 'stopping') {
+          // Another screen's STOP (§12): this one keeps the text as it was then too (§8).
+          const v = views.get(msg.turnId);
+          if (v) { v.freeze(); changed(v); }
+        }
+        // A state the room sent before it read this screen's `stop` does not undo `● STOPPING`
+        // (protocols.md §3.3: the turn stays `stopping` until its `turn.end`).
+        else if (root.dataset.turn === 'stopping' && msg.turnId === runningView()?.turnId) return;
         if (msg.state !== 'answering') { setTurn(msg.state); return; }
         heldTurn = msg.state;
         heldTurnId = msg.turnId;

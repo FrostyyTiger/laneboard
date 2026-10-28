@@ -125,6 +125,9 @@ test('§5 "Failures": ` · k failed` in the line, refused calls not counted, `�
   assert.equal(failedCount([ended('Bash', {}, { isError: true, denied: true })]), 0, 'a refused call is not a failure');
   assert.equal(lineText([call(f, { site: 'hv1' })]), 'read the feed of hv1…');
   assert.equal(lineText([call(f, { site: 'hv1' })], { stopped: true }), 'read the feed of hv1', 'the turn ended under it: no …');
+  // c1-talk.md §8: a line still running when STOP ended its turn ends in ` · stopped`; an ended one does not.
+  assert.equal(lineText([call(f, { site: 'hv1' })], { stopped: true, byStop: true }), 'read the feed of hv1 · stopped');
+  assert.equal(lineText([ended(f, { site: 'hv1' })], { stopped: true, byStop: true }), 'read the feed of hv1');
 });
 
 test('§5 "Open": one row per call, compact JSON cut at 120, its ms and ok|failed', () => {

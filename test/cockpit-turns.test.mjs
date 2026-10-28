@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeDocument } from './helpers/fakedom.mjs';
-import { createTurn, setDelivery, DELIVERY_WORDS, turnNode, firstSentenceDone } from '../public/js/cockpit/turns.js';
+import { createTurn, setDelivery, DELIVERY_WORDS, turnNode, firstSentenceDone, stoppedText } from '../public/js/cockpit/turns.js';
 import { newClientId } from '../public/js/cockpit/pane.js';
 
 const AT = '2026-10-27T07:02:04.130+01:00';
@@ -314,4 +314,67 @@ test('E1: the AGENT row the 3 s age made while the block waited goes, and no age
   assert.deepEqual(kids(v.node).map((c) => c.className), ['ck-label', 'ck-prompt', 'ck-err']);
   assert.equal(v.tick(sentAt + 9000), false);
   assert.equal(labels(v).length, 1, 'only the prompt\'s label row');
+});
+
+// STOP (c1-talk.md §8, D33, D262): the text as at the tap, the stopped line under it.
+const stoppedOf = (v) => kids(v.node).filter((c) => c.attrs?.['data-turn-stopped'] !== undefined);
+
+test('stoppedText: STOPPED AT HH:MM, and (FORCED) for a forced end, in capitals as written', () => {
+  const ms = Date.parse(AT);
+  assert.match(stoppedText(ms, false), /^STOPPED AT \d\d:\d\d$/);
+  assert.match(stoppedText(ms, true), /^STOPPED AT \d\d:\d\d \(FORCED\)$/);
+});
+
+test('STOP: after freeze nothing the turn sends is drawn; turn.end stopped adds the line last, a running tool line ends in · stopped', () => {
+  const v = createTurn(doc(), { turnId: 't-1', prompt: 'count to fifty', at: AT });
+  v.toolStart(start(0, 'tu-1', 'mcp__laneboard__fleet', { site: 'hv1' }));
+  v.delta({ blockIndex: 1, text: '1 2 ', sentAt: AT });
+  v.draw();
+  assert.deepEqual(cursorOn(v), [false, true]);
+  v.freeze();
+  v.delta({ blockIndex: 1, text: '3 ', sentAt: AT });
+  v.block({ blockIndex: 1, text: '1 2 3 4 ' });
+  v.toolStart(start(2, 'tu-2', 'mcp__laneboard__fleet', { site: 'hv2' }));
+  v.toolEnd({ toolUseId: 'tu-1', endedAt: AT, isError: false, denied: false });
+  v.draw();
+  assert.equal(replyOf(v).textContent.includes('1 2'), true);
+  assert.equal(replyOf(v).textContent.includes('3'), false, 'the text stays as at the tap (D33)');
+  assert.equal(toolLines(v).length, 1, 'no call after the tap');
+  assert.deepEqual(cursorOn(v), [false, false], 'the cursor goes at the tap');
+  assert.equal(stoppedOf(v).length, 0, 'no line before the end');
+  v.end({ state: 'stopped', forced: true, at: AT });
+  v.draw();
+  const [line] = stoppedOf(v);
+  assert.match(line.textContent, /^STOPPED AT \d\d:\d\d \(FORCED\)$/);
+  assert.equal(kids(v.node).at(-1), line, 'the turn\'s last child, under the cut text');
+  assert.deepEqual(toolLines(v).map(wordsOfLine), ['read the feed of hv1 · stopped']);
+});
+
+test('STOP: a done end draws no stopped line; a stopped snapshot turn draws it before its dropped prompts', () => {
+  const done = createTurn(doc(), { turnId: 't-1', prompt: 'a', at: AT });
+  done.end({ state: 'done', at: AT });
+  assert.equal(stoppedOf(done).length, 0);
+  const v = createTurn(doc(), {
+    turnId: 't-2', prompt: 'check all runs', at: AT, state: 'stopped', end: { state: 'stopped', forced: false, at: AT },
+    items: [
+      { kind: 'text', blockIndex: 0, text: 'Looking' },
+      { kind: 'prompt', clientId: 'p-00000002', text: 'only the failed one', at: AT, state: 'cancelled', why: 'stopped' },
+    ],
+  });
+  const [line] = stoppedOf(v);
+  assert.match(line.textContent, /^STOPPED AT \d\d:\d\d$/);
+  const order = kids(v.node).map((c) => c.className);
+  assert.ok(order.indexOf('ck-stopped') > order.indexOf('ck-reply'));
+  assert.equal(order.at(-1), 'ck-queue', 'the dropped prompt after the line');
+});
+
+test('STOP: a snapshot turn still stopping draws no cursor and takes no more text', () => {
+  const v = createTurn(doc(), {
+    turnId: 't-3', prompt: 'count', at: AT, state: 'stopping',
+    items: [{ kind: 'text', blockIndex: 0, text: '1 2 ' }],
+  });
+  v.delta({ blockIndex: 0, text: '3 ', sentAt: AT });
+  v.draw();
+  assert.deepEqual(cursorOn(v), [false]);
+  assert.equal(replyOf(v).textContent.includes('3'), false);
 });

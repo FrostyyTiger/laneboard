@@ -12,7 +12,10 @@
 //   t.confirm(msg)                    // the turn.prompt echo: the turnId, `· SENDING` goes
 //   t.delta(msg) / t.block(msg)       // text.delta appends, text.block replaces (§3 "Streaming")
 //   t.toolStart(msg) / t.toolEnd(msg) // a call joins its tool line or starts one (§5, §5.1)
-//   t.end(msg)                        // turn.end: the cursor goes, running calls lose `●`
+//   t.end(msg)                        // turn.end: the cursor goes, running calls lose `●`;
+//                                     // `stopped` adds the `STOPPED AT 07:03` line (c1-talk.md §8)
+//   t.freeze()                        // STOP (§8): the turn's text stays as it is now;
+//                                     // nothing it sends later is drawn
 //   t.draw()                          // the text changed since the last draw goes to the DOM
 //   t.tick(nowMs)                     // the age in the `AGENT` label row, from 3 s (§9, D235);
 //                                     // true when it made the row (the turn grew)
@@ -57,6 +60,15 @@ export const PROMPT_WHY = Object.freeze({ stopped: 'Dropped by STOP.', 'not-take
 
 /** The words of `[data-turn-delivery]` (D270). */
 export const DELIVERY_WORDS = Object.freeze({ sending: 'SENDING', queued: 'QUEUED', 'not-sent': 'NOT SENT' });
+
+/**
+ * The stopped line under a stopped turn (c1-talk.md §8 "What a stopped turn looks like", D262): `[data-turn-stopped]`,
+ * its words in capitals as written (`text-transform: none`), 16 px `--text-3` with the
+ * cockpit's rule (§3, D227). `ms` is the turn's end on the page's clock (build B200).
+ */
+export function stoppedText(ms, forced) {
+  return `STOPPED AT ${hhmm(ms)}${forced ? ' (FORCED)' : ''}`;
+}
 
 /** The label row `YOU · 07:02` / `AGENT · 07:02` (c1-talk.md §3, D227). */
 export function labelRow(doc, who, at) {
@@ -154,7 +166,7 @@ export function toolLine(doc, opts = {}) {
 
   function draw() {
     // A turn that ended with calls still running: they lose `●` and `…` (§5.1 `turn.end`).
-    const stopped = { stopped: line.stopped };
+    const stopped = { stopped: line.stopped, byStop: line.byStop };
     const running = anyRunning(calls) && !line.stopped;
     const text = lineText(calls, { ...opts, ...stopped });
     const rows = open ? calls.map((c) => callRow(c, stopped)) : [];
@@ -183,7 +195,7 @@ export function toolLine(doc, opts = {}) {
 
   const lastCall = () => calls.at(-1) ?? null;
   const push = (c) => { calls.push(c); };
-  const line = { node, calls, stopped: false, lastCall, add: push, draw };
+  const line = { node, calls, stopped: false, byStop: false, lastCall, add: push, draw };
   return line;
 }
 
@@ -211,6 +223,8 @@ export function createTurn(doc, turn, opts = {}) {
   const callsById = new Map(); // toolUseId → {call, line}
   let streaming = null; // the blockIndex the cursor follows
   let ended = Boolean(turn.end);
+  let frozen = turn.state === 'stopping'; // STOP tapped (§8): nothing the turn sends from here is drawn
+  let stoppedNode = null;
 
   const setId = (id) => {
     if (typeof id !== 'string' || !id) return;
@@ -378,8 +392,9 @@ export function createTurn(doc, turn, opts = {}) {
     if (it.state === 'taken') placeTaken(item, Number.isInteger(it.atBlock) ? it.atBlock : 0);
   }
   if (ended) for (const l of lines) l.stopped = true;
+  if (turn.end?.state === 'stopped') stoppedLine(turn.end);
   // A snapshot taken while the reply streams: the cursor on its last block (c1-talk.md §3).
-  if (!ended && turn.state === 'answering' && texts.length) {
+  if (!ended && !frozen && turn.state === 'answering' && texts.length) {
     follow(texts.at(-1).blockIndex ?? 0);
     blocks.get(streaming).done = false;
   }
@@ -412,6 +427,20 @@ export function createTurn(doc, turn, opts = {}) {
   }
   draw();
   tick(Date.now());
+
+  /**
+   * §8 "What a stopped turn looks like": `STOPPED AT 07:03` (or `(FORCED)`) under the cut
+   * text, before the prompts queued in the turn (they are not the reply); running tool
+   * lines end in ` · stopped`.
+   */
+  function stoppedLine(e) {
+    for (const l of lines) l.byStop = true;
+    if (stoppedNode) return;
+    const ms = pageMs(e.at, offset) ?? Date.now();
+    stoppedNode = el(doc, 'p', 'ck-stopped', { 'data-turn-stopped': '' });
+    stoppedNode.textContent = stoppedText(ms, e.forced === true);
+    box.insertBefore(stoppedNode, queueBox);
+  }
 
   /** A prompt item's label word, its text's colour and its line, for its state (§8). */
   function setPromptState(item, state, why) {
@@ -495,20 +524,21 @@ export function createTurn(doc, turn, opts = {}) {
     if (msg.delivery !== 'queued') startMs = pageMs(msg.at, offset) ?? startMs;
   }
   function delta(msg) {
-    if (ended) return;
+    if (ended || frozen) return;
     const b = blockOf(msg.blockIndex, msg.sentAt);
     b.text += msg.text;
     follow(msg.blockIndex);
   }
   /** The complete block replaces what the deltas built (a lost delta cannot leave wrong text). */
   function block(msg) {
+    if (frozen) return;
     const b = blockOf(msg.blockIndex, Date.now());
     b.text = msg.text;
     b.done = true;
     if (streaming === msg.blockIndex) follow(null);
   }
   function toolStart(msg) {
-    if (ended) return;
+    if (ended || frozen) return;
     addCall(msg);
   }
   /**
@@ -532,7 +562,7 @@ export function createTurn(doc, turn, opts = {}) {
   /** The call ends: its ms and ok|failed; `●` goes once no call of its line runs (§5.1). */
   function toolEnd(msg) {
     const rec = callsById.get(msg.toolUseId);
-    if (!rec) return;
+    if (!rec || frozen) return;
     rec.call.endedAt = msg.endedAt;
     rec.call.isError = msg.isError;
     rec.call.denied = msg.denied;
@@ -546,6 +576,12 @@ export function createTurn(doc, turn, opts = {}) {
     for (const l of lines) l.stopped = true;
     follow(null);
     tick(endMs);
+    if (msg.state === 'stopped') stoppedLine({ at: msg.at, forced: msg.forced });
+  }
+  /** STOP (§8 "What a stopped turn looks like"): the text stays as it was at the tap, and the `▍` cursor goes. */
+  function freeze() {
+    frozen = true;
+    follow(null);
   }
 
   return {
@@ -562,7 +598,7 @@ export function createTurn(doc, turn, opts = {}) {
     /** Is any reply text on screen? (`answering` waits for it, pane.js B140). */
     hasText: () => [...blocks.values()].some((b) => b.drawn !== null && b.drawn !== ''),
     confirm(msg) { unfail(); confirmed(msg); },
-    fail, unfail, delta, block, toolStart, toolEnd, end, draw, tick,
+    fail, unfail, delta, block, toolStart, toolEnd, end, freeze, draw, tick,
     /** Does this turn hold the call? (a tool.end naming another is not this turn's, §5.1). */
     hasCall: (id) => callsById.has(id),
   };

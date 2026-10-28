@@ -184,15 +184,18 @@ export const isDenied = (calls) => calls.some((c) => c.denied === true);
 
 /**
  * The whole collapsed text (no glyph, which is the line's own column): words, failures,
- * `…` while a call runs; `opts.stopped` (the turn ended under it, §5.1) drops the `…`.
+ * `…` while a call runs; `opts.stopped` (the turn ended under it, §5.1) drops the `…`,
+ * and `opts.byStop` (it ended by STOP, c1-talk.md §8) ends a line still running in ` · stopped`.
  * A refused call: `tried {tool}, not allowed`, no `…`, no ` · failed` (§5.2, D125);
  * until its `tool.end` says so it reads as any running call.
  */
 export function lineText(calls, opts = {}) {
   if (isDenied(calls)) return `tried ${shownName(calls.find((c) => c.denied === true).tool)}, not allowed`;
   const k = failedCount(calls);
-  const dots = anyRunning(calls) && !opts.stopped ? '…' : '';
-  return `${lineWords(calls, opts)}${k ? ` · ${k} failed` : ''}${dots}`;
+  const running = anyRunning(calls);
+  const dots = running && !opts.stopped ? '…' : '';
+  const cut = running && opts.stopped && opts.byStop ? ' · stopped' : '';
+  return `${lineWords(calls, opts)}${k ? ` · ${k} failed` : ''}${dots}${cut}`;
 }
 
 /** Whole ms from startedAt to endedAt (ISO strings or ms numbers), null when either is not a time. */

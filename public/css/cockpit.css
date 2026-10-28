@@ -487,6 +487,17 @@
   text-transform: uppercase;
 }
 .ck-err-btn:disabled { color: var(--text-3); }
+/* the stopped line under a stopped turn (c1-talk.md §8, D33, D262): 16 px caps --text-3 with the
+   cockpit's rule (§3, D227); its words are capitals in the DOM, so no text-transform */
+.ck-stopped {
+  margin: 16px 0 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--line-strong);
+  font: 500 16px/24px var(--font-label);
+  letter-spacing: var(--ls-label);
+  text-transform: none;
+  color: var(--text-3);
+}
 
 /* The on-screen keyboard up (c1-talk.md §7.1, D131): the pane covers the visible height,
    over the app's header and tape, from the visible top (--ck-vv-top) to the keyboard's edge

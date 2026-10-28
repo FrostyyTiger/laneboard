@@ -1109,3 +1109,31 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   agent's long `check all lanes` turn plays once per room), with 6 seeded turns; the fake agent's
   log goes on in one file, so counts are taken from where the first case left them. S-C1-32's third
   run is on the app's `#/map` (S-C1-16's page) — spec: `c1-talk.md` S-C1-29, S-C1-32 — overrule: none.
+- B200 (T26) The time in `STOPPED AT HH:MM` is the turn's end (`turn.end.at`, or a snapshot's
+  `end.at`) moved onto the page's clock with the welcome's offset, not the tap's own time: a reload
+  or a second screen has only the end's time, so every screen and every reload draws the same
+  minute (a forced stop can read one minute later than the tap) — spec: `c1-talk.md` §8 "What a
+  stopped turn looks like", S-C1-17 ("HH:MM from the page's clock") — overrule: keep the tap's time
+  on the screen that tapped (the others still need the end's).
+- B201 (T26) The stopped turn's text is frozen at the tap on the screen that tapped (`freeze()` in
+  `stopNow`), and on every other screen at the room's `turn.state` `stopping`, as is a snapshot turn
+  whose state is `stopping`: deltas, complete blocks, tool starts and tool ends after that point are
+  not drawn, and the `▍` cursor goes at once. A `turn.state` other than `stopping` arriving while the
+  header reads `● STOPPING` for the running turn is ignored (sent before the room read the `stop`)
+  — spec: `c1-talk.md` §8, D33, `protocols.md` §3.3 — overrule: keep drawing until the `turn.end`.
+  Note for later rounds: `public/js` comments cite D33 as "§8": `test/render.test.mjs`'s chart
+  guard reads `/d3/i` in the app's JS as a chart library.
+- B202 (T26) The stopped line sits after the reply and before the turn's queued and dropped prompt
+  blocks (`.ck-queue`), so with no queued prompt it is the turn's last child (review 89-owner finding
+  3) and a `Dropped by STOP.` block stays under it: the dropped prompt is not part of the cut reply —
+  spec: `c1-talk.md` §8 ("Under it", "Queued prompts at a STOP") — overrule: the line last, under
+  the dropped blocks.
+- B203 (T26) ` · stopped` ends only a tool line still running when a `stopped` `turn.end` came
+  (`lineText(…, {stopped, byStop})`); a turn ending `done` or `error` with a call open keeps §5.1's
+  plain words (no `…`, no word) — spec: `c1-talk.md` §8, §5.1 — overrule: ` · stopped` for any cut.
+- B204 (T26) S-C1-27's "`prompts()` count 1 before and 2 after `RETRY`" counts the prompts with the
+  words `only the failed one` (the first prompt, `check all runs`, makes the log's total 2 before):
+  the reading S-C1-29 already uses. The test also asserts the log's total stays 2 until `RETRY`
+  ("nothing more is sent to the agent"). The D33 freeze is pinned by `test/cockpit-turns.test.mjs`:
+  in S-C1-17 the fake's 300 ms stop rarely sends a delta after the tap, so the Playwright run only
+  sees it now and then — spec: `c1-talk.md` S-C1-27, S-C1-17 — overrule: none.
