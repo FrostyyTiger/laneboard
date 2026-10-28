@@ -45,6 +45,23 @@ async function watchWelcomes(page) {
 }
 const welcomes = (page) => page.evaluate(() => window.__afterWelcome.slice());
 
+/**
+ * The page's clock fixed at `iso`: `Date.now()` and `new Date()` only. Not `page.clock`: it
+ * fakes the timers too, for the whole context, and its timers fall behind real time when the
+ * machine is busy (seen: 1.2 s of page time in 26 s), so a 5 s grace (D139) never ran out
+ * within the 7 s the step allows; S-C1-38 runs on clock `real`.
+ */
+async function fixPageDate(page, iso) {
+  await page.addInitScript((at) => {
+    const Real = Date;
+    class Fixed extends Real {
+      constructor(...args) { if (args.length) super(...args); else super(at); }
+      static now() { return at; }
+    }
+    globalThis.Date = Fixed;
+  }, Date.parse(iso));
+}
+
 /** Sample the slot every `every` ms (100, or finer) in the page: `window.__statusSamples` `[{t, n, status, text}]`. */
 async function sampleStatus(page, every = 100) {
   await page.evaluate((ms) => {
@@ -112,7 +129,7 @@ async function loggedOutAt0315(page, room, fakeAgent) {
   expect(log.loginChecks().length, 'a second login-check line').toBe(2);
   expect(log.loginChecks()[1].login).toBe('failed');
   await watchWelcomes(page);
-  await page.clock.setFixedTime('2026-10-27T03:15:00+01:00');
+  await fixPageDate(page, '2026-10-27T03:15:00+01:00');
   await openWall(page, room);
   await openPane(page);
   await expect.poll(() => welcomes(page).then((w) => w.length)).toBeGreaterThan(0);

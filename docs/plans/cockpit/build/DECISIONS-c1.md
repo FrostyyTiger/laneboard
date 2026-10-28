@@ -1205,3 +1205,10 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   status line under a 64 px header at the screen's top (on the app the pane starts under the 36 px
   top bar: y 100-180); the cases of one id are steps of one test, each on a fresh room and page
   — spec: S-C1-37, slices.md §2 — overrule: the `openWall` calls in `c1-status.spec.mjs`.
+- B221 (round 94 fix) S-C1-37's fixed page clock (03:15) fixes `Date.now()` and `new Date()` only,
+  by an init script on that page (`fixPageDate`), not `page.clock.setFixedTime` — because
+  `page.clock` fakes every timer for the whole context, and under load its timers ran 1.2 s
+  in 26 s of real time, so the 5 s grace (D139) did not run out within the step's 7 s and
+  S-C1-38 failed on a busy machine; S-C1-38 says clock `real`, and the later cases' pages get the
+  page's own clock, as their comments said — spec: S-C1-37 ("its clock fixed"), S-C1-38
+  ("clock `real`") — overrule: back to `page.clock` with `runFor` to drive the 5 s.
