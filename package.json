@@ -11,7 +11,8 @@
   "main": "server/index.mjs",
   "scripts": {
     "start": "node server/index.mjs",
-    "test": "LANEBOARD_DB=:memory: LANEBOARD_CONFIG=test/fixtures/empty-config.json NODE_OPTIONS='--max-old-space-size=1536 --experimental-vm-modules' node --test"
+    "test": "LANEBOARD_DB=:memory: LANEBOARD_CONFIG=test/fixtures/empty-config.json NODE_OPTIONS='--max-old-space-size=1536 --experimental-vm-modules' node --test",
+    "test:cockpit": "playwright test -c e2e/playwright.config.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.10.0",
@@ -23,5 +24,8 @@
   },
   "allowScripts": {
     "node-pty@1.1.0": true
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1"
   }
 }

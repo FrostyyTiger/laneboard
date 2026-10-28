@@ -1,0 +1,25 @@
+{"name":"c1-voice",
+ "about":"stand-ins.md §5: protocols.md §13.1's turn, first delta 0.3 s after the prompt.",
+ "start":{"initAfterMs":200,"mcp":"connected","login":"ok","startFailures":0,"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1"]},
+ "turns":[
+  {"for":"S-C1-13 S-C3-18","match":"night go","repeat":true,"steps":[
+    {"at":50,"tool":"mcp__laneboard__morning","input":{"window":"tonight"},"endAt":250},
+    {"at":300,"text":"■ One run "},
+    {"at":830,"text":"is stuck: "},
+    {"at":1360,"text":"builder-a "},
+    {"at":1890,"text":"since "},
+    {"at":2420,"text":"03:12"},
+    {"at":2950,"text":"."},
+    {"at":3100,"end":"done","costUsd":0.0412}
+  ]},
+  {"for":"protocols.md §10","match":"wie lief die nacht","repeat":true,"steps":[
+    {"at":50,"tool":"mcp__laneboard__morning","input":{"window":"tonight"},"endAt":250},
+    {"at":300,"text":"■ One run "},
+    {"at":830,"text":"is stuck: "},
+    {"at":1360,"text":"builder-a "},
+    {"at":1890,"text":"since "},
+    {"at":2420,"text":"03:12"},
+    {"at":2950,"text":"."},
+    {"at":3100,"end":"done","costUsd":0.0412}
+  ]}
+ ]}

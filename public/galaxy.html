@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark" class="wall">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0d1014">
 <title>laneboard · galaxy</title>
@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/base.css">
 <link rel="stylesheet" href="/css/wall.css">
+<link rel="stylesheet" href="/css/cockpit.css">
 <link rel="icon" href="/icons/icon-192.png">
 <link rel="manifest" href="/galaxy.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -37,5 +38,9 @@
   <button type="button" class="galaxy-back" id="galaxy-back" hidden><span class="galaxy-back-glyph" aria-hidden="true">‹</span><span class="galaxy-back-word">Back</span></button>
 </main>
 <script type="module" src="/js/wall/galaxy/main.js"></script>
+<!-- The cockpit (its spec, screens.md §4): the button and the pane over the right 608 px,
+     drawn only when the board says it has a cockpit; it reaches the Wall only through
+     window.__cockpitView. -->
+<script type="module" src="/js/cockpit/wall-page.js"></script>
 </body>
 </html>

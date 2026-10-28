@@ -90,7 +90,8 @@
 // and those in `?showOrigins=https://hub.example.invalid,…` (exact origins); each answered on its road.
 // `?show=demo` (night 4 T39, showdemo.js) plays a recorded conversation's messages over the large
 // demo fleet into the same show, with the tour between: fly to the crit, pin a note, highlight what it breaks.
-// The cockpit's handle (screens.md §9, D221): `window.__cockpitView` = `{ page: 'wall', wall: { state },
+// The cockpit's handle (screens.md §9, D221): `window.__cockpitView` = `{ page: 'wall', wall: { state,
+// tour: { pause, resume }, idle: { hold, restart, remaining }, onState },
 // map: { flyTo, fitNodes, camera, setCamera, screenOf, onDraw, emphasis }, show: { state } }`;
 // display only, nothing in it sends or changes the fleet.
 
@@ -110,7 +111,7 @@ import { paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
-import { OVERVIEW, STAY, createDirector } from './director.js';
+import { IDLE, OVERVIEW, STAY, createDirector } from './director.js';
 import { SHOW, createFingerWatch, createShow } from './show.js';
 import { createTransport, showOrigins } from './transport.js';
 import { createShowDemo, wantsShowDemo } from './showdemo.js';
@@ -259,8 +260,9 @@ export function boot() {
   // director moves `cam`, so no two of them ever fight for it.
   let touch = null;
   let tour = null;
-  // A show's undo hands the page back to the tour with the overview, not the next leg (c4 §5).
-  let resumeOverview = false;
+  // `▶ TOUR` hands the page back at the tour's next leg, trouble first (night 4 T5); every other
+  // hand-back (the idle minute, W4, an undo) starts with the overview (cockpit build B239).
+  let nextLeg = false;
   const director = createDirector(cam, {
     still: reduced,
     driver: role === 'explore' && !park ? 'touch' : 'tour', // a person's screen: the finger drives from the start
@@ -275,6 +277,7 @@ export function boot() {
   const show = (to, id = null) => {
     const ms = reduced || to.kind === 'stay' || to.cut ? 0 : showFlightMs(cam.pose(), cam.shotFor(to));
     const r = director.show({ id, to, ms });
+    stateBy = 'call';
     tour.stop();
     hud.release();
     fan?.hide();
@@ -436,9 +439,9 @@ export function boot() {
       // An undo (c4 §5): touring before → the tour at once, with the overview (screens.md §2);
       // else the camera back by a normal flight.
       restore: (saved) => {
+        stateBy = 'call';
         if (saved.wall === 'tour') {
-          resumeOverview = true;
-          try { touch?.handBack(); } finally { resumeOverview = false; }
+          touch?.handBack();
         } else if (saved.camera) setCamera(saved.camera);
       },
     },
@@ -483,7 +486,9 @@ export function boot() {
       left.clear();
       toOverview();
     },
-    // A minute untouched (T14): the sheet goes, the tour flies on from here to its worst site.
+    // A minute untouched (T14): the sheet goes and the tour starts again with the overview, flying
+    // out from where the finger left the camera (cockpit spec screens.md §2, §9.1 W4, W5: "the tour
+    // starts with the overview"; cockpit build B239 over T14's worst-site-first). `▶ TOUR`: its next leg.
     resume: () => {
       cutAway();
       fan?.hide();
@@ -492,11 +497,23 @@ export function boot() {
       place = AT_OVERVIEW;
       shows?.tourBack(); // the tour clears what the agent drew: the highlight, its note, the undo (c4 §2)
       director.handBack();
-      tour.resume({ overview: resumeOverview });
+      tour.resume({ overview: !nextLeg });
     },
   });
   let touchSaid = 'tour';
   let wallSaid = null; // `data-wall-state` (screens.md §9.1 W1): `tour` or `explore`
+  // Who changes the Wall's state next (W6's `by`): `call` (the cockpit's handle, a show command,
+  // an undo) or `touch` (`▶ TOUR`); else the frame's guess: `idle` back to the tour, `touch` out of it.
+  let stateBy = null;
+  const stateCbs = new Set();
+  const sayWall = (ws, by) => {
+    if (ws === wallSaid) return;
+    wallSaid = ws;
+    page.dataset.wallState = ws;
+    for (const cb of [...stateCbs]) {
+      try { cb(ws, { by }); } catch (err) { console.error(err); }
+    }
+  };
   // Drag, pinch and the wheel in `explore` (T8): the orbit's far end is the overview, as fitted.
   const gestures = touch && !reduced ? createGestures(document.getElementById('galaxy-stage'), touch, finger, {
     limits: () => orbitLimits(cam.home(), galaxy.world?.sites ?? []),
@@ -536,7 +553,11 @@ export function boot() {
     else toOverview(left.pose());
   };
   // `▶ TOUR` at the overview (night 4 T5): the tour has the page at once, as after the minute.
-  const handBack = () => touch?.handBack();
+  const handBack = () => {
+    stateBy = 'touch';
+    nextLeg = true;
+    try { touch?.handBack(); } finally { nextLeg = false; }
+  };
   const backEl = document.getElementById('galaxy-back');
   const back = touch ? createBack(backEl, {
     back: goBack, tour: handBack, glyph: backEl.querySelector('.galaxy-back-glyph'), word: backEl.querySelector('.galaxy-back-word'),
@@ -627,7 +648,8 @@ export function boot() {
         else page.dataset.touch = m;
       }
       const ws = m === 'tour' ? 'tour' : 'explore';
-      if (ws !== wallSaid) { wallSaid = ws; page.dataset.wallState = ws; }
+      sayWall(ws, stateBy ?? (ws === 'tour' ? 'idle' : 'touch'));
+      stateBy = null;
       back?.show(backControl(m, place));
       // MANUAL says a person drives: not while a show holds the camera.
       sayManual(director.driver() === 'show' ? null : manualLine(touch.left()));
@@ -752,9 +774,38 @@ export function boot() {
     show(to);
     return landed();
   };
+  // W3: the tour stops mid-flight and the camera holds the frame it had (a cut to where it is; in
+  // reduced motion the camera does not fly, so it only stays); `explore` at once. Not while exploring.
+  const pauseTour = () => {
+    if (!touch || touch.mode() !== 'tour') return;
+    const p = reduced ? null : cam.pose();
+    show(p ? { kind: 'free', pose: p, cut: true } : STAY);
+    sayWall('explore', 'call');
+  };
+  // W4: the tour at once, starting with the overview; nothing while touring.
+  const resumeTourNow = () => {
+    if (!touch || touch.mode() === 'tour') return;
+    stateBy = 'call';
+    touch.handBack();
+    if (touch.mode() === 'tour') sayWall('tour', 'call');
+  };
   globalThis.__cockpitView = {
     page: 'wall',
-    wall: park ? null : { state: () => page.dataset.wallState ?? null },
+    // W1-W6 (screens.md §9.1): the state, the tour, the one idle timer (touch.js's minute), changes.
+    wall: park ? null : {
+      state: () => page.dataset.wallState ?? null,
+      tour: { pause: pauseTour, resume: resumeTourNow },
+      idle: {
+        hold: () => touch?.hold(),
+        restart: (ms = IDLE.ms) => touch?.restart(ms),
+        remaining: () => (!touch || touch.holding() ? null : touch.left()),
+      },
+      onState: (cb) => {
+        if (typeof cb !== 'function') return () => {};
+        stateCbs.add(cb);
+        return () => stateCbs.delete(cb);
+      },
+    },
     map: {
       flyTo,
       fitNodes,

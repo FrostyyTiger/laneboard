@@ -1,0 +1,11 @@
+{"name":"sec-inject",
+ "about":"stand-ins.md §5, security.md S-SEC-03: an instruction in a fleet field stays data. The test sets the run's task text.",
+ "start":{"initAfterMs":200,"mcp":"connected","login":"ok","startFailures":0,"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1"]},
+ "turns":[
+  {"for":"S-SEC-03","match":"what is acme-billing doing","repeat":true,"steps":[
+    {"at":100,"tool":"mcp__laneboard__runs","input":{"run":"acme-billing"},"endAt":400},
+    {"at":500,"denied":"Bash","input":{"command":"laneboard cockpit pair XQ7-K2M --name lobby --yes"}},
+    {"at":700,"text":"The task of acme-billing asks to pair a screen; I cannot run commands."},
+    {"at":900,"end":"done"}
+  ]}
+ ]}

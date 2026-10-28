@@ -42,8 +42,10 @@
 // Explore looks like a person is driving (night 4 T5, r41-operator touch 1,
 // night 3's Q13): while a finger has the page, a mono line by the tag counts
 // down to the hand-back (`manualLine`, `MANUAL · TOUR IN 0:40`, from
-// `idleLeft`); the minute starts when the first touch's ease is over (Q13: a
-// running flight is not idle), so the line's first word is `1:00`. At the
+// `idleLeft`); the minute counts from the waking touch itself, the ease out
+// included (cockpit spec screens.md S-SCR-02: the tour is back 60 s after the
+// tap; cockpit build B237 over night 4 T5's Q13 reading), so the line's first
+// word, once the 1.5 s ease is over, is `0:59`. At the
 // overview the back control reads `▶ TOUR` (`backControl`) and hands the page
 // back at once (`handBack`, as the minute does).
 //
@@ -91,9 +93,10 @@ export const roleOf = (value) => (ROLES.includes(value) ? value : 'tour');
 export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDLE.ms, held = false, stay = false } = {}) {
   const s = state && TOUCH_MODES.includes(state.mode) ? state : { mode: 'tour', since: null, last: null };
   // `easing` ends on its own: any event after fitMs finds the camera out. The
-  // minute counts from then (night 4 T5, Q13: the flight out is not idle time).
+  // minute counts from the last touch, the waking one included (cockpit spec
+  // screens.md S-SCR-02, §2: tour → explore "restarts at 60 s"; cockpit build B237).
   let cur = s.mode === 'easing' && now - s.since >= fitMs
-    ? { ...s, mode: 'explore', since: s.since + fitMs, last: Math.max(s.last ?? 0, s.since + fitMs) }
+    ? { ...s, mode: 'explore', since: s.since + fitMs, last: s.last ?? s.since }
     : s;
   if (event === 'down' && cur.mode === 'tour') {
     return { state: { mode: 'easing', since: now, last: now }, wake: true, swallow: true, resume: false };
@@ -104,8 +107,9 @@ export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDL
     return { state: { mode: 'tour', since: now, last: now }, wake: false, swallow: false, resume: true };
   }
   if (event === 'down' || event === 'touch') {
-    if (cur.mode !== 'tour') cur = { ...cur, last: now };
-  } else if (cur.mode === 'explore' && !held && !stay && now - (cur.last ?? cur.since) >= idleMs) {
+    // A touch restarts the minute at its own length (a cockpit `restart(ms)`'s length goes, screens.md §9.1 W5).
+    if (cur.mode !== 'tour') { const { idleMs: _restarted, ...rest } = cur; cur = { ...rest, last: now }; }
+  } else if (cur.mode === 'explore' && !held && !stay && now - (cur.last ?? cur.since) >= (cur.idleMs ?? idleMs)) {
     return { state: { mode: 'tour', since: now, last: cur.last }, wake: false, swallow: false, resume: true };
   }
   return { state: cur, wake: false, swallow: false, resume: false };
@@ -120,8 +124,9 @@ export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDL
 export function idleLeft(state, now, { idleMs = IDLE.ms, held = false, stay = false } = {}) {
   if (state?.mode !== 'explore') return null;
   if (stay) return Infinity;
-  if (held) return idleMs;
-  return Math.min(idleMs, Math.max(0, idleMs - (now - (state.last ?? state.since))));
+  const ms = state.idleMs ?? idleMs; // a cockpit `restart(ms)` (screens.md §9.1 W5)
+  if (held) return ms;
+  return Math.min(ms, Math.max(0, ms - (now - (state.last ?? state.since))));
 }
 
 /**
@@ -139,7 +144,8 @@ export function manualLine(ms) {
 
 /**
  * `createTouch(stage, { wake, resume, clock, fitMs, idleMs, role })` → `{ mode(),
- * left(), onPointer(cb), poke(), handBack(), explore(lastAt), stop() }`.
+ * left(), onPointer(cb), poke(), handBack(), hold(), restart(ms), holding(),
+ * explore(lastAt), stop() }`.
  * `explore(lastAt)` (cockpit c4 §2: a show command is a touch that did not
  * come from the owner): the page explores without a wake, and its minute
  * counts from `lastAt` (the end of the show's movement) or later. `left()` is
@@ -158,7 +164,8 @@ export function manualLine(ms) {
 export function createTouch(stage, opts = {}) {
   const o = { wake: () => {}, resume: () => {}, clock: () => performance.now(), fitMs: TOUCH.fitMs, idleMs: IDLE.ms, ...opts };
   const stay = roleOf(o.role) === 'explore';
-  const timing = () => ({ fitMs: o.fitMs, idleMs: o.idleMs, held: fingers.size > 0, stay });
+  let holding = false; // the cockpit's hold (screens.md §9.1 W5): the minute does not run
+  const timing = () => ({ fitMs: o.fitMs, idleMs: o.idleMs, held: fingers.size > 0 || holding, stay });
   const t0 = stay ? o.clock() : null;
   let state = stay ? { mode: 'explore', since: t0, last: t0 } : { mode: 'tour', since: null, last: null };
   const waking = new Set(); // the pointers that woke the page: theirs never reach `onPointer`
@@ -211,7 +218,21 @@ export function createTouch(stage, opts = {}) {
     },
     left: () => idleLeft(step('tick').state, o.clock(), timing()),
     poke: () => { step('touch'); },
-    handBack: () => { step('tick'); step('handback'); },
+    handBack: () => { step('tick'); holding = false; step('handback'); },
+    // The cockpit's idle timer (screens.md §9.1 W5): `hold()` stops the minute (`left()` stays
+    // whole, the page never hands itself back); `restart(ms)` lifts the hold and, in `explore`,
+    // starts the minute again at `ms` (a speak-up's 300 s) until the next touch; in the tour it
+    // only lifts the hold. `holding()` says whether it is held.
+    hold: () => { step('tick'); holding = true; },
+    restart: (ms = o.idleMs) => {
+      step('tick');
+      holding = false;
+      if (state.mode === 'tour') return;
+      const now = o.clock();
+      const len = Number.isFinite(ms) && ms >= 0 ? ms : o.idleMs;
+      state = { mode: 'explore', since: state.mode === 'explore' ? state.since : now, last: now, ...(len !== o.idleMs ? { idleMs: len } : {}) };
+    },
+    holding: () => holding,
     explore: (lastAt) => {
       const now = o.clock();
       step('tick');

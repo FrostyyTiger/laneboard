@@ -116,6 +116,13 @@ test('hello carries builder {id, code}, mode, version and apiVersion 1', () => {
   assert.equal(h.apiVersion, 1);
 });
 
+test('hello.cockpit: true for a room (cockpit.agent) or a forwarding front, else false (D93, D129)', () => {
+  assert.equal(helloMessage().cockpit, false);
+  assert.equal(helloMessage({ ...config, cockpit: { agent: { kind: 'claude-code' }, forwarded: false } }).cockpit, true);
+  assert.equal(helloMessage({ ...config, cockpit: { agent: null, forwarded: true } }).cockpit, true);
+  assert.equal(helloMessage({ ...config, cockpit: { agent: null, forwarded: false } }).cockpit, false);
+});
+
 test('every frame is stamped with builder and seq; send() advances seq', () => {
   const before = currentSeq();
   send({ type: 'delta' }); // no clients: nothing is written, the counter still moves

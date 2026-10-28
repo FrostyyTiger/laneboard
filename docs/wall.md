@@ -61,9 +61,10 @@ needs you, red for crit and down, amber for warn. A light's own colour
   the tour comes back.
 
 **To give the page back to the tour**: tap `▶ TOUR` (where the back control
-is, at the overview), or wait. A minute after the last touch, the tour
-takes the page back at its next leg, trouble first, flying there from
-wherever the finger left the camera.
+is, at the overview: the tour goes on at its next leg, trouble first), or
+wait. A minute after the last touch (the first touch included, while the
+camera eases out), the tour takes the page back and starts again with the
+overview, flying out from wherever the finger left the camera.
 
 **To stop the tour**: touch the screen; it stays stopped for a minute after
 the last touch. For a screen that never tours by itself, open it with
@@ -158,12 +159,20 @@ the undo of a command still waiting for a finger drops it (no answer
 follows).
 
 **For the cockpit's code and tests** the page sets `window.__cockpitView`:
-`page` (`"wall"`), `wall.state()` (the same as `data-wall-state`), `map`
+`page` (`"wall"`), `wall.state()` (the same as `data-wall-state`),
+`wall.tour.pause()` (the tour stops where the camera is, the page explores) and
+`wall.tour.resume()` (the tour at once, from the overview), `wall.idle`
+(`hold()` stops the minute, `restart(ms)` starts it again at `ms`, `remaining()`),
+`wall.onState(cb)` (`cb(state, {by})` after every change, `by` `touch`, `idle`
+or `call`), `map`
 (`flyTo(id)`, `fitNodes(ids)`, `camera()`, `setCamera(camera)`, each
 answering a Promise that is true once the camera lands; `screenOf(id)` in
 page px, `onDraw(cb)`, `emphasis(id)`) and `show.state()` (the highlight,
 the pins, what can be undone, what waits, the last answers). It moves the
-camera and reads; it sends nothing.
+camera and reads; it sends nothing. With the cockpit configured, the page
+draws the cockpit's button and pane (`CHAT`, bottom right) and the fleet line
+ends 112 px from the right edge, clear of it; the open pane holds the tour
+and the minute.
 
 **Until the Wall is a paired screen** the same messages reach it from a
 page standing in for the room. From a page of the same origin, on the

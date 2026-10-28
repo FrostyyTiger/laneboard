@@ -1,0 +1,18 @@
+{"name":"c1-session",
+ "about":"stand-ins.md §5: sessions, two pages, a room restart. `how is builder-a` and `and builder-b` each answer over 2.0 s.",
+ "start":{"initAfterMs":200,"mcp":"connected","login":"ok","startFailures":0,"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1"]},
+ "turns":[
+  {"for":"S-C1-22 S-C1-23 S-C1-39 S-C1-45","match":"how is builder-a","repeat":true,"steps":[
+    {"at":300,"text":"builder-a "},
+    {"at":800,"text":"is running "},
+    {"at":1300,"text":"acme-docs, "},
+    {"at":1800,"text":"round 4."},
+    {"at":2000,"end":"done"}
+  ]},
+  {"for":"S-C1-23","match":"and builder-b","repeat":true,"steps":[
+    {"at":300,"text":"builder-b "},
+    {"at":600,"text":"is "},
+    {"at":900,"text":"idle."},
+    {"at":2000,"end":"done"}
+  ]}
+ ]}

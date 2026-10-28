@@ -2,6 +2,7 @@
 // picks the wiring; everything shared lives in server/boot/common.mjs.
 //   builder  today's board: collectors, sessions, terminals (server/boot/builder.mjs)
 //   hub      the fleet view over many builders (server/boot/hub.mjs)
+//   cockpit  the cockpit's room alone (server/boot/cockpit.mjs, D128)
 // Kept as the entrypoint because package.json `main`, deploy/laneboard.service
 // and bin/laneboardctl all point here. Frozen after wave 0: add modules instead.
 import fs from 'node:fs';
@@ -13,4 +14,4 @@ process.on('uncaughtException', (err) => log.error('uncaughtException', err?.sta
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 
-await import(config.mode === 'hub' ? './boot/hub.mjs' : './boot/builder.mjs');
+await (config.mode === 'cockpit' ? import('./boot/cockpit.mjs').then((m) => m.startRoom()) : import(config.mode === 'hub' ? './boot/hub.mjs' : './boot/builder.mjs'));

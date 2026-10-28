@@ -569,6 +569,8 @@ const ctx = createContext({
 });
 const modules = await registerModules(['routes', 'flags'], ctx);
 
+// The one box: the room's start check (D210) before any port listens.
+if (config.cockpit?.agent) (await import('./cockpit.mjs')).prepareRoomFiles();
 await listenAll({ onUpgrade });
 // Any "<name>-web-<id>" session still around is from a crashed run of ours.
 await terminals.sweepStale();
@@ -638,5 +640,13 @@ const flushTimer = setInterval(() => transcripts.persistAll(), 60 * 1000);
 flushTimer.unref();
 
 await startModules(modules, ctx);
+
+// The one box (D128): with `cockpit.agent` this process is also the room, on
+// the board's ctx, after the board's own modules.
+if (config.cockpit?.agent) {
+  const room = await (await import('./cockpit.mjs')).startRoom(ctx);
+  // Ahead of the board's own hooks: the agent child and the links end first.
+  if (room) shutdownHooks.unshift(() => room.stop());
+}
 
 log.info(`laneboard up, pid ${process.pid}`);

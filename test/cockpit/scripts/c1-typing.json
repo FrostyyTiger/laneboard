@@ -1,0 +1,94 @@
+{"name":"c1-typing",
+ "about":"stand-ins.md §5: typing, sending, queued prompts and STOP. Any prompt no turn names gets the short `done` turn (the last).",
+ "start":{"initAfterMs":200,"mcp":"connected","login":"ok","startFailures":0,"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1"]},
+ "turns":[
+  {"for":"S-C1-16 S-C1-32 S-C1-41","match":"how did the night go","queued":"next-tool-end","onInterrupt":{"endAfterMs":300},"steps":[
+    {"at":300,"text":"Three runs ran last night."},
+    {"at":1000,"tool":"mcp__laneboard__runs","input":{"since":"tonight"},"endAt":4000,"call":false},
+    {"at":4300,"text":"Two of them finished."},
+    {"at":4600,"end":"done"}
+  ]},
+  {"for":"S-C1-16 S-C1-27 S-C1-28 S-C1-29","match":"only the failed one","repeat":true,"steps":[
+    {"at":300,"text":"Only builder-a failed."},
+    {"at":600,"end":"done"}
+  ]},
+  {"for":"S-C1-17","match":"count to fifty","onInterrupt":{"endAfterMs":300},"steps":[
+    {"at":100,"text":"1 "},
+    {"at":500,"text":"2 "},
+    {"at":900,"text":"3 "},
+    {"at":1300,"text":"4 "},
+    {"at":1700,"text":"5 "},
+    {"at":2100,"text":"6 "},
+    {"at":2500,"text":"7 "},
+    {"at":2900,"text":"8 "},
+    {"at":3300,"text":"9 "},
+    {"at":3700,"text":"10 "},
+    {"at":4100,"text":"11 "},
+    {"at":4500,"text":"12 "},
+    {"at":4900,"text":"13 "},
+    {"at":5300,"text":"14 "},
+    {"at":5700,"text":"15 "},
+    {"at":6100,"text":"16 "},
+    {"at":6500,"text":"17 "},
+    {"at":6900,"text":"18 "},
+    {"at":7300,"text":"19 "},
+    {"at":7700,"text":"20 "},
+    {"at":8100,"text":"21 "},
+    {"at":8500,"text":"22 "},
+    {"at":8900,"text":"23 "},
+    {"at":9300,"text":"24 "},
+    {"at":9700,"text":"25 "},
+    {"at":10100,"text":"26 "},
+    {"at":10500,"text":"27 "},
+    {"at":10900,"text":"28 "},
+    {"at":11300,"text":"29 "},
+    {"at":11700,"text":"30 "},
+    {"at":12100,"text":"31 "},
+    {"at":12500,"text":"32 "},
+    {"at":12900,"text":"33 "},
+    {"at":13300,"text":"34 "},
+    {"at":13700,"text":"35 "},
+    {"at":14100,"text":"36 "},
+    {"at":14500,"text":"37 "},
+    {"at":14900,"text":"38 "},
+    {"at":15300,"text":"39 "},
+    {"at":15700,"text":"40 "},
+    {"at":16100,"text":"41 "},
+    {"at":16500,"text":"42 "},
+    {"at":16900,"text":"43 "},
+    {"at":17300,"text":"44 "},
+    {"at":17700,"text":"45 "},
+    {"at":18100,"text":"46 "},
+    {"at":18500,"text":"47 "},
+    {"at":18900,"text":"48 "},
+    {"at":19300,"text":"49 "},
+    {"at":19700,"text":"50 "},
+    {"at":20000,"end":"done"}
+  ]},
+  {"for":"S-C1-17","match":"count slowly","onInterrupt":"ignore","steps":[
+    {"at":100,"text":"One… "},
+    {"at":600000,"end":"done"}
+  ]},
+  {"for":"S-C1-27","match":"check all runs","queued":"next-tool-end","onInterrupt":{"endAfterMs":300},"steps":[
+    {"at":500,"tool":"mcp__laneboard__runs","input":{},"endAt":20000,"call":false},
+    {"at":20300,"text":"All three runs are accounted for."},
+    {"at":20600,"end":"done"}
+  ]},
+  {"for":"S-C1-28","match":"count the runs","queued":"ignore-once","steps":[
+    {"at":300,"text":"Three runs ran last night."},
+    {"at":3000,"end":"done"}
+  ]},
+  {"for":"S-C1-28","match":"count the lanes","queued":"ignore","steps":[
+    {"at":300,"text":"Five lanes are open."},
+    {"at":3000,"end":"done"}
+  ]},
+  {"for":"S-C1-29","match":"check all lanes","queued":"next-tool-end","onInterrupt":{"endAfterMs":300},"steps":[
+    {"at":500,"tool":"mcp__laneboard__lanes","input":{},"endAt":20000,"call":false},
+    {"at":20300,"text":"All five lanes are quiet."},
+    {"at":20600,"end":"done"}
+  ]},
+  {"for":"S-C1-14 S-C1-15 S-C1-18 S-C1-32 S-C1-33 S-C1-41 S-C1-43","repeat":true,"steps":[
+    {"at":100,"text":"Done."},
+    {"at":200,"end":"done"}
+  ]}
+ ]}

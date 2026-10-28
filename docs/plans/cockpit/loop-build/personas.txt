@@ -1,0 +1,9 @@
+# The review panel, in rotation (README §9). One per review round; prompts in prompts/personas/<name>.md.
+# A build night judges the built pane against the spec, not the spec itself.
+owner
+spec-keeper
+touch
+security
+skeptic
+operator
+stranger

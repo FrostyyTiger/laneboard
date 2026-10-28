@@ -1,0 +1,32 @@
+{"name":"c1-errors",
+ "about":"stand-ins.md §5: the error ends of a turn (c1-talk.md §10), one turn per row.",
+ "start":{"initAfterMs":200,"mcp":"connected","login":"ok","startFailures":0,"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1"]},
+ "turns":[
+  {"for":"S-C1-19","match":"tell me about the night","steps":[
+    {"at":300,"text":"Last night "},
+    {"at":500,"text":"three runs "},
+    {"at":800,"exit":1}
+  ]},
+  {"for":"S-C1-20","match":"error overloaded","repeat":true,"steps":[
+    {"at":300,"end":"failed","detail":"overloaded"}
+  ]},
+  {"for":"S-C1-20 S-C1-41","match":"error step limit","repeat":true,"steps":[
+    {"at":100,"tool":"Read","input":{"file_path":"/etc/laneboard/config.json"},"endAt":300},
+    {"at":500,"end":"step-limit"}
+  ]},
+  {"for":"S-C1-20","match":"error boom","repeat":true,"steps":[
+    {"at":300,"end":"failed","detail":"boom"}
+  ]},
+  {"for":"S-C1-20","match":"error long detail","repeat":true,"steps":[
+    {"at":300,"end":"failed","detail":"the model service closed the stream after the third tool call and gave no reason beyond this text, the model service closed the stream after the third tool call and gave no reason beyond this text, the model service closed the stream after the third tool call and gave no reason beyond this text, the"}
+  ]},
+  {"for":"S-C1-20","match":"error login","repeat":true,"steps":[
+    {"at":300,"end":"not-logged-in"}
+  ]},
+  {"for":"S-C1-20","match":"error retries","repeat":true,"steps":[
+    {"at":100,"retry":{"attempt":1,"of":10,"error":"overloaded"}},
+    {"at":600,"retry":{"attempt":2,"of":10,"error":"overloaded"}},
+    {"at":1500,"text":"The service answered at last: all three runs finished."},
+    {"at":1800,"end":"done"}
+  ]}
+ ]}
