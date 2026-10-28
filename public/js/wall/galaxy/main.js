@@ -42,6 +42,9 @@
 // Back (T13, touch.js backStep): the big control top right (only while
 // exploring away from the overview) and a tap on empty sky each go one step
 // back, planet → system → overview, the sheet going with its step.
+// Moons (night 5 T8, scene.js openMoons): a tapped planet's moons open onto a
+// ring round it (a tapped moon keeps its planet's open), named and targets
+// while open; another planet, its system or the overview folds them.
 // The words are not sky (night 4 T1, touch.js coverHit): a tap on the plate,
 // the fleet line, the tag or the clock opens nothing and steps nothing back,
 // but a sheet row (or the trouble word) naming a planet opens that planet.
@@ -121,7 +124,7 @@ import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
 import {
   AT_OVERVIEW, COVERED, TOUCH, backControl, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createReturn, createTaps, createTouch, hitAll, hitTest, roleOf,
-  manualLine, memberPoints, orbitLimits, placeOf, tapPoints,
+  manualLine, memberPoints, moonsAt, orbitLimits, placeOf, tapPoints,
 } from './touch.js';
 
 const BACKOFF_START_MS = 1000;
@@ -463,6 +466,7 @@ export function boot() {
 
   // Where a finger has taken the page (T13): the overview, a system, a planet in it.
   let place = AT_OVERVIEW;
+  let moonsAsked = null; // the planet (or moon) whose ring the scene was last asked to open (T8)
   // Reduced motion (T14): a finger's step is a cut, the scene (canvas and names) fading in.
   const fade = reduced && !park ? createCutFade([canvas, document.getElementById('galaxy-labels')]) : null;
   // The camera is on a cut-to site (reduced motion): leaving it is a cut too.
@@ -653,6 +657,10 @@ export function boot() {
       sayWall(ws, stateBy ?? (ws === 'tour' ? 'idle' : 'touch'));
       stateBy = null;
       back?.show(backControl(m, place));
+      // A picked planet's moons open onto their ring (night 5 T8), a picked moon's planet's; any other
+      // step (its system, the overview, the tour's hand-back) folds them.
+      const moonsFor = moonsAt(place);
+      if (moonsFor !== moonsAsked) { moonsAsked = moonsFor; galaxy.openMoons(moonsFor); }
       // MANUAL says a person drives: not while a show holds the camera.
       sayManual(director.driver() === 'show' ? null : manualLine(touch.left()));
     }

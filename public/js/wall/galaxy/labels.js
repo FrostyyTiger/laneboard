@@ -363,7 +363,7 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
     const bodies = [];
     let rings = new Map();
     const body = (id, sp, r) => { if (r >= 2) bodies.push({ x: sp.x - r, y: sp.y - r, w: 2 * r, h: 2 * r, owner: id }); };
-    const add = (id, node, pos, radius, alpha, kind = node?.kind, toneIn = null, site = null, host = null) => {
+    const add = (id, node, pos, radius, alpha, kind = node?.kind, toneIn = null, site = null, host = null, rankIn = null) => {
       const tone = toneIn ?? toneOf(node);
       const sp = project(pos, W, H);
       if (!sp) return;
@@ -380,7 +380,7 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
       // A site or the sun names a place; a countdown belongs to the thing it runs on.
       const count = kind === 'site' || kind === 'core' ? null : labelCount(node, t);
       const { w: bw, h: bh } = labelBox(alt?.text ?? text, face, steps, count);
-      const rank = labelRank(kind, tone);
+      const rank = rankIn ?? labelRank(kind, tone);
       const r = isHeld ? Math.max(radius * sp.unit, lock.r) : radius * sp.unit;
       body(id, sp, r);
       // The plate's hero says its name already (T20): its brackets and the leader point at it.
@@ -412,12 +412,17 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
         }
         // A folded calm moon (scene.js MOON, T7) is unnamed: its planet's name stands for it.
         if (m.moon && !trouble && !m.tappable) continue;
+        // A ring a finger opened (scene.js openMoons, T8) is what it asked to read: its calm moons are
+        // named at any size, next after trouble, before the system's other planets the ring now overlaps,
+        // and stand their names off the size they are drawn at there (MOON.calm, not the folded one).
+        const picked = m.moon && m.tappable && !trouble ? RANK.site : null;
+        const radius = picked != null && m.mesh.geometry?.parameters ? m.mesh.scale.x * m.mesh.geometry.parameters.radius : m.radius ?? 4;
         const sp = project(m.mesh.position, W, H);
         if (!sp) continue;
-        if (!dotNamed(t, 2 * (m.radius ?? 4) * sp.unit)) { body(m.id, sp, (m.radius ?? 4) * sp.unit); continue; }
+        if (picked == null && !dotNamed(t, 2 * radius * sp.unit)) { body(m.id, sp, radius * sp.unit); continue; }
         // A moon's planet (scene.js keeps the member, a bare layout its id): named first (T6b).
         const host = m.moon ? (m.moon.host?.id ?? m.moon.host ?? null) : null;
-        add(m.id, m.node, m.mesh.position, m.radius ?? 4, trouble ? 1 : fade, m.node?.kind, null, s.id, host);
+        add(m.id, m.node, m.mesh.position, radius, trouble ? 1 : fade, m.node?.kind, null, s.id, host, picked);
       }
     }
 

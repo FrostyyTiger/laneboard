@@ -15,7 +15,7 @@
 // `update(model)`, `setOpen(id, k)`, `frame(now)`.
 
 import * as THREE from '../../../vendor/three/three.module.js';
-import { armBand, armRibbon, galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, smoother, CLOSED } from './layout.js';
+import { armBand, armRibbon, galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, smoother, CLOSED, OPEN_MS } from './layout.js';
 import { tourOrder, tourSites } from '../tour.js';
 import { TONES, dustTintWeight, grainRatio, nebulaFor, nebulaTint, tintGrain, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
@@ -86,6 +86,35 @@ export const bodyRadius = (m, tone) => (m.moon && !troubled(tone)
  * is the moon's.
  */
 export const MOON = Object.freeze({ calm: 5.5, foldK: 0.5, tight: 1.45, pad: 3, from: 0.35, to: 0.9 });
+
+/**
+ * A planet's moons opened (night 5 B2 open, T8): tapping the planet (or one
+ * of its moons) eases them out of their tight orbit onto one ring round it,
+ * over the site's open time (layout.js OPEN_MS) on `smoother`. The ring faces
+ * the camera, its top tilted `tilt` rad toward it, so it reads as an orbit
+ * and never as a flat badge; it is measured on screen, not in the world: its
+ * neighbours `gapPx` apart (along the circle; the tilt keeps at least
+ * cos(tilt) of it), never nearer the planet's centre than `minPx`, nor than
+ * `clearPx` past the planet's own disc and theirs (a camera that comes close,
+ * T9). Opened, a calm moon is drawn at MOON.calm, named and a target; it holds
+ * still on the ring (a finger aims at it). A faint orbit line of `segs`
+ * segments and thin tethers from the planet's rim to each moon, both at
+ * `alpha` of the line colour. One planet's ring is open at a time.
+ */
+export const MOON_RING = Object.freeze({ gapPx: 110, minPx: 80, clearPx: 28, tilt: 0.42, segs: 48, alpha: 0.9 });
+
+/**
+ * The ring's radius in css px for `n` moons round a planet `planetPx` in
+ * radius whose moons are `moonPx` (MOON_RING). Pure.
+ */
+export function moonRingPx(n, planetPx = 0, moonPx = 0) {
+  const R = MOON_RING;
+  const apart = n > 1 ? R.gapPx / (2 * Math.sin(Math.PI / n)) : 0;
+  return Math.max(R.minPx, planetPx + moonPx + R.clearPx, apart) / Math.cos(R.tilt);
+}
+
+/** Where moon `i` of `n` stands on its open ring: from the top, clockwise on screen (radians from the right, up positive). Pure. */
+export const ringAngle = (i, n) => Math.PI / 2 - (2 * Math.PI * i) / Math.max(1, n);
 
 /**
  * A planet's folded moon orbit (by its id), the same on every load: a period
@@ -577,7 +606,7 @@ export function sweepShape(R, timing = null, steps = 16) {
  * `warp` streaks the sky while `setWarp` says the camera flies,
  * `afterglow` rings a cluster whose trouble cleared (it remembers the tones from one `update` to the next),
  * `sweep` turns a faint line round the plane and rings the clusters `setSweep` says pinged (none in still mode).
- * Returns `{ update, setOpen, setSun, setActivity, setJobs, setCritAges, setWarp, setSweep, drawn, planets, beams, frame, resize,
+ * Returns `{ update, setOpen, openMoons, moonsOpen, setSun, setActivity, setJobs, setCritAges, setWarp, setSweep, drawn, planets, beams, frame, resize,
  * setQuality, size, camera, world, quality, pixelRatio, activity, jobs, beacons, afterglows, sweep, warp, renderer, dispose }`.
  * `ratio` pins the pixel ratio (`?ratio=`, for filming); else each quality level brings its own.
  * `stage` (stage.js, T29) keeps the canvas's css size so no frame reads layout; `size()` gives it to the
@@ -771,6 +800,9 @@ export function createGalaxyScene(canvas, {
   scene.add(group);
   // Running eases, by `<site>:<what>`: a new one for the same thing takes over from where the old one is.
   const tweens = new Map();
+  // Open moon rings (T8): planet id → `{ site, k }`, k its opening eased 0..1; one opening, others folding.
+  const moonRings = new Map();
+  let ringHost = null;
   let dirty = true;
   const tween = (key, ms, apply, done = null) => {
     tweens.set(key, { t0: clock(), ms, apply, done });
@@ -883,6 +915,14 @@ export function createGalaxyScene(canvas, {
     s.lines.geometry = new THREE.BufferGeometry();
     s.lines.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(planets * (4 + RING_SEGS * 2) * 3), 3));
     old.dispose();
+    // Room for two rings (T8: one opening while the last folds), each with the tethers of the planet with the most moons.
+    const most = Math.max(0, ...s.members.map((m) => (m.moon ? m.moon.n : 0)));
+    const oldRing = s.moonLines.geometry;
+    s.moonLines.geometry = new THREE.BufferGeometry();
+    s.moonLines.geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(most ? 2 * (MOON_RING.segs + most) * 2 * 3 : 3), 3));
+    s.moonLines.geometry.setDrawRange(0, 0);
+    s.moonLines.visible = false;
+    oldRing.dispose();
     s.reach = Math.max(0, ...s.members.map((m) => Math.hypot(m.off.x, m.off.y, m.off.z)));
     dirty = true;
   };
@@ -930,10 +970,15 @@ export function createGalaxyScene(canvas, {
     }));
     plane.rotation.x = -Math.PI / 2;
     const lane = new THREE.Line(new THREE.BufferGeometry(), lineMat(palette.line.rgb, 0));
-    group.add(star, starHalo, ...lobes.map((l) => l.mesh), lines, plane, lane);
+    // An open moon ring's orbit line and tethers (T8), drawn only while one is open.
+    const moonLines = new THREE.LineSegments(new THREE.BufferGeometry(), lineMat(palette.line.rgb, 0));
+    moonLines.frustumCulled = false;
+    moonLines.visible = false;
+    moonLines.name = 'moon-ring';
+    group.add(star, starHalo, ...lobes.map((l) => l.mesh), lines, plane, lane, moonLines);
     const s = {
       id: lay.id, node: lay.node, home: { ...lay.home }, reach: lay.reach, status, nebula: null, since: clock(), peak: 1,
-      star, starHalo, members: [], nebulaSprite, lobes, lines, plane, lane,
+      star, starHalo, members: [], nebulaSprite, lobes, lines, plane, lane, moonLines,
       open: 0, squeeze: 1, alive: 1, unfold: 0, relay: null, gone: false,
       neb: { color: nebCol.clone(), opacity: neb.opacity, size: neb.size }, starHaloSize: 0,
       index: lay.index, tint,
@@ -947,8 +992,10 @@ export function createGalaxyScene(canvas, {
   const dropSite = (s) => {
     for (const key of tweens.keys()) if (key.startsWith(`${s.id}:`)) tweens.delete(key);
     for (const m of s.members) group.remove(m.mesh, m.halo, m.mark);
-    group.remove(s.star, s.starHalo, ...s.lobes.map((l) => l.mesh), s.lines, s.plane, s.lane);
-    for (const o of [...s.lobes.map((l) => l.mesh.material), s.lines.geometry, s.lines.material, s.plane.geometry, s.plane.material, s.lane.geometry, s.lane.material]) o.dispose();
+    group.remove(s.star, s.starHalo, ...s.lobes.map((l) => l.mesh), s.lines, s.plane, s.lane, s.moonLines);
+    for (const o of [...s.lobes.map((l) => l.mesh.material), s.lines.geometry, s.lines.material, s.plane.geometry, s.plane.material, s.lane.geometry, s.lane.material, s.moonLines.geometry, s.moonLines.material]) o.dispose();
+    for (const [id, r] of moonRings) if (r.site === s.id) moonRings.delete(id);
+    if (ringHost != null && !moonRings.has(ringHost)) ringHost = null;
   };
 
   // The dust near each site takes its tint, its brightness kept (night 5 A4);
@@ -1074,28 +1121,48 @@ export function createGalaxyScene(canvas, {
   /**
    * A site's moons (T7), folded: each on its tight orbit round its planet as
    * drawn now, at its size (bodyRadius); a calm one grows in with the opening
-   * (MOON.from-to), one in trouble is always there and is a target. `s.moonsTurn`
-   * says whether any is shown and turning, so frame() moves them on (never in
-   * still mode).
+   * (MOON.from-to), one in trouble is always there and is a target. A planet
+   * whose ring is open (T8, `moonRings`) eases its moons from there onto the ring
+   * (ringPose), a calm one growing to MOON.calm, named and a target from half
+   * open; its orbit line and tethers go in `s.moonLines`. `s.moonsTurn` says
+   * whether any is shown and turning, `s.ringLive` whether a ring is open or
+   * easing, so frame() moves them on (a ring follows the camera, in still
+   * mode too).
    */
   const placeMoons = (s, now) => {
     const k = s.unfold ?? 0, a = s.alive;
     const shown = smoothstep(MOON.from, MOON.to, k);
     const markIn = smoothstep(MARK.from, MARK.to, k);
-    let any = false;
+    let any = false, live = false;
+    const poses = new Map();
     for (const m of s.members) {
       if (!m.moon) continue;
       const out = troubled(m.tone);
+      const h = m.moon.host;
+      const e = (moonRings.get(h.id)?.k ?? 0) * shown * a;
+      if (moonRings.has(h.id)) live = true;
       const f = (out ? 1 : shown) * a;
-      m.tappable = out;
+      m.tappable = out || e >= 0.5;
       m.mesh.visible = f > 0.005;
       if (!m.mesh.visible) { m.halo.visible = false; m.mark.visible = false; m.markShown = 0; continue; }
       any = true;
-      const h = m.moon.host, hp = h.mesh.position;
+      const hp = h.mesh.position;
       const hostR = h.mesh.scale.x * h.mesh.geometry.parameters.radius;
-      const r = m.size * f;
+      // Opened, a calm moon is drawn at MOON.calm (folded it is foldK of that); trouble keeps its size.
+      const grown = out ? m.size : m.size + (MOON.calm - m.size) * e;
+      const r = grown * f;
       const o = moonAt(m.moon, (hostR * MOON.tight + (MOON.pad + m.size) * a) * (0.5 + 0.5 * f), still ? 0 : now);
-      const x = hp.x + o.x, y = hp.y + o.y, z = hp.z + o.z;
+      let x = hp.x + o.x, y = hp.y + o.y, z = hp.z + o.z;
+      if (e > 0) {
+        let pose = poses.get(h);
+        if (!pose) { pose = ringPose(h, hostR, m.moon.n, out ? m.size : MOON.calm, e); poses.set(h, pose); }
+        const th = ringAngle(m.moon.i, m.moon.n), c = Math.cos(th), sn = Math.sin(th);
+        const rx = hp.x + pose.R * (c * pose.u.x + sn * pose.v.x);
+        const ry = hp.y + pose.R * (c * pose.u.y + sn * pose.v.y);
+        const rz = hp.z + pose.R * (c * pose.u.z + sn * pose.v.z);
+        x += (rx - x) * e; y += (ry - y) * e; z += (rz - z) * e;
+        pose.moons.push({ x, y, z, r });
+      }
       m.mesh.position.set(x, y, z);
       m.mesh.scale.setScalar(Math.max(1e-3, r / m.mesh.geometry.parameters.radius));
       m.halo.position.set(x, y, z);
@@ -1106,7 +1173,100 @@ export function createGalaxyScene(canvas, {
       m.mark.scale.setScalar(Math.max(1e-3, m.size * 2 * MARK.k * m.markShown));
       m.mark.visible = m.markShown > 0.02;
     }
+    drawRings(s, poses);
     s.moonsTurn = any && !still;
+    s.ringLive = live;
+  };
+
+  // The camera's right, up and back axes (its matrixWorld's columns), for ringPose.
+  const camX = new THREE.Vector3(), camY = new THREE.Vector3(), camZ = new THREE.Vector3(), toHost = new THREE.Vector3();
+  /**
+   * An open ring round planet `h` (drawn `hostR` in radius) for `n` moons of
+   * radius `moonR`, at its opening `e`: its radius `R` in world units from
+   * moonRingPx at the planet's depth, and the two axes of its plane, the
+   * camera's right `u` and its up tilted MOON_RING.tilt toward it `v`.
+   */
+  const ringPose = (h, hostR, n, moonR, e) => {
+    camera.matrixWorld.extractBasis(camX, camY, camZ);
+    const depth = Math.max(camera.near, toHost.copy(h.mesh.position).sub(camera.position).dot(camZ) * -1);
+    const unit = (sized.get().H || 1) / (2 * Math.tan((camera.fov * Math.PI) / 360) * depth); // css px per world unit
+    const t = MOON_RING.tilt;
+    return {
+      R: moonRingPx(n, hostR * unit, moonR * unit) / unit,
+      u: camX.clone(),
+      v: camY.clone().multiplyScalar(Math.cos(t)).addScaledVector(camZ, Math.sin(t)),
+      hp: h.mesh.position, hostR, e, moons: [],
+    };
+  };
+
+  /** The open rings' faint orbit lines and their tethers, planet rim to moon (T8), as placeMoons left them. */
+  const drawRings = (s, poses) => {
+    const attr = s.moonLines.geometry.attributes.position;
+    if (!attr || attr.count < 2) return;
+    const arr = attr.array;
+    let j = 0, e = 0;
+    const push = (x, y, z) => { if (j + 3 <= arr.length) { arr[j++] = x; arr[j++] = y; arr[j++] = z; } };
+    const N = MOON_RING.segs;
+    for (const p of [...poses.values()].sort((A, B) => B.e - A.e).slice(0, 2)) {
+      e = Math.max(e, p.e);
+      const R = p.R * p.e; // the ring grows out with its moons
+      const at = (i) => {
+        const th = (i / N) * Math.PI * 2, c = Math.cos(th) * R, sn = Math.sin(th) * R;
+        return [p.hp.x + c * p.u.x + sn * p.v.x, p.hp.y + c * p.u.y + sn * p.v.y, p.hp.z + c * p.u.z + sn * p.v.z];
+      };
+      for (let i = 0; i < N; i++) { push(...at(i)); push(...at(i + 1)); }
+      for (const m of p.moons) {
+        const dx = m.x - p.hp.x, dy = m.y - p.hp.y, dz = m.z - p.hp.z;
+        const d = Math.hypot(dx, dy, dz);
+        if (d <= p.hostR + m.r + 1) continue;
+        const a0 = p.hostR * 1.15 / d, a1 = 1 - (m.r * 1.6) / d;
+        push(p.hp.x + dx * a0, p.hp.y + dy * a0, p.hp.z + dz * a0);
+        push(p.hp.x + dx * a1, p.hp.y + dy * a1, p.hp.z + dz * a1);
+      }
+    }
+    s.moonLines.visible = j > 0;
+    s.moonLines.geometry.setDrawRange(0, j / 3);
+    if (j > 0) attr.needsUpdate = true;
+    s.moonLines.material.opacity = palette.line.alpha * MOON_RING.alpha * e;
+  };
+
+  /**
+   * Opens planet `id`'s moons onto their ring (T8), or the ring of the planet
+   * moon `id` orbits; any other open ring folds. A planet with no moons, or
+   * null, folds them all. Over `ms` (OPEN_MS; 0 at once, as in still mode),
+   * from where each ring is. Returns the planet whose ring opens, or null.
+   */
+  const openMoons = (id, ms = still ? 0 : OPEN_MS) => {
+    let host = null, site = null;
+    for (const s of world?.sites ?? []) {
+      if (id == null) break;
+      const m = s.members.find((x) => x.id === id);
+      if (!m) continue;
+      const h = m.moon ? m.moon.host : m.planet ? m : null;
+      if (h && s.members.some((x) => x.moon?.host === h)) { host = h.id; site = s.id; }
+      break;
+    }
+    const glideRing = (hid, r, to) => {
+      const key = `${r.site}:ring:${hid}`, from = r.k;
+      const s = world?.byId.get(r.site);
+      if (s) s.ringLive = true;
+      if (!ms || from === to) {
+        tweens.delete(key);
+        r.k = to;
+        if (!to) moonRings.delete(hid);
+        dirty = true;
+        return;
+      }
+      tween(key, ms, (t) => { r.k = from + (to - from) * smoother(t); }, () => { if (!to) moonRings.delete(hid); });
+    };
+    for (const [hid, r] of moonRings) if (hid !== host) glideRing(hid, r, 0);
+    if (host != null) {
+      const r = moonRings.get(host) ?? { site, k: 0 };
+      moonRings.set(host, r);
+      glideRing(host, r, 1);
+    }
+    ringHost = host;
+    return host;
   };
 
   /** The first model: every site at once, folded. */
@@ -1921,7 +2081,7 @@ export function createGalaxyScene(canvas, {
         s.breath = s.nebula.breathes ? 1 + PULSE.nebula * wave : 1;
         placeLobes(s);
         fadeNear(s);
-        if (s.moonsTurn) placeMoons(s, now);
+        if (s.moonsTurn || s.ringLive) placeMoons(s, now);
       }
     }
     easeSun(now);
@@ -1980,7 +2140,9 @@ export function createGalaxyScene(canvas, {
   };
 
   return {
-    update, setOpen, setHeld: (id) => { held = id ?? null; },
+    update, setOpen, openMoons, setHeld: (id) => { held = id ?? null; },
+    /** The planet whose moons are open or opening (T8), else null. */
+    moonsOpen: () => ringHost,
     setSun: (look) => { if (look) sunWant = look; }, setActivity, setJobs, setCritAges, setWarp, setSweep, drawn, planets, beams, frame, resize, setQuality, camera,
     size: sized.get,
     renderer, dispose,

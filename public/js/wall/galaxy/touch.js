@@ -753,6 +753,13 @@ export const placeOf = (site = null, planet = null) => (site == null
   ? AT_OVERVIEW
   : Object.freeze({ level: planet == null ? 'site' : 'planet', site, planet: planet ?? null }));
 
+/**
+ * The planet (or moon) whose moons stand open at `place` (night 5 T8,
+ * scene.js openMoons): a picked planet's, null at a system or the overview,
+ * so every step away folds them. Pure.
+ */
+export const moonsAt = (place) => (place?.level === 'planet' ? place.planet ?? null : null);
+
 /** Whether there is a step back from `place` (anywhere but the overview). */
 export const canGoBack = (place) => place?.level === 'site' || place?.level === 'planet';
 
