@@ -116,10 +116,24 @@ Notes for every builder round (planner, round 7):
   (`$RUN_DIR/shots/r14-t3-overview`, `r14-t3-hv1`, `r14-t3-hv2`, `r14-galaxy`): blue-black ground, warm sun, HOME's teal
   haze faint, stone labels readable, red and yellow the loudest; `?demo=1` film 30.1 fps at cpu 4x, 0 console errors (frame 1:
   HV1 crit, its red cluster the loudest thing).
-- [ ] T4 (§7 Night 5 A5) [ui] [variant:galaxy] Depth haze: distance fog from 0.6x to 2.6x of the look-at distance on calm
+- [x] T4 (§7 Night 5 A5) [ui] [variant:galaxy] Depth haze: distance fog from 0.6x to 2.6x of the look-at distance on calm
   materials only; status-hued materials and trouble nebulae never fogged (`scene.js`) — done when: a scene test finds `fog`
   off on every status-hued material and trouble nebula and on for calm bodies and dust, the fog range following the look-at
-  distance; a still of `?at=hv2&open=1` shows the far side fade and the crit member at full strength.
+  distance; a still of `?at=hv2&open=1` shows the far side fade and the crit member at full strength. (commit SHA)
+  Notes (builder, round 17): `scene.js HAZE` {near 0.6, far 2.6, min 200}, `hazed(tone)` (calm only) and a pure
+  `hazeRange(pos, dir)`: the look-at distance is where the sight line meets the galaxy's plane (all sites level: the held
+  star or the overview's middle), else the distance to the sun; the old `FogExp2(bg, 0.00008)` is now a linear `Fog` in the
+  same (lifted) ground colour, its near/far set each frame before the render (one direction read, no new draw). Never fogged:
+  warn/crit/low bodies, halos and stars (shared materials by tone), the marks, a trouble nebula's lobes and its lane (flipped
+  in `paintSite` only when the nebula's tone changes, one program rebuild), the beacon and afterglow fx, and the sun core and
+  halo (its look is the freshness signal, night 3 T6; deviation from the sketch, which fogged it). Fogged: calm bodies, calm
+  nebulae and lanes, orbit lines, arm ribbon/band, dust; far stars stay `fog: false`. What the camera looks at takes 20 %
+  haze (the sketch's numbers). Test: `test/wall-galaxy-haze.test.mjs` (5); the getter is `galaxy.haze` (a `fog()` getter
+  trips `frontend.test.mjs`'s call check). Perf: no geometry or draw-call change, the fog shader chunk swaps exp2 for linear.
+  Looked at (`$RUN_DIR/shots/r17-t4-hv2_open_1`, `r17-t4-overview`, `r17-t4-lab_open_1`, `r17-galaxy`): the crit `storage`
+  at full strength in front of a slightly dimmed calm system, HV2's red at the back of the overview as loud as before;
+  `?demo=1` film 32.6 fps at cpu 4x, 0 console errors. A large demo started 21:56 by an earlier round (no pid file) still
+  holds :7795 and serves this checkout; left running (not started by this round).
 - [ ] T5 (§7 Night 5 A6) [ui] [variant:galaxy] Gentler motion: open/fold 2800 ms on smootherstep (`layout.js OPEN_MS`,
   `ease`), the target opening from 0.32 of a flight (`camera.js FLIGHT.openAt`), held drift 0.6x (`SITE_SHOT`), dust turn
   0.6x (`still.js dustTurn`) — done when: tests pin the constants and that smootherstep has zero slope at both ends; the

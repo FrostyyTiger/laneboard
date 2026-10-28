@@ -122,6 +122,30 @@ export function dustFade(dist, reach, open = 1) {
   return 1 - (1 - DUST_FADE.floor) * inside * Math.max(0, Math.min(1, open));
 }
 
+/**
+ * Depth haze (night 5 A5, the owner's `sk_haze=1`): a linear fog from `near`
+ * to `far` times the distance to what the camera looks at, so the far side of
+ * an open system or of the galaxy sinks into the ground. Only calm things fog:
+ * a status hue is as loud far away as near (README §2.1). `min` keeps a close
+ * look from fogging the planet in front of it.
+ */
+export const HAZE = Object.freeze({ near: 0.6, far: 2.6, min: 200 });
+
+/** Whether a material in `tone` takes the haze: calm only, never a status hue. */
+export const hazed = (tone) => tone === 'calm';
+
+/**
+ * The haze's range for a camera at `pos` looking along the unit `dir`: the
+ * look-at distance is where the sight line meets the galaxy's plane (every
+ * site is level, so that is the held star or the overview's middle), or the
+ * distance to the sun when the camera looks up or along the plane.
+ */
+export function hazeRange(pos, dir) {
+  const plane = dir.y < -0.05 && pos.y > 0 ? -pos.y / dir.y : Math.hypot(pos.x, pos.y, pos.z);
+  const d = Math.max(HAZE.min, plane);
+  return { d, near: d * HAZE.near, far: d * HAZE.far };
+}
+
 /** Trouble breathes: one slow period (ms), crit deep, warn shallow. */
 export const PULSE = Object.freeze({ periodMs: 2600, crit: 0.4, warn: 0.15, nebula: 0.08 });
 
@@ -522,7 +546,8 @@ export function createGalaxyScene(canvas, {
   renderer.setPixelRatio(pixelRatio);
   renderer.setClearColor(bg, 1);
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(bg, 0.00008);
+  // The haze's range follows the camera each frame (hazeRange); these are placeholders.
+  scene.fog = new THREE.Fog(bg, HAZE.min * HAZE.near, HAZE.min * HAZE.far);
   const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 30000);
 
   // One light from the sun, a soft fill, and a key from above so the
@@ -548,22 +573,22 @@ export function createGalaxyScene(canvas, {
   lobeGeo.rotateX(-Math.PI / 2);
   const shared = [glowTex, dotTex, cloudTex, lobeGeo];
   const keep = (m) => { shared.push(m); return m; };
-  const flatMat = Object.fromEntries(TONES.map((t) => [t, keep(new THREE.MeshBasicMaterial({ color: tone[t] }))]));
+  const flatMat = Object.fromEntries(TONES.map((t) => [t, keep(new THREE.MeshBasicMaterial({ color: tone[t], fog: hazed(t) }))]));
   // Calm planets are matte grey with a faint glow of their own; trouble
   // glows from inside in its hue.
   const planetMat = Object.fromEntries(TONES.map((t) => [t, keep(new THREE.MeshStandardMaterial({
     color: tone[t], roughness: 0.75, metalness: 0.05,
-    emissive: t === 'calm' ? bg : tone[t], emissiveIntensity: t === 'calm' ? 1 : 0.45,
+    emissive: t === 'calm' ? bg : tone[t], emissiveIntensity: t === 'calm' ? 1 : 0.45, fog: hazed(t),
   }))]));
   const haloMat = Object.fromEntries(TONES.map((t) => [t, keep(new THREE.SpriteMaterial({
     map: glowTex, color: tone[t], transparent: true, depthWrite: false,
-    blending: THREE.AdditiveBlending, opacity: HALO[t].opacity,
+    blending: THREE.AdditiveBlending, opacity: HALO[t].opacity, fog: hazed(t),
   }))]));
 
   // A trouble member's shape: dark on its lit sphere, facing the camera, over it.
   const markMat = Object.fromEntries(Object.entries(MARK_SHAPE).map(([t, shape]) => {
     const tex = keep(markTexture(doc, shape));
-    return [t, keep(new THREE.SpriteMaterial({ map: tex, color: bg.clone(), transparent: true, depthTest: false, depthWrite: false }))];
+    return [t, keep(new THREE.SpriteMaterial({ map: tex, color: bg.clone(), transparent: true, depthTest: false, depthWrite: false, fog: false }))];
   }));
 
   // --- the sky: far stars and the dust band, never rebuilt ------------------
@@ -657,9 +682,10 @@ export function createGalaxyScene(canvas, {
   // warm stone with a softer halo of the same size.
   // The dust is depth-tested (PointsMaterial's default), so no grain is drawn over the core.
   const sunCore = col(palette.sunCore);
-  const sun = new THREE.Mesh(geo.sun, keep(new THREE.MeshBasicMaterial({ color: sunCore })));
+  // The sun is never hazed: its look says how fresh the data is (night 3 T6).
+  const sun = new THREE.Mesh(geo.sun, keep(new THREE.MeshBasicMaterial({ color: sunCore, fog: false })));
   const sunHalo = new THREE.Sprite(keep(new THREE.SpriteMaterial({
-    map: keep(glowTexture(doc, true)), color: sunCore, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: SUN_HALO,
+    map: keep(glowTexture(doc, true)), color: sunCore, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: SUN_HALO, fog: false,
   })));
   sunHalo.scale.setScalar(SIZE.sunHalo);
   scene.add(sun, sunHalo);
@@ -741,6 +767,11 @@ export function createGalaxyScene(canvas, {
     const nebTo = { color: nebColour(s, neb.tone).clone(), opacity: neb.opacity, size: neb.size };
     const starTo = SIZE.star * s.carryTo * HALO[t].k;
     const laneEnd = laneLook(neb.tone);
+    // Haze by the nebula's tone (HAZE): a trouble nebula and its lane are never fogged.
+    // A program change, so only when the tone changes.
+    for (const mat of [...s.lobes.map((l) => l.mesh.material), s.lane.material]) {
+      if (mat.fog !== hazed(neb.tone)) { mat.fog = hazed(neb.tone); mat.needsUpdate = true; }
+    }
     const set = (k) => {
       const nf = s.nebFrom, lf = s.laneFrom;
       s.neb.color.lerpColors(nf.color, nebTo.color, ease(k));
@@ -821,7 +852,7 @@ export function createGalaxyScene(canvas, {
     // sort of its own faces, so one pass draws the same thing.
     const lobes = nebulaLobes(lay.id).map((shape) => {
       const mesh = new THREE.Mesh(lobeGeo, new THREE.MeshBasicMaterial({
-        map: cloudTex, color: nebCol, transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true,
+        map: cloudTex, color: nebCol, transparent: true, fog: hazed(neb.tone), depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true,
         blending: THREE.AdditiveBlending, opacity: neb.opacity * shape.share,
       }));
       mesh.name = 'nebula';
@@ -1305,7 +1336,7 @@ export function createGalaxyScene(canvas, {
     const coreTex = keep(beamTexture(doc, coreProfile, 1));
     const beamGeo = keep(new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0));
     const beamMat = (map, color) => keep(new THREE.MeshBasicMaterial({
-      map, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+      map, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, fog: false,
     }));
     for (let i = 0; i < BEACON.max; i++) {
       const pillar = new THREE.Mesh(beamGeo, beamMat(sheathTex, tone.crit));
@@ -1315,7 +1346,7 @@ export function createGalaxyScene(canvas, {
       core.name = 'fx-beacon-core';
       core.renderOrder = 1;
       const tip = new THREE.Sprite(keep(new THREE.SpriteMaterial({
-        map: glowTex, color: tone.crit, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0,
+        map: glowTex, color: tone.crit, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, fog: false,
       })));
       tip.name = 'fx-beacon-tip';
       pillar.visible = core.visible = tip.visible = false;
@@ -1409,7 +1440,7 @@ export function createGalaxyScene(canvas, {
   if (fx?.has('afterglow')) {
     for (let i = 0; i < AFTERGLOW.max; i++) {
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.99, 1, 128), keep(new THREE.MeshBasicMaterial({
-        color: tone.calm.clone(), side: THREE.DoubleSide, forceSinglePass: true, transparent: true, opacity: 0, depthWrite: false,
+        color: tone.calm.clone(), side: THREE.DoubleSide, forceSinglePass: true, transparent: true, opacity: 0, depthWrite: false, fog: false,
       })));
       ring.rotation.x = -Math.PI / 2;
       ring.name = 'fx-afterglow';
@@ -1766,6 +1797,15 @@ export function createGalaxyScene(canvas, {
   };
   const fadeSun = () => { sunHalo.material.opacity = SUN_HALO * sunShown.glow * nearOf(SIZE.sunHalo * sunShown.scale, sun.position); };
 
+  /** The haze's range for this frame's camera (hazeRange): one plane test, read by three as uniforms. */
+  const sight = new THREE.Vector3();
+  const haze = () => {
+    camera.getWorldDirection(sight);
+    const r = hazeRange(camera.position, sight);
+    scene.fog.near = r.near;
+    scene.fog.far = r.far;
+  };
+
   /** One frame at `now` (ms): trouble breathes, the dust drifts, then draw. */
   const frame = (now) => {
     resize();
@@ -1791,6 +1831,7 @@ export function createGalaxyScene(canvas, {
     if (rings.length) drawAfterglows(now);
     if (sweepLine) drawSweep();
     if (warpParts.length) drawWarp();
+    haze();
     renderer.render(scene, camera);
   };
 
@@ -1863,5 +1904,7 @@ export function createGalaxyScene(canvas, {
     get ribbon() { return ribbon; },
     /** The near-site bands' mesh (T19), for tests. */
     get band() { return band; },
+    /** The depth haze (HAZE): the scene's fog, its range as of the last frame. */
+    get haze() { return scene.fog; },
   };
 }
