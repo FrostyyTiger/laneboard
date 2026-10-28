@@ -228,6 +228,21 @@ Notes for every builder round (planner, round 7):
   own place: in `r10-touch` 09-back-2 (3.2 s after the tap) `HV2 · STORAGE` is clipped by the frame's bottom edge while the
   camera still flies — done when: a page test on a fake clock finds the banner's box inside the frame at every step of a
   planet → system → overview Back, and not shown before the flight's end.
+- [ ] T26 (triage, r15-dreamer #1) [ui] [variant:galaxy] The red wins the map at the overview: HV1 (warn) has a ~200 px
+  yellow nebula and ring while HV2 (crit) has a thin red smear behind its own label (`r14-t3-overview`, `r15-3m.png`);
+  night 4's T23 from `## Later`. Crit nebula at least 1.5x the warn's area and drawn on the side away from the label; the warn
+  does not breathe and its nebula stays inside its cluster's reach — done when: a scene test finds the crit nebula's area ≥ 1.5x
+  the warn's for equal clusters, the warn's nebula not animated in size, and the crit nebula's centre not under its label box; an
+  overview still shrunk to 684 px (3 m) with one warn and one crit shows the red as the larger shape.
+- [ ] T27 (triage, r15-dreamer #6) [ui] [variant:galaxy] A crit member is a light, not a hole: `storage` in `r14-t3-hv2` is a
+  red disc with a black square and no name on the map. The crit shape stays `--text-1`/white on the red over a lit core, and the
+  name stays beside it at every step (night 4's T29) — done when: a test finds the crit mark's colour light against the red
+  body and the member's label in the shown list at every zoom step of its system; a still of `?at=hv2&open=1` shows both.
+- [ ] T28 (triage, r15-dreamer #4) [ui] [variant:galaxy] Big stars are still faceted at 2x pixels: HV2's, `secrets`' and
+  `media`'s star outlines show polygon steps at 1368 px (T2's 26x18 at ≤ 1.65x was not enough). Shade them smooth or take 48x32
+  above 1.2x — done when: a test pins the new segment count (or smooth shading) for `BIG_STAR` bodies, `?perf=1` triangles at
+  the overview before/after are in the notes (no rise past night 4's 84-86k beyond a few hundred), and a still of `?at=hv2` at
+  1368 px shows a round edge.
 
 - [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
   Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
@@ -284,6 +299,13 @@ From `r10-film-ui.md` (bugs and gaps past the 3-task limit):
 - r10 fx sweep: a ping is a short dash arc fading in about 1 s, not a closed ellipse (reads as selection).
 - r10 fx afterglow: needs a filmable clear (a demo hook clearing a site at a known second).
 
+From `r15-dreamer.md` (past the 3-task limit):
+- r15 #5 The plate's leader cuts through the system it points at; route it round the system's bounding ellipse to the lock's nearest bracket corner.
+- r15 #7 The red banner never rests: T23 (one line in holds) is the first step; aging trouble dropping a size step is under `## For the owner`.
+- r15 #8 The hub is a beige ball with no corona: C1b's (stale/live work), not ours.
+- r15 #9 A picked planet's tether to its star brightens while selected (T8/T9 cover the camera and ring; the tether is the addition).
+- r15 fx beacon: pillar stops at about the cluster's diameter with a tick for the crit's age (same as r10); fx afterglow/sweep: demo hook (clear a site, one sweep in the first 5 s of `?demo=1`) so they can be filmed; fx activity: rings at `--text-3`, slow fill, never inside a lock (same as r10).
+
 Closed by this night's plan (moot):
 - night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
   buttons and chips are 48 px by the night's tappable rule.
@@ -310,10 +332,19 @@ slim top bar of fleet totals, map modes.
 - (triage r10, `fx` candidates) `warp`: either one real acceleration moment in the middle 40 % of a flight, or drop it
   (half-measure is the worst of both); `beacon`/`sweep` set the rhythm the others should copy (one motion, one direction,
   then stillness); `afterglow` scored wow 3: decide whether to keep it.
+- (triage r15, taste/direction, not tasks) A held system carries its site's tint at calm chroma (orbit ellipse, star halo, soft
+  ground disc) so you know where you are before the name (#2); during a flight the destination's name and distance ride at the
+  frame's edge (`→ HOME · 0.4`) so calm flights are not dead air (#3); a trouble standing unchanged for hours drops one size
+  step and its age (`POOL 97% FULL · 6 H`) becomes the loud part (#7).
+- (triage r15, `fx` candidates, from "unforgettable") `scan`: on arrival a system's planet names type in, trouble members first,
+  then by load; `eclipse`: a member with no contact loses its lit side, a dark disc with a thin red rim until contact returns;
+  `dial`: a thin 24-hour ring round each star showing the last day's status as outline arcs in the old hue (afterglow with a clock).
+  None became a task (decision for the owner; `eclipse` and `dial` change what "down" and history look like).
 
 ## Reviews
 
 - r10-film-ui.md: 12 galaxy findings + 5 fx + 3 m check; 3 became tasks (T23, T24, T25); #9 dropped (covered by T9), #1/#2 covered by T1b, the rest under `## Later` or `## For the owner`.
+- r15-dreamer.md: 9 galaxy findings + 5 fx + 3 unforgettable + 3 m check; 3 became tasks (T26, T27, T28); #1 is night 4's T23 raised, #6 is night 4's T29 raised, #2/#3 and the three proposals to the owner, #5/#7/#8/#9 and fx notes under `## Later`.
 
 ## Scores
 
@@ -325,5 +356,11 @@ slim top bar of fleet totals, map modes.
 | 10 | film-ui | fx-afterglow | | | | | 3 | 8 | |
 | 10 | film-ui | fx-activity | | | | | 4 | 5 | |
 | 10 | film-ui | fx-sweep | | | | | 6 | 7 | |
+| 15 | dreamer | galaxy | 7 | 6 | 6 | 5 | 6 | 5 | 7 |
+| 15 | dreamer | fx-beacon | | | | | 5 | 6 | |
+| 15 | dreamer | fx-warp | | | | | 6 | 6 | |
+| 15 | dreamer | fx-afterglow | | | | | 2 | 7 | |
+| 15 | dreamer | fx-activity | | | | | 4 | 3 | |
+| 15 | dreamer | fx-sweep | | | | | 5 | 6 | |
 
 ## Morning
