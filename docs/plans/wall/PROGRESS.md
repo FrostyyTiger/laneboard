@@ -44,14 +44,32 @@ Notes for every builder round (planner, round 7):
 
 ## Tasks
 
-- [ ] T1 (§7 Night 5 A1+A2) [ui] [variant:galaxy] Spacing half and the rosette, as defaults: in `galaxy/layout.js` arms,
+- [x] T1 (§7 Night 5 A1+A2) [ui] [variant:galaxy] Spacing half and the rosette, as defaults: in `galaxy/layout.js` arms,
   gaps, `SITE_LIFT`, `MIN_SITE_GAP`, dust and `ARM_RIBBON`/`ARM_BAND` at 0.5x, a system's spread 0.75x; in `scene.js`
   nebulae and the sun halo at 0.64x; a wider-wound two-arm spiral with a site every 72°, all sites level, only shown sites
   taking slots (`galaxyLayout(nodes, aspect, shown)`, the sketch's `siteSpot`), the first site far enough out that an open
   system never reaches the sun's halo; `camera.js overviewShot` frames the whole galaxy snugly — done when: layout tests pin
   the 72° step, equal site heights, slots for shown sites only, and the nearest site's star farther from the sun than its
   open reach plus the halo radius; an overview still of the large demo (`?at=overview`) fills the frame with all five sites
-  and no site name off screen.
+  and no site name off screen. (commit 6d278d7)
+  Notes (builder, round 9): `layout.js TIGHT` {arm 0.5, neb 0.64, spread 0.75}; rosette `ARM` r0 625, turn 72°, `siteSpot`
+  (arm 1 half a step out). Deviations, on purpose: `ARM.step` 180, not the sketch's 165, because past five sites the rosette
+  laps and the sixth stands 2.5 steps behind the first on one ray (165 gave 412 < the gap); `MIN_SITE_GAP` follows the
+  nebulae (700 x 0.64 = 448), not the arms (0.5x = 350 would no longer keep crit nebulae, 435 across, apart). Dust kept as the
+  sketch's formula (a tighter inner spiral, out to about 940). `overview.js OVERVIEW_FIT.shift` 0.4 → 0.6: an even rosette in
+  a snug frame always has two sites under the widest plate, and the reduced-motion test needs the fit to slide past it.
+  The sketch's `ROOM` (arms pushed out 1.24x by `sk_sys=1`) is not in T1: T6 decides it with the 1.4x spread (the nearest
+  open system clears the halo with margin: star 733 out, reach 297 + halo 205; at 1.4x spread still 621).
+  `scene.js SIZE.sunHalo` and `OVERVIEW_MARGIN` are literals (no imported binding at evaluation time, `frontend.test.mjs`),
+  pinned to `TIGHT` by the layout test. Perf: no mesh or vertex count changes (same geometry, smaller numbers), so draw
+  calls/triangles stand as night 4's. Looked at (`$RUN_DIR/shots/r9-t1-*`, `r9-galaxy`): overview shows all five sites named,
+  none off screen, HV2's red the loudest; `?demo=1` film 34.5 fps at cpu 4x, 0 console errors. Found: T1b below.
+- [ ] T1b [ui] [variant:galaxy] The sun is out of a held system's frame again: with the tighter galaxy HV1's star is only
+  733 from the sun, so the inward look (`scene.js siteShot`, `framing.js FRAMING.inward`/`inwardRise`) puts the sun's disc in
+  the top right of the frame, on the tag (`?at=lab&open=1`, film frames 9.3 s and 32.5 s of r9; labels keep the sun's name off
+  the tag, the bright disc is not). `inwardRise` 1.0-2.2 does not clear it (tried, round 9). Keep the sun out of the frame
+  or out of `hud.covers()` for every site of the large demo at its hold — done when: a test projects the sun for each held
+  site's `siteShot` with the tablet view and finds it off the frame or clear of the tag box; a still of `?at=lab&open=1`.
 - [ ] T2 (§7 Night 5 A3) [ui] [variant:galaxy] Size is what it carries: a planet's radius factor 0.8 + 0.35·log2(1+n) of
   what is below it, a star's 0.8 + 0.2·log2(1+planets), clamped 0.8x-2.2x, never by status (a pure `carryScale` in
   `layout.js` or `scene.js`); a big sphere takes more segments so it never looks faceted, within the triangle budget — done
