@@ -21,7 +21,14 @@ const ROWS = [
   [3, 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc123DEF456ghi789', `Authorization: Bearer ${REDACTED}`, `Authorization: Bearer ${REDACTED}`],
   [3, 'use Basic dXNlcjpwYXNz now', `use Basic ${REDACTED} now`, `use Basic ${REDACTED} now`],
   [3, 'header Token abc.def', `header Token ${REDACTED}`, `header Token ${REDACTED}`],
-  [3, 'bearer lower', `bearer ${REDACTED}`, 'bearer lower'],
+  [3, 'bearer lower', `bearer ${REDACTED}`, `bearer ${REDACTED}`],
+  // T45 (B71): reply text takes `bearer`/`basic` in any case and `token` right after `Authorization:`.
+  [3, 'authorization: bearer hunter2pass', `authorization: bearer ${REDACTED}`, `authorization: bearer ${REDACTED}`],
+  [3, 'use bearer abcdefgh1234 now', `use bearer ${REDACTED} now`, `use bearer ${REDACTED} now`],
+  [3, 'try BASIC dXNlcjpwYXNz', `try BASIC ${REDACTED}`, `try BASIC ${REDACTED}`],
+  [3, 'Authorization: token xyz123secretvalue', `Authorization: token ${REDACTED}`, `Authorization: token ${REDACTED}`],
+  [3, 'AUTHORIZATION:TOKEN xyz123secretvalue', `AUTHORIZATION:TOKEN ${REDACTED}`, `AUTHORIZATION:TOKEN ${REDACTED}`],
+  [3, 'the token in /etc/acme/env', `the token ${REDACTED} /etc/acme/env`, 'the token in /etc/acme/env'],
   [4, 'https://example.invalid/hook?token=Q7wErTy12&lb_sig=Zq9Xw4Vr', `https://example.invalid/hook?token=${REDACTED}&lb_sig=${REDACTED}`, 'https://example.invalid/hook?token=Q7wErTy12&lb_sig=Zq9Xw4Vr'],
   [4, 'PGPASSWORD=hunter2 psql -h db', `PGPASSWORD=${REDACTED} psql -h db`, 'PGPASSWORD=hunter2 psql -h db'],
   [4, 'api_key: abc123, next', `api_key: ${REDACTED}, next`, 'api_key: abc123, next'],
@@ -143,6 +150,10 @@ test('the hold-back sends a word at white space, a tail over 200 characters as i
 test('a rule 3 word at the end of a delta waits with its credential (B73)', () => {
   assert.deepEqual(play(['send Bearer ', 'abc.def123 now']), ['send ', `Bearer ${REDACTED} `, 'now']);
   assert.deepEqual(play(['the token ', 'in it']), ['the token ', 'in ', 'it'], 'prose "token" is not rule 3 in reply text (B71)');
+  // T45: the lower-case words and `Authorization: token` wait too.
+  assert.deepEqual(play(['use bearer ', 'abcdefgh1234 now']), ['use ', `bearer ${REDACTED} `, 'now']);
+  assert.deepEqual(play(['send Authorization: ', 'token ', 'xyz123secretvalue now']), ['send ', '', `Authorization: token ${REDACTED} `, 'now']);
+  assert.deepEqual(play(['authorization:token ', 'xyz123secretvalue']), ['', '', `authorization:token ${REDACTED}`]);
 });
 
 test('roomSecrets: the MCP token, the speech token file and the values of cockpit.agent.env', () => {

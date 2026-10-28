@@ -419,11 +419,16 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   non-secret variables (`TERM`, `TZ`) whose short values would blank ordinary text, and a value
   under 4 characters is no key — spec: `c1-talk.md` §5.3 rule 1 — overrule: `SECRET_MIN = 1` in
   `server/cockpit/redact.mjs` (security-relevant, named under For the owner).
-- B71 (T10) Rule 3 in reply text matches `Bearer`, `Basic`, `Token` capitalised or upper-case only;
-  in tool input it stays case-insensitive as §5.3's table says — because S-SEC-02 (D211) expects
-  `The token in /etc/acme/env is [redacted] …`, which a case-insensitive rule 3 would turn into
-  `The token [redacted] /etc/acme/env …`; D211 is newer than §5.3's table (D127) — spec:
-  `security.md` §5, S-SEC-02, `c1-talk.md` §5.3 — overrule: `SCHEME_TEXT` in `redact.mjs`.
+- B71 (T10, changed by T45) Rule 3 in reply text matches `bearer` and `basic` in any case,
+  `Token` capitalised or upper-case only, and `token` in any case right after `Authorization:`
+  (any case); in tool input it stays case-insensitive as §5.3's table says; the stream's hold-back
+  (B73) keeps each of these words, and a trailing `Authorization:`, with its credential — because
+  S-SEC-02 (D211) expects `The token in /etc/acme/env is [redacted] …`, which a case-insensitive
+  `token` would turn into `The token [redacted] /etc/acme/env …`, while a lower-case
+  `authorization: bearer …` is a credential however it is written (reviews 18-owner finding 3,
+  108-security finding 5). The cost: prose such as `the basic idea` reads `the basic [redacted]`
+  — spec: `security.md` §5, S-SEC-02, `c1-talk.md` §5.3 rule 3 — overrule: `SCHEME_TEXT` and
+  `HOLD_WORD` in `redact.mjs`.
 - B72 (T10) Rule 4 inside a string also takes a quote around the name or the value
   (`"api_key": "v"`, `X-Api-Key: v`), and `--name value` needs the two dashes and a value not
   starting with `-`; only a name holding one of the seven parts matches, so `https:` never swallows

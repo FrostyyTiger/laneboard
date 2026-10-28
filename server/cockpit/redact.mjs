@@ -26,11 +26,12 @@ export const SECRET_MIN = 4;
 // Rule 2 (D127): a PEM private key block, to its -----END line or the string's end.
 const PEM = /-----BEGIN [^\n]*?PRIVATE KEY-----[\s\S]*?(?:-----END [^\n]*?PRIVATE KEY-----|$)/gi;
 // Rule 3 (D127): an auth scheme word and its credential; the word is kept.
-// Tool input: case-insensitive as §5.3's table says. Reply text: the word as
-// written, capitalised or upper-case (B71, D211's S-SEC-02: "The token in …"
-// is prose and stays).
+// Tool input: case-insensitive as §5.3's table says. Reply text (B71, T45):
+// `bearer`/`basic` in any case; `Token`/`TOKEN` capitalised or upper-case only,
+// and `token` in any case right after `Authorization:` (any case) (D211's S-SEC-02:
+// "The token in …" is prose and stays).
 const SCHEME_INPUT = /\b(Bearer|Basic|Token)([ \t]+)(?!\[redacted\])([^\s]+)/gi;
-const SCHEME_TEXT = /\b(Bearer|Basic|Token|BEARER|BASIC|TOKEN)([ \t]+)(?!\[redacted\])([^\s]+)/g;
+const SCHEME_TEXT = /(?<=\b(?i:authorization):[ \t]*)((?i:token))([ \t]+)(?!\[redacted\])([^\s]+)|\b((?i:bearer|basic)|Token|TOKEN)([ \t]+)(?!\[redacted\])([^\s]+)/g;
 // Rule 4 (D127): a secret-like name (§5.3's seven parts).
 const SECRET_NAME = /pass|secret|token|key|auth|credential|sig/i;
 // Rule 4 inside a string: `name=value`, `name: value`, `--name=value`, and
@@ -56,7 +57,11 @@ function ruleSecrets(secrets) {
 }
 
 const rulePem = (s) => s.replace(PEM, REDACTED);
-const ruleScheme = (re) => (s) => s.replace(re, (_, word, gap) => `${word}${gap}${REDACTED}`);
+const ruleScheme = (re) => (s) => s.replace(re, (...m) => {
+  // The scheme word and its gap are the first two groups that matched (SCHEME_TEXT has two branches).
+  const [word, gap] = m.slice(1).filter((g) => typeof g === 'string');
+  return `${word}${gap}${REDACTED}`;
+});
 
 /** Rule 4 inside a string: the value after a secret-like name. */
 function keepValue(value) {
@@ -152,9 +157,12 @@ function holdFrom(s) {
   const m = /\s(?=\S*$)/.exec(s);
   if (!m) return 0;
   const at = m.index + 1;
-  const word = /(?:^|\s)(Bearer|Basic|Token|BEARER|BASIC|TOKEN)[ \t]+$/.exec(s.slice(0, at));
-  return word ? word.index + word[0].length - word[0].replace(/^\s/, '').length : at;
+  // The words of SCHEME_TEXT (T45): `bearer`/`basic` any case, `Token`/`TOKEN`, and
+  // `Authorization:` with or without its `token`, whose credential is still to come.
+  const word = HOLD_WORD.exec(s.slice(0, at));
+  return word ? (word.indices[1] ?? word.indices[2])[0] : at;
 }
+const HOLD_WORD = /(?:^|\s)((?i:bearer|basic)|Token|TOKEN)[ \t]+$|\b((?i:authorization):(?:[ \t]*(?i:token))?)[ \t]+$/d;
 
 /**
  * Rule 1's list (D127): `LANEBOARD_MCP_TOKEN`, the speech token
