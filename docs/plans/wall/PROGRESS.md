@@ -252,10 +252,31 @@ Notes for every builder round (planner, round 7):
   the plate, so builder-a's top moon (and the lock on it) runs under the Back control and builder-b's ring past the
   frame's right edge (`04-ba-open`, `07-tap-moon`); T9's camera (planet left of centre, 45 % closer) is what puts the ring
   in empty screen, and its test should assert every open moon inside the frame and off the covers.
-- [ ] T9 (§7 Night 5 B3) [ui] [variant:galaxy] Picking a planet or moon flies the camera about 45 % closer with the planet
+- [x] T9 (§7 Night 5 B3) [ui] [variant:galaxy] Picking a planet or moon flies the camera about 45 % closer with the planet
   left of centre, so the ring and the card use the empty screen (`camera.js`, `main.js` selection) — done when: a page test
   on a fake clock taps a planet and finds, at the flight's end, the camera distance about 0.55 of the system hold's and the
-  planet's screen x in the left 45 % of the frame with its open ring inside the frame; a still shows it.
+  planet's screen x in the left 45 % of the frame with its open ring inside the frame; a still shows it. (commit c39f2dc)
+  Notes (builder, round 27): `camera.js PICK` {closer 0.55, at 0.3, padPx 64} and pure `planetShot(hold, p, view)`: the
+  camera 0.55 of the hold's distance along the hold's own line of sight (no swing; the drift goes on), the planet at 30 %
+  across the free box, never nearer its edge than its ring (`moonRingPx`) + 64 px, never past the box's middle. A site move
+  carries `{ member }` (`focus`/`cut`'s options, passed through `director.js`; a moon frames its planet, so a tap on the
+  ring keeps the camera); a move between two shots of the same system keeps its drift clock. `main.js openPlanet` flies
+  (a cut in reduced motion), and `openSite`'s `there` holds only without a member, so Back from a planet flies out to the
+  system's hold (T13 changes that to "keeps the camera where he turned it"). **Deviation, on purpose:** "left of centre"
+  is of the free box, not the frame: while a planet's sheet stands the plate covers the frame's left half (x 110-780 on a
+  1368 px tablet), so a planet in the frame's left 45 % would put its ring under the words. The pick's box
+  (`main.js pickBox`) also leaves out `‹ BACK` and the manual line (r25 #15). T17's card can take the box's right side.
+  Test: `test/wall-galaxy-pick.test.mjs` (5: planetShot; the page's camera and director on the large demo: builder-a at
+  0.55 of the hold's distance, 30 % across the free box, its five moons inside the frame and off the plate, tag, fleet
+  line and Back; a moon's tap keeps the camera, builder-b flies on, Back to the system flies out; reduced motion cuts;
+  main.js's wiring). One source assertion and one stale comment in `wall-galaxy-touch.test.mjs` follow openPlanet. Perf:
+  camera only, no draw call or triangle added. Looked at (`$RUN_DIR/shots/r27-t9-pick/`, CDP touch walk on `--size
+  large`): HV1 hold 2500 → builder-a 1375 units (0.55), its ring 89-107 px round it at (1038, 444), all moons in frame
+  and clear of Back; builder-b the same; a moon tap holds still; Back ×2 out to HV1 and the overview; 0 console errors.
+  `r27-galaxy` (`?demo=1`, cpu 4x) 32.9 fps, worst gap 224 ms, 0 errors, the tour unchanged. **Seen, not fixed:** at 1.8x
+  the HV1 builders cluster's neighbours (vm-a, vm-b, bb's trouble moons) crowd the open ring, and a picked planet's own
+  name is pushed off beside the ring (`ba` 120 px below it, `bb` past the ring's right); the names' trouble moon icons
+  cross `ci-retry`/`search ui` as in r24. Candidates for T17/T18 (the card names the planet) or a labels pass.
 - [ ] T10 (§7 Night 5 B2, contract) [ui] [variant:galaxy] Moons join the page contract, additive only: `__cockpitView`'s
   `screenOf` and `emphasis` accept a moon id, a show `fly_to` on a moon frames it as planet → system does now (site, then
   its planet opened, then the moon), every existing name and value unchanged; `data-wall-state` gains no renamed value. If
