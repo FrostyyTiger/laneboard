@@ -49,8 +49,11 @@ export function siteSpot(i) {
 /** A folded cluster's size against its open system. */
 export const CLOSED = 0.16;
 
-/** How long a cluster takes to open or fold (ms). */
-export const OPEN_MS = 1800;
+/**
+ * How long a cluster takes to open or fold (ms). Night 5 A6 (the owner's
+ * `sk_soft`): slower, on `smoother`, so an opening has no jerk at either end.
+ */
+export const OPEN_MS = 2800;
 
 /** The orbits layout's units to the galaxy's: a system's spread on the plane. */
 export const SPREAD = 2.2 * TIGHT.spread;
@@ -112,10 +115,20 @@ export function rng(seed = 1) {
   };
 }
 
-/** Ease in and out (cubic), 0..1 to 0..1. */
+/** Ease in and out (cubic), 0..1 to 0..1. Flights, the overview, a status change. */
 export const ease = (x) => {
   const k = Math.max(0, Math.min(1, x));
   return k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
+};
+
+/**
+ * Smootherstep, 0..1 to 0..1: zero slope and zero acceleration at both ends,
+ * so nothing starts or stops with a jolt. A system's opening and folding
+ * (`foldAt` and every fade that follows it, night 5 A6).
+ */
+export const smoother = (x) => {
+  const k = Math.max(0, Math.min(1, x));
+  return k * k * k * (k * (k * 6 - 15) + 10);
 };
 
 /**
@@ -371,7 +384,7 @@ export function galaxyLayout(nodes, aspect = 16 / 9, shown = null) {
  * folded cluster is a disc and an open one a 3D system.
  */
 export function foldAt(open, p) {
-  const k = ease(open);
+  const k = smoother(open);
   const spread = CLOSED + (1 - CLOSED) * k;
   return { x: p.x * spread, y: k === 0 ? 0 : p.y * spread * k, z: p.z * spread };
 }

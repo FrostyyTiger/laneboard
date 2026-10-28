@@ -40,10 +40,11 @@ import { sizeOf } from './stage.js';
 
 /**
  * A flight takes the tour's `flyMs` (tour.js TIMING, 2250 ms); the target system starts opening at
- * `openAt` of it (so it is open just after the camera arrives) and a long
+ * `openAt` of it (night 5 A6: early, so the slower opening, layout.js OPEN_MS, ends about a second after the
+ * camera arrives) and a long
  * hop rises by `lift` of its length at the middle, at most `maxLift`.
  */
-export const FLIGHT = Object.freeze({ ms: 2250, openAt: 0.45, lift: 0.18, maxLift: 900 });
+export const FLIGHT = Object.freeze({ ms: 2250, openAt: 0.32, lift: 0.18, maxLift: 900 });
 
 /** Where the sun is: the overview's star. */
 const SUN = Object.freeze({ x: 0, y: 0, z: 0 });

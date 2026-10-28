@@ -134,11 +134,23 @@ Notes for every builder round (planner, round 7):
   at full strength in front of a slightly dimmed calm system, HV2's red at the back of the overview as loud as before;
   `?demo=1` film 32.6 fps at cpu 4x, 0 console errors. A large demo started 21:56 by an earlier round (no pid file) still
   holds :7795 and serves this checkout; left running (not started by this round).
-- [ ] T5 (§7 Night 5 A6) [ui] [variant:galaxy] Gentler motion: open/fold 2800 ms on smootherstep (`layout.js OPEN_MS`,
+- [x] T5 (§7 Night 5 A6) [ui] [variant:galaxy] Gentler motion: open/fold 2800 ms on smootherstep (`layout.js OPEN_MS`,
   `ease`), the target opening from 0.32 of a flight (`camera.js FLIGHT.openAt`), held drift 0.6x (`SITE_SHOT`), dust turn
   0.6x (`still.js dustTurn`) — done when: tests pin the constants and that smootherstep has zero slope at both ends; the
   tour and touch page tests stay green (timings they assert updated only where they read these constants); a
-  `?demo=1` film shows an opening without a jerk at its start or end.
+  `?demo=1` film shows an opening without a jerk at its start or end. (commit SHA)
+  Notes (builder, round 18): `layout.js` `OPEN_MS` 2800 and a new `smoother` (smootherstep) beside `ease`; `foldAt` and
+  every fade that follows the opening in `scene.js` (the line spread, beacon/ring/ping fades, the crit-lobe switch, the
+  dust hole, `fadeNear`) use `smoother`, so members and fades stay in step. Flights, the overview, `live.js` and the
+  nebula colour changes keep the cubic `ease` (not in A6; the sketch's softer flight *out* belongs with C's Back, T13).
+  `FLIGHT.openAt` 0.32: the opening ends ~1.3 s after landing (720 + 2800 vs 2250 ms). `SITE_SHOT.speed` 0.000012,
+  `dustTurn` 0.0000024 rad/ms (comments updated: ~4.4 min a swing, ~44 min a turn). Test: `test/wall-galaxy-soft.test.mjs`
+  (3: constants, smootherstep ends and midpoint, `foldAt`); `wall-galaxy-still`'s dust check moved from > 0.9 to > 0.5
+  rad at 250 s; no tour or touch test read these constants. Perf: constants only, no draw change. Looked at
+  (`$RUN_DIR/shots/r18-galaxy-b`, 30.3 fps at cpu 4x, 0 errors; a first run read 25.8 fps at load avg 4.5 from other rooms;
+  `r18-galaxy-open`, 350 ms frames over HV1's opening, its 20 fps is the screenshot cadence): the cluster leaves folded at
+  2.3 s, is most of the way open at 3.3 s and settles by 4.1 s with no pop at either end. The plate's `WAITING ON A
+  PERMIS…` truncation is T24's, untouched here.
 - [ ] T6 (§7 Night 5 B1) [ui] [variant:galaxy] System room: planets spread 1.4x with a minimum gap of 13 % of the system's
   reach (the sketch's `spaceOut` in `layout.js`); what hangs below a planet moves with it; open-system labels never collide
   (`labels.js`), HV1's builders cluster the test case — done when: a layout test on the large fixture finds every planet pair

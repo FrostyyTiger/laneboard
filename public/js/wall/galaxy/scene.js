@@ -15,7 +15,7 @@
 // `update(model)`, `setOpen(id, k)`, `frame(now)`.
 
 import * as THREE from '../../../vendor/three/three.module.js';
-import { armBand, armRibbon, galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, CLOSED } from './layout.js';
+import { armBand, armRibbon, galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, smoother, CLOSED } from './layout.js';
 import { tourOrder, tourSites } from '../tour.js';
 import { TONES, dustTintWeight, grainRatio, nebulaFor, nebulaTint, tintGrain, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
@@ -311,10 +311,11 @@ export function overviewShot(sites, fov = FOV) {
  * Where the camera sits for one open system: on the sun's side of it, up,
  * looking out across it, so the sun is behind and below the camera and
  * never in the frame (r8-film-ui 2), and the sun lights the faces we see.
- * The drift sways round that side (±SWAY rad, about 2.6 min a swing)
+ * The drift sways round that side (±SWAY rad, about 4.4 min a swing: night 5 A6
+ * slowed it to 0.6x)
  * rather than circling, so a long hold never brings the sun round.
  */
-export const SITE_SHOT = Object.freeze({ jitter: 0.7, sway: 0.5, speed: 0.00002 });
+export const SITE_SHOT = Object.freeze({ jitter: 0.7, sway: 0.5, speed: 0.000012 });
 /**
  * With a `view` (`{ fov, aspect, free, scale }`, T18) the star sits at the
  * middle of the `free` box (framing.js `freeRect`: the frame minus the
@@ -972,7 +973,7 @@ export function createGalaxyScene(canvas, {
       const arr = s.lines.geometry.attributes.position.array;
       let j = 0;
       const push = (x, y, z) => { arr[j++] = x; arr[j++] = y; arr[j++] = z; };
-      const e = ease(k);
+      const e = smoother(k);
       const spread = CLOSED + (1 - CLOSED) * e;
       for (const m of s.members) {
         const o = foldAt(k, m.off);
@@ -1397,7 +1398,7 @@ export function createGalaxyScene(canvas, {
       // Close by, it looks wider than at the overview: fade it (beaconNear).
       const seen = Math.hypot(camera.position.x - s.home.x, camera.position.y - s.home.y - h / 2, camera.position.z - s.home.z);
       const ratio = w / Math.max(1, 2 * seen * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(1e-6, at.width);
-      const k = Math.min(1, at.rise * 2) * s.alive * (1 - (1 - BEACON.held) * ease(s.unfold)) * beaconNear(ratio);
+      const k = Math.min(1, at.rise * 2) * s.alive * (1 - (1 - BEACON.held) * smoother(s.unfold)) * beaconNear(ratio);
       slot.id = id;
       const { pillar, core, tip } = slot;
       const turn = Math.atan2(camera.position.x - s.home.x, camera.position.z - s.home.z);
@@ -1478,7 +1479,7 @@ export function createGalaxyScene(canvas, {
       ring.material.color.lerpColors(ringHue[at.from], ringHue[at.to], at.mix);
       const seen = Math.hypot(camera.position.x - s.home.x, camera.position.y - s.home.y, camera.position.z - s.home.z);
       const ratio = width / Math.max(1, 2 * seen * Math.tan((camera.fov * Math.PI) / 360)) / AFTERGLOW.line;
-      ring.material.opacity = at.alpha * at.k * s.alive * (1 - (1 - BEACON.held) * ease(s.unfold)) * beaconNear(ratio);
+      ring.material.opacity = at.alpha * at.k * s.alive * (1 - (1 - BEACON.held) * smoother(s.unfold)) * beaconNear(ratio);
       ring.visible = ring.material.opacity > 0.005;
     }
     for (; i < rings.length; i++) { rings[i].ring.visible = false; rings[i].id = null; }
@@ -1561,7 +1562,7 @@ export function createGalaxyScene(canvas, {
       slot.id = p.id;
       ring.position.set(s.home.x, s.home.y, s.home.z);
       ring.scale.setScalar(SWEEP.pingRadius * p.r * s.alive);
-      ring.material.opacity = SWEEP.pingOpacity * p.k * s.alive * (1 - ease(s.unfold));
+      ring.material.opacity = SWEEP.pingOpacity * p.k * s.alive * (1 - smoother(s.unfold));
       ring.visible = ring.material.opacity > 0.005;
     }
     for (; i < pingRings.length; i++) { pingRings[i].ring.visible = false; pingRings[i].id = null; }
@@ -1683,7 +1684,7 @@ export function createGalaxyScene(canvas, {
     warpView.value.copy(warpBuf);
     const out = [];
     for (const s of world?.sites ?? []) {
-      if (s.gone || s.nebula?.tone !== 'crit' || ease(s.unfold) >= 0.5) continue;
+      if (s.gone || s.nebula?.tone !== 'crit' || smoother(s.unfold) >= 0.5) continue;
       toView(warpNdc, s.home);
       const depth = -warpNdc.z;
       if (depth <= camera.near) continue;
@@ -1731,7 +1732,7 @@ export function createGalaxyScene(canvas, {
     let best = null;
     for (const s of world?.sites ?? []) if (!s.gone && s.unfold > (best?.unfold ?? 0)) best = s;
     if (!best) return { x: 0, y: 0, z: 0, r: 1, k: 0 };
-    return { ...best.home, r: dustFadeRadius(best.reach), k: ease(best.unfold) * best.alive };
+    return { ...best.home, r: dustFadeRadius(best.reach), k: smoother(best.unfold) * best.alive };
   };
   const holdDust = () => {
     const h = heldDust();
@@ -1781,7 +1782,7 @@ export function createGalaxyScene(canvas, {
     };
   };
   const fadeNear = (s) => {
-    const e = ease(s.unfold), a = s.alive;
+    const e = smoother(s.unfold), a = s.alive;
     const w = s.id === held ? 0 : 1 - e;
     const near = (size, p) => 1 - (1 - nearOf(size, p)) * w;
     // You are inside the nebula now: it thins as the system opens.
