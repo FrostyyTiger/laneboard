@@ -1,0 +1,234 @@
+# Wall: progress
+
+Night 5 (README §7 Night 5): make the galaxy feel right in the hand. The owner's picks from the live sketch become the
+defaults (A), systems get roomier and carry nested moons (B), touch and mouse let him turn an open system in 3D (C), a
+node card replaces the old sheet (D), docs and the cockpit handover come last (E). Night 4 is in `nights/night-4/` (its
+morning report says what stands), nights 1-3 in `nights/night-1/` to `nights/night-3/`.
+
+Notes for every builder round (planner, round 7):
+- **Order** (README §7 Night 5 `Order:`): A (T1-T5, A1 and A2 together in T1), then B1 (T6), B2-B3 (T7-T10), then C
+  with C1-C3 and C5 before C4 (T11-T16), then D (T17-T20), interleaved with triage's panel fixes; E last (T21-T22).
+  Every part of A-E is a task here; nothing of tonight's list waits in `## Later`.
+- **The sketch is a reference, not code to paste**: `docs/plans/wall/sketch/night5/sketch5.diff` (against `main`
+  0c6b951). The owner's picks are its `sk_tight=2 sk_size=1 sk_tint=2 sk_sun=1 sk_soft=1 sk_haze=1 sk_arr=2 sk_sys=1
+  sk_moons=1 sk_pal=1 sk_card=1`; they land as **defaults with no switch**. Nothing reads `SK`, `?sk_*` or the DOM at
+  load time; `sketch.js`, `sketch-panel.js`, `sketch5.css` and the presets do not land. The diff broke 11 guardrail tests:
+  no new sheet in `public/css/` (card and tappable rules go in `wall.css`, added, existing rules unchanged), no
+  `innerHTML`, no wholesale `style`, no person's name in a label, tap wiring tested by behaviour, not by source.
+- **Fenced tonight** (`loop/fenced.txt`; the cockpit's night C1b works on them at the same time): `galaxy/tour.js`,
+  `galaxy/show.js`, `galaxy/transport.js`, `public/galaxy.html`, `test/wall-galaxy-handle.test.mjs`, the Map tests,
+  `server/*`, `e2e/*`, `test/cockpit*`, `package.json`. A change a task needs there is written as a patch under
+  `docs/plans/wall/patches/` (create it) with one paragraph of why, and the task does what it can without it.
+  The card needs no new element in `galaxy.html`: `main.js` creates it under the stage as `fan.js` does today.
+- **Shared, not fenced**: this night owns `galaxy/touch.js`, the zoom/flight timings and hand-over eases in
+  `galaxy/director.js`, the selection levels (site → planet → moon) and the card. In `galaxy/main.js` change only
+  selection, card and look parts; the tour hold and the pane hooks stay; C1b changes the stale/board-down caption and tag
+  parts (do not build stale looks). `window.__cockpitView` and `data-wall-state` keep every name and value (additive only).
+- **Keep B237 and B239** (cockpit C1a): the idle minute counts from the tap; the hand-back to the tour starts with the
+  overview. `test/wall-galaxy-resume.test.mjs` and `test/wall-galaxy-show.test.mjs` pin them and stay green unchanged in
+  those assertions. Playwright is not installed on this VM, so `e2e/cockpit` (S-C1-01, S-SCR-0x) runs on `ci` only:
+  before changing a selector, state or event in `main.js`/`touch.js`, grep `e2e/cockpit/*.mjs` and `test/cockpit*` for it.
+- **Every tappable added or resized**: ≥ 48 px, a visible pressed state, `touch-action: manipulation` (cockpit D224).
+- **Colours**: `tokens.css` may hold only the accent and status hues as chromatic values (`test/design-guardrails.test.mjs`,
+  chroma > 0.02), and other sheets hold no colour literals. So the site tints (chroma 0.04-0.05) and the lifted ground live
+  as one frozen, documented table in `galaxy/palette.js` (WebGL numbers), reaching CSS (the card's 2 px edge) through
+  `el.style.setProperty('--…')` from that table; never a literal in `wall.css`. See `## For the owner`.
+- **Speed on the Surface** (owner, night 3): nothing may make `galaxy.html?demo=1&fx=beacon&perf=1` slower; judge by script
+  ms per frame and draw calls/triangles (`?perf=1`, `budget.js`), before/after in the task's notes, not by fps on this VM.
+- **Filming**: `film.mjs` needs the SwiftShader wrapper (`nights/night-1/PROGRESS.md` lines 19-22) and the large demo
+  (`demo-fleet.mjs --size large`); if `--cpu 4` stalls (night 4 r21), film at `--cpu 1` and say so. Touch films: a CDP
+  script with `Input.dispatchTouchEvent` (night 3 T14's note); every film script closes Chrome in a `finally` and writes
+  its pid to `$RUN_DIR`.
+- **Tests**: DOM tests on `test/helpers/fakedom.mjs`; page tests drive pointer events on a fake clock as
+  `test/wall-galaxy-touch.test.mjs` and `test/wall-galaxy-resume.test.mjs` do. `wall.html` keeps working.
+
+## Tasks
+
+- [ ] T1 (§7 Night 5 A1+A2) [ui] [variant:galaxy] Spacing half and the rosette, as defaults: in `galaxy/layout.js` arms,
+  gaps, `SITE_LIFT`, `MIN_SITE_GAP`, dust and `ARM_RIBBON`/`ARM_BAND` at 0.5x, a system's spread 0.75x; in `scene.js`
+  nebulae and the sun halo at 0.64x; a wider-wound two-arm spiral with a site every 72°, all sites level, only shown sites
+  taking slots (`galaxyLayout(nodes, aspect, shown)`, the sketch's `siteSpot`), the first site far enough out that an open
+  system never reaches the sun's halo; `camera.js overviewShot` frames the whole galaxy snugly — done when: layout tests pin
+  the 72° step, equal site heights, slots for shown sites only, and the nearest site's star farther from the sun than its
+  open reach plus the halo radius; an overview still of the large demo (`?at=overview`) fills the frame with all five sites
+  and no site name off screen.
+- [ ] T2 (§7 Night 5 A3) [ui] [variant:galaxy] Size is what it carries: a planet's radius factor 0.8 + 0.35·log2(1+n) of
+  what is below it, a star's 0.8 + 0.2·log2(1+planets), clamped 0.8x-2.2x, never by status (a pure `carryScale` in
+  `layout.js` or `scene.js`); a big sphere takes more segments so it never looks faceted, within the triangle budget — done
+  when: tests pin the formula, both clamps and that a status change leaves the size alone; `?perf=1` triangles at the
+  overview before/after in the notes (no rise past night 4's numbers); a still of `?at=hv1&open=1` shows smooth large bodies.
+- [ ] T3 (§7 Night 5 A4) [ui] [variant:galaxy] Colour: each site a quiet warm-set tint (teal, indigo, plum, sage; the
+  sketch's `TINT_SETS.warm`) in its calm nebula and dust; "lift": calm bodies and names a step lighter (stone) on a deep
+  blue-black ground; a warmer, softer sun. One frozen table in `galaxy/palette.js` (see the colour note above); status hues
+  stay the loudest thing on screen, no neon — done when: palette tests find every tint's chroma below every status hue's and
+  the lifted calm text still under `--text-1`, a scene test finds calm nebulae tinted and trouble nebulae in the status hue,
+  `test/design-guardrails.test.mjs` green; a still of the overview with HV1 in crit shows the red cluster as the loudest thing.
+- [ ] T4 (§7 Night 5 A5) [ui] [variant:galaxy] Depth haze: distance fog from 0.6x to 2.6x of the look-at distance on calm
+  materials only; status-hued materials and trouble nebulae never fogged (`scene.js`) — done when: a scene test finds `fog`
+  off on every status-hued material and trouble nebula and on for calm bodies and dust, the fog range following the look-at
+  distance; a still of `?at=hv2&open=1` shows the far side fade and the crit member at full strength.
+- [ ] T5 (§7 Night 5 A6) [ui] [variant:galaxy] Gentler motion: open/fold 2800 ms on smootherstep (`layout.js OPEN_MS`,
+  `ease`), the target opening from 0.32 of a flight (`camera.js FLIGHT.openAt`), held drift 0.6x (`SITE_SHOT`), dust turn
+  0.6x (`still.js dustTurn`) — done when: tests pin the constants and that smootherstep has zero slope at both ends; the
+  tour and touch page tests stay green (timings they assert updated only where they read these constants); a
+  `?demo=1` film shows an opening without a jerk at its start or end.
+- [ ] T6 (§7 Night 5 B1) [ui] [variant:galaxy] System room: planets spread 1.4x with a minimum gap of 13 % of the system's
+  reach (the sketch's `spaceOut` in `layout.js`); what hangs below a planet moves with it; open-system labels never collide
+  (`labels.js`), HV1's builders cluster the test case — done when: a layout test on the large fixture finds every planet pair
+  in an open HV1 at least 0.13 of its reach apart and each child at its planet's offset, a labels test finds no two shown
+  name boxes overlapping with HV1 open at 1368 px, and a still of `?at=hv1&open=1` shows every builder name whole.
+- [ ] T7 (§7 Night 5 B2, folded) [ui] [variant:galaxy] Moons in the model and the scene: services under a room, lanes under a
+  builder, sessions under a lane become moons (pure: which nodes are moons of which planet, from the map model); folded, they
+  sit tight to their planet at half size, unnamed, not tappable (`scene.js` `MOON`, `moonOrbit`); the large demo carries
+  lanes and sessions under at least two builders (`test/helpers/demo-hub.mjs`, if missing) — done when: tests pin the moon
+  tree for the large fixture, folded moons inside their planet's reach at half size, none in `labels`' list nor in the hit
+  points; the overview's draw calls/triangles before/after in the notes.
+- [ ] T8 (§7 Night 5 B2, open) [ui] [variant:galaxy] Opening moons: tapping a planet (or one of its moons) opens them onto a
+  ring round it with the site's open time and easing, tilted toward the camera, a faint orbit line and thin tethers; about
+  110 px apart on screen, at least 72 px from the planet; named and tappable while open; another planet's tap folds the
+  first's; no picker (Q19 when answered) — done when: a test with the camera at a picked builder finds its moons' screen
+  points ≥ 72 px from the planet and ≥ 100 px apart, named and in the hit points only while open, folded again when another
+  planet is picked; a still of an open lane ring on the large demo.
+- [ ] T9 (§7 Night 5 B3) [ui] [variant:galaxy] Picking a planet or moon flies the camera about 45 % closer with the planet
+  left of centre, so the ring and the card use the empty screen (`camera.js`, `main.js` selection) — done when: a page test
+  on a fake clock taps a planet and finds, at the flight's end, the camera distance about 0.55 of the system hold's and the
+  planet's screen x in the left 45 % of the frame with its open ring inside the frame; a still shows it.
+- [ ] T10 (§7 Night 5 B2, contract) [ui] [variant:galaxy] Moons join the page contract, additive only: `__cockpitView`'s
+  `screenOf` and `emphasis` accept a moon id, a show `fly_to` on a moon frames it as planet → system does now (site, then
+  its planet opened, then the moon), every existing name and value unchanged; `data-wall-state` gains no renamed value. If
+  `fly_to` on a moon needs `show.js` (fenced), write the patch under `docs/plans/wall/patches/` and do the `main.js` side —
+  done when: a test finds `screenOf(moonId)` a point while its ring is open, `emphasis` for a moon, and a `flyTo` of a moon id
+  ending with its site held and its planet's ring open; `wall-galaxy-show` and `cockpit-wall-hold` tests green unchanged.
+- [ ] T11 (§7 Night 5 C1) [ui] [variant:galaxy] Hit targets in screen space: 48 px for a finger, 28 px for a mouse (by
+  `pointerType`), the nearest centre wins (`touch.js` the sketch's `hitNearest`, `hitRadius`). The owner wants no picker, so
+  the fan (`fan.js`, its `main.js` wiring, `test/wall-galaxy-fan.test.mjs`, its `wall.css` rules unchanged or left unused)
+  goes; night 4's T35 and T61 close with it — done when: tests find the nearest of two members under one finger picked,
+  a mouse 30 px off a member picking nothing and a finger 30 px off picking it, no fan module or row left, and the touch page
+  tests green.
+- [ ] T12 (§7 Night 5 C2) [ui] [variant:galaxy] Inside an open system a drag orbits it round its own star (both axes, pitch
+  clamped; the sketch's `orbitRound`) and it stays open; the first drag does not shift the system on screen (no aim offset);
+  a tap on empty space does nothing — done when: a page test on a fake clock opens a site, drags 200 px each way and finds the
+  site still held and open, the star's screen point within 2 px of where it was, pitch within its clamp, and an empty tap
+  changing neither mode, selection nor camera.
+- [ ] T13 (§7 Night 5 C3) [ui] [variant:galaxy] Back, one step at a time (moon → planet → system → overview): right-click,
+  double-click/double-tap on empty space, or the Back control; Back from a planet folds its moons and keeps the camera where
+  the finger turned it; zoom-out flights 3000 ms on a soft ease (`director.js` timings); double-click from a system goes to
+  the overview as now — done when: a page test walks moon → planet → system → overview with each Back kind and asserts the
+  step, the folded moons, the kept pose from a planet, and each zoom-out flight's duration 3000 ms; keep B239.
+- [ ] T14 (§7 Night 5 C5) [ui] [variant:galaxy] The `createReturn` leftover (`touch.js`, `main.js`): Back returns to the
+  explore pose a person left, never to a pose a show's `flyTo` left — done when: a page test explores to a pose, lets a show
+  fly elsewhere and end, presses Back and finds the camera at the explore pose; the existing return tests green.
+- [ ] T15 (§7 Night 5 C4) [ui] [variant:galaxy] The overview turn: 0.0032 rad per px, the camera follows with a short lag
+  (about 70 ms), a longer gentler coast (τ about 650 ms), a capped fling speed (`touch.js`, the sketch's `SOFT.perPx`,
+  `tauMs`, `follow`, `maxVel`) — done when: a test drags 100 px and finds 0.32 rad of target turn, the camera behind the
+  target during the drag, the coast decaying with the τ, and a 3000 px/s fling capped; the touch tests green.
+- [ ] T16 (§7 Night 5 C, done-when) [ui] [variant:galaxy] The night's touch walk as one page test and one film: tap site →
+  tap planet (moons open) → drag-turn (system stays open, star stays put) → empty tap (nothing) → tap moon → Back ×3 →
+  overview, with the flight durations asserted (`test/wall-galaxy-walk.test.mjs`); then a CDP touch film of the same walk
+  on the large demo — done when: the test passes on a fake clock and the film's sheet shows each step (frames named in the
+  notes).
+- [ ] T17 (§7 Night 5 D1) [ui] [variant:galaxy] The card's place: a new `galaxy/card.js` with a pure `cardPlace` (beside the
+  selected node with a visible leader line; docked to the right edge when it does not fit beside the node or would cover the
+  open system's planets; never over the fleet line or the tag, `hud.covers()`) and the DOM shell `main.js` creates under the
+  stage on a selection, replacing the left-hand sheet for a tapped node; the caption and the fleet line stay (Q20 when
+  answered) — done when: `cardPlace` tests (fits beside, docks when off the edge, docks when it would cover a planet, clear
+  of fleet line and tag), and a page test taps a planet and finds a card, no sheet, the leader joining card and node.
+- [ ] T18 (§7 Night 5 D2) [ui] [variant:galaxy] The card's content: status dot, name, type chip, parent path (`hv1 › vm-a`),
+  a 48 px ×; 3-4 key stats from the model where only the off value takes a status hue; a "Below" strip of child chips (tap:
+  select and fly there; `+N`); a pure `describe(sel, model)` (the sketch's `card.js describe`) — done when: `describe` tests
+  for a site, a room, a builder, a service moon and a lane moon (path, stats, below, `+N`), a test that a calm stat has no
+  hue, and a page test tapping a Below chip selecting that node.
+- [ ] T19 (§7 Night 5 D3+D4) [ui] [variant:galaxy] The card's actions per type, at most 4 and `…`: site (Open, What's below,
+  Board, Pin; `…` Proxmox link), room (Logs, Board, What's below, Pin; `…` Fly to, Terminal link, Proxmox link), builder (Run
+  log, What's below, Board, Pin), service moon (Logs, Board, Pin, Fly to), lane moon (Log, PR, Pin, Fly to). Navigation
+  works; links open existing app views or are absent (never a dead button). Fleet actions (restart a service, pause a builder
+  or lane, snooze or ack) are disabled outline buttons tagged `later` in their slots; a tap says so; nothing touches the fleet,
+  nothing heavier ever appears — done when: tests per type list the buttons in order, find no button without a handler or an
+  existing target, every `later` button disabled and saying so on tap, and no network call from any card button.
+- [ ] T20 (§7 Night 5 D5+D6) [ui] [variant:galaxy] The card's manners: grey glass from tokens, the site tint only as a 2 px top
+  edge, a 150 ms fade, the galaxy dimmed slightly behind it; closes on ×, Esc, an empty tap, a second tap on its node, a
+  sideways swipe, or 60 s idle (then the tour may resume as now, B237); a labelled region, real named buttons, focus moves in
+  on open and back on close — done when: a page test on a fake clock closes it each of the seven ways, finds focus inside on
+  open and back on the opener on close, the region's label and every button's name; `wall.css` gains rules only; a still of
+  `?at=hv1&open=1` with a builder picked shows card, leader and ring together.
+- [ ] T21 (§7 Night 5 E) `docs/wall.md`: the look (the defaults and why), moons, the card (actions, `later` buttons), the
+  gestures (mouse and touch: right-click, double-click/tap, drag in a system, Back steps); not the "Show commands" or handle
+  sections; demo data for every feature named — done when: `test/wall-docs.test.mjs` (extended) finds the new sections and
+  every URL switch it names in `galaxy/main.js`, and the hygiene test is green.
+- [ ] T22 (§7 Night 5 E) The cockpit's handover: `docs/plans/wall/patches/README.md` lists every change this night made in
+  shared files (`galaxy/main.js`, `public/css/wall.css`, `galaxy/director.js`, `galaxy/touch.js`) with its commit and what it
+  touches, and every patch written for a fenced file; the 3 m check (an overview still shrunk to 3 m) and a `?demo=1` film
+  of the new defaults — done when: the list names every commit of the night that touched those files (`git log` check in the
+  notes) and the film's sheet is read in the notes.
+
+## Research questions
+
+- [ ] Q19 Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
+  Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
+  picker (spacing on screen, a ring or fan-out on selection, hit radius vs drawn size, labels on and off), how a selection
+  steps down and back up (site → planet → moon) and how the camera frames each step. Touch guidelines already answered in
+  night 1's Q6 and night 3's Q12: do not repeat them. 2-3 concrete proposals with a cost guess — for T8, T11
+- [ ] Q20 How a node card stays out of the way on a 3D view: anchored callouts with leader lines vs docked panels in games
+  and 3D tools (Stellaris's outliner and selection panel, Homeworld, Google Earth, CAD/BIM viewers, map apps' place cards):
+  when to dock, how a card avoids covering what it describes while the camera moves, how it follows a moving anchor without
+  jitter, and how it closes. `research/stellaris-ui-brief.md` already covers Stellaris's panels: read it, do not repeat it —
+  for T17, T20
+
+## Later
+
+Night 4's open tasks (`nights/night-4/PROGRESS.md`, full text there; its own `## Later` notes stay in that file):
+- night 4's T22 A new trouble is a moment (the banner types its new subject once after a rise).
+- night 4's T23 Crit and warn differ at 3 m by more than hue (crit nebula ≥ 1.5x warn, warn does not breathe).
+- night 4's T24 A site name is never eaten by its own cluster at the overview (re-check after T1's spacing).
+- night 4's T25 The held crit is not at the frame's edge (touches the tour hold, which stays as it is tonight).
+- night 4's T26 No red line without a name (hyperlanes grey at every zoom).
+- night 4's T27 The tag is a cover for map labels (re-check after T1's framing).
+- night 4's T28 One ranking for the banner and the tour (needs `tour.js`, fenced tonight: a patch if taken).
+- night 4's T29 A down or crit member keeps its red at every step and age.
+- night 4's T30 A held crit does not blank to update a number.
+- night 4's T31 A pinch cannot lose the galaxy (`⌂ ALL`).
+- night 4's T32 A palm does not wake.
+- night 4's T34 The overview is the cheapest frame it can be (dot geometry folded; T2 and T7 change the counts).
+- night 4's T36 The wake does not force layout.
+- night 4's T47 The afterglow ring is never read as live trouble (dashed, starting amber).
+- night 4's T48 The kicker never counts itself (needs `tour.js`, fenced tonight).
+- night 4's T49 The typing cursor never stands alone.
+- night 4's T50 Trouble leaving is a moment too (`CLEARED`).
+- night 4's T51 The agent has a voice: a show takes the caption plate (needs `show.js`, fenced tonight).
+- night 4's T52 Show cards and banner keep out of the way (needs `show.js`, fenced tonight).
+- night 4's T54 The camera does not leave a crit while its plate still names it (tour hold, stays tonight).
+- night 4's T55 The banner corner is never empty while trouble stands.
+- night 4's T56 A countdown in the scene is quiet.
+- night 4's T57 One countdown, never the loudest mover on a trouble plate.
+- night 4's T58 Late says late (`LATE 13 MIN`).
+- night 4's T59 A pinned card outlives its fact (needs `show.js`, fenced tonight).
+- night 4's T60 A finger beats a show for the camera only (needs `show.js`, fenced tonight).
+- night 4's T62 The wake is not silent (manual line and control within 200 ms).
+- night 4's T63 The show does nothing while nothing is due (needs `show.js`, fenced tonight).
+- night 4's T64 The sweep's news costs nothing per frame.
+
+Closed by this night's plan (moot):
+- night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
+  buttons and chips are 48 px by the night's tappable rule.
+- night 4's T35 An open fan writes only what changed, and T61 The fan keeps off trouble: the owner wants no picker; the fan
+  goes with T11 (nearest centre wins, roomier systems in T6).
+
+Night 6 (README §7, planned, not this night): the alert tray, the outliner with an "all green" seal, the situation log, the
+slim top bar of fleet totals, map modes.
+
+## For the owner
+
+- (planner, colours) The plan says the site tints come "from tokens through `palette.js`", but the design guardrail
+  (`test/design-guardrails.test.mjs`) allows only the accent and status hues as chromatic tokens in `tokens.css` and no
+  colour literals in other sheets. Tonight the tints and the lifted ground live as one documented table in
+  `galaxy/palette.js` (T3). If you want them as `--site-tint-*` tokens, that is a guardrail change for you to make.
+- (planner, tooling) Playwright is not in `node_modules` on this VM, so the cockpit's `e2e/cockpit` specs (S-C1-01,
+  S-SCR-0x) are checked only by `ci` on the PR; rounds keep the unit tests (`test/cockpit*`, the resume and show tests) green.
+- (planner, run) Rounds 1-6 of this run ended with no work (the loop stopped on `no-progress` at 21:35, tests not green);
+  the run restarted at 22:07 with tests green (4845 pass), and this plan is round 7's.
+
+## Reviews
+
+## Scores
+
+## Morning
