@@ -32,10 +32,10 @@
 
 import * as THREE from '../../../vendor/three/three.module.js';
 import { ease, OPEN_MS } from './layout.js';
-import { overviewShot, siteShot, SIZE, FOV } from './scene.js';
+import { moonRingPx, overviewShot, siteShot, SIZE, FOV } from './scene.js';
 import { TIMING } from '../tour.js';
 import { flight as mapFlight } from '../../core/motion.js';
-import { blendRect, ndcOf, standBack } from './framing.js';
+import { blendRect, ndcOf, panShot, standBack } from './framing.js';
 import { sizeOf } from './stage.js';
 
 /**
@@ -258,6 +258,37 @@ export function zoomedSiteShot(site, heldMs, zoom, view = null) {
 }
 
 /**
+ * A picked planet's shot (night 5 B3): the camera `closer` of the system
+ * hold's distance from what it looks at, along the hold's own line of sight
+ * (so the system turns with the hold's drift, never swings), the planet at
+ * `at` of the way across the free box from its left, so its ring and the
+ * card take the box's empty right side; never nearer the box's edge than its
+ * ring and `padPx` (a moon and its name), never past the box's middle. Left
+ * of the frame's middle is under the caption plate while a sheet stands
+ * (hud.js sheetCaption), so "left" is of the free box (framing.js freeRect).
+ */
+export const PICK = Object.freeze({ closer: 0.55, at: 0.3, padPx: 64 });
+
+/**
+ * `shot` (the system hold, `{ pos, look }`) brought in on the planet at `p`
+ * (world): PICK. `view`: `{ fov, aspect, H }` (css px high) and `free` (the
+ * box, fractions; the whole frame when null), `ringPx` the planet's open
+ * ring's radius on screen (0 without moons). Pure.
+ */
+export function planetShot(shot, p, { fov = FOV, aspect = 16 / 9, H = 900, free = null, ringPx = 0 } = {}, pick = PICK) {
+  const dir = { x: shot.pos.x - shot.look.x, y: shot.pos.y - shot.look.y, z: shot.pos.z - shot.look.z };
+  if (!(Math.hypot(dir.x, dir.y, dir.z) > 0) || !p) return shot;
+  const d = pick.closer;
+  const near = { pos: { x: p.x + dir.x * d, y: p.y + dir.y * d, z: p.z + dir.z * d }, look: { x: p.x, y: p.y, z: p.z } };
+  const b = free ?? { x0: 0, y0: 0, x1: 1, y1: 1 };
+  const W = H * aspect, room = Math.max(0, ringPx) + pick.padPx;
+  const x0 = b.x0 * W, x1 = b.x1 * W, y0 = b.y0 * H, y1 = b.y1 * H;
+  const x = Math.min((x0 + x1) / 2, Math.max(x0 + room, x0 + pick.at * (x1 - x0)));
+  const y = y1 - y0 > 2 * room ? Math.min(y1 - room, Math.max(y0 + room, (y0 + y1) / 2)) : (y0 + y1) / 2;
+  return panShot(near, p, { x: (2 * x) / W - 1, y: 1 - (2 * y) / H }, fov, aspect);
+}
+
+/**
  * The camera over `galaxy` (scene.js `createGalaxyScene`: `world`,
  * `setOpen`, `camera`). Call `frame(now)` before the scene draws and
  * `drawn()` after it. `flight` is injectable for tests; `still` holds the
@@ -267,8 +298,13 @@ export function zoomedSiteShot(site, heldMs, zoom, view = null) {
  * that comes or goes moves the camera, never cuts it. `fitOverview(shot,
  * sites, now)` (T19, overview.js createOverviewFit) slides the overview so
  * no site sits under the words; without it the overview is as scene.js gives it.
+ * A site move with `{ member }` (night 5 B3, `focus`/`cut`'s options) flies on
+ * to a planet in it (a moon: its planet), planetShot in `pickFree()`'s box
+ * (the words and the touch controls; `free()`'s without it), eased as `free`'s.
+ * A move between two shots of the same system keeps its drift's clock, so the
+ * system never swings back to the drift's start.
  */
-export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, free = null, fitOverview = null, steer = false } = {}) {
+export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, free = null, pickFree = null, fitOverview = null, steer = false } = {}) {
   // What the camera wants: the overview or one site, since `t0` (ms).
   let want = { kind: 'overview', t0: null };
   let from = null; // the pose the current flight left from
@@ -279,6 +315,8 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
   let version = 0;
   const drawCbs = new Set();
   let freeNow = null; // the free box the shot uses, eased toward `free()`
+  let pickNow = null; // the box a picked planet's shot uses, eased toward `pickFree()`
+  let heldFrom = null; // when the held system's drift began (page ms): kept across its own shots
   let flying = null; // the flight under way: `{ k, to }` (T12, fx=warp), null at rest
 
   const sites = () => galaxy.world?.sites ?? [];
@@ -297,10 +335,23 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
       const s = siteOf(want.id);
       if (s) {
         const view = freeNow ? { fov: galaxy.camera.fov, aspect: galaxy.camera.aspect, free: freeNow } : null;
-        return zoomedSiteShot(s, want.cut ? 0 : Math.max(0, now - want.t0 - (want.ms > 0 ? want.ms : flight.ms)), want.zoom, view);
+        const shot = zoomedSiteShot(s, want.cut ? 0 : Math.max(0, now - heldFrom), want.zoom, view);
+        return want.member != null ? pickedShot(s, shot) : shot;
       }
     }
     return overview(now);
+  };
+
+  // A planet's shot in its system (B3): a moon's is its planet's, so a tap on the ring keeps the camera.
+  const pickedShot = (s, shot) => {
+    const m = s.members.find((x) => x.id === want.member);
+    const host = m?.moon ? m.moon.host : m;
+    if (!host?.planet || !host.mesh) return shot;
+    const n = s.members.filter((x) => x.moon?.host === host).length;
+    const { H } = sizeOf(galaxy);
+    return planetShot(shot, host.mesh.position, {
+      fov: galaxy.camera.fov, aspect: galaxy.camera.aspect, H, free: pickNow ?? freeNow, ringPx: n ? moonRingPx(n) : 0,
+    });
   };
 
   // The star a shot is about: the held site's, or the sun for the overview.
@@ -329,13 +380,16 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     from = still || next.cut ? null : pose;
     fromEnd = from ? endFor(from, [starOf(want), fromEnd]) : null;
     fromId = want.kind === 'site' ? want.id : null;
+    const same = next.kind === 'site' && want.kind === 'site' && next.id === want.id && heldFrom != null && !next.cut;
     want = { ...next, t0: null };
+    if (!same) heldFrom = null; // set on the move's first frame, when its flight ends
     version += 1;
   };
 
   const frame = (now) => {
     if (galaxy.world == null) return null;
     if (want.t0 == null) want.t0 = now;
+    if (heldFrom == null && want.kind === 'site') heldFrom = want.t0 + (want.ms > 0 ? want.ms : flight.ms);
     // Slow frames (a small tablet under load) still open a system on time;
     // only a long gap (a hidden tab) is cut short.
     const dt = last == null ? 0 : Math.min(MAX_STEP_MS, now - last);
@@ -343,6 +397,8 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     const box = typeof free === 'function' ? free() : null;
     // Still mode moves nothing on its own: a held cut takes a new box at once.
     freeNow = box ? blendRect(freeNow, box, freeNow && !still ? 1 - Math.exp(-dt / FREE_EASE_MS) : 1) : null;
+    const pbox = typeof pickFree === 'function' ? pickFree() : null;
+    pickNow = pbox ? blendRect(pickNow, pbox, pickNow && !still ? 1 - Math.exp(-dt / FREE_EASE_MS) : 1) : null;
     const p = from ? (now - want.t0) / (want.ms > 0 ? want.ms : flight.ms) : 1;
     const k = from ? ease(p) : 1;
     flying = from && p < 1 ? { k: p, to: want.kind === 'site' ? want.id : null } : null;
@@ -409,11 +465,14 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     return { x: (v.x + 1) / 2 * W, y: (1 - v.y) / 2 * H, unit };
   };
 
+  const memberOf = (opts) => (opts?.member != null ? { member: opts.member } : {});
+
   return {
     // `{ ms }`: a show's flight in its own time (c4 §2, showFlightMs); the tour's and a tap's are FLIGHT.ms.
-    focus: (id, zoom, opts) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom, ...(opts?.ms > 0 ? { ms: opts.ms } : {}) }); },
+    // `{ member }` (B3): on to that planet in it (a moon: its planet), PICK.
+    focus: (id, zoom, opts) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom, ...(opts?.ms > 0 ? { ms: opts.ms } : {}), ...memberOf(opts) }); },
     // No flight, no drift: on the site's shot from the next frame, its system open (T14, reduced motion).
-    cut: (id, zoom) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom, cut: true }); },
+    cut: (id, zoom, opts) => { if (siteOf(id) || galaxy.world == null) go({ kind: 'site', id, zoom, cut: true, ...memberOf(opts) }); },
     // `{ ms }` flies there in its own time (a first touch, night 3 T7, touch.js); the tour's is FLIGHT.ms.
     fit: (opts) => go({ kind: 'overview', ...(opts?.ms > 0 ? { ms: opts.ms } : {}) }),
     frame,

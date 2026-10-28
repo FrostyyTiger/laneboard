@@ -191,6 +191,7 @@ export function createDirector(cam, opts = {}) {
     for (const cb of cbs) cb({ source, call: name, args });
     cam[name](...args);
   };
+  const picked = (to) => (to.member != null ? [{ member: to.member }] : []);
   const play = (move) => {
     const { source, to, ms } = move;
     // The tour's legs are camera.js's own (its fit and focus fly FLIGHT.ms), as tour.js always called them.
@@ -199,10 +200,11 @@ export function createDirector(cam, opts = {}) {
     // A show's free pose (fitNodes, setCamera, an undo) is camera.js's `place`: any page, a cut in still mode.
     else if (to.kind === 'free' && source === 'show') call(source, 'place', to.pose, move.cut || to.cut ? { cut: true } : timed);
     else if (to.kind === 'free') call(source, 'fly', to.pose, timed);
-    else if (to.kind === 'site' && (move.cut || to.cut) && source !== 'tour') call(source, 'cut', to.id, to.zoom);
+    // A planet in it (night 5 B3, camera.js PICK): `{ member }` after the zoom, only when there is one.
+    else if (to.kind === 'site' && (move.cut || to.cut) && source !== 'tour') call(source, 'cut', to.id, to.zoom, ...picked(to));
     // A show flies in its own time (c4 §2, D68); a finger's tap and the tour's leg keep camera.js's.
-    else if (to.kind === 'site' && source === 'show' && timed) call(source, 'focus', to.id, to.zoom, timed);
-    else if (to.kind === 'site') call(source, 'focus', to.id, to.zoom);
+    else if (to.kind === 'site' && source === 'show' && timed) call(source, 'focus', to.id, to.zoom, { ...timed, ...picked(to)[0] });
+    else if (to.kind === 'site') call(source, 'focus', to.id, to.zoom, ...picked(to));
   };
   const step = (event) => {
     // `held()` first: asking touch.js may hand the page back to the tour (a nested handBack), which
@@ -215,15 +217,16 @@ export function createDirector(cam, opts = {}) {
     if (r.resume) o.resume(from);
     return r;
   };
-  const site = (id, zoom, cut = false) => ({ kind: 'site', id, zoom, ...(cut ? { cut: true } : {}) });
+  const site = (id, zoom, cut = false, member = null) => ({ kind: 'site', id, zoom, ...(cut ? { cut: true } : {}), ...(member != null ? { member } : {}) });
   const views = new Map();
   const as = (source) => {
     if (views.has(source)) return views.get(source);
     const ev = (to, ms) => ({ type: source, to, ...(Number.isFinite(ms) ? { ms } : {}) });
     const view = {
       ...cam,
-      focus: (id, zoom) => { step(ev(site(id, zoom))); },
-      cut: (id, zoom) => { step(ev(site(id, zoom, true))); },
+      // `{ member }`: a planet in the site (night 5 B3), camera.js's focus/cut option.
+      focus: (id, zoom, fo) => { step(ev(site(id, zoom, false, fo?.member))); },
+      cut: (id, zoom, fo) => { step(ev(site(id, zoom, true, fo?.member))); },
       fit: (fo) => { step(ev(OVERVIEW, fo?.ms)); },
       fly: (pose, fo) => { if (pose) step(ev({ kind: 'free', pose }, fo?.ms)); },
       steer: (pose) => {

@@ -253,8 +253,14 @@ export function boot() {
     marks: (sites) => siteMarks(sites, steps.site),
     ...(easeMs != null ? { easeMs } : {}),
   });
+  // A picked planet (night 5 B3, camera.js PICK) is framed clear of the touch controls too: its ring
+  // and their names never run under `‹ BACK` or the manual line. `kept` is fresh: freeBox() came first.
+  const pickBox = () => {
+    const { W, H } = galaxy.size();
+    return freeRect(W, H, [...kept.filter(Boolean), ...touchCovers()]);
+  };
   const cam = createGalaxyCamera(galaxy, {
-    still: reduced, free: freeBox, fitOverview: overviewFit(reduced, reduced ? 0 : null), steer: !park && !reduced,
+    still: reduced, free: freeBox, pickFree: pickBox, fitOverview: overviewFit(reduced, reduced ? 0 : null), steer: !park && !reduced,
   });
   const parkedOverview = overviewFit(false, 0);
   // `?pace=wall`: the demo's data at the normal, readable speed (the demo's own
@@ -535,7 +541,7 @@ export function boot() {
     left.leave(place, cam); // off the overview: where the finger had it is where back returns
     const w = cam.want();
     // In reduced motion the tour's site legs leave the camera on the overview: only a cut is there.
-    const there = w.kind === 'site' && w.id === id && (!reduced || w.cut);
+    const there = w.kind === 'site' && w.id === id && w.member == null && (!reduced || w.cut);
     if (!there && reduced) {
       finger.cut(id, TIMING.zoom);
       fade?.cut();
@@ -544,9 +550,16 @@ export function boot() {
     hud.open({ id, arriveMs: there || reduced ? 0 : FLIGHT.ms });
     place = placeOf(id);
   };
-  // A planet in an open system (T11) is asked first: the camera stays, its sheet comes at once.
+  // A planet in an open system (T11) is asked first: its sheet comes at once, and the camera flies
+  // about 45 % closer with the planet left in the free box, its ring and the card on the empty side
+  // (night 5 B3, camera.js PICK); a moon's planet stays framed, so a tap on its ring keeps the camera.
   const openPlanet = (id, site) => {
+    left.leave(place, cam);
     hud.open({ id, arriveMs: 0 });
+    if (reduced) {
+      finger.cut(site, TIMING.zoom, { member: id });
+      fade?.cut();
+    } else finger.focus(site, TIMING.zoom, { member: id });
     place = placeOf(site, id);
   };
   // One step back (T13): a planet's sheet gives way to its system's, a system to the overview.

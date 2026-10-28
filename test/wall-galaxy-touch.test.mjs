@@ -670,7 +670,7 @@ test('pointer events on the page: in an open system a tap on a planet opens the 
   createTaps(p.touch, {
     clock: p.now,
     pick,
-    // As main.js: a planet's sheet where the camera is; a site flies.
+    // A planet's sheet, a site flies (the camera's flight on to a planet, night 5 T9: wall-galaxy-pick).
     tap: (hit) => { if (hit?.site) opened.push(['planet', hit.id]); else if (hit) { p.cam.focus(hit.id, DEMO_TIMING.zoom); opened.push(['site', hit.id]); } },
   });
   p.run(200);
@@ -686,17 +686,15 @@ test('pointer events on the page: in an open system a tap on a planet opens the 
   p.run(FLIGHT.ms + 500);
   const planet = p.cam.screenOf('cloud-a');
   assert.ok(planet && planet.x > 0 && planet.x < 1600 && planet.y > 0 && planet.y < 900, 'the planet is on screen');
-  const want = p.cam.want();
   tapAt(32, planet);
   assert.deepEqual(opened.at(-1), ['planet', 'cloud-a']);
-  assert.deepEqual(p.cam.want(), want, 'the camera stays where it is');
 });
 
-test('galaxy/main.js wires planet taps (T11): members asked before sites, a planet opens where the camera is', () => {
+test('galaxy/main.js wires planet taps (T11): members asked before sites, a planet\'s sheet at once (its camera: night 5 T9, wall-galaxy-pick)', () => {
   const js = read('js/wall/galaxy/main.js');
   const pick = js.slice(js.indexOf('pick: (x, y) =>'), js.indexOf('tap: (hit)'));
   assert.ok(pick.indexOf('memberPoints(') >= 0 && pick.indexOf('memberPoints(') < pick.indexOf('tapPoints('), 'members first');
-  assert.match(js, /const openPlanet = \(id, site\) => \{\s*hud\.open\(\{ id, arriveMs: 0 \}\);/);
+  assert.match(js, /const openPlanet = \(id, site\) => \{\s*left\.leave\(place, cam\);\s*hud\.open\(\{ id, arriveMs: 0 \}\);/);
   assert.match(js, /if \(hit\?\.covered\) return; if \(hit\?\.site\) openPlanet\(hit\.id, hit\.site\); else if \(hit\) openSite\(hit\.id\); else goBack\(\);/);
 });
 
