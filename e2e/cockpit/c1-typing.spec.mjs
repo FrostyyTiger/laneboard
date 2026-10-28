@@ -279,7 +279,17 @@ test('S-C1-18 A prompt the room never confirms is not sent again on its own', as
         await expect(p.locator('[data-cockpit-conversation] .ck-turn')).toHaveCount(0);
       });
       await test.step('the viewport at 1368x532: by 0.1 s data-keyboard="up", the input y 460-524', async () => {
+        // The 0.1 s counts from the page's own resize event: setViewportSize resolves before
+        // Chromium dispatches it (next rendering step), and a frame asked for after runFor
+        // would wait on the paused page clock.
+        await p.evaluate(() => {
+          window.__resized = false;
+          const seen = () => { window.__resized = true; };
+          window.visualViewport.addEventListener('resize', seen, { once: true });
+          window.addEventListener('resize', seen, { once: true });
+        });
         await p.setViewportSize({ width: 1368, height: 532 });
+        await expect.poll(() => p.evaluate(() => window.__resized), 'the page saw the resize').toBe(true);
         await p.clock.runFor(100);
         await expect(p.locator(':root')).toHaveAttribute('data-keyboard', 'up', { timeout: 1 });
         const r = await rectOf(p, INPUT);
