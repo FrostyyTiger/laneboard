@@ -1,6 +1,6 @@
 // C1, build 11: typing and sending (spec c1-talk.md §7, §10 E1; protocols.md §3.1; D30, D31).
-// The room under test and the fake agent on script `c1-typing`, clock `real`; the page's
-// sent and received frames recorded off the room link.
+// The room under test and the fake agent on script `c1-typing`, clock `real` (S-C1-18: the
+// page clock, below); the page's sent and received frames recorded off the room link.
 import { test, expect, cockpitDecided, rectOf } from './fixtures.mjs';
 
 /** Every frame on the room link, both ways, parsed: `{dir: 'sent'|'received', msg}`. */
@@ -164,5 +164,175 @@ test('S-C1-15 Too long a prompt cannot be sent', async ({ page, room, fakeAgent 
     await expect(page.locator(LINE)).toHaveCount(0);
     expect(promptsSent(frames)).toEqual([]);
     expect(fakeAgent.log().filter((l) => l.kind === 'prompt')).toEqual([]);
+  });
+});
+
+// S-C1-18 runs on the page clock (`page.clock.runFor`), the room's clock `manual` and moved
+// with it in 10 s steps so its heartbeat keeps the link live past the 25 s silence (build B187).
+const NOT_SENT_LINE = 'Not sent: the room did not confirm within 5 s.';
+const CONVO = '[data-cockpit-conversation] .ck-convo';
+
+/** The page's clock, then the room's, in steps of at most 10 s, each step's heartbeat heard. */
+async function advanceBoth(page, room, frames, ms) {
+  for (let left = ms; left > 0;) {
+    const step = Math.min(10_000, left);
+    left -= step;
+    await page.clock.runFor(step);
+    const beats = frames.filter((f) => f.dir === 'received' && f.msg?.type === 'heartbeat').length;
+    const r = await room.control('POST', '/clock', { advanceMs: step });
+    expect(r.status, `the room's clock moved ${step} ms`).toBe(200);
+    if (step === 10_000) {
+      await expect.poll(() => frames.filter((f) => f.dir === 'received' && f.msg?.type === 'heartbeat').length).toBeGreaterThan(beats);
+    }
+  }
+}
+
+/**
+ * One run's Given and When: a fresh page on the page clock, the pane open with the input not
+ * focused, the room armed to drop the next prompt; `restart the tour` typed and SEND tapped at
+ * t = 0. Returns the page and its recorded frames.
+ */
+async function sendDropped(context, room) {
+  const page = await context.newPage();
+  const frames = recordFrames(page);
+  await page.clock.install();
+  await page.goto(`${room.url}/#/map`);
+  await cockpitDecided(page);
+  await expect(page.locator(':root')).toHaveAttribute('data-cockpit', 'live');
+  await page.locator('[data-cockpit-open]').tap();
+  await expect(page.locator(':root')).toHaveAttribute('data-pane', 'open');
+  expect(await page.evaluate((sel) => document.activeElement === document.querySelector(sel), INPUT), 'the input not focused').toBe(false);
+  const r = await room.control('POST', '/drop', { what: 'next-prompt' });
+  expect(r.status).toBe(200);
+  expect(r.body).toEqual({ armed: true });
+  await page.locator(INPUT).tap();
+  await page.keyboard.type('restart the tour');
+  await page.locator(SEND).tap();
+  await expect(page.locator('[data-turn-delivery="sending"]')).toHaveCount(1);
+  return { page, frames };
+}
+
+/** t = 5 s on the page clock: the block's `NOT SENT`, the line, `RETRY` and `EDIT`. */
+async function expectNotSent(page) {
+  await page.clock.runFor(4_900);
+  await expect(page.locator('[data-turn-delivery="sending"]'), 'still SENDING at 4.9 s').toHaveCount(1);
+  await expect(page.locator('[data-turn-error="not-sent"]')).toHaveCount(0);
+  await page.clock.runFor(100);
+  const block = page.locator('[data-cockpit-conversation] .ck-turn').last();
+  await expect(block.locator('[data-turn-label]').first()).toHaveText(/^YOU · \d\d:\d\d · NOT SENT$/);
+  await expect(block.locator('[data-turn-delivery="not-sent"]')).toHaveCount(1);
+  const line = page.locator('[data-turn-error="not-sent"]');
+  await expect(line).toContainText(NOT_SENT_LINE);
+  await expect(line.getByRole('button', { name: 'RETRY' })).toBeVisible();
+  await expect(line.getByRole('button', { name: 'EDIT' })).toBeVisible();
+}
+
+/** Tap `EDIT` and read, in the tap's own click task (the same frame), the focus and the caret. */
+async function tapEdit(page) {
+  await page.evaluate((sel) => {
+    window.__afterEdit = null;
+    document.addEventListener('click', () => {
+      const input = document.querySelector(sel);
+      window.__afterEdit = {
+        focused: document.activeElement === input,
+        start: input.selectionStart,
+        end: input.selectionEnd,
+        value: input.value,
+        blocks: document.querySelectorAll('[data-turn-error="not-sent"]').length,
+      };
+    }, { once: true });
+  }, INPUT);
+  await page.locator('[data-turn-error="not-sent"]').getByRole('button', { name: 'EDIT' }).tap();
+  return (await page.waitForFunction(() => window.__afterEdit)).jsonValue();
+}
+
+const promptsBack = (frames) => frames.filter((f) => f.dir === 'received' && f.msg?.type === 'turn.prompt');
+
+test('S-C1-18 A prompt the room never confirms is not sent again on its own', async ({ page, room, fakeAgent }) => {
+  await room.start({ script: 'c1-typing' });
+  const context = page.context();
+  const received = () => fakeAgent.log().filter((l) => l.kind === 'prompt').length;
+  await page.close();
+
+  await test.step('first run: NOT SENT at 5 s, nothing more at 60 s, the tap on the conversation, EDIT, the keyboard', async () => {
+    const { page: p, frames } = await sendDropped(context, room);
+    try {
+      expect((await room.control('POST', '/clock', { mode: 'manual' })).status).toBe(200);
+      await expectNotSent(p);
+      await test.step('at t = 60 s nothing more has been sent: one prompt frame, no turn.prompt back, the room 0 turns', async () => {
+        await advanceBoth(p, room, frames, 55_000);
+        await expect(p.locator(':root')).toHaveAttribute('data-cockpit', 'live');
+        expect(promptsSent(frames).map((f) => f.msg.text)).toEqual(['restart the tour']);
+        expect(promptsBack(frames)).toEqual([]);
+        expect(received(), 'the room received no turn').toBe(0);
+        await expect(p.locator('[data-turn-error="not-sent"]')).toHaveCount(1);
+      });
+      await test.step('a tap on the conversation blurs the input (D132)', async () => {
+        const c = await rectOf(p, CONVO);
+        await p.touchscreen.tap((c.x1 + c.x2) / 2, c.y1 + 40);
+        expect(await p.evaluate((sel) => document.activeElement === document.querySelector(sel), INPUT)).toBe(false);
+      });
+      await test.step('EDIT: the block goes, `restart the tour` in the input, focused with the caret at 16 in the same frame', async () => {
+        const at = await tapEdit(p);
+        expect(at).toEqual({ focused: true, start: 16, end: 16, value: 'restart the tour', blocks: 0 });
+        await expect(p.locator(INPUT)).toHaveValue('restart the tour');
+        await expect(p.locator('[data-cockpit-conversation] .ck-turn')).toHaveCount(0);
+      });
+      await test.step('the viewport at 1368x532: by 0.1 s data-keyboard="up", the input y 460-524', async () => {
+        await p.setViewportSize({ width: 1368, height: 532 });
+        await p.clock.runFor(100);
+        await expect(p.locator(':root')).toHaveAttribute('data-keyboard', 'up', { timeout: 1 });
+        const r = await rectOf(p, INPUT);
+        expect(Math.abs(r.y1 - 460) <= 1 && Math.abs(r.y2 - 524) <= 1, `the input y 460-524, got ${JSON.stringify(r)}`).toBe(true);
+      });
+      expect(promptsSent(frames).length, 'still one prompt frame').toBe(1);
+      expect(received()).toBe(0);
+    } finally {
+      await p.close();
+      await room.control('POST', '/clock', { mode: 'real' });
+    }
+  });
+
+  await test.step('second run: RETRY sends it once, as a new turn', async () => {
+    const { page: p, frames } = await sendDropped(context, room);
+    try {
+      await expectNotSent(p);
+      expect(received()).toBe(0);
+      const first = promptsSent(frames)[0].msg.clientId;
+      await p.locator('[data-turn-error="not-sent"]').getByRole('button', { name: 'RETRY' }).tap();
+      await expect.poll(received, 'the room received one turn').toBe(1);
+      await expect.poll(() => promptsBack(frames).length).toBe(1);
+      const sent = promptsSent(frames);
+      expect(sent.map((f) => f.msg.text)).toEqual(['restart the tour', 'restart the tour']);
+      expect(sent[1].msg.clientId, 'E1 RETRY reuses the clientId (D95, D259)').toBe(first);
+      const blocks = p.locator('[data-cockpit-conversation] .ck-turn');
+      await expect(blocks).toHaveCount(2);
+      await expect(blocks.last().locator('[data-turn-delivery]')).toHaveCount(0);
+      await expect(blocks.last().locator('.ck-prompt')).toHaveText('restart the tour');
+      await p.clock.runFor(10_000);
+      expect(received(), 'sent once').toBe(1);
+      expect(promptsSent(frames).length).toBe(2);
+      await expect(p.locator('[data-turn-error="not-sent"]'), 'the failed block stays, the new one is not failed').toHaveCount(1);
+    } finally {
+      await p.close();
+    }
+  });
+
+  await test.step('third run: a draft `and hv1` is kept after the restored text, the caret at 16, two lines (103 px)', async () => {
+    const { page: p, frames } = await sendDropped(context, room);
+    try {
+      await expectNotSent(p);
+      await p.locator(INPUT).tap();
+      await p.keyboard.type('and hv1');
+      const at = await tapEdit(p);
+      expect(at).toEqual({ focused: true, start: 16, end: 16, value: 'restart the tour\nand hv1', blocks: 0 });
+      await expect(p.locator(INPUT)).toHaveValue('restart the tour\nand hv1');
+      const r = await rectOf(p, INPUT);
+      expect(Math.abs(r.y2 - r.y1 - 103.2), `two lines: ${r.y2 - r.y1} px`).toBeLessThanOrEqual(1);
+      expect(promptsSent(frames).length).toBe(1);
+      expect(received(), 'the room still has the one turn of the second run').toBe(1);
+    } finally {
+      await p.close();
+    }
   });
 });

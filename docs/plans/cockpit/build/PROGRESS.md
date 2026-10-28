@@ -129,7 +129,7 @@ that runs with a later slice, as §3.1 says.
 | S-C1-15 | Too long a prompt cannot be sent | T23 ✓ (89fc8cd) | Playwright | |
 | S-C1-16 | Sending during an answer steers it: queued, then taken into the same turn (pending Q-O1) | T25 | Playwright | |
 | S-C1-17 | STOP stops; a stuck stop is forced after 5 s | T26 | Playwright | |
-| S-C1-18 | A prompt the room never confirms is not sent again on its own | T23b (split from T23, B175) | Playwright | |
+| S-C1-18 | A prompt the room never confirms is not sent again on its own | T23b ✓ (split from T23, B175) | Playwright | |
 | S-C1-19 | The agent's process dies mid-turn | T27 | Playwright | |
 | S-C1-20 | Each error end of a turn has its exact message, in grey | T27 | Playwright | |
 | S-C1-21 | A long reply: its age shows, and it is drawn whole | T22 ✓ (d290312) | Playwright | |
@@ -220,6 +220,7 @@ What the slice itself says waits; nothing else moved here.
 - Review 35-security, finding 7: when T45 is built, include `token` right after `Authorization:` as well as `bearer`/`basic`.
 - Review 35-security, finding 3 (rest): a line in `docs/cockpit.md` (T44): "set `fleet.enforce` before you run a room behind serve" (on ingress with `enforce: false` a request with no login becomes `direct` user `local`).
 - `test/cockpit-link.test.mjs` S-SEC-06 failed once in a full `npm test` in round 33 (`frames.at(-1).screen` undefined: another frame after `welcome`) and passed in the next run and alone; unrelated to T20's files, noted in case it repeats.
+- From T23b's stills (T24b, T22b): with the keyboard up and a two-line input (103 px) the corner `CLOSE` opener (y 396-444 at 1368x532) straddles the input row's top border; it overlaps neither the input nor `SEND` (x 1288-1336 vs SEND x 1280-1344 y 460-524), but its rect against a grown row is for T24b's table.
 - S-C1-25's `by 300 ms: two lines, both ●` step failed once in round 40's full `test:cockpit` (no tool line drawn yet at 300 ms after the tap), then passed 8 of 8 alone and 18 of 18 in the c1-tools file 3 times; it never failed before T24, which adds no work on that path that I could find. Watch it; if it fails again, log the tool frames' arrival times against the tap.
 
 ## Spec fixes

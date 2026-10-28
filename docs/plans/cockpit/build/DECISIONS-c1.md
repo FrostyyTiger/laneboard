@@ -1036,3 +1036,10 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
 - B186 (T24) The pane re-reads the input's height (`grow()`) whenever the link's state is drawn,
   so the room-down status line coming or going changes the cap with the keyboard up at once,
   not at the next keystroke — spec: `c1-talk.md` §7.1 "The input grows" — overrule: `render()`.
+- B187 (T23b) S-C1-18's 60 s on the page clock run with the room's clock `manual` and moved with
+  it in 10 s steps (`advanceBoth`, each step's `heartbeat` heard before the next), so the link stays
+  live past the page's 25 s silence and "nothing more sent" is read on a live link, not after a
+  reconnect; the three runs are three fresh pages on one room, each re-arming `POST /drop`; "the
+  same frame" is read in a document `click` listener after `EDIT`'s own — because the scenario
+  names the page clock only and a 60 s jump with a real-time room drops the link (protocols.md §2.2)
+  — spec: `c1-talk.md` S-C1-18, `stand-ins.md` §1.1 advance(ms) — overrule: `c1-typing.spec.mjs`.
