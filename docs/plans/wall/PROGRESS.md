@@ -445,6 +445,23 @@ Notes for every builder round (planner, round 7):
   The cursor shows only while letters arrive; the name line's space stays reserved but empty until the first letter; the typing
   itself stays — done when: a fake-clock test finds no cursor element visible when the line is empty or fully typed and more
   than the settle time has passed, and the line's box height equal before and after the first letter.
+- [ ] T35 (triage, r30-touch #2) [ui] [variant:galaxy] The held star is never under a control: after picking STORAGE the
+  star of HV2 stands at about (1248, 228), inside `#galaxy-back` (1160-1286 × 151-231), so a finger on the star presses Back;
+  `k8s-1`/`k8s-2` sit under the manual line and Back too. T9's `pickBox` excludes Back and the manual line for the planet
+  and its ring, but not for the star and the other members. The pick framing's free box excludes Back and the manual line
+  with 24 px margin — done when: a test on the large demo finds, at every pick framing (each planet of each site), no
+  member's or star's screen point inside `#galaxy-back`'s box or the manual line's box; a still of STORAGE picked in HV2.
+- [ ] T36 (triage, r30-touch #3, second half; T13 does the levels) [ui] [variant:galaxy] Back never fires the tour on a
+  repeated tap: from a moon, three Back taps in a row reached the overview and the third turned into `▶ TOUR` and started the
+  tour (`r30-touch/14-back-3-150ms`, `driver: tour`). When Back has just reached the overview the control keeps its place and
+  its `‹ BACK` label but is inert for 1.5 s, then becomes `▶ TOUR` — done when: a fake-clock page test taps the control at
+  0, 300 and 1000 ms after Back lands on the overview and finds mode and driver unchanged, then a tap at 1600 ms starting the
+  tour; B239 (hand-back to the tour starts with the overview) stays green.
+- [ ] T37 (triage, r30-touch #5) [ui] [variant:galaxy] A slow press is not lost, and a press answers at once: a finger held
+  on HV1 for 450 ms did nothing (`TAP.ms` 300, no mark). `TAP.ms` 600 (the 12 px slop already separates a tap from a drag);
+  at `pointerdown` a 48 px ring under the finger fills while it stays down and fades on lift (a tappable's pressed state,
+  `wall.css` rule added, no colour literal) — done when: a test finds a 450 ms press with under 12 px of travel picking the
+  member, a 650 ms press picking nothing, and the ring present from `pointerdown` to lift; a touch film frame shows the ring.
 
 - [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
   Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
@@ -531,6 +548,18 @@ From `r25-skeptic.md` (past the 3-task limit):
 - r25 #15 Covered by T9; add to T9's test: every open moon and its lock inside the frame and off the controls (`‹ BACK`).
 - r25 fx: beacon straight up, short, crit age at its tip (same as r10/r15/r20); sweep: no wedge, a silent site gets one small outline mark; afterglow: demo clear hook or remove; warp, activity: skeptic says remove (see `## For the owner`).
 
+From `r30-touch.md` (past the 3-task limit):
+- r30 #1 Drag in an open system throws it off screen: T12 is the fix; until then hide the leader and lock when their target is out of frame. Add that to T12's test.
+- r30 #3 Back skips the planet step: T13 (levels); the inert-Back half is T36.
+- r30 #4 A palm turns the galaxy: `createGestures` ignores a pointer `isPalm` flags (down and move); Back to the overview lands on the fitted overview if the explore pose leaves a site out of frame.
+- r30 #6 The first touch has 1.5 s with no `MANUAL`/`▶ TOUR` (same as night 4's T62): show them in `easing` already.
+- r30 #7 Planet centres in an open system at least 64 px apart at the held and pick framings on every large-demo site (HV2's `media`/`gpu-box`, `k8s-*` miss it).
+- r30 #8 Tappable names in an open system at least 14 css px, condensed caps at `--text-2` (also r10 #6).
+- r30 #9 A tap on the plate whose subject is already selected does nothing; it flies only for a different subject.
+- r30 #10 In explore the banner keeps its overview size (T23) and is tappable only on its subject's name.
+- r30 fx: beacon pillar a target only within 24 px of base and tip; warp no streak in the first 300 ms after a tap; afterglow ring dashed, never closed or lock-sized; activity never draws a closed ring; sweep ends at `pointerdown`.
+- r30 3 m: `HV2`/`HOME` calm names do not read at a quarter width; the tag and the manual line not at all.
+
 Closed by this night's plan (moot):
 - night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
   buttons and chips are 48 px by the night's tappable rule.
@@ -567,6 +596,7 @@ slim top bar of fleet totals, map modes.
   None became a task (decision for the owner; `eclipse` and `dial` change what "down" and history look like).
 - (triage r20, `fx` candidates, taste) `warp`: drop it, or keep it only on a flight to a crit with the target's name in the streak's colour (scored wow 3, streaks not visible); the overview banner's second line as `1 DOWN · 3 ATTENTION · 1 WARN` in big condensed caps instead of `+4 MORE`; a beacon-style vertical mark above every crit visible from any camera, gone when it clears. No new `fx` task this review.
 - (triage r25, taste/direction, not tasks) The skeptic asks for removal: `fx=warp` (streaks not visible, wow 2), `fx=activity` (repeats `7 WORKING`, calm 3) and `fx=afterglow` unless a demo hook can show it; `fx=sweep` reduced to one outline mark on a silent site. Decision for the owner, nothing removed. Also: the galaxy's brightest lines should be the ones that carry data (outer ribbon dimmed, spokes removed, #11/#13).
+- (triage r30, idea, not a task) Steal `fx=beacon`'s idea for the pick framing: a short vertical tick over each tappable planet in an open system, so the aim point is visible even when two spheres touch. The tour hold's layout (system right, plate left, nothing under tag or Back) is the model for the pick framing's free box. No new `fx` task this review.
 
 ## Reviews
 
@@ -574,6 +604,7 @@ slim top bar of fleet totals, map modes.
 - r15-dreamer.md: 9 galaxy findings + 5 fx + 3 unforgettable + 3 m check; 3 became tasks (T26, T27, T28); #1 is night 4's T23 raised, #6 is night 4's T29 raised, #2/#3 and the three proposals to the owner, #5/#7/#8/#9 and fx notes under `## Later`.
 - r20-operator.md: 10 galaxy findings + 5 fx + 3 m check; 3 became tasks (T29 = #1+#2, T30 = #4, T31 = #3); #8 crit size covered by T26, #5/#6/#7 need fenced `tour.js` (patch notes under `## Later`), #9/#10 and fx notes under `## Later`, proposals under `## For the owner`.
 - r25-skeptic.md: 15 galaxy findings + 5 fx + 3 m check; 3 became tasks (T32 = #1+#9, T33 = #12, T34 = #6); #15 covered by T9 (test note under `## Later`), #3 covered by the card (T18) and r10 #10, the rest and the fx notes under `## Later`, removals under `## For the owner`.
+- r30-touch.md: 11 galaxy findings + 5 fx (one each) + 3 m check; 3 became tasks (T35 = #2, T36 = #3 second half, T37 = #5); #1 covered by T12 and #3 first half by T13 (notes added under `## Later`), #11 dropped (no fault), the rest and the fx notes under `## Later`, the beacon-tick idea under `## For the owner`.
 
 ## Scores
 
@@ -603,5 +634,11 @@ slim top bar of fleet totals, map modes.
 | 25 | skeptic | fx-afterglow | | | | | 2 | 7 | |
 | 25 | skeptic | fx-activity | | | | | 3 | 3 | |
 | 25 | skeptic | fx-sweep | | | | | 4 | 5 | |
+| 30 | touch | galaxy | 7 | 6 | 6 | 5 | 6 | 6 | 7 |
+| 30 | touch | fx-beacon | | | | | 5 | 6 | |
+| 30 | touch | fx-warp | | | | | 3 | 7 | |
+| 30 | touch | fx-afterglow | | | | | 2 | 7 | |
+| 30 | touch | fx-activity | | | | | 3 | 4 | |
+| 30 | touch | fx-sweep | | | | | 4 | 6 | |
 
 ## Morning
