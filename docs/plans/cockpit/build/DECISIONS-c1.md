@@ -1068,3 +1068,44 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   empty reply (S-C1-04 flaked on it) — because §3's table: `answering` is "reply text is streaming" —
   spec: `c1-talk.md` §3 — overrule: a turn that already shows text (a block before a tool line) still
   releases at once; hold per block if a later scenario reads `thinking`/`working` there.
+- B192 T25: with `stt.url: none` (D265) `SEND` sits in the talk button's rect, x 1280-1344, so the
+  taps S-C1-16 and S-C1-32's third run write at x 1232 (SEND's rect beside a talk button) go to
+  SEND's centre, (1312, 856) and (1312, 492); the slot's rects are asserted as x 1280-1344 — because
+  §3.1's C1 rule asserts the `none` layout in the talk button's place — spec: `slices.md` §3.1,
+  `c1-talk.md` S-C1-16, S-C1-32 — overrule: C2 moves them back to x 1232 / 1200-1264 with the talk button.
+- B193 T25 builds the slot's `send`/`wait`/`stop` faces (D268), the `stop` message with
+  `data-turn="stopping"` at the tap, and `Dropped by STOP.` on the receipt's cancels, because S-C1-16
+  (the press that stops nothing) and S-C1-29's second case (STOP, then a reload) need them; T26 keeps
+  the `STOPPED AT` line, the forced stop and S-C1-17/-27 — because one slot, one module, built once
+  — spec: `c1-talk.md` §8 — overrule: none needed, T26 only adds.
+- B194 A prompt sent during a turn is drawn at the tap as its own `SENDING` block at the end of the
+  conversation (B8); at the `queued` echo it moves into the running turn's `.ck-queue`, after
+  everything the turn draws, under its `[data-turn-id]`, as a snapshot's queued item is drawn
+  (S-C1-29: "the item under `[data-turn-id]`"); taken, it stands in `.ck-reply` before the first item
+  with `blockIndex` ≥ `atBlock` (placed at key `atBlock − 0.5`, send order kept); cancelled, it stays in
+  the queue with `NOT SENT` and its line — because one place per state, live and after a reload, and
+  text the agent writes before the take goes above it by construction — spec: `c1-talk.md` §8,
+  `protocols.md` §2.2, §3.4 — overrule: keep the queued block outside the turn (S-C1-29's selector changes).
+- B195 A turn started by a queued prompt (§8 "The turn ends first", D258) keeps the block's label time
+  (the send) and counts its age from the take on the page's clock, so its `AGENT` row comes at its
+  first item or 3 s after the take, not at once — because §8: "the `AGENT · HH:MM` label row comes as
+  a new turn's" — spec: `c1-talk.md` §8, §9 — overrule: count from the send (the row shows at once).
+- B196 The room's resend (D123) is armed for every prompt queued in a turn at that turn's
+  `turn.end`, on the room clock; at 10 s a turn running holds it (that turn's end arms it again);
+  a receipt's `stillQueued` excludes it; the resend's UUID maps to the same prompt, so a `taken` for
+  either takes it; the log line is `cockpit agent: prompt.resend <first uuid> <resend uuid>`; the
+  timers go at the child's exit and the bridge's close — because §3.4 "never resent while a turn
+  runs" and "a `taken` for either UUID takes it" — spec: `protocols.md` §3.4 — overrule: resend at
+  10 s even during a later turn.
+- B197 A `prompt.taken` keeps the pin rule in the same task (`grew()` right after the DOM change),
+  not at the next frame, so a `Dropped by STOP.` line with its buttons never ends below the fold with
+  `↓ NEW` showing (seen in the round's stills; S-C1-29's second case now asserts it on 6 seeded
+  turns) — spec: `c1-talk.md` §4 — overrule: none.
+- B198 A `prompt.taken` naming a `clientId` the pane does not hold (or an unknown `turnId`) closes the
+  link with 4000 `gap` through `link.gap()` (`createPane({onGap})`), as `protocols.md` §3.4 says; the
+  pane's other turn messages keep dropping what they cannot place (T29 builds D119 for them) —
+  spec: `protocols.md` §3.4, D119 — overrule: drop it and log.
+- B199 S-C1-29 is one test: its second case (STOP, then a reload) boots a second room (the fake
+  agent's long `check all lanes` turn plays once per room), with 6 seeded turns; the fake agent's
+  log goes on in one file, so counts are taken from where the first case left them. S-C1-32's third
+  run is on the app's `#/map` (S-C1-16's page) — spec: `c1-talk.md` S-C1-29, S-C1-32 — overrule: none.

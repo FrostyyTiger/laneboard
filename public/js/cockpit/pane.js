@@ -642,6 +642,7 @@ export function createPane(opts = {}) {
     const ok = v && (msg.state === 'taken' ? v.takePrompt(msg) : msg.state === 'cancelled' ? v.cancelPrompt(msg) : true);
     if (!ok) { onGap(); return; }
     changed(v);
+    grew(); // the pin rule (§4) in the same task: the block moved or its line came
   }
 
   /**

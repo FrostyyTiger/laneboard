@@ -388,7 +388,8 @@ test('S-C1-29 A queued prompt survives a reload (pending Q-O1)', async ({ page, 
   // The second case on a fresh room: the fake agent's long turn plays once a room (its log
   // goes on in the same file, so the counts below are the second room's).
   const earlier = steers().length;
-  await room.start({ script: 'c1-typing' });
+  // 6 seeded turns, so the conversation scrolls and the line must keep it at its end.
+  await room.start({ turns: 6, script: 'c1-typing' });
   await openPane(page, room);
 
   await test.step('second case: STOP at 3 s: NOT SENT, `Dropped by STOP.`; reloaded at 5 s: by 7 s the same label, line, RETRY and EDIT', async () => {
@@ -404,6 +405,9 @@ test('S-C1-29 A queued prompt survives a reload (pending Q-O1)', async ({ page, 
     await expect(line).toContainText('Dropped by STOP.', { timeout: 2_000 });
     const before = await blockLook(page, STEER);
     expect(before.label).toMatch(/^YOU · \d\d:\d\d · NOT SENT$/);
+    // The line and its buttons in sight: the conversation stays at its end (§4), no `↓ NEW`.
+    await expect.poll(() => page.evaluate(() => { const c = document.querySelector('.ck-convo'); return c.scrollTop + c.clientHeight >= c.scrollHeight - 1; })).toBe(true);
+    await expect(page.locator('[data-cockpit-follow]')).toBeHidden();
     await expect(page.locator(':root')).toHaveAttribute('data-turn', 'idle', { timeout: 2_000 });
     await until(t0, 5_000);
     const from = frames.length;
