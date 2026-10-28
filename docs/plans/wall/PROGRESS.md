@@ -301,12 +301,31 @@ Notes for every builder round (planner, round 7):
   222-234 ms, 0 errors, the tour unchanged (camera/show path only, no draw call added). **Seen:** a show releases the
   plate, so the free box is the whole frame and the picked planet lands far left (x 290 of 1368); fine for T17's card
   on the right.
-- [ ] T11 (§7 Night 5 C1) [ui] [variant:galaxy] Hit targets in screen space: 48 px for a finger, 28 px for a mouse (by
+- [x] T11 (§7 Night 5 C1) [ui] [variant:galaxy] Hit targets in screen space: 48 px for a finger, 28 px for a mouse (by
   `pointerType`), the nearest centre wins (`touch.js` the sketch's `hitNearest`, `hitRadius`). The owner wants no picker, so
   the fan (`fan.js`, its `main.js` wiring, `test/wall-galaxy-fan.test.mjs`, its `wall.css` rules unchanged or left unused)
   goes; night 4's T35 and T61 close with it — done when: tests find the nearest of two members under one finger picked,
   a mouse 30 px off a member picking nothing and a finger 30 px off picking it, no fan module or row left, and the touch page
-  tests green.
+  tests green. (commit 81dac29)
+  Notes (builder, round 29): `touch.js` `TAP.fingerPx` 48 / `mousePx` 28, `hitRadius(pointerType)` (a pen or an event that
+  does not say is a finger), `hitNearest` (the sketch's: nearest drawn centre within `max(reach, r)`, a name under the
+  finger 0 away, a beacon pillar by its nearest point, a tie within 2 px to the louder tone) and `memberHit` (hitNearest,
+  and a folded moon nearest the finger is its planet when that planet is in reach too: T8's "a planet and its folded moons
+  are one target"; a moon on an open ring is nearest anyway). `createTaps` now calls `pick(x, y, ev)`, so main.js's pick
+  takes its reach from `ev.pointerType`; sites use `hitNearest` too (the nearest centre, no longer worst tone first).
+  `hitAll`/`ringHit` are gone with `fan.js`, `test/wall-galaxy-fan.test.mjs` and every fan line in `main.js` (night 4's
+  T35/T61 close with it). `hitTest` (worst tone first, 27 px) stays exported: the touch/resume page tests use it as their
+  pick. Fenced `galaxy.html` keeps a hidden, unused `#galaxy-fan`; `wall.css` keeps the fan rules unchanged (comment
+  marks them unused) plus one added rule `.galaxy-fan { --fan-px: 18px; }`, because `frontend-static`'s var check no longer
+  saw fan.js set it. Empty sky is still a step back (T12 changes that). Test: `test/wall-galaxy-hit.test.mjs` (6: reaches,
+  nearest of two under one finger regardless of tone, the tie, mouse 30 px off nothing / finger 30 px off it, two planets
+  give the nearer, a page tap through `createTaps` with mouse/touch/pen events, no fan left); moon-ring, half and touch
+  tests moved to `memberHit`/`hitNearest`. Looked at (`$RUN_DIR/shots/r29-t11-hit/`, CDP on `--size large`, the nearest
+  centres logged at each tap): a finger 40 % of the way from ba to bb (80 px apart) → builder-a (its folded moon 10 px
+  off, ba 32); a finger 30 px past bb → builder-b (its moon ci-retry 22, bb 30, room-c 32); a mouse 30 px off ba → its
+  folded trouble moon fix-login, 13 px off (ba at 30 is past a mouse's 28); a mouse on ba → ba; never a fan row, 0
+  console errors. HV1's right side is so crowded that a live "30 px off = nothing" needs empty sky; the unit test pins it.
+  `r29-galaxy` (`?demo=1`, cpu 4x) 33.1 fps, worst gap 191 ms, 0 errors, the tour unchanged (no scene or draw change).
 - [ ] T12 (§7 Night 5 C2) [ui] [variant:galaxy] Inside an open system a drag orbits it round its own star (both axes, pitch
   clamped; the sketch's `orbitRound`) and it stays open; the first drag does not shift the system on screen (no aim offset);
   a tap on empty space does nothing — done when: a page test on a fake clock opens a site, drags 200 px each way and finds the
