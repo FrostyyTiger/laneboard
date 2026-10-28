@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { galaxyLayout, moonHosts } from '../public/js/wall/galaxy/layout.js';
 import { paletteFrom, toneOf } from '../public/js/wall/galaxy/palette.js';
-import { createGalaxyScene, moonAt, moonOrbit, siteShot, MOON, SIZE } from '../public/js/wall/galaxy/scene.js';
+import { createGalaxyScene, moonAt, moonOrbit, moonRing, siteShot, sphereSegs, MOON, SIZE } from '../public/js/wall/galaxy/scene.js';
 import { createLabels } from '../public/js/wall/galaxy/labels.js';
 import { memberPoints } from '../public/js/wall/galaxy/touch.js';
 
@@ -121,6 +121,7 @@ test('scene: open, every moon sits tight to its planet, clear of its body; calm 
     assert.equal(m.mesh.visible, true);
     if (troubled(m)) {
       assert.equal(r, SIZE.planet, `${m.id}: trouble is never the smallest thing in the frame`);
+      assert.equal(m.mesh.geometry.parameters.widthSegments, sphereSegs('planet')[0], `${m.id}: as round as a planet`);
       assert.ok(m.halo.visible);
     } else {
       assert.equal(r, MOON.calm * MOON.foldK, `${m.id}: half size`);
@@ -171,6 +172,25 @@ test('scene: moons turn slowly on their orbits, and hold still in still mode', (
   assert.equal(h.mesh.position.distanceTo(q0), 0);
 });
 
+test('scene: a planet\'s moons share one ring, evenly spaced, and never touch each other as they turn', () => {
+  const { galaxy, at } = sceneAt();
+  galaxy.setOpen('lab', 1);
+  const a = moonRing({ host: 'h', i: 0, n: 4 }), b = moonRing({ host: 'h', i: 1, n: 4 });
+  assert.equal(a.period, b.period);
+  assert.ok(Math.abs(b.phase - a.phase - Math.PI / 2) < 1e-12);
+  for (const t of [5000, 17000, 41000, 66000]) {
+    at(t);
+    const moons = moonsOf(galaxy.world.byId.get('lab'));
+    for (const m of moons) {
+      for (const o of moons) {
+        if (o === m || o.moon.host !== m.moon.host) continue;
+        const d = m.mesh.position.distanceTo(o.mesh.position);
+        assert.ok(d >= drawnR(m.mesh) + drawnR(o.mesh), `${m.id} and ${o.id} ${d.toFixed(1)} apart at ${t}`);
+      }
+    }
+  }
+});
+
 function fakeLabelDoc() {
   const el = () => {
     const style = { props: {}, setProperty(k, v) { this.props[k] = v; } };
@@ -200,7 +220,8 @@ test('labels and hit points: HV1 open, no calm moon is named or a target; a moon
   const calm = moonsOf(lab).filter((m) => !troubled(m));
   for (const m of calm) assert.equal(named.has(m.id), false, `${m.id} unnamed`);
   assert.ok(named.has('lane:builder-a/feat-search'), 'a lane in trouble keeps its name');
-  assert.ok(named.has('builder:builder-a') && named.has('room-a'), 'the planets are named');
+  // `ba` itself loses its sides to its trouble moons' names: T6b lets a planet's name win over its own children's.
+  assert.ok(named.has('room-a') && named.has('builder:builder-b'), `the planets are named: ${[...named].join(' ')}`);
   const v = galaxy.camera.position.clone();
   const screenOf = (id) => {
     const m = lab.members.find((x) => x.id === id);

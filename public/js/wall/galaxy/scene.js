@@ -88,7 +88,7 @@ export const bodyRadius = (m, tone) => (m.moon && !troubled(tone)
 export const MOON = Object.freeze({ calm: 5.5, foldK: 0.5, tight: 1.45, pad: 3, from: 0.35, to: 0.9 });
 
 /**
- * One moon's folded orbit round its planet, the same on every load: a period
+ * A planet's folded moon orbit (by its id), the same on every load: a period
  * of 40-90 s (slow enough never to pull the eye from the camera), inclined up
  * to ±40°, its node and phase from its id. Pure.
  */
@@ -99,6 +99,16 @@ export function moonOrbit(id) {
     node: hash(`${id}~mn`) * Math.PI * 2,
     phase: hash(`${id}~mf`) * Math.PI * 2,
   };
+}
+
+/**
+ * A moon's place on its planet's one ring (`moon`: layout.js's `{ host, i,
+ * n }`): every moon of a planet shares the planet's orbit (moonOrbit of its
+ * id), spaced evenly round it, so they turn together and never meet. Pure.
+ */
+export function moonRing(moon) {
+  const o = moonOrbit(moon.host);
+  return { ...o, phase: o.phase + (2 * Math.PI * moon.i) / Math.max(1, moon.n) };
 }
 
 /**
@@ -768,8 +778,7 @@ export function createGalaxyScene(canvas, {
   };
 
   const haloSize = (m, t) => (m.planet || troubled(t) ? bodyRadius(m, t) * HALO[t].k : t === 'calm' ? 0 : SIZE.dot * 2 * HALO[t].k);
-  // A moon is a dot's sphere at any size: small on screen whatever its tone.
-  const sphereOf = (m) => (!m.moon && m.radius > SIZE.dot ? geo.planet : geo.dot);
+  const sphereOf = (m) => (m.radius > SIZE.dot ? geo.planet : geo.dot);
   const laneLook = (t) => (t === 'calm'
     ? { color: col(palette.line.rgb), opacity: palette.line.alpha * 0.6 }
     : { color: tone[t].clone(), opacity: 0.5 });
@@ -780,7 +789,7 @@ export function createGalaxyScene(canvas, {
     const r0 = m.size ?? bodyRadius(m, t);
     m.radius = bodyRadius(m, t);
     // The sphere for the larger of the two sizes, so one growing in is never a coarse dot blown up.
-    m.mesh.geometry = sphereOf({ moon: m.moon, radius: Math.max(r0, m.radius) });
+    m.mesh.geometry = sphereOf({ radius: Math.max(r0, m.radius) });
     m.mesh.material = m.planet || troubled(t) ? planetMat[t] : flatMat[t];
     m.halo.material = haloMat[t];
     m.mark.material = markMat[t] ?? markMat.crit;
@@ -850,7 +859,7 @@ export function createGalaxyScene(canvas, {
     s.members = list.map((lm) => {
       const m = { id: lm.id, node: lm.node, off: { ...lm.off }, planet: lm.planet, carry: lm.carry ?? 1, tone: 'calm', haloSize: 0 };
       // A moon (T7): its planet is found below, once every member is made.
-      if (lm.moon) m.moon = { host: lm.moon.host, i: lm.moon.i, n: lm.moon.n, ...moonOrbit(lm.id) };
+      if (lm.moon) m.moon = { host: lm.moon.host, i: lm.moon.i, n: lm.moon.n, ...moonRing(lm.moon) };
       m.mesh = new THREE.Mesh(m.planet ? geo.planet : geo.dot, flatMat.calm);
       m.halo = new THREE.Sprite(haloMat.calm);
       m.mark = new THREE.Sprite(markMat.crit);
