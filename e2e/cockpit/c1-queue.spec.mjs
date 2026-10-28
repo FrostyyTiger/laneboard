@@ -343,6 +343,20 @@ test('S-C1-28 A queued prompt the agent never reads is sent once more, then show
 /** The running turn of a `snapshot` frame received after index `from`. */
 const snapshotAfter = (frames, from) => frames.slice(from).filter((f) => f.dir === 'received' && f.msg?.type === 'snapshot').map((f) => f.msg).at(-1);
 
+/**
+ * S-C1-29's Given, "`only the failed one` sent at t = 1 s and showing `YOU · HH:MM · QUEUED`",
+ * holds before its next step at t = 3 s: wait for the room's `turn.prompt` echo of the STEER
+ * (`delivery` `queued`, what the page draws the word from) by then, then the word drawn from it.
+ * The room's lag is not the page's: a busy room once echoed after t = 1.5 s (round 106's fix).
+ */
+async function queuedBy(page, frames, t0) {
+  const clientId = sent(frames, 'prompt').filter((m) => m.text === STEER).at(-1).clientId;
+  const echo = () => received(frames, 'turn.prompt').find((m) => m.clientId === clientId);
+  await expect.poll(() => echo() !== undefined, { timeout: Math.max(1, t0 + 3_000 - Date.now()) }).toBe(true);
+  expect(echo().delivery).toBe('queued');
+  await expect(page.locator(QUEUED)).toHaveCount(1, { timeout: 500 });
+}
+
 test('S-C1-29 A queued prompt survives a reload (pending Q-O1)', async ({ page, room, fakeAgent }) => {
   test.setTimeout(120_000);
   const frames = recordFrames(page);
@@ -354,7 +368,7 @@ test('S-C1-29 A queued prompt survives a reload (pending Q-O1)', async ({ page, 
     const t0 = await typeAndSend(page, 'check all lanes');
     await until(t0, 1_000);
     await typeAndSend(page, STEER);
-    await expect(page.locator(QUEUED)).toHaveCount(1, { timeout: 500 });
+    await queuedBy(page, frames, t0);
     const block = sent(frames, 'prompt').find((m) => m.text === STEER);
     const before = await blockLook(page, STEER);
     await until(t0, 3_000);
@@ -396,7 +410,7 @@ test('S-C1-29 A queued prompt survives a reload (pending Q-O1)', async ({ page, 
     const t0 = await typeAndSend(page, 'check all lanes');
     await until(t0, 1_000);
     await typeAndSend(page, STEER);
-    await expect(page.locator(QUEUED)).toHaveCount(1, { timeout: 500 });
+    await queuedBy(page, frames, t0);
     const block = sent(frames, 'prompt').filter((m) => m.text === STEER).at(-1);
     await until(t0, 3_000);
     await expect(page.locator(SEND)).toHaveAttribute('data-send', 'stop');
