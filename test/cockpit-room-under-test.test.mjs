@@ -313,6 +313,22 @@ test('§1.2 GET /connections: every upgrade the link reported, oldest first, clo
   ]);
 });
 
+test('§1.2 GET /connections: with the link stopped every refused upgrade is in the log, accepted false (B242)', async () => {
+  const { c } = setup();
+  await c.handle('POST', '/link', { up: false });
+  let destroyed = 0;
+  const sock = () => ({ destroy() { destroyed += 1; } });
+  const before = Date.now();
+  assert.equal(c.hooks.upgrade({}, sock(), 'ws'), true);
+  assert.equal(c.hooks.upgrade({}, sock(), 'http'), true); // an HTTP request is no upgrade attempt
+  assert.equal(destroyed, 2);
+  const { body } = await c.handle('GET', '/connections');
+  assert.equal(body.items.length, 1);
+  assert.equal(body.items[0].accepted, false);
+  assert.equal(body.items[0].closeCode, null);
+  assert.ok(body.items[0].atMs >= before && body.items[0].atMs <= Date.now());
+});
+
 test('§1.2 the rows that wait for a later build answer 404 unknown-verb', async () => {
   const { c } = setup();
   const waiting = [

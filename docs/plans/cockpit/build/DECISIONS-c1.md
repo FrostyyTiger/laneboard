@@ -1341,3 +1341,29 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   (a Wall that sets it late); `PANE_CLOSED_IDLE_MS` is gone, the module uses `EXPLORE_IDLE_S * 1000`
   (T47's part for this file) — spec: `screens.md` §2's rows "a turn is running" and "the pane
   closes" — overrule: `createWallHold`.
+- B242 (T32) The room under test's connection log (`GET /connections`) records an upgrade the
+  stopped link destroys (`POST /link {"up":false}`) as `{atMs, accepted: false, closeCode: null}`;
+  before, only upgrades that reached the link's checks were logged, so S-SCR-19's tries 1-7 were
+  missing. HTTP requests destroyed the same way are not upgrade attempts and are not logged — spec:
+  `stand-ins.md` §1.2 ("every upgrade attempt since start"), S-SCR-19 — overrule: the `upgrade` hook
+  in `test/cockpit/stand-ins/room-control.mjs`.
+- B243 (T32) The room-down tests on `page.clock` (`e2e/cockpit/c1-down.spec.mjs`): (a) the clock is
+  paused for the outage and its `Date` set to 06:41:00 with `setSystemTime` (no timer fires), so the
+  loss is at 06:41 exactly; (b) `page.clock` stubs `performance.getEntriesByName` (it answers `[]`),
+  so an init script copies each `performance.mark` into `window.__ckMarks`; the test waits for each
+  try's `cockpit:close` before it moves the clock past the next, keeping §7.1's moments exact
+  (a refused socket fails in real time); the real-clock S-SCR-19 test reads
+  `performance.getEntriesByName` as the scenario says; (c) S-SCR-17's "the wall half is
+  `data-wall-state="tour"` and flying throughout" cannot hold with the pane open (S-SCR-03, §2: the
+  open pane holds the Wall in `explore`); built as D257's "Wall half … unchanged": the Wall's state
+  is asserted unchanged across the loss (explore, held), then the pane is closed during the outage
+  and the tour is asserted back at 60 s and the camera flying to a site with the room still down
+  (under `## For the owner`) — spec: `screens.md` §7 "Room down", S-SCR-17, S-SCR-03, D257 —
+  overrule: the Given (a pane closed) or §2's row "the pane opens".
+- B244 (T32) S-SCR-19's "having answered one turn meanwhile" (page-clock test): the turn is asked
+  just before the loss (`tell me everything`, `scr-room`, 20.3 s of the fake agent's real time), the
+  page has its first part, and the room finishes it while the link is down (`GET /sent?type=turn.end`
+  before `{"up":true}`); in C1 nothing else can start a turn while every link is down (no watcher,
+  no second screen through a stopped link). The cut-off line of a reply streaming at the loss is
+  S-SCR-20 (not C1), so none is asserted — spec: S-SCR-19, `stand-ins.md` §5 (`scr-room`'s
+  `for`) — overrule: the test's Given.

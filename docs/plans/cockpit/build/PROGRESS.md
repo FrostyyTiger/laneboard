@@ -231,13 +231,19 @@ What the slice itself says waits; nothing else moved here.
 - From T24b's stills (800 wide, the pane full width, D249): the toast stack keeps `right: 24px` over the open pane (D158's `right: 624px` is for a 608 px pane) and two toasts cover the conversation's last reply above the opener. No spec rect at 800; noted for T42 or the owner.
 - Review 95-spec-keeper, finding 7 (rest): §10's button sizes (48 px tall, ≥ 96 px wide, 8 px apart) have no C1 scenario; give S-C1-41's table a row.
 - Review 95-spec-keeper, finding 9: the stills of T26 and T27 have no `console.txt`; later `shoot.mjs` runs keep it, even empty.
-- Review 95-spec-keeper, B218: the backoff-driven reconnect drawing `not-logged-in` in its first frame gets one check in T32's S-SCR tests.
+- Review 95-spec-keeper, B218: the backoff-driven reconnect drawing `not-logged-in` in its first frame gets one check in T32's S-SCR tests. Still open after T32 (round 104): S-SCR-19's reconnects carry no room condition (`welcome.status` null, so `Back since`); the check needs a room whose login fails during the outage, a step for S-C1-38 rather than an S-SCR test.
 - Review 101-touch, finding 5: T50 (banner over the input row) and the 800-wide toasts line above stay open; nothing touched `.banner`/`.toasts` since round 30.
 - T32: the line slot's `room-down` message is built (T24b, B188); T32 keeps its scenarios (S-SCR-17's line step reads it).
 
 ## Spec fixes
 
 ## For the owner
+- T32 (round 104), S-SCR-17's Given "a screen in `wall` layout, live, touring, the pane open" and
+  its "the wall half is `data-wall-state="tour"` and flying throughout" against §2's row "the pane
+  opens … tour → explore where the camera is now … paused while the pane is open" (and S-SCR-03).
+  Built (B243) as D257's "Wall half … unchanged": the state is asserted unchanged (explore) across
+  the loss, then the pane closed and the tour back and flying a minute later, the room still down.
+  A spec fix would read "the wall half's state unchanged throughout".
 - Round 100 (fix): S-C1-17's first run once took 774 ms from the tap to `STOPPED AT` (budget 400,
   run of 13:05), then 3 of 3 plain and 6 of 6 with the CPUs busy at 306-311 ms. Nothing in the
   page path waits (the stop line is drawn in the same task as `turn.end`). Two synchronous disk

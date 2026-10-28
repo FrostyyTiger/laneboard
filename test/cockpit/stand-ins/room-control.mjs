@@ -53,6 +53,9 @@ export function createRoomControl({ clock, timeZone = 'UTC' } = {}) {
     // has its socket destroyed unread. `silent` lets upgrades through (B20).
     upgrade(req, socket, kind) {
       if (up === false) {
+        // §1.2: the connection log has every upgrade attempt, so a refused one is in it too
+        // (S-SCR-19 reads the retries' times from it; build B242).
+        if (kind === 'ws') connections.push({ atMs: Date.now(), accepted: false, closeCode: null });
         socket.destroy();
         return true;
       }
