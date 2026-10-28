@@ -365,6 +365,8 @@ export function createLabels(root, galaxy, { steps, covers = () => [], held = nu
           add(m.id, m.node, m.mesh.position, m.radius ?? 15, trouble ? 1 : fade, m.node?.kind, null, s.id);
           continue;
         }
+        // A folded calm moon (scene.js MOON, T7) is unnamed: its planet's name stands for it.
+        if (m.moon && !trouble && !m.tappable) continue;
         const sp = project(m.mesh.position, W, H);
         if (!sp) continue;
         if (!dotNamed(t, 2 * (m.radius ?? 4) * sp.unit)) { body(m.id, sp, (m.radius ?? 4) * sp.unit); continue; }

@@ -68,7 +68,48 @@ export const memberRadius = (planet, tone) => (planet || troubled(tone) ? SIZE.p
  * carryScale): a planet's size times its `carry`; the rest are not carried.
  * The tone only decides planet size or dot, never the carry. Pure.
  */
-export const bodyRadius = (m, tone) => memberRadius(m.planet, tone) * (m.planet ? m.carry ?? 1 : 1);
+export const bodyRadius = (m, tone) => (m.moon && !troubled(tone)
+  ? MOON.calm * MOON.foldK
+  : memberRadius(m.planet, tone) * (m.planet ? m.carry ?? 1 : 1));
+
+/**
+ * Moons (night 5 B2, T7; the owner's sketch pick `sk_moons=1`; layout.js
+ * moonHosts says whose): `calm` is a moon's radius opened out (T8); folded on
+ * its planet it is drawn at `foldK` of that, on a tight inclined orbit `tight`
+ * times the planet's drawn radius plus `pad` plus its own radius from the
+ * planet's centre, unnamed and not tappable. It comes in from `from` to `to`
+ * of its system's opening, so the overview never draws it (the nebula and the
+ * site's name carry a folded cluster). A moon in trouble is the exception
+ * (README §2: readable trouble wins; r8-film-ui 3: a problem is never the
+ * smallest thing in the frame): always drawn, at the planet size as a dot in
+ * trouble was, its halo and shape with it, named and tappable, only its place
+ * is the moon's.
+ */
+export const MOON = Object.freeze({ calm: 5.5, foldK: 0.5, tight: 1.45, pad: 3, from: 0.35, to: 0.9 });
+
+/**
+ * One moon's folded orbit round its planet, the same on every load: a period
+ * of 40-90 s (slow enough never to pull the eye from the camera), inclined up
+ * to ±40°, its node and phase from its id. Pure.
+ */
+export function moonOrbit(id) {
+  return {
+    period: 40000 + 50000 * hash(`${id}~mp`),
+    inc: (hash(`${id}~mi`) - 0.5) * 1.4,
+    node: hash(`${id}~mn`) * Math.PI * 2,
+    phase: hash(`${id}~mf`) * Math.PI * 2,
+  };
+}
+
+/**
+ * Where a folded moon sits from its planet's centre at `now` (ms; 0 and
+ * still mode: its phase), on its orbit of radius `r`. Pure.
+ */
+export function moonAt(orbit, r, now = 0) {
+  const th = orbit.phase + (now / orbit.period) * Math.PI * 2;
+  const c = Math.cos(th), sn = Math.sin(th), cn = Math.cos(orbit.node), sN = Math.sin(orbit.node), ci = Math.cos(orbit.inc);
+  return { x: r * (c * cn - sn * sN * ci), y: r * sn * Math.sin(orbit.inc), z: r * (c * sN + sn * cn * ci) };
+}
 
 /** The shape a trouble member carries on its sphere (docs/design.md: ▲ wants you, ■ broken), null when calm. */
 export const MARK_SHAPE = Object.freeze({ warn: 'tri', crit: 'square' });
@@ -727,7 +768,8 @@ export function createGalaxyScene(canvas, {
   };
 
   const haloSize = (m, t) => (m.planet || troubled(t) ? bodyRadius(m, t) * HALO[t].k : t === 'calm' ? 0 : SIZE.dot * 2 * HALO[t].k);
-  const sphereOf = (m) => (m.radius > SIZE.dot ? geo.planet : geo.dot);
+  // A moon is a dot's sphere at any size: small on screen whatever its tone.
+  const sphereOf = (m) => (!m.moon && m.radius > SIZE.dot ? geo.planet : geo.dot);
   const laneLook = (t) => (t === 'calm'
     ? { color: col(palette.line.rgb), opacity: palette.line.alpha * 0.6 }
     : { color: tone[t].clone(), opacity: 0.5 });
@@ -738,7 +780,7 @@ export function createGalaxyScene(canvas, {
     const r0 = m.size ?? bodyRadius(m, t);
     m.radius = bodyRadius(m, t);
     // The sphere for the larger of the two sizes, so one growing in is never a coarse dot blown up.
-    m.mesh.geometry = sphereOf({ radius: Math.max(r0, m.radius) });
+    m.mesh.geometry = sphereOf({ moon: m.moon, radius: Math.max(r0, m.radius) });
     m.mesh.material = m.planet || troubled(t) ? planetMat[t] : flatMat[t];
     m.halo.material = haloMat[t];
     m.mark.material = markMat[t] ?? markMat.crit;
@@ -807,6 +849,8 @@ export function createGalaxyScene(canvas, {
     else tween(`${s.id}:carry`, ms, (k) => { s.carry = glide(from, carry, k); s.starRadius = SIZE.star * s.carry; });
     s.members = list.map((lm) => {
       const m = { id: lm.id, node: lm.node, off: { ...lm.off }, planet: lm.planet, carry: lm.carry ?? 1, tone: 'calm', haloSize: 0 };
+      // A moon (T7): its planet is found below, once every member is made.
+      if (lm.moon) m.moon = { host: lm.moon.host, i: lm.moon.i, n: lm.moon.n, ...moonOrbit(lm.id) };
       m.mesh = new THREE.Mesh(m.planet ? geo.planet : geo.dot, flatMat.calm);
       m.halo = new THREE.Sprite(haloMat.calm);
       m.mark = new THREE.Sprite(markMat.crit);
@@ -816,6 +860,14 @@ export function createGalaxyScene(canvas, {
       paintMember(s, m, toneOf(lm.node), 0);
       return m;
     });
+    const hostOf = new Map(s.members.filter((m) => m.planet).map((m) => [m.id, m]));
+    for (const m of s.members) {
+      if (!m.moon) continue;
+      m.moon.host = hostOf.get(m.moon.host) ?? null;
+      m.tappable = troubled(m.tone);
+      // A moon whose planet is not drawn is a dot again, where the layout put it.
+      if (!m.moon.host) { delete m.moon; paintMember(s, m, m.tone, 0); }
+    }
     // Orbit spokes, stems and landing rings: one line set per system, sized for its planets.
     const planets = s.members.filter((m) => m.planet).length;
     const old = s.lines.geometry;
@@ -976,6 +1028,7 @@ export function createGalaxyScene(canvas, {
       const e = smoother(k);
       const spread = CLOSED + (1 - CLOSED) * e;
       for (const m of s.members) {
+        if (m.moon) continue; // placeMoons, once their planets stand
         const o = foldAt(k, m.off);
         const x = s.home.x + o.x * a, y = s.home.y + o.y * a, z = s.home.z + o.z * a;
         m.mesh.position.set(x, y, z);
@@ -998,6 +1051,7 @@ export function createGalaxyScene(canvas, {
           push(x + Math.cos(a1) * r, s.home.y, z + Math.sin(a1) * r);
         }
       }
+      placeMoons(s, clock());
       s.lines.geometry.setDrawRange(0, j / 3);
       s.lines.geometry.attributes.position.needsUpdate = true;
       s.lines.material.opacity = palette.line.alpha * (0.3 + 1.2 * e) * a;
@@ -1006,6 +1060,44 @@ export function createGalaxyScene(canvas, {
       fadeNear(s);
     }
     dirty = false;
+  };
+
+  /**
+   * A site's moons (T7), folded: each on its tight orbit round its planet as
+   * drawn now, at its size (bodyRadius); a calm one grows in with the opening
+   * (MOON.from-to), one in trouble is always there and is a target. `s.moonsTurn`
+   * says whether any is shown and turning, so frame() moves them on (never in
+   * still mode).
+   */
+  const placeMoons = (s, now) => {
+    const k = s.unfold ?? 0, a = s.alive;
+    const shown = smoothstep(MOON.from, MOON.to, k);
+    const markIn = smoothstep(MARK.from, MARK.to, k);
+    let any = false;
+    for (const m of s.members) {
+      if (!m.moon) continue;
+      const out = troubled(m.tone);
+      const f = (out ? 1 : shown) * a;
+      m.tappable = out;
+      m.mesh.visible = f > 0.005;
+      if (!m.mesh.visible) { m.halo.visible = false; m.mark.visible = false; m.markShown = 0; continue; }
+      any = true;
+      const h = m.moon.host, hp = h.mesh.position;
+      const hostR = h.mesh.scale.x * h.mesh.geometry.parameters.radius;
+      const r = m.size * f;
+      const o = moonAt(m.moon, (hostR * MOON.tight + (MOON.pad + m.size) * a) * (0.5 + 0.5 * f), still ? 0 : now);
+      const x = hp.x + o.x, y = hp.y + o.y, z = hp.z + o.z;
+      m.mesh.position.set(x, y, z);
+      m.mesh.scale.setScalar(Math.max(1e-3, r / m.mesh.geometry.parameters.radius));
+      m.halo.position.set(x, y, z);
+      m.halo.visible = m.haloSize * f > 0.5;
+      m.halo.scale.setScalar(Math.max(1e-3, m.haloSize * f));
+      m.mark.position.set(x, y, z);
+      m.markShown = MARK_SHAPE[m.tone] ? markIn * f : 0;
+      m.mark.scale.setScalar(Math.max(1e-3, m.size * 2 * MARK.k * m.markShown));
+      m.mark.visible = m.markShown > 0.02;
+    }
+    s.moonsTurn = any && !still;
   };
 
   /** The first model: every site at once, folded. */
@@ -1820,6 +1912,7 @@ export function createGalaxyScene(canvas, {
         s.breath = s.nebula.breathes ? 1 + PULSE.nebula * wave : 1;
         placeLobes(s);
         fadeNear(s);
+        if (s.moonsTurn) placeMoons(s, now);
       }
     }
     easeSun(now);

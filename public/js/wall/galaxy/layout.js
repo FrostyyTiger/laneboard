@@ -312,7 +312,9 @@ export function farStars(n = 2500, seed = 11) {
  * drawn as a lit sphere with a stem; the rest are dots), `reach` the
  * farthest member's distance; `carry` on the site and on each member is
  * its radius factor (carryScale: a star by its planets, a planet by
- * everything below it in the site, 1 for the rest). What hangs on the core and is no place (a
+ * everything below it in the site, 1 for the rest); `moon` on a member that
+ * is a moon (moonHosts) is `{ host, i, n }`: its planet's id, its place among
+ * that planet's `n` moons, in model order. What hangs on the core and is no place (a
  * run) is in no site. `shown` (ids, optional): the sites the galaxy shows;
  * they take the arm slots first, in model order, so a hidden site leaves no
  * gap in the rosette (the rest follow, farther out).
@@ -390,10 +392,39 @@ export function galaxyLayout(nodes, aspect = 16 / 9, shown = null) {
       const planet = NAMED.has(n.kind);
       out.push({ id: n.id, node: n, off, planet, carry: planet ? carryScale(below.get(n.id) ?? 0, CARRY.planet) : 1 });
     }
+    const hosts = moonHosts(out.map((m) => m.node), byId, s);
+    const order = new Map();
+    for (const m of out) {
+      const host = hosts.get(m.id);
+      if (host == null) continue;
+      if (!order.has(host)) order.set(host, []);
+      order.get(host).push(m);
+    }
+    for (const [host, ms] of order) ms.forEach((m, i) => { m.moon = { host, i, n: ms.length }; });
     const carry = carryScale(out.filter((m) => m.planet).length, CARRY.star);
     return { id: s.id, node: s, index, home, members: out, reach, carry };
   });
   return { core, sites };
+}
+
+/**
+ * Moons (night 5 B2, the owner's `sk_moons=1`): what hangs below a planet and
+ * is no planet itself (services under a room, lanes under a builder, sessions
+ * under a lane, a run on a room) is a moon of the nearest planet above it, so
+ * a session orbits its lane's builder. `list`: a site's member nodes; `byId`
+ * every node by id; `site` the site node (the walk up stops there). Returns
+ * id → host planet's id; what has no planet above it in the site (a dot hung
+ * straight on the site) is no moon. Pure.
+ */
+export function moonHosts(list, byId, site) {
+  const out = new Map();
+  for (const n of list ?? []) {
+    if (!n || NAMED.has(n.kind)) continue;
+    let p = byId.get(n.parent);
+    for (let k = 0; p && p !== site && p.id !== site?.id && !NAMED.has(p.kind) && k < 50; k++) p = byId.get(p.parent);
+    if (p && p !== site && p.id !== site?.id && NAMED.has(p.kind)) out.set(n.id, p.id);
+  }
+  return out;
 }
 
 /**

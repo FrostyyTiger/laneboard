@@ -56,6 +56,9 @@
 import { toneOf, worseTone } from './palette.js';
 import { IDLE } from './director.js';
 
+/** The tones that need you: a moon in one is a target even folded (scene.js MOON). */
+const TROUBLE = new Set(['warn', 'crit']);
+
 /** How long the camera takes from wherever it is back to the overview on the first touch (ms). */
 export const TOUCH = Object.freeze({ fitMs: 1500 });
 
@@ -634,7 +637,7 @@ export function beamSegments(beams, screenAt) {
 
 /**
  * The things in an open system a tap can hit (T11, README §7 Night 3 C3):
- * every member (planet or dot) of a site at least `minOpen` open, at
+ * every member (planet or dot; a moon only while open, T7) of a site at least `minOpen` open, at
  * `screenOf(id)`, in its own tone, with its shown name's box. The page asks
  * these first, so a finger on a planet beside its star opens the planet, not
  * the star. Pure but for `screenOf`.
@@ -646,6 +649,8 @@ export function memberPoints(sites, screenOf, names = [], minOpen = 0.5) {
   for (const s of sites ?? []) {
     if (!s || s.gone || !((s.open ?? 0) >= minOpen)) continue;
     for (const m of s.members ?? []) {
+      // A folded calm moon (scene.js MOON, T7) is no target: a finger there means its planet.
+      if (m?.moon && !m.tappable && !TROUBLE.has(m.tone ?? toneOf(m.node))) continue;
       const sp = m?.id != null ? screenOf(m.id) : null;
       if (!sp) continue;
       out.push({ id: m.id, site: s.id, x: sp.x, y: sp.y, r: sp.r, tone: toneOf(m.node), box: boxes.get(m.id) ?? null, node: m.node });

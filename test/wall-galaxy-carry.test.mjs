@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { galaxyLayout, carryScale, CARRY } from '../public/js/wall/galaxy/layout.js';
 import { paletteFrom } from '../public/js/wall/galaxy/palette.js';
-import { createGalaxyScene, bodyRadius, sphereSegs, starSphere, BIG_STAR, SIZE } from '../public/js/wall/galaxy/scene.js';
+import { createGalaxyScene, bodyRadius, sphereSegs, starSphere, BIG_STAR, MOON, SIZE } from '../public/js/wall/galaxy/scene.js';
 
 const LARGE = JSON.parse(fs.readFileSync(new URL('./fixtures/wall-large-map.json', import.meta.url), 'utf8')).nodes;
 const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg ?? ''} ${a} vs ${b}`);
@@ -121,7 +121,7 @@ test('scene: planets and the star are drawn at their carry', () => {
   const by = new Map(s.members.map((m) => [m.id, m]));
   close(drawnR(by.get('builder-a').mesh), SIZE.planet * carryScale(6, CARRY.planet));
   close(drawnR(by.get('room-c').mesh), SIZE.planet * 0.8);
-  close(drawnR(by.get('svc').mesh), SIZE.dot, 'a calm dot stays a dot');
+  close(drawnR(by.get('svc').mesh), MOON.calm * MOON.foldK, 'a calm service is a folded moon of its room (T7), never carried');
   close(s.carry, carryScale(4, CARRY.star));
   close(s.star.scale.x, s.carry, 'the star sphere is SIZE.star at scale 1');
   close(s.starRadius, SIZE.star * s.carry, 'the site\'s name stands beside the star it is drawn at');

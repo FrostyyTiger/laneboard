@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { paletteFrom, toneOf } from '../public/js/wall/galaxy/palette.js';
 import {
-  createGalaxyScene, dustFade, dustFadeRadius, dustSightDist, memberRadius, DUST_FADE, MARK_SHAPE, SIZE,
+  createGalaxyScene, dustFade, dustFadeRadius, dustSightDist, memberRadius, DUST_FADE, MARK_SHAPE, MOON, SIZE,
 } from '../public/js/wall/galaxy/scene.js';
 import { LIVE } from '../public/js/wall/galaxy/live.js';
 
@@ -64,7 +64,7 @@ test('memberRadius: a planet, or anything in warn/crit, is planet-sized; the res
   assert.equal(memberRadius(false, 'crit'), SIZE.planet);
 });
 
-test('open, a lane in trouble is drawn at least as large as a calm planet, a calm lane stays a dot', () => {
+test('open, a lane in trouble is drawn at least as large as a calm planet, a calm lane is a folded moon (T7)', () => {
   const { galaxy, at } = sceneAt();
   galaxy.update(fleet(BAD));
   galaxy.setOpen('hv1', 1);
@@ -75,7 +75,7 @@ test('open, a lane in trouble is drawn at least as large as a calm planet, a cal
   assert.equal(drawnR(member(galaxy, 'hv1-b')), SIZE.planet * 1.5);
   assert.ok(drawnR(member(galaxy, 'lane:ask')) >= planet, 'warn');
   assert.ok(drawnR(member(galaxy, 'lane:jam')) >= planet, 'crit');
-  assert.equal(drawnR(member(galaxy, 'lane:calm')), SIZE.dot);
+  assert.equal(drawnR(member(galaxy, 'lane:calm')), MOON.calm * MOON.foldK, 'a moon of its builder, folded: half size');
   assert.ok(member(galaxy, 'lane:jam').haloSize > member(galaxy, 'hv1-b').haloSize, 'its glow outshines a calm planet\'s');
 });
 
@@ -102,16 +102,17 @@ test('a lane going into trouble grows to the planet size over the recolour, no j
   galaxy.setOpen('hv1', 1);
   at(1000);
   const m = member(galaxy, 'lane:jam');
-  assert.equal(drawnR(m), SIZE.dot);
+  const folded = MOON.calm * MOON.foldK; // a calm lane is a folded moon of its builder (T7)
+  assert.equal(drawnR(m), folded);
   galaxy.update(fleet({ 'lane:jam': 'down' }));
   at(1000 + LIVE.recolourMs / 2);
   const mid = drawnR(m);
-  assert.ok(mid > SIZE.dot && mid < SIZE.planet, `halfway: ${mid}`);
+  assert.ok(mid > folded && mid < SIZE.planet, `halfway: ${mid}`);
   at(1000 + LIVE.recolourMs + 10);
   assert.ok(Math.abs(drawnR(m) - SIZE.planet) < 1e-6);
   galaxy.update(fleet());
   at(5000 + LIVE.recolourMs + 10);
-  assert.ok(Math.abs(drawnR(m) - SIZE.dot) < 1e-6);
+  assert.ok(Math.abs(drawnR(m) - folded) < 1e-6);
   assert.equal(m.mark.visible, false);
 });
 
