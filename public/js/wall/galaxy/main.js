@@ -107,7 +107,7 @@ import { createGalaxyLock } from './lock.js';
 import { createLabels } from './labels.js';
 import { createFan } from './fan.js';
 import { demoAsked, fallbackHref, hasWebGL } from './fallback.js';
-import { paletteFrom } from './palette.js';
+import { applyLift, paletteFrom } from './palette.js';
 import { budgetStart, budgetStep, createFrameWindow, perfLine, ratioPin } from './budget.js';
 import { createGalaxyScene, overviewShot, siteShot } from './scene.js';
 import { createCutFade, prefersStill, stillTourTimingFor } from './still.js';
@@ -137,6 +137,8 @@ export function boot() {
   if (role !== 'tour') page.dataset.role = role;
   const canvas = document.getElementById('galaxy');
 
+  // Night 5 A4: calm text a step lighter on a blue-black ground, before the palette reads it.
+  applyLift(page);
   const style = getComputedStyle(page);
   const palette = paletteFrom((name) => style.getPropertyValue(name));
   const reduced = prefersStill();

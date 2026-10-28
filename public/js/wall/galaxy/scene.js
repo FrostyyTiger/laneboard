@@ -17,7 +17,7 @@
 import * as THREE from '../../../vendor/three/three.module.js';
 import { armBand, armRibbon, galaxyLayout, dustPoints, farStars, foldAt, rng, hash, ease, CLOSED } from './layout.js';
 import { tourOrder, tourSites } from '../tour.js';
-import { TONES, nebulaFor, toneOf } from './palette.js';
+import { TONES, dustTintWeight, grainRatio, nebulaFor, nebulaTint, tintGrain, toneOf } from './palette.js';
 import { LIVE, glide, planLive, relayPhase, siteKeys, treeKey } from './live.js';
 import { LEVELS, pixelRatioFor } from './budget.js';
 import { breathWave, dustTurn } from './still.js';
@@ -329,14 +329,23 @@ export function sceneKey(nodes) {
     .join('|');
 }
 
-/** A soft round sprite: white falling off to nothing, tinted by the material. */
-function glowTexture(doc) {
+/**
+ * A soft round sprite: white falling off to nothing, tinted by the material.
+ * `soft` (the sun's halo, night 5 A4): a brighter heart that falls off sooner,
+ * so the sun reads softer at the same size.
+ */
+function glowTexture(doc, soft = false) {
   const c = doc.createElement('canvas');
   c.width = c.height = 128;
   const x = c.getContext('2d');
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
   g.addColorStop(0, 'rgb(255 255 255 / 1)');
-  g.addColorStop(0.2, 'rgb(255 255 255 / 0.5)');
+  if (soft) {
+    g.addColorStop(0.12, 'rgb(255 255 255 / 0.6)');
+    g.addColorStop(0.45, 'rgb(255 255 255 / 0.18)');
+  } else {
+    g.addColorStop(0.2, 'rgb(255 255 255 / 0.5)');
+  }
   g.addColorStop(1, 'rgb(255 255 255 / 0)');
   x.fillStyle = g;
   x.fillRect(0, 0, 128, 128);
@@ -519,7 +528,8 @@ export function createGalaxyScene(canvas, {
   // One light from the sun, a soft fill, and a key from above so the
   // planets read as spheres from any side.
   const white = col(palette.sun);
-  scene.add(new THREE.PointLight(white, 2.2, 0, 0));
+  // The sun's own light is a warm off-white (night 5 A4); the key stays white.
+  scene.add(new THREE.PointLight(col(palette.sunLight ?? palette.sun), 2.2, 0, 0));
   scene.add(new THREE.AmbientLight(col(palette.calm), 0.55));
   const key = new THREE.DirectionalLight(white, 0.9);
   key.position.set(0.3, 1, 0.2);
@@ -643,12 +653,13 @@ export function createGalaxyScene(canvas, {
 
   // The sun: the hub, at the origin. Its halo is a soft grey, quieter
   // than any nebula in trouble (README §2.1: trouble is the loudest thing).
-  // The core is the text-2 grey, not white (r8-film-ui 2); the light stays white.
+  // The core is a step under the light, not white (r8-film-ui 2); since night 5 A4 a
+  // warm stone with a softer halo of the same size.
   // The dust is depth-tested (PointsMaterial's default), so no grain is drawn over the core.
   const sunCore = col(palette.sunCore);
   const sun = new THREE.Mesh(geo.sun, keep(new THREE.MeshBasicMaterial({ color: sunCore })));
   const sunHalo = new THREE.Sprite(keep(new THREE.SpriteMaterial({
-    map: glowTex, color: sunCore, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: SUN_HALO,
+    map: keep(glowTexture(doc, true)), color: sunCore, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: SUN_HALO,
   })));
   sunHalo.scale.setScalar(SIZE.sunHalo);
   scene.add(sun, sunHalo);
@@ -716,6 +727,9 @@ export function createGalaxyScene(canvas, {
     });
   };
 
+  /** A site's nebula colour in `t`: its own quiet tint when calm (night 5 A4), else the status hue. */
+  const nebColour = (s, t) => (t === 'calm' ? s.tint : tone[t]);
+
   /** A site's star, nebula and hyperlane to its tone and status, eased over `ms` (0: at once). */
   const paintSite = (s, ms) => {
     const t = toneOf(s.node);
@@ -724,7 +738,7 @@ export function createGalaxyScene(canvas, {
     const neb = nebulaFor(s.status);
     if (neb.tone !== s.nebula?.tone) s.since = clock(); // how old its trouble is (nebulaPeaks)
     s.nebula = neb;
-    const nebTo = { color: tone[neb.tone].clone(), opacity: neb.opacity, size: neb.size };
+    const nebTo = { color: nebColour(s, neb.tone).clone(), opacity: neb.opacity, size: neb.size };
     const starTo = SIZE.star * s.carryTo * HALO[t].k;
     const laneEnd = laneLook(neb.tone);
     const set = (k) => {
@@ -795,6 +809,9 @@ export function createGalaxyScene(canvas, {
   /** A site's objects (lay: one of galaxyLayout's sites), added to the galaxy. */
   const makeSite = (lay, status) => {
     const neb = nebulaFor(status);
+    // Its tint for life, from its place when it came (a later site does not repaint it).
+    const tint = col(nebulaTint(lay.index));
+    const nebCol = neb.tone === 'calm' ? tint : tone[neb.tone];
     const star = new THREE.Mesh(geo.star, flatMat.calm);
     const starHalo = new THREE.Sprite(haloMat.calm);
     // The nebula round the cluster (T17): two or three lobes flat in the plane, each its own
@@ -804,7 +821,7 @@ export function createGalaxyScene(canvas, {
     // sort of its own faces, so one pass draws the same thing.
     const lobes = nebulaLobes(lay.id).map((shape) => {
       const mesh = new THREE.Mesh(lobeGeo, new THREE.MeshBasicMaterial({
-        map: cloudTex, color: tone[neb.tone], transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true,
+        map: cloudTex, color: nebCol, transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true,
         blending: THREE.AdditiveBlending, opacity: neb.opacity * shape.share,
       }));
       mesh.name = 'nebula';
@@ -825,7 +842,8 @@ export function createGalaxyScene(canvas, {
       id: lay.id, node: lay.node, home: { ...lay.home }, reach: lay.reach, status, nebula: null, since: clock(), peak: 1,
       star, starHalo, members: [], nebulaSprite, lobes, lines, plane, lane,
       open: 0, squeeze: 1, alive: 1, unfold: 0, relay: null, gone: false,
-      neb: { color: tone[neb.tone].clone(), opacity: neb.opacity, size: neb.size }, starHaloSize: 0,
+      neb: { color: nebCol.clone(), opacity: neb.opacity, size: neb.size }, starHaloSize: 0,
+      index: lay.index, tint,
     };
     drawLane(s);
     setMembers(s, lay);
@@ -840,7 +858,34 @@ export function createGalaxyScene(canvas, {
     for (const o of [...s.lobes.map((l) => l.mesh.material), s.lines.geometry, s.lines.material, s.plane.geometry, s.plane.material, s.lane.geometry, s.lane.material]) o.dispose();
   };
 
+  // The dust near each site takes its tint, its brightness kept (night 5 A4);
+  // redone only when the sites or their places change.
+  let dustTintKey = null;
+  const tintDust = (sites) => {
+    const live = sites.filter((x) => !x.gone);
+    const key = live.map((x) => `${x.id}@${x.index}:${x.home.x},${x.home.z}`).join('|');
+    if (key === dustTintKey) return;
+    dustTintKey = key;
+    const attr = dust.geometry.attributes.color, pos = dust.geometry.attributes.position.array;
+    dust.userData.base ??= attr.array.slice();
+    const base = dust.userData.base, out = attr.array, grain = [0, 0, 0];
+    const ratio = new Map(live.map((x) => [x, grainRatio(x.index)]));
+    for (let i = 0; i < out.length / 3; i++) {
+      const px = pos[i * 3], pz = pos[i * 3 + 2];
+      let near = null, d2 = Infinity;
+      for (const x of live) {
+        const d = (x.home.x - px) ** 2 + (x.home.z - pz) ** 2;
+        if (d < d2) { d2 = d; near = x; }
+      }
+      for (let c = 0; c < 3; c++) grain[c] = base[i * 3 + c];
+      const got = near ? tintGrain(grain, near.index, dustTintWeight(d2), ratio.get(near)) : grain;
+      for (let c = 0; c < 3; c++) out[i * 3 + c] = got[c];
+    }
+    attr.needsUpdate = true;
+  };
+
   const index = (sites, core) => {
+    tintDust(sites);
     world = { sites, core, byId: new Map(sites.map((s) => [s.id, s])), version: (world?.version ?? 0) + 1, sunRadius: SIZE.sun };
     dirty = true;
   };
@@ -981,7 +1026,7 @@ export function createGalaxyScene(canvas, {
       // A star whose place moved glides there; the camera reads `home` as it goes.
       const from = { ...s.home }, to = ls.home;
       if (from.x !== to.x || from.y !== to.y || from.z !== to.z) {
-        tween(`${s.id}:home`, LIVE.glideMs, (k) => { Object.assign(s.home, glide(from, to, k)); drawLane(s); });
+        tween(`${s.id}:home`, LIVE.glideMs, (k) => { Object.assign(s.home, glide(from, to, k)); drawLane(s); }, () => tintDust(world.sites));
       }
       if (plan.changed.includes(ls.id)) {
         const r = s.relay;
