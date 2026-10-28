@@ -277,12 +277,30 @@ Notes for every builder round (planner, round 7):
   the HV1 builders cluster's neighbours (vm-a, vm-b, bb's trouble moons) crowd the open ring, and a picked planet's own
   name is pushed off beside the ring (`ba` 120 px below it, `bb` past the ring's right); the names' trouble moon icons
   cross `ci-retry`/`search ui` as in r24. Candidates for T17/T18 (the card names the planet) or a labels pass.
-- [ ] T10 (§7 Night 5 B2, contract) [ui] [variant:galaxy] Moons join the page contract, additive only: `__cockpitView`'s
+- [x] T10 (§7 Night 5 B2, contract) [ui] [variant:galaxy] Moons join the page contract, additive only: `__cockpitView`'s
   `screenOf` and `emphasis` accept a moon id, a show `fly_to` on a moon frames it as planet → system does now (site, then
   its planet opened, then the moon), every existing name and value unchanged; `data-wall-state` gains no renamed value. If
   `fly_to` on a moon needs `show.js` (fenced), write the patch under `docs/plans/wall/patches/` and do the `main.js` side —
   done when: a test finds `screenOf(moonId)` a point while its ring is open, `emphasis` for a moon, and a `flyTo` of a moon id
-  ending with its site held and its planet's ring open; `wall-galaxy-show` and `cockpit-wall-hold` tests green unchanged.
+  ending with its site held and its planet's ring open; `wall-galaxy-show` and `cockpit-wall-hold` tests green unchanged. (commit 942eac2)
+  Notes (builder, round 28): `screenOf` and `emphasis` already took any drawn id (camera.js finds a moon among its
+  site's members; show.js's highlight `known` is main.js's `nodeAt`), now pinned for a moon. `director.js showNode` /
+  `showTarget` (pure) replace main.js's inline `nodeAt`/`targetOf`: a moon's target is its site's shot at the show's
+  zoom with `{ member: moon }`, so the camera frames its planet as a finger's tap on that moon does (T9 PICK); a site,
+  a planet and the sun fly exactly as before (no member). `touch.js showPlace`: in main.js's `show()` a moon's move sets
+  the place to its planet's (`placeOf(site, moon)`), so the tick's `moonsAt` opens the ring and Back steps out from it;
+  a later show move (not a `stay`) takes back only a place a show set, a finger's place stays. **No `show.js` change, so
+  no patch.** `zoom` is a required argument (a default reading `TIMING` broke frontend.test's evaluation-time guard).
+  Test: `test/wall-galaxy-show-moon.test.mjs` (6: showNode/showTarget; showPlace; the page on the large demo: a show to
+  `lane:builder-a/fix-login` lands with `lab` held, member the moon, builder-a's ring open, the moon in the frame ≥ 72 px
+  from its planet, a later site move folds it; a planet's fly as before; emphasis of a highlighted / left-out moon;
+  main.js's wiring and every handle name). `wall-galaxy-show`, `cockpit-wall-hold` unchanged and green. Looked at
+  (`$RUN_DIR/shots/r28-t10-moon/`, CDP on `--size large` calling `__cockpitView.map.flyTo`): moon → landed true, ring
+  open round ba at (290, 320), moon at (243, 397); `hv2` folds it; a builder-b moon opens bb's; Back to the system;
+  0 console errors. `r28-galaxy` (`?demo=1`, cpu 4x) 27.9 fps under load, again 30.6 fps (`r28-galaxy-2`), worst gap
+  222-234 ms, 0 errors, the tour unchanged (camera/show path only, no draw call added). **Seen:** a show releases the
+  plate, so the free box is the whole frame and the picked planet lands far left (x 290 of 1368); fine for T17's card
+  on the right.
 - [ ] T11 (§7 Night 5 C1) [ui] [variant:galaxy] Hit targets in screen space: 48 px for a finger, 28 px for a mouse (by
   `pointerType`), the nearest centre wins (`touch.js` the sketch's `hitNearest`, `hitRadius`). The owner wants no picker, so
   the fan (`fan.js`, its `main.js` wiring, `test/wall-galaxy-fan.test.mjs`, its `wall.css` rules unchanged or left unused)
