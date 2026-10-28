@@ -24,6 +24,15 @@ const { setFaults } = await import('../../../server/cockpit/faults.mjs');
 const { createRoomControl } = await import('./room-control.mjs');
 
 const clock = createTestClock();
+// A scenario whose Given sets the room's clock before anything happens (S-C1-37: 03:00,
+// `manual`, and the start's login check already on that clock) passes it in
+// `ROOM_TEST_CLOCK` (`{"set":"<iso>","mode":"manual"}`), applied before the room boots, as
+// the first `POST /clock` would be (build B217). Read here only, never in server/.
+if (process.env.ROOM_TEST_CLOCK) {
+  const want = JSON.parse(process.env.ROOM_TEST_CLOCK);
+  if (want.mode) clock.setMode(want.mode);
+  if (want.set) clock.set(Date.parse(want.set));
+}
 setClock(clock);
 const control = createRoomControl({ clock, timeZone: config.timezone });
 setFaults(control.hooks);

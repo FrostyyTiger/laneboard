@@ -42,6 +42,13 @@ function makeFakeAgent() {
     dir,
     /** Copy test/cockpit/scripts/<name>.json to script.json (re-read at every prompt). */
     use(name) { fs.copyFileSync(path.join(SCRIPTS, `${name}.json`), path.join(dir, 'script.json')); },
+    /** Change the script in place (stand-ins.md §2.4: the fake reads it each time), e.g. `start.login`. */
+    edit(fn) {
+      const file = path.join(dir, 'script.json');
+      const sc = JSON.parse(fs.readFileSync(file, 'utf8'));
+      fn(sc);
+      fs.writeFileSync(file, JSON.stringify(sc));
+    },
     log: () => readFakeAgentLog(dir),
     cleanup() { fs.rmSync(dir, { recursive: true, force: true }); },
   };
@@ -69,10 +76,13 @@ function makeRoom(fakeAgent) {
     /**
      * Boot a room under test. `turns`: that many seeded done turns (c1-talk.md §6);
      * `empty`: a conversation with no turn; `cockpit: false`: the same board with no
-     * cockpit configured (S-SCR-09's second run); `script` the fake agent's script.
+     * cockpit configured (S-SCR-09's second run); `script` the fake agent's script;
+     * `clock` `{set, mode}` the room's clock from its first timer on (build B217); `edit(script)`
+     * changes the copied script before the boot (S-C1-37's second case).
      */
-    async start({ turns = 0, script = 'c1-render', cockpit = true, board = null, config = {} } = {}) {
+    async start({ turns = 0, script = 'c1-render', cockpit = true, board = null, config = {}, clock = null, edit = null } = {}) {
       fakeAgent.use(script);
+      if (edit) fakeAgent.edit(edit); // the script changed before the room's first start
       const dir = tmp('lb-room-');
       dirs.push(dir);
       const cfg = {
@@ -84,7 +94,7 @@ function makeRoom(fakeAgent) {
       };
       const booted = await boot({
         mode: 'builder', entry: ROOM_UNDER_TEST, config: cfg,
-        env: { FAKE_AGENT_DIR: fakeAgent.dir },
+        env: { FAKE_AGENT_DIR: fakeAgent.dir, ...(clock ? { ROOM_TEST_CLOCK: JSON.stringify(clock) } : {}) },
         stateFiles: cockpit ? conversationFiles({ turns: seededTurns(turns) }) : null,
         timeoutMs: 20_000,
       });

@@ -399,6 +399,19 @@ What the slice itself says waits; nothing else moved here.
 - Review 35-security, finding 9: the agent's own uid can open the room link (loopback plus forged Origin gives `local`). Proposed: the peer-uid check of `server/fleet/peercred.mjs` in `linkRefusal`, 4401 for the agent's uid (D161 does so on the admin routes).
 - Review 89-owner, finding 1 (order, not changed): the owner asks for T26, then T45, T53, T52 (security, small), then T27-T29, stopping at the C1a/C1b line. The list keeps its order (as for review 18); to follow it, move T45, T53, T52 above T27. Also for the loop (fenced): after 3 network errors in a row back off to 30 min and write one line to `owner-notes`.
 - Review 89-owner, finding 2: question: on open and close of the pane, with nothing selected, should the Map re-fit into x 0-759 (and back) in the pane's slide time? `c1-talk.md` §1 is silent; the pane hides the hub and most of the fleet. The owner expects "yes". Not built until answered.
+- T28 (review-required): the login check `server/cockpit/login.mjs` runs `cockpit.agent.loginCheck`
+  as the agent's user (`sudo -n -u {user} -H --preserve-env=…`, no shell, stdin closed, D214), with
+  the child's environment less `LANEBOARD_MCP_TOKEN` (B213), 10 s then SIGTERM, 64 KB read, its
+  output never logged (§11.10); `server/cockpit/status.mjs` is the room's status arbiter (D152);
+  `test/cockpit-login.test.mjs`.
+- T28, research Q1 pinned with one real run (B212): Claude Code 2.1.303, logged out
+  (`CLAUDE_CONFIG_DIR` a fresh dir, no key in the environment): `claude auth status` prints
+  `{"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty", …}` and exits 1;
+  `claude auth status --text` prints `Not logged in. Run claude auth login to authenticate.` and
+  exits 1. The spec's six login words miss the JSON form, so the night added the pattern
+  `"loggedIn": false` to them (`login.mjs` `PINNED`). Options: keep that; or make the default argv
+  `["claude","auth","status","--text"]` (`protocols.md` §11.10/§11.12, `server/config/cockpit.mjs`,
+  `docs/config.md`); or Q1's proposal (for the default command exit 1 alone is `not-logged-in`).
 - Review 89-owner, finding 7: a failed tool call is grey with ` · 1 failed` only (`c1-talk.md` §4-§5.1, D25). The owner finds it enough for now; spec stands.
 
 ## Measured on the real screen

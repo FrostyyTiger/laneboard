@@ -1165,3 +1165,43 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   apart — spec: `c1-talk.md` §10 E3, D289 — overrule: a `refused` flag on that `turn.end`.
 - B210 (T27) The `status` message is read only for `agent-back` (E2) in T27; the status line itself
   is T28's — spec: `protocols.md` §3.5 — overrule: none.
+- B211 (T28) The login check's 10 s limit runs on the real clock, not the room clock: a check
+  started by a timer in `manual` mode is awaited by `advance()`, so a room-clock limit could never
+  fire inside it (as B102's ping) — spec: `protocols.md` §11.10 "How it runs" — overrule:
+  `CHECK_TIMEOUT_MS` on `clock.setTimeout` in `server/cockpit/login.mjs`.
+- B212 (T28) The login words gain one pinned pattern, `"loggedIn": false`: a real run of Claude
+  Code 2.1.303 logged out (`CLAUDE_CONFIG_DIR` a fresh dir) prints JSON
+  `{"loggedIn": false, "authMethod": "none", …}` and exits 1, with none of the six words, so the
+  spec's default check would always be `unknown` (`--text` prints `Not logged in. Run claude auth
+  login to authenticate.`) — spec: §11.10 "the build night pins them with one real run", research Q1
+  — overrule: `LOGIN_WORDS`/`PINNED` in `login.mjs`, or the default argv gains `--text`.
+- B213 (T28) The check's environment is the child's (D108) without `LANEBOARD_MCP_TOKEN`, and its
+  stdin is closed (`ignore`): the check has no use for the token — spec: §11.10 "How it runs" —
+  overrule: pass `mcpToken` to `childEnv` in `session.mjs` `loginWatch()`.
+- B214 (T28) A failed start counts as "failed with the login words" (§11.4's last row) when the last
+  stderr line of the agent has them, judged where E3 is (from the second failed start); stdout
+  before `init` is not read for it — spec: `protocols.md` §11.4, §11.7 — overrule: `onExit` in
+  `session.mjs`.
+- B215 (T28) The pane counts the room's `welcome` as the end of `room-down` for the status line
+  (the room's `status` shows from the first frame after `welcome`, before the snapshot makes the
+  link `live`); a new loss (a new `since` on the link) undoes it — spec: c1-talk.md §10.1 ("draws
+  it from `welcome.status` in its first frame"), screens.md §7 "Back" — overrule: `welcomed` in
+  `pane.js`.
+- B216 (T28) With nothing to show, `[data-cockpit-status]` is taken out of the pane (S-C1-37:
+  "`[data-cockpit-status]` absent"), not only hidden; it goes back under the header when a row holds
+  — spec: c1-talk.md §10.1, S-C1-37 — overrule: `drawStatus()` in `pane.js`.
+- B217 (T28) The room under test takes its clock's start in `ROOM_TEST_CLOCK`
+  (`{"set":…,"mode":"manual"}`, `room.start({clock})`), applied before the room boots: S-C1-37's
+  03:00 `manual` must hold from the start's login check on, else the 900 s timer is armed on the
+  real clock before the first `POST /clock` and fires at 03:14:59 — spec: stand-ins.md §1.1,
+  S-C1-37 — overrule: the wrapper and `fixtures.mjs`; the test then sets the clock after the boot.
+- B218 (T28) S-C1-38's "the link starts again" taps `RETRY NOW` after `POST /link {"up":true}` so the
+  wait is not the backoff's (after the offline spell it can be 15 s); what it asserts is unchanged
+  — spec: S-C1-38, screens.md §7.1 — overrule: drop the tap and wait out the backoff.
+- B219 (T28) The restart after the login comes back closes the idle child's stdin (as `new`, B81),
+  SIGTERM 5 s later if it has not exited, and resumes at once at the exit; no `agent-down`, no
+  `agent-back` — spec: §11.10 result `ok`, §11.7 — overrule: `restartForLogin()` in `session.mjs`.
+- B220 (T28) S-C1-37 and S-C1-38 run on the Wall page: the scenario's rect y 64-144 is the pane's
+  status line under a 64 px header at the screen's top (on the app the pane starts under the 36 px
+  top bar: y 100-180); the cases of one id are steps of one test, each on a fresh room and page
+  — spec: S-C1-37, slices.md §2 — overrule: the `openWall` calls in `c1-status.spec.mjs`.

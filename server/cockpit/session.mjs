@@ -16,8 +16,10 @@
 //
 // opts: `bridge` (the createBridge() options; `emit`, `log` are shared),
 // `stateDir`, `emit(msg)`, `log(line)`, `condition(code, fields | null)` (a
-// status condition set or cleared; by default a `status` message, T28 brings
-// the arbiter of §3.5), `createBridge` (injectable), `onConversation(rec,
+// status condition set or cleared; by default status.mjs's arbiter of §3.5,
+// which sends the highest as `status`), `createBridge` (injectable),
+// `checkSpawn` (the login check's spawn, injectable; the check runs when
+// `bridge.agent.loginCheck` is an argv, protocols.md §11.10, login.mjs), `onConversation(rec,
 // reason)` (a conversation was written to session.json at a `ready`: `reason`
 // null for the first, `owner`, `forced`; the store begins it, B84), `cutTurn`
 // (the room went down mid-turn: `agent-back` at the first ready, §11.7.1 step 3).
@@ -27,7 +29,10 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createBridge as realCreateBridge } from './bridge.mjs';
+import { childEnv, createBridge as realCreateBridge } from './bridge.mjs';
+import { fillPath } from '../config/cockpit.mjs';
+import { checkArgv, createLoginWatch, hasLoginWords, runLoginCheck } from './login.mjs';
+import { createStatus } from './status.mjs';
 import * as clock from './clock.mjs';
 import { isoAt } from './iso.mjs';
 
@@ -91,9 +96,9 @@ export function createSession(opts) {
     stateDir, emit = () => {}, log = () => {}, createBridge = realCreateBridge,
     onConversation = () => {},
   } = opts;
-  const condition = opts.condition ?? ((code, fields) => emit({
-    type: 'status', status: fields === null ? null : { code, since: isoAt(clock.now()), ...fields },
-  }));
+  // protocols.md §3.5 (D152): every condition into one slot, the highest sent.
+  const status = opts.condition ? null : createStatus({ emit, log });
+  const condition = opts.condition ?? ((code, fields) => status.set(code, fields));
 
   let phase = 'down';
   let closed = false;
@@ -113,11 +118,42 @@ export function createSession(opts) {
   let readyTimer = null;
   let newsTimer = null;
   let replaceForced = false;
+  let reloginTimer = null;
+  let loginBlocked = false; // a failed start said the login words (§11.4's last row)
 
   const bridge = createBridge({
-    ...opts.bridge, emit, log, restartOnKill: false,
+    ...opts.bridge, emit, log, restartOnKill: false, onCondition: condition,
     onReady, onExit, onTurnEnd,
   });
+  const login = loginWatch();
+
+  /** protocols.md §11.10: the login check, when `cockpit.agent.loginCheck` names one. */
+  function loginWatch() {
+    const agent = opts.bridge?.agent;
+    if (!Array.isArray(agent?.loginCheck) || agent.loginCheck.length === 0) return null;
+    const env = opts.bridge.env ?? process.env;
+    const names = (agent.env ?? []).filter((n) => env[n] !== undefined);
+    const run = () => runLoginCheck({
+      argv: checkArgv(agent, names), cwd: fillPath(agent.cwd, { stateDir }),
+      env: childEnv({ env, names }), ...(opts.checkSpawn ? { spawn: opts.checkSpawn } : {}),
+    });
+    return createLoginWatch({
+      run, condition, log,
+      idle: () => phase === 'up' && !bridge.turn && !stopping && !renewing && bridge.pid !== null,
+      relogin: restartForLogin,
+    });
+  }
+
+  /** §11.10: the login is back and no turn runs: the child restarts with `--resume`, no `agent-back`. */
+  function restartForLogin() {
+    if (phase !== 'up' || bridge.turn || stopping || renewing || bridge.pid === null) return;
+    log('cockpit session: the login is back; the agent restarts with --resume to read it');
+    want = { resume: current !== null, reason: null };
+    replaceForced = true;
+    bridge.closeStdin('login');
+    // As `new` (B81): SIGTERM 5 s after a closed stdin without an exit.
+    reloginTimer = later(() => { reloginTimer = null; if (replaceForced) bridge.signal('SIGTERM'); }, NEW_TERM_MS);
+  }
 
   const later = (fn, ms) => clock.setTimeout(() => { if (!closed) fn(); }, ms);
   const clear = (h) => { if (h) clock.clearTimeout(h); };
@@ -133,6 +169,7 @@ export function createSession(opts) {
     } else {
       want = { resume: false, reason: null };
     }
+    login?.start(); // §11.10: at the room's start, beside the first spawn
     spawnNow();
   }
 
@@ -197,6 +234,8 @@ export function createSession(opts) {
       downShown = false;
       condition('agent-down', null);
     }
+    loginBlocked = false;
+    login?.sessionUp();
     downSince = null;
     if (cutTurn) {
       // E2's second line (c1-talk.md §10.1 row 7): news, it goes after 5 s.
@@ -210,6 +249,8 @@ export function createSession(opts) {
   function onExit({ code, beforeReady, why, turnId }) {
     clear(readyTimer);
     readyTimer = null;
+    clear(reloginTimer);
+    reloginTimer = null;
     const asked = attempt;
     attempt = null;
     if (closed) { phase = 'closed'; return; }
@@ -248,11 +289,16 @@ export function createSession(opts) {
       want = { resume: false, reason: 'forced' };
       resumeFails = 0;
     }
-    if (failedStarts >= 2 && !downShown) {
+    const lastLine = bridge.stderrTail().at(-1) ?? null;
+    if (failedStarts >= 2 && login && !loginBlocked && hasLoginWords(lastLine)) {
+      // §11.4's last row: a start that fails with the login words is `not-logged-in`
+      // with `blocksSend` until a session is up, instead of `agent-down` (B214).
+      loginBlocked = true;
+      login.startFailed();
+    } else if (failedStarts >= 2 && !downShown && !loginBlocked) {
       // E3 from the second failed start on, with the last stderr line (§11.7).
       downShown = true;
-      const tail = bridge.stderrTail();
-      condition('agent-down', { since: isoAt(downSince), detail: tail.at(-1) ?? `the agent exited (code ${code})`, blocksSend: true });
+      condition('agent-down', { since: isoAt(downSince), detail: lastLine ?? `the agent exited (code ${code})`, blocksSend: true });
     }
     scheduleRestart();
   }
@@ -307,7 +353,8 @@ export function createSession(opts) {
     stopping = null;
   }
 
-  function onTurnEnd() {
+  function onTurnEnd(msg) {
+    login?.turnEnded(msg); // §11.10 "Other ways in": E4 sets the condition, `done` clears it
     // A turn ended by the child's exit: onExit, called right after, decides.
     if (bridge.pid === null) {
       if (renewing) renewing.waitTurn = false;
@@ -379,8 +426,9 @@ export function createSession(opts) {
     endStop();
     for (const h of renewing?.timers ?? []) clear(h);
     renewing = null;
-    for (const h of [restartTimer, readyTimer, newsTimer]) clear(h);
-    restartTimer = readyTimer = newsTimer = null;
+    for (const h of [restartTimer, readyTimer, newsTimer, reloginTimer]) clear(h);
+    restartTimer = readyTimer = newsTimer = reloginTimer = null;
+    login?.close();
     return bridge.close();
   }
 

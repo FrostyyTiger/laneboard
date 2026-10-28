@@ -8,7 +8,7 @@
 //   pane.setLink(state)        the room link's state (link.js): data-cockpit, the status line
 //   pane.apply(msg)            one room message (welcome, snapshot, turn.prompt, turn.state,
 //                              text.delta, text.block, tool.start, tool.end, turn.retrying,
-//                              turn.end, status: only its `agent-back` for E2, c1-talk.md §10)
+//                              turn.end, status: the status line of c1-talk.md §10.1)
 //   onPrompt(msg)              SEND: the `prompt` to the room (protocols.md §3.1); the block is
 //                              drawn at the tap with `· SENDING` until the room's echo (B8)
 //   onStop(msg)                STOP: the `stop` to the room (protocols.md §3.3)
@@ -18,7 +18,7 @@
 //
 // The root (<html>) carries data-cockpit, data-pane, data-turn and data-keyboard (README.md
 // "Selectors tests use"); the pane is [data-cockpit-conversation].
-import { sinceText } from '../core/cockpit-time.js';
+import { hasAge, pickStatus, statusText as statusLine } from './status.js';
 import { AGE_FROM_MS, CONFIRM_WAIT_MS, MAX_PROMPT_CHARS, PANE_SLIDE_MS, STOP_GUARD_MS, TICK_MS } from '../core/cockpit-constants.js';
 import { createTurn } from './turns.js';
 import { endButtons, endText, GO_ON_TEXT } from './errors.js';
@@ -68,13 +68,8 @@ export function newClientId(cryptoImpl = globalThis.crypto) {
 /** c1-talk.md §1 "the conversation is pinned while its last pixel is within 48 px" (§4). */
 const PIN_PX = 48;
 
-/** The room-down status line of c1-talk.md §10.1 row 2 (screens.md §7). */
-export function roomDownText({ since, retryAt, trying }, nowMs) {
-  const head = `Cockpit room unreachable ${sinceText(since, nowMs)}.`;
-  if (trying) return `${head} Retrying now…`;
-  if (retryAt == null) return head;
-  return `${head} Retrying in ${Math.max(0, Math.ceil((retryAt - nowMs) / 1000))} s.`;
-}
+/** c1-talk.md §10.1 row 8 and screens.md §7 "Back": `Back since 06:47.` shows this long. */
+export const BACK_MS = 5_000;
 
 const el = (doc, tag, cls, attrs = {}) => {
   const n = doc.createElement(tag);
@@ -179,6 +174,13 @@ export function createPane(opts = {}) {
 
   let open = false;
   let link = { status: 'connecting', since: null, retryAt: null, trying: false, welcome: null };
+  // c1-talk.md §10.1: the room's last `status` (kept while rows 1-2 show), the screen's own
+  // rows 1 and 8.
+  let roomStatus = null;
+  let offlineSince = win.navigator && win.navigator.onLine === false ? now() : null;
+  let back = null; // {at} for BACK_MS after the room came back
+  let welcomed = false; // the room's welcome came since the last loss (its first frame ends room-down)
+  let backTimer = null;
   let stt = 'none';
   let drawnTurns = null; // null until the first snapshot
   const views = new Map(); // turnId → createTurn() view
@@ -263,7 +265,8 @@ export function createPane(opts = {}) {
     } else {
       // c1-talk.md §7: disabled while the input holds only white space, above the length
       // limit, and while the room is down; D118: until `live`.
-      send.disabled = link.status !== 'live' || !canSend(input.value, maxChars);
+      // §10.1 (protocols.md §3.5): `blocksSend` while no session is up, the draft kept.
+      send.disabled = link.status !== 'live' || roomStatus?.blocksSend === true || !canSend(input.value, maxChars);
       send.inert = false;
       send.removeAttribute('aria-disabled');
       send.removeAttribute('aria-label');
@@ -331,22 +334,62 @@ export function createPane(opts = {}) {
     grow();
   }
 
+  const roomDownShown = () => link.status === 'room-down' && link.since != null && !link.refused;
+
+  /** screens.md §7 "Back": `Back since 06:47.` for 5 s at the room's first frame. */
+  function startBack() {
+    dropBack();
+    back = { at: now() };
+    backTimer = win.setTimeout(() => { backTimer = null; back = null; render(); }, BACK_MS);
+  }
+
+  /** The row that holds now (c1-talk.md §10.1); news outranked is dropped, not kept (D152). */
+  function currentRow() {
+    const row = pickStatus({
+      offline: offlineSince === null ? null : { since: offlineSince },
+      roomDown: roomDownShown() && !welcomed ? { since: link.since, retryAt: link.retryAt, trying: link.trying } : null,
+      room: link.status === 'live' || welcomed ? roomStatus : null,
+      back,
+    });
+    if (back && row?.code !== 'back') dropBack();
+    return row;
+  }
+
+  function dropBack() {
+    back = null;
+    if (backTimer !== null) { win.clearTimeout(backTimer); backTimer = null; }
+  }
+
   function drawStatus() {
-    const t = now();
-    if (link.status === 'room-down' && link.since != null && !link.refused) {
+    const was = status.hidden;
+    const row = currentRow();
+    if (row) {
       status.hidden = false;
-      status.dataset.status = 'room-down';
-      statusText.textContent = roomDownText(link, t);
-      retryBtn.hidden = false;
+      status.dataset.status = row.code;
+      const text = statusLine(row, now());
+      if (statusText.textContent !== text) statusText.textContent = text;
+      retryBtn.hidden = row.code !== 'room-down';
       retryBtn.disabled = Boolean(link.trying);
+      if (!unsupported && !status.isConnected) head.after(status);
     } else {
       status.hidden = true;
       delete status.dataset.status;
       statusText.textContent = '';
       retryBtn.hidden = true;
+      // §10.1 / S-C1-37: nothing shows, no `[data-cockpit-status]` in the pane (build B216).
+      status.remove();
     }
     pane.classList.toggle('ck-has-status', !status.hidden);
+    // Rows 1-6 count their age every 1 s (§10.1); room-down's retry counts down too.
+    const counting = hasAge(row);
+    if (counting && tick === null) tick = win.setInterval(drawStatus, TICK_MS);
+    if (!counting && tick !== null) { win.clearInterval(tick); tick = null; }
+    if (was !== status.hidden && open) grow(); // the input's cap with the keyboard up (§7.1)
   }
+
+  // c1-talk.md §10.1 row 1: `navigator.onLine` (screens.md §7 "The screen offline").
+  win.addEventListener('offline', () => { offlineSince ??= now(); render(); });
+  win.addEventListener('online', () => { offlineSince = null; render(); });
 
   function drawNote() {
     if (drawnTurns === null) {
@@ -846,9 +889,6 @@ export function createPane(opts = {}) {
     drawLine();
     newBtn.disabled = true;
     turnWord.classList.toggle('ck-grey', link.status !== 'live');
-    const counting = link.status === 'room-down' && !link.refused;
-    if (counting && tick === null) tick = win.setInterval(drawStatus, TICK_MS);
-    if (!counting && tick !== null) { win.clearInterval(tick); tick = null; }
     if (open) grow(); // the status line came or went: the input's cap with the keyboard up (§7.1)
   }
 
@@ -857,6 +897,8 @@ export function createPane(opts = {}) {
   win.addEventListener('resize', () => { applyFit(); if (open) grow(); });
 
   function setLink(state) {
+    // A new loss (its own `since`): the room has not spoken since (build B215).
+    if (state.status !== 'live' && state.since != null && state.since !== link.since) welcomed = false;
     link = state;
     render();
     // E1's count starts again for every prompt whose 5 s ran out while the link was not live.
@@ -868,6 +910,14 @@ export function createPane(opts = {}) {
     switch (msg.type) {
       case 'welcome':
         agentBack = false;
+        {
+          // §10.1: a page that loads or reconnects draws the line from welcome.status; after a
+          // room-down that showed, `Back since` unless that line outranks it (screens.md §7).
+          const wasDown = roomDownShown() && !welcomed;
+          welcomed = true;
+          roomStatus = msg.status ?? null;
+          if (wasDown && roomStatus === null && offlineSince === null) startBack();
+        }
         if (msg.status?.code === 'agent-back') backNow();
         stt = msg.config?.stt === 'on' ? 'on' : 'none';
         if (Number.isInteger(msg.config?.maxPromptChars) && msg.config.maxPromptChars > 0) maxChars = msg.config.maxPromptChars;
@@ -878,6 +928,7 @@ export function createPane(opts = {}) {
           if (Number.isFinite(roomNow)) clockOffset = now() - roomNow;
         }
         drawNote();
+        drawStatus();
         return;
       case 'snapshot':
         drawSnapshot(msg);
@@ -933,8 +984,10 @@ export function createPane(opts = {}) {
         return;
       }
       case 'status':
-        // The status line itself is T28's (§10.1); here only E2's `agent-back`.
+        roomStatus = msg.status ?? null;
+        if (roomStatus) dropBack(); // §10.1: news never waits, the room's line outranks it
         if (msg.status?.code === 'agent-back') backNow();
+        render();
         return;
       case 'turn.retrying': {
         const v = views.get(msg.turnId);
