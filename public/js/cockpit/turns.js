@@ -22,6 +22,13 @@
 //   t.unfail()                        // the line goes, the label loses its word (a late echo)
 //   t.prompt / t.clientId             // the prompt's text and the screen's clientId
 //   t.hasError()                      // an error line shows
+//   t.queuePrompt(p)                  // a prompt sent during the turn (c1-talk.md §8): its block at the
+//                                     // turn's end, `· QUEUED` (or `NOT SENT` and its line when cancelled);
+//                                     // p: {clientId, text, at, state, why}
+//   t.takePrompt(msg)                 // prompt.taken `taken`: `· QUEUED` goes, the block before item `atBlock`
+//   t.cancelPrompt(msg)               // prompt.taken `cancelled`: `NOT SENT`, its line, RETRY and EDIT
+//   t.removePrompt(clientId)          // a queued block leaves the turn (taken as the next turn, EDIT)
+//   t.at                              // the turn's own time as it was given (the label row's)
 //
 // The reply's text is md.js's blocks drawn by reply.js (T19); its tool lines are
 // tool-words.js's words in a `<button>` each (T20).
@@ -44,6 +51,9 @@ const timeOf = (at) => {
   const ms = typeof at === 'number' ? at : Date.parse(at ?? '');
   return Number.isFinite(ms) ? hhmm(ms) : null;
 };
+
+/** c1-talk.md §8: the line under a queued prompt that was not sent, by `why`. */
+export const PROMPT_WHY = Object.freeze({ stopped: 'Dropped by STOP.', 'not-taken': 'The agent did not read this.' });
 
 /** The words of `[data-turn-delivery]` (D270). */
 export const DELIVERY_WORDS = Object.freeze({ sending: 'SENDING', queued: 'QUEUED', 'not-sent': 'NOT SENT' });
@@ -177,9 +187,15 @@ export function toolLine(doc, opts = {}) {
   return line;
 }
 
-/** One turn: `[data-turn-id]` holding its prompt block and everything under it (T91). */
+/**
+ * One turn: `[data-turn-id]` holding its prompt block and everything under it (T91).
+ * opts: `offset`, `onFirstSentence`, `startMs` (the age's start on the page's clock when it
+ * is not the turn's own time: a queued prompt's turn counts from its take), `promptButtons(item)`
+ * (the `RETRY`/`EDIT` of a cancelled prompt: [{label, onTap}], item {clientId, prompt, remove()}).
+ */
 export function createTurn(doc, turn, opts = {}) {
   const offset = Number.isFinite(opts.offset) ? opts.offset : 0;
+  const promptButtons = typeof opts.promptButtons === 'function' ? opts.promptButtons : () => [];
   let onFirstSentence = typeof opts.onFirstSentence === 'function' ? opts.onFirstSentence : null;
   const box = el(doc, 'section', 'ck-turn');
   let turnId = null;
@@ -187,7 +203,7 @@ export function createTurn(doc, turn, opts = {}) {
   let agentLabel = null; // the `AGENT` label row: with the first item, or at 3 s (§9)
   let ageNode = null; // its ` · ` and `[data-turn-age]`, from 3 s
   let reply = null;
-  let startMs = pageMs(turn.at, offset);
+  let startMs = Number.isFinite(opts.startMs) ? opts.startMs : pageMs(turn.at, offset);
   let endMs = turn.end ? pageMs(turn.end.at, offset) : null;
   const blocks = new Map(); // blockIndex → {node, text, drawn}
   const placed = new Map(); // blockIndex → the node standing at it (a text block, a tool line)
@@ -211,8 +227,17 @@ export function createTurn(doc, turn, opts = {}) {
     if (turn.delivery) setDelivery(doc, promptLabel, turn.delivery);
     promptBlock = el(doc, 'div', 'ck-prompt');
     promptBlock.textContent = turn.prompt;
+    // §8: a queued prompt's text is --text-2 until the agent takes it.
+    promptBlock.classList.toggle('ck-queued', turn.delivery === 'queued');
     box.append(promptLabel, promptBlock);
   }
+
+  // §8: prompts sent during this turn. Queued and cancelled ones wait in `queueBox`, after
+  // everything the turn draws (the block stays the turn's last item while queued); a taken
+  // one stands in the reply before the item at its `atBlock`.
+  const promptItems = new Map(); // clientId → {clientId, prompt, at, node, label, text, err, state}
+  let queueBox = null;
+  let takes = 0; // prompts placed in the reply, so two taken at one atBlock keep their send order
 
   /** §10: the error line under the prompt block; `not-sent` (E1) also sets the label's `NOT SENT`. */
   let unsent = false; // E1: the room never had the prompt, so no agent works on it
@@ -240,7 +265,7 @@ export function createTurn(doc, turn, opts = {}) {
   function agentRow(at) {
     if (!agentLabel) {
       agentLabel = labelRow(doc, 'AGENT', at);
-      box.append(agentLabel);
+      box.insertBefore(agentLabel, queueBox);
     }
     return agentLabel;
   }
@@ -250,7 +275,7 @@ export function createTurn(doc, turn, opts = {}) {
     if (!reply) {
       agentRow(at);
       reply = el(doc, 'div', 'ck-reply', { 'data-reply': '' });
-      box.append(reply); // the AGENT row is the turn's last child until its reply comes
+      box.insertBefore(reply, queueBox); // after the AGENT row, before the queued prompts
     }
     return reply;
   }
@@ -346,6 +371,12 @@ export function createTurn(doc, turn, opts = {}) {
     .filter((it) => it?.kind === 'tool')
     .sort((a, b) => (a.blockIndex ?? 0) - (b.blockIndex ?? 0));
   for (const it of calls) addCall(it);
+  // §8 "Across a reload" (D124): the turn's prompt items, each as the page that sent it drew it.
+  for (const it of turn.items ?? []) {
+    if (it?.kind !== 'prompt' || typeof it.clientId !== 'string' || typeof it.text !== 'string') continue;
+    const item = queuePrompt({ clientId: it.clientId, text: it.text, at: it.at, state: it.state, why: it.why });
+    if (it.state === 'taken') placeTaken(item, Number.isInteger(it.atBlock) ? it.atBlock : 0);
+  }
   if (ended) for (const l of lines) l.stopped = true;
   // A snapshot taken while the reply streams: the cursor on its last block (c1-talk.md §3).
   if (!ended && turn.state === 'answering' && texts.length) {
@@ -381,6 +412,80 @@ export function createTurn(doc, turn, opts = {}) {
   }
   draw();
   tick(Date.now());
+
+  /** A prompt item's label word, its text's colour and its line, for its state (§8). */
+  function setPromptState(item, state, why) {
+    item.state = state;
+    item.err?.remove();
+    item.err = null;
+    item.text.classList.toggle('ck-queued', state === 'queued');
+    if (state === 'queued') setDelivery(doc, item.label, 'queued');
+    else if (state === 'cancelled') {
+      setDelivery(doc, item.label, 'not-sent');
+      item.err = errorLine(doc, 'not-sent', PROMPT_WHY[why] ?? PROMPT_WHY['not-taken'], promptButtons(item));
+      item.node.append(item.err);
+    } else setDelivery(doc, item.label, null);
+  }
+
+  function queuePrompt(p) {
+    const old = promptItems.get(p.clientId);
+    if (old) return old;
+    if (!queueBox) {
+      queueBox = el(doc, 'div', 'ck-queue');
+      box.append(queueBox);
+    }
+    const node = el(doc, 'div', 'ck-pitem');
+    const label = labelRow(doc, 'YOU', p.at);
+    const text = el(doc, 'div', 'ck-prompt');
+    text.textContent = p.text;
+    node.append(label, text);
+    const item = {
+      clientId: p.clientId, prompt: p.text, at: p.at, node, label, text, err: null, state: null,
+      remove: () => removePrompt(p.clientId),
+    };
+    promptItems.set(p.clientId, item);
+    queueBox.append(node);
+    setPromptState(item, p.state === 'cancelled' || p.state === 'taken' ? p.state : 'queued', p.why);
+    return item;
+  }
+
+  /** §8 "Taken": the block before the turn's first item with `blockIndex` ≥ `atBlock`. */
+  function placeTaken(item, atBlock) {
+    replyBox(item.at);
+    takes += 1;
+    place(atBlock - 0.5 + takes * 1e-6, item.node);
+    setPromptState(item, 'taken');
+  }
+
+  function removePrompt(clientId) {
+    const item = promptItems.get(clientId);
+    if (!item) return null;
+    promptItems.delete(clientId);
+    for (const [k, n] of placed) if (n === item.node) placed.delete(k);
+    item.node.remove();
+    return item;
+  }
+
+  /** prompt.taken `taken`: this turn's own prompt (taken as the next turn) or one queued in it. */
+  function takePrompt(msg) {
+    if (msg.clientId && msg.clientId === turn.clientId && promptLabel) {
+      setDelivery(doc, promptLabel, null);
+      promptBlock.classList.remove('ck-queued');
+      return true;
+    }
+    const item = promptItems.get(msg.clientId);
+    if (!item) return false;
+    if (item.state !== 'queued') return true; // applied already (a snapshot newer than the message)
+    placeTaken(item, Number.isInteger(msg.atBlock) ? msg.atBlock : 0);
+    return true;
+  }
+
+  function cancelPrompt(msg) {
+    const item = promptItems.get(msg.clientId);
+    if (!item) return false;
+    setPromptState(item, 'cancelled', msg.why);
+    return true;
+  }
 
   /** The room has the prompt: its turnId, and the label's delivery word for `queued` or none. */
   function confirmed(msg) {
@@ -450,6 +555,9 @@ export function createTurn(doc, turn, opts = {}) {
     get startMs() { return startMs; },
     prompt: turn.prompt ?? null,
     clientId: turn.clientId ?? null,
+    at: turn.at ?? null,
+    queuePrompt, takePrompt, cancelPrompt, removePrompt,
+    holdsPrompt: (clientId) => promptItems.has(clientId),
     hasError: () => errLine !== null,
     /** Is any reply text on screen? (`answering` waits for it, pane.js B140). */
     hasText: () => [...blocks.values()].some((b) => b.drawn !== null && b.drawn !== ''),

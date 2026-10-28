@@ -195,10 +195,16 @@
   background: var(--bg-surface);
   border: 1px solid var(--line-weak);
   font: 400 var(--ck-type-talk)/var(--ck-line-talk) var(--font-mono);
+  color: var(--text-1);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .ck-prompt + .ck-label { margin-top: 16px; }
+/* a prompt sent during a turn (c1-talk.md §8): its text --text-2 while queued; queued and
+   not-sent blocks wait at the turn's end, a taken one stands in the reply */
+.ck-prompt.ck-queued { color: var(--text-2); }
+.ck-pitem { display: flex; flex-direction: column; min-width: 0; }
+.ck-queue { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
 .ck-reply { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 /* one text block of the reply: md.js's blocks, 16 px apart (c1-talk.md §3) */
 .ck-block {
@@ -416,6 +422,19 @@
 }
 .ck-input::placeholder { color: var(--text-3); }
 .ck-send { flex: none; width: 64px; height: 64px; padding: 0; }
+/* the slot during a turn (c1-talk.md §8, D268): `STOP` as the talk button's own layout, a 24 px
+   `■` over 16 px caps, 4 px apart, centred, both --text-1 (a control, never --p1, D25); for
+   the second after a send `SEND` in --text-3, inert */
+.ck-send[data-send="stop"] {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.ck-stop-glyph { font: 400 24px/24px var(--font-label); color: var(--text-1); }
+.ck-stop-word { font: 500 16px/16px var(--font-label); color: var(--text-1); }
+.ck-send[data-send="wait"] { color: var(--text-3); }
 
 /* the line slot on the input row's top edge: one message, 18 px --font-label 500, line
    height 24 px, --text-1, 4 px free above and below, from x 784, at most 480 px wide, at most

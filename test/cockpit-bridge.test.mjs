@@ -474,6 +474,48 @@ test('a prompt during a turn is queued into it, and taken at the running calls\'
   for (const m of s.messages) assert.deepEqual(checkMessage(m, 'out'), { ok: true }, JSON.stringify(m));
 });
 
+for (const [mode, takes] of [['ignore-once', true], ['ignore', false]]) {
+  test(`§3.4 the resend (D123): a queued prompt ${mode === 'ignore' ? 'never read is cancelled not-taken' : 'read on its resend starts a turn'} (${mode})`, async (t) => {
+    const clock = createTestClock();
+    setClock(clock);
+    t.after(() => setClock(null));
+    const s = await setup(t, { script: { name: 'resend', start: { initAfterMs: 50, capabilities: ['interrupt_receipt_v1', 'interrupt_cancel_queued_v1'] }, turns: [
+      { match: 'count', queued: mode, steps: [{ at: 50, text: 'Three runs. ' }, { at: 400, end: 'done' }] },
+      { match: 'only the failed one', repeat: true, steps: [{ at: 50, text: 'Only builder-a failed.' }, { at: 150, end: 'done' }] }] } });
+    s.bridge.start();
+    await s.until(() => s.bridge.state === 'up', 'ready');
+    await s.bridge.prompt({ clientId: 'p-0000000c', screen: 'desk', text: 'count the runs', source: 'typed', lang: null, about: null });
+    assert.deepEqual(await s.bridge.prompt({ clientId: 'p-0000000d', screen: 'desk', text: 'only the failed one', source: 'typed', lang: null, about: null }),
+      { ok: true, turnId: 't-0001', delivery: 'queued' });
+    await s.until(() => s.messages.some((m) => m.type === 'turn.end'), 'the first turn\'s end');
+    clock.setMode('manual');
+    await clock.advance(9_999);
+    assert.equal(s.log.prompts().length, 2, 'not resent before 10 s');
+    await clock.advance(1);
+    await s.until(() => s.log.prompts().length === 3, 'the resend');
+    const [, first, second] = s.log.prompts();
+    assert.notEqual(second.uuid, first.uuid, 'a new UUID');
+    assert.equal(second.resendOf, first.uuid);
+    assert.ok(s.logs.includes(`cockpit agent: prompt.resend ${first.uuid} ${second.uuid}`), s.logs.join('\n'));
+    if (takes) {
+      await s.until(() => s.messages.filter((m) => m.type === 'turn.end').length === 2, 'the resend\'s turn');
+      const i = s.messages.findIndex((m) => m.type === 'turn.prompt' && m.from === 'queued');
+      assert.deepEqual([s.messages[i].turnId, s.messages[i].clientId, s.messages[i].delivery], ['t-0002', 'p-0000000d', 'new']);
+      const tk = s.messages[i + 1];
+      assert.deepEqual([tk.type, tk.turnId, tk.clientId, tk.state, tk.atBlock], ['prompt.taken', 't-0002', 'p-0000000d', 'taken', 0]);
+    }
+    await clock.advance(10_000);
+    await new Promise((r) => setTimeout(r, 100));
+    const cancels = s.messages.filter((m) => m.type === 'prompt.taken' && m.state === 'cancelled');
+    if (takes) assert.deepEqual(cancels, [], 'taken: nothing cancelled');
+    else assert.deepEqual(cancels.map((m) => [m.turnId, m.clientId, m.why]), [['t-0001', 'p-0000000d', 'not-taken']]);
+    await clock.advance(30_000);
+    await new Promise((r) => setTimeout(r, 100));
+    assert.equal(s.log.prompts().length, 3, 'resent at most once');
+    for (const m of s.messages) assert.deepEqual(checkMessage(m, 'out'), { ok: true }, JSON.stringify(m));
+  });
+}
+
 test('the child exits during a turn: E2 agent-exited (§11.4); the restart is §11.7\'s', async (t) => {
   const s = await setup(t, { script: bridgeScript({}, [{ steps: [{ at: 50, text: 'half' }, { at: 150, exit: 3 }] }]) });
   s.bridge.start();

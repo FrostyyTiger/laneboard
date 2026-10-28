@@ -10,12 +10,15 @@
 //                              text.delta, text.block, tool.start, tool.end, turn.end)
 //   onPrompt(msg)              SEND: the `prompt` to the room (protocols.md §3.1); the block is
 //                              drawn at the tap with `· SENDING` until the room's echo (B8)
+//   onStop(msg)                STOP: the `stop` to the room (protocols.md §3.3)
+//   onGap()                    a message the pane cannot place: the link closes 4000 `gap` and
+//                              the snapshot redraws (D119; protocols.md §3.4's unknown `clientId`)
 //   pane.open() / .close() / .isOpen()
 //
 // The root (<html>) carries data-cockpit, data-pane, data-turn and data-keyboard (README.md
 // "Selectors tests use"); the pane is [data-cockpit-conversation].
 import { sinceText } from '../core/cockpit-time.js';
-import { AGE_FROM_MS, CONFIRM_WAIT_MS, MAX_PROMPT_CHARS, PANE_SLIDE_MS, TICK_MS } from '../core/cockpit-constants.js';
+import { AGE_FROM_MS, CONFIRM_WAIT_MS, MAX_PROMPT_CHARS, PANE_SLIDE_MS, STOP_GUARD_MS, TICK_MS } from '../core/cockpit-constants.js';
 import { createTurn } from './turns.js';
 import { canSend, inputHeight, isSendKey, lengthNote, linesFromScroll, INPUT_ONE_LINE_PX, restoreDraft } from './draft.js';
 import { focusNow } from './focus.js';
@@ -40,6 +43,19 @@ export const LINES = Object.freeze({
   // screens.md §7: the line slot's `room-down` message while SEND is disabled for it
   roomDown: 'Sending and voice come back with the room.',
 });
+
+/** c1-talk.md §8: the turn states during which the slot is `STOP` with an empty input ("One slot, two jobs"). */
+const RUNNING = new Set(['thinking', 'working', 'answering']);
+
+/**
+ * c1-talk.md §8 ("One slot, two jobs", D268): what the `SEND` slot is. `send` while idle or with a draft;
+ * during a turn with an empty input `stop`, but `wait` until STOP_GUARD_MS after the latest
+ * send, so `STOP` never appears under a sending finger.
+ */
+export function slotState({ turn, draft, sinceSendMs }) {
+  if (!RUNNING.has(turn) || draft.trim() !== '') return 'send';
+  return sinceSendMs !== null && sinceSendMs < STOP_GUARD_MS ? 'wait' : 'stop';
+}
 
 /** protocols.md §3.1: `p-` and 8 hex characters from crypto.getRandomValues. */
 export function newClientId(cryptoImpl = globalThis.crypto) {
@@ -77,6 +93,8 @@ export function createPane(opts = {}) {
   const onRetryNow = opts.onRetryNow ?? (() => {});
   const onOpenChange = opts.onOpenChange ?? (() => {});
   const onPrompt = opts.onPrompt ?? (() => false);
+  const onStop = opts.onStop ?? (() => false);
+  const onGap = opts.onGap ?? (() => {});
   const focus = opts.focus ?? (() => focusNow({ page, doc }));
   const now = opts.now ?? (() => Date.now());
   const unsupported = opts.unsupported === true;
@@ -133,6 +151,11 @@ export function createPane(opts = {}) {
     autocapitalize: 'sentences', spellcheck: 'true', 'aria-label': 'Message to the agent',
   });
   const send = button(doc, 'ck-btn ck-send', 'data-cockpit-send', 'SEND');
+  // §8 (D268): `STOP`'s face, a `■` glyph and the word; `SEND` is the button's own text.
+  const stopGlyph = el(doc, 'span', 'ck-stop-glyph', { 'aria-hidden': 'true' });
+  stopGlyph.textContent = '■';
+  const stopWord = el(doc, 'span', 'ck-stop-word');
+  stopWord.textContent = 'STOP';
   send.dataset.send = 'send';
   send.disabled = true;
   row.append(input, send);
@@ -160,6 +183,7 @@ export function createPane(opts = {}) {
   const sending = new Map(); // clientId → the view drawn at the tap, until the room's echo
   const waits = new Map(); // clientId → its E1 timer (c1-talk.md §10)
   const notSent = new Map(); // clientId → the view showing E1, until EDIT or a late echo
+  const steering = new WeakSet(); // views drawn at a SEND during a turn: no turn of their own (§8)
   const promptSeq = new Map(); // the link seq of a sent prompt → its clientId (an `error` names it in `re`)
   const dirty = new Set(); // views whose text changed since the last frame
   let frame = null;
@@ -201,14 +225,47 @@ export function createPane(opts = {}) {
     const s = Object.hasOwn(TURN_WORDS, state) ? state : 'idle';
     root.dataset.turn = s;
     turnWord.textContent = TURN_WORDS[s];
+    sendState(); // §8: the slot follows the turn
   };
 
   let maxChars = MAX_PROMPT_CHARS; // welcome.config.maxPromptChars (protocols.md §2.1)
+  let lastSendAt = null; // the page's clock at the latest send (D268)
+  let guardTimer = null;
+  let stopPress = null; // the pointer pressed on the slot while it read STOP (D268)
 
   function sendState() {
-    // c1-talk.md §7: disabled while the input holds only white space, above the length
-    // limit, and while the room is down; D118: until `live`.
-    send.disabled = link.status !== 'live' || !canSend(input.value, maxChars);
+    const was = send.dataset.send;
+    const since = lastSendAt === null ? null : now() - lastSendAt;
+    const face = slotState({ turn: root.dataset.turn, draft: input.value, sinceSendMs: since });
+    send.dataset.send = face;
+    if (face !== was) {
+      if (face === 'stop') send.replaceChildren(stopGlyph, stopWord);
+      else send.textContent = 'SEND';
+    }
+    if (face === 'stop') {
+      // §8 "How STOP looks and acts": enabled while the link is live; its name `Stop`.
+      send.disabled = link.status !== 'live';
+      send.inert = false;
+      send.removeAttribute('aria-disabled');
+      send.setAttribute('aria-label', 'Stop');
+    } else if (face === 'wait') {
+      // D268: `SEND` in --text-3, inert: a tap in the second does nothing at all.
+      send.disabled = false;
+      send.inert = true;
+      send.setAttribute('aria-disabled', 'true');
+      send.removeAttribute('aria-label');
+      if (guardTimer === null) {
+        guardTimer = win.setTimeout(() => { guardTimer = null; sendState(); }, Math.max(1, STOP_GUARD_MS - since));
+      }
+    } else {
+      // c1-talk.md §7: disabled while the input holds only white space, above the length
+      // limit, and while the room is down; D118: until `live`.
+      send.disabled = link.status !== 'live' || !canSend(input.value, maxChars);
+      send.inert = false;
+      send.removeAttribute('aria-disabled');
+      send.removeAttribute('aria-label');
+    }
+    if (was === 'stop' && face !== 'stop') stopPress = null;
   }
 
   /**
@@ -328,7 +385,7 @@ export function createPane(opts = {}) {
   const runningView = () => {
     let last = null;
     for (const v of views.values()) last = v;
-    for (const v of sending.values()) last = v;
+    for (const v of sending.values()) if (!steering.has(v)) last = v;
     return last && !last.ended ? last : null;
   };
 
@@ -353,7 +410,7 @@ export function createPane(opts = {}) {
     const frag = doc.createDocumentFragment();
     views.clear();
     for (const t of turns) {
-      const v = createTurn(doc, t, { offset: clockOffset });
+      const v = createTurn(doc, t, { offset: clockOffset, promptButtons });
       if (v.turnId) views.set(v.turnId, v);
       if (t.clientId) sending.delete(t.clientId); // the room had it: the snapshot's block is the one
       frag.append(v.node);
@@ -402,8 +459,9 @@ export function createPane(opts = {}) {
    */
   function sendNow() {
     const text = input.value.trim();
-    if (send.disabled || text === '') return;
+    if (send.disabled || send.dataset.send !== 'send' || text === '') return;
     input.value = '';
+    lastSendAt = now(); // D268: the slot is not `STOP` for a second after a send
     draftChanged();
     sendPrompt(text, newClientId());
   }
@@ -416,8 +474,12 @@ export function createPane(opts = {}) {
     const sentAt = now();
     // README B9: from the SEND tap to the reply's first sentence drawn; measured, never asserted (D235).
     win.performance?.mark?.('cockpit:B9:start');
+    // A send during a turn steers it (§8): its block waits for the room's `queued` echo and
+    // counts no age of its own; the header stays the running turn's.
+    const during = runningView() !== null;
     const v = createTurn(doc, { clientId, prompt: text, at: sentAt, delivery: 'sending' }, {
       offset: clockOffset,
+      startMs: during ? Number.NaN : undefined,
       onFirstSentence: () => {
         try {
           win.performance.mark('cockpit:B9:end');
@@ -425,9 +487,10 @@ export function createPane(opts = {}) {
         } catch { /* no marks in this browser: nothing to measure */ }
       },
     });
+    if (during) steering.add(v);
     sending.set(clientId, v);
     appendTurn(v);
-    setTurn('thinking');
+    if (!during) setTurn('thinking');
     pinned = true;
     follow.hidden = true;
     toEnd();
@@ -470,9 +533,22 @@ export function createPane(opts = {}) {
     grew();
   }
 
+  /**
+   * §8: a queued prompt not sent (`Dropped by STOP.`, `The agent did not read this.`):
+   * `RETRY` sends its text with a new `clientId` (D259), `EDIT` as E1's.
+   */
+  function promptButtons(item) {
+    return [
+      { label: 'RETRY', onTap: () => { if (link.status === 'live') { lastSendAt = now(); sendState(); sendPrompt(item.prompt, newClientId()); } } },
+      { label: 'EDIT', onTap: () => editText(item.prompt, () => item.remove()) },
+    ];
+  }
+
   /** E1 `RETRY`: the same text with the same `clientId`, as a new block; the failed one stays (§10). */
   function retry(v) {
     if (link.status !== 'live' || sending.has(v.clientId)) return;
+    lastSendAt = now(); // D268: a RETRY is a send
+    sendState();
     sendPrompt(v.prompt, v.clientId);
   }
 
@@ -482,10 +558,17 @@ export function createPane(opts = {}) {
    */
   function edit(v) {
     for (const [id, w] of notSent) if (w === v) notSent.delete(id);
-    v.node.remove();
-    drawnTurns = Math.max(0, (drawnTurns ?? 1) - 1);
+    editText(v.prompt, () => {
+      v.node.remove();
+      drawnTurns = Math.max(0, (drawnTurns ?? 1) - 1);
+    });
+  }
+
+  /** `EDIT`'s own part: `drop()` takes the block away, `text` goes back into the input. */
+  function editText(text, drop) {
+    drop();
     drawNote();
-    const { value, caret } = restoreDraft(v.prompt, input.value);
+    const { value, caret } = restoreDraft(text, input.value);
     input.value = value;
     draftChanged();
     input.focus({ preventScroll: true });
@@ -503,19 +586,86 @@ export function createPane(opts = {}) {
     if (mine) {
       sending.delete(msg.clientId);
       notSent.delete(msg.clientId);
-      mine.confirm(msg);
+      const host = msg.delivery === 'queued' ? views.get(msg.turnId) : null;
+      if (host) {
+        // §8: the block becomes the running turn's queued prompt, its label time the send's.
+        mine.node.remove();
+        drawnTurns = Math.max(0, (drawnTurns ?? 1) - 1);
+        host.queuePrompt({ clientId: msg.clientId, text: mine.prompt, at: mine.at, state: 'queued' });
+        grew();
+        return;
+      }
+      mine.confirm(msg.delivery === 'queued' ? { ...msg, turnId: null } : msg);
       if (mine.turnId && msg.delivery !== 'queued') views.set(mine.turnId, mine);
       ageTick();
       return;
     }
-    // A queued prompt from another screen is T25's (c1-talk.md §8); a known turn is a resend's answer.
-    if (msg.delivery === 'queued' || views.has(msg.turnId)) return;
+    if (msg.from === 'queued' && takeAsNextTurn(msg)) return;
+    if (msg.delivery === 'queued') {
+      // Another screen's prompt during the turn (§12): queued in it as this screen's would be.
+      views.get(msg.turnId)?.queuePrompt({ clientId: msg.clientId, text: msg.text, at: msg.at, state: 'queued' });
+      grew();
+      return;
+    }
+    // A known turn is a resend's answer.
+    if (views.has(msg.turnId)) return;
     const v = createTurn(doc, { turnId: msg.turnId, prompt: msg.text, at: msg.at }, { offset: clockOffset });
     views.set(msg.turnId, v);
     appendTurn(v);
     grew();
     ageTick();
   }
+
+  /**
+   * §8 "The turn ends first" (D258): the queued block this screen holds leaves its turn and
+   * becomes the new turn's prompt, its label time kept (the send), `· QUEUED` until the
+   * `prompt.taken`; its age counts from now. No block held: false, drawn as any prompt.
+   */
+  function takeAsNextTurn(msg) {
+    let item = null;
+    for (const v of views.values()) if ((item = v.removePrompt(msg.clientId))) break;
+    if (!item) return false;
+    const v = createTurn(doc, { turnId: msg.turnId, clientId: msg.clientId, prompt: item.prompt, at: item.at, delivery: 'queued' }, {
+      offset: clockOffset, startMs: now(),
+    });
+    views.set(msg.turnId, v);
+    turnsBox.append(v.node);
+    grew();
+    ageTick();
+    return true;
+  }
+
+  /** prompt.taken (protocols.md §3.4): taken into its turn, or cancelled; unknown: D119's gap. */
+  function promptTaken(msg) {
+    const v = views.get(msg.turnId);
+    const ok = v && (msg.state === 'taken' ? v.takePrompt(msg) : msg.state === 'cancelled' ? v.cancelPrompt(msg) : true);
+    if (!ok) { onGap(); return; }
+    changed(v);
+  }
+
+  /**
+   * STOP (§8, D268): acts on `pointerup` only when that pointer's `pointerdown` landed on the
+   * slot while it read `STOP` and the lift is within TAP_SLOP_TOUCH of it; a keyboard
+   * activation (`click` with `detail` 0) and `Ctrl+C` with the input empty act at once.
+   */
+  function stopNow() {
+    if (send.dataset.send !== 'stop' || send.disabled) return;
+    const v = runningView();
+    if (!v?.turnId) return;
+    setTurn('stopping');
+    onStop({ type: 'stop', turnId: v.turnId });
+  }
+  send.addEventListener('pointerdown', (e) => {
+    stopPress = send.dataset.send === 'stop' ? { id: e.pointerId, x: e.clientX, y: e.clientY } : null;
+  });
+  send.addEventListener('pointerup', (e) => {
+    const p = stopPress;
+    stopPress = null;
+    if (!p || p.id !== e.pointerId || send.dataset.send !== 'stop') return;
+    if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > TAP_SLOP_TOUCH) return;
+    stopNow();
+  });
+  send.addEventListener('pointercancel', () => { stopPress = null; });
 
   /**
    * B142: the slide starts in the frame of the tap. A new CSS transition waits pending for the
@@ -625,11 +775,20 @@ export function createPane(opts = {}) {
   opener.addEventListener('click', () => setOpen(!open));
   closeBtn.addEventListener('click', () => setOpen(false));
   retryBtn.addEventListener('click', () => onRetryNow());
-  send.addEventListener('click', sendNow);
+  send.addEventListener('click', (e) => {
+    if (send.dataset.send === 'stop') { if (e.detail === 0) stopNow(); return; }
+    sendNow();
+  });
   input.addEventListener('input', draftChanged);
   // §7 "Keys": Enter sends, Shift+Enter breaks the line. An Enter that cannot send
   // (white space, too long, the room down) does nothing: no line break either (build B172).
   input.addEventListener('keydown', (e) => {
+    // §8: Ctrl+C with the input empty is STOP (a key is not a bouncing finger).
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && (e.key === 'c' || e.key === 'C') && input.value === '' && send.dataset.send === 'stop') {
+      e.preventDefault();
+      stopNow();
+      return;
+    }
     if (!isSendKey(e)) return;
     e.preventDefault();
     sendNow();
@@ -686,6 +845,9 @@ export function createPane(opts = {}) {
         return;
       case 'turn.prompt':
         promptEcho(msg);
+        return;
+      case 'prompt.taken':
+        promptTaken(msg);
         return;
       case 'error': {
         // protocols.md §3.1: `bad-message` on a prompt (empty, too long, a bad focus) is E1 at once.

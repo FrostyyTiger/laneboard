@@ -61,6 +61,9 @@ export const MAX_LINE_BYTES = 16 * 1024 * 1024;
 export const STDERR_KEEP = 20;
 /** §11.11: a refused start's SIGTERM after its stdin is closed. */
 export const REFUSED_TERM_MS = 5_000;
+/** §3.4 (D123): a queued prompt not taken this long after its turn's end is written once more;
+ * the resend not taken this long after it is `cancelled` `not-taken`. */
+export const QUEUED_RESEND_MS = 10_000;
 /** D97: a tool input's strings and its whole JSON, as screens get them. */
 export const INPUT_STRING_MAX = 200;
 export const INPUT_JSON_MAX = 2_000;
@@ -166,6 +169,7 @@ export function createBridge(opts) {
   // Prompts written (or held for a session that cannot steer), by bridge id.
   const prompts = new Map();
   const held = [];
+  const resendTimers = new Set();
   let livenessTimer = null;
 
   // ------------------------------------------------------------------ child
@@ -288,6 +292,7 @@ export function createBridge(opts) {
     }
     for (const [id, p] of prompts) if (!p.taken) prompts.delete(id);
     held.length = 0;
+    dropResends();
     log(`cockpit agent: exited (${signalName ?? `code ${code}`})${why ? ` after ${why}` : ''}`);
     onExit({ code, signal: signalName, beforeReady, why, turnId: cut });
     // §11.9: the child the bridge killed for silence or a stuck stdin goes on
@@ -319,7 +324,13 @@ export function createBridge(opts) {
     return true;
   }
 
+  function dropResends() {
+    for (const t of resendTimers) clock.clearTimeout(t);
+    resendTimers.clear();
+  }
+
   function close() {
+    dropResends();
     const c = child;
     if (!c) return Promise.resolve();
     killedFor = killedFor ?? 'close';
@@ -541,9 +552,61 @@ export function createBridge(opts) {
     for (const id of ev.cancelled) {
       const p = prompts.get(id);
       if (!p || p.taken) continue;
-      prompts.delete(id);
+      forget(p);
       if (p.clientId) send({ type: 'prompt.taken', turnId: p.turnId, clientId: p.clientId, state: 'cancelled', why: 'stopped' });
     }
+    // §3.4: a prompt a receipt still holds is the agent's to take; the room never resends it.
+    for (const id of ev.stillQueued) {
+      const p = prompts.get(id);
+      if (p) p.stillQueued = true;
+    }
+  }
+
+  /** A prompt leaves the bridge under every id it was written with (its resend's too). */
+  function forget(p) {
+    prompts.delete(p.id);
+    if (p.resendId) prompts.delete(p.resendId);
+  }
+
+  /**
+   * §3.4 "The resend" (D123): 10.0 s after the end of the turn a prompt was queued in, a
+   * prompt neither taken nor held by a receipt is written once more as a new prompt (a new
+   * UUID; a `taken` for either takes it), logged `prompt.resend` with both UUIDs; 10.0 s
+   * after that, still not taken, it is `cancelled` `not-taken`. At most once per prompt, and
+   * never while a turn runs (a long tool call may hold it for minutes): a running turn's end
+   * arms it again.
+   */
+  function armResends() {
+    for (const p of new Set(prompts.values())) {
+      if (p.taken || p.stillQueued || p.resendId || p.resendArmed || !p.queued) continue;
+      p.resendArmed = true;
+      later(() => {
+        p.resendArmed = false;
+        if (p.taken || p.stillQueued || prompts.get(p.id) !== p) return;
+        if (turn) return; // its end arms it again
+        resend(p);
+      }, QUEUED_RESEND_MS);
+    }
+  }
+
+  function resend(p) {
+    p.resendId = randomUUID();
+    prompts.set(p.resendId, p);
+    log(`cockpit agent: prompt.resend ${p.id} ${p.resendId}`);
+    toAgent({ type: 'prompt', id: p.resendId, text: p.agentText, priority: 'next' });
+    later(() => {
+      if (p.taken || prompts.get(p.id) !== p) return;
+      forget(p);
+      log(`cockpit agent: prompt ${p.id} not taken after its resend; cancelled not-taken`);
+      if (p.clientId) send({ type: 'prompt.taken', turnId: p.turnId, clientId: p.clientId, state: 'cancelled', why: 'not-taken' });
+    }, QUEUED_RESEND_MS);
+  }
+
+  /** A room-clock timer the bridge drops at its close. */
+  function later(fn, ms) {
+    const t = clock.setTimeout(() => { resendTimers.delete(t); fn(); }, ms);
+    resendTimers.add(t);
+    return t;
   }
 
   // --------------------------------------------------------------------- turns
@@ -611,6 +674,7 @@ export function createBridge(opts) {
     for (const [id, p] of prompts) if (p.taken || p.turnId === t.turnId && p.id === t.prompt) prompts.delete(id);
     // §3.4: a session that cannot steer gets its held prompts after the turn.
     for (const p of held.splice(0)) toAgent({ type: 'prompt', id: p.id, text: p.agentText, priority: 'next' });
+    armResends();
   }
 
   function turnPrompt(p, { turnId, delivery, from }) {
@@ -639,6 +703,7 @@ export function createBridge(opts) {
     const delivery = turn ? 'queued' : 'new';
     if (delivery === 'new') newTurn(rec.id);
     rec.turnId = turn.turnId;
+    rec.queued = delivery === 'queued';
     prompts.set(rec.id, rec);
     if (delivery === 'queued' && readyEv?.canSteer === false) {
       held.push(rec);
