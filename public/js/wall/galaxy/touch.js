@@ -653,10 +653,33 @@ export function memberPoints(sites, screenOf, names = [], minOpen = 0.5) {
       if (m?.moon && !m.tappable && !TROUBLE.has(m.tone ?? toneOf(m.node))) continue;
       const sp = m?.id != null ? screenOf(m.id) : null;
       if (!sp) continue;
-      out.push({ id: m.id, site: s.id, x: sp.x, y: sp.y, r: sp.r, tone: toneOf(m.node), box: boxes.get(m.id) ?? null, node: m.node });
+      const p = { id: m.id, site: s.id, x: sp.x, y: sp.y, r: sp.r, tone: toneOf(m.node), box: boxes.get(m.id) ?? null, node: m.node };
+      // A moon says whose it is and whether it stands on its planet's open ring (T8, ringHit).
+      if (m.moon) { p.host = m.moon.host?.id ?? m.moon.host ?? null; p.onRing = Boolean(m.ringOpen); }
+      out.push(p);
     }
   }
   return out;
+}
+
+/**
+ * One planet's worth of hits (night 5 T8; the owner: "it's so tiny I need to
+ * select which one I meant", no picker): `hits` from hitAll over
+ * memberPoints. A moon on an open ring was put there for the finger, so the
+ * first such hit wins; a planet and its own folded moons are one target, the
+ * planet (its ring opens, then each moon has its own place); one hit is
+ * itself. Null when the hits belong to two planets or more (the fan's, until
+ * T11) or there are none. Pure.
+ */
+export function ringHit(hits) {
+  const list = (hits ?? []).filter(Boolean);
+  if (list.length < 2) return list[0] ?? null;
+  const onRing = list.find((h) => h.onRing);
+  if (onRing) return onRing;
+  const planetOf = (h) => (h.host != null ? h.host : h.id);
+  const p = planetOf(list[0]);
+  if (!list.every((h) => planetOf(h) === p)) return null;
+  return list.find((h) => h.id === p) ?? { id: p, site: list[0].site };
 }
 
 /** What a tap on the words over the canvas hits when it opens nothing (T1): not a star, not empty sky. */

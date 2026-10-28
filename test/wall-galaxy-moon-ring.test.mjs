@@ -13,7 +13,7 @@ import { OPEN_MS } from '../public/js/wall/galaxy/layout.js';
 import { paletteFrom, toneOf } from '../public/js/wall/galaxy/palette.js';
 import { createGalaxyScene, moonRingPx, ringAngle, siteShot, MOON, MOON_RING } from '../public/js/wall/galaxy/scene.js';
 import { createLabels } from '../public/js/wall/galaxy/labels.js';
-import { AT_OVERVIEW, memberPoints, moonsAt, placeOf } from '../public/js/wall/galaxy/touch.js';
+import { AT_OVERVIEW, hitAll, memberPoints, moonsAt, placeOf, ringHit } from '../public/js/wall/galaxy/touch.js';
 
 const LARGE = JSON.parse(fs.readFileSync(new URL('./fixtures/wall-large-map.json', import.meta.url), 'utf8')).nodes;
 const W = 1368, H = 912;
@@ -65,7 +65,8 @@ function heldLab(opts = {}) {
   const labels = createLabels(root, galaxy, { steps: { site: 26, room: 15 }, doc });
   const named = () => { labels.draw(); return new Set(labels.shown().map((s) => s.id)); };
   const targets = () => new Set(memberPoints(galaxy.world.sites, screenOf).map((p) => p.id));
-  return { galaxy, lab, at, clock, screenOf, named, targets };
+  const hits = (x, y) => hitAll(memberPoints(galaxy.world.sites, screenOf), x, y);
+  return { galaxy, lab, at, clock, screenOf, named, targets, hits };
 }
 
 const moonsOf = (lab, host) => lab.members.filter((m) => m.moon?.host?.id === host);
@@ -191,4 +192,43 @@ test('scene: a folding system takes its open ring with it; still mode opens the 
   still.at(1016);
   const p = still.screenOf(BA);
   for (const m of moonsOf(still.lab, BA)) assert.ok(px(still.screenOf(m.id), p) >= 72, `${m.id} out at once in still mode`);
+});
+
+test('ringHit: no picker for one planet: a planet with its own folded moons is the planet, a moon on an open ring wins, two planets stay ambiguous', () => {
+  const P = { id: 'b', site: 's' }, m1 = { id: 'l1', site: 's', host: 'b', onRing: false }, m2 = { id: 'l2', site: 's', host: 'b', onRing: false };
+  assert.equal(ringHit([]), null);
+  assert.equal(ringHit([m1]), m1, 'one hit is itself');
+  assert.equal(ringHit([m1, P, m2]), P, 'the planet, whatever order the tones gave');
+  assert.deepEqual(ringHit([m1, m2]), { id: 'b', site: 's' }, 'two of its folded moons: their planet');
+  const Q = { id: 'c', site: 's' };
+  assert.equal(ringHit([P, Q]), null, 'two planets: the fan decides (T11 replaces it)');
+  assert.equal(ringHit([m1, Q]), null);
+  const open = { id: 'l3', site: 's', host: 'c', onRing: true };
+  assert.equal(ringHit([Q, open]), open, 'a moon on the open ring was put there for the finger');
+});
+
+test('page pick on the large demo: a finger on builder-a (its trouble moons tight round it) means builder-a; open, each moon is its own target', () => {
+  const { galaxy, lab, at, screenOf, hits } = heldLab();
+  // From twice the held shot's distance, as a tapped system is framed on the page, the moons crowd it.
+  const look = siteShot(lab, 0).look, cp = galaxy.camera.position;
+  cp.set(look.x + (cp.x - look.x) * 2, look.y + (cp.y - look.y) * 2, look.z + (cp.z - look.z) * 2);
+  galaxy.camera.updateMatrixWorld();
+  at(1100);
+  const p = screenOf(BA);
+  const under = hits(p.x, p.y);
+  assert.ok(under.length > 1, `folded, its moons are under the finger too: ${under.map((h) => h.id).join(' ')}`);
+  assert.equal(ringHit(under)?.id, BA, 'one planet: no picker');
+  const held = siteShot(lab, 0).pos;
+  galaxy.camera.position.set(held.x, held.y, held.z);
+  galaxy.camera.updateMatrixWorld();
+  galaxy.openMoons(BA);
+  at(1000 + OPEN_MS + 50);
+  for (const m of moonsOf(lab, BA)) {
+    const sp = screenOf(m.id);
+    const h = ringHit(hits(sp.x, sp.y));
+    assert.equal(h?.id, m.id, `a finger on ${m.id} opens it`);
+  }
+  const q = screenOf(BA);
+  const onPlanet = hits(q.x, q.y);
+  assert.equal(ringHit(onPlanet)?.id, BA, `the planet is still the planet: ${onPlanet.map((h) => h.id).join(' ')}`);
 });

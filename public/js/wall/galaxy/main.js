@@ -124,7 +124,7 @@ import { createOverviewFit, siteMarks, widestFar } from './overview.js';
 import { freshness, sameFresh, sunLook } from './fresh.js';
 import {
   AT_OVERVIEW, COVERED, TOUCH, backControl, backStep, beamSegments, canGoBack, coverHit, createBack, createGestures, createReturn, createTaps, createTouch, hitAll, hitTest, roleOf,
-  manualLine, memberPoints, moonsAt, orbitLimits, placeOf, tapPoints,
+  manualLine, memberPoints, moonsAt, orbitLimits, placeOf, ringHit, tapPoints,
 } from './touch.js';
 
 const BACKOFF_START_MS = 1000;
@@ -606,9 +606,11 @@ export function boot() {
       // A beacon's pillar is its site's target (night 4 T2).
       const beams = fx.has('beacon') ? beamSegments(galaxy.beams?.(), cam.screenAt) : [];
       // Two or more planets under the finger (night 4 T3): none is guessed, they fan out for the next tap.
+      // A planet with its own folded moons is one planet, and a moon on an open ring wins (T8, ringHit).
       const members = hitAll(memberPoints(galaxy.world?.sites, cam.screenOf, names), x - o.left, y - o.top);
-      if (members.length > 1) return { fan: members, x: x - o.left, y: y - o.top };
-      return members[0] ?? hitTest(tapPoints(galaxy.world?.sites, cam.screenOf, labels.shown(), beams), x - o.left, y - o.top);
+      const one = ringHit(members);
+      if (members.length > 1 && !one) return { fan: members, x: x - o.left, y: y - o.top };
+      return one ?? hitTest(tapPoints(galaxy.world?.sites, cam.screenOf, labels.shown(), beams), x - o.left, y - o.top);
     },
     tap: (hit) => {
       if (hit?.fan) { fan.show(hit.fan, hit.x, hit.y); return; }

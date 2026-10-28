@@ -286,7 +286,8 @@ test('galaxy/main.js wires the fan (night 4 T3): asked first while up, two membe
   assert.ok(pick.indexOf('fan?.shown()') >= 0 && pick.indexOf('fan?.shown()') < pick.indexOf('coverHit('), 'a fan up first');
   assert.match(pick, /fan\.hit\(x - o\.left, y - o\.top\) \?\? COVERED/);
   assert.match(pick, /const members = hitAll\(memberPoints\(/);
-  assert.match(pick, /if \(members\.length > 1\) return \{ fan: members/);
+  // One planet with its own folded moons, or a moon on an open ring, is no fan (night 5 T8, touch.js ringHit).
+  assert.match(pick, /const one = ringHit\(members\);\s*if \(members\.length > 1 && !one\) return \{ fan: members/);
   assert.match(js, /if \(hit\?\.fan\) \{ fan\.show\(hit\.fan, hit\.x, hit\.y\); return; \}\s*fan\?\.hide\(\);/);
   assert.match(js, /moved: \(\) => fan\?\.hide\(\)/, 'a turn or a zoom closes it');
   assert.match(js, /cam\.onDraw\(fan\.draw\)/);

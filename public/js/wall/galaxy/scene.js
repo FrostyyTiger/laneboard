@@ -1142,7 +1142,8 @@ export function createGalaxyScene(canvas, {
       const e = (moonRings.get(h.id)?.k ?? 0) * shown * a;
       if (moonRings.has(h.id)) live = true;
       const f = (out ? 1 : shown) * a;
-      m.tappable = out || e >= 0.5;
+      m.ringOpen = e >= 0.5;
+      m.tappable = out || m.ringOpen;
       m.mesh.visible = f > 0.005;
       if (!m.mesh.visible) { m.halo.visible = false; m.mark.visible = false; m.markShown = 0; continue; }
       any = true;
