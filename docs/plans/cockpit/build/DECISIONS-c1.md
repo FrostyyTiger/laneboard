@@ -1409,3 +1409,10 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   loopback peer" and §2.3's checks run in their written order — spec: `security.md` §2.3,
   `screens.md` §6.2.1, D182, D212 — overrule: swap steps 2 and 4 to report 4401 first, or export
   `isLoopbackPeer` from auth.mjs (a fenced change) and import it here.
+- B250 (T60) The room writes one `cockpit.stop` line per stop that does something: `link.mjs`
+  writes it only while the running turn is not already stopping (`session.stopping`, a new
+  read-only getter on `session.mjs`, `{turnId}` or null); a second or fiftieth `stop` frame for
+  that turn is still answered ok and changes nothing, so it writes nothing, and with a failing log
+  the line is tried once per stop, the stop running anyway (D166) — because screens.md §6.4 has a
+  line per stop and 50 frames a second would otherwise fill the chained log with copies (review
+  108-security finding 6) — spec: `screens.md` §6.4, D165 — overrule: the `stop` case in `link.mjs`.

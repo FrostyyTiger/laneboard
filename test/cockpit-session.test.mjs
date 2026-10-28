@@ -201,10 +201,13 @@ test('§11.6: a stop the agent honours ends stopped, not forced; its queued prom
   const { turnId } = await s.session.prompt(typed('long'));
   await s.until(() => s.ofType('text.delta').length > 0, 'the first delta');
   assert.equal((await s.session.prompt(typed('later', 'p-0000000b'))).delivery, 'queued');
+  assert.equal(s.session.stopping, null, 'no stop yet');
   s.session.stop(turnId);
+  assert.deepEqual(s.session.stopping, { turnId }, 'the stop runs (link.mjs reads it, T60)');
   await s.until(() => s.ofType('turn.end').length === 1, 'the turn end');
   const end = s.ofType('turn.end')[0];
   assert.deepEqual([end.state, end.forced], ['stopped', false]);
+  await s.until(() => s.session.stopping === null, 'the stop over with its turn');
   const cancelled = s.ofType('prompt.taken');
   assert.deepEqual(cancelled.map((m) => [m.clientId, m.state, m.why]), [['p-0000000b', 'cancelled', 'stopped']]);
   assert.equal(s.log.interrupts()[0].cancelled.length, 1);

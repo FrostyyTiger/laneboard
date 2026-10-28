@@ -440,5 +440,7 @@ export function createSession(opts) {
     get conversation() { return current?.conversation ?? null; },
     get session() { return current?.session ?? null; },
     get startedAt() { return current?.startedAt ?? null; },
+    /** The stop that runs, `{turnId}`, or null (link.mjs: one `cockpit.stop` line per stop, T60). */
+    get stopping() { return stopping ? { turnId: stopping.turnId } : null; },
   };
 }

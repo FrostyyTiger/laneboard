@@ -374,7 +374,10 @@ export function createLink({ session, store, audit = null, config, log = () => {
       case 'stop': {
         // screens.md §6.4: the line before the bridge is asked; D166: a stop never waits for the log.
         const running = session.bridge?.turn;
-        if (running && running.turnId === msg.turnId) {
+        // D165 (T60): one line per stop that does something; a stop of a turn already stopping
+        // changes nothing (session.mjs answers ok) and writes no line, so a burst of `stop`
+        // frames for one turn is one chained line.
+        if (running && running.turnId === msg.turnId && session.stopping?.turnId !== msg.turnId) {
           const line = stopLine(audit, { turnId: msg.turnId, cancelQueued: session.bridge.ready?.canCancelQueued === true });
           if (!line.ok) auditFailed('cockpit.stop', line.reason);
         }

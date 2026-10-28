@@ -251,7 +251,12 @@ function standInSession() {
       s.emit({ type: 'turn.prompt', turnId, clientId: p.clientId, screen: p.screen, text: p.text, source: p.source, lang: p.lang, about: p.about, at: '2026-10-27T07:02:04.130+01:00', receivedAt: p.receivedAt, delivery });
       return { ok: true, turnId, delivery };
     },
-    stop: (id) => (s.bridge.turn?.turnId === id ? { ok: true } : { ok: false, code: 'unknown-id' }),
+    stopping: null, // session.mjs's getter: the stop that runs, {turnId}
+    stop: (id) => {
+      if (s.bridge.turn?.turnId !== id) return { ok: false, code: 'unknown-id' };
+      s.stopping ??= { turnId: id };
+      return { ok: true };
+    },
     newConversation: () => ({ ok: false, code: 'not-now' }),
   };
   return s;
@@ -450,6 +455,35 @@ test('link: a stop of the running turn is audited before the session hears it; a
   assert.deepEqual(room.audit.entries[1], {
     user: 'board', via: 'cockpit', action: 'cockpit.stop', target: 't-0042', args: {}, result: { ok: true, cancelQueued: true },
   });
+});
+
+test('link: three stop frames for one running turn are one cockpit.stop line; with a failing log the stop still runs (D165, T60)', async (t) => {
+  const session = standInSession();
+  const stops = [];
+  const stop = session.stop;
+  session.stop = (id) => { stops.push(id); return stop(id); };
+  const room = await inProcess(t, { session });
+  const a = await welcomed(room);
+  a.ws.send(JSON.stringify(PROMPT));
+  await until(() => a.frames.some((f) => f.type === 'turn.prompt'), 'the echo');
+  for (const seq of [3, 4, 5]) a.ws.send(JSON.stringify({ type: 'stop', seq, turnId: 't-0042' }));
+  await until(() => stops.length === 3, 'the three stops');
+  assert.deepEqual(room.audit.entries.map((e) => e.action), ['cockpit.prompt', 'cockpit.stop'], 'one line for the one stop');
+  assert.equal(a.frames.filter((f) => f.type === 'error').length, 0, 'each frame answered ok');
+
+  const failing = standInSession();
+  failing.bridge.turn = { turnId: 't-0041' };
+  const ran = [];
+  const stop2 = failing.stop;
+  failing.stop = (id) => { ran.push(id); return stop2(id); };
+  let tries = 0;
+  const audit = { append() { tries += 1; throw Object.assign(new Error('x'), { code: 'AUDIT_DETACHED' }); } };
+  const broken = await inProcess(t, { session: failing, audit });
+  const b = await welcomed(broken);
+  for (const seq of [2, 3, 4]) b.ws.send(JSON.stringify({ type: 'stop', seq, turnId: 't-0041' }));
+  await until(() => ran.length === 3, 'the three stops');
+  assert.equal(failing.stopping?.turnId, 't-0041', 'the stop runs although the log failed');
+  assert.equal(tries, 1, 'one try at the line, not one per frame');
 });
 
 test('link: a stop and a new run although the log fails, with one stderr line (D166); the new line once the conversation is up', async (t) => {
