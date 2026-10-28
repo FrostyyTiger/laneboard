@@ -293,6 +293,22 @@ Notes for every builder round (planner, round 7):
   above 1.2x — done when: a test pins the new segment count (or smooth shading) for `BIG_STAR` bodies, `?perf=1` triangles at
   the overview before/after are in the notes (no rise past night 4's 84-86k beyond a few hundred), and a still of `?at=hv2` at
   1368 px shows a round edge.
+- [ ] T29 (triage, r20-operator #1+#2) [ui] [variant:galaxy] A down member stays on the map as a red body, under the plate's
+  name: in `r20-galaxy-real` frame 5 the plate says `VM-C · BUILDER-C NO CONTACT · 1 DOWN`, the lock closes on a yellow
+  planet, the fleet line drops 115 → 114 and no red body stands; the map label reads `bc`. A member that goes down keeps a red
+  body (night 4's T29) or, if the model drops it, `live.js` keeps a red ghost until it returns; the lock frames that body; while
+  the plate stands the locked member's label is the plate's headline in its hue (r10 #5) — done when: a test drops a member
+  from the feed and finds a red body for it in the scene and the lock on its screen point, the label equal to the headline
+  while the plate stands, and the fleet count unchanged or the ghost counted as down; a still of the down builder on the large demo.
+- [ ] T30 (triage, r20-operator #4) [ui] [variant:galaxy] The banner corner is never empty and never rivals the plate: during
+  a crit hold `r20-galaxy-real` frames 3-4 show no banner and frame 5 a big yellow `▲ REMOTE · OFFICE-PRINTER · PAPER JAM`
+  beside the red plate. In a hold the banner stays at its one line (T23) and always shows something while trouble stands: the
+  held trouble, or the next one with a small `NEXT` kicker — done when: a test finds a non-empty banner at every step of a
+  50 s real-timing hold with trouble standing, its size at most the one-line step, and the next trouble carrying `NEXT`.
+- [ ] T31 (triage, r20-operator #3) [ui] [variant:galaxy] A number on the plate keeps counting: `NO CONTACT FOR 15S` stands
+  still over three frames (11-22 s) while the banner's age counts up. Tick the age text in place every second without
+  retyping the line (night 4's T30) — done when: a fake-clock test finds the plate's age text advancing each second while
+  the typed text node and its typing state are untouched.
 
 - [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
   Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
@@ -356,6 +372,15 @@ From `r15-dreamer.md` (past the 3-task limit):
 - r15 #9 A picked planet's tether to its star brightens while selected (T8/T9 cover the camera and ring; the tether is the addition).
 - r15 fx beacon: pillar stops at about the cluster's diameter with a tick for the crit's age (same as r10); fx afterglow/sweep: demo hook (clear a site, one sweep in the first 5 s of `?demo=1`) so they can be filmed; fx activity: rings at `--text-3`, slow fill, never inside a lock (same as r10).
 
+From `r20-operator.md` (past the 3-task limit):
+- r20 #5 Tour hold scales with severity (~14 s crit/down, ~8 s warn/attention), a crit revisited after every other site (`tour.js`, fenced: a patch).
+- r20 #6 `DEMO_TIMING` keeps the real ratios (trouble hold ≈ 2.3x calm, `revisitEvery: 2`; `tour.js`, fenced: a patch); with no plate the held shot recentres on the star.
+- r20 #7 Among equal severity the oldest trouble stays the banner's subject (night 4's T28, one ranking; needs `tour.js` for the tour side).
+- r20 #8 Status-hued labels take no depth fade (CLOUD's warn label is dark ochre at the overview); the crit nebula size is T26.
+- r20 #9 Trouble members' names a step larger in the condensed face; calm names stay small.
+- r20 #10 Wake says nothing for 300 ms (night 4's T62, r10 #12).
+- r20 fx: beacon pillar straight up about a cluster's diameter with a tick and the crit's age; activity rings at `--text-3` alpha, never in a lock; sweep pings only trouble as short fading dash arcs; afterglow needs a demo clear hook (same as r10/r15).
+
 Closed by this night's plan (moot):
 - night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
   buttons and chips are 48 px by the night's tappable rule.
@@ -390,11 +415,13 @@ slim top bar of fleet totals, map modes.
   then by load; `eclipse`: a member with no contact loses its lit side, a dark disc with a thin red rim until contact returns;
   `dial`: a thin 24-hour ring round each star showing the last day's status as outline arcs in the old hue (afterglow with a clock).
   None became a task (decision for the owner; `eclipse` and `dial` change what "down" and history look like).
+- (triage r20, `fx` candidates, taste) `warp`: drop it, or keep it only on a flight to a crit with the target's name in the streak's colour (scored wow 3, streaks not visible); the overview banner's second line as `1 DOWN · 3 ATTENTION · 1 WARN` in big condensed caps instead of `+4 MORE`; a beacon-style vertical mark above every crit visible from any camera, gone when it clears. No new `fx` task this review.
 
 ## Reviews
 
 - r10-film-ui.md: 12 galaxy findings + 5 fx + 3 m check; 3 became tasks (T23, T24, T25); #9 dropped (covered by T9), #1/#2 covered by T1b, the rest under `## Later` or `## For the owner`.
 - r15-dreamer.md: 9 galaxy findings + 5 fx + 3 unforgettable + 3 m check; 3 became tasks (T26, T27, T28); #1 is night 4's T23 raised, #6 is night 4's T29 raised, #2/#3 and the three proposals to the owner, #5/#7/#8/#9 and fx notes under `## Later`.
+- r20-operator.md: 10 galaxy findings + 5 fx + 3 m check; 3 became tasks (T29 = #1+#2, T30 = #4, T31 = #3); #8 crit size covered by T26, #5/#6/#7 need fenced `tour.js` (patch notes under `## Later`), #9/#10 and fx notes under `## Later`, proposals under `## For the owner`.
 
 ## Scores
 
@@ -412,5 +439,11 @@ slim top bar of fleet totals, map modes.
 | 15 | dreamer | fx-afterglow | | | | | 2 | 7 | |
 | 15 | dreamer | fx-activity | | | | | 4 | 3 | |
 | 15 | dreamer | fx-sweep | | | | | 5 | 6 | |
+| 20 | operator | galaxy | 7 | 6 | 5 | 5 | 6 | 6 | 7 |
+| 20 | operator | fx-beacon | | | | | 5 | 6 | |
+| 20 | operator | fx-warp | | | | | 3 | 7 | |
+| 20 | operator | fx-afterglow | | | | | 2 | 7 | |
+| 20 | operator | fx-activity | | | | | 3 | 3 | |
+| 20 | operator | fx-sweep | | | | | 4 | 5 | |
 
 ## Morning
