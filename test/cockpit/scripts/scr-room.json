@@ -1,5 +1,5 @@
 {"name":"scr-room",
- "about":"stand-ins.md §5: the screen and the room going away; one long turn, a fly_to, and a 400 s turn for S-SCR-04.",
+ "about":"stand-ins.md §5: the screen and the room going away; one long turn, a fly_to, a 400 s turn for S-SCR-04, and a 20 s night turn for S-SCR-30/31.",
  "start":{"initAfterMs":200,"mcp":"connected","login":"ok","startFailures":0,"capabilities":["interrupt_receipt_v1","interrupt_cancel_queued_v1"]},
  "turns":[
   {"for":"S-SCR-03 S-SCR-17 S-SCR-18 S-SCR-19 S-SCR-20 S-C1-41","match":"tell me everything","repeat":true,"steps":[
@@ -43,6 +43,29 @@
     {"at":18800,"text":"Part 38 of the long answer. "},
     {"at":19300,"text":"Part 39 of the long answer. "},
     {"at":19800,"text":"Part 40 of the long answer. "},
+    {"at":20300,"end":"done"}
+  ]},
+  {"for":"S-SCR-30 S-SCR-31","match":"how did the night go","repeat":true,"onInterrupt":{"endAfterMs":300},"steps":[
+    {"at":300,"text":"Night part 1. "},
+    {"at":1300,"text":"Night part 2. "},
+    {"at":2300,"text":"Night part 3. "},
+    {"at":3300,"text":"Night part 4. "},
+    {"at":4300,"text":"Night part 5. "},
+    {"at":5300,"text":"Night part 6. "},
+    {"at":6300,"text":"Night part 7. "},
+    {"at":7300,"text":"Night part 8. "},
+    {"at":8300,"text":"Night part 9. "},
+    {"at":9300,"text":"Night part 10. "},
+    {"at":10300,"text":"Night part 11. "},
+    {"at":11300,"text":"Night part 12. "},
+    {"at":12300,"text":"Night part 13. "},
+    {"at":13300,"text":"Night part 14. "},
+    {"at":14300,"text":"Night part 15. "},
+    {"at":15300,"text":"Night part 16. "},
+    {"at":16300,"text":"Night part 17. "},
+    {"at":17300,"text":"Night part 18. "},
+    {"at":18300,"text":"Night part 19. "},
+    {"at":19300,"text":"Night part 20. "},
     {"at":20300,"end":"done"}
   ]},
   {"for":"S-SCR-05","match":"show me builder-a","repeat":true,"steps":[

@@ -25,6 +25,7 @@ import { agentWalk, fileProblems, lookupAgent, secretPaths } from '../cockpit/st
 import { createSession, readSessionFile } from '../cockpit/session.mjs';
 import { createStore } from '../cockpit/store.mjs';
 import { createLink } from '../cockpit/link.mjs';
+import { createFailWarner } from '../cockpit/audit-lines.mjs';
 import { roomSecrets } from '../cockpit/redact.mjs';
 import { openAudit } from '../fleet/audit.mjs';
 import * as roomClock from '../cockpit/clock.mjs';
@@ -77,13 +78,17 @@ export async function startRoom(ctx = null, opts = {}) {
     emit: (msg) => link.emit(msg),
     log: say,
     cutTurn: loaded.cutTurn,
-    onConversation: (rec, reason) => store.begin({ conversation: rec.conversation, startedAt: rec.startedAt, reason: reason ?? 'first' }),
+    onConversation: (rec, reason, from) => {
+      store.begin({ conversation: rec.conversation, startedAt: rec.startedAt, reason: reason ?? 'first' });
+      link.conversationStarted({ conversation: rec.conversation, reason, from }); // its `cockpit.new` line (screens.md §6.4)
+    },
     bridge: {
       agent, stateDir: config.stateDir, env, mcpToken: null, turnCounter: loaded.lastTurn,
       secrets: roomSecrets({ sttTokenFile: config.cockpit.stt?.tokenFile ?? null }),
     },
   });
-  link = createLink({ session, store, audit, config, log: say, clientIds: loaded.clientIds });
+  // screens.md §6.4 (D166): an audit append that fails is one stderr line at most every 10 s.
+  link = createLink({ session, store, audit, config, log: say, clientIds: loaded.clientIds, auditWarn: createFailWarner() });
   ctx.upgrade((req, socket, head, url) => link.handleUpgrade(req, socket, head, url));
   session.start();
   log.info(`cockpit: room up (agent ${agent.kind}, cwd ${cwd})`);

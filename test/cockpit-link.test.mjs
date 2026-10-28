@@ -16,7 +16,7 @@ import WebSocket from 'ws';
 import { boot, control, ingressWs, ROOM_UNDER_TEST, ROOT } from './helpers/boot.mjs';
 import { classify } from '../server/fleet/auth.mjs';
 import { linkRefusal, MAX_LINKS, secureOrigin } from '../server/cockpit/link-checks.mjs';
-import { promptLine } from '../server/cockpit/audit-lines.mjs';
+import { createFailWarner, newLine, promptLine, stopLine } from '../server/cockpit/audit-lines.mjs';
 import {
   createLink, cutForSnapshot, snapshotParts, languageList, PART_MAX_BYTES, TURN_MAX_BYTES,
   HEARTBEAT_MS, HELLO_MS, INBOUND_PER_SEC, MAX_BINARY_BYTES, MAX_TEXT_BYTES, REPLAY_MAX,
@@ -24,7 +24,7 @@ import {
 import * as clockMod from '../server/cockpit/clock.mjs';
 import { setFaults } from '../server/cockpit/faults.mjs';
 import { checkMessage } from '../server/cockpit/protocol.mjs';
-import { openAudit } from '../server/fleet/audit.mjs';
+import { argsHashOf, openAudit } from '../server/fleet/audit.mjs';
 
 // --- the upgrade checks (link-checks.mjs) -----------------------------------
 
@@ -112,6 +112,43 @@ test('audit: no log, or an append that throws, is a failure the caller refuses o
   assert.equal(promptLine(null, { text: 'x', result: { ok: true } }).ok, false);
   const broken = { append() { const e = new Error('chain'); e.code = 'AUDIT_CHAIN_INVALID'; throw e; } };
   assert.deepEqual(promptLine(broken, { text: 'x', result: { ok: true } }), { ok: false, reason: 'AUDIT_CHAIN_INVALID' });
+});
+
+test('audit: cockpit.stop and cockpit.new as screens.md §6.4 writes them (T30)', (t) => {
+  const file = path.join(tmpDir(t), 'audit', 'audit.jsonl');
+  const audit = openAudit({ file, builder: 'builder-a' });
+  t.after(() => audit.close());
+  assert.deepEqual(stopLine(audit, { turnId: 't-0132', cancelQueued: true }), { ok: true });
+  assert.deepEqual(newLine(audit, { conversation: 'c-0008', from: 'c-0007', stoppedTurn: 't-0139', reason: 'owner' }), { ok: true });
+  assert.deepEqual(newLine(audit, { conversation: 'c-0009', from: 'c-0008', reason: 'forced' }), { ok: true });
+  assert.deepEqual(newLine(audit, { conversation: 'c-0010', from: 'c-0009' }), { ok: true });
+  const [stop, owner, forced, idle] = fs.readFileSync(file, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.deepEqual([stop.user, stop.via, stop.action, stop.target], ['board', 'cockpit', 'cockpit.stop', 't-0132']);
+  assert.deepEqual(stop.result, { ok: true, cancelQueued: true });
+  assert.equal(stop.argsHash, argsHashOf({}));
+  assert.deepEqual([owner.user, owner.action, owner.target], ['board', 'cockpit.new', 'c-0008']);
+  assert.deepEqual(owner.result, { ok: true, from: 'c-0007', stoppedTurn: 't-0139' });
+  assert.deepEqual([forced.user, forced.target], ['room', 'c-0009'], 'a forced fresh start is the room\'s own');
+  assert.deepEqual(forced.result, { ok: true, from: 'c-0008', reason: 'forced' });
+  assert.deepEqual(idle.result, { ok: true, from: 'c-0009', stoppedTurn: null }, 'null when idle');
+  assert.equal(audit.verifyAll().ok, true);
+});
+
+test('audit: a failed append that does not refuse is one line at most every 10 s, the rest counted (§6.4)', () => {
+  const out = [];
+  let now = 1_000;
+  const warn = createFailWarner({ write: (l) => out.push(l), now: () => now });
+  assert.equal(warn('cockpit.stop', 'AUDIT_DETACHED'), true);
+  now += 7_000;
+  assert.equal(warn('cockpit.prompt', 'AUDIT_DETACHED'), false);
+  now += 2_999;
+  assert.equal(warn('cockpit.new', 'AUDIT_DETACHED'), false);
+  now += 1;
+  assert.equal(warn('cockpit.stop', 'AUDIT_DETACHED'), true);
+  assert.deepEqual(out, [
+    'cockpit: audit append failed for cockpit.stop: AUDIT_DETACHED',
+    'cockpit: audit append failed for cockpit.stop: AUDIT_DETACHED (2 more since the last line)',
+  ]);
 });
 
 // --- snapshots (§2.2, D140) -------------------------------------------------
@@ -361,6 +398,55 @@ test('link: no session up is prompt.refused agent-down, audited as refused; a lo
   assert.equal(b.frames.find((f) => f.type === 'prompt.refused').code, 'audit-unavailable');
   assert.equal(broken.session.prompts.length, 0, 'nothing went to the agent');
   assert.ok(broken.lines.some((l) => l === 'cockpit: audit append failed for cockpit.prompt: AUDIT_FAILED'));
+});
+
+test('link: a stop of the running turn is audited before the session hears it; a refused stop writes nothing (§6.4, T30)', async (t) => {
+  const session = standInSession();
+  const order = [];
+  const stop = session.stop;
+  session.stop = (id) => { order.push(`stop ${id}`); return stop(id); };
+  session.bridge.ready = { canCancelQueued: true };
+  const room = await inProcess(t, { session });
+  const append = room.audit.append.bind(room.audit);
+  room.audit.append = (e) => { order.push(e.action); return append(e); };
+  const a = await welcomed(room);
+  a.ws.send(JSON.stringify(PROMPT));
+  await until(() => a.frames.some((f) => f.type === 'turn.prompt'), 'the echo');
+  a.ws.send(JSON.stringify({ type: 'stop', seq: 3, turnId: 't-0999' }));
+  a.ws.send(JSON.stringify({ type: 'stop', seq: 4, turnId: 't-0042' }));
+  await until(() => order.includes('stop t-0042'), 'the stop');
+  assert.deepEqual(order, ['cockpit.prompt', 'stop t-0999', 'cockpit.stop', 'stop t-0042']);
+  assert.deepEqual(room.audit.entries[1], {
+    user: 'board', via: 'cockpit', action: 'cockpit.stop', target: 't-0042', args: {}, result: { ok: true, cancelQueued: true },
+  });
+});
+
+test('link: a stop and a new run although the log fails, with one stderr line (D166); the new line once the conversation is up', async (t) => {
+  const session = standInSession();
+  session.bridge.turn = { turnId: 't-0041' };
+  let renewed = 0;
+  session.newConversation = () => { renewed += 1; return { ok: true }; };
+  const stops = [];
+  session.stop = (id) => { stops.push(id); return { ok: true }; };
+  let failing = true;
+  const entries = [];
+  const audit = { entries, append(e) { if (failing) throw Object.assign(new Error('x'), { code: 'AUDIT_DETACHED' }); entries.push(e); return e; } };
+  const room = await inProcess(t, { session, audit });
+  const a = await welcomed(room);
+  a.ws.send(JSON.stringify({ type: 'stop', seq: 2, turnId: 't-0041' }));
+  a.ws.send(JSON.stringify({ type: 'new', seq: 3 }));
+  await until(() => stops.length === 1 && renewed === 1, 'stop and new reached the session');
+  assert.deepEqual(room.lines.filter((l) => l.startsWith('cockpit: audit')), ['cockpit: audit append failed for cockpit.stop: AUDIT_DETACHED']);
+  assert.equal(a.frames.filter((f) => f.type === 'error').length, 0, 'nothing shown on the screens');
+
+  failing = false;
+  room.link.conversationStarted({ conversation: 'c-0004', reason: 'owner', from: 'c-0003' });
+  room.link.conversationStarted({ conversation: 'c-0005', reason: 'forced', from: 'c-0004' });
+  room.link.conversationStarted({ conversation: 'c-0001', reason: null, from: null });
+  assert.deepEqual(entries.map((e) => [e.user, e.action, e.target, e.result]), [
+    ['board', 'cockpit.new', 'c-0004', { ok: true, from: 'c-0003', stoppedTurn: 't-0041' }],
+    ['room', 'cockpit.new', 'c-0005', { ok: true, from: 'c-0004', reason: 'forced' }],
+  ], 'the first conversation of a room is no new');
 });
 
 test('link: bad messages are error bad-message / unknown-type with re; stop and new answer the session\'s codes', async (t) => {

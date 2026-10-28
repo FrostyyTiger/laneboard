@@ -44,6 +44,8 @@ export const LINES = Object.freeze({
   downFresh: 'The conversation shows again when the room is back.',
   // c1-talk.md §10 E1
   notSent: 'Not sent: the room did not confirm within 5 s.',
+  // protocols.md §3.1, screens.md §6.4 (D166): `prompt.refused` `audit-unavailable`
+  auditDown: 'Not sent: the room cannot write its audit log.',
   // screens.md §7: the line slot's `room-down` message while SEND is disabled for it
   roomDown: 'Sending and voice come back with the room.',
 });
@@ -1027,6 +1029,11 @@ export function createPane(opts = {}) {
         return;
       case 'prompt.taken':
         promptTaken(msg);
+        return;
+      case 'prompt.refused':
+        // protocols.md §3.1: the room cannot write its audit log (D166): E1's block, RETRY and EDIT.
+        // `too-many` (E9) is T23c's; `agent-down` comes with the status line (§10.1).
+        if (msg.code === 'audit-unavailable') showNotSent(msg.clientId, LINES.auditDown);
         return;
       case 'error': {
         // protocols.md §3.1: `bad-message` on a prompt (empty, too long, a bad focus) is E1 at once.

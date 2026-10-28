@@ -20,8 +20,9 @@
 // which sends the highest as `status`), `createBridge` (injectable),
 // `checkSpawn` (the login check's spawn, injectable; the check runs when
 // `bridge.agent.loginCheck` is an argv, protocols.md §11.10, login.mjs), `onConversation(rec,
-// reason)` (a conversation was written to session.json at a `ready`: `reason`
-// null for the first, `owner`, `forced`; the store begins it, B84), `cutTurn`
+// reason, from)` (a conversation was written to session.json at a `ready`: `reason`
+// null for the first, `owner`, `forced`; `from` the one before it or null; the
+// store begins it, B84; the link writes its `cockpit.new` line, T30), `cutTurn`
 // (the room went down mid-turn: `agent-back` at the first ready, §11.7.1 step 3).
 //
 // The conversation's turns on disk (`conversation.jsonl`, §11.7.1) are T12's;
@@ -222,11 +223,12 @@ export function createSession(opts) {
     if (isNew) {
       // A session is only written once its `ready` has come (§11.7).
       const reason = want.reason;
+      const from = current?.conversation ?? null;
       const conversation = current ? nextConversation(current.conversation) : nextConversation(null);
       current = { conversation, session: asked?.session ?? ev.session, startedAt: isoAt(clock.now()) };
       try { writeSessionFile(stateDir, current); } catch (err) { log(`cockpit session: cannot write session.json: ${err.code ?? err.message}`); }
       log(`cockpit session: ${conversation} on session ${current.session}${reason ? ` (${reason})` : ''}`);
-      onConversation(current, reason);
+      onConversation(current, reason, from);
       if (reason) emit({ type: 'conversation.new', conversation, reason, at: current.startedAt });
       want = { resume: true, reason: null };
     }

@@ -8,13 +8,17 @@
 //     .emit(msg)          a room → screen message of the session (no `seq`
 //                         yet): folded into the store, numbered, sent to
 //                         every link that has its `welcome`
+//     .conversationStarted({conversation, reason, from})  the session's new
+//                         conversation is up: its `cockpit.new` line
 //     .count, .epoch, .seq
 //     .close()            every link closed 1001 `room stopping`
 //
 // opts: `session` (session.mjs), `store` (store.mjs, loaded), `audit`
 // (openAudit's instance or null), `config` (the room's), `log(line)`,
 // `clientIds` (store.load()'s once-only ids, §11.7.1 step 6), `pingMs`
-// (PING_MS; tests shorten it).
+// (PING_MS; tests shorten it), `auditWarn(action, reason)` (an audit append
+// that failed: by default createFailWarner on `log`; the room passes its
+// stderr one, screens.md §6.4).
 //
 // An upgrade is taken, then checked (link-checks.mjs, D135: a refusal is a
 // close code, never an HTTP status); a refused link gets the close and no
@@ -30,7 +34,7 @@ import { WebSocketServer } from 'ws';
 import { warnRateLimited } from '../security.mjs';
 import { atConnection, atInbound, atOutbound, atUpgrade } from './faults.mjs';
 import { linkRefusal } from './link-checks.mjs';
-import { BOARD_USER, promptLine } from './audit-lines.mjs';
+import { BOARD_USER, createFailWarner, newLine, promptLine, stopLine } from './audit-lines.mjs';
 import { checkMessage, MAX_PROMPT_CHARS } from './protocol.mjs';
 import { nextConversation } from './session.mjs';
 import { ONCE_MS } from './store.mjs';
@@ -132,7 +136,8 @@ function closeTooBigFirst(ws) {
   });
 }
 
-export function createLink({ session, store, audit = null, config, log = () => {}, clientIds = [], pingMs = PING_MS }) {
+export function createLink({ session, store, audit = null, config, log = () => {}, clientIds = [], pingMs = PING_MS, auditWarn = null }) {
+  const auditFailed = auditWarn ?? createFailWarner({ write: log });
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_TEXT_BYTES, autoPong: false });
   const links = new Set(); // accepted links: {ws, auth, welcomed, rec, alive, helloTimer, rate}
   const epoch = `r-${randomBytes(3).toString('hex')}`;
@@ -145,6 +150,7 @@ export function createLink({ session, store, audit = null, config, log = () => {
   // D95: each prompt's clientId for 10 min → the turn.prompt that answered it.
   const once = new Map();
   const pending = new Set(); // clientIds accepted whose turn.prompt has not gone yet
+  let askedNew = null; // the owner's `new`, until its conversation is up: {from, stoppedTurn}
   seedOnce(clientIds);
 
   function seedOnce(ids) {
@@ -363,12 +369,20 @@ export function createLink({ session, store, audit = null, config, log = () => {
         prompt(link, msg).catch((err) => log(`cockpit: prompt failed: ${err?.message ?? err}`));
         return;
       case 'stop': {
+        // screens.md §6.4: the line before the bridge is asked; D166: a stop never waits for the log.
+        const running = session.bridge?.turn;
+        if (running && running.turnId === msg.turnId) {
+          const line = stopLine(audit, { turnId: msg.turnId, cancelQueued: session.bridge.ready?.canCancelQueued === true });
+          if (!line.ok) auditFailed('cockpit.stop', line.reason);
+        }
         const r = session.stop(msg.turnId);
         if (!r.ok) sendTo(link, { type: 'error', re: msg.seq, code: r.code, message: `stop: ${r.code === 'unknown-id' ? 'no such turn' : 'the turn is not running'}` });
         return;
       }
       case 'new': {
+        const asked = { from: session.conversation ?? null, stoppedTurn: session.bridge?.turn?.turnId ?? null };
         const r = session.newConversation();
+        if (r.ok) askedNew = asked; // its line once the conversation is up (conversationStarted)
         if (!r.ok) sendTo(link, { type: 'error', re: msg.seq, code: r.code, message: 'new: a new conversation is already starting' });
         return;
       }
@@ -432,7 +446,7 @@ export function createLink({ session, store, audit = null, config, log = () => {
     if (session.phase !== 'up') {
       // §3.1, §11.7 (D31): no session up, nothing held for later.
       const line = promptLine(audit, { text, result: { ok: false, status: 'agent-down' } });
-      if (!line.ok) log(`cockpit: audit append failed for cockpit.prompt: ${line.reason}`);
+      if (!line.ok) auditFailed('cockpit.prompt', line.reason);
       refuse('agent-down');
       return;
     }
@@ -443,7 +457,7 @@ export function createLink({ session, store, audit = null, config, log = () => {
     // D166: the line first; a prompt the log cannot hold never reaches the agent.
     const line = promptLine(audit, { turnId, text, result: { ok: true, source: msg.source, delivery, chars: text.length } });
     if (!line.ok) {
-      log(`cockpit: audit append failed for cockpit.prompt: ${line.reason}`);
+      auditFailed('cockpit.prompt', line.reason);
       refuse('audit-unavailable');
       return;
     }
@@ -455,6 +469,20 @@ export function createLink({ session, store, audit = null, config, log = () => {
       pending.delete(msg.clientId);
       refuse(r.code ?? 'agent-down');
     }
+  }
+
+  /**
+   * screens.md §6.4 `cockpit.new`, written once the new conversation has
+   * started: the owner's START (`reason` `owner`, with the turn it stopped)
+   * or the room's forced fresh start (`user` `room`). The first conversation
+   * of a room (`reason` null) is no `new`. D166: it never waits for the log.
+   */
+  function conversationStarted({ conversation, reason, from = null }) {
+    if (reason !== 'owner' && reason !== 'forced') return;
+    const asked = reason === 'owner' ? askedNew : null;
+    askedNew = null;
+    const line = newLine(audit, { conversation, reason, from: asked?.from ?? from, stoppedTurn: asked?.stoppedTurn ?? null });
+    if (!line.ok) auditFailed('cockpit.new', line.reason);
   }
 
   function close() {
@@ -469,7 +497,7 @@ export function createLink({ session, store, audit = null, config, log = () => {
   }
 
   return {
-    handleUpgrade, emit, close,
+    handleUpgrade, emit, close, conversationStarted,
     get count() { return links.size; },
     get epoch() { return epoch; },
     get seq() { return seq; },

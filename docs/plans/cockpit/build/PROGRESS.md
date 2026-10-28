@@ -434,6 +434,16 @@ What the slice itself says waits; nothing else moved here.
   the next room start rewrites the file. Built (B223): one line per turn of the rewrite, 24
   distinct turns, t-0124's last line `done`.
 
+- T30 (review-required, D164-D166): the room's audit wiring. `server/cockpit/audit-lines.mjs`
+  (`stopLine`, `newLine`, `createFailWarner`; `promptLine` from T13) and its calls in
+  `server/cockpit/link.mjs` (`stop`: the line before `session.stop`, the stop runs when it fails;
+  `conversationStarted`: `cockpit.new`, the forced one as `user` `room`), the `from` argument of
+  `onConversation` in `server/cockpit/session.mjs`, and the stderr warner passed in
+  `server/boot/cockpit.mjs`. Tests: `test/cockpit-link.test.mjs` (the lines, the 10 s limiter, the
+  order before the session), `e2e/cockpit/c1-audit.spec.mjs` (S-SCR-30, S-SCR-31 with the real
+  `laneboard audit` and `audit verify`). B227-B232. Not built: the `too-many` refusal lines and
+  `refusedSince` (T23c), the pairing lines (Pair slice).
+
 ## Measured on the real screen
 
 - C1: not measured yet

@@ -1244,3 +1244,32 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
 - B226 (T29) Decision numbers D30-D39 are not written in `public/js/` comments (cite the spec
   section instead): `test/render.test.mjs` guards against a chart library with `/d3/i` over every
   page script — spec: none — overrule: loosen that guard (not a cockpit file).
+- B227 (T30) `cockpit.stop` is written for a `stop` naming the running turn (as `session.stop`
+  would accept it), one line per such `stop` received; a refused `stop` (`unknown-id`, `not-now`)
+  changes nothing and writes no line. `cancelQueued` is the bridge's `ready.canCancelQueued`, the
+  same value `session.mjs` hands the interrupt — because §6.4's table has only the accepted stop and
+  "before it asks the bridge" means the link decides before `session.stop` — spec: screens.md §6.4
+  — overrule: a refused stop as a `{"ok":false,"status":…}` line in `link.mjs`.
+- B228 (T30) `cockpit.new`'s `from` comes from the session (`onConversation(rec, reason, from)`,
+  the conversation before it), `stoppedTurn` from the link at the owner's `new` (the running turn
+  then, else null); the line is written in `onConversation`, when the new session's `ready` came,
+  for `owner` and `forced` only (a room's first conversation is no `new`) — because the store has
+  already begun the new conversation by the time `conversation.new` is emitted — spec:
+  screens.md §6.4 ("written once it has started") — overrule: `link.mjs` `conversationStarted`.
+- B229 (T30) Every audit append that fails (prompt, stop, new) goes through one
+  `createFailWarner` (audit-lines.mjs): `cockpit: audit append failed for <action>: <reason>` on the
+  room's stderr, at most one line per 10 s on the real clock, the held ones counted into the next
+  line (` (2 more since the last line)`) — because §6.4 says one line per 10 s and a test room's
+  manual clock must not hold it back; one limiter makes S-SCR-31's "one line" exact although its
+  prompt fails 7 s after the stop — spec: screens.md §6.4 — overrule: a limiter per action.
+- B230 (T30) The pane handles `prompt.refused` only for `audit-unavailable` (E1's block, `RETRY`
+  with the same `clientId`, `EDIT`, line `Not sent: the room cannot write its audit log.`);
+  `too-many` stays T23c's and `agent-down` the status line's (send is blocked while it shows) —
+  because one task, one code — spec: protocols.md §3.1 — overrule: `pane.js` `case 'prompt.refused'`.
+- B231 (T30) `scr-room` gains a 20 s turn matching `how did the night go` (S-SCR-30, -31): no §5
+  script had a 20 s turn for that prompt — spec: stand-ins.md §5 (scr-room's row) — overrule: the
+  turn in `test/cockpit/scripts/scr-room.json`.
+- B232 (T30) S-SCR-30's resend "through `page.evaluate` on the page's link helper" is a second
+  link the page opens with `createRoomLink` (`public/js/cockpit/link.js`) sending the recorded
+  `prompt` frame without its `seq`: the pane exposes no link hook, and D95's memory is the room's,
+  not the link's — spec: screens.md S-SCR-30 Test — overrule: a test hook on the pane's own link.
