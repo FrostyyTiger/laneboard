@@ -6,8 +6,8 @@
 // On `page.clock` the clock is paused for the outage and moved by hand. A try's socket fails in
 // real time, while the page's clock stands still, so the moments of §7.1's table stay exact: the
 // test waits for each try's close (`cockpit:close` marks) before it moves past the next one.
-// The time of the loss is set with `setSystemTime` on the paused clock (no timer fires), so the
-// page's 06:41 is the loss's own minute (build B243).
+// The clock is paused at the time of the loss itself (`lose()`: set 1 s short with
+// `setSystemTime`, then `pauseAt` the loss), so the page's 06:41 is the loss's own minute (build B243).
 // C1 boots with `stt.url: none` (D265): no talk button, `SEND` in its rect (slices.md §3.1).
 import { test, expect, rectOf, cockpitDecided, WALL_PAGE } from './fixtures.mjs';
 import { fakeAgentLog } from '../../test/cockpit/stand-ins/fake-agent-log.mjs';
@@ -69,9 +69,18 @@ async function openPane(page) {
  * page's clock to `s` seconds after the loss, try by try, waiting for each try's close.
  */
 async function lose(page, room) {
-  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 50));
-  await page.clock.setSystemTime(LOSS);
+  // The running clock is set 1 s short of the loss, then paused at the loss itself: the pause
+  // lands on 06:41:00.000 whatever the round trips take. (Pausing at "the page's now + 50 ms",
+  // read in one round trip and applied in the next, threw "Cannot fast-forward to the past"
+  // when a trip took longer than 50 ms.) The 1 s jump fires only timers due in it, once.
+  await page.clock.setSystemTime(LOSS.getTime() - 1_000);
+  await page.clock.pauseAt(LOSS);
+  expect(await page.evaluate(() => Date.now()), 'the page paused at the loss').toBe(LOSS.getTime());
+  // The loss under test is the link's first: a close before it would leave its own "since" in
+  // place (link.js keeps `lossAt` until a welcome), and the line would not read 06:41.
   const closes = (await fakeMarks(page, 'cockpit:close')).length;
+  expect(closes, 'no loss before the one under test').toBe(0);
+  expect(await fakeMarks(page, 'cockpit:retry'), 'no retry before the loss').toEqual([]);
   expect((await room.control('POST', '/link', { up: false })).status).toBe(200);
   await expect.poll(async () => (await fakeMarks(page, 'cockpit:close')).length, { message: 'the page saw the loss', intervals: [20, 50, 100] }).toBe(closes + 1);
   let at = 0; // ms after the loss

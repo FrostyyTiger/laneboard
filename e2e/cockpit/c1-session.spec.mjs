@@ -91,12 +91,16 @@ const watch = (page) => page.evaluate(([header, divider, bar]) => {
   const root = document.documentElement;
   const w = { words: [document.querySelector(header).textContent], divider: null, barHidden: null, stopping: null, queued: null, queuedGone: null };
   window.__watch = w;
+  let barSeen = false;
   const seen = () => {
     const word = document.querySelector(header).textContent;
     if (w.words.at(-1) !== word) w.words.push(word);
     if (w.divider === null && document.querySelectorAll(divider).length > (window.__dividers ?? 0)) w.divider = Date.now();
+    // The bar's going counts only after it was seen shown: a watch set while it is hidden
+    // (after KEEP) must not take any earlier mutation for its going.
     const b = document.querySelector(bar);
-    if (w.barHidden === null && b && b.hidden) w.barHidden = Date.now();
+    if (b && !b.hidden) barSeen = true;
+    if (w.barHidden === null && barSeen && b && b.hidden) w.barHidden = Date.now();
     if (w.stopping === null && root.dataset.turn === 'stopping') w.stopping = Date.now();
     const q = document.querySelectorAll('[data-turn-delivery="queued"]').length;
     if (q > 0 && w.queued === null) w.queued = Date.now();
