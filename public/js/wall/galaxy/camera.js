@@ -63,8 +63,12 @@ const lerp = (a, b, k) => a + (b - a) * k;
  */
 export const FLIGHT_KEEP = 0.85;
 
-/** How many points of a flight `flightPose` samples to size its step back. */
-const FLIGHT_SAMPLES = 24;
+/**
+ * How many points of a flight `flightPose` samples to size its step back: 32
+ * (24 until night 5 B1), since the roomier systems' holds stand farther back
+ * and 24 missed a need peaking between two samples (HV2 to REMOTE jolted).
+ */
+const FLIGHT_SAMPLES = 32;
 
 /** The step back's shape over a flight: 0 at both ends, 1 in the middle, smooth. */
 const swell = (k) => Math.sin(Math.PI * Math.min(1, Math.max(0, k))) ** 2;

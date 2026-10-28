@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   armPoint, armSpine, dustPoints, farStars, galaxyLayout, foldAt, ease, hash, rng, siteSpot,
-  ARM, ARM_BAND, ARM_RIBBON, CLOSED, MIN_SITE_GAP, SITE_LIFT, SPREAD, TIGHT, TILT,
+  ARM, ARM_BAND, ARM_RIBBON, CLOSED, MIN_SITE_GAP, ROOM, SITE_LIFT, SPREAD, TIGHT, TILT,
 } from '../public/js/wall/galaxy/layout.js';
 import { OVERVIEW_MARGIN, SIZE } from '../public/js/wall/galaxy/scene.js';
 import { NEBULA } from '../public/js/wall/galaxy/palette.js';
@@ -116,25 +116,25 @@ test('arms: an open system never reaches the sun\'s halo, on the large demo and 
 
 test('spacing half (night 5 A1): arms, gaps, ribbon and dust at 0.5x, nebulae and sun halo 0.64x, spread 0.75x', () => {
   assert.deepEqual({ ...TIGHT }, { arm: 0.5, neb: 0.64, spread: 0.75 });
-  assert.equal(ARM.r0, 1250 * TIGHT.arm);
+  assert.equal(ARM.r0, 1250 * TIGHT.arm * ROOM.arms, 'and out again with the room (B1)');
   assert.ok(ARM.step >= MIN_SITE_GAP / 2.5, 'a lapped rosette keeps the gap');
   assert.ok(Math.abs(ARM.turn - (2 * Math.PI) / 5) < 1e-12);
   assert.equal(SITE_LIFT, 130 * TIGHT.arm);
   assert.equal(MIN_SITE_GAP, 700 * TIGHT.neb);
-  assert.equal(SPREAD, 2.2 * TIGHT.spread);
+  assert.equal(SPREAD, 2.2 * TIGHT.spread * ROOM.spread);
   assert.equal(ARM_RIBBON.half, 90 * TIGHT.arm);
   assert.equal(ARM_RIBBON.grow, 16 * TIGHT.arm);
   assert.equal(ARM_RIBBON.maxHalf, 170 * TIGHT.arm);
   assert.equal(ARM_BAND.half, 55 * TIGHT.arm);
   assert.equal(SIZE.sunHalo, 640 * TIGHT.neb);
-  assert.equal(OVERVIEW_MARGIN, 400 * TIGHT.arm);
+  assert.equal(OVERVIEW_MARGIN, 400 * TIGHT.arm * ROOM.arms);
   assert.deepEqual([NEBULA.calm.size, NEBULA.low.size, NEBULA.warn.size, NEBULA.crit.size], [520, 560, 640, 680].map((x) => x * TIGHT.neb));
   // The nebulae never meet: the gap holds the largest one.
   assert.ok(Math.max(...Object.values(NEBULA).map((n) => n.size)) <= MIN_SITE_GAP);
   const d = dustPoints(2000);
   let far = 0;
   for (let i = 0; i < 2000; i++) far = Math.max(far, Math.hypot(d.positions[i * 3], d.positions[i * 3 + 2]));
-  assert.ok(far < 1000, `the dust band is half as wide: ${far.toFixed(0)}`);
+  assert.ok(far < 1000 * ROOM.arms, `the dust band is half as wide, out with the arms (B1): ${far.toFixed(0)}`);
 });
 
 test('arms: no two sites closer than the minimum, for 1 to 12 sites and the large demo', () => {

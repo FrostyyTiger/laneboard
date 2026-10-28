@@ -25,6 +25,18 @@ import { layoutFor } from '../variants/orbits.js';
 export const TIGHT = Object.freeze({ arm: 0.5, neb: 0.64, spread: 0.75 });
 
 /**
+ * Room inside a system (night 5 B1, the owner's `sk_sys=1`): an open system
+ * spreads `spread` times wider, and no two of its planets stand closer on its
+ * plane than `gap` of its reach (spaceOut), so HV1's builders and their names
+ * keep apart. `arms` (the sketch's ROOM, 1 + 0.6 of the extra spread) pushes
+ * the rosette out with it: a bigger open system is framed from farther back,
+ * and without it the sun came into HV1's held frame and onto HV2's words
+ * (test/wall-galaxy-framing.test.mjs); scene.js OVERVIEW_MARGIN follows it, so
+ * the overview is the same picture from farther back.
+ */
+export const ROOM = Object.freeze({ spread: 1.4, gap: 0.13, arms: 1.24 });
+
+/**
  * The arms (night 5 A2, the rosette, `sk_arr=2`): the first site's radius,
  * the step outward per turn, the angle per step. A gentle, wide-wound
  * two-arm spiral; with the second arm half a step out (siteSpot) a site
@@ -32,9 +44,9 @@ export const TIGHT = Object.freeze({ arm: 0.5, neb: 0.64, spread: 0.75 });
  * sun's halo (test/wall-galaxy-layout.test.mjs). `step` is the sketch's 165
  * (330 x TIGHT.arm) raised to 180: past five sites the rosette laps, and the
  * sixth stands 2.5 steps behind the first on the same ray, so 2.5 steps must
- * be at least MIN_SITE_GAP or their nebulae would meet.
+ * be at least MIN_SITE_GAP or their nebulae would meet. Both at ROOM.arms.
  */
-export const ARM = Object.freeze({ r0: 1250 * TIGHT.arm, step: 180, turn: (2 * Math.PI) / 5 });
+export const ARM = Object.freeze({ r0: 1250 * TIGHT.arm * ROOM.arms, step: 180 * ROOM.arms, turn: (2 * Math.PI) / 5 });
 
 /**
  * Where the i-th site sits on the arms, `{ arm, t }`: even ones on arm 0,
@@ -46,8 +58,14 @@ export function siteSpot(i) {
   return { arm, t: k + 0.6 + (arm ? 0.5 : 0) };
 }
 
-/** A folded cluster's size against its open system. */
-export const CLOSED = 0.16;
+/** spaceOut's least gap between two planets, in world units, however small the system. */
+export const SPACE_MIN = 40;
+
+/**
+ * A folded cluster's size against its open system: 0.16 of the old spread,
+ * so a folded cluster stays the size it was before ROOM.
+ */
+export const CLOSED = 0.16 / ROOM.spread;
 
 /**
  * How long a cluster takes to open or fold (ms). Night 5 A6 (the owner's
@@ -56,7 +74,7 @@ export const CLOSED = 0.16;
 export const OPEN_MS = 2800;
 
 /** The orbits layout's units to the galaxy's: a system's spread on the plane. */
-export const SPREAD = 2.2 * TIGHT.spread;
+export const SPREAD = 2.2 * TIGHT.spread * ROOM.spread;
 
 /**
  * How far a site's star may sit above or below the galaxy's plane (each
@@ -333,6 +351,7 @@ export function galaxyLayout(nodes, aspect = 16 / 9, shown = null) {
       const f = flat(n);
       if (f) offs.set(n.id, { x: f.x - base.x, z: f.z - base.z });
     }
+    spaceOut(members.get(s.id), offs, byId, s);
     // Heights: a planet straight below the site picks a side and a tilt;
     // what hangs below it stays near its parent's height. Every height
     // is kept within half the distance from the star.
@@ -375,6 +394,82 @@ export function galaxyLayout(nodes, aspect = 16 / 9, shown = null) {
     return { id: s.id, node: s, index, home, members: out, reach, carry };
   });
   return { core, sites };
+}
+
+/**
+ * Room between planets (night 5 B1): no two planets of a system closer on its
+ * plane than ROOM.gap of its reach (at least SPACE_MIN), nor nearer the star
+ * than 0.8 of that. A few rounds push close pairs apart, half each; the star
+ * never moves. What hangs below a planet moves as its planet did, so it stays
+ * by its parent; then the dots (lanes, sessions, services) step off anything
+ * nearer than 0.55 of the gap, and only they move. `offs` (id → {x, z}) is
+ * changed in place. Deterministic: no randomness, a tie broken by `hash`.
+ */
+export function spaceOut(list, offs, byId, site) {
+  const named = list.filter((n) => NAMED.has(n.kind) && offs.has(n.id));
+  if (named.length < 2) return;
+  let reach = 0;
+  for (const n of named) { const o = offs.get(n.id); reach = Math.max(reach, Math.hypot(o.x, o.z)); }
+  const gap = Math.max(SPACE_MIN, reach * ROOM.gap);
+  const pos = new Map(named.map((n) => [n.id, { ...offs.get(n.id) }]));
+  for (let round = 0; round < 40; round++) {
+    let moved = false;
+    for (let i = 0; i < named.length; i++) {
+      const a = pos.get(named[i].id);
+      const da = Math.hypot(a.x, a.z);
+      if (da < gap * 0.8) {
+        if (da > 1e-6) { const k = (gap * 0.8) / da; a.x *= k; a.z *= k; } else a.x = gap * 0.8;
+        moved = true;
+      }
+      for (let j = i + 1; j < named.length; j++) {
+        const b = pos.get(named[j].id);
+        let dx = b.x - a.x, dz = b.z - a.z;
+        let d = Math.hypot(dx, dz);
+        if (d >= gap) continue;
+        if (d < 1e-6) { dx = 1; dz = 0; d = 1; }
+        const push = (gap - d) / 2 / d;
+        a.x -= dx * push; a.z -= dz * push;
+        b.x += dx * push; b.z += dz * push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  // What hangs below a planet moves as its nearest planet above it did.
+  const shift = new Map(named.map((n) => {
+    const o = offs.get(n.id), p = pos.get(n.id);
+    return [n.id, { x: p.x - o.x, z: p.z - o.z }];
+  }));
+  for (const n of list) {
+    if (!offs.has(n.id)) continue;
+    let d = shift.get(n.id);
+    for (let p = byId.get(n.parent), k = 0; !d && p && p !== site && k < 50; p = byId.get(p.parent), k++) d = shift.get(p.id);
+    if (!d) continue;
+    const o = offs.get(n.id);
+    offs.set(n.id, { x: o.x + d.x, z: o.z + d.z });
+  }
+  // Then the dots step off anything nearer than 0.55 of the gap.
+  const dots = list.filter((n) => !NAMED.has(n.kind) && offs.has(n.id));
+  const all = list.filter((n) => offs.has(n.id));
+  const small = gap * 0.55;
+  for (let round = 0; round < 30; round++) {
+    let moved = false;
+    for (const n of dots) {
+      const a = offs.get(n.id);
+      for (const m of all) {
+        if (m === n) continue;
+        const b = offs.get(m.id);
+        let dx = a.x - b.x, dz = a.z - b.z;
+        let d = Math.hypot(dx, dz);
+        if (d >= small) continue;
+        if (d < 1e-6) { dx = hash(`${n.id}|${m.id}`) - 0.5; dz = 0.5 - hash(`${m.id}|${n.id}`); d = Math.hypot(dx, dz) || 1; }
+        const k = (small - d) / d / (NAMED.has(m.kind) ? 1 : 2);
+        a.x += dx * k; a.z += dz * k;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
 }
 
 /**

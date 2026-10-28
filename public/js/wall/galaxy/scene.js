@@ -287,7 +287,7 @@ const LANE_SEGS = 40;
 export const FOV = 42;
 
 /** The overview's margin past the farthest site's star (world units): 400 at nights 1-4's scale. */
-export const OVERVIEW_MARGIN = 400 * 0.5; // layout.js TIGHT.arm, pinned by the layout test
+export const OVERVIEW_MARGIN = 400 * 0.5 * 1.24; // layout.js TIGHT.arm and ROOM.arms, pinned by the layout test
 
 /**
  * Where the camera sits for the whole galaxy: above, at an angle, and always
