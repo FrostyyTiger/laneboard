@@ -221,6 +221,29 @@ test('§11.6: a stop the agent honours ends stopped, not forced; its queued prom
 });
 const STOP_KILL_MS_PLUS = 12_000;
 
+test('§11.6: a stop of a new turn while an earlier forced stop still waits for its 8.0 s step stops the new turn', async (t) => {
+  const clock = manualClock(t);
+  const s = setup(t, fakeScript({}, [
+    { match: 'deaf', onInterrupt: 'ignore', steps: [{ at: 20, text: 'busy ' }, { at: 600_000, end: 'done' }] },
+    { match: 'second', onInterrupt: { endAfterMs: 100 }, steps: [{ at: 20, text: 'two ' }, { at: 600_000, end: 'done' }] }]));
+  s.session.start();
+  await s.until(() => s.session.phase === 'up', 'ready');
+  const first = await s.session.prompt(typed('deaf'));
+  await s.until(() => s.ofType('text.delta').length > 0, 'the first delta');
+  s.session.stop(first.turnId);
+  await clock.advance(STOP_FORCE_MS); // forced at 5.0 s; the old stop's 8.0 s step still pending
+  await s.until(() => s.ofType('turn.end').length === 1, 'the forced end');
+  await s.until(() => s.log.turnEnds().some((e) => e.end === 'stopped'), 'the result after the SIGINT');
+  const second = await s.session.prompt(typed('second', 'p-0000000b'));
+  await s.until(() => s.ofType('text.delta').some((m) => m.turnId === second.turnId), 'the second turn streams');
+  assert.deepEqual(s.session.stop(second.turnId), { ok: true });
+  assert.deepEqual(s.session.stopping, { turnId: second.turnId }, 'the new turn\'s own stop');
+  await s.until(() => s.ofType('turn.end').length === 2, 'the second turn ends');
+  const end = s.ofType('turn.end')[1];
+  assert.deepEqual([end.turnId, end.state, end.forced], [second.turnId, 'stopped', false]);
+  assert.equal(s.log.interrupts().length, 2, 'an interrupt for each stop');
+});
+
 test('§11.6: a SIGINT that ends the turn: forced at 5.0 s, its result comes, no SIGTERM at 8.0 s', async (t) => {
   const clock = manualClock(t);
   const s = setup(t, fakeScript({}, [{ match: 'deaf', onInterrupt: 'ignore', steps: [{ at: 20, text: 'busy ' }, { at: 600_000, end: 'done' }] }]));

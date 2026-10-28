@@ -313,7 +313,10 @@ export function createSession(opts) {
       const m = /^t-(\d{4,})$/.exec(turnId ?? '');
       return { ok: false, code: m && Number(m[1]) <= bridge.turnCount ? 'not-now' : 'unknown-id' };
     }
-    if (stopping) return { ok: true }; // the stop of this turn runs already
+    if (stopping?.turnId === turnId) return { ok: true }; // the stop of this turn runs already
+    // A forced stop of an earlier turn may still wait for its 8.0 s step while a new turn runs:
+    // that stop is over for this turn's purposes, and this turn's stop starts its own steps.
+    endStop();
     beginStop(turnId);
     return { ok: true };
   }
@@ -381,7 +384,7 @@ export function createSession(opts) {
     if (t) {
       // §11.7 `new`: the running turn is stopped first (§11.6).
       renewing.waitTurn = true;
-      if (!stopping) beginStop(t.turnId);
+      if (stopping?.turnId !== t.turnId) { endStop(); beginStop(t.turnId); } // as stop() above
     } else closeForNew();
     return { ok: true };
   }
