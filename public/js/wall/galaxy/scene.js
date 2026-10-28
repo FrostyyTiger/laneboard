@@ -63,6 +63,13 @@ const troubled = (t) => t === 'warn' || t === 'crit';
  */
 export const memberRadius = (planet, tone) => (planet || troubled(tone) ? SIZE.planet : SIZE.dot);
 
+/**
+ * A member's drawn radius with what it carries (night 5 A3, layout.js
+ * carryScale): a planet's size times its `carry`; the rest are not carried.
+ * The tone only decides planet size or dot, never the carry. Pure.
+ */
+export const bodyRadius = (m, tone) => memberRadius(m.planet, tone) * (m.planet ? m.carry ?? 1 : 1);
+
 /** The shape a trouble member carries on its sphere (docs/design.md: ▲ wants you, ■ broken), null when calm. */
 export const MARK_SHAPE = Object.freeze({ warn: 'tri', crit: 'square' });
 
@@ -118,8 +125,25 @@ export function dustFade(dist, reach, open = 1) {
 /** Trouble breathes: one slow period (ms), crit deep, warn shallow. */
 export const PULSE = Object.freeze({ periodMs: 2600, crit: 0.4, warn: 0.15, nebula: 0.08 });
 
-/** Sphere segments (width, height) at the best level; budget.js's levels scale them. */
-const SEGS = Object.freeze({ sun: [32, 20], star: [20, 14], planet: [32, 22], dot: [10, 8] });
+/**
+ * Sphere segments (width, height) at the best level; budget.js's levels
+ * scale them. `bigStar` (night 5 A3): a star that carries more than
+ * BIG_STAR is drawn up to 2.2x, and a 20-gon that size shows its corners;
+ * 26x18 keeps a star of up to 1.65x as round at its edge as a 1x star at
+ * 20x14 (test/wall-galaxy-carry.test.mjs) for 364 more triangles a star.
+ * Stars are flat-shaded, so only the edge can look faceted; planets are
+ * already 32x22, round enough at 2.2x.
+ */
+const SEGS = Object.freeze({ sun: [32, 20], star: [20, 14], bigStar: [26, 18], planet: [32, 22], dot: [10, 8] });
+
+/** Each sphere geometry's radius: a big star is the star's sphere, scaled by its carry like any star. */
+const SPHERE_R = Object.freeze({ sun: SIZE.sun, star: SIZE.star, bigStar: SIZE.star, planet: SIZE.planet, dot: SIZE.dot });
+
+/** A star's radius factor above which it takes the `bigStar` sphere. */
+export const BIG_STAR = 1.2;
+
+/** Which sphere a star carrying `carry` is drawn with. Pure. */
+export const starSphere = (carry) => (carry > BIG_STAR ? 'bigStar' : 'star');
 
 /**
  * A member dot's segments never exceed 8x6 (night 4 T12, r56-performance 3a):
@@ -506,7 +530,7 @@ export function createGalaxyScene(canvas, {
   const dotTex = dotTexture(doc);
   const cloudTex = cloudTexture(doc);
   const spheres = (seg) => Object.fromEntries(Object.keys(SEGS).map((k) => [
-    k, new THREE.SphereGeometry(SIZE[k], ...sphereSegs(k, seg)),
+    k, new THREE.SphereGeometry(SPHERE_R[k], ...sphereSegs(k, seg)),
   ]));
   const geo = spheres(1);
   // A nebula lobe: a flat square in the galaxy's plane, stretched by its scale (nebula.js).
@@ -664,8 +688,8 @@ export function createGalaxyScene(canvas, {
     dirty = true;
   };
 
-  const haloSize = (m, t) => (m.planet || troubled(t) ? memberRadius(m.planet, t) * HALO[t].k : t === 'calm' ? 0 : SIZE.dot * 2 * HALO[t].k);
-  const sphereOf = (m) => (m.radius === SIZE.planet ? geo.planet : geo.dot);
+  const haloSize = (m, t) => (m.planet || troubled(t) ? bodyRadius(m, t) * HALO[t].k : t === 'calm' ? 0 : SIZE.dot * 2 * HALO[t].k);
+  const sphereOf = (m) => (m.radius > SIZE.dot ? geo.planet : geo.dot);
   const laneLook = (t) => (t === 'calm'
     ? { color: col(palette.line.rgb), opacity: palette.line.alpha * 0.6 }
     : { color: tone[t].clone(), opacity: 0.5 });
@@ -673,8 +697,8 @@ export function createGalaxyScene(canvas, {
   /** A member's tone: its mesh swaps to the shared material; its halo eases to its new size. */
   const paintMember = (s, m, t, ms) => {
     m.tone = t;
-    const r0 = m.size ?? memberRadius(m.planet, t);
-    m.radius = memberRadius(m.planet, t);
+    const r0 = m.size ?? bodyRadius(m, t);
+    m.radius = bodyRadius(m, t);
     // The sphere for the larger of the two sizes, so one growing in is never a coarse dot blown up.
     m.mesh.geometry = sphereOf({ radius: Math.max(r0, m.radius) });
     m.mesh.material = m.planet || troubled(t) ? planetMat[t] : flatMat[t];
@@ -701,7 +725,7 @@ export function createGalaxyScene(canvas, {
     if (neb.tone !== s.nebula?.tone) s.since = clock(); // how old its trouble is (nebulaPeaks)
     s.nebula = neb;
     const nebTo = { color: tone[neb.tone].clone(), opacity: neb.opacity, size: neb.size };
-    const starTo = SIZE.star * HALO[t].k;
+    const starTo = SIZE.star * s.carryTo * HALO[t].k;
     const laneEnd = laneLook(neb.tone);
     const set = (k) => {
       const nf = s.nebFrom, lf = s.laneFrom;
@@ -720,12 +744,23 @@ export function createGalaxyScene(canvas, {
     tween(`${s.id}:paint`, ms, set);
   };
 
-  /** A site's members from its layout: the old ones go, the new ones come at their tones. */
-  const setMembers = (s, list) => {
+  /**
+   * A site's members from its layout (`lay`: one of galaxyLayout's sites):
+   * the old ones go, the new ones come at their tones; its star takes the
+   * size its planets give it, eased over `ms` when it had one (0: at once).
+   */
+  const setMembers = (s, lay, ms = 0) => {
+    const list = lay.members;
     for (const m of s.members) group.remove(m.mesh, m.halo, m.mark);
     for (const key of tweens.keys()) if (key.startsWith(`${s.id}:halo:`)) tweens.delete(key);
+    const carry = lay.carry ?? 1, from = s.carry;
+    s.carryTo = carry;
+    s.star.geometry = geo[starSphere(carry)];
+    // starRadius: what labels.js stands a site's name beside.
+    if (!ms || from == null || from === carry) { s.carry = carry; s.starRadius = SIZE.star * carry; }
+    else tween(`${s.id}:carry`, ms, (k) => { s.carry = glide(from, carry, k); s.starRadius = SIZE.star * s.carry; });
     s.members = list.map((lm) => {
-      const m = { id: lm.id, node: lm.node, off: { ...lm.off }, planet: lm.planet, tone: 'calm', haloSize: 0 };
+      const m = { id: lm.id, node: lm.node, off: { ...lm.off }, planet: lm.planet, carry: lm.carry ?? 1, tone: 'calm', haloSize: 0 };
       m.mesh = new THREE.Mesh(m.planet ? geo.planet : geo.dot, flatMat.calm);
       m.halo = new THREE.Sprite(haloMat.calm);
       m.mark = new THREE.Sprite(markMat.crit);
@@ -793,7 +828,7 @@ export function createGalaxyScene(canvas, {
       neb: { color: tone[neb.tone].clone(), opacity: neb.opacity, size: neb.size }, starHaloSize: 0,
     };
     drawLane(s);
-    setMembers(s, lay.members);
+    setMembers(s, lay);
     paintSite(s, 0);
     return s;
   };
@@ -997,7 +1032,8 @@ export function createGalaxyScene(canvas, {
       const ph = relayPhase(now - r.t0, r.from);
       if (ph.swap && !r.swapped) {
         r.swapped = true;
-        setMembers(s, r.lay.members);
+        setMembers(s, r.lay, LIVE.recolourMs);
+        paintSite(s, LIVE.recolourMs);
         world.version += 1;
       }
       s.squeeze = ph.squeeze;
@@ -1158,7 +1194,7 @@ export function createGalaxyScene(canvas, {
       const t = at.member ? at.member.tone : toneOf(at.site.node);
       if (t !== 'calm') continue;
       const look = activityLook(w.count);
-      const r = (at.member ? at.member.size * (at.member.lift ?? 1) : SIZE.star) * at.site.alive;
+      const r = (at.member ? at.member.size * (at.member.lift ?? 1) : SIZE.star * (at.site.carry ?? 1)) * at.site.alive;
       const glow = glows[i], ring = loops[i];
       i += 1;
       const far = tall * camera.position.distanceTo(at.pos) * at.site.alive;
@@ -1680,7 +1716,7 @@ export function createGalaxyScene(canvas, {
       l.mesh.material.opacity = s.neb.opacity * l.shape.share * s.peak * (1 - 0.7 * e) * a * near(l.shape.len * size, l.mesh.position) * leash(l.mesh.position);
     }
     const star = near(s.starHaloSize * a, s.home);
-    s.star.scale.setScalar(Math.max(1e-3, a * star));
+    s.star.scale.setScalar(Math.max(1e-3, a * star * s.carry));
     s.starHalo.scale.setScalar(Math.max(1e-3, s.starHaloSize * a * star));
   };
   const fadeSun = () => { sunHalo.material.opacity = SUN_HALO * sunShown.glow * nearOf(SIZE.sunHalo * sunShown.scale, sun.position); };
@@ -1729,7 +1765,7 @@ export function createGalaxyScene(canvas, {
     const next = spheres(L.seg);
     sun.geometry = next.sun;
     for (const s of world?.sites ?? []) {
-      s.star.geometry = next.star;
+      s.star.geometry = next[starSphere(s.carryTo)];
       for (const m of s.members) m.mesh.geometry = m.mesh.geometry === geo.planet ? next.planet : next.dot;
     }
     for (const k of Object.keys(geo)) { geo[k].dispose(); geo[k] = next[k]; }

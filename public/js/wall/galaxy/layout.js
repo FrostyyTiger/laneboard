@@ -75,6 +75,21 @@ export const TILT = Object.freeze({ min: 0.15, max: 0.5 });
 /** What hangs below a planet scatters this much up or down round its parent. */
 export const JITTER = 30;
 
+/**
+ * Size is what it carries (night 5 A3, the owner's sketch pick `sk_size=1`):
+ * a planet's radius factor grows by `planet` per doubling of what hangs below
+ * it, a star's by `star` per doubling of its planets, from `base` (a planet
+ * with nothing below it is a little smaller than nights 1-4's), clamped to
+ * `min`-`max`. Never by status: trouble speaks in hue, halo and mark.
+ */
+export const CARRY = Object.freeze({ base: 0.8, planet: 0.35, star: 0.2, min: 0.8, max: 2.2 });
+
+/** The radius factor of a body carrying `n` (`per`: CARRY.planet or CARRY.star). Pure. */
+export function carryScale(n, per) {
+  const k = CARRY.base + per * Math.log2(1 + Math.max(0, Number(n) || 0));
+  return Math.max(CARRY.min, Math.min(CARRY.max, k));
+}
+
 const NAMED = new Set(['site', 'host', 'room', 'repo', 'builder']);
 const PLACE = new Set(['site', 'host']);
 
@@ -264,7 +279,9 @@ export function farStars(n = 2500, seed = 11) {
  * world, `members` everything below it as `{ id, node, off, planet }`
  * with `off` the open position from the star (`planet`: a named kind,
  * drawn as a lit sphere with a stem; the rest are dots), `reach` the
- * farthest member's distance. What hangs on the core and is no place (a
+ * farthest member's distance; `carry` on the site and on each member is
+ * its radius factor (carryScale: a star by its planets, a planet by
+ * everything below it in the site, 1 for the rest). What hangs on the core and is no place (a
  * run) is in no site. `shown` (ids, optional): the sites the galaxy shows;
  * they take the arm slots first, in model order, so a hidden site leaves no
  * gap in the rosette (the rest follow, farther out).
@@ -324,6 +341,13 @@ export function galaxyLayout(nodes, aspect = 16 / 9, shown = null) {
       ys.set(n.id, y);
       return y;
     };
+    // What each member carries: every member of the site below it, at any depth.
+    const below = new Map();
+    for (const n of members.get(s.id)) {
+      if (!offs.has(n.id)) continue;
+      let p = byId.get(n.parent);
+      for (let k = 0; p && p !== s && k < 50; k++, p = byId.get(p.parent)) below.set(p.id, (below.get(p.id) ?? 0) + 1);
+    }
     const out = [];
     let reach = 0;
     for (const n of members.get(s.id)) {
@@ -331,9 +355,11 @@ export function galaxyLayout(nodes, aspect = 16 / 9, shown = null) {
       if (!o) continue;
       const off = { x: o.x, y: height(n), z: o.z };
       reach = Math.max(reach, Math.hypot(off.x, off.y, off.z));
-      out.push({ id: n.id, node: n, off, planet: NAMED.has(n.kind) });
+      const planet = NAMED.has(n.kind);
+      out.push({ id: n.id, node: n, off, planet, carry: planet ? carryScale(below.get(n.id) ?? 0, CARRY.planet) : 1 });
     }
-    return { id: s.id, node: s, index, home, members: out, reach };
+    const carry = carryScale(out.filter((m) => m.planet).length, CARRY.star);
+    return { id: s.id, node: s, index, home, members: out, reach, carry };
   });
   return { core, sites };
 }

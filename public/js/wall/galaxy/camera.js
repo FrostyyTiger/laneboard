@@ -373,7 +373,7 @@ export function createGalaxyCamera(galaxy, { flight = FLIGHT, still = false, fre
     if (!w) return null;
     const s = w.byId.get(id);
     let p = s?.home ?? null;
-    let radius = SIZE.star * (s?.alive ?? 1);
+    let radius = SIZE.star * (s?.carry ?? 1) * (s?.alive ?? 1);
     if (!p) {
       for (const site of w.sites) {
         const m = site.members.find((x) => x.id === id);

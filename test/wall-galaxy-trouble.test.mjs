@@ -69,8 +69,10 @@ test('open, a lane in trouble is drawn at least as large as a calm planet, a cal
   galaxy.update(fleet(BAD));
   galaxy.setOpen('hv1', 1);
   at(1000);
-  const planet = drawnR(member(galaxy, 'hv1-b'));
-  assert.equal(planet, SIZE.planet);
+  // A planet is drawn by what it carries (night 5 A3): the builder with three lanes at 1.5x;
+  // a lane in trouble takes the planet size itself, never smaller.
+  const planet = SIZE.planet;
+  assert.equal(drawnR(member(galaxy, 'hv1-b')), SIZE.planet * 1.5);
   assert.ok(drawnR(member(galaxy, 'lane:ask')) >= planet, 'warn');
   assert.ok(drawnR(member(galaxy, 'lane:jam')) >= planet, 'crit');
   assert.equal(drawnR(member(galaxy, 'lane:calm')), SIZE.dot);
