@@ -98,12 +98,24 @@ Notes for every builder round (planner, round 7):
   `lab` open L0 30.7k → 32.3k; draw calls unchanged (203); no per-frame work added. Looked at
   (`$RUN_DIR/shots/r13-t2-hv1b`, `r13-t2-overview`, `r13-t2-hv2`, `r13-galaxy`): HV1's star 1.6x and round, builders and
   rooms by load, names clear; `?demo=1` film 30.2 fps at cpu 4x, 0 console errors.
-- [ ] T3 (§7 Night 5 A4) [ui] [variant:galaxy] Colour: each site a quiet warm-set tint (teal, indigo, plum, sage; the
+- [x] T3 (§7 Night 5 A4) [ui] [variant:galaxy] Colour: each site a quiet warm-set tint (teal, indigo, plum, sage; the
   sketch's `TINT_SETS.warm`) in its calm nebula and dust; "lift": calm bodies and names a step lighter (stone) on a deep
   blue-black ground; a warmer, softer sun. One frozen table in `galaxy/palette.js` (see the colour note above); status hues
   stay the loudest thing on screen, no neon — done when: palette tests find every tint's chroma below every status hue's and
   the lifted calm text still under `--text-1`, a scene test finds calm nebulae tinted and trouble nebulae in the status hue,
-  `test/design-guardrails.test.mjs` green; a still of the overview with HV1 in crit shows the red cluster as the loudest thing.
+  `test/design-guardrails.test.mjs` green; a still of the overview with HV1 in crit shows the red cluster as the loudest thing. (commit 117cfbd)
+  Notes (builder, round 14): `palette.js LOOK` (frozen, OKLCH) holds the tints, the lift and the sun; `applyLift(page)` in
+  `main.js boot` sets `--text-3`/`--text-2`/`--bg-canvas` one property at a time before the palette is read (the guardrail
+  scans CSS, the values stay out of the sheets); `lifted(readVar)` gives tests the same view. `scene.js`: a site keeps the
+  tint of the place it came in for life (`s.tint`, a later site never repaints it); a calm nebula takes it, a trouble
+  nebula its status hue and eases back to the tint on clear; the dust is tinted per nearest site (`tintGrain`, brightness
+  kept) once per site change and after a star's glide, no per-frame work. Changes against the sketch: dust chroma 2.6x
+  instead of 3.2x (indigo dust reached 0.116, past `--p3`'s 0.11; now ≤ 0.095); the sun halo keeps `SIZE.sunHalo` with the
+  softer falloff instead of growing 1.15x (it would pass the crit nebula's size, the r8 guard). `wall-galaxy-sun`'s core
+  test now reads the warm core under the lifted text-2. Tests: `test/wall-galaxy-tint.test.mjs` (7). Looked at
+  (`$RUN_DIR/shots/r14-t3-overview`, `r14-t3-hv1`, `r14-t3-hv2`, `r14-galaxy`): blue-black ground, warm sun, HOME's teal
+  haze faint, stone labels readable, red and yellow the loudest; `?demo=1` film 30.1 fps at cpu 4x, 0 console errors (frame 1:
+  HV1 crit, its red cluster the loudest thing).
 - [ ] T4 (§7 Night 5 A5) [ui] [variant:galaxy] Depth haze: distance fog from 0.6x to 2.6x of the look-at distance on calm
   materials only; status-hued materials and trouble nebulae never fogged (`scene.js`) — done when: a scene test finds `fog`
   off on every status-hued material and trouble nebula and on for calm bodies and dust, the fog range following the look-at
