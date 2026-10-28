@@ -1416,3 +1416,9 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   the line is tried once per stop, the stop running anyway (D166) — because screens.md §6.4 has a
   line per stop and 50 frames a second would otherwise fill the chained log with copies (review
   108-security finding 6) — spec: `screens.md` §6.4, D165 — overrule: the `stop` case in `link.mjs`.
+- B251 (round 41's B187, lost unpushed and taken back after the night) On `turn.end` for a drawn
+  turn the pane sets `data-turn="idle"` and `READY` in the animation frame that draws the turn's
+  complete text, not at the message; that frame releases it whether or not the turn drew any text
+  — because S-C1-04 read `idle` beside a reply still drawn half-way (the `text.block` waiting for
+  its frame), and §3's `answering` means "reply text is streaming" until the complete block is on
+  screen — spec: c1-talk.md §3 "Streaming" — overrule: `turn.end` in `pane.js`'s `apply`.

@@ -555,7 +555,7 @@ export function createPane(opts = {}) {
     dirty.clear();
     // The room sends `turn.state` and the first delta as two frames; an animation frame
     // between them must not release `answering` over a reply still empty (S-C1-04).
-    if (heldTurn !== null && views.get(heldTurnId)?.hasText()) setTurn(heldTurn);
+    if (heldTurn !== null && (heldTurnId === null || views.get(heldTurnId)?.hasText())) setTurn(heldTurn);
     grew();
   }
   function changed(v) {
@@ -1183,8 +1183,12 @@ export function createPane(opts = {}) {
           if (msg.code === 'agent-exited') agentBack = false;
           drawEnd(v);
           changed(v);
-        }
-        setTurn('idle');
+          // B251: `idle` reaches the screen in the frame that draws the turn's last text (its
+          // text.block), as `answering` waits for the first (B140), never ahead of it. No text
+          // needed: the next frame releases it whatever the turn drew (heldTurnId null).
+          heldTurn = 'idle';
+          heldTurnId = null;
+        } else setTurn('idle');
         ageTick();
         return;
       }
