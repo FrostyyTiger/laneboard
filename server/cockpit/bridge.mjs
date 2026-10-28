@@ -212,14 +212,19 @@ export function createBridge(opts) {
     child = c;
     readLines(c.stdout, (line) => fromAgent(line));
     readLines(c.stderr, (line) => {
-      log(`cockpit agent stderr: ${line.slice(0, 500)}`);
-      stderrLines.push(cut(line));
+      // D127, D211 (T53): stderr is redacted at the source, so the room's log, `stderrTail()`
+      // (session.mjs's `agent-down` detail and login-word test), the status slot, the replay
+      // buffer and a later `welcome.status` never hold a raw line.
+      const safe = redactor.text(line);
+      log(`cockpit agent stderr: ${safe.slice(0, 500)}`);
+      stderrLines.push(cut(safe));
       if (stderrLines.length > STDERR_KEEP) stderrLines.shift();
     }, { quiet: true });
     c.stdin.on('error', (err) => log(`cockpit agent: stdin ${err.code ?? err.message}`));
     c.on('error', (err) => {
-      log(`cockpit agent: ${err.message}`);
-      stderrLines.push(cut(err.message));
+      const safe = redactor.text(err.message); // D211, as stderr above
+      log(`cockpit agent: ${safe}`);
+      stderrLines.push(cut(safe));
       if (stderrLines.length > STDERR_KEEP) stderrLines.shift();
     });
     c.on('close', (code, signal) => exited(c, code, signal));

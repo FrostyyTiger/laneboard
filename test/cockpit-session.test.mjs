@@ -6,8 +6,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { once } from 'node:events';
+import WebSocket from 'ws';
 
 import {
   createSession, nextConversation, readSessionFile, writeSessionFile, sessionFilePath,
@@ -16,6 +19,8 @@ import {
 import { checkMessage } from '../server/cockpit/protocol.mjs';
 import { setClock, createTestClock } from '../server/cockpit/clock.mjs';
 import { fakeAgentLog } from './cockpit/stand-ins/fake-agent-log.mjs';
+import { createLink } from '../server/cockpit/link.mjs';
+import { classify } from '../server/fleet/auth.mjs';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const FAKE = path.join(ROOT, 'test/cockpit/stand-ins/fake-agent.mjs');
@@ -35,7 +40,7 @@ function manualClock(t) {
 }
 
 /** A session supervisor on the fake agent (claude dialect, the adapter runs). */
-function setup(t, sc, { stateDir: given } = {}) {
+function setup(t, sc, { stateDir: given, tap } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'session-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const stateDir = given ?? path.join(dir, 'state');
@@ -55,7 +60,7 @@ function setup(t, sc, { stateDir: given } = {}) {
   let now = clockNow;
   const session = createSession({
     stateDir,
-    emit: (m) => { messages.push({ ...m, seq: messages.length + 1 }); poke(); },
+    emit: (m) => { messages.push({ ...m, seq: messages.length + 1 }); tap?.(m); poke(); },
     log: (l) => {
       logs.push(l);
       if (l.startsWith('cockpit agent: started pid')) starts.push(now());
@@ -297,6 +302,50 @@ test('§13 the restart test: E2, restarts after 0, 2, 4 s, agent-down, then conv
   await clock.advance(5_000);
   assert.equal(s.ofType('status').at(-1).status, null, 'agent-back is news: gone after 5 s');
   for (const m of s.messages) assert.deepEqual(checkMessage(m, 'out'), { ok: true }, JSON.stringify(m));
+});
+
+test('T53 (D127, D211): a token on the agent\'s stderr is redacted at the source: agent-down detail, log, welcome.status', async (t) => {
+  const clock = manualClock(t);
+  const TOKEN = 'sk-ant-api03-Qx7vR2mK9pL4sT8wZ1nB6cD3fG5hJ0yE';
+  const LINE = `claude: request failed, header Authorization: Bearer ${TOKEN}`;
+  // The link the room runs (boot/cockpit.mjs: the session's emit is the link's), so a screen
+  // that comes while the agent is down gets the held status in its welcome.
+  let link = null;
+  const s = setup(t, fakeScript({ startFailures: 99, startStderr: LINE }, []), { tap: (m) => link?.emit(m) });
+  const server = http.createServer();
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address();
+  const config = { port, cockpit: { stt: { url: 'none', language: ['en'] } } };
+  const store = { apply: () => {}, turns: () => [], conversation: null, startedAt: null };
+  const audit = { append: (e) => e };
+  link = createLink({ session: s.session, store, audit, config, log: (l) => s.logs.push(l) });
+  server.on('upgrade', (r, socket, head) => {
+    r.auth = classify(r, config, {});
+    if (!link.handleUpgrade(r, socket, head, new URL(r.url, 'http://x'))) socket.destroy();
+  });
+  t.after(() => { link.close(); server.close(); });
+
+  s.useClock(clock);
+  s.session.start();
+  await s.until(() => s.ofType('status').length === 1, 'agent-down at the second failed start');
+  const down = s.ofType('status')[0].status;
+  assert.equal(down.code, 'agent-down');
+  assert.equal(down.detail, 'claude: request failed, header Authorization: Bearer [redacted]');
+  assert.ok(s.logs.some((l) => l === `cockpit agent stderr: ${down.detail}`), 'the room log has the redacted line');
+
+  const ws = new WebSocket(`ws://127.0.0.1:${port}/api/cockpit/ws`, { origin: `http://127.0.0.1:${port}` });
+  const frames = [];
+  ws.on('message', (d) => frames.push(JSON.parse(d.toString())));
+  t.after(() => ws.terminate());
+  await once(ws, 'open');
+  ws.send(JSON.stringify({ type: 'hello', seq: 1, page: 'app', protocol: 1 }));
+  await s.until(() => frames.some((f) => f.type === 'welcome'), 'welcome');
+  const welcome = frames.find((f) => f.type === 'welcome');
+  assert.equal(welcome.status?.detail, down.detail, 'welcome.status while the agent is down');
+
+  const everything = JSON.stringify([...s.messages, ...frames, ...s.logs]);
+  assert.ok(!everything.includes(TOKEN), 'the raw token in no message, frame or log line');
+  assert.ok(!everything.includes('sk-ant-'), 'not even its prefix');
 });
 
 test('§11.7: no ready 30 s after the spawn is a failed start; the child is killed and the start tried again', async (t) => {
