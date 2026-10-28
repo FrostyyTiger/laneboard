@@ -42,8 +42,10 @@
 // Explore looks like a person is driving (night 4 T5, r41-operator touch 1,
 // night 3's Q13): while a finger has the page, a mono line by the tag counts
 // down to the hand-back (`manualLine`, `MANUAL · TOUR IN 0:40`, from
-// `idleLeft`); the minute starts when the first touch's ease is over (Q13: a
-// running flight is not idle), so the line's first word is `1:00`. At the
+// `idleLeft`); the minute counts from the waking touch itself, the ease out
+// included (cockpit spec screens.md S-SCR-02: the tour is back 60 s after the
+// tap; cockpit build B237 over night 4 T5's Q13 reading), so the line's first
+// word, once the 1.5 s ease is over, is `0:59`. At the
 // overview the back control reads `▶ TOUR` (`backControl`) and hands the page
 // back at once (`handBack`, as the minute does).
 //
@@ -91,9 +93,10 @@ export const roleOf = (value) => (ROLES.includes(value) ? value : 'tour');
 export function touchStep(state, event, now, { fitMs = TOUCH.fitMs, idleMs = IDLE.ms, held = false, stay = false } = {}) {
   const s = state && TOUCH_MODES.includes(state.mode) ? state : { mode: 'tour', since: null, last: null };
   // `easing` ends on its own: any event after fitMs finds the camera out. The
-  // minute counts from then (night 4 T5, Q13: the flight out is not idle time).
+  // minute counts from the last touch, the waking one included (cockpit spec
+  // screens.md S-SCR-02, §2: tour → explore "restarts at 60 s"; cockpit build B237).
   let cur = s.mode === 'easing' && now - s.since >= fitMs
-    ? { ...s, mode: 'explore', since: s.since + fitMs, last: Math.max(s.last ?? 0, s.since + fitMs) }
+    ? { ...s, mode: 'explore', since: s.since + fitMs, last: s.last ?? s.since }
     : s;
   if (event === 'down' && cur.mode === 'tour') {
     return { state: { mode: 'easing', since: now, last: now }, wake: true, swallow: true, resume: false };

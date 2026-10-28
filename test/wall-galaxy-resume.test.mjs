@@ -130,11 +130,12 @@ function page({ still = false, role = 'tour' } = {}) {
     sheets.push(null);
     place = AT_OVERVIEW;
   };
+  let nextLeg = false; // as galaxy/main.js: `▶ TOUR` its next leg, the minute the overview first (B239)
   touch = createTouch(stage, {
     clock,
     role,
     wake: () => { wakes++; tour.stop(); left.clear(); toOverview(); },
-    resume: () => { cutAway(); sheets.push(null); left.clear(); place = AT_OVERVIEW; director.handBack(); tour.resume(); },
+    resume: () => { cutAway(); sheets.push(null); left.clear(); place = AT_OVERVIEW; director.handBack(); tour.resume({ overview: !nextLeg }); },
   });
   const gestures = still ? null : createGestures(stage, touch, finger, {
     clock,
@@ -158,7 +159,7 @@ function page({ still = false, role = 'tour' } = {}) {
     else toOverview(left.pose());
   };
   const glyph = makeEl('span'), word = makeEl('span');
-  const back = createBack(button, { back: goBack, tour: () => touch.handBack(), glyph, word });
+  const back = createBack(button, { back: goBack, tour: () => { nextLeg = true; try { touch.handBack(); } finally { nextLeg = false; } }, glyph, word });
   createTaps(touch, {
     clock,
     pick: (x, y) => hitTest(memberPoints(galaxy.world.sites, cam.screenOf), x, y)
@@ -209,10 +210,10 @@ test('touchStep: explore → tour after IDLE.ms untouched (resume, once); a touc
   assert.equal(touchStep(woke, 'tick', t0 + TOUCH.fitMs - 1, { idleMs: 1 }).resume, false);
   const out = touchStep(woke, 'tick', t0 + TOUCH.fitMs).state;
   assert.equal(out.mode, 'explore');
-  // The minute counts from the end of the waking touch's ease (night 4 T5, Q13: the flight out is not idle).
-  assert.equal(out.last, t0 + TOUCH.fitMs);
-  assert.equal(touchStep(out, 'tick', t0 + TOUCH.fitMs + IDLE.ms - 1).resume, false);
-  const back = touchStep(out, 'tick', t0 + TOUCH.fitMs + IDLE.ms);
+  // The minute counts from the waking touch, the ease included (cockpit S-SCR-02, build B237).
+  assert.equal(out.last, t0);
+  assert.equal(touchStep(out, 'tick', t0 + IDLE.ms - 1).resume, false);
+  const back = touchStep(out, 'tick', t0 + IDLE.ms);
   assert.deepEqual([back.state.mode, back.resume, back.wake, back.swallow], ['tour', true, false, false]);
   assert.equal(touchStep(back.state, 'tick', t0 + 2 * IDLE.ms).resume, false, 'once: the tour has it');
   // A touch 50 s in starts the minute again; so does a down, a move, a lift or the wheel ('touch').
@@ -224,7 +225,7 @@ test('touchStep: explore → tour after IDLE.ms untouched (resume, once); a touc
   // A finger resting on the glass is a touch going on.
   assert.equal(touchStep(out, 'tick', t0 + 5 * IDLE.ms, { held: true }).resume, false);
   // The next down after the hand-back wakes the page again.
-  assert.equal(touchStep(back.state, 'down', t0 + TOUCH.fitMs + IDLE.ms + 10).wake, true);
+  assert.equal(touchStep(back.state, 'down', t0 + IDLE.ms + 10).wake, true);
 });
 
 test('resumeTour: the tour comes back at its worst site (trouble first), not the overview nor the calm site that was due', () => {
@@ -328,19 +329,24 @@ test('pointer events on the page: touch → overview → drag → tap a site →
   assert.equal(p.touch.mode(), 'explore');
   assert.equal(p.legs.length, legs, 'no leg while the minute runs');
   const before = p.cam.pose();
-  // The minute is up: the tour flies on from here, trouble first.
-  p.run(3000);
+  // The minute is up: the tour starts again with the overview, flying out from here (B239).
+  for (let t = 0; t < 3000 && p.touch.mode() !== 'tour'; t += 16) p.tick(16);
   assert.equal(p.touch.mode(), 'tour');
   assert.equal(p.legs.length, legs + 1);
-  assert.deepEqual([p.legs.at(-1).kind, p.legs.at(-1).id], ['site', 'hv2'], 'its worst site first');
-  assert.deepEqual([p.cam.want().kind, p.cam.want().id], ['site', 'hv2']);
+  assert.equal(p.legs.at(-1).kind, 'overview', 'the overview first');
+  assert.equal(p.cam.want().kind, 'overview');
   assert.ok(p.cam.flight(), 'a flight, not a cut');
   assert.equal(p.button.hidden, true, 'the back control goes with the person');
   assert.equal(p.timers.live.size, 1, 'the tour runs on');
   // Eased from where it was: the first frames of the flight stay by the pose the person left.
   const i = p.sheets.lastIndexOf(null);
   assert.equal(i, p.sheets.length - 1, 'the sheet went');
-  assert.ok(gap(p.cam.pose(), before) < 0.05 * gap(before, zoomedSiteShot(p.galaxy.world.byId.get('hv2'), 0, DEMO_TIMING.zoom)), 'no cut');
+  const first = p.tick(16);
+  p.run(FLIGHT.ms + 500);
+  assert.ok(gap(first, before) < 0.05 * gap(before, p.cam.pose()), 'no cut');
+  // Then trouble first, as a fresh cycle has it.
+  p.run(DEMO_TIMING.overviewMs);
+  assert.deepEqual([p.legs.at(-1).kind, p.legs.at(-1).id], ['site', 'hv2'], 'its worst site next');
   // The next touch is a first touch again.
   p.stage.dispatch('pointerdown', { pointerId: 9 });
   p.stage.dispatch('pointerup', { pointerId: 9 });
@@ -411,7 +417,7 @@ test('reduced motion on the page: every step a cut with a short fade, no flights
   const legs = p.legs.length;
   p.run(1500);
   assert.equal(p.touch.mode(), 'tour');
-  assert.deepEqual([p.legs.length, p.legs.at(-1).id], [legs + 1, 'hv2'], 'the tour at its worst site');
+  assert.deepEqual([p.legs.length, p.legs.at(-1).kind], [legs + 1, 'overview'], 'the tour with the overview first (B239)');
   const back = p.tick(16);
   assert.ok(gap(back, over) < 1, 'the camera on the overview, as the still tour has it');
   assert.equal(p.galaxy.world.byId.get('cloud').open, 0);
@@ -541,7 +547,7 @@ test('galaxy/main.js wires the return (night 4 T4): leave on open, fly back on t
 test('galaxy/main.js wires the hand-back (T14): resume releases the sheet and resumes the tour; cuts and the fade in reduced motion', () => {
   const js = read('js/wall/galaxy/main.js');
   const resume = js.slice(js.indexOf('resume: () => {'), js.indexOf('},', js.indexOf('resume: () => {')));
-  for (const rx of [/cutAway\(\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/, /tour\.resume\(/]) assert.match(resume, rx);
+  for (const rx of [/cutAway\(\)/, /hud\.release\(\)/, /place = AT_OVERVIEW/, /tour\.resume\(\{ overview: !nextLeg \}\)/]) assert.match(resume, rx);
   assert.match(js, /createCutFade\(\[canvas, document\.getElementById\('galaxy-labels'\)\]\)/);
   const open = js.slice(js.indexOf('const openSite = '), js.indexOf('};', js.indexOf('const openSite = ')));
   assert.match(open, /finger\.cut\(id, TIMING\.zoom\)/);
@@ -570,14 +576,14 @@ test('manualLine: MANUAL · TOUR IN m:ss, whole seconds rounded up; null for nul
   assert.equal(manualLine(125_000), 'MANUAL · TOUR IN 2:05');
 });
 
-test('idleLeft: only in explore; the minute from the ease\'s end, reset by a touch, full while a finger is held', () => {
+test('idleLeft: only in explore; the minute from the waking touch (B237), reset by a touch, full while a finger is held', () => {
   const t0 = 10_000;
   const woke = touchStep(null, 'down', t0).state;
   assert.equal(idleLeft(null, t0), null, 'the tour');
   assert.equal(idleLeft(woke, t0 + 100), null, 'easing out');
   const out = touchStep(woke, 'tick', t0 + TOUCH.fitMs).state;
-  assert.equal(idleLeft(out, t0 + TOUCH.fitMs), IDLE.ms);
-  assert.equal(idleLeft(out, t0 + TOUCH.fitMs + 20_000), IDLE.ms - 20_000);
+  assert.equal(idleLeft(out, t0 + TOUCH.fitMs), IDLE.ms - TOUCH.fitMs);
+  assert.equal(idleLeft(out, t0 + 20_000), IDLE.ms - 20_000);
   assert.equal(idleLeft(out, t0 + TOUCH.fitMs + 20_000, { held: true }), IDLE.ms);
   assert.equal(idleLeft(out, t0 + 10 * IDLE.ms), 0);
   const later = touchStep(out, 'touch', t0 + 30_000).state;
@@ -627,7 +633,7 @@ test('backControl and createBack: back away from the overview, ▶ TOUR at it, n
   assert.deepEqual(said, ['tour', 'back'], 'hidden does nothing');
 });
 
-test('pointer events on the page (night 4 T5): no line in the tour; 1:00 after the wake, 0:40 20 s on, 1:00 after a drag, gone at the hand-back', () => {
+test('pointer events on the page (night 4 T5): no line in the tour; 0:59 once the wake has eased out, 0:40 20 s on, 1:00 after a drag, gone at the hand-back', () => {
   const p = page();
   p.tour.start();
   p.run(DEMO_TIMING.overviewMs + 1000);
@@ -638,9 +644,10 @@ test('pointer events on the page (night 4 T5): no line in the tour; 1:00 after t
   assert.equal(p.manual(), null, 'easing out: no line yet');
   p.run(TOUCH.fitMs / 2 + 16);
   assert.equal(p.touch.mode(), 'explore');
-  assert.equal(p.manual(), 'MANUAL · TOUR IN 1:00', 'after the wake');
-  p.run(20_000);
-  assert.equal(p.manual(), 'MANUAL · TOUR IN 0:40', '20 s later');
+  // The minute runs from the waking touch (build B237): 58.5 s left once the ease is over.
+  assert.equal(p.manual(), 'MANUAL · TOUR IN 0:59', 'after the wake');
+  p.run(18_500);
+  assert.equal(p.manual(), 'MANUAL · TOUR IN 0:40', '20 s after the wake');
   p.drag(2, [[800, 450], [830, 450], [900, 460], [960, 470]]);
   assert.equal(p.manual(), 'MANUAL · TOUR IN 1:00', 'a drag starts the minute again');
   p.run(IDLE.ms + 100);
@@ -728,9 +735,13 @@ test('the page through the director (T14): tour → wake → drag → tap → ba
   const before = p.cam.pose();
   for (let t = 0; t < IDLE.ms && p.director.driver() === 'touch'; t += 16) p.tick(16);
   assert.equal(p.director.driver(), 'tour');
-  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call, p.moves.at(-1).args[0]], ['tour', 'focus', 'hv2'], 'the tour back at its worst');
+  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call], ['tour', 'fit'], 'the tour back with the overview first (B239)');
   assert.ok(p.cam.flight(), 'eased: a flight, not a cut');
-  assert.ok(gap(p.cam.pose(), before) < 0.05 * gap(before, zoomedSiteShot(p.galaxy.world.byId.get('hv2'), 0, DEMO_TIMING.zoom)), 'from where the finger left it');
+  const first = p.cam.pose();
+  p.run(FLIGHT.ms + 500);
+  assert.ok(gap(first, before) < 0.05 * gap(before, p.cam.pose()), 'from where the finger left it');
+  p.run(DEMO_TIMING.overviewMs);
+  assert.deepEqual([p.moves.at(-1).source, p.moves.at(-1).call, p.moves.at(-1).args[0]], ['tour', 'focus', 'hv2'], 'then its worst');
   // Nothing moved the camera but the director: one call per move it played, the same call.
   assert.deepEqual(p.calls, p.moves.map((m) => m.call));
   assert.ok(p.moves.every((m) => ['touch', 'tour'].includes(m.source)));

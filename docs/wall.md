@@ -61,9 +61,10 @@ needs you, red for crit and down, amber for warn. A light's own colour
   the tour comes back.
 
 **To give the page back to the tour**: tap `▶ TOUR` (where the back control
-is, at the overview), or wait. A minute after the last touch, the tour
-takes the page back at its next leg, trouble first, flying there from
-wherever the finger left the camera.
+is, at the overview: the tour goes on at its next leg, trouble first), or
+wait. A minute after the last touch (the first touch included, while the
+camera eases out), the tour takes the page back and starts again with the
+overview, flying out from wherever the finger left the camera.
 
 **To stop the tour**: touch the screen; it stays stopped for a minute after
 the last touch. For a screen that never tours by itself, open it with

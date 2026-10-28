@@ -17,7 +17,10 @@
 //                              the snapshot redraws (D119; protocols.md §3.4's unknown `clientId`)
 //   tabs                       the screen's other pages (screen-tabs.js; default a BroadcastChannel):
 //                              an E9 refusal is drawn on every page of the screen (S-C1-43, B234)
+//   onTurnChange(running)      a turn started or ended (`data-turn` other than `idle`): the Wall's
+//                              idle timer is held while one runs (screens.md §2, wall-hold.js)
 //   pane.open() / .close() / .isOpen()
+//   The pane closes itself after 300 s with no touch and no running turn (auto-close.js, D5).
 //
 // The root (<html>) carries data-cockpit, data-pane, data-turn and data-keyboard (README.md
 // "Selectors tests use"); the pane is [data-cockpit-conversation].
@@ -32,6 +35,7 @@ import { focusNow } from './focus.js';
 import { paneFit, TOO_OLD_TEXT } from './fit.js';
 import { inputCap, KEYBOARD_ROW_PX, watchKeyboard } from './keyboard.js';
 import { TAP_SLOP_TOUCH } from '../views/map/interact.js';
+import { createAutoClose } from './auto-close.js';
 
 /** c1-talk.md §2: the header's three words for the five turn states (D56). */
 export const TURN_WORDS = Object.freeze({
@@ -98,6 +102,7 @@ export function createPane(opts = {}) {
   const page = opts.page ?? 'app';
   const onRetryNow = opts.onRetryNow ?? (() => {});
   const onOpenChange = opts.onOpenChange ?? (() => {});
+  const onTurnChange = opts.onTurnChange ?? (() => {});
   const onPrompt = opts.onPrompt ?? (() => false);
   const onStop = opts.onStop ?? (() => false);
   const onNew = opts.onNew ?? (() => false);
@@ -248,12 +253,24 @@ export function createPane(opts = {}) {
     }
   }
 
+  // screens.md §2, D5: the pane closes itself after 300 s untouched, never during a turn.
+  const autoClose = createAutoClose({
+    setTimer: (fn, ms) => win.setTimeout(fn, ms),
+    clearTimer: (t) => win.clearTimeout(t),
+    close: () => setOpen(false),
+  });
+  let turnRunning = false;
   const setTurn = (state) => {
     heldTurn = null;
     const s = Object.hasOwn(TURN_WORDS, state) ? state : 'idle';
     root.dataset.turn = s;
     turnWord.textContent = TURN_WORDS[s];
     sendState(); // §8: the slot follows the turn
+    if ((s !== 'idle') !== turnRunning) {
+      turnRunning = s !== 'idle';
+      autoClose.turn(turnRunning);
+      onTurnChange(turnRunning);
+    }
   };
 
   let maxChars = MAX_PROMPT_CHARS; // welcome.config.maxPromptChars (protocols.md §2.1)
@@ -919,6 +936,7 @@ export function createPane(opts = {}) {
       hideTimer = win.setTimeout(() => { hideTimer = null; if (!open) pane.hidden = true; }, dur > 0 ? PANE_SLIDE_MS + 30 : 0);
     }
     coverView(open && fit === 'full');
+    autoClose.opened(open);
     onOpenChange(open);
   }
 
@@ -1009,6 +1027,8 @@ export function createPane(opts = {}) {
     e.preventDefault();
     sendNow();
   });
+  // D5's "no touch": a finger, a key or the wheel anywhere on the page starts the 300 s again.
+  for (const type of ['pointerdown', 'keydown', 'wheel']) win.addEventListener(type, () => autoClose.touched(), { capture: true, passive: true });
   // Esc closes the pane, the draft stays (c1-talk.md §2, §7); before the shell's own Esc.
   win.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape' || !open) return;

@@ -1306,3 +1306,38 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   block under load); with the half pixel the end lands in [line − 1, line) at any fraction —
   spec: D267 ("the last item ends at y ≤ 744"), c1-talk.md §7.1 — overrule: `.ck-convo`'s
   padding in `public/css/cockpit.css`.
+- B237 (T31) The Wall's idle minute counts from the waking touch itself, the 1.5 s ease out
+  included: `touchStep` keeps `last` at the tap when `easing` becomes `explore` (it was the ease's
+  end, night 4 T5's reading of the Wall's Q13), so the tour is back exactly 60 s after the tap and
+  the `MANUAL · TOUR IN` line first reads `0:59` once the ease is over — because S-SCR-02 asserts
+  `explore` at 59 s and `tour` at 60 s after the tap, §2's table says a touch "restarts at 60 s",
+  and §9.1 says the code follows the table — spec: `screens.md` §2, S-SCR-02, §9.1 W5 — overrule:
+  `touchStep` in `public/js/wall/galaxy/touch.js` back to `last: s.since + fitMs` and S-SCR-02's
+  59/60 s read as 60.5/61.5 s (under For the owner).
+- B238 (T31) The tour scenarios (`e2e/cockpit/c1-tour.spec.mjs`) move the page's clock by hand,
+  paused (`pauseAt`), with the room's `manual` clock in 10 s steps, each waiting for its heartbeat on
+  the page (the link stays live through 760 s, as B235); the Wall draws frames only when the page's
+  clock runs (34 ms after each step), and a tap the scenario puts at `s` lands at `s` exactly.
+  S-SCR-04's `stay a while` (B34: 400 s of the fake agent's real ms) is rewritten in the test's copy
+  of `scr-room` to a line every 2 s ending at 60 s real, so it runs while the page's clock goes to
+  400 s and ends with the page's clock held there; the close is read at end + 299 s / + 300 s and the
+  tour at end + 359 s / + 360 s, `end` the page's time the turn was drawn as over (400 s to 400.2 s,
+  asserted) — because the fake agent has no room clock — spec: `screens.md` S-SCR-02..04,
+  `stand-ins.md` §5 — overrule: the spec file.
+- B239 (T31) The Wall's idle minute (and W4, an undo) hands the page back with the overview first
+  (`tour.resume({ overview: true })`); `▶ TOUR` keeps night 4 T5's next leg, trouble first — because
+  §2's table, W4 ("the tour starts with the overview") and S-SCR-02 ("at t = 60 s it is `tour` and
+  the overview starts") say so for the minute and say nothing of `▶ TOUR` — spec: `screens.md` §2,
+  §9.1 W4, W5 — overrule: `resume` and `handBack` in `public/js/wall/galaxy/main.js` (`nextLeg`),
+  `docs/wall.md` "To give the page back".
+- B240 (T31) The auto-close (D5) is `public/js/cockpit/auto-close.js`, wired in `pane.js` on both
+  pages (D5: "the pane over the Wall and the app views"); "no touch" is no `pointerdown`, `keydown`
+  or `wheel` anywhere on the page (a paired keyboard's typing counts as a touch); "a turn" is
+  `data-turn` other than `idle` (`stopping` included), and its end starts the 300 s again — spec:
+  `screens.md` §2, c1-talk.md §2, D5 — overrule: the listeners in `pane.js` and `createAutoClose`.
+- B241 (T31) `wall-hold.js` is `createWallHold()`: the Wall's timer is held while the pane is open
+  or a turn runs (the pane's `onTurnChange`, B240's "turn"), and restarts at 60 s only when both are
+  over; opening the pane during a turn still pauses the tour (D4); the handle is read at each change
+  (a Wall that sets it late); `PANE_CLOSED_IDLE_MS` is gone, the module uses `EXPLORE_IDLE_S * 1000`
+  (T47's part for this file) — spec: `screens.md` §2's rows "a turn is running" and "the pane
+  closes" — overrule: `createWallHold`.

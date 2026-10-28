@@ -14,7 +14,7 @@ import { COCKPIT_PREFIX } from '../core/cockpit-constants.js';
 import { createRoomLink } from './link.js';
 import { createPane } from './pane.js';
 import { tooOld } from './fit.js';
-import { paneOnWall } from './wall-hold.js';
+import { createWallHold } from './wall-hold.js';
 import { installAppView } from './app-view.js';
 
 /** cb(true|false) once: the board's word on whether it has a cockpit (D93). */
@@ -61,6 +61,8 @@ export function initCockpit({ page = 'app', configured = boardSaysCockpit } = {}
     let link = null;
     // D250: below the browser floor the pane only says so, and no room link is opened.
     const old = tooOld(globalThis);
+    // The pane and a running turn hold the Wall's tour and idle timer (screens.md §2, D4).
+    const wallHold = createWallHold();
     const pane = createPane({
       page,
       unsupported: old,
@@ -69,8 +71,8 @@ export function initCockpit({ page = 'app', configured = boardSaysCockpit } = {}
       onStop: (m) => link?.send(m) ?? false,
       onNew: (m) => link?.send(m) ?? false,
       onGap: () => link?.gap(),
-      // The pane holds the Wall's tour and idle timer while open (screens.md §2).
-      onOpenChange: (open) => paneOnWall(globalThis.__cockpitView, open),
+      onOpenChange: (open) => wallHold.pane(open),
+      onTurnChange: (running) => wallHold.turn(running),
     });
     started.pane = pane;
     if (old) return;

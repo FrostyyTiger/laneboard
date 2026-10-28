@@ -534,7 +534,9 @@ test('galaxy.html has the show layers; wall.css draws the D72 looks; main.js wir
 
 test('main.js: an undo of a command made while touring hands the page back with the overview (c4 §5, screens.md §2); the note keeps off site names', () => {
   const js = read('js/wall/galaxy/main.js');
-  assert.match(js, /if \(saved\.wall === 'tour'\) \{\s*resumeOverview = true;\s*try \{ touch\?\.handBack\(\); \} finally \{ resumeOverview = false; \}/);
-  assert.match(js, /tour\.resume\(\{ overview: resumeOverview \}\)/);
+  // Every hand-back but `▶ TOUR` starts with the overview (screens.md §2, W4; cockpit build B239), an undo's too.
+  assert.match(js, /if \(saved\.wall === 'tour'\) \{\s*touch\?\.handBack\(\);/);
+  assert.match(js, /tour\.resume\(\{ overview: !nextLeg \}\)/);
+  assert.match(js, /nextLeg = true;\s*try \{ touch\?\.handBack\(\); \} finally \{ nextLeg = false; \}/);
   assert.match(js, /names: \(\) => labels\.shown\(\)\.filter/);
 });

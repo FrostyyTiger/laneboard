@@ -260,8 +260,9 @@ export function boot() {
   // director moves `cam`, so no two of them ever fight for it.
   let touch = null;
   let tour = null;
-  // A show's undo hands the page back to the tour with the overview, not the next leg (c4 §5).
-  let resumeOverview = false;
+  // `▶ TOUR` hands the page back at the tour's next leg, trouble first (night 4 T5); every other
+  // hand-back (the idle minute, W4, an undo) starts with the overview (cockpit build B239).
+  let nextLeg = false;
   const director = createDirector(cam, {
     still: reduced,
     driver: role === 'explore' && !park ? 'touch' : 'tour', // a person's screen: the finger drives from the start
@@ -440,8 +441,7 @@ export function boot() {
       restore: (saved) => {
         stateBy = 'call';
         if (saved.wall === 'tour') {
-          resumeOverview = true;
-          try { touch?.handBack(); } finally { resumeOverview = false; }
+          touch?.handBack();
         } else if (saved.camera) setCamera(saved.camera);
       },
     },
@@ -486,7 +486,9 @@ export function boot() {
       left.clear();
       toOverview();
     },
-    // A minute untouched (T14): the sheet goes, the tour flies on from here to its worst site.
+    // A minute untouched (T14): the sheet goes and the tour starts again with the overview, flying
+    // out from where the finger left the camera (cockpit spec screens.md §2, §9.1 W4, W5: "the tour
+    // starts with the overview"; cockpit build B239 over T14's worst-site-first). `▶ TOUR`: its next leg.
     resume: () => {
       cutAway();
       fan?.hide();
@@ -495,7 +497,7 @@ export function boot() {
       place = AT_OVERVIEW;
       shows?.tourBack(); // the tour clears what the agent drew: the highlight, its note, the undo (c4 §2)
       director.handBack();
-      tour.resume({ overview: resumeOverview });
+      tour.resume({ overview: !nextLeg });
     },
   });
   let touchSaid = 'tour';
@@ -551,7 +553,11 @@ export function boot() {
     else toOverview(left.pose());
   };
   // `▶ TOUR` at the overview (night 4 T5): the tour has the page at once, as after the minute.
-  const handBack = () => { stateBy = 'touch'; touch?.handBack(); };
+  const handBack = () => {
+    stateBy = 'touch';
+    nextLeg = true;
+    try { touch?.handBack(); } finally { nextLeg = false; }
+  };
   const backEl = document.getElementById('galaxy-back');
   const back = touch ? createBack(backEl, {
     back: goBack, tour: handBack, glyph: backEl.querySelector('.galaxy-back-glyph'), word: backEl.querySelector('.galaxy-back-word'),
@@ -780,8 +786,7 @@ export function boot() {
   const resumeTourNow = () => {
     if (!touch || touch.mode() === 'tour') return;
     stateBy = 'call';
-    resumeOverview = true;
-    try { touch.handBack(); } finally { resumeOverview = false; }
+    touch.handBack();
     if (touch.mode() === 'tour') sayWall('tour', 'call');
   };
   globalThis.__cockpitView = {
