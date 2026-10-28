@@ -270,6 +270,10 @@ What the slice itself says waits; nothing else moved here.
   a test hook, with the `ASK ABOUT THIS` tap left to C3; (b) S-C1-34 runs its chip steps as
   `test.step.skip('… — waits for C3')` and asserts the line-slot half now. The night builds (b) unless
   told otherwise when T22b comes, since (a) builds C3 UI ahead of its spec slice.
+  Round 105 (T22b) built (a) instead (B245): the loop's rule allows a skip only where §3.1 names a
+  wait and T22b's done-when says none skipped. C1 draws the chip row and its `✕`
+  (`public/js/cockpit/chip.js`, `pane.setChip`); nothing in C1 sets a chip, the menu and the send
+  half stay C3's. Overrule with (b): remove the row from `pane.js`, skip the chip steps.
 - T22 (round 37), a contradiction: S-C1-21's `Test:` asserts "the reply's `textContent` length" is
   26 000, while the `c1-long` reply holds a 30-row table that D23/§3 draws as cells (no pipes, no
   separator row), so the drawn `textContent` is shorter than the 26 000 characters sent. Built

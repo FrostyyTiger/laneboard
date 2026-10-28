@@ -1367,3 +1367,29 @@ taste, one-way or security-relevant choices go to `build/PROGRESS.md` `## For th
   no second screen through a stopped link). The cut-off line of a reply streaming at the loss is
   S-SCR-20 (not C1), so none is asserted — spec: S-SCR-19, `stand-ins.md` §5 (`scr-room`'s
   `for`) — overrule: the test's Given.
+- B245 (T22b) S-C1-34 is built whole with option (a) of the T22 owner line, not (b): C1 draws the
+  chip row (`public/js/cockpit/chip.js`: `[data-cockpit-chip]` with `data-node`, `ABOUT`, the label,
+  the kind, `[data-cockpit-chip-remove]` 48x48 `aria-label="Remove context"`; one chip at a time,
+  D65) between the conversation's band and the line slot, `pane.setChip/clearChip/chip()` the call
+  C3's `ASK ABOUT THIS` will make; the test sets the chip through `initCockpit().pane.setChip` (the
+  module the page already loaded, no global). Nothing in C1 sets a chip, and a send leaves it alone
+  (the label `ABOUT …`, the context line and the clear on send are S-C3-11's) — because the loop's
+  rule allows a skip only where `slices.md` §3.1 names a wait, it names none for S-C1-34, and T22b's
+  done-when says none skipped; the row is c1-talk.md §1.1's own stack item (D133), not the C3 menu —
+  spec: `c1-talk.md` §1.1, S-C1-34; `c3-see.md` §9 "The chip" — overrule: take the chip row out of
+  `pane.js` and write the chip steps as `test.step.skip(… — waits for C3)`.
+- B246 (T22b) The chip row is `.ck-chiprow` (64 px, padding 8 px, right padding 104 px so the chip
+  and its `✕` end at x ≤ 1264 at 1368 wide and at the right edge − 104 px under 900 px); its height
+  joins `--ck-lift` (the opener padding of D267 is 0 with a chip) and §7.1's `left`; with a chip the
+  pane carries `ck-has-chip` and `↓ NEW` is `right: 104px` — because §1.1's x rule and table give
+  those rects and the band already places `↓ NEW` from its bottom (B165) — spec: `c1-talk.md` §1.1,
+  §7.1, `c3-see.md` §9 — overrule: CSS only.
+- B247 (T22b) S-C1-34's "the line that was at the conversation's top is still there" is read as the
+  element under the conversation's top edge (x 1064, 4 px in) being the same one, at the same offset
+  from the conversation's top (± 1 px): room-down's 80 px status line moves the whole conversation
+  down, and the line moves with it — because §1.1's pin rule speaks of the conversation's top, not
+  the screen's — spec: `c1-talk.md` §1.1, S-C1-34 — overrule: the test's `topLine`.
+- B248 (T22b) S-C1-34 on `page.clock` installed before the load and left running (the fake agent
+  streams on real time); after `{"up":true}` the test moves the page's clock 15 s so the next try of
+  §7.1's series is due, then waits for `live` — spec: S-C1-34 "clock `page`", `screens.md` §7.1 —
+  overrule: the test only.

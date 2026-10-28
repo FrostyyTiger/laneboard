@@ -20,6 +20,9 @@
 //   onTurnChange(running)      a turn started or ended (`data-turn` other than `idle`): the Wall's
 //                              idle timer is held while one runs (screens.md §2, wall-hold.js)
 //   pane.open() / .close() / .isOpen()
+//   pane.setChip({ id, label, kind }) / .clearChip() / .chip()
+//                              the context chip above the input row (chip.js, c3-see.md §9): C1
+//                              draws it in the stack of c1-talk.md §1.1; C3's `ASK ABOUT THIS` sets it
 //   The pane closes itself after 300 s with no touch and no running turn (auto-close.js, D5).
 //
 // The root (<html>) carries data-cockpit, data-pane, data-turn and data-keyboard (README.md
@@ -36,6 +39,7 @@ import { paneFit, TOO_OLD_TEXT } from './fit.js';
 import { inputCap, KEYBOARD_ROW_PX, watchKeyboard } from './keyboard.js';
 import { TAP_SLOP_TOUCH } from '../views/map/interact.js';
 import { createAutoClose } from './auto-close.js';
+import { createChipRow } from './chip.js';
 
 /** c1-talk.md §2: the header's three words for the five turn states (D56). */
 export const TURN_WORDS = Object.freeze({
@@ -167,6 +171,15 @@ export function createPane(opts = {}) {
   // `hint` come with the talk button (C2).
   const lineSlot = el(doc, 'p', 'ck-line', { 'data-cockpit-line': '' });
   lineSlot.hidden = true;
+  // The chip row on top of the line slot (§1.1 item 2); with a chip `↓ NEW` moves right, to end
+  // at x 1264, never over the chip's `✕` (c3-see.md §9).
+  const chips = createChipRow({
+    doc,
+    onChange: () => {
+      pane.classList.toggle('ck-has-chip', chips.current() !== null);
+      if (open) grow(); // the pin rule as the item comes or goes (§1.1)
+    },
+  });
 
   const row = el(doc, 'div', 'ck-row');
   const input = el(doc, 'textarea', 'ck-input', {
@@ -189,7 +202,7 @@ export function createPane(opts = {}) {
     turnWord.hidden = true; // no room behind this pane: no turn state to show (build B133)
     pane.append(head, old);
   } else {
-    pane.append(head, status, newBar.node, band, lineSlot, row);
+    pane.append(head, status, newBar.node, band, chips.node, lineSlot, row);
   }
 
   // --- the opener above the talk button's place (screens.md §4, D116)
@@ -352,7 +365,8 @@ export function createPane(opts = {}) {
     // Past its cap the text scrolls inside, the caret line in sight (§7.1).
     if (doc.activeElement === input && input.selectionEnd === input.value.length) input.scrollTop = input.scrollHeight;
     pane.style.setProperty('--ck-grow', `${h - INPUT_ONE_LINE_PX}px`);
-    pane.style.setProperty('--ck-lift', `${(lineSlot.hidden ? 0 : lineSlot.offsetHeight) + h - INPUT_ONE_LINE_PX}px`);
+    const shown = (n) => (n.hidden ? 0 : n.offsetHeight);
+    pane.style.setProperty('--ck-lift', `${shown(lineSlot) + shown(chips.node) + h - INPUT_ONE_LINE_PX}px`);
     if (wasAtEnd) toEnd(); // the pin rule (§1.1): at its end it stays at its end
   }
 
@@ -361,11 +375,11 @@ export function createPane(opts = {}) {
 
   /**
    * §7.1's `left`: the conversation's height with a one-line input, the keyboard up: the
-   * pane less its header, the status line, the line slot and the 88 px row.
+   * pane less its header, the status line, the line slot, the chip row and the 88 px row.
    */
   function oneLineLeft() {
     const shown = (n) => (n.hidden ? 0 : n.offsetHeight);
-    return pane.getBoundingClientRect().height - head.offsetHeight - shown(status) - shown(newBar.node) - shown(lineSlot) - KEYBOARD_ROW_PX;
+    return pane.getBoundingClientRect().height - head.offsetHeight - shown(status) - shown(newBar.node) - shown(lineSlot) - shown(chips.node) - KEYBOARD_ROW_PX;
   }
 
   /** Everything the draft decides: SEND, the line slot, the input's height. */
@@ -1183,6 +1197,9 @@ export function createPane(opts = {}) {
     open: () => setOpen(true),
     close: () => setOpen(false),
     isOpen: () => open,
-    elements: { pane, opener, input, send, status, convo, follow, lineSlot, newBtn, newBar: newBar.node },
+    setChip: (c) => chips.set(c),
+    clearChip: () => chips.clear(),
+    chip: () => chips.current(),
+    elements: { pane, opener, input, send, status, convo, follow, lineSlot, chipRow: chips.node, newBtn, newBar: newBar.node },
   };
 }

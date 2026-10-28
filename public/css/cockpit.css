@@ -462,6 +462,68 @@
 .ck-line[data-line="room-down"],
 .ck-line[data-line="error"] { text-transform: none; letter-spacing: normal; }
 
+/* the chip row on top of the line slot (on the row's top edge when no line shows): 64 px, the
+   chip 48 px tall 8 px in from its top and bottom, from x 784, as wide as its content up to
+   480 px, ending at x <= 1264 (the right edge - 104 px); --bg-sunken, 1 px --line-strong.
+   Inside, 16 px in: `ABOUT` 16 px caps --text-3, 12 px, the label mono 20 px --text-1 cut
+   with `…`, 12 px, the kind 16 px --text-2, then the 48x48 `✕` flush with the chip's right
+   edge (c1-talk.md §1.1, c3-see.md §9, D133) */
+.ck-chiprow {
+  flex: none;
+  display: flex;
+  box-sizing: border-box;
+  height: 64px;
+  padding: 8px 104px 8px var(--ck-in);
+}
+.ck-chiprow[hidden] { display: none; }
+.ck-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 480px;
+  height: 48px;
+  padding-left: 16px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-strong);
+}
+.ck-chip-about {
+  flex: none;
+  font: 500 16px/1 var(--font-label);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ck-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font: 400 20px/1.2 var(--font-mono);
+  color: var(--text-1);
+}
+.ck-chip-kind {
+  flex: none;
+  font: 500 16px/1 var(--font-label);
+  color: var(--text-2);
+}
+.ck-chip-remove {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  margin: -1px -1px -1px 0; /* over the chip's border: the 48x48 target flush with its edge */
+  padding: 0;
+  font: 400 24px/1 var(--font-label);
+  color: var(--text-2);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  touch-action: manipulation;
+}
+/* with a chip `↓ NEW` is right-aligned, ending at x 1264, never over the `✕` (c1-talk.md §1.1) */
+.ck-pane.ck-has-chip .ck-follow { left: auto; right: 104px; }
+
 /* an error line in a turn: never a dialog, never red; 18 px mono --text-1 on --bg-sunken,
    the cockpit's 1 px --line-strong border, its left side 2 px; 12 px / 16 px padding; the
    buttons under the text, 48 px tall, >= 96 px wide, 8 px apart (c1-talk.md §10, D227) */
