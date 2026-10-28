@@ -180,12 +180,34 @@ Notes for every builder round (planner, round 7):
   `labels.js` while it stays in trouble's colour on the planet's glyph — done when: a labels test with
   `zoomedSiteShot(lab, t, DEMO_TIMING.zoom, view)` and the plate's covers names `ba`, `bb`, `bc` at four times, and a still
   of `?at=lab&open=1` shows them whole.
-- [ ] T7 (§7 Night 5 B2, folded) [ui] [variant:galaxy] Moons in the model and the scene: services under a room, lanes under a
+- [x] T7 (§7 Night 5 B2, folded) [ui] [variant:galaxy] Moons in the model and the scene: services under a room, lanes under a
   builder, sessions under a lane become moons (pure: which nodes are moons of which planet, from the map model); folded, they
   sit tight to their planet at half size, unnamed, not tappable (`scene.js` `MOON`, `moonOrbit`); the large demo carries
   lanes and sessions under at least two builders (`test/helpers/demo-hub.mjs`, if missing) — done when: tests pin the moon
   tree for the large fixture, folded moons inside their planet's reach at half size, none in `labels`' list nor in the hit
-  points; the overview's draw calls/triangles before/after in the notes.
+  points; the overview's draw calls/triangles before/after in the notes. (commit 2da817b)
+  Notes (builder, round 22): `layout.js moonHosts` (pure): a non-planet member is a moon of the nearest planet above it, so
+  a session orbits its lane's builder; `galaxyLayout` members carry `moon: { host, i, n }`. `scene.js MOON` {calm 5.5 open,
+  foldK 0.5, tight 1.45, pad 3, from 0.35, to 0.9}, `moonOrbit` (per planet: 40-90 s a turn, ≤ ±40°), `moonRing` (a
+  planet's moons on its one orbit, evenly spaced: the first still had HV1's trouble moons piling onto ba/bb when each had
+  its own plane), `moonAt`; `placeMoons` puts them on the ring at the planet's drawn radius x1.45 + 3 + their own, and
+  `frame()` turns them on (never in still mode). A calm moon grows in from 0.35 to 0.9 of the opening, so **the overview
+  draws no calm moon** (the nebula and site name carry a folded cluster). **Deviation, on purpose:** a moon in trouble stays
+  as a dot in trouble was: planet size, round sphere, halo, shape, named and a target, only its place is a moon's. Eight
+  existing tests pin that (r8-film-ui 3 trouble ≥ a planet; the tour's locked lane named in big caps, T9/T20/T22), and
+  readable trouble wins (README §2). T8 can make it tappable inside the open ring. Calm moons skip `labels.js` and
+  `touch.js memberPoints`. Demo: `demo-fleet.mjs` gives builder-b's `deps-bump` a second session (`deps audit`), so the
+  live Map hangs sessions under builder-a and builder-b (checked on `/api/map`). The static fixture
+  `wall-large-map.json` is unchanged: adding the two session nodes moved one name pair in the radial variant's T46 test,
+  and the fixture already pins lanes and sessions (builder-a), lanes and a run (builder-b). Test:
+  `test/wall-galaxy-moons.test.mjs` (8: the fixture's moon tree, moonHosts, orbit, tight and clear of the planet at half
+  size / planet size, none calm at the overview and growing in, turning and still, one ring that never touches, calm moons
+  not named and not targets while trouble moons are). The carry and trouble tests' "calm dot = 4" lines now read the folded
+  moon's 2.75. Perf (`?at=…&quality=0`, 1368 px, the r13 tool): overview **204 → 151 draw calls, 87.0k → 75.2k
+  triangles**; HV1 open 94 → 91 calls, 32.3k → 24.9k. The moons are re-placed each frame only for sites with one shown
+  (a few dozen positions). Looked at (`$RUN_DIR/shots/r22-t7-*`, `r22-galaxy`): overview clean, trouble still the loudest;
+  HV1 open: rings round ba/bb with trouble moons apart; `?demo=1` film 27.3 fps at cpu 4x, 0 errors. Still for T6b: `ba`
+  and `bb` lose their sides to their own trouble moons' names (the moons test leaves `ba` to T6b).
 - [ ] T8 (§7 Night 5 B2, open) [ui] [variant:galaxy] Opening moons: tapping a planet (or one of its moons) opens them onto a
   ring round it with the site's open time and easing, tilted toward the camera, a faint orbit line and thin tethers; about
   110 px apart on screen, at least 72 px from the planet; named and tappable while open; another planet's tap folds the
