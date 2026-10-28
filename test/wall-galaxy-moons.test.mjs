@@ -220,8 +220,8 @@ test('labels and hit points: HV1 open, no calm moon is named or a target; a moon
   const calm = moonsOf(lab).filter((m) => !troubled(m));
   for (const m of calm) assert.equal(named.has(m.id), false, `${m.id} unnamed`);
   assert.ok(named.has('lane:builder-a/feat-search'), 'a lane in trouble keeps its name');
-  // `ba` itself loses its sides to its trouble moons' names: T6b lets a planet's name win over its own children's.
-  assert.ok(named.has('room-a') && named.has('builder:builder-b'), `the planets are named: ${[...named].join(' ')}`);
+  // A planet's name goes before its own moons' (T6b), so `ba` keeps one beside its trouble lanes.
+  assert.ok(['room-a', 'builder:builder-a', 'builder:builder-b'].every((id) => named.has(id)), `the planets are named: ${[...named].join(' ')}`);
   const v = galaxy.camera.position.clone();
   const screenOf = (id) => {
     const m = lab.members.find((x) => x.id === id);
