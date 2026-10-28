@@ -30,7 +30,9 @@ const STEPS = stepsFor(pxPerMm(screenOf(new URLSearchParams(), { dpr: 2, cssHeig
 /** The large demo's sites as the scene holds them: layout plus the tour's rolled-up status. */
 function world() {
   const status = new Map(tourSites(FLEET).map((s) => [s.id, s.status]));
-  return galaxyLayout(FLEET).sites.map((s) => ({ ...s, status: status.get(s.id) ?? s.node.status }));
+  // As scene.js: only the shown sites, which take the rosette's slots (night 5 A2).
+  return galaxyLayout(FLEET, undefined, status.keys()).sites.filter((s) => status.has(s.id))
+    .map((s) => ({ ...s, status: status.get(s.id) }));
 }
 
 /** The names labels.js would show seen from `shot` (sites folded, and the sun), through a real three camera. */
@@ -59,15 +61,18 @@ function shownFrom(shot, sites, covers) {
 
 const view = (covers) => ({ fov: FOV, W, H, covers });
 
-test('without the fit the overview hides a site under the fleet block (the bug); with it every site is named', () => {
+test('without the fit the overview hides a site under the words (the bug); with it every site is named', () => {
   const sites = world();
-  const covers = [FLEET_BLOCK, TAG];
-  const bare = shownFrom(overviewShot(sites), sites, covers);
-  assert.ok(sites.some((s) => !bare.has(s.id)), 'the plain overview loses a site (CLOUD on round 37)');
-  const fit = fitOverview(overviewShot(sites), siteMarks(sites, STEPS.site), view(covers));
-  assert.equal(fit.clear, true);
-  const shown = shownFrom(fitShot(overviewShot(sites), fit, FOV, W / H), sites, covers);
-  for (const s of sites) assert.ok(shown.has(s.id), `${s.id} named at the overview`);
+  // Night 5's snug rosette clears the fleet block alone; the widest plate as well still hides a site bare
+  // (round 37's bug was CLOUD under the fleet block in nights 1-4's layout).
+  for (const covers of [[FLEET_BLOCK, TAG], [PLATE, FLEET_BLOCK, TAG]]) {
+    const fit = fitOverview(overviewShot(sites), siteMarks(sites, STEPS.site), view(covers));
+    assert.equal(fit.clear, true);
+    const shown = shownFrom(fitShot(overviewShot(sites), fit, FOV, W / H), sites, covers);
+    for (const s of sites) assert.ok(shown.has(s.id), `${s.id} named at the overview`);
+  }
+  const bare = shownFrom(overviewShot(sites), sites, [PLATE, FLEET_BLOCK, TAG]);
+  assert.ok(sites.some((s) => !bare.has(s.id)), 'the plain overview loses a site under the plate');
 });
 
 test('the fitted overview holds one pose over 7 min with every site named (T24: no turn)', () => {

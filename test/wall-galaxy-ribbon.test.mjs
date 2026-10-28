@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ARM_BAND, ARM_RIBBON, armBand, armPoint, armRibbon, armSpine, ribbonEnd } from '../public/js/wall/galaxy/layout.js';
+import { ARM_BAND, ARM_RIBBON, armBand, armPoint, armRibbon, armSpine, ribbonEnd, siteSpot } from '../public/js/wall/galaxy/layout.js';
 import { paletteFrom } from '../public/js/wall/galaxy/palette.js';
 import { BAND, bandOpacity, createGalaxyScene, overviewShot, RIBBON, ribbonOpacity } from '../public/js/wall/galaxy/scene.js';
 
@@ -42,7 +42,7 @@ function sceneAt(now = { t: 1000 }, palette = paletteFrom()) {
 const lum = ([r, g, b]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
 test('the ribbon follows the arms the sites sit on', () => {
-  for (let i = 0; i < 8; i++) assert.deepEqual(armPoint(i, 8), armSpine(i % 2, Math.floor(i / 2) + 0.6));
+  for (let i = 0; i < 8; i++) assert.deepEqual(armPoint(i, 8), armSpine(i % 2, siteSpot(i).t));
   const { positions, shade } = armRibbon(6);
   const perArm = (ARM_RIBBON.steps + 1) * ARM_RIBBON.across;
   // Every site of the large demo lies on its arm's spine, inside the band.

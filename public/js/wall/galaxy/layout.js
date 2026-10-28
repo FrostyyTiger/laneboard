@@ -16,8 +16,35 @@
 
 import { layoutFor } from '../variants/orbits.js';
 
-/** The arms: the first site's radius, the step outward per turn, the angle per step. */
-export const ARM = Object.freeze({ r0: 650, step: 520, turn: 0.85 });
+/**
+ * How much tighter the galaxy is than nights 1-4's (night 5 A1, the owner's
+ * sketch pick `sk_tight=2`): arms, gaps, dust and ribbon at `arm`; the
+ * nebulae and the sun's halo at `neb` (a little less tight, so clouds may
+ * touch; palette.js NEBULA, scene.js SIZE); a system's spread at `spread`.
+ */
+export const TIGHT = Object.freeze({ arm: 0.5, neb: 0.64, spread: 0.75 });
+
+/**
+ * The arms (night 5 A2, the rosette, `sk_arr=2`): the first site's radius,
+ * the step outward per turn, the angle per step. A gentle, wide-wound
+ * two-arm spiral; with the second arm half a step out (siteSpot) a site
+ * stands every 72° round the sun. `r0` keeps the nearest open system off the
+ * sun's halo (test/wall-galaxy-layout.test.mjs). `step` is the sketch's 165
+ * (330 x TIGHT.arm) raised to 180: past five sites the rosette laps, and the
+ * sixth stands 2.5 steps behind the first on the same ray, so 2.5 steps must
+ * be at least MIN_SITE_GAP or their nebulae would meet.
+ */
+export const ARM = Object.freeze({ r0: 1250 * TIGHT.arm, step: 180, turn: (2 * Math.PI) / 5 });
+
+/**
+ * Where the i-th site sits on the arms, `{ arm, t }`: even ones on arm 0,
+ * odd ones on arm 1 half a step further out, so the radii interleave and
+ * (with ARM.turn a fifth of a turn) the angles step by 72°.
+ */
+export function siteSpot(i) {
+  const arm = i % 2, k = Math.floor(i / 2);
+  return { arm, t: k + 0.6 + (arm ? 0.5 : 0) };
+}
 
 /** A folded cluster's size against its open system. */
 export const CLOSED = 0.16;
@@ -26,13 +53,21 @@ export const CLOSED = 0.16;
 export const OPEN_MS = 1800;
 
 /** The orbits layout's units to the galaxy's: a system's spread on the plane. */
-export const SPREAD = 2.2;
+export const SPREAD = 2.2 * TIGHT.spread;
 
-/** How far a site's star may sit above or below the galaxy's plane (each way). */
-export const SITE_LIFT = 130;
+/**
+ * How far a site's star may sit above or below the galaxy's plane (each
+ * way). The rosette keeps every site level (y 0): this is the ceiling.
+ */
+export const SITE_LIFT = 130 * TIGHT.arm;
 
-/** No two sites' stars closer than this: their nebulae (at most 680 across) never meet. */
-export const MIN_SITE_GAP = 700;
+/**
+ * No two sites' stars closer than this: their nebulae (at most 680 x
+ * TIGHT.neb across, palette.js NEBULA) never meet. It follows the nebulae,
+ * not the arms (0.64x, not 0.5x), or it would no longer say that; the
+ * rosette's nearest pair stands about twice as far apart.
+ */
+export const MIN_SITE_GAP = 700 * TIGHT.neb;
 
 /** Planets lie above or below their system's plane by 0.15-0.5 of their distance. */
 export const TILT = Object.freeze({ min: 0.15, max: 0.5 });
@@ -74,7 +109,8 @@ export const ease = (x) => {
  * added at the end leaves the others where they were.
  */
 export function armPoint(i, n) {
-  return armSpine(i % 2, Math.floor(i / 2) + 0.6);
+  const { arm, t } = siteSpot(i);
+  return armSpine(arm, t);
 }
 
 /** A point on arm `arm` (0 or 1) at `t` steps out: the spiral armPoint puts the sites on. */
@@ -96,7 +132,8 @@ export function armSpine(arm, t) {
  * `maxHalf` (it was 170 growing to ~350, a haze rather than an arm).
  */
 export const ARM_RIBBON = Object.freeze({
-  from: -0.9, tail: 1.1, minTo: 2.4, half: 90, grow: 16, maxHalf: 170, fadeIn: 1.1, fadeOut: 1.3, steps: 72, across: 9,
+  from: -0.9, tail: 1.1, minTo: 2.4, half: 90 * TIGHT.arm, grow: 16 * TIGHT.arm, maxHalf: 170 * TIGHT.arm,
+  fadeIn: 1.1, fadeOut: 1.3, steps: 72, across: 9,
 });
 
 /**
@@ -105,12 +142,12 @@ export const ARM_RIBBON = Object.freeze({
  * `reach` steps either side of the site, fading in and out over all of it;
  * `half` its half width. Brighter than the ribbon (scene.js BAND).
  */
-export const ARM_BAND = Object.freeze({ reach: 0.55, half: 55, steps: 16, across: 7 });
+export const ARM_BAND = Object.freeze({ reach: 0.55, half: 55 * TIGHT.arm, steps: 16, across: 7 });
 
 /** How far out the ribbon runs on arm `arm` with `n` sites: past the arm's last site. */
 export function ribbonEnd(arm, n) {
   const count = Math.max(0, Math.ceil((Math.max(0, n) - arm) / 2));
-  return Math.max(ARM_RIBBON.minTo, count ? count - 1 + 0.6 + ARM_RIBBON.tail : 0);
+  return Math.max(ARM_RIBBON.minTo, count ? siteSpot(2 * (count - 1) + arm).t + ARM_RIBBON.tail : 0);
 }
 
 const smooth01 = (x) => {
@@ -176,8 +213,8 @@ export function armBand(n) {
   const count = Math.max(0, Math.floor(n) || 0), per = (steps + 1) * across;
   const out = { positions: new Float32Array(count * per * 3), shade: new Float32Array(count * per), index: [] };
   for (let i = 0; i < count; i++) {
-    const at = Math.floor(i / 2) + 0.6;
-    armStrip(out, i * per, i % 2, at - reach, at + reach, steps, across, () => half,
+    const { arm, t: at } = siteSpot(i);
+    armStrip(out, i * per, arm, at - reach, at + reach, steps, across, () => half,
       (t) => smooth01(1 - Math.abs(t - at) / reach));
   }
   return out;
@@ -195,9 +232,9 @@ export function dustPoints(n = 9000, seed = 7) {
   for (let i = 0; i < n; i++) {
     const arm = i % 2;
     const s = rand() ** 0.8 * 4.2;
-    const r = 180 + ARM.step * s + (rand() - 0.5) * 380;
+    const r = 180 * TIGHT.arm + ARM.step * s + (rand() - 0.5) * 380 * TIGHT.arm;
     const a = arm * Math.PI + s * ARM.turn + (rand() - 0.5) * 0.55;
-    const y = (rand() - 0.5) * 120 * Math.exp(-s * 0.25);
+    const y = (rand() - 0.5) * 120 * TIGHT.arm * Math.exp(-s * 0.25);
     positions[i * 3] = Math.cos(a) * r;
     positions[i * 3 + 1] = y;
     positions[i * 3 + 2] = Math.sin(a) * r;
@@ -228,9 +265,11 @@ export function farStars(n = 2500, seed = 11) {
  * with `off` the open position from the star (`planet`: a named kind,
  * drawn as a lit sphere with a stem; the rest are dots), `reach` the
  * farthest member's distance. What hangs on the core and is no place (a
- * run) is in no site.
+ * run) is in no site. `shown` (ids, optional): the sites the galaxy shows;
+ * they take the arm slots first, in model order, so a hidden site leaves no
+ * gap in the rosette (the rest follow, farther out).
  */
-export function galaxyLayout(nodes, aspect = 16 / 9) {
+export function galaxyLayout(nodes, aspect = 16 / 9, shown = null) {
   const list = (Array.isArray(nodes) ? nodes : []).filter((n) => n && n.id != null);
   const byId = new Map(list.map((n) => [n.id, n]));
   const { pos } = layoutFor(aspect)(list);
@@ -252,9 +291,12 @@ export function galaxyLayout(nodes, aspect = 16 / 9) {
     return p ? { x: p.x * SPREAD, z: p.y * SPREAD } : null;
   };
 
+  const want = shown ? new Set(shown) : null;
+  const slots = want ? [...places.filter((s) => want.has(s.id)), ...places.filter((s) => !want.has(s.id))] : places;
   const sites = places.map((s, index) => {
-    const at = armPoint(index, places.length);
-    const home = { x: at.x, y: (hash(s.id) - 0.5) * 2 * SITE_LIFT, z: at.z };
+    const at = armPoint(slots.indexOf(s), places.length);
+    // All sites level (the rosette): the galaxy reads as one disc.
+    const home = { x: at.x, y: 0, z: at.z };
     const base = flat(s) ?? { x: 0, z: 0 };
     const offs = new Map();
     for (const n of members.get(s.id)) {

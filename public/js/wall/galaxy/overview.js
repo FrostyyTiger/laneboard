@@ -24,8 +24,12 @@ import { toneOf, worseTone } from './palette.js';
  * `shift`: the furthest the hub may slide from the frame's middle (ndc, each
  * axis) in `step`s; `easeMs`: how long the camera takes to a new fit (eased in and out);
  * `retryMs`: how long a fit that clears nothing whole waits before the next search.
+ * `shift` 0.6 since night 5's rosette (T1): five sites round the sun fill a
+ * snug frame evenly, so the widest plate (the left half's top) always holds
+ * two of them, and the fit must slide the galaxy past it (0.4 was enough
+ * for nights 1-4's lopsided arms).
  */
-export const OVERVIEW_FIT = Object.freeze({ gap: 24, pulls: [1, 1.05, 1.1, 1.15, 1.2, 1.3, 1.4, 1.5, 1.6], shift: 0.4, step: 0.05, easeMs: 1500, retryMs: 1000 });
+export const OVERVIEW_FIT = Object.freeze({ gap: 24, pulls: [1, 1.05, 1.1, 1.15, 1.2, 1.3, 1.4, 1.5, 1.6], shift: 0.6, step: 0.05, easeMs: 1500, retryMs: 1000 });
 
 /** No change: the shot as overviewShot gives it. */
 export const NO_FIT = Object.freeze({ k: 1, dx: 0, dy: 0 });

@@ -8,11 +8,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../public/vendor/three/three.module.js';
 import { LOBES, PEAK, armTangent, nebulaLobes, nebulaPeaks } from '../public/js/wall/galaxy/nebula.js';
-import { MIN_SITE_GAP, armPoint, ease, galaxyLayout } from '../public/js/wall/galaxy/layout.js';
+import { ARM, MIN_SITE_GAP, armPoint, ease, galaxyLayout, siteSpot } from '../public/js/wall/galaxy/layout.js';
 import { NEBULA, paletteFrom } from '../public/js/wall/galaxy/palette.js';
 import { FOV, LOBE_LEASH, NEAR_FADE, createGalaxyScene, lobeLeash, nearFade, overviewShot } from '../public/js/wall/galaxy/scene.js';
 import { FLIGHT, FLIGHT_CLEAR, flightPose, zoomedSiteShot } from '../public/js/wall/galaxy/camera.js';
-import { DEMO_TIMING } from '../public/js/wall/tour.js';
+import { DEMO_TIMING, tourSites } from '../public/js/wall/tour.js';
 
 const LARGE = JSON.parse(fs.readFileSync(new URL('./fixtures/wall-large-map.json', import.meta.url), 'utf8')).nodes;
 
@@ -84,8 +84,9 @@ test('a nebula is two or three lobes, the main one on the star, its visible clou
   assert.ok(LOBES.three > 0 && LOBES.three < 1);
   // Most of the light is inside 0.6 of a lobe: that part of two crit nebulae never meets.
   assert.ok(0.6 * LOBES.reach * NEBULA.crit.size < MIN_SITE_GAP / 2);
-  // On the large demo even the faint rims stay apart.
-  const homes = galaxyLayout(LARGE).sites.map((x) => x.home);
+  // On the large demo even the faint rims stay apart (its shown sites, as the scene lays them).
+  const shown = new Set(tourSites(LARGE).map((x) => x.id));
+  const homes = galaxyLayout(LARGE, undefined, shown).sites.filter((x) => shown.has(x.id)).map((x) => x.home);
   let gap = Infinity;
   for (const p of homes) for (const q of homes) if (p !== q) gap = Math.min(gap, Math.hypot(p.x - q.x, p.z - q.z));
   assert.ok(2 * LOBES.reach * NEBULA.crit.size < gap, `rims ${2 * LOBES.reach * NEBULA.crit.size} vs gap ${gap}`);
@@ -97,8 +98,8 @@ test('armTangent is the spiral arm direction at a star, outward along it', () =>
     const t = armTangent(p);
     assert.ok(Math.abs(Math.hypot(t.x, t.z) - 1) < 1e-9);
     // armPoint's own spiral, a small step further out along the same arm.
-    const arm = i % 2, k = Math.floor(i / 2) + 0.6 + 1e-4;
-    const r = 650 + 520 * k, a = arm * Math.PI + k * 0.85;
+    const { arm } = siteSpot(i), k = siteSpot(i).t + 1e-4;
+    const r = ARM.r0 + ARM.step * k, a = arm * Math.PI + k * ARM.turn;
     const d = { x: Math.cos(a) * r - p.x, z: Math.sin(a) * r - p.z };
     const l = Math.hypot(d.x, d.z);
     assert.ok(t.x * (d.x / l) + t.z * (d.z / l) > 0.9999, `site ${i}`);

@@ -33,9 +33,11 @@ import {
 /**
  * World sizes: the sun, a site's star, a planet (named kind), a dot (the
  * rest). The sun is 70 % of the sketch's 60 and its halo narrower than a
- * crit nebula (r8-film-ui 2: the sun outshouted the trouble).
+ * crit nebula (r8-film-ui 2: the sun outshouted the trouble); night 5 A1
+ * scales the halo with the nebulae (layout.js TIGHT.neb, 0.64; a literal,
+ * as nothing imported is read at evaluation time; the layout test pins it).
  */
-export const SIZE = Object.freeze({ sun: 42, sunHalo: 640, star: 24, planet: 15, dot: 4, landing: 7 });
+export const SIZE = Object.freeze({ sun: 42, sunHalo: 640 * 0.64, star: 24, planet: 15, dot: 4, landing: 7 });
 
 /**
  * The sun's halo strength: at most half the crit nebula's 0.85 (README
@@ -236,17 +238,21 @@ const LANE_SEGS = 40;
 /** The camera's field of view (degrees) and the far plane. */
 export const FOV = 42;
 
+/** The overview's margin past the farthest site's star (world units): 400 at nights 1-4's scale. */
+export const OVERVIEW_MARGIN = 400 * 0.5; // layout.js TIGHT.arm, pinned by the layout test
+
 /**
  * Where the camera sits for the whole galaxy: above, at an angle, and always
  * the same pose (T24, reviews/r26-skeptic.md 7). It used to turn once in about
  * 7 minutes, so every name stood somewhere else at each overview and the
  * hallway had to find HOME again; depth comes from the drift round a held
- * system (`siteShot`), the overview holds still.
+ * system (`siteShot`), the overview holds still. Snug (night 5 A1): the
+ * margin past the farthest star is OVERVIEW_MARGIN, at the arms' scale.
  */
 export function overviewShot(sites, fov = FOV) {
   let r = 0;
   for (const s of sites) r = Math.max(r, Math.hypot(s.home.x, s.home.z));
-  const d = ((r + 400) / Math.tan((fov * Math.PI) / 360)) * 0.9;
+  const d = ((r + OVERVIEW_MARGIN) / Math.tan((fov * Math.PI) / 360)) * 0.9;
   return {
     pos: { x: 0, y: d * 0.78, z: d * 0.62 },
     look: { x: 0, y: 0, z: 0 },
@@ -1027,7 +1033,8 @@ export function createGalaxyScene(canvas, {
     lastKey = k;
     const shown = new Map(tourSites(nodes).map((s) => [s.id, s.status]));
     const tree = treeKey(nodes, shown.keys());
-    const lay = galaxyLayout(nodes);
+    // Only the shown sites take the rosette's slots (layout.js), so a hidden one leaves no gap.
+    const lay = galaxyLayout(nodes, undefined, shown.keys());
     if (!world) build(lay, shown);
     else if (tree === lastTree) recolour(lay, shown);
     else relive(lay, shown);

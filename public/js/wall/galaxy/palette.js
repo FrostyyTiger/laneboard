@@ -10,6 +10,7 @@
 // test/wall-galaxy-palette.test.mjs runs it without a browser.
 
 import { statusStyle } from '../../views/map/overlays.js';
+import { TIGHT } from './layout.js';
 
 /** The tokens' dark values, when a property is missing (as render.js's FALLBACK). */
 const FALLBACK = Object.freeze({
@@ -30,13 +31,14 @@ export const TONES = Object.freeze(['calm', 'low', 'warn', 'crit']);
  * A nebula per tone: how strong (additive opacity), how big (world units
  * across; the layout keeps stars MIN_SITE_GAP apart so these never meet)
  * and whether it breathes. Calm is a faint grey haze; trouble is the
- * loudest thing on screen, crit the only one that moves.
+ * loudest thing on screen, crit the only one that moves. Night 5 A1: at
+ * TIGHT.neb (0.64x) of nights 1-4's, with the tighter arms.
  */
 export const NEBULA = Object.freeze({
-  calm: Object.freeze({ opacity: 0.2, size: 520, breathes: false }),
-  low: Object.freeze({ opacity: 0.4, size: 560, breathes: false }),
-  warn: Object.freeze({ opacity: 0.7, size: 640, breathes: false }),
-  crit: Object.freeze({ opacity: 0.85, size: 680, breathes: true }),
+  calm: Object.freeze({ opacity: 0.2, size: 520 * TIGHT.neb, breathes: false }),
+  low: Object.freeze({ opacity: 0.4, size: 560 * TIGHT.neb, breathes: false }),
+  warn: Object.freeze({ opacity: 0.7, size: 640 * TIGHT.neb, breathes: false }),
+  crit: Object.freeze({ opacity: 0.85, size: 680 * TIGHT.neb, breathes: true }),
 });
 
 /** A status word (or a node) to the galaxy's tone, by the Map's statusStyle. */
