@@ -138,7 +138,7 @@ Notes for every builder round (planner, round 7):
   `ease`), the target opening from 0.32 of a flight (`camera.js FLIGHT.openAt`), held drift 0.6x (`SITE_SHOT`), dust turn
   0.6x (`still.js dustTurn`) — done when: tests pin the constants and that smootherstep has zero slope at both ends; the
   tour and touch page tests stay green (timings they assert updated only where they read these constants); a
-  `?demo=1` film shows an opening without a jerk at its start or end. (commit SHA)
+  `?demo=1` film shows an opening without a jerk at its start or end. (commit 36bfcb4)
   Notes (builder, round 18): `layout.js` `OPEN_MS` 2800 and a new `smoother` (smootherstep) beside `ease`; `foldAt` and
   every fade that follows the opening in `scene.js` (the line spread, beacon/ring/ping fades, the crit-lobe switch, the
   dust hole, `fadeNear`) use `smoother`, so members and fades stay in step. Flights, the overview, `live.js` and the
