@@ -178,8 +178,21 @@ Notes for every builder round (planner, round 7):
   touches, and every patch written for a fenced file; the 3 m check (an overview still shrunk to 3 m) and a `?demo=1` film
   of the new defaults — done when: the list names every commit of the night that touched those files (`git log` check in the
   notes) and the film's sheet is read in the notes.
-
-## Research questions
+- [ ] T23 (triage, r10-film-ui #3) [ui] [variant:galaxy] One hero per held frame: the banner drops to its one-line size
+  whenever the camera holds a site, not only once the plate is up (frames 1-4 of `r9-galaxy` show `■ HV2 · STORAGE` at full
+  size over a hold on HV1); full size stays at the overview — done when: a test finds the banner's size step follow the
+  camera's hold state (overview full, any hold one-line, plate up or not), and a `?demo=1` film's held frames before the plate
+  types show the one-line banner.
+- [ ] T24 (triage, r10-film-ui #4) [ui] [variant:galaxy] The plate's text never truncates and has three levels:
+  `FEAT-SEARCH · WAITING ON A PERMIS…` is cut at the plate's edge; the site name `HV1` is smaller than the line above it and
+  the status lines compete with the headline. Wrap (or grow one line) instead of cutting; headline, subject, facts on one
+  scale (about 1.0 / 0.42 / 0.28), facts in `--text-1` with only the mark and label coloured — done when: a test with a long
+  fact finds no ellipsis cut and the plate inside the frame, a still of a crit plate (large demo, `HV1` down) shows three
+  clear sizes.
+- [ ] T25 (triage, r10-film-ui #11) [ui] [variant:galaxy] The overview banner returns after a Back flight lands, from its
+  own place: in `r10-touch` 09-back-2 (3.2 s after the tap) `HV2 · STORAGE` is clipped by the frame's bottom edge while the
+  camera still flies — done when: a page test on a fake clock finds the banner's box inside the frame at every step of a
+  planet → system → overview Back, and not shown before the flight's end.
 
 - [x] Q19 → research/Q19-moons-nested-selection.md (thin on hit radius; sources partly blocked). Moons and nested selection in 3D strategy and space maps (Stellaris, Homeworld, Elite Dangerous's system map, EVE,
   Kerbal Space Program's map view, Celestia/Space Engine): how small bodies inside a selected system stay tappable without a
@@ -225,6 +238,17 @@ Night 4's open tasks (`nights/night-4/PROGRESS.md`, full text there; its own `##
 - night 4's T63 The show does nothing while nothing is due (needs `show.js`, fenced tonight).
 - night 4's T64 The sweep's news costs nothing per frame.
 
+From `r10-film-ui.md` (bugs and gaps past the 3-task limit):
+- r10 #5 The plate's headline (`VM-C`) and the locked node's map label (`bc`) differ; show one name while the plate stands.
+- r10 #10 In explore mode the touched node's name is the headline and the fact its subject (the card, T17-T18, may settle it).
+- r10 #12 The wake says nothing for 300 ms (same as night 4's T62).
+- r10 3 m check: the banner's second line (`POOL 97% FULL`) turns to texture at 342 px; a step larger or bolder.
+- r10 #1/#2 sun on the tag and the held shot composed for the plate: T1b covers the sun; plate-sized bracket and the star on the right third line stay here.
+- r10 fx beacon: cap the pillar with a tick and the crit's age; keep it under a quarter of the frame in a flight.
+- r10 fx activity: rings at `--text-3` alpha, never inside a lock nor on the held trouble member.
+- r10 fx sweep: a ping is a short dash arc fading in about 1 s, not a closed ellipse (reads as selection).
+- r10 fx afterglow: needs a filmable clear (a demo hook clearing a site at a known second).
+
 Closed by this night's plan (moot):
 - night 4's T33 Sheet rows are real targets: the left-hand sheet for a tapped node gives way to the card (D5, T17), whose
   buttons and chips are 48 px by the night's tappable rule.
@@ -244,9 +268,27 @@ slim top bar of fleet totals, map modes.
   S-SCR-0x) are checked only by `ci` on the PR; rounds keep the unit tests (`test/cockpit*`, the resume and show tests) green.
 - (planner, run) Rounds 1-6 of this run ended with no work (the loop stopped on `no-progress` at 21:35, tests not green);
   the run restarted at 22:07 with tests green (4845 pass), and this plan is round 7's.
+- (triage r10, taste/direction, not tasks) From `r10-film-ui.md`: planet labels in the plate's condensed caps face at
+  `--text-2` with a dark halo instead of lowercase mono (#6); a beat of ~0.4 s stillness between arrival and the plate typing
+  (#7, partly T5); shift the overview's galaxy 3-4 % up-right so the banner sits in free space (#8); the plate's bracket sized
+  to its text (#1).
+- (triage r10, `fx` candidates) `warp`: either one real acceleration moment in the middle 40 % of a flight, or drop it
+  (half-measure is the worst of both); `beacon`/`sweep` set the rhythm the others should copy (one motion, one direction,
+  then stillness); `afterglow` scored wow 3: decide whether to keep it.
 
 ## Reviews
 
+- r10-film-ui.md: 12 galaxy findings + 5 fx + 3 m check; 3 became tasks (T23, T24, T25); #9 dropped (covered by T9), #1/#2 covered by T1b, the rest under `## Later` or `## For the owner`.
+
 ## Scores
+
+| round | persona | variant | overview | legibility | status | touch | wow | calm | performance |
+|---|---|---|---|---|---|---|---|---|---|
+| 10 | film-ui | galaxy | 7 | 6 | 8 | 6 | 7 | 6 | 7 |
+| 10 | film-ui | fx-beacon | | | | | 5 | 6 | |
+| 10 | film-ui | fx-warp | | | | | 4 | 6 | |
+| 10 | film-ui | fx-afterglow | | | | | 3 | 8 | |
+| 10 | film-ui | fx-activity | | | | | 4 | 5 | |
+| 10 | film-ui | fx-sweep | | | | | 6 | 7 | |
 
 ## Morning
