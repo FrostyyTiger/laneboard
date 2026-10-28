@@ -221,12 +221,37 @@ Notes for every builder round (planner, round 7):
   (a few dozen positions). Looked at (`$RUN_DIR/shots/r22-t7-*`, `r22-galaxy`): overview clean, trouble still the loudest;
   HV1 open: rings round ba/bb with trouble moons apart; `?demo=1` film 27.3 fps at cpu 4x, 0 errors. Still for T6b: `ba`
   and `bb` lose their sides to their own trouble moons' names (the moons test leaves `ba` to T6b).
-- [ ] T8 (§7 Night 5 B2, open) [ui] [variant:galaxy] Opening moons: tapping a planet (or one of its moons) opens them onto a
+- [x] T8 (§7 Night 5 B2, open) [ui] [variant:galaxy] Opening moons: tapping a planet (or one of its moons) opens them onto a
   ring round it with the site's open time and easing, tilted toward the camera, a faint orbit line and thin tethers; about
   110 px apart on screen, at least 72 px from the planet; named and tappable while open; another planet's tap folds the
   first's; no picker (Q19 when answered) — done when: a test with the camera at a picked builder finds its moons' screen
   points ≥ 72 px from the planet and ≥ 100 px apart, named and in the hit points only while open, folded again when another
-  planet is picked; a still of an open lane ring on the large demo.
+  planet is picked; a still of an open lane ring on the large demo. (commit a756402, 6bdc125)
+  Notes (builder, round 24): `scene.js openMoons(id)` / `moonsOpen()`: a planet (or a moon: its planet) opens, every
+  other ring folds, null or a planet with no moons folds all; each ring eases over `OPEN_MS` on `smoother` (still mode:
+  at once) and goes with its system when that folds. `MOON_RING` {gapPx 110, minPx 80, clearPx 28, tilt 0.42 rad, segs
+  48, alpha 0.9}: the ring is measured on screen at the planet's depth (`moonRingPx`), re-solved each frame, so it keeps
+  its px size through any camera move (T9, T12). It faces the camera, its top tilted toward it; moons start at the top
+  and go clockwise (`ringAngle`) and **hold still while open** (a finger aims at them; folded they turn as in T7). An
+  opened calm moon is drawn at `MOON.calm` (5.5), named and a target from half open (`m.ringOpen`). One `LineSegments`
+  per site (`s.moonLines`, invisible unless a ring is open, so the overview's draw calls are unchanged) carries the faint
+  ring and tethers. `main.js` asks `galaxy.openMoons(moonsAt(place))` when the place changes (touch.js `moonsAt`), so a
+  planet tap opens, a moon tap keeps its planet's ring, and its system, Back, the overview and the tour's hand-back fold.
+  `labels.js`: a picked ring's calm moons are named at any size, ranked just after trouble (`RANK.site`), so on HV1's
+  crowded right side they beat the neighbouring calm planets the ring overlaps (`vm-b` goes unnamed while builder-a's ring
+  stands). **Found while filming, fixed:** a tap on builder-a fanned out four rows, because its folded trouble moons are
+  inside the finger's 27 px. `touch.js ringHit`: a planet and its own folded moons are that planet, a moon on an open
+  ring wins its tap, two different planets still fan (T11 replaces the fan). `memberPoints` points carry `host`/`onRing`
+  for moons. One source assertion in `wall-galaxy-fan.test.mjs` now reads the `ringHit` line. Test:
+  `test/wall-galaxy-moon-ring.test.mjs` (7: ring px, moonsAt, builder-a's five moons ≥ 72 px from it and ≥ 100 px apart
+  at the held shot, named and targets only while open, held still, the ring line; builder-b folds builder-a's, a moon
+  keeps its planet's, a bare planet folds all; a folding system takes it; still mode; ringHit; the page pick on the large
+  fixture). Looked at (`$RUN_DIR/shots/r24-t8-ring/`, CDP touch walk on `--size large`: wake → HV1 → ba → bb → a moon →
+  Back): builder-a's ring 90-109 px out, builder-b's 78-93 px, no fan, 0 console errors; `r24-galaxy` (`?demo=1`, cpu 4x)
+  33.9 fps, worst gap 213 ms, 0 errors, the tour unchanged. **Left for T9:** at the system hold HV1 sits top right under
+  the plate, so builder-a's top moon (and the lock on it) runs under the Back control and builder-b's ring past the
+  frame's right edge (`04-ba-open`, `07-tap-moon`); T9's camera (planet left of centre, 45 % closer) is what puts the ring
+  in empty screen, and its test should assert every open moon inside the frame and off the covers.
 - [ ] T9 (§7 Night 5 B3) [ui] [variant:galaxy] Picking a planet or moon flies the camera about 45 % closer with the planet
   left of centre, so the ring and the card use the empty screen (`camera.js`, `main.js` selection) — done when: a page test
   on a fake clock taps a planet and finds, at the flight's end, the camera distance about 0.55 of the system hold's and the
